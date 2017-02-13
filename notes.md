@@ -297,6 +297,8 @@ Requires a project-admin token for the specified project. Schedules a sync job t
 project from the backing services into Limes' local database. When the job was scheduled successfully, returns 202
 (Accepted).
 
+If the project does not exist in Limes' database yet, query Keystone to see if this project was just created. If so, create the project in Limes' database before returning 202 (Accepted).
+
 *Rationale:* When a project administrator wants to adjust her project's quotas, she might discover that the usage data
 shown by Limes is out-of-date. She can then use this call to refresh the usage data in order to make a more informed
 decision about how to adjust her quotas.
