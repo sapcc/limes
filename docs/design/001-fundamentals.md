@@ -18,3 +18,9 @@ Multiple processes, talking to the same Postgres database:
 The collector service consists of plugins that implement capacity scanning and
 quota/usage scraping for each supported backing service (Nova, Cinder, etc.).
 Each collector runs in a separate thread.
+
+## Shared Service usecase
+If a service is shared across OpenStack clusters, there would be an addtional deployment of the collector service
+with credentials to the keystone backend. A config option would allow to scrape only information for a concrete 
+service.
+TODO: Do the collectors share a common database?
