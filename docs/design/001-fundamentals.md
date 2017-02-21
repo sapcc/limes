@@ -30,5 +30,5 @@ setup can have multiple proxy deployments which each authenticate against a diff
 the total capacity which is reported by the shared service needs to be distributed among all clusters using the shared
 service.
 
-When one of the cluster does not use Limes only for the shared service, not for its local resources, Limes can be
-configured to only collect and manage the resources provided by shared services.
+When one of the clusters uses Limes only for the shared service, not for its local resources, Limes can be configured to
+only collect and manage the resources provided by shared services.
