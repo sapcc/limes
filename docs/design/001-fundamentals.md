@@ -22,7 +22,7 @@ Each collector runs in a separate thread.
 ## Usecase: Shared services
 
 Limes includes support for services that are shared across *OpenStack clusters* (i.e. separate OpenStack installations
-with separate service catalogs). In this case, multiple Limes installationsi (one per cluster) will share the same
+with separate service catalogs). In this case, multiple Limes installations (one per cluster) will share the same
 Postgres database, but use different *cluster IDs* to identify their cluster's data within the database.
 
 A *shared service* is a backend service which is available in multiple clusters. For example, a Swift object storage
