@@ -184,9 +184,10 @@ If any of the aggregated backend quotas is `-1`, the `backend_quota` field will 
 TODO: Open question: Instead of aggregating backend quotas, maybe just include
 a `warnings` field that counts projects with `quota != backend_quota`?
 
-## GET /cloud
+## GET /clusters
+## GET /clusters/\<cluster-id\>
 
-Query data for the whole cloud. Requires a cloud-admin token. Arguments:
+Query data for clusters. Requires a cloud-admin token. Arguments:
 
 * `service`: Limit query to resources in this service. May be given multiple times.
 * `resource`: When combined, with `?service=`, limit query to that resource.
@@ -195,58 +196,70 @@ Returns 200 (OK) on success. Result is a JSON document like:
 
 ```json
 {
-  "services": [
+  "clusters": [
     {
-      "name": "compute",
-      "resources": [
+      "id": "example-cluster",
+      "services": [
         {
-          "name": "instances",
-          "capacity": -1,
-          "domains_quota": 20,
-          "usage": 1
+          "name": "compute",
+          "resources": [
+            {
+              "name": "instances",
+              "capacity": -1,
+              "domains_quota": 20,
+              "usage": 1
+            },
+            {
+              "name": "cores",
+              "capacity": 1000,
+              "domains_quota": 100,
+              "usage": 2
+            },
+            {
+              "name": "ram",
+              "unit": "MiB",
+              "capacity": 1048576,
+              "domains_quota": 204800,
+              "usage": 2048
+            }
+          ],
+          "max_scraped_at": 1486738599,
+          "min_scraped_at": 1486728599
         },
         {
-          "name": "cores",
-          "capacity": 1000,
-          "domains_quota": 100,
-          "usage": 2
+          "name": "object_storage",
+          "resources": [
+            {
+              "name": "capacity",
+              "unit": "B",
+              "capacity": 60000000000000,
+              "domains_quota": 107374182400,
+              "usage": 104857600
+            }
+          ],
+          "max_scraped_at": 1486733778,
+          "min_scraped_at": 1486723778
         },
-        {
-          "name": "ram",
-          "unit": "MiB",
-          "capacity": 1048576,
-          "domains_quota": 204800,
-          "usage": 2048
-        }
-      ],
-      "max_scraped_at": 1486738599,
-      "min_scraped_at": 1486728599
-    },
-    {
-      "name": "object_storage",
-      "resources": [
-        {
-          "name": "capacity",
-          "unit": "B",
-          "capacity": 60000000000000,
-          "domains_quota": 107374182400,
-          "usage": 104857600
-        }
-      ],
-      "max_scraped_at": 1486733778,
-      "min_scraped_at": 1486723778
+        ...
+      ]
     },
     ...
   ]
 }
 ```
 
-The cloud does not have a quota, but it is constrained by the `capacity` for each resource. The `domains_quota` field
+If `<cluster-id>` was given, the outer key is `cluster` and its value is the object without the array surrounding it.
+
+Clusters do not have a quota, but they are constrained by the `capacity` for each resource. The `domains_quota` field
 behaves just like the `projects_quota` key on domain level. Discrepancies between project quotas in Limes and in backing
 services will not be shown on this level, so there is no `backend_quota` key.
 
 Like with domain data, there are `min_scraped_at` and `max_scraped_at` timestamps for each service, aggregating over all
 project data in the whole cloud.
+
+For resources belonging to a cluster-local service (the default), the reported quota and usage is aggregated only over
+domains in this cluster. For resources belonging to a shared service, the reported quota and usage is aggregated over
+all domains in all clusters, and will thus be the same for every cluster listed.
 
 ## POST /domains/discover
 
