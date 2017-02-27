@@ -1,9 +1,9 @@
 # Public API specification
 
-## GET /domains/\<domain-id\>/projects
-## GET /domains/\<domain-id\>/projects/\<project-id\>
+## GET /domains/:domain\_id/projects
+## GET /domains/:domain\_id/projects/:project\_id
 
-Query data for projects in a domain. `<project-id>` is optional for domain admins. With domain admin token, shows
+Query data for projects in a domain. `:project_id` is optional for domain admins. With domain admin token, shows
 projects in that token's domain. With project member permission, shows that token's project only. Arguments:
 
 * `service`: Limit query to resources in this service (e.g. `?service=compute`). May be given multiple times.
@@ -61,7 +61,7 @@ Returns 200 (OK) on success. Result is a JSON document like:
 }
 ```
 
-If `<project-id>` was given, the outer key is `project` and its value is the object without the array surrounding it.
+If `:project_id` was given, the outer key is `project` and its value is the object without the array surrounding it.
 
 Quota/usage data for the project is ordered into `services`, then into `resources`. In the example above, services
 include `compute` and `object_storage`, and the `compute` service has three resources, `instances`, `cores` and `ram`.
@@ -92,9 +92,9 @@ indicates an infinite or disabled quota.
 TODO: Might need to add ordering and pagination to this at some point.
 
 ## GET /domains
-## GET /domains/\<domain-id\>
+## GET /domains/:domain\_id
 
-Query data for domains. `<domain-id>` is optional for cloud admins. With cloud admin token, shows all domains. With
+Query data for domains. `:domain_id` is optional for cloud admins. With cloud admin token, shows all domains. With
 domain admin token, shows that token's domain only. Arguments:
 
 * `service`: Limit query to resources in this service. May be given multiple times.
@@ -157,7 +157,7 @@ Returns 200 (OK) on success. Result is a JSON document like:
 }
 ```
 
-If `<domain-id>` was given, the outer key is `domain` and its value is the object without the array surrounding it.
+If `:domain_id` was given, the outer key is `domain` and its value is the object without the array surrounding it.
 
 Looks a lot like the project data, but each resource has two quota values: `quota` is the quota assigned by the
 cloud-admin to the domain, and `projects_quota` is the sum of all quotas assigned to projects in that domain by the
@@ -185,7 +185,7 @@ TODO: Open question: Instead of aggregating backend quotas, maybe just include
 a `warnings` field that counts projects with `quota != backend_quota`?
 
 ## GET /clusters
-## GET /clusters/\<cluster-id\>
+## GET /clusters/:cluster\_id
 
 Query data for clusters. Requires a cloud-admin token. Arguments:
 
@@ -248,7 +248,7 @@ Returns 200 (OK) on success. Result is a JSON document like:
 }
 ```
 
-If `<cluster-id>` was given, the outer key is `cluster` and its value is the object without the array surrounding it.
+If `:cluster_id` was given, the outer key is `cluster` and its value is the object without the array surrounding it.
 
 Clusters do not have a quota, but they are constrained by the `capacity` for each resource. The `domains_quota` field
 behaves just like the `projects_quota` key on domain level. Discrepancies between project quotas in Limes and in backing
@@ -285,7 +285,7 @@ When the call returns, quota/usage data for these domains will not yet be availa
 after that, but he can only do so after Limes has discovered the new domain. Limes will do so automatically after some
 time through scheduled auto-discovery, but this call can be used to reduce the waiting time.
 
-## POST /domains/\<domain-id\>/projects/discover
+## POST /domains/:domain\_id/projects/discover
 
 Requires a domain-admin token for the specified domain. Queries Keystone in order to discover newly-created projects in
 this domain that Limes does not yet know about. This works exactly like `POST /cloud/discover`, except that the JSON
@@ -294,7 +294,7 @@ document will list `new_projects` instead of `new_domains`.
 *Rationale:* Same as for domain discovery: The domain admin might want to assign quotas immediately after creating a new
 project.
 
-## POST /domains/\<domain-id\>/projects/\<project-id\>/sync
+## POST /domains/:domain\_id/projects/:project\_id/sync
 
 Requires a project-admin token for the specified project. Schedules a sync job that pulls quota and usage data for this
 project from the backing services into Limes' local database. When the job was scheduled successfully, returns 202
@@ -306,7 +306,7 @@ If the project does not exist in Limes' database yet, query Keystone to see if t
 shown by Limes is out-of-date. She can then use this call to refresh the usage data in order to make a more informed
 decision about how to adjust her quotas.
 
-## PUT /domains/\<domain-id\>
+## PUT /domains/:domain\_id
 
 Set quotas for the given domain. Requires a cloud-admin token, and a request body that is a JSON document like:
 
@@ -342,13 +342,13 @@ Set quotas for the given domain. Requires a cloud-admin token, and a request bod
 ```
 
 For resources that are measured rather than counted, the values are interpreted with the same unit that is mentioned for
-this resource in `GET /domains/<domain-id>`. All resources that are not mentioned in the request body remain unchanged.
+this resource in `GET /domains/:domain_id`. All resources that are not mentioned in the request body remain unchanged.
 This operation will not affect any project quotas in this domain.
 
 Returns 200 (OK) on success, with a response body identical to `GET` on the same URL, containing the updated quota
 values.
 
-## PUT /domains/\<domain-id\>/projects/\<project-id\>
+## PUT /domains/:domain\_id/projects/:project\_id
 
 Set quotas for the given project. Requires a domain-admin token for the specified domain. Other than that, the call
-works in the same way as `PUT /domains/<domain-id>`.
+works in the same way as `PUT /domains/:domain_id`.
