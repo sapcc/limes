@@ -1,0 +1,19 @@
+hash: 69b0c3ec7ecd5fe097e21b82c63a912df647f765d0b3acde8dbe5e370604740c
+updated: 2017-02-28T16:10:17.871283874+01:00
+imports:
+- name: github.com/lib/pq
+  version: ba5d4f7a35561e22fbdf7a39aa0070f4d460cfc0
+  subpackages:
+  - oid
+- name: github.com/mattes/migrate
+  version: 83e27c8b88547a927ce6f0876eaa1b5c3b75042c
+  subpackages:
+  - driver
+  - driver/postgres
+  - file
+  - migrate
+  - migrate/direction
+  - pipe
+- name: github.com/spf13/pflag
+  version: 5ccb023bc27df288a957c5e994cd44fd19619465
+testImports: []
