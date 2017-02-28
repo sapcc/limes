@@ -6,24 +6,18 @@ Limes is an OpenStack-compatible quota/usage tracking service, originally design
 
 There's a Makefile, so do:
 
-* `make` to just compile
+* `make` to just compile and run the binaries from the `build/` directory
 * `make && make install` to install to `/usr`
 * `make && make install PREFIX=/some/path` to install to `/some/path`
 
-## Setting up the database
+## Usage
 
-You will need a running PostgreSQL. Create a database for Limes, then populate the DB schema by running:
+Prerequisites: Create a PostgreSQL database for Limes, and a service user in at least one OpenStack installation.
 
-``` bash
-# if you did not "make install"
-$ ./build/limes-migrate -m ./pkg/db/migrations -d 'postgres://user:pass@host:port/database'
+1. Write a configuration file for your environment, by following the [example configuration][ex-conf]
 
-# if you did "make install"
-$ /usr/bin/limes-migrate -d 'postgres://user:pass@host:port/database'
+2. Populate the DB schema by running `limes-migrate config.yaml`. For more fine-grained control of migrations (e.g.
+   rollback), download the [`migrate` tool][migrate] and follow the instructions over there.
 
-# if you did "make install" with a custom PREFIX
-$ ${PREFIX}/bin/limes-migrate -m ${PREFIX}/share/limes/migrations -d 'postgres://user:pass@host:port/database'
-```
-
-For more fine-grained control (e.g. rollback of migrations), download the
-[`migrate` tool](https://github.com/mattes/migrate) and follow the instructions over there.
+[ex-conf]: ./docs/example-config.yaml
+[migrate]: https://github.com/mattes/migrate

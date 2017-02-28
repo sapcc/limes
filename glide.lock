@@ -1,5 +1,5 @@
-hash: 69b0c3ec7ecd5fe097e21b82c63a912df647f765d0b3acde8dbe5e370604740c
-updated: 2017-02-28T16:10:17.871283874+01:00
+hash: 7117023f021f99cb040d279594b70630027cc4e86bd17d3ecc2dbed219469e2c
+updated: 2017-02-28T17:07:08.908955558+01:00
 imports:
 - name: github.com/lib/pq
   version: ba5d4f7a35561e22fbdf7a39aa0070f4d460cfc0
@@ -14,6 +14,6 @@ imports:
   - migrate
   - migrate/direction
   - pipe
-- name: github.com/spf13/pflag
-  version: 5ccb023bc27df288a957c5e994cd44fd19619465
+- name: gopkg.in/yaml.v2
+  version: a83829b6f1293c91addabc89d0571c246397bbf4
 testImports: []

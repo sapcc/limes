@@ -1,2 +1,7 @@
+# build artifacts
 build/limes*
 .gopath/pkg/
+
+# custom configuration files used during development
+*test*.yaml
+*config*.yaml

@@ -1,3 +1,2 @@
 package: github.com/sapcc/limes
-import:
-  - package: github.com/mattes/migrate
+import: []
