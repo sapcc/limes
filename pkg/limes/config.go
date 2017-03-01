@@ -103,14 +103,19 @@ func (cfg Configuration) validate() (success bool) {
 			success = false
 		}
 
+		//gophercloud is very strict about requiring a trailing slash here
+		if cluster.AuthURL != "" && !strings.HasSuffix(cluster.AuthURL, "/") {
+			cluster.AuthURL += "/"
+		}
+
 		switch {
 		case cluster.AuthURL == "":
 			missing("auth_url")
 		case !strings.HasPrefix(cluster.AuthURL, "http://") && !strings.HasPrefix(cluster.AuthURL, "https://"):
 			Log(LogError, "clusters[%s].auth_url does not look like a HTTP URL", clusterID)
 			success = false
-		case !strings.HasSuffix(strings.TrimSuffix(cluster.AuthURL, "/"), "/v3"):
-			Log(LogError, "clusters[%s].auth_url does not end with \"/v3\"", clusterID)
+		case !strings.HasSuffix(cluster.AuthURL, "/v3/"):
+			Log(LogError, "clusters[%s].auth_url does not end with \"/v3/\"", clusterID)
 			success = false
 		}
 

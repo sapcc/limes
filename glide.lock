@@ -1,6 +1,15 @@
 hash: 7117023f021f99cb040d279594b70630027cc4e86bd17d3ecc2dbed219469e2c
-updated: 2017-02-28T17:07:08.908955558+01:00
+updated: 2017-03-01T16:58:39.912751568+01:00
 imports:
+- name: github.com/gophercloud/gophercloud
+  version: 6b8670527572d0b1eb850f8a941a968dcd673d55
+  subpackages:
+  - openstack
+  - openstack/identity/v2/tenants
+  - openstack/identity/v2/tokens
+  - openstack/identity/v3/tokens
+  - openstack/utils
+  - pagination
 - name: github.com/lib/pq
   version: ba5d4f7a35561e22fbdf7a39aa0070f4d460cfc0
   subpackages:

@@ -38,4 +38,10 @@ func main() {
 	if err != nil {
 		limes.Log(limes.LogFatal, err.Error())
 	}
+
+	cluster, err := limes.NewCluster(config, os.Args[2])
+	if err != nil {
+		limes.Log(limes.LogFatal, err.Error())
+	}
+	_ = cluster //TODO: use it
 }
