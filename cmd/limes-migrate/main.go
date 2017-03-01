@@ -34,9 +34,9 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Usage: %s <config-file>\n", os.Args[0])
 		os.Exit(1)
 	}
-	limes.InitConfiguration(os.Args[1])
+	config := limes.NewConfiguration(os.Args[1])
 
-	errs, ok := migrate.UpSync(limes.Config.DatabaseConnString, limes.Config.MigrationDirPath)
+	errs, ok := migrate.UpSync(config.Database.Location, config.Database.MigrationsPath)
 	if !ok {
 		limes.Log(limes.LogError, "ERROR: migration failed, see errors on stderr")
 		for _, err := range errs {
