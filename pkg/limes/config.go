@@ -29,8 +29,8 @@ import (
 
 //Configuration contains all the data from the configuration file.
 type Configuration struct {
-	Database ConfigurationEntryDatabase           `yaml:"database"`
-	Clusters map[string]ConfigurationEntryCluster `yaml:"clusters"`
+	Database ConfigurationEntryDatabase            `yaml:"database"`
+	Clusters map[string]*ConfigurationEntryCluster `yaml:"clusters"`
 }
 
 //ConfigurationEntryDatabase is used inside type Configuration, and only has an
