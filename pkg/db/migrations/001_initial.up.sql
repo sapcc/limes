@@ -52,7 +52,8 @@ CREATE TABLE project_services (
   id          BIGSERIAL NOT NULL PRIMARY KEY,
   project_id  BIGINT    NOT NULL REFERENCES projects ON DELETE CASCADE,
   name        TEXT      NOT NULL,
-  scraped_at  TIMESTAMP NOT NULL DEFAULT to_timestamp(0),
+  scraped_at  TIMESTAMP, -- defaults to NULL to indicate that scraping did not happen yet
+  stale       BOOLEAN   NOT NULL DEFAULT FALSE,
   UNIQUE (project_id, name)
 );
 

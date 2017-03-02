@@ -143,6 +143,12 @@ func (s *Statement) Close() error {
 	return s.inner.Close()
 }
 
+//Exec works like for sql.Stmt.
+func (s *Statement) Exec(args ...interface{}) (sql.Result, error) {
+	traceQuery(s.query, args)
+	return s.inner.Exec(args...)
+}
+
 //Query works like for sql.Stmt.
 func (s *Statement) Query(args ...interface{}) (*sql.Rows, error) {
 	traceQuery(s.query, args)

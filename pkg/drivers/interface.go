@@ -25,6 +25,10 @@ import "github.com/sapcc/limes/pkg/limes"
 //any collectors, in order to make it easy to swap out the driver
 //implementation for a mock during unit tests.
 type Driver interface {
+	//Return the Cluster that this Driver instance operates on. This is useful
+	//because it means we just have to pass around the Driver instance in
+	//function calls, instead of both the Driver and the Cluster.
+	Cluster() *limes.Cluster
 	/********** Keystone (Identity) **********/
 	ListDomains() ([]KeystoneDomain, error)
 	ListProjects(domainUUID string) ([]KeystoneProject, error)
@@ -46,10 +50,15 @@ type KeystoneProject struct {
 //to OpenStack. The interface implementations are in the other source files in
 //this module.
 type realDriver struct {
-	Cluster *limes.Cluster
+	cluster *limes.Cluster
 }
 
 //NewDriver instantiates a Driver for the given Cluster.
 func NewDriver(c *limes.Cluster) Driver {
 	return realDriver{c}
+}
+
+//Cluster implements the Driver interface.
+func (d realDriver) Cluster() *limes.Cluster {
+	return d.cluster
 }

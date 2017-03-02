@@ -32,7 +32,7 @@ import (
 type Cluster struct {
 	ID                string
 	Client            *gophercloud.ProviderClient
-	config            *ConfigurationEntryCluster
+	config            *ClusterConfiguration
 	tokenRenewalMutex *sync.Mutex
 }
 
@@ -63,6 +63,11 @@ func NewCluster(cfg Configuration, clusterID string) (*Cluster, error) {
 		return nil, fmt.Errorf("cannot fetch initial Keystone token: %v", err)
 	}
 	return &c, nil
+}
+
+//EnabledServices lists the services that are enabled in this cluster.
+func (c *Cluster) EnabledServices() []ServiceConfiguration {
+	return c.config.Services
 }
 
 //RefreshToken fetches a new Keystone token for this cluster. It is also used
@@ -108,13 +113,13 @@ func (c *Cluster) RefreshToken() error {
 
 //CanReauth implements the
 //gophercloud/openstack/identity/v3/tokens.AuthOptionsBuilder interface.
-func (cfg *ConfigurationEntryCluster) CanReauth() bool {
+func (cfg *ClusterConfiguration) CanReauth() bool {
 	return true
 }
 
 //ToTokenV3CreateMap implements the
 //gophercloud/openstack/identity/v3/tokens.AuthOptionsBuilder interface.
-func (cfg *ConfigurationEntryCluster) ToTokenV3CreateMap(scope map[string]interface{}) (map[string]interface{}, error) {
+func (cfg *ClusterConfiguration) ToTokenV3CreateMap(scope map[string]interface{}) (map[string]interface{}, error) {
 	gophercloudAuthOpts := gophercloud.AuthOptions{
 		Username:    cfg.UserName,
 		Password:    cfg.Password,
@@ -126,7 +131,7 @@ func (cfg *ConfigurationEntryCluster) ToTokenV3CreateMap(scope map[string]interf
 
 //ToTokenV3ScopeMap implements the
 //gophercloud/openstack/identity/v3/tokens.AuthOptionsBuilder interface.
-func (cfg *ConfigurationEntryCluster) ToTokenV3ScopeMap() (map[string]interface{}, error) {
+func (cfg *ClusterConfiguration) ToTokenV3ScopeMap() (map[string]interface{}, error) {
 	return map[string]interface{}{
 		"project": map[string]interface{}{
 			"name":   cfg.ProjectName,

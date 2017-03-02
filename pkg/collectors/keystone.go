@@ -21,6 +21,7 @@ package collectors
 
 import (
 	"github.com/sapcc/limes/pkg/drivers"
+	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/models"
 )
 
@@ -136,7 +137,7 @@ func ScanProjects(driver drivers.Driver, domain *models.Domain) ([]string, error
 			continue
 		}
 
-		_, err := models.CreateProject(project, domain.ID)
+		err := initProject(driver, domain, project)
 		if err != nil {
 			return result, err
 		}
@@ -144,4 +145,33 @@ func ScanProjects(driver drivers.Driver, domain *models.Domain) ([]string, error
 	}
 
 	return result, nil
+}
+
+//Initialize all the database records for a project (in both `projects` and
+//`project_services`).
+func initProject(driver drivers.Driver, domain *models.Domain, project drivers.KeystoneProject) error {
+	//add record to `projects` table
+	dbProject, err := models.CreateProject(project, domain.ID)
+	if err != nil {
+		return err
+	}
+
+	//add records for all cluster services to the `project_services` table, with
+	//default `scraped_at = NULL` to force the scraping jobs to scrape the
+	//project resources
+	stmt, err := limes.DB.Prepare(
+		`INSERT INTO project_services (project_id, name) VALUES ($1, $2)`,
+	)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	for _, srv := range driver.Cluster().EnabledServices() {
+		_, err := stmt.Exec(dbProject.ID, srv.Type)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

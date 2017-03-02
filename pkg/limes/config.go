@@ -29,20 +29,20 @@ import (
 
 //Configuration contains all the data from the configuration file.
 type Configuration struct {
-	Database ConfigurationEntryDatabase            `yaml:"database"`
-	Clusters map[string]*ConfigurationEntryCluster `yaml:"clusters"`
+	Database DatabaseConfiguration            `yaml:"database"`
+	Clusters map[string]*ClusterConfiguration `yaml:"clusters"`
 }
 
-//ConfigurationEntryDatabase is used inside type Configuration, and only has an
+//DatabaseConfiguration is used inside type Configuration, and only has an
 //exported name to produce more readable error messages for malformed YAMLs.
-type ConfigurationEntryDatabase struct {
+type DatabaseConfiguration struct {
 	Location       string `yaml:"location"`
 	MigrationsPath string `yaml:"migrations"`
 }
 
-//ConfigurationEntryCluster is used inside type Configuration, and only has an
+//ClusterConfiguration is used inside type Configuration, and only has an
 //exported name to produce more readable error messages for malformed YAMLs.
-type ConfigurationEntryCluster struct {
+type ClusterConfiguration struct {
 	AuthURL           string `yaml:"auth_url"`
 	UserName          string `yaml:"user_name"`
 	UserDomainName    string `yaml:"user_domain_name"`
@@ -50,12 +50,11 @@ type ConfigurationEntryCluster struct {
 	ProjectDomainName string `yaml:"project_domain_name"`
 	Password          string `yaml:"password"`
 	RegionName        string `yaml:"region_name"`
-	Services          []ConfigurationEntryService
+	Services          []ServiceConfiguration
 }
 
-//ConfigurationEntryService is used inside type Configuration, and only has an
-//exported name to produce more readable error messages for malformed YAMLs.
-type ConfigurationEntryService struct {
+//ServiceConfiguration describes a service that is enabled for a certain cluster.
+type ServiceConfiguration struct {
 	Type   string `yaml:"type"`
 	Shared bool   `yaml:"shared"`
 }
