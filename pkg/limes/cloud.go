@@ -30,6 +30,7 @@ import (
 
 //Cluster manages the connection to one of the OpenStack clusters defined in the Limes configuration.
 type Cluster struct {
+	ID                string
 	Client            *gophercloud.ProviderClient
 	config            *ConfigurationEntryCluster
 	tokenRenewalMutex *sync.Mutex
@@ -43,6 +44,7 @@ func NewCluster(cfg Configuration, clusterID string) (*Cluster, error) {
 		err error
 	)
 
+	c.ID = clusterID
 	c.tokenRenewalMutex = &sync.Mutex{}
 
 	//find the configuration for this cluster

@@ -25,6 +25,7 @@ import (
 	"net/http"
 	"os"
 
+	"github.com/sapcc/limes/pkg/collectors"
 	"github.com/sapcc/limes/pkg/drivers"
 	"github.com/sapcc/limes/pkg/limes"
 )
@@ -52,20 +53,10 @@ func main() {
 	}
 	driver := drivers.NewDriver(cluster)
 
-	//discover Keystone domains (TODO: dummy code)
-	domains, err := driver.ListDomains()
+	//TODO: replace by actual implementation
+	result, err := collectors.ScanDomains(driver, cluster.ID, collectors.ScanDomainsOpts{ScanAllProjects: true})
+	fmt.Printf("RESULT: %#v\n", result)
 	if err != nil {
 		limes.Log(limes.LogFatal, err.Error())
-	}
-	for _, domain := range domains {
-		fmt.Printf("%s: ", domain.Name)
-		projects, err := driver.ListProjects(domain.ID)
-		if err != nil {
-			limes.Log(limes.LogFatal, err.Error())
-		}
-		for _, project := range projects {
-			fmt.Printf("%s, ", project.Name)
-		}
-		fmt.Printf("\n")
 	}
 }

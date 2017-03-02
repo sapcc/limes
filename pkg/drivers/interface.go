@@ -27,18 +27,18 @@ import "github.com/sapcc/limes/pkg/limes"
 type Driver interface {
 	/********** Keystone (Identity) **********/
 	ListDomains() ([]KeystoneDomain, error)
-	ListProjects(domainID string) ([]KeystoneProject, error)
+	ListProjects(domainUUID string) ([]KeystoneProject, error)
 }
 
 //KeystoneDomain describes the basic attributes of a Keystone domain.
 type KeystoneDomain struct {
-	ID   string `json:"id"`
+	UUID string `json:"id"`
 	Name string `json:"name"`
 }
 
 //KeystoneProject describes the basic attributes of a Keystone project.
 type KeystoneProject struct {
-	ID   string `json:"id"`
+	UUID string `json:"id"`
 	Name string `json:"name"`
 }
 
@@ -49,6 +49,7 @@ type realDriver struct {
 	Cluster *limes.Cluster
 }
 
+//NewDriver instantiates a Driver for the given Cluster.
 func NewDriver(c *limes.Cluster) Driver {
 	return realDriver{c}
 }

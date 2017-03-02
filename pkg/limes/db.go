@@ -25,6 +25,7 @@ import (
 	"os"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	//enable postgres driver for database/sql
@@ -32,15 +33,15 @@ import (
 )
 
 //DB holds the main database connection. It will be `nil` until InitDatabase() is called.
-var DB *sql.DB
+var DB *Database
 
 //InitDatabase initializes the connection to the database.
 func InitDatabase(cfg Configuration) error {
-	var err error
-	DB, err = sql.Open("postgres", cfg.Database.Location)
+	db, err := sql.Open("postgres", cfg.Database.Location)
 	if err != nil {
 		return err
 	}
+	DB = &Database{db}
 
 	//wait for database to reach our expected migration level (this is useful
 	//because, depending on the rollout strategy, `limes-migrate` might still be
@@ -100,4 +101,71 @@ func getCurrentMigrationLevel(cfg Configuration) (int, error) {
 	}
 
 	return result, nil
+}
+
+//Database wraps the normal sql.DB structure to provide optional statement tracing.
+type Database struct {
+	inner *sql.DB
+}
+
+//Exec works like for sql.DB.
+func (db *Database) Exec(query string, args ...interface{}) (sql.Result, error) {
+	traceQuery(query, args)
+	return db.inner.Exec(query, args...)
+}
+
+//Prepare works like for sql.DB.
+func (db *Database) Prepare(query string) (*Statement, error) {
+	stmt, err := db.inner.Prepare(query)
+	return &Statement{stmt, query}, err
+}
+
+//Query works like for sql.DB.
+func (db *Database) Query(query string, args ...interface{}) (*sql.Rows, error) {
+	traceQuery(query, args)
+	return db.inner.Query(query, args...)
+}
+
+//QueryRow works like for sql.DB.
+func (db *Database) QueryRow(query string, args ...interface{}) *sql.Row {
+	traceQuery(query, args)
+	return db.inner.QueryRow(query, args...)
+}
+
+//Statement wraps the normal sql.Stmt structure to provide optional statement tracing.
+type Statement struct {
+	inner *sql.Stmt
+	query string
+}
+
+//Close works like for sql.Stmt.
+func (s *Statement) Close() error {
+	return s.inner.Close()
+}
+
+//Query works like for sql.Stmt.
+func (s *Statement) Query(args ...interface{}) (*sql.Rows, error) {
+	traceQuery(s.query, args)
+	return s.inner.Query(args...)
+}
+
+//QueryRow works like for sql.Stmt.
+func (s *Statement) QueryRow(query string, args ...interface{}) *sql.Row {
+	traceQuery(s.query, args)
+	return s.inner.QueryRow(args...)
+}
+
+func traceQuery(query string, args []interface{}) {
+	if !isDebug {
+		return
+	}
+	if len(args) == 0 {
+		Log(LogDebug, query)
+		return
+	}
+	formatStr := strings.Replace(query, "%", "%%", -1) + " ["
+	for _ = range args {
+		formatStr += "%#v, "
+	}
+	Log(LogDebug, strings.TrimSuffix(formatStr, ", ")+"]", args...)
 }

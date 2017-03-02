@@ -53,7 +53,7 @@ func (d realDriver) ListDomains() ([]KeystoneDomain, error) {
 }
 
 //ListProjects implements the Driver interface.
-func (d realDriver) ListProjects(domainID string) ([]KeystoneProject, error) {
+func (d realDriver) ListProjects(domainUUID string) ([]KeystoneProject, error) {
 	client, err := d.keystoneClient()
 	if err != nil {
 		return nil, err
@@ -62,9 +62,9 @@ func (d realDriver) ListProjects(domainID string) ([]KeystoneProject, error) {
 	//gophercloud does not support project listing yet - do it manually
 	url := client.ServiceURL("projects")
 	var opts struct {
-		DomainID string `q:"domain_id"`
+		DomainUUID string `q:"domain_id"`
 	}
-	opts.DomainID = domainID
+	opts.DomainUUID = domainUUID
 	query, err := gophercloud.BuildQueryString(opts)
 	if err != nil {
 		return nil, err
