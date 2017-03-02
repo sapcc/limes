@@ -2,6 +2,8 @@
 
 Limes is an OpenStack-compatible quota/usage tracking service, originally designed for SAP's internal cloud.
 
+Pronounce the name like the [Ancient Roman border wall][wp-limes], not like the fruit.
+
 # Installation
 
 There's a Makefile, so do:
@@ -19,5 +21,6 @@ Prerequisites: Create a PostgreSQL database for Limes, and a service user in at 
 2. Populate the DB schema by running `limes-migrate config.yaml`. For more fine-grained control of migrations (e.g.
    rollback), download the [`migrate` tool][migrate] and follow the instructions over there.
 
-[ex-conf]: ./docs/example-config.yaml
-[migrate]: https://github.com/mattes/migrate
+[wp-limes]: https://en.wikipedia.org/wiki/Limes
+[ex-conf]:  ./docs/example-config.yaml
+[migrate]:  https://github.com/mattes/migrate
