@@ -38,7 +38,7 @@ func main() {
 
 	errs, ok := migrate.UpSync(config.Database.Location, config.Database.MigrationsPath)
 	if !ok {
-		limes.Log(limes.LogError, "ERROR: migration failed, see errors on stderr")
+		limes.Log(limes.LogError, "migration failed, see errors on stderr")
 		for _, err := range errs {
 			fmt.Fprintln(os.Stderr, err.Error())
 		}
