@@ -20,13 +20,20 @@
 package main
 
 import (
+	"crypto/tls"
 	"fmt"
+	"net/http"
 	"os"
 
+	"github.com/sapcc/limes/pkg/drivers"
 	"github.com/sapcc/limes/pkg/limes"
 )
 
 func main() {
+	http.DefaultClient.Transport = &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
+
 	//expect two argument (config file name and cluster ID)
 	if len(os.Args) != 3 {
 		fmt.Fprintf(os.Stderr, "Usage: %s <config-file> <cluster-id>\n", os.Args[0])
@@ -43,5 +50,22 @@ func main() {
 	if err != nil {
 		limes.Log(limes.LogFatal, err.Error())
 	}
-	_ = cluster //TODO: use it
+	driver := drivers.NewDriver(cluster)
+
+	//discover Keystone domains (TODO: dummy code)
+	domains, err := driver.ListDomains()
+	if err != nil {
+		limes.Log(limes.LogFatal, err.Error())
+	}
+	for _, domain := range domains {
+		fmt.Printf("%s: ", domain.Name)
+		projects, err := driver.ListProjects(domain.ID)
+		if err != nil {
+			limes.Log(limes.LogFatal, err.Error())
+		}
+		for _, project := range projects {
+			fmt.Printf("%s, ", project.Name)
+		}
+		fmt.Printf("\n")
+	}
 }

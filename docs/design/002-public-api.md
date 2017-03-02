@@ -288,7 +288,7 @@ time through scheduled auto-discovery, but this call can be used to reduce the w
 ## POST /domains/:domain\_id/projects/discover
 
 Requires a domain-admin token for the specified domain. Queries Keystone in order to discover newly-created projects in
-this domain that Limes does not yet know about. This works exactly like `POST /cloud/discover`, except that the JSON
+this domain that Limes does not yet know about. This works exactly like `POST /domains/discover`, except that the JSON
 document will list `new_projects` instead of `new_domains`.
 
 *Rationale:* Same as for domain discovery: The domain admin might want to assign quotas immediately after creating a new
