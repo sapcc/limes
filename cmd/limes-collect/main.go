@@ -20,9 +20,7 @@
 package main
 
 import (
-	"crypto/tls"
 	"fmt"
-	"net/http"
 	"os"
 
 	"github.com/sapcc/limes/pkg/collectors"
@@ -31,10 +29,6 @@ import (
 )
 
 func main() {
-	http.DefaultClient.Transport = &http.Transport{
-		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-	}
-
 	//expect two argument (config file name and cluster ID)
 	if len(os.Args) != 3 {
 		fmt.Fprintf(os.Stderr, "Usage: %s <config-file> <cluster-id>\n", os.Args[0])
