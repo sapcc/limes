@@ -20,6 +20,7 @@
 package models
 
 import (
+	"database/sql"
 	"fmt"
 	"strings"
 
@@ -45,20 +46,62 @@ type Record interface {
 	Delete() error
 }
 
-//WalkWhere finds rows matching the given WHERE clause and executes a callback for
-//each of them.
-func (t *Table) WalkWhere(whereClause string, args []interface{}, action func(record Record) error) error {
+//Collection references a set of records by way of a still-to-be-executed SQL query.
+type Collection struct {
+	table      *Table
+	conditions []string
+	args       []interface{}
+}
+
+//Where selects a collection of records from the given table. Additional
+//conditions can be added before the collection is actually queried.
+func (t *Table) Where(condition string, args ...interface{}) *Collection {
+	return &Collection{
+		table:      t,
+		conditions: []string{condition},
+		args:       args,
+	}
+}
+
+//Where adds additional SQL conditions to this Collection.
+func (c *Collection) Where(condition string, args ...interface{}) *Collection {
+	return &Collection{
+		table:      c.table,
+		conditions: append(c.conditions, condition),
+		args:       append(c.args, args...),
+	}
+}
+
+func (c *Collection) doQuery() (*sql.Rows, error) {
+	var where string
+	if len(c.conditions) == 1 {
+		where = c.conditions[0]
+	} else {
+		//join multiple SQL conditions into one as "(cond1) AND (cond2) AND (cond3)"
+		conds := make([]string, len(c.conditions))
+		for idx, condition := range c.conditions {
+			conds[idx] = "(" + condition + ")"
+		}
+		where = strings.Join(conds, " AND ")
+	}
+
 	query := fmt.Sprintf("SELECT %s FROM %s WHERE %s",
-		strings.Join(t.AllFields, ", "), t.Name, whereClause,
+		strings.Join(c.table.AllFields, ", "), c.table.Name, where,
 	)
-	rows, err := limes.DB.Query(query, args...)
+	return limes.DB.Query(query, c.args...)
+}
+
+//Foreach materializes the Collection into Record instances and calls the
+//callback once for each record.
+func (c *Collection) Foreach(action func(record Record) error) error {
+	rows, err := c.doQuery()
 	if err != nil {
 		return err
 	}
 	defer rows.Close()
 
 	for rows.Next() {
-		record := t.makeRecord()
+		record := c.table.makeRecord()
 		err := rows.Scan(record.ScanTargets()...)
 		if err != nil {
 			return err

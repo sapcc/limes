@@ -49,8 +49,8 @@ func ScanDomains(driver drivers.Driver, clusterID string, opts ScanDomainsOpts) 
 	//domain and to all related resource records through `ON DELETE CASCADE`)
 	isDomainUUIDinDB := make(map[string]bool)
 	var dbDomains []*models.Domain
-	err = models.DomainsTable.WalkWhere(`cluster_id = $1`, []interface{}{clusterID},
-		func(record models.Record) error {
+	err = models.DomainsTable.Where(`cluster_id = $1`, clusterID).
+		Foreach(func(record models.Record) error {
 			domain := record.(*models.Domain)
 			if !isDomainUUID[domain.UUID] {
 				return domain.Delete()
@@ -58,8 +58,7 @@ func ScanDomains(driver drivers.Driver, clusterID string, opts ScanDomainsOpts) 
 			isDomainUUIDinDB[domain.UUID] = true
 			dbDomains = append(dbDomains, domain)
 			return nil
-		},
-	)
+		})
 	if err != nil {
 		return nil, err
 	}
@@ -116,16 +115,15 @@ func ScanProjects(driver drivers.Driver, domain *models.Domain) ([]string, error
 	//too (the deletion from the `projects` table includes the projects' resource
 	//records through `ON DELETE CASCADE`)
 	isProjectUUIDinDB := make(map[string]bool)
-	err = models.ProjectsTable.WalkWhere(`domain_id = $1`, []interface{}{domain.ID},
-		func(project models.Record) error {
+	err = models.ProjectsTable.Where(`domain_id = $1`, domain.ID).
+		Foreach(func(project models.Record) error {
 			uuid := project.(*models.Project).UUID
 			if !isProjectUUID[uuid] {
 				return project.Delete()
 			}
 			isProjectUUIDinDB[uuid] = true
 			return nil
-		},
-	)
+		})
 	if err != nil {
 		return nil, err
 	}
