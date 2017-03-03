@@ -39,12 +39,12 @@ var ProjectsTable = &Table{
 }
 
 //CreateProject puts a new project in the database.
-func CreateProject(kp drivers.KeystoneProject, domainID int64) (*Project, error) {
+func CreateProject(kp drivers.KeystoneProject, domainID int64, db limes.DBInterface) (*Project, error) {
 	p := &Project{
 		KeystoneProject: kp,
 		DomainID:        domainID,
 	}
-	return p, limes.DB.QueryRow(
+	return p, db.QueryRow(
 		`INSERT INTO projects (domain_id, uuid, name) VALUES ($1, $2, $3) RETURNING id`,
 		p.DomainID, p.UUID, p.Name,
 	).Scan(&p.ID)

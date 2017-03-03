@@ -103,9 +103,18 @@ func getCurrentMigrationLevel(cfg Configuration) (int, error) {
 	return result, nil
 }
 
+////////////////////////////////////////////////////////////////////////////////
+// Database struct
+
 //Database wraps the normal sql.DB structure to provide optional statement tracing.
 type Database struct {
 	inner *sql.DB
+}
+
+//Begin works like for sql.DB.
+func (db *Database) Begin() (*Transaction, error) {
+	tx, err := db.inner.Begin()
+	return &Transaction{tx}, err
 }
 
 //Exec works like for sql.DB.
@@ -132,6 +141,17 @@ func (db *Database) QueryRow(query string, args ...interface{}) *sql.Row {
 	return db.inner.QueryRow(query, args...)
 }
 
+//DBInterface is an interface that both Database and Transaction implement.
+type DBInterface interface {
+	Exec(query string, args ...interface{}) (sql.Result, error)
+	Prepare(query string) (*Statement, error)
+	Query(query string, args ...interface{}) (*sql.Rows, error)
+	QueryRow(query string, args ...interface{}) *sql.Row
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Statement struct
+
 //Statement wraps the normal sql.Stmt structure to provide optional statement tracing.
 type Statement struct {
 	inner *sql.Stmt
@@ -156,9 +176,46 @@ func (s *Statement) Query(args ...interface{}) (*sql.Rows, error) {
 }
 
 //QueryRow works like for sql.Stmt.
-func (s *Statement) QueryRow(query string, args ...interface{}) *sql.Row {
+func (s *Statement) QueryRow(args ...interface{}) *sql.Row {
 	traceQuery(s.query, args)
 	return s.inner.QueryRow(args...)
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Transaction struct
+
+//Transaction wraps the normal sql.Tx structure to provide optional statement tracing.
+type Transaction struct {
+	inner *sql.Tx
+}
+
+//Commit works like for sql.Tx.
+func (t *Transaction) Commit() error {
+	return t.inner.Commit()
+}
+
+//Exec works like for sql.Tx.
+func (t *Transaction) Exec(query string, args ...interface{}) (sql.Result, error) {
+	traceQuery(query, args)
+	return t.inner.Exec(query, args...)
+}
+
+//Prepare works like for sql.Tx.
+func (t *Transaction) Prepare(query string) (*Statement, error) {
+	stmt, err := t.inner.Prepare(query)
+	return &Statement{stmt, query}, err
+}
+
+//Query works like for sql.Tx.
+func (t *Transaction) Query(query string, args ...interface{}) (*sql.Rows, error) {
+	traceQuery(query, args)
+	return t.inner.Query(query, args...)
+}
+
+//QueryRow works like for sql.Tx.
+func (t *Transaction) QueryRow(query string, args ...interface{}) *sql.Row {
+	traceQuery(query, args)
+	return t.inner.QueryRow(query, args...)
 }
 
 func traceQuery(query string, args []interface{}) {

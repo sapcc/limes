@@ -72,7 +72,7 @@ func ScanDomains(driver drivers.Driver, clusterID string, opts ScanDomainsOpts) 
 			continue
 		}
 
-		dbDomain, err := models.CreateDomain(domain, clusterID)
+		dbDomain, err := models.CreateDomain(domain, clusterID, limes.DB)
 		if err != nil {
 			return result, err
 		}
@@ -150,8 +150,14 @@ func ScanProjects(driver drivers.Driver, domain *models.Domain) ([]string, error
 //Initialize all the database records for a project (in both `projects` and
 //`project_services`).
 func initProject(driver drivers.Driver, domain *models.Domain, project drivers.KeystoneProject) error {
+	//do this in a transaction to avoid half-initialized projects
+	tx, err := limes.DB.Begin()
+	if err != nil {
+		return err
+	}
+
 	//add record to `projects` table
-	dbProject, err := models.CreateProject(project, domain.ID)
+	dbProject, err := models.CreateProject(project, domain.ID, tx)
 	if err != nil {
 		return err
 	}
@@ -159,7 +165,7 @@ func initProject(driver drivers.Driver, domain *models.Domain, project drivers.K
 	//add records for all cluster services to the `project_services` table, with
 	//default `scraped_at = NULL` to force the scraping jobs to scrape the
 	//project resources
-	stmt, err := limes.DB.Prepare(
+	stmt, err := tx.Prepare(
 		`INSERT INTO project_services (project_id, name) VALUES ($1, $2)`,
 	)
 	if err != nil {
@@ -173,5 +179,5 @@ func initProject(driver drivers.Driver, domain *models.Domain, project drivers.K
 		}
 	}
 
-	return nil
+	return tx.Commit()
 }
