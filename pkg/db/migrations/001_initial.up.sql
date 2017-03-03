@@ -56,6 +56,7 @@ CREATE TABLE project_services (
   stale       BOOLEAN   NOT NULL DEFAULT FALSE,
   UNIQUE (project_id, name)
 );
+CREATE INDEX project_services_stale_idx ON project_services (stale);
 
 CREATE TABLE project_resources (
   service_id    BIGINT NOT NULL REFERENCES project_services ON DELETE CASCADE,
