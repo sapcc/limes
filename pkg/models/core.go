@@ -72,7 +72,7 @@ func (c *Collection) Where(condition string, args ...interface{}) *Collection {
 	}
 }
 
-func (c *Collection) doQuery() (*sql.Rows, error) {
+func (c *Collection) doQuery(db limes.DBInterface) (*sql.Rows, error) {
 	var where string
 	if len(c.conditions) == 1 {
 		where = c.conditions[0]
@@ -88,13 +88,13 @@ func (c *Collection) doQuery() (*sql.Rows, error) {
 	query := fmt.Sprintf("SELECT %s FROM %s WHERE %s",
 		strings.Join(c.table.AllFields, ", "), c.table.Name, where,
 	)
-	return limes.DB.Query(query, c.args...)
+	return db.Query(query, c.args...)
 }
 
 //Foreach materializes the Collection into Record instances and calls the
 //callback once for each record.
-func (c *Collection) Foreach(action func(record Record) error) error {
-	rows, err := c.doQuery()
+func (c *Collection) Foreach(db limes.DBInterface, action func(record Record) error) error {
+	rows, err := c.doQuery(db)
 	if err != nil {
 		return err
 	}

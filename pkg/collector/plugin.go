@@ -39,9 +39,8 @@ type Plugin interface {
 //ResourceInfo contains the metadata for a resource (i.e. some thing for which
 //quota and usage values can be retrieved from a backend service).
 type ResourceInfo struct {
-	Name        string
-	ServiceType string
-	Unit        Unit
+	Name string
+	Unit Unit
 }
 
 //ResourceData contains quota and usage data for a certain resource in a
@@ -75,7 +74,7 @@ const (
 	UnitExbibytes Unit = "EiB"
 )
 
-var plugins map[string]Plugin
+var plugins = map[string]Plugin{}
 
 //RegisterPlugin registers a Plugin with this package. It should only be called
 //once, typically in a func init() for the package that offers the Plugin. The

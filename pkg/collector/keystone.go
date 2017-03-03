@@ -34,7 +34,9 @@ type ScanDomainsOpts struct {
 
 //ScanDomains queries Keystone to discover new domains, and returns a
 //list of UUIDs for the newly discovered domains.
-func ScanDomains(driver drivers.Driver, clusterID string, opts ScanDomainsOpts) ([]string, error) {
+func ScanDomains(driver drivers.Driver, opts ScanDomainsOpts) ([]string, error) {
+	clusterID := driver.Cluster().ID
+
 	//list domains in Keystone
 	domains, err := driver.ListDomains()
 	if err != nil {
@@ -51,7 +53,7 @@ func ScanDomains(driver drivers.Driver, clusterID string, opts ScanDomainsOpts) 
 	isDomainUUIDinDB := make(map[string]bool)
 	var dbDomains []*models.Domain
 	err = models.DomainsTable.Where(`cluster_id = $1`, clusterID).
-		Foreach(func(record models.Record) error {
+		Foreach(limes.DB, func(record models.Record) error {
 			domain := record.(*models.Domain)
 			if !isDomainUUID[domain.UUID] {
 				return domain.Delete()
@@ -72,6 +74,7 @@ func ScanDomains(driver drivers.Driver, clusterID string, opts ScanDomainsOpts) 
 			continue
 		}
 
+		//TODO: create domain_service and domain_resource entries
 		dbDomain, err := models.CreateDomain(domain, clusterID, limes.DB)
 		if err != nil {
 			return result, err
@@ -117,7 +120,7 @@ func ScanProjects(driver drivers.Driver, domain *models.Domain) ([]string, error
 	//records through `ON DELETE CASCADE`)
 	isProjectUUIDinDB := make(map[string]bool)
 	err = models.ProjectsTable.Where(`domain_id = $1`, domain.ID).
-		Foreach(func(project models.Record) error {
+		Foreach(limes.DB, func(project models.Record) error {
 			uuid := project.(*models.Project).UUID
 			if !isProjectUUID[uuid] {
 				return project.Delete()

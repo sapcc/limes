@@ -28,19 +28,16 @@ type novaPlugin struct{}
 
 var novaResources = []collector.ResourceInfo{
 	collector.ResourceInfo{
-		Name:        "cores",
-		ServiceType: "compute",
-		Unit:        collector.UnitNone,
+		Name: "cores",
+		Unit: collector.UnitNone,
 	},
 	collector.ResourceInfo{
-		Name:        "instances",
-		ServiceType: "compute",
-		Unit:        collector.UnitNone,
+		Name: "instances",
+		Unit: collector.UnitNone,
 	},
 	collector.ResourceInfo{
-		Name:        "ram",
-		ServiceType: "compute",
-		Unit:        collector.UnitMebibytes,
+		Name: "ram",
+		Unit: collector.UnitMebibytes,
 	},
 }
 

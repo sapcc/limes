@@ -27,13 +27,9 @@ import (
 	"github.com/sapcc/limes/pkg/collector"
 	"github.com/sapcc/limes/pkg/drivers"
 	"github.com/sapcc/limes/pkg/limes"
-)
 
-//SharedState contains all the stuff that the main thread shares with the workers.
-type SharedState struct {
-	Cluster *limes.Cluster
-	Driver  drivers.Driver
-}
+	_ "github.com/sapcc/limes/pkg/plugins"
+)
 
 var discoverInterval = 3 * time.Minute
 
@@ -45,30 +41,39 @@ func main() {
 	}
 	config := limes.NewConfiguration(os.Args[1])
 
+	//connect to database
 	err := limes.InitDatabase(config)
 	if err != nil {
 		limes.Log(limes.LogFatal, err.Error())
 	}
 
-	//initialize shared state
-	var state SharedState
-	state.Cluster, err = limes.NewCluster(config, os.Args[2])
+	//connect to cluster
+	cluster, err := limes.NewCluster(config, os.Args[2])
 	if err != nil {
 		limes.Log(limes.LogFatal, err.Error())
 	}
-	state.Driver = drivers.NewDriver(state.Cluster)
+	driver := drivers.NewDriver(cluster)
 
-	//start threads (NOTE: Many people use a pair of sync.WaitGroup and stop
-	//channel to shutdown threads in a controlled manner. I decided against that
-	//for now, and instead construct worker threads in such a way that they can
-	//be terminated at any time without leaving the system in an inconsistent
+	//start scraper threads (NOTE: Many people use a pair of sync.WaitGroup and
+	//stop channel to shutdown threads in a controlled manner. I decided against
+	//that for now, and instead construct worker threads in such a way that they
+	//can be terminated at any time without leaving the system in an inconsistent
 	//state, mostly through usage of DB transactions.)
-
-	//TODO
+	for _, service := range cluster.EnabledServices() {
+		go func(service limes.ServiceConfiguration) {
+			err := collector.Scrape(driver, service.Type)
+			if err != nil {
+				limes.Log(limes.LogError, "startup for %s scraper failed: %s", service.Type, err.Error())
+			}
+		}(service)
+	}
 
 	//since we don't have to manage thread lifetime in the main thread, I use it to check Keystone regularly
+	//TODO: before starting this, walk over the existing project_services once to
+	//ensure that there is an entry for each project and service (this might not
+	//be the case if new services were added to the cluster configuration)
 	for {
-		_, err := collector.ScanDomains(state.Driver, state.Cluster.ID, collector.ScanDomainsOpts{ScanAllProjects: true})
+		_, err := collector.ScanDomains(driver, collector.ScanDomainsOpts{ScanAllProjects: true})
 		if err != nil {
 			limes.Log(limes.LogError, err.Error())
 		}
