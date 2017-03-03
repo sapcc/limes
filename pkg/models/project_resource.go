@@ -39,7 +39,7 @@ var ProjectResourcesTable = &Table{
 }
 
 //Insert writes this record into the database as a new row.
-func (pr *ProjectResource) Insert(db limes.DBInterface) error {
+func (pr *ProjectResource) Insert(db DBInterface) error {
 	_, err := db.Exec(
 		`INSERT INTO project_resources (service_id, name, quota, usage, backend_quota) VALUES ($1, $2, $3, $4, $5)`,
 		pr.ServiceID, pr.Name, pr.Quota, pr.Usage, pr.BackendQuota)

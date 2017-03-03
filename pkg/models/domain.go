@@ -39,7 +39,7 @@ var DomainsTable = &Table{
 }
 
 //CreateDomain puts a new domain in the database.
-func CreateDomain(kd drivers.KeystoneDomain, clusterID string, db limes.DBInterface) (*Domain, error) {
+func CreateDomain(kd drivers.KeystoneDomain, clusterID string, db DBInterface) (*Domain, error) {
 	d := &Domain{
 		KeystoneDomain: kd,
 		ClusterID:      clusterID,

@@ -23,8 +23,6 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
-
-	"github.com/sapcc/limes/pkg/limes"
 )
 
 //Table offers algorithms on Limes' database schema's tables.
@@ -72,7 +70,15 @@ func (c *Collection) Where(condition string, args ...interface{}) *Collection {
 	}
 }
 
-func (c *Collection) doQuery(db limes.DBInterface) (*sql.Rows, error) {
+//DBInterface is an interface that both sql.DB and sql.Transaction implement.
+type DBInterface interface {
+	Exec(query string, args ...interface{}) (sql.Result, error)
+	Prepare(query string) (*sql.Stmt, error)
+	Query(query string, args ...interface{}) (*sql.Rows, error)
+	QueryRow(query string, args ...interface{}) *sql.Row
+}
+
+func (c *Collection) doQuery(db DBInterface) (*sql.Rows, error) {
 	var where string
 	if len(c.conditions) == 1 {
 		where = c.conditions[0]
@@ -93,7 +99,7 @@ func (c *Collection) doQuery(db limes.DBInterface) (*sql.Rows, error) {
 
 //Foreach materializes the Collection into Record instances and calls the
 //callback once for each record.
-func (c *Collection) Foreach(db limes.DBInterface, action func(record Record) error) error {
+func (c *Collection) Foreach(db DBInterface, action func(record Record) error) error {
 	rows, err := c.doQuery(db)
 	if err != nil {
 		return err

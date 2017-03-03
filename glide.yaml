@@ -1,2 +1,3 @@
 package: github.com/sapcc/limes
-import: []
+import:
+- package: github.com/majewsky/sqlproxy

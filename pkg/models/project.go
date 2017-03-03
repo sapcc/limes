@@ -39,7 +39,7 @@ var ProjectsTable = &Table{
 }
 
 //CreateProject puts a new project in the database.
-func CreateProject(kp drivers.KeystoneProject, domainID int64, db limes.DBInterface) (*Project, error) {
+func CreateProject(kp drivers.KeystoneProject, domainID int64, db DBInterface) (*Project, error) {
 	p := &Project{
 		KeystoneProject: kp,
 		DomainID:        domainID,

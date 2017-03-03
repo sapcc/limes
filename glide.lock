@@ -1,10 +1,12 @@
-hash: 7117023f021f99cb040d279594b70630027cc4e86bd17d3ecc2dbed219469e2c
-updated: 2017-03-01T16:58:39.912751568+01:00
+hash: e2289a729e592fdbd9c334177ae8ddf779ecea09069807157a2b67456f5215ce
+updated: 2017-03-03T19:47:26.523783122+01:00
 imports:
 - name: github.com/gophercloud/gophercloud
-  version: 6b8670527572d0b1eb850f8a941a968dcd673d55
+  version: 303bf8a5e44befcf262f4d0502f7343f64c52d8e
   subpackages:
   - openstack
+  - openstack/compute/v2/extensions/limits
+  - openstack/compute/v2/extensions/quotasets
   - openstack/identity/v2/tenants
   - openstack/identity/v2/tokens
   - openstack/identity/v3/tokens
@@ -14,8 +16,10 @@ imports:
   version: ba5d4f7a35561e22fbdf7a39aa0070f4d460cfc0
   subpackages:
   - oid
+- name: github.com/majewsky/sqlproxy
+  version: 9e8ca35d4b98db53be6137c250c6b5706cef3151
 - name: github.com/mattes/migrate
-  version: 83e27c8b88547a927ce6f0876eaa1b5c3b75042c
+  version: 305a63a4472b883b8af8e0d71132e98d83a69e4d
   subpackages:
   - driver
   - driver/postgres
@@ -24,5 +28,5 @@ imports:
   - migrate/direction
   - pipe
 - name: gopkg.in/yaml.v2
-  version: a83829b6f1293c91addabc89d0571c246397bbf4
+  version: a3f3340b5840cee44f372bddb5880fcbc419b46a
 testImports: []

@@ -28,20 +28,34 @@ import (
 	"strings"
 	"time"
 
+	"github.com/majewsky/sqlproxy"
 	//enable postgres driver for database/sql
 	_ "github.com/lib/pq"
 )
 
 //DB holds the main database connection. It will be `nil` until InitDatabase() is called.
-var DB *Database
+var DB *sql.DB
+
+func init() {
+	sql.Register("postgres-debug", &sqlproxy.Driver{
+		ProxiedDriverName: "postgres",
+		BeforeQueryHook:   traceQuery,
+	})
+}
 
 //InitDatabase initializes the connection to the database.
 func InitDatabase(cfg Configuration) error {
-	db, err := sql.Open("postgres", cfg.Database.Location)
+	sqlDriver := "postgres"
+	if isDebug && os.Getenv("DEBUG_SQL") == "1" {
+		Log(LogInfo, "Enabling SQL tracing... \x1B[1;31mTHIS VOIDS YOUR WARRANTY!\x1B[0m If database queries fail in unexpected ways, check first if the tracing causes the issue.")
+		sqlDriver = "postgres-debug"
+	}
+
+	var err error
+	DB, err = sql.Open(sqlDriver, cfg.Database.Location)
 	if err != nil {
 		return err
 	}
-	DB = &Database{db}
 
 	//wait for database to reach our expected migration level (this is useful
 	//because, depending on the rollout strategy, `limes-migrate` might still be
@@ -103,125 +117,7 @@ func getCurrentMigrationLevel(cfg Configuration) (int, error) {
 	return result, nil
 }
 
-////////////////////////////////////////////////////////////////////////////////
-// Database struct
-
-//Database wraps the normal sql.DB structure to provide optional statement tracing.
-type Database struct {
-	inner *sql.DB
-}
-
-//Begin works like for sql.DB.
-func (db *Database) Begin() (*Transaction, error) {
-	tx, err := db.inner.Begin()
-	return &Transaction{tx}, err
-}
-
-//Exec works like for sql.DB.
-func (db *Database) Exec(query string, args ...interface{}) (sql.Result, error) {
-	traceQuery(query, args)
-	return db.inner.Exec(query, args...)
-}
-
-//Prepare works like for sql.DB.
-func (db *Database) Prepare(query string) (*Statement, error) {
-	stmt, err := db.inner.Prepare(query)
-	return &Statement{stmt, query}, err
-}
-
-//Query works like for sql.DB.
-func (db *Database) Query(query string, args ...interface{}) (*sql.Rows, error) {
-	traceQuery(query, args)
-	return db.inner.Query(query, args...)
-}
-
-//QueryRow works like for sql.DB.
-func (db *Database) QueryRow(query string, args ...interface{}) *sql.Row {
-	traceQuery(query, args)
-	return db.inner.QueryRow(query, args...)
-}
-
-//DBInterface is an interface that both Database and Transaction implement.
-type DBInterface interface {
-	Exec(query string, args ...interface{}) (sql.Result, error)
-	Prepare(query string) (*Statement, error)
-	Query(query string, args ...interface{}) (*sql.Rows, error)
-	QueryRow(query string, args ...interface{}) *sql.Row
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// Statement struct
-
-//Statement wraps the normal sql.Stmt structure to provide optional statement tracing.
-type Statement struct {
-	inner *sql.Stmt
-	query string
-}
-
-//Close works like for sql.Stmt.
-func (s *Statement) Close() error {
-	return s.inner.Close()
-}
-
-//Exec works like for sql.Stmt.
-func (s *Statement) Exec(args ...interface{}) (sql.Result, error) {
-	traceQuery(s.query, args)
-	return s.inner.Exec(args...)
-}
-
-//Query works like for sql.Stmt.
-func (s *Statement) Query(args ...interface{}) (*sql.Rows, error) {
-	traceQuery(s.query, args)
-	return s.inner.Query(args...)
-}
-
-//QueryRow works like for sql.Stmt.
-func (s *Statement) QueryRow(args ...interface{}) *sql.Row {
-	traceQuery(s.query, args)
-	return s.inner.QueryRow(args...)
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// Transaction struct
-
-//Transaction wraps the normal sql.Tx structure to provide optional statement tracing.
-type Transaction struct {
-	inner *sql.Tx
-}
-
-//Commit works like for sql.Tx.
-func (t *Transaction) Commit() error {
-	return t.inner.Commit()
-}
-
-//Exec works like for sql.Tx.
-func (t *Transaction) Exec(query string, args ...interface{}) (sql.Result, error) {
-	traceQuery(query, args)
-	return t.inner.Exec(query, args...)
-}
-
-//Prepare works like for sql.Tx.
-func (t *Transaction) Prepare(query string) (*Statement, error) {
-	stmt, err := t.inner.Prepare(query)
-	return &Statement{stmt, query}, err
-}
-
-//Query works like for sql.Tx.
-func (t *Transaction) Query(query string, args ...interface{}) (*sql.Rows, error) {
-	traceQuery(query, args)
-	return t.inner.Query(query, args...)
-}
-
-//QueryRow works like for sql.Tx.
-func (t *Transaction) QueryRow(query string, args ...interface{}) *sql.Row {
-	traceQuery(query, args)
-	return t.inner.QueryRow(query, args...)
-}
-
 func traceQuery(query string, args []interface{}) {
-	if !isDebug {
-		return
-	}
 	if len(args) == 0 {
 		Log(LogDebug, query)
 		return
