@@ -24,7 +24,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/sapcc/limes/pkg/collectors"
+	"github.com/sapcc/limes/pkg/collector"
 	"github.com/sapcc/limes/pkg/drivers"
 	"github.com/sapcc/limes/pkg/limes"
 )
@@ -68,7 +68,7 @@ func main() {
 
 	//since we don't have to manage thread lifetime in the main thread, I use it to check Keystone regularly
 	for {
-		_, err := collectors.ScanDomains(state.Driver, state.Cluster.ID, collectors.ScanDomainsOpts{ScanAllProjects: true})
+		_, err := collector.ScanDomains(state.Driver, state.Cluster.ID, collector.ScanDomainsOpts{ScanAllProjects: true})
 		if err != nil {
 			limes.Log(limes.LogError, err.Error())
 		}

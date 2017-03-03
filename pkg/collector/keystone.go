@@ -17,7 +17,7 @@
 *
 *******************************************************************************/
 
-package collectors
+package collector
 
 import (
 	"github.com/sapcc/limes/pkg/drivers"

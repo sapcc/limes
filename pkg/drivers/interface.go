@@ -21,9 +21,9 @@ package drivers
 
 import "github.com/sapcc/limes/pkg/limes"
 
-//Driver is an interface that wraps the queries to backend services required by
-//any collectors, in order to make it easy to swap out the driver
-//implementation for a mock during unit tests.
+//Driver is an interface that wraps any queries and requests to backend
+//services, in order to make it easy to swap out the driver implementation for
+//a mock during unit tests.
 type Driver interface {
 	//Return the Cluster that this Driver instance operates on. This is useful
 	//because it means we just have to pass around the Driver instance in
@@ -32,6 +32,9 @@ type Driver interface {
 	/********** Keystone (Identity) **********/
 	ListDomains() ([]KeystoneDomain, error)
 	ListProjects(domainUUID string) ([]KeystoneProject, error)
+	/********** Nova (Compute) **********/
+	GetComputeQuota(projectUUID string) (ComputeData, error)
+	GetComputeUsage(projectUUID string) (ComputeData, error)
 }
 
 //KeystoneDomain describes the basic attributes of a Keystone domain.
@@ -44,6 +47,13 @@ type KeystoneDomain struct {
 type KeystoneProject struct {
 	UUID string `json:"id"`
 	Name string `json:"name"`
+}
+
+//ComputeData contains quota or usage values for a project's compute resources.
+type ComputeData struct {
+	Cores     uint64
+	Instances uint64
+	RAM       uint64
 }
 
 //This is the type that implements the Driver interface by actually calling out
