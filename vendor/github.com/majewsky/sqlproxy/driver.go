@@ -47,10 +47,8 @@ package sqlproxy
 import (
 	"database/sql"
 	"database/sql/driver"
-	"errors"
-	"fmt"
 	"io"
-	"reflect"
+	"time"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -181,37 +179,83 @@ func (r *resultRows) Next(dest []driver.Value) error {
 		return io.EOF
 	}
 
-	columnTypes, err := r.rows.ColumnTypes()
-	if err != nil {
-		return errors.New("cannot determine column types while proxying Next(): " + err.Error())
+	buffer := make([]interface{}, len(dest))
+	for idx := range buffer {
+		buffer[idx] = &union{Current: 0}
 	}
 
-	reflectValues := make([]reflect.Value, len(dest))
-	scannableValues := make([]interface{}, len(dest))
-	for idx, columnType := range columnTypes {
-		//can only construct a scanning target if the ScanType() is not interface{}
-		scanType := columnType.ScanType()
-		if scanType == reflect.TypeOf(new(interface{})).Elem() {
-			return fmt.Errorf("cannot determine ScanType for result column %d", idx)
-		}
-		value := reflect.New(scanType)
-		reflectValues[idx] = value
-		scannableValues[idx] = value.Interface()
-	}
-
-	err = r.rows.Scan(scannableValues...)
+	err := r.rows.Scan(buffer...)
 	if err != nil {
 		return err
 	}
 
-	for idx := range columnTypes {
-		dest[idx] = reflect.Indirect(reflectValues[idx]).Interface()
+	for idx, val := range buffer {
+		dest[idx] = val.(*union).Extract()
 	}
 	return nil
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // utils
+
+//Union is a type that implements sql.Scanner and can store all scannable values.
+//(See documentation for type sql.Scanner for details.)
+type union struct {
+	Current uint //0 for nil values
+	Option1 int64
+	Option2 float64
+	Option3 bool
+	Option4 []byte
+	Option5 string
+	Option6 time.Time
+}
+
+//Scan implements the sql.Scanner interface. It places a value in the union.
+func (u *union) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case int64:
+		u.Current = 1
+		u.Option1 = s
+	case float64:
+		u.Current = 2
+		u.Option2 = s
+	case bool:
+		u.Current = 3
+		u.Option3 = s
+	case []byte:
+		u.Current = 4
+		u.Option4 = s
+	case string:
+		u.Current = 5
+		u.Option5 = s
+	case time.Time:
+		u.Current = 6
+		u.Option6 = s
+	default:
+		u.Current = 0
+	}
+	return nil
+}
+
+//Extract retrieves the value from the union.
+func (u *union) Extract() driver.Value {
+	switch u.Current {
+	case 1:
+		return u.Option1
+	case 2:
+		return u.Option2
+	case 3:
+		return u.Option3
+	case 4:
+		return u.Option4
+	case 5:
+		return u.Option5
+	case 6:
+		return u.Option6
+	default:
+		return nil
+	}
+}
 
 func castValues(values []driver.Value) []interface{} {
 	result := make([]interface{}, len(values))

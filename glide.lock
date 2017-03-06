@@ -17,7 +17,7 @@ imports:
   subpackages:
   - oid
 - name: github.com/majewsky/sqlproxy
-  version: 9e8ca35d4b98db53be6137c250c6b5706cef3151
+  version: d8bb9e1e021c8e97bc89ba1d6af59d1467826116
 - name: github.com/mattes/migrate
   version: 305a63a4472b883b8af8e0d71132e98d83a69e4d
   subpackages:

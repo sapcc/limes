@@ -26,24 +26,32 @@ import (
 	"reflect"
 	"testing"
 
+	_ "github.com/lib/pq"
 	_ "github.com/mattn/go-sqlite3"
 )
 
 var queries []string
 
 func init() {
-	sql.Register("sqlite3+nothing", &Driver{
-		ProxiedDriverName: "sqlite3",
-	})
-	sql.Register("sqlite3+beforequery", &Driver{
-		ProxiedDriverName: "sqlite3",
-		BeforeQueryHook: func(query string, args []interface{}) {
-			queries = append(queries, fmt.Sprintf("(%s) %#v", query, args))
-		},
-	})
+	for _, driverName := range []string{"sqlite3", "postgres"} {
+		sql.Register(driverName+"+nothing", &Driver{
+			ProxiedDriverName: driverName,
+		})
+		sql.Register(driverName+"+beforequery", &Driver{
+			ProxiedDriverName: driverName,
+			BeforeQueryHook: func(query string, args []interface{}) {
+				queries = append(queries, fmt.Sprintf("(%s) %#v", query, args))
+			},
+		})
+	}
 }
 
-var dsn = "file:test.db"
+var sqliteFile = "test.sqlite"
+
+//testing of the postgres driver can be optionally enabled
+var postgresURI = os.Getenv("POSTGRES_URI")
+
+////////////////////////////////////////////////////////////////////////////////
 
 type TT struct {
 	t *testing.T
@@ -71,20 +79,40 @@ func (tt TT) MustRows(rows *sql.Rows, err error) *sql.Rows {
 }
 
 func (tt TT) CleanupDB() {
-	err := os.Remove("test.db")
+	err := os.Remove(sqliteFile)
 	if !os.IsNotExist(err) {
 		tt.Must(err)
 	}
+
+	if postgresURI != "" {
+		db := tt.MustDB(sql.Open("postgres", postgresURI))
+		tt.MustResult(db.Exec("DROP TABLE IF EXISTS knowledge"))
+		tt.Must(db.Close())
+	}
 }
 
-func (tt TT) PrepareDB() {
+func (tt TT) ForeachDB(capability string, action func(db *sql.DB)) {
 	tt.CleanupDB()
 
-	db := tt.MustDB(sql.Open("sqlite3", dsn))
-	tt.MustResult(db.Exec(`CREATE TABLE knowledge (number INTEGER, thing TEXT)`))
-	tt.MustResult(db.Exec(`INSERT INTO knowledge VALUES (23, 'conspiracy')`))
-	tt.MustResult(db.Exec(`INSERT INTO knowledge VALUES (42, 'truth')`))
+	prepare := func(db *sql.DB) {
+		tt.MustResult(db.Exec(`CREATE TABLE knowledge (number INTEGER, thing TEXT)`))
+		tt.MustResult(db.Exec(`INSERT INTO knowledge VALUES (23, 'conspiracy')`))
+		tt.MustResult(db.Exec(`INSERT INTO knowledge VALUES (42, 'truth')`))
+		tt.Must(db.Close())
+	}
+
+	sqliteDSN := "file:" + sqliteFile
+	prepare(tt.MustDB(sql.Open("sqlite3", sqliteDSN)))
+	db := tt.MustDB(sql.Open("sqlite3"+capability, sqliteDSN))
+	action(db)
 	tt.Must(db.Close())
+
+	if postgresURI != "" {
+		prepare(tt.MustDB(sql.Open("postgres", postgresURI)))
+		db := tt.MustDB(sql.Open("postgres"+capability, postgresURI))
+		action(db)
+		tt.Must(db.Close())
+	}
 }
 
 func (tt TT) Unexpected(name string, expected, actual interface{}) {
@@ -113,71 +141,73 @@ func (tt TT) ExpectRow(rows *sql.Rows, expectedNumber int, expectedThing string)
 //Test_Basic verifies that SQL statements pass through the proxy.
 func Test_Basic(t *testing.T) {
 	tt := TT{t}
-	tt.PrepareDB()
-	db := tt.MustDB(sql.Open("sqlite3+nothing", dsn))
 
-	tt.MustResult(db.Exec(`INSERT INTO knowledge VALUES (5, 'chaos')`)).RowsAffected()
+	tt.ForeachDB("+nothing", func(db *sql.DB) {
+		tt.MustResult(db.Exec(`INSERT INTO knowledge VALUES (5, 'chaos')`)).RowsAffected()
 
-	affected, err := tt.MustResult(db.Exec(`UPDATE knowledge SET thing = ? WHERE number = ?`, "douglas", "42")).RowsAffected()
-	tt.Must(err)
-	if affected != 1 {
-		tt.Unexpected("affected", 1, affected)
-	}
+		affected, err := tt.MustResult(db.Exec(`UPDATE knowledge SET thing = $1 WHERE number = $2`, "douglas", "42")).RowsAffected()
+		tt.Must(err)
+		if affected != 1 {
+			tt.Unexpected("affected", 1, affected)
+		}
 
-	tt.MustResult(db.Exec(`DELETE FROM knowledge WHERE thing = 'conspiracy'`))
+		tt.MustResult(db.Exec(`DELETE FROM knowledge WHERE thing = 'conspiracy'`))
 
-	rows := tt.MustRows(db.Query(`SELECT * FROM knowledge ORDER BY number`))
-	tt.ExpectRow(rows, 5, "chaos")
-	tt.ExpectRow(rows, 42, "douglas")
-	if rows.Next() {
-		t.Fatalf("unexpected continuation of result set")
-	}
-	tt.Must(rows.Close())
+		rows := tt.MustRows(db.Query(`SELECT * FROM knowledge ORDER BY number`))
+		tt.ExpectRow(rows, 5, "chaos")
+		tt.ExpectRow(rows, 42, "douglas")
+		if rows.Next() {
+			t.Fatalf("unexpected continuation of result set")
+		}
+		tt.Must(rows.Close())
+	})
 
-	tt.Must(db.Close())
 	tt.CleanupDB()
 }
 
 //Test_BeforeQueryHook tests that the BeforeQueryHook is being called.
 func Test_BeforeQueryHook(t *testing.T) {
 	tt := TT{t}
-	queries = nil
 
-	db := tt.MustDB(sql.Open("sqlite3+beforequery", ":memory:"))
-	var x int
+	tt.ForeachDB("+beforequery", func(db *sql.DB) {
+		queries = nil
+		var x int
 
-	tt.Must(db.QueryRow(`SELECT 42`).Scan(&x))
-	if x != 42 {
-		tt.Unexpected("x", 42, x)
-	}
-
-	tt.Must(db.QueryRow(`SELECT ?`, int16(23)).Scan(&x))
-	if x != 23 {
-		tt.Unexpected("x", 23, x)
-	}
-
-	var y string
-	var z string
-	tt.Must(db.QueryRow(`SELECT ?, ?`, "black", "magic").Scan(&y, &z))
-	if y != "black" {
-		tt.Unexpected("y", "black", y)
-	}
-	if z != "magic" {
-		tt.Unexpected("z", "magic", z)
-	}
-
-	expectedQueries := []string{
-		`(SELECT 42) []interface {}{}`,
-		`(SELECT ?) []interface {}{23}`,
-		`(SELECT ?, ?) []interface {}{"black", "magic"}`,
-	}
-	if !reflect.DeepEqual(queries, expectedQueries) {
-		t.Errorf("not seeing the queries that I expected")
-		for idx, query := range expectedQueries {
-			t.Logf("expected %d = %s", idx, query)
+		tt.Must(db.QueryRow(`SELECT 42`).Scan(&x))
+		if x != 42 {
+			tt.Unexpected("x", 42, x)
 		}
-		for idx, query := range queries {
-			t.Logf("actual %d = %s", idx, query)
+
+		tt.Must(db.QueryRow(`SELECT $1::integer`, int16(23)).Scan(&x))
+		if x != 23 {
+			tt.Unexpected("x", 23, x)
 		}
-	}
+
+		var y string
+		var z string
+		tt.Must(db.QueryRow(`SELECT $1::text, $2::text`, "black", "magic").Scan(&y, &z))
+		if y != "black" {
+			tt.Unexpected("y", "black", y)
+		}
+		if z != "magic" {
+			tt.Unexpected("z", "magic", z)
+		}
+
+		expectedQueries := []string{
+			`(SELECT 42) []interface {}{}`,
+			`(SELECT $1::integer) []interface {}{23}`,
+			`(SELECT $1::text, $2::text) []interface {}{"black", "magic"}`,
+		}
+		if !reflect.DeepEqual(queries, expectedQueries) {
+			t.Errorf("not seeing the queries that I expected")
+			for idx, query := range expectedQueries {
+				t.Logf("expected %d = %s", idx, query)
+			}
+			for idx, query := range queries {
+				t.Logf("actual %d = %s", idx, query)
+			}
+		}
+	})
+
+	tt.CleanupDB()
 }
