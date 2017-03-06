@@ -57,7 +57,7 @@ func ScanDomains(driver drivers.Driver, opts ScanDomainsOpts) ([]string, error) 
 			domain := record.(*models.Domain)
 			if !isDomainUUID[domain.UUID] {
 				limes.Log(limes.LogInfo, "removing deleted Keystone domain from our database: %s", domain.Name)
-				return domain.Delete()
+				return domain.Delete(limes.DB)
 			}
 			isDomainUUIDinDB[domain.UUID] = true
 			dbDomains = append(dbDomains, domain)
@@ -126,7 +126,7 @@ func ScanProjects(driver drivers.Driver, domain *models.Domain) ([]string, error
 			project := record.(*models.Project)
 			if !isProjectUUID[project.UUID] {
 				limes.Log(limes.LogInfo, "removing deleted Keystone project from our database: %s/%s", domain.Name, project.Name)
-				return project.Delete()
+				return project.Delete(limes.DB)
 			}
 			isProjectUUIDinDB[project.UUID] = true
 			return nil
@@ -162,6 +162,7 @@ func initProject(driver drivers.Driver, domain *models.Domain, project drivers.K
 	if err != nil {
 		return err
 	}
+	defer limes.RollbackUnlessCommitted(tx)
 
 	//add record to `projects` table
 	dbProject, err := models.CreateProject(project, domain.ID, tx)

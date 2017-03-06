@@ -21,7 +21,6 @@ package collector
 
 import (
 	"database/sql"
-	"errors"
 	"time"
 
 	"github.com/sapcc/limes/pkg/drivers"
@@ -39,12 +38,13 @@ var scrapeInterval = 30 * time.Minute
 //records for the given driver's cluster and the given service type, and
 //updates them by querying the backend service.
 //
-//Errors are only returned if the pre-flight checks fail. Once in flight, the
-//function will log errors and never return.
-func Scrape(driver drivers.Driver, serviceType string) error {
+//Errors are logged instead of returned. The function will not return unless
+//startup fails.
+func Scrape(driver drivers.Driver, serviceType string) {
 	plugin := GetPlugin(serviceType)
 	if plugin == nil {
-		return errors.New("no scraper plugin found for this service")
+		limes.Log(limes.LogError, "startup for %s scraper failed: no such scraper plugin", serviceType)
+		return
 	}
 	clusterID := driver.Cluster().ID
 
@@ -64,7 +64,8 @@ func Scrape(driver drivers.Driver, serviceType string) error {
 		LIMIT 1
 	`)
 	if err != nil {
-		return err
+		limes.Log(limes.LogError, "startup for %s scraper failed: %s", serviceType, err.Error())
+		return
 	}
 	defer findProjectStmt.Close()
 
@@ -111,8 +112,6 @@ func Scrape(driver drivers.Driver, serviceType string) error {
 		//to finish scraping as fast as possible when there are multiple projects
 		//to scrape at once.
 	}
-
-	return nil
 }
 
 func writeScrapeResult(serviceID uint64, resourceDataList []ResourceData, scrapedAt time.Time) error {
@@ -120,6 +119,7 @@ func writeScrapeResult(serviceID uint64, resourceDataList []ResourceData, scrape
 	if err != nil {
 		return err
 	}
+	defer limes.RollbackUnlessCommitted(tx)
 
 	//find existing resource records
 	existing := make(map[string]*models.ProjectResource)

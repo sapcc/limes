@@ -129,3 +129,21 @@ func traceQuery(query string, args []interface{}) {
 	}
 	Log(LogDebug, strings.TrimSuffix(formatStr, ", ")+"]", args...)
 }
+
+//RollbackUnlessCommitted calls Rollback() on a transaction if it hasn't been
+//committed or rolled back yet. Use this with the defer keyword to make sure
+//that a transaction is automatically rolled back when a function fails.
+func RollbackUnlessCommitted(tx *sql.Tx) {
+	err := tx.Rollback()
+	switch err {
+	case nil:
+		//rolled back successfully
+		Log(LogInfo, "implicit rollback done")
+		return
+	case sql.ErrTxDone:
+		//already committed or rolled back - nothing to do
+		return
+	default:
+		Log(LogError, "implicit rollback failed: %s", err.Error())
+	}
+}

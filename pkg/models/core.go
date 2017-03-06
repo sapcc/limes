@@ -23,6 +23,8 @@ import (
 	"database/sql"
 	"fmt"
 	"strings"
+
+	"github.com/sapcc/limes/pkg/limes"
 )
 
 //Table offers algorithms on Limes' database schema's tables.
@@ -41,7 +43,7 @@ type Record interface {
 	//like in Table().AllFields.
 	ScanTargets() []interface{}
 	//Delete deletes this record from the database.
-	Delete() error
+	Delete(db DBInterface) error
 }
 
 //Collection references a set of records by way of a still-to-be-executed SQL query.
@@ -104,20 +106,47 @@ func (c *Collection) Foreach(db DBInterface, action func(record Record) error) e
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer func() {
+		if rows != nil {
+			err := rows.Close()
+			if err != nil {
+				//log this error since I might be returning some other error already
+				limes.Log(limes.LogError, "sql.Rows.Close failed: %s", err.Error())
+			}
+		}
+	}()
 
+	//we need to materialize the records first before using the callback -- The
+	//DBInterface might be a transaction, and the callback might do more SQL
+	//queries using the same transaction, but the libpq driver does not support
+	//multiple concurrent queries in a single transaction.
+	//<https://github.com/lib/pq/issues/81>
+	var records []Record
 	for rows.Next() {
 		record := c.table.makeRecord()
 		err := rows.Scan(record.ScanTargets()...)
 		if err != nil {
 			return err
 		}
+		records = append(records, record)
+	}
+	err = rows.Err()
+	if err != nil {
+		return err
+	}
+	err = rows.Close()
+	rows = nil //do not try to Close() twice
+	if err != nil {
+		return err
+	}
 
-		err = action(record)
+	//now we can safely use the callback
+	for _, record := range records {
+		err := action(record)
 		if err != nil {
 			return err
 		}
 	}
 
-	return rows.Err()
+	return nil
 }

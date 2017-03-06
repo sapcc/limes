@@ -2,9 +2,9 @@
 
 CREATE TABLE cluster_services (
   id         BIGSERIAL NOT NULL PRIMARY KEY,
-  cluster_id TEXT,
+  cluster_id TEXT      NOT NULL,
   name       TEXT      NOT NULL,
-  scraped_at TIMESTAMP NOT NULL DEFAULT to_timestamp(0),
+  scraped_at TIMESTAMP NOT NULL DEFAULT to_timestamp(0), -- TODO: replace by NULL-by-default
   UNIQUE (cluster_id, name)
 );
 
@@ -28,7 +28,7 @@ CREATE TABLE domain_services (
   id         BIGSERIAL NOT NULL PRIMARY KEY,
   domain_id  BIGINT    NOT NULL REFERENCES domains ON DELETE CASCADE,
   name       TEXT      NOT NULL,
-  scraped_at TIMESTAMP NOT NULL DEFAULT to_timestamp(0),
+  scraped_at TIMESTAMP NOT NULL DEFAULT to_timestamp(0), -- TODO: replace by NULL-by-default
   UNIQUE (domain_id, name)
 );
 

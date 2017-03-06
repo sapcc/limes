@@ -60,13 +60,9 @@ func main() {
 	//can be terminated at any time without leaving the system in an inconsistent
 	//state, mostly through usage of DB transactions.)
 	for _, service := range cluster.EnabledServices() {
-		go func(service limes.ServiceConfiguration) {
-			err := collector.Scrape(driver, service.Type)
-			if err != nil {
-				limes.Log(limes.LogError, "startup for %s scraper failed: %s", service.Type, err.Error())
-			}
-		}(service)
+		go collector.Scrape(driver, service.Type)
 	}
+	go collector.ScanCapacity(driver)
 
 	//since we don't have to manage thread lifetime in the main thread, I use it to check Keystone regularly
 	//TODO: before starting this, walk over the existing project_services once to

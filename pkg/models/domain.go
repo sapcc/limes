@@ -63,7 +63,7 @@ func (d *Domain) ScanTargets() []interface{} {
 }
 
 //Delete implements the Record interface.
-func (d *Domain) Delete() error {
-	_, err := limes.DB.Exec(`DELETE FROM domains WHERE id = $1`, d.ID)
+func (d *Domain) Delete(db DBInterface) error {
+	_, err := db.Exec(`DELETE FROM domains WHERE id = $1`, d.ID)
 	return err
 }

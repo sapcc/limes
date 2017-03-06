@@ -21,7 +21,6 @@ package models
 
 import (
 	"github.com/sapcc/limes/pkg/drivers"
-	"github.com/sapcc/limes/pkg/limes"
 )
 
 //Project represents a Keystone project in Limes' database.
@@ -63,7 +62,7 @@ func (p *Project) ScanTargets() []interface{} {
 }
 
 //Delete implements the Record interface.
-func (p *Project) Delete() error {
-	_, err := limes.DB.Exec(`DELETE FROM projects WHERE id = $1`, p.ID)
+func (p *Project) Delete(db DBInterface) error {
+	_, err := db.Exec(`DELETE FROM projects WHERE id = $1`, p.ID)
 	return err
 }

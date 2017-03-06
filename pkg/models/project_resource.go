@@ -19,8 +19,6 @@
 
 package models
 
-import "github.com/sapcc/limes/pkg/limes"
-
 //ProjectResource represents a single resource within a single Keystone
 //project.
 type ProjectResource struct {
@@ -59,8 +57,8 @@ func (pr *ProjectResource) ScanTargets() []interface{} {
 }
 
 //Delete implements the Record interface.
-func (pr *ProjectResource) Delete() error {
-	_, err := limes.DB.Exec(
+func (pr *ProjectResource) Delete(db DBInterface) error {
+	_, err := db.Exec(
 		`DELETE FROM project_resources WHERE service_id = $1 AND name = $2`,
 		pr.ServiceID, pr.Name)
 	return err
