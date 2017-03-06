@@ -81,6 +81,7 @@ func (c *Cluster) RefreshToken() error {
 
 	c.tokenRenewalMutex.Lock()
 	defer c.tokenRenewalMutex.Unlock()
+	Log(LogDebug, "renewing Keystone token...")
 
 	c.Client.TokenID = ""
 
