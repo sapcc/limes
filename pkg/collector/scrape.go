@@ -50,7 +50,7 @@ func Scrape(driver drivers.Driver, serviceType string) error {
 
 	//prepare SQL statement to find the next project to update
 	findProjectStmt, err := limes.DB.Prepare(`
-		SELECT ps.id, p.uuid, d.uuid
+		SELECT ps.id, p.name, p.uuid, d.name, d.uuid
 		FROM project_services ps
 		JOIN projects p ON p.id = ps.project_id
 		JOIN domains d ON d.id = p.domain_id
@@ -71,12 +71,14 @@ func Scrape(driver drivers.Driver, serviceType string) error {
 	for {
 		var (
 			serviceID   uint64
+			projectName string
 			projectUUID string
+			domainName  string
 			domainUUID  string
 		)
 		err := findProjectStmt.
 			QueryRow(clusterID, serviceType, time.Now().Add(-scrapeInterval)).
-			Scan(&serviceID, &projectUUID, &domainUUID)
+			Scan(&serviceID, &projectName, &projectUUID, &domainName, &domainUUID)
 		if err != nil {
 			//ErrNoRows is okay; it just means that needs scraping right now
 			if err != sql.ErrNoRows {
@@ -84,22 +86,23 @@ func Scrape(driver drivers.Driver, serviceType string) error {
 				//(such as "the DB has burst into flames"); maybe a separate thread that
 				//just pings the DB every now and then and does os.Exit(1) if it fails);
 				//check if database/sql has something like that built-in
-				limes.Log(limes.LogError, err.Error())
+				limes.Log(limes.LogError, "cannot select next project for which to scrape %s data: %s", serviceType, err.Error())
 			}
 			time.Sleep(idleInterval)
 			continue
 		}
 
+		limes.Log(limes.LogDebug, "scraping %s for %s/%s", serviceType, domainName, projectName)
 		resourceDataList, err := plugin.Scrape(driver, domainUUID, projectUUID)
 		if err != nil {
-			limes.Log(limes.LogError, err.Error())
+			limes.Log(limes.LogError, "scrape %s data for %s/%s failed: %s", serviceType, domainName, projectName, err.Error())
 			time.Sleep(idleInterval)
 			continue
 		}
 
 		err = writeScrapeResult(serviceID, resourceDataList, time.Now())
 		if err != nil {
-			limes.Log(limes.LogError, err.Error())
+			limes.Log(limes.LogError, "write %s backend data for %s/%s failed: %s", serviceType, domainName, projectName, err.Error())
 			time.Sleep(idleInterval)
 			continue
 		}

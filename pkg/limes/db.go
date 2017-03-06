@@ -87,6 +87,7 @@ func InitDatabase(cfg Configuration) error {
 		time.Sleep(time.Duration(waitInterval) * time.Second)
 	}
 
+	Log(LogDebug, "database is migrated - commencing normal startup...")
 	return nil
 }
 

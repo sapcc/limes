@@ -56,6 +56,7 @@ func ScanDomains(driver drivers.Driver, opts ScanDomainsOpts) ([]string, error) 
 		Foreach(limes.DB, func(record models.Record) error {
 			domain := record.(*models.Domain)
 			if !isDomainUUID[domain.UUID] {
+				limes.Log(limes.LogInfo, "removing deleted Keystone domain from our database: %s", domain.Name)
 				return domain.Delete()
 			}
 			isDomainUUIDinDB[domain.UUID] = true
@@ -75,6 +76,7 @@ func ScanDomains(driver drivers.Driver, opts ScanDomainsOpts) ([]string, error) 
 		}
 
 		//TODO: create domain_service and domain_resource entries
+		limes.Log(limes.LogInfo, "discovered new Keystone domain: %s", domain.Name)
 		dbDomain, err := models.CreateDomain(domain, clusterID, limes.DB)
 		if err != nil {
 			return result, err
@@ -120,12 +122,13 @@ func ScanProjects(driver drivers.Driver, domain *models.Domain) ([]string, error
 	//records through `ON DELETE CASCADE`)
 	isProjectUUIDinDB := make(map[string]bool)
 	err = models.ProjectsTable.Where(`domain_id = $1`, domain.ID).
-		Foreach(limes.DB, func(project models.Record) error {
-			uuid := project.(*models.Project).UUID
-			if !isProjectUUID[uuid] {
+		Foreach(limes.DB, func(record models.Record) error {
+			project := record.(*models.Project)
+			if !isProjectUUID[project.UUID] {
+				limes.Log(limes.LogInfo, "removing deleted Keystone project from our database: %s/%s", domain.Name, project.Name)
 				return project.Delete()
 			}
-			isProjectUUIDinDB[uuid] = true
+			isProjectUUIDinDB[project.UUID] = true
 			return nil
 		})
 	if err != nil {
@@ -140,6 +143,7 @@ func ScanProjects(driver drivers.Driver, domain *models.Domain) ([]string, error
 			continue
 		}
 
+		limes.Log(limes.LogInfo, "discovered new Keystone project: %s/%s", domain.Name, project.Name)
 		err := initProject(driver, domain, project)
 		if err != nil {
 			return result, err
