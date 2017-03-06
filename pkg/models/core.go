@@ -42,6 +42,8 @@ type Record interface {
 	//use with db.Rows.Scan(), db.QueryRow() and so on. The order of fields is
 	//like in Table().AllFields.
 	ScanTargets() []interface{}
+	//Save inserts this record into the database, or updates it if it already exists.
+	Save(db DBInterface) error
 	//Delete deletes this record from the database.
 	Delete(db DBInterface) error
 }

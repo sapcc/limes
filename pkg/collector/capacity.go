@@ -103,7 +103,7 @@ func scanCapacity(driver drivers.Driver, serviceType string, plugin Plugin) erro
 			capacity, exists := capacities[res.Name]
 			if exists {
 				res.Capacity = capacity
-				return res.Update(tx)
+				return res.Save(tx)
 			}
 			return res.Delete(tx)
 		})
@@ -121,7 +121,7 @@ func scanCapacity(driver drivers.Driver, serviceType string, plugin Plugin) erro
 			Name:      name,
 			Capacity:  capacity,
 		}
-		err := res.Insert(tx)
+		err := res.Save(tx)
 		if err != nil {
 			return err
 		}

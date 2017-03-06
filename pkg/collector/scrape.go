@@ -138,13 +138,8 @@ func writeScrapeResult(serviceID uint64, resourceDataList []ResourceData, scrape
 		record, exists := existing[data.Name]
 		if exists {
 			//update existing resource record
-			_, err := tx.Exec(
-				`UPDATE project_resources SET backend_quota = $1, usage = $2 WHERE service_id = $3 AND name = $4`,
-				data.Quota, data.Usage, serviceID, data.Name,
-			)
-			if err != nil {
-				return err
-			}
+			record.BackendQuota = data.Quota
+			record.Usage = data.Usage
 		} else {
 			//insert new resource record
 			record = &models.ProjectResource{
@@ -154,10 +149,10 @@ func writeScrapeResult(serviceID uint64, resourceDataList []ResourceData, scrape
 				Usage:        data.Usage,
 				BackendQuota: data.Quota,
 			}
-			err := record.Insert(tx)
-			if err != nil {
-				return err
-			}
+		}
+		err := record.Save(tx)
+		if err != nil {
+			return err
 		}
 	}
 

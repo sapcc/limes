@@ -28,25 +28,14 @@ type Project struct {
 	ID                      int64
 	drivers.KeystoneProject //Name and UUID
 	DomainID                int64
+	exists                  bool
 }
 
 //ProjectsTable enables table-level operations on projects.
 var ProjectsTable = &Table{
 	Name:       "projects",
 	AllFields:  []string{"id", "domain_id", "uuid", "name"},
-	makeRecord: func() Record { return &Project{} },
-}
-
-//CreateProject puts a new project in the database.
-func CreateProject(kp drivers.KeystoneProject, domainID int64, db DBInterface) (*Project, error) {
-	p := &Project{
-		KeystoneProject: kp,
-		DomainID:        domainID,
-	}
-	return p, db.QueryRow(
-		`INSERT INTO projects (domain_id, uuid, name) VALUES ($1, $2, $3) RETURNING id`,
-		p.DomainID, p.UUID, p.Name,
-	).Scan(&p.ID)
+	makeRecord: func() Record { return &Project{exists: true} },
 }
 
 //Table implements the Record interface.
@@ -59,6 +48,21 @@ func (p *Project) ScanTargets() []interface{} {
 	return []interface{}{
 		&p.ID, &p.DomainID, &p.UUID, &p.Name,
 	}
+}
+
+//Save implements the Record interface.
+func (p *Project) Save(db DBInterface) (err error) {
+	if p.exists {
+		//NOTE: only name may be updated
+		_, err = db.Exec(`UPDATE projects SET name = $1 WHERE id = $2`, p.Name, p.ID)
+	} else {
+		err = db.QueryRow(
+			`INSERT INTO projects (domain_id, uuid, name) VALUES ($1, $2, $3) RETURNING id`,
+			p.DomainID, p.UUID, p.Name,
+		).Scan(&p.ID)
+		p.exists = err == nil
+	}
+	return
 }
 
 //Delete implements the Record interface.

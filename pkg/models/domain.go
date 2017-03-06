@@ -29,25 +29,14 @@ type Domain struct {
 	ID                     int64
 	drivers.KeystoneDomain //Name and UUID
 	ClusterID              string
+	exists                 bool
 }
 
 //DomainsTable enables table-level operations on domains.
 var DomainsTable = &Table{
 	Name:       "domains",
 	AllFields:  []string{"id", "cluster_id", "uuid", "name"},
-	makeRecord: func() Record { return &Domain{} },
-}
-
-//CreateDomain puts a new domain in the database.
-func CreateDomain(kd drivers.KeystoneDomain, clusterID string, db DBInterface) (*Domain, error) {
-	d := &Domain{
-		KeystoneDomain: kd,
-		ClusterID:      clusterID,
-	}
-	return d, limes.DB.QueryRow(
-		`INSERT INTO domains (cluster_id, uuid, name) VALUES ($1, $2, $3) RETURNING id`,
-		d.ClusterID, d.UUID, d.Name,
-	).Scan(&d.ID)
+	makeRecord: func() Record { return &Domain{exists: true} },
 }
 
 //Table implements the Record interface.
@@ -60,6 +49,21 @@ func (d *Domain) ScanTargets() []interface{} {
 	return []interface{}{
 		&d.ID, &d.ClusterID, &d.UUID, &d.Name,
 	}
+}
+
+//Save implements the Record interface.
+func (d *Domain) Save(db DBInterface) (err error) {
+	if d.exists {
+		//NOTE: only name may be updated
+		_, err = db.Exec(`UPDATE domains SET name = $1 WHERE id = $2`, d.Name, d.ID)
+	} else {
+		err = limes.DB.QueryRow(
+			`INSERT INTO domains (cluster_id, uuid, name) VALUES ($1, $2, $3) RETURNING id`,
+			d.ClusterID, d.UUID, d.Name,
+		).Scan(&d.ID)
+		d.exists = err == nil
+	}
+	return
 }
 
 //Delete implements the Record interface.

@@ -24,21 +24,14 @@ type ClusterResource struct {
 	ServiceID uint64 //index into `cluster_services` table
 	Name      string
 	Capacity  uint64
+	exists    bool
 }
 
 //ClusterResourcesTable enables table-level operations on cluster resources.
 var ClusterResourcesTable = &Table{
 	Name:       "cluster_resources",
 	AllFields:  []string{"service_id", "name", "capacity"},
-	makeRecord: func() Record { return &ClusterResource{} },
-}
-
-//Insert writes this record into the database as a new row.
-func (cr *ClusterResource) Insert(db DBInterface) error {
-	_, err := db.Exec(
-		`INSERT INTO cluster_resources (service_id, name, capacity) VALUES ($1, $2, $3)`,
-		cr.ServiceID, cr.Name, cr.Capacity)
-	return err
+	makeRecord: func() Record { return &ClusterResource{exists: true} },
 }
 
 //Table implements the Record interface.
@@ -53,19 +46,25 @@ func (cr *ClusterResource) ScanTargets() []interface{} {
 	}
 }
 
+//Save implements the record interface.
+func (cr *ClusterResource) Save(db DBInterface) (err error) {
+	if cr.exists {
+		_, err = db.Exec(
+			`UPDATE cluster_resources SET capacity = $1 WHERE service_id = $2 AND name = $3`,
+			cr.Capacity, cr.ServiceID, cr.Name)
+	} else {
+		_, err = db.Exec(
+			`INSERT INTO cluster_resources (service_id, name, capacity) VALUES ($1, $2, $3) RETURNING id`,
+			cr.ServiceID, cr.Name, cr.Capacity)
+		cr.exists = err == nil
+	}
+	return
+}
+
 //Delete implements the Record interface.
 func (cr *ClusterResource) Delete(db DBInterface) error {
 	_, err := db.Exec(
 		`DELETE FROM cluster_resources WHERE service_id = $1 AND name = $2`,
 		cr.ServiceID, cr.Name)
-	return err
-}
-
-//Update writes the values from this resource back into the DB, assuming that
-//the record already exists in there.
-func (cr *ClusterResource) Update(db DBInterface) error {
-	_, err := db.Exec(
-		`UPDATE cluster_resources SET capacity = $1 WHERE service_id = $2 AND name = $3`,
-		cr.Capacity, cr.ServiceID, cr.Name)
 	return err
 }

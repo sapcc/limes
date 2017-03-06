@@ -77,7 +77,11 @@ func ScanDomains(driver drivers.Driver, opts ScanDomainsOpts) ([]string, error) 
 
 		//TODO: create domain_service and domain_resource entries
 		limes.Log(limes.LogInfo, "discovered new Keystone domain: %s", domain.Name)
-		dbDomain, err := models.CreateDomain(domain, clusterID, limes.DB)
+		dbDomain := &models.Domain{
+			KeystoneDomain: domain,
+			ClusterID:      clusterID,
+		}
+		err := dbDomain.Save(limes.DB)
 		if err != nil {
 			return result, err
 		}
@@ -165,7 +169,11 @@ func initProject(driver drivers.Driver, domain *models.Domain, project drivers.K
 	defer limes.RollbackUnlessCommitted(tx)
 
 	//add record to `projects` table
-	dbProject, err := models.CreateProject(project, domain.ID, tx)
+	dbProject := &models.Project{
+		KeystoneProject: project,
+		DomainID:        domain.ID,
+	}
+	err = dbProject.Save(tx)
 	if err != nil {
 		return err
 	}
