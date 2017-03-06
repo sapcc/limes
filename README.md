@@ -4,6 +4,8 @@ Limes is an OpenStack-compatible quota/usage tracking service, originally design
 
 Pronounce the name like the [Ancient Roman border wall][wp-limes], not like the fruit.
 
+**WARNING:** This is still in pre-alpha stage. Most notably, the API component is completely missing, and there are no tests yet.
+
 # Installation
 
 There's a Makefile, so do:
@@ -20,6 +22,8 @@ Prerequisites: Create a PostgreSQL database for Limes, and a service user in at 
 
 2. Populate the DB schema by running `limes-migrate config.yaml`. For more fine-grained control of migrations (e.g.
    rollback), download the [`migrate` tool][migrate] and follow the instructions over there.
+
+3. For each cluster, start `limes-api config.yaml $cluster_id` and `limes-collect config.yaml $cluster_id`.
 
 [wp-limes]: https://en.wikipedia.org/wiki/Limes
 [ex-conf]:  ./docs/example-config.yaml
