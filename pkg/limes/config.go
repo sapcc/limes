@@ -24,6 +24,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/util"
 
 	yaml "gopkg.in/yaml.v2"
@@ -31,15 +32,8 @@ import (
 
 //Configuration contains all the data from the configuration file.
 type Configuration struct {
-	Database DatabaseConfiguration            `yaml:"database"`
+	Database db.Configuration                 `yaml:"database"`
 	Clusters map[string]*ClusterConfiguration `yaml:"clusters"`
-}
-
-//DatabaseConfiguration is used inside type Configuration, and only has an
-//exported name to produce more readable error messages for malformed YAMLs.
-type DatabaseConfiguration struct {
-	Location       string `yaml:"location"`
-	MigrationsPath string `yaml:"migrations"`
 }
 
 //ClusterConfiguration is used inside type Configuration, and only has an

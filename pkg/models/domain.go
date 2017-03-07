@@ -21,7 +21,6 @@ package models
 
 import (
 	"github.com/sapcc/limes/pkg/drivers"
-	"github.com/sapcc/limes/pkg/limes"
 )
 
 //Domain represents a Keystone domain in Limes' database.
@@ -57,7 +56,7 @@ func (d *Domain) Save(db DBInterface) (err error) {
 		//NOTE: only name may be updated
 		_, err = db.Exec(`UPDATE domains SET name = $1 WHERE id = $2`, d.Name, d.ID)
 	} else {
-		err = limes.DB.QueryRow(
+		err = db.QueryRow(
 			`INSERT INTO domains (cluster_id, uuid, name) VALUES ($1, $2, $3) RETURNING id`,
 			d.ClusterID, d.UUID, d.Name,
 		).Scan(&d.ID)

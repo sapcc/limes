@@ -20,8 +20,8 @@
 package collector
 
 import (
+	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/drivers"
-	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/models"
 	"github.com/sapcc/limes/pkg/util"
 )
@@ -54,11 +54,11 @@ func ScanDomains(driver drivers.Driver, opts ScanDomainsOpts) ([]string, error) 
 	isDomainUUIDinDB := make(map[string]bool)
 	var dbDomains []*models.Domain
 	err = models.DomainsTable.Where(`cluster_id = $1`, clusterID).
-		Foreach(limes.DB, func(record models.Record) error {
+		Foreach(db.DB, func(record models.Record) error {
 			domain := record.(*models.Domain)
 			if !isDomainUUID[domain.UUID] {
 				util.LogInfo("removing deleted Keystone domain from our database: %s", domain.Name)
-				return domain.Delete(limes.DB)
+				return domain.Delete(db.DB)
 			}
 			isDomainUUIDinDB[domain.UUID] = true
 			dbDomains = append(dbDomains, domain)
@@ -82,7 +82,7 @@ func ScanDomains(driver drivers.Driver, opts ScanDomainsOpts) ([]string, error) 
 			KeystoneDomain: domain,
 			ClusterID:      clusterID,
 		}
-		err := dbDomain.Save(limes.DB)
+		err := dbDomain.Save(db.DB)
 		if err != nil {
 			return result, err
 		}
@@ -127,11 +127,11 @@ func ScanProjects(driver drivers.Driver, domain *models.Domain) ([]string, error
 	//records through `ON DELETE CASCADE`)
 	isProjectUUIDinDB := make(map[string]bool)
 	err = models.ProjectsTable.Where(`domain_id = $1`, domain.ID).
-		Foreach(limes.DB, func(record models.Record) error {
+		Foreach(db.DB, func(record models.Record) error {
 			project := record.(*models.Project)
 			if !isProjectUUID[project.UUID] {
 				util.LogInfo("removing deleted Keystone project from our database: %s/%s", domain.Name, project.Name)
-				return project.Delete(limes.DB)
+				return project.Delete(db.DB)
 			}
 			isProjectUUIDinDB[project.UUID] = true
 			return nil
@@ -163,11 +163,11 @@ func ScanProjects(driver drivers.Driver, domain *models.Domain) ([]string, error
 //`project_services`).
 func initProject(driver drivers.Driver, domain *models.Domain, project drivers.KeystoneProject) error {
 	//do this in a transaction to avoid half-initialized projects
-	tx, err := limes.DB.Begin()
+	tx, err := db.DB.Begin()
 	if err != nil {
 		return err
 	}
-	defer limes.RollbackUnlessCommitted(tx)
+	defer db.RollbackUnlessCommitted(tx)
 
 	//add record to `projects` table
 	dbProject := &models.Project{

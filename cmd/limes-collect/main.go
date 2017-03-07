@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/sapcc/limes/pkg/collector"
+	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/drivers"
 	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/util"
@@ -43,7 +44,7 @@ func main() {
 	config := limes.NewConfiguration(os.Args[1])
 
 	//connect to database
-	err := limes.InitDatabase(config)
+	err := db.Init(config.Database)
 	if err != nil {
 		util.LogFatal(err.Error())
 	}

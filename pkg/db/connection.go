@@ -17,7 +17,7 @@
 *
 *******************************************************************************/
 
-package limes
+package db
 
 import (
 	"database/sql"
@@ -44,16 +44,23 @@ func init() {
 	})
 }
 
-//InitDatabase initializes the connection to the database.
-func InitDatabase(cfg Configuration) error {
+//Configuration is the section of the global configuration file that
+//contains the data about
+type Configuration struct {
+	Location       string `yaml:"location"`
+	MigrationsPath string `yaml:"migrations"`
+}
+
+//Init initializes the connection to the database.
+func Init(cfg Configuration) error {
 	sqlDriver := "postgres"
 	if os.Getenv("LIMES_DEBUG_SQL") == "1" {
 		util.LogInfo("Enabling SQL tracing... \x1B[1;31mTHIS VOIDS YOUR WARRANTY!\x1B[0m If database queries fail in unexpected ways, check first if the tracing causes the issue.")
-		sqlDriver = "postgres-debug"
+		sqlDriver += "-debug"
 	}
 
 	var err error
-	DB, err = sql.Open(sqlDriver, cfg.Database.Location)
+	DB, err = sql.Open(sqlDriver, cfg.Location)
 	if err != nil {
 		return err
 	}
@@ -94,7 +101,7 @@ func InitDatabase(cfg Configuration) error {
 
 func getCurrentMigrationLevel(cfg Configuration) (int, error) {
 	//list files in migration directory
-	dir, err := os.Open(cfg.Database.MigrationsPath)
+	dir, err := os.Open(cfg.MigrationsPath)
 	if err != nil {
 		return 0, err
 	}

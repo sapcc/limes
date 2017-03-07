@@ -23,8 +23,8 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/drivers"
-	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/models"
 	"github.com/sapcc/limes/pkg/util"
 )
@@ -69,11 +69,11 @@ func scanCapacity(driver drivers.Driver, serviceType string, plugin Plugin) erro
 	scrapedAt := time.Now()
 
 	//do the following in a transaction to avoid inconsistent DB state
-	tx, err := limes.DB.Begin()
+	tx, err := db.DB.Begin()
 	if err != nil {
 		return err
 	}
-	defer limes.RollbackUnlessCommitted(tx)
+	defer db.RollbackUnlessCommitted(tx)
 
 	//find or create the cluster_services entry
 	var serviceID uint64

@@ -23,8 +23,8 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/drivers"
-	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/models"
 	"github.com/sapcc/limes/pkg/util"
 )
@@ -50,7 +50,7 @@ func Scrape(driver drivers.Driver, serviceType string) {
 	clusterID := driver.Cluster().ID
 
 	//prepare SQL statement to find the next project to update
-	findProjectStmt, err := limes.DB.Prepare(`
+	findProjectStmt, err := db.DB.Prepare(`
 		SELECT ps.id, p.name, p.uuid, d.name, d.uuid
 		FROM project_services ps
 		JOIN projects p ON p.id = ps.project_id
@@ -116,11 +116,11 @@ func Scrape(driver drivers.Driver, serviceType string) {
 }
 
 func writeScrapeResult(serviceID uint64, resourceDataList []ResourceData, scrapedAt time.Time) error {
-	tx, err := limes.DB.Begin()
+	tx, err := db.DB.Begin()
 	if err != nil {
 		return err
 	}
-	defer limes.RollbackUnlessCommitted(tx)
+	defer db.RollbackUnlessCommitted(tx)
 
 	//find existing resource records
 	existing := make(map[string]*models.ProjectResource)
