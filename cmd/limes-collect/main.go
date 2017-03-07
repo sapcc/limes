@@ -27,6 +27,7 @@ import (
 	"github.com/sapcc/limes/pkg/collector"
 	"github.com/sapcc/limes/pkg/drivers"
 	"github.com/sapcc/limes/pkg/limes"
+	"github.com/sapcc/limes/pkg/util"
 
 	_ "github.com/sapcc/limes/pkg/plugins"
 )
@@ -44,13 +45,13 @@ func main() {
 	//connect to database
 	err := limes.InitDatabase(config)
 	if err != nil {
-		limes.Log(limes.LogFatal, err.Error())
+		util.LogFatal(err.Error())
 	}
 
 	//connect to cluster
 	cluster, err := limes.NewCluster(config, os.Args[2])
 	if err != nil {
-		limes.Log(limes.LogFatal, err.Error())
+		util.LogFatal(err.Error())
 	}
 	driver := drivers.NewDriver(cluster)
 
@@ -71,7 +72,7 @@ func main() {
 	for {
 		_, err := collector.ScanDomains(driver, collector.ScanDomainsOpts{ScanAllProjects: true})
 		if err != nil {
-			limes.Log(limes.LogError, err.Error())
+			util.LogError(err.Error())
 		}
 		time.Sleep(discoverInterval)
 	}

@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/majewsky/sqlproxy"
+	"github.com/sapcc/limes/pkg/util"
 	//enable postgres driver for database/sql
 	_ "github.com/lib/pq"
 )
@@ -46,8 +47,8 @@ func init() {
 //InitDatabase initializes the connection to the database.
 func InitDatabase(cfg Configuration) error {
 	sqlDriver := "postgres"
-	if isDebug && os.Getenv("DEBUG_SQL") == "1" {
-		Log(LogInfo, "Enabling SQL tracing... \x1B[1;31mTHIS VOIDS YOUR WARRANTY!\x1B[0m If database queries fail in unexpected ways, check first if the tracing causes the issue.")
+	if os.Getenv("LIMES_DEBUG_SQL") == "1" {
+		util.LogInfo("Enabling SQL tracing... \x1B[1;31mTHIS VOIDS YOUR WARRANTY!\x1B[0m If database queries fail in unexpected ways, check first if the tracing causes the issue.")
 		sqlDriver = "postgres-debug"
 	}
 
@@ -61,7 +62,7 @@ func InitDatabase(cfg Configuration) error {
 	//because, depending on the rollout strategy, `limes-migrate` might still be
 	//running when we are starting, so wait for it to complete)
 	migrationLevel, err := getCurrentMigrationLevel(cfg)
-	Log(LogDebug, "waiting for database to migrate to schema version %d", migrationLevel)
+	util.LogDebug("waiting for database to migrate to schema version %d", migrationLevel)
 	if err != nil {
 		return err
 	}
@@ -83,11 +84,11 @@ func InitDatabase(cfg Configuration) error {
 		}
 		//did not get a row - expected migration not there -> sleep with exponential backoff
 		waitInterval *= 2
-		Log(LogInfo, "database is not migrated to schema version %d yet - will retry in %d seconds", migrationLevel, waitInterval)
+		util.LogInfo("database is not migrated to schema version %d yet - will retry in %d seconds", migrationLevel, waitInterval)
 		time.Sleep(time.Duration(waitInterval) * time.Second)
 	}
 
-	Log(LogDebug, "database is migrated - commencing normal startup...")
+	util.LogDebug("database is migrated - commencing normal startup...")
 	return nil
 }
 
@@ -120,14 +121,14 @@ func getCurrentMigrationLevel(cfg Configuration) (int, error) {
 
 func traceQuery(query string, args []interface{}) {
 	if len(args) == 0 {
-		Log(LogDebug, query)
+		util.LogDebug(query)
 		return
 	}
 	formatStr := strings.Replace(query, "%", "%%", -1) + " ["
 	for _ = range args {
 		formatStr += "%#v, "
 	}
-	Log(LogDebug, strings.TrimSuffix(formatStr, ", ")+"]", args...)
+	util.LogDebug(strings.TrimSuffix(formatStr, ", ")+"]", args...)
 }
 
 //RollbackUnlessCommitted calls Rollback() on a transaction if it hasn't been
@@ -138,12 +139,12 @@ func RollbackUnlessCommitted(tx *sql.Tx) {
 	switch err {
 	case nil:
 		//rolled back successfully
-		Log(LogInfo, "implicit rollback done")
+		util.LogInfo("implicit rollback done")
 		return
 	case sql.ErrTxDone:
 		//already committed or rolled back - nothing to do
 		return
 	default:
-		Log(LogError, "implicit rollback failed: %s", err.Error())
+		util.LogError("implicit rollback failed: %s", err.Error())
 	}
 }

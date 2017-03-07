@@ -26,6 +26,7 @@ import (
 	"github.com/sapcc/limes/pkg/drivers"
 	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/models"
+	"github.com/sapcc/limes/pkg/util"
 )
 
 var scanInterval = 15 * time.Minute
@@ -49,10 +50,10 @@ func ScanCapacity(driver drivers.Driver) {
 				//will already have reported the error
 				continue
 			}
-			limes.Log(limes.LogDebug, "scanning %s capacity", service.Type)
+			util.LogDebug("scanning %s capacity", service.Type)
 			err := scanCapacity(driver, service.Type, plugin)
 			if err != nil {
-				limes.Log(limes.LogError, "scan %s capacity failed: %s", service.Type, err.Error())
+				util.LogError("scan %s capacity failed: %s", service.Type, err.Error())
 			}
 		}
 

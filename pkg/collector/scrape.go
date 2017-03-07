@@ -26,6 +26,7 @@ import (
 	"github.com/sapcc/limes/pkg/drivers"
 	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/models"
+	"github.com/sapcc/limes/pkg/util"
 )
 
 //how long to sleep after a scraping error, or when nothing needed scraping
@@ -43,7 +44,7 @@ var scrapeInterval = 30 * time.Minute
 func Scrape(driver drivers.Driver, serviceType string) {
 	plugin := GetPlugin(serviceType)
 	if plugin == nil {
-		limes.Log(limes.LogError, "startup for %s scraper failed: no such scraper plugin", serviceType)
+		util.LogError("startup for %s scraper failed: no such scraper plugin", serviceType)
 		return
 	}
 	clusterID := driver.Cluster().ID
@@ -64,7 +65,7 @@ func Scrape(driver drivers.Driver, serviceType string) {
 		LIMIT 1
 	`)
 	if err != nil {
-		limes.Log(limes.LogError, "startup for %s scraper failed: %s", serviceType, err.Error())
+		util.LogError("startup for %s scraper failed: %s", serviceType, err.Error())
 		return
 	}
 	defer findProjectStmt.Close()
@@ -87,23 +88,23 @@ func Scrape(driver drivers.Driver, serviceType string) {
 				//(such as "the DB has burst into flames"); maybe a separate thread that
 				//just pings the DB every now and then and does os.Exit(1) if it fails);
 				//check if database/sql has something like that built-in
-				limes.Log(limes.LogError, "cannot select next project for which to scrape %s data: %s", serviceType, err.Error())
+				util.LogError("cannot select next project for which to scrape %s data: %s", serviceType, err.Error())
 			}
 			time.Sleep(idleInterval)
 			continue
 		}
 
-		limes.Log(limes.LogDebug, "scraping %s for %s/%s", serviceType, domainName, projectName)
+		util.LogDebug("scraping %s for %s/%s", serviceType, domainName, projectName)
 		resourceDataList, err := plugin.Scrape(driver, domainUUID, projectUUID)
 		if err != nil {
-			limes.Log(limes.LogError, "scrape %s data for %s/%s failed: %s", serviceType, domainName, projectName, err.Error())
+			util.LogError("scrape %s data for %s/%s failed: %s", serviceType, domainName, projectName, err.Error())
 			time.Sleep(idleInterval)
 			continue
 		}
 
 		err = writeScrapeResult(serviceID, resourceDataList, time.Now())
 		if err != nil {
-			limes.Log(limes.LogError, "write %s backend data for %s/%s failed: %s", serviceType, domainName, projectName, err.Error())
+			util.LogError("write %s backend data for %s/%s failed: %s", serviceType, domainName, projectName, err.Error())
 			time.Sleep(idleInterval)
 			continue
 		}
@@ -163,7 +164,7 @@ func writeScrapeResult(serviceID uint64, resourceDataList []ResourceData, scrape
 		delete(existing, data.Name)
 	}
 	for name := range existing {
-		limes.Log(limes.LogError,
+		util.LogError(
 			"could not scrape new data for resource %s in project service %d (was this resource type removed from the scraper plugin?)",
 			name, serviceID,
 		)

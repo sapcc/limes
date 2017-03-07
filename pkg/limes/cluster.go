@@ -26,6 +26,7 @@ import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/identity/v3/tokens"
+	"github.com/sapcc/limes/pkg/util"
 )
 
 //Cluster manages the connection to one of the OpenStack clusters defined in the Limes configuration.
@@ -81,7 +82,7 @@ func (c *Cluster) RefreshToken() error {
 
 	c.tokenRenewalMutex.Lock()
 	defer c.tokenRenewalMutex.Unlock()
-	Log(LogDebug, "renewing Keystone token...")
+	util.LogDebug("renewing Keystone token...")
 
 	c.Client.TokenID = ""
 

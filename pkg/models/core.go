@@ -24,7 +24,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/sapcc/limes/pkg/limes"
+	"github.com/sapcc/limes/pkg/util"
 )
 
 //Table offers algorithms on Limes' database schema's tables.
@@ -113,7 +113,7 @@ func (c *Collection) Foreach(db DBInterface, action func(record Record) error) e
 			err := rows.Close()
 			if err != nil {
 				//log this error since I might be returning some other error already
-				limes.Log(limes.LogError, "sql.Rows.Close failed: %s", err.Error())
+				util.LogError("sql.Rows.Close failed: %s", err.Error())
 			}
 		}
 	}()

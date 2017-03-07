@@ -26,6 +26,7 @@ import (
 	_ "github.com/mattes/migrate/driver/postgres"
 	"github.com/mattes/migrate/migrate"
 	"github.com/sapcc/limes/pkg/limes"
+	"github.com/sapcc/limes/pkg/util"
 )
 
 func main() {
@@ -38,7 +39,7 @@ func main() {
 
 	errs, ok := migrate.UpSync(config.Database.Location, config.Database.MigrationsPath)
 	if !ok {
-		limes.Log(limes.LogError, "migration failed, see errors on stderr")
+		util.LogError("migration failed, see errors on stderr")
 		for _, err := range errs {
 			fmt.Fprintln(os.Stderr, err.Error())
 		}

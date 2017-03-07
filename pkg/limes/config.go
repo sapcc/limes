@@ -24,6 +24,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/sapcc/limes/pkg/util"
+
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -66,11 +68,11 @@ func NewConfiguration(path string) (cfg Configuration) {
 	//read config file
 	configBytes, err := ioutil.ReadFile(path)
 	if err != nil {
-		Log(LogFatal, "read configuration file: %s", err.Error())
+		util.LogFatal("read configuration file: %s", err.Error())
 	}
 	err = yaml.Unmarshal(configBytes, &cfg)
 	if err != nil {
-		Log(LogFatal, "parse configuration: %s", err.Error())
+		util.LogFatal("parse configuration: %s", err.Error())
 	}
 	if !cfg.validate() {
 		os.Exit(1)
@@ -83,7 +85,7 @@ func (cfg Configuration) validate() (success bool) {
 	success = true //until proven otherwise
 
 	missing := func(key string) {
-		Log(LogError, "missing %s configuration value", key)
+		util.LogError("missing %s configuration value", key)
 		success = false
 	}
 	if cfg.Database.Location == "" {
@@ -98,7 +100,7 @@ func (cfg Configuration) validate() (success bool) {
 
 	for clusterID, cluster := range cfg.Clusters {
 		missing := func(key string) {
-			Log(LogError, "missing clusters[%s].%s configuration value", clusterID, key)
+			util.LogError("missing clusters[%s].%s configuration value", clusterID, key)
 			success = false
 		}
 
@@ -111,10 +113,10 @@ func (cfg Configuration) validate() (success bool) {
 		case cluster.AuthURL == "":
 			missing("auth_url")
 		case !strings.HasPrefix(cluster.AuthURL, "http://") && !strings.HasPrefix(cluster.AuthURL, "https://"):
-			Log(LogError, "clusters[%s].auth_url does not look like a HTTP URL", clusterID)
+			util.LogError("clusters[%s].auth_url does not look like a HTTP URL", clusterID)
 			success = false
 		case !strings.HasSuffix(cluster.AuthURL, "/v3/"):
-			Log(LogError, "clusters[%s].auth_url does not end with \"/v3/\"", clusterID)
+			util.LogError("clusters[%s].auth_url does not end with \"/v3/\"", clusterID)
 			success = false
 		}
 

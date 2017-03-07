@@ -23,6 +23,7 @@ import (
 	"github.com/sapcc/limes/pkg/drivers"
 	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/models"
+	"github.com/sapcc/limes/pkg/util"
 )
 
 //ScanDomainsOpts contains additional options for ScanDomains().
@@ -56,7 +57,7 @@ func ScanDomains(driver drivers.Driver, opts ScanDomainsOpts) ([]string, error) 
 		Foreach(limes.DB, func(record models.Record) error {
 			domain := record.(*models.Domain)
 			if !isDomainUUID[domain.UUID] {
-				limes.Log(limes.LogInfo, "removing deleted Keystone domain from our database: %s", domain.Name)
+				util.LogInfo("removing deleted Keystone domain from our database: %s", domain.Name)
 				return domain.Delete(limes.DB)
 			}
 			isDomainUUIDinDB[domain.UUID] = true
@@ -76,7 +77,7 @@ func ScanDomains(driver drivers.Driver, opts ScanDomainsOpts) ([]string, error) 
 		}
 
 		//TODO: create domain_service and domain_resource entries
-		limes.Log(limes.LogInfo, "discovered new Keystone domain: %s", domain.Name)
+		util.LogInfo("discovered new Keystone domain: %s", domain.Name)
 		dbDomain := &models.Domain{
 			KeystoneDomain: domain,
 			ClusterID:      clusterID,
@@ -129,7 +130,7 @@ func ScanProjects(driver drivers.Driver, domain *models.Domain) ([]string, error
 		Foreach(limes.DB, func(record models.Record) error {
 			project := record.(*models.Project)
 			if !isProjectUUID[project.UUID] {
-				limes.Log(limes.LogInfo, "removing deleted Keystone project from our database: %s/%s", domain.Name, project.Name)
+				util.LogInfo("removing deleted Keystone project from our database: %s/%s", domain.Name, project.Name)
 				return project.Delete(limes.DB)
 			}
 			isProjectUUIDinDB[project.UUID] = true
@@ -147,7 +148,7 @@ func ScanProjects(driver drivers.Driver, domain *models.Domain) ([]string, error
 			continue
 		}
 
-		limes.Log(limes.LogInfo, "discovered new Keystone project: %s/%s", domain.Name, project.Name)
+		util.LogInfo("discovered new Keystone project: %s/%s", domain.Name, project.Name)
 		err := initProject(driver, domain, project)
 		if err != nil {
 			return result, err
