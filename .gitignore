@@ -2,6 +2,9 @@
 build/limes*
 .gopath/pkg/
 
+# test artifacts
+unittest.db
+
 # custom configuration files used during development
 *test*.yaml
 *config*.yaml

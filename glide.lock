@@ -1,5 +1,5 @@
 hash: e2289a729e592fdbd9c334177ae8ddf779ecea09069807157a2b67456f5215ce
-updated: 2017-03-03T19:47:26.523783122+01:00
+updated: 2017-03-08T14:25:04.008517668+01:00
 imports:
 - name: github.com/gophercloud/gophercloud
   version: 303bf8a5e44befcf262f4d0502f7343f64c52d8e
@@ -17,16 +17,23 @@ imports:
   subpackages:
   - oid
 - name: github.com/majewsky/sqlproxy
-  version: d8bb9e1e021c8e97bc89ba1d6af59d1467826116
+  version: f5b297e7dce14c045323881f272b97a3fdfb74c3
 - name: github.com/mattes/migrate
-  version: 305a63a4472b883b8af8e0d71132e98d83a69e4d
+  version: 83e27c8b88547a927ce6f0876eaa1b5c3b75042c
   subpackages:
   - driver
   - driver/postgres
+  - driver/sqlite3
   - file
   - migrate
   - migrate/direction
   - pipe
+- name: github.com/mattn/go-sqlite3
+  version: eac1dfa2a61ebccaa117538a5bb12044f6700cd0
+- name: golang.org/x/net
+  version: e90d6d0afc4c315a0d87a568ae68577cc15149a0
+  subpackages:
+  - context
 - name: gopkg.in/yaml.v2
-  version: a3f3340b5840cee44f372bddb5880fcbc419b46a
+  version: a83829b6f1293c91addabc89d0571c246397bbf4
 testImports: []

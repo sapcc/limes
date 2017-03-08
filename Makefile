@@ -13,6 +13,13 @@ GO_LDFLAGS    := -s -w
 build/limes-%: FORCE
 	$(GO) install $(GO_BUILDFLAGS) -ldflags '$(GO_LDFLAGS)' '$(PKG)/cmd/limes-$*'
 
+check: prepare-check FORCE
+	@$(GO) test $(shell go list $(PKG)/pkg/...)
+
+# Precompile a module used by the unit tests which takes a long time to compile because of cgo.
+prepare-check: FORCE
+	@$(GO) install github.com/sapcc/limes/vendor/github.com/mattn/go-sqlite3
+
 install: FORCE all
 	install -D -m 0755 -t "$(DESTDIR)$(PREFIX)/bin" $(addprefix build/limes-,$(BINS))
 	install -D -m 0644 -t "$(DESTDIR)$(PREFIX)/share/limes/migrations" $(CURDIR)/pkg/db/migrations/*.sql

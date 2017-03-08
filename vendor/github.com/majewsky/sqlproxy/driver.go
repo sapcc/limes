@@ -190,7 +190,7 @@ func (r *resultRows) Next(dest []driver.Value) error {
 	}
 
 	for idx, val := range buffer {
-		dest[idx] = val.(*union).Extract()
+		dest[idx], _ = val.(*union).Value()
 	}
 	return nil
 }
@@ -198,8 +198,8 @@ func (r *resultRows) Next(dest []driver.Value) error {
 ////////////////////////////////////////////////////////////////////////////////
 // utils
 
-//Union is a type that implements sql.Scanner and can store all scannable values.
-//(See documentation for type sql.Scanner for details.)
+//Union is a type that implements sql.Scanner and driver.Valuer, and can store
+//all scannable values.
 type union struct {
 	Current uint //0 for nil values
 	Option1 int64
@@ -237,23 +237,23 @@ func (u *union) Scan(src interface{}) error {
 	return nil
 }
 
-//Extract retrieves the value from the union.
-func (u *union) Extract() driver.Value {
+//Value implements the driver.Valuer interface.
+func (u *union) Value() (driver.Value, error) {
 	switch u.Current {
 	case 1:
-		return u.Option1
+		return u.Option1, nil
 	case 2:
-		return u.Option2
+		return u.Option2, nil
 	case 3:
-		return u.Option3
+		return u.Option3, nil
 	case 4:
-		return u.Option4
+		return u.Option4, nil
 	case 5:
-		return u.Option5
+		return u.Option5, nil
 	case 6:
-		return u.Option6
+		return u.Option6, nil
 	default:
-		return nil
+		return nil, nil
 	}
 }
 
