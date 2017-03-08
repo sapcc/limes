@@ -24,6 +24,8 @@ import (
 	"os"
 	"testing"
 
+	gorp "gopkg.in/gorp.v2"
+
 	"github.com/mattes/migrate/migrate"
 	"github.com/sapcc/limes/pkg/db"
 
@@ -52,8 +54,10 @@ func InitDatabase(t *testing.T, migrationsPath string) {
 	}
 
 	//initialize DB connection
-	db.DB, err = sql.Open("sqlite3", dbPath)
+	sqliteDB, err := sql.Open("sqlite3-debug", dbPath)
 	if err != nil {
 		t.Fatal(err)
 	}
+	db.DB = &gorp.DbMap{Db: sqliteDB, Dialect: gorp.SqliteDialect{}}
+	db.InitGorp()
 }

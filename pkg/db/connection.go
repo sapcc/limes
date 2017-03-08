@@ -28,6 +28,8 @@ import (
 	"strings"
 	"time"
 
+	gorp "gopkg.in/gorp.v2"
+
 	"github.com/majewsky/sqlproxy"
 	"github.com/sapcc/limes/pkg/util"
 	//enable postgres driver for database/sql
@@ -35,11 +37,16 @@ import (
 )
 
 //DB holds the main database connection. It will be `nil` until InitDatabase() is called.
-var DB *sql.DB
+var DB *gorp.DbMap
 
 func init() {
 	sql.Register("postgres-debug", &sqlproxy.Driver{
 		ProxiedDriverName: "postgres",
+		BeforeQueryHook:   traceQuery,
+	})
+	//this driver only used within unit tests
+	sql.Register("sqlite3-debug", &sqlproxy.Driver{
+		ProxiedDriverName: "sqlite3",
 		BeforeQueryHook:   traceQuery,
 	})
 }
@@ -59,11 +66,12 @@ func Init(cfg Configuration) error {
 		sqlDriver += "-debug"
 	}
 
-	var err error
-	DB, err = sql.Open(sqlDriver, cfg.Location)
+	db, err := sql.Open(sqlDriver, cfg.Location)
 	if err != nil {
 		return err
 	}
+	DB = &gorp.DbMap{Db: db, Dialect: gorp.PostgresDialect{}}
+	InitGorp()
 
 	//wait for database to reach our expected migration level (this is useful
 	//because, depending on the rollout strategy, `limes-migrate` might still be
@@ -157,7 +165,7 @@ func traceQuery(query string, args []interface{}) {
 //RollbackUnlessCommitted calls Rollback() on a transaction if it hasn't been
 //committed or rolled back yet. Use this with the defer keyword to make sure
 //that a transaction is automatically rolled back when a function fails.
-func RollbackUnlessCommitted(tx *sql.Tx) {
+func RollbackUnlessCommitted(tx *gorp.Transaction) {
 	err := tx.Rollback()
 	switch err {
 	case nil:

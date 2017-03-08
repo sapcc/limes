@@ -16,9 +16,12 @@ build/limes-%: FORCE
 check: prepare-check FORCE
 	@$(GO) test $(shell go list $(PKG)/pkg/...)
 
-# Precompile a module used by the unit tests which takes a long time to compile because of cgo.
-prepare-check: FORCE
+prepare-check: FORCE $(patsubst pkg/db/%,pkg/test/%, $(wildcard pkg/db/migrations/*.sql))
+	@# Precompile a module used by the unit tests which takes a long time to compile because of cgo.
 	@$(GO) install github.com/sapcc/limes/vendor/github.com/mattn/go-sqlite3
+pkg/test/migrations/%.sql: pkg/db/migrations/%.sql
+	@# convert Postgres syntax into SQLite syntax where necessary
+	@sed 's/BIGSERIAL NOT NULL PRIMARY KEY/INTEGER PRIMARY KEY/' < $< > $@
 
 install: FORCE all
 	install -D -m 0755 -t "$(DESTDIR)$(PREFIX)/bin" $(addprefix build/limes-,$(BINS))

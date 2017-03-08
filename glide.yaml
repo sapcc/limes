@@ -1,3 +1,5 @@
 package: github.com/sapcc/limes
 import:
 - package: github.com/majewsky/sqlproxy
+- package: gopkg.in/gorp.v2
+  version: ^2.0.0

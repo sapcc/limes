@@ -22,7 +22,6 @@ package collector
 import (
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
-	"github.com/sapcc/limes/pkg/models"
 	"github.com/sapcc/limes/pkg/util"
 )
 
@@ -52,20 +51,21 @@ func ScanDomains(driver limes.Driver, opts ScanDomainsOpts) ([]string, error) {
 	//too (the deletion from the `domains` table includes all projects in that
 	//domain and to all related resource records through `ON DELETE CASCADE`)
 	isDomainUUIDinDB := make(map[string]bool)
-	var dbDomains []*models.Domain
-	err = models.DomainsTable.Where(`cluster_id = $1`, clusterID).
-		Foreach(db.DB, func(record models.Record) error {
-			domain := record.(*models.Domain)
-			if !isDomainUUID[domain.UUID] {
-				util.LogInfo("removing deleted Keystone domain from our database: %s", domain.Name)
-				return domain.Delete(db.DB)
-			}
-			isDomainUUIDinDB[domain.UUID] = true
-			dbDomains = append(dbDomains, domain)
-			return nil
-		})
+	var dbDomains []*db.Domain
+	_, err = db.DB.Select(&dbDomains, `SELECT * FROM domains WHERE cluster_id = $1`, clusterID)
 	if err != nil {
 		return nil, err
+	}
+	for _, dbDomain := range dbDomains {
+		if !isDomainUUID[dbDomain.UUID] {
+			util.LogInfo("removing deleted Keystone domain from our database: %s", dbDomain.Name)
+			_, err := db.DB.Delete(dbDomain)
+			if err != nil {
+				return nil, err
+			}
+			continue
+		}
+		isDomainUUIDinDB[dbDomain.UUID] = true
 	}
 
 	//when a domain has been created in Keystone, create the corresponding record
@@ -78,11 +78,12 @@ func ScanDomains(driver limes.Driver, opts ScanDomainsOpts) ([]string, error) {
 
 		//TODO: create domain_service and domain_resource entries
 		util.LogInfo("discovered new Keystone domain: %s", domain.Name)
-		dbDomain := &models.Domain{
-			KeystoneDomain: domain,
-			ClusterID:      clusterID,
+		dbDomain := &db.Domain{
+			ClusterID: clusterID,
+			Name:      domain.Name,
+			UUID:      domain.UUID,
 		}
-		err := dbDomain.Save(db.DB)
+		err := db.DB.Insert(dbDomain)
 		if err != nil {
 			return result, err
 		}
@@ -111,7 +112,7 @@ func ScanDomains(driver limes.Driver, opts ScanDomainsOpts) ([]string, error) {
 }
 
 //ScanProjects queries Keystone to discover new projects in the given domain.
-func ScanProjects(driver limes.Driver, domain *models.Domain) ([]string, error) {
+func ScanProjects(driver limes.Driver, domain *db.Domain) ([]string, error) {
 	//list projects in Keystone
 	projects, err := driver.ListProjects(domain.UUID)
 	if err != nil {
@@ -126,18 +127,21 @@ func ScanProjects(driver limes.Driver, domain *models.Domain) ([]string, error) 
 	//too (the deletion from the `projects` table includes the projects' resource
 	//records through `ON DELETE CASCADE`)
 	isProjectUUIDinDB := make(map[string]bool)
-	err = models.ProjectsTable.Where(`domain_id = $1`, domain.ID).
-		Foreach(db.DB, func(record models.Record) error {
-			project := record.(*models.Project)
-			if !isProjectUUID[project.UUID] {
-				util.LogInfo("removing deleted Keystone project from our database: %s/%s", domain.Name, project.Name)
-				return project.Delete(db.DB)
-			}
-			isProjectUUIDinDB[project.UUID] = true
-			return nil
-		})
+	var dbProjects []*db.Project
+	_, err = db.DB.Select(&dbProjects, `SELECT * FROM projects WHERE domain_id = $1`, domain.ID)
 	if err != nil {
 		return nil, err
+	}
+	for _, dbProject := range dbProjects {
+		if !isProjectUUID[dbProject.UUID] {
+			util.LogInfo("removing deleted Keystone project from our database: %s/%s", domain.Name, dbProject.Name)
+			_, err := db.DB.Delete(dbProject)
+			if err != nil {
+				return nil, err
+			}
+			continue
+		}
+		isProjectUUIDinDB[dbProject.UUID] = true
 	}
 
 	//when a project has been created in Keystone, create the corresponding
@@ -161,7 +165,7 @@ func ScanProjects(driver limes.Driver, domain *models.Domain) ([]string, error) 
 
 //Initialize all the database records for a project (in both `projects` and
 //`project_services`).
-func initProject(driver limes.Driver, domain *models.Domain, project limes.KeystoneProject) error {
+func initProject(driver limes.Driver, domain *db.Domain, project limes.KeystoneProject) error {
 	//do this in a transaction to avoid half-initialized projects
 	tx, err := db.DB.Begin()
 	if err != nil {
@@ -170,11 +174,12 @@ func initProject(driver limes.Driver, domain *models.Domain, project limes.Keyst
 	defer db.RollbackUnlessCommitted(tx)
 
 	//add record to `projects` table
-	dbProject := &models.Project{
-		KeystoneProject: project,
-		DomainID:        domain.ID,
+	dbProject := &db.Project{
+		DomainID: domain.ID,
+		Name:     project.Name,
+		UUID:     project.UUID,
 	}
-	err = dbProject.Save(tx)
+	err = db.DB.Insert(dbProject)
 	if err != nil {
 		return err
 	}

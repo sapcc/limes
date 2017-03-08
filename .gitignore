@@ -3,6 +3,7 @@ build/limes*
 .gopath/pkg/
 
 # test artifacts
+pkg/test/migrations/*.sql
 unittest.db
 
 # custom configuration files used during development

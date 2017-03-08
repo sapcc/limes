@@ -30,7 +30,7 @@ import (
 )
 
 func keystoneTestDriver(t *testing.T) *test.Driver {
-	test.InitDatabase(t, "../db/migrations")
+	test.InitDatabase(t, "../test/migrations")
 
 	return test.NewDriver(&limes.ClusterConfiguration{
 		ID: "cluster-id-test",
