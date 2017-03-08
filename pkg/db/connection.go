@@ -126,16 +126,32 @@ func getCurrentMigrationLevel(cfg Configuration) (int, error) {
 	return result, nil
 }
 
+var sqlWhitespaceRx = regexp.MustCompile(`(?:\s|--.*)+`) // `.*` matches until end of line!
+
 func traceQuery(query string, args []interface{}) {
+	//simplify query string - remove comments and reduce whitespace
+	//(This logic assumes that there are no arbitrary strings in the SQL
+	//statement, which is okay since values should be given as args anyway.)
+	query = strings.TrimSpace(sqlWhitespaceRx.ReplaceAllString(query, " "))
+
+	//early exit for easy option
 	if len(args) == 0 {
 		util.LogDebug(query)
 		return
 	}
-	formatStr := strings.Replace(query, "%", "%%", -1) + " ["
-	for _ = range args {
-		formatStr += "%#v, "
+
+	//if args contains time.Time objects, pretty-print these; use
+	//fmt.Sprintf("%#v") for all other types of values
+	argStrings := make([]string, len(args))
+	for idx, argument := range args {
+		switch arg := argument.(type) {
+		case time.Time:
+			argStrings[idx] = "time.Time [" + arg.Local().String() + "]"
+		default:
+			argStrings[idx] = fmt.Sprintf("%#v", arg)
+		}
 	}
-	util.LogDebug(strings.TrimSuffix(formatStr, ", ")+"]", args...)
+	util.LogDebug(query + " [" + strings.Join(argStrings, ", ") + "]")
 }
 
 //RollbackUnlessCommitted calls Rollback() on a transaction if it hasn't been
