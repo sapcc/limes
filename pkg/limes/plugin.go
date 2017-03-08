@@ -17,9 +17,7 @@
 *
 *******************************************************************************/
 
-package collector
-
-import "github.com/sapcc/limes/pkg/limes"
+package limes
 
 //Plugin is an interface that the collector plugins for all backend services must
 //implement.
@@ -29,11 +27,11 @@ type Plugin interface {
 	Resources() []ResourceInfo
 	//Scrape queries the backend service for the current quota and usage
 	//consumption for the given project in the given domain.
-	Scrape(driver limes.Driver, domainUUID, projectUUID string) ([]ResourceData, error)
+	Scrape(driver Driver, domainUUID, projectUUID string) ([]ResourceData, error)
 	//Capacity queries the backend service for the total capacity of its
 	//resources. If, for certain resources, a capacity estimate is not possible,
 	//the implementation shall omit these resources from the result.
-	Capacity(driver limes.Driver) (map[string]uint64, error)
+	Capacity(driver Driver) (map[string]uint64, error)
 }
 
 //ResourceInfo contains the metadata for a resource (i.e. some thing for which

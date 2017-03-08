@@ -42,7 +42,7 @@ var scrapeInterval = 30 * time.Minute
 //Errors are logged instead of returned. The function will not return unless
 //startup fails.
 func Scrape(driver limes.Driver, serviceType string) {
-	plugin := GetPlugin(serviceType)
+	plugin := limes.GetPlugin(serviceType)
 	if plugin == nil {
 		util.LogError("startup for %s scraper failed: no such scraper plugin", serviceType)
 		return
@@ -115,7 +115,7 @@ func Scrape(driver limes.Driver, serviceType string) {
 	}
 }
 
-func writeScrapeResult(serviceID uint64, resourceDataList []ResourceData, scrapedAt time.Time) error {
+func writeScrapeResult(serviceID uint64, resourceDataList []limes.ResourceData, scrapedAt time.Time) error {
 	tx, err := db.DB.Begin()
 	if err != nil {
 		return err

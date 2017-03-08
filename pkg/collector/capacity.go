@@ -44,7 +44,7 @@ func ScanCapacity(driver limes.Driver) {
 
 	for {
 		for _, service := range driver.Cluster().Services {
-			plugin := GetPlugin(service.Type)
+			plugin := limes.GetPlugin(service.Type)
 			if plugin == nil {
 				//don't need to log an error here; if this failed, the scraper thread
 				//will already have reported the error
@@ -61,7 +61,7 @@ func ScanCapacity(driver limes.Driver) {
 	}
 }
 
-func scanCapacity(driver limes.Driver, serviceType string, plugin Plugin) error {
+func scanCapacity(driver limes.Driver, serviceType string, plugin limes.Plugin) error {
 	capacities, err := plugin.Capacity(driver)
 	if err != nil {
 		return err

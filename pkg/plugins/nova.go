@@ -20,38 +20,37 @@
 package plugins
 
 import (
-	"github.com/sapcc/limes/pkg/collector"
 	"github.com/sapcc/limes/pkg/limes"
 )
 
 type novaPlugin struct{}
 
-var novaResources = []collector.ResourceInfo{
-	collector.ResourceInfo{
+var novaResources = []limes.ResourceInfo{
+	limes.ResourceInfo{
 		Name: "cores",
-		Unit: collector.UnitNone,
+		Unit: limes.UnitNone,
 	},
-	collector.ResourceInfo{
+	limes.ResourceInfo{
 		Name: "instances",
-		Unit: collector.UnitNone,
+		Unit: limes.UnitNone,
 	},
-	collector.ResourceInfo{
+	limes.ResourceInfo{
 		Name: "ram",
-		Unit: collector.UnitMebibytes,
+		Unit: limes.UnitMebibytes,
 	},
 }
 
 func init() {
-	collector.RegisterPlugin("compute", &novaPlugin{})
+	limes.RegisterPlugin("compute", &novaPlugin{})
 }
 
-//Resources implements the collector.Plugin interface.
-func (p *novaPlugin) Resources() []collector.ResourceInfo {
+//Resources implements the limes.Plugin interface.
+func (p *novaPlugin) Resources() []limes.ResourceInfo {
 	return novaResources
 }
 
-//Scrape implements the collector.Plugin interface.
-func (p *novaPlugin) Scrape(driver limes.Driver, domainUUID, projectUUID string) ([]collector.ResourceData, error) {
+//Scrape implements the limes.Plugin interface.
+func (p *novaPlugin) Scrape(driver limes.Driver, domainUUID, projectUUID string) ([]limes.ResourceData, error) {
 	quota, err := driver.GetComputeQuota(projectUUID)
 	if err != nil {
 		return nil, err
@@ -61,18 +60,18 @@ func (p *novaPlugin) Scrape(driver limes.Driver, domainUUID, projectUUID string)
 		return nil, err
 	}
 
-	return []collector.ResourceData{
-		collector.ResourceData{
+	return []limes.ResourceData{
+		limes.ResourceData{
 			Name:  "cores",
 			Quota: quota.Cores,
 			Usage: usage.Cores,
 		},
-		collector.ResourceData{
+		limes.ResourceData{
 			Name:  "instances",
 			Quota: quota.Instances,
 			Usage: usage.Instances,
 		},
-		collector.ResourceData{
+		limes.ResourceData{
 			Name:  "ram",
 			Quota: quota.RAM,
 			Usage: usage.RAM,
@@ -80,7 +79,7 @@ func (p *novaPlugin) Scrape(driver limes.Driver, domainUUID, projectUUID string)
 	}, nil
 }
 
-//Capacity implements the collector.Plugin interface.
+//Capacity implements the limes.Plugin interface.
 func (p *novaPlugin) Capacity(driver limes.Driver) (map[string]uint64, error) {
 	//TODO implement
 	return map[string]uint64{}, nil
