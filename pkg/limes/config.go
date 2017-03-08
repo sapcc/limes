@@ -24,6 +24,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/gophercloud/gophercloud"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/util"
 
@@ -36,9 +37,11 @@ type Configuration struct {
 	Clusters map[string]*ClusterConfiguration `yaml:"clusters"`
 }
 
-//ClusterConfiguration is used inside type Configuration, and only has an
-//exported name to produce more readable error messages for malformed YAMLs.
+//ClusterConfiguration contains all the configuration data for a single cluster.
+//It is passed around in a lot of Limes code, mostly for the cluster ID and the
+//list of enabled services.
 type ClusterConfiguration struct {
+	ID                string `yaml:"-"`
 	AuthURL           string `yaml:"auth_url"`
 	UserName          string `yaml:"user_name"`
 	UserDomainName    string `yaml:"user_domain_name"`
@@ -70,6 +73,13 @@ func NewConfiguration(path string) (cfg Configuration) {
 	}
 	if !cfg.validate() {
 		os.Exit(1)
+	}
+
+	for clusterID, cluster := range cfg.Clusters {
+		//pull the cluster IDs into the ClusterConfiguration objects
+		//so that we can then pass around the ClusterConfiguration objects
+		//instead of having to juggle both the ID and the config object
+		cluster.ID = clusterID
 	}
 	return
 }
@@ -136,4 +146,37 @@ func (cfg Configuration) validate() (success bool) {
 	}
 
 	return
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// The stuff in here actually belongs into pkg/drivers, but we can only
+// implement methods on *ClusterConfiguration here.
+
+//CanReauth implements the
+//gophercloud/openstack/identity/v3/tokens.AuthOptionsBuilder interface.
+func (cfg *ClusterConfiguration) CanReauth() bool {
+	return true
+}
+
+//ToTokenV3CreateMap implements the
+//gophercloud/openstack/identity/v3/tokens.AuthOptionsBuilder interface.
+func (cfg *ClusterConfiguration) ToTokenV3CreateMap(scope map[string]interface{}) (map[string]interface{}, error) {
+	gophercloudAuthOpts := gophercloud.AuthOptions{
+		Username:    cfg.UserName,
+		Password:    cfg.Password,
+		DomainName:  cfg.UserDomainName,
+		AllowReauth: true,
+	}
+	return gophercloudAuthOpts.ToTokenV3CreateMap(scope)
+}
+
+//ToTokenV3ScopeMap implements the
+//gophercloud/openstack/identity/v3/tokens.AuthOptionsBuilder interface.
+func (cfg *ClusterConfiguration) ToTokenV3ScopeMap() (map[string]interface{}, error) {
+	return map[string]interface{}{
+		"project": map[string]interface{}{
+			"name":   cfg.ProjectName,
+			"domain": map[string]interface{}{"name": cfg.ProjectDomainName},
+		},
+	}, nil
 }

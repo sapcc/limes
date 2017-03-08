@@ -50,18 +50,21 @@ func main() {
 	}
 
 	//connect to cluster
-	cluster, err := limes.NewCluster(config, os.Args[2])
+	cluster, exists := config.Clusters[os.Args[2]]
+	if !exists {
+		util.LogFatal("no such cluster configured: " + os.Args[2])
+	}
+	driver, err := drivers.NewDriver(cluster)
 	if err != nil {
 		util.LogFatal(err.Error())
 	}
-	driver := drivers.NewDriver(cluster)
 
 	//start scraper threads (NOTE: Many people use a pair of sync.WaitGroup and
 	//stop channel to shutdown threads in a controlled manner. I decided against
 	//that for now, and instead construct worker threads in such a way that they
 	//can be terminated at any time without leaving the system in an inconsistent
 	//state, mostly through usage of DB transactions.)
-	for _, service := range cluster.EnabledServices() {
+	for _, service := range cluster.Services {
 		go collector.Scrape(driver, service.Type)
 	}
 	go collector.ScanCapacity(driver)

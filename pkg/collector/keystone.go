@@ -189,7 +189,7 @@ func initProject(driver drivers.Driver, domain *models.Domain, project drivers.K
 		return err
 	}
 	defer stmt.Close()
-	for _, srv := range driver.Cluster().EnabledServices() {
+	for _, srv := range driver.Cluster().Services {
 		_, err := stmt.Exec(dbProject.ID, srv.Type)
 		if err != nil {
 			return err

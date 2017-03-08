@@ -43,7 +43,7 @@ func ScanCapacity(driver drivers.Driver) {
 	time.Sleep(scanInitialDelay)
 
 	for {
-		for _, service := range driver.Cluster().EnabledServices() {
+		for _, service := range driver.Cluster().Services {
 			plugin := GetPlugin(service.Type)
 			if plugin == nil {
 				//don't need to log an error here; if this failed, the scraper thread

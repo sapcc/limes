@@ -25,7 +25,7 @@ import (
 )
 
 func (d realDriver) keystoneClient() (*gophercloud.ServiceClient, error) {
-	return openstack.NewIdentityV3(d.cluster.Client,
+	return openstack.NewIdentityV3(d.Client,
 		gophercloud.EndpointOpts{Availability: gophercloud.AvailabilityPublic},
 	)
 }

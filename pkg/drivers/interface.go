@@ -28,7 +28,7 @@ type Driver interface {
 	//Return the Cluster that this Driver instance operates on. This is useful
 	//because it means we just have to pass around the Driver instance in
 	//function calls, instead of both the Driver and the Cluster.
-	Cluster() *limes.Cluster
+	Cluster() *limes.ClusterConfiguration
 	/********** Keystone (Identity) **********/
 	ListDomains() ([]KeystoneDomain, error)
 	ListProjects(domainUUID string) ([]KeystoneProject, error)
@@ -54,21 +54,4 @@ type ComputeData struct {
 	Cores     uint64
 	Instances uint64
 	RAM       uint64
-}
-
-//This is the type that implements the Driver interface by actually calling out
-//to OpenStack. The interface implementations are in the other source files in
-//this module.
-type realDriver struct {
-	cluster *limes.Cluster
-}
-
-//NewDriver instantiates a Driver for the given Cluster.
-func NewDriver(c *limes.Cluster) Driver {
-	return realDriver{c}
-}
-
-//Cluster implements the Driver interface.
-func (d realDriver) Cluster() *limes.Cluster {
-	return d.cluster
 }

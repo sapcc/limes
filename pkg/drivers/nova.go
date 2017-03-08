@@ -27,7 +27,7 @@ import (
 )
 
 func (d realDriver) novaClient() (*gophercloud.ServiceClient, error) {
-	return openstack.NewComputeV2(d.cluster.Client,
+	return openstack.NewComputeV2(d.Client,
 		gophercloud.EndpointOpts{Availability: gophercloud.AvailabilityPublic},
 	)
 }
