@@ -24,6 +24,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/limits"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/quotasets"
+	"github.com/sapcc/limes/pkg/limes"
 )
 
 func (d realDriver) novaClient() (*gophercloud.ServiceClient, error) {
@@ -32,38 +33,38 @@ func (d realDriver) novaClient() (*gophercloud.ServiceClient, error) {
 	)
 }
 
-//GetComputeQuota implements the Driver interface.
-func (d realDriver) GetComputeQuota(projectUUID string) (ComputeData, error) {
+//GetComputeQuota implements the limes.Driver interface.
+func (d realDriver) GetComputeQuota(projectUUID string) (limes.ComputeData, error) {
 	client, err := d.novaClient()
 	if err != nil {
-		return ComputeData{}, err
+		return limes.ComputeData{}, err
 	}
 
 	quotas, err := quotasets.Get(client, projectUUID).Extract()
 	if err != nil {
-		return ComputeData{}, err
+		return limes.ComputeData{}, err
 	}
 
-	return ComputeData{
+	return limes.ComputeData{
 		Cores:     uint64(quotas.Cores),
 		Instances: uint64(quotas.Instances),
 		RAM:       uint64(quotas.Ram),
 	}, nil
 }
 
-//GetComputeUsage implements the Driver interface.
-func (d realDriver) GetComputeUsage(projectUUID string) (ComputeData, error) {
+//GetComputeUsage implements the limes.Driver interface.
+func (d realDriver) GetComputeUsage(projectUUID string) (limes.ComputeData, error) {
 	client, err := d.novaClient()
 	if err != nil {
-		return ComputeData{}, err
+		return limes.ComputeData{}, err
 	}
 
 	limits, err := limits.Get(client, limits.GetOpts{TenantID: projectUUID}).Extract()
 	if err != nil {
-		return ComputeData{}, err
+		return limes.ComputeData{}, err
 	}
 
-	return ComputeData{
+	return limes.ComputeData{
 		Cores:     uint64(limits.Absolute.TotalCoresUsed),
 		Instances: uint64(limits.Absolute.TotalInstancesUsed),
 		RAM:       uint64(limits.Absolute.TotalRAMUsed),

@@ -21,7 +21,7 @@ package collector
 
 import (
 	"github.com/sapcc/limes/pkg/db"
-	"github.com/sapcc/limes/pkg/drivers"
+	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/models"
 	"github.com/sapcc/limes/pkg/util"
 )
@@ -35,7 +35,7 @@ type ScanDomainsOpts struct {
 
 //ScanDomains queries Keystone to discover new domains, and returns a
 //list of UUIDs for the newly discovered domains.
-func ScanDomains(driver drivers.Driver, opts ScanDomainsOpts) ([]string, error) {
+func ScanDomains(driver limes.Driver, opts ScanDomainsOpts) ([]string, error) {
 	clusterID := driver.Cluster().ID
 
 	//list domains in Keystone
@@ -111,7 +111,7 @@ func ScanDomains(driver drivers.Driver, opts ScanDomainsOpts) ([]string, error) 
 }
 
 //ScanProjects queries Keystone to discover new projects in the given domain.
-func ScanProjects(driver drivers.Driver, domain *models.Domain) ([]string, error) {
+func ScanProjects(driver limes.Driver, domain *models.Domain) ([]string, error) {
 	//list projects in Keystone
 	projects, err := driver.ListProjects(domain.UUID)
 	if err != nil {
@@ -161,7 +161,7 @@ func ScanProjects(driver drivers.Driver, domain *models.Domain) ([]string, error
 
 //Initialize all the database records for a project (in both `projects` and
 //`project_services`).
-func initProject(driver drivers.Driver, domain *models.Domain, project drivers.KeystoneProject) error {
+func initProject(driver limes.Driver, domain *models.Domain, project limes.KeystoneProject) error {
 	//do this in a transaction to avoid half-initialized projects
 	tx, err := db.DB.Begin()
 	if err != nil {

@@ -24,7 +24,7 @@ import (
 	"time"
 
 	"github.com/sapcc/limes/pkg/db"
-	"github.com/sapcc/limes/pkg/drivers"
+	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/models"
 	"github.com/sapcc/limes/pkg/util"
 )
@@ -37,7 +37,7 @@ var scanInitialDelay = 1 * time.Minute
 //
 //Errors are logged instead of returned. The function will not return unless
 //startup fails.
-func ScanCapacity(driver drivers.Driver) {
+func ScanCapacity(driver limes.Driver) {
 	//don't start scanning capacity immediately to avoid too much load on the
 	//backend services when the collector comes up
 	time.Sleep(scanInitialDelay)
@@ -61,7 +61,7 @@ func ScanCapacity(driver drivers.Driver) {
 	}
 }
 
-func scanCapacity(driver drivers.Driver, serviceType string, plugin Plugin) error {
+func scanCapacity(driver limes.Driver, serviceType string, plugin Plugin) error {
 	capacities, err := plugin.Capacity(driver)
 	if err != nil {
 		return err

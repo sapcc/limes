@@ -17,9 +17,7 @@
 *
 *******************************************************************************/
 
-package drivers
-
-import "github.com/sapcc/limes/pkg/limes"
+package limes
 
 //Driver is an interface that wraps any queries and requests to backend
 //services, in order to make it easy to swap out the driver implementation for
@@ -28,7 +26,7 @@ type Driver interface {
 	//Return the Cluster that this Driver instance operates on. This is useful
 	//because it means we just have to pass around the Driver instance in
 	//function calls, instead of both the Driver and the Cluster.
-	Cluster() *limes.ClusterConfiguration
+	Cluster() *ClusterConfiguration
 	/********** Keystone (Identity) **********/
 	ListDomains() ([]KeystoneDomain, error)
 	ListProjects(domainUUID string) ([]KeystoneProject, error)

@@ -30,10 +30,10 @@ import (
 	"github.com/sapcc/limes/pkg/util"
 )
 
-//This is the type that implements the Driver interface by actually calling out
-//to OpenStack. It also manages the Keystone token that's required for all
-//access to OpenStack APIs. The interface implementations are in the other
-//source files in this module.
+//This is the type that implements the limes.Driver interface by actually
+//calling out to OpenStack. It also manages the Keystone token that's required
+//for all access to OpenStack APIs. The interface implementations are in the
+//other source files in this module.
 type realDriver struct {
 	Client            *gophercloud.ProviderClient
 	Config            *limes.ClusterConfiguration
@@ -41,7 +41,7 @@ type realDriver struct {
 }
 
 //NewDriver instantiates a Driver for the given Cluster.
-func NewDriver(cfg *limes.ClusterConfiguration) (Driver, error) {
+func NewDriver(cfg *limes.ClusterConfiguration) (limes.Driver, error) {
 	var err error
 	d := &realDriver{
 		Config:            cfg,
@@ -60,7 +60,7 @@ func NewDriver(cfg *limes.ClusterConfiguration) (Driver, error) {
 	return d, nil
 }
 
-//Cluster implements the Driver interface.
+//Cluster implements the limes.Driver interface.
 func (d *realDriver) Cluster() *limes.ClusterConfiguration {
 	return d.Config
 }

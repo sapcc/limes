@@ -19,16 +19,14 @@
 
 package models
 
-import (
-	"github.com/sapcc/limes/pkg/drivers"
-)
+import "github.com/sapcc/limes/pkg/limes"
 
 //Domain represents a Keystone domain in Limes' database.
 type Domain struct {
-	ID                     int64
-	drivers.KeystoneDomain //Name and UUID
-	ClusterID              string
-	exists                 bool
+	ID                   int64
+	limes.KeystoneDomain //Name and UUID
+	ClusterID            string
+	exists               bool
 }
 
 //DomainsTable enables table-level operations on domains.

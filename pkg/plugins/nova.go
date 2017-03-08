@@ -21,7 +21,7 @@ package plugins
 
 import (
 	"github.com/sapcc/limes/pkg/collector"
-	"github.com/sapcc/limes/pkg/drivers"
+	"github.com/sapcc/limes/pkg/limes"
 )
 
 type novaPlugin struct{}
@@ -51,7 +51,7 @@ func (p *novaPlugin) Resources() []collector.ResourceInfo {
 }
 
 //Scrape implements the collector.Plugin interface.
-func (p *novaPlugin) Scrape(driver drivers.Driver, domainUUID, projectUUID string) ([]collector.ResourceData, error) {
+func (p *novaPlugin) Scrape(driver limes.Driver, domainUUID, projectUUID string) ([]collector.ResourceData, error) {
 	quota, err := driver.GetComputeQuota(projectUUID)
 	if err != nil {
 		return nil, err
@@ -81,7 +81,7 @@ func (p *novaPlugin) Scrape(driver drivers.Driver, domainUUID, projectUUID strin
 }
 
 //Capacity implements the collector.Plugin interface.
-func (p *novaPlugin) Capacity(driver drivers.Driver) (map[string]uint64, error) {
+func (p *novaPlugin) Capacity(driver limes.Driver) (map[string]uint64, error) {
 	//TODO implement
 	return map[string]uint64{}, nil
 }

@@ -22,6 +22,7 @@ package drivers
 import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
+	"github.com/sapcc/limes/pkg/limes"
 )
 
 func (d realDriver) keystoneClient() (*gophercloud.ServiceClient, error) {
@@ -30,8 +31,8 @@ func (d realDriver) keystoneClient() (*gophercloud.ServiceClient, error) {
 	)
 }
 
-//ListDomains implements the Driver interface.
-func (d realDriver) ListDomains() ([]KeystoneDomain, error) {
+//ListDomains implements the limes.Driver interface.
+func (d realDriver) ListDomains() ([]limes.KeystoneDomain, error) {
 	client, err := d.keystoneClient()
 	if err != nil {
 		return nil, err
@@ -46,14 +47,14 @@ func (d realDriver) ListDomains() ([]KeystoneDomain, error) {
 	}
 
 	var data struct {
-		Domains []KeystoneDomain `json:"domains"`
+		Domains []limes.KeystoneDomain `json:"domains"`
 	}
 	err = result.ExtractInto(&data)
 	return data.Domains, err
 }
 
-//ListProjects implements the Driver interface.
-func (d realDriver) ListProjects(domainUUID string) ([]KeystoneProject, error) {
+//ListProjects implements the limes.Driver interface.
+func (d realDriver) ListProjects(domainUUID string) ([]limes.KeystoneProject, error) {
 	client, err := d.keystoneClient()
 	if err != nil {
 		return nil, err
@@ -78,7 +79,7 @@ func (d realDriver) ListProjects(domainUUID string) ([]KeystoneProject, error) {
 	}
 
 	var data struct {
-		Projects []KeystoneProject `json:"projects"`
+		Projects []limes.KeystoneProject `json:"projects"`
 	}
 	err = result.ExtractInto(&data)
 	return data.Projects, err

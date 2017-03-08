@@ -24,7 +24,7 @@ import (
 	"time"
 
 	"github.com/sapcc/limes/pkg/db"
-	"github.com/sapcc/limes/pkg/drivers"
+	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/models"
 	"github.com/sapcc/limes/pkg/util"
 )
@@ -41,7 +41,7 @@ var scrapeInterval = 30 * time.Minute
 //
 //Errors are logged instead of returned. The function will not return unless
 //startup fails.
-func Scrape(driver drivers.Driver, serviceType string) {
+func Scrape(driver limes.Driver, serviceType string) {
 	plugin := GetPlugin(serviceType)
 	if plugin == nil {
 		util.LogError("startup for %s scraper failed: no such scraper plugin", serviceType)

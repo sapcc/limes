@@ -19,16 +19,14 @@
 
 package models
 
-import (
-	"github.com/sapcc/limes/pkg/drivers"
-)
+import "github.com/sapcc/limes/pkg/limes"
 
 //Project represents a Keystone project in Limes' database.
 type Project struct {
-	ID                      int64
-	drivers.KeystoneProject //Name and UUID
-	DomainID                int64
-	exists                  bool
+	ID                    int64
+	limes.KeystoneProject //Name and UUID
+	DomainID              int64
+	exists                bool
 }
 
 //ProjectsTable enables table-level operations on projects.
