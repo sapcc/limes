@@ -46,7 +46,7 @@ func init() {
 	})
 	//this driver only used within unit tests
 	sql.Register("sqlite3-debug", &sqlproxy.Driver{
-		ProxiedDriverName: "sqlite3",
+		ProxiedDriverName: "sqlite3-limes", //this driver is defined in pkg/test/db.go
 		BeforeQueryHook:   traceQuery,
 	})
 }

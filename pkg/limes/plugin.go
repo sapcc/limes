@@ -93,3 +93,12 @@ func RegisterPlugin(serviceType string, plugin Plugin) {
 func GetPlugin(serviceType string) Plugin {
 	return plugins[serviceType]
 }
+
+//AllPlugins lists all service types for which plugins exist.
+func AllPlugins() []string {
+	result := make([]string, 0, len(plugins))
+	for serviceType := range plugins {
+		result = append(result, serviceType)
+	}
+	return result
+}

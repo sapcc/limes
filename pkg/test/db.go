@@ -35,10 +35,22 @@ import (
 	"github.com/mattes/migrate/migrate"
 	"github.com/sapcc/limes/pkg/db"
 
-	//provides sqlite3 database driver
+	//provides sqlite3 migration driver
 	_ "github.com/mattes/migrate/driver/sqlite3"
-	_ "github.com/mattn/go-sqlite3"
+	sqlite "github.com/mattn/go-sqlite3"
 )
+
+func init() {
+	//provide SQL functions that the sqlite3 driver needs to consume Postgres queries successfully
+	toTimestamp := func(i int64) int64 {
+		return i
+	}
+	sql.Register("sqlite3-limes", &sqlite.SQLiteDriver{
+		ConnectHook: func(conn *sqlite.SQLiteConn) error {
+			return conn.RegisterFunc("to_timestamp", toTimestamp, true)
+		},
+	})
+}
 
 //InitDatabase initializes DB in pkg/db with an empty in-memory SQLite
 //database.
@@ -174,7 +186,7 @@ func (s *sqlValueSerializer) Scan(src interface{}) error {
 	case string:
 		s.Serialized = fmt.Sprintf("'%s'", val)
 	case time.Time:
-		s.Serialized = fmt.Sprintf("%#v", val)
+		s.Serialized = fmt.Sprintf("%#v", val.Unix())
 	default:
 		s.Serialized = "NULL"
 	}
