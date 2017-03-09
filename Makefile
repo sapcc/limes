@@ -14,7 +14,7 @@ build/limes-%: FORCE
 	$(GO) install $(GO_BUILDFLAGS) -ldflags '$(GO_LDFLAGS)' '$(PKG)/cmd/limes-$*'
 
 check: prepare-check FORCE
-	@$(GO) test $(shell go list $(PKG)/pkg/...)
+	@$(GO) test $(shell go list -f '{{if .TestGoFiles}}{{.ImportPath}}{{end}}' $(PKG)/pkg/...)
 
 prepare-check: FORCE $(patsubst pkg/db/%,pkg/test/%, $(wildcard pkg/db/migrations/*.sql))
 	@# Precompile a module used by the unit tests which takes a long time to compile because of cgo.
