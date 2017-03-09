@@ -1,5 +1,7 @@
 # Limes
 
+[![Build Status](https://travis-ci.org/sapcc/limes.svg?branch=master)](https://travis-ci.org/sapcc/limes)
+
 Limes is an OpenStack-compatible quota/usage tracking service, originally designed for SAP's internal cloud.
 
 Pronounce the name like the [Ancient Roman border wall][wp-limes], not like the fruit.
