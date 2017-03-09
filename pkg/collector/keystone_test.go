@@ -44,16 +44,31 @@ func keystoneTestDriver(t *testing.T) *test.Driver {
 func Test_ScanDomains(t *testing.T) {
 	driver := keystoneTestDriver(t)
 
+	//construct expectation for return value
 	var expectedNewDomains []string
 	for _, domain := range driver.StaticDomains {
 		expectedNewDomains = append(expectedNewDomains, domain.UUID)
 	}
 
+	//first ScanDomains should discover the StaticDomains in the driver,
+	//and initialize domains, projects and project_services (project_resources
+	//are then constructed by the scraper, and domain_services/domain_resources
+	//are created when a cloud admin approves quota for the domain)
 	actualNewDomains, err := ScanDomains(driver, ScanDomainsOpts{})
 	if err != nil {
 		t.Errorf("ScanDomains #1 failed: %v", err)
 	}
 	sort.Strings(expectedNewDomains) //order does not matter
 	sort.Strings(actualNewDomains)
-	test.AssertDeepEqual(t, "new domains after first ScanDomains run", actualNewDomains, expectedNewDomains)
+	test.AssertDeepEqual(t, "new domains after ScanDomains #1", actualNewDomains, expectedNewDomains)
+	test.AssertDBContent(t, "fixtures/scandomains.sql")
+
+	//first ScanDomains should not discover anything new
+	actualNewDomains, err = ScanDomains(driver, ScanDomainsOpts{})
+	if err != nil {
+		t.Errorf("ScanDomains #2 failed: %v", err)
+	}
+	sort.Strings(actualNewDomains)
+	test.AssertDeepEqual(t, "new domains after ScanDomains #2", actualNewDomains, []string(nil))
+	test.AssertDBContent(t, "fixtures/scandomains.sql")
 }

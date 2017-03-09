@@ -20,9 +20,14 @@
 package test
 
 import (
+	"bytes"
 	"database/sql"
+	"fmt"
 	"os"
+	"os/exec"
+	"strings"
 	"testing"
+	"time"
 
 	gorp "gopkg.in/gorp.v2"
 
@@ -60,4 +65,110 @@ func InitDatabase(t *testing.T, migrationsPath string) {
 	}
 	db.DB = &gorp.DbMap{Db: sqliteDB, Dialect: gorp.SqliteDialect{}}
 	db.InitGorp()
+}
+
+//AssertDBContent makes a dump of the database contents (as a sequence of
+//INSERT statements) and runs diff(1) against the given file, producing a test
+//error if these two are different from each other.
+func AssertDBContent(t *testing.T, fixtureFile string) {
+	actualContent := getDBContent(t)
+
+	cmd := exec.Command("diff", "-u", fixtureFile, "-")
+	cmd.Stdin = bytes.NewReader([]byte(actualContent))
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	failOnErr(t, cmd.Run())
+}
+
+func getDBContent(t *testing.T) string {
+	//list all tables
+	var tableNames []string
+	rows, err := db.DB.Query(`
+		SELECT name FROM sqlite_master WHERE type='table'
+		AND name != 'schema_migration' AND name NOT LIKE '%sqlite%'
+	`)
+	failOnErr(t, err)
+	for rows.Next() {
+		var name string
+		failOnErr(t, rows.Scan(&name))
+		tableNames = append(tableNames, name)
+	}
+	failOnErr(t, rows.Err())
+	failOnErr(t, rows.Close())
+
+	//foreach table, dump each entry as an INSERT statement
+	var result string
+	for _, tableName := range tableNames {
+		rows, err := db.DB.Query(`SELECT * FROM ` + tableName)
+		failOnErr(t, err)
+		columnNames, err := rows.Columns()
+		failOnErr(t, err)
+
+		scanTarget := make([]interface{}, len(columnNames))
+		for idx := range scanTarget {
+			scanTarget[idx] = &sqlValueSerializer{}
+		}
+		formatStr := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s);\n",
+			tableName,
+			strings.Join(columnNames, ", "),
+			strings.Join(times(len(columnNames), "%#v"), ", "),
+		)
+
+		hadRows := false
+		for rows.Next() {
+			failOnErr(t, rows.Scan(scanTarget...))
+			result += fmt.Sprintf(formatStr, scanTarget...)
+			hadRows = true
+		}
+
+		failOnErr(t, rows.Err())
+		failOnErr(t, rows.Close())
+		if hadRows {
+			result += "\n"
+		}
+	}
+
+	return strings.TrimSuffix(result, "\n")
+}
+
+func failOnErr(t *testing.T, err error) {
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func times(n int, s string) []string {
+	result := make([]string, n)
+	for idx := range result {
+		result[idx] = s
+	}
+	return result
+}
+
+type sqlValueSerializer struct {
+	Serialized string
+}
+
+func (s *sqlValueSerializer) Scan(src interface{}) error {
+	switch val := src.(type) {
+	case int64:
+		s.Serialized = fmt.Sprintf("%#v", val)
+	case float64:
+		s.Serialized = fmt.Sprintf("%#v", val)
+	case bool:
+		s.Serialized = fmt.Sprintf("%#v", val)
+	case []byte:
+		s.Serialized = fmt.Sprintf("'%s'", string(val))
+	case string:
+		s.Serialized = fmt.Sprintf("'%s'", val)
+	case time.Time:
+		s.Serialized = fmt.Sprintf("%#v", val)
+	default:
+		s.Serialized = "NULL"
+	}
+	return nil
+}
+
+func (s *sqlValueSerializer) GoString() string {
+	return s.Serialized
 }
