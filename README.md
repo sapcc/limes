@@ -1,6 +1,7 @@
 # Limes
 
 [![Build Status](https://travis-ci.org/sapcc/limes.svg?branch=master)](https://travis-ci.org/sapcc/limes)
+[![Coverage Status](https://coveralls.io/repos/github/sapcc/limes/badge.svg?branch=master)](https://coveralls.io/github/sapcc/limes?branch=master)
 
 Limes is an OpenStack-compatible quota/usage tracking service, originally designed for SAP's internal cloud.
 
