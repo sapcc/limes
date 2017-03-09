@@ -14,6 +14,13 @@ build/limes-%: FORCE
 	$(GO) install $(GO_BUILDFLAGS) -ldflags '$(GO_LDFLAGS)' '$(PKG)/cmd/limes-$*'
 
 check: prepare-check FORCE
+	@echo gofmt...
+	@gofmt -l cmd pkg
+	@echo golint...
+	@find cmd pkg -type d -exec golint {} \;
+	@echo govet...
+	@$(GO) vet $(shell go list github.com/sapcc/limes/{cmd,pkg}/...)
+	@echo go test...
 	@$(GO) test $(shell go list -f '{{if .TestGoFiles}}{{.ImportPath}}{{end}}' $(PKG)/pkg/...)
 
 prepare-check: FORCE $(patsubst pkg/db/%,pkg/test/%, $(wildcard pkg/db/migrations/*.sql))

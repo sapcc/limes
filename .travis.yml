@@ -1,0 +1,11 @@
+language: go
+sudo: false
+
+go:
+    - 1.8
+
+install:
+    - go get -u github.com/golang/lint/golint
+
+script:
+    - make && make check
