@@ -61,14 +61,35 @@ func Test_ScanDomains(t *testing.T) {
 	sort.Strings(expectedNewDomains) //order does not matter
 	sort.Strings(actualNewDomains)
 	test.AssertDeepEqual(t, "new domains after ScanDomains #1", actualNewDomains, expectedNewDomains)
-	test.AssertDBContent(t, "fixtures/scandomains.sql")
+	test.AssertDBContent(t, "fixtures/scandomains1.sql")
 
 	//first ScanDomains should not discover anything new
 	actualNewDomains, err = ScanDomains(driver, ScanDomainsOpts{})
 	if err != nil {
 		t.Errorf("ScanDomains #2 failed: %v", err)
 	}
-	sort.Strings(actualNewDomains)
 	test.AssertDeepEqual(t, "new domains after ScanDomains #2", actualNewDomains, []string(nil))
-	test.AssertDBContent(t, "fixtures/scandomains.sql")
+	test.AssertDBContent(t, "fixtures/scandomains1.sql")
+
+	//add another project
+	domainUUID := "a2f0d9a6a8a0410f9881335f1fe0b538"
+	driver.StaticProjects[domainUUID] = append(driver.StaticProjects[domainUUID],
+		limes.KeystoneProject{Name: "qux2", UUID: "f4bfdc9cf7284f7e849d91a22ab80e6d"},
+	)
+
+	//ScanDomains without ScanAllProjects should not see this new project
+	actualNewDomains, err = ScanDomains(driver, ScanDomainsOpts{})
+	if err != nil {
+		t.Errorf("ScanDomains #3 failed: %v", err)
+	}
+	test.AssertDeepEqual(t, "new domains after ScanDomains #2", actualNewDomains, []string(nil))
+	test.AssertDBContent(t, "fixtures/scandomains1.sql")
+
+	//ScanDomains with ScanAllProjects should discover the new project
+	actualNewDomains, err = ScanDomains(driver, ScanDomainsOpts{ScanAllProjects: true})
+	if err != nil {
+		t.Errorf("ScanDomains #3 failed: %v", err)
+	}
+	test.AssertDeepEqual(t, "new domains after ScanDomains #2", actualNewDomains, []string(nil))
+	test.AssertDBContent(t, "fixtures/scandomains2.sql")
 }
