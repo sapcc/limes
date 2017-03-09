@@ -6,11 +6,11 @@ INSERT INTO projects (id, domain_id, name, uuid) VALUES (2, 1, 'bar', '003645ff7
 INSERT INTO projects (id, domain_id, name, uuid) VALUES (3, 2, 'qux', 'ed5867497beb40c69f829837639d873d');
 INSERT INTO projects (id, domain_id, name, uuid) VALUES (4, 2, 'qux2', 'f4bfdc9cf7284f7e849d91a22ab80e6d');
 
-INSERT INTO project_services (id, project_id, name, scraped_at, stale) VALUES (1, 1, 'foo', NULL, 'FALSE');
-INSERT INTO project_services (id, project_id, name, scraped_at, stale) VALUES (2, 1, 'bar', NULL, 'FALSE');
-INSERT INTO project_services (id, project_id, name, scraped_at, stale) VALUES (3, 2, 'foo', NULL, 'FALSE');
-INSERT INTO project_services (id, project_id, name, scraped_at, stale) VALUES (4, 2, 'bar', NULL, 'FALSE');
-INSERT INTO project_services (id, project_id, name, scraped_at, stale) VALUES (5, 3, 'foo', NULL, 'FALSE');
-INSERT INTO project_services (id, project_id, name, scraped_at, stale) VALUES (6, 3, 'bar', NULL, 'FALSE');
-INSERT INTO project_services (id, project_id, name, scraped_at, stale) VALUES (7, 4, 'foo', NULL, 'FALSE');
-INSERT INTO project_services (id, project_id, name, scraped_at, stale) VALUES (8, 4, 'bar', NULL, 'FALSE');
+INSERT INTO project_services (id, project_id, name, scraped_at, stale) VALUES (1, 1, 'foo', NULL, FALSE);
+INSERT INTO project_services (id, project_id, name, scraped_at, stale) VALUES (2, 1, 'bar', NULL, FALSE);
+INSERT INTO project_services (id, project_id, name, scraped_at, stale) VALUES (3, 2, 'foo', NULL, FALSE);
+INSERT INTO project_services (id, project_id, name, scraped_at, stale) VALUES (4, 2, 'bar', NULL, FALSE);
+INSERT INTO project_services (id, project_id, name, scraped_at, stale) VALUES (5, 3, 'foo', NULL, FALSE);
+INSERT INTO project_services (id, project_id, name, scraped_at, stale) VALUES (6, 3, 'bar', NULL, FALSE);
+INSERT INTO project_services (id, project_id, name, scraped_at, stale) VALUES (7, 4, 'foo', NULL, FALSE);
+INSERT INTO project_services (id, project_id, name, scraped_at, stale) VALUES (8, 4, 'bar', NULL, FALSE);

@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -73,7 +74,8 @@ func InitDatabase(t *testing.T, migrationsPath string) {
 func AssertDBContent(t *testing.T, fixtureFile string) {
 	actualContent := getDBContent(t)
 
-	cmd := exec.Command("diff", "-u", fixtureFile, "-")
+	fixturePath, _ := filepath.Abs(fixtureFile)
+	cmd := exec.Command("diff", "-u", fixturePath, "-")
 	cmd.Stdin = bytes.NewReader([]byte(actualContent))
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -156,9 +158,19 @@ func (s *sqlValueSerializer) Scan(src interface{}) error {
 	case float64:
 		s.Serialized = fmt.Sprintf("%#v", val)
 	case bool:
-		s.Serialized = fmt.Sprintf("%#v", val)
+		s.Serialized = "FALSE"
+		if val {
+			s.Serialized = "TRUE"
+		}
 	case []byte:
 		s.Serialized = fmt.Sprintf("'%s'", string(val))
+		//SQLite apparently stores boolean values as C strings
+		switch s.Serialized {
+		case "'FALSE'":
+			s.Serialized = "FALSE"
+		case "'TRUE'":
+			s.Serialized = "TRUE"
+		}
 	case string:
 		s.Serialized = fmt.Sprintf("'%s'", val)
 	case time.Time:
