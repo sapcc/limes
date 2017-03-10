@@ -25,9 +25,9 @@ type Plugin interface {
 	//Resources returns metadata for all the resources that this plugin scrapes
 	//from the backend service.
 	Resources() []ResourceInfo
-	//Scrape queries the backend service for the current quota and usage
-	//consumption for the given project in the given domain.
-	Scrape(driver Driver, domainUUID, projectUUID string) ([]ResourceData, error)
+	//Scrape queries the backend service for the quota and usage data of all
+	//known resources for the given project in the given domain.
+	Scrape(driver Driver, domainUUID, projectUUID string) (map[string]ResourceData, error)
 	//Capacity queries the backend service for the total capacity of its
 	//resources. If, for certain resources, a capacity estimate is not possible,
 	//the implementation shall omit these resources from the result.
@@ -39,14 +39,6 @@ type Plugin interface {
 type ResourceInfo struct {
 	Name string
 	Unit Unit
-}
-
-//ResourceData contains quota and usage data for a certain resource in a
-//certain project.
-type ResourceData struct {
-	Name  string
-	Quota int64 //can be negative to indicate infinite quota
-	Usage uint64
 }
 
 //Unit enumerates allowed values for the unit a resource's quota/usage is

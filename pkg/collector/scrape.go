@@ -21,6 +21,7 @@ package collector
 
 import (
 	"database/sql"
+	"sort"
 	"time"
 
 	"github.com/sapcc/limes/pkg/db"
@@ -104,7 +105,7 @@ func (s scraper) Scrape(driver limes.Driver, serviceType string) {
 		}
 
 		util.LogDebug("scraping %s for %s/%s", serviceType, domainName, projectName)
-		resourceDataList, err := plugin.Scrape(driver, domainUUID, projectUUID)
+		resourceData, err := plugin.Scrape(driver, domainUUID, projectUUID)
 		if err != nil {
 			s.logError("scrape %s data for %s/%s failed: %s", serviceType, domainName, projectName, err.Error())
 			if s.once {
@@ -114,7 +115,7 @@ func (s scraper) Scrape(driver limes.Driver, serviceType string) {
 			continue
 		}
 
-		err = s.writeScrapeResult(serviceID, resourceDataList, s.timeNow())
+		err = s.writeScrapeResult(serviceID, resourceData, s.timeNow())
 		if err != nil {
 			s.logError("write %s backend data for %s/%s failed: %s", serviceType, domainName, projectName, err.Error())
 			if s.once {
@@ -133,62 +134,56 @@ func (s scraper) Scrape(driver limes.Driver, serviceType string) {
 	}
 }
 
-func (s scraper) writeScrapeResult(serviceID int64, resourceDataList []limes.ResourceData, scrapedAt time.Time) error {
+func (s scraper) writeScrapeResult(serviceID int64, resourceData map[string]limes.ResourceData, scrapedAt time.Time) error {
 	tx, err := db.DB.Begin()
 	if err != nil {
 		return err
 	}
 	defer db.RollbackUnlessCommitted(tx)
 
-	//find existing resource records
-	existing := make(map[string]*db.ProjectResource)
+	//update existing project_resources entries
+	seen := make(map[string]bool)
 	records, err := tx.Select(&db.ProjectResource{}, `SELECT * FROM project_resources WHERE service_id = $1`, serviceID)
 	if err != nil {
 		return err
 	}
 	for _, record := range records {
 		res := record.(*db.ProjectResource)
-		existing[res.Name] = res
-	}
+		seen[res.Name] = true
 
-	//insert or update resource records
-	for _, data := range resourceDataList {
-		record, exists := existing[data.Name]
+		data, exists := resourceData[res.Name]
 		if exists {
 			//update existing resource record
-			record.BackendQuota = data.Quota
-			record.Usage = data.Usage
-			_, err := tx.Update(record)
+			res.BackendQuota = data.Quota
+			res.Usage = data.Usage
+			_, err := tx.Update(res)
 			if err != nil {
 				return err
 			}
 		} else {
-			//insert new resource record
-			record = &db.ProjectResource{
-				ServiceID:    serviceID,
-				Name:         data.Name,
-				Quota:        0, //nothing approved yet
-				Usage:        data.Usage,
-				BackendQuota: data.Quota,
-			}
-			err := tx.Insert(record)
-			if err != nil {
-				return err
-			}
+			s.logError(
+				"could not scrape new data for resource %s in project service %d (was this resource type removed from the scraper plugin?)",
+				res.Name, serviceID,
+			)
 		}
 	}
 
-	//warn about resource records that cannot be scraped anymore (don't delete
-	//these immediately; it might just be due to a bug in the scraper plugin, and
-	//we don't want to lose our approved quota values from the local DB)
-	for _, data := range resourceDataList {
-		delete(existing, data.Name)
-	}
-	for name := range existing {
-		s.logError(
-			"could not scrape new data for resource %s in project service %d (was this resource type removed from the scraper plugin?)",
-			name, serviceID,
-		)
+	//insert missing project_resources entries
+	err = foreachResourceData(resourceData, func(name string, data limes.ResourceData) error {
+		if seen[name] {
+			return nil
+		}
+		res := &db.ProjectResource{
+			ServiceID:    serviceID,
+			Name:         name,
+			Quota:        0, //nothing approved yet
+			Usage:        data.Usage,
+			BackendQuota: data.Quota,
+		}
+		return tx.Insert(res)
+	})
+	if err != nil {
+		return err
 	}
 
 	//update scraped_at timestamp on this service so that we don't scrape it
@@ -202,4 +197,22 @@ func (s scraper) writeScrapeResult(serviceID int64, resourceDataList []limes.Res
 	}
 
 	return tx.Commit()
+}
+
+//Like a simple `range` over the collection, but sorts the keys before doing so
+//in order to achieve deterministic results (which is important for the unit
+//tests).
+func foreachResourceData(collection map[string]limes.ResourceData, action func(string, limes.ResourceData) error) error {
+	keys := make([]string, 0, len(collection))
+	for key := range collection {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		err := action(key, collection[key])
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

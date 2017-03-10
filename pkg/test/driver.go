@@ -25,11 +25,10 @@ import "github.com/sapcc/limes/pkg/limes"
 //an actual OpenStack. It returns a static set of domains and projects, and a
 //static set of quota/usage values for any project.
 type Driver struct {
-	ClusterConfig      *limes.ClusterConfiguration
-	StaticDomains      []limes.KeystoneDomain
-	StaticProjects     map[string][]limes.KeystoneProject
-	StaticComputeQuota limes.ComputeData
-	StaticComputeUsage limes.ComputeData
+	ClusterConfig     *limes.ClusterConfiguration
+	StaticDomains     []limes.KeystoneDomain
+	StaticProjects    map[string][]limes.KeystoneProject
+	StaticComputeData limes.ComputeData
 }
 
 //NewDriver creates a Driver instance. The ClusterConfiguration does not need
@@ -51,15 +50,10 @@ func NewDriver(cluster *limes.ClusterConfiguration) *Driver {
 				limes.KeystoneProject{Name: "qux", UUID: "ed5867497beb40c69f829837639d873d"},
 			},
 		},
-		StaticComputeQuota: limes.ComputeData{
-			Cores:     100,
-			Instances: 20,
-			RAM:       80 << 10,
-		},
-		StaticComputeUsage: limes.ComputeData{
-			Cores:     37,
-			Instances: 12,
-			RAM:       48 << 10,
+		StaticComputeData: limes.ComputeData{
+			Cores:     limes.ResourceData{Quota: 100, Usage: 37},
+			Instances: limes.ResourceData{Quota: 20, Usage: 12},
+			RAM:       limes.ResourceData{Quota: 80 << 10, Usage: 48 << 10},
 		},
 	}
 }
@@ -79,12 +73,7 @@ func (d *Driver) ListProjects(domainUUID string) ([]limes.KeystoneProject, error
 	return d.StaticProjects[domainUUID], nil
 }
 
-//GetComputeQuota implements the limes.Driver interface.
-func (d *Driver) GetComputeQuota(projectUUID string) (limes.ComputeData, error) {
-	return d.StaticComputeQuota, nil
-}
-
-//GetComputeUsage implements the limes.Driver interface.
-func (d *Driver) GetComputeUsage(projectUUID string) (limes.ComputeData, error) {
-	return d.StaticComputeUsage, nil
+//CheckCompute implements the limes.Driver interface.
+func (d *Driver) CheckCompute(projectUUID string) (limes.ComputeData, error) {
+	return d.StaticComputeData, nil
 }

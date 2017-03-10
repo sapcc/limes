@@ -34,7 +34,7 @@ func (d realDriver) novaClient() (*gophercloud.ServiceClient, error) {
 }
 
 //GetComputeQuota implements the limes.Driver interface.
-func (d realDriver) GetComputeQuota(projectUUID string) (limes.ComputeData, error) {
+func (d realDriver) CheckCompute(projectUUID string) (limes.ComputeData, error) {
 	client, err := d.novaClient()
 	if err != nil {
 		return limes.ComputeData{}, err
@@ -45,28 +45,23 @@ func (d realDriver) GetComputeQuota(projectUUID string) (limes.ComputeData, erro
 		return limes.ComputeData{}, err
 	}
 
-	return limes.ComputeData{
-		Cores:     int64(quotas.Cores),
-		Instances: int64(quotas.Instances),
-		RAM:       int64(quotas.Ram),
-	}, nil
-}
-
-//GetComputeUsage implements the limes.Driver interface.
-func (d realDriver) GetComputeUsage(projectUUID string) (limes.ComputeData, error) {
-	client, err := d.novaClient()
-	if err != nil {
-		return limes.ComputeData{}, err
-	}
-
 	limits, err := limits.Get(client, limits.GetOpts{TenantID: projectUUID}).Extract()
 	if err != nil {
 		return limes.ComputeData{}, err
 	}
 
 	return limes.ComputeData{
-		Cores:     int64(limits.Absolute.TotalCoresUsed),
-		Instances: int64(limits.Absolute.TotalInstancesUsed),
-		RAM:       int64(limits.Absolute.TotalRAMUsed),
+		Cores: limes.ResourceData{
+			Quota: int64(quotas.Cores),
+			Usage: uint64(limits.Absolute.TotalCoresUsed),
+		},
+		Instances: limes.ResourceData{
+			Quota: int64(quotas.Instances),
+			Usage: uint64(limits.Absolute.TotalInstancesUsed),
+		},
+		RAM: limes.ResourceData{
+			Quota: int64(quotas.Ram),
+			Usage: uint64(limits.Absolute.TotalRAMUsed),
+		},
 	}, nil
 }

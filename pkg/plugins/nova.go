@@ -50,35 +50,17 @@ func (p *novaPlugin) Resources() []limes.ResourceInfo {
 }
 
 //Scrape implements the limes.Plugin interface.
-func (p *novaPlugin) Scrape(driver limes.Driver, domainUUID, projectUUID string) ([]limes.ResourceData, error) {
-	quota, err := driver.GetComputeQuota(projectUUID)
-	if err != nil {
-		return nil, err
-	}
-	usage, err := driver.GetComputeUsage(projectUUID)
+func (p *novaPlugin) Scrape(driver limes.Driver, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
+	data, err := driver.CheckCompute(projectUUID)
 	if err != nil {
 		return nil, err
 	}
 
-	return []limes.ResourceData{
-		limes.ResourceData{
-			Name:  "cores",
-			Quota: quota.Cores,
-			//FIXME: unsafe sign cast
-			Usage: uint64(usage.Cores),
-		},
-		limes.ResourceData{
-			Name:  "instances",
-			Quota: quota.Instances,
-			//FIXME: unsafe sign cast
-			Usage: uint64(usage.Instances),
-		},
-		limes.ResourceData{
-			Name:  "ram",
-			Quota: quota.RAM,
-			//FIXME: unsafe sign cast
-			Usage: uint64(usage.RAM),
-		},
+	//TODO: get rid of this conversion step
+	return map[string]limes.ResourceData{
+		"cores":     data.Cores,
+		"instances": data.Instances,
+		"ram":       data.RAM,
 	}, nil
 }
 

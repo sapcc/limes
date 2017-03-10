@@ -31,8 +31,7 @@ type Driver interface {
 	ListDomains() ([]KeystoneDomain, error)
 	ListProjects(domainUUID string) ([]KeystoneProject, error)
 	/********** Nova (Compute) **********/
-	GetComputeQuota(projectUUID string) (ComputeData, error)
-	GetComputeUsage(projectUUID string) (ComputeData, error)
+	CheckCompute(projectUUID string) (ComputeData, error)
 }
 
 //KeystoneDomain describes the basic attributes of a Keystone domain.
@@ -47,9 +46,15 @@ type KeystoneProject struct {
 	Name string `json:"name"`
 }
 
+//ResourceData contains quota and usage data for a single resource.
+type ResourceData struct {
+	Quota int64 //negative values indicate infinite quota
+	Usage uint64
+}
+
 //ComputeData contains quota or usage values for a project's compute resources.
 type ComputeData struct {
-	Cores     int64 //negative values indicate infinite quota
-	Instances int64
-	RAM       int64
+	Cores     ResourceData
+	Instances ResourceData
+	RAM       ResourceData
 }
