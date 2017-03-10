@@ -186,11 +186,11 @@ func (s scraper) writeScrapeResult(serviceID int64, resourceData map[string]lime
 		return err
 	}
 
-	//update scraped_at timestamp on this service so that we don't scrape it
-	//again immediately afterwards
+	//update scraped_at timestamp and reset the stale flag on this service so
+	//that we don't scrape it again immediately afterwards
 	_, err = tx.Exec(
-		`UPDATE project_services SET scraped_at = $1 WHERE id = $2`,
-		scrapedAt, serviceID,
+		`UPDATE project_services SET scraped_at = $1, stale = $2 WHERE id = $3`,
+		scrapedAt, false, serviceID,
 	)
 	if err != nil {
 		return err

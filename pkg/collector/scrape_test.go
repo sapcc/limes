@@ -22,6 +22,7 @@ package collector
 import (
 	"testing"
 
+	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
 	_ "github.com/sapcc/limes/pkg/plugins"
 	"github.com/sapcc/limes/pkg/test"
@@ -72,7 +73,12 @@ func Test_Scrape(t *testing.T) {
 	//change the data that is reported by the driver
 	driver.StaticComputeData.Cores.Quota = 110
 	driver.StaticComputeData.Instances.Usage = 9
-	//Scrape should find these changes
+	//make sure that the project is scraped again
+	_, err = db.DB.Exec(`UPDATE project_services SET stale = ?`, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	//Scrape should pick up the changed resource data
 	s.Scrape(driver, "compute")
-	test.AssertDBContent(t, "fixtures/scrape1.sql")
+	test.AssertDBContent(t, "fixtures/scrape2.sql")
 }

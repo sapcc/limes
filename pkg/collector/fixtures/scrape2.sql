@@ -2,7 +2,7 @@ INSERT INTO domains (id, cluster_id, name, uuid) VALUES (1, 'cluster-id-test', '
 
 INSERT INTO projects (id, domain_id, name, uuid) VALUES (1, 1, 'foo', 'dd53fc9c38d740c6b7889424e740e194');
 
-INSERT INTO project_services (id, project_id, name, scraped_at, stale) VALUES (1, 1, 'compute', 1, FALSE);
+INSERT INTO project_services (id, project_id, name, scraped_at, stale) VALUES (1, 1, 'compute', 4, FALSE);
 
 INSERT INTO project_resources (service_id, name, quota, usage, backend_quota) VALUES (1, 'cores', 0, 37, 110);
 INSERT INTO project_resources (service_id, name, quota, usage, backend_quota) VALUES (1, 'instances', 0, 9, 20);
