@@ -68,4 +68,11 @@ func Test_Scrape(t *testing.T) {
 	//less than 30 minutes have passed since the last Scrape()
 	s.Scrape(driver, "compute")
 	test.AssertDBContent(t, "fixtures/scrape1.sql")
+
+	//change the data that is reported by the driver
+	driver.StaticComputeData.Cores.Quota = 110
+	driver.StaticComputeData.Instances.Usage = 9
+	//Scrape should find these changes
+	s.Scrape(driver, "compute")
+	test.AssertDBContent(t, "fixtures/scrape1.sql")
 }
