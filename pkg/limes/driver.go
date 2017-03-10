@@ -49,7 +49,7 @@ type KeystoneProject struct {
 
 //ComputeData contains quota or usage values for a project's compute resources.
 type ComputeData struct {
-	Cores     uint64
-	Instances uint64
-	RAM       uint64
+	Cores     int64 //negative values indicate infinite quota
+	Instances int64
+	RAM       int64
 }

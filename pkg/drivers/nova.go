@@ -46,9 +46,9 @@ func (d realDriver) GetComputeQuota(projectUUID string) (limes.ComputeData, erro
 	}
 
 	return limes.ComputeData{
-		Cores:     uint64(quotas.Cores),
-		Instances: uint64(quotas.Instances),
-		RAM:       uint64(quotas.Ram),
+		Cores:     int64(quotas.Cores),
+		Instances: int64(quotas.Instances),
+		RAM:       int64(quotas.Ram),
 	}, nil
 }
 
@@ -65,8 +65,8 @@ func (d realDriver) GetComputeUsage(projectUUID string) (limes.ComputeData, erro
 	}
 
 	return limes.ComputeData{
-		Cores:     uint64(limits.Absolute.TotalCoresUsed),
-		Instances: uint64(limits.Absolute.TotalInstancesUsed),
-		RAM:       uint64(limits.Absolute.TotalRAMUsed),
+		Cores:     int64(limits.Absolute.TotalCoresUsed),
+		Instances: int64(limits.Absolute.TotalInstancesUsed),
+		RAM:       int64(limits.Absolute.TotalRAMUsed),
 	}, nil
 }

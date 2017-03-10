@@ -25,7 +25,6 @@ import (
 
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
-	"github.com/sapcc/limes/pkg/models"
 	"github.com/sapcc/limes/pkg/util"
 )
 
@@ -76,7 +75,7 @@ func scanCapacity(driver limes.Driver, serviceType string, plugin limes.Plugin) 
 	defer db.RollbackUnlessCommitted(tx)
 
 	//find or create the cluster_services entry
-	var serviceID uint64
+	var serviceID int64
 	err = tx.QueryRow(
 		`UPDATE cluster_services SET scraped_at = $1 WHERE cluster_id = $2 AND name = $3 RETURNING id`,
 		scrapedAt, driver.Cluster().ID, serviceType,
@@ -99,20 +98,27 @@ func scanCapacity(driver limes.Driver, serviceType string, plugin limes.Plugin) 
 
 	//update existing cluster_resources entries
 	seen := make(map[string]bool)
-	err = models.ClusterResourcesTable.Where(`service_id = $1`, serviceID).
-		Foreach(tx, func(record models.Record) error {
-			res := record.(*models.ClusterResource)
-			seen[res.Name] = true
-
-			capacity, exists := capacities[res.Name]
-			if exists {
-				res.Capacity = capacity
-				return res.Save(tx)
-			}
-			return res.Delete(tx)
-		})
+	records, err := tx.Select(&db.ClusterResource{}, `SELECT * FROM cluster_resources WHERE service_id = $1`, serviceID)
 	if err != nil {
 		return err
+	}
+	for _, record := range records {
+		res := record.(*db.ClusterResource)
+		seen[res.Name] = true
+
+		capacity, exists := capacities[res.Name]
+		if exists {
+			res.Capacity = capacity
+			_, err := tx.Update(res)
+			if err != nil {
+				return err
+			}
+		} else {
+			_, err := tx.Delete(res)
+			if err != nil {
+				return err
+			}
+		}
 	}
 
 	//insert missing cluster_resources entries
@@ -120,12 +126,12 @@ func scanCapacity(driver limes.Driver, serviceType string, plugin limes.Plugin) 
 		if seen[name] {
 			continue
 		}
-		res := &models.ClusterResource{
+		res := &db.ClusterResource{
 			ServiceID: serviceID,
 			Name:      name,
 			Capacity:  capacity,
 		}
-		err := res.Save(tx)
+		err := tx.Insert(res)
 		if err != nil {
 			return err
 		}

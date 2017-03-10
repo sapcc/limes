@@ -21,6 +21,21 @@ package db
 
 import "time"
 
+//ClusterService contains a record from the `cluster_services` table.
+type ClusterService struct {
+	ID        int64      `db:"id"`
+	ClusterID string     `db:"cluster_id"`
+	Name      string     `db:"name"`
+	ScrapedAt *time.Time `db:"scraped_at"` //pointer type to allow for NULL value
+}
+
+//ClusterResource contains a record from the `cluster_resources` table.
+type ClusterResource struct {
+	ServiceID int64  `db:"service_id"`
+	Name      string `db:"name"`
+	Capacity  uint64 `db:"quota"`
+}
+
 //Domain contains a record from the `domains` table.
 type Domain struct {
 	ID        int64  `db:"id"`

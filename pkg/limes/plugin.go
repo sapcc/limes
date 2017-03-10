@@ -45,7 +45,7 @@ type ResourceInfo struct {
 //certain project.
 type ResourceData struct {
 	Name  string
-	Quota uint64
+	Quota int64 //can be negative to indicate infinite quota
 	Usage uint64
 }
 

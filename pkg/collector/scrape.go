@@ -25,7 +25,6 @@ import (
 
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
-	"github.com/sapcc/limes/pkg/models"
 	"github.com/sapcc/limes/pkg/util"
 )
 
@@ -80,7 +79,7 @@ func (s scraper) Scrape(driver limes.Driver, serviceType string) {
 
 	for {
 		var (
-			serviceID   uint64
+			serviceID   int64
 			projectName string
 			projectUUID string
 			domainName  string
@@ -134,7 +133,7 @@ func (s scraper) Scrape(driver limes.Driver, serviceType string) {
 	}
 }
 
-func (s scraper) writeScrapeResult(serviceID uint64, resourceDataList []limes.ResourceData, scrapedAt time.Time) error {
+func (s scraper) writeScrapeResult(serviceID int64, resourceDataList []limes.ResourceData, scrapedAt time.Time) error {
 	tx, err := db.DB.Begin()
 	if err != nil {
 		return err
@@ -142,15 +141,14 @@ func (s scraper) writeScrapeResult(serviceID uint64, resourceDataList []limes.Re
 	defer db.RollbackUnlessCommitted(tx)
 
 	//find existing resource records
-	existing := make(map[string]*models.ProjectResource)
-	err = models.ProjectResourcesTable.Where(`service_id = $1`, serviceID).
-		Foreach(tx, func(record models.Record) error {
-			res := record.(*models.ProjectResource)
-			existing[res.Name] = res
-			return nil
-		})
+	existing := make(map[string]*db.ProjectResource)
+	records, err := tx.Select(&db.ProjectResource{}, `SELECT * FROM project_resources WHERE service_id = $1`, serviceID)
 	if err != nil {
 		return err
+	}
+	for _, record := range records {
+		res := record.(*db.ProjectResource)
+		existing[res.Name] = res
 	}
 
 	//insert or update resource records
@@ -160,19 +158,23 @@ func (s scraper) writeScrapeResult(serviceID uint64, resourceDataList []limes.Re
 			//update existing resource record
 			record.BackendQuota = data.Quota
 			record.Usage = data.Usage
+			_, err := tx.Update(record)
+			if err != nil {
+				return err
+			}
 		} else {
 			//insert new resource record
-			record = &models.ProjectResource{
+			record = &db.ProjectResource{
 				ServiceID:    serviceID,
 				Name:         data.Name,
 				Quota:        0, //nothing approved yet
 				Usage:        data.Usage,
 				BackendQuota: data.Quota,
 			}
-		}
-		err := record.Save(tx)
-		if err != nil {
-			return err
+			err := tx.Insert(record)
+			if err != nil {
+				return err
+			}
 		}
 	}
 

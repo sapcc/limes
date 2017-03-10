@@ -64,17 +64,20 @@ func (p *novaPlugin) Scrape(driver limes.Driver, domainUUID, projectUUID string)
 		limes.ResourceData{
 			Name:  "cores",
 			Quota: quota.Cores,
-			Usage: usage.Cores,
+			//FIXME: unsafe sign cast
+			Usage: uint64(usage.Cores),
 		},
 		limes.ResourceData{
 			Name:  "instances",
 			Quota: quota.Instances,
-			Usage: usage.Instances,
+			//FIXME: unsafe sign cast
+			Usage: uint64(usage.Instances),
 		},
 		limes.ResourceData{
 			Name:  "ram",
 			Quota: quota.RAM,
-			Usage: usage.RAM,
+			//FIXME: unsafe sign cast
+			Usage: uint64(usage.RAM),
 		},
 	}, nil
 }
