@@ -82,14 +82,44 @@ func Test_ScanDomains(t *testing.T) {
 	if err != nil {
 		t.Errorf("ScanDomains #3 failed: %v", err)
 	}
-	test.AssertDeepEqual(t, "new domains after ScanDomains #2", actualNewDomains, []string(nil))
+	test.AssertDeepEqual(t, "new domains after ScanDomains #3", actualNewDomains, []string(nil))
 	test.AssertDBContent(t, "fixtures/scandomains1.sql")
 
 	//ScanDomains with ScanAllProjects should discover the new project
 	actualNewDomains, err = ScanDomains(driver, ScanDomainsOpts{ScanAllProjects: true})
 	if err != nil {
-		t.Errorf("ScanDomains #3 failed: %v", err)
+		t.Errorf("ScanDomains #4 failed: %v", err)
 	}
-	test.AssertDeepEqual(t, "new domains after ScanDomains #2", actualNewDomains, []string(nil))
+	test.AssertDeepEqual(t, "new domains after ScanDomains #4", actualNewDomains, []string(nil))
 	test.AssertDBContent(t, "fixtures/scandomains2.sql")
+
+	//remove the project again
+	driver.StaticProjects[domainUUID] = driver.StaticProjects[domainUUID][0:1]
+
+	//ScanDomains without ScanAllProjects should not notice anything
+	actualNewDomains, err = ScanDomains(driver, ScanDomainsOpts{})
+	if err != nil {
+		t.Errorf("ScanDomains #5 failed: %v", err)
+	}
+	test.AssertDeepEqual(t, "new domains after ScanDomains #5", actualNewDomains, []string(nil))
+	test.AssertDBContent(t, "fixtures/scandomains2.sql")
+
+	//ScanDomains with ScanAllProjects should notice the deleted project and cleanup its records
+	actualNewDomains, err = ScanDomains(driver, ScanDomainsOpts{ScanAllProjects: true})
+	if err != nil {
+		t.Errorf("ScanDomains #6 failed: %v", err)
+	}
+	test.AssertDeepEqual(t, "new domains after ScanDomains #6", actualNewDomains, []string(nil))
+	test.AssertDBContent(t, "fixtures/scandomains1.sql")
+
+	//remove a whole domain
+	driver.StaticDomains = driver.StaticDomains[0:1]
+
+	//ScanDomains should notice the deleted domain and cleanup its records and also its projects
+	actualNewDomains, err = ScanDomains(driver, ScanDomainsOpts{})
+	if err != nil {
+		t.Errorf("ScanDomains #7 failed: %v", err)
+	}
+	test.AssertDeepEqual(t, "new domains after ScanDomains #7", actualNewDomains, []string(nil))
+	test.AssertDBContent(t, "fixtures/scandomains3.sql")
 }

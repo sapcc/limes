@@ -22,6 +22,7 @@ package test
 import (
 	"bytes"
 	"database/sql"
+	"database/sql/driver"
 	"fmt"
 	"os"
 	"os/exec"
@@ -47,6 +48,11 @@ func init() {
 	}
 	sql.Register("sqlite3-limes", &sqlite.SQLiteDriver{
 		ConnectHook: func(conn *sqlite.SQLiteConn) error {
+			//need to enable foreign-key support (so that stuff like "ON DELETE CASCADE" works)
+			_, err := conn.Exec("PRAGMA foreign_keys = ON", []driver.Value{})
+			if err != nil {
+				return err
+			}
 			return conn.RegisterFunc("to_timestamp", toTimestamp, true)
 		},
 	})
