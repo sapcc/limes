@@ -21,7 +21,7 @@ GO_TESTPKGS := $(shell go list -f '{{if .TestGoFiles}}{{.ImportPath}}{{end}}' $(
 space := $(null) $(null)
 comma := ,
 
-check: prepare-check FORCE
+check: all prepare-check FORCE
 	@echo gofmt...
 	@gofmt -l cmd pkg
 	@echo golint...
