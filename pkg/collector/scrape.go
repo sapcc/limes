@@ -57,8 +57,8 @@ var findProjectQuery = `
 //
 //Errors are logged instead of returned. The function will not return unless
 //startup fails.
-func Scrape(driver limes.Driver, serviceType string) {
-	scraper{once: false, logError: util.LogError, timeNow: time.Now}.Scrape(driver, serviceType)
+func Scrape(driver limes.Driver, plugin limes.Plugin) {
+	scraper{once: false, logError: util.LogError, timeNow: time.Now}.Scrape(driver, plugin)
 }
 
 //This provides various hooks to Scrape() that the unit test needs: It can mock
@@ -70,12 +70,8 @@ type scraper struct {
 	timeNow  func() time.Time
 }
 
-func (s scraper) Scrape(driver limes.Driver, serviceType string) {
-	plugin := limes.GetPlugin(serviceType)
-	if plugin == nil {
-		s.logError("startup for %s scraper failed: no such scraper plugin", serviceType)
-		return
-	}
+func (s scraper) Scrape(driver limes.Driver, plugin limes.Plugin) {
+	serviceType := plugin.ServiceType()
 	clusterID := driver.Cluster().ID
 
 	for {

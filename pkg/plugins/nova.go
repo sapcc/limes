@@ -41,7 +41,12 @@ var novaResources = []limes.ResourceInfo{
 }
 
 func init() {
-	limes.RegisterPlugin("compute", &novaPlugin{})
+	limes.RegisterPlugin(&novaPlugin{})
+}
+
+//Resources implements the limes.Plugin interface.
+func (p *novaPlugin) ServiceType() string {
+	return "compute"
 }
 
 //Resources implements the limes.Plugin interface.

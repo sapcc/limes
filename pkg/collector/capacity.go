@@ -36,36 +36,30 @@ var scanInitialDelay = 1 * time.Minute
 //
 //Errors are logged instead of returned. The function will not return unless
 //startup fails.
-func ScanCapacity(driver limes.Driver) {
+func ScanCapacity(driver limes.Driver, plugin limes.Plugin) {
 	//don't start scanning capacity immediately to avoid too much load on the
 	//backend services when the collector comes up
 	time.Sleep(scanInitialDelay)
 
+	serviceType := plugin.ServiceType()
 	for {
-		for _, service := range driver.Cluster().Services {
-			plugin := limes.GetPlugin(service.Type)
-			if plugin == nil {
-				//don't need to log an error here; if this failed, the scraper thread
-				//will already have reported the error
-				continue
-			}
-			util.LogDebug("scanning %s capacity", service.Type)
-			err := scanCapacity(driver, service.Type, plugin)
-			if err != nil {
-				util.LogError("scan %s capacity failed: %s", service.Type, err.Error())
-			}
+		util.LogDebug("scanning %s capacity", serviceType)
+		err := scanCapacity(driver, plugin)
+		if err != nil {
+			util.LogError("scan %s capacity failed: %s", serviceType, err.Error())
 		}
 
 		time.Sleep(scanInterval)
 	}
 }
 
-func scanCapacity(driver limes.Driver, serviceType string, plugin limes.Plugin) error {
+func scanCapacity(driver limes.Driver, plugin limes.Plugin) error {
 	capacities, err := plugin.Capacity(driver)
 	if err != nil {
 		return err
 	}
 	scrapedAt := time.Now()
+	serviceType := plugin.ServiceType()
 
 	//do the following in a transaction to avoid inconsistent DB state
 	tx, err := db.DB.Begin()

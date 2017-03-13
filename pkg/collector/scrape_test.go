@@ -43,6 +43,7 @@ func scrapeTestDriver(t *testing.T) *test.Driver {
 
 func Test_Scrape(t *testing.T) {
 	driver := scrapeTestDriver(t)
+	plugin := limes.GetPlugin("compute")
 
 	//one domain and one project is enough
 	domainUUID1 := driver.StaticDomains[0].UUID
@@ -62,12 +63,12 @@ func Test_Scrape(t *testing.T) {
 	//correct usage and backend quota values (and quota = 0 because nothing was approved yet)
 	//and set `project_services.scraped_at` to the current time
 	s := scraper{once: true, logError: t.Errorf, timeNow: test.TimeNow}
-	s.Scrape(driver, "compute")
+	s.Scrape(driver, plugin)
 	test.AssertDBContent(t, "fixtures/scrape1.sql")
 
 	//second Scrape should not change anything (not even the timestamps) since
 	//less than 30 minutes have passed since the last Scrape()
-	s.Scrape(driver, "compute")
+	s.Scrape(driver, plugin)
 	test.AssertDBContent(t, "fixtures/scrape1.sql")
 
 	//change the data that is reported by the driver
@@ -79,6 +80,6 @@ func Test_Scrape(t *testing.T) {
 		t.Fatal(err)
 	}
 	//Scrape should pick up the changed resource data
-	s.Scrape(driver, "compute")
+	s.Scrape(driver, plugin)
 	test.AssertDBContent(t, "fixtures/scrape2.sql")
 }

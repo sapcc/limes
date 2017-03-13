@@ -22,6 +22,10 @@ package limes
 //Plugin is an interface that the collector plugins for all backend services must
 //implement.
 type Plugin interface {
+	//ServiceType returns the service type that the backend service for this
+	//plugin implements. This string must be identical to the type string from
+	//the Keystone service catalog.
+	ServiceType() string
 	//Resources returns metadata for all the resources that this plugin scrapes
 	//from the backend service.
 	Resources() []ResourceInfo
@@ -70,7 +74,8 @@ var plugins = map[string]Plugin{}
 //once, typically in a func init() for the package that offers the Plugin. The
 //service type must be identical to the type string used in the Keystone
 //service catalog for the backend service that this plugin supports.
-func RegisterPlugin(serviceType string, plugin Plugin) {
+func RegisterPlugin(plugin Plugin) {
+	serviceType := plugin.ServiceType()
 	if plugins[serviceType] != nil {
 		panic("collector.RegisterPlugin() called multiple times for service type: " + serviceType)
 	}
