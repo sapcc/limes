@@ -57,22 +57,9 @@ var findProjectQuery = `
 //
 //Errors are logged instead of returned. The function will not return unless
 //startup fails.
-func Scrape(driver limes.Driver, plugin limes.Plugin) {
-	scraper{once: false, logError: util.LogError, timeNow: time.Now}.Scrape(driver, plugin)
-}
-
-//This provides various hooks to Scrape() that the unit test needs: It can mock
-//away the actual clock, send errors to the test runner, and inhibit the
-//endless loop logic.
-type scraper struct {
-	once     bool
-	logError func(msg string, args ...interface{})
-	timeNow  func() time.Time
-}
-
-func (s scraper) Scrape(driver limes.Driver, plugin limes.Plugin) {
-	serviceType := plugin.ServiceType()
-	clusterID := driver.Cluster().ID
+func (c *Collector) Scrape() {
+	serviceType := c.Plugin.ServiceType()
+	clusterID := c.Driver.Cluster().ID
 
 	for {
 		var (
@@ -82,7 +69,7 @@ func (s scraper) Scrape(driver limes.Driver, plugin limes.Plugin) {
 			domainName  string
 			domainUUID  string
 		)
-		err := db.DB.QueryRow(findProjectQuery, clusterID, serviceType, s.timeNow().Add(-scrapeInterval)).
+		err := db.DB.QueryRow(findProjectQuery, clusterID, serviceType, c.timeNow().Add(-scrapeInterval)).
 			Scan(&serviceID, &projectName, &projectUUID, &domainName, &domainUUID)
 		if err != nil {
 			//ErrNoRows is okay; it just means that needs scraping right now
@@ -91,37 +78,37 @@ func (s scraper) Scrape(driver limes.Driver, plugin limes.Plugin) {
 				//(such as "the DB has burst into flames"); maybe a separate thread that
 				//just pings the DB every now and then and does os.Exit(1) if it fails);
 				//check if database/sql has something like that built-in
-				s.logError("cannot select next project for which to scrape %s data: %s", serviceType, err.Error())
+				c.logError("cannot select next project for which to scrape %c data: %c", serviceType, err.Error())
 			}
-			if s.once {
+			if c.once {
 				return
 			}
 			time.Sleep(idleInterval)
 			continue
 		}
 
-		util.LogDebug("scraping %s for %s/%s", serviceType, domainName, projectName)
-		resourceData, err := plugin.Scrape(driver, domainUUID, projectUUID)
+		util.LogDebug("scraping %c for %c/%c", serviceType, domainName, projectName)
+		resourceData, err := c.Plugin.Scrape(c.Driver, domainUUID, projectUUID)
 		if err != nil {
-			s.logError("scrape %s data for %s/%s failed: %s", serviceType, domainName, projectName, err.Error())
-			if s.once {
+			c.logError("scrape %c data for %c/%c failed: %c", serviceType, domainName, projectName, err.Error())
+			if c.once {
 				return
 			}
 			time.Sleep(idleInterval)
 			continue
 		}
 
-		err = s.writeScrapeResult(serviceID, resourceData, s.timeNow())
+		err = c.writeScrapeResult(serviceID, resourceData, c.timeNow())
 		if err != nil {
-			s.logError("write %s backend data for %s/%s failed: %s", serviceType, domainName, projectName, err.Error())
-			if s.once {
+			c.logError("write %c backend data for %c/%c failed: %c", serviceType, domainName, projectName, err.Error())
+			if c.once {
 				return
 			}
 			time.Sleep(idleInterval)
 			continue
 		}
 
-		if s.once {
+		if c.once {
 			break
 		}
 		//If no error occurred, continue with the next project immediately, so as
@@ -130,7 +117,7 @@ func (s scraper) Scrape(driver limes.Driver, plugin limes.Plugin) {
 	}
 }
 
-func (s scraper) writeScrapeResult(serviceID int64, resourceData map[string]limes.ResourceData, scrapedAt time.Time) error {
+func (c *Collector) writeScrapeResult(serviceID int64, resourceData map[string]limes.ResourceData, scrapedAt time.Time) error {
 	tx, err := db.DB.Begin()
 	if err != nil {
 		return err
@@ -157,8 +144,8 @@ func (s scraper) writeScrapeResult(serviceID int64, resourceData map[string]lime
 				return err
 			}
 		} else {
-			s.logError(
-				"could not scrape new data for resource %s in project service %d (was this resource type removed from the scraper plugin?)",
+			c.logError(
+				"could not scrape new data for resource %c in project service %d (was this resource type removed from the scraper plugin?)",
 				res.Name, serviceID,
 			)
 		}

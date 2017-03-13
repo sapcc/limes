@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/sapcc/limes/pkg/db"
-	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/util"
 )
 
@@ -36,30 +35,31 @@ var scanInitialDelay = 1 * time.Minute
 //
 //Errors are logged instead of returned. The function will not return unless
 //startup fails.
-func ScanCapacity(driver limes.Driver, plugin limes.Plugin) {
+func (c *Collector) ScanCapacity() {
 	//don't start scanning capacity immediately to avoid too much load on the
 	//backend services when the collector comes up
 	time.Sleep(scanInitialDelay)
 
-	serviceType := plugin.ServiceType()
+	serviceType := c.Plugin.ServiceType()
 	for {
 		util.LogDebug("scanning %s capacity", serviceType)
-		err := scanCapacity(driver, plugin)
+		err := c.scanCapacity()
 		if err != nil {
-			util.LogError("scan %s capacity failed: %s", serviceType, err.Error())
+			c.logError("scan %s capacity failed: %s", serviceType, err.Error())
 		}
 
 		time.Sleep(scanInterval)
 	}
 }
 
-func scanCapacity(driver limes.Driver, plugin limes.Plugin) error {
-	capacities, err := plugin.Capacity(driver)
+func (c *Collector) scanCapacity() error {
+	capacities, err := c.Plugin.Capacity(c.Driver)
 	if err != nil {
 		return err
 	}
-	scrapedAt := time.Now()
-	serviceType := plugin.ServiceType()
+	scrapedAt := c.timeNow()
+	serviceType := c.Plugin.ServiceType()
+	clusterID := c.Driver.Cluster().ID
 
 	//do the following in a transaction to avoid inconsistent DB state
 	tx, err := db.DB.Begin()
@@ -72,7 +72,7 @@ func scanCapacity(driver limes.Driver, plugin limes.Plugin) error {
 	var serviceID int64
 	err = tx.QueryRow(
 		`UPDATE cluster_services SET scraped_at = $1 WHERE cluster_id = $2 AND name = $3 RETURNING id`,
-		scrapedAt, driver.Cluster().ID, serviceType,
+		scrapedAt, clusterID, serviceType,
 	).Scan(&serviceID)
 	switch err {
 	case nil:
@@ -81,7 +81,7 @@ func scanCapacity(driver limes.Driver, plugin limes.Plugin) error {
 		//need to create the cluster_services entry
 		err := tx.QueryRow(
 			`INSERT INTO cluster_services (cluster_id, name, scraped_at) VALUES ($1, $2, $3) RETURNING id`,
-			driver.Cluster().ID, serviceType, scrapedAt,
+			clusterID, serviceType, scrapedAt,
 		).Scan(&serviceID)
 		if err != nil {
 			return err

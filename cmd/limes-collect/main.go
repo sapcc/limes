@@ -70,8 +70,9 @@ func main() {
 			util.LogError("skipping service %s: no suitable collector plugin found", service.Type)
 			continue
 		}
-		go collector.Scrape(driver, plugin)
-		go collector.ScanCapacity(driver, plugin)
+		c := collector.NewCollector(driver, plugin)
+		go c.Scrape()
+		go c.ScanCapacity()
 	}
 
 	//since we don't have to manage thread lifetime in the main thread, I use it to check Keystone regularly

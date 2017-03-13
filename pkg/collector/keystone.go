@@ -78,12 +78,7 @@ func ScanDomains(driver limes.Driver, opts ScanDomainsOpts) ([]string, error) {
 
 		//TODO: create domain_service and domain_resource entries
 		util.LogInfo("discovered new Keystone domain: %s", domain.Name)
-		dbDomain := &db.Domain{
-			ClusterID: clusterID,
-			Name:      domain.Name,
-			UUID:      domain.UUID,
-		}
-		err := db.DB.Insert(dbDomain)
+		dbDomain, err := initDomain(driver, domain)
 		if err != nil {
 			return result, err
 		}
@@ -109,6 +104,36 @@ func ScanDomains(driver limes.Driver, opts ScanDomainsOpts) ([]string, error) {
 	}
 
 	return result, nil
+}
+
+func initDomain(driver limes.Driver, domain limes.KeystoneDomain) (*db.Domain, error) {
+	//do this in a transaction to avoid half-initialized projects
+	tx, err := db.DB.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer db.RollbackUnlessCommitted(tx)
+
+	//add record to `domains` table
+	dbDomain := &db.Domain{
+		ClusterID: driver.Cluster().ID,
+		Name:      domain.Name,
+		UUID:      domain.UUID,
+	}
+	err = db.DB.Insert(dbDomain)
+	if err != nil {
+		return nil, err
+	}
+
+	//add records for all cluster services to the `project_services` table
+	for _, srv := range driver.Cluster().Services {
+		err := tx.Insert(&db.DomainService{DomainID: dbDomain.ID, Name: srv.Type})
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return dbDomain, tx.Commit()
 }
 
 //ScanProjects queries Keystone to discover new projects in the given domain.
@@ -187,15 +212,8 @@ func initProject(driver limes.Driver, domain *db.Domain, project limes.KeystoneP
 	//add records for all cluster services to the `project_services` table, with
 	//default `scraped_at = NULL` to force the scraping jobs to scrape the
 	//project resources
-	stmt, err := tx.Prepare(
-		`INSERT INTO project_services (project_id, name) VALUES ($1, $2)`,
-	)
-	if err != nil {
-		return err
-	}
-	defer stmt.Close()
 	for _, srv := range driver.Cluster().Services {
-		_, err := stmt.Exec(dbProject.ID, srv.Type)
+		err := tx.Insert(&db.ProjectService{ProjectID: dbProject.ID, Name: srv.Type})
 		if err != nil {
 			return err
 		}
