@@ -42,4 +42,16 @@ install: FORCE all
 	install -D -m 0755 -t "$(DESTDIR)$(PREFIX)/bin" $(addprefix build/limes-,$(BINS))
 	install -D -m 0644 -t "$(DESTDIR)$(PREFIX)/share/limes/migrations" $(CURDIR)/pkg/db/migrations/*.sql
 
+clean: FORCE
+	rm $(addprefix build/limes-,$(BINS))
+
+DOCKER       := docker
+DOCKER_IMAGE := sapcc/limes
+DOCKER_TAG   := latest
+
+docker: FORCE clean
+	make GO_LDFLAGS="-s -w -linkmode external -extldflags -static" DESTDIR='$(CURDIR)/build/install' check install
+	( cd build/install && tar cf - . ) > build/docker.tar
+	$(DOCKER) build -t "$(DOCKER_IMAGE):$(DOCKER_TAG)" .
+
 .PHONY: FORCE

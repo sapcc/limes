@@ -16,6 +16,7 @@ There's a Makefile, so do:
 * `make` to just compile and run the binaries from the `build/` directory
 * `make && make install` to install to `/usr`
 * `make && make install PREFIX=/some/path` to install to `/some/path`
+* `make docker` to build the Docker image (set image name and tag with the `DOCKER_IMAGE` and `DOCKER_TAG` variables)
 
 ## Usage
 
