@@ -59,7 +59,7 @@ func main() {
 		util.LogFatal(err.Error())
 	}
 
-	//start scraper threads (NOTE: Many people use a pair of sync.WaitGroup and
+	//start collector threads (NOTE: Many people use a pair of sync.WaitGroup and
 	//stop channel to shutdown threads in a controlled manner. I decided against
 	//that for now, and instead construct worker threads in such a way that they
 	//can be terminated at any time without leaving the system in an inconsistent
@@ -75,10 +75,11 @@ func main() {
 		go c.ScanCapacity()
 	}
 
+	//start those collector threads which operate over all services simultaneously
+	c := collector.NewCollector(driver, nil)
+	go c.CheckConsistency()
+
 	//since we don't have to manage thread lifetime in the main thread, I use it to check Keystone regularly
-	//TODO: before starting this, walk over the existing project_services once to
-	//ensure that there is an entry for each project and service (this might not
-	//be the case if new services were added to the cluster configuration)
 	for {
 		_, err := collector.ScanDomains(driver, collector.ScanDomainsOpts{ScanAllProjects: true})
 		if err != nil {
