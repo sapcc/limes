@@ -85,7 +85,9 @@ func ScanDomains(driver limes.Driver, opts ScanDomainsOpts) ([]string, error) {
 		result = append(result, domain.UUID)
 
 		//with ScanAllProjects = true, we will scan projects in the next step, so skip now
-		if !opts.ScanAllProjects {
+		if opts.ScanAllProjects {
+			dbDomains = append(dbDomains, dbDomain)
+		} else {
 			_, err = ScanProjects(driver, dbDomain)
 			if err != nil {
 				return result, err
