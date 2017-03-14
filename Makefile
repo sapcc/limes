@@ -45,13 +45,15 @@ install: FORCE all
 clean: FORCE
 	rm $(addprefix build/limes-,$(BINS))
 
+build/docker.tar: clean
+	make GO_LDFLAGS="-s -w -linkmode external -extldflags -static" DESTDIR='$(CURDIR)/build/install' check install
+	( cd build/install && tar cf - . ) > build/docker.tar
+
 DOCKER       := docker
 DOCKER_IMAGE := sapcc/limes
 DOCKER_TAG   := latest
 
-docker: FORCE clean
-	make GO_LDFLAGS="-s -w -linkmode external -extldflags -static" DESTDIR='$(CURDIR)/build/install' check install
-	( cd build/install && tar cf - . ) > build/docker.tar
+docker: build/docker.tar
 	$(DOCKER) build -t "$(DOCKER_IMAGE):$(DOCKER_TAG)" .
 
 .PHONY: FORCE
