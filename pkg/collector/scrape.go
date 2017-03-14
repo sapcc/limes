@@ -78,7 +78,7 @@ func (c *Collector) Scrape() {
 				//(such as "the DB has burst into flames"); maybe a separate thread that
 				//just pings the DB every now and then and does os.Exit(1) if it fails);
 				//check if database/sql has something like that built-in
-				c.logError("cannot select next project for which to scrape %c data: %c", serviceType, err.Error())
+				c.logError("cannot select next project for which to scrape %s data: %s", serviceType, err.Error())
 			}
 			if c.once {
 				return
@@ -87,10 +87,10 @@ func (c *Collector) Scrape() {
 			continue
 		}
 
-		util.LogDebug("scraping %c for %c/%c", serviceType, domainName, projectName)
+		util.LogDebug("scraping %s for %s/%s", serviceType, domainName, projectName)
 		resourceData, err := c.Plugin.Scrape(c.Driver, domainUUID, projectUUID)
 		if err != nil {
-			c.logError("scrape %c data for %c/%c failed: %c", serviceType, domainName, projectName, err.Error())
+			c.logError("scrape %s data for %s/%s failed: %s", serviceType, domainName, projectName, err.Error())
 			if c.once {
 				return
 			}
@@ -100,7 +100,7 @@ func (c *Collector) Scrape() {
 
 		err = c.writeScrapeResult(serviceID, resourceData, c.timeNow())
 		if err != nil {
-			c.logError("write %c backend data for %c/%c failed: %c", serviceType, domainName, projectName, err.Error())
+			c.logError("write %s backend data for %s/%s failed: %s", serviceType, domainName, projectName, err.Error())
 			if c.once {
 				return
 			}
@@ -145,7 +145,7 @@ func (c *Collector) writeScrapeResult(serviceID int64, resourceData map[string]l
 			}
 		} else {
 			c.logError(
-				"could not scrape new data for resource %c in project service %d (was this resource type removed from the scraper plugin?)",
+				"could not scrape new data for resource %s in project service %d (was this resource type removed from the scraper plugin?)",
 				res.Name, serviceID,
 			)
 		}
