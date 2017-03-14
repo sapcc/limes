@@ -1,8 +1,8 @@
-hash: 7b440a3273b86707ff3c608172a400ca78046914e80ff33a160f2c2475b4b957
-updated: 2017-03-08T15:23:31.935677783+01:00
+hash: 9b8d59ac85c634e14b5b9d6c64760eb24fe13b94b2209d8cae5b940f7ef75c23
+updated: 2017-03-14T15:18:41.104710565+01:00
 imports:
 - name: github.com/gophercloud/gophercloud
-  version: 303bf8a5e44befcf262f4d0502f7343f64c52d8e
+  version: 9a5595b8ffe429439c63781cdc312c254e4ad990
   subpackages:
   - openstack
   - openstack/compute/v2/extensions/limits
@@ -12,6 +12,8 @@ imports:
   - openstack/identity/v3/tokens
   - openstack/utils
   - pagination
+- name: github.com/gorilla/mux
+  version: 392c28fe23e1c45ddba891b0320b3b5df220beea
 - name: github.com/lib/pq
   version: ba5d4f7a35561e22fbdf7a39aa0070f4d460cfc0
   subpackages:
