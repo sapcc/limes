@@ -1,6 +1,8 @@
-hash: 9b8d59ac85c634e14b5b9d6c64760eb24fe13b94b2209d8cae5b940f7ef75c23
-updated: 2017-03-14T15:18:41.104710565+01:00
+hash: 97dac26ff9abab06b4659f615a311d38f8170b95b8338e03856bcd0ef44fd31d
+updated: 2017-03-14T15:32:56.688174851+01:00
 imports:
+- name: github.com/databus23/goslo.policy
+  version: 84ed738a906f39ce19930b9abcf74995d6472353
 - name: github.com/gophercloud/gophercloud
   version: 9a5595b8ffe429439c63781cdc312c254e4ad990
   subpackages:
