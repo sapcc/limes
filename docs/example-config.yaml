@@ -1,5 +1,6 @@
 database:
-  # Locate the database for this Limes setup with a libpq connection string or URI.
+  # Locate the database for this Limes setup with a libpq connection URI. (The
+  # non-URI "connection string" format is not allowed. It must be a URI.)
   # Reference: https://www.postgresql.org/docs/9.6/static/libpq-connect.html#LIBPQ-CONNSTRING
   location: "postgres://user:pass@host:port/database"
   # Locate the directory containing the migration files for Limes' database schema. The example shows the default

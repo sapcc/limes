@@ -20,8 +20,11 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
+	"net/url"
 	"os"
+	"regexp"
 
 	_ "github.com/mattes/migrate/driver/postgres"
 	"github.com/mattes/migrate/migrate"
@@ -37,6 +40,11 @@ func main() {
 	}
 	config := limes.NewConfiguration(os.Args[1])
 
+	err := createDatabaseIfNotExist(config)
+	if err != nil {
+		util.LogError(err.Error())
+	}
+
 	errs, ok := migrate.UpSync(config.Database.Location, config.Database.MigrationsPath)
 	if !ok {
 		util.LogError("migration failed, see errors on stderr")
@@ -45,4 +53,41 @@ func main() {
 		}
 	}
 
+}
+
+var dbNotExistErrRx = regexp.MustCompile(`^pq: database "([^"]+)" does not exist$`)
+
+func createDatabaseIfNotExist(config limes.Configuration) error {
+	//check if the database exists
+	db, err := sql.Open("postgres", config.Database.Location)
+	if err == nil {
+		//apparently the "database does not exist" error only occurs when trying to issue the first statement
+		_, err = db.Exec("SELECT 1")
+	}
+	if err == nil {
+		//nothing to do
+		return db.Close()
+	}
+	match := dbNotExistErrRx.FindStringSubmatch(err.Error())
+	if match == nil {
+		//unexpected error
+		return err
+	}
+	dbName := match[1]
+
+	//remove the database name from the connection URL
+	dbURL, err := url.Parse(config.Database.Location)
+	if err != nil {
+		return err
+	}
+
+	dbURL.Path = "/"
+	db, err = sql.Open("postgres", dbURL.String())
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+
+	_, err = db.Exec("CREATE DATABASE " + dbName)
+	return err
 }
