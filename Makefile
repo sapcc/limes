@@ -43,7 +43,7 @@ install: FORCE all
 	install -D -m 0644 -t "$(DESTDIR)$(PREFIX)/share/limes/migrations" $(CURDIR)/pkg/db/migrations/*.sql
 
 clean: FORCE
-	rm $(addprefix build/limes-,$(BINS))
+	rm -f -- $(addprefix build/limes-,$(BINS))
 
 build/docker.tar: clean
 	make GO_LDFLAGS="-s -w -linkmode external -extldflags -static" DESTDIR='$(CURDIR)/build/install' check install
