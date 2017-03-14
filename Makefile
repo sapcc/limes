@@ -13,8 +13,8 @@ GO_LDFLAGS    := -s -w
 build/limes-%: FORCE
 	$(GO) install $(GO_BUILDFLAGS) -ldflags '$(GO_LDFLAGS)' '$(PKG)/cmd/limes-$*'
 
-GO_ALLPKGS := $(shell $(GO) list $(PKG)/cmd/... $(PKG)/pkg/...)
-GO_TESTPKGS := $(shell $(GO) list -f '{{if .TestGoFiles}}{{.ImportPath}}{{end}}' $(PKG)/pkg/...)
+GO_ALLPKGS := $(shell go list $(PKG)/cmd/... $(PKG)/pkg/...)
+GO_TESTPKGS := $(shell go list -f '{{if .TestGoFiles}}{{.ImportPath}}{{end}}' $(PKG)/pkg/...)
 
 # down below, I need to substitute spaces with commas; because of the syntax,
 # I have to get these separators from variables
