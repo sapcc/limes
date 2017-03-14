@@ -35,7 +35,9 @@ pkg/test/migrations/%.sql: pkg/db/migrations/%.sql
 	sed 's/BIGSERIAL NOT NULL PRIMARY KEY/INTEGER PRIMARY KEY/' < $< > $@
 
 install: FORCE all
+	install -d -m 0755    "$(DESTDIR)$(PREFIX)/bin"
 	install -D -m 0755 -t "$(DESTDIR)$(PREFIX)/bin" $(addprefix build/limes-,$(BINS))
+	install -d -m 0755    "$(DESTDIR)$(PREFIX)/share/limes/migrations"
 	install -D -m 0644 -t "$(DESTDIR)$(PREFIX)/share/limes/migrations" $(CURDIR)/pkg/db/migrations/*.sql
 
 clean: FORCE
