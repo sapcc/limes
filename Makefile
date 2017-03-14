@@ -22,21 +22,17 @@ space := $(null) $(null)
 comma := ,
 
 check: all prepare-check FORCE
-	@echo gofmt...
-	@gofmt -l cmd pkg
-	@echo golint...
-	@find cmd pkg -type d -exec golint {} \;
-	@echo govet...
-	@$(GO) vet $(GO_ALLPKGS)
-	@echo go test...
-	@$(GO) test -coverprofile=cover.out -covermode=count -coverpkg=$(subst $(space),$(comma),$(GO_ALLPKGS)) $(GO_TESTPKGS)
+	gofmt -l cmd pkg
+	find cmd pkg -type d -exec golint {} \;
+	$(GO) vet $(GO_ALLPKGS)
+	$(GO) test -coverprofile=cover.out -covermode=count -coverpkg=$(subst $(space),$(comma),$(GO_ALLPKGS)) $(GO_TESTPKGS)
 
 prepare-check: FORCE $(patsubst pkg/db/%,pkg/test/%, $(wildcard pkg/db/migrations/*.sql))
 	@# Precompile a module used by the unit tests which takes a long time to compile because of cgo.
-	@$(GO) install github.com/sapcc/limes/vendor/github.com/mattn/go-sqlite3
+	$(GO) install github.com/sapcc/limes/vendor/github.com/mattn/go-sqlite3
 pkg/test/migrations/%.sql: pkg/db/migrations/%.sql
 	@# convert Postgres syntax into SQLite syntax where necessary
-	@sed 's/BIGSERIAL NOT NULL PRIMARY KEY/INTEGER PRIMARY KEY/' < $< > $@
+	sed 's/BIGSERIAL NOT NULL PRIMARY KEY/INTEGER PRIMARY KEY/' < $< > $@
 
 install: FORCE all
 	install -D -m 0755 -t "$(DESTDIR)$(PREFIX)/bin" $(addprefix build/limes-,$(BINS))
