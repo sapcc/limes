@@ -43,6 +43,7 @@ func main() {
 	err := createDatabaseIfNotExist(config)
 	if err != nil {
 		util.LogError(err.Error())
+		os.Exit(1)
 	}
 
 	errs, ok := migrate.UpSync(config.Database.Location, config.Database.MigrationsPath)
@@ -51,8 +52,8 @@ func main() {
 		for _, err := range errs {
 			fmt.Fprintln(os.Stderr, err.Error())
 		}
+		os.Exit(1)
 	}
-
 }
 
 var dbNotExistErrRx = regexp.MustCompile(`^pq: database "([^"]+)" does not exist$`)
