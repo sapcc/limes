@@ -42,7 +42,7 @@ clean: FORCE
 	rm -f -- $(addprefix build/limes-,$(BINS))
 
 build/docker.tar: clean
-	make GO_LDFLAGS="-s -w -linkmode external -extldflags -static" DESTDIR='$(CURDIR)/build/install' check install
+	make GO_LDFLAGS="-s -w -linkmode external -extldflags -static" DESTDIR='$(CURDIR)/build/install' install
 	( cd build/install && tar cf - . ) > build/docker.tar
 
 DOCKER       := docker
