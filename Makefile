@@ -1,5 +1,5 @@
 PKG    = github.com/sapcc/limes
-BINS   = collect migrate
+BINS   = collect migrate serve
 PREFIX := /usr
 
 all: $(addprefix build/limes-,$(BINS))

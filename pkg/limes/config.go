@@ -20,10 +20,12 @@
 package limes
 
 import (
+	"encoding/json"
 	"io/ioutil"
 	"os"
 	"strings"
 
+	policy "github.com/databus23/goslo.policy"
 	"github.com/gophercloud/gophercloud"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/util"
@@ -35,27 +37,35 @@ import (
 type Configuration struct {
 	Database db.Configuration                 `yaml:"database"`
 	Clusters map[string]*ClusterConfiguration `yaml:"clusters"`
+	API      APIConfiguration                 `yaml:"api"`
 }
 
 //ClusterConfiguration contains all the configuration data for a single cluster.
 //It is passed around in a lot of Limes code, mostly for the cluster ID and the
 //list of enabled services.
 type ClusterConfiguration struct {
-	ID                string `yaml:"-"`
-	AuthURL           string `yaml:"auth_url"`
-	UserName          string `yaml:"user_name"`
-	UserDomainName    string `yaml:"user_domain_name"`
-	ProjectName       string `yaml:"project_name"`
-	ProjectDomainName string `yaml:"project_domain_name"`
-	Password          string `yaml:"password"`
-	RegionName        string `yaml:"region_name"`
-	Services          []ServiceConfiguration
+	ID                string                 `yaml:"-"`
+	AuthURL           string                 `yaml:"auth_url"`
+	UserName          string                 `yaml:"user_name"`
+	UserDomainName    string                 `yaml:"user_domain_name"`
+	ProjectName       string                 `yaml:"project_name"`
+	ProjectDomainName string                 `yaml:"project_domain_name"`
+	Password          string                 `yaml:"password"`
+	RegionName        string                 `yaml:"region_name"`
+	Services          []ServiceConfiguration `yaml:"services"`
 }
 
 //ServiceConfiguration describes a service that is enabled for a certain cluster.
 type ServiceConfiguration struct {
 	Type   string `yaml:"type"`
 	Shared bool   `yaml:"shared"`
+}
+
+//APIConfiguration contains
+type APIConfiguration struct {
+	ListenAddress  string           `yaml:"listen"`
+	PolicyFilePath string           `yaml:"policy"`
+	PolicyEnforcer *policy.Enforcer `yaml:"-"`
 }
 
 //NewConfiguration reads and validates the given configuration file.
@@ -145,7 +155,35 @@ func (cfg Configuration) validate() (success bool) {
 		}
 	}
 
+	if cfg.API.ListenAddress == "" {
+		missing("api.listen")
+	}
+	if cfg.API.PolicyFilePath == "" {
+		missing("api.policy")
+	} else {
+		//load the policy file
+		var err error
+		cfg.API.PolicyEnforcer, err = loadPolicyFile(cfg.API.PolicyFilePath)
+		if err != nil {
+			util.LogError(err.Error())
+			success = false
+		}
+	}
+
 	return
+}
+
+func loadPolicyFile(path string) (*policy.Enforcer, error) {
+	bytes, err := ioutil.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var rules map[string]string
+	err = json.Unmarshal(bytes, &rules)
+	if err != nil {
+		return nil, err
+	}
+	return policy.NewEnforcer(rules)
 }
 
 ////////////////////////////////////////////////////////////////////////////////

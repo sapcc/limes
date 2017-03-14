@@ -44,3 +44,10 @@ clusters:
       - type: object-store
         shared: true
       - type: sharev2
+
+
+api:
+  # TCP address for limes-serve to listen on
+  listen: ':8080'
+  # authorization rules in oslo.policy format; see docs/example-policy.json for example
+  policy: '/etc/limes/policy.json'
