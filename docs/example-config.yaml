@@ -51,3 +51,6 @@ api:
   listen: ':8080'
   # authorization rules in oslo.policy format; see docs/example-policy.json for example
   policy: '/etc/limes/policy.json'
+  # URL of Limes endpoint as it appears in the Keystone service catalog (this
+  # is only used for self-links in the version announcement)
+  base: 'https://limes.example.org/'

@@ -21,8 +21,10 @@ package main
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 
+	"github.com/sapcc/limes/pkg/api"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/drivers"
 	"github.com/sapcc/limes/pkg/limes"
@@ -53,6 +55,18 @@ func main() {
 		util.LogFatal(err.Error())
 	}
 
-	//TODO continue
-	_ = driver
+	//hook up the v1 API (this code is structured so that a newer API version can
+	//be added easily later)
+	v1Router, v1VersionData := api.NewV1Router(driver, config.API)
+	http.Handle("/v1/", v1Router)
+
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		allVersions := struct {
+			Versions []api.VersionData `json:"versions"`
+		}{[]api.VersionData{v1VersionData}}
+		api.ReturnJSON(w, 300, allVersions)
+	})
+
+	//start HTTP server
+	util.LogFatal(http.ListenAndServe(config.API.ListenAddress, nil).Error())
 }

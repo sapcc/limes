@@ -66,6 +66,7 @@ type APIConfiguration struct {
 	ListenAddress  string           `yaml:"listen"`
 	PolicyFilePath string           `yaml:"policy"`
 	PolicyEnforcer *policy.Enforcer `yaml:"-"`
+	BaseURL        string           `yaml:"base"`
 }
 
 //NewConfiguration reads and validates the given configuration file.
