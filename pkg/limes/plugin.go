@@ -30,11 +30,15 @@ type Plugin interface {
 	//from the backend service.
 	Resources() []ResourceInfo
 	//Scrape queries the backend service for the quota and usage data of all
-	//known resources for the given project in the given domain.
+	//known resources for the given project in the given domain. The string keys
+	//in the result map must be identical to the resource names
+	//from Resources().
 	Scrape(driver Driver, domainUUID, projectUUID string) (map[string]ResourceData, error)
 	//Capacity queries the backend service for the total capacity of its
 	//resources. If, for certain resources, a capacity estimate is not possible,
-	//the implementation shall omit these resources from the result.
+	//the implementation shall omit these resources from the result. The string
+	//keys in the result map must be identical to the resource names from
+	//Resources().
 	Capacity(driver Driver) (map[string]uint64, error)
 }
 
