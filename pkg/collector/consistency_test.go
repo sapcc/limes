@@ -44,25 +44,25 @@ func Test_Consistency(t *testing.T) {
 	test.AssertDBContent(t, "fixtures/scandomains1.sql")
 
 	//remove some *_services entries
-	_, err = db.DB.Exec(`DELETE FROM domain_services WHERE name = ?`, "foo")
+	_, err = db.DB.Exec(`DELETE FROM domain_services WHERE type = ?`, "foo")
 	if err != nil {
 		t.Error(err)
 	}
-	_, err = db.DB.Exec(`DELETE FROM project_services WHERE name = ?`, "bar")
+	_, err = db.DB.Exec(`DELETE FROM project_services WHERE type = ?`, "bar")
 	if err != nil {
 		t.Error(err)
 	}
 	//add some useless *_services entries
 	err = db.DB.Insert(&db.DomainService{
 		DomainID: 1,
-		Name:     "whatever",
+		Type:     "whatever",
 	})
 	if err != nil {
 		t.Error(err)
 	}
 	err = db.DB.Insert(&db.ProjectService{
 		ProjectID: 1,
-		Name:      "whatever",
+		Type:      "whatever",
 	})
 	if err != nil {
 		t.Error(err)

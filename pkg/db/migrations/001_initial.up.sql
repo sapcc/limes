@@ -3,9 +3,9 @@
 CREATE TABLE cluster_services (
   id         BIGSERIAL NOT NULL PRIMARY KEY,
   cluster_id TEXT      NOT NULL,
-  name       TEXT      NOT NULL,
+  type       TEXT      NOT NULL,
   scraped_at TIMESTAMP NOT NULL,
-  UNIQUE (cluster_id, name)
+  UNIQUE (cluster_id, type)
 );
 
 CREATE TABLE cluster_resources (
@@ -27,8 +27,8 @@ CREATE TABLE domains (
 CREATE TABLE domain_services (
   id         BIGSERIAL NOT NULL PRIMARY KEY,
   domain_id  BIGINT    NOT NULL REFERENCES domains ON DELETE CASCADE,
-  name       TEXT      NOT NULL,
-  UNIQUE (domain_id, name)
+  type       TEXT      NOT NULL,
+  UNIQUE (domain_id, type)
 );
 
 CREATE TABLE domain_resources (
@@ -50,10 +50,10 @@ CREATE TABLE projects (
 CREATE TABLE project_services (
   id          BIGSERIAL NOT NULL PRIMARY KEY,
   project_id  BIGINT    NOT NULL REFERENCES projects ON DELETE CASCADE,
-  name        TEXT      NOT NULL,
+  type        TEXT      NOT NULL,
   scraped_at  TIMESTAMP, -- defaults to NULL to indicate that scraping did not happen yet
   stale       BOOLEAN   NOT NULL DEFAULT FALSE,
-  UNIQUE (project_id, name)
+  UNIQUE (project_id, type)
 );
 CREATE INDEX project_services_stale_idx ON project_services (stale);
 

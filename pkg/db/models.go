@@ -25,7 +25,7 @@ import "time"
 type ClusterService struct {
 	ID        int64      `db:"id"`
 	ClusterID string     `db:"cluster_id"`
-	Name      string     `db:"name"`
+	Type      string     `db:"type"`
 	ScrapedAt *time.Time `db:"scraped_at"` //pointer type to allow for NULL value
 }
 
@@ -48,7 +48,7 @@ type Domain struct {
 type DomainService struct {
 	ID       int64  `db:"id"`
 	DomainID int64  `db:"domain_id"`
-	Name     string `db:"name"`
+	Type     string `db:"type"`
 }
 
 //DomainResource contains a record from the `domain_resources` table.
@@ -70,7 +70,7 @@ type Project struct {
 type ProjectService struct {
 	ID        int64      `db:"id"`
 	ProjectID int64      `db:"project_id"`
-	Name      string     `db:"name"`
+	Type      string     `db:"type"`
 	ScrapedAt *time.Time `db:"scraped_at"` //pointer type to allow for NULL value
 	Stale     bool       `db:"stale"`
 }

@@ -71,7 +71,7 @@ func (c *Collector) scanCapacity() error {
 	//find or create the cluster_services entry
 	var serviceID int64
 	err = tx.QueryRow(
-		`UPDATE cluster_services SET scraped_at = $1 WHERE cluster_id = $2 AND name = $3 RETURNING id`,
+		`UPDATE cluster_services SET scraped_at = $1 WHERE cluster_id = $2 AND type = $3 RETURNING id`,
 		scrapedAt, clusterID, serviceType,
 	).Scan(&serviceID)
 	switch err {
@@ -80,7 +80,7 @@ func (c *Collector) scanCapacity() error {
 	case sql.ErrNoRows:
 		//need to create the cluster_services entry
 		err := tx.QueryRow(
-			`INSERT INTO cluster_services (cluster_id, name, scraped_at) VALUES ($1, $2, $3) RETURNING id`,
+			`INSERT INTO cluster_services (cluster_id, type, scraped_at) VALUES ($1, $2, $3) RETURNING id`,
 			clusterID, serviceType, scrapedAt,
 		).Scan(&serviceID)
 		if err != nil {

@@ -42,7 +42,7 @@ var findProjectQuery = `
 	JOIN projects p ON p.id = ps.project_id
 	JOIN domains d ON d.id = p.domain_id
 	-- filter by cluster ID and service type
-	WHERE d.cluster_id = $1 AND ps.name = $2
+	WHERE d.cluster_id = $1 AND ps.type = $2
 	-- filter by need to be updated (because of user request, because of missing data, or because of outdated data)
 	AND (ps.stale OR ps.scraped_at IS NULL OR ps.scraped_at < $3)
 	-- order by update priority (in the same way: first user-requested, then new projects, then outdated projects)

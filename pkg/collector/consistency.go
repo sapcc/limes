@@ -70,11 +70,11 @@ func (c *Collector) checkConsistencyDomain(domain db.Domain) {
 
 	//cleanup entries for services that have been disabled
 	for _, service := range services {
-		seen[service.Name] = true
-		if isServiceEnabled[service.Name] {
+		seen[service.Type] = true
+		if isServiceEnabled[service.Type] {
 			continue
 		}
-		util.LogInfo("cleaning up %s service entry for domain %s", service.Name)
+		util.LogInfo("cleaning up %s service entry for domain %s", service.Type)
 		_, err := db.DB.Delete(&service)
 		if err != nil {
 			c.logError(err.Error())
@@ -89,7 +89,7 @@ func (c *Collector) checkConsistencyDomain(domain db.Domain) {
 		util.LogInfo("creating missing %s service entry for domain %s", serviceType)
 		err := db.DB.Insert(&db.DomainService{
 			DomainID: domain.ID,
-			Name:     serviceType,
+			Type:     serviceType,
 		})
 		if err != nil {
 			c.logError(err.Error())
@@ -123,11 +123,11 @@ func (c *Collector) checkConsistencyProject(project db.Project) {
 
 	//cleanup entries for services that have been disabled
 	for _, service := range services {
-		seen[service.Name] = true
-		if isServiceEnabled[service.Name] {
+		seen[service.Type] = true
+		if isServiceEnabled[service.Type] {
 			continue
 		}
-		util.LogInfo("cleaning up %s service entry for project %s", service.Name)
+		util.LogInfo("cleaning up %s service entry for project %s", service.Type)
 		_, err := db.DB.Delete(&service)
 		if err != nil {
 			c.logError(err.Error())
@@ -142,7 +142,7 @@ func (c *Collector) checkConsistencyProject(project db.Project) {
 		util.LogInfo("creating missing %s service entry for project %s", serviceType)
 		err := db.DB.Insert(&db.ProjectService{
 			ProjectID: project.ID,
-			Name:      serviceType,
+			Type:      serviceType,
 		})
 		if err != nil {
 			c.logError(err.Error())
