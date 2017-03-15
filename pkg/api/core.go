@@ -95,7 +95,7 @@ func ReturnJSON(w http.ResponseWriter, code int, data interface{}) {
 //Path constructs a full URL for a given URL path below the /v1/ endpoint.
 func (p *v1Provider) Path(elements ...string) string {
 	parts := []string{
-		strings.TrimSuffix(p.Config.BaseURL, "/"),
+		strings.TrimSuffix(p.Driver.Cluster().CatalogURL, "/"),
 		"v1",
 	}
 	parts = append(parts, elements...)

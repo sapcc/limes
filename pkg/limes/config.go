@@ -52,6 +52,7 @@ type ClusterConfiguration struct {
 	ProjectDomainName string                 `yaml:"project_domain_name"`
 	Password          string                 `yaml:"password"`
 	RegionName        string                 `yaml:"region_name"`
+	CatalogURL        string                 `yaml:"catalog_url"`
 	Services          []ServiceConfiguration `yaml:"services"`
 }
 
@@ -66,7 +67,6 @@ type APIConfiguration struct {
 	ListenAddress  string           `yaml:"listen"`
 	PolicyFilePath string           `yaml:"policy"`
 	PolicyEnforcer *policy.Enforcer `yaml:"-"`
-	BaseURL        string           `yaml:"base"`
 }
 
 //NewConfiguration reads and validates the given configuration file.
