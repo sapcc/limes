@@ -139,6 +139,8 @@ func (c *Collector) writeScrapeResult(serviceID int64, resourceData map[string]l
 			//update existing resource record
 			res.BackendQuota = data.Quota
 			res.Usage = data.Usage
+			//TODO: if Quota != 0 && BackendQuota != Quota, try to enforce the Quota in the backend
+			//TODO: Update() only if required
 			_, err := tx.Update(res)
 			if err != nil {
 				return err
@@ -156,6 +158,9 @@ func (c *Collector) writeScrapeResult(serviceID int64, resourceData map[string]l
 		if seen[name] {
 			return nil
 		}
+		//TODO: allow to auto-approve certain initial non-null backend quotas (e.g. Neutron gives each
+		//project a "default" security group automatically, so the quotas start at security_groups=1 and
+		//security_group_rules=4 instead of at 0)
 		res := &db.ProjectResource{
 			ServiceID:    serviceID,
 			Name:         name,
