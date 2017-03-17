@@ -20,6 +20,7 @@ func TestRules(t *testing.T) {
 			"some_number":    "1",
 			"some_bool":      "True",
 		},
+		Logger: t.Logf,
 	}
 
 	testCases := []struct {
@@ -78,6 +79,7 @@ func TestPolicy(t *testing.T) {
 		Auth: map[string]string{
 			"domain_id": "admin_domain_id",
 		},
+		Logger: t.Logf,
 	}
 	userContext := Context{
 		Roles: []string{"member"},
@@ -87,6 +89,7 @@ func TestPolicy(t *testing.T) {
 		Request: map[string]string{
 			"user_id": "u-1",
 		},
+		Logger: t.Logf,
 	}
 
 	enforcer, err := NewEnforcer(keystonePolicy)

@@ -50,6 +50,8 @@ type v1Provider struct {
 }
 
 //NewV1Router creates a mux.Router that serves the Limes v1 API.
+//It also returns the VersionData for this API version which is needed for the
+//version advertisement on "GET /".
 func NewV1Router(driver limes.Driver, config limes.APIConfiguration) (*mux.Router, VersionData) {
 	r := mux.NewRouter()
 	p := &v1Provider{
@@ -73,8 +75,9 @@ func NewV1Router(driver limes.Driver, config limes.APIConfiguration) (*mux.Route
 	}
 
 	r.Methods("GET").Path("/v1/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ReturnJSON(w, 200, p.VersionData)
+		ReturnJSON(w, 200, map[string]interface{}{"version": p.VersionData})
 	})
+	r.Methods("GET").Path("/v1/domains/{domain_id}/projects").HandlerFunc(p.ListProjects)
 
 	return r, p.VersionData
 }
@@ -90,6 +93,25 @@ func ReturnJSON(w http.ResponseWriter, code int, data interface{}) {
 	} else {
 		http.Error(w, err.Error(), 500)
 	}
+}
+
+//HasPermission checks if the user fulfills the given rule, by validating the
+//X-Auth-Token from the request and checking the policy file regarding that rule.
+func (p *v1Provider) HasPermission(rule string, w http.ResponseWriter, r *http.Request) bool {
+	allowed, err := p.Driver.CheckUserPermission(
+		r.Header.Get("X-Auth-Token"),
+		rule,
+		p.Config.PolicyEnforcer,
+		mux.Vars(r),
+	)
+	if err != nil {
+		http.Error(w, err.Error(), 401)
+		return false
+	}
+	if !allowed {
+		http.Error(w, "Unauthorized", 401)
+	}
+	return allowed
 }
 
 //Path constructs a full URL for a given URL path below the /v1/ endpoint.

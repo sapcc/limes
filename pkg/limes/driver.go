@@ -19,6 +19,8 @@
 
 package limes
 
+import policy "github.com/databus23/goslo.policy"
+
 //Driver is an interface that wraps any queries and requests to backend
 //services, in order to make it easy to swap out the driver implementation for
 //a mock during unit tests.
@@ -30,6 +32,7 @@ type Driver interface {
 	/********** Keystone (Identity) **********/
 	ListDomains() ([]KeystoneDomain, error)
 	ListProjects(domainUUID string) ([]KeystoneProject, error)
+	CheckUserPermission(token, rule string, enforcer *policy.Enforcer, requestParams map[string]string) (bool, error)
 	/********** Nova (Compute) **********/
 	CheckCompute(projectUUID string) (ComputeData, error)
 }

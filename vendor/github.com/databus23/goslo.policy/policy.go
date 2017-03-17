@@ -1,10 +1,7 @@
 //Package policy provides RBAC policy enforcement similar to the OpenStack oslo.policy library.
 package policy
 
-import (
-	"fmt"
-	"log"
-)
+import "fmt"
 
 //go:generate go tool yacc -v "" -o parser.go parser.y
 //go:generate sed -i .tmp -e s/yyEofCode/yyEOFCode/ parser.go
@@ -71,10 +68,11 @@ type Context struct {
 	Roles []string
 	//Request variables that are referenced in policy rules
 	Request map[string]string
+	//Logger can be used to enable debug logging for this context.
+	Logger func(msg string, args ...interface{})
 
 	rules  *map[string]rule
 	checks map[string]Check
-	debug  bool
 }
 
 //RuleCheck provides the standard rule:... check
@@ -113,14 +111,14 @@ func DefaultCheck(c Context, key, match string) bool {
 }
 
 func (c Context) genericCheck(key, match string, isVariable bool) bool {
-	if c.debug {
-		log.Printf("executing %s:%s", key, match)
+	if c.Logger != nil {
+		c.Logger("executing %s:%s", key, match)
 	}
 	if isVariable {
 		m, ok := c.Request[match]
 		if !ok {
-			if c.debug {
-				log.Printf("request variable %s not present in context. failing\n", match)
+			if c.Logger != nil {
+				c.Logger("request variable %s not present in context. failing\n", match)
 			}
 			return false
 		}
@@ -129,32 +127,32 @@ func (c Context) genericCheck(key, match string, isVariable bool) bool {
 
 	if check, ok := c.checks[key]; ok {
 		result := check(c, key, match)
-		if c.debug {
-			log.Printf("check %s returned: %v\n", key, result)
+		if c.Logger != nil {
+			c.Logger("check %s returned: %v\n", key, result)
 		}
 		return result
 	}
 	result := c.checks["default"](c, key, match)
-	if c.debug {
-		log.Printf("default check result: %s:%s = %v\n", key, match, result)
+	if c.Logger != nil {
+		c.Logger("default check result: %s:%s = %v\n", key, match, result)
 	}
 	return result
 
 }
 
 func (c Context) checkVariable(variable string, match interface{}) bool {
-	if c.debug {
-		log.Printf("executing '%s':%s\n", match, variable)
+	if c.Logger != nil {
+		c.Logger("executing '%s':%s\n", match, variable)
 	}
 	val, ok := c.Request[variable]
 	if !ok {
-		if c.debug {
-			log.Printf("variable %s not present in context. failing\n", variable)
+		if c.Logger != nil {
+			c.Logger("variable %s not present in context. failing\n", variable)
 		}
 		return false
 	}
-	if c.debug {
-		log.Printf("'%s':%s = %v\n", match, val, val == match)
+	if c.Logger != nil {
+		c.Logger("'%s':%s = %v\n", match, val, val == match)
 	}
 	return val == match
 }

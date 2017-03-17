@@ -19,7 +19,10 @@
 
 package test
 
-import "github.com/sapcc/limes/pkg/limes"
+import (
+	policy "github.com/databus23/goslo.policy"
+	"github.com/sapcc/limes/pkg/limes"
+)
 
 //Driver is a limes.Driver implementation for unit tests that does not talk to
 //an actual OpenStack. It returns a static set of domains and projects, and a
@@ -71,6 +74,11 @@ func (d *Driver) ListDomains() ([]limes.KeystoneDomain, error) {
 //ListProjects implements the limes.Driver interface.
 func (d *Driver) ListProjects(domainUUID string) ([]limes.KeystoneProject, error) {
 	return d.StaticProjects[domainUUID], nil
+}
+
+//CheckUserPermission implements the limes.Driver interface.
+func (d *Driver) CheckUserPermission(token, rule string, enforcer *policy.Enforcer, requestParams map[string]string) (bool, error) {
+	return true, nil
 }
 
 //CheckCompute implements the limes.Driver interface.

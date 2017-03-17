@@ -29,6 +29,8 @@ import (
 	"github.com/sapcc/limes/pkg/drivers"
 	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/util"
+
+	_ "github.com/sapcc/limes/pkg/plugins"
 )
 
 func main() {

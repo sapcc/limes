@@ -17,48 +17,23 @@
 *
 *******************************************************************************/
 
-package util
+package api
 
 import (
-	"log"
-	"os"
-	"strings"
+	"net/http"
+
+	"github.com/gorilla/mux"
 )
 
-var isDebug = os.Getenv("LIMES_DEBUG") == "1"
-
-func init() {
-	log.SetOutput(os.Stdout)
-}
-
-//LogFatal logs a fatal error and terminates the program.
-func LogFatal(msg string, args ...interface{}) {
-	doLog("FATAL: "+msg, args)
-	os.Exit(1)
-}
-
-//LogError logs a non-fatal error.
-func LogError(msg string, args ...interface{}) {
-	doLog("ERROR: "+msg, args)
-}
-
-//LogInfo logs an informational message.
-func LogInfo(msg string, args ...interface{}) {
-	doLog("INFO: "+msg, args)
-}
-
-//LogDebug logs a debug message if debug logging is enabled.
-func LogDebug(msg string, args ...interface{}) {
-	if isDebug {
-		doLog("DEBUG: "+msg, args)
+//ListProjects handles GET /v1/domains/:domain_id/projects.
+func (p *v1Provider) ListProjects(w http.ResponseWriter, r *http.Request) {
+	if !p.HasPermission("project:list", w, r) {
+		return
 	}
-}
 
-func doLog(msg string, args []interface{}) {
-	msg = strings.TrimPrefix(msg, "\n")
-	if len(args) > 0 {
-		log.Printf(msg+"\n", args...)
-	} else {
-		log.Println(msg)
-	}
+	//TODO: respect r.URL.Query() fields "service" and "resource"
+	domainUUID := mux.Vars(r)["domain_id"]
+
+	//TODO: implement
+	ReturnJSON(w, 200, map[string]string{"domain_id": domainUUID})
 }

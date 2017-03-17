@@ -86,12 +86,19 @@ func NewConfiguration(path string) (cfg Configuration) {
 		os.Exit(1)
 	}
 
+	//load the policy file
+	cfg.API.PolicyEnforcer, err = loadPolicyFile(cfg.API.PolicyFilePath)
+	if err != nil {
+		util.LogFatal(err.Error())
+	}
+
 	for clusterID, cluster := range cfg.Clusters {
 		//pull the cluster IDs into the ClusterConfiguration objects
 		//so that we can then pass around the ClusterConfiguration objects
 		//instead of having to juggle both the ID and the config object
 		cluster.ID = clusterID
 	}
+
 	return
 }
 
@@ -161,14 +168,6 @@ func (cfg Configuration) validate() (success bool) {
 	}
 	if cfg.API.PolicyFilePath == "" {
 		missing("api.policy")
-	} else {
-		//load the policy file
-		var err error
-		cfg.API.PolicyEnforcer, err = loadPolicyFile(cfg.API.PolicyFilePath)
-		if err != nil {
-			util.LogError(err.Error())
-			success = false
-		}
 	}
 
 	return
