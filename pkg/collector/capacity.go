@@ -45,7 +45,7 @@ func (c *Collector) ScanCapacity() {
 		util.LogDebug("scanning %s capacity", serviceType)
 		err := c.scanCapacity()
 		if err != nil {
-			c.logError("scan %s capacity failed: %s", serviceType, err.Error())
+			c.LogError("scan %s capacity failed: %s", serviceType, err.Error())
 		}
 
 		time.Sleep(scanInterval)
@@ -57,7 +57,7 @@ func (c *Collector) scanCapacity() error {
 	if err != nil {
 		return err
 	}
-	scrapedAt := c.timeNow()
+	scrapedAt := c.TimeNow()
 	serviceType := c.Plugin.ServiceType()
 	clusterID := c.Driver.Cluster().ID
 

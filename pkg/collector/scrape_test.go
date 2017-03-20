@@ -24,7 +24,6 @@ import (
 
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
-	_ "github.com/sapcc/limes/pkg/plugins"
 	"github.com/sapcc/limes/pkg/test"
 )
 
@@ -47,9 +46,9 @@ func Test_Scrape(t *testing.T) {
 	c := Collector{
 		Driver:   driver,
 		Plugin:   plugin,
-		logError: t.Errorf,
-		timeNow:  test.TimeNow,
-		once:     true,
+		LogError: t.Errorf,
+		TimeNow:  test.TimeNow,
+		Once:     true,
 	}
 
 	//one domain and one project is enough

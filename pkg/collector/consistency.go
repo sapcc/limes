@@ -35,8 +35,8 @@ func (c *Collector) CheckConsistency() {
 		var domains []db.Domain
 		_, err := db.DB.Select(&domains, `SELECT * FROM domains WHERE cluster_id = $1`, c.Driver.Cluster().ID)
 		if err != nil {
-			c.logError(err.Error())
-			if c.once {
+			c.LogError(err.Error())
+			if c.Once {
 				return
 			}
 			time.Sleep(consistencyCheckInterval)
@@ -47,7 +47,7 @@ func (c *Collector) CheckConsistency() {
 			c.checkConsistencyDomain(domain)
 		}
 
-		if c.once {
+		if c.Once {
 			return
 		}
 		time.Sleep(consistencyCheckInterval)
@@ -64,7 +64,7 @@ func (c *Collector) checkConsistencyDomain(domain db.Domain) {
 	var services []db.DomainService
 	_, err := db.DB.Select(&services, `SELECT * FROM domain_services WHERE domain_id = $1`, domain.ID)
 	if err != nil {
-		c.logError(err.Error())
+		c.LogError(err.Error())
 		return
 	}
 
@@ -77,7 +77,7 @@ func (c *Collector) checkConsistencyDomain(domain db.Domain) {
 		util.LogInfo("cleaning up %s service entry for domain %s", service.Type)
 		_, err := db.DB.Delete(&service)
 		if err != nil {
-			c.logError(err.Error())
+			c.LogError(err.Error())
 		}
 	}
 
@@ -92,7 +92,7 @@ func (c *Collector) checkConsistencyDomain(domain db.Domain) {
 			Type:     serviceType,
 		})
 		if err != nil {
-			c.logError(err.Error())
+			c.LogError(err.Error())
 		}
 	}
 
@@ -100,7 +100,7 @@ func (c *Collector) checkConsistencyDomain(domain db.Domain) {
 	var projects []db.Project
 	_, err = db.DB.Select(&projects, `SELECT * FROM projects WHERE domain_id = $1`, domain.ID)
 	if err != nil {
-		c.logError(err.Error())
+		c.LogError(err.Error())
 		return
 	}
 
@@ -117,7 +117,7 @@ func (c *Collector) checkConsistencyProject(project db.Project) {
 	var services []db.ProjectService
 	_, err := db.DB.Select(&services, `SELECT * FROM project_services WHERE project_id = $1`, project.ID)
 	if err != nil {
-		c.logError(err.Error())
+		c.LogError(err.Error())
 		return
 	}
 
@@ -130,7 +130,7 @@ func (c *Collector) checkConsistencyProject(project db.Project) {
 		util.LogInfo("cleaning up %s service entry for project %s", service.Type)
 		_, err := db.DB.Delete(&service)
 		if err != nil {
-			c.logError(err.Error())
+			c.LogError(err.Error())
 		}
 	}
 
@@ -145,7 +145,7 @@ func (c *Collector) checkConsistencyProject(project db.Project) {
 			Type:      serviceType,
 		})
 		if err != nil {
-			c.logError(err.Error())
+			c.LogError(err.Error())
 		}
 	}
 }

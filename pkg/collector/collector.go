@@ -33,13 +33,15 @@ import (
 //basically everything that needs to be replaced by a mock implementation for
 //the collector's unit tests.
 type Collector struct {
-	Driver   limes.Driver
-	Plugin   limes.Plugin
-	logError func(msg string, args ...interface{})
-	timeNow  func() time.Time
-	//once can be set to false to suppress the usual non-returning behavior of
-	//collector jobs
-	once bool
+	Driver limes.Driver
+	Plugin limes.Plugin
+	//Usually util.LogError, but can be changed inside unit tests.
+	LogError func(msg string, args ...interface{})
+	//Usually time.Now, but can be changed inside unit tests.
+	TimeNow func() time.Time
+	//When set to true, suppresses the usual non-returning behavior of
+	//collector jobs.
+	Once bool
 }
 
 //NewCollector creates a Collector instance.
@@ -47,9 +49,9 @@ func NewCollector(driver limes.Driver, plugin limes.Plugin) *Collector {
 	return &Collector{
 		Driver:   driver,
 		Plugin:   plugin,
-		logError: util.LogError,
-		timeNow:  time.Now,
-		once:     false,
+		LogError: util.LogError,
+		TimeNow:  time.Now,
+		Once:     false,
 	}
 }
 

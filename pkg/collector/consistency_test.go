@@ -31,9 +31,9 @@ func Test_Consistency(t *testing.T) {
 	c := Collector{
 		Driver:   driver,
 		Plugin:   nil,
-		logError: t.Errorf,
-		timeNow:  test.TimeNow,
-		once:     true,
+		LogError: t.Errorf,
+		TimeNow:  test.TimeNow,
+		Once:     true,
 	}
 
 	//run ScanDomains once to establish a baseline

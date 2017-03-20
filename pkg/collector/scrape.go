@@ -69,7 +69,7 @@ func (c *Collector) Scrape() {
 			domainName  string
 			domainUUID  string
 		)
-		err := db.DB.QueryRow(findProjectQuery, clusterID, serviceType, c.timeNow().Add(-scrapeInterval)).
+		err := db.DB.QueryRow(findProjectQuery, clusterID, serviceType, c.TimeNow().Add(-scrapeInterval)).
 			Scan(&serviceID, &projectName, &projectUUID, &domainName, &domainUUID)
 		if err != nil {
 			//ErrNoRows is okay; it just means that needs scraping right now
@@ -78,9 +78,9 @@ func (c *Collector) Scrape() {
 				//(such as "the DB has burst into flames"); maybe a separate thread that
 				//just pings the DB every now and then and does os.Exit(1) if it fails);
 				//check if database/sql has something like that built-in
-				c.logError("cannot select next project for which to scrape %s data: %s", serviceType, err.Error())
+				c.LogError("cannot select next project for which to scrape %s data: %s", serviceType, err.Error())
 			}
-			if c.once {
+			if c.Once {
 				return
 			}
 			time.Sleep(idleInterval)
@@ -90,25 +90,25 @@ func (c *Collector) Scrape() {
 		util.LogDebug("scraping %s for %s/%s", serviceType, domainName, projectName)
 		resourceData, err := c.Plugin.Scrape(c.Driver, domainUUID, projectUUID)
 		if err != nil {
-			c.logError("scrape %s data for %s/%s failed: %s", serviceType, domainName, projectName, err.Error())
-			if c.once {
+			c.LogError("scrape %s data for %s/%s failed: %s", serviceType, domainName, projectName, err.Error())
+			if c.Once {
 				return
 			}
 			time.Sleep(idleInterval)
 			continue
 		}
 
-		err = c.writeScrapeResult(serviceID, resourceData, c.timeNow())
+		err = c.writeScrapeResult(serviceID, resourceData, c.TimeNow())
 		if err != nil {
-			c.logError("write %s backend data for %s/%s failed: %s", serviceType, domainName, projectName, err.Error())
-			if c.once {
+			c.LogError("write %s backend data for %s/%s failed: %s", serviceType, domainName, projectName, err.Error())
+			if c.Once {
 				return
 			}
 			time.Sleep(idleInterval)
 			continue
 		}
 
-		if c.once {
+		if c.Once {
 			break
 		}
 		//If no error occurred, continue with the next project immediately, so as
@@ -146,7 +146,7 @@ func (c *Collector) writeScrapeResult(serviceID int64, resourceData map[string]l
 				return err
 			}
 		} else {
-			c.logError(
+			c.LogError(
 				"could not scrape new data for resource %s in project service %d (was this resource type removed from the scraper plugin?)",
 				res.Name, serviceID,
 			)
