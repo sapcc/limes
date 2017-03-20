@@ -20,6 +20,10 @@
 package plugins
 
 import (
+	"github.com/gophercloud/gophercloud"
+	"github.com/gophercloud/gophercloud/openstack"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/limits"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/quotasets"
 	"github.com/sapcc/limes/pkg/limes"
 )
 
@@ -54,32 +58,65 @@ func (p *novaPlugin) Resources() []limes.ResourceInfo {
 	return novaResources
 }
 
+func (p *novaPlugin) Client(driver limes.Driver) (*gophercloud.ServiceClient, error) {
+	return openstack.NewComputeV2(driver.Client(),
+		gophercloud.EndpointOpts{Availability: gophercloud.AvailabilityPublic},
+	)
+}
+
 //Scrape implements the limes.Plugin interface.
 func (p *novaPlugin) Scrape(driver limes.Driver, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
-	data, err := driver.CheckCompute(projectUUID)
+	client, err := p.Client(driver)
 	if err != nil {
 		return nil, err
 	}
 
-	//TODO: get rid of this conversion step
+	quotas, err := quotasets.Get(client, projectUUID).Extract()
+	if err != nil {
+		return nil, err
+	}
+
+	limits, err := limits.Get(client, limits.GetOpts{TenantID: projectUUID}).Extract()
+	if err != nil {
+		return nil, err
+	}
+
 	return map[string]limes.ResourceData{
-		"cores":     data.Cores,
-		"instances": data.Instances,
-		"ram":       data.RAM,
+		"cores": limes.ResourceData{
+			Quota: int64(quotas.Cores),
+			Usage: uint64(limits.Absolute.TotalCoresUsed),
+		},
+		"instances": limes.ResourceData{
+			Quota: int64(quotas.Instances),
+			Usage: uint64(limits.Absolute.TotalInstancesUsed),
+		},
+		"ram": limes.ResourceData{
+			Quota: int64(quotas.Ram),
+			Usage: uint64(limits.Absolute.TotalRAMUsed),
+		},
 	}, nil
 }
 
 //SetQuota implements the limes.Plugin interface.
 func (p *novaPlugin) SetQuota(driver limes.Driver, domainUUID, projectUUID string, quotas map[string]uint64) error {
-	return driver.SetComputeQuota(projectUUID, limes.ComputeData{
-		Cores:     limes.ResourceData{Quota: int64(quotas["cores"])},
-		Instances: limes.ResourceData{Quota: int64(quotas["instances"])},
-		RAM:       limes.ResourceData{Quota: int64(quotas["ram"])},
-	})
+	client, err := p.Client(driver)
+	if err != nil {
+		return err
+	}
+
+	return quotasets.Update(client, projectUUID, quotasets.UpdateOpts{
+		Cores:     makeIntPointer(int(quotas["cores"])),
+		Instances: makeIntPointer(int(quotas["instances"])),
+		Ram:       makeIntPointer(int(quotas["ram"])),
+	}).Err
 }
 
 //Capacity implements the limes.Plugin interface.
 func (p *novaPlugin) Capacity(driver limes.Driver) (map[string]uint64, error) {
 	//TODO implement
 	return map[string]uint64{}, nil
+}
+
+func makeIntPointer(value int) *int {
+	return &value
 }

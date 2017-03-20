@@ -19,23 +19,29 @@
 
 package limes
 
-import policy "github.com/databus23/goslo.policy"
+import (
+	policy "github.com/databus23/goslo.policy"
+	"github.com/gophercloud/gophercloud"
+)
 
-//Driver is an interface that wraps any queries and requests to backend
-//services, in order to make it easy to swap out the driver implementation for
-//a mock during unit tests.
+//Driver is an interface that wraps the authorization of the service user and
+//queries to Keystone (i.e. all requests to backend services that are not
+//performed by a limes.Plugin). It makes the service user connection available
+//to limes.Plugin instances. Because it is an interface, the real
+//implementation can be mocked away in unit tests.
 type Driver interface {
 	//Return the Cluster that this Driver instance operates on. This is useful
 	//because it means we just have to pass around the Driver instance in
 	//function calls, instead of both the Driver and the Cluster.
 	Cluster() *ClusterConfiguration
-	/********** Keystone (Identity) **********/
+	//Return the main gophercloud client from which the respective service
+	//clients can be derived. For mock drivers, this returns nil, so test code
+	//should be prepared to handle a nil Client() where appropriate.
+	Client() *gophercloud.ProviderClient
+	/********** requests to Keystone **********/
 	ListDomains() ([]KeystoneDomain, error)
 	ListProjects(domainUUID string) ([]KeystoneProject, error)
 	CheckUserPermission(token, rule string, enforcer *policy.Enforcer, requestParams map[string]string) (bool, error)
-	/********** Nova (Compute) **********/
-	CheckCompute(projectUUID string) (ComputeData, error)
-	SetComputeQuota(projectUUID string, data ComputeData) error //disregards .Usage fields
 }
 
 //KeystoneDomain describes the basic attributes of a Keystone domain.
@@ -54,11 +60,4 @@ type KeystoneProject struct {
 type ResourceData struct {
 	Quota int64 //negative values indicate infinite quota
 	Usage uint64
-}
-
-//ComputeData contains quota or usage values for a project's compute resources.
-type ComputeData struct {
-	Cores     ResourceData
-	Instances ResourceData
-	RAM       ResourceData
 }

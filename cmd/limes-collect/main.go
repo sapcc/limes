@@ -26,7 +26,6 @@ import (
 
 	"github.com/sapcc/limes/pkg/collector"
 	"github.com/sapcc/limes/pkg/db"
-	"github.com/sapcc/limes/pkg/drivers"
 	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/util"
 
@@ -54,7 +53,7 @@ func main() {
 	if !exists {
 		util.LogFatal("no such cluster configured: " + os.Args[2])
 	}
-	driver, err := drivers.NewDriver(cluster)
+	driver, err := limes.NewDriver(cluster)
 	if err != nil {
 		util.LogFatal(err.Error())
 	}

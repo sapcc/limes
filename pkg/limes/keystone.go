@@ -17,25 +17,24 @@
 *
 *******************************************************************************/
 
-package drivers
+package limes
 
 import (
 	policy "github.com/databus23/goslo.policy"
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/identity/v3/tokens"
-	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/util"
 )
 
 func (d realDriver) keystoneClient() (*gophercloud.ServiceClient, error) {
-	return openstack.NewIdentityV3(d.Client,
+	return openstack.NewIdentityV3(d.ProviderClient,
 		gophercloud.EndpointOpts{Availability: gophercloud.AvailabilityPublic},
 	)
 }
 
-//ListDomains implements the limes.Driver interface.
-func (d realDriver) ListDomains() ([]limes.KeystoneDomain, error) {
+//ListDomains implements the Driver interface.
+func (d realDriver) ListDomains() ([]KeystoneDomain, error) {
 	client, err := d.keystoneClient()
 	if err != nil {
 		return nil, err
@@ -50,14 +49,14 @@ func (d realDriver) ListDomains() ([]limes.KeystoneDomain, error) {
 	}
 
 	var data struct {
-		Domains []limes.KeystoneDomain `json:"domains"`
+		Domains []KeystoneDomain `json:"domains"`
 	}
 	err = result.ExtractInto(&data)
 	return data.Domains, err
 }
 
-//ListProjects implements the limes.Driver interface.
-func (d realDriver) ListProjects(domainUUID string) ([]limes.KeystoneProject, error) {
+//ListProjects implements the Driver interface.
+func (d realDriver) ListProjects(domainUUID string) ([]KeystoneProject, error) {
 	client, err := d.keystoneClient()
 	if err != nil {
 		return nil, err
@@ -82,13 +81,13 @@ func (d realDriver) ListProjects(domainUUID string) ([]limes.KeystoneProject, er
 	}
 
 	var data struct {
-		Projects []limes.KeystoneProject `json:"projects"`
+		Projects []KeystoneProject `json:"projects"`
 	}
 	err = result.ExtractInto(&data)
 	return data.Projects, err
 }
 
-//CheckUserPermission implements the limes.Driver interface.
+//CheckUserPermission implements the Driver interface.
 func (d realDriver) CheckUserPermission(token, rule string, enforcer *policy.Enforcer, requestParams map[string]string) (bool, error) {
 	client, err := d.keystoneClient()
 	if err != nil {

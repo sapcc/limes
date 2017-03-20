@@ -20,9 +20,8 @@
 package test
 
 import (
-	"errors"
-
 	policy "github.com/databus23/goslo.policy"
+	"github.com/gophercloud/gophercloud"
 	"github.com/sapcc/limes/pkg/limes"
 )
 
@@ -62,6 +61,11 @@ func (d *Driver) Cluster() *limes.ClusterConfiguration {
 	return d.ClusterConfig
 }
 
+//Client implements the limes.Driver interface.
+func (d *Driver) Client() *gophercloud.ProviderClient {
+	return nil
+}
+
 //ListDomains implements the limes.Driver interface.
 func (d *Driver) ListDomains() ([]limes.KeystoneDomain, error) {
 	return d.StaticDomains, nil
@@ -75,14 +79,4 @@ func (d *Driver) ListProjects(domainUUID string) ([]limes.KeystoneProject, error
 //CheckUserPermission implements the limes.Driver interface.
 func (d *Driver) CheckUserPermission(token, rule string, enforcer *policy.Enforcer, requestParams map[string]string) (bool, error) {
 	return true, nil
-}
-
-//CheckCompute implements the limes.Driver interface.
-func (d *Driver) CheckCompute(projectUUID string) (limes.ComputeData, error) {
-	return limes.ComputeData{}, errors.New("stub")
-}
-
-//SetComputeQuota implements the limes.Driver interface.
-func (d *Driver) SetComputeQuota(projectUUID string, data limes.ComputeData) error {
-	return errors.New("stub")
 }

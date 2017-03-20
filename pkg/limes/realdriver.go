@@ -1,6 +1,6 @@
 /*******************************************************************************
 *
-* Copyright 2017 SAP SE
+* Copyright 2017 Stefan Majewsky <majewsky@gmx.net>
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 *
 *******************************************************************************/
 
-package drivers
+package limes
 
 import (
 	"fmt"
@@ -26,22 +26,21 @@ import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/identity/v3/tokens"
-	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/util"
 )
 
-//This is the type that implements the limes.Driver interface by actually
+//This is the type that implements the Driver interface by actually
 //calling out to OpenStack. It also manages the Keystone token that's required
 //for all access to OpenStack APIs. The interface implementations are in the
 //other source files in this module.
 type realDriver struct {
-	Client            *gophercloud.ProviderClient
-	Config            *limes.ClusterConfiguration
+	ProviderClient    *gophercloud.ProviderClient
+	Config            *ClusterConfiguration
 	TokenRenewalMutex *sync.Mutex
 }
 
 //NewDriver instantiates a Driver for the given Cluster.
-func NewDriver(cfg *limes.ClusterConfiguration) (limes.Driver, error) {
+func NewDriver(cfg *ClusterConfiguration) (Driver, error) {
 	var err error
 	d := &realDriver{
 		Config:            cfg,
@@ -49,7 +48,7 @@ func NewDriver(cfg *limes.ClusterConfiguration) (limes.Driver, error) {
 	}
 
 	//initialize the OpenStack client
-	d.Client, err = openstack.NewClient(d.Config.AuthURL)
+	d.ProviderClient, err = openstack.NewClient(d.Config.AuthURL)
 	if err != nil {
 		return nil, fmt.Errorf("cannot initialize OpenStack client: %v", err)
 	}
@@ -60,9 +59,14 @@ func NewDriver(cfg *limes.ClusterConfiguration) (limes.Driver, error) {
 	return d, nil
 }
 
-//Cluster implements the limes.Driver interface.
-func (d *realDriver) Cluster() *limes.ClusterConfiguration {
+//Cluster implements the Driver interface.
+func (d *realDriver) Cluster() *ClusterConfiguration {
 	return d.Config
+}
+
+//Client implements the Driver interface.
+func (d *realDriver) Client() *gophercloud.ProviderClient {
+	return d.ProviderClient
 }
 
 //RefreshToken fetches a new Keystone token for this cluster. It is also used
@@ -78,11 +82,11 @@ func (d *realDriver) RefreshToken() error {
 	defer d.TokenRenewalMutex.Unlock()
 	util.LogDebug("renewing Keystone token...")
 
-	d.Client.TokenID = ""
+	d.ProviderClient.TokenID = ""
 
 	//TODO: crashes with RegionName != ""
 	eo := gophercloud.EndpointOpts{Region: d.Config.RegionName}
-	keystone, err := openstack.NewIdentityV3(d.Client, eo)
+	keystone, err := openstack.NewIdentityV3(d.ProviderClient, eo)
 	if err != nil {
 		return fmt.Errorf("cannot initialize Keystone client: %v", err)
 	}
@@ -98,9 +102,9 @@ func (d *realDriver) RefreshToken() error {
 		return fmt.Errorf("cannot read service catalog: %v", err)
 	}
 
-	d.Client.TokenID = token.ID
-	d.Client.ReauthFunc = d.RefreshToken //TODO: exponential backoff necessary or already provided by gophercloud?
-	d.Client.EndpointLocator = func(opts gophercloud.EndpointOpts) (string, error) {
+	d.ProviderClient.TokenID = token.ID
+	d.ProviderClient.ReauthFunc = d.RefreshToken //TODO: exponential backoff necessary or already provided by gophercloud?
+	d.ProviderClient.EndpointLocator = func(opts gophercloud.EndpointOpts) (string, error) {
 		return openstack.V3EndpointURL(catalog, opts)
 	}
 
