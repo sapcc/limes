@@ -20,11 +20,13 @@
 package api
 
 import (
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"strings"
 
 	"github.com/gorilla/mux"
+	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
 )
 
@@ -95,15 +97,27 @@ func ReturnJSON(w http.ResponseWriter, code int, data interface{}) {
 	}
 }
 
+//ReturnError produces an error response with HTTP status code 500 if the given
+//error is non-nil. Otherwise, nothing is done and false is returned.
+func ReturnError(w http.ResponseWriter, err error) bool {
+	if err == nil {
+		return false
+	}
+
+	http.Error(w, err.Error(), 500)
+	return true
+}
+
 //HasPermission checks if the user fulfills the given rule, by validating the
 //X-Auth-Token from the request and checking the policy file regarding that rule.
 func (p *v1Provider) HasPermission(rule string, w http.ResponseWriter, r *http.Request) bool {
-	allowed, err := p.Driver.CheckUserPermission(
-		r.Header.Get("X-Auth-Token"),
-		rule,
-		p.Config.PolicyEnforcer,
-		mux.Vars(r),
-	)
+	tokenStr := r.Header.Get("X-Auth-Token")
+	if tokenStr == "" {
+		http.Error(w, "X-Auth-Token header missing", 400)
+		return false
+	}
+
+	allowed, err := p.Driver.CheckUserPermission(tokenStr, rule, p.Config.PolicyEnforcer, mux.Vars(r))
 	if err != nil {
 		http.Error(w, err.Error(), 401)
 		return false
@@ -111,6 +125,7 @@ func (p *v1Provider) HasPermission(rule string, w http.ResponseWriter, r *http.R
 	if !allowed {
 		http.Error(w, "Unauthorized", 401)
 	}
+
 	return allowed
 }
 
@@ -122,4 +137,27 @@ func (p *v1Provider) Path(elements ...string) string {
 	}
 	parts = append(parts, elements...)
 	return strings.Join(parts, "/")
+}
+
+//FindDomain loads the db.Domain referenced by the :domain_id path parameter.
+//Any errors will be written into the response immediately and cause a nil
+//return value.
+func FindDomain(w http.ResponseWriter, r *http.Request) *db.Domain {
+	domainUUID := mux.Vars(r)["domain_id"]
+	if domainUUID == "" {
+		http.Error(w, "domain ID missing", 400)
+		return nil
+	}
+
+	var domain db.Domain
+	err := db.DB.SelectOne(&domain, `SELECT * FROM domains WHERE uuid = $1`, domainUUID)
+	switch {
+	case err == sql.ErrNoRows:
+		http.Error(w, "no such domain (if it was just created, try to POST /domains/discover)", 404)
+		return nil
+	case ReturnError(w, err):
+		return nil
+	default:
+		return &domain
+	}
 }

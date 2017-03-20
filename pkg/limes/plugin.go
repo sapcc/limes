@@ -72,6 +72,22 @@ const (
 	UnitExbibytes Unit = "EiB"
 )
 
+//UnitFor finds the plugin for the given serviceType and finds within that
+//plugin the ResourceInfo for the given resourceName, and returns its unit. If
+//the service or resource does not exist, UnitNone is returned.
+func UnitFor(serviceType, resourceName string) Unit {
+	plugin := GetPlugin(serviceType)
+	if plugin == nil {
+		return UnitNone
+	}
+	for _, res := range plugin.Resources() {
+		if res.Name == resourceName {
+			return res.Unit
+		}
+	}
+	return UnitNone
+}
+
 var plugins = map[string]Plugin{}
 
 //RegisterPlugin registers a Plugin with this package. It should only be called
