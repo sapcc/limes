@@ -20,9 +20,12 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"testing"
 
+	policy "github.com/databus23/goslo.policy"
 	"github.com/sapcc/limes/pkg/collector"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
@@ -85,10 +88,25 @@ func testDriver(t *testing.T) *test.Driver {
 
 func Test_ProjectOperations(t *testing.T) {
 	driver := testDriver(t)
+
+	policyBytes, err := ioutil.ReadFile("../test/policy.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	policyRules := make(map[string]string)
+	err = json.Unmarshal(policyBytes, &policyRules)
+	if err != nil {
+		t.Fatal(err)
+	}
+	enforcer, err := policy.NewEnforcer(policyRules)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	router, _ := NewV1Router(driver, limes.APIConfiguration{
-		ListenAddress:  "",  //irrelevant, we do not listen
-		PolicyFilePath: "",  //irrelevant, only used for loading
-		PolicyEnforcer: nil, //irrelevant, the mock driver does not touch this
+		ListenAddress:  "", //irrelevant, we do not listen
+		PolicyFilePath: "", //irrelevant, only used for loading
+		PolicyEnforcer: enforcer,
 	})
 
 	domainUUID := driver.StaticDomains[0].UUID

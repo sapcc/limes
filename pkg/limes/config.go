@@ -62,7 +62,7 @@ type ServiceConfiguration struct {
 	Shared bool   `yaml:"shared"`
 }
 
-//APIConfiguration contains
+//APIConfiguration contains configuration parameters for limes-serve.
 type APIConfiguration struct {
 	ListenAddress  string           `yaml:"listen"`
 	PolicyFilePath string           `yaml:"policy"`

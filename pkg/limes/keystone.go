@@ -88,31 +88,25 @@ func (d realDriver) ListProjects(domainUUID string) ([]KeystoneProject, error) {
 }
 
 //CheckUserPermission implements the Driver interface.
-func (d realDriver) CheckUserPermission(token, rule string, enforcer *policy.Enforcer, requestParams map[string]string) (bool, error) {
+func (d realDriver) ValidateToken(token string) (policy.Context, error) {
 	client, err := d.keystoneClient()
 	if err != nil {
-		return false, err
+		return policy.Context{}, err
 	}
 
 	response := tokens.Get(client, token)
 	if response.Err != nil {
 		//this includes 4xx responses, so after this point, we can be sure that the token is valid
-		return false, response.Err
+		return policy.Context{}, response.Err
 	}
 
 	//use a custom token struct instead of tokens.Token which is way incomplete
 	var tokenData keystoneToken
 	err = response.ExtractInto(&tokenData)
 	if err != nil {
-		return false, err
+		return policy.Context{}, err
 	}
-
-	//map token into policy.Context
-	util.LogDebug("enforcer = %#v", enforcer)
-	util.LogDebug("token = %#v", tokenData)
-	util.LogDebug("context = %#v", tokenData.ToContext(requestParams))
-	util.LogDebug("rule = %s", rule)
-	return enforcer.Enforce(rule, tokenData.ToContext(requestParams)), nil
+	return tokenData.ToContext(), nil
 }
 
 type keystoneToken struct {
@@ -132,7 +126,7 @@ type keystoneTokenThingInDomain struct {
 	Domain keystoneTokenThing `json:"domain"`
 }
 
-func (t *keystoneToken) ToContext(requestParams map[string]string) policy.Context {
+func (t *keystoneToken) ToContext() policy.Context {
 	c := policy.Context{
 		Roles: make([]string, 0, len(t.Roles)),
 		Auth: map[string]string{
@@ -151,7 +145,7 @@ func (t *keystoneToken) ToContext(requestParams map[string]string) policy.Contex
 			"tenant_domain_id":    t.ProjectScope.Domain.ID,
 			"tenant_domain_name":  t.ProjectScope.Domain.Name,
 		},
-		Request: requestParams,
+		Request: nil,
 		Logger:  util.LogDebug,
 	}
 	for key, value := range c.Auth {

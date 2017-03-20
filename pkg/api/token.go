@@ -1,0 +1,72 @@
+/*******************************************************************************
+*
+* Copyright 2017 Stefan Majewsky <majewsky@gmx.net>
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You should have received a copy of the License along with this
+* program. If not, you may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*
+*******************************************************************************/
+
+package api
+
+import (
+	"errors"
+	"net/http"
+
+	policy "github.com/databus23/goslo.policy"
+	"github.com/gorilla/mux"
+)
+
+//Token represents a user's token, as passed through the X-Auth-Token header of
+//a request.
+type Token struct {
+	enforcer *policy.Enforcer
+	context  policy.Context
+	err      error
+}
+
+//CheckToken checks the validity of the request's X-Auth-Token in Keystone, and
+//returns a Token instance for checking authorization. Any errors that occur
+//during this function are deferred until Require() is called.
+func (p *v1Provider) CheckToken(r *http.Request) *Token {
+	str := r.Header.Get("X-Auth-Token")
+	if str == "" {
+		return &Token{err: errors.New("X-Auth-Token header missing")}
+	}
+
+	t := &Token{enforcer: p.Config.PolicyEnforcer}
+	t.context, t.err = p.Driver.ValidateToken(str)
+	t.context.Request = mux.Vars(r)
+	return t
+}
+
+//Require checks if the given token has the given permission according to the
+//policy.json that is in effect. If not, an error response is written and false
+//is returned.
+func (t *Token) Require(w http.ResponseWriter, rule string) bool {
+	if t.err != nil {
+		http.Error(w, t.err.Error(), 401)
+		return false
+	}
+
+	if !t.enforcer.Enforce(rule, t.context) {
+		http.Error(w, "Unauthorized", 401)
+		return false
+	}
+	return true
+}
+
+//Check is like Require, but does not write error responses.
+func (t *Token) Check(rule string) bool {
+	return t.err == nil && t.enforcer.Enforce(rule, t.context)
+}

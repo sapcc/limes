@@ -47,7 +47,7 @@ var showProjectQuery = `
 
 //ListProjects handles GET /v1/domains/:domain_id/projects.
 func (p *v1Provider) ListProjects(w http.ResponseWriter, r *http.Request) {
-	if !p.HasPermission("project:list", w, r) {
+	if !p.CheckToken(r).Require(w, "project:list") {
 		return
 	}
 	dbDomain := p.FindDomainFromRequest(w, r)
@@ -104,7 +104,7 @@ func (p *v1Provider) ListProjects(w http.ResponseWriter, r *http.Request) {
 
 //GetProject handles GET /v1/domains/:domain_id/projects/:project_id.
 func (p *v1Provider) GetProject(w http.ResponseWriter, r *http.Request) {
-	if !p.HasPermission("project:show", w, r) {
+	if !p.CheckToken(r).Require(w, "project:show") {
 		return
 	}
 	dbDomain := p.FindDomainFromRequest(w, r)
@@ -164,7 +164,7 @@ func (p *v1Provider) GetProject(w http.ResponseWriter, r *http.Request) {
 
 //DiscoverProjects handles POST /v1/domains/:domain_id/projects/discover.
 func (p *v1Provider) DiscoverProjects(w http.ResponseWriter, r *http.Request) {
-	if !p.HasPermission("project:discover", w, r) {
+	if !p.CheckToken(r).Require(w, "project:discover") {
 		return
 	}
 	dbDomain := p.FindDomainFromRequest(w, r)
@@ -183,7 +183,7 @@ func (p *v1Provider) DiscoverProjects(w http.ResponseWriter, r *http.Request) {
 
 //SyncProject handles POST /v1/domains/:domain_id/projects/sync.
 func (p *v1Provider) SyncProject(w http.ResponseWriter, r *http.Request) {
-	if !p.HasPermission("project:show", w, r) {
+	if !p.CheckToken(r).Require(w, "project:show") {
 		return
 	}
 	dbDomain := p.FindDomainFromRequest(w, r)
