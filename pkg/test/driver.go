@@ -20,6 +20,8 @@
 package test
 
 import (
+	"errors"
+
 	policy "github.com/databus23/goslo.policy"
 	"github.com/sapcc/limes/pkg/limes"
 )
@@ -28,10 +30,9 @@ import (
 //an actual OpenStack. It returns a static set of domains and projects, and a
 //static set of quota/usage values for any project.
 type Driver struct {
-	ClusterConfig     *limes.ClusterConfiguration
-	StaticDomains     []limes.KeystoneDomain
-	StaticProjects    map[string][]limes.KeystoneProject
-	StaticComputeData limes.ComputeData
+	ClusterConfig  *limes.ClusterConfiguration
+	StaticDomains  []limes.KeystoneDomain
+	StaticProjects map[string][]limes.KeystoneProject
 }
 
 //NewDriver creates a Driver instance. The ClusterConfiguration does not need
@@ -52,11 +53,6 @@ func NewDriver(cluster *limes.ClusterConfiguration) *Driver {
 			"a2f0d9a6a8a0410f9881335f1fe0b538": []limes.KeystoneProject{
 				limes.KeystoneProject{Name: "qux", UUID: "ed5867497beb40c69f829837639d873d"},
 			},
-		},
-		StaticComputeData: limes.ComputeData{
-			Cores:     limes.ResourceData{Quota: 100, Usage: 37},
-			Instances: limes.ResourceData{Quota: 20, Usage: 12},
-			RAM:       limes.ResourceData{Quota: 80 << 10, Usage: 48 << 10},
 		},
 	}
 }
@@ -83,5 +79,5 @@ func (d *Driver) CheckUserPermission(token, rule string, enforcer *policy.Enforc
 
 //CheckCompute implements the limes.Driver interface.
 func (d *Driver) CheckCompute(projectUUID string) (limes.ComputeData, error) {
-	return d.StaticComputeData, nil
+	return limes.ComputeData{}, errors.New("stub")
 }

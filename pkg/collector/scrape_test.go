@@ -34,7 +34,7 @@ func scrapeTestDriver(t *testing.T) *test.Driver {
 	cluster := &limes.ClusterConfiguration{
 		ID: "cluster-id-test",
 		Services: []limes.ServiceConfiguration{
-			limes.ServiceConfiguration{Type: "compute", Shared: false},
+			limes.ServiceConfiguration{Type: "unittest", Shared: false},
 		},
 	}
 
@@ -43,7 +43,7 @@ func scrapeTestDriver(t *testing.T) *test.Driver {
 
 func Test_Scrape(t *testing.T) {
 	driver := scrapeTestDriver(t)
-	plugin := limes.GetPlugin("compute")
+	plugin := limes.GetPlugin("unittest").(*test.Plugin)
 	c := Collector{
 		Driver:   driver,
 		Plugin:   plugin,
@@ -77,9 +77,9 @@ func Test_Scrape(t *testing.T) {
 	c.Scrape()
 	test.AssertDBContent(t, "fixtures/scrape1.sql")
 
-	//change the data that is reported by the driver
-	driver.StaticComputeData.Cores.Quota = 110
-	driver.StaticComputeData.Instances.Usage = 9
+	//change the data that is reported by the plugin
+	plugin.StaticResourceData["capacity"].Quota = 110
+	plugin.StaticResourceData["things"].Usage = 5
 	//make sure that the project is scraped again
 	_, err = db.DB.Exec(`UPDATE project_services SET stale = ?`, true)
 	if err != nil {

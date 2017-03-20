@@ -17,60 +17,57 @@
 *
 *******************************************************************************/
 
-package plugins
+package test
 
-import (
-	"github.com/sapcc/limes/pkg/limes"
-)
+import "github.com/sapcc/limes/pkg/limes"
 
-type novaPlugin struct{}
+//Plugin is a limes.Plugin implementation for unit tests, registered as the
+//service type "unittest".
+type Plugin struct {
+	StaticResourceData map[string]*limes.ResourceData
+	StaticCapacity     map[string]uint64
+}
 
-var novaResources = []limes.ResourceInfo{
+var resources = []limes.ResourceInfo{
 	limes.ResourceInfo{
-		Name: "cores",
+		Name: "things",
 		Unit: limes.UnitNone,
 	},
 	limes.ResourceInfo{
-		Name: "instances",
-		Unit: limes.UnitNone,
-	},
-	limes.ResourceInfo{
-		Name: "ram",
-		Unit: limes.UnitMebibytes,
+		Name: "capacity",
+		Unit: limes.UnitBytes,
 	},
 }
 
 func init() {
-	limes.RegisterPlugin(&novaPlugin{})
+	limes.RegisterPlugin(&Plugin{
+		StaticResourceData: map[string]*limes.ResourceData{
+			"things":   &limes.ResourceData{Quota: 42, Usage: 23},
+			"capacity": &limes.ResourceData{Quota: 100, Usage: 0},
+		},
+	})
 }
 
 //ServiceType implements the limes.Plugin interface.
-func (p *novaPlugin) ServiceType() string {
-	return "compute"
+func (p *Plugin) ServiceType() string {
+	return "unittest"
 }
 
 //Resources implements the limes.Plugin interface.
-func (p *novaPlugin) Resources() []limes.ResourceInfo {
-	return novaResources
+func (p *Plugin) Resources() []limes.ResourceInfo {
+	return resources
 }
 
 //Scrape implements the limes.Plugin interface.
-func (p *novaPlugin) Scrape(driver limes.Driver, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
-	data, err := driver.CheckCompute(projectUUID)
-	if err != nil {
-		return nil, err
+func (p *Plugin) Scrape(driver limes.Driver, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
+	result := make(map[string]limes.ResourceData)
+	for key, val := range p.StaticResourceData {
+		result[key] = *val
 	}
-
-	//TODO: get rid of this conversion step
-	return map[string]limes.ResourceData{
-		"cores":     data.Cores,
-		"instances": data.Instances,
-		"ram":       data.RAM,
-	}, nil
+	return result, nil
 }
 
 //Capacity implements the limes.Plugin interface.
-func (p *novaPlugin) Capacity(driver limes.Driver) (map[string]uint64, error) {
-	//TODO implement
-	return map[string]uint64{}, nil
+func (p *Plugin) Capacity(driver limes.Driver) (map[string]uint64, error) {
+	return p.StaticCapacity, nil
 }
