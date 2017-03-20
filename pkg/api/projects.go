@@ -98,6 +98,7 @@ func (p *v1Provider) ListProjects(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	//TODO: ensure that service list is equal to the one in the cluster configuration (can be off in both directions!)
 	ReturnJSON(w, 200, map[string]interface{}{"projects": projects.Scopes})
 }
 
@@ -157,6 +158,7 @@ func (p *v1Provider) GetProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	//TODO: ensure that service list is equal to the one in the cluster configuration (can be off in both directions!)
 	ReturnJSON(w, 200, map[string]interface{}{"project": project})
 }
 
