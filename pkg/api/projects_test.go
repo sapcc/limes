@@ -20,14 +20,7 @@
 package api
 
 import (
-	"bytes"
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
-	"net/http/httptest"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"testing"
 
 	"github.com/sapcc/limes/pkg/collector"
@@ -102,33 +95,20 @@ func Test_ProjectOperations(t *testing.T) {
 	projectUUID := driver.StaticProjects[domainUUID][0].UUID
 
 	//check GetProject
-	path := fmt.Sprintf("/v1/domains/%s/projects/%s", domainUUID, projectUUID)
-	request := httptest.NewRequest("GET", path, nil)
-	request.Header.Set("X-Auth-Token", "something")
-	recorder := httptest.NewRecorder()
-	router.ServeHTTP(recorder, request)
-	response := recorder.Result()
-	jsonBytes, _ := ioutil.ReadAll(response.Body)
+	test.APIRequest{
+		Method:           "GET",
+		Path:             fmt.Sprintf("/v1/domains/%s/projects/%s", domainUUID, projectUUID),
+		ExpectStatusCode: 200,
+		ExpectJSON:       "./fixtures/get-project.json",
+	}.Check(t, router)
 
-	if response.StatusCode != 200 {
-		t.Errorf("GET %s: expected status code 200, got %d", path, response.StatusCode)
-	}
-	var buf bytes.Buffer
-	err := json.Indent(&buf, jsonBytes, "", "  ")
-	if err != nil {
-		t.Logf("Response body: %s", jsonBytes)
-		t.Fatal(err)
-	}
-	buf.WriteByte('\n')
+	//TODO: check PutProject
 
-	fixturePath, _ := filepath.Abs("./fixtures/get-project.json")
-	cmd := exec.Command("diff", "-u", fixturePath, "-")
-	cmd.Stdin = &buf
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	err = cmd.Run()
-	if err != nil {
-		t.Logf("Response body: %s", jsonBytes)
-		t.Fatal(err)
-	}
+	//check ListProjects
+	test.APIRequest{
+		Method:           "GET",
+		Path:             fmt.Sprintf("/v1/domains/%s/projects", domainUUID),
+		ExpectStatusCode: 200,
+		ExpectJSON:       "./fixtures/list-projects.json",
+	}.Check(t, router)
 }
