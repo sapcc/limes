@@ -19,7 +19,7 @@ Returns 200 (OK) on success. Result is a JSON document like:
       "id": "8ad3bf54-2401-435e-88ad-e80fbf984c19",
       "services": [
         {
-          "name": "compute",
+          "type": "compute",
           "resources": [
             {
               "name": "instances",
@@ -42,7 +42,7 @@ Returns 200 (OK) on success. Result is a JSON document like:
           "scraped_at": 1486738599
         },
         {
-          "name": "object_storage",
+          "type": "object_storage",
           "resources": [
             {
               "name": "capacity",
@@ -65,6 +65,7 @@ If `:project_id` was given, the outer key is `project` and its value is the obje
 
 Quota/usage data for the project is ordered into `services`, then into `resources`. In the example above, services
 include `compute` and `object_storage`, and the `compute` service has three resources, `instances`, `cores` and `ram`.
+The service's "type" attribute will be identical to the same field in the Keystone service catalog.
 
 The data for each resource must include `quota` and `usage`. If the resource is not counted, but measured in a certain
 unit, it will be given as `unit`. Clients should be prepared to handle at least the following values for `unit`:
@@ -109,7 +110,7 @@ Returns 200 (OK) on success. Result is a JSON document like:
       "id": "d5fbe312-1f48-42ef-a36e-484659784aa0",
       "services": [
         {
-          "name": "compute",
+          "type": "compute",
           "resources": [
             {
               "name": "instances",
@@ -136,7 +137,7 @@ Returns 200 (OK) on success. Result is a JSON document like:
           "min_scraped_at": 1486728599
         },
         {
-          "name": "object_storage",
+          "type": "object_storage",
           "resources": [
             {
               "name": "capacity",
@@ -201,7 +202,7 @@ Returns 200 (OK) on success. Result is a JSON document like:
       "id": "example-cluster",
       "services": [
         {
-          "name": "compute",
+          "type": "compute",
           "resources": [
             {
               "name": "instances",
@@ -227,7 +228,7 @@ Returns 200 (OK) on success. Result is a JSON document like:
           "min_scraped_at": 1486728599
         },
         {
-          "name": "object_storage",
+          "type": "object_storage",
           "resources": [
             {
               "name": "capacity",
@@ -315,7 +316,7 @@ Set quotas for the given domain. Requires a cloud-admin token, and a request bod
   "domain": {
     "services": [
       {
-        "name": "compute",
+        "type": "compute",
         "resources": [
           {
             "name": "instances",
@@ -328,7 +329,7 @@ Set quotas for the given domain. Requires a cloud-admin token, and a request bod
         ]
       },
       {
-        "name": "object_storage",
+        "type": "object_storage",
         "resources": [
           {
             "name": "capacity",
