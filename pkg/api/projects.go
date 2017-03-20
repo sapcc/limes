@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/sapcc/limes/pkg/api/output"
+	"github.com/sapcc/limes/pkg/collector"
 	"github.com/sapcc/limes/pkg/db"
 )
 
@@ -155,4 +156,23 @@ func (p *v1Provider) GetProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ReturnJSON(w, 200, map[string]interface{}{"project": project})
+}
+
+//DiscoverProjects handles GET /v1/domains/:domain_id/projects.
+func (p *v1Provider) DiscoverProjects(w http.ResponseWriter, r *http.Request) {
+	if !p.HasPermission("project:discover", w, r) {
+		return
+	}
+	dbDomain := FindDomainFromRequest(w, r)
+	if dbDomain == nil {
+		return
+	}
+
+	newProjectUUIDs, err := collector.ScanProjects(p.Driver, dbDomain)
+	if ReturnError(w, err) {
+		return
+	}
+
+	result := output.NewScopesFromIDList(newProjectUUIDs)
+	ReturnJSON(w, 202, map[string]interface{}{"new_projects": result})
 }
