@@ -15,14 +15,14 @@ build/limes-%: FORCE
 
 GO_ALLPKGS := $(shell go list $(PKG)/cmd/... $(PKG)/pkg/...)
 GO_TESTPKGS := $(shell go list -f '{{if .TestGoFiles}}{{.ImportPath}}{{end}}' $(PKG)/pkg/...)
-GO_COVERFILES := $(patsubst %,%.cover.out,$(subst /,_,$(GO_TESTPKGS)))
+GO_COVERFILES := $(patsubst %,build/%.cover.out,$(subst /,_,$(GO_TESTPKGS)))
 
 # down below, I need to substitute spaces with commas; because of the syntax,
 # I have to get these separators from variables
 space := $(null) $(null)
 comma := ,
 
-check: all static-check cover.html FORCE
+check: all static-check build/cover.html FORCE
 prepare-check: FORCE $(patsubst pkg/db/%,pkg/test/%, $(wildcard pkg/db/migrations/*.sql))
 	@# Precompile a module used by the unit tests which takes a long time to compile because of cgo.
 	$(GO) install github.com/sapcc/limes/vendor/github.com/mattn/go-sqlite3
@@ -33,11 +33,11 @@ static-check: FORCE
 	gofmt -l cmd pkg
 	find cmd pkg -type d -exec golint {} \;
 	$(GO) vet $(GO_ALLPKGS)
-%.cover.out: prepare-check FORCE
+build/%.cover.out: prepare-check FORCE
 	$(GO) test -coverprofile=$@ -covermode=count -coverpkg=$(subst $(space),$(comma),$(GO_ALLPKGS)) $(subst _,/,$*)
-cover.out: $(GO_COVERFILES)
+build/cover.out: $(GO_COVERFILES)
 	pkg/test/util/gocovcat.go $(GO_COVERFILES) > $@
-cover.html: cover.out
+build/cover.html: build/cover.out
 	$(GO) tool cover -html $< -o $@
 
 install: FORCE all

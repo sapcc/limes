@@ -7,9 +7,9 @@ build/docker.tar
 # test artifacts
 pkg/test/migrations/*.sql
 unittest.db
-/cover.out
-/*.cover.out
-/cover.html
+build/cover.out
+build/*.cover.out
+build/cover.html
 
 # custom configuration files used during development
 *test*.yaml
