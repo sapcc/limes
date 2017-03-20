@@ -10,4 +10,4 @@ install:
 
 script:
     - make all check
-    - $HOME/gopath/bin/goveralls -coverprofile=cover.out -service=travis-ci
+    - $HOME/gopath/bin/goveralls -coverprofile=build/cover.out -service=travis-ci
