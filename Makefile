@@ -33,7 +33,7 @@ static-check: FORCE
 	gofmt -l cmd pkg
 	find cmd pkg -type d -exec golint {} \;
 	$(GO) vet $(GO_ALLPKGS)
-%.cover.out: FORCE
+%.cover.out: prepare-check FORCE
 	$(GO) test -coverprofile=$@ -covermode=count -coverpkg=$(subst $(space),$(comma),$(GO_ALLPKGS)) $(subst _,/,$*)
 cover.out: $(GO_COVERFILES)
 	pkg/test/util/gocovcat.go $(GO_COVERFILES) > $@
