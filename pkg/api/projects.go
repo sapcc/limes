@@ -24,6 +24,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/gorilla/mux"
 	"github.com/sapcc/limes/pkg/api/output"
 	"github.com/sapcc/limes/pkg/collector"
 	"github.com/sapcc/limes/pkg/db"
@@ -49,7 +50,7 @@ func (p *v1Provider) ListProjects(w http.ResponseWriter, r *http.Request) {
 	if !p.HasPermission("project:list", w, r) {
 		return
 	}
-	dbDomain := FindDomainFromRequest(w, r)
+	dbDomain := p.FindDomainFromRequest(w, r)
 	if dbDomain == nil {
 		return
 	}
@@ -105,7 +106,7 @@ func (p *v1Provider) GetProject(w http.ResponseWriter, r *http.Request) {
 	if !p.HasPermission("project:show", w, r) {
 		return
 	}
-	dbDomain := FindDomainFromRequest(w, r)
+	dbDomain := p.FindDomainFromRequest(w, r)
 	if dbDomain == nil {
 		return
 	}
@@ -158,12 +159,12 @@ func (p *v1Provider) GetProject(w http.ResponseWriter, r *http.Request) {
 	ReturnJSON(w, 200, map[string]interface{}{"project": project})
 }
 
-//DiscoverProjects handles GET /v1/domains/:domain_id/projects.
+//DiscoverProjects handles POST /v1/domains/:domain_id/projects/discover.
 func (p *v1Provider) DiscoverProjects(w http.ResponseWriter, r *http.Request) {
 	if !p.HasPermission("project:discover", w, r) {
 		return
 	}
-	dbDomain := FindDomainFromRequest(w, r)
+	dbDomain := p.FindDomainFromRequest(w, r)
 	if dbDomain == nil {
 		return
 	}
@@ -175,4 +176,53 @@ func (p *v1Provider) DiscoverProjects(w http.ResponseWriter, r *http.Request) {
 
 	result := output.NewScopesFromIDList(newProjectUUIDs)
 	ReturnJSON(w, 202, map[string]interface{}{"new_projects": result})
+}
+
+//SyncProject handles POST /v1/domains/:domain_id/projects/sync.
+func (p *v1Provider) SyncProject(w http.ResponseWriter, r *http.Request) {
+	if !p.HasPermission("project:show", w, r) {
+		return
+	}
+	dbDomain := p.FindDomainFromRequest(w, r)
+	if dbDomain == nil {
+		return
+	}
+	dbProject, ok := FindProjectFromRequestIfExists(w, r, dbDomain)
+	if !ok {
+		return
+	}
+
+	//check if project needs to be discovered
+	if dbProject == nil {
+		newProjectUUIDs, err := collector.ScanProjects(p.Driver, dbDomain)
+		if ReturnError(w, err) {
+			return
+		}
+		projectUUID := mux.Vars(r)["project_id"]
+		found := false
+		for _, newUUID := range newProjectUUIDs {
+			if projectUUID == newUUID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			http.Error(w, "no such project", 404)
+			return
+		}
+
+		//now we should find it in the DB
+		dbProject := FindProjectFromRequest(w, r, dbDomain)
+		if dbProject == nil {
+			return //wtf
+		}
+	}
+
+	//mark all project services as stale to force limes-collect to sync ASAP
+	_, err := db.DB.Exec(`UPDATE project_services SET stale = '1' WHERE project_id = $1`, dbProject.ID)
+	if ReturnError(w, err) {
+		return
+	}
+
+	w.WriteHeader(202)
 }

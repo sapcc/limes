@@ -83,6 +83,7 @@ func NewV1Router(driver limes.Driver, config limes.APIConfiguration) (*mux.Route
 	r.Methods("GET").Path("/v1/domains/{domain_id}/projects").HandlerFunc(p.ListProjects)
 	r.Methods("GET").Path("/v1/domains/{domain_id}/projects/{project_id}").HandlerFunc(p.GetProject)
 	r.Methods("POST").Path("/v1/domains/{domain_id}/projects/discover").HandlerFunc(p.DiscoverProjects)
+	r.Methods("POST").Path("/v1/domains/{domain_id}/projects/{project_id}/sync").HandlerFunc(p.SyncProject)
 
 	return r, p.VersionData
 }
@@ -145,7 +146,7 @@ func (p *v1Provider) Path(elements ...string) string {
 //FindDomainFromRequest loads the db.Domain referenced by the :domain_id path
 //parameter. Any errors will be written into the response immediately and cause
 //a nil return value.
-func FindDomainFromRequest(w http.ResponseWriter, r *http.Request) *db.Domain {
+func (p *v1Provider) FindDomainFromRequest(w http.ResponseWriter, r *http.Request) *db.Domain {
 	domainUUID := mux.Vars(r)["domain_id"]
 	if domainUUID == "" {
 		http.Error(w, "domain ID missing", 400)
@@ -153,7 +154,9 @@ func FindDomainFromRequest(w http.ResponseWriter, r *http.Request) *db.Domain {
 	}
 
 	var domain db.Domain
-	err := db.DB.SelectOne(&domain, `SELECT * FROM domains WHERE uuid = $1`, domainUUID)
+	err := db.DB.SelectOne(&domain, `SELECT * FROM domains WHERE uuid = $1 AND cluster_id = $2`,
+		domainUUID, p.Driver.Cluster().ID,
+	)
 	switch {
 	case err == sql.ErrNoRows:
 		http.Error(w, "no such domain (if it was just created, try to POST /domains/discover)", 404)
@@ -166,29 +169,42 @@ func FindDomainFromRequest(w http.ResponseWriter, r *http.Request) *db.Domain {
 }
 
 //FindProjectFromRequest loads the db.Project referenced by the :project_id
-//path parameter.  If a non-nil domain is given as third parameter,
-//FindProjectFromRequest will check whether the project is in that domain.
+//path parameter, and verifies that it is located within the given domain.
 func FindProjectFromRequest(w http.ResponseWriter, r *http.Request, domain *db.Domain) *db.Project {
-	projectUUID := mux.Vars(r)["project_id"]
-	if projectUUID == "" {
-		http.Error(w, "project ID missing", 400)
-		return nil
-	}
-
-	var project db.Project
-	err := db.DB.SelectOne(&project, `SELECT * FROM projects WHERE uuid = $1`, projectUUID)
-	switch {
-	case err == sql.ErrNoRows || (err == nil && domain != nil && domain.ID != project.DomainID):
+	project, ok := FindProjectFromRequestIfExists(w, r, domain)
+	if ok && project == nil {
 		msg := fmt.Sprintf(
 			"no such project (if it was just created, try to POST /domains/%s/projects/discover)",
 			mux.Vars(r)["domain_id"],
 		)
 		http.Error(w, msg, 404)
 		return nil
+	}
+	return project
+}
+
+//FindProjectFromRequestIfExists works like FindProjectFromRequest, but returns
+//a nil project instead of producing an error if the project does not exist in
+//the local DB yet.
+func FindProjectFromRequestIfExists(w http.ResponseWriter, r *http.Request, domain *db.Domain) (project *db.Project, ok bool) {
+	projectUUID := mux.Vars(r)["project_id"]
+	if projectUUID == "" {
+		http.Error(w, "project ID missing", 400)
+		return nil, false
+	}
+
+	project = &db.Project{}
+	err := db.DB.SelectOne(project, `SELECT * FROM projects WHERE uuid = $1`, projectUUID)
+	switch {
+	case err == sql.ErrNoRows:
+		return nil, true
+	case err == nil && domain.ID != project.DomainID:
+		http.Error(w, "no such project", 404)
+		return nil, false
 	case ReturnError(w, err):
-		return nil
+		return nil, false
 	default:
-		return &project
+		return project, true
 	}
 }
 
