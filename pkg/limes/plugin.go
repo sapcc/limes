@@ -34,6 +34,10 @@ type Plugin interface {
 	//in the result map must be identical to the resource names
 	//from Resources().
 	Scrape(driver Driver, domainUUID, projectUUID string) (map[string]ResourceData, error)
+	//SetQuota updates the backend service's quotas for the given project in the
+	//given domain to the values specified here. The map is guaranteed to contain
+	//values for all resources defined by Resources().
+	SetQuota(driver Driver, domainUUID, projectUUID string, quotas map[string]uint64) error
 	//Capacity queries the backend service for the total capacity of its
 	//resources. If, for certain resources, a capacity estimate is not possible,
 	//the implementation shall omit these resources from the result. The string

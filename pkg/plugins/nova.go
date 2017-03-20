@@ -69,6 +69,15 @@ func (p *novaPlugin) Scrape(driver limes.Driver, domainUUID, projectUUID string)
 	}, nil
 }
 
+//SetQuota implements the limes.Plugin interface.
+func (p *novaPlugin) SetQuota(driver limes.Driver, domainUUID, projectUUID string, quotas map[string]uint64) error {
+	return driver.SetComputeQuota(projectUUID, limes.ComputeData{
+		Cores:     limes.ResourceData{Quota: int64(quotas["cores"])},
+		Instances: limes.ResourceData{Quota: int64(quotas["instances"])},
+		RAM:       limes.ResourceData{Quota: int64(quotas["ram"])},
+	})
+}
+
 //Capacity implements the limes.Plugin interface.
 func (p *novaPlugin) Capacity(driver limes.Driver) (map[string]uint64, error) {
 	//TODO implement

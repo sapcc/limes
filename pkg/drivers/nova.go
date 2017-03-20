@@ -33,7 +33,7 @@ func (d realDriver) novaClient() (*gophercloud.ServiceClient, error) {
 	)
 }
 
-//GetComputeQuota implements the limes.Driver interface.
+//CheckCompute implements the limes.Driver interface.
 func (d realDriver) CheckCompute(projectUUID string) (limes.ComputeData, error) {
 	client, err := d.novaClient()
 	if err != nil {
@@ -64,4 +64,22 @@ func (d realDriver) CheckCompute(projectUUID string) (limes.ComputeData, error) 
 			Usage: uint64(limits.Absolute.TotalRAMUsed),
 		},
 	}, nil
+}
+
+//SetComputeQuota implements the limes.Driver interface.
+func (d realDriver) SetComputeQuota(projectUUID string, data limes.ComputeData) error {
+	client, err := d.novaClient()
+	if err != nil {
+		return err
+	}
+
+	return quotasets.Update(client, projectUUID, quotasets.UpdateOpts{
+		Cores:     makeIntPointer(int(data.Cores.Quota)),
+		Instances: makeIntPointer(int(data.Instances.Quota)),
+		Ram:       makeIntPointer(int(data.RAM.Quota)),
+	}).Err
+}
+
+func makeIntPointer(value int) *int {
+	return &value
 }

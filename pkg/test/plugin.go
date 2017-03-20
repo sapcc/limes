@@ -19,7 +19,11 @@
 
 package test
 
-import "github.com/sapcc/limes/pkg/limes"
+import (
+	"errors"
+
+	"github.com/sapcc/limes/pkg/limes"
+)
 
 //Plugin is a limes.Plugin implementation for unit tests, registered as the
 //service type "unittest".
@@ -65,6 +69,11 @@ func (p *Plugin) Scrape(driver limes.Driver, domainUUID, projectUUID string) (ma
 		result[key] = *val
 	}
 	return result, nil
+}
+
+//SetQuota implements the limes.Plugin interface.
+func (p *Plugin) SetQuota(driver limes.Driver, domainUUID, projectUUID string, quotas map[string]uint64) error {
+	return errors.New("SetQuota is not implemented for the unittest plugin")
 }
 
 //Capacity implements the limes.Plugin interface.

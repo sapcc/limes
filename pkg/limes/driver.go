@@ -35,6 +35,7 @@ type Driver interface {
 	CheckUserPermission(token, rule string, enforcer *policy.Enforcer, requestParams map[string]string) (bool, error)
 	/********** Nova (Compute) **********/
 	CheckCompute(projectUUID string) (ComputeData, error)
+	SetComputeQuota(projectUUID string, data ComputeData) error //disregards .Usage fields
 }
 
 //KeystoneDomain describes the basic attributes of a Keystone domain.

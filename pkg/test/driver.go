@@ -81,3 +81,8 @@ func (d *Driver) CheckUserPermission(token, rule string, enforcer *policy.Enforc
 func (d *Driver) CheckCompute(projectUUID string) (limes.ComputeData, error) {
 	return limes.ComputeData{}, errors.New("stub")
 }
+
+//SetComputeQuota implements the limes.Driver interface.
+func (d *Driver) SetComputeQuota(projectUUID string, data limes.ComputeData) error {
+	return errors.New("stub")
+}
