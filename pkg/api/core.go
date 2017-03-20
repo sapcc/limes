@@ -170,8 +170,8 @@ func (p *v1Provider) FindDomainFromRequest(w http.ResponseWriter, r *http.Reques
 
 //FindProjectFromRequest loads the db.Project referenced by the :project_id
 //path parameter, and verifies that it is located within the given domain.
-func FindProjectFromRequest(w http.ResponseWriter, r *http.Request, domain *db.Domain) *db.Project {
-	project, ok := FindProjectFromRequestIfExists(w, r, domain)
+func (p *v1Provider) FindProjectFromRequest(w http.ResponseWriter, r *http.Request, domain *db.Domain) *db.Project {
+	project, ok := p.FindProjectFromRequestIfExists(w, r, domain)
 	if ok && project == nil {
 		msg := fmt.Sprintf(
 			"no such project (if it was just created, try to POST /domains/%s/projects/discover)",
@@ -186,7 +186,7 @@ func FindProjectFromRequest(w http.ResponseWriter, r *http.Request, domain *db.D
 //FindProjectFromRequestIfExists works like FindProjectFromRequest, but returns
 //a nil project instead of producing an error if the project does not exist in
 //the local DB yet.
-func FindProjectFromRequestIfExists(w http.ResponseWriter, r *http.Request, domain *db.Domain) (project *db.Project, ok bool) {
+func (p *v1Provider) FindProjectFromRequestIfExists(w http.ResponseWriter, r *http.Request, domain *db.Domain) (project *db.Project, ok bool) {
 	projectUUID := mux.Vars(r)["project_id"]
 	if projectUUID == "" {
 		http.Error(w, "project ID missing", 400)
@@ -210,7 +210,7 @@ func FindProjectFromRequestIfExists(w http.ResponseWriter, r *http.Request, doma
 
 //AddStandardFiltersFromURLQuery handles the standard URL query parameters
 //"service" and "resource" that nearly all GET endpoints accept.
-func AddStandardFiltersFromURLQuery(filters map[string]interface{}, r *http.Request) {
+func (p *v1Provider) AddStandardFiltersFromURLQuery(filters map[string]interface{}, r *http.Request) {
 	queryValues := r.URL.Query()
 	if services, ok := queryValues["service"]; ok {
 		filters["ps.type"] = services

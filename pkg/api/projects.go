@@ -57,7 +57,7 @@ func (p *v1Provider) ListProjects(w http.ResponseWriter, r *http.Request) {
 
 	//execute SQL query
 	filters := map[string]interface{}{"p.domain_id": dbDomain.ID}
-	AddStandardFiltersFromURLQuery(filters, r)
+	p.AddStandardFiltersFromURLQuery(filters, r)
 	whereStr, queryArgs := db.BuildSimpleWhereClause(filters)
 	queryStr := fmt.Sprintf(listProjectsQuery, whereStr)
 	rows, err := db.DB.Query(queryStr, queryArgs...)
@@ -110,14 +110,14 @@ func (p *v1Provider) GetProject(w http.ResponseWriter, r *http.Request) {
 	if dbDomain == nil {
 		return
 	}
-	dbProject := FindProjectFromRequest(w, r, dbDomain)
+	dbProject := p.FindProjectFromRequest(w, r, dbDomain)
 	if dbProject == nil {
 		return
 	}
 
 	//execute SQL query
 	filters := map[string]interface{}{"ps.project_id": dbProject.ID}
-	AddStandardFiltersFromURLQuery(filters, r)
+	p.AddStandardFiltersFromURLQuery(filters, r)
 	whereStr, queryArgs := db.BuildSimpleWhereClause(filters)
 	queryStr := fmt.Sprintf(showProjectQuery, whereStr)
 	rows, err := db.DB.Query(queryStr, queryArgs...)
@@ -188,7 +188,7 @@ func (p *v1Provider) SyncProject(w http.ResponseWriter, r *http.Request) {
 	if dbDomain == nil {
 		return
 	}
-	dbProject, ok := FindProjectFromRequestIfExists(w, r, dbDomain)
+	dbProject, ok := p.FindProjectFromRequestIfExists(w, r, dbDomain)
 	if !ok {
 		return
 	}
@@ -213,7 +213,7 @@ func (p *v1Provider) SyncProject(w http.ResponseWriter, r *http.Request) {
 		}
 
 		//now we should find it in the DB
-		dbProject := FindProjectFromRequest(w, r, dbDomain)
+		dbProject := p.FindProjectFromRequest(w, r, dbDomain)
 		if dbProject == nil {
 			return //wtf
 		}
