@@ -76,7 +76,6 @@ func ScanDomains(driver limes.Driver, opts ScanDomainsOpts) ([]string, error) {
 			continue
 		}
 
-		//TODO: create domain_service and domain_resource entries
 		util.LogInfo("discovered new Keystone domain: %s", domain.Name)
 		dbDomain, err := initDomain(driver, domain)
 		if err != nil {
