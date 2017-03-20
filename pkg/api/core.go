@@ -22,6 +22,7 @@ package api
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -80,6 +81,7 @@ func NewV1Router(driver limes.Driver, config limes.APIConfiguration) (*mux.Route
 		ReturnJSON(w, 200, map[string]interface{}{"version": p.VersionData})
 	})
 	r.Methods("GET").Path("/v1/domains/{domain_id}/projects").HandlerFunc(p.ListProjects)
+	r.Methods("GET").Path("/v1/domains/{domain_id}/projects/{project_id}").HandlerFunc(p.GetProject)
 
 	return r, p.VersionData
 }
@@ -139,10 +141,10 @@ func (p *v1Provider) Path(elements ...string) string {
 	return strings.Join(parts, "/")
 }
 
-//FindDomain loads the db.Domain referenced by the :domain_id path parameter.
-//Any errors will be written into the response immediately and cause a nil
-//return value.
-func FindDomain(w http.ResponseWriter, r *http.Request) *db.Domain {
+//FindDomainFromRequest loads the db.Domain referenced by the :domain_id path
+//parameter. Any errors will be written into the response immediately and cause
+//a nil return value.
+func FindDomainFromRequest(w http.ResponseWriter, r *http.Request) *db.Domain {
 	domainUUID := mux.Vars(r)["domain_id"]
 	if domainUUID == "" {
 		http.Error(w, "domain ID missing", 400)
@@ -159,5 +161,44 @@ func FindDomain(w http.ResponseWriter, r *http.Request) *db.Domain {
 		return nil
 	default:
 		return &domain
+	}
+}
+
+//FindProjectFromRequest loads the db.Project referenced by the :project_id
+//path parameter.  If a non-nil domain is given as third parameter,
+//FindProjectFromRequest will check whether the project is in that domain.
+func FindProjectFromRequest(w http.ResponseWriter, r *http.Request, domain *db.Domain) *db.Project {
+	projectUUID := mux.Vars(r)["project_id"]
+	if projectUUID == "" {
+		http.Error(w, "project ID missing", 400)
+		return nil
+	}
+
+	var project db.Project
+	err := db.DB.SelectOne(&project, `SELECT * FROM projects WHERE uuid = $1`, projectUUID)
+	switch {
+	case err == sql.ErrNoRows || (err == nil && domain != nil && domain.ID != project.DomainID):
+		msg := fmt.Sprintf(
+			"no such project (if it was just created, try to POST /domains/%s/projects/discover)",
+			mux.Vars(r)["domain_id"],
+		)
+		http.Error(w, msg, 404)
+		return nil
+	case ReturnError(w, err):
+		return nil
+	default:
+		return &project
+	}
+}
+
+//AddStandardFiltersFromURLQuery handles the standard URL query parameters
+//"service" and "resource" that nearly all GET endpoints accept.
+func AddStandardFiltersFromURLQuery(filters map[string]interface{}, r *http.Request) {
+	queryValues := r.URL.Query()
+	if services, ok := queryValues["service"]; ok {
+		filters["ps.type"] = services
+	}
+	if resources, ok := queryValues["resource"]; ok {
+		filters["pr.name"] = resources
 	}
 }

@@ -36,28 +36,27 @@ var listProjectsQuery = `
 	 WHERE %s
 `
 
+var showProjectQuery = `
+	SELECT ps.type, ps.scraped_at, pr.name, pr.quota, pr.usage, pr.backend_quota
+	  FROM project_services ps
+	  JOIN project_resources pr ON pr.service_id = ps.id
+	 WHERE %s
+`
+
 //ListProjects handles GET /v1/domains/:domain_id/projects.
 func (p *v1Provider) ListProjects(w http.ResponseWriter, r *http.Request) {
 	if !p.HasPermission("project:list", w, r) {
 		return
 	}
-	domain := FindDomain(w, r)
-	if domain == nil {
+	dbDomain := FindDomainFromRequest(w, r)
+	if dbDomain == nil {
 		return
 	}
 
-	//collect conditions for SQL query
-	fields := map[string]interface{}{"p.domain_id": domain.ID}
-	queryValues := r.URL.Query()
-	if services, ok := queryValues["service"]; ok {
-		fields["ps.type"] = services
-	}
-	if resources, ok := queryValues["resource"]; ok {
-		fields["pr.name"] = resources
-	}
-
 	//execute SQL query
-	whereStr, queryArgs := db.BuildSimpleWhereClause(fields)
+	filters := map[string]interface{}{"p.domain_id": dbDomain.ID}
+	AddStandardFiltersFromURLQuery(filters, r)
+	whereStr, queryArgs := db.BuildSimpleWhereClause(filters)
 	queryStr := fmt.Sprintf(listProjectsQuery, whereStr)
 	rows, err := db.DB.Query(queryStr, queryArgs...)
 	if ReturnError(w, err) {
@@ -98,4 +97,62 @@ func (p *v1Provider) ListProjects(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ReturnJSON(w, 200, map[string]interface{}{"projects": projects.Scopes})
+}
+
+//GetProject handles GET /v1/domains/:domain_id/projects/:project_id.
+func (p *v1Provider) GetProject(w http.ResponseWriter, r *http.Request) {
+	if !p.HasPermission("project:show", w, r) {
+		return
+	}
+	dbDomain := FindDomainFromRequest(w, r)
+	if dbDomain == nil {
+		return
+	}
+	dbProject := FindProjectFromRequest(w, r, dbDomain)
+	if dbProject == nil {
+		return
+	}
+
+	//execute SQL query
+	filters := map[string]interface{}{"ps.project_id": dbProject.ID}
+	AddStandardFiltersFromURLQuery(filters, r)
+	whereStr, queryArgs := db.BuildSimpleWhereClause(filters)
+	queryStr := fmt.Sprintf(showProjectQuery, whereStr)
+	rows, err := db.DB.Query(queryStr, queryArgs...)
+	if ReturnError(w, err) {
+		return
+	}
+
+	//accumulate data into result
+	var (
+		project              output.Scope
+		serviceType          string
+		serviceScrapedAt     time.Time
+		resourceName         string
+		resourceQuota        int64
+		resourceUsage        uint64
+		resourceBackendQuota int64
+	)
+	for rows.Next() {
+		err := rows.Scan(
+			&serviceType, &serviceScrapedAt,
+			&resourceName, &resourceQuota, &resourceUsage, &resourceBackendQuota,
+		)
+		if ReturnError(w, err) {
+			return
+		}
+
+		srv := project.FindService(serviceType)
+		srv.ScrapedAt = serviceScrapedAt.Unix()
+		res := srv.FindResource(resourceName)
+		res.Set(resourceQuota, resourceUsage, resourceBackendQuota)
+	}
+	if ReturnError(w, rows.Err()) {
+		return
+	}
+	if ReturnError(w, rows.Close()) {
+		return
+	}
+
+	ReturnJSON(w, 200, map[string]interface{}{"project": project})
 }
