@@ -135,6 +135,7 @@ func (p *v1Provider) GetProject(w http.ResponseWriter, r *http.Request) {
 		resourceUsage        uint64
 		resourceBackendQuota int64
 	)
+	project.ID = dbProject.UUID
 	for rows.Next() {
 		err := rows.Scan(
 			&serviceType, &serviceScrapedAt,
