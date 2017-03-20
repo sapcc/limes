@@ -8,6 +8,8 @@ build/docker.tar
 pkg/test/migrations/*.sql
 unittest.db
 /cover.out
+/*.cover.out
+/cover.html
 
 # custom configuration files used during development
 *test*.yaml
