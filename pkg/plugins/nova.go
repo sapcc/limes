@@ -45,15 +45,15 @@ var novaResources = []limes.ResourceInfo{
 }
 
 func init() {
-	limes.RegisterPlugin(&novaPlugin{})
+	limes.RegisterQuotaPlugin(&novaPlugin{})
 }
 
-//ServiceType implements the limes.Plugin interface.
+//ServiceType implements the limes.QuotaPlugin interface.
 func (p *novaPlugin) ServiceType() string {
 	return "compute"
 }
 
-//Resources implements the limes.Plugin interface.
+//Resources implements the limes.QuotaPlugin interface.
 func (p *novaPlugin) Resources() []limes.ResourceInfo {
 	return novaResources
 }
@@ -64,7 +64,7 @@ func (p *novaPlugin) Client(driver limes.Driver) (*gophercloud.ServiceClient, er
 	)
 }
 
-//Scrape implements the limes.Plugin interface.
+//Scrape implements the limes.QuotaPlugin interface.
 func (p *novaPlugin) Scrape(driver limes.Driver, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
 	client, err := p.Client(driver)
 	if err != nil {
@@ -97,7 +97,7 @@ func (p *novaPlugin) Scrape(driver limes.Driver, domainUUID, projectUUID string)
 	}, nil
 }
 
-//SetQuota implements the limes.Plugin interface.
+//SetQuota implements the limes.QuotaPlugin interface.
 func (p *novaPlugin) SetQuota(driver limes.Driver, domainUUID, projectUUID string, quotas map[string]uint64) error {
 	client, err := p.Client(driver)
 	if err != nil {
@@ -109,12 +109,6 @@ func (p *novaPlugin) SetQuota(driver limes.Driver, domainUUID, projectUUID strin
 		Instances: makeIntPointer(int(quotas["instances"])),
 		Ram:       makeIntPointer(int(quotas["ram"])),
 	}).Err
-}
-
-//Capacity implements the limes.Plugin interface.
-func (p *novaPlugin) Capacity(driver limes.Driver) (map[string]uint64, error) {
-	//TODO implement
-	return map[string]uint64{}, nil
 }
 
 func makeIntPointer(value int) *int {

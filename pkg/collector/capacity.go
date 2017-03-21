@@ -20,10 +20,10 @@
 package collector
 
 import (
-	"database/sql"
 	"time"
 
 	"github.com/sapcc/limes/pkg/db"
+	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/util"
 )
 
@@ -40,25 +40,48 @@ func (c *Collector) ScanCapacity() {
 	//backend services when the collector comes up
 	time.Sleep(scanInitialDelay)
 
-	serviceType := c.Plugin.ServiceType()
 	for {
-		util.LogDebug("scanning %s capacity", serviceType)
-		err := c.scanCapacity()
-		if err != nil {
-			c.LogError("scan %s capacity failed: %s", serviceType, err.Error())
-		}
+		util.LogDebug("scanning capacity")
+		c.scanCapacity()
 
 		time.Sleep(scanInterval)
 	}
 }
 
-func (c *Collector) scanCapacity() error {
-	capacities, err := c.Plugin.Capacity(c.Driver)
-	if err != nil {
-		return err
-	}
+func (c *Collector) scanCapacity() {
+	values := make(map[string]map[string]uint64)
 	scrapedAt := c.TimeNow()
-	serviceType := c.Plugin.ServiceType()
+
+	for _, capacitor := range c.Driver.Cluster().Capacitors {
+		plugin := limes.GetCapacityPlugin(capacitor.ID)
+		if plugin == nil {
+			continue //skip silently, the missing plugin was already reported at program startup
+		}
+
+		capacities, err := plugin.Scrape(c.Driver)
+		if err != nil {
+			c.LogError("scan capacity with capacitor %s failed: %s", capacitor.ID, err.Error())
+			continue
+		}
+
+		//merge capacities from this plugin into the overall capacity values map
+		for serviceType, resources := range capacities {
+			if _, ok := values[serviceType]; !ok {
+				values[serviceType] = make(map[string]uint64)
+			}
+			for resourceName, value := range resources {
+				values[serviceType][resourceName] = value
+			}
+		}
+	}
+
+	err := c.writeCapacity(values, scrapedAt)
+	if err != nil {
+		c.LogError("write capacity failed: %s", err.Error())
+	}
+}
+
+func (c *Collector) writeCapacity(values map[string]map[string]uint64, scrapedAt time.Time) error {
 	clusterID := c.Driver.Cluster().ID
 
 	//do the following in a transaction to avoid inconsistent DB state
@@ -68,66 +91,90 @@ func (c *Collector) scanCapacity() error {
 	}
 	defer db.RollbackUnlessCommitted(tx)
 
-	//find or create the cluster_services entry
-	var serviceID int64
-	err = tx.QueryRow(
-		`UPDATE cluster_services SET scraped_at = $1 WHERE cluster_id = $2 AND type = $3 RETURNING id`,
-		scrapedAt, clusterID, serviceType,
-	).Scan(&serviceID)
-	switch err {
-	case nil:
-		//entry found - nothing to do here
-	case sql.ErrNoRows:
-		//need to create the cluster_services entry
-		err := tx.QueryRow(
-			`INSERT INTO cluster_services (cluster_id, type, scraped_at) VALUES ($1, $2, $3) RETURNING id`,
-			clusterID, serviceType, scrapedAt,
-		).Scan(&serviceID)
-		if err != nil {
-			return err
-		}
-	default:
-		return err
-	}
-
-	//update existing cluster_resources entries
-	seen := make(map[string]bool)
-	records, err := tx.Select(&db.ClusterResource{}, `SELECT * FROM cluster_resources WHERE service_id = $1`, serviceID)
+	//enumerate cluster_services entries: create missing ones, delete superfluous ones
+	serviceIDForType := make(map[string]int64)
+	serviceTypeForID := make(map[int64]string)
+	var dbServices []*db.ClusterService
+	_, err = tx.Select(&dbServices, `SELECT * FROM cluster_services WHERE cluster_id = $1`, clusterID)
 	if err != nil {
 		return err
 	}
-	for _, record := range records {
-		res := record.(*db.ClusterResource)
-		seen[res.Name] = true
-
-		capacity, exists := capacities[res.Name]
-		if exists {
-			res.Capacity = capacity
-			_, err := tx.Update(res)
-			if err != nil {
-				return err
-			}
+	for _, dbService := range dbServices {
+		if _, ok := values[dbService.Type]; ok {
+			serviceIDForType[dbService.Type] = dbService.ID
+			serviceTypeForID[dbService.ID] = dbService.Type
 		} else {
-			_, err := tx.Delete(res)
+			_, err := tx.Delete(&dbService)
 			if err != nil {
 				return err
 			}
 		}
 	}
-
-	//insert missing cluster_resources entries
-	for name, capacity := range capacities {
-		if seen[name] {
+	for serviceType := range values {
+		if _, ok := serviceIDForType[serviceType]; ok {
 			continue
 		}
-		res := &db.ClusterResource{
-			ServiceID: serviceID,
-			Name:      name,
-			Capacity:  capacity,
+		dbService := &db.ClusterService{
+			ClusterID: clusterID,
+			Type:      serviceType,
+			ScrapedAt: &scrapedAt,
 		}
-		err := tx.Insert(res)
+		err := tx.Insert(&dbService)
 		if err != nil {
 			return err
+		}
+		serviceIDForType[dbService.Type] = dbService.ID
+		serviceTypeForID[dbService.ID] = dbService.Type
+	}
+
+	//update scraped_at timestamp on all cluster services in one step
+	_, err = tx.Exec(`UPDATE cluster_services SET scraped_at = $1 WHERE cluster_id = $2`, scrapedAt, clusterID)
+	if err != nil {
+		return err
+	}
+
+	//same for resources as for services: create missing ones, update existing ones, delete superfluous ones
+	for serviceType, serviceValues := range values {
+		serviceID := serviceIDForType[serviceType]
+		var dbResources []*db.ClusterResource
+		_, err := tx.Select(&dbResources, `SELECT * FROM cluster_resources WHERE service_id = $1`, serviceID)
+		if err != nil {
+			return err
+		}
+
+		seen := make(map[string]bool)
+		for _, dbResource := range dbResources {
+			seen[dbResource.Name] = true
+
+			capacity, exists := serviceValues[dbResource.Name]
+			if exists {
+				dbResource.Capacity = capacity
+				_, err := tx.Update(dbResource)
+				if err != nil {
+					return err
+				}
+			} else {
+				_, err := tx.Delete(dbResource)
+				if err != nil {
+					return err
+				}
+			}
+		}
+
+		//insert missing cluster_resources entries
+		for name, capacity := range serviceValues {
+			if seen[name] {
+				continue
+			}
+			res := &db.ClusterResource{
+				ServiceID: serviceID,
+				Name:      name,
+				Capacity:  capacity,
+			}
+			err := tx.Insert(res)
+			if err != nil {
+				return err
+			}
 		}
 	}
 

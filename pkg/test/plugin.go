@@ -25,8 +25,8 @@ import (
 	"github.com/sapcc/limes/pkg/limes"
 )
 
-//Plugin is a limes.Plugin implementation for unit tests, registered as the
-//service type "unittest".
+//Plugin is a limes.QuotaPlugin implementation for unit tests, registered as
+//the service type "unittest".
 type Plugin struct {
 	StaticResourceData map[string]*limes.ResourceData
 	StaticCapacity     map[string]uint64
@@ -44,7 +44,7 @@ var resources = []limes.ResourceInfo{
 }
 
 func init() {
-	limes.RegisterPlugin(&Plugin{
+	limes.RegisterQuotaPlugin(&Plugin{
 		StaticResourceData: map[string]*limes.ResourceData{
 			"things":   &limes.ResourceData{Quota: 42, Usage: 23},
 			"capacity": &limes.ResourceData{Quota: 100, Usage: 0},
@@ -52,17 +52,17 @@ func init() {
 	})
 }
 
-//ServiceType implements the limes.Plugin interface.
+//ServiceType implements the limes.QuotaPlugin interface.
 func (p *Plugin) ServiceType() string {
 	return "unittest"
 }
 
-//Resources implements the limes.Plugin interface.
+//Resources implements the limes.QuotaPlugin interface.
 func (p *Plugin) Resources() []limes.ResourceInfo {
 	return resources
 }
 
-//Scrape implements the limes.Plugin interface.
+//Scrape implements the limes.QuotaPlugin interface.
 func (p *Plugin) Scrape(driver limes.Driver, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
 	result := make(map[string]limes.ResourceData)
 	for key, val := range p.StaticResourceData {
@@ -71,12 +71,7 @@ func (p *Plugin) Scrape(driver limes.Driver, domainUUID, projectUUID string) (ma
 	return result, nil
 }
 
-//SetQuota implements the limes.Plugin interface.
+//SetQuota implements the limes.QuotaPlugin interface.
 func (p *Plugin) SetQuota(driver limes.Driver, domainUUID, projectUUID string, quotas map[string]uint64) error {
 	return errors.New("SetQuota is not implemented for the unittest plugin")
-}
-
-//Capacity implements the limes.Plugin interface.
-func (p *Plugin) Capacity(driver limes.Driver) (map[string]uint64, error) {
-	return p.StaticCapacity, nil
 }

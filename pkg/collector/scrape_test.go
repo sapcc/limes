@@ -42,7 +42,7 @@ func scrapeTestDriver(t *testing.T) *test.Driver {
 
 func Test_Scrape(t *testing.T) {
 	driver := scrapeTestDriver(t)
-	plugin := limes.GetPlugin("unittest").(*test.Plugin)
+	plugin := limes.GetQuotaPlugin("unittest").(*test.Plugin)
 	c := Collector{
 		Driver:   driver,
 		Plugin:   plugin,

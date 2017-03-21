@@ -51,7 +51,7 @@ func testDriver(t *testing.T) *test.Driver {
 	//seed quota/usage data into DB
 	c := collector.Collector{
 		Driver:   driver,
-		Plugin:   limes.GetPlugin("unittest"),
+		Plugin:   limes.GetQuotaPlugin("unittest"),
 		LogError: t.Fatalf,
 		TimeNow:  test.TimeNow,
 		Once:     true,

@@ -19,9 +19,10 @@
 
 package limes
 
-//Plugin is an interface that the collector plugins for all backend services must
-//implement.
-type Plugin interface {
+//QuotaPlugin is the interface that the quota/usage collector plugins for all
+//backend services must implement. There can only be one QuotaPlugin for each
+//backend service.
+type QuotaPlugin interface {
 	//ServiceType returns the service type that the backend service for this
 	//plugin implements. This string must be identical to the type string from
 	//the Keystone service catalog.
@@ -38,12 +39,31 @@ type Plugin interface {
 	//given domain to the values specified here. The map is guaranteed to contain
 	//values for all resources defined by Resources().
 	SetQuota(driver Driver, domainUUID, projectUUID string, quotas map[string]uint64) error
-	//Capacity queries the backend service for the total capacity of its
-	//resources. If, for certain resources, a capacity estimate is not possible,
-	//the implementation shall omit these resources from the result. The string
-	//keys in the result map must be identical to the resource names from
-	//Resources().
-	Capacity(driver Driver) (map[string]uint64, error)
+}
+
+//CapacityPlugin is the interface that all capacity collector plugins must
+//implement.
+//
+//While there can only be one QuotaPlugin for each backend service, there may
+//be different CapacityPlugin instances for each backend service, and a single
+//CapacityPlugin can even report capacities for multiple service types. The
+//reason is that quotas are handled in the concrete backend service, thus their
+//handling is independent from the underlying infrastructure. Capacity
+//calculations, however, may be highly dependent on the infrastructure. For
+//example, for the Compute service, there could be different capacity plugins
+//for each type of hypervisor (KVM, VMware, etc.) which use the concrete APIs
+//of these hypervisors instead of the OpenStack Compute API.
+type CapacityPlugin interface {
+	//ID returns a unique identifier for this CapacityPlugin which is used to
+	//identify it in the configuration.
+	ID() string
+	//Scrape queries the backend service(s) for the capacities of the resources
+	//that this plugin is concerned with. The result is a two-dimensional map,
+	//with the first key being the service type, and the second key being the
+	//resource name. The capacity collector will ignore service types for which
+	//there is no QuotaPlugin, and resources which are not advertised by that
+	//QuotaPlugin.
+	Scrape(driver Driver) (map[string]map[string]uint64, error)
 }
 
 //ResourceInfo contains the metadata for a resource (i.e. some thing for which
@@ -80,7 +100,7 @@ const (
 //plugin the ResourceInfo for the given resourceName, and returns its unit. If
 //the service or resource does not exist, UnitNone is returned.
 func UnitFor(serviceType, resourceName string) Unit {
-	plugin := GetPlugin(serviceType)
+	plugin := GetQuotaPlugin(serviceType)
 	if plugin == nil {
 		return UnitNone
 	}
@@ -92,34 +112,45 @@ func UnitFor(serviceType, resourceName string) Unit {
 	return UnitNone
 }
 
-var plugins = map[string]Plugin{}
+var quotaPlugins = map[string]QuotaPlugin{}
+var capacityPlugins = map[string]CapacityPlugin{}
 
-//RegisterPlugin registers a Plugin with this package. It should only be called
-//once, typically in a func init() for the package that offers the Plugin. The
-//service type must be identical to the type string used in the Keystone
-//service catalog for the backend service that this plugin supports.
-func RegisterPlugin(plugin Plugin) {
-	serviceType := plugin.ServiceType()
-	if plugins[serviceType] != nil {
-		panic("collector.RegisterPlugin() called multiple times for service type: " + serviceType)
-	}
+//RegisterQuotaPlugin registers a QuotaPlugin with this package. It may only be
+//called once, typically in a func init() for the package that offers the
+//QuotaPlugin.
+func RegisterQuotaPlugin(plugin QuotaPlugin) {
 	if plugin == nil {
-		panic("collector.RegisterPlugin() called with nil Plugin instance")
+		panic("collector.RegisterQuotaPlugin() called with nil Plugin instance")
 	}
-	plugins[serviceType] = plugin
+	serviceType := plugin.ServiceType()
+	if quotaPlugins[serviceType] != nil {
+		panic("collector.RegisterQuotaPlugin() called multiple times for service type: " + serviceType)
+	}
+	quotaPlugins[serviceType] = plugin
 }
 
-//GetPlugin returns the Plugin that handles the given service type, or nil if
-//no such plugin exists.
-func GetPlugin(serviceType string) Plugin {
-	return plugins[serviceType]
+//GetQuotaPlugin returns the QuotaPlugin that handles the given service type,
+//or nil if no such plugin exists.
+func GetQuotaPlugin(serviceType string) QuotaPlugin {
+	return quotaPlugins[serviceType]
 }
 
-//AllPlugins lists all service types for which plugins exist.
-func AllPlugins() []string {
-	result := make([]string, 0, len(plugins))
-	for serviceType := range plugins {
-		result = append(result, serviceType)
+//RegisterCapacityPlugin registers a CapacityPlugin with this package. It may
+//only be called once, typically in a func init() for the package that offers
+//the CapacityPlugin.
+func RegisterCapacityPlugin(plugin CapacityPlugin) {
+	if plugin == nil {
+		panic("collector.RegisterCapacityPlugin() called with nil Plugin instance")
 	}
-	return result
+	id := plugin.ID()
+	if capacityPlugins[id] != nil {
+		panic("collector.RegisterCapacityPlugin() called multiple times for ID: " + id)
+	}
+	capacityPlugins[id] = plugin
+}
+
+//GetCapacityPlugin returns the CapacityPlugin with the given ID, or nil if no
+//such plugin exists.
+func GetCapacityPlugin(serviceType string) CapacityPlugin {
+	return capacityPlugins[serviceType]
 }
