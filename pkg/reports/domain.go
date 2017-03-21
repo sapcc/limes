@@ -48,13 +48,14 @@ type DomainService struct {
 //DomainResource is a substructure of Domain containing data for
 //a single resource.
 type DomainResource struct {
-	Name                 string     `json:"name"`
-	Unit                 limes.Unit `json:"unit,omitempty"`
-	DomainQuota          uint64     `json:"quota,keepempty"`
-	ProjectsQuota        uint64     `json:"projects_quota,keepempty"`
-	Usage                uint64     `json:"usage,,keepemptykeepempty"`
-	BackendQuota         *uint64    `json:"backend_quota,omitempty"`
-	InfiniteBackendQuota *bool      `json:"infinite_backend_quota,omitempty"`
+	Name          string     `json:"name"`
+	Unit          limes.Unit `json:"unit,omitempty"`
+	DomainQuota   uint64     `json:"quota,keepempty"`
+	ProjectsQuota uint64     `json:"projects_quota,keepempty"`
+	Usage         uint64     `json:"usage,,keepemptykeepempty"`
+	//These are pointers to values to enable precise control over whether this field is rendered in output.
+	BackendQuota         *uint64 `json:"backend_quota,omitempty"`
+	InfiniteBackendQuota *bool   `json:"infinite_backend_quota,omitempty"`
 }
 
 //DomainServices provides fast lookup of services using a map, but serializes
@@ -116,13 +117,12 @@ var domainReportQuery2 = `
 //GetDomains returns Domain reports for all domains in the given cluster or, if
 //domainID is non-nil, for that domain only.
 func GetDomains(cluster *limes.ClusterConfiguration, domainID *int64, dbi db.Interface, filter Filter) ([]*Domain, error) {
+	//first query: data for projects in this domain
 	fields := map[string]interface{}{"d.cluster_id": cluster.ID}
 	if domainID != nil {
 		fields["d.id"] = *domainID
 	}
-	filter.ApplyTo(fields, "ds", "dr")
-
-	//first query: data for projects in this domain
+	filter.ApplyTo(fields, "ps", "pr")
 	whereStr, queryArgs := db.BuildSimpleWhereClause(fields)
 	rows, err := dbi.Query(fmt.Sprintf(domainReportQuery1, whereStr), queryArgs...)
 	if err != nil {
@@ -200,6 +200,12 @@ func GetDomains(cluster *limes.ClusterConfiguration, domainID *int64, dbi db.Int
 	}
 
 	//second query: add domain quotas
+	fields = map[string]interface{}{"d.cluster_id": cluster.ID}
+	if domainID != nil {
+		fields["d.id"] = *domainID
+	}
+	filter.ApplyTo(fields, "ds", "dr")
+	whereStr, queryArgs = db.BuildSimpleWhereClause(fields)
 	rows, err = dbi.Query(fmt.Sprintf(domainReportQuery2, whereStr), queryArgs...)
 	if err != nil {
 		return nil, err
