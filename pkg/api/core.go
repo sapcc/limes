@@ -190,15 +190,3 @@ func (p *v1Provider) FindProjectFromRequestIfExists(w http.ResponseWriter, r *ht
 		return project, true
 	}
 }
-
-//AddStandardFiltersFromURLQuery handles the standard URL query parameters
-//"service" and "resource" that nearly all GET endpoints accept.
-func (p *v1Provider) AddStandardFiltersFromURLQuery(filters map[string]interface{}, r *http.Request) {
-	queryValues := r.URL.Query()
-	if services, ok := queryValues["service"]; ok {
-		filters["ps.type"] = services
-	}
-	if resources, ok := queryValues["resource"]; ok {
-		filters["pr.name"] = resources
-	}
-}

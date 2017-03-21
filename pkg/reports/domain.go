@@ -115,11 +115,12 @@ var domainReportQuery2 = `
 
 //GetDomains returns Domain reports for all domains in the given cluster or, if
 //domainID is non-nil, for that domain only.
-func GetDomains(cluster *limes.ClusterConfiguration, domainID *int64, dbi db.Interface) ([]*Domain, error) {
+func GetDomains(cluster *limes.ClusterConfiguration, domainID *int64, dbi db.Interface, filter Filter) ([]*Domain, error) {
 	fields := map[string]interface{}{"d.cluster_id": cluster.ID}
 	if domainID != nil {
 		fields["d.id"] = *domainID
 	}
+	filter.ApplyTo(fields, "ds", "dr")
 
 	//first query: data for projects in this domain
 	whereStr, queryArgs := db.BuildSimpleWhereClause(fields)

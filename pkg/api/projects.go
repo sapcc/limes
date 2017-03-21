@@ -28,6 +28,7 @@ import (
 	"github.com/sapcc/limes/pkg/api/output"
 	"github.com/sapcc/limes/pkg/collector"
 	"github.com/sapcc/limes/pkg/db"
+	"github.com/sapcc/limes/pkg/reports"
 )
 
 var listProjectsQuery = `
@@ -57,7 +58,7 @@ func (p *v1Provider) ListProjects(w http.ResponseWriter, r *http.Request) {
 
 	//execute SQL query
 	filters := map[string]interface{}{"p.domain_id": dbDomain.ID}
-	p.AddStandardFiltersFromURLQuery(filters, r)
+	reports.ReadFilter(r).ApplyTo(filters, "ps", "pr")
 	whereStr, queryArgs := db.BuildSimpleWhereClause(filters)
 	queryStr := fmt.Sprintf(listProjectsQuery, whereStr)
 	rows, err := db.DB.Query(queryStr, queryArgs...)
@@ -118,7 +119,7 @@ func (p *v1Provider) GetProject(w http.ResponseWriter, r *http.Request) {
 
 	//execute SQL query
 	filters := map[string]interface{}{"ps.project_id": dbProject.ID}
-	p.AddStandardFiltersFromURLQuery(filters, r)
+	reports.ReadFilter(r).ApplyTo(filters, "ps", "pr")
 	whereStr, queryArgs := db.BuildSimpleWhereClause(filters)
 	queryStr := fmt.Sprintf(showProjectQuery, whereStr)
 	rows, err := db.DB.Query(queryStr, queryArgs...)

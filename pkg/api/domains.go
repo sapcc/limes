@@ -32,7 +32,7 @@ func (p *v1Provider) ListDomains(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	domains, err := reports.GetDomains(p.Driver.Cluster(), nil, db.DB)
+	domains, err := reports.GetDomains(p.Driver.Cluster(), nil, db.DB, reports.ReadFilter(r))
 	if ReturnError(w, err) {
 		return
 	}
@@ -50,7 +50,7 @@ func (p *v1Provider) GetDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	domains, err := reports.GetDomains(p.Driver.Cluster(), &dbDomain.ID, db.DB)
+	domains, err := reports.GetDomains(p.Driver.Cluster(), &dbDomain.ID, db.DB, reports.ReadFilter(r))
 	if ReturnError(w, err) {
 		return
 	}
