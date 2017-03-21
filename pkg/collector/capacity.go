@@ -75,6 +75,40 @@ func (c *Collector) scanCapacity() {
 		}
 	}
 
+	//skip values for services not enabled for this cluster
+	serviceTypes := make(map[string]bool)
+	for serviceType := range values {
+		serviceTypes[serviceType] = true
+	}
+	for _, srv := range c.Driver.Cluster().Services {
+		delete(serviceTypes, srv.Type)
+	}
+	for serviceType := range serviceTypes {
+		delete(values, serviceType)
+	}
+
+	//skip values for resources not announced by the respective QuotaPlugin
+	for _, srv := range c.Driver.Cluster().Services {
+		subvalues, exists := values[srv.Type]
+		if !exists {
+			continue
+		}
+		plugin := limes.GetQuotaPlugin(srv.Type)
+		if plugin == nil {
+			continue
+		}
+		names := make(map[string]bool)
+		for name := range values {
+			names[name] = true
+		}
+		for _, res := range plugin.Resources() {
+			delete(names, res.Name)
+		}
+		for name := range names {
+			delete(subvalues, name)
+		}
+	}
+
 	err := c.writeCapacity(values, scrapedAt)
 	if err != nil {
 		c.LogError("write capacity failed: %s", err.Error())
