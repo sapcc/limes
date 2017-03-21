@@ -21,9 +21,11 @@ package main
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sapcc/limes/pkg/collector"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
@@ -77,13 +79,17 @@ func main() {
 	//start those collector threads which operate over all services simultaneously
 	c := collector.NewCollector(driver, nil)
 	go c.CheckConsistency()
-
-	//since we don't have to manage thread lifetime in the main thread, I use it to check Keystone regularly
-	for {
-		_, err := collector.ScanDomains(driver, collector.ScanDomainsOpts{ScanAllProjects: true})
-		if err != nil {
-			util.LogError(err.Error())
+	go func() {
+		for {
+			_, err := collector.ScanDomains(driver, collector.ScanDomainsOpts{ScanAllProjects: true})
+			if err != nil {
+				util.LogError(err.Error())
+			}
+			time.Sleep(discoverInterval)
 		}
-		time.Sleep(discoverInterval)
-	}
+	}()
+
+	//use main thread to emit Prometheus metrics
+	http.Handle("/metrics", promhttp.Handler())
+	util.LogFatal(http.ListenAndServe(config.Collector.MetricsListenAddress, nil).Error())
 }

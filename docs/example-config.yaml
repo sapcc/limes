@@ -54,3 +54,7 @@ api:
   listen: ':8080'
   # authorization rules in oslo.policy format; see docs/example-policy.json for example
   policy: '/etc/limes/policy.json'
+
+collector:
+  # TCP address for limes-collect to serve Prometheus metrics on (on HTTP under the /metrics endpoint)
+  metrics: ':8080'

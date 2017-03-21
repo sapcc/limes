@@ -35,9 +35,10 @@ import (
 
 //Configuration contains all the data from the configuration file.
 type Configuration struct {
-	Database db.Configuration                 `yaml:"database"`
-	Clusters map[string]*ClusterConfiguration `yaml:"clusters"`
-	API      APIConfiguration                 `yaml:"api"`
+	Database  db.Configuration                 `yaml:"database"`
+	Clusters  map[string]*ClusterConfiguration `yaml:"clusters"`
+	API       APIConfiguration                 `yaml:"api"`
+	Collector CollectorConfiguration           `yaml:"collector"`
 }
 
 //ClusterConfiguration contains all the configuration data for a single cluster.
@@ -67,6 +68,11 @@ type APIConfiguration struct {
 	ListenAddress  string           `yaml:"listen"`
 	PolicyFilePath string           `yaml:"policy"`
 	PolicyEnforcer *policy.Enforcer `yaml:"-"`
+}
+
+//CollectorConfiguration contains configuration parameters for limes-collect.
+type CollectorConfiguration struct {
+	MetricsListenAddress string `yaml:"metrics"`
 }
 
 //NewConfiguration reads and validates the given configuration file.
@@ -168,6 +174,10 @@ func (cfg Configuration) validate() (success bool) {
 	}
 	if cfg.API.PolicyFilePath == "" {
 		missing("api.policy")
+	}
+
+	if cfg.Collector.MetricsListenAddress == "" {
+		missing("collector.metrics")
 	}
 
 	return
