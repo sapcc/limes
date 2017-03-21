@@ -39,3 +39,25 @@ func (p *v1Provider) ListDomains(w http.ResponseWriter, r *http.Request) {
 
 	ReturnJSON(w, 200, map[string]interface{}{"domains": domains})
 }
+
+//GetDomain handles GET /v1/domains.
+func (p *v1Provider) GetDomain(w http.ResponseWriter, r *http.Request) {
+	if !p.CheckToken(r).Require(w, "domain:show") {
+		return
+	}
+	dbDomain := p.FindDomainFromRequest(w, r)
+	if dbDomain == nil {
+		return
+	}
+
+	domains, err := reports.GetDomains(p.Driver.Cluster(), &dbDomain.ID, db.DB)
+	if ReturnError(w, err) {
+		return
+	}
+	if len(domains) == 0 {
+		http.Error(w, "no resource data found for domain", 500)
+		return
+	}
+
+	ReturnJSON(w, 200, map[string]interface{}{"domain": domains[0]})
+}

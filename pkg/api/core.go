@@ -82,6 +82,7 @@ func NewV1Router(driver limes.Driver, config limes.APIConfiguration) (*mux.Route
 	})
 
 	r.Methods("GET").Path("/v1/domains").HandlerFunc(p.ListDomains)
+	r.Methods("GET").Path("/v1/domains/{domain_id}").HandlerFunc(p.GetDomain)
 
 	r.Methods("GET").Path("/v1/domains/{domain_id}/projects").HandlerFunc(p.ListProjects)
 	r.Methods("GET").Path("/v1/domains/{domain_id}/projects/{project_id}").HandlerFunc(p.GetProject)

@@ -20,6 +20,7 @@
 package api
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/sapcc/limes/pkg/test"
@@ -27,7 +28,16 @@ import (
 
 func Test_DomainOperations(t *testing.T) {
 	driver, router := testSetup(t)
-	_ = driver
+
+	domainUUID := driver.StaticDomains[0].UUID
+
+	//check GetDomain
+	test.APIRequest{
+		Method:           "GET",
+		Path:             fmt.Sprintf("/v1/domains/%s", domainUUID),
+		ExpectStatusCode: 200,
+		ExpectJSON:       "./fixtures/get-domain.json",
+	}.Check(t, router)
 
 	//check ListDomains
 	test.APIRequest{
