@@ -7,14 +7,14 @@
           "type": "unittest",
           "resources": [
             {
-              "type": "capacity",
+              "name": "capacity",
               "unit": "B",
               "quota": 0,
               "projects_quota": 200,
               "usage": 0
             },
             {
-              "type": "things",
+              "name": "things",
               "quota": 0,
               "projects_quota": 0,
               "usage": 46,
@@ -33,14 +33,14 @@
           "type": "unittest",
           "resources": [
             {
-              "type": "capacity",
+              "name": "capacity",
               "unit": "B",
               "quota": 0,
               "projects_quota": 100,
               "usage": 0
             },
             {
-              "type": "things",
+              "name": "things",
               "quota": 0,
               "projects_quota": 0,
               "usage": 23,

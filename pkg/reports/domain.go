@@ -48,7 +48,7 @@ type DomainService struct {
 //DomainResource is a substructure of Domain containing data for
 //a single resource.
 type DomainResource struct {
-	Name                 string     `json:"type"`
+	Name                 string     `json:"name"`
 	Unit                 limes.Unit `json:"unit,omitempty"`
 	DomainQuota          uint64     `json:"quota,keepempty"`
 	ProjectsQuota        uint64     `json:"projects_quota,keepempty"`
