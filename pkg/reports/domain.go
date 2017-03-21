@@ -117,13 +117,13 @@ var domainReportQuery2 = `
 //GetDomains returns Domain reports for all domains in the given cluster or, if
 //domainID is non-nil, for that domain only.
 func GetDomains(cluster *limes.ClusterConfiguration, domainID *int64, dbi db.Interface, filter Filter) ([]*Domain, error) {
-	//first query: data for projects in this domain
 	fields := map[string]interface{}{"d.cluster_id": cluster.ID}
 	if domainID != nil {
 		fields["d.id"] = *domainID
 	}
-	filter.ApplyTo(fields, "ps", "pr")
 	whereStr, queryArgs := db.BuildSimpleWhereClause(fields)
+
+	//first query: data for projects in this domain
 	rows, err := dbi.Query(fmt.Sprintf(domainReportQuery1, whereStr), queryArgs...)
 	if err != nil {
 		return nil, err
@@ -161,6 +161,10 @@ func GetDomains(cluster *limes.ClusterConfiguration, domainID *int64, dbi db.Int
 			domains[domainUUID] = domain
 		}
 
+		if !filter.MatchesService(serviceType) {
+			continue
+		}
+
 		service, exists := domain.Services[serviceType]
 		if !exists {
 			service = &DomainService{
@@ -170,6 +174,10 @@ func GetDomains(cluster *limes.ClusterConfiguration, domainID *int64, dbi db.Int
 				MinScrapedAt: time.Time(minScrapedAt).Unix(),
 			}
 			domain.Services[serviceType] = service
+		}
+
+		if !filter.MatchesResource(resourceName) {
+			continue
 		}
 
 		resource := &DomainResource{
@@ -200,12 +208,6 @@ func GetDomains(cluster *limes.ClusterConfiguration, domainID *int64, dbi db.Int
 	}
 
 	//second query: add domain quotas
-	fields = map[string]interface{}{"d.cluster_id": cluster.ID}
-	if domainID != nil {
-		fields["d.id"] = *domainID
-	}
-	filter.ApplyTo(fields, "ds", "dr")
-	whereStr, queryArgs = db.BuildSimpleWhereClause(fields)
 	rows, err = dbi.Query(fmt.Sprintf(domainReportQuery2, whereStr), queryArgs...)
 	if err != nil {
 		return nil, err

@@ -108,7 +108,6 @@ func GetProjects(cluster *limes.ClusterConfiguration, domainID int64, projectID 
 	if projectID != nil {
 		fields["p.id"] = *projectID
 	}
-	filter.ApplyTo(fields, "ps", "pr")
 
 	whereStr, queryArgs := db.BuildSimpleWhereClause(fields)
 	rows, err := dbi.Query(fmt.Sprintf(projectReportQuery, whereStr), queryArgs...)
@@ -145,6 +144,10 @@ func GetProjects(cluster *limes.ClusterConfiguration, domainID int64, projectID 
 			projects[projectUUID] = project
 		}
 
+		if !filter.MatchesService(serviceType) {
+			continue
+		}
+
 		service, exists := project.Services[serviceType]
 		if !exists {
 			service = &ProjectService{
@@ -153,6 +156,10 @@ func GetProjects(cluster *limes.ClusterConfiguration, domainID int64, projectID 
 				ScrapedAt: time.Time(scrapedAt).Unix(),
 			}
 			project.Services[serviceType] = service
+		}
+
+		if !filter.MatchesResource(resourceName) {
+			continue
 		}
 
 		resource := &ProjectResource{

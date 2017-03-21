@@ -121,6 +121,24 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectStatusCode: 200,
 		ExpectJSON:       "./fixtures/get-project.json",
 	}.Check(t, router)
+	test.APIRequest{
+		Method:           "GET",
+		Path:             fmt.Sprintf("/v1/domains/%s/projects/%s?service=unknown", domainUUID, projectUUID),
+		ExpectStatusCode: 200,
+		ExpectJSON:       "./fixtures/get-project-no-services.json",
+	}.Check(t, router)
+	test.APIRequest{
+		Method:           "GET",
+		Path:             fmt.Sprintf("/v1/domains/%s/projects/%s?service=unittest&resource=unknown", domainUUID, projectUUID),
+		ExpectStatusCode: 200,
+		ExpectJSON:       "./fixtures/get-project-no-resources.json",
+	}.Check(t, router)
+	test.APIRequest{
+		Method:           "GET",
+		Path:             fmt.Sprintf("/v1/domains/%s/projects/%s?service=unittest&resource=things", domainUUID, projectUUID),
+		ExpectStatusCode: 200,
+		ExpectJSON:       "./fixtures/get-project-filtered.json",
+	}.Check(t, router)
 
 	//TODO: check PutProject
 
