@@ -80,6 +80,9 @@ func NewV1Router(driver limes.Driver, config limes.APIConfiguration) (*mux.Route
 	r.Methods("GET").Path("/v1/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ReturnJSON(w, 200, map[string]interface{}{"version": p.VersionData})
 	})
+
+	r.Methods("GET").Path("/v1/domains").HandlerFunc(p.ListDomains)
+
 	r.Methods("GET").Path("/v1/domains/{domain_id}/projects").HandlerFunc(p.ListProjects)
 	r.Methods("GET").Path("/v1/domains/{domain_id}/projects/{project_id}").HandlerFunc(p.GetProject)
 	r.Methods("POST").Path("/v1/domains/{domain_id}/projects/discover").HandlerFunc(p.DiscoverProjects)

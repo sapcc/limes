@@ -48,6 +48,10 @@ func init() {
 	sql.Register("sqlite3-debug", &sqlproxy.Driver{
 		ProxiedDriverName: "sqlite3-limes", //this driver is defined in pkg/test/db.go
 		BeforeQueryHook:   traceQuery,
+		BeforePrepareHook: func(query string) (string, error) {
+			//rewrite Postgres function name into SQLite function name
+			return regexp.MustCompile(`\bGREATEST\b`).ReplaceAllString(query, "MAX"), nil
+		},
 	})
 }
 
@@ -178,4 +182,13 @@ func RollbackUnlessCommitted(tx *gorp.Transaction) {
 	default:
 		util.LogError("implicit rollback failed: %s", err.Error())
 	}
+}
+
+//Interface provides the common methods that both SQL connections and
+//transactions implement.
+type Interface interface {
+	Exec(query string, args ...interface{}) (sql.Result, error)
+	Prepare(query string) (*sql.Stmt, error)
+	Query(query string, args ...interface{}) (*sql.Rows, error)
+	QueryRow(query string, args ...interface{}) *sql.Row
 }

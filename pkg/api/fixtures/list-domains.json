@@ -1,0 +1,56 @@
+{
+  "domains": [
+    {
+      "id": "2131d24fee484da9be8671aa276360e0",
+      "services": [
+        {
+          "type": "unittest",
+          "resources": [
+            {
+              "type": "capacity",
+              "unit": "B",
+              "quota": 0,
+              "projects_quota": 200,
+              "usage": 0
+            },
+            {
+              "type": "things",
+              "quota": 0,
+              "projects_quota": 0,
+              "usage": 46,
+              "backend_quota": 84
+            }
+          ],
+          "max_scraped_at": 1,
+          "min_scraped_at": 1
+        }
+      ]
+    },
+    {
+      "id": "a2f0d9a6a8a0410f9881335f1fe0b538",
+      "services": [
+        {
+          "type": "unittest",
+          "resources": [
+            {
+              "type": "capacity",
+              "unit": "B",
+              "quota": 0,
+              "projects_quota": 100,
+              "usage": 0
+            },
+            {
+              "type": "things",
+              "quota": 0,
+              "projects_quota": 0,
+              "usage": 23,
+              "backend_quota": 42
+            }
+          ],
+          "max_scraped_at": 1,
+          "min_scraped_at": 1
+        }
+      ]
+    }
+  ]
+}

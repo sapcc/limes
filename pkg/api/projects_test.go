@@ -26,13 +26,14 @@ import (
 	"testing"
 
 	policy "github.com/databus23/goslo.policy"
+	"github.com/gorilla/mux"
 	"github.com/sapcc/limes/pkg/collector"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/test"
 )
 
-func testDriver(t *testing.T) *test.Driver {
+func testSetup(t *testing.T) (*test.Driver, *mux.Router) {
 	test.InitDatabase(t, "../test/migrations")
 
 	cluster := &limes.ClusterConfiguration{
@@ -83,12 +84,7 @@ func testDriver(t *testing.T) *test.Driver {
 		t.Fatal(err)
 	}
 
-	return driver
-}
-
-func Test_ProjectOperations(t *testing.T) {
-	driver := testDriver(t)
-
+	//load test policy (where everything is allowed)
 	policyBytes, err := ioutil.ReadFile("../test/policy.json")
 	if err != nil {
 		t.Fatal(err)
@@ -108,6 +104,12 @@ func Test_ProjectOperations(t *testing.T) {
 		PolicyFilePath: "", //irrelevant, only used for loading
 		PolicyEnforcer: enforcer,
 	})
+
+	return driver, router
+}
+
+func Test_ProjectOperations(t *testing.T) {
+	driver, router := testSetup(t)
 
 	domainUUID := driver.StaticDomains[0].UUID
 	projectUUID := driver.StaticProjects[domainUUID][0].UUID
