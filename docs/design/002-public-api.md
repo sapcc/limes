@@ -163,14 +163,9 @@ If `:domain_id` was given, the outer key is `domain` and its value is the object
 Looks a lot like the project data, but each resource has two quota values: `quota` is the quota assigned by the
 cloud-admin to the domain, and `projects_quota` is the sum of all quotas assigned to projects in that domain by the
 domain-admin. If the backing service has a different idea of the quota values than Limes does, then `backend_quota`
-shows the sum of all project quotas as seen by the backing service. If one of the backend quotas is infinite, then
-the `infinite_backend_quota` key is added as for aggregated project data.
-
-In contrast to project data, `scraped_at` is replaced by `min_scraped_at` and `max_scraped_at`, which aggregate over the
-`scraped_at` timestamps of all project data for that service and domain.
-
-If any of the aggregated backend quotas is `-1`, the `backend_quota` field will contain the sum of the
-*finite* quota values only, and an additional key `infinite_backend_quota` will be added. For example:
+shows the sum of all project quotas as seen by the backing service. If any of the aggregated backend quotas is
+`-1`, the `backend_quota` field will contain the sum of the *finite* quota values only, and an additional key
+`infinite_backend_quota` will be added. For example:
 
 ```js
 // resources before aggregation
@@ -182,7 +177,10 @@ If any of the aggregated backend quotas is `-1`, the `backend_quota` field will 
 { "quota": 20, "usage": 17, "backend_quota": 15, "infinite_backend_quota": true }
 ```
 
-TODO: Open question: Instead of aggregating backend quotas, maybe just include
+In contrast to project data, `scraped_at` is replaced by `min_scraped_at` and `max_scraped_at`, which aggregate over the
+`scraped_at` timestamps of all project data for that service and domain.
+
+**TODO:** Open question: Instead of aggregating backend quotas, maybe just include
 a `warnings` field that counts projects with `quota != backend_quota`?
 
 ## GET /clusters
