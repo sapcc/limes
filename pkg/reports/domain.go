@@ -22,6 +22,7 @@ package reports
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/sapcc/limes/pkg/db"
@@ -62,9 +63,15 @@ type DomainServices map[string]*DomainService
 
 //MarshalJSON implements the json.Marshaler interface.
 func (s DomainServices) MarshalJSON() ([]byte, error) {
-	list := make([]*DomainService, 0, len(s))
-	for _, srv := range s {
-		list = append(list, srv)
+	//serialize with ordered keys to ensure testcase stability
+	types := make([]string, 0, len(s))
+	for typeStr := range s {
+		types = append(types, typeStr)
+	}
+	sort.Strings(types)
+	list := make([]*DomainService, len(s))
+	for idx, typeStr := range types {
+		list[idx] = s[typeStr]
 	}
 	return json.Marshal(list)
 }
@@ -75,9 +82,15 @@ type DomainResources map[string]*DomainResource
 
 //MarshalJSON implements the json.Marshaler interface.
 func (r DomainResources) MarshalJSON() ([]byte, error) {
-	list := make([]*DomainResource, 0, len(r))
-	for _, res := range r {
-		list = append(list, res)
+	//serialize with ordered keys to ensure testcase stability
+	names := make([]string, 0, len(r))
+	for name := range r {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	list := make([]*DomainResource, len(r))
+	for idx, name := range names {
+		list[idx] = r[name]
 	}
 	return json.Marshal(list)
 }
