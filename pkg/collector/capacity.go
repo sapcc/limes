@@ -138,7 +138,7 @@ func (c *Collector) writeCapacity(values map[string]map[string]uint64, scrapedAt
 			serviceIDForType[dbService.Type] = dbService.ID
 			serviceTypeForID[dbService.ID] = dbService.Type
 		} else {
-			_, err := tx.Delete(&dbService)
+			_, err := tx.Delete(dbService)
 			if err != nil {
 				return err
 			}
@@ -153,7 +153,7 @@ func (c *Collector) writeCapacity(values map[string]map[string]uint64, scrapedAt
 			Type:      serviceType,
 			ScrapedAt: &scrapedAt,
 		}
-		err := tx.Insert(&dbService)
+		err := tx.Insert(dbService)
 		if err != nil {
 			return err
 		}
