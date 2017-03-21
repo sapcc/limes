@@ -21,6 +21,7 @@ package limes
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"strings"
@@ -174,6 +175,18 @@ func (cfg Configuration) validate() (success bool) {
 		//NOTE: cluster.RegionName is optional
 		if len(cluster.Services) == 0 {
 			missing("services[]")
+		}
+		//NOTE: cluster.Capacitors is optional
+
+		for idx, srv := range cluster.Services {
+			if srv.Type == "" {
+				missing(fmt.Sprintf("services[%d].type", idx))
+			}
+		}
+		for idx, capa := range cluster.Capacitors {
+			if capa.ID == "" {
+				missing(fmt.Sprintf("capacitors[%d].id", idx))
+			}
 		}
 	}
 
