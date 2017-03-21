@@ -23,7 +23,7 @@ space := $(null) $(null)
 comma := ,
 
 check: all static-check build/cover.html FORCE
-	echo -e "\e[1;32m>> All tests successful.\e[0m"
+	@echo -e "\e[1;32m>> All tests successful.\e[0m"
 prepare-check: FORCE $(patsubst pkg/db/%,pkg/test/%, $(wildcard pkg/db/migrations/*.sql))
 	@# Precompile a module used by the unit tests which takes a long time to compile because of cgo.
 	$(GO) install github.com/sapcc/limes/vendor/github.com/mattn/go-sqlite3

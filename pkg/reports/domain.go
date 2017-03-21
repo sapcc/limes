@@ -288,10 +288,15 @@ func GetDomains(cluster *limes.ClusterConfiguration, domainID *int64, dbi db.Int
 		}
 	}
 
-	//flatten result
-	result := make([]*Domain, 0, len(domains))
-	for _, domain := range domains {
-		result = append(result, domain)
+	//flatten result (with stable order to keep the tests happy)
+	uuids := make([]string, 0, len(domains))
+	for uuid := range domains {
+		uuids = append(uuids, uuid)
+	}
+	sort.Strings(uuids)
+	result := make([]*Domain, len(domains))
+	for idx, uuid := range uuids {
+		result[idx] = domains[uuid]
 	}
 
 	return result, nil
