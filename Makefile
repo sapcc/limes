@@ -1,5 +1,5 @@
 PKG    = github.com/sapcc/limes
-BINS   = collect migrate serve
+BINS   = collect migrate serve sync-with-elektra
 PREFIX := /usr
 
 all: $(addprefix build/limes-,$(BINS))
