@@ -112,27 +112,6 @@ func ReturnError(w http.ResponseWriter, err error) bool {
 	return true
 }
 
-//HasPermission checks if the user fulfills the given rule, by validating the
-//X-Auth-Token from the request and checking the policy file regarding that rule.
-func (p *v1Provider) HasPermission(rule string, w http.ResponseWriter, r *http.Request) bool {
-	tokenStr := r.Header.Get("X-Auth-Token")
-	if tokenStr == "" {
-		http.Error(w, "X-Auth-Token header missing", 400)
-		return false
-	}
-
-	allowed, err := p.Driver.CheckUserPermission(tokenStr, rule, p.Config.PolicyEnforcer, mux.Vars(r))
-	if err != nil {
-		http.Error(w, err.Error(), 401)
-		return false
-	}
-	if !allowed {
-		http.Error(w, "Unauthorized", 401)
-	}
-
-	return allowed
-}
-
 //Path constructs a full URL for a given URL path below the /v1/ endpoint.
 func (p *v1Provider) Path(elements ...string) string {
 	parts := []string{

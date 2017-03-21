@@ -76,7 +76,7 @@ func (d *Driver) ListProjects(domainUUID string) ([]limes.KeystoneProject, error
 	return d.StaticProjects[domainUUID], nil
 }
 
-//CheckUserPermission implements the limes.Driver interface.
-func (d *Driver) CheckUserPermission(token, rule string, enforcer *policy.Enforcer, requestParams map[string]string) (bool, error) {
-	return true, nil
+//ValidateToken implements the limes.Driver interface.
+func (d *Driver) ValidateToken(token string) (policy.Context, error) {
+	return policy.Context{}, nil
 }

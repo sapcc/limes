@@ -21,9 +21,11 @@ package main
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sapcc/limes/pkg/collector"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
@@ -58,32 +60,45 @@ func main() {
 		util.LogFatal(err.Error())
 	}
 
-	//start collector threads (NOTE: Many people use a pair of sync.WaitGroup and
+	//start scraping threads (NOTE: Many people use a pair of sync.WaitGroup and
 	//stop channel to shutdown threads in a controlled manner. I decided against
 	//that for now, and instead construct worker threads in such a way that they
 	//can be terminated at any time without leaving the system in an inconsistent
 	//state, mostly through usage of DB transactions.)
 	for _, service := range cluster.Services {
-		plugin := limes.GetPlugin(service.Type)
+		plugin := limes.GetQuotaPlugin(service.Type)
 		if plugin == nil {
 			util.LogError("skipping service %s: no suitable collector plugin found", service.Type)
 			continue
 		}
 		c := collector.NewCollector(driver, plugin)
 		go c.Scrape()
-		go c.ScanCapacity()
+	}
+
+	//complain about missing capacity plugins
+	for _, capacitor := range cluster.Capacitors {
+		plugin := limes.GetCapacityPlugin(capacitor.ID)
+		if plugin == nil {
+			util.LogError("skipping capacitor %s: no suitable collector plugin found", capacitor.ID)
+			continue
+		}
 	}
 
 	//start those collector threads which operate over all services simultaneously
 	c := collector.NewCollector(driver, nil)
 	go c.CheckConsistency()
-
-	//since we don't have to manage thread lifetime in the main thread, I use it to check Keystone regularly
-	for {
-		_, err := collector.ScanDomains(driver, collector.ScanDomainsOpts{ScanAllProjects: true})
-		if err != nil {
-			util.LogError(err.Error())
+	go c.ScanCapacity()
+	go func() {
+		for {
+			_, err := collector.ScanDomains(driver, collector.ScanDomainsOpts{ScanAllProjects: true})
+			if err != nil {
+				util.LogError(err.Error())
+			}
+			time.Sleep(discoverInterval)
 		}
-		time.Sleep(discoverInterval)
-	}
+	}()
+
+	//use main thread to emit Prometheus metrics
+	http.Handle("/metrics", promhttp.Handler())
+	util.LogFatal(http.ListenAndServe(config.Collector.MetricsListenAddress, nil).Error())
 }

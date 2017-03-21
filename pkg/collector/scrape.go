@@ -24,6 +24,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/util"
@@ -60,6 +61,7 @@ var findProjectQuery = `
 func (c *Collector) Scrape() {
 	serviceType := c.Plugin.ServiceType()
 	clusterID := c.Driver.Cluster().ID
+	labels := prometheus.Labels{"cluster": clusterID, "service": serviceType}
 
 	for {
 		var (
@@ -91,6 +93,7 @@ func (c *Collector) Scrape() {
 		resourceData, err := c.Plugin.Scrape(c.Driver, domainUUID, projectUUID)
 		if err != nil {
 			c.LogError("scrape %s data for %s/%s failed: %s", serviceType, domainName, projectName, err.Error())
+			scrapeFailedCounter.With(labels).Inc()
 			if c.Once {
 				return
 			}
@@ -101,6 +104,7 @@ func (c *Collector) Scrape() {
 		err = c.writeScrapeResult(serviceID, resourceData, c.TimeNow())
 		if err != nil {
 			c.LogError("write %s backend data for %s/%s failed: %s", serviceType, domainName, projectName, err.Error())
+			scrapeFailedCounter.With(labels).Inc()
 			if c.Once {
 				return
 			}
@@ -108,6 +112,7 @@ func (c *Collector) Scrape() {
 			continue
 		}
 
+		scrapeSuccessCounter.With(labels).Inc()
 		if c.Once {
 			break
 		}

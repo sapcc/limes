@@ -34,7 +34,7 @@ import (
 //the collector's unit tests.
 type Collector struct {
 	Driver limes.Driver
-	Plugin limes.Plugin
+	Plugin limes.QuotaPlugin
 	//Usually util.LogError, but can be changed inside unit tests.
 	LogError func(msg string, args ...interface{})
 	//Usually time.Now, but can be changed inside unit tests.
@@ -45,7 +45,7 @@ type Collector struct {
 }
 
 //NewCollector creates a Collector instance.
-func NewCollector(driver limes.Driver, plugin limes.Plugin) *Collector {
+func NewCollector(driver limes.Driver, plugin limes.QuotaPlugin) *Collector {
 	return &Collector{
 		Driver:   driver,
 		Plugin:   plugin,

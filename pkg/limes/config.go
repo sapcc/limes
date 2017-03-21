@@ -21,6 +21,7 @@ package limes
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"strings"
@@ -35,25 +36,28 @@ import (
 
 //Configuration contains all the data from the configuration file.
 type Configuration struct {
-	Database db.Configuration                 `yaml:"database"`
-	Clusters map[string]*ClusterConfiguration `yaml:"clusters"`
-	API      APIConfiguration                 `yaml:"api"`
+	Database  db.Configuration                 `yaml:"database"`
+	Clusters  map[string]*ClusterConfiguration `yaml:"clusters"`
+	API       APIConfiguration                 `yaml:"api"`
+	Collector CollectorConfiguration           `yaml:"collector"`
 }
 
 //ClusterConfiguration contains all the configuration data for a single cluster.
 //It is passed around in a lot of Limes code, mostly for the cluster ID and the
 //list of enabled services.
 type ClusterConfiguration struct {
-	ID                string                 `yaml:"-"`
-	AuthURL           string                 `yaml:"auth_url"`
-	UserName          string                 `yaml:"user_name"`
-	UserDomainName    string                 `yaml:"user_domain_name"`
-	ProjectName       string                 `yaml:"project_name"`
-	ProjectDomainName string                 `yaml:"project_domain_name"`
-	Password          string                 `yaml:"password"`
-	RegionName        string                 `yaml:"region_name"`
-	CatalogURL        string                 `yaml:"catalog_url"`
-	Services          []ServiceConfiguration `yaml:"services"`
+	ID                string                   `yaml:"-"`
+	AuthURL           string                   `yaml:"auth_url"`
+	UserName          string                   `yaml:"user_name"`
+	UserDomainName    string                   `yaml:"user_domain_name"`
+	ProjectName       string                   `yaml:"project_name"`
+	ProjectDomainName string                   `yaml:"project_domain_name"`
+	Password          string                   `yaml:"password"`
+	RegionName        string                   `yaml:"region_name"`
+	CatalogURL        string                   `yaml:"catalog_url"`
+	Services          []ServiceConfiguration   `yaml:"services"`
+	Capacitors        []CapacitorConfiguration `yaml:"capacitors"`
+	//Sorry for the stupid pun. Not.
 }
 
 //ServiceConfiguration describes a service that is enabled for a certain cluster.
@@ -62,11 +66,22 @@ type ServiceConfiguration struct {
 	Shared bool   `yaml:"shared"`
 }
 
-//APIConfiguration contains
+//CapacitorConfiguration describes a capacity plugin that is enabled for a
+//certain cluster.
+type CapacitorConfiguration struct {
+	ID string `yaml:"id"`
+}
+
+//APIConfiguration contains configuration parameters for limes-serve.
 type APIConfiguration struct {
 	ListenAddress  string           `yaml:"listen"`
 	PolicyFilePath string           `yaml:"policy"`
 	PolicyEnforcer *policy.Enforcer `yaml:"-"`
+}
+
+//CollectorConfiguration contains configuration parameters for limes-collect.
+type CollectorConfiguration struct {
+	MetricsListenAddress string `yaml:"metrics"`
 }
 
 //NewConfiguration reads and validates the given configuration file.
@@ -161,6 +176,18 @@ func (cfg Configuration) validate() (success bool) {
 		if len(cluster.Services) == 0 {
 			missing("services[]")
 		}
+		//NOTE: cluster.Capacitors is optional
+
+		for idx, srv := range cluster.Services {
+			if srv.Type == "" {
+				missing(fmt.Sprintf("services[%d].type", idx))
+			}
+		}
+		for idx, capa := range cluster.Capacitors {
+			if capa.ID == "" {
+				missing(fmt.Sprintf("capacitors[%d].id", idx))
+			}
+		}
 	}
 
 	if cfg.API.ListenAddress == "" {
@@ -168,6 +195,10 @@ func (cfg Configuration) validate() (success bool) {
 	}
 	if cfg.API.PolicyFilePath == "" {
 		missing("api.policy")
+	}
+
+	if cfg.Collector.MetricsListenAddress == "" {
+		missing("collector.metrics")
 	}
 
 	return

@@ -1,8 +1,16 @@
-hash: 97dac26ff9abab06b4659f615a311d38f8170b95b8338e03856bcd0ef44fd31d
-updated: 2017-03-14T15:32:56.688174851+01:00
+hash: 9c3a0a05080fa5b9ffd098a2c38046d8113d3980c57f5109949f9ef7c6296de7
+updated: 2017-03-21T10:15:55.446836385+01:00
 imports:
+- name: github.com/beorn7/perks
+  version: 4c0e84591b9aa9e6dcfdf3e020114cd81f89d5f9
+  subpackages:
+  - quantile
 - name: github.com/databus23/goslo.policy
   version: 3ae74dd07ebf48d1f2babbd1d2177cd1878a09ee
+- name: github.com/golang/protobuf
+  version: df1d3ca07d2d07bba352d5b73c4313b4e2a6203e
+  subpackages:
+  - proto
 - name: github.com/gophercloud/gophercloud
   version: 9a5595b8ffe429439c63781cdc312c254e4ad990
   subpackages:
@@ -14,6 +22,8 @@ imports:
   - openstack/identity/v3/tokens
   - openstack/utils
   - pagination
+- name: github.com/gorilla/context
+  version: 08b5f424b9271eedf6f9f0ce86cb9396ed337a42
 - name: github.com/gorilla/mux
   version: 392c28fe23e1c45ddba891b0320b3b5df220beea
 - name: github.com/lib/pq
@@ -34,6 +44,29 @@ imports:
   - pipe
 - name: github.com/mattn/go-sqlite3
   version: eac1dfa2a61ebccaa117538a5bb12044f6700cd0
+- name: github.com/matttproud/golang_protobuf_extensions
+  version: c12348ce28de40eed0136aa2b644d0ee0650e56c
+  subpackages:
+  - pbutil
+- name: github.com/prometheus/client_golang
+  version: c5b7fccd204277076155f10851dad72b76a49317
+  subpackages:
+  - prometheus
+  - prometheus/promhttp
+- name: github.com/prometheus/client_model
+  version: 6f3806018612930941127f2a7c6c453ba2c527d2
+  subpackages:
+  - go
+- name: github.com/prometheus/common
+  version: 49fee292b27bfff7f354ee0f64e1bc4850462edf
+  subpackages:
+  - expfmt
+  - internal/bitbucket.org/ww/goautoneg
+  - model
+- name: github.com/prometheus/procfs
+  version: a1dba9ce8baed984a2495b658c82687f8157b98f
+  subpackages:
+  - xfs
 - name: golang.org/x/net
   version: e90d6d0afc4c315a0d87a568ae68577cc15149a0
   subpackages:

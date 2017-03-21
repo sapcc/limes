@@ -41,7 +41,7 @@ type Driver interface {
 	/********** requests to Keystone **********/
 	ListDomains() ([]KeystoneDomain, error)
 	ListProjects(domainUUID string) ([]KeystoneProject, error)
-	CheckUserPermission(token, rule string, enforcer *policy.Enforcer, requestParams map[string]string) (bool, error)
+	ValidateToken(token string) (policy.Context, error)
 }
 
 //KeystoneDomain describes the basic attributes of a Keystone domain.
