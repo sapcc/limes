@@ -20,30 +20,14 @@
 package api
 
 import (
-	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/sapcc/limes/pkg/api/output"
 	"github.com/sapcc/limes/pkg/collector"
 	"github.com/sapcc/limes/pkg/db"
+	"github.com/sapcc/limes/pkg/reports"
 )
-
-var listProjectsQuery = `
-	SELECT p.uuid, ps.type, ps.scraped_at, pr.name, pr.quota, pr.usage, pr.backend_quota
-	  FROM projects p
-	  JOIN project_services ps ON ps.project_id = p.id
-	  JOIN project_resources pr ON pr.service_id = ps.id
-	 WHERE %s
-`
-
-var showProjectQuery = `
-	SELECT ps.type, ps.scraped_at, pr.name, pr.quota, pr.usage, pr.backend_quota
-	  FROM project_services ps
-	  JOIN project_resources pr ON pr.service_id = ps.id
-	 WHERE %s
-`
 
 //ListProjects handles GET /v1/domains/:domain_id/projects.
 func (p *v1Provider) ListProjects(w http.ResponseWriter, r *http.Request) {
@@ -55,51 +39,12 @@ func (p *v1Provider) ListProjects(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//execute SQL query
-	filters := map[string]interface{}{"p.domain_id": dbDomain.ID}
-	p.AddStandardFiltersFromURLQuery(filters, r)
-	whereStr, queryArgs := db.BuildSimpleWhereClause(filters)
-	queryStr := fmt.Sprintf(listProjectsQuery, whereStr)
-	rows, err := db.DB.Query(queryStr, queryArgs...)
+	projects, err := reports.GetProjects(p.Driver.Cluster(), dbDomain.ID, nil, db.DB, reports.ReadFilter(r))
 	if ReturnError(w, err) {
 		return
 	}
 
-	//accumulate data into result
-	var (
-		projects             output.Scopes
-		projectUUID          string
-		serviceType          string
-		serviceScrapedAt     time.Time
-		resourceName         string
-		resourceQuota        int64
-		resourceUsage        uint64
-		resourceBackendQuota int64
-	)
-	for rows.Next() {
-		err := rows.Scan(
-			&projectUUID, &serviceType, &serviceScrapedAt,
-			&resourceName, &resourceQuota, &resourceUsage, &resourceBackendQuota,
-		)
-		if ReturnError(w, err) {
-			return
-		}
-
-		proj := projects.FindScope(projectUUID)
-		srv := proj.FindService(serviceType)
-		srv.ScrapedAt = serviceScrapedAt.Unix()
-		res := srv.FindResource(resourceName)
-		res.Set(resourceQuota, resourceUsage, resourceBackendQuota)
-	}
-	if ReturnError(w, rows.Err()) {
-		return
-	}
-	if ReturnError(w, rows.Close()) {
-		return
-	}
-
-	//TODO: ensure that service list is equal to the one in the cluster configuration (can be off in both directions!)
-	ReturnJSON(w, 200, map[string]interface{}{"projects": projects.Scopes})
+	ReturnJSON(w, 200, map[string]interface{}{"projects": projects})
 }
 
 //GetProject handles GET /v1/domains/:domain_id/projects/:project_id.
@@ -116,50 +61,16 @@ func (p *v1Provider) GetProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//execute SQL query
-	filters := map[string]interface{}{"ps.project_id": dbProject.ID}
-	p.AddStandardFiltersFromURLQuery(filters, r)
-	whereStr, queryArgs := db.BuildSimpleWhereClause(filters)
-	queryStr := fmt.Sprintf(showProjectQuery, whereStr)
-	rows, err := db.DB.Query(queryStr, queryArgs...)
+	projects, err := reports.GetProjects(p.Driver.Cluster(), dbDomain.ID, &dbProject.ID, db.DB, reports.ReadFilter(r))
 	if ReturnError(w, err) {
 		return
 	}
-
-	//accumulate data into result
-	var (
-		project              output.Scope
-		serviceType          string
-		serviceScrapedAt     time.Time
-		resourceName         string
-		resourceQuota        int64
-		resourceUsage        uint64
-		resourceBackendQuota int64
-	)
-	project.ID = dbProject.UUID
-	for rows.Next() {
-		err := rows.Scan(
-			&serviceType, &serviceScrapedAt,
-			&resourceName, &resourceQuota, &resourceUsage, &resourceBackendQuota,
-		)
-		if ReturnError(w, err) {
-			return
-		}
-
-		srv := project.FindService(serviceType)
-		srv.ScrapedAt = serviceScrapedAt.Unix()
-		res := srv.FindResource(resourceName)
-		res.Set(resourceQuota, resourceUsage, resourceBackendQuota)
-	}
-	if ReturnError(w, rows.Err()) {
-		return
-	}
-	if ReturnError(w, rows.Close()) {
+	if len(projects) == 0 {
+		http.Error(w, "no resource data found for project", 500)
 		return
 	}
 
-	//TODO: ensure that service list is equal to the one in the cluster configuration (can be off in both directions!)
-	ReturnJSON(w, 200, map[string]interface{}{"project": project})
+	ReturnJSON(w, 200, map[string]interface{}{"project": projects[0]})
 }
 
 //DiscoverProjects handles POST /v1/domains/:domain_id/projects/discover.

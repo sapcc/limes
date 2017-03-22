@@ -61,7 +61,11 @@ var findProjectQuery = `
 func (c *Collector) Scrape() {
 	serviceType := c.Plugin.ServiceType()
 	clusterID := c.Driver.Cluster().ID
+
+	//make sure that the counters are reported
 	labels := prometheus.Labels{"cluster": clusterID, "service": serviceType}
+	scrapeSuccessCounter.With(labels).Add(0)
+	scrapeFailedCounter.With(labels).Add(0)
 
 	for {
 		var (

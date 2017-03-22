@@ -80,6 +80,10 @@ func NewV1Router(driver limes.Driver, config limes.APIConfiguration) (*mux.Route
 	r.Methods("GET").Path("/v1/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ReturnJSON(w, 200, map[string]interface{}{"version": p.VersionData})
 	})
+
+	r.Methods("GET").Path("/v1/domains").HandlerFunc(p.ListDomains)
+	r.Methods("GET").Path("/v1/domains/{domain_id}").HandlerFunc(p.GetDomain)
+
 	r.Methods("GET").Path("/v1/domains/{domain_id}/projects").HandlerFunc(p.ListProjects)
 	r.Methods("GET").Path("/v1/domains/{domain_id}/projects/{project_id}").HandlerFunc(p.GetProject)
 	r.Methods("POST").Path("/v1/domains/{domain_id}/projects/discover").HandlerFunc(p.DiscoverProjects)
@@ -184,17 +188,5 @@ func (p *v1Provider) FindProjectFromRequestIfExists(w http.ResponseWriter, r *ht
 		return nil, false
 	default:
 		return project, true
-	}
-}
-
-//AddStandardFiltersFromURLQuery handles the standard URL query parameters
-//"service" and "resource" that nearly all GET endpoints accept.
-func (p *v1Provider) AddStandardFiltersFromURLQuery(filters map[string]interface{}, r *http.Request) {
-	queryValues := r.URL.Query()
-	if services, ok := queryValues["service"]; ok {
-		filters["ps.type"] = services
-	}
-	if resources, ok := queryValues["resource"]; ok {
-		filters["pr.name"] = resources
 	}
 }

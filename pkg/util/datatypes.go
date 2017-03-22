@@ -17,27 +17,27 @@
 *
 *******************************************************************************/
 
-package output
+package util
 
-import "github.com/sapcc/limes/pkg/limes"
+import (
+	"fmt"
+	"time"
+)
 
-//Resource contains data about a backend service in the format returned by the API.
-type Resource struct {
-	Name  string     `json:"name"`
-	Unit  limes.Unit `json:"unit,omitempty"`
-	Quota int64      `json:"quota,keepempty"`
-	Usage uint64     `json:"usage,keepempty"`
-	//This is a pointer to a value to enable precise control over whether this field is rendered in output.
-	BackendQuota *int64 `json:"backend_quota,omitempty"`
-}
+//Time is like time.Time, but can be scanned from a SQLite query where the
+//result is an int64 (a UNIX timestamp).
+type Time time.Time
 
-//Set writes the given quota and usage values into this Resource.
-func (r *Resource) Set(quota int64, usage uint64, backendQuota int64) {
-	r.Quota = quota
-	r.Usage = usage
-	if backendQuota == quota {
-		r.BackendQuota = nil
-	} else {
-		r.BackendQuota = &backendQuota
+//Scan implements the sql.Scanner interface.
+func (t *Time) Scan(src interface{}) error {
+	switch val := src.(type) {
+	case int64:
+		*t = Time(time.Unix(val, 0))
+		return nil
+	case time.Time:
+		*t = Time(val)
+		return nil
+	default:
+		return fmt.Errorf("cannot scan %t into util.Time", val)
 	}
 }
