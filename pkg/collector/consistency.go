@@ -74,7 +74,7 @@ func (c *Collector) checkConsistencyDomain(domain db.Domain) {
 		if isServiceEnabled[service.Type] {
 			continue
 		}
-		util.LogInfo("cleaning up %s service entry for domain %s", service.Type)
+		util.LogInfo("cleaning up %s service entry for domain %s", service.Type, domain.Name)
 		_, err := db.DB.Delete(&service)
 		if err != nil {
 			c.LogError(err.Error())
@@ -86,7 +86,7 @@ func (c *Collector) checkConsistencyDomain(domain db.Domain) {
 		if seen[serviceType] {
 			continue
 		}
-		util.LogInfo("creating missing %s service entry for domain %s", serviceType)
+		util.LogInfo("creating missing %s service entry for domain %s", serviceType, domain.Name)
 		err := db.DB.Insert(&db.DomainService{
 			DomainID: domain.ID,
 			Type:     serviceType,
@@ -105,11 +105,11 @@ func (c *Collector) checkConsistencyDomain(domain db.Domain) {
 	}
 
 	for _, project := range projects {
-		c.checkConsistencyProject(project)
+		c.checkConsistencyProject(project, domain)
 	}
 }
 
-func (c *Collector) checkConsistencyProject(project db.Project) {
+func (c *Collector) checkConsistencyProject(project db.Project, domain db.Domain) {
 	enabledServices, isServiceEnabled := c.enumerateEnabledServices()
 
 	//check project_services entries
@@ -127,7 +127,7 @@ func (c *Collector) checkConsistencyProject(project db.Project) {
 		if isServiceEnabled[service.Type] {
 			continue
 		}
-		util.LogInfo("cleaning up %s service entry for project %s", service.Type)
+		util.LogInfo("cleaning up %s service entry for project %s/%s", service.Type, domain.Name, project.Name)
 		_, err := db.DB.Delete(&service)
 		if err != nil {
 			c.LogError(err.Error())
@@ -139,7 +139,7 @@ func (c *Collector) checkConsistencyProject(project db.Project) {
 		if seen[serviceType] {
 			continue
 		}
-		util.LogInfo("creating missing %s service entry for project %s", serviceType)
+		util.LogInfo("creating missing %s service entry for project %s/%s", serviceType, domain.Name, project.Name)
 		err := db.DB.Insert(&db.ProjectService{
 			ProjectID: project.ID,
 			Type:      serviceType,
