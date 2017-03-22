@@ -81,14 +81,19 @@ func NewV1Router(driver limes.Driver, config limes.APIConfiguration) (*mux.Route
 		ReturnJSON(w, 200, map[string]interface{}{"version": p.VersionData})
 	})
 
+	// r.Methods("GET").Path("/v1/clusters").HandlerFunc(p.ListClusters)
+	// r.Methods("GET").Path("/v1/clusters/{cluster_id}").HandlerFunc(p.GetCluster)
+
 	r.Methods("GET").Path("/v1/domains").HandlerFunc(p.ListDomains)
 	r.Methods("GET").Path("/v1/domains/{domain_id}").HandlerFunc(p.GetDomain)
 	r.Methods("POST").Path("/v1/domains/discover").HandlerFunc(p.DiscoverDomains)
+	// r.Methods("PUT").Path("/v1/domains/{domain_id}").HandlerFunc(p.PutDomain)
 
 	r.Methods("GET").Path("/v1/domains/{domain_id}/projects").HandlerFunc(p.ListProjects)
 	r.Methods("GET").Path("/v1/domains/{domain_id}/projects/{project_id}").HandlerFunc(p.GetProject)
 	r.Methods("POST").Path("/v1/domains/{domain_id}/projects/discover").HandlerFunc(p.DiscoverProjects)
 	r.Methods("POST").Path("/v1/domains/{domain_id}/projects/{project_id}/sync").HandlerFunc(p.SyncProject)
+	// r.Methods("PUT").Path("/v1/domains/{domain_id}/projects/{project_id}").HandlerFunc(p.PutProject)
 
 	return r, p.VersionData
 }
