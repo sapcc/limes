@@ -240,7 +240,9 @@ Returns 200 (OK) on success. Result is a JSON document like:
           "min_scraped_at": 1486723778
         },
         ...
-      ]
+      ],
+      "max_scraped_at": 1486712957,
+      "min_scraped_at": 1486701582
     },
     ...
   ]
@@ -253,8 +255,12 @@ Clusters do not have a quota, but they are constrained by the `capacity` for eac
 behaves just like the `projects_quota` key on domain level. Discrepancies between project quotas in Limes and in backing
 services will not be shown on this level, so there is no `backend_quota` key.
 
-Like with domain data, there are `min_scraped_at` and `max_scraped_at` timestamps for each service, aggregating over all
-project data in the whole cloud.
+The `min_scraped_at` and `max_scraped_at` timestamps on the service level refer to the usage values (aggregated over all
+projects just like for `GET /domains`).
+
+The `min_scraped_at` and `max_scraped_at` timestamps on the cluster level refer to the cluster capacity values. Capacity
+plugins (and thus, capacity scraping events) are not bound to a single service, which is why the scraping timestamps
+cannot be shown on the service level here.
 
 For resources belonging to a cluster-local service (the default), the reported quota and usage is aggregated only over
 domains in this cluster. For resources belonging to a shared service, the reported quota and usage is aggregated over
