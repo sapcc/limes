@@ -23,10 +23,10 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-	"github.com/sapcc/limes/pkg/api/output"
 	"github.com/sapcc/limes/pkg/collector"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/reports"
+	"github.com/sapcc/limes/pkg/util"
 )
 
 //ListProjects handles GET /v1/domains/:domain_id/projects.
@@ -88,8 +88,7 @@ func (p *v1Provider) DiscoverProjects(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result := output.NewScopesFromIDList(newProjectUUIDs)
-	ReturnJSON(w, 202, map[string]interface{}{"new_projects": result})
+	ReturnJSON(w, 202, map[string]interface{}{"new_projects": util.IDsToJSON(newProjectUUIDs)})
 }
 
 //SyncProject handles POST /v1/domains/:domain_id/projects/sync.
