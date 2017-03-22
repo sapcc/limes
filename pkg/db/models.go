@@ -88,6 +88,8 @@ type ProjectResource struct {
 //It's available as an exported function because the unit tests need to call
 //this while bypassing the normal Init() logic.
 func InitGorp() {
+	DB.AddTableWithName(ClusterService{}, "cluster_services").SetKeys(true, "id")
+	DB.AddTableWithName(ClusterResource{}, "cluster_resources").SetKeys(false, "service_id", "name")
 	DB.AddTableWithName(Domain{}, "domains").SetKeys(true, "id")
 	DB.AddTableWithName(DomainService{}, "domain_services").SetKeys(true, "id")
 	DB.AddTableWithName(DomainResource{}, "domain_resources").SetKeys(false, "service_id", "name")

@@ -52,7 +52,7 @@ type DomainResource struct {
 	Unit          limes.Unit `json:"unit,omitempty"`
 	DomainQuota   uint64     `json:"quota,keepempty"`
 	ProjectsQuota uint64     `json:"projects_quota,keepempty"`
-	Usage         uint64     `json:"usage,,keepemptykeepempty"`
+	Usage         uint64     `json:"usage,keepempty"`
 	//These are pointers to values to enable precise control over whether this field is rendered in output.
 	BackendQuota         *uint64 `json:"backend_quota,omitempty"`
 	InfiniteBackendQuota *bool   `json:"infinite_backend_quota,omitempty"`

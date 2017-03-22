@@ -17,20 +17,17 @@
 *
 *******************************************************************************/
 
-package output
+package util
 
-//NewScope contains data about a newly discovered domain or project in the
-//format returned by the API.
-type NewScope struct {
-	ID string `json:"id"`
-}
-
-//NewScopesFromIDList prepares a list of IDs of newly discovered projects and
-//domains for JSON serialization.
-func NewScopesFromIDList(ids []string) []NewScope {
-	result := make([]NewScope, len(ids))
-	for idx, id := range ids {
-		result[idx].ID = id
+//IDsToJSON embeds a list of string IDs in a data structure that serializes to
+//JSON like [{"id":"first"},{"id":"second"}].
+func IDsToJSON(ids []string) interface{} {
+	type id struct {
+		ID string `json:"id"`
+	}
+	result := make([]id, len(ids))
+	for idx, str := range ids {
+		result[idx].ID = str
 	}
 	return result
 }

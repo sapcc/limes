@@ -99,10 +99,10 @@ func testSetup(t *testing.T) (*test.Driver, *mux.Router) {
 		t.Fatal(err)
 	}
 
-	router, _ := NewV1Router(driver, limes.APIConfiguration{
-		ListenAddress:  "", //irrelevant, we do not listen
-		PolicyFilePath: "", //irrelevant, only used for loading
-		PolicyEnforcer: enforcer,
+	router, _ := NewV1Router(driver, limes.Configuration{
+		API: limes.APIConfiguration{
+			PolicyEnforcer: enforcer,
+		},
 	})
 
 	return driver, router

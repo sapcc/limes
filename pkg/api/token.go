@@ -44,7 +44,7 @@ func (p *v1Provider) CheckToken(r *http.Request) *Token {
 		return &Token{err: errors.New("X-Auth-Token header missing")}
 	}
 
-	t := &Token{enforcer: p.Config.PolicyEnforcer}
+	t := &Token{enforcer: p.Config.API.PolicyEnforcer}
 	t.context, t.err = p.Driver.ValidateToken(str)
 	t.context.Request = mux.Vars(r)
 	return t

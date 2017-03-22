@@ -22,8 +22,10 @@ package api
 import (
 	"net/http"
 
+	"github.com/sapcc/limes/pkg/collector"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/reports"
+	"github.com/sapcc/limes/pkg/util"
 )
 
 //ListDomains handles GET /v1/domains.
@@ -60,4 +62,18 @@ func (p *v1Provider) GetDomain(w http.ResponseWriter, r *http.Request) {
 	}
 
 	ReturnJSON(w, 200, map[string]interface{}{"domain": domains[0]})
+}
+
+//DiscoverDomains handles POST /v1/domains/discover.
+func (p *v1Provider) DiscoverDomains(w http.ResponseWriter, r *http.Request) {
+	if !p.CheckToken(r).Require(w, "domain:discover") {
+		return
+	}
+
+	newDomainUUIDs, err := collector.ScanDomains(p.Driver, collector.ScanDomainsOpts{})
+	if ReturnError(w, err) {
+		return
+	}
+
+	ReturnJSON(w, 202, map[string]interface{}{"new_domains": util.IDsToJSON(newDomainUUIDs)})
 }
