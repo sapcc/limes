@@ -58,7 +58,7 @@ func main() {
 
 	//hook up the v1 API (this code is structured so that a newer API version can
 	//be added easily later)
-	v1Router, v1VersionData := api.NewV1Router(driver, config.API)
+	v1Router, v1VersionData := api.NewV1Router(driver, config)
 	http.Handle("/v1/", v1Router)
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

@@ -48,14 +48,14 @@ type VersionLinkData struct {
 
 type v1Provider struct {
 	Driver      limes.Driver
-	Config      limes.APIConfiguration
+	Config      limes.Configuration
 	VersionData VersionData
 }
 
 //NewV1Router creates a mux.Router that serves the Limes v1 API.
 //It also returns the VersionData for this API version which is needed for the
 //version advertisement on "GET /".
-func NewV1Router(driver limes.Driver, config limes.APIConfiguration) (*mux.Router, VersionData) {
+func NewV1Router(driver limes.Driver, config limes.Configuration) (*mux.Router, VersionData) {
 	r := mux.NewRouter()
 	p := &v1Provider{
 		Driver: driver,
@@ -81,8 +81,8 @@ func NewV1Router(driver limes.Driver, config limes.APIConfiguration) (*mux.Route
 		ReturnJSON(w, 200, map[string]interface{}{"version": p.VersionData})
 	})
 
-	// r.Methods("GET").Path("/v1/clusters").HandlerFunc(p.ListClusters)
-	// r.Methods("GET").Path("/v1/clusters/{cluster_id}").HandlerFunc(p.GetCluster)
+	r.Methods("GET").Path("/v1/clusters").HandlerFunc(p.ListClusters)
+	r.Methods("GET").Path("/v1/clusters/{cluster_id}").HandlerFunc(p.GetCluster)
 
 	r.Methods("GET").Path("/v1/domains").HandlerFunc(p.ListDomains)
 	r.Methods("GET").Path("/v1/domains/{domain_id}").HandlerFunc(p.GetDomain)
