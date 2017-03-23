@@ -1,0 +1,47 @@
+{
+  "cluster": {
+    "id": "west",
+    "services": [
+      {
+        "type": "shared",
+        "resources": [
+          {
+            "name": "capacity",
+            "unit": "B",
+            "domains_quota": 50,
+            "usage": 8
+          },
+          {
+            "name": "things",
+            "capacity": 246,
+            "domains_quota": 90,
+            "usage": 8
+          }
+        ],
+        "max_scraped_at": 66,
+        "min_scraped_at": 22
+      },
+      {
+        "type": "unshared",
+        "resources": [
+          {
+            "name": "capacity",
+            "unit": "B",
+            "domains_quota": 100,
+            "usage": 6
+          },
+          {
+            "name": "things",
+            "capacity": 139,
+            "domains_quota": 70,
+            "usage": 6
+          }
+        ],
+        "max_scraped_at": 55,
+        "min_scraped_at": 11
+      }
+    ],
+    "max_scraped_at": 1100,
+    "min_scraped_at": 1000
+  }
+}

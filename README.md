@@ -8,8 +8,6 @@ Limes is an OpenStack-compatible quota/usage tracking service, originally design
 
 Pronounce the name like the [Ancient Roman border wall][wp-limes], not like the fruit.
 
-**WARNING:** This is still in pre-alpha stage. Most notably, the API component is completely missing, and there are no tests yet.
-
 # Installation
 
 There's a Makefile, so do:
