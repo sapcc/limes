@@ -24,6 +24,7 @@ import (
 	"database/sql"
 	"database/sql/driver"
 	"fmt"
+	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -84,6 +85,27 @@ func InitDatabase(t *testing.T, migrationsPath string) {
 	}
 	db.DB = &gorp.DbMap{Db: sqliteDB, Dialect: gorp.SqliteDialect{}}
 	db.InitGorp()
+}
+
+//ExecSQLFile loads a file containing SQL statements and executes them all.
+//It implies that every SQL statement is on a single line.
+func ExecSQLFile(t *testing.T, path string) {
+	sqlBytes, err := ioutil.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	//split into single statements because db.DB.Exec() will just ignore everything after the first semicolon
+	for _, line := range strings.Split(string(sqlBytes), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "--") {
+			continue
+		}
+		_, err = db.DB.Exec(line)
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 //AssertDBContent makes a dump of the database contents (as a sequence of

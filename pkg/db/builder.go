@@ -20,6 +20,7 @@
 package db
 
 import (
+	"database/sql"
 	"fmt"
 	"strings"
 )
@@ -47,6 +48,10 @@ func BuildSimpleWhereClause(fields map[string]interface{}) (queryFragment string
 		}
 	}
 
+	if len(conditions) == 0 {
+		return "TRUE", nil
+	}
+
 	return strings.Join(conditions, " AND "), args
 }
 
@@ -56,4 +61,23 @@ func makePlaceholderList(count, offset int) string {
 		placeholders[idx] = fmt.Sprintf("$%d", offset+idx)
 	}
 	return strings.Join(placeholders, ",")
+}
+
+//ForeachRow calls the given action one for every row in the given sql.Rows
+//instance. It then cleans up the sql.Rows and handles any errors that occur
+//during that or during the iteration.
+func ForeachRow(rows *sql.Rows, action func() error) error {
+	for rows.Next() {
+		err := action()
+		if err != nil {
+			rows.Close()
+			return err
+		}
+	}
+	err := rows.Err()
+	if err != nil {
+		rows.Close()
+		return err
+	}
+	return rows.Close()
 }

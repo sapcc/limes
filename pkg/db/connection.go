@@ -50,7 +50,10 @@ func init() {
 		BeforeQueryHook:   traceQuery,
 		BeforePrepareHook: func(query string) (string, error) {
 			//rewrite Postgres function name into SQLite function name
-			return regexp.MustCompile(`\bGREATEST\b`).ReplaceAllString(query, "MAX"), nil
+			query = regexp.MustCompile(`\bGREATEST\b`).ReplaceAllString(query, "MAX")
+			//Postgres is okay with a no-op "WHERE TRUE" clause, but SQLite does not know the TRUE literal
+			query = regexp.MustCompile(`\bWHERE TRUE\s*(GROUP|LIMIT|ORDER|$)`).ReplaceAllString(query, "$1")
+			return query, nil
 		},
 	})
 }

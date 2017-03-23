@@ -56,3 +56,22 @@ func (f Filter) MatchesService(serviceType string) bool {
 func (f Filter) MatchesResource(resourceName string) bool {
 	return f.isResourceName == nil || f.isResourceName[resourceName]
 }
+
+//ApplyTo adds this filter to a field-value map that is going to be passed into
+//db.BuildSimpleWhereClause.
+func (f Filter) ApplyTo(fields map[string]interface{}, tableWithServiceType, tableWithResourceName string) {
+	if f.isServiceType != nil {
+		list := make([]string, 0, len(f.isServiceType))
+		for srv := range f.isServiceType {
+			list = append(list, srv)
+		}
+		fields[tableWithServiceType+".type"] = list
+	}
+	if f.isResourceName != nil {
+		list := make([]string, 0, len(f.isResourceName))
+		for res := range f.isResourceName {
+			list = append(list, res)
+		}
+		fields[tableWithResourceName+".name"] = list
+	}
+}

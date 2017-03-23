@@ -21,19 +21,21 @@ package reports
 
 import (
 	"encoding/json"
-	"errors"
+	"fmt"
 	"sort"
+	"time"
 
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
+	"github.com/sapcc/limes/pkg/util"
 )
 
 //Cluster contains aggregated data about resource usage in a cluster.
 type Cluster struct {
-	UUID         string          `json:"id"`
+	ID           string          `json:"id"`
 	Services     ClusterServices `json:"services,keepempty"`
-	MaxScrapedAt int64           `json:"max_scraped_at,keepempty"`
-	MinScrapedAt int64           `json:"min_scraped_at,keepempty"`
+	MaxScrapedAt *int64          `json:"max_scraped_at,keepempty"`
+	MinScrapedAt *int64          `json:"min_scraped_at,keepempty"`
 }
 
 //ClusterService is a substructure of Cluster containing data for
@@ -50,7 +52,7 @@ type ClusterService struct {
 type ClusterResource struct {
 	Name         string     `json:"name"`
 	Unit         limes.Unit `json:"unit,omitempty"`
-	Capacity     *uint64    `json:"capacity,keepempty"`
+	Capacity     *uint64    `json:"capacity,omitempty"`
 	DomainsQuota uint64     `json:"domains_quota,keepempty"`
 	Usage        uint64     `json:"usage,keepempty"`
 }
@@ -111,10 +113,24 @@ var clusterReportQuery2 = `
 `
 
 var clusterReportQuery3 = `
-	SELECT cs.cluster_id, cs.type, cr.name, cr.capacity
+	SELECT cs.cluster_id, cs.type, cr.name, cr.capacity, cs.scraped_at
 	  FROM cluster_services cs
 	  JOIN cluster_resources cr ON cr.service_id = cs.id
 	 WHERE %s
+`
+
+var clusterReportQuery4 = `
+	SELECT ds.type, dr.name, SUM(dr.quota)
+	  FROM domain_services ds
+	  JOIN domain_resources dr ON dr.service_id = ds.id
+	 WHERE %s GROUP BY ds.type, dr.name
+`
+
+var clusterReportQuery5 = `
+	SELECT ps.type, pr.name, SUM(pr.usage)
+	  FROM project_services ps
+	  JOIN project_resources pr ON pr.service_id = ps.id
+	 WHERE %s GROUP BY ps.type, pr.name
 `
 
 //GetClusters returns Cluster reports for al clusters or, if clusterID is
@@ -124,6 +140,282 @@ var clusterReportQuery3 = `
 //limes.Configuration (instead of just the current limes.ClusterConfiguration)
 //to look at the services enabled in other clusters.
 func GetClusters(config limes.Configuration, clusterID *string, dbi db.Interface, filter Filter) ([]*Cluster, error) {
-	//TODO: implement (keep in mind the "shared" flag on cluster services)
-	return nil, errors.New("stub")
+	//first query: collect project usage data in these clusters
+	whereStr, queryArgs := db.BuildSimpleWhereClause(makeClusterFilter("d", "ps", "pr", clusterID, filter))
+	rows, err := dbi.Query(fmt.Sprintf(clusterReportQuery1, whereStr), queryArgs...)
+	if err != nil {
+		return nil, err
+	}
+
+	clusters := make(clusters)
+	err = db.ForeachRow(rows, func() error {
+		var (
+			clusterID    string
+			serviceType  string
+			resourceName string
+			usage        uint64
+			minScrapedAt util.Time
+			maxScrapedAt util.Time
+		)
+		err := rows.Scan(&clusterID, &serviceType, &resourceName, &usage, &minScrapedAt, &maxScrapedAt)
+		if err != nil {
+			return err
+		}
+
+		_, service, resource := clusters.Find(clusterID, serviceType, resourceName)
+		service.MaxScrapedAt = time.Time(maxScrapedAt).Unix()
+		service.MinScrapedAt = time.Time(minScrapedAt).Unix()
+		resource.Usage = usage
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	//second query: collect domain quota data in these clusters
+	whereStr, queryArgs = db.BuildSimpleWhereClause(makeClusterFilter("d", "ds", "dr", clusterID, filter))
+	rows, err = dbi.Query(fmt.Sprintf(clusterReportQuery2, whereStr), queryArgs...)
+	if err != nil {
+		return nil, err
+	}
+
+	err = db.ForeachRow(rows, func() error {
+		var (
+			clusterID    string
+			serviceType  string
+			resourceName string
+			quota        uint64
+		)
+		err := rows.Scan(&clusterID, &serviceType, &resourceName, &quota)
+		if err != nil {
+			return err
+		}
+
+		_, _, resource := clusters.Find(clusterID, serviceType, resourceName)
+		resource.DomainsQuota = quota
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	//third query: collect capacity data for these clusters
+	whereStr, queryArgs = db.BuildSimpleWhereClause(makeClusterFilter("cs", "cs", "cr", clusterID, filter))
+	rows, err = dbi.Query(fmt.Sprintf(clusterReportQuery3, whereStr), queryArgs...)
+	if err != nil {
+		return nil, err
+	}
+
+	err = db.ForeachRow(rows, func() error {
+		var (
+			clusterID    string
+			serviceType  string
+			resourceName string
+			capacity     uint64
+			scrapedAt    util.Time
+		)
+		err := rows.Scan(&clusterID, &serviceType, &resourceName, &capacity, &scrapedAt)
+		if err != nil {
+			return err
+		}
+
+		cluster, _, resource := clusters.Find(clusterID, serviceType, resourceName)
+		resource.Capacity = &capacity
+
+		scrapedAtUnix := time.Time(scrapedAt).Unix()
+		if cluster.MaxScrapedAt == nil || *cluster.MaxScrapedAt < scrapedAtUnix {
+			cluster.MaxScrapedAt = &scrapedAtUnix
+		}
+		if cluster.MinScrapedAt == nil || *cluster.MinScrapedAt > scrapedAtUnix {
+			cluster.MinScrapedAt = &scrapedAtUnix
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	//validate against known services/resources
+	isSharedService := make(map[string]bool)
+	for clusterID, cluster := range clusters {
+		clusterConfig, exists := config.Clusters[clusterID]
+		if !exists {
+			delete(clusters, clusterID)
+			continue
+		}
+
+		isValidService := make(map[string]bool)
+		for _, serviceConfig := range clusterConfig.Services {
+			isValidService[serviceConfig.Type] = true
+			if serviceConfig.Shared {
+				isSharedService[serviceConfig.Type] = true
+			}
+		}
+
+		for serviceType, service := range cluster.Services {
+			if !isValidService[serviceType] {
+				delete(cluster.Services, serviceType)
+				continue
+			}
+
+			isValidResource := make(map[string]bool)
+			if plugin := limes.GetQuotaPlugin(serviceType); plugin != nil {
+				for _, res := range plugin.Resources() {
+					isValidResource[res.Name] = true
+				}
+			}
+
+			for resourceName := range service.Resources {
+				if !isValidResource[resourceName] {
+					delete(service.Resources, resourceName)
+				}
+			}
+		}
+	}
+
+	if len(isSharedService) > 0 {
+
+		//fourth query: aggregate domain quota for shared services
+		sharedServiceTypes := make([]string, 0, len(isSharedService))
+		for serviceType := range isSharedService {
+			sharedServiceTypes = append(sharedServiceTypes, serviceType)
+		}
+		whereStr, queryArgs = db.BuildSimpleWhereClause(map[string]interface{}{"ds.type": sharedServiceTypes})
+		rows, err = dbi.Query(fmt.Sprintf(clusterReportQuery4, whereStr), queryArgs...)
+		if err != nil {
+			return nil, err
+		}
+
+		sharedQuotaSums := make(map[string]map[string]uint64)
+		err = db.ForeachRow(rows, func() error {
+			var (
+				serviceType  string
+				resourceName string
+				quota        uint64
+			)
+			err := rows.Scan(&serviceType, &resourceName, &quota)
+			if err != nil {
+				return err
+			}
+
+			if sharedQuotaSums[serviceType] == nil {
+				sharedQuotaSums[serviceType] = make(map[string]uint64)
+			}
+			sharedQuotaSums[serviceType][resourceName] = quota
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		//fifth query: aggregate project quota for shared services
+		whereStr, queryArgs = db.BuildSimpleWhereClause(map[string]interface{}{"ps.type": sharedServiceTypes})
+		rows, err = dbi.Query(fmt.Sprintf(clusterReportQuery5, whereStr), queryArgs...)
+		if err != nil {
+			return nil, err
+		}
+
+		sharedUsageSums := make(map[string]map[string]uint64)
+		err = db.ForeachRow(rows, func() error {
+			var (
+				serviceType  string
+				resourceName string
+				usage        uint64
+			)
+			err := rows.Scan(&serviceType, &resourceName, &usage)
+			if err != nil {
+				return err
+			}
+
+			if sharedUsageSums[serviceType] == nil {
+				sharedUsageSums[serviceType] = make(map[string]uint64)
+			}
+			sharedUsageSums[serviceType][resourceName] = usage
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		for _, cluster := range clusters {
+			isSharedService := make(map[string]bool)
+			for _, serviceConfig := range config.Clusters[cluster.ID].Services {
+				//NOTE: cluster config is guaranteed to exist due to earlier validation
+				if serviceConfig.Shared {
+					isSharedService[serviceConfig.Type] = true
+				}
+			}
+
+			for _, service := range cluster.Services {
+				if isSharedService[service.Type] && sharedQuotaSums[service.Type] != nil {
+					for _, resource := range service.Resources {
+						quota, exists := sharedQuotaSums[service.Type][resource.Name]
+						if exists {
+							resource.DomainsQuota = quota
+						}
+						usage, exists := sharedUsageSums[service.Type][resource.Name]
+						if exists {
+							resource.Usage = usage
+						}
+					}
+				}
+			}
+		}
+
+	}
+
+	//flatten result (with stable order to keep the tests happy)
+	ids := make([]string, 0, len(clusters))
+	for id := range clusters {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	result := make([]*Cluster, len(clusters))
+	for idx, id := range ids {
+		result[idx] = clusters[id]
+	}
+
+	return result, nil
+}
+
+func makeClusterFilter(tableWithClusterID, tableWithServiceType, tableWithResourceName string, clusterID *string, filter Filter) map[string]interface{} {
+	fields := make(map[string]interface{})
+	filter.ApplyTo(fields, tableWithServiceType, tableWithResourceName)
+	if clusterID != nil {
+		fields[tableWithClusterID+".cluster_id"] = *clusterID
+	}
+	return fields
+}
+
+type clusters map[string]*Cluster
+
+func (c clusters) Find(clusterID, serviceType, resourceName string) (*Cluster, *ClusterService, *ClusterResource) {
+	cluster, exists := c[clusterID]
+	if !exists {
+		cluster = &Cluster{
+			ID:       clusterID,
+			Services: make(ClusterServices),
+		}
+		c[clusterID] = cluster
+	}
+
+	service, exists := cluster.Services[serviceType]
+	if !exists {
+		service = &ClusterService{
+			Type:      serviceType,
+			Resources: make(ClusterResources),
+		}
+		cluster.Services[serviceType] = service
+	}
+
+	resource, exists := service.Resources[resourceName]
+	if !exists {
+		resource = &ClusterResource{
+			Name: resourceName,
+			Unit: limes.UnitFor(serviceType, resourceName),
+		}
+		service.Resources[resourceName] = resource
+	}
+
+	return cluster, service, resource
 }

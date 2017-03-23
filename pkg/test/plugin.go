@@ -28,6 +28,7 @@ import (
 //Plugin is a limes.QuotaPlugin implementation for unit tests, registered as
 //the service type "unittest".
 type Plugin struct {
+	StaticServiceType  string
 	StaticResourceData map[string]*limes.ResourceData
 	StaticCapacity     map[string]uint64
 }
@@ -45,6 +46,7 @@ var resources = []limes.ResourceInfo{
 
 func init() {
 	limes.RegisterQuotaPlugin(&Plugin{
+		StaticServiceType: "unittest",
 		StaticResourceData: map[string]*limes.ResourceData{
 			"things":   &limes.ResourceData{Quota: 42, Usage: 23},
 			"capacity": &limes.ResourceData{Quota: 100, Usage: 0},
@@ -54,7 +56,7 @@ func init() {
 
 //ServiceType implements the limes.QuotaPlugin interface.
 func (p *Plugin) ServiceType() string {
-	return "unittest"
+	return p.StaticServiceType
 }
 
 //Resources implements the limes.QuotaPlugin interface.
