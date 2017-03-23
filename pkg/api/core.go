@@ -62,7 +62,7 @@ func NewV1Router(driver limes.Driver, config limes.Configuration) (*mux.Router, 
 		Config: config,
 	}
 	p.VersionData = VersionData{
-		Status: "EXPERIMENTAL",
+		Status: "CURRENT",
 		ID:     "v1",
 		Links: []VersionLinkData{
 			VersionLinkData{
