@@ -21,11 +21,14 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/ioutil"
+	"reflect"
 	"testing"
 
 	policy "github.com/databus23/goslo.policy"
 	"github.com/gorilla/mux"
+	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/test"
 )
@@ -259,4 +262,59 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectStatusCode: 204, //no content because no new projects discovered
 		ExpectBody:       &emptyString,
 	}.Check(t, router)
+
+	//check SyncProject
+	expectStaleProjectServices(t /*, nothing */)
+	test.APIRequest{
+		Method:           "POST",
+		Path:             "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/sync",
+		ExpectStatusCode: 202,
+		ExpectBody:       &emptyString,
+	}.Check(t, router)
+	expectStaleProjectServices(t, "berlin:shared", "berlin:unshared")
+
+	//SyncProject should discover the given project if not yet done
+	driver.StaticProjects["uuid-for-germany"] = append(driver.StaticProjects["uuid-for-germany"],
+		limes.KeystoneProject{Name: "walldorf", UUID: "uuid-for-walldorf"},
+	)
+	test.APIRequest{
+		Method:           "POST",
+		Path:             "/v1/domains/uuid-for-germany/projects/uuid-for-walldorf/sync",
+		ExpectStatusCode: 202,
+		ExpectBody:       &emptyString,
+	}.Check(t, router)
+	expectStaleProjectServices(t, "berlin:shared", "berlin:unshared", "walldorf:shared", "walldorf:unshared")
+}
+
+func expectStaleProjectServices(t *testing.T, pairs ...string) {
+	rows, err := db.DB.Query(`
+		SELECT p.name, ps.type
+		  FROM projects p JOIN project_services ps ON ps.project_id = p.id
+		 WHERE ps.stale
+		 ORDER BY p.name, ps.type
+	`)
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+
+	var actualPairs []string
+	err = db.ForeachRow(rows, func() error {
+		var (
+			projectName string
+			serviceType string
+		)
+		err := rows.Scan(&projectName, &serviceType)
+		if err != nil {
+			return err
+		}
+		actualPairs = append(actualPairs, fmt.Sprintf("%s:%s", projectName, serviceType))
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err.Error())
+	}
+
+	if !reflect.DeepEqual(pairs, actualPairs) {
+		t.Errorf("expected stale project services %v, but got %v", pairs, actualPairs)
+	}
 }

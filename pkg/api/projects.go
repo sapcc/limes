@@ -129,7 +129,7 @@ func (p *v1Provider) SyncProject(w http.ResponseWriter, r *http.Request) {
 		}
 
 		//now we should find it in the DB
-		dbProject := p.FindProjectFromRequest(w, r, dbDomain)
+		dbProject = p.FindProjectFromRequest(w, r, dbDomain)
 		if dbProject == nil {
 			return //wtf
 		}
