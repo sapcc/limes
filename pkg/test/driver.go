@@ -41,16 +41,16 @@ func NewDriver(cluster *limes.ClusterConfiguration) *Driver {
 	return &Driver{
 		ClusterConfig: cluster,
 		StaticDomains: []limes.KeystoneDomain{
-			limes.KeystoneDomain{Name: "Default", UUID: "2131d24fee484da9be8671aa276360e0"},
-			limes.KeystoneDomain{Name: "Example", UUID: "a2f0d9a6a8a0410f9881335f1fe0b538"},
+			limes.KeystoneDomain{Name: "germany", UUID: "uuid-for-germany"},
+			limes.KeystoneDomain{Name: "france", UUID: "uuid-for-france"},
 		},
 		StaticProjects: map[string][]limes.KeystoneProject{
-			"2131d24fee484da9be8671aa276360e0": []limes.KeystoneProject{
-				limes.KeystoneProject{Name: "foo", UUID: "dd53fc9c38d740c6b7889424e740e194"},
-				limes.KeystoneProject{Name: "bar", UUID: "003645ff7b534b8ab612885ff7653526"},
+			"uuid-for-germany": []limes.KeystoneProject{
+				limes.KeystoneProject{Name: "berlin", UUID: "uuid-for-berlin"},
+				limes.KeystoneProject{Name: "dresden", UUID: "uuid-for-dresden"},
 			},
-			"a2f0d9a6a8a0410f9881335f1fe0b538": []limes.KeystoneProject{
-				limes.KeystoneProject{Name: "qux", UUID: "ed5867497beb40c69f829837639d873d"},
+			"uuid-for-france": []limes.KeystoneProject{
+				limes.KeystoneProject{Name: "paris", UUID: "uuid-for-paris"},
 			},
 		},
 	}

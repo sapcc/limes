@@ -33,10 +33,10 @@ func keystoneTestDriver(t *testing.T) *test.Driver {
 	test.InitDatabase(t, "../test/migrations")
 
 	return test.NewDriver(&limes.ClusterConfiguration{
-		ID: "cluster-id-test",
+		ID: "west",
 		Services: []limes.ServiceConfiguration{
-			limes.ServiceConfiguration{Type: "foo", Shared: false},
-			limes.ServiceConfiguration{Type: "bar", Shared: true},
+			limes.ServiceConfiguration{Type: "unshared", Shared: false},
+			limes.ServiceConfiguration{Type: "shared", Shared: true},
 		},
 	})
 }
@@ -72,9 +72,9 @@ func Test_ScanDomains(t *testing.T) {
 	test.AssertDBContent(t, "fixtures/scandomains1.sql")
 
 	//add another project
-	domainUUID := "a2f0d9a6a8a0410f9881335f1fe0b538"
+	domainUUID := "uuid-for-france"
 	driver.StaticProjects[domainUUID] = append(driver.StaticProjects[domainUUID],
-		limes.KeystoneProject{Name: "qux2", UUID: "f4bfdc9cf7284f7e849d91a22ab80e6d"},
+		limes.KeystoneProject{Name: "bordeaux", UUID: "uuid-for-bordeaux"},
 	)
 
 	//ScanDomains without ScanAllProjects should not see this new project

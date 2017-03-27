@@ -72,20 +72,6 @@ func setupTest(t *testing.T) (*test.Driver, *mux.Router) {
 
 	//create test driver with the domains and projects from start-data.sql
 	driver := test.NewDriver(config.Clusters["west"])
-	driver.StaticDomains = []limes.KeystoneDomain{
-		limes.KeystoneDomain{Name: "germany", UUID: "uuid-for-germany"},
-		limes.KeystoneDomain{Name: "france", UUID: "uuid-for-france"},
-	}
-	driver.StaticProjects = map[string][]limes.KeystoneProject{
-		"uuid-for-germany": []limes.KeystoneProject{
-			limes.KeystoneProject{Name: "berlin", UUID: "uuid-for-berlin"},
-			limes.KeystoneProject{Name: "dresden", UUID: "uuid-for-dresden"},
-		},
-		"uuid-for-france": []limes.KeystoneProject{
-			limes.KeystoneProject{Name: "paris", UUID: "uuid-for-paris"},
-		},
-	}
-
 	router, _ := NewV1Router(driver, config)
 	return driver, router
 }

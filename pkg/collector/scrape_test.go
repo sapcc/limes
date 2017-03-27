@@ -31,7 +31,7 @@ func scrapeTestDriver(t *testing.T) *test.Driver {
 	test.InitDatabase(t, "../test/migrations")
 
 	cluster := &limes.ClusterConfiguration{
-		ID: "cluster-id-test",
+		ID: "west",
 		Services: []limes.ServiceConfiguration{
 			limes.ServiceConfiguration{Type: "unittest", Shared: false},
 		},
