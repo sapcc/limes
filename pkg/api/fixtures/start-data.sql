@@ -73,3 +73,18 @@ INSERT INTO project_resources (service_id, name, quota, usage, backend_quota) VA
 INSERT INTO project_resources (service_id, name, quota, usage, backend_quota) VALUES (7, 'capacity', 10, 2, 10);
 INSERT INTO project_resources (service_id, name, quota, usage, backend_quota) VALUES (8, 'things',   10, 2, 10);
 INSERT INTO project_resources (service_id, name, quota, usage, backend_quota) VALUES (8, 'capacity', 10, 2, 10);
+
+-- insert some bullshit data that should be filtered out by the pkg/reports/ logic
+-- (cluster "north", service "weird" and resource "items" are not configured)
+INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (101, 'north', 'unshared', 1000);
+INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (102, 'north', 'shared',   1100);
+INSERT INTO cluster_resources (service_id, name, capacity) VALUES (101, 'things', 1);
+INSERT INTO cluster_resources (service_id, name, capacity) VALUES (102, 'things', 1);
+
+INSERT INTO domain_services (id, domain_id, type) VALUES (101, 1, 'weird');
+INSERT INTO domain_resources (service_id, name, quota) VALUES (101, 'things', 1);
+INSERT INTO project_services (id, project_id, type) VALUES (101, 1, 'weird');
+INSERT INTO project_resources (service_id, name, quota, usage, backend_quota) VALUES (101, 'things', 2, 1, 2);
+
+INSERT INTO domain_resources (service_id, name, quota) VALUES (1, 'items', 1);
+INSERT INTO project_resources (service_id, name, quota, usage, backend_quota) VALUES (1, 'items', 2, 1, 2);

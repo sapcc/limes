@@ -166,11 +166,15 @@ func GetClusters(config limes.Configuration, clusterID *string, dbi db.Interface
 		_, service, resource := clusters.Find(clusterID, serviceType, resourceName)
 
 		if service != nil {
-			service.MaxScrapedAt = time.Time(*maxScrapedAt).Unix()
-			service.MinScrapedAt = time.Time(*minScrapedAt).Unix()
+			if maxScrapedAt != nil {
+				service.MaxScrapedAt = time.Time(*maxScrapedAt).Unix()
+			}
+			if minScrapedAt != nil {
+				service.MinScrapedAt = time.Time(*minScrapedAt).Unix()
+			}
 		}
 
-		if resource != nil {
+		if resource != nil && usage != nil {
 			resource.Usage = *usage
 		}
 		return nil
@@ -201,7 +205,7 @@ func GetClusters(config limes.Configuration, clusterID *string, dbi db.Interface
 
 		_, _, resource := clusters.Find(clusterID, serviceType, resourceName)
 
-		if resource != nil {
+		if resource != nil && quota != nil {
 			resource.DomainsQuota = *quota
 		}
 

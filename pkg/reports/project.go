@@ -154,7 +154,9 @@ func GetProjects(cluster *limes.ClusterConfiguration, domainID int64, projectID 
 			service = &ProjectService{
 				Type:      *serviceType,
 				Resources: make(ProjectResources),
-				ScrapedAt: time.Time(*scrapedAt).Unix(),
+			}
+			if scrapedAt != nil {
+				service.ScrapedAt = time.Time(*scrapedAt).Unix()
 			}
 			project.Services[*serviceType] = service
 		}
@@ -166,12 +168,17 @@ func GetProjects(cluster *limes.ClusterConfiguration, domainID int64, projectID 
 		resource := &ProjectResource{
 			Name:         *resourceName,
 			Unit:         limes.UnitFor(*serviceType, *resourceName),
-			Quota:        *quota,
 			Usage:        *usage,
 			BackendQuota: nil, //see below
 		}
-		if *backendQuota < 0 || uint64(*backendQuota) != *quota {
-			resource.BackendQuota = backendQuota
+		if usage != nil {
+			resource.Usage = *usage
+		}
+		if quota != nil {
+			resource.Quota = *quota
+			if backendQuota != nil && (*backendQuota < 0 || uint64(*backendQuota) != *quota) {
+				resource.BackendQuota = backendQuota
+			}
 		}
 		service.Resources[*resourceName] = resource
 	}

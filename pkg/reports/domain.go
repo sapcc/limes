@@ -155,17 +155,25 @@ func GetDomains(cluster *limes.ClusterConfiguration, domainID *int64, dbi db.Int
 		_, service, resource := domains.Find(domainUUID, serviceType, resourceName)
 
 		if service != nil {
-			service.MaxScrapedAt = time.Time(*maxScrapedAt).Unix()
-			service.MinScrapedAt = time.Time(*minScrapedAt).Unix()
+			if maxScrapedAt != nil {
+				service.MaxScrapedAt = time.Time(*maxScrapedAt).Unix()
+			}
+			if minScrapedAt != nil {
+				service.MinScrapedAt = time.Time(*minScrapedAt).Unix()
+			}
 		}
 
 		if resource != nil {
-			resource.ProjectsQuota = *projectsQuota
-			resource.Usage = *usage
-			if *projectsQuota != *backendQuota {
-				resource.BackendQuota = backendQuota
+			if usage != nil {
+				resource.Usage = *usage
 			}
-			if *infiniteBackendQuota {
+			if projectsQuota != nil {
+				resource.ProjectsQuota = *projectsQuota
+				if backendQuota != nil && *projectsQuota != *backendQuota {
+					resource.BackendQuota = backendQuota
+				}
+			}
+			if infiniteBackendQuota != nil && *infiniteBackendQuota {
 				resource.InfiniteBackendQuota = infiniteBackendQuota
 			}
 		}
@@ -199,7 +207,7 @@ func GetDomains(cluster *limes.ClusterConfiguration, domainID *int64, dbi db.Int
 		}
 
 		_, _, resource := domains.Find(domainUUID, serviceType, resourceName)
-		if resource != nil {
+		if resource != nil && quota != nil {
 			resource.DomainQuota = *quota
 		}
 

@@ -267,11 +267,11 @@ func Test_ProjectOperations(t *testing.T) {
 	expectStaleProjectServices(t /*, nothing */)
 	test.APIRequest{
 		Method:           "POST",
-		Path:             "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/sync",
+		Path:             "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/sync",
 		ExpectStatusCode: 202,
 		ExpectBody:       &emptyString,
 	}.Check(t, router)
-	expectStaleProjectServices(t, "berlin:shared", "berlin:unshared")
+	expectStaleProjectServices(t, "dresden:shared", "dresden:unshared")
 
 	//SyncProject should discover the given project if not yet done
 	driver.StaticProjects["uuid-for-germany"] = append(driver.StaticProjects["uuid-for-germany"],
@@ -283,7 +283,7 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectStatusCode: 202,
 		ExpectBody:       &emptyString,
 	}.Check(t, router)
-	expectStaleProjectServices(t, "berlin:shared", "berlin:unshared", "walldorf:shared", "walldorf:unshared")
+	expectStaleProjectServices(t, "dresden:shared", "dresden:unshared", "walldorf:shared", "walldorf:unshared")
 }
 
 func expectStaleProjectServices(t *testing.T, pairs ...string) {
