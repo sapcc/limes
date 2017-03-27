@@ -91,6 +91,18 @@ func Test_ClusterOperations(t *testing.T) {
 	}.Check(t, router)
 	test.APIRequest{
 		Method:           "GET",
+		Path:             "/v1/clusters?service=unknown",
+		ExpectStatusCode: 200,
+		ExpectJSON:       "./fixtures/cluster-list-no-services.json",
+	}.Check(t, router)
+	test.APIRequest{
+		Method:           "GET",
+		Path:             "/v1/clusters?service=shared&resource=unknown",
+		ExpectStatusCode: 200,
+		ExpectJSON:       "./fixtures/cluster-list-no-resources.json",
+	}.Check(t, router)
+	test.APIRequest{
+		Method:           "GET",
 		Path:             "/v1/clusters?service=shared&resource=things",
 		ExpectStatusCode: 200,
 		ExpectJSON:       "fixtures/cluster-list-filtered.json",

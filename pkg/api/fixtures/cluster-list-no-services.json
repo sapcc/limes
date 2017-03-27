@@ -1,0 +1,12 @@
+{
+  "clusters": [
+    {
+      "id": "east",
+      "services": []
+    },
+    {
+      "id": "west",
+      "services": []
+    }
+  ]
+}

@@ -53,6 +53,7 @@ func init() {
 			query = regexp.MustCompile(`\bGREATEST\b`).ReplaceAllString(query, "MAX")
 			//Postgres is okay with a no-op "WHERE TRUE" clause, but SQLite does not know the TRUE literal
 			query = regexp.MustCompile(`\bWHERE TRUE\s*(GROUP|LIMIT|ORDER|$)`).ReplaceAllString(query, "$1")
+			query = regexp.MustCompile(`\bWHERE TRUE AND\b`).ReplaceAllString(query, "WHERE")
 			traceQuery(query, []interface{}{"PREPARE"})
 			return query, nil
 		},

@@ -251,15 +251,6 @@ func GetDomains(cluster *limes.ClusterConfiguration, domainID *int64, dbi db.Int
 	return result, nil
 }
 
-func makeDomainFilter(tableWithServiceType, tableWithResourceName string, clusterID string, domainID *int64, filter Filter) map[string]interface{} {
-	fields := map[string]interface{}{"d.cluster_id": clusterID}
-	if domainID != nil {
-		fields["d.id"] = *domainID
-	}
-	filter.ApplyTo(fields, tableWithServiceType, tableWithResourceName)
-	return fields
-}
-
 type domains map[string]*Domain
 
 func (d domains) Find(domainUUID string, serviceType, resourceName *string) (*Domain, *DomainService, *DomainResource) {

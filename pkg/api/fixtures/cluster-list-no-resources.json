@@ -1,0 +1,30 @@
+{
+  "clusters": [
+    {
+      "id": "east",
+      "services": [
+        {
+          "type": "shared",
+          "resources": [],
+          "max_scraped_at": 88,
+          "min_scraped_at": 88
+        }
+      ],
+      "max_scraped_at": 1300,
+      "min_scraped_at": 1300
+    },
+    {
+      "id": "west",
+      "services": [
+        {
+          "type": "shared",
+          "resources": [],
+          "max_scraped_at": 66,
+          "min_scraped_at": 22
+        }
+      ],
+      "max_scraped_at": 1100,
+      "min_scraped_at": 1100
+    }
+  ]
+}
