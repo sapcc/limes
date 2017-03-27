@@ -125,6 +125,18 @@ func Test_DomainOperations(t *testing.T) {
 	}.Check(t, router)
 	test.APIRequest{
 		Method:           "GET",
+		Path:             "/v1/domains?service=unknown",
+		ExpectStatusCode: 200,
+		ExpectJSON:       "./fixtures/domain-list-no-services.json",
+	}.Check(t, router)
+	test.APIRequest{
+		Method:           "GET",
+		Path:             "/v1/domains?service=shared&resource=unknown",
+		ExpectStatusCode: 200,
+		ExpectJSON:       "./fixtures/domain-list-no-resources.json",
+	}.Check(t, router)
+	test.APIRequest{
+		Method:           "GET",
 		Path:             "/v1/domains?service=shared&resource=things",
 		ExpectStatusCode: 200,
 		ExpectJSON:       "./fixtures/domain-list-filtered.json",

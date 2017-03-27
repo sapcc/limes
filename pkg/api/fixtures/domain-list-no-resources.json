@@ -1,0 +1,26 @@
+{
+  "domains": [
+    {
+      "id": "uuid-for-france",
+      "services": [
+        {
+          "type": "shared",
+          "resources": [],
+          "max_scraped_at": 66,
+          "min_scraped_at": 66
+        }
+      ]
+    },
+    {
+      "id": "uuid-for-germany",
+      "services": [
+        {
+          "type": "shared",
+          "resources": [],
+          "max_scraped_at": 44,
+          "min_scraped_at": 22
+        }
+      ]
+    }
+  ]
+}

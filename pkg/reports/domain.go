@@ -101,25 +101,31 @@ var domainReportQuery1 = `
 	       SUM(GREATEST(pr.backend_quota, 0)), MIN(pr.backend_quota) < 0, MIN(ps.scraped_at), MAX(ps.scraped_at)
 	  FROM domains d
 	  JOIN projects p ON p.domain_id = d.id
-	  JOIN project_services ps ON ps.project_id = p.id
-	  JOIN project_resources pr ON pr.service_id = ps.id
+	  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
+	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
 	 WHERE %s GROUP BY d.uuid, ps.type, pr.name
 `
 
 var domainReportQuery2 = `
 	SELECT d.uuid, ds.type, dr.name, dr.quota
 	  FROM domains d
-	  JOIN domain_services ds ON ds.domain_id = d.id
-	  JOIN domain_resources dr ON dr.service_id = ds.id
+	  LEFT OUTER JOIN domain_services ds ON ds.domain_id = d.id {{AND ds.type = $service_type}}
+	  LEFT OUTER JOIN domain_resources dr ON dr.service_id = ds.id {{AND dr.name = $resource_name}}
 	 WHERE %s
 `
 
 //GetDomains returns Domain reports for all domains in the given cluster or, if
 //domainID is non-nil, for that domain only.
 func GetDomains(cluster *limes.ClusterConfiguration, domainID *int64, dbi db.Interface, filter Filter) ([]*Domain, error) {
+	fields := map[string]interface{}{"d.cluster_id": cluster.ID}
+	if domainID != nil {
+		fields["d.id"] = *domainID
+	}
+
 	//first query: data for projects in this domain
-	whereStr, queryArgs := db.BuildSimpleWhereClause(makeDomainFilter("ps", "pr", cluster.ID, domainID, filter), 0)
-	rows, err := dbi.Query(fmt.Sprintf(domainReportQuery1, whereStr), queryArgs...)
+	queryStr, joinArgs := filter.PrepareQuery(domainReportQuery1)
+	whereStr, whereArgs := db.BuildSimpleWhereClause(fields, len(joinArgs))
+	rows, err := dbi.Query(fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...)...)
 	if err != nil {
 		return nil, err
 	}
@@ -128,14 +134,14 @@ func GetDomains(cluster *limes.ClusterConfiguration, domainID *int64, dbi db.Int
 	err = db.ForeachRow(rows, func() error {
 		var (
 			domainUUID           string
-			serviceType          string
-			resourceName         string
-			projectsQuota        uint64
-			usage                uint64
-			backendQuota         uint64
-			infiniteBackendQuota bool
-			minScrapedAt         util.Time
-			maxScrapedAt         util.Time
+			serviceType          *string
+			resourceName         *string
+			projectsQuota        *uint64
+			usage                *uint64
+			backendQuota         *uint64
+			infiniteBackendQuota *bool
+			minScrapedAt         *util.Time
+			maxScrapedAt         *util.Time
 		)
 		err := rows.Scan(
 			&domainUUID, &serviceType, &resourceName,
@@ -148,17 +154,22 @@ func GetDomains(cluster *limes.ClusterConfiguration, domainID *int64, dbi db.Int
 
 		_, service, resource := domains.Find(domainUUID, serviceType, resourceName)
 
-		service.MaxScrapedAt = time.Time(maxScrapedAt).Unix()
-		service.MinScrapedAt = time.Time(minScrapedAt).Unix()
+		if service != nil {
+			service.MaxScrapedAt = time.Time(*maxScrapedAt).Unix()
+			service.MinScrapedAt = time.Time(*minScrapedAt).Unix()
+		}
 
-		resource.ProjectsQuota = projectsQuota
-		resource.Usage = usage
-		if projectsQuota != backendQuota {
-			resource.BackendQuota = &backendQuota
+		if resource != nil {
+			resource.ProjectsQuota = *projectsQuota
+			resource.Usage = *usage
+			if *projectsQuota != *backendQuota {
+				resource.BackendQuota = backendQuota
+			}
+			if *infiniteBackendQuota {
+				resource.InfiniteBackendQuota = infiniteBackendQuota
+			}
 		}
-		if infiniteBackendQuota {
-			resource.InfiniteBackendQuota = &infiniteBackendQuota
-		}
+
 		return nil
 	})
 	if err != nil {
@@ -166,8 +177,9 @@ func GetDomains(cluster *limes.ClusterConfiguration, domainID *int64, dbi db.Int
 	}
 
 	//second query: add domain quotas
-	whereStr, queryArgs = db.BuildSimpleWhereClause(makeDomainFilter("ds", "dr", cluster.ID, domainID, filter), 0)
-	rows, err = dbi.Query(fmt.Sprintf(domainReportQuery2, whereStr), queryArgs...)
+	queryStr, joinArgs = filter.PrepareQuery(domainReportQuery2)
+	whereStr, whereArgs = db.BuildSimpleWhereClause(fields, len(joinArgs))
+	rows, err = dbi.Query(fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...)...)
 	if err != nil {
 		return nil, err
 	}
@@ -175,9 +187,9 @@ func GetDomains(cluster *limes.ClusterConfiguration, domainID *int64, dbi db.Int
 	err = db.ForeachRow(rows, func() error {
 		var (
 			domainUUID   string
-			serviceType  string
-			resourceName string
-			quota        uint64
+			serviceType  *string
+			resourceName *string
+			quota        *uint64
 		)
 		err := rows.Scan(
 			&domainUUID, &serviceType, &resourceName, &quota,
@@ -187,7 +199,10 @@ func GetDomains(cluster *limes.ClusterConfiguration, domainID *int64, dbi db.Int
 		}
 
 		_, _, resource := domains.Find(domainUUID, serviceType, resourceName)
-		resource.DomainQuota = quota
+		if resource != nil {
+			resource.DomainQuota = *quota
+		}
+
 		return nil
 	})
 	if err != nil {
@@ -247,7 +262,7 @@ func makeDomainFilter(tableWithServiceType, tableWithResourceName string, cluste
 
 type domains map[string]*Domain
 
-func (d domains) Find(domainUUID, serviceType, resourceName string) (*Domain, *DomainService, *DomainResource) {
+func (d domains) Find(domainUUID string, serviceType, resourceName *string) (*Domain, *DomainService, *DomainResource) {
 	domain, exists := d[domainUUID]
 	if !exists {
 		domain = &Domain{
@@ -257,22 +272,30 @@ func (d domains) Find(domainUUID, serviceType, resourceName string) (*Domain, *D
 		d[domainUUID] = domain
 	}
 
-	service, exists := domain.Services[serviceType]
-	if !exists {
-		service = &DomainService{
-			Type:      serviceType,
-			Resources: make(DomainResources),
-		}
-		domain.Services[serviceType] = service
+	if serviceType == nil {
+		return domain, nil, nil
 	}
 
-	resource, exists := service.Resources[resourceName]
+	service, exists := domain.Services[*serviceType]
+	if !exists {
+		service = &DomainService{
+			Type:      *serviceType,
+			Resources: make(DomainResources),
+		}
+		domain.Services[*serviceType] = service
+	}
+
+	if resourceName == nil {
+		return domain, service, nil
+	}
+
+	resource, exists := service.Resources[*resourceName]
 	if !exists {
 		resource = &DomainResource{
-			Name: resourceName,
-			Unit: limes.UnitFor(serviceType, resourceName),
+			Name: *resourceName,
+			Unit: limes.UnitFor(*serviceType, *resourceName),
 		}
-		service.Resources[resourceName] = resource
+		service.Resources[*resourceName] = resource
 	}
 
 	return domain, service, resource

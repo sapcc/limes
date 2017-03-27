@@ -1,0 +1,12 @@
+{
+  "domains": [
+    {
+      "id": "uuid-for-france",
+      "services": []
+    },
+    {
+      "id": "uuid-for-germany",
+      "services": []
+    }
+  ]
+}
