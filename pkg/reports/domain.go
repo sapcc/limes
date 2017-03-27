@@ -118,7 +118,7 @@ var domainReportQuery2 = `
 //domainID is non-nil, for that domain only.
 func GetDomains(cluster *limes.ClusterConfiguration, domainID *int64, dbi db.Interface, filter Filter) ([]*Domain, error) {
 	//first query: data for projects in this domain
-	whereStr, queryArgs := db.BuildSimpleWhereClause(makeDomainFilter("ps", "pr", cluster.ID, domainID, filter))
+	whereStr, queryArgs := db.BuildSimpleWhereClause(makeDomainFilter("ps", "pr", cluster.ID, domainID, filter), 0)
 	rows, err := dbi.Query(fmt.Sprintf(domainReportQuery1, whereStr), queryArgs...)
 	if err != nil {
 		return nil, err
@@ -166,7 +166,7 @@ func GetDomains(cluster *limes.ClusterConfiguration, domainID *int64, dbi db.Int
 	}
 
 	//second query: add domain quotas
-	whereStr, queryArgs = db.BuildSimpleWhereClause(makeDomainFilter("ds", "dr", cluster.ID, domainID, filter))
+	whereStr, queryArgs = db.BuildSimpleWhereClause(makeDomainFilter("ds", "dr", cluster.ID, domainID, filter), 0)
 	rows, err = dbi.Query(fmt.Sprintf(domainReportQuery2, whereStr), queryArgs...)
 	if err != nil {
 		return nil, err

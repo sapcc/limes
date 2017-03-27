@@ -96,8 +96,8 @@ func (r ProjectResources) MarshalJSON() ([]byte, error) {
 var projectReportQuery = `
 	SELECT p.uuid, ps.type, ps.scraped_at, pr.name, pr.quota, pr.usage, pr.backend_quota
 	  FROM projects p
-	  JOIN project_services ps ON ps.project_id = p.id
-	  JOIN project_resources pr ON pr.service_id = ps.id
+	  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
+	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
 	 WHERE %s
 `
 
@@ -109,8 +109,9 @@ func GetProjects(cluster *limes.ClusterConfiguration, domainID int64, projectID 
 		fields["p.id"] = *projectID
 	}
 
-	whereStr, queryArgs := db.BuildSimpleWhereClause(fields)
-	rows, err := dbi.Query(fmt.Sprintf(projectReportQuery, whereStr), queryArgs...)
+	queryStr, joinArgs := filter.PrepareQuery(projectReportQuery)
+	whereStr, whereArgs := db.BuildSimpleWhereClause(fields, len(joinArgs))
+	rows, err := dbi.Query(fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...)...)
 	if err != nil {
 		return nil, err
 	}
@@ -119,12 +120,12 @@ func GetProjects(cluster *limes.ClusterConfiguration, domainID int64, projectID 
 	for rows.Next() {
 		var (
 			projectUUID  string
-			serviceType  string
-			scrapedAt    util.Time
-			resourceName string
-			quota        uint64
-			usage        uint64
-			backendQuota int64
+			serviceType  *string
+			scrapedAt    *util.Time
+			resourceName *string
+			quota        *uint64
+			usage        *uint64
+			backendQuota *int64
 		)
 		err := rows.Scan(
 			&projectUUID, &serviceType, &scrapedAt, &resourceName,
@@ -144,35 +145,35 @@ func GetProjects(cluster *limes.ClusterConfiguration, domainID int64, projectID 
 			projects[projectUUID] = project
 		}
 
-		if !filter.MatchesService(serviceType) {
+		if serviceType == nil {
 			continue
 		}
 
-		service, exists := project.Services[serviceType]
+		service, exists := project.Services[*serviceType]
 		if !exists {
 			service = &ProjectService{
-				Type:      serviceType,
+				Type:      *serviceType,
 				Resources: make(ProjectResources),
-				ScrapedAt: time.Time(scrapedAt).Unix(),
+				ScrapedAt: time.Time(*scrapedAt).Unix(),
 			}
-			project.Services[serviceType] = service
+			project.Services[*serviceType] = service
 		}
 
-		if !filter.MatchesResource(resourceName) {
+		if resourceName == nil {
 			continue
 		}
 
 		resource := &ProjectResource{
-			Name:         resourceName,
-			Unit:         limes.UnitFor(serviceType, resourceName),
-			Quota:        quota,
-			Usage:        usage,
+			Name:         *resourceName,
+			Unit:         limes.UnitFor(*serviceType, *resourceName),
+			Quota:        *quota,
+			Usage:        *usage,
 			BackendQuota: nil, //see below
 		}
-		if backendQuota < 0 || uint64(backendQuota) != quota {
-			resource.BackendQuota = &backendQuota
+		if *backendQuota < 0 || uint64(*backendQuota) != *quota {
+			resource.BackendQuota = backendQuota
 		}
-		service.Resources[resourceName] = resource
+		service.Resources[*resourceName] = resource
 	}
 	err = rows.Err()
 	if err != nil {

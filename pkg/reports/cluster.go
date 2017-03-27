@@ -141,7 +141,7 @@ var clusterReportQuery5 = `
 //to look at the services enabled in other clusters.
 func GetClusters(config limes.Configuration, clusterID *string, dbi db.Interface, filter Filter) ([]*Cluster, error) {
 	//first query: collect project usage data in these clusters
-	whereStr, queryArgs := db.BuildSimpleWhereClause(makeClusterFilter("d", "ps", "pr", clusterID, filter))
+	whereStr, queryArgs := db.BuildSimpleWhereClause(makeClusterFilter("d", "ps", "pr", clusterID, filter), 0)
 	rows, err := dbi.Query(fmt.Sprintf(clusterReportQuery1, whereStr), queryArgs...)
 	if err != nil {
 		return nil, err
@@ -173,7 +173,7 @@ func GetClusters(config limes.Configuration, clusterID *string, dbi db.Interface
 	}
 
 	//second query: collect domain quota data in these clusters
-	whereStr, queryArgs = db.BuildSimpleWhereClause(makeClusterFilter("d", "ds", "dr", clusterID, filter))
+	whereStr, queryArgs = db.BuildSimpleWhereClause(makeClusterFilter("d", "ds", "dr", clusterID, filter), 0)
 	rows, err = dbi.Query(fmt.Sprintf(clusterReportQuery2, whereStr), queryArgs...)
 	if err != nil {
 		return nil, err
@@ -200,7 +200,7 @@ func GetClusters(config limes.Configuration, clusterID *string, dbi db.Interface
 	}
 
 	//third query: collect capacity data for these clusters
-	whereStr, queryArgs = db.BuildSimpleWhereClause(makeClusterFilter("cs", "cs", "cr", clusterID, filter))
+	whereStr, queryArgs = db.BuildSimpleWhereClause(makeClusterFilter("cs", "cs", "cr", clusterID, filter), 0)
 	rows, err = dbi.Query(fmt.Sprintf(clusterReportQuery3, whereStr), queryArgs...)
 	if err != nil {
 		return nil, err
@@ -280,7 +280,7 @@ func GetClusters(config limes.Configuration, clusterID *string, dbi db.Interface
 		for serviceType := range isSharedService {
 			sharedServiceTypes = append(sharedServiceTypes, serviceType)
 		}
-		whereStr, queryArgs = db.BuildSimpleWhereClause(map[string]interface{}{"ds.type": sharedServiceTypes})
+		whereStr, queryArgs = db.BuildSimpleWhereClause(map[string]interface{}{"ds.type": sharedServiceTypes}, 0)
 		rows, err = dbi.Query(fmt.Sprintf(clusterReportQuery4, whereStr), queryArgs...)
 		if err != nil {
 			return nil, err
@@ -309,7 +309,7 @@ func GetClusters(config limes.Configuration, clusterID *string, dbi db.Interface
 		}
 
 		//fifth query: aggregate project quota for shared services
-		whereStr, queryArgs = db.BuildSimpleWhereClause(map[string]interface{}{"ps.type": sharedServiceTypes})
+		whereStr, queryArgs = db.BuildSimpleWhereClause(map[string]interface{}{"ps.type": sharedServiceTypes}, 0)
 		rows, err = dbi.Query(fmt.Sprintf(clusterReportQuery5, whereStr), queryArgs...)
 		if err != nil {
 			return nil, err

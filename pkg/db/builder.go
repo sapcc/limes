@@ -27,7 +27,10 @@ import (
 
 //BuildSimpleWhereClause constructs a WHERE clause of the form "field1 = val1 AND
 //field2 = val2 AND field3 IN (val3, val4)".
-func BuildSimpleWhereClause(fields map[string]interface{}) (queryFragment string, queryArgs []interface{}) {
+//
+//If parameterOffset is not 0, start counting placeholders ("$1", "$2", etc.)
+//after that offset.
+func BuildSimpleWhereClause(fields map[string]interface{}, parameterOffset int) (queryFragment string, queryArgs []interface{}) {
 	var (
 		conditions []string
 		args       []interface{}
@@ -35,15 +38,15 @@ func BuildSimpleWhereClause(fields map[string]interface{}) (queryFragment string
 	for field, val := range fields {
 		switch value := val.(type) {
 		case []string:
-			conditions = append(conditions, fmt.Sprintf("%s IN (%s)", field, makePlaceholderList(len(value), len(args)+1)))
+			conditions = append(conditions, fmt.Sprintf("%s IN (%s)", field, makePlaceholderList(len(value), len(args)+1+parameterOffset)))
 			for _, v := range value {
 				args = append(args, v)
 			}
 		case []interface{}:
-			conditions = append(conditions, fmt.Sprintf("%s IN (%s)", field, makePlaceholderList(len(value), len(args)+1)))
+			conditions = append(conditions, fmt.Sprintf("%s IN (%s)", field, makePlaceholderList(len(value), len(args)+1+parameterOffset)))
 			args = append(args, value...)
 		default:
-			conditions = append(conditions, fmt.Sprintf("%s = $%d", field, len(args)+1))
+			conditions = append(conditions, fmt.Sprintf("%s = $%d", field, len(args)+1+parameterOffset))
 			args = append(args, value)
 		}
 	}
