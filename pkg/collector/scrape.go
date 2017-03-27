@@ -21,7 +21,6 @@ package collector
 
 import (
 	"database/sql"
-	"sort"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -105,7 +104,7 @@ func (c *Collector) Scrape() {
 			continue
 		}
 
-		err = c.writeScrapeResult(serviceID, resourceData, c.TimeNow())
+		err = c.writeScrapeResult(domainUUID, projectUUID, serviceID, resourceData, c.TimeNow())
 		if err != nil {
 			c.LogError("write %s backend data for %s/%s failed: %s", serviceType, domainName, projectName, err.Error())
 			scrapeFailedCounter.With(labels).Inc()
@@ -126,7 +125,7 @@ func (c *Collector) Scrape() {
 	}
 }
 
-func (c *Collector) writeScrapeResult(serviceID int64, resourceData map[string]limes.ResourceData, scrapedAt time.Time) error {
+func (c *Collector) writeScrapeResult(domainUUID, projectUUID string, serviceID int64, resourceData map[string]limes.ResourceData, scrapedAt time.Time) error {
 	tx, err := db.DB.Begin()
 	if err != nil {
 		return err
@@ -134,25 +133,28 @@ func (c *Collector) writeScrapeResult(serviceID int64, resourceData map[string]l
 	defer db.RollbackUnlessCommitted(tx)
 
 	//update existing project_resources entries
-	seen := make(map[string]bool)
-	records, err := tx.Select(&db.ProjectResource{}, `SELECT * FROM project_resources WHERE service_id = $1`, serviceID)
+	quotaValues := make(map[string]uint64)
+	needToSetQuota := false
+	var resources []db.ProjectResource
+	_, err = tx.Select(&resources, `SELECT * FROM project_resources WHERE service_id = $1`, serviceID)
 	if err != nil {
 		return err
 	}
-	for _, record := range records {
-		res := record.(*db.ProjectResource)
-		seen[res.Name] = true
+	for _, res := range resources {
+		quotaValues[res.Name] = res.Quota
 
 		data, exists := resourceData[res.Name]
 		if exists {
 			//update existing resource record
 			res.BackendQuota = data.Quota
 			res.Usage = data.Usage
-			//TODO: if Quota != 0 && BackendQuota != Quota, try to enforce the Quota in the backend
 			//TODO: Update() only if required
-			_, err := tx.Update(res)
+			_, err := tx.Update(&res)
 			if err != nil {
 				return err
+			}
+			if res.BackendQuota < 0 || res.Quota != uint64(res.BackendQuota) {
+				needToSetQuota = true
 			}
 		} else {
 			c.LogError(
@@ -163,24 +165,29 @@ func (c *Collector) writeScrapeResult(serviceID int64, resourceData map[string]l
 	}
 
 	//insert missing project_resources entries
-	err = foreachResourceData(resourceData, func(name string, data limes.ResourceData) error {
-		if seen[name] {
-			return nil
+	for _, resMetadata := range c.Plugin.Resources() {
+		if _, exists := quotaValues[resMetadata.Name]; exists {
+			continue
 		}
+		data := resourceData[resMetadata.Name]
 		//TODO: allow to auto-approve certain initial non-null backend quotas (e.g. Neutron gives each
 		//project a "default" security group automatically, so the quotas start at security_groups=1 and
 		//security_group_rules=4 instead of at 0)
 		res := &db.ProjectResource{
 			ServiceID:    serviceID,
-			Name:         name,
+			Name:         resMetadata.Name,
 			Quota:        0, //nothing approved yet
 			Usage:        data.Usage,
 			BackendQuota: data.Quota,
 		}
-		return tx.Insert(res)
-	})
-	if err != nil {
-		return err
+		err = tx.Insert(res)
+		if err != nil {
+			return err
+		}
+		quotaValues[res.Name] = res.Quota
+		if res.BackendQuota < 0 || res.Quota != uint64(res.BackendQuota) {
+			needToSetQuota = true
+		}
 	}
 
 	//update scraped_at timestamp and reset the stale flag on this service so
@@ -193,23 +200,30 @@ func (c *Collector) writeScrapeResult(serviceID int64, resourceData map[string]l
 		return err
 	}
 
-	return tx.Commit()
-}
-
-//Like a simple `range` over the collection, but sorts the keys before doing so
-//in order to achieve deterministic results (which is important for the unit
-//tests).
-func foreachResourceData(collection map[string]limes.ResourceData, action func(string, limes.ResourceData) error) error {
-	keys := make([]string, 0, len(collection))
-	for key := range collection {
-		keys = append(keys, key)
+	err = tx.Commit()
+	if err != nil {
+		return err
 	}
-	sort.Strings(keys)
-	for _, key := range keys {
-		err := action(key, collection[key])
+
+	//if a mismatch between frontend and backend quota was detected, try to
+	//rectify it (but an error at this point is non-fatal: we don't want scraping
+	//to get stuck because some project has backend_quota > usage > quota, for
+	//example)
+	if needToSetQuota {
+		err := c.Plugin.SetQuota(c.Driver, domainUUID, projectUUID, quotaValues)
 		if err != nil {
+			util.LogError("could not rectify frontend/backend quota mismatch for service %s in project %s: %s",
+				c.Plugin.ServiceType(), projectUUID, err.Error(),
+			)
+		} else {
+			//backend quota rectified successfully
+			_, err = db.DB.Exec(
+				`UPDATE project_resources SET backend_quota = quota WHERE service_id = $1`,
+				serviceID,
+			)
 			return err
 		}
 	}
+
 	return nil
 }

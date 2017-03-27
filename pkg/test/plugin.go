@@ -35,12 +35,12 @@ type Plugin struct {
 
 var resources = []limes.ResourceInfo{
 	limes.ResourceInfo{
-		Name: "things",
-		Unit: limes.UnitNone,
-	},
-	limes.ResourceInfo{
 		Name: "capacity",
 		Unit: limes.UnitBytes,
+	},
+	limes.ResourceInfo{
+		Name: "things",
+		Unit: limes.UnitNone,
 	},
 }
 
