@@ -82,9 +82,17 @@ func (r APIRequest) Check(t *testing.T, router *mux.Router) {
 	}
 	buf.WriteByte('\n')
 
+	//write actual JSON to file to make it easy to copy the computed result over
+	//to the fixture path when a new test is added or an existing one is modified
 	fixturePath, _ := filepath.Abs(r.ExpectJSON)
-	cmd := exec.Command("diff", "-u", fixturePath, "-")
-	cmd.Stdin = &buf
+	actualPath := fixturePath + ".actual"
+	err = ioutil.WriteFile(actualPath, buf.Bytes(), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command("diff", "-u", fixturePath, actualPath)
+	cmd.Stdin = nil
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	err = cmd.Run()

@@ -10,6 +10,7 @@ unittest.db
 build/cover.out
 build/*.cover.out
 build/cover.html
+*.actual
 
 # custom configuration files used during development
 *test*.yaml
