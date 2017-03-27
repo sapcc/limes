@@ -1,0 +1,42 @@
+{
+  "project": {
+    "id": "uuid-for-paris",
+    "services": [
+      {
+        "type": "shared",
+        "resources": [
+          {
+            "name": "capacity",
+            "unit": "B",
+            "quota": 10,
+            "usage": 2
+          },
+          {
+            "name": "things",
+            "quota": 10,
+            "usage": 2
+          }
+        ],
+        "scraped_at": 66
+      },
+      {
+        "type": "unshared",
+        "resources": [
+          {
+            "name": "capacity",
+            "unit": "B",
+            "quota": 10,
+            "usage": 2
+          },
+          {
+            "name": "things",
+            "quota": 10,
+            "usage": 2,
+            "backend_quota": -1
+          }
+        ],
+        "scraped_at": 55
+      }
+    ]
+  }
+}

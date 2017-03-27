@@ -1,0 +1,24 @@
+{
+  "projects": [
+    {
+      "id": "uuid-for-berlin",
+      "services": [
+        {
+          "type": "shared",
+          "resources": [],
+          "scraped_at": 22
+        }
+      ]
+    },
+    {
+      "id": "uuid-for-dresden",
+      "services": [
+        {
+          "type": "shared",
+          "resources": [],
+          "scraped_at": 44
+        }
+      ]
+    }
+  ]
+}

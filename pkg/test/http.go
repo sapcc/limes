@@ -39,7 +39,8 @@ type APIRequest struct {
 	Path             string
 	Body             string //may be empty
 	ExpectStatusCode int
-	ExpectJSON       string //path to JSON file
+	ExpectBody       *string //raw content (not a file path)
+	ExpectJSON       string  //path to JSON file
 }
 
 //Check performs the HTTP request described by this APIRequest against the
@@ -63,6 +64,16 @@ func (r APIRequest) Check(t *testing.T, router *mux.Router) {
 		t.Errorf("%s %s: expected status code %d, got %d",
 			r.Method, r.Path, r.ExpectStatusCode, response.StatusCode,
 		)
+	}
+
+	if r.ExpectBody != nil {
+		responseStr := string(responseBytes)
+		if responseStr != *r.ExpectBody {
+			t.Fatalf("%s %s: expected body %#v, but got %#v",
+				r.Method, r.Path, *r.ExpectBody, responseStr,
+			)
+		}
+		return //do not try to evaluate ExpectJSON
 	}
 
 	if r.ExpectJSON == "" {

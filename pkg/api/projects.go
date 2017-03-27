@@ -88,6 +88,10 @@ func (p *v1Provider) DiscoverProjects(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if len(newProjectUUIDs) == 0 {
+		w.WriteHeader(204)
+		return
+	}
 	ReturnJSON(w, 202, map[string]interface{}{"new_projects": util.IDsToJSON(newProjectUUIDs)})
 }
 

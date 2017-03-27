@@ -1,0 +1,12 @@
+{
+  "projects": [
+    {
+      "id": "uuid-for-berlin",
+      "services": []
+    },
+    {
+      "id": "uuid-for-dresden",
+      "services": []
+    }
+  ]
+}

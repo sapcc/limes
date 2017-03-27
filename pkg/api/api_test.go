@@ -35,7 +35,7 @@ func init() {
 	limes.RegisterQuotaPlugin(&test.Plugin{StaticServiceType: "unshared"})
 }
 
-func setupTest(t *testing.T) *mux.Router {
+func setupTest(t *testing.T) (*test.Driver, *mux.Router) {
 	//load test database
 	test.InitDatabase(t, "../test/migrations")
 	test.ExecSQLFile(t, "fixtures/start-data.sql")
@@ -67,12 +67,28 @@ func setupTest(t *testing.T) *mux.Router {
 		t.Fatal(err)
 	}
 
-	router, _ := NewV1Router(test.NewDriver(config.Clusters["west"]), config)
-	return router
+	//create test driver with the domains and projects from start-data.sql
+	driver := test.NewDriver(config.Clusters["west"])
+	driver.StaticDomains = []limes.KeystoneDomain{
+		limes.KeystoneDomain{Name: "germany", UUID: "uuid-for-germany"},
+		limes.KeystoneDomain{Name: "france", UUID: "uuid-for-france"},
+	}
+	driver.StaticProjects = map[string][]limes.KeystoneProject{
+		"uuid-for-germany": []limes.KeystoneProject{
+			limes.KeystoneProject{Name: "berlin", UUID: "uuid-for-berlin"},
+			limes.KeystoneProject{Name: "dresden", UUID: "uuid-for-dresden"},
+		},
+		"uuid-for-france": []limes.KeystoneProject{
+			limes.KeystoneProject{Name: "paris", UUID: "uuid-for-paris"},
+		},
+	}
+
+	router, _ := NewV1Router(driver, config)
+	return driver, router
 }
 
 func Test_ClusterOperations(t *testing.T) {
-	router := setupTest(t)
+	_, router := setupTest(t)
 
 	//check GetCluster
 	test.APIRequest{
@@ -110,7 +126,7 @@ func Test_ClusterOperations(t *testing.T) {
 }
 
 func Test_DomainOperations(t *testing.T) {
-	router := setupTest(t)
+	driver, router := setupTest(t)
 
 	//check GetDomain
 	test.APIRequest{
@@ -152,5 +168,95 @@ func Test_DomainOperations(t *testing.T) {
 		Path:             "/v1/domains?service=shared&resource=things",
 		ExpectStatusCode: 200,
 		ExpectJSON:       "./fixtures/domain-list-filtered.json",
+	}.Check(t, router)
+
+	//check DiscoverDomains
+	driver.StaticDomains = append(driver.StaticDomains,
+		limes.KeystoneDomain{Name: "spain", UUID: "uuid-for-spain"},
+	)
+	test.APIRequest{
+		Method:           "POST",
+		Path:             "/v1/domains/discover",
+		ExpectStatusCode: 202,
+		ExpectJSON:       "./fixtures/domain-discover.json",
+	}.Check(t, router)
+
+	emptyString := ""
+	test.APIRequest{
+		Method:           "POST",
+		Path:             "/v1/domains/discover",
+		ExpectStatusCode: 204, //no content because no new domains discovered
+		ExpectBody:       &emptyString,
+	}.Check(t, router)
+}
+
+func Test_ProjectOperations(t *testing.T) {
+	driver, router := setupTest(t)
+
+	//check GetProject
+	test.APIRequest{
+		Method:           "GET",
+		Path:             "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatusCode: 200,
+		ExpectJSON:       "./fixtures/project-get-berlin.json",
+	}.Check(t, router)
+	//dresden has a case of backend quota != quota
+	test.APIRequest{
+		Method:           "GET",
+		Path:             "/v1/domains/uuid-for-germany/projects/uuid-for-dresden",
+		ExpectStatusCode: 200,
+		ExpectJSON:       "./fixtures/project-get-dresden.json",
+	}.Check(t, router)
+	//paris has a case of infinite backend quota
+	test.APIRequest{
+		Method:           "GET",
+		Path:             "/v1/domains/uuid-for-france/projects/uuid-for-paris",
+		ExpectStatusCode: 200,
+		ExpectJSON:       "./fixtures/project-get-paris.json",
+	}.Check(t, router)
+
+	//check ListProjects
+	test.APIRequest{
+		Method:           "GET",
+		Path:             "/v1/domains/uuid-for-germany/projects",
+		ExpectStatusCode: 200,
+		ExpectJSON:       "./fixtures/project-list.json",
+	}.Check(t, router)
+	test.APIRequest{
+		Method:           "GET",
+		Path:             "/v1/domains/uuid-for-germany/projects?service=unknown",
+		ExpectStatusCode: 200,
+		ExpectJSON:       "./fixtures/project-list-no-services.json",
+	}.Check(t, router)
+	test.APIRequest{
+		Method:           "GET",
+		Path:             "/v1/domains/uuid-for-germany/projects?service=shared&resource=unknown",
+		ExpectStatusCode: 200,
+		ExpectJSON:       "./fixtures/project-list-no-resources.json",
+	}.Check(t, router)
+	test.APIRequest{
+		Method:           "GET",
+		Path:             "/v1/domains/uuid-for-germany/projects?service=shared&resource=things",
+		ExpectStatusCode: 200,
+		ExpectJSON:       "./fixtures/project-list-filtered.json",
+	}.Check(t, router)
+
+	//check DiscoverProjects
+	driver.StaticProjects["uuid-for-germany"] = append(driver.StaticProjects["uuid-for-germany"],
+		limes.KeystoneProject{Name: "frankfurt", UUID: "uuid-for-frankfurt"},
+	)
+	test.APIRequest{
+		Method:           "POST",
+		Path:             "/v1/domains/uuid-for-germany/projects/discover",
+		ExpectStatusCode: 202,
+		ExpectJSON:       "./fixtures/project-discover.json",
+	}.Check(t, router)
+
+	emptyString := ""
+	test.APIRequest{
+		Method:           "POST",
+		Path:             "/v1/domains/uuid-for-germany/projects/discover",
+		ExpectStatusCode: 204, //no content because no new projects discovered
+		ExpectBody:       &emptyString,
 	}.Check(t, router)
 }

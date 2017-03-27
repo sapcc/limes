@@ -75,5 +75,9 @@ func (p *v1Provider) DiscoverDomains(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if len(newDomainUUIDs) == 0 {
+		w.WriteHeader(204)
+		return
+	}
 	ReturnJSON(w, 202, map[string]interface{}{"new_domains": util.IDsToJSON(newDomainUUIDs)})
 }

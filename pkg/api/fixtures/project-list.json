@@ -1,0 +1,83 @@
+{
+  "projects": [
+    {
+      "id": "uuid-for-berlin",
+      "services": [
+        {
+          "type": "shared",
+          "resources": [
+            {
+              "name": "capacity",
+              "unit": "B",
+              "quota": 10,
+              "usage": 2
+            },
+            {
+              "name": "things",
+              "quota": 10,
+              "usage": 2
+            }
+          ],
+          "scraped_at": 22
+        },
+        {
+          "type": "unshared",
+          "resources": [
+            {
+              "name": "capacity",
+              "unit": "B",
+              "quota": 10,
+              "usage": 2
+            },
+            {
+              "name": "things",
+              "quota": 10,
+              "usage": 2
+            }
+          ],
+          "scraped_at": 11
+        }
+      ]
+    },
+    {
+      "id": "uuid-for-dresden",
+      "services": [
+        {
+          "type": "shared",
+          "resources": [
+            {
+              "name": "capacity",
+              "unit": "B",
+              "quota": 10,
+              "usage": 2,
+              "backend_quota": 100
+            },
+            {
+              "name": "things",
+              "quota": 10,
+              "usage": 2
+            }
+          ],
+          "scraped_at": 44
+        },
+        {
+          "type": "unshared",
+          "resources": [
+            {
+              "name": "capacity",
+              "unit": "B",
+              "quota": 10,
+              "usage": 2
+            },
+            {
+              "name": "things",
+              "quota": 10,
+              "usage": 2
+            }
+          ],
+          "scraped_at": 33
+        }
+      ]
+    }
+  ]
+}
