@@ -19,6 +19,8 @@
 
 package limes
 
+import "strconv"
+
 //QuotaPlugin is the interface that the quota/usage collector plugins for all
 //backend services must implement. There can only be one QuotaPlugin for each
 //backend service.
@@ -95,6 +97,18 @@ const (
 	//UnitExbibytes is exactly that.
 	UnitExbibytes Unit = "EiB"
 )
+
+//Format appends the unit (if any) to the given value. This should only be used
+//for error messages; actual UIs should be more clever about formatting values
+//(e.g. UnitMebibytes.Format(1048576) returns "1048576 MiB" where "1 TiB"
+//would be more appropriate).
+func (u Unit) Format(value uint64) string {
+	str := strconv.FormatUint(value, 10)
+	if u == UnitNone {
+		return str
+	}
+	return str + " " + string(u)
+}
 
 //UnitFor finds the plugin for the given serviceType and finds within that
 //plugin the ResourceInfo for the given resourceName, and returns its unit. If
