@@ -17,7 +17,6 @@
 
   "domain:list":      "rule:cluster_admin",
   "domain:show":      "rule:domain_viewer",
-  "domain:sync":      "rule:domain_editor",
   "domain:raise":     "rule:cluster_admin",
   "domain:lower":     "rule:domain_editor",
   "domain:discover":  "rule:cluster_admin",
