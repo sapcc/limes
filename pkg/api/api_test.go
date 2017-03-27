@@ -24,11 +24,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net/http"
 	"reflect"
 	"testing"
 
 	policy "github.com/databus23/goslo.policy"
-	"github.com/gorilla/mux"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/test"
@@ -39,7 +39,7 @@ func init() {
 	limes.RegisterQuotaPlugin(&test.Plugin{StaticServiceType: "unshared"})
 }
 
-func setupTest(t *testing.T) (*test.Driver, *mux.Router) {
+func setupTest(t *testing.T) (*test.Driver, http.Handler) {
 	//load test database
 	test.InitDatabase(t, "../test/migrations")
 	test.ExecSQLFile(t, "fixtures/start-data.sql")

@@ -52,10 +52,10 @@ type v1Provider struct {
 	VersionData VersionData
 }
 
-//NewV1Router creates a mux.Router that serves the Limes v1 API.
+//NewV1Router creates a http.Handler that serves the Limes v1 API.
 //It also returns the VersionData for this API version which is needed for the
 //version advertisement on "GET /".
-func NewV1Router(driver limes.Driver, config limes.Configuration) (*mux.Router, VersionData) {
+func NewV1Router(driver limes.Driver, config limes.Configuration) (http.Handler, VersionData) {
 	r := mux.NewRouter()
 	p := &v1Provider{
 		Driver: driver,

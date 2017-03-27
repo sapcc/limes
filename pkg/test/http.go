@@ -24,13 +24,12 @@ import (
 	"encoding/json"
 	"io"
 	"io/ioutil"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
-
-	"github.com/gorilla/mux"
 )
 
 //APIRequest contains all metadata about a test request.
@@ -44,9 +43,9 @@ type APIRequest struct {
 }
 
 //Check performs the HTTP request described by this APIRequest against the
-//given router and compares the response with the expectation in the
+//given http.Handler and compares the response with the expectation in the
 //APIRequest.
-func (r APIRequest) Check(t *testing.T, router *mux.Router) {
+func (r APIRequest) Check(t *testing.T, handler http.Handler) {
 	var requestBody io.Reader
 	if r.Body != "" {
 		requestBody = bytes.NewReader([]byte(r.Body))
@@ -55,7 +54,7 @@ func (r APIRequest) Check(t *testing.T, router *mux.Router) {
 	request.Header.Set("X-Auth-Token", "something")
 
 	recorder := httptest.NewRecorder()
-	router.ServeHTTP(recorder, request)
+	handler.ServeHTTP(recorder, request)
 
 	response := recorder.Result()
 	responseBytes, _ := ioutil.ReadAll(response.Body)
