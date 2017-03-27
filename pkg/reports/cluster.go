@@ -34,8 +34,8 @@ import (
 type Cluster struct {
 	ID           string          `json:"id"`
 	Services     ClusterServices `json:"services,keepempty"`
-	MaxScrapedAt *int64          `json:"max_scraped_at,keepempty"`
-	MinScrapedAt *int64          `json:"min_scraped_at,keepempty"`
+	MaxScrapedAt *int64          `json:"max_scraped_at,omitempty"`
+	MinScrapedAt *int64          `json:"min_scraped_at,omitempty"`
 }
 
 //ClusterService is a substructure of Cluster containing data for
