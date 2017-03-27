@@ -124,8 +124,8 @@ func GetDomains(cluster *limes.ClusterConfiguration, domainID *int64, dbi db.Int
 		return nil, err
 	}
 
-	domains := make(map[string]*Domain)
-	for rows.Next() {
+	domains := make(domains)
+	err = db.ForeachRow(rows, func() error {
 		var (
 			domainUUID           string
 			serviceType          string
@@ -143,53 +143,24 @@ func GetDomains(cluster *limes.ClusterConfiguration, domainID *int64, dbi db.Int
 			&minScrapedAt, &maxScrapedAt,
 		)
 		if err != nil {
-			rows.Close()
-			return nil, err
+			return err
 		}
 
-		domain, exists := domains[domainUUID]
-		if !exists {
-			domain = &Domain{
-				UUID:     domainUUID,
-				Services: make(DomainServices),
-			}
-			domains[domainUUID] = domain
-		}
+		_, service, resource := domains.Find(domainUUID, serviceType, resourceName)
 
-		service, exists := domain.Services[serviceType]
-		if !exists {
-			service = &DomainService{
-				Type:         serviceType,
-				Resources:    make(DomainResources),
-				MaxScrapedAt: time.Time(maxScrapedAt).Unix(),
-				MinScrapedAt: time.Time(minScrapedAt).Unix(),
-			}
-			domain.Services[serviceType] = service
-		}
+		service.MaxScrapedAt = time.Time(maxScrapedAt).Unix()
+		service.MinScrapedAt = time.Time(minScrapedAt).Unix()
 
-		resource := &DomainResource{
-			Name:                 resourceName,
-			Unit:                 limes.UnitFor(serviceType, resourceName),
-			DomainQuota:          0, //will be measured in the next step
-			ProjectsQuota:        projectsQuota,
-			Usage:                usage,
-			BackendQuota:         nil, //see below
-			InfiniteBackendQuota: nil, //see below
-		}
+		resource.ProjectsQuota = projectsQuota
+		resource.Usage = usage
 		if projectsQuota != backendQuota {
 			resource.BackendQuota = &backendQuota
 		}
 		if infiniteBackendQuota {
 			resource.InfiniteBackendQuota = &infiniteBackendQuota
 		}
-		service.Resources[resourceName] = resource
-	}
-	err = rows.Err()
-	if err != nil {
-		rows.Close()
-		return nil, err
-	}
-	err = rows.Close()
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -201,7 +172,7 @@ func GetDomains(cluster *limes.ClusterConfiguration, domainID *int64, dbi db.Int
 		return nil, err
 	}
 
-	for rows.Next() {
+	err = db.ForeachRow(rows, func() error {
 		var (
 			domainUUID   string
 			serviceType  string
@@ -212,46 +183,13 @@ func GetDomains(cluster *limes.ClusterConfiguration, domainID *int64, dbi db.Int
 			&domainUUID, &serviceType, &resourceName, &quota,
 		)
 		if err != nil {
-			rows.Close()
-			return nil, err
+			return err
 		}
 
-		domain, exists := domains[domainUUID]
-		if !exists {
-			domain = &Domain{
-				UUID:     domainUUID,
-				Services: make(DomainServices),
-			}
-			domains[domainUUID] = domain
-		}
-
-		service, exists := domain.Services[serviceType]
-		if !exists {
-			service = &DomainService{
-				Type:      serviceType,
-				Resources: make(DomainResources),
-			}
-			domain.Services[serviceType] = service
-		}
-
-		resource, exists := service.Resources[resourceName]
-		if exists {
-			resource.DomainQuota = quota
-		} else {
-			resource = &DomainResource{
-				Name:        resourceName,
-				Unit:        limes.UnitFor(serviceType, resourceName),
-				DomainQuota: quota,
-			}
-			service.Resources[resourceName] = resource
-		}
-	}
-	err = rows.Err()
-	if err != nil {
-		rows.Close()
-		return nil, err
-	}
-	err = rows.Close()
+		_, _, resource := domains.Find(domainUUID, serviceType, resourceName)
+		resource.DomainQuota = quota
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -305,4 +243,37 @@ func makeDomainFilter(tableWithServiceType, tableWithResourceName string, cluste
 	}
 	filter.ApplyTo(fields, tableWithServiceType, tableWithResourceName)
 	return fields
+}
+
+type domains map[string]*Domain
+
+func (d domains) Find(domainUUID, serviceType, resourceName string) (*Domain, *DomainService, *DomainResource) {
+	domain, exists := d[domainUUID]
+	if !exists {
+		domain = &Domain{
+			UUID:     domainUUID,
+			Services: make(DomainServices),
+		}
+		d[domainUUID] = domain
+	}
+
+	service, exists := domain.Services[serviceType]
+	if !exists {
+		service = &DomainService{
+			Type:      serviceType,
+			Resources: make(DomainResources),
+		}
+		domain.Services[serviceType] = service
+	}
+
+	resource, exists := service.Resources[resourceName]
+	if !exists {
+		resource = &DomainResource{
+			Name: resourceName,
+			Unit: limes.UnitFor(serviceType, resourceName),
+		}
+		service.Resources[resourceName] = resource
+	}
+
+	return domain, service, resource
 }
