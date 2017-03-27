@@ -1,19 +1,18 @@
 PKG    = github.com/sapcc/limes
-BINS   = collect migrate serve sync-with-elektra
 PREFIX := /usr
 
-all: $(addprefix build/limes-,$(BINS))
+all: build/limes
 
 GO            := GOPATH=$(CURDIR)/.gopath GOBIN=$(CURDIR)/build go
 GO_BUILDFLAGS :=
 GO_LDFLAGS    := -s -w
 
-# These target use the incremental rebuild capabilities of the Go compiler to speed things up.
+# Theis target uses the incremental rebuild capabilities of the Go compiler to speed things up.
 # If no source files have changed, `go install` exits quickly without doing anything.
-build/limes-%: FORCE
-	$(GO) install $(GO_BUILDFLAGS) -ldflags '$(GO_LDFLAGS)' '$(PKG)/cmd/limes-$*'
+build/limes: FORCE
+	$(GO) install $(GO_BUILDFLAGS) -ldflags '$(GO_LDFLAGS)' '$(PKG)'
 
-GO_ALLPKGS := $(shell go list $(PKG)/cmd/... $(PKG)/pkg/...)
+GO_ALLPKGS := $(PKG) $(shell go list $(PKG)/pkg/...)
 GO_TESTPKGS := $(shell go list -f '{{if .TestGoFiles}}{{.ImportPath}}{{end}}' $(PKG)/pkg/...)
 GO_COVERFILES := $(patsubst %,build/%.cover.out,$(subst /,_,$(GO_TESTPKGS)))
 
@@ -31,8 +30,8 @@ pkg/test/migrations/%.sql: pkg/db/migrations/%.sql
 	@# convert Postgres syntax into SQLite syntax where necessary
 	sed 's/BIGSERIAL NOT NULL PRIMARY KEY/INTEGER PRIMARY KEY/' < $< > $@
 static-check: FORCE
-	@if s="$$(gofmt -l cmd pkg 2>/dev/null)"                        && test -n "$$s"; then printf ' => %s\n%s\n' gofmt  "$$s"; false; fi
-	@if s="$$(find cmd pkg -type d -exec golint {} \; 2>/dev/null)" && test -n "$$s"; then printf ' => %s\n%s\n' golint "$$s"; false; fi
+	@if s="$$(gofmt -l *.go pkg 2>/dev/null)"                               && test -n "$$s"; then printf ' => %s\n%s\n' gofmt  "$$s"; false; fi
+	@if s="$$(golint . && find pkg -type d -exec golint {} \; 2>/dev/null)" && test -n "$$s"; then printf ' => %s\n%s\n' golint "$$s"; false; fi
 	$(GO) vet $(GO_ALLPKGS)
 build/%.cover.out: prepare-check FORCE
 	$(GO) test -coverprofile=$@ -covermode=count -coverpkg=$(subst $(space),$(comma),$(GO_ALLPKGS)) $(subst _,/,$*)
@@ -42,13 +41,12 @@ build/cover.html: build/cover.out
 	$(GO) tool cover -html $< -o $@
 
 install: FORCE all
-	install -d -m 0755    "$(DESTDIR)$(PREFIX)/bin"
-	install -D -m 0755 -t "$(DESTDIR)$(PREFIX)/bin" $(addprefix build/limes-,$(BINS))
+	install -D -m 0755 build/limes "$(DESTDIR)$(PREFIX)/bin/limes"
 	install -d -m 0755    "$(DESTDIR)$(PREFIX)/share/limes/migrations"
 	install -D -m 0644 -t "$(DESTDIR)$(PREFIX)/share/limes/migrations" $(CURDIR)/pkg/db/migrations/*.sql
 
 clean: FORCE
-	rm -f -- $(addprefix build/limes-,$(BINS))
+	rm -f -- build/limes
 
 build/docker.tar: clean
 	make GO_LDFLAGS="-s -w -linkmode external -extldflags -static" DESTDIR='$(CURDIR)/build/install' install
