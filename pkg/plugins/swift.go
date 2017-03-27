@@ -20,14 +20,15 @@
 package plugins
 
 import (
+	"net/http"
+	"regexp"
+	"strconv"
+
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/objectstorage/v1/accounts"
 	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/util"
-	"net/http"
-	"regexp"
-	"strconv"
 )
 
 type swiftPlugin struct{}
@@ -85,16 +86,16 @@ func (p *swiftPlugin) Scrape(driver limes.Driver, domainUUID, projectUUID string
 
 	//Extract quota, if set
 	var quota int64 = -1
-	quota_header := account.Header.Get("X-Account-Meta-Quota-Bytes")
-	if quota_header != "" {
-		quota, _ = strconv.ParseInt(quota_header, 10, 64)
+	quotaHeader := account.Header.Get("X-Account-Meta-Quota-Bytes")
+	if quotaHeader != "" {
+		quota, _ = strconv.ParseInt(quotaHeader, 10, 64)
 	}
 
 	//Extract usage
-	var usage int64 = 0
-	usage_header := account.Header.Get("X-Account-Bytes-Used")
-	if usage_header != "" {
-		usage, _ = strconv.ParseInt(usage_header, 10, 64)
+	var usage int64
+	usageHeader := account.Header.Get("X-Account-Bytes-Used")
+	if usageHeader != "" {
+		usage, _ = strconv.ParseInt(usageHeader, 10, 64)
 	}
 
 	util.LogDebug("Swift Account %s: quota '%d' - usage '%d'", projectUUID, quota, usage)
