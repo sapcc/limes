@@ -49,17 +49,6 @@ func ReadFilter(r *http.Request) Filter {
 	return f
 }
 
-//ApplyTo adds this filter to a field-value map that is going to be passed into
-//db.BuildSimpleWhereClause.
-func (f Filter) ApplyTo(fields map[string]interface{}, tableWithServiceType, tableWithResourceName string) {
-	if f.serviceTypes != nil {
-		fields[tableWithServiceType+".type"] = f.serviceTypes
-	}
-	if f.resourceNames != nil {
-		fields[tableWithResourceName+".name"] = f.resourceNames
-	}
-}
-
 var filterPrepareRx = regexp.MustCompile(`{{AND ([a-z.]+) = \$(service_type|resource_name)}}`)
 
 //PrepareQuery takes a SQL query string, and replaces the following
