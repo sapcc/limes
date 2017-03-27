@@ -25,6 +25,7 @@ import (
 	"testing"
 
 	policy "github.com/databus23/goslo.policy"
+	"github.com/gorilla/mux"
 	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/test"
 )
@@ -34,7 +35,7 @@ func init() {
 	limes.RegisterQuotaPlugin(&test.Plugin{StaticServiceType: "unshared"})
 }
 
-func Test_ClusterOperations(t *testing.T) {
+func setupTest(t *testing.T) *mux.Router {
 	//load test database
 	test.InitDatabase(t, "../test/migrations")
 	test.ExecSQLFile(t, "fixtures/start-data.sql")
@@ -67,14 +68,21 @@ func Test_ClusterOperations(t *testing.T) {
 	}
 
 	router, _ := NewV1Router(test.NewDriver(config.Clusters["west"]), config)
+	return router
+}
 
-	//check cluster operations
+func Test_ClusterOperations(t *testing.T) {
+	router := setupTest(t)
+
+	//check GetCluster
 	test.APIRequest{
 		Method:           "GET",
 		Path:             "/v1/clusters/west",
 		ExpectStatusCode: 200,
 		ExpectJSON:       "fixtures/cluster-get-west.json",
 	}.Check(t, router)
+
+	//check ListClusters
 	test.APIRequest{
 		Method:           "GET",
 		Path:             "/v1/clusters",
@@ -86,5 +94,39 @@ func Test_ClusterOperations(t *testing.T) {
 		Path:             "/v1/clusters?service=shared&resource=things",
 		ExpectStatusCode: 200,
 		ExpectJSON:       "fixtures/cluster-list-filtered.json",
+	}.Check(t, router)
+}
+
+func Test_DomainOperations(t *testing.T) {
+	router := setupTest(t)
+
+	//check GetDomain
+	test.APIRequest{
+		Method:           "GET",
+		Path:             "/v1/domains/uuid-for-germany",
+		ExpectStatusCode: 200,
+		ExpectJSON:       "./fixtures/domain-get-germany.json",
+	}.Check(t, router)
+	//domain "france" covers some special cases: an infinite backend quota and
+	//missing domain quota entries for one service
+	test.APIRequest{
+		Method:           "GET",
+		Path:             "/v1/domains/uuid-for-france",
+		ExpectStatusCode: 200,
+		ExpectJSON:       "./fixtures/domain-get-france.json",
+	}.Check(t, router)
+
+	//check ListDomains
+	test.APIRequest{
+		Method:           "GET",
+		Path:             "/v1/domains",
+		ExpectStatusCode: 200,
+		ExpectJSON:       "./fixtures/domain-list.json",
+	}.Check(t, router)
+	test.APIRequest{
+		Method:           "GET",
+		Path:             "/v1/domains?service=shared&resource=things",
+		ExpectStatusCode: 200,
+		ExpectJSON:       "./fixtures/domain-list-filtered.json",
 	}.Check(t, router)
 }

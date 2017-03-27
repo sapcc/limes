@@ -1,0 +1,48 @@
+{
+  "domain": {
+    "id": "uuid-for-germany",
+    "services": [
+      {
+        "type": "shared",
+        "resources": [
+          {
+            "name": "capacity",
+            "unit": "B",
+            "quota": 25,
+            "projects_quota": 20,
+            "usage": 4,
+            "backend_quota": 110
+          },
+          {
+            "name": "things",
+            "quota": 30,
+            "projects_quota": 20,
+            "usage": 4
+          }
+        ],
+        "max_scraped_at": 44,
+        "min_scraped_at": 22
+      },
+      {
+        "type": "unshared",
+        "resources": [
+          {
+            "name": "capacity",
+            "unit": "B",
+            "quota": 45,
+            "projects_quota": 20,
+            "usage": 4
+          },
+          {
+            "name": "things",
+            "quota": 50,
+            "projects_quota": 20,
+            "usage": 4
+          }
+        ],
+        "max_scraped_at": 33,
+        "min_scraped_at": 11
+      }
+    ]
+  }
+}

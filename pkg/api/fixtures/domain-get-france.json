@@ -1,0 +1,49 @@
+{
+  "domain": {
+    "id": "uuid-for-france",
+    "services": [
+      {
+        "type": "shared",
+        "resources": [
+          {
+            "name": "capacity",
+            "unit": "B",
+            "quota": 0,
+            "projects_quota": 10,
+            "usage": 2
+          },
+          {
+            "name": "things",
+            "quota": 0,
+            "projects_quota": 10,
+            "usage": 2
+          }
+        ],
+        "max_scraped_at": 66,
+        "min_scraped_at": 66
+      },
+      {
+        "type": "unshared",
+        "resources": [
+          {
+            "name": "capacity",
+            "unit": "B",
+            "quota": 55,
+            "projects_quota": 10,
+            "usage": 2
+          },
+          {
+            "name": "things",
+            "quota": 20,
+            "projects_quota": 10,
+            "usage": 2,
+            "backend_quota": 0,
+            "infinite_backend_quota": true
+          }
+        ],
+        "max_scraped_at": 55,
+        "min_scraped_at": 55
+      }
+    ]
+  }
+}

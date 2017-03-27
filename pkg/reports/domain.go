@@ -117,13 +117,8 @@ var domainReportQuery2 = `
 //GetDomains returns Domain reports for all domains in the given cluster or, if
 //domainID is non-nil, for that domain only.
 func GetDomains(cluster *limes.ClusterConfiguration, domainID *int64, dbi db.Interface, filter Filter) ([]*Domain, error) {
-	fields := map[string]interface{}{"d.cluster_id": cluster.ID}
-	if domainID != nil {
-		fields["d.id"] = *domainID
-	}
-	whereStr, queryArgs := db.BuildSimpleWhereClause(fields)
-
 	//first query: data for projects in this domain
+	whereStr, queryArgs := db.BuildSimpleWhereClause(makeDomainFilter("ps", "pr", cluster.ID, domainID, filter))
 	rows, err := dbi.Query(fmt.Sprintf(domainReportQuery1, whereStr), queryArgs...)
 	if err != nil {
 		return nil, err
@@ -161,10 +156,6 @@ func GetDomains(cluster *limes.ClusterConfiguration, domainID *int64, dbi db.Int
 			domains[domainUUID] = domain
 		}
 
-		if !filter.MatchesService(serviceType) {
-			continue
-		}
-
 		service, exists := domain.Services[serviceType]
 		if !exists {
 			service = &DomainService{
@@ -174,10 +165,6 @@ func GetDomains(cluster *limes.ClusterConfiguration, domainID *int64, dbi db.Int
 				MinScrapedAt: time.Time(minScrapedAt).Unix(),
 			}
 			domain.Services[serviceType] = service
-		}
-
-		if !filter.MatchesResource(resourceName) {
-			continue
 		}
 
 		resource := &DomainResource{
@@ -208,6 +195,7 @@ func GetDomains(cluster *limes.ClusterConfiguration, domainID *int64, dbi db.Int
 	}
 
 	//second query: add domain quotas
+	whereStr, queryArgs = db.BuildSimpleWhereClause(makeDomainFilter("ds", "dr", cluster.ID, domainID, filter))
 	rows, err = dbi.Query(fmt.Sprintf(domainReportQuery2, whereStr), queryArgs...)
 	if err != nil {
 		return nil, err
@@ -308,4 +296,13 @@ func GetDomains(cluster *limes.ClusterConfiguration, domainID *int64, dbi db.Int
 	}
 
 	return result, nil
+}
+
+func makeDomainFilter(tableWithServiceType, tableWithResourceName string, clusterID string, domainID *int64, filter Filter) map[string]interface{} {
+	fields := map[string]interface{}{"d.cluster_id": clusterID}
+	if domainID != nil {
+		fields["d.id"] = *domainID
+	}
+	filter.ApplyTo(fields, tableWithServiceType, tableWithResourceName)
+	return fields
 }
