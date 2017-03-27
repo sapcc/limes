@@ -20,6 +20,7 @@
 package api
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
@@ -273,18 +274,15 @@ func Test_ProjectOperations(t *testing.T) {
 }
 
 func expectStaleProjectServices(t *testing.T, pairs ...string) {
-	rows, err := db.DB.Query(`
+	queryStr := `
 		SELECT p.name, ps.type
 		  FROM projects p JOIN project_services ps ON ps.project_id = p.id
 		 WHERE ps.stale
 		 ORDER BY p.name, ps.type
-	`)
-	if err != nil {
-		t.Fatal(err.Error())
-	}
-
+	`
 	var actualPairs []string
-	err = db.ForeachRow(rows, func() error {
+
+	err := db.ForeachRow(db.DB, queryStr, nil, func(rows *sql.Rows) error {
 		var (
 			projectName string
 			serviceType string

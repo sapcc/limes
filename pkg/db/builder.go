@@ -66,18 +66,22 @@ func makePlaceholderList(count, offset int) string {
 	return strings.Join(placeholders, ",")
 }
 
-//ForeachRow calls the given action one for every row in the given sql.Rows
-//instance. It then cleans up the sql.Rows and handles any errors that occur
-//during that or during the iteration.
-func ForeachRow(rows *sql.Rows, action func() error) error {
+//ForeachRow calls dbi.Query() with the given query and args, then executes the
+//given action one for every row in the result set. It then cleans up the
+//result set, and it handles any errors that occur during all of this.
+func ForeachRow(dbi Interface, query string, args []interface{}, action func(*sql.Rows) error) error {
+	rows, err := dbi.Query(query, args...)
+	if err != nil {
+		return err
+	}
 	for rows.Next() {
-		err := action()
+		err = action(rows)
 		if err != nil {
 			rows.Close()
 			return err
 		}
 	}
-	err := rows.Err()
+	err = rows.Err()
 	if err != nil {
 		rows.Close()
 		return err

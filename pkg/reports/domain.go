@@ -20,6 +20,7 @@
 package reports
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -123,15 +124,10 @@ func GetDomains(cluster *limes.ClusterConfiguration, domainID *int64, dbi db.Int
 	}
 
 	//first query: data for projects in this domain
+	domains := make(domains)
 	queryStr, joinArgs := filter.PrepareQuery(domainReportQuery1)
 	whereStr, whereArgs := db.BuildSimpleWhereClause(fields, len(joinArgs))
-	rows, err := dbi.Query(fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...)...)
-	if err != nil {
-		return nil, err
-	}
-
-	domains := make(domains)
-	err = db.ForeachRow(rows, func() error {
+	err := db.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		var (
 			domainUUID           string
 			serviceType          *string
@@ -187,12 +183,7 @@ func GetDomains(cluster *limes.ClusterConfiguration, domainID *int64, dbi db.Int
 	//second query: add domain quotas
 	queryStr, joinArgs = filter.PrepareQuery(domainReportQuery2)
 	whereStr, whereArgs = db.BuildSimpleWhereClause(fields, len(joinArgs))
-	rows, err = dbi.Query(fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...)...)
-	if err != nil {
-		return nil, err
-	}
-
-	err = db.ForeachRow(rows, func() error {
+	err = db.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		var (
 			domainUUID   string
 			serviceType  *string

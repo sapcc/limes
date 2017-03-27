@@ -20,6 +20,7 @@
 package reports
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -141,15 +142,10 @@ var clusterReportQuery5 = `
 //to look at the services enabled in other clusters.
 func GetClusters(config limes.Configuration, clusterID *string, dbi db.Interface, filter Filter) ([]*Cluster, error) {
 	//first query: collect project usage data in these clusters
+	clusters := make(clusters)
 	queryStr, joinArgs := filter.PrepareQuery(clusterReportQuery1)
 	whereStr, whereArgs := db.BuildSimpleWhereClause(makeClusterFilter("d", clusterID), len(joinArgs))
-	rows, err := dbi.Query(fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...)...)
-	if err != nil {
-		return nil, err
-	}
-
-	clusters := make(clusters)
-	err = db.ForeachRow(rows, func() error {
+	err := db.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		var (
 			clusterID    string
 			serviceType  *string
@@ -186,12 +182,7 @@ func GetClusters(config limes.Configuration, clusterID *string, dbi db.Interface
 	//second query: collect domain quota data in these clusters
 	queryStr, joinArgs = filter.PrepareQuery(clusterReportQuery2)
 	whereStr, whereArgs = db.BuildSimpleWhereClause(makeClusterFilter("d", clusterID), len(joinArgs))
-	rows, err = dbi.Query(fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...)...)
-	if err != nil {
-		return nil, err
-	}
-
-	err = db.ForeachRow(rows, func() error {
+	err = db.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		var (
 			clusterID    string
 			serviceType  *string
@@ -218,12 +209,7 @@ func GetClusters(config limes.Configuration, clusterID *string, dbi db.Interface
 	//third query: collect capacity data for these clusters
 	queryStr, joinArgs = filter.PrepareQuery(clusterReportQuery3)
 	whereStr, whereArgs = db.BuildSimpleWhereClause(makeClusterFilter("cs", clusterID), len(joinArgs))
-	rows, err = dbi.Query(fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...)...)
-	if err != nil {
-		return nil, err
-	}
-
-	err = db.ForeachRow(rows, func() error {
+	err = db.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		var (
 			clusterID    string
 			serviceType  string
@@ -296,18 +282,14 @@ func GetClusters(config limes.Configuration, clusterID *string, dbi db.Interface
 	if len(isSharedService) > 0 {
 
 		//fourth query: aggregate domain quota for shared services
+		sharedQuotaSums := make(map[string]map[string]uint64)
+
 		sharedServiceTypes := make([]string, 0, len(isSharedService))
 		for serviceType := range isSharedService {
 			sharedServiceTypes = append(sharedServiceTypes, serviceType)
 		}
 		whereStr, queryArgs := db.BuildSimpleWhereClause(map[string]interface{}{"ds.type": sharedServiceTypes}, 0)
-		rows, err = dbi.Query(fmt.Sprintf(clusterReportQuery4, whereStr), queryArgs...)
-		if err != nil {
-			return nil, err
-		}
-
-		sharedQuotaSums := make(map[string]map[string]uint64)
-		err = db.ForeachRow(rows, func() error {
+		err = db.ForeachRow(db.DB, fmt.Sprintf(clusterReportQuery4, whereStr), queryArgs, func(rows *sql.Rows) error {
 			var (
 				serviceType  string
 				resourceName string
@@ -330,13 +312,8 @@ func GetClusters(config limes.Configuration, clusterID *string, dbi db.Interface
 
 		//fifth query: aggregate project quota for shared services
 		whereStr, queryArgs = db.BuildSimpleWhereClause(map[string]interface{}{"ps.type": sharedServiceTypes}, 0)
-		rows, err = dbi.Query(fmt.Sprintf(clusterReportQuery5, whereStr), queryArgs...)
-		if err != nil {
-			return nil, err
-		}
-
 		sharedUsageSums := make(map[string]map[string]uint64)
-		err = db.ForeachRow(rows, func() error {
+		err = db.ForeachRow(db.DB, fmt.Sprintf(clusterReportQuery5, whereStr), queryArgs, func(rows *sql.Rows) error {
 			var (
 				serviceType  string
 				resourceName string
