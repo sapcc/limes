@@ -170,13 +170,15 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 
 	//parse request body
 	var parseTarget struct {
-		Project ServiceQuotas `json:"project"`
+		Project struct {
+			Services ServiceQuotas `json:"services"`
+		} `json:"project"`
 	}
-	parseTarget.Project = make(ServiceQuotas)
+	parseTarget.Project.Services = make(ServiceQuotas)
 	if !RequireJSON(w, r, &parseTarget) {
 		return
 	}
-	serviceQuotas := parseTarget.Project
+	serviceQuotas := parseTarget.Project.Services
 
 	//start a transaction for the quota updates
 	tx, err := db.DB.Begin()
@@ -199,11 +201,12 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 	//check all services for resources to update
 	var services []db.ProjectService
 	_, err = tx.Select(&services,
-		`SELECT * FROM project_services WHERE project_id = $1`, dbProject.ID)
+		`SELECT * FROM project_services WHERE project_id = $1 ORDER BY type`, dbProject.ID)
 	if ReturnError(w, err) {
 		return
 	}
 	var resourcesToUpdate []db.ProjectResource
+	var resourcesToUpdateAsUntyped []interface{}
 	servicesToUpdate := make(map[string]bool)
 	var errors []string
 
@@ -216,7 +219,7 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 		//check all resources
 		var resources []db.ProjectResource
 		_, err = tx.Select(&resources,
-			`SELECT * FROM project_resources WHERE service_id = $1`, srv.ID)
+			`SELECT * FROM project_resources WHERE service_id = $1 ORDER BY name`, srv.ID)
 		if ReturnError(w, err) {
 			return
 		}
@@ -235,8 +238,13 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 
+			//take a copy of the loop variable (it will be updated by the loop, so if
+			//we didn't take a copy manually, the resourcesToUpdateAsUntyped list
+			//would contain only identical pointers)
+			res := res
 			res.Quota = newQuota
 			resourcesToUpdate = append(resourcesToUpdate, res)
+			resourcesToUpdateAsUntyped = append(resourcesToUpdateAsUntyped, &res)
 			servicesToUpdate[srv.Type] = true
 		}
 	}
@@ -251,7 +259,7 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 	onlyQuota := func(c *gorp.ColumnMap) bool {
 		return c.ColumnName == "quota"
 	}
-	_, err = tx.UpdateColumns(onlyQuota, resourcesToUpdate)
+	_, err = tx.UpdateColumns(onlyQuota, resourcesToUpdateAsUntyped...)
 	if ReturnError(w, err) {
 		return
 	}

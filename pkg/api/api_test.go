@@ -35,8 +35,8 @@ import (
 )
 
 func init() {
-	limes.RegisterQuotaPlugin(&test.Plugin{StaticServiceType: "shared"})
-	limes.RegisterQuotaPlugin(&test.Plugin{StaticServiceType: "unshared"})
+	limes.RegisterQuotaPlugin(test.NewPlugin("shared"))
+	limes.RegisterQuotaPlugin(test.NewPlugin("unshared"))
 }
 
 func setupTest(t *testing.T) (*test.Driver, http.Handler) {
@@ -171,12 +171,11 @@ func Test_DomainOperations(t *testing.T) {
 		ExpectJSON:       "./fixtures/domain-discover.json",
 	}.Check(t, router)
 
-	emptyString := ""
 	test.APIRequest{
 		Method:           "POST",
 		Path:             "/v1/domains/discover",
 		ExpectStatusCode: 204, //no content because no new domains discovered
-		ExpectBody:       &emptyString,
+		ExpectBody:       p2s(""),
 	}.Check(t, router)
 }
 
@@ -242,12 +241,11 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectJSON:       "./fixtures/project-discover.json",
 	}.Check(t, router)
 
-	emptyString := ""
 	test.APIRequest{
 		Method:           "POST",
 		Path:             "/v1/domains/uuid-for-germany/projects/discover",
 		ExpectStatusCode: 204, //no content because no new projects discovered
-		ExpectBody:       &emptyString,
+		ExpectBody:       p2s(""),
 	}.Check(t, router)
 
 	//check SyncProject
@@ -256,7 +254,7 @@ func Test_ProjectOperations(t *testing.T) {
 		Method:           "POST",
 		Path:             "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/sync",
 		ExpectStatusCode: 202,
-		ExpectBody:       &emptyString,
+		ExpectBody:       p2s(""),
 	}.Check(t, router)
 	expectStaleProjectServices(t, "dresden:shared", "dresden:unshared")
 
@@ -268,9 +266,124 @@ func Test_ProjectOperations(t *testing.T) {
 		Method:           "POST",
 		Path:             "/v1/domains/uuid-for-germany/projects/uuid-for-walldorf/sync",
 		ExpectStatusCode: 202,
-		ExpectBody:       &emptyString,
+		ExpectBody:       p2s(""),
 	}.Check(t, router)
 	expectStaleProjectServices(t, "dresden:shared", "dresden:unshared", "walldorf:shared", "walldorf:unshared")
+
+	//check PutProject: pre-flight checks
+	type object map[string]interface{}
+	test.APIRequest{
+		Method:           "PUT",
+		Path:             "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatusCode: 422,
+		ExpectBody:       p2s("cannot change shared/capacity quota: quota may not be lower than current usage\ncannot change shared/things quota: domain quota exceeded (maximum acceptable project quota is 20)\n"),
+		RequestJSON: object{
+			"project": object{
+				"services": []object{
+					object{
+						"type": "shared",
+						"resources": []object{
+							//should fail because usage exceeds new quota
+							object{"name": "capacity", "quota": 1},
+							//should fail because domain quota exceeded
+							object{"name": "things", "quota": 30},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+
+	//check PutProject: quota admissible (i.e. will be persisted in DB), but
+	//SetQuota fails for some reason (e.g. backend service down)
+	plugin := limes.GetQuotaPlugin("shared").(*test.Plugin)
+	plugin.SetQuotaFails = true
+	test.APIRequest{
+		Method:           "PUT",
+		Path:             "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatusCode: 500,
+		ExpectBody:       p2s("quotas have been accepted, but some error(s) occurred while trying to write the quotas into the backend services:\nSetQuota failed as requested\n"),
+		RequestJSON: object{
+			"project": object{
+				"services": []object{
+					object{
+						"type": "shared",
+						"resources": []object{
+							object{"name": "capacity", "quota": 5},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+	var (
+		actualQuota        uint64
+		actualBackendQuota uint64
+	)
+	err := db.DB.QueryRow(`
+		SELECT pr.quota, pr.backend_quota FROM project_resources pr
+		JOIN project_services ps ON ps.id = pr.service_id
+		JOIN projects p ON p.id = ps.project_id
+		WHERE p.name = ? AND ps.type = ? AND pr.name = ?`,
+		"berlin", "shared", "capacity").Scan(&actualQuota, &actualBackendQuota)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if actualQuota != 5 {
+		t.Error("quota was not updated in database")
+	}
+	if actualBackendQuota == 5 {
+		t.Error("backend quota was updated in database even though SetQuota failed")
+	}
+
+	//check PutProject happy path
+	plugin.SetQuotaFails = false
+	test.APIRequest{
+		Method:           "PUT",
+		Path:             "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatusCode: 200,
+		RequestJSON: object{
+			"project": object{
+				"services": []object{
+					object{
+						"type": "shared",
+						"resources": []object{
+							object{"name": "capacity", "quota": 6},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+	err = db.DB.QueryRow(`
+		SELECT pr.quota, pr.backend_quota FROM project_resources pr
+		JOIN project_services ps ON ps.id = pr.service_id
+		JOIN projects p ON p.id = ps.project_id
+		WHERE p.name = ? AND ps.type = ? AND pr.name = ?`,
+		"berlin", "shared", "capacity").Scan(&actualQuota, &actualBackendQuota)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if actualQuota != 6 {
+		t.Error("quota was not updated in database")
+	}
+	if actualBackendQuota != 6 {
+		t.Error("backend quota was not updated in database")
+	}
+	//double-check with the plugin that the write was durable, and also that
+	//SetQuota sent *all* quotas for that service (even for resources that were
+	//not touched) as required by the QuotaPlugin interface documentation
+	expectBackendQuota := map[string]uint64{
+		"capacity": 6,  //as set above
+		"things":   10, //unchanged
+	}
+	backendQuota, exists := plugin.OverrideQuota["uuid-for-berlin"]
+	if !exists {
+		t.Error("quota was not sent to backend")
+	}
+	if !reflect.DeepEqual(expectBackendQuota, backendQuota) {
+		t.Errorf("expected backend quota %#v, but got %#v", expectBackendQuota, backendQuota)
+	}
 }
 
 func expectStaleProjectServices(t *testing.T, pairs ...string) {
@@ -301,4 +414,9 @@ func expectStaleProjectServices(t *testing.T, pairs ...string) {
 	if !reflect.DeepEqual(pairs, actualPairs) {
 		t.Errorf("expected stale project services %v, but got %v", pairs, actualPairs)
 	}
+}
+
+//p2s makes a "pointer to string".
+func p2s(val string) *string {
+	return &val
 }

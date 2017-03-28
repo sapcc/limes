@@ -19,7 +19,9 @@
 
 package api
 
-import "encoding/json"
+import (
+	"encoding/json"
+)
 
 //ServiceQuotas contains new quota values for resources in multiple services.
 //The map key is the service type. This type is used to unserialize JSON
@@ -38,7 +40,7 @@ func (sq *ServiceQuotas) UnmarshalJSON(input []byte) error {
 		Resources []struct {
 			Name  string `json:"name"`
 			Quota uint64 `json:"quota"`
-		}
+		} `json:"resources"`
 	}
 	err := json.Unmarshal(input, &data)
 	if err != nil {

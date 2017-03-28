@@ -48,14 +48,19 @@ var resources = []limes.ResourceInfo{
 }
 
 func init() {
-	limes.RegisterQuotaPlugin(&Plugin{
-		StaticServiceType: "unittest",
+	limes.RegisterQuotaPlugin(NewPlugin("unittest"))
+}
+
+//NewPlugin creates a new Plugin instance.
+func NewPlugin(serviceType string) *Plugin {
+	return &Plugin{
+		StaticServiceType: serviceType,
 		StaticResourceData: map[string]*limes.ResourceData{
 			"things":   &limes.ResourceData{Quota: 42, Usage: 23},
 			"capacity": &limes.ResourceData{Quota: 100, Usage: 0},
 		},
 		OverrideQuota: make(map[string]map[string]uint64),
-	})
+	}
 }
 
 //ServiceType implements the limes.QuotaPlugin interface.
