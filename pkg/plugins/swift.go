@@ -115,7 +115,7 @@ func (p *swiftPlugin) SetQuota(driver limes.Driver, domainUUID, projectUUID stri
 	}
 
 	headers := map[string]string{
-		"X-Account-Meta-Quota-Bytes": string(quotas["capacity"]),
+		"X-Account-Meta-Quota-Bytes": strconv.FormatUint(quotas["capacity"], 10),
 		//this header brought to you by https://github.com/sapcc/swift-addons
 		"X-Account-Project-Domain-Id-Override": domainUUID,
 	}
