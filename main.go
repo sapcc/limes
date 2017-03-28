@@ -30,7 +30,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gorilla/mux"
 	"github.com/mattes/migrate/migrate"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sapcc/limes/pkg/api"
 	"github.com/sapcc/limes/pkg/collector"
@@ -226,17 +228,24 @@ func taskServe(config limes.Configuration, driver limes.Driver, args []string) e
 		printUsageAndExit()
 	}
 
+	mainRouter := mux.NewRouter()
+
 	//hook up the v1 API (this code is structured so that a newer API version can
 	//be added easily later)
 	v1Router, v1VersionData := api.NewV1Router(driver, config)
-	http.Handle("/v1/", v1Router)
+	mainRouter.PathPrefix("/v1/").Handler(v1Router)
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	//add the version advertisement that lists all available API versions
+	mainRouter.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		allVersions := struct {
 			Versions []api.VersionData `json:"versions"`
 		}{[]api.VersionData{v1VersionData}}
 		api.ReturnJSON(w, 300, allVersions)
 	})
+
+	//add Prometheus instrumentation
+	http.Handle("/metrics", promhttp.Handler())
+	http.HandleFunc("/", prometheus.InstrumentHandler("limes-serve", mainRouter))
 
 	//start HTTP server
 	return http.ListenAndServe(config.API.ListenAddress, nil)
