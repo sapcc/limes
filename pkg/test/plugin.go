@@ -31,6 +31,9 @@ type Plugin struct {
 	StaticServiceType  string
 	StaticResourceData map[string]*limes.ResourceData
 	StaticCapacity     map[string]uint64
+	OverrideQuota      map[string]map[string]uint64
+	//behavior flags that can be set by a unit test
+	SetQuotaFails bool
 }
 
 var resources = []limes.ResourceInfo{
@@ -51,6 +54,7 @@ func init() {
 			"things":   &limes.ResourceData{Quota: 42, Usage: 23},
 			"capacity": &limes.ResourceData{Quota: 100, Usage: 0},
 		},
+		OverrideQuota: make(map[string]map[string]uint64),
 	})
 }
 
@@ -70,10 +74,25 @@ func (p *Plugin) Scrape(driver limes.Driver, domainUUID, projectUUID string) (ma
 	for key, val := range p.StaticResourceData {
 		result[key] = *val
 	}
+
+	data, exists := p.OverrideQuota[projectUUID]
+	if exists {
+		for resourceName, quota := range data {
+			result[resourceName] = limes.ResourceData{
+				Quota: int64(quota),
+				Usage: result[resourceName].Usage,
+			}
+		}
+	}
+
 	return result, nil
 }
 
 //SetQuota implements the limes.QuotaPlugin interface.
 func (p *Plugin) SetQuota(driver limes.Driver, domainUUID, projectUUID string, quotas map[string]uint64) error {
-	return errors.New("SetQuota is not implemented for the unittest plugin")
+	if p.SetQuotaFails {
+		return errors.New("SetQuota failed as requested")
+	}
+	p.OverrideQuota[projectUUID] = quotas
+	return nil
 }

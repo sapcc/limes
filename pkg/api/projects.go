@@ -327,14 +327,17 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 }
 
 func checkProjectQuotaUpdate(srv db.ProjectService, res db.ProjectResource, domain *reports.Domain, newQuota uint64, canRaise, canLower bool) error {
-	//if quota is being reduced, only the permission must be checked
+	//if quota is being reduced, permission is required and usage must fit into quota
 	//(note that both res.Quota and newQuota are uint64, so we do not need to
 	//cover the case of infinite quotas)
 	if res.Quota > newQuota {
-		if canLower {
-			return nil
+		if !canLower {
+			return fmt.Errorf("cannot change %s/%s quota: user is not allowed to lower quotas in this project", srv.Type, res.Name)
 		}
-		return fmt.Errorf("cannot change %s/%s quota: user is not allowed to lower quotas in this project", srv.Type, res.Name)
+		if res.Usage > newQuota {
+			return fmt.Errorf("cannot change %s/%s quota: quota may not be lower than current usage", srv.Type, res.Name)
+		}
+		return nil
 	}
 
 	//if quota is being raised, permission is required and also the domain quota may not be exceeded

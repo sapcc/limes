@@ -68,6 +68,7 @@ func Test_Scrape(t *testing.T) {
 	//first Scrape should create the entries in `project_resources` with the
 	//correct usage and backend quota values (and quota = 0 because nothing was approved yet)
 	//and set `project_services.scraped_at` to the current time
+	plugin.SetQuotaFails = true
 	c.Scrape()
 	test.AssertDBContent(t, "fixtures/scrape1.sql")
 
@@ -79,12 +80,40 @@ func Test_Scrape(t *testing.T) {
 	//change the data that is reported by the plugin
 	plugin.StaticResourceData["capacity"].Quota = 110
 	plugin.StaticResourceData["things"].Usage = 5
-	//make sure that the project is scraped again
-	_, err = db.DB.Exec(`UPDATE project_services SET stale = ?`, true)
-	if err != nil {
-		t.Fatal(err)
-	}
+	setProjectServicesStale(t)
 	//Scrape should pick up the changed resource data
 	c.Scrape()
 	test.AssertDBContent(t, "fixtures/scrape2.sql")
+
+	//set some non-zero quota values so that we can discriminate them from zero
+	_, err = db.DB.Exec(`UPDATE project_resources SET quota = ? WHERE name = ?`, 20, "capacity")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.DB.Exec(`UPDATE project_resources SET quota = ? WHERE name = ?`, 13, "things")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	//Scrape should try to enforce quota values in the backend (this did not work
+	//until now because the test.Plugin was instructed to have SetQuota fail)
+	plugin.SetQuotaFails = false
+	setProjectServicesStale(t)
+	c.Scrape()
+	test.AssertDBContent(t, "fixtures/scrape3.sql")
+
+	//another Scrape (with SetQuota disabled again) should show that the quota
+	//update was durable
+	plugin.SetQuotaFails = true
+	setProjectServicesStale(t)
+	c.Scrape()
+	test.AssertDBContent(t, "fixtures/scrape4.sql") //same as scrape3.sql except for scraped_at timestamp
+}
+
+func setProjectServicesStale(t *testing.T) {
+	//make sure that the project is scraped again
+	_, err := db.DB.Exec(`UPDATE project_services SET stale = ?`, true)
+	if err != nil {
+		t.Fatal(err)
+	}
 }
