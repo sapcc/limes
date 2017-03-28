@@ -39,6 +39,8 @@ func init() {
 	limes.RegisterQuotaPlugin(test.NewPlugin("unshared"))
 }
 
+type object map[string]interface{}
+
 func setupTest(t *testing.T) (*test.Driver, http.Handler) {
 	//load test database
 	test.InitDatabase(t, "../test/migrations")
@@ -177,6 +179,61 @@ func Test_DomainOperations(t *testing.T) {
 		ExpectStatusCode: 204, //no content because no new domains discovered
 		ExpectBody:       p2s(""),
 	}.Check(t, router)
+
+	//check PutDomain error cases
+	test.APIRequest{
+		Method:           "PUT",
+		Path:             "/v1/domains/uuid-for-germany",
+		ExpectStatusCode: 422,
+		ExpectBody:       p2s("cannot change shared/capacity quota: domain quota may not be smaller than sum of project quotas in that domain (20 B)\n"),
+		RequestJSON: object{
+			"domain": object{
+				"services": []object{
+					object{
+						"type": "shared",
+						"resources": []object{
+							//should fail because project quota sum exceeds new quota
+							object{"name": "capacity", "quota": 1},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+
+	//check PutDomain happy path
+	test.APIRequest{
+		Method:           "PUT",
+		Path:             "/v1/domains/uuid-for-germany",
+		ExpectStatusCode: 200,
+		RequestJSON: object{
+			"domain": object{
+				"services": []object{
+					object{
+						"type": "shared",
+						"resources": []object{
+							//should fail because project quota sum exceeds new quota
+							object{"name": "capacity", "quota": 1234},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+
+	var actualQuota uint64
+	err := db.DB.QueryRow(`
+		SELECT dr.quota FROM domain_resources dr
+		JOIN domain_services ds ON ds.id = dr.service_id
+		JOIN domains d ON d.id = ds.domain_id
+		WHERE d.name = ? AND ds.type = ? AND dr.name = ?`,
+		"germany", "shared", "capacity").Scan(&actualQuota)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if actualQuota != 1234 {
+		t.Error("quota was not updated in database")
+	}
 }
 
 func Test_ProjectOperations(t *testing.T) {
@@ -271,7 +328,6 @@ func Test_ProjectOperations(t *testing.T) {
 	expectStaleProjectServices(t, "dresden:shared", "dresden:unshared", "walldorf:shared", "walldorf:unshared")
 
 	//check PutProject: pre-flight checks
-	type object map[string]interface{}
 	test.APIRequest{
 		Method:           "PUT",
 		Path:             "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
