@@ -114,10 +114,11 @@ func (p *swiftPlugin) SetQuota(driver limes.Driver, domainUUID, projectUUID stri
 		return err
 	}
 
-	headers := make(map[string]string)
-	headers["X-Account-Meta-Quota-Bytes"] = string(quotas["capacity"])
-	//this header brought to you by https://github.com/sapcc/swift-addons
-	headers["X-Account-Project-Domain-Id-Override"] = domainUUID
+	headers := map[string]string{
+		"X-Account-Meta-Quota-Bytes": string(quotas["capacity"]),
+		//this header brought to you by https://github.com/sapcc/swift-addons
+		"X-Account-Project-Domain-Id-Override": domainUUID,
+	}
 
 	result, err := updateAccount(client, headers)
 	if result.StatusCode == http.StatusNotFound && quotas["capacity"] > 0 {
