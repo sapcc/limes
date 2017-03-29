@@ -10,17 +10,17 @@ Pronounce the name like the [Ancient Roman border wall][wp-limes], not like the 
 
 # The idea: Hierarchical quota delegation
 
-OpenStack groups resources into three levels:
+OpenStack groups access into three levels:
 
 1. the cluster (the sum of all the resources in an OpenStack installation, e.&nbsp;g.&nbsp;hypervisors or storage capacity)
 2. Keystone domains within that cluster
 3. Keystone projects within each domain
 
-Limes enables a similar hierarchy for quotas: After having reviewed the cluster's capacity, a cluster admin can allocate
-quotas to domains. The domain admin can then sublease that quota to its projects. Limes will then write these approved
-project quotas into the backend services that actually manage the resources. Limes also tracks resource usage in all
-projects in all domains, so that users can make informed decisions about resource allocation at all levels of the
-hierarchy.
+Limes enables a similar hierarchy for resource usage and quotas: After having reviewed the cluster's capacity, a cluster
+admin can allocate quotas to domains. The domain admin can then sublease that quota to its projects. Limes will then
+write these approved project quotas into the backend services that actually manage the resources. Limes also tracks
+resource usage in all projects in all domains, so that users can make informed decisions about resource allocation at
+all levels of the hierarchy.
 
 # Installation
 
