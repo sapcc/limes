@@ -58,3 +58,5 @@ api:
 collector:
   # TCP address for limes-collect to serve Prometheus metrics on (on HTTP under the /metrics endpoint)
   metrics: ':8080'
+  # if true, expose all quota, usage and capacity data to Prometheus as the gauges limes_{project,domain,cluster}_{capacity,quota,usage,backend_quota}
+  data_metrics: True
