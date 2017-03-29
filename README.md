@@ -8,6 +8,20 @@ Limes is an OpenStack-compatible quota/usage tracking service, originally design
 
 Pronounce the name like the [Ancient Roman border wall][wp-limes], not like the fruit.
 
+# The idea: Hierarchical quota delegation
+
+OpenStack groups resources into three levels:
+
+1. the cluster (the sum of all the resources in an OpenStack installation, e.&nbsp;g.&nbsp;hypervisors or storage capacity)
+2. Keystone domains within that cluster
+3. Keystone projects within each domain
+
+Limes enables a similar hierarchy for quotas: After having reviewed the cluster's capacity, a cluster admin can allocate
+quotas to domains. The domain admin can then sublease that quota to its projects. Limes will then write these approved
+project quotas into the backend services that actually manage the resources. Limes also tracks resource usage in all
+projects in all domains, so that users can make informed decisions about resource allocation at all levels of the
+hierarchy.
+
 # Installation
 
 There's a Makefile, so do:
@@ -23,10 +37,10 @@ Prerequisites: Create a PostgreSQL database for Limes, and a service user in at 
 
 1. Write a configuration file for your environment, by following the [example configuration][ex-conf]
 
-2. Populate the DB schema by running `limes-migrate config.yaml`. For more fine-grained control of migrations (e.g.
+2. Populate the DB schema by running `limes migrate config.yaml`. For more fine-grained control of migrations (e.g.
    rollback), download the [`migrate` tool][migrate] and follow the instructions over there.
 
-3. For each cluster, start `limes-api config.yaml $cluster_id` and `limes-collect config.yaml $cluster_id`.
+3. For each cluster, start `limes serve config.yaml $cluster_id` and `limes collect config.yaml $cluster_id`.
 
 [wp-limes]: https://en.wikipedia.org/wiki/Limes
 [ex-conf]:  ./docs/example-config.yaml
