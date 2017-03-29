@@ -216,6 +216,9 @@ func taskCollect(config limes.Configuration, driver limes.Driver, args []string)
 	}()
 
 	//use main thread to emit Prometheus metrics
+	if config.Collector.ExposeDataMetrics {
+		prometheus.MustRegister(&collector.DataMetricsCollector{Cluster: driver.Cluster()})
+	}
 	http.Handle("/metrics", promhttp.Handler())
 	return http.ListenAndServe(config.Collector.MetricsListenAddress, nil)
 }
