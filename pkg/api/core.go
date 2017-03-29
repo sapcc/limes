@@ -87,13 +87,13 @@ func NewV1Router(driver limes.Driver, config limes.Configuration) (http.Handler,
 	r.Methods("GET").Path("/v1/domains").HandlerFunc(p.ListDomains)
 	r.Methods("GET").Path("/v1/domains/{domain_id}").HandlerFunc(p.GetDomain)
 	r.Methods("POST").Path("/v1/domains/discover").HandlerFunc(p.DiscoverDomains)
-	// r.Methods("PUT").Path("/v1/domains/{domain_id}").HandlerFunc(p.PutDomain)
+	r.Methods("PUT").Path("/v1/domains/{domain_id}").HandlerFunc(p.PutDomain)
 
 	r.Methods("GET").Path("/v1/domains/{domain_id}/projects").HandlerFunc(p.ListProjects)
 	r.Methods("GET").Path("/v1/domains/{domain_id}/projects/{project_id}").HandlerFunc(p.GetProject)
 	r.Methods("POST").Path("/v1/domains/{domain_id}/projects/discover").HandlerFunc(p.DiscoverProjects)
 	r.Methods("POST").Path("/v1/domains/{domain_id}/projects/{project_id}/sync").HandlerFunc(p.SyncProject)
-	// r.Methods("PUT").Path("/v1/domains/{domain_id}/projects/{project_id}").HandlerFunc(p.PutProject)
+	r.Methods("PUT").Path("/v1/domains/{domain_id}/projects/{project_id}").HandlerFunc(p.PutProject)
 
 	return r, p.VersionData
 }
@@ -119,6 +119,17 @@ func ReturnError(w http.ResponseWriter, err error) bool {
 	}
 
 	http.Error(w, err.Error(), 500)
+	return true
+}
+
+//RequireJSON will parse the request body into the given data structure, or
+//write an error response if that fails.
+func RequireJSON(w http.ResponseWriter, r *http.Request, data interface{}) bool {
+	err := json.NewDecoder(r.Body).Decode(data)
+	if err != nil {
+		http.Error(w, "request body is not valid JSON: "+err.Error(), 400)
+		return false
+	}
 	return true
 }
 

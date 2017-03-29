@@ -36,7 +36,7 @@ import (
 type APIRequest struct {
 	Method           string
 	Path             string
-	Body             string //may be empty
+	RequestJSON      interface{} //if non-nil, will be encoded as JSON
 	ExpectStatusCode int
 	ExpectBody       *string //raw content (not a file path)
 	ExpectJSON       string  //path to JSON file
@@ -47,8 +47,12 @@ type APIRequest struct {
 //APIRequest.
 func (r APIRequest) Check(t *testing.T, handler http.Handler) {
 	var requestBody io.Reader
-	if r.Body != "" {
-		requestBody = bytes.NewReader([]byte(r.Body))
+	if r.RequestJSON != nil {
+		body, err := json.Marshal(r.RequestJSON)
+		if err != nil {
+			t.Fatal(err)
+		}
+		requestBody = bytes.NewReader([]byte(body))
 	}
 	request := httptest.NewRequest(r.Method, r.Path, requestBody)
 	request.Header.Set("X-Auth-Token", "something")
@@ -76,11 +80,6 @@ func (r APIRequest) Check(t *testing.T, handler http.Handler) {
 	}
 
 	if r.ExpectJSON == "" {
-		if len(responseBytes) != 0 {
-			t.Fatalf("%s %s: expected no body, but got: %s",
-				r.Method, r.Path, string(responseBytes),
-			)
-		}
 		return //if no JSON response expected, don't try to parse the response body
 	}
 
