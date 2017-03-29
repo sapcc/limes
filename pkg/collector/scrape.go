@@ -21,6 +21,7 @@ package collector
 
 import (
 	"database/sql"
+	"os"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -203,6 +204,11 @@ func (c *Collector) writeScrapeResult(domainUUID, projectUUID string, serviceID 
 	err = tx.Commit()
 	if err != nil {
 		return err
+	}
+
+	//feature gate for automatic quota alignment
+	if os.Getenv("LIMES_NO_AUTO_QUOTA_ALIGNMENT") == "1" {
+		return nil
 	}
 
 	//if a mismatch between frontend and backend quota was detected, try to
