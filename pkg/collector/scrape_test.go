@@ -61,7 +61,7 @@ func Test_Scrape(t *testing.T) {
 	driver := prepareScrapeTest(t, []limes.ServiceConfiguration{
 		{Type: "unittest", Shared: false},
 	})
-	plugin := limes.GetQuotaPlugin("unittest").(*test.Plugin)
+	plugin := driver.Cluster().GetQuotaPlugin("unittest").(*test.Plugin)
 	c := Collector{
 		Driver:   driver,
 		Plugin:   plugin,
@@ -145,7 +145,9 @@ type autoApprovalTestPlugin struct {
 }
 
 func init() {
-	limes.RegisterQuotaPlugin(&autoApprovalTestPlugin{StaticBackendQuota: 10})
+	limes.RegisterQuotaPlugin(func(c limes.ServiceConfiguration) limes.QuotaPlugin {
+		return &autoApprovalTestPlugin{StaticBackendQuota: 10}
+	})
 }
 
 func (p *autoApprovalTestPlugin) ServiceType() string {
@@ -181,7 +183,7 @@ func Test_AutoApproveInitialQuota(t *testing.T) {
 	driver := prepareScrapeTest(t, []limes.ServiceConfiguration{
 		{Type: "autoapprovaltest", Shared: false},
 	})
-	plugin := limes.GetQuotaPlugin("autoapprovaltest").(*autoApprovalTestPlugin)
+	plugin := driver.Cluster().GetQuotaPlugin("autoapprovaltest").(*autoApprovalTestPlugin)
 	c := Collector{
 		Driver:   driver,
 		Plugin:   plugin,

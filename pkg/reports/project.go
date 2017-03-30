@@ -151,6 +151,9 @@ func GetProjects(cluster *limes.ClusterConfiguration, domainID int64, projectID 
 
 		service, exists := project.Services[*serviceType]
 		if !exists {
+			if !cluster.HasService(*serviceType) {
+				continue
+			}
 			service = &ProjectService{
 				Type:      *serviceType,
 				Resources: make(ProjectResources),
@@ -164,10 +167,13 @@ func GetProjects(cluster *limes.ClusterConfiguration, domainID int64, projectID 
 		if resourceName == nil {
 			continue
 		}
+		if !cluster.HasResource(*serviceType, *resourceName) {
+			continue
+		}
 
 		resource := &ProjectResource{
 			Name:         *resourceName,
-			Unit:         limes.UnitFor(*serviceType, *resourceName),
+			Unit:         cluster.UnitFor(*serviceType, *resourceName),
 			Usage:        *usage,
 			BackendQuota: nil, //see below
 		}
@@ -190,34 +196,6 @@ func GetProjects(cluster *limes.ClusterConfiguration, domainID int64, projectID 
 	err = rows.Close()
 	if err != nil {
 		return nil, err
-	}
-
-	//validate against known services/resources
-	isValidService := make(map[string]bool)
-	for _, srv := range cluster.Services {
-		isValidService[srv.Type] = true
-	}
-
-	for _, project := range projects {
-		for serviceType, service := range project.Services {
-			if !isValidService[serviceType] {
-				delete(project.Services, serviceType)
-				continue
-			}
-
-			isValidResource := make(map[string]bool)
-			if plugin := limes.GetQuotaPlugin(serviceType); plugin != nil {
-				for _, res := range plugin.Resources() {
-					isValidResource[res.Name] = true
-				}
-			}
-
-			for resourceName := range service.Resources {
-				if !isValidResource[resourceName] {
-					delete(service.Resources, resourceName)
-				}
-			}
-		}
 	}
 
 	//flatten result (with stable order to keep the tests happy)

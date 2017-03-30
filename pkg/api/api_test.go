@@ -35,8 +35,8 @@ import (
 )
 
 func init() {
-	limes.RegisterQuotaPlugin(test.NewPlugin("shared"))
-	limes.RegisterQuotaPlugin(test.NewPlugin("unshared"))
+	limes.RegisterQuotaPlugin(test.NewPluginFactory("shared"))
+	limes.RegisterQuotaPlugin(test.NewPluginFactory("unshared"))
 }
 
 type object map[string]interface{}
@@ -352,7 +352,7 @@ func Test_ProjectOperations(t *testing.T) {
 
 	//check PutProject: quota admissible (i.e. will be persisted in DB), but
 	//SetQuota fails for some reason (e.g. backend service down)
-	plugin := limes.GetQuotaPlugin("shared").(*test.Plugin)
+	plugin := driver.Cluster().GetQuotaPlugin("shared").(*test.Plugin)
 	plugin.SetQuotaFails = true
 	test.APIRequest{
 		Method:           "PUT",

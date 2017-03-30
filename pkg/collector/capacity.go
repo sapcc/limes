@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/sapcc/limes/pkg/db"
-	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/util"
 )
 
@@ -51,9 +50,10 @@ func (c *Collector) ScanCapacity() {
 func (c *Collector) scanCapacity() {
 	values := make(map[string]map[string]uint64)
 	scrapedAt := c.TimeNow()
+	cluster := c.Driver.Cluster()
 
-	for _, capacitor := range c.Driver.Cluster().Capacitors {
-		plugin := limes.GetCapacityPlugin(capacitor.ID)
+	for _, capacitor := range cluster.Capacitors {
+		plugin := cluster.GetCapacityPlugin(capacitor.ID)
 		if plugin == nil {
 			continue //skip silently, the missing plugin was already reported at program startup
 		}
@@ -80,7 +80,7 @@ func (c *Collector) scanCapacity() {
 	for serviceType := range values {
 		serviceTypes[serviceType] = true
 	}
-	for _, srv := range c.Driver.Cluster().Services {
+	for _, srv := range cluster.Services {
 		delete(serviceTypes, srv.Type)
 	}
 	for serviceType := range serviceTypes {
@@ -88,12 +88,12 @@ func (c *Collector) scanCapacity() {
 	}
 
 	//skip values for resources not announced by the respective QuotaPlugin
-	for _, srv := range c.Driver.Cluster().Services {
+	for _, srv := range cluster.Services {
 		subvalues, exists := values[srv.Type]
 		if !exists {
 			continue
 		}
-		plugin := limes.GetQuotaPlugin(srv.Type)
+		plugin := cluster.GetQuotaPlugin(srv.Type)
 		if plugin == nil {
 			continue
 		}

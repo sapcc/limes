@@ -232,16 +232,18 @@ func checkDomainQuotaUpdate(srv db.DomainService, res db.DomainResource, domain 
 		return fmt.Errorf("cannot change %s/%s quota: user is not allowed to lower quotas in this project", srv.Type, res.Name)
 	}
 	projectsQuota := uint64(0)
+	var unit limes.Unit
 	if domainService, exists := domain.Services[srv.Type]; exists {
 		if domainResource, exists := domainService.Resources[res.Name]; exists {
 			projectsQuota = domainResource.ProjectsQuota
+			unit = domainResource.Unit
 		}
 	}
 	if newQuota < projectsQuota {
 		return fmt.Errorf(
 			"cannot change %s/%s quota: domain quota may not be smaller than sum of project quotas in that domain (%s)",
 			srv.Type, res.Name,
-			limes.UnitFor(srv.Type, res.Name).Format(projectsQuota),
+			unit.Format(projectsQuota),
 		)
 	}
 

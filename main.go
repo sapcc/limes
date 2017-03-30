@@ -183,7 +183,7 @@ func taskCollect(config limes.Configuration, driver limes.Driver, args []string)
 	//can be terminated at any time without leaving the system in an inconsistent
 	//state, mostly through usage of DB transactions.)
 	for _, service := range cluster.Services {
-		plugin := limes.GetQuotaPlugin(service.Type)
+		plugin := cluster.GetQuotaPlugin(service.Type)
 		if plugin == nil {
 			util.LogError("skipping service %s: no suitable collector plugin found", service.Type)
 			continue
@@ -194,7 +194,7 @@ func taskCollect(config limes.Configuration, driver limes.Driver, args []string)
 
 	//complain about missing capacity plugins
 	for _, capacitor := range cluster.Capacitors {
-		plugin := limes.GetCapacityPlugin(capacitor.ID)
+		plugin := cluster.GetCapacityPlugin(capacitor.ID)
 		if plugin == nil {
 			util.LogError("skipping capacitor %s: no suitable collector plugin found", capacitor.ID)
 			continue

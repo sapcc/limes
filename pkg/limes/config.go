@@ -58,6 +58,8 @@ type ClusterConfiguration struct {
 	Services          []ServiceConfiguration   `yaml:"services"`
 	Capacitors        []CapacitorConfiguration `yaml:"capacitors"`
 	//Sorry for the stupid pun. Not.
+	quotaPlugins    map[string]QuotaPlugin
+	capacityPlugins map[string]CapacityPlugin
 }
 
 //ServiceConfiguration describes a service that is enabled for a certain cluster.
@@ -217,10 +219,6 @@ func loadPolicyFile(path string) (*policy.Enforcer, error) {
 	}
 	return policy.NewEnforcer(rules)
 }
-
-////////////////////////////////////////////////////////////////////////////////
-// The stuff in here actually belongs into pkg/drivers, but we can only
-// implement methods on *ClusterConfiguration here.
 
 //CanReauth implements the
 //gophercloud/openstack/identity/v3/tokens.AuthOptionsBuilder interface.

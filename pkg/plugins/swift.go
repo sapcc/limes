@@ -31,7 +31,9 @@ import (
 	"github.com/sapcc/limes/pkg/util"
 )
 
-type swiftPlugin struct{}
+type swiftPlugin struct {
+	cfg limes.ServiceConfiguration
+}
 
 var swiftResources = []limes.ResourceInfo{
 	{
@@ -44,7 +46,9 @@ var swiftResources = []limes.ResourceInfo{
 var urlRegex = regexp.MustCompile("(v1/AUTH_)[a-zA-Z0-9]+")
 
 func init() {
-	limes.RegisterQuotaPlugin(&swiftPlugin{})
+	limes.RegisterQuotaPlugin(func(c limes.ServiceConfiguration) limes.QuotaPlugin {
+		return &swiftPlugin{c}
+	})
 }
 
 //ServiceType implements the limes.Plugin interface.

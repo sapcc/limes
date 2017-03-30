@@ -27,7 +27,9 @@ import (
 	"github.com/sapcc/limes/pkg/limes"
 )
 
-type novaPlugin struct{}
+type novaPlugin struct {
+	cfg limes.ServiceConfiguration
+}
 
 var novaResources = []limes.ResourceInfo{
 	{
@@ -45,7 +47,9 @@ var novaResources = []limes.ResourceInfo{
 }
 
 func init() {
-	limes.RegisterQuotaPlugin(&novaPlugin{})
+	limes.RegisterQuotaPlugin(func(c limes.ServiceConfiguration) limes.QuotaPlugin {
+		return &novaPlugin{c}
+	})
 }
 
 //ServiceType implements the limes.QuotaPlugin interface.

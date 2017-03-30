@@ -159,7 +159,7 @@ func GetClusters(config limes.Configuration, clusterID *string, dbi db.Interface
 			return err
 		}
 
-		_, service, resource := clusters.Find(clusterID, serviceType, resourceName)
+		_, service, resource := clusters.Find(config, clusterID, serviceType, resourceName)
 
 		if service != nil {
 			if maxScrapedAt != nil {
@@ -194,7 +194,7 @@ func GetClusters(config limes.Configuration, clusterID *string, dbi db.Interface
 			return err
 		}
 
-		_, _, resource := clusters.Find(clusterID, serviceType, resourceName)
+		_, _, resource := clusters.Find(config, clusterID, serviceType, resourceName)
 
 		if resource != nil && quota != nil {
 			resource.DomainsQuota = *quota
@@ -222,58 +222,36 @@ func GetClusters(config limes.Configuration, clusterID *string, dbi db.Interface
 			return err
 		}
 
-		cluster, _, resource := clusters.Find(clusterID, &serviceType, resourceName)
+		cluster, _, resource := clusters.Find(config, clusterID, &serviceType, resourceName)
 
 		if resource != nil {
 			resource.Capacity = capacity
 		}
 
-		scrapedAtUnix := time.Time(scrapedAt).Unix()
-		if cluster.MaxScrapedAt == nil || *cluster.MaxScrapedAt < scrapedAtUnix {
-			cluster.MaxScrapedAt = &scrapedAtUnix
+		if cluster != nil {
+			scrapedAtUnix := time.Time(scrapedAt).Unix()
+			if cluster.MaxScrapedAt == nil || *cluster.MaxScrapedAt < scrapedAtUnix {
+				cluster.MaxScrapedAt = &scrapedAtUnix
+			}
+			if cluster.MinScrapedAt == nil || *cluster.MinScrapedAt > scrapedAtUnix {
+				cluster.MinScrapedAt = &scrapedAtUnix
+			}
 		}
-		if cluster.MinScrapedAt == nil || *cluster.MinScrapedAt > scrapedAtUnix {
-			cluster.MinScrapedAt = &scrapedAtUnix
-		}
+
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	//validate against known services/resources
+	//enumerate shared services
 	isSharedService := make(map[string]bool)
-	for clusterID, cluster := range clusters {
+	for clusterID := range clusters {
 		clusterConfig, exists := config.Clusters[clusterID]
-		if !exists {
-			delete(clusters, clusterID)
-			continue
-		}
-
-		isValidService := make(map[string]bool)
-		for _, serviceConfig := range clusterConfig.Services {
-			isValidService[serviceConfig.Type] = true
-			if serviceConfig.Shared {
-				isSharedService[serviceConfig.Type] = true
-			}
-		}
-
-		for serviceType, service := range cluster.Services {
-			if !isValidService[serviceType] {
-				delete(cluster.Services, serviceType)
-				continue
-			}
-
-			isValidResource := make(map[string]bool)
-			if plugin := limes.GetQuotaPlugin(serviceType); plugin != nil {
-				for _, res := range plugin.Resources() {
-					isValidResource[res.Name] = true
-				}
-			}
-
-			for resourceName := range service.Resources {
-				if !isValidResource[resourceName] {
-					delete(service.Resources, resourceName)
+		if exists {
+			for _, serviceConfig := range clusterConfig.Services {
+				if serviceConfig.Shared {
+					isSharedService[serviceConfig.Type] = true
 				}
 			}
 		}
@@ -385,7 +363,12 @@ func makeClusterFilter(tableWithClusterID string, clusterID *string) map[string]
 
 type clusters map[string]*Cluster
 
-func (c clusters) Find(clusterID string, serviceType, resourceName *string) (*Cluster, *ClusterService, *ClusterResource) {
+func (c clusters) Find(config limes.Configuration, clusterID string, serviceType, resourceName *string) (*Cluster, *ClusterService, *ClusterResource) {
+	clusterConfig, exists := config.Clusters[clusterID]
+	if !exists {
+		return nil, nil, nil
+	}
+
 	cluster, exists := c[clusterID]
 	if !exists {
 		cluster = &Cluster{
@@ -401,6 +384,9 @@ func (c clusters) Find(clusterID string, serviceType, resourceName *string) (*Cl
 
 	service, exists := cluster.Services[*serviceType]
 	if !exists {
+		if !clusterConfig.HasService(*serviceType) {
+			return cluster, nil, nil
+		}
 		service = &ClusterService{
 			Type:      *serviceType,
 			Resources: make(ClusterResources),
@@ -414,9 +400,12 @@ func (c clusters) Find(clusterID string, serviceType, resourceName *string) (*Cl
 
 	resource, exists := service.Resources[*resourceName]
 	if !exists {
+		if !clusterConfig.HasResource(*serviceType, *resourceName) {
+			return cluster, service, nil
+		}
 		resource = &ClusterResource{
 			Name: *resourceName,
-			Unit: limes.UnitFor(*serviceType, *resourceName),
+			Unit: clusterConfig.UnitFor(*serviceType, *resourceName),
 		}
 		service.Resources[*resourceName] = resource
 	}

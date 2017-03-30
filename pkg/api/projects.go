@@ -280,7 +280,7 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		plugin := limes.GetQuotaPlugin(srv.Type)
+		plugin := p.Driver.Cluster().GetQuotaPlugin(srv.Type)
 		if plugin == nil {
 			errors = append(errors, fmt.Sprintf("no quota plugin registered for service type %s", srv.Type))
 			continue
@@ -354,10 +354,12 @@ func checkProjectQuotaUpdate(srv db.ProjectService, res db.ProjectResource, doma
 	}
 	domainQuota := uint64(0)
 	projectsQuota := uint64(0)
+	var unit limes.Unit
 	if domainService, exists := domain.Services[srv.Type]; exists {
 		if domainResource, exists := domainService.Resources[res.Name]; exists {
 			domainQuota = domainResource.DomainQuota
 			projectsQuota = domainResource.ProjectsQuota
+			unit = domainResource.Unit
 		}
 	}
 	//NOTE: It looks like an arithmetic overflow (or rather, underflow) is
@@ -374,7 +376,7 @@ func checkProjectQuotaUpdate(srv db.ProjectService, res db.ProjectResource, doma
 		}
 		return fmt.Errorf("cannot change %s/%s quota: domain quota exceeded (maximum acceptable project quota is %s)",
 			srv.Type, res.Name,
-			limes.UnitFor(srv.Type, res.Name).Format(maxQuota),
+			unit.Format(maxQuota),
 		)
 	}
 

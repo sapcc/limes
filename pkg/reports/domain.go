@@ -148,7 +148,7 @@ func GetDomains(cluster *limes.ClusterConfiguration, domainID *int64, dbi db.Int
 			return err
 		}
 
-		_, service, resource := domains.Find(domainUUID, serviceType, resourceName)
+		_, service, resource := domains.Find(cluster, domainUUID, serviceType, resourceName)
 
 		if service != nil {
 			if maxScrapedAt != nil {
@@ -197,7 +197,7 @@ func GetDomains(cluster *limes.ClusterConfiguration, domainID *int64, dbi db.Int
 			return err
 		}
 
-		_, _, resource := domains.Find(domainUUID, serviceType, resourceName)
+		_, _, resource := domains.Find(cluster, domainUUID, serviceType, resourceName)
 		if resource != nil && quota != nil {
 			resource.DomainQuota = *quota
 		}
@@ -206,34 +206,6 @@ func GetDomains(cluster *limes.ClusterConfiguration, domainID *int64, dbi db.Int
 	})
 	if err != nil {
 		return nil, err
-	}
-
-	//validate against known services/resources
-	isValidService := make(map[string]bool)
-	for _, srv := range cluster.Services {
-		isValidService[srv.Type] = true
-	}
-
-	for _, domain := range domains {
-		for serviceType, service := range domain.Services {
-			if !isValidService[serviceType] {
-				delete(domain.Services, serviceType)
-				continue
-			}
-
-			isValidResource := make(map[string]bool)
-			if plugin := limes.GetQuotaPlugin(serviceType); plugin != nil {
-				for _, res := range plugin.Resources() {
-					isValidResource[res.Name] = true
-				}
-			}
-
-			for resourceName := range service.Resources {
-				if !isValidResource[resourceName] {
-					delete(service.Resources, resourceName)
-				}
-			}
-		}
 	}
 
 	//flatten result (with stable order to keep the tests happy)
@@ -252,7 +224,7 @@ func GetDomains(cluster *limes.ClusterConfiguration, domainID *int64, dbi db.Int
 
 type domains map[string]*Domain
 
-func (d domains) Find(domainUUID string, serviceType, resourceName *string) (*Domain, *DomainService, *DomainResource) {
+func (d domains) Find(cluster *limes.ClusterConfiguration, domainUUID string, serviceType, resourceName *string) (*Domain, *DomainService, *DomainResource) {
 	domain, exists := d[domainUUID]
 	if !exists {
 		domain = &Domain{
@@ -268,6 +240,9 @@ func (d domains) Find(domainUUID string, serviceType, resourceName *string) (*Do
 
 	service, exists := domain.Services[*serviceType]
 	if !exists {
+		if !cluster.HasService(*serviceType) {
+			return domain, nil, nil
+		}
 		service = &DomainService{
 			Type:      *serviceType,
 			Resources: make(DomainResources),
@@ -281,9 +256,12 @@ func (d domains) Find(domainUUID string, serviceType, resourceName *string) (*Do
 
 	resource, exists := service.Resources[*resourceName]
 	if !exists {
+		if !cluster.HasResource(*serviceType, *resourceName) {
+			return domain, service, resource
+		}
 		resource = &DomainResource{
 			Name: *resourceName,
-			Unit: limes.UnitFor(*serviceType, *resourceName),
+			Unit: cluster.UnitFor(*serviceType, *resourceName),
 		}
 		service.Resources[*resourceName] = resource
 	}

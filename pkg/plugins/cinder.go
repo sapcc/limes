@@ -25,7 +25,9 @@ import (
 	"github.com/sapcc/limes/pkg/limes"
 )
 
-type cinderPlugin struct{}
+type cinderPlugin struct {
+	cfg limes.ServiceConfiguration
+}
 
 var cinderResources = []limes.ResourceInfo{
 	{
@@ -43,7 +45,9 @@ var cinderResources = []limes.ResourceInfo{
 }
 
 func init() {
-	limes.RegisterQuotaPlugin(&cinderPlugin{})
+	limes.RegisterQuotaPlugin(func(c limes.ServiceConfiguration) limes.QuotaPlugin {
+		return &cinderPlugin{c}
+	})
 }
 
 //ServiceType implements the limes.QuotaPlugin interface.

@@ -19,7 +19,9 @@
 
 package limes
 
-import "strconv"
+import (
+	"strconv"
+)
 
 //QuotaPlugin is the interface that the quota/usage collector plugins for all
 //backend services must implement. There can only be one QuotaPlugin for each
@@ -117,8 +119,8 @@ func (u Unit) Format(value uint64) string {
 //UnitFor finds the plugin for the given serviceType and finds within that
 //plugin the ResourceInfo for the given resourceName, and returns its unit. If
 //the service or resource does not exist, UnitNone is returned.
-func UnitFor(serviceType, resourceName string) Unit {
-	plugin := GetQuotaPlugin(serviceType)
+func (c *ClusterConfiguration) UnitFor(serviceType, resourceName string) Unit {
+	plugin := c.GetQuotaPlugin(serviceType)
 	if plugin == nil {
 		return UnitNone
 	}
@@ -130,45 +132,141 @@ func UnitFor(serviceType, resourceName string) Unit {
 	return UnitNone
 }
 
-var quotaPlugins = map[string]QuotaPlugin{}
-var capacityPlugins = map[string]CapacityPlugin{}
+//QuotaPluginFactory is a function that produces quota plugins for a certain
+//ServiceType. The quota plugin instance will use the service configuration
+//given to it if it wants to.
+type QuotaPluginFactory func(ServiceConfiguration) QuotaPlugin
+
+//CapacityPluginFactory is a function that produces capacity plugins with a
+//certain ID. The capacity plugin instance will use the service configuration
+//given to it if it wants to.
+type CapacityPluginFactory func(CapacitorConfiguration) CapacityPlugin
+
+var quotaPluginFactories = map[string]QuotaPluginFactory{}
+var capacityPluginFactories = map[string]CapacityPluginFactory{}
 
 //RegisterQuotaPlugin registers a QuotaPlugin with this package. It may only be
 //called once, typically in a func init() for the package that offers the
 //QuotaPlugin.
-func RegisterQuotaPlugin(plugin QuotaPlugin) {
-	if plugin == nil {
-		panic("collector.RegisterQuotaPlugin() called with nil Plugin instance")
+//
+//When called, this function will use the factory with a zero
+//ServiceConfiguration to determine the ServiceType of the quota plugin.
+func RegisterQuotaPlugin(factory QuotaPluginFactory) {
+	if factory == nil {
+		panic("collector.RegisterQuotaPlugin() called with nil QuotaPluginFactory instance")
 	}
-	serviceType := plugin.ServiceType()
-	if quotaPlugins[serviceType] != nil {
+	serviceType := factory(ServiceConfiguration{}).ServiceType()
+	if serviceType == "" {
+		panic("QuotaPlugin instance with empty ServiceType!")
+	}
+	if quotaPluginFactories[serviceType] != nil {
 		panic("collector.RegisterQuotaPlugin() called multiple times for service type: " + serviceType)
 	}
-	quotaPlugins[serviceType] = plugin
+	quotaPluginFactories[serviceType] = factory
 }
 
 //GetQuotaPlugin returns the QuotaPlugin that handles the given service type,
-//or nil if no such plugin exists.
-func GetQuotaPlugin(serviceType string) QuotaPlugin {
-	return quotaPlugins[serviceType]
+//or nil if no such plugin exists, or if it is not configured in this cluster.
+func (c *ClusterConfiguration) GetQuotaPlugin(serviceType string) QuotaPlugin {
+	//already cached?
+	if c.quotaPlugins == nil {
+		c.quotaPlugins = make(map[string]QuotaPlugin)
+	} else {
+		plugin, ok := c.quotaPlugins[serviceType]
+		if ok {
+			return plugin
+		}
+	}
+
+	//do we have a factory?
+	factory, ok := quotaPluginFactories[serviceType]
+	if !ok {
+		return nil
+	}
+
+	//is this plugin configured in this cluster?
+	for _, sc := range c.Services {
+		if sc.Type == serviceType {
+			plugin := factory(sc)
+			c.quotaPlugins[serviceType] = plugin
+			return plugin
+		}
+	}
+
+	return nil
 }
 
 //RegisterCapacityPlugin registers a CapacityPlugin with this package. It may
 //only be called once, typically in a func init() for the package that offers
 //the CapacityPlugin.
-func RegisterCapacityPlugin(plugin CapacityPlugin) {
-	if plugin == nil {
-		panic("collector.RegisterCapacityPlugin() called with nil Plugin instance")
+//
+//When called, this function will use the factory with a zero
+//ServiceConfiguration to determine the ServiceType of the quota plugin.
+func RegisterCapacityPlugin(factory CapacityPluginFactory) {
+	if factory == nil {
+		panic("collector.RegisterCapacityPlugin() called with nil CapacityPluginFactory instance")
 	}
-	id := plugin.ID()
-	if capacityPlugins[id] != nil {
+	id := factory(CapacitorConfiguration{}).ID()
+	if id == "" {
+		panic("CapacityPlugin instance with empty ID!")
+	}
+	if capacityPluginFactories[id] != nil {
 		panic("collector.RegisterCapacityPlugin() called multiple times for ID: " + id)
 	}
-	capacityPlugins[id] = plugin
+	capacityPluginFactories[id] = factory
 }
 
 //GetCapacityPlugin returns the CapacityPlugin with the given ID, or nil if no
-//such plugin exists.
-func GetCapacityPlugin(serviceType string) CapacityPlugin {
-	return capacityPlugins[serviceType]
+//such plugin exists, or if it is not configured in this cluster.
+func (c *ClusterConfiguration) GetCapacityPlugin(capacitorID string) CapacityPlugin {
+	//already cached?
+	if c.capacityPlugins == nil {
+		c.capacityPlugins = make(map[string]CapacityPlugin)
+	} else {
+		plugin, ok := c.capacityPlugins[capacitorID]
+		if ok {
+			return plugin
+		}
+	}
+
+	//do we have a factory?
+	factory, ok := capacityPluginFactories[capacitorID]
+	if !ok {
+		return nil
+	}
+
+	//is this plugin configured in this cluster?
+	for _, cc := range c.Capacitors {
+		if cc.ID == capacitorID {
+			plugin := factory(cc)
+			c.capacityPlugins[capacitorID] = plugin
+			return plugin
+		}
+	}
+
+	return nil
+}
+
+//HasService checks whether the given service is enabled in this cluster.
+func (c *ClusterConfiguration) HasService(serviceType string) bool {
+	for _, srv := range c.Services {
+		if srv.Type == serviceType {
+			return true
+		}
+	}
+	return false
+}
+
+//HasResource checks whether the given service is enabled in this cluster and whether it advertises the given resource.
+func (c *ClusterConfiguration) HasResource(serviceType, resourceName string) bool {
+	plugin := c.GetQuotaPlugin(serviceType)
+	if plugin == nil {
+		return false
+	}
+	for _, res := range plugin.Resources() {
+		if res.Name == resourceName {
+			return true
+		}
+	}
+	return false
 }
