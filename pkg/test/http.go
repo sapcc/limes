@@ -40,6 +40,7 @@ type APIRequest struct {
 	ExpectStatusCode int
 	ExpectBody       *string //raw content (not a file path)
 	ExpectJSON       string  //path to JSON file
+	ExpectFile       string  //path to arbitrary file
 }
 
 //Check performs the HTTP request described by this APIRequest against the
@@ -69,38 +70,39 @@ func (r APIRequest) Check(t *testing.T, handler http.Handler) {
 		)
 	}
 
-	if r.ExpectBody != nil {
+	switch {
+	case r.ExpectBody != nil:
 		responseStr := string(responseBytes)
 		if responseStr != *r.ExpectBody {
 			t.Fatalf("%s %s: expected body %#v, but got %#v",
 				r.Method, r.Path, *r.ExpectBody, responseStr,
 			)
 		}
-		return //do not try to evaluate ExpectJSON
+	case r.ExpectJSON != "":
+		var buf bytes.Buffer
+		err := json.Indent(&buf, responseBytes, "", "  ")
+		if err != nil {
+			t.Logf("Response body: %s", responseBytes)
+			t.Fatal(err)
+		}
+		buf.WriteByte('\n')
+		r.compareBodyToFixture(t, r.ExpectJSON, buf.Bytes())
+	case r.ExpectFile != "":
+		r.compareBodyToFixture(t, r.ExpectFile, responseBytes)
 	}
+}
 
-	if r.ExpectJSON == "" {
-		return //if no JSON response expected, don't try to parse the response body
-	}
-
-	var buf bytes.Buffer
-	err := json.Indent(&buf, responseBytes, "", "  ")
-	if err != nil {
-		t.Logf("Response body: %s", responseBytes)
-		t.Fatal(err)
-	}
-	buf.WriteByte('\n')
-
-	//write actual JSON to file to make it easy to copy the computed result over
+func (r APIRequest) compareBodyToFixture(t *testing.T, fixturePath string, data []byte) {
+	//write actual content to file to make it easy to copy the computed result over
 	//to the fixture path when a new test is added or an existing one is modified
-	fixturePath, _ := filepath.Abs(r.ExpectJSON)
-	actualPath := fixturePath + ".actual"
-	err = ioutil.WriteFile(actualPath, buf.Bytes(), 0644)
+	fixturePathAbs, _ := filepath.Abs(fixturePath)
+	actualPathAbs := fixturePathAbs + ".actual"
+	err := ioutil.WriteFile(actualPathAbs, data, 0644)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	cmd := exec.Command("diff", "-u", fixturePath, actualPath)
+	cmd := exec.Command("diff", "-u", fixturePathAbs, actualPathAbs)
 	cmd.Stdin = nil
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
