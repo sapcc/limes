@@ -1,0 +1,12 @@
+# HELP limes_project_backendquota Actual quota of a Limes resource for an OpenStack project.
+# TYPE limes_project_backendquota gauge
+limes_project_backendquota{cluster="west",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="unittest"} 20
+limes_project_backendquota{cluster="west",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="things",service="unittest"} 13
+# HELP limes_project_quota Assigned quota of a Limes resource for an OpenStack project.
+# TYPE limes_project_quota gauge
+limes_project_quota{cluster="west",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="unittest"} 20
+limes_project_quota{cluster="west",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="things",service="unittest"} 13
+# HELP limes_project_usage Actual usage of a Limes resource for an OpenStack project.
+# TYPE limes_project_usage gauge
+limes_project_usage{cluster="west",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="unittest"} 0
+limes_project_usage{cluster="west",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="things",service="unittest"} 5
