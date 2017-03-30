@@ -30,3 +30,9 @@ func TimeNow() time.Time {
 	clockSeconds++
 	return time.Unix(clockSeconds, 0)
 }
+
+//ResetTime should be called at the start of unit tests that use TimeNow, to
+//ensure a reproducible flow of time.
+func ResetTime() {
+	clockSeconds = -1
+}

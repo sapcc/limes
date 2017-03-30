@@ -73,6 +73,10 @@ type CapacityPlugin interface {
 type ResourceInfo struct {
 	Name string
 	Unit Unit
+	//If AutoApproveInitialQuota is non-zero, when a new project is scraped for
+	//the first time, a backend quota equal to this value will be approved
+	//automatically (i.e. Quota will be set equal to BackendQuota).
+	AutoApproveInitialQuota uint64
 }
 
 //Unit enumerates allowed values for the unit a resource's quota/usage is

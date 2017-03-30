@@ -171,9 +171,6 @@ func (c *Collector) writeScrapeResult(domainUUID, projectUUID string, serviceID 
 			continue
 		}
 		data := resourceData[resMetadata.Name]
-		//TODO: allow to auto-approve certain initial non-null backend quotas (e.g. Neutron gives each
-		//project a "default" security group automatically, so the quotas start at security_groups=1 and
-		//security_group_rules=4 instead of at 0)
 		res := &db.ProjectResource{
 			ServiceID:    serviceID,
 			Name:         resMetadata.Name,
@@ -181,6 +178,10 @@ func (c *Collector) writeScrapeResult(domainUUID, projectUUID string, serviceID 
 			Usage:        data.Usage,
 			BackendQuota: data.Quota,
 		}
+		if data.Quota > 0 && uint64(data.Quota) == resMetadata.AutoApproveInitialQuota {
+			res.Quota = resMetadata.AutoApproveInitialQuota
+		}
+
 		err = tx.Insert(res)
 		if err != nil {
 			return err

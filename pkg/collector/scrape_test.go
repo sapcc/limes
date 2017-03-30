@@ -20,6 +20,7 @@
 package collector
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -29,29 +30,16 @@ import (
 	"github.com/sapcc/limes/pkg/test"
 )
 
-func scrapeTestDriver(t *testing.T) *test.Driver {
+func prepareScrapeTest(t *testing.T, sc []limes.ServiceConfiguration) *test.Driver {
+	test.ResetTime()
 	test.InitDatabase(t, "../test/migrations")
 
 	cluster := &limes.ClusterConfiguration{
-		ID: "west",
-		Services: []limes.ServiceConfiguration{
-			limes.ServiceConfiguration{Type: "unittest", Shared: false},
-		},
+		ID:       "west",
+		Services: sc,
 	}
 
-	return test.NewDriver(cluster)
-}
-
-func Test_Scrape(t *testing.T) {
-	driver := scrapeTestDriver(t)
-	plugin := limes.GetQuotaPlugin("unittest").(*test.Plugin)
-	c := Collector{
-		Driver:   driver,
-		Plugin:   plugin,
-		LogError: t.Errorf,
-		TimeNow:  test.TimeNow,
-		Once:     true,
-	}
+	driver := test.NewDriver(cluster)
 
 	//one domain and one project is enough
 	domainUUID1 := driver.StaticDomains[0].UUID
@@ -65,6 +53,24 @@ func Test_Scrape(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	return driver
+}
+
+func Test_Scrape(t *testing.T) {
+	driver := prepareScrapeTest(t, []limes.ServiceConfiguration{
+		limes.ServiceConfiguration{Type: "unittest", Shared: false},
+	})
+	plugin := limes.GetQuotaPlugin("unittest").(*test.Plugin)
+	c := Collector{
+		Driver:   driver,
+		Plugin:   plugin,
+		LogError: t.Errorf,
+		TimeNow:  test.TimeNow,
+		Once:     true,
+	}
+
+	//check that ScanDomains created the domain, project and their services
 	test.AssertDBContent(t, "fixtures/scrape0.sql")
 
 	//first Scrape should create the entries in `project_resources` with the
@@ -88,7 +94,7 @@ func Test_Scrape(t *testing.T) {
 	test.AssertDBContent(t, "fixtures/scrape2.sql")
 
 	//set some non-zero quota values so that we can discriminate them from zero
-	_, err = db.DB.Exec(`UPDATE project_resources SET quota = ? WHERE name = ?`, 20, "capacity")
+	_, err := db.DB.Exec(`UPDATE project_resources SET quota = ? WHERE name = ?`, 20, "capacity")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -129,4 +135,71 @@ func setProjectServicesStale(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// test for auto-approval
+
+type autoApprovalTestPlugin struct {
+	StaticBackendQuota uint64
+}
+
+func init() {
+	limes.RegisterQuotaPlugin(&autoApprovalTestPlugin{StaticBackendQuota: 10})
+}
+
+func (p *autoApprovalTestPlugin) ServiceType() string {
+	return "autoapprovaltest"
+}
+
+func (p *autoApprovalTestPlugin) Resources() []limes.ResourceInfo {
+	//one resource can auto-approve, one cannot because BackendQuota != AutoApproveInitialQuota
+	return []limes.ResourceInfo{
+		limes.ResourceInfo{
+			Name: "approve",
+			AutoApproveInitialQuota: p.StaticBackendQuota,
+		},
+		limes.ResourceInfo{
+			Name: "noapprove",
+			AutoApproveInitialQuota: p.StaticBackendQuota,
+		},
+	}
+}
+
+func (p *autoApprovalTestPlugin) Scrape(driver limes.Driver, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
+	return map[string]limes.ResourceData{
+		"approve":   limes.ResourceData{Usage: 0, Quota: int64(p.StaticBackendQuota)},
+		"noapprove": limes.ResourceData{Usage: 0, Quota: int64(p.StaticBackendQuota) + 10},
+	}, nil
+}
+
+func (p *autoApprovalTestPlugin) SetQuota(driver limes.Driver, domainUUID, projectUUID string, quotas map[string]uint64) error {
+	return errors.New("unimplemented")
+}
+
+func Test_AutoApproveInitialQuota(t *testing.T) {
+	driver := prepareScrapeTest(t, []limes.ServiceConfiguration{
+		limes.ServiceConfiguration{Type: "autoapprovaltest", Shared: false},
+	})
+	plugin := limes.GetQuotaPlugin("autoapprovaltest").(*autoApprovalTestPlugin)
+	c := Collector{
+		Driver:   driver,
+		Plugin:   plugin,
+		LogError: t.Errorf,
+		TimeNow:  test.TimeNow,
+		Once:     true,
+	}
+
+	//when first scraping, the initial backend quota of the "approve" resource
+	//shall be approved automatically
+	c.Scrape()
+	test.AssertDBContent(t, "fixtures/scrape-autoapprove1.sql")
+
+	//modify the backend quota; verify that the second scrape does not
+	//auto-approve the changed value again (auto-approval is limited to the
+	//initial scrape)
+	plugin.StaticBackendQuota += 10
+	setProjectServicesStale(t)
+	c.Scrape()
+	test.AssertDBContent(t, "fixtures/scrape-autoapprove2.sql")
 }
