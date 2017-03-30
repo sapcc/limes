@@ -48,13 +48,13 @@ func setupTest(t *testing.T) (*test.Driver, http.Handler) {
 
 	//prepare test configuration
 	servicesConfig := []limes.ServiceConfiguration{
-		limes.ServiceConfiguration{Type: "shared", Shared: true},
-		limes.ServiceConfiguration{Type: "unshared", Shared: false},
+		{Type: "shared", Shared: true},
+		{Type: "unshared", Shared: false},
 	}
 	config := limes.Configuration{
 		Clusters: map[string]*limes.ClusterConfiguration{
-			"west": &limes.ClusterConfiguration{ID: "west", Services: servicesConfig},
-			"east": &limes.ClusterConfiguration{ID: "east", Services: servicesConfig},
+			"west": {ID: "west", Services: servicesConfig},
+			"east": {ID: "east", Services: servicesConfig},
 		},
 	}
 
@@ -189,11 +189,11 @@ func Test_DomainOperations(t *testing.T) {
 		RequestJSON: object{
 			"domain": object{
 				"services": []object{
-					object{
+					{
 						"type": "shared",
 						"resources": []object{
 							//should fail because project quota sum exceeds new quota
-							object{"name": "capacity", "quota": 1},
+							{"name": "capacity", "quota": 1},
 						},
 					},
 				},
@@ -209,11 +209,11 @@ func Test_DomainOperations(t *testing.T) {
 		RequestJSON: object{
 			"domain": object{
 				"services": []object{
-					object{
+					{
 						"type": "shared",
 						"resources": []object{
 							//should fail because project quota sum exceeds new quota
-							object{"name": "capacity", "quota": 1234},
+							{"name": "capacity", "quota": 1234},
 						},
 					},
 				},
@@ -336,13 +336,13 @@ func Test_ProjectOperations(t *testing.T) {
 		RequestJSON: object{
 			"project": object{
 				"services": []object{
-					object{
+					{
 						"type": "shared",
 						"resources": []object{
 							//should fail because usage exceeds new quota
-							object{"name": "capacity", "quota": 1},
+							{"name": "capacity", "quota": 1},
 							//should fail because domain quota exceeded
-							object{"name": "things", "quota": 30},
+							{"name": "things", "quota": 30},
 						},
 					},
 				},
@@ -362,10 +362,10 @@ func Test_ProjectOperations(t *testing.T) {
 		RequestJSON: object{
 			"project": object{
 				"services": []object{
-					object{
+					{
 						"type": "shared",
 						"resources": []object{
-							object{"name": "capacity", "quota": 5},
+							{"name": "capacity", "quota": 5},
 						},
 					},
 				},
@@ -401,10 +401,10 @@ func Test_ProjectOperations(t *testing.T) {
 		RequestJSON: object{
 			"project": object{
 				"services": []object{
-					object{
+					{
 						"type": "shared",
 						"resources": []object{
-							object{"name": "capacity", "quota": 6},
+							{"name": "capacity", "quota": 6},
 						},
 					},
 				},

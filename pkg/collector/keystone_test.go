@@ -35,8 +35,8 @@ func keystoneTestDriver(t *testing.T) *test.Driver {
 	return test.NewDriver(&limes.ClusterConfiguration{
 		ID: "west",
 		Services: []limes.ServiceConfiguration{
-			limes.ServiceConfiguration{Type: "unshared", Shared: false},
-			limes.ServiceConfiguration{Type: "shared", Shared: true},
+			{Type: "unshared", Shared: false},
+			{Type: "shared", Shared: true},
 		},
 	})
 }

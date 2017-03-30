@@ -41,16 +41,16 @@ func NewDriver(cluster *limes.ClusterConfiguration) *Driver {
 	return &Driver{
 		ClusterConfig: cluster,
 		StaticDomains: []limes.KeystoneDomain{
-			limes.KeystoneDomain{Name: "germany", UUID: "uuid-for-germany"},
-			limes.KeystoneDomain{Name: "france", UUID: "uuid-for-france"},
+			{Name: "germany", UUID: "uuid-for-germany"},
+			{Name: "france", UUID: "uuid-for-france"},
 		},
 		StaticProjects: map[string][]limes.KeystoneProject{
-			"uuid-for-germany": []limes.KeystoneProject{
-				limes.KeystoneProject{Name: "berlin", UUID: "uuid-for-berlin"},
-				limes.KeystoneProject{Name: "dresden", UUID: "uuid-for-dresden"},
+			"uuid-for-germany": {
+				{Name: "berlin", UUID: "uuid-for-berlin"},
+				{Name: "dresden", UUID: "uuid-for-dresden"},
 			},
-			"uuid-for-france": []limes.KeystoneProject{
-				limes.KeystoneProject{Name: "paris", UUID: "uuid-for-paris"},
+			"uuid-for-france": {
+				{Name: "paris", UUID: "uuid-for-paris"},
 			},
 		},
 	}

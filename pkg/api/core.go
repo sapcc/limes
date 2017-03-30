@@ -65,11 +65,11 @@ func NewV1Router(driver limes.Driver, config limes.Configuration) (http.Handler,
 		Status: "CURRENT",
 		ID:     "v1",
 		Links: []VersionLinkData{
-			VersionLinkData{
+			{
 				Relation: "self",
 				URL:      p.Path(),
 			},
-			VersionLinkData{
+			{
 				Relation: "describedby",
 				URL:      "https://github.com/sapcc/limes/tree/master/docs",
 				Type:     "text/html",

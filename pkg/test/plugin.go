@@ -37,11 +37,11 @@ type Plugin struct {
 }
 
 var resources = []limes.ResourceInfo{
-	limes.ResourceInfo{
+	{
 		Name: "capacity",
 		Unit: limes.UnitBytes,
 	},
-	limes.ResourceInfo{
+	{
 		Name: "things",
 		Unit: limes.UnitNone,
 	},
@@ -56,8 +56,8 @@ func NewPlugin(serviceType string) *Plugin {
 	return &Plugin{
 		StaticServiceType: serviceType,
 		StaticResourceData: map[string]*limes.ResourceData{
-			"things":   &limes.ResourceData{Quota: 42, Usage: 23},
-			"capacity": &limes.ResourceData{Quota: 100, Usage: 0},
+			"things":   {Quota: 42, Usage: 23},
+			"capacity": {Quota: 100, Usage: 0},
 		},
 		OverrideQuota: make(map[string]map[string]uint64),
 	}

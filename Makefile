@@ -30,7 +30,7 @@ pkg/test/migrations/%.sql: pkg/db/migrations/%.sql
 	@# convert Postgres syntax into SQLite syntax where necessary
 	sed 's/BIGSERIAL NOT NULL PRIMARY KEY/INTEGER PRIMARY KEY/' < $< > $@
 static-check: FORCE
-	@if s="$$(gofmt -l *.go pkg 2>/dev/null)"                               && test -n "$$s"; then printf ' => %s\n%s\n' gofmt  "$$s"; false; fi
+	@if s="$$(gofmt -s -l *.go pkg 2>/dev/null)"                            && test -n "$$s"; then printf ' => %s\n%s\n' gofmt  "$$s"; false; fi
 	@if s="$$(golint . && find pkg -type d -exec golint {} \; 2>/dev/null)" && test -n "$$s"; then printf ' => %s\n%s\n' golint "$$s"; false; fi
 	$(GO) vet $(GO_ALLPKGS)
 build/%.cover.out: prepare-check FORCE

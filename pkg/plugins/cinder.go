@@ -28,15 +28,15 @@ import (
 type cinderPlugin struct{}
 
 var cinderResources = []limes.ResourceInfo{
-	limes.ResourceInfo{
+	{
 		Name: "capacity",
 		Unit: limes.UnitGibibytes,
 	},
-	limes.ResourceInfo{
+	{
 		Name: "snapshots",
 		Unit: limes.UnitNone,
 	},
-	limes.ResourceInfo{
+	{
 		Name: "volumes",
 		Unit: limes.UnitNone,
 	},
@@ -93,15 +93,15 @@ func (p *cinderPlugin) Scrape(driver limes.Driver, domainUUID, projectUUID strin
 	}
 
 	return map[string]limes.ResourceData{
-		"capacity": limes.ResourceData{
+		"capacity": {
 			Quota: data.QuotaSet.Capacity.Quota,
 			Usage: data.QuotaSet.Capacity.Usage,
 		},
-		"snapshots": limes.ResourceData{
+		"snapshots": {
 			Quota: data.QuotaSet.Snapshots.Quota,
 			Usage: data.QuotaSet.Snapshots.Usage,
 		},
-		"volumes": limes.ResourceData{
+		"volumes": {
 			Quota: data.QuotaSet.Volumes.Quota,
 			Usage: data.QuotaSet.Volumes.Usage,
 		},
@@ -111,7 +111,7 @@ func (p *cinderPlugin) Scrape(driver limes.Driver, domainUUID, projectUUID strin
 //SetQuota implements the limes.QuotaPlugin interface.
 func (p *cinderPlugin) SetQuota(driver limes.Driver, domainUUID, projectUUID string, quotas map[string]uint64) error {
 	requestData := map[string]map[string]uint64{
-		"quota_set": map[string]uint64{
+		"quota_set": {
 			"gigabytes": quotas["gigabytes"],
 			"snapshots": quotas["snapshots"],
 			"volumes":   quotas["volumes"],

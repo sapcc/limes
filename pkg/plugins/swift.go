@@ -34,7 +34,7 @@ import (
 type swiftPlugin struct{}
 
 var swiftResources = []limes.ResourceInfo{
-	limes.ResourceInfo{
+	{
 		Name: "capacity",
 		Unit: limes.UnitBytes,
 	},
@@ -75,7 +75,7 @@ func (p *swiftPlugin) Scrape(driver limes.Driver, domainUUID, projectUUID string
 	if account == nil {
 		//Swift account does not exist, but the keystone project
 		return map[string]limes.ResourceData{
-			"capacity": limes.ResourceData{
+			"capacity": {
 				Quota: 0,
 				Usage: 0,
 			},
@@ -100,7 +100,7 @@ func (p *swiftPlugin) Scrape(driver limes.Driver, domainUUID, projectUUID string
 
 	util.LogDebug("Swift Account %s: quota '%d' - usage '%d'", projectUUID, quota, usage)
 	return map[string]limes.ResourceData{
-		"capacity": limes.ResourceData{
+		"capacity": {
 			Quota: quota,
 			Usage: uint64(usage),
 		},

@@ -59,7 +59,7 @@ func prepareScrapeTest(t *testing.T, sc []limes.ServiceConfiguration) *test.Driv
 
 func Test_Scrape(t *testing.T) {
 	driver := prepareScrapeTest(t, []limes.ServiceConfiguration{
-		limes.ServiceConfiguration{Type: "unittest", Shared: false},
+		{Type: "unittest", Shared: false},
 	})
 	plugin := limes.GetQuotaPlugin("unittest").(*test.Plugin)
 	c := Collector{
@@ -155,11 +155,11 @@ func (p *autoApprovalTestPlugin) ServiceType() string {
 func (p *autoApprovalTestPlugin) Resources() []limes.ResourceInfo {
 	//one resource can auto-approve, one cannot because BackendQuota != AutoApproveInitialQuota
 	return []limes.ResourceInfo{
-		limes.ResourceInfo{
+		{
 			Name: "approve",
 			AutoApproveInitialQuota: p.StaticBackendQuota,
 		},
-		limes.ResourceInfo{
+		{
 			Name: "noapprove",
 			AutoApproveInitialQuota: p.StaticBackendQuota,
 		},
@@ -168,8 +168,8 @@ func (p *autoApprovalTestPlugin) Resources() []limes.ResourceInfo {
 
 func (p *autoApprovalTestPlugin) Scrape(driver limes.Driver, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
 	return map[string]limes.ResourceData{
-		"approve":   limes.ResourceData{Usage: 0, Quota: int64(p.StaticBackendQuota)},
-		"noapprove": limes.ResourceData{Usage: 0, Quota: int64(p.StaticBackendQuota) + 10},
+		"approve":   {Usage: 0, Quota: int64(p.StaticBackendQuota)},
+		"noapprove": {Usage: 0, Quota: int64(p.StaticBackendQuota) + 10},
 	}, nil
 }
 
@@ -179,7 +179,7 @@ func (p *autoApprovalTestPlugin) SetQuota(driver limes.Driver, domainUUID, proje
 
 func Test_AutoApproveInitialQuota(t *testing.T) {
 	driver := prepareScrapeTest(t, []limes.ServiceConfiguration{
-		limes.ServiceConfiguration{Type: "autoapprovaltest", Shared: false},
+		{Type: "autoapprovaltest", Shared: false},
 	})
 	plugin := limes.GetQuotaPlugin("autoapprovaltest").(*autoApprovalTestPlugin)
 	c := Collector{

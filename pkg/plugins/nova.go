@@ -30,15 +30,15 @@ import (
 type novaPlugin struct{}
 
 var novaResources = []limes.ResourceInfo{
-	limes.ResourceInfo{
+	{
 		Name: "cores",
 		Unit: limes.UnitNone,
 	},
-	limes.ResourceInfo{
+	{
 		Name: "instances",
 		Unit: limes.UnitNone,
 	},
-	limes.ResourceInfo{
+	{
 		Name: "ram",
 		Unit: limes.UnitMebibytes,
 	},
@@ -82,15 +82,15 @@ func (p *novaPlugin) Scrape(driver limes.Driver, domainUUID, projectUUID string)
 	}
 
 	return map[string]limes.ResourceData{
-		"cores": limes.ResourceData{
+		"cores": {
 			Quota: int64(quotas.Cores),
 			Usage: uint64(limits.Absolute.TotalCoresUsed),
 		},
-		"instances": limes.ResourceData{
+		"instances": {
 			Quota: int64(quotas.Instances),
 			Usage: uint64(limits.Absolute.TotalInstancesUsed),
 		},
-		"ram": limes.ResourceData{
+		"ram": {
 			Quota: int64(quotas.Ram),
 			Usage: uint64(limits.Absolute.TotalRAMUsed),
 		},
