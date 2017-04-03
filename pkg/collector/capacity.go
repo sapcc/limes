@@ -52,15 +52,10 @@ func (c *Collector) scanCapacity() {
 	scrapedAt := c.TimeNow()
 	cluster := c.Driver.Cluster()
 
-	for _, capacitor := range cluster.Capacitors {
-		plugin := cluster.GetCapacityPlugin(capacitor.ID)
-		if plugin == nil {
-			continue //skip silently, the missing plugin was already reported at program startup
-		}
-
+	for capacitorID, plugin := range cluster.CapacityPlugins {
 		capacities, err := plugin.Scrape(c.Driver)
 		if err != nil {
-			c.LogError("scan capacity with capacitor %s failed: %s", capacitor.ID, err.Error())
+			c.LogError("scan capacity with capacitor %s failed: %s", capacitorID, err.Error())
 			continue
 		}
 
@@ -76,25 +71,16 @@ func (c *Collector) scanCapacity() {
 	}
 
 	//skip values for services not enabled for this cluster
-	serviceTypes := make(map[string]bool)
 	for serviceType := range values {
-		serviceTypes[serviceType] = true
-	}
-	for _, srv := range cluster.Services {
-		delete(serviceTypes, srv.Type)
-	}
-	for serviceType := range serviceTypes {
-		delete(values, serviceType)
+		if !cluster.HasService(serviceType) {
+			delete(values, serviceType)
+		}
 	}
 
 	//skip values for resources not announced by the respective QuotaPlugin
-	for _, srv := range cluster.Services {
-		subvalues, exists := values[srv.Type]
+	for serviceType, plugin := range cluster.QuotaPlugins {
+		subvalues, exists := values[serviceType]
 		if !exists {
-			continue
-		}
-		plugin := cluster.GetQuotaPlugin(srv.Type)
-		if plugin == nil {
 			continue
 		}
 		names := make(map[string]bool)

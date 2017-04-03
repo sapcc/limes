@@ -116,22 +116,6 @@ func (u Unit) Format(value uint64) string {
 	return str + " " + string(u)
 }
 
-//UnitFor finds the plugin for the given serviceType and finds within that
-//plugin the ResourceInfo for the given resourceName, and returns its unit. If
-//the service or resource does not exist, UnitNone is returned.
-func (c *ClusterConfiguration) UnitFor(serviceType, resourceName string) Unit {
-	plugin := c.GetQuotaPlugin(serviceType)
-	if plugin == nil {
-		return UnitNone
-	}
-	for _, res := range plugin.Resources() {
-		if res.Name == resourceName {
-			return res.Unit
-		}
-	}
-	return UnitNone
-}
-
 //QuotaPluginFactory is a function that produces quota plugins for a certain
 //ServiceType. The quota plugin instance will use the service configuration
 //given to it if it wants to.
@@ -165,37 +149,6 @@ func RegisterQuotaPlugin(factory QuotaPluginFactory) {
 	quotaPluginFactories[serviceType] = factory
 }
 
-//GetQuotaPlugin returns the QuotaPlugin that handles the given service type,
-//or nil if no such plugin exists, or if it is not configured in this cluster.
-func (c *ClusterConfiguration) GetQuotaPlugin(serviceType string) QuotaPlugin {
-	//already cached?
-	if c.quotaPlugins == nil {
-		c.quotaPlugins = make(map[string]QuotaPlugin)
-	} else {
-		plugin, ok := c.quotaPlugins[serviceType]
-		if ok {
-			return plugin
-		}
-	}
-
-	//do we have a factory?
-	factory, ok := quotaPluginFactories[serviceType]
-	if !ok {
-		return nil
-	}
-
-	//is this plugin configured in this cluster?
-	for _, sc := range c.Services {
-		if sc.Type == serviceType {
-			plugin := factory(sc)
-			c.quotaPlugins[serviceType] = plugin
-			return plugin
-		}
-	}
-
-	return nil
-}
-
 //RegisterCapacityPlugin registers a CapacityPlugin with this package. It may
 //only be called once, typically in a func init() for the package that offers
 //the CapacityPlugin.
@@ -214,59 +167,4 @@ func RegisterCapacityPlugin(factory CapacityPluginFactory) {
 		panic("collector.RegisterCapacityPlugin() called multiple times for ID: " + id)
 	}
 	capacityPluginFactories[id] = factory
-}
-
-//GetCapacityPlugin returns the CapacityPlugin with the given ID, or nil if no
-//such plugin exists, or if it is not configured in this cluster.
-func (c *ClusterConfiguration) GetCapacityPlugin(capacitorID string) CapacityPlugin {
-	//already cached?
-	if c.capacityPlugins == nil {
-		c.capacityPlugins = make(map[string]CapacityPlugin)
-	} else {
-		plugin, ok := c.capacityPlugins[capacitorID]
-		if ok {
-			return plugin
-		}
-	}
-
-	//do we have a factory?
-	factory, ok := capacityPluginFactories[capacitorID]
-	if !ok {
-		return nil
-	}
-
-	//is this plugin configured in this cluster?
-	for _, cc := range c.Capacitors {
-		if cc.ID == capacitorID {
-			plugin := factory(cc)
-			c.capacityPlugins[capacitorID] = plugin
-			return plugin
-		}
-	}
-
-	return nil
-}
-
-//HasService checks whether the given service is enabled in this cluster.
-func (c *ClusterConfiguration) HasService(serviceType string) bool {
-	for _, srv := range c.Services {
-		if srv.Type == serviceType {
-			return true
-		}
-	}
-	return false
-}
-
-//HasResource checks whether the given service is enabled in this cluster and whether it advertises the given resource.
-func (c *ClusterConfiguration) HasResource(serviceType, resourceName string) bool {
-	plugin := c.GetQuotaPlugin(serviceType)
-	if plugin == nil {
-		return false
-	}
-	for _, res := range plugin.Resources() {
-		if res.Name == resourceName {
-			return true
-		}
-	}
-	return false
 }

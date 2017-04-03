@@ -34,11 +34,6 @@ import (
 	"github.com/sapcc/limes/pkg/test"
 )
 
-func init() {
-	limes.RegisterQuotaPlugin(test.NewPluginFactory("shared"))
-	limes.RegisterQuotaPlugin(test.NewPluginFactory("unshared"))
-}
-
 type object map[string]interface{}
 
 func setupTest(t *testing.T) (*test.Driver, http.Handler) {
@@ -47,14 +42,28 @@ func setupTest(t *testing.T) (*test.Driver, http.Handler) {
 	test.ExecSQLFile(t, "fixtures/start-data.sql")
 
 	//prepare test configuration
-	servicesConfig := []limes.ServiceConfiguration{
-		{Type: "shared", Shared: true},
-		{Type: "unshared", Shared: false},
+	serviceTypes := []string{"shared", "unshared"}
+	isServiceShared := map[string]bool{"shared": true}
+	quotaPlugins := map[string]limes.QuotaPlugin{
+		"shared":   test.NewPlugin("shared"),
+		"unshared": test.NewPlugin("unshared"),
 	}
 	config := limes.Configuration{
-		Clusters: map[string]*limes.ClusterConfiguration{
-			"west": {ID: "west", Services: servicesConfig},
-			"east": {ID: "east", Services: servicesConfig},
+		Clusters: map[string]*limes.Cluster{
+			"west": {
+				ID:              "west",
+				ServiceTypes:    serviceTypes,
+				IsServiceShared: isServiceShared,
+				QuotaPlugins:    quotaPlugins,
+				CapacityPlugins: map[string]limes.CapacityPlugin{},
+			},
+			"east": {
+				ID:              "east",
+				ServiceTypes:    serviceTypes,
+				IsServiceShared: isServiceShared,
+				QuotaPlugins:    quotaPlugins,
+				CapacityPlugins: map[string]limes.CapacityPlugin{},
+			},
 		},
 	}
 
@@ -352,7 +361,7 @@ func Test_ProjectOperations(t *testing.T) {
 
 	//check PutProject: quota admissible (i.e. will be persisted in DB), but
 	//SetQuota fails for some reason (e.g. backend service down)
-	plugin := driver.Cluster().GetQuotaPlugin("shared").(*test.Plugin)
+	plugin := driver.Cluster().QuotaPlugins["shared"].(*test.Plugin)
 	plugin.SetQuotaFails = true
 	test.APIRequest{
 		Method:           "PUT",

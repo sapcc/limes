@@ -29,17 +29,17 @@ import (
 //an actual OpenStack. It returns a static set of domains and projects, and a
 //static set of quota/usage values for any project.
 type Driver struct {
-	ClusterConfig  *limes.ClusterConfiguration
+	cluster        *limes.Cluster
 	StaticDomains  []limes.KeystoneDomain
 	StaticProjects map[string][]limes.KeystoneProject
 }
 
-//NewDriver creates a Driver instance. The ClusterConfiguration does not need
-//to have the Keystone auth params fields filled. Only the cluster ID and
-//service list are required.
-func NewDriver(cluster *limes.ClusterConfiguration) *Driver {
+//NewDriver creates a Driver instance. The Cluster does not need to have the
+//Keystone auth params fields filled. Only the cluster ID and service list are
+//required.
+func NewDriver(cluster *limes.Cluster) *Driver {
 	return &Driver{
-		ClusterConfig: cluster,
+		cluster: cluster,
 		StaticDomains: []limes.KeystoneDomain{
 			{Name: "germany", UUID: "uuid-for-germany"},
 			{Name: "france", UUID: "uuid-for-france"},
@@ -57,8 +57,8 @@ func NewDriver(cluster *limes.ClusterConfiguration) *Driver {
 }
 
 //Cluster implements the limes.Driver interface.
-func (d *Driver) Cluster() *limes.ClusterConfiguration {
-	return d.ClusterConfig
+func (d *Driver) Cluster() *limes.Cluster {
+	return d.cluster
 }
 
 //Client implements the limes.Driver interface.

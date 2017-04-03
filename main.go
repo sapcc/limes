@@ -182,23 +182,9 @@ func taskCollect(config limes.Configuration, driver limes.Driver, args []string)
 	//that for now, and instead construct worker threads in such a way that they
 	//can be terminated at any time without leaving the system in an inconsistent
 	//state, mostly through usage of DB transactions.)
-	for _, service := range cluster.Services {
-		plugin := cluster.GetQuotaPlugin(service.Type)
-		if plugin == nil {
-			util.LogError("skipping service %s: no suitable collector plugin found", service.Type)
-			continue
-		}
+	for _, plugin := range cluster.QuotaPlugins {
 		c := collector.NewCollector(driver, plugin)
 		go c.Scrape()
-	}
-
-	//complain about missing capacity plugins
-	for _, capacitor := range cluster.Capacitors {
-		plugin := cluster.GetCapacityPlugin(capacitor.ID)
-		if plugin == nil {
-			util.LogError("skipping capacitor %s: no suitable collector plugin found", capacitor.ID)
-			continue
-		}
 	}
 
 	//start those collector threads which operate over all services simultaneously
@@ -217,7 +203,7 @@ func taskCollect(config limes.Configuration, driver limes.Driver, args []string)
 
 	//use main thread to emit Prometheus metrics
 	if config.Collector.ExposeDataMetrics {
-		prometheus.MustRegister(&collector.DataMetricsCollector{Cluster: driver.Cluster()})
+		prometheus.MustRegister(&collector.DataMetricsCollector{ClusterID: driver.Cluster().ID})
 	}
 	http.Handle("/metrics", promhttp.Handler())
 	return http.ListenAndServe(config.Collector.MetricsListenAddress, nil)

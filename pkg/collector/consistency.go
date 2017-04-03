@@ -57,7 +57,7 @@ func (c *Collector) CheckConsistency() {
 //TODO: code duplication
 
 func (c *Collector) checkConsistencyDomain(domain db.Domain) {
-	enabledServices, isServiceEnabled := c.enumerateEnabledServices()
+	cluster := c.Driver.Cluster()
 
 	//check domain_services entries
 	seen := make(map[string]bool)
@@ -71,7 +71,7 @@ func (c *Collector) checkConsistencyDomain(domain db.Domain) {
 	//cleanup entries for services that have been disabled
 	for _, service := range services {
 		seen[service.Type] = true
-		if isServiceEnabled[service.Type] {
+		if cluster.HasService(service.Type) {
 			continue
 		}
 		util.LogInfo("cleaning up %s service entry for domain %s", service.Type, domain.Name)
@@ -82,7 +82,7 @@ func (c *Collector) checkConsistencyDomain(domain db.Domain) {
 	}
 
 	//create missing service entries
-	for _, serviceType := range enabledServices {
+	for _, serviceType := range cluster.ServiceTypes {
 		if seen[serviceType] {
 			continue
 		}
@@ -110,7 +110,7 @@ func (c *Collector) checkConsistencyDomain(domain db.Domain) {
 }
 
 func (c *Collector) checkConsistencyProject(project db.Project, domain db.Domain) {
-	enabledServices, isServiceEnabled := c.enumerateEnabledServices()
+	cluster := c.Driver.Cluster()
 
 	//check project_services entries
 	seen := make(map[string]bool)
@@ -124,7 +124,7 @@ func (c *Collector) checkConsistencyProject(project db.Project, domain db.Domain
 	//cleanup entries for services that have been disabled
 	for _, service := range services {
 		seen[service.Type] = true
-		if isServiceEnabled[service.Type] {
+		if cluster.HasService(service.Type) {
 			continue
 		}
 		util.LogInfo("cleaning up %s service entry for project %s/%s", service.Type, domain.Name, project.Name)
@@ -135,7 +135,7 @@ func (c *Collector) checkConsistencyProject(project db.Project, domain db.Domain
 	}
 
 	//create missing service entries
-	for _, serviceType := range enabledServices {
+	for _, serviceType := range cluster.ServiceTypes {
 		if seen[serviceType] {
 			continue
 		}

@@ -249,9 +249,9 @@ func GetClusters(config limes.Configuration, clusterID *string, dbi db.Interface
 	for clusterID := range clusters {
 		clusterConfig, exists := config.Clusters[clusterID]
 		if exists {
-			for _, serviceConfig := range clusterConfig.Services {
-				if serviceConfig.Shared {
-					isSharedService[serviceConfig.Type] = true
+			for serviceType, shared := range clusterConfig.IsServiceShared {
+				if shared {
+					isSharedService[serviceType] = true
 				}
 			}
 		}
@@ -314,10 +314,10 @@ func GetClusters(config limes.Configuration, clusterID *string, dbi db.Interface
 
 		for _, cluster := range clusters {
 			isSharedService := make(map[string]bool)
-			for _, serviceConfig := range config.Clusters[cluster.ID].Services {
+			for serviceType, shared := range config.Clusters[cluster.ID].IsServiceShared {
 				//NOTE: cluster config is guaranteed to exist due to earlier validation
-				if serviceConfig.Shared {
-					isSharedService[serviceConfig.Type] = true
+				if shared {
+					isSharedService[serviceType] = true
 				}
 			}
 

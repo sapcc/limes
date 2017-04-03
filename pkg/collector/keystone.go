@@ -127,8 +127,8 @@ func initDomain(driver limes.Driver, domain limes.KeystoneDomain) (*db.Domain, e
 	}
 
 	//add records for all cluster services to the `project_services` table
-	for _, srv := range driver.Cluster().Services {
-		err := tx.Insert(&db.DomainService{DomainID: dbDomain.ID, Type: srv.Type})
+	for _, serviceType := range driver.Cluster().ServiceTypes {
+		err := tx.Insert(&db.DomainService{DomainID: dbDomain.ID, Type: serviceType})
 		if err != nil {
 			return nil, err
 		}
@@ -213,8 +213,8 @@ func initProject(driver limes.Driver, domain *db.Domain, project limes.KeystoneP
 	//add records for all cluster services to the `project_services` table, with
 	//default `scraped_at = NULL` to force the scraping jobs to scrape the
 	//project resources
-	for _, srv := range driver.Cluster().Services {
-		err := tx.Insert(&db.ProjectService{ProjectID: dbProject.ID, Type: srv.Type})
+	for _, serviceType := range driver.Cluster().ServiceTypes {
+		err := tx.Insert(&db.ProjectService{ProjectID: dbProject.ID, Type: serviceType})
 		if err != nil {
 			return err
 		}

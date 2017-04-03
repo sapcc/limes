@@ -36,17 +36,17 @@ import (
 
 //Configuration contains all the data from the configuration file.
 type Configuration struct {
-	Database  db.Configuration                 `yaml:"database"`
-	Clusters  map[string]*ClusterConfiguration `yaml:"clusters"`
-	API       APIConfiguration                 `yaml:"api"`
-	Collector CollectorConfiguration           `yaml:"collector"`
+	Database       db.Configuration                `yaml:"database"`
+	Clusters       map[string]*Cluster             `yaml:"-"`
+	clusterConfigs map[string]ClusterConfiguration `yaml:"clusters"`
+	API            APIConfiguration                `yaml:"api"`
+	Collector      CollectorConfiguration          `yaml:"collector"`
 }
 
 //ClusterConfiguration contains all the configuration data for a single cluster.
 //It is passed around in a lot of Limes code, mostly for the cluster ID and the
 //list of enabled services.
 type ClusterConfiguration struct {
-	ID                string                   `yaml:"-"`
 	AuthURL           string                   `yaml:"auth_url"`
 	UserName          string                   `yaml:"user_name"`
 	UserDomainName    string                   `yaml:"user_domain_name"`
@@ -58,8 +58,6 @@ type ClusterConfiguration struct {
 	Services          []ServiceConfiguration   `yaml:"services"`
 	Capacitors        []CapacitorConfiguration `yaml:"capacitors"`
 	//Sorry for the stupid pun. Not.
-	quotaPlugins    map[string]QuotaPlugin
-	capacityPlugins map[string]CapacityPlugin
 }
 
 //ServiceConfiguration describes a service that is enabled for a certain cluster.
@@ -110,11 +108,12 @@ func NewConfiguration(path string) (cfg Configuration) {
 		util.LogFatal(err.Error())
 	}
 
-	for clusterID, cluster := range cfg.Clusters {
-		//pull the cluster IDs into the ClusterConfiguration objects
-		//so that we can then pass around the ClusterConfiguration objects
-		//instead of having to juggle both the ID and the config object
-		cluster.ID = clusterID
+	//inflate the ClusterConfiguration instances into Cluster, thereby validating
+	//the existence of the requested quota and capacity plugins and initializing
+	//some handy lookup tables
+	cfg.Clusters = make(map[string]*Cluster)
+	for clusterID, config := range cfg.clusterConfigs {
+		cfg.Clusters[clusterID] = NewCluster(clusterID, config)
 	}
 
 	return
@@ -138,7 +137,7 @@ func (cfg Configuration) validate() (success bool) {
 		missing("clusters[]")
 	}
 
-	for clusterID, cluster := range cfg.Clusters {
+	for clusterID, cluster := range cfg.clusterConfigs {
 		missing := func(key string) {
 			util.LogError("missing clusters[%s].%s configuration value", clusterID, key)
 			success = false

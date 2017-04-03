@@ -117,7 +117,7 @@ var domainReportQuery2 = `
 
 //GetDomains returns Domain reports for all domains in the given cluster or, if
 //domainID is non-nil, for that domain only.
-func GetDomains(cluster *limes.ClusterConfiguration, domainID *int64, dbi db.Interface, filter Filter) ([]*Domain, error) {
+func GetDomains(cluster *limes.Cluster, domainID *int64, dbi db.Interface, filter Filter) ([]*Domain, error) {
 	fields := map[string]interface{}{"d.cluster_id": cluster.ID}
 	if domainID != nil {
 		fields["d.id"] = *domainID
@@ -224,7 +224,7 @@ func GetDomains(cluster *limes.ClusterConfiguration, domainID *int64, dbi db.Int
 
 type domains map[string]*Domain
 
-func (d domains) Find(cluster *limes.ClusterConfiguration, domainUUID string, serviceType, resourceName *string) (*Domain, *DomainService, *DomainResource) {
+func (d domains) Find(cluster *limes.Cluster, domainUUID string, serviceType, resourceName *string) (*Domain, *DomainService, *DomainResource) {
 	domain, exists := d[domainUUID]
 	if !exists {
 		domain = &Domain{

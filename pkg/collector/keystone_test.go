@@ -32,12 +32,15 @@ import (
 func keystoneTestDriver(t *testing.T) *test.Driver {
 	test.InitDatabase(t, "../test/migrations")
 
-	return test.NewDriver(&limes.ClusterConfiguration{
-		ID: "west",
-		Services: []limes.ServiceConfiguration{
-			{Type: "unshared", Shared: false},
-			{Type: "shared", Shared: true},
+	return test.NewDriver(&limes.Cluster{
+		ID:              "west",
+		ServiceTypes:    []string{"unshared", "shared"},
+		IsServiceShared: map[string]bool{"shared": true},
+		QuotaPlugins: map[string]limes.QuotaPlugin{
+			"shared":   test.NewPlugin("shared"),
+			"unshared": test.NewPlugin("unshared"),
 		},
+		CapacityPlugins: map[string]limes.CapacityPlugin{},
 	})
 }
 

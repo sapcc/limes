@@ -35,20 +35,20 @@ import (
 //other source files in this module.
 type realDriver struct {
 	ProviderClient    *gophercloud.ProviderClient
-	Config            *ClusterConfiguration
+	cluster           *Cluster //need to use lowercase "cluster" because "Cluster" is already a method
 	TokenRenewalMutex *sync.Mutex
 }
 
 //NewDriver instantiates a Driver for the given Cluster.
-func NewDriver(cfg *ClusterConfiguration) (Driver, error) {
+func NewDriver(cfg *Cluster) (Driver, error) {
 	var err error
 	d := &realDriver{
-		Config:            cfg,
+		cluster:           cfg,
 		TokenRenewalMutex: &sync.Mutex{},
 	}
 
 	//initialize the OpenStack client
-	d.ProviderClient, err = openstack.NewClient(d.Config.AuthURL)
+	d.ProviderClient, err = openstack.NewClient(d.cluster.Config.AuthURL)
 	if err != nil {
 		return nil, fmt.Errorf("cannot initialize OpenStack client: %v", err)
 	}
@@ -60,8 +60,8 @@ func NewDriver(cfg *ClusterConfiguration) (Driver, error) {
 }
 
 //Cluster implements the Driver interface.
-func (d *realDriver) Cluster() *ClusterConfiguration {
-	return d.Config
+func (d *realDriver) Cluster() *Cluster {
+	return d.cluster
 }
 
 //Client implements the Driver interface.
@@ -85,14 +85,14 @@ func (d *realDriver) RefreshToken() error {
 	d.ProviderClient.TokenID = ""
 
 	//TODO: crashes with RegionName != ""
-	eo := gophercloud.EndpointOpts{Region: d.Config.RegionName}
+	eo := gophercloud.EndpointOpts{Region: d.cluster.Config.RegionName}
 	keystone, err := openstack.NewIdentityV3(d.ProviderClient, eo)
 	if err != nil {
 		return fmt.Errorf("cannot initialize Keystone client: %v", err)
 	}
-	keystone.Endpoint = d.Config.AuthURL
+	keystone.Endpoint = d.cluster.Config.AuthURL
 
-	result := tokens.Create(keystone, d.Config)
+	result := tokens.Create(keystone, &d.cluster.Config)
 	token, err := result.ExtractToken()
 	if err != nil {
 		return fmt.Errorf("cannot read token: %v", err)

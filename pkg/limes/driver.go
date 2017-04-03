@@ -33,7 +33,7 @@ type Driver interface {
 	//Return the Cluster that this Driver instance operates on. This is useful
 	//because it means we just have to pass around the Driver instance in
 	//function calls, instead of both the Driver and the Cluster.
-	Cluster() *ClusterConfiguration
+	Cluster() *Cluster
 	//Return the main gophercloud client from which the respective service
 	//clients can be derived. For mock drivers, this returns nil, so test code
 	//should be prepared to handle a nil Client() where appropriate.

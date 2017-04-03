@@ -20,7 +20,6 @@
 package collector
 
 import (
-	"sort"
 	"time"
 
 	"github.com/sapcc/limes/pkg/limes"
@@ -53,14 +52,4 @@ func NewCollector(driver limes.Driver, plugin limes.QuotaPlugin) *Collector {
 		TimeNow:  time.Now,
 		Once:     false,
 	}
-}
-
-func (c *Collector) enumerateEnabledServices() (asList []string, asMap map[string]bool) {
-	asMap = make(map[string]bool)
-	for _, service := range c.Driver.Cluster().Services {
-		asMap[service.Type] = true
-		asList = append(asList, service.Type)
-	}
-	sort.Strings(asList) //determinism is useful for unit tests
-	return
 }

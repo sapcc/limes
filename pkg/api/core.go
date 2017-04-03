@@ -136,7 +136,7 @@ func RequireJSON(w http.ResponseWriter, r *http.Request, data interface{}) bool 
 //Path constructs a full URL for a given URL path below the /v1/ endpoint.
 func (p *v1Provider) Path(elements ...string) string {
 	parts := []string{
-		strings.TrimSuffix(p.Driver.Cluster().CatalogURL, "/"),
+		strings.TrimSuffix(p.Driver.Cluster().Config.CatalogURL, "/"),
 		"v1",
 	}
 	parts = append(parts, elements...)

@@ -280,7 +280,7 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		plugin := p.Driver.Cluster().GetQuotaPlugin(srv.Type)
+		plugin := p.Driver.Cluster().QuotaPlugins[srv.Type]
 		if plugin == nil {
 			errors = append(errors, fmt.Sprintf("no quota plugin registered for service type %s", srv.Type))
 			continue

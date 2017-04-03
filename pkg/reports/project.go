@@ -103,7 +103,7 @@ var projectReportQuery = `
 
 //GetProjects returns Project reports for all projects in the given domain or,
 //if projectID is non-nil, for that project only.
-func GetProjects(cluster *limes.ClusterConfiguration, domainID int64, projectID *int64, dbi db.Interface, filter Filter) ([]*Project, error) {
+func GetProjects(cluster *limes.Cluster, domainID int64, projectID *int64, dbi db.Interface, filter Filter) ([]*Project, error) {
 	fields := map[string]interface{}{"p.domain_id": domainID}
 	if projectID != nil {
 		fields["p.id"] = *projectID
