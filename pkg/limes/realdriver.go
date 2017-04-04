@@ -92,7 +92,7 @@ func (d *realDriver) RefreshToken() error {
 	}
 	keystone.Endpoint = d.cluster.Config.AuthURL
 
-	result := tokens.Create(keystone, &d.cluster.Config)
+	result := tokens.Create(keystone, d.cluster.Config)
 	token, err := result.ExtractToken()
 	if err != nil {
 		return fmt.Errorf("cannot read token: %v", err)

@@ -30,7 +30,7 @@ import (
 //the list of enabled services, and access to the quota and capacity plugins.
 type Cluster struct {
 	ID              string
-	Config          ClusterConfiguration
+	Config          *ClusterConfiguration
 	ServiceTypes    []string
 	IsServiceShared map[string]bool
 	QuotaPlugins    map[string]QuotaPlugin
@@ -40,7 +40,7 @@ type Cluster struct {
 //NewCluster creates a new Cluster instance with the given ID and
 //configuration, and also initializes all quota and capacity plugins. Errors
 //will be logged when some of the requested plugins cannot be found.
-func NewCluster(id string, config ClusterConfiguration) *Cluster {
+func NewCluster(id string, config *ClusterConfiguration) *Cluster {
 	c := &Cluster{
 		ID:              id,
 		Config:          config,

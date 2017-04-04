@@ -36,11 +36,17 @@ import (
 
 //Configuration contains all the data from the configuration file.
 type Configuration struct {
-	Database       db.Configuration                `yaml:"database"`
-	Clusters       map[string]*Cluster             `yaml:"-"`
-	clusterConfigs map[string]ClusterConfiguration `yaml:"clusters"`
-	API            APIConfiguration                `yaml:"api"`
-	Collector      CollectorConfiguration          `yaml:"collector"`
+	Database  db.Configuration       `yaml:"database"`
+	Clusters  map[string]*Cluster    `yaml:"-"`
+	API       APIConfiguration       `yaml:"api"`
+	Collector CollectorConfiguration `yaml:"collector"`
+}
+
+type configurationInFile struct {
+	Database  db.Configuration                 `yaml:"database"`
+	Clusters  map[string]*ClusterConfiguration `yaml:"clusters"`
+	API       APIConfiguration                 `yaml:"api"`
+	Collector CollectorConfiguration           `yaml:"collector"`
 }
 
 //ClusterConfiguration contains all the configuration data for a single cluster.
@@ -94,12 +100,26 @@ func NewConfiguration(path string) (cfg Configuration) {
 	if err != nil {
 		util.LogFatal("read configuration file: %s", err.Error())
 	}
-	err = yaml.Unmarshal(configBytes, &cfg)
+	var cfgFile configurationInFile
+	err = yaml.Unmarshal(configBytes, &cfgFile)
 	if err != nil {
 		util.LogFatal("parse configuration: %s", err.Error())
 	}
-	if !cfg.validate() {
+	if !cfgFile.validate() {
 		os.Exit(1)
+	}
+
+	//inflate the ClusterConfiguration instances into Cluster, thereby validating
+	//the existence of the requested quota and capacity plugins and initializing
+	//some handy lookup tables
+	cfg = Configuration{
+		Database:  cfgFile.Database,
+		Clusters:  make(map[string]*Cluster),
+		API:       cfgFile.API,
+		Collector: cfgFile.Collector,
+	}
+	for clusterID, config := range cfgFile.Clusters {
+		cfg.Clusters[clusterID] = NewCluster(clusterID, config)
 	}
 
 	//load the policy file
@@ -108,18 +128,10 @@ func NewConfiguration(path string) (cfg Configuration) {
 		util.LogFatal(err.Error())
 	}
 
-	//inflate the ClusterConfiguration instances into Cluster, thereby validating
-	//the existence of the requested quota and capacity plugins and initializing
-	//some handy lookup tables
-	cfg.Clusters = make(map[string]*Cluster)
-	for clusterID, config := range cfg.clusterConfigs {
-		cfg.Clusters[clusterID] = NewCluster(clusterID, config)
-	}
-
 	return
 }
 
-func (cfg Configuration) validate() (success bool) {
+func (cfg configurationInFile) validate() (success bool) {
 	//do not fail on first error; keep going and report all errors at once
 	success = true //until proven otherwise
 
@@ -137,7 +149,7 @@ func (cfg Configuration) validate() (success bool) {
 		missing("clusters[]")
 	}
 
-	for clusterID, cluster := range cfg.clusterConfigs {
+	for clusterID, cluster := range cfg.Clusters {
 		missing := func(key string) {
 			util.LogError("missing clusters[%s].%s configuration value", clusterID, key)
 			success = false
