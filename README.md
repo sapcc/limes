@@ -36,13 +36,18 @@ There's a Makefile, so do:
 
 Prerequisites: Create a PostgreSQL database for Limes, and a service user in at least one OpenStack installation.
 
-1. Write a configuration file for your environment, by following the [example configuration][ex-conf]
+1. Write a configuration file for your environment, by following the [example configuration][ex-conf].
 
 2. Populate the DB schema by running `limes migrate config.yaml`. For more fine-grained control of migrations (e.g.
    rollback), download the [`migrate` tool][migrate] and follow the instructions over there.
 
 3. For each cluster, start `limes serve config.yaml $cluster_id` and `limes collect config.yaml $cluster_id`.
 
+4. For each cluster, register the public URL of the `limes serve` process in the Keystone service catalog with service type `resources`.
+
+A lot of that is automated by our team's [Helm chart for Limes][chart].
+
 [wp-limes]: https://en.wikipedia.org/wiki/Limes
 [ex-conf]:  ./docs/example-config.yaml
 [migrate]:  https://github.com/mattes/migrate
+[chart]:    https://github.com/sapcc/helm-charts/tree/master/openstack/limes
