@@ -26,9 +26,9 @@ import (
 
 //Driver is an interface that wraps the authorization of the service user and
 //queries to Keystone (i.e. all requests to backend services that are not
-//performed by a limes.Plugin). It makes the service user connection available
-//to limes.Plugin instances. Because it is an interface, the real
-//implementation can be mocked away in unit tests.
+//performed by a limes.{Quota,Capacity}Plugin). It makes the service user
+//connection available to limes.{Quota,Capacity}Plugin instances.  Because it
+//is an interface, the real implementation can be mocked away in unit tests.
 type Driver interface {
 	//Return the Cluster that this Driver instance operates on. This is useful
 	//because it means we just have to pass around the Driver instance in

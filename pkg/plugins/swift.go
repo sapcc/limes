@@ -51,12 +51,12 @@ func init() {
 	})
 }
 
-//ServiceType implements the limes.Plugin interface.
+//ServiceType implements the limes.QuotaPlugin interface.
 func (p *swiftPlugin) ServiceType() string {
 	return "object-store"
 }
 
-//Resources implements the limes.Plugin interface.
+//Resources implements the limes.QuotaPlugin interface.
 func (p *swiftPlugin) Resources() []limes.ResourceInfo {
 	return swiftResources
 }
@@ -67,7 +67,7 @@ func (p *swiftPlugin) Client(driver limes.Driver) (*gophercloud.ServiceClient, e
 	)
 }
 
-//Scrape implements the limes.Plugin interface.
+//Scrape implements the limes.QuotaPlugin interface.
 func (p *swiftPlugin) Scrape(driver limes.Driver, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
 	client, err := p.projectClient(driver, projectUUID)
 	if err != nil {
@@ -111,7 +111,7 @@ func (p *swiftPlugin) Scrape(driver limes.Driver, domainUUID, projectUUID string
 	}, nil
 }
 
-//SetQuota implements the limes.Plugin interface.
+//SetQuota implements the limes.QuotaPlugin interface.
 func (p *swiftPlugin) SetQuota(driver limes.Driver, domainUUID, projectUUID string, quotas map[string]uint64) error {
 	client, err := p.projectClient(driver, projectUUID)
 	if err != nil {
