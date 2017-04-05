@@ -206,6 +206,7 @@ func taskCollect(config limes.Configuration, driver limes.Driver, args []string)
 		prometheus.MustRegister(&collector.DataMetricsCollector{ClusterID: driver.Cluster().ID})
 	}
 	http.Handle("/metrics", promhttp.Handler())
+	util.LogInfo("listening on " + config.Collector.MetricsListenAddress)
 	return http.ListenAndServe(config.Collector.MetricsListenAddress, nil)
 }
 
@@ -237,6 +238,7 @@ func taskServe(config limes.Configuration, driver limes.Driver, args []string) e
 	http.HandleFunc("/", prometheus.InstrumentHandler("limes-serve", mainRouter))
 
 	//start HTTP server
+	util.LogInfo("listening on " + config.API.ListenAddress)
 	return http.ListenAndServe(config.API.ListenAddress, nil)
 }
 
