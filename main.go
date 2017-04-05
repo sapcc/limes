@@ -250,7 +250,6 @@ func taskSyncWithElektra(config limes.Configuration, driver limes.Driver, args [
 		printUsageAndExit()
 	}
 
-	http.DefaultClient.Transport = http.DefaultTransport
 	for {
 		util.LogInfo("Starting sync...")
 		err := syncWithElektra(driver, args[0], false)
@@ -280,7 +279,15 @@ func syncWithElektra(driver limes.Driver, elektraURL string, freshToken bool) er
 	}
 	req.Header.Set("X-Auth-Token", driver.Client().TokenID)
 
-	resp, err := http.DefaultClient.Do(req)
+	client := http.Client{
+		Transport: http.DefaultTransport,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			//never follow redirects (see below)
+			return http.ErrUseLastResponse
+		},
+	}
+
+	resp, err := client.Do(req)
 	if err != nil {
 		return err
 	}
@@ -290,8 +297,10 @@ func syncWithElektra(driver limes.Driver, elektraURL string, freshToken bool) er
 	switch {
 	case resp.StatusCode == 200:
 		//continue parsing the response below
-	case resp.StatusCode == 401 && !freshToken:
+	case (resp.StatusCode == 401 || resp.StatusCode == 302) && !freshToken:
 		//our token might have expired - fetch a new one and retry
+		//(we check 302 because Elektra will attempt to redirect to the login page
+		//when the given token is invalid)
 		err := driver.Client().ReauthFunc()
 		if err != nil {
 			return err
