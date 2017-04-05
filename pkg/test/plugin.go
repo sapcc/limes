@@ -21,12 +21,12 @@ package test
 
 import (
 	"errors"
+	"strings"
 
 	"github.com/sapcc/limes/pkg/limes"
 )
 
-//Plugin is a limes.QuotaPlugin implementation for unit tests, registered as
-//the service type "unittest".
+//Plugin is a limes.QuotaPlugin implementation for unit tests.
 type Plugin struct {
 	StaticServiceType  string
 	StaticResourceData map[string]*limes.ResourceData
@@ -96,4 +96,35 @@ func (p *Plugin) SetQuota(driver limes.Driver, domainUUID, projectUUID string, q
 	}
 	p.OverrideQuota[projectUUID] = quotas
 	return nil
+}
+
+//CapacityPlugin is a limes.CapacityPlugin implementation for unit tests.
+type CapacityPlugin struct {
+	PluginID  string
+	Resources []string //each formatted as "servicetype/resourcename"
+	Capacity  uint64
+}
+
+//NewCapacityPlugin creates a new CapacityPlugin.
+func NewCapacityPlugin(id string, resources ...string) *CapacityPlugin {
+	return &CapacityPlugin{id, resources, 42}
+}
+
+//ID implements the limes.CapacityPlugin interface.
+func (p *CapacityPlugin) ID() string {
+	return p.PluginID
+}
+
+//Scrape implements the limes.CapacityPlugin interface.
+func (p *CapacityPlugin) Scrape(driver limes.Driver) (map[string]map[string]uint64, error) {
+	result := make(map[string]map[string]uint64)
+	for _, str := range p.Resources {
+		parts := strings.SplitN(str, "/", 2)
+		_, exists := result[parts[0]]
+		if !exists {
+			result[parts[0]] = make(map[string]uint64)
+		}
+		result[parts[0]][parts[1]] = p.Capacity
+	}
+	return result, nil
 }

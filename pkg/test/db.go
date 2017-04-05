@@ -20,7 +20,6 @@
 package test
 
 import (
-	"bytes"
 	"database/sql"
 	"database/sql/driver"
 	"fmt"
@@ -114,9 +113,17 @@ func ExecSQLFile(t *testing.T, path string) {
 func AssertDBContent(t *testing.T, fixtureFile string) {
 	actualContent := getDBContent(t)
 
+	//write actual content to file to make it easy to copy the computed result over
+	//to the fixture path when a new test is added or an existing one is modified
 	fixturePath, _ := filepath.Abs(fixtureFile)
-	cmd := exec.Command("diff", "-u", fixturePath, "-")
-	cmd.Stdin = bytes.NewReader([]byte(actualContent))
+	actualPath := fixturePath + ".actual"
+	err := ioutil.WriteFile(actualPath, []byte(actualContent), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cmd := exec.Command("diff", "-u", fixturePath, actualPath)
+	cmd.Stdin = nil
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	failOnErr(t, cmd.Run())

@@ -20,6 +20,7 @@
 package collector
 
 import (
+	"sort"
 	"time"
 
 	"github.com/sapcc/limes/pkg/db"
@@ -84,7 +85,7 @@ func (c *Collector) scanCapacity() {
 			continue
 		}
 		names := make(map[string]bool)
-		for name := range values {
+		for name := range subvalues {
 			names[name] = true
 		}
 		for _, res := range plugin.Resources() {
@@ -130,10 +131,14 @@ func (c *Collector) writeCapacity(values map[string]map[string]uint64, scrapedAt
 			}
 		}
 	}
+	var missingServiceTypes []string
 	for serviceType := range values {
-		if _, ok := serviceIDForType[serviceType]; ok {
-			continue
+		if _, ok := serviceIDForType[serviceType]; !ok {
+			missingServiceTypes = append(missingServiceTypes, serviceType)
 		}
+	}
+	sort.Strings(missingServiceTypes) //for reproducability in unit test
+	for _, serviceType := range missingServiceTypes {
 		dbService := &db.ClusterService{
 			ClusterID: clusterID,
 			Type:      serviceType,
@@ -154,7 +159,13 @@ func (c *Collector) writeCapacity(values map[string]map[string]uint64, scrapedAt
 	}
 
 	//same for resources as for services: create missing ones, update existing ones, delete superfluous ones
-	for serviceType, serviceValues := range values {
+	var allServiceTypes []string
+	for serviceType := range values {
+		allServiceTypes = append(allServiceTypes, serviceType)
+	}
+	sort.Strings(allServiceTypes) //for reproducability in unit test
+	for _, serviceType := range allServiceTypes {
+		serviceValues := values[serviceType]
 		serviceID := serviceIDForType[serviceType]
 		var dbResources []*db.ClusterResource
 		_, err := tx.Select(&dbResources, `SELECT * FROM cluster_resources WHERE service_id = $1`, serviceID)
@@ -182,14 +193,18 @@ func (c *Collector) writeCapacity(values map[string]map[string]uint64, scrapedAt
 		}
 
 		//insert missing cluster_resources entries
-		for name, capacity := range serviceValues {
-			if seen[name] {
-				continue
+		var missingResourceNames []string
+		for name := range serviceValues {
+			if !seen[name] {
+				missingResourceNames = append(missingResourceNames, name)
 			}
+		}
+		sort.Strings(missingResourceNames) //for reproducability in unit test
+		for _, name := range missingResourceNames {
 			res := &db.ClusterResource{
 				ServiceID: serviceID,
 				Name:      name,
-				Capacity:  capacity,
+				Capacity:  serviceValues[name],
 			}
 			err := tx.Insert(res)
 			if err != nil {
