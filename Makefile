@@ -34,7 +34,7 @@ static-check: FORCE
 	@if s="$$(golint . && find pkg -type d -exec golint {} \; 2>/dev/null)" && test -n "$$s"; then printf ' => %s\n%s\n' golint "$$s"; false; fi
 	$(GO) vet $(GO_ALLPKGS)
 build/%.cover.out: prepare-check FORCE
-	$(GO) test -coverprofile=$@ -covermode=count -coverpkg=$(subst $(space),$(comma),$(GO_ALLPKGS)) $(subst _,/,$*)
+	$(GO) test $(GO_BUILDFLAGS) -ldflags '$(GO_LDFLAGS)' -coverprofile=$@ -covermode=count -coverpkg=$(subst $(space),$(comma),$(GO_ALLPKGS)) $(subst _,/,$*)
 build/cover.out: $(GO_COVERFILES)
 	pkg/test/util/gocovcat.go $(GO_COVERFILES) > $@
 build/cover.html: build/cover.out
