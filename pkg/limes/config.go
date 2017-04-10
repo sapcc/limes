@@ -150,6 +150,11 @@ func (cfg configurationInFile) validate() (success bool) {
 	}
 
 	for clusterID, cluster := range cfg.Clusters {
+		if clusterID == "current" {
+			util.LogError("\"current\" is not an acceptable cluster ID (it would make the URL /v1/clusters/current ambiguous)")
+			success = false
+		}
+
 		missing := func(key string) {
 			util.LogError("missing clusters[%s].%s configuration value", clusterID, key)
 			success = false

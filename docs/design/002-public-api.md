@@ -187,6 +187,7 @@ a `warnings` field that counts projects with `quota != backend_quota`?
 
 ## GET /clusters
 ## GET /clusters/:cluster\_id
+## GET /clusters/current
 
 Query data for clusters. Requires a cloud-admin token. Arguments:
 
@@ -251,7 +252,9 @@ Returns 200 (OK) on success. Result is a JSON document like:
 }
 ```
 
-If `:cluster_id` was given, the outer key is `cluster` and its value is the object without the array surrounding it.
+If `:cluster_id` was given, the outer key is `cluster` and its value is the object without the array surrounding it. As
+a special case, a cluster ID of `current` will be substituted by the current cluster (i.e. the one for which domains and
+projects can be inspected on this endpoint).
 
 Clusters do not have a quota, but they are constrained by the `capacity` for each resource. The `domains_quota` field
 behaves just like the `projects_quota` key on domain level. Discrepancies between project quotas in Limes and in backing

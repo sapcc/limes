@@ -100,6 +100,12 @@ func Test_ClusterOperations(t *testing.T) {
 		ExpectStatusCode: 200,
 		ExpectJSON:       "fixtures/cluster-get-west.json",
 	}.Check(t, router)
+	test.APIRequest{
+		Method:           "GET",
+		Path:             "/v1/clusters/current",
+		ExpectStatusCode: 200,
+		ExpectJSON:       "fixtures/cluster-get-west.json",
+	}.Check(t, router)
 
 	//check ListClusters
 	test.APIRequest{
