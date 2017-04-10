@@ -125,4 +125,16 @@ func Test_ScanDomains(t *testing.T) {
 	}
 	test.AssertDeepEqual(t, "new domains after ScanDomains #7", actualNewDomains, []string(nil))
 	test.AssertDBContent(t, "fixtures/scandomains3.sql")
+
+	//rename a domain and a project
+	driver.StaticDomains[0].Name = "germany-changed"
+	driver.StaticProjects["uuid-for-germany"][0].Name = "berlin-changed"
+
+	//ScanDomains should notice the changed names and update the domain/project records accordingly
+	actualNewDomains, err = ScanDomains(driver, ScanDomainsOpts{ScanAllProjects: true})
+	if err != nil {
+		t.Errorf("ScanDomains #8 failed: %v", err)
+	}
+	test.AssertDeepEqual(t, "new domains after ScanDomains #8", actualNewDomains, []string(nil))
+	test.AssertDBContent(t, "fixtures/scandomains4.sql")
 }

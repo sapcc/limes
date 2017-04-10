@@ -50,7 +50,7 @@ func ScanDomains(driver limes.Driver, opts ScanDomainsOpts) ([]string, error) {
 	//when a domain has been deleted in Keystone, remove it from our database,
 	//too (the deletion from the `domains` table includes all projects in that
 	//domain and to all related resource records through `ON DELETE CASCADE`)
-	isDomainUUIDinDB := make(map[string]bool)
+	existingDomainsByUUID := make(map[string]*db.Domain)
 	var dbDomains []*db.Domain
 	_, err = db.DB.Select(&dbDomains, `SELECT * FROM domains WHERE cluster_id = $1`, clusterID)
 	if err != nil {
@@ -65,14 +65,24 @@ func ScanDomains(driver limes.Driver, opts ScanDomainsOpts) ([]string, error) {
 			}
 			continue
 		}
-		isDomainUUIDinDB[dbDomain.UUID] = true
+		existingDomainsByUUID[dbDomain.UUID] = dbDomain
 	}
 
 	//when a domain has been created in Keystone, create the corresponding record
 	//in our DB and scan its projects immediately
 	var result []string
 	for _, domain := range domains {
-		if isDomainUUIDinDB[domain.UUID] {
+		dbDomain, exists := existingDomainsByUUID[domain.UUID]
+		if exists {
+			//check if the name was updated in Keystone
+			if dbDomain.Name != domain.Name {
+				util.LogInfo("discovered Keystone domain name change: %s -> %s", dbDomain.Name, domain.Name)
+				dbDomain.Name = domain.Name
+				_, err := db.DB.Update(dbDomain)
+				if err != nil {
+					return result, err
+				}
+			}
 			continue
 		}
 
@@ -152,7 +162,7 @@ func ScanProjects(driver limes.Driver, domain *db.Domain) ([]string, error) {
 	//when a project has been deleted in Keystone, remove it from our database,
 	//too (the deletion from the `projects` table includes the projects' resource
 	//records through `ON DELETE CASCADE`)
-	isProjectUUIDinDB := make(map[string]bool)
+	existingProjectsByUUID := make(map[string]*db.Project)
 	var dbProjects []*db.Project
 	_, err = db.DB.Select(&dbProjects, `SELECT * FROM projects WHERE domain_id = $1`, domain.ID)
 	if err != nil {
@@ -167,14 +177,24 @@ func ScanProjects(driver limes.Driver, domain *db.Domain) ([]string, error) {
 			}
 			continue
 		}
-		isProjectUUIDinDB[dbProject.UUID] = true
+		existingProjectsByUUID[dbProject.UUID] = dbProject
 	}
 
 	//when a project has been created in Keystone, create the corresponding
 	//record in our DB
 	var result []string
 	for _, project := range projects {
-		if isProjectUUIDinDB[project.UUID] {
+		dbProject, exists := existingProjectsByUUID[project.UUID]
+		if exists {
+			//check if the name was updated in Keystone
+			if dbProject.Name != project.Name {
+				util.LogInfo("discovered Keystone project name change: %s/%s -> %s", domain.Name, dbProject.Name, project.Name)
+				dbProject.Name = project.Name
+				_, err := db.DB.Update(dbProject)
+				if err != nil {
+					return result, err
+				}
+			}
 			continue
 		}
 
