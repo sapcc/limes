@@ -1,6 +1,7 @@
 {
   "project": {
     "id": "uuid-for-paris",
+    "name": "paris",
     "services": [
       {
         "type": "shared",

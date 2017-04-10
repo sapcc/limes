@@ -1,6 +1,7 @@
 {
   "domain": {
     "id": "uuid-for-france",
+    "name": "france",
     "services": [
       {
         "type": "shared",

@@ -33,6 +33,7 @@ import (
 //Project contains all data about resource usage in a project.
 type Project struct {
 	UUID     string          `json:"id"`
+	Name     string          `json:"name"`
 	Services ProjectServices `json:"services,keepempty"`
 }
 
@@ -94,7 +95,7 @@ func (r ProjectResources) MarshalJSON() ([]byte, error) {
 }
 
 var projectReportQuery = `
-	SELECT p.uuid, ps.type, ps.scraped_at, pr.name, pr.quota, pr.usage, pr.backend_quota
+	SELECT p.uuid, p.name, ps.type, ps.scraped_at, pr.name, pr.quota, pr.usage, pr.backend_quota
 	  FROM projects p
 	  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
 	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
@@ -120,6 +121,7 @@ func GetProjects(cluster *limes.Cluster, domainID int64, projectID *int64, dbi d
 	for rows.Next() {
 		var (
 			projectUUID  string
+			projectName  string
 			serviceType  *string
 			scrapedAt    *util.Time
 			resourceName *string
@@ -128,7 +130,8 @@ func GetProjects(cluster *limes.Cluster, domainID int64, projectID *int64, dbi d
 			backendQuota *int64
 		)
 		err := rows.Scan(
-			&projectUUID, &serviceType, &scrapedAt, &resourceName,
+			&projectUUID, &projectName,
+			&serviceType, &scrapedAt, &resourceName,
 			&quota, &usage, &backendQuota,
 		)
 		if err != nil {
@@ -140,6 +143,7 @@ func GetProjects(cluster *limes.Cluster, domainID int64, projectID *int64, dbi d
 		if !exists {
 			project = &Project{
 				UUID:     projectUUID,
+				Name:     projectName,
 				Services: make(ProjectServices),
 			}
 			projects[projectUUID] = project

@@ -1,6 +1,7 @@
 {
   "domain": {
     "id": "uuid-for-germany",
+    "name": "germany",
     "services": [
       {
         "type": "shared",

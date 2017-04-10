@@ -17,6 +17,7 @@ Returns 200 (OK) on success. Result is a JSON document like:
   "projects": [
     {
       "id": "8ad3bf54-2401-435e-88ad-e80fbf984c19",
+      "name": "example-project",
       "services": [
         {
           "type": "compute",
@@ -108,6 +109,7 @@ Returns 200 (OK) on success. Result is a JSON document like:
   "domains": [
     {
       "id": "d5fbe312-1f48-42ef-a36e-484659784aa0",
+      "name": "example-domain",
       "services": [
         {
           "type": "compute",

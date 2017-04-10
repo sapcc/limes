@@ -2,6 +2,7 @@
   "projects": [
     {
       "id": "uuid-for-berlin",
+      "name": "berlin",
       "services": [
         {
           "type": "shared",
@@ -12,6 +13,7 @@
     },
     {
       "id": "uuid-for-dresden",
+      "name": "dresden",
       "services": [
         {
           "type": "shared",

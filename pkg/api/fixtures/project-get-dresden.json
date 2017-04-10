@@ -1,6 +1,7 @@
 {
   "project": {
     "id": "uuid-for-dresden",
+    "name": "dresden",
     "services": [
       {
         "type": "shared",

@@ -2,6 +2,7 @@
   "domains": [
     {
       "id": "uuid-for-france",
+      "name": "france",
       "services": [
         {
           "type": "shared",
@@ -20,6 +21,7 @@
     },
     {
       "id": "uuid-for-germany",
+      "name": "germany",
       "services": [
         {
           "type": "shared",

@@ -1,6 +1,7 @@
 {
   "project": {
     "id": "uuid-for-berlin",
+    "name": "berlin",
     "services": [
       {
         "type": "shared",

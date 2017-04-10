@@ -2,10 +2,12 @@
   "projects": [
     {
       "id": "uuid-for-berlin",
+      "name": "berlin",
       "services": []
     },
     {
       "id": "uuid-for-dresden",
+      "name": "dresden",
       "services": []
     }
   ]

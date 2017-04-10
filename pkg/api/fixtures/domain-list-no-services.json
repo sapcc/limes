@@ -2,10 +2,12 @@
   "domains": [
     {
       "id": "uuid-for-france",
+      "name": "france",
       "services": []
     },
     {
       "id": "uuid-for-germany",
+      "name": "germany",
       "services": []
     }
   ]

@@ -34,6 +34,7 @@ import (
 //Domain contains aggregated data about resource usage in a domain.
 type Domain struct {
 	UUID     string         `json:"id"`
+	Name     string         `json:"name"`
 	Services DomainServices `json:"services,keepempty"`
 }
 
@@ -98,7 +99,7 @@ func (r DomainResources) MarshalJSON() ([]byte, error) {
 }
 
 var domainReportQuery1 = `
-	SELECT d.uuid, ps.type, pr.name, SUM(pr.quota), SUM(pr.usage),
+	SELECT d.uuid, d.name, ps.type, pr.name, SUM(pr.quota), SUM(pr.usage),
 	       SUM(GREATEST(pr.backend_quota, 0)), MIN(pr.backend_quota) < 0, MIN(ps.scraped_at), MAX(ps.scraped_at)
 	  FROM domains d
 	  JOIN projects p ON p.domain_id = d.id
@@ -108,7 +109,7 @@ var domainReportQuery1 = `
 `
 
 var domainReportQuery2 = `
-	SELECT d.uuid, ds.type, dr.name, dr.quota
+	SELECT d.uuid, d.name, ds.type, dr.name, dr.quota
 	  FROM domains d
 	  LEFT OUTER JOIN domain_services ds ON ds.domain_id = d.id {{AND ds.type = $service_type}}
 	  LEFT OUTER JOIN domain_resources dr ON dr.service_id = ds.id {{AND dr.name = $resource_name}}
@@ -130,6 +131,7 @@ func GetDomains(cluster *limes.Cluster, domainID *int64, dbi db.Interface, filte
 	err := db.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		var (
 			domainUUID           string
+			domainName           string
 			serviceType          *string
 			resourceName         *string
 			projectsQuota        *uint64
@@ -140,7 +142,7 @@ func GetDomains(cluster *limes.Cluster, domainID *int64, dbi db.Interface, filte
 			maxScrapedAt         *util.Time
 		)
 		err := rows.Scan(
-			&domainUUID, &serviceType, &resourceName,
+			&domainUUID, &domainName, &serviceType, &resourceName,
 			&projectsQuota, &usage, &backendQuota, &infiniteBackendQuota,
 			&minScrapedAt, &maxScrapedAt,
 		)
@@ -148,7 +150,9 @@ func GetDomains(cluster *limes.Cluster, domainID *int64, dbi db.Interface, filte
 			return err
 		}
 
-		_, service, resource := domains.Find(cluster, domainUUID, serviceType, resourceName)
+		domain, service, resource := domains.Find(cluster, domainUUID, serviceType, resourceName)
+
+		domain.Name = domainName
 
 		if service != nil {
 			if maxScrapedAt != nil {
@@ -186,18 +190,22 @@ func GetDomains(cluster *limes.Cluster, domainID *int64, dbi db.Interface, filte
 	err = db.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		var (
 			domainUUID   string
+			domainName   string
 			serviceType  *string
 			resourceName *string
 			quota        *uint64
 		)
 		err := rows.Scan(
-			&domainUUID, &serviceType, &resourceName, &quota,
+			&domainUUID, &domainName, &serviceType, &resourceName, &quota,
 		)
 		if err != nil {
 			return err
 		}
 
-		_, _, resource := domains.Find(cluster, domainUUID, serviceType, resourceName)
+		domain, _, resource := domains.Find(cluster, domainUUID, serviceType, resourceName)
+
+		domain.Name = domainName
+
 		if resource != nil && quota != nil {
 			resource.DomainQuota = *quota
 		}
