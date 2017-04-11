@@ -105,7 +105,7 @@ var domainReportQuery1 = `
 	  JOIN projects p ON p.domain_id = d.id
 	  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
 	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
-	 WHERE %s GROUP BY d.uuid, ps.type, pr.name
+	 WHERE %s GROUP BY d.uuid, d.name, ps.type, pr.name
 `
 
 var domainReportQuery2 = `
