@@ -12,6 +12,9 @@ build/*.cover.out
 build/cover.html
 *.actual
 
+# vendoring artifacts
+.golangvend-cache/
+
 # custom configuration files used during development
 *test*.yaml
 *config*.yaml
