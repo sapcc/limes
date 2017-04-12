@@ -34,6 +34,7 @@ type ClusterResource struct {
 	ServiceID int64  `db:"service_id"`
 	Name      string `db:"name"`
 	Capacity  uint64 `db:"capacity"`
+	Comment   string `db:"comment"`
 }
 
 //Domain contains a record from the `domains` table.

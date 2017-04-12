@@ -6,10 +6,10 @@ INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (4, 'east
 
 -- both services have the resources "things" and "capacity"; we can only scrape capacity for "things", so the
 -- cluster_resources for "capacity" are missing
-INSERT INTO cluster_resources (service_id, name, capacity) VALUES (1, 'things', 139);
-INSERT INTO cluster_resources (service_id, name, capacity) VALUES (2, 'things', 246);
-INSERT INTO cluster_resources (service_id, name, capacity) VALUES (3, 'things', 385);
-INSERT INTO cluster_resources (service_id, name, capacity) VALUES (4, 'things', 246); -- shared service, must be same as service_id = 2
+INSERT INTO cluster_resources (service_id, name, capacity, comment) VALUES (1, 'things', 139, '');
+INSERT INTO cluster_resources (service_id, name, capacity, comment) VALUES (2, 'things', 246, '');
+INSERT INTO cluster_resources (service_id, name, capacity, comment) VALUES (3, 'things', 385, '');
+INSERT INTO cluster_resources (service_id, name, capacity, comment) VALUES (4, 'things', 246, ''); -- shared service, must be same as service_id = 2
 
 -- "west" has two domains, "east" has one domain
 INSERT INTO domains (id, cluster_id, name, uuid) VALUES (1, 'west', 'germany', 'uuid-for-germany');
