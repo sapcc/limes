@@ -207,7 +207,6 @@ Returns 200 (OK) on success. Result is a JSON document like:
           "resources": [
             {
               "name": "instances",
-              "capacity": -1,
               "domains_quota": 20,
               "usage": 1
             },
@@ -235,6 +234,7 @@ Returns 200 (OK) on success. Result is a JSON document like:
               "name": "capacity",
               "unit": "B",
               "capacity": 60000000000000,
+              "comment": "looked it up in `df`",
               "domains_quota": 107374182400,
               "usage": 104857600
             }
@@ -256,9 +256,14 @@ If `:cluster_id` was given, the outer key is `cluster` and its value is the obje
 a special case, a cluster ID of `current` will be substituted by the current cluster (i.e. the one for which domains and
 projects can be inspected on this endpoint).
 
-Clusters do not have a quota, but they are constrained by the `capacity` for each resource. The `domains_quota` field
-behaves just like the `projects_quota` key on domain level. Discrepancies between project quotas in Limes and in backing
+Clusters do not have a quota, but resources may be constrained by a `capacity` value. The `domains_quota` field behaves
+just like the `projects_quota` key on domain level. Discrepancies between project quotas in Limes and in backing
 services will not be shown on this level, so there is no `backend_quota` key.
+
+The `capacity` key is will only be supplied when a capacity is known. Capacity values can be maintained by cluster
+administrators, in which case a `comment` string will be present (such as for `object_storage/capacity` in the example
+output above). The capacity is only informational: Cloud admins can choose to exceed the reported capacity when
+allocating quota to domains.
 
 The `min_scraped_at` and `max_scraped_at` timestamps on the service level refer to the usage values (aggregated over all
 projects just like for `GET /domains`).
@@ -362,3 +367,55 @@ values.
 
 Set quotas for the given project. Requires a domain-admin token for the specified domain. Other than that, the call
 works in the same way as `PUT /domains/:domain_id`.
+
+## PUT /clusters/:cluster_id
+
+## PUT /clusters/current
+
+Set capacity values for the given cluster. Requires a cloud-admin token, and a request body that is a JSON document
+like:
+
+```json
+{
+  "cluster": {
+    "services": [
+      {
+        "type": "compute",
+        "resources": [
+          {
+            "name": "instances",
+            "capacity": 30,
+            "comment": "guesstimate"
+          },
+          {
+            "name": "cores",
+            "quota": 150,
+            "comment": "counted them by hand"
+          }
+        ]
+      },
+      {
+        "type": "object_storage",
+        "resources": [
+          {
+            "name": "capacity",
+            "capacity": 0,
+            "comment": "data center on fire"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+For resources that are measured rather than counted, the values are interpreted with the same unit that is mentioned for
+this resource in `GET /domains/:domain_id`. All resources that are not mentioned in the request body remain unchanged.
+This operation will not affect any domain or project quotas.
+
+Capacity values can only be set for resources which Limes does not know how to measure automatically. A `comment` is
+always required, and should ideally contain a description of how the capacity value was derived. An existing
+capacity value can be deleted by setting it to `-1`, in which case no `comment` is required.
+
+Returns 200 (OK) on success, with a response body identical to `GET` on the same URL, containing the updated quota
+values.
