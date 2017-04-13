@@ -22,6 +22,8 @@ package util
 import (
 	"fmt"
 	"time"
+
+	"encoding/json"
 )
 
 //Time is like time.Time, but can be scanned from a SQLite query where the
@@ -40,4 +42,20 @@ func (t *Time) Scan(src interface{}) error {
 	default:
 		return fmt.Errorf("cannot scan %t into util.Time", val)
 	}
+}
+
+//Float64OrUnknown extracts a value of type float64 or unknown from a json
+//result is an float64
+type Float64OrUnknown float64
+
+//UnmarshalJSON implements the json.Unmarshaler interface
+func (f *Float64OrUnknown) UnmarshalJSON(buffer []byte) error {
+	if buffer[0] == '"' {
+		*f = 0
+		return nil
+	}
+	var x float64
+	err := json.Unmarshal(buffer, &x)
+	*f = Float64OrUnknown(x)
+	return err
 }
