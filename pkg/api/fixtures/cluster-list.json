@@ -42,8 +42,8 @@
           "min_scraped_at": 77
         }
       ],
-      "max_scraped_at": 1300,
-      "min_scraped_at": 1200
+      "max_scraped_at": 1200,
+      "min_scraped_at": 1100
     },
     {
       "id": "west",

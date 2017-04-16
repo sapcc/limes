@@ -337,6 +337,49 @@ func GetClusters(config limes.Configuration, clusterID *string, dbi db.Interface
 			}
 		}
 
+		//third query again, but this time to collect shared capacities
+		queryStr, joinArgs = filter.PrepareQuery(clusterReportQuery3)
+		filter := map[string]interface{}{"cs.cluster_id": "shared"}
+		whereStr, whereArgs = db.BuildSimpleWhereClause(filter, len(joinArgs))
+		err = db.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
+			var (
+				sharedClusterID string
+				serviceType     string
+				resourceName    *string
+				capacity        *uint64
+				scrapedAt       util.Time
+			)
+			err := rows.Scan(&sharedClusterID, &serviceType, &resourceName, &capacity, &scrapedAt)
+			if err != nil {
+				return err
+			}
+
+			for _, cluster := range clusters {
+				if !config.Clusters[cluster.ID].IsServiceShared[serviceType] {
+					continue
+				}
+
+				_, _, resource := clusters.Find(config, cluster.ID, &serviceType, resourceName)
+
+				if resource != nil {
+					resource.Capacity = capacity
+				}
+
+				scrapedAtUnix := time.Time(scrapedAt).Unix()
+				if cluster.MaxScrapedAt == nil || *cluster.MaxScrapedAt < scrapedAtUnix {
+					cluster.MaxScrapedAt = &scrapedAtUnix
+				}
+				if cluster.MinScrapedAt == nil || *cluster.MinScrapedAt > scrapedAtUnix {
+					cluster.MinScrapedAt = &scrapedAtUnix
+				}
+			}
+
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+
 	}
 
 	//flatten result (with stable order to keep the tests happy)

@@ -96,14 +96,29 @@ func (c *Collector) scanCapacity() {
 		}
 	}
 
-	err := c.writeCapacity(values, scrapedAt)
+	//split values into sharedValues and unsharedValues
+	sharedValues := make(map[string]map[string]uint64)
+	unsharedValues := make(map[string]map[string]uint64)
+	for serviceType, subvalues := range values {
+		if cluster.IsServiceShared[serviceType] {
+			sharedValues[serviceType] = subvalues
+		} else {
+			unsharedValues[serviceType] = subvalues
+		}
+	}
+
+	err := c.writeCapacity("shared", sharedValues, scrapedAt)
+	if err != nil {
+		c.LogError("write capacity failed: %s", err.Error())
+	}
+	err = c.writeCapacity(c.Driver.Cluster().ID, unsharedValues, scrapedAt)
 	if err != nil {
 		c.LogError("write capacity failed: %s", err.Error())
 	}
 }
 
-func (c *Collector) writeCapacity(values map[string]map[string]uint64, scrapedAt time.Time) error {
-	clusterID := c.Driver.Cluster().ID
+func (c *Collector) writeCapacity(clusterID string, values map[string]map[string]uint64, scrapedAt time.Time) error {
+	//NOTE: clusterID is not taken from c.Driver.Cluster() because it can also be "shared".
 
 	//do the following in a transaction to avoid inconsistent DB state
 	tx, err := db.DB.Begin()
@@ -125,9 +140,13 @@ func (c *Collector) writeCapacity(values map[string]map[string]uint64, scrapedAt
 			serviceIDForType[dbService.Type] = dbService.ID
 			serviceTypeForID[dbService.ID] = dbService.Type
 		} else {
-			_, err := tx.Delete(dbService)
-			if err != nil {
-				return err
+			//we cannot delete superfluous services for clusterID == "shared" because
+			//this cluster might not have invoked all relevant capacity plugins
+			if clusterID != "shared" {
+				_, err := tx.Delete(dbService)
+				if err != nil {
+					return err
+				}
 			}
 		}
 	}

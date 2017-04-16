@@ -150,8 +150,12 @@ func (cfg configurationInFile) validate() (success bool) {
 	}
 
 	for clusterID, cluster := range cfg.Clusters {
-		if clusterID == "current" {
+		switch clusterID {
+		case "current":
 			util.LogError("\"current\" is not an acceptable cluster ID (it would make the URL /v1/clusters/current ambiguous)")
+			success = false
+		case "shared":
+			util.LogError("\"shared\" is not an acceptable cluster ID (it is used for internal accounting)")
 			success = false
 		}
 
