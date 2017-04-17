@@ -22,5 +22,6 @@
   "domain:discover":  "rule:cluster_admin",
 
   "cluster:list":     "rule:cluster_admin",
-  "cluster:show":     "rule:cluster_admin"
+  "cluster:show":     "rule:cluster_admin",
+  "cluster:edit":     "rule:cluster_admin"
 }

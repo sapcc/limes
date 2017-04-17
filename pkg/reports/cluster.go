@@ -54,6 +54,7 @@ type ClusterResource struct {
 	Name         string     `json:"name"`
 	Unit         limes.Unit `json:"unit,omitempty"`
 	Capacity     *uint64    `json:"capacity,omitempty"`
+	Comment      string     `json:"comment,omitempty"`
 	DomainsQuota uint64     `json:"domains_quota,keepempty"`
 	Usage        uint64     `json:"usage,keepempty"`
 }
@@ -114,7 +115,7 @@ var clusterReportQuery2 = `
 `
 
 var clusterReportQuery3 = `
-	SELECT cs.cluster_id, cs.type, cr.name, cr.capacity, cs.scraped_at
+	SELECT cs.cluster_id, cs.type, cr.name, cr.capacity, cr.comment, cs.scraped_at
 	  FROM cluster_services cs
 	  LEFT OUTER JOIN cluster_resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
 	 WHERE %s {{AND cs.type = $service_type}}
@@ -215,9 +216,10 @@ func GetClusters(config limes.Configuration, clusterID *string, dbi db.Interface
 			serviceType  string
 			resourceName *string
 			capacity     *uint64
+			comment      *string
 			scrapedAt    util.Time
 		)
-		err := rows.Scan(&clusterID, &serviceType, &resourceName, &capacity, &scrapedAt)
+		err := rows.Scan(&clusterID, &serviceType, &resourceName, &capacity, &comment, &scrapedAt)
 		if err != nil {
 			return err
 		}
@@ -226,6 +228,9 @@ func GetClusters(config limes.Configuration, clusterID *string, dbi db.Interface
 
 		if resource != nil {
 			resource.Capacity = capacity
+			if comment != nil {
+				resource.Comment = *comment
+			}
 		}
 
 		if cluster != nil {
@@ -347,9 +352,10 @@ func GetClusters(config limes.Configuration, clusterID *string, dbi db.Interface
 				serviceType     string
 				resourceName    *string
 				capacity        *uint64
+				comment         *string
 				scrapedAt       util.Time
 			)
-			err := rows.Scan(&sharedClusterID, &serviceType, &resourceName, &capacity, &scrapedAt)
+			err := rows.Scan(&sharedClusterID, &serviceType, &resourceName, &capacity, &comment, &scrapedAt)
 			if err != nil {
 				return err
 			}
@@ -363,6 +369,9 @@ func GetClusters(config limes.Configuration, clusterID *string, dbi db.Interface
 
 				if resource != nil {
 					resource.Capacity = capacity
+					if comment != nil {
+						resource.Comment = *comment
+					}
 				}
 
 				scrapedAtUnix := time.Time(scrapedAt).Unix()

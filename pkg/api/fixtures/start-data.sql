@@ -3,11 +3,13 @@ INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (1, 'west
 INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (2, 'shared', 'shared',   1100);
 INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (3, 'east',   'unshared', 1200);
 
--- both services have the resources "things" and "capacity"; we can only scrape capacity for "things", so the
--- cluster_resources for "capacity" are missing
+-- both services have the resources "things" and "capacity"; we can only scrape capacity for "things"...
 INSERT INTO cluster_resources (service_id, name, capacity, comment) VALUES (1, 'things', 139, '');
 INSERT INTO cluster_resources (service_id, name, capacity, comment) VALUES (2, 'things', 246, '');
 INSERT INTO cluster_resources (service_id, name, capacity, comment) VALUES (3, 'things', 385, '');
+-- ...BUT we have manually-maintained capacity values for some of the "capacity" resources
+INSERT INTO cluster_resources (service_id, name, capacity, comment) VALUES (2, 'capacity', 185, 'hand-counted');
+INSERT INTO cluster_resources (service_id, name, capacity, comment) VALUES (3, 'capacity', 1000, 'rough estimate');
 
 -- "west" has two domains, "east" has one domain
 INSERT INTO domains (id, cluster_id, name, uuid) VALUES (1, 'west', 'germany', 'uuid-for-germany');
