@@ -83,6 +83,7 @@ func NewV1Router(driver limes.Driver, config limes.Configuration) (http.Handler,
 
 	r.Methods("GET").Path("/v1/clusters").HandlerFunc(p.ListClusters)
 	r.Methods("GET").Path("/v1/clusters/{cluster_id}").HandlerFunc(p.GetCluster)
+	r.Methods("PUT").Path("/v1/clusters/{cluster_id}").HandlerFunc(p.PutCluster)
 
 	r.Methods("GET").Path("/v1/domains").HandlerFunc(p.ListDomains)
 	r.Methods("GET").Path("/v1/domains/{domain_id}").HandlerFunc(p.GetDomain)

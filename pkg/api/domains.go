@@ -141,7 +141,6 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 	}
 	var resourcesToUpdate []db.DomainResource
 	var resourcesToUpdateAsUntyped []interface{}
-	servicesToUpdate := make(map[string]bool)
 	var errors []string
 
 	for _, srv := range services {
@@ -179,7 +178,6 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 			res.Quota = newQuota
 			resourcesToUpdate = append(resourcesToUpdate, res)
 			resourcesToUpdateAsUntyped = append(resourcesToUpdateAsUntyped, &res)
-			servicesToUpdate[srv.Type] = true
 		}
 	}
 

@@ -132,6 +132,244 @@ func Test_ClusterOperations(t *testing.T) {
 		ExpectStatusCode: 200,
 		ExpectJSON:       "fixtures/cluster-list-filtered.json",
 	}.Check(t, router)
+
+	//check PutCluster error cases
+	test.APIRequest{
+		Method:           "PUT",
+		Path:             "/v1/clusters/east",
+		ExpectStatusCode: 422,
+		ExpectBody:       p2s("cannot set shared/things capacity: capacity for this resource is maintained automatically\n"),
+		RequestJSON: object{
+			"cluster": object{
+				"services": []object{
+					{
+						"type": "shared",
+						"resources": []object{
+							{"name": "things", "capacity": 100, "comment": "whatever"},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+
+	test.APIRequest{
+		Method:           "PUT",
+		Path:             "/v1/clusters/east",
+		ExpectStatusCode: 422,
+		ExpectBody:       p2s("cannot set shared/things capacity: capacity for this resource is maintained automatically\n"),
+		RequestJSON: object{
+			"cluster": object{
+				"services": []object{
+					{
+						"type": "shared",
+						"resources": []object{
+							{"name": "things", "capacity": -1},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+
+	test.APIRequest{
+		Method:           "PUT",
+		Path:             "/v1/clusters/east",
+		ExpectStatusCode: 422,
+		ExpectBody:       p2s("cannot set shared/capacity capacity: comment is missing\n"),
+		RequestJSON: object{
+			"cluster": object{
+				"services": []object{
+					{
+						"type": "shared",
+						"resources": []object{
+							{"name": "capacity", "capacity": 100},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+
+	test.APIRequest{
+		Method:           "PUT",
+		Path:             "/v1/clusters/east",
+		ExpectStatusCode: 422,
+		ExpectBody:       p2s("cannot set unknown/things capacity: no such service\n"),
+		RequestJSON: object{
+			"cluster": object{
+				"services": []object{
+					{
+						"type": "unknown",
+						"resources": []object{
+							{"name": "things", "capacity": 100, "comment": "foo"},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+
+	test.APIRequest{
+		Method:           "PUT",
+		Path:             "/v1/clusters/east",
+		ExpectStatusCode: 422,
+		ExpectBody:       p2s("cannot set shared/unknown capacity: no such resource\n"),
+		RequestJSON: object{
+			"cluster": object{
+				"services": []object{
+					{
+						"type": "shared",
+						"resources": []object{
+							{"name": "unknown", "capacity": 100, "comment": "foo"},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+
+	//before checking PutCluster, delete all existing manually-maintained
+	//capacity values to be able to check inserts as well as updates
+	_, err := db.DB.Exec(`DELETE FROM cluster_resources WHERE comment != ''`)
+	if err != nil {
+		t.Error(err)
+	}
+
+	//check PutCluster insert
+	test.APIRequest{
+		Method:           "PUT",
+		Path:             "/v1/clusters/east",
+		ExpectStatusCode: 200,
+		RequestJSON: object{
+			"cluster": object{
+				"services": []object{
+					{
+						"type": "shared",
+						"resources": []object{
+							{"name": "capacity", "capacity": 100, "comment": "hundred"},
+						},
+					},
+					{
+						"type": "unshared",
+						"resources": []object{
+							{"name": "capacity", "capacity": 200, "comment": "two-hundred"},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+	expectClusterCapacity(t, "shared", "shared", "capacity", 100, "hundred")
+	expectClusterCapacity(t, "east", "unshared", "capacity", 200, "two-hundred")
+
+	//check PutCluster update
+	test.APIRequest{
+		Method:           "PUT",
+		Path:             "/v1/clusters/east",
+		ExpectStatusCode: 200,
+		RequestJSON: object{
+			"cluster": object{
+				"services": []object{
+					{
+						"type": "shared",
+						"resources": []object{
+							{"name": "capacity", "capacity": 101, "comment": "updated"},
+						},
+					},
+					{
+						"type": "unshared",
+						"resources": []object{
+							{"name": "capacity", "capacity": 201, "comment": "updated!"},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+	expectClusterCapacity(t, "shared", "shared", "capacity", 101, "updated")
+	expectClusterCapacity(t, "east", "unshared", "capacity", 201, "updated!")
+
+	//check PutCluster delete
+	test.APIRequest{
+		Method:           "PUT",
+		Path:             "/v1/clusters/east",
+		ExpectStatusCode: 200,
+		RequestJSON: object{
+			"cluster": object{
+				"services": []object{
+					{
+						"type": "shared",
+						"resources": []object{
+							{"name": "capacity", "capacity": -1},
+						},
+					},
+					{
+						"type": "unshared",
+						"resources": []object{
+							{"name": "capacity", "capacity": 202, "comment": "updated again"},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+	expectClusterCapacity(t, "shared", "shared", "capacity", -1, "")
+	expectClusterCapacity(t, "east", "unshared", "capacity", 202, "updated again")
+
+	//check PutCluster double-delete (i.e. delete should be idempotent)
+	test.APIRequest{
+		Method:           "PUT",
+		Path:             "/v1/clusters/east",
+		ExpectStatusCode: 200,
+		RequestJSON: object{
+			"cluster": object{
+				"services": []object{
+					{
+						"type": "shared",
+						"resources": []object{
+							{"name": "capacity", "capacity": -1},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+	expectClusterCapacity(t, "shared", "shared", "capacity", -1, "")
+}
+
+func expectClusterCapacity(t *testing.T, clusterID, serviceType, resourceName string, capacity int64, comment string) {
+	queryStr := `
+	SELECT cr.capacity, cr.comment
+	  FROM cluster_services cs
+	  JOIN cluster_resources cr ON cr.service_id = cs.id
+	 WHERE cs.cluster_id = ? AND cs.type = ? AND cr.name = ?
+	`
+	var (
+		actualCapacity int64
+		actualComment  string
+	)
+	err := db.DB.QueryRow(queryStr, clusterID, serviceType, resourceName).Scan(&actualCapacity, &actualComment)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			actualCapacity = -1
+			actualComment = ""
+		} else {
+			t.Error(err)
+			return
+		}
+	}
+
+	if actualCapacity != capacity {
+		t.Errorf("expectClusterCapacity failed: expected capacity = %d, but got %d for %s/%s/%s",
+			capacity, actualCapacity, clusterID, serviceType, resourceName,
+		)
+	}
+	if actualComment != comment {
+		t.Errorf("expectClusterCapacity failed: expected comment = %#v, but got %#v for %s/%s/%s",
+			comment, actualComment, clusterID, serviceType, resourceName,
+		)
+	}
 }
 
 func Test_DomainOperations(t *testing.T) {

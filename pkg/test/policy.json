@@ -14,5 +14,6 @@
   "domain:discover":  "@",
 
   "cluster:list":     "@",
-  "cluster:show":     "@"
+  "cluster:show":     "@",
+  "cluster:edit":     "@"
 }

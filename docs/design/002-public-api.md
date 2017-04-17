@@ -417,5 +417,5 @@ Capacity values can only be set for resources which Limes does not know how to m
 always required, and should ideally contain a description of how the capacity value was derived. An existing
 capacity value can be deleted by setting it to `-1`, in which case no `comment` is required.
 
-Returns 200 (OK) on success, with a response body identical to `GET` on the same URL, containing the updated quota
+Returns 200 (OK) on success, with a response body identical to `GET` on the same URL, containing the updated capacity
 values.

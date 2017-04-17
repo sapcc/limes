@@ -62,3 +62,17 @@ func (sq *ServiceQuotas) UnmarshalJSON(input []byte) error {
 	}
 	return nil
 }
+
+//ServiceCapacities contains updated capacity values for some or all resources
+//in a single service.
+type ServiceCapacities struct {
+	Type      string             `json:"type"`
+	Resources []ResourceCapacity `json:"resources"`
+}
+
+//ResourceCapacity contains an updated capacity value for a single resource.
+type ResourceCapacity struct {
+	Name     string `json:"name"`
+	Capacity int64  `json:"capacity"`
+	Comment  string `json:"comment"`
+}
