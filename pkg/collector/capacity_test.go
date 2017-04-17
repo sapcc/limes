@@ -21,7 +21,6 @@ package collector
 
 import (
 	"testing"
-	"time"
 
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
@@ -35,10 +34,11 @@ func Test_ScanCapacity(t *testing.T) {
 	cluster := &limes.Cluster{
 		ID:              "west",
 		IsServiceShared: map[string]bool{"shared": true},
-		ServiceTypes:    []string{"shared", "unshared"},
+		ServiceTypes:    []string{"shared", "unshared", "unshared2"},
 		QuotaPlugins: map[string]limes.QuotaPlugin{
-			"shared":   test.NewPlugin("shared"),
-			"unshared": test.NewPlugin("unshared"),
+			"shared":    test.NewPlugin("shared"),
+			"unshared":  test.NewPlugin("unshared"),
+			"unshared2": test.NewPlugin("unshared2"),
 		},
 		CapacityPlugins: map[string]limes.CapacityPlugin{
 			"unittest": test.NewCapacityPlugin("unittest",
@@ -71,16 +71,17 @@ func Test_ScanCapacity(t *testing.T) {
 	test.AssertDBContent(t, "fixtures/scancapacity1.sql")
 
 	//insert some crap records
+	insertTime := test.TimeNow()
 	err := db.DB.Insert(&db.ClusterService{
 		ClusterID: "west",
 		Type:      "unknown",
-		ScrapedAt: pointerToTime(test.TimeNow()),
+		ScrapedAt: &insertTime,
 	})
 	if err != nil {
 		t.Error(err)
 	}
 	err = db.DB.Insert(&db.ClusterResource{
-		ServiceID: 1,
+		ServiceID: 2,
 		Name:      "unknown",
 		Capacity:  100,
 	})
@@ -94,15 +95,48 @@ func Test_ScanCapacity(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
+
+	//simulate manual maintenance of capacity value by user
+	err = db.DB.Insert(&db.ClusterService{
+		ClusterID: "west",
+		Type:      "unshared2",
+		ScrapedAt: &insertTime,
+	})
+	if err != nil {
+		t.Error(err)
+	}
+	err = db.DB.Insert(&db.ClusterResource{
+		ServiceID: 1,
+		Name:      "capacity",
+		Capacity:  50,
+		Comment:   "manual",
+	})
+	if err != nil {
+		t.Error(err)
+	}
+	err = db.DB.Insert(&db.ClusterResource{
+		ServiceID: 4,
+		Name:      "capacity",
+		Capacity:  50,
+		Comment:   "manual",
+	})
+	if err != nil {
+		t.Error(err)
+	}
+
 	test.AssertDBContent(t, "fixtures/scancapacity2.sql")
 
-	//next scan should throw out the crap records and recreate the deleted ones;
-	//also change the reported Capacity to see if updates are getting through
+	//next scan should throw out the crap records and recreate the deleted ones,
+	//but keep the manually maintained ones; also change the reported Capacity to
+	//see if updates are getting through
 	cluster.CapacityPlugins["unittest"].(*test.CapacityPlugin).Capacity = 23
 	c.scanCapacity()
 	test.AssertDBContent(t, "fixtures/scancapacity3.sql")
-}
 
-func pointerToTime(t time.Time) *time.Time {
-	return &t
+	//add another capacity plugin covering a resource that currently has a
+	//manually maintained resource record; check that this resource is upgraded
+	//to automatically maintained by the next scan run
+	cluster.CapacityPlugins["unittest3"] = test.NewCapacityPlugin("unittest3", "shared/capacity")
+	c.scanCapacity()
+	test.AssertDBContent(t, "fixtures/scancapacity4.sql")
 }

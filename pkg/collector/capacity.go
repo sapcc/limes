@@ -20,6 +20,7 @@
 package collector
 
 import (
+	"database/sql"
 	"sort"
 	"time"
 
@@ -117,6 +118,12 @@ func (c *Collector) scanCapacity() {
 	}
 }
 
+var listProtectedServicesQueryStr = `
+	SELECT DISTINCT cs.id FROM cluster_services cs
+		JOIN cluster_resources cr ON cr.service_id = cs.id
+	 WHERE cs.cluster_id = $1 AND cr.comment != ''
+`
+
 func (c *Collector) writeCapacity(clusterID string, values map[string]map[string]uint64, scrapedAt time.Time) error {
 	//NOTE: clusterID is not taken from c.Driver.Cluster() because it can also be "shared".
 
@@ -127,9 +134,29 @@ func (c *Collector) writeCapacity(clusterID string, values map[string]map[string
 	}
 	defer db.RollbackUnlessCommitted(tx)
 
+	//make a list of all cluster_services which we may not cleanup because they
+	//contain manually maintained capacity records that we may not touch
+	//(BUT skip this for clusterID == "shared" since we're not going to use the
+	//result anyway; see below)
+	isProtectedClusterID := make(map[int64]bool)
+	if clusterID != "shared" {
+		err := db.ForeachRow(tx, listProtectedServicesQueryStr, []interface{}{clusterID},
+			func(rows *sql.Rows) error {
+				var id int64
+				err := rows.Scan(&id)
+				if err == nil {
+					isProtectedClusterID[id] = true
+				}
+				return err
+			},
+		)
+		if err != nil {
+			return err
+		}
+	}
+
 	//enumerate cluster_services entries: create missing ones, delete superfluous ones
 	serviceIDForType := make(map[string]int64)
-	serviceTypeForID := make(map[int64]string)
 	var dbServices []*db.ClusterService
 	_, err = tx.Select(&dbServices, `SELECT * FROM cluster_services WHERE cluster_id = $1`, clusterID)
 	if err != nil {
@@ -138,11 +165,12 @@ func (c *Collector) writeCapacity(clusterID string, values map[string]map[string
 	for _, dbService := range dbServices {
 		if _, ok := values[dbService.Type]; ok {
 			serviceIDForType[dbService.Type] = dbService.ID
-			serviceTypeForID[dbService.ID] = dbService.Type
 		} else {
 			//we cannot delete superfluous services for clusterID == "shared" because
-			//this cluster might not have invoked all relevant capacity plugins
-			if clusterID != "shared" {
+			//this cluster might not have invoked all relevant capacity plugins;
+			//also, skip deletion for services that contain manually maintained
+			//capacity records
+			if clusterID != "shared" && !isProtectedClusterID[dbService.ID] {
 				_, err := tx.Delete(dbService)
 				if err != nil {
 					return err
@@ -168,7 +196,6 @@ func (c *Collector) writeCapacity(clusterID string, values map[string]map[string
 			return err
 		}
 		serviceIDForType[dbService.Type] = dbService.ID
-		serviceTypeForID[dbService.ID] = dbService.Type
 	}
 
 	//update scraped_at timestamp on all cluster services in one step
@@ -199,14 +226,19 @@ func (c *Collector) writeCapacity(clusterID string, values map[string]map[string
 			capacity, exists := serviceValues[dbResource.Name]
 			if exists {
 				dbResource.Capacity = capacity
+				//if this is a manually maintained record, upgrade it to automatically maintained
+				dbResource.Comment = ""
 				_, err := tx.Update(dbResource)
 				if err != nil {
 					return err
 				}
 			} else {
-				_, err := tx.Delete(dbResource)
-				if err != nil {
-					return err
+				//same reasoning here as above for deletion of services
+				if clusterID != "shared" && dbResource.Comment == "" {
+					_, err := tx.Delete(dbResource)
+					if err != nil {
+						return err
+					}
 				}
 			}
 		}
