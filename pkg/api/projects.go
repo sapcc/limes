@@ -317,7 +317,7 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 	//report any backend errors to the user
 	if len(errors) > 0 {
 		msg := "quotas have been accepted, but some error(s) occurred while trying to write the quotas into the backend services:"
-		http.Error(w, msg+"\n"+strings.Join(errors, "\n"), 500)
+		http.Error(w, msg+"\n"+strings.Join(errors, "\n"), 202)
 		return
 	}
 
