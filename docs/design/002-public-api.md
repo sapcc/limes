@@ -389,7 +389,7 @@ like:
           },
           {
             "name": "cores",
-            "quota": 150,
+            "capacity": 150,
             "comment": "counted them by hand"
           }
         ]
