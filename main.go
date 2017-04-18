@@ -23,6 +23,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -251,29 +252,29 @@ func taskSyncWithElektra(config limes.Configuration, driver limes.Driver, args [
 	}
 
 	for {
-		util.LogInfo("Starting sync...")
-		err := syncWithElektra(driver, args[0], false)
+		util.LogInfo("Starting quota sync...")
+		err := syncQuotasFromElektra(driver, args[0])
 		if err == nil {
 			util.LogInfo("Done.")
 		} else {
 			util.LogError(err.Error())
 		}
+
+		util.LogInfo("Starting capacity sync...")
+		err = syncCapacitiesFromElektra(driver, args[0])
+		if err == nil {
+			util.LogInfo("Done.")
+		} else {
+			util.LogError(err.Error())
+		}
+
 		time.Sleep(15 * time.Minute)
 	}
 }
 
-//Entry is an entry in the JSON returned by Elektra.
-type Entry struct {
-	DomainUUID   string `json:"domain_id"`
-	ProjectUUID  string `json:"project_id"`
-	ServiceType  string `json:"service"`
-	ResourceName string `json:"resource"`
-	Quota        uint64 `json:"approved_quota"`
-}
-
-func syncWithElektra(driver limes.Driver, elektraURL string, freshToken bool) error {
+func syncFromElektra(driver limes.Driver, url string, freshToken bool, action func(body io.Reader) error) error {
 	//build request
-	req, err := http.NewRequest("GET", elektraURL, nil)
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return err
 	}
@@ -305,83 +306,189 @@ func syncWithElektra(driver limes.Driver, elektraURL string, freshToken bool) er
 		if err != nil {
 			return err
 		}
-		return syncWithElektra(driver, elektraURL, true)
+		return syncFromElektra(driver, url, true, action)
 	default:
 		//unexpected response
 		return fmt.Errorf("GET expected 200, got %s", resp.Status)
 	}
 
-	//parse JSON
-	var entries []Entry
-	err = json.NewDecoder(resp.Body).Decode(&entries)
-	if err != nil {
-		return err
-	}
+	return action(resp.Body)
+}
 
-	//store data
-	tx, err := db.DB.Begin()
-	if err != nil {
-		return err
-	}
-	defer db.RollbackUnlessCommitted(tx)
+//QuotaEntry is an entry in the JSON returned by Elektra /dump_approved_quotas.
+type QuotaEntry struct {
+	DomainUUID   string `json:"domain_id"`
+	ProjectUUID  string `json:"project_id"`
+	ServiceType  string `json:"service"`
+	ResourceName string `json:"resource"`
+	Quota        uint64 `json:"approved_quota"`
+}
 
-	stmtProject, err := tx.Prepare(`
-		UPDATE project_resources SET quota = $1
-		WHERE  name = $2 AND service_id IN (
-			SELECT ps.id FROM project_services ps JOIN projects p ON ps.project_id = p.id
-			WHERE  ps.type = $3 AND p.uuid = $4
-		)
-	`)
-	if err != nil {
-		return err
-	}
-	defer stmtProject.Close()
-
-	stmtDomain, err := tx.Prepare(`
-		SELECT ds.id FROM domain_services ds JOIN domains d ON ds.domain_id = d.id
-		WHERE  ds.type = $1 AND d.uuid = $2
-	`)
-	if err != nil {
-		return err
-	}
-	defer stmtDomain.Close()
-
-	for _, entry := range entries {
-		if entry.ProjectUUID != "" {
-			_, err = stmtProject.Exec(entry.Quota, entry.ResourceName, entry.ServiceType, entry.ProjectUUID)
-			if err != nil {
-				return err
-			}
-			continue
+func syncQuotasFromElektra(driver limes.Driver, elektraURL string) error {
+	return syncFromElektra(driver, elektraURL, false, func(responseBody io.Reader) error {
+		//parse JSON
+		var entries []QuotaEntry
+		err := json.NewDecoder(responseBody).Decode(&entries)
+		if err != nil {
+			return err
 		}
 
-		var serviceID int64
-		err = stmtDomain.QueryRow(entry.ServiceType, entry.DomainUUID).Scan(&serviceID)
+		//store data
+		tx, err := db.DB.Begin()
 		if err != nil {
-			if err == sql.ErrNoRows {
-				//skip services not yet supported by Limes
+			return err
+		}
+		defer db.RollbackUnlessCommitted(tx)
+
+		stmtProject, err := tx.Prepare(`
+			UPDATE project_resources SET quota = $1
+			WHERE  name = $2 AND service_id IN (
+				SELECT ps.id FROM project_services ps JOIN projects p ON ps.project_id = p.id
+				WHERE  ps.type = $3 AND p.uuid = $4
+			)
+		`)
+		if err != nil {
+			return err
+		}
+		defer stmtProject.Close()
+
+		stmtDomain, err := tx.Prepare(`
+			SELECT ds.id FROM domain_services ds JOIN domains d ON ds.domain_id = d.id
+			WHERE  ds.type = $1 AND d.uuid = $2
+		`)
+		if err != nil {
+			return err
+		}
+		defer stmtDomain.Close()
+
+		for _, entry := range entries {
+			if entry.ProjectUUID != "" {
+				_, err = stmtProject.Exec(entry.Quota, entry.ResourceName, entry.ServiceType, entry.ProjectUUID)
+				if err != nil {
+					return err
+				}
 				continue
 			}
-			return err
-		}
 
-		record := &db.DomainResource{
-			ServiceID: serviceID,
-			Name:      entry.ResourceName,
-			Quota:     entry.Quota,
-		}
+			var serviceID int64
+			err = stmtDomain.QueryRow(entry.ServiceType, entry.DomainUUID).Scan(&serviceID)
+			if err != nil {
+				if err == sql.ErrNoRows {
+					//skip services not yet supported by Limes
+					continue
+				}
+				return err
+			}
 
-		rowsAffected, err := tx.Update(record)
+			record := &db.DomainResource{
+				ServiceID: serviceID,
+				Name:      entry.ResourceName,
+				Quota:     entry.Quota,
+			}
+
+			rowsAffected, err := tx.Update(record)
+			if err != nil {
+				return err
+			}
+			if rowsAffected == 0 {
+				err = tx.Insert(record)
+				if err != nil {
+					return err
+				}
+			}
+
+		}
+		return tx.Commit()
+	})
+}
+
+//CapacityEntry is an entry in the JSON returned by Elektra /dump_capacities.
+type CapacityEntry struct {
+	ServiceType  string `json:"service"`
+	ResourceName string `json:"resource"`
+	Capacity     int64  `json:"capacity"`
+	Comment      string `json:"comment"`
+}
+
+func syncCapacitiesFromElektra(driver limes.Driver, elektraURL string) error {
+	elektraURL = strings.Replace(elektraURL, "dump_approved_quotas", "dump_capacities", -1)
+	return syncFromElektra(driver, elektraURL, false, func(responseBody io.Reader) error {
+		//parse JSON
+		var entries []CapacityEntry
+		err := json.NewDecoder(responseBody).Decode(&entries)
 		if err != nil {
 			return err
 		}
-		if rowsAffected == 0 {
-			err = tx.Insert(record)
+
+		//store data
+		tx, err := db.DB.Begin()
+		if err != nil {
+			return err
+		}
+		defer db.RollbackUnlessCommitted(tx)
+
+		cluster := driver.Cluster()
+		for _, entry := range entries {
+			if !cluster.HasResource(entry.ServiceType, entry.ResourceName) {
+				continue
+			}
+
+			serviceClusterID := cluster.ID
+			if cluster.IsServiceShared[entry.ServiceType] {
+				serviceClusterID = "shared"
+			}
+
+			var service *db.ClusterService
+			err := tx.SelectOne(&service,
+				`SELECT * FROM cluster_services WHERE cluster_id = $1 AND type = $2`,
+				serviceClusterID, entry.ServiceType,
+			)
+			if err != nil {
+				return err
+			}
+
+			var resource *db.ClusterResource
+			err = tx.SelectOne(&resource,
+				`SELECT * FROM cluster_resources WHERE service_id = $1 AND name = $2`,
+				service.ID, entry.ResourceName,
+			)
+
+			switch err {
+			case nil:
+				//do not touch auto-maintained records
+				if resource.Comment == "" {
+					continue
+				}
+			case sql.ErrNoRows:
+				if entry.Capacity >= 0 {
+					resource = &db.ClusterResource{
+						ServiceID: service.ID,
+						Name:      entry.ResourceName,
+						Capacity:  uint64(entry.Capacity),
+						Comment:   entry.Comment,
+					}
+					err := tx.Insert(resource)
+					if err != nil {
+						return err
+					}
+				}
+				continue
+			default:
+				return err
+			}
+
+			if entry.Capacity >= 0 {
+				resource.Capacity = uint64(entry.Capacity)
+				resource.Comment = entry.Comment
+				_, err = tx.Update(resource)
+			} else {
+				_, err = tx.Delete(resource)
+			}
 			if err != nil {
 				return err
 			}
 		}
 
-	}
-	return tx.Commit()
+		return tx.Commit()
+	})
 }
