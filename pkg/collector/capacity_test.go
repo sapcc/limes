@@ -71,16 +71,7 @@ func Test_ScanCapacity(t *testing.T) {
 	test.AssertDBContent(t, "fixtures/scancapacity1.sql")
 
 	//insert some crap records
-	insertTime := test.TimeNow()
-	err := db.DB.Insert(&db.ClusterService{
-		ClusterID: "west",
-		Type:      "unknown",
-		ScrapedAt: &insertTime,
-	})
-	if err != nil {
-		t.Error(err)
-	}
-	err = db.DB.Insert(&db.ClusterResource{
+	err := db.DB.Insert(&db.ClusterResource{
 		ServiceID: 2,
 		Name:      "unknown",
 		Capacity:  100,
@@ -97,6 +88,7 @@ func Test_ScanCapacity(t *testing.T) {
 	}
 
 	//simulate manual maintenance of capacity value by user
+	insertTime := test.TimeNow()
 	err = db.DB.Insert(&db.ClusterService{
 		ClusterID: "west",
 		Type:      "unshared2",
@@ -115,7 +107,7 @@ func Test_ScanCapacity(t *testing.T) {
 		t.Error(err)
 	}
 	err = db.DB.Insert(&db.ClusterResource{
-		ServiceID: 4,
+		ServiceID: 3,
 		Name:      "capacity",
 		Capacity:  50,
 		Comment:   "manual",

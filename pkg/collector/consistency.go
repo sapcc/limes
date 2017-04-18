@@ -32,20 +32,7 @@ var consistencyCheckInterval = 1 * time.Hour
 //have a service entry for this plugin's service type.
 func (c *Collector) CheckConsistency() {
 	for {
-		var domains []db.Domain
-		_, err := db.DB.Select(&domains, `SELECT * FROM domains WHERE cluster_id = $1`, c.Driver.Cluster().ID)
-		if err != nil {
-			c.LogError(err.Error())
-			if c.Once {
-				return
-			}
-			time.Sleep(consistencyCheckInterval)
-			continue
-		}
-
-		for _, domain := range domains {
-			c.checkConsistencyDomain(domain)
-		}
+		c.checkConsistencyCluster()
 
 		if c.Once {
 			return
@@ -55,6 +42,82 @@ func (c *Collector) CheckConsistency() {
 }
 
 //TODO: code duplication
+
+func (c *Collector) checkConsistencyCluster() {
+	cluster := c.Driver.Cluster()
+	now := c.TimeNow()
+
+	//check cluster_services entries
+	var services []db.ClusterService
+	_, err := db.DB.Select(&services, `SELECT * FROM cluster_services WHERE cluster_id IN ($1,'shared')`, cluster.ID)
+	if err != nil {
+		c.LogError(err.Error())
+		return
+	}
+
+	//cleanup entries for services that have been disabled
+	sharedSeen := make(map[string]bool)
+	unsharedSeen := make(map[string]bool)
+	for _, service := range services {
+		if service.ClusterID == "shared" {
+			sharedSeen[service.Type] = true
+			//cannot cleanup entries for shared services since we're only looking at
+			//one cluster and thus cannot know if a shared service is disabled in all
+			//clusters
+			continue
+		} else {
+			unsharedSeen[service.Type] = true
+		}
+
+		if !cluster.HasService(service.Type) || cluster.IsServiceShared[service.Type] {
+			util.LogInfo("cleaning up %s service entry for domain %s", service.Type, cluster.ID)
+			_, err := db.DB.Delete(&service)
+			if err != nil {
+				c.LogError(err.Error())
+			}
+		}
+	}
+
+	//create missing service entries
+	for _, serviceType := range cluster.ServiceTypes {
+		shared := cluster.IsServiceShared[serviceType]
+		if shared {
+			if sharedSeen[serviceType] {
+				continue
+			}
+		} else {
+			if unsharedSeen[serviceType] {
+				continue
+			}
+		}
+
+		util.LogInfo("creating missing %s service entry for cluster %s", serviceType, cluster.ID)
+		service := &db.ClusterService{
+			ClusterID: cluster.ID,
+			Type:      serviceType,
+			ScrapedAt: &now,
+		}
+		if shared {
+			service.ClusterID = "shared"
+		}
+		err := db.DB.Insert(service)
+		if err != nil {
+			c.LogError(err.Error())
+		}
+	}
+
+	//recurse into domains
+	var domains []db.Domain
+	_, err = db.DB.Select(&domains, `SELECT * FROM domains WHERE cluster_id = $1`, cluster.ID)
+	if err != nil {
+		c.LogError(err.Error())
+		return
+	}
+
+	for _, domain := range domains {
+		c.checkConsistencyDomain(domain)
+	}
+}
 
 func (c *Collector) checkConsistencyDomain(domain db.Domain) {
 	cluster := c.Driver.Cluster()

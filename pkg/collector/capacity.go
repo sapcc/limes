@@ -20,7 +20,6 @@
 package collector
 
 import (
-	"database/sql"
 	"sort"
 	"time"
 
@@ -134,28 +133,8 @@ func (c *Collector) writeCapacity(clusterID string, values map[string]map[string
 	}
 	defer db.RollbackUnlessCommitted(tx)
 
-	//make a list of all cluster_services which we may not cleanup because they
-	//contain manually maintained capacity records that we may not touch
-	//(BUT skip this for clusterID == "shared" since we're not going to use the
-	//result anyway; see below)
-	isProtectedClusterID := make(map[int64]bool)
-	if clusterID != "shared" {
-		err := db.ForeachRow(tx, listProtectedServicesQueryStr, []interface{}{clusterID},
-			func(rows *sql.Rows) error {
-				var id int64
-				err := rows.Scan(&id)
-				if err == nil {
-					isProtectedClusterID[id] = true
-				}
-				return err
-			},
-		)
-		if err != nil {
-			return err
-		}
-	}
-
-	//enumerate cluster_services entries: create missing ones, delete superfluous ones
+	//create missing cluster_services entries (superfluous ones will be cleaned
+	//up by the CheckConsistency())
 	serviceIDForType := make(map[string]int64)
 	var dbServices []*db.ClusterService
 	_, err = tx.Select(&dbServices, `SELECT * FROM cluster_services WHERE cluster_id = $1`, clusterID)
@@ -163,29 +142,21 @@ func (c *Collector) writeCapacity(clusterID string, values map[string]map[string
 		return err
 	}
 	for _, dbService := range dbServices {
-		if _, ok := values[dbService.Type]; ok {
-			serviceIDForType[dbService.Type] = dbService.ID
-		} else {
-			//we cannot delete superfluous services for clusterID == "shared" because
-			//this cluster might not have invoked all relevant capacity plugins;
-			//also, skip deletion for services that contain manually maintained
-			//capacity records
-			if clusterID != "shared" && !isProtectedClusterID[dbService.ID] {
-				_, err := tx.Delete(dbService)
-				if err != nil {
-					return err
-				}
-			}
-		}
+		serviceIDForType[dbService.Type] = dbService.ID
 	}
-	var missingServiceTypes []string
+
+	var allServiceTypes []string
 	for serviceType := range values {
-		if _, ok := serviceIDForType[serviceType]; !ok {
-			missingServiceTypes = append(missingServiceTypes, serviceType)
-		}
+		allServiceTypes = append(allServiceTypes, serviceType)
 	}
-	sort.Strings(missingServiceTypes) //for reproducability in unit test
-	for _, serviceType := range missingServiceTypes {
+	sort.Strings(allServiceTypes) //for reproducability in unit test
+
+	for _, serviceType := range allServiceTypes {
+		_, exists := serviceIDForType[serviceType]
+		if exists {
+			continue
+		}
+
 		dbService := &db.ClusterService{
 			ClusterID: clusterID,
 			Type:      serviceType,
@@ -204,12 +175,7 @@ func (c *Collector) writeCapacity(clusterID string, values map[string]map[string
 		return err
 	}
 
-	//same for resources as for services: create missing ones, update existing ones, delete superfluous ones
-	var allServiceTypes []string
-	for serviceType := range values {
-		allServiceTypes = append(allServiceTypes, serviceType)
-	}
-	sort.Strings(allServiceTypes) //for reproducability in unit test
+	//enumerate cluster_resources: create missing ones, update existing ones, delete superfluous ones
 	for _, serviceType := range allServiceTypes {
 		serviceValues := values[serviceType]
 		serviceID := serviceIDForType[serviceType]
@@ -233,7 +199,9 @@ func (c *Collector) writeCapacity(clusterID string, values map[string]map[string
 					return err
 				}
 			} else {
-				//same reasoning here as above for deletion of services
+				//never delete capacity records for shared services (because the
+				//current cluster might not have all relevant capacity plugins enabled,
+				//thus serviceValues may not have the whole picture)
 				if clusterID != "shared" && dbResource.Comment == "" {
 					_, err := tx.Delete(dbResource)
 					if err != nil {

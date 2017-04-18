@@ -1,3 +1,7 @@
+INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (1, 'west', 'unshared', 0);
+INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (2, 'shared', 'whatever', 0);
+INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (3, 'west', 'shared', 0);
+
 INSERT INTO domains (id, cluster_id, name, uuid) VALUES (1, 'west', 'germany', 'uuid-for-germany');
 INSERT INTO domains (id, cluster_id, name, uuid) VALUES (2, 'west', 'france', 'uuid-for-france');
 

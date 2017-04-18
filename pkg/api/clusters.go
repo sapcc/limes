@@ -24,7 +24,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	gorp "gopkg.in/gorp.v2"
 
@@ -117,14 +116,19 @@ func (p *v1Provider) PutCluster(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		service, err := findOrCreateClusterService(tx, srv, clusterID, cluster.IsServiceShared[srv.Type])
+		service, err := findClusterService(tx, srv, clusterID, cluster.IsServiceShared[srv.Type])
 		if ReturnError(w, err) {
 			return
 		}
 		if service == nil {
-			//this occurs if the cluster_services record does not exist, and we also
-			//don't need to create it because all srv.Resources are set to be deleted,
-			//therefore we're done with this service
+			//this should only occur if a service was added, and users try to
+			//maintain capacity for the new service before CheckConsistency() has run
+			//(which should happen immediately when `limes collect` starts)
+			for _, res := range srv.Resources {
+				errors = append(errors,
+					fmt.Sprintf("cannot set %s/%s capacity: no such service", srv.Type, res.Name),
+				)
+			}
 			continue
 		}
 
@@ -167,14 +171,7 @@ func (p *v1Provider) PutCluster(w http.ResponseWriter, r *http.Request) {
 	ReturnJSON(w, 200, map[string]interface{}{"cluster": clusters[0]})
 }
 
-func findOrCreateClusterService(tx *gorp.Transaction, srv ServiceCapacities, clusterID string, shared bool) (*db.ClusterService, error) {
-	needToCreateService := false
-	for _, res := range srv.Resources {
-		if res.Capacity >= 0 {
-			needToCreateService = true
-			break
-		}
-	}
+func findClusterService(tx *gorp.Transaction, srv ServiceCapacities, clusterID string, shared bool) (*db.ClusterService, error) {
 	if shared {
 		clusterID = "shared"
 	}
@@ -185,22 +182,9 @@ func findOrCreateClusterService(tx *gorp.Transaction, srv ServiceCapacities, clu
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			if !needToCreateService {
-				return nil, nil
-			}
-			now := time.Now()
-			service = &db.ClusterService{
-				ClusterID: clusterID,
-				Type:      srv.Type,
-				ScrapedAt: &now,
-			}
-			err := tx.Insert(service)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			return nil, err
+			return nil, nil
 		}
+		return nil, err
 	}
 
 	return service, nil
