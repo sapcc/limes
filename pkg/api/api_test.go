@@ -612,7 +612,7 @@ func Test_ProjectOperations(t *testing.T) {
 	test.APIRequest{
 		Method:           "PUT",
 		Path:             "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
-		ExpectStatusCode: 500,
+		ExpectStatusCode: 202,
 		ExpectBody:       p2s("quotas have been accepted, but some error(s) occurred while trying to write the quotas into the backend services:\nSetQuota failed as requested\n"),
 		RequestJSON: object{
 			"project": object{
