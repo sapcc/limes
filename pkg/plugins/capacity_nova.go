@@ -1,0 +1,138 @@
+/*******************************************************************************
+*
+* Copyright 2017 SAP SE
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You should have received a copy of the License along with this
+* program. If not, you may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*
+*******************************************************************************/
+
+package plugins
+
+import (
+	"github.com/gophercloud/gophercloud"
+	"github.com/gophercloud/gophercloud/openstack"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
+	"github.com/gophercloud/gophercloud/pagination"
+	"github.com/sapcc/limes/pkg/limes"
+	"math"
+)
+
+type capacityNovaPlugin struct {
+	cfg limes.CapacitorConfiguration
+}
+
+func init() {
+	limes.RegisterCapacityPlugin(func(c limes.CapacitorConfiguration) limes.CapacityPlugin {
+		return &capacityNovaPlugin{c}
+	})
+}
+
+func (p *capacityNovaPlugin) Client(driver limes.Driver) (*gophercloud.ServiceClient, error) {
+	return openstack.NewComputeV2(driver.Client(),
+		gophercloud.EndpointOpts{Availability: gophercloud.AvailabilityPublic},
+	)
+}
+
+func (p *capacityNovaPlugin) ID() string {
+	return "nova"
+}
+
+//Scrape implements the limes.CapacityPlugin interface.
+func (p *capacityNovaPlugin) Scrape(driver limes.Driver) (map[string]map[string]uint64, error) {
+	client, err := p.Client(driver)
+	if err != nil {
+		return nil, err
+	}
+
+	var result gophercloud.Result
+
+	//Get absolute limits for a tenant
+	url := client.ServiceURL("os-hypervisors", "statistics")
+	_, err = client.Get(url, &result.Body, nil)
+	if err != nil {
+		return nil, err
+	}
+	var hypervisorData struct {
+		HypervisorStatistics struct {
+			Vcpus    int `json:"vcpus"`
+			MemoryMb int `json:"memory_mb"`
+			LocalGb  int `json:"local_gb"`
+		} `json:"hypervisor_statistics"`
+	}
+	err = result.ExtractInto(&hypervisorData)
+	if err != nil {
+		return nil, err
+	}
+
+	//Get availability zones
+	url = client.ServiceURL("os-availability-zone")
+	_, err = client.Get(url, &result.Body, nil)
+	if err != nil {
+		return nil, err
+	}
+	var availabilityZoneData struct {
+		AvailabilityZoneInfo []struct {
+			ZoneName  string `json:"zoneName"`
+			ZoneState struct {
+				Available bool `json:"available"`
+			} `json:"zoneState"`
+		} `json:"availabilityZoneInfo"`
+	}
+	err = result.ExtractInto(&availabilityZoneData)
+	if err != nil {
+		return nil, err
+	}
+
+	//list all flavors and get max(flavor_size)
+	pages, maxFlavorSize := 0, 0.0
+	err = flavors.ListDetail(client, nil).EachPage(func(page pagination.Page) (bool, error) {
+		pages++
+		f, err := flavors.ExtractFlavors(page)
+		if err != nil {
+			return false, err
+		}
+		for _, element := range f {
+			maxFlavorSize = math.Max(maxFlavorSize, float64(element.Disk))
+		}
+
+		return true, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var azCount int
+
+	//count availability zones
+	for _, element := range availabilityZoneData.AvailabilityZoneInfo {
+		if element.ZoneState.Available == true {
+			azCount++
+		}
+	}
+
+	//returns something like
+	//"volumev2": {
+	//	"cores": total_vcpus,
+	//	"instances": min(10000 per Availability Zone, local_gb/max(flavor size)),
+	//	"ram": total_memory_mb,
+	//}
+	return map[string]map[string]uint64{
+		"computev2": {
+			"cores":     uint64(hypervisorData.HypervisorStatistics.Vcpus),
+			"instances": uint64(math.Min(float64(10000*azCount), float64(hypervisorData.HypervisorStatistics.LocalGb)/maxFlavorSize)),
+			"ram":       uint64(hypervisorData.HypervisorStatistics.MemoryMb),
+		},
+	}, nil
+
+}
