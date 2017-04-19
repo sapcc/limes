@@ -7,13 +7,18 @@ GO            := GOPATH=$(CURDIR)/.gopath GOBIN=$(CURDIR)/build go
 GO_BUILDFLAGS :=
 GO_LDFLAGS    := -s -w
 
-# Theis target uses the incremental rebuild capabilities of the Go compiler to speed things up.
+# This target uses the incremental rebuild capabilities of the Go compiler to speed things up.
 # If no source files have changed, `go install` exits quickly without doing anything.
 build/limes: FORCE
 	$(GO) install $(GO_BUILDFLAGS) -ldflags '$(GO_LDFLAGS)' '$(PKG)'
 
+# which packages to test with static checkers?
 GO_ALLPKGS := $(PKG) $(shell go list $(PKG)/pkg/...)
+# which packages to test with `go test`?
 GO_TESTPKGS := $(shell go list -f '{{if .TestGoFiles}}{{.ImportPath}}{{end}}' $(PKG)/pkg/...)
+# which packages to measure coverage for?
+GO_COVERPKGS := $(shell go list $(PKG)/pkg/... | grep -v plugins)
+# output files from `go test`
 GO_COVERFILES := $(patsubst %,build/%.cover.out,$(subst /,_,$(GO_TESTPKGS)))
 
 # down below, I need to substitute spaces with commas; because of the syntax,
@@ -34,7 +39,7 @@ static-check: FORCE
 	@if s="$$(golint . && find pkg -type d -exec golint {} \; 2>/dev/null)" && test -n "$$s"; then printf ' => %s\n%s\n' golint "$$s"; false; fi
 	$(GO) vet $(GO_ALLPKGS)
 build/%.cover.out: prepare-check FORCE
-	$(GO) test $(GO_BUILDFLAGS) -ldflags '$(GO_LDFLAGS)' -coverprofile=$@ -covermode=count -coverpkg=$(subst $(space),$(comma),$(GO_ALLPKGS)) $(subst _,/,$*)
+	$(GO) test $(GO_BUILDFLAGS) -ldflags '$(GO_LDFLAGS)' -coverprofile=$@ -covermode=count -coverpkg=$(subst $(space),$(comma),$(GO_COVERPKGS)) $(subst _,/,$*)
 build/cover.out: $(GO_COVERFILES)
 	pkg/test/util/gocovcat.go $(GO_COVERFILES) > $@
 build/cover.html: build/cover.out
