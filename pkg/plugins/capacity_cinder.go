@@ -20,27 +20,14 @@
 package plugins
 
 import (
-	"encoding/json"
-
 	"github.com/gophercloud/gophercloud"
+	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/sapcc/limes/pkg/limes"
+	"github.com/sapcc/limes/pkg/util"
 )
 
 type capacityCinderPlugin struct {
 	cfg limes.CapacitorConfiguration
-}
-
-type Float64OrUnknown float64
-
-func (f *Float64OrUnknown) UnmarshalJSON(json_buffer []byte) error {
-	if json_buffer[0] == '"' {
-		*f = 0
-		return nil
-	}
-	var x float64
-	err := json.Unmarshal(json_buffer, &x)
-	*f = Float64OrUnknown(x)
-	return err
 }
 
 func init() {
@@ -49,8 +36,14 @@ func init() {
 	})
 }
 
-func (p *capacityCinderPlugin) ID() string{
-	return "capacityCinderPlugin"
+func (p *capacityCinderPlugin) Client(driver limes.Driver) (*gophercloud.ServiceClient, error) {
+	return openstack.NewBlockStorageV2(driver.Client(),
+		gophercloud.EndpointOpts{Availability: gophercloud.AvailabilityPublic},
+	)
+}
+
+func (p *capacityCinderPlugin) ID() string {
+	return "cinder"
 }
 
 //Scrape implements the limes.CapacityPlugin interface.
@@ -68,15 +61,15 @@ func (p *capacityCinderPlugin) Scrape(driver limes.Driver) (map[string]map[strin
 	if err != nil {
 		return nil, err
 	}
-	var limit_data struct {
+	var limitData struct {
 		Pools []struct {
-			Name string `json:"name"`
+			Name         string `json:"name"`
 			Capabilities struct {
-				TotalCapacity Float64OrUnknown `json:"total_capacity_gb"`
+				TotalCapacity util.Float64OrUnknown `json:"total_capacity_gb"`
 			} `json:"capabilities"`
 		} `json:"pools"`
 	}
-	err = result.ExtractInto(&limit_data)
+	err = result.ExtractInto(&limitData)
 	if err != nil {
 		return nil, err
 	}
@@ -87,24 +80,52 @@ func (p *capacityCinderPlugin) Scrape(driver limes.Driver) (map[string]map[strin
 	if err != nil {
 		return nil, err
 	}
-	var availability_zone_data struct {
+	var availabilityZoneData struct {
 		AvailabilityZoneInfo []struct {
-			ZoneName string `json:"zoneName""`
+			ZoneName  string `json:"zoneName"`
 			ZoneState struct {
-				available bool `json:"available"`
+				Available bool `json:"available"`
 			} `json:"zoneState"`
 		} `json:"availabilityZoneInfo"`
 	}
-	err = result.ExtractInto(&availability_zone_data)
+	err = result.ExtractInto(&availabilityZoneData)
 	if err != nil {
 		return nil, err
 	}
 
+	length := 0
+	for _, element := range availabilityZoneData.AvailabilityZoneInfo {
+		if element.ZoneState.Available == true {
+			length++
+		}
+	}
+
+	var totalCapacity, azCount uint64
+
+	//add results from scheduler-stats
+	for _, element := range limitData.Pools {
+		totalCapacity += uint64(element.Capabilities.TotalCapacity)
+	}
+
+	//count availability zones
+	for _, element := range availabilityZoneData.AvailabilityZoneInfo {
+		if element.ZoneState.Available == true {
+			azCount++
+		}
+	}
+
+	//returns something like
+	//"volumev2": {
+	//	"capacity": capacitySum,
+	//	"snapshots": 2500 * zoneCount,
+	//	"volumes": 2500 * zoneCount,
+	//}
 	return map[string]map[string]uint64{
-		"service": {
-			"resource": 0,
+		"volumev2": {
+			"capacity":  totalCapacity,
+			"snapshots": uint64(2500 * azCount),
+			"volumes":   uint64(2500 * azCount),
 		},
-	},nil
+	}, nil
 
 }
-
