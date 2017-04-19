@@ -93,13 +93,6 @@ func (p *capacityCinderPlugin) Scrape(driver limes.Driver) (map[string]map[strin
 		return nil, err
 	}
 
-	length := 0
-	for _, element := range availabilityZoneData.AvailabilityZoneInfo {
-		if element.ZoneState.Available == true {
-			length++
-		}
-	}
-
 	var totalCapacity, azCount uint64
 
 	//add results from scheduler-stats
