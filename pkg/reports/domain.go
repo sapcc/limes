@@ -50,11 +50,10 @@ type DomainService struct {
 //DomainResource is a substructure of Domain containing data for
 //a single resource.
 type DomainResource struct {
-	Name          string     `json:"name"`
-	Unit          limes.Unit `json:"unit,omitempty"`
-	DomainQuota   uint64     `json:"quota,keepempty"`
-	ProjectsQuota uint64     `json:"projects_quota,keepempty"`
-	Usage         uint64     `json:"usage,keepempty"`
+	limes.ResourceInfo
+	DomainQuota   uint64 `json:"quota,keepempty"`
+	ProjectsQuota uint64 `json:"projects_quota,keepempty"`
+	Usage         uint64 `json:"usage,keepempty"`
 	//These are pointers to values to enable precise control over whether this field is rendered in output.
 	BackendQuota         *uint64 `json:"backend_quota,omitempty"`
 	InfiniteBackendQuota *bool   `json:"infinite_backend_quota,omitempty"`
@@ -268,8 +267,7 @@ func (d domains) Find(cluster *limes.Cluster, domainUUID string, serviceType, re
 			return domain, service, resource
 		}
 		resource = &DomainResource{
-			Name: *resourceName,
-			Unit: cluster.UnitFor(*serviceType, *resourceName),
+			ResourceInfo: cluster.InfoForResource(*serviceType, *resourceName),
 		}
 		service.Resources[*resourceName] = resource
 	}

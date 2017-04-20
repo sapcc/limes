@@ -51,12 +51,11 @@ type ClusterService struct {
 //ClusterResource is a substructure of Cluster containing data for
 //a single resource.
 type ClusterResource struct {
-	Name         string     `json:"name"`
-	Unit         limes.Unit `json:"unit,omitempty"`
-	Capacity     *uint64    `json:"capacity,omitempty"`
-	Comment      string     `json:"comment,omitempty"`
-	DomainsQuota uint64     `json:"domains_quota,keepempty"`
-	Usage        uint64     `json:"usage,keepempty"`
+	limes.ResourceInfo
+	Capacity     *uint64 `json:"capacity,omitempty"`
+	Comment      string  `json:"comment,omitempty"`
+	DomainsQuota uint64  `json:"domains_quota,keepempty"`
+	Usage        uint64  `json:"usage,keepempty"`
 }
 
 //ClusterServices provides fast lookup of services using a map, but serializes
@@ -456,8 +455,7 @@ func (c clusters) Find(config limes.Configuration, clusterID string, serviceType
 			return cluster, service, nil
 		}
 		resource = &ClusterResource{
-			Name: *resourceName,
-			Unit: clusterConfig.UnitFor(*serviceType, *resourceName),
+			ResourceInfo: clusterConfig.InfoForResource(*serviceType, *resourceName),
 		}
 		service.Resources[*resourceName] = resource
 	}

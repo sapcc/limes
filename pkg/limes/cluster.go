@@ -104,18 +104,19 @@ func (c *Cluster) HasResource(serviceType, resourceName string) bool {
 	return false
 }
 
-//UnitFor finds the plugin for the given serviceType and finds within that
-//plugin the ResourceInfo for the given resourceName, and returns its unit. If
-//the service or resource does not exist, UnitNone is returned.
-func (c *Cluster) UnitFor(serviceType, resourceName string) Unit {
+//InfoForResource finds the plugin for the given serviceType and finds within that
+//plugin the ResourceInfo for the given resourceName. If the service or
+//resource does not exist, an empty ResourceInfo (with .Unit == UnitNone and
+//.Category == "") is returned.
+func (c *Cluster) InfoForResource(serviceType, resourceName string) ResourceInfo {
 	plugin := c.QuotaPlugins[serviceType]
 	if plugin == nil {
-		return UnitNone
+		return ResourceInfo{Name: resourceName, Unit: UnitNone}
 	}
 	for _, res := range plugin.Resources() {
 		if res.Name == resourceName {
-			return res.Unit
+			return res
 		}
 	}
-	return UnitNone
+	return ResourceInfo{Name: resourceName, Unit: UnitNone}
 }

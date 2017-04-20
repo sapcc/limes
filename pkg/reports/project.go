@@ -48,10 +48,9 @@ type ProjectService struct {
 //ProjectResource is a substructure of Project containing data for
 //a single resource.
 type ProjectResource struct {
-	Name  string     `json:"name"`
-	Unit  limes.Unit `json:"unit,omitempty"`
-	Quota uint64     `json:"quota,keepempty"`
-	Usage uint64     `json:"usage,keepempty"`
+	limes.ResourceInfo
+	Quota uint64 `json:"quota,keepempty"`
+	Usage uint64 `json:"usage,keepempty"`
 	//This is a pointer to a value to enable precise control over whether this field is rendered in output.
 	BackendQuota *int64 `json:"backend_quota,omitempty"`
 }
@@ -176,8 +175,7 @@ func GetProjects(cluster *limes.Cluster, domainID int64, projectID *int64, dbi d
 		}
 
 		resource := &ProjectResource{
-			Name:         *resourceName,
-			Unit:         cluster.UnitFor(*serviceType, *resourceName),
+			ResourceInfo: cluster.InfoForResource(*serviceType, *resourceName),
 			Usage:        *usage,
 			BackendQuota: nil, //see below
 		}

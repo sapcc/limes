@@ -73,16 +73,16 @@ type CapacityPlugin interface {
 //ResourceInfo contains the metadata for a resource (i.e. some thing for which
 //quota and usage values can be retrieved from a backend service).
 type ResourceInfo struct {
-	Name string
-	Unit Unit
+	Name string `json:"name"`
+	Unit Unit   `json:"unit,omitempty"`
 	//Category is an optional hint that UIs can use to group resources of one
 	//service into subgroups. If it is used, it should be set on all
 	//ResourceInfos reported by the same QuotaPlugin.
-	Category string
+	Category string `json:"category,omitempty"`
 	//If AutoApproveInitialQuota is non-zero, when a new project is scraped for
 	//the first time, a backend quota equal to this value will be approved
 	//automatically (i.e. Quota will be set equal to BackendQuota).
-	AutoApproveInitialQuota uint64
+	AutoApproveInitialQuota uint64 `json:"-"`
 }
 
 //Unit enumerates allowed values for the unit a resource's quota/usage is

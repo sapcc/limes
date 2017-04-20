@@ -79,6 +79,11 @@ unit, it will be given as `unit`. Clients should be prepared to handle at least 
     PiB   - pebibytes = 2^50 bytes
     EiB   - exbibytes = 2^60 bytes
 
+Besides `unit`, there may be another informational field called `category`. If present, UIs can use the string value in
+this field to divide resources from the same service into logical groups for presentational purposes. For example, the
+service type `network` advertises resources with the category strings `networking` and `loadbalancing`, since these
+topics are cleanly separable from each other.
+
 Limes tracks quotas in its local database, and expects that the quota values in the backing services may only be
 manipulated by the Limes service user, but not by the project's members or admins. If, nonetheless, Limes finds the
 backing service to use a different quota value than what Limes expected, it will be shown in the `backend_quota` key, as
