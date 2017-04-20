@@ -22,6 +22,7 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -95,6 +96,10 @@ func main() {
 		task = taskServe
 	case "sync-with-elektra":
 		task = taskSyncWithElektra
+	case "test-scrape":
+		task = taskTestScrape
+	case "test-scan-capacity":
+		task = taskTestScanCapacity
 	default:
 		printUsageAndExit()
 	}
@@ -111,10 +116,12 @@ Usage:
 \t%s migrate <config-file>
 \t%s (collect|serve) <config-file> <cluster-id>
 \t%s sync-with-elektra <config-file> <cluster-id> <elektra-dump-url>
+\t%s test-scrape <config-file> <cluster-id> <project-id>
+\t%s test-scan-capacity <config-file> <cluster-id>
 `), `\t`, "\t", -1) + "\n"
 
 func printUsageAndExit() {
-	fmt.Fprintf(os.Stderr, usageMessage, os.Args[0], os.Args[0], os.Args[0])
+	fmt.Fprintln(os.Stderr, strings.Replace(usageMessage, "%s", os.Args[0], -1))
 	os.Exit(1)
 }
 
@@ -491,4 +498,72 @@ func syncCapacitiesFromElektra(driver limes.Driver, elektraURL string) error {
 
 		return tx.Commit()
 	})
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// task: test-scrape
+
+func taskTestScrape(config limes.Configuration, driver limes.Driver, args []string) error {
+	if len(args) != 1 {
+		printUsageAndExit()
+	}
+	cluster := driver.Cluster()
+
+	var (
+		domainUUID  string
+		projectUUID string
+	)
+	err := db.DB.QueryRow(`
+		SELECT d.uuid, p.uuid
+		  FROM domains d JOIN projects p ON p.domain_id = d.id
+		 WHERE p.uuid = $1 AND d.cluster_id = $2
+	`, args[0], cluster.ID).Scan(&domainUUID, &projectUUID)
+	if err == sql.ErrNoRows {
+		return errors.New("no such project in this cluster")
+	}
+
+	result := make(map[string]map[string]limes.ResourceData)
+
+	for serviceType, plugin := range cluster.QuotaPlugins {
+		data, err := plugin.Scrape(driver, domainUUID, projectUUID)
+		if err != nil {
+			util.LogError("scrape failed for %s: %s", serviceType, err.Error())
+		}
+		if data != nil {
+			result[serviceType] = data
+		}
+	}
+
+	return json.NewEncoder(os.Stdout).Encode(result)
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// task: test-scan-capacity
+
+func taskTestScanCapacity(config limes.Configuration, driver limes.Driver, args []string) error {
+	if len(args) != 0 {
+		printUsageAndExit()
+	}
+	cluster := driver.Cluster()
+
+	result := make(map[string]map[string]uint64)
+	for capacitorID, plugin := range cluster.CapacityPlugins {
+		capacities, err := plugin.Scrape(driver)
+		if err != nil {
+			util.LogError("scan capacity with capacitor %s failed: %s", capacitorID, err.Error())
+		}
+		if capacities != nil {
+			//merge capacities from this plugin into the overall capacity values map
+			for serviceType, resources := range capacities {
+				if _, ok := result[serviceType]; !ok {
+					result[serviceType] = make(map[string]uint64)
+				}
+				for resourceName, value := range resources {
+					result[serviceType][resourceName] = value
+				}
+			}
+		}
+	}
+
+	return json.NewEncoder(os.Stdout).Encode(result)
 }
