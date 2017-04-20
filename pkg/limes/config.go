@@ -79,6 +79,9 @@ type CapacitorConfiguration struct {
 	Nova struct {
 		VCPUOvercommitFactor *uint64 `yaml:"vcpu_overcommit"`
 	} `yaml:"nova"`
+	Swift struct {
+		PrometheusAPIURL string `yaml:"prometheus_api_url"`
+	} `yaml:"swift"`
 }
 
 //APIConfiguration contains configuration parameters for limes-serve.
