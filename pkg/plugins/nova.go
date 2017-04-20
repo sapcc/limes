@@ -52,9 +52,12 @@ func init() {
 	})
 }
 
-//ServiceType implements the limes.QuotaPlugin interface.
-func (p *novaPlugin) ServiceType() string {
-	return "compute"
+//ServiceInfo implements the limes.QuotaPlugin interface.
+func (p *novaPlugin) ServiceInfo() limes.ServiceInfo {
+	return limes.ServiceInfo{
+		Type: "compute",
+		Area: "compute",
+	}
 }
 
 //Resources implements the limes.QuotaPlugin interface.

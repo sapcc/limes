@@ -27,10 +27,8 @@ import (
 //backend services must implement. There can only be one QuotaPlugin for each
 //backend service.
 type QuotaPlugin interface {
-	//ServiceType returns the service type that the backend service for this
-	//plugin implements. This string must be identical to the type string from
-	//the Keystone service catalog.
-	ServiceType() string
+	//ServiceInfo returns metadata for this service.
+	ServiceInfo() ServiceInfo
 	//Resources returns metadata for all the resources that this plugin scrapes
 	//from the backend service.
 	Resources() []ResourceInfo
@@ -85,6 +83,16 @@ type ResourceInfo struct {
 	AutoApproveInitialQuota uint64 `json:"-"`
 }
 
+//ServiceInfo contains the metadata for a backend service.
+type ServiceInfo struct {
+	//Type returns the service type that the backend service for this
+	//plugin implements. This string must be identical to the type string from
+	//the Keystone service catalog.
+	Type string `json:"type"`
+	//Area is a hint that UIs can use to group similar services.
+	Area string `json:"area,omitempty"`
+}
+
 //Unit enumerates allowed values for the unit a resource's quota/usage is
 //measured in.
 type Unit string
@@ -121,8 +129,8 @@ func (u Unit) Format(value uint64) string {
 }
 
 //QuotaPluginFactory is a function that produces quota plugins for a certain
-//ServiceType. The quota plugin instance will use the service configuration
-//given to it if it wants to.
+//ServiceInfo.Type. The quota plugin instance will use the service
+//configuration given to it if it wants to.
 type QuotaPluginFactory func(ServiceConfiguration) QuotaPlugin
 
 //CapacityPluginFactory is a function that produces capacity plugins with a
@@ -138,19 +146,22 @@ var capacityPluginFactories = map[string]CapacityPluginFactory{}
 //QuotaPlugin.
 //
 //When called, this function will use the factory with a zero
-//ServiceConfiguration to determine the ServiceType of the quota plugin.
+//ServiceConfiguration to determine the service type of the quota plugin.
 func RegisterQuotaPlugin(factory QuotaPluginFactory) {
 	if factory == nil {
 		panic("collector.RegisterQuotaPlugin() called with nil QuotaPluginFactory instance")
 	}
-	serviceType := factory(ServiceConfiguration{}).ServiceType()
-	if serviceType == "" {
-		panic("QuotaPlugin instance with empty ServiceType!")
+	info := factory(ServiceConfiguration{}).ServiceInfo()
+	if info.Type == "" {
+		panic("QuotaPlugin instance with empty service type!")
 	}
-	if quotaPluginFactories[serviceType] != nil {
-		panic("collector.RegisterQuotaPlugin() called multiple times for service type: " + serviceType)
+	if info.Area == "" {
+		panic("QuotaPlugin instance with empty area!")
 	}
-	quotaPluginFactories[serviceType] = factory
+	if quotaPluginFactories[info.Type] != nil {
+		panic("collector.RegisterQuotaPlugin() called multiple times for service type: " + info.Type)
+	}
+	quotaPluginFactories[info.Type] = factory
 }
 
 //RegisterCapacityPlugin registers a CapacityPlugin with this package. It may

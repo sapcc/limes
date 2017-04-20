@@ -42,7 +42,7 @@ type Cluster struct {
 //ClusterService is a substructure of Cluster containing data for
 //a single backend service.
 type ClusterService struct {
-	Type         string           `json:"type"`
+	limes.ServiceInfo
 	Resources    ClusterResources `json:"resources,keepempty"`
 	MaxScrapedAt int64            `json:"max_scraped_at,keepempty"`
 	MinScrapedAt int64            `json:"min_scraped_at,keepempty"`
@@ -439,8 +439,8 @@ func (c clusters) Find(config limes.Configuration, clusterID string, serviceType
 			return cluster, nil, nil
 		}
 		service = &ClusterService{
-			Type:      *serviceType,
-			Resources: make(ClusterResources),
+			ServiceInfo: clusterConfig.InfoForService(*serviceType),
+			Resources:   make(ClusterResources),
 		}
 		cluster.Services[*serviceType] = service
 	}

@@ -42,8 +42,9 @@ func prepareScrapeTest(t *testing.T, quotaPlugins ...limes.QuotaPlugin) *test.Dr
 		CapacityPlugins: map[string]limes.CapacityPlugin{},
 	}
 	for _, plugin := range quotaPlugins {
-		cluster.ServiceTypes = append(cluster.ServiceTypes, plugin.ServiceType())
-		cluster.QuotaPlugins[plugin.ServiceType()] = plugin
+		info := plugin.ServiceInfo()
+		cluster.ServiceTypes = append(cluster.ServiceTypes, info.Type)
+		cluster.QuotaPlugins[info.Type] = plugin
 	}
 	sort.Strings(cluster.ServiceTypes)
 
@@ -150,8 +151,10 @@ type autoApprovalTestPlugin struct {
 	StaticBackendQuota uint64
 }
 
-func (p *autoApprovalTestPlugin) ServiceType() string {
-	return "autoapprovaltest"
+func (p *autoApprovalTestPlugin) ServiceInfo() limes.ServiceInfo {
+	return limes.ServiceInfo{
+		Type: "autoapprovaltest",
+	}
 }
 
 func (p *autoApprovalTestPlugin) Resources() []limes.ResourceInfo {

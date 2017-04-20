@@ -40,7 +40,7 @@ type Project struct {
 //ProjectService is a substructure of Project containing data for
 //a single backend service.
 type ProjectService struct {
-	Type      string           `json:"type"`
+	limes.ServiceInfo
 	Resources ProjectResources `json:"resources,keepempty"`
 	ScrapedAt int64            `json:"scraped_at"`
 }
@@ -158,8 +158,8 @@ func GetProjects(cluster *limes.Cluster, domainID int64, projectID *int64, dbi d
 				continue
 			}
 			service = &ProjectService{
-				Type:      *serviceType,
-				Resources: make(ProjectResources),
+				ServiceInfo: cluster.InfoForService(*serviceType),
+				Resources:   make(ProjectResources),
 			}
 			if scrapedAt != nil {
 				service.ScrapedAt = time.Time(*scrapedAt).Unix()

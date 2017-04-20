@@ -51,9 +51,12 @@ func init() {
 	})
 }
 
-//ServiceType implements the limes.QuotaPlugin interface.
-func (p *swiftPlugin) ServiceType() string {
-	return "object-store"
+//ServiceInfo implements the limes.QuotaPlugin interface.
+func (p *swiftPlugin) ServiceInfo() limes.ServiceInfo {
+	return limes.ServiceInfo{
+		Type: "object-store",
+		Area: "storage",
+	}
 }
 
 //Resources implements the limes.QuotaPlugin interface.

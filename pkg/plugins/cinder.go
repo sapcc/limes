@@ -50,9 +50,12 @@ func init() {
 	})
 }
 
-//ServiceType implements the limes.QuotaPlugin interface.
-func (p *cinderPlugin) ServiceType() string {
-	return "volumev2"
+//ServiceInfo implements the limes.QuotaPlugin interface.
+func (p *cinderPlugin) ServiceInfo() limes.ServiceInfo {
+	return limes.ServiceInfo{
+		Type: "volumev2",
+		Area: "storage",
+	}
 }
 
 //Resources implements the limes.QuotaPlugin interface.

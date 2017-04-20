@@ -41,7 +41,7 @@ type Domain struct {
 //DomainService is a substructure of Domain containing data for
 //a single backend service.
 type DomainService struct {
-	Type         string          `json:"type"`
+	limes.ServiceInfo
 	Resources    DomainResources `json:"resources,keepempty"`
 	MaxScrapedAt int64           `json:"max_scraped_at"`
 	MinScrapedAt int64           `json:"min_scraped_at"`
@@ -251,8 +251,8 @@ func (d domains) Find(cluster *limes.Cluster, domainUUID string, serviceType, re
 			return domain, nil, nil
 		}
 		service = &DomainService{
-			Type:      *serviceType,
-			Resources: make(DomainResources),
+			ServiceInfo: cluster.InfoForService(*serviceType),
+			Resources:   make(DomainResources),
 		}
 		domain.Services[*serviceType] = service
 	}

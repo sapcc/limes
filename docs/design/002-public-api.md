@@ -21,6 +21,7 @@ Returns 200 (OK) on success. Result is a JSON document like:
       "services": [
         {
           "type": "compute",
+          "area": "compute",
           "resources": [
             {
               "name": "instances",
@@ -44,6 +45,7 @@ Returns 200 (OK) on success. Result is a JSON document like:
         },
         {
           "type": "object_storage",
+          "area": "storage",
           "resources": [
             {
               "name": "capacity",
@@ -66,7 +68,8 @@ If `:project_id` was given, the outer key is `project` and its value is the obje
 
 Quota/usage data for the project is ordered into `services`, then into `resources`. In the example above, services
 include `compute` and `object_storage`, and the `compute` service has three resources, `instances`, `cores` and `ram`.
-The service's "type" attribute will be identical to the same field in the Keystone service catalog.
+The service's `type` attribute will be identical to the same field in the Keystone service catalog. Through the `area`
+attribute, services can be grouped into areas like `network` or `storage` for presentational purposes.
 
 The data for each resource must include `quota` and `usage`. If the resource is not counted, but measured in a certain
 unit, it will be given as `unit`. Clients should be prepared to handle at least the following values for `unit`:

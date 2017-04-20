@@ -56,7 +56,7 @@ func NewCluster(id string, config *ClusterConfiguration) *Cluster {
 			continue
 		}
 		plugin := factory(srv)
-		if plugin == nil || plugin.ServiceType() != srv.Type {
+		if plugin == nil || plugin.ServiceInfo().Type != srv.Type {
 			util.LogError("skipping service %s: failed to initialize collector plugin", srv.Type)
 			continue
 		}
@@ -119,4 +119,15 @@ func (c *Cluster) InfoForResource(serviceType, resourceName string) ResourceInfo
 		}
 	}
 	return ResourceInfo{Name: resourceName, Unit: UnitNone}
+}
+
+//InfoForService finds the plugin for the given serviceType and returns its
+//ServiceInfo(), or an empty ServiceInfo (with .Area == "") when no such
+//service exists in this cluster.
+func (c *Cluster) InfoForService(serviceType string) ServiceInfo {
+	plugin := c.QuotaPlugins[serviceType]
+	if plugin == nil {
+		return ServiceInfo{Type: serviceType}
+	}
+	return plugin.ServiceInfo()
 }

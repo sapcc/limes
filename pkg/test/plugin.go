@@ -59,9 +59,11 @@ func NewPlugin(serviceType string) *Plugin {
 	}
 }
 
-//ServiceType implements the limes.QuotaPlugin interface.
-func (p *Plugin) ServiceType() string {
-	return p.StaticServiceType
+//ServiceInfo implements the limes.QuotaPlugin interface.
+func (p *Plugin) ServiceInfo() limes.ServiceInfo {
+	return limes.ServiceInfo{
+		Type: p.StaticServiceType,
+	}
 }
 
 //Resources implements the limes.QuotaPlugin interface.

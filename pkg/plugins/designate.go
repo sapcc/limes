@@ -47,9 +47,12 @@ func init() {
 	})
 }
 
-//ServiceType implements the limes.QuotaPlugin interface.
-func (p *designatePlugin) ServiceType() string {
-	return "dns"
+//ServiceInfo implements the limes.QuotaPlugin interface.
+func (p *designatePlugin) ServiceInfo() limes.ServiceInfo {
+	return limes.ServiceInfo{
+		Type: "dns",
+		Area: "dns",
+	}
 }
 
 //Resources implements the limes.QuotaPlugin interface.

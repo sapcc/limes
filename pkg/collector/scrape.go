@@ -59,7 +59,7 @@ var findProjectQuery = `
 //Errors are logged instead of returned. The function will not return unless
 //startup fails.
 func (c *Collector) Scrape() {
-	serviceType := c.Plugin.ServiceType()
+	serviceType := c.Plugin.ServiceInfo().Type
 	clusterID := c.Driver.Cluster().ID
 
 	//make sure that the counters are reported
@@ -219,8 +219,9 @@ func (c *Collector) writeScrapeResult(domainUUID, projectUUID string, serviceID 
 	if needToSetQuota {
 		err := c.Plugin.SetQuota(c.Driver, domainUUID, projectUUID, quotaValues)
 		if err != nil {
+			serviceType := c.Plugin.ServiceInfo().Type
 			util.LogError("could not rectify frontend/backend quota mismatch for service %s in project %s: %s",
-				c.Plugin.ServiceType(), projectUUID, err.Error(),
+				serviceType, projectUUID, err.Error(),
 			)
 		} else {
 			//backend quota rectified successfully

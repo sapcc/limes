@@ -63,9 +63,12 @@ func init() {
 	})
 }
 
-//ServiceType implements the limes.QuotaPlugin interface.
-func (p *manilaPlugin) ServiceType() string {
-	return "sharev2"
+//ServiceInfo implements the limes.QuotaPlugin interface.
+func (p *manilaPlugin) ServiceInfo() limes.ServiceInfo {
+	return limes.ServiceInfo{
+		Type: "sharev2",
+		Area: "storage",
+	}
 }
 
 //Resources implements the limes.QuotaPlugin interface.
