@@ -136,7 +136,7 @@ func (p *capacityNovaPlugin) Scrape(driver limes.Driver) (map[string]map[string]
 	//	"ram": total_memory_mb,
 	//}
 	return map[string]map[string]uint64{
-		"computev2": {
+		"compute": {
 			"cores":     uint64(hypervisorData.HypervisorStatistics.Vcpus) * vcpuOvercommitFactor,
 			"instances": uint64(math.Min(float64(10000*azCount), float64(hypervisorData.HypervisorStatistics.LocalGb)/maxFlavorSize)),
 			"ram":       uint64(hypervisorData.HypervisorStatistics.MemoryMb),
