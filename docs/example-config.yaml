@@ -47,6 +47,9 @@ clusters:
       - type: object-store
         shared: true
       - type: sharev2
+    capacitors:
+      - id: cinder
+      - id: nova
 
 
 api:
