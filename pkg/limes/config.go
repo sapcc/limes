@@ -75,7 +75,10 @@ type ServiceConfiguration struct {
 //CapacitorConfiguration describes a capacity plugin that is enabled for a
 //certain cluster.
 type CapacitorConfiguration struct {
-	ID string `yaml:"id"`
+	ID   string `yaml:"id"`
+	Nova struct {
+		VCPUOvercommitFactor *uint64 `yaml:"vcpu_overcommit"`
+	} `yaml:"nova"`
 }
 
 //APIConfiguration contains configuration parameters for limes-serve.

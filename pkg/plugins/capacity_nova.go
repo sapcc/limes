@@ -20,12 +20,13 @@
 package plugins
 
 import (
+	"math"
+
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/sapcc/limes/pkg/limes"
-	"math"
 )
 
 type capacityNovaPlugin struct {
@@ -121,6 +122,13 @@ func (p *capacityNovaPlugin) Scrape(driver limes.Driver) (map[string]map[string]
 		}
 	}
 
+	//get overcommit factor from configuration (hypervisor stats unfortunately is
+	//stupid and does not include this factor even though it is in the nova.conf)
+	var vcpuOvercommitFactor uint64 = 1
+	if p.cfg.Nova.VCPUOvercommitFactor != nil {
+		vcpuOvercommitFactor = *p.cfg.Nova.VCPUOvercommitFactor
+	}
+
 	//returns something like
 	//"volumev2": {
 	//	"cores": total_vcpus,
@@ -129,7 +137,7 @@ func (p *capacityNovaPlugin) Scrape(driver limes.Driver) (map[string]map[string]
 	//}
 	return map[string]map[string]uint64{
 		"computev2": {
-			"cores":     uint64(hypervisorData.HypervisorStatistics.Vcpus),
+			"cores":     uint64(hypervisorData.HypervisorStatistics.Vcpus) * vcpuOvercommitFactor,
 			"instances": uint64(math.Min(float64(10000*azCount), float64(hypervisorData.HypervisorStatistics.LocalGb)/maxFlavorSize)),
 			"ram":       uint64(hypervisorData.HypervisorStatistics.MemoryMb),
 		},
