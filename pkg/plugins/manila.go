@@ -87,7 +87,7 @@ func (p *manilaPlugin) Scrape(driver limes.Driver, domainUUID, projectUUID strin
 	}
 
 	var result gophercloud.Result
-	var totalShareUsage, totalSnapshotUsage, totalShareNetworksUsage = int64(0), 0, 0
+	var totalShareUsage, totalSnapshotUsage, totalShareNetworksUsage = uint64(0), uint64(0), uint64(0)
 
 	//Get absolute quota limits per project
 	url := client.ServiceURL("os-quota-sets", projectUUID)
@@ -118,7 +118,7 @@ func (p *manilaPlugin) Scrape(driver limes.Driver, domainUUID, projectUUID strin
 
 	var manilaShareUsageData struct {
 		Shares []struct {
-			Size int64 `json:"size"`
+			Size uint64 `json:"size"`
 		} `json:"shares"`
 	}
 	err = result.ExtractInto(&manilaShareUsageData)
@@ -139,7 +139,7 @@ func (p *manilaPlugin) Scrape(driver limes.Driver, domainUUID, projectUUID strin
 
 	var manilaSnapshotUsageData struct {
 		Snapshots []struct {
-			ShareSize int `json:"share_size"`
+			ShareSize uint64 `json:"share_size"`
 		} `json:"snapshots"`
 	}
 	err = result.ExtractInto(&manilaSnapshotUsageData)
@@ -159,7 +159,7 @@ func (p *manilaPlugin) Scrape(driver limes.Driver, domainUUID, projectUUID strin
 		if err != nil {
 			return false, err
 		}
-		totalShareNetworksUsage = len(sn)
+		totalShareNetworksUsage = uint64(len(sn))
 		return true, nil
 	})
 
