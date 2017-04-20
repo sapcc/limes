@@ -87,7 +87,7 @@ func (p *manilaPlugin) Scrape(driver limes.Driver, domainUUID, projectUUID strin
 	}
 
 	var result gophercloud.Result
-	var totalShareUsage, totalSnapshotUsage, totalShareNetworksUsage = 0, 0, 0
+	var totalShareUsage, totalSnapshotUsage, totalShareNetworksUsage = int64(0), 0, 0
 
 	//Get absolute quota limits per project
 	url := client.ServiceURL("os-quota-sets", projectUUID)
@@ -97,11 +97,11 @@ func (p *manilaPlugin) Scrape(driver limes.Driver, domainUUID, projectUUID strin
 	}
 	var manilaQuotaData struct {
 		QuotaSet struct {
-			Gigabytes         int `json:"gigabytes"`
-			Shares            int `json:"shares"`
-			SnapshotGigabytes int `json:"snapshot_gigabytes"`
-			Snapshots         int `json:"snapshots"`
-			ShareNetworks     int `json:"share_networks"`
+			Gigabytes         int64 `json:"gigabytes"`
+			Shares            int64 `json:"shares"`
+			SnapshotGigabytes int64 `json:"snapshot_gigabytes"`
+			Snapshots         int64 `json:"snapshots"`
+			ShareNetworks     int64 `json:"share_networks"`
 		} `json:"quota_set"`
 	}
 	err = result.ExtractInto(&manilaQuotaData)
@@ -118,7 +118,7 @@ func (p *manilaPlugin) Scrape(driver limes.Driver, domainUUID, projectUUID strin
 
 	var manilaShareUsageData struct {
 		Shares []struct {
-			Size int `json:"size"`
+			Size int64 `json:"size"`
 		} `json:"shares"`
 	}
 	err = result.ExtractInto(&manilaShareUsageData)
@@ -167,23 +167,23 @@ func (p *manilaPlugin) Scrape(driver limes.Driver, domainUUID, projectUUID strin
 
 	return map[string]limes.ResourceData{
 		"shares": {
-			Quota: int64(manilaQuotaData.QuotaSet.Shares),
+			Quota: manilaQuotaData.QuotaSet.Shares,
 			Usage: uint64(len(manilaShareUsageData.Shares)),
 		},
 		"share_snapshots": {
-			Quota: int64(manilaQuotaData.QuotaSet.Snapshots),
+			Quota: manilaQuotaData.QuotaSet.Snapshots,
 			Usage: uint64(len(manilaSnapshotUsageData.Snapshots)),
 		},
 		"share_networks": {
-			Quota: int64(manilaQuotaData.QuotaSet.ShareNetworks),
+			Quota: manilaQuotaData.QuotaSet.ShareNetworks,
 			Usage: uint64(totalShareNetworksUsage),
 		},
 		"share_capacity": {
-			Quota: int64(manilaQuotaData.QuotaSet.Gigabytes),
+			Quota: manilaQuotaData.QuotaSet.Gigabytes,
 			Usage: uint64(totalShareUsage),
 		},
 		"snapshot_capacity": {
-			Quota: int64(manilaQuotaData.QuotaSet.SnapshotGigabytes),
+			Quota: manilaQuotaData.QuotaSet.SnapshotGigabytes,
 			Usage: uint64(totalSnapshotUsage),
 		},
 	}, err
