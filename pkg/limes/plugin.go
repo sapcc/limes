@@ -75,6 +75,10 @@ type CapacityPlugin interface {
 type ResourceInfo struct {
 	Name string
 	Unit Unit
+	//Category is an optional hint that UIs can use to group resources of one
+	//service into subgroups. If it is used, it should be set on all
+	//ResourceInfos reported by the same QuotaPlugin.
+	Category string
 	//If AutoApproveInitialQuota is non-zero, when a new project is scraped for
 	//the first time, a backend quota equal to this value will be approved
 	//automatically (i.e. Quota will be set equal to BackendQuota).
