@@ -27,10 +27,15 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/sapcc/limes/pkg/limes"
+	"github.com/sapcc/limes/pkg/util"
 )
 
 type capacityNovaPlugin struct {
 	cfg limes.CapacitorConfiguration
+}
+
+type extraSpecs struct {
+	ExtraSpecs map[string]string `json:"extra_specs"`
 }
 
 func init() {
@@ -104,7 +109,16 @@ func (p *capacityNovaPlugin) Scrape(driver limes.Driver) (map[string]map[string]
 			return false, err
 		}
 		for _, element := range f {
-			maxFlavorSize = math.Max(maxFlavorSize, float64(element.Disk))
+			extras, err := getFlavorExtras(client, element.ID)
+			if err != nil {
+				util.LogDebug("Failed to get extra specs for flavor: %s.", element.ID)
+				return false, err
+			}
+			//necessary to be able to ignore huge baremetal flavors
+			//consider only flavors with extra specs
+			if len(extras.ExtraSpecs) != 0 {
+				maxFlavorSize = math.Max(maxFlavorSize, float64(element.Disk))
+			}
 		}
 
 		return true, nil
@@ -143,4 +157,26 @@ func (p *capacityNovaPlugin) Scrape(driver limes.Driver) (map[string]map[string]
 		},
 	}, nil
 
+}
+
+//get flavor extra-specs
+//result contains
+//{ "vmware:hv_enabled" : 'True' }
+//which identifies a VM flavor
+func getFlavorExtras(client *gophercloud.ServiceClient, flavorUUID string) (*extraSpecs, error) {
+	var result gophercloud.Result
+	var extraSpecsData extraSpecs
+
+	url := client.ServiceURL("flavors", flavorUUID, "os-extra_specs")
+	_, err := client.Get(url, &result.Body, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	err = result.ExtractInto(&extraSpecsData)
+	if err != nil {
+		return nil, err
+	}
+
+	return &extraSpecsData, nil
 }
