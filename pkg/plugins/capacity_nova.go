@@ -24,6 +24,7 @@ import (
 
 	"strings"
 
+	"fmt"
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
@@ -159,13 +160,20 @@ func (p *capacityNovaPlugin) Scrape(driver limes.Driver) (map[string]map[string]
 	//	"instances": min(10000 per Availability Zone, local_gb/max(flavor size)),
 	//	"ram": total_memory_mb,
 	//}
-	return map[string]map[string]uint64{
+
+	capacity := map[string]map[string]uint64{
 		"compute": {
-			"cores":     uint64(hypervisorData.HypervisorStatistics.Vcpus) * vcpuOvercommitFactor,
-			"instances": uint64(math.Min(float64(10000*azCount), float64(hypervisorData.HypervisorStatistics.LocalGb)/maxFlavorSize)),
-			"ram":       uint64(hypervisorData.HypervisorStatistics.MemoryMb),
-		},
-	}, nil
+			"cores": uint64(hypervisorData.HypervisorStatistics.Vcpus) * vcpuOvercommitFactor,
+			"ram":   uint64(hypervisorData.HypervisorStatistics.MemoryMb)},
+	}
+
+	if maxFlavorSize != 0 {
+		capacity["compute"]["instances"] = uint64(math.Min(float64(10000*azCount), float64(hypervisorData.HypervisorStatistics.LocalGb)/maxFlavorSize))
+	} else {
+		util.LogError("Nova Capacity: Maximal flavor size is 0. Not reporting instances.")
+	}
+
+	return capacity, nil
 
 }
 
