@@ -22,6 +22,8 @@ package plugins
 import (
 	"math"
 
+	"strings"
+
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
@@ -114,10 +116,18 @@ func (p *capacityNovaPlugin) Scrape(driver limes.Driver) (map[string]map[string]
 				util.LogDebug("Failed to get extra specs for flavor: %s.", element.ID)
 				return false, err
 			}
+
 			//necessary to be able to ignore huge baremetal flavors
-			//consider only flavors with extra specs
-			if len(extras.ExtraSpecs) != 0 {
-				maxFlavorSize = math.Max(maxFlavorSize, float64(element.Disk))
+			//consider only flavors as defined in extra specs
+			var extraSpecs map[string]string
+			if p.cfg.Nova.ExtraSpecs != nil {
+				extraSpecs = p.cfg.Nova.ExtraSpecs
+			}
+
+			for key, value := range extraSpecs {
+				if value == strings.Replace(extras.ExtraSpecs[key], "'", "", -1) {
+					maxFlavorSize = math.Max(maxFlavorSize, float64(element.Disk))
+				}
 			}
 		}
 

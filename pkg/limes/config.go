@@ -77,7 +77,8 @@ type ServiceConfiguration struct {
 type CapacitorConfiguration struct {
 	ID   string `yaml:"id"`
 	Nova struct {
-		VCPUOvercommitFactor *uint64 `yaml:"vcpu_overcommit"`
+		VCPUOvercommitFactor *uint64           `yaml:"vcpu_overcommit"`
+		ExtraSpecs           map[string]string `yaml:"extra_specs"`
 	} `yaml:"nova"`
 }
 
