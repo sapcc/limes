@@ -114,10 +114,18 @@ func (p *capacityNovaPlugin) Scrape(driver limes.Driver) (map[string]map[string]
 				util.LogDebug("Failed to get extra specs for flavor: %s.", element.ID)
 				return false, err
 			}
+
 			//necessary to be able to ignore huge baremetal flavors
-			//consider only flavors with extra specs
-			if len(extras.ExtraSpecs) != 0 {
-				maxFlavorSize = math.Max(maxFlavorSize, float64(element.Disk))
+			//consider only flavors as defined in extra specs
+			var extraSpecs = map[string]string{}
+			if p.cfg.Nova.ExtraSpecs != nil {
+				extraSpecs = p.cfg.Nova.ExtraSpecs
+			}
+
+			for key, value := range extraSpecs {
+				if value == extras.ExtraSpecs[key] {
+					maxFlavorSize = math.Max(maxFlavorSize, float64(element.Disk))
+				}
 			}
 		}
 
@@ -149,13 +157,20 @@ func (p *capacityNovaPlugin) Scrape(driver limes.Driver) (map[string]map[string]
 	//	"instances": min(10000 per Availability Zone, local_gb/max(flavor size)),
 	//	"ram": total_memory_mb,
 	//}
-	return map[string]map[string]uint64{
+
+	capacity := map[string]map[string]uint64{
 		"compute": {
-			"cores":     uint64(hypervisorData.HypervisorStatistics.Vcpus) * vcpuOvercommitFactor,
-			"instances": uint64(math.Min(float64(10000*azCount), float64(hypervisorData.HypervisorStatistics.LocalGb)/maxFlavorSize)),
-			"ram":       uint64(hypervisorData.HypervisorStatistics.MemoryMb),
-		},
-	}, nil
+			"cores": uint64(hypervisorData.HypervisorStatistics.Vcpus) * vcpuOvercommitFactor,
+			"ram":   uint64(hypervisorData.HypervisorStatistics.MemoryMb)},
+	}
+
+	if maxFlavorSize != 0 {
+		capacity["compute"]["instances"] = uint64(math.Min(float64(10000*azCount), float64(hypervisorData.HypervisorStatistics.LocalGb)/maxFlavorSize))
+	} else {
+		util.LogError("Nova Capacity: Maximal flavor size is 0. Not reporting instances.")
+	}
+
+	return capacity, nil
 
 }
 
