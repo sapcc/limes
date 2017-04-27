@@ -5,6 +5,7 @@
     "services": [
       {
         "type": "shared",
+        "area": "shared",
         "resources": [
           {
             "name": "capacity",
@@ -23,6 +24,7 @@
       },
       {
         "type": "unshared",
+        "area": "unshared",
         "resources": [
           {
             "name": "capacity",

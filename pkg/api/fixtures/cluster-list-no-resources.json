@@ -5,6 +5,7 @@
       "services": [
         {
           "type": "shared",
+          "area": "shared",
           "resources": [],
           "max_scraped_at": 88,
           "min_scraped_at": 88
@@ -18,6 +19,7 @@
       "services": [
         {
           "type": "shared",
+          "area": "shared",
           "resources": [],
           "max_scraped_at": 66,
           "min_scraped_at": 22

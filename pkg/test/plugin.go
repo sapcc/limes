@@ -63,6 +63,7 @@ func NewPlugin(serviceType string) *Plugin {
 func (p *Plugin) ServiceInfo() limes.ServiceInfo {
 	return limes.ServiceInfo{
 		Type: p.StaticServiceType,
+		Area: p.StaticServiceType,
 	}
 }
 

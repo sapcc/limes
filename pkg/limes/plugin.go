@@ -90,7 +90,7 @@ type ServiceInfo struct {
 	//the Keystone service catalog.
 	Type string `json:"type"`
 	//Area is a hint that UIs can use to group similar services.
-	Area string `json:"area,omitempty"`
+	Area string `json:"area"`
 }
 
 //Unit enumerates allowed values for the unit a resource's quota/usage is
