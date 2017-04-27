@@ -36,6 +36,12 @@ import (
 
 type object map[string]interface{}
 
+func init() {
+	//This is required for limes.GetServiceTypesForArea() to work.
+	limes.RegisterQuotaPlugin(test.NewPluginFactory("shared"))
+	limes.RegisterQuotaPlugin(test.NewPluginFactory("unshared"))
+}
+
 func setupTest(t *testing.T) (*test.Driver, http.Handler) {
 	//load test database
 	test.InitDatabase(t, "../test/migrations")
@@ -538,6 +544,26 @@ func Test_ProjectOperations(t *testing.T) {
 	test.APIRequest{
 		Method:           "GET",
 		Path:             "/v1/domains/uuid-for-germany/projects?service=shared&resource=things",
+		ExpectStatusCode: 200,
+		ExpectJSON:       "./fixtures/project-list-filtered.json",
+	}.Check(t, router)
+
+	//check ?area= filter (esp. interaction with ?service= filter)
+	test.APIRequest{
+		Method:           "GET",
+		Path:             "/v1/domains/uuid-for-germany/projects?area=unknown",
+		ExpectStatusCode: 200,
+		ExpectJSON:       "./fixtures/project-list-no-services.json",
+	}.Check(t, router)
+	test.APIRequest{
+		Method:           "GET",
+		Path:             "/v1/domains/uuid-for-germany/projects?area=shared&service=unshared",
+		ExpectStatusCode: 200,
+		ExpectJSON:       "./fixtures/project-list-no-services.json",
+	}.Check(t, router)
+	test.APIRequest{
+		Method:           "GET",
+		Path:             "/v1/domains/uuid-for-germany/projects?area=shared&resource=things",
 		ExpectStatusCode: 200,
 		ExpectJSON:       "./fixtures/project-list-filtered.json",
 	}.Check(t, router)

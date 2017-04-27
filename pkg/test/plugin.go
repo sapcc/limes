@@ -59,6 +59,14 @@ func NewPlugin(serviceType string) *Plugin {
 	}
 }
 
+//NewPluginFactory creates a new PluginFactory for limes.RegisterQuotaPlugin.
+func NewPluginFactory(serviceType string) func(limes.ServiceConfiguration) limes.QuotaPlugin {
+	return func(cfg limes.ServiceConfiguration) limes.QuotaPlugin {
+		//cfg is ignored
+		return NewPlugin(serviceType)
+	}
+}
+
 //ServiceInfo implements the limes.QuotaPlugin interface.
 func (p *Plugin) ServiceInfo() limes.ServiceInfo {
 	return limes.ServiceInfo{

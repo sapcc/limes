@@ -140,6 +140,7 @@ type CapacityPluginFactory func(CapacitorConfiguration) CapacityPlugin
 
 var quotaPluginFactories = map[string]QuotaPluginFactory{}
 var capacityPluginFactories = map[string]CapacityPluginFactory{}
+var serviceTypesByArea = map[string][]string{}
 
 //RegisterQuotaPlugin registers a QuotaPlugin with this package. It may only be
 //called once, typically in a func init() for the package that offers the
@@ -162,6 +163,13 @@ func RegisterQuotaPlugin(factory QuotaPluginFactory) {
 		panic("collector.RegisterQuotaPlugin() called multiple times for service type: " + info.Type)
 	}
 	quotaPluginFactories[info.Type] = factory
+	serviceTypesByArea[info.Area] = append(serviceTypesByArea[info.Area], info.Type)
+}
+
+//GetServiceTypesForArea returns a list of all service types whose QuotaPlugins
+//report the given area.
+func GetServiceTypesForArea(area string) []string {
+	return serviceTypesByArea[area]
 }
 
 //RegisterCapacityPlugin registers a CapacityPlugin with this package. It may

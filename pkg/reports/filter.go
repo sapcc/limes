@@ -24,6 +24,7 @@ import (
 	"regexp"
 
 	"github.com/sapcc/limes/pkg/db"
+	"github.com/sapcc/limes/pkg/limes"
 )
 
 //Filter describes query parameters that can be sent to various GET endpoints
@@ -46,6 +47,38 @@ func ReadFilter(r *http.Request) Filter {
 	if f.resourceNames, ok = queryValues["resource"]; !ok {
 		f.resourceNames = nil
 	}
+
+	if areas, ok := queryValues["area"]; ok {
+		var areaServices []string
+		for _, area := range areas {
+			areaServices = append(areaServices, limes.GetServiceTypesForArea(area)...)
+		}
+
+		if len(f.serviceTypes) == 0 {
+			//convert area filter into service filter by finding all services in these areas
+			f.serviceTypes = areaServices
+		} else {
+			//restrict services filter using the area filter
+			isAreaService := make(map[string]bool, len(areaServices))
+			for _, serviceType := range areaServices {
+				isAreaService[serviceType] = true
+			}
+			var filteredServiceTypes []string
+			for _, serviceType := range f.serviceTypes {
+				if isAreaService[serviceType] {
+					filteredServiceTypes = append(filteredServiceTypes, serviceType)
+				}
+			}
+			f.serviceTypes = filteredServiceTypes
+		}
+
+		//if the given areas do not exist, insert a bogus service type now because
+		//`f.serviceTypes == nil` will be misinterpreted as "no filter"
+		if len(f.serviceTypes) == 0 {
+			f.serviceTypes = []string{""}
+		}
+	}
+
 	return f
 }
 
