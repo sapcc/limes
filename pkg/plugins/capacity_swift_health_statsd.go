@@ -63,6 +63,7 @@ func (p *capacitySwiftHealthStatsdPlugin) ID() string {
 //Scrape implements the limes.CapacityPlugin interface.
 func (p *capacitySwiftHealthStatsdPlugin) Scrape(driver limes.Driver) (map[string]map[string]uint64, error) {
 
+	var prometheusQuery = "min(swift_cluster_storage_capacity_bytes_gauge < inf)"
 	var prometheusAPIURL = "https://localhost:9090"
 	if p.cfg.Swift.PrometheusAPIURL != "" {
 		prometheusAPIURL = p.cfg.Swift.PrometheusAPIURL
@@ -76,13 +77,14 @@ func (p *capacitySwiftHealthStatsdPlugin) Scrape(driver limes.Driver) (map[strin
 	var value model.Value
 	var resultVector model.Vector
 
-	value, err = client.Query(context.Background(), "min(swift_cluster_storage_capacity_bytes_gauge < inf)", time.Now())
+	value, err = client.Query(context.Background(), prometheusQuery, time.Now())
 	if err != nil {
+		util.LogError("Could not get value for query %s from Prometheus %s.", prometheusQuery, prometheusAPIURL)
 		return nil, err
 	}
 	resultVector, ok := value.(model.Vector)
 	if !ok {
-		util.LogDebug("Could not get value for query min(swift_cluster_storage_capacity_bytes_gauge < inf) from Prometheus")
+		util.LogError("Could not get value for query %s from Prometheus due to type mismatch.", prometheusQuery)
 		return nil, nil
 	}
 
