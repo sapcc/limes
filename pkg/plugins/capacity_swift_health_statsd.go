@@ -29,13 +29,13 @@ import (
 	"golang.org/x/net/context"
 )
 
-type capacitySwiftPlugin struct {
+type capacitySwiftHealthStatsdPlugin struct {
 	cfg limes.CapacitorConfiguration
 }
 
 func init() {
 	limes.RegisterCapacityPlugin(func(c limes.CapacitorConfiguration) limes.CapacityPlugin {
-		return &capacitySwiftPlugin{c}
+		return &capacitySwiftHealthStatsdPlugin{c}
 	})
 }
 
@@ -56,12 +56,12 @@ func Client(prometheusAPIURL string) (prometheus.QueryAPI, error) {
 	return prometheus.NewQueryAPI(client), nil
 }
 
-func (p *capacitySwiftPlugin) ID() string {
+func (p *capacitySwiftHealthStatsdPlugin) ID() string {
 	return "swift-health-statsd"
 }
 
 //Scrape implements the limes.CapacityPlugin interface.
-func (p *capacitySwiftPlugin) Scrape(driver limes.Driver) (map[string]map[string]uint64, error) {
+func (p *capacitySwiftHealthStatsdPlugin) Scrape(driver limes.Driver) (map[string]map[string]uint64, error) {
 
 	var prometheusAPIURL = "https://localhost:9090"
 	if p.cfg.Swift.PrometheusAPIURL != "" {
