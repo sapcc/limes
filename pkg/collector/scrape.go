@@ -105,7 +105,7 @@ func (c *Collector) Scrape() {
 			continue
 		}
 
-		err = c.writeScrapeResult(domainUUID, projectUUID, serviceID, resourceData, c.TimeNow())
+		err = c.writeScrapeResult(domainUUID, projectUUID, serviceType, serviceID, resourceData, c.TimeNow())
 		if err != nil {
 			c.LogError("write %s backend data for %s/%s failed: %s", serviceType, domainName, projectName, err.Error())
 			scrapeFailedCounter.With(labels).Inc()
@@ -126,7 +126,7 @@ func (c *Collector) Scrape() {
 	}
 }
 
-func (c *Collector) writeScrapeResult(domainUUID, projectUUID string, serviceID int64, resourceData map[string]limes.ResourceData, scrapedAt time.Time) error {
+func (c *Collector) writeScrapeResult(domainUUID, projectUUID, serviceType string, serviceID int64, resourceData map[string]limes.ResourceData, scrapedAt time.Time) error {
 	tx, err := db.DB.Begin()
 	if err != nil {
 		return err
@@ -166,6 +166,7 @@ func (c *Collector) writeScrapeResult(domainUUID, projectUUID string, serviceID 
 	}
 
 	//insert missing project_resources entries
+	var auditTrail util.AuditTrail
 	for _, resMetadata := range c.Plugin.Resources() {
 		if _, exists := quotaValues[resMetadata.Name]; exists {
 			continue
@@ -180,6 +181,9 @@ func (c *Collector) writeScrapeResult(domainUUID, projectUUID string, serviceID 
 		}
 		if data.Quota > 0 && uint64(data.Quota) == resMetadata.AutoApproveInitialQuota {
 			res.Quota = resMetadata.AutoApproveInitialQuota
+			auditTrail.Add("set quota %s.%s = 0 -> %d for project %s through auto-approval",
+				serviceType, resMetadata.Name, res.Quota, projectUUID,
+			)
 		}
 
 		err = tx.Insert(res)
@@ -206,6 +210,7 @@ func (c *Collector) writeScrapeResult(domainUUID, projectUUID string, serviceID 
 	if err != nil {
 		return err
 	}
+	auditTrail.Commit()
 
 	//feature gate for automatic quota alignment
 	if os.Getenv("LIMES_NO_AUTO_QUOTA_ALIGNMENT") == "1" {

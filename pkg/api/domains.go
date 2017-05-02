@@ -143,6 +143,7 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 	var resourcesToUpdateAsUntyped []interface{}
 	var errors []string
 
+	var auditTrail util.AuditTrail
 	for _, srv := range services {
 		resourceQuotas, exists := serviceQuotas[srv.Type]
 		if !exists {
@@ -175,6 +176,10 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 			//we didn't take a copy manually, the resourcesToUpdateAsUntyped list
 			//would contain only identical pointers)
 			res := res
+			auditTrail.Add("set quota %s.%s = %d -> %d for domain %s by user %s (%s)",
+				srv.Type, res.Name, res.Quota, newQuota,
+				dbDomain.UUID, token.UserUUID, token.UserName,
+			)
 			res.Quota = newQuota
 			resourcesToUpdate = append(resourcesToUpdate, res)
 			resourcesToUpdateAsUntyped = append(resourcesToUpdateAsUntyped, &res)
@@ -199,6 +204,7 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 	if ReturnError(w, err) {
 		return
 	}
+	auditTrail.Commit()
 
 	//otherwise, report success
 	domains, err := reports.GetDomains(p.Driver.Cluster(), &dbDomain.ID, db.DB, reports.ReadFilter(r))

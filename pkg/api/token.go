@@ -33,6 +33,9 @@ type Token struct {
 	enforcer *policy.Enforcer
 	context  policy.Context
 	err      error
+	//some attributes from the policy.Context that are useful for logging
+	UserUUID string
+	UserName string
 }
 
 //CheckToken checks the validity of the request's X-Auth-Token in Keystone, and
@@ -47,6 +50,8 @@ func (p *v1Provider) CheckToken(r *http.Request) *Token {
 	t := &Token{enforcer: p.Config.API.PolicyEnforcer}
 	t.context, t.err = p.Driver.ValidateToken(str)
 	t.context.Request = mux.Vars(r)
+	t.UserUUID = t.context.Auth["user_id"]
+	t.UserName = t.context.Auth["user_name"]
 	return t
 }
 

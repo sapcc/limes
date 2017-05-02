@@ -210,6 +210,7 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 	servicesToUpdate := make(map[string]bool)
 	var errors []string
 
+	var auditTrail util.AuditTrail
 	for _, srv := range services {
 		resourceQuotas, exists := serviceQuotas[srv.Type]
 		if !exists {
@@ -242,6 +243,10 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 			//we didn't take a copy manually, the resourcesToUpdateAsUntyped list
 			//would contain only identical pointers)
 			res := res
+			auditTrail.Add("set quota %s.%s = %d -> %d for project %s by user %s (%s)",
+				srv.Type, res.Name, res.Quota, newQuota,
+				dbProject.UUID, token.UserUUID, token.UserName,
+			)
 			res.Quota = newQuota
 			resourcesToUpdate = append(resourcesToUpdate, res)
 			resourcesToUpdateAsUntyped = append(resourcesToUpdateAsUntyped, &res)
@@ -267,6 +272,7 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 	if ReturnError(w, err) {
 		return
 	}
+	auditTrail.Commit()
 
 	//attempt to write the quotas into the backend
 	//

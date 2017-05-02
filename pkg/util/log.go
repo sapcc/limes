@@ -20,6 +20,7 @@
 package util
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -61,4 +62,24 @@ func doLog(msg string, args []interface{}) {
 	} else {
 		log.Println(msg)
 	}
+}
+
+//AuditTrail is a list of log lines with log level AUDIT. It has a separate
+//interface from the rest of the logging to allow to withhold the logging until
+//DB changes are committed.
+type AuditTrail struct {
+	lines []string
+}
+
+//Add adds a line to the audit trail.
+func (t *AuditTrail) Add(msg string, args ...interface{}) {
+	t.lines = append(t.lines, fmt.Sprintf(msg, args...))
+}
+
+//Commit sends the whole audit trail into the log. Call this after tx.Commit().
+func (t *AuditTrail) Commit() {
+	for _, line := range t.lines {
+		doLog("AUDIT: "+line, nil)
+	}
+	t.lines = nil //do not log these lines again
 }
