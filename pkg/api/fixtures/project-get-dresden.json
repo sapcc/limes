@@ -2,6 +2,7 @@
   "project": {
     "id": "uuid-for-dresden",
     "name": "dresden",
+    "parent_id": "uuid-for-berlin",
     "services": [
       {
         "type": "shared",

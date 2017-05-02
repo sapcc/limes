@@ -2,6 +2,7 @@
   "project": {
     "id": "uuid-for-paris",
     "name": "paris",
+    "parent_id": "uuid-for-france",
     "services": [
       {
         "type": "shared",

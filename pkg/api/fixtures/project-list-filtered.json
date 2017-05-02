@@ -3,6 +3,7 @@
     {
       "id": "uuid-for-berlin",
       "name": "berlin",
+      "parent_id": "uuid-for-germany",
       "services": [
         {
           "type": "shared",
@@ -21,6 +22,7 @@
     {
       "id": "uuid-for-dresden",
       "name": "dresden",
+      "parent_id": "uuid-for-berlin",
       "services": [
         {
           "type": "shared",

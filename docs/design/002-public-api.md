@@ -19,6 +19,7 @@ Returns 200 (OK) on success. Result is a JSON document like:
     {
       "id": "8ad3bf54-2401-435e-88ad-e80fbf984c19",
       "name": "example-project",
+      "parent_id": "e4864dd1-1929-4b41-bb69-e5a724f20fa2",
       "services": [
         {
           "type": "compute",
@@ -66,6 +67,9 @@ Returns 200 (OK) on success. Result is a JSON document like:
 ```
 
 If `:project_id` was given, the outer key is `project` and its value is the object without the array surrounding it.
+
+On the project level, the `id`, `name` and `parent_id` from Keystone are shown. (The parent ID refers to the parent
+project if there is one, otherwise it is identical to the domain ID.)
 
 Quota/usage data for the project is ordered into `services`, then into `resources`. In the example above, services
 include `compute` and `object_storage`, and the `compute` service has three resources, `instances`, `cores` and `ram`.
