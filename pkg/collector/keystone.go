@@ -187,9 +187,20 @@ func ScanProjects(driver limes.Driver, domain *db.Domain) ([]string, error) {
 		dbProject, exists := existingProjectsByUUID[project.UUID]
 		if exists {
 			//check if the name was updated in Keystone
+			needToSave := false
 			if dbProject.Name != project.Name {
 				util.LogInfo("discovered Keystone project name change: %s/%s -> %s", domain.Name, dbProject.Name, project.Name)
 				dbProject.Name = project.Name
+				needToSave = true
+			}
+			if dbProject.ParentUUID != project.ParentUUID {
+				util.LogInfo("discovered Keystone project parent change for %s/%s: %s -> %s",
+					domain.Name, dbProject.Name, dbProject.ParentUUID, project.ParentUUID,
+				)
+				dbProject.ParentUUID = project.ParentUUID
+				needToSave = true
+			}
+			if needToSave {
 				_, err := db.DB.Update(dbProject)
 				if err != nil {
 					return result, err
@@ -221,9 +232,10 @@ func initProject(driver limes.Driver, domain *db.Domain, project limes.KeystoneP
 
 	//add record to `projects` table
 	dbProject := &db.Project{
-		DomainID: domain.ID,
-		Name:     project.Name,
-		UUID:     project.UUID,
+		DomainID:   domain.ID,
+		Name:       project.Name,
+		UUID:       project.UUID,
+		ParentUUID: project.ParentUUID,
 	}
 	err = db.DB.Insert(dbProject)
 	if err != nil {

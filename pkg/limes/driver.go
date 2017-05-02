@@ -52,8 +52,9 @@ type KeystoneDomain struct {
 
 //KeystoneProject describes the basic attributes of a Keystone project.
 type KeystoneProject struct {
-	UUID string `json:"id"`
-	Name string `json:"name"`
+	UUID       string `json:"id"`
+	Name       string `json:"name"`
+	ParentUUID string `json:"parent_id"`
 }
 
 //ResourceData contains quota and usage data for a single resource.

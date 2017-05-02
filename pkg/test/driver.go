@@ -46,11 +46,11 @@ func NewDriver(cluster *limes.Cluster) *Driver {
 		},
 		StaticProjects: map[string][]limes.KeystoneProject{
 			"uuid-for-germany": {
-				{Name: "berlin", UUID: "uuid-for-berlin"},
-				{Name: "dresden", UUID: "uuid-for-dresden"},
+				{Name: "berlin", UUID: "uuid-for-berlin", ParentUUID: "uuid-for-germany"},
+				{Name: "dresden", UUID: "uuid-for-dresden", ParentUUID: "uuid-for-berlin"},
 			},
 			"uuid-for-france": {
-				{Name: "paris", UUID: "uuid-for-paris"},
+				{Name: "paris", UUID: "uuid-for-paris", ParentUUID: "uuid-for-france"},
 			},
 		},
 	}

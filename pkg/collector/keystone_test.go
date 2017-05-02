@@ -77,7 +77,7 @@ func Test_ScanDomains(t *testing.T) {
 	//add another project
 	domainUUID := "uuid-for-france"
 	driver.StaticProjects[domainUUID] = append(driver.StaticProjects[domainUUID],
-		limes.KeystoneProject{Name: "bordeaux", UUID: "uuid-for-bordeaux"},
+		limes.KeystoneProject{Name: "bordeaux", UUID: "uuid-for-bordeaux", ParentUUID: "uuid-for-france"},
 	)
 
 	//ScanDomains without ScanAllProjects should not see this new project
