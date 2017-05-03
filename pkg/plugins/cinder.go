@@ -119,7 +119,7 @@ func (p *cinderPlugin) Scrape(driver limes.Driver, domainUUID, projectUUID strin
 func (p *cinderPlugin) SetQuota(driver limes.Driver, domainUUID, projectUUID string, quotas map[string]uint64) error {
 	requestData := map[string]map[string]uint64{
 		"quota_set": {
-			"gigabytes": quotas["gigabytes"],
+			"gigabytes": quotas["capacity"],
 			"snapshots": quotas["snapshots"],
 			"volumes":   quotas["volumes"],
 		},
