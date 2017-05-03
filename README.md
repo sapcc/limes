@@ -31,6 +31,10 @@ all levels of the hierarchy.
 * [API specification](./docs/users/api-v1-specification.md)
 * [API usage example](./docs/users/api-example.md)
 
+## For developers
+
+* [Developer's guide](./docs/developers/guide.md)
+
 # Installation
 
 There's a Makefile, so do:
