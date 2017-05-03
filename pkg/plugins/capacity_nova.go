@@ -130,6 +130,7 @@ func (p *capacityNovaPlugin) Scrape(driver limes.Driver) (map[string]map[string]
 				}
 			}
 			if matches {
+				util.LogDebug("FlavorName: %s, FlavorID: %s, FlavorSize: %d GiB", element.Name, element.ID, element.Disk)
 				maxFlavorSize = math.Max(maxFlavorSize, float64(element.Disk))
 			}
 		}
