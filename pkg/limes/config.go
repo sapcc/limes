@@ -84,7 +84,8 @@ type CapacitorConfiguration struct {
 		ExtraSpecs           map[string]string `yaml:"extra_specs"`
 	} `yaml:"nova"`
 	Swift struct {
-		PrometheusAPIURL string `yaml:"prometheus_api_url"`
+		PrometheusAPIURL string  `yaml:"prometheus_api_url"`
+		AdjustmentFactor float64 `yaml:"adjustment_factor"`
 	} `yaml:"swift"`
 	Manual map[string]map[string]uint64 `yaml:"manual"`
 }

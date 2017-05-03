@@ -77,6 +77,8 @@ func (p *capacitySwiftHealthStatsdPlugin) Scrape(driver limes.Driver) (map[strin
 
 	var value model.Value
 	var resultVector model.Vector
+	var capacity = map[string]uint64{}
+	var adjustmentFactor = 1.0
 
 	value, err = client.Query(context.Background(), prometheusQuery, time.Now())
 	if err != nil {
@@ -89,14 +91,20 @@ func (p *capacitySwiftHealthStatsdPlugin) Scrape(driver limes.Driver) (map[strin
 		return nil, nil
 	}
 
+	if p.cfg.Swift.AdjustmentFactor != 0 {
+		adjustmentFactor = p.cfg.Swift.AdjustmentFactor
+	}
+
+	if resultVector.Len() != 0 {
+		capacity["capacity"] = uint64(float64(resultVector[0].Value) * adjustmentFactor)
+	}
+
 	//returns something like
 	//"object-store": {
 	//	"capacity": capacity,
 	//}
 	return map[string]map[string]uint64{
-		"object-store": {
-			"capacity": uint64(resultVector[0].Value),
-		},
+		"object-store": capacity,
 	}, nil
 
 }
