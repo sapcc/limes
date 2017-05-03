@@ -75,7 +75,10 @@ type ServiceConfiguration struct {
 //CapacitorConfiguration describes a capacity plugin that is enabled for a
 //certain cluster.
 type CapacitorConfiguration struct {
-	ID   string `yaml:"id"`
+	ID string `yaml:"id"`
+	//for capacitors that need configuration, add a field with the plugin's ID as
+	//name and put the config data in there (use a struct to be able to give
+	//config options meaningful names)
 	Nova struct {
 		VCPUOvercommitFactor *uint64           `yaml:"vcpu_overcommit"`
 		ExtraSpecs           map[string]string `yaml:"extra_specs"`
@@ -83,6 +86,7 @@ type CapacitorConfiguration struct {
 	Swift struct {
 		PrometheusAPIURL string `yaml:"prometheus_api_url"`
 	} `yaml:"swift"`
+	Manual map[string]map[string]uint64 `yaml:"manual"`
 }
 
 //APIConfiguration contains configuration parameters for limes-serve.

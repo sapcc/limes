@@ -56,6 +56,7 @@ func Client(prometheusAPIURL string) (prometheus.QueryAPI, error) {
 	return prometheus.NewQueryAPI(client), nil
 }
 
+//ID implements the limes.CapacityPlugin interface.
 func (p *capacitySwiftHealthStatsdPlugin) ID() string {
 	return "swift-health-statsd"
 }
