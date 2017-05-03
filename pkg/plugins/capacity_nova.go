@@ -122,10 +122,15 @@ func (p *capacityNovaPlugin) Scrape(driver limes.Driver) (map[string]map[string]
 				extraSpecs = p.cfg.Nova.ExtraSpecs
 			}
 
+			matches := true
 			for key, value := range extraSpecs {
-				if value == extras.ExtraSpecs[key] {
-					maxFlavorSize = math.Max(maxFlavorSize, float64(element.Disk))
+				if value != extras.ExtraSpecs[key] {
+					matches = false
+					break
 				}
+			}
+			if matches {
+				maxFlavorSize = math.Max(maxFlavorSize, float64(element.Disk))
 			}
 		}
 
