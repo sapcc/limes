@@ -1,5 +1,11 @@
 # Public API specification
 
+The URLs indicated in the headers of each section are relative to the endpoint URL advertised in the Keystone
+catalog under the service type `resources`.
+
+Where permission requirements are indicated, they refer to the default policy. Limes operators can configure their
+policy differently, so that certain requests may require other roles or token scopes.
+
 ## GET /v1/domains/:domain\_id/projects
 ## GET /v1/domains/:domain\_id/projects/:project\_id
 
