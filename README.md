@@ -23,6 +23,14 @@ write these approved project quotas into the backend services that actually mana
 resource usage in all projects in all domains, so that users can make informed decisions about resource allocation at
 all levels of the hierarchy.
 
+# Documentation
+
+## For users
+
+* [Index](./docs/users/index.md)
+* [API specification](./docs/users/api-v1-specification.md)
+* [API usage example](./docs/users/api-example.md)
+
 # Installation
 
 There's a Makefile, so do:

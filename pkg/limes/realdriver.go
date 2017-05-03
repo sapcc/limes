@@ -56,6 +56,8 @@ func NewDriver(cfg *Cluster) (Driver, error) {
 	if err != nil {
 		return nil, fmt.Errorf("cannot fetch initial Keystone token: %v", err)
 	}
+
+	//TODO: d.ProviderClient.UserAgent.Prepend("limes/%s", versionString)
 	return d, nil
 }
 

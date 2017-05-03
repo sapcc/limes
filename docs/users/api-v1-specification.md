@@ -1,7 +1,13 @@
 # Public API specification
 
-## GET /domains/:domain\_id/projects
-## GET /domains/:domain\_id/projects/:project\_id
+The URLs indicated in the headers of each section are relative to the endpoint URL advertised in the Keystone
+catalog under the service type `resources`.
+
+Where permission requirements are indicated, they refer to the default policy. Limes operators can configure their
+policy differently, so that certain requests may require other roles or token scopes.
+
+## GET /v1/domains/:domain\_id/projects
+## GET /v1/domains/:domain\_id/projects/:project\_id
 
 Query data for projects in a domain. `:project_id` is optional for domain admins. With domain admin token, shows
 projects in that token's domain. With project member permission, shows that token's project only. Arguments:
@@ -106,8 +112,8 @@ indicates an infinite or disabled quota.
 
 TODO: Might need to add ordering and pagination to this at some point.
 
-## GET /domains
-## GET /domains/:domain\_id
+## GET /v1/domains
+## GET /v1/domains/:domain\_id
 
 Query data for domains. `:domain_id` is optional for cloud admins. With cloud admin token, shows all domains. With
 domain admin token, shows that token's domain only. Arguments:
@@ -199,9 +205,9 @@ In contrast to project data, `scraped_at` is replaced by `min_scraped_at` and `m
 **TODO:** Open question: Instead of aggregating backend quotas, maybe just include
 a `warnings` field that counts projects with `quota != backend_quota`?
 
-## GET /clusters
-## GET /clusters/:cluster\_id
-## GET /clusters/current
+## GET /v1/clusters
+## GET /v1/clusters/:cluster\_id
+## GET /v1/clusters/current
 
 Query data for clusters. Requires a cloud-admin token. Arguments:
 
@@ -291,7 +297,7 @@ For resources belonging to a cluster-local service (the default), the reported q
 domains in this cluster. For resources belonging to a shared service, the reported quota and usage is aggregated over
 all domains in all clusters, and will thus be the same for every cluster listed.
 
-## POST /domains/discover
+## POST /v1/domains/discover
 
 Requires a cloud-admin token. Queries Keystone in order to discover newly-created domains that Limes does not yet know
 about.
@@ -315,7 +321,7 @@ When the call returns, quota/usage data for these domains will not yet be availa
 after that, but he can only do so after Limes has discovered the new domain. Limes will do so automatically after some
 time through scheduled auto-discovery, but this call can be used to reduce the waiting time.
 
-## POST /domains/:domain\_id/projects/discover
+## POST /v1/domains/:domain\_id/projects/discover
 
 Requires a domain-admin token for the specified domain. Queries Keystone in order to discover newly-created projects in
 this domain that Limes does not yet know about. This works exactly like `POST /domains/discover`, except that the JSON
@@ -324,7 +330,7 @@ document will list `new_projects` instead of `new_domains`.
 *Rationale:* Same as for domain discovery: The domain admin might want to assign quotas immediately after creating a new
 project.
 
-## POST /domains/:domain\_id/projects/:project\_id/sync
+## POST /v1/domains/:domain\_id/projects/:project\_id/sync
 
 Requires a project-admin token for the specified project. Schedules a sync job that pulls quota and usage data for this
 project from the backing services into Limes' local database. When the job was scheduled successfully, returns 202
@@ -336,7 +342,7 @@ If the project does not exist in Limes' database yet, query Keystone to see if t
 shown by Limes is out-of-date. She can then use this call to refresh the usage data in order to make a more informed
 decision about how to adjust her quotas.
 
-## PUT /domains/:domain\_id
+## PUT /v1/domains/:domain\_id
 
 Set quotas for the given domain. Requires a cloud-admin token, and a request body that is a JSON document like:
 
@@ -378,14 +384,14 @@ This operation will not affect any project quotas in this domain.
 Returns 200 (OK) on success, with a response body identical to `GET` on the same URL, containing the updated quota
 values.
 
-## PUT /domains/:domain\_id/projects/:project\_id
+## PUT /v1/domains/:domain\_id/projects/:project\_id
 
 Set quotas for the given project. Requires a domain-admin token for the specified domain. Other than that, the call
 works in the same way as `PUT /domains/:domain_id`.
 
-## PUT /clusters/:cluster_id
+## PUT /v1/clusters/:cluster_id
 
-## PUT /clusters/current
+## PUT /v1/clusters/current
 
 Set capacity values for the given cluster. Requires a cloud-admin token, and a request body that is a JSON document
 like:
