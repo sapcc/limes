@@ -27,7 +27,9 @@ all levels of the hierarchy.
 
 ## For users
 
+* [Index](./docs/users/index.md)
 * [API specification](./docs/users/api-v1-specification.md)
+* [API usage example](./docs/users/api-example.md)
 
 # Installation
 
