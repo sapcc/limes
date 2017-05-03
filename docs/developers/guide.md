@@ -109,6 +109,11 @@ When `limes migrate` has completed successfully, you can run any other Limes job
 
 Only unset the `LIMES_NO_AUTO_QUOTA_ALIGNMENT` variable if you know what you're doing.
 
+There are two further subcommands that assist with the development of new plugins: `limes test-scrape` invokes all
+enabled quota plugins on a single project, and dumps the quota/usage data that was scraped by the plugins. `limes
+test-scan-capacity` invokes all enabled capacity plugins on the current cluster, and dumps the capacity data that was
+scrapes by the plugins.
+
 The following environment variables can be useful during development:
 
 ```bash
