@@ -22,11 +22,11 @@ clusters:
     project_name:        service
     project_domain_name: Default
     password:            swordfish
-  services:
-    - type: compute
-    - type: network
-  capacitors:
-    - id: nova
+    services:
+      - type: compute
+      - type: network
+    capacitors:
+      - id: nova
 ```
 
 Read on for the full list and description of all configuration options.
@@ -201,7 +201,80 @@ The area for this service is `storage`.
 
 Quotas per volume type cannot be controlled explicitly in Limes.
 
+# Available capacity plugins
+
+Note that capacity for a resource only becomes visible when the corresponding service is enabled in the
+`clusters.$id.services` list as well.
+
+## `cinder`
+
+```yaml
+capacitors:
+  - id: cinder
+```
+
+| Resource | Method |
+| --- | --- |
+| `volumev2/capacity` | The sum over all pools reported by Cinder. |
+| `volumev2/snapshots` | Estimated as `2500 * count(availabilityZones)`. |
+| `volumev2/volumes` | Estimated as `2500 * count(availabilityZones)`. |
+
+## `manual`
+
+```yaml
+capacitors:
+  - id: manual
+    manual:
+      network:
+        floating_ips: 8192
+        networks: 4096
+```
+
+The `manual` capacity plugin does not query any backend service for capacity data. It just reports the capacity data
+that is provided in the configuration file in the `manual` key. Values are grouped by service, then by resource.
+
+This is useful for capacities that cannot be queried automatically, but can be inferred from domain knowledge. Limes
+also allows to configure such capacities via the API, but operators might prefer the `manual` capacity plugin because it
+allows to track capacity values along with other configuration in a Git repository or similar.
+
+## `nova`
+
+```yaml
+capacitors:
+  - id: nova
+    nova:
+      vcpu_overcommit: 4
+      extra_specs:
+        first: 'foo'
+        second: 'bar'
+```
+
+| Resource | Method |
+| --- | --- |
+| `compute/cores` | The sum of the reported CPUs for all hypervisors, optionally multiplied by the `nova.vcpu_overcommit` parameter. This option is provided because the hypervisor statistics reported by Nova do not take overcommit into account. |
+| `compute/instances` | Estimated as `10000 * count(availabilityZones)`, but never more than `sumLocalDisk / maxDisk`, where `sumLocalDisk` is the sum of the local disk size for all hypervisors, and `maxDisk` is the largest disk requirement of all flavors. |
+| `compute/ram` | The sum of the reported RAM for all hypervisors. |
+
+The `nova.extra_specs` parameter can be used to control how flavors are enumerated. Only those flavors will be
+considered which have all the extra specs noted in this map, with the same values as defined in the configuration file.
+This is particularly useful to filter Ironic flavors, which usually have much larger root disk sizes.
+
+## `swift-health-statsd`
+
+```yaml
+capacitors:
+  - id: swift-health-statsd
+    swift:
+      prometheus_api_url: https://prometheus.example.com
+      adjustment_factor: 0.25   # 4 replicas
+```
+
+| Resource | Method |
+| --- | --- |
+| `object-store/capacity` | A Prometheus instance must be running at the URL given in `swift.prometheus_api_url`. It is queried for the `swift_cluster_storage_capacity_bytes_gauge` metric provided by [swift-health-statsd][shs]. Because this value is only the sum of all disk sizes in the Swift cluster, it needs to be adjusted for the number of replicas that Swift writes, and (if enabled) also for erasure coding. The operator must provide an appropriate scaling factor in the `swift.adjustment_factor` parameter.|
+
 [yaml]:   http://yaml.org/
 [pq-uri]: https://www.postgresql.org/docs/9.6/static/libpq-connect.html#LIBPQ-CONNSTRING
 [policy]: https://docs.openstack.org/security-guide/identity/policies.html
 [ex-pol]: ../example-policy.json
+[shs]:    https://github.com/sapcc/swift-health-statsd
