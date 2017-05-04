@@ -58,6 +58,14 @@ Configuration options relating to the behavior of the collector service.
 | `collector.metrics` | *Required* | Bind address for the Prometheus metrics endpoint provided by this service. See `api.listen` for acceptable values. |
 | `collector.data_metrics` | `false` | If `true`, expose all quota/usage/capacity data as Prometheus gauges. This is disabled by default because this can be a lot of data for OpenStack clusters containing many projects, domains and services. |
 
+## Section "clusters"
+
+Configuration options describing the OpenStack clusters which Limes shall cover. `$id` is the internal *cluster ID*, which may be chosen freely, but should not be changed afterwards. (It *can* be changed, but that requires a downtime and manual editing of the database.)
+
+| Field | Default | Description |
+| --- | --- | --- |
+| `clusters.$id.auth_url` | *Required* | URL for Keystone v3 API in this cluster.
+
 [yaml]:   http://yaml.org/
 [pq-uri]: https://www.postgresql.org/docs/9.6/static/libpq-connect.html#LIBPQ-CONNSTRING
 [policy]: https://docs.openstack.org/security-guide/identity/policies.html
