@@ -78,6 +78,36 @@ Configuration options describing the OpenStack clusters which Limes shall cover.
 | `clusters.$id.services` | yes | List of backend services for which to scrape quota/usage data. Service types for which Limes does not include a suitable *quota plugin* will be ignored. See below for supported service types. |
 | `clusters.$id.capacitors` | no | List of capacity plugins to use for scraping capacity data. See below for supported capacity plugins. |
 
+# Supported service types
+
+This section lists all supported service types and the resources that are understood for each service.
+
+## `compute`: Nova v2
+
+```yaml
+services:
+  - type: compute
+```
+
+| Resource | Unit | Comment |
+| --- | --- | --- |
+| `cores` | countable ||
+| `instances` | countable ||
+| `ram` | MiB ||
+
+## `volume`: Cinder v2
+
+```yaml
+services:
+  - type: volume
+```
+
+| Resource | Unit | Comment |
+| --- | --- | --- |
+| `capacity` | GiB ||
+| `snapshots` | countable ||
+| `volumes` | countable ||
+
 [yaml]:   http://yaml.org/
 [pq-uri]: https://www.postgresql.org/docs/9.6/static/libpq-connect.html#LIBPQ-CONNSTRING
 [policy]: https://docs.openstack.org/security-guide/identity/policies.html
