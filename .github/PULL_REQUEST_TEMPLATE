@@ -1,0 +1,4 @@
+Checklist:
+
+- [ ] If this PR is about a plugin, I tested the plugin against an OpenStack cluster.
+- [ ] I updated the documentation to describe the semantical or interface changes I introduced.
