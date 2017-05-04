@@ -60,11 +60,20 @@ Configuration options relating to the behavior of the collector service.
 
 ## Section "clusters"
 
-Configuration options describing the OpenStack clusters which Limes shall cover. `$id` is the internal *cluster ID*, which may be chosen freely, but should not be changed afterwards. (It *can* be changed, but that requires a downtime and manual editing of the database.)
+Configuration options describing the OpenStack clusters which Limes shall cover. `$id` is the internal *cluster ID*, which may be chosen freely, but should not be changed afterwards. (It *can* be changed, but that requires a shutdown of all Limes components and manual editing of the database.)
 
-| Field | Default | Description |
-| --- | --- | --- |
-| `clusters.$id.auth_url` | *Required* | URL for Keystone v3 API in this cluster.
+| Field | Default | Description | Equivalent to |
+| --- | --- | --- | :--- |
+| `clusters.$id.auth_url` | *Required* | URL for Keystone v3 API in this cluster. Should end in `/v3`. Other Keystone API versions are not supported. | `$OS_AUTH_URL` |
+| `clusters.$id.user_name` | *Required* | Limes service user. | `OS_USERNAME` |
+| `clusters.$id.user_domain_name` | *Required* | Domain containing Limes service user. | `OS_USER_DOMAIN_NAME` |
+| `clusters.$id.project_name` | *Required* | Project where Limes service user has access. | `OS_PROJECT_NAME` |
+| `clusters.$id.project_domain_name` | *Required* | Domain containing that project. | `OS_PROJECT_DOMAIN_NAME` |
+| `clusters.$id.password` | *Required* | Password for Limes service user. | `OS_PASSWORD` |
+| `clusters.$id.region_name` | `""` | In multi-region OpenStack clusters, this selects the region to work on. | `OS_REGION_NAME` |
+| `clusters.$id.catalog_url` | `""` | URL of Limes API service as it appears in the Keystone service catalog for this cluster. This is only used for version advertisements, and can be omitted if no client relies on the URLs in these version advertisements. ||
+| `clusters.$id.services` | `[]` | List of backend services for which to scrape quota/usage data. Service types for which Limes does not include a suitable *quota plugin* will be skipped. See below for supported service types. ||
+| `clusters.$id.capacitors` | `[]` | List of capacity plugins to use for scraping capacity data. See below for supported capacity plugins. ||
 
 [yaml]:   http://yaml.org/
 [pq-uri]: https://www.postgresql.org/docs/9.6/static/libpq-connect.html#LIBPQ-CONNSTRING
