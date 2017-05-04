@@ -1,5 +1,9 @@
 # Documentation for Limes users
 
+Limes is a quota and usage tracking service. If Limes is deployed in an OpenStack clusters, new domains and projects
+start out with zero quota unless someone with the required permissions approves quota for them. (There may be exceptions
+for certain auto-created resources, e.g. the `default` security group in Neutron.)
+
 ## Available clients
 
 * At the time of this writing, there is no command-line client for Limes. You can send requests to

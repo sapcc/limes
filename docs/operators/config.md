@@ -80,7 +80,18 @@ Configuration options describing the OpenStack clusters which Limes shall cover.
 
 # Supported service types
 
-This section lists all supported service types and the resources that are understood for each service.
+This section lists all supported service types and the resources that are understood for each service. The `type` string is always equal to the one that appears in the Keystone service catalog.
+
+For each service, `shared: true` can be set to indicate that the resources of this service are shared among all clusters that specify this service type. For example:
+
+```yaml
+services:
+  # unshared service
+  - type: compute
+  # shared service
+  - type: object-store
+    shared: true
+```
 
 ## `compute`: Nova v2
 
@@ -89,24 +100,106 @@ services:
   - type: compute
 ```
 
-| Resource | Unit | Comment |
-| --- | --- | --- |
-| `cores` | countable ||
-| `instances` | countable ||
-| `ram` | MiB ||
+The area for this service is `compute`.
 
-## `volume`: Cinder v2
+| Resource | Unit |
+| --- | --- |
+| `cores` | countable |
+| `instances` | countable |
+| `ram` | MiB |
+
+## `dns`: Designate v2
 
 ```yaml
 services:
-  - type: volume
+  - type: volumev2
 ```
 
-| Resource | Unit | Comment |
-| --- | --- | --- |
-| `capacity` | GiB ||
-| `snapshots` | countable ||
-| `volumes` | countable ||
+The area for this service is `dns`.
+
+| Resource | Unit |
+| --- | --- |
+| `recordsets` | countable |
+| `zones` | countable |
+
+When the `recordsets` quota is set, the backend quota for records is set to 20 times that value, to fit into the `records_per_recordset` quota (which is set to 20 by default in Designate). The record quota cannot be controlled explicitly in Limes.
+
+## `network`: Neutron v1
+
+```yaml
+services:
+  - type: object-store
+```
+
+The area for this service is `network`. Resources are categorized into `networking` for SDN resources and `loadbalancing` for LBaaS resources.
+
+| Category | Resource | Unit | Comment |
+| --- | --- | --- | --- |
+| `networking` | `floating_ips` | countable ||
+|| `networks` | countable ||
+|| `ports` | countable ||
+|| `rbac_policies` | countable ||
+|| `routers` | countable ||
+|| `security_group_rules` | countable | See note about auto-approval below. |
+|| `security_groups` | countable | See note about auto-approval below. |
+|| `subnet_pools` | countable ||
+|| `subnets` | countable ||
+| `loadbalancing` | `healthmonitors` | countable ||
+|| `l7policies` | countable ||
+|| `listeners` | countable ||
+|| `loadbalancers` | countable ||
+|| `pools` | countable ||
+
+When a new project is scraped for the first time, and usage for `security_groups` and `security_group_rules` is 1 and 4,
+respectively, quota of the same size is approved automatically. This covers the `default` security group that is
+automatically created in a new project.
+
+## `object-store`: Swift v1
+
+```yaml
+services:
+  - type: object-store
+```
+
+The area for this service is `storage`.
+
+| Resource | Unit |
+| --- | --- |
+| `capacity` | Bytes |
+
+## `sharev2`: Manila v2
+
+```yaml
+services:
+  - type: sharev2
+```
+
+The area for this service is `storage`.
+
+| Resource | Unit |
+| --- | --- |
+| `shares` | countable |
+| `share_capacity` | GiB |
+| `share_networks` | countable |
+| `share_snapshots` | countable |
+| `snapshot_capacity` | GiB |
+
+## `volumev2`: Cinder v2
+
+```yaml
+services:
+  - type: volumev2
+```
+
+The area for this service is `storage`.
+
+| Resource | Unit |
+| --- | --- |
+| `capacity` | GiB |
+| `snapshots` | countable |
+| `volumes` | countable |
+
+Quotas per volume type cannot be controlled explicitly in Limes.
 
 [yaml]:   http://yaml.org/
 [pq-uri]: https://www.postgresql.org/docs/9.6/static/libpq-connect.html#LIBPQ-CONNSTRING
