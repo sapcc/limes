@@ -187,12 +187,12 @@ func taskCollect(config limes.Configuration, driver limes.Driver, args []string)
 	//can be terminated at any time without leaving the system in an inconsistent
 	//state, mostly through usage of DB transactions.)
 	for _, plugin := range cluster.QuotaPlugins {
-		c := collector.NewCollector(driver, plugin)
+		c := collector.NewCollector(driver, plugin, config.Collector)
 		go c.Scrape()
 	}
 
 	//start those collector threads which operate over all services simultaneously
-	c := collector.NewCollector(driver, nil)
+	c := collector.NewCollector(driver, nil, config.Collector)
 	go c.CheckConsistency()
 	go c.ScanCapacity()
 	go func() {

@@ -101,6 +101,7 @@ type APIConfiguration struct {
 type CollectorConfiguration struct {
 	MetricsListenAddress string `yaml:"metrics"`
 	ExposeDataMetrics    bool   `yaml:"data_metrics"`
+	AutoAlignQuotas      bool   `yaml:"auto_align_quotas"`
 }
 
 //NewConfiguration reads and validates the given configuration file.

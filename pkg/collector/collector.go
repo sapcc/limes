@@ -41,15 +41,18 @@ type Collector struct {
 	//When set to true, suppresses the usual non-returning behavior of
 	//collector jobs.
 	Once bool
+	//Mirrored from CollectorConfiguration.AutoAlignQuotas.
+	AutoAlignQuotas bool
 }
 
 //NewCollector creates a Collector instance.
-func NewCollector(driver limes.Driver, plugin limes.QuotaPlugin) *Collector {
+func NewCollector(driver limes.Driver, plugin limes.QuotaPlugin, cfg limes.CollectorConfiguration) *Collector {
 	return &Collector{
-		Driver:   driver,
-		Plugin:   plugin,
-		LogError: util.LogError,
-		TimeNow:  time.Now,
-		Once:     false,
+		Driver:          driver,
+		Plugin:          plugin,
+		LogError:        util.LogError,
+		TimeNow:         time.Now,
+		Once:            false,
+		AutoAlignQuotas: cfg.AutoAlignQuotas,
 	}
 }

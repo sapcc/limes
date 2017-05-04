@@ -88,6 +88,9 @@ api:
 
 Of course, you can also use the same trick as before and download the policy file from the existing deployment.
 
+Finally, to avoid confusion, you need to set the `collector.auto_align_quotas` flag to `false` when operating against an
+OpenStack cluster that already has a Limes instance.
+
 ### Running
 
 Before any other Limes job can run, you must create the database and populate the schema:
@@ -105,9 +108,7 @@ psql -U postgres -c 'CREATE DATABASE limes;'
 When `limes migrate` has completed successfully, you can run any other Limes job.
 
 * the API: `./build/limes serve test.yaml ccloud`
-* the collectors: `export LIMES_NO_AUTO_QUOTA_ALIGNMENT=1 && ./build/limes collect test.yaml ccloud`
-
-Only unset the `LIMES_NO_AUTO_QUOTA_ALIGNMENT` variable if you know what you're doing.
+* the collectors: `./build/limes collect test.yaml ccloud`
 
 There are two further subcommands that assist with the development of new plugins: `limes test-scrape` invokes all
 enabled quota plugins on a single project, and dumps the quota/usage data that was scraped by the plugins. `limes
