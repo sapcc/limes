@@ -33,10 +33,32 @@ Read on for the full list and description of all configuration options.
 
 ## Section "database"
 
+Configuration options relating to the database connection of all services.
+
 | Field | Default | Description |
 | --- | --- | --- |
 | `database.location` | *Required* | A [libpq connection URI][pq-uri] that locates the Limes database. The non-URI "connection string" format is not allowed; it must be a URI. |
 | `database.migrations` | *Required* | Path to the directory containing the migration files for Limes' database schema. These are usually installed in `/usr/share/limes/migrations`. In development setups, point this to the directory `$repo_root/pkg/db/migrations`. |
 
+## Section "api"
+
+Configuration options relating to the behavior of the API service.
+
+| Field | Default | Description |
+| --- | --- | --- |
+| `api.listen` | *Required* | Bind address for the HTTP API exposed by this service, e.g. `127.0.0.1:8080` to bind only on one IP, or `:8080` to bind on all interfaces and addresses. |
+| `api.policy` | *Required* | Path to the oslo.policy file that describes authorization behavior for this service. Please refer to the [OpenStack documentation on policies][policy] for syntax reference. This repository includes an [example policy][ex-pol] that can be used for development setups, or as a basis for writing your own policy. |
+
+## Section "collector"
+
+Configuration options relating to the behavior of the collector service.
+
+| Field | Default | Description |
+| --- | --- | --- |
+| `collector.metrics` | *Required* | Bind address for the Prometheus metrics endpoint provided by this service. See `api.listen` for acceptable values. |
+| `collector.data_metrics` | `false` | If `true`, expose all quota/usage/capacity data as Prometheus gauges. This is disabled by default because this can be a lot of data for OpenStack clusters containing many projects, domains and services. |
+
 [yaml]:   http://yaml.org/
 [pq-uri]: https://www.postgresql.org/docs/9.6/static/libpq-connect.html#LIBPQ-CONNSTRING
+[policy]: https://docs.openstack.org/security-guide/identity/policies.html
+[ex-pol]: ../example-policy.json
