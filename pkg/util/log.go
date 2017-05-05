@@ -57,6 +57,7 @@ func LogDebug(msg string, args ...interface{}) {
 
 func doLog(msg string, args []interface{}) {
 	msg = strings.TrimPrefix(msg, "\n")
+	msg = strings.Replace(msg, "\n", "\\n", -1) //avoid multiline log messages
 	if len(args) > 0 {
 		log.Printf(msg+"\n", args...)
 	} else {
