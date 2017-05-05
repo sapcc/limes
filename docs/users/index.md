@@ -17,6 +17,10 @@ for certain auto-created resources, e.g. the `default` security group in Neutron
   minutes**, or when a user requests an immediate sync via the API. When displaying project data on the API, the time of
   the last scrape event will be indicated by the `scraped_at` field.
 * For each cluster, capacity data is scraped into Limes' database every **15 minutes**.
+* For each cluster, domain and project data will be collected from Keystone every **3 minutes**. This means that, for
+  example, if a new project is created, resource data will become visible in Limes within 3 minutes. However, if the
+  client which creates the project implements the Limes API (e.g. if the project is created in Elektra), Limes will be
+  notified of the new project immediately, and resource data will become visible within a few seconds.
 
 If updated project quotas are not reflected in the backend service, you can try to request an immediate sync via the API
 or in your client (e.g. via Elektra's "Sync Now" button). Whenever quota is scraped from the backend service, Limes will
