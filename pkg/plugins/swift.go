@@ -43,7 +43,7 @@ var swiftResources = []limes.ResourceInfo{
 }
 
 //TODO Make Auth prefix configurable
-var urlRegex = regexp.MustCompile("(v1/AUTH_)[a-zA-Z0-9]+")
+var urlRegex = regexp.MustCompile("(v1/AUTH_)[a-zA-Z0-9-]+")
 
 func init() {
 	limes.RegisterQuotaPlugin(func(c limes.ServiceConfiguration) limes.QuotaPlugin {
