@@ -21,6 +21,7 @@ package limes
 
 import (
 	"fmt"
+	"net/http"
 	"sync"
 
 	"github.com/gophercloud/gophercloud"
@@ -52,6 +53,9 @@ func NewDriver(cfg *Cluster) (Driver, error) {
 	if err != nil {
 		return nil, fmt.Errorf("cannot initialize OpenStack client: %v", err)
 	}
+	//use http.DefaultClient, esp. to pick up LIMES_INSECURE flag
+	d.ProviderClient.HTTPClient = *http.DefaultClient
+
 	err = d.RefreshToken()
 	if err != nil {
 		return nil, fmt.Errorf("cannot fetch initial Keystone token: %v", err)
