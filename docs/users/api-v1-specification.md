@@ -16,6 +16,7 @@ projects in that token's domain. With project member permission, shows that toke
 * `area`: Limit query to resources in services in this area. May be given multiple times.
 * `resource`: When combined, with `?service=`, limit query to that resource
   (e.g. `?service=compute&resource=instances`). May be given multiple times.
+* `detail`: If given, list subresources for resources that support it. (See subheading below for details.)
 
 Returns 200 (OK) on success. Result is a JSON document like:
 
@@ -111,6 +112,32 @@ Valid values for quotas include all non-negative numbers. Backend quotas can als
 indicates an infinite or disabled quota.
 
 TODO: Might need to add ordering and pagination to this at some point.
+
+### Subresources
+
+If the `?detail` query parameter is given (no value is required), countable resources may be further broken down into
+*subresources*, i.e. entities of this countable resource with their own set of attributes. Intended usecases for
+subresource include billing services using data collected by Limes to create itemized bills, or to bill resources
+depending on their attributes. (For example, a floating IP in an external network may be more expensive than one from an
+internal network.)
+
+Subresources will only be displayed for supported resources, and only if scraping has been enabled for that subresource
+in Limes' configuration. If enabled, the resource will have a `subresources` key containing an array of objects. For
+example, extending the example from above, the `projects[0].services[0].resources[0]` object might look like this:
+
+```json
+{
+  "name": "instances",
+  "quota": 5,
+  "usage": 1,
+  "subresources": [
+    { "id": "ad87bb8a-5864-4905-b099-40b9f2b49bf9", "name": "testvm", "cores": 2, "ram": 2048 }
+  ]
+}
+```
+
+The fields in the subresource objects are specific to the resource type, and are not mandated by this specification.
+Please refer to the [documentation for the quota plugin that generates it](../operators/config.md) for details.
 
 ## GET /v1/domains
 ## GET /v1/domains/:domain\_id
