@@ -212,5 +212,5 @@ func (p *manilaPlugin) SetQuota(driver limes.Driver, domainUUID, projectUUID str
 	url := client.ServiceURL("os-quota-sets", projectUUID)
 	_, err = client.Put(url, requestData, nil, &gophercloud.RequestOpts{OkCodes: []int{200}})
 
-	return nil
+	return err
 }
