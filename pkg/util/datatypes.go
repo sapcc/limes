@@ -59,3 +59,12 @@ func (f *Float64OrUnknown) UnmarshalJSON(buffer []byte) error {
 	*f = Float64OrUnknown(x)
 	return err
 }
+
+//JSONString is a string containing JSON, that is not serialized further during
+//json.Marshal().
+type JSONString string
+
+//MarshalJSON implements the json.Marshaler interface.
+func (s JSONString) MarshalJSON() ([]byte, error) {
+	return []byte(s), nil
+}

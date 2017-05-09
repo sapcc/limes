@@ -507,6 +507,13 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectStatusCode: 200,
 		ExpectJSON:       "./fixtures/project-get-berlin.json",
 	}.Check(t, router)
+	//check rendering of subresources
+	test.APIRequest{
+		Method:           "GET",
+		Path:             "/v1/domains/uuid-for-germany/projects/uuid-for-berlin?detail",
+		ExpectStatusCode: 200,
+		ExpectJSON:       "./fixtures/project-get-details-berlin.json",
+	}.Check(t, router)
 	//dresden has a case of backend quota != quota
 	test.APIRequest{
 		Method:           "GET",

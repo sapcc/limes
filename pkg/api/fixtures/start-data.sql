@@ -54,26 +54,26 @@ INSERT INTO project_services (id, project_id, type, scraped_at) VALUES (7, 4, 'u
 INSERT INTO project_services (id, project_id, type, scraped_at) VALUES (8, 4, 'shared',   88);
 
 -- project_resources contains some pathological cases
--- berlin
-INSERT INTO project_resources (service_id, name, quota, usage, backend_quota) VALUES (1, 'things',   10, 2, 10);
-INSERT INTO project_resources (service_id, name, quota, usage, backend_quota) VALUES (1, 'capacity', 10, 2, 10);
-INSERT INTO project_resources (service_id, name, quota, usage, backend_quota) VALUES (2, 'things',   10, 2, 10);
-INSERT INTO project_resources (service_id, name, quota, usage, backend_quota) VALUES (2, 'capacity', 10, 2, 10);
+-- berlin (also used for test cases concerning subresources)
+INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources) VALUES (1, 'things',   10, 2, 10, '[{"id":"firstthing","value":23},{"id":"secondthing","value":42}]');
+INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources) VALUES (1, 'capacity', 10, 2, 10, '');
+INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources) VALUES (2, 'things',   10, 2, 10, '[{"id":"thirdthing","value":5},{"id":"fourththing","value":123}]');
+INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources) VALUES (2, 'capacity', 10, 2, 10, '');
 -- dresden (backend quota for shared/capacity mismatches approved quota and exceeds domain quota)
-INSERT INTO project_resources (service_id, name, quota, usage, backend_quota) VALUES (3, 'things',   10, 2, 10);
-INSERT INTO project_resources (service_id, name, quota, usage, backend_quota) VALUES (3, 'capacity', 10, 2, 10);
-INSERT INTO project_resources (service_id, name, quota, usage, backend_quota) VALUES (4, 'things',   10, 2, 10);
-INSERT INTO project_resources (service_id, name, quota, usage, backend_quota) VALUES (4, 'capacity', 10, 2, 100);
+INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources) VALUES (3, 'things',   10, 2, 10, '');
+INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources) VALUES (3, 'capacity', 10, 2, 10, '');
+INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources) VALUES (4, 'things',   10, 2, 10, '');
+INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources) VALUES (4, 'capacity', 10, 2, 100, '');
 -- paris (infinite backend quota for unshared/things)
-INSERT INTO project_resources (service_id, name, quota, usage, backend_quota) VALUES (5, 'things',   10, 2, -1);
-INSERT INTO project_resources (service_id, name, quota, usage, backend_quota) VALUES (5, 'capacity', 10, 2, 10);
-INSERT INTO project_resources (service_id, name, quota, usage, backend_quota) VALUES (6, 'things',   10, 2, 10);
-INSERT INTO project_resources (service_id, name, quota, usage, backend_quota) VALUES (6, 'capacity', 10, 2, 10);
+INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources) VALUES (5, 'things',   10, 2, -1, '');
+INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources) VALUES (5, 'capacity', 10, 2, 10, '');
+INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources) VALUES (6, 'things',   10, 2, 10, '');
+INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources) VALUES (6, 'capacity', 10, 2, 10, '');
 -- warsaw
-INSERT INTO project_resources (service_id, name, quota, usage, backend_quota) VALUES (7, 'things',   10, 2, 10);
-INSERT INTO project_resources (service_id, name, quota, usage, backend_quota) VALUES (7, 'capacity', 10, 2, 10);
-INSERT INTO project_resources (service_id, name, quota, usage, backend_quota) VALUES (8, 'things',   10, 2, 10);
-INSERT INTO project_resources (service_id, name, quota, usage, backend_quota) VALUES (8, 'capacity', 10, 2, 10);
+INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources) VALUES (7, 'things',   10, 2, 10, '');
+INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources) VALUES (7, 'capacity', 10, 2, 10, '');
+INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources) VALUES (8, 'things',   10, 2, 10, '');
+INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources) VALUES (8, 'capacity', 10, 2, 10, '');
 
 -- insert some bullshit data that should be filtered out by the pkg/reports/ logic
 -- (cluster "north", service "weird" and resource "items" are not configured)
@@ -85,7 +85,7 @@ INSERT INTO cluster_resources (service_id, name, capacity) VALUES (102, 'things'
 INSERT INTO domain_services (id, domain_id, type) VALUES (101, 1, 'weird');
 INSERT INTO domain_resources (service_id, name, quota) VALUES (101, 'things', 1);
 INSERT INTO project_services (id, project_id, type) VALUES (101, 1, 'weird');
-INSERT INTO project_resources (service_id, name, quota, usage, backend_quota) VALUES (101, 'things', 2, 1, 2);
+INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources) VALUES (101, 'things', 2, 1, 2, '');
 
 INSERT INTO domain_resources (service_id, name, quota) VALUES (1, 'items', 1);
-INSERT INTO project_resources (service_id, name, quota, usage, backend_quota) VALUES (1, 'items', 2, 1, 2);
+INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources) VALUES (1, 'items', 2, 1, 2, '');

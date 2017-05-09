@@ -1,0 +1,65 @@
+{
+  "project": {
+    "id": "uuid-for-berlin",
+    "name": "berlin",
+    "parent_id": "uuid-for-germany",
+    "services": [
+      {
+        "type": "shared",
+        "area": "shared",
+        "resources": [
+          {
+            "name": "capacity",
+            "unit": "B",
+            "quota": 10,
+            "usage": 2
+          },
+          {
+            "name": "things",
+            "quota": 10,
+            "usage": 2,
+            "subresources": [
+              {
+                "id": "thirdthing",
+                "value": 5
+              },
+              {
+                "id": "fourththing",
+                "value": 123
+              }
+            ]
+          }
+        ],
+        "scraped_at": 22
+      },
+      {
+        "type": "unshared",
+        "area": "unshared",
+        "resources": [
+          {
+            "name": "capacity",
+            "unit": "B",
+            "quota": 10,
+            "usage": 2
+          },
+          {
+            "name": "things",
+            "quota": 10,
+            "usage": 2,
+            "subresources": [
+              {
+                "id": "firstthing",
+                "value": 23
+              },
+              {
+                "id": "secondthing",
+                "value": 42
+              }
+            ]
+          }
+        ],
+        "scraped_at": 11
+      }
+    ]
+  }
+}

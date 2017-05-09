@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/sapcc/limes/pkg/db"
@@ -53,7 +54,8 @@ type ProjectResource struct {
 	Quota uint64 `json:"quota,keepempty"`
 	Usage uint64 `json:"usage,keepempty"`
 	//This is a pointer to a value to enable precise control over whether this field is rendered in output.
-	BackendQuota *int64 `json:"backend_quota,omitempty"`
+	BackendQuota *int64          `json:"backend_quota,omitempty"`
+	Subresources util.JSONString `json:"subresources,omitempty"`
 }
 
 //ProjectServices provides fast lookup of services using a map, but serializes
@@ -95,7 +97,7 @@ func (r ProjectResources) MarshalJSON() ([]byte, error) {
 }
 
 var projectReportQuery = `
-	SELECT p.uuid, p.name, COALESCE(p.parent_uuid, ''), ps.type, ps.scraped_at, pr.name, pr.quota, pr.usage, pr.backend_quota
+	SELECT p.uuid, p.name, COALESCE(p.parent_uuid, ''), ps.type, ps.scraped_at, pr.name, pr.quota, pr.usage, pr.backend_quota, pr.subresources
 	  FROM projects p
 	  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
 	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
@@ -104,13 +106,19 @@ var projectReportQuery = `
 
 //GetProjects returns Project reports for all projects in the given domain or,
 //if projectID is non-nil, for that project only.
-func GetProjects(cluster *limes.Cluster, domainID int64, projectID *int64, dbi db.Interface, filter Filter) ([]*Project, error) {
+func GetProjects(cluster *limes.Cluster, domainID int64, projectID *int64, dbi db.Interface, filter Filter, withSubresources bool) ([]*Project, error) {
 	fields := map[string]interface{}{"p.domain_id": domainID}
 	if projectID != nil {
 		fields["p.id"] = *projectID
 	}
 
-	queryStr, joinArgs := filter.PrepareQuery(projectReportQuery)
+	//avoid collecting the potentially large subresources strings when possible
+	queryStr := projectReportQuery
+	if !withSubresources {
+		queryStr = strings.Replace(queryStr, "pr.subresources", "''", 1)
+	}
+
+	queryStr, joinArgs := filter.PrepareQuery(queryStr)
 	whereStr, whereArgs := db.BuildSimpleWhereClause(fields, len(joinArgs))
 	rows, err := dbi.Query(fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...)...)
 	if err != nil {
@@ -129,11 +137,12 @@ func GetProjects(cluster *limes.Cluster, domainID int64, projectID *int64, dbi d
 			quota             *uint64
 			usage             *uint64
 			backendQuota      *int64
+			subresources      string
 		)
 		err := rows.Scan(
 			&projectUUID, &projectName, &projectParentUUID,
 			&serviceType, &scrapedAt, &resourceName,
-			&quota, &usage, &backendQuota,
+			&quota, &usage, &backendQuota, &subresources,
 		)
 		if err != nil {
 			rows.Close()
@@ -181,6 +190,7 @@ func GetProjects(cluster *limes.Cluster, domainID int64, projectID *int64, dbi d
 			ResourceInfo: cluster.InfoForResource(*serviceType, *resourceName),
 			Usage:        *usage,
 			BackendQuota: nil, //see below
+			Subresources: util.JSONString(subresources),
 		}
 		if usage != nil {
 			resource.Usage = *usage
