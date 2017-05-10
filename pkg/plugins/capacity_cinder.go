@@ -54,11 +54,6 @@ func (p *capacityCinderPlugin) Scrape(driver limes.Driver) (map[string]map[strin
 	}
 
 	var result gophercloud.Result
-	var volumeBackendName string
-
-	if p.cfg.Cinder.VolumeBackendName != "" {
-		volumeBackendName = p.cfg.Cinder.VolumeBackendName
-	}
 
 	//Get absolute limits for a tenant
 	url := client.ServiceURL("scheduler-stats", "get_pools") + "?detail=True"
@@ -101,14 +96,17 @@ func (p *capacityCinderPlugin) Scrape(driver limes.Driver) (map[string]map[strin
 	}
 
 	var totalCapacity, azCount uint64
+	volumeBackendName := p.cfg.Cinder.VolumeBackendName
 
 	//add results from scheduler-stats
 	for _, element := range limitData.Pools {
-		if (volumeBackendName != "") && (element.Capabilities.VolumeBackendName == volumeBackendName) {
+		if (volumeBackendName != "") && (element.Capabilities.VolumeBackendName != volumeBackendName) {
+			util.LogDebug("Not considering %s with volume_backend_name %s", element.Name, element.Capabilities.VolumeBackendName)
+		} else {
 			totalCapacity += uint64(element.Capabilities.TotalCapacity)
 			util.LogDebug("Considering %s with volume_backend_name %s", element.Name, element.Capabilities.VolumeBackendName)
 		}
-		util.LogDebug("Not considering %s with volume_backend_name %s", element.Name, element.Capabilities.VolumeBackendName)
+
 	}
 
 	//count availability zones
