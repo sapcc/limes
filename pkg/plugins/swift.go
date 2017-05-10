@@ -46,7 +46,7 @@ var swiftResources = []limes.ResourceInfo{
 var urlRegex = regexp.MustCompile("(v1/AUTH_)[a-zA-Z0-9-]+")
 
 func init() {
-	limes.RegisterQuotaPlugin(func(c limes.ServiceConfiguration) limes.QuotaPlugin {
+	limes.RegisterQuotaPlugin(func(c limes.ServiceConfiguration, scrapeSubresources map[string]bool) limes.QuotaPlugin {
 		return &swiftPlugin{c}
 	})
 }

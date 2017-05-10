@@ -27,6 +27,9 @@ clusters:
       - type: network
     capacitors:
       - id: nova
+    subresources:
+      compute:
+        - instances
 ```
 
 Read on for the full list and description of all configuration options.
@@ -77,6 +80,7 @@ Configuration options describing the OpenStack clusters which Limes shall cover.
 | --- | --- | --- |
 | `clusters.$id.catalog_url` | no | URL of Limes API service as it appears in the Keystone service catalog for this cluster. This is only used for version advertisements, and can be omitted if no client relies on the URLs in these version advertisements. |
 | `clusters.$id.services` | yes | List of backend services for which to scrape quota/usage data. Service types for which Limes does not include a suitable *quota plugin* will be ignored. See below for supported service types. |
+| `clusters.$id.subresources` | no | List of resources where subresource scraping is requested. This is an object with service types as keys, and a list of resource names as values. |
 | `clusters.$id.capacitors` | no | List of capacity plugins to use for scraping capacity data. See below for supported capacity plugins. |
 
 # Supported service types
@@ -108,6 +112,15 @@ The area for this service is `compute`.
 | `cores` | countable |
 | `instances` | countable |
 | `ram` | MiB |
+
+The `instances` resource supports subresource scraping. Subresources bear the following attributes:
+
+| Attribute | Type | Comment |
+| --- | --- | --- |
+| `id` | string ||
+| `name` | string ||
+| `status` | string ||
+| `flavor_id` | string | provisional; will be replaced by `cores` and `ram` attributes soon |
 
 ## `dns`: Designate v2
 

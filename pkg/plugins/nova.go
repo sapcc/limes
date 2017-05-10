@@ -24,11 +24,14 @@ import (
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/limits"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/quotasets"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
+	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/sapcc/limes/pkg/limes"
 )
 
 type novaPlugin struct {
-	cfg limes.ServiceConfiguration
+	cfg             limes.ServiceConfiguration
+	scrapeInstances bool
 }
 
 var novaResources = []limes.ResourceInfo{
@@ -47,8 +50,11 @@ var novaResources = []limes.ResourceInfo{
 }
 
 func init() {
-	limes.RegisterQuotaPlugin(func(c limes.ServiceConfiguration) limes.QuotaPlugin {
-		return &novaPlugin{c}
+	limes.RegisterQuotaPlugin(func(c limes.ServiceConfiguration, scrapeSubresources map[string]bool) limes.QuotaPlugin {
+		return &novaPlugin{
+			cfg:             c,
+			scrapeInstances: scrapeSubresources["instances"],
+		}
 	})
 }
 
@@ -88,14 +94,44 @@ func (p *novaPlugin) Scrape(driver limes.Driver, domainUUID, projectUUID string)
 		return nil, err
 	}
 
+	var instanceData []interface{}
+	if p.scrapeInstances {
+		listOpts := novaServerListOpts{
+			AllTenants: true,
+			TenantID:   projectUUID,
+		}
+
+		err := servers.List(client, listOpts).EachPage(func(page pagination.Page) (bool, error) {
+			instances, err := servers.ExtractServers(page)
+			if err != nil {
+				return false, err
+			}
+
+			for _, instance := range instances {
+				instanceData = append(instanceData, map[string]interface{}{
+					"id":     instance.ID,
+					"name":   instance.Name,
+					"status": instance.Status,
+					//TODO: get flavor object and report "cores"/"ram" instead of "flavor_id" (but cache the flavors!)
+					"flavor_id": instance.Flavor["id"],
+				})
+			}
+			return true, nil
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return map[string]limes.ResourceData{
 		"cores": {
 			Quota: int64(quotas.Cores),
 			Usage: uint64(limits.Absolute.TotalCoresUsed),
 		},
 		"instances": {
-			Quota: int64(quotas.Instances),
-			Usage: uint64(limits.Absolute.TotalInstancesUsed),
+			Quota:        int64(quotas.Instances),
+			Usage:        uint64(limits.Absolute.TotalInstancesUsed),
+			Subresources: instanceData,
 		},
 		"ram": {
 			Quota: int64(quotas.Ram),
@@ -120,4 +156,14 @@ func (p *novaPlugin) SetQuota(driver limes.Driver, domainUUID, projectUUID strin
 
 func makeIntPointer(value int) *int {
 	return &value
+}
+
+type novaServerListOpts struct {
+	AllTenants bool   `q:"all_tenants"`
+	TenantID   string `q:"tenant_id"`
+}
+
+func (opts novaServerListOpts) ToServerListQuery() (string, error) {
+	q, err := gophercloud.BuildQueryString(opts)
+	return q.String(), err
 }
