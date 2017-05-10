@@ -55,11 +55,18 @@ func NewCluster(id string, config *ClusterConfiguration) *Cluster {
 			util.LogError("skipping service %s: no suitable collector plugin found", srv.Type)
 			continue
 		}
-		plugin := factory(srv)
+
+		scrapeSubresources := map[string]bool{}
+		for _, resName := range config.Subresources[srv.Type] {
+			scrapeSubresources[resName] = true
+		}
+
+		plugin := factory(srv, scrapeSubresources)
 		if plugin == nil || plugin.ServiceInfo().Type != srv.Type {
 			util.LogError("skipping service %s: failed to initialize collector plugin", srv.Type)
 			continue
 		}
+
 		c.ServiceTypes = append(c.ServiceTypes, srv.Type)
 		c.QuotaPlugins[srv.Type] = plugin
 		c.IsServiceShared[srv.Type] = srv.Shared

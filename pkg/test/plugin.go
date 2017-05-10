@@ -60,9 +60,9 @@ func NewPlugin(serviceType string) *Plugin {
 }
 
 //NewPluginFactory creates a new PluginFactory for limes.RegisterQuotaPlugin.
-func NewPluginFactory(serviceType string) func(limes.ServiceConfiguration) limes.QuotaPlugin {
-	return func(cfg limes.ServiceConfiguration) limes.QuotaPlugin {
-		//cfg is ignored
+func NewPluginFactory(serviceType string) func(limes.ServiceConfiguration, map[string]bool) limes.QuotaPlugin {
+	return func(cfg limes.ServiceConfiguration, scrapeSubresources map[string]bool) limes.QuotaPlugin {
+		//cfg and scrapeSubresources is ignored
 		return NewPlugin(serviceType)
 	}
 }

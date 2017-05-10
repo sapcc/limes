@@ -63,6 +63,7 @@ type ClusterConfiguration struct {
 	CatalogURL        string                   `yaml:"catalog_url"`
 	Services          []ServiceConfiguration   `yaml:"services"`
 	Capacitors        []CapacitorConfiguration `yaml:"capacitors"`
+	Subresources      map[string][]string      `yaml:"subresources"`
 	//Sorry for the stupid pun. Not.
 }
 

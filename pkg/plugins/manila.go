@@ -58,7 +58,7 @@ var manilaResources = []limes.ResourceInfo{
 }
 
 func init() {
-	limes.RegisterQuotaPlugin(func(c limes.ServiceConfiguration) limes.QuotaPlugin {
+	limes.RegisterQuotaPlugin(func(c limes.ServiceConfiguration, scrapeSubresources map[string]bool) limes.QuotaPlugin {
 		return &manilaPlugin{c}
 	})
 }

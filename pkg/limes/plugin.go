@@ -130,8 +130,10 @@ func (u Unit) Format(value uint64) string {
 
 //QuotaPluginFactory is a function that produces quota plugins for a certain
 //ServiceInfo.Type. The quota plugin instance will use the service
-//configuration given to it if it wants to.
-type QuotaPluginFactory func(ServiceConfiguration) QuotaPlugin
+//configuration given to it if it wants to. For plugins that support
+//subresource scraping, the second argument indicates which resources to scrape
+//(the keys are resource names).
+type QuotaPluginFactory func(cfg ServiceConfiguration, scrapeSubresources map[string]bool) QuotaPlugin
 
 //CapacityPluginFactory is a function that produces capacity plugins with a
 //certain ID. The capacity plugin instance will use the service configuration
@@ -152,7 +154,7 @@ func RegisterQuotaPlugin(factory QuotaPluginFactory) {
 	if factory == nil {
 		panic("collector.RegisterQuotaPlugin() called with nil QuotaPluginFactory instance")
 	}
-	info := factory(ServiceConfiguration{}).ServiceInfo()
+	info := factory(ServiceConfiguration{}, map[string]bool{}).ServiceInfo()
 	if info.Type == "" {
 		panic("QuotaPlugin instance with empty service type!")
 	}
