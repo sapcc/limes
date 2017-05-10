@@ -113,6 +113,15 @@ The area for this service is `compute`.
 | `instances` | countable |
 | `ram` | MiB |
 
+The `instances` resource supports subresource scraping. Subresources bear the following attributes:
+
+| Attribute | Type | Comment |
+| --- | --- | --- |
+| `id` | string ||
+| `name` | string ||
+| `status` | string ||
+| `flavor_id` | string | provisional; will be replaced by `cores` and `ram` attributes soon |
+
 ## `dns`: Designate v2
 
 ```yaml
