@@ -225,6 +225,8 @@ Note that capacity for a resource only becomes visible when the corresponding se
 ```yaml
 capacitors:
   - id: cinder
+    cinder:
+      volume_backend_name: "vmware"
 ```
 
 | Resource | Method |
@@ -232,6 +234,8 @@ capacitors:
 | `volumev2/capacity` | The sum over all pools reported by Cinder. |
 | `volumev2/snapshots` | Estimated as `2500 * count(availabilityZones)`. |
 | `volumev2/volumes` | Estimated as `2500 * count(availabilityZones)`. |
+
+The `cinder.volume_backend_name` parameter can be used to filter the back-end storage pools by volume name.
 
 ## `manual`
 
