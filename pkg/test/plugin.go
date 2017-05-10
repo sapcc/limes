@@ -52,7 +52,7 @@ func NewPlugin(serviceType string) *Plugin {
 	return &Plugin{
 		StaticServiceType: serviceType,
 		StaticResourceData: map[string]*limes.ResourceData{
-			"things":   {Quota: 42, Usage: 23},
+			"things":   {Quota: 42, Usage: 2},
 			"capacity": {Quota: 100, Usage: 0},
 		},
 		OverrideQuota: make(map[string]map[string]uint64),
@@ -95,6 +95,20 @@ func (p *Plugin) Scrape(driver limes.Driver, domainUUID, projectUUID string) (ma
 				Usage: result[resourceName].Usage,
 			}
 		}
+	}
+
+	//make up some subresources for "things"
+	thingsUsage := int(result["things"].Usage)
+	subres := make([]interface{}, thingsUsage)
+	for idx := 0; idx < thingsUsage; idx++ {
+		subres[idx] = map[string]interface{}{
+			"index": idx,
+		}
+	}
+	result["things"] = limes.ResourceData{
+		Quota:        result["things"].Quota,
+		Usage:        result["things"].Usage,
+		Subresources: subres,
 	}
 
 	return result, nil

@@ -21,6 +21,8 @@ package collector
 
 import (
 	"database/sql"
+	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -148,6 +150,16 @@ func (c *Collector) writeScrapeResult(domainUUID, projectUUID, serviceType strin
 			//update existing resource record
 			res.BackendQuota = data.Quota
 			res.Usage = data.Usage
+			if len(data.Subresources) == 0 {
+				res.SubresourcesJSON = ""
+			} else {
+				bytes, err := json.Marshal(data.Subresources)
+				if err != nil {
+					return fmt.Errorf("failed to convert subresources to JSON: %s", err.Error())
+				}
+				res.SubresourcesJSON = string(bytes)
+			}
+
 			//TODO: Update() only if required
 			_, err := tx.Update(&res)
 			if err != nil {
@@ -172,17 +184,25 @@ func (c *Collector) writeScrapeResult(domainUUID, projectUUID, serviceType strin
 		}
 		data := resourceData[resMetadata.Name]
 		res := &db.ProjectResource{
-			ServiceID:    serviceID,
-			Name:         resMetadata.Name,
-			Quota:        0, //nothing approved yet
-			Usage:        data.Usage,
-			BackendQuota: data.Quota,
+			ServiceID:        serviceID,
+			Name:             resMetadata.Name,
+			Quota:            0, //nothing approved yet
+			Usage:            data.Usage,
+			BackendQuota:     data.Quota,
+			SubresourcesJSON: "", //but see below
 		}
 		if data.Quota > 0 && uint64(data.Quota) == resMetadata.AutoApproveInitialQuota {
 			res.Quota = resMetadata.AutoApproveInitialQuota
 			auditTrail.Add("set quota %s.%s = 0 -> %d for project %s through auto-approval",
 				serviceType, resMetadata.Name, res.Quota, projectUUID,
 			)
+		}
+		if len(data.Subresources) != 0 {
+			bytes, err := json.Marshal(data.Subresources)
+			if err != nil {
+				return fmt.Errorf("failed to convert subresources to JSON: %s", err.Error())
+			}
+			res.SubresourcesJSON = string(bytes)
 		}
 
 		err = tx.Insert(res)
