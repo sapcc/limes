@@ -33,8 +33,9 @@ func init() {
 	//"DEBUG" variable. "DEBUG" is meant to be useful for production systems,
 	//where you definitely don't want to turn off certificate verification.)
 	if os.Getenv("LIMES_INSECURE") == "1" {
-		http.DefaultClient.Transport = &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{
+			InsecureSkipVerify: true,
 		}
+		http.DefaultClient.Transport = http.DefaultTransport
 	}
 }
