@@ -10,7 +10,7 @@ install and use it][os-cli]. Assuming that you have provided your credentials to
 with
 
 ```bash
-export OS_AUTH_TOKEN="$(openstack token issue -c value -f id)"
+export OS_AUTH_TOKEN="$(openstack token issue -f value -c id)"
 ```
 
 This command will not print any output if it is successful.
