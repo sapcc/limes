@@ -32,8 +32,6 @@ type Driver interface {
 	//function calls, instead of both the Driver and the Cluster.
 	Cluster() *Cluster
 	/********** requests to Keystone **********/
-	ListDomains() ([]KeystoneDomain, error)
-	ListProjects(domainUUID string) ([]KeystoneProject, error)
 	ValidateToken(token string) (policy.Context, error)
 }
 

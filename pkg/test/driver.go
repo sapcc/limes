@@ -21,7 +21,6 @@ package test
 
 import (
 	policy "github.com/databus23/goslo.policy"
-	"github.com/gophercloud/gophercloud"
 	"github.com/sapcc/limes/pkg/limes"
 )
 
@@ -29,9 +28,7 @@ import (
 //an actual OpenStack. It returns a static set of domains and projects, and a
 //static set of quota/usage values for any project.
 type Driver struct {
-	cluster        *limes.Cluster
-	StaticDomains  []limes.KeystoneDomain
-	StaticProjects map[string][]limes.KeystoneProject
+	cluster *limes.Cluster
 }
 
 //NewDriver creates a Driver instance. The Cluster does not need to have the
@@ -40,40 +37,12 @@ type Driver struct {
 func NewDriver(cluster *limes.Cluster) *Driver {
 	return &Driver{
 		cluster: cluster,
-		StaticDomains: []limes.KeystoneDomain{
-			{Name: "germany", UUID: "uuid-for-germany"},
-			{Name: "france", UUID: "uuid-for-france"},
-		},
-		StaticProjects: map[string][]limes.KeystoneProject{
-			"uuid-for-germany": {
-				{Name: "berlin", UUID: "uuid-for-berlin", ParentUUID: "uuid-for-germany"},
-				{Name: "dresden", UUID: "uuid-for-dresden", ParentUUID: "uuid-for-berlin"},
-			},
-			"uuid-for-france": {
-				{Name: "paris", UUID: "uuid-for-paris", ParentUUID: "uuid-for-france"},
-			},
-		},
 	}
 }
 
 //Cluster implements the limes.Driver interface.
 func (d *Driver) Cluster() *limes.Cluster {
 	return d.cluster
-}
-
-//Client implements the limes.Driver interface.
-func (d *Driver) Client() *gophercloud.ProviderClient {
-	return nil
-}
-
-//ListDomains implements the limes.Driver interface.
-func (d *Driver) ListDomains() ([]limes.KeystoneDomain, error) {
-	return d.StaticDomains, nil
-}
-
-//ListProjects implements the limes.Driver interface.
-func (d *Driver) ListProjects(domainUUID string) ([]limes.KeystoneProject, error) {
-	return d.StaticProjects[domainUUID], nil
 }
 
 //ValidateToken implements the limes.Driver interface.

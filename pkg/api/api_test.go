@@ -60,6 +60,7 @@ func setupTest(t *testing.T) (*test.Driver, http.Handler) {
 				ID:              "west",
 				ServiceTypes:    serviceTypes,
 				IsServiceShared: isServiceShared,
+				DiscoveryPlugin: test.NewDiscoveryPlugin(),
 				QuotaPlugins:    quotaPlugins,
 				CapacityPlugins: map[string]limes.CapacityPlugin{},
 				Config:          &limes.ClusterConfiguration{AuthParameters: &limes.AuthParameters{}},
@@ -380,6 +381,7 @@ func expectClusterCapacity(t *testing.T, clusterID, serviceType, resourceName st
 
 func Test_DomainOperations(t *testing.T) {
 	driver, router := setupTest(t)
+	discovery := driver.Cluster().DiscoveryPlugin.(*test.DiscoveryPlugin)
 
 	//check GetDomain
 	test.APIRequest{
@@ -424,7 +426,7 @@ func Test_DomainOperations(t *testing.T) {
 	}.Check(t, router)
 
 	//check DiscoverDomains
-	driver.StaticDomains = append(driver.StaticDomains,
+	discovery.StaticDomains = append(discovery.StaticDomains,
 		limes.KeystoneDomain{Name: "spain", UUID: "uuid-for-spain"},
 	)
 	test.APIRequest{
@@ -499,6 +501,7 @@ func Test_DomainOperations(t *testing.T) {
 
 func Test_ProjectOperations(t *testing.T) {
 	driver, router := setupTest(t)
+	discovery := driver.Cluster().DiscoveryPlugin.(*test.DiscoveryPlugin)
 
 	//check GetProject
 	test.APIRequest{
@@ -576,7 +579,7 @@ func Test_ProjectOperations(t *testing.T) {
 	}.Check(t, router)
 
 	//check DiscoverProjects
-	driver.StaticProjects["uuid-for-germany"] = append(driver.StaticProjects["uuid-for-germany"],
+	discovery.StaticProjects["uuid-for-germany"] = append(discovery.StaticProjects["uuid-for-germany"],
 		limes.KeystoneProject{Name: "frankfurt", UUID: "uuid-for-frankfurt"},
 	)
 	test.APIRequest{
@@ -604,7 +607,7 @@ func Test_ProjectOperations(t *testing.T) {
 	expectStaleProjectServices(t, "dresden:shared", "dresden:unshared")
 
 	//SyncProject should discover the given project if not yet done
-	driver.StaticProjects["uuid-for-germany"] = append(driver.StaticProjects["uuid-for-germany"],
+	discovery.StaticProjects["uuid-for-germany"] = append(discovery.StaticProjects["uuid-for-germany"],
 		limes.KeystoneProject{Name: "walldorf", UUID: "uuid-for-walldorf"},
 	)
 	test.APIRequest{

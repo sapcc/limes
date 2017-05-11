@@ -38,7 +38,7 @@ func ScanDomains(driver limes.Driver, opts ScanDomainsOpts) ([]string, error) {
 	clusterID := driver.Cluster().ID
 
 	//list domains in Keystone
-	domains, err := driver.ListDomains()
+	domains, err := driver.Cluster().DiscoveryPlugin.ListDomains(driver.Cluster().ProviderClient())
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +150,7 @@ func initDomain(driver limes.Driver, domain limes.KeystoneDomain) (*db.Domain, e
 //ScanProjects queries Keystone to discover new projects in the given domain.
 func ScanProjects(driver limes.Driver, domain *db.Domain) ([]string, error) {
 	//list projects in Keystone
-	projects, err := driver.ListProjects(domain.UUID)
+	projects, err := driver.Cluster().DiscoveryPlugin.ListProjects(driver.Cluster().ProviderClient(), domain.UUID)
 	if err != nil {
 		return nil, err
 	}

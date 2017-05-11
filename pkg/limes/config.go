@@ -57,7 +57,7 @@ type ClusterConfiguration struct {
 	Discovery  DiscoveryConfiguration   `yaml:"discovery"`
 	Services   []ServiceConfiguration   `yaml:"services"`
 	Capacitors []CapacitorConfiguration `yaml:"capacitors"`
-	//Sorry for the stupid pun. Not.
+	//^ Sorry for the stupid pun. Not.
 	Subresources map[string][]string `yaml:"subresources"`
 }
 

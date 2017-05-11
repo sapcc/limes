@@ -39,6 +39,7 @@ func prepareScrapeTest(t *testing.T, quotaPlugins ...limes.QuotaPlugin) *test.Dr
 	cluster := &limes.Cluster{
 		ID:              "west",
 		IsServiceShared: map[string]bool{},
+		DiscoveryPlugin: test.NewDiscoveryPlugin(),
 		QuotaPlugins:    map[string]limes.QuotaPlugin{},
 		CapacityPlugins: map[string]limes.CapacityPlugin{},
 		Config:          &limes.ClusterConfiguration{AuthParameters: &limes.AuthParameters{}},
@@ -53,10 +54,11 @@ func prepareScrapeTest(t *testing.T, quotaPlugins ...limes.QuotaPlugin) *test.Dr
 	driver := test.NewDriver(cluster)
 
 	//one domain and one project is enough
-	domainUUID1 := driver.StaticDomains[0].UUID
-	driver.StaticDomains = driver.StaticDomains[0:1]
-	driver.StaticProjects = map[string][]limes.KeystoneProject{
-		domainUUID1: driver.StaticProjects[domainUUID1][0:1],
+	discovery := driver.Cluster().DiscoveryPlugin.(*test.DiscoveryPlugin)
+	domainUUID1 := discovery.StaticDomains[0].UUID
+	discovery.StaticDomains = discovery.StaticDomains[0:1]
+	discovery.StaticProjects = map[string][]limes.KeystoneProject{
+		domainUUID1: discovery.StaticProjects[domainUUID1][0:1],
 	}
 
 	//ScanDomains is required to create the entries in `domains`, `domain_services`
