@@ -33,15 +33,16 @@ import (
 //AuthParameters contains credentials for authenticating with Keystone (i.e.
 //everything that's needed to set up a gophercloud.ProviderClient instance).
 type AuthParameters struct {
-	AuthURL           string                      `yaml:"auth_url"`
-	UserName          string                      `yaml:"user_name"`
-	UserDomainName    string                      `yaml:"user_domain_name"`
-	ProjectName       string                      `yaml:"project_name"`
-	ProjectDomainName string                      `yaml:"project_domain_name"`
-	Password          string                      `yaml:"password"`
-	RegionName        string                      `yaml:"region_name"`
-	tokenRenewalMutex *sync.Mutex                 //initialized on first use
-	providerClient    *gophercloud.ProviderClient //initialized on first use
+	AuthURL           string      `yaml:"auth_url"`
+	UserName          string      `yaml:"user_name"`
+	UserDomainName    string      `yaml:"user_domain_name"`
+	ProjectName       string      `yaml:"project_name"`
+	ProjectDomainName string      `yaml:"project_domain_name"`
+	Password          string      `yaml:"password"`
+	RegionName        string      `yaml:"region_name"`
+	tokenRenewalMutex *sync.Mutex `yaml:"-"`
+	//ProviderClient is only valid after calling Connect().
+	ProviderClient *gophercloud.ProviderClient `yaml:"-"`
 }
 
 //CanReauth implements the
@@ -73,31 +74,31 @@ func (auth AuthParameters) ToTokenV3ScopeMap() (map[string]interface{}, error) {
 	}, nil
 }
 
-//ProviderClient returns an instance of gophercloud.ProviderClient using these
-//credentials, or creates one if called for the first time.
-func (auth *AuthParameters) ProviderClient() (*gophercloud.ProviderClient, error) {
+//Connect creates the gophercloud.ProviderClient instance for these credentials.
+func (auth *AuthParameters) Connect() error {
 	if auth.tokenRenewalMutex == nil {
 		auth.tokenRenewalMutex = &sync.Mutex{}
 	}
 
-	if auth.providerClient != nil {
-		var err error
-		auth.providerClient, err = openstack.NewClient(auth.AuthURL)
-		if err != nil {
-			return nil, fmt.Errorf("cannot initialize OpenStack client: %v", err)
-		}
-		//use http.DefaultClient, esp. to pick up LIMES_INSECURE flag
-		auth.providerClient.HTTPClient = *http.DefaultClient
-
-		err = auth.refreshToken()
-		if err != nil {
-			return nil, fmt.Errorf("cannot fetch initial Keystone token: %v", err)
-		}
-
-		//TODO: auth.providerClient.UserAgent.Prepend("limes/%s", versionString)
+	if auth.ProviderClient != nil {
+		//already done
+		return nil
 	}
 
-	return auth.providerClient, nil
+	var err error
+	auth.ProviderClient, err = openstack.NewClient(auth.AuthURL)
+	if err != nil {
+		return fmt.Errorf("cannot initialize OpenStack client: %v", err)
+	}
+	//use http.DefaultClient, esp. to pick up LIMES_INSECURE flag
+	auth.ProviderClient.HTTPClient = *http.DefaultClient
+
+	err = auth.refreshToken()
+	if err != nil {
+		return fmt.Errorf("cannot fetch initial Keystone token: %v", err)
+	}
+
+	return nil
 }
 
 //refreshToken fetches a new Keystone token for this cluster. It is also used
@@ -113,11 +114,11 @@ func (auth *AuthParameters) refreshToken() error {
 	defer auth.tokenRenewalMutex.Unlock()
 	util.LogDebug("renewing Keystone token...")
 
-	auth.providerClient.TokenID = ""
+	auth.ProviderClient.TokenID = ""
 
 	//TODO: crashes with RegionName != ""
 	eo := gophercloud.EndpointOpts{Region: auth.RegionName}
-	keystone, err := openstack.NewIdentityV3(auth.providerClient, eo)
+	keystone, err := openstack.NewIdentityV3(auth.ProviderClient, eo)
 	if err != nil {
 		return fmt.Errorf("cannot initialize Keystone client: %v", err)
 	}
@@ -133,9 +134,9 @@ func (auth *AuthParameters) refreshToken() error {
 		return fmt.Errorf("cannot read service catalog: %v", err)
 	}
 
-	auth.providerClient.TokenID = token.ID
-	auth.providerClient.ReauthFunc = auth.refreshToken //TODO: exponential backoff necessary or already provided by gophercloud?
-	auth.providerClient.EndpointLocator = func(opts gophercloud.EndpointOpts) (string, error) {
+	auth.ProviderClient.TokenID = token.ID
+	auth.ProviderClient.ReauthFunc = auth.refreshToken //TODO: exponential backoff necessary or already provided by gophercloud?
+	auth.ProviderClient.EndpointLocator = func(opts gophercloud.EndpointOpts) (string, error) {
 		return openstack.V3EndpointURL(catalog, opts)
 	}
 

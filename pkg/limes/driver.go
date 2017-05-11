@@ -22,7 +22,6 @@ package limes
 import (
 	policy "github.com/databus23/goslo.policy"
 	"github.com/gophercloud/gophercloud"
-	"github.com/sapcc/limes/pkg/util"
 )
 
 //Driver is an interface that wraps the authorization of the service user and
@@ -81,14 +80,11 @@ type realDriver struct {
 
 //NewDriver instantiates a Driver for the given Cluster.
 func NewDriver(cfg *Cluster) (Driver, error) {
-	var err error
 	d := &realDriver{
 		cluster: cfg,
 	}
 
-	//ensure that the gophercloud.ProviderClient is working
-	_, err = d.cluster.Config.ProviderClient()
-	return d, err
+	return d, d.cluster.Connect()
 }
 
 //Cluster implements the Driver interface.
@@ -98,10 +94,5 @@ func (d *realDriver) Cluster() *Cluster {
 
 //Client implements the Driver interface.
 func (d *realDriver) Client() *gophercloud.ProviderClient {
-	client, err := d.cluster.Config.ProviderClient()
-	if err != nil {
-		//shouldn't happen because the ProviderClient was already initialized during NewDriver()
-		util.LogFatal(err.Error())
-	}
-	return client
+	return d.cluster.ProviderClient()
 }

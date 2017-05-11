@@ -22,6 +22,7 @@ package limes
 import (
 	"sort"
 
+	"github.com/gophercloud/gophercloud"
 	"github.com/sapcc/limes/pkg/util"
 )
 
@@ -89,6 +90,18 @@ func NewCluster(id string, config *ClusterConfiguration) *Cluster {
 	sort.Strings(c.ServiceTypes) //determinism is useful for unit tests
 
 	return c
+}
+
+//Connect calls Connect() on the AuthParameters, thus ensuring that the ProviderClient instance is available.
+func (c *Cluster) Connect() error {
+	return c.Config.Connect()
+}
+
+//ProviderClient returns the gophercloud.ProviderClient for this cluster. This
+//returns nil unless Connect() is called first. (This usually happens at
+//program startup time for the current cluster.)
+func (c *Cluster) ProviderClient() *gophercloud.ProviderClient {
+	return c.Config.ProviderClient
 }
 
 //HasService checks whether the given service is enabled in this cluster.
