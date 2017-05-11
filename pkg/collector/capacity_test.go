@@ -54,6 +54,7 @@ func Test_ScanCapacity(t *testing.T) {
 				"someother/capacity",
 			),
 		},
+		Config: &limes.ClusterConfiguration{AuthParameters: &limes.AuthParameters{}},
 	}
 
 	driver := test.NewDriver(cluster)

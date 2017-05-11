@@ -41,6 +41,7 @@ func prepareScrapeTest(t *testing.T, quotaPlugins ...limes.QuotaPlugin) *test.Dr
 		IsServiceShared: map[string]bool{},
 		QuotaPlugins:    map[string]limes.QuotaPlugin{},
 		CapacityPlugins: map[string]limes.CapacityPlugin{},
+		Config:          &limes.ClusterConfiguration{AuthParameters: &limes.AuthParameters{}},
 	}
 	for _, plugin := range quotaPlugins {
 		info := plugin.ServiceInfo()

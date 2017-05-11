@@ -62,7 +62,7 @@ func setupTest(t *testing.T) (*test.Driver, http.Handler) {
 				IsServiceShared: isServiceShared,
 				QuotaPlugins:    quotaPlugins,
 				CapacityPlugins: map[string]limes.CapacityPlugin{},
-				Config:          &limes.ClusterConfiguration{},
+				Config:          &limes.ClusterConfiguration{AuthParameters: &limes.AuthParameters{}},
 			},
 			"east": {
 				ID:              "east",
@@ -70,7 +70,7 @@ func setupTest(t *testing.T) (*test.Driver, http.Handler) {
 				IsServiceShared: isServiceShared,
 				QuotaPlugins:    quotaPlugins,
 				CapacityPlugins: map[string]limes.CapacityPlugin{},
-				Config:          &limes.ClusterConfiguration{},
+				Config:          &limes.ClusterConfiguration{AuthParameters: &limes.AuthParameters{}},
 			},
 		},
 	}

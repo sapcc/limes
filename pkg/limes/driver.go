@@ -19,10 +19,7 @@
 
 package limes
 
-import (
-	policy "github.com/databus23/goslo.policy"
-	"github.com/gophercloud/gophercloud"
-)
+import policy "github.com/databus23/goslo.policy"
 
 //Driver is an interface that wraps the authorization of the service user and
 //queries to Keystone (i.e. all requests to backend services that are not
@@ -34,10 +31,6 @@ type Driver interface {
 	//because it means we just have to pass around the Driver instance in
 	//function calls, instead of both the Driver and the Cluster.
 	Cluster() *Cluster
-	//Return the main gophercloud client from which the respective service
-	//clients can be derived. For mock drivers, this returns nil, so test code
-	//should be prepared to handle a nil Client() where appropriate.
-	Client() *gophercloud.ProviderClient
 	/********** requests to Keystone **********/
 	ListDomains() ([]KeystoneDomain, error)
 	ListProjects(domainUUID string) ([]KeystoneProject, error)
@@ -90,9 +83,4 @@ func NewDriver(cfg *Cluster) (Driver, error) {
 //Cluster implements the Driver interface.
 func (d *realDriver) Cluster() *Cluster {
 	return d.cluster
-}
-
-//Client implements the Driver interface.
-func (d *realDriver) Client() *gophercloud.ProviderClient {
-	return d.cluster.ProviderClient()
 }

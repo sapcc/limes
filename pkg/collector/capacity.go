@@ -54,7 +54,7 @@ func (c *Collector) scanCapacity() {
 	cluster := c.Driver.Cluster()
 
 	for capacitorID, plugin := range cluster.CapacityPlugins {
-		capacities, err := plugin.Scrape(c.Driver.Client())
+		capacities, err := plugin.Scrape(c.Driver.Cluster().ProviderClient())
 		if err != nil {
 			c.LogError("scan capacity with capacitor %s failed: %s", capacitorID, err.Error())
 			continue
