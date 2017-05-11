@@ -23,6 +23,7 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/gophercloud/gophercloud"
 	"github.com/sapcc/limes/pkg/limes"
 )
 
@@ -81,7 +82,7 @@ func (p *Plugin) Resources() []limes.ResourceInfo {
 }
 
 //Scrape implements the limes.QuotaPlugin interface.
-func (p *Plugin) Scrape(driver limes.Driver, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
+func (p *Plugin) Scrape(provider *gophercloud.ProviderClient, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
 	result := make(map[string]limes.ResourceData)
 	for key, val := range p.StaticResourceData {
 		result[key] = *val
@@ -115,7 +116,7 @@ func (p *Plugin) Scrape(driver limes.Driver, domainUUID, projectUUID string) (ma
 }
 
 //SetQuota implements the limes.QuotaPlugin interface.
-func (p *Plugin) SetQuota(driver limes.Driver, domainUUID, projectUUID string, quotas map[string]uint64) error {
+func (p *Plugin) SetQuota(provider *gophercloud.ProviderClient, domainUUID, projectUUID string, quotas map[string]uint64) error {
 	if p.SetQuotaFails {
 		return errors.New("SetQuota failed as requested")
 	}
@@ -141,7 +142,7 @@ func (p *CapacityPlugin) ID() string {
 }
 
 //Scrape implements the limes.CapacityPlugin interface.
-func (p *CapacityPlugin) Scrape(driver limes.Driver) (map[string]map[string]uint64, error) {
+func (p *CapacityPlugin) Scrape(provider *gophercloud.ProviderClient) (map[string]map[string]uint64, error) {
 	result := make(map[string]map[string]uint64)
 	for _, str := range p.Resources {
 		parts := strings.SplitN(str, "/", 2)

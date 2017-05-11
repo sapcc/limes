@@ -271,7 +271,7 @@ func taskTestScrape(config limes.Configuration, driver limes.Driver, args []stri
 	result := make(map[string]map[string]limes.ResourceData)
 
 	for serviceType, plugin := range cluster.QuotaPlugins {
-		data, err := plugin.Scrape(driver, domainUUID, projectUUID)
+		data, err := plugin.Scrape(driver.Client(), domainUUID, projectUUID)
 		if err != nil {
 			util.LogError("scrape failed for %s: %s", serviceType, err.Error())
 		}
@@ -294,7 +294,7 @@ func taskTestScanCapacity(config limes.Configuration, driver limes.Driver, args 
 
 	result := make(map[string]map[string]uint64)
 	for capacitorID, plugin := range cluster.CapacityPlugins {
-		capacities, err := plugin.Scrape(driver)
+		capacities, err := plugin.Scrape(driver.Client())
 		if err != nil {
 			util.LogError("scan capacity with capacitor %s failed: %s", capacitorID, err.Error())
 		}

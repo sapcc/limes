@@ -71,15 +71,15 @@ func (p *novaPlugin) Resources() []limes.ResourceInfo {
 	return novaResources
 }
 
-func (p *novaPlugin) Client(driver limes.Driver) (*gophercloud.ServiceClient, error) {
-	return openstack.NewComputeV2(driver.Client(),
+func (p *novaPlugin) Client(provider *gophercloud.ProviderClient) (*gophercloud.ServiceClient, error) {
+	return openstack.NewComputeV2(provider,
 		gophercloud.EndpointOpts{Availability: gophercloud.AvailabilityPublic},
 	)
 }
 
 //Scrape implements the limes.QuotaPlugin interface.
-func (p *novaPlugin) Scrape(driver limes.Driver, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
-	client, err := p.Client(driver)
+func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
+	client, err := p.Client(provider)
 	if err != nil {
 		return nil, err
 	}
@@ -141,8 +141,8 @@ func (p *novaPlugin) Scrape(driver limes.Driver, domainUUID, projectUUID string)
 }
 
 //SetQuota implements the limes.QuotaPlugin interface.
-func (p *novaPlugin) SetQuota(driver limes.Driver, domainUUID, projectUUID string, quotas map[string]uint64) error {
-	client, err := p.Client(driver)
+func (p *novaPlugin) SetQuota(provider *gophercloud.ProviderClient, domainUUID, projectUUID string, quotas map[string]uint64) error {
+	client, err := p.Client(provider)
 	if err != nil {
 		return err
 	}

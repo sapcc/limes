@@ -21,6 +21,8 @@ package limes
 
 import (
 	"strconv"
+
+	"github.com/gophercloud/gophercloud"
 )
 
 //QuotaPlugin is the interface that the quota/usage collector plugins for all
@@ -36,11 +38,11 @@ type QuotaPlugin interface {
 	//known resources for the given project in the given domain. The string keys
 	//in the result map must be identical to the resource names
 	//from Resources().
-	Scrape(driver Driver, domainUUID, projectUUID string) (map[string]ResourceData, error)
+	Scrape(client *gophercloud.ProviderClient, domainUUID, projectUUID string) (map[string]ResourceData, error)
 	//SetQuota updates the backend service's quotas for the given project in the
 	//given domain to the values specified here. The map is guaranteed to contain
 	//values for all resources defined by Resources().
-	SetQuota(driver Driver, domainUUID, projectUUID string, quotas map[string]uint64) error
+	SetQuota(client *gophercloud.ProviderClient, domainUUID, projectUUID string, quotas map[string]uint64) error
 }
 
 //CapacityPlugin is the interface that all capacity collector plugins must
@@ -65,7 +67,7 @@ type CapacityPlugin interface {
 	//resource name. The capacity collector will ignore service types for which
 	//there is no QuotaPlugin, and resources which are not advertised by that
 	//QuotaPlugin.
-	Scrape(driver Driver) (map[string]map[string]uint64, error)
+	Scrape(client *gophercloud.ProviderClient) (map[string]map[string]uint64, error)
 }
 
 //ResourceInfo contains the metadata for a resource (i.e. some thing for which
