@@ -54,17 +54,16 @@ var findProjectQuery = `
 `
 
 //Scrape checks the database periodically for outdated or missing resource
-//records for the given driver's cluster and the given service type, and
-//updates them by querying the backend service.
+//records for the given cluster and the given service type, and updates them by
+//querying the backend service.
 //
 //Errors are logged instead of returned. The function will not return unless
 //startup fails.
 func (c *Collector) Scrape() {
 	serviceType := c.Plugin.ServiceInfo().Type
-	clusterID := c.Driver.Cluster().ID
 
 	//make sure that the counters are reported
-	labels := prometheus.Labels{"cluster": clusterID, "service": serviceType}
+	labels := prometheus.Labels{"cluster": c.Cluster.ID, "service": serviceType}
 	scrapeSuccessCounter.With(labels).Add(0)
 	scrapeFailedCounter.With(labels).Add(0)
 
@@ -76,7 +75,7 @@ func (c *Collector) Scrape() {
 			domainName  string
 			domainUUID  string
 		)
-		err := db.DB.QueryRow(findProjectQuery, clusterID, serviceType, c.TimeNow().Add(-scrapeInterval)).
+		err := db.DB.QueryRow(findProjectQuery, c.Cluster.ID, serviceType, c.TimeNow().Add(-scrapeInterval)).
 			Scan(&serviceID, &projectName, &projectUUID, &domainName, &domainUUID)
 		if err != nil {
 			//ErrNoRows is okay; it just means that needs scraping right now
@@ -95,7 +94,7 @@ func (c *Collector) Scrape() {
 		}
 
 		util.LogDebug("scraping %s for %s/%s", serviceType, domainName, projectName)
-		resourceData, err := c.Plugin.Scrape(c.Driver.Cluster().ProviderClientForService(serviceType), domainUUID, projectUUID)
+		resourceData, err := c.Plugin.Scrape(c.Cluster.ProviderClientForService(serviceType), domainUUID, projectUUID)
 		if err != nil {
 			c.LogError("scrape %s data for %s/%s failed: %s", serviceType, domainName, projectName, err.Error())
 			scrapeFailedCounter.With(labels).Inc()
@@ -241,7 +240,7 @@ func (c *Collector) writeScrapeResult(domainUUID, projectUUID, serviceType strin
 	//to get stuck because some project has backend_quota > usage > quota, for
 	//example)
 	if needToSetQuota {
-		err := c.Plugin.SetQuota(c.Driver.Cluster().ProviderClientForService(serviceType), domainUUID, projectUUID, quotaValues)
+		err := c.Plugin.SetQuota(c.Cluster.ProviderClientForService(serviceType), domainUUID, projectUUID, quotaValues)
 		if err != nil {
 			serviceType := c.Plugin.ServiceInfo().Type
 			util.LogError("could not rectify frontend/backend quota mismatch for service %s in project %s: %s",

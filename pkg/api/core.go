@@ -47,7 +47,7 @@ type VersionLinkData struct {
 }
 
 type v1Provider struct {
-	Driver      limes.Driver
+	Cluster     *limes.Cluster
 	Config      limes.Configuration
 	VersionData VersionData
 }
@@ -55,11 +55,11 @@ type v1Provider struct {
 //NewV1Router creates a http.Handler that serves the Limes v1 API.
 //It also returns the VersionData for this API version which is needed for the
 //version advertisement on "GET /".
-func NewV1Router(driver limes.Driver, config limes.Configuration) (http.Handler, VersionData) {
+func NewV1Router(cluster *limes.Cluster, config limes.Configuration) (http.Handler, VersionData) {
 	r := mux.NewRouter()
 	p := &v1Provider{
-		Driver: driver,
-		Config: config,
+		Cluster: cluster,
+		Config:  config,
 	}
 	p.VersionData = VersionData{
 		Status: "CURRENT",
@@ -137,7 +137,7 @@ func RequireJSON(w http.ResponseWriter, r *http.Request, data interface{}) bool 
 //Path constructs a full URL for a given URL path below the /v1/ endpoint.
 func (p *v1Provider) Path(elements ...string) string {
 	parts := []string{
-		strings.TrimSuffix(p.Driver.Cluster().Config.CatalogURL, "/"),
+		strings.TrimSuffix(p.Cluster.Config.CatalogURL, "/"),
 		"v1",
 	}
 	parts = append(parts, elements...)
@@ -156,7 +156,7 @@ func (p *v1Provider) FindDomainFromRequest(w http.ResponseWriter, r *http.Reques
 
 	var domain db.Domain
 	err := db.DB.SelectOne(&domain, `SELECT * FROM domains WHERE uuid = $1 AND cluster_id = $2`,
-		domainUUID, p.Driver.Cluster().ID,
+		domainUUID, p.Cluster.ID,
 	)
 	switch {
 	case err == sql.ErrNoRows:

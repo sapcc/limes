@@ -34,11 +34,9 @@ type ScanDomainsOpts struct {
 
 //ScanDomains queries Keystone to discover new domains, and returns a
 //list of UUIDs for the newly discovered domains.
-func ScanDomains(driver limes.Driver, opts ScanDomainsOpts) ([]string, error) {
-	clusterID := driver.Cluster().ID
-
+func ScanDomains(cluster *limes.Cluster, opts ScanDomainsOpts) ([]string, error) {
 	//list domains in Keystone
-	domains, err := driver.Cluster().DiscoveryPlugin.ListDomains(driver.Cluster().ProviderClient())
+	domains, err := cluster.DiscoveryPlugin.ListDomains(cluster.ProviderClient())
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +50,7 @@ func ScanDomains(driver limes.Driver, opts ScanDomainsOpts) ([]string, error) {
 	//domain and to all related resource records through `ON DELETE CASCADE`)
 	existingDomainsByUUID := make(map[string]*db.Domain)
 	var dbDomains []*db.Domain
-	_, err = db.DB.Select(&dbDomains, `SELECT * FROM domains WHERE cluster_id = $1`, clusterID)
+	_, err = db.DB.Select(&dbDomains, `SELECT * FROM domains WHERE cluster_id = $1`, cluster.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +85,7 @@ func ScanDomains(driver limes.Driver, opts ScanDomainsOpts) ([]string, error) {
 		}
 
 		util.LogInfo("discovered new Keystone domain: %s", domain.Name)
-		dbDomain, err := initDomain(driver, domain)
+		dbDomain, err := initDomain(cluster, domain)
 		if err != nil {
 			return result, err
 		}
@@ -97,7 +95,7 @@ func ScanDomains(driver limes.Driver, opts ScanDomainsOpts) ([]string, error) {
 		if opts.ScanAllProjects {
 			dbDomains = append(dbDomains, dbDomain)
 		} else {
-			_, err = ScanProjects(driver, dbDomain)
+			_, err = ScanProjects(cluster, dbDomain)
 			if err != nil {
 				return result, err
 			}
@@ -107,7 +105,7 @@ func ScanDomains(driver limes.Driver, opts ScanDomainsOpts) ([]string, error) {
 	//recurse into ScanProjects if requested
 	if opts.ScanAllProjects {
 		for _, dbDomain := range dbDomains {
-			_, err = ScanProjects(driver, dbDomain)
+			_, err = ScanProjects(cluster, dbDomain)
 			if err != nil {
 				return result, err
 			}
@@ -117,7 +115,7 @@ func ScanDomains(driver limes.Driver, opts ScanDomainsOpts) ([]string, error) {
 	return result, nil
 }
 
-func initDomain(driver limes.Driver, domain limes.KeystoneDomain) (*db.Domain, error) {
+func initDomain(cluster *limes.Cluster, domain limes.KeystoneDomain) (*db.Domain, error) {
 	//do this in a transaction to avoid half-initialized projects
 	tx, err := db.DB.Begin()
 	if err != nil {
@@ -127,7 +125,7 @@ func initDomain(driver limes.Driver, domain limes.KeystoneDomain) (*db.Domain, e
 
 	//add record to `domains` table
 	dbDomain := &db.Domain{
-		ClusterID: driver.Cluster().ID,
+		ClusterID: cluster.ID,
 		Name:      domain.Name,
 		UUID:      domain.UUID,
 	}
@@ -137,7 +135,7 @@ func initDomain(driver limes.Driver, domain limes.KeystoneDomain) (*db.Domain, e
 	}
 
 	//add records for all cluster services to the `project_services` table
-	for _, serviceType := range driver.Cluster().ServiceTypes {
+	for _, serviceType := range cluster.ServiceTypes {
 		err := tx.Insert(&db.DomainService{DomainID: dbDomain.ID, Type: serviceType})
 		if err != nil {
 			return nil, err
@@ -148,9 +146,9 @@ func initDomain(driver limes.Driver, domain limes.KeystoneDomain) (*db.Domain, e
 }
 
 //ScanProjects queries Keystone to discover new projects in the given domain.
-func ScanProjects(driver limes.Driver, domain *db.Domain) ([]string, error) {
+func ScanProjects(cluster *limes.Cluster, domain *db.Domain) ([]string, error) {
 	//list projects in Keystone
-	projects, err := driver.Cluster().DiscoveryPlugin.ListProjects(driver.Cluster().ProviderClient(), domain.UUID)
+	projects, err := cluster.DiscoveryPlugin.ListProjects(cluster.ProviderClient(), domain.UUID)
 	if err != nil {
 		return nil, err
 	}
@@ -210,7 +208,7 @@ func ScanProjects(driver limes.Driver, domain *db.Domain) ([]string, error) {
 		}
 
 		util.LogInfo("discovered new Keystone project: %s/%s", domain.Name, project.Name)
-		err := initProject(driver, domain, project)
+		err := initProject(cluster, domain, project)
 		if err != nil {
 			return result, err
 		}
@@ -222,7 +220,7 @@ func ScanProjects(driver limes.Driver, domain *db.Domain) ([]string, error) {
 
 //Initialize all the database records for a project (in both `projects` and
 //`project_services`).
-func initProject(driver limes.Driver, domain *db.Domain, project limes.KeystoneProject) error {
+func initProject(cluster *limes.Cluster, domain *db.Domain, project limes.KeystoneProject) error {
 	//do this in a transaction to avoid half-initialized projects
 	tx, err := db.DB.Begin()
 	if err != nil {
@@ -245,7 +243,7 @@ func initProject(driver limes.Driver, domain *db.Domain, project limes.KeystoneP
 	//add records for all cluster services to the `project_services` table, with
 	//default `scraped_at = NULL` to force the scraping jobs to scrape the
 	//project resources
-	for _, serviceType := range driver.Cluster().ServiceTypes {
+	for _, serviceType := range cluster.ServiceTypes {
 		err := tx.Insert(&db.ProjectService{ProjectID: dbProject.ID, Type: serviceType})
 		if err != nil {
 			return err

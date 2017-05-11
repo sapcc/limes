@@ -81,13 +81,13 @@ func main() {
 	if !exists {
 		util.LogFatal("no such cluster configured: " + clusterID)
 	}
-	driver, err := limes.NewDriver(cluster)
+	err = cluster.Connect()
 	if err != nil {
 		util.LogFatal(err.Error())
 	}
 
 	//select task
-	var task func(limes.Configuration, limes.Driver, []string) error
+	var task func(limes.Configuration, *limes.Cluster, []string) error
 	switch taskName {
 	case "collect":
 		task = taskCollect
@@ -102,7 +102,7 @@ func main() {
 	}
 
 	//run task
-	err = task(config, driver, remainingArgs)
+	err = task(config, cluster, remainingArgs)
 	if err != nil {
 		util.LogFatal(err.Error())
 	}
@@ -175,11 +175,10 @@ func createDatabaseIfNotExist(config limes.Configuration) error {
 ////////////////////////////////////////////////////////////////////////////////
 // task: collect
 
-func taskCollect(config limes.Configuration, driver limes.Driver, args []string) error {
+func taskCollect(config limes.Configuration, cluster *limes.Cluster, args []string) error {
 	if len(args) != 0 {
 		printUsageAndExit()
 	}
-	cluster := driver.Cluster()
 
 	//start scraping threads (NOTE: Many people use a pair of sync.WaitGroup and
 	//stop channel to shutdown threads in a controlled manner. I decided against
@@ -187,17 +186,17 @@ func taskCollect(config limes.Configuration, driver limes.Driver, args []string)
 	//can be terminated at any time without leaving the system in an inconsistent
 	//state, mostly through usage of DB transactions.)
 	for _, plugin := range cluster.QuotaPlugins {
-		c := collector.NewCollector(driver, plugin, config.Collector)
+		c := collector.NewCollector(cluster, plugin, config.Collector)
 		go c.Scrape()
 	}
 
 	//start those collector threads which operate over all services simultaneously
-	c := collector.NewCollector(driver, nil, config.Collector)
+	c := collector.NewCollector(cluster, nil, config.Collector)
 	go c.CheckConsistency()
 	go c.ScanCapacity()
 	go func() {
 		for {
-			_, err := collector.ScanDomains(driver, collector.ScanDomainsOpts{ScanAllProjects: true})
+			_, err := collector.ScanDomains(cluster, collector.ScanDomainsOpts{ScanAllProjects: true})
 			if err != nil {
 				util.LogError(err.Error())
 			}
@@ -207,7 +206,7 @@ func taskCollect(config limes.Configuration, driver limes.Driver, args []string)
 
 	//use main thread to emit Prometheus metrics
 	if config.Collector.ExposeDataMetrics {
-		prometheus.MustRegister(&collector.DataMetricsCollector{ClusterID: driver.Cluster().ID})
+		prometheus.MustRegister(&collector.DataMetricsCollector{ClusterID: cluster.ID})
 	}
 	http.Handle("/metrics", promhttp.Handler())
 	util.LogInfo("listening on " + config.Collector.MetricsListenAddress)
@@ -217,7 +216,7 @@ func taskCollect(config limes.Configuration, driver limes.Driver, args []string)
 ////////////////////////////////////////////////////////////////////////////////
 // task: serve
 
-func taskServe(config limes.Configuration, driver limes.Driver, args []string) error {
+func taskServe(config limes.Configuration, cluster *limes.Cluster, args []string) error {
 	if len(args) != 0 {
 		printUsageAndExit()
 	}
@@ -226,7 +225,7 @@ func taskServe(config limes.Configuration, driver limes.Driver, args []string) e
 
 	//hook up the v1 API (this code is structured so that a newer API version can
 	//be added easily later)
-	v1Router, v1VersionData := api.NewV1Router(driver, config)
+	v1Router, v1VersionData := api.NewV1Router(cluster, config)
 	mainRouter.PathPrefix("/v1/").Handler(v1Router)
 
 	//add the version advertisement that lists all available API versions
@@ -249,11 +248,10 @@ func taskServe(config limes.Configuration, driver limes.Driver, args []string) e
 ////////////////////////////////////////////////////////////////////////////////
 // task: test-scrape
 
-func taskTestScrape(config limes.Configuration, driver limes.Driver, args []string) error {
+func taskTestScrape(config limes.Configuration, cluster *limes.Cluster, args []string) error {
 	if len(args) != 1 {
 		printUsageAndExit()
 	}
-	cluster := driver.Cluster()
 
 	var (
 		domainUUID  string
@@ -271,7 +269,7 @@ func taskTestScrape(config limes.Configuration, driver limes.Driver, args []stri
 	result := make(map[string]map[string]limes.ResourceData)
 
 	for serviceType, plugin := range cluster.QuotaPlugins {
-		data, err := plugin.Scrape(driver.Cluster().ProviderClientForService(serviceType), domainUUID, projectUUID)
+		data, err := plugin.Scrape(cluster.ProviderClientForService(serviceType), domainUUID, projectUUID)
 		if err != nil {
 			util.LogError("scrape failed for %s: %s", serviceType, err.Error())
 		}
@@ -286,15 +284,14 @@ func taskTestScrape(config limes.Configuration, driver limes.Driver, args []stri
 ////////////////////////////////////////////////////////////////////////////////
 // task: test-scan-capacity
 
-func taskTestScanCapacity(config limes.Configuration, driver limes.Driver, args []string) error {
+func taskTestScanCapacity(config limes.Configuration, cluster *limes.Cluster, args []string) error {
 	if len(args) != 0 {
 		printUsageAndExit()
 	}
-	cluster := driver.Cluster()
 
 	result := make(map[string]map[string]uint64)
 	for capacitorID, plugin := range cluster.CapacityPlugins {
-		capacities, err := plugin.Scrape(driver.Cluster().ProviderClient())
+		capacities, err := plugin.Scrape(cluster.ProviderClient())
 		if err != nil {
 			util.LogError("scan capacity with capacitor %s failed: %s", capacitorID, err.Error())
 		}

@@ -55,7 +55,7 @@ func (p *v1Provider) GetCluster(w http.ResponseWriter, r *http.Request) {
 
 	clusterID := mux.Vars(r)["cluster_id"]
 	if clusterID == "current" {
-		clusterID = p.Driver.Cluster().ID
+		clusterID = p.Cluster.ID
 	}
 	clusters, err := reports.GetClusters(p.Config, &clusterID, db.DB, reports.ReadFilter(r))
 	if ReturnError(w, err) {
@@ -78,7 +78,7 @@ func (p *v1Provider) PutCluster(w http.ResponseWriter, r *http.Request) {
 	//check whether cluster exists
 	clusterID := mux.Vars(r)["cluster_id"]
 	if clusterID == "current" {
-		clusterID = p.Driver.Cluster().ID
+		clusterID = p.Cluster.ID
 	}
 	cluster, ok := p.Config.Clusters[clusterID]
 	if !ok {

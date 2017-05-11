@@ -48,7 +48,7 @@ func (p *v1Provider) CheckToken(r *http.Request) *Token {
 	}
 
 	t := &Token{enforcer: p.Config.API.PolicyEnforcer}
-	t.context, t.err = p.Driver.ValidateToken(str)
+	t.context, t.err = p.Cluster.Config.ValidateToken(str)
 	t.context.Request = mux.Vars(r)
 	t.UserUUID = t.context.Auth["user_id"]
 	t.UserName = t.context.Auth["user_name"]

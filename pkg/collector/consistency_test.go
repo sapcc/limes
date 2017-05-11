@@ -29,9 +29,9 @@ import (
 
 func Test_Consistency(t *testing.T) {
 	test.ResetTime()
-	driver := keystoneTestDriver(t)
+	cluster := keystoneTestCluster(t)
 	c := Collector{
-		Driver:   driver,
+		Cluster:  cluster,
 		Plugin:   nil,
 		LogError: t.Errorf,
 		TimeNow:  test.TimeNow,
@@ -39,7 +39,7 @@ func Test_Consistency(t *testing.T) {
 	}
 
 	//run ScanDomains once to establish a baseline
-	_, err := ScanDomains(driver, ScanDomainsOpts{})
+	_, err := ScanDomains(cluster, ScanDomainsOpts{})
 	if err != nil {
 		t.Errorf("ScanDomains failed: %v", err)
 	}

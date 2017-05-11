@@ -51,10 +51,9 @@ func (c *Collector) ScanCapacity() {
 func (c *Collector) scanCapacity() {
 	values := make(map[string]map[string]uint64)
 	scrapedAt := c.TimeNow()
-	cluster := c.Driver.Cluster()
 
-	for capacitorID, plugin := range cluster.CapacityPlugins {
-		capacities, err := plugin.Scrape(c.Driver.Cluster().ProviderClient())
+	for capacitorID, plugin := range c.Cluster.CapacityPlugins {
+		capacities, err := plugin.Scrape(c.Cluster.ProviderClient())
 		if err != nil {
 			c.LogError("scan capacity with capacitor %s failed: %s", capacitorID, err.Error())
 			continue
@@ -73,13 +72,13 @@ func (c *Collector) scanCapacity() {
 
 	//skip values for services not enabled for this cluster
 	for serviceType := range values {
-		if !cluster.HasService(serviceType) {
+		if !c.Cluster.HasService(serviceType) {
 			delete(values, serviceType)
 		}
 	}
 
 	//skip values for resources not announced by the respective QuotaPlugin
-	for serviceType, plugin := range cluster.QuotaPlugins {
+	for serviceType, plugin := range c.Cluster.QuotaPlugins {
 		subvalues, exists := values[serviceType]
 		if !exists {
 			continue
@@ -100,7 +99,7 @@ func (c *Collector) scanCapacity() {
 	sharedValues := make(map[string]map[string]uint64)
 	unsharedValues := make(map[string]map[string]uint64)
 	for serviceType, subvalues := range values {
-		if cluster.IsServiceShared[serviceType] {
+		if c.Cluster.IsServiceShared[serviceType] {
 			sharedValues[serviceType] = subvalues
 		} else {
 			unsharedValues[serviceType] = subvalues
@@ -111,7 +110,7 @@ func (c *Collector) scanCapacity() {
 	if err != nil {
 		c.LogError("write capacity failed: %s", err.Error())
 	}
-	err = c.writeCapacity(c.Driver.Cluster().ID, unsharedValues, scrapedAt)
+	err = c.writeCapacity(c.Cluster.ID, unsharedValues, scrapedAt)
 	if err != nil {
 		c.LogError("write capacity failed: %s", err.Error())
 	}
@@ -124,7 +123,7 @@ var listProtectedServicesQueryStr = `
 `
 
 func (c *Collector) writeCapacity(clusterID string, values map[string]map[string]uint64, scrapedAt time.Time) error {
-	//NOTE: clusterID is not taken from c.Driver.Cluster() because it can also be "shared".
+	//NOTE: clusterID is not taken from c.Cluster because it can also be "shared".
 
 	//do the following in a transaction to avoid inconsistent DB state
 	tx, err := db.DB.Begin()
