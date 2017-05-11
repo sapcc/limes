@@ -271,7 +271,7 @@ func taskTestScrape(config limes.Configuration, driver limes.Driver, args []stri
 	result := make(map[string]map[string]limes.ResourceData)
 
 	for serviceType, plugin := range cluster.QuotaPlugins {
-		data, err := plugin.Scrape(driver.Cluster().ProviderClient(), domainUUID, projectUUID)
+		data, err := plugin.Scrape(driver.Cluster().ProviderClientForService(serviceType), domainUUID, projectUUID)
 		if err != nil {
 			util.LogError("scrape failed for %s: %s", serviceType, err.Error())
 		}

@@ -98,6 +98,26 @@ services:
     shared: true
 ```
 
+For each service, an `auth:` section can be given to provide alternative credentials for operations on this service type
+(i.e. get quota/usage, set quota). This is particularly useful for shared services, when the service user with the
+required permissions is in a different cluster than the one for which quotas are managed. The available fields are the
+same as for `clusters.$id`. For example:
+
+```yaml
+services:
+  - type: compute
+  - type: object-store
+    shared: true
+    auth:
+      auth_url:            https://keystone.staging.example.com/v3
+      user_name:           limes
+      user_domain_name:    Default
+      project_name:        service
+      project_domain_name: Default
+      password:            swordfish
+      region_name:         staging
+```
+
 ## `compute`: Nova v2
 
 ```yaml

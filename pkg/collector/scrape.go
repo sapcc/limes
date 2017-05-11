@@ -95,7 +95,7 @@ func (c *Collector) Scrape() {
 		}
 
 		util.LogDebug("scraping %s for %s/%s", serviceType, domainName, projectName)
-		resourceData, err := c.Plugin.Scrape(c.Driver.Cluster().ProviderClient(), domainUUID, projectUUID)
+		resourceData, err := c.Plugin.Scrape(c.Driver.Cluster().ProviderClientForService(serviceType), domainUUID, projectUUID)
 		if err != nil {
 			c.LogError("scrape %s data for %s/%s failed: %s", serviceType, domainName, projectName, err.Error())
 			scrapeFailedCounter.With(labels).Inc()
@@ -241,7 +241,7 @@ func (c *Collector) writeScrapeResult(domainUUID, projectUUID, serviceType strin
 	//to get stuck because some project has backend_quota > usage > quota, for
 	//example)
 	if needToSetQuota {
-		err := c.Plugin.SetQuota(c.Driver.Cluster().ProviderClient(), domainUUID, projectUUID, quotaValues)
+		err := c.Plugin.SetQuota(c.Driver.Cluster().ProviderClientForService(serviceType), domainUUID, projectUUID, quotaValues)
 		if err != nil {
 			serviceType := c.Plugin.ServiceInfo().Type
 			util.LogError("could not rectify frontend/backend quota mismatch for service %s in project %s: %s",

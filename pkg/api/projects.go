@@ -307,7 +307,7 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 		for _, res := range resources {
 			quotaValues[res.Name] = res.Quota
 		}
-		err = plugin.SetQuota(p.Driver.Cluster().ProviderClient(), dbDomain.UUID, dbProject.UUID, quotaValues)
+		err = plugin.SetQuota(p.Driver.Cluster().ProviderClientForService(srv.Type), dbDomain.UUID, dbProject.UUID, quotaValues)
 		if err != nil {
 			errors = append(errors, err.Error())
 			continue

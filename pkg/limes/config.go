@@ -62,8 +62,9 @@ type ClusterConfiguration struct {
 
 //ServiceConfiguration describes a service that is enabled for a certain cluster.
 type ServiceConfiguration struct {
-	Type   string `yaml:"type"`
-	Shared bool   `yaml:"shared"`
+	Type   string          `yaml:"type"`
+	Shared bool            `yaml:"shared"`
+	Auth   *AuthParameters `yaml:"auth"`
 }
 
 //CapacitorConfiguration describes a capacity plugin that is enabled for a
