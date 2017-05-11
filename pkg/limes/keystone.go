@@ -35,12 +35,12 @@ func (d realDriver) keystoneClient() (*gophercloud.ServiceClient, error) {
 
 //ListDomains implements the Driver interface.
 func (d realDriver) ListDomains() ([]KeystoneDomain, error) {
-	return d.discovery.ListDomains(d.cluster.ProviderClient())
+	return d.Cluster().DiscoveryPlugin.ListDomains(d.cluster.ProviderClient())
 }
 
 //ListProjects implements the Driver interface.
 func (d realDriver) ListProjects(domainUUID string) ([]KeystoneProject, error) {
-	return d.discovery.ListProjects(d.cluster.ProviderClient(), domainUUID)
+	return d.Cluster().DiscoveryPlugin.ListProjects(d.cluster.ProviderClient(), domainUUID)
 }
 
 //ValidateToken implements the Driver interface.

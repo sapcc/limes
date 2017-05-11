@@ -53,11 +53,12 @@ type configurationInFile struct {
 //list of enabled services.
 type ClusterConfiguration struct {
 	*AuthParameters
-	CatalogURL   string                   `yaml:"catalog_url"`
-	Services     []ServiceConfiguration   `yaml:"services"`
-	Capacitors   []CapacitorConfiguration `yaml:"capacitors"`
-	Subresources map[string][]string      `yaml:"subresources"`
+	CatalogURL string                   `yaml:"catalog_url"`
+	Discovery  DiscoveryConfiguration   `yaml:"discovery"`
+	Services   []ServiceConfiguration   `yaml:"services"`
+	Capacitors []CapacitorConfiguration `yaml:"capacitors"`
 	//Sorry for the stupid pun. Not.
+	Subresources map[string][]string `yaml:"subresources"`
 }
 
 //DiscoveryConfiguration describes the method of discovering Keystone domains

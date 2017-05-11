@@ -79,9 +79,18 @@ Configuration options describing the OpenStack clusters which Limes shall cover.
 | Field | Required | Description |
 | --- | --- | --- |
 | `clusters.$id.catalog_url` | no | URL of Limes API service as it appears in the Keystone service catalog for this cluster. This is only used for version advertisements, and can be omitted if no client relies on the URLs in these version advertisements. |
+| `clusters.$id.discovery` | no | Defines which method to use to discover Keystone domains and projects in this cluster. If not given, the default value is `{ method: list }`. |
 | `clusters.$id.services` | yes | List of backend services for which to scrape quota/usage data. Service types for which Limes does not include a suitable *quota plugin* will be ignored. See below for supported service types. |
 | `clusters.$id.subresources` | no | List of resources where subresource scraping is requested. This is an object with service types as keys, and a list of resource names as values. |
 | `clusters.$id.capacitors` | no | List of capacity plugins to use for scraping capacity data. See below for supported capacity plugins. |
+
+# Supported discovery methods
+
+This section lists all supported discovery methods for Keystone domains and projects.
+
+## Method: `list` (default)
+
+When this method is configured, Limes will simply list all Keystone domains and projects with the standard API calls, equivalent to what the CLI commands `openstack domain list` and `openstack project list --domain $DOMAIN_ID` do.
 
 # Supported service types
 

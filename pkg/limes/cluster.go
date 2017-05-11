@@ -34,6 +34,7 @@ type Cluster struct {
 	Config          *ClusterConfiguration
 	ServiceTypes    []string
 	IsServiceShared map[string]bool
+	DiscoveryPlugin DiscoveryPlugin
 	QuotaPlugins    map[string]QuotaPlugin
 	CapacityPlugins map[string]CapacityPlugin
 }
@@ -42,10 +43,16 @@ type Cluster struct {
 //configuration, and also initializes all quota and capacity plugins. Errors
 //will be logged when some of the requested plugins cannot be found.
 func NewCluster(id string, config *ClusterConfiguration) *Cluster {
+	factory, exists := discoveryPluginFactories[config.Discovery.Method]
+	if !exists {
+		util.LogFatal("setup for cluster %s failed: no suitable discovery plugin found", id)
+	}
+
 	c := &Cluster{
 		ID:              id,
 		Config:          config,
 		IsServiceShared: make(map[string]bool),
+		DiscoveryPlugin: factory(config.Discovery),
 		QuotaPlugins:    make(map[string]QuotaPlugin),
 		CapacityPlugins: make(map[string]CapacityPlugin),
 	}

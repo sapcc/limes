@@ -68,15 +68,13 @@ type ResourceData struct {
 //for all access to OpenStack APIs. The interface implementations are in the
 //other source files in this module.
 type realDriver struct {
-	cluster   *Cluster //need to use lowercase "cluster" because "Cluster" is already a method
-	discovery DiscoveryPlugin
+	cluster *Cluster //need to use lowercase "cluster" because "Cluster" is already a method
 }
 
 //NewDriver instantiates a Driver for the given Cluster.
 func NewDriver(cfg *Cluster) (Driver, error) {
 	d := &realDriver{
-		cluster:   cfg,
-		discovery: discoveryPluginFactories["list"](DiscoveryConfiguration{}),
+		cluster: cfg,
 	}
 
 	return d, d.cluster.Connect()
