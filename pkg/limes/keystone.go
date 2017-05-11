@@ -35,56 +35,12 @@ func (d realDriver) keystoneClient() (*gophercloud.ServiceClient, error) {
 
 //ListDomains implements the Driver interface.
 func (d realDriver) ListDomains() ([]KeystoneDomain, error) {
-	client, err := d.keystoneClient()
-	if err != nil {
-		return nil, err
-	}
-
-	//gophercloud does not support domain listing yet - do it manually
-	url := client.ServiceURL("domains")
-	var result gophercloud.Result
-	_, err = client.Get(url, &result.Body, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	var data struct {
-		Domains []KeystoneDomain `json:"domains"`
-	}
-	err = result.ExtractInto(&data)
-	return data.Domains, err
+	return d.discovery.ListDomains(d.cluster.ProviderClient())
 }
 
 //ListProjects implements the Driver interface.
 func (d realDriver) ListProjects(domainUUID string) ([]KeystoneProject, error) {
-	client, err := d.keystoneClient()
-	if err != nil {
-		return nil, err
-	}
-
-	//gophercloud does not support project listing yet - do it manually
-	url := client.ServiceURL("projects")
-	var opts struct {
-		DomainUUID string `q:"domain_id"`
-	}
-	opts.DomainUUID = domainUUID
-	query, err := gophercloud.BuildQueryString(opts)
-	if err != nil {
-		return nil, err
-	}
-	url += query.String()
-
-	var result gophercloud.Result
-	_, err = client.Get(url, &result.Body, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	var data struct {
-		Projects []KeystoneProject `json:"projects"`
-	}
-	err = result.ExtractInto(&data)
-	return data.Projects, err
+	return d.discovery.ListProjects(d.cluster.ProviderClient(), domainUUID)
 }
 
 //ValidateToken implements the Driver interface.

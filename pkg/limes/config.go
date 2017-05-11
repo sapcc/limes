@@ -60,11 +60,23 @@ type ClusterConfiguration struct {
 	//Sorry for the stupid pun. Not.
 }
 
+//DiscoveryConfiguration describes the method of discovering Keystone domains
+//and projects.
+type DiscoveryConfiguration struct {
+	Method string `yaml:"method"`
+	//for discovery methods that need configuration, add a field with the method
+	//as name and put the config data in there (use a struct to be able to give
+	//config options meaningful names)
+}
+
 //ServiceConfiguration describes a service that is enabled for a certain cluster.
 type ServiceConfiguration struct {
 	Type   string          `yaml:"type"`
 	Shared bool            `yaml:"shared"`
 	Auth   *AuthParameters `yaml:"auth"`
+	//for quota plugins that need configuration, add a field with the service type as
+	//name and put the config data in there (use a struct to be able to give
+	//config options meaningful names)
 }
 
 //CapacitorConfiguration describes a capacity plugin that is enabled for a
