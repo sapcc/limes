@@ -25,6 +25,19 @@ import (
 	"github.com/gophercloud/gophercloud"
 )
 
+//KeystoneDomain describes the basic attributes of a Keystone domain.
+type KeystoneDomain struct {
+	UUID string `json:"id"`
+	Name string `json:"name"`
+}
+
+//KeystoneProject describes the basic attributes of a Keystone project.
+type KeystoneProject struct {
+	UUID       string `json:"id"`
+	Name       string `json:"name"`
+	ParentUUID string `json:"parent_id"`
+}
+
 //DiscoveryPlugin is the interface that the collector uses to discover Keystone
 //projects and domains in a cluster.
 type DiscoveryPlugin interface {
@@ -35,6 +48,17 @@ type DiscoveryPlugin interface {
 	ListDomains(client *gophercloud.ProviderClient) ([]KeystoneDomain, error)
 	//ListProjects returns all Keystone projects in the given domain.
 	ListProjects(client *gophercloud.ProviderClient, domainUUID string) ([]KeystoneProject, error)
+}
+
+//ResourceData contains quota and usage data for a single resource.
+//
+//The Subresources field may optionally be populated with subresources, if the
+//quota plugin providing this ResourceData instance has been instructed to (and
+//is able to) scrape subresources for this resource.
+type ResourceData struct {
+	Quota        int64 //negative values indicate infinite quota
+	Usage        uint64
+	Subresources []interface{}
 }
 
 //QuotaPlugin is the interface that the quota/usage collector plugins for all

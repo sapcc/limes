@@ -35,30 +35,6 @@ type Driver interface {
 	ValidateToken(token string) (policy.Context, error)
 }
 
-//KeystoneDomain describes the basic attributes of a Keystone domain.
-type KeystoneDomain struct {
-	UUID string `json:"id"`
-	Name string `json:"name"`
-}
-
-//KeystoneProject describes the basic attributes of a Keystone project.
-type KeystoneProject struct {
-	UUID       string `json:"id"`
-	Name       string `json:"name"`
-	ParentUUID string `json:"parent_id"`
-}
-
-//ResourceData contains quota and usage data for a single resource.
-//
-//The Subresources field may optionally be populated with subresources, if the
-//quota plugin providing this ResourceData instance has been instructed to (and
-//is able to) scrape subresources for this resource.
-type ResourceData struct {
-	Quota        int64 //negative values indicate infinite quota
-	Usage        uint64
-	Subresources []interface{}
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 
 //This is the type that implements the Driver interface by actually
@@ -81,4 +57,9 @@ func NewDriver(cfg *Cluster) (Driver, error) {
 //Cluster implements the Driver interface.
 func (d *realDriver) Cluster() *Cluster {
 	return d.cluster
+}
+
+//ValidateToken implements the Driver interface.
+func (d realDriver) ValidateToken(token string) (policy.Context, error) {
+	return d.Cluster().Config.ValidateToken(token)
 }
