@@ -28,7 +28,7 @@ import (
 )
 
 func (d realDriver) keystoneClient() (*gophercloud.ServiceClient, error) {
-	return openstack.NewIdentityV3(d.ProviderClient,
+	return openstack.NewIdentityV3(d.Client(),
 		gophercloud.EndpointOpts{Availability: gophercloud.AvailabilityPublic},
 	)
 }
@@ -87,7 +87,7 @@ func (d realDriver) ListProjects(domainUUID string) ([]KeystoneProject, error) {
 	return data.Projects, err
 }
 
-//CheckUserPermission implements the Driver interface.
+//ValidateToken implements the Driver interface.
 func (d realDriver) ValidateToken(token string) (policy.Context, error) {
 	client, err := d.keystoneClient()
 	if err != nil {

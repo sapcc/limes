@@ -22,6 +22,7 @@ package limes
 import (
 	policy "github.com/databus23/goslo.policy"
 	"github.com/gophercloud/gophercloud"
+	"github.com/sapcc/limes/pkg/util"
 )
 
 //Driver is an interface that wraps the authorization of the service user and
@@ -66,4 +67,41 @@ type ResourceData struct {
 	Quota        int64 //negative values indicate infinite quota
 	Usage        uint64
 	Subresources []interface{}
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+//This is the type that implements the Driver interface by actually
+//calling out to OpenStack. It also manages the Keystone token that's required
+//for all access to OpenStack APIs. The interface implementations are in the
+//other source files in this module.
+type realDriver struct {
+	cluster *Cluster //need to use lowercase "cluster" because "Cluster" is already a method
+}
+
+//NewDriver instantiates a Driver for the given Cluster.
+func NewDriver(cfg *Cluster) (Driver, error) {
+	var err error
+	d := &realDriver{
+		cluster: cfg,
+	}
+
+	//ensure that the gophercloud.ProviderClient is working
+	_, err = d.cluster.Config.ProviderClient()
+	return d, err
+}
+
+//Cluster implements the Driver interface.
+func (d *realDriver) Cluster() *Cluster {
+	return d.cluster
+}
+
+//Client implements the Driver interface.
+func (d *realDriver) Client() *gophercloud.ProviderClient {
+	client, err := d.cluster.Config.ProviderClient()
+	if err != nil {
+		//shouldn't happen because the ProviderClient was already initialized during NewDriver()
+		util.LogFatal(err.Error())
+	}
+	return client
 }
