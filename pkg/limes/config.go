@@ -88,6 +88,9 @@ type CapacitorConfiguration struct {
 		PrometheusAPIURL string  `yaml:"prometheus_api_url"`
 		AdjustmentFactor float64 `yaml:"adjustment_factor"`
 	} `yaml:"swift"`
+	Cinder struct {
+		VolumeBackendName string `yaml:"volume_backend_name"`
+	} `yaml:"cinder"`
 	Manual map[string]map[string]uint64 `yaml:"manual"`
 }
 
