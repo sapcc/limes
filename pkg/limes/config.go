@@ -52,7 +52,7 @@ type configurationInFile struct {
 //It is passed around in a lot of Limes code, mostly for the cluster ID and the
 //list of enabled services.
 type ClusterConfiguration struct {
-	*AuthParameters
+	Auth       *AuthParameters          `yaml:"auth"`
 	CatalogURL string                   `yaml:"catalog_url"`
 	Discovery  DiscoveryConfiguration   `yaml:"discovery"`
 	Services   []ServiceConfiguration   `yaml:"services"`
@@ -186,35 +186,35 @@ func (cfg configurationInFile) validate() (success bool) {
 		}
 
 		//gophercloud is very strict about requiring a trailing slash here
-		if cluster.AuthURL != "" && !strings.HasSuffix(cluster.AuthURL, "/") {
-			cluster.AuthURL += "/"
+		if cluster.Auth.AuthURL != "" && !strings.HasSuffix(cluster.Auth.AuthURL, "/") {
+			cluster.Auth.AuthURL += "/"
 		}
 
 		switch {
-		case cluster.AuthURL == "":
-			missing("auth_url")
-		case !strings.HasPrefix(cluster.AuthURL, "http://") && !strings.HasPrefix(cluster.AuthURL, "https://"):
-			util.LogError("clusters[%s].auth_url does not look like a HTTP URL", clusterID)
+		case cluster.Auth.AuthURL == "":
+			missing("auth.auth_url")
+		case !strings.HasPrefix(cluster.Auth.AuthURL, "http://") && !strings.HasPrefix(cluster.Auth.AuthURL, "https://"):
+			util.LogError("clusters[%s].auth.auth_url does not look like a HTTP URL", clusterID)
 			success = false
-		case !strings.HasSuffix(cluster.AuthURL, "/v3/"):
-			util.LogError("clusters[%s].auth_url does not end with \"/v3/\"", clusterID)
+		case !strings.HasSuffix(cluster.Auth.AuthURL, "/v3/"):
+			util.LogError("clusters[%s].auth.auth_url does not end with \"/v3/\"", clusterID)
 			success = false
 		}
 
-		if cluster.UserName == "" {
-			missing("user_name")
+		if cluster.Auth.UserName == "" {
+			missing("auth.user_name")
 		}
-		if cluster.UserDomainName == "" {
-			missing("user_domain_name")
+		if cluster.Auth.UserDomainName == "" {
+			missing("auth.user_domain_name")
 		}
-		if cluster.ProjectName == "" {
-			missing("project_name")
+		if cluster.Auth.ProjectName == "" {
+			missing("auth.project_name")
 		}
-		if cluster.ProjectDomainName == "" {
-			missing("project_domain_name")
+		if cluster.Auth.ProjectDomainName == "" {
+			missing("auth.project_domain_name")
 		}
-		if cluster.Password == "" {
-			missing("password")
+		if cluster.Auth.Password == "" {
+			missing("auth.password")
 		}
 		//NOTE: cluster.RegionName is optional
 		if len(cluster.Services) == 0 {

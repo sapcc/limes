@@ -102,7 +102,7 @@ func NewCluster(id string, config *ClusterConfiguration) *Cluster {
 //Connect calls Connect() on all AuthParameters for this Cluster, thus ensuring
 //that all ProviderClient instances are available.
 func (c *Cluster) Connect() error {
-	err := c.Config.Connect()
+	err := c.Config.Auth.Connect()
 	if err != nil {
 		return err
 	}
@@ -123,7 +123,7 @@ func (c *Cluster) Connect() error {
 //returns nil unless Connect() is called first. (This usually happens at
 //program startup time for the current cluster.)
 func (c *Cluster) ProviderClient() *gophercloud.ProviderClient {
-	return c.Config.ProviderClient
+	return c.Config.Auth.ProviderClient
 }
 
 //ProviderClientForService returns the gophercloud.ProviderClient for this
@@ -135,7 +135,7 @@ func (c *Cluster) ProviderClientForService(serviceType string) *gophercloud.Prov
 			return srv.Auth.ProviderClient
 		}
 	}
-	return c.Config.ProviderClient
+	return c.Config.Auth.ProviderClient
 }
 
 //HasService checks whether the given service is enabled in this cluster.
