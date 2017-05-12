@@ -54,7 +54,7 @@ func Test_ScanCapacity(t *testing.T) {
 				"someother/capacity",
 			),
 		},
-		Config: &limes.ClusterConfiguration{AuthParameters: &limes.AuthParameters{}},
+		Config: &limes.ClusterConfiguration{Auth: &limes.AuthParameters{}},
 	}
 
 	c := Collector{

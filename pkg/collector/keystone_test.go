@@ -34,7 +34,7 @@ func keystoneTestCluster(t *testing.T) *limes.Cluster {
 
 	return &limes.Cluster{
 		ID:              "west",
-		Config:          &limes.ClusterConfiguration{AuthParameters: &limes.AuthParameters{}},
+		Config:          &limes.ClusterConfiguration{Auth: &limes.AuthParameters{}},
 		ServiceTypes:    []string{"unshared", "shared"},
 		IsServiceShared: map[string]bool{"shared": true},
 		DiscoveryPlugin: test.NewDiscoveryPlugin(),
