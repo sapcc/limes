@@ -22,6 +22,7 @@ package plugins
 import (
 	"time"
 
+	"github.com/gophercloud/gophercloud"
 	"github.com/prometheus/client_golang/api/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/sapcc/limes/pkg/limes"
@@ -62,7 +63,7 @@ func (p *capacitySwiftHealthStatsdPlugin) ID() string {
 }
 
 //Scrape implements the limes.CapacityPlugin interface.
-func (p *capacitySwiftHealthStatsdPlugin) Scrape(driver limes.Driver) (map[string]map[string]uint64, error) {
+func (p *capacitySwiftHealthStatsdPlugin) Scrape(provider *gophercloud.ProviderClient) (map[string]map[string]uint64, error) {
 
 	var prometheusQuery = "min(swift_cluster_storage_capacity_bytes_gauge < inf)"
 	var prometheusAPIURL = "https://localhost:9090"

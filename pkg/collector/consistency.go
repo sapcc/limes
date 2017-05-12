@@ -44,12 +44,11 @@ func (c *Collector) CheckConsistency() {
 //TODO: code duplication
 
 func (c *Collector) checkConsistencyCluster() {
-	cluster := c.Driver.Cluster()
 	now := c.TimeNow()
 
 	//check cluster_services entries
 	var services []db.ClusterService
-	_, err := db.DB.Select(&services, `SELECT * FROM cluster_services WHERE cluster_id IN ($1,'shared')`, cluster.ID)
+	_, err := db.DB.Select(&services, `SELECT * FROM cluster_services WHERE cluster_id IN ($1,'shared')`, c.Cluster.ID)
 	if err != nil {
 		c.LogError(err.Error())
 		return
@@ -69,8 +68,8 @@ func (c *Collector) checkConsistencyCluster() {
 			unsharedSeen[service.Type] = true
 		}
 
-		if !cluster.HasService(service.Type) || cluster.IsServiceShared[service.Type] {
-			util.LogInfo("cleaning up %s service entry for domain %s", service.Type, cluster.ID)
+		if !c.Cluster.HasService(service.Type) || c.Cluster.IsServiceShared[service.Type] {
+			util.LogInfo("cleaning up %s service entry for domain %s", service.Type, c.Cluster.ID)
 			_, err := db.DB.Delete(&service)
 			if err != nil {
 				c.LogError(err.Error())
@@ -79,8 +78,8 @@ func (c *Collector) checkConsistencyCluster() {
 	}
 
 	//create missing service entries
-	for _, serviceType := range cluster.ServiceTypes {
-		shared := cluster.IsServiceShared[serviceType]
+	for _, serviceType := range c.Cluster.ServiceTypes {
+		shared := c.Cluster.IsServiceShared[serviceType]
 		if shared {
 			if sharedSeen[serviceType] {
 				continue
@@ -91,9 +90,9 @@ func (c *Collector) checkConsistencyCluster() {
 			}
 		}
 
-		util.LogInfo("creating missing %s service entry for cluster %s", serviceType, cluster.ID)
+		util.LogInfo("creating missing %s service entry for cluster %s", serviceType, c.Cluster.ID)
 		service := &db.ClusterService{
-			ClusterID: cluster.ID,
+			ClusterID: c.Cluster.ID,
 			Type:      serviceType,
 			ScrapedAt: &now,
 		}
@@ -108,7 +107,7 @@ func (c *Collector) checkConsistencyCluster() {
 
 	//recurse into domains
 	var domains []db.Domain
-	_, err = db.DB.Select(&domains, `SELECT * FROM domains WHERE cluster_id = $1`, cluster.ID)
+	_, err = db.DB.Select(&domains, `SELECT * FROM domains WHERE cluster_id = $1`, c.Cluster.ID)
 	if err != nil {
 		c.LogError(err.Error())
 		return
@@ -120,8 +119,6 @@ func (c *Collector) checkConsistencyCluster() {
 }
 
 func (c *Collector) checkConsistencyDomain(domain db.Domain) {
-	cluster := c.Driver.Cluster()
-
 	//check domain_services entries
 	seen := make(map[string]bool)
 	var services []db.DomainService
@@ -134,7 +131,7 @@ func (c *Collector) checkConsistencyDomain(domain db.Domain) {
 	//cleanup entries for services that have been disabled
 	for _, service := range services {
 		seen[service.Type] = true
-		if cluster.HasService(service.Type) {
+		if c.Cluster.HasService(service.Type) {
 			continue
 		}
 		util.LogInfo("cleaning up %s service entry for domain %s", service.Type, domain.Name)
@@ -145,7 +142,7 @@ func (c *Collector) checkConsistencyDomain(domain db.Domain) {
 	}
 
 	//create missing service entries
-	for _, serviceType := range cluster.ServiceTypes {
+	for _, serviceType := range c.Cluster.ServiceTypes {
 		if seen[serviceType] {
 			continue
 		}
@@ -173,8 +170,6 @@ func (c *Collector) checkConsistencyDomain(domain db.Domain) {
 }
 
 func (c *Collector) checkConsistencyProject(project db.Project, domain db.Domain) {
-	cluster := c.Driver.Cluster()
-
 	//check project_services entries
 	seen := make(map[string]bool)
 	var services []db.ProjectService
@@ -187,7 +182,7 @@ func (c *Collector) checkConsistencyProject(project db.Project, domain db.Domain
 	//cleanup entries for services that have been disabled
 	for _, service := range services {
 		seen[service.Type] = true
-		if cluster.HasService(service.Type) {
+		if c.Cluster.HasService(service.Type) {
 			continue
 		}
 		util.LogInfo("cleaning up %s service entry for project %s/%s", service.Type, domain.Name, project.Name)
@@ -198,7 +193,7 @@ func (c *Collector) checkConsistencyProject(project db.Project, domain db.Domain
 	}
 
 	//create missing service entries
-	for _, serviceType := range cluster.ServiceTypes {
+	for _, serviceType := range c.Cluster.ServiceTypes {
 		if seen[serviceType] {
 			continue
 		}

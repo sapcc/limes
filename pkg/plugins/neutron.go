@@ -130,8 +130,8 @@ func (p *neutronPlugin) Resources() []limes.ResourceInfo {
 	return neutronResources
 }
 
-func (p *neutronPlugin) Client(driver limes.Driver) (*gophercloud.ServiceClient, error) {
-	return openstack.NewNetworkV2(driver.Client(),
+func (p *neutronPlugin) Client(provider *gophercloud.ProviderClient) (*gophercloud.ServiceClient, error) {
+	return openstack.NewNetworkV2(provider,
 		gophercloud.EndpointOpts{Availability: gophercloud.AvailabilityPublic},
 	)
 }
@@ -236,8 +236,8 @@ type neutronQueryOpts struct {
 }
 
 //Scrape implements the limes.QuotaPlugin interface.
-func (p *neutronPlugin) Scrape(driver limes.Driver, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
-	client, err := p.Client(driver)
+func (p *neutronPlugin) Scrape(provider *gophercloud.ProviderClient, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
+	client, err := p.Client(provider)
 	if err != nil {
 		return nil, err
 	}
@@ -298,7 +298,7 @@ func (p *neutronPlugin) Scrape(driver limes.Driver, domainUUID, projectUUID stri
 }
 
 //SetQuota implements the limes.QuotaPlugin interface.
-func (p *neutronPlugin) SetQuota(driver limes.Driver, domainUUID, projectUUID string, quotas map[string]uint64) error {
+func (p *neutronPlugin) SetQuota(provider *gophercloud.ProviderClient, domainUUID, projectUUID string, quotas map[string]uint64) error {
 	//map resource names from Limes to Neutron
 	var requestData struct {
 		Quotas map[string]uint64 `json:"quota"`
@@ -311,7 +311,7 @@ func (p *neutronPlugin) SetQuota(driver limes.Driver, domainUUID, projectUUID st
 		}
 	}
 
-	client, err := p.Client(driver)
+	client, err := p.Client(provider)
 	if err != nil {
 		return err
 	}

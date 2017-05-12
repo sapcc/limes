@@ -27,7 +27,6 @@ import (
 	"strings"
 
 	policy "github.com/databus23/goslo.policy"
-	"github.com/gophercloud/gophercloud"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/util"
 
@@ -53,24 +52,32 @@ type configurationInFile struct {
 //It is passed around in a lot of Limes code, mostly for the cluster ID and the
 //list of enabled services.
 type ClusterConfiguration struct {
-	AuthURL           string                   `yaml:"auth_url"`
-	UserName          string                   `yaml:"user_name"`
-	UserDomainName    string                   `yaml:"user_domain_name"`
-	ProjectName       string                   `yaml:"project_name"`
-	ProjectDomainName string                   `yaml:"project_domain_name"`
-	Password          string                   `yaml:"password"`
-	RegionName        string                   `yaml:"region_name"`
-	CatalogURL        string                   `yaml:"catalog_url"`
-	Services          []ServiceConfiguration   `yaml:"services"`
-	Capacitors        []CapacitorConfiguration `yaml:"capacitors"`
-	Subresources      map[string][]string      `yaml:"subresources"`
-	//Sorry for the stupid pun. Not.
+	Auth       *AuthParameters          `yaml:"auth"`
+	CatalogURL string                   `yaml:"catalog_url"`
+	Discovery  DiscoveryConfiguration   `yaml:"discovery"`
+	Services   []ServiceConfiguration   `yaml:"services"`
+	Capacitors []CapacitorConfiguration `yaml:"capacitors"`
+	//^ Sorry for the stupid pun. Not.
+	Subresources map[string][]string `yaml:"subresources"`
+}
+
+//DiscoveryConfiguration describes the method of discovering Keystone domains
+//and projects.
+type DiscoveryConfiguration struct {
+	Method string `yaml:"method"`
+	//for discovery methods that need configuration, add a field with the method
+	//as name and put the config data in there (use a struct to be able to give
+	//config options meaningful names)
 }
 
 //ServiceConfiguration describes a service that is enabled for a certain cluster.
 type ServiceConfiguration struct {
-	Type   string `yaml:"type"`
-	Shared bool   `yaml:"shared"`
+	Type   string          `yaml:"type"`
+	Shared bool            `yaml:"shared"`
+	Auth   *AuthParameters `yaml:"auth"`
+	//for quota plugins that need configuration, add a field with the service type as
+	//name and put the config data in there (use a struct to be able to give
+	//config options meaningful names)
 }
 
 //CapacitorConfiguration describes a capacity plugin that is enabled for a
@@ -136,6 +143,10 @@ func NewConfiguration(path string) (cfg Configuration) {
 		Collector: cfgFile.Collector,
 	}
 	for clusterID, config := range cfgFile.Clusters {
+		if config.Discovery.Method == "" {
+			//choose default discovery method
+			config.Discovery.Method = "list"
+		}
 		cfg.Clusters[clusterID] = NewCluster(clusterID, config)
 	}
 
@@ -182,35 +193,35 @@ func (cfg configurationInFile) validate() (success bool) {
 		}
 
 		//gophercloud is very strict about requiring a trailing slash here
-		if cluster.AuthURL != "" && !strings.HasSuffix(cluster.AuthURL, "/") {
-			cluster.AuthURL += "/"
+		if cluster.Auth.AuthURL != "" && !strings.HasSuffix(cluster.Auth.AuthURL, "/") {
+			cluster.Auth.AuthURL += "/"
 		}
 
 		switch {
-		case cluster.AuthURL == "":
-			missing("auth_url")
-		case !strings.HasPrefix(cluster.AuthURL, "http://") && !strings.HasPrefix(cluster.AuthURL, "https://"):
-			util.LogError("clusters[%s].auth_url does not look like a HTTP URL", clusterID)
+		case cluster.Auth.AuthURL == "":
+			missing("auth.auth_url")
+		case !strings.HasPrefix(cluster.Auth.AuthURL, "http://") && !strings.HasPrefix(cluster.Auth.AuthURL, "https://"):
+			util.LogError("clusters[%s].auth.auth_url does not look like a HTTP URL", clusterID)
 			success = false
-		case !strings.HasSuffix(cluster.AuthURL, "/v3/"):
-			util.LogError("clusters[%s].auth_url does not end with \"/v3/\"", clusterID)
+		case !strings.HasSuffix(cluster.Auth.AuthURL, "/v3/"):
+			util.LogError("clusters[%s].auth.auth_url does not end with \"/v3/\"", clusterID)
 			success = false
 		}
 
-		if cluster.UserName == "" {
-			missing("user_name")
+		if cluster.Auth.UserName == "" {
+			missing("auth.user_name")
 		}
-		if cluster.UserDomainName == "" {
-			missing("user_domain_name")
+		if cluster.Auth.UserDomainName == "" {
+			missing("auth.user_domain_name")
 		}
-		if cluster.ProjectName == "" {
-			missing("project_name")
+		if cluster.Auth.ProjectName == "" {
+			missing("auth.project_name")
 		}
-		if cluster.ProjectDomainName == "" {
-			missing("project_domain_name")
+		if cluster.Auth.ProjectDomainName == "" {
+			missing("auth.project_domain_name")
 		}
-		if cluster.Password == "" {
-			missing("password")
+		if cluster.Auth.Password == "" {
+			missing("auth.password")
 		}
 		//NOTE: cluster.RegionName is optional
 		if len(cluster.Services) == 0 {
@@ -255,33 +266,4 @@ func loadPolicyFile(path string) (*policy.Enforcer, error) {
 		return nil, err
 	}
 	return policy.NewEnforcer(rules)
-}
-
-//CanReauth implements the
-//gophercloud/openstack/identity/v3/tokens.AuthOptionsBuilder interface.
-func (cfg *ClusterConfiguration) CanReauth() bool {
-	return true
-}
-
-//ToTokenV3CreateMap implements the
-//gophercloud/openstack/identity/v3/tokens.AuthOptionsBuilder interface.
-func (cfg *ClusterConfiguration) ToTokenV3CreateMap(scope map[string]interface{}) (map[string]interface{}, error) {
-	gophercloudAuthOpts := gophercloud.AuthOptions{
-		Username:    cfg.UserName,
-		Password:    cfg.Password,
-		DomainName:  cfg.UserDomainName,
-		AllowReauth: true,
-	}
-	return gophercloudAuthOpts.ToTokenV3CreateMap(scope)
-}
-
-//ToTokenV3ScopeMap implements the
-//gophercloud/openstack/identity/v3/tokens.AuthOptionsBuilder interface.
-func (cfg *ClusterConfiguration) ToTokenV3ScopeMap() (map[string]interface{}, error) {
-	return map[string]interface{}{
-		"project": map[string]interface{}{
-			"name":   cfg.ProjectName,
-			"domain": map[string]interface{}{"name": cfg.ProjectDomainName},
-		},
-	}, nil
 }

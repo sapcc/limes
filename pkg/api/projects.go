@@ -45,7 +45,7 @@ func (p *v1Provider) ListProjects(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, withSubresources := r.URL.Query()["detail"]
-	projects, err := reports.GetProjects(p.Driver.Cluster(), dbDomain.ID, nil, db.DB, reports.ReadFilter(r), withSubresources)
+	projects, err := reports.GetProjects(p.Cluster, dbDomain.ID, nil, db.DB, reports.ReadFilter(r), withSubresources)
 	if ReturnError(w, err) {
 		return
 	}
@@ -68,7 +68,7 @@ func (p *v1Provider) GetProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, withSubresources := r.URL.Query()["detail"]
-	projects, err := reports.GetProjects(p.Driver.Cluster(), dbDomain.ID, &dbProject.ID, db.DB, reports.ReadFilter(r), withSubresources)
+	projects, err := reports.GetProjects(p.Cluster, dbDomain.ID, &dbProject.ID, db.DB, reports.ReadFilter(r), withSubresources)
 	if ReturnError(w, err) {
 		return
 	}
@@ -90,7 +90,7 @@ func (p *v1Provider) DiscoverProjects(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newProjectUUIDs, err := collector.ScanProjects(p.Driver, dbDomain)
+	newProjectUUIDs, err := collector.ScanProjects(p.Cluster, dbDomain)
 	if ReturnError(w, err) {
 		return
 	}
@@ -118,7 +118,7 @@ func (p *v1Provider) SyncProject(w http.ResponseWriter, r *http.Request) {
 
 	//check if project needs to be discovered
 	if dbProject == nil {
-		newProjectUUIDs, err := collector.ScanProjects(p.Driver, dbDomain)
+		newProjectUUIDs, err := collector.ScanProjects(p.Cluster, dbDomain)
 		if ReturnError(w, err) {
 			return
 		}
@@ -190,7 +190,7 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 	defer db.RollbackUnlessCommitted(tx)
 
 	//gather a report on the domain's quotas to decide whether a quota update is legal
-	domainReports, err := reports.GetDomains(p.Driver.Cluster(), &dbDomain.ID, db.DB, reports.Filter{})
+	domainReports, err := reports.GetDomains(p.Cluster, &dbDomain.ID, db.DB, reports.Filter{})
 	if ReturnError(w, err) {
 		return
 	}
@@ -288,7 +288,7 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		plugin := p.Driver.Cluster().QuotaPlugins[srv.Type]
+		plugin := p.Cluster.QuotaPlugins[srv.Type]
 		if plugin == nil {
 			errors = append(errors, fmt.Sprintf("no quota plugin registered for service type %s", srv.Type))
 			continue
@@ -307,7 +307,7 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 		for _, res := range resources {
 			quotaValues[res.Name] = res.Quota
 		}
-		err = plugin.SetQuota(p.Driver, dbDomain.UUID, dbProject.UUID, quotaValues)
+		err = plugin.SetQuota(p.Cluster.ProviderClientForService(srv.Type), dbDomain.UUID, dbProject.UUID, quotaValues)
 		if err != nil {
 			errors = append(errors, err.Error())
 			continue
@@ -330,7 +330,7 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//otherwise, report success
-	projects, err := reports.GetProjects(p.Driver.Cluster(), dbDomain.ID, &dbProject.ID, db.DB, reports.Filter{}, false)
+	projects, err := reports.GetProjects(p.Cluster, dbDomain.ID, &dbProject.ID, db.DB, reports.Filter{}, false)
 	if ReturnError(w, err) {
 		return
 	}

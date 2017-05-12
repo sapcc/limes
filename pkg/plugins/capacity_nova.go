@@ -44,8 +44,8 @@ func init() {
 	})
 }
 
-func (p *capacityNovaPlugin) Client(driver limes.Driver) (*gophercloud.ServiceClient, error) {
-	return openstack.NewComputeV2(driver.Client(),
+func (p *capacityNovaPlugin) Client(provider *gophercloud.ProviderClient) (*gophercloud.ServiceClient, error) {
+	return openstack.NewComputeV2(provider,
 		gophercloud.EndpointOpts{Availability: gophercloud.AvailabilityPublic},
 	)
 }
@@ -55,8 +55,8 @@ func (p *capacityNovaPlugin) ID() string {
 }
 
 //Scrape implements the limes.CapacityPlugin interface.
-func (p *capacityNovaPlugin) Scrape(driver limes.Driver) (map[string]map[string]uint64, error) {
-	client, err := p.Client(driver)
+func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient) (map[string]map[string]uint64, error) {
+	client, err := p.Client(provider)
 	if err != nil {
 		return nil, err
 	}

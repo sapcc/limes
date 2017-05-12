@@ -22,6 +22,7 @@ package limes
 import (
 	"sort"
 
+	"github.com/gophercloud/gophercloud"
 	"github.com/sapcc/limes/pkg/util"
 )
 
@@ -33,6 +34,7 @@ type Cluster struct {
 	Config          *ClusterConfiguration
 	ServiceTypes    []string
 	IsServiceShared map[string]bool
+	DiscoveryPlugin DiscoveryPlugin
 	QuotaPlugins    map[string]QuotaPlugin
 	CapacityPlugins map[string]CapacityPlugin
 }
@@ -41,10 +43,16 @@ type Cluster struct {
 //configuration, and also initializes all quota and capacity plugins. Errors
 //will be logged when some of the requested plugins cannot be found.
 func NewCluster(id string, config *ClusterConfiguration) *Cluster {
+	factory, exists := discoveryPluginFactories[config.Discovery.Method]
+	if !exists {
+		util.LogFatal("setup for cluster %s failed: no suitable discovery plugin found", id)
+	}
+
 	c := &Cluster{
 		ID:              id,
 		Config:          config,
 		IsServiceShared: make(map[string]bool),
+		DiscoveryPlugin: factory(config.Discovery),
 		QuotaPlugins:    make(map[string]QuotaPlugin),
 		CapacityPlugins: make(map[string]CapacityPlugin),
 	}
@@ -89,6 +97,45 @@ func NewCluster(id string, config *ClusterConfiguration) *Cluster {
 	sort.Strings(c.ServiceTypes) //determinism is useful for unit tests
 
 	return c
+}
+
+//Connect calls Connect() on all AuthParameters for this Cluster, thus ensuring
+//that all ProviderClient instances are available.
+func (c *Cluster) Connect() error {
+	err := c.Config.Auth.Connect()
+	if err != nil {
+		return err
+	}
+
+	for _, srv := range c.Config.Services {
+		if srv.Auth != nil {
+			err := srv.Auth.Connect()
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+//ProviderClient returns the gophercloud.ProviderClient for this cluster. This
+//returns nil unless Connect() is called first. (This usually happens at
+//program startup time for the current cluster.)
+func (c *Cluster) ProviderClient() *gophercloud.ProviderClient {
+	return c.Config.Auth.ProviderClient
+}
+
+//ProviderClientForService returns the gophercloud.ProviderClient for this
+//service. This returns nil unless Connect() is called first. (This usually
+//happens at program startup time for the current cluster.)
+func (c *Cluster) ProviderClientForService(serviceType string) *gophercloud.ProviderClient {
+	for _, srv := range c.Config.Services {
+		if srv.Type == serviceType && srv.Auth != nil {
+			return srv.Auth.ProviderClient
+		}
+	}
+	return c.Config.Auth.ProviderClient
 }
 
 //HasService checks whether the given service is enabled in this cluster.

@@ -64,15 +64,15 @@ func (p *swiftPlugin) Resources() []limes.ResourceInfo {
 	return swiftResources
 }
 
-func (p *swiftPlugin) Client(driver limes.Driver) (*gophercloud.ServiceClient, error) {
-	return openstack.NewObjectStorageV1(driver.Client(),
+func (p *swiftPlugin) Client(provider *gophercloud.ProviderClient) (*gophercloud.ServiceClient, error) {
+	return openstack.NewObjectStorageV1(provider,
 		gophercloud.EndpointOpts{Availability: gophercloud.AvailabilityPublic},
 	)
 }
 
 //Scrape implements the limes.QuotaPlugin interface.
-func (p *swiftPlugin) Scrape(driver limes.Driver, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
-	client, err := p.projectClient(driver, projectUUID)
+func (p *swiftPlugin) Scrape(provider *gophercloud.ProviderClient, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
+	client, err := p.projectClient(provider, projectUUID)
 	if err != nil {
 		return nil, err
 	}
@@ -115,8 +115,8 @@ func (p *swiftPlugin) Scrape(driver limes.Driver, domainUUID, projectUUID string
 }
 
 //SetQuota implements the limes.QuotaPlugin interface.
-func (p *swiftPlugin) SetQuota(driver limes.Driver, domainUUID, projectUUID string, quotas map[string]uint64) error {
-	client, err := p.projectClient(driver, projectUUID)
+func (p *swiftPlugin) SetQuota(provider *gophercloud.ProviderClient, domainUUID, projectUUID string, quotas map[string]uint64) error {
+	client, err := p.projectClient(provider, projectUUID)
 	if err != nil {
 		return err
 	}
@@ -139,8 +139,8 @@ func (p *swiftPlugin) SetQuota(driver limes.Driver, domainUUID, projectUUID stri
 }
 
 //Get the project scoped cliet with specific storage URL
-func (p *swiftPlugin) projectClient(driver limes.Driver, projectUUID string) (*gophercloud.ServiceClient, error) {
-	client, err := p.Client(driver)
+func (p *swiftPlugin) projectClient(provider *gophercloud.ProviderClient, projectUUID string) (*gophercloud.ServiceClient, error) {
+	client, err := p.Client(provider)
 	if err != nil {
 		return nil, err
 	}

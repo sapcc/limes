@@ -16,12 +16,13 @@ collector:
 
 clusters:
   staging:
-    auth_url:            https://keystone.staging.example.com/v3
-    user_name:           limes
-    user_domain_name:    Default
-    project_name:        service
-    project_domain_name: Default
-    password:            swordfish
+    auth:
+      auth_url:            https://keystone.staging.example.com/v3
+      user_name:           limes
+      user_domain_name:    Default
+      project_name:        service
+      project_domain_name: Default
+      password:            swordfish
     services:
       - type: compute
       - type: network
@@ -68,20 +69,29 @@ Configuration options describing the OpenStack clusters which Limes shall cover.
 
 | Field | Required | Description | Equivalent to |
 | --- | --- | --- | :--- |
-| `clusters.$id.auth_url` | yes | URL for Keystone v3 API in this cluster. Should end in `/v3`. Other Keystone API versions are not supported. | `$OS_AUTH_URL` |
-| `clusters.$id.user_name` | yes | Limes service user. | `OS_USERNAME` |
-| `clusters.$id.user_domain_name` | yes | Domain containing Limes service user. | `OS_USER_DOMAIN_NAME` |
-| `clusters.$id.project_name` | yes | Project where Limes service user has access. | `OS_PROJECT_NAME` |
-| `clusters.$id.project_domain_name` | yes | Domain containing that project. | `OS_PROJECT_DOMAIN_NAME` |
-| `clusters.$id.password` | yes | Password for Limes service user. | `OS_PASSWORD` |
-| `clusters.$id.region_name` | no | In multi-region OpenStack clusters, this selects the region to work on. | `OS_REGION_NAME` |
+| `clusters.$id.auth.auth_url` | yes | URL for Keystone v3 API in this cluster. Should end in `/v3`. Other Keystone API versions are not supported. | `$OS_AUTH_URL` |
+| `clusters.$id.auth.user_name` | yes | Limes service user. | `OS_USERNAME` |
+| `clusters.$id.auth.user_domain_name` | yes | Domain containing Limes service user. | `OS_USER_DOMAIN_NAME` |
+| `clusters.$id.auth.project_name` | yes | Project where Limes service user has access. | `OS_PROJECT_NAME` |
+| `clusters.$id.auth.project_domain_name` | yes | Domain containing that project. | `OS_PROJECT_DOMAIN_NAME` |
+| `clusters.$id.auth.password` | yes | Password for Limes service user. | `OS_PASSWORD` |
+| `clusters.$id.auth.region_name` | no | In multi-region OpenStack clusters, this selects the region to work on. | `OS_REGION_NAME` |
 
 | Field | Required | Description |
 | --- | --- | --- |
 | `clusters.$id.catalog_url` | no | URL of Limes API service as it appears in the Keystone service catalog for this cluster. This is only used for version advertisements, and can be omitted if no client relies on the URLs in these version advertisements. |
+| `clusters.$id.discovery` | no | Defines which method to use to discover Keystone domains and projects in this cluster. If not given, the default value is `{ method: list }`. |
 | `clusters.$id.services` | yes | List of backend services for which to scrape quota/usage data. Service types for which Limes does not include a suitable *quota plugin* will be ignored. See below for supported service types. |
 | `clusters.$id.subresources` | no | List of resources where subresource scraping is requested. This is an object with service types as keys, and a list of resource names as values. |
 | `clusters.$id.capacitors` | no | List of capacity plugins to use for scraping capacity data. See below for supported capacity plugins. |
+
+# Supported discovery methods
+
+This section lists all supported discovery methods for Keystone domains and projects.
+
+## Method: `list` (default)
+
+When this method is configured, Limes will simply list all Keystone domains and projects with the standard API calls, equivalent to what the CLI commands `openstack domain list` and `openstack project list --domain $DOMAIN_ID` do.
 
 # Supported service types
 
@@ -96,6 +106,26 @@ services:
   # shared service
   - type: object-store
     shared: true
+```
+
+For each service, an `auth:` section can be given to provide alternative credentials for operations on this service type
+(i.e. get quota/usage, set quota). This is particularly useful for shared services, when the service user with the
+required permissions is in a different cluster than the one for which quotas are managed. The structure is the same as
+for `clusters.$id.auth`. For example:
+
+```yaml
+services:
+  - type: compute
+  - type: object-store
+    shared: true
+    auth:
+      auth_url:            https://keystone.staging.example.com/v3
+      user_name:           limes
+      user_domain_name:    Default
+      project_name:        service
+      project_domain_name: Default
+      password:            swordfish
+      region_name:         staging
 ```
 
 ## `compute`: Nova v2

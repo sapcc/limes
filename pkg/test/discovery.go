@@ -20,26 +20,20 @@
 package test
 
 import (
-	policy "github.com/databus23/goslo.policy"
 	"github.com/gophercloud/gophercloud"
 	"github.com/sapcc/limes/pkg/limes"
 )
 
-//Driver is a limes.Driver implementation for unit tests that does not talk to
-//an actual OpenStack. It returns a static set of domains and projects, and a
-//static set of quota/usage values for any project.
-type Driver struct {
-	cluster        *limes.Cluster
+//DiscoveryPlugin is a limes.DiscoveryPlugin implementation for unit tests that
+//reports a static set of domains and projects.
+type DiscoveryPlugin struct {
 	StaticDomains  []limes.KeystoneDomain
 	StaticProjects map[string][]limes.KeystoneProject
 }
 
-//NewDriver creates a Driver instance. The Cluster does not need to have the
-//Keystone auth params fields filled. Only the cluster ID and service list are
-//required.
-func NewDriver(cluster *limes.Cluster) *Driver {
-	return &Driver{
-		cluster: cluster,
+//NewDiscoveryPlugin creates a DiscoveryPlugin instance.
+func NewDiscoveryPlugin() *DiscoveryPlugin {
+	return &DiscoveryPlugin{
 		StaticDomains: []limes.KeystoneDomain{
 			{Name: "germany", UUID: "uuid-for-germany"},
 			{Name: "france", UUID: "uuid-for-france"},
@@ -56,27 +50,17 @@ func NewDriver(cluster *limes.Cluster) *Driver {
 	}
 }
 
-//Cluster implements the limes.Driver interface.
-func (d *Driver) Cluster() *limes.Cluster {
-	return d.cluster
+//Method implements the limes.DiscoveryPlugin interface.
+func (p *DiscoveryPlugin) Method() string {
+	return "unittest"
 }
 
-//Client implements the limes.Driver interface.
-func (d *Driver) Client() *gophercloud.ProviderClient {
-	return nil
+//ListDomains implements the limes.DiscoveryPlugin interface.
+func (p *DiscoveryPlugin) ListDomains(provider *gophercloud.ProviderClient) ([]limes.KeystoneDomain, error) {
+	return p.StaticDomains, nil
 }
 
-//ListDomains implements the limes.Driver interface.
-func (d *Driver) ListDomains() ([]limes.KeystoneDomain, error) {
-	return d.StaticDomains, nil
-}
-
-//ListProjects implements the limes.Driver interface.
-func (d *Driver) ListProjects(domainUUID string) ([]limes.KeystoneProject, error) {
-	return d.StaticProjects[domainUUID], nil
-}
-
-//ValidateToken implements the limes.Driver interface.
-func (d *Driver) ValidateToken(token string) (policy.Context, error) {
-	return policy.Context{}, nil
+//ListProjects implements the limes.DiscoveryPlugin interface.
+func (p *DiscoveryPlugin) ListProjects(provider *gophercloud.ProviderClient, domainUUID string) ([]limes.KeystoneProject, error) {
+	return p.StaticProjects[domainUUID], nil
 }

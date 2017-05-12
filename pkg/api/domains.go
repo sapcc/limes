@@ -39,7 +39,7 @@ func (p *v1Provider) ListDomains(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	domains, err := reports.GetDomains(p.Driver.Cluster(), nil, db.DB, reports.ReadFilter(r))
+	domains, err := reports.GetDomains(p.Cluster, nil, db.DB, reports.ReadFilter(r))
 	if ReturnError(w, err) {
 		return
 	}
@@ -57,7 +57,7 @@ func (p *v1Provider) GetDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	domains, err := reports.GetDomains(p.Driver.Cluster(), &dbDomain.ID, db.DB, reports.ReadFilter(r))
+	domains, err := reports.GetDomains(p.Cluster, &dbDomain.ID, db.DB, reports.ReadFilter(r))
 	if ReturnError(w, err) {
 		return
 	}
@@ -75,7 +75,7 @@ func (p *v1Provider) DiscoverDomains(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newDomainUUIDs, err := collector.ScanDomains(p.Driver, collector.ScanDomainsOpts{})
+	newDomainUUIDs, err := collector.ScanDomains(p.Cluster, collector.ScanDomainsOpts{})
 	if ReturnError(w, err) {
 		return
 	}
@@ -122,7 +122,7 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 	defer db.RollbackUnlessCommitted(tx)
 
 	//gather a report on the domain's quotas to decide whether a quota update is legal
-	domainReports, err := reports.GetDomains(p.Driver.Cluster(), &dbDomain.ID, db.DB, reports.Filter{})
+	domainReports, err := reports.GetDomains(p.Cluster, &dbDomain.ID, db.DB, reports.Filter{})
 	if ReturnError(w, err) {
 		return
 	}
@@ -207,7 +207,7 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 	auditTrail.Commit()
 
 	//otherwise, report success
-	domains, err := reports.GetDomains(p.Driver.Cluster(), &dbDomain.ID, db.DB, reports.ReadFilter(r))
+	domains, err := reports.GetDomains(p.Cluster, &dbDomain.ID, db.DB, reports.ReadFilter(r))
 	if ReturnError(w, err) {
 		return
 	}

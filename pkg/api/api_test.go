@@ -42,7 +42,7 @@ func init() {
 	limes.RegisterQuotaPlugin(test.NewPluginFactory("unshared"))
 }
 
-func setupTest(t *testing.T) (*test.Driver, http.Handler) {
+func setupTest(t *testing.T) (*limes.Cluster, http.Handler) {
 	//load test database
 	test.InitDatabase(t, "../test/migrations")
 	test.ExecSQLFile(t, "fixtures/start-data.sql")
@@ -60,9 +60,10 @@ func setupTest(t *testing.T) (*test.Driver, http.Handler) {
 				ID:              "west",
 				ServiceTypes:    serviceTypes,
 				IsServiceShared: isServiceShared,
+				DiscoveryPlugin: test.NewDiscoveryPlugin(),
 				QuotaPlugins:    quotaPlugins,
 				CapacityPlugins: map[string]limes.CapacityPlugin{},
-				Config:          &limes.ClusterConfiguration{},
+				Config:          &limes.ClusterConfiguration{Auth: &limes.AuthParameters{}},
 			},
 			"east": {
 				ID:              "east",
@@ -70,7 +71,7 @@ func setupTest(t *testing.T) (*test.Driver, http.Handler) {
 				IsServiceShared: isServiceShared,
 				QuotaPlugins:    quotaPlugins,
 				CapacityPlugins: map[string]limes.CapacityPlugin{},
-				Config:          &limes.ClusterConfiguration{},
+				Config:          &limes.ClusterConfiguration{Auth: &limes.AuthParameters{}},
 			},
 		},
 	}
@@ -90,10 +91,9 @@ func setupTest(t *testing.T) (*test.Driver, http.Handler) {
 		t.Fatal(err)
 	}
 
-	//create test driver with the domains and projects from start-data.sql
-	driver := test.NewDriver(config.Clusters["west"])
-	router, _ := NewV1Router(driver, config)
-	return driver, router
+	cluster := config.Clusters["west"]
+	router, _ := NewV1Router(cluster, config)
+	return cluster, router
 }
 
 func Test_ClusterOperations(t *testing.T) {
@@ -379,7 +379,8 @@ func expectClusterCapacity(t *testing.T, clusterID, serviceType, resourceName st
 }
 
 func Test_DomainOperations(t *testing.T) {
-	driver, router := setupTest(t)
+	cluster, router := setupTest(t)
+	discovery := cluster.DiscoveryPlugin.(*test.DiscoveryPlugin)
 
 	//check GetDomain
 	test.APIRequest{
@@ -424,7 +425,7 @@ func Test_DomainOperations(t *testing.T) {
 	}.Check(t, router)
 
 	//check DiscoverDomains
-	driver.StaticDomains = append(driver.StaticDomains,
+	discovery.StaticDomains = append(discovery.StaticDomains,
 		limes.KeystoneDomain{Name: "spain", UUID: "uuid-for-spain"},
 	)
 	test.APIRequest{
@@ -498,7 +499,8 @@ func Test_DomainOperations(t *testing.T) {
 }
 
 func Test_ProjectOperations(t *testing.T) {
-	driver, router := setupTest(t)
+	cluster, router := setupTest(t)
+	discovery := cluster.DiscoveryPlugin.(*test.DiscoveryPlugin)
 
 	//check GetProject
 	test.APIRequest{
@@ -576,7 +578,7 @@ func Test_ProjectOperations(t *testing.T) {
 	}.Check(t, router)
 
 	//check DiscoverProjects
-	driver.StaticProjects["uuid-for-germany"] = append(driver.StaticProjects["uuid-for-germany"],
+	discovery.StaticProjects["uuid-for-germany"] = append(discovery.StaticProjects["uuid-for-germany"],
 		limes.KeystoneProject{Name: "frankfurt", UUID: "uuid-for-frankfurt"},
 	)
 	test.APIRequest{
@@ -604,7 +606,7 @@ func Test_ProjectOperations(t *testing.T) {
 	expectStaleProjectServices(t, "dresden:shared", "dresden:unshared")
 
 	//SyncProject should discover the given project if not yet done
-	driver.StaticProjects["uuid-for-germany"] = append(driver.StaticProjects["uuid-for-germany"],
+	discovery.StaticProjects["uuid-for-germany"] = append(discovery.StaticProjects["uuid-for-germany"],
 		limes.KeystoneProject{Name: "walldorf", UUID: "uuid-for-walldorf"},
 	)
 	test.APIRequest{
@@ -640,7 +642,7 @@ func Test_ProjectOperations(t *testing.T) {
 
 	//check PutProject: quota admissible (i.e. will be persisted in DB), but
 	//SetQuota fails for some reason (e.g. backend service down)
-	plugin := driver.Cluster().QuotaPlugins["shared"].(*test.Plugin)
+	plugin := cluster.QuotaPlugins["shared"].(*test.Plugin)
 	plugin.SetQuotaFails = true
 	test.APIRequest{
 		Method:           "PUT",
