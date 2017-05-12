@@ -140,6 +140,10 @@ func NewConfiguration(path string) (cfg Configuration) {
 		Collector: cfgFile.Collector,
 	}
 	for clusterID, config := range cfgFile.Clusters {
+		if config.Discovery.Method == "" {
+			//choose default discovery method
+			config.Discovery.Method = "list"
+		}
 		cfg.Clusters[clusterID] = NewCluster(clusterID, config)
 	}
 
