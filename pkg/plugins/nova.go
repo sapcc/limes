@@ -33,7 +33,7 @@ import (
 type novaPlugin struct {
 	cfg             limes.ServiceConfiguration
 	scrapeInstances bool
-	flavors 	map[string]*flavors.Flavor
+	flavors         map[string]*flavors.Flavor
 }
 
 var novaResources = []limes.ResourceInfo{
@@ -117,7 +117,7 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, domainUUID, pr
 				}
 				flavor, err := p.getFlavor(client, instance.Flavor["id"].(string))
 				if err == nil {
-					subResource["ram"]  = flavor.RAM
+					subResource["ram"] = flavor.RAM
 					subResource["vcpu"] = flavor.VCPUs
 					subResource["disk"] = flavor.Disk
 				}
