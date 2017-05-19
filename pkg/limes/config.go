@@ -191,7 +191,10 @@ func (cfg configurationInFile) validate() (success bool) {
 			util.LogError("missing clusters[%s].%s configuration value", clusterID, key)
 			success = false
 		}
-
+		if cluster.Auth == nil {
+			//Avoid nil pointer access if section cluster.auth not provided but still alert on the missing values
+			cluster.Auth = new(AuthParameters)
+		}
 		//gophercloud is very strict about requiring a trailing slash here
 		if cluster.Auth.AuthURL != "" && !strings.HasSuffix(cluster.Auth.AuthURL, "/") {
 			cluster.Auth.AuthURL += "/"
