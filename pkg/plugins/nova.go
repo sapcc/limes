@@ -24,6 +24,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/limits"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/quotasets"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
 	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/sapcc/limes/pkg/limes"
@@ -32,6 +33,7 @@ import (
 type novaPlugin struct {
 	cfg             limes.ServiceConfiguration
 	scrapeInstances bool
+	flavors         map[string]*flavors.Flavor
 }
 
 var novaResources = []limes.ResourceInfo{
@@ -108,13 +110,18 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, domainUUID, pr
 			}
 
 			for _, instance := range instances {
-				instanceData = append(instanceData, map[string]interface{}{
+				subResource := map[string]interface{}{
 					"id":     instance.ID,
 					"name":   instance.Name,
 					"status": instance.Status,
-					//TODO: get flavor object and report "cores"/"ram" instead of "flavor_id" (but cache the flavors!)
-					"flavor_id": instance.Flavor["id"],
-				})
+				}
+				flavor, err := p.getFlavor(client, instance.Flavor["id"].(string))
+				if err == nil {
+					subResource["ram"] = flavor.RAM
+					subResource["vcpu"] = flavor.VCPUs
+					subResource["disk"] = flavor.Disk
+				}
+				instanceData = append(instanceData, subResource)
 			}
 			return true, nil
 		})
@@ -152,6 +159,25 @@ func (p *novaPlugin) SetQuota(provider *gophercloud.ProviderClient, domainUUID, 
 		Instances: makeIntPointer(int(quotas["instances"])),
 		Ram:       makeIntPointer(int(quotas["ram"])),
 	}).Err
+}
+
+//Getting and caching flavor details
+//Changing a flavor is not supported from OpenStack, so no invalidating of the cache needed
+//Acces to the map is not thread safe
+func (p *novaPlugin) getFlavor(client *gophercloud.ServiceClient, flavorID string) (*flavors.Flavor, error) {
+	if p.flavors == nil {
+		p.flavors = make(map[string]*flavors.Flavor)
+	}
+
+	if flavor, ok := p.flavors[flavorID]; ok {
+		return flavor, nil
+	}
+
+	flavor, err := flavors.Get(client, flavorID).Extract()
+	if err == nil {
+		p.flavors[flavorID] = flavor
+	}
+	return flavor, err
 }
 
 func makeIntPointer(value int) *int {

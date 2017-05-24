@@ -147,10 +147,12 @@ The `instances` resource supports subresource scraping. Subresources bear the fo
 
 | Attribute | Type | Comment |
 | --- | --- | --- |
-| `id` | string ||
-| `name` | string ||
-| `status` | string ||
-| `flavor_id` | string | provisional; will be replaced by `cores` and `ram` attributes soon |
+| `id` | string | nova server UUID |
+| `name` | string | nova server name |
+| `status` | string | https://wiki.openstack.org/wiki/VMState |
+| `ram` | int | ram in MB configured in flavor |
+| `vcpu` | int | vcpu configured in flavor |
+| `disk` | int | root disk size in GB configured in flavor |
 
 ## `dns`: Designate v2
 
