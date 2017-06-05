@@ -35,7 +35,7 @@ var scrapeSuccessCounter = prometheus.NewCounterVec(
 		Name: "limes_successful_scrapes",
 		Help: "Counter for successful scrape operations per Keystone project.",
 	},
-	[]string{"cluster", "service"},
+	[]string{"os_cluster", "service"},
 )
 
 var scrapeFailedCounter = prometheus.NewCounterVec(
@@ -43,7 +43,7 @@ var scrapeFailedCounter = prometheus.NewCounterVec(
 		Name: "limes_failed_scrapes",
 		Help: "Counter for failed scrape operations per Keystone project.",
 	},
-	[]string{"cluster", "service"},
+	[]string{"os_cluster", "service"},
 )
 
 func init() {
@@ -59,7 +59,7 @@ var clusterCapacityGauge = prometheus.NewGaugeVec(
 		Name: "limes_cluster_capacity",
 		Help: "Reported capacity of a Limes resource for an OpenStack cluster.",
 	},
-	[]string{"cluster", "service", "resource"},
+	[]string{"os_cluster", "service", "resource"},
 )
 
 var domainQuotaGauge = prometheus.NewGaugeVec(
@@ -67,7 +67,7 @@ var domainQuotaGauge = prometheus.NewGaugeVec(
 		Name: "limes_domain_quota",
 		Help: "Assigned quota of a Limes resource for an OpenStack domain.",
 	},
-	[]string{"cluster", "domain", "domain_id", "service", "resource"},
+	[]string{"os_cluster", "domain", "domain_id", "service", "resource"},
 )
 
 var projectQuotaGauge = prometheus.NewGaugeVec(
@@ -75,7 +75,7 @@ var projectQuotaGauge = prometheus.NewGaugeVec(
 		Name: "limes_project_quota",
 		Help: "Assigned quota of a Limes resource for an OpenStack project.",
 	},
-	[]string{"cluster", "domain", "domain_id", "project", "project_id", "service", "resource"},
+	[]string{"os_cluster", "domain", "domain_id", "project", "project_id", "service", "resource"},
 )
 
 var projectUsageGauge = prometheus.NewGaugeVec(
@@ -83,7 +83,7 @@ var projectUsageGauge = prometheus.NewGaugeVec(
 		Name: "limes_project_usage",
 		Help: "Actual usage of a Limes resource for an OpenStack project.",
 	},
-	[]string{"cluster", "domain", "domain_id", "project", "project_id", "service", "resource"},
+	[]string{"os_cluster", "domain", "domain_id", "project", "project_id", "service", "resource"},
 )
 
 var projectBackendQuotaGauge = prometheus.NewGaugeVec(
@@ -91,7 +91,7 @@ var projectBackendQuotaGauge = prometheus.NewGaugeVec(
 		Name: "limes_project_backendquota",
 		Help: "Actual quota of a Limes resource for an OpenStack project.",
 	},
-	[]string{"cluster", "domain", "domain_id", "project", "project_id", "service", "resource"},
+	[]string{"os_cluster", "domain", "domain_id", "project", "project_id", "service", "resource"},
 )
 
 //DataMetricsCollector is a prometheus.Collector that submits

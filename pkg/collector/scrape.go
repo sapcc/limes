@@ -63,7 +63,7 @@ func (c *Collector) Scrape() {
 	serviceType := c.Plugin.ServiceInfo().Type
 
 	//make sure that the counters are reported
-	labels := prometheus.Labels{"cluster": c.Cluster.ID, "service": serviceType}
+	labels := prometheus.Labels{"os_cluster": c.Cluster.ID, "service": serviceType}
 	scrapeSuccessCounter.With(labels).Add(0)
 	scrapeFailedCounter.With(labels).Add(0)
 
