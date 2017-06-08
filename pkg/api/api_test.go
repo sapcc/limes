@@ -474,7 +474,6 @@ func Test_DomainOperations(t *testing.T) {
 					{
 						"type": "shared",
 						"resources": []object{
-							//should fail because project quota sum exceeds new quota
 							{"name": "capacity", "quota": 1234},
 						},
 					},
@@ -482,19 +481,45 @@ func Test_DomainOperations(t *testing.T) {
 			},
 		},
 	}.Check(t, router)
+	expectDomainQuota(t, "germany", "shared", "capacity", 1234)
 
+	//check PutDomain on a missing domain quota (see issue #36)
+	test.APIRequest{
+		Method:           "PUT",
+		Path:             "/v1/domains/uuid-for-france",
+		ExpectStatusCode: 200,
+		RequestJSON: object{
+			"domain": object{
+				"services": []object{
+					{
+						"type": "shared",
+						"resources": []object{
+							{"name": "capacity", "quota": 123},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+	expectDomainQuota(t, "france", "shared", "capacity", 123)
+}
+
+func expectDomainQuota(t *testing.T, domainName, serviceType, resourceName string, expected uint64) {
 	var actualQuota uint64
 	err := db.DB.QueryRow(`
 		SELECT dr.quota FROM domain_resources dr
 		JOIN domain_services ds ON ds.id = dr.service_id
 		JOIN domains d ON d.id = ds.domain_id
 		WHERE d.name = ? AND ds.type = ? AND dr.name = ?`,
-		"germany", "shared", "capacity").Scan(&actualQuota)
+		domainName, serviceType, resourceName).Scan(&actualQuota)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if actualQuota != 1234 {
-		t.Error("quota was not updated in database")
+	if actualQuota != expected {
+		t.Errorf(
+			"domain quota for %s/%s/%s was not updated in database",
+			domainName, serviceType, resourceName,
+		)
 	}
 }
 
