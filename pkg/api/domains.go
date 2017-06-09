@@ -149,8 +149,9 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 		if !exists {
 			continue
 		}
+		isExistingResource := make(map[string]bool)
 
-		//check all resources
+		//check all existing resources
 		var resources []db.DomainResource
 		_, err = tx.Select(&resources,
 			`SELECT * FROM domain_resources WHERE service_id = $1 ORDER BY name`, srv.ID)
@@ -158,6 +159,7 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		for _, res := range resources {
+			isExistingResource[res.Name] = true
 			newQuota, exists := resourceQuotas[res.Name]
 			if !exists {
 				continue
@@ -183,6 +185,40 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 			res.Quota = newQuota
 			resourcesToUpdate = append(resourcesToUpdate, res)
 			resourcesToUpdateAsUntyped = append(resourcesToUpdateAsUntyped, &res)
+		}
+
+		//check resources that need to be created
+		for resourceName, newQuota := range resourceQuotas {
+			if isExistingResource[resourceName] {
+				continue
+			}
+			if !p.Cluster.HasResource(srv.Type, resourceName) {
+				errors = append(errors,
+					fmt.Sprintf("cannot set %s/%s quota: no such resource", srv.Type, resourceName),
+				)
+				continue
+			}
+
+			res := db.DomainResource{
+				ServiceID: srv.ID,
+				Name:      resourceName,
+				Quota:     0, //start with 0 because the previous value is taken into account by checkDomainQuotaUpdate
+			}
+			err := checkDomainQuotaUpdate(srv, res, domainReport, newQuota, canRaise, canLower)
+			if err != nil {
+				errors = append(errors, err.Error())
+				continue
+			}
+
+			auditTrail.Add("set quota %s.%s = %d -> %d for domain %s by user %s (%s)",
+				srv.Type, res.Name, res.Quota, newQuota,
+				dbDomain.UUID, token.UserUUID, token.UserName,
+			)
+			res.Quota = newQuota
+			err = tx.Insert(&res)
+			if ReturnError(w, err) {
+				return
+			}
 		}
 	}
 
