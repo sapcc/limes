@@ -53,7 +53,7 @@ Returns 200 (OK) on success. Result is a JSON document like:
           "scraped_at": 1486738599
         },
         {
-          "type": "object_storage",
+          "type": "object-store",
           "area": "storage",
           "resources": [
             {
@@ -186,7 +186,7 @@ Returns 200 (OK) on success. Result is a JSON document like:
           "min_scraped_at": 1486728599
         },
         {
-          "type": "object_storage",
+          "type": "object-store",
           "resources": [
             {
               "name": "capacity",
@@ -276,7 +276,7 @@ Returns 200 (OK) on success. Result is a JSON document like:
           "min_scraped_at": 1486728599
         },
         {
-          "type": "object_storage",
+          "type": "object-store",
           "resources": [
             {
               "name": "capacity",
@@ -391,11 +391,11 @@ Set quotas for the given domain. Requires a cloud-admin token, and a request bod
         ]
       },
       {
-        "type": "object_storage",
+        "type": "object-store",
         "resources": [
           {
             "name": "capacity",
-            "quota": 0
+            "quota": 60000
           }
         ]
       }
@@ -443,7 +443,7 @@ like:
         ]
       },
       {
-        "type": "object_storage",
+        "type": "object-store",
         "resources": [
           {
             "name": "capacity",
