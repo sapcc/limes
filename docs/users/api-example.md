@@ -48,7 +48,7 @@ of the paths from the [API specification][v1-api]. For example, to show quota an
 following command:
 
 ```bash
-curl -H "X-Auth-Token: $OS_AUTH_TOKEN" https://limes.example.com/v1/$DOMAIN_ID/domains/$PROJECT_ID/projects
+curl -H "X-Auth-Token: $OS_AUTH_TOKEN" https://limes.example.com/v1/domains/$DOMAIN_ID/projects/$PROJECT_ID
 ```
 
 `$OS_AUTH_TOKEN` is the token from the first step. `$DOMAIN_ID` and `$PROJECT_ID` need to be set by you to the project
