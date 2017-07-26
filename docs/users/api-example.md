@@ -52,7 +52,7 @@ curl -H "X-Auth-Token: $OS_AUTH_TOKEN" https://limes.example.com/v1/domains/$DOM
 ```
 
 `$OS_AUTH_TOKEN` is the token from the first step. `$DOMAIN_ID` and `$PROJECT_ID` need to be set by you to the project
-ID in question and its domain ID. If you only have a project name, you can get these ideas by calling `openstack project
+ID in question and its domain ID. If you only have a project name, you can get these IDs by calling `openstack project
 show $NAME`.
 
 [os-cli]: https://docs.openstack.org/user-guide/cli.html
