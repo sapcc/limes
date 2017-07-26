@@ -66,8 +66,9 @@ func init() {
 //ServiceInfo implements the limes.QuotaPlugin interface.
 func (p *manilaPlugin) ServiceInfo() limes.ServiceInfo {
 	return limes.ServiceInfo{
-		Type: "sharev2",
-		Area: "storage",
+		Type:        "sharev2",
+		ProductName: "manila",
+		Area:        "storage",
 	}
 }
 

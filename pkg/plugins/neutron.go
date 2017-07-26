@@ -120,8 +120,9 @@ func init() {
 //ServiceInfo implements the limes.QuotaPlugin interface.
 func (p *neutronPlugin) ServiceInfo() limes.ServiceInfo {
 	return limes.ServiceInfo{
-		Type: "network",
-		Area: "network",
+		Type:        "network",
+		ProductName: "neutron",
+		Area:        "network",
 	}
 }
 
