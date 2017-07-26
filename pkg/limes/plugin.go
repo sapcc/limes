@@ -127,6 +127,10 @@ type ServiceInfo struct {
 	//plugin implements. This string must be identical to the type string from
 	//the Keystone service catalog.
 	Type string `json:"type"`
+	//ProductName returns the name of the product that is the reference
+	//implementation for this service. For example, ProductName = "nova" for
+	//Type = "compute".
+	ProductName string `json:"-"`
 	//Area is a hint that UIs can use to group similar services.
 	Area string `json:"area"`
 }

@@ -60,10 +60,15 @@ var findProjectQuery = `
 //Errors are logged instead of returned. The function will not return unless
 //startup fails.
 func (c *Collector) Scrape() {
-	serviceType := c.Plugin.ServiceInfo().Type
+	serviceInfo := c.Plugin.ServiceInfo()
+	serviceType := serviceInfo.Type
 
 	//make sure that the counters are reported
-	labels := prometheus.Labels{"os_cluster": c.Cluster.ID, "service": serviceType}
+	labels := prometheus.Labels{
+		"os_cluster":   c.Cluster.ID,
+		"service":      serviceType,
+		"service_name": serviceInfo.ProductName,
+	}
 	scrapeSuccessCounter.With(labels).Add(0)
 	scrapeFailedCounter.With(labels).Add(0)
 

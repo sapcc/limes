@@ -35,7 +35,7 @@ var scrapeSuccessCounter = prometheus.NewCounterVec(
 		Name: "limes_successful_scrapes",
 		Help: "Counter for successful scrape operations per Keystone project.",
 	},
-	[]string{"os_cluster", "service"},
+	[]string{"os_cluster", "service", "service_name"},
 )
 
 var scrapeFailedCounter = prometheus.NewCounterVec(
@@ -43,7 +43,7 @@ var scrapeFailedCounter = prometheus.NewCounterVec(
 		Name: "limes_failed_scrapes",
 		Help: "Counter for failed scrape operations per Keystone project.",
 	},
-	[]string{"os_cluster", "service"},
+	[]string{"os_cluster", "service", "service_name"},
 )
 
 func init() {

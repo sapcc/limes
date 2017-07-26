@@ -63,8 +63,9 @@ func init() {
 //ServiceInfo implements the limes.QuotaPlugin interface.
 func (p *novaPlugin) ServiceInfo() limes.ServiceInfo {
 	return limes.ServiceInfo{
-		Type: "compute",
-		Area: "compute",
+		Type:        "compute",
+		ProductName: "nova",
+		Area:        "compute",
 	}
 }
 

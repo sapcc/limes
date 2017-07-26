@@ -53,8 +53,9 @@ func init() {
 //ServiceInfo implements the limes.QuotaPlugin interface.
 func (p *cinderPlugin) ServiceInfo() limes.ServiceInfo {
 	return limes.ServiceInfo{
-		Type: "volumev2",
-		Area: "storage",
+		Type:        "volumev2",
+		ProductName: "cinder",
+		Area:        "storage",
 	}
 }
 

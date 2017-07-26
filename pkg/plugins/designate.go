@@ -50,8 +50,9 @@ func init() {
 //ServiceInfo implements the limes.QuotaPlugin interface.
 func (p *designatePlugin) ServiceInfo() limes.ServiceInfo {
 	return limes.ServiceInfo{
-		Type: "dns",
-		Area: "dns",
+		Type:        "dns",
+		ProductName: "designate",
+		Area:        "dns",
 	}
 }
 
