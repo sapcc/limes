@@ -41,18 +41,15 @@ type Collector struct {
 	//When set to true, suppresses the usual non-returning behavior of
 	//collector jobs.
 	Once bool
-	//Mirrored from CollectorConfiguration.AutoAlignQuotas.
-	AutoAlignQuotas bool
 }
 
 //NewCollector creates a Collector instance.
 func NewCollector(cluster *limes.Cluster, plugin limes.QuotaPlugin, cfg limes.CollectorConfiguration) *Collector {
 	return &Collector{
-		Cluster:         cluster,
-		Plugin:          plugin,
-		LogError:        util.LogError,
-		TimeNow:         time.Now,
-		Once:            false,
-		AutoAlignQuotas: cfg.AutoAlignQuotas,
+		Cluster:  cluster,
+		Plugin:   plugin,
+		LogError: util.LogError,
+		TimeNow:  time.Now,
+		Once:     false,
 	}
 }

@@ -236,7 +236,7 @@ func (c *Collector) writeScrapeResult(domainUUID, projectUUID, serviceType strin
 	auditTrail.Commit()
 
 	//feature gate for automatic quota alignment
-	if !c.AutoAlignQuotas {
+	if !c.Cluster.Authoritative {
 		return nil
 	}
 

@@ -71,13 +71,13 @@ func prepareScrapeTest(t *testing.T, quotaPlugins ...limes.QuotaPlugin) *limes.C
 func Test_Scrape(t *testing.T) {
 	plugin := test.NewPlugin("unittest")
 	cluster := prepareScrapeTest(t, plugin)
+	cluster.Authoritative = true
 	c := Collector{
-		Cluster:         cluster,
-		Plugin:          plugin,
-		LogError:        t.Errorf,
-		TimeNow:         test.TimeNow,
-		Once:            true,
-		AutoAlignQuotas: true,
+		Cluster:  cluster,
+		Plugin:   plugin,
+		LogError: t.Errorf,
+		TimeNow:  test.TimeNow,
+		Once:     true,
 	}
 
 	//check that ScanDomains created the domain, project and their services

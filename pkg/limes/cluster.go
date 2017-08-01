@@ -37,6 +37,7 @@ type Cluster struct {
 	DiscoveryPlugin DiscoveryPlugin
 	QuotaPlugins    map[string]QuotaPlugin
 	CapacityPlugins map[string]CapacityPlugin
+	Authoritative   bool
 }
 
 //NewCluster creates a new Cluster instance with the given ID and
@@ -55,6 +56,7 @@ func NewCluster(id string, config *ClusterConfiguration) *Cluster {
 		DiscoveryPlugin: factory(config.Discovery),
 		QuotaPlugins:    make(map[string]QuotaPlugin),
 		CapacityPlugins: make(map[string]CapacityPlugin),
+		Authoritative:   config.Authoritative,
 	}
 
 	for _, srv := range config.Services {

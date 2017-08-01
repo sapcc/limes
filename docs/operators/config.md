@@ -61,7 +61,6 @@ Configuration options relating to the behavior of the collector service.
 | --- | --- | --- |
 | `collector.metrics` | yes | Bind address for the Prometheus metrics endpoint provided by this service. See `api.listen` for acceptable values. |
 | `collector.data_metrics` | no | If set to `true`, expose all quota/usage/capacity data as Prometheus gauges. This is disabled by default because this can be a lot of data for OpenStack clusters containing many projects, domains and services. |
-| `collector.auto_align_quotas` | no | If set to `true`, the collector will write the quota from its own database into the backend service whenever scraping encounters a backend quota that differs from the expectation. This flag is very recommended in production systems to avoid divergence of Limes quotas from backend quotas, but should be used with care during development. |
 
 ## Section "clusters"
 
@@ -84,6 +83,7 @@ Configuration options describing the OpenStack clusters which Limes shall cover.
 | `clusters.$id.services` | yes | List of backend services for which to scrape quota/usage data. Service types for which Limes does not include a suitable *quota plugin* will be ignored. See below for supported service types. |
 | `clusters.$id.subresources` | no | List of resources where subresource scraping is requested. This is an object with service types as keys, and a list of resource names as values. |
 | `clusters.$id.capacitors` | no | List of capacity plugins to use for scraping capacity data. See below for supported capacity plugins. |
+| `clusters.$id.authoritative` | no | If set to `true`, the collector will write the quota from its own database into the backend service whenever scraping encounters a backend quota that differs from the expectation. This flag is strongly recommended in production systems to avoid divergence of Limes quotas from backend quotas, but should be used with care during development. |
 
 # Supported discovery methods
 

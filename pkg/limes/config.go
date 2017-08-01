@@ -58,7 +58,8 @@ type ClusterConfiguration struct {
 	Services   []ServiceConfiguration   `yaml:"services"`
 	Capacitors []CapacitorConfiguration `yaml:"capacitors"`
 	//^ Sorry for the stupid pun. Not.
-	Subresources map[string][]string `yaml:"subresources"`
+	Subresources  map[string][]string `yaml:"subresources"`
+	Authoritative bool                `yaml:"authoritative"`
 }
 
 //DiscoveryConfiguration describes the method of discovering Keystone domains
@@ -112,7 +113,6 @@ type APIConfiguration struct {
 type CollectorConfiguration struct {
 	MetricsListenAddress string `yaml:"metrics"`
 	ExposeDataMetrics    bool   `yaml:"data_metrics"`
-	AutoAlignQuotas      bool   `yaml:"auto_align_quotas"`
 }
 
 //NewConfiguration reads and validates the given configuration file.
