@@ -134,6 +134,7 @@ func (auth *AuthParameters) refreshToken() error {
 	auth.ProviderClient.TokenID = token.ID
 	auth.ProviderClient.ReauthFunc = auth.refreshToken //TODO: exponential backoff necessary or already provided by gophercloud?
 	auth.ProviderClient.EndpointLocator = func(opts gophercloud.EndpointOpts) (string, error) {
+		opts.Region = auth.RegionName
 		return openstack.V3EndpointURL(catalog, opts)
 	}
 
