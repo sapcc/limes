@@ -128,7 +128,7 @@ func (p *roleAssignmentDiscoveryPlugin) ListProjects(provider *gophercloud.Provi
 		projects = append(projects, data2.Project)
 	}
 
-	util.LogInfo("domain = %s -> projects = %#v", domainUUID, projects)
+	util.LogDebug("domain = %s -> projects = %#v", domainUUID, projects)
 	return projects, nil
 }
 

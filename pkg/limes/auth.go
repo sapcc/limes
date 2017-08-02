@@ -117,14 +117,10 @@ func (auth *AuthParameters) refreshToken() error {
 
 	auth.ProviderClient.TokenID = ""
 
-	//TODO: crashes with RegionName != ""
-	eo := gophercloud.EndpointOpts{Region: auth.RegionName}
-	keystone, err := openstack.NewIdentityV3(auth.ProviderClient, eo)
-	if err != nil {
-		return fmt.Errorf("cannot initialize Keystone client: %v", err)
+	keystone := &gophercloud.ServiceClient{
+		ProviderClient: auth.ProviderClient,
+		Endpoint:       auth.AuthURL,
 	}
-	keystone.Endpoint = auth.AuthURL
-
 	result := tokens.Create(keystone, auth)
 	token, err := result.ExtractToken()
 	if err != nil {
