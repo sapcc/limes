@@ -69,6 +69,9 @@ type DiscoveryConfiguration struct {
 	//for discovery methods that need configuration, add a field with the method
 	//as name and put the config data in there (use a struct to be able to give
 	//config options meaningful names)
+	RoleAssignment struct {
+		RoleName string `yaml:"role"`
+	} `yaml:"role-assignment"`
 }
 
 //ServiceConfiguration describes a service that is enabled for a certain cluster.

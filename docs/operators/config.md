@@ -91,7 +91,25 @@ This section lists all supported discovery methods for Keystone domains and proj
 
 ## Method: `list` (default)
 
+```yaml
+discovery:
+  method: list
+```
+
 When this method is configured, Limes will simply list all Keystone domains and projects with the standard API calls, equivalent to what the CLI commands `openstack domain list` and `openstack project list --domain $DOMAIN_ID` do.
+
+## Method: `role-assignment`
+
+```yaml
+discovery:
+  method: role-assignment
+  role-assignment:
+    role: swiftoperator
+```
+
+When this method is configured, Limes will only consider those Keystone projects where the configured role is assigned to at least one user or group. Role assignments to domains are not considered.
+
+This method is useful when there are a lot of projects (e.g. more than 10 000), but only a few of them (e.g. a few dozen) need to be considered by Limes. Since this method requires one API call per project (times the number of domains) every three minutes, it is not advisable when a lot of projects need to be considered by Limes.
 
 # Supported service types
 
