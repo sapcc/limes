@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"regexp"
 	"strings"
 
 	policy "github.com/databus23/goslo.policy"
@@ -65,7 +66,11 @@ type ClusterConfiguration struct {
 //DiscoveryConfiguration describes the method of discovering Keystone domains
 //and projects.
 type DiscoveryConfiguration struct {
-	Method string `yaml:"method"`
+	Method               string         `yaml:"method"`
+	ExcludeDomainPattern string         `yaml:"except_domains"`
+	IncludeDomainPattern string         `yaml:"only_domains"`
+	ExcludeDomainRx      *regexp.Regexp `yaml:"-"`
+	IncludeDomainRx      *regexp.Regexp `yaml:"-"`
 	//for discovery methods that need configuration, add a field with the method
 	//as name and put the config data in there (use a struct to be able to give
 	//config options meaningful names)
@@ -194,6 +199,18 @@ func (cfg configurationInFile) validate() (success bool) {
 			util.LogError("missing clusters[%s].%s configuration value", clusterID, key)
 			success = false
 		}
+		compileOptionalRx := func(pattern string) *regexp.Regexp {
+			if pattern == "" {
+				return nil
+			}
+			rx, err := regexp.Compile(pattern)
+			if err != nil {
+				util.LogError("failed to compile regex %#v: %s", pattern, err.Error())
+				success = false
+			}
+			return rx
+		}
+
 		if cluster.Auth == nil {
 			//Avoid nil pointer access if section cluster.auth not provided but still alert on the missing values
 			cluster.Auth = new(AuthParameters)
@@ -245,6 +262,9 @@ func (cfg configurationInFile) validate() (success bool) {
 				missing(fmt.Sprintf("capacitors[%d].id", idx))
 			}
 		}
+
+		cluster.Discovery.IncludeDomainRx = compileOptionalRx(cluster.Discovery.IncludeDomainPattern)
+		cluster.Discovery.ExcludeDomainRx = compileOptionalRx(cluster.Discovery.ExcludeDomainPattern)
 	}
 
 	if cfg.API.ListenAddress == "" {

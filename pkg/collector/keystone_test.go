@@ -20,7 +20,9 @@
 package collector
 
 import (
+	"regexp"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/sapcc/limes/pkg/limes"
@@ -140,4 +142,37 @@ func Test_ScanDomains(t *testing.T) {
 	}
 	test.AssertDeepEqual(t, "new domains after ScanDomains #8", actualNewDomains, []string(nil))
 	test.AssertDBContent(t, "fixtures/scandomains4.sql")
+}
+
+func Test_listDomainsFiltered(t *testing.T) {
+	cluster := &limes.Cluster{
+		DiscoveryPlugin: &test.DiscoveryPlugin{
+			StaticDomains: []limes.KeystoneDomain{
+				{Name: "bar1"},
+				{Name: "bar2"},
+				{Name: "foo1"},
+				{Name: "foo2"},
+			},
+		},
+		Config: &limes.ClusterConfiguration{
+			Auth: &limes.AuthParameters{},
+			Discovery: limes.DiscoveryConfiguration{
+				IncludeDomainRx: regexp.MustCompile(`foo`),
+				ExcludeDomainRx: regexp.MustCompile(`2$`),
+			},
+		},
+	}
+
+	domains, err := listDomainsFiltered(cluster)
+	if err != nil {
+		t.Fatal("listDomainsFiltered failed with unexpected error:", err.Error())
+	}
+	names := make([]string, len(domains))
+	for idx, d := range domains {
+		names[idx] = d.Name
+	}
+	namesStr := strings.Join(names, " ")
+	if namesStr != "foo1" {
+		t.Errorf("expected only domain \"foo1\", but got \"%s\" instead", namesStr)
+	}
 }

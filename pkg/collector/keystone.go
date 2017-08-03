@@ -32,11 +32,39 @@ type ScanDomainsOpts struct {
 	ScanAllProjects bool
 }
 
+//This extends ListDomains() by handling of the {Include,Exclude}DomainRx. It's
+//a separate function for unit test accessibility.
+func listDomainsFiltered(cluster *limes.Cluster) ([]limes.KeystoneDomain, error) {
+	domains, err := cluster.DiscoveryPlugin.ListDomains(cluster.ProviderClient())
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]limes.KeystoneDomain, 0, len(domains))
+	discovery := cluster.Config.Discovery
+
+	for _, domain := range domains {
+		if discovery.ExcludeDomainRx != nil {
+			if discovery.ExcludeDomainRx.MatchString(domain.Name) {
+				continue
+			}
+		}
+		if discovery.IncludeDomainRx != nil {
+			if !discovery.IncludeDomainRx.MatchString(domain.Name) {
+				continue
+			}
+		}
+		result = append(result, domain)
+	}
+
+	return result, nil
+}
+
 //ScanDomains queries Keystone to discover new domains, and returns a
 //list of UUIDs for the newly discovered domains.
 func ScanDomains(cluster *limes.Cluster, opts ScanDomainsOpts) ([]string, error) {
 	//list domains in Keystone
-	domains, err := cluster.DiscoveryPlugin.ListDomains(cluster.ProviderClient())
+	domains, err := listDomainsFiltered(cluster)
 	if err != nil {
 		return nil, err
 	}
