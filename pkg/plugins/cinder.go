@@ -22,11 +22,14 @@ package plugins
 import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
+	"github.com/gophercloud/gophercloud/openstack/blockstorage/v2/volumes"
+	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/sapcc/limes/pkg/limes"
 )
 
 type cinderPlugin struct {
-	cfg limes.ServiceConfiguration
+	cfg           limes.ServiceConfiguration
+	scrapeVolumes bool
 }
 
 var cinderResources = []limes.ResourceInfo{
@@ -46,7 +49,10 @@ var cinderResources = []limes.ResourceInfo{
 
 func init() {
 	limes.RegisterQuotaPlugin(func(c limes.ServiceConfiguration, scrapeSubresources map[string]bool) limes.QuotaPlugin {
-		return &cinderPlugin{c}
+		return &cinderPlugin{
+			cfg:           c,
+			scrapeVolumes: scrapeSubresources["volumes"],
+		}
 	})
 }
 
@@ -100,6 +106,34 @@ func (p *cinderPlugin) Scrape(provider *gophercloud.ProviderClient, domainUUID, 
 		return nil, err
 	}
 
+	var volumeData []interface{}
+	if p.scrapeVolumes {
+		listOpts := cinderVolumeListOpts{
+			AllTenants: true,
+			ProjectID:  projectUUID,
+		}
+
+		err := volumes.List(client, listOpts).EachPage(func(page pagination.Page) (bool, error) {
+			vols, err := volumes.ExtractVolumes(page)
+			if err != nil {
+				return false, err
+			}
+
+			for _, volume := range vols {
+				volumeData = append(volumeData, map[string]interface{}{
+					"id":     volume.ID,
+					"name":   volume.Name,
+					"status": volume.Status,
+					"size":   volume.Size,
+				})
+			}
+			return true, nil
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return map[string]limes.ResourceData{
 		"capacity": {
 			Quota: data.QuotaSet.Capacity.Quota,
@@ -110,8 +144,9 @@ func (p *cinderPlugin) Scrape(provider *gophercloud.ProviderClient, domainUUID, 
 			Usage: data.QuotaSet.Snapshots.Usage,
 		},
 		"volumes": {
-			Quota: data.QuotaSet.Volumes.Quota,
-			Usage: data.QuotaSet.Volumes.Usage,
+			Quota:        data.QuotaSet.Volumes.Quota,
+			Usage:        data.QuotaSet.Volumes.Usage,
+			Subresources: volumeData,
 		},
 	}, nil
 }
@@ -134,4 +169,14 @@ func (p *cinderPlugin) SetQuota(provider *gophercloud.ProviderClient, domainUUID
 	url := client.ServiceURL("os-quota-sets", projectUUID)
 	_, err = client.Put(url, requestData, nil, &gophercloud.RequestOpts{OkCodes: []int{200}})
 	return err
+}
+
+type cinderVolumeListOpts struct {
+	AllTenants bool   `q:"all_tenants"`
+	ProjectID  string `q:"project_id"`
+}
+
+func (opts cinderVolumeListOpts) ToVolumeListQuery() (string, error) {
+	q, err := gophercloud.BuildQueryString(opts)
+	return q.String(), err
 }

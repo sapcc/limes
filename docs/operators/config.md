@@ -267,6 +267,15 @@ The area for this service is `storage`.
 
 Quotas per volume type cannot be controlled explicitly in Limes.
 
+The `volumes` resource supports subresource scraping. Subresources bear the following attributes:
+
+| Attribute | Type | Comment |
+| --- | --- | --- |
+| `id` | string | volume UUID |
+| `name` | string | volume name |
+| `status` | string | https://developer.openstack.org/api-ref/block-storage/v2/index.html#volumes-volumes |
+| `size` | integer | volume size in GiB |
+
 # Available capacity plugins
 
 Note that capacity for a resource only becomes visible when the corresponding service is enabled in the
