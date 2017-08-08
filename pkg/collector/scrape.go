@@ -157,6 +157,13 @@ func (c *Collector) writeScrapeResult(domainUUID, projectUUID, serviceType strin
 			if len(data.Subresources) == 0 {
 				res.SubresourcesJSON = ""
 			} else {
+				//warn when the backend is inconsistent with itself
+				if uint64(len(data.Subresources)) != res.Usage {
+					util.LogInfo("resource quantity mismatch in project %s, resource %s/%s: usage = %d, but found %d subresources",
+						projectUUID, serviceType, res.Name,
+						res.Usage, len(data.Subresources),
+					)
+				}
 				bytes, err := json.Marshal(data.Subresources)
 				if err != nil {
 					return fmt.Errorf("failed to convert subresources to JSON: %s", err.Error())
