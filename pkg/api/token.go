@@ -65,7 +65,7 @@ func (t *Token) Require(w http.ResponseWriter, rule string) bool {
 	}
 
 	if !t.enforcer.Enforce(rule, t.context) {
-		http.Error(w, "Unauthorized", 401)
+		http.Error(w, "Forbidden", 403)
 		return false
 	}
 	return true
