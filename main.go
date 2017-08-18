@@ -125,6 +125,12 @@ func printUsageAndExit() {
 // task: migrate
 
 func taskMigrate(config limes.Configuration) {
+	err := createDatabaseIfNotExist(config)
+	if err != nil {
+		util.LogError(err.Error())
+		os.Exit(1)
+	}
+
 	errs, ok := migrate.UpSync(config.Database.Location, config.Database.MigrationsPath)
 	if !ok {
 		util.LogError("migration failed, see errors on stderr")
