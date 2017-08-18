@@ -53,17 +53,6 @@ install: FORCE all
 clean: FORCE
 	rm -f -- build/limes
 
-build/docker.tar: clean
-	make GO_LDFLAGS="-s -w -linkmode external -extldflags -static" DESTDIR='$(CURDIR)/build/install' install
-	( cd build/install && tar cf - . ) > build/docker.tar
-
-DOCKER       := docker
-DOCKER_IMAGE := sapcc/limes
-DOCKER_TAG   := latest
-
-docker: build/docker.tar
-	$(DOCKER) build -t "$(DOCKER_IMAGE):$(DOCKER_TAG)" .
-
 vendor: FORCE
 	@# vendoring by https://github.com/holocm/golangvend
 	golangvend

@@ -47,23 +47,7 @@ The only required build dependency is [Go][go]. Version 1.8 and newer definitely
 tested; 1.6 and older does not work. Go is only a build dependency, not a runtime dependency, so this should not be a
 dealbreaker if you plan to use Limes on a distribution whose repos carry an older Go.
 
-If you're doing stuff with Docker, you can use the `Dockerfile` in this repo. The recommended way to do so is to use the
-`docker` target in the Makefile. This target invokes `docker build` directly, and you can override the image tag with
-the `DOCKER_IMAGE` and `DOCKER_TAG` variables.
-
-```bash
-$ make docker DOCKER_IMAGE=private-repo.example.com/myteam/limes DOCKER_TAG=latest
-```
-
-The `DOCKER` variable can be used to specify the path to the Docker binary, or to prefix `sudo` if necessary:
-
-```bash
-$ make docker DOCKER='sudo /opt/docker/bin/docker'
-```
-
-The `docker` target will link Limes against the current libc statically (rather than dynamically) to avoid a libc ABI
-mismatch in the Alpine-based container. This means that `libc.a` must be present at build time. (For example, in RHEL,
-you will need to install the `glibc-static` package.)
+If you're doing stuff with Docker, you can use the `Dockerfile` in this repo. Just invoke `docker build` in the usual manner.
 
 # Installation
 
