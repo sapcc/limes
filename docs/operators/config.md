@@ -178,7 +178,7 @@ The `instances` resource supports subresource scraping. Subresources bear the fo
 
 ```yaml
 services:
-  - type: volumev2
+  - type: dns
 ```
 
 The area for this service is `dns`.

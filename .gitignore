@@ -16,5 +16,4 @@ build/cover.html
 .golangvend-cache/
 
 # custom configuration files used during development
-*test*.yaml
-*config*.yaml
+*.yaml
