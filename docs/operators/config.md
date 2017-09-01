@@ -167,12 +167,12 @@ The `instances` resource supports subresource scraping. Subresources bear the fo
 
 | Attribute | Type | Comment |
 | --- | --- | --- |
-| `id` | string | nova server UUID |
-| `name` | string | nova server name |
-| `status` | string | https://wiki.openstack.org/wiki/VMState |
-| `ram` | int | ram in MB configured in flavor |
-| `vcpu` | int | vcpu configured in flavor |
-| `disk` | int | root disk size in GB configured in flavor |
+| `id` | string | instance UUID |
+| `name` | string | instance name |
+| `status` | string | instance status [as reported by OpenStack Nova](https://wiki.openstack.org/wiki/VMState) |
+| `ram` | integer value with unit | amount of memory configured in flavor |
+| `vcpu` | integer | number of vCPUs configured in flavor |
+| `disk` | integer value with unit | root disk size configured in flavor |
 
 ## `dns`: Designate v2
 
@@ -273,8 +273,8 @@ The `volumes` resource supports subresource scraping. Subresources bear the foll
 | --- | --- | --- |
 | `id` | string | volume UUID |
 | `name` | string | volume name |
-| `status` | string | https://developer.openstack.org/api-ref/block-storage/v2/index.html#volumes-volumes |
-| `size` | integer | volume size in GiB |
+| `status` | string | volume status [as reported by OpenStack Cinder](https://developer.openstack.org/api-ref/block-storage/v2/index.html#volumes-volumes) |
+| `size` | integer value with unit | volume size |
 
 # Available capacity plugins
 

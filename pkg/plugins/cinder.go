@@ -124,7 +124,10 @@ func (p *cinderPlugin) Scrape(provider *gophercloud.ProviderClient, domainUUID, 
 					"id":     volume.ID,
 					"name":   volume.Name,
 					"status": volume.Status,
-					"size":   volume.Size,
+					"size": limes.ValueWithUnit{
+						Value: uint64(volume.Size),
+						Unit:  limes.UnitGibibytes,
+					},
 				})
 			}
 			return true, nil

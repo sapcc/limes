@@ -118,9 +118,15 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, domainUUID, pr
 				}
 				flavor, err := p.getFlavor(client, instance.Flavor["id"].(string))
 				if err == nil {
-					subResource["ram"] = flavor.RAM
 					subResource["vcpu"] = flavor.VCPUs
-					subResource["disk"] = flavor.Disk
+					subResource["ram"] = limes.ValueWithUnit{
+						Value: uint64(flavor.RAM),
+						Unit:  limes.UnitMebibytes,
+					}
+					subResource["disk"] = limes.ValueWithUnit{
+						Value: uint64(flavor.Disk),
+						Unit:  limes.UnitGibibytes,
+					}
 				}
 				instanceData = append(instanceData, subResource)
 			}

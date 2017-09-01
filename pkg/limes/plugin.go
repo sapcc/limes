@@ -170,6 +170,12 @@ func (u Unit) Format(value uint64) string {
 	return str + " " + string(u)
 }
 
+//ValueWithUnit is used to represent values with units in subresources.
+type ValueWithUnit struct {
+	Value uint64 `json:"value" yaml:"value"`
+	Unit  Unit   `json:"unit"  yaml:"unit"`
+}
+
 //DiscoveryPluginFactory is a function that produces discovery plugins with a
 //certain ID. The discovery plugin instance will use the discovery configuration
 //given to it if it wants to.
