@@ -36,16 +36,21 @@ import (
 
 //ListProjects handles GET /v1/domains/:domain_id/projects.
 func (p *v1Provider) ListProjects(w http.ResponseWriter, r *http.Request) {
-	if !p.CheckToken(r).Require(w, "project:list") {
+	token := p.CheckToken(r)
+	if !token.Require(w, "project:list") {
 		return
 	}
-	dbDomain := p.FindDomainFromRequest(w, r)
+	cluster := p.FindClusterFromRequest(w, r, token)
+	if cluster == nil {
+		return
+	}
+	dbDomain := p.FindDomainFromRequest(w, r, cluster)
 	if dbDomain == nil {
 		return
 	}
 
 	_, withSubresources := r.URL.Query()["detail"]
-	projects, err := reports.GetProjects(p.Cluster, dbDomain.ID, nil, db.DB, reports.ReadFilter(r), withSubresources)
+	projects, err := reports.GetProjects(cluster, dbDomain.ID, nil, db.DB, reports.ReadFilter(r), withSubresources)
 	if ReturnError(w, err) {
 		return
 	}
@@ -55,10 +60,15 @@ func (p *v1Provider) ListProjects(w http.ResponseWriter, r *http.Request) {
 
 //GetProject handles GET /v1/domains/:domain_id/projects/:project_id.
 func (p *v1Provider) GetProject(w http.ResponseWriter, r *http.Request) {
-	if !p.CheckToken(r).Require(w, "project:show") {
+	token := p.CheckToken(r)
+	if !token.Require(w, "project:show") {
 		return
 	}
-	dbDomain := p.FindDomainFromRequest(w, r)
+	cluster := p.FindClusterFromRequest(w, r, token)
+	if cluster == nil {
+		return
+	}
+	dbDomain := p.FindDomainFromRequest(w, r, cluster)
 	if dbDomain == nil {
 		return
 	}
@@ -68,7 +78,7 @@ func (p *v1Provider) GetProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, withSubresources := r.URL.Query()["detail"]
-	projects, err := reports.GetProjects(p.Cluster, dbDomain.ID, &dbProject.ID, db.DB, reports.ReadFilter(r), withSubresources)
+	projects, err := reports.GetProjects(cluster, dbDomain.ID, &dbProject.ID, db.DB, reports.ReadFilter(r), withSubresources)
 	if ReturnError(w, err) {
 		return
 	}
@@ -85,7 +95,7 @@ func (p *v1Provider) DiscoverProjects(w http.ResponseWriter, r *http.Request) {
 	if !p.CheckToken(r).Require(w, "project:discover") {
 		return
 	}
-	dbDomain := p.FindDomainFromRequest(w, r)
+	dbDomain := p.FindDomainFromRequest(w, r, p.Cluster)
 	if dbDomain == nil {
 		return
 	}
@@ -107,7 +117,7 @@ func (p *v1Provider) SyncProject(w http.ResponseWriter, r *http.Request) {
 	if !p.CheckToken(r).Require(w, "project:show") {
 		return
 	}
-	dbDomain := p.FindDomainFromRequest(w, r)
+	dbDomain := p.FindDomainFromRequest(w, r, p.Cluster)
 	if dbDomain == nil {
 		return
 	}
@@ -161,7 +171,7 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dbDomain := p.FindDomainFromRequest(w, r)
+	dbDomain := p.FindDomainFromRequest(w, r, p.Cluster)
 	if dbDomain == nil {
 		return
 	}

@@ -144,10 +144,34 @@ func (p *v1Provider) Path(elements ...string) string {
 	return strings.Join(parts, "/")
 }
 
+//FindClusterFromRequest loads the limes.Cluster referenced by the
+//X-Limes-Cluster-Id request header (or returns the current cluster if there is
+//no such header). Any errors will be written into the response immediately and
+//cause a nil return value.
+func (p *v1Provider) FindClusterFromRequest(w http.ResponseWriter, r *http.Request, token *Token) *limes.Cluster {
+	//use current cluster if nothing else specified
+	clusterID := r.Header.Get("X-Limes-Cluster-Id")
+	if clusterID == "" || clusterID == p.Cluster.ID {
+		return p.Cluster
+	}
+
+	//if foreign cluster specified, user needs permission to read it
+	if !token.Require(w, "foreign:read") {
+		return nil
+	}
+
+	cluster, exists := p.Config.Clusters[clusterID]
+	if !exists {
+		http.Error(w, "no such cluster", 404)
+		return nil
+	}
+	return cluster
+}
+
 //FindDomainFromRequest loads the db.Domain referenced by the :domain_id path
 //parameter. Any errors will be written into the response immediately and cause
 //a nil return value.
-func (p *v1Provider) FindDomainFromRequest(w http.ResponseWriter, r *http.Request) *db.Domain {
+func (p *v1Provider) FindDomainFromRequest(w http.ResponseWriter, r *http.Request, cluster *limes.Cluster) *db.Domain {
 	domainUUID := mux.Vars(r)["domain_id"]
 	if domainUUID == "" {
 		http.Error(w, "domain ID missing", 400)
@@ -156,7 +180,7 @@ func (p *v1Provider) FindDomainFromRequest(w http.ResponseWriter, r *http.Reques
 
 	var domain db.Domain
 	err := db.DB.SelectOne(&domain, `SELECT * FROM domains WHERE uuid = $1 AND cluster_id = $2`,
-		domainUUID, p.Cluster.ID,
+		domainUUID, cluster.ID,
 	)
 	switch {
 	case err == sql.ErrNoRows:

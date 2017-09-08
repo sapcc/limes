@@ -35,11 +35,16 @@ import (
 
 //ListDomains handles GET /v1/domains.
 func (p *v1Provider) ListDomains(w http.ResponseWriter, r *http.Request) {
-	if !p.CheckToken(r).Require(w, "domain:list") {
+	token := p.CheckToken(r)
+	if !token.Require(w, "domain:list") {
+		return
+	}
+	cluster := p.FindClusterFromRequest(w, r, token)
+	if cluster == nil {
 		return
 	}
 
-	domains, err := reports.GetDomains(p.Cluster, nil, db.DB, reports.ReadFilter(r))
+	domains, err := reports.GetDomains(cluster, nil, db.DB, reports.ReadFilter(r))
 	if ReturnError(w, err) {
 		return
 	}
@@ -49,15 +54,20 @@ func (p *v1Provider) ListDomains(w http.ResponseWriter, r *http.Request) {
 
 //GetDomain handles GET /v1/domains/:domain_id.
 func (p *v1Provider) GetDomain(w http.ResponseWriter, r *http.Request) {
-	if !p.CheckToken(r).Require(w, "domain:show") {
+	token := p.CheckToken(r)
+	if !token.Require(w, "domain:show") {
 		return
 	}
-	dbDomain := p.FindDomainFromRequest(w, r)
+	cluster := p.FindClusterFromRequest(w, r, token)
+	if cluster == nil {
+		return
+	}
+	dbDomain := p.FindDomainFromRequest(w, r, cluster)
 	if dbDomain == nil {
 		return
 	}
 
-	domains, err := reports.GetDomains(p.Cluster, &dbDomain.ID, db.DB, reports.ReadFilter(r))
+	domains, err := reports.GetDomains(cluster, &dbDomain.ID, db.DB, reports.ReadFilter(r))
 	if ReturnError(w, err) {
 		return
 	}
@@ -97,7 +107,7 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dbDomain := p.FindDomainFromRequest(w, r)
+	dbDomain := p.FindDomainFromRequest(w, r, p.Cluster)
 	if dbDomain == nil {
 		return
 	}

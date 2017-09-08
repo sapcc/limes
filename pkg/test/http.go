@@ -36,6 +36,7 @@ import (
 type APIRequest struct {
 	Method           string
 	Path             string
+	RequestHeader    map[string]string
 	RequestJSON      interface{} //if non-nil, will be encoded as JSON
 	ExpectStatusCode int
 	ExpectBody       *string //raw content (not a file path)
@@ -57,6 +58,11 @@ func (r APIRequest) Check(t *testing.T, handler http.Handler) {
 	}
 	request := httptest.NewRequest(r.Method, r.Path, requestBody)
 	request.Header.Set("X-Auth-Token", "something")
+	if r.RequestHeader != nil {
+		for key, value := range r.RequestHeader {
+			request.Header.Set(key, value)
+		}
+	}
 
 	recorder := httptest.NewRecorder()
 	handler.ServeHTTP(recorder, request)

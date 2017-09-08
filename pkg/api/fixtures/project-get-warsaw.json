@@ -1,0 +1,45 @@
+{
+  "project": {
+    "id": "uuid-for-warsaw",
+    "name": "warsaw",
+    "parent_id": "uuid-for-poland",
+    "services": [
+      {
+        "type": "shared",
+        "area": "shared",
+        "resources": [
+          {
+            "name": "capacity",
+            "unit": "B",
+            "quota": 10,
+            "usage": 2
+          },
+          {
+            "name": "things",
+            "quota": 10,
+            "usage": 2
+          }
+        ],
+        "scraped_at": 88
+      },
+      {
+        "type": "unshared",
+        "area": "unshared",
+        "resources": [
+          {
+            "name": "capacity",
+            "unit": "B",
+            "quota": 10,
+            "usage": 2
+          },
+          {
+            "name": "things",
+            "quota": 10,
+            "usage": 2
+          }
+        ],
+        "scraped_at": 77
+      }
+    ]
+  }
+}

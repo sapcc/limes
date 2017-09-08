@@ -1,0 +1,50 @@
+{
+  "domain": {
+    "id": "uuid-for-poland",
+    "name": "poland",
+    "services": [
+      {
+        "type": "shared",
+        "area": "shared",
+        "resources": [
+          {
+            "name": "capacity",
+            "unit": "B",
+            "quota": 25,
+            "projects_quota": 10,
+            "usage": 2
+          },
+          {
+            "name": "things",
+            "quota": 60,
+            "projects_quota": 10,
+            "usage": 2
+          }
+        ],
+        "max_scraped_at": 88,
+        "min_scraped_at": 88
+      },
+      {
+        "type": "unshared",
+        "area": "unshared",
+        "resources": [
+          {
+            "name": "capacity",
+            "unit": "B",
+            "quota": 15,
+            "projects_quota": 10,
+            "usage": 2
+          },
+          {
+            "name": "things",
+            "quota": 10,
+            "projects_quota": 10,
+            "usage": 2
+          }
+        ],
+        "max_scraped_at": 77,
+        "min_scraped_at": 77
+      }
+    ]
+  }
+}

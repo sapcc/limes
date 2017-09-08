@@ -398,6 +398,22 @@ func Test_DomainOperations(t *testing.T) {
 		ExpectJSON:       "./fixtures/domain-get-france.json",
 	}.Check(t, router)
 
+	//domain "poland" is in a different cluster, so the X-Limes-Cluster-Id header
+	//needs to be given
+	test.APIRequest{
+		Method:           "GET",
+		Path:             "/v1/domains/uuid-for-poland",
+		ExpectStatusCode: 404,
+		ExpectBody:       p2s("no such domain (if it was just created, try to POST /domains/discover)\n"),
+	}.Check(t, router)
+	test.APIRequest{
+		Method:           "GET",
+		Path:             "/v1/domains/uuid-for-poland",
+		RequestHeader:    map[string]string{"X-Limes-Cluster-Id": "east"},
+		ExpectStatusCode: 200,
+		ExpectJSON:       "./fixtures/domain-get-poland.json",
+	}.Check(t, router)
+
 	//check ListDomains
 	test.APIRequest{
 		Method:           "GET",
@@ -422,6 +438,22 @@ func Test_DomainOperations(t *testing.T) {
 		Path:             "/v1/domains?service=shared&resource=things",
 		ExpectStatusCode: 200,
 		ExpectJSON:       "./fixtures/domain-list-filtered.json",
+	}.Check(t, router)
+
+	//check cross-cluster ListDomains
+	test.APIRequest{
+		Method:           "GET",
+		Path:             "/v1/domains",
+		RequestHeader:    map[string]string{"X-Limes-Cluster-Id": "east"},
+		ExpectStatusCode: 200,
+		ExpectJSON:       "./fixtures/domain-list-east.json",
+	}.Check(t, router)
+	test.APIRequest{
+		Method:           "GET",
+		Path:             "/v1/domains",
+		RequestHeader:    map[string]string{"X-Limes-Cluster-Id": "unknown"},
+		ExpectStatusCode: 404,
+		ExpectBody:       p2s("no such cluster\n"),
 	}.Check(t, router)
 
 	//check DiscoverDomains
@@ -555,6 +587,20 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectStatusCode: 200,
 		ExpectJSON:       "./fixtures/project-get-paris.json",
 	}.Check(t, router)
+	//warsaw is in a different cluster
+	test.APIRequest{
+		Method:           "GET",
+		Path:             "/v1/domains/uuid-for-poland/projects/uuid-for-warsaw",
+		ExpectStatusCode: 404,
+		ExpectBody:       p2s("no such domain (if it was just created, try to POST /domains/discover)\n"),
+	}.Check(t, router)
+	test.APIRequest{
+		Method:           "GET",
+		Path:             "/v1/domains/uuid-for-poland/projects/uuid-for-warsaw",
+		RequestHeader:    map[string]string{"X-Limes-Cluster-Id": "east"},
+		ExpectStatusCode: 200,
+		ExpectJSON:       "./fixtures/project-get-warsaw.json",
+	}.Check(t, router)
 
 	//check ListProjects
 	test.APIRequest{
@@ -600,6 +646,22 @@ func Test_ProjectOperations(t *testing.T) {
 		Path:             "/v1/domains/uuid-for-germany/projects?area=shared&resource=things",
 		ExpectStatusCode: 200,
 		ExpectJSON:       "./fixtures/project-list-filtered.json",
+	}.Check(t, router)
+
+	//check cross-cluster ListProjects
+	test.APIRequest{
+		Method:           "GET",
+		Path:             "/v1/domains/uuid-for-poland/projects",
+		RequestHeader:    map[string]string{"X-Limes-Cluster-Id": "east"},
+		ExpectStatusCode: 200,
+		ExpectJSON:       "./fixtures/project-list-poland.json",
+	}.Check(t, router)
+	test.APIRequest{
+		Method:           "GET",
+		Path:             "/v1/domains/uuid-for-poland/projects",
+		RequestHeader:    map[string]string{"X-Limes-Cluster-Id": "unknown"},
+		ExpectStatusCode: 404,
+		ExpectBody:       p2s("no such cluster\n"),
 	}.Check(t, router)
 
 	//check DiscoverProjects
