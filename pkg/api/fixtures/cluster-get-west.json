@@ -5,6 +5,7 @@
       {
         "type": "shared",
         "area": "shared",
+        "shared": true,
         "resources": [
           {
             "name": "capacity",

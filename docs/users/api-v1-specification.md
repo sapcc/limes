@@ -290,6 +290,7 @@ Returns 200 (OK) on success. Result is a JSON document like:
         },
         {
           "type": "object-store",
+          "shared": true,
           "resources": [
             {
               "name": "capacity",
@@ -335,7 +336,8 @@ cannot be shown on the service level here.
 
 For resources belonging to a cluster-local service (the default), the reported quota and usage is aggregated only over
 domains in this cluster. For resources belonging to a shared service, the reported quota and usage is aggregated over
-all domains in all clusters, and will thus be the same for every cluster listed.
+all domains in all clusters, and will thus be the same for every cluster listed. Shared services are indicated by the
+`shared` key on the service level (which defaults to `false` if not specified).
 
 ## POST /v1/domains/discover
 

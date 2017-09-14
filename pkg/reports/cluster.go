@@ -43,6 +43,7 @@ type Cluster struct {
 //a single backend service.
 type ClusterService struct {
 	limes.ServiceInfo
+	Shared       bool             `json:"shared,omitempty"`
 	Resources    ClusterResources `json:"resources,keepempty"`
 	MaxScrapedAt int64            `json:"max_scraped_at,keepempty"`
 	MinScrapedAt int64            `json:"min_scraped_at,keepempty"`
@@ -439,6 +440,7 @@ func (c clusters) Find(config limes.Configuration, clusterID string, serviceType
 			return cluster, nil, nil
 		}
 		service = &ClusterService{
+			Shared:      clusterConfig.IsServiceShared[*serviceType],
 			ServiceInfo: clusterConfig.InfoForService(*serviceType),
 			Resources:   make(ClusterResources),
 		}

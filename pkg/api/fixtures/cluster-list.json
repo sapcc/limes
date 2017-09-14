@@ -6,6 +6,7 @@
         {
           "type": "shared",
           "area": "shared",
+          "shared": true,
           "resources": [
             {
               "name": "capacity",
@@ -57,6 +58,7 @@
         {
           "type": "shared",
           "area": "shared",
+          "shared": true,
           "resources": [
             {
               "name": "capacity",

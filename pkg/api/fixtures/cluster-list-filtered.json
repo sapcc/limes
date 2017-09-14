@@ -6,6 +6,7 @@
         {
           "type": "shared",
           "area": "shared",
+          "shared": true,
           "resources": [
             {
               "name": "things",
@@ -27,6 +28,7 @@
         {
           "type": "shared",
           "area": "shared",
+          "shared": true,
           "resources": [
             {
               "name": "things",
