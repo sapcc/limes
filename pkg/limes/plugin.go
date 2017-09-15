@@ -20,8 +20,6 @@
 package limes
 
 import (
-	"strconv"
-
 	"github.com/gophercloud/gophercloud"
 )
 
@@ -133,47 +131,6 @@ type ServiceInfo struct {
 	ProductName string `json:"-"`
 	//Area is a hint that UIs can use to group similar services.
 	Area string `json:"area"`
-}
-
-//Unit enumerates allowed values for the unit a resource's quota/usage is
-//measured in.
-type Unit string
-
-const (
-	//UnitNone is used for countable (rather than measurable) resources.
-	UnitNone Unit = ""
-	//UnitBytes is exactly that.
-	UnitBytes Unit = "B"
-	//UnitKibibytes is exactly that.
-	UnitKibibytes Unit = "KiB"
-	//UnitMebibytes is exactly that.
-	UnitMebibytes Unit = "MiB"
-	//UnitGibibytes is exactly that.
-	UnitGibibytes Unit = "GiB"
-	//UnitTebibytes is exactly that.
-	UnitTebibytes Unit = "TiB"
-	//UnitPebibytes is exactly that.
-	UnitPebibytes Unit = "PiB"
-	//UnitExbibytes is exactly that.
-	UnitExbibytes Unit = "EiB"
-)
-
-//Format appends the unit (if any) to the given value. This should only be used
-//for error messages; actual UIs should be more clever about formatting values
-//(e.g. UnitMebibytes.Format(1048576) returns "1048576 MiB" where "1 TiB"
-//would be more appropriate).
-func (u Unit) Format(value uint64) string {
-	str := strconv.FormatUint(value, 10)
-	if u == UnitNone {
-		return str
-	}
-	return str + " " + string(u)
-}
-
-//ValueWithUnit is used to represent values with units in subresources.
-type ValueWithUnit struct {
-	Value uint64 `json:"value" yaml:"value"`
-	Unit  Unit   `json:"unit"  yaml:"unit"`
 }
 
 //DiscoveryPluginFactory is a function that produces discovery plugins with a
