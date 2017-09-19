@@ -122,6 +122,19 @@ func (v ValueWithUnit) ConvertTo(u Unit) (ValueWithUnit, error) {
 	}, nil
 }
 
+//ConvertFor works like ConvertTo, but instead of taking a unit as an argument,
+//it uses the native unit of the specified resource. In contrast to
+//ConvertTo(), this also handles UnitUnspecified. Values with unspecified unit
+//will be interpreted as being in the native unit, and will not be converted.
+func (v ValueWithUnit) ConvertFor(cluster *Cluster, serviceType, resourceName string) (uint64, error) {
+	if v.Unit == UnitUnspecified {
+		return v.Value, nil
+	}
+	targetUnit := cluster.InfoForResource(serviceType, resourceName).Unit
+	result, err := v.ConvertTo(targetUnit)
+	return result.Value, err
+}
+
 //IncompatibleUnitsError is returned by ValueWithUnit.ConvertTo() when the
 //original and target unit are incompatible and cannot be converted into each
 //other.

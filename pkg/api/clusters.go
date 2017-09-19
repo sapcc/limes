@@ -231,7 +231,7 @@ func writeClusterResource(tx *gorp.Transaction, cluster *limes.Cluster, srv Serv
 		}
 		//int64->uint64 is safe here because `res.Capacity >= 0` has already been established
 		inputValue := limes.ValueWithUnit{Value: uint64(res.Capacity), Unit: inputUnit}
-		newCapacity, err = CoerceDatatypeToResource(inputValue, cluster, srv.Type, res.Name)
+		newCapacity, err = inputValue.ConvertFor(cluster, srv.Type, res.Name)
 		if err != nil {
 			return err.Error(), nil
 		}

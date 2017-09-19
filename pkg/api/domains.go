@@ -174,7 +174,7 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 			if !exists {
 				continue
 			}
-			newQuota, err := CoerceDatatypeToResource(newQuotaInput, p.Cluster, srv.Type, res.Name)
+			newQuota, err := newQuotaInput.ConvertFor(p.Cluster, srv.Type, res.Name)
 			if err != nil {
 				errors = append(errors, fmt.Sprintf("cannot change %s/%s quota: %s", srv.Type, res.Name, err.Error()))
 				continue
@@ -214,7 +214,7 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 
-			newQuota, err := CoerceDatatypeToResource(newQuotaInput, p.Cluster, srv.Type, resourceName)
+			newQuota, err := newQuotaInput.ConvertFor(p.Cluster, srv.Type, resourceName)
 			if err != nil {
 				errors = append(errors, fmt.Sprintf("cannot change %s/%s quota: %s", srv.Type, resourceName, err.Error()))
 				continue

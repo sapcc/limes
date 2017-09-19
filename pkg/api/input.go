@@ -87,16 +87,3 @@ type ResourceCapacity struct {
 	Unit     *limes.Unit `json:"unit"`
 	Comment  string      `json:"comment"`
 }
-
-//CoerceDatatypeToResource converts the given ValueWithUnit to the given
-//resource's native unit and returns the resulting value, or returns a
-//user-readable error message otherwise. In contrast to
-//ValueWithUnit.ConvertTo(), this also handles UnitUnspecified.
-func CoerceDatatypeToResource(val limes.ValueWithUnit, cluster *limes.Cluster, serviceType, resourceName string) (uint64, error) {
-	targetUnit := cluster.InfoForResource(serviceType, resourceName).Unit
-	if val.Unit == limes.UnitUnspecified {
-		val.Unit = targetUnit
-	}
-	result, err := val.ConvertTo(targetUnit)
-	return result.Value, err
-}
