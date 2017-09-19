@@ -410,7 +410,8 @@ Set quotas for the given domain. Requires a cloud-admin token, and a request bod
         "resources": [
           {
             "name": "capacity",
-            "quota": 60000
+            "quota": 60000,
+            "unit": "MiB"
           }
         ]
       }
@@ -420,8 +421,9 @@ Set quotas for the given domain. Requires a cloud-admin token, and a request bod
 ```
 
 For resources that are measured rather than counted, the values are interpreted with the same unit that is mentioned for
-this resource in `GET /domains/:domain_id`. All resources that are not mentioned in the request body remain unchanged.
-This operation will not affect any project quotas in this domain.
+this resource in `GET /domains/:domain_id`. However, a `unit` string may be given to override this default. All
+resources that are not mentioned in the request body remain unchanged. This operation will not affect any project
+quotas in this domain.
 
 Returns 200 (OK) on success, with a response body identical to `GET` on the same URL, containing the updated quota
 values.
@@ -473,8 +475,9 @@ like:
 ```
 
 For resources that are measured rather than counted, the values are interpreted with the same unit that is mentioned for
-this resource in `GET /domains/:domain_id`. All resources that are not mentioned in the request body remain unchanged.
-This operation will not affect any domain or project quotas.
+this resource in `GET /clusters/:cluster_id`. However, a `unit` string may be given to override this default. All
+resources that are not mentioned in the request body remain unchanged. This operation will not affect any domain or
+project quotas.
 
 Capacity values can only be set for resources which Limes does not know how to measure automatically. A `comment` is
 always required, and should ideally contain a description of how the capacity value was derived. An existing

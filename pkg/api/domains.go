@@ -170,15 +170,20 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 		}
 		for _, res := range resources {
 			isExistingResource[res.Name] = true
-			newQuota, exists := resourceQuotas[res.Name]
+			newQuotaInput, exists := resourceQuotas[res.Name]
 			if !exists {
+				continue
+			}
+			newQuota, err := CoerceDatatypeToResource(newQuotaInput, p.Cluster, srv.Type, res.Name)
+			if err != nil {
+				errors = append(errors, fmt.Sprintf("cannot change %s/%s quota: %s", srv.Type, res.Name, err.Error()))
 				continue
 			}
 			if res.Quota == newQuota {
 				continue //nothing to do
 			}
 
-			err := checkDomainQuotaUpdate(srv, res, domainReport, newQuota, canRaise, canLower)
+			err = checkDomainQuotaUpdate(srv, res, domainReport, newQuota, canRaise, canLower)
 			if err != nil {
 				errors = append(errors, err.Error())
 				continue
@@ -198,7 +203,7 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 		}
 
 		//check resources that need to be created
-		for resourceName, newQuota := range resourceQuotas {
+		for resourceName, newQuotaInput := range resourceQuotas {
 			if isExistingResource[resourceName] {
 				continue
 			}
@@ -209,12 +214,18 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 
+			newQuota, err := CoerceDatatypeToResource(newQuotaInput, p.Cluster, srv.Type, resourceName)
+			if err != nil {
+				errors = append(errors, fmt.Sprintf("cannot change %s/%s quota: %s", srv.Type, resourceName, err.Error()))
+				continue
+			}
+
 			res := db.DomainResource{
 				ServiceID: srv.ID,
 				Name:      resourceName,
 				Quota:     0, //start with 0 because the previous value is taken into account by checkDomainQuotaUpdate
 			}
-			err := checkDomainQuotaUpdate(srv, res, domainReport, newQuota, canRaise, canLower)
+			err = checkDomainQuotaUpdate(srv, res, domainReport, newQuota, canRaise, canLower)
 			if err != nil {
 				errors = append(errors, err.Error())
 				continue

@@ -45,6 +45,8 @@ const (
 	UnitPebibytes Unit = "PiB"
 	//UnitExbibytes is exactly that.
 	UnitExbibytes Unit = "EiB"
+	//UnitUnspecified is used as a placeholder when the unit is not known.
+	UnitUnspecified Unit = "UNSPECIFIED"
 )
 
 //Base returns the base unit of this unit. For units defined as a multiple of

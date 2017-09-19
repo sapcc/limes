@@ -222,15 +222,29 @@ func writeClusterResource(tx *gorp.Transaction, cluster *limes.Cluster, srv Serv
 		return "comment is missing", nil
 	}
 
+	//convert to target unit if required
+	var newCapacity uint64
+	if res.Capacity >= 0 {
+		inputUnit := limes.UnitUnspecified
+		if res.Unit != nil {
+			inputUnit = *res.Unit
+		}
+		//int64->uint64 is safe here because `res.Capacity >= 0` has already been established
+		inputValue := limes.ValueWithUnit{Value: uint64(res.Capacity), Unit: inputUnit}
+		newCapacity, err = CoerceDatatypeToResource(inputValue, cluster, srv.Type, res.Name)
+		if err != nil {
+			return err.Error(), nil
+		}
+	}
+
 	switch {
 	case resource == nil:
 		//need to insert
 		resource = &db.ClusterResource{
 			ServiceID: service.ID,
 			Name:      res.Name,
-			//int64->uint64 cast is safe here because `res.Capacity >= 0` is already known
-			Capacity: uint64(res.Capacity),
-			Comment:  res.Comment,
+			Capacity:  newCapacity,
+			Comment:   res.Comment,
 		}
 		return "", tx.Insert(resource)
 	case res.Capacity < 0:
@@ -239,7 +253,7 @@ func writeClusterResource(tx *gorp.Transaction, cluster *limes.Cluster, srv Serv
 		return "", err
 	default:
 		//need to update
-		resource.Capacity = uint64(res.Capacity) //cast is safe here just like above
+		resource.Capacity = newCapacity
 		resource.Comment = res.Comment
 		_, err := tx.Update(resource)
 		return "", err

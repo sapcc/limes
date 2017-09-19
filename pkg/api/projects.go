@@ -237,15 +237,20 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		for _, res := range resources {
-			newQuota, exists := resourceQuotas[res.Name]
+			newQuotaInput, exists := resourceQuotas[res.Name]
 			if !exists {
+				continue
+			}
+			newQuota, err := CoerceDatatypeToResource(newQuotaInput, p.Cluster, srv.Type, res.Name)
+			if err != nil {
+				errors = append(errors, fmt.Sprintf("cannot change %s/%s quota: %s", srv.Type, res.Name, err.Error()))
 				continue
 			}
 			if res.Quota == newQuota {
 				continue //nothing to do
 			}
 
-			err := checkProjectQuotaUpdate(srv, res, domainReport, newQuota, canRaise, canLower)
+			err = checkProjectQuotaUpdate(srv, res, domainReport, newQuota, canRaise, canLower)
 			if err != nil {
 				errors = append(errors, err.Error())
 				continue

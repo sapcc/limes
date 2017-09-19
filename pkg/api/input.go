@@ -21,6 +21,8 @@ package api
 
 import (
 	"encoding/json"
+
+	"github.com/sapcc/limes/pkg/limes"
 )
 
 //ServiceQuotas contains new quota values for resources in multiple services.
@@ -31,15 +33,16 @@ type ServiceQuotas map[string]ResourceQuotas
 //ResourceQuotas contains new quota values for the resources in a single
 //service. The map key is the resource name. This type is used to unserialize
 //JSON request bodies in PUT requests.
-type ResourceQuotas map[string]uint64
+type ResourceQuotas map[string]limes.ValueWithUnit
 
 //UnmarshalJSON implements the json.Unmarshaler interface.
 func (sq *ServiceQuotas) UnmarshalJSON(input []byte) error {
 	var data []struct {
 		Type      string `json:"type"`
 		Resources []struct {
-			Name  string `json:"name"`
-			Quota uint64 `json:"quota"`
+			Name  string      `json:"name"`
+			Quota uint64      `json:"quota"`
+			Unit  *limes.Unit `json:"unit"`
 		} `json:"resources"`
 	}
 	err := json.Unmarshal(input, &data)
@@ -56,7 +59,14 @@ func (sq *ServiceQuotas) UnmarshalJSON(input []byte) error {
 	for _, srv := range data {
 		rq := make(ResourceQuotas, len(srv.Resources))
 		for _, res := range srv.Resources {
-			rq[res.Name] = res.Quota
+			unit := limes.UnitUnspecified
+			if res.Unit != nil {
+				unit = *res.Unit
+			}
+			rq[res.Name] = limes.ValueWithUnit{
+				Value: res.Quota,
+				Unit:  unit,
+			}
 		}
 		(*sq)[srv.Type] = rq
 	}
@@ -72,7 +82,21 @@ type ServiceCapacities struct {
 
 //ResourceCapacity contains an updated capacity value for a single resource.
 type ResourceCapacity struct {
-	Name     string `json:"name"`
-	Capacity int64  `json:"capacity"`
-	Comment  string `json:"comment"`
+	Name     string      `json:"name"`
+	Capacity int64       `json:"capacity"`
+	Unit     *limes.Unit `json:"unit"`
+	Comment  string      `json:"comment"`
+}
+
+//CoerceDatatypeToResource converts the given ValueWithUnit to the given
+//resource's native unit and returns the resulting value, or returns a
+//user-readable error message otherwise. In contrast to
+//ValueWithUnit.ConvertTo(), this also handles UnitUnspecified.
+func CoerceDatatypeToResource(val limes.ValueWithUnit, cluster *limes.Cluster, serviceType, resourceName string) (uint64, error) {
+	targetUnit := cluster.InfoForResource(serviceType, resourceName).Unit
+	if val.Unit == limes.UnitUnspecified {
+		val.Unit = targetUnit
+	}
+	result, err := val.ConvertTo(targetUnit)
+	return result.Value, err
 }

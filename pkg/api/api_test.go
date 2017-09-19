@@ -235,6 +235,25 @@ func Test_ClusterOperations(t *testing.T) {
 		},
 	}.Check(t, router)
 
+	test.APIRequest{
+		Method:           "PUT",
+		Path:             "/v1/clusters/east",
+		ExpectStatusCode: 422,
+		ExpectBody:       p2s("cannot set shared/capacity capacity: cannot convert value from <count> to B because units are incompatible\n"),
+		RequestJSON: object{
+			"cluster": object{
+				"services": []object{
+					{
+						"type": "shared",
+						"resources": []object{
+							{"name": "capacity", "capacity": 100, "unit": "", "comment": "foo"},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+
 	//before checking PutCluster, delete all existing manually-maintained
 	//capacity values to be able to check inserts as well as updates
 	_, err := db.DB.Exec(`DELETE FROM cluster_resources WHERE comment != ''`)
@@ -269,7 +288,7 @@ func Test_ClusterOperations(t *testing.T) {
 	expectClusterCapacity(t, "shared", "shared", "capacity", 100, "hundred")
 	expectClusterCapacity(t, "east", "unshared", "capacity", 200, "two-hundred")
 
-	//check PutCluster update
+	//check PutCluster update (and unit conversion)
 	test.APIRequest{
 		Method:           "PUT",
 		Path:             "/v1/clusters/east",
@@ -286,7 +305,7 @@ func Test_ClusterOperations(t *testing.T) {
 					{
 						"type": "unshared",
 						"resources": []object{
-							{"name": "capacity", "capacity": 201, "comment": "updated!"},
+							{"name": "capacity", "capacity": 201, "unit": "MiB", "comment": "updated!"},
 						},
 					},
 				},
@@ -294,7 +313,7 @@ func Test_ClusterOperations(t *testing.T) {
 		},
 	}.Check(t, router)
 	expectClusterCapacity(t, "shared", "shared", "capacity", 101, "updated")
-	expectClusterCapacity(t, "east", "unshared", "capacity", 201, "updated!")
+	expectClusterCapacity(t, "east", "unshared", "capacity", 201<<20, "updated!")
 
 	//check PutCluster delete
 	test.APIRequest{
@@ -494,6 +513,25 @@ func Test_DomainOperations(t *testing.T) {
 			},
 		},
 	}.Check(t, router)
+	test.APIRequest{
+		Method:           "PUT",
+		Path:             "/v1/domains/uuid-for-germany",
+		ExpectStatusCode: 422,
+		ExpectBody:       p2s("cannot change shared/things quota: cannot convert value from MiB to <count> because units are incompatible\n"),
+		RequestJSON: object{
+			"domain": object{
+				"services": []object{
+					{
+						"type": "shared",
+						"resources": []object{
+							//should fail because unit is incompatible with resource
+							{"name": "things", "quota": 1, "unit": "MiB"},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
 
 	//check PutDomain happy path
 	test.APIRequest{
@@ -514,6 +552,24 @@ func Test_DomainOperations(t *testing.T) {
 		},
 	}.Check(t, router)
 	expectDomainQuota(t, "germany", "shared", "capacity", 1234)
+	test.APIRequest{
+		Method:           "PUT",
+		Path:             "/v1/domains/uuid-for-germany",
+		ExpectStatusCode: 200,
+		RequestJSON: object{
+			"domain": object{
+				"services": []object{
+					{
+						"type": "shared",
+						"resources": []object{
+							{"name": "capacity", "quota": 1, "unit": limes.UnitMebibytes},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+	expectDomainQuota(t, "germany", "shared", "capacity", 1<<20)
 
 	//check PutDomain on a missing domain quota (see issue #36)
 	test.APIRequest{
