@@ -44,7 +44,7 @@ type Project struct {
 type ProjectService struct {
 	limes.ServiceInfo
 	Resources ProjectResources `json:"resources,keepempty"`
-	ScrapedAt int64            `json:"scraped_at"`
+	ScrapedAt int64            `json:"scraped_at,omitempty"`
 }
 
 //ProjectResource is a substructure of Project containing data for

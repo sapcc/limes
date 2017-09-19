@@ -694,7 +694,7 @@ func Test_ProjectOperations(t *testing.T) {
 
 	//SyncProject should discover the given project if not yet done
 	discovery.StaticProjects["uuid-for-germany"] = append(discovery.StaticProjects["uuid-for-germany"],
-		limes.KeystoneProject{Name: "walldorf", UUID: "uuid-for-walldorf"},
+		limes.KeystoneProject{Name: "walldorf", UUID: "uuid-for-walldorf", ParentUUID: "uuid-for-germany"},
 	)
 	test.APIRequest{
 		Method:           "POST",
@@ -703,6 +703,14 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectBody:       p2s(""),
 	}.Check(t, router)
 	expectStaleProjectServices(t, "dresden:shared", "dresden:unshared", "walldorf:shared", "walldorf:unshared")
+
+	//check GetProject for a project that has been discovered, but not yet synced
+	test.APIRequest{
+		Method:           "GET",
+		Path:             "/v1/domains/uuid-for-germany/projects/uuid-for-walldorf",
+		ExpectStatusCode: 200,
+		ExpectJSON:       "./fixtures/project-get-walldorf-not-scraped-yet.json",
+	}.Check(t, router)
 
 	//check PutProject: pre-flight checks
 	test.APIRequest{

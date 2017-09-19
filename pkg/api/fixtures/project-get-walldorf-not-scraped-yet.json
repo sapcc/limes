@@ -1,0 +1,19 @@
+{
+  "project": {
+    "id": "uuid-for-walldorf",
+    "name": "walldorf",
+    "parent_id": "uuid-for-germany",
+    "services": [
+      {
+        "type": "shared",
+        "area": "shared",
+        "resources": []
+      },
+      {
+        "type": "unshared",
+        "area": "unshared",
+        "resources": []
+      }
+    ]
+  }
+}

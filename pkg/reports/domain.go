@@ -43,8 +43,8 @@ type Domain struct {
 type DomainService struct {
 	limes.ServiceInfo
 	Resources    DomainResources `json:"resources,keepempty"`
-	MaxScrapedAt int64           `json:"max_scraped_at"`
-	MinScrapedAt int64           `json:"min_scraped_at"`
+	MaxScrapedAt int64           `json:"max_scraped_at,omitempty"`
+	MinScrapedAt int64           `json:"min_scraped_at,omitempty"`
 }
 
 //DomainResource is a substructure of Domain containing data for
