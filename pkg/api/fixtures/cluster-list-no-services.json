@@ -1,4 +1,5 @@
 {
+  "current_cluster": "west",
   "clusters": [
     {
       "id": "east",

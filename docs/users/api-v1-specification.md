@@ -259,6 +259,7 @@ Returns 200 (OK) on success. Result is a JSON document like:
 
 ```json
 {
+  "current_cluster": "example-cluster-2",
   "clusters": [
     {
       "id": "example-cluster",
@@ -313,6 +314,8 @@ Returns 200 (OK) on success. Result is a JSON document like:
   ]
 }
 ```
+
+The `current_cluster` key is only present if no `:cluster_id` was given.
 
 If `:cluster_id` was given, the outer key is `cluster` and its value is the object without the array surrounding it. As
 a special case, a cluster ID of `current` will be substituted by the current cluster (i.e. the one for which domains and

@@ -39,12 +39,19 @@ func (p *v1Provider) ListClusters(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	clusters, err := reports.GetClusters(p.Config, nil, db.DB, reports.ReadFilter(r))
+	var result struct {
+		CurrentCluster string             `json:"current_cluster"`
+		Clusters       []*reports.Cluster `json:"clusters"`
+	}
+	result.CurrentCluster = p.Cluster.ID
+
+	var err error
+	result.Clusters, err = reports.GetClusters(p.Config, nil, db.DB, reports.ReadFilter(r))
 	if ReturnError(w, err) {
 		return
 	}
 
-	ReturnJSON(w, 200, map[string]interface{}{"clusters": clusters})
+	ReturnJSON(w, 200, result)
 }
 
 //GetCluster handles GET /v1/clusters/:cluster_id.
