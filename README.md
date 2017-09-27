@@ -7,7 +7,7 @@
 
 Limes is an OpenStack-compatible quota/usage tracking service, originally designed for SAP's internal cloud.
 
-Pronounce the name like the [Ancient Roman border wall][wp-limes], not like the fruit.
+Pronounce the name like the [Ancient Roman border wall][wp-limes], not like the fruit. (Mnemonic: The original Limes was installed when the Romans wanted to put a quota on Germanic land use.)
 
 # The idea: Hierarchical quota delegation
 
