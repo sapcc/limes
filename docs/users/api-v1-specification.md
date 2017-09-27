@@ -254,6 +254,7 @@ Query data for clusters. Requires a cloud-admin token. Arguments:
 * `service`: Limit query to resources in this service. May be given multiple times.
 * `area`: Limit query to resources in services in this area. May be given multiple times.
 * `resource`: When combined, with `?service=`, limit query to that resource.
+* `local`: When given, quota and usage for shared resources is not aggregated across clusters (see below).
 
 Returns 200 (OK) on success. Result is a JSON document like:
 
@@ -339,8 +340,9 @@ cannot be shown on the service level here.
 
 For resources belonging to a cluster-local service (the default), the reported quota and usage is aggregated only over
 domains in this cluster. For resources belonging to a shared service, the reported quota and usage is aggregated over
-all domains in all clusters, and will thus be the same for every cluster listed. Shared services are indicated by the
-`shared` key on the service level (which defaults to `false` if not specified).
+all domains in all clusters (and will thus be the same for every cluster listed), unless the query parameter `local` is
+given. Shared services are indicated by the `shared` key on the service level (which defaults to `false` if not
+specified).
 
 ## POST /v1/domains/discover
 

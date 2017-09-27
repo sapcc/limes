@@ -141,7 +141,7 @@ var clusterReportQuery5 = `
 //In contrast to nearly everything else in Limes, this needs the full
 //limes.Configuration (instead of just the current limes.ClusterConfiguration)
 //to look at the services enabled in other clusters.
-func GetClusters(config limes.Configuration, clusterID *string, dbi db.Interface, filter Filter) ([]*Cluster, error) {
+func GetClusters(config limes.Configuration, clusterID *string, localQuotaUsageOnly bool, dbi db.Interface, filter Filter) ([]*Cluster, error) {
 	//first query: collect project usage data in these clusters
 	clusters := make(clusters)
 	queryStr, joinArgs := filter.PrepareQuery(clusterReportQuery1)
@@ -264,82 +264,86 @@ func GetClusters(config limes.Configuration, clusterID *string, dbi db.Interface
 
 	if len(isSharedService) > 0 {
 
-		//fourth query: aggregate domain quota for shared services
-		sharedQuotaSums := make(map[string]map[string]uint64)
+		if !localQuotaUsageOnly {
 
-		sharedServiceTypes := make([]string, 0, len(isSharedService))
-		for serviceType := range isSharedService {
-			sharedServiceTypes = append(sharedServiceTypes, serviceType)
-		}
-		whereStr, queryArgs := db.BuildSimpleWhereClause(map[string]interface{}{"ds.type": sharedServiceTypes}, 0)
-		err = db.ForeachRow(db.DB, fmt.Sprintf(clusterReportQuery4, whereStr), queryArgs, func(rows *sql.Rows) error {
-			var (
-				serviceType  string
-				resourceName string
-				quota        uint64
-			)
-			err := rows.Scan(&serviceType, &resourceName, &quota)
-			if err != nil {
-				return err
+			//fourth query: aggregate domain quota for shared services
+			sharedQuotaSums := make(map[string]map[string]uint64)
+
+			sharedServiceTypes := make([]string, 0, len(isSharedService))
+			for serviceType := range isSharedService {
+				sharedServiceTypes = append(sharedServiceTypes, serviceType)
 			}
-
-			if sharedQuotaSums[serviceType] == nil {
-				sharedQuotaSums[serviceType] = make(map[string]uint64)
-			}
-			sharedQuotaSums[serviceType][resourceName] = quota
-			return nil
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		//fifth query: aggregate project quota for shared services
-		whereStr, queryArgs = db.BuildSimpleWhereClause(map[string]interface{}{"ps.type": sharedServiceTypes}, 0)
-		sharedUsageSums := make(map[string]map[string]uint64)
-		err = db.ForeachRow(db.DB, fmt.Sprintf(clusterReportQuery5, whereStr), queryArgs, func(rows *sql.Rows) error {
-			var (
-				serviceType  string
-				resourceName string
-				usage        uint64
-			)
-			err := rows.Scan(&serviceType, &resourceName, &usage)
-			if err != nil {
-				return err
-			}
-
-			if sharedUsageSums[serviceType] == nil {
-				sharedUsageSums[serviceType] = make(map[string]uint64)
-			}
-			sharedUsageSums[serviceType][resourceName] = usage
-			return nil
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		for _, cluster := range clusters {
-			isSharedService := make(map[string]bool)
-			for serviceType, shared := range config.Clusters[cluster.ID].IsServiceShared {
-				//NOTE: cluster config is guaranteed to exist due to earlier validation
-				if shared {
-					isSharedService[serviceType] = true
+			whereStr, queryArgs := db.BuildSimpleWhereClause(map[string]interface{}{"ds.type": sharedServiceTypes}, 0)
+			err = db.ForeachRow(db.DB, fmt.Sprintf(clusterReportQuery4, whereStr), queryArgs, func(rows *sql.Rows) error {
+				var (
+					serviceType  string
+					resourceName string
+					quota        uint64
+				)
+				err := rows.Scan(&serviceType, &resourceName, &quota)
+				if err != nil {
+					return err
 				}
+
+				if sharedQuotaSums[serviceType] == nil {
+					sharedQuotaSums[serviceType] = make(map[string]uint64)
+				}
+				sharedQuotaSums[serviceType][resourceName] = quota
+				return nil
+			})
+			if err != nil {
+				return nil, err
 			}
 
-			for _, service := range cluster.Services {
-				if isSharedService[service.Type] && sharedQuotaSums[service.Type] != nil {
-					for _, resource := range service.Resources {
-						quota, exists := sharedQuotaSums[service.Type][resource.Name]
-						if exists {
-							resource.DomainsQuota = quota
-						}
-						usage, exists := sharedUsageSums[service.Type][resource.Name]
-						if exists {
-							resource.Usage = usage
+			//fifth query: aggregate project quota for shared services
+			whereStr, queryArgs = db.BuildSimpleWhereClause(map[string]interface{}{"ps.type": sharedServiceTypes}, 0)
+			sharedUsageSums := make(map[string]map[string]uint64)
+			err = db.ForeachRow(db.DB, fmt.Sprintf(clusterReportQuery5, whereStr), queryArgs, func(rows *sql.Rows) error {
+				var (
+					serviceType  string
+					resourceName string
+					usage        uint64
+				)
+				err := rows.Scan(&serviceType, &resourceName, &usage)
+				if err != nil {
+					return err
+				}
+
+				if sharedUsageSums[serviceType] == nil {
+					sharedUsageSums[serviceType] = make(map[string]uint64)
+				}
+				sharedUsageSums[serviceType][resourceName] = usage
+				return nil
+			})
+			if err != nil {
+				return nil, err
+			}
+
+			for _, cluster := range clusters {
+				isSharedService := make(map[string]bool)
+				for serviceType, shared := range config.Clusters[cluster.ID].IsServiceShared {
+					//NOTE: cluster config is guaranteed to exist due to earlier validation
+					if shared {
+						isSharedService[serviceType] = true
+					}
+				}
+
+				for _, service := range cluster.Services {
+					if isSharedService[service.Type] && sharedQuotaSums[service.Type] != nil {
+						for _, resource := range service.Resources {
+							quota, exists := sharedQuotaSums[service.Type][resource.Name]
+							if exists {
+								resource.DomainsQuota = quota
+							}
+							usage, exists := sharedUsageSums[service.Type][resource.Name]
+							if exists {
+								resource.Usage = usage
+							}
 						}
 					}
 				}
 			}
+
 		}
 
 		//third query again, but this time to collect shared capacities
