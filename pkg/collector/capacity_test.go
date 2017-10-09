@@ -22,6 +22,8 @@ package collector
 import (
 	"testing"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/test"
@@ -130,4 +132,15 @@ func Test_ScanCapacity(t *testing.T) {
 	cluster.CapacityPlugins["unittest3"] = test.NewCapacityPlugin("unittest3", "shared/capacity")
 	c.scanCapacity()
 	test.AssertDBContent(t, "fixtures/scancapacity4.sql")
+
+	//check data metrics generated for these capacity data
+	registry := prometheus.NewPedanticRegistry()
+	dmc := &DataMetricsCollector{ClusterID: cluster.ID}
+	registry.MustRegister(dmc)
+	test.APIRequest{
+		Method:           "GET",
+		Path:             "/metrics",
+		ExpectStatusCode: 200,
+		ExpectFile:       "fixtures/capacity_metrics.prom",
+	}.Check(t, promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
 }

@@ -1,0 +1,6 @@
+# HELP limes_cluster_capacity Reported capacity of a Limes resource for an OpenStack cluster.
+# TYPE limes_cluster_capacity gauge
+limes_cluster_capacity{os_cluster="west",shared="true",resource="capacity",service="shared"} 42
+limes_cluster_capacity{os_cluster="west",shared="true",resource="things",service="shared"} 23
+limes_cluster_capacity{os_cluster="west",shared="false",resource="capacity",service="unshared"} 42
+limes_cluster_capacity{os_cluster="west",shared="false",resource="capacity",service="unshared2"} 50
