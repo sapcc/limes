@@ -135,7 +135,7 @@ func Test_ScanCapacity(t *testing.T) {
 
 	//check data metrics generated for these capacity data
 	registry := prometheus.NewPedanticRegistry()
-	dmc := &DataMetricsCollector{ClusterID: cluster.ID}
+	dmc := &DataMetricsCollector{Cluster: cluster}
 	registry.MustRegister(dmc)
 	test.APIRequest{
 		Method:           "GET",

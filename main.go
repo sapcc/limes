@@ -212,7 +212,7 @@ func taskCollect(config limes.Configuration, cluster *limes.Cluster, args []stri
 
 	//use main thread to emit Prometheus metrics
 	if config.Collector.ExposeDataMetrics {
-		prometheus.MustRegister(&collector.DataMetricsCollector{ClusterID: cluster.ID})
+		prometheus.MustRegister(&collector.DataMetricsCollector{Cluster: cluster})
 	}
 	http.Handle("/metrics", promhttp.Handler())
 	util.LogInfo("listening on " + config.Collector.MetricsListenAddress)

@@ -24,6 +24,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/limes/pkg/db"
+	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/util"
 )
 
@@ -59,7 +60,7 @@ var clusterCapacityGauge = prometheus.NewGaugeVec(
 		Name: "limes_cluster_capacity",
 		Help: "Reported capacity of a Limes resource for an OpenStack cluster.",
 	},
-	[]string{"os_cluster", "service", "resource"},
+	[]string{"os_cluster", "shared", "service", "resource"},
 )
 
 var domainQuotaGauge = prometheus.NewGaugeVec(
@@ -97,7 +98,7 @@ var projectBackendQuotaGauge = prometheus.NewGaugeVec(
 //DataMetricsCollector is a prometheus.Collector that submits
 //quota/usage/backend quota from an OpenStack cluster as Prometheus metrics.
 type DataMetricsCollector struct {
-	ClusterID string
+	Cluster *limes.Cluster
 }
 
 //Describe implements the prometheus.Collector interface.
@@ -110,10 +111,10 @@ func (c *DataMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 }
 
 var clusterMetricsQuery = `
-	SELECT cs.type, cr.name, cr.capacity
+	SELECT cs.cluster_id, cs.type, cr.name, cr.capacity
 	  FROM cluster_services cs
 	  JOIN cluster_resources cr ON cr.service_id = cs.id
-	 WHERE cs.cluster_id = $1
+	 WHERE cs.cluster_id = $1 OR cs.cluster_id = 'shared'
 `
 
 var domainMetricsQuery = `
@@ -155,22 +156,33 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	projectBackendQuotaGauge.Describe(descCh)
 	projectBackendQuotaDesc := <-descCh
 
-	//fetch values
-	queryArgs := []interface{}{c.ClusterID}
+	//fetch values for cluster level
+	queryArgs := []interface{}{c.Cluster.ID}
 	err := db.ForeachRow(db.DB, clusterMetricsQuery, queryArgs, func(rows *sql.Rows) error {
 		var (
+			clusterID    string
 			serviceType  string
 			resourceName string
 			capacity     uint64
 		)
-		err := rows.Scan(&serviceType, &resourceName, &capacity)
+		err := rows.Scan(&clusterID, &serviceType, &resourceName, &capacity)
 		if err != nil {
 			return err
 		}
+		var sharedString string
+		if clusterID == "shared" {
+			sharedString = "true"
+			if !c.Cluster.IsServiceShared[serviceType] {
+				return nil //continue with next row
+			}
+		} else {
+			sharedString = "false"
+		}
+
 		ch <- prometheus.MustNewConstMetric(
 			clusterCapacityDesc,
 			prometheus.GaugeValue, float64(capacity),
-			c.ClusterID, serviceType, resourceName,
+			c.Cluster.ID, sharedString, serviceType, resourceName,
 		)
 		return nil
 	})
@@ -178,6 +190,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		util.LogError("collect cluster metrics failed: " + err.Error())
 	}
 
+	//fetch values for domain level
 	err = db.ForeachRow(db.DB, domainMetricsQuery, queryArgs, func(rows *sql.Rows) error {
 		var (
 			domainName   string
@@ -193,7 +206,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(
 			domainQuotaDesc,
 			prometheus.GaugeValue, float64(quota),
-			c.ClusterID, domainName, domainUUID, serviceType, resourceName,
+			c.Cluster.ID, domainName, domainUUID, serviceType, resourceName,
 		)
 		return nil
 	})
@@ -201,6 +214,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		util.LogError("collect domain metrics failed: " + err.Error())
 	}
 
+	//fetch values for project level
 	err = db.ForeachRow(db.DB, projectMetricsQuery, queryArgs, func(rows *sql.Rows) error {
 		var (
 			domainName   string
@@ -221,17 +235,17 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(
 			projectQuotaDesc,
 			prometheus.GaugeValue, float64(quota),
-			c.ClusterID, domainName, domainUUID, projectName, projectUUID, serviceType, resourceName,
+			c.Cluster.ID, domainName, domainUUID, projectName, projectUUID, serviceType, resourceName,
 		)
 		ch <- prometheus.MustNewConstMetric(
 			projectUsageDesc,
 			prometheus.GaugeValue, float64(usage),
-			c.ClusterID, domainName, domainUUID, projectName, projectUUID, serviceType, resourceName,
+			c.Cluster.ID, domainName, domainUUID, projectName, projectUUID, serviceType, resourceName,
 		)
 		ch <- prometheus.MustNewConstMetric(
 			projectBackendQuotaDesc,
 			prometheus.GaugeValue, float64(backendQuota),
-			c.ClusterID, domainName, domainUUID, projectName, projectUUID, serviceType, resourceName,
+			c.Cluster.ID, domainName, domainUUID, projectName, projectUUID, serviceType, resourceName,
 		)
 		return nil
 	})
