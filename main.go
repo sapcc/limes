@@ -301,15 +301,13 @@ func taskTestScanCapacity(config limes.Configuration, cluster *limes.Cluster, ar
 		if err != nil {
 			util.LogError("scan capacity with capacitor %s failed: %s", capacitorID, err.Error())
 		}
-		if capacities != nil {
-			//merge capacities from this plugin into the overall capacity values map
-			for serviceType, resources := range capacities {
-				if _, ok := result[serviceType]; !ok {
-					result[serviceType] = make(map[string]uint64)
-				}
-				for resourceName, value := range resources {
-					result[serviceType][resourceName] = value
-				}
+		//merge capacities from this plugin into the overall capacity values map
+		for serviceType, resources := range capacities {
+			if _, ok := result[serviceType]; !ok {
+				result[serviceType] = make(map[string]uint64)
+			}
+			for resourceName, value := range resources {
+				result[serviceType][resourceName] = value
 			}
 		}
 	}

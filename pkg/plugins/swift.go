@@ -156,8 +156,7 @@ func (p *swiftPlugin) projectClient(provider *gophercloud.ProviderClient, projec
 //Wrapping the accounts.Get because the swift account might not be created if account_auto_create = false
 func getAccount(client *gophercloud.ServiceClient, projectUUID string) *accounts.GetResult {
 	//Get account metadata
-	var result accounts.GetResult
-	result = accounts.Get(client, accounts.GetOpts{})
+	result := accounts.Get(client, accounts.GetOpts{})
 	if _, ok := result.Err.(gophercloud.ErrDefault404); ok {
 		//Swift Account does not exist. This is expected esp. if account_auto_create is disabled
 		util.LogDebug("Swift Account %s does not exist", projectUUID)

@@ -111,7 +111,7 @@ func (p *capacityCinderPlugin) Scrape(provider *gophercloud.ProviderClient) (map
 
 	//count availability zones
 	for _, element := range availabilityZoneData.AvailabilityZoneInfo {
-		if element.ZoneState.Available == true {
+		if element.ZoneState.Available {
 			azCount++
 		}
 	}

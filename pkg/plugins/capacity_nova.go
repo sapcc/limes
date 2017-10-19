@@ -145,7 +145,7 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient) (map[s
 
 	//count availability zones
 	for _, element := range availabilityZoneData.AvailabilityZoneInfo {
-		if element.ZoneState.Available == true {
+		if element.ZoneState.Available {
 			azCount++
 		}
 	}
