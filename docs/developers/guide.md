@@ -88,7 +88,7 @@ api:
 
 Of course, you can also use the same trick as before and download the policy file from the existing deployment.
 
-Finally, to avoid confusion, you need to set the `collector.auto_align_quotas` flag to `false` when operating against an
+Finally, to avoid confusion, you need to set all `clusters.<name>.authoritative` flag to `false` when operating against an
 OpenStack cluster that already has a Limes instance.
 
 ### Running
