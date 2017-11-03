@@ -23,7 +23,7 @@ write these approved project quotas into the backend services that actually mana
 resource usage in all projects in all domains, so that users can make informed decisions about resource allocation at
 all levels of the hierarchy.
 
-## Choices
+## Unique features
 
 Limes can take over the handling of initial project quotas: All quotas for a new project (or domain) will be set to
 zero initially, until a sufficiently privileged user approves quota explicitly.
