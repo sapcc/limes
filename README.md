@@ -23,8 +23,14 @@ write these approved project quotas into the backend services that actually mana
 resource usage in all projects in all domains, so that users can make informed decisions about resource allocation at
 all levels of the hierarchy.
 
-Limes also takes over the handling of initial project quotas: All quotas for a new project (or domain) will be set to
+## Choices
+
+Limes can take over the handling of initial project quotas: All quotas for a new project (or domain) will be set to
 zero initially, until a sufficiently privileged user approves quota explicitly.
+
+As a unique feature, Limes can also track physical resources that are shared between multiple OpenStack clusters.
+
+Quota and usage data can be exposed as [Prometheus metrics](https://prometheus.io) for monitoring and alerting.
 
 # Documentation
 
