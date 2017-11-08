@@ -39,8 +39,6 @@ $ cd limes
 $ make install DESTDIR=/tmp/install
 GOPATH=/x/src/github.com/sapcc/limes/.gopath GOBIN=/x/src/github.com/sapcc/limes/build go install  -ldflags '-s -w' 'github.com/sapcc/limes'
 install -D -m 0755 build/limes "/tmp/install/usr/bin/limes"
-install -d -m 0755    "/tmp/install/usr/share/limes/migrations"
-install -D -m 0644 -t "/tmp/install/usr/share/limes/migrations" /x/src/github.com/sapcc/limes/pkg/db/migrations/*.sql
 ```
 
 The only required build dependency is [Go][go]. Version 1.8 and newer definitely works; 1.7 might work, but has not been
@@ -62,12 +60,6 @@ If you're using Kubernetes, you can use our team's [Helm chart for Limes][chart]
 3. Write a configuration file for Limes, by following the [configuration guide](./config.md).
 
 4. Prepare the database schema for Limes by running `limes migrate /path/to/config.yaml`.
-
-   `limes migrate` should be able to issue the required `CREATE DATABASE` statement. If this step fails and an error
-   like `database "limes" not found` is shown, execute the `CREATE DATABASE` statement manually, e.g. with psql.
-
-   For more fine-grained control of migrations (e.g. rollback), download the [`migrate` tool][migrate] and follow the
-   instructions over there.
 
 5. Start both the API service and the container service once for each cluster.
 
@@ -95,5 +87,4 @@ Scraping is usually pretty silent, but errors will always be logged (the most co
 unavailability of a backend service). So if no errors occur in the first few minutes, everything is working fine.
 
 [go]:       https://golang.org
-[migrate]:  https://github.com/mattes/migrate
 [chart]:    https://github.com/sapcc/helm-charts/tree/master/openstack/limes

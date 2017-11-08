@@ -33,11 +33,11 @@ import (
 
 	gorp "gopkg.in/gorp.v2"
 
-	"github.com/mattes/migrate/migrate"
 	"github.com/sapcc/limes/pkg/db"
 
 	//provides sqlite3 migration driver
-	_ "github.com/mattes/migrate/driver/sqlite3"
+	_ "github.com/mattes/migrate/database/sqlite3"
+	_ "github.com/mattes/migrate/source/file"
 	sqlite "github.com/mattn/go-sqlite3"
 )
 
@@ -69,12 +69,13 @@ func InitDatabase(t *testing.T, migrationsPath string) {
 	}
 
 	//apply DB schema
-	errs, ok := migrate.UpSync("sqlite3://"+dbPath, migrationsPath)
-	if !ok {
-		for _, err := range errs {
-			t.Error(err)
-		}
-		t.FailNow()
+	m, err := db.Configuration{Location: "sqlite3://" + dbPath}.GetMigrate(migrationsPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = m.Up()
+	if err != nil {
+		t.Fatal(err)
 	}
 
 	//initialize DB connection
@@ -134,7 +135,7 @@ func getDBContent(t *testing.T) string {
 	var tableNames []string
 	rows, err := db.DB.Query(`
 		SELECT name FROM sqlite_master WHERE type='table'
-		AND name != 'schema_migration' AND name NOT LIKE '%sqlite%'
+		AND name != 'schema_migrations' AND name NOT LIKE '%sqlite%'
 	`)
 	failOnErr(t, err)
 	for rows.Next() {

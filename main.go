@@ -32,7 +32,6 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/mattes/migrate/migrate"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sapcc/limes/pkg/api"
@@ -41,7 +40,8 @@ import (
 	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/util"
 
-	_ "github.com/mattes/migrate/driver/postgres"
+	"github.com/mattes/migrate"
+	_ "github.com/mattes/migrate/database/postgres"
 	_ "github.com/sapcc/limes/pkg/plugins"
 )
 
@@ -131,13 +131,12 @@ func taskMigrate(config limes.Configuration) {
 		os.Exit(1)
 	}
 
-	errs, ok := migrate.UpSync(config.Database.Location, config.Database.MigrationsPath)
-	if !ok {
-		util.LogError("migration failed, see errors on stderr")
-		for _, err := range errs {
-			fmt.Fprintln(os.Stderr, err.Error())
-		}
-		os.Exit(1)
+	m, err := config.Database.GetMigrate("go-bindata")
+	if err == nil {
+		err = m.Up()
+	}
+	if err != nil && err != migrate.ErrNoChange {
+		util.LogFatal("migration failed: " + err.Error())
 	}
 }
 

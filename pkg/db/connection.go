@@ -31,6 +31,8 @@ import (
 	gorp "gopkg.in/gorp.v2"
 
 	"github.com/majewsky/sqlproxy"
+	"github.com/mattes/migrate"
+	bindata "github.com/mattes/migrate/source/go-bindata"
 	"github.com/sapcc/limes/pkg/util"
 	//enable postgres driver for database/sql
 	_ "github.com/lib/pq"
@@ -63,8 +65,7 @@ func init() {
 //Configuration is the section of the global configuration file that
 //contains the data about
 type Configuration struct {
-	Location       string `yaml:"location"`
-	MigrationsPath string `yaml:"migrations"`
+	Location string `yaml:"location"`
 }
 
 //Init initializes the connection to the database.
@@ -116,21 +117,27 @@ func Init(cfg Configuration) error {
 	return nil
 }
 
-func getCurrentMigrationLevel(cfg Configuration) (int, error) {
-	//list files in migration directory
-	dir, err := os.Open(cfg.MigrationsPath)
-	if err != nil {
-		return 0, err
-	}
-	fileNames, err := dir.Readdirnames(-1)
-	if err != nil {
-		return 0, err
+//GetMigrate returns a github.com/mattes/migrate.Migrate instance for the Limes DB.
+//During tests, give the path to the SQLite-compatible migrations (at
+//pkg/test/migrations in the repo). At runtime, give "go-bindata" to use
+//the compiled-in Postgres-compatible migrations.
+func (cfg Configuration) GetMigrate(migrationsPath string) (*migrate.Migrate, error) {
+	if migrationsPath != "go-bindata" {
+		return migrate.New("file://"+migrationsPath, cfg.Location)
 	}
 
+	driver, err := bindata.WithInstance(bindata.Resource(AssetNames(), Asset))
+	if err != nil {
+		return nil, err
+	}
+	return migrate.NewWithSourceInstance("go-bindata", driver, cfg.Location)
+}
+
+func getCurrentMigrationLevel(cfg Configuration) (int, error) {
 	result := 0
-	rx := regexp.MustCompile(`^([0-9]+)_.*\.(?:up|down)\.sql`)
+	rx := regexp.MustCompile(`^pkg/db/migrations/([0-9]+)_.*\.(?:up|down)\.sql`)
 	//find the relevant SQL files and extract their migration numbers
-	for _, fileName := range fileNames {
+	for _, fileName := range AssetNames() {
 		match := rx.FindStringSubmatch(fileName)
 		if match != nil {
 			migration, _ := strconv.Atoi(match[1])

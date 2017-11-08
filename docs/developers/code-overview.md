@@ -19,7 +19,8 @@ from the bottom up)
 | `pkg/api` | yes | functionality of `limes api` |
 
 The database is defined by SQL files in `pkg/db/migrations`. The contents follow the PostgreSQL dialect of SQL, the
-filenames follow the requirements of [the library that Limes uses for handling the DB schema][migrate].
+filenames follow the requirements of [the library that Limes uses for handling the DB schema][migrate]. During `make`,
+the SQL files in this directory are packed into `pkg/db/migrations.go` by `go-bindata`. Please commit this source file.
 
 ## Testing methodology
 
