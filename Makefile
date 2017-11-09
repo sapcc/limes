@@ -39,7 +39,7 @@ pkg/test/migrations/%.sql: pkg/db/migrations/%.sql
 	@# convert Postgres syntax into SQLite syntax where necessary
 	sed '/BEGIN skip in sqlite/,/END skip in sqlite/d;s/BIGSERIAL NOT NULL PRIMARY KEY/INTEGER PRIMARY KEY/' < $< > $@
 static-check: FORCE
-	@if ! hash golint 2>/dev/null; then echo ">> Installing golint..."; go get -u github.com/golang/lint/golint; exit 1; fi
+	@if ! hash golint 2>/dev/null; then echo ">> Installing golint..."; go get -u github.com/golang/lint/golint; fi
 	@echo '>> gofmt'
 	@if s="$$(gofmt -s -l *.go pkg 2>/dev/null)"                            && test -n "$$s"; then printf ' => %s\n%s\n' gofmt  "$$s"; false; fi
 	@echo '>> golint'
