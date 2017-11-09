@@ -5,7 +5,6 @@ Limes requires a configuration file in [YAML format][yaml]. A minimal complete c
 ```yaml
 database:
   location: "postgres://postgres@localhost/limes"
-  migrations: "/usr/share/limes/migrations"
 
 api:
   listen: "127.0.0.1:8080"
@@ -42,7 +41,6 @@ Configuration options relating to the database connection of all services.
 | Field | Required | Description |
 | --- | --- | --- |
 | `database.location` | yes | A [libpq connection URI][pq-uri] that locates the Limes database. The non-URI "connection string" format is not allowed; it must be a URI. |
-| `database.migrations` | yes | Path to the directory containing the migration files for Limes' database schema. These are usually installed in `/usr/share/limes/migrations`. In development setups, point this to the directory `$repo_root/pkg/db/migrations`. |
 
 ## Section "api"
 

@@ -178,9 +178,6 @@ func (cfg configurationInFile) validate() (success bool) {
 	if cfg.Database.Location == "" {
 		missing("database.location")
 	}
-	if cfg.Database.MigrationsPath == "" {
-		missing("database.migrations")
-	}
 	if len(cfg.Clusters) == 0 {
 		missing("clusters[]")
 	}

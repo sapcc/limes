@@ -75,10 +75,9 @@ You will need to edit the `database` section to point to your local database and
 ```yaml
 database:
   location: "postgres://postgres@localhost/limes?sslmode=disable"
-  migrations: /my/gopath/src/github.com/sapcc/limes/pkg/db/migrations
 ```
 
-Adjust the database user name if required, and replace `/my/gopath` by your GOPATH. Furthermore, edit the `api` section to point it to a valid `policy.json` file. The example from the `docs` directory should work fine:
+Adjust the database user name, and add a password if required. Furthermore, edit the `api` section to point it to a valid `policy.json` file. The example from the `docs` directory should work fine:
 
 ```yaml
 api:
