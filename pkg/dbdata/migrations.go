@@ -12,7 +12,7 @@
 // pkg/db/migrations/005_add_project_resource_subresources.up.sql
 // DO NOT EDIT!
 
-package db
+package dbdata
 
 import (
 	"bytes"

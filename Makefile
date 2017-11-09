@@ -9,11 +9,11 @@ GO_LDFLAGS    := -s -w
 
 # This target uses the incremental rebuild capabilities of the Go compiler to speed things up.
 # If no source files have changed, `go install` exits quickly without doing anything.
-build/limes: pkg/db/migrations.go FORCE
+build/limes: pkg/dbdata/migrations.go FORCE
 	$(GO) install $(GO_BUILDFLAGS) -ldflags '$(GO_LDFLAGS)' '$(PKG)'
-pkg/db/migrations.go: pkg/db/migrations/*.sql
+pkg/dbdata/migrations.go: pkg/db/migrations/*.sql
 	@if ! hash go-bindata 2>/dev/null; then echo ">> Installing go-bindata..."; go get -u github.com/jteeuwen/go-bindata/go-bindata; exit 1; fi
-	go-bindata -prefix pkg/db/migrations -pkg db -o $@ pkg/db/migrations/
+	go-bindata -prefix pkg/db/migrations -pkg dbdata -o $@ pkg/db/migrations/
 	gofmt -s -w $@
 
 # which packages to test with static checkers?
@@ -40,10 +40,14 @@ pkg/test/migrations/%.sql: pkg/db/migrations/%.sql
 	sed '/BEGIN skip in sqlite/,/END skip in sqlite/d;s/BIGSERIAL NOT NULL PRIMARY KEY/INTEGER PRIMARY KEY/' < $< > $@
 static-check: FORCE
 	@if ! hash golint 2>/dev/null; then echo ">> Installing golint..."; go get -u github.com/golang/lint/golint; exit 1; fi
+	@echo '>> gofmt'
 	@if s="$$(gofmt -s -l *.go pkg 2>/dev/null)"                            && test -n "$$s"; then printf ' => %s\n%s\n' gofmt  "$$s"; false; fi
-	@if s="$$(golint . && find pkg -type d -exec golint {} \; 2>/dev/null)" && test -n "$$s"; then printf ' => %s\n%s\n' golint "$$s"; false; fi
-	$(GO) vet $(GO_ALLPKGS)
+	@echo '>> golint'
+	@if s="$$(golint . && find pkg -type d ! -name dbdata -exec golint {} \; 2>/dev/null)" && test -n "$$s"; then printf ' => %s\n%s\n' golint "$$s"; false; fi
+	@echo '>> go vet'
+	@$(GO) vet $(GO_ALLPKGS)
 build/%.cover.out: prepare-check FORCE
+	@echo '>> go test $*'
 	$(GO) test $(GO_BUILDFLAGS) -ldflags '$(GO_LDFLAGS)' -coverprofile=$@ -covermode=count -coverpkg=$(subst $(space),$(comma),$(GO_COVERPKGS)) $(subst _,/,$*)
 build/cover.out: $(GO_COVERFILES)
 	pkg/test/util/gocovcat.go $(GO_COVERFILES) > $@

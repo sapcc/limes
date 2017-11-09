@@ -33,6 +33,7 @@ import (
 	"github.com/majewsky/sqlproxy"
 	"github.com/mattes/migrate"
 	bindata "github.com/mattes/migrate/source/go-bindata"
+	"github.com/sapcc/limes/pkg/dbdata"
 	"github.com/sapcc/limes/pkg/util"
 	//enable postgres driver for database/sql
 	_ "github.com/lib/pq"
@@ -126,7 +127,7 @@ func (cfg Configuration) GetMigrate(migrationsPath string) (*migrate.Migrate, er
 		return migrate.New("file://"+migrationsPath, cfg.Location)
 	}
 
-	driver, err := bindata.WithInstance(bindata.Resource(AssetNames(), Asset))
+	driver, err := bindata.WithInstance(bindata.Resource(dbdata.AssetNames(), dbdata.Asset))
 	if err != nil {
 		return nil, err
 	}
@@ -137,7 +138,7 @@ func getCurrentMigrationLevel(cfg Configuration) (int, error) {
 	result := 0
 	rx := regexp.MustCompile(`^pkg/db/migrations/([0-9]+)_.*\.(?:up|down)\.sql`)
 	//find the relevant SQL files and extract their migration numbers
-	for _, fileName := range AssetNames() {
+	for _, fileName := range dbdata.AssetNames() {
 		match := rx.FindStringSubmatch(fileName)
 		if match != nil {
 			migration, _ := strconv.Atoi(match[1])
