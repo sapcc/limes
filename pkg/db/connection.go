@@ -92,7 +92,7 @@ func Init(cfg Configuration) error {
 	if err != nil {
 		return err
 	}
-	stmt, err := DB.Prepare(fmt.Sprintf("SELECT 1 FROM schema_migrations WHERE version = %d", migrationLevel))
+	stmt, err := DB.Prepare(fmt.Sprintf("SELECT 1 FROM schema_migrations WHERE version = %d AND NOT dirty", migrationLevel))
 	if err != nil {
 		return err
 	}
@@ -136,7 +136,7 @@ func (cfg Configuration) GetMigrate(migrationsPath string) (*migrate.Migrate, er
 
 func getCurrentMigrationLevel(cfg Configuration) (int, error) {
 	result := 0
-	rx := regexp.MustCompile(`^pkg/db/migrations/([0-9]+)_.*\.(?:up|down)\.sql`)
+	rx := regexp.MustCompile(`^([0-9]+)_.*\.(?:up|down)\.sql`)
 	//find the relevant SQL files and extract their migration numbers
 	for _, fileName := range dbdata.AssetNames() {
 		match := rx.FindStringSubmatch(fileName)
