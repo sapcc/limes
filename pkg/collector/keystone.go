@@ -20,8 +20,6 @@
 package collector
 
 import (
-	"strconv"
-
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
@@ -196,7 +194,7 @@ func ScanProjects(cluster *limes.Cluster, domain *db.Domain) (result []string, r
 	labels := prometheus.Labels{
 		"os_cluster": cluster.ID,
 		"domain":     domain.Name,
-		"domain_id":  strconv.FormatInt(domain.ID, 10),
+		"domain_id":  domain.UUID,
 	}
 	projectDiscoverySuccessCounter.With(labels).Add(0)
 	projectDiscoveryFailedCounter.With(labels).Add(0)
