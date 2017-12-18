@@ -47,9 +47,45 @@ var scrapeFailedCounter = prometheus.NewCounterVec(
 	[]string{"os_cluster", "service", "service_name"},
 )
 
+var projectDiscoverySuccessCounter = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "limes_successful_project_discoveries",
+		Help: "Counter for successful project discovery operations per Keystone domain.",
+	},
+	[]string{"os_cluster", "domain", "domain_id"},
+)
+
+var projectDiscoveryFailedCounter = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "limes_failed_project_discoveries",
+		Help: "Counter for failed project discovery operations per Keystone domain.",
+	},
+	[]string{"os_cluster", "domain", "domain_id"},
+)
+
+var domainDiscoverySuccessCounter = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "limes_successful_domain_discoveries",
+		Help: "Counter for successful domain discovery operations.",
+	},
+	[]string{"os_cluster"},
+)
+
+var domainDiscoveryFailedCounter = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "limes_failed_domain_discoveries",
+		Help: "Counter for failed domain discovery operations.",
+	},
+	[]string{"os_cluster"},
+)
+
 func init() {
 	prometheus.MustRegister(scrapeSuccessCounter)
 	prometheus.MustRegister(scrapeFailedCounter)
+	prometheus.MustRegister(projectDiscoverySuccessCounter)
+	prometheus.MustRegister(projectDiscoveryFailedCounter)
+	prometheus.MustRegister(domainDiscoverySuccessCounter)
+	prometheus.MustRegister(domainDiscoveryFailedCounter)
 }
 
 ////////////////////////////////////////////////////////////////////////////////

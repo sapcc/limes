@@ -22,13 +22,18 @@ The collector service exposes the following metrics by default:
 | --- | --- | --- |
 | Counter | `limes_successful_scrapes` | `os_cluster`, `service`, `service_name` (counts projects) |
 | Counter | `limes_failed_scrapes` | `os_cluster`, `service`, `service_name` (counts projects) |
+| Counter | `limes_successful_domain_discoveries` | `os_cluster` |
+| Counter | `limes_failed_domain_discoveries` | `os_cluster` |
+| Counter | `limes_successful_project_discoveries` | `os_cluster`, `domain`, `domain_id` |
+| Counter | `limes_failed_project_discoveries` | `os_cluster`, `domain`, `domain_id` |
 
 The `limes_failed_scrapes` metric is particularly useful for assessing the continued operation of backend services
 (specifically their API parts). If you can do only one alert on Limes metrics, alert on `limes_failed_scrapes`.
+Alerts on `limes_failed_{domain,project}_discoveries` are very useful, too, but less important.
 
 `os_cluster` represents the OpenStack cluster configured in the [clusters configuration section](config.md#section-clusters)
 
-For both metrics, the `service` label contains the type of the backend service in question (as stated in the Keystone
+For the scraping metrics, the `service` label contains the type of the backend service in question (as stated in the Keystone
 service catalog), and the `service_name` label contains the product name (in lower case) of the reference implementation
 of this service, for instance, `service_name="nova"` for `service="compute"`.
 

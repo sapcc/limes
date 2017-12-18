@@ -20,6 +20,9 @@
 package collector
 
 import (
+	"strconv"
+
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/util"
@@ -62,7 +65,22 @@ func listDomainsFiltered(cluster *limes.Cluster) ([]limes.KeystoneDomain, error)
 
 //ScanDomains queries Keystone to discover new domains, and returns a
 //list of UUIDs for the newly discovered domains.
-func ScanDomains(cluster *limes.Cluster, opts ScanDomainsOpts) ([]string, error) {
+func ScanDomains(cluster *limes.Cluster, opts ScanDomainsOpts) (result []string, resultErr error) {
+	//make sure that the counters are reported
+	labels := prometheus.Labels{
+		"os_cluster": cluster.ID,
+	}
+	domainDiscoverySuccessCounter.With(labels).Add(0)
+	domainDiscoveryFailedCounter.With(labels).Add(0)
+	//report either success or failure when the method exists
+	defer func() {
+		if resultErr == nil {
+			domainDiscoverySuccessCounter.With(labels).Inc()
+		} else {
+			domainDiscoveryFailedCounter.With(labels).Inc()
+		}
+	}()
+
 	//list domains in Keystone
 	domains, err := listDomainsFiltered(cluster)
 	if err != nil {
@@ -96,7 +114,6 @@ func ScanDomains(cluster *limes.Cluster, opts ScanDomainsOpts) ([]string, error)
 
 	//when a domain has been created in Keystone, create the corresponding record
 	//in our DB and scan its projects immediately
-	var result []string
 	for _, domain := range domains {
 		dbDomain, exists := existingDomainsByUUID[domain.UUID]
 		if exists {
@@ -174,7 +191,24 @@ func initDomain(cluster *limes.Cluster, domain limes.KeystoneDomain) (*db.Domain
 }
 
 //ScanProjects queries Keystone to discover new projects in the given domain.
-func ScanProjects(cluster *limes.Cluster, domain *db.Domain) ([]string, error) {
+func ScanProjects(cluster *limes.Cluster, domain *db.Domain) (result []string, resultErr error) {
+	//make sure that the counters are reported
+	labels := prometheus.Labels{
+		"os_cluster": cluster.ID,
+		"domain":     domain.Name,
+		"domain_id":  strconv.FormatInt(domain.ID, 10),
+	}
+	projectDiscoverySuccessCounter.With(labels).Add(0)
+	projectDiscoveryFailedCounter.With(labels).Add(0)
+	//report either success or failure when the method exists
+	defer func() {
+		if resultErr == nil {
+			projectDiscoverySuccessCounter.With(labels).Inc()
+		} else {
+			projectDiscoveryFailedCounter.With(labels).Inc()
+		}
+	}()
+
 	//list projects in Keystone
 	projects, err := cluster.DiscoveryPlugin.ListProjects(cluster.ProviderClient(), domain.UUID)
 	if err != nil {
@@ -208,7 +242,6 @@ func ScanProjects(cluster *limes.Cluster, domain *db.Domain) ([]string, error) {
 
 	//when a project has been created in Keystone, create the corresponding
 	//record in our DB
-	var result []string
 	for _, project := range projects {
 		dbProject, exists := existingProjectsByUUID[project.UUID]
 		if exists {
