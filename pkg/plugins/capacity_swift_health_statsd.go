@@ -65,7 +65,7 @@ func (p *capacitySwiftHealthStatsdPlugin) ID() string {
 //Scrape implements the limes.CapacityPlugin interface.
 func (p *capacitySwiftHealthStatsdPlugin) Scrape(provider *gophercloud.ProviderClient) (map[string]map[string]uint64, error) {
 
-	var prometheusQuery = "min(swift_cluster_storage_capacity_bytes_gauge < inf)"
+	var prometheusQuery = "min(swift_cluster_storage_capacity_bytes < inf)"
 	var prometheusAPIURL = "https://localhost:9090"
 	if p.cfg.Swift.PrometheusAPIURL != "" {
 		prometheusAPIURL = p.cfg.Swift.PrometheusAPIURL
