@@ -336,22 +336,40 @@ The `nova.extra_specs` parameter can be used to control how flavors are enumerat
 considered which have all the extra specs noted in this map, with the same values as defined in the configuration file.
 This is particularly useful to filter Ironic flavors, which usually have much larger root disk sizes.
 
-## `swift-health-statsd`
+## `prometheus`
 
 ```yaml
 capacitors:
-  - id: swift-health-statsd
-    swift:
-      prometheus_api_url: https://prometheus.example.com
-      adjustment_factor: 0.25   # 4 replicas
+  - id: prometheus
+    prometheus:
+      api_url: https://prometheus.example.com
+      queries:
+        compute:
+          cores:     sum(hypervisor_cores)
+          ram:       sum(hypervisor_ram_gigabytes) * 1024
 ```
 
-| Resource | Method |
-| --- | --- |
-| `object-store/capacity` | A Prometheus instance must be running at the URL given in `swift.prometheus_api_url`. It is queried for the `swift_cluster_storage_capacity_bytes_gauge` metric provided by [swift-health-statsd][shs]. Because this value is only the sum of all disk sizes in the Swift cluster, it needs to be adjusted for the number of replicas that Swift writes, and (if enabled) also for erasure coding. The operator must provide an appropriate scaling factor in the `swift.adjustment_factor` parameter.|
+Like the `manual` capacity plugin, this plugin can provide capacity values for arbitrary resources. A [Prometheus][prom]
+instance must be running at the URL given in `prometheus.api_url`. Each of the queries in `prometheus.queries` is
+executed on this Prometheus instance, and the resulting value is reported as capacity for the resource named by the key
+of this query. Queries are grouped by service, then by resource.
+
+For example, the following configuration can be used with [swift-health-statsd][shs] to find the net capacity of a Swift cluster with 3 replicas:
+
+```yaml
+capacitors:
+  - id: prometheus
+    prometheus:
+      api_url: https://prometheus.example.com
+      queries:
+        object-store:
+          capacity: min(swift_cluster_storage_capacity_bytes < inf) / 3
+```
+
 
 [yaml]:   http://yaml.org/
 [pq-uri]: https://www.postgresql.org/docs/9.6/static/libpq-connect.html#LIBPQ-CONNSTRING
 [policy]: https://docs.openstack.org/security-guide/identity/policies.html
 [ex-pol]: ../example-policy.json
+[prom]:   https://prometheus.io
 [shs]:    https://github.com/sapcc/swift-health-statsd

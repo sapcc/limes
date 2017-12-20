@@ -20,6 +20,7 @@
 package plugins
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/gophercloud/gophercloud"
@@ -30,82 +31,78 @@ import (
 	"golang.org/x/net/context"
 )
 
-type capacitySwiftHealthStatsdPlugin struct {
+type capacityPrometheusPlugin struct {
 	cfg limes.CapacitorConfiguration
 }
 
 func init() {
 	limes.RegisterCapacityPlugin(func(c limes.CapacitorConfiguration) limes.CapacityPlugin {
-		return &capacitySwiftHealthStatsdPlugin{c}
+		return &capacityPrometheusPlugin{c}
 	})
 }
 
 //Client relates to the prometheus client
 //requires the url to prometheus à la "http<s>://localhost<:9090>"
 //in our case even without port
-func Client(prometheusAPIURL string) (prometheus.QueryAPI, error) {
+func (p *capacityPrometheusPlugin) Client(apiURL string) (prometheus.QueryAPI, error) {
+	//default value
+	if apiURL == "" {
+		apiURL = "https://localhost:9090"
+	}
 
 	config := prometheus.Config{
-		Address:   prometheusAPIURL,
+		Address:   apiURL,
 		Transport: prometheus.DefaultTransport,
 	}
 	client, err := prometheus.New(config)
 	if err != nil {
-		util.LogDebug("Could not create Prometheus client with URL: %s", prometheusAPIURL)
-		return nil, err
+		return nil, fmt.Errorf("cannot connect to Prometheus at %s: %s", apiURL, err.Error())
 	}
 	return prometheus.NewQueryAPI(client), nil
 }
 
 //ID implements the limes.CapacityPlugin interface.
-func (p *capacitySwiftHealthStatsdPlugin) ID() string {
-	return "swift-health-statsd"
+func (p *capacityPrometheusPlugin) ID() string {
+	return "prometheus"
 }
 
 //Scrape implements the limes.CapacityPlugin interface.
-func (p *capacitySwiftHealthStatsdPlugin) Scrape(provider *gophercloud.ProviderClient) (map[string]map[string]uint64, error) {
+func (p *capacityPrometheusPlugin) Scrape(provider *gophercloud.ProviderClient) (map[string]map[string]uint64, error) {
 
-	var prometheusQuery = "min(swift_cluster_storage_capacity_bytes < inf)"
-	var prometheusAPIURL = "https://localhost:9090"
-	if p.cfg.Swift.PrometheusAPIURL != "" {
-		prometheusAPIURL = p.cfg.Swift.PrometheusAPIURL
-	}
-
-	client, err := Client(prometheusAPIURL)
+	client, err := p.Client(p.cfg.Prometheus.APIURL)
 	if err != nil {
 		return nil, err
 	}
 
-	var value model.Value
-	var resultVector model.Vector
-	var capacity = map[string]uint64{}
-	var adjustmentFactor = 1.0
+	result := make(map[string]map[string]uint64)
+	for serviceType, queries := range p.cfg.Prometheus.Queries {
+		serviceResult := make(map[string]uint64)
+		for resourceName, query := range queries {
 
-	value, err = client.Query(context.Background(), prometheusQuery, time.Now())
-	if err != nil {
-		util.LogError("Could not get value for query %s from Prometheus %s.", prometheusQuery, prometheusAPIURL)
-		return nil, err
+			var value model.Value
+			var resultVector model.Vector
+
+			value, err = client.Query(context.Background(), query, time.Now())
+			if err != nil {
+				return nil, fmt.Errorf("Prometheus query failed: %s: %s", query, err.Error())
+			}
+			resultVector, ok := value.(model.Vector)
+			if !ok {
+				return nil, fmt.Errorf("Prometheus query failed: %s: unexpected type %T", query, value)
+			}
+
+			switch resultVector.Len() {
+			case 0:
+				util.LogInfo("Prometheus query returned empty result: %s", query)
+			default:
+				util.LogInfo("Prometheus query returned more than one result: %s (only the first value will be used)", query)
+				fallthrough
+			case 1:
+				serviceResult[resourceName] = uint64(resultVector[0].Value)
+			}
+
+		}
+		result[serviceType] = serviceResult
 	}
-	resultVector, ok := value.(model.Vector)
-	if !ok {
-		util.LogError("Could not get value for query %s from Prometheus due to type mismatch.", prometheusQuery)
-		return nil, nil
-	}
-
-	if p.cfg.Swift.AdjustmentFactor != 0 {
-		adjustmentFactor = p.cfg.Swift.AdjustmentFactor
-	}
-
-	if resultVector.Len() != 0 {
-		capacity["capacity"] = uint64(float64(resultVector[0].Value) * adjustmentFactor)
-	}
-
-	//returns something like
-	//"object-store": {
-	//	"capacity": capacity,
-	//}
-	return map[string]map[string]uint64{
-		"object-store": capacity,
-	}, nil
-
+	return result, nil
 }

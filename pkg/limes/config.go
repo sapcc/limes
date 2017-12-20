@@ -100,10 +100,10 @@ type CapacitorConfiguration struct {
 		VCPUOvercommitFactor *uint64           `yaml:"vcpu_overcommit"`
 		ExtraSpecs           map[string]string `yaml:"extra_specs"`
 	} `yaml:"nova"`
-	Swift struct {
-		PrometheusAPIURL string  `yaml:"prometheus_api_url"`
-		AdjustmentFactor float64 `yaml:"adjustment_factor"`
-	} `yaml:"swift"`
+	Prometheus struct {
+		APIURL  string                       `yaml:"api_url"`
+		Queries map[string]map[string]string `yaml:"queries"`
+	} `yaml:"prometheus"`
 	Cinder struct {
 		VolumeBackendName string `yaml:"volume_backend_name"`
 	} `yaml:"cinder"`
