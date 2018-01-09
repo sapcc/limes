@@ -68,6 +68,11 @@ func NewPluginFactory(serviceType string) func(limes.ServiceConfiguration, map[s
 	}
 }
 
+//Init implements the limes.QuotaPlugin interface.
+func (p *Plugin) Init(provider *gophercloud.ProviderClient) error {
+	return nil
+}
+
 //ServiceInfo implements the limes.QuotaPlugin interface.
 func (p *Plugin) ServiceInfo() limes.ServiceInfo {
 	return limes.ServiceInfo{

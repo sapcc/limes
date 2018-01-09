@@ -117,6 +117,11 @@ func init() {
 	})
 }
 
+//Init implements the limes.QuotaPlugin interface.
+func (p *neutronPlugin) Init(provider *gophercloud.ProviderClient) error {
+	return nil
+}
+
 //ServiceInfo implements the limes.QuotaPlugin interface.
 func (p *neutronPlugin) ServiceInfo() limes.ServiceInfo {
 	return limes.ServiceInfo{

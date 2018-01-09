@@ -63,6 +63,10 @@ type ResourceData struct {
 //backend services must implement. There can only be one QuotaPlugin for each
 //backend service.
 type QuotaPlugin interface {
+	//Init is guaranteed to be called before all other methods exposed by the
+	//interface. Implementations can use it f.i. to discover the available
+	//Resources().
+	Init(client *gophercloud.ProviderClient) error
 	//ServiceInfo returns metadata for this service.
 	ServiceInfo() ServiceInfo
 	//Resources returns metadata for all the resources that this plugin scrapes

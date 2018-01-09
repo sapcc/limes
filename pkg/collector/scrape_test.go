@@ -154,6 +154,10 @@ type autoApprovalTestPlugin struct {
 	StaticBackendQuota uint64
 }
 
+func (p *autoApprovalTestPlugin) Init(provider *gophercloud.ProviderClient) error {
+	return nil
+}
+
 func (p *autoApprovalTestPlugin) ServiceInfo() limes.ServiceInfo {
 	return limes.ServiceInfo{
 		Type: "autoapprovaltest",

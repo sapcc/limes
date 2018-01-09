@@ -110,11 +110,19 @@ func (c *Cluster) Connect() error {
 	}
 
 	for _, srv := range c.Config.Services {
+		provider := c.Config.Auth.ProviderClient
+
 		if srv.Auth != nil {
 			err := srv.Auth.Connect()
 			if err != nil {
 				return err
 			}
+			provider = srv.Auth.ProviderClient
+		}
+
+		err := c.QuotaPlugins[srv.Type].Init(provider)
+		if err != nil {
+			return err
 		}
 	}
 
