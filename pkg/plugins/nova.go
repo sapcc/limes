@@ -95,8 +95,9 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient) error {
 	for key := range body.QuotaClassSet {
 		if strings.HasPrefix(key, "instances_") {
 			p.resources = append(p.resources, limes.ResourceInfo{
-				Name: key,
-				Unit: limes.UnitNone,
+				Name:     key,
+				Category: "per_flavor",
+				Unit:     limes.UnitNone,
 			})
 		}
 	}

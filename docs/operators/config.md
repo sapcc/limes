@@ -176,7 +176,8 @@ The `instances` resource supports subresource scraping. Subresources bear the fo
 On SAP Converged Cloud (or any other OpenStack cluster where Nova carries the relevant patches), there will be an
 additional resource `instances_<flavorname>` for each flavor with the `quota:separate = true` extraspec. These resources
 behave like the `instances` resource. When subresources are scraped for the `instances` resource, they will also be
-scraped for these flavor-specific instance resources.
+scraped for these flavor-specific instance resources. The flavor-specific instance resources are in the `per_flavor`
+category.
 
 ## `dns`: Designate v2
 
