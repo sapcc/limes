@@ -168,9 +168,15 @@ The `instances` resource supports subresource scraping. Subresources bear the fo
 | `id` | string | instance UUID |
 | `name` | string | instance name |
 | `status` | string | instance status [as reported by OpenStack Nova](https://wiki.openstack.org/wiki/VMState) |
+| `flavor` | string | flavor name (not ID!) |
 | `ram` | integer value with unit | amount of memory configured in flavor |
 | `vcpu` | integer | number of vCPUs configured in flavor |
 | `disk` | integer value with unit | root disk size configured in flavor |
+
+On SAP Converged Cloud (or any other OpenStack cluster where Nova carries the relevant patches), there will be an
+additional resource `instances_<flavorname>` for each flavor with the `quota:separate = true` extraspec. These resources
+behave like the `instances` resource. When subresources are scraped for the `instances` resource, they will also be
+scraped for these flavor-specific instance resources.
 
 ## `dns`: Designate v2
 

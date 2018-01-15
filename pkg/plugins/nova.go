@@ -20,6 +20,9 @@
 package plugins
 
 import (
+	"sort"
+	"strings"
+
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/limits"
@@ -33,10 +36,11 @@ import (
 type novaPlugin struct {
 	cfg             limes.ServiceConfiguration
 	scrapeInstances bool
+	resources       []limes.ResourceInfo
 	flavors         map[string]*flavors.Flavor
 }
 
-var novaResources = []limes.ResourceInfo{
+var novaDefaultResources = []limes.ResourceInfo{
 	{
 		Name: "cores",
 		Unit: limes.UnitNone,
@@ -56,12 +60,50 @@ func init() {
 		return &novaPlugin{
 			cfg:             c,
 			scrapeInstances: scrapeSubresources["instances"],
+			resources:       novaDefaultResources,
 		}
 	})
 }
 
 //Init implements the limes.QuotaPlugin interface.
 func (p *novaPlugin) Init(provider *gophercloud.ProviderClient) error {
+	client, err := p.Client(provider)
+	if err != nil {
+		return err
+	}
+
+	//look at quota class "default" to determine which quotas exist
+	url := client.ServiceURL("os-quota-class-sets", "default")
+	var result gophercloud.Result
+	_, err = client.Get(url, &result.Body, nil)
+	if err != nil {
+		return err
+	}
+
+	//At SAP Converged Cloud, we use per-flavor instance quotas for baremetal
+	//(Ironic) flavors, to control precisely how many baremetal machines can be
+	//used by each domain/project. Each such quota has the resource name
+	//"instances_${FLAVOR_NAME}".
+	var body struct {
+		QuotaClassSet map[string]int64 `yaml:"quota_class_set"`
+	}
+	err = result.ExtractInto(&body)
+	if err != nil {
+		return err
+	}
+
+	for key := range body.QuotaClassSet {
+		if strings.HasPrefix(key, "instances_") {
+			p.resources = append(p.resources, limes.ResourceInfo{
+				Name: key,
+				Unit: limes.UnitNone,
+			})
+		}
+	}
+
+	sort.Slice(p.resources, func(i, j int) bool {
+		return p.resources[i].Name < p.resources[j].Name
+	})
 	return nil
 }
 
@@ -76,7 +118,7 @@ func (p *novaPlugin) ServiceInfo() limes.ServiceInfo {
 
 //Resources implements the limes.QuotaPlugin interface.
 func (p *novaPlugin) Resources() []limes.ResourceInfo {
-	return novaResources
+	return p.resources
 }
 
 func (p *novaPlugin) Client(provider *gophercloud.ProviderClient) (*gophercloud.ServiceClient, error) {
@@ -92,17 +134,48 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, domainUUID, pr
 		return nil, err
 	}
 
-	quotas, err := quotasets.Get(client, projectUUID).Extract()
+	var limitsData struct {
+		Limits struct {
+			Absolute struct {
+				MaxTotalCores      int64  `json:"maxTotalCores"`
+				MaxTotalInstances  int64  `json:"maxTotalInstances"`
+				MaxTotalRAMSize    int64  `json:"maxTotalRAMSize"`
+				TotalCoresUsed     uint64 `json:"totalCoresUsed"`
+				TotalInstancesUsed uint64 `json:"totalInstancesUsed"`
+				TotalRAMUsed       uint64 `json:"totalRAMUsed"`
+			} `json:"absolute"`
+			AbsolutePerFlavor map[string]struct {
+				MaxTotalInstances  int64  `json:"maxTotalInstances"`
+				TotalInstancesUsed uint64 `json:"totalInstancesUsed"`
+			} `json:"absolutePerFlavor"`
+		} `json:"limits"`
+	}
+	err = limits.Get(client, limits.GetOpts{TenantID: projectUUID}).ExtractInto(&limitsData)
 	if err != nil {
 		return nil, err
 	}
 
-	limits, err := limits.Get(client, limits.GetOpts{TenantID: projectUUID}).Extract()
-	if err != nil {
-		return nil, err
+	result := map[string]limes.ResourceData{
+		"cores": {
+			Quota: limitsData.Limits.Absolute.MaxTotalCores,
+			Usage: limitsData.Limits.Absolute.TotalCoresUsed,
+		},
+		"instances": {
+			Quota: limitsData.Limits.Absolute.MaxTotalInstances,
+			Usage: limitsData.Limits.Absolute.TotalInstancesUsed,
+		},
+		"ram": {
+			Quota: limitsData.Limits.Absolute.MaxTotalRAMSize,
+			Usage: limitsData.Limits.Absolute.TotalRAMUsed,
+		},
+	}
+	for flavorName, flavorLimits := range limitsData.Limits.AbsolutePerFlavor {
+		result["instances_"+flavorName] = limes.ResourceData{
+			Quota: flavorLimits.MaxTotalInstances,
+			Usage: flavorLimits.TotalInstancesUsed,
+		}
 	}
 
-	var instanceData []interface{}
 	if p.scrapeInstances {
 		listOpts := novaServerListOpts{
 			AllTenants: true,
@@ -123,6 +196,7 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, domainUUID, pr
 				}
 				flavor, err := p.getFlavor(client, instance.Flavor["id"].(string))
 				if err == nil {
+					subResource["flavor"] = flavor.Name
 					subResource["vcpu"] = flavor.VCPUs
 					subResource["ram"] = limes.ValueWithUnit{
 						Value: uint64(flavor.RAM),
@@ -133,7 +207,12 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, domainUUID, pr
 						Unit:  limes.UnitGibibytes,
 					}
 				}
-				instanceData = append(instanceData, subResource)
+
+				resource, exists := result["instances_"+flavor.Name]
+				if !exists {
+					resource = result["instances"]
+				}
+				resource.Subresources = append(resource.Subresources, subResource)
 			}
 			return true, nil
 		})
@@ -142,21 +221,7 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, domainUUID, pr
 		}
 	}
 
-	return map[string]limes.ResourceData{
-		"cores": {
-			Quota: int64(quotas.Cores),
-			Usage: uint64(limits.Absolute.TotalCoresUsed),
-		},
-		"instances": {
-			Quota:        int64(quotas.Instances),
-			Usage:        uint64(limits.Absolute.TotalInstancesUsed),
-			Subresources: instanceData,
-		},
-		"ram": {
-			Quota: int64(quotas.Ram),
-			Usage: uint64(limits.Absolute.TotalRAMUsed),
-		},
-	}, nil
+	return result, nil
 }
 
 //SetQuota implements the limes.QuotaPlugin interface.
@@ -166,11 +231,7 @@ func (p *novaPlugin) SetQuota(provider *gophercloud.ProviderClient, domainUUID, 
 		return err
 	}
 
-	return quotasets.Update(client, projectUUID, quotasets.UpdateOpts{
-		Cores:     makeIntPointer(int(quotas["cores"])),
-		Instances: makeIntPointer(int(quotas["instances"])),
-		Ram:       makeIntPointer(int(quotas["ram"])),
-	}).Err
+	return quotasets.Update(client, projectUUID, novaQuotaUpdateOpts(quotas)).Err
 }
 
 //Getting and caching flavor details
@@ -204,4 +265,14 @@ type novaServerListOpts struct {
 func (opts novaServerListOpts) ToServerListQuery() (string, error) {
 	q, err := gophercloud.BuildQueryString(opts)
 	return q.String(), err
+}
+
+type novaQuotaUpdateOpts map[string]uint64
+
+func (opts novaQuotaUpdateOpts) ToComputeQuotaUpdateMap() (map[string]interface{}, error) {
+	result := make(map[string]interface{}, len(opts))
+	for key, val := range opts {
+		result[key] = val
+	}
+	return result, nil
 }
