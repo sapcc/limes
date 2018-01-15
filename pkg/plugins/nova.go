@@ -274,5 +274,5 @@ func (opts novaQuotaUpdateOpts) ToComputeQuotaUpdateMap() (map[string]interface{
 	for key, val := range opts {
 		result[key] = val
 	}
-	return result, nil
+	return map[string]interface{}{"quota_set": result}, nil
 }
