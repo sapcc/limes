@@ -172,6 +172,11 @@ The `instances` resource supports subresource scraping. Subresources bear the fo
 | `ram` | integer value with unit | amount of memory configured in flavor |
 | `vcpu` | integer | number of vCPUs configured in flavor |
 | `disk` | integer value with unit | root disk size configured in flavor |
+| `os_type` | string | identifier for OS type as configured in image (see below) |
+
+The `os_type` field contains:
+- for VMware images: the value of the `vmware_ostype` property of the instance's image, or
+- otherwise: the part after the colon of a tag starting with `ostype:`, e.g. `rhel` if there is a tag `ostype:rhel` on the image.
 
 On SAP Converged Cloud (or any other OpenStack cluster where Nova carries the relevant patches), there will be an
 additional resource `instances_<flavorname>` for each flavor with the `quota:separate = true` extraspec. These resources
