@@ -20,6 +20,7 @@
 package limes
 
 import (
+	"fmt"
 	"sort"
 
 	"github.com/gophercloud/gophercloud"
@@ -106,7 +107,7 @@ func NewCluster(id string, config *ClusterConfiguration) *Cluster {
 func (c *Cluster) Connect() error {
 	err := c.Config.Auth.Connect()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to authenticate in cluster %s: %s", c.ID, err.Error())
 	}
 
 	for _, srv := range c.Config.Services {
@@ -115,14 +116,14 @@ func (c *Cluster) Connect() error {
 		if srv.Auth != nil {
 			err := srv.Auth.Connect()
 			if err != nil {
-				return err
+				return fmt.Errorf("failed to authenticate for service %s in cluster %s: %s", srv.Type, c.ID, err.Error())
 			}
 			provider = srv.Auth.ProviderClient
 		}
 
 		err := c.QuotaPlugins[srv.Type].Init(provider)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to initialize service %s in cluster %s: %s", srv.Type, c.ID, err.Error())
 		}
 	}
 
