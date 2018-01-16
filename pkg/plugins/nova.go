@@ -156,7 +156,7 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, domainUUID, pr
 		return nil, err
 	}
 
-	result := map[string]limes.ResourceData{
+	result := map[string]*limes.ResourceData{
 		"cores": {
 			Quota: limitsData.Limits.Absolute.MaxTotalCores,
 			Usage: limitsData.Limits.Absolute.TotalCoresUsed,
@@ -171,7 +171,7 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, domainUUID, pr
 		},
 	}
 	for flavorName, flavorLimits := range limitsData.Limits.AbsolutePerFlavor {
-		result["instances_"+flavorName] = limes.ResourceData{
+		result["instances_"+flavorName] = &limes.ResourceData{
 			Quota: flavorLimits.MaxTotalInstances,
 			Usage: flavorLimits.TotalInstancesUsed,
 		}
@@ -222,7 +222,12 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, domainUUID, pr
 		}
 	}
 
-	return result, nil
+	//remove references (which we needed to apply the subresources correctly)
+	result2 := make(map[string]limes.ResourceData, len(result))
+	for name, data := range result {
+		result2[name] = *data
+	}
+	return result2, nil
 }
 
 //SetQuota implements the limes.QuotaPlugin interface.
