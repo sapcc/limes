@@ -20,6 +20,7 @@
 package plugins
 
 import (
+	"fmt"
 	"sort"
 	"strings"
 
@@ -29,15 +30,22 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/quotasets"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
+	"github.com/gophercloud/gophercloud/openstack/imageservice/v2/images"
 	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/sapcc/limes/pkg/limes"
+	"github.com/sapcc/limes/pkg/util"
 )
+
+//use a name that's unique to github.com/gophercloud/gophercloud/openstack/imageservice/v2/images
+//to ensure that goimports does not mistakenly replace it by .../compute/v2/images
+var _ images.ImageVisibility
 
 type novaPlugin struct {
 	cfg             limes.ServiceConfiguration
 	scrapeInstances bool
 	resources       []limes.ResourceInfo
 	flavors         map[string]*flavors.Flavor
+	osTypeForImage  map[string]string
 }
 
 var novaDefaultResources = []limes.ResourceInfo{
@@ -128,6 +136,12 @@ func (p *novaPlugin) Client(provider *gophercloud.ProviderClient) (*gophercloud.
 	)
 }
 
+func (p *novaPlugin) GlanceClient(provider *gophercloud.ProviderClient) (*gophercloud.ServiceClient, error) {
+	return openstack.NewImageServiceV2(provider,
+		gophercloud.EndpointOpts{Availability: gophercloud.AvailabilityPublic},
+	)
+}
+
 //Scrape implements the limes.QuotaPlugin interface.
 func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
 	client, err := p.Client(provider)
@@ -195,7 +209,8 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, domainUUID, pr
 					"name":   instance.Name,
 					"status": instance.Status,
 				}
-				flavor, err := p.getFlavor(client, instance.Flavor["id"].(string))
+				flavorID := instance.Flavor["id"].(string)
+				flavor, err := p.getFlavor(client, flavorID)
 				if err == nil {
 					subResource["flavor"] = flavor.Name
 					subResource["vcpu"] = flavor.VCPUs
@@ -207,6 +222,16 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, domainUUID, pr
 						Value: uint64(flavor.Disk),
 						Unit:  limes.UnitGibibytes,
 					}
+				} else {
+					util.LogError("error while trying to retrieve data for flavor %s: %s", flavorID, err.Error())
+				}
+
+				imageID := instance.Image["id"].(string)
+				osType, err := p.getOSType(provider, imageID)
+				if err == nil {
+					subResource["os_type"] = osType
+				} else {
+					util.LogError("error while trying to find OS type for image %s: %s", imageID, err.Error())
 				}
 
 				resource, exists := result["instances_"+flavor.Name]
@@ -257,6 +282,68 @@ func (p *novaPlugin) getFlavor(client *gophercloud.ServiceClient, flavorID strin
 		p.flavors[flavorID] = flavor
 	}
 	return flavor, err
+}
+
+func (p *novaPlugin) getOSType(provider *gophercloud.ProviderClient, imageID string) (string, error) {
+	if p.osTypeForImage == nil {
+		p.osTypeForImage = make(map[string]string)
+	}
+
+	if osType, ok := p.osTypeForImage[imageID]; ok {
+		return osType, nil
+	}
+
+	osType, err := p.findOSType(provider, imageID)
+	if err == nil {
+		p.osTypeForImage[imageID] = osType
+	} else {
+		fmt.Printf("internal error: %#v\n", err)
+	}
+	return osType, err
+}
+
+func (p *novaPlugin) findOSType(provider *gophercloud.ProviderClient, imageID string) (string, error) {
+	client, err := p.Client(provider)
+	if err != nil {
+		return "", err
+	}
+	var result struct {
+		Tags         []string `json:"tags"`
+		VMwareOSType string   `json:"vmware_ostype"`
+	}
+	err = images.Get(client, imageID).ExtractInto(&result)
+	if err != nil {
+		//report a dummy value if image has been deleted...
+		if _, ok := err.(gophercloud.ErrDefault404); ok {
+			return "image-deleted", nil
+		}
+		//otherwise, try to GET image again during next scrape
+		return "", err
+	}
+
+	//prefer vmware_ostype attribute since this is validated by Nova upon booting the VM
+	if isValidVMwareOSType[result.VMwareOSType] {
+		return result.VMwareOSType, nil
+	}
+	//look for a tag like "ostype:rhel7" or "ostype:windows8Server64"
+	osType := ""
+	for _, tag := range result.Tags {
+		if strings.HasPrefix(tag, "ostype:") {
+			if osType == "" {
+				osType = strings.TrimPrefix(tag, "ostype:")
+			} else {
+				//multiple such tags -> wtf
+				osType = ""
+				break
+			}
+		}
+	}
+
+	//report "unknown" as a last resort
+	if osType == "" {
+		osType = "unknown"
+	}
+	return osType, nil
 }
 
 func makeIntPointer(value int) *int {
