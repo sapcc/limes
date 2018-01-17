@@ -226,12 +226,16 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, domainUUID, pr
 					util.LogError("error while trying to retrieve data for flavor %s: %s", flavorID, err.Error())
 				}
 
-				imageID := instance.Image["id"].(string)
-				osType, err := p.getOSType(provider, imageID)
-				if err == nil {
-					subResource["os_type"] = osType
+				imageID, ok := instance.Image["id"].(string)
+				if ok {
+					osType, err := p.getOSType(provider, imageID)
+					if err == nil {
+						subResource["os_type"] = osType
+					} else {
+						util.LogError("error while trying to find OS type for image %s: %s", imageID, err.Error())
+					}
 				} else {
-					util.LogError("error while trying to find OS type for image %s: %s", imageID, err.Error())
+					subResource["os_type"] = "image-missing"
 				}
 
 				resource, exists := result["instances_"+flavor.Name]
