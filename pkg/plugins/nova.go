@@ -186,10 +186,12 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, domainUUID, pr
 			Usage: limitsData.Limits.Absolute.TotalRAMUsed,
 		},
 	}
-	for flavorName, flavorLimits := range limitsData.Limits.AbsolutePerFlavor {
-		result["instances_"+flavorName] = &limes.ResourceData{
-			Quota: flavorLimits.MaxTotalInstances,
-			Usage: flavorLimits.TotalInstancesUsed,
+	if limitsData.Limits.AbsolutePerFlavor != nil {
+		for flavorName, flavorLimits := range limitsData.Limits.AbsolutePerFlavor {
+			result["instances_"+flavorName] = &limes.ResourceData{
+				Quota: flavorLimits.MaxTotalInstances,
+				Usage: flavorLimits.TotalInstancesUsed,
+			}
 		}
 	}
 
