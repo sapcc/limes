@@ -93,7 +93,9 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient) error {
 	//used by each domain/project. Each such quota has the resource name
 	//"instances_${FLAVOR_NAME}".
 	var body struct {
-		QuotaClassSet map[string]int64 `yaml:"quota_class_set"`
+		//NOTE: cannot use map[string]int64 here because this object contains the
+		//field "id": "default" (curse you, untyped JSON)
+		QuotaClassSet map[string]interface{} `json:"quota_class_set"`
 	}
 	err = result.ExtractInto(&body)
 	if err != nil {
