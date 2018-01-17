@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gophercloud/gophercloud"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
@@ -33,6 +34,9 @@ import (
 
 //how long to sleep after a scraping error, or when nothing needed scraping
 var idleInterval = 10 * time.Second
+
+//how long to sleep when scraping fails because the backend service is not in the catalog
+var serviceNotDeployedIdleInterval = 10 * time.Minute
 
 //how long to wait before scraping the same project and service again
 var scrapeInterval = 30 * time.Minute
@@ -83,7 +87,7 @@ func (c *Collector) Scrape() {
 		err := db.DB.QueryRow(findProjectQuery, c.Cluster.ID, serviceType, c.TimeNow().Add(-scrapeInterval)).
 			Scan(&serviceID, &projectName, &projectUUID, &domainName, &domainUUID)
 		if err != nil {
-			//ErrNoRows is okay; it just means that needs scraping right now
+			//ErrNoRows is okay; it just means that nothing needs scraping right now
 			if err != sql.ErrNoRows {
 				//TODO: there should be some sort of detection for persistent DB errors
 				//(such as "the DB has burst into flames"); maybe a separate thread that
@@ -101,12 +105,21 @@ func (c *Collector) Scrape() {
 		util.LogDebug("scraping %s for %s/%s", serviceType, domainName, projectName)
 		resourceData, err := c.Plugin.Scrape(c.Cluster.ProviderClientForService(serviceType), domainUUID, projectUUID)
 		if err != nil {
-			c.LogError("scrape %s data for %s/%s failed: %s", serviceType, domainName, projectName, err.Error())
-			scrapeFailedCounter.With(labels).Inc()
+			//special case: stop scraping for a while when the backend service is not
+			//yet registered in the catalog (this prevents log spamming during buildup)
+			sleepInterval := idleInterval
+			if _, ok := err.(*gophercloud.ErrEndpointNotFound); ok {
+				sleepInterval = serviceNotDeployedIdleInterval
+				c.LogError("suspending %s data scraping for %d minutes: %s", serviceType, sleepInterval/time.Minute, err.Error())
+			} else {
+				c.LogError("scrape %s data for %s/%s failed: %s", serviceType, domainName, projectName, err.Error())
+				scrapeFailedCounter.With(labels).Inc()
+			}
+
 			if c.Once {
 				return
 			}
-			time.Sleep(idleInterval)
+			time.Sleep(sleepInterval)
 			continue
 		}
 
