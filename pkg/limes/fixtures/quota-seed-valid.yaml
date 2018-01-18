@@ -1,0 +1,24 @@
+domains:
+  germany:
+    service-one:
+      things: 20
+      capacity_MiB: 10 GiB
+    service-two:
+      capacity_MiB: 1 MiB
+  poland:
+    service-two:
+      things: 5
+
+projects:
+  germany/berlin:
+    service-one:
+      things: 10
+      capacity_MiB: 5 GiB
+  germany/dresden:
+    service-one:
+      things: 5
+    service-two:
+      capacity_MiB: 1 MiB
+  poland/warsaw:
+    service-two:
+      things: 5

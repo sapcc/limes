@@ -39,6 +39,7 @@ type Cluster struct {
 	QuotaPlugins    map[string]QuotaPlugin
 	CapacityPlugins map[string]CapacityPlugin
 	Authoritative   bool
+	QuotaSeeds      *QuotaSeeds
 }
 
 //NewCluster creates a new Cluster instance with the given ID and

@@ -16,23 +16,24 @@ domains:
   ...
 
 projects:
-  swift-tests@Default: # project name @ domain name
+  Default/swift-tests: # domain name + "/" + project name
     object-store: # service type
       capacity: 200 MiB # resource name and quota value
   ...
 ```
 
-In this example, when Limes discovers the "Default" domain, it will assign 1 GiB of domain quota for the "capacity"
+In this example, when Limes discovers the "Default" domain, it will assign 1 TiB of domain quota for the "capacity"
 resource in the "object-store" service. Moreover, when Limes discovers the "swift-tests" project in said domain, it will
 assign 200 MiB of project quota for the same resource.
 
-The quota values:
+For countable resources, the quota values are numbers matching the regex `[0-9]+`. For measured resources, the quota values:
 
 - must match the regex `[0-9]+\s*[A-Za-z]+`, and
 - the word at the end must be a unit name understood by Limes, and
-- the value described by the full string must be an integer multiple of the base unit for that resource. For example,
-  RAM can only be allocated in MiB, so a hypothetical quota value of "2000 KiB" would be rejected since this value lies
-  between 1 MiB and 2 MiB.
+- the value described by the full string must be an integer multiple of the base unit for that resource.
+
+For example, RAM can only be allocated in MiB, so a hypothetical quota value of "2000 KiB" would be rejected since this
+value lies between 1 MiB and 2 MiB.
 
 All these criteria are checked when `limes collect` parses its configuration during startup, and any errors will
 interrupt the collector and cause Limes to terminate immediately.
