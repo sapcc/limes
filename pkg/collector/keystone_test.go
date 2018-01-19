@@ -58,10 +58,29 @@ func Test_ScanDomains(t *testing.T) {
 		expectedNewDomains = append(expectedNewDomains, domain.UUID)
 	}
 
+	//add a quota seed; we're going to test if it's applied correctly
+	cluster.QuotaSeeds = &limes.QuotaSeeds{
+		Domains: map[string]limes.QuotaSeedValues{
+			"germany": {
+				"unshared": {"things": 10, "capacity": 20},
+			},
+		},
+		Projects: map[string]map[string]limes.QuotaSeedValues{
+			"germany": {
+				"berlin": {
+					"unshared": {"things": 5},
+					"shared":   {"capacity": 10},
+				},
+			},
+		},
+	}
+
 	//first ScanDomains should discover the StaticDomains in the cluster,
 	//and initialize domains, projects and project_services (project_resources
 	//are then constructed by the scraper, and domain_services/domain_resources
 	//are created when a cloud admin approves quota for the domain)
+	//
+	//This also tests that the quota seed is applied correctly.
 	actualNewDomains, err := ScanDomains(cluster, ScanDomainsOpts{})
 	if err != nil {
 		t.Errorf("ScanDomains #1 failed: %v", err)

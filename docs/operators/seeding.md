@@ -5,6 +5,17 @@ immediately applied to that domain or project. This is particularly useful durin
 assign quotas to the technical projects that are used by OpenStack services and auxiliary processes like monitoring and
 logshipping.
 
+## Caveats
+
+The current implementation of seeding is geared towards supporting the buildup of new OpenStack clusters. Two
+restrictions apply:
+
+- Limes does not validate if the quota seed is internally consistent, i.e. if the project quotas per domain fit into
+  that domain's quota.
+- Project quota is only written into the backend when the `authoritative` flag is set in the cluster configuration.
+
+## Configuration
+
 Quota seeds are configured in a separate YAML file which is referenced in the `clusters.$id.seed` field of the main
 configuration file. The seed configuration file looks like this:
 
