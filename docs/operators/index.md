@@ -41,9 +41,9 @@ GOPATH=/x/src/github.com/sapcc/limes/.gopath GOBIN=/x/src/github.com/sapcc/limes
 install -D -m 0755 build/limes "/tmp/install/usr/bin/limes"
 ```
 
-The only required build dependency is [Go][go]. Version 1.8 and newer definitely works; 1.7 might work, but has not been
-tested; 1.6 and older does not work. Go is only a build dependency, not a runtime dependency, so this should not be a
-dealbreaker if you plan to use Limes on a distribution whose repos carry an older Go.
+The only required build dependency is [Go][go]. Version 1.9 or higher is required. Go is only a build dependency, not a
+runtime dependency, so this should not be a dealbreaker if you plan to use Limes on a distribution whose repos carry an
+older Go. The only runtime dependency is a libc.
 
 If you're doing stuff with Docker, you can use the `Dockerfile` in this repo. Just invoke `docker build` in the usual manner.
 
@@ -59,9 +59,11 @@ If you're using Kubernetes, you can use our team's [Helm chart for Limes][chart]
 
 3. Write a configuration file for Limes, by following the [configuration guide](./config.md).
 
-4. Prepare the database schema for Limes by running `limes migrate /path/to/config.yaml`.
+4. Configure [quota seeds](./seeding.md) if desired.
 
-5. Start both the API service and the container service once for each cluster.
+5. Prepare the database schema for Limes by running `limes migrate /path/to/config.yaml`.
+
+6. Start both the API service and the container service once for each cluster.
 
    ```bash
    $ limes serve /path/to/config.yaml $cluster_id
@@ -71,7 +73,7 @@ If you're using Kubernetes, you can use our team's [Helm chart for Limes][chart]
    There should be only one instance of the collector service. The API service can be scaled out by simply starting
    additional instances with the same configuration and cluster ID.
 
-6. For each cluster, register the public URL of the API service in the Keystone service catalog with service
+7. For each cluster, register the public URL of the API service in the Keystone service catalog with service
    type `resources`. Note that the API service only exposes HTTP, so you probably want to have some sort of reverse
    proxy in front for load balancing and TLS termination.
 

@@ -1,0 +1,29 @@
+domains:
+  germany:
+    service-one:
+      things: 20
+      capacity_MiB: 10 GiB or something # does not parse
+    service-two:
+      capacity_MiB: 1 ounce # unknown unit
+  poland:
+    service-two:
+      things: 5
+
+projects:
+  atlantis: # missing domain name
+    service-one:
+      things: 1
+  germany/berlin:
+    service-one:
+      things: 10
+      capacity_MiB: 5 GiB
+    unknown: # no such service
+      things: 1
+  germany/dresden:
+    service-one:
+      things: NaN # not a number
+    service-two:
+      capacity_MiB: 1 MiB
+  poland/warsaw:
+    service-two:
+      things: 5

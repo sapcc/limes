@@ -112,6 +112,7 @@ func ExecSQLFile(t *testing.T, path string) {
 //INSERT statements) and runs diff(1) against the given file, producing a test
 //error if these two are different from each other.
 func AssertDBContent(t *testing.T, fixtureFile string) {
+	t.Helper()
 	actualContent := getDBContent(t)
 
 	//write actual content to file to make it easy to copy the computed result over
@@ -182,6 +183,7 @@ func getDBContent(t *testing.T) string {
 }
 
 func failOnErr(t *testing.T, err error) {
+	t.Helper()
 	if err != nil {
 		t.Fatal(err)
 	}

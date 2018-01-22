@@ -159,7 +159,7 @@ func ScanDomains(cluster *limes.Cluster, opts ScanDomainsOpts) (result []string,
 }
 
 func initDomain(cluster *limes.Cluster, domain limes.KeystoneDomain) (*db.Domain, error) {
-	//do this in a transaction to avoid half-initialized projects
+	//do this in a transaction to avoid half-initialized domains
 	tx, err := db.DB.Begin()
 	if err != nil {
 		return nil, err
@@ -177,11 +177,34 @@ func initDomain(cluster *limes.Cluster, domain limes.KeystoneDomain) (*db.Domain
 		return nil, err
 	}
 
+	var seed limes.QuotaSeedValues
+	if cluster.QuotaSeeds != nil {
+		seed = cluster.QuotaSeeds.Domains[domain.Name]
+	}
+
 	//add records for all cluster services to the `project_services` table
 	for _, serviceType := range cluster.ServiceTypes {
-		err := tx.Insert(&db.DomainService{DomainID: dbDomain.ID, Type: serviceType})
+		srv := &db.DomainService{
+			DomainID: dbDomain.ID,
+			Type:     serviceType,
+		}
+		err := tx.Insert(srv)
 		if err != nil {
 			return nil, err
+		}
+
+		//initialize domain quotas from seed, if there is one
+		if serviceSeed, exists := seed[serviceType]; exists {
+			for resourceName, quota := range serviceSeed {
+				err := tx.Insert(&db.DomainResource{
+					ServiceID: srv.ID,
+					Name:      resourceName,
+					Quota:     quota,
+				})
+				if err != nil {
+					return nil, err
+				}
+			}
 		}
 	}
 
@@ -299,13 +322,38 @@ func initProject(cluster *limes.Cluster, domain *db.Domain, project limes.Keysto
 		return err
 	}
 
+	var seed limes.QuotaSeedValues
+	if cluster.QuotaSeeds != nil {
+		seed = cluster.QuotaSeeds.Projects[domain.Name][project.Name]
+	}
+
 	//add records for all cluster services to the `project_services` table, with
 	//default `scraped_at = NULL` to force the scraping jobs to scrape the
 	//project resources
 	for _, serviceType := range cluster.ServiceTypes {
-		err := tx.Insert(&db.ProjectService{ProjectID: dbProject.ID, Type: serviceType})
+		srv := &db.ProjectService{
+			ProjectID: dbProject.ID,
+			Type:      serviceType,
+		}
+		err := tx.Insert(srv)
 		if err != nil {
 			return err
+		}
+
+		//initialize project quotas from seed, if there is one
+		if serviceSeed, exists := seed[serviceType]; exists {
+			for resourceName, quota := range serviceSeed {
+				err := tx.Insert(&db.ProjectResource{
+					ServiceID: srv.ID,
+					Name:      resourceName,
+					Quota:     quota,
+					//Scrape() will fill in the remaining backend attributes, and it will
+					//also write the quotas into the backend.
+				})
+				if err != nil {
+					return err
+				}
+			}
 		}
 	}
 

@@ -43,7 +43,7 @@ func Test_Consistency(t *testing.T) {
 	if err != nil {
 		t.Errorf("ScanDomains failed: %v", err)
 	}
-	test.AssertDBContent(t, "fixtures/scandomains1.sql")
+	test.AssertDBContent(t, "fixtures/checkconsistency-pre.sql")
 
 	//check that CheckConsistency() is satisfied with the
 	//{domain,project}_services created by ScanDomains(), but adds
