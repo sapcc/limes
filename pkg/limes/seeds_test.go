@@ -95,15 +95,24 @@ func clusterForQuotaSeedTest() *Cluster {
 }
 
 func TestQuotaSeedParsingFailure(t *testing.T) {
-	_, errs := NewQuotaSeeds(clusterForQuotaSeedTest(), "fixtures/quota-seed-invalid.yaml")
-
-	expectedErrors := []string{
+	expectQuotaSeedInvalid(t, "fixtures/quota-seed-invalid.yaml",
 		"missing domain name for project atlantis",
 		`invalid seed values for domain germany: value "10 GiB or something" for service-one/capacity_MiB does not match expected format "<number> <unit>"`,
 		"invalid seed values for domain germany: cannot convert value from ounce to MiB because units are incompatible",
 		"invalid seed values for project germany/berlin: no such service: unknown",
 		`invalid seed values for project germany/dresden: invalid value "NaN" for service-one/things: strconv.ParseUint: parsing "NaN": invalid syntax`,
-	}
+	)
+
+	expectQuotaSeedInvalid(t, "fixtures/quota-seed-inconsistent.yaml",
+		`inconsistent seed values for domain germany: sum of project quotas (20480 MiB) for service-one/capacity_MiB exceeds domain quota (10240 MiB)`,
+		`inconsistent seed values for domain poland: sum of project quotas (5) for service-two/things exceeds domain quota (0)`,
+	)
+}
+
+func expectQuotaSeedInvalid(t *testing.T, path string, expectedErrors ...string) {
+	t.Helper()
+	_, errs := NewQuotaSeeds(clusterForQuotaSeedTest(), path)
+
 	expectedErrs := make(map[string]bool)
 	for _, err := range expectedErrors {
 		expectedErrs[err] = true

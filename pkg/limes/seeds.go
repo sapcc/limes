@@ -68,6 +68,7 @@ func NewQuotaSeeds(cluster *Cluster, seedConfigPath string) (*QuotaSeeds, []erro
 	}
 	var errors []error
 
+	//parse quota seed values for domains
 	for domainName, domainData := range data.Domains {
 		values, errs := compileQuotaSeedValues(cluster, domainData)
 		for _, err := range errs {
@@ -78,6 +79,7 @@ func NewQuotaSeeds(cluster *Cluster, seedConfigPath string) (*QuotaSeeds, []erro
 		result.Domains[domainName] = values
 	}
 
+	//parse quota seed values for projects
 	for projectAndDomainName, projectData := range data.Projects {
 		fields := strings.SplitN(projectAndDomainName, "/", 2)
 		if len(fields) < 2 {
@@ -102,7 +104,29 @@ func NewQuotaSeeds(cluster *Cluster, seedConfigPath string) (*QuotaSeeds, []erro
 		result.Projects[domainName][projectName] = values
 	}
 
-	//TODO: validate that sum(result.Projects[d][p][s][r]) by (d,s,r) < result.Domains[d][s][r]
+	//do not attempt to validate if the parsing already caused errors (a
+	//consistent, but invalid quota seed might look inconsistent because values
+	//that don't parse were not initialized in `result`)
+	if len(errors) > 0 {
+		return result, errors
+	}
+
+	//validate that project quotas fit into domain quotas
+	allDomainNames := make(map[string]bool)
+	for domainName := range result.Domains {
+		allDomainNames[domainName] = true
+	}
+	for domainName := range result.Projects {
+		allDomainNames[domainName] = true
+	}
+	for domainName := range allDomainNames {
+		errs := validateQuotaSeedValues(cluster, result.Domains[domainName], result.Projects[domainName])
+		for _, err := range errs {
+			errors = append(errors,
+				fmt.Errorf("inconsistent seed values for domain %s: %s", domainName, err.Error()),
+			)
+		}
+	}
 
 	return result, errors
 }
@@ -166,4 +190,35 @@ func parseQuotaValue(serviceType string, resource ResourceInfo, str string) (uin
 	}
 	converted, err := value.ConvertTo(resource.Unit)
 	return converted.Value, err
+}
+
+func validateQuotaSeedValues(cluster *Cluster, domainQuotas QuotaSeedValues, projectQuotas map[string]QuotaSeedValues) (errors []error) {
+	projectQuotaSums := make(QuotaSeedValues)
+	for _, projectValues := range projectQuotas {
+		for serviceType, serviceValues := range projectValues {
+			if _, exists := projectQuotaSums[serviceType]; !exists {
+				projectQuotaSums[serviceType] = make(map[string]uint64)
+			}
+			for resourceName, quota := range serviceValues {
+				projectQuotaSums[serviceType][resourceName] += quota
+			}
+		}
+	}
+
+	for serviceType, serviceSums := range projectQuotaSums {
+		for resourceName, projectQuotaSum := range serviceSums {
+			domainQuota := domainQuotas[serviceType][resourceName]
+			if projectQuotaSum > domainQuota {
+				unit := cluster.InfoForResource(serviceType, resourceName).Unit
+				errors = append(errors, fmt.Errorf(
+					"sum of project quotas (%s) for %s/%s exceeds domain quota (%s)",
+					ValueWithUnit{projectQuotaSum, unit},
+					serviceType, resourceName,
+					ValueWithUnit{domainQuota, unit},
+				))
+			}
+		}
+	}
+
+	return
 }
