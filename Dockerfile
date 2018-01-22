@@ -1,4 +1,4 @@
-FROM golang:1.8.3-alpine3.6 as builder
+FROM golang:1.9.2-alpine3.7 as builder
 WORKDIR /x/src/github.com/sapcc/limes/
 RUN apk add --no-cache make
 

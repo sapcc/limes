@@ -41,9 +41,9 @@ GOPATH=/x/src/github.com/sapcc/limes/.gopath GOBIN=/x/src/github.com/sapcc/limes
 install -D -m 0755 build/limes "/tmp/install/usr/bin/limes"
 ```
 
-The only required build dependency is [Go][go]. Version 1.8 and newer definitely works; 1.7 might work, but has not been
-tested; 1.6 and older does not work. Go is only a build dependency, not a runtime dependency, so this should not be a
-dealbreaker if you plan to use Limes on a distribution whose repos carry an older Go.
+The only required build dependency is [Go][go]. Version 1.9 or higher is required. Go is only a build dependency, not a
+runtime dependency, so this should not be a dealbreaker if you plan to use Limes on a distribution whose repos carry an
+older Go. The only runtime dependency is a libc.
 
 If you're doing stuff with Docker, you can use the `Dockerfile` in this repo. Just invoke `docker build` in the usual manner.
 
