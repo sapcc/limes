@@ -20,6 +20,8 @@
 package collector
 
 import (
+	"sort"
+
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
@@ -195,11 +197,18 @@ func initDomain(cluster *limes.Cluster, domain limes.KeystoneDomain) (*db.Domain
 
 		//initialize domain quotas from seed, if there is one
 		if serviceSeed, exists := seed[serviceType]; exists {
-			for resourceName, quota := range serviceSeed {
+			//ensure deterministic ordering of resources (useful for tests)
+			resourceNames := make([]string, 0, len(serviceSeed))
+			for resourceName := range serviceSeed {
+				resourceNames = append(resourceNames, resourceName)
+			}
+			sort.Strings(resourceNames)
+
+			for _, resourceName := range resourceNames {
 				err := tx.Insert(&db.DomainResource{
 					ServiceID: srv.ID,
 					Name:      resourceName,
-					Quota:     quota,
+					Quota:     serviceSeed[resourceName],
 				})
 				if err != nil {
 					return nil, err
@@ -342,11 +351,18 @@ func initProject(cluster *limes.Cluster, domain *db.Domain, project limes.Keysto
 
 		//initialize project quotas from seed, if there is one
 		if serviceSeed, exists := seed[serviceType]; exists {
-			for resourceName, quota := range serviceSeed {
+			//ensure deterministic ordering of resources (useful for tests)
+			resourceNames := make([]string, 0, len(serviceSeed))
+			for resourceName := range serviceSeed {
+				resourceNames = append(resourceNames, resourceName)
+			}
+			sort.Strings(resourceNames)
+
+			for _, resourceName := range resourceNames {
 				err := tx.Insert(&db.ProjectResource{
 					ServiceID: srv.ID,
 					Name:      resourceName,
-					Quota:     quota,
+					Quota:     serviceSeed[resourceName],
 					//Scrape() will fill in the remaining backend attributes, and it will
 					//also write the quotas into the backend.
 				})

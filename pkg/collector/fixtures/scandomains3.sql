@@ -3,8 +3,8 @@ INSERT INTO domains (id, cluster_id, name, uuid) VALUES (1, 'west', 'germany', '
 INSERT INTO domain_services (id, domain_id, type) VALUES (1, 1, 'unshared');
 INSERT INTO domain_services (id, domain_id, type) VALUES (2, 1, 'shared');
 
-INSERT INTO domain_resources (service_id, name, quota) VALUES (1, 'things', 10);
 INSERT INTO domain_resources (service_id, name, quota) VALUES (1, 'capacity', 20);
+INSERT INTO domain_resources (service_id, name, quota) VALUES (1, 'things', 10);
 
 INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany');
 INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (2, 1, 'dresden', 'uuid-for-dresden', 'uuid-for-berlin');
