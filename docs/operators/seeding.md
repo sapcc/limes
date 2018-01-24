@@ -5,13 +5,17 @@ immediately applied to that domain or project. This is particularly useful durin
 assign quotas to the technical projects that are used by OpenStack services and auxiliary processes like monitoring and
 logshipping.
 
+Note that seeds are only applied **once** per domain/project. To change the quota for an existing domain or project, use
+the [API](../users/api-v1-specification.md) instead.
+
 ## Caveats
 
 The current implementation of seeding is geared towards supporting the buildup of new OpenStack clusters. Two
 restrictions apply:
 
-- Limes does not validate if the quota seed is internally consistent, i.e. if the project quotas per domain fit into
-  that domain's quota.
+- Limes validates if the quota seed is internally consistent, i.e. if the project quotas per domain fit into
+  that domain's quota. But it does **not** perform a similar validation when applying the seed to a new project. If the
+  domain quota has already been given out to other projects not named in the seed, the domain quota may be overcommitted.
 - Project quota is only written into the backend when the `authoritative` flag is set in the cluster configuration.
 
 ## Configuration
