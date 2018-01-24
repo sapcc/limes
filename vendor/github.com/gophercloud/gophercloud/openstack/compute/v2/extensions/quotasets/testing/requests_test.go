@@ -1,9 +1,9 @@
 package testing
 
 import (
+	"errors"
 	"testing"
 
-	"errors"
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/quotasets"
 	th "github.com/gophercloud/gophercloud/testhelper"
@@ -17,6 +17,15 @@ func TestGet(t *testing.T) {
 	actual, err := quotasets.Get(client.ServiceClient(), FirstTenantID).Extract()
 	th.AssertNoErr(t, err)
 	th.CheckDeepEquals(t, &FirstQuotaSet, actual)
+}
+
+func TestGetDetail(t *testing.T) {
+	th.SetupHTTP()
+	defer th.TeardownHTTP()
+	HandleGetDetailSuccessfully(t)
+	actual, err := quotasets.GetDetail(client.ServiceClient(), FirstTenantID).Extract()
+	th.CheckDeepEquals(t, FirstQuotaDetailsSet, actual)
+	th.AssertNoErr(t, err)
 }
 
 func TestUpdate(t *testing.T) {

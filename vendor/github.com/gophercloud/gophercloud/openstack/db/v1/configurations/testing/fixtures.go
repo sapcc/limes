@@ -4,12 +4,13 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack/db/v1/configurations"
 )
 
 var (
-	timestamp  = "2015-11-12T14:22:42Z"
-	timeVal, _ = time.Parse(time.RFC3339, timestamp)
+	timestamp  = "2015-11-12T14:22:42"
+	timeVal, _ = time.Parse(gophercloud.RFC3339NoZ, timestamp)
 )
 
 var singleConfigJSON = `
@@ -154,6 +155,6 @@ var ExampleConfigWithValues = configurations.Config{
 	Updated:              timeVal,
 	Values: map[string]interface{}{
 		"collation_server": "latin1_swedish_ci",
-		"connect_timeout":  120,
+		"connect_timeout":  float64(120),
 	},
 }

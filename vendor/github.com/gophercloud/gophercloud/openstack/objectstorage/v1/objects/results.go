@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -30,6 +31,9 @@ type Object struct {
 
 	// Name is the unique name for the object.
 	Name string `json:"name"`
+
+	// Subdir denotes if the result contains a subdir.
+	Subdir string `json:"subdir"`
 }
 
 func (r *Object) UnmarshalJSON(b []byte) error {
@@ -66,24 +70,19 @@ func (r ObjectPage) IsEmpty() (bool, error) {
 
 // LastMarker returns the last object name in a ListResult.
 func (r ObjectPage) LastMarker() (string, error) {
-	names, err := ExtractNames(r)
-	if err != nil {
-		return "", err
-	}
-	if len(names) == 0 {
-		return "", nil
-	}
-	return names[len(names)-1], nil
+	return extractLastMarker(r)
 }
 
-// ExtractInfo is a function that takes a page of objects and returns their full information.
+// ExtractInfo is a function that takes a page of objects and returns their
+// full information.
 func ExtractInfo(r pagination.Page) ([]Object, error) {
 	var s []Object
 	err := (r.(ObjectPage)).ExtractInto(&s)
 	return s, err
 }
 
-// ExtractNames is a function that takes a page of objects and returns only their names.
+// ExtractNames is a function that takes a page of objects and returns only
+// their names.
 func ExtractNames(r pagination.Page) ([]string, error) {
 	casted := r.(ObjectPage)
 	ct := casted.Header.Get("Content-Type")
@@ -96,7 +95,11 @@ func ExtractNames(r pagination.Page) ([]string, error) {
 
 		names := make([]string, 0, len(parsed))
 		for _, object := range parsed {
-			names = append(names, object.Name)
+			if object.Subdir != "" {
+				names = append(names, object.Subdir)
+			} else {
+				names = append(names, object.Name)
+			}
 		}
 
 		return names, nil
@@ -118,7 +121,8 @@ func ExtractNames(r pagination.Page) ([]string, error) {
 	}
 }
 
-// DownloadHeader represents the headers returned in the response from a Download request.
+// DownloadHeader represents the headers returned in the response from a
+// Download request.
 type DownloadHeader struct {
 	AcceptRanges       string    `json:"Accept-Ranges"`
 	ContentDisposition string    `json:"Content-Disposition"`
@@ -167,14 +171,14 @@ func (r *DownloadHeader) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// DownloadResult is a *http.Response that is returned from a call to the Download function.
+// DownloadResult is a *http.Response that is returned from a call to the
+// Download function.
 type DownloadResult struct {
 	gophercloud.HeaderResult
 	Body io.ReadCloser
 }
 
-// Extract will return a struct of headers returned from a call to Download. To obtain
-// a map of headers, call the ExtractHeader method on the DownloadResult.
+// Extract will return a struct of headers returned from a call to Download.
 func (r DownloadResult) Extract() (*DownloadHeader, error) {
 	var s *DownloadHeader
 	err := r.ExtractInto(&s)
@@ -247,13 +251,13 @@ func (r *GetHeader) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-// GetResult is a *http.Response that is returned from a call to the Get function.
+// GetResult is a *http.Response that is returned from a call to the Get
+// function.
 type GetResult struct {
 	gophercloud.HeaderResult
 }
 
-// Extract will return a struct of headers returned from a call to Get. To obtain
-// a map of headers, call the ExtractHeader method on the GetResult.
+// Extract will return a struct of headers returned from a call to Get.
 func (r GetResult) Extract() (*GetHeader, error) {
 	var s *GetHeader
 	err := r.ExtractInto(&s)
@@ -276,7 +280,8 @@ func (r GetResult) ExtractMetadata() (map[string]string, error) {
 	return metadata, nil
 }
 
-// CreateHeader represents the headers returned in the response from a Create request.
+// CreateHeader represents the headers returned in the response from a
+// Create request.
 type CreateHeader struct {
 	ContentLength int64     `json:"-"`
 	ContentType   string    `json:"Content-Type"`
@@ -323,8 +328,7 @@ type CreateResult struct {
 	gophercloud.HeaderResult
 }
 
-// Extract will return a struct of headers returned from a call to Create. To obtain
-// a map of headers, call the ExtractHeader method on the CreateResult.
+// Extract will return a struct of headers returned from a call to Create.
 func (r CreateResult) Extract() (*CreateHeader, error) {
 	//if r.Header.Get("ETag") != fmt.Sprintf("%x", localChecksum) {
 	//	return nil, ErrWrongChecksum{}
@@ -334,7 +338,8 @@ func (r CreateResult) Extract() (*CreateHeader, error) {
 	return s, err
 }
 
-// UpdateHeader represents the headers returned in the response from a Update request.
+// UpdateHeader represents the headers returned in the response from a
+// Update request.
 type UpdateHeader struct {
 	ContentLength int64     `json:"-"`
 	ContentType   string    `json:"Content-Type"`
@@ -376,15 +381,15 @@ type UpdateResult struct {
 	gophercloud.HeaderResult
 }
 
-// Extract will return a struct of headers returned from a call to Update. To obtain
-// a map of headers, call the ExtractHeader method on the UpdateResult.
+// Extract will return a struct of headers returned from a call to Update.
 func (r UpdateResult) Extract() (*UpdateHeader, error) {
 	var s *UpdateHeader
 	err := r.ExtractInto(&s)
 	return s, err
 }
 
-// DeleteHeader represents the headers returned in the response from a Delete request.
+// DeleteHeader represents the headers returned in the response from a
+// Delete request.
 type DeleteHeader struct {
 	ContentLength int64     `json:"Content-Length"`
 	ContentType   string    `json:"Content-Type"`
@@ -426,15 +431,15 @@ type DeleteResult struct {
 	gophercloud.HeaderResult
 }
 
-// Extract will return a struct of headers returned from a call to Delete. To obtain
-// a map of headers, call the ExtractHeader method on the DeleteResult.
+// Extract will return a struct of headers returned from a call to Delete.
 func (r DeleteResult) Extract() (*DeleteHeader, error) {
 	var s *DeleteHeader
 	err := r.ExtractInto(&s)
 	return s, err
 }
 
-// CopyHeader represents the headers returned in the response from a Copy request.
+// CopyHeader represents the headers returned in the response from a
+// Copy request.
 type CopyHeader struct {
 	ContentLength          int64     `json:"-"`
 	ContentType            string    `json:"Content-Type"`
@@ -484,10 +489,65 @@ type CopyResult struct {
 	gophercloud.HeaderResult
 }
 
-// Extract will return a struct of headers returned from a call to Copy. To obtain
-// a map of headers, call the ExtractHeader method on the CopyResult.
+// Extract will return a struct of headers returned from a call to Copy.
 func (r CopyResult) Extract() (*CopyHeader, error) {
 	var s *CopyHeader
 	err := r.ExtractInto(&s)
 	return s, err
+}
+
+// extractLastMarker is a function that takes a page of objects and returns the
+// marker for the page. This can either be a subdir or the last object's name.
+func extractLastMarker(r pagination.Page) (string, error) {
+	casted := r.(ObjectPage)
+
+	// If a delimiter was requested, check if a subdir exists.
+	queryParams, err := url.ParseQuery(casted.URL.RawQuery)
+	if err != nil {
+		return "", err
+	}
+
+	var delimeter bool
+	if v, ok := queryParams["delimiter"]; ok && len(v) > 0 {
+		delimeter = true
+	}
+
+	ct := casted.Header.Get("Content-Type")
+	switch {
+	case strings.HasPrefix(ct, "application/json"):
+		parsed, err := ExtractInfo(r)
+		if err != nil {
+			return "", err
+		}
+
+		var lastObject Object
+		if len(parsed) > 0 {
+			lastObject = parsed[len(parsed)-1]
+		}
+
+		if !delimeter {
+			return lastObject.Name, nil
+		}
+
+		if lastObject.Name != "" {
+			return lastObject.Name, nil
+		}
+
+		return lastObject.Subdir, nil
+	case strings.HasPrefix(ct, "text/plain"):
+		names := make([]string, 0, 50)
+
+		body := string(r.(ObjectPage).Body.([]uint8))
+		for _, name := range strings.Split(body, "\n") {
+			if len(name) > 0 {
+				names = append(names, name)
+			}
+		}
+
+		return names[len(names)-1], err
+	case strings.HasPrefix(ct, "text/html"):
+		return "", nil
+	default:
+		return "", fmt.Errorf("Cannot extract names from response with content-type: [%s]", ct)
+	}
 }
