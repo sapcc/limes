@@ -19,7 +19,7 @@ This should show you a prompt.
 
 ### Prerequisite: Go
 
-Make sure that Go is installed. A fairly recent one is required: If your package manager does not offer 1.8 or newer,
+Make sure that Go is installed. A fairly recent one is required: If your package manager does not offer 1.9 or newer,
 grab the official binaries from golang.org. Add the following to your shell rc:
 
 ```bash
@@ -31,8 +31,8 @@ export PATH=$PATH:$GOBIN
 `$GOPATH/src` is where Go will put all your Go source code. You can change the GOPATH to whatever you like, but stick
 with it once set.
 
-In addition to the builtin checkers and testsuite runners in the `go` command, Limes runs checks from `golint`, so
-install that with
+In addition to the builtin checkers and testsuite runners in the `go` command, Limes runs checks from `golint`. It will
+be installed when you run `make check` for the first time, or you can install it manually with
 
 ```bash
 $ go get -u github.com/golang/lint/golint
@@ -98,12 +98,6 @@ Before any other Limes job can run, you must create the database and populate th
 $ ./build/limes migrate test.yaml
 ```
 
-For some reason, that sometimes fails with `database does not exist` even though it should autocreate the database. If that happens, create the database manually before trying again:
-
-```bash
-psql -U postgres -c 'CREATE DATABASE limes;'
-```
-
 When `limes migrate` has completed successfully, you can run any other Limes job.
 
 * the API: `./build/limes serve test.yaml ccloud`
@@ -112,7 +106,7 @@ When `limes migrate` has completed successfully, you can run any other Limes job
 There are two further subcommands that assist with the development of new plugins: `limes test-scrape` invokes all
 enabled quota plugins on a single project, and dumps the quota/usage data that was scraped by the plugins. `limes
 test-scan-capacity` invokes all enabled capacity plugins on the current cluster, and dumps the capacity data that was
-scrapes by the plugins.
+scrapes by the plugins. Run `limes --help` for details.
 
 The following environment variables can be useful during development:
 

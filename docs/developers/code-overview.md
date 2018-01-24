@@ -11,7 +11,7 @@ from the bottom up)
 | --- | :---: | --- |
 | `pkg/util` | no | various small utility functions (esp. logging, type conversion) |
 | `pkg/db` | no | database configuration, connection handling, ORM model classes, utility functions |
-| `pkg/limes` | no | core interfaces (Driver, QuotaPlugin, CapacityPlugin) and data structures, config parsing and validation |
+| `pkg/limes` | yes | core interfaces (Driver, QuotaPlugin, CapacityPlugin) and data structures, config parsing and validation |
 | `pkg/test` | no | testing helpers: mock implementations of core interfaces, test runners, etc. |
 | `pkg/plugins` | no | implementations of QuotaPlugin and CapacityPlugin |
 | `pkg/collector` | yes | functionality of `limes collect` |
@@ -24,12 +24,12 @@ the SQL files in this directory are packed into `pkg/db/migrations.go` by `go-bi
 
 ## Testing methodology
 
-The only tests are in the top-level packages `pkg/collector` and `pkg/api`. I consider this enough because everything
+Most of the tests are in the top-level packages `pkg/collector` and `pkg/api`. I consider this enough because everything
 else is used by these packages, except for the plugin implementations in `pkg/plugins`. We do not test these yet because
 `go test` cannot assume the presence of an OpenStack cluster anywhere near where the test runs.
 
 During `go test`, Postgres is substituted for SQLite. The `pkg/test` module provides mock implementations of
-`limes.Driver`, `limes.QuotaPlugin`, `limes.CapacityPlugin` and `time.Now`, and a few helper functions to load and
-assert SQL data as well as simulate HTTP requests.
+`limes.Driver`, `limes.QuotaPlugin`, `limes.CapacityPlugin`, `limes.DiscoveryPlugin` and `time.Now`, and a few helper
+functions to load and assert SQL data as well as simulate HTTP requests.
 
 [migrate]: https://github.com/mattes/migrate
