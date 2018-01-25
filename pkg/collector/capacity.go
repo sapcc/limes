@@ -73,6 +73,7 @@ func (c *Collector) scanCapacity() {
 	//skip values for services not enabled for this cluster
 	for serviceType := range values {
 		if !c.Cluster.HasService(serviceType) {
+			util.LogInfo("discarding capacity values for unknown service type: %s", serviceType)
 			delete(values, serviceType)
 		}
 	}
@@ -91,6 +92,7 @@ func (c *Collector) scanCapacity() {
 			delete(names, res.Name)
 		}
 		for name := range names {
+			util.LogInfo("discarding capacity value for unknown resource: %s/%s", serviceType, name)
 			delete(subvalues, name)
 		}
 	}
