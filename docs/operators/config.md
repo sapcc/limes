@@ -310,6 +310,34 @@ capacitors:
 
 The `cinder.volume_backend_name` parameter can be used to filter the back-end storage pools by volume name.
 
+## `manila`
+
+```yaml
+capacitors:
+- id: manila
+  manila:
+    share_networks_per_host: 250
+    shares_per_pool: 1000
+    snapshots_per_share: 5
+    capacity_balance: 0.5
+    capacity_overcommit: 1
+```
+
+| Resource | Method |
+| --- | --- |
+| `sharev2/share_networks` | Calculated as `share_networks_per_host * count(hosts)`. |
+| `sharev2/shares` | Calculated as `shares_per_pool * count(pools)` minus total number of share networks (see above). |
+| `sharev2/share_snapshots` | Calculated as `snapshots_per_share` times the above value. |
+| `sharev2/share_capacity`<br>`sharev2/snapshot_capacity` | Calculated as `capacity_overcommit * sum(pool.capabilities.totalCapacityGB)`, then divided among those two resources according to the `capacity_balance` (see below). |
+
+The capacity balance is defined as
+
+```
+snapshot_capacity = capacity_balance * share_capacity,
+```
+
+that is, there is `capacity_balance` as much snapshot capacity as there is share capacity. For example, `capacity_balance = 0.5` means that the capacity for snapshots is half as big as that for shares, meaning that shares get 2/3 of the total capacity and snapshots get the other 1/3.
+
 ## `manual`
 
 ```yaml
