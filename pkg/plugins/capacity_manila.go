@@ -105,7 +105,7 @@ func (p *capacityManilaPlugin) Scrape(provider *gophercloud.ProviderClient) (map
 		"sharev2": {
 			"share_networks":    cfg.ShareNetworks,
 			"shares":            shareCount,
-			"snapshots":         cfg.SnapshotsPerShare * shareCount,
+			"share_snapshots":   cfg.SnapshotsPerShare * shareCount,
 			"share_capacity":    uint64(1 / (b + 1) * totalCapacityGB),
 			"snapshot_capacity": uint64(b / (b + 1) * totalCapacityGB),
 		},
