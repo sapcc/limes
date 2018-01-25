@@ -42,6 +42,7 @@ func (p *capacityCinderPlugin) Client(provider *gophercloud.ProviderClient) (*go
 	)
 }
 
+//ID implements the limes.CapacityPlugin interface.
 func (p *capacityCinderPlugin) ID() string {
 	return "cinder"
 }
