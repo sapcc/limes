@@ -51,8 +51,8 @@ func (p *capacityManilaPlugin) ID() string {
 //Scrape implements the limes.CapacityPlugin interface.
 func (p *capacityManilaPlugin) Scrape(provider *gophercloud.ProviderClient) (map[string]map[string]uint64, error) {
 	cfg := p.cfg.Manila
-	if cfg.ShareNetworksPerHost == 0 {
-		return nil, errors.New("missing configuration parameter: share_networks_per_host")
+	if cfg.ShareNetworks == 0 {
+		return nil, errors.New("missing configuration parameter: share_networks")
 	}
 	if cfg.SharesPerPool == 0 {
 		return nil, errors.New("missing configuration parameter: shares_per_pool")
@@ -90,13 +90,11 @@ func (p *capacityManilaPlugin) Scrape(provider *gophercloud.ProviderClient) (map
 		hosts[pool.Host] = true
 		totalCapacityGB += pool.Capabilities.TotalCapacityGB
 	}
-	hostCount := uint64(len(hosts))
 	poolCount := uint64(len(data.Pools))
 	totalCapacityGB *= cfg.CapacityOvercommitFactor
 
 	//derive capacities
-	shareNetworkCount := cfg.ShareNetworksPerHost * hostCount
-	shareCount := cfg.SharesPerPool*poolCount - shareNetworkCount
+	shareCount := cfg.SharesPerPool*poolCount - cfg.ShareNetworks
 
 	//NOTE: The value of `cfg.CapacityBalance` is how many capacity we give out
 	//to snapshots as a fraction of the capacity given out to shares. For
@@ -105,7 +103,7 @@ func (p *capacityManilaPlugin) Scrape(provider *gophercloud.ProviderClient) (map
 	b := cfg.CapacityBalance
 	return map[string]map[string]uint64{
 		"sharev2": {
-			"share_networks":    shareNetworkCount,
+			"share_networks":    cfg.ShareNetworks,
 			"shares":            shareCount,
 			"snapshots":         cfg.SnapshotsPerShare * shareCount,
 			"share_capacity":    uint64(1 / (b + 1) * totalCapacityGB),

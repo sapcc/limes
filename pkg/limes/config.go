@@ -109,7 +109,7 @@ type CapacitorConfiguration struct {
 		VolumeBackendName string `yaml:"volume_backend_name"`
 	} `yaml:"cinder"`
 	Manila struct {
-		ShareNetworksPerHost     uint64  `yaml:"share_networks_per_host"`
+		ShareNetworks            uint64  `yaml:"share_networks"`
 		SharesPerPool            uint64  `yaml:"shares_per_pool"`
 		SnapshotsPerShare        uint64  `yaml:"snapshots_per_share"`
 		CapacityBalance          float64 `yaml:"capacity_balance"`

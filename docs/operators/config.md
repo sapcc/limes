@@ -316,7 +316,7 @@ The `cinder.volume_backend_name` parameter can be used to filter the back-end st
 capacitors:
 - id: manila
   manila:
-    share_networks_per_host: 250
+    share_networks: 250
     shares_per_pool: 1000
     snapshots_per_share: 5
     capacity_balance: 0.5
@@ -325,8 +325,8 @@ capacitors:
 
 | Resource | Method |
 | --- | --- |
-| `sharev2/share_networks` | Calculated as `share_networks_per_host * count(hosts)`. |
-| `sharev2/shares` | Calculated as `shares_per_pool * count(pools)` minus total number of share networks (see above). |
+| `sharev2/share_networks` | Taken from identically-named configuration parameter. |
+| `sharev2/shares` | Calculated as `shares_per_pool * count(pools) - share_networks`. |
 | `sharev2/share_snapshots` | Calculated as `snapshots_per_share` times the above value. |
 | `sharev2/share_capacity`<br>`sharev2/snapshot_capacity` | Calculated as `capacity_overcommit * sum(pool.capabilities.totalCapacityGB)`, then divided among those two resources according to the `capacity_balance` (see below). |
 
