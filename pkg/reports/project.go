@@ -137,7 +137,7 @@ func GetProjects(cluster *limes.Cluster, domainID int64, projectID *int64, dbi d
 			quota             *uint64
 			usage             *uint64
 			backendQuota      *int64
-			subresources      string
+			subresources      *string
 		)
 		err := rows.Scan(
 			&projectUUID, &projectName, &projectParentUUID,
@@ -186,11 +186,16 @@ func GetProjects(cluster *limes.Cluster, domainID int64, projectID *int64, dbi d
 			continue
 		}
 
+		subresourcesValue := ""
+		if subresources != nil {
+			subresourcesValue = *subresources
+		}
+
 		resource := &ProjectResource{
 			ResourceInfo: cluster.InfoForResource(*serviceType, *resourceName),
 			Usage:        *usage,
 			BackendQuota: nil, //see below
-			Subresources: util.JSONString(subresources),
+			Subresources: util.JSONString(subresourcesValue),
 		}
 		if usage != nil {
 			resource.Usage = *usage
