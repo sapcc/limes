@@ -256,7 +256,7 @@ func taskServe(config limes.Configuration, cluster *limes.Cluster, args []string
 	//add Prometheus instrumentation
 	http.Handle("/metrics", promhttp.Handler())
 	http.Handle("/",
-		util.AddLogMiddleware(
+		util.AddLogMiddleware(config.API.RequestLog.ExceptStatusCodes,
 			prometheus.InstrumentHandler("limes-serve",
 				mainRouter,
 			),

@@ -51,6 +51,7 @@ Configuration options relating to the behavior of the API service.
 | --- | --- | --- |
 | `api.listen` | yes | Bind address for the HTTP API exposed by this service, e.g. `127.0.0.1:8080` to bind only on one IP, or `:8080` to bind on all interfaces and addresses. |
 | `api.policy` | yes | Path to the oslo.policy file that describes authorization behavior for this service. Please refer to the [OpenStack documentation on policies][policy] for syntax reference. This repository includes an [example policy][ex-pol] that can be used for development setups, or as a basis for writing your own policy. |
+| `api.request_log.except_status_codes` | no | A list of HTTP status codes for which requests will not be logged. A useful setting is `[300]` when using `GET /` requests as a healthcheck. |
 
 ## Section "collector"
 

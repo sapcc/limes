@@ -26,13 +26,14 @@ import (
 )
 
 type logMiddleware struct {
-	handler http.Handler
+	handler           http.Handler
+	exceptStatusCodes []int
 }
 
 //AddLogMiddleware adds logging of requests and error responses to a
 //`http.Handler`.
-func AddLogMiddleware(h http.Handler) http.Handler {
-	return logMiddleware{h}
+func AddLogMiddleware(exceptStatusCodes []int, h http.Handler) http.Handler {
+	return logMiddleware{h, exceptStatusCodes}
 }
 
 //ServeHTTP implements the http.Handler interface.
@@ -46,21 +47,32 @@ func (l logMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	//write log line (the format is similar to nginx's "combined" log format, but
 	//the timestamp is at the front to ensure consistency with the rest of the
 	//log)
-	doLog(
-		`REQUEST: %s - - "%s %s %s" %03d %d "%s" "%s"`,
-		[]interface{}{
-			tryStripPort(r.RemoteAddr),
-			r.Method, r.URL.String(), r.Proto,
-			writer.statusCode, writer.bytesWritten,
-			stringOrDefault("-", r.Header.Get("Referer")),
-			stringOrDefault("-", r.Header.Get("User-Agent")),
-		},
-	)
+	if !containsInt(l.exceptStatusCodes, writer.statusCode) {
+		doLog(
+			`REQUEST: %s - - "%s %s %s" %03d %d "%s" "%s"`,
+			[]interface{}{
+				tryStripPort(r.RemoteAddr),
+				r.Method, r.URL.String(), r.Proto,
+				writer.statusCode, writer.bytesWritten,
+				stringOrDefault("-", r.Header.Get("Referer")),
+				stringOrDefault("-", r.Header.Get("User-Agent")),
+			},
+		)
+	}
 	if writer.errorMessageBuf.Len() > 0 {
 		LogError(`during "%s %s": %s`,
 			r.Method, r.URL.String(), writer.errorMessageBuf.String(),
 		)
 	}
+}
+
+func containsInt(list []int, value int) bool {
+	for _, v := range list {
+		if v == value {
+			return true
+		}
+	}
+	return false
 }
 
 func stringOrDefault(defaultValue, value string) string {

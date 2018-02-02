@@ -123,6 +123,9 @@ type APIConfiguration struct {
 	ListenAddress  string           `yaml:"listen"`
 	PolicyFilePath string           `yaml:"policy"`
 	PolicyEnforcer *policy.Enforcer `yaml:"-"`
+	RequestLog     struct {
+		ExceptStatusCodes []int `yaml:"except_status_codes"`
+	} `yaml:"request_log"`
 }
 
 //CollectorConfiguration contains configuration parameters for limes-collect.
