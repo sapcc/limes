@@ -255,7 +255,13 @@ func taskServe(config limes.Configuration, cluster *limes.Cluster, args []string
 
 	//add Prometheus instrumentation
 	http.Handle("/metrics", promhttp.Handler())
-	http.HandleFunc("/", prometheus.InstrumentHandler("limes-serve", mainRouter))
+	http.Handle("/",
+		util.AddLogMiddleware(
+			prometheus.InstrumentHandler("limes-serve",
+				mainRouter,
+			),
+		),
+	)
 
 	//start HTTP server
 	util.LogInfo("listening on " + config.API.ListenAddress)

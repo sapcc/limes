@@ -83,6 +83,24 @@ Both components present log messages on standard error, but they are usually ver
 something like `listening on :8080` for both services since they both expose HTTP. (In the collector service, this is
 only used for Prometheus metrics.)
 
+### API service
+
+The API service will log requests in the "combined" log format as used by nginx, except that the timestamp is shown at
+the front to be consistent with the rest of the log. The reported log level is "REQUEST".
+
+```
+2017/02/02 11:49:49 REQUEST: 127.0.0.1 - - "GET /v1/domains HTTP/1.1" 200 987 "-" "curl/7.58.0"
+```
+
+When a 5xx response is generated, the API service will additionally log the response body with log level "ERROR".
+
+```
+2018/02/02 12:32:59 REQUEST: 127.0.0.1 - - "GET /v1/domains HTTP/1.1" 500 52 "-" "curl/7.58.0"
+2018/02/02 12:32:59 ERROR: during "GET /v1/domains": dial tcp [::1]:5432: getsockopt: connection refused
+```
+
+### Collector service
+
 When the collector service is started for the first time, you should immediately see a bunch of log messages indicating
 the discovery of the existing Keystone domains and projects. Quota/usage scraping will start a few seconds after that.
 Scraping is usually pretty silent, but errors will always be logged (the most common error source being the temporary
