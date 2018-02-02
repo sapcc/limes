@@ -311,7 +311,7 @@ func (p *novaPlugin) getOSType(provider *gophercloud.ProviderClient, imageID str
 }
 
 func (p *novaPlugin) findOSType(provider *gophercloud.ProviderClient, imageID string) (string, error) {
-	client, err := p.Client(provider)
+	client, err := p.GlanceClient(provider)
 	if err != nil {
 		return "", err
 	}
