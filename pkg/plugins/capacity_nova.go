@@ -34,10 +34,6 @@ type capacityNovaPlugin struct {
 	cfg limes.CapacitorConfiguration
 }
 
-type extraSpecs struct {
-	ExtraSpecs map[string]string `json:"extra_specs"`
-}
-
 func init() {
 	limes.RegisterCapacityPlugin(func(c limes.CapacitorConfiguration) limes.CapacityPlugin {
 		return &capacityNovaPlugin{c}
@@ -117,14 +113,14 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient) (map[s
 
 			//necessary to be able to ignore huge baremetal flavors
 			//consider only flavors as defined in extra specs
-			var extraSpecs = map[string]string{}
+			var extraSpecs map[string]string
 			if p.cfg.Nova.ExtraSpecs != nil {
 				extraSpecs = p.cfg.Nova.ExtraSpecs
 			}
 
 			matches := true
 			for key, value := range extraSpecs {
-				if value != extras.ExtraSpecs[key] {
+				if value != extras[key] {
 					matches = false
 					break
 				}
@@ -157,13 +153,6 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient) (map[s
 		vcpuOvercommitFactor = *p.cfg.Nova.VCPUOvercommitFactor
 	}
 
-	//returns something like
-	//"volumev2": {
-	//	"cores": total_vcpus,
-	//	"instances": min(10000 per Availability Zone, local_gb/max(flavor size)),
-	//	"ram": total_memory_mb,
-	//}
-
 	capacity := map[string]map[string]uint64{
 		"compute": {
 			"cores": uint64(hypervisorData.HypervisorStatistics.Vcpus) * vcpuOvercommitFactor,
@@ -184,9 +173,11 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient) (map[s
 //result contains
 //{ "vmware:hv_enabled" : 'True' }
 //which identifies a VM flavor
-func getFlavorExtras(client *gophercloud.ServiceClient, flavorUUID string) (*extraSpecs, error) {
+func getFlavorExtras(client *gophercloud.ServiceClient, flavorUUID string) (map[string]string, error) {
 	var result gophercloud.Result
-	var extraSpecsData extraSpecs
+	var extraSpecs struct {
+		ExtraSpecs map[string]string `json:"extra_specs"`
+	}
 
 	url := client.ServiceURL("flavors", flavorUUID, "os-extra_specs")
 	_, err := client.Get(url, &result.Body, nil)
@@ -194,10 +185,10 @@ func getFlavorExtras(client *gophercloud.ServiceClient, flavorUUID string) (*ext
 		return nil, err
 	}
 
-	err = result.ExtractInto(&extraSpecsData)
+	err = result.ExtractInto(&extraSpecs)
 	if err != nil {
 		return nil, err
 	}
 
-	return &extraSpecsData, nil
+	return extraSpecs.ExtraSpecs, nil
 }

@@ -80,36 +80,16 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient) error {
 		return err
 	}
 
-	//look at quota class "default" to determine which quotas exist
-	url := client.ServiceURL("os-quota-class-sets", "default")
-	var result gophercloud.Result
-	_, err = client.Get(url, &result.Body, nil)
+	resources, err := listPerFlavorInstanceResources(client)
 	if err != nil {
 		return err
 	}
-
-	//At SAP Converged Cloud, we use per-flavor instance quotas for baremetal
-	//(Ironic) flavors, to control precisely how many baremetal machines can be
-	//used by each domain/project. Each such quota has the resource name
-	//"instances_${FLAVOR_NAME}".
-	var body struct {
-		//NOTE: cannot use map[string]int64 here because this object contains the
-		//field "id": "default" (curse you, untyped JSON)
-		QuotaClassSet map[string]interface{} `json:"quota_class_set"`
-	}
-	err = result.ExtractInto(&body)
-	if err != nil {
-		return err
-	}
-
-	for key := range body.QuotaClassSet {
-		if strings.HasPrefix(key, "instances_") {
-			p.resources = append(p.resources, limes.ResourceInfo{
-				Name:     key,
-				Category: "per_flavor",
-				Unit:     limes.UnitNone,
-			})
-		}
+	for _, resourceName := range resources {
+		p.resources = append(p.resources, limes.ResourceInfo{
+			Name:     resourceName,
+			Category: "per_flavor",
+			Unit:     limes.UnitNone,
+		})
 	}
 
 	sort.Slice(p.resources, func(i, j int) bool {
