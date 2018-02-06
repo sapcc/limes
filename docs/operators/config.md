@@ -409,6 +409,16 @@ capacitors:
           capacity: min(swift_cluster_storage_capacity_bytes < inf) / 3
 ```
 
+## `sapcc-ironic`
+
+```yaml
+capacitors:
+  - id: sapcc-ironic
+```
+
+This capacity plugin reports capacity for the special `compute/instances_<flavorname>` resources that exist on SAP
+Converged Cloud ([see above](#compute-nova-v2)). For each such flavor, it counts the number of Ironic nodes whose RAM
+size, disk size, number of cores, and capabilities match those in the flavor.
 
 [yaml]:   http://yaml.org/
 [pq-uri]: https://www.postgresql.org/docs/9.6/static/libpq-connect.html#LIBPQ-CONNSTRING

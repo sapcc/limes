@@ -176,3 +176,16 @@ var isValidVMwareOSType = map[string]bool{
 	"winXPPro64Guest":         true,
 	"winXPProGuest":           true,
 }
+
+//This is a list of all *stable* provisioning states of an Ironic node which will
+//cause that node to not be considered when counting capacity.
+//
+//Reference: https://github.com/openstack/ironic/blob/master/ironic/common/states.py
+var isAvailableProvisionState = map[string]bool{
+	"enroll":     false,
+	"manageable": false,
+	"available":  true,
+	"active":     true,
+	"error":      true, //occurs during delete or rebuild, so node was active before
+	"rescue":     true,
+}
