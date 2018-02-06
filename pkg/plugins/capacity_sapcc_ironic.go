@@ -90,6 +90,11 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient)
 
 	unmatchedCounter := 0
 	for _, node := range nodes {
+		//do not consider nodes that have not been made available for provisioning yet
+		if !isAvailableProvisionState[node.StableProvisionState()] {
+			continue
+		}
+
 		matched := false
 		for _, flavor := range flavors {
 			if node.Matches(flavor) {

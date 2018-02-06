@@ -53,15 +53,24 @@ func newIronicClient(provider *gophercloud.ProviderClient) (*ironicClient, error
 // list nodes
 
 type ironicNode struct {
-	ID         string `json:"uuid"`
-	Name       string `json:"name"`
-	Properties struct {
+	ID                   string  `json:"uuid"`
+	Name                 string  `json:"name"`
+	ProvisionState       string  `json:"provision_state"`
+	TargetProvisionState *string `json:"target_provision_state"`
+	Properties           struct {
 		Cores           veryFlexibleUint64 `json:"cpu"`
 		DiskGiB         veryFlexibleUint64 `json:"local_gb"`
 		MemoryMiB       veryFlexibleUint64 `json:"memory_mb"`
 		CPUArchitecture string             `json:"cpu_arch"`
 		Capabilities    string             `json:"capabilities"` //e.g. "cpu_txt:true,cpu_aes:true"
 	} `json:"properties"`
+}
+
+func (n ironicNode) StableProvisionState() string {
+	if n.TargetProvisionState != nil {
+		return *n.TargetProvisionState
+	}
+	return n.ProvisionState
 }
 
 func extractNodes(page pagination.Page) (nodes []ironicNode, err error) {
@@ -93,6 +102,11 @@ func (c ironicClient) GetNodes() ([]ironicNode, error) {
 		page.MarkerPageBase.Owner = page
 		return page
 	})
+	//if this is not set, the provision_state fields will be there,
+	//but always be null ... #justopenstackthings
+	pager.Headers = map[string]string{
+		"X-Openstack-Ironic-Api-Version": "1.22",
+	}
 
 	var result []ironicNode
 	err := pager.EachPage(func(page pagination.Page) (bool, error) {
