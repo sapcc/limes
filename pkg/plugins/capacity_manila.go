@@ -49,7 +49,7 @@ func (p *capacityManilaPlugin) ID() string {
 }
 
 //Scrape implements the limes.CapacityPlugin interface.
-func (p *capacityManilaPlugin) Scrape(provider *gophercloud.ProviderClient) (map[string]map[string]uint64, error) {
+func (p *capacityManilaPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID string) (map[string]map[string]uint64, error) {
 	cfg := p.cfg.Manila
 	if cfg.ShareNetworks == 0 {
 		return nil, errors.New("missing configuration parameter: share_networks")

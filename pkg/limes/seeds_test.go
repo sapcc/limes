@@ -141,10 +141,10 @@ func (p quotaSeedTestPlugin) Init(client *gophercloud.ProviderClient) error {
 func (p quotaSeedTestPlugin) ServiceInfo() ServiceInfo {
 	return ServiceInfo{Type: p.ServiceType}
 }
-func (p quotaSeedTestPlugin) Scrape(client *gophercloud.ProviderClient, domainUUID, projectUUID string) (map[string]ResourceData, error) {
+func (p quotaSeedTestPlugin) Scrape(client *gophercloud.ProviderClient, clusterID, domainUUID, projectUUID string) (map[string]ResourceData, error) {
 	return nil, nil
 }
-func (p quotaSeedTestPlugin) SetQuota(client *gophercloud.ProviderClient, domainUUID, projectUUID string, quotas map[string]uint64) error {
+func (p quotaSeedTestPlugin) SetQuota(client *gophercloud.ProviderClient, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
 	return nil
 }
 

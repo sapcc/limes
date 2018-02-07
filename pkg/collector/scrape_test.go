@@ -178,14 +178,14 @@ func (p *autoApprovalTestPlugin) Resources() []limes.ResourceInfo {
 	}
 }
 
-func (p *autoApprovalTestPlugin) Scrape(provider *gophercloud.ProviderClient, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
+func (p *autoApprovalTestPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
 	return map[string]limes.ResourceData{
 		"approve":   {Usage: 0, Quota: int64(p.StaticBackendQuota)},
 		"noapprove": {Usage: 0, Quota: int64(p.StaticBackendQuota) + 10},
 	}, nil
 }
 
-func (p *autoApprovalTestPlugin) SetQuota(provider *gophercloud.ProviderClient, domainUUID, projectUUID string, quotas map[string]uint64) error {
+func (p *autoApprovalTestPlugin) SetQuota(provider *gophercloud.ProviderClient, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
 	return errors.New("unimplemented")
 }
 

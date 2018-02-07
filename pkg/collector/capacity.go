@@ -53,7 +53,7 @@ func (c *Collector) scanCapacity() {
 	scrapedAt := c.TimeNow()
 
 	for capacitorID, plugin := range c.Cluster.CapacityPlugins {
-		capacities, err := plugin.Scrape(c.Cluster.ProviderClient())
+		capacities, err := plugin.Scrape(c.Cluster.ProviderClient(), c.Cluster.ID)
 		if err != nil {
 			c.LogError("scan capacity with capacitor %s failed: %s", capacitorID, err.Error())
 			continue

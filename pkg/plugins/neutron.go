@@ -242,7 +242,7 @@ type neutronQueryOpts struct {
 }
 
 //Scrape implements the limes.QuotaPlugin interface.
-func (p *neutronPlugin) Scrape(provider *gophercloud.ProviderClient, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
+func (p *neutronPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
 	client, err := p.Client(provider)
 	if err != nil {
 		return nil, err
@@ -304,7 +304,7 @@ func (p *neutronPlugin) Scrape(provider *gophercloud.ProviderClient, domainUUID,
 }
 
 //SetQuota implements the limes.QuotaPlugin interface.
-func (p *neutronPlugin) SetQuota(provider *gophercloud.ProviderClient, domainUUID, projectUUID string, quotas map[string]uint64) error {
+func (p *neutronPlugin) SetQuota(provider *gophercloud.ProviderClient, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
 	//map resource names from Limes to Neutron
 	var requestData struct {
 		Quotas map[string]uint64 `json:"quota"`

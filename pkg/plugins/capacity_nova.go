@@ -51,7 +51,7 @@ func (p *capacityNovaPlugin) ID() string {
 }
 
 //Scrape implements the limes.CapacityPlugin interface.
-func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient) (map[string]map[string]uint64, error) {
+func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID string) (map[string]map[string]uint64, error) {
 	client, err := p.Client(provider)
 	if err != nil {
 		return nil, err

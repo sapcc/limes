@@ -76,11 +76,19 @@ type QuotaPlugin interface {
 	//known resources for the given project in the given domain. The string keys
 	//in the result map must be identical to the resource names
 	//from Resources().
-	Scrape(client *gophercloud.ProviderClient, domainUUID, projectUUID string) (map[string]ResourceData, error)
+	//
+	//The clusterID is usually not needed, but should be given as a label to
+	//Prometheus metrics emitted by the plugin (if the plugin does that sort of
+	//thing).
+	Scrape(client *gophercloud.ProviderClient, clusterID, domainUUID, projectUUID string) (map[string]ResourceData, error)
 	//SetQuota updates the backend service's quotas for the given project in the
 	//given domain to the values specified here. The map is guaranteed to contain
 	//values for all resources defined by Resources().
-	SetQuota(client *gophercloud.ProviderClient, domainUUID, projectUUID string, quotas map[string]uint64) error
+	//
+	//The clusterID is usually not needed, but should be given as a label to
+	//Prometheus metrics emitted by the plugin (if the plugin does that sort of
+	//thing).
+	SetQuota(client *gophercloud.ProviderClient, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error
 }
 
 //CapacityPlugin is the interface that all capacity collector plugins must
@@ -105,7 +113,11 @@ type CapacityPlugin interface {
 	//resource name. The capacity collector will ignore service types for which
 	//there is no QuotaPlugin, and resources which are not advertised by that
 	//QuotaPlugin.
-	Scrape(client *gophercloud.ProviderClient) (map[string]map[string]uint64, error)
+	//
+	//The clusterID is usually not needed, but should be given as a label to
+	//Prometheus metrics emitted by the plugin (if the plugin does that sort of
+	//thing).
+	Scrape(client *gophercloud.ProviderClient, clusterID string) (map[string]map[string]uint64, error)
 }
 
 //ResourceInfo contains the metadata for a resource (i.e. some thing for which

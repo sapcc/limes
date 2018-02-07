@@ -51,3 +51,9 @@ additional metrics:
 | Gauge | `limes_project_usage` | `os_cluster`, `service`, `resource`, `domain`, `domain_id`, `project`, `project_id` |
 
 `os_cluster` represents the OpenStack cluster configured in the [clusters configuration section](config.md#section-clusters)
+
+### Quota/capacity plugins
+
+Plugins may emit their own metrics when enabled. Refer to the documentation of [the quota
+plugins](config.md#supported-service-types) and [the capacity plugins](config.md#available-capacity-plugins) for
+details.

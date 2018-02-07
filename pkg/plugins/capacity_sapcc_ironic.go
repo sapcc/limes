@@ -61,7 +61,7 @@ type ironicFlavorInfo struct {
 }
 
 //Scrape implements the limes.CapacityPlugin interface.
-func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient) (map[string]map[string]uint64, error) {
+func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID string) (map[string]map[string]uint64, error) {
 	//collect info about flavors with separate instance quota
 	novaClient, err := p.NovaClient(provider)
 	if err != nil {

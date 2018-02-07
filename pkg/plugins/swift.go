@@ -77,7 +77,7 @@ func (p *swiftPlugin) Client(provider *gophercloud.ProviderClient) (*gophercloud
 }
 
 //Scrape implements the limes.QuotaPlugin interface.
-func (p *swiftPlugin) Scrape(provider *gophercloud.ProviderClient, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
+func (p *swiftPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
 	client, err := p.projectClient(provider, projectUUID)
 	if err != nil {
 		return nil, err
@@ -121,7 +121,7 @@ func (p *swiftPlugin) Scrape(provider *gophercloud.ProviderClient, domainUUID, p
 }
 
 //SetQuota implements the limes.QuotaPlugin interface.
-func (p *swiftPlugin) SetQuota(provider *gophercloud.ProviderClient, domainUUID, projectUUID string, quotas map[string]uint64) error {
+func (p *swiftPlugin) SetQuota(provider *gophercloud.ProviderClient, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
 	client, err := p.projectClient(provider, projectUUID)
 	if err != nil {
 		return err
