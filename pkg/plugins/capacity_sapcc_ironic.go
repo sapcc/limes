@@ -26,6 +26,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack"
 	flavorsmodule "github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/pagination"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/util"
 )
@@ -34,10 +35,19 @@ type capacitySapccIronicPlugin struct {
 	cfg limes.CapacitorConfiguration
 }
 
+var ironicUnmatchedNodesGauge = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "limes_unmatched_ironic_nodes",
+		Help: "Number of available/active Ironic nodes without matching flavor.",
+	},
+	[]string{"os_cluster"},
+)
+
 func init() {
 	limes.RegisterCapacityPlugin(func(c limes.CapacitorConfiguration) limes.CapacityPlugin {
 		return &capacitySapccIronicPlugin{c}
 	})
+	prometheus.MustRegister(ironicUnmatchedNodesGauge)
 }
 
 func (p *capacitySapccIronicPlugin) NovaClient(provider *gophercloud.ProviderClient) (*gophercloud.ServiceClient, error) {
@@ -113,6 +123,9 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 	if unmatchedCounter > 0 {
 		util.LogError("%d Ironic nodes do not match any baremetal flavors", unmatchedCounter)
 	}
+	ironicUnmatchedNodesGauge.With(
+		prometheus.Labels{"os_cluster": clusterID},
+	).Set(float64(unmatchedCounter))
 
 	return map[string]map[string]uint64{"compute": result}, nil
 }
