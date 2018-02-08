@@ -58,7 +58,7 @@ type ironicNode struct {
 	ProvisionState       string  `json:"provision_state"`
 	TargetProvisionState *string `json:"target_provision_state"`
 	Properties           struct {
-		Cores           veryFlexibleUint64 `json:"cpu"`
+		Cores           veryFlexibleUint64 `json:"cpus"`
 		DiskGiB         veryFlexibleUint64 `json:"local_gb"`
 		MemoryMiB       veryFlexibleUint64 `json:"memory_mb"`
 		CPUArchitecture string             `json:"cpu_arch"`
