@@ -115,14 +115,11 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 			}
 		}
 		if !matched {
-			util.LogDebug("Ironic node %q (%s) does not match any flavor", node.Name, node.ID)
+			util.LogError("Ironic node %q (%s) does not match any baremetal flavor", node.Name, node.ID)
 			unmatchedCounter++
 		}
 	}
 
-	if unmatchedCounter > 0 {
-		util.LogError("%d Ironic nodes do not match any baremetal flavors", unmatchedCounter)
-	}
 	ironicUnmatchedNodesGauge.With(
 		prometheus.Labels{"os_cluster": clusterID},
 	).Set(float64(unmatchedCounter))
