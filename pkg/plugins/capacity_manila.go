@@ -70,6 +70,7 @@ func (p *capacityManilaPlugin) Scrape(provider *gophercloud.ProviderClient, clus
 	}
 
 	//query Manila for known pools and hosts
+	//filtered by share-type 'default'
 	var data struct {
 		Pools []struct {
 			Host         string `json:"host"`
@@ -113,7 +114,7 @@ func (p *capacityManilaPlugin) Scrape(provider *gophercloud.ProviderClient, clus
 }
 
 func manilaGetPoolsDetailed(client *gophercloud.ServiceClient) (result gophercloud.Result) {
-	url := client.ServiceURL("scheduler-stats", "pools", "detail")
+	url := client.ServiceURL("scheduler-stats", "pools", "detail") + "?share_type=default"
 	_, result.Err = client.Get(url, &result.Body, nil)
 	return
 }
