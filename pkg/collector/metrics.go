@@ -131,6 +131,16 @@ var projectBackendQuotaGauge = prometheus.NewGaugeVec(
 	[]string{"os_cluster", "domain", "domain_id", "project", "project_id", "service", "resource"},
 )
 
+var unitConversionGauge = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "limes_unit_multiplier",
+		Help: "Conversion factor that a value of this resource must be multiplied" +
+			" with to obtain the base unit (e.g. bytes). For use with Grafana when" +
+			" only the base unit can be configured because of templating.",
+	},
+	[]string{"service", "resource"},
+)
+
 //DataMetricsCollector is a prometheus.Collector that submits
 //quota/usage/backend quota from an OpenStack cluster as Prometheus metrics.
 type DataMetricsCollector struct {
@@ -191,6 +201,8 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	projectUsageDesc := <-descCh
 	projectBackendQuotaGauge.Describe(descCh)
 	projectBackendQuotaDesc := <-descCh
+	unitConversionGauge.Describe(descCh)
+	unitConversionDesc := <-descCh
 
 	//fetch values for cluster level
 	queryArgs := []interface{}{c.Cluster.ID}
@@ -287,5 +299,17 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	})
 	if err != nil {
 		util.LogError("collect project metrics failed: " + err.Error())
+	}
+
+	//fetch metadata for services/resources
+	for serviceType, quotaPlugin := range c.Cluster.QuotaPlugins {
+		for _, resource := range quotaPlugin.Resources() {
+			_, multiplier := resource.Unit.Base()
+			ch <- prometheus.MustNewConstMetric(
+				unitConversionDesc,
+				prometheus.GaugeValue, float64(multiplier),
+				serviceType, resource.Name,
+			)
+		}
 	}
 }
