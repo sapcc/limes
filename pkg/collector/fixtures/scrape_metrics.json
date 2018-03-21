@@ -10,3 +10,7 @@ limes_project_quota{domain="germany",domain_id="uuid-for-germany",os_cluster="we
 # TYPE limes_project_usage gauge
 limes_project_usage{domain="germany",domain_id="uuid-for-germany",os_cluster="west",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="unittest"} 0
 limes_project_usage{domain="germany",domain_id="uuid-for-germany",os_cluster="west",project="berlin",project_id="uuid-for-berlin",resource="things",service="unittest"} 5
+# HELP limes_unit_multiplier Conversion factor that a value of this resource must be multiplied with to obtain the base unit (e.g. bytes). For use with Grafana when only the base unit can be configured because of templating.
+# TYPE limes_unit_multiplier gauge
+limes_unit_multiplier{resource="capacity",service="unittest"} 1
+limes_unit_multiplier{resource="things",service="unittest"} 1

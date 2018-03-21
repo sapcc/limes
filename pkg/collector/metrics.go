@@ -154,6 +154,7 @@ func (c *DataMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 	projectQuotaGauge.Describe(ch)
 	projectUsageGauge.Describe(ch)
 	projectBackendQuotaGauge.Describe(ch)
+	unitConversionGauge.Describe(ch)
 }
 
 var clusterMetricsQuery = `
