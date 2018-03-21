@@ -96,6 +96,9 @@ func (p *capacityManilaPlugin) Scrape(provider *gophercloud.ProviderClient, clus
 
 	//derive capacities
 	shareCount := cfg.SharesPerPool*poolCount - cfg.ShareNetworks
+	if cfg.SharesPerPool*poolCount < cfg.ShareNetworks { //detect unsigned int underflow
+		shareCount = 0
+	}
 
 	//NOTE: The value of `cfg.CapacityBalance` is how many capacity we give out
 	//to snapshots as a fraction of the capacity given out to shares. For
