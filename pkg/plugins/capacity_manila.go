@@ -25,6 +25,7 @@ import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/sapcc/limes/pkg/limes"
+	"github.com/sapcc/limes/pkg/util"
 )
 
 type capacityManilaPlugin struct {
@@ -96,6 +97,7 @@ func (p *capacityManilaPlugin) Scrape(provider *gophercloud.ProviderClient, clus
 
 	//derive capacities
 	shareCount := cfg.SharesPerPool*poolCount - cfg.ShareNetworks
+	util.LogDebug("sc = sp * pc - sn = %d * %d - %d = %d", cfg.SharesPerPool, poolCount, cfg.ShareNetworks, shareCount)
 	if cfg.SharesPerPool*poolCount < cfg.ShareNetworks { //detect unsigned int underflow
 		shareCount = 0
 	}
@@ -117,6 +119,7 @@ func (p *capacityManilaPlugin) Scrape(provider *gophercloud.ProviderClient, clus
 }
 
 func manilaGetPoolsDetailed(client *gophercloud.ServiceClient) (result gophercloud.Result) {
+	client.Microversion = "2.23" //required for filtering by share_type
 	url := client.ServiceURL("scheduler-stats", "pools", "detail") + "?share_type=default"
 	_, result.Err = client.Get(url, &result.Body, nil)
 	return
