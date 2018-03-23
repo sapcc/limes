@@ -176,13 +176,33 @@ The `instances` resource supports subresource scraping. Subresources bear the fo
 | `vcpu` | integer | number of vCPUs configured in flavor |
 | `disk` | integer value with unit | root disk size configured in flavor |
 | `os_type` | string | identifier for OS type as configured in image (see below) |
+| `hypervisor` | string | identifier for the hypervisor type of this instance (only if configured, see below) |
 
 The `os_type` field contains:
 - for VMware images: the value of the `vmware_ostype` property of the instance's image, or
 - otherwise: the part after the colon of a tag starting with `ostype:`, e.g. `rhel` if there is a tag `ostype:rhel` on the image.
 
+The value of the `hypervisor` field is determined by looking at the extra specs of the instance's flavor, using matching
+rules supplied in the configuration like this:
+
+```yaml
+services:
+  - type: compute
+    compute:
+      hypervisor_type_rules:
+        - match: extra-spec:vmware:hv_enabled
+          pattern: '^True$'
+          type: vmware
+        - match: extra-spec:capabilities:cpu_arch
+          pattern: '.+'
+          type: none # i.e. bare-metal
+```
+
+Rules are evaulated in the order given, and the first matching rule will be taken. If no rule matches, the hypervisor
+will be reported as `unknown`.
+
 On SAP Converged Cloud (or any other OpenStack cluster where Nova carries the relevant patches), there will be an
-additional resource `instances_<flavorname>` for each flavor with the `quota:separate = true` extraspec. These resources
+additional resource `instances_<flavorname>` for each flavor with the `quota:separate = true` extra spec. These resources
 behave like the `instances` resource. When subresources are scraped for the `instances` resource, they will also be
 scraped for these flavor-specific instance resources. The flavor-specific instance resources are in the `per_flavor`
 category.

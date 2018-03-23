@@ -21,6 +21,7 @@ package plugins
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -41,13 +42,22 @@ import (
 //to ensure that goimports does not mistakenly replace it by .../compute/v2/images
 var _ images.ImageVisibility
 
+type novaHypervisorTypeRule struct {
+	ExtraSpecName  string
+	ValuePattern   *regexp.Regexp
+	HypervisorType string
+}
+
 type novaPlugin struct {
 	cfg             limes.ServiceConfiguration
 	scrapeInstances bool
-	resources       []limes.ResourceInfo
-	flavors         map[string]*flavors.Flavor
-	extraSpecs      map[string]map[string]string
-	osTypeForImage  map[string]string
+	//computed state
+	hypervisorTypeRules []novaHypervisorTypeRule
+	resources           []limes.ResourceInfo
+	//caches
+	flavors        map[string]*flavors.Flavor
+	extraSpecs     map[string]map[string]string
+	osTypeForImage map[string]string
 }
 
 var novaDefaultResources = []limes.ResourceInfo{
@@ -91,6 +101,7 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient) error {
 		return err
 	}
 
+	//find per-flavor instance resources
 	resources, err := listPerFlavorInstanceResources(client)
 	if err != nil {
 		return err
@@ -102,10 +113,31 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient) error {
 			Unit:     limes.UnitNone,
 		})
 	}
-
 	sort.Slice(p.resources, func(i, j int) bool {
 		return p.resources[i].Name < p.resources[j].Name
 	})
+
+	//compile hypervisor type rules
+	p.hypervisorTypeRules = nil
+	for _, rule := range p.cfg.Compute.HypervisorTypeRules {
+		rx, err := regexp.Compile(rule.Pattern)
+		if err != nil {
+			return err
+		}
+		//the format of rule.Key is built for future extensibility, e.g. if it
+		//later becomes required to match against image capabilties or flavor name
+		switch {
+		case strings.HasPrefix(rule.Key, "extra-spec:"):
+			p.hypervisorTypeRules = append(p.hypervisorTypeRules, novaHypervisorTypeRule{
+				ExtraSpecName:  strings.TrimPrefix(rule.Key, "extra-spec:"),
+				ValuePattern:   rx,
+				HypervisorType: rule.Type,
+			})
+		default:
+			return fmt.Errorf("key %q for hypervisor type rule must start with \"extra-spec:\"", rule.Key)
+		}
+	}
+
 	return nil
 }
 
@@ -323,11 +355,10 @@ func (p *novaPlugin) getHypervisorType(client *gophercloud.ServiceClient, flavor
 		return "unknown", err
 	}
 
-	if extraSpecs["vmware:hv_enabled"] == "True" {
-		return "vmware", nil
-	}
-	if _, ok := extraSpecs["capabilities:cpu_arch"]; ok {
-		return "none", nil //looks like a bare-metal flavor
+	for _, rule := range p.hypervisorTypeRules {
+		if rule.ValuePattern.MatchString(extraSpecs[rule.ExtraSpecName]) {
+			return rule.HypervisorType, nil
+		}
 	}
 	return "unknown", nil
 }
