@@ -358,15 +358,12 @@ func (p *novaPlugin) getFlavor(client *gophercloud.ServiceClient, flavorID strin
 }
 
 func (p *novaPlugin) getHypervisorType(client *gophercloud.ServiceClient, flavorID string) (string, error) {
-	flavor, extraSpecs, err := p.getFlavor(client, flavorID)
+	_, extraSpecs, err := p.getFlavor(client, flavorID)
 	if err != nil {
-		return "unknown", err
+		return "flavor-deleted", err
 	}
 
 	for _, rule := range p.hypervisorTypeRules {
-		if flavor == nil {
-			return "flavor-deleted", nil
-		}
 		if rule.ValuePattern.MatchString(extraSpecs[rule.ExtraSpecName]) {
 			return rule.HypervisorType, nil
 		}
