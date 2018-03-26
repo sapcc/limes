@@ -278,7 +278,11 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID, dom
 					subResource["os_type"] = "image-missing"
 				}
 
-				resource, exists := result["instances_"+flavor.Name]
+				flavorName := ""
+				if flavor != nil {
+					flavorName = flavor.Name
+				}
+				resource, exists := result["instances_"+flavorName]
 				if !exists {
 					resource = result["instances"]
 				}
