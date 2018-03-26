@@ -259,12 +259,14 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID, dom
 					util.LogError("error while trying to retrieve data for flavor %s: %s", flavorID, err.Error())
 				}
 
-				hypervisorType, err := p.getHypervisorType(client, flavorID)
-				if err != nil {
-					util.LogError("error while trying to find hypervisor type for flavor %s: %s", flavorID, err.Error())
+				if len(p.hypervisorTypeRules) > 0 {
+					hypervisorType, err := p.getHypervisorType(client, flavorID)
+					if err != nil {
+						util.LogError("error while trying to find hypervisor type for flavor %s: %s", flavorID, err.Error())
+					}
+					subResource["hypervisor"] = hypervisorType
+					countsByHypervisor[hypervisorType]++
 				}
-				subResource["hypervisor"] = hypervisorType
-				countsByHypervisor[hypervisorType]++
 
 				imageID, ok := instance.Image["id"].(string)
 				if ok {
@@ -295,13 +297,15 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID, dom
 		}
 
 		//report Prometheus metrics
-		for typeStr, count := range countsByHypervisor {
-			novaInstanceCountGauge.With(prometheus.Labels{
-				"os_cluster": clusterID,
-				"domain_id":  domainUUID,
-				"project_id": projectUUID,
-				"hypervisor": typeStr,
-			}).Set(float64(count))
+		if len(p.hypervisorTypeRules) > 0 {
+			for typeStr, count := range countsByHypervisor {
+				novaInstanceCountGauge.With(prometheus.Labels{
+					"os_cluster": clusterID,
+					"domain_id":  domainUUID,
+					"project_id": projectUUID,
+					"hypervisor": typeStr,
+				}).Set(float64(count))
+			}
 		}
 	}
 
