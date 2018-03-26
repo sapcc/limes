@@ -199,7 +199,8 @@ services:
 ```
 
 Rules are evaulated in the order given, and the first matching rule will be taken. If no rule matches, the hypervisor
-will be reported as `unknown`.
+will be reported as `unknown`. If rules cannot be evaluated because the instance's flavor has been deleted, the
+hypervisor will be reported as `flavor-deleted`.
 
 On SAP Converged Cloud (or any other OpenStack cluster where Nova carries the relevant patches), there will be an
 additional resource `instances_<flavorname>` for each flavor with the `quota:separate = true` extra spec. These resources
