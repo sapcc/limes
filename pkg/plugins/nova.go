@@ -43,9 +43,10 @@ import (
 var _ images.ImageVisibility
 
 type novaHypervisorTypeRule struct {
-	ExtraSpecName  string
-	ValuePattern   *regexp.Regexp
-	HypervisorType string
+	MatchFlavorName bool
+	MatchExtraSpec  string
+	ValuePattern    *regexp.Regexp
+	HypervisorType  string
 }
 
 type novaPlugin struct {
@@ -131,14 +132,23 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient) error {
 		//the format of rule.Key is built for future extensibility, e.g. if it
 		//later becomes required to match against image capabilties or flavor name
 		switch {
+		case rule.Key == "flavor-name":
+			p.hypervisorTypeRules = append(p.hypervisorTypeRules, novaHypervisorTypeRule{
+				MatchFlavorName: true,
+				ValuePattern:    rx,
+				HypervisorType:  rule.Type,
+			})
 		case strings.HasPrefix(rule.Key, "extra-spec:"):
 			p.hypervisorTypeRules = append(p.hypervisorTypeRules, novaHypervisorTypeRule{
-				ExtraSpecName:  strings.TrimPrefix(rule.Key, "extra-spec:"),
+				MatchExtraSpec: strings.TrimPrefix(rule.Key, "extra-spec:"),
 				ValuePattern:   rx,
 				HypervisorType: rule.Type,
 			})
 		default:
-			return fmt.Errorf("key %q for hypervisor type rule must start with \"extra-spec:\"", rule.Key)
+			return fmt.Errorf(
+				"key %q for hypervisor type rule must be \"flavor-name\" or start with \"extra-spec:\"",
+				rule.Key,
+			)
 		}
 	}
 
@@ -350,11 +360,11 @@ func (p *novaPlugin) getFlavorInfo(client *gophercloud.ServiceClient, flavorID s
 	)
 	result.Flavor, err = flavors.Get(client, flavorID).Extract()
 	if err != nil {
-		util.LogDebug("retrieve flavor %s: %s", flavorID, err.Error())
+		util.LogError("retrieve flavor %s: %s", flavorID, err.Error())
 	}
 	result.ExtraSpecs, err = getFlavorExtras(client, flavorID)
 	if err != nil {
-		util.LogDebug("retrieve flavor %s extra-specs: %s", flavorID, err.Error())
+		util.LogError("retrieve flavor %s extra-specs: %s", flavorID, err.Error())
 	}
 
 	p.flavorInfo[flavorID] = result
@@ -365,11 +375,21 @@ func (p *novaPlugin) getHypervisorType(client *gophercloud.ServiceClient, flavor
 	flavorInfo := p.getFlavorInfo(client, flavorID)
 
 	for _, rule := range p.hypervisorTypeRules {
-		if flavorInfo.Flavor == nil { //cannot evaluate this rule
-			return "flavor-deleted", nil
-		}
-		if rule.ValuePattern.MatchString(flavorInfo.ExtraSpecs[rule.ExtraSpecName]) {
-			return rule.HypervisorType, nil
+		switch {
+		case rule.MatchFlavorName:
+			if flavorInfo.Flavor == nil { //cannot evaluate this rule
+				return "flavor-deleted", nil
+			}
+			if rule.ValuePattern.MatchString(flavorInfo.Flavor.Name) {
+				return rule.HypervisorType, nil
+			}
+		case rule.MatchExtraSpec != "":
+			if flavorInfo.Flavor == nil { //cannot evaluate this rule
+				return "flavor-deleted", nil
+			}
+			if rule.ValuePattern.MatchString(flavorInfo.ExtraSpecs[rule.MatchExtraSpec]) {
+				return rule.HypervisorType, nil
+			}
 		}
 	}
 	return "unknown", nil

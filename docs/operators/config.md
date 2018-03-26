@@ -190,15 +190,18 @@ services:
   - type: compute
     compute:
       hypervisor_type_rules:
-        - match: extra-spec:vmware:hv_enabled
-          pattern: '^True$'
+        - match: extra-spec:vmware:hv_enabled # match on extra spec with name "vmware:hv_enabled"
+          pattern: '^True$'                   # regular expression
           type: vmware
+        - match: flavor-name
+          pattern: '^kvm'
+          type: kvm
         - match: extra-spec:capabilities:cpu_arch
           pattern: '.+'
           type: none # i.e. bare-metal
 ```
 
-Rules are evaulated in the order given, and the first matching rule will be taken. If no rule matches, the hypervisor
+Rules are evaluated in the order given, and the first matching rule will be taken. If no rule matches, the hypervisor
 will be reported as `unknown`. If rules cannot be evaluated because the instance's flavor has been deleted, the
 hypervisor will be reported as `flavor-deleted`.
 
