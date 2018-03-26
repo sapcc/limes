@@ -88,6 +88,13 @@ type ServiceConfiguration struct {
 	//for quota plugins that need configuration, add a field with the service type as
 	//name and put the config data in there (use a struct to be able to give
 	//config options meaningful names)
+	Compute struct {
+		HypervisorTypeRules []struct {
+			Key     string `yaml:"match"`
+			Pattern string `yaml:"pattern"`
+			Type    string `yaml:"type"`
+		} `yaml:"hypervisor_type_rules"`
+	} `yaml:"compute"`
 }
 
 //CapacitorConfiguration describes a capacity plugin that is enabled for a

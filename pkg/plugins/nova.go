@@ -21,6 +21,7 @@ package plugins
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -32,6 +33,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
 	"github.com/gophercloud/gophercloud/openstack/imageservice/v2/images"
 	"github.com/gophercloud/gophercloud/pagination"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/util"
 )
@@ -40,12 +42,22 @@ import (
 //to ensure that goimports does not mistakenly replace it by .../compute/v2/images
 var _ images.ImageVisibility
 
+type novaHypervisorTypeRule struct {
+	ExtraSpecName  string
+	ValuePattern   *regexp.Regexp
+	HypervisorType string
+}
+
 type novaPlugin struct {
 	cfg             limes.ServiceConfiguration
 	scrapeInstances bool
-	resources       []limes.ResourceInfo
-	flavors         map[string]*flavors.Flavor
-	osTypeForImage  map[string]string
+	//computed state
+	hypervisorTypeRules []novaHypervisorTypeRule
+	resources           []limes.ResourceInfo
+	//caches
+	flavors        map[string]*flavors.Flavor
+	extraSpecs     map[string]map[string]string
+	osTypeForImage map[string]string
 }
 
 var novaDefaultResources = []limes.ResourceInfo{
@@ -63,6 +75,14 @@ var novaDefaultResources = []limes.ResourceInfo{
 	},
 }
 
+var novaInstanceCountGauge = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "limes_instance_counts",
+		Help: "Number of Nova instances per project and hypervisor type.",
+	},
+	[]string{"os_cluster", "domain_id", "project_id", "hypervisor"},
+)
+
 func init() {
 	limes.RegisterQuotaPlugin(func(c limes.ServiceConfiguration, scrapeSubresources map[string]bool) limes.QuotaPlugin {
 		return &novaPlugin{
@@ -71,6 +91,7 @@ func init() {
 			resources:       novaDefaultResources,
 		}
 	})
+	prometheus.MustRegister(novaInstanceCountGauge)
 }
 
 //Init implements the limes.QuotaPlugin interface.
@@ -80,6 +101,7 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient) error {
 		return err
 	}
 
+	//find per-flavor instance resources
 	resources, err := listPerFlavorInstanceResources(client)
 	if err != nil {
 		return err
@@ -91,10 +113,31 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient) error {
 			Unit:     limes.UnitNone,
 		})
 	}
-
 	sort.Slice(p.resources, func(i, j int) bool {
 		return p.resources[i].Name < p.resources[j].Name
 	})
+
+	//compile hypervisor type rules
+	p.hypervisorTypeRules = nil
+	for _, rule := range p.cfg.Compute.HypervisorTypeRules {
+		rx, err := regexp.Compile(rule.Pattern)
+		if err != nil {
+			return err
+		}
+		//the format of rule.Key is built for future extensibility, e.g. if it
+		//later becomes required to match against image capabilties or flavor name
+		switch {
+		case strings.HasPrefix(rule.Key, "extra-spec:"):
+			p.hypervisorTypeRules = append(p.hypervisorTypeRules, novaHypervisorTypeRule{
+				ExtraSpecName:  strings.TrimPrefix(rule.Key, "extra-spec:"),
+				ValuePattern:   rx,
+				HypervisorType: rule.Type,
+			})
+		default:
+			return fmt.Errorf("key %q for hypervisor type rule must start with \"extra-spec:\"", rule.Key)
+		}
+	}
+
 	return nil
 }
 
@@ -181,6 +224,12 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID, dom
 			TenantID:   projectUUID,
 		}
 
+		countsByHypervisor := map[string]uint64{
+			"vmware":  0,
+			"none":    0,
+			"unknown": 0,
+		}
+
 		err := servers.List(client, listOpts).EachPage(func(page pagination.Page) (bool, error) {
 			instances, err := servers.ExtractServers(page)
 			if err != nil {
@@ -194,7 +243,7 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID, dom
 					"status": instance.Status,
 				}
 				flavorID := instance.Flavor["id"].(string)
-				flavor, err := p.getFlavor(client, flavorID)
+				flavor, _, err := p.getFlavor(client, flavorID)
 				if err == nil {
 					subResource["flavor"] = flavor.Name
 					subResource["vcpu"] = flavor.VCPUs
@@ -209,6 +258,13 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID, dom
 				} else {
 					util.LogError("error while trying to retrieve data for flavor %s: %s", flavorID, err.Error())
 				}
+
+				hypervisorType, err := p.getHypervisorType(client, flavorID)
+				if err != nil {
+					util.LogError("error while trying to find hypervisor type for flavor %s: %s", flavorID, err.Error())
+				}
+				subResource["hypervisor"] = hypervisorType
+				countsByHypervisor[hypervisorType]++
 
 				imageID, ok := instance.Image["id"].(string)
 				if ok {
@@ -233,6 +289,16 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID, dom
 		if err != nil {
 			return nil, err
 		}
+
+		//report Prometheus metrics
+		for typeStr, count := range countsByHypervisor {
+			novaInstanceCountGauge.With(prometheus.Labels{
+				"os_cluster": clusterID,
+				"domain_id":  domainUUID,
+				"project_id": projectUUID,
+				"hypervisor": typeStr,
+			}).Set(float64(count))
+		}
 	}
 
 	//remove references (which we needed to apply the subresources correctly)
@@ -253,23 +319,48 @@ func (p *novaPlugin) SetQuota(provider *gophercloud.ProviderClient, clusterID, d
 	return quotasets.Update(client, projectUUID, novaQuotaUpdateOpts(quotas)).Err
 }
 
-//Getting and caching flavor details
+//Getting and caching flavor details and extra specs
 //Changing a flavor is not supported from OpenStack, so no invalidating of the cache needed
-//Acces to the map is not thread safe
-func (p *novaPlugin) getFlavor(client *gophercloud.ServiceClient, flavorID string) (*flavors.Flavor, error) {
+//Access to the map is not thread safe
+func (p *novaPlugin) getFlavor(client *gophercloud.ServiceClient, flavorID string) (*flavors.Flavor, map[string]string, error) {
 	if p.flavors == nil {
 		p.flavors = make(map[string]*flavors.Flavor)
 	}
-
-	if flavor, ok := p.flavors[flavorID]; ok {
-		return flavor, nil
+	if p.extraSpecs == nil {
+		p.extraSpecs = make(map[string]map[string]string)
 	}
 
-	flavor, err := flavors.Get(client, flavorID).Extract()
-	if err == nil {
+	if _, ok := p.flavors[flavorID]; !ok {
+		flavor, err := flavors.Get(client, flavorID).Extract()
+		if err != nil {
+			return nil, nil, err
+		}
 		p.flavors[flavorID] = flavor
 	}
-	return flavor, err
+
+	if _, ok := p.extraSpecs[flavorID]; !ok {
+		specs, err := getFlavorExtras(client, flavorID)
+		if err != nil {
+			return nil, nil, err
+		}
+		p.extraSpecs[flavorID] = specs
+	}
+
+	return p.flavors[flavorID], p.extraSpecs[flavorID], nil
+}
+
+func (p *novaPlugin) getHypervisorType(client *gophercloud.ServiceClient, flavorID string) (string, error) {
+	_, extraSpecs, err := p.getFlavor(client, flavorID)
+	if err != nil {
+		return "unknown", err
+	}
+
+	for _, rule := range p.hypervisorTypeRules {
+		if rule.ValuePattern.MatchString(extraSpecs[rule.ExtraSpecName]) {
+			return rule.HypervisorType, nil
+		}
+	}
+	return "unknown", nil
 }
 
 func (p *novaPlugin) getOSType(provider *gophercloud.ProviderClient, imageID string) (string, error) {
