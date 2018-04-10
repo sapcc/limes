@@ -50,6 +50,13 @@ func (p *v1Provider) CheckToken(r *http.Request) *Token {
 	t := &Token{enforcer: p.Config.API.PolicyEnforcer}
 	t.context, t.err = p.Cluster.Config.Auth.ValidateToken(str)
 	t.context.Request = mux.Vars(r)
+
+	//provide the cluster ID to the policy (this can be used e.g. to restrict
+	//cloud-admin operations to a certain cluster)
+	if t.context.Auth != nil {
+		t.context.Auth["cluster_id"] = p.Cluster.ID
+	}
+
 	t.UserUUID = t.context.Auth["user_id"]
 	t.UserName = t.context.Auth["user_name"]
 	return t
