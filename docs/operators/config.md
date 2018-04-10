@@ -330,10 +330,11 @@ capacitors:
 | Resource | Method |
 | --- | --- |
 | `volumev2/capacity` | The sum over all pools reported by Cinder. |
-| `volumev2/snapshots` | Estimated as `2500 * count(availabilityZones)`. |
-| `volumev2/volumes` | Estimated as `2500 * count(availabilityZones)`. |
 
 The `cinder.volume_backend_name` parameter can be used to filter the back-end storage pools by volume name.
+
+No estimates are made for the `snapshots` and `volumes` resources since capacity highly depends on
+the concrete Cinder backend.
 
 ## `manila`
 

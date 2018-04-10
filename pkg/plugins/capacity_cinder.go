@@ -77,26 +77,7 @@ func (p *capacityCinderPlugin) Scrape(provider *gophercloud.ProviderClient, clus
 		return nil, err
 	}
 
-	//Get availability zones
-	url = client.ServiceURL("os-availability-zone")
-	_, err = client.Get(url, &result.Body, nil)
-	if err != nil {
-		return nil, err
-	}
-	var availabilityZoneData struct {
-		AvailabilityZoneInfo []struct {
-			ZoneName  string `json:"zoneName"`
-			ZoneState struct {
-				Available bool `json:"available"`
-			} `json:"zoneState"`
-		} `json:"availabilityZoneInfo"`
-	}
-	err = result.ExtractInto(&availabilityZoneData)
-	if err != nil {
-		return nil, err
-	}
-
-	var totalCapacity, azCount uint64
+	var totalCapacity uint64
 	volumeBackendName := p.cfg.Cinder.VolumeBackendName
 
 	//add results from scheduler-stats
@@ -110,24 +91,11 @@ func (p *capacityCinderPlugin) Scrape(provider *gophercloud.ProviderClient, clus
 
 	}
 
-	//count availability zones
-	for _, element := range availabilityZoneData.AvailabilityZoneInfo {
-		if element.ZoneState.Available {
-			azCount++
-		}
-	}
-
-	//returns something like
-	//"volumev2": {
-	//	"capacity": capacitySum,
-	//	"snapshots": 2500 * zoneCount,
-	//	"volumes": 2500 * zoneCount,
-	//}
 	return map[string]map[string]uint64{
 		"volumev2": {
-			"capacity":  totalCapacity,
-			"snapshots": uint64(2500 * azCount),
-			"volumes":   uint64(2500 * azCount),
+			"capacity": totalCapacity,
+			//NOTE: no estimates for no. of snapshots/volumes here; this depends highly on the backend
+			//(on SAP CC, we configure capacity for snapshots/volumes via the "manual" capacitor)
 		},
 	}, nil
 
