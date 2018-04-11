@@ -92,15 +92,20 @@ func (p *v1Provider) GetProject(w http.ResponseWriter, r *http.Request) {
 
 //DiscoverProjects handles POST /v1/domains/:domain_id/projects/discover.
 func (p *v1Provider) DiscoverProjects(w http.ResponseWriter, r *http.Request) {
-	if !p.CheckToken(r).Require(w, "project:discover") {
+	token := p.CheckToken(r)
+	if !token.Require(w, "project:discover") {
 		return
 	}
-	dbDomain := p.FindDomainFromRequest(w, r, p.Cluster)
+	cluster := p.FindClusterFromRequest(w, r, token)
+	if cluster == nil {
+		return
+	}
+	dbDomain := p.FindDomainFromRequest(w, r, cluster)
 	if dbDomain == nil {
 		return
 	}
 
-	newProjectUUIDs, err := collector.ScanProjects(p.Cluster, dbDomain)
+	newProjectUUIDs, err := collector.ScanProjects(cluster, dbDomain)
 	if ReturnError(w, err) {
 		return
 	}
@@ -114,10 +119,15 @@ func (p *v1Provider) DiscoverProjects(w http.ResponseWriter, r *http.Request) {
 
 //SyncProject handles POST /v1/domains/:domain_id/projects/sync.
 func (p *v1Provider) SyncProject(w http.ResponseWriter, r *http.Request) {
-	if !p.CheckToken(r).Require(w, "project:show") {
+	token := p.CheckToken(r)
+	if !token.Require(w, "project:show") {
 		return
 	}
-	dbDomain := p.FindDomainFromRequest(w, r, p.Cluster)
+	cluster := p.FindClusterFromRequest(w, r, token)
+	if cluster == nil {
+		return
+	}
+	dbDomain := p.FindDomainFromRequest(w, r, cluster)
 	if dbDomain == nil {
 		return
 	}
@@ -128,7 +138,7 @@ func (p *v1Provider) SyncProject(w http.ResponseWriter, r *http.Request) {
 
 	//check if project needs to be discovered
 	if dbProject == nil {
-		newProjectUUIDs, err := collector.ScanProjects(p.Cluster, dbDomain)
+		newProjectUUIDs, err := collector.ScanProjects(cluster, dbDomain)
 		if ReturnError(w, err) {
 			return
 		}
@@ -171,7 +181,11 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dbDomain := p.FindDomainFromRequest(w, r, p.Cluster)
+	cluster := p.FindClusterFromRequest(w, r, token)
+	if cluster == nil {
+		return
+	}
+	dbDomain := p.FindDomainFromRequest(w, r, cluster)
 	if dbDomain == nil {
 		return
 	}
@@ -200,7 +214,7 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 	defer db.RollbackUnlessCommitted(tx)
 
 	//gather a report on the domain's quotas to decide whether a quota update is legal
-	domainReports, err := reports.GetDomains(p.Cluster, &dbDomain.ID, db.DB, reports.Filter{})
+	domainReports, err := reports.GetDomains(cluster, &dbDomain.ID, db.DB, reports.Filter{})
 	if ReturnError(w, err) {
 		return
 	}
@@ -241,7 +255,7 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 			if !exists {
 				continue
 			}
-			newQuota, err := newQuotaInput.ConvertFor(p.Cluster, srv.Type, res.Name)
+			newQuota, err := newQuotaInput.ConvertFor(cluster, srv.Type, res.Name)
 			if err != nil {
 				errors = append(errors, fmt.Sprintf("cannot change %s/%s quota: %s", srv.Type, res.Name, err.Error()))
 				continue
@@ -303,7 +317,7 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		plugin := p.Cluster.QuotaPlugins[srv.Type]
+		plugin := cluster.QuotaPlugins[srv.Type]
 		if plugin == nil {
 			errors = append(errors, fmt.Sprintf("no quota plugin registered for service type %s", srv.Type))
 			continue
@@ -323,8 +337,8 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 			quotaValues[res.Name] = res.Quota
 		}
 		err = plugin.SetQuota(
-			p.Cluster.ProviderClientForService(srv.Type),
-			p.Cluster.ID, dbDomain.UUID, dbProject.UUID, quotaValues,
+			cluster.ProviderClientForService(srv.Type),
+			cluster.ID, dbDomain.UUID, dbProject.UUID, quotaValues,
 		)
 		if err != nil {
 			errors = append(errors, err.Error())
@@ -348,7 +362,7 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//otherwise, report success
-	projects, err := reports.GetProjects(p.Cluster, dbDomain.ID, &dbProject.ID, db.DB, reports.Filter{}, false)
+	projects, err := reports.GetProjects(cluster, dbDomain.ID, &dbProject.ID, db.DB, reports.Filter{}, false)
 	if ReturnError(w, err) {
 		return
 	}

@@ -238,6 +238,15 @@ func taskServe(config limes.Configuration, cluster *limes.Cluster, args []string
 		printUsageAndExit()
 	}
 
+	//connect to *all* clusters - we may have to service cross-cluster requests
+	for _, otherCluster := range config.Clusters {
+		//Note that Connect() is idempotent, so this is safe even for `otherCluster == cluster`.
+		err := otherCluster.Connect()
+		if err != nil {
+			util.LogFatal(err.Error())
+		}
+	}
+
 	mainRouter := mux.NewRouter()
 
 	//hook up the v1 API (this code is structured so that a newer API version can

@@ -104,7 +104,8 @@ func NewCluster(id string, config *ClusterConfiguration) *Cluster {
 }
 
 //Connect calls Connect() on all AuthParameters for this Cluster, thus ensuring
-//that all ProviderClient instances are available.
+//that all ProviderClient instances are available. It also calls Init() on all
+//quota plugins.
 func (c *Cluster) Connect() error {
 	err := c.Config.Auth.Connect()
 	if err != nil {

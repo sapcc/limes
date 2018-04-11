@@ -155,8 +155,12 @@ func (p *v1Provider) FindClusterFromRequest(w http.ResponseWriter, r *http.Reque
 		return p.Cluster
 	}
 
-	//if foreign cluster specified, user needs permission to read it
-	if !token.Require(w, "foreign:read") {
+	//if foreign cluster specified, user needs permission to access it
+	requiredAccess := "foreign:write"
+	if r.Method == "GET" || r.Method == "HEAD" {
+		requiredAccess = "foreign:read"
+	}
+	if !token.Require(w, requiredAccess) {
 		return nil
 	}
 

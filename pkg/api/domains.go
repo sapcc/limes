@@ -81,11 +81,16 @@ func (p *v1Provider) GetDomain(w http.ResponseWriter, r *http.Request) {
 
 //DiscoverDomains handles POST /v1/domains/discover.
 func (p *v1Provider) DiscoverDomains(w http.ResponseWriter, r *http.Request) {
-	if !p.CheckToken(r).Require(w, "domain:discover") {
+	token := p.CheckToken(r)
+	if !token.Require(w, "domain:discover") {
+		return
+	}
+	cluster := p.FindClusterFromRequest(w, r, token)
+	if cluster == nil {
 		return
 	}
 
-	newDomainUUIDs, err := collector.ScanDomains(p.Cluster, collector.ScanDomainsOpts{})
+	newDomainUUIDs, err := collector.ScanDomains(cluster, collector.ScanDomainsOpts{})
 	if ReturnError(w, err) {
 		return
 	}
@@ -107,7 +112,11 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	dbDomain := p.FindDomainFromRequest(w, r, p.Cluster)
+	cluster := p.FindClusterFromRequest(w, r, token)
+	if cluster == nil {
+		return
+	}
+	dbDomain := p.FindDomainFromRequest(w, r, cluster)
 	if dbDomain == nil {
 		return
 	}
@@ -132,7 +141,7 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 	defer db.RollbackUnlessCommitted(tx)
 
 	//gather a report on the domain's quotas to decide whether a quota update is legal
-	domainReports, err := reports.GetDomains(p.Cluster, &dbDomain.ID, db.DB, reports.Filter{})
+	domainReports, err := reports.GetDomains(cluster, &dbDomain.ID, db.DB, reports.Filter{})
 	if ReturnError(w, err) {
 		return
 	}
@@ -174,7 +183,7 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 			if !exists {
 				continue
 			}
-			newQuota, err := newQuotaInput.ConvertFor(p.Cluster, srv.Type, res.Name)
+			newQuota, err := newQuotaInput.ConvertFor(cluster, srv.Type, res.Name)
 			if err != nil {
 				errors = append(errors, fmt.Sprintf("cannot change %s/%s quota: %s", srv.Type, res.Name, err.Error()))
 				continue
@@ -207,14 +216,14 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 			if isExistingResource[resourceName] {
 				continue
 			}
-			if !p.Cluster.HasResource(srv.Type, resourceName) {
+			if !cluster.HasResource(srv.Type, resourceName) {
 				errors = append(errors,
 					fmt.Sprintf("cannot set %s/%s quota: no such resource", srv.Type, resourceName),
 				)
 				continue
 			}
 
-			newQuota, err := newQuotaInput.ConvertFor(p.Cluster, srv.Type, resourceName)
+			newQuota, err := newQuotaInput.ConvertFor(cluster, srv.Type, resourceName)
 			if err != nil {
 				errors = append(errors, fmt.Sprintf("cannot change %s/%s quota: %s", srv.Type, resourceName, err.Error()))
 				continue
@@ -264,7 +273,7 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 	auditTrail.Commit()
 
 	//otherwise, report success
-	domains, err := reports.GetDomains(p.Cluster, &dbDomain.ID, db.DB, reports.ReadFilter(r))
+	domains, err := reports.GetDomains(cluster, &dbDomain.ID, db.DB, reports.ReadFilter(r))
 	if ReturnError(w, err) {
 		return
 	}

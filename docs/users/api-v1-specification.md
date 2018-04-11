@@ -16,8 +16,7 @@ As with all OpenStack services, this header must contain a Keystone token.
 
 Each Limes API is bound to a certain OpenStack cluster, usually the one where it is configured in the service catalog.
 To make a request concerning a domain or project in a different cluster, the `X-Limes-Cluster-Id` header must be given.
-Using this header requires special permission (usually a cloud-admin token) and is only allowed for read operations at
-this point, although support for cross-cluster write operations may be added at a later point.
+Using this header requires special permission (usually a cloud-admin token).
 
 ## GET /v1/domains/:domain\_id/projects
 ## GET /v1/domains/:domain\_id/projects/:project\_id
