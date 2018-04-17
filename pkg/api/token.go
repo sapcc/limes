@@ -70,7 +70,7 @@ func (p *v1Provider) CheckToken(r *http.Request) *Token {
 func (t *Token) Require(w http.ResponseWriter, rule string) bool {
 	if t.err != nil {
 		util.LogError("authentication failed: " + extractErrorMessage(t.err))
-		http.Error(w, t.err.Error(), 401)
+		http.Error(w, "Unauthorized", 401)
 		return false
 	}
 
