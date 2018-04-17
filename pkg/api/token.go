@@ -24,7 +24,9 @@ import (
 	"net/http"
 
 	policy "github.com/databus23/goslo.policy"
+	"github.com/gophercloud/gophercloud"
 	"github.com/gorilla/mux"
+	"github.com/sapcc/limes/pkg/util"
 )
 
 //Token represents a user's token, as passed through the X-Auth-Token header of
@@ -67,6 +69,7 @@ func (p *v1Provider) CheckToken(r *http.Request) *Token {
 //is returned.
 func (t *Token) Require(w http.ResponseWriter, rule string) bool {
 	if t.err != nil {
+		util.LogError("authentication failed: " + extractErrorMessage(t.err))
 		http.Error(w, t.err.Error(), 401)
 		return false
 	}
@@ -81,4 +84,29 @@ func (t *Token) Require(w http.ResponseWriter, rule string) bool {
 //Check is like Require, but does not write error responses.
 func (t *Token) Check(rule string) bool {
 	return t.err == nil && t.enforcer.Enforce(rule, t.context)
+}
+
+func extractErrorMessage(err error) string {
+	switch e := err.(type) {
+	case gophercloud.ErrUnexpectedResponseCode:
+		return e.Error()
+	case gophercloud.ErrDefault401:
+		return e.ErrUnexpectedResponseCode.Error()
+	case gophercloud.ErrDefault403:
+		return e.ErrUnexpectedResponseCode.Error()
+	case gophercloud.ErrDefault404:
+		return e.ErrUnexpectedResponseCode.Error()
+	case gophercloud.ErrDefault405:
+		return e.ErrUnexpectedResponseCode.Error()
+	case gophercloud.ErrDefault408:
+		return e.ErrUnexpectedResponseCode.Error()
+	case gophercloud.ErrDefault429:
+		return e.ErrUnexpectedResponseCode.Error()
+	case gophercloud.ErrDefault500:
+		return e.ErrUnexpectedResponseCode.Error()
+	case gophercloud.ErrDefault503:
+		return e.ErrUnexpectedResponseCode.Error()
+	default:
+		return err.Error()
+	}
 }
