@@ -89,8 +89,8 @@ func (p *swiftPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID, do
 	}
 
 	headers, err := account.Headers()
-	if schwift.Is(err, http.StatusNotFound) {
-		//Swift account does not exist, but the keystone project
+	if schwift.Is(err, http.StatusNotFound) || schwift.Is(err, http.StatusGone) {
+		//Swift account does not exist or was deleted and not yet reaped, but the keystone project exist
 		return map[string]limes.ResourceData{
 			"capacity": {
 				Quota: 0,
