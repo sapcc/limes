@@ -105,8 +105,9 @@ type CapacitorConfiguration struct {
 	//name and put the config data in there (use a struct to be able to give
 	//config options meaningful names)
 	Nova struct {
-		VCPUOvercommitFactor *uint64           `yaml:"vcpu_overcommit"`
-		ExtraSpecs           map[string]string `yaml:"extra_specs"`
+		VCPUOvercommitFactor  *uint64           `yaml:"vcpu_overcommit"`
+		ExtraSpecs            map[string]string `yaml:"extra_specs"`
+		HypervisorTypePattern string            `yaml:"hypervisor_type_pattern"`
 	} `yaml:"nova"`
 	Prometheus struct {
 		APIURL  string                       `yaml:"api_url"`

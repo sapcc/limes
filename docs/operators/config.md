@@ -389,6 +389,7 @@ capacitors:
   - id: nova
     nova:
       vcpu_overcommit: 4
+      hypervisor_type_pattern: '^(?:VMware|QEMU)'
       extra_specs:
         first: 'foo'
         second: 'bar'
@@ -399,6 +400,10 @@ capacitors:
 | `compute/cores` | The sum of the reported CPUs for all hypervisors, optionally multiplied by the `nova.vcpu_overcommit` parameter. This option is provided because the hypervisor statistics reported by Nova do not take overcommit into account. |
 | `compute/instances` | Estimated as `10000 * count(availabilityZones)`, but never more than `sumLocalDisk / maxDisk`, where `sumLocalDisk` is the sum of the local disk size for all hypervisors, and `maxDisk` is the largest disk requirement of all flavors. |
 | `compute/ram` | The sum of the reported RAM for all hypervisors. |
+
+If the `nova.hypervisor_type_pattern` parameter is set, only those hypervisors are considered whose `hypervisor_type`
+matches this regex. Note that this is distinct from the `hypervisor_type_rules` used by the `compute` quota plugin, and
+uses the `hypervisor_type` reported by Nova instead.
 
 The `nova.extra_specs` parameter can be used to control how flavors are enumerated. Only those flavors will be
 considered which have all the extra specs noted in this map, with the same values as defined in the configuration file.

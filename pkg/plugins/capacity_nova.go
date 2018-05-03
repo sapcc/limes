@@ -20,7 +20,9 @@
 package plugins
 
 import (
+	"errors"
 	"math"
+	"regexp"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
@@ -52,6 +54,15 @@ func (p *capacityNovaPlugin) ID() string {
 
 //Scrape implements the limes.CapacityPlugin interface.
 func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID string) (map[string]map[string]uint64, error) {
+	var hypervisorTypeRx *regexp.Regexp
+	if p.cfg.Nova.HypervisorTypePattern != "" {
+		var err error
+		hypervisorTypeRx, err = regexp.Compile(p.cfg.Nova.HypervisorTypePattern)
+		if err != nil {
+			return nil, errors.New("invalid value for hypervisor_type: " + err.Error())
+		}
+	}
+
 	client, err := p.Client(provider)
 	if err != nil {
 		return nil, err
@@ -59,22 +70,41 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, cluste
 
 	var result gophercloud.Result
 
-	//Get absolute limits for a tenant
-	url := client.ServiceURL("os-hypervisors", "statistics")
+	//enumerate hypervisors
+	url := client.ServiceURL("os-hypervisors", "detail")
 	_, err = client.Get(url, &result.Body, nil)
 	if err != nil {
 		return nil, err
 	}
 	var hypervisorData struct {
-		HypervisorStatistics struct {
-			Vcpus    int `json:"vcpus"`
-			MemoryMb int `json:"memory_mb"`
-			LocalGb  int `json:"local_gb"`
-		} `json:"hypervisor_statistics"`
+		Hypervisors []struct {
+			Type     string `json:"hypervisor_type"`
+			Vcpus    uint64 `json:"vcpus"`
+			MemoryMb uint64 `json:"memory_mb"`
+			LocalGb  uint64 `json:"local_gb"`
+		} `json:"hypervisors"`
 	}
 	err = result.ExtractInto(&hypervisorData)
 	if err != nil {
 		return nil, err
+	}
+
+	//compute sum of cores and RAM for matching hypervisors
+	var (
+		totalVcpus    uint64
+		totalMemoryMb uint64
+		totalLocalGb  uint64
+	)
+	for _, hypervisor := range hypervisorData.Hypervisors {
+		if hypervisorTypeRx != nil {
+			if !hypervisorTypeRx.MatchString(hypervisor.Type) {
+				continue
+			}
+		}
+
+		totalVcpus += hypervisor.Vcpus
+		totalMemoryMb += hypervisor.MemoryMb
+		totalLocalGb += hypervisor.LocalGb
 	}
 
 	//Get availability zones
@@ -155,12 +185,13 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, cluste
 
 	capacity := map[string]map[string]uint64{
 		"compute": {
-			"cores": uint64(hypervisorData.HypervisorStatistics.Vcpus) * vcpuOvercommitFactor,
-			"ram":   uint64(hypervisorData.HypervisorStatistics.MemoryMb)},
+			"cores": totalVcpus * vcpuOvercommitFactor,
+			"ram":   totalMemoryMb,
+		},
 	}
 
 	if maxFlavorSize != 0 {
-		capacity["compute"]["instances"] = uint64(math.Min(float64(10000*azCount), float64(hypervisorData.HypervisorStatistics.LocalGb)/maxFlavorSize))
+		capacity["compute"]["instances"] = uint64(math.Min(float64(10000*azCount), float64(totalLocalGb)/maxFlavorSize))
 	} else {
 		util.LogError("Nova Capacity: Maximal flavor size is 0. Not reporting instances.")
 	}
