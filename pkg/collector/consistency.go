@@ -22,6 +22,7 @@ package collector
 import (
 	"time"
 
+	"github.com/sapcc/limes/pkg/datamodel"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/util"
 )
@@ -119,41 +120,26 @@ func (c *Collector) checkConsistencyCluster() {
 }
 
 func (c *Collector) checkConsistencyDomain(domain db.Domain) {
-	//check domain_services entries
-	seen := make(map[string]bool)
-	var services []db.DomainService
-	_, err := db.DB.Select(&services, `SELECT * FROM domain_services WHERE domain_id = $1`, domain.ID)
+	tx, err := db.DB.Begin()
 	if err != nil {
 		c.LogError(err.Error())
 		return
 	}
+	defer db.RollbackUnlessCommitted(tx)
 
-	//cleanup entries for services that have been disabled
-	for _, service := range services {
-		seen[service.Type] = true
-		if c.Cluster.HasService(service.Type) {
-			continue
-		}
-		util.LogInfo("cleaning up %s service entry for domain %s", service.Type, domain.Name)
-		_, err := db.DB.Delete(&service)
-		if err != nil {
-			c.LogError(err.Error())
-		}
+	//validate domain_services entries
+	scope := datamodel.Scope{
+		Cluster:             c.Cluster,
+		Tx:                  tx,
+		LogAutomaticActions: util.LogInfo,
 	}
-
-	//create missing service entries
-	for _, serviceType := range c.Cluster.ServiceTypes {
-		if seen[serviceType] {
-			continue
-		}
-		util.LogInfo("creating missing %s service entry for domain %s", serviceType, domain.Name)
-		err := db.DB.Insert(&db.DomainService{
-			DomainID: domain.ID,
-			Type:     serviceType,
-		})
-		if err != nil {
-			c.LogError(err.Error())
-		}
+	err = scope.CreateAndValidateDomainServices(domain)
+	if err == nil {
+		err = tx.Commit()
+	}
+	if err != nil {
+		c.LogError(err.Error())
+		return
 	}
 
 	//recurse into projects

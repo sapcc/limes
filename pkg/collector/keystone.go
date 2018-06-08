@@ -23,6 +23,7 @@ import (
 	"sort"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sapcc/limes/pkg/datamodel"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/util"
@@ -179,44 +180,13 @@ func initDomain(cluster *limes.Cluster, domain limes.KeystoneDomain) (*db.Domain
 		return nil, err
 	}
 
-	var constraints limes.QuotaConstraints
-	if cluster.QuotaConstraints != nil {
-		constraints = cluster.QuotaConstraints.Domains[domain.Name]
-	}
-
-	//add records for all cluster services to the `project_services` table
-	for _, serviceType := range cluster.ServiceTypes {
-		srv := &db.DomainService{
-			DomainID: dbDomain.ID,
-			Type:     serviceType,
-		}
-		err := tx.Insert(srv)
-		if err != nil {
-			return nil, err
-		}
-
-		//initialize domain quotas from constraints, if there is one
-		if serviceConstraints, exists := constraints[serviceType]; exists {
-			//ensure deterministic ordering of resources (useful for tests)
-			resourceNames := make([]string, 0, len(serviceConstraints))
-			for resourceName, constraint := range serviceConstraints {
-				if constraint.InitialQuotaValue() != 0 {
-					resourceNames = append(resourceNames, resourceName)
-				}
-			}
-			sort.Strings(resourceNames)
-
-			for _, resourceName := range resourceNames {
-				err := tx.Insert(&db.DomainResource{
-					ServiceID: srv.ID,
-					Name:      resourceName,
-					Quota:     serviceConstraints[resourceName].InitialQuotaValue(),
-				})
-				if err != nil {
-					return nil, err
-				}
-			}
-		}
+	err = datamodel.Scope{
+		Cluster:             cluster,
+		Tx:                  tx,
+		LogAutomaticActions: util.LogInfo,
+	}.CreateAndValidateDomainServices(*dbDomain)
+	if err != nil {
+		return nil, err
 	}
 
 	return dbDomain, tx.Commit()

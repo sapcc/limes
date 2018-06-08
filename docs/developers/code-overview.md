@@ -14,6 +14,7 @@ from the bottom up)
 | `pkg/limes` | yes | core interfaces (Driver, QuotaPlugin, CapacityPlugin) and data structures, config parsing and validation |
 | `pkg/test` | no | testing helpers: mock implementations of core interfaces, test runners, etc. |
 | `pkg/plugins` | no | implementations of QuotaPlugin and CapacityPlugin |
+| `pkg/datamodel` | no | higher-level functions that operate on the ORM model classes (not in `pkg/db` because of dependency on stuff from `pkg/limes` |
 | `pkg/collector` | yes | functionality of `limes collect` |
 | `pkg/reports` | no | helper for `pkg/api`: rendering of reports for GET requests |
 | `pkg/api` | yes | functionality of `limes api` |
