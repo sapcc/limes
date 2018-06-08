@@ -179,9 +179,9 @@ func initDomain(cluster *limes.Cluster, domain limes.KeystoneDomain) (*db.Domain
 		return nil, err
 	}
 
-	var seed limes.QuotaSeedValues
-	if cluster.QuotaSeeds != nil {
-		seed = cluster.QuotaSeeds.Domains[domain.Name]
+	var constraints limes.QuotaConstraints
+	if cluster.QuotaConstraints != nil {
+		constraints = cluster.QuotaConstraints.Domains[domain.Name]
 	}
 
 	//add records for all cluster services to the `project_services` table
@@ -195,12 +195,14 @@ func initDomain(cluster *limes.Cluster, domain limes.KeystoneDomain) (*db.Domain
 			return nil, err
 		}
 
-		//initialize domain quotas from seed, if there is one
-		if serviceSeed, exists := seed[serviceType]; exists {
+		//initialize domain quotas from constraints, if there is one
+		if serviceConstraints, exists := constraints[serviceType]; exists {
 			//ensure deterministic ordering of resources (useful for tests)
-			resourceNames := make([]string, 0, len(serviceSeed))
-			for resourceName := range serviceSeed {
-				resourceNames = append(resourceNames, resourceName)
+			resourceNames := make([]string, 0, len(serviceConstraints))
+			for resourceName, constraint := range serviceConstraints {
+				if constraint.InitialQuotaValue() != 0 {
+					resourceNames = append(resourceNames, resourceName)
+				}
 			}
 			sort.Strings(resourceNames)
 
@@ -208,7 +210,7 @@ func initDomain(cluster *limes.Cluster, domain limes.KeystoneDomain) (*db.Domain
 				err := tx.Insert(&db.DomainResource{
 					ServiceID: srv.ID,
 					Name:      resourceName,
-					Quota:     serviceSeed[resourceName],
+					Quota:     serviceConstraints[resourceName].InitialQuotaValue(),
 				})
 				if err != nil {
 					return nil, err
@@ -331,9 +333,9 @@ func initProject(cluster *limes.Cluster, domain *db.Domain, project limes.Keysto
 		return err
 	}
 
-	var seed limes.QuotaSeedValues
-	if cluster.QuotaSeeds != nil {
-		seed = cluster.QuotaSeeds.Projects[domain.Name][project.Name]
+	var constraints limes.QuotaConstraints
+	if cluster.QuotaConstraints != nil {
+		constraints = cluster.QuotaConstraints.Projects[domain.Name][project.Name]
 	}
 
 	//add records for all cluster services to the `project_services` table, with
@@ -349,12 +351,14 @@ func initProject(cluster *limes.Cluster, domain *db.Domain, project limes.Keysto
 			return err
 		}
 
-		//initialize project quotas from seed, if there is one
-		if serviceSeed, exists := seed[serviceType]; exists {
+		//initialize project quotas from constraints, if there is one
+		if serviceConstraints, exists := constraints[serviceType]; exists {
 			//ensure deterministic ordering of resources (useful for tests)
-			resourceNames := make([]string, 0, len(serviceSeed))
-			for resourceName := range serviceSeed {
-				resourceNames = append(resourceNames, resourceName)
+			resourceNames := make([]string, 0, len(serviceConstraints))
+			for resourceName, constraint := range serviceConstraints {
+				if constraint.InitialQuotaValue() != 0 {
+					resourceNames = append(resourceNames, resourceName)
+				}
 			}
 			sort.Strings(resourceNames)
 
@@ -362,7 +366,7 @@ func initProject(cluster *limes.Cluster, domain *db.Domain, project limes.Keysto
 				err := tx.Insert(&db.ProjectResource{
 					ServiceID: srv.ID,
 					Name:      resourceName,
-					Quota:     serviceSeed[resourceName],
+					Quota:     serviceConstraints[resourceName].InitialQuotaValue(),
 					//Scrape() will fill in the remaining backend attributes, and it will
 					//also write the quotas into the backend.
 				})

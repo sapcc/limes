@@ -20,34 +20,54 @@
 package limes
 
 import (
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"regexp"
-	"strconv"
 	"strings"
 
 	yaml "gopkg.in/yaml.v2"
 )
 
-//QuotaSeeds contains the contents of the seed configuration file for a limes.Cluster.
-type QuotaSeeds struct {
+//QuotaConstraintSet contains the contents of the constraint configuration file
+//for a limes.Cluster.
+type QuotaConstraintSet struct {
 	//Indexed by domain name.
-	Domains map[string]QuotaSeedValues
+	Domains map[string]QuotaConstraints
 	//Indexed by domain name, then by project name.
-	Projects map[string]map[string]QuotaSeedValues
+	Projects map[string]map[string]QuotaConstraints
 }
 
-//QuotaSeedValues contains the quota seed for a single domain or project. The
-//outer key is the service type, the inner key is the resource name.
-type QuotaSeedValues map[string]map[string]uint64
+//QuotaConstraints contains the quota constraints for a single domain or project.
+//The outer key is the service type, the inner key is the resource name.
+type QuotaConstraints map[string]map[string]QuotaConstraint
 
-//NewQuotaSeeds parses the quota seed at `seedConfigPath`. The `cluster`
-//argument is required because quota values need to be converted into the base
-//unit of their resource, for which we need to access the
+//QuotaConstraint contains the quota constraints for a single resource within a
+//single domain or project.
+type QuotaConstraint struct {
+	Minimum  *uint64
+	Maximum  *uint64
+	Expected *uint64 //TODO: remove (undocumented and used only during transition from quota seeds to quota constraints)
+}
+
+//InitialQuotaValue shall be replaced by direct access to Minimum when Expected is removed. (TODO)
+func (c QuotaConstraint) InitialQuotaValue() uint64 {
+	if c.Minimum != nil {
+		return *c.Minimum
+	}
+	if c.Expected != nil {
+		return *c.Expected
+	}
+	return 0
+}
+
+//NewQuotaConstraints parses the quota constraints at `constraintConfigPath`.
+//The `cluster` argument is required because quota values need to be converted
+//into the base unit of their resource, for which we need to access the
 //QuotaPlugin.Resources(). Hence, `cluster.Init()` needs to have been called
 //before this function is called.
-func NewQuotaSeeds(cluster *Cluster, seedConfigPath string) (*QuotaSeeds, []error) {
-	buf, err := ioutil.ReadFile(seedConfigPath)
+func NewQuotaConstraints(cluster *Cluster, constraintConfigPath string) (*QuotaConstraintSet, []error) {
+	buf, err := ioutil.ReadFile(constraintConfigPath)
 	if err != nil {
 		return nil, []error{err}
 	}
@@ -62,24 +82,24 @@ func NewQuotaSeeds(cluster *Cluster, seedConfigPath string) (*QuotaSeeds, []erro
 		return nil, []error{err}
 	}
 
-	result := &QuotaSeeds{
-		Domains:  make(map[string]QuotaSeedValues),
-		Projects: make(map[string]map[string]QuotaSeedValues),
+	result := &QuotaConstraintSet{
+		Domains:  make(map[string]QuotaConstraints),
+		Projects: make(map[string]map[string]QuotaConstraints),
 	}
 	var errors []error
 
-	//parse quota seed values for domains
+	//parse quota constraints for domains
 	for domainName, domainData := range data.Domains {
-		values, errs := compileQuotaSeedValues(cluster, domainData)
+		values, errs := compileQuotaConstraints(cluster, domainData)
 		for _, err := range errs {
 			errors = append(errors,
-				fmt.Errorf("invalid seed values for domain %s: %s", domainName, err.Error()),
+				fmt.Errorf("invalid constraints for domain %s: %s", domainName, err.Error()),
 			)
 		}
 		result.Domains[domainName] = values
 	}
 
-	//parse quota seed values for projects
+	//parse quota constraints for projects
 	for projectAndDomainName, projectData := range data.Projects {
 		fields := strings.SplitN(projectAndDomainName, "/", 2)
 		if len(fields) < 2 {
@@ -91,22 +111,22 @@ func NewQuotaSeeds(cluster *Cluster, seedConfigPath string) (*QuotaSeeds, []erro
 		domainName := fields[0]
 		projectName := fields[1]
 
-		values, errs := compileQuotaSeedValues(cluster, projectData)
+		values, errs := compileQuotaConstraints(cluster, projectData)
 		for _, err := range errs {
 			errors = append(errors,
-				fmt.Errorf("invalid seed values for project %s: %s", projectAndDomainName, err.Error()),
+				fmt.Errorf("invalid constraints for project %s: %s", projectAndDomainName, err.Error()),
 			)
 		}
 
 		if _, exists := result.Projects[domainName]; !exists {
-			result.Projects[domainName] = make(map[string]QuotaSeedValues)
+			result.Projects[domainName] = make(map[string]QuotaConstraints)
 		}
 		result.Projects[domainName][projectName] = values
 	}
 
 	//do not attempt to validate if the parsing already caused errors (a
-	//consistent, but invalid quota seed might look inconsistent because values
-	//that don't parse were not initialized in `result`)
+	//consistent, but invalid constraint set might look inconsistent because
+	//values that don't parse were not initialized in `result`)
 	if len(errors) > 0 {
 		return result, errors
 	}
@@ -120,10 +140,10 @@ func NewQuotaSeeds(cluster *Cluster, seedConfigPath string) (*QuotaSeeds, []erro
 		allDomainNames[domainName] = true
 	}
 	for domainName := range allDomainNames {
-		errs := validateQuotaSeedValues(cluster, result.Domains[domainName], result.Projects[domainName])
+		errs := validateQuotaConstraints(cluster, result.Domains[domainName], result.Projects[domainName])
 		for _, err := range errs {
 			errors = append(errors,
-				fmt.Errorf("inconsistent seed values for domain %s: %s", domainName, err.Error()),
+				fmt.Errorf("inconsistent constraints for domain %s: %s", domainName, err.Error()),
 			)
 		}
 	}
@@ -131,90 +151,155 @@ func NewQuotaSeeds(cluster *Cluster, seedConfigPath string) (*QuotaSeeds, []erro
 	return result, errors
 }
 
-func compileQuotaSeedValues(cluster *Cluster, data map[string]map[string]string) (values QuotaSeedValues, errors []error) {
-	values = make(QuotaSeedValues)
+func compileQuotaConstraints(cluster *Cluster, data map[string]map[string]string) (values QuotaConstraints, errors []error) {
+	values = make(QuotaConstraints)
 
 	for serviceType, serviceData := range data {
 		if !cluster.HasService(serviceType) {
 			errors = append(errors, fmt.Errorf("no such service: %s", serviceType))
 			continue
 		}
-		values[serviceType] = make(map[string]uint64)
+		values[serviceType] = make(map[string]QuotaConstraint)
 
-		for resourceName, quotaValueStr := range serviceData {
-			quotaValue, err := parseQuotaValue(
-				serviceType,
-				cluster.InfoForResource(serviceType, resourceName),
-				quotaValueStr,
-			)
+		for resourceName, constraintStr := range serviceData {
+			resource := cluster.InfoForResource(serviceType, resourceName)
+			constraint, err := parseQuotaConstraint(resource, constraintStr)
 			if err != nil {
-				errors = append(errors, err)
+				errors = append(errors, fmt.Errorf("invalid constraint %q for %s/%s: %s", constraintStr, serviceType, resourceName, err.Error()))
 				continue
 			}
-			values[serviceType][resourceName] = quotaValue
+			values[serviceType][resourceName] = *constraint
 		}
 	}
 
 	return values, errors
 }
 
-var measuredQuotaValueRx = regexp.MustCompile(`^\s*([0-9]+)\s*([A-Za-z]+)$`)
+var atLeastRx = regexp.MustCompile(`^at\s+least\s+(.+)$`)
+var atMostRx = regexp.MustCompile(`^at\s+most\s+(.+)$`)
+var exactlyRx = regexp.MustCompile(`^exactly\s+(.+)$`)
+var shouldBeRx = regexp.MustCompile(`^should\s+be\s+(.+)$`)
 
-func parseQuotaValue(serviceType string, resource ResourceInfo, str string) (uint64, error) {
-	//for countable resources, expect a number only
-	if resource.Unit == UnitNone {
-		value, err := strconv.ParseUint(strings.TrimSpace(str), 10, 64)
-		if err != nil {
-			err = fmt.Errorf("invalid value %q for %s/%s: %s",
-				str, serviceType, resource.Name, err.Error())
+func parseQuotaConstraint(resource ResourceInfo, str string) (*QuotaConstraint, error) {
+	var lowerBounds []uint64
+	var upperBounds []uint64
+	var expected []uint64
+
+	for _, part := range strings.Split(str, ",") {
+		part = strings.TrimSpace(part)
+		if match := atLeastRx.FindStringSubmatch(part); match != nil {
+			value, err := resource.Unit.Parse(match[1])
+			if err != nil {
+				return nil, err
+			}
+			lowerBounds = append(lowerBounds, value)
+		} else if match := atMostRx.FindStringSubmatch(part); match != nil {
+			value, err := resource.Unit.Parse(match[1])
+			if err != nil {
+				return nil, err
+			}
+			upperBounds = append(upperBounds, value)
+		} else if match := exactlyRx.FindStringSubmatch(part); match != nil {
+			value, err := resource.Unit.Parse(match[1])
+			if err != nil {
+				return nil, err
+			}
+			lowerBounds = append(lowerBounds, value)
+			upperBounds = append(upperBounds, value)
+		} else if match := shouldBeRx.FindStringSubmatch(part); match != nil {
+			value, err := resource.Unit.Parse(match[1])
+			if err != nil {
+				return nil, err
+			}
+			expected = append(expected, value)
+		} else {
+			return nil, fmt.Errorf(`clause %q should start with "at least", "at most" or "exactly"`, part)
 		}
-		return value, err
 	}
 
-	//for measured resources, expect a number plus unit
-	fields := strings.Fields(str)
-	if len(fields) != 2 {
-		return 0, fmt.Errorf("value %q for %s/%s does not match expected format \"<number> <unit>\"",
-			str, serviceType, resource.Name)
+	var result QuotaConstraint
+	pointerTo := func(x uint64) *uint64 { return &x }
+
+	for _, val := range lowerBounds {
+		if result.Minimum == nil {
+			result.Minimum = pointerTo(val)
+		} else if *result.Minimum < val {
+			*result.Minimum = val
+		}
 	}
 
-	number, err := strconv.ParseUint(fields[0], 10, 64)
-	if err != nil {
-		return 0, fmt.Errorf("invalid value %q for %s/%s: %s",
-			str, serviceType, resource.Name, err.Error())
+	for _, val := range upperBounds {
+		if result.Maximum == nil {
+			result.Maximum = pointerTo(val)
+		} else if *result.Maximum > val {
+			*result.Maximum = val
+		}
 	}
-	value := ValueWithUnit{
-		Value: number,
-		//no need to validate unit string here; that will happen implicitly during .ConvertTo()
-		Unit: Unit(fields[1]),
+
+	if result.Minimum != nil && result.Maximum != nil && *result.Maximum < *result.Minimum {
+		return nil, errors.New("constraint clauses cannot simultaneously be satisfied")
 	}
-	converted, err := value.ConvertTo(resource.Unit)
-	return converted.Value, err
+
+	switch len(expected) {
+	case 0:
+		result.Expected = nil
+	case 1:
+		result.Expected = pointerTo(expected[0])
+	default:
+		return nil, errors.New(`cannot have multiple "should be" clauses in one constraint`)
+	}
+
+	return &result, nil
 }
 
-func validateQuotaSeedValues(cluster *Cluster, domainQuotas QuotaSeedValues, projectQuotas map[string]QuotaSeedValues) (errors []error) {
-	projectQuotaSums := make(QuotaSeedValues)
-	for _, projectValues := range projectQuotas {
-		for serviceType, serviceValues := range projectValues {
-			if _, exists := projectQuotaSums[serviceType]; !exists {
-				projectQuotaSums[serviceType] = make(map[string]uint64)
+func validateQuotaConstraints(cluster *Cluster, domainConstraints QuotaConstraints, projectsConstraints map[string]QuotaConstraints) (errors []error) {
+	//sum up the constraints of all projects into total min/max quotas
+	sumConstraints := make(QuotaConstraints)
+	for _, projectConstraints := range projectsConstraints {
+		for serviceType, serviceConstraints := range projectConstraints {
+			if _, exists := sumConstraints[serviceType]; !exists {
+				sumConstraints[serviceType] = make(map[string]QuotaConstraint)
 			}
-			for resourceName, quota := range serviceValues {
-				projectQuotaSums[serviceType][resourceName] += quota
+			for resourceName, constraint := range serviceConstraints {
+				sumConstraint := sumConstraints[serviceType][resourceName]
+
+				if constraint.Minimum != nil {
+					if sumConstraint.Minimum == nil {
+						val := *constraint.Minimum
+						sumConstraint.Minimum = &val
+					} else {
+						*sumConstraint.Minimum += *constraint.Minimum
+					}
+				}
+				//NOTE: We're not interested in the Maximum constraints, see below in
+				//the checking phase.
+
+				sumConstraints[serviceType][resourceName] = sumConstraint
 			}
 		}
 	}
 
-	for serviceType, serviceSums := range projectQuotaSums {
-		for resourceName, projectQuotaSum := range serviceSums {
-			domainQuota := domainQuotas[serviceType][resourceName]
-			if projectQuotaSum > domainQuota {
+	//check that sumConstraints fits within the domain constraints
+	for serviceType, serviceSums := range sumConstraints {
+		for resourceName, sumConstraint := range serviceSums {
+			domainConstraint := domainConstraints[serviceType][resourceName]
+
+			minProjectQuota := uint64(0)
+			if sumConstraint.Minimum != nil {
+				minProjectQuota = *sumConstraint.Minimum
+			}
+			minDomainQuota := uint64(0)
+			if domainConstraint.Minimum != nil {
+				minDomainQuota = *domainConstraint.Minimum
+			}
+
+			if minProjectQuota > minDomainQuota {
 				unit := cluster.InfoForResource(serviceType, resourceName).Unit
 				errors = append(errors, fmt.Errorf(
-					"sum of project quotas (%s) for %s/%s exceeds domain quota (%s)",
-					ValueWithUnit{projectQuotaSum, unit},
+					`sum of "at least/exactly" project quotas (%s) for %s/%s exceeds "at least/exactly" domain quota (%s)`,
+					ValueWithUnit{minProjectQuota, unit},
 					serviceType, resourceName,
-					ValueWithUnit{domainQuota, unit},
+					ValueWithUnit{minDomainQuota, unit},
 				))
 			}
 		}

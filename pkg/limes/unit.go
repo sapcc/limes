@@ -21,7 +21,9 @@ package limes
 
 import (
 	"fmt"
+	"regexp"
 	"strconv"
+	"strings"
 )
 
 //Unit enumerates allowed values for the unit a resource's quota/usage is
@@ -83,6 +85,45 @@ func (u Unit) Format(value uint64) string {
 		return str
 	}
 	return str + " " + string(u)
+}
+
+var measuredQuotaValueRx = regexp.MustCompile(`^\s*([0-9]+)\s*([A-Za-z]+)$`)
+
+//Parse parses the string representation of a value with this unit (or any unit
+//that can be converted to it).
+//
+//	UnitMebibytes.Parse("10 MiB") -> 10
+//	UnitMebibytes.Parse("10 GiB") -> 10240
+//	UnitMebibytes.Parse("10 KiB") -> returns FractionalValueError
+//	UnitMebibytes.Parse("10")     -> returns syntax error (missing unit)
+//	UnitNone.Parse("42")          -> 42
+//	UnitNone.Parse("42 MiB")      -> returns syntax error (unexpected unit)
+//
+func (u Unit) Parse(str string) (uint64, error) {
+	//for countable resources, expect a number only
+	if u == UnitNone {
+		return strconv.ParseUint(strings.TrimSpace(str), 10, 64)
+	}
+
+	//for measured resources, expect a number plus unit
+	fields := strings.Fields(str)
+	if len(fields) != 2 {
+		return 0, fmt.Errorf("value %q does not match expected format \"<number> <unit>\"",
+			str)
+	}
+
+	number, err := strconv.ParseUint(fields[0], 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid value %q: %s",
+			str, err.Error())
+	}
+	value := ValueWithUnit{
+		Value: number,
+		//no need to validate unit string here; that will happen implicitly during .ConvertTo()
+		Unit: Unit(fields[1]),
+	}
+	converted, err := value.ConvertTo(u)
+	return converted.Value, err
 }
 
 //ValueWithUnit is used to represent values with units in subresources.

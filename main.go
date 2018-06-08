@@ -185,10 +185,10 @@ func taskCollect(config limes.Configuration, cluster *limes.Cluster, args []stri
 		printUsageAndExit()
 	}
 
-	//load seed configuration
-	if cluster.Config.SeedConfigPath != "" {
+	//load constraint set
+	if cluster.Config.ConstraintConfigPath != "" {
 		var errs []error
-		cluster.QuotaSeeds, errs = limes.NewQuotaSeeds(cluster, cluster.Config.SeedConfigPath)
+		cluster.QuotaConstraints, errs = limes.NewQuotaConstraints(cluster, cluster.Config.ConstraintConfigPath)
 		if len(errs) > 0 {
 			for _, err := range errs {
 				util.LogError(err.Error())

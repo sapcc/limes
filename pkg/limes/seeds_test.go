@@ -26,8 +26,8 @@ import (
 	"github.com/gophercloud/gophercloud"
 )
 
-func TestQuotaSeedParsingSuccess(t *testing.T) {
-	seeds, errs := NewQuotaSeeds(clusterForQuotaSeedTest(), "fixtures/quota-seed-valid.yaml")
+func TestQuotaConstraintParsingSuccess(t *testing.T) {
+	constraints, errs := NewQuotaConstraints(clusterForQuotaConstraintTest(), "fixtures/quota-constraint-valid.yaml")
 
 	if len(errs) > 0 {
 		t.Errorf("expected no parsing errors, got %d errors:\n", len(errs))
@@ -36,82 +36,88 @@ func TestQuotaSeedParsingSuccess(t *testing.T) {
 		}
 	}
 
-	expected := QuotaSeeds{
-		Domains: map[string]QuotaSeedValues{
+	pointerTo := func(x uint64) *uint64 { return &x }
+
+	expected := QuotaConstraintSet{
+		Domains: map[string]QuotaConstraints{
 			"germany": {
 				"service-one": {
-					"things":       20,
-					"capacity_MiB": 10240,
+					"things":       {Minimum: pointerTo(20), Maximum: pointerTo(30)},
+					"capacity_MiB": {Minimum: pointerTo(10240)},
 				},
 				"service-two": {
-					"capacity_MiB": 1,
+					"capacity_MiB": {Minimum: pointerTo(1)},
 				},
 			},
 			"poland": {
 				"service-two": {
-					"things": 5,
+					"things": {Minimum: pointerTo(5)},
 				},
 			},
 		},
-		Projects: map[string]map[string]QuotaSeedValues{
+		Projects: map[string]map[string]QuotaConstraints{
 			"germany": {
 				"berlin": {
 					"service-one": {
-						"things":       10,
-						"capacity_MiB": 5120,
+						"things":       {Minimum: pointerTo(10)},
+						"capacity_MiB": {Minimum: pointerTo(5120), Maximum: pointerTo(6144)},
 					},
 				},
 				"dresden": {
 					"service-one": {
-						"things": 5,
+						"things": {Minimum: pointerTo(5), Maximum: pointerTo(5)},
 					},
 					"service-two": {
-						"capacity_MiB": 1,
+						"capacity_MiB": {Minimum: pointerTo(1), Maximum: pointerTo(1)},
 					},
 				},
 			},
 			"poland": {
 				"warsaw": {
 					"service-two": {
-						"things": 5,
+						"things": {Expected: pointerTo(5), Maximum: pointerTo(10)},
 					},
 				},
 			},
 		},
 	}
-	if !reflect.DeepEqual(seeds, &expected) {
-		t.Errorf("actual = %#v\n", seeds)
+	if !reflect.DeepEqual(constraints, &expected) {
+		t.Errorf("actual = %#v\n", constraints)
 		t.Errorf("expected = %#v\n", expected)
 	}
 }
 
-func clusterForQuotaSeedTest() *Cluster {
+func clusterForQuotaConstraintTest() *Cluster {
 	return &Cluster{
 		QuotaPlugins: map[string]QuotaPlugin{
-			"service-one": quotaSeedTestPlugin{"service-one"},
-			"service-two": quotaSeedTestPlugin{"service-two"},
+			"service-one": quotaConstraintTestPlugin{"service-one"},
+			"service-two": quotaConstraintTestPlugin{"service-two"},
 		},
 	}
 }
 
-func TestQuotaSeedParsingFailure(t *testing.T) {
-	expectQuotaSeedInvalid(t, "fixtures/quota-seed-invalid.yaml",
-		"missing domain name for project atlantis",
-		`invalid seed values for domain germany: value "10 GiB or something" for service-one/capacity_MiB does not match expected format "<number> <unit>"`,
-		"invalid seed values for domain germany: cannot convert value from ounce to MiB because units are incompatible",
-		"invalid seed values for project germany/berlin: no such service: unknown",
-		`invalid seed values for project germany/dresden: invalid value "NaN" for service-one/things: strconv.ParseUint: parsing "NaN": invalid syntax`,
+func TestQuotaConstraintParsingFailure(t *testing.T) {
+	expectQuotaConstraintInvalid(t, "fixtures/quota-constraint-invalid.yaml",
+		//ordered by appearance in fixture file
+		`invalid constraints for domain germany: invalid constraint "not more than 20" for service-one/things: clause "not more than 20" should start with "at least", "at most" or "exactly"`,
+		`invalid constraints for domain germany: invalid constraint "at least 10 GiB or something" for service-one/capacity_MiB: value "10 GiB or something" does not match expected format "<number> <unit>"`,
+		`invalid constraints for domain germany: invalid constraint "at most 1 ounce" for service-two/capacity_MiB: cannot convert value from ounce to MiB because units are incompatible`,
+		`missing domain name for project atlantis`,
+		`invalid constraints for project germany/berlin: no such service: unknown`,
+		`invalid constraints for project germany/dresden: invalid constraint "at least NaN" for service-one/things: strconv.ParseUint: parsing "NaN": invalid syntax`,
+		`invalid constraints for project germany/dresden: invalid constraint "at least 4, at most 2" for service-two/things: constraint clauses cannot simultaneously be satisfied`,
+		`invalid constraints for project poland/warsaw: invalid constraint "should be 4 MiB, should be 5 MiB" for service-two/capacity_MiB: cannot have multiple "should be" clauses in one constraint`,
 	)
 
-	expectQuotaSeedInvalid(t, "fixtures/quota-seed-inconsistent.yaml",
-		`inconsistent seed values for domain germany: sum of project quotas (20480 MiB) for service-one/capacity_MiB exceeds domain quota (10240 MiB)`,
-		`inconsistent seed values for domain poland: sum of project quotas (5) for service-two/things exceeds domain quota (0)`,
+	expectQuotaConstraintInvalid(t, "fixtures/quota-constraint-inconsistent.yaml",
+		`inconsistent constraints for domain germany: sum of "at least/exactly" project quotas (20480 MiB) for service-one/capacity_MiB exceeds "at least/exactly" domain quota (10240 MiB)`,
+		`inconsistent constraints for domain poland: sum of "at least/exactly" project quotas (5) for service-two/things exceeds "at least/exactly" domain quota (0)`,
 	)
 }
 
-func expectQuotaSeedInvalid(t *testing.T, path string, expectedErrors ...string) {
+func expectQuotaConstraintInvalid(t *testing.T, path string, expectedErrors ...string) {
 	t.Helper()
-	_, errs := NewQuotaSeeds(clusterForQuotaSeedTest(), path)
+	_, errs := NewQuotaConstraints(clusterForQuotaConstraintTest(), path)
 
 	expectedErrs := make(map[string]bool)
 	for _, err := range expectedErrors {
@@ -131,24 +137,24 @@ func expectQuotaSeedInvalid(t *testing.T, path string, expectedErrors ...string)
 	}
 }
 
-type quotaSeedTestPlugin struct {
+type quotaConstraintTestPlugin struct {
 	ServiceType string
 }
 
-func (p quotaSeedTestPlugin) Init(client *gophercloud.ProviderClient) error {
+func (p quotaConstraintTestPlugin) Init(client *gophercloud.ProviderClient) error {
 	return nil
 }
-func (p quotaSeedTestPlugin) ServiceInfo() ServiceInfo {
+func (p quotaConstraintTestPlugin) ServiceInfo() ServiceInfo {
 	return ServiceInfo{Type: p.ServiceType}
 }
-func (p quotaSeedTestPlugin) Scrape(client *gophercloud.ProviderClient, clusterID, domainUUID, projectUUID string) (map[string]ResourceData, error) {
+func (p quotaConstraintTestPlugin) Scrape(client *gophercloud.ProviderClient, clusterID, domainUUID, projectUUID string) (map[string]ResourceData, error) {
 	return nil, nil
 }
-func (p quotaSeedTestPlugin) SetQuota(client *gophercloud.ProviderClient, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
+func (p quotaConstraintTestPlugin) SetQuota(client *gophercloud.ProviderClient, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
 	return nil
 }
 
-func (p quotaSeedTestPlugin) Resources() []ResourceInfo {
+func (p quotaConstraintTestPlugin) Resources() []ResourceInfo {
 	return []ResourceInfo{
 		{Name: "things", Unit: UnitNone},
 		{Name: "capacity_MiB", Unit: UnitMebibytes},

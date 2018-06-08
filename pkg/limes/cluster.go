@@ -31,15 +31,15 @@ import (
 //cluster. It is passed around a lot in Limes code, mostly for the cluster ID,
 //the list of enabled services, and access to the quota and capacity plugins.
 type Cluster struct {
-	ID              string
-	Config          *ClusterConfiguration
-	ServiceTypes    []string
-	IsServiceShared map[string]bool
-	DiscoveryPlugin DiscoveryPlugin
-	QuotaPlugins    map[string]QuotaPlugin
-	CapacityPlugins map[string]CapacityPlugin
-	Authoritative   bool
-	QuotaSeeds      *QuotaSeeds
+	ID               string
+	Config           *ClusterConfiguration
+	ServiceTypes     []string
+	IsServiceShared  map[string]bool
+	DiscoveryPlugin  DiscoveryPlugin
+	QuotaPlugins     map[string]QuotaPlugin
+	CapacityPlugins  map[string]CapacityPlugin
+	Authoritative    bool
+	QuotaConstraints *QuotaConstraintSet
 }
 
 //NewCluster creates a new Cluster instance with the given ID and

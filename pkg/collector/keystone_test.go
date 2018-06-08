@@ -58,18 +58,26 @@ func Test_ScanDomains(t *testing.T) {
 		expectedNewDomains = append(expectedNewDomains, domain.UUID)
 	}
 
-	//add a quota seed; we're going to test if it's applied correctly
-	cluster.QuotaSeeds = &limes.QuotaSeeds{
-		Domains: map[string]limes.QuotaSeedValues{
+	//add a quota constraint set; we're going to test if it's applied correctly
+	pointerTo := func(x uint64) *uint64 { return &x }
+	cluster.QuotaConstraints = &limes.QuotaConstraintSet{
+		Domains: map[string]limes.QuotaConstraints{
 			"germany": {
-				"unshared": {"things": 10, "capacity": 20},
+				"unshared": {
+					"things":   {Minimum: pointerTo(10)},
+					"capacity": {Minimum: pointerTo(20)},
+				},
 			},
 		},
-		Projects: map[string]map[string]limes.QuotaSeedValues{
+		Projects: map[string]map[string]limes.QuotaConstraints{
 			"germany": {
 				"berlin": {
-					"unshared": {"things": 5},
-					"shared":   {"capacity": 10},
+					"unshared": {
+						"things": {Minimum: pointerTo(5)},
+					},
+					"shared": {
+						"capacity": {Minimum: pointerTo(10)},
+					},
 				},
 			},
 		},

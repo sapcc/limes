@@ -59,7 +59,7 @@ If you're using Kubernetes, you can use our team's [Helm chart for Limes][chart]
 
 3. Write a configuration file for Limes, by following the [configuration guide](./config.md).
 
-4. Configure [quota seeds](./seeding.md) if desired.
+4. Configure [quota constraints](./constraints.md) if desired.
 
 5. Prepare the database schema for Limes by running `limes migrate /path/to/config.yaml`.
 
