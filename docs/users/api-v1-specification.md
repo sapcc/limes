@@ -241,9 +241,6 @@ shows the sum of all project quotas as seen by the backing service. If any of th
 In contrast to project data, `scraped_at` is replaced by `min_scraped_at` and `max_scraped_at`, which aggregate over the
 `scraped_at` timestamps of all project data for that service and domain.
 
-**TODO:** Open question: Instead of aggregating backend quotas, maybe just include
-a `warnings` field that counts projects with `quota != backend_quota`?
-
 ## GET /v1/clusters
 ## GET /v1/clusters/:cluster\_id
 ## GET /v1/clusters/current
@@ -342,6 +339,81 @@ domains in this cluster. For resources belonging to a shared service, the report
 all domains in all clusters (and will thus be the same for every cluster listed), unless the query parameter `local` is
 given. Shared services are indicated by the `shared` key on the service level (which defaults to `false` if not
 specified).
+
+## GET /v1/inconsistencies
+
+Requires a cloud-admin token. Detects inconsistent quota setups for domains and projects in this cluster. The following
+situations are considered:
+
+1. `domain_quota_overcommitted` &ndash; The total quota of some resource across all projects in some domain exceeds the
+   quota of that resource for the domain. (In other words, the domain has distributed more quota to its projects than it
+   has been given.) This may happen when new projects are created and their quota is initialized because of constraints
+   configured by a cloud administrator.
+2. `project_quota_overspend` &ndash; The quota of some resource in some project is lower than the usage of that resource
+   in that project. This may happen when someone else changes the quota in the backend service directly and increases
+   usage before Limes intervenes, or when a cloud administrator changes quota constraints.
+3. `project_quota_mismatch` &ndash; The quota of some resource in some project differs from the backend quota for that
+   resource and project. This may happen when Limes is unable to write a changed quota value into the backend, for
+   example because of a service downtime.
+
+Accepts the arguments `service`, `area` and `resource` with the same filtering semantics as for other GET endpoints (see
+above). Returns 200 (OK) on success. Result is a JSON document like:
+
+```json
+{
+  "domain_quota_overcommitted": [
+    {
+      "domain": {
+        "id": "d5fbe312-1f48-42ef-a36e-484659784aa0",
+        "name": "example-domain"
+      },
+      "service": "network",
+      "resource": "security_groups",
+      "domain_quota": 100,
+      "projects_quota": 114
+    },
+    ...
+  ],
+  "project_quota_overspend": [
+    {
+      "project": {
+        "id": "8ad3bf54-2401-435e-88ad-e80fbf984c19",
+        "name": "example-project",
+        "domain": {
+          "id": "d5fbe312-1f48-42ef-a36e-484659784aa0",
+          "name": "example-domain"
+        }
+      },
+      "service": "network",
+      "resource": "routers",
+      "quota": 5,
+      "usage": 6
+    },
+    ...
+  ],
+  "project_quota_mismatch": [
+    {
+      "project": {
+        "id": "8ad3bf54-2401-435e-88ad-e80fbf984c19",
+        "name": "example-project",
+        "domain": {
+          "id": "d5fbe312-1f48-42ef-a36e-484659784aa0",
+          "name": "example-domain"
+        }
+      },
+      "service": "network",
+      "resource": "routers",
+      "quota": 5,
+      "backend_quota": 7
+    },
+    ...
+  ]
+}
+```
+
+Each entry in those three lists concerns exactly one resource in one project or domain. If multiple resources in the
+same project are inconsistent, they will appear as multiple entries. Like in the example above, the same project and
+resource may appear both in `project_quota_overspend` and `project_quota_mismatch` if `quota < usage < backend_quota`.
 
 ## POST /v1/domains/discover
 
