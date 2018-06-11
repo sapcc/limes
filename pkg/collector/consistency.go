@@ -133,7 +133,7 @@ func (c *Collector) checkConsistencyDomain(domain db.Domain) {
 		Tx:                  tx,
 		LogAutomaticActions: util.LogInfo,
 	}
-	err = scope.CreateAndValidateDomainServices(domain)
+	_, err = scope.ValidateDomainServices(domain)
 	if err == nil {
 		err = tx.Commit()
 	}
@@ -151,45 +151,29 @@ func (c *Collector) checkConsistencyDomain(domain db.Domain) {
 	}
 
 	for _, project := range projects {
-		c.checkConsistencyProject(project, domain)
+		err := c.checkConsistencyProject(project, domain)
+		if err != nil {
+			c.LogError(err.Error())
+		}
 	}
 }
 
-func (c *Collector) checkConsistencyProject(project db.Project, domain db.Domain) {
-	//check project_services entries
-	seen := make(map[string]bool)
-	var services []db.ProjectService
-	_, err := db.DB.Select(&services, `SELECT * FROM project_services WHERE project_id = $1`, project.ID)
+func (c *Collector) checkConsistencyProject(project db.Project, domain db.Domain) error {
+	tx, err := db.DB.Begin()
 	if err != nil {
-		c.LogError(err.Error())
-		return
+		return err
 	}
+	defer db.RollbackUnlessCommitted(tx)
 
-	//cleanup entries for services that have been disabled
-	for _, service := range services {
-		seen[service.Type] = true
-		if c.Cluster.HasService(service.Type) {
-			continue
-		}
-		util.LogInfo("cleaning up %s service entry for project %s/%s", service.Type, domain.Name, project.Name)
-		_, err := db.DB.Delete(&service)
-		if err != nil {
-			c.LogError(err.Error())
-		}
+	//validate project_services entries
+	scope := datamodel.Scope{
+		Cluster:             c.Cluster,
+		Tx:                  tx,
+		LogAutomaticActions: util.LogInfo,
 	}
-
-	//create missing service entries
-	for _, serviceType := range c.Cluster.ServiceTypes {
-		if seen[serviceType] {
-			continue
-		}
-		util.LogInfo("creating missing %s service entry for project %s/%s", serviceType, domain.Name, project.Name)
-		err := db.DB.Insert(&db.ProjectService{
-			ProjectID: project.ID,
-			Type:      serviceType,
-		})
-		if err != nil {
-			c.LogError(err.Error())
-		}
+	_, err = scope.ValidateProjectServices(domain, project)
+	if err == nil {
+		err = tx.Commit()
 	}
+	return err
 }

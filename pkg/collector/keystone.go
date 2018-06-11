@@ -20,8 +20,6 @@
 package collector
 
 import (
-	"sort"
-
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/limes/pkg/datamodel"
 	"github.com/sapcc/limes/pkg/db"
@@ -180,11 +178,11 @@ func initDomain(cluster *limes.Cluster, domain limes.KeystoneDomain) (*db.Domain
 		return nil, err
 	}
 
-	err = datamodel.Scope{
+	_, err = datamodel.Scope{
 		Cluster:             cluster,
 		Tx:                  tx,
 		LogAutomaticActions: util.LogInfo,
-	}.CreateAndValidateDomainServices(*dbDomain)
+	}.ValidateDomainServices(*dbDomain)
 	if err != nil {
 		return nil, err
 	}
@@ -303,48 +301,14 @@ func initProject(cluster *limes.Cluster, domain *db.Domain, project limes.Keysto
 		return err
 	}
 
-	var constraints limes.QuotaConstraints
-	if cluster.QuotaConstraints != nil {
-		constraints = cluster.QuotaConstraints.Projects[domain.Name][project.Name]
-	}
-
-	//add records for all cluster services to the `project_services` table, with
-	//default `scraped_at = NULL` to force the scraping jobs to scrape the
-	//project resources
-	for _, serviceType := range cluster.ServiceTypes {
-		srv := &db.ProjectService{
-			ProjectID: dbProject.ID,
-			Type:      serviceType,
-		}
-		err := tx.Insert(srv)
-		if err != nil {
-			return err
-		}
-
-		//initialize project quotas from constraints, if there is one
-		if serviceConstraints, exists := constraints[serviceType]; exists {
-			//ensure deterministic ordering of resources (useful for tests)
-			resourceNames := make([]string, 0, len(serviceConstraints))
-			for resourceName, constraint := range serviceConstraints {
-				if constraint.InitialQuotaValue() != 0 {
-					resourceNames = append(resourceNames, resourceName)
-				}
-			}
-			sort.Strings(resourceNames)
-
-			for _, resourceName := range resourceNames {
-				err := tx.Insert(&db.ProjectResource{
-					ServiceID: srv.ID,
-					Name:      resourceName,
-					Quota:     serviceConstraints[resourceName].InitialQuotaValue(),
-					//Scrape() will fill in the remaining backend attributes, and it will
-					//also write the quotas into the backend.
-				})
-				if err != nil {
-					return err
-				}
-			}
-		}
+	//add records to `project_services` table
+	_, err = datamodel.Scope{
+		Cluster:             cluster,
+		Tx:                  tx,
+		LogAutomaticActions: util.LogInfo,
+	}.ValidateProjectServices(*domain, *dbProject)
+	if err != nil {
+		return err
 	}
 
 	return tx.Commit()

@@ -26,14 +26,14 @@ import (
 	"github.com/sapcc/limes/pkg/limes"
 )
 
-//ValidateDomainServices ensures that all required DomainService records for
-//this domain exist (and none other). It returns the full set of domain services.
-func (s Scope) ValidateDomainServices(domain db.Domain) ([]db.DomainService, error) {
+//ValidateProjectServices ensures that all required ProjectService records for
+//this project exist (and none other). It returns the full set of project services.
+func (s Scope) ValidateProjectServices(domain db.Domain, project db.Project) ([]db.ProjectService, error) {
 	//list existing records
 	seen := make(map[string]bool)
-	var services []db.DomainService
+	var services []db.ProjectService
 	_, err := s.Tx.Select(&services,
-		`SELECT * FROM domain_services WHERE domain_id = $1 ORDER BY type`, domain.ID)
+		`SELECT * FROM project_services WHERE project_id = $1 ORDER BY type`, project.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +44,7 @@ func (s Scope) ValidateDomainServices(domain db.Domain) ([]db.DomainService, err
 		if s.Cluster.HasService(srv.Type) {
 			continue
 		}
-		s.logAutomaticAction("cleaning up %s service entry for domain %s", srv.Type, domain.Name)
+		s.logAutomaticAction("cleaning up %s service entry for project %s/%s", srv.Type, domain.Name, project.Name)
 		_, err := s.Tx.Delete(&srv)
 		if err != nil {
 			return nil, err
@@ -53,7 +53,7 @@ func (s Scope) ValidateDomainServices(domain db.Domain) ([]db.DomainService, err
 
 	var constraints limes.QuotaConstraints
 	if s.Cluster.QuotaConstraints != nil {
-		constraints = s.Cluster.QuotaConstraints.Domains[domain.Name]
+		constraints = s.Cluster.QuotaConstraints.Projects[domain.Name][project.Name]
 	}
 
 	//create missing service entries
@@ -61,10 +61,10 @@ func (s Scope) ValidateDomainServices(domain db.Domain) ([]db.DomainService, err
 		if seen[serviceType] {
 			continue
 		}
-		s.logAutomaticAction("creating %s service entry for domain %s", serviceType, domain.Name)
-		srv := db.DomainService{
-			DomainID: domain.ID,
-			Type:     serviceType,
+		s.logAutomaticAction("creating %s service entry for project %s/%s", serviceType, domain.Name, project.Name)
+		srv := db.ProjectService{
+			ProjectID: project.ID,
+			Type:      serviceType,
 		}
 		err := s.Tx.Insert(&srv)
 		if err != nil {
@@ -72,7 +72,7 @@ func (s Scope) ValidateDomainServices(domain db.Domain) ([]db.DomainService, err
 		}
 		services = append(services, srv)
 
-		//initialize domain quotas from constraints, if there is one
+		//initialize project quotas from constraints, if there is one
 		if serviceConstraints, exists := constraints[serviceType]; exists {
 			//ensure deterministic ordering of resources (useful for tests)
 			resourceNames := make([]string, 0, len(serviceConstraints))
@@ -84,10 +84,12 @@ func (s Scope) ValidateDomainServices(domain db.Domain) ([]db.DomainService, err
 			sort.Strings(resourceNames)
 
 			for _, resourceName := range resourceNames {
-				err := s.Tx.Insert(&db.DomainResource{
+				err := s.Tx.Insert(&db.ProjectResource{
 					ServiceID: srv.ID,
 					Name:      resourceName,
 					Quota:     serviceConstraints[resourceName].InitialQuotaValue(),
+					//Scrape() will fill in the remaining backend attributes, and it will
+					//also write the quotas into the backend.
 				})
 				if err != nil {
 					return nil, err
