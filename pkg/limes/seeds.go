@@ -61,6 +61,30 @@ func (c QuotaConstraint) InitialQuotaValue() uint64 {
 	return 0
 }
 
+//ToString returns a compact string representation of this QuotaConstraint.
+//The result is valid input syntax for parseQuotaConstraint().
+func (c QuotaConstraint) ToString(resource ResourceInfo) string {
+	var parts []string
+	hasExactly := false
+	u := resource.Unit
+
+	if c.Minimum != nil {
+		if c.Maximum != nil && *c.Maximum == *c.Minimum {
+			parts = append(parts, "exactly "+ValueWithUnit{*c.Minimum, u}.String())
+			hasExactly = true
+		} else {
+			parts = append(parts, "at least "+ValueWithUnit{*c.Minimum, u}.String())
+		}
+	}
+	if c.Maximum != nil && !hasExactly {
+		parts = append(parts, "at most "+ValueWithUnit{*c.Maximum, u}.String())
+	}
+	if c.Expected != nil {
+		parts = append(parts, "should be "+ValueWithUnit{*c.Maximum, u}.String())
+	}
+	return strings.Join(parts, ", ")
+}
+
 //NewQuotaConstraints parses the quota constraints at `constraintConfigPath`.
 //The `cluster` argument is required because quota values need to be converted
 //into the base unit of their resource, for which we need to access the

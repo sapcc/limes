@@ -160,3 +160,33 @@ func (p quotaConstraintTestPlugin) Resources() []ResourceInfo {
 		{Name: "capacity_MiB", Unit: UnitMebibytes},
 	}
 }
+
+func TestQuotaConstraintToString(t *testing.T) {
+	pointerTo := func(x uint64) *uint64 { return &x }
+
+	type testcase struct {
+		Input    QuotaConstraint
+		Expected string
+	}
+	testcases := []testcase{
+		{
+			Input:    QuotaConstraint{Minimum: pointerTo(10)},
+			Expected: "at least 10 MiB",
+		}, {
+			Input:    QuotaConstraint{Minimum: pointerTo(10), Maximum: pointerTo(20)},
+			Expected: "at least 10 MiB, at most 20 MiB",
+		}, {
+			Input:    QuotaConstraint{Minimum: pointerTo(20), Maximum: pointerTo(20)},
+			Expected: "exactly 20 MiB",
+		},
+	}
+
+	for _, testcase := range testcases {
+		resource := ResourceInfo{Unit: UnitMebibytes}
+		actual := testcase.Input.ToString(resource)
+		if actual != testcase.Expected {
+			t.Errorf("expected %#v to serialize into %q, but got %q",
+				testcase.Input, testcase.Expected, actual)
+		}
+	}
+}
