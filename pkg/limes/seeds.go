@@ -61,26 +61,31 @@ func (c QuotaConstraint) InitialQuotaValue() uint64 {
 	return 0
 }
 
+//Allows checks whether the given quota value satisfies this constraint.
+func (c QuotaConstraint) Allows(value uint64) bool {
+	return (c.Minimum == nil || *c.Minimum <= value) && (c.Maximum == nil || *c.Maximum >= value)
+}
+
 //ToString returns a compact string representation of this QuotaConstraint.
-//The result is valid input syntax for parseQuotaConstraint().
-func (c QuotaConstraint) ToString(resource ResourceInfo) string {
+//The result is valid input syntax for parseQuotaConstraint(). The argument
+//is the unit for the resource in question.
+func (c QuotaConstraint) ToString(unit Unit) string {
 	var parts []string
 	hasExactly := false
-	u := resource.Unit
 
 	if c.Minimum != nil {
 		if c.Maximum != nil && *c.Maximum == *c.Minimum {
-			parts = append(parts, "exactly "+ValueWithUnit{*c.Minimum, u}.String())
+			parts = append(parts, "exactly "+ValueWithUnit{*c.Minimum, unit}.String())
 			hasExactly = true
 		} else {
-			parts = append(parts, "at least "+ValueWithUnit{*c.Minimum, u}.String())
+			parts = append(parts, "at least "+ValueWithUnit{*c.Minimum, unit}.String())
 		}
 	}
 	if c.Maximum != nil && !hasExactly {
-		parts = append(parts, "at most "+ValueWithUnit{*c.Maximum, u}.String())
+		parts = append(parts, "at most "+ValueWithUnit{*c.Maximum, unit}.String())
 	}
 	if c.Expected != nil {
-		parts = append(parts, "should be "+ValueWithUnit{*c.Maximum, u}.String())
+		parts = append(parts, "should be "+ValueWithUnit{*c.Maximum, unit}.String())
 	}
 	return strings.Join(parts, ", ")
 }

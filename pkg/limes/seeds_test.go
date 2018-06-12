@@ -182,8 +182,7 @@ func TestQuotaConstraintToString(t *testing.T) {
 	}
 
 	for _, testcase := range testcases {
-		resource := ResourceInfo{Unit: UnitMebibytes}
-		actual := testcase.Input.ToString(resource)
+		actual := testcase.Input.ToString(UnitMebibytes)
 		if actual != testcase.Expected {
 			t.Errorf("expected %#v to serialize into %q, but got %q",
 				testcase.Input, testcase.Expected, actual)
