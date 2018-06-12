@@ -66,6 +66,18 @@ func (c QuotaConstraint) Allows(value uint64) bool {
 	return (c.Minimum == nil || *c.Minimum <= value) && (c.Maximum == nil || *c.Maximum >= value)
 }
 
+//ApplyTo modifies the given value such that it satisfies this constraint. If
+//c.Allows(value), then the value is returned unchanged.
+func (c QuotaConstraint) ApplyTo(value uint64) uint64 {
+	if c.Minimum != nil && *c.Minimum > value {
+		return *c.Minimum
+	}
+	if c.Maximum != nil && *c.Maximum < value {
+		return *c.Maximum
+	}
+	return value
+}
+
 //ToString returns a compact string representation of this QuotaConstraint.
 //The result is valid input syntax for parseQuotaConstraint(). The argument
 //is the unit for the resource in question.

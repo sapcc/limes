@@ -178,11 +178,7 @@ func initDomain(cluster *limes.Cluster, domain limes.KeystoneDomain) (*db.Domain
 		return nil, err
 	}
 
-	_, err = datamodel.Scope{
-		Cluster:             cluster,
-		Tx:                  tx,
-		LogAutomaticActions: util.LogInfo,
-	}.ValidateDomainServices(*dbDomain)
+	_, err = datamodel.ValidateDomainServices(tx, cluster, *dbDomain)
 	if err != nil {
 		return nil, err
 	}
@@ -302,11 +298,7 @@ func initProject(cluster *limes.Cluster, domain *db.Domain, project limes.Keysto
 	}
 
 	//add records to `project_services` table
-	_, err = datamodel.Scope{
-		Cluster:             cluster,
-		Tx:                  tx,
-		LogAutomaticActions: util.LogInfo,
-	}.ValidateProjectServices(*domain, *dbProject)
+	_, err = datamodel.ValidateProjectServices(tx, cluster, *domain, *dbProject)
 	if err != nil {
 		return err
 	}

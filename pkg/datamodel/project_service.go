@@ -24,49 +24,74 @@ import (
 
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
+	"github.com/sapcc/limes/pkg/util"
+	gorp "gopkg.in/gorp.v2"
 )
 
 //ValidateProjectServices ensures that all required ProjectService records for
-//this project exist (and none other). It returns the full set of project services.
-func (s Scope) ValidateProjectServices(domain db.Domain, project db.Project) ([]db.ProjectService, error) {
+//this project exist (and none other). It also marks all services as stale
+//where quota values contradict the project's quota constraints.
+//
+//It returns the full set of project services.
+func ValidateProjectServices(tx *gorp.Transaction, cluster *limes.Cluster, domain db.Domain, project db.Project) ([]db.ProjectService, error) {
 	//list existing records
 	seen := make(map[string]bool)
 	var services []db.ProjectService
-	_, err := s.Tx.Select(&services,
+	_, err := tx.Select(&services,
 		`SELECT * FROM project_services WHERE project_id = $1 ORDER BY type`, project.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	//cleanup entries for services that have been removed from the configuration
+	var constraints limes.QuotaConstraints
+	if cluster.QuotaConstraints != nil {
+		constraints = cluster.QuotaConstraints.Projects[domain.Name][project.Name]
+	}
+
 	for _, srv := range services {
+		//cleanup entries for services that have been removed from the configuration
 		seen[srv.Type] = true
-		if s.Cluster.HasService(srv.Type) {
+		if !cluster.HasService(srv.Type) {
+			util.LogInfo("cleaning up %s service entry for project %s/%s", srv.Type, domain.Name, project.Name)
+			_, err := tx.Delete(&srv)
+			if err != nil {
+				return nil, err
+			}
 			continue
 		}
-		s.logAutomaticAction("cleaning up %s service entry for project %s/%s", srv.Type, domain.Name, project.Name)
-		_, err := s.Tx.Delete(&srv)
+
+		//valid service -> check whether the existing quota values violate any constraints
+		compliant, err := checkProjectResourcesAgainstConstraint(tx, srv, constraints[srv.Type])
 		if err != nil {
 			return nil, err
 		}
-	}
-
-	var constraints limes.QuotaConstraints
-	if s.Cluster.QuotaConstraints != nil {
-		constraints = s.Cluster.QuotaConstraints.Projects[domain.Name][project.Name]
+		if !compliant {
+			//Do not attempt to rectify these quota values right now; that's a ton of
+			//logic that would need to be duplicated from Scrape(). Instead, set the
+			//`stale` flag on the project_service which will cause Scrape() to pick
+			//up this project_service at the next opportunity and do the work for us.
+			srv.Stale = true
+			onlyStale := func(c *gorp.ColumnMap) bool {
+				return c.ColumnName == "stale"
+			}
+			_, err = tx.UpdateColumns(onlyStale, srv)
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	//create missing service entries
-	for _, serviceType := range s.Cluster.ServiceTypes {
+	for _, serviceType := range cluster.ServiceTypes {
 		if seen[serviceType] {
 			continue
 		}
-		s.logAutomaticAction("creating %s service entry for project %s/%s", serviceType, domain.Name, project.Name)
+		util.LogInfo("creating %s service entry for project %s/%s", serviceType, domain.Name, project.Name)
 		srv := db.ProjectService{
 			ProjectID: project.ID,
 			Type:      serviceType,
 		}
-		err := s.Tx.Insert(&srv)
+		err := tx.Insert(&srv)
 		if err != nil {
 			return nil, err
 		}
@@ -84,7 +109,7 @@ func (s Scope) ValidateProjectServices(domain db.Domain, project db.Project) ([]
 			sort.Strings(resourceNames)
 
 			for _, resourceName := range resourceNames {
-				err := s.Tx.Insert(&db.ProjectResource{
+				err := tx.Insert(&db.ProjectResource{
 					ServiceID: srv.ID,
 					Name:      resourceName,
 					Quota:     serviceConstraints[resourceName].InitialQuotaValue(),
@@ -99,4 +124,25 @@ func (s Scope) ValidateProjectServices(domain db.Domain, project db.Project) ([]
 	}
 
 	return services, nil
+}
+
+func checkProjectResourcesAgainstConstraint(tx *gorp.Transaction, srv db.ProjectService, serviceConstraints map[string]limes.QuotaConstraint) (ok bool, err error) {
+	//do not hit the database if there are no constraints to check
+	if len(serviceConstraints) == 0 {
+		return true, nil
+	}
+
+	var resources []db.ProjectResource
+	_, err = tx.Select(&resources,
+		`SELECT * FROM project_resources WHERE service_id = $1 ORDER BY name`, srv.ID)
+	if err != nil {
+		return false, err
+	}
+
+	for _, res := range resources {
+		if !serviceConstraints[res.Name].Allows(res.Quota) {
+			return false, nil
+		}
+	}
+	return true, nil
 }

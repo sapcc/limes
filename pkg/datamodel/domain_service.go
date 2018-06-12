@@ -24,77 +24,152 @@ import (
 
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
+	"github.com/sapcc/limes/pkg/util"
+	gorp "gopkg.in/gorp.v2"
 )
 
 //ValidateDomainServices ensures that all required DomainService records for
 //this domain exist (and none other). It returns the full set of domain services.
-func (s Scope) ValidateDomainServices(domain db.Domain) ([]db.DomainService, error) {
+func ValidateDomainServices(tx *gorp.Transaction, cluster *limes.Cluster, domain db.Domain) ([]db.DomainService, error) {
 	//list existing records
 	seen := make(map[string]bool)
 	var services []db.DomainService
-	_, err := s.Tx.Select(&services,
+	_, err := tx.Select(&services,
 		`SELECT * FROM domain_services WHERE domain_id = $1 ORDER BY type`, domain.ID)
 	if err != nil {
 		return nil, err
 	}
 
-	//cleanup entries for services that have been removed from the configuration
+	var constraints limes.QuotaConstraints
+	if cluster.QuotaConstraints != nil {
+		constraints = cluster.QuotaConstraints.Domains[domain.Name]
+	}
+
 	for _, srv := range services {
+		//cleanup entries for services that have been removed from the configuration
 		seen[srv.Type] = true
-		if s.Cluster.HasService(srv.Type) {
+		if !cluster.HasService(srv.Type) {
+			util.LogInfo("cleaning up %s service entry for domain %s", srv.Type, domain.Name)
+			_, err := tx.Delete(&srv)
+			if err != nil {
+				return nil, err
+			}
 			continue
 		}
-		s.logAutomaticAction("cleaning up %s service entry for domain %s", srv.Type, domain.Name)
-		_, err := s.Tx.Delete(&srv)
+
+		//valid service -> check whether the existing quota values violate any constraints
+		err := checkDomainServiceConstraints(tx, cluster, domain, srv, constraints[srv.Type])
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	var constraints limes.QuotaConstraints
-	if s.Cluster.QuotaConstraints != nil {
-		constraints = s.Cluster.QuotaConstraints.Domains[domain.Name]
-	}
-
 	//create missing service entries
-	for _, serviceType := range s.Cluster.ServiceTypes {
+	for _, serviceType := range cluster.ServiceTypes {
 		if seen[serviceType] {
 			continue
 		}
-		s.logAutomaticAction("creating %s service entry for domain %s", serviceType, domain.Name)
+		util.LogInfo("creating %s service entry for domain %s", serviceType, domain.Name)
 		srv := db.DomainService{
 			DomainID: domain.ID,
 			Type:     serviceType,
 		}
-		err := s.Tx.Insert(&srv)
+		err := tx.Insert(&srv)
 		if err != nil {
 			return nil, err
 		}
 		services = append(services, srv)
 
-		//initialize domain quotas from constraints, if there is one
-		if serviceConstraints, exists := constraints[serviceType]; exists {
-			//ensure deterministic ordering of resources (useful for tests)
-			resourceNames := make([]string, 0, len(serviceConstraints))
-			for resourceName, constraint := range serviceConstraints {
-				if constraint.InitialQuotaValue() != 0 {
-					resourceNames = append(resourceNames, resourceName)
-				}
-			}
-			sort.Strings(resourceNames)
-
-			for _, resourceName := range resourceNames {
-				err := s.Tx.Insert(&db.DomainResource{
-					ServiceID: srv.ID,
-					Name:      resourceName,
-					Quota:     serviceConstraints[resourceName].InitialQuotaValue(),
-				})
-				if err != nil {
-					return nil, err
-				}
-			}
+		err = createMissingDomainResources(tx, cluster, domain, srv, constraints[serviceType], nil)
+		if err != nil {
+			return nil, err
 		}
 	}
 
 	return services, nil
+}
+
+func checkDomainServiceConstraints(tx *gorp.Transaction, cluster *limes.Cluster, domain db.Domain, srv db.DomainService, serviceConstraints map[string]limes.QuotaConstraint) error {
+	//do not hit the database if there are no constraints to check
+	if len(serviceConstraints) == 0 {
+		return nil
+	}
+
+	var resources []db.DomainResource
+	_, err := tx.Select(&resources,
+		`SELECT * FROM domain_resources WHERE service_id = $1 ORDER BY name`, srv.ID)
+	if err != nil {
+		return err
+	}
+
+	//check existing domain_resources for any quota values that violate constraints
+	seen := make(map[string]bool)
+	var resourcesToUpdate []interface{}
+	for _, res := range resources {
+		seen[res.Name] = true
+
+		constraint := serviceConstraints[res.Name]
+		if newQuota := constraint.ApplyTo(res.Quota); newQuota != res.Quota {
+			resInfo := cluster.InfoForResource(srv.Type, res.Name)
+			util.LogInfo("changing %s/%s quota for domain %s from %s to %s to satisfy constraint %q",
+				srv.Type, res.Name, domain.Name,
+				limes.ValueWithUnit{Value: res.Quota, Unit: resInfo.Unit},
+				limes.ValueWithUnit{Value: newQuota, Unit: resInfo.Unit},
+				constraint.ToString(resInfo.Unit),
+			)
+
+			res.Quota = newQuota
+			resourcesToUpdate = append(resourcesToUpdate, res)
+		}
+	}
+	if len(resourcesToUpdate) > 0 {
+		onlyQuota := func(c *gorp.ColumnMap) bool {
+			return c.ColumnName == "quota"
+		}
+		_, err = tx.UpdateColumns(onlyQuota, resourcesToUpdate...)
+		if err != nil {
+			return err
+		}
+	}
+
+	//create any missing domain resources where there are "at least/exactly/should be" constraints
+	return createMissingDomainResources(tx, cluster, domain, srv, serviceConstraints, seen)
+}
+
+func createMissingDomainResources(tx *gorp.Transaction, cluster *limes.Cluster, domain db.Domain, srv db.DomainService, serviceConstraints map[string]limes.QuotaConstraint, resourceExists map[string]bool) error {
+	//do not hit the database if there are no constraints to check
+	if len(serviceConstraints) == 0 {
+		return nil
+	}
+
+	//ensure deterministic ordering of resources (useful for tests)
+	resourceNames := make([]string, 0, len(serviceConstraints))
+	for resourceName, constraint := range serviceConstraints {
+		//initialize domain quotas where constraints require a non-zero quota value
+		if constraint.InitialQuotaValue() != 0 && !resourceExists[resourceName] {
+			resourceNames = append(resourceNames, resourceName)
+		}
+	}
+	sort.Strings(resourceNames)
+
+	for _, resourceName := range resourceNames {
+		resInfo := cluster.InfoForResource(srv.Type, resourceName)
+		constraint := serviceConstraints[resourceName]
+		newQuota := constraint.InitialQuotaValue()
+		util.LogInfo("initializing %s/%s quota for domain %s to %s to satisfy constraint %q",
+			srv.Type, resourceName, domain.Name,
+			limes.ValueWithUnit{Value: newQuota, Unit: resInfo.Unit},
+			constraint.ToString(resInfo.Unit),
+		)
+
+		err := tx.Insert(&db.DomainResource{
+			ServiceID: srv.ID,
+			Name:      resourceName,
+			Quota:     newQuota,
+		})
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

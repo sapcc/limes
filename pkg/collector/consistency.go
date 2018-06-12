@@ -128,12 +128,7 @@ func (c *Collector) checkConsistencyDomain(domain db.Domain) {
 	defer db.RollbackUnlessCommitted(tx)
 
 	//validate domain_services entries
-	scope := datamodel.Scope{
-		Cluster:             c.Cluster,
-		Tx:                  tx,
-		LogAutomaticActions: util.LogInfo,
-	}
-	_, err = scope.ValidateDomainServices(domain)
+	_, err = datamodel.ValidateDomainServices(tx, c.Cluster, domain)
 	if err == nil {
 		err = tx.Commit()
 	}
@@ -166,12 +161,7 @@ func (c *Collector) checkConsistencyProject(project db.Project, domain db.Domain
 	defer db.RollbackUnlessCommitted(tx)
 
 	//validate project_services entries
-	scope := datamodel.Scope{
-		Cluster:             c.Cluster,
-		Tx:                  tx,
-		LogAutomaticActions: util.LogInfo,
-	}
-	_, err = scope.ValidateProjectServices(domain, project)
+	_, err = datamodel.ValidateProjectServices(tx, c.Cluster, domain, project)
 	if err == nil {
 		err = tx.Commit()
 	}
