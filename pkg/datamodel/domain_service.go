@@ -119,7 +119,7 @@ func checkDomainServiceConstraints(tx *gorp.Transaction, cluster *limes.Cluster,
 			)
 
 			res.Quota = newQuota
-			resourcesToUpdate = append(resourcesToUpdate, res)
+			resourcesToUpdate = append(resourcesToUpdate, &res)
 		}
 	}
 	if len(resourcesToUpdate) > 0 {

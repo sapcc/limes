@@ -74,7 +74,7 @@ func ValidateProjectServices(tx *gorp.Transaction, cluster *limes.Cluster, domai
 			onlyStale := func(c *gorp.ColumnMap) bool {
 				return c.ColumnName == "stale"
 			}
-			_, err = tx.UpdateColumns(onlyStale, srv)
+			_, err = tx.UpdateColumns(onlyStale, &srv)
 			if err != nil {
 				return nil, err
 			}

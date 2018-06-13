@@ -193,7 +193,7 @@ func taskCollect(config limes.Configuration, cluster *limes.Cluster, args []stri
 			for _, err := range errs {
 				util.LogError(err.Error())
 			}
-			return fmt.Errorf("cannot load quota seeds for cluster %s (see errors above)", cluster.ID)
+			return fmt.Errorf("cannot load quota constraints for cluster %s (see errors above)", cluster.ID)
 		}
 	}
 

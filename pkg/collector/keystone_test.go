@@ -88,7 +88,7 @@ func Test_ScanDomains(t *testing.T) {
 	//are then constructed by the scraper, and domain_services/domain_resources
 	//are created when a cloud admin approves quota for the domain)
 	//
-	//This also tests that the quota seed is applied correctly.
+	//This also tests that the quota constraint is applied correctly.
 	actualNewDomains, err := ScanDomains(cluster, ScanDomainsOpts{})
 	if err != nil {
 		t.Errorf("ScanDomains #1 failed: %v", err)
