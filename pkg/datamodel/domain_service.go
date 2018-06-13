@@ -121,6 +121,15 @@ func checkDomainServiceConstraints(tx *gorp.Transaction, cluster *limes.Cluster,
 			res.Quota = newQuota
 			resourcesToUpdate = append(resourcesToUpdate, &res)
 		}
+
+		if constraint.Expected != nil && *constraint.Expected != res.Quota {
+			unit := cluster.InfoForResource(srv.Type, res.Name).Unit
+			util.LogError(`expectation mismatch: %s/%s quota for domain %s should be %s, but is %s`,
+				srv.Type, res.Name, domain.Name,
+				limes.ValueWithUnit{Value: *constraint.Expected, Unit: unit},
+				limes.ValueWithUnit{Value: res.Quota, Unit: unit},
+			)
+		}
 	}
 	if len(resourcesToUpdate) > 0 {
 		onlyQuota := func(c *gorp.ColumnMap) bool {

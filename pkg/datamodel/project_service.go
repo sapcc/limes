@@ -61,7 +61,7 @@ func ValidateProjectServices(tx *gorp.Transaction, cluster *limes.Cluster, domai
 		}
 
 		//valid service -> check whether the existing quota values violate any constraints
-		compliant, err := checkProjectResourcesAgainstConstraint(tx, srv, constraints[srv.Type])
+		compliant, err := checkProjectResourcesAgainstConstraint(tx, cluster, domain, project, srv, constraints[srv.Type])
 		if err != nil {
 			return nil, err
 		}
@@ -126,7 +126,7 @@ func ValidateProjectServices(tx *gorp.Transaction, cluster *limes.Cluster, domai
 	return services, nil
 }
 
-func checkProjectResourcesAgainstConstraint(tx *gorp.Transaction, srv db.ProjectService, serviceConstraints map[string]limes.QuotaConstraint) (ok bool, err error) {
+func checkProjectResourcesAgainstConstraint(tx *gorp.Transaction, cluster *limes.Cluster, domain db.Domain, project db.Project, srv db.ProjectService, serviceConstraints map[string]limes.QuotaConstraint) (ok bool, err error) {
 	//do not hit the database if there are no constraints to check
 	if len(serviceConstraints) == 0 {
 		return true, nil
@@ -139,10 +139,21 @@ func checkProjectResourcesAgainstConstraint(tx *gorp.Transaction, srv db.Project
 		return false, err
 	}
 
+	ok = true
 	for _, res := range resources {
-		if !serviceConstraints[res.Name].Allows(res.Quota) {
-			return false, nil
+		constraint := serviceConstraints[res.Name]
+		if !constraint.Allows(res.Quota) {
+			ok = false
+		}
+
+		if constraint.Expected != nil && *constraint.Expected != res.Quota {
+			unit := cluster.InfoForResource(srv.Type, res.Name).Unit
+			util.LogError(`expectation mismatch: %s/%s quota for project %s/%s should be %s, but is %s`,
+				srv.Type, res.Name, domain.Name, project.Name,
+				limes.ValueWithUnit{Value: *constraint.Expected, Unit: unit},
+				limes.ValueWithUnit{Value: res.Quota, Unit: unit},
+			)
 		}
 	}
-	return true, nil
+	return ok, nil
 }
