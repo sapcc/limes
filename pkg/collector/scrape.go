@@ -126,7 +126,7 @@ func (c *Collector) Scrape() {
 			continue
 		}
 
-		err = c.writeScrapeResult(domainUUID, projectUUID, serviceType, serviceID, resourceData, c.TimeNow())
+		err = c.writeScrapeResult(domainName, domainUUID, projectName, projectUUID, serviceType, serviceID, resourceData, c.TimeNow())
 		if err != nil {
 			c.LogError("write %s backend data for %s/%s failed: %s", serviceType, domainName, projectName, err.Error())
 			scrapeFailedCounter.With(labels).Inc()
@@ -147,12 +147,17 @@ func (c *Collector) Scrape() {
 	}
 }
 
-func (c *Collector) writeScrapeResult(domainUUID, projectUUID, serviceType string, serviceID int64, resourceData map[string]limes.ResourceData, scrapedAt time.Time) error {
+func (c *Collector) writeScrapeResult(domainName, domainUUID, projectName, projectUUID, serviceType string, serviceID int64, resourceData map[string]limes.ResourceData, scrapedAt time.Time) error {
 	tx, err := db.DB.Begin()
 	if err != nil {
 		return err
 	}
 	defer db.RollbackUnlessCommitted(tx)
+
+	var serviceConstraints map[string]limes.QuotaConstraint
+	if c.Cluster.QuotaConstraints != nil {
+		serviceConstraints = c.Cluster.QuotaConstraints.Projects[domainName][projectName][serviceType]
+	}
 
 	//update existing project_resources entries
 	quotaValues := make(map[string]uint64)
@@ -166,40 +171,56 @@ func (c *Collector) writeScrapeResult(domainUUID, projectUUID, serviceType strin
 		quotaValues[res.Name] = res.Quota
 
 		data, exists := resourceData[res.Name]
-		if exists {
-			//update existing resource record
-			res.BackendQuota = data.Quota
-			res.Usage = data.Usage
-			if len(data.Subresources) == 0 {
-				res.SubresourcesJSON = ""
-			} else {
-				//warn when the backend is inconsistent with itself
-				if uint64(len(data.Subresources)) != res.Usage {
-					util.LogInfo("resource quantity mismatch in project %s, resource %s/%s: usage = %d, but found %d subresources",
-						projectUUID, serviceType, res.Name,
-						res.Usage, len(data.Subresources),
-					)
-				}
-				bytes, err := json.Marshal(data.Subresources)
-				if err != nil {
-					return fmt.Errorf("failed to convert subresources to JSON: %s", err.Error())
-				}
-				res.SubresourcesJSON = string(bytes)
-			}
-
-			//TODO: Update() only if required
-			_, err := tx.Update(&res)
-			if err != nil {
-				return err
-			}
-			if res.BackendQuota < 0 || res.Quota != uint64(res.BackendQuota) {
-				needToSetQuota = true
-			}
-		} else {
+		if !exists {
 			c.LogError(
 				"could not scrape new data for resource %s in project service %d (was this resource type removed from the scraper plugin?)",
 				res.Name, serviceID,
 			)
+			continue
+		}
+
+		//check if we need to enforce a constraint
+		constraint := serviceConstraints[res.Name]
+		if !constraint.Allows(res.Quota) {
+			resInfo := c.Cluster.InfoForResource(serviceType, res.Name)
+			newQuota := constraint.ApplyTo(res.Quota)
+			util.LogInfo("changing %s/%s quota for project %s/%s from %s to %s to satisfy constraint %q",
+				serviceType, res.Name, domainName, projectName,
+				limes.ValueWithUnit{Value: res.Quota, Unit: resInfo.Unit},
+				limes.ValueWithUnit{Value: newQuota, Unit: resInfo.Unit},
+				constraint.ToString(resInfo.Unit),
+			)
+			res.Quota = newQuota
+			quotaValues[res.Name] = newQuota
+		}
+
+		//update existing resource record
+		res.BackendQuota = data.Quota
+		res.Usage = data.Usage
+		if len(data.Subresources) == 0 {
+			res.SubresourcesJSON = ""
+		} else {
+			//warn when the backend is inconsistent with itself
+			if uint64(len(data.Subresources)) != res.Usage {
+				util.LogInfo("resource quantity mismatch in project %s, resource %s/%s: usage = %d, but found %d subresources",
+					projectUUID, serviceType, res.Name,
+					res.Usage, len(data.Subresources),
+				)
+			}
+			bytes, err := json.Marshal(data.Subresources)
+			if err != nil {
+				return fmt.Errorf("failed to convert subresources to JSON: %s", err.Error())
+			}
+			res.SubresourcesJSON = string(bytes)
+		}
+
+		//TODO: Update() only if required
+		_, err := tx.Update(&res)
+		if err != nil {
+			return err
+		}
+		if res.BackendQuota < 0 || res.Quota != uint64(res.BackendQuota) {
+			needToSetQuota = true
 		}
 	}
 
@@ -213,18 +234,27 @@ func (c *Collector) writeScrapeResult(domainUUID, projectUUID, serviceType strin
 		res := &db.ProjectResource{
 			ServiceID:        serviceID,
 			Name:             resMetadata.Name,
-			Quota:            0, //nothing approved yet
+			Quota:            serviceConstraints[resMetadata.Name].InitialQuotaValue(),
 			Usage:            data.Usage,
 			BackendQuota:     data.Quota,
 			SubresourcesJSON: "", //but see below
 		}
-		if data.Quota > 0 && uint64(data.Quota) == resMetadata.AutoApproveInitialQuota {
+
+		if res.Quota == 0 && data.Quota > 0 && uint64(data.Quota) == resMetadata.AutoApproveInitialQuota {
 			res.Quota = resMetadata.AutoApproveInitialQuota
 			auditTrail.Add("set quota %s.%s = 0 -> %d for project %s through auto-approval",
 				serviceType, resMetadata.Name, res.Quota, projectUUID,
 			)
 		}
+
 		if len(data.Subresources) != 0 {
+			//warn when the backend is inconsistent with itself
+			if uint64(len(data.Subresources)) != data.Usage {
+				util.LogInfo("resource quantity mismatch in project %s, resource %s/%s: usage = %d, but found %d subresources",
+					projectUUID, serviceType, res.Name,
+					data.Usage, len(data.Subresources),
+				)
+			}
 			bytes, err := json.Marshal(data.Subresources)
 			if err != nil {
 				return fmt.Errorf("failed to convert subresources to JSON: %s", err.Error())

@@ -1,0 +1,24 @@
+domains:
+  germany:
+    service-one:
+      things: at least 20, at most 30
+      capacity_MiB: at least 10 GiB
+    service-two:
+      capacity_MiB: at least 1 MiB
+  poland:
+    service-two:
+      things: at least 5
+
+projects:
+  germany/berlin:
+    service-one:
+      things: at least 10
+      capacity_MiB: at least 5 GiB, at most 6 GiB
+  germany/dresden:
+    service-one:
+      things: exactly 5
+    service-two:
+      capacity_MiB: exactly 1 MiB
+  poland/warsaw:
+    service-two:
+      things: should be 5, at most 10

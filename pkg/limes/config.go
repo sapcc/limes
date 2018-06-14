@@ -59,9 +59,9 @@ type ClusterConfiguration struct {
 	Services   []ServiceConfiguration   `yaml:"services"`
 	Capacitors []CapacitorConfiguration `yaml:"capacitors"`
 	//^ Sorry for the stupid pun. Not.
-	Subresources   map[string][]string `yaml:"subresources"`
-	Authoritative  bool                `yaml:"authoritative"`
-	SeedConfigPath string              `yaml:"seeds"`
+	Subresources         map[string][]string `yaml:"subresources"`
+	Authoritative        bool                `yaml:"authoritative"`
+	ConstraintConfigPath string              `yaml:"constraints"`
 }
 
 //DiscoveryConfiguration describes the method of discovering Keystone domains

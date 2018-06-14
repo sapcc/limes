@@ -54,16 +54,52 @@ func setupTest(t *testing.T) (*limes.Cluster, http.Handler) {
 		"shared":   test.NewPlugin("shared"),
 		"unshared": test.NewPlugin("unshared"),
 	}
+	westConstraintSet := limes.QuotaConstraintSet{
+		Domains: map[string]limes.QuotaConstraints{
+			"france": {
+				"shared": {
+					"capacity": {Minimum: p2u64(10), Maximum: p2u64(123)},
+					"things":   {Minimum: p2u64(20)},
+				},
+				"unshared": {
+					"capacity": {Maximum: p2u64(20)},
+					"things":   {Minimum: p2u64(20), Maximum: p2u64(20)},
+				},
+			},
+		},
+		Projects: map[string]map[string]limes.QuotaConstraints{
+			"germany": {
+				"berlin": {
+					//This constraint is used for the happy-path tests, where PUT
+					//succeeds because the requested value fits within the constraint.
+					"shared": {"capacity": {Minimum: p2u64(1), Maximum: p2u64(6)}},
+				},
+				"dresden": {
+					//These constraints are used for the failure tests, where PUT fails
+					//because the requested values conflict with the constraint.
+					"shared": {
+						"capacity": {Minimum: p2u64(10)},
+					},
+					"unshared": {
+						"capacity": {Minimum: p2u64(10), Maximum: p2u64(10)},
+						"things":   {Maximum: p2u64(10)},
+					},
+				},
+			},
+		},
+	}
+
 	config := limes.Configuration{
 		Clusters: map[string]*limes.Cluster{
 			"west": {
-				ID:              "west",
-				ServiceTypes:    serviceTypes,
-				IsServiceShared: isServiceShared,
-				DiscoveryPlugin: test.NewDiscoveryPlugin(),
-				QuotaPlugins:    quotaPlugins,
-				CapacityPlugins: map[string]limes.CapacityPlugin{},
-				Config:          &limes.ClusterConfiguration{Auth: &limes.AuthParameters{}},
+				ID:               "west",
+				ServiceTypes:     serviceTypes,
+				IsServiceShared:  isServiceShared,
+				DiscoveryPlugin:  test.NewDiscoveryPlugin(),
+				QuotaPlugins:     quotaPlugins,
+				CapacityPlugins:  map[string]limes.CapacityPlugin{},
+				Config:           &limes.ClusterConfiguration{Auth: &limes.AuthParameters{}},
+				QuotaConstraints: &westConstraintSet,
 			},
 			"east": {
 				ID:              "east",
@@ -539,6 +575,36 @@ func Test_DomainOperations(t *testing.T) {
 		},
 	}.Check(t, router)
 
+	//check PutDomain error cases because of constraints
+	test.APIRequest{
+		Method:           "PUT",
+		Path:             "/v1/domains/uuid-for-france",
+		ExpectStatusCode: 422,
+		ExpectBody:       p2s("cannot change shared/things quota: requested value \"15\" contradicts constraint \"at least 20\" for this domain and resource\ncannot change unshared/capacity quota: requested value \"30 B\" contradicts constraint \"at most 20 B\" for this domain and resource\ncannot change unshared/things quota: requested value \"19\" contradicts constraint \"exactly 20\" for this domain and resource\n"),
+		RequestJSON: object{
+			"domain": object{
+				"services": []object{
+					{
+						"type": "shared",
+						"resources": []object{
+							//should fail because of "at least 20" constraint
+							{"name": "things", "quota": 15},
+						},
+					},
+					{
+						"type": "unshared",
+						"resources": []object{
+							//should fail because of "at most 20" constraint
+							{"name": "capacity", "quota": 30},
+							//should fail because of "exactly 20" constraint
+							{"name": "things", "quota": 19},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+
 	//check PutDomain happy path
 	test.APIRequest{
 		Method:           "PUT",
@@ -797,6 +863,35 @@ func Test_ProjectOperations(t *testing.T) {
 		},
 	}.Check(t, router)
 
+	test.APIRequest{
+		Method:           "PUT",
+		Path:             "/v1/domains/uuid-for-germany/projects/uuid-for-dresden",
+		ExpectStatusCode: 422,
+		ExpectBody:       p2s("cannot change shared/capacity quota: requested value \"9 B\" contradicts constraint \"at least 10 B\" for this project and resource\ncannot change unshared/capacity quota: requested value \"20 B\" contradicts constraint \"exactly 10 B\" for this project and resource\ncannot change unshared/things quota: requested value \"11\" contradicts constraint \"at most 10\" for this project and resource\n"),
+		RequestJSON: object{
+			"project": object{
+				"services": []object{
+					{
+						"type": "shared",
+						"resources": []object{
+							//should fail because of "at least 10" constraint
+							{"name": "capacity", "quota": 9},
+						},
+					},
+					{
+						"type": "unshared",
+						"resources": []object{
+							//should fail because of "exactly 10" constraint
+							{"name": "capacity", "quota": 20},
+							//should fail because of "at most 10" constraint
+							{"name": "things", "quota": 11},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+
 	//check PutProject: quota admissible (i.e. will be persisted in DB), but
 	//SetQuota fails for some reason (e.g. backend service down)
 	plugin := cluster.QuotaPlugins["shared"].(*test.Plugin)
@@ -921,5 +1016,10 @@ func expectStaleProjectServices(t *testing.T, pairs ...string) {
 
 //p2s makes a "pointer to string".
 func p2s(val string) *string {
+	return &val
+}
+
+//p2u64 makes a "pointer to uint64".
+func p2u64(val uint64) *uint64 {
 	return &val
 }

@@ -20,9 +20,8 @@
 package collector
 
 import (
-	"sort"
-
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sapcc/limes/pkg/datamodel"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/util"
@@ -179,42 +178,9 @@ func initDomain(cluster *limes.Cluster, domain limes.KeystoneDomain) (*db.Domain
 		return nil, err
 	}
 
-	var seed limes.QuotaSeedValues
-	if cluster.QuotaSeeds != nil {
-		seed = cluster.QuotaSeeds.Domains[domain.Name]
-	}
-
-	//add records for all cluster services to the `project_services` table
-	for _, serviceType := range cluster.ServiceTypes {
-		srv := &db.DomainService{
-			DomainID: dbDomain.ID,
-			Type:     serviceType,
-		}
-		err := tx.Insert(srv)
-		if err != nil {
-			return nil, err
-		}
-
-		//initialize domain quotas from seed, if there is one
-		if serviceSeed, exists := seed[serviceType]; exists {
-			//ensure deterministic ordering of resources (useful for tests)
-			resourceNames := make([]string, 0, len(serviceSeed))
-			for resourceName := range serviceSeed {
-				resourceNames = append(resourceNames, resourceName)
-			}
-			sort.Strings(resourceNames)
-
-			for _, resourceName := range resourceNames {
-				err := tx.Insert(&db.DomainResource{
-					ServiceID: srv.ID,
-					Name:      resourceName,
-					Quota:     serviceSeed[resourceName],
-				})
-				if err != nil {
-					return nil, err
-				}
-			}
-		}
+	_, err = datamodel.ValidateDomainServices(tx, cluster, *dbDomain)
+	if err != nil {
+		return nil, err
 	}
 
 	return dbDomain, tx.Commit()
@@ -331,46 +297,10 @@ func initProject(cluster *limes.Cluster, domain *db.Domain, project limes.Keysto
 		return err
 	}
 
-	var seed limes.QuotaSeedValues
-	if cluster.QuotaSeeds != nil {
-		seed = cluster.QuotaSeeds.Projects[domain.Name][project.Name]
-	}
-
-	//add records for all cluster services to the `project_services` table, with
-	//default `scraped_at = NULL` to force the scraping jobs to scrape the
-	//project resources
-	for _, serviceType := range cluster.ServiceTypes {
-		srv := &db.ProjectService{
-			ProjectID: dbProject.ID,
-			Type:      serviceType,
-		}
-		err := tx.Insert(srv)
-		if err != nil {
-			return err
-		}
-
-		//initialize project quotas from seed, if there is one
-		if serviceSeed, exists := seed[serviceType]; exists {
-			//ensure deterministic ordering of resources (useful for tests)
-			resourceNames := make([]string, 0, len(serviceSeed))
-			for resourceName := range serviceSeed {
-				resourceNames = append(resourceNames, resourceName)
-			}
-			sort.Strings(resourceNames)
-
-			for _, resourceName := range resourceNames {
-				err := tx.Insert(&db.ProjectResource{
-					ServiceID: srv.ID,
-					Name:      resourceName,
-					Quota:     serviceSeed[resourceName],
-					//Scrape() will fill in the remaining backend attributes, and it will
-					//also write the quotas into the backend.
-				})
-				if err != nil {
-					return err
-				}
-			}
-		}
+	//add records to `project_services` table
+	_, err = datamodel.ValidateProjectServices(tx, cluster, *domain, *dbProject)
+	if err != nil {
+		return err
 	}
 
 	return tx.Commit()

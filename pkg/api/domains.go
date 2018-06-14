@@ -140,6 +140,11 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 	}
 	defer db.RollbackUnlessCommitted(tx)
 
+	var constraints limes.QuotaConstraints
+	if cluster.QuotaConstraints != nil {
+		constraints = cluster.QuotaConstraints.Domains[dbDomain.Name]
+	}
+
 	//gather a report on the domain's quotas to decide whether a quota update is legal
 	domainReports, err := reports.GetDomains(cluster, &dbDomain.ID, db.DB, reports.Filter{})
 	if ReturnError(w, err) {
@@ -192,7 +197,9 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 				continue //nothing to do
 			}
 
-			err = checkDomainQuotaUpdate(srv, res, domainReport, newQuota, canRaise, canLower)
+			resInfo := cluster.InfoForResource(srv.Type, res.Name)
+			constraint := constraints[srv.Type][res.Name]
+			err = checkDomainQuotaUpdate(srv, res, resInfo.Unit, domainReport, constraint, newQuota, canRaise, canLower)
 			if err != nil {
 				errors = append(errors, err.Error())
 				continue
@@ -234,7 +241,9 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 				Name:      resourceName,
 				Quota:     0, //start with 0 because the previous value is taken into account by checkDomainQuotaUpdate
 			}
-			err = checkDomainQuotaUpdate(srv, res, domainReport, newQuota, canRaise, canLower)
+			resInfo := cluster.InfoForResource(srv.Type, res.Name)
+			constraint := constraints[srv.Type][res.Name]
+			err = checkDomainQuotaUpdate(srv, res, resInfo.Unit, domainReport, constraint, newQuota, canRaise, canLower)
 			if err != nil {
 				errors = append(errors, err.Error())
 				continue
@@ -285,7 +294,12 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 	ReturnJSON(w, 200, map[string]interface{}{"domain": domains[0]})
 }
 
-func checkDomainQuotaUpdate(srv db.DomainService, res db.DomainResource, domain *reports.Domain, newQuota uint64, canRaise, canLower bool) error {
+func checkDomainQuotaUpdate(srv db.DomainService, res db.DomainResource, unit limes.Unit, domain *reports.Domain, constraint limes.QuotaConstraint, newQuota uint64, canRaise, canLower bool) error {
+	if !constraint.Allows(newQuota) {
+		return fmt.Errorf("cannot change %s/%s quota: requested value %q contradicts constraint %q for this domain and resource",
+			srv.Type, res.Name, limes.ValueWithUnit{Value: newQuota, Unit: unit}, constraint.ToString(unit))
+	}
+
 	//if quota is being raised, only permission is required (overprovisioning of
 	//domain quota over the cluster capacity is explicitly allowed because
 	//capacity measurements are usually to be taken with a grain of salt)
@@ -302,11 +316,9 @@ func checkDomainQuotaUpdate(srv db.DomainService, res db.DomainResource, domain 
 		return fmt.Errorf("cannot change %s/%s quota: user is not allowed to lower quotas in this project", srv.Type, res.Name)
 	}
 	projectsQuota := uint64(0)
-	var unit limes.Unit
 	if domainService, exists := domain.Services[srv.Type]; exists {
 		if domainResource, exists := domainService.Resources[res.Name]; exists {
 			projectsQuota = domainResource.ProjectsQuota
-			unit = domainResource.Unit
 		}
 	}
 	if newQuota < projectsQuota {
