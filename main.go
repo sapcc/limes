@@ -185,18 +185,6 @@ func taskCollect(config limes.Configuration, cluster *limes.Cluster, args []stri
 		printUsageAndExit()
 	}
 
-	//load constraint set
-	if cluster.Config.ConstraintConfigPath != "" {
-		var errs []error
-		cluster.QuotaConstraints, errs = limes.NewQuotaConstraints(cluster, cluster.Config.ConstraintConfigPath)
-		if len(errs) > 0 {
-			for _, err := range errs {
-				util.LogError(err.Error())
-			}
-			return fmt.Errorf("cannot load quota constraints for cluster %s (see errors above)", cluster.ID)
-		}
-	}
-
 	//start scraping threads (NOTE: Many people use a pair of sync.WaitGroup and
 	//stop channel to shutdown threads in a controlled manner. I decided against
 	//that for now, and instead construct worker threads in such a way that they

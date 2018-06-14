@@ -106,7 +106,20 @@ func NewCluster(id string, config *ClusterConfiguration) *Cluster {
 //Connect calls Connect() on all AuthParameters for this Cluster, thus ensuring
 //that all ProviderClient instances are available. It also calls Init() on all
 //quota plugins.
+//
+//It also loads the QuotaConstraints for thie cluster, if configured.
 func (c *Cluster) Connect() error {
+	if c.Config.ConstraintConfigPath != "" && c.QuotaConstraints == nil {
+		var errs []error
+		c.QuotaConstraints, errs = NewQuotaConstraints(c, c.Config.ConstraintConfigPath)
+		if len(errs) > 0 {
+			for _, err := range errs {
+				util.LogError(err.Error())
+			}
+			return fmt.Errorf("cannot load quota constraints for cluster %s (see errors above)", c.ID)
+		}
+	}
+
 	err := c.Config.Auth.Connect()
 	if err != nil {
 		return fmt.Errorf("failed to authenticate in cluster %s: %s", c.ID, err.Error())
