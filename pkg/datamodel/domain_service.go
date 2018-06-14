@@ -118,6 +118,11 @@ func checkDomainServiceConstraints(tx *gorp.Transaction, cluster *limes.Cluster,
 				constraint.ToString(resInfo.Unit),
 			)
 
+			//take a copy of the loop variable (it will be updated by the loop, so if
+			//we didn't take a copy manually, the resourcesToUpdate list would
+			//contain only identical pointers)
+			res := res
+
 			res.Quota = newQuota
 			resourcesToUpdate = append(resourcesToUpdate, &res)
 		}
