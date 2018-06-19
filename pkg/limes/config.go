@@ -62,6 +62,8 @@ type ClusterConfiguration struct {
 	Subresources         map[string][]string `yaml:"subresources"`
 	Authoritative        bool                `yaml:"authoritative"`
 	ConstraintConfigPath string              `yaml:"constraints"`
+	//The following is only read to warn that users need to upgrade from seeds to constraints.
+	OldSeedConfigPath string `yaml:"seeds"`
 }
 
 //DiscoveryConfiguration describes the method of discovering Keystone domains
@@ -281,6 +283,12 @@ func (cfg configurationInFile) validate() (success bool) {
 
 		cluster.Discovery.IncludeDomainRx = compileOptionalRx(cluster.Discovery.IncludeDomainPattern)
 		cluster.Discovery.ExcludeDomainRx = compileOptionalRx(cluster.Discovery.ExcludeDomainPattern)
+
+		//warn about removed configuration options
+		if cluster.OldSeedConfigPath != "" {
+			util.LogError("quota seeds have been replaced by quota constraints: rename clusters[%s].seeds config key to clusters[%s].constraints and convert seed file into constraint file; documentation at https://github.com/sapcc/limes/blob/master/docs/operators/constraints.md", clusterID, clusterID)
+			success = false
+		}
 	}
 
 	if cfg.API.ListenAddress == "" {
