@@ -455,6 +455,25 @@ This capacity plugin reports capacity for the special `compute/instances_<flavor
 Converged Cloud ([see above](#compute-nova-v2)). For each such flavor, it counts the number of Ironic nodes whose RAM
 size, disk size, number of cores, and capabilities match those in the flavor.
 
+```yaml
+capacitors:
+  - id: sapcc-ironic
+subcapacities:
+  - compute: [ instances-baremetal ]
+```
+
+When the "compute/instances-baremetal" pseudo-resource is set up for subcapacity scraping (as shown above),
+subcapacities will be scraped for all resources reported by this plugin. Subcapacities correspond to Ironic nodes and
+bear the following attributes:
+
+| Attribute | Type | Comment |
+| --- | --- | --- |
+| `id` | string | node UUID |
+| `name` | string | node name |
+| `ram` | integer value with unit | amount of memory |
+| `cores` | integer | number of CPU cores |
+| `disk` | integer value with unit | root disk size |
+
 [yaml]:   http://yaml.org/
 [pq-uri]: https://www.postgresql.org/docs/9.6/static/libpq-connect.html#LIBPQ-CONNSTRING
 [policy]: https://docs.openstack.org/security-guide/identity/policies.html

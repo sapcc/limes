@@ -32,7 +32,8 @@ import (
 )
 
 type capacitySapccIronicPlugin struct {
-	cfg limes.CapacitorConfiguration
+	cfg                 limes.CapacitorConfiguration
+	reportSubcapacities bool
 }
 
 var ironicUnmatchedNodesGauge = prometheus.NewGaugeVec(
@@ -45,7 +46,7 @@ var ironicUnmatchedNodesGauge = prometheus.NewGaugeVec(
 
 func init() {
 	limes.RegisterCapacityPlugin(func(c limes.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) limes.CapacityPlugin {
-		return &capacitySapccIronicPlugin{c}
+		return &capacitySapccIronicPlugin{c, scrapeSubcapacities["compute"]["instances-baremetal"]}
 	})
 	prometheus.MustRegister(ironicUnmatchedNodesGauge)
 }
@@ -109,7 +110,18 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 		for _, flavor := range flavors {
 			if node.Matches(flavor) {
 				util.LogDebug("Ironic node %q (%s) matches flavor %s", node.Name, node.ID, flavor.Name)
-				result["instances_"+flavor.Name].Capacity++
+				data := result["instances_"+flavor.Name]
+				data.Capacity++
+				if p.reportSubcapacities {
+					data.Subcapacities = append(data.Subcapacities, map[string]interface{}{
+						"id":    node.ID,
+						"name":  node.Name,
+						"ram":   limes.ValueWithUnit{Unit: limes.UnitMebibytes, Value: uint64(node.Properties.MemoryMiB)},
+						"disk":  limes.ValueWithUnit{Unit: limes.UnitGibibytes, Value: uint64(node.Properties.DiskGiB)},
+						"cores": node.Properties.Cores,
+					})
+				}
+
 				matched = true
 				break
 			}
