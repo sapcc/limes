@@ -47,7 +47,8 @@ func (p *v1Provider) ListClusters(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 	_, localQuotaUsageOnly := r.URL.Query()["local"]
-	result.Clusters, err = reports.GetClusters(p.Config, nil, localQuotaUsageOnly, db.DB, reports.ReadFilter(r))
+	_, withSubcapacities := r.URL.Query()["detail"]
+	result.Clusters, err = reports.GetClusters(p.Config, nil, localQuotaUsageOnly, withSubcapacities, db.DB, reports.ReadFilter(r))
 	if ReturnError(w, err) {
 		return
 	}
@@ -66,7 +67,8 @@ func (p *v1Provider) GetCluster(w http.ResponseWriter, r *http.Request) {
 		clusterID = p.Cluster.ID
 	}
 	_, localQuotaUsageOnly := r.URL.Query()["local"]
-	clusters, err := reports.GetClusters(p.Config, &clusterID, localQuotaUsageOnly, db.DB, reports.ReadFilter(r))
+	_, withSubcapacities := r.URL.Query()["detail"]
+	clusters, err := reports.GetClusters(p.Config, &clusterID, localQuotaUsageOnly, withSubcapacities, db.DB, reports.ReadFilter(r))
 	if ReturnError(w, err) {
 		return
 	}
@@ -168,7 +170,7 @@ func (p *v1Provider) PutCluster(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//otherwise, report success
-	clusters, err := reports.GetClusters(p.Config, &clusterID, false, db.DB, reports.ReadFilter(r))
+	clusters, err := reports.GetClusters(p.Config, &clusterID, false, false, db.DB, reports.ReadFilter(r))
 	if ReturnError(w, err) {
 		return
 	}
