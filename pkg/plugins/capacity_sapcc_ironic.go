@@ -44,7 +44,7 @@ var ironicUnmatchedNodesGauge = prometheus.NewGaugeVec(
 )
 
 func init() {
-	limes.RegisterCapacityPlugin(func(c limes.CapacitorConfiguration) limes.CapacityPlugin {
+	limes.RegisterCapacityPlugin(func(c limes.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) limes.CapacityPlugin {
 		return &capacitySapccIronicPlugin{c}
 	})
 	prometheus.MustRegister(ironicUnmatchedNodesGauge)
@@ -71,7 +71,7 @@ type ironicFlavorInfo struct {
 }
 
 //Scrape implements the limes.CapacityPlugin interface.
-func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID string) (map[string]map[string]uint64, error) {
+func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID string) (map[string]map[string]limes.CapacityData, error) {
 	//collect info about flavors with separate instance quota
 	novaClient, err := p.NovaClient(provider)
 	if err != nil {
@@ -83,9 +83,9 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 	}
 
 	//we are going to report capacity for all per-flavor instance quotas
-	result := make(map[string]uint64)
+	result := make(map[string]*limes.CapacityData)
 	for _, flavor := range flavors {
-		result["instances_"+flavor.Name] = 0
+		result["instances_"+flavor.Name] = &limes.CapacityData{Capacity: 0}
 	}
 
 	//count Ironic nodes
@@ -109,7 +109,7 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 		for _, flavor := range flavors {
 			if node.Matches(flavor) {
 				util.LogDebug("Ironic node %q (%s) matches flavor %s", node.Name, node.ID, flavor.Name)
-				result["instances_"+flavor.Name]++
+				result["instances_"+flavor.Name].Capacity++
 				matched = true
 				break
 			}
@@ -124,7 +124,13 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 		prometheus.Labels{"os_cluster": clusterID},
 	).Set(float64(unmatchedCounter))
 
-	return map[string]map[string]uint64{"compute": result}, nil
+	//remove pointers from `result`
+	result2 := make(map[string]limes.CapacityData, len(result))
+	for resourceName, data := range result {
+		result2[resourceName] = *data
+	}
+
+	return map[string]map[string]limes.CapacityData{"compute": result2}, nil
 }
 
 //NOTE: This method is shared with the Nova quota plugin.

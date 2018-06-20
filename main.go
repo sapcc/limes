@@ -345,7 +345,7 @@ func taskTestScanCapacity(config limes.Configuration, cluster *limes.Cluster, ar
 		printUsageAndExit()
 	}
 
-	result := make(map[string]map[string]uint64)
+	result := make(map[string]map[string]limes.CapacityData)
 	for capacitorID, plugin := range cluster.CapacityPlugins {
 		capacities, err := plugin.Scrape(cluster.ProviderClient(), cluster.ID)
 		if err != nil {
@@ -354,7 +354,7 @@ func taskTestScanCapacity(config limes.Configuration, cluster *limes.Cluster, ar
 		//merge capacities from this plugin into the overall capacity values map
 		for serviceType, resources := range capacities {
 			if _, ok := result[serviceType]; !ok {
-				result[serviceType] = make(map[string]uint64)
+				result[serviceType] = make(map[string]limes.CapacityData)
 			}
 			for resourceName, value := range resources {
 				result[serviceType][resourceName] = value
