@@ -135,6 +135,9 @@ func Test_Consistency(t *testing.T) {
 		Name:      "capacity",
 		Quota:     200,
 	})
+	if err != nil {
+		t.Error(err)
+	}
 	//add a project_resource that contradicts the cluster.QuotaConstraints; this
 	//should cause CheckConsistency() to mark the corresponding project_service
 	//as stale (to prompt the scraper to take care of the problem)
