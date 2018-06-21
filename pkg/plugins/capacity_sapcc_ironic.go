@@ -113,13 +113,23 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 				data := result["instances_"+flavor.Name]
 				data.Capacity++
 				if p.reportSubcapacities {
-					data.Subcapacities = append(data.Subcapacities, map[string]interface{}{
-						"id":    node.ID,
-						"name":  node.Name,
-						"ram":   limes.ValueWithUnit{Unit: limes.UnitMebibytes, Value: uint64(node.Properties.MemoryMiB)},
-						"disk":  limes.ValueWithUnit{Unit: limes.UnitGibibytes, Value: uint64(node.Properties.DiskGiB)},
-						"cores": node.Properties.Cores,
-					})
+					sub := map[string]interface{}{
+						"id":   node.ID,
+						"name": node.Name,
+					}
+					if node.Properties.MemoryMiB > 0 {
+						sub["ram"] = limes.ValueWithUnit{Unit: limes.UnitMebibytes, Value: uint64(node.Properties.MemoryMiB)}
+					}
+					if node.Properties.DiskGiB > 0 {
+						sub["disk"] = limes.ValueWithUnit{Unit: limes.UnitGibibytes, Value: uint64(node.Properties.DiskGiB)}
+					}
+					if node.Properties.Cores > 0 {
+						sub["cores"] = uint64(node.Properties.Cores)
+					}
+					if node.Properties.SerialNumber != "" {
+						sub["serial"] = node.Properties.SerialNumber
+					}
+					data.Subcapacities = append(data.Subcapacities, sub)
 				}
 
 				matched = true

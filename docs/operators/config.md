@@ -473,6 +473,7 @@ bear the following attributes:
 | `ram` | integer value with unit | amount of memory |
 | `cores` | integer | number of CPU cores |
 | `disk` | integer value with unit | root disk size |
+| `serial` | string | hardware serial number for node |
 
 [yaml]:   http://yaml.org/
 [pq-uri]: https://www.postgresql.org/docs/9.6/static/libpq-connect.html#LIBPQ-CONNSTRING
