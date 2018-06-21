@@ -36,7 +36,7 @@ type capacityPrometheusPlugin struct {
 }
 
 func init() {
-	limes.RegisterCapacityPlugin(func(c limes.CapacitorConfiguration) limes.CapacityPlugin {
+	limes.RegisterCapacityPlugin(func(c limes.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) limes.CapacityPlugin {
 		return &capacityPrometheusPlugin{c}
 	})
 }
@@ -67,16 +67,16 @@ func (p *capacityPrometheusPlugin) ID() string {
 }
 
 //Scrape implements the limes.CapacityPlugin interface.
-func (p *capacityPrometheusPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID string) (map[string]map[string]uint64, error) {
+func (p *capacityPrometheusPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID string) (map[string]map[string]limes.CapacityData, error) {
 
 	client, err := p.Client(p.cfg.Prometheus.APIURL)
 	if err != nil {
 		return nil, err
 	}
 
-	result := make(map[string]map[string]uint64)
+	result := make(map[string]map[string]limes.CapacityData)
 	for serviceType, queries := range p.cfg.Prometheus.Queries {
-		serviceResult := make(map[string]uint64)
+		serviceResult := make(map[string]limes.CapacityData)
 		for resourceName, query := range queries {
 
 			var value model.Value
@@ -98,7 +98,7 @@ func (p *capacityPrometheusPlugin) Scrape(provider *gophercloud.ProviderClient, 
 				util.LogInfo("Prometheus query returned more than one result: %s (only the first value will be used)", query)
 				fallthrough
 			case 1:
-				serviceResult[resourceName] = uint64(resultVector[0].Value)
+				serviceResult[resourceName] = limes.CapacityData{Capacity: uint64(resultVector[0].Value)}
 			}
 
 		}

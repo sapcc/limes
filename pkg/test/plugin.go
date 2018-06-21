@@ -131,14 +131,15 @@ func (p *Plugin) SetQuota(provider *gophercloud.ProviderClient, clusterID, domai
 
 //CapacityPlugin is a limes.CapacityPlugin implementation for unit tests.
 type CapacityPlugin struct {
-	PluginID  string
-	Resources []string //each formatted as "servicetype/resourcename"
-	Capacity  uint64
+	PluginID          string
+	Resources         []string //each formatted as "servicetype/resourcename"
+	Capacity          uint64
+	WithSubcapacities bool
 }
 
 //NewCapacityPlugin creates a new CapacityPlugin.
 func NewCapacityPlugin(id string, resources ...string) *CapacityPlugin {
-	return &CapacityPlugin{id, resources, 42}
+	return &CapacityPlugin{id, resources, 42, false}
 }
 
 //ID implements the limes.CapacityPlugin interface.
@@ -147,15 +148,23 @@ func (p *CapacityPlugin) ID() string {
 }
 
 //Scrape implements the limes.CapacityPlugin interface.
-func (p *CapacityPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID string) (map[string]map[string]uint64, error) {
-	result := make(map[string]map[string]uint64)
+func (p *CapacityPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID string) (map[string]map[string]limes.CapacityData, error) {
+	var subcapacities []interface{}
+	if p.WithSubcapacities {
+		subcapacities = []interface{}{
+			map[string]uint64{"smaller_half": p.Capacity / 3},
+			map[string]uint64{"larger_half": p.Capacity - p.Capacity/3},
+		}
+	}
+
+	result := make(map[string]map[string]limes.CapacityData)
 	for _, str := range p.Resources {
 		parts := strings.SplitN(str, "/", 2)
 		_, exists := result[parts[0]]
 		if !exists {
-			result[parts[0]] = make(map[string]uint64)
+			result[parts[0]] = make(map[string]limes.CapacityData)
 		}
-		result[parts[0]][parts[1]] = p.Capacity
+		result[parts[0]][parts[1]] = limes.CapacityData{Capacity: p.Capacity, Subcapacities: subcapacities}
 	}
 	return result, nil
 }

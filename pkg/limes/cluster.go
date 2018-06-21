@@ -84,13 +84,22 @@ func NewCluster(id string, config *ClusterConfiguration) *Cluster {
 		c.IsServiceShared[srv.Type] = srv.Shared
 	}
 
+	scrapeSubcapacities := make(map[string]map[string]bool)
+	for serviceType, resourceNames := range config.Subcapacities {
+		m := make(map[string]bool)
+		for _, resourceName := range resourceNames {
+			m[resourceName] = true
+		}
+		scrapeSubcapacities[serviceType] = m
+	}
+
 	for _, capa := range config.Capacitors {
 		factory, exists := capacityPluginFactories[capa.ID]
 		if !exists {
 			util.LogError("skipping capacitor %s: no suitable collector plugin found", capa.ID)
 			continue
 		}
-		plugin := factory(capa)
+		plugin := factory(capa, scrapeSubcapacities)
 		if plugin == nil || plugin.ID() != capa.ID {
 			util.LogError("skipping capacitor %s: failed to initialize collector plugin", capa.ID)
 			continue

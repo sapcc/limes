@@ -33,7 +33,7 @@ type capacityManilaPlugin struct {
 }
 
 func init() {
-	limes.RegisterCapacityPlugin(func(c limes.CapacitorConfiguration) limes.CapacityPlugin {
+	limes.RegisterCapacityPlugin(func(c limes.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) limes.CapacityPlugin {
 		return &capacityManilaPlugin{c}
 	})
 }
@@ -50,7 +50,7 @@ func (p *capacityManilaPlugin) ID() string {
 }
 
 //Scrape implements the limes.CapacityPlugin interface.
-func (p *capacityManilaPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID string) (map[string]map[string]uint64, error) {
+func (p *capacityManilaPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID string) (map[string]map[string]limes.CapacityData, error) {
 	cfg := p.cfg.Manila
 	if cfg.ShareNetworks == 0 {
 		return nil, errors.New("missing configuration parameter: share_networks")
@@ -107,13 +107,13 @@ func (p *capacityManilaPlugin) Scrape(provider *gophercloud.ProviderClient, clus
 	//example, with CapacityBalance = 2, we allocate 2/3 of the total capacity to
 	//snapshots, and 1/3 to shares.
 	b := cfg.CapacityBalance
-	return map[string]map[string]uint64{
+	return map[string]map[string]limes.CapacityData{
 		"sharev2": {
-			"share_networks":    cfg.ShareNetworks,
-			"shares":            shareCount,
-			"share_snapshots":   cfg.SnapshotsPerShare * shareCount,
-			"share_capacity":    uint64(1 / (b + 1) * totalCapacityGB),
-			"snapshot_capacity": uint64(b / (b + 1) * totalCapacityGB),
+			"share_networks":    limes.CapacityData{Capacity: cfg.ShareNetworks},
+			"shares":            limes.CapacityData{Capacity: shareCount},
+			"share_snapshots":   limes.CapacityData{Capacity: cfg.SnapshotsPerShare * shareCount},
+			"share_capacity":    limes.CapacityData{Capacity: uint64(1 / (b + 1) * totalCapacityGB)},
+			"snapshot_capacity": limes.CapacityData{Capacity: uint64(b / (b + 1) * totalCapacityGB)},
 		},
 	}, nil
 }

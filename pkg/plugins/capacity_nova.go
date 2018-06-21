@@ -37,7 +37,7 @@ type capacityNovaPlugin struct {
 }
 
 func init() {
-	limes.RegisterCapacityPlugin(func(c limes.CapacitorConfiguration) limes.CapacityPlugin {
+	limes.RegisterCapacityPlugin(func(c limes.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) limes.CapacityPlugin {
 		return &capacityNovaPlugin{c}
 	})
 }
@@ -53,7 +53,7 @@ func (p *capacityNovaPlugin) ID() string {
 }
 
 //Scrape implements the limes.CapacityPlugin interface.
-func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID string) (map[string]map[string]uint64, error) {
+func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID string) (map[string]map[string]limes.CapacityData, error) {
 	var hypervisorTypeRx *regexp.Regexp
 	if p.cfg.Nova.HypervisorTypePattern != "" {
 		var err error
@@ -183,15 +183,16 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, cluste
 		vcpuOvercommitFactor = *p.cfg.Nova.VCPUOvercommitFactor
 	}
 
-	capacity := map[string]map[string]uint64{
+	capacity := map[string]map[string]limes.CapacityData{
 		"compute": {
-			"cores": totalVcpus * vcpuOvercommitFactor,
-			"ram":   totalMemoryMb,
+			"cores": limes.CapacityData{Capacity: totalVcpus * vcpuOvercommitFactor},
+			"ram":   limes.CapacityData{Capacity: totalMemoryMb},
 		},
 	}
 
 	if maxFlavorSize != 0 {
-		capacity["compute"]["instances"] = uint64(math.Min(float64(10000*azCount), float64(totalLocalGb)/maxFlavorSize))
+		instanceCapacity := uint64(math.Min(float64(10000*azCount), float64(totalLocalGb)/maxFlavorSize))
+		capacity["compute"]["instances"] = limes.CapacityData{Capacity: instanceCapacity}
 	} else {
 		util.LogError("Nova Capacity: Maximal flavor size is 0. Not reporting instances.")
 	}

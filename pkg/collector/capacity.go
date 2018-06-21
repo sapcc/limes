@@ -20,10 +20,13 @@
 package collector
 
 import (
+	"encoding/json"
+	"fmt"
 	"sort"
 	"time"
 
 	"github.com/sapcc/limes/pkg/db"
+	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/util"
 )
 
@@ -49,7 +52,7 @@ func (c *Collector) ScanCapacity() {
 }
 
 func (c *Collector) scanCapacity() {
-	values := make(map[string]map[string]uint64)
+	values := make(map[string]map[string]limes.CapacityData)
 	scrapedAt := c.TimeNow()
 
 	for capacitorID, plugin := range c.Cluster.CapacityPlugins {
@@ -62,7 +65,7 @@ func (c *Collector) scanCapacity() {
 		//merge capacities from this plugin into the overall capacity values map
 		for serviceType, resources := range capacities {
 			if _, ok := values[serviceType]; !ok {
-				values[serviceType] = make(map[string]uint64)
+				values[serviceType] = make(map[string]limes.CapacityData)
 			}
 			for resourceName, value := range resources {
 				values[serviceType][resourceName] = value
@@ -98,8 +101,8 @@ func (c *Collector) scanCapacity() {
 	}
 
 	//split values into sharedValues and unsharedValues
-	sharedValues := make(map[string]map[string]uint64)
-	unsharedValues := make(map[string]map[string]uint64)
+	sharedValues := make(map[string]map[string]limes.CapacityData)
+	unsharedValues := make(map[string]map[string]limes.CapacityData)
 	for serviceType, subvalues := range values {
 		if c.Cluster.IsServiceShared[serviceType] {
 			sharedValues[serviceType] = subvalues
@@ -124,7 +127,7 @@ var listProtectedServicesQueryStr = `
 	 WHERE cs.cluster_id = $1 AND cr.comment != ''
 `
 
-func (c *Collector) writeCapacity(clusterID string, values map[string]map[string]uint64, scrapedAt time.Time) error {
+func (c *Collector) writeCapacity(clusterID string, values map[string]map[string]limes.CapacityData, scrapedAt time.Time) error {
 	//NOTE: clusterID is not taken from c.Cluster because it can also be "shared".
 
 	//do the following in a transaction to avoid inconsistent DB state
@@ -190,9 +193,20 @@ func (c *Collector) writeCapacity(clusterID string, values map[string]map[string
 		for _, dbResource := range dbResources {
 			seen[dbResource.Name] = true
 
-			capacity, exists := serviceValues[dbResource.Name]
+			data, exists := serviceValues[dbResource.Name]
 			if exists {
-				dbResource.Capacity = capacity
+				dbResource.Capacity = data.Capacity
+
+				if len(data.Subcapacities) == 0 {
+					dbResource.SubcapacitiesJSON = ""
+				} else {
+					bytes, err := json.Marshal(data.Subcapacities)
+					if err != nil {
+						return fmt.Errorf("failed to convert subcapacities to JSON: %s", err.Error())
+					}
+					dbResource.SubcapacitiesJSON = string(bytes)
+				}
+
 				//if this is a manually maintained record, upgrade it to automatically maintained
 				dbResource.Comment = ""
 				_, err := tx.Update(dbResource)
@@ -221,11 +235,22 @@ func (c *Collector) writeCapacity(clusterID string, values map[string]map[string
 		}
 		sort.Strings(missingResourceNames) //for reproducability in unit test
 		for _, name := range missingResourceNames {
+			data := serviceValues[name]
 			res := &db.ClusterResource{
-				ServiceID: serviceID,
-				Name:      name,
-				Capacity:  serviceValues[name],
+				ServiceID:         serviceID,
+				Name:              name,
+				Capacity:          data.Capacity,
+				SubcapacitiesJSON: "", //but see below
 			}
+
+			if len(data.Subcapacities) != 0 {
+				bytes, err := json.Marshal(data.Subcapacities)
+				if err != nil {
+					return fmt.Errorf("failed to convert subcapacities to JSON: %s", err.Error())
+				}
+				res.SubcapacitiesJSON = string(bytes)
+			}
+
 			err := tx.Insert(res)
 			if err != nil {
 				return err

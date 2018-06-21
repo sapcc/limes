@@ -10,6 +10,8 @@
 // pkg/db/migrations/004_fix_domain_uuid_uniqueness.up.sql
 // pkg/db/migrations/005_add_project_resource_subresources.down.sql
 // pkg/db/migrations/005_add_project_resource_subresources.up.sql
+// pkg/db/migrations/006_add_cluster_resources_subcapacities.down.sql
+// pkg/db/migrations/006_add_cluster_resources_subcapacities.up.sql
 // DO NOT EDIT!
 
 package dbdata
@@ -92,7 +94,7 @@ func _001_initialDownSql() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "001_initial.down.sql", size: 255, mode: os.FileMode(420), modTime: time.Unix(1488533276, 0)}
+	info := bindataFileInfo{name: "001_initial.down.sql", size: 255, mode: os.FileMode(420), modTime: time.Unix(1512381827, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -112,7 +114,7 @@ func _001_initialUpSql() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "001_initial.up.sql", size: 1996, mode: os.FileMode(420), modTime: time.Unix(1489655842, 0)}
+	info := bindataFileInfo{name: "001_initial.up.sql", size: 1996, mode: os.FileMode(420), modTime: time.Unix(1512381827, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -132,7 +134,7 @@ func _002_add_cluster_resource_commentDownSql() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "002_add_cluster_resource_comment.down.sql", size: 51, mode: os.FileMode(420), modTime: time.Unix(1492505794, 0)}
+	info := bindataFileInfo{name: "002_add_cluster_resource_comment.down.sql", size: 51, mode: os.FileMode(420), modTime: time.Unix(1512381827, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -152,7 +154,7 @@ func _002_add_cluster_resource_commentUpSql() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "002_add_cluster_resource_comment.up.sql", size: 75, mode: os.FileMode(420), modTime: time.Unix(1492505794, 0)}
+	info := bindataFileInfo{name: "002_add_cluster_resource_comment.up.sql", size: 75, mode: os.FileMode(420), modTime: time.Unix(1512381827, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -172,7 +174,7 @@ func _003_add_project_parent_idDownSql() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "003_add_project_parent_id.down.sql", size: 46, mode: os.FileMode(420), modTime: time.Unix(1493727781, 0)}
+	info := bindataFileInfo{name: "003_add_project_parent_id.down.sql", size: 46, mode: os.FileMode(420), modTime: time.Unix(1512381827, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -192,7 +194,7 @@ func _003_add_project_parent_idUpSql() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "003_add_project_parent_id.up.sql", size: 70, mode: os.FileMode(420), modTime: time.Unix(1493727775, 0)}
+	info := bindataFileInfo{name: "003_add_project_parent_id.up.sql", size: 70, mode: os.FileMode(420), modTime: time.Unix(1512381827, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -212,7 +214,7 @@ func _004_fix_domain_uuid_uniquenessDownSql() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "004_fix_domain_uuid_uniqueness.down.sql", size: 150, mode: os.FileMode(420), modTime: time.Unix(1494241913, 0)}
+	info := bindataFileInfo{name: "004_fix_domain_uuid_uniqueness.down.sql", size: 150, mode: os.FileMode(420), modTime: time.Unix(1512381827, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -232,7 +234,7 @@ func _004_fix_domain_uuid_uniquenessUpSql() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "004_fix_domain_uuid_uniqueness.up.sql", size: 151, mode: os.FileMode(420), modTime: time.Unix(1494241923, 0)}
+	info := bindataFileInfo{name: "004_fix_domain_uuid_uniqueness.up.sql", size: 151, mode: os.FileMode(420), modTime: time.Unix(1512381827, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -252,7 +254,7 @@ func _005_add_project_resource_subresourcesDownSql() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "005_add_project_resource_subresources.down.sql", size: 56, mode: os.FileMode(420), modTime: time.Unix(1494421560, 0)}
+	info := bindataFileInfo{name: "005_add_project_resource_subresources.down.sql", size: 56, mode: os.FileMode(420), modTime: time.Unix(1512381827, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -272,7 +274,47 @@ func _005_add_project_resource_subresourcesUpSql() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "005_add_project_resource_subresources.up.sql", size: 80, mode: os.FileMode(420), modTime: time.Unix(1494421560, 0)}
+	info := bindataFileInfo{name: "005_add_project_resource_subresources.up.sql", size: 80, mode: os.FileMode(420), modTime: time.Unix(1512381827, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
+var __006_add_cluster_resources_subcapacitiesDownSql = []byte("\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\x72\xf4\x09\x71\x0d\x52\x08\x71\x74\xf2\x71\x55\x48\xce\x29\x2d\x2e\x49\x2d\x8a\x2f\x4a\x2d\xce\x2f\x2d\x4a\x4e\x2d\x56\x70\x09\xf2\x0f\x50\x70\xf6\xf7\x09\xf5\xf5\x53\x28\x2e\x4d\x4a\x4e\x2c\x48\x4c\xce\x2c\xc9\x4c\x2d\xb6\xe6\x02\x04\x00\x00\xff\xff\x6e\x04\x33\xae\x39\x00\x00\x00")
+
+func _006_add_cluster_resources_subcapacitiesDownSqlBytes() ([]byte, error) {
+	return bindataRead(
+		__006_add_cluster_resources_subcapacitiesDownSql,
+		"006_add_cluster_resources_subcapacities.down.sql",
+	)
+}
+
+func _006_add_cluster_resources_subcapacitiesDownSql() (*asset, error) {
+	bytes, err := _006_add_cluster_resources_subcapacitiesDownSqlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "006_add_cluster_resources_subcapacities.down.sql", size: 57, mode: os.FileMode(420), modTime: time.Unix(1529486720, 0)}
+	a := &asset{bytes: bytes, info: info}
+	return a, nil
+}
+
+var __006_add_cluster_resources_subcapacitiesUpSql = []byte("\x1f\x8b\x08\x00\x00\x00\x00\x00\x00\xff\x04\xc0\x31\x0a\x42\x31\x0c\x06\xe0\xdd\x53\xfc\x5b\x0f\xe1\x14\x6d\x9c\x62\x0b\x92\x82\x9b\xd4\x90\xa1\x20\xf8\x68\xda\xfb\xbf\x8f\x44\xf9\x05\xa5\x9b\x30\xec\xb7\x63\xf9\xfc\x4c\x8f\xff\x9e\xe6\x01\xca\x19\xf7\x2a\xed\x59\x10\xfb\x6b\xfd\xe8\x36\xd6\xf0\x80\xf2\x5b\x51\xaa\xa2\x34\x11\x64\x7e\x50\x13\x45\x4a\xd7\xcb\x19\x00\x00\xff\xff\xb5\x6b\xc1\xbd\x51\x00\x00\x00")
+
+func _006_add_cluster_resources_subcapacitiesUpSqlBytes() ([]byte, error) {
+	return bindataRead(
+		__006_add_cluster_resources_subcapacitiesUpSql,
+		"006_add_cluster_resources_subcapacities.up.sql",
+	)
+}
+
+func _006_add_cluster_resources_subcapacitiesUpSql() (*asset, error) {
+	bytes, err := _006_add_cluster_resources_subcapacitiesUpSqlBytes()
+	if err != nil {
+		return nil, err
+	}
+
+	info := bindataFileInfo{name: "006_add_cluster_resources_subcapacities.up.sql", size: 81, mode: os.FileMode(420), modTime: time.Unix(1529486742, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -329,16 +371,18 @@ func AssetNames() []string {
 
 // _bindata is a table, holding each asset generator, mapped to its name.
 var _bindata = map[string]func() (*asset, error){
-	"001_initial.down.sql":                           _001_initialDownSql,
-	"001_initial.up.sql":                             _001_initialUpSql,
-	"002_add_cluster_resource_comment.down.sql":      _002_add_cluster_resource_commentDownSql,
-	"002_add_cluster_resource_comment.up.sql":        _002_add_cluster_resource_commentUpSql,
-	"003_add_project_parent_id.down.sql":             _003_add_project_parent_idDownSql,
-	"003_add_project_parent_id.up.sql":               _003_add_project_parent_idUpSql,
-	"004_fix_domain_uuid_uniqueness.down.sql":        _004_fix_domain_uuid_uniquenessDownSql,
-	"004_fix_domain_uuid_uniqueness.up.sql":          _004_fix_domain_uuid_uniquenessUpSql,
-	"005_add_project_resource_subresources.down.sql": _005_add_project_resource_subresourcesDownSql,
-	"005_add_project_resource_subresources.up.sql":   _005_add_project_resource_subresourcesUpSql,
+	"001_initial.down.sql":                             _001_initialDownSql,
+	"001_initial.up.sql":                               _001_initialUpSql,
+	"002_add_cluster_resource_comment.down.sql":        _002_add_cluster_resource_commentDownSql,
+	"002_add_cluster_resource_comment.up.sql":          _002_add_cluster_resource_commentUpSql,
+	"003_add_project_parent_id.down.sql":               _003_add_project_parent_idDownSql,
+	"003_add_project_parent_id.up.sql":                 _003_add_project_parent_idUpSql,
+	"004_fix_domain_uuid_uniqueness.down.sql":          _004_fix_domain_uuid_uniquenessDownSql,
+	"004_fix_domain_uuid_uniqueness.up.sql":            _004_fix_domain_uuid_uniquenessUpSql,
+	"005_add_project_resource_subresources.down.sql":   _005_add_project_resource_subresourcesDownSql,
+	"005_add_project_resource_subresources.up.sql":     _005_add_project_resource_subresourcesUpSql,
+	"006_add_cluster_resources_subcapacities.down.sql": _006_add_cluster_resources_subcapacitiesDownSql,
+	"006_add_cluster_resources_subcapacities.up.sql":   _006_add_cluster_resources_subcapacitiesUpSql,
 }
 
 // AssetDir returns the file names below a certain
@@ -382,16 +426,18 @@ type bintree struct {
 }
 
 var _bintree = &bintree{nil, map[string]*bintree{
-	"001_initial.down.sql":                           {_001_initialDownSql, map[string]*bintree{}},
-	"001_initial.up.sql":                             {_001_initialUpSql, map[string]*bintree{}},
-	"002_add_cluster_resource_comment.down.sql":      {_002_add_cluster_resource_commentDownSql, map[string]*bintree{}},
-	"002_add_cluster_resource_comment.up.sql":        {_002_add_cluster_resource_commentUpSql, map[string]*bintree{}},
-	"003_add_project_parent_id.down.sql":             {_003_add_project_parent_idDownSql, map[string]*bintree{}},
-	"003_add_project_parent_id.up.sql":               {_003_add_project_parent_idUpSql, map[string]*bintree{}},
-	"004_fix_domain_uuid_uniqueness.down.sql":        {_004_fix_domain_uuid_uniquenessDownSql, map[string]*bintree{}},
-	"004_fix_domain_uuid_uniqueness.up.sql":          {_004_fix_domain_uuid_uniquenessUpSql, map[string]*bintree{}},
-	"005_add_project_resource_subresources.down.sql": {_005_add_project_resource_subresourcesDownSql, map[string]*bintree{}},
-	"005_add_project_resource_subresources.up.sql":   {_005_add_project_resource_subresourcesUpSql, map[string]*bintree{}},
+	"001_initial.down.sql":                             {_001_initialDownSql, map[string]*bintree{}},
+	"001_initial.up.sql":                               {_001_initialUpSql, map[string]*bintree{}},
+	"002_add_cluster_resource_comment.down.sql":        {_002_add_cluster_resource_commentDownSql, map[string]*bintree{}},
+	"002_add_cluster_resource_comment.up.sql":          {_002_add_cluster_resource_commentUpSql, map[string]*bintree{}},
+	"003_add_project_parent_id.down.sql":               {_003_add_project_parent_idDownSql, map[string]*bintree{}},
+	"003_add_project_parent_id.up.sql":                 {_003_add_project_parent_idUpSql, map[string]*bintree{}},
+	"004_fix_domain_uuid_uniqueness.down.sql":          {_004_fix_domain_uuid_uniquenessDownSql, map[string]*bintree{}},
+	"004_fix_domain_uuid_uniqueness.up.sql":            {_004_fix_domain_uuid_uniquenessUpSql, map[string]*bintree{}},
+	"005_add_project_resource_subresources.down.sql":   {_005_add_project_resource_subresourcesDownSql, map[string]*bintree{}},
+	"005_add_project_resource_subresources.up.sql":     {_005_add_project_resource_subresourcesUpSql, map[string]*bintree{}},
+	"006_add_cluster_resources_subcapacities.down.sql": {_006_add_cluster_resources_subcapacitiesDownSql, map[string]*bintree{}},
+	"006_add_cluster_resources_subcapacities.up.sql":   {_006_add_cluster_resources_subcapacitiesUpSql, map[string]*bintree{}},
 }}
 
 // RestoreAsset restores an asset under the given directory

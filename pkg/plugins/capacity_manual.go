@@ -31,7 +31,7 @@ type capacityManualPlugin struct {
 }
 
 func init() {
-	limes.RegisterCapacityPlugin(func(c limes.CapacitorConfiguration) limes.CapacityPlugin {
+	limes.RegisterCapacityPlugin(func(c limes.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) limes.CapacityPlugin {
 		return &capacityManualPlugin{c}
 	})
 }
@@ -44,9 +44,19 @@ func (p *capacityManualPlugin) ID() string {
 var errNoManualData = errors.New(`missing values for capacitor plugin "manual"`)
 
 //Scrape implements the limes.CapacityPlugin interface.
-func (p *capacityManualPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID string) (map[string]map[string]uint64, error) {
+func (p *capacityManualPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID string) (map[string]map[string]limes.CapacityData, error) {
 	if p.cfg.Manual == nil {
 		return nil, errNoManualData
 	}
-	return p.cfg.Manual, nil
+
+	result := make(map[string]map[string]limes.CapacityData)
+	for serviceType, serviceData := range p.cfg.Manual {
+		serviceResult := make(map[string]limes.CapacityData)
+		for resourceName, capacity := range serviceData {
+			serviceResult[resourceName] = limes.CapacityData{Capacity: capacity}
+		}
+		result[serviceType] = serviceResult
+	}
+
+	return result, nil
 }
