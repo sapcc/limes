@@ -1,0 +1,113 @@
+/*******************************************************************************
+*
+* Copyright 2018 SAP SE
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You should have received a copy of the License along with this
+* program. If not, you may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*
+*******************************************************************************/
+
+package reports
+
+import (
+	"database/sql"
+	"fmt"
+
+	"github.com/sapcc/limes/pkg/db"
+	"github.com/sapcc/limes/pkg/limes"
+)
+
+//Inconsistencies contains aggregated data about inconsistent quota setups for domains and projects
+//in the current cluster.
+type Inconsistencies struct {
+	ClusterID           string                     `json:"cluster_id"`
+	OvercommittedQuotas []OvercommittedDomainQuota `json:"domain_quota_overcommitted,keepempty"`
+	// OverspentQuotas     []OverspentProjectQuota    `json:"project_quota_overspent,keepempty"`
+	// MismatchQuotas      []MismatchProjectQuota     `json:"project_quota_mismatch,keepempty"`
+}
+
+//OvercommittedDomainQuota is a substructure of Inconsistency containing data for the inconsistency type
+//where for a domain the sum(projects_quota) > domain_quota for a single resource.
+type OvercommittedDomainQuota struct {
+	Domain        DomainData `json:"domain,keepempty"`
+	Service       string     `json:"service,keepempty"`
+	Resource      string     `json:"resource,keepempty"`
+	DomainQuota   uint64     `json:"domain_quota,keepempty"`
+	ProjectsQuota uint64     `json:"projects_quota,keepempty"`
+}
+
+//OverspentProjectQuota is a substructure of Inconsistency containing data for the inconsistency type
+//where for some project the usage > quota for a single resource.
+// type OverspentProjectQuota struct {
+// }
+
+//MismatchProjectQuota is a substructure of Inconsistency containing data for the inconsistency type
+//where for some project the quota != backend_quota for a single resource.
+// type OverspentProjectQuota struct {
+// }
+
+//DomainData is a substructure containing domain data for a single inconsistency
+type DomainData struct {
+	UUID string `json:"id"`
+	Name string `json:"name"`
+}
+
+//ProjectData is a substructure containing project data for a single inconsistency
+// type ProjectData struct {
+// }
+
+var ocdqReportQuery = `
+	SELECT d.uuid, d.name, ps.type, pr.name, COALESCE(SUM(dr.quota),0), COALESCE(SUM(pr.quota),0)
+	  FROM domains d
+	  LEFT OUTER JOIN domain_services ds ON ds.domain_id = d.id
+	  LEFT OUTER JOIN domain_resources dr ON dr.service_id = ds.id
+	  JOIN projects p ON p.domain_id = d.id
+	  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
+	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
+	WHERE %s GROUP BY d.uuid, d.name, ps.type, pr.name
+	HAVING COALESCE(SUM(dr.quota),0) < COALESCE(SUM(pr.quota),0)
+	ORDER BY d.uuid ASC
+`
+
+//GetInconsistencies returns Inconsistency reports for all inconsistencies and their projects in the current cluster.
+func GetInconsistencies(cluster *limes.Cluster, dbi db.Interface, filter Filter) (*Inconsistencies, error) {
+	fields := map[string]interface{}{"d.cluster_id": cluster.ID}
+
+	//Initialize inconsistencies as Inconsistencies type and assign ClusterID.
+	//The inconsistency data will be assigned in the respective SQL queries.
+	inconsistencies := Inconsistencies{
+		ClusterID: cluster.ID,
+	}
+
+	//ocdqReportQuery: data for OvercommittedDomainQuota inconsistencies.
+	queryStr, joinArgs := filter.PrepareQuery(ocdqReportQuery)
+	whereStr, whereArgs := db.BuildSimpleWhereClause(fields, len(joinArgs))
+	err := db.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
+		ocdq := OvercommittedDomainQuota{}
+		err := rows.Scan(
+			&ocdq.Domain.UUID, &ocdq.Domain.Name, &ocdq.Service, &ocdq.Resource, &ocdq.DomainQuota, &ocdq.ProjectsQuota,
+		)
+		if err != nil {
+			return err
+		}
+
+		inconsistencies.OvercommittedQuotas = append(inconsistencies.OvercommittedQuotas, ocdq)
+
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &inconsistencies, nil
+}
