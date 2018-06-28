@@ -32,7 +32,7 @@ type Inconsistencies struct {
 	ClusterID           string                     `json:"cluster_id"`
 	OvercommittedQuotas []OvercommittedDomainQuota `json:"domain_quota_overcommitted,keepempty"`
 	OverspentQuotas     []OverspentProjectQuota    `json:"project_quota_overspent,keepempty"`
-	// MismatchQuotas      []MismatchProjectQuota     `json:"project_quota_mismatch,keepempty"`
+	MismatchQuotas      []MismatchProjectQuota     `json:"project_quota_mismatch,keepempty"`
 }
 
 //OvercommittedDomainQuota is a substructure of Inconsistency containing data for the inconsistency type
@@ -57,13 +57,13 @@ type OverspentProjectQuota struct {
 
 //MismatchProjectQuota is a substructure of Inconsistency containing data for the inconsistency type
 //where for some project the quota != backend_quota for a single resource.
-// type MismatchProjectQuota struct {
-// 	Project      ProjectData `json:"project,keepempty"`
-// 	Service      string      `json:"service,keepempty"`
-// 	Resource     string      `json:"resource,keepempty"`
-// 	Quota        uint64      `json:"quota,keepempty"`
-// 	BackendQuota uint64      `json:"backend_quota,keepempty"`
-// }
+type MismatchProjectQuota struct {
+	Project      ProjectData `json:"project,keepempty"`
+	Service      string      `json:"service,keepempty"`
+	Resource     string      `json:"resource,keepempty"`
+	Quota        uint64      `json:"quota,keepempty"`
+	BackendQuota uint64      `json:"backend_quota,keepempty"`
+}
 
 //DomainData is a substructure containing domain data for a single inconsistency
 type DomainData struct {
@@ -99,6 +99,17 @@ var ospqReportQuery = `
 	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
 	WHERE %s GROUP BY d.uuid, d.name, p.uuid, p.name, ps.type, pr.name
 	HAVING SUM(pr.usage) > SUM(pr.quota)
+	ORDER BY p.uuid ASC
+`
+
+var mmpqReportQuery = `
+	SELECT d.uuid, d.name, p.uuid, p.name, ps.type, pr.name, SUM(pr.quota), SUM(pr.backend_quota)
+	  FROM projects p
+	  LEFT OUTER JOIN domains d ON d.id=p.domain_id
+	  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
+	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
+	WHERE %s GROUP BY d.uuid, d.name, p.uuid, p.name, ps.type, pr.name
+	HAVING SUM(pr.quota) > SUM(pr.backend_quota)
 	ORDER BY p.uuid ASC
 `
 
@@ -144,6 +155,24 @@ func GetInconsistencies(cluster *limes.Cluster, dbi db.Interface, filter Filter)
 		}
 
 		inconsistencies.OverspentQuotas = append(inconsistencies.OverspentQuotas, ospq)
+
+		return err
+	})
+
+	//mmpqReportQuery: data for MismatchProjectQuota inconsistencies.
+	queryStr, joinArgs = filter.PrepareQuery(mmpqReportQuery)
+	whereStr, whereArgs = db.BuildSimpleWhereClause(fields, len(joinArgs))
+	err = db.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
+		mmpq := MismatchProjectQuota{}
+		err := rows.Scan(
+			&mmpq.Project.Domain.UUID, &mmpq.Project.Domain.Name, &mmpq.Project.UUID,
+			&mmpq.Project.Name, &mmpq.Service, &mmpq.Resource, &mmpq.Quota, &mmpq.BackendQuota,
+		)
+		if err != nil {
+			return err
+		}
+
+		inconsistencies.MismatchQuotas = append(inconsistencies.MismatchQuotas, mmpq)
 
 		return err
 	})
