@@ -109,7 +109,7 @@ var mmpqReportQuery = `
 	  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
 	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
 	WHERE %s GROUP BY d.uuid, d.name, p.uuid, p.name, ps.type, pr.name
-	HAVING SUM(pr.quota) > SUM(pr.backend_quota)
+	HAVING SUM(pr.quota) != SUM(pr.backend_quota)
 	ORDER BY p.uuid ASC
 `
 
