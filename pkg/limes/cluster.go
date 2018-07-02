@@ -31,15 +31,15 @@ import (
 //cluster. It is passed around a lot in Limes code, mostly for the cluster ID,
 //the list of enabled services, and access to the quota and capacity plugins.
 type Cluster struct {
-	ID              string
-	Config          *ClusterConfiguration
-	ServiceTypes    []string
-	IsServiceShared map[string]bool
-	DiscoveryPlugin DiscoveryPlugin
-	QuotaPlugins    map[string]QuotaPlugin
-	CapacityPlugins map[string]CapacityPlugin
-	Authoritative   bool
-	QuotaSeeds      *QuotaSeeds
+	ID               string
+	Config           *ClusterConfiguration
+	ServiceTypes     []string
+	IsServiceShared  map[string]bool
+	DiscoveryPlugin  DiscoveryPlugin
+	QuotaPlugins     map[string]QuotaPlugin
+	CapacityPlugins  map[string]CapacityPlugin
+	Authoritative    bool
+	QuotaConstraints *QuotaConstraintSet
 }
 
 //NewCluster creates a new Cluster instance with the given ID and
@@ -84,13 +84,22 @@ func NewCluster(id string, config *ClusterConfiguration) *Cluster {
 		c.IsServiceShared[srv.Type] = srv.Shared
 	}
 
+	scrapeSubcapacities := make(map[string]map[string]bool)
+	for serviceType, resourceNames := range config.Subcapacities {
+		m := make(map[string]bool)
+		for _, resourceName := range resourceNames {
+			m[resourceName] = true
+		}
+		scrapeSubcapacities[serviceType] = m
+	}
+
 	for _, capa := range config.Capacitors {
 		factory, exists := capacityPluginFactories[capa.ID]
 		if !exists {
 			util.LogError("skipping capacitor %s: no suitable collector plugin found", capa.ID)
 			continue
 		}
-		plugin := factory(capa)
+		plugin := factory(capa, scrapeSubcapacities)
 		if plugin == nil || plugin.ID() != capa.ID {
 			util.LogError("skipping capacitor %s: failed to initialize collector plugin", capa.ID)
 			continue
@@ -106,7 +115,20 @@ func NewCluster(id string, config *ClusterConfiguration) *Cluster {
 //Connect calls Connect() on all AuthParameters for this Cluster, thus ensuring
 //that all ProviderClient instances are available. It also calls Init() on all
 //quota plugins.
+//
+//It also loads the QuotaConstraints for thie cluster, if configured.
 func (c *Cluster) Connect() error {
+	if c.Config.ConstraintConfigPath != "" && c.QuotaConstraints == nil {
+		var errs []error
+		c.QuotaConstraints, errs = NewQuotaConstraints(c, c.Config.ConstraintConfigPath)
+		if len(errs) > 0 {
+			for _, err := range errs {
+				util.LogError(err.Error())
+			}
+			return fmt.Errorf("cannot load quota constraints for cluster %s (see errors above)", c.ID)
+		}
+	}
+
 	err := c.Config.Auth.Connect()
 	if err != nil {
 		return fmt.Errorf("failed to authenticate in cluster %s: %s", c.ID, err.Error())

@@ -91,6 +91,16 @@ type QuotaPlugin interface {
 	SetQuota(client *gophercloud.ProviderClient, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error
 }
 
+//CapacityData contains capacity data for a single resource.
+//
+//The Subcapacities field may optionally be populated with subcapacities, if the
+//capacity plugin providing this CapacityData instance has been instructed to (and
+//is able to) scrape subcapacities for this resource.
+type CapacityData struct {
+	Capacity      uint64
+	Subcapacities []interface{}
+}
+
 //CapacityPlugin is the interface that all capacity collector plugins must
 //implement.
 //
@@ -117,7 +127,7 @@ type CapacityPlugin interface {
 	//The clusterID is usually not needed, but should be given as a label to
 	//Prometheus metrics emitted by the plugin (if the plugin does that sort of
 	//thing).
-	Scrape(client *gophercloud.ProviderClient, clusterID string) (map[string]map[string]uint64, error)
+	Scrape(client *gophercloud.ProviderClient, clusterID string) (map[string]map[string]CapacityData, error)
 }
 
 //ResourceInfo contains the metadata for a resource (i.e. some thing for which
@@ -163,8 +173,10 @@ type QuotaPluginFactory func(cfg ServiceConfiguration, scrapeSubresources map[st
 
 //CapacityPluginFactory is a function that produces capacity plugins with a
 //certain ID. The capacity plugin instance will use the capacitor configuration
-//given to it if it wants to.
-type CapacityPluginFactory func(CapacitorConfiguration) CapacityPlugin
+//given to it if it wants to. For plugins that support subcapacity scraping,
+//the second argument indicates which resources to scrape (the first key is the
+//service type, the second key is the resource name).
+type CapacityPluginFactory func(cfg CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) CapacityPlugin
 
 var discoveryPluginFactories = map[string]DiscoveryPluginFactory{}
 var quotaPluginFactories = map[string]QuotaPluginFactory{}
@@ -231,7 +243,7 @@ func RegisterCapacityPlugin(factory CapacityPluginFactory) {
 	if factory == nil {
 		panic("collector.RegisterCapacityPlugin() called with nil CapacityPluginFactory instance")
 	}
-	id := factory(CapacitorConfiguration{}).ID()
+	id := factory(CapacitorConfiguration{}, nil).ID()
 	if id == "" {
 		panic("CapacityPlugin instance with empty ID!")
 	}

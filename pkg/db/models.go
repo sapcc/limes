@@ -31,10 +31,11 @@ type ClusterService struct {
 
 //ClusterResource contains a record from the `cluster_resources` table.
 type ClusterResource struct {
-	ServiceID int64  `db:"service_id"`
-	Name      string `db:"name"`
-	Capacity  uint64 `db:"capacity"`
-	Comment   string `db:"comment"`
+	ServiceID         int64  `db:"service_id"`
+	Name              string `db:"name"`
+	Capacity          uint64 `db:"capacity"`
+	Comment           string `db:"comment"`
+	SubcapacitiesJSON string `db:"subcapacities"`
 }
 
 //Domain contains a record from the `domains` table.

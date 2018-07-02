@@ -185,18 +185,6 @@ func taskCollect(config limes.Configuration, cluster *limes.Cluster, args []stri
 		printUsageAndExit()
 	}
 
-	//load seed configuration
-	if cluster.Config.SeedConfigPath != "" {
-		var errs []error
-		cluster.QuotaSeeds, errs = limes.NewQuotaSeeds(cluster, cluster.Config.SeedConfigPath)
-		if len(errs) > 0 {
-			for _, err := range errs {
-				util.LogError(err.Error())
-			}
-			return fmt.Errorf("cannot load quota seeds for cluster %s (see errors above)", cluster.ID)
-		}
-	}
-
 	//start scraping threads (NOTE: Many people use a pair of sync.WaitGroup and
 	//stop channel to shutdown threads in a controlled manner. I decided against
 	//that for now, and instead construct worker threads in such a way that they
@@ -357,7 +345,7 @@ func taskTestScanCapacity(config limes.Configuration, cluster *limes.Cluster, ar
 		printUsageAndExit()
 	}
 
-	result := make(map[string]map[string]uint64)
+	result := make(map[string]map[string]limes.CapacityData)
 	for capacitorID, plugin := range cluster.CapacityPlugins {
 		capacities, err := plugin.Scrape(cluster.ProviderClient(), cluster.ID)
 		if err != nil {
@@ -366,7 +354,7 @@ func taskTestScanCapacity(config limes.Configuration, cluster *limes.Cluster, ar
 		//merge capacities from this plugin into the overall capacity values map
 		for serviceType, resources := range capacities {
 			if _, ok := result[serviceType]; !ok {
-				result[serviceType] = make(map[string]uint64)
+				result[serviceType] = make(map[string]limes.CapacityData)
 			}
 			for resourceName, value := range resources {
 				result[serviceType][resourceName] = value

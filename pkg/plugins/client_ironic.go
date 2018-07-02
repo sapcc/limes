@@ -63,6 +63,7 @@ type ironicNode struct {
 		MemoryMiB       veryFlexibleUint64 `json:"memory_mb"`
 		CPUArchitecture string             `json:"cpu_arch"`
 		Capabilities    string             `json:"capabilities"` //e.g. "cpu_txt:true,cpu_aes:true"
+		SerialNumber    string             `json:"serial"`
 	} `json:"properties"`
 }
 

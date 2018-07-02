@@ -48,6 +48,8 @@ type APIRequest struct {
 //given http.Handler and compares the response with the expectation in the
 //APIRequest.
 func (r APIRequest) Check(t *testing.T, handler http.Handler) {
+	t.Helper()
+
 	var requestBody io.Reader
 	if r.RequestJSON != nil {
 		body, err := json.Marshal(r.RequestJSON)

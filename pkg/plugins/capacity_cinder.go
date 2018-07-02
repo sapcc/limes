@@ -31,7 +31,7 @@ type capacityCinderPlugin struct {
 }
 
 func init() {
-	limes.RegisterCapacityPlugin(func(c limes.CapacitorConfiguration) limes.CapacityPlugin {
+	limes.RegisterCapacityPlugin(func(c limes.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) limes.CapacityPlugin {
 		return &capacityCinderPlugin{c}
 	})
 }
@@ -48,7 +48,7 @@ func (p *capacityCinderPlugin) ID() string {
 }
 
 //Scrape implements the limes.CapacityPlugin interface.
-func (p *capacityCinderPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID string) (map[string]map[string]uint64, error) {
+func (p *capacityCinderPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID string) (map[string]map[string]limes.CapacityData, error) {
 	client, err := p.Client(provider)
 	if err != nil {
 		return nil, err
@@ -91,9 +91,9 @@ func (p *capacityCinderPlugin) Scrape(provider *gophercloud.ProviderClient, clus
 
 	}
 
-	return map[string]map[string]uint64{
+	return map[string]map[string]limes.CapacityData{
 		"volumev2": {
-			"capacity": totalCapacity,
+			"capacity": limes.CapacityData{Capacity: totalCapacity},
 			//NOTE: no estimates for no. of snapshots/volumes here; this depends highly on the backend
 			//(on SAP CC, we configure capacity for snapshots/volumes via the "manual" capacitor)
 		},

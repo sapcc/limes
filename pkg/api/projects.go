@@ -224,6 +224,11 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 	}
 	domainReport := domainReports[0]
 
+	var constraints limes.QuotaConstraints
+	if cluster.QuotaConstraints != nil {
+		constraints = cluster.QuotaConstraints.Projects[dbDomain.Name][dbProject.Name]
+	}
+
 	//check all services for resources to update
 	var services []db.ProjectService
 	_, err = tx.Select(&services,
@@ -264,7 +269,9 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 				continue //nothing to do
 			}
 
-			err = checkProjectQuotaUpdate(srv, res, domainReport, newQuota, canRaise, canLower)
+			resInfo := cluster.InfoForResource(srv.Type, res.Name)
+			constraint := constraints[srv.Type][res.Name]
+			err = checkProjectQuotaUpdate(srv, res, resInfo.Unit, domainReport, constraint, newQuota, canRaise, canLower)
 			if err != nil {
 				errors = append(errors, err.Error())
 				continue
@@ -374,7 +381,12 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 	ReturnJSON(w, 200, map[string]interface{}{"project": projects[0]})
 }
 
-func checkProjectQuotaUpdate(srv db.ProjectService, res db.ProjectResource, domain *reports.Domain, newQuota uint64, canRaise, canLower bool) error {
+func checkProjectQuotaUpdate(srv db.ProjectService, res db.ProjectResource, unit limes.Unit, domain *reports.Domain, constraint limes.QuotaConstraint, newQuota uint64, canRaise, canLower bool) error {
+	if !constraint.Allows(newQuota) {
+		return fmt.Errorf("cannot change %s/%s quota: requested value %q contradicts constraint %q for this project and resource",
+			srv.Type, res.Name, limes.ValueWithUnit{Value: newQuota, Unit: unit}, constraint.ToString(unit))
+	}
+
 	//if quota is being reduced, permission is required and usage must fit into quota
 	//(note that both res.Quota and newQuota are uint64, so we do not need to
 	//cover the case of infinite quotas)
@@ -394,12 +406,10 @@ func checkProjectQuotaUpdate(srv db.ProjectService, res db.ProjectResource, doma
 	}
 	domainQuota := uint64(0)
 	projectsQuota := uint64(0)
-	var unit limes.Unit
 	if domainService, exists := domain.Services[srv.Type]; exists {
 		if domainResource, exists := domainService.Resources[res.Name]; exists {
 			domainQuota = domainResource.DomainQuota
 			projectsQuota = domainResource.ProjectsQuota
-			unit = domainResource.Unit
 		}
 	}
 	//NOTE: It looks like an arithmetic overflow (or rather, underflow) is
@@ -416,7 +426,7 @@ func checkProjectQuotaUpdate(srv db.ProjectService, res db.ProjectResource, doma
 		}
 		return fmt.Errorf("cannot change %s/%s quota: domain quota exceeded (maximum acceptable project quota is %s)",
 			srv.Type, res.Name,
-			unit.Format(maxQuota),
+			limes.ValueWithUnit{Value: maxQuota, Unit: unit},
 		)
 	}
 

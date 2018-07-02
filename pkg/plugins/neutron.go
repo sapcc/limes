@@ -274,29 +274,14 @@ func (p *neutronPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID, 
 	}
 	for _, res := range neutronResourceMeta {
 		url := client.ServiceURL(res.EndpointPath...) + query.String()
-		var result gophercloud.Result
-		_, err := client.Get(url, &result.Body, nil)
+		count, err := countNeutronThings(client, url)
 		if err != nil {
 			return nil, err
-		}
-
-		//body looks like { "key": [ {...}, {...}, ... ] }, but we only need the length of that list
-		body := make(map[string][]struct{})
-		err = result.ExtractInto(&body)
-		if err != nil {
-			return nil, err
-		}
-
-		list, exists := body[res.JSONToplevelKey]
-		if !exists {
-			return nil, fmt.Errorf("JSON response from GET /%s lacks expected \"%s\" key",
-				strings.Join(res.EndpointPath, "/"), res.JSONToplevelKey,
-			)
 		}
 
 		data[res.LimesName] = limes.ResourceData{
 			Quota: quotas.Values[res.NeutronName],
-			Usage: uint64(len(list)),
+			Usage: uint64(count),
 		}
 	}
 
@@ -325,4 +310,79 @@ func (p *neutronPlugin) SetQuota(provider *gophercloud.ProviderClient, clusterID
 	url := client.ServiceURL("quotas", projectUUID)
 	_, err = client.Put(url, requestData, nil, &gophercloud.RequestOpts{OkCodes: []int{200}})
 	return err
+}
+
+//I know that gophercloud has a pagination implementation, but it would lead to
+//a ton of code duplication because Gophercloud insists on using different
+//types for each resource.
+func countNeutronThings(client *gophercloud.ServiceClient, firstPageURL string) (int, error) {
+	url := firstPageURL
+	count := 0
+
+	type entry struct {
+		//if this entry is in the list of things, then this field is set
+		ID string `json:"id"`
+		//if this entry is in the list of links, then these fields are set
+		URL string `json:"href"`
+		Rel string `json:"rel"`
+	}
+
+	for {
+		jsonBody := make(map[string][]entry)
+		_, err := client.Get(url, &jsonBody, nil)
+		if err != nil {
+			return 0, err
+		}
+		keySetError := func() (int, error) {
+			allKeys := make([]string, 0, len(jsonBody))
+			for key := range jsonBody {
+				allKeys = append(allKeys, key)
+			}
+			return 0, fmt.Errorf("GET %s returned JSON with unexpected set of keys: %s", url, strings.Join(allKeys, ", "))
+		}
+
+		//we should have two keys, one for the list of things (e.g. "ports") and
+		//one for the list of links (e.g. "ports_links")
+		if len(jsonBody) > 2 {
+			return keySetError()
+		}
+
+		var (
+			links     []entry
+			hasLinks  bool
+			things    []entry
+			hasThings bool
+		)
+		for key, entries := range jsonBody {
+			if strings.HasSuffix(key, "_links") {
+				if hasLinks {
+					return keySetError()
+				}
+				links = entries
+				hasLinks = true
+			} else {
+				if hasThings {
+					return keySetError()
+				}
+				things = entries
+				hasThings = true
+			}
+		}
+
+		if !hasThings {
+			return keySetError()
+		}
+
+		//page is valid - count the things and find the next page (if any)
+		count += len(things)
+		url = ""
+		for _, link := range links {
+			if link.Rel == "next" {
+				url = link.URL
+			}
+		}
+		if url == "" {
+			return count, nil
+		}
+	}
 }

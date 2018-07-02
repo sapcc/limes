@@ -133,6 +133,19 @@ func Test_ScanCapacity(t *testing.T) {
 	c.scanCapacity()
 	test.AssertDBContent(t, "fixtures/scancapacity4.sql")
 
+	//add a capacity plugin that reports subcapacities; check that subcapacities
+	//are correctly written when creating a cluster_resources record
+	subcapacityPlugin := test.NewCapacityPlugin("unittest4", "unshared/things")
+	subcapacityPlugin.WithSubcapacities = true
+	cluster.CapacityPlugins["unittest4"] = subcapacityPlugin
+	c.scanCapacity()
+	test.AssertDBContent(t, "fixtures/scancapacity5.sql")
+
+	//check that scraping correctly updates subcapacities on an existing record
+	subcapacityPlugin.Capacity = 10
+	c.scanCapacity()
+	test.AssertDBContent(t, "fixtures/scancapacity6.sql")
+
 	//check data metrics generated for these capacity data
 	registry := prometheus.NewPedanticRegistry()
 	dmc := &DataMetricsCollector{Cluster: cluster}

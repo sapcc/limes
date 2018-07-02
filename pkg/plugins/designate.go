@@ -22,6 +22,8 @@ package plugins
 import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
+	"github.com/gophercloud/gophercloud/openstack/dns/v2/zones"
+	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/sapcc/limes/pkg/limes"
 )
 
@@ -169,31 +171,23 @@ func dnsSetQuota(client *gophercloud.ServiceClient, projectUUID string, quota *d
 }
 
 func dnsListZoneIDs(client *gophercloud.ServiceClient, projectUUID string) ([]string, error) {
-	//cannot use predefined zones.List() request because we need to include the headers for project switching
-	url := client.ServiceURL("zones")
-	opts := gophercloud.RequestOpts{
-		MoreHeaders: map[string]string{
-			"X-Auth-All-Projects":    "false",
-			"X-Auth-Sudo-Project-Id": projectUUID,
-		},
+	pager := zones.List(client, zones.ListOpts{})
+	pager.Headers = map[string]string{
+		"X-Auth-All-Projects":    "false",
+		"X-Auth-Sudo-Project-Id": projectUUID,
 	}
 
-	var result gophercloud.Result
-	var data struct {
-		Zones []struct {
-			ID string `json:"id"`
-		} `json:"zones"`
-	}
-	_, result.Err = client.Get(url, &result.Body, &opts)
-	err := result.ExtractInto(&data)
-	if err != nil {
-		return nil, err
-	}
-
-	ids := make([]string, len(data.Zones))
-	for idx, zone := range data.Zones {
-		ids[idx] = zone.ID
-	}
+	var ids []string
+	err := pager.EachPage(func(page pagination.Page) (bool, error) {
+		zones, err := zones.ExtractZones(page)
+		if err != nil {
+			return false, err
+		}
+		for _, zone := range zones {
+			ids = append(ids, zone.ID)
+		}
+		return true, nil
+	})
 	return ids, err
 }
 

@@ -30,7 +30,11 @@ clusters:
     subresources:
       compute:
         - instances
-    seeds: /etc/limes/seeds-for-staging.yaml
+    subcapacities:
+      compute:
+        - cores
+        - ram
+    constraints: /etc/limes/constraints-for-staging.yaml
 ```
 
 Read on for the full list and description of all configuration options.
@@ -84,9 +88,10 @@ Configuration options describing the OpenStack clusters which Limes shall cover.
 | `clusters.$id.discovery.only_domains` | no | May contain a regex. If given, only domains whose names match the regex will be considered by Limes. If `except_domains` is also given, it takes precedence over `only_domains`. |
 | `clusters.$id.services` | yes | List of backend services for which to scrape quota/usage data. Service types for which Limes does not include a suitable *quota plugin* will be ignored. See below for supported service types. |
 | `clusters.$id.subresources` | no | List of resources where subresource scraping is requested. This is an object with service types as keys, and a list of resource names as values. |
+| `clusters.$id.subcapacities` | no | List of resources where subcapacity scraping is requested. This is an object with service types as keys, and a list of resource names as values. |
 | `clusters.$id.capacitors` | no | List of capacity plugins to use for scraping capacity data. See below for supported capacity plugins. |
 | `clusters.$id.authoritative` | no | If set to `true`, the collector will write the quota from its own database into the backend service whenever scraping encounters a backend quota that differs from the expectation. This flag is strongly recommended in production systems to avoid divergence of Limes quotas from backend quotas, but should be used with care during development. |
-| `clusters.$id.seeds` | no | Path to a YAML file containing the quota seeds for this cluster. See [*quota seeding*](seeding.md) for details. |
+| `clusters.$id.constraints` | no | Path to a YAML file containing the quota constraints for this cluster. See [*quota constraints*](constraints.md) for details. |
 
 # Supported discovery methods
 
@@ -449,6 +454,26 @@ capacitors:
 This capacity plugin reports capacity for the special `compute/instances_<flavorname>` resources that exist on SAP
 Converged Cloud ([see above](#compute-nova-v2)). For each such flavor, it counts the number of Ironic nodes whose RAM
 size, disk size, number of cores, and capabilities match those in the flavor.
+
+```yaml
+capacitors:
+  - id: sapcc-ironic
+subcapacities:
+  - compute: [ instances-baremetal ]
+```
+
+When the "compute/instances-baremetal" pseudo-resource is set up for subcapacity scraping (as shown above),
+subcapacities will be scraped for all resources reported by this plugin. Subcapacities correspond to Ironic nodes and
+bear the following attributes:
+
+| Attribute | Type | Comment |
+| --- | --- | --- |
+| `id` | string | node UUID |
+| `name` | string | node name |
+| `ram` | integer value with unit | amount of memory |
+| `cores` | integer | number of CPU cores |
+| `disk` | integer value with unit | root disk size |
+| `serial` | string | hardware serial number for node |
 
 [yaml]:   http://yaml.org/
 [pq-uri]: https://www.postgresql.org/docs/9.6/static/libpq-connect.html#LIBPQ-CONNSTRING

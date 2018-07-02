@@ -1,0 +1,22 @@
+domains:
+  germany:
+    service-one:
+      things: at least 20
+      capacity_MiB: at least 10 GiB
+    service-two:
+      capacity_MiB: at least 1 MiB
+
+projects:
+  germany/berlin:
+    service-one:
+      things: at least 10
+      capacity_MiB: at least 10 GiB # error: sum of project quotas exceeds domain quota
+  germany/dresden:
+    service-one:
+      things: at least 5
+      capacity_MiB: at least 10 GiB # error: sum of project quotas exceeds domain quota
+    service-two:
+      capacity_MiB: at least 1 MiB
+  poland/warsaw:
+    service-two:
+      things: at least 5 # error: no matching domain quota

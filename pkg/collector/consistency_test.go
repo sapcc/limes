@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/sapcc/limes/pkg/db"
+	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/test"
 )
 
@@ -50,6 +51,34 @@ func Test_Consistency(t *testing.T) {
 	//cluster_services entries
 	c.CheckConsistency()
 	test.AssertDBContent(t, "fixtures/checkconsistency0.sql")
+
+	//add some quota constraints
+	cluster.QuotaConstraints = &limes.QuotaConstraintSet{
+		Domains: map[string]limes.QuotaConstraints{
+			"germany": {
+				"unshared": {
+					"capacity": {Minimum: p2u64(10)},
+				},
+				"shared": {
+					"capacity": {Maximum: p2u64(100)},
+				},
+			},
+		},
+		Projects: map[string]map[string]limes.QuotaConstraints{
+			"germany": {
+				"berlin": {
+					"unshared": {
+						"capacity": {Maximum: p2u64(10)},
+					},
+				},
+				"dresden": {
+					"shared": {
+						"capacity": {Minimum: p2u64(10)},
+					},
+				},
+			},
+		},
+	}
 
 	//remove some *_services entries
 	_, err = db.DB.Exec(`DELETE FROM cluster_services WHERE type = ?`, "shared")
@@ -98,12 +127,37 @@ func Test_Consistency(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
+
+	//add a domain_resource that contradicts the cluster.QuotaConstraints; this
+	//should be fixed by CheckConsistency()
+	err = db.DB.Insert(&db.DomainResource{
+		ServiceID: 2,
+		Name:      "capacity",
+		Quota:     200,
+	})
+	if err != nil {
+		t.Error(err)
+	}
+	//add a project_resource that contradicts the cluster.QuotaConstraints; this
+	//should cause CheckConsistency() to mark the corresponding project_service
+	//as stale (to prompt the scraper to take care of the problem)
+	err = db.DB.Insert(&db.ProjectResource{
+		ServiceID: 1,
+		Name:      "capacity",
+		Quota:     20,
+	})
+	if err != nil {
+		t.Error(err)
+	}
 	test.AssertDBContent(t, "fixtures/checkconsistency1.sql")
 
 	//check that CheckConsistency() brings everything back into a nice state (BUT
 	//cluster_service shared/whatever is left as it is even though this service
 	//is not enabled, because CheckConsistency() only looks at one cluster and
 	//cannot know whether another cluster has this service enabled)
+	//
+	//Also, for all services that are created here, resources are added where the
+	//quota constraint contains some Minimum values.
 	c.CheckConsistency()
 	test.AssertDBContent(t, "fixtures/checkconsistency2.sql")
 }

@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/sapcc/limes/pkg/db"
@@ -53,10 +54,11 @@ type ClusterService struct {
 //a single resource.
 type ClusterResource struct {
 	limes.ResourceInfo
-	Capacity     *uint64 `json:"capacity,omitempty"`
-	Comment      string  `json:"comment,omitempty"`
-	DomainsQuota uint64  `json:"domains_quota,keepempty"`
-	Usage        uint64  `json:"usage,keepempty"`
+	Capacity      *uint64         `json:"capacity,omitempty"`
+	Comment       string          `json:"comment,omitempty"`
+	DomainsQuota  uint64          `json:"domains_quota,keepempty"`
+	Usage         uint64          `json:"usage,keepempty"`
+	Subcapacities util.JSONString `json:"subcapacities,omitempty"`
 }
 
 //ClusterServices provides fast lookup of services using a map, but serializes
@@ -115,7 +117,7 @@ var clusterReportQuery2 = `
 `
 
 var clusterReportQuery3 = `
-	SELECT cs.cluster_id, cs.type, cr.name, cr.capacity, cr.comment, cs.scraped_at
+	SELECT cs.cluster_id, cs.type, cr.name, cr.capacity, cr.comment, cr.subcapacities, cs.scraped_at
 	  FROM cluster_services cs
 	  LEFT OUTER JOIN cluster_resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
 	 WHERE %s {{AND cs.type = $service_type}}
@@ -141,7 +143,7 @@ var clusterReportQuery5 = `
 //In contrast to nearly everything else in Limes, this needs the full
 //limes.Configuration (instead of just the current limes.ClusterConfiguration)
 //to look at the services enabled in other clusters.
-func GetClusters(config limes.Configuration, clusterID *string, localQuotaUsageOnly bool, dbi db.Interface, filter Filter) ([]*Cluster, error) {
+func GetClusters(config limes.Configuration, clusterID *string, localQuotaUsageOnly bool, withSubcapacities bool, dbi db.Interface, filter Filter) ([]*Cluster, error) {
 	//first query: collect project usage data in these clusters
 	clusters := make(clusters)
 	queryStr, joinArgs := filter.PrepareQuery(clusterReportQuery1)
@@ -209,17 +211,21 @@ func GetClusters(config limes.Configuration, clusterID *string, localQuotaUsageO
 
 	//third query: collect capacity data for these clusters
 	queryStr, joinArgs = filter.PrepareQuery(clusterReportQuery3)
+	if !withSubcapacities {
+		queryStr = strings.Replace(queryStr, "cr.subcapacities", "''", 1)
+	}
 	whereStr, whereArgs = db.BuildSimpleWhereClause(makeClusterFilter("cs", clusterID), len(joinArgs))
 	err = db.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		var (
-			clusterID    string
-			serviceType  string
-			resourceName *string
-			capacity     *uint64
-			comment      *string
-			scrapedAt    util.Time
+			clusterID     string
+			serviceType   string
+			resourceName  *string
+			capacity      *uint64
+			comment       *string
+			subcapacities *string
+			scrapedAt     util.Time
 		)
-		err := rows.Scan(&clusterID, &serviceType, &resourceName, &capacity, &comment, &scrapedAt)
+		err := rows.Scan(&clusterID, &serviceType, &resourceName, &capacity, &comment, &subcapacities, &scrapedAt)
 		if err != nil {
 			return err
 		}
@@ -230,6 +236,9 @@ func GetClusters(config limes.Configuration, clusterID *string, localQuotaUsageO
 			resource.Capacity = capacity
 			if comment != nil {
 				resource.Comment = *comment
+			}
+			if subcapacities != nil && *subcapacities != "" {
+				resource.Subcapacities = util.JSONString(*subcapacities)
 			}
 		}
 
@@ -348,6 +357,9 @@ func GetClusters(config limes.Configuration, clusterID *string, localQuotaUsageO
 
 		//third query again, but this time to collect shared capacities
 		queryStr, joinArgs = filter.PrepareQuery(clusterReportQuery3)
+		if !withSubcapacities {
+			queryStr = strings.Replace(queryStr, "cr.subcapacities", "''", 1)
+		}
 		filter := map[string]interface{}{"cs.cluster_id": "shared"}
 		whereStr, whereArgs = db.BuildSimpleWhereClause(filter, len(joinArgs))
 		err = db.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
@@ -357,9 +369,10 @@ func GetClusters(config limes.Configuration, clusterID *string, localQuotaUsageO
 				resourceName    *string
 				capacity        *uint64
 				comment         *string
+				subcapacities   *string
 				scrapedAt       util.Time
 			)
-			err := rows.Scan(&sharedClusterID, &serviceType, &resourceName, &capacity, &comment, &scrapedAt)
+			err := rows.Scan(&sharedClusterID, &serviceType, &resourceName, &capacity, &comment, &subcapacities, &scrapedAt)
 			if err != nil {
 				return err
 			}
@@ -375,6 +388,9 @@ func GetClusters(config limes.Configuration, clusterID *string, localQuotaUsageO
 					resource.Capacity = capacity
 					if comment != nil {
 						resource.Comment = *comment
+					}
+					if subcapacities != nil && *subcapacities != "" {
+						resource.Subcapacities = util.JSONString(*subcapacities)
 					}
 				}
 

@@ -133,9 +133,10 @@ subresource include billing services using data collected by Limes to create ite
 depending on their attributes. (For example, a floating IP in an external network may be more expensive than one from an
 internal network.)
 
-Subresources will only be displayed for supported resources, and only if scraping has been enabled for that subresource
-in Limes' configuration. If enabled, the resource will have a `subresources` key containing an array of objects. For
-example, extending the example from above, the `projects[0].services[0].resources[0]` object might look like this:
+Subresources will only be displayed for supported resources, and only if subresource scraping has been enabled for that
+resource in Limes' configuration. If enabled, the resource will have a `subresources` key containing an array of
+objects. For example, extending the example from above, the `projects[0].services[0].resources[0]` object might look
+like this:
 
 ```json
 {
@@ -143,7 +144,7 @@ example, extending the example from above, the `projects[0].services[0].resource
   "quota": 5,
   "usage": 1,
   "subresources": [
-    { "id": "ad87bb8a-5864-4905-b099-40b9f2b49bf9", "name": "testvm", "cores": 2, "ram": 2048 }
+    { "id": "ad87bb8a-5864-4905-b099-40b9f2b49bf9", "name": "testvm", "cores": 2, "ram": { "value": 2048, "unit": "MiB" } }
   ]
 }
 ```
@@ -251,6 +252,7 @@ Query data for clusters. Requires a cloud-admin token. Arguments:
 * `area`: Limit query to resources in services in this area. May be given multiple times.
 * `resource`: When combined, with `?service=`, limit query to that resource.
 * `local`: When given, quota and usage for shared resources is not aggregated across clusters (see below).
+* `detail`: If given, list subcapacities for resources that support it. (See subheading below for details.)
 
 Returns 200 (OK) on success. Result is a JSON document like:
 
@@ -339,6 +341,32 @@ domains in this cluster. For resources belonging to a shared service, the report
 all domains in all clusters (and will thus be the same for every cluster listed), unless the query parameter `local` is
 given. Shared services are indicated by the `shared` key on the service level (which defaults to `false` if not
 specified).
+
+### Subcapacities
+
+If the `?detail` query parameter is given (no value is required), capacity for a resource may be further broken down into
+*subcapacities*, i.e. a list of individual capacities with individual properties.
+
+Subcapacities will only be displayed for supported resources, and only if subcapacity scraping has been enabled for that
+resource in Limes' configuration. If enabled, the resource will have a `subresources` key containing an array of
+objects. For example, extending the example from above, the `projects[0].services[0].resources[1]` object might look
+like this:
+
+```json
+{
+  "name": "cores",
+  "capacity": 1000,
+  "domains_quota": 100,
+  "usage": 2,
+  "subcapacities": [
+    { "hypervisor": "cluster-1", "cores": 200 },
+    { "hypervisor": "cluster-2", "cores": 800 }
+  ]
+}
+```
+
+The fields in the subcapacity objects are specific to the resource type, and are not mandated by this specification.
+Please refer to the [documentation for the corresponding capacity plugin](../operators/config.md) for details.
 
 ## GET /v1/inconsistencies
 

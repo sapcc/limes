@@ -22,6 +22,7 @@ package collector
 import (
 	"time"
 
+	"github.com/sapcc/limes/pkg/datamodel"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/util"
 )
@@ -119,41 +120,21 @@ func (c *Collector) checkConsistencyCluster() {
 }
 
 func (c *Collector) checkConsistencyDomain(domain db.Domain) {
-	//check domain_services entries
-	seen := make(map[string]bool)
-	var services []db.DomainService
-	_, err := db.DB.Select(&services, `SELECT * FROM domain_services WHERE domain_id = $1`, domain.ID)
+	tx, err := db.DB.Begin()
 	if err != nil {
 		c.LogError(err.Error())
 		return
 	}
+	defer db.RollbackUnlessCommitted(tx)
 
-	//cleanup entries for services that have been disabled
-	for _, service := range services {
-		seen[service.Type] = true
-		if c.Cluster.HasService(service.Type) {
-			continue
-		}
-		util.LogInfo("cleaning up %s service entry for domain %s", service.Type, domain.Name)
-		_, err := db.DB.Delete(&service)
-		if err != nil {
-			c.LogError(err.Error())
-		}
+	//validate domain_services entries
+	_, err = datamodel.ValidateDomainServices(tx, c.Cluster, domain)
+	if err == nil {
+		err = tx.Commit()
 	}
-
-	//create missing service entries
-	for _, serviceType := range c.Cluster.ServiceTypes {
-		if seen[serviceType] {
-			continue
-		}
-		util.LogInfo("creating missing %s service entry for domain %s", serviceType, domain.Name)
-		err := db.DB.Insert(&db.DomainService{
-			DomainID: domain.ID,
-			Type:     serviceType,
-		})
-		if err != nil {
-			c.LogError(err.Error())
-		}
+	if err != nil {
+		c.LogError(err.Error())
+		return
 	}
 
 	//recurse into projects
@@ -165,45 +146,24 @@ func (c *Collector) checkConsistencyDomain(domain db.Domain) {
 	}
 
 	for _, project := range projects {
-		c.checkConsistencyProject(project, domain)
+		err := c.checkConsistencyProject(project, domain)
+		if err != nil {
+			c.LogError(err.Error())
+		}
 	}
 }
 
-func (c *Collector) checkConsistencyProject(project db.Project, domain db.Domain) {
-	//check project_services entries
-	seen := make(map[string]bool)
-	var services []db.ProjectService
-	_, err := db.DB.Select(&services, `SELECT * FROM project_services WHERE project_id = $1`, project.ID)
+func (c *Collector) checkConsistencyProject(project db.Project, domain db.Domain) error {
+	tx, err := db.DB.Begin()
 	if err != nil {
-		c.LogError(err.Error())
-		return
+		return err
 	}
+	defer db.RollbackUnlessCommitted(tx)
 
-	//cleanup entries for services that have been disabled
-	for _, service := range services {
-		seen[service.Type] = true
-		if c.Cluster.HasService(service.Type) {
-			continue
-		}
-		util.LogInfo("cleaning up %s service entry for project %s/%s", service.Type, domain.Name, project.Name)
-		_, err := db.DB.Delete(&service)
-		if err != nil {
-			c.LogError(err.Error())
-		}
+	//validate project_services entries
+	_, err = datamodel.ValidateProjectServices(tx, c.Cluster, domain, project)
+	if err == nil {
+		err = tx.Commit()
 	}
-
-	//create missing service entries
-	for _, serviceType := range c.Cluster.ServiceTypes {
-		if seen[serviceType] {
-			continue
-		}
-		util.LogInfo("creating missing %s service entry for project %s/%s", serviceType, domain.Name, project.Name)
-		err := db.DB.Insert(&db.ProjectService{
-			ProjectID: project.ID,
-			Type:      serviceType,
-		})
-		if err != nil {
-			c.LogError(err.Error())
-		}
-	}
+	return err
 }
