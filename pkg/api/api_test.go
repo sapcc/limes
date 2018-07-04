@@ -42,10 +42,10 @@ func init() {
 	limes.RegisterQuotaPlugin(test.NewPluginFactory("unshared"))
 }
 
-func setupTest(t *testing.T) (*limes.Cluster, http.Handler) {
+func setupTest(t *testing.T, clusterName, startData string) (*limes.Cluster, http.Handler) {
 	//load test database
 	test.InitDatabase(t, "../test/migrations")
-	test.ExecSQLFile(t, "fixtures/start-data.sql")
+	test.ExecSQLFile(t, startData)
 
 	//prepare test configuration
 	serviceTypes := []string{"shared", "unshared"}
@@ -109,6 +109,15 @@ func setupTest(t *testing.T) (*limes.Cluster, http.Handler) {
 				CapacityPlugins: map[string]limes.CapacityPlugin{},
 				Config:          &limes.ClusterConfiguration{Auth: &limes.AuthParameters{}},
 			},
+			"cloud": {
+				ID:              "cloud",
+				ServiceTypes:    serviceTypes,
+				IsServiceShared: isServiceShared,
+				DiscoveryPlugin: test.NewDiscoveryPlugin(),
+				QuotaPlugins:    quotaPlugins,
+				CapacityPlugins: map[string]limes.CapacityPlugin{},
+				Config:          &limes.ClusterConfiguration{Auth: &limes.AuthParameters{}},
+			},
 		},
 	}
 
@@ -127,13 +136,27 @@ func setupTest(t *testing.T) (*limes.Cluster, http.Handler) {
 		t.Fatal(err)
 	}
 
-	cluster := config.Clusters["west"]
+	cluster := config.Clusters[clusterName]
 	router, _ := NewV1Router(cluster, config)
 	return cluster, router
 }
 
+func Test_InconsistencyOperations(t *testing.T) {
+	clusterName, pathtoData := "cloud", "fixtures/start-data-inconsistencies.sql"
+	_, router := setupTest(t, clusterName, pathtoData)
+
+	//check ListInconsistencies
+	test.APIRequest{
+		Method:           "GET",
+		Path:             "/v1/inconsistencies",
+		ExpectStatusCode: 200,
+		ExpectJSON:       "./fixtures/inconsistency-list.json",
+	}.Check(t, router)
+}
+
 func Test_ClusterOperations(t *testing.T) {
-	_, router := setupTest(t)
+	clusterName, pathtoData := "west", "fixtures/start-data.sql"
+	_, router := setupTest(t, clusterName, pathtoData)
 
 	//check GetCluster
 	test.APIRequest{
@@ -446,7 +469,8 @@ func expectClusterCapacity(t *testing.T, clusterID, serviceType, resourceName st
 }
 
 func Test_DomainOperations(t *testing.T) {
-	cluster, router := setupTest(t)
+	clusterName, pathtoData := "west", "fixtures/start-data.sql"
+	cluster, router := setupTest(t, clusterName, pathtoData)
 	discovery := cluster.DiscoveryPlugin.(*test.DiscoveryPlugin)
 
 	//check GetDomain
@@ -690,7 +714,8 @@ func expectDomainQuota(t *testing.T, domainName, serviceType, resourceName strin
 }
 
 func Test_ProjectOperations(t *testing.T) {
-	cluster, router := setupTest(t)
+	clusterName, pathtoData := "west", "fixtures/start-data.sql"
+	cluster, router := setupTest(t, clusterName, pathtoData)
 	discovery := cluster.DiscoveryPlugin.(*test.DiscoveryPlugin)
 
 	//check GetProject

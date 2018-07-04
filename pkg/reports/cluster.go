@@ -137,7 +137,7 @@ var clusterReportQuery5 = `
 	 WHERE %s GROUP BY ps.type, pr.name
 `
 
-//GetClusters returns Cluster reports for al clusters or, if clusterID is
+//GetClusters returns Cluster reports for all clusters or, if clusterID is
 //non-nil, for that cluster only.
 //
 //In contrast to nearly everything else in Limes, this needs the full
