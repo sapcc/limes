@@ -41,6 +41,7 @@ type OvercommittedDomainQuota struct {
 	Domain        DomainData `json:"domain,keepempty"`
 	Service       string     `json:"service,keepempty"`
 	Resource      string     `json:"resource,keepempty"`
+	Unit          limes.Unit `json:"unit,omitempty"`
 	DomainQuota   uint64     `json:"domain_quota,keepempty"`
 	ProjectsQuota uint64     `json:"projects_quota,keepempty"`
 }
@@ -51,6 +52,7 @@ type OverspentProjectQuota struct {
 	Project  ProjectData `json:"project,keepempty"`
 	Service  string      `json:"service,keepempty"`
 	Resource string      `json:"resource,keepempty"`
+	Unit     limes.Unit  `json:"unit,omitempty"`
 	Quota    uint64      `json:"quota,keepempty"`
 	Usage    uint64      `json:"usage,keepempty"`
 }
@@ -61,6 +63,7 @@ type MismatchProjectQuota struct {
 	Project      ProjectData `json:"project,keepempty"`
 	Service      string      `json:"service,keepempty"`
 	Resource     string      `json:"resource,keepempty"`
+	Unit         limes.Unit  `json:"unit,omitempty"`
 	Quota        uint64      `json:"quota,keepempty"`
 	BackendQuota int64       `json:"backend_quota,keepempty"`
 }
@@ -136,6 +139,7 @@ func GetInconsistencies(cluster *limes.Cluster, dbi db.Interface, filter Filter)
 			return err
 		}
 
+		ocdq.Unit = cluster.InfoForResource(ocdq.Service, ocdq.Resource).Unit
 		inconsistencies.OvercommittedQuotas = append(inconsistencies.OvercommittedQuotas, ocdq)
 
 		return err
@@ -154,6 +158,7 @@ func GetInconsistencies(cluster *limes.Cluster, dbi db.Interface, filter Filter)
 			return err
 		}
 
+		ospq.Unit = cluster.InfoForResource(ospq.Service, ospq.Resource).Unit
 		inconsistencies.OverspentQuotas = append(inconsistencies.OverspentQuotas, ospq)
 
 		return err
@@ -172,6 +177,7 @@ func GetInconsistencies(cluster *limes.Cluster, dbi db.Interface, filter Filter)
 			return err
 		}
 
+		mmpq.Unit = cluster.InfoForResource(mmpq.Service, mmpq.Resource).Unit
 		inconsistencies.MismatchQuotas = append(inconsistencies.MismatchQuotas, mmpq)
 
 		return err
