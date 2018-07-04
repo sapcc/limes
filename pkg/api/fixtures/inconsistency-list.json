@@ -1,0 +1,59 @@
+{
+  "inconsistencies": {
+    "cluster_id": "cloud",
+    "domain_quota_overcommitted": [
+      {
+        "domain": {
+          "id": "uuid-for-pakistan",
+          "name": "pakistan"
+        },
+        "service": "compute",
+        "resource": "cores",
+        "domain_quota": 30,
+        "projects_quota": 44
+      },
+      {
+        "domain": {
+          "id": "uuid-for-pakistan",
+          "name": "pakistan"
+        },
+        "service": "network",
+        "resource": "loadbalancers",
+        "domain_quota": 0,
+        "projects_quota": 15
+      }
+    ],
+    "project_quota_overspent": [
+      {
+        "project": {
+          "id": "uuid-for-karachi",
+          "name": "karachi",
+          "domain": {
+            "id": "uuid-for-pakistan",
+            "name": "pakistan"
+          }
+        },
+        "service": "compute",
+        "resource": "cores",
+        "quota": 14,
+        "usage": 18
+      }
+    ],
+    "project_quota_mismatch": [
+      {
+        "project": {
+          "id": "uuid-for-dresden",
+          "name": "dresden",
+          "domain": {
+            "id": "uuid-for-germany",
+            "name": "germany"
+          }
+        },
+        "service": "compute",
+        "resource": "cores",
+        "quota": 30,
+        "backend_quota": 10
+      }
+    ]
+  }
+}
