@@ -62,7 +62,7 @@ type MismatchProjectQuota struct {
 	Service      string      `json:"service,keepempty"`
 	Resource     string      `json:"resource,keepempty"`
 	Quota        uint64      `json:"quota,keepempty"`
-	BackendQuota uint64      `json:"backend_quota,keepempty"`
+	BackendQuota int64       `json:"backend_quota,keepempty"`
 }
 
 //DomainData is a substructure containing domain data for a single inconsistency
