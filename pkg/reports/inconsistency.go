@@ -79,16 +79,16 @@ type ProjectData struct {
 }
 
 var ocdqReportQuery = `
-	SELECT d.uuid, d.name, ps.type, pr.name, COALESCE(SUM(dr.quota),0), COALESCE(SUM(pr.quota),0)
+	SELECT d.uuid, d.name, ps.type, pr.name, MAX(COALESCE(dr.quota, 0)), SUM(pr.quota)
 	  FROM domains d
-	  LEFT OUTER JOIN domain_services ds ON ds.domain_id = d.id
-	  LEFT OUTER JOIN domain_resources dr ON dr.service_id = ds.id
 	  JOIN projects p ON p.domain_id = d.id
-	  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
-	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
+	  JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
+	  JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
+	  LEFT OUTER JOIN domain_services ds ON ds.domain_id = d.id AND ds.type = ps.type
+	  LEFT OUTER JOIN domain_resources dr ON dr.service_id = ds.id AND dr.name = pr.name
 	WHERE %s GROUP BY d.uuid, d.name, ps.type, pr.name
-	HAVING COALESCE(SUM(dr.quota),0) < COALESCE(SUM(pr.quota),0)
-	ORDER BY d.uuid ASC
+	HAVING MAX(COALESCE(dr.quota, 0)) < SUM(pr.quota)
+	ORDER BY d.uuid ASC;
 `
 
 var ospqReportQuery = `
