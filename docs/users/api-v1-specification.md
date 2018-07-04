@@ -370,14 +370,14 @@ Please refer to the [documentation for the corresponding capacity plugin](../ope
 
 ## GET /v1/inconsistencies
 
-Requires a cloud-admin token. Detects inconsistent quota setups for domains and projects in this cluster. The following
+Requires a cloud-admin token. Detects inconsistent quota setups for domains and projects in the current cluster. The following
 situations are considered:
 
 1. `domain_quota_overcommitted` &ndash; The total quota of some resource across all projects in some domain exceeds the
    quota of that resource for the domain. (In other words, the domain has distributed more quota to its projects than it
    has been given.) This may happen when new projects are created and their quota is initialized because of constraints
    configured by a cloud administrator.
-2. `project_quota_overspend` &ndash; The quota of some resource in some project is lower than the usage of that resource
+2. `project_quota_overspent` &ndash; The quota of some resource in some project is lower than the usage of that resource
    in that project. This may happen when someone else changes the quota in the backend service directly and increases
    usage before Limes intervenes, or when a cloud administrator changes quota constraints.
 3. `project_quota_mismatch` &ndash; The quota of some resource in some project differs from the backend quota for that
@@ -389,59 +389,64 @@ above). Returns 200 (OK) on success. Result is a JSON document like:
 
 ```json
 {
-  "domain_quota_overcommitted": [
-    {
-      "domain": {
-        "id": "d5fbe312-1f48-42ef-a36e-484659784aa0",
-        "name": "example-domain"
-      },
-      "service": "network",
-      "resource": "security_groups",
-      "domain_quota": 100,
-      "projects_quota": 114
-    },
-    ...
-  ],
-  "project_quota_overspend": [
-    {
-      "project": {
-        "id": "8ad3bf54-2401-435e-88ad-e80fbf984c19",
-        "name": "example-project",
+  "inconsistencies": {
+    "cluster_id": "current-cluster",
+    "domain_quota_overcommitted": [
+      {
         "domain": {
           "id": "d5fbe312-1f48-42ef-a36e-484659784aa0",
           "name": "example-domain"
-        }
+        },
+        "service": "network",
+        "resource": "security_groups",
+        "domain_quota": 100,
+        "projects_quota": 114
       },
-      "service": "network",
-      "resource": "routers",
-      "quota": 5,
-      "usage": 6
-    },
-    ...
-  ],
-  "project_quota_mismatch": [
-    {
-      "project": {
-        "id": "8ad3bf54-2401-435e-88ad-e80fbf984c19",
-        "name": "example-project",
-        "domain": {
-          "id": "d5fbe312-1f48-42ef-a36e-484659784aa0",
-          "name": "example-domain"
-        }
+      ...
+    ],
+    "project_quota_overspent": [
+      {
+        "project": {
+          "id": "8ad3bf54-2401-435e-88ad-e80fbf984c19",
+          "name": "example-project",
+          "domain": {
+            "id": "d5fbe312-1f48-42ef-a36e-484659784aa0",
+            "name": "example-domain"
+          }
+        },
+        "service": "compute",
+        "resource": "ram",
+        "unit": "GiB",
+        "quota": 250,
+        "usage": 300
       },
-      "service": "network",
-      "resource": "routers",
-      "quota": 5,
-      "backend_quota": 7
-    },
-    ...
-  ]
+      ...
+    ],
+    "project_quota_mismatch": [
+      {
+        "project": {
+          "id": "8ad3bf54-2401-435e-88ad-e80fbf984c19",
+          "name": "example-project",
+          "domain": {
+            "id": "d5fbe312-1f48-42ef-a36e-484659784aa0",
+            "name": "example-domain"
+          }
+        },
+        "service": "object-store",
+        "resource": "storage",
+        "unit": "B",
+        "quota": 12345678,
+        "backend_quota": 1234567
+      },
+      ...
+    ]
+  }
 }
 ```
 
 Each entry in those three lists concerns exactly one resource in one project or domain. If multiple resources in the
 same project are inconsistent, they will appear as multiple entries. Like in the example above, the same project and
-resource may appear both in `project_quota_overspend` and `project_quota_mismatch` if `quota < usage < backend_quota`.
+resource may appear in both `project_quota_overspent` and `project_quota_mismatch` if `quota < usage < backend_quota`.
 
 ## POST /v1/domains/discover
 
