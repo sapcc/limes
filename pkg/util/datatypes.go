@@ -68,3 +68,9 @@ type JSONString string
 func (s JSONString) MarshalJSON() ([]byte, error) {
 	return []byte(s), nil
 }
+
+//UnmarshalJSON implements the json.Unmarshaler interface
+func (s *JSONString) UnmarshalJSON(b []byte) error {
+	*s = JSONString(b)
+	return nil
+}
