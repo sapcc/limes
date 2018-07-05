@@ -35,6 +35,40 @@ type ServiceQuotas map[string]ResourceQuotas
 //JSON request bodies in PUT requests.
 type ResourceQuotas map[string]limes.ValueWithUnit
 
+//MarshalJSON implements the json.Marshaler interface.
+func (sq ServiceQuotas) MarshalJSON() ([]byte, error) {
+	type resourceQuota struct {
+		Name  string     `json:"name"`
+		Quota uint64     `json:"quota"`
+		Unit  limes.Unit `json:"unit"`
+	}
+
+	type serviceQuotas struct {
+		Type      string          `json:"type"`
+		Resources []resourceQuota `json:"resources"`
+	}
+
+	list := []serviceQuotas{}
+	for t, rqs := range sq {
+		sqs := serviceQuotas{
+			Type:      t,
+			Resources: []resourceQuota{},
+		}
+
+		for n, r := range rqs {
+			sqs.Resources = append(sqs.Resources, resourceQuota{
+				Name:  n,
+				Quota: r.Value,
+				Unit:  r.Unit,
+			})
+		}
+
+		list = append(list, sqs)
+	}
+
+	return json.Marshal(list)
+}
+
 //UnmarshalJSON implements the json.Unmarshaler interface.
 func (sq *ServiceQuotas) UnmarshalJSON(input []byte) error {
 	var data []struct {
