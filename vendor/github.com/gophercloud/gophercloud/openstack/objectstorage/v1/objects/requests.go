@@ -7,6 +7,7 @@ import (
 	"crypto/sha1"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"strings"
 	"time"
 
@@ -125,7 +126,7 @@ func Download(c *gophercloud.ServiceClient, containerName, objectName string, op
 
 	resp, err := c.Get(url, nil, &gophercloud.RequestOpts{
 		MoreHeaders: h,
-		OkCodes:     []int{200, 304},
+		OkCodes:     []int{200, 206, 304},
 	})
 	if resp != nil {
 		r.Header = resp.Header
@@ -145,6 +146,7 @@ type CreateOptsBuilder interface {
 type CreateOpts struct {
 	Content            io.Reader
 	Metadata           map[string]string
+	NoETag             bool
 	CacheControl       string `h:"Cache-Control"`
 	ContentDisposition string `h:"Content-Disposition"`
 	ContentEncoding    string `h:"Content-Encoding"`
@@ -179,16 +181,37 @@ func (opts CreateOpts) ToObjectCreateParams() (io.Reader, map[string]string, str
 		h["X-Object-Meta-"+k] = v
 	}
 
+	if opts.NoETag {
+		delete(h, "etag")
+		return opts.Content, h, q.String(), nil
+	}
+
+	if h["ETag"] != "" {
+		return opts.Content, h, q.String(), nil
+	}
+
+	// When we're dealing with big files an io.ReadSeeker allows us to efficiently calculate
+	// the md5 sum. An io.Reader is only readable once which means we have to copy the entire
+	// file content into memory first.
+	readSeeker, isReadSeeker := opts.Content.(io.ReadSeeker)
+	if !isReadSeeker {
+		data, err := ioutil.ReadAll(opts.Content)
+		if err != nil {
+			return nil, nil, "", err
+		}
+		readSeeker = bytes.NewReader(data)
+	}
+
 	hash := md5.New()
-	buf := bytes.NewBuffer([]byte{})
-	_, err = io.Copy(io.MultiWriter(hash, buf), opts.Content)
-	if err != nil {
+	// io.Copy into md5 is very efficient as it's done in small chunks.
+	if _, err := io.Copy(hash, readSeeker); err != nil {
 		return nil, nil, "", err
 	}
-	localChecksum := fmt.Sprintf("%x", hash.Sum(nil))
-	h["ETag"] = localChecksum
+	readSeeker.Seek(0, io.SeekStart)
 
-	return buf, h, q.String(), nil
+	h["ETag"] = fmt.Sprintf("%x", hash.Sum(nil))
+
+	return readSeeker, h, q.String(), nil
 }
 
 // Create is a function that creates a new object or replaces an existing
@@ -344,7 +367,7 @@ func Get(c *gophercloud.ServiceClient, containerName, objectName string, opts Ge
 		}
 		url += query
 	}
-	resp, err := c.Request("HEAD", url, &gophercloud.RequestOpts{
+	resp, err := c.Head(url, &gophercloud.RequestOpts{
 		OkCodes: []int{200, 204},
 	})
 	if resp != nil {

@@ -2,6 +2,7 @@ package siteconnections
 
 import (
 	"github.com/gophercloud/gophercloud"
+	"github.com/gophercloud/gophercloud/pagination"
 )
 
 // CreateOptsBuilder allows extensions to add additional parameters to the
@@ -111,7 +112,7 @@ type CreateOpts struct {
 	MTU int `json:"mtu,omitempty"`
 }
 
-// ToServiceCreateMap casts a CreateOpts struct to a map.
+// ToConnectionCreateMap casts a CreateOpts struct to a map.
 func (opts CreateOpts) ToConnectionCreateMap() (map[string]interface{}, error) {
 	return gophercloud.BuildRequestBody(opts, "ipsec_site_connection")
 }
@@ -125,6 +126,7 @@ func Create(c *gophercloud.ServiceClient, opts CreateOptsBuilder) (r CreateResul
 		return
 	}
 	_, r.Err = c.Post(rootURL(c), b, &r.Body, nil)
+
 	return
 }
 
@@ -138,5 +140,104 @@ func Delete(c *gophercloud.ServiceClient, id string) (r DeleteResult) {
 // Get retrieves a particular IPSec site connection based on its unique ID.
 func Get(c *gophercloud.ServiceClient, id string) (r GetResult) {
 	_, r.Err = c.Get(resourceURL(c, id), &r.Body, nil)
+	return
+}
+
+// ListOptsBuilder allows extensions to add additional parameters to the
+// List request.
+type ListOptsBuilder interface {
+	ToConnectionListQuery() (string, error)
+}
+
+// ListOpts allows the filtering and sorting of paginated collections through
+// the API. Filtering is achieved by passing in struct field values that map to
+// the IPSec site connection attributes you want to see returned.
+type ListOpts struct {
+	IKEPolicyID    string    `q:"ikepolicy_id"`
+	VPNServiceID   string    `q:"vpnservice_id"`
+	LocalEPGroupID string    `q:"local_ep_group_id"`
+	IPSecPolicyID  string    `q:"ipsecpolicy_id"`
+	PeerID         string    `q:"peer_id"`
+	TenantID       string    `q:"tenant_id"`
+	ProjectID      string    `q:"project_id"`
+	PeerEPGroupID  string    `q:"peer_ep_group_id"`
+	LocalID        string    `q:"local_id"`
+	Name           string    `q:"name"`
+	Description    string    `q:"description"`
+	PeerAddress    string    `q:"peer_address"`
+	PSK            string    `q:"psk"`
+	Initiator      Initiator `q:"initiator"`
+	AdminStateUp   *bool     `q:"admin_state_up"`
+	MTU            int       `q:"mtu"`
+}
+
+// ToConnectionListQuery formats a ListOpts into a query string.
+func (opts ListOpts) ToConnectionListQuery() (string, error) {
+	q, err := gophercloud.BuildQueryString(opts)
+	return q.String(), err
+}
+
+// List returns a Pager which allows you to iterate over a collection of
+// IPSec site connections. It accepts a ListOpts struct, which allows you to filter
+// and sort the returned collection for greater efficiency.
+func List(c *gophercloud.ServiceClient, opts ListOptsBuilder) pagination.Pager {
+	url := rootURL(c)
+	if opts != nil {
+		query, err := opts.ToConnectionListQuery()
+		if err != nil {
+			return pagination.Pager{Err: err}
+		}
+		url += query
+	}
+	return pagination.NewPager(c, url, func(r pagination.PageResult) pagination.Page {
+		return ConnectionPage{pagination.LinkedPageBase{PageResult: r}}
+	})
+}
+
+// UpdateOptsBuilder allows extensions to add additional parameters to the
+// Update request.
+type UpdateOptsBuilder interface {
+	ToConnectionUpdateMap() (map[string]interface{}, error)
+}
+
+// UpdateOpts contains the values used when updating the DPD of an IPSec site connection
+type DPDUpdateOpts struct {
+	Action   Action `json:"action,omitempty"`
+	Timeout  int    `json:"timeout,omitempty"`
+	Interval int    `json:"interval,omitempty"`
+}
+
+// UpdateOpts contains the values used when updating an IPSec site connection
+type UpdateOpts struct {
+	Description    *string        `json:"description,omitempty"`
+	Name           *string        `json:"name,omitempty"`
+	LocalID        string         `json:"local_id,omitempty"`
+	PeerAddress    string         `json:"peer_address,omitempty"`
+	PeerID         string         `json:"peer_id,omitempty"`
+	PeerCIDRs      []string       `json:"peer_cidrs,omitempty"`
+	LocalEPGroupID string         `json:"local_ep_group_id,omitempty"`
+	PeerEPGroupID  string         `json:"peer_ep_group_id,omitempty"`
+	MTU            int            `json:"mtu,omitempty"`
+	Initiator      Initiator      `json:"initiator,omitempty"`
+	PSK            string         `json:"psk,omitempty"`
+	DPD            *DPDUpdateOpts `json:"dpd,omitempty"`
+	AdminStateUp   *bool          `json:"admin_state_up,omitempty"`
+}
+
+// ToConnectionUpdateMap casts an UpdateOpts struct to a map.
+func (opts UpdateOpts) ToConnectionUpdateMap() (map[string]interface{}, error) {
+	return gophercloud.BuildRequestBody(opts, "ipsec_site_connection")
+}
+
+// Update allows IPSec site connections to be updated.
+func Update(c *gophercloud.ServiceClient, id string, opts UpdateOptsBuilder) (r UpdateResult) {
+	b, err := opts.ToConnectionUpdateMap()
+	if err != nil {
+		r.Err = err
+		return
+	}
+	_, r.Err = c.Put(resourceURL(c, id), b, &r.Body, &gophercloud.RequestOpts{
+		OkCodes: []int{200},
+	})
 	return
 }
