@@ -21,6 +21,7 @@ package api
 
 import (
 	"encoding/json"
+	"sort"
 
 	"github.com/sapcc/limes/pkg/limes"
 )
@@ -63,8 +64,18 @@ func (sq ServiceQuotas) MarshalJSON() ([]byte, error) {
 			})
 		}
 
+		//ensure test reproducability
+		sort.Slice(sqs.Resources, func(i, j int) bool {
+			return sqs.Resources[i].Name < sqs.Resources[j].Name
+		})
+
 		list = append(list, sqs)
 	}
+
+	//ensure test reproducability
+	sort.Slice(list, func(i, j int) bool {
+		return list[i].Type < list[j].Type
+	})
 
 	return json.Marshal(list)
 }
