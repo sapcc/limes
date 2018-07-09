@@ -283,7 +283,7 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 			res := res
 			auditTrail.Add("set quota %s.%s = %d -> %d for project %s by user %s (%s)",
 				srv.Type, res.Name, res.Quota, newQuota,
-				dbProject.UUID, token.UserUUID, token.UserName,
+				dbProject.UUID, token.UserUUID(), token.UserName(),
 			)
 			res.Quota = newQuota
 			resourcesToUpdate = append(resourcesToUpdate, res)

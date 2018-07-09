@@ -27,6 +27,7 @@ import (
 	"strings"
 
 	"github.com/gorilla/mux"
+	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
 )
@@ -150,7 +151,7 @@ func (p *v1Provider) Path(elements ...string) string {
 //X-Limes-Cluster-Id request header (or returns the current cluster if there is
 //no such header). Any errors will be written into the response immediately and
 //cause a nil return value.
-func (p *v1Provider) FindClusterFromRequest(w http.ResponseWriter, r *http.Request, token *Token) *limes.Cluster {
+func (p *v1Provider) FindClusterFromRequest(w http.ResponseWriter, r *http.Request, token *gopherpolicy.Token) *limes.Cluster {
 	//use current cluster if nothing else specified
 	clusterID := r.Header.Get("X-Limes-Cluster-Id")
 	if clusterID == "" || clusterID == p.Cluster.ID {

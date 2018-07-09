@@ -211,7 +211,7 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 			res := res
 			auditTrail.Add("set quota %s.%s = %d -> %d for domain %s by user %s (%s)",
 				srv.Type, res.Name, res.Quota, newQuota,
-				dbDomain.UUID, token.UserUUID, token.UserName,
+				dbDomain.UUID, token.UserUUID(), token.UserName(),
 			)
 			res.Quota = newQuota
 			resourcesToUpdate = append(resourcesToUpdate, res)
@@ -251,7 +251,7 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 
 			auditTrail.Add("set quota %s.%s = %d -> %d for domain %s by user %s (%s)",
 				srv.Type, res.Name, res.Quota, newQuota,
-				dbDomain.UUID, token.UserUUID, token.UserName,
+				dbDomain.UUID, token.UserUUID(), token.UserName(),
 			)
 			res.Quota = newQuota
 			err = tx.Insert(&res)

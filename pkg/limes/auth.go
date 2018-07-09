@@ -24,11 +24,8 @@ import (
 	"net/http"
 	"sync"
 
-	policy "github.com/databus23/goslo.policy"
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
-	"github.com/gophercloud/gophercloud/openstack/identity/v3/tokens"
-	"github.com/sapcc/go-bits/logg"
 )
 
 //AuthParameters contains credentials for authenticating with Keystone (i.e.
@@ -83,88 +80,4 @@ func (auth *AuthParameters) Connect() error {
 	}
 
 	return nil
-}
-
-//ValidateToken validates the given Keystone token and returns a policy context for
-//checking authorization.
-func (auth *AuthParameters) ValidateToken(token string) (policy.Context, error) {
-	//special case for unit tests
-	if auth.AuthURL == "" {
-		return policy.Context{}, nil
-	}
-
-	client, err := openstack.NewIdentityV3(auth.ProviderClient,
-		gophercloud.EndpointOpts{Availability: gophercloud.AvailabilityPublic},
-	)
-	if err != nil {
-		return policy.Context{}, err
-	}
-
-	response := tokens.Get(client, token)
-	if response.Err != nil {
-		//this includes 4xx responses, so after this point, we can be sure that the token is valid
-		return policy.Context{}, response.Err
-	}
-
-	//use a custom token struct instead of tokens.Token which is way incomplete
-	var tokenData keystoneToken
-	err = response.ExtractInto(&tokenData)
-	if err != nil {
-		return policy.Context{}, err
-	}
-	return tokenData.ToContext(), nil
-}
-
-type keystoneToken struct {
-	DomainScope  keystoneTokenThing         `json:"domain"`
-	ProjectScope keystoneTokenThingInDomain `json:"project"`
-	Roles        []keystoneTokenThing       `json:"roles"`
-	User         keystoneTokenThingInDomain `json:"user"`
-}
-
-type keystoneTokenThing struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
-}
-
-type keystoneTokenThingInDomain struct {
-	keystoneTokenThing
-	Domain keystoneTokenThing `json:"domain"`
-}
-
-func (t *keystoneToken) ToContext() policy.Context {
-	c := policy.Context{
-		Roles: make([]string, 0, len(t.Roles)),
-		Auth: map[string]string{
-			"user_id":             t.User.ID,
-			"user_name":           t.User.Name,
-			"user_domain_id":      t.User.Domain.ID,
-			"user_domain_name":    t.User.Domain.Name,
-			"domain_id":           t.DomainScope.ID,
-			"domain_name":         t.DomainScope.Name,
-			"project_id":          t.ProjectScope.ID,
-			"project_name":        t.ProjectScope.Name,
-			"project_domain_id":   t.ProjectScope.Domain.ID,
-			"project_domain_name": t.ProjectScope.Domain.Name,
-			"tenant_id":           t.ProjectScope.ID,
-			"tenant_name":         t.ProjectScope.Name,
-			"tenant_domain_id":    t.ProjectScope.Domain.ID,
-			"tenant_domain_name":  t.ProjectScope.Domain.Name,
-		},
-		Request: nil,
-		Logger:  logg.Debug,
-	}
-	for key, value := range c.Auth {
-		if value == "" {
-			delete(c.Auth, key)
-		}
-	}
-	for _, role := range t.Roles {
-		c.Roles = append(c.Roles, role.Name)
-	}
-	if c.Request == nil {
-		c.Request = map[string]string{}
-	}
-
-	return c
 }
