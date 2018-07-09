@@ -26,7 +26,7 @@ import (
 	policy "github.com/databus23/goslo.policy"
 	"github.com/gophercloud/gophercloud"
 	"github.com/gorilla/mux"
-	"github.com/sapcc/limes/pkg/util"
+	"github.com/sapcc/go-bits/logg"
 )
 
 //Token represents a user's token, as passed through the X-Auth-Token header of
@@ -69,7 +69,7 @@ func (p *v1Provider) CheckToken(r *http.Request) *Token {
 //is returned.
 func (t *Token) Require(w http.ResponseWriter, rule string) bool {
 	if t.err != nil {
-		util.LogError("authentication failed: " + extractErrorMessage(t.err))
+		logg.Error("authentication failed: " + extractErrorMessage(t.err))
 		http.Error(w, "Unauthorized", 401)
 		return false
 	}

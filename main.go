@@ -34,6 +34,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes/pkg/api"
 	"github.com/sapcc/limes/pkg/collector"
 	"github.com/sapcc/limes/pkg/db"
@@ -73,17 +74,17 @@ func main() {
 	//connect to database
 	err := db.Init(config.Database)
 	if err != nil {
-		util.LogFatal(err.Error())
+		logg.Fatal(err.Error())
 	}
 
 	//connect to cluster
 	cluster, exists := config.Clusters[clusterID]
 	if !exists {
-		util.LogFatal("no such cluster configured: " + clusterID)
+		logg.Fatal("no such cluster configured: " + clusterID)
 	}
 	err = cluster.Connect()
 	if err != nil {
-		util.LogFatal(err.Error())
+		logg.Fatal(err.Error())
 	}
 
 	//select task
@@ -104,7 +105,7 @@ func main() {
 	//run task
 	err = task(config, cluster, remainingArgs)
 	if err != nil {
-		util.LogFatal(err.Error())
+		logg.Fatal(err.Error())
 	}
 }
 
@@ -127,7 +128,7 @@ func printUsageAndExit() {
 func taskMigrate(config limes.Configuration) {
 	err := createDatabaseIfNotExist(config)
 	if err != nil {
-		util.LogError(err.Error())
+		logg.Error(err.Error())
 		os.Exit(1)
 	}
 
@@ -136,7 +137,7 @@ func taskMigrate(config limes.Configuration) {
 		err = m.Up()
 	}
 	if err != nil && err != migrate.ErrNoChange {
-		util.LogFatal("migration failed: " + err.Error())
+		logg.Fatal("migration failed: " + err.Error())
 	}
 }
 
@@ -203,7 +204,7 @@ func taskCollect(config limes.Configuration, cluster *limes.Cluster, args []stri
 		for {
 			_, err := collector.ScanDomains(cluster, collector.ScanDomainsOpts{ScanAllProjects: true})
 			if err != nil {
-				util.LogError(err.Error())
+				logg.Error(err.Error())
 			}
 			time.Sleep(discoverInterval)
 		}
@@ -214,7 +215,7 @@ func taskCollect(config limes.Configuration, cluster *limes.Cluster, args []stri
 		prometheus.MustRegister(&collector.DataMetricsCollector{Cluster: cluster})
 	}
 	http.Handle("/metrics", promhttp.Handler())
-	util.LogInfo("listening on " + config.Collector.MetricsListenAddress)
+	logg.Info("listening on " + config.Collector.MetricsListenAddress)
 	return http.ListenAndServe(config.Collector.MetricsListenAddress, nil)
 }
 
@@ -231,7 +232,7 @@ func taskServe(config limes.Configuration, cluster *limes.Cluster, args []string
 		//Note that Connect() is idempotent, so this is safe even for `otherCluster == cluster`.
 		err := otherCluster.Connect()
 		if err != nil {
-			util.LogFatal(err.Error())
+			logg.Fatal(err.Error())
 		}
 	}
 
@@ -261,7 +262,7 @@ func taskServe(config limes.Configuration, cluster *limes.Cluster, args []string
 	)
 
 	//start HTTP server
-	util.LogInfo("listening on " + config.API.ListenAddress)
+	logg.Info("listening on " + config.API.ListenAddress)
 	return http.ListenAndServe(config.API.ListenAddress, nil)
 }
 
@@ -291,7 +292,7 @@ func taskTestScrape(config limes.Configuration, cluster *limes.Cluster, args []s
 	for serviceType, plugin := range cluster.QuotaPlugins {
 		data, err := plugin.Scrape(cluster.ProviderClientForService(serviceType), cluster.ID, domainUUID, projectUUID)
 		if err != nil {
-			util.LogError("scrape failed for %s: %s", serviceType, err.Error())
+			logg.Error("scrape failed for %s: %s", serviceType, err.Error())
 		}
 		if data != nil {
 			result[serviceType] = data
@@ -307,10 +308,10 @@ func dumpGeneratedPrometheusMetrics() {
 	if err != nil {
 		if merr, ok := err.(prometheus.MultiError); ok {
 			for _, err := range merr {
-				util.LogError("error while gathering Prometheus metrics: " + err.Error())
+				logg.Error("error while gathering Prometheus metrics: " + err.Error())
 			}
 		} else {
-			util.LogError("error while gathering Prometheus metrics: " + err.Error())
+			logg.Error("error while gathering Prometheus metrics: " + err.Error())
 		}
 	}
 
@@ -327,11 +328,11 @@ func dumpGeneratedPrometheusMetrics() {
 			}
 			switch {
 			case metric.Gauge != nil:
-				util.LogInfo("generated gauge   %s %v %g", *metricFamily.Name, labels, *metric.Gauge.Value)
+				logg.Info("generated gauge   %s %v %g", *metricFamily.Name, labels, *metric.Gauge.Value)
 			case metric.Counter != nil:
-				util.LogInfo("generated counter %s %v %g", *metricFamily.Name, labels, *metric.Counter.Value)
+				logg.Info("generated counter %s %v %g", *metricFamily.Name, labels, *metric.Counter.Value)
 			default:
-				util.LogInfo("generated metric  %s (do not know how to print type %d)", *metricFamily.Name, *metricFamily.Type)
+				logg.Info("generated metric  %s (do not know how to print type %d)", *metricFamily.Name, *metricFamily.Type)
 			}
 		}
 	}
@@ -349,7 +350,7 @@ func taskTestScanCapacity(config limes.Configuration, cluster *limes.Cluster, ar
 	for capacitorID, plugin := range cluster.CapacityPlugins {
 		capacities, err := plugin.Scrape(cluster.ProviderClient(), cluster.ID)
 		if err != nil {
-			util.LogError("scan capacity with capacitor %s failed: %s", capacitorID, err.Error())
+			logg.Error("scan capacity with capacitor %s failed: %s", capacitorID, err.Error())
 		}
 		//merge capacities from this plugin into the overall capacity values map
 		for serviceType, resources := range capacities {

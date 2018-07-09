@@ -28,8 +28,8 @@ import (
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/pagination"
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes/pkg/limes"
-	"github.com/sapcc/limes/pkg/util"
 )
 
 type capacityNovaPlugin struct {
@@ -137,7 +137,7 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, cluste
 		for _, element := range f {
 			extras, err := getFlavorExtras(client, element.ID)
 			if err != nil {
-				util.LogDebug("Failed to get extra specs for flavor: %s.", element.ID)
+				logg.Debug("Failed to get extra specs for flavor: %s.", element.ID)
 				return false, err
 			}
 
@@ -156,7 +156,7 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, cluste
 				}
 			}
 			if matches {
-				util.LogDebug("FlavorName: %s, FlavorID: %s, FlavorSize: %d GiB", element.Name, element.ID, element.Disk)
+				logg.Debug("FlavorName: %s, FlavorID: %s, FlavorSize: %d GiB", element.Name, element.ID, element.Disk)
 				maxFlavorSize = math.Max(maxFlavorSize, float64(element.Disk))
 			}
 		}
@@ -194,7 +194,7 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, cluste
 		instanceCapacity := uint64(math.Min(float64(10000*azCount), float64(totalLocalGb)/maxFlavorSize))
 		capacity["compute"]["instances"] = limes.CapacityData{Capacity: instanceCapacity}
 	} else {
-		util.LogError("Nova Capacity: Maximal flavor size is 0. Not reporting instances.")
+		logg.Error("Nova Capacity: Maximal flavor size is 0. Not reporting instances.")
 	}
 
 	return capacity, nil

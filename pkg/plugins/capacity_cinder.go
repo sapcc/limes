@@ -22,6 +22,7 @@ package plugins
 import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/util"
 )
@@ -83,10 +84,10 @@ func (p *capacityCinderPlugin) Scrape(provider *gophercloud.ProviderClient, clus
 	//add results from scheduler-stats
 	for _, element := range limitData.Pools {
 		if (volumeBackendName != "") && (element.Capabilities.VolumeBackendName != volumeBackendName) {
-			util.LogDebug("Not considering %s with volume_backend_name %s", element.Name, element.Capabilities.VolumeBackendName)
+			logg.Debug("Not considering %s with volume_backend_name %s", element.Name, element.Capabilities.VolumeBackendName)
 		} else {
 			totalCapacity += uint64(element.Capabilities.TotalCapacity)
-			util.LogDebug("Considering %s with volume_backend_name %s", element.Name, element.Capabilities.VolumeBackendName)
+			logg.Debug("Considering %s with volume_backend_name %s", element.Name, element.Capabilities.VolumeBackendName)
 		}
 
 	}

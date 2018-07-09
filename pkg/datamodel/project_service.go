@@ -22,9 +22,9 @@ package datamodel
 import (
 	"sort"
 
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
-	"github.com/sapcc/limes/pkg/util"
 	gorp "gopkg.in/gorp.v2"
 )
 
@@ -52,7 +52,7 @@ func ValidateProjectServices(tx *gorp.Transaction, cluster *limes.Cluster, domai
 		//cleanup entries for services that have been removed from the configuration
 		seen[srv.Type] = true
 		if !cluster.HasService(srv.Type) {
-			util.LogInfo("cleaning up %s service entry for project %s/%s", srv.Type, domain.Name, project.Name)
+			logg.Info("cleaning up %s service entry for project %s/%s", srv.Type, domain.Name, project.Name)
 			_, err := tx.Delete(&srv)
 			if err != nil {
 				return nil, err
@@ -86,7 +86,7 @@ func ValidateProjectServices(tx *gorp.Transaction, cluster *limes.Cluster, domai
 		if seen[serviceType] {
 			continue
 		}
-		util.LogInfo("creating %s service entry for project %s/%s", serviceType, domain.Name, project.Name)
+		logg.Info("creating %s service entry for project %s/%s", serviceType, domain.Name, project.Name)
 		srv := db.ProjectService{
 			ProjectID: project.ID,
 			Type:      serviceType,
@@ -148,7 +148,7 @@ func checkProjectResourcesAgainstConstraint(tx *gorp.Transaction, cluster *limes
 
 		if constraint.Expected != nil && *constraint.Expected != res.Quota {
 			unit := cluster.InfoForResource(srv.Type, res.Name).Unit
-			util.LogError(`expectation mismatch: %s/%s quota for project %s/%s should be %s, but is %s`,
+			logg.Error(`expectation mismatch: %s/%s quota for project %s/%s should be %s, but is %s`,
 				srv.Type, res.Name, domain.Name, project.Name,
 				limes.ValueWithUnit{Value: *constraint.Expected, Unit: unit},
 				limes.ValueWithUnit{Value: res.Quota, Unit: unit},

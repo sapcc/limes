@@ -26,8 +26,8 @@ import (
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/sharedfilesystems/v2/sharenetworks"
 	"github.com/gophercloud/gophercloud/pagination"
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes/pkg/limes"
-	"github.com/sapcc/limes/pkg/util"
 )
 
 type manilaPlugin struct {
@@ -172,7 +172,7 @@ func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID, d
 		return true, nil
 	})
 
-	util.LogDebug("Scraped quota and usage for service: sharev2.")
+	logg.Debug("Scraped quota and usage for service: sharev2.")
 
 	return map[string]limes.ResourceData{
 		"shares": {

@@ -24,7 +24,7 @@ import (
 	"sort"
 
 	"github.com/gophercloud/gophercloud"
-	"github.com/sapcc/limes/pkg/util"
+	"github.com/sapcc/go-bits/logg"
 )
 
 //Cluster contains all configuration and runtime information about a single
@@ -48,7 +48,7 @@ type Cluster struct {
 func NewCluster(id string, config *ClusterConfiguration) *Cluster {
 	factory, exists := discoveryPluginFactories[config.Discovery.Method]
 	if !exists {
-		util.LogFatal("setup for cluster %s failed: no suitable discovery plugin found", id)
+		logg.Fatal("setup for cluster %s failed: no suitable discovery plugin found", id)
 	}
 
 	c := &Cluster{
@@ -64,7 +64,7 @@ func NewCluster(id string, config *ClusterConfiguration) *Cluster {
 	for _, srv := range config.Services {
 		factory, exists := quotaPluginFactories[srv.Type]
 		if !exists {
-			util.LogError("skipping service %s: no suitable collector plugin found", srv.Type)
+			logg.Error("skipping service %s: no suitable collector plugin found", srv.Type)
 			continue
 		}
 
@@ -75,7 +75,7 @@ func NewCluster(id string, config *ClusterConfiguration) *Cluster {
 
 		plugin := factory(srv, scrapeSubresources)
 		if plugin == nil || plugin.ServiceInfo().Type != srv.Type {
-			util.LogError("skipping service %s: failed to initialize collector plugin", srv.Type)
+			logg.Error("skipping service %s: failed to initialize collector plugin", srv.Type)
 			continue
 		}
 
@@ -96,12 +96,12 @@ func NewCluster(id string, config *ClusterConfiguration) *Cluster {
 	for _, capa := range config.Capacitors {
 		factory, exists := capacityPluginFactories[capa.ID]
 		if !exists {
-			util.LogError("skipping capacitor %s: no suitable collector plugin found", capa.ID)
+			logg.Error("skipping capacitor %s: no suitable collector plugin found", capa.ID)
 			continue
 		}
 		plugin := factory(capa, scrapeSubcapacities)
 		if plugin == nil || plugin.ID() != capa.ID {
-			util.LogError("skipping capacitor %s: failed to initialize collector plugin", capa.ID)
+			logg.Error("skipping capacitor %s: failed to initialize collector plugin", capa.ID)
 			continue
 		}
 		c.CapacityPlugins[capa.ID] = plugin
@@ -123,7 +123,7 @@ func (c *Cluster) Connect() error {
 		c.QuotaConstraints, errs = NewQuotaConstraints(c, c.Config.ConstraintConfigPath)
 		if len(errs) > 0 {
 			for _, err := range errs {
-				util.LogError(err.Error())
+				logg.Error(err.Error())
 			}
 			return fmt.Errorf("cannot load quota constraints for cluster %s (see errors above)", c.ID)
 		}

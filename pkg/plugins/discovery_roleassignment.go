@@ -26,8 +26,8 @@ import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack/identity/v3/roles"
 	"github.com/gophercloud/gophercloud/pagination"
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes/pkg/limes"
-	"github.com/sapcc/limes/pkg/util"
 )
 
 type roleAssignmentDiscoveryPlugin struct {
@@ -58,7 +58,7 @@ func (p *roleAssignmentDiscoveryPlugin) ListDomains(provider *gophercloud.Provid
 //ListProjects implements the limes.DiscoveryPlugin interface.
 func (p *roleAssignmentDiscoveryPlugin) ListProjects(provider *gophercloud.ProviderClient, domainUUID string) ([]limes.KeystoneProject, error) {
 	if p.cfg.RoleAssignment.RoleName == "" {
-		util.LogFatal(`missing role name for discovery plugin "role-assignment"`)
+		logg.Fatal(`missing role name for discovery plugin "role-assignment"`)
 	}
 
 	client, err := p.lister.Client(provider)
@@ -128,7 +128,7 @@ func (p *roleAssignmentDiscoveryPlugin) ListProjects(provider *gophercloud.Provi
 		projects = append(projects, data2.Project)
 	}
 
-	util.LogDebug("domain = %s -> projects = %#v", domainUUID, projects)
+	logg.Debug("domain = %s -> projects = %#v", domainUUID, projects)
 	return projects, nil
 }
 

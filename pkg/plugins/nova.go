@@ -34,8 +34,8 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/imageservice/v2/images"
 	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes/pkg/limes"
-	"github.com/sapcc/limes/pkg/util"
 )
 
 //use a name that's unique to github.com/gophercloud/gophercloud/openstack/imageservice/v2/images
@@ -270,13 +270,13 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID, dom
 						Unit:  limes.UnitGibibytes,
 					}
 				} else {
-					util.LogError("error while trying to retrieve data for flavor %s: %s", flavorID, err.Error())
+					logg.Error("error while trying to retrieve data for flavor %s: %s", flavorID, err.Error())
 				}
 
 				if len(p.hypervisorTypeRules) > 0 {
 					hypervisorType, err := p.getHypervisorType(client, flavorID)
 					if err != nil {
-						util.LogError("error while trying to find hypervisor type for flavor %s: %s", flavorID, err.Error())
+						logg.Error("error while trying to find hypervisor type for flavor %s: %s", flavorID, err.Error())
 					}
 					subResource["hypervisor"] = hypervisorType
 					countsByHypervisor[hypervisorType]++
@@ -288,7 +288,7 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID, dom
 					if err == nil {
 						subResource["os_type"] = osType
 					} else {
-						util.LogError("error while trying to find OS type for image %s: %s", imageID, err.Error())
+						logg.Error("error while trying to find OS type for image %s: %s", imageID, err.Error())
 					}
 				} else {
 					subResource["os_type"] = "image-missing"
@@ -360,11 +360,11 @@ func (p *novaPlugin) getFlavorInfo(client *gophercloud.ServiceClient, flavorID s
 	)
 	result.Flavor, err = flavors.Get(client, flavorID).Extract()
 	if err != nil {
-		util.LogError("retrieve flavor %s: %s", flavorID, err.Error())
+		logg.Error("retrieve flavor %s: %s", flavorID, err.Error())
 	}
 	result.ExtraSpecs, err = getFlavorExtras(client, flavorID)
 	if err != nil {
-		util.LogError("retrieve flavor %s extra-specs: %s", flavorID, err.Error())
+		logg.Error("retrieve flavor %s extra-specs: %s", flavorID, err.Error())
 	}
 
 	p.flavorInfo[flavorID] = result

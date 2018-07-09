@@ -25,9 +25,9 @@ import (
 	"sort"
 	"time"
 
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
-	"github.com/sapcc/limes/pkg/util"
 )
 
 var scanInterval = 15 * time.Minute
@@ -44,7 +44,7 @@ func (c *Collector) ScanCapacity() {
 	time.Sleep(scanInitialDelay)
 
 	for {
-		util.LogDebug("scanning capacity")
+		logg.Debug("scanning capacity")
 		c.scanCapacity()
 
 		time.Sleep(scanInterval)
@@ -76,7 +76,7 @@ func (c *Collector) scanCapacity() {
 	//skip values for services not enabled for this cluster
 	for serviceType := range values {
 		if !c.Cluster.HasService(serviceType) {
-			util.LogInfo("discarding capacity values for unknown service type: %s", serviceType)
+			logg.Info("discarding capacity values for unknown service type: %s", serviceType)
 			delete(values, serviceType)
 		}
 	}
@@ -95,7 +95,7 @@ func (c *Collector) scanCapacity() {
 			delete(names, res.Name)
 		}
 		for name := range names {
-			util.LogInfo("discarding capacity value for unknown resource: %s/%s", serviceType, name)
+			logg.Info("discarding capacity value for unknown resource: %s/%s", serviceType, name)
 			delete(subvalues, name)
 		}
 	}

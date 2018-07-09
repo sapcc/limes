@@ -22,8 +22,8 @@ package collector
 import (
 	"time"
 
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes/pkg/limes"
-	"github.com/sapcc/limes/pkg/util"
 )
 
 //Collector provides methods that implement the collection jobs performed by
@@ -34,7 +34,7 @@ import (
 type Collector struct {
 	Cluster *limes.Cluster
 	Plugin  limes.QuotaPlugin
-	//Usually util.LogError, but can be changed inside unit tests.
+	//Usually logg.Error, but can be changed inside unit tests.
 	LogError func(msg string, args ...interface{})
 	//Usually time.Now, but can be changed inside unit tests.
 	TimeNow func() time.Time
@@ -48,7 +48,7 @@ func NewCollector(cluster *limes.Cluster, plugin limes.QuotaPlugin, cfg limes.Co
 	return &Collector{
 		Cluster:  cluster,
 		Plugin:   plugin,
-		LogError: util.LogError,
+		LogError: logg.Error,
 		TimeNow:  time.Now,
 		Once:     false,
 	}

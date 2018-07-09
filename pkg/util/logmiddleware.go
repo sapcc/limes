@@ -23,6 +23,8 @@ import (
 	"bytes"
 	"net"
 	"net/http"
+
+	"github.com/sapcc/go-bits/logg"
 )
 
 type logMiddleware struct {
@@ -48,19 +50,17 @@ func (l logMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	//the timestamp is at the front to ensure consistency with the rest of the
 	//log)
 	if !containsInt(l.exceptStatusCodes, writer.statusCode) {
-		doLog(
-			`REQUEST: %s - - "%s %s %s" %03d %d "%s" "%s"`,
-			[]interface{}{
-				tryStripPort(r.RemoteAddr),
-				r.Method, r.URL.String(), r.Proto,
-				writer.statusCode, writer.bytesWritten,
-				stringOrDefault("-", r.Header.Get("Referer")),
-				stringOrDefault("-", r.Header.Get("User-Agent")),
-			},
+		logg.Other(
+			"REQUEST", `%s - - "%s %s %s" %03d %d "%s" "%s"`,
+			tryStripPort(r.RemoteAddr),
+			r.Method, r.URL.String(), r.Proto,
+			writer.statusCode, writer.bytesWritten,
+			stringOrDefault("-", r.Header.Get("Referer")),
+			stringOrDefault("-", r.Header.Get("User-Agent")),
 		)
 	}
 	if writer.errorMessageBuf.Len() > 0 {
-		LogError(`during "%s %s": %s`,
+		logg.Error(`during "%s %s": %s`,
 			r.Method, r.URL.String(), writer.errorMessageBuf.String(),
 		)
 	}

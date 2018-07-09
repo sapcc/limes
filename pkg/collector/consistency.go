@@ -22,9 +22,9 @@ package collector
 import (
 	"time"
 
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes/pkg/datamodel"
 	"github.com/sapcc/limes/pkg/db"
-	"github.com/sapcc/limes/pkg/util"
 )
 
 var consistencyCheckInterval = 1 * time.Hour
@@ -70,7 +70,7 @@ func (c *Collector) checkConsistencyCluster() {
 		}
 
 		if !c.Cluster.HasService(service.Type) || c.Cluster.IsServiceShared[service.Type] {
-			util.LogInfo("cleaning up %s service entry for domain %s", service.Type, c.Cluster.ID)
+			logg.Info("cleaning up %s service entry for domain %s", service.Type, c.Cluster.ID)
 			_, err := db.DB.Delete(&service)
 			if err != nil {
 				c.LogError(err.Error())
@@ -91,7 +91,7 @@ func (c *Collector) checkConsistencyCluster() {
 			}
 		}
 
-		util.LogInfo("creating missing %s service entry for cluster %s", serviceType, c.Cluster.ID)
+		logg.Info("creating missing %s service entry for cluster %s", serviceType, c.Cluster.ID)
 		service := &db.ClusterService{
 			ClusterID: c.Cluster.ID,
 			Type:      serviceType,

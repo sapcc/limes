@@ -24,8 +24,8 @@ import (
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes/pkg/limes"
-	"github.com/sapcc/limes/pkg/util"
 )
 
 type capacityManilaPlugin struct {
@@ -97,7 +97,7 @@ func (p *capacityManilaPlugin) Scrape(provider *gophercloud.ProviderClient, clus
 
 	//derive capacities
 	shareCount := cfg.SharesPerPool*poolCount - cfg.ShareNetworks
-	util.LogDebug("sc = sp * pc - sn = %d * %d - %d = %d", cfg.SharesPerPool, poolCount, cfg.ShareNetworks, shareCount)
+	logg.Debug("sc = sp * pc - sn = %d * %d - %d = %d", cfg.SharesPerPool, poolCount, cfg.ShareNetworks, shareCount)
 	if cfg.SharesPerPool*poolCount < cfg.ShareNetworks { //detect unsigned int underflow
 		shareCount = 0
 	}

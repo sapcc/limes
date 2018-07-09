@@ -28,7 +28,7 @@ import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/identity/v3/tokens"
-	"github.com/sapcc/limes/pkg/util"
+	"github.com/sapcc/go-bits/logg"
 )
 
 //AuthParameters contains credentials for authenticating with Keystone (i.e.
@@ -152,7 +152,7 @@ func (t *keystoneToken) ToContext() policy.Context {
 			"tenant_domain_name":  t.ProjectScope.Domain.Name,
 		},
 		Request: nil,
-		Logger:  util.LogDebug,
+		Logger:  logg.Debug,
 	}
 	for key, value := range c.Auth {
 		if value == "" {

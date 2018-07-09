@@ -23,9 +23,9 @@ import (
 	"database/sql"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
-	"github.com/sapcc/limes/pkg/util"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -236,7 +236,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		return nil
 	})
 	if err != nil {
-		util.LogError("collect cluster metrics failed: " + err.Error())
+		logg.Error("collect cluster metrics failed: " + err.Error())
 	}
 
 	//fetch values for domain level
@@ -260,7 +260,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		return nil
 	})
 	if err != nil {
-		util.LogError("collect domain metrics failed: " + err.Error())
+		logg.Error("collect domain metrics failed: " + err.Error())
 	}
 
 	//fetch values for project level
@@ -299,7 +299,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		return nil
 	})
 	if err != nil {
-		util.LogError("collect project metrics failed: " + err.Error())
+		logg.Error("collect project metrics failed: " + err.Error())
 	}
 
 	//fetch metadata for services/resources

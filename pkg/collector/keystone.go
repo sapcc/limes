@@ -21,10 +21,10 @@ package collector
 
 import (
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes/pkg/datamodel"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
-	"github.com/sapcc/limes/pkg/util"
 )
 
 //ScanDomainsOpts contains additional options for ScanDomains().
@@ -101,7 +101,7 @@ func ScanDomains(cluster *limes.Cluster, opts ScanDomainsOpts) (result []string,
 	}
 	for _, dbDomain := range dbDomains {
 		if !isDomainUUID[dbDomain.UUID] {
-			util.LogInfo("removing deleted Keystone domain from our database: %s", dbDomain.Name)
+			logg.Info("removing deleted Keystone domain from our database: %s", dbDomain.Name)
 			_, err := db.DB.Delete(dbDomain)
 			if err != nil {
 				return nil, err
@@ -118,7 +118,7 @@ func ScanDomains(cluster *limes.Cluster, opts ScanDomainsOpts) (result []string,
 		if exists {
 			//check if the name was updated in Keystone
 			if dbDomain.Name != domain.Name {
-				util.LogInfo("discovered Keystone domain name change: %s -> %s", dbDomain.Name, domain.Name)
+				logg.Info("discovered Keystone domain name change: %s -> %s", dbDomain.Name, domain.Name)
 				dbDomain.Name = domain.Name
 				_, err := db.DB.Update(dbDomain)
 				if err != nil {
@@ -128,7 +128,7 @@ func ScanDomains(cluster *limes.Cluster, opts ScanDomainsOpts) (result []string,
 			continue
 		}
 
-		util.LogInfo("discovered new Keystone domain: %s", domain.Name)
+		logg.Info("discovered new Keystone domain: %s", domain.Name)
 		dbDomain, err := initDomain(cluster, domain)
 		if err != nil {
 			return result, err
@@ -226,7 +226,7 @@ func ScanProjects(cluster *limes.Cluster, domain *db.Domain) (result []string, r
 	}
 	for _, dbProject := range dbProjects {
 		if !isProjectUUID[dbProject.UUID] {
-			util.LogInfo("removing deleted Keystone project from our database: %s/%s", domain.Name, dbProject.Name)
+			logg.Info("removing deleted Keystone project from our database: %s/%s", domain.Name, dbProject.Name)
 			_, err := db.DB.Delete(dbProject)
 			if err != nil {
 				return nil, err
@@ -244,12 +244,12 @@ func ScanProjects(cluster *limes.Cluster, domain *db.Domain) (result []string, r
 			//check if the name was updated in Keystone
 			needToSave := false
 			if dbProject.Name != project.Name {
-				util.LogInfo("discovered Keystone project name change: %s/%s -> %s", domain.Name, dbProject.Name, project.Name)
+				logg.Info("discovered Keystone project name change: %s/%s -> %s", domain.Name, dbProject.Name, project.Name)
 				dbProject.Name = project.Name
 				needToSave = true
 			}
 			if dbProject.ParentUUID != project.ParentUUID {
-				util.LogInfo("discovered Keystone project parent change for %s/%s: %s -> %s",
+				logg.Info("discovered Keystone project parent change for %s/%s: %s -> %s",
 					domain.Name, dbProject.Name, dbProject.ParentUUID, project.ParentUUID,
 				)
 				dbProject.ParentUUID = project.ParentUUID
@@ -264,7 +264,7 @@ func ScanProjects(cluster *limes.Cluster, domain *db.Domain) (result []string, r
 			continue
 		}
 
-		util.LogInfo("discovered new Keystone project: %s/%s", domain.Name, project.Name)
+		logg.Info("discovered new Keystone project: %s/%s", domain.Name, project.Name)
 		err := initProject(cluster, domain, project)
 		if err != nil {
 			return result, err

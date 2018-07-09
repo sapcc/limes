@@ -33,8 +33,8 @@ import (
 	"github.com/majewsky/sqlproxy"
 	"github.com/mattes/migrate"
 	bindata "github.com/mattes/migrate/source/go-bindata"
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes/pkg/dbdata"
-	"github.com/sapcc/limes/pkg/util"
 	//enable postgres driver for database/sql
 	_ "github.com/lib/pq"
 )
@@ -73,7 +73,7 @@ type Configuration struct {
 func Init(cfg Configuration) error {
 	sqlDriver := "postgres"
 	if os.Getenv("LIMES_DEBUG_SQL") == "1" {
-		util.LogInfo("Enabling SQL tracing... \x1B[1;31mTHIS VOIDS YOUR WARRANTY!\x1B[0m If database queries fail in unexpected ways, check first if the tracing causes the issue.")
+		logg.Info("Enabling SQL tracing... \x1B[1;31mTHIS VOIDS YOUR WARRANTY!\x1B[0m If database queries fail in unexpected ways, check first if the tracing causes the issue.")
 		sqlDriver += "-debug"
 	}
 
@@ -88,7 +88,7 @@ func Init(cfg Configuration) error {
 	//because, depending on the rollout strategy, `limes-migrate` might still be
 	//running when we are starting, so wait for it to complete)
 	migrationLevel, err := getCurrentMigrationLevel(cfg)
-	util.LogDebug("waiting for database to migrate to schema version %d", migrationLevel)
+	logg.Debug("waiting for database to migrate to schema version %d", migrationLevel)
 	if err != nil {
 		return err
 	}
@@ -110,11 +110,11 @@ func Init(cfg Configuration) error {
 		}
 		//did not get a row - expected migration not there -> sleep with exponential backoff
 		waitInterval *= 2
-		util.LogInfo("database is not migrated to schema version %d yet - will retry in %d seconds", migrationLevel, waitInterval)
+		logg.Info("database is not migrated to schema version %d yet - will retry in %d seconds", migrationLevel, waitInterval)
 		time.Sleep(time.Duration(waitInterval) * time.Second)
 	}
 
-	util.LogDebug("database is migrated - commencing normal startup...")
+	logg.Debug("database is migrated - commencing normal startup...")
 	return nil
 }
 
@@ -161,7 +161,7 @@ func traceQuery(query string, args []interface{}) {
 
 	//early exit for easy option
 	if len(args) == 0 {
-		util.LogDebug(query)
+		logg.Debug(query)
 		return
 	}
 
@@ -176,7 +176,7 @@ func traceQuery(query string, args []interface{}) {
 			argStrings[idx] = fmt.Sprintf("%#v", arg)
 		}
 	}
-	util.LogDebug(query + " [" + strings.Join(argStrings, ", ") + "]")
+	logg.Debug(query + " [" + strings.Join(argStrings, ", ") + "]")
 }
 
 //RollbackUnlessCommitted calls Rollback() on a transaction if it hasn't been
@@ -187,13 +187,13 @@ func RollbackUnlessCommitted(tx *gorp.Transaction) {
 	switch err {
 	case nil:
 		//rolled back successfully
-		util.LogInfo("implicit rollback done")
+		logg.Info("implicit rollback done")
 		return
 	case sql.ErrTxDone:
 		//already committed or rolled back - nothing to do
 		return
 	default:
-		util.LogError("implicit rollback failed: %s", err.Error())
+		logg.Error("implicit rollback failed: %s", err.Error())
 	}
 }
 

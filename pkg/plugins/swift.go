@@ -26,8 +26,8 @@ import (
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/majewsky/schwift"
 	"github.com/majewsky/schwift/gopherschwift"
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes/pkg/limes"
-	"github.com/sapcc/limes/pkg/util"
 )
 
 type swiftPlugin struct {
@@ -128,7 +128,7 @@ func (p *swiftPlugin) SetQuota(provider *gophercloud.ProviderClient, clusterID, 
 		//account does not exist yet - if there is a non-zero quota, enable it now
 		err = account.Create(headers.ToOpts())
 		if err == nil {
-			util.LogInfo("Swift Account %s created", projectUUID)
+			logg.Info("Swift Account %s created", projectUUID)
 		}
 	}
 	return err

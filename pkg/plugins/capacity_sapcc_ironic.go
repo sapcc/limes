@@ -27,8 +27,8 @@ import (
 	flavorsmodule "github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes/pkg/limes"
-	"github.com/sapcc/limes/pkg/util"
 )
 
 type capacitySapccIronicPlugin struct {
@@ -109,7 +109,7 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 		matched := false
 		for _, flavor := range flavors {
 			if node.Matches(flavor) {
-				util.LogDebug("Ironic node %q (%s) matches flavor %s", node.Name, node.ID, flavor.Name)
+				logg.Debug("Ironic node %q (%s) matches flavor %s", node.Name, node.ID, flavor.Name)
 				data := result["instances_"+flavor.Name]
 				data.Capacity++
 				if p.reportSubcapacities {
@@ -137,7 +137,7 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 			}
 		}
 		if !matched {
-			util.LogError("Ironic node %q (%s) does not match any baremetal flavor", node.Name, node.ID)
+			logg.Error("Ironic node %q (%s) does not match any baremetal flavor", node.Name, node.ID)
 			unmatchedCounter++
 		}
 	}
@@ -246,15 +246,15 @@ func collectIronicFlavorInfo(novaClient *gophercloud.ServiceClient) ([]ironicFla
 
 func (n ironicNode) Matches(f ironicFlavorInfo) bool {
 	if uint64(n.Properties.Cores) != f.Cores {
-		util.LogDebug("core mismatch: %d != %d", n.Properties.Cores, f.Cores)
+		logg.Debug("core mismatch: %d != %d", n.Properties.Cores, f.Cores)
 		return false
 	}
 	if uint64(n.Properties.MemoryMiB) != f.MemoryMiB {
-		util.LogDebug("memory mismatch: %d != %d", n.Properties.MemoryMiB, f.MemoryMiB)
+		logg.Debug("memory mismatch: %d != %d", n.Properties.MemoryMiB, f.MemoryMiB)
 		return false
 	}
 	if uint64(n.Properties.DiskGiB) != f.DiskGiB {
-		util.LogDebug("disk mismatch: %d != %d", n.Properties.DiskGiB, f.DiskGiB)
+		logg.Debug("disk mismatch: %d != %d", n.Properties.DiskGiB, f.DiskGiB)
 		return false
 	}
 
@@ -272,7 +272,7 @@ func (n ironicNode) Matches(f ironicFlavorInfo) bool {
 	for key, flavorValue := range f.Capabilities {
 		nodeValue, exists := nodeCaps[key]
 		if !exists || nodeValue != flavorValue {
-			util.LogDebug("capability %s mismatch: %q != %q", key, nodeValue, flavorValue)
+			logg.Debug("capability %s mismatch: %q != %q", key, nodeValue, flavorValue)
 			return false
 		}
 	}

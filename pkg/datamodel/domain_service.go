@@ -22,9 +22,9 @@ package datamodel
 import (
 	"sort"
 
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
-	"github.com/sapcc/limes/pkg/util"
 	gorp "gopkg.in/gorp.v2"
 )
 
@@ -49,7 +49,7 @@ func ValidateDomainServices(tx *gorp.Transaction, cluster *limes.Cluster, domain
 		//cleanup entries for services that have been removed from the configuration
 		seen[srv.Type] = true
 		if !cluster.HasService(srv.Type) {
-			util.LogInfo("cleaning up %s service entry for domain %s", srv.Type, domain.Name)
+			logg.Info("cleaning up %s service entry for domain %s", srv.Type, domain.Name)
 			_, err := tx.Delete(&srv)
 			if err != nil {
 				return nil, err
@@ -69,7 +69,7 @@ func ValidateDomainServices(tx *gorp.Transaction, cluster *limes.Cluster, domain
 		if seen[serviceType] {
 			continue
 		}
-		util.LogInfo("creating %s service entry for domain %s", serviceType, domain.Name)
+		logg.Info("creating %s service entry for domain %s", serviceType, domain.Name)
 		srv := db.DomainService{
 			DomainID: domain.ID,
 			Type:     serviceType,
@@ -111,7 +111,7 @@ func checkDomainServiceConstraints(tx *gorp.Transaction, cluster *limes.Cluster,
 		constraint := serviceConstraints[res.Name]
 		if newQuota := constraint.ApplyTo(res.Quota); newQuota != res.Quota {
 			resInfo := cluster.InfoForResource(srv.Type, res.Name)
-			util.LogInfo("changing %s/%s quota for domain %s from %s to %s to satisfy constraint %q",
+			logg.Info("changing %s/%s quota for domain %s from %s to %s to satisfy constraint %q",
 				srv.Type, res.Name, domain.Name,
 				limes.ValueWithUnit{Value: res.Quota, Unit: resInfo.Unit},
 				limes.ValueWithUnit{Value: newQuota, Unit: resInfo.Unit},
@@ -129,7 +129,7 @@ func checkDomainServiceConstraints(tx *gorp.Transaction, cluster *limes.Cluster,
 
 		if constraint.Expected != nil && *constraint.Expected != res.Quota {
 			unit := cluster.InfoForResource(srv.Type, res.Name).Unit
-			util.LogError(`expectation mismatch: %s/%s quota for domain %s should be %s, but is %s`,
+			logg.Error(`expectation mismatch: %s/%s quota for domain %s should be %s, but is %s`,
 				srv.Type, res.Name, domain.Name,
 				limes.ValueWithUnit{Value: *constraint.Expected, Unit: unit},
 				limes.ValueWithUnit{Value: res.Quota, Unit: unit},
@@ -170,7 +170,7 @@ func createMissingDomainResources(tx *gorp.Transaction, cluster *limes.Cluster, 
 		resInfo := cluster.InfoForResource(srv.Type, resourceName)
 		constraint := serviceConstraints[resourceName]
 		newQuota := constraint.InitialQuotaValue()
-		util.LogInfo("initializing %s/%s quota for domain %s to %s to satisfy constraint %q",
+		logg.Info("initializing %s/%s quota for domain %s to %s to satisfy constraint %q",
 			srv.Type, resourceName, domain.Name,
 			limes.ValueWithUnit{Value: newQuota, Unit: resInfo.Unit},
 			constraint.ToString(resInfo.Unit),

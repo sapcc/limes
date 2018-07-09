@@ -28,8 +28,8 @@ import (
 	"strings"
 
 	policy "github.com/databus23/goslo.policy"
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes/pkg/db"
-	"github.com/sapcc/limes/pkg/util"
 
 	yaml "gopkg.in/yaml.v2"
 )
@@ -152,12 +152,12 @@ func NewConfiguration(path string) (cfg Configuration) {
 	//read config file
 	configBytes, err := ioutil.ReadFile(path)
 	if err != nil {
-		util.LogFatal("read configuration file: %s", err.Error())
+		logg.Fatal("read configuration file: %s", err.Error())
 	}
 	var cfgFile configurationInFile
 	err = yaml.Unmarshal(configBytes, &cfgFile)
 	if err != nil {
-		util.LogFatal("parse configuration: %s", err.Error())
+		logg.Fatal("parse configuration: %s", err.Error())
 	}
 	if !cfgFile.validate() {
 		os.Exit(1)
@@ -183,7 +183,7 @@ func NewConfiguration(path string) (cfg Configuration) {
 	//load the policy file
 	cfg.API.PolicyEnforcer, err = loadPolicyFile(cfg.API.PolicyFilePath)
 	if err != nil {
-		util.LogFatal(err.Error())
+		logg.Fatal(err.Error())
 	}
 
 	return
@@ -194,7 +194,7 @@ func (cfg configurationInFile) validate() (success bool) {
 	success = true //until proven otherwise
 
 	missing := func(key string) {
-		util.LogError("missing %s configuration value", key)
+		logg.Error("missing %s configuration value", key)
 		success = false
 	}
 	if cfg.Database.Location == "" {
@@ -207,15 +207,15 @@ func (cfg configurationInFile) validate() (success bool) {
 	for clusterID, cluster := range cfg.Clusters {
 		switch clusterID {
 		case "current":
-			util.LogError("\"current\" is not an acceptable cluster ID (it would make the URL /v1/clusters/current ambiguous)")
+			logg.Error("\"current\" is not an acceptable cluster ID (it would make the URL /v1/clusters/current ambiguous)")
 			success = false
 		case "shared":
-			util.LogError("\"shared\" is not an acceptable cluster ID (it is used for internal accounting)")
+			logg.Error("\"shared\" is not an acceptable cluster ID (it is used for internal accounting)")
 			success = false
 		}
 
 		missing := func(key string) {
-			util.LogError("missing clusters[%s].%s configuration value", clusterID, key)
+			logg.Error("missing clusters[%s].%s configuration value", clusterID, key)
 			success = false
 		}
 		compileOptionalRx := func(pattern string) *regexp.Regexp {
@@ -224,7 +224,7 @@ func (cfg configurationInFile) validate() (success bool) {
 			}
 			rx, err := regexp.Compile(pattern)
 			if err != nil {
-				util.LogError("failed to compile regex %#v: %s", pattern, err.Error())
+				logg.Error("failed to compile regex %#v: %s", pattern, err.Error())
 				success = false
 			}
 			return rx
@@ -243,10 +243,10 @@ func (cfg configurationInFile) validate() (success bool) {
 		case cluster.Auth.AuthURL == "":
 			missing("auth.auth_url")
 		case !strings.HasPrefix(cluster.Auth.AuthURL, "http://") && !strings.HasPrefix(cluster.Auth.AuthURL, "https://"):
-			util.LogError("clusters[%s].auth.auth_url does not look like a HTTP URL", clusterID)
+			logg.Error("clusters[%s].auth.auth_url does not look like a HTTP URL", clusterID)
 			success = false
 		case !strings.HasSuffix(cluster.Auth.AuthURL, "/v3/"):
-			util.LogError("clusters[%s].auth.auth_url does not end with \"/v3/\"", clusterID)
+			logg.Error("clusters[%s].auth.auth_url does not end with \"/v3/\"", clusterID)
 			success = false
 		}
 
@@ -287,7 +287,7 @@ func (cfg configurationInFile) validate() (success bool) {
 
 		//warn about removed configuration options
 		if cluster.OldSeedConfigPath != "" {
-			util.LogError("quota seeds have been replaced by quota constraints: rename clusters[%s].seeds config key to clusters[%s].constraints and convert seed file into constraint file; documentation at https://github.com/sapcc/limes/blob/master/docs/operators/constraints.md", clusterID, clusterID)
+			logg.Error("quota seeds have been replaced by quota constraints: rename clusters[%s].seeds config key to clusters[%s].constraints and convert seed file into constraint file; documentation at https://github.com/sapcc/limes/blob/master/docs/operators/constraints.md", clusterID, clusterID)
 			success = false
 		}
 	}

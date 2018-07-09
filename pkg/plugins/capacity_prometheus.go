@@ -26,8 +26,8 @@ import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/prometheus/client_golang/api/prometheus"
 	"github.com/prometheus/common/model"
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes/pkg/limes"
-	"github.com/sapcc/limes/pkg/util"
 	"golang.org/x/net/context"
 )
 
@@ -93,9 +93,9 @@ func (p *capacityPrometheusPlugin) Scrape(provider *gophercloud.ProviderClient, 
 
 			switch resultVector.Len() {
 			case 0:
-				util.LogInfo("Prometheus query returned empty result: %s", query)
+				logg.Info("Prometheus query returned empty result: %s", query)
 			default:
-				util.LogInfo("Prometheus query returned more than one result: %s (only the first value will be used)", query)
+				logg.Info("Prometheus query returned more than one result: %s (only the first value will be used)", query)
 				fallthrough
 			case 1:
 				serviceResult[resourceName] = limes.CapacityData{Capacity: uint64(resultVector[0].Value)}
