@@ -124,6 +124,10 @@ func GetInconsistencies(cluster *limes.Cluster, dbi db.Interface, filter Filter)
 	//The inconsistency data will be assigned in the respective SQL queries.
 	inconsistencies := Inconsistencies{
 		ClusterID: cluster.ID,
+		//ensure that empty lists get serialized as `[]` rather than as `null`
+		OvercommittedQuotas: []OvercommittedDomainQuota{},
+		OverspentQuotas:     []OverspentProjectQuota{},
+		MismatchQuotas:      []MismatchProjectQuota{},
 	}
 
 	//ocdqReportQuery: data for OvercommittedDomainQuota inconsistencies.

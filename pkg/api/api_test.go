@@ -154,6 +154,18 @@ func Test_InconsistencyOperations(t *testing.T) {
 	}.Check(t, router)
 }
 
+func Test_EmptyInconsistencyReport(t *testing.T) {
+	_, router := setupTest(t, "cloud", "/dev/null")
+
+	//check ListInconsistencies
+	test.APIRequest{
+		Method:           "GET",
+		Path:             "/v1/inconsistencies",
+		ExpectStatusCode: 200,
+		ExpectJSON:       "./fixtures/inconsistency-empty.json",
+	}.Check(t, router)
+}
+
 func Test_ClusterOperations(t *testing.T) {
 	clusterName, pathtoData := "west", "fixtures/start-data.sql"
 	_, router := setupTest(t, clusterName, pathtoData)
