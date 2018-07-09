@@ -46,35 +46,6 @@ type AuthParameters struct {
 	ProviderClient *gophercloud.ProviderClient `yaml:"-"`
 }
 
-//CanReauth implements the
-//gophercloud/openstack/identity/v3/tokens.AuthOptionsBuilder interface.
-func (auth AuthParameters) CanReauth() bool {
-	return true
-}
-
-//ToTokenV3CreateMap implements the
-//gophercloud/openstack/identity/v3/tokens.AuthOptionsBuilder interface.
-func (auth AuthParameters) ToTokenV3CreateMap(scope map[string]interface{}) (map[string]interface{}, error) {
-	gophercloudAuthOpts := gophercloud.AuthOptions{
-		Username:    auth.UserName,
-		Password:    auth.Password,
-		DomainName:  auth.UserDomainName,
-		AllowReauth: true,
-	}
-	return gophercloudAuthOpts.ToTokenV3CreateMap(scope)
-}
-
-//ToTokenV3ScopeMap implements the
-//gophercloud/openstack/identity/v3/tokens.AuthOptionsBuilder interface.
-func (auth AuthParameters) ToTokenV3ScopeMap() (map[string]interface{}, error) {
-	return map[string]interface{}{
-		"project": map[string]interface{}{
-			"name":   auth.ProjectName,
-			"domain": map[string]interface{}{"name": auth.ProjectDomainName},
-		},
-	}, nil
-}
-
 //Connect creates the gophercloud.ProviderClient instance for these credentials.
 func (auth *AuthParameters) Connect() error {
 	if auth.tokenRenewalMutex == nil {
@@ -91,51 +62,24 @@ func (auth *AuthParameters) Connect() error {
 	if err != nil {
 		return fmt.Errorf("cannot initialize OpenStack client: %v", err)
 	}
+
 	//use http.DefaultClient, esp. to pick up LIMES_INSECURE flag
 	auth.ProviderClient.HTTPClient = *http.DefaultClient
 
-	err = auth.refreshToken()
+	err = openstack.Authenticate(auth.ProviderClient, gophercloud.AuthOptions{
+		IdentityEndpoint: auth.AuthURL,
+		AllowReauth:      true,
+		Username:         auth.UserName,
+		DomainName:       auth.UserDomainName,
+		Password:         auth.Password,
+		Scope: &gophercloud.AuthScope{
+			ProjectName: auth.ProjectName,
+			DomainName:  auth.ProjectDomainName,
+		},
+	})
+	//FIXME: honor auth.RegionName
 	if err != nil {
 		return fmt.Errorf("cannot fetch initial Keystone token: %v", err)
-	}
-
-	return nil
-}
-
-//refreshToken fetches a new Keystone token for this cluster. It is also used
-//to fetch the initial token on startup.
-func (auth *AuthParameters) refreshToken() error {
-	//NOTE: This function is very similar to v3auth() in
-	//gophercloud/openstack/client.go, but with a few differences:
-	//
-	//1. thread-safe token renewal
-	//2. proper support for cross-domain scoping
-
-	auth.tokenRenewalMutex.Lock()
-	defer auth.tokenRenewalMutex.Unlock()
-	util.LogDebug("renewing Keystone token...")
-
-	auth.ProviderClient.TokenID = ""
-
-	keystone := &gophercloud.ServiceClient{
-		ProviderClient: auth.ProviderClient,
-		Endpoint:       auth.AuthURL,
-	}
-	result := tokens.Create(keystone, auth)
-	token, err := result.ExtractToken()
-	if err != nil {
-		return fmt.Errorf("cannot read token: %v", err)
-	}
-	catalog, err := result.ExtractServiceCatalog()
-	if err != nil {
-		return fmt.Errorf("cannot read service catalog: %v", err)
-	}
-
-	auth.ProviderClient.TokenID = token.ID
-	auth.ProviderClient.ReauthFunc = auth.refreshToken //TODO: exponential backoff necessary or already provided by gophercloud?
-	auth.ProviderClient.EndpointLocator = func(opts gophercloud.EndpointOpts) (string, error) {
-		opts.Region = auth.RegionName
-		return openstack.V3EndpointURL(catalog, opts)
 	}
 
 	return nil
