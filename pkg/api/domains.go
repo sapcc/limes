@@ -26,6 +26,7 @@ import (
 
 	gorp "gopkg.in/gorp.v2"
 
+	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/limes/pkg/collector"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
@@ -45,11 +46,11 @@ func (p *v1Provider) ListDomains(w http.ResponseWriter, r *http.Request) {
 	}
 
 	domains, err := reports.GetDomains(cluster, nil, db.DB, reports.ReadFilter(r))
-	if ReturnError(w, err) {
+	if respondwith.ErrorText(w, err) {
 		return
 	}
 
-	ReturnJSON(w, 200, map[string]interface{}{"domains": domains})
+	respondwith.JSON(w, 200, map[string]interface{}{"domains": domains})
 }
 
 //GetDomain handles GET /v1/domains/:domain_id.
@@ -68,7 +69,7 @@ func (p *v1Provider) GetDomain(w http.ResponseWriter, r *http.Request) {
 	}
 
 	domains, err := reports.GetDomains(cluster, &dbDomain.ID, db.DB, reports.ReadFilter(r))
-	if ReturnError(w, err) {
+	if respondwith.ErrorText(w, err) {
 		return
 	}
 	if len(domains) == 0 {
@@ -76,7 +77,7 @@ func (p *v1Provider) GetDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ReturnJSON(w, 200, map[string]interface{}{"domain": domains[0]})
+	respondwith.JSON(w, 200, map[string]interface{}{"domain": domains[0]})
 }
 
 //DiscoverDomains handles POST /v1/domains/discover.
@@ -91,7 +92,7 @@ func (p *v1Provider) DiscoverDomains(w http.ResponseWriter, r *http.Request) {
 	}
 
 	newDomainUUIDs, err := collector.ScanDomains(cluster, collector.ScanDomainsOpts{})
-	if ReturnError(w, err) {
+	if respondwith.ErrorText(w, err) {
 		return
 	}
 
@@ -99,7 +100,7 @@ func (p *v1Provider) DiscoverDomains(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(204)
 		return
 	}
-	ReturnJSON(w, 202, map[string]interface{}{"new_domains": util.IDsToJSON(newDomainUUIDs)})
+	respondwith.JSON(w, 202, map[string]interface{}{"new_domains": util.IDsToJSON(newDomainUUIDs)})
 }
 
 //PutDomain handles PUT /v1/domains/:domain_id.
@@ -135,7 +136,7 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 
 	//start a transaction for the quota updates
 	tx, err := db.DB.Begin()
-	if ReturnError(w, err) {
+	if respondwith.ErrorText(w, err) {
 		return
 	}
 	defer db.RollbackUnlessCommitted(tx)
@@ -147,7 +148,7 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 
 	//gather a report on the domain's quotas to decide whether a quota update is legal
 	domainReports, err := reports.GetDomains(cluster, &dbDomain.ID, db.DB, reports.Filter{})
-	if ReturnError(w, err) {
+	if respondwith.ErrorText(w, err) {
 		return
 	}
 	if len(domainReports) == 0 {
@@ -160,7 +161,7 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 	var services []db.DomainService
 	_, err = tx.Select(&services,
 		`SELECT * FROM domain_services WHERE domain_id = $1 ORDER BY type`, dbDomain.ID)
-	if ReturnError(w, err) {
+	if respondwith.ErrorText(w, err) {
 		return
 	}
 	var resourcesToUpdate []db.DomainResource
@@ -179,7 +180,7 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 		var resources []db.DomainResource
 		_, err = tx.Select(&resources,
 			`SELECT * FROM domain_resources WHERE service_id = $1 ORDER BY name`, srv.ID)
-		if ReturnError(w, err) {
+		if respondwith.ErrorText(w, err) {
 			return
 		}
 		for _, res := range resources {
@@ -255,7 +256,7 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 			)
 			res.Quota = newQuota
 			err = tx.Insert(&res)
-			if ReturnError(w, err) {
+			if respondwith.ErrorText(w, err) {
 				return
 			}
 		}
@@ -272,18 +273,18 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 		return c.ColumnName == "quota"
 	}
 	_, err = tx.UpdateColumns(onlyQuota, resourcesToUpdateAsUntyped...)
-	if ReturnError(w, err) {
+	if respondwith.ErrorText(w, err) {
 		return
 	}
 	err = tx.Commit()
-	if ReturnError(w, err) {
+	if respondwith.ErrorText(w, err) {
 		return
 	}
 	auditTrail.Commit()
 
 	//otherwise, report success
 	domains, err := reports.GetDomains(cluster, &dbDomain.ID, db.DB, reports.ReadFilter(r))
-	if ReturnError(w, err) {
+	if respondwith.ErrorText(w, err) {
 		return
 	}
 	if len(domains) == 0 {
@@ -291,7 +292,7 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ReturnJSON(w, 200, map[string]interface{}{"domain": domains[0]})
+	respondwith.JSON(w, 200, map[string]interface{}{"domain": domains[0]})
 }
 
 func checkDomainQuotaUpdate(srv db.DomainService, res db.DomainResource, unit limes.Unit, domain *reports.Domain, constraint limes.QuotaConstraint, newQuota uint64, canRaise, canLower bool) error {

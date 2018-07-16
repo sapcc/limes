@@ -28,6 +28,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/sapcc/go-bits/gopherpolicy"
+	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
 )
@@ -79,7 +80,7 @@ func NewV1Router(cluster *limes.Cluster, config limes.Configuration) (http.Handl
 	}
 
 	r.Methods("GET").Path("/v1/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ReturnJSON(w, 200, map[string]interface{}{"version": p.VersionData})
+		respondwith.JSON(w, 200, map[string]interface{}{"version": p.VersionData})
 	})
 
 	r.Methods("GET").Path("/v1/clusters").HandlerFunc(p.ListClusters)
@@ -100,30 +101,6 @@ func NewV1Router(cluster *limes.Cluster, config limes.Configuration) (http.Handl
 	r.Methods("PUT").Path("/v1/domains/{domain_id}/projects/{project_id}").HandlerFunc(p.PutProject)
 
 	return r, p.VersionData
-}
-
-//ReturnJSON is a convenience function for HTTP handlers returning JSON data.
-//The `code` argument specifies the HTTP response code, usually 200.
-func ReturnJSON(w http.ResponseWriter, code int, data interface{}) {
-	bytes, err := json.Marshal(&data)
-	if err == nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(code)
-		w.Write(bytes)
-	} else {
-		http.Error(w, err.Error(), 500)
-	}
-}
-
-//ReturnError produces an error response with HTTP status code 500 if the given
-//error is non-nil. Otherwise, nothing is done and false is returned.
-func ReturnError(w http.ResponseWriter, err error) bool {
-	if err == nil {
-		return false
-	}
-
-	http.Error(w, err.Error(), 500)
-	return true
 }
 
 //RequireJSON will parse the request body into the given data structure, or
@@ -193,7 +170,7 @@ func (p *v1Provider) FindDomainFromRequest(w http.ResponseWriter, r *http.Reques
 	case err == sql.ErrNoRows:
 		http.Error(w, "no such domain (if it was just created, try to POST /domains/discover)", 404)
 		return nil
-	case ReturnError(w, err):
+	case respondwith.ErrorText(w, err):
 		return nil
 	default:
 		return &domain
@@ -233,7 +210,7 @@ func (p *v1Provider) FindProjectFromRequestIfExists(w http.ResponseWriter, r *ht
 	case err == nil && domain.ID != project.DomainID:
 		http.Error(w, "no such project", 404)
 		return nil, false
-	case ReturnError(w, err):
+	case respondwith.ErrorText(w, err):
 		return nil, false
 	default:
 		return project, true

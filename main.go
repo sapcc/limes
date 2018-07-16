@@ -35,6 +35,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/limes/pkg/api"
 	"github.com/sapcc/limes/pkg/collector"
 	"github.com/sapcc/limes/pkg/db"
@@ -248,7 +249,7 @@ func taskServe(config limes.Configuration, cluster *limes.Cluster, args []string
 		allVersions := struct {
 			Versions []api.VersionData `json:"versions"`
 		}{[]api.VersionData{v1VersionData}}
-		api.ReturnJSON(w, 300, allVersions)
+		respondwith.JSON(w, 300, allVersions)
 	})
 
 	//add Prometheus instrumentation

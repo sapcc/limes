@@ -28,6 +28,7 @@ import (
 	gorp "gopkg.in/gorp.v2"
 
 	"github.com/gorilla/mux"
+	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/reports"
@@ -49,11 +50,11 @@ func (p *v1Provider) ListClusters(w http.ResponseWriter, r *http.Request) {
 	_, localQuotaUsageOnly := r.URL.Query()["local"]
 	_, withSubcapacities := r.URL.Query()["detail"]
 	result.Clusters, err = reports.GetClusters(p.Config, nil, localQuotaUsageOnly, withSubcapacities, db.DB, reports.ReadFilter(r))
-	if ReturnError(w, err) {
+	if respondwith.ErrorText(w, err) {
 		return
 	}
 
-	ReturnJSON(w, 200, result)
+	respondwith.JSON(w, 200, result)
 }
 
 //GetCluster handles GET /v1/clusters/:cluster_id.
@@ -69,7 +70,7 @@ func (p *v1Provider) GetCluster(w http.ResponseWriter, r *http.Request) {
 	_, localQuotaUsageOnly := r.URL.Query()["local"]
 	_, withSubcapacities := r.URL.Query()["detail"]
 	clusters, err := reports.GetClusters(p.Config, &clusterID, localQuotaUsageOnly, withSubcapacities, db.DB, reports.ReadFilter(r))
-	if ReturnError(w, err) {
+	if respondwith.ErrorText(w, err) {
 		return
 	}
 	if len(clusters) == 0 {
@@ -77,7 +78,7 @@ func (p *v1Provider) GetCluster(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ReturnJSON(w, 200, map[string]interface{}{"cluster": clusters[0]})
+	respondwith.JSON(w, 200, map[string]interface{}{"cluster": clusters[0]})
 }
 
 //PutCluster handles PUT /v1/clusters/:cluster_id.
@@ -109,7 +110,7 @@ func (p *v1Provider) PutCluster(w http.ResponseWriter, r *http.Request) {
 
 	//start a transaction for the capacity updates
 	tx, err := db.DB.Begin()
-	if ReturnError(w, err) {
+	if respondwith.ErrorText(w, err) {
 		return
 	}
 	defer db.RollbackUnlessCommitted(tx)
@@ -128,7 +129,7 @@ func (p *v1Provider) PutCluster(w http.ResponseWriter, r *http.Request) {
 		}
 
 		service, err := findClusterService(tx, srv, clusterID, cluster.IsServiceShared[srv.Type])
-		if ReturnError(w, err) {
+		if respondwith.ErrorText(w, err) {
 			return
 		}
 		if service == nil {
@@ -145,7 +146,7 @@ func (p *v1Provider) PutCluster(w http.ResponseWriter, r *http.Request) {
 
 		for _, res := range srv.Resources {
 			msg, err := writeClusterResource(tx, cluster, srv, service, res)
-			if ReturnError(w, err) {
+			if respondwith.ErrorText(w, err) {
 				return
 			}
 			if msg != "" {
@@ -165,13 +166,13 @@ func (p *v1Provider) PutCluster(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	err = tx.Commit()
-	if ReturnError(w, err) {
+	if respondwith.ErrorText(w, err) {
 		return
 	}
 
 	//otherwise, report success
 	clusters, err := reports.GetClusters(p.Config, &clusterID, false, false, db.DB, reports.ReadFilter(r))
-	if ReturnError(w, err) {
+	if respondwith.ErrorText(w, err) {
 		return
 	}
 	if len(clusters) == 0 {
@@ -179,7 +180,7 @@ func (p *v1Provider) PutCluster(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ReturnJSON(w, 200, map[string]interface{}{"cluster": clusters[0]})
+	respondwith.JSON(w, 200, map[string]interface{}{"cluster": clusters[0]})
 }
 
 func findClusterService(tx *gorp.Transaction, srv ServiceCapacities, clusterID string, shared bool) (*db.ClusterService, error) {
