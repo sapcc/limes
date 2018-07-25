@@ -20,11 +20,15 @@
 package util
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 
+	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/satori/go.uuid"
 )
 
 func init() {
@@ -32,24 +36,132 @@ func init() {
 	if os.Getenv("LIMES_DEBUG") == "1" {
 		logg.ShowDebug = true
 	}
+	observerUUID = generateUUID()
 }
 
-//AuditTrail is a list of log lines with log level AUDIT. It has a separate
-//interface from the rest of the logging to allow to withhold the logging until
-//DB changes are committed.
+var observerUUID string
+
+//AuditTrail is a list of CADF formatted events with log level AUDIT. It has a separate interface
+//from the rest of the logging to allow to withhold the logging until DB changes are committed.
 type AuditTrail struct {
-	lines []string
+	events []CADFevent
 }
 
-//Add adds a line to the audit trail.
-func (t *AuditTrail) Add(msg string, args ...interface{}) {
-	t.lines = append(t.lines, fmt.Sprintf(msg, args...))
+//CADFevent is a substructure of AuditTrail containing data for a CADF event (read: quota change)
+//regarding some resource in a domain or project.
+type CADFevent struct {
+	TypeURI     string         `json:"typeURI"`
+	ID          string         `json:"id"`
+	EventTime   string         `json:"eventTime"`
+	EventType   string         `json:"eventType"`
+	Action      string         `json:"action"`
+	Outcome     string         `json:"outcome"`
+	Reason      EventReason    `json:"reason"`
+	Initiator   EventInitiator `json:"initiator"`
+	Target      EventTarget    `json:"target"`
+	Observer    EventObserver  `json:"observer"`
+	RequestPath string         `json:"requestPath"`
+}
+
+//EventObserver is a substructure of CADFevent containing data for the event's observer.
+type EventObserver struct {
+	TypeURI string `json:"typeURI"`
+	Name    string `json:"name"`
+	ID      string `json:"id"`
+}
+
+//EventInitiator is a substructure of CADFevent containing data for the event's initiator.
+type EventInitiator struct {
+	TypeURI   string             `json:"typeURI"`
+	Name      string             `json:"name"`
+	ID        string             `json:"id"`
+	Domain    string             `json:"domain,omitempty"`
+	DomainID  string             `json:"domain_id,omitempty"`
+	ProjectID string             `json:"project_id,omitempty"`
+	Host      EventInitiatorHost `json:"host"`
+}
+
+//EventInitiatorHost is a substructure of eventInitiator containing data for
+// the event initiator's host.
+type EventInitiatorHost struct {
+	Address string `json:"address"`
+	Agent   string `json:"agent"`
+}
+
+//EventTarget is a substructure of CADFevent containing data for the event's target.
+type EventTarget struct {
+	TypeURI  string `json:"typeURI"`
+	ID       string `json:"id"`
+	OldQuota uint64 `json:"oldQuota"`
+	NewQuota uint64 `json:"newQuota"`
+}
+
+//EventReason is a substructure of CADFevent containing data for the event outcome's reason.
+type EventReason struct {
+	Type string `json:"reasonType"`
+	Code string `json:"reasonCode"`
+}
+
+//NewAuditEvent takes the necessary parameters from an API PUT request and returns a new audit event.
+func NewAuditEvent(
+	t *gopherpolicy.Token, r *http.Request, requestTime,
+	targetID, srvType, resName string, resQuota, newQuota uint64,
+) CADFevent {
+	return CADFevent{
+		TypeURI:   "http://schemas.dmtf.org/cloud/audit/1.0/event",
+		ID:        generateUUID(),
+		EventTime: requestTime,
+		EventType: "activity",
+		Action:    "update",
+		Outcome:   "success",
+		Reason: EventReason{
+			Type: "HTTP",
+			Code: "200",
+		},
+		Initiator: EventInitiator{
+			TypeURI:   "service/security/account/user",
+			Name:      t.Context.Auth["user_name"],
+			ID:        t.Context.Auth["user_id"],
+			Domain:    t.Context.Auth["domain_name"],
+			DomainID:  t.Context.Auth["domain_id"],
+			ProjectID: t.Context.Auth["project_id"],
+			Host: EventInitiatorHost{
+				Address: TryStripPort(r.RemoteAddr),
+				Agent:   r.Header.Get("User-Agent"),
+			},
+		},
+		Target: EventTarget{
+			TypeURI:  fmt.Sprintf("service/%s/%s/quota", srvType, resName),
+			ID:       targetID,
+			OldQuota: resQuota,
+			NewQuota: newQuota,
+		},
+		Observer: EventObserver{
+			TypeURI: "service/resources",
+			Name:    "limes",
+			ID:      observerUUID,
+		},
+		RequestPath: r.URL.String(),
+	}
+}
+
+//Add adds an event to the audit trail.
+func (t *AuditTrail) Add(auditEvent CADFevent) {
+	t.events = append(t.events, auditEvent)
 }
 
 //Commit sends the whole audit trail into the log. Call this after tx.Commit().
 func (t *AuditTrail) Commit() {
-	for _, line := range t.lines {
-		logg.Other("AUDIT", line)
+	for _, event := range t.events {
+		//encode the event to a []byte of json data
+		msg, _ := json.Marshal(event)
+		logg.Other("AUDIT", string(msg))
 	}
-	t.lines = nil //do not log these lines again
+	t.events = nil //do not log these lines again
+}
+
+//Generate an UUID based on random numbers (RFC 4122).
+func generateUUID() string {
+	u := uuid.Must(uuid.NewV4())
+	return u.String()
 }

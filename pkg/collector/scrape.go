@@ -30,7 +30,6 @@ import (
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
-	"github.com/sapcc/limes/pkg/util"
 )
 
 //how long to sleep after a scraping error, or when nothing needed scraping
@@ -226,7 +225,6 @@ func (c *Collector) writeScrapeResult(domainName, domainUUID, projectName, proje
 	}
 
 	//insert missing project_resources entries
-	var auditTrail util.AuditTrail
 	for _, resMetadata := range c.Plugin.Resources() {
 		if _, exists := quotaValues[resMetadata.Name]; exists {
 			continue
@@ -243,8 +241,10 @@ func (c *Collector) writeScrapeResult(domainName, domainUUID, projectName, proje
 
 		if res.Quota == 0 && data.Quota > 0 && uint64(data.Quota) == resMetadata.AutoApproveInitialQuota {
 			res.Quota = resMetadata.AutoApproveInitialQuota
-			auditTrail.Add("set quota %s.%s = 0 -> %d for project %s through auto-approval",
-				serviceType, resMetadata.Name, res.Quota, projectUUID,
+
+			//temp workaround until CADF audit trail is implemented
+			logg.Other("AUDIT", fmt.Sprintf("set quota %s.%s = 0 -> %d for project %s through auto-approval",
+				serviceType, resMetadata.Name, res.Quota, projectUUID),
 			)
 		}
 
@@ -287,7 +287,6 @@ func (c *Collector) writeScrapeResult(domainName, domainUUID, projectName, proje
 	if err != nil {
 		return err
 	}
-	auditTrail.Commit()
 
 	//feature gate for automatic quota alignment
 	if !c.Cluster.Authoritative {
