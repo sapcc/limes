@@ -62,6 +62,7 @@ func (c *Collector) scanCapacity() {
 			"capacitor":  capacitorID,
 		}
 		//always report the counter
+		clusterCapacitorSuccessCounter.With(labels).Add(0)
 		clusterCapacitorFailedCounter.With(labels).Add(0)
 
 		capacities, err := plugin.Scrape(c.Cluster.ProviderClient(), c.Cluster.ID)
@@ -80,6 +81,8 @@ func (c *Collector) scanCapacity() {
 				values[serviceType][resourceName] = value
 			}
 		}
+
+		clusterCapacitorSuccessCounter.With(labels).Inc()
 	}
 
 	//skip values for services not enabled for this cluster

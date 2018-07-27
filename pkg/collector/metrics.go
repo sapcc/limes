@@ -79,6 +79,14 @@ var domainDiscoveryFailedCounter = prometheus.NewCounterVec(
 	[]string{"os_cluster"},
 )
 
+var clusterCapacitorSuccessCounter = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "limes_successful_capacity_scrapes",
+		Help: "Counter for successful cluster capacity scrapes.",
+	},
+	[]string{"os_cluster", "capacitor"},
+)
+
 var clusterCapacitorFailedCounter = prometheus.NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "limes_failed_capacity_scrapes",
@@ -94,6 +102,7 @@ func init() {
 	prometheus.MustRegister(projectDiscoveryFailedCounter)
 	prometheus.MustRegister(domainDiscoverySuccessCounter)
 	prometheus.MustRegister(domainDiscoveryFailedCounter)
+	prometheus.MustRegister(clusterCapacitorSuccessCounter)
 	prometheus.MustRegister(clusterCapacitorFailedCounter)
 }
 
