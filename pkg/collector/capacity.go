@@ -59,7 +59,7 @@ func (c *Collector) scanCapacity() {
 	for capacitorID, plugin := range c.Cluster.CapacityPlugins {
 		labels := prometheus.Labels{
 			"os_cluster": c.Cluster.ID,
-			"capacitor": capacitorID,
+			"capacitor":  capacitorID,
 		}
 		//always report the counter
 		clusterCapacitorFailedCounter.With(labels).Add(0)
