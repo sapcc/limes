@@ -81,7 +81,7 @@ var domainDiscoveryFailedCounter = prometheus.NewCounterVec(
 
 var clusterCapacitorFailedCounter = prometheus.NewCounterVec(
 	prometheus.CounterOpts{
-		Name: "limes_failed_capacity_srcapes",
+		Name: "limes_failed_capacity_scrapes",
 		Help: "Counter for failed cluster capacity scrapes.",
 	},
 	[]string{"os_cluster", "capacitor"},
