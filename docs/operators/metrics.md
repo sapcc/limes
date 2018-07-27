@@ -26,6 +26,7 @@ The collector service exposes the following metrics by default:
 | Counter | `limes_failed_domain_discoveries` | `os_cluster` |
 | Counter | `limes_successful_project_discoveries` | `os_cluster`, `domain`, `domain_id` |
 | Counter | `limes_failed_project_discoveries` | `os_cluster`, `domain`, `domain_id` |
+| Counter | `limes_failed_capacity_srcapes` | `os_cluster`, `capacitor` |
 
 The `limes_failed_scrapes` metric is particularly useful for assessing the continued operation of backend services
 (specifically their API parts). If you can do only one alert on Limes metrics, alert on `limes_failed_scrapes`.
