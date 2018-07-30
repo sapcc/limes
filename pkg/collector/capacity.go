@@ -25,6 +25,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
@@ -56,9 +57,18 @@ func (c *Collector) scanCapacity() {
 	scrapedAt := c.TimeNow()
 
 	for capacitorID, plugin := range c.Cluster.CapacityPlugins {
+		labels := prometheus.Labels{
+			"os_cluster": c.Cluster.ID,
+			"capacitor":  capacitorID,
+		}
+		//always report the counter
+		clusterCapacitorSuccessCounter.With(labels).Add(0)
+		clusterCapacitorFailedCounter.With(labels).Add(0)
+
 		capacities, err := plugin.Scrape(c.Cluster.ProviderClient(), c.Cluster.ID)
 		if err != nil {
 			c.LogError("scan capacity with capacitor %s failed: %s", capacitorID, err.Error())
+			clusterCapacitorFailedCounter.With(labels).Inc()
 			continue
 		}
 
@@ -71,6 +81,8 @@ func (c *Collector) scanCapacity() {
 				values[serviceType][resourceName] = value
 			}
 		}
+
+		clusterCapacitorSuccessCounter.With(labels).Inc()
 	}
 
 	//skip values for services not enabled for this cluster
