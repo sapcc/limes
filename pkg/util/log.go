@@ -28,6 +28,7 @@ import (
 
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/limes/pkg/limes"
 	"github.com/satori/go.uuid"
 )
 
@@ -151,7 +152,12 @@ func (t *AuditTrail) Add(auditEvent CADFevent) {
 }
 
 //Commit sends the whole audit trail into the log. Call this after tx.Commit().
-func (t *AuditTrail) Commit() {
+func (t *AuditTrail) Commit(config limes.CADFConfiguration) {
+	if config.Enabled {
+		events := t.events //take a copy to pass into the goroutine
+		go backoff(func() error { return sendEvents(config, events) })
+	}
+
 	for _, event := range t.events {
 		//encode the event to a []byte of json data
 		msg, _ := json.Marshal(event)

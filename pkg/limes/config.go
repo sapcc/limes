@@ -63,6 +63,7 @@ type ClusterConfiguration struct {
 	Subcapacities        map[string][]string `yaml:"subcapacities"`
 	Authoritative        bool                `yaml:"authoritative"`
 	ConstraintConfigPath string              `yaml:"constraints"`
+	CADF                 CADFConfiguration   `yaml:"cadf"`
 	//The following is only read to warn that users need to upgrade from seeds to constraints.
 	OldSeedConfigPath string `yaml:"seeds"`
 }
@@ -127,6 +128,15 @@ type CapacitorConfiguration struct {
 		CapacityOvercommitFactor float64 `yaml:"capacity_overcommit"`
 	} `yaml:"manila"`
 	Manual map[string]map[string]uint64 `yaml:"manual"`
+}
+
+//CADFConfiguration contains configuration parameters for audit trail.
+type CADFConfiguration struct {
+	Enabled  bool `yaml:"enabled"`
+	RabbitMQ struct {
+		URL       string `yaml:"url"`
+		QueueName string `yaml:"queue_name"`
+	} `yaml:"rabbitmq"`
 }
 
 //APIConfiguration contains configuration parameters for limes-serve.
