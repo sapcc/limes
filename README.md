@@ -13,7 +13,7 @@ Pronounce the name like the [Ancient Roman border wall][wp-limes], not like the 
 
 OpenStack groups access into three levels:
 
-1. the cluster (the sum of all the resources in an OpenStack installation, e.&nbsp;g.&nbsp;hypervisors or storage capacity)
+1. the cluster (the sum of all the resources in an OpenStack installation, e.g. hypervisors or storage capacity)
 2. Keystone domains within that cluster
 3. Keystone projects within each domain
 
@@ -25,12 +25,10 @@ all levels of the hierarchy.
 
 ## Unique features
 
-Limes can take over the handling of initial project quotas: All quotas for a new project (or domain) will be set to
-zero initially, until a sufficiently privileged user approves quota explicitly.
-
-As a unique feature, Limes can also track physical resources that are shared between multiple OpenStack clusters.
-
-Quota and usage data can be exposed as [Prometheus metrics](https://prometheus.io) for monitoring and alerting.
+* Limes can take over the handling of initial project quotas: All quotas for a new project (or domain) will be set to zero initially, until a sufficiently privileged user approves quota explicitly.
+* As a unique feature, Limes can also track physical resources that are shared between multiple OpenStack clusters.
+* Limes records quota changes in an Open Standards [CADF Format](https://www.dmtf.org/sites/default/files/standards/documents/DSP0262_1.0.0.pdf), and is compatible with other cloud based audit APIs (e.g. [Hermes](https://github.com/sapcc/hermes)).
+* Quota and usage data can be exposed as [Prometheus metrics](https://prometheus.io) for monitoring and alerting.
 
 # Documentation
 
@@ -39,6 +37,7 @@ Quota and usage data can be exposed as [Prometheus metrics](https://prometheus.i
 * [Index](./docs/users/index.md)
 * [API specification](./docs/users/api-v1-specification.md)
 * [API usage example](./docs/users/api-example.md)
+* [Audit trail](./docs/users/audit.md)
 
 ## For operators
 
