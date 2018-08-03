@@ -34,14 +34,14 @@ func sendEvents(config limes.CADFConfiguration, events []CADFevent) error {
 	// establish a connection with the RabbitMQ server
 	conn, err := amqp.Dial(config.RabbitMQ.URL)
 	if err != nil {
-		return fmt.Errorf("Failed to establish a connection with the server: %s", err)
+		return fmt.Errorf("%s -- Failed to establish a connection with the server: %s", events[0].ID, err)
 	}
 	defer conn.Close()
 
 	// open a unique, concurrent server channel to process the bulk of AMQP messages.
 	ch, err := conn.Channel()
 	if err != nil {
-		return fmt.Errorf("Failed to open a channel: %s", err)
+		return fmt.Errorf("%s -- Failed to open a channel: %s", events[0].ID, err)
 	}
 	defer ch.Close()
 
@@ -55,7 +55,7 @@ func sendEvents(config limes.CADFConfiguration, events []CADFevent) error {
 		nil,   // arguments for advanced config
 	)
 	if err != nil {
-		return fmt.Errorf("Failed to declare a queue: %s", err)
+		return fmt.Errorf("%s -- Failed to declare a queue: %s", events[0].ID, err)
 	}
 
 	// publish the events to an exchange on the server
@@ -72,7 +72,7 @@ func sendEvents(config limes.CADFConfiguration, events []CADFevent) error {
 			},
 		)
 		if err != nil {
-			return fmt.Errorf("Failed to publish the audit event: %s", err)
+			return fmt.Errorf("%s -- Failed to publish the audit event: %s", event.ID, err)
 		}
 	}
 
