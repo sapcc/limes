@@ -37,10 +37,10 @@ import (
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/limes/pkg/api"
+	"github.com/sapcc/limes/pkg/audit"
 	"github.com/sapcc/limes/pkg/collector"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
-	"github.com/sapcc/limes/pkg/util"
 
 	"github.com/mattes/migrate"
 	_ "github.com/mattes/migrate/database/postgres"
@@ -255,7 +255,7 @@ func taskServe(config limes.Configuration, cluster *limes.Cluster, args []string
 	//add Prometheus instrumentation
 	http.Handle("/metrics", promhttp.Handler())
 	http.Handle("/",
-		util.AddLogMiddleware(config.API.RequestLog.ExceptStatusCodes,
+		audit.AddLogMiddleware(config.API.RequestLog.ExceptStatusCodes,
 			prometheus.InstrumentHandler("limes-serve",
 				mainRouter,
 			),

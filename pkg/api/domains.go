@@ -28,6 +28,7 @@ import (
 	gorp "gopkg.in/gorp.v2"
 
 	"github.com/sapcc/go-bits/respondwith"
+	"github.com/sapcc/limes/pkg/audit"
 	"github.com/sapcc/limes/pkg/collector"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
@@ -170,7 +171,7 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 	var resourcesToUpdateAsUntyped []interface{}
 	var errors []string
 
-	var auditTrail util.AuditTrail
+	var auditTrail audit.AuditTrail
 	for _, srv := range services {
 		resourceQuotas, exists := serviceQuotas[srv.Type]
 		if !exists {
@@ -213,7 +214,7 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 			//would contain only identical pointers)
 			res := res
 
-			auditEvent := util.NewAuditEvent(token, r, requestTime, dbDomain.UUID, srv.Type, res.Name, res.Quota, newQuota)
+			auditEvent := audit.NewAuditEvent(token, r, requestTime, dbDomain.UUID, srv.Type, res.Name, res.Quota, newQuota)
 			auditTrail.Add(auditEvent)
 
 			res.Quota = newQuota
@@ -252,7 +253,7 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 
-			auditEvent := util.NewAuditEvent(token, r, requestTime, dbDomain.UUID, srv.Type, res.Name, res.Quota, newQuota)
+			auditEvent := audit.NewAuditEvent(token, r, requestTime, dbDomain.UUID, srv.Type, res.Name, res.Quota, newQuota)
 			auditTrail.Add(auditEvent)
 
 			res.Quota = newQuota
