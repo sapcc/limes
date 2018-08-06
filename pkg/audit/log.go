@@ -154,10 +154,10 @@ func (t *Trail) Add(event CADFevent) {
 }
 
 //Commit sends the whole audit trail into the log. Call this after tx.Commit().
-func (t *Trail) Commit(config limes.CADFConfiguration) {
+func (t *Trail) Commit(clusterID string, config limes.CADFConfiguration) {
 	if config.Enabled {
 		events := t.events //take a copy to pass into the goroutine
-		go backoff(func() error { return sendEvents(config, events) })
+		go backoff(func() error { return sendEvents(clusterID, config, events) })
 	}
 
 	for _, event := range t.events {

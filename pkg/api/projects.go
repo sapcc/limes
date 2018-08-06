@@ -314,7 +314,7 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-	auditTrail.Commit(cluster.Config.CADF)
+	auditTrail.Commit(cluster.ID, cluster.Config.CADF)
 
 	//attempt to write the quotas into the backend
 	//

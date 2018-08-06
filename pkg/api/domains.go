@@ -282,7 +282,7 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-	auditTrail.Commit(cluster.Config.CADF)
+	auditTrail.Commit(cluster.ID, cluster.Config.CADF)
 
 	//otherwise, report success
 	domains, err := reports.GetDomains(cluster, &dbDomain.ID, db.DB, reports.ReadFilter(r))

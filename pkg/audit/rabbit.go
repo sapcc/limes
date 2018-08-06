@@ -24,16 +24,24 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes/pkg/limes"
 	"github.com/streadway/amqp"
 )
 
 //sendEvents sends audit events to a RabbitMQ server
-func sendEvents(config limes.CADFConfiguration, events []CADFevent) error {
+func sendEvents(clusterID string, config limes.CADFConfiguration, events []CADFevent) error {
+	labels := prometheus.Labels{
+		"os_cluster": clusterID,
+	}
+	eventPublishSuccessCounter.With(labels).Add(0)
+	eventPublishFailedCounter.With(labels).Add(0)
+
 	// establish a connection with the RabbitMQ server
 	conn, err := amqp.Dial(config.RabbitMQ.URL)
 	if err != nil {
+		eventPublishFailedCounter.With(labels).Inc()
 		return fmt.Errorf("%s -- Failed to establish a connection with the server: %s", events[0].ID, err)
 	}
 	defer conn.Close()
@@ -41,6 +49,7 @@ func sendEvents(config limes.CADFConfiguration, events []CADFevent) error {
 	// open a unique, concurrent server channel to process the bulk of AMQP messages.
 	ch, err := conn.Channel()
 	if err != nil {
+		eventPublishFailedCounter.With(labels).Inc()
 		return fmt.Errorf("%s -- Failed to open a channel: %s", events[0].ID, err)
 	}
 	defer ch.Close()
@@ -55,6 +64,7 @@ func sendEvents(config limes.CADFConfiguration, events []CADFevent) error {
 		nil,   // arguments for advanced config
 	)
 	if err != nil {
+		eventPublishFailedCounter.With(labels).Inc()
 		return fmt.Errorf("%s -- Failed to declare a queue: %s", events[0].ID, err)
 	}
 
@@ -72,8 +82,10 @@ func sendEvents(config limes.CADFConfiguration, events []CADFevent) error {
 			},
 		)
 		if err != nil {
+			eventPublishFailedCounter.With(labels).Inc()
 			return fmt.Errorf("%s -- Failed to publish the audit event: %s", event.ID, err)
 		}
+		eventPublishSuccessCounter.With(labels).Inc()
 	}
 
 	return err
