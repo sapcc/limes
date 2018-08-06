@@ -286,7 +286,7 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 			//would contain only identical pointers)
 			res := res
 
-			auditEvent := audit.NewEvent(token, r, requestTime, dbProject.UUID, srv.Type, res.Name, res.Quota, newQuota)
+			auditEvent := audit.NewEvent(token, r, requestTime, dbProject.UUID, srv.Type, res.Name, resInfo.Unit, res.Quota, newQuota)
 			auditTrail.Add(auditEvent)
 
 			res.Quota = newQuota

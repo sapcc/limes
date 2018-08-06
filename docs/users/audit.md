@@ -51,10 +51,11 @@ For any given event, the log contains the following details: What, When, Who, Fr
     }
   },
   "target": {
-    "typeURI": "service/compute/instances/quota",
+    "typeURI": "service/compute/ram/quota",
     "id": "example-project-id",
-    "oldQuota": 32,
-    "newQuota": 58
+    "oldQuota": 10248,
+    "newQuota": 13000,
+    "unit": "MiB"
   },
   "observer": {
     "typeURI": "service/resources",
@@ -91,6 +92,7 @@ The table below should help you understand what the different fields in an audit
 | `event.target.id` | Project or Domain ID, depending on *where* the quota was changed. |
 | `event.target.oldQuota` | Quota of the resource before the change. |
 | `event.target.newQuota` | New quota of the resource after the change. |
+| `event.target.unit` | Unit of the resource that was changed, if it is measured in a certain unit. |
 | `event.observer.typeURI` | Defaults to `service/resources`. |
 | `event.observer.name` | Defaults to Limes. |
 | `event.observer.id` | UUID for Limes generated at its startup. |

@@ -91,10 +91,11 @@ type EventInitiatorHost struct {
 
 //EventTarget is a substructure of CADFevent containing data for the event's target.
 type EventTarget struct {
-	TypeURI  string `json:"typeURI"`
-	ID       string `json:"id"`
-	OldQuota uint64 `json:"oldQuota"`
-	NewQuota uint64 `json:"newQuota"`
+	TypeURI  string     `json:"typeURI"`
+	ID       string     `json:"id"`
+	OldQuota uint64     `json:"oldQuota"`
+	NewQuota uint64     `json:"newQuota"`
+	Unit     limes.Unit `json:"unit,omitempty"`
 }
 
 //EventReason is a substructure of CADFevent containing data for the event outcome's reason.
@@ -105,8 +106,8 @@ type EventReason struct {
 
 //NewEvent takes the necessary parameters from an API request and returns a new audit event.
 func NewEvent(
-	t *gopherpolicy.Token, r *http.Request, requestTime,
-	targetID, srvType, resName string, resQuota, newQuota uint64,
+	t *gopherpolicy.Token, r *http.Request, requestTime, targetID,
+	srvType, resName string, resUnit limes.Unit, resQuota, newQuota uint64,
 ) CADFevent {
 	return CADFevent{
 		TypeURI:   "http://schemas.dmtf.org/cloud/audit/1.0/event",
@@ -136,6 +137,7 @@ func NewEvent(
 			ID:       targetID,
 			OldQuota: resQuota,
 			NewQuota: newQuota,
+			Unit:     resUnit,
 		},
 		Observer: EventObserver{
 			TypeURI: "service/resources",

@@ -214,7 +214,7 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 			//would contain only identical pointers)
 			res := res
 
-			auditEvent := audit.NewEvent(token, r, requestTime, dbDomain.UUID, srv.Type, res.Name, res.Quota, newQuota)
+			auditEvent := audit.NewEvent(token, r, requestTime, dbDomain.UUID, srv.Type, res.Name, resInfo.Unit, res.Quota, newQuota)
 			auditTrail.Add(auditEvent)
 
 			res.Quota = newQuota
@@ -253,7 +253,7 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 
-			auditEvent := audit.NewEvent(token, r, requestTime, dbDomain.UUID, srv.Type, res.Name, res.Quota, newQuota)
+			auditEvent := audit.NewEvent(token, r, requestTime, dbDomain.UUID, srv.Type, res.Name, resInfo.Unit, res.Quota, newQuota)
 			auditTrail.Add(auditEvent)
 
 			res.Quota = newQuota
