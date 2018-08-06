@@ -42,13 +42,13 @@ func init() {
 
 var observerUUID string
 
-//AuditTrail is a list of CADF formatted events with log level AUDIT. It has a separate interface
+//Trail is a list of CADF formatted events with log level AUDIT. It has a separate interface
 //from the rest of the logging to allow to withhold the logging until DB changes are committed.
-type AuditTrail struct {
+type Trail struct {
 	events []CADFevent
 }
 
-//CADFevent is a substructure of AuditTrail containing data for a CADF event (read: quota change)
+//CADFevent is a substructure of Trail containing data for a CADF event (read: quota change)
 //regarding some resource in a domain or project.
 type CADFevent struct {
 	TypeURI     string         `json:"typeURI"`
@@ -103,8 +103,8 @@ type EventReason struct {
 	Code string `json:"reasonCode"`
 }
 
-//NewAuditEvent takes the necessary parameters from an API PUT request and returns a new audit event.
-func NewAuditEvent(
+//NewEvent takes the necessary parameters from an API request and returns a new audit event.
+func NewEvent(
 	t *gopherpolicy.Token, r *http.Request, requestTime,
 	targetID, srvType, resName string, resQuota, newQuota uint64,
 ) CADFevent {
@@ -147,12 +147,12 @@ func NewAuditEvent(
 }
 
 //Add adds an event to the audit trail.
-func (t *AuditTrail) Add(auditEvent CADFevent) {
-	t.events = append(t.events, auditEvent)
+func (t *Trail) Add(event CADFevent) {
+	t.events = append(t.events, event)
 }
 
 //Commit sends the whole audit trail into the log. Call this after tx.Commit().
-func (t *AuditTrail) Commit(config limes.CADFConfiguration) {
+func (t *Trail) Commit(config limes.CADFConfiguration) {
 	if config.Enabled {
 		events := t.events //take a copy to pass into the goroutine
 		go backoff(func() error { return sendEvents(config, events) })

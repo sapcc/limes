@@ -245,7 +245,7 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 	servicesToUpdate := make(map[string]bool)
 	var errors []string
 
-	var auditTrail audit.AuditTrail
+	var auditTrail audit.Trail
 	for _, srv := range services {
 		resourceQuotas, exists := serviceQuotas[srv.Type]
 		if !exists {
@@ -286,7 +286,7 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 			//would contain only identical pointers)
 			res := res
 
-			auditEvent := audit.NewAuditEvent(token, r, requestTime, dbProject.UUID, srv.Type, res.Name, res.Quota, newQuota)
+			auditEvent := audit.NewEvent(token, r, requestTime, dbProject.UUID, srv.Type, res.Name, res.Quota, newQuota)
 			auditTrail.Add(auditEvent)
 
 			res.Quota = newQuota
