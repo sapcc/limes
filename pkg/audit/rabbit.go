@@ -98,10 +98,9 @@ func backoff(action func() error) {
 		err := action()
 		if err != nil {
 			logg.Error("RabbitMQ -- %s", err)
+			duration *= 2
 			if duration > 5*time.Minute {
 				duration = 5 * time.Minute
-			} else {
-				duration *= 2
 			}
 			time.Sleep(duration)
 			continue
