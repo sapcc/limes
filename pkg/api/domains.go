@@ -23,10 +23,12 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	gorp "gopkg.in/gorp.v2"
 
 	"github.com/sapcc/go-bits/respondwith"
+	"github.com/sapcc/limes/pkg/audit"
 	"github.com/sapcc/limes/pkg/collector"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
@@ -105,6 +107,7 @@ func (p *v1Provider) DiscoverDomains(w http.ResponseWriter, r *http.Request) {
 
 //PutDomain handles PUT /v1/domains/:domain_id.
 func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
+	requestTime := time.Now().Format("2006-01-02T15:04:05.999999+00:00")
 	token := p.CheckToken(r)
 	canRaise := token.Check("domain:raise")
 	canLower := token.Check("domain:lower")
@@ -168,7 +171,7 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 	var resourcesToUpdateAsUntyped []interface{}
 	var errors []string
 
-	var auditTrail util.AuditTrail
+	var auditTrail audit.Trail
 	for _, srv := range services {
 		resourceQuotas, exists := serviceQuotas[srv.Type]
 		if !exists {
@@ -210,10 +213,10 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 			//we didn't take a copy manually, the resourcesToUpdateAsUntyped list
 			//would contain only identical pointers)
 			res := res
-			auditTrail.Add("set quota %s.%s = %d -> %d for domain %s by user %s (%s)",
-				srv.Type, res.Name, res.Quota, newQuota,
-				dbDomain.UUID, token.UserUUID(), token.UserName(),
-			)
+
+			auditEvent := audit.NewEvent(token, r, requestTime, dbDomain.UUID, srv.Type, res.Name, resInfo.Unit, res.Quota, newQuota)
+			auditTrail.Add(auditEvent)
+
 			res.Quota = newQuota
 			resourcesToUpdate = append(resourcesToUpdate, res)
 			resourcesToUpdateAsUntyped = append(resourcesToUpdateAsUntyped, &res)
@@ -250,10 +253,9 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 
-			auditTrail.Add("set quota %s.%s = %d -> %d for domain %s by user %s (%s)",
-				srv.Type, res.Name, res.Quota, newQuota,
-				dbDomain.UUID, token.UserUUID(), token.UserName(),
-			)
+			auditEvent := audit.NewEvent(token, r, requestTime, dbDomain.UUID, srv.Type, res.Name, resInfo.Unit, res.Quota, newQuota)
+			auditTrail.Add(auditEvent)
+
 			res.Quota = newQuota
 			err = tx.Insert(&res)
 			if respondwith.ErrorText(w, err) {
@@ -280,7 +282,7 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-	auditTrail.Commit()
+	auditTrail.Commit(cluster.ID, cluster.Config.CADF)
 
 	//otherwise, report success
 	domains, err := reports.GetDomains(cluster, &dbDomain.ID, db.DB, reports.ReadFilter(r))

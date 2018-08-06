@@ -23,11 +23,13 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	gorp "gopkg.in/gorp.v2"
 
 	"github.com/gorilla/mux"
 	"github.com/sapcc/go-bits/respondwith"
+	"github.com/sapcc/limes/pkg/audit"
 	"github.com/sapcc/limes/pkg/collector"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
@@ -174,6 +176,7 @@ func (p *v1Provider) SyncProject(w http.ResponseWriter, r *http.Request) {
 
 //PutProject handles PUT /v1/domains/:domain_id/projects/:project_id.
 func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
+	requestTime := time.Now().Format("2006-01-02T15:04:05.999999+00:00")
 	token := p.CheckToken(r)
 	canRaise := token.Check("project:raise")
 	canLower := token.Check("project:lower")
@@ -242,7 +245,7 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 	servicesToUpdate := make(map[string]bool)
 	var errors []string
 
-	var auditTrail util.AuditTrail
+	var auditTrail audit.Trail
 	for _, srv := range services {
 		resourceQuotas, exists := serviceQuotas[srv.Type]
 		if !exists {
@@ -282,10 +285,10 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 			//we didn't take a copy manually, the resourcesToUpdateAsUntyped list
 			//would contain only identical pointers)
 			res := res
-			auditTrail.Add("set quota %s.%s = %d -> %d for project %s by user %s (%s)",
-				srv.Type, res.Name, res.Quota, newQuota,
-				dbProject.UUID, token.UserUUID(), token.UserName(),
-			)
+
+			auditEvent := audit.NewEvent(token, r, requestTime, dbProject.UUID, srv.Type, res.Name, resInfo.Unit, res.Quota, newQuota)
+			auditTrail.Add(auditEvent)
+
 			res.Quota = newQuota
 			resourcesToUpdate = append(resourcesToUpdate, res)
 			resourcesToUpdateAsUntyped = append(resourcesToUpdateAsUntyped, &res)
@@ -311,7 +314,7 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-	auditTrail.Commit()
+	auditTrail.Commit(cluster.ID, cluster.Config.CADF)
 
 	//attempt to write the quotas into the backend
 	//

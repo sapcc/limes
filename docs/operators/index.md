@@ -79,9 +79,9 @@ If you're using Kubernetes, you can use our team's [Helm chart for Limes][chart]
 
 ## Logging
 
-Both components present log messages on standard error, but they are usually very quiet. You should at least see
-something like `listening on :8080` for both services since they both expose HTTP. (In the collector service, this is
-only used for Prometheus metrics.)
+Both components present log messages on standard error, but they are usually very quiet. You should at least see something like `listening on :8080` for both services since they both expose HTTP. (In the collector service, this is only used for Prometheus metrics.)
+
+Additionally, quota changes at the domain and project level are logged in an Open Standards [CADF format](https://www.dmtf.org/standards/cadf). See the [configuration guide](./config.md#audit-trail) for details.
 
 ### API service
 

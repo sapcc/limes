@@ -17,7 +17,7 @@
 *
 *******************************************************************************/
 
-package util
+package audit
 
 import (
 	"bytes"
@@ -52,7 +52,7 @@ func (l logMiddleware) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !containsInt(l.exceptStatusCodes, writer.statusCode) {
 		logg.Other(
 			"REQUEST", `%s - - "%s %s %s" %03d %d "%s" "%s"`,
-			tryStripPort(r.RemoteAddr),
+			TryStripPort(r.RemoteAddr),
 			r.Method, r.URL.String(), r.Proto,
 			writer.statusCode, writer.bytesWritten,
 			stringOrDefault("-", r.Header.Get("Referer")),
@@ -82,7 +82,8 @@ func stringOrDefault(defaultValue, value string) string {
 	return value
 }
 
-func tryStripPort(hostPort string) string {
+//TryStripPort returns a host without the port number
+func TryStripPort(hostPort string) string {
 	host, _, err := net.SplitHostPort(hostPort)
 	if err == nil {
 		return host
