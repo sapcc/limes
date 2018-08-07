@@ -31,7 +31,7 @@ import (
 )
 
 //sendEvents sends audit events to a RabbitMQ server
-func sendEvents(clusterID string, config limes.CADFConfiguration, events []CADFevent) error {
+func sendEvents(clusterID string, config limes.CADFConfiguration, events []CADFEvent) error {
 	labels := prometheus.Labels{
 		"os_cluster": clusterID,
 	}
