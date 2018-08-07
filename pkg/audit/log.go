@@ -97,7 +97,7 @@ type Reason struct {
 	ReasonCode string `json:"reasonCode"`
 }
 
-//EventInitiatorHost is a substructure of eventInitiator containing data for
+//Host is a substructure of eventInitiator containing data for
 // the event initiator's host.
 type Host struct {
 	ID       string `json:"id,omitempty"`
@@ -135,8 +135,8 @@ func NewEvent(
 			},
 		},
 		Target: Resource{
-			TypeURI: fmt.Sprintf("service/%s/%s/quota", srvType, resName),
-			ID:      targetID,
+			TypeURI:   fmt.Sprintf("service/%s/%s/quota", srvType, resName),
+			ID:        targetID,
 			ProjectID: targetID,
 			Attachments: Attachment{
 				Name:    "payload",
