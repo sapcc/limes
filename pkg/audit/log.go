@@ -76,8 +76,8 @@ type Resource struct {
 		URL  string `json:"url"`
 		Name string `json:"name,omitempty"`
 	} `json:"addresses,omitempty"`
-	Host        Host       `json:"host,omitempty"`
-	Attachments Attachment `json:"attachments,omitempty"`
+	Host        *Host       `json:"host,omitempty"`
+	Attachments *Attachment `json:"attachments,omitempty"`
 	// project_id and domain_id are OpenStack extensions (introduced by Keystone and keystone(audit)middleware)
 	ProjectID string `json:"project_id,omitempty"`
 	DomainID  string `json:"domain_id,omitempty"`
@@ -85,10 +85,10 @@ type Resource struct {
 
 // Attachment contains self-describing extensions to the event
 type Attachment struct {
-	// Note: name is optional in CADF spec. to permit unnamed attachments
-	Name    string `json:"name,omitempty"`
-	TypeURI string `json:"typeURI"`
-	Content string `json:"content"`
+	// Note: name is optional in CADF spec. to permit unnamed attachment
+	Name    string      `json:"name,omitempty"`
+	TypeURI string      `json:"typeURI"`
+	Content interface{} `json:"content"`
 }
 
 //Reason is a substructure of CADFevent containing data for the event outcome's reason.
@@ -129,7 +129,7 @@ func NewEvent(
 			Domain:    t.Context.Auth["domain_name"],
 			DomainID:  t.Context.Auth["domain_id"],
 			ProjectID: t.Context.Auth["project_id"],
-			Host: Host{
+			Host: &Host{
 				Address: TryStripPort(r.RemoteAddr),
 				Agent:   r.Header.Get("User-Agent"),
 			},
@@ -138,10 +138,14 @@ func NewEvent(
 			TypeURI:   fmt.Sprintf("service/%s/%s/quota", srvType, resName),
 			ID:        targetID,
 			ProjectID: targetID,
-			Attachments: Attachment{
+			Attachments: &Attachment{
 				Name:    "payload",
 				TypeURI: "mime:application/json",
-				Content: fmt.Sprintf("OldQuota:%d,NewQuota:%d,Unit:%s", resQuota, newQuota, resUnit),
+				Content: struct {
+					OldQuota uint64     `json:"oldQuota"`
+					NewQuota uint64     `json:"newQuota"`
+					Unit     limes.Unit `json:"unit,omitempty"`
+				}{OldQuota: resQuota, NewQuota: newQuota, Unit: resUnit},
 			},
 		},
 		Observer: Resource{
