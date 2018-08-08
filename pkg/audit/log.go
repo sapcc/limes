@@ -108,9 +108,14 @@ type Host struct {
 
 //NewEvent takes the necessary parameters from an API request and returns a new audit event.
 func NewEvent(
-	t *gopherpolicy.Token, r *http.Request, requestTime, targetID,
+	t *gopherpolicy.Token, r *http.Request, requestTime, dbDomainID, dbProjectID,
 	srvType, resName string, resUnit limes.Unit, resQuota, newQuota uint64,
 ) CADFEvent {
+	targetID := dbProjectID
+	if dbProjectID == "" {
+		targetID = dbDomainID
+	}
+
 	return CADFEvent{
 		TypeURI:   "http://schemas.dmtf.org/cloud/audit/1.0/event",
 		ID:        generateUUID(),
@@ -137,7 +142,8 @@ func NewEvent(
 		Target: Resource{
 			TypeURI:   fmt.Sprintf("service/%s/%s/quota", srvType, resName),
 			ID:        targetID,
-			ProjectID: targetID,
+			DomainID:  dbDomainID,
+			ProjectID: dbProjectID,
 			Attachments: &Attachment{
 				Name:    "payload",
 				TypeURI: "mime:application/json",
