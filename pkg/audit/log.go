@@ -50,8 +50,8 @@ type Trail struct {
 	events []CADFEvent
 }
 
-// CADFEvent contains the CADF event according to CADF spec, section 6.6.1 Event (data)
-// Extensions: requestPath (OpenStack, IBM), initiator.project_id/domain_id
+//CADFEvent contains the CADF event format according to CADF spec (section 6.6.1 Event)
+//and includes extensions for better auditing.
 type CADFEvent struct {
 	TypeURI     string       `json:"typeURI"`
 	ID          string       `json:"id"`
@@ -64,11 +64,10 @@ type CADFEvent struct {
 	Target      Resource     `json:"target"`
 	Observer    Resource     `json:"observer"`
 	Attachments []Attachment `json:"attachments,omitempty"`
-	// requestPath is an extension of OpenStack's pycadf which is supported by IBM as well
-	RequestPath string `json:"requestPath,omitempty"`
+	RequestPath string       `json:"requestPath,omitempty"`
 }
 
-// Resource contains attributes describing a (OpenStack-) Resource
+//Resource is a substructure of CADFEvent and contains attributes describing a (OpenStack-) resource.
 type Resource struct {
 	TypeURI   string `json:"typeURI"`
 	Name      string `json:"name,omitempty"`
@@ -80,14 +79,12 @@ type Resource struct {
 	} `json:"addresses,omitempty"`
 	Host        *Host       `json:"host,omitempty"`
 	Attachments *Attachment `json:"attachments,omitempty"`
-	// project_id and domain_id are OpenStack extensions (introduced by Keystone and keystone(audit)middleware)
-	ProjectID string `json:"project_id,omitempty"`
-	DomainID  string `json:"domain_id,omitempty"`
+	ProjectID   string      `json:"project_id,omitempty"`
+	DomainID    string      `json:"domain_id,omitempty"`
 }
 
-// Attachment contains self-describing extensions to the event
+//Attachment is a substructure of CADFEvent and contains self-describing extensions to the event.
 type Attachment struct {
-	// Note: name is optional in CADF spec. to permit unnamed attachment
 	Name    string      `json:"name,omitempty"`
 	TypeURI string      `json:"typeURI"`
 	Content interface{} `json:"content"`
@@ -99,8 +96,7 @@ type Reason struct {
 	ReasonCode string `json:"reasonCode"`
 }
 
-//Host is a substructure of eventInitiator containing data for
-// the event initiator's host.
+//Host is a substructure of Resource containing data for the event initiator's host.
 type Host struct {
 	ID       string `json:"id,omitempty"`
 	Address  string `json:"address,omitempty"`
@@ -181,7 +177,6 @@ func (t *Trail) Commit(clusterID string, config limes.CADFConfiguration) {
 	}
 
 	for _, event := range t.events {
-		//encode the event to a []byte of json data
 		msg, _ := json.Marshal(event)
 		logg.Other("AUDIT", string(msg))
 	}

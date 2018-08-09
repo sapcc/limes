@@ -28,7 +28,7 @@ import (
 	"github.com/streadway/amqp"
 )
 
-//sendEvents sends audit events to a RabbitMQ server
+//sendEvents sends audit events to a RabbitMQ server.
 func sendEvents(clusterID string, config limes.CADFConfiguration, events []CADFEvent) error {
 	labels := prometheus.Labels{
 		"os_cluster": clusterID,
@@ -36,7 +36,7 @@ func sendEvents(clusterID string, config limes.CADFConfiguration, events []CADFE
 	eventPublishSuccessCounter.With(labels).Add(0)
 	eventPublishFailedCounter.With(labels).Add(0)
 
-	// establish a connection with the RabbitMQ server
+	//establish a connection with the RabbitMQ server
 	conn, err := amqp.Dial(config.RabbitMQ.URL)
 	if err != nil {
 		eventPublishFailedCounter.With(labels).Inc()
@@ -44,7 +44,7 @@ func sendEvents(clusterID string, config limes.CADFConfiguration, events []CADFE
 	}
 	defer conn.Close()
 
-	// open a unique, concurrent server channel to process the bulk of AMQP messages.
+	//open a unique, concurrent server channel to process the bulk of AMQP messages
 	ch, err := conn.Channel()
 	if err != nil {
 		eventPublishFailedCounter.With(labels).Inc()
@@ -52,7 +52,7 @@ func sendEvents(clusterID string, config limes.CADFConfiguration, events []CADFE
 	}
 	defer ch.Close()
 
-	// declare a queue to hold and deliver messages to consumers.
+	//declare a queue to hold and deliver messages to consumers
 	q, err := ch.QueueDeclare(
 		config.RabbitMQ.QueueName, // name of the queue
 		false, // durable: queue should survive cluster reset (or broker restart)
@@ -66,7 +66,7 @@ func sendEvents(clusterID string, config limes.CADFConfiguration, events []CADFE
 		return fmt.Errorf("RabbitMQ -- %s -- Failed to declare a queue: %s", events[0].ID, err)
 	}
 
-	// publish the events to an exchange on the server
+	//publish the events to an exchange on the server
 	for _, event := range events {
 		body, _ := json.Marshal(event)
 		err = ch.Publish(
