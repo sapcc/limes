@@ -22,39 +22,37 @@ package audit
 import (
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes/pkg/limes"
 	"github.com/streadway/amqp"
 )
 
-//sendEvents sends audit events to a RabbitMQ server
-func sendEvents(clusterID string, config limes.CADFConfiguration, events []CADFevent) error {
+//sendEvents sends audit events to a RabbitMQ server.
+func sendEvents(clusterID string, config limes.CADFConfiguration, events []CADFEvent) error {
 	labels := prometheus.Labels{
 		"os_cluster": clusterID,
 	}
 	eventPublishSuccessCounter.With(labels).Add(0)
 	eventPublishFailedCounter.With(labels).Add(0)
 
-	// establish a connection with the RabbitMQ server
+	//establish a connection with the RabbitMQ server
 	conn, err := amqp.Dial(config.RabbitMQ.URL)
 	if err != nil {
 		eventPublishFailedCounter.With(labels).Inc()
-		return fmt.Errorf("%s -- Failed to establish a connection with the server: %s", events[0].ID, err)
+		return fmt.Errorf("RabbitMQ -- %s -- Failed to establish a connection with the server: %s", events[0].ID, err)
 	}
 	defer conn.Close()
 
-	// open a unique, concurrent server channel to process the bulk of AMQP messages.
+	//open a unique, concurrent server channel to process the bulk of AMQP messages
 	ch, err := conn.Channel()
 	if err != nil {
 		eventPublishFailedCounter.With(labels).Inc()
-		return fmt.Errorf("%s -- Failed to open a channel: %s", events[0].ID, err)
+		return fmt.Errorf("RabbitMQ -- %s -- Failed to open a channel: %s", events[0].ID, err)
 	}
 	defer ch.Close()
 
-	// declare a queue to hold and deliver messages to consumers.
+	//declare a queue to hold and deliver messages to consumers
 	q, err := ch.QueueDeclare(
 		config.RabbitMQ.QueueName, // name of the queue
 		false, // durable: queue should survive cluster reset (or broker restart)
@@ -65,10 +63,10 @@ func sendEvents(clusterID string, config limes.CADFConfiguration, events []CADFe
 	)
 	if err != nil {
 		eventPublishFailedCounter.With(labels).Inc()
-		return fmt.Errorf("%s -- Failed to declare a queue: %s", events[0].ID, err)
+		return fmt.Errorf("RabbitMQ -- %s -- Failed to declare a queue: %s", events[0].ID, err)
 	}
 
-	// publish the events to an exchange on the server
+	//publish the events to an exchange on the server
 	for _, event := range events {
 		body, _ := json.Marshal(event)
 		err = ch.Publish(
@@ -83,28 +81,10 @@ func sendEvents(clusterID string, config limes.CADFConfiguration, events []CADFe
 		)
 		if err != nil {
 			eventPublishFailedCounter.With(labels).Inc()
-			return fmt.Errorf("%s -- Failed to publish the audit event: %s", event.ID, err)
+			return fmt.Errorf("RabbitMQ -- %s -- Failed to publish the audit event: %s", event.ID, err)
 		}
 		eventPublishSuccessCounter.With(labels).Inc()
 	}
 
 	return err
-}
-
-//backoff creates a retry loop with an exponential backoff
-func backoff(action func() error) {
-	duration := time.Second
-	for {
-		err := action()
-		if err != nil {
-			logg.Error("RabbitMQ -- %s", err)
-			duration *= 2
-			if duration > 5*time.Minute {
-				duration = 5 * time.Minute
-			}
-			time.Sleep(duration)
-			continue
-		}
-		break
-	}
 }
