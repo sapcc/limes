@@ -22,10 +22,8 @@ package audit
 import (
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes/pkg/limes"
 	"github.com/streadway/amqp"
 )
@@ -42,7 +40,7 @@ func sendEvents(clusterID string, config limes.CADFConfiguration, events []CADFE
 	conn, err := amqp.Dial(config.RabbitMQ.URL)
 	if err != nil {
 		eventPublishFailedCounter.With(labels).Inc()
-		return fmt.Errorf("%s -- Failed to establish a connection with the server: %s", events[0].ID, err)
+		return fmt.Errorf("RabbitMQ -- %s -- Failed to establish a connection with the server: %s", events[0].ID, err)
 	}
 	defer conn.Close()
 
@@ -50,7 +48,7 @@ func sendEvents(clusterID string, config limes.CADFConfiguration, events []CADFE
 	ch, err := conn.Channel()
 	if err != nil {
 		eventPublishFailedCounter.With(labels).Inc()
-		return fmt.Errorf("%s -- Failed to open a channel: %s", events[0].ID, err)
+		return fmt.Errorf("RabbitMQ -- %s -- Failed to open a channel: %s", events[0].ID, err)
 	}
 	defer ch.Close()
 
@@ -65,7 +63,7 @@ func sendEvents(clusterID string, config limes.CADFConfiguration, events []CADFE
 	)
 	if err != nil {
 		eventPublishFailedCounter.With(labels).Inc()
-		return fmt.Errorf("%s -- Failed to declare a queue: %s", events[0].ID, err)
+		return fmt.Errorf("RabbitMQ -- %s -- Failed to declare a queue: %s", events[0].ID, err)
 	}
 
 	// publish the events to an exchange on the server
@@ -83,28 +81,10 @@ func sendEvents(clusterID string, config limes.CADFConfiguration, events []CADFE
 		)
 		if err != nil {
 			eventPublishFailedCounter.With(labels).Inc()
-			return fmt.Errorf("%s -- Failed to publish the audit event: %s", event.ID, err)
+			return fmt.Errorf("RabbitMQ -- %s -- Failed to publish the audit event: %s", event.ID, err)
 		}
 		eventPublishSuccessCounter.With(labels).Inc()
 	}
 
 	return err
-}
-
-//backoff creates a retry loop with an exponential backoff
-func backoff(action func() error) {
-	duration := time.Second
-	for {
-		err := action()
-		if err != nil {
-			logg.Error("RabbitMQ -- %s", err)
-			duration *= 2
-			if duration > 5*time.Minute {
-				duration = 5 * time.Minute
-			}
-			time.Sleep(duration)
-			continue
-		}
-		break
-	}
 }

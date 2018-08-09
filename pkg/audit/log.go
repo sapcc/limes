@@ -25,9 +25,11 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/go-bits/retry"
 	"github.com/sapcc/limes/pkg/limes"
 	"github.com/satori/go.uuid"
 )
@@ -172,7 +174,10 @@ func (t *Trail) Add(event CADFEvent) {
 func (t *Trail) Commit(clusterID string, config limes.CADFConfiguration) {
 	if config.Enabled {
 		events := t.events //take a copy to pass into the goroutine
-		go backoff(func() error { return sendEvents(clusterID, config, events) })
+		go retry.ExponentialBackoff{
+			Factor:      2,
+			MaxInterval: 5 * time.Minute,
+		}.RetryUntilSuccessful(func() error { return sendEvents(clusterID, config, events) })
 	}
 
 	for _, event := range t.events {
