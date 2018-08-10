@@ -77,10 +77,10 @@ type Resource struct {
 		URL  string `json:"url"`
 		Name string `json:"name,omitempty"`
 	} `json:"addresses,omitempty"`
-	Host        *Host       `json:"host,omitempty"`
-	Attachments *Attachment `json:"attachments,omitempty"`
-	ProjectID   string      `json:"project_id,omitempty"`
-	DomainID    string      `json:"domain_id,omitempty"`
+	Host        *Host        `json:"host,omitempty"`
+	Attachments []Attachment `json:"attachments,omitempty"`
+	ProjectID   string       `json:"project_id,omitempty"`
+	DomainID    string       `json:"domain_id,omitempty"`
 }
 
 //Attachment is a substructure of CADFEvent and contains self-describing extensions to the event.
@@ -142,15 +142,11 @@ func NewEvent(
 			ID:        targetID,
 			DomainID:  dbDomainID,
 			ProjectID: dbProjectID,
-			Attachments: &Attachment{
+			Attachments: []Attachment{{
 				Name:    "payload",
 				TypeURI: "mime:application/json",
-				Content: struct {
-					OldQuota uint64     `json:"oldQuota"`
-					NewQuota uint64     `json:"newQuota"`
-					Unit     limes.Unit `json:"unit,omitempty"`
-				}{OldQuota: resQuota, NewQuota: newQuota, Unit: resUnit},
-			},
+				Content: attachmentContent{OldQuota: resQuota, NewQuota: newQuota, Unit: resUnit},
+			}},
 		},
 		Observer: Resource{
 			TypeURI: "service/resources",
@@ -159,6 +155,34 @@ func NewEvent(
 		},
 		RequestPath: r.URL.String(),
 	}
+}
+
+//This type is needed for the custom MarshalJSON behavior.
+type attachmentContent struct {
+	OldQuota uint64
+	NewQuota uint64
+	Unit     limes.Unit
+}
+
+//MarshalJSON implements the json.Marshaler interface.
+func (a attachmentContent) MarshalJSON() ([]byte, error) {
+	//copy data into a struct that does not have a custom MarshalJSON
+	data := struct {
+		OldQuota uint64     `json:"oldQuota"`
+		NewQuota uint64     `json:"newQuota"`
+		Unit     limes.Unit `json:"unit,omitempty"`
+	}{
+		OldQuota: a.OldQuota,
+		NewQuota: a.NewQuota,
+		Unit:     a.Unit,
+	}
+	//Hermes does not accept a JSON object at target.attachments[].content, so we need
+	//to wrap the marshaled JSON into a JSON string
+	bytes, err := json.Marshal(data)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(string(bytes))
 }
 
 //Add adds an event to the audit trail.
