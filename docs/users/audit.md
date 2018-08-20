@@ -18,7 +18,7 @@ For any given event, the log contains the following details: What, When, Who, Fr
 | When | `event.eventTime` || “when” did it happen. |
 | Who | `event.initiator.id`<br>`event.initiator.typeURI` | `event.initiator.name` | “who” (person or service) initiated the action. |
 | FromWhere || `event.initiator.host`<br>`event.initiator.domain`<br>`event.initiator.domain_id`<br>`event.initiator.project_id` | "FromWhere" provides information describing where the action was initiated from. |
-| OnWhat | `event.target.id`<br>`event.target.typeURI`  || “onWhat” resource did the activity target. |
+| OnWhat | `event.target.id`<br>`event.target.typeURI`  | `event.target.domain_id`<br>`event.target.project_id` | “onWhat” resource did the activity target. |
 | Where | `event.observer.id`<br>`event.observer.typeURI` | `event.observer.name` | “where” did the activity get observed (reported), or modified in some way. |
 | ToWhere ||| "ToWhere" provides information describing where the target resource that is affected by the action is located. |
 
@@ -53,9 +53,15 @@ For any given event, the log contains the following details: What, When, Who, Fr
   "target": {
     "typeURI": "service/compute/ram/quota",
     "id": "example-project-id",
-    "oldQuota": 10248,
-    "newQuota": 13000,
-    "unit": "MiB"
+    "attachments": [
+      {
+        "name": "payload",
+        "typeURI": "mime:application/json",
+        "content": "{\"oldQuota\":10248,\"newQuota\":13000,\"unit\":MiB}"
+      }
+    ],
+    "project_id": "example-project-id",
+    "domain_id": "example-domain-id"
   },
   "observer": {
     "typeURI": "service/resources",
@@ -90,6 +96,9 @@ The table below should help you understand what the different fields in an audit
 | `event.initiator.host.agent` | Curl or Elektron depending on where the request came from. |
 | `event.target.typeURI` | *Which* quota was changed. |
 | `event.target.id` | Project or Domain ID, depending on *where* the quota was changed. |
+| `event.target.attachments` | Additional info regarding the specific quota change. |
+| `event.target.project_id` | ID of project where the quota was changed. |
+| `event.target.domain_id` | ID of domain where the quota was changed. |
 | `event.target.oldQuota` | Quota of the resource before the change. |
 | `event.target.newQuota` | New quota of the resource after the change. |
 | `event.target.unit` | Unit of the resource that was changed, if it is measured in a certain unit. |
