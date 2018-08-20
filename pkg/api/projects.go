@@ -177,6 +177,7 @@ func (p *v1Provider) SyncProject(w http.ResponseWriter, r *http.Request) {
 //PutProject handles PUT /v1/domains/:domain_id/projects/:project_id.
 func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 	requestTime := time.Now().Format("2006-01-02T15:04:05.999999+00:00")
+	var auditTrail audit.Trail
 	token := p.CheckToken(r)
 	canRaise := token.Check("project:raise")
 	canLower := token.Check("project:lower")
@@ -245,7 +246,6 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 	servicesToUpdate := make(map[string]bool)
 	var errors []string
 
-	var auditTrail audit.Trail
 	for _, srv := range services {
 		resourceQuotas, exists := serviceQuotas[srv.Type]
 		if !exists {
@@ -277,7 +277,24 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 			constraint := constraints[srv.Type][res.Name]
 			err = checkProjectQuotaUpdate(srv, res, resInfo.Unit, domainReport, constraint, newQuota, canRaise, canLower)
 			if err != nil {
-				errors = append(errors, err.Error())
+				auditTrail.Add(audit.EventParams{
+					Token:        token,
+					Request:      r,
+					ReasonCode:   http.StatusUnprocessableEntity,
+					Time:         requestTime,
+					DomainID:     dbDomain.UUID,
+					ProjectID:    dbProject.UUID,
+					ServiceType:  srv.Type,
+					ResourceName: res.Name,
+					OldQuota:     res.Quota,
+					NewQuota:     newQuota,
+					QuotaUnit:    resInfo.Unit,
+					RejectReason: err.Error(),
+				})
+
+				errors = append(errors, fmt.Sprintf(
+					"cannot change %s/%s quota: %s", srv.Type, res.Name, err.Error()),
+				)
 				continue
 			}
 
@@ -286,8 +303,19 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 			//would contain only identical pointers)
 			res := res
 
-			auditEvent := audit.NewEvent(token, r, requestTime, dbDomain.UUID, dbProject.UUID, srv.Type, res.Name, resInfo.Unit, res.Quota, newQuota)
-			auditTrail.Add(auditEvent)
+			auditTrail.Add(audit.EventParams{
+				Token:        token,
+				Request:      r,
+				ReasonCode:   http.StatusOK,
+				Time:         requestTime,
+				DomainID:     dbDomain.UUID,
+				ProjectID:    dbProject.UUID,
+				ServiceType:  srv.Type,
+				ResourceName: res.Name,
+				OldQuota:     res.Quota,
+				NewQuota:     newQuota,
+				QuotaUnit:    resInfo.Unit,
+			})
 
 			res.Quota = newQuota
 			resourcesToUpdate = append(resourcesToUpdate, res)
@@ -298,6 +326,7 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 
 	//if not legal, report errors to the user
 	if len(errors) > 0 {
+		auditTrail.Commit(cluster.ID, cluster.Config.CADF)
 		http.Error(w, strings.Join(errors, "\n"), 422)
 		return
 	}
@@ -387,8 +416,8 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 
 func checkProjectQuotaUpdate(srv db.ProjectService, res db.ProjectResource, unit limes.Unit, domain *reports.Domain, constraint limes.QuotaConstraint, newQuota uint64, canRaise, canLower bool) error {
 	if !constraint.Allows(newQuota) {
-		return fmt.Errorf("cannot change %s/%s quota: requested value %q contradicts constraint %q for this project and resource",
-			srv.Type, res.Name, limes.ValueWithUnit{Value: newQuota, Unit: unit}, constraint.ToString(unit))
+		return fmt.Errorf("requested value %q contradicts constraint %q for this project and resource",
+			limes.ValueWithUnit{Value: newQuota, Unit: unit}, constraint.ToString(unit))
 	}
 
 	//if quota is being reduced, permission is required and usage must fit into quota
@@ -396,17 +425,17 @@ func checkProjectQuotaUpdate(srv db.ProjectService, res db.ProjectResource, unit
 	//cover the case of infinite quotas)
 	if res.Quota > newQuota {
 		if !canLower {
-			return fmt.Errorf("cannot change %s/%s quota: user is not allowed to lower quotas in this project", srv.Type, res.Name)
+			return fmt.Errorf("user is not allowed to lower quotas in this project")
 		}
 		if res.Usage > newQuota {
-			return fmt.Errorf("cannot change %s/%s quota: quota may not be lower than current usage", srv.Type, res.Name)
+			return fmt.Errorf("quota may not be lower than current usage")
 		}
 		return nil
 	}
 
 	//if quota is being raised, permission is required and also the domain quota may not be exceeded
 	if !canRaise {
-		return fmt.Errorf("cannot change %s/%s quota: user is not allowed to raise quotas in this project", srv.Type, res.Name)
+		return fmt.Errorf("user is not allowed to raise quotas in this project")
 	}
 	domainQuota := uint64(0)
 	projectsQuota := uint64(0)
@@ -428,8 +457,7 @@ func checkProjectQuotaUpdate(srv db.ProjectService, res db.ProjectResource, unit
 		if domainQuota < projectsQuota-res.Quota {
 			maxQuota = 0
 		}
-		return fmt.Errorf("cannot change %s/%s quota: domain quota exceeded (maximum acceptable project quota is %s)",
-			srv.Type, res.Name,
+		return fmt.Errorf("domain quota exceeded (maximum acceptable project quota is %s)",
 			limes.ValueWithUnit{Value: maxQuota, Unit: unit},
 		)
 	}

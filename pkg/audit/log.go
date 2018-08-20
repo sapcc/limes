@@ -25,6 +25,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/sapcc/go-bits/gopherpolicy"
@@ -104,48 +105,70 @@ type Host struct {
 	Platform string `json:"platform,omitempty"`
 }
 
-//NewEvent takes the necessary parameters from an API request and returns a new audit event.
-func NewEvent(
-	t *gopherpolicy.Token, r *http.Request, requestTime, dbDomainID, dbProjectID,
-	srvType, resName string, resUnit limes.Unit, resQuota, newQuota uint64,
-) CADFEvent {
-	targetID := dbProjectID
-	if dbProjectID == "" {
-		targetID = dbDomainID
+//EventParams contains parameters for creating an audit event.
+type EventParams struct {
+	Token        *gopherpolicy.Token
+	Request      *http.Request
+	ReasonCode   int
+	Time         string
+	DomainID     string
+	ProjectID    string
+	ServiceType  string
+	ResourceName string
+	OldQuota     uint64
+	NewQuota     uint64
+	QuotaUnit    limes.Unit
+	RejectReason string
+}
+
+//newEvent takes the necessary parameters and returns a new audit event.
+func (p EventParams) newEvent() CADFEvent {
+	targetID := p.ProjectID
+	if p.ProjectID == "" {
+		targetID = p.DomainID
+	}
+
+	outcome := "failure"
+	if p.ReasonCode == http.StatusOK {
+		outcome = "success"
 	}
 
 	return CADFEvent{
 		TypeURI:   "http://schemas.dmtf.org/cloud/audit/1.0/event",
 		ID:        generateUUID(),
-		EventTime: requestTime,
+		EventTime: p.Time,
 		EventType: "activity",
 		Action:    "update",
-		Outcome:   "success",
+		Outcome:   outcome,
 		Reason: Reason{
 			ReasonType: "HTTP",
-			ReasonCode: "200",
+			ReasonCode: strconv.Itoa(p.ReasonCode),
 		},
 		Initiator: Resource{
 			TypeURI:   "service/security/account/user",
-			Name:      t.Context.Auth["user_name"],
-			ID:        t.Context.Auth["user_id"],
-			Domain:    t.Context.Auth["domain_name"],
-			DomainID:  t.Context.Auth["domain_id"],
-			ProjectID: t.Context.Auth["project_id"],
+			Name:      p.Token.Context.Auth["user_name"],
+			ID:        p.Token.Context.Auth["user_id"],
+			Domain:    p.Token.Context.Auth["domain_name"],
+			DomainID:  p.Token.Context.Auth["domain_id"],
+			ProjectID: p.Token.Context.Auth["project_id"],
 			Host: &Host{
-				Address: TryStripPort(r.RemoteAddr),
-				Agent:   r.Header.Get("User-Agent"),
+				Address: TryStripPort(p.Request.RemoteAddr),
+				Agent:   p.Request.Header.Get("User-Agent"),
 			},
 		},
 		Target: Resource{
-			TypeURI:   fmt.Sprintf("service/%s/%s/quota", srvType, resName),
+			TypeURI:   fmt.Sprintf("service/%s/%s/quota", p.ServiceType, p.ResourceName),
 			ID:        targetID,
-			DomainID:  dbDomainID,
-			ProjectID: dbProjectID,
+			DomainID:  p.DomainID,
+			ProjectID: p.ProjectID,
 			Attachments: []Attachment{{
 				Name:    "payload",
 				TypeURI: "mime:application/json",
-				Content: attachmentContent{OldQuota: resQuota, NewQuota: newQuota, Unit: resUnit},
+				Content: attachmentContent{
+					OldQuota:     p.OldQuota,
+					NewQuota:     p.NewQuota,
+					Unit:         p.QuotaUnit,
+					RejectReason: p.RejectReason},
 			}},
 		},
 		Observer: Resource{
@@ -153,28 +176,31 @@ func NewEvent(
 			Name:    "limes",
 			ID:      observerUUID,
 		},
-		RequestPath: r.URL.String(),
+		RequestPath: p.Request.URL.String(),
 	}
 }
 
 //This type is needed for the custom MarshalJSON behavior.
 type attachmentContent struct {
-	OldQuota uint64
-	NewQuota uint64
-	Unit     limes.Unit
+	OldQuota     uint64
+	NewQuota     uint64
+	Unit         limes.Unit
+	RejectReason string
 }
 
 //MarshalJSON implements the json.Marshaler interface.
 func (a attachmentContent) MarshalJSON() ([]byte, error) {
 	//copy data into a struct that does not have a custom MarshalJSON
 	data := struct {
-		OldQuota uint64     `json:"oldQuota"`
-		NewQuota uint64     `json:"newQuota"`
-		Unit     limes.Unit `json:"unit,omitempty"`
+		OldQuota     uint64     `json:"oldQuota,omitempty"`
+		NewQuota     uint64     `json:"newQuota,omitempty"`
+		Unit         limes.Unit `json:"unit,omitempty"`
+		RejectReason string     `json:"rejectReason,omitempty"`
 	}{
-		OldQuota: a.OldQuota,
-		NewQuota: a.NewQuota,
-		Unit:     a.Unit,
+		OldQuota:     a.OldQuota,
+		NewQuota:     a.NewQuota,
+		Unit:         a.Unit,
+		RejectReason: a.RejectReason,
 	}
 	//Hermes does not accept a JSON object at target.attachments[].content, so we need
 	//to wrap the marshaled JSON into a JSON string
@@ -186,7 +212,8 @@ func (a attachmentContent) MarshalJSON() ([]byte, error) {
 }
 
 //Add adds an event to the audit trail.
-func (t *Trail) Add(event CADFEvent) {
+func (t *Trail) Add(p EventParams) {
+	event := p.newEvent()
 	t.events = append(t.events, event)
 }
 
