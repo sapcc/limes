@@ -105,7 +105,7 @@ type Host struct {
 	Platform string `json:"platform,omitempty"`
 }
 
-//EventParams to-do
+//EventParams contains parameters for creating an audit event.
 type EventParams struct {
 	Token        *gopherpolicy.Token
 	Request      *http.Request
@@ -121,7 +121,7 @@ type EventParams struct {
 	RejectReason string
 }
 
-//newEvent takes the necessary parameters from an API request and returns a new audit event.
+//newEvent takes the necessary parameters and returns a new audit event.
 func (p EventParams) newEvent() CADFEvent {
 	targetID := p.ProjectID
 	if p.ProjectID == "" {

@@ -178,8 +178,14 @@ func (p *v1Provider) SyncProject(w http.ResponseWriter, r *http.Request) {
 func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 	requestTime := time.Now().Format("2006-01-02T15:04:05.999999+00:00")
 	var auditTrail audit.Trail
-
 	token := p.CheckToken(r)
+	canRaise := token.Check("project:raise")
+	canLower := token.Check("project:lower")
+	if !canRaise && !canLower {
+		token.Require(w, "project:raise") //produce standard Unauthorized response
+		return
+	}
+
 	cluster := p.FindClusterFromRequest(w, r, token)
 	if cluster == nil {
 		return
@@ -204,13 +210,6 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	serviceQuotas := parseTarget.Project.Services
-
-	canRaise := token.Check("project:raise")
-	canLower := token.Check("project:lower")
-	if !canRaise && !canLower {
-		token.Require(w, "project:raise") //produce standard Unauthorized response
-		return
-	}
 
 	//start a transaction for the quota updates
 	tx, err := db.DB.Begin()

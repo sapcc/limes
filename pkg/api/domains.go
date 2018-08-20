@@ -109,8 +109,14 @@ func (p *v1Provider) DiscoverDomains(w http.ResponseWriter, r *http.Request) {
 func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 	requestTime := time.Now().Format("2006-01-02T15:04:05.999999+00:00")
 	var auditTrail audit.Trail
-
 	token := p.CheckToken(r)
+	canRaise := token.Check("domain:raise")
+	canLower := token.Check("domain:lower")
+	if !canRaise && !canLower {
+		token.Require(w, "domain:raise") //produce standard Unauthorized response
+		return
+	}
+
 	cluster := p.FindClusterFromRequest(w, r, token)
 	if cluster == nil {
 		return
@@ -132,12 +138,6 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 	}
 	serviceQuotas := parseTarget.Domain.Services
 
-	canRaise := token.Check("domain:raise")
-	canLower := token.Check("domain:lower")
-	if !canRaise && !canLower {
-		token.Require(w, "domain:raise") //produce standard Unauthorized response
-		return
-	}
 	//start a transaction for the quota updates
 	tx, err := db.DB.Begin()
 	if respondwith.ErrorText(w, err) {
