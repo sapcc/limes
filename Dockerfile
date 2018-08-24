@@ -1,6 +1,6 @@
 FROM golang:1.10-alpine builder
 WORKDIR /x/src/github.com/sapcc/limes/
-RUN apk add --no-cache make
+RUN apk add --no-cache make gcc musl-dev
 
 COPY . .
 RUN make install PREFIX=/pkg

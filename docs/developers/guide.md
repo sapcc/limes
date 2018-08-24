@@ -92,16 +92,10 @@ OpenStack cluster that already has a Limes instance.
 
 ### Running
 
-Before any other Limes job can run, you must create the database and populate the schema:
-
-```bash
-$ ./build/limes migrate test.yaml
-```
-
-When `limes migrate` has completed successfully, you can run any other Limes job.
+You can now run both Limes jobs:
 
 * the API: `./build/limes serve test.yaml ccloud`
-* the collectors: `./build/limes collect test.yaml ccloud`
+* the collector: `./build/limes collect test.yaml ccloud`
 
 There are two further subcommands that assist with the development of new plugins: `limes test-scrape` invokes all
 enabled quota plugins on a single project, and dumps the quota/usage data that was scraped by the plugins. `limes
@@ -112,7 +106,6 @@ The following environment variables can be useful during development:
 
 ```bash
 export LIMES_DEBUG=1       # show debug logs
-export LIMES_DEBUG_SQL=1   # log executed SQL statements
 export LIMES_INSECURE=1    # disable SSL certificate verification (useful with mitmproxy)
 ```
 

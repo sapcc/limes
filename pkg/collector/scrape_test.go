@@ -38,7 +38,7 @@ func p2u64(x uint64) *uint64 {
 
 func prepareScrapeTest(t *testing.T, quotaPlugins ...limes.QuotaPlugin) *limes.Cluster {
 	test.ResetTime()
-	test.InitDatabase(t, "../test/migrations")
+	test.InitDatabase(t)
 
 	cluster := &limes.Cluster{
 		ID:              "west",
