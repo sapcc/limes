@@ -31,7 +31,7 @@ import (
 
 func Test_ScanCapacity(t *testing.T) {
 	test.ResetTime()
-	test.InitDatabase(t, "../test/migrations")
+	test.InitDatabase(t)
 
 	cluster := &limes.Cluster{
 		ID:              "west",

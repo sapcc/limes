@@ -61,9 +61,7 @@ If you're using Kubernetes, you can use our team's [Helm chart for Limes][chart]
 
 4. Configure [quota constraints](./constraints.md) if desired.
 
-5. Prepare the database schema for Limes by running `limes migrate /path/to/config.yaml`.
-
-6. Start both the API service and the container service once for each cluster.
+5. Start both the API service and the container service once for each cluster.
 
    ```bash
    $ limes serve /path/to/config.yaml $cluster_id
@@ -73,7 +71,7 @@ If you're using Kubernetes, you can use our team's [Helm chart for Limes][chart]
    There should be only one instance of the collector service. The API service can be scaled out by simply starting
    additional instances with the same configuration and cluster ID.
 
-7. For each cluster, register the public URL of the API service in the Keystone service catalog with service
+6. For each cluster, register the public URL of the API service in the Keystone service catalog with service
    type `resources`. Note that the API service only exposes HTTP, so you probably want to have some sort of reverse
    proxy in front for load balancing and TLS termination.
 

@@ -44,7 +44,7 @@ func init() {
 
 func setupTest(t *testing.T, clusterName, startData string) (*limes.Cluster, http.Handler) {
 	//load test database
-	test.InitDatabase(t, "../test/migrations")
+	test.InitDatabase(t)
 	test.ExecSQLFile(t, startData)
 
 	//prepare test configuration

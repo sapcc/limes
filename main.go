@@ -25,9 +25,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/url"
 	"os"
-	"regexp"
 	"strings"
 	"time"
 
@@ -42,8 +40,6 @@ import (
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
 
-	"github.com/mattes/migrate"
-	_ "github.com/mattes/migrate/database/postgres"
 	_ "github.com/sapcc/limes/pkg/plugins"
 )
 
@@ -58,13 +54,6 @@ func main() {
 
 	//load configuration
 	config := limes.NewConfiguration(configPath)
-
-	//handle migrate task specially; it's the only one that does not need the
-	//standard database and Keystone connections
-	if taskName == "migrate" {
-		taskMigrate(config)
-		return
-	}
 
 	//all other tasks have the <cluster-id> as os.Args[3]
 	if len(os.Args) < 4 {
@@ -112,7 +101,6 @@ func main() {
 
 var usageMessage = strings.Replace(strings.TrimSpace(`
 Usage:
-\t%s migrate <config-file>
 \t%s (collect|serve) <config-file> <cluster-id>
 \t%s test-scrape <config-file> <cluster-id> <project-id>
 \t%s test-scan-capacity <config-file> <cluster-id>
@@ -121,62 +109,6 @@ Usage:
 func printUsageAndExit() {
 	fmt.Fprintln(os.Stderr, strings.Replace(usageMessage, "%s", os.Args[0], -1))
 	os.Exit(1)
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// task: migrate
-
-func taskMigrate(config limes.Configuration) {
-	err := createDatabaseIfNotExist(config)
-	if err != nil {
-		logg.Error(err.Error())
-		os.Exit(1)
-	}
-
-	m, err := config.Database.GetMigrate("go-bindata")
-	if err == nil {
-		err = m.Up()
-	}
-	if err != nil && err != migrate.ErrNoChange {
-		logg.Fatal("migration failed: " + err.Error())
-	}
-}
-
-var dbNotExistErrRx = regexp.MustCompile(`^pq: database "([^"]+)" does not exist$`)
-
-func createDatabaseIfNotExist(config limes.Configuration) error {
-	//check if the database exists
-	db, err := sql.Open("postgres", config.Database.Location)
-	if err == nil {
-		//apparently the "database does not exist" error only occurs when trying to issue the first statement
-		_, err = db.Exec("SELECT 1")
-	}
-	if err == nil {
-		//nothing to do
-		return db.Close()
-	}
-	match := dbNotExistErrRx.FindStringSubmatch(err.Error())
-	if match == nil {
-		//unexpected error
-		return err
-	}
-	dbName := match[1]
-
-	//remove the database name from the connection URL
-	dbURL, err := url.Parse(config.Database.Location)
-	if err != nil {
-		return err
-	}
-
-	dbURL.Path = "/"
-	db, err = sql.Open("postgres", dbURL.String())
-	if err != nil {
-		return err
-	}
-	defer db.Close()
-
-	_, err = db.Exec("CREATE DATABASE " + dbName)
-	return err
 }
 
 ////////////////////////////////////////////////////////////////////////////////

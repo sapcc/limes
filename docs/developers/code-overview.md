@@ -1,8 +1,8 @@
 # Code structure overview
 
-Once compiled, Limes is only a single binary containing subcommands for the various components (`limes serve`, `limes
-collect` and `limes migrate`). This reduces the size of the compiled application dramatically since a lot of code is
-shared. The main entrypoint is in `main.go` in the top level, from which everything else follows.
+Once compiled, Limes is only a single binary containing subcommands for the various components (`limes serve` and `limes
+collect`). This reduces the size of the compiled application dramatically since a lot of code is shared. The main
+entrypoint is in `main.go` in the top level, from which everything else follows.
 
 The `main.go` is fairly compact. The main sourcecode is below `pkg/`, organized into packages as follows: (listed
 from the bottom up)
@@ -19,9 +19,8 @@ from the bottom up)
 | `pkg/reports` | no | helper for `pkg/api`: rendering of reports for GET requests |
 | `pkg/api` | yes | functionality of `limes api` |
 
-The database is defined by SQL files in `pkg/db/migrations`. The contents follow the PostgreSQL dialect of SQL, the
-filenames follow the requirements of [the library that Limes uses for handling the DB schema][migrate]. During `make`,
-the SQL files in this directory are packed into `pkg/db/migrations.go` by `go-bindata`. Please commit this source file.
+The database is defined by SQL files in `pkg/db/migrations.go`. The contents follow the PostgreSQL dialect of SQL, the
+filenames follow the requirements of [the library that Limes uses for handling the DB schema][migrate].
 
 ## Testing methodology
 
@@ -33,4 +32,4 @@ During `go test`, Postgres is substituted for SQLite. The `pkg/test` module prov
 `limes.Driver`, `limes.QuotaPlugin`, `limes.CapacityPlugin`, `limes.DiscoveryPlugin` and `time.Now`, and a few helper
 functions to load and assert SQL data as well as simulate HTTP requests.
 
-[migrate]: https://github.com/mattes/migrate
+[migrate]: https://github.com/golang-migrate/migrate

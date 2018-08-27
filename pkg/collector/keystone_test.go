@@ -32,7 +32,7 @@ import (
 )
 
 func keystoneTestCluster(t *testing.T) *limes.Cluster {
-	test.InitDatabase(t, "../test/migrations")
+	test.InitDatabase(t)
 
 	return &limes.Cluster{
 		ID:              "west",

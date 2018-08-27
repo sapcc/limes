@@ -9,19 +9,15 @@ GO_LDFLAGS    := -s -w
 
 # This target uses the incremental rebuild capabilities of the Go compiler to speed things up.
 # If no source files have changed, `go install` exits quickly without doing anything.
-build/limes: pkg/dbdata/migrations.go FORCE
+build/limes: FORCE
 	$(GO) install $(GO_BUILDFLAGS) -ldflags '$(GO_LDFLAGS)' '$(PKG)'
-pkg/dbdata/migrations.go: pkg/db/migrations/*.sql
-	@if ! hash go-bindata 2>/dev/null; then echo ">> Installing go-bindata..."; go get -u github.com/jteeuwen/go-bindata/go-bindata; exit 1; fi
-	go-bindata -prefix pkg/db/migrations -pkg dbdata -o $@ pkg/db/migrations/
-	gofmt -s -w $@
 
 # which packages to test with static checkers?
 GO_ALLPKGS := $(PKG) $(shell go list $(PKG)/pkg/...)
 # which packages to test with `go test`?
 GO_TESTPKGS := $(shell go list -f '{{if .TestGoFiles}}{{.ImportPath}}{{end}}' $(PKG)/pkg/...)
 # which packages to measure coverage for?
-GO_COVERPKGS := $(shell go list $(PKG)/pkg/... | grep -v plugins | grep -v dbdata)
+GO_COVERPKGS := $(shell go list $(PKG)/pkg/... | grep -v plugins)
 # output files from `go test`
 GO_COVERFILES := $(patsubst %,build/%.cover.out,$(subst /,_,$(GO_TESTPKGS)))
 
@@ -32,12 +28,6 @@ comma := ,
 
 check: all static-check build/cover.html FORCE
 	@echo -e "\e[1;32m>> All tests successful.\e[0m"
-prepare-check: FORCE $(patsubst pkg/db/%,pkg/test/%, $(wildcard pkg/db/migrations/*.sql))
-	@# Precompile a module used by the unit tests which takes a long time to compile because of cgo.
-	$(GO) install github.com/sapcc/limes/vendor/github.com/mattn/go-sqlite3
-pkg/test/migrations/%.sql: pkg/db/migrations/%.sql
-	@# convert Postgres syntax into SQLite syntax where necessary
-	sed '/BEGIN skip in sqlite/,/END skip in sqlite/d;s/BIGSERIAL NOT NULL PRIMARY KEY/INTEGER PRIMARY KEY/' < $< > $@
 static-check: FORCE
 	@if ! hash golint 2>/dev/null; then echo ">> Installing golint..."; go get -u github.com/golang/lint/golint; fi
 	@echo '>> gofmt'
@@ -46,7 +36,7 @@ static-check: FORCE
 	@if s="$$(golint . && find pkg -type d ! -name dbdata -exec golint {} \; 2>/dev/null)" && test -n "$$s"; then printf ' => %s\n%s\n' golint "$$s"; false; fi
 	@echo '>> go vet'
 	@$(GO) vet $(GO_ALLPKGS)
-build/%.cover.out: prepare-check FORCE
+build/%.cover.out: FORCE
 	@echo '>> go test $*'
 	$(GO) test $(GO_BUILDFLAGS) -ldflags '$(GO_LDFLAGS)' -coverprofile=$@ -covermode=count -coverpkg=$(subst $(space),$(comma),$(GO_COVERPKGS)) $(subst _,/,$*)
 build/cover.out: $(GO_COVERFILES)
