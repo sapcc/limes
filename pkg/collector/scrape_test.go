@@ -170,10 +170,10 @@ func Test_Scrape(t *testing.T) {
 	dmc := &DataMetricsCollector{Cluster: cluster}
 	registry.MustRegister(dmc)
 	assert.HTTPRequest{
-		Method:           "GET",
-		Path:             "/metrics",
-		ExpectStatusCode: 200,
-		ExpectFile:       "fixtures/scrape_metrics.json",
+		Method:       "GET",
+		Path:         "/metrics",
+		ExpectStatus: 200,
+		ExpectBody:   assert.FixtureFile("fixtures/scrape_metrics.json"),
 	}.Check(t, promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
 }
 

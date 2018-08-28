@@ -152,9 +152,9 @@ func Test_ScanCapacity(t *testing.T) {
 	dmc := &DataMetricsCollector{Cluster: cluster}
 	registry.MustRegister(dmc)
 	assert.HTTPRequest{
-		Method:           "GET",
-		Path:             "/metrics",
-		ExpectStatusCode: 200,
-		ExpectFile:       "fixtures/capacity_metrics.prom",
+		Method:       "GET",
+		Path:         "/metrics",
+		ExpectStatus: 200,
+		ExpectBody:   assert.FixtureFile("fixtures/capacity_metrics.prom"),
 	}.Check(t, promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
 }
