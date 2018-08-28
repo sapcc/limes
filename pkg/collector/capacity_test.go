@@ -24,6 +24,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/test"
@@ -150,7 +151,7 @@ func Test_ScanCapacity(t *testing.T) {
 	registry := prometheus.NewPedanticRegistry()
 	dmc := &DataMetricsCollector{Cluster: cluster}
 	registry.MustRegister(dmc)
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "GET",
 		Path:             "/metrics",
 		ExpectStatusCode: 200,

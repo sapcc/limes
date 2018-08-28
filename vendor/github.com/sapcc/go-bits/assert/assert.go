@@ -17,21 +17,22 @@
 *
 *******************************************************************************/
 
-package test
+package assert
 
 import (
 	"reflect"
 	"testing"
 )
 
-//AssertDeepEqual checks if the actual and expected value are equal as
+//DeepEqual checks if the actual and expected value are equal as
 //determined by reflect.DeepEqual(), and t.Error()s otherwise.
-func AssertDeepEqual(t *testing.T, variable string, actual, expected interface{}) bool {
+func DeepEqual(t *testing.T, variable string, actual, expected interface{}) bool {
+	t.Helper()
 	if reflect.DeepEqual(actual, expected) {
 		return true
 	}
 
-	t.Error("AssertDeepEqual failed for " + variable)
+	t.Error("assert.DeepEqual failed for " + variable)
 	t.Logf("\texpected = %#v\n", expected)
 	t.Logf("\t  actual = %#v\n", actual)
 	return false

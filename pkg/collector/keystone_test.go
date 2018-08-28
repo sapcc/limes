@@ -25,6 +25,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/test"
 
@@ -95,7 +96,7 @@ func Test_ScanDomains(t *testing.T) {
 	}
 	sort.Strings(expectedNewDomains) //order does not matter
 	sort.Strings(actualNewDomains)
-	test.AssertDeepEqual(t, "new domains after ScanDomains #1", actualNewDomains, expectedNewDomains)
+	assert.DeepEqual(t, "new domains after ScanDomains #1", actualNewDomains, expectedNewDomains)
 	test.AssertDBContent(t, "fixtures/scandomains1.sql")
 
 	//first ScanDomains should not discover anything new
@@ -103,7 +104,7 @@ func Test_ScanDomains(t *testing.T) {
 	if err != nil {
 		t.Errorf("ScanDomains #2 failed: %v", err)
 	}
-	test.AssertDeepEqual(t, "new domains after ScanDomains #2", actualNewDomains, []string(nil))
+	assert.DeepEqual(t, "new domains after ScanDomains #2", actualNewDomains, []string(nil))
 	test.AssertDBContent(t, "fixtures/scandomains1.sql")
 
 	//add another project
@@ -117,7 +118,7 @@ func Test_ScanDomains(t *testing.T) {
 	if err != nil {
 		t.Errorf("ScanDomains #3 failed: %v", err)
 	}
-	test.AssertDeepEqual(t, "new domains after ScanDomains #3", actualNewDomains, []string(nil))
+	assert.DeepEqual(t, "new domains after ScanDomains #3", actualNewDomains, []string(nil))
 	test.AssertDBContent(t, "fixtures/scandomains1.sql")
 
 	//ScanDomains with ScanAllProjects should discover the new project
@@ -125,7 +126,7 @@ func Test_ScanDomains(t *testing.T) {
 	if err != nil {
 		t.Errorf("ScanDomains #4 failed: %v", err)
 	}
-	test.AssertDeepEqual(t, "new domains after ScanDomains #4", actualNewDomains, []string(nil))
+	assert.DeepEqual(t, "new domains after ScanDomains #4", actualNewDomains, []string(nil))
 	test.AssertDBContent(t, "fixtures/scandomains2.sql")
 
 	//remove the project again
@@ -136,7 +137,7 @@ func Test_ScanDomains(t *testing.T) {
 	if err != nil {
 		t.Errorf("ScanDomains #5 failed: %v", err)
 	}
-	test.AssertDeepEqual(t, "new domains after ScanDomains #5", actualNewDomains, []string(nil))
+	assert.DeepEqual(t, "new domains after ScanDomains #5", actualNewDomains, []string(nil))
 	test.AssertDBContent(t, "fixtures/scandomains2.sql")
 
 	//ScanDomains with ScanAllProjects should notice the deleted project and cleanup its records
@@ -144,7 +145,7 @@ func Test_ScanDomains(t *testing.T) {
 	if err != nil {
 		t.Errorf("ScanDomains #6 failed: %v", err)
 	}
-	test.AssertDeepEqual(t, "new domains after ScanDomains #6", actualNewDomains, []string(nil))
+	assert.DeepEqual(t, "new domains after ScanDomains #6", actualNewDomains, []string(nil))
 	test.AssertDBContent(t, "fixtures/scandomains1.sql")
 
 	//remove a whole domain
@@ -155,7 +156,7 @@ func Test_ScanDomains(t *testing.T) {
 	if err != nil {
 		t.Errorf("ScanDomains #7 failed: %v", err)
 	}
-	test.AssertDeepEqual(t, "new domains after ScanDomains #7", actualNewDomains, []string(nil))
+	assert.DeepEqual(t, "new domains after ScanDomains #7", actualNewDomains, []string(nil))
 	test.AssertDBContent(t, "fixtures/scandomains3.sql")
 
 	//rename a domain and a project
@@ -167,7 +168,7 @@ func Test_ScanDomains(t *testing.T) {
 	if err != nil {
 		t.Errorf("ScanDomains #8 failed: %v", err)
 	}
-	test.AssertDeepEqual(t, "new domains after ScanDomains #8", actualNewDomains, []string(nil))
+	assert.DeepEqual(t, "new domains after ScanDomains #8", actualNewDomains, []string(nil))
 	test.AssertDBContent(t, "fixtures/scandomains4.sql")
 }
 

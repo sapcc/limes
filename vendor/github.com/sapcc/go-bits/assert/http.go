@@ -1,6 +1,6 @@
 /*******************************************************************************
 *
-* Copyright 2017 SAP SE
+* Copyright 2017-2018 SAP SE
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 *
 *******************************************************************************/
 
-package test
+package assert
 
 import (
 	"bytes"
@@ -32,22 +32,26 @@ import (
 	"testing"
 )
 
-//APIRequest contains all metadata about a test request.
-type APIRequest struct {
-	Method           string
-	Path             string
-	RequestHeader    map[string]string
-	RequestJSON      interface{} //if non-nil, will be encoded as JSON
+//HTTPRequest is a HTTP request that gets executed by a unit test.
+type HTTPRequest struct {
+	//request properties
+	Method        string
+	Path          string
+	RequestHeader map[string]string
+	//request body
+	RequestJSON interface{} //if non-nil, will be encoded as JSON
+	//response properties
 	ExpectStatusCode int
-	ExpectBody       *string //raw content (not a file path)
-	ExpectJSON       string  //path to JSON file
-	ExpectFile       string  //path to arbitrary file
+	//response body (only one of those may be set)
+	ExpectBody *string //raw content (not a file path)
+	ExpectJSON string  //path to JSON file
+	ExpectFile string  //path to arbitrary file
 }
 
-//Check performs the HTTP request described by this APIRequest against the
-//given http.Handler and compares the response with the expectation in the
-//APIRequest.
-func (r APIRequest) Check(t *testing.T, handler http.Handler) {
+//Check performs the HTTP request described by this HTTPRequest against the
+//given http.Handler and compares the response with the expectations in the
+//HTTPRequest.
+func (r HTTPRequest) Check(t *testing.T, handler http.Handler) {
 	t.Helper()
 
 	var requestBody io.Reader
@@ -59,7 +63,6 @@ func (r APIRequest) Check(t *testing.T, handler http.Handler) {
 		requestBody = bytes.NewReader([]byte(body))
 	}
 	request := httptest.NewRequest(r.Method, r.Path, requestBody)
-	request.Header.Set("X-Auth-Token", "something")
 	if r.RequestHeader != nil {
 		for key, value := range r.RequestHeader {
 			request.Header.Set(key, value)
@@ -100,7 +103,7 @@ func (r APIRequest) Check(t *testing.T, handler http.Handler) {
 	}
 }
 
-func (r APIRequest) compareBodyToFixture(t *testing.T, fixturePath string, data []byte) {
+func (r HTTPRequest) compareBodyToFixture(t *testing.T, fixturePath string, data []byte) {
 	//write actual content to file to make it easy to copy the computed result over
 	//to the fixture path when a new test is added or an existing one is modified
 	fixturePathAbs, _ := filepath.Abs(fixturePath)

@@ -29,6 +29,7 @@ import (
 	"testing"
 
 	policy "github.com/databus23/goslo.policy"
+	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/test"
@@ -146,7 +147,7 @@ func Test_InconsistencyOperations(t *testing.T) {
 	_, router := setupTest(t, clusterName, pathtoData)
 
 	//check ListInconsistencies
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "GET",
 		Path:             "/v1/inconsistencies",
 		ExpectStatusCode: 200,
@@ -158,7 +159,7 @@ func Test_EmptyInconsistencyReport(t *testing.T) {
 	_, router := setupTest(t, "cloud", "/dev/null")
 
 	//check ListInconsistencies
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "GET",
 		Path:             "/v1/inconsistencies",
 		ExpectStatusCode: 200,
@@ -171,13 +172,13 @@ func Test_ClusterOperations(t *testing.T) {
 	_, router := setupTest(t, clusterName, pathtoData)
 
 	//check GetCluster
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "GET",
 		Path:             "/v1/clusters/west",
 		ExpectStatusCode: 200,
 		ExpectJSON:       "fixtures/cluster-get-west.json",
 	}.Check(t, router)
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "GET",
 		Path:             "/v1/clusters/current",
 		ExpectStatusCode: 200,
@@ -185,37 +186,37 @@ func Test_ClusterOperations(t *testing.T) {
 	}.Check(t, router)
 
 	//check ListClusters
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "GET",
 		Path:             "/v1/clusters",
 		ExpectStatusCode: 200,
 		ExpectJSON:       "fixtures/cluster-list.json",
 	}.Check(t, router)
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "GET",
 		Path:             "/v1/clusters?detail",
 		ExpectStatusCode: 200,
 		ExpectJSON:       "fixtures/cluster-list-detail.json",
 	}.Check(t, router)
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "GET",
 		Path:             "/v1/clusters?local",
 		ExpectStatusCode: 200,
 		ExpectJSON:       "fixtures/cluster-list-local.json",
 	}.Check(t, router)
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "GET",
 		Path:             "/v1/clusters?service=unknown",
 		ExpectStatusCode: 200,
 		ExpectJSON:       "./fixtures/cluster-list-no-services.json",
 	}.Check(t, router)
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "GET",
 		Path:             "/v1/clusters?service=shared&resource=unknown",
 		ExpectStatusCode: 200,
 		ExpectJSON:       "./fixtures/cluster-list-no-resources.json",
 	}.Check(t, router)
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "GET",
 		Path:             "/v1/clusters?service=shared&resource=things",
 		ExpectStatusCode: 200,
@@ -223,7 +224,7 @@ func Test_ClusterOperations(t *testing.T) {
 	}.Check(t, router)
 
 	//check PutCluster error cases
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "PUT",
 		Path:             "/v1/clusters/east",
 		ExpectStatusCode: 422,
@@ -242,7 +243,7 @@ func Test_ClusterOperations(t *testing.T) {
 		},
 	}.Check(t, router)
 
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "PUT",
 		Path:             "/v1/clusters/east",
 		ExpectStatusCode: 422,
@@ -261,7 +262,7 @@ func Test_ClusterOperations(t *testing.T) {
 		},
 	}.Check(t, router)
 
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "PUT",
 		Path:             "/v1/clusters/east",
 		ExpectStatusCode: 422,
@@ -280,7 +281,7 @@ func Test_ClusterOperations(t *testing.T) {
 		},
 	}.Check(t, router)
 
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "PUT",
 		Path:             "/v1/clusters/east",
 		ExpectStatusCode: 422,
@@ -299,7 +300,7 @@ func Test_ClusterOperations(t *testing.T) {
 		},
 	}.Check(t, router)
 
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "PUT",
 		Path:             "/v1/clusters/east",
 		ExpectStatusCode: 422,
@@ -318,7 +319,7 @@ func Test_ClusterOperations(t *testing.T) {
 		},
 	}.Check(t, router)
 
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "PUT",
 		Path:             "/v1/clusters/east",
 		ExpectStatusCode: 422,
@@ -345,7 +346,7 @@ func Test_ClusterOperations(t *testing.T) {
 	}
 
 	//check PutCluster insert
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "PUT",
 		Path:             "/v1/clusters/east",
 		ExpectStatusCode: 200,
@@ -372,7 +373,7 @@ func Test_ClusterOperations(t *testing.T) {
 	expectClusterCapacity(t, "east", "unshared", "capacity", 200, "two-hundred")
 
 	//check PutCluster update (and unit conversion)
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "PUT",
 		Path:             "/v1/clusters/east",
 		ExpectStatusCode: 200,
@@ -399,7 +400,7 @@ func Test_ClusterOperations(t *testing.T) {
 	expectClusterCapacity(t, "east", "unshared", "capacity", 201<<20, "updated!")
 
 	//check PutCluster delete
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "PUT",
 		Path:             "/v1/clusters/east",
 		ExpectStatusCode: 200,
@@ -426,7 +427,7 @@ func Test_ClusterOperations(t *testing.T) {
 	expectClusterCapacity(t, "east", "unshared", "capacity", 202, "updated again")
 
 	//check PutCluster double-delete (i.e. delete should be idempotent)
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "PUT",
 		Path:             "/v1/clusters/east",
 		ExpectStatusCode: 200,
@@ -486,7 +487,7 @@ func Test_DomainOperations(t *testing.T) {
 	discovery := cluster.DiscoveryPlugin.(*test.DiscoveryPlugin)
 
 	//check GetDomain
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "GET",
 		Path:             "/v1/domains/uuid-for-germany",
 		ExpectStatusCode: 200,
@@ -494,7 +495,7 @@ func Test_DomainOperations(t *testing.T) {
 	}.Check(t, router)
 	//domain "france" covers some special cases: an infinite backend quota and
 	//missing domain quota entries for one service
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "GET",
 		Path:             "/v1/domains/uuid-for-france",
 		ExpectStatusCode: 200,
@@ -503,13 +504,13 @@ func Test_DomainOperations(t *testing.T) {
 
 	//domain "poland" is in a different cluster, so the X-Limes-Cluster-Id header
 	//needs to be given
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "GET",
 		Path:             "/v1/domains/uuid-for-poland",
 		ExpectStatusCode: 404,
 		ExpectBody:       p2s("no such domain (if it was just created, try to POST /domains/discover)\n"),
 	}.Check(t, router)
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "GET",
 		Path:             "/v1/domains/uuid-for-poland",
 		RequestHeader:    map[string]string{"X-Limes-Cluster-Id": "east"},
@@ -518,25 +519,25 @@ func Test_DomainOperations(t *testing.T) {
 	}.Check(t, router)
 
 	//check ListDomains
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "GET",
 		Path:             "/v1/domains",
 		ExpectStatusCode: 200,
 		ExpectJSON:       "./fixtures/domain-list.json",
 	}.Check(t, router)
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "GET",
 		Path:             "/v1/domains?service=unknown",
 		ExpectStatusCode: 200,
 		ExpectJSON:       "./fixtures/domain-list-no-services.json",
 	}.Check(t, router)
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "GET",
 		Path:             "/v1/domains?service=shared&resource=unknown",
 		ExpectStatusCode: 200,
 		ExpectJSON:       "./fixtures/domain-list-no-resources.json",
 	}.Check(t, router)
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "GET",
 		Path:             "/v1/domains?service=shared&resource=things",
 		ExpectStatusCode: 200,
@@ -544,14 +545,14 @@ func Test_DomainOperations(t *testing.T) {
 	}.Check(t, router)
 
 	//check cross-cluster ListDomains
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "GET",
 		Path:             "/v1/domains",
 		RequestHeader:    map[string]string{"X-Limes-Cluster-Id": "east"},
 		ExpectStatusCode: 200,
 		ExpectJSON:       "./fixtures/domain-list-east.json",
 	}.Check(t, router)
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "GET",
 		Path:             "/v1/domains",
 		RequestHeader:    map[string]string{"X-Limes-Cluster-Id": "unknown"},
@@ -563,14 +564,14 @@ func Test_DomainOperations(t *testing.T) {
 	discovery.StaticDomains = append(discovery.StaticDomains,
 		limes.KeystoneDomain{Name: "spain", UUID: "uuid-for-spain"},
 	)
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "POST",
 		Path:             "/v1/domains/discover",
 		ExpectStatusCode: 202,
 		ExpectJSON:       "./fixtures/domain-discover.json",
 	}.Check(t, router)
 
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "POST",
 		Path:             "/v1/domains/discover",
 		ExpectStatusCode: 204, //no content because no new domains discovered
@@ -578,7 +579,7 @@ func Test_DomainOperations(t *testing.T) {
 	}.Check(t, router)
 
 	//check PutDomain error cases
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "PUT",
 		Path:             "/v1/domains/uuid-for-germany",
 		ExpectStatusCode: 422,
@@ -597,7 +598,7 @@ func Test_DomainOperations(t *testing.T) {
 			},
 		},
 	}.Check(t, router)
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "PUT",
 		Path:             "/v1/domains/uuid-for-germany",
 		ExpectStatusCode: 422,
@@ -618,7 +619,7 @@ func Test_DomainOperations(t *testing.T) {
 	}.Check(t, router)
 
 	//check PutDomain error cases because of constraints
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "PUT",
 		Path:             "/v1/domains/uuid-for-france",
 		ExpectStatusCode: 422,
@@ -648,7 +649,7 @@ func Test_DomainOperations(t *testing.T) {
 	}.Check(t, router)
 
 	//check PutDomain happy path
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "PUT",
 		Path:             "/v1/domains/uuid-for-germany",
 		ExpectStatusCode: 200,
@@ -666,7 +667,7 @@ func Test_DomainOperations(t *testing.T) {
 		},
 	}.Check(t, router)
 	expectDomainQuota(t, "germany", "shared", "capacity", 1234)
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "PUT",
 		Path:             "/v1/domains/uuid-for-germany",
 		ExpectStatusCode: 200,
@@ -686,7 +687,7 @@ func Test_DomainOperations(t *testing.T) {
 	expectDomainQuota(t, "germany", "shared", "capacity", 1<<20)
 
 	//check PutDomain on a missing domain quota (see issue #36)
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "PUT",
 		Path:             "/v1/domains/uuid-for-france",
 		ExpectStatusCode: 200,
@@ -731,41 +732,41 @@ func Test_ProjectOperations(t *testing.T) {
 	discovery := cluster.DiscoveryPlugin.(*test.DiscoveryPlugin)
 
 	//check GetProject
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "GET",
 		Path:             "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatusCode: 200,
 		ExpectJSON:       "./fixtures/project-get-berlin.json",
 	}.Check(t, router)
 	//check rendering of subresources
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "GET",
 		Path:             "/v1/domains/uuid-for-germany/projects/uuid-for-berlin?detail",
 		ExpectStatusCode: 200,
 		ExpectJSON:       "./fixtures/project-get-details-berlin.json",
 	}.Check(t, router)
 	//dresden has a case of backend quota != quota
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "GET",
 		Path:             "/v1/domains/uuid-for-germany/projects/uuid-for-dresden",
 		ExpectStatusCode: 200,
 		ExpectJSON:       "./fixtures/project-get-dresden.json",
 	}.Check(t, router)
 	//paris has a case of infinite backend quota
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "GET",
 		Path:             "/v1/domains/uuid-for-france/projects/uuid-for-paris",
 		ExpectStatusCode: 200,
 		ExpectJSON:       "./fixtures/project-get-paris.json",
 	}.Check(t, router)
 	//warsaw is in a different cluster
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "GET",
 		Path:             "/v1/domains/uuid-for-poland/projects/uuid-for-warsaw",
 		ExpectStatusCode: 404,
 		ExpectBody:       p2s("no such domain (if it was just created, try to POST /domains/discover)\n"),
 	}.Check(t, router)
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "GET",
 		Path:             "/v1/domains/uuid-for-poland/projects/uuid-for-warsaw",
 		RequestHeader:    map[string]string{"X-Limes-Cluster-Id": "east"},
@@ -774,25 +775,25 @@ func Test_ProjectOperations(t *testing.T) {
 	}.Check(t, router)
 
 	//check ListProjects
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "GET",
 		Path:             "/v1/domains/uuid-for-germany/projects",
 		ExpectStatusCode: 200,
 		ExpectJSON:       "./fixtures/project-list.json",
 	}.Check(t, router)
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "GET",
 		Path:             "/v1/domains/uuid-for-germany/projects?service=unknown",
 		ExpectStatusCode: 200,
 		ExpectJSON:       "./fixtures/project-list-no-services.json",
 	}.Check(t, router)
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "GET",
 		Path:             "/v1/domains/uuid-for-germany/projects?service=shared&resource=unknown",
 		ExpectStatusCode: 200,
 		ExpectJSON:       "./fixtures/project-list-no-resources.json",
 	}.Check(t, router)
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "GET",
 		Path:             "/v1/domains/uuid-for-germany/projects?service=shared&resource=things",
 		ExpectStatusCode: 200,
@@ -800,19 +801,19 @@ func Test_ProjectOperations(t *testing.T) {
 	}.Check(t, router)
 
 	//check ?area= filter (esp. interaction with ?service= filter)
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "GET",
 		Path:             "/v1/domains/uuid-for-germany/projects?area=unknown",
 		ExpectStatusCode: 200,
 		ExpectJSON:       "./fixtures/project-list-no-services.json",
 	}.Check(t, router)
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "GET",
 		Path:             "/v1/domains/uuid-for-germany/projects?area=shared&service=unshared",
 		ExpectStatusCode: 200,
 		ExpectJSON:       "./fixtures/project-list-no-services.json",
 	}.Check(t, router)
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "GET",
 		Path:             "/v1/domains/uuid-for-germany/projects?area=shared&resource=things",
 		ExpectStatusCode: 200,
@@ -820,14 +821,14 @@ func Test_ProjectOperations(t *testing.T) {
 	}.Check(t, router)
 
 	//check cross-cluster ListProjects
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "GET",
 		Path:             "/v1/domains/uuid-for-poland/projects",
 		RequestHeader:    map[string]string{"X-Limes-Cluster-Id": "east"},
 		ExpectStatusCode: 200,
 		ExpectJSON:       "./fixtures/project-list-poland.json",
 	}.Check(t, router)
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "GET",
 		Path:             "/v1/domains/uuid-for-poland/projects",
 		RequestHeader:    map[string]string{"X-Limes-Cluster-Id": "unknown"},
@@ -839,14 +840,14 @@ func Test_ProjectOperations(t *testing.T) {
 	discovery.StaticProjects["uuid-for-germany"] = append(discovery.StaticProjects["uuid-for-germany"],
 		limes.KeystoneProject{Name: "frankfurt", UUID: "uuid-for-frankfurt"},
 	)
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "POST",
 		Path:             "/v1/domains/uuid-for-germany/projects/discover",
 		ExpectStatusCode: 202,
 		ExpectJSON:       "./fixtures/project-discover.json",
 	}.Check(t, router)
 
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "POST",
 		Path:             "/v1/domains/uuid-for-germany/projects/discover",
 		ExpectStatusCode: 204, //no content because no new projects discovered
@@ -855,7 +856,7 @@ func Test_ProjectOperations(t *testing.T) {
 
 	//check SyncProject
 	expectStaleProjectServices(t /*, nothing */)
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "POST",
 		Path:             "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/sync",
 		ExpectStatusCode: 202,
@@ -867,7 +868,7 @@ func Test_ProjectOperations(t *testing.T) {
 	discovery.StaticProjects["uuid-for-germany"] = append(discovery.StaticProjects["uuid-for-germany"],
 		limes.KeystoneProject{Name: "walldorf", UUID: "uuid-for-walldorf", ParentUUID: "uuid-for-germany"},
 	)
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "POST",
 		Path:             "/v1/domains/uuid-for-germany/projects/uuid-for-walldorf/sync",
 		ExpectStatusCode: 202,
@@ -876,7 +877,7 @@ func Test_ProjectOperations(t *testing.T) {
 	expectStaleProjectServices(t, "dresden:shared", "dresden:unshared", "walldorf:shared", "walldorf:unshared")
 
 	//check GetProject for a project that has been discovered, but not yet synced
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "GET",
 		Path:             "/v1/domains/uuid-for-germany/projects/uuid-for-walldorf",
 		ExpectStatusCode: 200,
@@ -884,7 +885,7 @@ func Test_ProjectOperations(t *testing.T) {
 	}.Check(t, router)
 
 	//check PutProject: pre-flight checks
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "PUT",
 		Path:             "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatusCode: 422,
@@ -906,7 +907,7 @@ func Test_ProjectOperations(t *testing.T) {
 		},
 	}.Check(t, router)
 
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "PUT",
 		Path:             "/v1/domains/uuid-for-germany/projects/uuid-for-dresden",
 		ExpectStatusCode: 422,
@@ -939,7 +940,7 @@ func Test_ProjectOperations(t *testing.T) {
 	//SetQuota fails for some reason (e.g. backend service down)
 	plugin := cluster.QuotaPlugins["shared"].(*test.Plugin)
 	plugin.SetQuotaFails = true
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "PUT",
 		Path:             "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatusCode: 202,
@@ -979,7 +980,7 @@ func Test_ProjectOperations(t *testing.T) {
 
 	//check PutProject happy path
 	plugin.SetQuotaFails = false
-	test.APIRequest{
+	assert.HTTPRequest{
 		Method:           "PUT",
 		Path:             "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatusCode: 200,
