@@ -70,16 +70,11 @@ func (p *v1Provider) GetDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	domains, err := reports.GetDomains(cluster, &dbDomain.ID, db.DB, reports.ReadFilter(r))
+	domain, err := GetDomainReport(cluster, *dbDomain, db.DB, reports.ReadFilter(r))
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-	if len(domains) == 0 {
-		http.Error(w, "no resource data found for domain", 500)
-		return
-	}
-
-	respondwith.JSON(w, 200, map[string]interface{}{"domain": domains[0]})
+	respondwith.JSON(w, 200, map[string]interface{}{"domain": domain})
 }
 
 //DiscoverDomains handles POST /v1/domains/discover.
@@ -338,16 +333,11 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 	auditTrail.Commit(cluster.ID, cluster.Config.CADF)
 
 	//otherwise, report success
-	domains, err := reports.GetDomains(cluster, &dbDomain.ID, db.DB, reports.ReadFilter(r))
+	domain, err := GetDomainReport(cluster, *dbDomain, db.DB, reports.ReadFilter(r))
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-	if len(domains) == 0 {
-		http.Error(w, "no resource data found for domain", 500)
-		return
-	}
-
-	respondwith.JSON(w, 200, map[string]interface{}{"domain": domains[0]})
+	respondwith.JSON(w, 200, map[string]interface{}{"domain": domain})
 }
 
 func checkDomainQuotaUpdate(srv db.DomainService, res db.DomainResource, unit limes.Unit, domain *reports.Domain, constraint limes.QuotaConstraint, newQuota uint64, canRaise, canLower bool) error {

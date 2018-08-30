@@ -22,6 +22,7 @@ package api
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -31,6 +32,7 @@ import (
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
+	"github.com/sapcc/limes/pkg/reports"
 )
 
 //VersionData is used by version advertisement handlers.
@@ -215,4 +217,28 @@ func (p *v1Provider) FindProjectFromRequestIfExists(w http.ResponseWriter, r *ht
 	default:
 		return project, true
 	}
+}
+
+//GetDomainReport is a convenience wrapper around reports.GetDomains() for getting a single domain report.
+func GetDomainReport(cluster *limes.Cluster, dbDomain db.Domain, dbi db.Interface, filter reports.Filter) (*reports.Domain, error) {
+	domainReports, err := reports.GetDomains(cluster, &dbDomain.ID, dbi, filter)
+	if err != nil {
+		return nil, err
+	}
+	if len(domainReports) == 0 {
+		return nil, errors.New("no resource data found for domain")
+	}
+	return domainReports[0], nil
+}
+
+//GetProjectReport is a convenience wrapper around reports.GetProjects() for getting a single project report.
+func GetProjectReport(cluster *limes.Cluster, dbDomain db.Domain, dbProject db.Project, dbi db.Interface, filter reports.Filter, withSubresources bool) (*reports.Project, error) {
+	projectReports, err := reports.GetProjects(cluster, dbDomain.ID, &dbProject.ID, dbi, filter, withSubresources)
+	if err != nil {
+		return nil, err
+	}
+	if len(projectReports) == 0 {
+		return nil, errors.New("no resource data found for project")
+	}
+	return projectReports[0], nil
 }

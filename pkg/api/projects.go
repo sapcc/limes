@@ -81,16 +81,11 @@ func (p *v1Provider) GetProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, withSubresources := r.URL.Query()["detail"]
-	projects, err := reports.GetProjects(cluster, dbDomain.ID, &dbProject.ID, db.DB, reports.ReadFilter(r), withSubresources)
+	project, err := GetProjectReport(cluster, *dbDomain, *dbProject, db.DB, reports.ReadFilter(r), withSubresources)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-	if len(projects) == 0 {
-		http.Error(w, "no resource data found for project", 500)
-		return
-	}
-
-	respondwith.JSON(w, 200, map[string]interface{}{"project": projects[0]})
+	respondwith.JSON(w, 200, map[string]interface{}{"project": project})
 }
 
 //DiscoverProjects handles POST /v1/domains/:domain_id/projects/discover.
@@ -402,16 +397,12 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//otherwise, report success
-	projects, err := reports.GetProjects(cluster, dbDomain.ID, &dbProject.ID, db.DB, reports.Filter{}, false)
+	_, withSubresources := r.URL.Query()["detail"]
+	projectReport, err := GetProjectReport(cluster, *dbDomain, *dbProject, db.DB, reports.ReadFilter(r), withSubresources)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-	if len(projects) == 0 {
-		http.Error(w, "no resource data found for project", 500)
-		return
-	}
-
-	respondwith.JSON(w, 200, map[string]interface{}{"project": projects[0]})
+	respondwith.JSON(w, 200, map[string]interface{}{"project": projectReport})
 }
 
 func checkProjectQuotaUpdate(srv db.ProjectService, res db.ProjectResource, unit limes.Unit, domain *reports.Domain, constraint limes.QuotaConstraint, newQuota uint64, canRaise, canLower bool) error {
