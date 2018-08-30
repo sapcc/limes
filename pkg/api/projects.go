@@ -29,10 +29,8 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/sapcc/go-bits/respondwith"
-	"github.com/sapcc/limes/pkg/audit"
 	"github.com/sapcc/limes/pkg/collector"
 	"github.com/sapcc/limes/pkg/db"
-	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/reports"
 	"github.com/sapcc/limes/pkg/util"
 )
@@ -171,8 +169,7 @@ func (p *v1Provider) SyncProject(w http.ResponseWriter, r *http.Request) {
 
 //PutProject handles PUT /v1/domains/:domain_id/projects/:project_id.
 func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
-	requestTime := time.Now().Format("2006-01-02T15:04:05.999999+00:00")
-	var auditTrail audit.Trail
+	requestTime := time.Now()
 	token := p.CheckToken(r)
 	canRaise := token.Check("project:raise")
 	canLower := token.Check("project:lower")
@@ -181,16 +178,17 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cluster := p.FindClusterFromRequest(w, r, token)
-	if cluster == nil {
+	updater := QuotaUpdater{CanRaise: canRaise, CanLower: canLower}
+	updater.Cluster = p.FindClusterFromRequest(w, r, token)
+	if updater.Cluster == nil {
 		return
 	}
-	dbDomain := p.FindDomainFromRequest(w, r, cluster)
-	if dbDomain == nil {
+	updater.Domain = p.FindDomainFromRequest(w, r, updater.Cluster)
+	if updater.Domain == nil {
 		return
 	}
-	dbProject := p.FindProjectFromRequest(w, r, dbDomain)
-	if dbProject == nil {
+	updater.Project = p.FindProjectFromRequest(w, r, updater.Domain)
+	if updater.Project == nil {
 		return
 	}
 
@@ -204,7 +202,6 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 	if !RequireJSON(w, r, &parseTarget) {
 		return
 	}
-	serviceQuotas := parseTarget.Project.Services
 
 	//start a transaction for the quota updates
 	tx, err := db.DB.Begin()
@@ -213,36 +210,30 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 	}
 	defer db.RollbackUnlessCommitted(tx)
 
-	//gather a report on the domain's quotas to decide whether a quota update is legal
-	domainReports, err := reports.GetDomains(cluster, &dbDomain.ID, db.DB, reports.Filter{})
+	//validate inputs (within the DB transaction, to ensure that we do not apply
+	//inconsistent values later)
+	err = updater.ValidateInput(parseTarget.Project.Services, tx)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-	if len(domainReports) == 0 {
-		http.Error(w, "no resource data found for domain", 500)
+	if !updater.IsValid() {
+		updater.AuditTrail(token, r, requestTime).Commit(updater.Cluster.ID, updater.Cluster.Config.CADF)
+		http.Error(w, updater.ErrorMessage(), http.StatusUnprocessableEntity)
 		return
-	}
-	domainReport := domainReports[0]
-
-	var constraints limes.QuotaConstraints
-	if cluster.QuotaConstraints != nil {
-		constraints = cluster.QuotaConstraints.Projects[dbDomain.Name][dbProject.Name]
 	}
 
 	//check all services for resources to update
 	var services []db.ProjectService
 	_, err = tx.Select(&services,
-		`SELECT * FROM project_services WHERE project_id = $1 ORDER BY type`, dbProject.ID)
+		`SELECT * FROM project_services WHERE project_id = $1 ORDER BY type`, updater.Project.ID)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-	var resourcesToUpdate []db.ProjectResource
-	var resourcesToUpdateAsUntyped []interface{}
+	var resourcesToUpdate []interface{}
 	servicesToUpdate := make(map[string]bool)
-	var errors []string
 
 	for _, srv := range services {
-		resourceQuotas, exists := serviceQuotas[srv.Type]
+		serviceRequests, exists := updater.Requests[srv.Type]
 		if !exists {
 			continue
 		}
@@ -255,82 +246,27 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		for _, res := range resources {
-			newQuotaInput, exists := resourceQuotas[res.Name]
+			req, exists := serviceRequests[res.Name]
 			if !exists {
-				continue
-			}
-			newQuota, err := newQuotaInput.ConvertFor(cluster, srv.Type, res.Name)
-			if err != nil {
-				errors = append(errors, fmt.Sprintf("cannot change %s/%s quota: %s", srv.Type, res.Name, err.Error()))
-				continue
-			}
-			if res.Quota == newQuota {
-				continue //nothing to do
-			}
-
-			resInfo := cluster.InfoForResource(srv.Type, res.Name)
-			constraint := constraints[srv.Type][res.Name]
-			err = checkProjectQuotaUpdate(srv, res, resInfo.Unit, domainReport, constraint, newQuota, canRaise, canLower)
-			if err != nil {
-				auditTrail.Add(audit.EventParams{
-					Token:        token,
-					Request:      r,
-					ReasonCode:   http.StatusUnprocessableEntity,
-					Time:         requestTime,
-					DomainID:     dbDomain.UUID,
-					ProjectID:    dbProject.UUID,
-					ServiceType:  srv.Type,
-					ResourceName: res.Name,
-					OldQuota:     res.Quota,
-					NewQuota:     newQuota,
-					QuotaUnit:    resInfo.Unit,
-					RejectReason: err.Error(),
-				})
-
-				errors = append(errors, fmt.Sprintf(
-					"cannot change %s/%s quota: %s", srv.Type, res.Name, err.Error()),
-				)
 				continue
 			}
 
 			//take a copy of the loop variable (it will be updated by the loop, so if
-			//we didn't take a copy manually, the resourcesToUpdateAsUntyped list
-			//would contain only identical pointers)
+			//we didn't take a copy manually, the resourcesToUpdate list would
+			//contain only identical pointers)
 			res := res
 
-			auditTrail.Add(audit.EventParams{
-				Token:        token,
-				Request:      r,
-				ReasonCode:   http.StatusOK,
-				Time:         requestTime,
-				DomainID:     dbDomain.UUID,
-				ProjectID:    dbProject.UUID,
-				ServiceType:  srv.Type,
-				ResourceName: res.Name,
-				OldQuota:     res.Quota,
-				NewQuota:     newQuota,
-				QuotaUnit:    resInfo.Unit,
-			})
-
-			res.Quota = newQuota
-			resourcesToUpdate = append(resourcesToUpdate, res)
-			resourcesToUpdateAsUntyped = append(resourcesToUpdateAsUntyped, &res)
+			res.Quota = req.NewValue
+			resourcesToUpdate = append(resourcesToUpdate, &res)
 			servicesToUpdate[srv.Type] = true
 		}
-	}
-
-	//if not legal, report errors to the user
-	if len(errors) > 0 {
-		auditTrail.Commit(cluster.ID, cluster.Config.CADF)
-		http.Error(w, strings.Join(errors, "\n"), 422)
-		return
 	}
 
 	//update the DB with the new quotas
 	onlyQuota := func(c *gorp.ColumnMap) bool {
 		return c.ColumnName == "quota"
 	}
-	_, err = tx.UpdateColumns(onlyQuota, resourcesToUpdateAsUntyped...)
+	_, err = tx.UpdateColumns(onlyQuota, resourcesToUpdate...)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -338,7 +274,7 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-	auditTrail.Commit(cluster.ID, cluster.Config.CADF)
+	updater.AuditTrail(token, r, requestTime).Commit(updater.Cluster.ID, updater.Cluster.Config.CADF)
 
 	//attempt to write the quotas into the backend
 	//
@@ -346,13 +282,13 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 	//fails, then subsequent scraping tasks will try to apply the quota again
 	//until the operation succeeds. What's important is that the approved quota
 	//budget inside Limes is redistributed.
-	errors = nil
+	var errors []string
 	for _, srv := range services {
 		if !servicesToUpdate[srv.Type] {
 			continue
 		}
 
-		plugin := cluster.QuotaPlugins[srv.Type]
+		plugin := updater.Cluster.QuotaPlugins[srv.Type]
 		if plugin == nil {
 			errors = append(errors, fmt.Sprintf("no quota plugin registered for service type %s", srv.Type))
 			continue
@@ -372,8 +308,8 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 			quotaValues[res.Name] = res.Quota
 		}
 		err = plugin.SetQuota(
-			cluster.ProviderClientForService(srv.Type),
-			cluster.ID, dbDomain.UUID, dbProject.UUID, quotaValues,
+			updater.Cluster.ProviderClientForService(srv.Type),
+			updater.Cluster.ID, updater.Domain.UUID, updater.Project.UUID, quotaValues,
 		)
 		if err != nil {
 			errors = append(errors, err.Error())
@@ -398,60 +334,9 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 
 	//otherwise, report success
 	_, withSubresources := r.URL.Query()["detail"]
-	projectReport, err := GetProjectReport(cluster, *dbDomain, *dbProject, db.DB, reports.ReadFilter(r), withSubresources)
+	projectReport, err := GetProjectReport(updater.Cluster, *updater.Domain, *updater.Project, db.DB, reports.ReadFilter(r), withSubresources)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
 	respondwith.JSON(w, 200, map[string]interface{}{"project": projectReport})
-}
-
-func checkProjectQuotaUpdate(srv db.ProjectService, res db.ProjectResource, unit limes.Unit, domain *reports.Domain, constraint limes.QuotaConstraint, newQuota uint64, canRaise, canLower bool) error {
-	if !constraint.Allows(newQuota) {
-		return fmt.Errorf("requested value %q contradicts constraint %q for this project and resource",
-			limes.ValueWithUnit{Value: newQuota, Unit: unit}, constraint.ToString(unit))
-	}
-
-	//if quota is being reduced, permission is required and usage must fit into quota
-	//(note that both res.Quota and newQuota are uint64, so we do not need to
-	//cover the case of infinite quotas)
-	if res.Quota > newQuota {
-		if !canLower {
-			return fmt.Errorf("user is not allowed to lower quotas in this project")
-		}
-		if res.Usage > newQuota {
-			return fmt.Errorf("quota may not be lower than current usage")
-		}
-		return nil
-	}
-
-	//if quota is being raised, permission is required and also the domain quota may not be exceeded
-	if !canRaise {
-		return fmt.Errorf("user is not allowed to raise quotas in this project")
-	}
-	domainQuota := uint64(0)
-	projectsQuota := uint64(0)
-	if domainService, exists := domain.Services[srv.Type]; exists {
-		if domainResource, exists := domainService.Resources[res.Name]; exists {
-			domainQuota = domainResource.DomainQuota
-			projectsQuota = domainResource.ProjectsQuota
-		}
-	}
-	//NOTE: It looks like an arithmetic overflow (or rather, underflow) is
-	//possible here, but it isn't. projectsQuota is the sum over all current
-	//project quotas, including res.Quota, and thus is always bigger (since these
-	//quotas are all unsigned). Also, we're doing everything in a transaction, so
-	//an overflow because of concurrent quota changes is also out of the
-	//question.
-	newProjectsQuota := projectsQuota - res.Quota + newQuota
-	if newProjectsQuota > domainQuota {
-		maxQuota := domainQuota - (projectsQuota - res.Quota)
-		if domainQuota < projectsQuota-res.Quota {
-			maxQuota = 0
-		}
-		return fmt.Errorf("domain quota exceeded (maximum acceptable project quota is %s)",
-			limes.ValueWithUnit{Value: maxQuota, Unit: unit},
-		)
-	}
-
-	return nil
 }
