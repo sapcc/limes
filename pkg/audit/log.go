@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"strconv"
@@ -152,7 +153,7 @@ func (p EventParams) newEvent() CADFEvent {
 			DomainID:  p.Token.Context.Auth["domain_id"],
 			ProjectID: p.Token.Context.Auth["project_id"],
 			Host: &Host{
-				Address: TryStripPort(p.Request.RemoteAddr),
+				Address: tryStripPort(p.Request.RemoteAddr),
 				Agent:   p.Request.Header.Get("User-Agent"),
 			},
 		},
@@ -238,4 +239,12 @@ func (t *Trail) Commit(clusterID string, config limes.CADFConfiguration) {
 func generateUUID() string {
 	u := uuid.Must(uuid.NewV4())
 	return u.String()
+}
+
+func tryStripPort(hostPort string) string {
+	host, _, err := net.SplitHostPort(hostPort)
+	if err == nil {
+		return host
+	}
+	return hostPort
 }

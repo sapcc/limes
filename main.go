@@ -35,7 +35,6 @@ import (
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/limes/pkg/api"
-	"github.com/sapcc/limes/pkg/audit"
 	"github.com/sapcc/limes/pkg/collector"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
@@ -187,7 +186,7 @@ func taskServe(config limes.Configuration, cluster *limes.Cluster, args []string
 	//add Prometheus instrumentation
 	http.Handle("/metrics", promhttp.Handler())
 	http.Handle("/",
-		audit.AddLogMiddleware(config.API.RequestLog.ExceptStatusCodes,
+		logg.Middleware{ExceptStatusCodes: config.API.RequestLog.ExceptStatusCodes}.Wrap(
 			prometheus.InstrumentHandler("limes-serve",
 				mainRouter,
 			),
