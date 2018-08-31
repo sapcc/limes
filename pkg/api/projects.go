@@ -217,7 +217,7 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !updater.IsValid() {
-		updater.AuditTrail(token, r, requestTime).Commit(updater.Cluster.ID, updater.Cluster.Config.CADF)
+		updater.CommitAuditTrail(token, r, requestTime)
 		http.Error(w, updater.ErrorMessage(), http.StatusUnprocessableEntity)
 		return
 	}
@@ -250,6 +250,9 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 			if !exists {
 				continue
 			}
+			if res.Quota == req.NewValue {
+				continue //nothing to do
+			}
 
 			//take a copy of the loop variable (it will be updated by the loop, so if
 			//we didn't take a copy manually, the resourcesToUpdate list would
@@ -274,7 +277,7 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-	updater.AuditTrail(token, r, requestTime).Commit(updater.Cluster.ID, updater.Cluster.Config.CADF)
+	updater.CommitAuditTrail(token, r, requestTime)
 
 	//attempt to write the quotas into the backend
 	//

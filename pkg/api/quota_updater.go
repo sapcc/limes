@@ -255,8 +255,12 @@ func (u QuotaUpdater) ErrorMessage() string {
 	return strings.Join(lines, "\n")
 }
 
-//AuditTrail compiles u.Requests into a set of audit events.
-func (u QuotaUpdater) AuditTrail(token *gopherpolicy.Token, r *http.Request, requestTime time.Time) *audit.Trail {
+////////////////////////////////////////////////////////////////////////////////
+// integration with package audit
+
+//CommitAuditTrail prepares an audit.Trail instance for this updater and
+//commits it.
+func (u QuotaUpdater) CommitAuditTrail(token *gopherpolicy.Token, r *http.Request, requestTime time.Time) {
 	requestTimeStr := requestTime.Format("2006-01-02T15:04:05.999999+00:00")
 	var trail audit.Trail
 
@@ -301,5 +305,5 @@ func (u QuotaUpdater) AuditTrail(token *gopherpolicy.Token, r *http.Request, req
 		}
 	}
 
-	return &trail
+	trail.Commit(u.Cluster.ID, u.Cluster.Config.CADF)
 }
