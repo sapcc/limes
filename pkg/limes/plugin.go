@@ -85,6 +85,9 @@ type QuotaPlugin interface {
 	//given domain to the values specified here. The map is guaranteed to contain
 	//values for all resources defined by Resources().
 	//
+	//An error shall be returned if a value is given in `quotas` for any resource
+	//that is ExternallyManaged.
+	//
 	//The clusterID is usually not needed, but should be given as a label to
 	//Prometheus metrics emitted by the plugin (if the plugin does that sort of
 	//thing).
@@ -143,6 +146,9 @@ type ResourceInfo struct {
 	//the first time, a backend quota equal to this value will be approved
 	//automatically (i.e. Quota will be set equal to BackendQuota).
 	AutoApproveInitialQuota uint64 `json:"-"`
+	//If ExternallyManaged is true, quota cannot be set via the API. The quota
+	//value reported by the QuotaPlugin is always authoritative.
+	ExternallyManaged bool `json:"externally_managed,omitempty"`
 }
 
 //ServiceInfo contains the metadata for a backend service.

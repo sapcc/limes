@@ -106,10 +106,13 @@ unit, it will be given as `unit`. Clients should be prepared to handle at least 
     PiB   - pebibytes = 2^50 bytes
     EiB   - exbibytes = 2^60 bytes
 
-Besides `unit`, there may be another informational field called `category`. If present, UIs can use the string value in
-this field to divide resources from the same service into logical groups for presentational purposes. For example, the
-service type `network` advertises resources with the category strings `networking` and `loadbalancing`, since these
-topics are cleanly separable from each other.
+Besides `unit`, resources may bear the following informational fields:
+
+* `category`: If present, UIs can use the string value in this field to divide resources from the same service into
+  logical groups for presentational purposes. For example, the service type `network` advertises resources with the
+  category strings `networking` and `loadbalancing`, since these topics are cleanly separable from each other.
+* `externally_managed`: If `true`, quota for this resource is managed by some other system than Limes. Attempts to
+  set project/domain quota via the Limes API will be rejected.
 
 Limes tracks quotas in its local database, and expects that the quota values in the backing services may only be
 manipulated by the Limes service user, but not by the project's members or admins. If, nonetheless, Limes finds the
@@ -542,7 +545,7 @@ values.
 Set quotas for the given project. Requires a domain-admin token for the specified domain. Other than that, the call
 works in the same way as `PUT /domains/:domain_id`.
 
-## PUT /v1/clusters/:cluster_id
+## PUT /v1/clusters/:cluster\_id
 
 ## PUT /v1/clusters/current
 

@@ -23,6 +23,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/gophercloud/gophercloud"
@@ -195,8 +196,16 @@ func (c *Collector) writeScrapeResult(domainName, domainUUID, projectName, proje
 		}
 
 		//update existing resource record
-		res.BackendQuota = data.Quota
 		res.Usage = data.Usage
+		res.BackendQuota = data.Quota
+		if c.Cluster.InfoForResource(serviceType, res.Name).ExternallyManaged {
+			if data.Quota >= 0 {
+				res.Quota = uint64(data.Quota)
+			} else {
+				res.Quota = math.MaxUint64
+			}
+		}
+
 		if len(data.Subresources) == 0 {
 			res.SubresourcesJSON = ""
 		} else {
@@ -220,6 +229,8 @@ func (c *Collector) writeScrapeResult(domainName, domainUUID, projectName, proje
 			return err
 		}
 		if res.BackendQuota < 0 || res.Quota != uint64(res.BackendQuota) {
+			//Note that this branch will never be taken for ExternallyManaged resources,
+			//because we set res.Quota == res.BackendQuota above for those.
 			needToSetQuota = true
 		}
 	}
@@ -237,6 +248,14 @@ func (c *Collector) writeScrapeResult(domainName, domainUUID, projectName, proje
 			Usage:            data.Usage,
 			BackendQuota:     data.Quota,
 			SubresourcesJSON: "", //but see below
+		}
+
+		if resMetadata.ExternallyManaged {
+			if data.Quota >= 0 {
+				res.Quota = uint64(data.Quota)
+			} else {
+				res.Quota = math.MaxUint64
+			}
 		}
 
 		if res.Quota == 0 && data.Quota > 0 && uint64(data.Quota) == resMetadata.AutoApproveInitialQuota {

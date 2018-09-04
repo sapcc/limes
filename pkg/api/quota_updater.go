@@ -1,6 +1,6 @@
 /*******************************************************************************
 *
-* Copyright 2017--2018 SAP SE
+* Copyright 2017-2018 SAP SE
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -20,6 +20,7 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"sort"
@@ -138,7 +139,14 @@ func (u *QuotaUpdater) ValidateInput(input ServiceQuotas, dbi db.Interface) erro
 			}
 			req.NewValue, req.ValidationError = newQuota.ConvertFor(u.Cluster, srv.Type, res.Name)
 
-			//validation phase 2: check quota constraints
+			//validation phase 2: can we change this quota at all?
+			if req.ValidationError == nil {
+				if res.ExternallyManaged {
+					req.ValidationError = errors.New("resource is managed externally")
+				}
+			}
+
+			//validation phase 3: check quota constraints
 			if req.ValidationError == nil {
 				constraint := u.QuotaConstraints()[srv.Type][res.Name]
 				if !constraint.Allows(req.NewValue) {
@@ -148,7 +156,7 @@ func (u *QuotaUpdater) ValidateInput(input ServiceQuotas, dbi db.Interface) erro
 				}
 			}
 
-			//validation phase 3: specific rules for domain quotas vs. project quotas
+			//validation phase 4: specific rules for domain quotas vs. project quotas
 			if req.ValidationError == nil {
 				if u.Project == nil {
 					req.ValidationError = u.validateDomainQuota(*domRes, req.NewValue)

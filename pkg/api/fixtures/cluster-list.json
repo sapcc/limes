@@ -18,6 +18,12 @@
               "usage": 8
             },
             {
+              "name": "external_things",
+              "externally_managed": true,
+              "domains_quota": 0,
+              "usage": 0
+            },
+            {
               "name": "things",
               "capacity": 246,
               "domains_quota": 90,
@@ -68,6 +74,12 @@
               "comment": "hand-counted",
               "domains_quota": 50,
               "usage": 8
+            },
+            {
+              "name": "external_things",
+              "externally_managed": true,
+              "domains_quota": 0,
+              "usage": 0
             },
             {
               "name": "things",

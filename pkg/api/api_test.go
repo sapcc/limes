@@ -88,6 +88,8 @@ func setupTest(t *testing.T, clusterName, startData string) (*limes.Cluster, htt
 		},
 	}
 
+	quotaPlugins["shared"].(*test.Plugin).WithExternallyManagedResource = true
+
 	config := limes.Configuration{
 		Clusters: map[string]*limes.Cluster{
 			"west": {
@@ -600,6 +602,25 @@ func Test_DomainOperations(t *testing.T) {
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany",
 		ExpectStatus: 422,
+		ExpectBody:   assert.StringData("cannot change shared/external_things quota: resource is managed externally\n"),
+		Body: assert.JSONObject{
+			"domain": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "shared",
+						"resources": []assert.JSONObject{
+							//should fail because resource is externally managed, so setting quota via API is forbidden
+							{"name": "external_things", "quota": 20},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany",
+		ExpectStatus: 422,
 		ExpectBody:   assert.StringData("cannot change shared/things quota: cannot convert value from MiB to <count> because units are incompatible\n"),
 		Body: assert.JSONObject{
 			"domain": assert.JSONObject{
@@ -1014,8 +1035,9 @@ func Test_ProjectOperations(t *testing.T) {
 	//SetQuota sent *all* quotas for that service (even for resources that were
 	//not touched) as required by the QuotaPlugin interface documentation
 	expectBackendQuota := map[string]uint64{
-		"capacity": 6,  //as set above
-		"things":   10, //unchanged
+		"capacity":        6,  //as set above
+		"things":          10, //unchanged
+		"external_things": 1,  //unchanged
 	}
 	backendQuota, exists := plugin.OverrideQuota["uuid-for-berlin"]
 	if !exists {
