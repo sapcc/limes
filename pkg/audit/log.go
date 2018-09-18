@@ -29,11 +29,11 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/gofrs/uuid"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/retry"
 	"github.com/sapcc/limes/pkg/limes"
-	"github.com/satori/go.uuid"
 )
 
 func init() {
@@ -237,7 +237,11 @@ func (t *Trail) Commit(clusterID string, config limes.CADFConfiguration) {
 
 //Generate an UUID based on random numbers (RFC 4122).
 func generateUUID() string {
-	u := uuid.Must(uuid.NewV4())
+	u, err := uuid.NewV4()
+	if err != nil {
+		logg.Fatal(err.Error())
+	}
+
 	return u.String()
 }
 
