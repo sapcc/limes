@@ -223,6 +223,19 @@ behave like the `instances` resource. When subresources are scraped for the `ins
 scraped for these flavor-specific instance resources. The flavor-specific instance resources are in the `per_flavor`
 category.
 
+## `database`: SAP Cloud Frame Manager
+
+```yaml
+services:
+  - type: database
+```
+
+The area for this service is `storage`.
+
+| Resource | Unit |
+| --- | --- |
+| `cfm_share_capacity` | bytes |
+
 ## `dns`: Designate v2
 
 ```yaml
