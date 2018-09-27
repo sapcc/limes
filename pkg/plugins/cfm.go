@@ -29,6 +29,9 @@ import (
 	"time"
 
 	"github.com/gophercloud/gophercloud"
+	"github.com/gophercloud/gophercloud/openstack"
+	"github.com/gophercloud/gophercloud/openstack/identity/v3/tokens"
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/util"
 )
@@ -75,7 +78,11 @@ func (p *cfmPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID, doma
 	//cache the result of cfmListShareservers(), it's mildly expensive
 	now := time.Now()
 	if p.shareserversCache == nil || p.shareserversCacheExpires.Before(now) {
-		shareservers, err := cfmListShareservers(provider)
+		projectID, err := cfmGetScopedProjectID(provider)
+		if err != nil {
+			return nil, err
+		}
+		shareservers, err := cfmListShareservers(provider, projectID)
 		if err != nil {
 			return nil, err
 		}
@@ -84,13 +91,21 @@ func (p *cfmPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID, doma
 	}
 	shareservers := p.shareserversCache
 
+	var projectID string
 	result := limes.ResourceData{Quota: 0, Usage: 0}
 	for _, shareserver := range shareservers {
 		if shareserver.ProjectUUID != projectUUID {
 			continue
 		}
 
-		shareserverDetailed, err := cfmGetShareserver(provider, shareserver.DetailsURL)
+		if projectID == "" {
+			var err error
+			projectID, err = cfmGetScopedProjectID(provider)
+			if err != nil {
+				return nil, err
+			}
+		}
+		shareserverDetailed, err := cfmGetShareserver(provider, shareserver.DetailsURL, projectID)
 		if err != nil {
 			return nil, err
 		}
@@ -104,10 +119,24 @@ func (p *cfmPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID, doma
 
 //SetQuota implements the limes.QuotaPlugin interface.
 func (p *cfmPlugin) SetQuota(provider *gophercloud.ProviderClient, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
-	return errors.New("the database/cfm_share_capacity resource is externally managed")
+	if len(quotas) > 0 {
+		return errors.New("the database/cfm_share_capacity resource is externally managed")
+	}
+	return nil
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+func cfmGetScopedProjectID(provider *gophercloud.ProviderClient) (string, error) {
+	//the CFM API is stupid and needs the caller to provide the scope of the
+	//token redundantly in the X-Project-Id header
+	identityClient, err := openstack.NewIdentityV3(provider, gophercloud.EndpointOpts{})
+	if err != nil {
+		return "", err
+	}
+	project, err := tokens.Get(identityClient, provider.Token()).ExtractProject()
+	return project.ID, err
+}
 
 type cfmShareserver struct {
 	Type        string
@@ -118,7 +147,7 @@ type cfmShareserver struct {
 	MaximumSizeBytes uint64
 }
 
-func cfmListShareservers(provider *gophercloud.ProviderClient) ([]cfmShareserver, error) {
+func cfmListShareservers(provider *gophercloud.ProviderClient, projectID string) ([]cfmShareserver, error) {
 	baseURL, err := provider.EndpointLocator(gophercloud.EndpointOpts{
 		Type:         "database",
 		Name:         "cfm",
@@ -136,7 +165,7 @@ func cfmListShareservers(provider *gophercloud.ProviderClient) ([]cfmShareserver
 			ProjectUUID string             `json:"customer_id"`
 		} `json:"shareservers"`
 	}
-	err = cfmDoRequest(provider, url, &data)
+	err = cfmDoRequest(provider, url, &data, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("GET %s failed: %s", url, err.Error())
 	}
@@ -152,9 +181,10 @@ func cfmListShareservers(provider *gophercloud.ProviderClient) ([]cfmShareserver
 	return result, nil
 }
 
-func cfmGetShareserver(provider *gophercloud.ProviderClient, url string) (*cfmShareserver, error) {
+func cfmGetShareserver(provider *gophercloud.ProviderClient, url string, projectID string) (*cfmShareserver, error) {
 	var data struct {
 		Shareserver struct {
+			ID         string `json:"id"`
 			Properties struct {
 				SizeBytes        util.CFMBytes `json:"size"`
 				MaximumSizeBytes util.CFMBytes `json:"maximum_size"`
@@ -164,12 +194,17 @@ func cfmGetShareserver(provider *gophercloud.ProviderClient, url string) (*cfmSh
 			ProjectUUID string             `json:"customer_id"`
 		} `json:"shareserver"`
 	}
-	err := cfmDoRequest(provider, url, &data)
+	err := cfmDoRequest(provider, url, &data, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("GET %s failed: %s", url, err.Error())
 	}
 
 	srv := data.Shareserver
+	logg.Info("CFM shareserver %s (type %s) in project %s has size = %d bytes, maximum_size = %d bytes",
+		srv.ID, srv.Type, srv.ProjectUUID,
+		srv.Properties.SizeBytes,
+		srv.Properties.MaximumSizeBytes,
+	)
 	return &cfmShareserver{
 		Type:             srv.Type,
 		ProjectUUID:      srv.ProjectUUID,
@@ -179,13 +214,14 @@ func cfmGetShareserver(provider *gophercloud.ProviderClient, url string) (*cfmSh
 	}, nil
 }
 
-func cfmDoRequest(provider *gophercloud.ProviderClient, url string, body interface{}) error {
+func cfmDoRequest(provider *gophercloud.ProviderClient, url string, body interface{}, projectID string) error {
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return err
 	}
 	token := provider.Token()
 	req.Header.Set("Authorization", "Token "+token)
+	req.Header.Set("X-Project-Id", projectID)
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -212,7 +248,7 @@ func cfmDoRequest(provider *gophercloud.ProviderClient, url string, body interfa
 		err = provider.Reauthenticate(token)
 		if err == nil {
 			//restart function call after successful reauth
-			return cfmDoRequest(provider, url, body)
+			return cfmDoRequest(provider, url, body, projectID)
 		}
 	}
 
