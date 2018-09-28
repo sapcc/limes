@@ -18,7 +18,7 @@
             {
               "name": "external_things",
               "externally_managed": true,
-              "quota": 0,
+              "quota": 1,
               "projects_quota": 1,
               "usage": 0
             },
