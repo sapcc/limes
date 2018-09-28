@@ -20,7 +20,7 @@
             {
               "name": "external_things",
               "externally_managed": true,
-              "domains_quota": 0,
+              "domains_quota": 1,
               "usage": 0
             },
             {
@@ -78,7 +78,7 @@
             {
               "name": "external_things",
               "externally_managed": true,
-              "domains_quota": 0,
+              "domains_quota": 3,
               "usage": 0
             },
             {

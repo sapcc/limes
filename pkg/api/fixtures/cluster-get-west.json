@@ -18,7 +18,7 @@
           {
             "name": "external_things",
             "externally_managed": true,
-            "domains_quota": 0,
+            "domains_quota": 3,
             "usage": 0
           },
           {

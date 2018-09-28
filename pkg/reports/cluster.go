@@ -100,7 +100,7 @@ func (r ClusterResources) MarshalJSON() ([]byte, error) {
 }
 
 var clusterReportQuery1 = `
-	SELECT d.cluster_id, ps.type, pr.name, SUM(pr.usage), MIN(ps.scraped_at), MAX(ps.scraped_at)
+	SELECT d.cluster_id, ps.type, pr.name, SUM(pr.quota), SUM(pr.usage), MIN(ps.scraped_at), MAX(ps.scraped_at)
 	  FROM domains d
 	  JOIN projects p ON p.domain_id = d.id
 	  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
@@ -150,14 +150,15 @@ func GetClusters(config limes.Configuration, clusterID *string, localQuotaUsageO
 	whereStr, whereArgs := db.BuildSimpleWhereClause(makeClusterFilter("d", clusterID), len(joinArgs))
 	err := db.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		var (
-			clusterID    string
-			serviceType  *string
-			resourceName *string
-			usage        *uint64
-			minScrapedAt *util.Time
-			maxScrapedAt *util.Time
+			clusterID     string
+			serviceType   *string
+			resourceName  *string
+			projectsQuota *uint64
+			usage         *uint64
+			minScrapedAt  *util.Time
+			maxScrapedAt  *util.Time
 		)
-		err := rows.Scan(&clusterID, &serviceType, &resourceName, &usage, &minScrapedAt, &maxScrapedAt)
+		err := rows.Scan(&clusterID, &serviceType, &resourceName, &projectsQuota, &usage, &minScrapedAt, &maxScrapedAt)
 		if err != nil {
 			return err
 		}
@@ -173,8 +174,13 @@ func GetClusters(config limes.Configuration, clusterID *string, localQuotaUsageO
 			}
 		}
 
-		if resource != nil && usage != nil {
-			resource.Usage = *usage
+		if resource != nil {
+			if projectsQuota != nil && resource.ExternallyManaged {
+				resource.DomainsQuota = *projectsQuota
+			}
+			if usage != nil {
+				resource.Usage = *usage
+			}
 		}
 		return nil
 	})
@@ -199,7 +205,7 @@ func GetClusters(config limes.Configuration, clusterID *string, localQuotaUsageO
 
 		_, _, resource := clusters.Find(config, clusterID, serviceType, resourceName)
 
-		if resource != nil && quota != nil {
+		if resource != nil && quota != nil && !resource.ExternallyManaged {
 			resource.DomainsQuota = *quota
 		}
 
