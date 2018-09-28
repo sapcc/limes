@@ -23,7 +23,6 @@ import (
 	"net/http"
 
 	policy "github.com/databus23/goslo.policy"
-	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gorilla/mux"
 	"github.com/sapcc/go-bits/gopherpolicy"
@@ -43,9 +42,7 @@ func (p *v1Provider) CheckToken(r *http.Request) *gopherpolicy.Token {
 		}
 	}
 
-	client, err := openstack.NewIdentityV3(auth.ProviderClient,
-		gophercloud.EndpointOpts{Availability: gophercloud.AvailabilityPublic},
-	)
+	client, err := openstack.NewIdentityV3(auth.ProviderClient, auth.EndpointOpts)
 	if err != nil {
 		return &gopherpolicy.Token{Err: err}
 	}
