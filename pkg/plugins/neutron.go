@@ -118,7 +118,7 @@ func init() {
 }
 
 //Init implements the limes.QuotaPlugin interface.
-func (p *neutronPlugin) Init(provider *gophercloud.ProviderClient) error {
+func (p *neutronPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
 	return nil
 }
 
@@ -134,12 +134,6 @@ func (p *neutronPlugin) ServiceInfo() limes.ServiceInfo {
 //Resources implements the limes.QuotaPlugin interface.
 func (p *neutronPlugin) Resources() []limes.ResourceInfo {
 	return neutronResources
-}
-
-func (p *neutronPlugin) Client(provider *gophercloud.ProviderClient) (*gophercloud.ServiceClient, error) {
-	return openstack.NewNetworkV2(provider,
-		gophercloud.EndpointOpts{Availability: gophercloud.AvailabilityPublic},
-	)
 }
 
 type neutronResourceMetadata struct {
@@ -242,8 +236,8 @@ type neutronQueryOpts struct {
 }
 
 //Scrape implements the limes.QuotaPlugin interface.
-func (p *neutronPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
-	client, err := p.Client(provider)
+func (p *neutronPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
+	client, err := openstack.NewNetworkV2(provider, eo)
 	if err != nil {
 		return nil, err
 	}
@@ -289,7 +283,7 @@ func (p *neutronPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID, 
 }
 
 //SetQuota implements the limes.QuotaPlugin interface.
-func (p *neutronPlugin) SetQuota(provider *gophercloud.ProviderClient, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
+func (p *neutronPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
 	//map resource names from Limes to Neutron
 	var requestData struct {
 		Quotas map[string]uint64 `json:"quota"`
@@ -302,7 +296,7 @@ func (p *neutronPlugin) SetQuota(provider *gophercloud.ProviderClient, clusterID
 		}
 	}
 
-	client, err := p.Client(provider)
+	client, err := openstack.NewNetworkV2(provider, eo)
 	if err != nil {
 		return err
 	}

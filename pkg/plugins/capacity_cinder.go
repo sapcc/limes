@@ -37,20 +37,14 @@ func init() {
 	})
 }
 
-func (p *capacityCinderPlugin) Client(provider *gophercloud.ProviderClient) (*gophercloud.ServiceClient, error) {
-	return openstack.NewBlockStorageV2(provider,
-		gophercloud.EndpointOpts{Availability: gophercloud.AvailabilityPublic},
-	)
-}
-
 //ID implements the limes.CapacityPlugin interface.
 func (p *capacityCinderPlugin) ID() string {
 	return "cinder"
 }
 
 //Scrape implements the limes.CapacityPlugin interface.
-func (p *capacityCinderPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID string) (map[string]map[string]limes.CapacityData, error) {
-	client, err := p.Client(provider)
+func (p *capacityCinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]limes.CapacityData, error) {
+	client, err := openstack.NewBlockStorageV2(provider, eo)
 	if err != nil {
 		return nil, err
 	}

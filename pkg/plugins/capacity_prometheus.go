@@ -67,7 +67,7 @@ func (p *capacityPrometheusPlugin) ID() string {
 }
 
 //Scrape implements the limes.CapacityPlugin interface.
-func (p *capacityPrometheusPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID string) (map[string]map[string]limes.CapacityData, error) {
+func (p *capacityPrometheusPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]limes.CapacityData, error) {
 
 	client, err := p.Client(p.cfg.Prometheus.APIURL)
 	if err != nil {

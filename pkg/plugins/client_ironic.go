@@ -31,9 +31,8 @@ type ironicClient struct {
 	*gophercloud.ServiceClient
 }
 
-func newIronicClient(provider *gophercloud.ProviderClient) (*ironicClient, error) {
+func newIronicClient(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (*ironicClient, error) {
 	serviceType := "baremetal"
-	eo := gophercloud.EndpointOpts{Availability: gophercloud.AvailabilityPublic}
 	eo.ApplyDefaults(serviceType)
 
 	url, err := provider.EndpointLocator(eo)

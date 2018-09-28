@@ -38,19 +38,13 @@ func init() {
 	})
 }
 
-func (p *capacityManilaPlugin) Client(provider *gophercloud.ProviderClient) (*gophercloud.ServiceClient, error) {
-	return openstack.NewSharedFileSystemV2(provider,
-		gophercloud.EndpointOpts{Availability: gophercloud.AvailabilityPublic},
-	)
-}
-
 //ID implements the limes.CapacityPlugin interface.
 func (p *capacityManilaPlugin) ID() string {
 	return "manila"
 }
 
 //Scrape implements the limes.CapacityPlugin interface.
-func (p *capacityManilaPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID string) (map[string]map[string]limes.CapacityData, error) {
+func (p *capacityManilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]limes.CapacityData, error) {
 	cfg := p.cfg.Manila
 	if cfg.ShareNetworks == 0 {
 		return nil, errors.New("missing configuration parameter: share_networks")
@@ -65,7 +59,7 @@ func (p *capacityManilaPlugin) Scrape(provider *gophercloud.ProviderClient, clus
 		cfg.CapacityOvercommitFactor = 1 //default is no overcommit
 	}
 
-	client, err := p.Client(provider)
+	client, err := openstack.NewSharedFileSystemV2(provider, eo)
 	if err != nil {
 		return nil, err
 	}

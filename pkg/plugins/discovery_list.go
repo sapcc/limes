@@ -40,15 +40,9 @@ func (p *listDiscoveryPlugin) Method() string {
 	return "list"
 }
 
-func (p *listDiscoveryPlugin) Client(provider *gophercloud.ProviderClient) (*gophercloud.ServiceClient, error) {
-	return openstack.NewIdentityV3(provider,
-		gophercloud.EndpointOpts{Availability: gophercloud.AvailabilityPublic},
-	)
-}
-
 //ListDomains implements the limes.DiscoveryPlugin interface.
-func (p *listDiscoveryPlugin) ListDomains(provider *gophercloud.ProviderClient) ([]limes.KeystoneDomain, error) {
-	client, err := p.Client(provider)
+func (p *listDiscoveryPlugin) ListDomains(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) ([]limes.KeystoneDomain, error) {
+	client, err := openstack.NewIdentityV3(provider, eo)
 	if err != nil {
 		return nil, err
 	}
@@ -69,8 +63,8 @@ func (p *listDiscoveryPlugin) ListDomains(provider *gophercloud.ProviderClient) 
 }
 
 //ListProjects implements the limes.DiscoveryPlugin interface.
-func (p *listDiscoveryPlugin) ListProjects(provider *gophercloud.ProviderClient, domainUUID string) ([]limes.KeystoneProject, error) {
-	client, err := p.Client(provider)
+func (p *listDiscoveryPlugin) ListProjects(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID string) ([]limes.KeystoneProject, error) {
+	client, err := openstack.NewIdentityV3(provider, eo)
 	if err != nil {
 		return nil, err
 	}

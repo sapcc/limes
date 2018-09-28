@@ -100,8 +100,8 @@ func init() {
 }
 
 //Init implements the limes.QuotaPlugin interface.
-func (p *novaPlugin) Init(provider *gophercloud.ProviderClient) error {
-	client, err := p.Client(provider)
+func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
+	client, err := openstack.NewComputeV2(provider, eo)
 	if err != nil {
 		return err
 	}
@@ -169,21 +169,9 @@ func (p *novaPlugin) Resources() []limes.ResourceInfo {
 	return p.resources
 }
 
-func (p *novaPlugin) Client(provider *gophercloud.ProviderClient) (*gophercloud.ServiceClient, error) {
-	return openstack.NewComputeV2(provider,
-		gophercloud.EndpointOpts{Availability: gophercloud.AvailabilityPublic},
-	)
-}
-
-func (p *novaPlugin) GlanceClient(provider *gophercloud.ProviderClient) (*gophercloud.ServiceClient, error) {
-	return openstack.NewImageServiceV2(provider,
-		gophercloud.EndpointOpts{Availability: gophercloud.AvailabilityPublic},
-	)
-}
-
 //Scrape implements the limes.QuotaPlugin interface.
-func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
-	client, err := p.Client(provider)
+func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
+	client, err := openstack.NewComputeV2(provider, eo)
 	if err != nil {
 		return nil, err
 	}
@@ -284,7 +272,7 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID, dom
 
 				imageID, ok := instance.Image["id"].(string)
 				if ok {
-					osType, err := p.getOSType(provider, imageID)
+					osType, err := p.getOSType(provider, eo, imageID)
 					if err == nil {
 						subResource["os_type"] = osType
 					} else {
@@ -332,8 +320,8 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID, dom
 }
 
 //SetQuota implements the limes.QuotaPlugin interface.
-func (p *novaPlugin) SetQuota(provider *gophercloud.ProviderClient, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
-	client, err := p.Client(provider)
+func (p *novaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
+	client, err := openstack.NewComputeV2(provider, eo)
 	if err != nil {
 		return err
 	}
@@ -395,7 +383,7 @@ func (p *novaPlugin) getHypervisorType(client *gophercloud.ServiceClient, flavor
 	return "unknown", nil
 }
 
-func (p *novaPlugin) getOSType(provider *gophercloud.ProviderClient, imageID string) (string, error) {
+func (p *novaPlugin) getOSType(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, imageID string) (string, error) {
 	if p.osTypeForImage == nil {
 		p.osTypeForImage = make(map[string]string)
 	}
@@ -404,7 +392,7 @@ func (p *novaPlugin) getOSType(provider *gophercloud.ProviderClient, imageID str
 		return osType, nil
 	}
 
-	osType, err := p.findOSType(provider, imageID)
+	osType, err := p.findOSType(provider, eo, imageID)
 	if err == nil {
 		p.osTypeForImage[imageID] = osType
 	} else {
@@ -413,8 +401,8 @@ func (p *novaPlugin) getOSType(provider *gophercloud.ProviderClient, imageID str
 	return osType, err
 }
 
-func (p *novaPlugin) findOSType(provider *gophercloud.ProviderClient, imageID string) (string, error) {
-	client, err := p.GlanceClient(provider)
+func (p *novaPlugin) findOSType(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, imageID string) (string, error) {
+	client, err := openstack.NewImageServiceV2(provider, eo)
 	if err != nil {
 		return "", err
 	}

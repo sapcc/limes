@@ -104,10 +104,8 @@ func (c *Collector) Scrape() {
 		}
 
 		logg.Debug("scraping %s for %s/%s", serviceType, domainName, projectName)
-		resourceData, err := c.Plugin.Scrape(
-			c.Cluster.ProviderClientForService(serviceType),
-			c.Cluster.ID, domainUUID, projectUUID,
-		)
+		provider, eo := c.Cluster.ProviderClientForService(serviceType)
+		resourceData, err := c.Plugin.Scrape(provider, eo, c.Cluster.ID, domainUUID, projectUUID)
 		if err != nil {
 			//special case: stop scraping for a while when the backend service is not
 			//yet registered in the catalog (this prevents log spamming during buildup)
@@ -317,10 +315,8 @@ func (c *Collector) writeScrapeResult(domainName, domainUUID, projectName, proje
 	//to get stuck because some project has backend_quota > usage > quota, for
 	//example)
 	if needToSetQuota {
-		err := c.Plugin.SetQuota(
-			c.Cluster.ProviderClientForService(serviceType),
-			c.Cluster.ID, domainUUID, projectUUID, quotaValues,
-		)
+		provider, eo := c.Cluster.ProviderClientForService(serviceType)
+		err := c.Plugin.SetQuota(provider, eo, c.Cluster.ID, domainUUID, projectUUID, quotaValues)
 		if err != nil {
 			serviceType := c.Plugin.ServiceInfo().Type
 			logg.Error("could not rectify frontend/backend quota mismatch for service %s in project %s: %s",

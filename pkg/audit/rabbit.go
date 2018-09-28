@@ -55,11 +55,11 @@ func sendEvents(clusterID string, config limes.CADFConfiguration, events []CADFE
 	//declare a queue to hold and deliver messages to consumers
 	q, err := ch.QueueDeclare(
 		config.RabbitMQ.QueueName, // name of the queue
-		false, // durable: queue should survive cluster reset (or broker restart)
-		false, // autodelete when unused
-		false, // exclusive: queue only accessible by connection that declares and deleted when the connection closes
-		false, // noWait: the queue will assume to be declared on the server
-		nil,   // arguments for advanced config
+		false,                     // durable: queue should survive cluster reset (or broker restart)
+		false,                     // autodelete when unused
+		false,                     // exclusive: queue only accessible by connection that declares and deleted when the connection closes
+		false,                     // noWait: the queue will assume to be declared on the server
+		nil,                       // arguments for advanced config
 	)
 	if err != nil {
 		eventPublishFailedCounter.With(labels).Inc()
