@@ -64,7 +64,7 @@ func init() {
 }
 
 //Init implements the limes.QuotaPlugin interface.
-func (p *manilaPlugin) Init(provider *gophercloud.ProviderClient) error {
+func (p *manilaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
 	return nil
 }
 
@@ -82,15 +82,9 @@ func (p *manilaPlugin) Resources() []limes.ResourceInfo {
 	return manilaResources
 }
 
-func (p *manilaPlugin) Client(provider *gophercloud.ProviderClient) (*gophercloud.ServiceClient, error) {
-	return openstack.NewSharedFileSystemV2(provider,
-		gophercloud.EndpointOpts{Availability: gophercloud.AvailabilityPublic},
-	)
-}
-
 //Scrape implements the limes.QuotaPlugin interface.
-func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
-	client, err := p.Client(provider)
+func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
+	client, err := openstack.NewSharedFileSystemV2(provider, eo)
 	if err != nil {
 		return nil, err
 	}
@@ -199,8 +193,8 @@ func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID, d
 }
 
 //SetQuota implements the limes.QuotaPlugin interface.
-func (p *manilaPlugin) SetQuota(provider *gophercloud.ProviderClient, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
-	client, err := p.Client(provider)
+func (p *manilaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
+	client, err := openstack.NewSharedFileSystemV2(provider, eo)
 	if err != nil {
 		return err
 	}

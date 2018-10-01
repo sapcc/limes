@@ -48,7 +48,7 @@ func init() {
 }
 
 //Init implements the limes.QuotaPlugin interface.
-func (p *swiftPlugin) Init(provider *gophercloud.ProviderClient) error {
+func (p *swiftPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
 	return nil
 }
 
@@ -66,10 +66,8 @@ func (p *swiftPlugin) Resources() []limes.ResourceInfo {
 	return swiftResources
 }
 
-func (p *swiftPlugin) Account(provider *gophercloud.ProviderClient, projectUUID string) (*schwift.Account, error) {
-	client, err := openstack.NewObjectStorageV1(provider,
-		gophercloud.EndpointOpts{Availability: gophercloud.AvailabilityPublic},
-	)
+func (p *swiftPlugin) Account(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, projectUUID string) (*schwift.Account, error) {
+	client, err := openstack.NewObjectStorageV1(provider, eo)
 	if err != nil {
 		return nil, err
 	}
@@ -82,8 +80,8 @@ func (p *swiftPlugin) Account(provider *gophercloud.ProviderClient, projectUUID 
 }
 
 //Scrape implements the limes.QuotaPlugin interface.
-func (p *swiftPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
-	account, err := p.Account(provider, projectUUID)
+func (p *swiftPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
+	account, err := p.Account(provider, eo, projectUUID)
 	if err != nil {
 		return nil, err
 	}
@@ -112,8 +110,8 @@ func (p *swiftPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID, do
 }
 
 //SetQuota implements the limes.QuotaPlugin interface.
-func (p *swiftPlugin) SetQuota(provider *gophercloud.ProviderClient, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
-	account, err := p.Account(provider, projectUUID)
+func (p *swiftPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
+	account, err := p.Account(provider, eo, projectUUID)
 	if err != nil {
 		return err
 	}

@@ -141,16 +141,16 @@ type quotaConstraintTestPlugin struct {
 	ServiceType string
 }
 
-func (p quotaConstraintTestPlugin) Init(client *gophercloud.ProviderClient) error {
+func (p quotaConstraintTestPlugin) Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
 	return nil
 }
 func (p quotaConstraintTestPlugin) ServiceInfo() ServiceInfo {
 	return ServiceInfo{Type: p.ServiceType}
 }
-func (p quotaConstraintTestPlugin) Scrape(client *gophercloud.ProviderClient, clusterID, domainUUID, projectUUID string) (map[string]ResourceData, error) {
+func (p quotaConstraintTestPlugin) Scrape(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]ResourceData, error) {
 	return nil, nil
 }
-func (p quotaConstraintTestPlugin) SetQuota(client *gophercloud.ProviderClient, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
+func (p quotaConstraintTestPlugin) SetQuota(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
 	return nil
 }
 

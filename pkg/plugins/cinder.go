@@ -57,7 +57,7 @@ func init() {
 }
 
 //Init implements the limes.QuotaPlugin interface.
-func (p *cinderPlugin) Init(provider *gophercloud.ProviderClient) error {
+func (p *cinderPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
 	return nil
 }
 
@@ -75,15 +75,9 @@ func (p *cinderPlugin) Resources() []limes.ResourceInfo {
 	return cinderResources
 }
 
-func (p *cinderPlugin) Client(provider *gophercloud.ProviderClient) (*gophercloud.ServiceClient, error) {
-	return openstack.NewBlockStorageV2(provider,
-		gophercloud.EndpointOpts{Availability: gophercloud.AvailabilityPublic},
-	)
-}
-
 //Scrape implements the limes.QuotaPlugin interface.
-func (p *cinderPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
-	client, err := p.Client(provider)
+func (p *cinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
+	client, err := openstack.NewBlockStorageV2(provider, eo)
 	if err != nil {
 		return nil, err
 	}
@@ -160,7 +154,7 @@ func (p *cinderPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID, d
 }
 
 //SetQuota implements the limes.QuotaPlugin interface.
-func (p *cinderPlugin) SetQuota(provider *gophercloud.ProviderClient, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
+func (p *cinderPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
 	requestData := map[string]map[string]uint64{
 		"quota_set": {
 			"gigabytes": quotas["capacity"],
@@ -169,7 +163,7 @@ func (p *cinderPlugin) SetQuota(provider *gophercloud.ProviderClient, clusterID,
 		},
 	}
 
-	client, err := p.Client(provider)
+	client, err := openstack.NewBlockStorageV2(provider, eo)
 	if err != nil {
 		return err
 	}

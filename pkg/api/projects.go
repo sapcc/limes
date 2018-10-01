@@ -310,10 +310,8 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 		for _, res := range resources {
 			quotaValues[res.Name] = res.Quota
 		}
-		err = plugin.SetQuota(
-			updater.Cluster.ProviderClientForService(srv.Type),
-			updater.Cluster.ID, updater.Domain.UUID, updater.Project.UUID, quotaValues,
-		)
+		provider, eo := updater.Cluster.ProviderClientForService(srv.Type)
+		err = plugin.SetQuota(provider, eo, updater.Cluster.ID, updater.Domain.UUID, updater.Project.UUID, quotaValues)
 		if err != nil {
 			errors = append(errors, err.Error())
 			continue

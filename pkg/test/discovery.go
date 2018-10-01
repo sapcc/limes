@@ -56,11 +56,11 @@ func (p *DiscoveryPlugin) Method() string {
 }
 
 //ListDomains implements the limes.DiscoveryPlugin interface.
-func (p *DiscoveryPlugin) ListDomains(provider *gophercloud.ProviderClient) ([]limes.KeystoneDomain, error) {
+func (p *DiscoveryPlugin) ListDomains(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) ([]limes.KeystoneDomain, error) {
 	return p.StaticDomains, nil
 }
 
 //ListProjects implements the limes.DiscoveryPlugin interface.
-func (p *DiscoveryPlugin) ListProjects(provider *gophercloud.ProviderClient, domainUUID string) ([]limes.KeystoneProject, error) {
+func (p *DiscoveryPlugin) ListProjects(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID string) ([]limes.KeystoneProject, error) {
 	return p.StaticProjects[domainUUID], nil
 }

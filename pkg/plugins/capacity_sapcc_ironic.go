@@ -51,12 +51,6 @@ func init() {
 	prometheus.MustRegister(ironicUnmatchedNodesGauge)
 }
 
-func (p *capacitySapccIronicPlugin) NovaClient(provider *gophercloud.ProviderClient) (*gophercloud.ServiceClient, error) {
-	return openstack.NewComputeV2(provider,
-		gophercloud.EndpointOpts{Availability: gophercloud.AvailabilityPublic},
-	)
-}
-
 //ID implements the limes.CapacityPlugin interface.
 func (p *capacitySapccIronicPlugin) ID() string {
 	return "sapcc-ironic"
@@ -72,9 +66,9 @@ type ironicFlavorInfo struct {
 }
 
 //Scrape implements the limes.CapacityPlugin interface.
-func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID string) (map[string]map[string]limes.CapacityData, error) {
+func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]limes.CapacityData, error) {
 	//collect info about flavors with separate instance quota
-	novaClient, err := p.NovaClient(provider)
+	novaClient, err := openstack.NewComputeV2(provider, eo)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +84,7 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 	}
 
 	//count Ironic nodes
-	ironicClient, err := newIronicClient(provider)
+	ironicClient, err := newIronicClient(provider, eo)
 	if err != nil {
 		return nil, err
 	}

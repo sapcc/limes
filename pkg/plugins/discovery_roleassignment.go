@@ -24,6 +24,7 @@ import (
 	"fmt"
 
 	"github.com/gophercloud/gophercloud"
+	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/identity/v3/roles"
 	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/sapcc/go-bits/logg"
@@ -51,17 +52,17 @@ func (p *roleAssignmentDiscoveryPlugin) Method() string {
 }
 
 //ListDomains implements the limes.DiscoveryPlugin interface.
-func (p *roleAssignmentDiscoveryPlugin) ListDomains(provider *gophercloud.ProviderClient) ([]limes.KeystoneDomain, error) {
-	return p.lister.ListDomains(provider)
+func (p *roleAssignmentDiscoveryPlugin) ListDomains(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) ([]limes.KeystoneDomain, error) {
+	return p.lister.ListDomains(provider, eo)
 }
 
 //ListProjects implements the limes.DiscoveryPlugin interface.
-func (p *roleAssignmentDiscoveryPlugin) ListProjects(provider *gophercloud.ProviderClient, domainUUID string) ([]limes.KeystoneProject, error) {
+func (p *roleAssignmentDiscoveryPlugin) ListProjects(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID string) ([]limes.KeystoneProject, error) {
 	if p.cfg.RoleAssignment.RoleName == "" {
 		logg.Fatal(`missing role name for discovery plugin "role-assignment"`)
 	}
 
-	client, err := p.lister.Client(provider)
+	client, err := openstack.NewIdentityV3(provider, eo)
 	if err != nil {
 		return nil, err
 	}

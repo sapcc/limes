@@ -214,7 +214,7 @@ type autoApprovalTestPlugin struct {
 	StaticBackendQuota uint64
 }
 
-func (p *autoApprovalTestPlugin) Init(provider *gophercloud.ProviderClient) error {
+func (p *autoApprovalTestPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
 	return nil
 }
 
@@ -228,24 +228,24 @@ func (p *autoApprovalTestPlugin) Resources() []limes.ResourceInfo {
 	//one resource can auto-approve, one cannot because BackendQuota != AutoApproveInitialQuota
 	return []limes.ResourceInfo{
 		{
-			Name: "approve",
+			Name:                    "approve",
 			AutoApproveInitialQuota: p.StaticBackendQuota,
 		},
 		{
-			Name: "noapprove",
+			Name:                    "noapprove",
 			AutoApproveInitialQuota: p.StaticBackendQuota,
 		},
 	}
 }
 
-func (p *autoApprovalTestPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
+func (p *autoApprovalTestPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
 	return map[string]limes.ResourceData{
 		"approve":   {Usage: 0, Quota: int64(p.StaticBackendQuota)},
 		"noapprove": {Usage: 0, Quota: int64(p.StaticBackendQuota) + 10},
 	}, nil
 }
 
-func (p *autoApprovalTestPlugin) SetQuota(provider *gophercloud.ProviderClient, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
+func (p *autoApprovalTestPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
 	return errors.New("unimplemented")
 }
 

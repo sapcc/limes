@@ -44,7 +44,7 @@ func (p *capacityManualPlugin) ID() string {
 var errNoManualData = errors.New(`missing values for capacitor plugin "manual"`)
 
 //Scrape implements the limes.CapacityPlugin interface.
-func (p *capacityManualPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID string) (map[string]map[string]limes.CapacityData, error) {
+func (p *capacityManualPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]limes.CapacityData, error) {
 	if p.cfg.Manual == nil {
 		return nil, errNoManualData
 	}

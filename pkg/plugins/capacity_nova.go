@@ -42,18 +42,12 @@ func init() {
 	})
 }
 
-func (p *capacityNovaPlugin) Client(provider *gophercloud.ProviderClient) (*gophercloud.ServiceClient, error) {
-	return openstack.NewComputeV2(provider,
-		gophercloud.EndpointOpts{Availability: gophercloud.AvailabilityPublic},
-	)
-}
-
 func (p *capacityNovaPlugin) ID() string {
 	return "nova"
 }
 
 //Scrape implements the limes.CapacityPlugin interface.
-func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID string) (map[string]map[string]limes.CapacityData, error) {
+func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]limes.CapacityData, error) {
 	var hypervisorTypeRx *regexp.Regexp
 	if p.cfg.Nova.HypervisorTypePattern != "" {
 		var err error
@@ -63,7 +57,7 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, cluste
 		}
 	}
 
-	client, err := p.Client(provider)
+	client, err := openstack.NewComputeV2(provider, eo)
 	if err != nil {
 		return nil, err
 	}

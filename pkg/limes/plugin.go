@@ -43,9 +43,9 @@ type DiscoveryPlugin interface {
 	//identify it in the configuration.
 	Method() string
 	//ListDomains returns all Keystone domains in the cluster.
-	ListDomains(client *gophercloud.ProviderClient) ([]KeystoneDomain, error)
+	ListDomains(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) ([]KeystoneDomain, error)
 	//ListProjects returns all Keystone projects in the given domain.
-	ListProjects(client *gophercloud.ProviderClient, domainUUID string) ([]KeystoneProject, error)
+	ListProjects(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID string) ([]KeystoneProject, error)
 }
 
 //ResourceData contains quota and usage data for a single resource.
@@ -66,7 +66,7 @@ type QuotaPlugin interface {
 	//Init is guaranteed to be called before all other methods exposed by the
 	//interface. Implementations can use it f.i. to discover the available
 	//Resources().
-	Init(client *gophercloud.ProviderClient) error
+	Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error
 	//ServiceInfo returns metadata for this service.
 	ServiceInfo() ServiceInfo
 	//Resources returns metadata for all the resources that this plugin scrapes
@@ -80,7 +80,7 @@ type QuotaPlugin interface {
 	//The clusterID is usually not needed, but should be given as a label to
 	//Prometheus metrics emitted by the plugin (if the plugin does that sort of
 	//thing).
-	Scrape(client *gophercloud.ProviderClient, clusterID, domainUUID, projectUUID string) (map[string]ResourceData, error)
+	Scrape(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]ResourceData, error)
 	//SetQuota updates the backend service's quotas for the given project in the
 	//given domain to the values specified here. The map is guaranteed to contain
 	//values for all resources defined by Resources().
@@ -91,7 +91,7 @@ type QuotaPlugin interface {
 	//The clusterID is usually not needed, but should be given as a label to
 	//Prometheus metrics emitted by the plugin (if the plugin does that sort of
 	//thing).
-	SetQuota(client *gophercloud.ProviderClient, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error
+	SetQuota(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error
 }
 
 //CapacityData contains capacity data for a single resource.
@@ -130,7 +130,7 @@ type CapacityPlugin interface {
 	//The clusterID is usually not needed, but should be given as a label to
 	//Prometheus metrics emitted by the plugin (if the plugin does that sort of
 	//thing).
-	Scrape(client *gophercloud.ProviderClient, clusterID string) (map[string]map[string]CapacityData, error)
+	Scrape(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]CapacityData, error)
 }
 
 //ResourceInfo contains the metadata for a resource (i.e. some thing for which

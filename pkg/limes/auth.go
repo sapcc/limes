@@ -39,8 +39,9 @@ type AuthParameters struct {
 	Password          string      `yaml:"password"`
 	RegionName        string      `yaml:"region_name"`
 	tokenRenewalMutex *sync.Mutex `yaml:"-"`
-	//ProviderClient is only valid after calling Connect().
+	//The following fields are only valid after calling Connect().
 	ProviderClient *gophercloud.ProviderClient `yaml:"-"`
+	EndpointOpts   gophercloud.EndpointOpts    `yaml:"-"`
 }
 
 //Connect creates the gophercloud.ProviderClient instance for these credentials.
@@ -74,10 +75,13 @@ func (auth *AuthParameters) Connect() error {
 			DomainName:  auth.ProjectDomainName,
 		},
 	})
-	//FIXME: honor auth.RegionName
 	if err != nil {
 		return fmt.Errorf("cannot fetch initial Keystone token: %v", err)
 	}
 
+	auth.EndpointOpts = gophercloud.EndpointOpts{
+		Availability: gophercloud.AvailabilityPublic,
+		Region:       auth.RegionName,
+	}
 	return nil
 }

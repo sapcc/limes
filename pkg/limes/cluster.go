@@ -136,6 +136,7 @@ func (c *Cluster) Connect() error {
 
 	for _, srv := range c.Config.Services {
 		provider := c.Config.Auth.ProviderClient
+		eo := c.Config.Auth.EndpointOpts
 
 		if srv.Auth != nil {
 			err := srv.Auth.Connect()
@@ -143,9 +144,10 @@ func (c *Cluster) Connect() error {
 				return fmt.Errorf("failed to authenticate for service %s in cluster %s: %s", srv.Type, c.ID, err.Error())
 			}
 			provider = srv.Auth.ProviderClient
+			eo = srv.Auth.EndpointOpts
 		}
 
-		err := c.QuotaPlugins[srv.Type].Init(provider)
+		err := c.QuotaPlugins[srv.Type].Init(provider, eo)
 		if err != nil {
 			return fmt.Errorf("failed to initialize service %s in cluster %s: %s", srv.Type, c.ID, err.Error())
 		}
@@ -157,20 +159,20 @@ func (c *Cluster) Connect() error {
 //ProviderClient returns the gophercloud.ProviderClient for this cluster. This
 //returns nil unless Connect() is called first. (This usually happens at
 //program startup time for the current cluster.)
-func (c *Cluster) ProviderClient() *gophercloud.ProviderClient {
-	return c.Config.Auth.ProviderClient
+func (c *Cluster) ProviderClient() (*gophercloud.ProviderClient, gophercloud.EndpointOpts) {
+	return c.Config.Auth.ProviderClient, c.Config.Auth.EndpointOpts
 }
 
 //ProviderClientForService returns the gophercloud.ProviderClient for this
 //service. This returns nil unless Connect() is called first. (This usually
 //happens at program startup time for the current cluster.)
-func (c *Cluster) ProviderClientForService(serviceType string) *gophercloud.ProviderClient {
+func (c *Cluster) ProviderClientForService(serviceType string) (*gophercloud.ProviderClient, gophercloud.EndpointOpts) {
 	for _, srv := range c.Config.Services {
 		if srv.Type == serviceType && srv.Auth != nil {
-			return srv.Auth.ProviderClient
+			return srv.Auth.ProviderClient, srv.Auth.EndpointOpts
 		}
 	}
-	return c.Config.Auth.ProviderClient
+	return c.Config.Auth.ProviderClient, c.Config.Auth.EndpointOpts
 }
 
 //HasService checks whether the given service is enabled in this cluster.

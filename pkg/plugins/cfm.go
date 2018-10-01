@@ -50,7 +50,7 @@ func init() {
 }
 
 //Init implements the limes.QuotaPlugin interface.
-func (p *cfmPlugin) Init(provider *gophercloud.ProviderClient) error {
+func (p *cfmPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
 	return nil
 }
 
@@ -74,15 +74,15 @@ func (p *cfmPlugin) Resources() []limes.ResourceInfo {
 }
 
 //Scrape implements the limes.QuotaPlugin interface.
-func (p *cfmPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
+func (p *cfmPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
 	//cache the result of cfmListShareservers(), it's mildly expensive
 	now := time.Now()
 	if p.shareserversCache == nil || p.shareserversCacheExpires.Before(now) {
-		projectID, err := cfmGetScopedProjectID(provider)
+		projectID, err := cfmGetScopedProjectID(provider, eo)
 		if err != nil {
 			return nil, err
 		}
-		shareservers, err := cfmListShareservers(provider, projectID)
+		shareservers, err := cfmListShareservers(provider, eo, projectID)
 		if err != nil {
 			return nil, err
 		}
@@ -100,7 +100,7 @@ func (p *cfmPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID, doma
 
 		if projectID == "" {
 			var err error
-			projectID, err = cfmGetScopedProjectID(provider)
+			projectID, err = cfmGetScopedProjectID(provider, eo)
 			if err != nil {
 				return nil, err
 			}
@@ -118,7 +118,7 @@ func (p *cfmPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID, doma
 }
 
 //SetQuota implements the limes.QuotaPlugin interface.
-func (p *cfmPlugin) SetQuota(provider *gophercloud.ProviderClient, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
+func (p *cfmPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
 	if len(quotas) > 0 {
 		return errors.New("the database/cfm_share_capacity resource is externally managed")
 	}
@@ -127,10 +127,10 @@ func (p *cfmPlugin) SetQuota(provider *gophercloud.ProviderClient, clusterID, do
 
 ////////////////////////////////////////////////////////////////////////////////
 
-func cfmGetScopedProjectID(provider *gophercloud.ProviderClient) (string, error) {
+func cfmGetScopedProjectID(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (string, error) {
 	//the CFM API is stupid and needs the caller to provide the scope of the
 	//token redundantly in the X-Project-Id header
-	identityClient, err := openstack.NewIdentityV3(provider, gophercloud.EndpointOpts{})
+	identityClient, err := openstack.NewIdentityV3(provider, eo)
 	if err != nil {
 		return "", err
 	}
@@ -147,12 +147,9 @@ type cfmShareserver struct {
 	MaximumSizeBytes uint64
 }
 
-func cfmListShareservers(provider *gophercloud.ProviderClient, projectID string) ([]cfmShareserver, error) {
-	baseURL, err := provider.EndpointLocator(gophercloud.EndpointOpts{
-		Type:         "database",
-		Name:         "cfm",
-		Availability: gophercloud.AvailabilityPublic,
-	})
+func cfmListShareservers(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, projectID string) ([]cfmShareserver, error) {
+	eo.ApplyDefaults("database")
+	baseURL, err := provider.EndpointLocator(eo)
 	if err != nil {
 		return nil, err
 	}

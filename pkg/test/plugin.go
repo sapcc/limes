@@ -71,7 +71,7 @@ func NewPluginFactory(serviceType string) func(limes.ServiceConfiguration, map[s
 }
 
 //Init implements the limes.QuotaPlugin interface.
-func (p *Plugin) Init(provider *gophercloud.ProviderClient) error {
+func (p *Plugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
 	return nil
 }
 
@@ -97,7 +97,7 @@ func (p *Plugin) Resources() []limes.ResourceInfo {
 }
 
 //Scrape implements the limes.QuotaPlugin interface.
-func (p *Plugin) Scrape(provider *gophercloud.ProviderClient, clusterID, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
+func (p *Plugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
 	result := make(map[string]limes.ResourceData)
 	for key, val := range p.StaticResourceData {
 		if !p.WithExternallyManagedResource && key == "external_things" {
@@ -134,7 +134,7 @@ func (p *Plugin) Scrape(provider *gophercloud.ProviderClient, clusterID, domainU
 }
 
 //SetQuota implements the limes.QuotaPlugin interface.
-func (p *Plugin) SetQuota(provider *gophercloud.ProviderClient, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
+func (p *Plugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
 	if p.SetQuotaFails {
 		return errors.New("SetQuota failed as requested")
 	}
@@ -161,7 +161,7 @@ func (p *CapacityPlugin) ID() string {
 }
 
 //Scrape implements the limes.CapacityPlugin interface.
-func (p *CapacityPlugin) Scrape(provider *gophercloud.ProviderClient, clusterID string) (map[string]map[string]limes.CapacityData, error) {
+func (p *CapacityPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]limes.CapacityData, error) {
 	var subcapacities []interface{}
 	if p.WithSubcapacities {
 		subcapacities = []interface{}{
