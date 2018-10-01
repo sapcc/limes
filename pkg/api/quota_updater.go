@@ -139,6 +139,11 @@ func (u *QuotaUpdater) ValidateInput(input ServiceQuotas, dbi db.Interface) erro
 			}
 			req.NewValue, req.ValidationError = newQuota.ConvertFor(u.Cluster, srv.Type, res.Name)
 
+			//skip this resource entirely if no change is requested
+			if req.ValidationError == nil && req.OldValue == newQuota.Value {
+				continue //with next resource
+			}
+
 			//validation phase 2: can we change this quota at all?
 			if req.ValidationError == nil {
 				if res.ExternallyManaged {
