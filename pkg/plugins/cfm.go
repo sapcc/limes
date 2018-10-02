@@ -110,8 +110,8 @@ func (p *cfmPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.
 			return nil, err
 		}
 
-		result.Quota += int64(shareserverDetailed.MaximumSizeBytes)
-		result.Usage += shareserverDetailed.SizeBytes
+		result.Quota += int64(shareserverDetailed.BytesUsed)
+		result.Usage += shareserverDetailed.BytesUsed
 	}
 
 	return map[string]limes.ResourceData{"cfm_share_capacity": result}, nil
@@ -143,8 +143,7 @@ type cfmShareserver struct {
 	ProjectUUID string
 	DetailsURL  string
 	//fields that are only filled by cfmGetShareserver, not by cfmListShareservers
-	SizeBytes        uint64
-	MaximumSizeBytes uint64
+	BytesUsed uint64
 }
 
 func cfmListShareservers(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, projectID string) ([]cfmShareserver, error) {
@@ -183,8 +182,7 @@ func cfmGetShareserver(provider *gophercloud.ProviderClient, url string, project
 		Shareserver struct {
 			ID         string `json:"id"`
 			Properties struct {
-				SizeBytes        util.CFMBytes `json:"size"`
-				MaximumSizeBytes util.CFMBytes `json:"maximum_size"`
+				BytesUsed util.CFMBytes `json:"size_used"`
 			} `json:"properties"`
 			Links       []gophercloud.Link `json:"links"`
 			Type        string             `json:"type"`
@@ -197,17 +195,15 @@ func cfmGetShareserver(provider *gophercloud.ProviderClient, url string, project
 	}
 
 	srv := data.Shareserver
-	logg.Info("CFM shareserver %s (type %s) in project %s has size = %d bytes, maximum_size = %d bytes",
+	logg.Info("CFM shareserver %s (type %s) in project %s has size_used = %d bytes",
 		srv.ID, srv.Type, srv.ProjectUUID,
-		srv.Properties.SizeBytes,
-		srv.Properties.MaximumSizeBytes,
+		srv.Properties.BytesUsed,
 	)
 	return &cfmShareserver{
-		Type:             srv.Type,
-		ProjectUUID:      srv.ProjectUUID,
-		DetailsURL:       srv.Links[0].Href,
-		SizeBytes:        uint64(srv.Properties.SizeBytes),
-		MaximumSizeBytes: uint64(srv.Properties.MaximumSizeBytes),
+		Type:        srv.Type,
+		ProjectUUID: srv.ProjectUUID,
+		DetailsURL:  srv.Links[0].Href,
+		BytesUsed:   uint64(srv.Properties.BytesUsed),
 	}, nil
 }
 
