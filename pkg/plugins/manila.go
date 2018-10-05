@@ -112,52 +112,25 @@ func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 		return nil, err
 	}
 
-	//Get usage of shares per project
-	url = client.ServiceURL("shares", "detail") + fmt.Sprintf("?project_id=%s&all_tenants=1", projectUUID)
-	_, err = client.Get(url, &result.Body, nil)
+	shares, err := manilaGetShares(client, projectUUID)
 	if err != nil {
 		return nil, err
 	}
-
-	var manilaShareUsageData struct {
-		Shares []struct {
-			Size uint64 `json:"size"`
-		} `json:"shares"`
-	}
-	err = result.ExtractInto(&manilaShareUsageData)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, element := range manilaShareUsageData.Shares {
-		totalShareUsage += element.Size
+	for _, share := range shares {
+		totalShareUsage += share.Size
 	}
 
 	//Get usage of snapshots per project
-	url = client.ServiceURL("snapshots", "detail") + fmt.Sprintf("?project_id=%s&all_tenants=1", projectUUID)
-	_, err = client.Get(url, &result.Body, nil)
+	snapshots, err := manilaGetSnapshots(client, projectUUID)
 	if err != nil {
 		return nil, err
 	}
-
-	var manilaSnapshotUsageData struct {
-		Snapshots []struct {
-			ShareSize uint64 `json:"share_size"`
-		} `json:"snapshots"`
-	}
-	err = result.ExtractInto(&manilaSnapshotUsageData)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, element := range manilaSnapshotUsageData.Snapshots {
-		totalSnapshotUsage += element.ShareSize
+	for _, snapshot := range snapshots {
+		totalSnapshotUsage += snapshot.ShareSize
 	}
 
 	//Get usage of shared networks
-	pages := 0
 	sharenetworks.ListDetail(client, sharenetworks.ListOpts{ProjectID: projectUUID}).EachPage(func(page pagination.Page) (bool, error) {
-		pages++
 		sn, err := sharenetworks.ExtractShareNetworks(page)
 		if err != nil {
 			return false, err
@@ -171,11 +144,11 @@ func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 	return map[string]limes.ResourceData{
 		"shares": {
 			Quota: manilaQuotaData.QuotaSet.Shares,
-			Usage: uint64(len(manilaShareUsageData.Shares)),
+			Usage: uint64(len(shares)),
 		},
 		"share_snapshots": {
 			Quota: manilaQuotaData.QuotaSet.Snapshots,
-			Usage: uint64(len(manilaSnapshotUsageData.Snapshots)),
+			Usage: uint64(len(snapshots)),
 		},
 		"share_networks": {
 			Quota: manilaQuotaData.QuotaSet.ShareNetworks,
@@ -213,4 +186,76 @@ func (p *manilaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherc
 	_, err = client.Put(url, requestData, nil, &gophercloud.RequestOpts{OkCodes: []int{200}})
 
 	return err
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+type manilaShare struct {
+	ID   string `json:"id"`
+	Size uint64 `json:"size"`
+}
+
+func manilaGetShares(client *gophercloud.ServiceClient, projectUUID string) (result []manilaShare, err error) {
+	page := 0
+	pageSize := 250
+
+	for {
+		url := client.ServiceURL("shares", "detail") + fmt.Sprintf("?project_id=%s&all_tenants=1&limit=%d&offset=%d", projectUUID, pageSize, page*pageSize)
+		var r gophercloud.Result
+		_, err = client.Get(url, &r.Body, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		var data struct {
+			Shares []manilaShare `json:"shares"`
+		}
+		err = r.ExtractInto(&data)
+		if err != nil {
+			return nil, err
+		}
+
+		if len(data.Shares) > 0 {
+			result = append(result, data.Shares...)
+			page++
+		} else {
+			//last page reached
+			return
+		}
+	}
+}
+
+type manilaSnapshot struct {
+	ID        string `json:"id"`
+	ShareSize uint64 `json:"share_size"`
+}
+
+func manilaGetSnapshots(client *gophercloud.ServiceClient, projectUUID string) (result []manilaSnapshot, err error) {
+	page := 0
+	pageSize := 250
+
+	for {
+		url := client.ServiceURL("snapshots", "detail") + fmt.Sprintf("?project_id=%s&all_tenants=1&limit=%d&offset=%d", projectUUID, pageSize, page*pageSize)
+		var r gophercloud.Result
+		_, err = client.Get(url, &r.Body, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		var data struct {
+			Snapshots []manilaSnapshot `json:"snapshots"`
+		}
+		err = r.ExtractInto(&data)
+		if err != nil {
+			return nil, err
+		}
+
+		if len(data.Snapshots) > 0 {
+			result = append(result, data.Snapshots...)
+			page++
+		} else {
+			//last page reached
+			return
+		}
+	}
 }
