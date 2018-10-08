@@ -78,6 +78,21 @@ func (s DomainServices) MarshalJSON() ([]byte, error) {
 	return json.Marshal(list)
 }
 
+//UnmarshalJSON implements the json.Unmarshaler interface
+func (s *DomainServices) UnmarshalJSON(b []byte) error {
+	tmp := make([]*DomainService, 0)
+	err := json.Unmarshal(b, &tmp)
+	if err != nil {
+		return err
+	}
+	t := make(DomainServices)
+	for _, ds := range tmp {
+		t[ds.Type] = ds
+	}
+	*s = DomainServices(t)
+	return nil
+}
+
 //DomainResources provides fast lookup of resources using a map, but serializes
 //to JSON as a list.
 type DomainResources map[string]*DomainResource
@@ -95,6 +110,21 @@ func (r DomainResources) MarshalJSON() ([]byte, error) {
 		list[idx] = r[name]
 	}
 	return json.Marshal(list)
+}
+
+//UnmarshalJSON implements the json.Unmarshaler interface
+func (r *DomainResources) UnmarshalJSON(b []byte) error {
+	tmp := make([]*DomainResource, 0)
+	err := json.Unmarshal(b, &tmp)
+	if err != nil {
+		return err
+	}
+	t := make(DomainResources)
+	for _, dr := range tmp {
+		t[dr.Name] = dr
+	}
+	*r = DomainResources(t)
+	return nil
 }
 
 var domainReportQuery1 = `
