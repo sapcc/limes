@@ -349,7 +349,7 @@ func Test_ClusterOperations(t *testing.T) {
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/clusters/east",
-		ExpectStatus: 200,
+		ExpectStatus: 202,
 		Body: assert.JSONObject{
 			"cluster": assert.JSONObject{
 				"services": []assert.JSONObject{
@@ -376,7 +376,7 @@ func Test_ClusterOperations(t *testing.T) {
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/clusters/east",
-		ExpectStatus: 200,
+		ExpectStatus: 202,
 		Body: assert.JSONObject{
 			"cluster": assert.JSONObject{
 				"services": []assert.JSONObject{
@@ -403,7 +403,7 @@ func Test_ClusterOperations(t *testing.T) {
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/clusters/east",
-		ExpectStatus: 200,
+		ExpectStatus: 202,
 		Body: assert.JSONObject{
 			"cluster": assert.JSONObject{
 				"services": []assert.JSONObject{
@@ -430,7 +430,7 @@ func Test_ClusterOperations(t *testing.T) {
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/clusters/east",
-		ExpectStatus: 200,
+		ExpectStatus: 202,
 		Body: assert.JSONObject{
 			"cluster": assert.JSONObject{
 				"services": []assert.JSONObject{
@@ -620,7 +620,7 @@ func Test_DomainOperations(t *testing.T) {
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany",
-		ExpectStatus: 200,
+		ExpectStatus: 202,
 		Body: assert.JSONObject{
 			"domain": assert.JSONObject{
 				"services": []assert.JSONObject{
@@ -689,7 +689,7 @@ func Test_DomainOperations(t *testing.T) {
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany",
-		ExpectStatus: 200,
+		ExpectStatus: 202,
 		Body: assert.JSONObject{
 			"domain": assert.JSONObject{
 				"services": []assert.JSONObject{
@@ -707,7 +707,7 @@ func Test_DomainOperations(t *testing.T) {
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany",
-		ExpectStatus: 200,
+		ExpectStatus: 202,
 		Body: assert.JSONObject{
 			"domain": assert.JSONObject{
 				"services": []assert.JSONObject{
@@ -727,7 +727,7 @@ func Test_DomainOperations(t *testing.T) {
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-france",
-		ExpectStatus: 200,
+		ExpectStatus: 202,
 		Body: assert.JSONObject{
 			"domain": assert.JSONObject{
 				"services": []assert.JSONObject{
@@ -1020,7 +1020,7 @@ func Test_ProjectOperations(t *testing.T) {
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
-		ExpectStatus: 200,
+		ExpectStatus: 202,
 		Body: assert.JSONObject{
 			"project": assert.JSONObject{
 				"services": []assert.JSONObject{

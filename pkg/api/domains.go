@@ -221,9 +221,5 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 	updater.CommitAuditTrail(token, r, requestTime)
 
 	//report success
-	domain, err := GetDomainReport(updater.Cluster, *updater.Domain, db.DB, reports.ReadFilter(r))
-	if respondwith.ErrorText(w, err) {
-		return
-	}
-	respondwith.JSON(w, 200, map[string]interface{}{"domain": domain})
+	w.WriteHeader(202)
 }

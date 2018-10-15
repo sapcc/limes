@@ -171,16 +171,7 @@ func (p *v1Provider) PutCluster(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//otherwise, report success
-	clusters, err := reports.GetClusters(p.Config, &clusterID, false, false, db.DB, reports.ReadFilter(r))
-	if respondwith.ErrorText(w, err) {
-		return
-	}
-	if len(clusters) == 0 {
-		http.Error(w, "no resource data found for cluster", 500)
-		return
-	}
-
-	respondwith.JSON(w, 200, map[string]interface{}{"cluster": clusters[0]})
+	w.WriteHeader(202)
 }
 
 func findClusterService(tx *gorp.Transaction, srv ServiceCapacities, clusterID string, shared bool) (*db.ClusterService, error) {

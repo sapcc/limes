@@ -537,13 +537,16 @@ this resource in `GET /domains/:domain_id`. However, a `unit` string may be give
 resources that are not mentioned in the request body remain unchanged. This operation will not affect any project
 quotas in this domain.
 
-Returns 200 (OK) on success, with a response body identical to `GET` on the same URL, containing the updated quota
-values.
+Returns 202 (Accepted) on success, with an empty response body.
 
 ## PUT /v1/domains/:domain\_id/projects/:project\_id
 
 Set quotas for the given project. Requires a domain-admin token for the specified domain. Other than that, the call
 works in the same way as `PUT /domains/:domain_id`.
+
+When returning 202 (Accepted), the response body may contain error messages if quota could not be applied to all backend
+services. This is not considered a fatal error (hence the 2xx status code) since the new quota values are still stored
+in Limes and will typically be applied in the backend as soon as the backend starts working again.
 
 ## PUT /v1/clusters/:cluster\_id
 
@@ -595,5 +598,4 @@ Capacity values can only be set for resources which Limes does not know how to m
 always required, and should ideally contain a description of how the capacity value was derived. An existing
 capacity value can be deleted by setting it to `-1`, in which case no `comment` is required.
 
-Returns 200 (OK) on success, with a response body identical to `GET` on the same URL, containing the updated capacity
-values.
+Returns 202 (Accepted) on success, with an empty response body.

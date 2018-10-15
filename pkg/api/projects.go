@@ -332,12 +332,6 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, msg+"\n"+strings.Join(errors, "\n"), 202)
 		return
 	}
-
 	//otherwise, report success
-	_, withSubresources := r.URL.Query()["detail"]
-	projectReport, err := GetProjectReport(updater.Cluster, *updater.Domain, *updater.Project, db.DB, reports.ReadFilter(r), withSubresources)
-	if respondwith.ErrorText(w, err) {
-		return
-	}
-	respondwith.JSON(w, 200, map[string]interface{}{"project": projectReport})
+	w.WriteHeader(202)
 }
