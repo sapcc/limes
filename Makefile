@@ -29,7 +29,7 @@ comma := ,
 check: all static-check build/cover.html FORCE
 	@echo -e "\e[1;32m>> All tests successful.\e[0m"
 static-check: FORCE
-	@if ! hash golint 2>/dev/null; then echo ">> Installing golint..."; go get -u github.com/golang/lint/golint; fi
+	@if ! hash golint 2>/dev/null; then echo ">> Installing golint..."; go get -u golang.org/x/lint/golint; fi
 	@echo '>> gofmt'
 	@if s="$$(gofmt -s -l *.go pkg 2>/dev/null)"                            && test -n "$$s"; then printf ' => %s\n%s\n' gofmt  "$$s"; false; fi
 	@echo '>> golint'
