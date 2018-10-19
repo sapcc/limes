@@ -7,7 +7,7 @@ import (
 	"github.com/sapcc/limes/pkg/limes"
 )
 
-var sharedServicesJSON = `
+var projectServicesMockJSON = `
 	[
 		{
 			"type": "shared",
@@ -30,7 +30,7 @@ var sharedServicesJSON = `
 	]
 `
 
-var resourcesJSON = `
+var projectResourcesMockJSON = `
  [
 		{
 			"name": "capacity",
@@ -46,7 +46,7 @@ var resourcesJSON = `
 	]
 `
 
-var resources = &ProjectResources{
+var projectMockResources = &ProjectResources{
 	"capacity": &ProjectResource{
 		ResourceInfo: limes.ResourceInfo{
 			Name: "capacity",
@@ -64,35 +64,35 @@ var resources = &ProjectResources{
 	},
 }
 
-var sharedServices = &ProjectServices{
+var projectMockServices = &ProjectServices{
 	"shared": &ProjectService{
 		ServiceInfo: limes.ServiceInfo{
 			Type: "shared",
 			Area: "shared",
 		},
-		Resources: *resources,
+		Resources: *projectMockResources,
 		ScrapedAt: 22,
 	},
 }
 
 func TestProjectServicesMarshall(t *testing.T) {
-	th.CheckJSONEquals(t, sharedServicesJSON, sharedServices)
+	th.CheckJSONEquals(t, projectServicesMockJSON, projectMockServices)
 }
 
 func TestProjectServicesUnmarshall(t *testing.T) {
 	actual := &ProjectServices{}
-	err := actual.UnmarshalJSON([]byte(sharedServicesJSON))
+	err := actual.UnmarshalJSON([]byte(projectServicesMockJSON))
 	th.AssertNoErr(t, err)
-	th.CheckDeepEquals(t, sharedServices, actual)
+	th.CheckDeepEquals(t, projectMockServices, actual)
 }
 
 func TestProjectResourcesMarshall(t *testing.T) {
-	th.CheckJSONEquals(t, sharedServicesJSON, sharedServices)
+	th.CheckJSONEquals(t, projectResourcesMockJSON, projectMockResources)
 }
 
 func TestProjectResourcesUnmarshall(t *testing.T) {
-	actual := &ProjectServices{}
-	err := actual.UnmarshalJSON([]byte(sharedServicesJSON))
+	actual := &ProjectResources{}
+	err := actual.UnmarshalJSON([]byte(projectResourcesMockJSON))
 	th.AssertNoErr(t, err)
-	th.CheckDeepEquals(t, sharedServices, actual)
+	th.CheckDeepEquals(t, projectMockResources, actual)
 }

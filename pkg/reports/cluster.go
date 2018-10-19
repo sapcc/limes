@@ -80,6 +80,21 @@ func (s ClusterServices) MarshalJSON() ([]byte, error) {
 	return json.Marshal(list)
 }
 
+//UnmarshalJSON implements the json.Unmarshaler interface
+func (s *ClusterServices) UnmarshalJSON(b []byte) error {
+	tmp := make([]*ClusterService, 0)
+	err := json.Unmarshal(b, &tmp)
+	if err != nil {
+		return err
+	}
+	t := make(ClusterServices)
+	for _, cs := range tmp {
+		t[cs.Type] = cs
+	}
+	*s = ClusterServices(t)
+	return nil
+}
+
 //ClusterResources provides fast lookup of resources using a map, but serializes
 //to JSON as a list.
 type ClusterResources map[string]*ClusterResource
@@ -97,6 +112,21 @@ func (r ClusterResources) MarshalJSON() ([]byte, error) {
 		list[idx] = r[name]
 	}
 	return json.Marshal(list)
+}
+
+//UnmarshalJSON implements the json.Unmarshaler interface
+func (r *ClusterResources) UnmarshalJSON(b []byte) error {
+	tmp := make([]*ClusterResource, 0)
+	err := json.Unmarshal(b, &tmp)
+	if err != nil {
+		return err
+	}
+	t := make(ClusterResources)
+	for _, cr := range tmp {
+		t[cr.Name] = cr
+	}
+	*r = ClusterResources(t)
+	return nil
 }
 
 var clusterReportQuery1 = `
