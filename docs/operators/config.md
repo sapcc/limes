@@ -343,6 +343,17 @@ The `volumes` resource supports subresource scraping. Subresources bear the foll
 Note that capacity for a resource only becomes visible when the corresponding service is enabled in the
 `clusters.$id.services` list as well.
 
+## `cfm`
+
+```yaml
+capacitors:
+  - id: cfm
+```
+
+| Resource | Method |
+| --- | --- |
+| `database/cfm_share_capacity` | Calculated as `sum(pool.capabilities.total_capacity)` over all pools. |
+
 ## `cinder`
 
 ```yaml
