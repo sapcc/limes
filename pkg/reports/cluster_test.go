@@ -17,11 +17,11 @@ var clusterServicesMockJSON = `
 					"name": "cores",
 					"capacity": 500,
 					"domains_quota": 200,
-            		"usage": 100
+					"usage": 100
 				},
 				{
 					"name": "ram",
-            		"unit": "MiB",
+					"unit": "MiB",
 					"capacity": 204800,
 					"domains_quota": 102400,
 					"usage": 40800
@@ -34,7 +34,7 @@ var clusterServicesMockJSON = `
 `
 
 var clusterResourcesMockJSON = `
- [
+	[
 		{
 			"name": "cores",
 			"capacity": 500,

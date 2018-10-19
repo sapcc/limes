@@ -17,11 +17,11 @@ var domainServicesMockJSON = `
 					"name": "cores",
 					"quota": 50,
 					"projects_quota": 20,
-            		"usage": 10
+					"usage": 10
 				},
 				{
 					"name": "ram",
-            		"unit": "MiB",
+					"unit": "MiB",
 					"quota": 20480,
 					"projects_quota": 10240,
 					"usage": 4080
@@ -34,7 +34,7 @@ var domainServicesMockJSON = `
 `
 
 var domainResourcesMockJSON = `
- [
+	[
 		{
 			"name": "cores",
 			"quota": 50,
