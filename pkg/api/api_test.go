@@ -448,6 +448,8 @@ func Test_ClusterOperations(t *testing.T) {
 }
 
 func expectClusterCapacity(t *testing.T, clusterID, serviceType, resourceName string, capacity int64, comment string) {
+	t.Helper()
+
 	queryStr := `
 	SELECT cr.capacity, cr.comment
 	  FROM cluster_services cs
@@ -768,6 +770,8 @@ func Test_DomainOperations(t *testing.T) {
 }
 
 func expectDomainQuota(t *testing.T, domainName, serviceType, resourceName string, expected uint64) {
+	t.Helper()
+
 	var actualQuota uint64
 	err := db.DB.QueryRow(`
 		SELECT dr.quota FROM domain_resources dr
@@ -1090,6 +1094,8 @@ func Test_ProjectOperations(t *testing.T) {
 }
 
 func expectStaleProjectServices(t *testing.T, pairs ...string) {
+	t.Helper()
+
 	queryStr := `
 		SELECT p.name, ps.type
 		  FROM projects p JOIN project_services ps ON ps.project_id = p.id
