@@ -33,7 +33,6 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/identity/v3/tokens"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes/pkg/limes"
-	"github.com/sapcc/limes/pkg/util"
 )
 
 type cfmPlugin struct {
@@ -156,9 +155,9 @@ func cfmListShareservers(provider *gophercloud.ProviderClient, eo gophercloud.En
 	url := strings.TrimSuffix(baseURL, "/") + "/v1.0/shareservers/"
 	var data struct {
 		Shareservers []struct {
-			Links       []gophercloud.Link `json:"links"`
-			Type        string             `json:"type"`
-			ProjectUUID string             `json:"customer_id"`
+			ID          string `json:"id"`
+			Type        string `json:"type"`
+			ProjectUUID string `json:"customer_id"`
 		} `json:"shareservers"`
 	}
 	err = cfmDoRequest(provider, url, &data, projectID)
@@ -171,7 +170,7 @@ func cfmListShareservers(provider *gophercloud.ProviderClient, eo gophercloud.En
 		result[idx] = cfmShareserver{
 			Type:        srv.Type,
 			ProjectUUID: srv.ProjectUUID,
-			DetailsURL:  srv.Links[0].Href,
+			DetailsURL:  url + srv.ID + "/",
 		}
 	}
 	return result, nil
@@ -182,28 +181,40 @@ func cfmGetShareserver(provider *gophercloud.ProviderClient, url string, project
 		Shareserver struct {
 			ID         string `json:"id"`
 			Properties struct {
-				BytesUsed util.CFMBytes `json:"size_used"`
+				SVMs []struct {
+					Volumes []struct {
+						Space struct {
+							BytesUsed uint64 `json:"size"`
+						} `json:"space"`
+					} `json:"volumes"`
+				} `json:"svms"`
 			} `json:"properties"`
-			Links       []gophercloud.Link `json:"links"`
-			Type        string             `json:"type"`
-			ProjectUUID string             `json:"customer_id"`
+			Type        string `json:"type"`
+			ProjectUUID string `json:"customer_id"`
 		} `json:"shareserver"`
 	}
 	err := cfmDoRequest(provider, url, &data, projectID)
 	if err != nil {
 		return nil, fmt.Errorf("GET %s failed: %s", url, err.Error())
 	}
-
 	srv := data.Shareserver
-	logg.Info("CFM shareserver %s (type %s) in project %s has size_used = %d bytes",
+
+	var totalBytesUsed uint64
+	for _, svm := range srv.Properties.SVMs {
+		for _, volume := range svm.Volumes {
+			totalBytesUsed += volume.Space.BytesUsed
+		}
+	}
+
+	logg.Info("CFM shareserver %s (type %s) in project %s has size = %d bytes",
 		srv.ID, srv.Type, srv.ProjectUUID,
-		srv.Properties.BytesUsed,
+		totalBytesUsed,
 	)
 	return &cfmShareserver{
 		Type:        srv.Type,
 		ProjectUUID: srv.ProjectUUID,
-		DetailsURL:  srv.Links[0].Href,
-		BytesUsed:   uint64(srv.Properties.BytesUsed),
+		DetailsURL:  url + srv.ID + "/",
+		BytesUsed:   totalBytesUsed,
 	}, nil
 }
 

@@ -21,8 +21,6 @@ package util
 
 import (
 	"fmt"
-	"strconv"
-	"strings"
 	"time"
 
 	"encoding/json"
@@ -74,48 +72,5 @@ func (s JSONString) MarshalJSON() ([]byte, error) {
 //UnmarshalJSON implements the json.Unmarshaler interface
 func (s *JSONString) UnmarshalJSON(b []byte) error {
 	*s = JSONString(b)
-	return nil
-}
-
-//CFMBytes is a unsigned integer type with custom JSON demarshaling logic to
-//read strings like "0 bytes", "734.24 GB" or "1.95 TB" that appear in the CFM
-//API.
-//
-//NOTE: If we ever add base-1000 units to limes.Unit, consider using
-//limes.ValueWithUnit instead.
-type CFMBytes uint64
-
-var cfmUnits = map[string]float64{
-	"bytes": 1,
-	"KB":    1e3,
-	"MB":    1e6,
-	"GB":    1e9,
-	"TB":    1e12,
-	"PB":    1e15,
-	"EB":    1e18,
-}
-
-//UnmarshalJSON implements the json.Unmarshaler interface
-func (x *CFMBytes) UnmarshalJSON(b []byte) error {
-	var s string
-	err := json.Unmarshal(b, &s)
-	if err != nil {
-		return err
-	}
-
-	fields := strings.SplitN(s, " ", 2)
-	if len(fields) != 2 {
-		return fmt.Errorf(`expected a string with the format "{value} {unit}", got %q instead`, s)
-	}
-	value, err := strconv.ParseFloat(fields[0], 10)
-	if err != nil {
-		return err
-	}
-	unitMultiplier, ok := cfmUnits[fields[1]]
-	if !ok {
-		return fmt.Errorf("unknown unit %q in value %q", fields[1], s)
-	}
-
-	*x = CFMBytes(value * unitMultiplier)
 	return nil
 }
