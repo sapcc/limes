@@ -60,7 +60,7 @@ func (p *capacityCFMPlugin) Scrape(provider *gophercloud.ProviderClient, eo goph
 
 	return map[string]map[string]limes.CapacityData{
 		"database": {
-			"cfm": {
+			"cfm_share_capacity": {
 				Capacity: totalCapacityBytes,
 			},
 		},
