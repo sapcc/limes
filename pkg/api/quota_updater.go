@@ -132,7 +132,7 @@ func (u *QuotaUpdater) ValidateInput(input ServiceQuotas, dbi db.Interface) erro
 				req.OldValue = projRes.Quota
 			}
 
-			//validation phase 1: convert given value to correct unit
+			//convert given value to correct unit
 			newQuota, exists := input[srv.Type][res.Name]
 			if !exists {
 				continue
@@ -144,37 +144,35 @@ func (u *QuotaUpdater) ValidateInput(input ServiceQuotas, dbi db.Interface) erro
 				continue //with next resource
 			}
 
-			//validation phase 2: can we change this quota at all?
 			if req.ValidationError == nil {
-				if res.ExternallyManaged {
-					req.ValidationError = errors.New("resource is managed externally")
-				}
+				req.ValidationError = u.validateQuota(srv, res, *domRes, projRes, req.NewValue)
 			}
-
-			//validation phase 3: check quota constraints
-			if req.ValidationError == nil {
-				constraint := u.QuotaConstraints()[srv.Type][res.Name]
-				if !constraint.Allows(req.NewValue) {
-					req.ValidationError = fmt.Errorf("requested value %q contradicts constraint %q for this %s and resource",
-						limes.ValueWithUnit{Value: req.NewValue, Unit: res.Unit},
-						constraint.ToString(res.Unit), u.ScopeType())
-				}
-			}
-
-			//validation phase 4: specific rules for domain quotas vs. project quotas
-			if req.ValidationError == nil {
-				if u.Project == nil {
-					req.ValidationError = u.validateDomainQuota(*domRes, req.NewValue)
-				} else {
-					req.ValidationError = u.validateProjectQuota(*domRes, *projRes, req.NewValue)
-				}
-			}
-
 			u.Requests[srv.Type][res.Name] = req
 		}
 	}
 
 	return nil
+}
+
+func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limes.ResourceInfo, domRes reports.DomainResource, projRes *reports.ProjectResource, newQuota uint64) error {
+	//can we change this quota at all?
+	if res.ExternallyManaged {
+		return errors.New("resource is managed externally")
+	}
+
+	//check quota constraints
+	constraint := u.QuotaConstraints()[srv.Type][res.Name]
+	if !constraint.Allows(newQuota) {
+		return fmt.Errorf("requested value %q contradicts constraint %q for this %s and resource",
+			limes.ValueWithUnit{Value: newQuota, Unit: res.Unit},
+			constraint.ToString(res.Unit), u.ScopeType())
+	}
+
+	//specific rules for domain quotas vs. project quotas
+	if u.Project == nil {
+		return u.validateDomainQuota(domRes, newQuota)
+	}
+	return u.validateProjectQuota(domRes, *projRes, newQuota)
 }
 
 func (u QuotaUpdater) validateDomainQuota(report reports.DomainResource, newQuota uint64) error {
