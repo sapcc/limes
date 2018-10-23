@@ -206,12 +206,12 @@ func (u QuotaUpdater) validateDomainQuota(report reports.DomainResource, newQuot
 		}
 	}
 	if newQuota < report.ProjectsQuota {
+		min := report.ProjectsQuota
 		return &limes.QuotaValidationError{
-			Status: http.StatusConflict,
-			Message: fmt.Sprintf(
-				"domain quota may not be smaller than sum of project quotas in that domain (%s)",
-				report.Unit.Format(report.ProjectsQuota),
-			),
+			Status:       http.StatusConflict,
+			Message:      "domain quota may not be smaller than sum of project quotas in that domain",
+			MinimumValue: &min,
+			Unit:         report.Unit,
 		}
 	}
 
@@ -230,9 +230,12 @@ func (u QuotaUpdater) validateProjectQuota(domRes reports.DomainResource, projRe
 			}
 		}
 		if projRes.Usage > newQuota {
+			min := projRes.Usage
 			return &limes.QuotaValidationError{
-				Status:  http.StatusConflict,
-				Message: "quota may not be lower than current usage",
+				Status:       http.StatusConflict,
+				Message:      "quota may not be lower than current usage",
+				MinimumValue: &min,
+				Unit:         projRes.Unit,
 			}
 		}
 		return nil
@@ -258,10 +261,10 @@ func (u QuotaUpdater) validateProjectQuota(domRes reports.DomainResource, projRe
 			maxQuota = 0
 		}
 		return &limes.QuotaValidationError{
-			Status: http.StatusConflict,
-			Message: fmt.Sprintf("domain quota exceeded (maximum acceptable project quota is %s)",
-				limes.ValueWithUnit{Value: maxQuota, Unit: domRes.Unit},
-			),
+			Status:       http.StatusConflict,
+			Message:      "domain quota exceeded",
+			MaximumValue: &maxQuota,
+			Unit:         domRes.Unit,
 		}
 	}
 
@@ -292,8 +295,21 @@ func (u QuotaUpdater) WritePutErrorResponse(w http.ResponseWriter) {
 			err := req.ValidationError
 			if err != nil {
 				hasSubstatus[err.Status] = true
-				lines = append(lines, fmt.Sprintf("cannot change %s/%s quota: %s",
-					srvType, resName, err.Message))
+				line := fmt.Sprintf("cannot change %s/%s quota: %s",
+					srvType, resName, err.Message)
+				var notes []string
+				if err.MinimumValue != nil {
+					notes = append(notes, fmt.Sprintf("minimum acceptable %s quota is %v",
+						u.ScopeType(), limes.ValueWithUnit{Value: *err.MinimumValue, Unit: err.Unit}))
+				}
+				if err.MaximumValue != nil {
+					notes = append(notes, fmt.Sprintf("maximum acceptable %s quota is %v",
+						u.ScopeType(), limes.ValueWithUnit{Value: *err.MaximumValue, Unit: err.Unit}))
+				}
+				if len(notes) > 0 {
+					line += fmt.Sprintf(" (%s)", strings.Join(notes, ", "))
+				}
+				lines = append(lines, line)
 			}
 		}
 	}
