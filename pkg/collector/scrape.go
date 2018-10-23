@@ -180,14 +180,14 @@ func (c *Collector) writeScrapeResult(domainName, domainUUID, projectName, proje
 
 		//check if we need to enforce a constraint
 		constraint := serviceConstraints[res.Name]
-		if !constraint.Allows(res.Quota) {
+		if constraint.Validate(res.Quota) != nil {
 			resInfo := c.Cluster.InfoForResource(serviceType, res.Name)
 			newQuota := constraint.ApplyTo(res.Quota)
 			logg.Info("changing %s/%s quota for project %s/%s from %s to %s to satisfy constraint %q",
 				serviceType, res.Name, domainName, projectName,
 				limes.ValueWithUnit{Value: res.Quota, Unit: resInfo.Unit},
 				limes.ValueWithUnit{Value: newQuota, Unit: resInfo.Unit},
-				constraint.ToString(resInfo.Unit),
+				constraint.String(),
 			)
 			res.Quota = newQuota
 			quotaValues[res.Name] = newQuota

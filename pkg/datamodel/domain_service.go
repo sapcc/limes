@@ -115,7 +115,7 @@ func checkDomainServiceConstraints(tx *gorp.Transaction, cluster *limes.Cluster,
 				srv.Type, res.Name, domain.Name,
 				limes.ValueWithUnit{Value: res.Quota, Unit: resInfo.Unit},
 				limes.ValueWithUnit{Value: newQuota, Unit: resInfo.Unit},
-				constraint.ToString(resInfo.Unit),
+				constraint.String(),
 			)
 
 			//take a copy of the loop variable (it will be updated by the loop, so if
@@ -173,7 +173,7 @@ func createMissingDomainResources(tx *gorp.Transaction, cluster *limes.Cluster, 
 		logg.Info("initializing %s/%s quota for domain %s to %s to satisfy constraint %q",
 			srv.Type, resourceName, domain.Name,
 			limes.ValueWithUnit{Value: newQuota, Unit: resInfo.Unit},
-			constraint.ToString(resInfo.Unit),
+			constraint.String(),
 		)
 
 		err := tx.Insert(&db.DomainResource{

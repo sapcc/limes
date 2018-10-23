@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"net/http"
 	"regexp"
 	"strings"
 
@@ -48,6 +49,16 @@ type QuotaConstraint struct {
 	Minimum  *uint64
 	Maximum  *uint64
 	Expected *uint64 //TODO: remove (undocumented and used only during transition from quota seeds to quota constraints)
+	Unit     Unit
+}
+
+//QuotaValidationError appears in the Limes API in the POST .../simulate-put responses.
+type QuotaValidationError struct {
+	Status       int     `json:"status"` //an HTTP status code, e.g. http.StatusForbidden
+	Message      string  `json:"message"`
+	MinimumValue *uint64 `json:"min_acceptable_quota,omitempty"`
+	MaximumValue *uint64 `json:"max_acceptable_quota,omitempty"`
+	Unit         Unit    `json:"unit,omitempty"`
 }
 
 //InitialQuotaValue shall be replaced by direct access to Minimum when Expected is removed. (TODO)
@@ -61,9 +72,21 @@ func (c QuotaConstraint) InitialQuotaValue() uint64 {
 	return 0
 }
 
-//Allows checks whether the given quota value satisfies this constraint.
-func (c QuotaConstraint) Allows(value uint64) bool {
-	return (c.Minimum == nil || *c.Minimum <= value) && (c.Maximum == nil || *c.Maximum >= value)
+//Validate checks if the given quota value satisfies this constraint, or
+//returns an error otherwise.
+func (c QuotaConstraint) Validate(value uint64) *QuotaValidationError {
+	if (c.Minimum == nil || *c.Minimum <= value) && (c.Maximum == nil || *c.Maximum >= value) {
+		return nil
+	}
+	return &QuotaValidationError{
+		Status: http.StatusConflict,
+		Message: fmt.Sprintf("requested value %q contradicts constraint %q",
+			ValueWithUnit{Value: value, Unit: c.Unit}, c.String(),
+		),
+		MinimumValue: c.Minimum,
+		MaximumValue: c.Maximum,
+		Unit:         c.Unit,
+	}
 }
 
 //ApplyTo modifies the given value such that it satisfies this constraint. If
@@ -78,26 +101,25 @@ func (c QuotaConstraint) ApplyTo(value uint64) uint64 {
 	return value
 }
 
-//ToString returns a compact string representation of this QuotaConstraint.
-//The result is valid input syntax for parseQuotaConstraint(). The argument
-//is the unit for the resource in question.
-func (c QuotaConstraint) ToString(unit Unit) string {
+//String returns a compact string representation of this QuotaConstraint.
+//The result is valid input syntax for parseQuotaConstraint().
+func (c QuotaConstraint) String() string {
 	var parts []string
 	hasExactly := false
 
 	if c.Minimum != nil {
 		if c.Maximum != nil && *c.Maximum == *c.Minimum {
-			parts = append(parts, "exactly "+ValueWithUnit{*c.Minimum, unit}.String())
+			parts = append(parts, "exactly "+ValueWithUnit{*c.Minimum, c.Unit}.String())
 			hasExactly = true
 		} else {
-			parts = append(parts, "at least "+ValueWithUnit{*c.Minimum, unit}.String())
+			parts = append(parts, "at least "+ValueWithUnit{*c.Minimum, c.Unit}.String())
 		}
 	}
 	if c.Maximum != nil && !hasExactly {
-		parts = append(parts, "at most "+ValueWithUnit{*c.Maximum, unit}.String())
+		parts = append(parts, "at most "+ValueWithUnit{*c.Maximum, c.Unit}.String())
 	}
 	if c.Expected != nil {
-		parts = append(parts, "should be "+ValueWithUnit{*c.Maximum, unit}.String())
+		parts = append(parts, "should be "+ValueWithUnit{*c.Maximum, c.Unit}.String())
 	}
 	return strings.Join(parts, ", ")
 }
@@ -258,7 +280,7 @@ func parseQuotaConstraint(resource ResourceInfo, str string) (*QuotaConstraint, 
 		}
 	}
 
-	var result QuotaConstraint
+	result := QuotaConstraint{Unit: resource.Unit}
 	pointerTo := func(x uint64) *uint64 { return &x }
 
 	for _, val := range lowerBounds {

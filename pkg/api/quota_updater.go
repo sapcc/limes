@@ -54,13 +54,7 @@ type QuotaRequest struct {
 	OldValue        uint64
 	NewValue        uint64
 	Unit            limes.Unit
-	ValidationError *QuotaValidationError
-}
-
-//QuotaValidationError is an error type that appears in QuotaRequest.
-type QuotaValidationError struct {
-	Status  int //an HTTP status code, e.g. http.StatusForbidden
-	Message string
+	ValidationError *limes.QuotaValidationError
 }
 
 //ScopeType is used for constructing error messages.
@@ -145,7 +139,7 @@ func (u *QuotaUpdater) ValidateInput(input ServiceQuotas, dbi db.Interface) erro
 			}
 			req.NewValue, err = newQuota.ConvertFor(u.Cluster, srv.Type, res.Name)
 			if err != nil {
-				req.ValidationError = &QuotaValidationError{
+				req.ValidationError = &limes.QuotaValidationError{
 					Status:  http.StatusUnprocessableEntity,
 					Message: err.Error(),
 				}
@@ -165,10 +159,10 @@ func (u *QuotaUpdater) ValidateInput(input ServiceQuotas, dbi db.Interface) erro
 	return nil
 }
 
-func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limes.ResourceInfo, domRes reports.DomainResource, projRes *reports.ProjectResource, newQuota uint64) *QuotaValidationError {
+func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limes.ResourceInfo, domRes reports.DomainResource, projRes *reports.ProjectResource, newQuota uint64) *limes.QuotaValidationError {
 	//can we change this quota at all?
 	if res.ExternallyManaged {
-		return &QuotaValidationError{
+		return &limes.QuotaValidationError{
 			Status:  http.StatusUnprocessableEntity,
 			Message: "resource is managed externally",
 		}
@@ -176,13 +170,10 @@ func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limes.ResourceInf
 
 	//check quota constraints
 	constraint := u.QuotaConstraints()[srv.Type][res.Name]
-	if !constraint.Allows(newQuota) {
-		return &QuotaValidationError{
-			Status: http.StatusConflict,
-			Message: fmt.Sprintf("requested value %q contradicts constraint %q for this %s and resource",
-				limes.ValueWithUnit{Value: newQuota, Unit: res.Unit},
-				constraint.ToString(res.Unit), u.ScopeType()),
-		}
+	err := constraint.Validate(newQuota)
+	if err != nil {
+		err.Message += fmt.Sprintf(" for this %s and resource", u.ScopeType())
+		return err
 	}
 
 	//specific rules for domain quotas vs. project quotas
@@ -192,7 +183,7 @@ func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limes.ResourceInf
 	return u.validateProjectQuota(domRes, *projRes, newQuota)
 }
 
-func (u QuotaUpdater) validateDomainQuota(report reports.DomainResource, newQuota uint64) *QuotaValidationError {
+func (u QuotaUpdater) validateDomainQuota(report reports.DomainResource, newQuota uint64) *limes.QuotaValidationError {
 	//if quota is being raised, only permission is required (overprovisioning of
 	//domain quota over the cluster capacity is explicitly allowed because
 	//capacity measurements are usually to be taken with a grain of salt)
@@ -200,7 +191,7 @@ func (u QuotaUpdater) validateDomainQuota(report reports.DomainResource, newQuot
 		if u.CanRaise {
 			return nil
 		}
-		return &QuotaValidationError{
+		return &limes.QuotaValidationError{
 			Status:  http.StatusForbidden,
 			Message: "user is not allowed to raise quotas in this domain",
 		}
@@ -209,13 +200,13 @@ func (u QuotaUpdater) validateDomainQuota(report reports.DomainResource, newQuot
 	//if quota is being lowered, permission is required and the domain quota may
 	//not be less than the sum of quotas that the domain gives out to projects
 	if !u.CanLower {
-		return &QuotaValidationError{
+		return &limes.QuotaValidationError{
 			Status:  http.StatusForbidden,
 			Message: "user is not allowed to lower quotas in this domain",
 		}
 	}
 	if newQuota < report.ProjectsQuota {
-		return &QuotaValidationError{
+		return &limes.QuotaValidationError{
 			Status: http.StatusConflict,
 			Message: fmt.Sprintf(
 				"domain quota may not be smaller than sum of project quotas in that domain (%s)",
@@ -227,19 +218,19 @@ func (u QuotaUpdater) validateDomainQuota(report reports.DomainResource, newQuot
 	return nil
 }
 
-func (u QuotaUpdater) validateProjectQuota(domRes reports.DomainResource, projRes reports.ProjectResource, newQuota uint64) *QuotaValidationError {
+func (u QuotaUpdater) validateProjectQuota(domRes reports.DomainResource, projRes reports.ProjectResource, newQuota uint64) *limes.QuotaValidationError {
 	//if quota is being reduced, permission is required and usage must fit into quota
 	//(note that both res.Quota and newQuota are uint64, so we do not need to
 	//cover the case of infinite quotas)
 	if projRes.Quota > newQuota {
 		if !u.CanLower {
-			return &QuotaValidationError{
+			return &limes.QuotaValidationError{
 				Status:  http.StatusForbidden,
 				Message: "user is not allowed to lower quotas in this project",
 			}
 		}
 		if projRes.Usage > newQuota {
-			return &QuotaValidationError{
+			return &limes.QuotaValidationError{
 				Status:  http.StatusConflict,
 				Message: "quota may not be lower than current usage",
 			}
@@ -249,7 +240,7 @@ func (u QuotaUpdater) validateProjectQuota(domRes reports.DomainResource, projRe
 
 	//if quota is being raised, permission is required and also the domain quota may not be exceeded
 	if !u.CanRaise {
-		return &QuotaValidationError{
+		return &limes.QuotaValidationError{
 			Status:  http.StatusForbidden,
 			Message: "user is not allowed to raise quotas in this project",
 		}
@@ -266,7 +257,7 @@ func (u QuotaUpdater) validateProjectQuota(domRes reports.DomainResource, projRe
 		if domRes.DomainQuota < domRes.ProjectsQuota-projRes.Quota {
 			maxQuota = 0
 		}
-		return &QuotaValidationError{
+		return &limes.QuotaValidationError{
 			Status: http.StatusConflict,
 			Message: fmt.Sprintf("domain quota exceeded (maximum acceptable project quota is %s)",
 				limes.ValueWithUnit{Value: maxQuota, Unit: domRes.Unit},
