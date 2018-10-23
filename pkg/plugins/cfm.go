@@ -184,7 +184,7 @@ func cfmGetShareserver(provider *gophercloud.ProviderClient, url string, project
 				SVMs []struct {
 					Volumes []struct {
 						Space struct {
-							BytesUsed uint64 `json:"size_used"` //TODO also consider size_used_by_snapshots?
+							BytesUsed uint64 `json:"size"`
 						} `json:"space"`
 					} `json:"volumes"`
 				} `json:"svms"`
@@ -206,7 +206,7 @@ func cfmGetShareserver(provider *gophercloud.ProviderClient, url string, project
 		}
 	}
 
-	logg.Info("CFM shareserver %s (type %s) in project %s has size_used = %d bytes",
+	logg.Info("CFM shareserver %s (type %s) in project %s has size = %d bytes",
 		srv.ID, srv.Type, srv.ProjectUUID,
 		totalBytesUsed,
 	)
