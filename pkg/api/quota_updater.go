@@ -140,7 +140,7 @@ func (u *QuotaUpdater) ValidateInput(input ServiceQuotas, dbi db.Interface) erro
 			req.NewValue, req.ValidationError = newQuota.ConvertFor(u.Cluster, srv.Type, res.Name)
 
 			//skip this resource entirely if no change is requested
-			if req.ValidationError == nil && req.OldValue == newQuota.Value {
+			if req.ValidationError == nil && req.OldValue == req.NewValue {
 				continue //with next resource
 			}
 

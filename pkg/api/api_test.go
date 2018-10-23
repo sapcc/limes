@@ -723,6 +723,29 @@ func Test_DomainOperations(t *testing.T) {
 	}.Check(t, router)
 	expectDomainQuota(t, "germany", "shared", "capacity", 1<<20)
 
+	//check a bizarre edge case that was going wrong at some point: when
+	//setting the quota to `<value> <unit>` where the current quota was `<value>
+	//<other-unit>` (with the same value, but a different unit), the update would
+	//be skipped because the value was compared before the unit conversion
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany",
+		ExpectStatus: 202,
+		Body: assert.JSONObject{
+			"domain": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "shared",
+						"resources": []assert.JSONObject{
+							{"name": "capacity", "quota": 1 << 20, "unit": limes.UnitKibibytes},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+	expectDomainQuota(t, "germany", "shared", "capacity", 1<<30)
+
 	//check PutDomain on a missing domain quota (see issue #36)
 	assert.HTTPRequest{
 		Method:       "PUT",
