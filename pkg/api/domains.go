@@ -143,7 +143,7 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 	}
 	if !updater.IsValid() {
 		updater.CommitAuditTrail(token, r, requestTime)
-		http.Error(w, updater.ErrorMessage(), http.StatusUnprocessableEntity)
+		updater.WritePutErrorResponse(w)
 		return
 	}
 

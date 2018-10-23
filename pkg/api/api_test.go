@@ -584,7 +584,7 @@ func Test_DomainOperations(t *testing.T) {
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany",
-		ExpectStatus: 422,
+		ExpectStatus: 409,
 		ExpectBody:   assert.StringData("cannot change shared/capacity quota: domain quota may not be smaller than sum of project quotas in that domain (20 B)\n"),
 		Body: assert.JSONObject{
 			"domain": assert.JSONObject{
@@ -661,7 +661,7 @@ func Test_DomainOperations(t *testing.T) {
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-france",
-		ExpectStatus: 422,
+		ExpectStatus: 409,
 		ExpectBody:   assert.StringData("cannot change shared/things quota: requested value \"15\" contradicts constraint \"at least 20\" for this domain and resource\ncannot change unshared/capacity quota: requested value \"30 B\" contradicts constraint \"at most 20 B\" for this domain and resource\ncannot change unshared/things quota: requested value \"19\" contradicts constraint \"exactly 20\" for this domain and resource\n"),
 		Body: assert.JSONObject{
 			"domain": assert.JSONObject{
@@ -952,7 +952,7 @@ func Test_ProjectOperations(t *testing.T) {
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
-		ExpectStatus: 422,
+		ExpectStatus: 409,
 		ExpectBody:   assert.StringData("cannot change shared/capacity quota: quota may not be lower than current usage\ncannot change shared/things quota: domain quota exceeded (maximum acceptable project quota is 20)\n"),
 		Body: assert.JSONObject{
 			"project": assert.JSONObject{
@@ -974,7 +974,7 @@ func Test_ProjectOperations(t *testing.T) {
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden",
-		ExpectStatus: 422,
+		ExpectStatus: 409,
 		ExpectBody:   assert.StringData("cannot change shared/capacity quota: requested value \"9 B\" contradicts constraint \"at least 10 B\" for this project and resource\ncannot change unshared/capacity quota: requested value \"20 B\" contradicts constraint \"exactly 10 B\" for this project and resource\ncannot change unshared/things quota: requested value \"11\" contradicts constraint \"at most 10\" for this project and resource\n"),
 		Body: assert.JSONObject{
 			"project": assert.JSONObject{

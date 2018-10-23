@@ -289,19 +289,35 @@ func (u QuotaUpdater) IsValid() bool {
 	return true
 }
 
-//ErrorMessage compiles all validation errors into a single user-readable string.
-func (u QuotaUpdater) ErrorMessage() string {
+//WritePutErrorResponse produces a negative HTTP response for this PUT request.
+//It may only be used when `u.IsValid()` is false.
+func (u QuotaUpdater) WritePutErrorResponse(w http.ResponseWriter) {
 	var lines []string
+	hasSubstatus := make(map[int]bool)
+
+	//collect error messages
 	for srvType, reqs := range u.Requests {
 		for resName, req := range reqs {
-			if req.ValidationError != nil {
+			err := req.ValidationError
+			if err != nil {
+				hasSubstatus[err.Status] = true
 				lines = append(lines, fmt.Sprintf("cannot change %s/%s quota: %s",
-					srvType, resName, req.ValidationError.Message))
+					srvType, resName, err.Message))
 			}
 		}
 	}
 	sort.Strings(lines) //for determinism in unit test
-	return strings.Join(lines, "\n")
+	msg := strings.Join(lines, "\n")
+
+	//when all errors have the same status, report that; otherwise use 422
+	//(Unprocessable Entity) as a reasonable overall default
+	status := http.StatusUnprocessableEntity
+	if len(hasSubstatus) == 1 {
+		for s := range hasSubstatus {
+			status = s
+		}
+	}
+	http.Error(w, msg, status)
 }
 
 ////////////////////////////////////////////////////////////////////////////////

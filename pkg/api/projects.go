@@ -218,7 +218,7 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 	}
 	if !updater.IsValid() {
 		updater.CommitAuditTrail(token, r, requestTime)
-		http.Error(w, updater.ErrorMessage(), http.StatusUnprocessableEntity)
+		updater.WritePutErrorResponse(w)
 		return
 	}
 
