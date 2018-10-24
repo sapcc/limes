@@ -1,7 +1,6 @@
 # Example for usage of Limes API
 
-Since there is no commandline client for Limes yet, this guide shall introduce you to using the Limes API directly via
-`curl`.
+This guide shall introduce you to using the Limes API directly via `curl`.
 
 ## Getting a token
 

@@ -6,8 +6,9 @@ for certain auto-created resources, e.g. the `default` security group in Neutron
 
 ## Available clients
 
-* At the time of this writing, there is no command-line client for Limes. You can send requests to
-  [the HTTP API](./api-v1-specification.md) directly, as shown [in this guide](./api-example.md).
+* You can interact with Limes through:
+	* the [command-line client](https://github.com/sapcc/limesctl),
+	* or you can send requests to [the HTTP API](./api-v1-specification.md) directly, as shown [in this guide](./api-example.md).
 * The OpenStack web dashboard [Elektra](https://github.com/sapcc/elektra) contains an optional *Resource Management*
   module that becomes accessible if Limes is deployed in the target OpenStack cluster.
 
