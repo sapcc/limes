@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/sapcc/go-bits/gopherpolicy"
+	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/limes/pkg/audit"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
@@ -281,6 +282,50 @@ func (u QuotaUpdater) IsValid() bool {
 		}
 	}
 	return true
+}
+
+//WriteSimulationReport produces the HTTP response for the POST /simulate-put
+//endpoints.
+func (u QuotaUpdater) WriteSimulationReport(w http.ResponseWriter) {
+	type unacceptableResource struct {
+		ServiceType  string `json:"service_type"`
+		ResourceName string `json:"resource_name"`
+		limes.QuotaValidationError
+	}
+	var result struct {
+		IsValid               bool                   `json:"success,keepempty"`
+		UnacceptableResources []unacceptableResource `json:"unacceptable_resources,omitempty"`
+	}
+	result.IsValid = true //until proven otherwise
+
+	for srvType, reqs := range u.Requests {
+		for resName, req := range reqs {
+			if req.ValidationError != nil {
+				result.IsValid = false
+				result.UnacceptableResources = append(result.UnacceptableResources,
+					unacceptableResource{
+						ServiceType:          srvType,
+						ResourceName:         resName,
+						QuotaValidationError: *req.ValidationError,
+					},
+				)
+			}
+		}
+	}
+
+	//deterministic ordering for unit tests
+	sort.Slice(result.UnacceptableResources, func(i, j int) bool {
+		srvType1 := result.UnacceptableResources[i].ServiceType
+		srvType2 := result.UnacceptableResources[j].ServiceType
+		if srvType1 != srvType2 {
+			return srvType1 < srvType2
+		}
+		resName1 := result.UnacceptableResources[i].ResourceName
+		resName2 := result.UnacceptableResources[j].ResourceName
+		return resName1 < resName2
+	})
+
+	respondwith.JSON(w, http.StatusOK, result)
 }
 
 //WritePutErrorResponse produces a negative HTTP response for this PUT request.

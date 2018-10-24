@@ -98,6 +98,15 @@ func (p *v1Provider) DiscoverDomains(w http.ResponseWriter, r *http.Request) {
 
 //PutDomain handles PUT /v1/domains/:domain_id.
 func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
+	p.putOrSimulatePutDomain(w, r, false)
+}
+
+//SimulatePutDomain handles POST /v1/domains/:domain_id/simulate-put.
+func (p *v1Provider) SimulatePutDomain(w http.ResponseWriter, r *http.Request) {
+	p.putOrSimulatePutDomain(w, r, true)
+}
+
+func (p *v1Provider) putOrSimulatePutDomain(w http.ResponseWriter, r *http.Request, simulate bool) {
 	requestTime := time.Now()
 	token := p.CheckToken(r)
 	canRaise := token.Check("domain:raise")
@@ -129,18 +138,33 @@ func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//start a transaction for the quota updates
-	tx, err := db.DB.Begin()
-	if respondwith.ErrorText(w, err) {
-		return
+	var tx *gorp.Transaction
+	var dbi db.Interface
+	if simulate {
+		dbi = db.DB
+	} else {
+		var err error
+		tx, err = db.DB.Begin()
+		if respondwith.ErrorText(w, err) {
+			return
+		}
+		defer db.RollbackUnlessCommitted(tx)
+		dbi = tx
 	}
-	defer db.RollbackUnlessCommitted(tx)
 
 	//validate inputs (within the DB transaction, to ensure that we do not apply
 	//inconsistent values later)
-	err = updater.ValidateInput(parseTarget.Domain.Services, tx)
+	err := updater.ValidateInput(parseTarget.Domain.Services, dbi)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
+
+	//stop now if we're only simulating
+	if simulate {
+		updater.WriteSimulationReport(w)
+		return
+	}
+
 	if !updater.IsValid() {
 		updater.CommitAuditTrail(token, r, requestTime)
 		updater.WritePutErrorResponse(w)

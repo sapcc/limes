@@ -169,6 +169,15 @@ func (p *v1Provider) SyncProject(w http.ResponseWriter, r *http.Request) {
 
 //PutProject handles PUT /v1/domains/:domain_id/projects/:project_id.
 func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
+	p.putOrSimulatePutProject(w, r, false)
+}
+
+//SimulatePutProject handles POST /v1/domains/:domain_id/projects/:project_id/simulate-put.
+func (p *v1Provider) SimulatePutProject(w http.ResponseWriter, r *http.Request) {
+	p.putOrSimulatePutProject(w, r, true)
+}
+
+func (p *v1Provider) putOrSimulatePutProject(w http.ResponseWriter, r *http.Request, simulate bool) {
 	requestTime := time.Now()
 	token := p.CheckToken(r)
 	canRaise := token.Check("project:raise")
@@ -204,18 +213,33 @@ func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//start a transaction for the quota updates
-	tx, err := db.DB.Begin()
-	if respondwith.ErrorText(w, err) {
-		return
+	var tx *gorp.Transaction
+	var dbi db.Interface
+	if simulate {
+		dbi = db.DB
+	} else {
+		var err error
+		tx, err = db.DB.Begin()
+		if respondwith.ErrorText(w, err) {
+			return
+		}
+		defer db.RollbackUnlessCommitted(tx)
+		dbi = tx
 	}
-	defer db.RollbackUnlessCommitted(tx)
 
 	//validate inputs (within the DB transaction, to ensure that we do not apply
 	//inconsistent values later)
-	err = updater.ValidateInput(parseTarget.Project.Services, tx)
+	err := updater.ValidateInput(parseTarget.Project.Services, dbi)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
+
+	//stop now if we're only simulating
+	if simulate {
+		updater.WriteSimulationReport(w)
+		return
+	}
+
 	if !updater.IsValid() {
 		updater.CommitAuditTrail(token, r, requestTime)
 		updater.WritePutErrorResponse(w)
