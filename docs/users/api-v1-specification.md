@@ -498,7 +498,8 @@ decision about how to adjust her quotas.
 
 ## PUT /v1/domains/:domain\_id
 
-Set quotas for the given domain. Requires a cloud-admin token, and a request body that is a JSON document like:
+Set quotas for the given domain. Requires a cloud-admin or domain-admin token, and a request body that is a JSON
+document like:
 
 ```json
 {
@@ -537,12 +538,65 @@ this resource in `GET /domains/:domain_id`. However, a `unit` string may be give
 resources that are not mentioned in the request body remain unchanged. This operation will not affect any project
 quotas in this domain.
 
+With cloud-admin token, quotas can be set freely. With domain-admin token, installation-specific restrictions may apply.
+Usually, domain admins are limited to lowering quotas, or to raising them only within predefined boundaries.
+
 Returns 202 (Accepted) on success, with an empty response body.
+
+## POST /v1/domains/:domain\_id/simulate-put
+
+Requires a similar token and request body like `PUT /v1/domains/:domain_id`, but does not attempt to actually change any
+quotas.
+
+Returns 200 on success. Result is a JSON document like:
+
+```json
+{
+  "success": false,
+  "unacceptable_resources": [
+    {
+      "service_type": "compute",
+      "resource_name": "ram",
+      "status": 409,
+      "message": "domain quota may not be smaller than sum of project quotas in that domain",
+      "min_acceptable_quota": 200,
+    }
+    {
+      "service_type": "object-store",
+      "resource_name": "capacity",
+      "status": 403,
+      "message": "requested quota exceeds self-approval threshold",
+      "max_acceptable_quota": 5368709120,
+      "unit": "B",
+    }
+  ]
+}
+```
+
+If `success` is true, the corresponding PUT request would have been accepted (i.e., produced a 202 response).
+Otherwise, `unacceptable_resources` contains one entry for each resource whose requested quota value was not accepted.
+
+For each such entry, the `service_type`, `resource_name`, `status` and `message` fields are always given. The `message`
+field contains a human-readable explanation for the error. The `status` field is a machine-readable classification of
+the error as the most closely corresponding HTTP status code. Possible values include:
+
+- 403 (Forbidden) indicates that a higher permission level (e.g. a cloud-admin token instead of a domain-admin token) is
+  needed to set the requested quota value.
+- 409 (Conflict) indicates that the requested quota value contradicts values set on other levels of the quota hierarchy.
+- 422 (Unprocessable Entity) indicates that the quota request itself was malformed (e.g. when a quota of 200 MiB is
+  requeted for a countable resource like `compute/cores`).
+
+For statuses 403 and 409, either `min_acceptable_quota` or `max_acceptable_quota` (or both) **may** be given to indicate
+to the client which quota values would be acceptable. For measured resources, the `unit` field is given whenever either
+`min_acceptable_quota` or `max_acceptable_quota` is given.
 
 ## PUT /v1/domains/:domain\_id/projects/:project\_id
 
-Set quotas for the given project. Requires a domain-admin token for the specified domain. Other than that, the call
-works in the same way as `PUT /domains/:domain_id`.
+## POST /v1/domains/:domain\_id/projects/:project\_id/simulate-put
+
+Set (or simulate setting) quotas for the given project. Requires a domain-admin token for the specified domain, or a
+project-admin token for the specified project. Other than that, the call works in the same way as `PUT
+/domains/:domain_id` and `POST /domains/:domain_id/simulate_put`.
 
 When returning 202 (Accepted), the response body may contain error messages if quota could not be applied to all backend
 services. This is not considered a fatal error (hence the 2xx status code) since the new quota values are still stored

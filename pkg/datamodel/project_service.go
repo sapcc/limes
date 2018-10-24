@@ -142,7 +142,7 @@ func checkProjectResourcesAgainstConstraint(tx *gorp.Transaction, cluster *limes
 	ok = true
 	for _, res := range resources {
 		constraint := serviceConstraints[res.Name]
-		if !constraint.Allows(res.Quota) {
+		if constraint.Validate(res.Quota) != nil {
 			ok = false
 		}
 

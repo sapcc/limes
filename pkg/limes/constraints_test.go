@@ -43,10 +43,10 @@ func TestQuotaConstraintParsingSuccess(t *testing.T) {
 			"germany": {
 				"service-one": {
 					"things":       {Minimum: pointerTo(20), Maximum: pointerTo(30)},
-					"capacity_MiB": {Minimum: pointerTo(10240)},
+					"capacity_MiB": {Minimum: pointerTo(10240), Unit: UnitMebibytes},
 				},
 				"service-two": {
-					"capacity_MiB": {Minimum: pointerTo(1)},
+					"capacity_MiB": {Minimum: pointerTo(1), Unit: UnitMebibytes},
 				},
 			},
 			"poland": {
@@ -60,7 +60,7 @@ func TestQuotaConstraintParsingSuccess(t *testing.T) {
 				"berlin": {
 					"service-one": {
 						"things":       {Minimum: pointerTo(10)},
-						"capacity_MiB": {Minimum: pointerTo(5120), Maximum: pointerTo(6144)},
+						"capacity_MiB": {Minimum: pointerTo(5120), Maximum: pointerTo(6144), Unit: UnitMebibytes},
 					},
 				},
 				"dresden": {
@@ -68,7 +68,7 @@ func TestQuotaConstraintParsingSuccess(t *testing.T) {
 						"things": {Minimum: pointerTo(5), Maximum: pointerTo(5)},
 					},
 					"service-two": {
-						"capacity_MiB": {Minimum: pointerTo(1), Maximum: pointerTo(1)},
+						"capacity_MiB": {Minimum: pointerTo(1), Maximum: pointerTo(1), Unit: UnitMebibytes},
 					},
 				},
 			},
@@ -170,19 +170,19 @@ func TestQuotaConstraintToString(t *testing.T) {
 	}
 	testcases := []testcase{
 		{
-			Input:    QuotaConstraint{Minimum: pointerTo(10)},
+			Input:    QuotaConstraint{Minimum: pointerTo(10), Unit: UnitMebibytes},
 			Expected: "at least 10 MiB",
 		}, {
-			Input:    QuotaConstraint{Minimum: pointerTo(10), Maximum: pointerTo(20)},
+			Input:    QuotaConstraint{Minimum: pointerTo(10), Maximum: pointerTo(20), Unit: UnitMebibytes},
 			Expected: "at least 10 MiB, at most 20 MiB",
 		}, {
-			Input:    QuotaConstraint{Minimum: pointerTo(20), Maximum: pointerTo(20)},
+			Input:    QuotaConstraint{Minimum: pointerTo(20), Maximum: pointerTo(20), Unit: UnitMebibytes},
 			Expected: "exactly 20 MiB",
 		},
 	}
 
 	for _, testcase := range testcases {
-		actual := testcase.Input.ToString(UnitMebibytes)
+		actual := testcase.Input.String()
 		if actual != testcase.Expected {
 			t.Errorf("expected %#v to serialize into %q, but got %q",
 				testcase.Input, testcase.Expected, actual)

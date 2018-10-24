@@ -57,11 +57,11 @@ func setupTest(t *testing.T, clusterName, startData string) (*limes.Cluster, htt
 		Domains: map[string]limes.QuotaConstraints{
 			"france": {
 				"shared": {
-					"capacity": {Minimum: p2u64(10), Maximum: p2u64(123)},
+					"capacity": {Minimum: p2u64(10), Maximum: p2u64(123), Unit: limes.UnitBytes},
 					"things":   {Minimum: p2u64(20)},
 				},
 				"unshared": {
-					"capacity": {Maximum: p2u64(20)},
+					"capacity": {Maximum: p2u64(20), Unit: limes.UnitBytes},
 					"things":   {Minimum: p2u64(20), Maximum: p2u64(20)},
 				},
 			},
@@ -71,16 +71,16 @@ func setupTest(t *testing.T, clusterName, startData string) (*limes.Cluster, htt
 				"berlin": {
 					//This constraint is used for the happy-path tests, where PUT
 					//succeeds because the requested value fits within the constraint.
-					"shared": {"capacity": {Minimum: p2u64(1), Maximum: p2u64(6)}},
+					"shared": {"capacity": {Minimum: p2u64(1), Maximum: p2u64(6), Unit: limes.UnitBytes}},
 				},
 				"dresden": {
 					//These constraints are used for the failure tests, where PUT fails
 					//because the requested values conflict with the constraint.
 					"shared": {
-						"capacity": {Minimum: p2u64(10)},
+						"capacity": {Minimum: p2u64(10), Unit: limes.UnitBytes},
 					},
 					"unshared": {
-						"capacity": {Minimum: p2u64(10), Maximum: p2u64(10)},
+						"capacity": {Minimum: p2u64(10), Maximum: p2u64(10), Unit: limes.UnitBytes},
 						"things":   {Maximum: p2u64(10)},
 					},
 				},
@@ -584,8 +584,8 @@ func Test_DomainOperations(t *testing.T) {
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany",
-		ExpectStatus: 422,
-		ExpectBody:   assert.StringData("cannot change shared/capacity quota: domain quota may not be smaller than sum of project quotas in that domain (20 B)\n"),
+		ExpectStatus: 409,
+		ExpectBody:   assert.StringData("cannot change shared/capacity quota: domain quota may not be smaller than sum of project quotas in that domain (minimum acceptable domain quota is 20 B)\n"),
 		Body: assert.JSONObject{
 			"domain": assert.JSONObject{
 				"services": []assert.JSONObject{
@@ -661,8 +661,8 @@ func Test_DomainOperations(t *testing.T) {
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-france",
-		ExpectStatus: 422,
-		ExpectBody:   assert.StringData("cannot change shared/things quota: requested value \"15\" contradicts constraint \"at least 20\" for this domain and resource\ncannot change unshared/capacity quota: requested value \"30 B\" contradicts constraint \"at most 20 B\" for this domain and resource\ncannot change unshared/things quota: requested value \"19\" contradicts constraint \"exactly 20\" for this domain and resource\n"),
+		ExpectStatus: 409,
+		ExpectBody:   assert.StringData("cannot change shared/things quota: requested value \"15\" contradicts constraint \"at least 20\" for this domain and resource (minimum acceptable domain quota is 20)\ncannot change unshared/capacity quota: requested value \"30 B\" contradicts constraint \"at most 20 B\" for this domain and resource (maximum acceptable domain quota is 20 B)\ncannot change unshared/things quota: requested value \"19\" contradicts constraint \"exactly 20\" for this domain and resource (minimum acceptable domain quota is 20, maximum acceptable domain quota is 20)\n"),
 		Body: assert.JSONObject{
 			"domain": assert.JSONObject{
 				"services": []assert.JSONObject{
@@ -767,6 +767,98 @@ func Test_DomainOperations(t *testing.T) {
 		},
 	}.Check(t, router)
 	expectDomainQuota(t, "france", "shared", "capacity", 123)
+
+	//check SimulatePutDomain for no actual changes (all quotas requested already are set like that)
+	assert.HTTPRequest{
+		Method:       "POST",
+		Path:         "/v1/domains/uuid-for-germany/simulate-put",
+		ExpectStatus: 200,
+		Body: assert.JSONObject{
+			"domain": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "shared",
+						"resources": []assert.JSONObject{
+							{"name": "capacity", "quota": 1 << 20, "unit": limes.UnitKibibytes},
+						},
+					},
+				},
+			},
+		},
+		ExpectBody: assert.JSONObject{
+			"success": true,
+		},
+	}.Check(t, router)
+
+	//check SimulatePutDomain for acceptable changes
+	assert.HTTPRequest{
+		Method:       "POST",
+		Path:         "/v1/domains/uuid-for-germany/simulate-put",
+		ExpectStatus: 200,
+		Body: assert.JSONObject{
+			"domain": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "shared",
+						"resources": []assert.JSONObject{
+							{"name": "capacity", "quota": 1, "unit": limes.UnitMebibytes},
+						},
+					},
+				},
+			},
+		},
+		ExpectBody: assert.JSONObject{
+			"success": true,
+		},
+	}.Check(t, router)
+
+	//check SimulatePutDomain for partially unacceptable changes
+	assert.HTTPRequest{
+		Method:       "POST",
+		Path:         "/v1/domains/uuid-for-germany/simulate-put",
+		ExpectStatus: 200,
+		Body: assert.JSONObject{
+			"domain": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "shared",
+						"resources": []assert.JSONObject{
+							{"name": "capacity", "quota": 100},
+							//should fail with 422 because of incompatible units
+							{"name": "things", "quota": 1, "unit": limes.UnitBytes},
+						},
+					},
+					{
+						"type": "unshared",
+						"resources": []assert.JSONObject{
+							//should fail with 409 because project quotas are higher than that
+							{"name": "capacity", "quota": 0},
+							{"name": "things", "quota": 100},
+						},
+					},
+				},
+			},
+		},
+		ExpectBody: assert.JSONObject{
+			"success": false,
+			"unacceptable_resources": []assert.JSONObject{
+				{
+					"service_type":  "shared",
+					"resource_name": "things",
+					"status":        422,
+					"message":       `cannot convert value from B to <count> because units are incompatible`,
+				},
+				{
+					"service_type":         "unshared",
+					"resource_name":        "capacity",
+					"status":               409,
+					"message":              "domain quota may not be smaller than sum of project quotas in that domain",
+					"min_acceptable_quota": 20,
+					"unit":                 "B",
+				},
+			},
+		},
+	}.Check(t, router)
 }
 
 func expectDomainQuota(t *testing.T, domainName, serviceType, resourceName string, expected uint64) {
@@ -952,8 +1044,8 @@ func Test_ProjectOperations(t *testing.T) {
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
-		ExpectStatus: 422,
-		ExpectBody:   assert.StringData("cannot change shared/capacity quota: quota may not be lower than current usage\ncannot change shared/things quota: domain quota exceeded (maximum acceptable project quota is 20)\n"),
+		ExpectStatus: 409,
+		ExpectBody:   assert.StringData("cannot change shared/capacity quota: quota may not be lower than current usage (minimum acceptable project quota is 2 B)\ncannot change shared/things quota: domain quota exceeded (maximum acceptable project quota is 20)\n"),
 		Body: assert.JSONObject{
 			"project": assert.JSONObject{
 				"services": []assert.JSONObject{
@@ -974,8 +1066,8 @@ func Test_ProjectOperations(t *testing.T) {
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden",
-		ExpectStatus: 422,
-		ExpectBody:   assert.StringData("cannot change shared/capacity quota: requested value \"9 B\" contradicts constraint \"at least 10 B\" for this project and resource\ncannot change unshared/capacity quota: requested value \"20 B\" contradicts constraint \"exactly 10 B\" for this project and resource\ncannot change unshared/things quota: requested value \"11\" contradicts constraint \"at most 10\" for this project and resource\n"),
+		ExpectStatus: 409,
+		ExpectBody:   assert.StringData("cannot change shared/capacity quota: requested value \"9 B\" contradicts constraint \"at least 10 B\" for this project and resource (minimum acceptable project quota is 10 B)\ncannot change unshared/capacity quota: requested value \"20 B\" contradicts constraint \"exactly 10 B\" for this project and resource (minimum acceptable project quota is 10 B, maximum acceptable project quota is 10 B)\ncannot change unshared/things quota: requested value \"11\" contradicts constraint \"at most 10\" for this project and resource (maximum acceptable project quota is 10)\n"),
 		Body: assert.JSONObject{
 			"project": assert.JSONObject{
 				"services": []assert.JSONObject{
@@ -1091,6 +1183,98 @@ func Test_ProjectOperations(t *testing.T) {
 	if !reflect.DeepEqual(expectBackendQuota, backendQuota) {
 		t.Errorf("expected backend quota %#v, but got %#v", expectBackendQuota, backendQuota)
 	}
+
+	//check SimulatePutProject for no actual changes (all quotas requested already are set like that)
+	assert.HTTPRequest{
+		Method:       "POST",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/simulate-put",
+		ExpectStatus: 200,
+		Body: assert.JSONObject{
+			"project": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "shared",
+						"resources": []assert.JSONObject{
+							{"name": "capacity", "quota": 6},
+						},
+					},
+				},
+			},
+		},
+		ExpectBody: assert.JSONObject{
+			"success": true,
+		},
+	}.Check(t, router)
+
+	//check SimulatePutProject for acceptable changes
+	assert.HTTPRequest{
+		Method:       "POST",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/simulate-put",
+		ExpectStatus: 200,
+		Body: assert.JSONObject{
+			"project": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "shared",
+						"resources": []assert.JSONObject{
+							{"name": "capacity", "quota": 5},
+						},
+					},
+				},
+			},
+		},
+		ExpectBody: assert.JSONObject{
+			"success": true,
+		},
+	}.Check(t, router)
+
+	//check SimulatePutProject for partially unacceptable changes
+	assert.HTTPRequest{
+		Method:       "POST",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/simulate-put",
+		ExpectStatus: 200,
+		Body: assert.JSONObject{
+			"project": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "shared",
+						"resources": []assert.JSONObject{
+							{"name": "capacity", "quota": 4},
+							//should fail with 422 because of incompatible units
+							{"name": "things", "quota": 1, "unit": limes.UnitBytes},
+						},
+					},
+					{
+						"type": "unshared",
+						"resources": []assert.JSONObject{
+							//should fail with 409 because usage is higher than that
+							{"name": "capacity", "quota": 0},
+							{"name": "things", "quota": 4},
+						},
+					},
+				},
+			},
+		},
+		ExpectBody: assert.JSONObject{
+			"success": false,
+			"unacceptable_resources": []assert.JSONObject{
+				{
+					"service_type":  "shared",
+					"resource_name": "things",
+					"status":        422,
+					"message":       `cannot convert value from B to <count> because units are incompatible`,
+				},
+				{
+					"service_type":         "unshared",
+					"resource_name":        "capacity",
+					"status":               409,
+					"message":              "quota may not be lower than current usage",
+					"min_acceptable_quota": 2,
+					"unit":                 "B",
+				},
+			},
+		},
+	}.Check(t, router)
 }
 
 func expectStaleProjectServices(t *testing.T, pairs ...string) {

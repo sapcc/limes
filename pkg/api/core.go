@@ -94,12 +94,14 @@ func NewV1Router(cluster *limes.Cluster, config limes.Configuration) (http.Handl
 	r.Methods("GET").Path("/v1/domains").HandlerFunc(p.ListDomains)
 	r.Methods("GET").Path("/v1/domains/{domain_id}").HandlerFunc(p.GetDomain)
 	r.Methods("POST").Path("/v1/domains/discover").HandlerFunc(p.DiscoverDomains)
+	r.Methods("POST").Path("/v1/domains/{domain_id}/simulate-put").HandlerFunc(p.SimulatePutDomain)
 	r.Methods("PUT").Path("/v1/domains/{domain_id}").HandlerFunc(p.PutDomain)
 
 	r.Methods("GET").Path("/v1/domains/{domain_id}/projects").HandlerFunc(p.ListProjects)
 	r.Methods("GET").Path("/v1/domains/{domain_id}/projects/{project_id}").HandlerFunc(p.GetProject)
 	r.Methods("POST").Path("/v1/domains/{domain_id}/projects/discover").HandlerFunc(p.DiscoverProjects)
 	r.Methods("POST").Path("/v1/domains/{domain_id}/projects/{project_id}/sync").HandlerFunc(p.SyncProject)
+	r.Methods("POST").Path("/v1/domains/{domain_id}/projects/{project_id}/simulate-put").HandlerFunc(p.SimulatePutProject)
 	r.Methods("PUT").Path("/v1/domains/{domain_id}/projects/{project_id}").HandlerFunc(p.PutProject)
 
 	return r, p.VersionData
