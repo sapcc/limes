@@ -220,7 +220,7 @@ func (u QuotaUpdater) validateAuthorization(oldQuota, newQuota, lprLimit uint64,
 	if u.CanRaise {
 		return nil
 	}
-	if u.CanRaiseLP {
+	if u.CanRaiseLP && lprLimit > 0 {
 		if newQuota < lprLimit {
 			return nil
 		}

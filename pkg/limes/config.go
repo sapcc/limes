@@ -28,6 +28,7 @@ import (
 	"strings"
 
 	policy "github.com/databus23/goslo.policy"
+	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes/pkg/db"
 
@@ -167,9 +168,9 @@ type CADFConfiguration struct {
 
 //APIConfiguration contains configuration parameters for limes-serve.
 type APIConfiguration struct {
-	ListenAddress  string           `yaml:"listen"`
-	PolicyFilePath string           `yaml:"policy"`
-	PolicyEnforcer *policy.Enforcer `yaml:"-"`
+	ListenAddress  string                `yaml:"listen"`
+	PolicyFilePath string                `yaml:"policy"`
+	PolicyEnforcer gopherpolicy.Enforcer `yaml:"-"`
 	RequestLog     struct {
 		ExceptStatusCodes []int `yaml:"except_status_codes"`
 	} `yaml:"request_log"`
@@ -345,7 +346,7 @@ func (cfg configurationInFile) validate() (success bool) {
 	return
 }
 
-func loadPolicyFile(path string) (*policy.Enforcer, error) {
+func loadPolicyFile(path string) (gopherpolicy.Enforcer, error) {
 	bytes, err := ioutil.ReadFile(path)
 	if err != nil {
 		return nil, err
