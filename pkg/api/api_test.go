@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -1439,7 +1440,32 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 							//attempt to raise should fail because of lack of permissions
 							{"name": "capacity", "quota": 11},
 							//attempt to raise should be permitted by low-privilege exception
-							{"name": "things", "quota": 5},
+							{"name": "things", "quota": 11},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+
+	cluster.Config.LowPrivilegeRaise.ExcludeProjectDomainRx = regexp.MustCompile(`germany`)
+
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 403,
+		ExpectBody:   assert.StringData("cannot change shared/capacity quota: user is not allowed to raise quotas in this project\ncannot change shared/things quota: user is not allowed to raise quotas in this project\n"),
+		Body: assert.JSONObject{
+			"project": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "shared",
+						"resources": []assert.JSONObject{
+							//attempt to raise should fail because of lack of permissions
+							{"name": "capacity", "quota": 11},
+							//attempt to raise should fail because low-privilege q.r. is
+							//disabled in this domain
+							{"name": "things", "quota": 11},
 						},
 					},
 				},
