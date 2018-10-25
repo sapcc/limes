@@ -59,11 +59,12 @@ type ClusterConfiguration struct {
 	Services   []ServiceConfiguration   `yaml:"services"`
 	Capacitors []CapacitorConfiguration `yaml:"capacitors"`
 	//^ Sorry for the stupid pun. Not.
-	Subresources         map[string][]string `yaml:"subresources"`
-	Subcapacities        map[string][]string `yaml:"subcapacities"`
-	Authoritative        bool                `yaml:"authoritative"`
-	ConstraintConfigPath string              `yaml:"constraints"`
-	CADF                 CADFConfiguration   `yaml:"cadf"`
+	Subresources         map[string][]string            `yaml:"subresources"`
+	Subcapacities        map[string][]string            `yaml:"subcapacities"`
+	Authoritative        bool                           `yaml:"authoritative"`
+	ConstraintConfigPath string                         `yaml:"constraints"`
+	CADF                 CADFConfiguration              `yaml:"cadf"`
+	LowPrivilegeRaise    LowPrivilegeRaiseConfiguration `yaml:"lowpriv_raise"`
 	//The following is only read to warn that users need to upgrade from seeds to constraints.
 	OldSeedConfigPath string `yaml:"seeds"`
 }
@@ -128,6 +129,31 @@ type CapacitorConfiguration struct {
 		CapacityOvercommitFactor float64 `yaml:"capacity_overcommit"`
 	} `yaml:"manila"`
 	Manual map[string]map[string]uint64 `yaml:"manual"`
+}
+
+//LowPrivilegeRaiseConfiguration contains the configuration options for
+//low-privilege quota raising in a certain cluster.
+type LowPrivilegeRaiseConfiguration struct {
+	Limits struct {
+		ForDomains  map[string]map[string]string `yaml:"domains"`
+		ForProjects map[string]map[string]string `yaml:"projects"`
+	} `yaml:"limits"`
+	ExcludeProjectDomainPattern string         `yaml:"except_projects_in_domains"`
+	IncludeProjectDomainPattern string         `yaml:"only_projects_in_domains"`
+	IncludeProjectDomainRx      *regexp.Regexp `yaml:"-"`
+	ExcludeProjectDomainRx      *regexp.Regexp `yaml:"-"`
+}
+
+//IsAllowedForProjectsIn checks if low-privilege quota raising is enabled by this config
+//for the domain with the given name.
+func (l LowPrivilegeRaiseConfiguration) IsAllowedForProjectsIn(domainName string) bool {
+	if l.ExcludeProjectDomainRx != nil && l.ExcludeProjectDomainRx.MatchString(domainName) {
+		return false
+	}
+	if l.IncludeProjectDomainRx == nil {
+		return true
+	}
+	return l.IncludeProjectDomainRx.MatchString(domainName)
 }
 
 //CADFConfiguration contains configuration parameters for audit trail.
@@ -294,6 +320,9 @@ func (cfg configurationInFile) validate() (success bool) {
 
 		cluster.Discovery.IncludeDomainRx = compileOptionalRx(cluster.Discovery.IncludeDomainPattern)
 		cluster.Discovery.ExcludeDomainRx = compileOptionalRx(cluster.Discovery.ExcludeDomainPattern)
+
+		cluster.LowPrivilegeRaise.IncludeProjectDomainRx = compileOptionalRx(cluster.LowPrivilegeRaise.IncludeProjectDomainPattern)
+		cluster.LowPrivilegeRaise.ExcludeProjectDomainRx = compileOptionalRx(cluster.LowPrivilegeRaise.ExcludeProjectDomainPattern)
 
 		//warn about removed configuration options
 		if cluster.OldSeedConfigPath != "" {

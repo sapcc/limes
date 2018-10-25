@@ -42,8 +42,9 @@ type QuotaUpdater struct {
 	Domain  *db.Domain  //always set (for project quota updates, contains the project'u domain)
 	Project *db.Project //nil for domain quota updates
 	//AuthZ info
-	CanRaise bool
-	CanLower bool
+	CanRaise   bool
+	CanRaiseLP bool //low-privilege raise
+	CanLower   bool
 
 	//filled by ValidateInput(), key = service type + resource name
 	Requests map[string]map[string]QuotaRequest
@@ -178,13 +179,21 @@ func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limes.ResourceInf
 	}
 
 	//check authorization for quota change
-	var oldQuota uint64
+	var (
+		oldQuota uint64
+		lprLimit uint64
+	)
 	if u.Project == nil {
 		oldQuota = domRes.DomainQuota
+		lprLimit = u.Cluster.LowPrivilegeRaise.LimitsForDomains[srv.Type][res.Name]
 	} else {
 		oldQuota = projRes.Quota
+		lprLimit = u.Cluster.LowPrivilegeRaise.LimitsForProjects[srv.Type][res.Name]
+		if !u.Cluster.Config.LowPrivilegeRaise.IsAllowedForProjectsIn(u.Domain.Name) {
+			lprLimit = 0
+		}
 	}
-	err = u.validateAuthorization(oldQuota, newQuota, res.Unit)
+	err = u.validateAuthorization(oldQuota, newQuota, lprLimit, res.Unit)
 	if err != nil {
 		err.Message += fmt.Sprintf(" in this %s", u.ScopeType())
 		return err
@@ -197,7 +206,7 @@ func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limes.ResourceInf
 	return u.validateProjectQuota(domRes, *projRes, newQuota)
 }
 
-func (u QuotaUpdater) validateAuthorization(oldQuota, newQuota uint64, unit limes.Unit) *limes.QuotaValidationError {
+func (u QuotaUpdater) validateAuthorization(oldQuota, newQuota, lprLimit uint64, unit limes.Unit) *limes.QuotaValidationError {
 	if oldQuota >= newQuota {
 		if u.CanLower {
 			return nil
@@ -210,6 +219,17 @@ func (u QuotaUpdater) validateAuthorization(oldQuota, newQuota uint64, unit lime
 
 	if u.CanRaise {
 		return nil
+	}
+	if u.CanRaiseLP {
+		if newQuota < lprLimit {
+			return nil
+		}
+		return &limes.QuotaValidationError{
+			Status:       http.StatusForbidden,
+			Message:      "user is not allowed to raise quotas that high",
+			MaximumValue: &lprLimit,
+			Unit:         unit,
+		}
 	}
 	return &limes.QuotaValidationError{
 		Status:  http.StatusForbidden,

@@ -31,15 +31,19 @@ import (
 //cluster. It is passed around a lot in Limes code, mostly for the cluster ID,
 //the list of enabled services, and access to the quota and capacity plugins.
 type Cluster struct {
-	ID               string
-	Config           *ClusterConfiguration
-	ServiceTypes     []string
-	IsServiceShared  map[string]bool
-	DiscoveryPlugin  DiscoveryPlugin
-	QuotaPlugins     map[string]QuotaPlugin
-	CapacityPlugins  map[string]CapacityPlugin
-	Authoritative    bool
-	QuotaConstraints *QuotaConstraintSet
+	ID                string
+	Config            *ClusterConfiguration
+	ServiceTypes      []string
+	IsServiceShared   map[string]bool
+	DiscoveryPlugin   DiscoveryPlugin
+	QuotaPlugins      map[string]QuotaPlugin
+	CapacityPlugins   map[string]CapacityPlugin
+	Authoritative     bool
+	QuotaConstraints  *QuotaConstraintSet
+	LowPrivilegeRaise struct {
+		LimitsForDomains  map[string]map[string]uint64
+		LimitsForProjects map[string]map[string]uint64
+	}
 }
 
 //NewCluster creates a new Cluster instance with the given ID and
@@ -116,19 +120,11 @@ func NewCluster(id string, config *ClusterConfiguration) *Cluster {
 //that all ProviderClient instances are available. It also calls Init() on all
 //quota plugins.
 //
-//It also loads the QuotaConstraints for thie cluster, if configured.
+//It also loads the QuotaConstraints for this cluster, if configured. The
+//LowPrivilegeRaise.Limits fields are also initialized here. Both constraints and
+//limits cannot be initialized earlier because we only know all resources after
+//calling Init() on all quota plugins.
 func (c *Cluster) Connect() error {
-	if c.Config.ConstraintConfigPath != "" && c.QuotaConstraints == nil {
-		var errs []error
-		c.QuotaConstraints, errs = NewQuotaConstraints(c, c.Config.ConstraintConfigPath)
-		if len(errs) > 0 {
-			for _, err := range errs {
-				logg.Error(err.Error())
-			}
-			return fmt.Errorf("cannot load quota constraints for cluster %s (see errors above)", c.ID)
-		}
-	}
-
 	err := c.Config.Auth.Connect()
 	if err != nil {
 		return fmt.Errorf("failed to authenticate in cluster %s: %s", c.ID, err.Error())
@@ -153,7 +149,50 @@ func (c *Cluster) Connect() error {
 		}
 	}
 
+	//load quota constraints
+	if c.Config.ConstraintConfigPath != "" && c.QuotaConstraints == nil {
+		var errs []error
+		c.QuotaConstraints, errs = NewQuotaConstraints(c, c.Config.ConstraintConfigPath)
+		if len(errs) > 0 {
+			for _, err := range errs {
+				logg.Error(err.Error())
+			}
+			return fmt.Errorf("cannot load quota constraints for cluster %s (see errors above)", c.ID)
+		}
+	}
+
+	//parse low-privilege raise limits
+	c.LowPrivilegeRaise.LimitsForDomains, err = c.parseLowPrivilegeRaiseLimits(
+		c.Config.LowPrivilegeRaise.Limits.ForDomains)
+	if err != nil {
+		return err
+	}
+	c.LowPrivilegeRaise.LimitsForProjects, err = c.parseLowPrivilegeRaiseLimits(
+		c.Config.LowPrivilegeRaise.Limits.ForProjects)
+	if err != nil {
+		return err
+	}
+
 	return nil
+}
+
+func (c Cluster) parseLowPrivilegeRaiseLimits(inputs map[string]map[string]string) (map[string]map[string]uint64, error) {
+	result := make(map[string]map[string]uint64)
+	var err error
+	for srvType, quotaPlugin := range c.QuotaPlugins {
+		result[srvType] = make(map[string]uint64)
+		for _, res := range quotaPlugin.Resources() {
+			limit, exists := inputs[srvType][res.Name]
+			if !exists {
+				continue
+			}
+			result[srvType][res.Name], err = res.Unit.Parse(limit)
+			if err != nil {
+				return nil, fmt.Errorf("could not parse low-privilege raise limit: %s", err.Error())
+			}
+		}
+	}
+	return result, nil
 }
 
 //ProviderClient returns the gophercloud.ProviderClient for this cluster. This
