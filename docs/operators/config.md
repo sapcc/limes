@@ -99,6 +99,15 @@ Configuration options describing the OpenStack clusters which Limes shall cover.
 | `clusters.$id.constraints` | no | Path to a YAML file containing the quota constraints for this cluster. See [*quota constraints*](constraints.md) for details. |
 | `clusters.$id.cadf` | no | Audit trail configuration options. See [*audit trail*](#audit-trail) for details. |
 
+### Audit trail
+
+Limes logs all quota changes at the domain and project level in an Open Standards [CADF format](https://www.dmtf.org/standards/cadf). These audit events can be sent to a RabbitMQ server which can then forward them to any cloud audit API, datastore, etc.
+
+| Field | Required | Description |
+| --- | --- | --- |
+| `clusters.$id.cadf.enabled` | no | Set this to true if you want to send the audit events to a RabbitMQ server. |
+| `clusters.$id.cadf.rabbitmq.url` | yes, if `enabled` is true | URI for establishing a connection to the RabbitMQ server as per the [AMQP URI format](https://www.rabbitmq.com/uri-spec.html). |
+| `clusters.$id.cadf.rabbitmq.queue_name` | yes, if `enabled` is true | Name for the queue that will hold the audit events. The events are published to the default exchange. |
 
 # Supported discovery methods
 
@@ -505,16 +514,6 @@ bear the following attributes:
 | `cores` | integer | number of CPU cores |
 | `disk` | integer value with unit | root disk size |
 | `serial` | string | hardware serial number for node |
-
-## Audit trail
-
-Limes logs all quota changes at the domain and project level in an Open Standards [CADF format](https://www.dmtf.org/standards/cadf). These audit events can be sent to a RabbitMQ server which can then forward them to any cloud audit API, datastore, etc.
-
-| Field | Required | Description |
-| --- | --- | --- |
-| `clusters.$id.cadf.enabled` | no | Set this to true if you want to send the audit events to a RabbitMQ server. |
-| `clusters.$id.cadf.rabbitmq.url` | yes, if `enabled` is true | URI for establishing a connection to the RabbitMQ server as per the [AMQP URI format](https://www.rabbitmq.com/uri-spec.html). |
-| `clusters.$id.cadf.rabbitmq.queue_name` | yes, if `enabled` is true | Name for the queue that will hold the audit events. The events are published to the default exchange. |
 
 [yaml]:   http://yaml.org/
 [pq-uri]: https://www.postgresql.org/docs/9.6/static/libpq-connect.html#LIBPQ-CONNSTRING
