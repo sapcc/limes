@@ -177,6 +177,19 @@ func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limes.ResourceInf
 		return err
 	}
 
+	//check authorization for quota change
+	var oldQuota uint64
+	if u.Project == nil {
+		oldQuota = domRes.DomainQuota
+	} else {
+		oldQuota = projRes.Quota
+	}
+	err = u.validateAuthorization(oldQuota, newQuota, res.Unit)
+	if err != nil {
+		err.Message += fmt.Sprintf(" in this %s", u.ScopeType())
+		return err
+	}
+
 	//specific rules for domain quotas vs. project quotas
 	if u.Project == nil {
 		return u.validateDomainQuota(domRes, newQuota)
@@ -184,28 +197,28 @@ func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limes.ResourceInf
 	return u.validateProjectQuota(domRes, *projRes, newQuota)
 }
 
-func (u QuotaUpdater) validateDomainQuota(report reports.DomainResource, newQuota uint64) *limes.QuotaValidationError {
-	//if quota is being raised, only permission is required (overprovisioning of
-	//domain quota over the cluster capacity is explicitly allowed because
-	//capacity measurements are usually to be taken with a grain of salt)
-	if report.DomainQuota < newQuota {
-		if u.CanRaise {
+func (u QuotaUpdater) validateAuthorization(oldQuota, newQuota uint64, unit limes.Unit) *limes.QuotaValidationError {
+	if oldQuota >= newQuota {
+		if u.CanLower {
 			return nil
 		}
 		return &limes.QuotaValidationError{
 			Status:  http.StatusForbidden,
-			Message: "user is not allowed to raise quotas in this domain",
+			Message: "user is not allowed to lower quotas",
 		}
 	}
 
-	//if quota is being lowered, permission is required and the domain quota may
-	//not be less than the sum of quotas that the domain gives out to projects
-	if !u.CanLower {
-		return &limes.QuotaValidationError{
-			Status:  http.StatusForbidden,
-			Message: "user is not allowed to lower quotas in this domain",
-		}
+	if u.CanRaise {
+		return nil
 	}
+	return &limes.QuotaValidationError{
+		Status:  http.StatusForbidden,
+		Message: "user is not allowed to raise quotas",
+	}
+}
+
+func (u QuotaUpdater) validateDomainQuota(report reports.DomainResource, newQuota uint64) *limes.QuotaValidationError {
+	//check that existing project quotas fit into new domain quota
 	if newQuota < report.ProjectsQuota {
 		min := report.ProjectsQuota
 		return &limes.QuotaValidationError{
@@ -220,35 +233,19 @@ func (u QuotaUpdater) validateDomainQuota(report reports.DomainResource, newQuot
 }
 
 func (u QuotaUpdater) validateProjectQuota(domRes reports.DomainResource, projRes reports.ProjectResource, newQuota uint64) *limes.QuotaValidationError {
-	//if quota is being reduced, permission is required and usage must fit into quota
-	//(note that both res.Quota and newQuota are uint64, so we do not need to
-	//cover the case of infinite quotas)
-	if projRes.Quota > newQuota {
-		if !u.CanLower {
-			return &limes.QuotaValidationError{
-				Status:  http.StatusForbidden,
-				Message: "user is not allowed to lower quotas in this project",
-			}
+	//check that usage fits into quota
+	if projRes.Usage > newQuota {
+		min := projRes.Usage
+		return &limes.QuotaValidationError{
+			Status:       http.StatusConflict,
+			Message:      "quota may not be lower than current usage",
+			MinimumValue: &min,
+			Unit:         projRes.Unit,
 		}
-		if projRes.Usage > newQuota {
-			min := projRes.Usage
-			return &limes.QuotaValidationError{
-				Status:       http.StatusConflict,
-				Message:      "quota may not be lower than current usage",
-				MinimumValue: &min,
-				Unit:         projRes.Unit,
-			}
-		}
-		return nil
 	}
 
-	//if quota is being raised, permission is required and also the domain quota may not be exceeded
-	if !u.CanRaise {
-		return &limes.QuotaValidationError{
-			Status:  http.StatusForbidden,
-			Message: "user is not allowed to raise quotas in this project",
-		}
-	}
+	//check that domain quota is not exceeded
+	//
 	//NOTE: It looks like an arithmetic overflow (or rather, underflow) is
 	//possible here, but it isn't. projectsQuota is the sum over all current
 	//project quotas, including res.Quota, and thus is always bigger (since these
