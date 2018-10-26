@@ -34,6 +34,7 @@ type Plugin struct {
 	StaticCapacity     map[string]uint64
 	OverrideQuota      map[string]map[string]uint64
 	//behavior flags that can be set by a unit test
+	ScrapeFails                   bool
 	SetQuotaFails                 bool
 	WithExternallyManagedResource bool
 }
@@ -98,6 +99,10 @@ func (p *Plugin) Resources() []limes.ResourceInfo {
 
 //Scrape implements the limes.QuotaPlugin interface.
 func (p *Plugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
+	if p.ScrapeFails {
+		return nil, errors.New("Scrape failed as requested")
+	}
+
 	result := make(map[string]limes.ResourceData)
 	for key, val := range p.StaticResourceData {
 		if !p.WithExternallyManagedResource && key == "external_things" {

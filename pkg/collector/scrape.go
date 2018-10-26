@@ -44,7 +44,7 @@ var scrapeInterval = 30 * time.Minute
 
 //query that finds the next project that needs to be scraped
 var findProjectQuery = `
-	SELECT ps.id, p.name, p.uuid, d.name, d.uuid
+	SELECT ps.id, ps.scraped_at, p.name, p.uuid, d.name, d.uuid
 	FROM project_services ps
 	JOIN projects p ON p.id = ps.project_id
 	JOIN domains d ON d.id = p.domain_id
@@ -53,7 +53,7 @@ var findProjectQuery = `
 	-- filter by need to be updated (because of user request, because of missing data, or because of outdated data)
 	AND (ps.stale OR ps.scraped_at IS NULL OR ps.scraped_at < $3)
 	-- order by update priority (in the same way: first user-requested, then new projects, then outdated projects)
-	ORDER BY ps.stale DESC, COALESCE(ps.scraped_at, to_timestamp(0)) ASC
+	ORDER BY ps.stale DESC, COALESCE(ps.scraped_at, to_timestamp(-1)) ASC
 	-- find only one project to scrape per iteration
 	LIMIT 1
 `
@@ -79,14 +79,15 @@ func (c *Collector) Scrape() {
 
 	for {
 		var (
-			serviceID   int64
-			projectName string
-			projectUUID string
-			domainName  string
-			domainUUID  string
+			serviceID        int64
+			serviceScrapedAt *time.Time
+			projectName      string
+			projectUUID      string
+			domainName       string
+			domainUUID       string
 		)
 		err := db.DB.QueryRow(findProjectQuery, c.Cluster.ID, serviceType, c.TimeNow().Add(-scrapeInterval)).
-			Scan(&serviceID, &projectName, &projectUUID, &domainName, &domainUUID)
+			Scan(&serviceID, &serviceScrapedAt, &projectName, &projectUUID, &domainName, &domainUUID)
 		if err != nil {
 			//ErrNoRows is okay; it just means that nothing needs scraping right now
 			if err != sql.ErrNoRows {
@@ -116,6 +117,14 @@ func (c *Collector) Scrape() {
 			} else {
 				c.LogError("scrape %s data for %s/%s failed: %s", serviceType, domainName, projectName, err.Error())
 				scrapeFailedCounter.With(labels).Inc()
+
+				if serviceScrapedAt == nil {
+					//see explanation inside the called function's body
+					err := c.writeDummyResources(domainName, projectName, serviceType, serviceID)
+					if err != nil {
+						c.LogError("write dummy resource data for service %s for %s/%s failed: %s", serviceType, domainName, projectName, err.Error())
+					}
+				}
 			}
 
 			if c.Once {
@@ -333,4 +342,75 @@ func (c *Collector) writeScrapeResult(domainName, domainUUID, projectName, proje
 	}
 
 	return nil
+}
+
+func (c *Collector) writeDummyResources(domainName, projectName, serviceType string, serviceID int64) error {
+	//Rationale: This is called when we first try to scrape a project service,
+	//and the scraping fails (most likely due to some internal error in the
+	//backend service). We used to just not touch the database at this point,
+	//thus resuming scraping of the same project service in the next loop
+	//iteration of c.Scrape(). However, when the backend service is down for some
+	//time, this means that project_services in new projects are stuck without
+	//project_resources, which is an unexpected state that confuses the API.
+	//
+	//To avoid this situation, this method creates dummy project_resources for an
+	//unscrapable project_service. Also, scraped_at is set to 0 (i.e. 1970-01-01
+	//00:00:00 UTC) to make the scraper come back to it after dealing with all
+	//new and stale project_services.
+	tx, err := db.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer db.RollbackUnlessCommitted(tx)
+
+	var serviceConstraints map[string]limes.QuotaConstraint
+	if c.Cluster.QuotaConstraints != nil {
+		serviceConstraints = c.Cluster.QuotaConstraints.Projects[domainName][projectName][serviceType]
+	}
+
+	//find existing project_resources entries (we don't want to touch those)
+	var existingResources []db.ProjectResource
+	_, err = tx.Select(&existingResources,
+		`SELECT * FROM project_resources WHERE service_id = $1`, serviceID)
+	if err != nil {
+		return err
+	}
+	isExistingResource := make(map[string]bool)
+	for _, res := range existingResources {
+		isExistingResource[res.Name] = true
+	}
+
+	//create dummy resources
+	for _, resMetadata := range c.Plugin.Resources() {
+		if isExistingResource[resMetadata.Name] {
+			continue
+		}
+
+		res := &db.ProjectResource{
+			ServiceID:        serviceID,
+			Name:             resMetadata.Name,
+			Quota:            serviceConstraints[resMetadata.Name].InitialQuotaValue(),
+			Usage:            0,
+			BackendQuota:     -1,
+			SubresourcesJSON: "",
+		}
+		err = tx.Insert(res)
+		if err != nil {
+			return err
+		}
+	}
+
+	//update scraped_at timestamp and reset stale flag to make sure that we do
+	//not scrape this service again immediately afterwards if there are other
+	//stale services to cover first
+	dummyScrapedAt := time.Unix(0, 0).UTC()
+	_, err = tx.Exec(
+		`UPDATE project_services SET scraped_at = $1, stale = $2 WHERE id = $3`,
+		dummyScrapedAt, false, serviceID,
+	)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }

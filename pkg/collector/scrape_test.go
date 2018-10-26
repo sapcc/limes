@@ -21,6 +21,7 @@ package collector
 
 import (
 	"errors"
+	"fmt"
 	"sort"
 	"testing"
 
@@ -28,6 +29,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sapcc/go-bits/assert"
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/test"
@@ -205,6 +207,50 @@ func setProjectServicesStale(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+}
+
+func Test_ScrapeFailure(t *testing.T) {
+	plugin := test.NewPlugin("unittest")
+	cluster := prepareScrapeTest(t, plugin)
+	c := Collector{
+		Cluster: cluster,
+		Plugin:  plugin,
+		TimeNow: test.TimeNow,
+		Once:    true,
+	}
+	//we will see an expected ERROR during testing, do not make the test fail because of this
+	c.LogError = func(msg string, args ...interface{}) {
+		msg = fmt.Sprintf(msg, args...)
+		if msg == "scrape unittest data for germany/berlin failed: Scrape failed as requested" {
+			logg.Info(msg)
+		} else {
+			t.Error(msg)
+		}
+	}
+
+	//check that ScanDomains created the domain, project and their services
+	test.AssertDBContent(t, "fixtures/scrape0.sql")
+
+	//failing Scrape should create dummy records to ensure that the API finds
+	//plausibly-structured data
+	plugin.ScrapeFails = true
+	c.Scrape()
+	test.AssertDBContent(t, "fixtures/scrape-failures1.sql")
+
+	//next Scrape should yield the same result
+	c.Scrape()
+	test.AssertDBContent(t, "fixtures/scrape-failures1.sql")
+
+	//once the backend starts working, we start to see plausible data again
+	plugin.ScrapeFails = false
+	c.Scrape()
+	test.AssertDBContent(t, "fixtures/scrape-failures2.sql")
+
+	//backend fails again and we need to scrape because of the stale flag ->
+	//touch neither scraped_at nor the existing resources
+	plugin.ScrapeFails = true
+	c.Scrape()
+	test.AssertDBContent(t, "fixtures/scrape-failures2.sql")
 }
 
 ////////////////////////////////////////////////////////////////////////////////
