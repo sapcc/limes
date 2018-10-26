@@ -28,6 +28,7 @@ import (
 	"strings"
 
 	policy "github.com/databus23/goslo.policy"
+	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes/pkg/db"
 
@@ -59,11 +60,12 @@ type ClusterConfiguration struct {
 	Services   []ServiceConfiguration   `yaml:"services"`
 	Capacitors []CapacitorConfiguration `yaml:"capacitors"`
 	//^ Sorry for the stupid pun. Not.
-	Subresources         map[string][]string `yaml:"subresources"`
-	Subcapacities        map[string][]string `yaml:"subcapacities"`
-	Authoritative        bool                `yaml:"authoritative"`
-	ConstraintConfigPath string              `yaml:"constraints"`
-	CADF                 CADFConfiguration   `yaml:"cadf"`
+	Subresources         map[string][]string            `yaml:"subresources"`
+	Subcapacities        map[string][]string            `yaml:"subcapacities"`
+	Authoritative        bool                           `yaml:"authoritative"`
+	ConstraintConfigPath string                         `yaml:"constraints"`
+	CADF                 CADFConfiguration              `yaml:"cadf"`
+	LowPrivilegeRaise    LowPrivilegeRaiseConfiguration `yaml:"lowpriv_raise"`
 	//The following is only read to warn that users need to upgrade from seeds to constraints.
 	OldSeedConfigPath string `yaml:"seeds"`
 }
@@ -130,6 +132,31 @@ type CapacitorConfiguration struct {
 	Manual map[string]map[string]uint64 `yaml:"manual"`
 }
 
+//LowPrivilegeRaiseConfiguration contains the configuration options for
+//low-privilege quota raising in a certain cluster.
+type LowPrivilegeRaiseConfiguration struct {
+	Limits struct {
+		ForDomains  map[string]map[string]string `yaml:"domains"`
+		ForProjects map[string]map[string]string `yaml:"projects"`
+	} `yaml:"limits"`
+	ExcludeProjectDomainPattern string         `yaml:"except_projects_in_domains"`
+	IncludeProjectDomainPattern string         `yaml:"only_projects_in_domains"`
+	IncludeProjectDomainRx      *regexp.Regexp `yaml:"-"`
+	ExcludeProjectDomainRx      *regexp.Regexp `yaml:"-"`
+}
+
+//IsAllowedForProjectsIn checks if low-privilege quota raising is enabled by this config
+//for the domain with the given name.
+func (l LowPrivilegeRaiseConfiguration) IsAllowedForProjectsIn(domainName string) bool {
+	if l.ExcludeProjectDomainRx != nil && l.ExcludeProjectDomainRx.MatchString(domainName) {
+		return false
+	}
+	if l.IncludeProjectDomainRx == nil {
+		return true
+	}
+	return l.IncludeProjectDomainRx.MatchString(domainName)
+}
+
 //CADFConfiguration contains configuration parameters for audit trail.
 type CADFConfiguration struct {
 	Enabled  bool `yaml:"enabled"`
@@ -141,9 +168,9 @@ type CADFConfiguration struct {
 
 //APIConfiguration contains configuration parameters for limes-serve.
 type APIConfiguration struct {
-	ListenAddress  string           `yaml:"listen"`
-	PolicyFilePath string           `yaml:"policy"`
-	PolicyEnforcer *policy.Enforcer `yaml:"-"`
+	ListenAddress  string                `yaml:"listen"`
+	PolicyFilePath string                `yaml:"policy"`
+	PolicyEnforcer gopherpolicy.Enforcer `yaml:"-"`
 	RequestLog     struct {
 		ExceptStatusCodes []int `yaml:"except_status_codes"`
 	} `yaml:"request_log"`
@@ -295,6 +322,9 @@ func (cfg configurationInFile) validate() (success bool) {
 		cluster.Discovery.IncludeDomainRx = compileOptionalRx(cluster.Discovery.IncludeDomainPattern)
 		cluster.Discovery.ExcludeDomainRx = compileOptionalRx(cluster.Discovery.ExcludeDomainPattern)
 
+		cluster.LowPrivilegeRaise.IncludeProjectDomainRx = compileOptionalRx(cluster.LowPrivilegeRaise.IncludeProjectDomainPattern)
+		cluster.LowPrivilegeRaise.ExcludeProjectDomainRx = compileOptionalRx(cluster.LowPrivilegeRaise.ExcludeProjectDomainPattern)
+
 		//warn about removed configuration options
 		if cluster.OldSeedConfigPath != "" {
 			logg.Error("quota seeds have been replaced by quota constraints: rename clusters[%s].seeds config key to clusters[%s].constraints and convert seed file into constraint file; documentation at https://github.com/sapcc/limes/blob/master/docs/operators/constraints.md", clusterID, clusterID)
@@ -316,7 +346,7 @@ func (cfg configurationInFile) validate() (success bool) {
 	return
 }
 
-func loadPolicyFile(path string) (*policy.Enforcer, error) {
+func loadPolicyFile(path string) (gopherpolicy.Enforcer, error) {
 	bytes, err := ioutil.ReadFile(path)
 	if err != nil {
 		return nil, err

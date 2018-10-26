@@ -21,11 +21,11 @@ package api
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"net/http"
 	"reflect"
+	"regexp"
+	"strings"
 	"testing"
 
 	policy "github.com/databus23/goslo.policy"
@@ -41,7 +41,7 @@ func init() {
 	limes.RegisterQuotaPlugin(test.NewPluginFactory("unshared"))
 }
 
-func setupTest(t *testing.T, clusterName, startData string) (*limes.Cluster, http.Handler) {
+func setupTest(t *testing.T, clusterName, startData string) (*limes.Cluster, http.Handler, *TestPolicyEnforcer) {
 	//load test database
 	test.InitDatabase(t)
 	test.ExecSQLFile(t, startData)
@@ -122,29 +122,43 @@ func setupTest(t *testing.T, clusterName, startData string) (*limes.Cluster, htt
 		},
 	}
 
-	//load test policy (where everything is allowed)
-	policyBytes, err := ioutil.ReadFile("../test/policy.json")
-	if err != nil {
-		t.Fatal(err)
+	//load mock policy (where everything is allowed)
+	enforcer := &TestPolicyEnforcer{
+		AllowRaise:   true,
+		AllowRaiseLP: true,
+		AllowLower:   true,
 	}
-	policyRules := make(map[string]string)
-	err = json.Unmarshal(policyBytes, &policyRules)
-	if err != nil {
-		t.Fatal(err)
-	}
-	config.API.PolicyEnforcer, err = policy.NewEnforcer(policyRules)
-	if err != nil {
-		t.Fatal(err)
-	}
+	config.API.PolicyEnforcer = enforcer
 
 	cluster := config.Clusters[clusterName]
 	router, _ := NewV1Router(cluster, config)
-	return cluster, router
+	return cluster, router, enforcer
+}
+
+type TestPolicyEnforcer struct {
+	AllowRaise   bool
+	AllowRaiseLP bool
+	AllowLower   bool
+}
+
+//Enforce implements the gopherpolicy.Enforcer interface.
+func (e TestPolicyEnforcer) Enforce(rule string, _ policy.Context) bool {
+	fields := strings.Split(rule, ":")
+	switch fields[len(fields)-1] {
+	case "raise":
+		return e.AllowRaise
+	case "raise_lowpriv":
+		return e.AllowRaiseLP
+	case "lower":
+		return e.AllowLower
+	default:
+		return true
+	}
 }
 
 func Test_InconsistencyOperations(t *testing.T) {
 	clusterName, pathtoData := "cloud", "fixtures/start-data-inconsistencies.sql"
-	_, router := setupTest(t, clusterName, pathtoData)
+	_, router, _ := setupTest(t, clusterName, pathtoData)
 
 	//check ListInconsistencies
 	assert.HTTPRequest{
@@ -156,7 +170,7 @@ func Test_InconsistencyOperations(t *testing.T) {
 }
 
 func Test_EmptyInconsistencyReport(t *testing.T) {
-	_, router := setupTest(t, "cloud", "/dev/null")
+	_, router, _ := setupTest(t, "cloud", "/dev/null")
 
 	//check ListInconsistencies
 	assert.HTTPRequest{
@@ -169,7 +183,7 @@ func Test_EmptyInconsistencyReport(t *testing.T) {
 
 func Test_ClusterOperations(t *testing.T) {
 	clusterName, pathtoData := "west", "fixtures/start-data.sql"
-	_, router := setupTest(t, clusterName, pathtoData)
+	_, router, _ := setupTest(t, clusterName, pathtoData)
 
 	//check GetCluster
 	assert.HTTPRequest{
@@ -485,7 +499,7 @@ func expectClusterCapacity(t *testing.T, clusterID, serviceType, resourceName st
 
 func Test_DomainOperations(t *testing.T) {
 	clusterName, pathtoData := "west", "fixtures/start-data.sql"
-	cluster, router := setupTest(t, clusterName, pathtoData)
+	cluster, router, _ := setupTest(t, clusterName, pathtoData)
 	discovery := cluster.DiscoveryPlugin.(*test.DiscoveryPlugin)
 
 	//check GetDomain
@@ -884,7 +898,7 @@ func expectDomainQuota(t *testing.T, domainName, serviceType, resourceName strin
 
 func Test_ProjectOperations(t *testing.T) {
 	clusterName, pathtoData := "west", "fixtures/start-data.sql"
-	cluster, router := setupTest(t, clusterName, pathtoData)
+	cluster, router, _ := setupTest(t, clusterName, pathtoData)
 	discovery := cluster.DiscoveryPlugin.(*test.DiscoveryPlugin)
 
 	//check GetProject
@@ -1271,6 +1285,189 @@ func Test_ProjectOperations(t *testing.T) {
 					"message":              "quota may not be lower than current usage",
 					"min_acceptable_quota": 2,
 					"unit":                 "B",
+				},
+			},
+		},
+	}.Check(t, router)
+}
+
+func Test_RaiseLowerPermissions(t *testing.T) {
+	clusterName, pathtoData := "west", "fixtures/start-data.sql"
+	cluster, router, enforcer := setupTest(t, clusterName, pathtoData)
+
+	//we're not testing this right now
+	cluster.QuotaConstraints = nil
+
+	//test that the correct 403 errors are generated for missing permissions
+	//(the other testcases cover the happy paths for raising and lowering)
+	enforcer.AllowRaise = false
+	enforcer.AllowRaiseLP = true
+	enforcer.AllowLower = true
+
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany",
+		ExpectStatus: 403,
+		ExpectBody:   assert.StringData("cannot change shared/capacity quota: user is not allowed to raise quotas in this domain\n"),
+		Body: assert.JSONObject{
+			"domain": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "shared",
+						"resources": []assert.JSONObject{
+							//attempt to raise should fail because of lack of permissions
+							{"name": "capacity", "quota": 30},
+							//attempt to lower should be permitted (but will not be executed)
+							{"name": "things", "quota": 25},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 403,
+		ExpectBody:   assert.StringData("cannot change shared/capacity quota: user is not allowed to raise quotas in this project\n"),
+		Body: assert.JSONObject{
+			"project": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "shared",
+						"resources": []assert.JSONObject{
+							//attempt to raise should fail because of lack of permissions
+							{"name": "capacity", "quota": 11},
+							//attempt to lower should be permitted (but will not be executed)
+							{"name": "things", "quota": 5},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+
+	enforcer.AllowRaise = true
+	enforcer.AllowRaiseLP = true
+	enforcer.AllowLower = false
+
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany",
+		ExpectStatus: 403,
+		ExpectBody:   assert.StringData("cannot change shared/things quota: user is not allowed to lower quotas in this domain\n"),
+		Body: assert.JSONObject{
+			"domain": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "shared",
+						"resources": []assert.JSONObject{
+							//attempt to raise should be permitted (but will not be executed)
+							{"name": "capacity", "quota": 30},
+							//attempt to lower should fail because of lack of permissions
+							{"name": "things", "quota": 25},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 403,
+		ExpectBody:   assert.StringData("cannot change shared/things quota: user is not allowed to lower quotas in this project\n"),
+		Body: assert.JSONObject{
+			"project": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "shared",
+						"resources": []assert.JSONObject{
+							//attempt to raise should be permitted (but will not be executed)
+							{"name": "capacity", "quota": 11},
+							//attempt to lower should fail because of lack of permissions
+							{"name": "things", "quota": 5},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+
+	enforcer.AllowRaise = false
+	enforcer.AllowRaiseLP = true
+	enforcer.AllowLower = true
+
+	cluster.LowPrivilegeRaise.LimitsForDomains = map[string]map[string]uint64{
+		"shared": {"capacity": 29, "things": 25},
+	}
+	cluster.LowPrivilegeRaise.LimitsForProjects = map[string]map[string]uint64{
+		"shared": {"capacity": 10, "things": 25},
+	}
+
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany",
+		ExpectStatus: 403,
+		ExpectBody:   assert.StringData("cannot change shared/capacity quota: user is not allowed to raise quotas that high in this domain (maximum acceptable domain quota is 29 B)\n"),
+		Body: assert.JSONObject{
+			"domain": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "shared",
+						"resources": []assert.JSONObject{
+							//attempt to raise should fail because of lack of permissions
+							{"name": "capacity", "quota": 30},
+							//attempt to raise should be permitted by low-privilege exception
+							{"name": "things", "quota": 25},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 403,
+		ExpectBody:   assert.StringData("cannot change shared/capacity quota: user is not allowed to raise quotas that high in this project (maximum acceptable project quota is 10 B)\n"),
+		Body: assert.JSONObject{
+			"project": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "shared",
+						"resources": []assert.JSONObject{
+							//attempt to raise should fail because of lack of permissions
+							{"name": "capacity", "quota": 11},
+							//attempt to raise should be permitted by low-privilege exception
+							{"name": "things", "quota": 11},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+
+	cluster.Config.LowPrivilegeRaise.ExcludeProjectDomainRx = regexp.MustCompile(`germany`)
+
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 403,
+		ExpectBody:   assert.StringData("cannot change shared/capacity quota: user is not allowed to raise quotas in this project\ncannot change shared/things quota: user is not allowed to raise quotas in this project\n"),
+		Body: assert.JSONObject{
+			"project": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "shared",
+						"resources": []assert.JSONObject{
+							//attempt to raise should fail because of lack of permissions
+							{"name": "capacity", "quota": 11},
+							//attempt to raise should fail because low-privilege q.r. is
+							//disabled in this domain
+							{"name": "things", "quota": 11},
+						},
+					},
 				},
 			},
 		},
