@@ -113,6 +113,14 @@ Besides `unit`, resources may bear the following informational fields:
   category strings `networking` and `loadbalancing`, since these topics are cleanly separable from each other.
 * `externally_managed`: If `true`, quota for this resource is managed by some other system than Limes. Attempts to
   set project/domain quota via the Limes API will be rejected.
+* `scales_with`: An object containing the fields `service_type`, `resource_name` and `factor`. If given, this resource
+  *scales with* another resource which is identified by the `scales_with.service_type` and `scales_with.resource_name`
+  fields. Following relations are only provided as a suggestion to user agents; they are not evaluated by Limes. When
+  resource X scales with resource Y, it means that a user agent SHOULD suggest to change the quota for X whenever the
+  user wants to change the quota for Y. The amount by which the quota for X is changed shall be equal to the requested
+  change in quota for Y, multiplied with the value of the `scales_with.factor` field. For example, if resource
+  `network/listeners` scales with `network/loadbalancers` with a scaling factor of 2, when the user requests that the
+  loadbalancers quota be increased by 5, the user agent should suggest to increase the listeners quota by 10.
 
 Limes tracks quotas in its local database, and expects that the quota values in the backing services may only be
 manipulated by the Limes service user, but not by the project's members or admins. If, nonetheless, Limes finds the
@@ -284,6 +292,7 @@ Returns 200 (OK) on success. Result is a JSON document like:
               "name": "ram",
               "unit": "MiB",
               "capacity": 1048576,
+              "raw_capacity": 524288,
               "domains_quota": 204800,
               "usage": 2048
             }
@@ -332,6 +341,9 @@ administrators, in which case a `comment` string will be present (such as for `o
 output above). The capacity is only informational: Cloud admins can choose to exceed the reported capacity when
 allocating quota to domains.
 
+When `raw_capacity` is given, it means that this resource is configured with an overcommitment. The `capacity` key will
+show the overcommitted capacity (`raw_capacity` times overcommitment factor).
+
 The `min_scraped_at` and `max_scraped_at` timestamps on the service level refer to the usage values (aggregated over all
 projects just like for `GET /domains`).
 
@@ -351,8 +363,8 @@ If the `?detail` query parameter is given (no value is required), capacity for a
 *subcapacities*, i.e. a list of individual capacities with individual properties.
 
 Subcapacities will only be displayed for supported resources, and only if subcapacity scraping has been enabled for that
-resource in Limes' configuration. If enabled, the resource will have a `subresources` key containing an array of
-objects. For example, extending the example from above, the `projects[0].services[0].resources[1]` object might look
+resource in Limes' configuration. If enabled, the resource will have a `subcapacities` key containing an array of
+objects. For example, extending the example from above, the `clusters[0].services[0].resources[1]` object might look
 like this:
 
 ```json
