@@ -243,14 +243,16 @@ func Test_ScrapeFailure(t *testing.T) {
 
 	//once the backend starts working, we start to see plausible data again
 	plugin.ScrapeFails = false
+	setProjectServicesStale(t)
 	c.Scrape()
 	test.AssertDBContent(t, "fixtures/scrape-failures2.sql")
 
 	//backend fails again and we need to scrape because of the stale flag ->
 	//touch neither scraped_at nor the existing resources
 	plugin.ScrapeFails = true
+	setProjectServicesStale(t)
 	c.Scrape()
-	test.AssertDBContent(t, "fixtures/scrape-failures2.sql")
+	test.AssertDBContent(t, "fixtures/scrape-failures3.sql")
 }
 
 ////////////////////////////////////////////////////////////////////////////////
