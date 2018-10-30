@@ -66,6 +66,7 @@ type ClusterConfiguration struct {
 	ConstraintConfigPath string                         `yaml:"constraints"`
 	CADF                 CADFConfiguration              `yaml:"cadf"`
 	LowPrivilegeRaise    LowPrivilegeRaiseConfiguration `yaml:"lowpriv_raise"`
+	ResourceBehavior     ResourceBehaviorConfiguration  `yaml:"resource_behavior"`
 	//The following is only read to warn that users need to upgrade from seeds to constraints.
 	OldSeedConfigPath string `yaml:"seeds"`
 }
@@ -143,6 +144,21 @@ type LowPrivilegeRaiseConfiguration struct {
 	IncludeProjectDomainPattern string         `yaml:"only_projects_in_domains"`
 	IncludeProjectDomainRx      *regexp.Regexp `yaml:"-"`
 	ExcludeProjectDomainRx      *regexp.Regexp `yaml:"-"`
+}
+
+//ResourceBehaviorConfiguration contains the configuration options for
+//specialized resource behavior in a certain cluster. The map keys are service
+//type, then resource name.
+type ResourceBehaviorConfiguration map[string]map[string]*ResourceBehavior
+
+//ResourceBehavior contains the configuration options for specialized behaviors
+//of a single resource in a certain cluster. The map keys are service type,
+//then resource name.
+type ResourceBehavior struct {
+	OvercommitFactor       float64 `yaml:"overcommit_factor"`
+	ScalesWithResourceName string  `yaml:"scales_with"`
+	ScalesWithServiceType  string  `yaml:"-"` //initialized during Cluster.Connect()
+	ScalingFactor          float64 `yaml:"scaling_factor"`
 }
 
 //IsAllowedForProjectsIn checks if low-privilege quota raising is enabled by this config
@@ -324,6 +340,27 @@ func (cfg configurationInFile) validate() (success bool) {
 
 		cluster.LowPrivilegeRaise.IncludeProjectDomainRx = compileOptionalRx(cluster.LowPrivilegeRaise.IncludeProjectDomainPattern)
 		cluster.LowPrivilegeRaise.ExcludeProjectDomainRx = compileOptionalRx(cluster.LowPrivilegeRaise.ExcludeProjectDomainPattern)
+
+		for srvType, behaviors := range cluster.ResourceBehavior {
+			for resName, behavior := range behaviors {
+				if behavior.ScalesWithResourceName == "" {
+					if behavior.ScalingFactor != 0 {
+						missing(fmt.Sprintf(
+							`resource_behavior.%s.%s.scaling_factor (must be given if "scales_with" is given)`,
+							srvType, resName,
+						))
+					} else {
+						if strings.Contains(behavior.ScalesWithResourceName, "/") {
+							fields := strings.SplitN(behavior.ScalesWithResourceName, "/", 2)
+							behavior.ScalesWithServiceType = fields[0]
+							behavior.ScalesWithResourceName = fields[1]
+						} else {
+							behavior.ScalesWithServiceType = srvType
+						}
+					}
+				}
+			}
+		}
 
 		//warn about removed configuration options
 		if cluster.OldSeedConfigPath != "" {
