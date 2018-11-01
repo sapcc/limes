@@ -130,6 +130,16 @@ func setupTest(t *testing.T, clusterName, startData string) (*limes.Cluster, htt
 	}
 	config.API.PolicyEnforcer = enforcer
 
+	config.Clusters["west"].Config.ResourceBehavior = map[string]map[string]*limes.ResourceBehavior{
+		"unshared": {
+			"things": &limes.ResourceBehavior{
+				ScalesWithResourceName: "shared",
+				ScalesWithServiceType:  "things",
+				ScalingFactor:          2,
+			},
+		},
+	}
+
 	cluster := config.Clusters[clusterName]
 	router, _ := NewV1Router(cluster, config)
 	return cluster, router, enforcer

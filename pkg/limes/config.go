@@ -146,6 +146,18 @@ type LowPrivilegeRaiseConfiguration struct {
 	ExcludeProjectDomainRx      *regexp.Regexp `yaml:"-"`
 }
 
+//IsAllowedForProjectsIn checks if low-privilege quota raising is enabled by this config
+//for the domain with the given name.
+func (l LowPrivilegeRaiseConfiguration) IsAllowedForProjectsIn(domainName string) bool {
+	if l.ExcludeProjectDomainRx != nil && l.ExcludeProjectDomainRx.MatchString(domainName) {
+		return false
+	}
+	if l.IncludeProjectDomainRx == nil {
+		return true
+	}
+	return l.IncludeProjectDomainRx.MatchString(domainName)
+}
+
 //ResourceBehaviorConfiguration contains the configuration options for
 //specialized resource behavior in a certain cluster. The map keys are service
 //type, then resource name.
@@ -161,16 +173,25 @@ type ResourceBehavior struct {
 	ScalingFactor          float64 `yaml:"scaling_factor"`
 }
 
-//IsAllowedForProjectsIn checks if low-privilege quota raising is enabled by this config
-//for the domain with the given name.
-func (l LowPrivilegeRaiseConfiguration) IsAllowedForProjectsIn(domainName string) bool {
-	if l.ExcludeProjectDomainRx != nil && l.ExcludeProjectDomainRx.MatchString(domainName) {
-		return false
+//ScalingBehavior appears in domain and project reports and describes the
+//scaling behavior of a single resource. It is derived from ResourceBehavior
+//using the ToScalingBehavior() method.
+type ScalingBehavior struct {
+	ScalesWithResourceName string  `json:"service_type"`
+	ScalesWithServiceType  string  `json:"resource_name"`
+	ScalingFactor          float64 `json:"factor"`
+}
+
+//ToScalingBehavior returns the ScalingBehavior for this resource, or nil if no scaling has been configured.
+func (b ResourceBehavior) ToScalingBehavior() *ScalingBehavior {
+	if b.ScalesWithResourceName == "" {
+		return nil
 	}
-	if l.IncludeProjectDomainRx == nil {
-		return true
+	return &ScalingBehavior{
+		ScalesWithServiceType:  b.ScalesWithServiceType,
+		ScalesWithResourceName: b.ScalesWithResourceName,
+		ScalingFactor:          b.ScalingFactor,
 	}
-	return l.IncludeProjectDomainRx.MatchString(domainName)
 }
 
 //CADFConfiguration contains configuration parameters for audit trail.

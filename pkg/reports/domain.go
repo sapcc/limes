@@ -55,8 +55,9 @@ type DomainResource struct {
 	ProjectsQuota uint64 `json:"projects_quota,keepempty"`
 	Usage         uint64 `json:"usage,keepempty"`
 	//These are pointers to values to enable precise control over whether this field is rendered in output.
-	BackendQuota         *uint64 `json:"backend_quota,omitempty"`
-	InfiniteBackendQuota *bool   `json:"infinite_backend_quota,omitempty"`
+	BackendQuota         *uint64                `json:"backend_quota,omitempty"`
+	InfiniteBackendQuota *bool                  `json:"infinite_backend_quota,omitempty"`
+	Scaling              *limes.ScalingBehavior `json:"scales_with,omitempty"`
 }
 
 //DomainServices provides fast lookup of services using a map, but serializes
@@ -310,6 +311,7 @@ func (d domains) Find(cluster *limes.Cluster, domainUUID string, serviceType, re
 		}
 		resource = &DomainResource{
 			ResourceInfo: cluster.InfoForResource(*serviceType, *resourceName),
+			Scaling:      cluster.BehaviorForResource(*serviceType, *resourceName).ToScalingBehavior(),
 		}
 		service.Resources[*resourceName] = resource
 	}
