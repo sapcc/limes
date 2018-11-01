@@ -61,7 +61,12 @@
                 "id": "secondthing",
                 "value": 42
               }
-            ]
+            ],
+            "scales_with": {
+              "service_type": "shared",
+              "resource_name": "things",
+              "factor": 2
+            }
           }
         ],
         "scraped_at": 11

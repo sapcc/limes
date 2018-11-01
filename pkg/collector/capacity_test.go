@@ -74,9 +74,9 @@ func Test_ScanCapacity(t *testing.T) {
 
 	//insert some crap records
 	err := db.DB.Insert(&db.ClusterResource{
-		ServiceID: 2,
-		Name:      "unknown",
-		Capacity:  100,
+		ServiceID:   2,
+		Name:        "unknown",
+		RawCapacity: 100,
 	})
 	if err != nil {
 		t.Error(err)
@@ -100,19 +100,19 @@ func Test_ScanCapacity(t *testing.T) {
 		t.Error(err)
 	}
 	err = db.DB.Insert(&db.ClusterResource{
-		ServiceID: 1,
-		Name:      "capacity",
-		Capacity:  50,
-		Comment:   "manual",
+		ServiceID:   1,
+		Name:        "capacity",
+		RawCapacity: 50,
+		Comment:     "manual",
 	})
 	if err != nil {
 		t.Error(err)
 	}
 	err = db.DB.Insert(&db.ClusterResource{
-		ServiceID: 3,
-		Name:      "capacity",
-		Capacity:  50,
-		Comment:   "manual",
+		ServiceID:   3,
+		Name:        "capacity",
+		RawCapacity: 50,
+		Comment:     "manual",
 	})
 	if err != nil {
 		t.Error(err)

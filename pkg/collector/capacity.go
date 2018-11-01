@@ -208,7 +208,7 @@ func (c *Collector) writeCapacity(clusterID string, values map[string]map[string
 
 			data, exists := serviceValues[dbResource.Name]
 			if exists {
-				dbResource.Capacity = data.Capacity
+				dbResource.RawCapacity = data.Capacity
 
 				if len(data.Subcapacities) == 0 {
 					dbResource.SubcapacitiesJSON = ""
@@ -252,7 +252,7 @@ func (c *Collector) writeCapacity(clusterID string, values map[string]map[string
 			res := &db.ClusterResource{
 				ServiceID:         serviceID,
 				Name:              name,
-				Capacity:          data.Capacity,
+				RawCapacity:       data.Capacity,
 				SubcapacitiesJSON: "", //but see below
 			}
 

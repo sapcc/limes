@@ -121,8 +121,10 @@ func NewCluster(id string, config *ClusterConfiguration) *Cluster {
 //quota plugins.
 //
 //It also loads the QuotaConstraints for this cluster, if configured. The
-//LowPrivilegeRaise.Limits fields are also initialized here. Both constraints and
-//limits cannot be initialized earlier because we only know all resources after
+//LowPrivilegeRaise.Limits fields are also initialized here. We also validate
+//if Config.ResourceBehavior[].ScalesWith refers to existing resources.
+//
+//We cannot do any of this earlier because we only know all resources after
 //calling Init() on all quota plugins.
 func (c *Cluster) Connect() error {
 	err := c.Config.Auth.Connect()
@@ -171,6 +173,19 @@ func (c *Cluster) Connect() error {
 		c.Config.LowPrivilegeRaise.Limits.ForProjects)
 	if err != nil {
 		return err
+	}
+
+	//validate scaling relations
+	for srvType, behaviors := range c.Config.ResourceBehavior {
+		for resName, behavior := range behaviors {
+			if behavior.ScalesWithResourceName == "" {
+				continue
+			}
+			if !c.HasResource(behavior.ScalesWithServiceType, behavior.ScalesWithResourceName) {
+				return fmt.Errorf(`resource "%s/%s" scales with unknown resource "%s/%s"`,
+					srvType, resName, behavior.ScalesWithServiceType, behavior.ScalesWithResourceName)
+			}
+		}
 	}
 
 	return nil
@@ -260,4 +275,15 @@ func (c *Cluster) InfoForService(serviceType string) ServiceInfo {
 		return ServiceInfo{Type: serviceType}
 	}
 	return plugin.ServiceInfo()
+}
+
+//BehaviorForResource returns the ResourceBehavior for the given resource. If
+//no special behavior has been configured for this resource, or if this
+//resource does not exist, a zero-initialized struct is returned.
+func (c *Cluster) BehaviorForResource(serviceType, resourceName string) ResourceBehavior {
+	b := c.Config.ResourceBehavior[serviceType][resourceName]
+	if b == nil {
+		return ResourceBehavior{}
+	}
+	return *b
 }

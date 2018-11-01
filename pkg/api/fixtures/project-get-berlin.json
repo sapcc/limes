@@ -41,7 +41,12 @@
           {
             "name": "things",
             "quota": 10,
-            "usage": 2
+            "usage": 2,
+            "scales_with": {
+              "service_type": "shared",
+              "resource_name": "things",
+              "factor": 2
+            }
           }
         ],
         "scraped_at": 11

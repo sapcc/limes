@@ -54,8 +54,9 @@ type ProjectResource struct {
 	Quota uint64 `json:"quota,keepempty"`
 	Usage uint64 `json:"usage,keepempty"`
 	//This is a pointer to a value to enable precise control over whether this field is rendered in output.
-	BackendQuota *int64          `json:"backend_quota,omitempty"`
-	Subresources util.JSONString `json:"subresources,omitempty"`
+	BackendQuota *int64                 `json:"backend_quota,omitempty"`
+	Subresources util.JSONString        `json:"subresources,omitempty"`
+	Scaling      *limes.ScalingBehavior `json:"scales_with,omitempty"`
 }
 
 //ProjectServices provides fast lookup of services using a map, but serializes
@@ -224,6 +225,7 @@ func GetProjects(cluster *limes.Cluster, domainID int64, projectID *int64, dbi d
 
 		resource := &ProjectResource{
 			ResourceInfo: cluster.InfoForResource(*serviceType, *resourceName),
+			Scaling:      cluster.BehaviorForResource(*serviceType, *resourceName).ToScalingBehavior(),
 			Usage:        *usage,
 			BackendQuota: nil, //see below
 			Subresources: util.JSONString(subresourcesValue),

@@ -1,33 +1,34 @@
 {
-  "project": {
-    "id": "uuid-for-dresden",
-    "name": "dresden",
-    "parent_id": "uuid-for-berlin",
+  "cluster": {
+    "id": "west",
     "services": [
       {
         "type": "shared",
         "area": "shared",
+        "shared": true,
         "resources": [
           {
             "name": "capacity",
             "unit": "B",
-            "quota": 10,
-            "usage": 2,
-            "backend_quota": 100
+            "domains_quota": 50,
+            "usage": 8
           },
           {
             "name": "external_things",
             "externally_managed": true,
-            "quota": 1,
+            "domains_quota": 3,
             "usage": 0
           },
           {
             "name": "things",
-            "quota": 10,
-            "usage": 2
+            "capacity": 615,
+            "raw_capacity": 246,
+            "domains_quota": 90,
+            "usage": 8
           }
         ],
-        "scraped_at": 44
+        "max_scraped_at": 66,
+        "min_scraped_at": 22
       },
       {
         "type": "unshared",
@@ -36,22 +37,22 @@
           {
             "name": "capacity",
             "unit": "B",
-            "quota": 10,
-            "usage": 2
+            "domains_quota": 100,
+            "usage": 6
           },
           {
             "name": "things",
-            "quota": 10,
-            "usage": 2,
-            "scales_with": {
-              "service_type": "shared",
-              "resource_name": "things",
-              "factor": 2
-            }
+            "capacity": 208,
+            "raw_capacity": 139,
+            "domains_quota": 70,
+            "usage": 6
           }
         ],
-        "scraped_at": 33
+        "max_scraped_at": 55,
+        "min_scraped_at": 11
       }
-    ]
+    ],
+    "max_scraped_at": 1100,
+    "min_scraped_at": 1000
   }
 }

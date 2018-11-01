@@ -42,7 +42,12 @@
             "name": "things",
             "quota": 10,
             "usage": 2,
-            "backend_quota": -1
+            "backend_quota": -1,
+            "scales_with": {
+              "service_type": "shared",
+              "resource_name": "things",
+              "factor": 2
+            }
           }
         ],
         "scraped_at": 55

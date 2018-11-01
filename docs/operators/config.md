@@ -99,6 +99,7 @@ Configuration options describing the OpenStack clusters which Limes shall cover.
 | `clusters.$id.constraints` | no | Path to a YAML file containing the quota constraints for this cluster. See [*quota constraints*](constraints.md) for details. |
 | `clusters.$id.cadf` | no | Audit trail configuration options. See [*audit trail*](#audit-trail) for details. |
 | `clusters.$id.lowpriv_raise` | no | Configuration options for low-privilege quota raising. See [*low-privilege quota raising*](#low-privilege-quota-raising) for details. |
+| `clusters.$id.resource_behavior` | no | Configuration options for special resource behaviors. See [*resource behavior*](#resource-behavior) for details. |
 
 ### Audit trail
 
@@ -140,6 +141,32 @@ clusters:
             cores: 1000
             instances: 500
             ram: 1 TiB
+```
+
+### Resource behavior
+
+Some special behaviors for resources can be configured in the `clusters[].resource_behavior` section.
+
+| Field | Required | Description |
+| --- | --- | --- |
+| `clusters.$id.resource_behavior.$service_type.$resource_name.overcommit_factor` | no | If given, capacity for this resource will be computed as `raw_capacity * overcommit_factor`, where `raw_capacity` is what the capacity plugin reports. |
+| `clusters.$id.resource_behavior.$service_type.$resource_name.scales_with` | no | If a resource is given, this resource scales with that resource. The other resource may be specified by its name (for resources within the same service type), or by a slash-concatenated pair of service type and resource name, e.g. `compute/cores`. |
+| `clusters.$id.resource_behavior.$service_type.$resource_name.scaling_factor` | yes, if `scales_with` is given | The scaling factor that will be reported for this resource's scaling relation. |
+
+For example:
+
+```yaml
+clusters:
+  example:
+    resource_behavior:
+      sharev2:
+        share_capacity:    { overcommit_factor: 3 }
+        snapshot_capacity: { overcommit_factor: 2 }
+      network:
+        healthmonitors:    { scales_with: loadbalancers, scaling_factor: 1 }
+        listeners:         { scales_with: loadbalancers, scaling_factor: 2 }
+        l7policies:        { scales_with: loadbalancers, scaling_factor: 1 }
+        pools:             { scales_with: loadbalancers, scaling_factor: 1 }
 ```
 
 # Supported discovery methods
@@ -424,7 +451,6 @@ capacitors:
     shares_per_pool: 1000
     snapshots_per_share: 5
     capacity_balance: 0.5
-    capacity_overcommit: 1
 ```
 
 | Resource | Method |
@@ -432,7 +458,7 @@ capacitors:
 | `sharev2/share_networks` | Taken from identically-named configuration parameter. |
 | `sharev2/shares` | Calculated as `shares_per_pool * count(pools) - share_networks`. |
 | `sharev2/share_snapshots` | Calculated as `snapshots_per_share` times the above value. |
-| `sharev2/share_capacity`<br>`sharev2/snapshot_capacity` | Calculated as `capacity_overcommit * sum(pool.capabilities.totalCapacityGB)`, then divided among those two resources according to the `capacity_balance` (see below). |
+| `sharev2/share_capacity`<br>`sharev2/snapshot_capacity` | Calculated as `sum(pool.capabilities.totalCapacityGB)`, then divided among those two resources according to the `capacity_balance` (see below). |
 
 The capacity balance is defined as
 
@@ -466,7 +492,6 @@ allows to track capacity values along with other configuration in a Git reposito
 capacitors:
   - id: nova
     nova:
-      vcpu_overcommit: 4
       hypervisor_type_pattern: '^(?:VMware|QEMU)'
       extra_specs:
         first: 'foo'
@@ -475,7 +500,7 @@ capacitors:
 
 | Resource | Method |
 | --- | --- |
-| `compute/cores` | The sum of the reported CPUs for all hypervisors, optionally multiplied by the `nova.vcpu_overcommit` parameter. This option is provided because the hypervisor statistics reported by Nova do not take overcommit into account. |
+| `compute/cores` | The sum of the reported CPUs for all hypervisors. Note that the hypervisor statistics reported by Nova do not take overcommit into account, so you may have to configure the overcommitment again in Limes for accurate capacity reporting. |
 | `compute/instances` | Estimated as `10000 * count(availabilityZones)`, but never more than `sumLocalDisk / maxDisk`, where `sumLocalDisk` is the sum of the local disk size for all hypervisors, and `maxDisk` is the largest disk requirement of all flavors. |
 | `compute/ram` | The sum of the reported RAM for all hypervisors. |
 
