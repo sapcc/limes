@@ -44,7 +44,7 @@ type Project struct {
 type ProjectService struct {
 	limes.ServiceInfo
 	Resources ProjectResources `json:"resources,keepempty"`
-	ScrapedAt int64            `json:"scraped_at,keepempty"`
+	ScrapedAt *int64           `json:"scraped_at,omitempty"`
 }
 
 //ProjectResource is a substructure of Project containing data for
@@ -204,7 +204,8 @@ func GetProjects(cluster *limes.Cluster, domainID int64, projectID *int64, dbi d
 				Resources:   make(ProjectResources),
 			}
 			if scrapedAt != nil {
-				service.ScrapedAt = time.Time(*scrapedAt).Unix()
+				val := time.Time(*scrapedAt).Unix()
+				service.ScrapedAt = &val
 			}
 			project.Services[*serviceType] = service
 		}

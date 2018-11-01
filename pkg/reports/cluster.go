@@ -46,8 +46,8 @@ type ClusterService struct {
 	limes.ServiceInfo
 	Shared       bool             `json:"shared,omitempty"`
 	Resources    ClusterResources `json:"resources,keepempty"`
-	MaxScrapedAt int64            `json:"max_scraped_at,keepempty"`
-	MinScrapedAt int64            `json:"min_scraped_at,keepempty"`
+	MaxScrapedAt *int64           `json:"max_scraped_at,omitempty"`
+	MinScrapedAt *int64           `json:"min_scraped_at,omitempty"`
 }
 
 //ClusterResource is a substructure of Cluster containing data for
@@ -197,10 +197,12 @@ func GetClusters(config limes.Configuration, clusterID *string, localQuotaUsageO
 
 		if service != nil {
 			if maxScrapedAt != nil {
-				service.MaxScrapedAt = time.Time(*maxScrapedAt).Unix()
+				val := time.Time(*maxScrapedAt).Unix()
+				service.MaxScrapedAt = &val
 			}
 			if minScrapedAt != nil {
-				service.MinScrapedAt = time.Time(*minScrapedAt).Unix()
+				val := time.Time(*minScrapedAt).Unix()
+				service.MinScrapedAt = &val
 			}
 		}
 

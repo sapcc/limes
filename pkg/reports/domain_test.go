@@ -78,8 +78,8 @@ var domainMockServices = &DomainServices{
 			Area: "compute",
 		},
 		Resources:    *domainMockResources,
-		MaxScrapedAt: 1538955269,
-		MinScrapedAt: 1538955116,
+		MaxScrapedAt: p2i64(1538955269),
+		MinScrapedAt: p2i64(1538955116),
 	},
 }
 

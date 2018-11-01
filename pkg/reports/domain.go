@@ -43,8 +43,8 @@ type Domain struct {
 type DomainService struct {
 	limes.ServiceInfo
 	Resources    DomainResources `json:"resources,keepempty"`
-	MaxScrapedAt int64           `json:"max_scraped_at,keepempty"`
-	MinScrapedAt int64           `json:"min_scraped_at,keepempty"`
+	MaxScrapedAt *int64          `json:"max_scraped_at,omitempty"`
+	MinScrapedAt *int64          `json:"min_scraped_at,omitempty"`
 }
 
 //DomainResource is a substructure of Domain containing data for
@@ -185,10 +185,12 @@ func GetDomains(cluster *limes.Cluster, domainID *int64, dbi db.Interface, filte
 
 		if service != nil {
 			if maxScrapedAt != nil {
-				service.MaxScrapedAt = time.Time(*maxScrapedAt).Unix()
+				val := time.Time(*maxScrapedAt).Unix()
+				service.MaxScrapedAt = &val
 			}
 			if minScrapedAt != nil {
-				service.MinScrapedAt = time.Time(*minScrapedAt).Unix()
+				val := time.Time(*minScrapedAt).Unix()
+				service.MinScrapedAt = &val
 			}
 		}
 

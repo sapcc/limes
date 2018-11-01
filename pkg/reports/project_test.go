@@ -71,7 +71,7 @@ var projectMockServices = &ProjectServices{
 			Area: "shared",
 		},
 		Resources: *projectMockResources,
-		ScrapedAt: 22,
+		ScrapedAt: p2i64(22),
 	},
 }
 
