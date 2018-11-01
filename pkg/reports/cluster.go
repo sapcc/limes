@@ -55,6 +55,7 @@ type ClusterService struct {
 type ClusterResource struct {
 	limes.ResourceInfo
 	Capacity      *uint64         `json:"capacity,omitempty"`
+	RawCapacity   *uint64         `json:"raw_capacity,omitempty"`
 	Comment       string          `json:"comment,omitempty"`
 	DomainsQuota  uint64          `json:"domains_quota,keepempty"`
 	Usage         uint64          `json:"usage,keepempty"`
@@ -256,12 +257,12 @@ func GetClusters(config limes.Configuration, clusterID *string, localQuotaUsageO
 			clusterID     string
 			serviceType   string
 			resourceName  *string
-			capacity      *uint64
+			rawCapacity   *uint64
 			comment       *string
 			subcapacities *string
 			scrapedAt     util.Time
 		)
-		err := rows.Scan(&clusterID, &serviceType, &resourceName, &capacity, &comment, &subcapacities, &scrapedAt)
+		err := rows.Scan(&clusterID, &serviceType, &resourceName, &rawCapacity, &comment, &subcapacities, &scrapedAt)
 		if err != nil {
 			return err
 		}
@@ -269,7 +270,14 @@ func GetClusters(config limes.Configuration, clusterID *string, localQuotaUsageO
 		cluster, _, resource := clusters.Find(config, clusterID, &serviceType, resourceName)
 
 		if resource != nil {
-			resource.Capacity = capacity
+			overcommitFactor := config.Clusters[clusterID].BehaviorForResource(serviceType, *resourceName).OvercommitFactor
+			if overcommitFactor == 0 {
+				resource.Capacity = rawCapacity
+			} else {
+				resource.RawCapacity = rawCapacity
+				capacity := uint64(float64(*rawCapacity) * overcommitFactor)
+				resource.Capacity = &capacity
+			}
 			if comment != nil {
 				resource.Comment = *comment
 			}
@@ -403,12 +411,12 @@ func GetClusters(config limes.Configuration, clusterID *string, localQuotaUsageO
 				sharedClusterID string
 				serviceType     string
 				resourceName    *string
-				capacity        *uint64
+				rawCapacity     *uint64
 				comment         *string
 				subcapacities   *string
 				scrapedAt       util.Time
 			)
-			err := rows.Scan(&sharedClusterID, &serviceType, &resourceName, &capacity, &comment, &subcapacities, &scrapedAt)
+			err := rows.Scan(&sharedClusterID, &serviceType, &resourceName, &rawCapacity, &comment, &subcapacities, &scrapedAt)
 			if err != nil {
 				return err
 			}
@@ -421,7 +429,14 @@ func GetClusters(config limes.Configuration, clusterID *string, localQuotaUsageO
 				_, _, resource := clusters.Find(config, cluster.ID, &serviceType, resourceName)
 
 				if resource != nil {
-					resource.Capacity = capacity
+					overcommitFactor := config.Clusters[cluster.ID].BehaviorForResource(serviceType, *resourceName).OvercommitFactor
+					if overcommitFactor == 0 {
+						resource.Capacity = rawCapacity
+					} else {
+						resource.RawCapacity = rawCapacity
+						capacity := uint64(float64(*rawCapacity) * overcommitFactor)
+						resource.Capacity = &capacity
+					}
 					if comment != nil {
 						resource.Comment = *comment
 					}

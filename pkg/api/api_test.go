@@ -183,7 +183,7 @@ func Test_EmptyInconsistencyReport(t *testing.T) {
 
 func Test_ClusterOperations(t *testing.T) {
 	clusterName, pathtoData := "west", "fixtures/start-data.sql"
-	_, router, _ := setupTest(t, clusterName, pathtoData)
+	cluster, router, _ := setupTest(t, clusterName, pathtoData)
 
 	//check GetCluster
 	assert.HTTPRequest{
@@ -459,6 +459,26 @@ func Test_ClusterOperations(t *testing.T) {
 		},
 	}.Check(t, router)
 	expectClusterCapacity(t, "shared", "shared", "capacity", -1, "")
+
+	//check rendering of overcommit factors
+	cluster.Config.ResourceBehavior = map[string]map[string]*limes.ResourceBehavior{
+		"shared": {
+			"things": &limes.ResourceBehavior{
+				OvercommitFactor: 2.5,
+			},
+		},
+		"unshared": {
+			"things": &limes.ResourceBehavior{
+				OvercommitFactor: 1.5,
+			},
+		},
+	}
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/v1/clusters/west",
+		ExpectStatus: 200,
+		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-with-overcommit.json"),
+	}.Check(t, router)
 }
 
 func expectClusterCapacity(t *testing.T, clusterID, serviceType, resourceName string, capacity int64, comment string) {

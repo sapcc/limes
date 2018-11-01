@@ -276,3 +276,14 @@ func (c *Cluster) InfoForService(serviceType string) ServiceInfo {
 	}
 	return plugin.ServiceInfo()
 }
+
+//BehaviorForResource returns the ResourceBehavior for the given resource. If
+//no special behavior has been configured for this resource, or if this
+//resource does not exist, a zero-initialized struct is returned.
+func (c *Cluster) BehaviorForResource(serviceType, resourceName string) ResourceBehavior {
+	b := c.Config.ResourceBehavior[serviceType][resourceName]
+	if b == nil {
+		return ResourceBehavior{}
+	}
+	return *b
+}

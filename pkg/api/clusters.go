@@ -244,10 +244,10 @@ func writeClusterResource(tx *gorp.Transaction, cluster *limes.Cluster, srv Serv
 	case resource == nil:
 		//need to insert
 		resource = &db.ClusterResource{
-			ServiceID: service.ID,
-			Name:      res.Name,
-			Capacity:  newCapacity,
-			Comment:   res.Comment,
+			ServiceID:   service.ID,
+			Name:        res.Name,
+			RawCapacity: newCapacity,
+			Comment:     res.Comment,
 		}
 		return "", tx.Insert(resource)
 	case res.Capacity < 0:
@@ -256,7 +256,7 @@ func writeClusterResource(tx *gorp.Transaction, cluster *limes.Cluster, srv Serv
 		return "", err
 	default:
 		//need to update
-		resource.Capacity = newCapacity
+		resource.RawCapacity = newCapacity
 		resource.Comment = res.Comment
 		_, err := tx.Update(resource)
 		return "", err
