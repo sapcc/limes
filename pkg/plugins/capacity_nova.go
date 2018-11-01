@@ -170,16 +170,9 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 		}
 	}
 
-	//get overcommit factor from configuration (hypervisor stats unfortunately is
-	//stupid and does not include this factor even though it is in the nova.conf)
-	var vcpuOvercommitFactor uint64 = 1
-	if p.cfg.Nova.VCPUOvercommitFactor != nil {
-		vcpuOvercommitFactor = *p.cfg.Nova.VCPUOvercommitFactor
-	}
-
 	capacity := map[string]map[string]limes.CapacityData{
 		"compute": {
-			"cores": limes.CapacityData{Capacity: totalVcpus * vcpuOvercommitFactor},
+			"cores": limes.CapacityData{Capacity: totalVcpus},
 			"ram":   limes.CapacityData{Capacity: totalMemoryMb},
 		},
 	}

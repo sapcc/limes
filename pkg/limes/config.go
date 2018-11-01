@@ -112,7 +112,6 @@ type CapacitorConfiguration struct {
 	//name and put the config data in there (use a struct to be able to give
 	//config options meaningful names)
 	Nova struct {
-		VCPUOvercommitFactor  *uint64           `yaml:"vcpu_overcommit"`
 		ExtraSpecs            map[string]string `yaml:"extra_specs"`
 		HypervisorTypePattern string            `yaml:"hypervisor_type_pattern"`
 	} `yaml:"nova"`
@@ -124,11 +123,10 @@ type CapacitorConfiguration struct {
 		VolumeBackendName string `yaml:"volume_backend_name"`
 	} `yaml:"cinder"`
 	Manila struct {
-		ShareNetworks            uint64  `yaml:"share_networks"`
-		SharesPerPool            uint64  `yaml:"shares_per_pool"`
-		SnapshotsPerShare        uint64  `yaml:"snapshots_per_share"`
-		CapacityBalance          float64 `yaml:"capacity_balance"`
-		CapacityOvercommitFactor float64 `yaml:"capacity_overcommit"`
+		ShareNetworks     uint64  `yaml:"share_networks"`
+		SharesPerPool     uint64  `yaml:"shares_per_pool"`
+		SnapshotsPerShare uint64  `yaml:"snapshots_per_share"`
+		CapacityBalance   float64 `yaml:"capacity_balance"`
 	} `yaml:"manila"`
 	Manual map[string]map[string]uint64 `yaml:"manual"`
 }

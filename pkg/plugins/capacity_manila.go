@@ -55,9 +55,6 @@ func (p *capacityManilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo g
 	if cfg.SnapshotsPerShare == 0 {
 		return nil, errors.New("missing configuration parameter: snapshots_per_share")
 	}
-	if cfg.CapacityOvercommitFactor == 0 {
-		cfg.CapacityOvercommitFactor = 1 //default is no overcommit
-	}
 
 	client, err := openstack.NewSharedFileSystemV2(provider, eo)
 	if err != nil {
@@ -87,7 +84,6 @@ func (p *capacityManilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo g
 		totalCapacityGB += pool.Capabilities.TotalCapacityGB
 	}
 	poolCount := uint64(len(data.Pools))
-	totalCapacityGB *= cfg.CapacityOvercommitFactor
 
 	//derive capacities
 	shareCount := cfg.SharesPerPool*poolCount - cfg.ShareNetworks
