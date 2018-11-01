@@ -46,8 +46,8 @@ type ClusterService struct {
 	limes.ServiceInfo
 	Shared       bool             `json:"shared,omitempty"`
 	Resources    ClusterResources `json:"resources,keepempty"`
-	MaxScrapedAt int64            `json:"max_scraped_at,omitempty"`
-	MinScrapedAt int64            `json:"min_scraped_at,omitempty"`
+	MaxScrapedAt int64            `json:"max_scraped_at,keepempty"`
+	MinScrapedAt int64            `json:"min_scraped_at,keepempty"`
 }
 
 //ClusterResource is a substructure of Cluster containing data for
