@@ -57,7 +57,17 @@ func Test_ScanCapacity(t *testing.T) {
 				"someother/capacity",
 			),
 		},
-		Config: &limes.ClusterConfiguration{Auth: &limes.AuthParameters{}},
+		Config: &limes.ClusterConfiguration{
+			Auth: &limes.AuthParameters{},
+			//overcommit should be reflected in capacity metrics
+			ResourceBehavior: limes.ResourceBehaviorConfiguration{
+				"unshared2": {
+					"capacity": {
+						OvercommitFactor: 2.5,
+					},
+				},
+			},
+		},
 	}
 
 	c := Collector{

@@ -2,7 +2,7 @@
 # TYPE limes_cluster_capacity gauge
 limes_cluster_capacity{os_cluster="west",resource="capacity",service="shared",shared="true"} 42
 limes_cluster_capacity{os_cluster="west",resource="capacity",service="unshared",shared="false"} 42
-limes_cluster_capacity{os_cluster="west",resource="capacity",service="unshared2",shared="false"} 50
+limes_cluster_capacity{os_cluster="west",resource="capacity",service="unshared2",shared="false"} 125
 limes_cluster_capacity{os_cluster="west",resource="things",service="shared",shared="true"} 23
 limes_cluster_capacity{os_cluster="west",resource="things",service="unshared",shared="false"} 10
 limes_cluster_capacity{os_cluster="west",resource="things",service="unshared2",shared="false"} 0
