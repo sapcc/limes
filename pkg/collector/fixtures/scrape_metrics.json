@@ -1,3 +1,8 @@
+# HELP limes_cluster_capacity Reported capacity of a Limes resource for an OpenStack cluster.
+# TYPE limes_cluster_capacity gauge
+limes_cluster_capacity{os_cluster="west",resource="capacity",service="unittest",shared="false"} 0
+limes_cluster_capacity{os_cluster="west",resource="external_things",service="unittest",shared="false"} 0
+limes_cluster_capacity{os_cluster="west",resource="things",service="unittest",shared="false"} 0
 # HELP limes_project_backendquota Actual quota of a Limes resource for an OpenStack project.
 # TYPE limes_project_backendquota gauge
 limes_project_backendquota{domain="germany",domain_id="uuid-for-germany",os_cluster="west",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="unittest"} 40

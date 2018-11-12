@@ -224,6 +224,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	unitConversionDesc := <-descCh
 
 	//fetch values for cluster level
+	capacityReported := make(map[string]map[string]bool)
 	queryArgs := []interface{}{c.Cluster.ID}
 	err := db.ForeachRow(db.DB, clusterMetricsQuery, queryArgs, func(rows *sql.Rows) error {
 		var (
@@ -251,10 +252,38 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			prometheus.GaugeValue, float64(capacity),
 			c.Cluster.ID, sharedString, serviceType, resourceName,
 		)
+
+		_, exists := capacityReported[serviceType]
+		if !exists {
+			capacityReported[serviceType] = make(map[string]bool)
+		}
+		capacityReported[serviceType][resourceName] = true
+
 		return nil
 	})
 	if err != nil {
 		logg.Error("collect cluster metrics failed: " + err.Error())
+	}
+
+	//make sure that a cluster capacity value is reported for each resource (the
+	//corresponding time series might otherwise be missing if capacity scraping
+	//fails)
+	for serviceType, quotaPlugin := range c.Cluster.QuotaPlugins {
+		for _, res := range quotaPlugin.Resources() {
+			if capacityReported[serviceType][res.Name] {
+				continue
+			}
+
+			sharedString := "false"
+			if c.Cluster.IsServiceShared[serviceType] {
+				sharedString = "true"
+			}
+			ch <- prometheus.MustNewConstMetric(
+				clusterCapacityDesc,
+				prometheus.GaugeValue, 0,
+				c.Cluster.ID, sharedString, serviceType, res.Name,
+			)
+		}
 	}
 
 	//fetch values for domain level
