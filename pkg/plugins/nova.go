@@ -270,16 +270,20 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 					countsByHypervisor[hypervisorType]++
 				}
 
-				imageID, ok := instance.Image["id"].(string)
-				if ok {
-					osType, err := p.getOSType(provider, eo, imageID)
-					if err == nil {
-						subResource["os_type"] = osType
-					} else {
-						logg.Error("error while trying to find OS type for image %s: %s", imageID, err.Error())
-					}
-				} else {
+				if instance.Image == nil {
 					subResource["os_type"] = "image-missing"
+				} else {
+					imageID, ok := instance.Image["id"].(string)
+					if ok {
+						osType, err := p.getOSType(provider, eo, imageID)
+						if err == nil {
+							subResource["os_type"] = osType
+						} else {
+							logg.Error("error while trying to find OS type for image %s: %s", imageID, err.Error())
+						}
+					} else {
+						subResource["os_type"] = "image-missing"
+					}
 				}
 
 				flavorName := ""
