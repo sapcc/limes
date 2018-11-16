@@ -74,6 +74,15 @@ func (c *cfmClient) reqOpts(okCodes ...int) *gophercloud.RequestOpts {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+// new-style quota/usage API
+
+func (c *cfmClient) GetQuotaSet(projectID string) (result gophercloud.Result) {
+	url := c.ServiceURL("v1.0", "quota-sets", projectID) + "/"
+	_, result.Err = c.Get(url, &result.Body, c.reqOpts(200))
+	return
+}
+
+////////////////////////////////////////////////////////////////////////////////
 // old-style usage API
 
 type cfmShareserver struct {

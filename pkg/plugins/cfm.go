@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/gophercloud/gophercloud"
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes/pkg/limes"
 )
 
@@ -71,6 +72,30 @@ func (p *cfmPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.
 		return nil, err
 	}
 
+	//prefer the new quota API if it is available
+	var data struct {
+		StorageQuota struct {
+			SizeLimitBytes int64 `json:"size_limit"`
+			Usage          struct {
+				BytesUsed uint64 `json:"potential_growth_size"`
+			} `json:"usage"`
+		} `json:"storage_quota"`
+	}
+	err = client.GetQuotaSet(projectUUID).ExtractInto(&data)
+	if err == nil {
+		logg.Info("using CFM quota set for project %s", projectUUID)
+		return map[string]limes.ResourceData{
+			"cfm_share_capacity": {
+				Quota: data.StorageQuota.SizeLimitBytes,
+				Usage: data.StorageQuota.Usage.BytesUsed,
+			},
+		}, nil
+	}
+
+	return p.scrapeOld(client, projectUUID)
+}
+
+func (p *cfmPlugin) scrapeOld(client *cfmClient, projectUUID string) (map[string]limes.ResourceData, error) {
 	//cache the result of cfmListShareservers(), it's mildly expensive
 	now := time.Now()
 	if p.shareserversCache == nil || p.shareserversCacheExpires.Before(now) {
