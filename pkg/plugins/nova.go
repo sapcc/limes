@@ -257,8 +257,6 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 						Value: uint64(flavor.Disk),
 						Unit:  limes.UnitGibibytes,
 					}
-				} else {
-					logg.Error("error while trying to retrieve data for flavor %s: %s", flavorID, err.Error())
 				}
 
 				if len(p.hypervisorTypeRules) > 0 {
