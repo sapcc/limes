@@ -20,9 +20,6 @@
 package plugins
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/gophercloud/gophercloud"
 	"github.com/sapcc/limes/pkg/limes"
 )
@@ -44,11 +41,11 @@ func (p *capacityCFMPlugin) ID() string {
 
 //Scrape implements the limes.CapacityPlugin interface.
 func (p *capacityCFMPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]limes.CapacityData, error) {
-	projectID, err := cfmGetScopedProjectID(provider, eo)
+	client, err := newCFMClient(provider, eo)
 	if err != nil {
 		return nil, err
 	}
-	pools, err := cfmListPools(provider, eo, projectID)
+	pools, err := client.ListPools()
 	if err != nil {
 		return nil, err
 	}
@@ -65,31 +62,4 @@ func (p *capacityCFMPlugin) Scrape(provider *gophercloud.ProviderClient, eo goph
 			},
 		},
 	}, nil
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-type cfmPool struct {
-	Capabilities struct {
-		TotalCapacityBytes uint64 `json:"total_capacity"`
-	} `json:"capabilities"`
-}
-
-func cfmListPools(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, projectID string) ([]cfmPool, error) {
-	eo.ApplyDefaults("database")
-	baseURL, err := provider.EndpointLocator(eo)
-	if err != nil {
-		return nil, err
-	}
-
-	url := strings.TrimSuffix(baseURL, "/") + "/v1.0/scheduler-stats/pools/detail/"
-	var data struct {
-		Pools []cfmPool `json:"pools"`
-	}
-	err = cfmDoRequest(provider, url, &data, projectID)
-	if err != nil {
-		return nil, fmt.Errorf("GET %s failed: %s", url, err.Error())
-	}
-
-	return data.Pools, nil
 }

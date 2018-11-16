@@ -20,18 +20,10 @@
 package plugins
 
 import (
-	"encoding/json"
 	"errors"
-	"fmt"
-	"io/ioutil"
-	"net/http"
-	"strings"
 	"time"
 
 	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/openstack"
-	"github.com/gophercloud/gophercloud/openstack/identity/v3/tokens"
-	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes/pkg/limes"
 )
 
@@ -74,14 +66,15 @@ func (p *cfmPlugin) Resources() []limes.ResourceInfo {
 
 //Scrape implements the limes.QuotaPlugin interface.
 func (p *cfmPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
+	client, err := newCFMClient(provider, eo)
+	if err != nil {
+		return nil, err
+	}
+
 	//cache the result of cfmListShareservers(), it's mildly expensive
 	now := time.Now()
 	if p.shareserversCache == nil || p.shareserversCacheExpires.Before(now) {
-		projectID, err := cfmGetScopedProjectID(provider, eo)
-		if err != nil {
-			return nil, err
-		}
-		shareservers, err := cfmListShareservers(provider, eo, projectID)
+		shareservers, err := client.ListShareservers()
 		if err != nil {
 			return nil, err
 		}
@@ -90,21 +83,13 @@ func (p *cfmPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.
 	}
 	shareservers := p.shareserversCache
 
-	var projectID string
 	result := limes.ResourceData{Quota: 0, Usage: 0}
 	for _, shareserver := range shareservers {
 		if shareserver.ProjectUUID != projectUUID {
 			continue
 		}
 
-		if projectID == "" {
-			var err error
-			projectID, err = cfmGetScopedProjectID(provider, eo)
-			if err != nil {
-				return nil, err
-			}
-		}
-		shareserverDetailed, err := cfmGetShareserver(provider, shareserver.DetailsURL, projectID)
+		shareserverDetailed, err := client.GetShareserver(shareserver.DetailsURL)
 		if err != nil {
 			return nil, err
 		}
@@ -122,139 +107,4 @@ func (p *cfmPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherclou
 		return errors.New("the database/cfm_share_capacity resource is externally managed")
 	}
 	return nil
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-func cfmGetScopedProjectID(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (string, error) {
-	//the CFM API is stupid and needs the caller to provide the scope of the
-	//token redundantly in the X-Project-Id header
-	identityClient, err := openstack.NewIdentityV3(provider, eo)
-	if err != nil {
-		return "", err
-	}
-	project, err := tokens.Get(identityClient, provider.Token()).ExtractProject()
-	return project.ID, err
-}
-
-type cfmShareserver struct {
-	Type        string
-	ProjectUUID string
-	DetailsURL  string
-	//fields that are only filled by cfmGetShareserver, not by cfmListShareservers
-	BytesUsed uint64
-}
-
-func cfmListShareservers(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, projectID string) ([]cfmShareserver, error) {
-	eo.ApplyDefaults("database")
-	baseURL, err := provider.EndpointLocator(eo)
-	if err != nil {
-		return nil, err
-	}
-
-	url := strings.TrimSuffix(baseURL, "/") + "/v1.0/shareservers/"
-	var data struct {
-		Shareservers []struct {
-			ID          string `json:"id"`
-			Type        string `json:"type"`
-			ProjectUUID string `json:"customer_id"`
-		} `json:"shareservers"`
-	}
-	err = cfmDoRequest(provider, url, &data, projectID)
-	if err != nil {
-		return nil, fmt.Errorf("GET %s failed: %s", url, err.Error())
-	}
-
-	result := make([]cfmShareserver, len(data.Shareservers))
-	for idx, srv := range data.Shareservers {
-		result[idx] = cfmShareserver{
-			Type:        srv.Type,
-			ProjectUUID: srv.ProjectUUID,
-			DetailsURL:  url + srv.ID + "/",
-		}
-	}
-	return result, nil
-}
-
-func cfmGetShareserver(provider *gophercloud.ProviderClient, url string, projectID string) (*cfmShareserver, error) {
-	var data struct {
-		Shareserver struct {
-			ID         string `json:"id"`
-			Properties struct {
-				SVMs []struct {
-					Volumes []struct {
-						Space struct {
-							BytesUsed uint64 `json:"size"`
-						} `json:"space"`
-					} `json:"volumes"`
-				} `json:"svms"`
-			} `json:"properties"`
-			Type        string `json:"type"`
-			ProjectUUID string `json:"customer_id"`
-		} `json:"shareserver"`
-	}
-	err := cfmDoRequest(provider, url, &data, projectID)
-	if err != nil {
-		return nil, fmt.Errorf("GET %s failed: %s", url, err.Error())
-	}
-	srv := data.Shareserver
-
-	var totalBytesUsed uint64
-	for _, svm := range srv.Properties.SVMs {
-		for _, volume := range svm.Volumes {
-			totalBytesUsed += volume.Space.BytesUsed
-		}
-	}
-
-	logg.Info("CFM shareserver %s (type %s) in project %s has size = %d bytes",
-		srv.ID, srv.Type, srv.ProjectUUID,
-		totalBytesUsed,
-	)
-	return &cfmShareserver{
-		Type:        srv.Type,
-		ProjectUUID: srv.ProjectUUID,
-		DetailsURL:  url + srv.ID + "/",
-		BytesUsed:   totalBytesUsed,
-	}, nil
-}
-
-func cfmDoRequest(provider *gophercloud.ProviderClient, url string, body interface{}, projectID string) error {
-	req, err := http.NewRequest("GET", url, nil)
-	if err != nil {
-		return err
-	}
-	token := provider.Token()
-	req.Header.Set("Authorization", "Token "+token)
-	req.Header.Set("X-Project-Id", projectID)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	//success case
-	if resp.StatusCode == http.StatusOK {
-		return json.NewDecoder(resp.Body).Decode(&body)
-	}
-
-	//error case: read error message from body
-	buf, err := ioutil.ReadAll(resp.Body)
-	if err == nil {
-		err = errors.New(string(buf))
-	}
-
-	//detect when token has expired
-	//
-	//NOTE: We don't trust the resp.StatusCode here. The CFM API is known to return
-	//403 when it means 401.
-	if strings.Contains(err.Error(), "Invalid credentials") {
-		err = provider.Reauthenticate(token)
-		if err == nil {
-			//restart function call after successful reauth
-			return cfmDoRequest(provider, url, body, projectID)
-		}
-	}
-
-	return err
 }
