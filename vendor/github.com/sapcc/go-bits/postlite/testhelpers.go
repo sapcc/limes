@@ -34,20 +34,21 @@ import (
 //ExecSQLFile loads a file containing SQL statements and executes them all.
 //It implies that every SQL statement is on a single line.
 func ExecSQLFile(t *testing.T, db *sql.DB, path string) {
+	t.Helper()
 	sqlBytes, err := ioutil.ReadFile(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	//split into single statements because db.Exec() will just ignore everything after the first semicolon
-	for _, line := range strings.Split(string(sqlBytes), "\n") {
+	for idx, line := range strings.Split(string(sqlBytes), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "--") {
 			continue
 		}
 		_, err = db.Exec(line)
 		if err != nil {
-			t.Fatal(err)
+			t.Fatalf("error on SQL line %d: %s", idx, err.Error())
 		}
 	}
 }
