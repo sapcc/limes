@@ -20,7 +20,6 @@
 package api
 
 import (
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -30,6 +29,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/limes/pkg/collector"
+	"github.com/sapcc/limes/pkg/datamodel"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/reports"
 	"github.com/sapcc/limes/pkg/util"
@@ -319,39 +319,14 @@ func (p *v1Provider) putOrSimulatePutProject(w http.ResponseWriter, r *http.Requ
 		if !servicesToUpdate[srv.Type] {
 			continue
 		}
-
-		plugin := updater.Cluster.QuotaPlugins[srv.Type]
-		if plugin == nil {
-			errors = append(errors, fmt.Sprintf("no quota plugin registered for service type %s", srv.Type))
-			continue
-		}
-
-		//collect all resource quotas for this service (NOT only the ones that were
-		//updated just now; the QuotaPlugin.SetQuota method requires as input *all*
-		//quotas for that plugin's service)
-		quotaValues := make(map[string]uint64)
-		var resources []db.ProjectResource
-		_, err = db.DB.Select(&resources,
-			`SELECT * FROM project_resources WHERE service_id = $1`, srv.ID)
-		if respondwith.ErrorText(w, err) {
-			return
-		}
-		for _, res := range resources {
-			quotaValues[res.Name] = res.Quota
-		}
-		provider, eo := updater.Cluster.ProviderClientForService(srv.Type)
-		err = plugin.SetQuota(provider, eo, updater.Cluster.ID, updater.Domain.UUID, updater.Project.UUID, quotaValues)
+		err := datamodel.ApplyBackendQuota(
+			db.DB,
+			updater.Cluster, updater.Domain.UUID, updater.Project.UUID,
+			srv.ID, srv.Type,
+		)
 		if err != nil {
 			errors = append(errors, err.Error())
 			continue
-		}
-
-		//on success, we now know that the backend has all the correct quotas
-		_, err = db.DB.Exec(
-			`UPDATE project_resources SET backend_quota = quota WHERE service_id = $1`,
-			srv.ID)
-		if respondwith.ErrorText(w, err) {
-			return
 		}
 	}
 

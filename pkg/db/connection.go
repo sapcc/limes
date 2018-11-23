@@ -79,8 +79,12 @@ func RollbackUnlessCommitted(tx *gorp.Transaction) {
 //Interface provides the common methods that both SQL connections and
 //transactions implement.
 type Interface interface {
+	//from database/sql
 	Exec(query string, args ...interface{}) (sql.Result, error)
 	Prepare(query string) (*sql.Stmt, error)
 	Query(query string, args ...interface{}) (*sql.Rows, error)
 	QueryRow(query string, args ...interface{}) *sql.Row
+
+	//from gorp.v2
+	Select(i interface{}, query string, args ...interface{}) ([]interface{}, error)
 }

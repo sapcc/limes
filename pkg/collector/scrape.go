@@ -29,6 +29,7 @@ import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/limes/pkg/datamodel"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
 )
@@ -168,15 +169,14 @@ func (c *Collector) writeScrapeResult(domainName, domainUUID, projectName, proje
 	}
 
 	//update existing project_resources entries
-	quotaValues := make(map[string]uint64)
-	needToSetQuota := false
+	resourceExists := make(map[string]bool)
 	var resources []db.ProjectResource
 	_, err = tx.Select(&resources, `SELECT * FROM project_resources WHERE service_id = $1`, serviceID)
 	if err != nil {
 		return err
 	}
 	for _, res := range resources {
-		quotaValues[res.Name] = res.Quota
+		resourceExists[res.Name] = true
 
 		data, exists := resourceData[res.Name]
 		if !exists {
@@ -199,7 +199,6 @@ func (c *Collector) writeScrapeResult(domainName, domainUUID, projectName, proje
 				constraint.String(),
 			)
 			res.Quota = newQuota
-			quotaValues[res.Name] = newQuota
 		}
 
 		//update existing resource record
@@ -235,16 +234,11 @@ func (c *Collector) writeScrapeResult(domainName, domainUUID, projectName, proje
 		if err != nil {
 			return err
 		}
-		if res.BackendQuota < 0 || res.Quota != uint64(res.BackendQuota) {
-			//Note that this branch will never be taken for ExternallyManaged resources,
-			//because we set res.Quota == res.BackendQuota above for those.
-			needToSetQuota = true
-		}
 	}
 
 	//insert missing project_resources entries
 	for _, resMetadata := range c.Plugin.Resources() {
-		if _, exists := quotaValues[resMetadata.Name]; exists {
+		if _, exists := resourceExists[resMetadata.Name]; exists {
 			continue
 		}
 		data := resourceData[resMetadata.Name]
@@ -293,10 +287,6 @@ func (c *Collector) writeScrapeResult(domainName, domainUUID, projectName, proje
 		if err != nil {
 			return err
 		}
-		quotaValues[res.Name] = res.Quota
-		if res.BackendQuota < 0 || res.Quota != uint64(res.BackendQuota) {
-			needToSetQuota = true
-		}
 	}
 
 	//update scraped_at timestamp and reset the stale flag on this service so
@@ -314,30 +304,16 @@ func (c *Collector) writeScrapeResult(domainName, domainUUID, projectName, proje
 		return err
 	}
 
-	//feature gate for automatic quota alignment
-	if !c.Cluster.Authoritative {
-		return nil
-	}
-
 	//if a mismatch between frontend and backend quota was detected, try to
 	//rectify it (but an error at this point is non-fatal: we don't want scraping
 	//to get stuck because some project has backend_quota > usage > quota, for
 	//example)
-	if needToSetQuota {
-		provider, eo := c.Cluster.ProviderClientForService(serviceType)
-		err := c.Plugin.SetQuota(provider, eo, c.Cluster.ID, domainUUID, projectUUID, quotaValues)
+	if c.Cluster.Authoritative {
+		err := datamodel.ApplyBackendQuota(db.DB, c.Cluster, domainUUID, projectUUID, serviceID, serviceType)
 		if err != nil {
-			serviceType := c.Plugin.ServiceInfo().Type
 			logg.Error("could not rectify frontend/backend quota mismatch for service %s in project %s: %s",
 				serviceType, projectUUID, err.Error(),
 			)
-		} else {
-			//backend quota rectified successfully
-			_, err = db.DB.Exec(
-				`UPDATE project_resources SET backend_quota = quota WHERE service_id = $1`,
-				serviceID,
-			)
-			return err
 		}
 	}
 
