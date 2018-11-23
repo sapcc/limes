@@ -47,9 +47,16 @@ func newCFMClient(provider *gophercloud.ProviderClient, eo gophercloud.EndpointO
 	if err != nil {
 		return nil, err
 	}
-	project, err := tokens.Get(identityClient, provider.Token()).ExtractProject()
+	ourToken := provider.Token()
+	project, err := tokens.Get(identityClient, ourToken).ExtractProject()
 	if err != nil {
 		return nil, err
+	}
+	//if our token changed mid-request because it expired and the 401 response
+	//triggered Gophercloud to reauthenticate, then we cannot trust the response
+	if provider.Token() != ourToken {
+		//restart this call
+		return newCFMClient(provider, eo)
 	}
 
 	return &cfmClient{
