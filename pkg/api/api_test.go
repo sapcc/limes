@@ -43,6 +43,7 @@ func init() {
 
 func setupTest(t *testing.T, clusterName, startData string) (*limes.Cluster, http.Handler, *TestPolicyEnforcer) {
 	//load test database
+	t.Helper()
 	test.InitDatabase(t)
 	test.ExecSQLFile(t, startData)
 

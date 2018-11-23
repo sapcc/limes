@@ -33,10 +33,19 @@ import (
 
 //Project contains all data about resource usage in a project.
 type Project struct {
-	UUID       string          `json:"id"`
-	Name       string          `json:"name"`
-	ParentUUID string          `json:"parent_id"`
-	Services   ProjectServices `json:"services,keepempty"`
+	UUID       string               `json:"id"`
+	Name       string               `json:"name"`
+	ParentUUID string               `json:"parent_id"`
+	Bursting   *ProjectBurstingInfo `json:"bursting,omitempty"`
+	Services   ProjectServices      `json:"services,keepempty"`
+}
+
+//ProjectBurstingInfo is a substructure of Project containing information about
+//quota bursting. (It is omitted if bursting is not supported for the project's
+//cluster.)
+type ProjectBurstingInfo struct {
+	Enabled    bool                     `json:"enabled,keepempty"`
+	Multiplier limes.BurstingMultiplier `json:"multiplier,keepempty"`
 }
 
 //ProjectService is a substructure of Project containing data for
@@ -50,10 +59,11 @@ type ProjectService struct {
 //ProjectResource is a substructure of Project containing data for
 //a single resource.
 type ProjectResource struct {
+	//Several fields are pointers to values to enable precise control over which fields are rendered in output.
 	limes.ResourceInfo
-	Quota uint64 `json:"quota,keepempty"`
-	Usage uint64 `json:"usage,keepempty"`
-	//This is a pointer to a value to enable precise control over whether this field is rendered in output.
+	Quota        uint64                 `json:"quota,keepempty"`
+	Usage        uint64                 `json:"usage,keepempty"`
+	BurstUsage   uint64                 `json:"burst_usage,omitempty"`
 	BackendQuota *int64                 `json:"backend_quota,omitempty"`
 	Subresources util.JSONString        `json:"subresources,omitempty"`
 	Scaling      *limes.ScalingBehavior `json:"scales_with,omitempty"`
@@ -128,7 +138,7 @@ func (r *ProjectResources) UnmarshalJSON(b []byte) error {
 }
 
 var projectReportQuery = `
-	SELECT p.uuid, p.name, COALESCE(p.parent_uuid, ''), ps.type, ps.scraped_at, pr.name, pr.quota, pr.usage, pr.backend_quota, pr.subresources
+	SELECT p.uuid, p.name, COALESCE(p.parent_uuid, ''), p.has_bursting, ps.type, ps.scraped_at, pr.name, pr.quota, pr.usage, pr.backend_quota, pr.subresources
 	  FROM projects p
 	  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
 	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
@@ -138,6 +148,8 @@ var projectReportQuery = `
 //GetProjects returns Project reports for all projects in the given domain or,
 //if projectID is non-nil, for that project only.
 func GetProjects(cluster *limes.Cluster, domainID int64, projectID *int64, dbi db.Interface, filter Filter, withSubresources bool) ([]*Project, error) {
+	clusterCanBurst := cluster.Config.Bursting.MaxMultiplier > 0
+
 	fields := map[string]interface{}{"p.domain_id": domainID}
 	if projectID != nil {
 		fields["p.id"] = *projectID
@@ -159,19 +171,20 @@ func GetProjects(cluster *limes.Cluster, domainID int64, projectID *int64, dbi d
 	projects := make(map[string]*Project)
 	for rows.Next() {
 		var (
-			projectUUID       string
-			projectName       string
-			projectParentUUID string
-			serviceType       *string
-			scrapedAt         *util.Time
-			resourceName      *string
-			quota             *uint64
-			usage             *uint64
-			backendQuota      *int64
-			subresources      *string
+			projectUUID        string
+			projectName        string
+			projectParentUUID  string
+			projectHasBursting bool
+			serviceType        *string
+			scrapedAt          *util.Time
+			resourceName       *string
+			quota              *uint64
+			usage              *uint64
+			backendQuota       *int64
+			subresources       *string
 		)
 		err := rows.Scan(
-			&projectUUID, &projectName, &projectParentUUID,
+			&projectUUID, &projectName, &projectParentUUID, &projectHasBursting,
 			&serviceType, &scrapedAt, &resourceName,
 			&quota, &usage, &backendQuota, &subresources,
 		)
@@ -189,6 +202,13 @@ func GetProjects(cluster *limes.Cluster, domainID int64, projectID *int64, dbi d
 				Services:   make(ProjectServices),
 			}
 			projects[projectUUID] = project
+
+			if clusterCanBurst {
+				project.Bursting = &ProjectBurstingInfo{
+					Enabled:    projectHasBursting,
+					Multiplier: cluster.Config.Bursting.MaxMultiplier,
+				}
+			}
 		}
 
 		if serviceType == nil {
@@ -235,8 +255,15 @@ func GetProjects(cluster *limes.Cluster, domainID int64, projectID *int64, dbi d
 		}
 		if quota != nil {
 			resource.Quota = *quota
-			if backendQuota != nil && (*backendQuota < 0 || uint64(*backendQuota) != *quota) {
+			desiredQuota := cluster.Config.Bursting.MaxMultiplier.ApplyTo(*quota)
+			if backendQuota != nil && (*backendQuota < 0 || uint64(*backendQuota) != desiredQuota) {
 				resource.BackendQuota = backendQuota
+			}
+		}
+		if clusterCanBurst && quota != nil && usage != nil {
+			burstUsage := *usage - *quota
+			if burstUsage > 0 {
+				resource.BurstUsage = burstUsage
 			}
 		}
 		service.Resources[*resourceName] = resource

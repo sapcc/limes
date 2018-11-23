@@ -49,7 +49,7 @@ func ApplyBackendQuota(dbi db.Interface, cluster *limes.Cluster, domainUUID, pro
 	var resourcesToUpdate []db.ProjectResource
 	quotaValues := make(map[string]uint64)
 	for _, res := range resources {
-		desiredQuota := res.Quota
+		desiredQuota := cluster.Config.Bursting.MaxMultiplier.ApplyTo(res.Quota)
 		logg.Info("desired %s/%s is %d", serviceType, res.Name, desiredQuota)
 		quotaValues[res.Name] = desiredQuota
 

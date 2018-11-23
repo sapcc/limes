@@ -37,7 +37,7 @@ static-check: FORCE
 	@echo '>> go vet'
 	@$(GO) vet $(GO_ALLPKGS)
 build/%.cover.out: FORCE
-	@echo '>> go test $*'
+	@echo '>> go test $(subst _,/,$*)'
 	$(GO) test $(GO_BUILDFLAGS) -ldflags '$(GO_LDFLAGS)' -coverprofile=$@ -covermode=count -coverpkg=$(subst $(space),$(comma),$(GO_COVERPKGS)) $(subst _,/,$*)
 build/cover.out: $(GO_COVERFILES)
 	pkg/test/util/gocovcat.go $(GO_COVERFILES) > $@

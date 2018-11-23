@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"os"
 	"regexp"
 	"strings"
@@ -67,6 +68,7 @@ type ClusterConfiguration struct {
 	CADF                 CADFConfiguration              `yaml:"cadf"`
 	LowPrivilegeRaise    LowPrivilegeRaiseConfiguration `yaml:"lowpriv_raise"`
 	ResourceBehavior     ResourceBehaviorConfiguration  `yaml:"resource_behavior"`
+	Bursting             BurstingConfiguration          `yaml:"bursting"`
 	//The following is only read to warn that users need to upgrade from seeds to constraints.
 	OldSeedConfigPath string `yaml:"seeds"`
 }
@@ -190,6 +192,20 @@ func (b ResourceBehavior) ToScalingBehavior() *ScalingBehavior {
 		ScalesWithResourceName: b.ScalesWithResourceName,
 		ScalingFactor:          b.ScalingFactor,
 	}
+}
+
+//BurstingConfiguration contains the configuration options for quota bursting.
+type BurstingConfiguration struct {
+	//If MaxMultiplier is zero, bursting is disabled.
+	MaxMultiplier BurstingMultiplier `yaml:"max_multiplier"`
+}
+
+//BurstingMultiplier is a multiplier for quota bursting.
+type BurstingMultiplier float64
+
+//ApplyTo returns the bursted backend quota for the given approved quota.
+func (m BurstingMultiplier) ApplyTo(quota uint64) uint64 {
+	return uint64(math.Floor((1 + float64(m)) * float64(quota)))
 }
 
 //CADFConfiguration contains configuration parameters for audit trail.
@@ -379,6 +395,11 @@ func (cfg configurationInFile) validate() (success bool) {
 					}
 				}
 			}
+		}
+
+		if cluster.Bursting.MaxMultiplier < 0 {
+			logg.Error("clusters[%s].bursting.max_multiplier may not be negative")
+			success = false
 		}
 
 		//warn about removed configuration options

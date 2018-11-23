@@ -62,11 +62,12 @@ type DomainResource struct {
 
 //Project contains a record from the `projects` table.
 type Project struct {
-	ID         int64  `db:"id"`
-	DomainID   int64  `db:"domain_id"`
-	Name       string `db:"name"`
-	UUID       string `db:"uuid"`
-	ParentUUID string `db:"parent_uuid"`
+	ID          int64  `db:"id"`
+	DomainID    int64  `db:"domain_id"`
+	Name        string `db:"name"`
+	UUID        string `db:"uuid"`
+	ParentUUID  string `db:"parent_uuid"`
+	HasBursting bool   `db:"has_bursting"`
 }
 
 //ProjectService contains a record from the `project_services` table.

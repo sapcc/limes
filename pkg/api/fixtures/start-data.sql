@@ -38,10 +38,10 @@ INSERT INTO domain_resources (service_id, name, quota) VALUES (6, 'capacity', 25
 
 -- "germany" has two projects, the other domains have one each (Dresden is a child project of Berlin in order to check
 -- correct rendering of the parent_uuid field)
-INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany');
-INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (2, 1, 'dresden', 'uuid-for-dresden', 'uuid-for-berlin');
-INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (3, 2, 'paris', 'uuid-for-paris', 'uuid-for-france');
-INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (4, 3, 'warsaw', 'uuid-for-warsaw', 'uuid-for-poland');
+INSERT INTO projects (id, domain_id, name, uuid, parent_uuid, has_bursting) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany', FALSE);
+INSERT INTO projects (id, domain_id, name, uuid, parent_uuid, has_bursting) VALUES (2, 1, 'dresden', 'uuid-for-dresden', 'uuid-for-berlin', FALSE);
+INSERT INTO projects (id, domain_id, name, uuid, parent_uuid, has_bursting) VALUES (3, 2, 'paris', 'uuid-for-paris', 'uuid-for-france', FALSE);
+INSERT INTO projects (id, domain_id, name, uuid, parent_uuid, has_bursting) VALUES (4, 3, 'warsaw', 'uuid-for-warsaw', 'uuid-for-poland', FALSE);
 
 -- project_services is fully populated (as ensured by the collector's consistency check)
 INSERT INTO project_services (id, project_id, type, scraped_at) VALUES (1, 1, 'unshared', 11);
