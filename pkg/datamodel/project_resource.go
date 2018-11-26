@@ -38,9 +38,11 @@ func ApplyBackendQuota(dbi db.Interface, cluster *limes.Cluster, domainUUID stri
 		return fmt.Errorf("no quota plugin registered for service type %s", serviceType)
 	}
 
-	isExistingResource := make(map[string]bool)
+	isRelevantResource := make(map[string]bool)
 	for _, res := range plugin.Resources() {
-		isExistingResource[res.Name] = true
+		if !res.ExternallyManaged {
+			isRelevantResource[res.Name] = true
+		}
 	}
 
 	var resources []db.ProjectResource
@@ -53,7 +55,7 @@ func ApplyBackendQuota(dbi db.Interface, cluster *limes.Cluster, domainUUID stri
 	var resourcesToUpdate []db.ProjectResource
 	quotaValues := make(map[string]uint64)
 	for _, res := range resources {
-		if !isExistingResource[res.Name] {
+		if !isRelevantResource[res.Name] {
 			continue
 		}
 
