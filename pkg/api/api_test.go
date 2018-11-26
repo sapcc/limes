@@ -1546,3 +1546,177 @@ func p2s(val string) *string {
 func p2u64(val uint64) *uint64 {
 	return &val
 }
+
+func Test_QuotaBursting(t *testing.T) {
+	clusterName, pathtoData := "west", "fixtures/start-data.sql"
+	cluster, router, _ := setupTest(t, clusterName, pathtoData)
+	cluster.Config.Bursting.MaxMultiplier = 0.1
+
+	//check initial GetProject with bursting disabled, but supported
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 200,
+		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-berlin-bursting-disabled.json"),
+	}.Check(t, router)
+
+	//bursting can only enabled when the cluster supports it
+	cluster.Config.Bursting.MaxMultiplier = 0
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 400,
+		ExpectBody:   assert.StringData("bursting is not available for this cluster\n"),
+		Body: assert.JSONObject{
+			"project": assert.JSONObject{
+				"bursting": assert.JSONObject{
+					"enabled": true,
+				},
+			},
+		},
+	}.Check(t, router)
+
+	//enable bursting
+	cluster.Config.Bursting.MaxMultiplier = 0.1
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 202,
+		ExpectBody:   assert.StringData(""),
+		Body: assert.JSONObject{
+			"project": assert.JSONObject{
+				"bursting": assert.JSONObject{
+					"enabled": true,
+				},
+			},
+		},
+	}.Check(t, router)
+
+	//update a quota; this should also scale up the backend_quota according to
+	//the bursting multiplier (we will check this in the next step)
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 202,
+		ExpectBody:   assert.StringData(""),
+		Body: assert.JSONObject{
+			"project": assert.JSONObject{
+				"services": []assert.JSONObject{{
+					"type": "unshared",
+					"resources": []assert.JSONObject{{
+						"name":  "things",
+						"quota": 40,
+					}},
+				}},
+			},
+		},
+	}.Check(t, router)
+
+	//check that quota has been updated in DB
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 200,
+		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-berlin-bursting-enabled.json"),
+	}.Check(t, router)
+
+	//check that backend_quota has been updated in backend
+	plugin := cluster.QuotaPlugins["shared"].(*test.Plugin)
+	expectBackendQuota := map[string]uint64{
+		"capacity":        11, //original value (10) * multiplier (110%)
+		"things":          11, //original value (10) * multiplier (110%)
+		"external_things": 1,  //original value (1) * multiplier (110%), but rounded down
+	}
+	backendQuota, exists := plugin.OverrideQuota["uuid-for-berlin"]
+	if !exists {
+		t.Error("quota was not sent to backend")
+	}
+	if !reflect.DeepEqual(expectBackendQuota, backendQuota) {
+		t.Errorf("expected backend quota %#v, but got %#v", expectBackendQuota, backendQuota)
+	}
+
+	plugin = cluster.QuotaPlugins["unshared"].(*test.Plugin)
+	expectBackendQuota = map[string]uint64{
+		"capacity": 11, //original value (10) * multiplier (110%)
+		"things":   44, //as set above (40) * multiplier (110%)
+	}
+	backendQuota, exists = plugin.OverrideQuota["uuid-for-berlin"]
+	if !exists {
+		t.Error("quota was not sent to backend")
+	}
+	if !reflect.DeepEqual(expectBackendQuota, backendQuota) {
+		t.Errorf("expected backend quota %#v, but got %#v", expectBackendQuota, backendQuota)
+	}
+
+	//increase usage beyond frontend quota -> should show up as burst usage
+	_, err := db.DB.Exec(`UPDATE project_resources SET usage = 42 WHERE service_id = 1 AND name = 'things'`)
+	if err != nil {
+		t.Error(err.Error())
+	}
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 200,
+		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-berlin-bursting-in-progress.json"),
+	}.Check(t, router)
+
+	//check that we cannot disable bursting now
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 409,
+		ExpectBody:   assert.StringData("cannot disable bursting because 1 resource is currently bursted: unshared/things\n"),
+		Body: assert.JSONObject{
+			"project": assert.JSONObject{
+				"bursting": assert.JSONObject{
+					"enabled": false,
+				},
+			},
+		},
+	}.Check(t, router)
+
+	//decrease usage, then disable bursting successfully
+	_, err = db.DB.Exec(`UPDATE project_resources SET usage = 2 WHERE service_id = 1 AND name = 'things'`)
+	if err != nil {
+		t.Error(err.Error())
+	}
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 202,
+		ExpectBody:   assert.StringData(""),
+		Body: assert.JSONObject{
+			"project": assert.JSONObject{
+				"bursting": assert.JSONObject{
+					"enabled": false,
+				},
+			},
+		},
+	}.Check(t, router)
+
+	//also resetting the quota that we changed above should bring us back into
+	//the initial state
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 202,
+		ExpectBody:   assert.StringData(""),
+		Body: assert.JSONObject{
+			"project": assert.JSONObject{
+				"services": []assert.JSONObject{{
+					"type": "unshared",
+					"resources": []assert.JSONObject{{
+						"name":  "things",
+						"quota": 10,
+					}},
+				}},
+			},
+		},
+	}.Check(t, router)
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 200,
+		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-berlin-bursting-disabled.json"),
+	}.Check(t, router)
+}

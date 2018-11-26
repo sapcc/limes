@@ -339,7 +339,7 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 		}
 		err := datamodel.ApplyBackendQuota(
 			db.DB,
-			updater.Cluster, updater.Domain.UUID, updater.Project.UUID,
+			updater.Cluster, updater.Domain.UUID, *updater.Project,
 			srv.ID, srv.Type,
 		)
 		if err != nil {
@@ -457,16 +457,20 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 
 	//update backend quotas to match new bursting mode
 	var services []db.ProjectService
-	_, err = db.DB.Select(services, `SELECT * FROM project_services WHERE project_id = $1`, project.ID)
+	_, err = db.DB.Select(&services, `SELECT * FROM project_services WHERE project_id = $1`, project.ID)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
 
 	var errors []string
 	for _, srv := range services {
+		_, exists := cluster.QuotaPlugins[srv.Type]
+		if !exists {
+			continue
+		}
 		err := datamodel.ApplyBackendQuota(
 			db.DB,
-			cluster, domain.UUID, project.UUID,
+			cluster, domain.UUID, *project,
 			srv.ID, srv.Type,
 		)
 		if err != nil {
