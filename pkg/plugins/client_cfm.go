@@ -91,6 +91,7 @@ func (c *cfmClient) reqOpts(okCodes ...int) *gophercloud.RequestOpts {
 			"Authorization": "Token " + c.ProviderClient.Token(),
 			"X-Project-ID":  c.projectID,
 		},
+		ErrorContext: cfmNotFoundError{},
 	}
 }
 
@@ -101,6 +102,46 @@ func (c *cfmClient) GetQuotaSet(projectID string) (result gophercloud.Result) {
 	url := c.ServiceURL("v1.0", "quota-sets", projectID) + "/"
 	_, result.Err = c.Get(url, &result.Body, c.reqOpts(200))
 	return
+}
+
+func (c *cfmClient) CreateQuotaSet(projectID string, quotaBytes uint64) error {
+	body := struct {
+		StorageQuota struct {
+			ProjectID string `json:"project_id"`
+			SizeLimit uint64 `json:"size_limit"`
+		} `json:"storage_quota"`
+	}{}
+	body.StorageQuota.ProjectID = projectID
+	body.StorageQuota.SizeLimit = quotaBytes
+	url := c.ServiceURL("v1.0", "quota-sets") + "/"
+	_, err := c.Post(url, body, nil, c.reqOpts(202))
+	return err
+}
+
+//UpdateQuotaSet may return cfmNotFoundError.
+func (c *cfmClient) UpdateQuotaSet(projectID string, quotaBytes uint64) error {
+	body := struct {
+		StorageQuota struct {
+			SizeLimit uint64 `json:"size_limit"`
+		} `json:"storage_quota"`
+	}{}
+	body.StorageQuota.SizeLimit = quotaBytes
+	url := c.ServiceURL("v1.0", "quota-sets", projectID) + "/"
+	_, err := c.Put(url, body, nil, c.reqOpts(200))
+	return err
+}
+
+//An error type that can be used in gophercloud's weird ErrorContext interface.
+type cfmNotFoundError struct{}
+
+//Error implements the builtin/error interface.
+func (cfmNotFoundError) Error() string {
+	return "not found"
+}
+
+//Error404 implements the gophercloud.Err404er interface.
+func (cfmNotFoundError) Error404(gophercloud.ErrUnexpectedResponseCode) error {
+	return cfmNotFoundError{}
 }
 
 ////////////////////////////////////////////////////////////////////////////////

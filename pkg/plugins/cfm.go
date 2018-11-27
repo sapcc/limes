@@ -60,8 +60,8 @@ func (p *cfmPlugin) Resources() []limes.ResourceInfo {
 	return []limes.ResourceInfo{{
 		Name: "cfm_share_capacity",
 		Unit: limes.UnitBytes,
-		//we cannot set quota for this service
-		ExternallyManaged: true,
+		//need explicit permission to set quota for this service
+		ExternallyManaged: !p.cfg.CFM.Authoritative,
 	}}
 }
 
@@ -90,6 +90,14 @@ func (p *cfmPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.
 				Usage: data.StorageQuota.Usage.BytesUsed,
 			},
 		}, nil
+	}
+
+	//never use the old API when we're instructed to only read quotas
+	if p.cfg.CFM.Authoritative {
+		if _, ok := err.(cfmNotFoundError); ok {
+			return map[string]limes.ResourceData{"cfm_share_capacity": {Quota: 0, Usage: 0}}, nil
+		}
+		return nil, err
 	}
 
 	return p.scrapeOld(client, projectUUID)
@@ -128,8 +136,21 @@ func (p *cfmPlugin) scrapeOld(client *cfmClient, projectUUID string) (map[string
 
 //SetQuota implements the limes.QuotaPlugin interface.
 func (p *cfmPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
-	if len(quotas) > 0 {
+	if !p.cfg.CFM.Authoritative {
 		return errors.New("the database/cfm_share_capacity resource is externally managed")
 	}
-	return nil
+
+	client, err := newCFMClient(provider, eo)
+	if err != nil {
+		return err
+	}
+	quotaBytes := quotas["cfm_share_capacity"]
+	err = client.UpdateQuotaSet(projectUUID, quotaBytes)
+	if _, ok := err.(cfmNotFoundError); ok {
+		if quotaBytes == 0 {
+			return nil //nothing to do: quota does not exist, but is also not wanted
+		}
+		err = client.CreateQuotaSet(projectUUID, quotaBytes)
+	}
+	return err
 }

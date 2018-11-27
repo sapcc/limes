@@ -104,6 +104,9 @@ type ServiceConfiguration struct {
 			Type    string `yaml:"type"`
 		} `yaml:"hypervisor_type_rules"`
 	} `yaml:"compute"`
+	CFM struct {
+		Authoritative bool `yaml:"authoritative"`
+	} `yaml:"database"`
 }
 
 //CapacitorConfiguration describes a capacity plugin that is enabled for a
