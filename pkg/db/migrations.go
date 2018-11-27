@@ -137,4 +137,10 @@ var SQLMigrations = map[string]string{
 	"006_add_cluster_resources_subcapacities.up.sql": `
 		ALTER TABLE cluster_resources ADD COLUMN subcapacities TEXT NOT NULL DEFAULT '';
 	`,
+	"007_add_projects_has_bursting.down.sql": `
+		ALTER TABLE projects DROP COLUMN has_bursting;
+	`,
+	"007_add_projects_has_bursting.up.sql": `
+		ALTER TABLE projects ADD COLUMN has_bursting BOOLEAN NOT NULL DEFAULT TRUE;
+	`,
 }

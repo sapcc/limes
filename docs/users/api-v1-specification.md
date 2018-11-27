@@ -39,6 +39,10 @@ Returns 200 (OK) on success. Result is a JSON document like:
       "id": "8ad3bf54-2401-435e-88ad-e80fbf984c19",
       "name": "example-project",
       "parent_id": "e4864dd1-1929-4b41-bb69-e5a724f20fa2",
+      "bursting": {
+        "enabled": true,
+        "multiplier": 0.2
+      },
       "services": [
         {
           "type": "compute",
@@ -128,6 +132,13 @@ backing service to use a different quota value than what Limes expected, it will
 shown in the example above for the `compute/cores` resource. If a `backend_quota` value exists, a Limes client should
 display a warning message to the user.
 
+When the `bursting` section is present on the project level, it means that **quota bursting** is available for this
+cluster. Bursting means that usage can overshoot the approved quota by a certain multiplier (e.g. 20% if
+`bursting.multiplier` is 0.2). This is achieved by writing `floor(quota * (1 + bursting.multiplier))` into the backend.
+If the bursting multiplier is non-zero, the `backend_quota` will thus be different from the value shown in the `quota`
+field of each resource. The `backend_quota` field will only be shown if the backend quota differs from the desired
+value, `floor(quota * (1 + bursting.multiplier))`.
+
 The `scraped_at` timestamp for each service denotes when Limes last checked the quota and usage values in the backing
 service. The value is a standard UNIX timestamp (seconds since `1970-00-00T00:00:00Z`).
 
@@ -162,6 +173,23 @@ like this:
 
 The fields in the subresource objects are specific to the resource type, and are not mandated by this specification.
 Please refer to the [documentation for the quota plugin that generates it](../operators/config.md) for details.
+
+### Quota bursting details
+
+When the `?detail` query parameter is given and quota bursting is enabled for this project (i.e. `bursting.multiplier`
+exists and is non-zero), then resources with `usage > quota` will display an additional field `burst_usage` like this:
+
+```json
+{
+  "name": "cores",
+  "quota": 20,
+  "usage": 30,
+  "burst_usage": 10
+}
+```
+
+The `burst_usage` field is guaranteed to be equal to `usage - quota`. Applications should prefer to read the `quota` and
+`usage` values directly instead of using this field.
 
 ## GET /v1/domains
 ## GET /v1/domains/:domain\_id
@@ -203,7 +231,8 @@ Returns 200 (OK) on success. Result is a JSON document like:
               "unit": "MiB",
               "quota": 204800,
               "projects_quota": 10240,
-              "usage": 2048
+              "usage": 2048,
+              "burst_usage": 128
             }
           ],
           "max_scraped_at": 1486738599,
@@ -250,6 +279,9 @@ shows the sum of all project quotas as seen by the backing service. If any of th
 { "quota": 20, "usage": 17, "backend_quota": 15, "infinite_backend_quota": true }
 ```
 
+Furthermore, if quota bursting is available on this cluster, the `burst_usage` field contains
+`sum(max(0, usage - quota))` over all projects in this domain.
+
 In contrast to project data, `scraped_at` is replaced by `min_scraped_at` and `max_scraped_at`, which aggregate over the
 `scraped_at` timestamps of all project data for that service and domain.
 
@@ -294,7 +326,8 @@ Returns 200 (OK) on success. Result is a JSON document like:
               "capacity": 1048576,
               "raw_capacity": 524288,
               "domains_quota": 204800,
-              "usage": 2048
+              "usage": 2048,
+              "burst_usage": 128
             }
           ],
           "max_scraped_at": 1486738599,
@@ -343,6 +376,9 @@ allocating quota to domains.
 
 When `raw_capacity` is given, it means that this resource is configured with an overcommitment. The `capacity` key will
 show the overcommitted capacity (`raw_capacity` times overcommitment factor).
+
+Furthermore, if quota bursting is available on this cluster, the `burst_usage` field contains
+`sum(max(0, usage - quota))` over all projects in this cluster.
 
 The `min_scraped_at` and `max_scraped_at` timestamps on the service level refer to the usage values (aggregated over all
 projects just like for `GET /domains`).
@@ -608,11 +644,26 @@ to the client which quota values would be acceptable. For measured resources, th
 
 Set (or simulate setting) quotas for the given project. Requires a domain-admin token for the specified domain, or a
 project-admin token for the specified project. Other than that, the call works in the same way as `PUT
-/domains/:domain_id` and `POST /domains/:domain_id/simulate_put`.
+/domains/:domain_id` and `POST /domains/:domain_id/simulate_put`, with the following exceptions:
 
-When returning 202 (Accepted), the response body may contain error messages if quota could not be applied to all backend
-services. This is not considered a fatal error (hence the 2xx status code) since the new quota values are still stored
-in Limes and will typically be applied in the backend as soon as the backend starts working again.
+- When returning 202 (Accepted), the response body may contain error messages if quota could not be applied to all
+  backend services. This is not considered a fatal error (hence the 2xx status code) since the new quota values are
+  still stored in Limes and will typically be applied in the backend as soon as the backend starts working again.
+
+- The `project.bursting.enabled` field can be given to enable or disable bursting for this project. For example:
+
+  ```json
+  {
+    "project": {
+      "bursting": {
+        "enabled": true
+      }
+    }
+  }
+  ```
+
+  Note that it is currently not allowed to set quotas and `bursting.enabled` in the same request. This restriction may
+  be lifted in the future.
 
 ## PUT /v1/clusters/:cluster\_id
 

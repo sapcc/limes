@@ -54,6 +54,7 @@ type DomainResource struct {
 	DomainQuota   uint64 `json:"quota,keepempty"`
 	ProjectsQuota uint64 `json:"projects_quota,keepempty"`
 	Usage         uint64 `json:"usage,keepempty"`
+	BurstUsage    uint64 `json:"burst_usage,omitempty"`
 	//These are pointers to values to enable precise control over whether this field is rendered in output.
 	BackendQuota         *uint64                `json:"backend_quota,omitempty"`
 	InfiniteBackendQuota *bool                  `json:"infinite_backend_quota,omitempty"`
@@ -130,6 +131,7 @@ func (r *DomainResources) UnmarshalJSON(b []byte) error {
 
 var domainReportQuery1 = `
 	SELECT d.uuid, d.name, ps.type, pr.name, SUM(pr.quota), SUM(pr.usage),
+	       SUM(GREATEST(pr.usage - pr.quota, 0)),
 	       SUM(GREATEST(pr.backend_quota, 0)), MIN(pr.backend_quota) < 0, MIN(ps.scraped_at), MAX(ps.scraped_at)
 	  FROM domains d
 	  JOIN projects p ON p.domain_id = d.id
@@ -149,6 +151,8 @@ var domainReportQuery2 = `
 //GetDomains returns Domain reports for all domains in the given cluster or, if
 //domainID is non-nil, for that domain only.
 func GetDomains(cluster *limes.Cluster, domainID *int64, dbi db.Interface, filter Filter) ([]*Domain, error) {
+	clusterCanBurst := cluster.Config.Bursting.MaxMultiplier > 0
+
 	fields := map[string]interface{}{"d.cluster_id": cluster.ID}
 	if domainID != nil {
 		fields["d.id"] = *domainID
@@ -166,6 +170,7 @@ func GetDomains(cluster *limes.Cluster, domainID *int64, dbi db.Interface, filte
 			resourceName         *string
 			projectsQuota        *uint64
 			usage                *uint64
+			burstUsage           *uint64
 			backendQuota         *uint64
 			infiniteBackendQuota *bool
 			minScrapedAt         *util.Time
@@ -173,7 +178,8 @@ func GetDomains(cluster *limes.Cluster, domainID *int64, dbi db.Interface, filte
 		)
 		err := rows.Scan(
 			&domainUUID, &domainName, &serviceType, &resourceName,
-			&projectsQuota, &usage, &backendQuota, &infiniteBackendQuota,
+			&projectsQuota, &usage, &burstUsage,
+			&backendQuota, &infiniteBackendQuota,
 			&minScrapedAt, &maxScrapedAt,
 		)
 		if err != nil {
@@ -198,6 +204,9 @@ func GetDomains(cluster *limes.Cluster, domainID *int64, dbi db.Interface, filte
 		if resource != nil {
 			if usage != nil {
 				resource.Usage = *usage
+			}
+			if clusterCanBurst && burstUsage != nil {
+				resource.BurstUsage = *burstUsage
 			}
 			if projectsQuota != nil {
 				resource.ProjectsQuota = *projectsQuota

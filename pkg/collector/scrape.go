@@ -45,7 +45,7 @@ var scrapeInterval = 30 * time.Minute
 
 //query that finds the next project that needs to be scraped
 var findProjectQuery = `
-	SELECT ps.id, ps.scraped_at, p.name, p.uuid, d.name, d.uuid
+	SELECT ps.id, ps.scraped_at, p.name, p.uuid, p.id, d.name, d.uuid
 	FROM project_services ps
 	JOIN projects p ON p.id = ps.project_id
 	JOIN domains d ON d.id = p.domain_id
@@ -53,8 +53,8 @@ var findProjectQuery = `
 	WHERE d.cluster_id = $1 AND ps.type = $2
 	-- filter by need to be updated (because of user request, because of missing data, or because of outdated data)
 	AND (ps.stale OR ps.scraped_at IS NULL OR ps.scraped_at < $3)
-	-- order by update priority (in the same way: first user-requested, then new projects, then outdated projects)
-	ORDER BY ps.stale DESC, COALESCE(ps.scraped_at, to_timestamp(-1)) ASC
+	-- order by update priority (in the same way: first user-requested, then new projects, then outdated projects, then ID for deterministic test behavior)
+	ORDER BY ps.stale DESC, COALESCE(ps.scraped_at, to_timestamp(-1)) ASC, ps.id ASC
 	-- find only one project to scrape per iteration
 	LIMIT 1
 `
@@ -84,11 +84,12 @@ func (c *Collector) Scrape() {
 			serviceScrapedAt *time.Time
 			projectName      string
 			projectUUID      string
+			projectID        int64
 			domainName       string
 			domainUUID       string
 		)
 		err := db.DB.QueryRow(findProjectQuery, c.Cluster.ID, serviceType, c.TimeNow().Add(-scrapeInterval)).
-			Scan(&serviceID, &serviceScrapedAt, &projectName, &projectUUID, &domainName, &domainUUID)
+			Scan(&serviceID, &serviceScrapedAt, &projectName, &projectUUID, &projectID, &domainName, &domainUUID)
 		if err != nil {
 			//ErrNoRows is okay; it just means that nothing needs scraping right now
 			if err != sql.ErrNoRows {
@@ -135,7 +136,7 @@ func (c *Collector) Scrape() {
 			continue
 		}
 
-		err = c.writeScrapeResult(domainName, domainUUID, projectName, projectUUID, serviceType, serviceID, resourceData, c.TimeNow())
+		err = c.writeScrapeResult(domainName, domainUUID, projectName, projectUUID, projectID, serviceType, serviceID, resourceData, c.TimeNow())
 		if err != nil {
 			c.LogError("write %s backend data for %s/%s failed: %s", serviceType, domainName, projectName, err.Error())
 			scrapeFailedCounter.With(labels).Inc()
@@ -156,7 +157,7 @@ func (c *Collector) Scrape() {
 	}
 }
 
-func (c *Collector) writeScrapeResult(domainName, domainUUID, projectName, projectUUID, serviceType string, serviceID int64, resourceData map[string]limes.ResourceData, scrapedAt time.Time) error {
+func (c *Collector) writeScrapeResult(domainName, domainUUID, projectName, projectUUID string, projectID int64, serviceType string, serviceID int64, resourceData map[string]limes.ResourceData, scrapedAt time.Time) error {
 	tx, err := db.DB.Begin()
 	if err != nil {
 		return err
@@ -309,7 +310,11 @@ func (c *Collector) writeScrapeResult(domainName, domainUUID, projectName, proje
 	//to get stuck because some project has backend_quota > usage > quota, for
 	//example)
 	if c.Cluster.Authoritative {
-		err := datamodel.ApplyBackendQuota(db.DB, c.Cluster, domainUUID, projectUUID, serviceID, serviceType)
+		var project db.Project
+		err := db.DB.SelectOne(&project, `SELECT * FROM projects WHERE id = $1`, projectID)
+		if err == nil {
+			err = datamodel.ApplyBackendQuota(db.DB, c.Cluster, domainUUID, project, serviceID, serviceType)
+		}
 		if err != nil {
 			logg.Error("could not rectify frontend/backend quota mismatch for service %s in project %s: %s",
 				serviceType, projectUUID, err.Error(),

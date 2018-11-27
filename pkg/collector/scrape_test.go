@@ -22,6 +22,7 @@ package collector
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"sort"
 	"testing"
 
@@ -39,7 +40,7 @@ func p2u64(x uint64) *uint64 {
 	return &x
 }
 
-func prepareScrapeTest(t *testing.T, quotaPlugins ...limes.QuotaPlugin) *limes.Cluster {
+func prepareScrapeTest(t *testing.T, numProjects int, quotaPlugins ...limes.QuotaPlugin) *limes.Cluster {
 	test.ResetTime()
 	test.InitDatabase(t)
 
@@ -58,36 +59,50 @@ func prepareScrapeTest(t *testing.T, quotaPlugins ...limes.QuotaPlugin) *limes.C
 	}
 	sort.Strings(cluster.ServiceTypes)
 
-	//one domain and one project is enough
+	//one domain is enough; one or two projects is enough
 	discovery := cluster.DiscoveryPlugin.(*test.DiscoveryPlugin)
 	domain1 := discovery.StaticDomains[0]
 	project1 := discovery.StaticProjects[domain1.UUID][0]
+	project2 := discovery.StaticProjects[domain1.UUID][1]
 
 	discovery.StaticDomains = discovery.StaticDomains[0:1]
 	discovery.StaticProjects = map[string][]limes.KeystoneProject{
-		domain1.UUID: discovery.StaticProjects[domain1.UUID][0:1],
+		domain1.UUID: discovery.StaticProjects[domain1.UUID][0:numProjects],
 	}
 
-	//ScanDomains is required to create the entries in `domains`, `domain_services`
+	//ScanDomains is required to create the entries in `domains`,
+	//`domain_services`, `projects` and `project_services`
 	_, err := ScanDomains(cluster, ScanDomainsOpts{})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	//setup a quota constraint for the project that we're scraping (this is only used by Test_Scrape())
+	//if we have two projects, we are going to test with and without bursting, so
+	//set up bursting for one of both projects
+	if numProjects == 2 {
+		_, err := db.DB.Exec(`UPDATE projects SET has_bursting = TRUE WHERE id = 2`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cluster.Config.Bursting.MaxMultiplier = 0.2
+	}
+
+	//setup a quota constraint for the project that we're scraping (this is only used by Test_ScrapeSuccess())
 	//
 	//NOTE: This is set only *after* ScanDomains has run, in order to exercise
 	//the code path in Scrape() that applies constraints when first creating
 	//project_resources entries. If we had set this before ScanDomains, then
 	//ScanDomains would already have created the project_resources entries.
+	projectConstraints := limes.QuotaConstraints{
+		"unittest": {
+			"capacity": {Minimum: p2u64(10), Maximum: p2u64(40)},
+		},
+	}
 	cluster.QuotaConstraints = &limes.QuotaConstraintSet{
 		Projects: map[string]map[string]limes.QuotaConstraints{
 			domain1.Name: {
-				project1.Name: {
-					"unittest": {
-						"capacity": {Minimum: p2u64(10), Maximum: p2u64(40)},
-					},
-				},
+				project1.Name: projectConstraints,
+				project2.Name: projectConstraints,
 			},
 		},
 	}
@@ -95,9 +110,9 @@ func prepareScrapeTest(t *testing.T, quotaPlugins ...limes.QuotaPlugin) *limes.C
 	return cluster
 }
 
-func Test_Scrape(t *testing.T) {
+func Test_ScrapeSuccess(t *testing.T) {
 	plugin := test.NewPlugin("unittest")
-	cluster := prepareScrapeTest(t, plugin)
+	cluster := prepareScrapeTest(t, 2, plugin)
 	cluster.Authoritative = true
 	c := Collector{
 		Cluster:  cluster,
@@ -115,6 +130,7 @@ func Test_Scrape(t *testing.T) {
 	//and set `project_services.scraped_at` to the current time
 	plugin.SetQuotaFails = true
 	c.Scrape()
+	c.Scrape() //twice because there are two projects
 	test.AssertDBContent(t, "fixtures/scrape1.sql")
 
 	//second Scrape should not change anything (not even the timestamps) since
@@ -128,6 +144,7 @@ func Test_Scrape(t *testing.T) {
 	setProjectServicesStale(t)
 	//Scrape should pick up the changed resource data
 	c.Scrape()
+	c.Scrape() //twice because there are two projects
 	test.AssertDBContent(t, "fixtures/scrape2.sql")
 
 	//set some new quota values (note that "capacity" already had a non-zero
@@ -146,12 +163,14 @@ func Test_Scrape(t *testing.T) {
 	plugin.SetQuotaFails = false
 	setProjectServicesStale(t)
 	c.Scrape()
+	c.Scrape() //twice because there are two projects
 	test.AssertDBContent(t, "fixtures/scrape3.sql")
 
 	//another Scrape (with SetQuota disabled again) should show that the quota
 	//update was durable
 	plugin.SetQuotaFails = true
 	setProjectServicesStale(t)
+	c.Scrape() //twice because there are two projects
 	c.Scrape()
 	test.AssertDBContent(t, "fixtures/scrape4.sql") //same as scrape3.sql except for scraped_at timestamp
 
@@ -165,6 +184,7 @@ func Test_Scrape(t *testing.T) {
 	plugin.SetQuotaFails = false
 	setProjectServicesStale(t)
 	c.Scrape()
+	c.Scrape() //twice because there are two projects
 	test.AssertDBContent(t, "fixtures/scrape5.sql")
 
 	//add an externally-managed resource, scrape it twice (first time adds the
@@ -172,11 +192,13 @@ func Test_Scrape(t *testing.T) {
 	plugin.WithExternallyManagedResource = true
 	setProjectServicesStale(t)
 	c.Scrape()
+	c.Scrape() //twice because there are two projects
 	test.AssertDBContent(t, "fixtures/scrape6.sql")
 
 	plugin.StaticResourceData["external_things"].Quota = 10
 	setProjectServicesStale(t)
 	c.Scrape()
+	c.Scrape() //twice because there are two projects
 	test.AssertDBContent(t, "fixtures/scrape7.sql")
 
 	//check that setting the quota of an externally-managed resource on our side
@@ -186,8 +208,9 @@ func Test_Scrape(t *testing.T) {
 		t.Fatal(err)
 	}
 	setProjectServicesStale(t)
+	c.Scrape() //twice because there are two projects
 	c.Scrape()
-	test.AssertDBContent(t, "fixtures/scrape8.sql") //identical to scrape8.sql except for timestamps
+	test.AssertDBContent(t, "fixtures/scrape8.sql") //identical to scrape7.sql except for timestamps
 
 	//check data metrics generated by this scraping pass
 	registry := prometheus.NewPedanticRegistry()
@@ -211,7 +234,7 @@ func setProjectServicesStale(t *testing.T) {
 
 func Test_ScrapeFailure(t *testing.T) {
 	plugin := test.NewPlugin("unittest")
-	cluster := prepareScrapeTest(t, plugin)
+	cluster := prepareScrapeTest(t, 2, plugin)
 	c := Collector{
 		Cluster: cluster,
 		Plugin:  plugin,
@@ -219,9 +242,10 @@ func Test_ScrapeFailure(t *testing.T) {
 		Once:    true,
 	}
 	//we will see an expected ERROR during testing, do not make the test fail because of this
+	expectedErrorRx := regexp.MustCompile(`^scrape unittest data for germany/(berlin|dresden) failed: Scrape failed as requested$`)
 	c.LogError = func(msg string, args ...interface{}) {
 		msg = fmt.Sprintf(msg, args...)
-		if msg == "scrape unittest data for germany/berlin failed: Scrape failed as requested" {
+		if expectedErrorRx.MatchString(msg) {
 			logg.Info(msg)
 		} else {
 			t.Error(msg)
@@ -235,16 +259,19 @@ func Test_ScrapeFailure(t *testing.T) {
 	//plausibly-structured data
 	plugin.ScrapeFails = true
 	c.Scrape()
+	c.Scrape() //twice because there are two projects
 	test.AssertDBContent(t, "fixtures/scrape-failures1.sql")
 
 	//next Scrape should yield the same result
 	c.Scrape()
+	c.Scrape() //twice because there are two projects
 	test.AssertDBContent(t, "fixtures/scrape-failures1.sql")
 
 	//once the backend starts working, we start to see plausible data again
 	plugin.ScrapeFails = false
 	setProjectServicesStale(t)
 	c.Scrape()
+	c.Scrape() //twice because there are two projects
 	test.AssertDBContent(t, "fixtures/scrape-failures2.sql")
 
 	//backend fails again and we need to scrape because of the stale flag ->
@@ -252,6 +279,7 @@ func Test_ScrapeFailure(t *testing.T) {
 	plugin.ScrapeFails = true
 	setProjectServicesStale(t)
 	c.Scrape()
+	c.Scrape() //twice because there are two projects
 	test.AssertDBContent(t, "fixtures/scrape-failures3.sql")
 }
 
@@ -299,7 +327,7 @@ func (p *autoApprovalTestPlugin) SetQuota(provider *gophercloud.ProviderClient, 
 
 func Test_AutoApproveInitialQuota(t *testing.T) {
 	plugin := &autoApprovalTestPlugin{StaticBackendQuota: 10}
-	cluster := prepareScrapeTest(t, plugin)
+	cluster := prepareScrapeTest(t, 1, plugin)
 	c := Collector{
 		Cluster:  cluster,
 		Plugin:   plugin,

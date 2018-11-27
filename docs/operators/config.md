@@ -40,6 +40,8 @@ clusters:
         - cores
         - ram
     constraints: /etc/limes/constraints-for-staging.yaml
+    bursting:
+      max_multiplier: 0.2
 ```
 
 Read on for the full list and description of all configuration options.
@@ -100,6 +102,7 @@ Configuration options describing the OpenStack clusters which Limes shall cover.
 | `clusters.$id.cadf` | no | Audit trail configuration options. See [*audit trail*](#audit-trail) for details. |
 | `clusters.$id.lowpriv_raise` | no | Configuration options for low-privilege quota raising. See [*low-privilege quota raising*](#low-privilege-quota-raising) for details. |
 | `clusters.$id.resource_behavior` | no | Configuration options for special resource behaviors. See [*resource behavior*](#resource-behavior) for details. |
+| `clusters.$id.bursting.max_multiplier` | no | If given, permits quota bursting in this cluster. When projects enable quota bursting, the backend quota is set to `quota * (1 + max_multiplier)`. In the future, Limes may autonomously adjust the multiplier between 0 and the configured maximum based on cluster-wide resource utilization. |
 
 ### Audit trail
 

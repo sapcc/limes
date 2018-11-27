@@ -22,7 +22,6 @@ package datamodel
 import (
 	"fmt"
 
-	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/limes"
 )
@@ -33,10 +32,17 @@ import (
 //
 //If the backend quotas recorded in the project service's resources already
 //match the expected values, nothing is done.
-func ApplyBackendQuota(dbi db.Interface, cluster *limes.Cluster, domainUUID, projectUUID string, serviceID int64, serviceType string) error {
+func ApplyBackendQuota(dbi db.Interface, cluster *limes.Cluster, domainUUID string, project db.Project, serviceID int64, serviceType string) error {
 	plugin := cluster.QuotaPlugins[serviceType]
 	if plugin == nil {
 		return fmt.Errorf("no quota plugin registered for service type %s", serviceType)
+	}
+
+	isRelevantResource := make(map[string]bool)
+	for _, res := range plugin.Resources() {
+		if !res.ExternallyManaged {
+			isRelevantResource[res.Name] = true
+		}
 	}
 
 	var resources []db.ProjectResource
@@ -49,12 +55,17 @@ func ApplyBackendQuota(dbi db.Interface, cluster *limes.Cluster, domainUUID, pro
 	var resourcesToUpdate []db.ProjectResource
 	quotaValues := make(map[string]uint64)
 	for _, res := range resources {
+		if !isRelevantResource[res.Name] {
+			continue
+		}
+
 		desiredQuota := res.Quota
-		logg.Info("desired %s/%s is %d", serviceType, res.Name, desiredQuota)
+		if project.HasBursting {
+			desiredQuota = cluster.Config.Bursting.MaxMultiplier.ApplyTo(res.Quota)
+		}
 		quotaValues[res.Name] = desiredQuota
 
 		if res.BackendQuota < 0 || desiredQuota != uint64(res.BackendQuota) {
-			logg.Info("backend quota %s/%s is %d", serviceType, res.Name, res.BackendQuota)
 			res.BackendQuota = int64(desiredQuota)
 			resourcesToUpdate = append(resourcesToUpdate, res)
 		}
@@ -65,15 +76,13 @@ func ApplyBackendQuota(dbi db.Interface, cluster *limes.Cluster, domainUUID, pro
 
 	//apply quotas in backend
 	provider, eo := cluster.ProviderClientForService(serviceType)
-	err = plugin.SetQuota(provider, eo, cluster.ID, domainUUID, projectUUID, quotaValues)
+	err = plugin.SetQuota(provider, eo, cluster.ID, domainUUID, project.UUID, quotaValues)
 	if err != nil {
 		return err
 	}
 
 	//save applied backend quotas in DB
-	for _, v := range resourcesToUpdate {
-		logg.Info("%#v", v)
-	}
+	//
 	//NOTE: cannot use UpdateColumns() because of https://github.com/go-gorp/gorp/issues/325
 	stmt, err := dbi.Prepare(`UPDATE project_resources SET backend_quota = $1 WHERE service_id = $2 AND name = $3`)
 	if err != nil {

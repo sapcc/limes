@@ -18,4 +18,3 @@ build/cover.html
 
 # custom configuration files used during development
 *.yaml
-*.json

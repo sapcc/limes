@@ -20,6 +20,8 @@
 package api
 
 import (
+	"database/sql"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -178,6 +180,33 @@ func (p *v1Provider) SimulatePutProject(w http.ResponseWriter, r *http.Request) 
 }
 
 func (p *v1Provider) putOrSimulatePutProject(w http.ResponseWriter, r *http.Request, simulate bool) {
+	//parse request body
+	var parseTarget struct {
+		Project struct {
+			Bursting struct {
+				Enabled *bool `json:"enabled"`
+			} `json:"bursting"`
+			Services ServiceQuotas `json:"services"`
+		} `json:"project"`
+	}
+	parseTarget.Project.Services = make(ServiceQuotas)
+	if !RequireJSON(w, r, &parseTarget) {
+		return
+	}
+
+	//branch out into the specialized subfunctions
+	if parseTarget.Project.Bursting.Enabled == nil {
+		p.putOrSimulatePutProjectQuotas(w, r, simulate, parseTarget.Project.Services)
+	} else {
+		if len(parseTarget.Project.Services) == 0 {
+			p.putOrSimulateProjectAttributes(w, r, simulate, *parseTarget.Project.Bursting.Enabled)
+		} else {
+			http.Error(w, "it is currently not allowed to set bursting.enabled and quotas in the same request", http.StatusBadRequest)
+		}
+	}
+}
+
+func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *http.Request, simulate bool, serviceQuotas ServiceQuotas) {
 	requestTime := time.Now()
 	token := p.CheckToken(r)
 	canRaise := token.Check("project:raise")
@@ -206,17 +235,6 @@ func (p *v1Provider) putOrSimulatePutProject(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	//parse request body
-	var parseTarget struct {
-		Project struct {
-			Services ServiceQuotas `json:"services"`
-		} `json:"project"`
-	}
-	parseTarget.Project.Services = make(ServiceQuotas)
-	if !RequireJSON(w, r, &parseTarget) {
-		return
-	}
-
 	//start a transaction for the quota updates
 	var tx *gorp.Transaction
 	var dbi db.Interface
@@ -234,7 +252,7 @@ func (p *v1Provider) putOrSimulatePutProject(w http.ResponseWriter, r *http.Requ
 
 	//validate inputs (within the DB transaction, to ensure that we do not apply
 	//inconsistent values later)
-	err := updater.ValidateInput(parseTarget.Project.Services, dbi)
+	err := updater.ValidateInput(serviceQuotas, dbi)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -321,7 +339,7 @@ func (p *v1Provider) putOrSimulatePutProject(w http.ResponseWriter, r *http.Requ
 		}
 		err := datamodel.ApplyBackendQuota(
 			db.DB,
-			updater.Cluster, updater.Domain.UUID, updater.Project.UUID,
+			updater.Cluster, updater.Domain.UUID, *updater.Project,
 			srv.ID, srv.Type,
 		)
 		if err != nil {
@@ -333,6 +351,137 @@ func (p *v1Provider) putOrSimulatePutProject(w http.ResponseWriter, r *http.Requ
 	//report any backend errors to the user
 	if len(errors) > 0 {
 		msg := "quotas have been accepted, but some error(s) occurred while trying to write the quotas into the backend services:"
+		http.Error(w, msg+"\n"+strings.Join(errors, "\n"), 202)
+		return
+	}
+	//otherwise, report success
+	w.WriteHeader(202)
+}
+
+func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *http.Request, simulate, hasBursting bool) {
+	//TODO generate audit events when changing Project.HasBursting
+
+	token := p.CheckToken(r)
+	if !token.Require(w, "project:edit") {
+		return
+	}
+	cluster := p.FindClusterFromRequest(w, r, token)
+	if cluster == nil {
+		return
+	}
+	domain := p.FindDomainFromRequest(w, r, cluster)
+	if domain == nil {
+		return
+	}
+	project := p.FindProjectFromRequest(w, r, domain)
+	if project == nil {
+		return
+	}
+	if cluster.Config.Bursting.MaxMultiplier == 0 {
+		http.Error(w, "bursting is not available for this cluster", http.StatusBadRequest)
+		return
+	}
+
+	//start a transaction for the attribute updates
+	var tx *gorp.Transaction
+	var dbi db.Interface
+	if simulate {
+		dbi = db.DB
+	} else {
+		var err error
+		tx, err = db.DB.Begin()
+		if respondwith.ErrorText(w, err) {
+			return
+		}
+		defer db.RollbackUnlessCommitted(tx)
+		dbi = tx
+	}
+
+	//anything to do?
+	if project.HasBursting == hasBursting {
+		if simulate {
+			respondwith.JSON(w, http.StatusOK, map[string]interface{}{"success": true})
+		} else {
+			w.WriteHeader(http.StatusAccepted)
+		}
+		return
+	}
+
+	//When enabling bursting, we do not need to validate anything else.
+	//When disabling bursting, we need to ensure `usage < quota`.
+	if project.HasBursting {
+		var overbookedResources []string
+		query := `
+			SELECT ps.type, pr.name
+				FROM project_services ps
+				JOIN project_resources pr ON ps.id = pr.service_id
+			 WHERE ps.project_id = $1 AND pr.usage > pr.quota`
+		err := db.ForeachRow(dbi, query, []interface{}{project.ID}, func(rows *sql.Rows) error {
+			var serviceType, resourceName string
+			err := rows.Scan(&serviceType, &resourceName)
+			overbookedResources = append(overbookedResources, serviceType+"/"+resourceName)
+			return err
+		})
+		if respondwith.ErrorText(w, err) {
+			return
+		}
+		if len(overbookedResources) > 0 {
+			msg := fmt.Sprintf(
+				"cannot disable bursting because %d resources are currently bursted: %s",
+				len(overbookedResources), strings.Join(overbookedResources, ", "))
+			if len(overbookedResources) == 1 {
+				msg = "cannot disable bursting because 1 resource is currently bursted: " +
+					overbookedResources[0]
+			}
+			http.Error(w, msg, http.StatusConflict)
+			return
+		}
+	}
+
+	//we're about to change stuff
+	if simulate {
+		respondwith.JSON(w, http.StatusOK, map[string]interface{}{"success": true})
+		return
+	}
+
+	//update project
+	project.HasBursting = hasBursting
+	_, err := tx.Exec(`UPDATE projects SET has_bursting = $1 WHERE id = $2`, hasBursting, project.ID)
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+	err = tx.Commit()
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	//update backend quotas to match new bursting mode
+	var services []db.ProjectService
+	_, err = db.DB.Select(&services, `SELECT * FROM project_services WHERE project_id = $1`, project.ID)
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	var errors []string
+	for _, srv := range services {
+		_, exists := cluster.QuotaPlugins[srv.Type]
+		if !exists {
+			continue
+		}
+		err := datamodel.ApplyBackendQuota(
+			db.DB,
+			cluster, domain.UUID, *project,
+			srv.ID, srv.Type,
+		)
+		if err != nil {
+			errors = append(errors, err.Error())
+			continue
+		}
+	}
+
+	//report any backend errors to the user
+	if len(errors) > 0 {
+		msg := "bursting mode has been updated, but some error(s) occurred while trying to write quotas into the backend services:"
 		http.Error(w, msg+"\n"+strings.Join(errors, "\n"), 202)
 		return
 	}

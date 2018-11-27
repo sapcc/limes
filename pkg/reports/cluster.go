@@ -59,6 +59,7 @@ type ClusterResource struct {
 	Comment       string          `json:"comment,omitempty"`
 	DomainsQuota  uint64          `json:"domains_quota,keepempty"`
 	Usage         uint64          `json:"usage,keepempty"`
+	BurstUsage    uint64          `json:"burst_usage,omitempty"`
 	Subcapacities util.JSONString `json:"subcapacities,omitempty"`
 }
 
@@ -131,7 +132,9 @@ func (r *ClusterResources) UnmarshalJSON(b []byte) error {
 }
 
 var clusterReportQuery1 = `
-	SELECT d.cluster_id, ps.type, pr.name, SUM(pr.quota), SUM(pr.usage), MIN(ps.scraped_at), MAX(ps.scraped_at)
+	SELECT d.cluster_id, ps.type, pr.name,
+	       SUM(pr.quota), SUM(pr.usage), SUM(GREATEST(pr.usage - pr.quota, 0)),
+	       MIN(ps.scraped_at), MAX(ps.scraped_at)
 	  FROM domains d
 	  JOIN projects p ON p.domain_id = d.id
 	  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
@@ -186,15 +189,21 @@ func GetClusters(config limes.Configuration, clusterID *string, localQuotaUsageO
 			resourceName  *string
 			projectsQuota *uint64
 			usage         *uint64
+			burstUsage    *uint64
 			minScrapedAt  *util.Time
 			maxScrapedAt  *util.Time
 		)
-		err := rows.Scan(&clusterID, &serviceType, &resourceName, &projectsQuota, &usage, &minScrapedAt, &maxScrapedAt)
+		err := rows.Scan(&clusterID, &serviceType, &resourceName,
+			&projectsQuota, &usage, &burstUsage,
+			&minScrapedAt, &maxScrapedAt)
 		if err != nil {
 			return err
 		}
 
 		_, service, resource := clusters.Find(config, clusterID, serviceType, resourceName)
+
+		clusterConfig, exists := config.Clusters[clusterID]
+		clusterCanBurst := exists && clusterConfig.Config.Bursting.MaxMultiplier > 0
 
 		if service != nil {
 			if maxScrapedAt != nil {
@@ -213,6 +222,9 @@ func GetClusters(config limes.Configuration, clusterID *string, localQuotaUsageO
 			}
 			if usage != nil {
 				resource.Usage = *usage
+			}
+			if clusterCanBurst && burstUsage != nil {
+				resource.BurstUsage = *burstUsage
 			}
 		}
 		return nil
