@@ -31,6 +31,37 @@ type cfmClient struct {
 	projectID string
 }
 
+var cfmProjectIDCache = map[string]string{}
+
+func getProjectIDForToken(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (string, error) {
+	//The CFM API is stupid and needs the caller to provide the scope of the
+	//token redundantly in the X-Project-Id header.
+
+	//cache the token -> project_id mapping
+	token := provider.Token()
+	if projectID, exists := cfmProjectIDCache[token]; exists {
+		return projectID, nil
+	}
+
+	identityClient, err := openstack.NewIdentityV3(provider, eo)
+	if err != nil {
+		return "", err
+	}
+	project, err := tokens.Get(identityClient, token).ExtractProject()
+	if err != nil {
+		return "", err
+	}
+	//if our token changed mid-request because it expired and the 401 response
+	//triggered Gophercloud to reauthenticate, then we cannot trust the response
+	if provider.Token() != token {
+		//restart this call
+		return getProjectIDForToken(provider, eo)
+	}
+
+	cfmProjectIDCache[token] = project.ID
+	return project.ID, nil
+}
+
 func newCFMClient(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (*cfmClient, error) {
 	serviceType := "database"
 	eoCFM := eo
@@ -41,37 +72,20 @@ func newCFMClient(provider *gophercloud.ProviderClient, eo gophercloud.EndpointO
 		return nil, err
 	}
 
-	//the CFM API is stupid and needs the caller to provide the scope of the
-	//token redundantly in the X-Project-Id header
-	identityClient, err := openstack.NewIdentityV3(provider, eo)
-	if err != nil {
-		return nil, err
-	}
-	ourToken := provider.Token()
-	project, err := tokens.Get(identityClient, ourToken).ExtractProject()
-	if err != nil {
-		return nil, err
-	}
-	//if our token changed mid-request because it expired and the 401 response
-	//triggered Gophercloud to reauthenticate, then we cannot trust the response
-	if provider.Token() != ourToken {
-		//restart this call
-		return newCFMClient(provider, eo)
-	}
-
+	ourProjectID, err := getProjectIDForToken(provider, eo)
 	return &cfmClient{
 		ServiceClient: &gophercloud.ServiceClient{
 			ProviderClient: provider,
 			Endpoint:       url,
 			Type:           serviceType,
 		},
-		projectID: project.ID,
+		projectID: ourProjectID,
 	}, nil
 }
 
 func (c *cfmClient) reqOpts(okCodes ...int) *gophercloud.RequestOpts {
 	return &gophercloud.RequestOpts{
-		OkCodes: []int{200},
+		OkCodes: okCodes,
 		MoreHeaders: map[string]string{
 			"X-Auth-Token":  "",
 			"Authorization": "Token " + c.ProviderClient.Token(),
