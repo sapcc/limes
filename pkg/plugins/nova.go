@@ -78,6 +78,16 @@ var novaDefaultResources = []limes.ResourceInfo{
 		Name: "ram",
 		Unit: limes.UnitMebibytes,
 	},
+	{
+		Name:              "server_groups",
+		Unit:              limes.UnitNone,
+		ExternallyManaged: true,
+	},
+	{
+		Name:              "server_group_members",
+		Unit:              limes.UnitNone,
+		ExternallyManaged: true,
+	},
 }
 
 var novaInstanceCountGauge = prometheus.NewGaugeVec(
@@ -176,43 +186,61 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 		return nil, err
 	}
 
-	var limitsData struct {
+	type quotaDetail struct {
+		InUse uint64 `json:"in_use"`
+		Limit int64  `json:"limit"`
+	}
+
+	var projectResourceData struct {
+		QuotaSet struct {
+			Cores              quotaDetail `json:"cores"`
+			Instances          quotaDetail `json:"instances"`
+			RAM                quotaDetail `json:"ram"`
+			ServerGroupMembers quotaDetail `json:"server_group_members"`
+			ServerGroups       quotaDetail `json:"server_groups"`
+		} `json:"quota_set"`
 		Limits struct {
-			Absolute struct {
-				MaxTotalCores      int64  `json:"maxTotalCores"`
-				MaxTotalInstances  int64  `json:"maxTotalInstances"`
-				MaxTotalRAMSize    int64  `json:"maxTotalRAMSize"`
-				TotalCoresUsed     uint64 `json:"totalCoresUsed"`
-				TotalInstancesUsed uint64 `json:"totalInstancesUsed"`
-				TotalRAMUsed       uint64 `json:"totalRAMUsed"`
-			} `json:"absolute"`
 			AbsolutePerFlavor map[string]struct {
 				MaxTotalInstances  int64  `json:"maxTotalInstances"`
 				TotalInstancesUsed uint64 `json:"totalInstancesUsed"`
 			} `json:"absolutePerFlavor"`
 		} `json:"limits"`
 	}
-	err = limits.Get(client, limits.GetOpts{TenantID: projectUUID}).ExtractInto(&limitsData)
+
+	err = quotasets.GetDetail(client, projectUUID).ExtractInto(&projectResourceData)
+	if err != nil {
+		return nil, err
+	}
+
+	err = limits.Get(client, limits.GetOpts{TenantID: projectUUID}).ExtractInto(&projectResourceData)
 	if err != nil {
 		return nil, err
 	}
 
 	result := map[string]*limes.ResourceData{
 		"cores": {
-			Quota: limitsData.Limits.Absolute.MaxTotalCores,
-			Usage: limitsData.Limits.Absolute.TotalCoresUsed,
+			Quota: projectResourceData.QuotaSet.Cores.Limit,
+			Usage: projectResourceData.QuotaSet.Cores.InUse,
 		},
 		"instances": {
-			Quota: limitsData.Limits.Absolute.MaxTotalInstances,
-			Usage: limitsData.Limits.Absolute.TotalInstancesUsed,
+			Quota: projectResourceData.QuotaSet.Instances.Limit,
+			Usage: projectResourceData.QuotaSet.Instances.InUse,
 		},
 		"ram": {
-			Quota: limitsData.Limits.Absolute.MaxTotalRAMSize,
-			Usage: limitsData.Limits.Absolute.TotalRAMUsed,
+			Quota: projectResourceData.QuotaSet.RAM.Limit,
+			Usage: projectResourceData.QuotaSet.RAM.InUse,
+		},
+		"server_groups": {
+			Quota: projectResourceData.QuotaSet.ServerGroups.Limit,
+			Usage: projectResourceData.QuotaSet.ServerGroups.InUse,
+		},
+		"server_group_members": {
+			Quota: projectResourceData.QuotaSet.ServerGroupMembers.Limit,
+			Usage: projectResourceData.QuotaSet.ServerGroupMembers.InUse,
 		},
 	}
-	if limitsData.Limits.AbsolutePerFlavor != nil {
-		for flavorName, flavorLimits := range limitsData.Limits.AbsolutePerFlavor {
+	if projectResourceData.Limits.AbsolutePerFlavor != nil {
+		for flavorName, flavorLimits := range projectResourceData.Limits.AbsolutePerFlavor {
 			result["instances_"+flavorName] = &limes.ResourceData{
 				Quota: flavorLimits.MaxTotalInstances,
 				Usage: flavorLimits.TotalInstancesUsed,
