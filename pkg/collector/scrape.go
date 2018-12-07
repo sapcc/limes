@@ -243,10 +243,16 @@ func (c *Collector) writeScrapeResult(domainName, domainUUID, projectName, proje
 			continue
 		}
 		data := resourceData[resMetadata.Name]
+
+		initialQuota := uint64(0)
+		if constraint := serviceConstraints[resMetadata.Name]; constraint.Minimum != nil {
+			initialQuota = *constraint.Minimum
+		}
+
 		res := &db.ProjectResource{
 			ServiceID:        serviceID,
 			Name:             resMetadata.Name,
-			Quota:            serviceConstraints[resMetadata.Name].InitialQuotaValue(),
+			Quota:            initialQuota,
 			Usage:            data.Usage,
 			BackendQuota:     data.Quota,
 			SubresourcesJSON: "", //but see below
@@ -367,10 +373,15 @@ func (c *Collector) writeDummyResources(domainName, projectName, serviceType str
 			continue
 		}
 
+		initialQuota := uint64(0)
+		if constraint := serviceConstraints[resMetadata.Name]; constraint.Minimum != nil {
+			initialQuota = *constraint.Minimum
+		}
+
 		res := &db.ProjectResource{
 			ServiceID:        serviceID,
 			Name:             resMetadata.Name,
-			Quota:            serviceConstraints[resMetadata.Name].InitialQuotaValue(),
+			Quota:            initialQuota,
 			Usage:            0,
 			BackendQuota:     -1,
 			SubresourcesJSON: "",

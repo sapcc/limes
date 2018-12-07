@@ -102,7 +102,7 @@ func ValidateProjectServices(tx *gorp.Transaction, cluster *limes.Cluster, domai
 			//ensure deterministic ordering of resources (useful for tests)
 			resourceNames := make([]string, 0, len(serviceConstraints))
 			for resourceName, constraint := range serviceConstraints {
-				if constraint.InitialQuotaValue() != 0 {
+				if constraint.Minimum != nil {
 					resourceNames = append(resourceNames, resourceName)
 				}
 			}
@@ -112,7 +112,7 @@ func ValidateProjectServices(tx *gorp.Transaction, cluster *limes.Cluster, domai
 				err := tx.Insert(&db.ProjectResource{
 					ServiceID: srv.ID,
 					Name:      resourceName,
-					Quota:     serviceConstraints[resourceName].InitialQuotaValue(),
+					Quota:     *(serviceConstraints[resourceName].Minimum),
 					//Scrape() will fill in the remaining backend attributes, and it will
 					//also write the quotas into the backend.
 				})
@@ -139,21 +139,11 @@ func checkProjectResourcesAgainstConstraint(tx *gorp.Transaction, cluster *limes
 		return false, err
 	}
 
-	ok = true
 	for _, res := range resources {
 		constraint := serviceConstraints[res.Name]
 		if constraint.Validate(res.Quota) != nil {
-			ok = false
-		}
-
-		if constraint.Expected != nil && *constraint.Expected != res.Quota {
-			unit := cluster.InfoForResource(srv.Type, res.Name).Unit
-			logg.Error(`expectation mismatch: %s/%s quota for project %s/%s should be %s, but is %s`,
-				srv.Type, res.Name, domain.Name, project.Name,
-				limes.ValueWithUnit{Value: *constraint.Expected, Unit: unit},
-				limes.ValueWithUnit{Value: res.Quota, Unit: unit},
-			)
+			return false, nil
 		}
 	}
-	return ok, nil
+	return true, nil
 }

@@ -28,4 +28,3 @@ projects:
   poland/warsaw:
     service-two:
       things: exactly 5
-      capacity_MiB: should be 4 MiB, should be 5 MiB # self-contradictory

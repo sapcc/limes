@@ -46,10 +46,9 @@ type QuotaConstraints map[string]map[string]QuotaConstraint
 //QuotaConstraint contains the quota constraints for a single resource within a
 //single domain or project.
 type QuotaConstraint struct {
-	Minimum  *uint64
-	Maximum  *uint64
-	Expected *uint64 //TODO: remove (undocumented and used only during transition from quota seeds to quota constraints)
-	Unit     Unit
+	Minimum *uint64
+	Maximum *uint64
+	Unit    Unit
 }
 
 //QuotaValidationError appears in the Limes API in the POST .../simulate-put responses.
@@ -59,17 +58,6 @@ type QuotaValidationError struct {
 	MinimumValue *uint64 `json:"min_acceptable_quota,omitempty"`
 	MaximumValue *uint64 `json:"max_acceptable_quota,omitempty"`
 	Unit         Unit    `json:"unit,omitempty"`
-}
-
-//InitialQuotaValue shall be replaced by direct access to Minimum when Expected is removed. (TODO)
-func (c QuotaConstraint) InitialQuotaValue() uint64 {
-	if c.Minimum != nil {
-		return *c.Minimum
-	}
-	if c.Expected != nil {
-		return *c.Expected
-	}
-	return 0
 }
 
 //Validate checks if the given quota value satisfies this constraint, or
@@ -117,9 +105,6 @@ func (c QuotaConstraint) String() string {
 	}
 	if c.Maximum != nil && !hasExactly {
 		parts = append(parts, "at most "+ValueWithUnit{*c.Maximum, c.Unit}.String())
-	}
-	if c.Expected != nil {
-		parts = append(parts, "should be "+ValueWithUnit{*c.Maximum, c.Unit}.String())
 	}
 	return strings.Join(parts, ", ")
 }
@@ -241,12 +226,10 @@ func compileQuotaConstraints(cluster *Cluster, data map[string]map[string]string
 var atLeastRx = regexp.MustCompile(`^at\s+least\s+(.+)$`)
 var atMostRx = regexp.MustCompile(`^at\s+most\s+(.+)$`)
 var exactlyRx = regexp.MustCompile(`^exactly\s+(.+)$`)
-var shouldBeRx = regexp.MustCompile(`^should\s+be\s+(.+)$`)
 
 func parseQuotaConstraint(resource ResourceInfo, str string) (*QuotaConstraint, error) {
 	var lowerBounds []uint64
 	var upperBounds []uint64
-	var expected []uint64
 
 	for _, part := range strings.Split(str, ",") {
 		part = strings.TrimSpace(part)
@@ -269,12 +252,6 @@ func parseQuotaConstraint(resource ResourceInfo, str string) (*QuotaConstraint, 
 			}
 			lowerBounds = append(lowerBounds, value)
 			upperBounds = append(upperBounds, value)
-		} else if match := shouldBeRx.FindStringSubmatch(part); match != nil {
-			value, err := resource.Unit.Parse(match[1])
-			if err != nil {
-				return nil, err
-			}
-			expected = append(expected, value)
 		} else {
 			return nil, fmt.Errorf(`clause %q should start with "at least", "at most" or "exactly"`, part)
 		}
@@ -301,15 +278,6 @@ func parseQuotaConstraint(resource ResourceInfo, str string) (*QuotaConstraint, 
 
 	if result.Minimum != nil && result.Maximum != nil && *result.Maximum < *result.Minimum {
 		return nil, errors.New("constraint clauses cannot simultaneously be satisfied")
-	}
-
-	switch len(expected) {
-	case 0:
-		result.Expected = nil
-	case 1:
-		result.Expected = pointerTo(expected[0])
-	default:
-		return nil, errors.New(`cannot have multiple "should be" clauses in one constraint`)
 	}
 
 	return &result, nil

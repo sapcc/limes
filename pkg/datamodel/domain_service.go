@@ -126,15 +126,6 @@ func checkDomainServiceConstraints(tx *gorp.Transaction, cluster *limes.Cluster,
 			res.Quota = newQuota
 			resourcesToUpdate = append(resourcesToUpdate, &res)
 		}
-
-		if constraint.Expected != nil && *constraint.Expected != res.Quota {
-			unit := cluster.InfoForResource(srv.Type, res.Name).Unit
-			logg.Error(`expectation mismatch: %s/%s quota for domain %s should be %s, but is %s`,
-				srv.Type, res.Name, domain.Name,
-				limes.ValueWithUnit{Value: *constraint.Expected, Unit: unit},
-				limes.ValueWithUnit{Value: res.Quota, Unit: unit},
-			)
-		}
 	}
 	if len(resourcesToUpdate) > 0 {
 		onlyQuota := func(c *gorp.ColumnMap) bool {
@@ -160,7 +151,7 @@ func createMissingDomainResources(tx *gorp.Transaction, cluster *limes.Cluster, 
 	resourceNames := make([]string, 0, len(serviceConstraints))
 	for resourceName, constraint := range serviceConstraints {
 		//initialize domain quotas where constraints require a non-zero quota value
-		if constraint.InitialQuotaValue() != 0 && !resourceExists[resourceName] {
+		if constraint.Minimum != nil && !resourceExists[resourceName] {
 			resourceNames = append(resourceNames, resourceName)
 		}
 	}
@@ -169,7 +160,7 @@ func createMissingDomainResources(tx *gorp.Transaction, cluster *limes.Cluster, 
 	for _, resourceName := range resourceNames {
 		resInfo := cluster.InfoForResource(srv.Type, resourceName)
 		constraint := serviceConstraints[resourceName]
-		newQuota := constraint.InitialQuotaValue()
+		newQuota := *constraint.Minimum
 		logg.Info("initializing %s/%s quota for domain %s to %s to satisfy constraint %q",
 			srv.Type, resourceName, domain.Name,
 			limes.ValueWithUnit{Value: newQuota, Unit: resInfo.Unit},

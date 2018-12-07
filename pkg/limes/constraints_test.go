@@ -75,7 +75,7 @@ func TestQuotaConstraintParsingSuccess(t *testing.T) {
 			"poland": {
 				"warsaw": {
 					"service-two": {
-						"things": {Expected: pointerTo(5), Maximum: pointerTo(10)},
+						"things": {Maximum: pointerTo(10)},
 					},
 				},
 			},
@@ -106,7 +106,6 @@ func TestQuotaConstraintParsingFailure(t *testing.T) {
 		`invalid constraints for project germany/berlin: no such service: unknown`,
 		`invalid constraints for project germany/dresden: invalid constraint "at least NaN" for service-one/things: strconv.ParseUint: parsing "NaN": invalid syntax`,
 		`invalid constraints for project germany/dresden: invalid constraint "at least 4, at most 2" for service-two/things: constraint clauses cannot simultaneously be satisfied`,
-		`invalid constraints for project poland/warsaw: invalid constraint "should be 4 MiB, should be 5 MiB" for service-two/capacity_MiB: cannot have multiple "should be" clauses in one constraint`,
 	)
 
 	expectQuotaConstraintInvalid(t, "fixtures/quota-constraint-inconsistent.yaml",

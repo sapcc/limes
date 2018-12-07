@@ -21,4 +21,4 @@ projects:
       capacity_MiB: exactly 1 MiB
   poland/warsaw:
     service-two:
-      things: should be 5, at most 10
+      things: at most 10
