@@ -228,6 +228,9 @@ type APIConfiguration struct {
 	RequestLog     struct {
 		ExceptStatusCodes []int `yaml:"except_status_codes"`
 	} `yaml:"request_log"`
+	CORS struct {
+		AllowedOrigins []string `yaml:"allowed_origins"`
+	} `yaml:"cors"`
 }
 
 //CollectorConfiguration contains configuration parameters for limes-collect.

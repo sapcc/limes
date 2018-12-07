@@ -32,6 +32,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/rs/cors"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/limes/pkg/api"
@@ -182,18 +183,26 @@ func taskServe(config limes.Configuration, cluster *limes.Cluster, args []string
 		}{[]api.VersionData{v1VersionData}}
 		respondwith.JSON(w, 300, allVersions)
 	})
+	var handler http.Handler = mainRouter
 
 	//add Prometheus instrumentation
 	http.Handle("/metrics", promhttp.Handler())
-	http.Handle("/",
-		logg.Middleware{ExceptStatusCodes: config.API.RequestLog.ExceptStatusCodes}.Wrap(
-			prometheus.InstrumentHandler("limes-serve",
-				mainRouter,
-			),
-		),
-	)
+	handler = prometheus.InstrumentHandler("limes-serve", handler)
+
+	//add logging instrumentation
+	handler = logg.Middleware{ExceptStatusCodes: config.API.RequestLog.ExceptStatusCodes}.Wrap(handler)
+
+	//add CORS support
+	if len(config.API.CORS.AllowedOrigins) > 0 {
+		handler = cors.New(cors.Options{
+			AllowedOrigins: config.API.CORS.AllowedOrigins,
+			AllowedMethods: []string{"HEAD", "GET", "POST", "PUT"},
+			AllowedHeaders: []string{"User-Agent", "X-Auth-Token", "X-Limes-Cluster-Id"},
+		}).Handler(handler)
+	}
 
 	//start HTTP server
+	http.Handle("/", handler)
 	logg.Info("listening on " + config.API.ListenAddress)
 	return http.ListenAndServe(config.API.ListenAddress, nil)
 }
