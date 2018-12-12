@@ -20,7 +20,6 @@
 package limes
 
 import (
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/http"
@@ -136,17 +135,6 @@ func NewQuotaConstraints(cluster *Cluster, constraintConfigPath string) (*QuotaC
 	}
 	var errors []error
 
-	//parse quota constraints for domains
-	for domainName, domainData := range data.Domains {
-		values, errs := compileQuotaConstraints(cluster, domainData)
-		for _, err := range errs {
-			errors = append(errors,
-				fmt.Errorf("invalid constraints for domain %s: %s", domainName, err.Error()),
-			)
-		}
-		result.Domains[domainName] = values
-	}
-
 	//parse quota constraints for projects
 	for projectAndDomainName, projectData := range data.Projects {
 		fields := strings.SplitN(projectAndDomainName, "/", 2)
@@ -159,7 +147,7 @@ func NewQuotaConstraints(cluster *Cluster, constraintConfigPath string) (*QuotaC
 		domainName := fields[0]
 		projectName := fields[1]
 
-		values, errs := compileQuotaConstraints(cluster, projectData)
+		values, errs := compileQuotaConstraints(cluster, projectData, nil)
 		for _, err := range errs {
 			errors = append(errors,
 				fmt.Errorf("invalid constraints for project %s: %s", projectAndDomainName, err.Error()),
@@ -170,6 +158,24 @@ func NewQuotaConstraints(cluster *Cluster, constraintConfigPath string) (*QuotaC
 			result.Projects[domainName] = make(map[string]QuotaConstraints)
 		}
 		result.Projects[domainName][projectName] = values
+	}
+
+	//parse quota constraints for domains
+	for domainName, domainData := range data.Domains {
+		//in order to compile "at least X more than project constraints" constraints, we need to give the
+		//project constraints for this domain into the compiler
+		projectsConstraints := result.Projects[domainName]
+		if projectsConstraints == nil {
+			projectsConstraints = make(map[string]QuotaConstraints)
+		}
+
+		values, errs := compileQuotaConstraints(cluster, domainData, projectsConstraints)
+		for _, err := range errs {
+			errors = append(errors,
+				fmt.Errorf("invalid constraints for domain %s: %s", domainName, err.Error()),
+			)
+		}
+		result.Domains[domainName] = values
 	}
 
 	//do not attempt to validate if the parsing already caused errors (a
@@ -199,7 +205,9 @@ func NewQuotaConstraints(cluster *Cluster, constraintConfigPath string) (*QuotaC
 	return result, errors
 }
 
-func compileQuotaConstraints(cluster *Cluster, data map[string]map[string]string) (values QuotaConstraints, errors []error) {
+//When `data` contains the constraints for a project, `projectsConstraints` will be nil.
+//When `data` contains the constraints for a domain, `projectsConstraints` will be non-nil.
+func compileQuotaConstraints(cluster *Cluster, data map[string]map[string]string, projectsConstraints map[string]QuotaConstraints) (values QuotaConstraints, errors []error) {
 	values = make(QuotaConstraints)
 
 	for serviceType, serviceData := range data {
@@ -211,7 +219,20 @@ func compileQuotaConstraints(cluster *Cluster, data map[string]map[string]string
 
 		for resourceName, constraintStr := range serviceData {
 			resource := cluster.InfoForResource(serviceType, resourceName)
-			constraint, err := parseQuotaConstraint(resource, constraintStr)
+
+			var projectMinimumsSum *uint64
+			if projectsConstraints != nil {
+				sum := uint64(0)
+				for _, projectConstraints := range projectsConstraints {
+					minimum := projectConstraints[serviceType][resourceName].Minimum
+					if minimum != nil {
+						sum += *minimum
+					}
+				}
+				projectMinimumsSum = &sum
+			}
+
+			constraint, err := parseQuotaConstraint(resource, constraintStr, projectMinimumsSum)
 			if err != nil {
 				errors = append(errors, fmt.Errorf("invalid constraint %q for %s/%s: %s", constraintStr, serviceType, resourceName, err.Error()))
 				continue
@@ -226,14 +247,23 @@ func compileQuotaConstraints(cluster *Cluster, data map[string]map[string]string
 var atLeastRx = regexp.MustCompile(`^at\s+least\s+(.+)$`)
 var atMostRx = regexp.MustCompile(`^at\s+most\s+(.+)$`)
 var exactlyRx = regexp.MustCompile(`^exactly\s+(.+)$`)
+var atLeastMoreRx = regexp.MustCompile(`^at\s+least\s+(.+)\s+more\s+than\s+project\s+constraints$`)
 
-func parseQuotaConstraint(resource ResourceInfo, str string) (*QuotaConstraint, error) {
+//When parsing a constraint for a project, `projectMinimumsSum` will be nil.
+//When parsing a constraint for a domain, `projectMinimumsSum` will be non-nil.
+func parseQuotaConstraint(resource ResourceInfo, str string, projectMinimumsSum *uint64) (*QuotaConstraint, error) {
 	var lowerBounds []uint64
 	var upperBounds []uint64
 
 	for _, part := range strings.Split(str, ",") {
 		part = strings.TrimSpace(part)
-		if match := atLeastRx.FindStringSubmatch(part); match != nil {
+		if match := atLeastMoreRx.FindStringSubmatch(part); projectMinimumsSum != nil && match != nil {
+			value, err := resource.Unit.Parse(match[1])
+			if err != nil {
+				return nil, err
+			}
+			lowerBounds = append(lowerBounds, value+*projectMinimumsSum)
+		} else if match := atLeastRx.FindStringSubmatch(part); match != nil {
 			value, err := resource.Unit.Parse(match[1])
 			if err != nil {
 				return nil, err
@@ -277,7 +307,11 @@ func parseQuotaConstraint(resource ResourceInfo, str string) (*QuotaConstraint, 
 	}
 
 	if result.Minimum != nil && result.Maximum != nil && *result.Maximum < *result.Minimum {
-		return nil, errors.New("constraint clauses cannot simultaneously be satisfied")
+		return nil, fmt.Errorf(
+			"constraint clauses cannot simultaneously be satisfied (at least %s, but at most %s)",
+			ValueWithUnit{Unit: resource.Unit, Value: *result.Minimum},
+			ValueWithUnit{Unit: resource.Unit, Value: *result.Maximum},
+		)
 	}
 
 	return &result, nil

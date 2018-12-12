@@ -18,7 +18,7 @@ OpenStack installations.
 Quota constraints are configured in a separate YAML file which is referenced in the `clusters.$id.constraints` field of
 the main configuration file. The constraint set looks like this:
 
-```
+```yaml
 domains:
   Default: # domain name
     object-store: # service type
@@ -40,6 +40,11 @@ Requests to change the quota for the "swift-tests" project will be rejected beca
 Requests to change the quota for the "Default" domain will only be accepted if the requested domain quota is between
 (inclusive) 1 and 5 TiB.
 
+Constraints are parsed and validated when `limes collect` parses its configuration during startup, and any errors will
+interrupt the collector and cause it to terminate immediately.
+
+### Constraint syntax
+
 Supported operators include "at least", "at most" and "exactly". For countable resources, the quota values are numbers
 matching the regex `[0-9]+`. For measured resources, the quota values:
 
@@ -50,5 +55,26 @@ matching the regex `[0-9]+`. For measured resources, the quota values:
 For example, RAM can only be allocated in MiB, so a hypothetical quota value of "2000 KiB" would be rejected since this
 value lies between 1 MiB and 2 MiB.
 
-All these criteria are checked when `limes collect` parses its configuration during startup, and any errors will
-interrupt the collector and cause Limes to terminate immediately.
+For domain constraints, a special operator "at least ... more than project constraints" is supported, that works like
+"at least", but adds all "at least" and "exactly" constraints for projects in that domain.
+
+```yaml
+domains:
+  Default:
+    object-store:
+      capacity: at least 1 TiB more than project constraints
+      # This constraint gets compiled into "at least 7 TiB" because the
+      # "at least" and "exactly" constraints for all projects in the "Default"
+      # domain get added to it.
+
+projects:
+  Default/swift-tests:
+    object-store:
+      capacity: exactly 1 TiB
+  Default/db-backups:
+    object-store:
+      capacity: at least 5 TiB
+  customer-domain/webshop: # not considered because not in "Default" domain
+    object-store:
+      capacity: at least 1 TiB
+```

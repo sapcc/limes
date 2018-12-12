@@ -20,6 +20,7 @@
 package limes
 
 import (
+	"encoding/json"
 	"reflect"
 	"testing"
 
@@ -50,6 +51,14 @@ func TestQuotaConstraintParsingSuccess(t *testing.T) {
 				},
 			},
 			"poland": {
+				"service-one": {
+					"capacity_MiB": {Minimum: pointerTo(16), Unit: UnitMebibytes},
+				},
+				"service-two": {
+					"things": {Minimum: pointerTo(5)},
+				},
+			},
+			"france": {
 				"service-two": {
 					"things": {Minimum: pointerTo(5)},
 				},
@@ -74,16 +83,26 @@ func TestQuotaConstraintParsingSuccess(t *testing.T) {
 			},
 			"poland": {
 				"warsaw": {
+					"service-one": {
+						"capacity_MiB": {Minimum: pointerTo(2), Unit: UnitMebibytes},
+					},
 					"service-two": {
 						"things": {Maximum: pointerTo(10)},
+					},
+				},
+				"krakow": {
+					"service-one": {
+						"capacity_MiB": {Minimum: pointerTo(4), Unit: UnitMebibytes},
 					},
 				},
 			},
 		},
 	}
 	if !reflect.DeepEqual(constraints, &expected) {
-		t.Errorf("actual = %#v\n", constraints)
-		t.Errorf("expected = %#v\n", expected)
+		buf, _ := json.Marshal(constraints)
+		t.Errorf("  actual = %s\n", buf)
+		buf, _ = json.Marshal(expected)
+		t.Errorf("expected = %s\n", buf)
 	}
 }
 
@@ -105,7 +124,7 @@ func TestQuotaConstraintParsingFailure(t *testing.T) {
 		`missing domain name for project atlantis`,
 		`invalid constraints for project germany/berlin: no such service: unknown`,
 		`invalid constraints for project germany/dresden: invalid constraint "at least NaN" for service-one/things: strconv.ParseUint: parsing "NaN": invalid syntax`,
-		`invalid constraints for project germany/dresden: invalid constraint "at least 4, at most 2" for service-two/things: constraint clauses cannot simultaneously be satisfied`,
+		`invalid constraints for project germany/dresden: invalid constraint "at least 4, at most 2" for service-two/things: constraint clauses cannot simultaneously be satisfied (at least 4, but at most 2)`,
 	)
 
 	expectQuotaConstraintInvalid(t, "fixtures/quota-constraint-inconsistent.yaml",

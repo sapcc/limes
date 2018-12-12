@@ -8,6 +8,13 @@ domains:
   poland:
     service-two:
       things: at least 5
+    # test "at least X more than project constraints" where project constraints DO exist
+    service-one:
+      capacity_MiB: at least 10 MiB more than project constraints
+  france:
+    service-two:
+      # test "at least X more than project constraints" where NO project constraints exist
+      things: at least 5 more than project constraints
 
 projects:
   germany/berlin:
@@ -20,5 +27,10 @@ projects:
     service-two:
       capacity_MiB: exactly 1 MiB
   poland/warsaw:
+    service-one:
+      capacity_MiB: at least 2 MiB
     service-two:
       things: at most 10
+  poland/krakow:
+    service-one:
+      capacity_MiB: at least 4 MiB
