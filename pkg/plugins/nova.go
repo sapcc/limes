@@ -220,6 +220,17 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 		}
 	}
 
+	//the Queens branch of sapcc/nova sometimes does not report zero quotas,
+	//so make sure that all known resources are reflected
+	for _, res := range p.resources {
+		if _, exists := result[res.Name]; !exists {
+			result[res.Name] = &limes.ResourceData{
+				Quota: 0,
+				Usage: 0,
+			}
+		}
+	}
+
 	if p.scrapeInstances {
 		listOpts := novaServerListOpts{
 			AllTenants: true,
