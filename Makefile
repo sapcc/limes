@@ -29,20 +29,28 @@ comma := ,
 check: all static-check build/cover.html FORCE
 	@printf "\e[1;32m>> All tests successful.\e[0m\n"
 static-check: FORCE
-	@if ! hash golint 2>/dev/null; then echo ">> Installing golint..."; go get -u golang.org/x/lint/golint; fi
-	@echo '>> gofmt'
+	@if ! hash golint 2>/dev/null; then printf "\e[1;36m>> Installing golint...\e[0m\n"; go get -u golang.org/x/lint/golint; fi
+	@printf "\e[1;36m>> gofmt\e[0m\n"
 	@if s="$$(gofmt -s -l *.go cmd pkg 2>/dev/null)"                            && test -n "$$s"; then printf ' => %s\n%s\n' gofmt  "$$s"; false; fi
-	@echo '>> golint'
+	@printf "\e[1;36m>> golint\e[0m\n"
 	@if s="$$(golint . && find cmd pkg -type d -exec golint {} \; 2>/dev/null)" && test -n "$$s"; then printf ' => %s\n%s\n' golint "$$s"; false; fi
-	@echo '>> go vet'
+	@printf "\e[1;36m>> go vet\e[0m\n"
 	@$(GO) vet $(GO_ALLPKGS)
+
+# detailed unit test run (incl. test coverage)
 build/%.cover.out: FORCE
-	@echo '>> go test $(subst _,/,$*)'
+	@printf "\e[1;36m>> go test $(subst _,/,$*)\e[0m\n"
 	$(GO) test $(GO_BUILDFLAGS) -ldflags '$(GO_LDFLAGS)' -coverprofile=$@ -covermode=count -coverpkg=$(subst $(space),$(comma),$(GO_COVERPKGS)) $(subst _,/,$*)
 build/cover.out: $(GO_COVERFILES)
 	pkg/test/util/gocovcat.go $(GO_COVERFILES) > $@
 build/cover.html: build/cover.out
 	$(GO) tool cover -html $< -o $@
+
+# quick unit test run
+quick-check: all static-check $(addprefix quick-check-,$(subst /,_,$(GO_TESTPKGS))) FORCE
+quick-check-%:
+	@printf "\e[1;36m>> go test $(subst _,/,$*)\e[0m\n"
+	$(GO) test $(GO_BUILDFLAGS) -ldflags '$(GO_LDFLAGS)' $(subst _,/,$*)
 
 install: FORCE all
 	install -D -m 0755 build/limes "$(DESTDIR)$(PREFIX)/bin/limes"
