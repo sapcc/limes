@@ -10,14 +10,14 @@ GO_LDFLAGS    := -s -w
 # This target uses the incremental rebuild capabilities of the Go compiler to speed things up.
 # If no source files have changed, `go install` exits quickly without doing anything.
 build/limes: FORCE
-	$(GO) install $(GO_BUILDFLAGS) -ldflags '$(GO_LDFLAGS)' '$(PKG)'
+	$(GO) install $(GO_BUILDFLAGS) -ldflags '$(GO_LDFLAGS)' '$(PKG)/cmd/limes'
 
 # which packages to test with static checkers?
-GO_ALLPKGS := $(PKG) $(shell go list $(PKG)/pkg/...)
+GO_ALLPKGS := $(PKG) $(shell go list $(PKG)/pkg/... $(PKG)/cmd/...)
 # which packages to test with `go test`?
-GO_TESTPKGS := $(shell go list -f '{{if .TestGoFiles}}{{.ImportPath}}{{end}}' $(PKG)/pkg/...)
+GO_TESTPKGS := $(shell go list -f '{{if .TestGoFiles}}{{.ImportPath}}{{end}}' $(PKG)/pkg/... $(PKG)/cmd/...)
 # which packages to measure coverage for?
-GO_COVERPKGS := $(shell go list $(PKG)/pkg/... | grep -v plugins)
+GO_COVERPKGS := $(shell go list $(PKG) $(PKG)/pkg/... | grep -v plugins)
 # output files from `go test`
 GO_COVERFILES := $(patsubst %,build/%.cover.out,$(subst /,_,$(GO_TESTPKGS)))
 
@@ -27,7 +27,7 @@ space := $(null) $(null)
 comma := ,
 
 check: all static-check build/cover.html FORCE
-	@echo -e "\e[1;32m>> All tests successful.\e[0m"
+	@printf "\e[1;32m>> All tests successful.\e[0m\n"
 static-check: FORCE
 	@if ! hash golint 2>/dev/null; then echo ">> Installing golint..."; go get -u golang.org/x/lint/golint; fi
 	@echo '>> gofmt'
