@@ -237,7 +237,9 @@ func compileQuotaConstraints(cluster *Cluster, data map[string]map[string]string
 				errors = append(errors, fmt.Errorf("invalid constraint %q for %s/%s: %s", constraintStr, serviceType, resourceName, err.Error()))
 				continue
 			}
-			values[serviceType][resourceName] = *constraint
+			if constraint != nil {
+				values[serviceType][resourceName] = *constraint
+			}
 		}
 	}
 
@@ -312,6 +314,17 @@ func parseQuotaConstraint(resource ResourceInfo, str string, projectMinimumsSum 
 			ValueWithUnit{Unit: resource.Unit, Value: *result.Minimum},
 			ValueWithUnit{Unit: resource.Unit, Value: *result.Maximum},
 		)
+	}
+
+	//ignore constraints that end up equivalent to "at least 0" (which can happen
+	//when a domain constraint is "at least 0 more than project constraints") and
+	//then it turns out there are no project constraints for that domain and
+	//resource
+	if result.Minimum != nil && *result.Minimum == 0 {
+		result.Minimum = nil
+	}
+	if result.Minimum == nil && result.Maximum == nil {
+		return nil, nil
 	}
 
 	return &result, nil
