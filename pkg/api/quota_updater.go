@@ -85,7 +85,7 @@ func (u QuotaUpdater) QuotaConstraints() core.QuotaConstraints {
 //ValidateInput reads the given input and validates the quotas contained therein.
 //Results are collected into u.Requests. The return value is only set for unexpected
 //errors, not for validation errors.
-func (u *QuotaUpdater) ValidateInput(input ServiceQuotas, dbi db.Interface) error {
+func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface) error {
 	//gather a report on the domain's quotas to decide whether a quota update is legal
 	domainReport, err := GetDomainReport(u.Cluster, *u.Domain, dbi, reports.Filter{})
 	if err != nil {

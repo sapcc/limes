@@ -17,31 +17,29 @@
 *
 *******************************************************************************/
 
-package api
+package limes
 
 import (
 	"encoding/json"
 	"sort"
-
-	"github.com/sapcc/limes"
 )
 
-//ServiceQuotas contains new quota values for resources in multiple services.
-//The map key is the service type. This type is used to unserialize JSON
-//request bodies in PUT requests.
-type ServiceQuotas map[string]ResourceQuotas
+//QuotaRequest contains new quota values for resources in multiple services.
+//The map key is the service type. This type is used to serialize JSON
+//request bodies in PUT requests on domains and projects.
+type QuotaRequest map[string]ServiceQuotaRequest
 
-//ResourceQuotas contains new quota values for the resources in a single
-//service. The map key is the resource name. This type is used to unserialize
-//JSON request bodies in PUT requests.
-type ResourceQuotas map[string]limes.ValueWithUnit
+//ServiceQuotaRequest contains new quota values for the resources in a single
+//service. The map key is the resource name. This type appears in type
+//QuotaRequest.
+type ServiceQuotaRequest map[string]ValueWithUnit
 
 //MarshalJSON implements the json.Marshaler interface.
-func (sq ServiceQuotas) MarshalJSON() ([]byte, error) {
+func (r QuotaRequest) MarshalJSON() ([]byte, error) {
 	type resourceQuota struct {
-		Name  string     `json:"name"`
-		Quota uint64     `json:"quota"`
-		Unit  limes.Unit `json:"unit"`
+		Name  string `json:"name"`
+		Quota uint64 `json:"quota"`
+		Unit  Unit   `json:"unit"`
 	}
 
 	type serviceQuotas struct {
@@ -50,7 +48,7 @@ func (sq ServiceQuotas) MarshalJSON() ([]byte, error) {
 	}
 
 	list := []serviceQuotas{}
-	for t, rqs := range sq {
+	for t, rqs := range r {
 		sqs := serviceQuotas{
 			Type:      t,
 			Resources: []resourceQuota{},
@@ -81,13 +79,13 @@ func (sq ServiceQuotas) MarshalJSON() ([]byte, error) {
 }
 
 //UnmarshalJSON implements the json.Unmarshaler interface.
-func (sq *ServiceQuotas) UnmarshalJSON(input []byte) error {
+func (r *QuotaRequest) UnmarshalJSON(input []byte) error {
 	var data []struct {
 		Type      string `json:"type"`
 		Resources []struct {
-			Name  string      `json:"name"`
-			Quota uint64      `json:"quota"`
-			Unit  *limes.Unit `json:"unit"`
+			Name  string `json:"name"`
+			Quota uint64 `json:"quota"`
+			Unit  *Unit  `json:"unit"`
 		} `json:"resources"`
 	}
 	err := json.Unmarshal(input, &data)
@@ -96,39 +94,41 @@ func (sq *ServiceQuotas) UnmarshalJSON(input []byte) error {
 	}
 
 	//remove existing content
-	for key := range *sq {
-		delete(*sq, key)
+	for key := range *r {
+		delete(*r, key)
 	}
 
 	//add new content
 	for _, srv := range data {
-		rq := make(ResourceQuotas, len(srv.Resources))
+		sr := make(ServiceQuotaRequest, len(srv.Resources))
 		for _, res := range srv.Resources {
-			unit := limes.UnitUnspecified
+			unit := UnitUnspecified
 			if res.Unit != nil {
 				unit = *res.Unit
 			}
-			rq[res.Name] = limes.ValueWithUnit{
+			sr[res.Name] = ValueWithUnit{
 				Value: res.Quota,
 				Unit:  unit,
 			}
 		}
-		(*sq)[srv.Type] = rq
+		(*r)[srv.Type] = sr
 	}
 	return nil
 }
 
-//ServiceCapacities contains updated capacity values for some or all resources
-//in a single service.
-type ServiceCapacities struct {
-	Type      string             `json:"type"`
-	Resources []ResourceCapacity `json:"resources"`
+//ServiceCapacityRequest contains updated capacity values for some or all
+//resources in a single service. This type is used to serialize JSON request
+//bodies in PUT requests on clusters.
+type ServiceCapacityRequest struct {
+	Type      string                    `json:"type"`
+	Resources []ResourceCapacityRequest `json:"resources"`
 }
 
-//ResourceCapacity contains an updated capacity value for a single resource.
-type ResourceCapacity struct {
-	Name     string      `json:"name"`
-	Capacity int64       `json:"capacity"`
-	Unit     *limes.Unit `json:"unit"`
-	Comment  string      `json:"comment"`
+//ResourceCapacityRequest contains an updated capacity value for a single resource.
+//It appears in type ServiceCapacityRequest.
+type ResourceCapacityRequest struct {
+	Name     string `json:"name"`
+	Capacity int64  `json:"capacity"`
+	Unit     *Unit  `json:"unit"`
+	Comment  string `json:"comment"`
 }

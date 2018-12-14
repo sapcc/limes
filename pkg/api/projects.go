@@ -30,6 +30,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/sapcc/go-bits/respondwith"
+	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/collector"
 	"github.com/sapcc/limes/pkg/datamodel"
 	"github.com/sapcc/limes/pkg/db"
@@ -186,10 +187,10 @@ func (p *v1Provider) putOrSimulatePutProject(w http.ResponseWriter, r *http.Requ
 			Bursting struct {
 				Enabled *bool `json:"enabled"`
 			} `json:"bursting"`
-			Services ServiceQuotas `json:"services"`
+			Services limes.QuotaRequest `json:"services"`
 		} `json:"project"`
 	}
-	parseTarget.Project.Services = make(ServiceQuotas)
+	parseTarget.Project.Services = make(limes.QuotaRequest)
 	if !RequireJSON(w, r, &parseTarget) {
 		return
 	}
@@ -206,7 +207,7 @@ func (p *v1Provider) putOrSimulatePutProject(w http.ResponseWriter, r *http.Requ
 	}
 }
 
-func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *http.Request, simulate bool, serviceQuotas ServiceQuotas) {
+func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *http.Request, simulate bool, serviceQuotas limes.QuotaRequest) {
 	requestTime := time.Now()
 	token := p.CheckToken(r)
 	canRaise := token.Check("project:raise")

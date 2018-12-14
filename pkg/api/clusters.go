@@ -102,7 +102,7 @@ func (p *v1Provider) PutCluster(w http.ResponseWriter, r *http.Request) {
 	//parse request body
 	var parseTarget struct {
 		Cluster struct {
-			Services []ServiceCapacities `json:"services"`
+			Services []limes.ServiceCapacityRequest `json:"services"`
 		} `json:"cluster"`
 	}
 	if !RequireJSON(w, r, &parseTarget) {
@@ -175,7 +175,7 @@ func (p *v1Provider) PutCluster(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(202)
 }
 
-func findClusterService(tx *gorp.Transaction, srv ServiceCapacities, clusterID string, shared bool) (*db.ClusterService, error) {
+func findClusterService(tx *gorp.Transaction, srv limes.ServiceCapacityRequest, clusterID string, shared bool) (*db.ClusterService, error) {
 	if shared {
 		clusterID = "shared"
 	}
@@ -194,7 +194,7 @@ func findClusterService(tx *gorp.Transaction, srv ServiceCapacities, clusterID s
 	return service, nil
 }
 
-func writeClusterResource(tx *gorp.Transaction, cluster *core.Cluster, srv ServiceCapacities, service *db.ClusterService, res ResourceCapacity) (validationError string, internalError error) {
+func writeClusterResource(tx *gorp.Transaction, cluster *core.Cluster, srv limes.ServiceCapacityRequest, service *db.ClusterService, res limes.ResourceCapacityRequest) (validationError string, internalError error) {
 	if !cluster.HasResource(srv.Type, res.Name) {
 		return "no such resource", nil
 	}
