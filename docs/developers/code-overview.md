@@ -2,22 +2,25 @@
 
 Once compiled, Limes is only a single binary containing subcommands for the various components (`limes serve` and `limes
 collect`). This reduces the size of the compiled application dramatically since a lot of code is shared. The main
-entrypoint is in `main.go` in the top level, from which everything else follows.
+entrypoint is in `cmd/limes/main.go`, from which everything else follows.
 
 The `main.go` is fairly compact. The main sourcecode is below `pkg/`, organized into packages as follows: (listed
 from the bottom up)
 
 | Package | `go test` | Contents |
 | --- | :---: | --- |
-| `pkg/util` | no | various small utility functions (esp. logging, type conversion) |
+| _(toplevel)_ | yes | types for data structures that appear in the Limes API |
+| `pkg/util` | no | various small utility functions (esp. for type conversion) |
 | `pkg/db` | no | database configuration, connection handling, ORM model classes, utility functions |
-| `pkg/limes` | yes | core interfaces (Driver, QuotaPlugin, CapacityPlugin) and data structures, config parsing and validation |
+| `pkg/core` | yes | core interfaces (DiscoveryPlugin, QuotaPlugin, CapacityPlugin) and data structures (Configuration, Cluster), config parsing and validation |
 | `pkg/test` | no | testing helpers: mock implementations of core interfaces, test runners, etc. |
 | `pkg/plugins` | no | implementations of QuotaPlugin and CapacityPlugin |
 | `pkg/datamodel` | no | higher-level functions that operate on the ORM model classes (not in `pkg/db` because of dependency on stuff from `pkg/limes` |
 | `pkg/collector` | yes | functionality of `limes collect` |
 | `pkg/reports` | no | helper for `pkg/api`: rendering of reports for GET requests |
-| `pkg/api` | yes | functionality of `limes api` |
+| `pkg/api` | yes | functionality of `limes serve` |
+
+Only the toplevel package is considered public API. Code that is not in this repository should not import anything from below `pkg/`.
 
 The database is defined by SQL files in `pkg/db/migrations.go`. The contents follow the PostgreSQL dialect of SQL, the
 filenames follow the requirements of [the library that Limes uses for handling the DB schema][migrate].
