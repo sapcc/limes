@@ -27,6 +27,7 @@ import (
 	"github.com/majewsky/schwift"
 	"github.com/majewsky/schwift/gopherschwift"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 )
 
@@ -34,10 +35,10 @@ type swiftPlugin struct {
 	cfg core.ServiceConfiguration
 }
 
-var swiftResources = []core.ResourceInfo{
+var swiftResources = []limes.ResourceInfo{
 	{
 		Name: "capacity",
-		Unit: core.UnitBytes,
+		Unit: limes.UnitBytes,
 	},
 }
 
@@ -53,8 +54,8 @@ func (p *swiftPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.
 }
 
 //ServiceInfo implements the core.QuotaPlugin interface.
-func (p *swiftPlugin) ServiceInfo() core.ServiceInfo {
-	return core.ServiceInfo{
+func (p *swiftPlugin) ServiceInfo() limes.ServiceInfo {
+	return limes.ServiceInfo{
 		Type:        "object-store",
 		ProductName: "swift",
 		Area:        "storage",
@@ -62,7 +63,7 @@ func (p *swiftPlugin) ServiceInfo() core.ServiceInfo {
 }
 
 //Resources implements the core.QuotaPlugin interface.
-func (p *swiftPlugin) Resources() []core.ResourceInfo {
+func (p *swiftPlugin) Resources() []limes.ResourceInfo {
 	return swiftResources
 }
 

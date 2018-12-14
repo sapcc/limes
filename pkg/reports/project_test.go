@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	th "github.com/gophercloud/gophercloud/testhelper"
-	"github.com/sapcc/limes/pkg/core"
+	"github.com/sapcc/limes"
 )
 
 var projectServicesMockJSON = `
@@ -48,15 +48,15 @@ var projectResourcesMockJSON = `
 
 var projectMockResources = &ProjectResources{
 	"capacity": &ProjectResource{
-		ResourceInfo: core.ResourceInfo{
+		ResourceInfo: limes.ResourceInfo{
 			Name: "capacity",
-			Unit: core.UnitBytes,
+			Unit: limes.UnitBytes,
 		},
 		Quota: 10,
 		Usage: 2,
 	},
 	"things": &ProjectResource{
-		ResourceInfo: core.ResourceInfo{
+		ResourceInfo: limes.ResourceInfo{
 			Name: "things",
 		},
 		Quota: 10,
@@ -66,7 +66,7 @@ var projectMockResources = &ProjectResources{
 
 var projectMockServices = &ProjectServices{
 	"shared": &ProjectService{
-		ServiceInfo: core.ServiceInfo{
+		ServiceInfo: limes.ServiceInfo{
 			Type: "shared",
 			Area: "shared",
 		},

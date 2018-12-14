@@ -23,7 +23,7 @@ import (
 	"encoding/json"
 	"sort"
 
-	"github.com/sapcc/limes/pkg/core"
+	"github.com/sapcc/limes"
 )
 
 //ServiceQuotas contains new quota values for resources in multiple services.
@@ -34,14 +34,14 @@ type ServiceQuotas map[string]ResourceQuotas
 //ResourceQuotas contains new quota values for the resources in a single
 //service. The map key is the resource name. This type is used to unserialize
 //JSON request bodies in PUT requests.
-type ResourceQuotas map[string]core.ValueWithUnit
+type ResourceQuotas map[string]limes.ValueWithUnit
 
 //MarshalJSON implements the json.Marshaler interface.
 func (sq ServiceQuotas) MarshalJSON() ([]byte, error) {
 	type resourceQuota struct {
-		Name  string    `json:"name"`
-		Quota uint64    `json:"quota"`
-		Unit  core.Unit `json:"unit"`
+		Name  string     `json:"name"`
+		Quota uint64     `json:"quota"`
+		Unit  limes.Unit `json:"unit"`
 	}
 
 	type serviceQuotas struct {
@@ -85,9 +85,9 @@ func (sq *ServiceQuotas) UnmarshalJSON(input []byte) error {
 	var data []struct {
 		Type      string `json:"type"`
 		Resources []struct {
-			Name  string     `json:"name"`
-			Quota uint64     `json:"quota"`
-			Unit  *core.Unit `json:"unit"`
+			Name  string      `json:"name"`
+			Quota uint64      `json:"quota"`
+			Unit  *limes.Unit `json:"unit"`
 		} `json:"resources"`
 	}
 	err := json.Unmarshal(input, &data)
@@ -104,11 +104,11 @@ func (sq *ServiceQuotas) UnmarshalJSON(input []byte) error {
 	for _, srv := range data {
 		rq := make(ResourceQuotas, len(srv.Resources))
 		for _, res := range srv.Resources {
-			unit := core.UnitUnspecified
+			unit := limes.UnitUnspecified
 			if res.Unit != nil {
 				unit = *res.Unit
 			}
-			rq[res.Name] = core.ValueWithUnit{
+			rq[res.Name] = limes.ValueWithUnit{
 				Value: res.Quota,
 				Unit:  unit,
 			}
@@ -127,8 +127,8 @@ type ServiceCapacities struct {
 
 //ResourceCapacity contains an updated capacity value for a single resource.
 type ResourceCapacity struct {
-	Name     string     `json:"name"`
-	Capacity int64      `json:"capacity"`
-	Unit     *core.Unit `json:"unit"`
-	Comment  string     `json:"comment"`
+	Name     string      `json:"name"`
+	Capacity int64       `json:"capacity"`
+	Unit     *limes.Unit `json:"unit"`
+	Comment  string      `json:"comment"`
 }

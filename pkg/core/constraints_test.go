@@ -25,6 +25,7 @@ import (
 	"testing"
 
 	"github.com/gophercloud/gophercloud"
+	"github.com/sapcc/limes"
 )
 
 func TestQuotaConstraintParsingSuccess(t *testing.T) {
@@ -44,15 +45,15 @@ func TestQuotaConstraintParsingSuccess(t *testing.T) {
 			"germany": {
 				"service-one": {
 					"things":       {Minimum: pointerTo(20), Maximum: pointerTo(30)},
-					"capacity_MiB": {Minimum: pointerTo(10240), Unit: UnitMebibytes},
+					"capacity_MiB": {Minimum: pointerTo(10240), Unit: limes.UnitMebibytes},
 				},
 				"service-two": {
-					"capacity_MiB": {Minimum: pointerTo(1), Unit: UnitMebibytes},
+					"capacity_MiB": {Minimum: pointerTo(1), Unit: limes.UnitMebibytes},
 				},
 			},
 			"poland": {
 				"service-one": {
-					"capacity_MiB": {Minimum: pointerTo(16), Unit: UnitMebibytes},
+					"capacity_MiB": {Minimum: pointerTo(16), Unit: limes.UnitMebibytes},
 				},
 				"service-two": {
 					"things": {Minimum: pointerTo(5)},
@@ -69,7 +70,7 @@ func TestQuotaConstraintParsingSuccess(t *testing.T) {
 				"berlin": {
 					"service-one": {
 						"things":       {Minimum: pointerTo(10)},
-						"capacity_MiB": {Minimum: pointerTo(5120), Maximum: pointerTo(6144), Unit: UnitMebibytes},
+						"capacity_MiB": {Minimum: pointerTo(5120), Maximum: pointerTo(6144), Unit: limes.UnitMebibytes},
 					},
 				},
 				"dresden": {
@@ -77,14 +78,14 @@ func TestQuotaConstraintParsingSuccess(t *testing.T) {
 						"things": {Minimum: pointerTo(5), Maximum: pointerTo(5)},
 					},
 					"service-two": {
-						"capacity_MiB": {Minimum: pointerTo(1), Maximum: pointerTo(1), Unit: UnitMebibytes},
+						"capacity_MiB": {Minimum: pointerTo(1), Maximum: pointerTo(1), Unit: limes.UnitMebibytes},
 					},
 				},
 			},
 			"poland": {
 				"warsaw": {
 					"service-one": {
-						"capacity_MiB": {Minimum: pointerTo(2), Unit: UnitMebibytes},
+						"capacity_MiB": {Minimum: pointerTo(2), Unit: limes.UnitMebibytes},
 					},
 					"service-two": {
 						"things": {Maximum: pointerTo(10)},
@@ -92,7 +93,7 @@ func TestQuotaConstraintParsingSuccess(t *testing.T) {
 				},
 				"krakow": {
 					"service-one": {
-						"capacity_MiB": {Minimum: pointerTo(4), Unit: UnitMebibytes},
+						"capacity_MiB": {Minimum: pointerTo(4), Unit: limes.UnitMebibytes},
 					},
 				},
 			},
@@ -162,8 +163,8 @@ type quotaConstraintTestPlugin struct {
 func (p quotaConstraintTestPlugin) Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
 	return nil
 }
-func (p quotaConstraintTestPlugin) ServiceInfo() ServiceInfo {
-	return ServiceInfo{Type: p.ServiceType}
+func (p quotaConstraintTestPlugin) ServiceInfo() limes.ServiceInfo {
+	return limes.ServiceInfo{Type: p.ServiceType}
 }
 func (p quotaConstraintTestPlugin) Scrape(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]ResourceData, error) {
 	return nil, nil
@@ -172,10 +173,10 @@ func (p quotaConstraintTestPlugin) SetQuota(client *gophercloud.ProviderClient, 
 	return nil
 }
 
-func (p quotaConstraintTestPlugin) Resources() []ResourceInfo {
-	return []ResourceInfo{
-		{Name: "things", Unit: UnitNone},
-		{Name: "capacity_MiB", Unit: UnitMebibytes},
+func (p quotaConstraintTestPlugin) Resources() []limes.ResourceInfo {
+	return []limes.ResourceInfo{
+		{Name: "things", Unit: limes.UnitNone},
+		{Name: "capacity_MiB", Unit: limes.UnitMebibytes},
 	}
 }
 
@@ -188,13 +189,13 @@ func TestQuotaConstraintToString(t *testing.T) {
 	}
 	testcases := []testcase{
 		{
-			Input:    QuotaConstraint{Minimum: pointerTo(10), Unit: UnitMebibytes},
+			Input:    QuotaConstraint{Minimum: pointerTo(10), Unit: limes.UnitMebibytes},
 			Expected: "at least 10 MiB",
 		}, {
-			Input:    QuotaConstraint{Minimum: pointerTo(10), Maximum: pointerTo(20), Unit: UnitMebibytes},
+			Input:    QuotaConstraint{Minimum: pointerTo(10), Maximum: pointerTo(20), Unit: limes.UnitMebibytes},
 			Expected: "at least 10 MiB, at most 20 MiB",
 		}, {
-			Input:    QuotaConstraint{Minimum: pointerTo(20), Maximum: pointerTo(20), Unit: UnitMebibytes},
+			Input:    QuotaConstraint{Minimum: pointerTo(20), Maximum: pointerTo(20), Unit: limes.UnitMebibytes},
 			Expected: "exactly 20 MiB",
 		},
 	}

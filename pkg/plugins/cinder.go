@@ -24,6 +24,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v2/volumes"
 	"github.com/gophercloud/gophercloud/pagination"
+	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 )
 
@@ -32,18 +33,18 @@ type cinderPlugin struct {
 	scrapeVolumes bool
 }
 
-var cinderResources = []core.ResourceInfo{
+var cinderResources = []limes.ResourceInfo{
 	{
 		Name: "capacity",
-		Unit: core.UnitGibibytes,
+		Unit: limes.UnitGibibytes,
 	},
 	{
 		Name: "snapshots",
-		Unit: core.UnitNone,
+		Unit: limes.UnitNone,
 	},
 	{
 		Name: "volumes",
-		Unit: core.UnitNone,
+		Unit: limes.UnitNone,
 	},
 }
 
@@ -62,8 +63,8 @@ func (p *cinderPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud
 }
 
 //ServiceInfo implements the core.QuotaPlugin interface.
-func (p *cinderPlugin) ServiceInfo() core.ServiceInfo {
-	return core.ServiceInfo{
+func (p *cinderPlugin) ServiceInfo() limes.ServiceInfo {
+	return limes.ServiceInfo{
 		Type:        "volumev2",
 		ProductName: "cinder",
 		Area:        "storage",
@@ -71,7 +72,7 @@ func (p *cinderPlugin) ServiceInfo() core.ServiceInfo {
 }
 
 //Resources implements the core.QuotaPlugin interface.
-func (p *cinderPlugin) Resources() []core.ResourceInfo {
+func (p *cinderPlugin) Resources() []limes.ResourceInfo {
 	return cinderResources
 }
 
@@ -123,9 +124,9 @@ func (p *cinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 					"id":     volume.ID,
 					"name":   volume.Name,
 					"status": volume.Status,
-					"size": core.ValueWithUnit{
+					"size": limes.ValueWithUnit{
 						Value: uint64(volume.Size),
-						Unit:  core.UnitGibibytes,
+						Unit:  limes.UnitGibibytes,
 					},
 				})
 			}

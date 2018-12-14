@@ -33,6 +33,7 @@ import (
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/retry"
+	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 )
 
@@ -118,7 +119,7 @@ type EventParams struct {
 	ResourceName string
 	OldQuota     uint64
 	NewQuota     uint64
-	QuotaUnit    core.Unit
+	QuotaUnit    limes.Unit
 	RejectReason string
 }
 
@@ -185,7 +186,7 @@ func (p EventParams) newEvent() CADFEvent {
 type attachmentContent struct {
 	OldQuota     uint64
 	NewQuota     uint64
-	Unit         core.Unit
+	Unit         limes.Unit
 	RejectReason string
 }
 
@@ -193,10 +194,10 @@ type attachmentContent struct {
 func (a attachmentContent) MarshalJSON() ([]byte, error) {
 	//copy data into a struct that does not have a custom MarshalJSON
 	data := struct {
-		OldQuota     uint64    `json:"oldQuota,omitempty"`
-		NewQuota     uint64    `json:"newQuota,omitempty"`
-		Unit         core.Unit `json:"unit,omitempty"`
-		RejectReason string    `json:"rejectReason,omitempty"`
+		OldQuota     uint64     `json:"oldQuota,omitempty"`
+		NewQuota     uint64     `json:"newQuota,omitempty"`
+		Unit         limes.Unit `json:"unit,omitempty"`
+		RejectReason string     `json:"rejectReason,omitempty"`
 	}{
 		OldQuota:     a.OldQuota,
 		NewQuota:     a.NewQuota,

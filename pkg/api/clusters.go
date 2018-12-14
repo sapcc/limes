@@ -29,6 +29,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/sapcc/go-bits/respondwith"
+	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/reports"
@@ -228,13 +229,13 @@ func writeClusterResource(tx *gorp.Transaction, cluster *core.Cluster, srv Servi
 	//convert to target unit if required
 	var newCapacity uint64
 	if res.Capacity >= 0 {
-		inputUnit := core.UnitUnspecified
+		inputUnit := limes.UnitUnspecified
 		if res.Unit != nil {
 			inputUnit = *res.Unit
 		}
 		//int64->uint64 is safe here because `res.Capacity >= 0` has already been established
-		inputValue := core.ValueWithUnit{Value: uint64(res.Capacity), Unit: inputUnit}
-		newCapacity, err = inputValue.ConvertFor(cluster, srv.Type, res.Name)
+		inputValue := limes.ValueWithUnit{Value: uint64(res.Capacity), Unit: inputUnit}
+		newCapacity, err = core.ConvertUnitFor(cluster, srv.Type, res.Name, inputValue)
 		if err != nil {
 			return err.Error(), nil
 		}

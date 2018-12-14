@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	th "github.com/gophercloud/gophercloud/testhelper"
-	"github.com/sapcc/limes/pkg/core"
+	"github.com/sapcc/limes"
 )
 
 var domainServicesMockJSON = `
@@ -53,7 +53,7 @@ var domainResourcesMockJSON = `
 
 var domainMockResources = &DomainResources{
 	"cores": &DomainResource{
-		ResourceInfo: core.ResourceInfo{
+		ResourceInfo: limes.ResourceInfo{
 			Name: "cores",
 		},
 		DomainQuota:   50,
@@ -61,9 +61,9 @@ var domainMockResources = &DomainResources{
 		Usage:         10,
 	},
 	"ram": &DomainResource{
-		ResourceInfo: core.ResourceInfo{
+		ResourceInfo: limes.ResourceInfo{
 			Name: "ram",
-			Unit: core.UnitMebibytes,
+			Unit: limes.UnitMebibytes,
 		},
 		DomainQuota:   20480,
 		ProjectsQuota: 10240,
@@ -73,7 +73,7 @@ var domainMockResources = &DomainResources{
 
 var domainMockServices = &DomainServices{
 	"compute": &DomainService{
-		ServiceInfo: core.ServiceInfo{
+		ServiceInfo: limes.ServiceInfo{
 			Type: "compute",
 			Area: "compute",
 		},

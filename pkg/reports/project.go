@@ -52,7 +52,7 @@ type ProjectBurstingInfo struct {
 //ProjectService is a substructure of Project containing data for
 //a single backend service.
 type ProjectService struct {
-	core.ServiceInfo
+	limes.ServiceInfo
 	Resources ProjectResources `json:"resources,keepempty"`
 	ScrapedAt *int64           `json:"scraped_at,omitempty"`
 }
@@ -61,7 +61,7 @@ type ProjectService struct {
 //a single resource.
 type ProjectResource struct {
 	//Several fields are pointers to values to enable precise control over which fields are rendered in output.
-	core.ResourceInfo
+	limes.ResourceInfo
 	Quota        uint64                `json:"quota,keepempty"`
 	Usage        uint64                `json:"usage,keepempty"`
 	BurstUsage   uint64                `json:"burst_usage,omitempty"`

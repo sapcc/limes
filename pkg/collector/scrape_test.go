@@ -31,6 +31,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/test"
@@ -294,15 +295,15 @@ func (p *autoApprovalTestPlugin) Init(provider *gophercloud.ProviderClient, eo g
 	return nil
 }
 
-func (p *autoApprovalTestPlugin) ServiceInfo() core.ServiceInfo {
-	return core.ServiceInfo{
+func (p *autoApprovalTestPlugin) ServiceInfo() limes.ServiceInfo {
+	return limes.ServiceInfo{
 		Type: "autoapprovaltest",
 	}
 }
 
-func (p *autoApprovalTestPlugin) Resources() []core.ResourceInfo {
+func (p *autoApprovalTestPlugin) Resources() []limes.ResourceInfo {
 	//one resource can auto-approve, one cannot because BackendQuota != AutoApproveInitialQuota
-	return []core.ResourceInfo{
+	return []limes.ResourceInfo{
 		{
 			Name:                    "approve",
 			AutoApproveInitialQuota: p.StaticBackendQuota,

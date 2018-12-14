@@ -22,6 +22,7 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
 )
@@ -41,7 +42,7 @@ type OvercommittedDomainQuota struct {
 	Domain        DomainData `json:"domain,keepempty"`
 	Service       string     `json:"service,keepempty"`
 	Resource      string     `json:"resource,keepempty"`
-	Unit          core.Unit  `json:"unit,omitempty"`
+	Unit          limes.Unit `json:"unit,omitempty"`
 	DomainQuota   uint64     `json:"domain_quota,keepempty"`
 	ProjectsQuota uint64     `json:"projects_quota,keepempty"`
 }
@@ -52,7 +53,7 @@ type OverspentProjectQuota struct {
 	Project  ProjectData `json:"project,keepempty"`
 	Service  string      `json:"service,keepempty"`
 	Resource string      `json:"resource,keepempty"`
-	Unit     core.Unit   `json:"unit,omitempty"`
+	Unit     limes.Unit  `json:"unit,omitempty"`
 	Quota    uint64      `json:"quota,keepempty"`
 	Usage    uint64      `json:"usage,keepempty"`
 }
@@ -63,7 +64,7 @@ type MismatchProjectQuota struct {
 	Project      ProjectData `json:"project,keepempty"`
 	Service      string      `json:"service,keepempty"`
 	Resource     string      `json:"resource,keepempty"`
-	Unit         core.Unit   `json:"unit,omitempty"`
+	Unit         limes.Unit  `json:"unit,omitempty"`
 	Quota        uint64      `json:"quota,keepempty"`
 	BackendQuota int64       `json:"backend_quota,keepempty"`
 }

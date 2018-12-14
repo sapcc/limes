@@ -25,6 +25,7 @@ import (
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/limes"
 )
 
 //Cluster contains all configuration and runtime information about a single
@@ -253,26 +254,26 @@ func (c *Cluster) HasResource(serviceType, resourceName string) bool {
 //plugin the ResourceInfo for the given resourceName. If the service or
 //resource does not exist, an empty ResourceInfo (with .Unit == UnitNone and
 //.Category == "") is returned.
-func (c *Cluster) InfoForResource(serviceType, resourceName string) ResourceInfo {
+func (c *Cluster) InfoForResource(serviceType, resourceName string) limes.ResourceInfo {
 	plugin := c.QuotaPlugins[serviceType]
 	if plugin == nil {
-		return ResourceInfo{Name: resourceName, Unit: UnitNone}
+		return limes.ResourceInfo{Name: resourceName, Unit: limes.UnitNone}
 	}
 	for _, res := range plugin.Resources() {
 		if res.Name == resourceName {
 			return res
 		}
 	}
-	return ResourceInfo{Name: resourceName, Unit: UnitNone}
+	return limes.ResourceInfo{Name: resourceName, Unit: limes.UnitNone}
 }
 
 //InfoForService finds the plugin for the given serviceType and returns its
 //ServiceInfo(), or an empty ServiceInfo (with .Area == "") when no such
 //service exists in this cluster.
-func (c *Cluster) InfoForService(serviceType string) ServiceInfo {
+func (c *Cluster) InfoForService(serviceType string) limes.ServiceInfo {
 	plugin := c.QuotaPlugins[serviceType]
 	if plugin == nil {
-		return ServiceInfo{Type: serviceType}
+		return limes.ServiceInfo{Type: serviceType}
 	}
 	return plugin.ServiceInfo()
 }

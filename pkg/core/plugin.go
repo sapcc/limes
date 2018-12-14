@@ -21,6 +21,7 @@ package core
 
 import (
 	"github.com/gophercloud/gophercloud"
+	"github.com/sapcc/limes"
 )
 
 //KeystoneDomain describes the basic attributes of a Keystone domain.
@@ -68,10 +69,10 @@ type QuotaPlugin interface {
 	//Resources().
 	Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error
 	//ServiceInfo returns metadata for this service.
-	ServiceInfo() ServiceInfo
+	ServiceInfo() limes.ServiceInfo
 	//Resources returns metadata for all the resources that this plugin scrapes
 	//from the backend service.
-	Resources() []ResourceInfo
+	Resources() []limes.ResourceInfo
 	//Scrape queries the backend service for the quota and usage data of all
 	//known resources for the given project in the given domain. The string keys
 	//in the result map must be identical to the resource names
@@ -131,38 +132,6 @@ type CapacityPlugin interface {
 	//Prometheus metrics emitted by the plugin (if the plugin does that sort of
 	//thing).
 	Scrape(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]CapacityData, error)
-}
-
-//ResourceInfo contains the metadata for a resource (i.e. some thing for which
-//quota and usage values can be retrieved from a backend service).
-type ResourceInfo struct {
-	Name string `json:"name"`
-	Unit Unit   `json:"unit,omitempty"`
-	//Category is an optional hint that UIs can use to group resources of one
-	//service into subgroups. If it is used, it should be set on all
-	//ResourceInfos reported by the same QuotaPlugin.
-	Category string `json:"category,omitempty"`
-	//If AutoApproveInitialQuota is non-zero, when a new project is scraped for
-	//the first time, a backend quota equal to this value will be approved
-	//automatically (i.e. Quota will be set equal to BackendQuota).
-	AutoApproveInitialQuota uint64 `json:"-"`
-	//If ExternallyManaged is true, quota cannot be set via the API. The quota
-	//value reported by the QuotaPlugin is always authoritative.
-	ExternallyManaged bool `json:"externally_managed,omitempty"`
-}
-
-//ServiceInfo contains the metadata for a backend service.
-type ServiceInfo struct {
-	//Type returns the service type that the backend service for this
-	//plugin implements. This string must be identical to the type string from
-	//the Keystone service catalog.
-	Type string `json:"type"`
-	//ProductName returns the name of the product that is the reference
-	//implementation for this service. For example, ProductName = "nova" for
-	//Type = "compute".
-	ProductName string `json:"-"`
-	//Area is a hint that UIs can use to group similar services.
-	Area string `json:"area"`
 }
 
 //DiscoveryPluginFactory is a function that produces discovery plugins with a

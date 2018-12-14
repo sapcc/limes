@@ -29,6 +29,7 @@ import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/datamodel"
 	"github.com/sapcc/limes/pkg/db"
@@ -195,8 +196,8 @@ func (c *Collector) writeScrapeResult(domainName, domainUUID, projectName, proje
 			newQuota := constraint.ApplyTo(res.Quota)
 			logg.Info("changing %s/%s quota for project %s/%s from %s to %s to satisfy constraint %q",
 				serviceType, res.Name, domainName, projectName,
-				core.ValueWithUnit{Value: res.Quota, Unit: resInfo.Unit},
-				core.ValueWithUnit{Value: newQuota, Unit: resInfo.Unit},
+				limes.ValueWithUnit{Value: res.Quota, Unit: resInfo.Unit},
+				limes.ValueWithUnit{Value: newQuota, Unit: resInfo.Unit},
 				constraint.String(),
 			)
 			res.Quota = newQuota

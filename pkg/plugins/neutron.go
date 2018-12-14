@@ -25,6 +25,7 @@ import (
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
+	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 )
 
@@ -32,81 +33,81 @@ type neutronPlugin struct {
 	cfg core.ServiceConfiguration
 }
 
-var neutronResources = []core.ResourceInfo{
+var neutronResources = []limes.ResourceInfo{
 	////////// SDN resources
 	{
 		Name:     "floating_ips",
-		Unit:     core.UnitNone,
+		Unit:     limes.UnitNone,
 		Category: "networking",
 	},
 	{
 		Name:     "networks",
-		Unit:     core.UnitNone,
+		Unit:     limes.UnitNone,
 		Category: "networking",
 	},
 	{
 		Name:     "ports",
-		Unit:     core.UnitNone,
+		Unit:     limes.UnitNone,
 		Category: "networking",
 	},
 	{
 		Name:     "rbac_policies",
-		Unit:     core.UnitNone,
+		Unit:     limes.UnitNone,
 		Category: "networking",
 	},
 	{
 		Name:     "routers",
-		Unit:     core.UnitNone,
+		Unit:     limes.UnitNone,
 		Category: "networking",
 	},
 	{
 		Name:     "security_group_rules",
-		Unit:     core.UnitNone,
+		Unit:     limes.UnitNone,
 		Category: "networking",
 		//for "default" security group
 		AutoApproveInitialQuota: 4,
 	},
 	{
 		Name:     "security_groups",
-		Unit:     core.UnitNone,
+		Unit:     limes.UnitNone,
 		Category: "networking",
 		//for "default" security group
 		AutoApproveInitialQuota: 1,
 	},
 	{
 		Name:     "subnet_pools",
-		Unit:     core.UnitNone,
+		Unit:     limes.UnitNone,
 		Category: "networking",
 	},
 	{
 		Name:     "subnets",
-		Unit:     core.UnitNone,
+		Unit:     limes.UnitNone,
 		Category: "networking",
 	},
 	////////// LBaaS resources
 	{
 		Name:     "healthmonitors",
-		Unit:     core.UnitNone,
+		Unit:     limes.UnitNone,
 		Category: "loadbalancing",
 	},
 	{
 		Name:     "l7policies",
-		Unit:     core.UnitNone,
+		Unit:     limes.UnitNone,
 		Category: "loadbalancing",
 	},
 	{
 		Name:     "listeners",
-		Unit:     core.UnitNone,
+		Unit:     limes.UnitNone,
 		Category: "loadbalancing",
 	},
 	{
 		Name:     "loadbalancers",
-		Unit:     core.UnitNone,
+		Unit:     limes.UnitNone,
 		Category: "loadbalancing",
 	},
 	{
 		Name:     "pools",
-		Unit:     core.UnitNone,
+		Unit:     limes.UnitNone,
 		Category: "loadbalancing",
 	},
 }
@@ -123,8 +124,8 @@ func (p *neutronPlugin) Init(provider *gophercloud.ProviderClient, eo gopherclou
 }
 
 //ServiceInfo implements the core.QuotaPlugin interface.
-func (p *neutronPlugin) ServiceInfo() core.ServiceInfo {
-	return core.ServiceInfo{
+func (p *neutronPlugin) ServiceInfo() limes.ServiceInfo {
+	return limes.ServiceInfo{
 		Type:        "network",
 		ProductName: "neutron",
 		Area:        "network",
@@ -132,7 +133,7 @@ func (p *neutronPlugin) ServiceInfo() core.ServiceInfo {
 }
 
 //Resources implements the core.QuotaPlugin interface.
-func (p *neutronPlugin) Resources() []core.ResourceInfo {
+func (p *neutronPlugin) Resources() []limes.ResourceInfo {
 	return neutronResources
 }
 

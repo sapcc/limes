@@ -35,6 +35,7 @@ import (
 	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 )
 
@@ -54,7 +55,7 @@ type novaPlugin struct {
 	scrapeInstances bool
 	//computed state
 	hypervisorTypeRules []novaHypervisorTypeRule
-	resources           []core.ResourceInfo
+	resources           []limes.ResourceInfo
 	//caches
 	flavorInfo     map[string]novaFlavorInfo
 	osTypeForImage map[string]string
@@ -65,18 +66,18 @@ type novaFlavorInfo struct {
 	ExtraSpecs map[string]string
 }
 
-var novaDefaultResources = []core.ResourceInfo{
+var novaDefaultResources = []limes.ResourceInfo{
 	{
 		Name: "cores",
-		Unit: core.UnitNone,
+		Unit: limes.UnitNone,
 	},
 	{
 		Name: "instances",
-		Unit: core.UnitNone,
+		Unit: limes.UnitNone,
 	},
 	{
 		Name: "ram",
-		Unit: core.UnitMebibytes,
+		Unit: limes.UnitMebibytes,
 	},
 }
 
@@ -112,10 +113,10 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.E
 		return err
 	}
 	for _, resourceName := range resources {
-		p.resources = append(p.resources, core.ResourceInfo{
+		p.resources = append(p.resources, limes.ResourceInfo{
 			Name:     resourceName,
 			Category: "per_flavor",
-			Unit:     core.UnitNone,
+			Unit:     limes.UnitNone,
 		})
 	}
 	sort.Slice(p.resources, func(i, j int) bool {
@@ -156,8 +157,8 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.E
 }
 
 //ServiceInfo implements the core.QuotaPlugin interface.
-func (p *novaPlugin) ServiceInfo() core.ServiceInfo {
-	return core.ServiceInfo{
+func (p *novaPlugin) ServiceInfo() limes.ServiceInfo {
+	return limes.ServiceInfo{
 		Type:        "compute",
 		ProductName: "nova",
 		Area:        "compute",
@@ -165,7 +166,7 @@ func (p *novaPlugin) ServiceInfo() core.ServiceInfo {
 }
 
 //Resources implements the core.QuotaPlugin interface.
-func (p *novaPlugin) Resources() []core.ResourceInfo {
+func (p *novaPlugin) Resources() []limes.ResourceInfo {
 	return p.resources
 }
 
@@ -260,13 +261,13 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 				if flavor := flavorInfo.Flavor; flavor != nil {
 					subResource["flavor"] = flavor.Name
 					subResource["vcpu"] = flavor.VCPUs
-					subResource["ram"] = core.ValueWithUnit{
+					subResource["ram"] = limes.ValueWithUnit{
 						Value: uint64(flavor.RAM),
-						Unit:  core.UnitMebibytes,
+						Unit:  limes.UnitMebibytes,
 					}
-					subResource["disk"] = core.ValueWithUnit{
+					subResource["disk"] = limes.ValueWithUnit{
 						Value: uint64(flavor.Disk),
-						Unit:  core.UnitGibibytes,
+						Unit:  limes.UnitGibibytes,
 					}
 				}
 

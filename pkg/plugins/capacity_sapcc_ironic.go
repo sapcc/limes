@@ -28,6 +28,7 @@ import (
 	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 )
 
@@ -112,10 +113,10 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 						"name": node.Name,
 					}
 					if node.Properties.MemoryMiB > 0 {
-						sub["ram"] = core.ValueWithUnit{Unit: core.UnitMebibytes, Value: uint64(node.Properties.MemoryMiB)}
+						sub["ram"] = limes.ValueWithUnit{Unit: limes.UnitMebibytes, Value: uint64(node.Properties.MemoryMiB)}
 					}
 					if node.Properties.DiskGiB > 0 {
-						sub["disk"] = core.ValueWithUnit{Unit: core.UnitGibibytes, Value: uint64(node.Properties.DiskGiB)}
+						sub["disk"] = limes.ValueWithUnit{Unit: limes.UnitGibibytes, Value: uint64(node.Properties.DiskGiB)}
 					}
 					if node.Properties.Cores > 0 {
 						sub["cores"] = uint64(node.Properties.Cores)

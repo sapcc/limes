@@ -30,6 +30,7 @@ import (
 
 	policy "github.com/databus23/goslo.policy"
 	"github.com/sapcc/go-bits/assert"
+	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/test"
@@ -58,11 +59,11 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 		Domains: map[string]core.QuotaConstraints{
 			"france": {
 				"shared": {
-					"capacity": {Minimum: p2u64(10), Maximum: p2u64(123), Unit: core.UnitBytes},
+					"capacity": {Minimum: p2u64(10), Maximum: p2u64(123), Unit: limes.UnitBytes},
 					"things":   {Minimum: p2u64(20)},
 				},
 				"unshared": {
-					"capacity": {Maximum: p2u64(20), Unit: core.UnitBytes},
+					"capacity": {Maximum: p2u64(20), Unit: limes.UnitBytes},
 					"things":   {Minimum: p2u64(20), Maximum: p2u64(20)},
 				},
 			},
@@ -72,16 +73,16 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 				"berlin": {
 					//This constraint is used for the happy-path tests, where PUT
 					//succeeds because the requested value fits within the constraint.
-					"shared": {"capacity": {Minimum: p2u64(1), Maximum: p2u64(6), Unit: core.UnitBytes}},
+					"shared": {"capacity": {Minimum: p2u64(1), Maximum: p2u64(6), Unit: limes.UnitBytes}},
 				},
 				"dresden": {
 					//These constraints are used for the failure tests, where PUT fails
 					//because the requested values conflict with the constraint.
 					"shared": {
-						"capacity": {Minimum: p2u64(10), Unit: core.UnitBytes},
+						"capacity": {Minimum: p2u64(10), Unit: limes.UnitBytes},
 					},
 					"unshared": {
-						"capacity": {Minimum: p2u64(10), Maximum: p2u64(10), Unit: core.UnitBytes},
+						"capacity": {Minimum: p2u64(10), Maximum: p2u64(10), Unit: limes.UnitBytes},
 						"things":   {Maximum: p2u64(10)},
 					},
 				},
@@ -761,7 +762,7 @@ func Test_DomainOperations(t *testing.T) {
 					{
 						"type": "shared",
 						"resources": []assert.JSONObject{
-							{"name": "capacity", "quota": 1, "unit": core.UnitMebibytes},
+							{"name": "capacity", "quota": 1, "unit": limes.UnitMebibytes},
 						},
 					},
 				},
@@ -784,7 +785,7 @@ func Test_DomainOperations(t *testing.T) {
 					{
 						"type": "shared",
 						"resources": []assert.JSONObject{
-							{"name": "capacity", "quota": 1 << 20, "unit": core.UnitKibibytes},
+							{"name": "capacity", "quota": 1 << 20, "unit": limes.UnitKibibytes},
 						},
 					},
 				},
@@ -824,7 +825,7 @@ func Test_DomainOperations(t *testing.T) {
 					{
 						"type": "shared",
 						"resources": []assert.JSONObject{
-							{"name": "capacity", "quota": 1 << 20, "unit": core.UnitKibibytes},
+							{"name": "capacity", "quota": 1 << 20, "unit": limes.UnitKibibytes},
 						},
 					},
 				},
@@ -846,7 +847,7 @@ func Test_DomainOperations(t *testing.T) {
 					{
 						"type": "shared",
 						"resources": []assert.JSONObject{
-							{"name": "capacity", "quota": 1, "unit": core.UnitMebibytes},
+							{"name": "capacity", "quota": 1, "unit": limes.UnitMebibytes},
 						},
 					},
 				},
@@ -870,7 +871,7 @@ func Test_DomainOperations(t *testing.T) {
 						"resources": []assert.JSONObject{
 							{"name": "capacity", "quota": 100},
 							//should fail with 422 because of incompatible units
-							{"name": "things", "quota": 1, "unit": core.UnitBytes},
+							{"name": "things", "quota": 1, "unit": limes.UnitBytes},
 						},
 					},
 					{
@@ -1285,7 +1286,7 @@ func Test_ProjectOperations(t *testing.T) {
 						"resources": []assert.JSONObject{
 							{"name": "capacity", "quota": 4},
 							//should fail with 422 because of incompatible units
-							{"name": "things", "quota": 1, "unit": core.UnitBytes},
+							{"name": "things", "quota": 1, "unit": limes.UnitBytes},
 						},
 					},
 					{

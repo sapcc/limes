@@ -26,6 +26,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/util"
@@ -41,7 +42,7 @@ type Domain struct {
 //DomainService is a substructure of Domain containing data for
 //a single backend service.
 type DomainService struct {
-	core.ServiceInfo
+	limes.ServiceInfo
 	Resources    DomainResources `json:"resources,keepempty"`
 	MaxScrapedAt *int64          `json:"max_scraped_at,omitempty"`
 	MinScrapedAt *int64          `json:"min_scraped_at,omitempty"`
@@ -50,7 +51,7 @@ type DomainService struct {
 //DomainResource is a substructure of Domain containing data for
 //a single resource.
 type DomainResource struct {
-	core.ResourceInfo
+	limes.ResourceInfo
 	DomainQuota   uint64 `json:"quota,keepempty"`
 	ProjectsQuota uint64 `json:"projects_quota,keepempty"`
 	Usage         uint64 `json:"usage,keepempty"`

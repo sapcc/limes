@@ -26,6 +26,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/sapcc/limes"
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -47,16 +48,16 @@ type QuotaConstraints map[string]map[string]QuotaConstraint
 type QuotaConstraint struct {
 	Minimum *uint64
 	Maximum *uint64
-	Unit    Unit
+	Unit    limes.Unit
 }
 
 //QuotaValidationError appears in the Limes API in the POST .../simulate-put responses.
 type QuotaValidationError struct {
-	Status       int     `json:"status"` //an HTTP status code, e.g. http.StatusForbidden
-	Message      string  `json:"message"`
-	MinimumValue *uint64 `json:"min_acceptable_quota,omitempty"`
-	MaximumValue *uint64 `json:"max_acceptable_quota,omitempty"`
-	Unit         Unit    `json:"unit,omitempty"`
+	Status       int        `json:"status"` //an HTTP status code, e.g. http.StatusForbidden
+	Message      string     `json:"message"`
+	MinimumValue *uint64    `json:"min_acceptable_quota,omitempty"`
+	MaximumValue *uint64    `json:"max_acceptable_quota,omitempty"`
+	Unit         limes.Unit `json:"unit,omitempty"`
 }
 
 //Validate checks if the given quota value satisfies this constraint, or
@@ -68,7 +69,7 @@ func (c QuotaConstraint) Validate(value uint64) *QuotaValidationError {
 	return &QuotaValidationError{
 		Status: http.StatusConflict,
 		Message: fmt.Sprintf("requested value %q contradicts constraint %q",
-			ValueWithUnit{Value: value, Unit: c.Unit}, c.String(),
+			limes.ValueWithUnit{Value: value, Unit: c.Unit}, c.String(),
 		),
 		MinimumValue: c.Minimum,
 		MaximumValue: c.Maximum,
@@ -96,14 +97,14 @@ func (c QuotaConstraint) String() string {
 
 	if c.Minimum != nil {
 		if c.Maximum != nil && *c.Maximum == *c.Minimum {
-			parts = append(parts, "exactly "+ValueWithUnit{*c.Minimum, c.Unit}.String())
+			parts = append(parts, "exactly "+limes.ValueWithUnit{Value: *c.Minimum, Unit: c.Unit}.String())
 			hasExactly = true
 		} else {
-			parts = append(parts, "at least "+ValueWithUnit{*c.Minimum, c.Unit}.String())
+			parts = append(parts, "at least "+limes.ValueWithUnit{Value: *c.Minimum, Unit: c.Unit}.String())
 		}
 	}
 	if c.Maximum != nil && !hasExactly {
-		parts = append(parts, "at most "+ValueWithUnit{*c.Maximum, c.Unit}.String())
+		parts = append(parts, "at most "+limes.ValueWithUnit{Value: *c.Maximum, Unit: c.Unit}.String())
 	}
 	return strings.Join(parts, ", ")
 }
@@ -253,7 +254,7 @@ var atLeastMoreRx = regexp.MustCompile(`^at\s+least\s+(.+)\s+more\s+than\s+proje
 
 //When parsing a constraint for a project, `projectMinimumsSum` will be nil.
 //When parsing a constraint for a domain, `projectMinimumsSum` will be non-nil.
-func parseQuotaConstraint(resource ResourceInfo, str string, projectMinimumsSum *uint64) (*QuotaConstraint, error) {
+func parseQuotaConstraint(resource limes.ResourceInfo, str string, projectMinimumsSum *uint64) (*QuotaConstraint, error) {
 	var lowerBounds []uint64
 	var upperBounds []uint64
 
@@ -311,8 +312,8 @@ func parseQuotaConstraint(resource ResourceInfo, str string, projectMinimumsSum 
 	if result.Minimum != nil && result.Maximum != nil && *result.Maximum < *result.Minimum {
 		return nil, fmt.Errorf(
 			"constraint clauses cannot simultaneously be satisfied (at least %s, but at most %s)",
-			ValueWithUnit{Unit: resource.Unit, Value: *result.Minimum},
-			ValueWithUnit{Unit: resource.Unit, Value: *result.Maximum},
+			limes.ValueWithUnit{Unit: resource.Unit, Value: *result.Minimum},
+			limes.ValueWithUnit{Unit: resource.Unit, Value: *result.Maximum},
 		)
 	}
 
@@ -375,9 +376,9 @@ func validateQuotaConstraints(cluster *Cluster, domainConstraints QuotaConstrain
 				unit := cluster.InfoForResource(serviceType, resourceName).Unit
 				errors = append(errors, fmt.Errorf(
 					`sum of "at least/exactly" project quotas (%s) for %s/%s exceeds "at least/exactly" domain quota (%s)`,
-					ValueWithUnit{minProjectQuota, unit},
+					limes.ValueWithUnit{Value: minProjectQuota, Unit: unit},
 					serviceType, resourceName,
-					ValueWithUnit{minDomainQuota, unit},
+					limes.ValueWithUnit{Value: minDomainQuota, Unit: unit},
 				))
 			}
 		}

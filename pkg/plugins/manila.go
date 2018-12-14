@@ -27,6 +27,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/sharedfilesystems/v2/sharenetworks"
 	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 )
 
@@ -34,26 +35,26 @@ type manilaPlugin struct {
 	cfg core.ServiceConfiguration
 }
 
-var manilaResources = []core.ResourceInfo{
+var manilaResources = []limes.ResourceInfo{
 	{
 		Name: "share_networks",
-		Unit: core.UnitNone,
+		Unit: limes.UnitNone,
 	},
 	{
 		Name: "share_capacity",
-		Unit: core.UnitGibibytes,
+		Unit: limes.UnitGibibytes,
 	},
 	{
 		Name: "shares",
-		Unit: core.UnitNone,
+		Unit: limes.UnitNone,
 	},
 	{
 		Name: "snapshot_capacity",
-		Unit: core.UnitGibibytes,
+		Unit: limes.UnitGibibytes,
 	},
 	{
 		Name: "share_snapshots",
-		Unit: core.UnitNone,
+		Unit: limes.UnitNone,
 	},
 }
 
@@ -69,8 +70,8 @@ func (p *manilaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud
 }
 
 //ServiceInfo implements the core.QuotaPlugin interface.
-func (p *manilaPlugin) ServiceInfo() core.ServiceInfo {
-	return core.ServiceInfo{
+func (p *manilaPlugin) ServiceInfo() limes.ServiceInfo {
+	return limes.ServiceInfo{
 		Type:        "sharev2",
 		ProductName: "manila",
 		Area:        "storage",
@@ -78,7 +79,7 @@ func (p *manilaPlugin) ServiceInfo() core.ServiceInfo {
 }
 
 //Resources implements the core.QuotaPlugin interface.
-func (p *manilaPlugin) Resources() []core.ResourceInfo {
+func (p *manilaPlugin) Resources() []limes.ResourceInfo {
 	return manilaResources
 }
 

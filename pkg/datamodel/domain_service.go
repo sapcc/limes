@@ -23,6 +23,7 @@ import (
 	"sort"
 
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
 	gorp "gopkg.in/gorp.v2"
@@ -113,8 +114,8 @@ func checkDomainServiceConstraints(tx *gorp.Transaction, cluster *core.Cluster, 
 			resInfo := cluster.InfoForResource(srv.Type, res.Name)
 			logg.Info("changing %s/%s quota for domain %s from %s to %s to satisfy constraint %q",
 				srv.Type, res.Name, domain.Name,
-				core.ValueWithUnit{Value: res.Quota, Unit: resInfo.Unit},
-				core.ValueWithUnit{Value: newQuota, Unit: resInfo.Unit},
+				limes.ValueWithUnit{Value: res.Quota, Unit: resInfo.Unit},
+				limes.ValueWithUnit{Value: newQuota, Unit: resInfo.Unit},
 				constraint.String(),
 			)
 
@@ -163,7 +164,7 @@ func createMissingDomainResources(tx *gorp.Transaction, cluster *core.Cluster, d
 		newQuota := *constraint.Minimum
 		logg.Info("initializing %s/%s quota for domain %s to %s to satisfy constraint %q",
 			srv.Type, resourceName, domain.Name,
-			core.ValueWithUnit{Value: newQuota, Unit: resInfo.Unit},
+			limes.ValueWithUnit{Value: newQuota, Unit: resInfo.Unit},
 			constraint.String(),
 		)
 

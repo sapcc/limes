@@ -25,6 +25,7 @@ import (
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 )
 
@@ -47,8 +48,8 @@ func (p *cfmPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.En
 }
 
 //ServiceInfo implements the core.QuotaPlugin interface.
-func (p *cfmPlugin) ServiceInfo() core.ServiceInfo {
-	return core.ServiceInfo{
+func (p *cfmPlugin) ServiceInfo() limes.ServiceInfo {
+	return limes.ServiceInfo{
 		Type:        "database",
 		ProductName: "cfm",
 		Area:        "storage",
@@ -56,10 +57,10 @@ func (p *cfmPlugin) ServiceInfo() core.ServiceInfo {
 }
 
 //Resources implements the core.QuotaPlugin interface.
-func (p *cfmPlugin) Resources() []core.ResourceInfo {
-	return []core.ResourceInfo{{
+func (p *cfmPlugin) Resources() []limes.ResourceInfo {
+	return []limes.ResourceInfo{{
 		Name: "cfm_share_capacity",
-		Unit: core.UnitBytes,
+		Unit: limes.UnitBytes,
 		//need explicit permission to set quota for this service
 		ExternallyManaged: !p.cfg.CFM.Authoritative,
 	}}

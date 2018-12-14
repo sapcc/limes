@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	"github.com/gophercloud/gophercloud"
+	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 )
 
@@ -39,14 +40,14 @@ type Plugin struct {
 	WithExternallyManagedResource bool
 }
 
-var resources = []core.ResourceInfo{
+var resources = []limes.ResourceInfo{
 	{
 		Name: "capacity",
-		Unit: core.UnitBytes,
+		Unit: limes.UnitBytes,
 	},
 	{
 		Name: "things",
-		Unit: core.UnitNone,
+		Unit: limes.UnitNone,
 	},
 }
 
@@ -77,20 +78,20 @@ func (p *Plugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.Endpo
 }
 
 //ServiceInfo implements the core.QuotaPlugin interface.
-func (p *Plugin) ServiceInfo() core.ServiceInfo {
-	return core.ServiceInfo{
+func (p *Plugin) ServiceInfo() limes.ServiceInfo {
+	return limes.ServiceInfo{
 		Type: p.StaticServiceType,
 		Area: p.StaticServiceType,
 	}
 }
 
 //Resources implements the core.QuotaPlugin interface.
-func (p *Plugin) Resources() []core.ResourceInfo {
+func (p *Plugin) Resources() []limes.ResourceInfo {
 	result := resources
 	if p.WithExternallyManagedResource {
-		result = append(result, core.ResourceInfo{
+		result = append(result, limes.ResourceInfo{
 			Name:              "external_things",
-			Unit:              core.UnitNone,
+			Unit:              limes.UnitNone,
 			ExternallyManaged: true,
 		})
 	}

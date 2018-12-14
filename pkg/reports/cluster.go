@@ -44,7 +44,7 @@ type Cluster struct {
 //ClusterService is a substructure of Cluster containing data for
 //a single backend service.
 type ClusterService struct {
-	core.ServiceInfo
+	limes.ServiceInfo
 	Shared       bool             `json:"shared,omitempty"`
 	Resources    ClusterResources `json:"resources,keepempty"`
 	MaxScrapedAt *int64           `json:"max_scraped_at,omitempty"`
@@ -54,7 +54,7 @@ type ClusterService struct {
 //ClusterResource is a substructure of Cluster containing data for
 //a single resource.
 type ClusterResource struct {
-	core.ResourceInfo
+	limes.ResourceInfo
 	Capacity      *uint64          `json:"capacity,omitempty"`
 	RawCapacity   *uint64          `json:"raw_capacity,omitempty"`
 	Comment       string           `json:"comment,omitempty"`

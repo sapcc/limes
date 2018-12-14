@@ -24,6 +24,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/dns/v2/zones"
 	"github.com/gophercloud/gophercloud/pagination"
+	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 )
 
@@ -31,15 +32,15 @@ type designatePlugin struct {
 	cfg core.ServiceConfiguration
 }
 
-var designateResources = []core.ResourceInfo{
+var designateResources = []limes.ResourceInfo{
 	{
 		Name: "zones",
-		Unit: core.UnitNone,
+		Unit: limes.UnitNone,
 	},
 	{
 		//this quota means "recordsets per zone", not "recordsets per project"!
 		Name: "recordsets",
-		Unit: core.UnitNone,
+		Unit: limes.UnitNone,
 	},
 }
 
@@ -55,8 +56,8 @@ func (p *designatePlugin) Init(provider *gophercloud.ProviderClient, eo gophercl
 }
 
 //ServiceInfo implements the core.QuotaPlugin interface.
-func (p *designatePlugin) ServiceInfo() core.ServiceInfo {
-	return core.ServiceInfo{
+func (p *designatePlugin) ServiceInfo() limes.ServiceInfo {
+	return limes.ServiceInfo{
 		Type:        "dns",
 		ProductName: "designate",
 		Area:        "dns",
@@ -64,7 +65,7 @@ func (p *designatePlugin) ServiceInfo() core.ServiceInfo {
 }
 
 //Resources implements the core.QuotaPlugin interface.
-func (p *designatePlugin) Resources() []core.ResourceInfo {
+func (p *designatePlugin) Resources() []limes.ResourceInfo {
 	return designateResources
 }
 

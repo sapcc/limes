@@ -28,6 +28,7 @@ import (
 
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/respondwith"
+	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/audit"
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
@@ -55,7 +56,7 @@ type QuotaUpdater struct {
 type QuotaRequest struct {
 	OldValue        uint64
 	NewValue        uint64
-	Unit            core.Unit
+	Unit            limes.Unit
 	ValidationError *core.QuotaValidationError
 }
 
@@ -139,7 +140,7 @@ func (u *QuotaUpdater) ValidateInput(input ServiceQuotas, dbi db.Interface) erro
 			if !exists {
 				continue
 			}
-			req.NewValue, err = newQuota.ConvertFor(u.Cluster, srv.Type, res.Name)
+			req.NewValue, err = core.ConvertUnitFor(u.Cluster, srv.Type, res.Name, newQuota)
 			if err != nil {
 				req.ValidationError = &core.QuotaValidationError{
 					Status:  http.StatusUnprocessableEntity,
@@ -161,7 +162,7 @@ func (u *QuotaUpdater) ValidateInput(input ServiceQuotas, dbi db.Interface) erro
 	return nil
 }
 
-func (u QuotaUpdater) validateQuota(srv core.ServiceInfo, res core.ResourceInfo, domRes reports.DomainResource, projRes *reports.ProjectResource, newQuota uint64) *core.QuotaValidationError {
+func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limes.ResourceInfo, domRes reports.DomainResource, projRes *reports.ProjectResource, newQuota uint64) *core.QuotaValidationError {
 	//can we change this quota at all?
 	if res.ExternallyManaged {
 		return &core.QuotaValidationError{
@@ -206,7 +207,7 @@ func (u QuotaUpdater) validateQuota(srv core.ServiceInfo, res core.ResourceInfo,
 	return u.validateProjectQuota(domRes, *projRes, newQuota)
 }
 
-func (u QuotaUpdater) validateAuthorization(oldQuota, newQuota, lprLimit uint64, unit core.Unit) *core.QuotaValidationError {
+func (u QuotaUpdater) validateAuthorization(oldQuota, newQuota, lprLimit uint64, unit limes.Unit) *core.QuotaValidationError {
 	if oldQuota >= newQuota {
 		if u.CanLower {
 			return nil
@@ -362,11 +363,11 @@ func (u QuotaUpdater) WritePutErrorResponse(w http.ResponseWriter) {
 				var notes []string
 				if err.MinimumValue != nil {
 					notes = append(notes, fmt.Sprintf("minimum acceptable %s quota is %v",
-						u.ScopeType(), core.ValueWithUnit{Value: *err.MinimumValue, Unit: err.Unit}))
+						u.ScopeType(), limes.ValueWithUnit{Value: *err.MinimumValue, Unit: err.Unit}))
 				}
 				if err.MaximumValue != nil {
 					notes = append(notes, fmt.Sprintf("maximum acceptable %s quota is %v",
-						u.ScopeType(), core.ValueWithUnit{Value: *err.MaximumValue, Unit: err.Unit}))
+						u.ScopeType(), limes.ValueWithUnit{Value: *err.MaximumValue, Unit: err.Unit}))
 				}
 				if len(notes) > 0 {
 					line += fmt.Sprintf(" (%s)", strings.Join(notes, ", "))
