@@ -27,42 +27,42 @@ import (
 	"github.com/majewsky/schwift"
 	"github.com/majewsky/schwift/gopherschwift"
 	"github.com/sapcc/go-bits/logg"
-	"github.com/sapcc/limes/pkg/limes"
+	"github.com/sapcc/limes/pkg/core"
 )
 
 type swiftPlugin struct {
-	cfg limes.ServiceConfiguration
+	cfg core.ServiceConfiguration
 }
 
-var swiftResources = []limes.ResourceInfo{
+var swiftResources = []core.ResourceInfo{
 	{
 		Name: "capacity",
-		Unit: limes.UnitBytes,
+		Unit: core.UnitBytes,
 	},
 }
 
 func init() {
-	limes.RegisterQuotaPlugin(func(c limes.ServiceConfiguration, scrapeSubresources map[string]bool) limes.QuotaPlugin {
+	core.RegisterQuotaPlugin(func(c core.ServiceConfiguration, scrapeSubresources map[string]bool) core.QuotaPlugin {
 		return &swiftPlugin{c}
 	})
 }
 
-//Init implements the limes.QuotaPlugin interface.
+//Init implements the core.QuotaPlugin interface.
 func (p *swiftPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
 	return nil
 }
 
-//ServiceInfo implements the limes.QuotaPlugin interface.
-func (p *swiftPlugin) ServiceInfo() limes.ServiceInfo {
-	return limes.ServiceInfo{
+//ServiceInfo implements the core.QuotaPlugin interface.
+func (p *swiftPlugin) ServiceInfo() core.ServiceInfo {
+	return core.ServiceInfo{
 		Type:        "object-store",
 		ProductName: "swift",
 		Area:        "storage",
 	}
 }
 
-//Resources implements the limes.QuotaPlugin interface.
-func (p *swiftPlugin) Resources() []limes.ResourceInfo {
+//Resources implements the core.QuotaPlugin interface.
+func (p *swiftPlugin) Resources() []core.ResourceInfo {
 	return swiftResources
 }
 
@@ -79,8 +79,8 @@ func (p *swiftPlugin) Account(provider *gophercloud.ProviderClient, eo gopherclo
 	return resellerAccount.SwitchAccount("AUTH_" + projectUUID), nil
 }
 
-//Scrape implements the limes.QuotaPlugin interface.
-func (p *swiftPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
+//Scrape implements the core.QuotaPlugin interface.
+func (p *swiftPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, error) {
 	account, err := p.Account(provider, eo, projectUUID)
 	if err != nil {
 		return nil, err
@@ -89,7 +89,7 @@ func (p *swiftPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclou
 	headers, err := account.Headers()
 	if schwift.Is(err, http.StatusNotFound) || schwift.Is(err, http.StatusGone) {
 		//Swift account does not exist or was deleted and not yet reaped, but the keystone project exist
-		return map[string]limes.ResourceData{
+		return map[string]core.ResourceData{
 			"capacity": {
 				Quota: 0,
 				Usage: 0,
@@ -99,17 +99,17 @@ func (p *swiftPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclou
 		return nil, err
 	}
 
-	data := limes.ResourceData{
+	data := core.ResourceData{
 		Usage: headers.BytesUsed().Get(),
 		Quota: int64(headers.BytesUsedQuota().Get()),
 	}
 	if !headers.BytesUsedQuota().Exists() {
 		data.Quota = -1
 	}
-	return map[string]limes.ResourceData{"capacity": data}, nil
+	return map[string]core.ResourceData{"capacity": data}, nil
 }
 
-//SetQuota implements the limes.QuotaPlugin interface.
+//SetQuota implements the core.QuotaPlugin interface.
 func (p *swiftPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
 	account, err := p.Account(provider, eo, projectUUID)
 	if err != nil {

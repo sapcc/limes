@@ -29,9 +29,9 @@ import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/datamodel"
 	"github.com/sapcc/limes/pkg/db"
-	"github.com/sapcc/limes/pkg/limes"
 )
 
 //how long to sleep after a scraping error, or when nothing needed scraping
@@ -157,14 +157,14 @@ func (c *Collector) Scrape() {
 	}
 }
 
-func (c *Collector) writeScrapeResult(domainName, domainUUID, projectName, projectUUID string, projectID int64, serviceType string, serviceID int64, resourceData map[string]limes.ResourceData, scrapedAt time.Time) error {
+func (c *Collector) writeScrapeResult(domainName, domainUUID, projectName, projectUUID string, projectID int64, serviceType string, serviceID int64, resourceData map[string]core.ResourceData, scrapedAt time.Time) error {
 	tx, err := db.DB.Begin()
 	if err != nil {
 		return err
 	}
 	defer db.RollbackUnlessCommitted(tx)
 
-	var serviceConstraints map[string]limes.QuotaConstraint
+	var serviceConstraints map[string]core.QuotaConstraint
 	if c.Cluster.QuotaConstraints != nil {
 		serviceConstraints = c.Cluster.QuotaConstraints.Projects[domainName][projectName][serviceType]
 	}
@@ -195,8 +195,8 @@ func (c *Collector) writeScrapeResult(domainName, domainUUID, projectName, proje
 			newQuota := constraint.ApplyTo(res.Quota)
 			logg.Info("changing %s/%s quota for project %s/%s from %s to %s to satisfy constraint %q",
 				serviceType, res.Name, domainName, projectName,
-				limes.ValueWithUnit{Value: res.Quota, Unit: resInfo.Unit},
-				limes.ValueWithUnit{Value: newQuota, Unit: resInfo.Unit},
+				core.ValueWithUnit{Value: res.Quota, Unit: resInfo.Unit},
+				core.ValueWithUnit{Value: newQuota, Unit: resInfo.Unit},
 				constraint.String(),
 			)
 			res.Quota = newQuota
@@ -350,7 +350,7 @@ func (c *Collector) writeDummyResources(domainName, projectName, serviceType str
 	}
 	defer db.RollbackUnlessCommitted(tx)
 
-	var serviceConstraints map[string]limes.QuotaConstraint
+	var serviceConstraints map[string]core.QuotaConstraint
 	if c.Cluster.QuotaConstraints != nil {
 		serviceConstraints = c.Cluster.QuotaConstraints.Projects[domainName][projectName][serviceType]
 	}

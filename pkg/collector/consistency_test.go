@@ -23,8 +23,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
-	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/test"
 )
 
@@ -53,8 +53,8 @@ func Test_Consistency(t *testing.T) {
 	test.AssertDBContent(t, "fixtures/checkconsistency0.sql")
 
 	//add some quota constraints
-	cluster.QuotaConstraints = &limes.QuotaConstraintSet{
-		Domains: map[string]limes.QuotaConstraints{
+	cluster.QuotaConstraints = &core.QuotaConstraintSet{
+		Domains: map[string]core.QuotaConstraints{
 			"germany": {
 				"unshared": {
 					"capacity": {Minimum: p2u64(10)},
@@ -64,7 +64,7 @@ func Test_Consistency(t *testing.T) {
 				},
 			},
 		},
-		Projects: map[string]map[string]limes.QuotaConstraints{
+		Projects: map[string]map[string]core.QuotaConstraints{
 			"germany": {
 				"berlin": {
 					"unshared": {

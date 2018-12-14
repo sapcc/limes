@@ -30,18 +30,18 @@ import (
 
 	policy "github.com/databus23/goslo.policy"
 	"github.com/sapcc/go-bits/assert"
+	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
-	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/test"
 )
 
 func init() {
-	//This is required for limes.GetServiceTypesForArea() to work.
-	limes.RegisterQuotaPlugin(test.NewPluginFactory("shared"))
-	limes.RegisterQuotaPlugin(test.NewPluginFactory("unshared"))
+	//This is required for core.GetServiceTypesForArea() to work.
+	core.RegisterQuotaPlugin(test.NewPluginFactory("shared"))
+	core.RegisterQuotaPlugin(test.NewPluginFactory("unshared"))
 }
 
-func setupTest(t *testing.T, clusterName, startData string) (*limes.Cluster, http.Handler, *TestPolicyEnforcer) {
+func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http.Handler, *TestPolicyEnforcer) {
 	//load test database
 	t.Helper()
 	test.InitDatabase(t)
@@ -50,38 +50,38 @@ func setupTest(t *testing.T, clusterName, startData string) (*limes.Cluster, htt
 	//prepare test configuration
 	serviceTypes := []string{"shared", "unshared"}
 	isServiceShared := map[string]bool{"shared": true}
-	quotaPlugins := map[string]limes.QuotaPlugin{
+	quotaPlugins := map[string]core.QuotaPlugin{
 		"shared":   test.NewPlugin("shared"),
 		"unshared": test.NewPlugin("unshared"),
 	}
-	westConstraintSet := limes.QuotaConstraintSet{
-		Domains: map[string]limes.QuotaConstraints{
+	westConstraintSet := core.QuotaConstraintSet{
+		Domains: map[string]core.QuotaConstraints{
 			"france": {
 				"shared": {
-					"capacity": {Minimum: p2u64(10), Maximum: p2u64(123), Unit: limes.UnitBytes},
+					"capacity": {Minimum: p2u64(10), Maximum: p2u64(123), Unit: core.UnitBytes},
 					"things":   {Minimum: p2u64(20)},
 				},
 				"unshared": {
-					"capacity": {Maximum: p2u64(20), Unit: limes.UnitBytes},
+					"capacity": {Maximum: p2u64(20), Unit: core.UnitBytes},
 					"things":   {Minimum: p2u64(20), Maximum: p2u64(20)},
 				},
 			},
 		},
-		Projects: map[string]map[string]limes.QuotaConstraints{
+		Projects: map[string]map[string]core.QuotaConstraints{
 			"germany": {
 				"berlin": {
 					//This constraint is used for the happy-path tests, where PUT
 					//succeeds because the requested value fits within the constraint.
-					"shared": {"capacity": {Minimum: p2u64(1), Maximum: p2u64(6), Unit: limes.UnitBytes}},
+					"shared": {"capacity": {Minimum: p2u64(1), Maximum: p2u64(6), Unit: core.UnitBytes}},
 				},
 				"dresden": {
 					//These constraints are used for the failure tests, where PUT fails
 					//because the requested values conflict with the constraint.
 					"shared": {
-						"capacity": {Minimum: p2u64(10), Unit: limes.UnitBytes},
+						"capacity": {Minimum: p2u64(10), Unit: core.UnitBytes},
 					},
 					"unshared": {
-						"capacity": {Minimum: p2u64(10), Maximum: p2u64(10), Unit: limes.UnitBytes},
+						"capacity": {Minimum: p2u64(10), Maximum: p2u64(10), Unit: core.UnitBytes},
 						"things":   {Maximum: p2u64(10)},
 					},
 				},
@@ -91,16 +91,16 @@ func setupTest(t *testing.T, clusterName, startData string) (*limes.Cluster, htt
 
 	quotaPlugins["shared"].(*test.Plugin).WithExternallyManagedResource = true
 
-	config := limes.Configuration{
-		Clusters: map[string]*limes.Cluster{
+	config := core.Configuration{
+		Clusters: map[string]*core.Cluster{
 			"west": {
 				ID:               "west",
 				ServiceTypes:     serviceTypes,
 				IsServiceShared:  isServiceShared,
 				DiscoveryPlugin:  test.NewDiscoveryPlugin(),
 				QuotaPlugins:     quotaPlugins,
-				CapacityPlugins:  map[string]limes.CapacityPlugin{},
-				Config:           &limes.ClusterConfiguration{Auth: &limes.AuthParameters{}},
+				CapacityPlugins:  map[string]core.CapacityPlugin{},
+				Config:           &core.ClusterConfiguration{Auth: &core.AuthParameters{}},
 				QuotaConstraints: &westConstraintSet,
 			},
 			"east": {
@@ -108,8 +108,8 @@ func setupTest(t *testing.T, clusterName, startData string) (*limes.Cluster, htt
 				ServiceTypes:    serviceTypes,
 				IsServiceShared: isServiceShared,
 				QuotaPlugins:    quotaPlugins,
-				CapacityPlugins: map[string]limes.CapacityPlugin{},
-				Config:          &limes.ClusterConfiguration{Auth: &limes.AuthParameters{}},
+				CapacityPlugins: map[string]core.CapacityPlugin{},
+				Config:          &core.ClusterConfiguration{Auth: &core.AuthParameters{}},
 			},
 			"cloud": {
 				ID:              "cloud",
@@ -117,8 +117,8 @@ func setupTest(t *testing.T, clusterName, startData string) (*limes.Cluster, htt
 				IsServiceShared: isServiceShared,
 				DiscoveryPlugin: test.NewDiscoveryPlugin(),
 				QuotaPlugins:    quotaPlugins,
-				CapacityPlugins: map[string]limes.CapacityPlugin{},
-				Config:          &limes.ClusterConfiguration{Auth: &limes.AuthParameters{}},
+				CapacityPlugins: map[string]core.CapacityPlugin{},
+				Config:          &core.ClusterConfiguration{Auth: &core.AuthParameters{}},
 			},
 		},
 	}
@@ -131,9 +131,9 @@ func setupTest(t *testing.T, clusterName, startData string) (*limes.Cluster, htt
 	}
 	config.API.PolicyEnforcer = enforcer
 
-	config.Clusters["west"].Config.ResourceBehavior = map[string]map[string]*limes.ResourceBehavior{
+	config.Clusters["west"].Config.ResourceBehavior = map[string]map[string]*core.ResourceBehavior{
 		"unshared": {
-			"things": &limes.ResourceBehavior{
+			"things": &core.ResourceBehavior{
 				ScalesWithResourceName: "shared",
 				ScalesWithServiceType:  "things",
 				ScalingFactor:          2,
@@ -472,14 +472,14 @@ func Test_ClusterOperations(t *testing.T) {
 	expectClusterCapacity(t, "shared", "shared", "capacity", -1, "")
 
 	//check rendering of overcommit factors
-	cluster.Config.ResourceBehavior = map[string]map[string]*limes.ResourceBehavior{
+	cluster.Config.ResourceBehavior = map[string]map[string]*core.ResourceBehavior{
 		"shared": {
-			"things": &limes.ResourceBehavior{
+			"things": &core.ResourceBehavior{
 				OvercommitFactor: 2.5,
 			},
 		},
 		"unshared": {
-			"things": &limes.ResourceBehavior{
+			"things": &core.ResourceBehavior{
 				OvercommitFactor: 1.5,
 			},
 		},
@@ -609,7 +609,7 @@ func Test_DomainOperations(t *testing.T) {
 
 	//check DiscoverDomains
 	discovery.StaticDomains = append(discovery.StaticDomains,
-		limes.KeystoneDomain{Name: "spain", UUID: "uuid-for-spain"},
+		core.KeystoneDomain{Name: "spain", UUID: "uuid-for-spain"},
 	)
 	assert.HTTPRequest{
 		Method:       "POST",
@@ -761,7 +761,7 @@ func Test_DomainOperations(t *testing.T) {
 					{
 						"type": "shared",
 						"resources": []assert.JSONObject{
-							{"name": "capacity", "quota": 1, "unit": limes.UnitMebibytes},
+							{"name": "capacity", "quota": 1, "unit": core.UnitMebibytes},
 						},
 					},
 				},
@@ -784,7 +784,7 @@ func Test_DomainOperations(t *testing.T) {
 					{
 						"type": "shared",
 						"resources": []assert.JSONObject{
-							{"name": "capacity", "quota": 1 << 20, "unit": limes.UnitKibibytes},
+							{"name": "capacity", "quota": 1 << 20, "unit": core.UnitKibibytes},
 						},
 					},
 				},
@@ -824,7 +824,7 @@ func Test_DomainOperations(t *testing.T) {
 					{
 						"type": "shared",
 						"resources": []assert.JSONObject{
-							{"name": "capacity", "quota": 1 << 20, "unit": limes.UnitKibibytes},
+							{"name": "capacity", "quota": 1 << 20, "unit": core.UnitKibibytes},
 						},
 					},
 				},
@@ -846,7 +846,7 @@ func Test_DomainOperations(t *testing.T) {
 					{
 						"type": "shared",
 						"resources": []assert.JSONObject{
-							{"name": "capacity", "quota": 1, "unit": limes.UnitMebibytes},
+							{"name": "capacity", "quota": 1, "unit": core.UnitMebibytes},
 						},
 					},
 				},
@@ -870,7 +870,7 @@ func Test_DomainOperations(t *testing.T) {
 						"resources": []assert.JSONObject{
 							{"name": "capacity", "quota": 100},
 							//should fail with 422 because of incompatible units
-							{"name": "things", "quota": 1, "unit": limes.UnitBytes},
+							{"name": "things", "quota": 1, "unit": core.UnitBytes},
 						},
 					},
 					{
@@ -1039,7 +1039,7 @@ func Test_ProjectOperations(t *testing.T) {
 
 	//check DiscoverProjects
 	discovery.StaticProjects["uuid-for-germany"] = append(discovery.StaticProjects["uuid-for-germany"],
-		limes.KeystoneProject{Name: "frankfurt", UUID: "uuid-for-frankfurt"},
+		core.KeystoneProject{Name: "frankfurt", UUID: "uuid-for-frankfurt"},
 	)
 	assert.HTTPRequest{
 		Method:       "POST",
@@ -1067,7 +1067,7 @@ func Test_ProjectOperations(t *testing.T) {
 
 	//SyncProject should discover the given project if not yet done
 	discovery.StaticProjects["uuid-for-germany"] = append(discovery.StaticProjects["uuid-for-germany"],
-		limes.KeystoneProject{Name: "walldorf", UUID: "uuid-for-walldorf", ParentUUID: "uuid-for-germany"},
+		core.KeystoneProject{Name: "walldorf", UUID: "uuid-for-walldorf", ParentUUID: "uuid-for-germany"},
 	)
 	assert.HTTPRequest{
 		Method:       "POST",
@@ -1285,7 +1285,7 @@ func Test_ProjectOperations(t *testing.T) {
 						"resources": []assert.JSONObject{
 							{"name": "capacity", "quota": 4},
 							//should fail with 422 because of incompatible units
-							{"name": "things", "quota": 1, "unit": limes.UnitBytes},
+							{"name": "things", "quota": 1, "unit": core.UnitBytes},
 						},
 					},
 					{

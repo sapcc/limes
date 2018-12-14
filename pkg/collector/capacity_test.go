@@ -25,8 +25,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sapcc/go-bits/assert"
+	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
-	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/test"
 )
 
@@ -34,16 +34,16 @@ func Test_ScanCapacity(t *testing.T) {
 	test.ResetTime()
 	test.InitDatabase(t)
 
-	cluster := &limes.Cluster{
+	cluster := &core.Cluster{
 		ID:              "west",
 		IsServiceShared: map[string]bool{"shared": true},
 		ServiceTypes:    []string{"shared", "unshared", "unshared2"},
-		QuotaPlugins: map[string]limes.QuotaPlugin{
+		QuotaPlugins: map[string]core.QuotaPlugin{
 			"shared":    test.NewPlugin("shared"),
 			"unshared":  test.NewPlugin("unshared"),
 			"unshared2": test.NewPlugin("unshared2"),
 		},
-		CapacityPlugins: map[string]limes.CapacityPlugin{
+		CapacityPlugins: map[string]core.CapacityPlugin{
 			"unittest": test.NewCapacityPlugin("unittest",
 				//publish capacity for some known resources...
 				"shared/things",
@@ -57,10 +57,10 @@ func Test_ScanCapacity(t *testing.T) {
 				"someother/capacity",
 			),
 		},
-		Config: &limes.ClusterConfiguration{
-			Auth: &limes.AuthParameters{},
+		Config: &core.ClusterConfiguration{
+			Auth: &core.AuthParameters{},
 			//overcommit should be reflected in capacity metrics
-			ResourceBehavior: limes.ResourceBehaviorConfiguration{
+			ResourceBehavior: core.ResourceBehaviorConfiguration{
 				"unshared2": {
 					"capacity": {
 						OvercommitFactor: 2.5,

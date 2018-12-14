@@ -24,52 +24,52 @@ import (
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/dns/v2/zones"
 	"github.com/gophercloud/gophercloud/pagination"
-	"github.com/sapcc/limes/pkg/limes"
+	"github.com/sapcc/limes/pkg/core"
 )
 
 type designatePlugin struct {
-	cfg limes.ServiceConfiguration
+	cfg core.ServiceConfiguration
 }
 
-var designateResources = []limes.ResourceInfo{
+var designateResources = []core.ResourceInfo{
 	{
 		Name: "zones",
-		Unit: limes.UnitNone,
+		Unit: core.UnitNone,
 	},
 	{
 		//this quota means "recordsets per zone", not "recordsets per project"!
 		Name: "recordsets",
-		Unit: limes.UnitNone,
+		Unit: core.UnitNone,
 	},
 }
 
 func init() {
-	limes.RegisterQuotaPlugin(func(c limes.ServiceConfiguration, scrapeSubresources map[string]bool) limes.QuotaPlugin {
+	core.RegisterQuotaPlugin(func(c core.ServiceConfiguration, scrapeSubresources map[string]bool) core.QuotaPlugin {
 		return &designatePlugin{c}
 	})
 }
 
-//Init implements the limes.QuotaPlugin interface.
+//Init implements the core.QuotaPlugin interface.
 func (p *designatePlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
 	return nil
 }
 
-//ServiceInfo implements the limes.QuotaPlugin interface.
-func (p *designatePlugin) ServiceInfo() limes.ServiceInfo {
-	return limes.ServiceInfo{
+//ServiceInfo implements the core.QuotaPlugin interface.
+func (p *designatePlugin) ServiceInfo() core.ServiceInfo {
+	return core.ServiceInfo{
 		Type:        "dns",
 		ProductName: "designate",
 		Area:        "dns",
 	}
 }
 
-//Resources implements the limes.QuotaPlugin interface.
-func (p *designatePlugin) Resources() []limes.ResourceInfo {
+//Resources implements the core.QuotaPlugin interface.
+func (p *designatePlugin) Resources() []core.ResourceInfo {
 	return designateResources
 }
 
-//Scrape implements the limes.QuotaPlugin interface.
-func (p *designatePlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
+//Scrape implements the core.QuotaPlugin interface.
+func (p *designatePlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, error) {
 	client, err := openstack.NewDNSV2(provider, eo)
 	if err != nil {
 		return nil, err
@@ -103,7 +103,7 @@ func (p *designatePlugin) Scrape(provider *gophercloud.ProviderClient, eo gopher
 		}
 	}
 
-	return map[string]limes.ResourceData{
+	return map[string]core.ResourceData{
 		"zones": {
 			Quota: quotas.Zones,
 			Usage: uint64(len(zoneIDs)),
@@ -115,7 +115,7 @@ func (p *designatePlugin) Scrape(provider *gophercloud.ProviderClient, eo gopher
 	}, nil
 }
 
-//SetQuota implements the limes.QuotaPlugin interface.
+//SetQuota implements the core.QuotaPlugin interface.
 func (p *designatePlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
 	client, err := openstack.NewDNSV2(provider, eo)
 	if err != nil {

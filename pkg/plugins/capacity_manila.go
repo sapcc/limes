@@ -25,26 +25,26 @@ import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/sapcc/go-bits/logg"
-	"github.com/sapcc/limes/pkg/limes"
+	"github.com/sapcc/limes/pkg/core"
 )
 
 type capacityManilaPlugin struct {
-	cfg limes.CapacitorConfiguration
+	cfg core.CapacitorConfiguration
 }
 
 func init() {
-	limes.RegisterCapacityPlugin(func(c limes.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) limes.CapacityPlugin {
+	core.RegisterCapacityPlugin(func(c core.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) core.CapacityPlugin {
 		return &capacityManilaPlugin{c}
 	})
 }
 
-//ID implements the limes.CapacityPlugin interface.
+//ID implements the core.CapacityPlugin interface.
 func (p *capacityManilaPlugin) ID() string {
 	return "manila"
 }
 
-//Scrape implements the limes.CapacityPlugin interface.
-func (p *capacityManilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]limes.CapacityData, error) {
+//Scrape implements the core.CapacityPlugin interface.
+func (p *capacityManilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]core.CapacityData, error) {
 	cfg := p.cfg.Manila
 	if cfg.ShareNetworks == 0 {
 		return nil, errors.New("missing configuration parameter: share_networks")
@@ -97,13 +97,13 @@ func (p *capacityManilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo g
 	//example, with CapacityBalance = 2, we allocate 2/3 of the total capacity to
 	//snapshots, and 1/3 to shares.
 	b := cfg.CapacityBalance
-	return map[string]map[string]limes.CapacityData{
+	return map[string]map[string]core.CapacityData{
 		"sharev2": {
-			"share_networks":    limes.CapacityData{Capacity: cfg.ShareNetworks},
-			"shares":            limes.CapacityData{Capacity: shareCount},
-			"share_snapshots":   limes.CapacityData{Capacity: cfg.SnapshotsPerShare * shareCount},
-			"share_capacity":    limes.CapacityData{Capacity: uint64(1 / (b + 1) * totalCapacityGB)},
-			"snapshot_capacity": limes.CapacityData{Capacity: uint64(b / (b + 1) * totalCapacityGB)},
+			"share_networks":    core.CapacityData{Capacity: cfg.ShareNetworks},
+			"shares":            core.CapacityData{Capacity: shareCount},
+			"share_snapshots":   core.CapacityData{Capacity: cfg.SnapshotsPerShare * shareCount},
+			"share_capacity":    core.CapacityData{Capacity: uint64(1 / (b + 1) * totalCapacityGB)},
+			"snapshot_capacity": core.CapacityData{Capacity: uint64(b / (b + 1) * totalCapacityGB)},
 		},
 	}, nil
 }

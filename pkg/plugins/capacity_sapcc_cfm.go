@@ -21,26 +21,26 @@ package plugins
 
 import (
 	"github.com/gophercloud/gophercloud"
-	"github.com/sapcc/limes/pkg/limes"
+	"github.com/sapcc/limes/pkg/core"
 )
 
 type capacityCFMPlugin struct {
-	cfg limes.CapacitorConfiguration
+	cfg core.CapacitorConfiguration
 }
 
 func init() {
-	limes.RegisterCapacityPlugin(func(c limes.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) limes.CapacityPlugin {
+	core.RegisterCapacityPlugin(func(c core.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) core.CapacityPlugin {
 		return &capacityCFMPlugin{c}
 	})
 }
 
-//ID implements the limes.CapacityPlugin interface.
+//ID implements the core.CapacityPlugin interface.
 func (p *capacityCFMPlugin) ID() string {
 	return "cfm"
 }
 
-//Scrape implements the limes.CapacityPlugin interface.
-func (p *capacityCFMPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]limes.CapacityData, error) {
+//Scrape implements the core.CapacityPlugin interface.
+func (p *capacityCFMPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]core.CapacityData, error) {
 	client, err := newCFMClient(provider, eo)
 	if err != nil {
 		return nil, err
@@ -55,7 +55,7 @@ func (p *capacityCFMPlugin) Scrape(provider *gophercloud.ProviderClient, eo goph
 		totalCapacityBytes += pool.Capabilities.TotalCapacityBytes
 	}
 
-	return map[string]map[string]limes.CapacityData{
+	return map[string]map[string]core.CapacityData{
 		"database": {
 			"cfm_share_capacity": {
 				Capacity: totalCapacityBytes,

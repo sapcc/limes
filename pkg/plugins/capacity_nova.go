@@ -29,15 +29,15 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/sapcc/go-bits/logg"
-	"github.com/sapcc/limes/pkg/limes"
+	"github.com/sapcc/limes/pkg/core"
 )
 
 type capacityNovaPlugin struct {
-	cfg limes.CapacitorConfiguration
+	cfg core.CapacitorConfiguration
 }
 
 func init() {
-	limes.RegisterCapacityPlugin(func(c limes.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) limes.CapacityPlugin {
+	core.RegisterCapacityPlugin(func(c core.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) core.CapacityPlugin {
 		return &capacityNovaPlugin{c}
 	})
 }
@@ -46,8 +46,8 @@ func (p *capacityNovaPlugin) ID() string {
 	return "nova"
 }
 
-//Scrape implements the limes.CapacityPlugin interface.
-func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]limes.CapacityData, error) {
+//Scrape implements the core.CapacityPlugin interface.
+func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]core.CapacityData, error) {
 	var hypervisorTypeRx *regexp.Regexp
 	if p.cfg.Nova.HypervisorTypePattern != "" {
 		var err error
@@ -170,16 +170,16 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 		}
 	}
 
-	capacity := map[string]map[string]limes.CapacityData{
+	capacity := map[string]map[string]core.CapacityData{
 		"compute": {
-			"cores": limes.CapacityData{Capacity: totalVcpus},
-			"ram":   limes.CapacityData{Capacity: totalMemoryMb},
+			"cores": core.CapacityData{Capacity: totalVcpus},
+			"ram":   core.CapacityData{Capacity: totalMemoryMb},
 		},
 	}
 
 	if maxFlavorSize != 0 {
 		instanceCapacity := uint64(math.Min(float64(10000*azCount), float64(totalLocalGb)/maxFlavorSize))
-		capacity["compute"]["instances"] = limes.CapacityData{Capacity: instanceCapacity}
+		capacity["compute"]["instances"] = core.CapacityData{Capacity: instanceCapacity}
 	} else {
 		logg.Error("Nova Capacity: Maximal flavor size is 0. Not reporting instances.")
 	}

@@ -29,8 +29,8 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/sapcc/go-bits/respondwith"
+	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
-	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/reports"
 )
 
@@ -193,7 +193,7 @@ func findClusterService(tx *gorp.Transaction, srv ServiceCapacities, clusterID s
 	return service, nil
 }
 
-func writeClusterResource(tx *gorp.Transaction, cluster *limes.Cluster, srv ServiceCapacities, service *db.ClusterService, res ResourceCapacity) (validationError string, internalError error) {
+func writeClusterResource(tx *gorp.Transaction, cluster *core.Cluster, srv ServiceCapacities, service *db.ClusterService, res ResourceCapacity) (validationError string, internalError error) {
 	if !cluster.HasResource(srv.Type, res.Name) {
 		return "no such resource", nil
 	}
@@ -228,12 +228,12 @@ func writeClusterResource(tx *gorp.Transaction, cluster *limes.Cluster, srv Serv
 	//convert to target unit if required
 	var newCapacity uint64
 	if res.Capacity >= 0 {
-		inputUnit := limes.UnitUnspecified
+		inputUnit := core.UnitUnspecified
 		if res.Unit != nil {
 			inputUnit = *res.Unit
 		}
 		//int64->uint64 is safe here because `res.Capacity >= 0` has already been established
-		inputValue := limes.ValueWithUnit{Value: uint64(res.Capacity), Unit: inputUnit}
+		inputValue := core.ValueWithUnit{Value: uint64(res.Capacity), Unit: inputUnit}
 		newCapacity, err = inputValue.ConvertFor(cluster, srv.Type, res.Name)
 		if err != nil {
 			return err.Error(), nil

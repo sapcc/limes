@@ -26,26 +26,26 @@ import (
 	"testing"
 
 	"github.com/sapcc/go-bits/assert"
-	"github.com/sapcc/limes/pkg/limes"
+	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/test"
 
 	_ "github.com/mattn/go-sqlite3"
 )
 
-func keystoneTestCluster(t *testing.T) *limes.Cluster {
+func keystoneTestCluster(t *testing.T) *core.Cluster {
 	test.InitDatabase(t)
 
-	return &limes.Cluster{
+	return &core.Cluster{
 		ID:              "west",
-		Config:          &limes.ClusterConfiguration{Auth: &limes.AuthParameters{}},
+		Config:          &core.ClusterConfiguration{Auth: &core.AuthParameters{}},
 		ServiceTypes:    []string{"unshared", "shared"},
 		IsServiceShared: map[string]bool{"shared": true},
 		DiscoveryPlugin: test.NewDiscoveryPlugin(),
-		QuotaPlugins: map[string]limes.QuotaPlugin{
+		QuotaPlugins: map[string]core.QuotaPlugin{
 			"shared":   test.NewPlugin("shared"),
 			"unshared": test.NewPlugin("unshared"),
 		},
-		CapacityPlugins: map[string]limes.CapacityPlugin{},
+		CapacityPlugins: map[string]core.CapacityPlugin{},
 	}
 }
 
@@ -61,8 +61,8 @@ func Test_ScanDomains(t *testing.T) {
 
 	//add a quota constraint set; we're going to test if it's applied correctly
 	pointerTo := func(x uint64) *uint64 { return &x }
-	cluster.QuotaConstraints = &limes.QuotaConstraintSet{
-		Domains: map[string]limes.QuotaConstraints{
+	cluster.QuotaConstraints = &core.QuotaConstraintSet{
+		Domains: map[string]core.QuotaConstraints{
 			"germany": {
 				"unshared": {
 					"things":   {Minimum: pointerTo(10)},
@@ -70,7 +70,7 @@ func Test_ScanDomains(t *testing.T) {
 				},
 			},
 		},
-		Projects: map[string]map[string]limes.QuotaConstraints{
+		Projects: map[string]map[string]core.QuotaConstraints{
 			"germany": {
 				"berlin": {
 					"unshared": {
@@ -110,7 +110,7 @@ func Test_ScanDomains(t *testing.T) {
 	//add another project
 	domainUUID := "uuid-for-france"
 	discovery.StaticProjects[domainUUID] = append(discovery.StaticProjects[domainUUID],
-		limes.KeystoneProject{Name: "bordeaux", UUID: "uuid-for-bordeaux", ParentUUID: "uuid-for-france"},
+		core.KeystoneProject{Name: "bordeaux", UUID: "uuid-for-bordeaux", ParentUUID: "uuid-for-france"},
 	)
 
 	//ScanDomains without ScanAllProjects should not see this new project
@@ -173,18 +173,18 @@ func Test_ScanDomains(t *testing.T) {
 }
 
 func Test_listDomainsFiltered(t *testing.T) {
-	cluster := &limes.Cluster{
+	cluster := &core.Cluster{
 		DiscoveryPlugin: &test.DiscoveryPlugin{
-			StaticDomains: []limes.KeystoneDomain{
+			StaticDomains: []core.KeystoneDomain{
 				{Name: "bar1"},
 				{Name: "bar2"},
 				{Name: "foo1"},
 				{Name: "foo2"},
 			},
 		},
-		Config: &limes.ClusterConfiguration{
-			Auth: &limes.AuthParameters{},
-			Discovery: limes.DiscoveryConfiguration{
+		Config: &core.ClusterConfiguration{
+			Auth: &core.AuthParameters{},
+			Discovery: core.DiscoveryConfiguration{
 				IncludeDomainRx: regexp.MustCompile(`foo`),
 				ExcludeDomainRx: regexp.MustCompile(`2$`),
 			},

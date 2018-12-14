@@ -22,8 +22,8 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
-	"github.com/sapcc/limes/pkg/limes"
 )
 
 //Inconsistencies contains aggregated data about inconsistent quota setups for domains and projects
@@ -41,7 +41,7 @@ type OvercommittedDomainQuota struct {
 	Domain        DomainData `json:"domain,keepempty"`
 	Service       string     `json:"service,keepempty"`
 	Resource      string     `json:"resource,keepempty"`
-	Unit          limes.Unit `json:"unit,omitempty"`
+	Unit          core.Unit  `json:"unit,omitempty"`
 	DomainQuota   uint64     `json:"domain_quota,keepempty"`
 	ProjectsQuota uint64     `json:"projects_quota,keepempty"`
 }
@@ -52,7 +52,7 @@ type OverspentProjectQuota struct {
 	Project  ProjectData `json:"project,keepempty"`
 	Service  string      `json:"service,keepempty"`
 	Resource string      `json:"resource,keepempty"`
-	Unit     limes.Unit  `json:"unit,omitempty"`
+	Unit     core.Unit   `json:"unit,omitempty"`
 	Quota    uint64      `json:"quota,keepempty"`
 	Usage    uint64      `json:"usage,keepempty"`
 }
@@ -63,7 +63,7 @@ type MismatchProjectQuota struct {
 	Project      ProjectData `json:"project,keepempty"`
 	Service      string      `json:"service,keepempty"`
 	Resource     string      `json:"resource,keepempty"`
-	Unit         limes.Unit  `json:"unit,omitempty"`
+	Unit         core.Unit   `json:"unit,omitempty"`
 	Quota        uint64      `json:"quota,keepempty"`
 	BackendQuota int64       `json:"backend_quota,keepempty"`
 }
@@ -117,7 +117,7 @@ var mmpqReportQuery = `
 `
 
 //GetInconsistencies returns Inconsistency reports for all inconsistencies and their projects in the current cluster.
-func GetInconsistencies(cluster *limes.Cluster, dbi db.Interface, filter Filter) (*Inconsistencies, error) {
+func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter) (*Inconsistencies, error) {
 	fields := map[string]interface{}{"d.cluster_id": cluster.ID}
 
 	//Initialize inconsistencies as Inconsistencies type and assign ClusterID.

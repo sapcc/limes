@@ -22,8 +22,8 @@ package datamodel
 import (
 	"fmt"
 
+	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
-	"github.com/sapcc/limes/pkg/limes"
 )
 
 //ApplyBackendQuota applies the backend quota for the given project service.
@@ -32,7 +32,7 @@ import (
 //
 //If the backend quotas recorded in the project service's resources already
 //match the expected values, nothing is done.
-func ApplyBackendQuota(dbi db.Interface, cluster *limes.Cluster, domainUUID string, project db.Project, serviceID int64, serviceType string) error {
+func ApplyBackendQuota(dbi db.Interface, cluster *core.Cluster, domainUUID string, project db.Project, serviceID int64, serviceType string) error {
 	plugin := cluster.QuotaPlugins[serviceType]
 	if plugin == nil {
 		return fmt.Errorf("no quota plugin registered for service type %s", serviceType)

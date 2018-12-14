@@ -23,27 +23,27 @@ import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/sapcc/go-bits/logg"
-	"github.com/sapcc/limes/pkg/limes"
+	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/util"
 )
 
 type capacityCinderPlugin struct {
-	cfg limes.CapacitorConfiguration
+	cfg core.CapacitorConfiguration
 }
 
 func init() {
-	limes.RegisterCapacityPlugin(func(c limes.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) limes.CapacityPlugin {
+	core.RegisterCapacityPlugin(func(c core.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) core.CapacityPlugin {
 		return &capacityCinderPlugin{c}
 	})
 }
 
-//ID implements the limes.CapacityPlugin interface.
+//ID implements the core.CapacityPlugin interface.
 func (p *capacityCinderPlugin) ID() string {
 	return "cinder"
 }
 
-//Scrape implements the limes.CapacityPlugin interface.
-func (p *capacityCinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]limes.CapacityData, error) {
+//Scrape implements the core.CapacityPlugin interface.
+func (p *capacityCinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]core.CapacityData, error) {
 	client, err := openstack.NewBlockStorageV2(provider, eo)
 	if err != nil {
 		return nil, err
@@ -86,9 +86,9 @@ func (p *capacityCinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo g
 
 	}
 
-	return map[string]map[string]limes.CapacityData{
+	return map[string]map[string]core.CapacityData{
 		"volumev2": {
-			"capacity": limes.CapacityData{Capacity: totalCapacity},
+			"capacity": core.CapacityData{Capacity: totalCapacity},
 			//NOTE: no estimates for no. of snapshots/volumes here; this depends highly on the backend
 			//(on SAP CC, we configure capacity for snapshots/volumes via the "manual" capacitor)
 		},

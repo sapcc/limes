@@ -4,18 +4,18 @@ import (
 	"testing"
 
 	th "github.com/gophercloud/gophercloud/testhelper"
-	"github.com/sapcc/limes/pkg/limes"
+	"github.com/sapcc/limes/pkg/core"
 )
 
 var quotas = ServiceQuotas{
 	"volumev2": ResourceQuotas{
-		"capacity": limes.ValueWithUnit{
+		"capacity": core.ValueWithUnit{
 			Value: 1024,
-			Unit:  limes.UnitBytes,
+			Unit:  core.UnitBytes,
 		},
-		"volumes": limes.ValueWithUnit{
+		"volumes": core.ValueWithUnit{
 			Value: 16,
-			Unit:  limes.UnitNone,
+			Unit:  core.UnitNone,
 		},
 	},
 }

@@ -23,37 +23,37 @@ import (
 	"errors"
 
 	"github.com/gophercloud/gophercloud"
-	"github.com/sapcc/limes/pkg/limes"
+	"github.com/sapcc/limes/pkg/core"
 )
 
 type capacityManualPlugin struct {
-	cfg limes.CapacitorConfiguration
+	cfg core.CapacitorConfiguration
 }
 
 func init() {
-	limes.RegisterCapacityPlugin(func(c limes.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) limes.CapacityPlugin {
+	core.RegisterCapacityPlugin(func(c core.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) core.CapacityPlugin {
 		return &capacityManualPlugin{c}
 	})
 }
 
-//ID implements the limes.CapacityPlugin interface.
+//ID implements the core.CapacityPlugin interface.
 func (p *capacityManualPlugin) ID() string {
 	return "manual"
 }
 
 var errNoManualData = errors.New(`missing values for capacitor plugin "manual"`)
 
-//Scrape implements the limes.CapacityPlugin interface.
-func (p *capacityManualPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]limes.CapacityData, error) {
+//Scrape implements the core.CapacityPlugin interface.
+func (p *capacityManualPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]core.CapacityData, error) {
 	if p.cfg.Manual == nil {
 		return nil, errNoManualData
 	}
 
-	result := make(map[string]map[string]limes.CapacityData)
+	result := make(map[string]map[string]core.CapacityData)
 	for serviceType, serviceData := range p.cfg.Manual {
-		serviceResult := make(map[string]limes.CapacityData)
+		serviceResult := make(map[string]core.CapacityData)
 		for resourceName, capacity := range serviceData {
-			serviceResult[resourceName] = limes.CapacityData{Capacity: capacity}
+			serviceResult[resourceName] = core.CapacityData{Capacity: capacity}
 		}
 		result[serviceType] = serviceResult
 	}

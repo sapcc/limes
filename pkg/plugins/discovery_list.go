@@ -22,26 +22,26 @@ package plugins
 import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
-	"github.com/sapcc/limes/pkg/limes"
+	"github.com/sapcc/limes/pkg/core"
 )
 
 type listDiscoveryPlugin struct {
-	cfg limes.DiscoveryConfiguration
+	cfg core.DiscoveryConfiguration
 }
 
 func init() {
-	limes.RegisterDiscoveryPlugin(func(c limes.DiscoveryConfiguration) limes.DiscoveryPlugin {
+	core.RegisterDiscoveryPlugin(func(c core.DiscoveryConfiguration) core.DiscoveryPlugin {
 		return &listDiscoveryPlugin{c}
 	})
 }
 
-//Method implements the limes.DiscoveryPlugin interface.
+//Method implements the core.DiscoveryPlugin interface.
 func (p *listDiscoveryPlugin) Method() string {
 	return "list"
 }
 
-//ListDomains implements the limes.DiscoveryPlugin interface.
-func (p *listDiscoveryPlugin) ListDomains(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) ([]limes.KeystoneDomain, error) {
+//ListDomains implements the core.DiscoveryPlugin interface.
+func (p *listDiscoveryPlugin) ListDomains(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) ([]core.KeystoneDomain, error) {
 	client, err := openstack.NewIdentityV3(provider, eo)
 	if err != nil {
 		return nil, err
@@ -56,14 +56,14 @@ func (p *listDiscoveryPlugin) ListDomains(provider *gophercloud.ProviderClient, 
 	}
 
 	var data struct {
-		Domains []limes.KeystoneDomain `json:"domains"`
+		Domains []core.KeystoneDomain `json:"domains"`
 	}
 	err = result.ExtractInto(&data)
 	return data.Domains, err
 }
 
-//ListProjects implements the limes.DiscoveryPlugin interface.
-func (p *listDiscoveryPlugin) ListProjects(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID string) ([]limes.KeystoneProject, error) {
+//ListProjects implements the core.DiscoveryPlugin interface.
+func (p *listDiscoveryPlugin) ListProjects(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID string) ([]core.KeystoneProject, error) {
 	client, err := openstack.NewIdentityV3(provider, eo)
 	if err != nil {
 		return nil, err
@@ -88,7 +88,7 @@ func (p *listDiscoveryPlugin) ListProjects(provider *gophercloud.ProviderClient,
 	}
 
 	var data struct {
-		Projects []limes.KeystoneProject `json:"projects"`
+		Projects []core.KeystoneProject `json:"projects"`
 	}
 	err = result.ExtractInto(&data)
 	return data.Projects, err

@@ -35,7 +35,7 @@ import (
 	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/logg"
-	"github.com/sapcc/limes/pkg/limes"
+	"github.com/sapcc/limes/pkg/core"
 )
 
 //use a name that's unique to github.com/gophercloud/gophercloud/openstack/imageservice/v2/images
@@ -50,11 +50,11 @@ type novaHypervisorTypeRule struct {
 }
 
 type novaPlugin struct {
-	cfg             limes.ServiceConfiguration
+	cfg             core.ServiceConfiguration
 	scrapeInstances bool
 	//computed state
 	hypervisorTypeRules []novaHypervisorTypeRule
-	resources           []limes.ResourceInfo
+	resources           []core.ResourceInfo
 	//caches
 	flavorInfo     map[string]novaFlavorInfo
 	osTypeForImage map[string]string
@@ -65,18 +65,18 @@ type novaFlavorInfo struct {
 	ExtraSpecs map[string]string
 }
 
-var novaDefaultResources = []limes.ResourceInfo{
+var novaDefaultResources = []core.ResourceInfo{
 	{
 		Name: "cores",
-		Unit: limes.UnitNone,
+		Unit: core.UnitNone,
 	},
 	{
 		Name: "instances",
-		Unit: limes.UnitNone,
+		Unit: core.UnitNone,
 	},
 	{
 		Name: "ram",
-		Unit: limes.UnitMebibytes,
+		Unit: core.UnitMebibytes,
 	},
 }
 
@@ -89,7 +89,7 @@ var novaInstanceCountGauge = prometheus.NewGaugeVec(
 )
 
 func init() {
-	limes.RegisterQuotaPlugin(func(c limes.ServiceConfiguration, scrapeSubresources map[string]bool) limes.QuotaPlugin {
+	core.RegisterQuotaPlugin(func(c core.ServiceConfiguration, scrapeSubresources map[string]bool) core.QuotaPlugin {
 		return &novaPlugin{
 			cfg:             c,
 			scrapeInstances: scrapeSubresources["instances"],
@@ -99,7 +99,7 @@ func init() {
 	prometheus.MustRegister(novaInstanceCountGauge)
 }
 
-//Init implements the limes.QuotaPlugin interface.
+//Init implements the core.QuotaPlugin interface.
 func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
 	client, err := openstack.NewComputeV2(provider, eo)
 	if err != nil {
@@ -112,10 +112,10 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.E
 		return err
 	}
 	for _, resourceName := range resources {
-		p.resources = append(p.resources, limes.ResourceInfo{
+		p.resources = append(p.resources, core.ResourceInfo{
 			Name:     resourceName,
 			Category: "per_flavor",
-			Unit:     limes.UnitNone,
+			Unit:     core.UnitNone,
 		})
 	}
 	sort.Slice(p.resources, func(i, j int) bool {
@@ -155,22 +155,22 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.E
 	return nil
 }
 
-//ServiceInfo implements the limes.QuotaPlugin interface.
-func (p *novaPlugin) ServiceInfo() limes.ServiceInfo {
-	return limes.ServiceInfo{
+//ServiceInfo implements the core.QuotaPlugin interface.
+func (p *novaPlugin) ServiceInfo() core.ServiceInfo {
+	return core.ServiceInfo{
 		Type:        "compute",
 		ProductName: "nova",
 		Area:        "compute",
 	}
 }
 
-//Resources implements the limes.QuotaPlugin interface.
-func (p *novaPlugin) Resources() []limes.ResourceInfo {
+//Resources implements the core.QuotaPlugin interface.
+func (p *novaPlugin) Resources() []core.ResourceInfo {
 	return p.resources
 }
 
-//Scrape implements the limes.QuotaPlugin interface.
-func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
+//Scrape implements the core.QuotaPlugin interface.
+func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, error) {
 	client, err := openstack.NewComputeV2(provider, eo)
 	if err != nil {
 		return nil, err
@@ -197,7 +197,7 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 		return nil, err
 	}
 
-	result := map[string]*limes.ResourceData{
+	result := map[string]*core.ResourceData{
 		"cores": {
 			Quota: limitsData.Limits.Absolute.MaxTotalCores,
 			Usage: limitsData.Limits.Absolute.TotalCoresUsed,
@@ -213,7 +213,7 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 	}
 	if limitsData.Limits.AbsolutePerFlavor != nil {
 		for flavorName, flavorLimits := range limitsData.Limits.AbsolutePerFlavor {
-			result["instances_"+flavorName] = &limes.ResourceData{
+			result["instances_"+flavorName] = &core.ResourceData{
 				Quota: flavorLimits.MaxTotalInstances,
 				Usage: flavorLimits.TotalInstancesUsed,
 			}
@@ -224,7 +224,7 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 	//so make sure that all known resources are reflected
 	for _, res := range p.resources {
 		if _, exists := result[res.Name]; !exists {
-			result[res.Name] = &limes.ResourceData{
+			result[res.Name] = &core.ResourceData{
 				Quota: 0,
 				Usage: 0,
 			}
@@ -260,13 +260,13 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 				if flavor := flavorInfo.Flavor; flavor != nil {
 					subResource["flavor"] = flavor.Name
 					subResource["vcpu"] = flavor.VCPUs
-					subResource["ram"] = limes.ValueWithUnit{
+					subResource["ram"] = core.ValueWithUnit{
 						Value: uint64(flavor.RAM),
-						Unit:  limes.UnitMebibytes,
+						Unit:  core.UnitMebibytes,
 					}
-					subResource["disk"] = limes.ValueWithUnit{
+					subResource["disk"] = core.ValueWithUnit{
 						Value: uint64(flavor.Disk),
-						Unit:  limes.UnitGibibytes,
+						Unit:  core.UnitGibibytes,
 					}
 				}
 
@@ -325,14 +325,14 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 	}
 
 	//remove references (which we needed to apply the subresources correctly)
-	result2 := make(map[string]limes.ResourceData, len(result))
+	result2 := make(map[string]core.ResourceData, len(result))
 	for name, data := range result {
 		result2[name] = *data
 	}
 	return result2, nil
 }
 
-//SetQuota implements the limes.QuotaPlugin interface.
+//SetQuota implements the core.QuotaPlugin interface.
 func (p *novaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
 	client, err := openstack.NewComputeV2(provider, eo)
 	if err != nil {

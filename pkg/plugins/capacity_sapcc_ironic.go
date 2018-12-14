@@ -28,11 +28,11 @@ import (
 	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/logg"
-	"github.com/sapcc/limes/pkg/limes"
+	"github.com/sapcc/limes/pkg/core"
 )
 
 type capacitySapccIronicPlugin struct {
-	cfg                 limes.CapacitorConfiguration
+	cfg                 core.CapacitorConfiguration
 	reportSubcapacities bool
 }
 
@@ -45,13 +45,13 @@ var ironicUnmatchedNodesGauge = prometheus.NewGaugeVec(
 )
 
 func init() {
-	limes.RegisterCapacityPlugin(func(c limes.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) limes.CapacityPlugin {
+	core.RegisterCapacityPlugin(func(c core.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) core.CapacityPlugin {
 		return &capacitySapccIronicPlugin{c, scrapeSubcapacities["compute"]["instances-baremetal"]}
 	})
 	prometheus.MustRegister(ironicUnmatchedNodesGauge)
 }
 
-//ID implements the limes.CapacityPlugin interface.
+//ID implements the core.CapacityPlugin interface.
 func (p *capacitySapccIronicPlugin) ID() string {
 	return "sapcc-ironic"
 }
@@ -65,8 +65,8 @@ type ironicFlavorInfo struct {
 	Capabilities map[string]string
 }
 
-//Scrape implements the limes.CapacityPlugin interface.
-func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]limes.CapacityData, error) {
+//Scrape implements the core.CapacityPlugin interface.
+func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]core.CapacityData, error) {
 	//collect info about flavors with separate instance quota
 	novaClient, err := openstack.NewComputeV2(provider, eo)
 	if err != nil {
@@ -78,9 +78,9 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 	}
 
 	//we are going to report capacity for all per-flavor instance quotas
-	result := make(map[string]*limes.CapacityData)
+	result := make(map[string]*core.CapacityData)
 	for _, flavor := range flavors {
-		result["instances_"+flavor.Name] = &limes.CapacityData{Capacity: 0}
+		result["instances_"+flavor.Name] = &core.CapacityData{Capacity: 0}
 	}
 
 	//count Ironic nodes
@@ -112,10 +112,10 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 						"name": node.Name,
 					}
 					if node.Properties.MemoryMiB > 0 {
-						sub["ram"] = limes.ValueWithUnit{Unit: limes.UnitMebibytes, Value: uint64(node.Properties.MemoryMiB)}
+						sub["ram"] = core.ValueWithUnit{Unit: core.UnitMebibytes, Value: uint64(node.Properties.MemoryMiB)}
 					}
 					if node.Properties.DiskGiB > 0 {
-						sub["disk"] = limes.ValueWithUnit{Unit: limes.UnitGibibytes, Value: uint64(node.Properties.DiskGiB)}
+						sub["disk"] = core.ValueWithUnit{Unit: core.UnitGibibytes, Value: uint64(node.Properties.DiskGiB)}
 					}
 					if node.Properties.Cores > 0 {
 						sub["cores"] = uint64(node.Properties.Cores)
@@ -141,12 +141,12 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 	).Set(float64(unmatchedCounter))
 
 	//remove pointers from `result`
-	result2 := make(map[string]limes.CapacityData, len(result))
+	result2 := make(map[string]core.CapacityData, len(result))
 	for resourceName, data := range result {
 		result2[resourceName] = *data
 	}
 
-	return map[string]map[string]limes.CapacityData{"compute": result2}, nil
+	return map[string]map[string]core.CapacityData{"compute": result2}, nil
 }
 
 //NOTE: This method is shared with the Nova quota plugin.

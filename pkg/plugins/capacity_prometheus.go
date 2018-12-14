@@ -27,16 +27,16 @@ import (
 	"github.com/prometheus/client_golang/api/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/sapcc/go-bits/logg"
-	"github.com/sapcc/limes/pkg/limes"
+	"github.com/sapcc/limes/pkg/core"
 	"golang.org/x/net/context"
 )
 
 type capacityPrometheusPlugin struct {
-	cfg limes.CapacitorConfiguration
+	cfg core.CapacitorConfiguration
 }
 
 func init() {
-	limes.RegisterCapacityPlugin(func(c limes.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) limes.CapacityPlugin {
+	core.RegisterCapacityPlugin(func(c core.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) core.CapacityPlugin {
 		return &capacityPrometheusPlugin{c}
 	})
 }
@@ -61,22 +61,22 @@ func (p *capacityPrometheusPlugin) Client(apiURL string) (prometheus.QueryAPI, e
 	return prometheus.NewQueryAPI(client), nil
 }
 
-//ID implements the limes.CapacityPlugin interface.
+//ID implements the core.CapacityPlugin interface.
 func (p *capacityPrometheusPlugin) ID() string {
 	return "prometheus"
 }
 
-//Scrape implements the limes.CapacityPlugin interface.
-func (p *capacityPrometheusPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]limes.CapacityData, error) {
+//Scrape implements the core.CapacityPlugin interface.
+func (p *capacityPrometheusPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]core.CapacityData, error) {
 
 	client, err := p.Client(p.cfg.Prometheus.APIURL)
 	if err != nil {
 		return nil, err
 	}
 
-	result := make(map[string]map[string]limes.CapacityData)
+	result := make(map[string]map[string]core.CapacityData)
 	for serviceType, queries := range p.cfg.Prometheus.Queries {
-		serviceResult := make(map[string]limes.CapacityData)
+		serviceResult := make(map[string]core.CapacityData)
 		for resourceName, query := range queries {
 
 			var value model.Value
@@ -98,7 +98,7 @@ func (p *capacityPrometheusPlugin) Scrape(provider *gophercloud.ProviderClient, 
 				logg.Info("Prometheus query returned more than one result: %s (only the first value will be used)", query)
 				fallthrough
 			case 1:
-				serviceResult[resourceName] = limes.CapacityData{Capacity: uint64(resultVector[0].Value)}
+				serviceResult[resourceName] = core.CapacityData{Capacity: uint64(resultVector[0].Value)}
 			}
 
 		}

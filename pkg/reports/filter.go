@@ -23,8 +23,8 @@ import (
 	"net/http"
 	"regexp"
 
+	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
-	"github.com/sapcc/limes/pkg/limes"
 )
 
 //Filter describes query parameters that can be sent to various GET endpoints
@@ -51,7 +51,7 @@ func ReadFilter(r *http.Request) Filter {
 	if areas, ok := queryValues["area"]; ok {
 		var areaServices []string
 		for _, area := range areas {
-			areaServices = append(areaServices, limes.GetServiceTypesForArea(area)...)
+			areaServices = append(areaServices, core.GetServiceTypesForArea(area)...)
 		}
 
 		if len(f.serviceTypes) == 0 {

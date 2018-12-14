@@ -30,8 +30,8 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/respondwith"
+	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
-	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/reports"
 )
 
@@ -51,15 +51,15 @@ type VersionLinkData struct {
 }
 
 type v1Provider struct {
-	Cluster     *limes.Cluster
-	Config      limes.Configuration
+	Cluster     *core.Cluster
+	Config      core.Configuration
 	VersionData VersionData
 }
 
 //NewV1Router creates a http.Handler that serves the Limes v1 API.
 //It also returns the VersionData for this API version which is needed for the
 //version advertisement on "GET /".
-func NewV1Router(cluster *limes.Cluster, config limes.Configuration) (http.Handler, VersionData) {
+func NewV1Router(cluster *core.Cluster, config core.Configuration) (http.Handler, VersionData) {
 	r := mux.NewRouter()
 	p := &v1Provider{
 		Cluster: cluster,
@@ -128,11 +128,11 @@ func (p *v1Provider) Path(elements ...string) string {
 	return strings.Join(parts, "/")
 }
 
-//FindClusterFromRequest loads the limes.Cluster referenced by the
+//FindClusterFromRequest loads the core.Cluster referenced by the
 //X-Limes-Cluster-Id request header (or returns the current cluster if there is
 //no such header). Any errors will be written into the response immediately and
 //cause a nil return value.
-func (p *v1Provider) FindClusterFromRequest(w http.ResponseWriter, r *http.Request, token *gopherpolicy.Token) *limes.Cluster {
+func (p *v1Provider) FindClusterFromRequest(w http.ResponseWriter, r *http.Request, token *gopherpolicy.Token) *core.Cluster {
 	//use current cluster if nothing else specified
 	clusterID := r.Header.Get("X-Limes-Cluster-Id")
 	if clusterID == "" || clusterID == p.Cluster.ID {
@@ -159,7 +159,7 @@ func (p *v1Provider) FindClusterFromRequest(w http.ResponseWriter, r *http.Reque
 //FindDomainFromRequest loads the db.Domain referenced by the :domain_id path
 //parameter. Any errors will be written into the response immediately and cause
 //a nil return value.
-func (p *v1Provider) FindDomainFromRequest(w http.ResponseWriter, r *http.Request, cluster *limes.Cluster) *db.Domain {
+func (p *v1Provider) FindDomainFromRequest(w http.ResponseWriter, r *http.Request, cluster *core.Cluster) *db.Domain {
 	domainUUID := mux.Vars(r)["domain_id"]
 	if domainUUID == "" {
 		http.Error(w, "domain ID missing", 400)
@@ -222,7 +222,7 @@ func (p *v1Provider) FindProjectFromRequestIfExists(w http.ResponseWriter, r *ht
 }
 
 //GetDomainReport is a convenience wrapper around reports.GetDomains() for getting a single domain report.
-func GetDomainReport(cluster *limes.Cluster, dbDomain db.Domain, dbi db.Interface, filter reports.Filter) (*reports.Domain, error) {
+func GetDomainReport(cluster *core.Cluster, dbDomain db.Domain, dbi db.Interface, filter reports.Filter) (*reports.Domain, error) {
 	domainReports, err := reports.GetDomains(cluster, &dbDomain.ID, dbi, filter)
 	if err != nil {
 		return nil, err
@@ -234,7 +234,7 @@ func GetDomainReport(cluster *limes.Cluster, dbDomain db.Domain, dbi db.Interfac
 }
 
 //GetProjectReport is a convenience wrapper around reports.GetProjects() for getting a single project report.
-func GetProjectReport(cluster *limes.Cluster, dbDomain db.Domain, dbProject db.Project, dbi db.Interface, filter reports.Filter, withSubresources bool) (*reports.Project, error) {
+func GetProjectReport(cluster *core.Cluster, dbDomain db.Domain, dbProject db.Project, dbi db.Interface, filter reports.Filter, withSubresources bool) (*reports.Project, error) {
 	projectReports, err := reports.GetProjects(cluster, dbDomain.ID, &dbProject.ID, dbi, filter, withSubresources)
 	if err != nil {
 		return nil, err

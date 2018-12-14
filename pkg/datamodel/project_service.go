@@ -23,8 +23,8 @@ import (
 	"sort"
 
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
-	"github.com/sapcc/limes/pkg/limes"
 	gorp "gopkg.in/gorp.v2"
 )
 
@@ -33,7 +33,7 @@ import (
 //where quota values contradict the project's quota constraints.
 //
 //It returns the full set of project services.
-func ValidateProjectServices(tx *gorp.Transaction, cluster *limes.Cluster, domain db.Domain, project db.Project) ([]db.ProjectService, error) {
+func ValidateProjectServices(tx *gorp.Transaction, cluster *core.Cluster, domain db.Domain, project db.Project) ([]db.ProjectService, error) {
 	//list existing records
 	seen := make(map[string]bool)
 	var services []db.ProjectService
@@ -43,7 +43,7 @@ func ValidateProjectServices(tx *gorp.Transaction, cluster *limes.Cluster, domai
 		return nil, err
 	}
 
-	var constraints limes.QuotaConstraints
+	var constraints core.QuotaConstraints
 	if cluster.QuotaConstraints != nil {
 		constraints = cluster.QuotaConstraints.Projects[domain.Name][project.Name]
 	}
@@ -126,7 +126,7 @@ func ValidateProjectServices(tx *gorp.Transaction, cluster *limes.Cluster, domai
 	return services, nil
 }
 
-func checkProjectResourcesAgainstConstraint(tx *gorp.Transaction, cluster *limes.Cluster, domain db.Domain, project db.Project, srv db.ProjectService, serviceConstraints map[string]limes.QuotaConstraint) (ok bool, err error) {
+func checkProjectResourcesAgainstConstraint(tx *gorp.Transaction, cluster *core.Cluster, domain db.Domain, project db.Project, srv db.ProjectService, serviceConstraints map[string]core.QuotaConstraint) (ok bool, err error) {
 	//do not hit the database if there are no constraints to check
 	if len(serviceConstraints) == 0 {
 		return true, nil

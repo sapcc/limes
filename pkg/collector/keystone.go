@@ -22,9 +22,9 @@ package collector
 import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/datamodel"
 	"github.com/sapcc/limes/pkg/db"
-	"github.com/sapcc/limes/pkg/limes"
 )
 
 //ScanDomainsOpts contains additional options for ScanDomains().
@@ -36,13 +36,13 @@ type ScanDomainsOpts struct {
 
 //This extends ListDomains() by handling of the {Include,Exclude}DomainRx. It's
 //a separate function for unit test accessibility.
-func listDomainsFiltered(cluster *limes.Cluster) ([]limes.KeystoneDomain, error) {
+func listDomainsFiltered(cluster *core.Cluster) ([]core.KeystoneDomain, error) {
 	domains, err := cluster.DiscoveryPlugin.ListDomains(cluster.ProviderClient())
 	if err != nil {
 		return nil, err
 	}
 
-	result := make([]limes.KeystoneDomain, 0, len(domains))
+	result := make([]core.KeystoneDomain, 0, len(domains))
 	discovery := cluster.Config.Discovery
 
 	for _, domain := range domains {
@@ -64,7 +64,7 @@ func listDomainsFiltered(cluster *limes.Cluster) ([]limes.KeystoneDomain, error)
 
 //ScanDomains queries Keystone to discover new domains, and returns a
 //list of UUIDs for the newly discovered domains.
-func ScanDomains(cluster *limes.Cluster, opts ScanDomainsOpts) (result []string, resultErr error) {
+func ScanDomains(cluster *core.Cluster, opts ScanDomainsOpts) (result []string, resultErr error) {
 	//make sure that the counters are reported
 	labels := prometheus.Labels{
 		"os_cluster": cluster.ID,
@@ -159,7 +159,7 @@ func ScanDomains(cluster *limes.Cluster, opts ScanDomainsOpts) (result []string,
 	return result, nil
 }
 
-func initDomain(cluster *limes.Cluster, domain limes.KeystoneDomain) (*db.Domain, error) {
+func initDomain(cluster *core.Cluster, domain core.KeystoneDomain) (*db.Domain, error) {
 	//do this in a transaction to avoid half-initialized domains
 	tx, err := db.DB.Begin()
 	if err != nil {
@@ -187,7 +187,7 @@ func initDomain(cluster *limes.Cluster, domain limes.KeystoneDomain) (*db.Domain
 }
 
 //ScanProjects queries Keystone to discover new projects in the given domain.
-func ScanProjects(cluster *limes.Cluster, domain *db.Domain) (result []string, resultErr error) {
+func ScanProjects(cluster *core.Cluster, domain *db.Domain) (result []string, resultErr error) {
 	//make sure that the counters are reported
 	labels := prometheus.Labels{
 		"os_cluster": cluster.ID,
@@ -278,7 +278,7 @@ func ScanProjects(cluster *limes.Cluster, domain *db.Domain) (result []string, r
 
 //Initialize all the database records for a project (in both `projects` and
 //`project_services`).
-func initProject(cluster *limes.Cluster, domain *db.Domain, project limes.KeystoneProject) error {
+func initProject(cluster *core.Cluster, domain *db.Domain, project core.KeystoneProject) error {
 	//do this in a transaction to avoid half-initialized projects
 	tx, err := db.DB.Begin()
 	if err != nil {

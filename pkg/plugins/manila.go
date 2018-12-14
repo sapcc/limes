@@ -27,63 +27,63 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/sharedfilesystems/v2/sharenetworks"
 	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/sapcc/go-bits/logg"
-	"github.com/sapcc/limes/pkg/limes"
+	"github.com/sapcc/limes/pkg/core"
 )
 
 type manilaPlugin struct {
-	cfg limes.ServiceConfiguration
+	cfg core.ServiceConfiguration
 }
 
-var manilaResources = []limes.ResourceInfo{
+var manilaResources = []core.ResourceInfo{
 	{
 		Name: "share_networks",
-		Unit: limes.UnitNone,
+		Unit: core.UnitNone,
 	},
 	{
 		Name: "share_capacity",
-		Unit: limes.UnitGibibytes,
+		Unit: core.UnitGibibytes,
 	},
 	{
 		Name: "shares",
-		Unit: limes.UnitNone,
+		Unit: core.UnitNone,
 	},
 	{
 		Name: "snapshot_capacity",
-		Unit: limes.UnitGibibytes,
+		Unit: core.UnitGibibytes,
 	},
 	{
 		Name: "share_snapshots",
-		Unit: limes.UnitNone,
+		Unit: core.UnitNone,
 	},
 }
 
 func init() {
-	limes.RegisterQuotaPlugin(func(c limes.ServiceConfiguration, scrapeSubresources map[string]bool) limes.QuotaPlugin {
+	core.RegisterQuotaPlugin(func(c core.ServiceConfiguration, scrapeSubresources map[string]bool) core.QuotaPlugin {
 		return &manilaPlugin{c}
 	})
 }
 
-//Init implements the limes.QuotaPlugin interface.
+//Init implements the core.QuotaPlugin interface.
 func (p *manilaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
 	return nil
 }
 
-//ServiceInfo implements the limes.QuotaPlugin interface.
-func (p *manilaPlugin) ServiceInfo() limes.ServiceInfo {
-	return limes.ServiceInfo{
+//ServiceInfo implements the core.QuotaPlugin interface.
+func (p *manilaPlugin) ServiceInfo() core.ServiceInfo {
+	return core.ServiceInfo{
 		Type:        "sharev2",
 		ProductName: "manila",
 		Area:        "storage",
 	}
 }
 
-//Resources implements the limes.QuotaPlugin interface.
-func (p *manilaPlugin) Resources() []limes.ResourceInfo {
+//Resources implements the core.QuotaPlugin interface.
+func (p *manilaPlugin) Resources() []core.ResourceInfo {
 	return manilaResources
 }
 
-//Scrape implements the limes.QuotaPlugin interface.
-func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
+//Scrape implements the core.QuotaPlugin interface.
+func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, error) {
 	client, err := openstack.NewSharedFileSystemV2(provider, eo)
 	if err != nil {
 		return nil, err
@@ -141,7 +141,7 @@ func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 
 	logg.Debug("Scraped quota and usage for service: sharev2.")
 
-	return map[string]limes.ResourceData{
+	return map[string]core.ResourceData{
 		"shares": {
 			Quota: manilaQuotaData.QuotaSet.Shares,
 			Usage: uint64(len(shares)),
@@ -165,7 +165,7 @@ func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 	}, err
 }
 
-//SetQuota implements the limes.QuotaPlugin interface.
+//SetQuota implements the core.QuotaPlugin interface.
 func (p *manilaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
 	client, err := openstack.NewSharedFileSystemV2(provider, eo)
 	if err != nil {

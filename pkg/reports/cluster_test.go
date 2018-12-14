@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	th "github.com/gophercloud/gophercloud/testhelper"
-	"github.com/sapcc/limes/pkg/limes"
+	"github.com/sapcc/limes/pkg/core"
 )
 
 var clusterServicesMockJSON = `
@@ -53,7 +53,7 @@ var clusterResourcesMockJSON = `
 
 var clusterMockResources = &ClusterResources{
 	"cores": &ClusterResource{
-		ResourceInfo: limes.ResourceInfo{
+		ResourceInfo: core.ResourceInfo{
 			Name: "cores",
 		},
 		Capacity:     &coresCap,
@@ -61,9 +61,9 @@ var clusterMockResources = &ClusterResources{
 		Usage:        100,
 	},
 	"ram": &ClusterResource{
-		ResourceInfo: limes.ResourceInfo{
+		ResourceInfo: core.ResourceInfo{
 			Name: "ram",
-			Unit: limes.UnitMebibytes,
+			Unit: core.UnitMebibytes,
 		},
 		Capacity:     &ramCap,
 		DomainsQuota: 102400,
@@ -76,7 +76,7 @@ var ramCap uint64 = 204800
 
 var clusterMockServices = &ClusterServices{
 	"compute": &ClusterService{
-		ServiceInfo: limes.ServiceInfo{
+		ServiceInfo: core.ServiceInfo{
 			Type: "compute",
 			Area: "compute",
 		},

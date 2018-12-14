@@ -25,114 +25,114 @@ import (
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
-	"github.com/sapcc/limes/pkg/limes"
+	"github.com/sapcc/limes/pkg/core"
 )
 
 type neutronPlugin struct {
-	cfg limes.ServiceConfiguration
+	cfg core.ServiceConfiguration
 }
 
-var neutronResources = []limes.ResourceInfo{
+var neutronResources = []core.ResourceInfo{
 	////////// SDN resources
 	{
 		Name:     "floating_ips",
-		Unit:     limes.UnitNone,
+		Unit:     core.UnitNone,
 		Category: "networking",
 	},
 	{
 		Name:     "networks",
-		Unit:     limes.UnitNone,
+		Unit:     core.UnitNone,
 		Category: "networking",
 	},
 	{
 		Name:     "ports",
-		Unit:     limes.UnitNone,
+		Unit:     core.UnitNone,
 		Category: "networking",
 	},
 	{
 		Name:     "rbac_policies",
-		Unit:     limes.UnitNone,
+		Unit:     core.UnitNone,
 		Category: "networking",
 	},
 	{
 		Name:     "routers",
-		Unit:     limes.UnitNone,
+		Unit:     core.UnitNone,
 		Category: "networking",
 	},
 	{
 		Name:     "security_group_rules",
-		Unit:     limes.UnitNone,
+		Unit:     core.UnitNone,
 		Category: "networking",
 		//for "default" security group
 		AutoApproveInitialQuota: 4,
 	},
 	{
 		Name:     "security_groups",
-		Unit:     limes.UnitNone,
+		Unit:     core.UnitNone,
 		Category: "networking",
 		//for "default" security group
 		AutoApproveInitialQuota: 1,
 	},
 	{
 		Name:     "subnet_pools",
-		Unit:     limes.UnitNone,
+		Unit:     core.UnitNone,
 		Category: "networking",
 	},
 	{
 		Name:     "subnets",
-		Unit:     limes.UnitNone,
+		Unit:     core.UnitNone,
 		Category: "networking",
 	},
 	////////// LBaaS resources
 	{
 		Name:     "healthmonitors",
-		Unit:     limes.UnitNone,
+		Unit:     core.UnitNone,
 		Category: "loadbalancing",
 	},
 	{
 		Name:     "l7policies",
-		Unit:     limes.UnitNone,
+		Unit:     core.UnitNone,
 		Category: "loadbalancing",
 	},
 	{
 		Name:     "listeners",
-		Unit:     limes.UnitNone,
+		Unit:     core.UnitNone,
 		Category: "loadbalancing",
 	},
 	{
 		Name:     "loadbalancers",
-		Unit:     limes.UnitNone,
+		Unit:     core.UnitNone,
 		Category: "loadbalancing",
 	},
 	{
 		Name:     "pools",
-		Unit:     limes.UnitNone,
+		Unit:     core.UnitNone,
 		Category: "loadbalancing",
 	},
 }
 
 func init() {
-	limes.RegisterQuotaPlugin(func(c limes.ServiceConfiguration, scrapeSubresources map[string]bool) limes.QuotaPlugin {
+	core.RegisterQuotaPlugin(func(c core.ServiceConfiguration, scrapeSubresources map[string]bool) core.QuotaPlugin {
 		return &neutronPlugin{c}
 	})
 }
 
-//Init implements the limes.QuotaPlugin interface.
+//Init implements the core.QuotaPlugin interface.
 func (p *neutronPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
 	return nil
 }
 
-//ServiceInfo implements the limes.QuotaPlugin interface.
-func (p *neutronPlugin) ServiceInfo() limes.ServiceInfo {
-	return limes.ServiceInfo{
+//ServiceInfo implements the core.QuotaPlugin interface.
+func (p *neutronPlugin) ServiceInfo() core.ServiceInfo {
+	return core.ServiceInfo{
 		Type:        "network",
 		ProductName: "neutron",
 		Area:        "network",
 	}
 }
 
-//Resources implements the limes.QuotaPlugin interface.
-func (p *neutronPlugin) Resources() []limes.ResourceInfo {
+//Resources implements the core.QuotaPlugin interface.
+func (p *neutronPlugin) Resources() []core.ResourceInfo {
 	return neutronResources
 }
 
@@ -235,14 +235,14 @@ type neutronQueryOpts struct {
 	ProjectUUID string `q:"tenant_id"`
 }
 
-//Scrape implements the limes.QuotaPlugin interface.
-func (p *neutronPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
+//Scrape implements the core.QuotaPlugin interface.
+func (p *neutronPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, error) {
 	client, err := openstack.NewNetworkV2(provider, eo)
 	if err != nil {
 		return nil, err
 	}
 
-	data := make(map[string]limes.ResourceData)
+	data := make(map[string]core.ResourceData)
 
 	//query quotas
 	var result gophercloud.Result
@@ -273,7 +273,7 @@ func (p *neutronPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercl
 			return nil, err
 		}
 
-		data[res.LimesName] = limes.ResourceData{
+		data[res.LimesName] = core.ResourceData{
 			Quota: quotas.Values[res.NeutronName],
 			Usage: uint64(count),
 		}
@@ -282,7 +282,7 @@ func (p *neutronPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercl
 	return data, nil
 }
 
-//SetQuota implements the limes.QuotaPlugin interface.
+//SetQuota implements the core.QuotaPlugin interface.
 func (p *neutronPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
 	//map resource names from Limes to Neutron
 	var requestData struct {

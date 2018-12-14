@@ -31,9 +31,9 @@ check: all static-check build/cover.html FORCE
 static-check: FORCE
 	@if ! hash golint 2>/dev/null; then echo ">> Installing golint..."; go get -u golang.org/x/lint/golint; fi
 	@echo '>> gofmt'
-	@if s="$$(gofmt -s -l *.go pkg 2>/dev/null)"                            && test -n "$$s"; then printf ' => %s\n%s\n' gofmt  "$$s"; false; fi
+	@if s="$$(gofmt -s -l *.go cmd pkg 2>/dev/null)"                            && test -n "$$s"; then printf ' => %s\n%s\n' gofmt  "$$s"; false; fi
 	@echo '>> golint'
-	@if s="$$(golint . && find pkg -type d ! -name dbdata -exec golint {} \; 2>/dev/null)" && test -n "$$s"; then printf ' => %s\n%s\n' golint "$$s"; false; fi
+	@if s="$$(golint . && find cmd pkg -type d -exec golint {} \; 2>/dev/null)" && test -n "$$s"; then printf ' => %s\n%s\n' golint "$$s"; false; fi
 	@echo '>> go vet'
 	@$(GO) vet $(GO_ALLPKGS)
 build/%.cover.out: FORCE

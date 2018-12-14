@@ -24,8 +24,8 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
-	"github.com/sapcc/limes/pkg/limes"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -162,7 +162,7 @@ var unitConversionGauge = prometheus.NewGaugeVec(
 //DataMetricsCollector is a prometheus.Collector that submits
 //quota/usage/backend quota from an OpenStack cluster as Prometheus metrics.
 type DataMetricsCollector struct {
-	Cluster *limes.Cluster
+	Cluster *core.Cluster
 }
 
 //Describe implements the prometheus.Collector interface.

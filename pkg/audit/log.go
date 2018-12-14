@@ -33,7 +33,7 @@ import (
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/retry"
-	"github.com/sapcc/limes/pkg/limes"
+	"github.com/sapcc/limes/pkg/core"
 )
 
 func init() {
@@ -118,7 +118,7 @@ type EventParams struct {
 	ResourceName string
 	OldQuota     uint64
 	NewQuota     uint64
-	QuotaUnit    limes.Unit
+	QuotaUnit    core.Unit
 	RejectReason string
 }
 
@@ -185,7 +185,7 @@ func (p EventParams) newEvent() CADFEvent {
 type attachmentContent struct {
 	OldQuota     uint64
 	NewQuota     uint64
-	Unit         limes.Unit
+	Unit         core.Unit
 	RejectReason string
 }
 
@@ -193,10 +193,10 @@ type attachmentContent struct {
 func (a attachmentContent) MarshalJSON() ([]byte, error) {
 	//copy data into a struct that does not have a custom MarshalJSON
 	data := struct {
-		OldQuota     uint64     `json:"oldQuota,omitempty"`
-		NewQuota     uint64     `json:"newQuota,omitempty"`
-		Unit         limes.Unit `json:"unit,omitempty"`
-		RejectReason string     `json:"rejectReason,omitempty"`
+		OldQuota     uint64    `json:"oldQuota,omitempty"`
+		NewQuota     uint64    `json:"newQuota,omitempty"`
+		Unit         core.Unit `json:"unit,omitempty"`
+		RejectReason string    `json:"rejectReason,omitempty"`
 	}{
 		OldQuota:     a.OldQuota,
 		NewQuota:     a.NewQuota,
@@ -219,7 +219,7 @@ func (t *Trail) Add(p EventParams) {
 }
 
 //Commit sends the whole audit trail into the log. Call this after tx.Commit().
-func (t *Trail) Commit(clusterID string, config limes.CADFConfiguration) {
+func (t *Trail) Commit(clusterID string, config core.CADFConfiguration) {
 	if config.Enabled && len(t.events) != 0 {
 		events := t.events //take a copy to pass into the goroutine
 		go retry.ExponentialBackoff{

@@ -24,31 +24,31 @@ import (
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v2/volumes"
 	"github.com/gophercloud/gophercloud/pagination"
-	"github.com/sapcc/limes/pkg/limes"
+	"github.com/sapcc/limes/pkg/core"
 )
 
 type cinderPlugin struct {
-	cfg           limes.ServiceConfiguration
+	cfg           core.ServiceConfiguration
 	scrapeVolumes bool
 }
 
-var cinderResources = []limes.ResourceInfo{
+var cinderResources = []core.ResourceInfo{
 	{
 		Name: "capacity",
-		Unit: limes.UnitGibibytes,
+		Unit: core.UnitGibibytes,
 	},
 	{
 		Name: "snapshots",
-		Unit: limes.UnitNone,
+		Unit: core.UnitNone,
 	},
 	{
 		Name: "volumes",
-		Unit: limes.UnitNone,
+		Unit: core.UnitNone,
 	},
 }
 
 func init() {
-	limes.RegisterQuotaPlugin(func(c limes.ServiceConfiguration, scrapeSubresources map[string]bool) limes.QuotaPlugin {
+	core.RegisterQuotaPlugin(func(c core.ServiceConfiguration, scrapeSubresources map[string]bool) core.QuotaPlugin {
 		return &cinderPlugin{
 			cfg:           c,
 			scrapeVolumes: scrapeSubresources["volumes"],
@@ -56,27 +56,27 @@ func init() {
 	})
 }
 
-//Init implements the limes.QuotaPlugin interface.
+//Init implements the core.QuotaPlugin interface.
 func (p *cinderPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
 	return nil
 }
 
-//ServiceInfo implements the limes.QuotaPlugin interface.
-func (p *cinderPlugin) ServiceInfo() limes.ServiceInfo {
-	return limes.ServiceInfo{
+//ServiceInfo implements the core.QuotaPlugin interface.
+func (p *cinderPlugin) ServiceInfo() core.ServiceInfo {
+	return core.ServiceInfo{
 		Type:        "volumev2",
 		ProductName: "cinder",
 		Area:        "storage",
 	}
 }
 
-//Resources implements the limes.QuotaPlugin interface.
-func (p *cinderPlugin) Resources() []limes.ResourceInfo {
+//Resources implements the core.QuotaPlugin interface.
+func (p *cinderPlugin) Resources() []core.ResourceInfo {
 	return cinderResources
 }
 
-//Scrape implements the limes.QuotaPlugin interface.
-func (p *cinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
+//Scrape implements the core.QuotaPlugin interface.
+func (p *cinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, error) {
 	client, err := openstack.NewBlockStorageV2(provider, eo)
 	if err != nil {
 		return nil, err
@@ -123,9 +123,9 @@ func (p *cinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 					"id":     volume.ID,
 					"name":   volume.Name,
 					"status": volume.Status,
-					"size": limes.ValueWithUnit{
+					"size": core.ValueWithUnit{
 						Value: uint64(volume.Size),
-						Unit:  limes.UnitGibibytes,
+						Unit:  core.UnitGibibytes,
 					},
 				})
 			}
@@ -136,7 +136,7 @@ func (p *cinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 		}
 	}
 
-	return map[string]limes.ResourceData{
+	return map[string]core.ResourceData{
 		"capacity": {
 			Quota: data.QuotaSet.Capacity.Quota,
 			Usage: data.QuotaSet.Capacity.Usage,
@@ -153,7 +153,7 @@ func (p *cinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 	}, nil
 }
 
-//SetQuota implements the limes.QuotaPlugin interface.
+//SetQuota implements the core.QuotaPlugin interface.
 func (p *cinderPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
 	requestData := map[string]map[string]uint64{
 		"quota_set": {

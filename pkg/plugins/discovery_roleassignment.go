@@ -28,16 +28,16 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/identity/v3/roles"
 	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/sapcc/go-bits/logg"
-	"github.com/sapcc/limes/pkg/limes"
+	"github.com/sapcc/limes/pkg/core"
 )
 
 type roleAssignmentDiscoveryPlugin struct {
-	cfg    limes.DiscoveryConfiguration
+	cfg    core.DiscoveryConfiguration
 	lister *listDiscoveryPlugin
 }
 
 func init() {
-	limes.RegisterDiscoveryPlugin(func(c limes.DiscoveryConfiguration) limes.DiscoveryPlugin {
+	core.RegisterDiscoveryPlugin(func(c core.DiscoveryConfiguration) core.DiscoveryPlugin {
 		//this plugin embeds another plugin to avoid code duplication (see ListDomains())
 		return &roleAssignmentDiscoveryPlugin{
 			cfg:    c,
@@ -46,18 +46,18 @@ func init() {
 	})
 }
 
-//Method implements the limes.DiscoveryPlugin interface.
+//Method implements the core.DiscoveryPlugin interface.
 func (p *roleAssignmentDiscoveryPlugin) Method() string {
 	return "role-assignment"
 }
 
-//ListDomains implements the limes.DiscoveryPlugin interface.
-func (p *roleAssignmentDiscoveryPlugin) ListDomains(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) ([]limes.KeystoneDomain, error) {
+//ListDomains implements the core.DiscoveryPlugin interface.
+func (p *roleAssignmentDiscoveryPlugin) ListDomains(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) ([]core.KeystoneDomain, error) {
 	return p.lister.ListDomains(provider, eo)
 }
 
-//ListProjects implements the limes.DiscoveryPlugin interface.
-func (p *roleAssignmentDiscoveryPlugin) ListProjects(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID string) ([]limes.KeystoneProject, error) {
+//ListProjects implements the core.DiscoveryPlugin interface.
+func (p *roleAssignmentDiscoveryPlugin) ListProjects(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID string) ([]core.KeystoneProject, error) {
 	if p.cfg.RoleAssignment.RoleName == "" {
 		logg.Fatal(`missing role name for discovery plugin "role-assignment"`)
 	}
@@ -94,7 +94,7 @@ func (p *roleAssignmentDiscoveryPlugin) ListProjects(provider *gophercloud.Provi
 	}
 
 	//filter projects by domain and get name
-	var projects []limes.KeystoneProject
+	var projects []core.KeystoneProject
 	for projectID := range projectIDs {
 		if projectID == "" {
 			continue
@@ -120,7 +120,7 @@ func (p *roleAssignmentDiscoveryPlugin) ListProjects(provider *gophercloud.Provi
 		}
 
 		var data2 struct {
-			Project limes.KeystoneProject `json:"project"`
+			Project core.KeystoneProject `json:"project"`
 		}
 		err = result.ExtractInto(&data2)
 		if err != nil {

@@ -26,8 +26,8 @@ import (
 	"sort"
 	"time"
 
+	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
-	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/util"
 )
 
@@ -41,7 +41,7 @@ type Domain struct {
 //DomainService is a substructure of Domain containing data for
 //a single backend service.
 type DomainService struct {
-	limes.ServiceInfo
+	core.ServiceInfo
 	Resources    DomainResources `json:"resources,keepempty"`
 	MaxScrapedAt *int64          `json:"max_scraped_at,omitempty"`
 	MinScrapedAt *int64          `json:"min_scraped_at,omitempty"`
@@ -50,15 +50,15 @@ type DomainService struct {
 //DomainResource is a substructure of Domain containing data for
 //a single resource.
 type DomainResource struct {
-	limes.ResourceInfo
+	core.ResourceInfo
 	DomainQuota   uint64 `json:"quota,keepempty"`
 	ProjectsQuota uint64 `json:"projects_quota,keepempty"`
 	Usage         uint64 `json:"usage,keepempty"`
 	BurstUsage    uint64 `json:"burst_usage,omitempty"`
 	//These are pointers to values to enable precise control over whether this field is rendered in output.
-	BackendQuota         *uint64                `json:"backend_quota,omitempty"`
-	InfiniteBackendQuota *bool                  `json:"infinite_backend_quota,omitempty"`
-	Scaling              *limes.ScalingBehavior `json:"scales_with,omitempty"`
+	BackendQuota         *uint64               `json:"backend_quota,omitempty"`
+	InfiniteBackendQuota *bool                 `json:"infinite_backend_quota,omitempty"`
+	Scaling              *core.ScalingBehavior `json:"scales_with,omitempty"`
 }
 
 //DomainServices provides fast lookup of services using a map, but serializes
@@ -150,7 +150,7 @@ var domainReportQuery2 = `
 
 //GetDomains returns Domain reports for all domains in the given cluster or, if
 //domainID is non-nil, for that domain only.
-func GetDomains(cluster *limes.Cluster, domainID *int64, dbi db.Interface, filter Filter) ([]*Domain, error) {
+func GetDomains(cluster *core.Cluster, domainID *int64, dbi db.Interface, filter Filter) ([]*Domain, error) {
 	clusterCanBurst := cluster.Config.Bursting.MaxMultiplier > 0
 
 	fields := map[string]interface{}{"d.cluster_id": cluster.ID}
@@ -285,7 +285,7 @@ func GetDomains(cluster *limes.Cluster, domainID *int64, dbi db.Interface, filte
 
 type domains map[string]*Domain
 
-func (d domains) Find(cluster *limes.Cluster, domainUUID string, serviceType, resourceName *string) (*Domain, *DomainService, *DomainResource) {
+func (d domains) Find(cluster *core.Cluster, domainUUID string, serviceType, resourceName *string) (*Domain, *DomainService, *DomainResource) {
 	domain, exists := d[domainUUID]
 	if !exists {
 		domain = &Domain{

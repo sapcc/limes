@@ -17,7 +17,7 @@
 *
 *******************************************************************************/
 
-package limes
+package core
 
 import (
 	"github.com/gophercloud/gophercloud"

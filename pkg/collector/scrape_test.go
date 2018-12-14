@@ -31,8 +31,8 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
-	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/test"
 )
 
@@ -40,17 +40,17 @@ func p2u64(x uint64) *uint64 {
 	return &x
 }
 
-func prepareScrapeTest(t *testing.T, numProjects int, quotaPlugins ...limes.QuotaPlugin) *limes.Cluster {
+func prepareScrapeTest(t *testing.T, numProjects int, quotaPlugins ...core.QuotaPlugin) *core.Cluster {
 	test.ResetTime()
 	test.InitDatabase(t)
 
-	cluster := &limes.Cluster{
+	cluster := &core.Cluster{
 		ID:              "west",
 		IsServiceShared: map[string]bool{},
 		DiscoveryPlugin: test.NewDiscoveryPlugin(),
-		QuotaPlugins:    map[string]limes.QuotaPlugin{},
-		CapacityPlugins: map[string]limes.CapacityPlugin{},
-		Config:          &limes.ClusterConfiguration{Auth: &limes.AuthParameters{}},
+		QuotaPlugins:    map[string]core.QuotaPlugin{},
+		CapacityPlugins: map[string]core.CapacityPlugin{},
+		Config:          &core.ClusterConfiguration{Auth: &core.AuthParameters{}},
 	}
 	for _, plugin := range quotaPlugins {
 		info := plugin.ServiceInfo()
@@ -66,7 +66,7 @@ func prepareScrapeTest(t *testing.T, numProjects int, quotaPlugins ...limes.Quot
 	project2 := discovery.StaticProjects[domain1.UUID][1]
 
 	discovery.StaticDomains = discovery.StaticDomains[0:1]
-	discovery.StaticProjects = map[string][]limes.KeystoneProject{
+	discovery.StaticProjects = map[string][]core.KeystoneProject{
 		domain1.UUID: discovery.StaticProjects[domain1.UUID][0:numProjects],
 	}
 
@@ -93,13 +93,13 @@ func prepareScrapeTest(t *testing.T, numProjects int, quotaPlugins ...limes.Quot
 	//the code path in Scrape() that applies constraints when first creating
 	//project_resources entries. If we had set this before ScanDomains, then
 	//ScanDomains would already have created the project_resources entries.
-	projectConstraints := limes.QuotaConstraints{
+	projectConstraints := core.QuotaConstraints{
 		"unittest": {
 			"capacity": {Minimum: p2u64(10), Maximum: p2u64(40)},
 		},
 	}
-	cluster.QuotaConstraints = &limes.QuotaConstraintSet{
-		Projects: map[string]map[string]limes.QuotaConstraints{
+	cluster.QuotaConstraints = &core.QuotaConstraintSet{
+		Projects: map[string]map[string]core.QuotaConstraints{
 			domain1.Name: {
 				project1.Name: projectConstraints,
 				project2.Name: projectConstraints,
@@ -294,15 +294,15 @@ func (p *autoApprovalTestPlugin) Init(provider *gophercloud.ProviderClient, eo g
 	return nil
 }
 
-func (p *autoApprovalTestPlugin) ServiceInfo() limes.ServiceInfo {
-	return limes.ServiceInfo{
+func (p *autoApprovalTestPlugin) ServiceInfo() core.ServiceInfo {
+	return core.ServiceInfo{
 		Type: "autoapprovaltest",
 	}
 }
 
-func (p *autoApprovalTestPlugin) Resources() []limes.ResourceInfo {
+func (p *autoApprovalTestPlugin) Resources() []core.ResourceInfo {
 	//one resource can auto-approve, one cannot because BackendQuota != AutoApproveInitialQuota
-	return []limes.ResourceInfo{
+	return []core.ResourceInfo{
 		{
 			Name:                    "approve",
 			AutoApproveInitialQuota: p.StaticBackendQuota,
@@ -314,8 +314,8 @@ func (p *autoApprovalTestPlugin) Resources() []limes.ResourceInfo {
 	}
 }
 
-func (p *autoApprovalTestPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
-	return map[string]limes.ResourceData{
+func (p *autoApprovalTestPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, error) {
+	return map[string]core.ResourceData{
 		"approve":   {Usage: 0, Quota: int64(p.StaticBackendQuota)},
 		"noapprove": {Usage: 0, Quota: int64(p.StaticBackendQuota) + 10},
 	}, nil

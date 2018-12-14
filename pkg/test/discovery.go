@@ -21,24 +21,24 @@ package test
 
 import (
 	"github.com/gophercloud/gophercloud"
-	"github.com/sapcc/limes/pkg/limes"
+	"github.com/sapcc/limes/pkg/core"
 )
 
-//DiscoveryPlugin is a limes.DiscoveryPlugin implementation for unit tests that
+//DiscoveryPlugin is a core.DiscoveryPlugin implementation for unit tests that
 //reports a static set of domains and projects.
 type DiscoveryPlugin struct {
-	StaticDomains  []limes.KeystoneDomain
-	StaticProjects map[string][]limes.KeystoneProject
+	StaticDomains  []core.KeystoneDomain
+	StaticProjects map[string][]core.KeystoneProject
 }
 
 //NewDiscoveryPlugin creates a DiscoveryPlugin instance.
 func NewDiscoveryPlugin() *DiscoveryPlugin {
 	return &DiscoveryPlugin{
-		StaticDomains: []limes.KeystoneDomain{
+		StaticDomains: []core.KeystoneDomain{
 			{Name: "germany", UUID: "uuid-for-germany"},
 			{Name: "france", UUID: "uuid-for-france"},
 		},
-		StaticProjects: map[string][]limes.KeystoneProject{
+		StaticProjects: map[string][]core.KeystoneProject{
 			"uuid-for-germany": {
 				{Name: "berlin", UUID: "uuid-for-berlin", ParentUUID: "uuid-for-germany"},
 				{Name: "dresden", UUID: "uuid-for-dresden", ParentUUID: "uuid-for-berlin"},
@@ -50,17 +50,17 @@ func NewDiscoveryPlugin() *DiscoveryPlugin {
 	}
 }
 
-//Method implements the limes.DiscoveryPlugin interface.
+//Method implements the core.DiscoveryPlugin interface.
 func (p *DiscoveryPlugin) Method() string {
 	return "unittest"
 }
 
-//ListDomains implements the limes.DiscoveryPlugin interface.
-func (p *DiscoveryPlugin) ListDomains(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) ([]limes.KeystoneDomain, error) {
+//ListDomains implements the core.DiscoveryPlugin interface.
+func (p *DiscoveryPlugin) ListDomains(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) ([]core.KeystoneDomain, error) {
 	return p.StaticDomains, nil
 }
 
-//ListProjects implements the limes.DiscoveryPlugin interface.
-func (p *DiscoveryPlugin) ListProjects(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID string) ([]limes.KeystoneProject, error) {
+//ListProjects implements the core.DiscoveryPlugin interface.
+func (p *DiscoveryPlugin) ListProjects(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID string) ([]core.KeystoneProject, error) {
 	return p.StaticProjects[domainUUID], nil
 }

@@ -24,12 +24,12 @@ import (
 	"fmt"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/sapcc/limes/pkg/limes"
+	"github.com/sapcc/limes/pkg/core"
 	"github.com/streadway/amqp"
 )
 
 //sendEvents sends audit events to a RabbitMQ server.
-func sendEvents(clusterID string, config limes.CADFConfiguration, events []CADFEvent) error {
+func sendEvents(clusterID string, config core.CADFConfiguration, events []CADFEvent) error {
 	labels := prometheus.Labels{
 		"os_cluster": clusterID,
 	}

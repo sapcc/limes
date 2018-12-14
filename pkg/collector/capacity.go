@@ -27,8 +27,8 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
-	"github.com/sapcc/limes/pkg/limes"
 )
 
 var scanInterval = 15 * time.Minute
@@ -53,7 +53,7 @@ func (c *Collector) ScanCapacity() {
 }
 
 func (c *Collector) scanCapacity() {
-	values := make(map[string]map[string]limes.CapacityData)
+	values := make(map[string]map[string]core.CapacityData)
 	scrapedAt := c.TimeNow()
 
 	for capacitorID, plugin := range c.Cluster.CapacityPlugins {
@@ -76,7 +76,7 @@ func (c *Collector) scanCapacity() {
 		//merge capacities from this plugin into the overall capacity values map
 		for serviceType, resources := range capacities {
 			if _, ok := values[serviceType]; !ok {
-				values[serviceType] = make(map[string]limes.CapacityData)
+				values[serviceType] = make(map[string]core.CapacityData)
 			}
 			for resourceName, value := range resources {
 				values[serviceType][resourceName] = value
@@ -114,8 +114,8 @@ func (c *Collector) scanCapacity() {
 	}
 
 	//split values into sharedValues and unsharedValues
-	sharedValues := make(map[string]map[string]limes.CapacityData)
-	unsharedValues := make(map[string]map[string]limes.CapacityData)
+	sharedValues := make(map[string]map[string]core.CapacityData)
+	unsharedValues := make(map[string]map[string]core.CapacityData)
 	for serviceType, subvalues := range values {
 		if c.Cluster.IsServiceShared[serviceType] {
 			sharedValues[serviceType] = subvalues
@@ -140,7 +140,7 @@ var listProtectedServicesQueryStr = `
 	 WHERE cs.cluster_id = $1 AND cr.comment != ''
 `
 
-func (c *Collector) writeCapacity(clusterID string, values map[string]map[string]limes.CapacityData, scrapedAt time.Time) error {
+func (c *Collector) writeCapacity(clusterID string, values map[string]map[string]core.CapacityData, scrapedAt time.Time) error {
 	//NOTE: clusterID is not taken from c.Cluster because it can also be "shared".
 
 	//do the following in a transaction to avoid inconsistent DB state

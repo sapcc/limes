@@ -24,13 +24,13 @@ import (
 	"strings"
 
 	"github.com/gophercloud/gophercloud"
-	"github.com/sapcc/limes/pkg/limes"
+	"github.com/sapcc/limes/pkg/core"
 )
 
-//Plugin is a limes.QuotaPlugin implementation for unit tests.
+//Plugin is a core.QuotaPlugin implementation for unit tests.
 type Plugin struct {
 	StaticServiceType  string
-	StaticResourceData map[string]*limes.ResourceData
+	StaticResourceData map[string]*core.ResourceData
 	StaticCapacity     map[string]uint64
 	OverrideQuota      map[string]map[string]uint64
 	//behavior flags that can be set by a unit test
@@ -39,14 +39,14 @@ type Plugin struct {
 	WithExternallyManagedResource bool
 }
 
-var resources = []limes.ResourceInfo{
+var resources = []core.ResourceInfo{
 	{
 		Name: "capacity",
-		Unit: limes.UnitBytes,
+		Unit: core.UnitBytes,
 	},
 	{
 		Name: "things",
-		Unit: limes.UnitNone,
+		Unit: core.UnitNone,
 	},
 }
 
@@ -54,7 +54,7 @@ var resources = []limes.ResourceInfo{
 func NewPlugin(serviceType string) *Plugin {
 	return &Plugin{
 		StaticServiceType: serviceType,
-		StaticResourceData: map[string]*limes.ResourceData{
+		StaticResourceData: map[string]*core.ResourceData{
 			"things":          {Quota: 42, Usage: 2},
 			"capacity":        {Quota: 100, Usage: 0},
 			"external_things": {Quota: 5, Usage: 0},
@@ -63,47 +63,47 @@ func NewPlugin(serviceType string) *Plugin {
 	}
 }
 
-//NewPluginFactory creates a new PluginFactory for limes.RegisterQuotaPlugin.
-func NewPluginFactory(serviceType string) func(limes.ServiceConfiguration, map[string]bool) limes.QuotaPlugin {
-	return func(cfg limes.ServiceConfiguration, scrapeSubresources map[string]bool) limes.QuotaPlugin {
+//NewPluginFactory creates a new PluginFactory for core.RegisterQuotaPlugin.
+func NewPluginFactory(serviceType string) func(core.ServiceConfiguration, map[string]bool) core.QuotaPlugin {
+	return func(cfg core.ServiceConfiguration, scrapeSubresources map[string]bool) core.QuotaPlugin {
 		//cfg and scrapeSubresources is ignored
 		return NewPlugin(serviceType)
 	}
 }
 
-//Init implements the limes.QuotaPlugin interface.
+//Init implements the core.QuotaPlugin interface.
 func (p *Plugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
 	return nil
 }
 
-//ServiceInfo implements the limes.QuotaPlugin interface.
-func (p *Plugin) ServiceInfo() limes.ServiceInfo {
-	return limes.ServiceInfo{
+//ServiceInfo implements the core.QuotaPlugin interface.
+func (p *Plugin) ServiceInfo() core.ServiceInfo {
+	return core.ServiceInfo{
 		Type: p.StaticServiceType,
 		Area: p.StaticServiceType,
 	}
 }
 
-//Resources implements the limes.QuotaPlugin interface.
-func (p *Plugin) Resources() []limes.ResourceInfo {
+//Resources implements the core.QuotaPlugin interface.
+func (p *Plugin) Resources() []core.ResourceInfo {
 	result := resources
 	if p.WithExternallyManagedResource {
-		result = append(result, limes.ResourceInfo{
+		result = append(result, core.ResourceInfo{
 			Name:              "external_things",
-			Unit:              limes.UnitNone,
+			Unit:              core.UnitNone,
 			ExternallyManaged: true,
 		})
 	}
 	return result
 }
 
-//Scrape implements the limes.QuotaPlugin interface.
-func (p *Plugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]limes.ResourceData, error) {
+//Scrape implements the core.QuotaPlugin interface.
+func (p *Plugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, error) {
 	if p.ScrapeFails {
 		return nil, errors.New("Scrape failed as requested")
 	}
 
-	result := make(map[string]limes.ResourceData)
+	result := make(map[string]core.ResourceData)
 	for key, val := range p.StaticResourceData {
 		if !p.WithExternallyManagedResource && key == "external_things" {
 			continue
@@ -114,7 +114,7 @@ func (p *Plugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.End
 	data, exists := p.OverrideQuota[projectUUID]
 	if exists {
 		for resourceName, quota := range data {
-			result[resourceName] = limes.ResourceData{
+			result[resourceName] = core.ResourceData{
 				Quota: int64(quota),
 				Usage: result[resourceName].Usage,
 			}
@@ -129,7 +129,7 @@ func (p *Plugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.End
 			"index": idx,
 		}
 	}
-	result["things"] = limes.ResourceData{
+	result["things"] = core.ResourceData{
 		Quota:        result["things"].Quota,
 		Usage:        result["things"].Usage,
 		Subresources: subres,
@@ -138,7 +138,7 @@ func (p *Plugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.End
 	return result, nil
 }
 
-//SetQuota implements the limes.QuotaPlugin interface.
+//SetQuota implements the core.QuotaPlugin interface.
 func (p *Plugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
 	if p.SetQuotaFails {
 		return errors.New("SetQuota failed as requested")
@@ -147,7 +147,7 @@ func (p *Plugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.E
 	return nil
 }
 
-//CapacityPlugin is a limes.CapacityPlugin implementation for unit tests.
+//CapacityPlugin is a core.CapacityPlugin implementation for unit tests.
 type CapacityPlugin struct {
 	PluginID          string
 	Resources         []string //each formatted as "servicetype/resourcename"
@@ -160,13 +160,13 @@ func NewCapacityPlugin(id string, resources ...string) *CapacityPlugin {
 	return &CapacityPlugin{id, resources, 42, false}
 }
 
-//ID implements the limes.CapacityPlugin interface.
+//ID implements the core.CapacityPlugin interface.
 func (p *CapacityPlugin) ID() string {
 	return p.PluginID
 }
 
-//Scrape implements the limes.CapacityPlugin interface.
-func (p *CapacityPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]limes.CapacityData, error) {
+//Scrape implements the core.CapacityPlugin interface.
+func (p *CapacityPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]core.CapacityData, error) {
 	var subcapacities []interface{}
 	if p.WithSubcapacities {
 		subcapacities = []interface{}{
@@ -175,14 +175,14 @@ func (p *CapacityPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherc
 		}
 	}
 
-	result := make(map[string]map[string]limes.CapacityData)
+	result := make(map[string]map[string]core.CapacityData)
 	for _, str := range p.Resources {
 		parts := strings.SplitN(str, "/", 2)
 		_, exists := result[parts[0]]
 		if !exists {
-			result[parts[0]] = make(map[string]limes.CapacityData)
+			result[parts[0]] = make(map[string]core.CapacityData)
 		}
-		result[parts[0]][parts[1]] = limes.CapacityData{Capacity: p.Capacity, Subcapacities: subcapacities}
+		result[parts[0]][parts[1]] = core.CapacityData{Capacity: p.Capacity, Subcapacities: subcapacities}
 	}
 	return result, nil
 }

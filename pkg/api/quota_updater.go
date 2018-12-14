@@ -29,8 +29,8 @@ import (
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/limes/pkg/audit"
+	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
-	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/reports"
 )
 
@@ -38,7 +38,7 @@ import (
 //See func PutDomain and func PutProject for how it's used.
 type QuotaUpdater struct {
 	//scope
-	Cluster *limes.Cluster
+	Cluster *core.Cluster
 	Domain  *db.Domain  //always set (for project quota updates, contains the project'u domain)
 	Project *db.Project //nil for domain quota updates
 	//AuthZ info
@@ -55,8 +55,8 @@ type QuotaUpdater struct {
 type QuotaRequest struct {
 	OldValue        uint64
 	NewValue        uint64
-	Unit            limes.Unit
-	ValidationError *limes.QuotaValidationError
+	Unit            core.Unit
+	ValidationError *core.QuotaValidationError
 }
 
 //ScopeType is used for constructing error messages.
@@ -68,7 +68,7 @@ func (u QuotaUpdater) ScopeType() string {
 }
 
 //QuotaConstraints returns the quota constraints that apply to this updater's scope.
-func (u QuotaUpdater) QuotaConstraints() limes.QuotaConstraints {
+func (u QuotaUpdater) QuotaConstraints() core.QuotaConstraints {
 	if u.Cluster.QuotaConstraints == nil {
 		return nil
 	}
@@ -141,7 +141,7 @@ func (u *QuotaUpdater) ValidateInput(input ServiceQuotas, dbi db.Interface) erro
 			}
 			req.NewValue, err = newQuota.ConvertFor(u.Cluster, srv.Type, res.Name)
 			if err != nil {
-				req.ValidationError = &limes.QuotaValidationError{
+				req.ValidationError = &core.QuotaValidationError{
 					Status:  http.StatusUnprocessableEntity,
 					Message: err.Error(),
 				}
@@ -161,10 +161,10 @@ func (u *QuotaUpdater) ValidateInput(input ServiceQuotas, dbi db.Interface) erro
 	return nil
 }
 
-func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limes.ResourceInfo, domRes reports.DomainResource, projRes *reports.ProjectResource, newQuota uint64) *limes.QuotaValidationError {
+func (u QuotaUpdater) validateQuota(srv core.ServiceInfo, res core.ResourceInfo, domRes reports.DomainResource, projRes *reports.ProjectResource, newQuota uint64) *core.QuotaValidationError {
 	//can we change this quota at all?
 	if res.ExternallyManaged {
-		return &limes.QuotaValidationError{
+		return &core.QuotaValidationError{
 			Status:  http.StatusUnprocessableEntity,
 			Message: "resource is managed externally",
 		}
@@ -206,12 +206,12 @@ func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limes.ResourceInf
 	return u.validateProjectQuota(domRes, *projRes, newQuota)
 }
 
-func (u QuotaUpdater) validateAuthorization(oldQuota, newQuota, lprLimit uint64, unit limes.Unit) *limes.QuotaValidationError {
+func (u QuotaUpdater) validateAuthorization(oldQuota, newQuota, lprLimit uint64, unit core.Unit) *core.QuotaValidationError {
 	if oldQuota >= newQuota {
 		if u.CanLower {
 			return nil
 		}
-		return &limes.QuotaValidationError{
+		return &core.QuotaValidationError{
 			Status:  http.StatusForbidden,
 			Message: "user is not allowed to lower quotas",
 		}
@@ -224,24 +224,24 @@ func (u QuotaUpdater) validateAuthorization(oldQuota, newQuota, lprLimit uint64,
 		if newQuota < lprLimit {
 			return nil
 		}
-		return &limes.QuotaValidationError{
+		return &core.QuotaValidationError{
 			Status:       http.StatusForbidden,
 			Message:      "user is not allowed to raise quotas that high",
 			MaximumValue: &lprLimit,
 			Unit:         unit,
 		}
 	}
-	return &limes.QuotaValidationError{
+	return &core.QuotaValidationError{
 		Status:  http.StatusForbidden,
 		Message: "user is not allowed to raise quotas",
 	}
 }
 
-func (u QuotaUpdater) validateDomainQuota(report reports.DomainResource, newQuota uint64) *limes.QuotaValidationError {
+func (u QuotaUpdater) validateDomainQuota(report reports.DomainResource, newQuota uint64) *core.QuotaValidationError {
 	//check that existing project quotas fit into new domain quota
 	if newQuota < report.ProjectsQuota {
 		min := report.ProjectsQuota
-		return &limes.QuotaValidationError{
+		return &core.QuotaValidationError{
 			Status:       http.StatusConflict,
 			Message:      "domain quota may not be smaller than sum of project quotas in that domain",
 			MinimumValue: &min,
@@ -252,11 +252,11 @@ func (u QuotaUpdater) validateDomainQuota(report reports.DomainResource, newQuot
 	return nil
 }
 
-func (u QuotaUpdater) validateProjectQuota(domRes reports.DomainResource, projRes reports.ProjectResource, newQuota uint64) *limes.QuotaValidationError {
+func (u QuotaUpdater) validateProjectQuota(domRes reports.DomainResource, projRes reports.ProjectResource, newQuota uint64) *core.QuotaValidationError {
 	//check that usage fits into quota
 	if projRes.Usage > newQuota {
 		min := projRes.Usage
-		return &limes.QuotaValidationError{
+		return &core.QuotaValidationError{
 			Status:       http.StatusConflict,
 			Message:      "quota may not be lower than current usage",
 			MinimumValue: &min,
@@ -278,7 +278,7 @@ func (u QuotaUpdater) validateProjectQuota(domRes reports.DomainResource, projRe
 		if domRes.DomainQuota < domRes.ProjectsQuota-projRes.Quota {
 			maxQuota = 0
 		}
-		return &limes.QuotaValidationError{
+		return &core.QuotaValidationError{
 			Status:       http.StatusConflict,
 			Message:      "domain quota exceeded",
 			MaximumValue: &maxQuota,
@@ -307,7 +307,7 @@ func (u QuotaUpdater) WriteSimulationReport(w http.ResponseWriter) {
 	type unacceptableResource struct {
 		ServiceType  string `json:"service_type"`
 		ResourceName string `json:"resource_name"`
-		limes.QuotaValidationError
+		core.QuotaValidationError
 	}
 	var result struct {
 		IsValid               bool                   `json:"success,keepempty"`
@@ -362,11 +362,11 @@ func (u QuotaUpdater) WritePutErrorResponse(w http.ResponseWriter) {
 				var notes []string
 				if err.MinimumValue != nil {
 					notes = append(notes, fmt.Sprintf("minimum acceptable %s quota is %v",
-						u.ScopeType(), limes.ValueWithUnit{Value: *err.MinimumValue, Unit: err.Unit}))
+						u.ScopeType(), core.ValueWithUnit{Value: *err.MinimumValue, Unit: err.Unit}))
 				}
 				if err.MaximumValue != nil {
 					notes = append(notes, fmt.Sprintf("maximum acceptable %s quota is %v",
-						u.ScopeType(), limes.ValueWithUnit{Value: *err.MaximumValue, Unit: err.Unit}))
+						u.ScopeType(), core.ValueWithUnit{Value: *err.MaximumValue, Unit: err.Unit}))
 				}
 				if len(notes) > 0 {
 					line += fmt.Sprintf(" (%s)", strings.Join(notes, ", "))

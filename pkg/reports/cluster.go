@@ -27,8 +27,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
-	"github.com/sapcc/limes/pkg/limes"
 	"github.com/sapcc/limes/pkg/util"
 )
 
@@ -43,7 +43,7 @@ type Cluster struct {
 //ClusterService is a substructure of Cluster containing data for
 //a single backend service.
 type ClusterService struct {
-	limes.ServiceInfo
+	core.ServiceInfo
 	Shared       bool             `json:"shared,omitempty"`
 	Resources    ClusterResources `json:"resources,keepempty"`
 	MaxScrapedAt *int64           `json:"max_scraped_at,omitempty"`
@@ -53,7 +53,7 @@ type ClusterService struct {
 //ClusterResource is a substructure of Cluster containing data for
 //a single resource.
 type ClusterResource struct {
-	limes.ResourceInfo
+	core.ResourceInfo
 	Capacity      *uint64         `json:"capacity,omitempty"`
 	RawCapacity   *uint64         `json:"raw_capacity,omitempty"`
 	Comment       string          `json:"comment,omitempty"`
@@ -175,9 +175,9 @@ var clusterReportQuery5 = `
 //non-nil, for that cluster only.
 //
 //In contrast to nearly everything else in Limes, this needs the full
-//limes.Configuration (instead of just the current limes.ClusterConfiguration)
+//core.Configuration (instead of just the current core.ClusterConfiguration)
 //to look at the services enabled in other clusters.
-func GetClusters(config limes.Configuration, clusterID *string, localQuotaUsageOnly bool, withSubcapacities bool, dbi db.Interface, filter Filter) ([]*Cluster, error) {
+func GetClusters(config core.Configuration, clusterID *string, localQuotaUsageOnly bool, withSubcapacities bool, dbi db.Interface, filter Filter) ([]*Cluster, error) {
 	//first query: collect project usage data in these clusters
 	clusters := make(clusters)
 	queryStr, joinArgs := filter.PrepareQuery(clusterReportQuery1)
@@ -500,7 +500,7 @@ func makeClusterFilter(tableWithClusterID string, clusterID *string) map[string]
 
 type clusters map[string]*Cluster
 
-func (c clusters) Find(config limes.Configuration, clusterID string, serviceType, resourceName *string) (*Cluster, *ClusterService, *ClusterResource) {
+func (c clusters) Find(config core.Configuration, clusterID string, serviceType, resourceName *string) (*Cluster, *ClusterService, *ClusterResource) {
 	clusterConfig, exists := config.Clusters[clusterID]
 	if !exists {
 		return nil, nil, nil

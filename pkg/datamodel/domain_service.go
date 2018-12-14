@@ -23,14 +23,14 @@ import (
 	"sort"
 
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
-	"github.com/sapcc/limes/pkg/limes"
 	gorp "gopkg.in/gorp.v2"
 )
 
 //ValidateDomainServices ensures that all required DomainService records for
 //this domain exist (and none other). It returns the full set of domain services.
-func ValidateDomainServices(tx *gorp.Transaction, cluster *limes.Cluster, domain db.Domain) ([]db.DomainService, error) {
+func ValidateDomainServices(tx *gorp.Transaction, cluster *core.Cluster, domain db.Domain) ([]db.DomainService, error) {
 	//list existing records
 	seen := make(map[string]bool)
 	var services []db.DomainService
@@ -40,7 +40,7 @@ func ValidateDomainServices(tx *gorp.Transaction, cluster *limes.Cluster, domain
 		return nil, err
 	}
 
-	var constraints limes.QuotaConstraints
+	var constraints core.QuotaConstraints
 	if cluster.QuotaConstraints != nil {
 		constraints = cluster.QuotaConstraints.Domains[domain.Name]
 	}
@@ -89,7 +89,7 @@ func ValidateDomainServices(tx *gorp.Transaction, cluster *limes.Cluster, domain
 	return services, nil
 }
 
-func checkDomainServiceConstraints(tx *gorp.Transaction, cluster *limes.Cluster, domain db.Domain, srv db.DomainService, serviceConstraints map[string]limes.QuotaConstraint) error {
+func checkDomainServiceConstraints(tx *gorp.Transaction, cluster *core.Cluster, domain db.Domain, srv db.DomainService, serviceConstraints map[string]core.QuotaConstraint) error {
 	//do not hit the database if there are no constraints to check
 	if len(serviceConstraints) == 0 {
 		return nil
@@ -113,8 +113,8 @@ func checkDomainServiceConstraints(tx *gorp.Transaction, cluster *limes.Cluster,
 			resInfo := cluster.InfoForResource(srv.Type, res.Name)
 			logg.Info("changing %s/%s quota for domain %s from %s to %s to satisfy constraint %q",
 				srv.Type, res.Name, domain.Name,
-				limes.ValueWithUnit{Value: res.Quota, Unit: resInfo.Unit},
-				limes.ValueWithUnit{Value: newQuota, Unit: resInfo.Unit},
+				core.ValueWithUnit{Value: res.Quota, Unit: resInfo.Unit},
+				core.ValueWithUnit{Value: newQuota, Unit: resInfo.Unit},
 				constraint.String(),
 			)
 
@@ -141,7 +141,7 @@ func checkDomainServiceConstraints(tx *gorp.Transaction, cluster *limes.Cluster,
 	return createMissingDomainResources(tx, cluster, domain, srv, serviceConstraints, seen)
 }
 
-func createMissingDomainResources(tx *gorp.Transaction, cluster *limes.Cluster, domain db.Domain, srv db.DomainService, serviceConstraints map[string]limes.QuotaConstraint, resourceExists map[string]bool) error {
+func createMissingDomainResources(tx *gorp.Transaction, cluster *core.Cluster, domain db.Domain, srv db.DomainService, serviceConstraints map[string]core.QuotaConstraint, resourceExists map[string]bool) error {
 	//do not hit the database if there are no constraints to check
 	if len(serviceConstraints) == 0 {
 		return nil
@@ -163,7 +163,7 @@ func createMissingDomainResources(tx *gorp.Transaction, cluster *limes.Cluster, 
 		newQuota := *constraint.Minimum
 		logg.Info("initializing %s/%s quota for domain %s to %s to satisfy constraint %q",
 			srv.Type, resourceName, domain.Name,
-			limes.ValueWithUnit{Value: newQuota, Unit: resInfo.Unit},
+			core.ValueWithUnit{Value: newQuota, Unit: resInfo.Unit},
 			constraint.String(),
 		)
 

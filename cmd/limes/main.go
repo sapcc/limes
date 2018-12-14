@@ -37,8 +37,8 @@ import (
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/limes/pkg/api"
 	"github.com/sapcc/limes/pkg/collector"
+	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
-	"github.com/sapcc/limes/pkg/limes"
 
 	_ "github.com/sapcc/limes/pkg/plugins"
 )
@@ -53,7 +53,7 @@ func main() {
 	taskName, configPath := os.Args[1], os.Args[2]
 
 	//load configuration
-	config := limes.NewConfiguration(configPath)
+	config := core.NewConfiguration(configPath)
 
 	//all other tasks have the <cluster-id> as os.Args[3]
 	if len(os.Args) < 4 {
@@ -78,7 +78,7 @@ func main() {
 	}
 
 	//select task
-	var task func(limes.Configuration, *limes.Cluster, []string) error
+	var task func(core.Configuration, *core.Cluster, []string) error
 	switch taskName {
 	case "collect":
 		task = taskCollect
@@ -114,7 +114,7 @@ func printUsageAndExit() {
 ////////////////////////////////////////////////////////////////////////////////
 // task: collect
 
-func taskCollect(config limes.Configuration, cluster *limes.Cluster, args []string) error {
+func taskCollect(config core.Configuration, cluster *core.Cluster, args []string) error {
 	if len(args) != 0 {
 		printUsageAndExit()
 	}
@@ -155,7 +155,7 @@ func taskCollect(config limes.Configuration, cluster *limes.Cluster, args []stri
 ////////////////////////////////////////////////////////////////////////////////
 // task: serve
 
-func taskServe(config limes.Configuration, cluster *limes.Cluster, args []string) error {
+func taskServe(config core.Configuration, cluster *core.Cluster, args []string) error {
 	if len(args) != 0 {
 		printUsageAndExit()
 	}
@@ -210,7 +210,7 @@ func taskServe(config limes.Configuration, cluster *limes.Cluster, args []string
 ////////////////////////////////////////////////////////////////////////////////
 // task: test-scrape
 
-func taskTestScrape(config limes.Configuration, cluster *limes.Cluster, args []string) error {
+func taskTestScrape(config core.Configuration, cluster *core.Cluster, args []string) error {
 	if len(args) != 1 {
 		printUsageAndExit()
 	}
@@ -228,7 +228,7 @@ func taskTestScrape(config limes.Configuration, cluster *limes.Cluster, args []s
 		return errors.New("no such project in this cluster")
 	}
 
-	result := make(map[string]map[string]limes.ResourceData)
+	result := make(map[string]map[string]core.ResourceData)
 
 	for serviceType, plugin := range cluster.QuotaPlugins {
 		provider, eo := cluster.ProviderClientForService(serviceType)
@@ -283,12 +283,12 @@ func dumpGeneratedPrometheusMetrics() {
 ////////////////////////////////////////////////////////////////////////////////
 // task: test-scan-capacity
 
-func taskTestScanCapacity(config limes.Configuration, cluster *limes.Cluster, args []string) error {
+func taskTestScanCapacity(config core.Configuration, cluster *core.Cluster, args []string) error {
 	if len(args) != 0 {
 		printUsageAndExit()
 	}
 
-	result := make(map[string]map[string]limes.CapacityData)
+	result := make(map[string]map[string]core.CapacityData)
 	for capacitorID, plugin := range cluster.CapacityPlugins {
 		provider, eo := cluster.ProviderClient()
 		capacities, err := plugin.Scrape(provider, eo, cluster.ID)
@@ -298,7 +298,7 @@ func taskTestScanCapacity(config limes.Configuration, cluster *limes.Cluster, ar
 		//merge capacities from this plugin into the overall capacity values map
 		for serviceType, resources := range capacities {
 			if _, ok := result[serviceType]; !ok {
-				result[serviceType] = make(map[string]limes.CapacityData)
+				result[serviceType] = make(map[string]core.CapacityData)
 			}
 			for resourceName, value := range resources {
 				result[serviceType][resourceName] = value
