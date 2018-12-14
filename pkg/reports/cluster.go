@@ -27,6 +27,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/util"
@@ -54,13 +55,13 @@ type ClusterService struct {
 //a single resource.
 type ClusterResource struct {
 	core.ResourceInfo
-	Capacity      *uint64         `json:"capacity,omitempty"`
-	RawCapacity   *uint64         `json:"raw_capacity,omitempty"`
-	Comment       string          `json:"comment,omitempty"`
-	DomainsQuota  uint64          `json:"domains_quota,keepempty"`
-	Usage         uint64          `json:"usage,keepempty"`
-	BurstUsage    uint64          `json:"burst_usage,omitempty"`
-	Subcapacities util.JSONString `json:"subcapacities,omitempty"`
+	Capacity      *uint64          `json:"capacity,omitempty"`
+	RawCapacity   *uint64          `json:"raw_capacity,omitempty"`
+	Comment       string           `json:"comment,omitempty"`
+	DomainsQuota  uint64           `json:"domains_quota,keepempty"`
+	Usage         uint64           `json:"usage,keepempty"`
+	BurstUsage    uint64           `json:"burst_usage,omitempty"`
+	Subcapacities limes.JSONString `json:"subcapacities,omitempty"`
 }
 
 //ClusterServices provides fast lookup of services using a map, but serializes
@@ -296,7 +297,7 @@ func GetClusters(config core.Configuration, clusterID *string, localQuotaUsageOn
 				resource.Comment = *comment
 			}
 			if subcapacities != nil && *subcapacities != "" {
-				resource.Subcapacities = util.JSONString(*subcapacities)
+				resource.Subcapacities = limes.JSONString(*subcapacities)
 			}
 		}
 
@@ -455,7 +456,7 @@ func GetClusters(config core.Configuration, clusterID *string, localQuotaUsageOn
 						resource.Comment = *comment
 					}
 					if subcapacities != nil && *subcapacities != "" {
-						resource.Subcapacities = util.JSONString(*subcapacities)
+						resource.Subcapacities = limes.JSONString(*subcapacities)
 					}
 				}
 

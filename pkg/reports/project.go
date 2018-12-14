@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/util"
@@ -65,7 +66,7 @@ type ProjectResource struct {
 	Usage        uint64                `json:"usage,keepempty"`
 	BurstUsage   uint64                `json:"burst_usage,omitempty"`
 	BackendQuota *int64                `json:"backend_quota,omitempty"`
-	Subresources util.JSONString       `json:"subresources,omitempty"`
+	Subresources limes.JSONString      `json:"subresources,omitempty"`
 	Scaling      *core.ScalingBehavior `json:"scales_with,omitempty"`
 }
 
@@ -248,7 +249,7 @@ func GetProjects(cluster *core.Cluster, domainID int64, projectID *int64, dbi db
 			Scaling:      cluster.BehaviorForResource(*serviceType, *resourceName).ToScalingBehavior(),
 			Usage:        *usage,
 			BackendQuota: nil, //see below
-			Subresources: util.JSONString(subresourcesValue),
+			Subresources: limes.JSONString(subresourcesValue),
 		}
 		if usage != nil {
 			resource.Usage = *usage

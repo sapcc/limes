@@ -1,6 +1,6 @@
 /*******************************************************************************
 *
-* Copyright 2017-2018 SAP SE
+* Copyright 2018 SAP SE
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -17,45 +17,19 @@
 *
 *******************************************************************************/
 
-package util
+package limes
 
-import (
-	"fmt"
-	"time"
+//JSONString is a string containing JSON, that is not serialized further during
+//json.Marshal().
+type JSONString string
 
-	"encoding/json"
-)
-
-//Time is like time.Time, but can be scanned from a SQLite query where the
-//result is an int64 (a UNIX timestamp).
-type Time time.Time
-
-//Scan implements the sql.Scanner interface.
-func (t *Time) Scan(src interface{}) error {
-	switch val := src.(type) {
-	case int64:
-		*t = Time(time.Unix(val, 0))
-		return nil
-	case time.Time:
-		*t = Time(val)
-		return nil
-	default:
-		return fmt.Errorf("cannot scan %t into util.Time", val)
-	}
+//MarshalJSON implements the json.Marshaler interface.
+func (s JSONString) MarshalJSON() ([]byte, error) {
+	return []byte(s), nil
 }
 
-//Float64OrUnknown extracts a value of type float64 or unknown from a json
-//result is an float64
-type Float64OrUnknown float64
-
 //UnmarshalJSON implements the json.Unmarshaler interface
-func (f *Float64OrUnknown) UnmarshalJSON(buffer []byte) error {
-	if buffer[0] == '"' {
-		*f = 0
-		return nil
-	}
-	var x float64
-	err := json.Unmarshal(buffer, &x)
-	*f = Float64OrUnknown(x)
-	return err
+func (s *JSONString) UnmarshalJSON(b []byte) error {
+	*s = JSONString(b)
+	return nil
 }
