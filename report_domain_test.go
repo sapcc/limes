@@ -1,10 +1,9 @@
-package reports
+package limes
 
 import (
 	"testing"
 
 	th "github.com/gophercloud/gophercloud/testhelper"
-	"github.com/sapcc/limes"
 )
 
 var domainServicesMockJSON = `
@@ -51,19 +50,19 @@ var domainResourcesMockJSON = `
 	]
 `
 
-var domainMockResources = &DomainResources{
-	"cores": &DomainResource{
-		ResourceInfo: limes.ResourceInfo{
+var domainMockResources = &DomainResourceReports{
+	"cores": &DomainResourceReport{
+		ResourceInfo: ResourceInfo{
 			Name: "cores",
 		},
 		DomainQuota:   50,
 		ProjectsQuota: 20,
 		Usage:         10,
 	},
-	"ram": &DomainResource{
-		ResourceInfo: limes.ResourceInfo{
+	"ram": &DomainResourceReport{
+		ResourceInfo: ResourceInfo{
 			Name: "ram",
-			Unit: limes.UnitMebibytes,
+			Unit: UnitMebibytes,
 		},
 		DomainQuota:   20480,
 		ProjectsQuota: 10240,
@@ -71,9 +70,9 @@ var domainMockResources = &DomainResources{
 	},
 }
 
-var domainMockServices = &DomainServices{
-	"compute": &DomainService{
-		ServiceInfo: limes.ServiceInfo{
+var domainMockServices = &DomainServiceReports{
+	"compute": &DomainServiceReport{
+		ServiceInfo: ServiceInfo{
 			Type: "compute",
 			Area: "compute",
 		},
@@ -88,7 +87,7 @@ func TestDomainServicesMarshal(t *testing.T) {
 }
 
 func TestDomainServicesUnmarshal(t *testing.T) {
-	actual := &DomainServices{}
+	actual := &DomainServiceReports{}
 	err := actual.UnmarshalJSON([]byte(domainServicesMockJSON))
 	th.AssertNoErr(t, err)
 	th.CheckDeepEquals(t, domainMockServices, actual)
@@ -99,7 +98,7 @@ func TestDomainResourcesMarshal(t *testing.T) {
 }
 
 func TestDomainResourcesUnmarshal(t *testing.T) {
-	actual := &DomainResources{}
+	actual := &DomainResourceReports{}
 	err := actual.UnmarshalJSON([]byte(domainResourcesMockJSON))
 	th.AssertNoErr(t, err)
 	th.CheckDeepEquals(t, domainMockResources, actual)

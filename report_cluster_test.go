@@ -1,10 +1,9 @@
-package reports
+package limes
 
 import (
 	"testing"
 
 	th "github.com/gophercloud/gophercloud/testhelper"
-	"github.com/sapcc/limes"
 )
 
 var clusterServicesMockJSON = `
@@ -51,19 +50,19 @@ var clusterResourcesMockJSON = `
 	]
 `
 
-var clusterMockResources = &ClusterResources{
-	"cores": &ClusterResource{
-		ResourceInfo: limes.ResourceInfo{
+var clusterMockResources = &ClusterResourceReports{
+	"cores": &ClusterResourceReport{
+		ResourceInfo: ResourceInfo{
 			Name: "cores",
 		},
 		Capacity:     &coresCap,
 		DomainsQuota: 200,
 		Usage:        100,
 	},
-	"ram": &ClusterResource{
-		ResourceInfo: limes.ResourceInfo{
+	"ram": &ClusterResourceReport{
+		ResourceInfo: ResourceInfo{
 			Name: "ram",
-			Unit: limes.UnitMebibytes,
+			Unit: UnitMebibytes,
 		},
 		Capacity:     &ramCap,
 		DomainsQuota: 102400,
@@ -74,9 +73,9 @@ var clusterMockResources = &ClusterResources{
 var coresCap uint64 = 500
 var ramCap uint64 = 204800
 
-var clusterMockServices = &ClusterServices{
-	"compute": &ClusterService{
-		ServiceInfo: limes.ServiceInfo{
+var clusterMockServices = &ClusterServiceReports{
+	"compute": &ClusterServiceReport{
+		ServiceInfo: ServiceInfo{
 			Type: "compute",
 			Area: "compute",
 		},
@@ -95,7 +94,7 @@ func TestClusterServicesMarshal(t *testing.T) {
 }
 
 func TestClusterServicesUnmarshal(t *testing.T) {
-	actual := &ClusterServices{}
+	actual := &ClusterServiceReports{}
 	err := actual.UnmarshalJSON([]byte(clusterServicesMockJSON))
 	th.AssertNoErr(t, err)
 	th.CheckDeepEquals(t, clusterMockServices, actual)
@@ -106,7 +105,7 @@ func TestClusterResourcesMarshal(t *testing.T) {
 }
 
 func TestClusterResourcesUnmarshal(t *testing.T) {
-	actual := &ClusterResources{}
+	actual := &ClusterResourceReports{}
 	err := actual.UnmarshalJSON([]byte(clusterResourcesMockJSON))
 	th.AssertNoErr(t, err)
 	th.CheckDeepEquals(t, clusterMockResources, actual)

@@ -1,10 +1,9 @@
-package reports
+package limes
 
 import (
 	"testing"
 
 	th "github.com/gophercloud/gophercloud/testhelper"
-	"github.com/sapcc/limes"
 )
 
 var projectServicesMockJSON = `
@@ -46,17 +45,17 @@ var projectResourcesMockJSON = `
 	]
 `
 
-var projectMockResources = &ProjectResources{
-	"capacity": &ProjectResource{
-		ResourceInfo: limes.ResourceInfo{
+var projectMockResources = &ProjectResourceReports{
+	"capacity": &ProjectResourceReport{
+		ResourceInfo: ResourceInfo{
 			Name: "capacity",
-			Unit: limes.UnitBytes,
+			Unit: UnitBytes,
 		},
 		Quota: 10,
 		Usage: 2,
 	},
-	"things": &ProjectResource{
-		ResourceInfo: limes.ResourceInfo{
+	"things": &ProjectResourceReport{
+		ResourceInfo: ResourceInfo{
 			Name: "things",
 		},
 		Quota: 10,
@@ -64,9 +63,9 @@ var projectMockResources = &ProjectResources{
 	},
 }
 
-var projectMockServices = &ProjectServices{
-	"shared": &ProjectService{
-		ServiceInfo: limes.ServiceInfo{
+var projectMockServices = &ProjectServiceReports{
+	"shared": &ProjectServiceReport{
+		ServiceInfo: ServiceInfo{
 			Type: "shared",
 			Area: "shared",
 		},
@@ -80,7 +79,7 @@ func TestProjectServicesMarshall(t *testing.T) {
 }
 
 func TestProjectServicesUnmarshall(t *testing.T) {
-	actual := &ProjectServices{}
+	actual := &ProjectServiceReports{}
 	err := actual.UnmarshalJSON([]byte(projectServicesMockJSON))
 	th.AssertNoErr(t, err)
 	th.CheckDeepEquals(t, projectMockServices, actual)
@@ -91,7 +90,7 @@ func TestProjectResourcesMarshall(t *testing.T) {
 }
 
 func TestProjectResourcesUnmarshall(t *testing.T) {
-	actual := &ProjectResources{}
+	actual := &ProjectResourceReports{}
 	err := actual.UnmarshalJSON([]byte(projectResourcesMockJSON))
 	th.AssertNoErr(t, err)
 	th.CheckDeepEquals(t, projectMockResources, actual)

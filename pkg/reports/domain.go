@@ -21,7 +21,6 @@ package reports
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"sort"
 	"time"
@@ -31,104 +30,6 @@ import (
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/util"
 )
-
-//Domain contains aggregated data about resource usage in a domain.
-type Domain struct {
-	UUID     string         `json:"id"`
-	Name     string         `json:"name"`
-	Services DomainServices `json:"services,keepempty"`
-}
-
-//DomainService is a substructure of Domain containing data for
-//a single backend service.
-type DomainService struct {
-	limes.ServiceInfo
-	Resources    DomainResources `json:"resources,keepempty"`
-	MaxScrapedAt *int64          `json:"max_scraped_at,omitempty"`
-	MinScrapedAt *int64          `json:"min_scraped_at,omitempty"`
-}
-
-//DomainResource is a substructure of Domain containing data for
-//a single resource.
-type DomainResource struct {
-	limes.ResourceInfo
-	DomainQuota   uint64 `json:"quota,keepempty"`
-	ProjectsQuota uint64 `json:"projects_quota,keepempty"`
-	Usage         uint64 `json:"usage,keepempty"`
-	BurstUsage    uint64 `json:"burst_usage,omitempty"`
-	//These are pointers to values to enable precise control over whether this field is rendered in output.
-	BackendQuota         *uint64               `json:"backend_quota,omitempty"`
-	InfiniteBackendQuota *bool                 `json:"infinite_backend_quota,omitempty"`
-	Scaling              *core.ScalingBehavior `json:"scales_with,omitempty"`
-}
-
-//DomainServices provides fast lookup of services using a map, but serializes
-//to JSON as a list.
-type DomainServices map[string]*DomainService
-
-//MarshalJSON implements the json.Marshaler interface.
-func (s DomainServices) MarshalJSON() ([]byte, error) {
-	//serialize with ordered keys to ensure testcase stability
-	types := make([]string, 0, len(s))
-	for typeStr := range s {
-		types = append(types, typeStr)
-	}
-	sort.Strings(types)
-	list := make([]*DomainService, len(s))
-	for idx, typeStr := range types {
-		list[idx] = s[typeStr]
-	}
-	return json.Marshal(list)
-}
-
-//UnmarshalJSON implements the json.Unmarshaler interface
-func (s *DomainServices) UnmarshalJSON(b []byte) error {
-	tmp := make([]*DomainService, 0)
-	err := json.Unmarshal(b, &tmp)
-	if err != nil {
-		return err
-	}
-	t := make(DomainServices)
-	for _, ds := range tmp {
-		t[ds.Type] = ds
-	}
-	*s = DomainServices(t)
-	return nil
-}
-
-//DomainResources provides fast lookup of resources using a map, but serializes
-//to JSON as a list.
-type DomainResources map[string]*DomainResource
-
-//MarshalJSON implements the json.Marshaler interface.
-func (r DomainResources) MarshalJSON() ([]byte, error) {
-	//serialize with ordered keys to ensure testcase stability
-	names := make([]string, 0, len(r))
-	for name := range r {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	list := make([]*DomainResource, len(r))
-	for idx, name := range names {
-		list[idx] = r[name]
-	}
-	return json.Marshal(list)
-}
-
-//UnmarshalJSON implements the json.Unmarshaler interface
-func (r *DomainResources) UnmarshalJSON(b []byte) error {
-	tmp := make([]*DomainResource, 0)
-	err := json.Unmarshal(b, &tmp)
-	if err != nil {
-		return err
-	}
-	t := make(DomainResources)
-	for _, dr := range tmp {
-		t[dr.Name] = dr
-	}
-	*r = DomainResources(t)
-	return nil
-}
 
 var domainReportQuery1 = `
 	SELECT d.uuid, d.name, ps.type, pr.name, SUM(pr.quota), SUM(pr.usage),
@@ -149,9 +50,9 @@ var domainReportQuery2 = `
 	 WHERE %s
 `
 
-//GetDomains returns Domain reports for all domains in the given cluster or, if
+//GetDomains returns reports for all domains in the given cluster or, if
 //domainID is non-nil, for that domain only.
-func GetDomains(cluster *core.Cluster, domainID *int64, dbi db.Interface, filter Filter) ([]*Domain, error) {
+func GetDomains(cluster *core.Cluster, domainID *int64, dbi db.Interface, filter Filter) ([]*limes.DomainReport, error) {
 	clusterCanBurst := cluster.Config.Bursting.MaxMultiplier > 0
 
 	fields := map[string]interface{}{"d.cluster_id": cluster.ID}
@@ -276,7 +177,7 @@ func GetDomains(cluster *core.Cluster, domainID *int64, dbi db.Interface, filter
 		uuids = append(uuids, uuid)
 	}
 	sort.Strings(uuids)
-	result := make([]*Domain, len(domains))
+	result := make([]*limes.DomainReport, len(domains))
 	for idx, uuid := range uuids {
 		result[idx] = domains[uuid]
 	}
@@ -284,14 +185,14 @@ func GetDomains(cluster *core.Cluster, domainID *int64, dbi db.Interface, filter
 	return result, nil
 }
 
-type domains map[string]*Domain
+type domains map[string]*limes.DomainReport
 
-func (d domains) Find(cluster *core.Cluster, domainUUID string, serviceType, resourceName *string) (*Domain, *DomainService, *DomainResource) {
+func (d domains) Find(cluster *core.Cluster, domainUUID string, serviceType, resourceName *string) (*limes.DomainReport, *limes.DomainServiceReport, *limes.DomainResourceReport) {
 	domain, exists := d[domainUUID]
 	if !exists {
-		domain = &Domain{
+		domain = &limes.DomainReport{
 			UUID:     domainUUID,
-			Services: make(DomainServices),
+			Services: make(limes.DomainServiceReports),
 		}
 		d[domainUUID] = domain
 	}
@@ -305,9 +206,9 @@ func (d domains) Find(cluster *core.Cluster, domainUUID string, serviceType, res
 		if !cluster.HasService(*serviceType) {
 			return domain, nil, nil
 		}
-		service = &DomainService{
+		service = &limes.DomainServiceReport{
 			ServiceInfo: cluster.InfoForService(*serviceType),
-			Resources:   make(DomainResources),
+			Resources:   make(limes.DomainResourceReports),
 		}
 		domain.Services[*serviceType] = service
 	}
@@ -321,7 +222,7 @@ func (d domains) Find(cluster *core.Cluster, domainUUID string, serviceType, res
 		if !cluster.HasResource(*serviceType, *resourceName) {
 			return domain, service, resource
 		}
-		resource = &DomainResource{
+		resource = &limes.DomainResourceReport{
 			ResourceInfo: cluster.InfoForResource(*serviceType, *resourceName),
 			Scaling:      cluster.BehaviorForResource(*serviceType, *resourceName).ToScalingBehavior(),
 		}

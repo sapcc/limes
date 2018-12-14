@@ -15,7 +15,7 @@ build/limes: FORCE
 # which packages to test with static checkers?
 GO_ALLPKGS := $(PKG) $(shell go list $(PKG)/pkg/... $(PKG)/cmd/...)
 # which packages to test with `go test`?
-GO_TESTPKGS := $(shell go list -f '{{if .TestGoFiles}}{{.ImportPath}}{{end}}' $(PKG)/pkg/... $(PKG)/cmd/...)
+GO_TESTPKGS := $(shell go list -f '{{if .TestGoFiles}}{{.ImportPath}}{{end}}' $(PKG) $(PKG)/pkg/... $(PKG)/cmd/...)
 # which packages to measure coverage for?
 GO_COVERPKGS := $(shell go list $(PKG) $(PKG)/pkg/... | grep -v plugins)
 # output files from `go test`

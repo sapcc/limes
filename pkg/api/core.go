@@ -30,6 +30,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/respondwith"
+	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/reports"
@@ -222,7 +223,7 @@ func (p *v1Provider) FindProjectFromRequestIfExists(w http.ResponseWriter, r *ht
 }
 
 //GetDomainReport is a convenience wrapper around reports.GetDomains() for getting a single domain report.
-func GetDomainReport(cluster *core.Cluster, dbDomain db.Domain, dbi db.Interface, filter reports.Filter) (*reports.Domain, error) {
+func GetDomainReport(cluster *core.Cluster, dbDomain db.Domain, dbi db.Interface, filter reports.Filter) (*limes.DomainReport, error) {
 	domainReports, err := reports.GetDomains(cluster, &dbDomain.ID, dbi, filter)
 	if err != nil {
 		return nil, err
@@ -234,7 +235,7 @@ func GetDomainReport(cluster *core.Cluster, dbDomain db.Domain, dbi db.Interface
 }
 
 //GetProjectReport is a convenience wrapper around reports.GetProjects() for getting a single project report.
-func GetProjectReport(cluster *core.Cluster, dbDomain db.Domain, dbProject db.Project, dbi db.Interface, filter reports.Filter, withSubresources bool) (*reports.Project, error) {
+func GetProjectReport(cluster *core.Cluster, dbDomain db.Domain, dbProject db.Project, dbi db.Interface, filter reports.Filter, withSubresources bool) (*limes.ProjectReport, error) {
 	projectReports, err := reports.GetProjects(cluster, dbDomain.ID, &dbProject.ID, dbi, filter, withSubresources)
 	if err != nil {
 		return nil, err

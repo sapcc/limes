@@ -42,8 +42,8 @@ func (p *v1Provider) ListClusters(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var result struct {
-		CurrentCluster string             `json:"current_cluster"`
-		Clusters       []*reports.Cluster `json:"clusters"`
+		CurrentCluster string                 `json:"current_cluster"`
+		Clusters       []*limes.ClusterReport `json:"clusters"`
 	}
 	result.CurrentCluster = p.Cluster.ID
 

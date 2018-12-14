@@ -21,7 +21,6 @@ package reports
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -32,105 +31,6 @@ import (
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/util"
 )
-
-//Cluster contains aggregated data about resource usage in a cluster.
-type Cluster struct {
-	ID           string          `json:"id"`
-	Services     ClusterServices `json:"services,keepempty"`
-	MaxScrapedAt *int64          `json:"max_scraped_at,omitempty"`
-	MinScrapedAt *int64          `json:"min_scraped_at,omitempty"`
-}
-
-//ClusterService is a substructure of Cluster containing data for
-//a single backend service.
-type ClusterService struct {
-	limes.ServiceInfo
-	Shared       bool             `json:"shared,omitempty"`
-	Resources    ClusterResources `json:"resources,keepempty"`
-	MaxScrapedAt *int64           `json:"max_scraped_at,omitempty"`
-	MinScrapedAt *int64           `json:"min_scraped_at,omitempty"`
-}
-
-//ClusterResource is a substructure of Cluster containing data for
-//a single resource.
-type ClusterResource struct {
-	limes.ResourceInfo
-	Capacity      *uint64          `json:"capacity,omitempty"`
-	RawCapacity   *uint64          `json:"raw_capacity,omitempty"`
-	Comment       string           `json:"comment,omitempty"`
-	DomainsQuota  uint64           `json:"domains_quota,keepempty"`
-	Usage         uint64           `json:"usage,keepempty"`
-	BurstUsage    uint64           `json:"burst_usage,omitempty"`
-	Subcapacities limes.JSONString `json:"subcapacities,omitempty"`
-}
-
-//ClusterServices provides fast lookup of services using a map, but serializes
-//to JSON as a list.
-type ClusterServices map[string]*ClusterService
-
-//MarshalJSON implements the json.Marshaler interface.
-func (s ClusterServices) MarshalJSON() ([]byte, error) {
-	//serialize with ordered keys to ensure testcase stability
-	types := make([]string, 0, len(s))
-	for typeStr := range s {
-		types = append(types, typeStr)
-	}
-	sort.Strings(types)
-	list := make([]*ClusterService, len(s))
-	for idx, typeStr := range types {
-		list[idx] = s[typeStr]
-	}
-	return json.Marshal(list)
-}
-
-//UnmarshalJSON implements the json.Unmarshaler interface
-func (s *ClusterServices) UnmarshalJSON(b []byte) error {
-	tmp := make([]*ClusterService, 0)
-	err := json.Unmarshal(b, &tmp)
-	if err != nil {
-		return err
-	}
-	t := make(ClusterServices)
-	for _, cs := range tmp {
-		t[cs.Type] = cs
-	}
-	*s = ClusterServices(t)
-	return nil
-}
-
-//ClusterResources provides fast lookup of resources using a map, but serializes
-//to JSON as a list.
-type ClusterResources map[string]*ClusterResource
-
-//MarshalJSON implements the json.Marshaler interface.
-func (r ClusterResources) MarshalJSON() ([]byte, error) {
-	//serialize with ordered keys to ensure testcase stability
-	names := make([]string, 0, len(r))
-	for name := range r {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	list := make([]*ClusterResource, len(r))
-	for idx, name := range names {
-		list[idx] = r[name]
-	}
-	return json.Marshal(list)
-}
-
-//UnmarshalJSON implements the json.Unmarshaler interface
-func (r *ClusterResources) UnmarshalJSON(b []byte) error {
-	tmp := make([]*ClusterResource, 0)
-	err := json.Unmarshal(b, &tmp)
-	if err != nil {
-		return err
-	}
-	t := make(ClusterResources)
-	for _, cr := range tmp {
-		t[cr.Name] = cr
-	}
-	*r = ClusterResources(t)
-	return nil
-}
 
 var clusterReportQuery1 = `
 	SELECT d.cluster_id, ps.type, pr.name,
@@ -172,13 +72,13 @@ var clusterReportQuery5 = `
 	 WHERE %s GROUP BY ps.type, pr.name
 `
 
-//GetClusters returns Cluster reports for all clusters or, if clusterID is
+//GetClusters returns reports for all clusters or, if clusterID is
 //non-nil, for that cluster only.
 //
 //In contrast to nearly everything else in Limes, this needs the full
 //core.Configuration (instead of just the current core.ClusterConfiguration)
 //to look at the services enabled in other clusters.
-func GetClusters(config core.Configuration, clusterID *string, localQuotaUsageOnly bool, withSubcapacities bool, dbi db.Interface, filter Filter) ([]*Cluster, error) {
+func GetClusters(config core.Configuration, clusterID *string, localQuotaUsageOnly bool, withSubcapacities bool, dbi db.Interface, filter Filter) ([]*limes.ClusterReport, error) {
 	//first query: collect project usage data in these clusters
 	clusters := make(clusters)
 	queryStr, joinArgs := filter.PrepareQuery(clusterReportQuery1)
@@ -483,7 +383,7 @@ func GetClusters(config core.Configuration, clusterID *string, localQuotaUsageOn
 		ids = append(ids, id)
 	}
 	sort.Strings(ids)
-	result := make([]*Cluster, len(clusters))
+	result := make([]*limes.ClusterReport, len(clusters))
 	for idx, id := range ids {
 		result[idx] = clusters[id]
 	}
@@ -499,9 +399,9 @@ func makeClusterFilter(tableWithClusterID string, clusterID *string) map[string]
 	return fields
 }
 
-type clusters map[string]*Cluster
+type clusters map[string]*limes.ClusterReport
 
-func (c clusters) Find(config core.Configuration, clusterID string, serviceType, resourceName *string) (*Cluster, *ClusterService, *ClusterResource) {
+func (c clusters) Find(config core.Configuration, clusterID string, serviceType, resourceName *string) (*limes.ClusterReport, *limes.ClusterServiceReport, *limes.ClusterResourceReport) {
 	clusterConfig, exists := config.Clusters[clusterID]
 	if !exists {
 		return nil, nil, nil
@@ -509,9 +409,9 @@ func (c clusters) Find(config core.Configuration, clusterID string, serviceType,
 
 	cluster, exists := c[clusterID]
 	if !exists {
-		cluster = &Cluster{
+		cluster = &limes.ClusterReport{
 			ID:       clusterID,
-			Services: make(ClusterServices),
+			Services: make(limes.ClusterServiceReports),
 		}
 		c[clusterID] = cluster
 	}
@@ -525,10 +425,10 @@ func (c clusters) Find(config core.Configuration, clusterID string, serviceType,
 		if !clusterConfig.HasService(*serviceType) {
 			return cluster, nil, nil
 		}
-		service = &ClusterService{
+		service = &limes.ClusterServiceReport{
 			Shared:      clusterConfig.IsServiceShared[*serviceType],
 			ServiceInfo: clusterConfig.InfoForService(*serviceType),
-			Resources:   make(ClusterResources),
+			Resources:   make(limes.ClusterResourceReports),
 		}
 		cluster.Services[*serviceType] = service
 	}
@@ -542,7 +442,7 @@ func (c clusters) Find(config core.Configuration, clusterID string, serviceType,
 		if !clusterConfig.HasResource(*serviceType, *resourceName) {
 			return cluster, service, nil
 		}
-		resource = &ClusterResource{
+		resource = &limes.ClusterResourceReport{
 			ResourceInfo: clusterConfig.InfoForResource(*serviceType, *resourceName),
 		}
 		service.Resources[*resourceName] = resource

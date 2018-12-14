@@ -92,7 +92,7 @@ func (u *QuotaUpdater) ValidateInput(input ServiceQuotas, dbi db.Interface) erro
 		return err
 	}
 	//for project scope, we also need a project report for validation
-	var projectReport *reports.Project
+	var projectReport *limes.ProjectReport
 	if u.Project != nil {
 		projectReport, err = GetProjectReport(u.Cluster, *u.Domain, *u.Project, dbi, reports.Filter{}, false)
 		if err != nil {
@@ -109,8 +109,8 @@ func (u *QuotaUpdater) ValidateInput(input ServiceQuotas, dbi db.Interface) erro
 		for _, res := range quotaPlugin.Resources() {
 			//find the report data for this resource
 			var (
-				domRes  *reports.DomainResource
-				projRes *reports.ProjectResource
+				domRes  *limes.DomainResourceReport
+				projRes *limes.ProjectResourceReport
 			)
 			if domainService, exists := domainReport.Services[srv.Type]; exists {
 				domRes = domainService.Resources[res.Name]
@@ -162,7 +162,7 @@ func (u *QuotaUpdater) ValidateInput(input ServiceQuotas, dbi db.Interface) erro
 	return nil
 }
 
-func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limes.ResourceInfo, domRes reports.DomainResource, projRes *reports.ProjectResource, newQuota uint64) *core.QuotaValidationError {
+func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limes.ResourceInfo, domRes limes.DomainResourceReport, projRes *limes.ProjectResourceReport, newQuota uint64) *core.QuotaValidationError {
 	//can we change this quota at all?
 	if res.ExternallyManaged {
 		return &core.QuotaValidationError{
@@ -238,7 +238,7 @@ func (u QuotaUpdater) validateAuthorization(oldQuota, newQuota, lprLimit uint64,
 	}
 }
 
-func (u QuotaUpdater) validateDomainQuota(report reports.DomainResource, newQuota uint64) *core.QuotaValidationError {
+func (u QuotaUpdater) validateDomainQuota(report limes.DomainResourceReport, newQuota uint64) *core.QuotaValidationError {
 	//check that existing project quotas fit into new domain quota
 	if newQuota < report.ProjectsQuota {
 		min := report.ProjectsQuota
@@ -253,7 +253,7 @@ func (u QuotaUpdater) validateDomainQuota(report reports.DomainResource, newQuot
 	return nil
 }
 
-func (u QuotaUpdater) validateProjectQuota(domRes reports.DomainResource, projRes reports.ProjectResource, newQuota uint64) *core.QuotaValidationError {
+func (u QuotaUpdater) validateProjectQuota(domRes limes.DomainResourceReport, projRes limes.ProjectResourceReport, newQuota uint64) *core.QuotaValidationError {
 	//check that usage fits into quota
 	if projRes.Usage > newQuota {
 		min := projRes.Usage

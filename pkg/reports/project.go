@@ -20,7 +20,6 @@
 package reports
 
 import (
-	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -32,112 +31,6 @@ import (
 	"github.com/sapcc/limes/pkg/util"
 )
 
-//Project contains all data about resource usage in a project.
-type Project struct {
-	UUID       string               `json:"id"`
-	Name       string               `json:"name"`
-	ParentUUID string               `json:"parent_id"`
-	Bursting   *ProjectBurstingInfo `json:"bursting,omitempty"`
-	Services   ProjectServices      `json:"services,keepempty"`
-}
-
-//ProjectBurstingInfo is a substructure of Project containing information about
-//quota bursting. (It is omitted if bursting is not supported for the project's
-//cluster.)
-type ProjectBurstingInfo struct {
-	Enabled    bool                    `json:"enabled,keepempty"`
-	Multiplier core.BurstingMultiplier `json:"multiplier,keepempty"`
-}
-
-//ProjectService is a substructure of Project containing data for
-//a single backend service.
-type ProjectService struct {
-	limes.ServiceInfo
-	Resources ProjectResources `json:"resources,keepempty"`
-	ScrapedAt *int64           `json:"scraped_at,omitempty"`
-}
-
-//ProjectResource is a substructure of Project containing data for
-//a single resource.
-type ProjectResource struct {
-	//Several fields are pointers to values to enable precise control over which fields are rendered in output.
-	limes.ResourceInfo
-	Quota        uint64                `json:"quota,keepempty"`
-	Usage        uint64                `json:"usage,keepempty"`
-	BurstUsage   uint64                `json:"burst_usage,omitempty"`
-	BackendQuota *int64                `json:"backend_quota,omitempty"`
-	Subresources limes.JSONString      `json:"subresources,omitempty"`
-	Scaling      *core.ScalingBehavior `json:"scales_with,omitempty"`
-}
-
-//ProjectServices provides fast lookup of services using a map, but serializes
-//to JSON as a list.
-type ProjectServices map[string]*ProjectService
-
-//MarshalJSON implements the json.Marshaler interface.
-func (s ProjectServices) MarshalJSON() ([]byte, error) {
-	//serialize with ordered keys to ensure testcase stability
-	types := make([]string, 0, len(s))
-	for typeStr := range s {
-		types = append(types, typeStr)
-	}
-	sort.Strings(types)
-	list := make([]*ProjectService, len(s))
-	for idx, typeStr := range types {
-		list[idx] = s[typeStr]
-	}
-	return json.Marshal(list)
-}
-
-//UnmarshalJSON implements the json.Unmarshaler interface
-func (s *ProjectServices) UnmarshalJSON(b []byte) error {
-	tmp := make([]*ProjectService, 0)
-	err := json.Unmarshal(b, &tmp)
-	if err != nil {
-		return err
-	}
-	t := make(ProjectServices)
-	for _, ps := range tmp {
-		t[ps.Type] = ps
-	}
-	*s = ProjectServices(t)
-	return nil
-}
-
-//ProjectResources provides fast lookup of resources using a map, but serializes
-//to JSON as a list.
-type ProjectResources map[string]*ProjectResource
-
-//MarshalJSON implements the json.Marshaler interface.
-func (r ProjectResources) MarshalJSON() ([]byte, error) {
-	//serialize with ordered keys to ensure testcase stability
-	names := make([]string, 0, len(r))
-	for name := range r {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	list := make([]*ProjectResource, len(r))
-	for idx, name := range names {
-		list[idx] = r[name]
-	}
-	return json.Marshal(list)
-}
-
-//UnmarshalJSON implements the json.Unmarshaler interface
-func (r *ProjectResources) UnmarshalJSON(b []byte) error {
-	tmp := make([]*ProjectResource, 0)
-	err := json.Unmarshal(b, &tmp)
-	if err != nil {
-		return err
-	}
-	t := make(ProjectResources)
-	for _, pr := range tmp {
-		t[pr.Name] = pr
-	}
-	*r = ProjectResources(t)
-	return nil
-}
-
 var projectReportQuery = `
 	SELECT p.uuid, p.name, COALESCE(p.parent_uuid, ''), p.has_bursting, ps.type, ps.scraped_at, pr.name, pr.quota, pr.usage, pr.backend_quota, pr.subresources
 	  FROM projects p
@@ -146,9 +39,9 @@ var projectReportQuery = `
 	 WHERE %s
 `
 
-//GetProjects returns Project reports for all projects in the given domain or,
+//GetProjects returns limes.ProjectReport reports for all projects in the given domain or,
 //if projectID is non-nil, for that project only.
-func GetProjects(cluster *core.Cluster, domainID int64, projectID *int64, dbi db.Interface, filter Filter, withSubresources bool) ([]*Project, error) {
+func GetProjects(cluster *core.Cluster, domainID int64, projectID *int64, dbi db.Interface, filter Filter, withSubresources bool) ([]*limes.ProjectReport, error) {
 	clusterCanBurst := cluster.Config.Bursting.MaxMultiplier > 0
 
 	fields := map[string]interface{}{"p.domain_id": domainID}
@@ -169,7 +62,7 @@ func GetProjects(cluster *core.Cluster, domainID int64, projectID *int64, dbi db
 		return nil, err
 	}
 
-	projects := make(map[string]*Project)
+	projects := make(map[string]*limes.ProjectReport)
 	for rows.Next() {
 		var (
 			projectUUID        string
@@ -196,16 +89,16 @@ func GetProjects(cluster *core.Cluster, domainID int64, projectID *int64, dbi db
 
 		project, exists := projects[projectUUID]
 		if !exists {
-			project = &Project{
+			project = &limes.ProjectReport{
 				UUID:       projectUUID,
 				Name:       projectName,
 				ParentUUID: projectParentUUID,
-				Services:   make(ProjectServices),
+				Services:   make(limes.ProjectServiceReports),
 			}
 			projects[projectUUID] = project
 
 			if clusterCanBurst {
-				project.Bursting = &ProjectBurstingInfo{
+				project.Bursting = &limes.ProjectBurstingInfo{
 					Enabled:    projectHasBursting,
 					Multiplier: cluster.Config.Bursting.MaxMultiplier,
 				}
@@ -221,9 +114,9 @@ func GetProjects(cluster *core.Cluster, domainID int64, projectID *int64, dbi db
 			if !cluster.HasService(*serviceType) {
 				continue
 			}
-			service = &ProjectService{
+			service = &limes.ProjectServiceReport{
 				ServiceInfo: cluster.InfoForService(*serviceType),
-				Resources:   make(ProjectResources),
+				Resources:   make(limes.ProjectResourceReports),
 			}
 			if scrapedAt != nil {
 				val := time.Time(*scrapedAt).Unix()
@@ -244,7 +137,7 @@ func GetProjects(cluster *core.Cluster, domainID int64, projectID *int64, dbi db
 			subresourcesValue = *subresources
 		}
 
-		resource := &ProjectResource{
+		resource := &limes.ProjectResourceReport{
 			ResourceInfo: cluster.InfoForResource(*serviceType, *resourceName),
 			Scaling:      cluster.BehaviorForResource(*serviceType, *resourceName).ToScalingBehavior(),
 			Usage:        *usage,
@@ -287,7 +180,7 @@ func GetProjects(cluster *core.Cluster, domainID int64, projectID *int64, dbi db
 		uuids = append(uuids, uuid)
 	}
 	sort.Strings(uuids)
-	result := make([]*Project, len(projects))
+	result := make([]*limes.ProjectReport, len(projects))
 	for idx, uuid := range uuids {
 		result[idx] = projects[uuid]
 	}

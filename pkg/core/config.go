@@ -23,7 +23,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
-	"math"
 	"os"
 	"regexp"
 	"strings"
@@ -31,6 +30,7 @@ import (
 	policy "github.com/databus23/goslo.policy"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/db"
 
 	yaml "gopkg.in/yaml.v2"
@@ -176,21 +176,13 @@ type ResourceBehavior struct {
 	ScalingFactor          float64 `yaml:"scaling_factor"`
 }
 
-//ScalingBehavior appears in domain and project reports and describes the
-//scaling behavior of a single resource. It is derived from ResourceBehavior
-//using the ToScalingBehavior() method.
-type ScalingBehavior struct {
-	ScalesWithResourceName string  `json:"service_type"`
-	ScalesWithServiceType  string  `json:"resource_name"`
-	ScalingFactor          float64 `json:"factor"`
-}
-
-//ToScalingBehavior returns the ScalingBehavior for this resource, or nil if no scaling has been configured.
-func (b ResourceBehavior) ToScalingBehavior() *ScalingBehavior {
+//ToScalingBehavior returns the limes.ScalingBehavior for this resource, or nil
+//if no scaling has been configured.
+func (b ResourceBehavior) ToScalingBehavior() *limes.ScalingBehavior {
 	if b.ScalesWithResourceName == "" {
 		return nil
 	}
-	return &ScalingBehavior{
+	return &limes.ScalingBehavior{
 		ScalesWithServiceType:  b.ScalesWithServiceType,
 		ScalesWithResourceName: b.ScalesWithResourceName,
 		ScalingFactor:          b.ScalingFactor,
@@ -200,15 +192,7 @@ func (b ResourceBehavior) ToScalingBehavior() *ScalingBehavior {
 //BurstingConfiguration contains the configuration options for quota bursting.
 type BurstingConfiguration struct {
 	//If MaxMultiplier is zero, bursting is disabled.
-	MaxMultiplier BurstingMultiplier `yaml:"max_multiplier"`
-}
-
-//BurstingMultiplier is a multiplier for quota bursting.
-type BurstingMultiplier float64
-
-//ApplyTo returns the bursted backend quota for the given approved quota.
-func (m BurstingMultiplier) ApplyTo(quota uint64) uint64 {
-	return uint64(math.Floor((1 + float64(m)) * float64(quota)))
+	MaxMultiplier limes.BurstingMultiplier `yaml:"max_multiplier"`
 }
 
 //CADFConfiguration contains configuration parameters for audit trail.

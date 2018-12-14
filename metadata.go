@@ -19,6 +19,8 @@
 
 package limes
 
+import "math"
+
 //ResourceInfo contains the metadata for a resource (i.e. some thing for which
 //quota and usage values can be retrieved from a backend service).
 type ResourceInfo struct {
@@ -49,4 +51,21 @@ type ServiceInfo struct {
 	ProductName string `json:"-"`
 	//Area is a hint that UIs can use to group similar services.
 	Area string `json:"area"`
+}
+
+//BurstingMultiplier is a multiplier for quota bursting.
+type BurstingMultiplier float64
+
+//ApplyTo returns the bursted backend quota for the given approved quota.
+func (m BurstingMultiplier) ApplyTo(quota uint64) uint64 {
+	return uint64(math.Floor((1 + float64(m)) * float64(quota)))
+}
+
+//ScalingBehavior appears in type DomainResourceReport and type
+//ProjectResourceReport and describes the scaling behavior of a single
+//resource.
+type ScalingBehavior struct {
+	ScalesWithResourceName string  `json:"service_type"`
+	ScalesWithServiceType  string  `json:"resource_name"`
+	ScalingFactor          float64 `json:"factor"`
 }
