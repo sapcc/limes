@@ -26,6 +26,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sapcc/limes/pkg/audit"
+
 	gorp "gopkg.in/gorp.v2"
 
 	"github.com/gorilla/mux"
@@ -360,8 +362,8 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 }
 
 func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *http.Request, simulate, hasBursting bool) {
-	//TODO generate audit events when changing Project.HasBursting
-
+	requestTime := time.Now().Format("2006-01-02T15:04:05.999999+00:00")
+	var trail audit.Trail
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:edit") {
 		return
@@ -380,6 +382,16 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 	}
 	if cluster.Config.Bursting.MaxMultiplier == 0 {
 		http.Error(w, "bursting is not available for this cluster", http.StatusBadRequest)
+		trail.Add(audit.BurstEventParams{
+			Token:        token,
+			Request:      r,
+			ReasonCode:   http.StatusForbidden,
+			Time:         requestTime,
+			DomainID:     domain.UUID,
+			ProjectID:    project.UUID,
+			RejectReason: "bursting is not available for this cluster",
+		})
+		trail.Commit(cluster.ID, cluster.Config.CADF)
 		return
 	}
 
@@ -435,6 +447,16 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 					overbookedResources[0]
 			}
 			http.Error(w, msg, http.StatusConflict)
+			trail.Add(audit.BurstEventParams{
+				Token:        token,
+				Request:      r,
+				ReasonCode:   http.StatusConflict,
+				Time:         requestTime,
+				DomainID:     domain.UUID,
+				ProjectID:    project.UUID,
+				RejectReason: msg,
+			})
+			trail.Commit(cluster.ID, cluster.Config.CADF)
 			return
 		}
 	}
@@ -479,6 +501,17 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 			continue
 		}
 	}
+
+	trail.Add(audit.BurstEventParams{
+		Token:      token,
+		Request:    r,
+		ReasonCode: http.StatusOK,
+		Time:       requestTime,
+		DomainID:   domain.UUID,
+		ProjectID:  project.UUID,
+		NewStatus:  hasBursting,
+	})
+	trail.Commit(cluster.ID, cluster.Config.CADF)
 
 	//report any backend errors to the user
 	if len(errors) > 0 {

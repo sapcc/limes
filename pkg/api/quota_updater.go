@@ -40,7 +40,7 @@ import (
 type QuotaUpdater struct {
 	//scope
 	Cluster *core.Cluster
-	Domain  *db.Domain  //always set (for project quota updates, contains the project'u domain)
+	Domain  *db.Domain  //always set (for project quota updates, contains the project's domain)
 	Project *db.Project //nil for domain quota updates
 	//AuthZ info
 	CanRaise   bool
@@ -423,7 +423,7 @@ func (u QuotaUpdater) CommitAuditTrail(token *gopherpolicy.Token, r *http.Reques
 				}
 			}
 
-			trail.Add(audit.EventParams{
+			trail.Add(audit.ResourceEventParams{
 				Token:        token,
 				Request:      r,
 				ReasonCode:   statusCode,
