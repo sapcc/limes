@@ -39,6 +39,7 @@ import (
 	"github.com/sapcc/limes/pkg/collector"
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
+	"github.com/sapcc/limes/pkg/util"
 
 	_ "github.com/sapcc/limes/pkg/plugins"
 )
@@ -74,7 +75,7 @@ func main() {
 	}
 	err = cluster.Connect()
 	if err != nil {
-		logg.Fatal(err.Error())
+		logg.Fatal(util.ErrorToString(err))
 	}
 
 	//select task
@@ -137,7 +138,7 @@ func taskCollect(config core.Configuration, cluster *core.Cluster, args []string
 		for {
 			_, err := collector.ScanDomains(cluster, collector.ScanDomainsOpts{ScanAllProjects: true})
 			if err != nil {
-				logg.Error(err.Error())
+				logg.Error(util.ErrorToString(err))
 			}
 			time.Sleep(discoverInterval)
 		}
@@ -165,7 +166,7 @@ func taskServe(config core.Configuration, cluster *core.Cluster, args []string) 
 		//Note that Connect() is idempotent, so this is safe even for `otherCluster == cluster`.
 		err := otherCluster.Connect()
 		if err != nil {
-			logg.Fatal(err.Error())
+			logg.Fatal(util.ErrorToString(err))
 		}
 	}
 
@@ -234,7 +235,7 @@ func taskTestScrape(config core.Configuration, cluster *core.Cluster, args []str
 		provider, eo := cluster.ProviderClientForService(serviceType)
 		data, err := plugin.Scrape(provider, eo, cluster.ID, domainUUID, projectUUID)
 		if err != nil {
-			logg.Error("scrape failed for %s: %s", serviceType, err.Error())
+			logg.Error("scrape failed for %s: %s", serviceType, util.ErrorToString(err))
 		}
 		if data != nil {
 			result[serviceType] = data
@@ -293,7 +294,7 @@ func taskTestScanCapacity(config core.Configuration, cluster *core.Cluster, args
 		provider, eo := cluster.ProviderClient()
 		capacities, err := plugin.Scrape(provider, eo, cluster.ID)
 		if err != nil {
-			logg.Error("scan capacity with capacitor %s failed: %s", capacitorID, err.Error())
+			logg.Error("scan capacity with capacitor %s failed: %s", capacitorID, util.ErrorToString(err))
 		}
 		//merge capacities from this plugin into the overall capacity values map
 		for serviceType, resources := range capacities {

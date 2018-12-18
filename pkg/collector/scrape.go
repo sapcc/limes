@@ -33,6 +33,7 @@ import (
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/datamodel"
 	"github.com/sapcc/limes/pkg/db"
+	"github.com/sapcc/limes/pkg/util"
 )
 
 //how long to sleep after a scraping error, or when nothing needed scraping
@@ -118,7 +119,7 @@ func (c *Collector) Scrape() {
 				sleepInterval = serviceNotDeployedIdleInterval
 				c.LogError("suspending %s data scraping for %d minutes: %s", serviceType, sleepInterval/time.Minute, err.Error())
 			} else {
-				c.LogError("scrape %s data for %s/%s failed: %s", serviceType, domainName, projectName, err.Error())
+				c.LogError("scrape %s data for %s/%s failed: %s", serviceType, domainName, projectName, util.ErrorToString(err))
 				scrapeFailedCounter.With(labels).Inc()
 
 				if serviceScrapedAt == nil {

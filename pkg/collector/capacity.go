@@ -29,6 +29,7 @@ import (
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
+	"github.com/sapcc/limes/pkg/util"
 )
 
 var scanInterval = 15 * time.Minute
@@ -68,7 +69,7 @@ func (c *Collector) scanCapacity() {
 		provider, eo := c.Cluster.ProviderClient()
 		capacities, err := plugin.Scrape(provider, eo, c.Cluster.ID)
 		if err != nil {
-			c.LogError("scan capacity with capacitor %s failed: %s", capacitorID, err.Error())
+			c.LogError("scan capacity with capacitor %s failed: %s", capacitorID, util.ErrorToString(err))
 			clusterCapacitorFailedCounter.With(labels).Inc()
 			continue
 		}

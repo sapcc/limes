@@ -29,6 +29,7 @@ import (
 	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes/pkg/core"
+	"github.com/sapcc/limes/pkg/util"
 )
 
 type roleAssignmentDiscoveryPlugin struct {
@@ -72,7 +73,7 @@ func (p *roleAssignmentDiscoveryPlugin) ListProjects(provider *gophercloud.Provi
 	opts.RoleID, err = getRoleIDForName(client, p.cfg.RoleAssignment.RoleName)
 	if err != nil {
 		return nil, fmt.Errorf(`cannot get role ID for role "%s": %s`,
-			p.cfg.RoleAssignment.RoleName, err.Error(),
+			p.cfg.RoleAssignment.RoleName, util.ErrorToString(err),
 		)
 	}
 
@@ -90,7 +91,7 @@ func (p *roleAssignmentDiscoveryPlugin) ListProjects(provider *gophercloud.Provi
 		return true, nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf(`cannot list role assignments: %s`, err.Error())
+		return nil, fmt.Errorf(`cannot list role assignments: %s`, util.ErrorToString(err))
 	}
 
 	//filter projects by domain and get name
@@ -103,7 +104,7 @@ func (p *roleAssignmentDiscoveryPlugin) ListProjects(provider *gophercloud.Provi
 		var result gophercloud.Result
 		_, err := client.Get(client.ServiceURL("projects", projectID), &result.Body, nil)
 		if err != nil {
-			return nil, fmt.Errorf(`cannot query project %s: %s`, projectID, err.Error())
+			return nil, fmt.Errorf(`cannot query project %s: %s`, projectID, util.ErrorToString(err))
 		}
 
 		var data1 struct {
