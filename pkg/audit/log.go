@@ -43,11 +43,6 @@ type Trail struct {
 	events []CADFEvent
 }
 
-//EventParams is the interface type that different types of EventParams must satisfy.
-type EventParams interface {
-	newEvent() CADFEvent
-}
-
 //Add adds an event to the audit trail.
 func (t *Trail) Add(p EventParams) {
 	event := p.newEvent()

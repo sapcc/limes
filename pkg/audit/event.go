@@ -25,6 +25,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/gofrs/uuid"
 	"github.com/sapcc/go-bits/gopherpolicy"
@@ -38,8 +39,8 @@ func init() {
 	observerUUID = generateUUID()
 }
 
-//CADFEvent contains the CADF event format according to CADF spec (section 6.6.1 Event)
-//and includes extensions for better auditing.
+//CADFEvent contains the CADF event format according to CADF spec (section
+//6.6.1 Event) and includes extensions for better auditing.
 type CADFEvent struct {
 	TypeURI     string       `json:"typeURI"`
 	ID          string       `json:"id"`
@@ -55,7 +56,8 @@ type CADFEvent struct {
 	RequestPath string       `json:"requestPath,omitempty"`
 }
 
-//Resource is a substructure of CADFEvent and contains attributes describing a (OpenStack-) resource.
+//Resource is a substructure of CADFEvent and contains attributes describing a
+//(OpenStack-) resource.
 type Resource struct {
 	TypeURI   string `json:"typeURI"`
 	Name      string `json:"name,omitempty"`
@@ -71,7 +73,8 @@ type Resource struct {
 	DomainID    string       `json:"domain_id,omitempty"`
 }
 
-//Attachment is a substructure of CADFEvent and contains self-describing extensions to the event.
+//Attachment is a substructure of CADFEvent and contains self-describing
+//extensions to the event.
 type Attachment struct {
 	Name    string      `json:"name,omitempty"`
 	TypeURI string      `json:"typeURI"`
@@ -92,12 +95,24 @@ type Host struct {
 	Platform string `json:"platform,omitempty"`
 }
 
-//ResourceEventParams contains parameters for creating an audit event for changes regarding some service/resource.
-type ResourceEventParams struct {
-	Token        *gopherpolicy.Token
-	Request      *http.Request
-	ReasonCode   int
-	Time         string
+//EventParams contains parameters for creating an audit event.
+type EventParams struct {
+	Token      *gopherpolicy.Token
+	Request    *http.Request
+	ReasonCode int
+	Time       time.Time
+	Target     EventTarget
+}
+
+//EventTarget is the interface that different event target types must implement
+//in order to render the respective Event.Target section.
+type EventTarget interface {
+	Render() Resource
+}
+
+//QuotaEventTarget contains the structure for rendering a Event.Target for
+//changes regarding resource quota.
+type QuotaEventTarget struct {
 	DomainID     string
 	ProjectID    string
 	ServiceType  string
@@ -108,72 +123,65 @@ type ResourceEventParams struct {
 	RejectReason string
 }
 
-//newEvent takes the necessary parameters and returns a new audit event.
-func (p ResourceEventParams) newEvent() CADFEvent {
-	targetID := p.ProjectID
-	if p.ProjectID == "" {
-		targetID = p.DomainID
+// Render implements the EventTarget interface type.
+func (t QuotaEventTarget) Render() Resource {
+	targetID := t.ProjectID
+	if t.ProjectID == "" {
+		targetID = t.DomainID
 	}
 
-	outcome := "failure"
-	if p.ReasonCode == http.StatusOK {
-		outcome = "success"
+	return Resource{
+		TypeURI:   fmt.Sprintf("service/%s/%s/quota", t.ServiceType, t.ResourceName),
+		ID:        targetID,
+		DomainID:  t.DomainID,
+		ProjectID: t.ProjectID,
+		Attachments: []Attachment{{
+			Name:    "payload",
+			TypeURI: "mime:application/json",
+			Content: attachmentContent{
+				OldQuota:     t.OldQuota,
+				NewQuota:     t.NewQuota,
+				Unit:         t.QuotaUnit,
+				RejectReason: t.RejectReason},
+		}},
 	}
+}
 
-	return CADFEvent{
-		TypeURI:   "http://schemas.dmtf.org/cloud/audit/1.0/event",
-		ID:        generateUUID(),
-		EventTime: p.Time,
-		EventType: "activity",
-		Action:    "update",
-		Outcome:   outcome,
-		Reason: Reason{
-			ReasonType: "HTTP",
-			ReasonCode: strconv.Itoa(p.ReasonCode),
-		},
-		Initiator: Resource{
-			TypeURI:   "service/security/account/user",
-			Name:      p.Token.Context.Auth["user_name"],
-			ID:        p.Token.Context.Auth["user_id"],
-			Domain:    p.Token.Context.Auth["domain_name"],
-			DomainID:  p.Token.Context.Auth["domain_id"],
-			ProjectID: p.Token.Context.Auth["project_id"],
-			Host: &Host{
-				Address: tryStripPort(p.Request.RemoteAddr),
-				Agent:   p.Request.Header.Get("User-Agent"),
-			},
-		},
-		Target: Resource{
-			TypeURI:   fmt.Sprintf("service/%s/%s/quota", p.ServiceType, p.ResourceName),
-			ID:        targetID,
-			DomainID:  p.DomainID,
-			ProjectID: p.ProjectID,
-			Attachments: []Attachment{{
-				Name:    "payload",
-				TypeURI: "mime:application/json",
-				Content: attachmentContent{
-					OldQuota:     p.OldQuota,
-					NewQuota:     p.NewQuota,
-					Unit:         p.QuotaUnit,
-					RejectReason: p.RejectReason},
-			}},
-		},
-		Observer: Resource{
-			TypeURI: "service/resources",
-			Name:    "limes",
-			ID:      observerUUID,
-		},
-		RequestPath: p.Request.URL.String(),
+//BurstEventTarget contains the structure for rendering a Event.Target for
+//changes regarding quota bursting for some project.
+type BurstEventTarget struct {
+	DomainID     string
+	ProjectID    string
+	NewStatus    bool
+	RejectReason string
+}
+
+// Render implements the EventTarget interface type.
+func (t BurstEventTarget) Render() Resource {
+	return Resource{
+		TypeURI:   "service/resources/bursting",
+		ID:        t.ProjectID,
+		DomainID:  t.DomainID,
+		ProjectID: t.ProjectID,
+		Attachments: []Attachment{{
+			Name:    "payload",
+			TypeURI: "mime:application/json",
+			Content: attachmentContent{
+				NewStatus:    t.NewStatus,
+				RejectReason: t.RejectReason},
+		}},
 	}
 }
 
 //This type is needed for the custom MarshalJSON behavior.
 type attachmentContent struct {
-	OldQuota     uint64
-	NewQuota     uint64
-	Unit         limes.Unit
-	NewStatus    bool //for quota bursting
 	RejectReason string
+	// for quota changes
+	OldQuota uint64
+	NewQuota uint64
+	Unit     limes.Unit
+	// for quota bursting
+	NewStatus bool
 }
 
 //MarshalJSON implements the json.Marshaler interface.
@@ -182,8 +190,8 @@ func (a attachmentContent) MarshalJSON() ([]byte, error) {
 	data := struct {
 		OldQuota     uint64     `json:"oldQuota,omitempty"`
 		NewQuota     uint64     `json:"newQuota,omitempty"`
-		NewStatus    bool       `json:"newStatus,omitempty"`
 		Unit         limes.Unit `json:"unit,omitempty"`
+		NewStatus    bool       `json:"newStatus,omitempty"`
 		RejectReason string     `json:"rejectReason,omitempty"`
 	}{
 		OldQuota:     a.OldQuota,
@@ -192,8 +200,8 @@ func (a attachmentContent) MarshalJSON() ([]byte, error) {
 		Unit:         a.Unit,
 		RejectReason: a.RejectReason,
 	}
-	//Hermes does not accept a JSON object at target.attachments[].content, so we need
-	//to wrap the marshaled JSON into a JSON string
+	//Hermes does not accept a JSON object at target.attachments[].content, so
+	//we need to wrap the marshaled JSON into a JSON string
 	bytes, err := json.Marshal(data)
 	if err != nil {
 		return nil, err
@@ -201,32 +209,17 @@ func (a attachmentContent) MarshalJSON() ([]byte, error) {
 	return json.Marshal(string(bytes))
 }
 
-//BurstEventParams contains parameters for creating an audit event for changes regarding quota bursting.
-type BurstEventParams struct {
-	Token        *gopherpolicy.Token
-	Request      *http.Request
-	ReasonCode   int
-	Time         string
-	DomainID     string
-	ProjectID    string
-	NewStatus    bool
-	RejectReason string
-}
-
-func (p BurstEventParams) newEvent() CADFEvent {
+//newEvent takes the necessary parameters and returns a new audit event.
+func (p EventParams) newEvent() CADFEvent {
 	outcome := "failure"
-	attachCont := attachmentContent{
-		RejectReason: p.RejectReason,
-	}
 	if p.ReasonCode == http.StatusOK {
 		outcome = "success"
-		attachCont.NewStatus = p.NewStatus
 	}
 
 	return CADFEvent{
 		TypeURI:   "http://schemas.dmtf.org/cloud/audit/1.0/event",
 		ID:        generateUUID(),
-		EventTime: p.Time,
+		EventTime: p.Time.Format("2006-01-02T15:04:05.999999+00:00"),
 		EventType: "activity",
 		Action:    "update",
 		Outcome:   outcome,
@@ -246,17 +239,7 @@ func (p BurstEventParams) newEvent() CADFEvent {
 				Agent:   p.Request.Header.Get("User-Agent"),
 			},
 		},
-		Target: Resource{
-			TypeURI:   "service/resources/bursting",
-			ID:        p.ProjectID,
-			DomainID:  p.DomainID,
-			ProjectID: p.ProjectID,
-			Attachments: []Attachment{{
-				Name:    "payload",
-				TypeURI: "mime:application/json",
-				Content: attachCont,
-			}},
-		},
+		Target: p.Target.Render(),
 		Observer: Resource{
 			TypeURI: "service/resources",
 			Name:    "limes",
