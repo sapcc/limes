@@ -27,8 +27,8 @@ import (
 	"github.com/sapcc/limes/pkg/db"
 )
 
-//Inconsistencies contains aggregated data about inconsistent quota setups for domains and projects
-//in the current cluster.
+//Inconsistencies contains aggregated data about inconsistent quota setups for
+//domains and projects in the current cluster.
 type Inconsistencies struct {
 	ClusterID           string                     `json:"cluster_id"`
 	OvercommittedQuotas []OvercommittedDomainQuota `json:"domain_quota_overcommitted,keepempty"`
@@ -36,8 +36,9 @@ type Inconsistencies struct {
 	MismatchQuotas      []MismatchProjectQuota     `json:"project_quota_mismatch,keepempty"`
 }
 
-//OvercommittedDomainQuota is a substructure of Inconsistency containing data for the inconsistency type
-//where for a domain the sum(projects_quota) > domain_quota for a single resource.
+//OvercommittedDomainQuota is a substructure of Inconsistency containing data
+//for the inconsistency type where for a domain the 'sum(projects_quota) > domain_quota'
+//for a single resource.
 type OvercommittedDomainQuota struct {
 	Domain        DomainData `json:"domain,keepempty"`
 	Service       string     `json:"service,keepempty"`
@@ -47,8 +48,13 @@ type OvercommittedDomainQuota struct {
 	ProjectsQuota uint64     `json:"projects_quota,keepempty"`
 }
 
-//OverspentProjectQuota is a substructure of Inconsistency containing data for the inconsistency type
-//where for some project the usage > quota for a single resource.
+//OverspentProjectQuota is a substructure of Inconsistency containing data for
+//the inconsistency type where for some project the 'usage > desired_backend_quota' for a
+//single resource.
+//
+//For projects with quota bursting disabled the 'desired_backend_quota == quota',
+//and for projects with quota bursting enabled the
+//'desired_backend_quota == floor(quota * (1 + bursting.multiplier))'.
 type OverspentProjectQuota struct {
 	Project  ProjectData `json:"project,keepempty"`
 	Service  string      `json:"service,keepempty"`
@@ -58,8 +64,13 @@ type OverspentProjectQuota struct {
 	Usage    uint64      `json:"usage,keepempty"`
 }
 
-//MismatchProjectQuota is a substructure of Inconsistency containing data for the inconsistency type
-//where for some project the quota != backend_quota for a single resource.
+//MismatchProjectQuota is a substructure of Inconsistency containing data for
+//the inconsistency type where for some project the 'backend_quota != desired_backend_quota'
+//for a single resource.
+//
+//For projects with quota bursting disabled the 'desired_backend_quota == quota',
+//and for projects with quota bursting enabled the
+//'desired_backend_quota == floor(quota * (1 + bursting.multiplier))'.
 type MismatchProjectQuota struct {
 	Project      ProjectData `json:"project,keepempty"`
 	Service      string      `json:"service,keepempty"`
@@ -96,24 +107,24 @@ var ocdqReportQuery = `
 `
 
 var ospqReportQuery = `
-	SELECT d.uuid, d.name, p.uuid, p.name, ps.type, pr.name, SUM(pr.quota), SUM(pr.usage)
+	SELECT d.uuid, d.name, p.uuid, p.name, ps.type, pr.name, SUM(pr.desired_backend_quota), SUM(pr.usage)
 	  FROM projects p
 	  LEFT OUTER JOIN domains d ON d.id=p.domain_id
 	  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
 	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
 	WHERE %s GROUP BY d.uuid, d.name, p.uuid, p.name, ps.type, pr.name
-	HAVING SUM(pr.usage) > SUM(pr.quota)
+	HAVING SUM(pr.usage) > SUM(pr.desired_backend_quota)
 	ORDER BY p.uuid ASC
 `
 
 var mmpqReportQuery = `
-	SELECT d.uuid, d.name, p.uuid, p.name, ps.type, pr.name, SUM(pr.quota), SUM(pr.backend_quota)
+	SELECT d.uuid, d.name, p.uuid, p.name, ps.type, pr.name, SUM(pr.desired_backend_quota), SUM(pr.backend_quota)
 	  FROM projects p
 	  LEFT OUTER JOIN domains d ON d.id=p.domain_id
 	  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
 	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
 	WHERE %s GROUP BY d.uuid, d.name, p.uuid, p.name, ps.type, pr.name
-	HAVING SUM(pr.quota) != SUM(pr.backend_quota)
+	HAVING SUM(pr.backend_quota) != SUM(pr.desired_backend_quota)
 	ORDER BY p.uuid ASC
 `
 
@@ -131,7 +142,7 @@ func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter) 
 		MismatchQuotas:      []MismatchProjectQuota{},
 	}
 
-	//ocdqReportQuery: data for OvercommittedDomainQuota inconsistencies.
+	//ocdqReportQuery: data for overcommitted domain quota inconsistencies
 	queryStr, joinArgs := filter.PrepareQuery(ocdqReportQuery)
 	whereStr, whereArgs := db.BuildSimpleWhereClause(fields, len(joinArgs))
 	err := db.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
@@ -147,17 +158,21 @@ func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter) 
 		ocdq.Unit = cluster.InfoForResource(ocdq.Service, ocdq.Resource).Unit
 		inconsistencies.OvercommittedQuotas = append(inconsistencies.OvercommittedQuotas, ocdq)
 
-		return err
+		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
 
-	//ospqReportQuery: data for OverspentProjectQuota inconsistencies.
+	//ospqReportQuery: data for overspent project quota inconsistencies
 	queryStr, joinArgs = filter.PrepareQuery(ospqReportQuery)
 	whereStr, whereArgs = db.BuildSimpleWhereClause(fields, len(joinArgs))
 	err = db.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		ospq := OverspentProjectQuota{}
 		err := rows.Scan(
-			&ospq.Project.Domain.UUID, &ospq.Project.Domain.Name, &ospq.Project.UUID,
-			&ospq.Project.Name, &ospq.Service, &ospq.Resource, &ospq.Quota, &ospq.Usage,
+			&ospq.Project.Domain.UUID, &ospq.Project.Domain.Name,
+			&ospq.Project.UUID, &ospq.Project.Name, &ospq.Service,
+			&ospq.Resource, &ospq.Quota, &ospq.Usage,
 		)
 		if err != nil {
 			return err
@@ -166,17 +181,21 @@ func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter) 
 		ospq.Unit = cluster.InfoForResource(ospq.Service, ospq.Resource).Unit
 		inconsistencies.OverspentQuotas = append(inconsistencies.OverspentQuotas, ospq)
 
-		return err
+		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
 
-	//mmpqReportQuery: data for MismatchProjectQuota inconsistencies.
+	//mmpqReportQuery: data for mismatch project quota inconsistencies
 	queryStr, joinArgs = filter.PrepareQuery(mmpqReportQuery)
 	whereStr, whereArgs = db.BuildSimpleWhereClause(fields, len(joinArgs))
 	err = db.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		mmpq := MismatchProjectQuota{}
 		err := rows.Scan(
-			&mmpq.Project.Domain.UUID, &mmpq.Project.Domain.Name, &mmpq.Project.UUID,
-			&mmpq.Project.Name, &mmpq.Service, &mmpq.Resource, &mmpq.Quota, &mmpq.BackendQuota,
+			&mmpq.Project.Domain.UUID, &mmpq.Project.Domain.Name,
+			&mmpq.Project.UUID, &mmpq.Project.Name, &mmpq.Service,
+			&mmpq.Resource, &mmpq.Quota, &mmpq.BackendQuota,
 		)
 		if err != nil {
 			return err
@@ -185,9 +204,8 @@ func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter) 
 		mmpq.Unit = cluster.InfoForResource(mmpq.Service, mmpq.Resource).Unit
 		inconsistencies.MismatchQuotas = append(inconsistencies.MismatchQuotas, mmpq)
 
-		return err
+		return nil
 	})
-
 	if err != nil {
 		return nil, err
 	}
