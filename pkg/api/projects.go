@@ -26,6 +26,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sapcc/limes/pkg/audit"
+
 	gorp "gopkg.in/gorp.v2"
 
 	"github.com/gorilla/mux"
@@ -360,7 +362,8 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 }
 
 func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *http.Request, simulate, hasBursting bool) {
-	//TODO generate audit events when changing Project.HasBursting
+	requestTime := time.Now()
+	var trail audit.Trail
 
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:edit") {
@@ -379,7 +382,20 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 		return
 	}
 	if cluster.Config.Bursting.MaxMultiplier == 0 {
-		http.Error(w, "bursting is not available for this cluster", http.StatusBadRequest)
+		msg := "bursting is not available for this cluster"
+		http.Error(w, msg, http.StatusBadRequest)
+		trail.Add(audit.EventParams{
+			Token:      token,
+			Request:    r,
+			ReasonCode: http.StatusBadRequest,
+			Time:       requestTime,
+			Target: audit.BurstEventTarget{
+				DomainID:     domain.UUID,
+				ProjectID:    project.UUID,
+				RejectReason: msg,
+			},
+		})
+		trail.Commit(cluster.ID, cluster.Config.CADF)
 		return
 	}
 
@@ -435,6 +451,18 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 					overbookedResources[0]
 			}
 			http.Error(w, msg, http.StatusConflict)
+			trail.Add(audit.EventParams{
+				Token:      token,
+				Request:    r,
+				ReasonCode: http.StatusConflict,
+				Time:       requestTime,
+				Target: audit.BurstEventTarget{
+					DomainID:     domain.UUID,
+					ProjectID:    project.UUID,
+					RejectReason: msg,
+				},
+			})
+			trail.Commit(cluster.ID, cluster.Config.CADF)
 			return
 		}
 	}
@@ -479,6 +507,19 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 			continue
 		}
 	}
+
+	trail.Add(audit.EventParams{
+		Token:      token,
+		Request:    r,
+		ReasonCode: http.StatusOK,
+		Time:       requestTime,
+		Target: audit.BurstEventTarget{
+			DomainID:  domain.UUID,
+			ProjectID: project.UUID,
+			NewStatus: hasBursting,
+		},
+	})
+	trail.Commit(cluster.ID, cluster.Config.CADF)
 
 	//report any backend errors to the user
 	if len(errors) > 0 {

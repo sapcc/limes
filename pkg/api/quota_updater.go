@@ -40,7 +40,7 @@ import (
 type QuotaUpdater struct {
 	//scope
 	Cluster *core.Cluster
-	Domain  *db.Domain  //always set (for project quota updates, contains the project'u domain)
+	Domain  *db.Domain  //always set (for project quota updates, contains the project's domain)
 	Project *db.Project //nil for domain quota updates
 	//AuthZ info
 	CanRaise   bool
@@ -396,7 +396,6 @@ func (u QuotaUpdater) WritePutErrorResponse(w http.ResponseWriter) {
 //CommitAuditTrail prepares an audit.Trail instance for this updater and
 //commits it.
 func (u QuotaUpdater) CommitAuditTrail(token *gopherpolicy.Token, r *http.Request, requestTime time.Time) {
-	requestTimeStr := requestTime.Format("2006-01-02T15:04:05.999999+00:00")
 	var trail audit.Trail
 
 	projectUUID := ""
@@ -424,18 +423,20 @@ func (u QuotaUpdater) CommitAuditTrail(token *gopherpolicy.Token, r *http.Reques
 			}
 
 			trail.Add(audit.EventParams{
-				Token:        token,
-				Request:      r,
-				ReasonCode:   statusCode,
-				Time:         requestTimeStr,
-				DomainID:     u.Domain.UUID,
-				ProjectID:    projectUUID, //is empty for domain quota updates, see above
-				ServiceType:  srvType,
-				ResourceName: resName,
-				OldQuota:     req.OldValue,
-				NewQuota:     req.NewValue,
-				QuotaUnit:    req.Unit,
-				RejectReason: rejectReason,
+				Token:      token,
+				Request:    r,
+				ReasonCode: statusCode,
+				Time:       requestTime,
+				Target: audit.QuotaEventTarget{
+					DomainID:     u.Domain.UUID,
+					ProjectID:    projectUUID, //is empty for domain quota updates, see above
+					ServiceType:  srvType,
+					ResourceName: resName,
+					OldQuota:     req.OldValue,
+					NewQuota:     req.NewValue,
+					QuotaUnit:    req.Unit,
+					RejectReason: rejectReason,
+				},
 			})
 		}
 	}
