@@ -213,7 +213,7 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 	requestTime := time.Now()
 	token := p.CheckToken(r)
 	canRaise := token.Check("project:raise")
-	canRaiseLP := token.Check("domain:raise_lowpriv")
+	canRaiseLP := token.Check("project:raise_lowpriv")
 	canLower := token.Check("project:lower")
 	if !canRaise && !canLower {
 		token.Require(w, "project:raise") //produce standard Unauthorized response
