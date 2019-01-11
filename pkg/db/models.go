@@ -81,12 +81,13 @@ type ProjectService struct {
 
 //ProjectResource contains a record from the `project_resources` table.
 type ProjectResource struct {
-	ServiceID        int64  `db:"service_id"`
-	Name             string `db:"name"`
-	Quota            uint64 `db:"quota"`
-	Usage            uint64 `db:"usage"`
-	BackendQuota     int64  `db:"backend_quota"`
-	SubresourcesJSON string `db:"subresources"`
+	ServiceID           int64  `db:"service_id"`
+	Name                string `db:"name"`
+	Quota               uint64 `db:"quota"`
+	Usage               uint64 `db:"usage"`
+	BackendQuota        int64  `db:"backend_quota"`
+	DesiredBackendQuota uint64 `db:"desired_backend_quota"`
+	SubresourcesJSON    string `db:"subresources"`
 }
 
 //InitGorp is used by Init() to setup the ORM part of the database connection.

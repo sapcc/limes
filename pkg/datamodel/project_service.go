@@ -109,13 +109,20 @@ func ValidateProjectServices(tx *gorp.Transaction, cluster *core.Cluster, domain
 			sort.Strings(resourceNames)
 
 			for _, resourceName := range resourceNames {
-				err := tx.Insert(&db.ProjectResource{
+				res := db.ProjectResource{
 					ServiceID: srv.ID,
 					Name:      resourceName,
 					Quota:     *(serviceConstraints[resourceName].Minimum),
 					//Scrape() will fill in the remaining backend attributes, and it will
 					//also write the quotas into the backend.
-				})
+				}
+				if project.HasBursting {
+					res.DesiredBackendQuota = cluster.Config.Bursting.MaxMultiplier.ApplyTo(res.Quota)
+				} else {
+					res.DesiredBackendQuota = res.Quota
+				}
+
+				err := tx.Insert(&res)
 				if err != nil {
 					return nil, err
 				}

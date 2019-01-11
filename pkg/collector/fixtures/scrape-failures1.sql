@@ -8,7 +8,7 @@ INSERT INTO projects (id, domain_id, name, uuid, parent_uuid, has_bursting) VALU
 INSERT INTO project_services (id, project_id, type, scraped_at, stale) VALUES (1, 1, 'unittest', 0, FALSE);
 INSERT INTO project_services (id, project_id, type, scraped_at, stale) VALUES (2, 2, 'unittest', 0, FALSE);
 
-INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources) VALUES (1, 'capacity', 10, 0, -1, '');
-INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources) VALUES (1, 'things', 0, 0, -1, '');
-INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources) VALUES (2, 'capacity', 10, 0, -1, '');
-INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources) VALUES (2, 'things', 0, 0, -1, '');
+INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota) VALUES (1, 'capacity', 10, 0, -1, '', 10);
+INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota) VALUES (1, 'things', 0, 0, -1, '', 0);
+INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota) VALUES (2, 'capacity', 10, 0, -1, '', 12);
+INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota) VALUES (2, 'things', 0, 0, -1, '', 0);
