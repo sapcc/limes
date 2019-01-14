@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/limes"
@@ -411,6 +412,28 @@ func (u QuotaUpdater) CommitAuditTrail(token *gopherpolicy.Token, r *http.Reques
 
 	for srvType, reqs := range u.Requests {
 		for resName, req := range reqs {
+			// low-privilege-raise metrics
+			if u.CanRaiseLP && !u.CanRaise {
+				labels := prometheus.Labels{
+					"os_cluster": u.Cluster.ID,
+					"service":    srvType,
+					"resource":   resName,
+				}
+				if u.ScopeType() == "domain" {
+					if invalid {
+						lowPrivilegeRaiseDomainFailureCounter.With(labels).Inc()
+					} else {
+						lowPrivilegeRaiseDomainSuccessCounter.With(labels).Inc()
+					}
+				} else {
+					if invalid {
+						lowPrivilegeRaiseProjectFailureCounter.With(labels).Inc()
+					} else {
+						lowPrivilegeRaiseProjectSuccessCounter.With(labels).Inc()
+					}
+				}
+			}
+
 			//if !u.IsValid(), then all requested quotas in this PUT are considered
 			//invalid (and none are committed), so set the rejectReason to explain this
 			rejectReason := ""
