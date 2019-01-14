@@ -65,13 +65,29 @@ func ApplyBackendQuota(dbi db.Interface, cluster *core.Cluster, domainUUID strin
 		}
 		quotaValues[res.Name] = desiredQuota
 
-		if res.BackendQuota < 0 || desiredQuota != uint64(res.BackendQuota) {
+		if res.BackendQuota < 0 || desiredQuota != uint64(res.BackendQuota) || desiredQuota != res.DesiredBackendQuota {
+			res.DesiredBackendQuota = desiredQuota
 			res.BackendQuota = int64(desiredQuota)
 			resourcesToUpdate = append(resourcesToUpdate, res)
 		}
 	}
 	if len(resourcesToUpdate) == 0 {
 		return nil
+	}
+
+	//save desired backend quotas in DB (we do this before SetQuota so that it is
+	//durable even if SetQuota fails)
+	//
+	//NOTE: cannot use UpdateColumns() because of https://github.com/go-gorp/gorp/issues/325
+	stmt, err := dbi.Prepare(`UPDATE project_resources SET desired_backend_quota = $1 WHERE service_id = $2 AND name = $3`)
+	if err != nil {
+		return err
+	}
+	for _, res := range resourcesToUpdate {
+		_, err := stmt.Exec(res.DesiredBackendQuota, serviceID, res.Name)
+		if err != nil {
+			return err
+		}
 	}
 
 	//apply quotas in backend
@@ -84,7 +100,7 @@ func ApplyBackendQuota(dbi db.Interface, cluster *core.Cluster, domainUUID strin
 	//save applied backend quotas in DB
 	//
 	//NOTE: cannot use UpdateColumns() because of https://github.com/go-gorp/gorp/issues/325
-	stmt, err := dbi.Prepare(`UPDATE project_resources SET backend_quota = $1 WHERE service_id = $2 AND name = $3`)
+	stmt, err = dbi.Prepare(`UPDATE project_resources SET backend_quota = $1 WHERE service_id = $2 AND name = $3`)
 	if err != nil {
 		return err
 	}

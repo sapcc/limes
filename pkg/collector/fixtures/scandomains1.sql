@@ -20,5 +20,5 @@ INSERT INTO project_services (id, project_id, type, scraped_at, stale) VALUES (4
 INSERT INTO project_services (id, project_id, type, scraped_at, stale) VALUES (5, 3, 'unshared', NULL, FALSE);
 INSERT INTO project_services (id, project_id, type, scraped_at, stale) VALUES (6, 3, 'shared', NULL, FALSE);
 
-INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources) VALUES (1, 'things', 5, 0, 0, '');
-INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources) VALUES (2, 'capacity', 10, 0, 0, '');
+INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota) VALUES (1, 'things', 5, 0, 0, '', 5);
+INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota) VALUES (2, 'capacity', 10, 0, 0, '', 10);

@@ -143,4 +143,10 @@ var SQLMigrations = map[string]string{
 	"007_add_projects_has_bursting.up.sql": `
 		ALTER TABLE projects ADD COLUMN has_bursting BOOLEAN NOT NULL DEFAULT TRUE;
 	`,
+	"008_add_project_resources_desired_backend_quota.down.sql": `
+		ALTER TABLE project_resources DROP COLUMN desired_backend_quota;
+	`,
+	"008_add_project_resources_desired_backend_quota.up.sql": `
+		ALTER TABLE project_resources ADD COLUMN desired_backend_quota BIGINT NOT NULL DEFAULT 0;
+	`,
 }

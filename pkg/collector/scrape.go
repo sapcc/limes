@@ -47,7 +47,7 @@ var scrapeInterval = 30 * time.Minute
 
 //query that finds the next project that needs to be scraped
 var findProjectQuery = `
-	SELECT ps.id, ps.scraped_at, p.name, p.uuid, p.id, d.name, d.uuid
+	SELECT ps.id, ps.scraped_at, p.name, p.uuid, p.id, p.has_bursting, d.name, d.uuid
 	FROM project_services ps
 	JOIN projects p ON p.id = ps.project_id
 	JOIN domains d ON d.id = p.domain_id
@@ -82,16 +82,17 @@ func (c *Collector) Scrape() {
 
 	for {
 		var (
-			serviceID        int64
-			serviceScrapedAt *time.Time
-			projectName      string
-			projectUUID      string
-			projectID        int64
-			domainName       string
-			domainUUID       string
+			serviceID          int64
+			serviceScrapedAt   *time.Time
+			projectName        string
+			projectUUID        string
+			projectID          int64
+			projectHasBursting bool
+			domainName         string
+			domainUUID         string
 		)
 		err := db.DB.QueryRow(findProjectQuery, c.Cluster.ID, serviceType, c.TimeNow().Add(-scrapeInterval)).
-			Scan(&serviceID, &serviceScrapedAt, &projectName, &projectUUID, &projectID, &domainName, &domainUUID)
+			Scan(&serviceID, &serviceScrapedAt, &projectName, &projectUUID, &projectID, &projectHasBursting, &domainName, &domainUUID)
 		if err != nil {
 			//ErrNoRows is okay; it just means that nothing needs scraping right now
 			if err != sql.ErrNoRows {
@@ -124,7 +125,7 @@ func (c *Collector) Scrape() {
 
 				if serviceScrapedAt == nil {
 					//see explanation inside the called function's body
-					err := c.writeDummyResources(domainName, projectName, serviceType, serviceID)
+					err := c.writeDummyResources(domainName, projectName, projectHasBursting, serviceType, serviceID)
 					if err != nil {
 						c.LogError("write dummy resource data for service %s for %s/%s failed: %s", serviceType, domainName, projectName, err.Error())
 					}
@@ -138,7 +139,7 @@ func (c *Collector) Scrape() {
 			continue
 		}
 
-		err = c.writeScrapeResult(domainName, domainUUID, projectName, projectUUID, projectID, serviceType, serviceID, resourceData, c.TimeNow())
+		err = c.writeScrapeResult(domainName, domainUUID, projectName, projectUUID, projectID, projectHasBursting, serviceType, serviceID, resourceData, c.TimeNow())
 		if err != nil {
 			c.LogError("write %s backend data for %s/%s failed: %s", serviceType, domainName, projectName, err.Error())
 			scrapeFailedCounter.With(labels).Inc()
@@ -159,7 +160,7 @@ func (c *Collector) Scrape() {
 	}
 }
 
-func (c *Collector) writeScrapeResult(domainName, domainUUID, projectName, projectUUID string, projectID int64, serviceType string, serviceID int64, resourceData map[string]core.ResourceData, scrapedAt time.Time) error {
+func (c *Collector) writeScrapeResult(domainName, domainUUID, projectName, projectUUID string, projectID int64, projectHasBursting bool, serviceType string, serviceID int64, resourceData map[string]core.ResourceData, scrapedAt time.Time) error {
 	tx, err := db.DB.Begin()
 	if err != nil {
 		return err
@@ -213,6 +214,7 @@ func (c *Collector) writeScrapeResult(domainName, domainUUID, projectName, proje
 			} else {
 				res.Quota = math.MaxUint64
 			}
+			res.DesiredBackendQuota = res.Quota
 		}
 
 		if len(data.Subresources) == 0 {
@@ -260,14 +262,6 @@ func (c *Collector) writeScrapeResult(domainName, domainUUID, projectName, proje
 			SubresourcesJSON: "", //but see below
 		}
 
-		if resMetadata.ExternallyManaged {
-			if data.Quota >= 0 {
-				res.Quota = uint64(data.Quota)
-			} else {
-				res.Quota = math.MaxUint64
-			}
-		}
-
 		if res.Quota == 0 && data.Quota > 0 && uint64(data.Quota) == resMetadata.AutoApproveInitialQuota {
 			res.Quota = resMetadata.AutoApproveInitialQuota
 
@@ -275,6 +269,21 @@ func (c *Collector) writeScrapeResult(domainName, domainUUID, projectName, proje
 			logg.Other("AUDIT", fmt.Sprintf("set quota %s.%s = 0 -> %d for project %s through auto-approval",
 				serviceType, resMetadata.Name, res.Quota, projectUUID),
 			)
+		}
+
+		if projectHasBursting {
+			res.DesiredBackendQuota = c.Cluster.Config.Bursting.MaxMultiplier.ApplyTo(res.Quota)
+		} else {
+			res.DesiredBackendQuota = res.Quota
+		}
+
+		if resMetadata.ExternallyManaged {
+			if data.Quota >= 0 {
+				res.Quota = uint64(data.Quota)
+			} else {
+				res.Quota = math.MaxUint64
+			}
+			res.DesiredBackendQuota = res.Quota
 		}
 
 		if len(data.Subresources) != 0 {
@@ -333,7 +342,7 @@ func (c *Collector) writeScrapeResult(domainName, domainUUID, projectName, proje
 	return nil
 }
 
-func (c *Collector) writeDummyResources(domainName, projectName, serviceType string, serviceID int64) error {
+func (c *Collector) writeDummyResources(domainName, projectName string, projectHasBursting bool, serviceType string, serviceID int64) error {
 	//Rationale: This is called when we first try to scrape a project service,
 	//and the scraping fails (most likely due to some internal error in the
 	//backend service). We used to just not touch the database at this point,
@@ -388,6 +397,13 @@ func (c *Collector) writeDummyResources(domainName, projectName, serviceType str
 			BackendQuota:     -1,
 			SubresourcesJSON: "",
 		}
+
+		if projectHasBursting {
+			res.DesiredBackendQuota = c.Cluster.Config.Bursting.MaxMultiplier.ApplyTo(res.Quota)
+		} else {
+			res.DesiredBackendQuota = res.Quota
+		}
+
 		err = tx.Insert(res)
 		if err != nil {
 			return err
