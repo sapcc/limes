@@ -52,9 +52,6 @@ $ make check
 The `make check` will spew out a bit of bizarre-looking log, but you can easily see if it went well by looking for the
 friendly green "All tests successful" message at the end.
 
-**Note:** On macOS, `echo(1)` is too stupid to understand color codes. You should still see the "All tests successful"
-message in the last line, but minus color and plus mojibake.
-
 If `make check` complains about a missing libsqlite3.so, you will need to install SQLite3 via your usual package
 manager. It's probably there already, though.
 

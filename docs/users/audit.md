@@ -83,8 +83,8 @@ The table below should help you understand what the different fields in an audit
 | `event.eventTime` | Time at which the quota was changed. |
 | `event.eventType` | Defaults to activity (refer to section 4.5.1 of [CADF spec][cadf-spec]). |
 | `event.action` | Defaults to update (refer to section A.3.5 of [CADF spec][cadf-spec]). |
-| `event.outcome` | Defaults to success (only successful quota changes are logged at the moment. |
-| `event.reason.reasonType` | Defaults to HTTP (Limes only has a HTTP API at the moment). |
+| `event.outcome` | `success` or `failure` with respect to the `action`. |
+| `event.reason.reasonType` | Defaults to HTTP. |
 | `event.reason.reasonCode` | Appropriate HTTP status code depending on the `outcome`. |
 | `event.initiator.typeURI` | Defaults to `service/security/account/user`. |
 | `event.initiator.name` | Username of the person who changed the quota. |

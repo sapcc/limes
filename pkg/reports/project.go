@@ -20,6 +20,7 @@
 package reports
 
 import (
+	"database/sql"
 	"fmt"
 	"sort"
 	"strings"
@@ -55,15 +56,10 @@ func GetProjects(cluster *core.Cluster, domainID int64, projectID *int64, dbi db
 		queryStr = strings.Replace(queryStr, "pr.subresources", "''", 1)
 	}
 
+	projects := make(map[string]*limes.ProjectReport)
 	queryStr, joinArgs := filter.PrepareQuery(queryStr)
 	whereStr, whereArgs := db.BuildSimpleWhereClause(fields, len(joinArgs))
-	rows, err := dbi.Query(fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...)...)
-	if err != nil {
-		return nil, err
-	}
-
-	projects := make(map[string]*limes.ProjectReport)
-	for rows.Next() {
+	err := db.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		var (
 			projectUUID        string
 			projectName        string
@@ -83,8 +79,7 @@ func GetProjects(cluster *core.Cluster, domainID int64, projectID *int64, dbi db
 			&quota, &usage, &backendQuota, &subresources,
 		)
 		if err != nil {
-			rows.Close()
-			return nil, err
+			return err
 		}
 
 		project, exists := projects[projectUUID]
@@ -105,71 +100,62 @@ func GetProjects(cluster *core.Cluster, domainID int64, projectID *int64, dbi db
 			}
 		}
 
-		if serviceType == nil {
-			continue
+		if serviceType != nil {
+			service, exists := project.Services[*serviceType]
+			if !exists {
+				if cluster.HasService(*serviceType) {
+					service = &limes.ProjectServiceReport{
+						ServiceInfo: cluster.InfoForService(*serviceType),
+						Resources:   make(limes.ProjectResourceReports),
+					}
+					if scrapedAt != nil {
+						val := time.Time(*scrapedAt).Unix()
+						service.ScrapedAt = &val
+					}
+					project.Services[*serviceType] = service
+				}
+			}
+
+			if resourceName != nil {
+				if cluster.HasResource(*serviceType, *resourceName) {
+					subresourcesValue := ""
+					if subresources != nil {
+						subresourcesValue = *subresources
+					}
+
+					resource := &limes.ProjectResourceReport{
+						ResourceInfo: cluster.InfoForResource(*serviceType, *resourceName),
+						Scaling:      cluster.BehaviorForResource(*serviceType, *resourceName).ToScalingBehavior(),
+						Usage:        *usage,
+						BackendQuota: nil, //see below
+						Subresources: limes.JSONString(subresourcesValue),
+					}
+					if usage != nil {
+						resource.Usage = *usage
+					}
+					if quota != nil {
+						resource.Quota = *quota
+						desiredQuota := *quota
+						if projectHasBursting && clusterCanBurst {
+							desiredQuota = cluster.Config.Bursting.MaxMultiplier.ApplyTo(*quota)
+						}
+						if backendQuota != nil && (*backendQuota < 0 || uint64(*backendQuota) != desiredQuota) {
+							resource.BackendQuota = backendQuota
+						}
+					}
+					if projectHasBursting && clusterCanBurst && quota != nil && usage != nil {
+						if *usage > *quota {
+							resource.BurstUsage = *usage - *quota
+						}
+					}
+					service.Resources[*resourceName] = resource
+				}
+
+			}
 		}
 
-		service, exists := project.Services[*serviceType]
-		if !exists {
-			if !cluster.HasService(*serviceType) {
-				continue
-			}
-			service = &limes.ProjectServiceReport{
-				ServiceInfo: cluster.InfoForService(*serviceType),
-				Resources:   make(limes.ProjectResourceReports),
-			}
-			if scrapedAt != nil {
-				val := time.Time(*scrapedAt).Unix()
-				service.ScrapedAt = &val
-			}
-			project.Services[*serviceType] = service
-		}
-
-		if resourceName == nil {
-			continue
-		}
-		if !cluster.HasResource(*serviceType, *resourceName) {
-			continue
-		}
-
-		subresourcesValue := ""
-		if subresources != nil {
-			subresourcesValue = *subresources
-		}
-
-		resource := &limes.ProjectResourceReport{
-			ResourceInfo: cluster.InfoForResource(*serviceType, *resourceName),
-			Scaling:      cluster.BehaviorForResource(*serviceType, *resourceName).ToScalingBehavior(),
-			Usage:        *usage,
-			BackendQuota: nil, //see below
-			Subresources: limes.JSONString(subresourcesValue),
-		}
-		if usage != nil {
-			resource.Usage = *usage
-		}
-		if quota != nil {
-			resource.Quota = *quota
-			desiredQuota := *quota
-			if projectHasBursting && clusterCanBurst {
-				desiredQuota = cluster.Config.Bursting.MaxMultiplier.ApplyTo(*quota)
-			}
-			if backendQuota != nil && (*backendQuota < 0 || uint64(*backendQuota) != desiredQuota) {
-				resource.BackendQuota = backendQuota
-			}
-		}
-		if projectHasBursting && clusterCanBurst && quota != nil && usage != nil {
-			if *usage > *quota {
-				resource.BurstUsage = *usage - *quota
-			}
-		}
-		service.Resources[*resourceName] = resource
-	}
-	err = rows.Err()
-	if err != nil {
-		rows.Close()
-		return nil, err
-	}
-	err = rows.Close()
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
