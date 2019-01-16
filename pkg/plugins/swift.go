@@ -26,6 +26,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/majewsky/schwift"
 	"github.com/majewsky/schwift/gopherschwift"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
@@ -42,10 +43,20 @@ var swiftResources = []limes.ResourceInfo{
 	},
 }
 
+var swiftObjectsCountGauge = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "limes_swift_objects_per_container",
+		Help: "Number of objects per Swift container.",
+	},
+	[]string{"os_cluster", "domain_id", "project_id", "container_name"},
+)
+
 func init() {
 	core.RegisterQuotaPlugin(func(c core.ServiceConfiguration, scrapeSubresources map[string]bool) core.QuotaPlugin {
 		return &swiftPlugin{c}
 	})
+
+	prometheus.MustRegister(swiftObjectsCountGauge)
 }
 
 //Init implements the core.QuotaPlugin interface.
@@ -98,6 +109,29 @@ func (p *swiftPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclou
 		}, nil
 	} else if err != nil {
 		return nil, err
+	}
+
+	// collect object count metrics per container
+	metricLabels := prometheus.Labels{
+		"os_cluster": clusterID,
+		"domain_id":  domainUUID,
+		"project_id": projectUUID,
+	}
+
+	containers, err := account.Containers().Collect()
+	if err != nil {
+		logg.Error("Could not list containers in Swift account '%s': %v", projectUUID, err)
+	} else {
+		for _, container := range containers {
+			cHeaders, err := container.Headers()
+			if err != nil {
+				logg.Error("Could not get headers for container '%s' in Swift account '%s': %v", container.Name(), projectUUID, err)
+				continue
+			}
+
+			metricLabels["container_name"] = container.Name()
+			swiftObjectsCountGauge.With(metricLabels).Set(float64(cHeaders.ObjectCount().Get()))
+		}
 	}
 
 	data := core.ResourceData{
