@@ -219,8 +219,9 @@ type APIConfiguration struct {
 
 //CollectorConfiguration contains configuration parameters for limes-collect.
 type CollectorConfiguration struct {
-	MetricsListenAddress string `yaml:"metrics"`
-	ExposeDataMetrics    bool   `yaml:"data_metrics"`
+	MetricsListenAddress   string `yaml:"metrics"`
+	ExposeDataMetrics      bool   `yaml:"data_metrics"`
+	SkipZeroForDataMetrics bool   `yaml:"data_metrics_skip_zero"`
 }
 
 //NewConfiguration reads and validates the given configuration file.

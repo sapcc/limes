@@ -162,7 +162,8 @@ var unitConversionGauge = prometheus.NewGaugeVec(
 //DataMetricsCollector is a prometheus.Collector that submits
 //quota/usage/backend quota from an OpenStack cluster as Prometheus metrics.
 type DataMetricsCollector struct {
-	Cluster *core.Cluster
+	Cluster      *core.Cluster
+	ReportZeroes bool
 }
 
 //Describe implements the prometheus.Collector interface.
@@ -334,21 +335,27 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			return err
 		}
 
-		ch <- prometheus.MustNewConstMetric(
-			projectQuotaDesc,
-			prometheus.GaugeValue, float64(quota),
-			c.Cluster.ID, domainName, domainUUID, projectName, projectUUID, serviceType, resourceName,
-		)
-		ch <- prometheus.MustNewConstMetric(
-			projectUsageDesc,
-			prometheus.GaugeValue, float64(usage),
-			c.Cluster.ID, domainName, domainUUID, projectName, projectUUID, serviceType, resourceName,
-		)
-		ch <- prometheus.MustNewConstMetric(
-			projectBackendQuotaDesc,
-			prometheus.GaugeValue, float64(backendQuota),
-			c.Cluster.ID, domainName, domainUUID, projectName, projectUUID, serviceType, resourceName,
-		)
+		if c.ReportZeroes || quota != 0 {
+			ch <- prometheus.MustNewConstMetric(
+				projectQuotaDesc,
+				prometheus.GaugeValue, float64(quota),
+				c.Cluster.ID, domainName, domainUUID, projectName, projectUUID, serviceType, resourceName,
+			)
+		}
+		if c.ReportZeroes || usage != 0 {
+			ch <- prometheus.MustNewConstMetric(
+				projectUsageDesc,
+				prometheus.GaugeValue, float64(usage),
+				c.Cluster.ID, domainName, domainUUID, projectName, projectUUID, serviceType, resourceName,
+			)
+		}
+		if c.ReportZeroes || backendQuota != 0 {
+			ch <- prometheus.MustNewConstMetric(
+				projectBackendQuotaDesc,
+				prometheus.GaugeValue, float64(backendQuota),
+				c.Cluster.ID, domainName, domainUUID, projectName, projectUUID, serviceType, resourceName,
+			)
+		}
 		return nil
 	})
 	if err != nil {

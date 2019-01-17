@@ -75,6 +75,7 @@ Configuration options relating to the behavior of the collector service.
 | --- | --- | --- |
 | `collector.metrics` | yes | Bind address for the Prometheus metrics endpoint provided by this service. See `api.listen` for acceptable values. |
 | `collector.data_metrics` | no | If set to `true`, expose all quota/usage/capacity data as Prometheus gauges. This is disabled by default because this can be a lot of data for OpenStack clusters containing many projects, domains and services. |
+| `collector.data_metrics_skip_zero` | no | If set to `true`, data metrics will only be emitted for non-zero values. In large deployments, this can substantially reduce the amount of timeseries emitted. |
 
 ## Section "clusters"
 
