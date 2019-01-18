@@ -369,8 +369,8 @@ func (cfg configurationInFile) validate() (success bool) {
 
 		for srvType, behaviors := range cluster.ResourceBehavior {
 			for resName, behavior := range behaviors {
-				if behavior.ScalesWithResourceName == "" {
-					if behavior.ScalingFactor != 0 {
+				if behavior.ScalesWithResourceName != "" {
+					if behavior.ScalingFactor == 0 {
 						missing(fmt.Sprintf(
 							`resource_behavior.%s.%s.scaling_factor (must be given if "scales_with" is given)`,
 							srvType, resName,
