@@ -201,7 +201,7 @@ func taskServe(config core.Configuration, cluster *core.Cluster, args []string) 
 		handler = cors.New(cors.Options{
 			AllowedOrigins: config.API.CORS.AllowedOrigins,
 			AllowedMethods: []string{"HEAD", "GET", "POST", "PUT"},
-			AllowedHeaders: []string{"User-Agent", "X-Auth-Token", "X-Limes-Cluster-Id"},
+			AllowedHeaders: []string{"Content-Type", "User-Agent", "X-Auth-Token", "X-Limes-Cluster-Id"},
 		}).Handler(handler)
 	}
 
