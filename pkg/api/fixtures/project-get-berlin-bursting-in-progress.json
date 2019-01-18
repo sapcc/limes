@@ -48,8 +48,8 @@
             "usage": 42,
             "burst_usage": 2,
             "scales_with": {
-              "service_type": "shared",
               "resource_name": "things",
+              "service_type": "shared",
               "factor": 2
             }
           }

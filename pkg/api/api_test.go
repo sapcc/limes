@@ -135,8 +135,8 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 	config.Clusters["west"].Config.ResourceBehavior = map[string]map[string]*core.ResourceBehavior{
 		"unshared": {
 			"things": &core.ResourceBehavior{
-				ScalesWithResourceName: "shared",
-				ScalesWithServiceType:  "things",
+				ScalesWithResourceName: "things",
+				ScalesWithServiceType:  "shared",
 				ScalingFactor:          2,
 			},
 		},

@@ -44,8 +44,8 @@
             "usage": 2,
             "backend_quota": -1,
             "scales_with": {
-              "service_type": "shared",
               "resource_name": "things",
+              "service_type": "shared",
               "factor": 2
             }
           }
