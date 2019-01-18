@@ -65,7 +65,7 @@ func (m BurstingMultiplier) ApplyTo(quota uint64) uint64 {
 //ProjectResourceReport and describes the scaling behavior of a single
 //resource.
 type ScalingBehavior struct {
-	ScalesWithResourceName string  `json:"service_type"`
-	ScalesWithServiceType  string  `json:"resource_name"`
+	ScalesWithResourceName string  `json:"resource_name"`
+	ScalesWithServiceType  string  `json:"service_type"`
 	ScalingFactor          float64 `json:"factor"`
 }
