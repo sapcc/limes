@@ -132,7 +132,7 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 	}
 	config.API.PolicyEnforcer = enforcer
 
-	config.Clusters["west"].Config.ResourceBehaviors = []core.ResourceBehavior{{
+	config.Clusters["west"].Config.ResourceBehaviors = []*core.ResourceBehavior{{
 		FullResourceNamePattern: "unshared/things",
 		FullResourceNameRx:      regexp.MustCompile("^unshared/things$"),
 		ScalesWithResourceName:  "things",
@@ -471,7 +471,7 @@ func Test_ClusterOperations(t *testing.T) {
 	expectClusterCapacity(t, "shared", "shared", "capacity", -1, "")
 
 	//check rendering of overcommit factors
-	cluster.Config.ResourceBehaviors = []core.ResourceBehavior{
+	cluster.Config.ResourceBehaviors = []*core.ResourceBehavior{
 		{
 			FullResourceNamePattern: "shared/things",
 			FullResourceNameRx:      regexp.MustCompile("^shared/things$"),
