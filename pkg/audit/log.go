@@ -37,6 +37,8 @@ func init() {
 	}
 }
 
+var showAuditOnStdout = os.Getenv("LIMES_SILENT") != "1"
+
 //Trail is a list of CADF formatted events with log level AUDIT. It has a separate interface
 //from the rest of the logging to allow to withhold the logging until DB changes are committed.
 type Trail struct {
@@ -59,9 +61,12 @@ func (t *Trail) Commit(clusterID string, config core.CADFConfiguration) {
 		}.RetryUntilSuccessful(func() error { return sendEvents(clusterID, config, events) })
 	}
 
-	for _, event := range t.events {
-		msg, _ := json.Marshal(event)
-		logg.Other("AUDIT", string(msg))
+	if showAuditOnStdout {
+		for _, event := range t.events {
+			msg, _ := json.Marshal(event)
+			logg.Other("AUDIT", string(msg))
+		}
 	}
+
 	t.events = nil //do not log these lines again
 }
