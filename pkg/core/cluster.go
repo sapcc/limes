@@ -283,7 +283,7 @@ func (c *Cluster) BehaviorForResource(serviceType, resourceName string) Resource
 	fullName := serviceType + "/" + resourceName
 	for _, behavior := range c.Config.ResourceBehaviors {
 		if behavior.FullResourceNameRx.MatchString(fullName) {
-			return behavior
+			return *behavior
 		}
 	}
 	return ResourceBehavior{}

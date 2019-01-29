@@ -67,7 +67,7 @@ type ClusterConfiguration struct {
 	ConstraintConfigPath string                         `yaml:"constraints"`
 	CADF                 CADFConfiguration              `yaml:"cadf"`
 	LowPrivilegeRaise    LowPrivilegeRaiseConfiguration `yaml:"lowpriv_raise"`
-	ResourceBehaviors    []ResourceBehavior             `yaml:"resource_behavior"`
+	ResourceBehaviors    []*ResourceBehavior            `yaml:"resource_behavior"`
 	Bursting             BurstingConfiguration          `yaml:"bursting"`
 	//The following is only read to warn that users need to upgrade from seeds to constraints.
 	OldSeedConfigPath string `yaml:"seeds"`
