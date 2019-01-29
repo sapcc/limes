@@ -136,11 +136,11 @@ func GetProjects(cluster *core.Cluster, domainID int64, projectID *int64, dbi db
 					}
 					if quota != nil {
 						resource.Quota = *quota
-						desiredQuota := *quota
+						resource.UsableQuota = *quota
 						if projectHasBursting && clusterCanBurst {
-							desiredQuota = behavior.MaxBurstMultiplier.ApplyTo(*quota)
+							resource.UsableQuota = behavior.MaxBurstMultiplier.ApplyTo(*quota)
 						}
-						if backendQuota != nil && (*backendQuota < 0 || uint64(*backendQuota) != desiredQuota) {
+						if backendQuota != nil && (*backendQuota < 0 || uint64(*backendQuota) != resource.UsableQuota) {
 							resource.BackendQuota = backendQuota
 						}
 					}

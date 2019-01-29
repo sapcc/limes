@@ -12,6 +12,7 @@
             {
               "name": "things",
               "quota": 10,
+              "usable_quota": 10,
               "usage": 2
             }
           ],
@@ -31,6 +32,7 @@
             {
               "name": "things",
               "quota": 10,
+              "usable_quota": 10,
               "usage": 2
             }
           ],

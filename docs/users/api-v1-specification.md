@@ -51,11 +51,13 @@ Returns 200 (OK) on success. Result is a JSON document like:
             {
               "name": "instances",
               "quota": 5,
+              "usable_quota": 5,
               "usage": 1
             },
             {
               "name": "cores",
               "quota": 20,
+              "usable_quota": 24,
               "usage": 2,
               "backend_quota": 50
             },
@@ -63,6 +65,7 @@ Returns 200 (OK) on success. Result is a JSON document like:
               "name": "ram",
               "unit": "MiB",
               "quota": 10240,
+              "usable_quota": 12288,
               "usage": 2048
             }
           ],
@@ -76,6 +79,7 @@ Returns 200 (OK) on success. Result is a JSON document like:
               "name": "capacity",
               "unit": "B",
               "quota": 1073741824,
+              "usable_quota": 1073741824,
               "usage": 104857600
             }
           ],
@@ -99,8 +103,9 @@ include `compute` and `object_storage`, and the `compute` service has three reso
 The service's `type` attribute will be identical to the same field in the Keystone service catalog. Through the `area`
 attribute, services can be grouped into areas like `network` or `storage` for presentational purposes.
 
-The data for each resource must include `quota` and `usage`. If the resource is not counted, but measured in a certain
-unit, it will be given as `unit`. Clients should be prepared to handle at least the following values for `unit`:
+The data for each resource must include `quota`, `usage` and `usable_quota` (usually equal to `quota`, but see below).
+If the resource is not counted, but measured in a certain unit, it will be given as `unit`. Clients should be prepared
+to handle at least the following values for `unit`:
 
     B     - bytes
     KiB   - kibibytes = 2^10 bytes
@@ -128,16 +133,17 @@ Besides `unit`, resources may bear the following informational fields:
 
 Limes tracks quotas in its local database, and expects that the quota values in the backing services may only be
 manipulated by the Limes service user, but not by the project's members or admins. If, nonetheless, Limes finds the
-backing service to use a different quota value than what Limes expected, it will be shown in the `backend_quota` key, as
-shown in the example above for the `compute/cores` resource. If a `backend_quota` value exists, a Limes client should
-display a warning message to the user.
+backing service to use a different quota value than the `usable_quota` that Limes expected, it will be shown in the
+`backend_quota` key, as shown in the example above for the `compute/cores` resource. If a `backend_quota` value exists,
+a Limes client should display a warning message to the user.
 
 When the `bursting` section is present on the project level, it means that **quota bursting** is available for this
 cluster. Bursting means that usage can overshoot the approved quota by a certain multiplier (e.g. 20% if
-`bursting.multiplier` is 0.2). This is achieved by writing `floor(quota * (1 + bursting.multiplier))` into the backend.
-If the bursting multiplier is non-zero, the `backend_quota` will thus be different from the value shown in the `quota`
-field of each resource. The `backend_quota` field will only be shown if the backend quota differs from the desired
-value, `floor(quota * (1 + bursting.multiplier))`.
+`bursting.multiplier` is 0.2). This is achieved by writing a higher `usable_quota` into the backend.  If the bursting
+multiplier is non-zero, the `backend_quota` will thus be different from the value shown in the `quota` field of each
+resource. The `backend_quota` field will only be shown if the backend quota differs from the desired value indicated in
+the `usable_quota` field. While `usable_quota` is usually computed as `floor(quota * (1 + bursting.multiplier))`,
+different multipliers may apply per resource.
 
 The `scraped_at` timestamp for each service denotes when Limes last checked the quota and usage values in the backing
 service. The value is a standard UNIX timestamp (seconds since `1970-00-00T00:00:00Z`).

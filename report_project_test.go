@@ -16,11 +16,13 @@ var projectServicesMockJSON = `
 					"name": "capacity",
 					"unit": "B",
 					"quota": 10,
+					"usable_quota": 11,
 					"usage": 2
 				},
 				{
 					"name": "things",
 					"quota": 10,
+					"usable_quota": 10,
 					"usage": 2
 				}
 			],
@@ -35,11 +37,13 @@ var projectResourcesMockJSON = `
 			"name": "capacity",
 			"unit": "B",
 			"quota": 10,
+			"usable_quota": 11,
 			"usage": 2
 		},
 		{
 			"name": "things",
 			"quota": 10,
+			"usable_quota": 10,
 			"usage": 2
 		}
 	]
@@ -51,15 +55,17 @@ var projectMockResources = &ProjectResourceReports{
 			Name: "capacity",
 			Unit: UnitBytes,
 		},
-		Quota: 10,
-		Usage: 2,
+		Quota:       10,
+		UsableQuota: 11,
+		Usage:       2,
 	},
 	"things": &ProjectResourceReport{
 		ResourceInfo: ResourceInfo{
 			Name: "things",
 		},
-		Quota: 10,
-		Usage: 2,
+		Quota:       10,
+		UsableQuota: 10,
+		Usage:       2,
 	},
 }
 
