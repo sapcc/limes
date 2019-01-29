@@ -272,7 +272,8 @@ func (c *Collector) writeScrapeResult(domainName, domainUUID, projectName, proje
 		}
 
 		if projectHasBursting {
-			res.DesiredBackendQuota = c.Cluster.Config.Bursting.MaxMultiplier.ApplyTo(res.Quota)
+			behavior := c.Cluster.BehaviorForResource(serviceType, resMetadata.Name)
+			res.DesiredBackendQuota = behavior.MaxBurstMultiplier.ApplyTo(res.Quota)
 		} else {
 			res.DesiredBackendQuota = res.Quota
 		}
@@ -399,7 +400,8 @@ func (c *Collector) writeDummyResources(domainName, projectName string, projectH
 		}
 
 		if projectHasBursting {
-			res.DesiredBackendQuota = c.Cluster.Config.Bursting.MaxMultiplier.ApplyTo(res.Quota)
+			behavior := c.Cluster.BehaviorForResource(serviceType, resMetadata.Name)
+			res.DesiredBackendQuota = behavior.MaxBurstMultiplier.ApplyTo(res.Quota)
 		} else {
 			res.DesiredBackendQuota = res.Quota
 		}

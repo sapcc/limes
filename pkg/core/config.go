@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"math"
 	"os"
 	"regexp"
 	"strings"
@@ -61,14 +62,14 @@ type ClusterConfiguration struct {
 	Services   []ServiceConfiguration   `yaml:"services"`
 	Capacitors []CapacitorConfiguration `yaml:"capacitors"`
 	//^ Sorry for the stupid pun. Not.
-	Subresources         map[string][]string            `yaml:"subresources"`
-	Subcapacities        map[string][]string            `yaml:"subcapacities"`
-	Authoritative        bool                           `yaml:"authoritative"`
-	ConstraintConfigPath string                         `yaml:"constraints"`
-	CADF                 CADFConfiguration              `yaml:"cadf"`
-	LowPrivilegeRaise    LowPrivilegeRaiseConfiguration `yaml:"lowpriv_raise"`
-	ResourceBehaviors    []*ResourceBehavior            `yaml:"resource_behavior"`
-	Bursting             BurstingConfiguration          `yaml:"bursting"`
+	Subresources         map[string][]string              `yaml:"subresources"`
+	Subcapacities        map[string][]string              `yaml:"subcapacities"`
+	Authoritative        bool                             `yaml:"authoritative"`
+	ConstraintConfigPath string                           `yaml:"constraints"`
+	CADF                 CADFConfiguration                `yaml:"cadf"`
+	LowPrivilegeRaise    LowPrivilegeRaiseConfiguration   `yaml:"lowpriv_raise"`
+	ResourceBehaviors    []*ResourceBehaviorConfiguration `yaml:"resource_behavior"`
+	Bursting             BurstingConfiguration            `yaml:"bursting"`
 	//The following is only read to warn that users need to upgrade from seeds to constraints.
 	OldSeedConfigPath string `yaml:"seeds"`
 }
@@ -161,16 +162,26 @@ func (l LowPrivilegeRaiseConfiguration) IsAllowedForProjectsIn(domainName string
 	return l.IncludeProjectDomainRx.MatchString(domainName)
 }
 
-//ResourceBehavior contains the configuration options for specialized behaviors
-//of a single resource (or a set of resources) in a certain cluster. The map keys are service type,
-//then resource name.
+//ResourceBehaviorConfiguration contains the configuration options for
+//specialized behaviors of a single resource (or a set of resources) in a
+//certain cluster.
+type ResourceBehaviorConfiguration struct {
+	FullResourceName   string                    `yaml:"resource"`
+	MaxBurstMultiplier *limes.BurstingMultiplier `yaml:"max_burst_multiplier"`
+	OvercommitFactor   float64                   `yaml:"overcommit_factor"`
+	ScalesWith         string                    `yaml:"scales_with"`
+	ScalingFactor      float64                   `yaml:"scaling_factor"`
+	Compiled           ResourceBehavior          `yaml:"-"`
+}
+
+//ResourceBehavior is the compiled version of ResourceBehaviorConfiguration.
 type ResourceBehavior struct {
-	FullResourceNamePattern string         `yaml:"resource"`
-	FullResourceNameRx      *regexp.Regexp `yaml:"-"`
-	OvercommitFactor        float64        `yaml:"overcommit_factor"`
-	ScalesWithResourceName  string         `yaml:"scales_with"`
-	ScalesWithServiceType   string         `yaml:"-"` //initialized during Cluster.Connect()
-	ScalingFactor           float64        `yaml:"scaling_factor"`
+	FullResourceName       *regexp.Regexp
+	MaxBurstMultiplier     limes.BurstingMultiplier
+	OvercommitFactor       float64
+	ScalesWithResourceName string
+	ScalesWithServiceType  string
+	ScalingFactor          float64
 }
 
 //ToScalingBehavior returns the limes.ScalingBehavior for this resource, or nil
@@ -365,24 +376,38 @@ func (cfg configurationInFile) validate() (success bool) {
 		cluster.LowPrivilegeRaise.ExcludeProjectDomainRx = compileOptionalRx(cluster.LowPrivilegeRaise.ExcludeProjectDomainPattern)
 
 		for idx, behavior := range cluster.ResourceBehaviors {
-			if behavior.FullResourceNamePattern == "" {
-				missing(fmt.Sprintf(`resource_behavior[%d].resource`, idx))
-			} else {
-				pattern := `^` + behavior.FullResourceNamePattern + `$`
-				behavior.FullResourceNameRx = compileOptionalRx(pattern)
+			behavior.Compiled = ResourceBehavior{
+				OvercommitFactor: behavior.OvercommitFactor,
 			}
 
-			if behavior.ScalesWithResourceName != "" {
+			if behavior.FullResourceName == "" {
+				missing(fmt.Sprintf(`resource_behavior[%d].resource`, idx))
+			} else {
+				pattern := `^` + behavior.FullResourceName + `$`
+				behavior.Compiled.FullResourceName = compileOptionalRx(pattern)
+			}
+
+			if behavior.MaxBurstMultiplier != nil {
+				behavior.Compiled.MaxBurstMultiplier = *behavior.MaxBurstMultiplier
+				if *behavior.MaxBurstMultiplier < 0 {
+					logg.Error(`clusters[%s].resource_behavior[%d].max_burst_multiplier may not be negative`, clusterID, idx)
+					success = false
+				}
+			} else {
+				behavior.Compiled.MaxBurstMultiplier = limes.BurstingMultiplier(math.Inf(+1))
+			}
+
+			if behavior.ScalesWith != "" {
 				if behavior.ScalingFactor == 0 {
 					missing(fmt.Sprintf(
 						`resource_behavior[%d].scaling_factor (must be given since "scales_with" is given)`,
 						idx,
 					))
 				} else {
-					if strings.Contains(behavior.ScalesWithResourceName, "/") {
-						fields := strings.SplitN(behavior.ScalesWithResourceName, "/", 2)
-						behavior.ScalesWithServiceType = fields[0]
-						behavior.ScalesWithResourceName = fields[1]
+					if strings.Contains(behavior.ScalesWith, "/") {
+						fields := strings.SplitN(behavior.ScalesWith, "/", 2)
+						behavior.Compiled.ScalesWithServiceType = fields[0]
+						behavior.Compiled.ScalesWithResourceName = fields[1]
 					} else {
 						logg.Error(`clusters[%s].resource_behavior[%d].scales_with must have the format "service_type/resource_name"`, clusterID, idx)
 						success = false

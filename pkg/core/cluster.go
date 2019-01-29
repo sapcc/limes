@@ -178,12 +178,13 @@ func (c *Cluster) Connect() error {
 
 	//validate scaling relations
 	for _, behavior := range c.Config.ResourceBehaviors {
-		if behavior.ScalesWithResourceName == "" {
+		b := behavior.Compiled
+		if b.ScalesWithResourceName == "" {
 			continue
 		}
-		if !c.HasResource(behavior.ScalesWithServiceType, behavior.ScalesWithResourceName) {
+		if !c.HasResource(b.ScalesWithServiceType, b.ScalesWithResourceName) {
 			return fmt.Errorf(`resources matching "%s" scale with unknown resource "%s/%s"`,
-				behavior.FullResourceNamePattern, behavior.ScalesWithServiceType, behavior.ScalesWithResourceName)
+				behavior.FullResourceName, b.ScalesWithServiceType, b.ScalesWithResourceName)
 		}
 	}
 
@@ -280,11 +281,32 @@ func (c *Cluster) InfoForService(serviceType string) limes.ServiceInfo {
 //no special behavior has been configured for this resource, or if this
 //resource does not exist, a zero-initialized struct is returned.
 func (c *Cluster) BehaviorForResource(serviceType, resourceName string) ResourceBehavior {
+	//default behavior
+	result := ResourceBehavior{
+		MaxBurstMultiplier: c.Config.Bursting.MaxMultiplier,
+	}
+
+	//check for specific behavior
 	fullName := serviceType + "/" + resourceName
-	for _, behavior := range c.Config.ResourceBehaviors {
-		if behavior.FullResourceNameRx.MatchString(fullName) {
-			return *behavior
+	for _, behaviorConfig := range c.Config.ResourceBehaviors {
+		behavior := behaviorConfig.Compiled
+		if !behavior.FullResourceName.MatchString(fullName) {
+			continue
+		}
+
+		// merge `behavior` into `result`
+		if result.MaxBurstMultiplier > behavior.MaxBurstMultiplier {
+			result.MaxBurstMultiplier = behavior.MaxBurstMultiplier
+		}
+		if behavior.OvercommitFactor != 0 {
+			result.OvercommitFactor = behavior.OvercommitFactor
+		}
+		if behavior.ScalingFactor != 0 {
+			result.ScalesWithServiceType = behavior.ScalesWithServiceType
+			result.ScalesWithResourceName = behavior.ScalesWithResourceName
+			result.ScalingFactor = behavior.ScalingFactor
 		}
 	}
-	return ResourceBehavior{}
+
+	return result
 }

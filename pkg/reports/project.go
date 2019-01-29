@@ -123,9 +123,10 @@ func GetProjects(cluster *core.Cluster, domainID int64, projectID *int64, dbi db
 						subresourcesValue = *subresources
 					}
 
+					behavior := cluster.BehaviorForResource(*serviceType, *resourceName)
 					resource := &limes.ProjectResourceReport{
 						ResourceInfo: cluster.InfoForResource(*serviceType, *resourceName),
-						Scaling:      cluster.BehaviorForResource(*serviceType, *resourceName).ToScalingBehavior(),
+						Scaling:      behavior.ToScalingBehavior(),
 						Usage:        *usage,
 						BackendQuota: nil, //see below
 						Subresources: limes.JSONString(subresourcesValue),
@@ -137,7 +138,7 @@ func GetProjects(cluster *core.Cluster, domainID int64, projectID *int64, dbi db
 						resource.Quota = *quota
 						desiredQuota := *quota
 						if projectHasBursting && clusterCanBurst {
-							desiredQuota = cluster.Config.Bursting.MaxMultiplier.ApplyTo(*quota)
+							desiredQuota = behavior.MaxBurstMultiplier.ApplyTo(*quota)
 						}
 						if backendQuota != nil && (*backendQuota < 0 || uint64(*backendQuota) != desiredQuota) {
 							resource.BackendQuota = backendQuota

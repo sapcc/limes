@@ -157,6 +157,7 @@ Some special behaviors for resources can be configured in the `clusters[].resour
 | Field | Required | Description |
 | --- | --- | --- |
 | `clusters.$id.resource_behavior[].resource` | yes | Must contain a regex. The behavior entry applies to all resources where this regex matches against a slash-concatenated pair of service type and resource name. The anchors `^` and `$` are implied at both ends, so the regex must match the entire phrase. |
+| `clusters.$id.resource_behavior[].max_burst_multiplier` | no | If given, the bursting multiplier for matching resources will be restricted to this value (see also `clusters.$id.bursting.max_multiplier`). |
 | `clusters.$id.resource_behavior[].overcommit_factor` | no | If given, capacity for matching resources will be computed as `raw_capacity * overcommit_factor`, where `raw_capacity` is what the capacity plugin reports. |
 | `clusters.$id.resource_behavior[].scales_with` | no | If a resource is given, matching resources scales with this resource. The other resource may be specified by its name (for resources within the same service type), or by a slash-concatenated pair of service type and resource name, e.g. `compute/cores`. |
 | `clusters.$id.resource_behavior[].scaling_factor` | yes, if `scales_with` is given | The scaling factor that will be reported for this resource's scaling relation. |

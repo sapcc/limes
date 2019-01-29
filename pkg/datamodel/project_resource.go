@@ -61,7 +61,8 @@ func ApplyBackendQuota(dbi db.Interface, cluster *core.Cluster, domainUUID strin
 
 		desiredQuota := res.Quota
 		if project.HasBursting {
-			desiredQuota = cluster.Config.Bursting.MaxMultiplier.ApplyTo(res.Quota)
+			behavior := cluster.BehaviorForResource(serviceType, res.Name)
+			desiredQuota = behavior.MaxBurstMultiplier.ApplyTo(res.Quota)
 		}
 		quotaValues[res.Name] = desiredQuota
 

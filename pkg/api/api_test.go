@@ -22,6 +22,7 @@ package api
 import (
 	"database/sql"
 	"fmt"
+	"math"
 	"net/http"
 	"reflect"
 	"regexp"
@@ -132,12 +133,14 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 	}
 	config.API.PolicyEnforcer = enforcer
 
-	config.Clusters["west"].Config.ResourceBehaviors = []*core.ResourceBehavior{{
-		FullResourceNamePattern: "unshared/things",
-		FullResourceNameRx:      regexp.MustCompile("^unshared/things$"),
-		ScalesWithResourceName:  "things",
-		ScalesWithServiceType:   "shared",
-		ScalingFactor:           2,
+	config.Clusters["west"].Config.ResourceBehaviors = []*core.ResourceBehaviorConfiguration{{
+		Compiled: core.ResourceBehavior{
+			MaxBurstMultiplier:     limes.BurstingMultiplier(math.Inf(+1)),
+			FullResourceName:       regexp.MustCompile("^unshared/things$"),
+			ScalesWithResourceName: "things",
+			ScalesWithServiceType:  "shared",
+			ScalingFactor:          2,
+		},
 	}}
 
 	cluster := config.Clusters[clusterName]
@@ -471,16 +474,20 @@ func Test_ClusterOperations(t *testing.T) {
 	expectClusterCapacity(t, "shared", "shared", "capacity", -1, "")
 
 	//check rendering of overcommit factors
-	cluster.Config.ResourceBehaviors = []*core.ResourceBehavior{
+	cluster.Config.ResourceBehaviors = []*core.ResourceBehaviorConfiguration{
 		{
-			FullResourceNamePattern: "shared/things",
-			FullResourceNameRx:      regexp.MustCompile("^shared/things$"),
-			OvercommitFactor:        2.5,
+			Compiled: core.ResourceBehavior{
+				FullResourceName:   regexp.MustCompile("^shared/things$"),
+				MaxBurstMultiplier: limes.BurstingMultiplier(math.Inf(+1)),
+				OvercommitFactor:   2.5,
+			},
 		},
 		{
-			FullResourceNamePattern: "unshared/things",
-			FullResourceNameRx:      regexp.MustCompile("^unshared/things$"),
-			OvercommitFactor:        1.5,
+			Compiled: core.ResourceBehavior{
+				FullResourceName:   regexp.MustCompile("^unshared/things$"),
+				MaxBurstMultiplier: limes.BurstingMultiplier(math.Inf(+1)),
+				OvercommitFactor:   1.5,
+			},
 		},
 	}
 	assert.HTTPRequest{
