@@ -132,15 +132,13 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 	}
 	config.API.PolicyEnforcer = enforcer
 
-	config.Clusters["west"].Config.ResourceBehavior = map[string]map[string]*core.ResourceBehavior{
-		"unshared": {
-			"things": &core.ResourceBehavior{
-				ScalesWithResourceName: "things",
-				ScalesWithServiceType:  "shared",
-				ScalingFactor:          2,
-			},
-		},
-	}
+	config.Clusters["west"].Config.ResourceBehaviors = []core.ResourceBehavior{{
+		FullResourceNamePattern: "unshared/things",
+		FullResourceNameRx:      regexp.MustCompile("^unshared/things$"),
+		ScalesWithResourceName:  "things",
+		ScalesWithServiceType:   "shared",
+		ScalingFactor:           2,
+	}}
 
 	cluster := config.Clusters[clusterName]
 	router, _ := NewV1Router(cluster, config)
@@ -473,16 +471,16 @@ func Test_ClusterOperations(t *testing.T) {
 	expectClusterCapacity(t, "shared", "shared", "capacity", -1, "")
 
 	//check rendering of overcommit factors
-	cluster.Config.ResourceBehavior = map[string]map[string]*core.ResourceBehavior{
-		"shared": {
-			"things": &core.ResourceBehavior{
-				OvercommitFactor: 2.5,
-			},
+	cluster.Config.ResourceBehaviors = []core.ResourceBehavior{
+		{
+			FullResourceNamePattern: "shared/things",
+			FullResourceNameRx:      regexp.MustCompile("^shared/things$"),
+			OvercommitFactor:        2.5,
 		},
-		"unshared": {
-			"things": &core.ResourceBehavior{
-				OvercommitFactor: 1.5,
-			},
+		{
+			FullResourceNamePattern: "unshared/things",
+			FullResourceNameRx:      regexp.MustCompile("^unshared/things$"),
+			OvercommitFactor:        1.5,
 		},
 	}
 	assert.HTTPRequest{

@@ -152,13 +152,14 @@ clusters:
 
 ### Resource behavior
 
-Some special behaviors for resources can be configured in the `clusters[].resource_behavior` section.
+Some special behaviors for resources can be configured in the `clusters[].resource_behavior[]` section. Each entry in this section can match multiple resources.
 
 | Field | Required | Description |
 | --- | --- | --- |
-| `clusters.$id.resource_behavior.$service_type.$resource_name.overcommit_factor` | no | If given, capacity for this resource will be computed as `raw_capacity * overcommit_factor`, where `raw_capacity` is what the capacity plugin reports. |
-| `clusters.$id.resource_behavior.$service_type.$resource_name.scales_with` | no | If a resource is given, this resource scales with that resource. The other resource may be specified by its name (for resources within the same service type), or by a slash-concatenated pair of service type and resource name, e.g. `compute/cores`. |
-| `clusters.$id.resource_behavior.$service_type.$resource_name.scaling_factor` | yes, if `scales_with` is given | The scaling factor that will be reported for this resource's scaling relation. |
+| `clusters.$id.resource_behavior[].resource` | yes | Must contain a regex. The behavior entry applies to all resources where this regex matches against a slash-concatenated pair of service type and resource name. The anchors `^` and `$` are implied at both ends, so the regex must match the entire phrase. |
+| `clusters.$id.resource_behavior[].overcommit_factor` | no | If given, capacity for matching resources will be computed as `raw_capacity * overcommit_factor`, where `raw_capacity` is what the capacity plugin reports. |
+| `clusters.$id.resource_behavior[].scales_with` | no | If a resource is given, matching resources scales with this resource. The other resource may be specified by its name (for resources within the same service type), or by a slash-concatenated pair of service type and resource name, e.g. `compute/cores`. |
+| `clusters.$id.resource_behavior[].scaling_factor` | yes, if `scales_with` is given | The scaling factor that will be reported for this resource's scaling relation. |
 
 For example:
 
@@ -166,14 +167,12 @@ For example:
 clusters:
   example:
     resource_behavior:
-      sharev2:
-        share_capacity:    { overcommit_factor: 3 }
-        snapshot_capacity: { overcommit_factor: 2 }
-      network:
-        healthmonitors:    { scales_with: loadbalancers, scaling_factor: 1 }
-        listeners:         { scales_with: loadbalancers, scaling_factor: 2 }
-        l7policies:        { scales_with: loadbalancers, scaling_factor: 1 }
-        pools:             { scales_with: loadbalancers, scaling_factor: 1 }
+      - { resource: network/healthmonitors, scales_with: network/loadbalancers, scaling_factor: 1 }
+      - { resource: network/listeners,      scales_with: network/loadbalancers, scaling_factor: 2 }
+      - { resource: network/l7policies,     scales_with: network/loadbalancers, scaling_factor: 1 }
+      - { resource: network/pools,          scales_with: network/loadbalancers, scaling_factor: 1 }
+      # matches both sharev2/share_capacity and sharev2/snapshot_capacity
+      - { resource: sharev2/.*_capacity, overcommit_factor: 2 }
 ```
 
 # Supported discovery methods

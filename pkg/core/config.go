@@ -67,7 +67,7 @@ type ClusterConfiguration struct {
 	ConstraintConfigPath string                         `yaml:"constraints"`
 	CADF                 CADFConfiguration              `yaml:"cadf"`
 	LowPrivilegeRaise    LowPrivilegeRaiseConfiguration `yaml:"lowpriv_raise"`
-	ResourceBehavior     ResourceBehaviorConfiguration  `yaml:"resource_behavior"`
+	ResourceBehaviors    []ResourceBehavior             `yaml:"resource_behavior"`
 	Bursting             BurstingConfiguration          `yaml:"bursting"`
 	//The following is only read to warn that users need to upgrade from seeds to constraints.
 	OldSeedConfigPath string `yaml:"seeds"`
@@ -161,19 +161,16 @@ func (l LowPrivilegeRaiseConfiguration) IsAllowedForProjectsIn(domainName string
 	return l.IncludeProjectDomainRx.MatchString(domainName)
 }
 
-//ResourceBehaviorConfiguration contains the configuration options for
-//specialized resource behavior in a certain cluster. The map keys are service
-//type, then resource name.
-type ResourceBehaviorConfiguration map[string]map[string]*ResourceBehavior
-
 //ResourceBehavior contains the configuration options for specialized behaviors
-//of a single resource in a certain cluster. The map keys are service type,
+//of a single resource (or a set of resources) in a certain cluster. The map keys are service type,
 //then resource name.
 type ResourceBehavior struct {
-	OvercommitFactor       float64 `yaml:"overcommit_factor"`
-	ScalesWithResourceName string  `yaml:"scales_with"`
-	ScalesWithServiceType  string  `yaml:"-"` //initialized during Cluster.Connect()
-	ScalingFactor          float64 `yaml:"scaling_factor"`
+	FullResourceNamePattern string         `yaml:"resource"`
+	FullResourceNameRx      *regexp.Regexp `yaml:"-"`
+	OvercommitFactor        float64        `yaml:"overcommit_factor"`
+	ScalesWithResourceName  string         `yaml:"scales_with"`
+	ScalesWithServiceType   string         `yaml:"-"` //initialized during Cluster.Connect()
+	ScalingFactor           float64        `yaml:"scaling_factor"`
 }
 
 //ToScalingBehavior returns the limes.ScalingBehavior for this resource, or nil
@@ -367,22 +364,28 @@ func (cfg configurationInFile) validate() (success bool) {
 		cluster.LowPrivilegeRaise.IncludeProjectDomainRx = compileOptionalRx(cluster.LowPrivilegeRaise.IncludeProjectDomainPattern)
 		cluster.LowPrivilegeRaise.ExcludeProjectDomainRx = compileOptionalRx(cluster.LowPrivilegeRaise.ExcludeProjectDomainPattern)
 
-		for srvType, behaviors := range cluster.ResourceBehavior {
-			for resName, behavior := range behaviors {
-				if behavior.ScalesWithResourceName != "" {
-					if behavior.ScalingFactor == 0 {
-						missing(fmt.Sprintf(
-							`resource_behavior.%s.%s.scaling_factor (must be given if "scales_with" is given)`,
-							srvType, resName,
-						))
+		for idx, behavior := range cluster.ResourceBehaviors {
+			if behavior.FullResourceNamePattern == "" {
+				missing(fmt.Sprintf(`resource_behavior[%d].resource`, idx))
+			} else {
+				pattern := `^` + behavior.FullResourceNamePattern + `$`
+				behavior.FullResourceNameRx = compileOptionalRx(pattern)
+			}
+
+			if behavior.ScalesWithResourceName != "" {
+				if behavior.ScalingFactor == 0 {
+					missing(fmt.Sprintf(
+						`resource_behavior[%d].scaling_factor (must be given since "scales_with" is given)`,
+						idx,
+					))
+				} else {
+					if strings.Contains(behavior.ScalesWithResourceName, "/") {
+						fields := strings.SplitN(behavior.ScalesWithResourceName, "/", 2)
+						behavior.ScalesWithServiceType = fields[0]
+						behavior.ScalesWithResourceName = fields[1]
 					} else {
-						if strings.Contains(behavior.ScalesWithResourceName, "/") {
-							fields := strings.SplitN(behavior.ScalesWithResourceName, "/", 2)
-							behavior.ScalesWithServiceType = fields[0]
-							behavior.ScalesWithResourceName = fields[1]
-						} else {
-							behavior.ScalesWithServiceType = srvType
-						}
+						logg.Error(`clusters[%s].resource_behavior[%d].scales_with must have the format "service_type/resource_name"`, clusterID, idx)
+						success = false
 					}
 				}
 			}

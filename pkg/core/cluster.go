@@ -177,15 +177,13 @@ func (c *Cluster) Connect() error {
 	}
 
 	//validate scaling relations
-	for srvType, behaviors := range c.Config.ResourceBehavior {
-		for resName, behavior := range behaviors {
-			if behavior.ScalesWithResourceName == "" {
-				continue
-			}
-			if !c.HasResource(behavior.ScalesWithServiceType, behavior.ScalesWithResourceName) {
-				return fmt.Errorf(`resource "%s/%s" scales with unknown resource "%s/%s"`,
-					srvType, resName, behavior.ScalesWithServiceType, behavior.ScalesWithResourceName)
-			}
+	for _, behavior := range c.Config.ResourceBehaviors {
+		if behavior.ScalesWithResourceName == "" {
+			continue
+		}
+		if !c.HasResource(behavior.ScalesWithServiceType, behavior.ScalesWithResourceName) {
+			return fmt.Errorf(`resources matching "%s" scale with unknown resource "%s/%s"`,
+				behavior.FullResourceNamePattern, behavior.ScalesWithServiceType, behavior.ScalesWithResourceName)
 		}
 	}
 
@@ -282,9 +280,11 @@ func (c *Cluster) InfoForService(serviceType string) limes.ServiceInfo {
 //no special behavior has been configured for this resource, or if this
 //resource does not exist, a zero-initialized struct is returned.
 func (c *Cluster) BehaviorForResource(serviceType, resourceName string) ResourceBehavior {
-	b := c.Config.ResourceBehavior[serviceType][resourceName]
-	if b == nil {
-		return ResourceBehavior{}
+	fullName := serviceType + "/" + resourceName
+	for _, behavior := range c.Config.ResourceBehaviors {
+		if behavior.FullResourceNameRx.MatchString(fullName) {
+			return behavior
+		}
 	}
-	return *b
+	return ResourceBehavior{}
 }

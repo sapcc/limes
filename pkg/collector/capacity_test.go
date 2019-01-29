@@ -20,6 +20,7 @@
 package collector
 
 import (
+	"regexp"
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -60,13 +61,11 @@ func Test_ScanCapacity(t *testing.T) {
 		Config: &core.ClusterConfiguration{
 			Auth: &core.AuthParameters{},
 			//overcommit should be reflected in capacity metrics
-			ResourceBehavior: core.ResourceBehaviorConfiguration{
-				"unshared2": {
-					"capacity": {
-						OvercommitFactor: 2.5,
-					},
-				},
-			},
+			ResourceBehaviors: []core.ResourceBehavior{{
+				FullResourceNamePattern: "unshared2/capacity",
+				FullResourceNameRx:      regexp.MustCompile("^unshared2/capacity$"),
+				OvercommitFactor:        2.5,
+			}},
 		},
 	}
 
