@@ -408,6 +408,7 @@ func (cfg configurationInFile) validate() (success bool) {
 						fields := strings.SplitN(behavior.ScalesWith, "/", 2)
 						behavior.Compiled.ScalesWithServiceType = fields[0]
 						behavior.Compiled.ScalesWithResourceName = fields[1]
+						behavior.Compiled.ScalingFactor = behavior.ScalingFactor
 					} else {
 						logg.Error(`clusters[%s].resource_behavior[%d].scales_with must have the format "service_type/resource_name"`, clusterID, idx)
 						success = false
