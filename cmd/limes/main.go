@@ -246,7 +246,10 @@ func taskTestScrape(config core.Configuration, cluster *core.Cluster, args []str
 	}
 
 	dumpGeneratedPrometheusMetrics()
-	return json.NewEncoder(os.Stdout).Encode(result)
+
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	return enc.Encode(result)
 }
 
 func dumpGeneratedPrometheusMetrics() {
@@ -311,5 +314,8 @@ func taskTestScanCapacity(config core.Configuration, cluster *core.Cluster, args
 	}
 
 	dumpGeneratedPrometheusMetrics()
-	return json.NewEncoder(os.Stdout).Encode(result)
+
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	return enc.Encode(result)
 }
