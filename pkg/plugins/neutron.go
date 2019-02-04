@@ -25,12 +25,16 @@ import (
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 )
 
 type neutronPlugin struct {
-	cfg core.ServiceConfiguration
+	cfg                     core.ServiceConfiguration
+	hasQuotaDetailsEndpoint bool
+	resources               []limes.ResourceInfo
+	resourcesMeta           []neutronResourceMetadata
 }
 
 var neutronResources = []limes.ResourceInfo{
@@ -114,12 +118,62 @@ var neutronResources = []limes.ResourceInfo{
 
 func init() {
 	core.RegisterQuotaPlugin(func(c core.ServiceConfiguration, scrapeSubresources map[string]bool) core.QuotaPlugin {
-		return &neutronPlugin{c}
+		return &neutronPlugin{
+			cfg:                     c,
+			hasQuotaDetailsEndpoint: false, //until proven otherwise in Init()
+			resources:               neutronResources,
+			resourcesMeta:           neutronResourceMeta,
+		}
 	})
 }
 
 //Init implements the core.QuotaPlugin interface.
 func (p *neutronPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
+	client, err := openstack.NewNetworkV2(provider, eo)
+	if err != nil {
+		return err
+	}
+
+	//probe support for the quotas/:project_id/details endpoint (available in
+	//Pike and above)
+	var result gophercloud.Result
+	url := client.ServiceURL("quotas", "unknown", "details") //FIXME should use a valid project ID, such as AuthResult().GetProject().ID
+	_, err = client.Get(url, &result.Body, nil)
+	if err != nil {
+		if _, ok := err.(gophercloud.ErrDefault404); ok {
+			logg.Debug("Neutron does NOT have the /quotas/:project_id/details endpoint - falling back to counting usage manually")
+			p.hasQuotaDetailsEndpoint = false
+			return nil
+		}
+		return err
+	}
+	logg.Debug("Neutron HAS the /quotas/:project_id/details endpoint - usage can be scraped efficiently")
+	p.hasQuotaDetailsEndpoint = true
+
+	//probe support for specific resources
+	var data struct {
+		Quotas map[string]interface{} `json:"quota"`
+	}
+	data.Quotas = make(map[string]interface{})
+	err = result.ExtractInto(&data)
+	if err != nil {
+		return err
+	}
+
+	if _, exists := data.Quotas["member"]; exists {
+		logg.Debug("Neutron HAS the pool members resource")
+		p.resources = append(p.resources, limes.ResourceInfo{
+			Name:     "pool_members",
+			Unit:     limes.UnitNone,
+			Category: "loadbalancing",
+		})
+		p.resourcesMeta = append(p.resourcesMeta, neutronResourceMetadata{
+			LimesName:   "pool_members",
+			NeutronName: "member",
+		})
+	} else {
+		logg.Debug("Neutron does NOT have the pool members resource")
+	}
 	return nil
 }
 
@@ -134,7 +188,7 @@ func (p *neutronPlugin) ServiceInfo() limes.ServiceInfo {
 
 //Resources implements the core.QuotaPlugin interface.
 func (p *neutronPlugin) Resources() []limes.ResourceInfo {
-	return neutronResources
+	return p.resources
 }
 
 type neutronResourceMetadata struct {
@@ -243,12 +297,52 @@ func (p *neutronPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercl
 		return nil, err
 	}
 
+	if p.hasQuotaDetailsEndpoint {
+		return p.scrapeNewStyle(client, projectUUID)
+	}
+	return p.scrapeOldStyle(client, projectUUID)
+}
+
+func (p *neutronPlugin) scrapeNewStyle(client *gophercloud.ServiceClient, projectUUID string) (map[string]core.ResourceData, error) {
+	var result gophercloud.Result
+	url := client.ServiceURL("quotas", projectUUID, "details")
+	_, err := client.Get(url, &result.Body, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	type neutronQuotaStruct struct {
+		Quota int64  `json:"limit"`
+		Usage uint64 `json:"used"`
+	}
+	var quotas struct {
+		Values map[string]neutronQuotaStruct `json:"quota"`
+	}
+	quotas.Values = make(map[string]neutronQuotaStruct)
+	err = result.ExtractInto(&quotas)
+	if err != nil {
+		return nil, err
+	}
+
+	//convert data returned by Neutron into Limes' internal format
+	data := make(map[string]core.ResourceData)
+	for _, res := range p.resourcesMeta {
+		values := quotas.Values[res.NeutronName]
+		data[res.LimesName] = core.ResourceData{
+			Quota: values.Quota,
+			Usage: values.Usage,
+		}
+	}
+	return data, nil
+}
+
+func (p *neutronPlugin) scrapeOldStyle(client *gophercloud.ServiceClient, projectUUID string) (map[string]core.ResourceData, error) {
 	data := make(map[string]core.ResourceData)
 
 	//query quotas
 	var result gophercloud.Result
 	url := client.ServiceURL("quotas", projectUUID)
-	_, err = client.Get(url, &result.Body, nil)
+	_, err := client.Get(url, &result.Body, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -267,7 +361,7 @@ func (p *neutronPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercl
 	if err != nil {
 		return nil, err
 	}
-	for _, res := range neutronResourceMeta {
+	for _, res := range p.resourcesMeta {
 		url := client.ServiceURL(res.EndpointPath...) + query.String()
 		count, err := countNeutronThings(client, url)
 		if err != nil {
@@ -290,7 +384,7 @@ func (p *neutronPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopher
 		Quotas map[string]uint64 `json:"quota"`
 	}
 	requestData.Quotas = make(map[string]uint64)
-	for _, res := range neutronResourceMeta {
+	for _, res := range p.resourcesMeta {
 		quota, exists := quotas[res.LimesName]
 		if exists {
 			requestData.Quotas[res.NeutronName] = quota
