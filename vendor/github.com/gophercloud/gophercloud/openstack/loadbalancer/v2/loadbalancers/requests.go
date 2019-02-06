@@ -17,22 +17,26 @@ type ListOptsBuilder interface {
 // sort by a particular attribute. SortDir sets the direction, and is
 // either `asc' or `desc'. Marker and Limit are used for pagination.
 type ListOpts struct {
-	Description        string `q:"description"`
-	AdminStateUp       *bool  `q:"admin_state_up"`
-	ProjectID          string `q:"project_id"`
-	ProvisioningStatus string `q:"provisioning_status"`
-	VipAddress         string `q:"vip_address"`
-	VipPortID          string `q:"vip_port_id"`
-	VipSubnetID        string `q:"vip_subnet_id"`
-	ID                 string `q:"id"`
-	OperatingStatus    string `q:"operating_status"`
-	Name               string `q:"name"`
-	Flavor             string `q:"flavor"`
-	Provider           string `q:"provider"`
-	Limit              int    `q:"limit"`
-	Marker             string `q:"marker"`
-	SortKey            string `q:"sort_key"`
-	SortDir            string `q:"sort_dir"`
+	Description        string   `q:"description"`
+	AdminStateUp       *bool    `q:"admin_state_up"`
+	ProjectID          string   `q:"project_id"`
+	ProvisioningStatus string   `q:"provisioning_status"`
+	VipAddress         string   `q:"vip_address"`
+	VipPortID          string   `q:"vip_port_id"`
+	VipSubnetID        string   `q:"vip_subnet_id"`
+	ID                 string   `q:"id"`
+	OperatingStatus    string   `q:"operating_status"`
+	Name               string   `q:"name"`
+	Flavor             string   `q:"flavor"`
+	Provider           string   `q:"provider"`
+	Limit              int      `q:"limit"`
+	Marker             string   `q:"marker"`
+	SortKey            string   `q:"sort_key"`
+	SortDir            string   `q:"sort_dir"`
+	Tags               []string `q:"tags"`
+	TagsAny            []string `q:"tags-any"`
+	TagsNot            []string `q:"not-tags"`
+	TagsNotAny         []string `q:"not-tags-any"`
 }
 
 // ToLoadBalancerListQuery formats a ListOpts into a query string.
@@ -97,6 +101,9 @@ type CreateOpts struct {
 
 	// The name of the provider.
 	Provider string `json:"provider,omitempty"`
+
+	// Tags is a set of resource tags.
+	Tags []string `json:"tags,omitempty"`
 }
 
 // ToLoadBalancerCreateMap builds a request body from CreateOpts.
@@ -134,14 +141,17 @@ type UpdateOptsBuilder interface {
 // operation.
 type UpdateOpts struct {
 	// Human-readable name for the Loadbalancer. Does not have to be unique.
-	Name string `json:"name,omitempty"`
+	Name *string `json:"name,omitempty"`
 
 	// Human-readable description for the Loadbalancer.
-	Description string `json:"description,omitempty"`
+	Description *string `json:"description,omitempty"`
 
 	// The administrative state of the Loadbalancer. A valid value is true (UP)
 	// or false (DOWN).
 	AdminStateUp *bool `json:"admin_state_up,omitempty"`
+
+	// Tags is a set of resource tags.
+	Tags *[]string `json:"tags,omitempty"`
 }
 
 // ToLoadBalancerUpdateMap builds a request body from UpdateOpts.
@@ -201,5 +211,19 @@ func Delete(c *gophercloud.ServiceClient, id string, opts DeleteOptsBuilder) (r 
 // GetStatuses will return the status of a particular LoadBalancer.
 func GetStatuses(c *gophercloud.ServiceClient, id string) (r GetStatusesResult) {
 	_, r.Err = c.Get(statusRootURL(c, id), &r.Body, nil)
+	return
+}
+
+// GetStats will return the shows the current statistics of a particular LoadBalancer.
+func GetStats(c *gophercloud.ServiceClient, id string) (r StatsResult) {
+	_, r.Err = c.Get(statisticsRootURL(c, id), &r.Body, nil)
+	return
+}
+
+// Failover performs a failover of a load balancer.
+func Failover(c *gophercloud.ServiceClient, id string) (r FailoverResult) {
+	_, r.Err = c.Put(failoverRootURL(c, id), nil, nil, &gophercloud.RequestOpts{
+		OkCodes: []int{202},
+	})
 	return
 }

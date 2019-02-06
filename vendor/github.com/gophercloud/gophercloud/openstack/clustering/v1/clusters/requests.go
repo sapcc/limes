@@ -523,3 +523,172 @@ func CompleteLifecycle(client *gophercloud.ServiceClient, id string, opts Comple
 
 	return
 }
+
+func (opts AddNodesOpts) ToClusterAddNodeMap() (map[string]interface{}, error) {
+	return gophercloud.BuildRequestBody(opts, "add_nodes")
+}
+
+type AddNodesOpts struct {
+	Nodes []string `json:"nodes" required:"true"`
+}
+
+func AddNodes(client *gophercloud.ServiceClient, id string, opts AddNodesOpts) (r ActionResult) {
+	b, err := opts.ToClusterAddNodeMap()
+	if err != nil {
+		r.Err = err
+		return
+	}
+	var result *http.Response
+	result, r.Err = client.Post(nodeURL(client, id), b, &r.Body, &gophercloud.RequestOpts{
+		OkCodes: []int{202},
+	})
+	r.Header = result.Header
+	return
+}
+
+func (opts RemoveNodesOpts) ToClusterRemoveNodeMap() (map[string]interface{}, error) {
+	return gophercloud.BuildRequestBody(opts, "del_nodes")
+}
+
+type RemoveNodesOpts struct {
+	Nodes []string `json:"nodes" required:"true"`
+}
+
+func RemoveNodes(client *gophercloud.ServiceClient, clusterID string, opts RemoveNodesOpts) (r DeleteResult) {
+	b, err := opts.ToClusterRemoveNodeMap()
+	if err != nil {
+		r.Err = err
+		return
+	}
+	var result *http.Response
+	result, r.Err = client.Post(nodeURL(client, clusterID), b, &r.Body, &gophercloud.RequestOpts{
+		OkCodes: []int{202},
+	})
+	r.Header = result.Header
+	return
+}
+
+func (opts ReplaceNodesOpts) ToClusterReplaceNodeMap() (map[string]interface{}, error) {
+	return gophercloud.BuildRequestBody(opts, "replace_nodes")
+}
+
+type ReplaceNodesOpts struct {
+	Nodes map[string]string `json:"nodes" required:"true"`
+}
+
+func ReplaceNodes(client *gophercloud.ServiceClient, id string, opts ReplaceNodesOpts) (r ActionResult) {
+	b, err := opts.ToClusterReplaceNodeMap()
+	if err != nil {
+		r.Err = err
+		return
+	}
+	var result *http.Response
+	result, r.Err = client.Post(nodeURL(client, id), b, &r.Body, &gophercloud.RequestOpts{
+		OkCodes: []int{202},
+	})
+	r.Header = result.Header
+	return
+}
+
+type CollectOptsBuilder interface {
+	ToClusterCollectMap() (string, error)
+}
+
+// CollectOpts represents options to collect attribute values across a cluster
+type CollectOpts struct {
+	Path string `q:"path" required:"true"`
+}
+
+func (opts CollectOpts) ToClusterCollectMap() (string, error) {
+	return opts.Path, nil
+}
+
+// Collect instructs OpenStack to aggregate attribute values across a cluster
+func Collect(client *gophercloud.ServiceClient, id string, opts CollectOptsBuilder) (r CollectResult) {
+	query, err := opts.ToClusterCollectMap()
+	if err != nil {
+		r.Err = err
+		return
+	}
+
+	var result *http.Response
+	result, r.Err = client.Get(collectURL(client, id, query), &r.Body, &gophercloud.RequestOpts{
+		OkCodes: []int{200},
+	})
+
+	if r.Err == nil {
+		r.Header = result.Header
+	}
+
+	return
+}
+
+// OperationName represents valid values for cluster operation
+type OperationName string
+
+const (
+	// Nova Profile Op Names
+	RebootOperation         OperationName = "reboot"
+	RebuildOperation        OperationName = "rebuild"
+	ChangePasswordOperation OperationName = "change_password"
+	PauseOperation          OperationName = "pause"
+	UnpauseOperation        OperationName = "unpause"
+	SuspendOperation        OperationName = "suspend"
+	ResumeOperation         OperationName = "resume"
+	LockOperation           OperationName = "lock"
+	UnlockOperation         OperationName = "unlock"
+	StartOperation          OperationName = "start"
+	StopOperation           OperationName = "stop"
+	RescueOperation         OperationName = "rescue"
+	UnrescueOperation       OperationName = "unrescue"
+	EvacuateOperation       OperationName = "evacuate"
+
+	// Heat Pofile Op Names
+	AbandonOperation OperationName = "abandon"
+)
+
+// ToClusterOperationMap constructs a request body from OperationOpts.
+func (opts OperationOpts) ToClusterOperationMap() (map[string]interface{}, error) {
+	operationArg := struct {
+		Filters OperationFilters `json:"filters,omitempty"`
+		Params  OperationParams  `json:"params,omitempty"`
+	}{
+		Filters: opts.Filters,
+		Params:  opts.Params,
+	}
+
+	return gophercloud.BuildRequestBody(operationArg, string(opts.Operation))
+}
+
+// OperationOptsBuilder allows extensions to add additional parameters to the
+// Op request.
+type OperationOptsBuilder interface {
+	ToClusterOperationMap() (map[string]interface{}, error)
+}
+type OperationFilters map[string]interface{}
+type OperationParams map[string]interface{}
+
+// OperationOpts represents options used to perform an operation on a cluster
+type OperationOpts struct {
+	Operation OperationName    `json:"operation" required:"true"`
+	Filters   OperationFilters `json:"filters,omitempty"`
+	Params    OperationParams  `json:"params,omitempty"`
+}
+
+func Ops(client *gophercloud.ServiceClient, id string, opts OperationOptsBuilder) (r ActionResult) {
+	b, err := opts.ToClusterOperationMap()
+	if err != nil {
+		r.Err = err
+		return
+	}
+
+	var result *http.Response
+	result, r.Err = client.Post(opsURL(client, id), b, &r.Body, &gophercloud.RequestOpts{
+		OkCodes: []int{202},
+	})
+	if r.Err == nil {
+		r.Header = result.Header
+	}
+
+	return
+}

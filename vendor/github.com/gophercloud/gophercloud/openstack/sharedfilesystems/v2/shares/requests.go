@@ -267,3 +267,115 @@ func ListAccessRights(client *gophercloud.ServiceClient, id string) (r ListAcces
 	})
 	return
 }
+
+// ExtendOptsBuilder allows extensions to add additional parameters to the
+// Extend request.
+type ExtendOptsBuilder interface {
+	ToShareExtendMap() (map[string]interface{}, error)
+}
+
+// ExtendOpts contains options for extending a Share.
+// For more information about these parameters, please, refer to the shared file systems API v2,
+// Share Actions, Extend share documentation
+type ExtendOpts struct {
+	// New size in GBs.
+	NewSize int `json:"new_size"`
+}
+
+// ToShareExtendMap assembles a request body based on the contents of a
+// ExtendOpts.
+func (opts ExtendOpts) ToShareExtendMap() (map[string]interface{}, error) {
+	return gophercloud.BuildRequestBody(opts, "extend")
+}
+
+// Extend will extend the capacity of an existing share. ExtendResult contains only the error.
+// To extract it, call the ExtractErr method on the ExtendResult.
+// Client must have Microversion set; minimum supported microversion for Extend is 2.7.
+func Extend(client *gophercloud.ServiceClient, id string, opts ExtendOptsBuilder) (r ExtendResult) {
+	b, err := opts.ToShareExtendMap()
+	if err != nil {
+		r.Err = err
+		return
+	}
+
+	_, r.Err = client.Post(extendURL(client, id), b, nil, &gophercloud.RequestOpts{
+		OkCodes: []int{202},
+	})
+
+	return
+}
+
+// ShrinkOptsBuilder allows extensions to add additional parameters to the
+// Shrink request.
+type ShrinkOptsBuilder interface {
+	ToShareShrinkMap() (map[string]interface{}, error)
+}
+
+// ShrinkOpts contains options for shrinking a Share.
+// For more information about these parameters, please, refer to the shared file systems API v2,
+// Share Actions, Shrink share documentation
+type ShrinkOpts struct {
+	// New size in GBs.
+	NewSize int `json:"new_size"`
+}
+
+// ToShareShrinkMap assembles a request body based on the contents of a
+// ShrinkOpts.
+func (opts ShrinkOpts) ToShareShrinkMap() (map[string]interface{}, error) {
+	return gophercloud.BuildRequestBody(opts, "shrink")
+}
+
+// Shrink will shrink the capacity of an existing share. ShrinkResult contains only the error.
+// To extract it, call the ExtractErr method on the ShrinkResult.
+// Client must have Microversion set; minimum supported microversion for Shrink is 2.7.
+func Shrink(client *gophercloud.ServiceClient, id string, opts ShrinkOptsBuilder) (r ShrinkResult) {
+	b, err := opts.ToShareShrinkMap()
+	if err != nil {
+		r.Err = err
+		return
+	}
+
+	_, r.Err = client.Post(shrinkURL(client, id), b, nil, &gophercloud.RequestOpts{
+		OkCodes: []int{202},
+	})
+
+	return
+}
+
+// UpdateOptsBuilder allows extensions to add additional parameters to the
+// Update request.
+type UpdateOptsBuilder interface {
+	ToShareUpdateMap() (map[string]interface{}, error)
+}
+
+// UpdateOpts contain options for updating an existing Share. This object is passed
+// to the share.Update function. For more information about the parameters, see
+// the Share object.
+type UpdateOpts struct {
+	// Share name. Manila share update logic doesn't have a "name" alias.
+	DisplayName *string `json:"display_name,omitempty"`
+	// Share description. Manila share update logic doesn't have a "description" alias.
+	DisplayDescription *string `json:"display_description,omitempty"`
+	// Determines whether or not the share is public
+	IsPublic *bool `json:"is_public,omitempty"`
+}
+
+// ToShareUpdateMap assembles a request body based on the contents of an
+// UpdateOpts.
+func (opts UpdateOpts) ToShareUpdateMap() (map[string]interface{}, error) {
+	return gophercloud.BuildRequestBody(opts, "share")
+}
+
+// Update will update the Share with provided information. To extract the updated
+// Share from the response, call the Extract method on the UpdateResult.
+func Update(client *gophercloud.ServiceClient, id string, opts UpdateOptsBuilder) (r UpdateResult) {
+	b, err := opts.ToShareUpdateMap()
+	if err != nil {
+		r.Err = err
+		return
+	}
+	_, r.Err = client.Put(updateURL(client, id), b, &r.Body, &gophercloud.RequestOpts{
+		OkCodes: []int{200},
+	})
+	return
+}

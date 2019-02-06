@@ -38,5 +38,53 @@ Example to Create Cluster Template
 		panic(err)
 	}
 
+Example to Delete Cluster Template
+
+	clusterTemplateID := "dc6d336e3fc4c0a951b5698cd1236ee"
+	err := clustertemplates.Delete(serviceClient, clusterTemplateID).ExtractErr()
+	if err != nil {
+		panic(err)
+	}
+
+Example to List Clusters Templates
+
+	listOpts := clustertemplates.ListOpts{
+		Limit: 20,
+	}
+
+	allPages, err := clustertemplates.List(serviceClient, listOpts).AllPages()
+	if err != nil {
+		panic(err)
+	}
+
+	allClusterTemplates, err := clusters.ExtractClusterTemplates(allPages)
+	if err != nil {
+		panic(err)
+	}
+
+	for _, clusterTemplate := range allClusterTemplates {
+		fmt.Printf("%+v\n", clusterTemplate)
+	}
+
+Example to Update Cluster Template
+
+	updateOpts := []clustertemplates.UpdateOptsBuilder{
+		clustertemplates.UpdateOpts{
+			Op:    clustertemplates.ReplaceOp,
+			Path:  "/master_lb_enabled",
+			Value: "True",
+		},
+		clustertemplates.UpdateOpts{
+			Op:    clustertemplates.ReplaceOp,
+			Path:  "/registry_enabled",
+			Value: "True",
+		},
+	}
+
+	clustertemplate, err := clustertemplates.Update(serviceClient, updateOpts).Extract()
+	if err != nil {
+		panic(err)
+	}
+
 */
 package clustertemplates
