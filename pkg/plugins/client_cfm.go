@@ -247,6 +247,9 @@ func (c *cfmClient) GetShareserver(url string) (*cfmShareserver, error) {
 // capacity API
 
 type cfmPool struct {
+	HostName     string `json:"host"`
+	Name         string `json:"name"`
+	Type         string `json:"pool"`
 	Capabilities struct {
 		TotalCapacityBytes uint64 `json:"total_capacity"`
 	} `json:"capabilities"`
