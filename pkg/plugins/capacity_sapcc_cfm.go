@@ -20,7 +20,11 @@
 package plugins
 
 import (
+	"errors"
+	"fmt"
+
 	"github.com/gophercloud/gophercloud"
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes/pkg/core"
 )
 
@@ -50,9 +54,32 @@ func (p *capacityCFMPlugin) Scrape(provider *gophercloud.ProviderClient, eo goph
 		return nil, err
 	}
 
+	//The CFM API is weird and sometimes returns the same pools multiple times.
+	//We need to take precautions to avoid double-counting.
+	sizesSeen := make(map[string]uint64)
+	inconsistentData := false
+
 	var totalCapacityBytes uint64
 	for _, pool := range pools {
-		totalCapacityBytes += pool.Capabilities.TotalCapacityBytes
+		idStr := fmt.Sprintf("%s/%s (%s)", pool.HostName, pool.Name, pool.Type)
+		size := pool.Capabilities.TotalCapacityBytes
+
+		if previousSize, exists := sizesSeen[idStr]; exists {
+			//accept duplicate pools if they are *at least* consistent...
+			if previousSize != size {
+				//...but choke when multiple entries have different opinions about the size of the same pool
+				inconsistentData = true
+				logg.Error("CFM pool %s was reported as being both %d bytes and %d bytes large", previousSize, size)
+			}
+			continue
+		}
+
+		totalCapacityBytes += size
+		sizesSeen[idStr] = size
+	}
+
+	if inconsistentData {
+		return nil, errors.New("some pools were reported with inconsistent sizes; see errors above")
 	}
 
 	return map[string]map[string]core.CapacityData{
