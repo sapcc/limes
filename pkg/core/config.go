@@ -62,14 +62,14 @@ type ClusterConfiguration struct {
 	Services   []ServiceConfiguration   `yaml:"services"`
 	Capacitors []CapacitorConfiguration `yaml:"capacitors"`
 	//^ Sorry for the stupid pun. Not.
-	Subresources         map[string][]string              `yaml:"subresources"`
-	Subcapacities        map[string][]string              `yaml:"subcapacities"`
-	Authoritative        bool                             `yaml:"authoritative"`
-	ConstraintConfigPath string                           `yaml:"constraints"`
-	CADF                 CADFConfiguration                `yaml:"cadf"`
-	LowPrivilegeRaise    LowPrivilegeRaiseConfiguration   `yaml:"lowpriv_raise"`
-	ResourceBehaviors    []*ResourceBehaviorConfiguration `yaml:"resource_behavior"`
-	Bursting             BurstingConfiguration            `yaml:"bursting"`
+	Subresources          map[string][]string              `yaml:"subresources"`
+	Subcapacities         map[string][]string              `yaml:"subcapacities"`
+	Authoritative         bool                             `yaml:"authoritative"`
+	ConstraintConfigPaths []string                         `yaml:"constraints"`
+	CADF                  CADFConfiguration                `yaml:"cadf"`
+	LowPrivilegeRaise     LowPrivilegeRaiseConfiguration   `yaml:"lowpriv_raise"`
+	ResourceBehaviors     []*ResourceBehaviorConfiguration `yaml:"resource_behavior"`
+	Bursting              BurstingConfiguration            `yaml:"bursting"`
 	//The following is only read to warn that users need to upgrade from seeds to constraints.
 	OldSeedConfigPath string `yaml:"seeds"`
 }

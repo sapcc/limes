@@ -15,8 +15,8 @@ OpenStack installations.
 
 ## Configuration
 
-Quota constraints are configured in a separate YAML file which is referenced in the `clusters.$id.constraints` field of
-the main configuration file. The constraint set looks like this:
+Quota constraints are configured in separate YAML files which are listed in the `clusters.$id.constraints` field of
+the main configuration file. A constraint set looks like this:
 
 ```yaml
 domains:

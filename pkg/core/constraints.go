@@ -386,3 +386,55 @@ func validateQuotaConstraints(cluster *Cluster, domainConstraints QuotaConstrain
 
 	return
 }
+
+//ExtendWith adds the constraints in the `other` constraint set to this one.
+//In case of conflicts, values from `other` take precedence.
+func (qcs *QuotaConstraintSet) ExtendWith(other *QuotaConstraintSet) {
+	for domainName, domainOther := range other.Domains {
+		domain, exists := qcs.Domains[domainName]
+		if !exists {
+			domain = make(QuotaConstraints)
+			qcs.Domains[domainName] = domain
+		}
+		extendQuotaConstraints(domain, domainOther)
+	}
+
+	for domainName, projectsOther := range other.Projects {
+		if _, exists := qcs.Projects[domainName]; !exists {
+			qcs.Projects[domainName] = make(map[string]QuotaConstraints)
+		}
+		for projectName, projectOther := range projectsOther {
+			project, exists := qcs.Projects[domainName][projectName]
+			if !exists {
+				project = make(QuotaConstraints)
+				qcs.Projects[domainName][projectName] = project
+			}
+			extendQuotaConstraints(project, projectOther)
+		}
+	}
+}
+
+func extendQuotaConstraints(this QuotaConstraints, other QuotaConstraints) {
+	lastPointerWins := func(first, last *uint64) *uint64 {
+		if last != nil {
+			return last
+		}
+		return first
+	}
+
+	for serviceType, servicesOther := range other {
+		service, exists := this[serviceType]
+		if !exists {
+			service = make(map[string]QuotaConstraint)
+			this[serviceType] = service
+		}
+		for resourceName, resourceOther := range servicesOther {
+			resource := service[resourceName]
+			service[resourceName] = QuotaConstraint{
+				Minimum: lastPointerWins(resource.Minimum, resourceOther.Minimum),
+				Maximum: lastPointerWins(resource.Maximum, resourceOther.Maximum),
+				Unit:    resourceOther.Unit,
+			}
+		}
+	}
+}

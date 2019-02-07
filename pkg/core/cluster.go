@@ -153,14 +153,21 @@ func (c *Cluster) Connect() error {
 	}
 
 	//load quota constraints
-	if c.Config.ConstraintConfigPath != "" && c.QuotaConstraints == nil {
-		var errs []error
-		c.QuotaConstraints, errs = NewQuotaConstraints(c, c.Config.ConstraintConfigPath)
-		if len(errs) > 0 {
-			for _, err := range errs {
-				logg.Error(err.Error())
+	if len(c.Config.ConstraintConfigPaths) != 0 && c.QuotaConstraints == nil {
+		for _, path := range c.Config.ConstraintConfigPaths {
+			var errs []error
+			constraints, errs := NewQuotaConstraints(c, path)
+			if len(errs) > 0 {
+				for _, err := range errs {
+					logg.Error(err.Error())
+				}
+				return fmt.Errorf("cannot load quota constraints for cluster %s from %s (see errors above)", c.ID, path)
 			}
-			return fmt.Errorf("cannot load quota constraints for cluster %s (see errors above)", c.ID)
+			if c.QuotaConstraints == nil {
+				c.QuotaConstraints = constraints
+			} else {
+				c.QuotaConstraints.ExtendWith(constraints)
+			}
 		}
 	}
 

@@ -102,7 +102,7 @@ Configuration options describing the OpenStack clusters which Limes shall cover.
 | `clusters.$id.subcapacities` | no | List of resources where subcapacity scraping is requested. This is an object with service types as keys, and a list of resource names as values. |
 | `clusters.$id.capacitors` | no | List of capacity plugins to use for scraping capacity data. See below for supported capacity plugins. |
 | `clusters.$id.authoritative` | no | If set to `true`, the collector will write the quota from its own database into the backend service whenever scraping encounters a backend quota that differs from the expectation. This flag is strongly recommended in production systems to avoid divergence of Limes quotas from backend quotas, but should be used with care during development. |
-| `clusters.$id.constraints` | no | Path to a YAML file containing the quota constraints for this cluster. See [*quota constraints*](constraints.md) for details. |
+| `clusters.$id.constraints` | no | List of paths to YAML files containing the quota constraints for this cluster. See [*quota constraints*](constraints.md) for details. |
 | `clusters.$id.cadf` | no | Audit trail configuration options. See [*audit trail*](#audit-trail) for details. |
 | `clusters.$id.lowpriv_raise` | no | Configuration options for low-privilege quota raising. See [*low-privilege quota raising*](#low-privilege-quota-raising) for details. |
 | `clusters.$id.resource_behavior` | no | Configuration options for special resource behaviors. See [*resource behavior*](#resource-behavior) for details. |

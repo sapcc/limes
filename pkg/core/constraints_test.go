@@ -208,3 +208,151 @@ func TestQuotaConstraintToString(t *testing.T) {
 		}
 	}
 }
+
+func TestExtendQuotaConstraintSet_Domains(t *testing.T) {
+	pointerTo := func(x uint64) *uint64 { return &x }
+
+	first := QuotaConstraintSet{
+		Domains: map[string]QuotaConstraints{
+			"dom-onlyfirst": {
+				"srv1": {"res1": {Minimum: pointerTo(1)}},
+			},
+			"dom-both": {
+				"srv1": {
+					"res1": {Minimum: pointerTo(2)},
+					"res2": {Minimum: pointerTo(3)},
+				},
+			},
+		},
+	}
+	second := QuotaConstraintSet{
+		Domains: map[string]QuotaConstraints{
+			"dom-both": {
+				"srv1": {
+					"res2": {Minimum: pointerTo(10)},
+					"res3": {Minimum: pointerTo(4)},
+				},
+			},
+			"dom-onlysecond": {
+				"srv1": {"res1": {Minimum: pointerTo(5)}},
+			},
+		},
+	}
+
+	expected := QuotaConstraintSet{
+		Domains: map[string]QuotaConstraints{
+			"dom-both": {
+				"srv1": {
+					"res1": {Minimum: pointerTo(2)},
+					"res2": {Minimum: pointerTo(10)},
+					"res3": {Minimum: pointerTo(4)},
+				},
+			},
+			"dom-onlyfirst": {
+				"srv1": {"res1": {Minimum: pointerTo(1)}},
+			},
+			"dom-onlysecond": {
+				"srv1": {"res1": {Minimum: pointerTo(5)}},
+			},
+		},
+	}
+
+	first.ExtendWith(&second)
+	if !reflect.DeepEqual(first, expected) {
+		buf, _ := json.Marshal(first)
+		t.Errorf("  actual = %s\n", buf)
+		buf, _ = json.Marshal(expected)
+		t.Errorf("expected = %s\n", buf)
+	}
+}
+
+func TestExtendQuotaConstraintSet_Projects(t *testing.T) {
+	pointerTo := func(x uint64) *uint64 { return &x }
+
+	first := QuotaConstraintSet{
+		Projects: map[string]map[string]QuotaConstraints{
+			"dom-onlyfirst": {
+				"proj1": {
+					"srv1": {"res1": {Minimum: pointerTo(1)}},
+				},
+			},
+			"dom-both": {
+				"proj-onlyfirst": {
+					"srv1": {
+						"res1": {Minimum: pointerTo(2)},
+					},
+				},
+				"proj-both": {
+					"srv1": {
+						"res1": {Minimum: pointerTo(3)},
+						"res2": {Minimum: pointerTo(4)},
+					},
+				},
+			},
+		},
+	}
+	second := QuotaConstraintSet{
+		Projects: map[string]map[string]QuotaConstraints{
+			"dom-onlysecond": {
+				"proj1": {
+					"srv1": {"res1": {Minimum: pointerTo(5)}},
+				},
+			},
+			"dom-both": {
+				"proj-onlysecond": {
+					"srv1": {
+						"res1": {Minimum: pointerTo(6)},
+					},
+				},
+				"proj-both": {
+					"srv1": {
+						"res2": {Minimum: pointerTo(7)},
+						"res3": {Minimum: pointerTo(8)},
+					},
+				},
+			},
+		},
+	}
+
+	expected := QuotaConstraintSet{
+		Projects: map[string]map[string]QuotaConstraints{
+			"dom-onlyfirst": {
+				"proj1": {
+					"srv1": {"res1": {Minimum: pointerTo(1)}},
+				},
+			},
+			"dom-onlysecond": {
+				"proj1": {
+					"srv1": {"res1": {Minimum: pointerTo(5)}},
+				},
+			},
+			"dom-both": {
+				"proj-onlyfirst": {
+					"srv1": {
+						"res1": {Minimum: pointerTo(2)},
+					},
+				},
+				"proj-onlysecond": {
+					"srv1": {
+						"res1": {Minimum: pointerTo(6)},
+					},
+				},
+				"proj-both": {
+					"srv1": {
+						"res1": {Minimum: pointerTo(3)},
+						"res2": {Minimum: pointerTo(7)},
+						"res3": {Minimum: pointerTo(8)},
+					},
+				},
+			},
+		},
+	}
+
+	first.ExtendWith(&second)
+	if !reflect.DeepEqual(first, expected) {
+		buf, _ := json.Marshal(first)
+		t.Errorf("  actual = %s\n", buf)
+		buf, _ = json.Marshal(expected)
+		t.Errorf("expected = %s\n", buf)
+	}
+}
