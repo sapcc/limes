@@ -33,14 +33,23 @@ type Time time.Time
 //Scan implements the sql.Scanner interface.
 func (t *Time) Scan(src interface{}) error {
 	switch val := src.(type) {
-	case int64:
-		*t = Time(time.Unix(val, 0))
-		return nil
 	case time.Time:
+		//This case works for Postgres.
 		*t = Time(val)
 		return nil
+	case int64:
+		//This case works for SQLite.
+		*t = Time(time.Unix(val, 0))
+		return nil
+	case []uint8:
+		//For some reason, SQLite sometimes reports an aggregate timestamp like
+		//MIN(scraped_at) as a string of the form "1970-01-01 01:00:30+01:00".
+		str := string(val)
+		tt, err := time.Parse("2006-01-02 15:04:05-07:00", str)
+		*t = Time(tt)
+		return err
 	default:
-		return fmt.Errorf("cannot scan %t into util.Time", val)
+		return fmt.Errorf("cannot scan %T into util.Time", val)
 	}
 }
 

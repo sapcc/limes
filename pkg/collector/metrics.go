@@ -21,11 +21,13 @@ package collector
 
 import (
 	"database/sql"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
+	"github.com/sapcc/limes/pkg/util"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -104,6 +106,91 @@ func init() {
 	prometheus.MustRegister(domainDiscoveryFailedCounter)
 	prometheus.MustRegister(clusterCapacitorSuccessCounter)
 	prometheus.MustRegister(clusterCapacitorFailedCounter)
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// scraped_at aggregate metrics
+
+var minScrapedAtGauge = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "limes_oldest_scraped_at",
+		Help: "Oldest (i.e. smallest) scraped_at timestamp for any project given a certain service in a certain OpenStack cluster.",
+	},
+	[]string{"os_cluster", "service", "service_name"},
+)
+
+var maxScrapedAtGauge = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "limes_newest_scraped_at",
+		Help: "Newest (i.e. largest) scraped_at timestamp for any project given a certain service in a certain OpenStack cluster.",
+	},
+	[]string{"os_cluster", "service", "service_name"},
+)
+
+//AggregateMetricsCollector is a prometheus.Collector that submits
+//dynamically-calculated aggregate metrics about scraping progress.
+type AggregateMetricsCollector struct {
+	Cluster *core.Cluster
+}
+
+//Describe implements the prometheus.Collector interface.
+func (c *AggregateMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
+	minScrapedAtGauge.Describe(ch)
+	maxScrapedAtGauge.Describe(ch)
+}
+
+var scrapedAtAggregateQuery = `
+	SELECT ps.type, MIN(ps.scraped_at), MAX(ps.scraped_at)
+	  FROM domains d
+	  JOIN projects p ON p.domain_id = d.id
+	  JOIN project_services ps ON ps.project_id = p.id
+	 WHERE d.cluster_id = $1 AND ps.scraped_at IS NOT NULL
+	 GROUP BY ps.type
+`
+
+//Collect implements the prometheus.Collector interface.
+func (c *AggregateMetricsCollector) Collect(ch chan<- prometheus.Metric) {
+	//NOTE: I use NewConstMetric() instead of storing the values in the GaugeVec
+	//instances because it is faster.
+
+	descCh := make(chan *prometheus.Desc, 1)
+	minScrapedAtGauge.Describe(descCh)
+	minScrapedAtDesc := <-descCh
+	maxScrapedAtGauge.Describe(descCh)
+	maxScrapedAtDesc := <-descCh
+
+	queryArgs := []interface{}{c.Cluster.ID}
+	err := db.ForeachRow(db.DB, scrapedAtAggregateQuery, queryArgs, func(rows *sql.Rows) error {
+		var (
+			serviceType  string
+			minScrapedAt util.Time
+			maxScrapedAt util.Time
+		)
+		err := rows.Scan(&serviceType, &minScrapedAt, &maxScrapedAt)
+		if err != nil {
+			return err
+		}
+
+		serviceName := ""
+		if plugin := c.Cluster.QuotaPlugins[serviceType]; plugin != nil {
+			serviceName = plugin.ServiceInfo().ProductName
+		}
+
+		ch <- prometheus.MustNewConstMetric(
+			minScrapedAtDesc,
+			prometheus.GaugeValue, float64(time.Time(minScrapedAt).Unix()),
+			c.Cluster.ID, serviceType, serviceName,
+		)
+		ch <- prometheus.MustNewConstMetric(
+			maxScrapedAtDesc,
+			prometheus.GaugeValue, float64(time.Time(maxScrapedAt).Unix()),
+			c.Cluster.ID, serviceType, serviceName,
+		)
+		return nil
+	})
+	if err != nil {
+		logg.Error("collect cluster aggregate metrics failed: " + err.Error())
+	}
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -269,7 +356,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		return nil
 	})
 	if err != nil {
-		logg.Error("collect cluster metrics failed: " + err.Error())
+		logg.Error("collect cluster data metrics failed: " + err.Error())
 	}
 
 	//make sure that a cluster capacity value is reported for each resource (the

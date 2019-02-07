@@ -145,6 +145,9 @@ func taskCollect(config core.Configuration, cluster *core.Cluster, args []string
 	}()
 
 	//use main thread to emit Prometheus metrics
+	prometheus.MustRegister(&collector.AggregateMetricsCollector{
+		Cluster: cluster,
+	})
 	if config.Collector.ExposeDataMetrics {
 		prometheus.MustRegister(&collector.DataMetricsCollector{
 			Cluster:      cluster,
