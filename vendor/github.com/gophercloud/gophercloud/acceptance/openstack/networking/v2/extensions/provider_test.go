@@ -9,21 +9,26 @@ import (
 	networking "github.com/gophercloud/gophercloud/acceptance/openstack/networking/v2"
 	"github.com/gophercloud/gophercloud/acceptance/tools"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
-	th "github.com/gophercloud/gophercloud/testhelper"
 )
 
 func TestNetworksProviderCRUD(t *testing.T) {
 	client, err := clients.NewNetworkV2Client()
-	th.AssertNoErr(t, err)
+	if err != nil {
+		t.Fatalf("Unable to create a network client: %v", err)
+	}
 
 	// Create a network
 	network, err := networking.CreateNetwork(t, client)
-	th.AssertNoErr(t, err)
+	if err != nil {
+		t.Fatalf("Unable to create network: %v", err)
+	}
 	defer networking.DeleteNetwork(t, client, network.ID)
 
 	getResult := networks.Get(client, network.ID)
 	newNetwork, err := getResult.Extract()
-	th.AssertNoErr(t, err)
+	if err != nil {
+		t.Fatalf("Unable to extract network: %v", err)
+	}
 
 	tools.PrintResource(t, newNetwork)
 }

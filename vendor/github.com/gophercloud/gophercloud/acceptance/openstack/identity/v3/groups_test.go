@@ -17,11 +17,9 @@ func TestGroupCRUD(t *testing.T) {
 	client, err := clients.NewIdentityV3Client()
 	th.AssertNoErr(t, err)
 
-	description := "Test Groups"
-	domainID := "default"
 	createOpts := groups.CreateOpts{
-		Description: description,
-		DomainID:    domainID,
+		Name:     "testgroup",
+		DomainID: "default",
 		Extra: map[string]interface{}{
 			"email": "testgroup@example.com",
 		},
@@ -35,13 +33,8 @@ func TestGroupCRUD(t *testing.T) {
 	tools.PrintResource(t, group)
 	tools.PrintResource(t, group.Extra)
 
-	th.AssertEquals(t, group.Description, description)
-	th.AssertEquals(t, group.DomainID, domainID)
-	th.AssertDeepEquals(t, group.Extra, createOpts.Extra)
-
-	description = ""
 	updateOpts := groups.UpdateOpts{
-		Description: &description,
+		Description: "Test Groups",
 		Extra: map[string]interface{}{
 			"email": "thetestgroup@example.com",
 		},
@@ -52,9 +45,6 @@ func TestGroupCRUD(t *testing.T) {
 
 	tools.PrintResource(t, newGroup)
 	tools.PrintResource(t, newGroup.Extra)
-
-	th.AssertEquals(t, newGroup.Description, description)
-	th.AssertDeepEquals(t, newGroup.Extra, updateOpts.Extra)
 
 	listOpts := groups.ListOpts{
 		DomainID: "default",

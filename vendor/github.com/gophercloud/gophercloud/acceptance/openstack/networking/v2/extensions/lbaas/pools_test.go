@@ -64,12 +64,12 @@ func TestPoolsCRUD(t *testing.T) {
 
 	_, err = pools.Update(client, pool.ID, updateOpts).Extract()
 	if err != nil {
-		t.Fatalf("Unable to update pool: %v", err)
+		t.Fatalf("Unable to update pool: %v")
 	}
 
 	newPool, err := pools.Get(client, pool.ID).Extract()
 	if err != nil {
-		t.Fatalf("Unable to get pool: %v", err)
+		t.Fatalf("Unable to get pool: %v")
 	}
 
 	tools.PrintResource(t, newPool)

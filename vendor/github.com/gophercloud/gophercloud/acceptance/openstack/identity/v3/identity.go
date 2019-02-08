@@ -21,7 +21,6 @@ import (
 // unable to be created.
 func CreateProject(t *testing.T, client *gophercloud.ServiceClient, c *projects.CreateOpts) (*projects.Project, error) {
 	name := tools.RandomString("ACPTTEST", 8)
-	description := tools.RandomString("ACPTTEST-DESC", 8)
 	t.Logf("Attempting to create project: %s", name)
 
 	var createOpts projects.CreateOpts
@@ -32,7 +31,6 @@ func CreateProject(t *testing.T, client *gophercloud.ServiceClient, c *projects.
 	}
 
 	createOpts.Name = name
-	createOpts.Description = description
 
 	project, err := projects.Create(client, createOpts).Extract()
 	if err != nil {
@@ -42,7 +40,6 @@ func CreateProject(t *testing.T, client *gophercloud.ServiceClient, c *projects.
 	t.Logf("Successfully created project %s with ID %s", name, project.ID)
 
 	th.AssertEquals(t, project.Name, name)
-	th.AssertEquals(t, project.Description, description)
 
 	return project, nil
 }

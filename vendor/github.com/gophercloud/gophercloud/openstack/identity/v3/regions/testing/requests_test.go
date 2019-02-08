@@ -77,9 +77,8 @@ func TestUpdateRegion(t *testing.T) {
 	defer th.TeardownHTTP()
 	HandleUpdateRegionSuccessfully(t)
 
-	var description = "First West sub-region of RegionOne"
 	updateOpts := regions.UpdateOpts{
-		Description: &description,
+		Description: "First West sub-region of RegionOne",
 		/*
 			// Due to a bug in Keystone, the Extra column of the Region table
 			// is not updatable, see: https://bugs.launchpad.net/keystone/+bug/1729933

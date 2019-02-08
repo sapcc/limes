@@ -125,12 +125,9 @@ func TestUpdateListener(t *testing.T) {
 
 	client := fake.ServiceClient()
 	i1001 := 1001
-	name := "NewListenerName"
-	defaultPoolID := ""
 	actual, err := listeners.Update(client, "4ec89087-d057-4e2c-911f-60a3b47ee304", listeners.UpdateOpts{
-		Name:          &name,
-		ConnLimit:     &i1001,
-		DefaultPoolID: &defaultPoolID,
+		Name:      "NewListenerName",
+		ConnLimit: &i1001,
 	}).Extract()
 	if err != nil {
 		t.Fatalf("Unexpected Update error: %v", err)

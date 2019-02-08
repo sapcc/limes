@@ -26,10 +26,6 @@ func getURL(c *gophercloud.ServiceClient, taskID string) string {
 	return resourceURL(c, taskID)
 }
 
-func createURL(c *gophercloud.ServiceClient) string {
-	return rootURL(c)
-}
-
 func nextPageURL(serviceURL, requestedNext string) (string, error) {
 	base, err := utils.BaseEndpoint(serviceURL)
 	if err != nil {

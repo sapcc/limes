@@ -8,15 +8,39 @@ import (
 	"github.com/gophercloud/gophercloud/acceptance/clients"
 	"github.com/gophercloud/gophercloud/acceptance/tools"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/fwaas/rules"
-	th "github.com/gophercloud/gophercloud/testhelper"
 )
+
+func TestRuleList(t *testing.T) {
+	client, err := clients.NewNetworkV2Client()
+	if err != nil {
+		t.Fatalf("Unable to create a network client: %v", err)
+	}
+
+	allPages, err := rules.List(client, nil).AllPages()
+	if err != nil {
+		t.Fatalf("Unable to list rules: %v", err)
+	}
+
+	allRules, err := rules.ExtractRules(allPages)
+	if err != nil {
+		t.Fatalf("Unable to extract rules: %v", err)
+	}
+
+	for _, rule := range allRules {
+		tools.PrintResource(t, rule)
+	}
+}
 
 func TestRuleCRUD(t *testing.T) {
 	client, err := clients.NewNetworkV2Client()
-	th.AssertNoErr(t, err)
+	if err != nil {
+		t.Fatalf("Unable to create a network client: %v", err)
+	}
 
 	rule, err := CreateRule(t, client)
-	th.AssertNoErr(t, err)
+	if err != nil {
+		t.Fatalf("Unable to create rule: %v", err)
+	}
 	defer DeleteRule(t, client, rule.ID)
 
 	tools.PrintResource(t, rule)
@@ -27,25 +51,14 @@ func TestRuleCRUD(t *testing.T) {
 	}
 
 	_, err = rules.Update(client, rule.ID, updateOpts).Extract()
-	th.AssertNoErr(t, err)
-
-	newRule, err := rules.Get(client, rule.ID).Extract()
-	th.AssertNoErr(t, err)
-
-	tools.PrintResource(t, newRule)
-
-	allPages, err := rules.List(client, nil).AllPages()
-	th.AssertNoErr(t, err)
-
-	allRules, err := rules.ExtractRules(allPages)
-	th.AssertNoErr(t, err)
-
-	var found bool
-	for _, rule := range allRules {
-		if rule.ID == newRule.ID {
-			found = true
-		}
+	if err != nil {
+		t.Fatalf("Unable to update rule: %v", err)
 	}
 
-	th.AssertEquals(t, found, true)
+	newRule, err := rules.Get(client, rule.ID).Extract()
+	if err != nil {
+		t.Fatalf("Unable to get rule: %v", err)
+	}
+
+	tools.PrintResource(t, newRule)
 }

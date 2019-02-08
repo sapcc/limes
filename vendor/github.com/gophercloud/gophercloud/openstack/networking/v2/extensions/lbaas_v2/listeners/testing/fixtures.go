@@ -204,7 +204,6 @@ func HandleListenerUpdateSuccessfully(t *testing.T) {
 		th.TestJSONRequest(t, r, `{
 			"listener": {
 				"name": "NewListenerName",
-				"default_pool_id": null,
 				"connection_limit": 1001
 			}
 		}`)

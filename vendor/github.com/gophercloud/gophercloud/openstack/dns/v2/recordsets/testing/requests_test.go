@@ -109,10 +109,9 @@ func TestUpdate(t *testing.T) {
 	defer th.TeardownHTTP()
 	HandleUpdateSuccessfully(t)
 
-	var description = "Updated description"
 	updateOpts := recordsets.UpdateOpts{
 		TTL:         0,
-		Description: &description,
+		Description: "Updated description",
 		Records:     []string{"10.1.0.2", "10.1.0.3"},
 	}
 

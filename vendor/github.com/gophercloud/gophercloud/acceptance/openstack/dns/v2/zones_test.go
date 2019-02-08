@@ -40,9 +40,8 @@ func TestZonesCRUD(t *testing.T) {
 
 	th.AssertEquals(t, found, true)
 
-	description := ""
 	updateOpts := zones.UpdateOpts{
-		Description: &description,
+		Description: "New description",
 		TTL:         0,
 	}
 
@@ -51,5 +50,5 @@ func TestZonesCRUD(t *testing.T) {
 
 	tools.PrintResource(t, &newZone)
 
-	th.AssertEquals(t, newZone.Description, description)
+	th.AssertEquals(t, newZone.Description, "New description")
 }

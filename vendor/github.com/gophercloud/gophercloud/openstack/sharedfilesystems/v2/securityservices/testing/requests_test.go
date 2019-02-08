@@ -201,8 +201,7 @@ func TestUpdate(t *testing.T) {
 		Password:    "supersecret",
 	}
 
-	name := "SecServ2"
-	options := securityservices.UpdateOpts{Name: &name}
+	options := securityservices.UpdateOpts{Name: "SecServ2"}
 	s, err := securityservices.Update(client.ServiceClient(), "securityServiceID", options).Extract()
 	th.AssertNoErr(t, err)
 	th.CheckDeepEquals(t, &expected, s)

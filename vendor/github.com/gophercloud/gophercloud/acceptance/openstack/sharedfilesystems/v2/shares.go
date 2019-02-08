@@ -1,14 +1,12 @@
 package v2
 
 import (
+	"encoding/json"
 	"fmt"
-	"strings"
 	"testing"
 
-	"github.com/gophercloud/gophercloud/acceptance/tools"
-
 	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/openstack/sharedfilesystems/v2/messages"
+	"github.com/gophercloud/gophercloud/acceptance/clients"
 	"github.com/gophercloud/gophercloud/openstack/sharedfilesystems/v2/shares"
 )
 
@@ -19,26 +17,26 @@ func CreateShare(t *testing.T, client *gophercloud.ServiceClient) (*shares.Share
 		t.Skip("Skipping test that requres share creation in short mode.")
 	}
 
-	iTrue := true
+	choices, err := clients.AcceptanceTestChoicesFromEnv()
+	if err != nil {
+		t.Fatalf("Unable to fetch environment information")
+	}
+
+	t.Logf("Share network id %s", choices.ShareNetworkID)
 	createOpts := shares.CreateOpts{
-		Size:        1,
-		Name:        "My Test Share",
-		Description: "My Test Description",
-		ShareProto:  "NFS",
-		ShareType:   "dhss_false",
-		IsPublic:    &iTrue,
+		Size:           1,
+		Name:           "My Test Share",
+		ShareProto:     "NFS",
+		ShareNetworkID: choices.ShareNetworkID,
 	}
 
 	share, err := shares.Create(client, createOpts).Extract()
 	if err != nil {
-		t.Logf("Failed to create share")
-		return nil, err
+		return share, err
 	}
 
-	err = waitForStatus(t, client, share.ID, "available", 600)
+	err = waitForStatus(client, share.ID, "available", 600)
 	if err != nil {
-		t.Logf("Failed to get %s share status", share.ID)
-		DeleteShare(t, client, share)
 		return share, err
 	}
 
@@ -62,7 +60,7 @@ func GrantAccess(t *testing.T, client *gophercloud.ServiceClient, share *shares.
 	return shares.GrantAccess(client, share.ID, shares.GrantAccessOpts{
 		AccessType:  "ip",
 		AccessTo:    "0.0.0.0/32",
-		AccessLevel: "ro",
+		AccessLevel: "r",
 	}).Extract()
 }
 
@@ -85,79 +83,47 @@ func GetAccessRightsSlice(t *testing.T, client *gophercloud.ServiceClient, share
 func DeleteShare(t *testing.T, client *gophercloud.ServiceClient, share *shares.Share) {
 	err := shares.Delete(client, share.ID).ExtractErr()
 	if err != nil {
-		t.Errorf("Unable to delete share %s: %v", share.ID, err)
+		t.Fatalf("Unable to delete share %s: %v", share.ID, err)
 	}
 
-	err = waitForStatus(t, client, share.ID, "deleted", 600)
+	t.Logf("Deleted share: %s", share.ID)
+}
+
+// PrintShare prints some information of the share
+func PrintShare(t *testing.T, share *shares.Share) {
+	asJSON, err := json.MarshalIndent(share, "", " ")
 	if err != nil {
-		t.Errorf("Failed to wait for 'deleted' status for %s share: %v", share.ID, err)
-	} else {
-		t.Logf("Deleted share: %s", share.ID)
+		t.Logf("Cannot print the contents of %s", share.ID)
 	}
+
+	t.Logf("Share %s", string(asJSON))
 }
 
-// ExtendShare extends the capacity of an existing share
-func ExtendShare(t *testing.T, client *gophercloud.ServiceClient, share *shares.Share, newSize int) error {
-	return shares.Extend(client, share.ID, &shares.ExtendOpts{NewSize: newSize}).ExtractErr()
-}
-
-// ShrinkShare shrinks the capacity of an existing share
-func ShrinkShare(t *testing.T, client *gophercloud.ServiceClient, share *shares.Share, newSize int) error {
-	return shares.Shrink(client, share.ID, &shares.ShrinkOpts{NewSize: newSize}).ExtractErr()
-}
-
-func PrintMessages(t *testing.T, c *gophercloud.ServiceClient, id string) error {
-	c.Microversion = "2.37"
-
-	allPages, err := messages.List(c, messages.ListOpts{ResourceID: id}).AllPages()
+// PrintAccessRight prints contents of an access rule
+func PrintAccessRight(t *testing.T, accessRight *shares.AccessRight) {
+	asJSON, err := json.MarshalIndent(accessRight, "", " ")
 	if err != nil {
-		return fmt.Errorf("Unable to retrieve messages: %v", err)
+		t.Logf("Cannot print access rule")
 	}
 
-	allMessages, err := messages.ExtractMessages(allPages)
-	if err != nil {
-		return fmt.Errorf("Unable to extract messages: %v", err)
-	}
-
-	for _, message := range allMessages {
-		tools.PrintResource(t, message)
-	}
-
-	return nil
+	t.Logf("Access rule %s", string(asJSON))
 }
 
-func waitForStatus(t *testing.T, c *gophercloud.ServiceClient, id, status string, secs int) error {
-	err := gophercloud.WaitFor(secs, func() (bool, error) {
+func waitForStatus(c *gophercloud.ServiceClient, id, status string, secs int) error {
+	return gophercloud.WaitFor(secs, func() (bool, error) {
 		current, err := shares.Get(c, id).Extract()
 		if err != nil {
-			if _, ok := err.(gophercloud.ErrDefault404); ok {
-				switch status {
-				case "deleted":
-					return true, nil
-				default:
-					return false, err
-				}
-			}
 			return false, err
+		}
+
+		if current.Status == "error" {
+			return true, fmt.Errorf("An error occurred")
 		}
 
 		if current.Status == status {
 			return true, nil
 		}
 
-		if strings.Contains(current.Status, "error") {
-			return true, fmt.Errorf("An error occurred, wrong status: %s", current.Status)
-		}
-
 		return false, nil
 	})
-
-	if err != nil {
-		mErr := PrintMessages(t, c, id)
-		if mErr != nil {
-			return fmt.Errorf("Share status is '%s' and unable to get manila messages: %s", err, mErr)
-		}
-	}
-
-	return err
 }

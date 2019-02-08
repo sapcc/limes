@@ -79,9 +79,8 @@ func TestUpdateDomain(t *testing.T) {
 	defer th.TeardownHTTP()
 	HandleUpdateDomainSuccessfully(t)
 
-	var description = "Staging Domain"
 	updateOpts := domains.UpdateOpts{
-		Description: &description,
+		Description: "Staging Domain",
 	}
 
 	actual, err := domains.Update(client.ServiceClient(), "9fe1d3", updateOpts).Extract()

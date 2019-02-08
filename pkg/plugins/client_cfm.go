@@ -37,14 +37,6 @@ func getProjectIDForToken(provider *gophercloud.ProviderClient, eo gophercloud.E
 	//The CFM API is stupid and needs the caller to provide the scope of the
 	//token redundantly in the X-Project-Id header.
 
-	//try to use the new AuthResult API to get the token without extra HTTP requests
-	if result, ok := provider.GetAuthResult().(tokens.CreateResult); ok {
-		project, err := result.ExtractProject()
-		if err == nil {
-			return project.ID, nil
-		}
-	}
-
 	//cache the token -> project_id mapping
 	token := provider.Token()
 	if projectID, exists := cfmProjectIDCache[token]; exists {

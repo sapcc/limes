@@ -5,7 +5,6 @@ import (
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/rbacpolicies"
-	th "github.com/gophercloud/gophercloud/testhelper"
 )
 
 // CreateRBACPolicy will create a rbac-policy. An error will be returned if the
@@ -26,9 +25,6 @@ func CreateRBACPolicy(t *testing.T, client *gophercloud.ServiceClient, tenantID,
 	}
 
 	t.Logf("Successfully created rbac_policy")
-
-	th.AssertEquals(t, rbacPolicy.ObjectID, networkID)
-
 	return rbacPolicy, nil
 }
 

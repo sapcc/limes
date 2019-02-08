@@ -23,13 +23,18 @@ func ListByServer(client *gophercloud.ServiceClient, serverID string) pagination
 	return commonList(client, listByServerURL(client, serverID))
 }
 
-// CreateOpts is the struct responsible for creating a security group.
-type CreateOpts struct {
+// GroupOpts is the underlying struct responsible for creating or updating
+// security groups. It therefore represents the mutable attributes of a
+// security group.
+type GroupOpts struct {
 	// the name of your security group.
 	Name string `json:"name" required:"true"`
 	// the description of your security group.
-	Description string `json:"description,omitempty"`
+	Description string `json:"description" required:"true"`
 }
+
+// CreateOpts is the struct responsible for creating a security group.
+type CreateOpts GroupOpts
 
 // CreateOptsBuilder allows extensions to add additional parameters to the
 // Create request.
@@ -56,12 +61,7 @@ func Create(client *gophercloud.ServiceClient, opts CreateOptsBuilder) (r Create
 }
 
 // UpdateOpts is the struct responsible for updating an existing security group.
-type UpdateOpts struct {
-	// the name of your security group.
-	Name string `json:"name,omitempty"`
-	// the description of your security group.
-	Description *string `json:"description,omitempty"`
-}
+type UpdateOpts GroupOpts
 
 // UpdateOptsBuilder allows extensions to add additional parameters to the
 // Update request.

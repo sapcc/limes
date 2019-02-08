@@ -37,20 +37,16 @@ func TestVolumeTypes(t *testing.T) {
 
 	th.AssertEquals(t, found, true)
 
-	isPublic := false
-	name := vt.Name + "-UPDATED"
-	description := ""
+	var isPublic = false
 	updateOpts := volumetypes.UpdateOpts{
-		Name:        &name,
-		Description: &description,
-		IsPublic:    &isPublic,
+		Name:     vt.Name + "-UPDATED",
+		IsPublic: &isPublic,
 	}
 
 	newVT, err := volumetypes.Update(client, vt.ID, updateOpts).Extract()
 	th.AssertNoErr(t, err)
+	th.AssertEquals(t, vt.Name+"-UPDATED", newVT.Name)
+	th.AssertEquals(t, false, newVT.IsPublic)
 
 	tools.PrintResource(t, newVT)
-	th.AssertEquals(t, name, newVT.Name)
-	th.AssertEquals(t, description, newVT.Description)
-	th.AssertEquals(t, isPublic, newVT.IsPublic)
 }

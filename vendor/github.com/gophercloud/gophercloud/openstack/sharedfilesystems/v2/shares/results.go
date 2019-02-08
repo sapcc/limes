@@ -71,8 +71,6 @@ type Share struct {
 	SourceCgsnapshotMemberID string `json:"source_cgsnapshot_member_id"`
 	// Timestamp when the share was created
 	CreatedAt time.Time `json:"-"`
-	// Timestamp when the share was updated
-	UpdatedAt time.Time `json:"-"`
 }
 
 func (r *Share) UnmarshalJSON(b []byte) error {
@@ -80,7 +78,6 @@ func (r *Share) UnmarshalJSON(b []byte) error {
 	var s struct {
 		tmp
 		CreatedAt gophercloud.JSONRFC3339MilliNoZ `json:"created_at"`
-		UpdatedAt gophercloud.JSONRFC3339MilliNoZ `json:"updated_at"`
 	}
 	err := json.Unmarshal(b, &s)
 	if err != nil {
@@ -89,7 +86,6 @@ func (r *Share) UnmarshalJSON(b []byte) error {
 	*r = Share(s.tmp)
 
 	r.CreatedAt = time.Time(s.CreatedAt)
-	r.UpdatedAt = time.Time(s.UpdatedAt)
 
 	return nil
 }
@@ -202,11 +198,6 @@ type GetResult struct {
 	commonResult
 }
 
-// UpdateResult contains the response body and error from an Update request.
-type UpdateResult struct {
-	commonResult
-}
-
 // IDFromName is a convenience function that returns a share's ID given its name.
 func IDFromName(client *gophercloud.ServiceClient, name string) (string, error) {
 	r, err := ListDetail(client, &ListOpts{Name: name}).AllPages()
@@ -313,14 +304,4 @@ func (r ListAccessRightsResult) Extract() ([]AccessRight, error) {
 // ListAccessRightsResult contains the result body and error from a ListAccessRights request.
 type ListAccessRightsResult struct {
 	gophercloud.Result
-}
-
-// ExtendResult contains the response body and error from an Extend request.
-type ExtendResult struct {
-	gophercloud.ErrResult
-}
-
-// ShrinkResult contains the response body and error from a Shrink request.
-type ShrinkResult struct {
-	gophercloud.ErrResult
 }

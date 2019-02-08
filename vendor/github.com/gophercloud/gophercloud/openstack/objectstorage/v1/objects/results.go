@@ -25,7 +25,8 @@ type Object struct {
 	// Hash represents the MD5 checksum value of the object's content.
 	Hash string `json:"hash"`
 
-	// LastModified is the time the object was last modified.
+	// LastModified is the time the object was last modified, represented
+	// as a string.
 	LastModified time.Time `json:"-"`
 
 	// Name is the unique name for the object.
@@ -39,7 +40,7 @@ func (r *Object) UnmarshalJSON(b []byte) error {
 	type tmp Object
 	var s *struct {
 		tmp
-		LastModified string `json:"last_modified"`
+		LastModified gophercloud.JSONRFC3339MilliNoZ `json:"last_modified"`
 	}
 
 	err := json.Unmarshal(b, &s)
@@ -49,18 +50,10 @@ func (r *Object) UnmarshalJSON(b []byte) error {
 
 	*r = Object(s.tmp)
 
-	if s.LastModified != "" {
-		t, err := time.Parse(gophercloud.RFC3339MilliNoZ, s.LastModified)
-		if err != nil {
-			t, err = time.Parse(gophercloud.RFC3339Milli, s.LastModified)
-			if err != nil {
-				return err
-			}
-		}
-		r.LastModified = t
-	}
+	r.LastModified = time.Time(s.LastModified)
 
 	return nil
+
 }
 
 // ObjectPage is a single page of objects that is returned from a call to the
@@ -418,7 +411,7 @@ func (r UpdateResult) Extract() (*UpdateHeader, error) {
 // DeleteHeader represents the headers returned in the response from a
 // Delete request.
 type DeleteHeader struct {
-	ContentLength int64     `json:"-"`
+	ContentLength int64     `json:"Content-Length"`
 	ContentType   string    `json:"Content-Type"`
 	Date          time.Time `json:"-"`
 	TransID       string    `json:"X-Trans-Id"`

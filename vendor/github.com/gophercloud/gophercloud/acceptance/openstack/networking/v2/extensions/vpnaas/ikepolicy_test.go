@@ -8,18 +8,23 @@ import (
 	"github.com/gophercloud/gophercloud/acceptance/clients"
 	"github.com/gophercloud/gophercloud/acceptance/tools"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/vpnaas/ikepolicies"
-	th "github.com/gophercloud/gophercloud/testhelper"
 )
 
 func TestIKEPolicyList(t *testing.T) {
 	client, err := clients.NewNetworkV2Client()
-	th.AssertNoErr(t, err)
+	if err != nil {
+		t.Fatalf("Unable to create a network client: %v", err)
+	}
 
 	allPages, err := ikepolicies.List(client, nil).AllPages()
-	th.AssertNoErr(t, err)
+	if err != nil {
+		t.Fatalf("Unable to list IKE policies: %v", err)
+	}
 
 	allPolicies, err := ikepolicies.ExtractPolicies(allPages)
-	th.AssertNoErr(t, err)
+	if err != nil {
+		t.Fatalf("Unable to extract IKE policies: %v", err)
+	}
 
 	for _, policy := range allPolicies {
 		tools.PrintResource(t, policy)
@@ -28,16 +33,22 @@ func TestIKEPolicyList(t *testing.T) {
 
 func TestIKEPolicyCRUD(t *testing.T) {
 	client, err := clients.NewNetworkV2Client()
-	th.AssertNoErr(t, err)
+	if err != nil {
+		t.Fatalf("Unable to create a network client: %v", err)
+	}
 
 	policy, err := CreateIKEPolicy(t, client)
-	th.AssertNoErr(t, err)
+	if err != nil {
+		t.Fatalf("Unable to create IKE policy: %v", err)
+	}
 	defer DeleteIKEPolicy(t, client, policy.ID)
 
 	tools.PrintResource(t, policy)
 
 	newPolicy, err := ikepolicies.Get(client, policy.ID).Extract()
-	th.AssertNoErr(t, err)
+	if err != nil {
+		t.Fatalf("Unable to get IKE policy: %v", err)
+	}
 	tools.PrintResource(t, newPolicy)
 
 	updatedName := "updatedname"
@@ -50,6 +61,9 @@ func TestIKEPolicyCRUD(t *testing.T) {
 		},
 	}
 	updatedPolicy, err := ikepolicies.Update(client, policy.ID, updateOpts).Extract()
-	th.AssertNoErr(t, err)
+	if err != nil {
+		t.Fatalf("Unable to update IKE policy: %v", err)
+	}
 	tools.PrintResource(t, updatedPolicy)
+
 }

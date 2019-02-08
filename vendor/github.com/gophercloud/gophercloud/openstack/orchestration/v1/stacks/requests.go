@@ -30,7 +30,7 @@ type CreateOpts struct {
 	// A structure that contains details for the environment of the stack.
 	EnvironmentOpts *Environment `json:"-"`
 	// User-defined parameters to pass to the template.
-	Parameters map[string]interface{} `json:"parameters,omitempty"`
+	Parameters map[string]string `json:"parameters,omitempty"`
 	// The timeout for stack creation in minutes.
 	Timeout int `json:"timeout_mins,omitempty"`
 	// A list of tags to assosciate with the Stack
@@ -127,7 +127,7 @@ type AdoptOpts struct {
 	// A structure that contains details for the environment of the stack.
 	EnvironmentOpts *Environment `json:"-"`
 	// User-defined parameters to pass to the template.
-	Parameters map[string]interface{} `json:"parameters,omitempty"`
+	Parameters map[string]string `json:"parameters,omitempty"`
 }
 
 // ToStackAdoptMap casts a CreateOpts struct to a map.
@@ -256,12 +256,6 @@ func List(c *gophercloud.ServiceClient, opts ListOptsBuilder) pagination.Pager {
 // Get retreives a stack based on the stack name and stack ID.
 func Get(c *gophercloud.ServiceClient, stackName, stackID string) (r GetResult) {
 	_, r.Err = c.Get(getURL(c, stackName, stackID), &r.Body, nil)
-	return
-}
-
-// Find retrieves a stack based on the stack name or stack ID.
-func Find(c *gophercloud.ServiceClient, stackIdentity string) (r GetResult) {
-	_, r.Err = c.Get(findURL(c, stackIdentity), &r.Body, nil)
 	return
 }
 
@@ -411,7 +405,7 @@ type PreviewOpts struct {
 	// A structure that contains details for the environment of the stack.
 	EnvironmentOpts *Environment `json:"-"`
 	// User-defined parameters to pass to the template.
-	Parameters map[string]interface{} `json:"parameters,omitempty"`
+	Parameters map[string]string `json:"parameters,omitempty"`
 }
 
 // ToStackPreviewMap casts a PreviewOpts struct to a map.

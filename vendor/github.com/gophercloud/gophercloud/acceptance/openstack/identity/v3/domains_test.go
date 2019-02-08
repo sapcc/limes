@@ -61,9 +61,8 @@ func TestDomainsCRUD(t *testing.T) {
 	th.AssertNoErr(t, err)
 
 	var iTrue bool = true
-	var description = "Testing Domain"
 	createOpts := domains.CreateOpts{
-		Description: description,
+		Description: "Testing Domain",
 		Enabled:     &iTrue,
 	}
 
@@ -73,12 +72,11 @@ func TestDomainsCRUD(t *testing.T) {
 
 	tools.PrintResource(t, domain)
 
-	th.AssertEquals(t, domain.Description, description)
+	th.AssertEquals(t, domain.Description, "Testing Domain")
 
 	var iFalse bool = false
-	description = ""
 	updateOpts := domains.UpdateOpts{
-		Description: &description,
+		Description: "Staging Test Domain",
 		Enabled:     &iFalse,
 	}
 
@@ -87,5 +85,5 @@ func TestDomainsCRUD(t *testing.T) {
 
 	tools.PrintResource(t, newDomain)
 
-	th.AssertEquals(t, newDomain.Description, description)
+	th.AssertEquals(t, newDomain.Description, "Staging Test Domain")
 }

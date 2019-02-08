@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/acceptance/clients"
 	"github.com/gophercloud/gophercloud/acceptance/tools"
 	"github.com/gophercloud/gophercloud/openstack/sharedfilesystems/v2/sharenetworks"
 )
@@ -16,19 +15,12 @@ func CreateShareNetwork(t *testing.T, client *gophercloud.ServiceClient) (*share
 		t.Skip("Skipping test that requires share network creation in short mode.")
 	}
 
-	choices, err := clients.AcceptanceTestChoicesFromEnv()
-	if err != nil {
-		return nil, err
-	}
-
 	shareNetworkName := tools.RandomString("ACPTTEST", 16)
 	t.Logf("Attempting to create share network: %s", shareNetworkName)
 
 	createOpts := sharenetworks.CreateOpts{
-		Name:            shareNetworkName,
-		NeutronNetID:    choices.NetworkID,
-		NeutronSubnetID: choices.SubnetID,
-		Description:     "This is a shared network",
+		Name:        shareNetworkName,
+		Description: "This is a shared network",
 	}
 
 	shareNetwork, err := sharenetworks.Create(client, createOpts).Extract()
@@ -41,11 +33,28 @@ func CreateShareNetwork(t *testing.T, client *gophercloud.ServiceClient) (*share
 
 // DeleteShareNetwork will delete a share network. An error will occur if
 // the share network was unable to be deleted.
-func DeleteShareNetwork(t *testing.T, client *gophercloud.ServiceClient, shareNetworkID string) {
-	err := sharenetworks.Delete(client, shareNetworkID).ExtractErr()
+func DeleteShareNetwork(t *testing.T, client *gophercloud.ServiceClient, shareNetwork *sharenetworks.ShareNetwork) {
+	err := sharenetworks.Delete(client, shareNetwork.ID).ExtractErr()
 	if err != nil {
-		t.Fatalf("Failed to delete share network %s: %v", shareNetworkID, err)
+		t.Fatalf("Failed to delete share network %s: %v", shareNetwork.ID, err)
 	}
 
-	t.Logf("Deleted share network: %s", shareNetworkID)
+	t.Logf("Deleted share network: %s", shareNetwork.ID)
+}
+
+// PrintShareNetwork will print a share network and all of its attributes.
+func PrintShareNetwork(t *testing.T, sharenetwork *sharenetworks.ShareNetwork) {
+	t.Logf("ID: %s", sharenetwork.ID)
+	t.Logf("Project ID: %s", sharenetwork.ProjectID)
+	t.Logf("Neutron network ID: %s", sharenetwork.NeutronNetID)
+	t.Logf("Neutron sub-network ID: %s", sharenetwork.NeutronSubnetID)
+	t.Logf("Nova network ID: %s", sharenetwork.NovaNetID)
+	t.Logf("Network type: %s", sharenetwork.NetworkType)
+	t.Logf("Segmentation ID: %d", sharenetwork.SegmentationID)
+	t.Logf("CIDR: %s", sharenetwork.CIDR)
+	t.Logf("IP version: %d", sharenetwork.IPVersion)
+	t.Logf("Name: %s", sharenetwork.Name)
+	t.Logf("Description: %s", sharenetwork.Description)
+	t.Logf("Created at: %v", sharenetwork.CreatedAt)
+	t.Logf("Updated at: %v", sharenetwork.UpdatedAt)
 }

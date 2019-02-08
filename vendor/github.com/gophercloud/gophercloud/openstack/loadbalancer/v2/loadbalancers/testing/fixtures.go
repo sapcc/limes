@@ -5,12 +5,13 @@ import (
 	"net/http"
 	"testing"
 
+	th "github.com/gophercloud/gophercloud/testhelper"
+	"github.com/gophercloud/gophercloud/testhelper/client"
+
 	"github.com/gophercloud/gophercloud/openstack/loadbalancer/v2/listeners"
 	"github.com/gophercloud/gophercloud/openstack/loadbalancer/v2/loadbalancers"
 	"github.com/gophercloud/gophercloud/openstack/loadbalancer/v2/monitors"
 	"github.com/gophercloud/gophercloud/openstack/loadbalancer/v2/pools"
-	th "github.com/gophercloud/gophercloud/testhelper"
-	"github.com/gophercloud/gophercloud/testhelper/client"
 )
 
 // LoadbalancersListBody contains the canned body of a loadbalancer list response.
@@ -29,8 +30,7 @@ const LoadbalancersListBody = `
 			"provider": "haproxy",
 			"admin_state_up": true,
 			"provisioning_status": "ACTIVE",
-			"operating_status": "ONLINE",
-			"tags": ["test", "stage"]
+			"operating_status": "ONLINE"
 		},
 		{
 			"id": "36e08a3e-a78f-4b40-a229-1e7e23eee1ab",
@@ -44,8 +44,7 @@ const LoadbalancersListBody = `
 			"provider": "haproxy",
 			"admin_state_up": true,
 			"provisioning_status": "PENDING_CREATE",
-			"operating_status": "OFFLINE",
-			"tags": ["test", "stage"]
+			"operating_status": "OFFLINE"
 		}
 	]
 }
@@ -66,8 +65,7 @@ const SingleLoadbalancerBody = `
 		"provider": "haproxy",
 		"admin_state_up": true,
 		"provisioning_status": "PENDING_CREATE",
-		"operating_status": "OFFLINE",
-		"tags": ["test", "stage"]
+		"operating_status": "OFFLINE"
 	}
 }
 `
@@ -87,14 +85,13 @@ const PostUpdateLoadbalancerBody = `
 		"provider": "haproxy",
 		"admin_state_up": true,
 		"provisioning_status": "PENDING_CREATE",
-		"operating_status": "OFFLINE",
-		"tags": ["test"]
+		"operating_status": "OFFLINE"
 	}
 }
 `
 
-// GetLoadbalancerStatusesBody is the canned request body of a Get request on loadbalancer's status.
-const GetLoadbalancerStatusesBody = `
+// SingleLoadbalancerBody is the canned body of a Get request on an existing loadbalancer.
+const LoadbalancerStatuesesTree = `
 {
 	"statuses" : {
 		"loadbalancer": {
@@ -102,7 +99,6 @@ const GetLoadbalancerStatusesBody = `
 			"name": "db_lb",
 			"provisioning_status": "PENDING_UPDATE",
 			"operating_status": "ACTIVE",
-			"tags": ["test", "stage"],
 			"listeners": [{
 				"id": "db902c0c-d5ff-4753-b465-668ad9656918",
 				"name": "db",
@@ -130,19 +126,6 @@ const GetLoadbalancerStatusesBody = `
 }
 `
 
-// LoadbalancerStatsTree is the canned request body of a Get request on loadbalancer's statistics.
-const GetLoadbalancerStatsBody = `
-{
-    "stats": {
-        "active_connections": 0,
-        "bytes_in": 9532,
-        "bytes_out": 22033,
-        "request_errors": 46,
-        "total_connections": 112
-    }
-}
-`
-
 var (
 	LoadbalancerWeb = loadbalancers.LoadBalancer{
 		ID:                 "c331058c-6a40-4144-948e-b9fb1df9db4b",
@@ -157,7 +140,6 @@ var (
 		AdminStateUp:       true,
 		ProvisioningStatus: "ACTIVE",
 		OperatingStatus:    "ONLINE",
-		Tags:               []string{"test", "stage"},
 	}
 	LoadbalancerDb = loadbalancers.LoadBalancer{
 		ID:                 "36e08a3e-a78f-4b40-a229-1e7e23eee1ab",
@@ -172,7 +154,6 @@ var (
 		AdminStateUp:       true,
 		ProvisioningStatus: "PENDING_CREATE",
 		OperatingStatus:    "OFFLINE",
-		Tags:               []string{"test", "stage"},
 	}
 	LoadbalancerUpdated = loadbalancers.LoadBalancer{
 		ID:                 "36e08a3e-a78f-4b40-a229-1e7e23eee1ab",
@@ -187,45 +168,34 @@ var (
 		AdminStateUp:       true,
 		ProvisioningStatus: "PENDING_CREATE",
 		OperatingStatus:    "OFFLINE",
-		Tags:               []string{"test"},
 	}
-	LoadbalancerStatusesTree = loadbalancers.StatusTree{
-		Loadbalancer: &loadbalancers.LoadBalancer{
-			ID:                 "36e08a3e-a78f-4b40-a229-1e7e23eee1ab",
-			Name:               "db_lb",
-			ProvisioningStatus: "PENDING_UPDATE",
-			OperatingStatus:    "ACTIVE",
-			Tags:               []string{"test", "stage"},
-			Listeners: []listeners.Listener{{
-				ID:                 "db902c0c-d5ff-4753-b465-668ad9656918",
+	LoadbalancerStatusesTree = loadbalancers.LoadBalancer{
+		ID:                 "36e08a3e-a78f-4b40-a229-1e7e23eee1ab",
+		Name:               "db_lb",
+		ProvisioningStatus: "PENDING_UPDATE",
+		OperatingStatus:    "ACTIVE",
+		Listeners: []listeners.Listener{{
+			ID:                 "db902c0c-d5ff-4753-b465-668ad9656918",
+			Name:               "db",
+			ProvisioningStatus: "ACTIVE",
+			Pools: []pools.Pool{{
+				ID:                 "fad389a3-9a4a-4762-a365-8c7038508b5d",
 				Name:               "db",
 				ProvisioningStatus: "ACTIVE",
-				Pools: []pools.Pool{{
-					ID:                 "fad389a3-9a4a-4762-a365-8c7038508b5d",
-					Name:               "db",
+				Monitor: monitors.Monitor{
+					ID:                 "67306cda-815d-4354-9fe4-59e09da9c3c5",
+					Type:               "PING",
 					ProvisioningStatus: "ACTIVE",
-					Monitor: monitors.Monitor{
-						ID:                 "67306cda-815d-4354-9fe4-59e09da9c3c5",
-						Type:               "PING",
-						ProvisioningStatus: "ACTIVE",
-					},
-					Members: []pools.Member{{
-						ID:                 "2a280670-c202-4b0b-a562-34077415aabf",
-						Name:               "db",
-						Address:            "10.0.2.11",
-						ProtocolPort:       80,
-						ProvisioningStatus: "ACTIVE",
-					}},
+				},
+				Members: []pools.Member{{
+					ID:                 "2a280670-c202-4b0b-a562-34077415aabf",
+					Name:               "db",
+					Address:            "10.0.2.11",
+					ProtocolPort:       80,
+					ProvisioningStatus: "ACTIVE",
 				}},
 			}},
-		},
-	}
-	LoadbalancerStatsTree = loadbalancers.Stats{
-		ActiveConnections: 0,
-		BytesIn:           9532,
-		BytesOut:          22033,
-		RequestErrors:     46,
-		TotalConnections:  112,
+		}},
 	}
 )
 
@@ -262,8 +232,7 @@ func HandleLoadbalancerCreationSuccessfully(t *testing.T, response string) {
 				"vip_address": "10.30.176.48",
 				"flavor": "medium",
 				"provider": "haproxy",
-				"admin_state_up": true,
-				"tags": ["test", "stage"]
+				"admin_state_up": true
 			}
 		}`)
 
@@ -286,12 +255,12 @@ func HandleLoadbalancerGetSuccessfully(t *testing.T) {
 
 // HandleLoadbalancerGetStatusesTree sets up the test server to respond to a loadbalancer Get statuses tree request.
 func HandleLoadbalancerGetStatusesTree(t *testing.T) {
-	th.Mux.HandleFunc("/v2.0/lbaas/loadbalancers/36e08a3e-a78f-4b40-a229-1e7e23eee1ab/status", func(w http.ResponseWriter, r *http.Request) {
+	th.Mux.HandleFunc("/v2.0/lbaas/loadbalancers/36e08a3e-a78f-4b40-a229-1e7e23eee1ab/statuses", func(w http.ResponseWriter, r *http.Request) {
 		th.TestMethod(t, r, "GET")
 		th.TestHeader(t, r, "X-Auth-Token", client.TokenID)
 		th.TestHeader(t, r, "Accept", "application/json")
 
-		fmt.Fprintf(w, GetLoadbalancerStatusesBody)
+		fmt.Fprintf(w, LoadbalancerStatuesesTree)
 	})
 }
 
@@ -314,32 +283,10 @@ func HandleLoadbalancerUpdateSuccessfully(t *testing.T) {
 		th.TestHeader(t, r, "Content-Type", "application/json")
 		th.TestJSONRequest(t, r, `{
 			"loadbalancer": {
-				"name": "NewLoadbalancerName",
-				"tags": ["test"]
+				"name": "NewLoadbalancerName"
 			}
 		}`)
 
 		fmt.Fprintf(w, PostUpdateLoadbalancerBody)
-	})
-}
-
-// HandleLoadbalancerGetStatsTree sets up the test server to respond to a loadbalancer Get stats tree request.
-func HandleLoadbalancerGetStatsTree(t *testing.T) {
-	th.Mux.HandleFunc("/v2.0/lbaas/loadbalancers/36e08a3e-a78f-4b40-a229-1e7e23eee1ab/stats", func(w http.ResponseWriter, r *http.Request) {
-		th.TestMethod(t, r, "GET")
-		th.TestHeader(t, r, "X-Auth-Token", client.TokenID)
-		th.TestHeader(t, r, "Accept", "application/json")
-
-		fmt.Fprintf(w, GetLoadbalancerStatsBody)
-	})
-}
-
-// HandleLoadbalancerFailoverSuccessfully sets up the test server to respond to a loadbalancer failover request.
-func HandleLoadbalancerFailoverSuccessfully(t *testing.T) {
-	th.Mux.HandleFunc("/v2.0/lbaas/loadbalancers/36e08a3e-a78f-4b40-a229-1e7e23eee1ab/failover", func(w http.ResponseWriter, r *http.Request) {
-		th.TestMethod(t, r, "PUT")
-		th.TestHeader(t, r, "X-Auth-Token", client.TokenID)
-
-		w.WriteHeader(http.StatusAccepted)
 	})
 }

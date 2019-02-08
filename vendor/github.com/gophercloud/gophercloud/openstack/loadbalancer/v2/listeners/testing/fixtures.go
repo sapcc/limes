@@ -39,9 +39,7 @@ const ListenersListBody = `
 			"connection_limit": 2000,
 			"admin_state_up": true,
 			"default_tls_container_ref": "2c433435-20de-4411-84ae-9cc8917def76",
-			"sni_container_refs": ["3d328d82-2547-4921-ac2f-61c3b452b5ff", "b3cfd7e3-8c19-455c-8ebb-d78dfd8f7e7d"],
-			"timeout_client_data": 50000,
-			"timeout_member_data": 50000
+			"sni_container_refs": ["3d328d82-2547-4921-ac2f-61c3b452b5ff", "b3cfd7e3-8c19-455c-8ebb-d78dfd8f7e7d"]
 		}
 	]
 }
@@ -62,10 +60,7 @@ const SingleListenerBody = `
 		"connection_limit": 2000,
 		"admin_state_up": true,
 		"default_tls_container_ref": "2c433435-20de-4411-84ae-9cc8917def76",
-		"sni_container_refs": ["3d328d82-2547-4921-ac2f-61c3b452b5ff", "b3cfd7e3-8c19-455c-8ebb-d78dfd8f7e7d"],
-		"timeout_client_data": 50000,
-		"timeout_member_data": 50000
-
+		"sni_container_refs": ["3d328d82-2547-4921-ac2f-61c3b452b5ff", "b3cfd7e3-8c19-455c-8ebb-d78dfd8f7e7d"]
 	}
 }
 `
@@ -85,24 +80,8 @@ const PostUpdateListenerBody = `
 		"connection_limit": 1000,
 		"admin_state_up": true,
 		"default_tls_container_ref": "2c433435-20de-4411-84ae-9cc8917def76",
-		"sni_container_refs": ["3d328d82-2547-4921-ac2f-61c3b452b5ff", "b3cfd7e3-8c19-455c-8ebb-d78dfd8f7e7d"],
-		"timeout_client_data": 181000,
-		"timeout_member_data": 181000
-
+		"sni_container_refs": ["3d328d82-2547-4921-ac2f-61c3b452b5ff", "b3cfd7e3-8c19-455c-8ebb-d78dfd8f7e7d"]
 	}
-}
-`
-
-// GetListenerStatsBody is the canned request body of a Get request on listener's statistics.
-const GetListenerStatsBody = `
-{
-    "stats": {
-        "active_connections": 0,
-        "bytes_in": 9532,
-        "bytes_out": 22033,
-        "request_errors": 46,
-        "total_connections": 112
-    }
 }
 `
 
@@ -133,8 +112,6 @@ var (
 		AdminStateUp:           true,
 		DefaultTlsContainerRef: "2c433435-20de-4411-84ae-9cc8917def76",
 		SniContainerRefs:       []string{"3d328d82-2547-4921-ac2f-61c3b452b5ff", "b3cfd7e3-8c19-455c-8ebb-d78dfd8f7e7d"},
-		TimeoutClientData:      50000,
-		TimeoutMemberData:      50000,
 	}
 	ListenerUpdated = listeners.Listener{
 		ID:                     "36e08a3e-a78f-4b40-a229-1e7e23eee1ab",
@@ -149,15 +126,6 @@ var (
 		AdminStateUp:           true,
 		DefaultTlsContainerRef: "2c433435-20de-4411-84ae-9cc8917def76",
 		SniContainerRefs:       []string{"3d328d82-2547-4921-ac2f-61c3b452b5ff", "b3cfd7e3-8c19-455c-8ebb-d78dfd8f7e7d"},
-		TimeoutClientData:      181000,
-		TimeoutMemberData:      181000,
-	}
-	ListenerStatsTree = listeners.Stats{
-		ActiveConnections: 0,
-		BytesIn:           9532,
-		BytesOut:          22033,
-		RequestErrors:     46,
-		TotalConnections:  112,
 	}
 )
 
@@ -236,24 +204,10 @@ func HandleListenerUpdateSuccessfully(t *testing.T) {
 		th.TestJSONRequest(t, r, `{
 			"listener": {
 				"name": "NewListenerName",
-				"default_pool_id": null,
-				"connection_limit": 1001,
-				"timeout_client_data": 181000,
-				"timeout_member_data": 181000
+				"connection_limit": 1001
 			}
 		}`)
 
 		fmt.Fprintf(w, PostUpdateListenerBody)
-	})
-}
-
-// HandleListenerGetStatsTree sets up the test server to respond to a listener Get stats tree request.
-func HandleListenerGetStatsTree(t *testing.T) {
-	th.Mux.HandleFunc("/v2.0/lbaas/listeners/4ec89087-d057-4e2c-911f-60a3b47ee304/stats", func(w http.ResponseWriter, r *http.Request) {
-		th.TestMethod(t, r, "GET")
-		th.TestHeader(t, r, "X-Auth-Token", client.TokenID)
-		th.TestHeader(t, r, "Accept", "application/json")
-
-		fmt.Fprintf(w, GetListenerStatsBody)
 	})
 }

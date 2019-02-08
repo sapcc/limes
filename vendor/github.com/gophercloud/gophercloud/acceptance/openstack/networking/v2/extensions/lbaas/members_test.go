@@ -71,12 +71,12 @@ func TestMembersCRUD(t *testing.T) {
 
 	_, err = members.Update(client, member.ID, updateOpts).Extract()
 	if err != nil {
-		t.Fatalf("Unable to update member: %v", err)
+		t.Fatalf("Unable to update member: %v")
 	}
 
 	newMember, err := members.Get(client, member.ID).Extract()
 	if err != nil {
-		t.Fatalf("Unable to get member: %v", err)
+		t.Fatalf("Unable to get member: %v")
 	}
 
 	tools.PrintResource(t, newMember)

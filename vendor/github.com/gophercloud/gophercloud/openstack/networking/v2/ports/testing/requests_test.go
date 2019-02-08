@@ -377,9 +377,8 @@ func TestUpdate(t *testing.T) {
 		fmt.Fprintf(w, UpdateResponse)
 	})
 
-	name := "new_port_name"
 	options := ports.UpdateOpts{
-		Name: &name,
+		Name: "new_port_name",
 		FixedIPs: []ports.IP{
 			{SubnetID: "a0304c3a-4f08-4c43-88af-d796509c97d2", IPAddress: "10.0.0.3"},
 		},
@@ -419,9 +418,8 @@ func TestUpdateOmitSecurityGroups(t *testing.T) {
 		fmt.Fprintf(w, UpdateOmitSecurityGroupsResponse)
 	})
 
-	name := "new_port_name"
 	options := ports.UpdateOpts{
-		Name: &name,
+		Name: "new_port_name",
 		FixedIPs: []ports.IP{
 			{SubnetID: "a0304c3a-4f08-4c43-88af-d796509c97d2", IPAddress: "10.0.0.3"},
 		},
@@ -497,9 +495,8 @@ func TestRemoveSecurityGroups(t *testing.T) {
 		fmt.Fprintf(w, RemoveSecurityGroupResponse)
 	})
 
-	name := "new_port_name"
 	options := ports.UpdateOpts{
-		Name: &name,
+		Name: "new_port_name",
 		FixedIPs: []ports.IP{
 			{SubnetID: "a0304c3a-4f08-4c43-88af-d796509c97d2", IPAddress: "10.0.0.3"},
 		},
@@ -539,9 +536,8 @@ func TestRemoveAllowedAddressPairs(t *testing.T) {
 		fmt.Fprintf(w, RemoveAllowedAddressPairsResponse)
 	})
 
-	name := "new_port_name"
 	options := ports.UpdateOpts{
-		Name: &name,
+		Name: "new_port_name",
 		FixedIPs: []ports.IP{
 			{SubnetID: "a0304c3a-4f08-4c43-88af-d796509c97d2", IPAddress: "10.0.0.3"},
 		},
@@ -577,9 +573,8 @@ func TestDontUpdateAllowedAddressPairs(t *testing.T) {
 		fmt.Fprintf(w, DontUpdateAllowedAddressPairsResponse)
 	})
 
-	name := "new_port_name"
 	options := ports.UpdateOpts{
-		Name: &name,
+		Name: "new_port_name",
 		FixedIPs: []ports.IP{
 			{SubnetID: "a0304c3a-4f08-4c43-88af-d796509c97d2", IPAddress: "10.0.0.3"},
 		},
@@ -736,9 +731,8 @@ func TestUpdateWithExtraDHCPOpts(t *testing.T) {
 		fmt.Fprintf(w, UpdateWithExtraDHCPOptsResponse)
 	})
 
-	name := "updated-port-with-dhcp-opts"
 	portUpdateOpts := ports.UpdateOpts{
-		Name: &name,
+		Name: "updated-port-with-dhcp-opts",
 		FixedIPs: []ports.IP{
 			{SubnetID: "a0304c3a-4f08-4c43-88af-d796509c97d2", IPAddress: "10.0.0.3"},
 		},

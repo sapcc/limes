@@ -137,10 +137,7 @@ func TestCreate(t *testing.T) {
       "admin_state_up": false,
       "external_gateway_info":{
          "enable_snat": false,
-         "network_id":"8ca37218-28ff-41cb-9b10-039601ea7e6b",
-         "external_fixed_ips": [
-             {"subnet_id": "ab561bc4-1a8e-48f2-9fbd-376fcb1a1def"}
-         ]
+         "network_id":"8ca37218-28ff-41cb-9b10-039601ea7e6b"
 	  },
 	  "availability_zone_hints": ["zone1", "zone2"]
    }
@@ -174,15 +171,9 @@ func TestCreate(t *testing.T) {
 
 	asu := false
 	enableSNAT := false
-	efi := []routers.ExternalFixedIP{
-		routers.ExternalFixedIP{
-			SubnetID: "ab561bc4-1a8e-48f2-9fbd-376fcb1a1def",
-		},
-	}
 	gwi := routers.GatewayInfo{
-		NetworkID:        "8ca37218-28ff-41cb-9b10-039601ea7e6b",
-		EnableSNAT:       &enableSNAT,
-		ExternalFixedIPs: efi,
+		NetworkID:  "8ca37218-28ff-41cb-9b10-039601ea7e6b",
+		EnableSNAT: &enableSNAT,
 	}
 	options := routers.CreateOpts{
 		Name:                  "foo_router",

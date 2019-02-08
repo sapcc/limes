@@ -14,7 +14,6 @@ type ListOpts struct {
 	Direction      string `q:"direction"`
 	EtherType      string `q:"ethertype"`
 	ID             string `q:"id"`
-	Description    string `q:"description"`
 	PortRangeMax   int    `q:"port_range_max"`
 	PortRangeMin   int    `q:"port_range_min"`
 	Protocol       string `q:"protocol"`
@@ -88,9 +87,6 @@ type CreateOpts struct {
 	// Must be either "ingress" or "egress": the direction in which the security
 	// group rule is applied.
 	Direction RuleDirection `json:"direction" required:"true"`
-
-	// String description of each rule, optional
-	Description string `json:"description,omitempty"`
 
 	// Must be "IPv4" or "IPv6", and addresses represented in CIDR must match the
 	// ingress or egress rules.

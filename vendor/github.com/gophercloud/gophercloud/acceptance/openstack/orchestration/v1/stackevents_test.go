@@ -5,35 +5,64 @@ package v1
 import (
 	"testing"
 
-	"github.com/gophercloud/gophercloud/acceptance/clients"
+	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack/orchestration/v1/stackevents"
+	"github.com/gophercloud/gophercloud/openstack/orchestration/v1/stacks"
+	"github.com/gophercloud/gophercloud/pagination"
 	th "github.com/gophercloud/gophercloud/testhelper"
 )
 
 func TestStackEvents(t *testing.T) {
-	client, err := clients.NewOrchestrationV1Client()
-	th.AssertNoErr(t, err)
+	// Create a provider client for making the HTTP requests.
+	// See common.go in this directory for more information.
+	client := newClient(t)
 
-	stack, err := CreateStack(t, client)
-	th.AssertNoErr(t, err)
-	defer DeleteStack(t, client, stack.Name, stack.ID)
+	stackName := "postman_stack_2"
+	resourceName := "hello_world"
+	var eventID string
 
-	allPages, err := stackevents.List(client, stack.Name, stack.ID, nil).AllPages()
+	createOpts := stacks.CreateOpts{
+		Name:     stackName,
+		Template: template,
+		Timeout:  5,
+	}
+	stack, err := stacks.Create(client, createOpts).Extract()
 	th.AssertNoErr(t, err)
-	allEvents, err := stackevents.ExtractEvents(allPages)
-	th.AssertNoErr(t, err)
-
-	th.AssertEquals(t, len(allEvents), 4)
-
-	/*
-			allPages is currently broke
-		allPages, err = stackevents.ListResourceEvents(client, stack.Name, stack.ID, basicTemplateResourceName, nil).AllPages()
+	t.Logf("Created stack: %+v\n", stack)
+	defer func() {
+		err := stacks.Delete(client, stackName, stack.ID).ExtractErr()
 		th.AssertNoErr(t, err)
-		allEvents, err = stackevents.ExtractEvents(allPages)
-		th.AssertNoErr(t, err)
-
-		for _, v := range allEvents {
-			tools.PrintResource(t, v)
+		t.Logf("Deleted stack (%s)", stackName)
+	}()
+	err = gophercloud.WaitFor(60, func() (bool, error) {
+		getStack, err := stacks.Get(client, stackName, stack.ID).Extract()
+		if err != nil {
+			return false, err
 		}
-	*/
+		if getStack.Status == "CREATE_COMPLETE" {
+			return true, nil
+		}
+		return false, nil
+	})
+
+	err = stackevents.List(client, stackName, stack.ID, nil).EachPage(func(page pagination.Page) (bool, error) {
+		events, err := stackevents.ExtractEvents(page)
+		th.AssertNoErr(t, err)
+		t.Logf("listed events: %+v\n", events)
+		eventID = events[0].ID
+		return false, nil
+	})
+	th.AssertNoErr(t, err)
+
+	err = stackevents.ListResourceEvents(client, stackName, stack.ID, resourceName, nil).EachPage(func(page pagination.Page) (bool, error) {
+		resourceEvents, err := stackevents.ExtractEvents(page)
+		th.AssertNoErr(t, err)
+		t.Logf("listed resource events: %+v\n", resourceEvents)
+		return false, nil
+	})
+	th.AssertNoErr(t, err)
+
+	event, err := stackevents.Get(client, stackName, stack.ID, resourceName, eventID).Extract()
+	th.AssertNoErr(t, err)
+	t.Logf("retrieved event: %+v\n", event)
 }

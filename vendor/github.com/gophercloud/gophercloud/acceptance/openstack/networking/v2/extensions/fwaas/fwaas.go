@@ -11,21 +11,18 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/fwaas/policies"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/fwaas/routerinsertion"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/fwaas/rules"
-	th "github.com/gophercloud/gophercloud/testhelper"
 )
 
 // CreateFirewall will create a Firewaill with a random name and a specified
 // policy ID. An error will be returned if the firewall could not be created.
 func CreateFirewall(t *testing.T, client *gophercloud.ServiceClient, policyID string) (*firewalls.Firewall, error) {
 	firewallName := tools.RandomString("TESTACC-", 8)
-	firewallDescription := tools.RandomString("TESTACC-DESC-", 8)
 
 	t.Logf("Attempting to create firewall %s", firewallName)
 
 	iTrue := true
 	createOpts := firewalls.CreateOpts{
 		Name:         firewallName,
-		Description:  firewallDescription,
 		PolicyID:     policyID,
 		AdminStateUp: &iTrue,
 	}
@@ -42,9 +39,6 @@ func CreateFirewall(t *testing.T, client *gophercloud.ServiceClient, policyID st
 
 	t.Logf("Successfully created firewall %s", firewallName)
 
-	th.AssertEquals(t, firewall.Name, firewallName)
-	th.AssertEquals(t, firewall.Description, firewallDescription)
-
 	return firewall, nil
 }
 
@@ -53,14 +47,12 @@ func CreateFirewall(t *testing.T, client *gophercloud.ServiceClient, policyID st
 // returned if the firewall could not be created.
 func CreateFirewallOnRouter(t *testing.T, client *gophercloud.ServiceClient, policyID string, routerID string) (*firewalls.Firewall, error) {
 	firewallName := tools.RandomString("TESTACC-", 8)
-	firewallDescription := tools.RandomString("TESTACC-DESC-", 8)
 
 	t.Logf("Attempting to create firewall %s", firewallName)
 
 	firewallCreateOpts := firewalls.CreateOpts{
-		Name:        firewallName,
-		Description: firewallDescription,
-		PolicyID:    policyID,
+		Name:     firewallName,
+		PolicyID: policyID,
 	}
 
 	createOpts := routerinsertion.CreateOptsExt{
@@ -80,9 +72,6 @@ func CreateFirewallOnRouter(t *testing.T, client *gophercloud.ServiceClient, pol
 
 	t.Logf("Successfully created firewall %s", firewallName)
 
-	th.AssertEquals(t, firewall.Name, firewallName)
-	th.AssertEquals(t, firewall.Description, firewallDescription)
-
 	return firewall, nil
 }
 
@@ -90,13 +79,11 @@ func CreateFirewallOnRouter(t *testing.T, client *gophercloud.ServiceClient, pol
 // rule. An error will be returned if the rule could not be created.
 func CreatePolicy(t *testing.T, client *gophercloud.ServiceClient, ruleID string) (*policies.Policy, error) {
 	policyName := tools.RandomString("TESTACC-", 8)
-	policyDescription := tools.RandomString("TESTACC-DESC-", 8)
 
 	t.Logf("Attempting to create policy %s", policyName)
 
 	createOpts := policies.CreateOpts{
-		Name:        policyName,
-		Description: policyDescription,
+		Name: policyName,
 		Rules: []string{
 			ruleID,
 		},
@@ -108,10 +95,6 @@ func CreatePolicy(t *testing.T, client *gophercloud.ServiceClient, ruleID string
 	}
 
 	t.Logf("Successfully created policy %s", policyName)
-
-	th.AssertEquals(t, policy.Name, policyName)
-	th.AssertEquals(t, policy.Description, policyDescription)
-	th.AssertEquals(t, len(policy.Rules), 1)
 
 	return policy, nil
 }
@@ -145,13 +128,6 @@ func CreateRule(t *testing.T, client *gophercloud.ServiceClient) (*rules.Rule, e
 	}
 
 	t.Logf("Rule %s successfully created", ruleName)
-
-	th.AssertEquals(t, rule.Name, ruleName)
-	th.AssertEquals(t, rule.Protocol, rules.ProtocolTCP)
-	th.AssertEquals(t, rule.SourceIPAddress, sourceAddress)
-	th.AssertEquals(t, rule.SourcePort, sourcePort)
-	th.AssertEquals(t, rule.DestinationIPAddress, destinationAddress)
-	th.AssertEquals(t, rule.DestinationPort, destinationPort)
 
 	return rule, nil
 }

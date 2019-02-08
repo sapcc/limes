@@ -115,7 +115,7 @@ func TestGetLoadbalancerStatusesTree(t *testing.T) {
 		t.Fatalf("Unexpected Get error: %v", err)
 	}
 
-	th.CheckDeepEquals(t, LoadbalancerStatusesTree, *actual)
+	th.CheckDeepEquals(t, LoadbalancerStatusesTree, *(actual.Loadbalancer))
 }
 
 func TestDeleteLoadbalancer(t *testing.T) {
@@ -133,9 +133,8 @@ func TestUpdateLoadbalancer(t *testing.T) {
 	HandleLoadbalancerUpdateSuccessfully(t)
 
 	client := fake.ServiceClient()
-	name := "NewLoadbalancerName"
 	actual, err := loadbalancers.Update(client, "36e08a3e-a78f-4b40-a229-1e7e23eee1ab", loadbalancers.UpdateOpts{
-		Name: &name,
+		Name: "NewLoadbalancerName",
 	}).Extract()
 	if err != nil {
 		t.Fatalf("Unexpected Update error: %v", err)
@@ -159,18 +158,4 @@ func TestCascadingDeleteLoadbalancer(t *testing.T) {
 	sc.Type = "load-balancer"
 	err = loadbalancers.CascadingDelete(sc, "36e08a3e-a78f-4b40-a229-1e7e23eee1ab").ExtractErr()
 	th.AssertNoErr(t, err)
-}
-
-func TestGetLoadbalancerStatsTree(t *testing.T) {
-	th.SetupHTTP()
-	defer th.TeardownHTTP()
-	HandleLoadbalancerGetStatsTree(t)
-
-	client := fake.ServiceClient()
-	actual, err := loadbalancers.GetStats(client, "36e08a3e-a78f-4b40-a229-1e7e23eee1ab").Extract()
-	if err != nil {
-		t.Fatalf("Unexpected Get error: %v", err)
-	}
-
-	th.CheckDeepEquals(t, LoadbalancerStatsTree, *actual)
 }

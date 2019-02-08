@@ -3,7 +3,7 @@ package capsules
 import (
 	"encoding/json"
 
-	yaml "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 )
 
 // Template is a structure that represents OpenStack Zun Capsule templates

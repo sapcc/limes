@@ -113,9 +113,8 @@ func TestUpdateHealthmonitor(t *testing.T) {
 	HandleHealthmonitorUpdateSuccessfully(t)
 
 	client := fake.ServiceClient()
-	name := "NewHealthmonitorName"
 	actual, err := monitors.Update(client, "5d4b5228-33b0-4e60-b225-9b727c1a20e7", monitors.UpdateOpts{
-		Name:          &name,
+		Name:          "NewHealthmonitorName",
 		Delay:         3,
 		Timeout:       20,
 		MaxRetries:    10,

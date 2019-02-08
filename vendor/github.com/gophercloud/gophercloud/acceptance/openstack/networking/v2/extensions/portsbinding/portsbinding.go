@@ -7,7 +7,6 @@ import (
 	"github.com/gophercloud/gophercloud/acceptance/tools"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/portsbinding"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/ports"
-	th "github.com/gophercloud/gophercloud/testhelper"
 )
 
 // PortWithBindingExt represents a port with the binding fields
@@ -20,7 +19,6 @@ type PortWithBindingExt struct {
 // returned if the port could not be created.
 func CreatePortsbinding(t *testing.T, client *gophercloud.ServiceClient, networkID, subnetID, hostID string) (PortWithBindingExt, error) {
 	portName := tools.RandomString("TESTACC-", 8)
-	portDescription := tools.RandomString("TESTACC-PORT-DESC-", 8)
 	iFalse := false
 
 	t.Logf("Attempting to create port: %s", portName)
@@ -28,7 +26,6 @@ func CreatePortsbinding(t *testing.T, client *gophercloud.ServiceClient, network
 	portCreateOpts := ports.CreateOpts{
 		NetworkID:    networkID,
 		Name:         portName,
-		Description:  portDescription,
 		AdminStateUp: &iFalse,
 		FixedIPs:     []ports.IP{ports.IP{SubnetID: subnetID}},
 	}
@@ -46,9 +43,6 @@ func CreatePortsbinding(t *testing.T, client *gophercloud.ServiceClient, network
 	}
 
 	t.Logf("Successfully created port: %s", portName)
-
-	th.AssertEquals(t, s.Name, portName)
-	th.AssertEquals(t, s.Description, portDescription)
 
 	return s, nil
 }

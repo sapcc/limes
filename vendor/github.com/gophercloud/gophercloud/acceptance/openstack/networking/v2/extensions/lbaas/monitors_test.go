@@ -51,12 +51,12 @@ func TestMonitorsCRUD(t *testing.T) {
 
 	_, err = monitors.Update(client, monitor.ID, updateOpts).Extract()
 	if err != nil {
-		t.Fatalf("Unable to update monitor: %v", err)
+		t.Fatalf("Unable to update monitor: %v")
 	}
 
 	newMonitor, err := monitors.Get(client, monitor.ID).Extract()
 	if err != nil {
-		t.Fatalf("Unable to get monitor: %v", err)
+		t.Fatalf("Unable to get monitor: %v")
 	}
 
 	tools.PrintResource(t, newMonitor)

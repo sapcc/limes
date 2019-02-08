@@ -29,23 +29,17 @@ type AcceptanceTestChoices struct {
 	// FloatingIPPool contains the name of the pool from where to obtain floating IPs.
 	FloatingIPPoolName string
 
-	// MagnumKeypair contains the ID of a valid key pair.
-	MagnumKeypair string
-
 	// MagnumImageID contains the ID of a valid magnum image.
 	MagnumImageID string
 
 	// NetworkName is the name of a network to launch the instance on.
 	NetworkName string
 
-	// NetworkID is the ID of a network to launch the instance on.
-	NetworkID string
-
-	// SubnetID is the ID of a subnet to launch the instance on.
-	SubnetID string
-
 	// ExternalNetworkID is the network ID of the external network.
 	ExternalNetworkID string
+
+	// ShareNetworkID is the Manila Share network ID
+	ShareNetworkID string
 
 	// DBDatastoreType is the datastore type for DB tests.
 	DBDatastoreType string
@@ -61,12 +55,10 @@ func AcceptanceTestChoicesFromEnv() (*AcceptanceTestChoices, error) {
 	flavorID := os.Getenv("OS_FLAVOR_ID")
 	flavorIDResize := os.Getenv("OS_FLAVOR_ID_RESIZE")
 	magnumImageID := os.Getenv("OS_MAGNUM_IMAGE_ID")
-	magnumKeypair := os.Getenv("OS_MAGNUM_KEYPAIR")
 	networkName := os.Getenv("OS_NETWORK_NAME")
-	networkID := os.Getenv("OS_NETWORK_ID")
-	subnetID := os.Getenv("OS_SUBNET_ID")
 	floatingIPPoolName := os.Getenv("OS_POOL_NAME")
 	externalNetworkID := os.Getenv("OS_EXTGW_ID")
+	shareNetworkID := os.Getenv("OS_SHARE_NETWORK_ID")
 	dbDatastoreType := os.Getenv("OS_DB_DATASTORE_TYPE")
 	dbDatastoreVersion := os.Getenv("OS_DB_DATASTORE_VERSION")
 
@@ -86,18 +78,11 @@ func AcceptanceTestChoicesFromEnv() (*AcceptanceTestChoices, error) {
 	if externalNetworkID == "" {
 		missing = append(missing, "OS_EXTGW_ID")
 	}
-
-	/* // Temporarily disabled, see https://github.com/gophercloud/gophercloud/issues/1345
-	if networkID == "" {
-		missing = append(missing, "OS_NETWORK_ID")
-	}
-	if subnetID == "" {
-		missing = append(missing, "OS_SUBNET_ID")
-	}
-	*/
-
 	if networkName == "" {
 		networkName = "private"
+	}
+	if shareNetworkID == "" {
+		missing = append(missing, "OS_SHARE_NETWORK_ID")
 	}
 	notDistinct := ""
 	if flavorID == flavorIDResize {
@@ -122,11 +107,9 @@ func AcceptanceTestChoicesFromEnv() (*AcceptanceTestChoices, error) {
 		FlavorIDResize:     flavorIDResize,
 		FloatingIPPoolName: floatingIPPoolName,
 		MagnumImageID:      magnumImageID,
-		MagnumKeypair:      magnumKeypair,
 		NetworkName:        networkName,
-		NetworkID:          networkID,
-		SubnetID:           subnetID,
 		ExternalNetworkID:  externalNetworkID,
+		ShareNetworkID:     shareNetworkID,
 		DBDatastoreType:    dbDatastoreType,
 		DBDatastoreVersion: dbDatastoreVersion,
 	}, nil
@@ -616,48 +599,6 @@ func NewContainerInfraV1Client() (*gophercloud.ServiceClient, error) {
 	client = configureDebug(client)
 
 	return openstack.NewContainerInfraV1(client, gophercloud.EndpointOpts{
-		Region: os.Getenv("OS_REGION_NAME"),
-	})
-}
-
-// NewWorkflowV2Client returns a *ServiceClient for making calls
-// to the OpenStack Workflow v2 API (Mistral). An error will be returned if
-// authentication or client creation failed.
-func NewWorkflowV2Client() (*gophercloud.ServiceClient, error) {
-	ao, err := openstack.AuthOptionsFromEnv()
-	if err != nil {
-		return nil, err
-	}
-
-	client, err := openstack.AuthenticatedClient(ao)
-	if err != nil {
-		return nil, err
-	}
-
-	client = configureDebug(client)
-
-	return openstack.NewWorkflowV2(client, gophercloud.EndpointOpts{
-		Region: os.Getenv("OS_REGION_NAME"),
-	})
-}
-
-// NewOrchestrationV1Client returns a *ServiceClient for making calls
-// to the OpenStack Orchestration v1 API. An error will be returned
-// if authentication or client creation was not possible.
-func NewOrchestrationV1Client() (*gophercloud.ServiceClient, error) {
-	ao, err := openstack.AuthOptionsFromEnv()
-	if err != nil {
-		return nil, err
-	}
-
-	client, err := openstack.AuthenticatedClient(ao)
-	if err != nil {
-		return nil, err
-	}
-
-	client = configureDebug(client)
-
-	return openstack.NewOrchestrationV1(client, gophercloud.EndpointOpts{
 		Region: os.Getenv("OS_REGION_NAME"),
 	})
 }

@@ -13,16 +13,6 @@ type GetResult struct {
 	commonResult
 }
 
-// CreateResult is the response of a Create operations.
-type CreateResult struct {
-	commonResult
-}
-
-// UpdateResult is the response of an Update operations.
-type UpdateResult struct {
-	gophercloud.ErrResult
-}
-
 // Extract is a function that accepts a result and extracts a certificate resource.
 func (r commonResult) Extract() (*Certificate, error) {
 	var s *Certificate
@@ -30,11 +20,10 @@ func (r commonResult) Extract() (*Certificate, error) {
 	return s, err
 }
 
-// Represents a Certificate
+// Represents a template for a Cluster Template
 type Certificate struct {
 	ClusterUUID string             `json:"cluster_uuid"`
 	BayUUID     string             `json:"bay_uuid"`
 	Links       []gophercloud.Link `json:"links"`
-	PEM         string             `json:"pem"`
-	CSR         string             `json:"csr"`
+	Pem         string             `json:"pem"`
 }

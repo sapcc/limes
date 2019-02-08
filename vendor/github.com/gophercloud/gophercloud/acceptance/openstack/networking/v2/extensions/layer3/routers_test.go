@@ -9,132 +9,91 @@ import (
 	networking "github.com/gophercloud/gophercloud/acceptance/openstack/networking/v2"
 	"github.com/gophercloud/gophercloud/acceptance/tools"
 	"github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/layer3/routers"
-	th "github.com/gophercloud/gophercloud/testhelper"
+	"github.com/gophercloud/gophercloud/openstack/networking/v2/networks"
 )
 
-func TestLayer3RouterCreateDelete(t *testing.T) {
+func TestLayer3RouterList(t *testing.T) {
 	client, err := clients.NewNetworkV2Client()
-	th.AssertNoErr(t, err)
-
-	network, err := networking.CreateNetwork(t, client)
-	th.AssertNoErr(t, err)
-	defer networking.DeleteNetwork(t, client, network.ID)
-
-	router, err := CreateRouter(t, client, network.ID)
-	th.AssertNoErr(t, err)
-	defer DeleteRouter(t, client, router.ID)
-
-	tools.PrintResource(t, router)
-
-	newName := tools.RandomString("TESTACC-", 8)
-	newDescription := ""
-	updateOpts := routers.UpdateOpts{
-		Name:        newName,
-		Description: &newDescription,
+	if err != nil {
+		t.Fatalf("Unable to create a network client: %v", err)
 	}
-
-	_, err = routers.Update(client, router.ID, updateOpts).Extract()
-	th.AssertNoErr(t, err)
-
-	newRouter, err := routers.Get(client, router.ID).Extract()
-	th.AssertNoErr(t, err)
-
-	tools.PrintResource(t, newRouter)
-	th.AssertEquals(t, newRouter.Name, newName)
-	th.AssertEquals(t, newRouter.Description, newDescription)
 
 	listOpts := routers.ListOpts{}
 	allPages, err := routers.List(client, listOpts).AllPages()
-	th.AssertNoErr(t, err)
-
-	allRouters, err := routers.ExtractRouters(allPages)
-	th.AssertNoErr(t, err)
-
-	var found bool
-	for _, router := range allRouters {
-		if router.ID == newRouter.ID {
-			found = true
-		}
+	if err != nil {
+		t.Fatalf("Unable to list routers: %v", err)
 	}
 
-	th.AssertEquals(t, found, true)
+	allRouters, err := routers.ExtractRouters(allPages)
+	if err != nil {
+		t.Fatalf("Unable to extract routers: %v", err)
+	}
+
+	for _, router := range allRouters {
+		tools.PrintResource(t, router)
+	}
 }
 
 func TestLayer3ExternalRouterCreateDelete(t *testing.T) {
-	clients.RequireAdmin(t)
-
 	client, err := clients.NewNetworkV2Client()
-	th.AssertNoErr(t, err)
+	if err != nil {
+		t.Fatalf("Unable to create a network client: %v", err)
+	}
 
 	router, err := CreateExternalRouter(t, client)
-	th.AssertNoErr(t, err)
+	if err != nil {
+		t.Fatalf("Unable to create router: %v", err)
+	}
 	defer DeleteRouter(t, client, router.ID)
 
 	tools.PrintResource(t, router)
 
-	efi := []routers.ExternalFixedIP{}
-	for _, extIP := range router.GatewayInfo.ExternalFixedIPs {
-		efi = append(efi,
-			routers.ExternalFixedIP{
-				IPAddress: extIP.IPAddress,
-				SubnetID:  extIP.SubnetID,
-			},
-		)
-	}
-	// Add a new external router IP
-	efi = append(efi,
-		routers.ExternalFixedIP{
-			SubnetID: router.GatewayInfo.ExternalFixedIPs[0].SubnetID,
-		},
-	)
-
-	enableSNAT := true
-	gatewayInfo := routers.GatewayInfo{
-		NetworkID:        router.GatewayInfo.NetworkID,
-		EnableSNAT:       &enableSNAT,
-		ExternalFixedIPs: efi,
-	}
-
 	newName := tools.RandomString("TESTACC-", 8)
-	newDescription := ""
 	updateOpts := routers.UpdateOpts{
-		Name:        newName,
-		Description: &newDescription,
-		GatewayInfo: &gatewayInfo,
+		Name: newName,
 	}
 
 	_, err = routers.Update(client, router.ID, updateOpts).Extract()
-	th.AssertNoErr(t, err)
+	if err != nil {
+		t.Fatalf("Unable to update router: %v", err)
+	}
 
 	newRouter, err := routers.Get(client, router.ID).Extract()
-	th.AssertNoErr(t, err)
+	if err != nil {
+		t.Fatalf("Unable to get router: %v", err)
+	}
 
 	tools.PrintResource(t, newRouter)
-	th.AssertEquals(t, newRouter.Name, newName)
-	th.AssertEquals(t, newRouter.Description, newDescription)
-	th.AssertEquals(t, *newRouter.GatewayInfo.EnableSNAT, enableSNAT)
-	th.AssertDeepEquals(t, newRouter.GatewayInfo.ExternalFixedIPs, efi)
 }
 
 func TestLayer3RouterInterface(t *testing.T) {
-	clients.RequireAdmin(t)
-
 	client, err := clients.NewNetworkV2Client()
-	th.AssertNoErr(t, err)
+	if err != nil {
+		t.Fatalf("Unable to create a compute client: %v", err)
+	}
 
-	// Create Network
-	network, err := networking.CreateNetwork(t, client)
-	th.AssertNoErr(t, err)
-	defer networking.DeleteNetwork(t, client, network.ID)
+	choices, err := clients.AcceptanceTestChoicesFromEnv()
+	if err != nil {
+		t.Fatalf("Unable to get choices: %v", err)
+	}
 
-	subnet, err := networking.CreateSubnet(t, client, network.ID)
-	th.AssertNoErr(t, err)
+	netid, err := networks.IDFromName(client, choices.NetworkName)
+	if err != nil {
+		t.Fatalf("Unable to find network id: %v", err)
+	}
+
+	subnet, err := networking.CreateSubnet(t, client, netid)
+	if err != nil {
+		t.Fatalf("Unable to create subnet: %v", err)
+	}
 	defer networking.DeleteSubnet(t, client, subnet.ID)
 
 	tools.PrintResource(t, subnet)
 
 	router, err := CreateExternalRouter(t, client)
-	th.AssertNoErr(t, err)
+	if err != nil {
+		t.Fatalf("Unable to create router: %v", err)
+	}
 	defer DeleteRouter(t, client, router.ID)
 
 	aiOpts := routers.AddInterfaceOpts{
@@ -142,7 +101,9 @@ func TestLayer3RouterInterface(t *testing.T) {
 	}
 
 	iface, err := routers.AddInterface(client, router.ID, aiOpts).Extract()
-	th.AssertNoErr(t, err)
+	if err != nil {
+		t.Fatalf("Failed to add interface to router: %v", err)
+	}
 
 	tools.PrintResource(t, router)
 	tools.PrintResource(t, iface)
@@ -152,5 +113,7 @@ func TestLayer3RouterInterface(t *testing.T) {
 	}
 
 	_, err = routers.RemoveInterface(client, router.ID, riOpts).Extract()
-	th.AssertNoErr(t, err)
+	if err != nil {
+		t.Fatalf("Failed to remove interface from router: %v", err)
+	}
 }
