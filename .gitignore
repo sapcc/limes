@@ -5,7 +5,6 @@ build/install/
 build/docker.tar
 
 # test artifacts
-pkg/test/migrations/*.sql
 unittest.db
 unittest.db-journal
 build/cover.out
