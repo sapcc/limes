@@ -38,6 +38,7 @@ type AuthParameters struct {
 	ProjectDomainName string      `yaml:"project_domain_name"`
 	Password          string      `yaml:"password"`
 	RegionName        string      `yaml:"region_name"`
+	Interface         string      `yaml:"interface"`
 	tokenRenewalMutex *sync.Mutex `yaml:"-"`
 	//The following fields are only valid after calling Connect().
 	ProviderClient *gophercloud.ProviderClient `yaml:"-"`
@@ -80,7 +81,7 @@ func (auth *AuthParameters) Connect() error {
 	}
 
 	auth.EndpointOpts = gophercloud.EndpointOpts{
-		Availability: gophercloud.AvailabilityPublic,
+		Availability: gophercloud.Availability(auth.Interface),
 		Region:       auth.RegionName,
 	}
 	return nil
