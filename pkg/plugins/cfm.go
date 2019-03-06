@@ -78,7 +78,7 @@ func (p *cfmPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.
 		StorageQuota struct {
 			SizeLimitBytes int64 `json:"size_limit"`
 			Usage          struct {
-				BytesUsed uint64 `json:"potential_growth_size"`
+				BytesUsed uint64 `json:"size_used"`
 			} `json:"usage"`
 		} `json:"storage_quota"`
 	}
