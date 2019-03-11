@@ -90,6 +90,7 @@ Configuration options describing the OpenStack clusters which Limes shall cover.
 | `clusters.$id.auth.project_domain_name` | yes | Domain containing that project. | `OS_PROJECT_DOMAIN_NAME` |
 | `clusters.$id.auth.password` | yes | Password for Limes service user. | `OS_PASSWORD` |
 | `clusters.$id.auth.region_name` | no | In multi-region OpenStack clusters, this selects the region to work on. | `OS_REGION_NAME` |
+| `clusters.$id.auth.interface` | no | The endpoint type Limes should use for the OpenStack services. | `OS_INTERFACE` |
 
 | Field | Required | Description |
 | --- | --- | --- |
