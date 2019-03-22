@@ -15,7 +15,8 @@
               "capacity": 185,
               "comment": "hand-counted",
               "domains_quota": 50,
-              "usage": 8
+              "usage": 8,
+              "physical_usage": 7
             },
             {
               "name": "external_things",
@@ -51,7 +52,8 @@
               "capacity": 1000,
               "comment": "rough estimate",
               "domains_quota": 15,
-              "usage": 2
+              "usage": 2,
+              "physical_usage": 1
             },
             {
               "name": "things",
@@ -89,7 +91,8 @@
               "capacity": 185,
               "comment": "hand-counted",
               "domains_quota": 50,
-              "usage": 8
+              "usage": 8,
+              "physical_usage": 7
             },
             {
               "name": "external_things",

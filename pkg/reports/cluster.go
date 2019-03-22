@@ -34,7 +34,9 @@ import (
 
 var clusterReportQuery1 = `
 	SELECT d.cluster_id, ps.type, pr.name,
-	       SUM(pr.quota), SUM(pr.usage), SUM(GREATEST(pr.usage - pr.quota, 0)),
+	       SUM(pr.quota), SUM(pr.usage),
+	       SUM(GREATEST(pr.usage - pr.quota, 0)),
+	       SUM(COALESCE(pr.physical_usage, pr.usage)), COUNT(pr.physical_usage) > 0,
 	       MIN(ps.scraped_at), MAX(ps.scraped_at)
 	  FROM domains d
 	  JOIN projects p ON p.domain_id = d.id
@@ -66,7 +68,8 @@ var clusterReportQuery4 = `
 `
 
 var clusterReportQuery5 = `
-	SELECT ps.type, pr.name, SUM(pr.usage)
+	SELECT ps.type, pr.name, SUM(pr.usage),
+	       SUM(COALESCE(pr.physical_usage, pr.usage)), COUNT(pr.physical_usage) > 0
 	  FROM project_services ps
 	  JOIN project_resources pr ON pr.service_id = ps.id
 	 WHERE %s GROUP BY ps.type, pr.name
@@ -85,17 +88,20 @@ func GetClusters(config core.Configuration, clusterID *string, localQuotaUsageOn
 	whereStr, whereArgs := db.BuildSimpleWhereClause(makeClusterFilter("d", clusterID), len(joinArgs))
 	err := db.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		var (
-			clusterID     string
-			serviceType   *string
-			resourceName  *string
-			projectsQuota *uint64
-			usage         *uint64
-			burstUsage    *uint64
-			minScrapedAt  *util.Time
-			maxScrapedAt  *util.Time
+			clusterID         string
+			serviceType       *string
+			resourceName      *string
+			projectsQuota     *uint64
+			usage             *uint64
+			burstUsage        *uint64
+			physicalUsage     *uint64
+			showPhysicalUsage *bool
+			minScrapedAt      *util.Time
+			maxScrapedAt      *util.Time
 		)
 		err := rows.Scan(&clusterID, &serviceType, &resourceName,
 			&projectsQuota, &usage, &burstUsage,
+			&physicalUsage, &showPhysicalUsage,
 			&minScrapedAt, &maxScrapedAt)
 		if err != nil {
 			return err
@@ -126,6 +132,9 @@ func GetClusters(config core.Configuration, clusterID *string, localQuotaUsageOn
 			}
 			if clusterCanBurst && burstUsage != nil {
 				resource.BurstUsage = *burstUsage
+			}
+			if showPhysicalUsage != nil && *showPhysicalUsage {
+				resource.PhysicalUsage = physicalUsage
 			}
 		}
 		return nil
@@ -265,22 +274,34 @@ func GetClusters(config core.Configuration, clusterID *string, localQuotaUsageOn
 
 			//fifth query: aggregate project quota for shared services
 			whereStr, queryArgs = db.BuildSimpleWhereClause(map[string]interface{}{"ps.type": sharedServiceTypes}, 0)
-			sharedUsageSums := make(map[string]map[string]uint64)
+			type usageSum struct {
+				Usage         uint64
+				PhysicalUsage *uint64
+			}
+			sharedUsageSums := make(map[string]map[string]usageSum)
 			err = db.ForeachRow(db.DB, fmt.Sprintf(clusterReportQuery5, whereStr), queryArgs, func(rows *sql.Rows) error {
 				var (
-					serviceType  string
-					resourceName string
-					usage        uint64
+					serviceType       string
+					resourceName      string
+					usage             uint64
+					physicalUsage     *uint64
+					showPhysicalUsage bool
 				)
-				err := rows.Scan(&serviceType, &resourceName, &usage)
+				err := rows.Scan(&serviceType, &resourceName, &usage,
+					&physicalUsage, &showPhysicalUsage)
 				if err != nil {
 					return err
 				}
 
-				if sharedUsageSums[serviceType] == nil {
-					sharedUsageSums[serviceType] = make(map[string]uint64)
+				u := usageSum{Usage: usage}
+				if showPhysicalUsage {
+					u.PhysicalUsage = physicalUsage
 				}
-				sharedUsageSums[serviceType][resourceName] = usage
+
+				if sharedUsageSums[serviceType] == nil {
+					sharedUsageSums[serviceType] = make(map[string]usageSum)
+				}
+				sharedUsageSums[serviceType][resourceName] = u
 				return nil
 			})
 			if err != nil {
@@ -303,9 +324,10 @@ func GetClusters(config core.Configuration, clusterID *string, localQuotaUsageOn
 							if exists {
 								resource.DomainsQuota = quota
 							}
-							usage, exists := sharedUsageSums[service.Type][resource.Name]
+							u, exists := sharedUsageSums[service.Type][resource.Name]
 							if exists {
-								resource.Usage = usage
+								resource.Usage = u.Usage
+								resource.PhysicalUsage = u.PhysicalUsage
 							}
 						}
 					}

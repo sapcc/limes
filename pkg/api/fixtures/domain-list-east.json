@@ -13,7 +13,8 @@
               "unit": "B",
               "quota": 25,
               "projects_quota": 10,
-              "usage": 2
+              "usage": 2,
+              "physical_usage": 1
             },
             {
               "name": "external_things",
@@ -41,7 +42,8 @@
               "unit": "B",
               "quota": 15,
               "projects_quota": 10,
-              "usage": 2
+              "usage": 2,
+              "physical_usage": 1
             },
             {
               "name": "things",

@@ -13,7 +13,8 @@
             "capacity": 185,
             "comment": "hand-counted",
             "domains_quota": 50,
-            "usage": 8
+            "usage": 8,
+            "physical_usage": 7
           },
           {
             "name": "external_things",

@@ -34,7 +34,9 @@ import (
 var domainReportQuery1 = `
 	SELECT d.uuid, d.name, ps.type, pr.name, SUM(pr.quota), SUM(pr.usage),
 	       SUM(GREATEST(pr.usage - pr.quota, 0)),
-	       SUM(GREATEST(pr.backend_quota, 0)), MIN(pr.backend_quota) < 0, MIN(ps.scraped_at), MAX(ps.scraped_at)
+	       SUM(GREATEST(pr.backend_quota, 0)), MIN(pr.backend_quota) < 0,
+	       SUM(COALESCE(pr.physical_usage, pr.usage)), COUNT(pr.physical_usage) > 0,
+	       MIN(ps.scraped_at), MAX(ps.scraped_at)
 	  FROM domains d
 	  JOIN projects p ON p.domain_id = d.id
 	  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
@@ -75,6 +77,8 @@ func GetDomains(cluster *core.Cluster, domainID *int64, dbi db.Interface, filter
 			burstUsage           *uint64
 			backendQuota         *uint64
 			infiniteBackendQuota *bool
+			physicalUsage        *uint64
+			showPhysicalUsage    *bool
 			minScrapedAt         *util.Time
 			maxScrapedAt         *util.Time
 		)
@@ -82,6 +86,7 @@ func GetDomains(cluster *core.Cluster, domainID *int64, dbi db.Interface, filter
 			&domainUUID, &domainName, &serviceType, &resourceName,
 			&projectsQuota, &usage, &burstUsage,
 			&backendQuota, &infiniteBackendQuota,
+			&physicalUsage, &showPhysicalUsage,
 			&minScrapedAt, &maxScrapedAt,
 		)
 		if err != nil {
@@ -118,6 +123,9 @@ func GetDomains(cluster *core.Cluster, domainID *int64, dbi db.Interface, filter
 			}
 			if infiniteBackendQuota != nil && *infiniteBackendQuota {
 				resource.InfiniteBackendQuota = infiniteBackendQuota
+			}
+			if showPhysicalUsage != nil && *showPhysicalUsage {
+				resource.PhysicalUsage = physicalUsage
 			}
 		}
 
