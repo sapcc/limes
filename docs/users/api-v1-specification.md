@@ -66,7 +66,8 @@ Returns 200 (OK) on success. Result is a JSON document like:
               "unit": "MiB",
               "quota": 10240,
               "usable_quota": 12288,
-              "usage": 2048
+              "usage": 2048,
+              "physical_usage": 1058
             }
           ],
           "scraped_at": 1486738599
@@ -145,13 +146,15 @@ resource. The `backend_quota` field will only be shown if the backend quota diff
 the `usable_quota` field. While `usable_quota` is usually computed as `floor(quota * (1 + bursting.multiplier))`,
 different multipliers may apply per resource.
 
+For some resources, a separate `physical_usage` can be reported which may be at or below `usage`. If `physical_usage` is
+not given, it shall be assumed to be equal to `usage`. Physical usage is especially useful for storage: When you have a
+2 GiB volume that contains 600 MiB worth of files, then `usage` is 2 GiB and `physical_usage` would be 600 MiB.
+
 The `scraped_at` timestamp for each service denotes when Limes last checked the quota and usage values in the backing
 service. The value is a standard UNIX timestamp (seconds since `1970-00-00T00:00:00Z`).
 
 Valid values for quotas include all non-negative numbers. Backend quotas can also have the special value `-1` which
 indicates an infinite or disabled quota.
-
-TODO: Might need to add ordering and pagination to this at some point.
 
 ### Subresources
 
@@ -238,7 +241,8 @@ Returns 200 (OK) on success. Result is a JSON document like:
               "quota": 204800,
               "projects_quota": 10240,
               "usage": 2048,
-              "burst_usage": 128
+              "burst_usage": 128,
+              "physical_usage": 1376
             }
           ],
           "max_scraped_at": 1486738599,
@@ -287,6 +291,9 @@ shows the sum of all project quotas as seen by the backing service. If any of th
 
 Furthermore, if quota bursting is available on this cluster, the `burst_usage` field contains
 `sum(max(0, usage - quota))` over all projects in this domain.
+
+If any project in the domain reports a `physical_usage`, then the domain will report the aggregated `physical_usage`
+over all projects. If the `physical_usage` is not present in the output, it shall be assumed to be equal to `usage`.
 
 In contrast to project data, `scraped_at` is replaced by `min_scraped_at` and `max_scraped_at`, which aggregate over the
 `scraped_at` timestamps of all project data for that service and domain.
@@ -385,6 +392,9 @@ show the overcommitted capacity (`raw_capacity` times overcommitment factor).
 
 Furthermore, if quota bursting is available on this cluster, the `burst_usage` field contains
 `sum(max(0, usage - quota))` over all projects in this cluster.
+
+If any project in the cluster reports a `physical_usage`, then the cluster will report the aggregated `physical_usage`
+over all projects. If the `physical_usage` is not present in the output, it shall be assumed to be equal to `usage`.
 
 The `min_scraped_at` and `max_scraped_at` timestamps on the service level refer to the usage values (aggregated over all
 projects just like for `GET /domains`).
