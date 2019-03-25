@@ -17,6 +17,10 @@ limes_project_backendquota{domain="germany",domain_id="uuid-for-germany",os_clus
 limes_project_backendquota{domain="germany",domain_id="uuid-for-germany",os_cluster="west",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="unittest"} 48
 limes_project_backendquota{domain="germany",domain_id="uuid-for-germany",os_cluster="west",project="dresden",project_id="uuid-for-dresden",resource="external_things",service="unittest"} 10
 limes_project_backendquota{domain="germany",domain_id="uuid-for-germany",os_cluster="west",project="dresden",project_id="uuid-for-dresden",resource="things",service="unittest"} 15
+# HELP limes_project_physical_usage Actual (physical) usage of a Limes resource for an OpenStack project.
+# TYPE limes_project_physical_usage gauge
+limes_project_physical_usage{domain="germany",domain_id="uuid-for-germany",os_cluster="west",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="unittest"} 0
+limes_project_physical_usage{domain="germany",domain_id="uuid-for-germany",os_cluster="west",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="unittest"} 0
 # HELP limes_project_quota Assigned quota of a Limes resource for an OpenStack project.
 # TYPE limes_project_quota gauge
 limes_project_quota{domain="germany",domain_id="uuid-for-germany",os_cluster="west",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="unittest"} 40
@@ -25,7 +29,7 @@ limes_project_quota{domain="germany",domain_id="uuid-for-germany",os_cluster="we
 limes_project_quota{domain="germany",domain_id="uuid-for-germany",os_cluster="west",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="unittest"} 40
 limes_project_quota{domain="germany",domain_id="uuid-for-germany",os_cluster="west",project="dresden",project_id="uuid-for-dresden",resource="external_things",service="unittest"} 10
 limes_project_quota{domain="germany",domain_id="uuid-for-germany",os_cluster="west",project="dresden",project_id="uuid-for-dresden",resource="things",service="unittest"} 13
-# HELP limes_project_usage Actual usage of a Limes resource for an OpenStack project.
+# HELP limes_project_usage Actual (logical) usage of a Limes resource for an OpenStack project.
 # TYPE limes_project_usage gauge
 limes_project_usage{domain="germany",domain_id="uuid-for-germany",os_cluster="west",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="unittest"} 0
 limes_project_usage{domain="germany",domain_id="uuid-for-germany",os_cluster="west",project="berlin",project_id="uuid-for-berlin",resource="external_things",service="unittest"} 0

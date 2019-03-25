@@ -220,18 +220,26 @@ var projectQuotaGauge = prometheus.NewGaugeVec(
 	[]string{"os_cluster", "domain", "domain_id", "project", "project_id", "service", "resource"},
 )
 
-var projectUsageGauge = prometheus.NewGaugeVec(
-	prometheus.GaugeOpts{
-		Name: "limes_project_usage",
-		Help: "Actual usage of a Limes resource for an OpenStack project.",
-	},
-	[]string{"os_cluster", "domain", "domain_id", "project", "project_id", "service", "resource"},
-)
-
 var projectBackendQuotaGauge = prometheus.NewGaugeVec(
 	prometheus.GaugeOpts{
 		Name: "limes_project_backendquota",
 		Help: "Actual quota of a Limes resource for an OpenStack project.",
+	},
+	[]string{"os_cluster", "domain", "domain_id", "project", "project_id", "service", "resource"},
+)
+
+var projectUsageGauge = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "limes_project_usage",
+		Help: "Actual (logical) usage of a Limes resource for an OpenStack project.",
+	},
+	[]string{"os_cluster", "domain", "domain_id", "project", "project_id", "service", "resource"},
+)
+
+var projectPhysicalUsageGauge = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "limes_project_physical_usage",
+		Help: "Actual (physical) usage of a Limes resource for an OpenStack project.",
 	},
 	[]string{"os_cluster", "domain", "domain_id", "project", "project_id", "service", "resource"},
 )
@@ -258,8 +266,9 @@ func (c *DataMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 	clusterCapacityGauge.Describe(ch)
 	domainQuotaGauge.Describe(ch)
 	projectQuotaGauge.Describe(ch)
-	projectUsageGauge.Describe(ch)
 	projectBackendQuotaGauge.Describe(ch)
+	projectUsageGauge.Describe(ch)
+	projectPhysicalUsageGauge.Describe(ch)
 	unitConversionGauge.Describe(ch)
 }
 
@@ -279,7 +288,7 @@ var domainMetricsQuery = `
 `
 
 var projectMetricsQuery = `
-	SELECT d.name, d.uuid, p.name, p.uuid, ps.type, pr.name, pr.quota, pr.usage, pr.backend_quota
+	SELECT d.name, d.uuid, p.name, p.uuid, ps.type, pr.name, pr.quota, pr.backend_quota, pr.usage, pr.physical_usage
 	  FROM domains d
 	  JOIN projects p ON p.domain_id = d.id
 	  JOIN project_services ps ON ps.project_id = p.id
@@ -304,10 +313,12 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	domainQuotaDesc := <-descCh
 	projectQuotaGauge.Describe(descCh)
 	projectQuotaDesc := <-descCh
-	projectUsageGauge.Describe(descCh)
-	projectUsageDesc := <-descCh
 	projectBackendQuotaGauge.Describe(descCh)
 	projectBackendQuotaDesc := <-descCh
+	projectUsageGauge.Describe(descCh)
+	projectUsageDesc := <-descCh
+	projectPhysicalUsageGauge.Describe(descCh)
+	projectPhysicalUsageDesc := <-descCh
 	unitConversionGauge.Describe(descCh)
 	unitConversionDesc := <-descCh
 
@@ -407,17 +418,18 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	//fetch values for project level
 	err = db.ForeachRow(db.DB, projectMetricsQuery, queryArgs, func(rows *sql.Rows) error {
 		var (
-			domainName   string
-			domainUUID   string
-			projectName  string
-			projectUUID  string
-			serviceType  string
-			resourceName string
-			quota        uint64
-			usage        uint64
-			backendQuota int64
+			domainName    string
+			domainUUID    string
+			projectName   string
+			projectUUID   string
+			serviceType   string
+			resourceName  string
+			quota         uint64
+			backendQuota  int64
+			usage         uint64
+			physicalUsage *uint64
 		)
-		err := rows.Scan(&domainName, &domainUUID, &projectName, &projectUUID, &serviceType, &resourceName, &quota, &usage, &backendQuota)
+		err := rows.Scan(&domainName, &domainUUID, &projectName, &projectUUID, &serviceType, &resourceName, &quota, &backendQuota, &usage, &physicalUsage)
 		if err != nil {
 			return err
 		}
@@ -429,6 +441,13 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 				c.Cluster.ID, domainName, domainUUID, projectName, projectUUID, serviceType, resourceName,
 			)
 		}
+		if c.ReportZeroes || backendQuota != 0 {
+			ch <- prometheus.MustNewConstMetric(
+				projectBackendQuotaDesc,
+				prometheus.GaugeValue, float64(backendQuota),
+				c.Cluster.ID, domainName, domainUUID, projectName, projectUUID, serviceType, resourceName,
+			)
+		}
 		if c.ReportZeroes || usage != 0 {
 			ch <- prometheus.MustNewConstMetric(
 				projectUsageDesc,
@@ -436,12 +455,14 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 				c.Cluster.ID, domainName, domainUUID, projectName, projectUUID, serviceType, resourceName,
 			)
 		}
-		if c.ReportZeroes || backendQuota != 0 {
-			ch <- prometheus.MustNewConstMetric(
-				projectBackendQuotaDesc,
-				prometheus.GaugeValue, float64(backendQuota),
-				c.Cluster.ID, domainName, domainUUID, projectName, projectUUID, serviceType, resourceName,
-			)
+		if physicalUsage != nil {
+			if c.ReportZeroes || *physicalUsage != 0 {
+				ch <- prometheus.MustNewConstMetric(
+					projectPhysicalUsageDesc,
+					prometheus.GaugeValue, float64(*physicalUsage),
+					c.Cluster.ID, domainName, domainUUID, projectName, projectUUID, serviceType, resourceName,
+				)
+			}
 		}
 		return nil
 	})
