@@ -26,7 +26,6 @@ import (
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/sharedfilesystems/v2/sharenetworks"
 	"github.com/gophercloud/gophercloud/pagination"
-	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 )
@@ -83,6 +82,16 @@ func (p *manilaPlugin) Resources() []limes.ResourceInfo {
 	return manilaResources
 }
 
+type manilaUsage struct {
+	ShareCount                uint64
+	SnapshotCount             uint64
+	ShareNetworkCount         uint64
+	Gigabytes                 uint64
+	GigabytesPhysical         *uint64
+	SnapshotGigabytes         uint64
+	SnapshotGigabytesPhysical *uint64
+}
+
 //Scrape implements the core.QuotaPlugin interface.
 func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, error) {
 	client, err := openstack.NewSharedFileSystemV2(provider, eo)
@@ -91,7 +100,6 @@ func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 	}
 
 	var result gophercloud.Result
-	var totalShareUsage, totalSnapshotUsage, totalShareNetworksUsage = uint64(0), uint64(0), uint64(0)
 
 	//Get absolute quota limits per project
 	url := client.ServiceURL("os-quota-sets", projectUUID)
@@ -113,55 +121,33 @@ func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 		return nil, err
 	}
 
-	shares, err := manilaGetShares(client, projectUUID)
+	usage, err := manilaCollectUsage(client, projectUUID)
 	if err != nil {
 		return nil, err
 	}
-	for _, share := range shares {
-		totalShareUsage += share.Size
-	}
-
-	//Get usage of snapshots per project
-	snapshots, err := manilaGetSnapshots(client, projectUUID)
-	if err != nil {
-		return nil, err
-	}
-	for _, snapshot := range snapshots {
-		totalSnapshotUsage += snapshot.ShareSize
-	}
-
-	//Get usage of shared networks
-	sharenetworks.ListDetail(client, sharenetworks.ListOpts{ProjectID: projectUUID}).EachPage(func(page pagination.Page) (bool, error) {
-		sn, err := sharenetworks.ExtractShareNetworks(page)
-		if err != nil {
-			return false, err
-		}
-		totalShareNetworksUsage = uint64(len(sn))
-		return true, nil
-	})
-
-	logg.Debug("Scraped quota and usage for service: sharev2.")
 
 	return map[string]core.ResourceData{
 		"shares": {
 			Quota: manilaQuotaData.QuotaSet.Shares,
-			Usage: uint64(len(shares)),
+			Usage: usage.ShareCount,
 		},
 		"share_snapshots": {
 			Quota: manilaQuotaData.QuotaSet.Snapshots,
-			Usage: uint64(len(snapshots)),
+			Usage: usage.SnapshotCount,
 		},
 		"share_networks": {
 			Quota: manilaQuotaData.QuotaSet.ShareNetworks,
-			Usage: uint64(totalShareNetworksUsage),
+			Usage: usage.ShareNetworkCount,
 		},
 		"share_capacity": {
-			Quota: manilaQuotaData.QuotaSet.Gigabytes,
-			Usage: uint64(totalShareUsage),
+			Quota:         manilaQuotaData.QuotaSet.Gigabytes,
+			Usage:         usage.Gigabytes,
+			PhysicalUsage: usage.GigabytesPhysical,
 		},
 		"snapshot_capacity": {
-			Quota: manilaQuotaData.QuotaSet.SnapshotGigabytes,
-			Usage: uint64(totalSnapshotUsage),
+			Quota:         manilaQuotaData.QuotaSet.SnapshotGigabytes,
+			Usage:         usage.SnapshotGigabytes,
+			PhysicalUsage: usage.SnapshotGigabytesPhysical,
 		},
 	}, err
 }
@@ -190,6 +176,42 @@ func (p *manilaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherc
 }
 
 ////////////////////////////////////////////////////////////////////////////////
+
+func manilaCollectUsage(client *gophercloud.ServiceClient, projectUUID string) (result manilaUsage, err error) {
+	shares, err := manilaGetShares(client, projectUUID)
+	if err != nil {
+		return manilaUsage{}, err
+	}
+	result.ShareCount = uint64(len(shares))
+	for _, share := range shares {
+		result.Gigabytes += share.Size
+	}
+
+	//Get usage of snapshots per project
+	snapshots, err := manilaGetSnapshots(client, projectUUID)
+	if err != nil {
+		return manilaUsage{}, err
+	}
+	result.SnapshotCount = uint64(len(snapshots))
+	for _, snapshot := range snapshots {
+		result.SnapshotGigabytes += snapshot.ShareSize
+	}
+
+	//Get usage of shared networks
+	err = sharenetworks.ListDetail(client, sharenetworks.ListOpts{ProjectID: projectUUID}).EachPage(func(page pagination.Page) (bool, error) {
+		sn, err := sharenetworks.ExtractShareNetworks(page)
+		if err != nil {
+			return false, err
+		}
+		result.ShareNetworkCount += uint64(len(sn))
+		return true, nil
+	})
+	if err != nil {
+		return manilaUsage{}, err
+	}
+
+	return
+}
 
 type manilaShare struct {
 	ID   string `json:"id"`
