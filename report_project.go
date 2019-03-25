@@ -54,13 +54,14 @@ type ProjectServiceReport struct {
 type ProjectResourceReport struct {
 	//Several fields are pointers to values to enable precise control over which fields are rendered in output.
 	ResourceInfo
-	Quota        uint64           `json:"quota,keepempty"`
-	UsableQuota  uint64           `json:"usable_quota,keepempty"`
-	Usage        uint64           `json:"usage,keepempty"`
-	BurstUsage   uint64           `json:"burst_usage,omitempty"`
-	BackendQuota *int64           `json:"backend_quota,omitempty"`
-	Subresources JSONString       `json:"subresources,omitempty"`
-	Scaling      *ScalingBehavior `json:"scales_with,omitempty"`
+	Quota         uint64           `json:"quota,keepempty"`
+	UsableQuota   uint64           `json:"usable_quota,keepempty"`
+	Usage         uint64           `json:"usage,keepempty"`
+	BurstUsage    uint64           `json:"burst_usage,omitempty"`
+	PhysicalUsage *uint64          `json:"physical_usage,omitempty"`
+	BackendQuota  *int64           `json:"backend_quota,omitempty"`
+	Subresources  JSONString       `json:"subresources,omitempty"`
+	Scaling       *ScalingBehavior `json:"scales_with,omitempty"`
 }
 
 //ProjectServiceReports provides fast lookup of services using a map, but serializes

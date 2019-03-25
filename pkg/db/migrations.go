@@ -149,4 +149,10 @@ var SQLMigrations = map[string]string{
 	"008_add_project_resources_desired_backend_quota.up.sql": `
 		ALTER TABLE project_resources ADD COLUMN desired_backend_quota BIGINT NOT NULL DEFAULT 0;
 	`,
+	"009_add_project_resources_physical_usage.down.sql": `
+		ALTER TABLE project_resources DROP COLUMN physical_usage;
+	`,
+	"009_add_project_resources_physical_usage.up.sql": `
+		ALTER TABLE project_resources ADD COLUMN physical_usage BIGINT DEFAULT NULL;
+	`,
 }

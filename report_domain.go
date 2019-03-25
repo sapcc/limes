@@ -50,6 +50,7 @@ type DomainResourceReport struct {
 	Usage         uint64 `json:"usage,keepempty"`
 	BurstUsage    uint64 `json:"burst_usage,omitempty"`
 	//These are pointers to values to enable precise control over whether this field is rendered in output.
+	PhysicalUsage        *uint64          `json:"physical_usage,omitempty"`
 	BackendQuota         *uint64          `json:"backend_quota,omitempty"`
 	InfiniteBackendQuota *bool            `json:"infinite_backend_quota,omitempty"`
 	Scaling              *ScalingBehavior `json:"scales_with,omitempty"`

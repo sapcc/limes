@@ -55,9 +55,10 @@ type DiscoveryPlugin interface {
 //quota plugin providing this ResourceData instance has been instructed to (and
 //is able to) scrape subresources for this resource.
 type ResourceData struct {
-	Quota        int64 //negative values indicate infinite quota
-	Usage        uint64
-	Subresources []interface{}
+	Quota         int64 //negative values indicate infinite quota
+	Usage         uint64
+	PhysicalUsage *uint64 //only supported by some plugins
+	Subresources  []interface{}
 }
 
 //QuotaPlugin is the interface that the quota/usage collector plugins for all

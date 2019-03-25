@@ -207,6 +207,7 @@ func (c *Collector) writeScrapeResult(domainName, domainUUID, projectName, proje
 
 		//update existing resource record
 		res.Usage = data.Usage
+		res.PhysicalUsage = data.PhysicalUsage
 		res.BackendQuota = data.Quota
 		if c.Cluster.InfoForResource(serviceType, res.Name).ExternallyManaged {
 			if data.Quota >= 0 {
@@ -258,6 +259,7 @@ func (c *Collector) writeScrapeResult(domainName, domainUUID, projectName, proje
 			Name:             resMetadata.Name,
 			Quota:            initialQuota,
 			Usage:            data.Usage,
+			PhysicalUsage:    data.PhysicalUsage,
 			BackendQuota:     data.Quota,
 			SubresourcesJSON: "", //but see below
 		}
@@ -395,6 +397,7 @@ func (c *Collector) writeDummyResources(domainName, projectName string, projectH
 			Name:             resMetadata.Name,
 			Quota:            initialQuota,
 			Usage:            0,
+			PhysicalUsage:    nil,
 			BackendQuota:     -1,
 			SubresourcesJSON: "",
 		}

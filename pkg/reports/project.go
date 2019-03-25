@@ -33,7 +33,7 @@ import (
 )
 
 var projectReportQuery = `
-	SELECT p.uuid, p.name, COALESCE(p.parent_uuid, ''), p.has_bursting, ps.type, ps.scraped_at, pr.name, pr.quota, pr.usage, pr.backend_quota, pr.subresources
+	SELECT p.uuid, p.name, COALESCE(p.parent_uuid, ''), p.has_bursting, ps.type, ps.scraped_at, pr.name, pr.quota, pr.usage, pr.physical_usage, pr.backend_quota, pr.subresources
 	  FROM projects p
 	  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
 	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
@@ -70,13 +70,14 @@ func GetProjects(cluster *core.Cluster, domainID int64, projectID *int64, dbi db
 			resourceName       *string
 			quota              *uint64
 			usage              *uint64
+			physicalUsage      *uint64
 			backendQuota       *int64
 			subresources       *string
 		)
 		err := rows.Scan(
 			&projectUUID, &projectName, &projectParentUUID, &projectHasBursting,
 			&serviceType, &scrapedAt, &resourceName,
-			&quota, &usage, &backendQuota, &subresources,
+			&quota, &usage, &physicalUsage, &backendQuota, &subresources,
 		)
 		if err != nil {
 			return err
@@ -125,11 +126,12 @@ func GetProjects(cluster *core.Cluster, domainID int64, projectID *int64, dbi db
 
 					behavior := cluster.BehaviorForResource(*serviceType, *resourceName)
 					resource := &limes.ProjectResourceReport{
-						ResourceInfo: cluster.InfoForResource(*serviceType, *resourceName),
-						Scaling:      behavior.ToScalingBehavior(),
-						Usage:        *usage,
-						BackendQuota: nil, //see below
-						Subresources: limes.JSONString(subresourcesValue),
+						ResourceInfo:  cluster.InfoForResource(*serviceType, *resourceName),
+						Scaling:       behavior.ToScalingBehavior(),
+						Usage:         *usage,
+						PhysicalUsage: physicalUsage,
+						BackendQuota:  nil, //see below
+						Subresources:  limes.JSONString(subresourcesValue),
 					}
 					if usage != nil {
 						resource.Usage = *usage

@@ -53,6 +53,7 @@ type ClusterResourceReport struct {
 	DomainsQuota  uint64     `json:"domains_quota,keepempty"`
 	Usage         uint64     `json:"usage,keepempty"`
 	BurstUsage    uint64     `json:"burst_usage,omitempty"`
+	PhysicalUsage *uint64    `json:"physical_usage,omitempty"`
 	Subcapacities JSONString `json:"subcapacities,omitempty"`
 }
 

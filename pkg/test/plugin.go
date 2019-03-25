@@ -109,15 +109,24 @@ func (p *Plugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.End
 		if !p.WithExternallyManagedResource && key == "external_things" {
 			continue
 		}
-		result[key] = *val
+		copyOfVal := *val
+
+		//test coverage for PhysicalUsage != Usage
+		if key == "capacity" {
+			physUsage := val.Usage / 2
+			copyOfVal.PhysicalUsage = &physUsage
+		}
+
+		result[key] = copyOfVal
 	}
 
 	data, exists := p.OverrideQuota[projectUUID]
 	if exists {
 		for resourceName, quota := range data {
 			result[resourceName] = core.ResourceData{
-				Quota: int64(quota),
-				Usage: result[resourceName].Usage,
+				Quota:         int64(quota),
+				Usage:         result[resourceName].Usage,
+				PhysicalUsage: result[resourceName].PhysicalUsage,
 			}
 		}
 	}
