@@ -20,6 +20,7 @@
 package plugins
 
 import (
+	"regexp"
 	"strings"
 
 	"github.com/gophercloud/gophercloud"
@@ -151,7 +152,7 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 }
 
 //NOTE: This method is shared with the Nova quota plugin.
-func listPerFlavorInstanceResources(novaClient *gophercloud.ServiceClient) ([]string, error) {
+func listPerFlavorInstanceResources(novaClient *gophercloud.ServiceClient, flavorNameRx *regexp.Regexp) ([]string, error) {
 	//look at quota class "default" to determine which quotas exist
 	url := novaClient.ServiceURL("os-quota-class-sets", "default")
 	var result gophercloud.Result
@@ -177,6 +178,13 @@ func listPerFlavorInstanceResources(novaClient *gophercloud.ServiceClient) ([]st
 	var resources []string
 	for key := range body.QuotaClassSet {
 		if strings.HasPrefix(key, "instances_") {
+			//if `flavorNameRx` is given, only consider flavors matching it
+			if flavorNameRx != nil {
+				flavorName := strings.TrimPrefix(key, "instances_")
+				if !flavorNameRx.MatchString(flavorName) {
+					continue
+				}
+			}
 			resources = append(resources, key)
 		}
 	}
@@ -186,7 +194,7 @@ func listPerFlavorInstanceResources(novaClient *gophercloud.ServiceClient) ([]st
 
 func collectIronicFlavorInfo(novaClient *gophercloud.ServiceClient) ([]ironicFlavorInfo, error) {
 	//which flavors have separate instance quota?
-	resources, err := listPerFlavorInstanceResources(novaClient)
+	resources, err := listPerFlavorInstanceResources(novaClient, nil)
 	if err != nil {
 		return nil, err
 	}

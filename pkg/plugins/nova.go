@@ -55,6 +55,7 @@ type novaPlugin struct {
 	cfg             core.ServiceConfiguration
 	scrapeInstances bool
 	//computed state
+	flavorNameRx        *regexp.Regexp
 	hypervisorTypeRules []novaHypervisorTypeRule
 	resources           []limes.ResourceInfo
 	//caches
@@ -103,13 +104,23 @@ func init() {
 
 //Init implements the core.QuotaPlugin interface.
 func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
+	//if a non-empty `flavorNamePattern` is given, only flavors matching
+	//it are considered
+	if pattern := p.cfg.Compute.SeparateInstanceQuotas.FlavorNamePattern; pattern != "" {
+		var err error
+		p.flavorNameRx, err = regexp.Compile(pattern)
+		if err != nil {
+			return fmt.Errorf("%q is not a valid regex: %v", pattern, err)
+		}
+	}
+
 	client, err := openstack.NewComputeV2(provider, eo)
 	if err != nil {
 		return err
 	}
 
 	//find per-flavor instance resources
-	resources, err := listPerFlavorInstanceResources(client)
+	resources, err := listPerFlavorInstanceResources(client, p.flavorNameRx)
 	if err != nil {
 		return err
 	}
@@ -215,9 +226,11 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 	}
 	if limitsData.Limits.AbsolutePerFlavor != nil {
 		for flavorName, flavorLimits := range limitsData.Limits.AbsolutePerFlavor {
-			result["instances_"+flavorName] = &core.ResourceData{
-				Quota: flavorLimits.MaxTotalInstances,
-				Usage: flavorLimits.TotalInstancesUsed,
+			if p.flavorNameRx == nil || p.flavorNameRx.MatchString(flavorName) {
+				result["instances_"+flavorName] = &core.ResourceData{
+					Quota: flavorLimits.MaxTotalInstances,
+					Usage: flavorLimits.TotalInstancesUsed,
+				}
 			}
 		}
 	}

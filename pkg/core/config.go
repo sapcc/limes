@@ -104,6 +104,9 @@ type ServiceConfiguration struct {
 			Pattern string `yaml:"pattern"`
 			Type    string `yaml:"type"`
 		} `yaml:"hypervisor_type_rules"`
+		SeparateInstanceQuotas struct {
+			FlavorNamePattern string `yaml:"flavor_name_pattern"`
+		} `yaml:"separate_instance_quotas"`
 	} `yaml:"compute"`
 	CFM struct {
 		Authoritative bool `yaml:"authoritative"`

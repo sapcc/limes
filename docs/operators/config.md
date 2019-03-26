@@ -300,6 +300,19 @@ behave like the `instances` resource. When subresources are scraped for the `ins
 scraped for these flavor-specific instance resources. The flavor-specific instance resources are in the `per_flavor`
 category.
 
+```yaml
+services:
+  - type: compute
+    compute:
+      separate_instance_quotas:
+        flavor_name_pattern: ^z
+```
+
+Sometimes Tempest creates resource classes or flavors that Limes recognizes as requiring a separate instance quota,
+which may not be desired. To control which flavors get a separate instance quota, give the
+`compute.separate_instance_quotas.flavor_name_pattern` option as shown above. Only flavors with a name matching that
+regex will be considered.
+
 ## `database`: SAP Cloud Frame Manager
 
 ```yaml
