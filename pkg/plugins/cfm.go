@@ -86,6 +86,14 @@ func (p *cfmPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.
 	err = client.GetQuotaSet(projectUUID).ExtractInto(&data)
 	if err == nil {
 		logg.Info("using CFM quota set for project %s", projectUUID)
+		if !p.cfg.CFM.ReportPhysicalUsage {
+			return map[string]core.ResourceData{
+				"cfm_share_capacity": {
+					Quota: data.StorageQuota.SizeLimitBytes,
+					Usage: data.StorageQuota.Usage.BytesUsed,
+				},
+			}, nil
+		}
 		physicalUsage := data.StorageQuota.Usage.BytesUsed
 		return map[string]core.ResourceData{
 			"cfm_share_capacity": {

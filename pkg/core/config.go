@@ -110,6 +110,8 @@ type ServiceConfiguration struct {
 	} `yaml:"compute"`
 	CFM struct {
 		Authoritative bool `yaml:"authoritative"`
+		//TODO: remove this hidden feature flag when we have migrated to the new reporting style everywhere
+		ReportPhysicalUsage bool `yaml:"report_physical_usage"`
 	} `yaml:"database"`
 }
 
