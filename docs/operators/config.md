@@ -390,6 +390,8 @@ The area for this service is `storage`.
 ```yaml
 services:
   - type: sharev2
+    sharev2:
+      prometheus_api_url: https://prometheus.example.com
 ```
 
 The area for this service is `storage`.
@@ -401,6 +403,10 @@ The area for this service is `storage`.
 | `share_networks` | countable |
 | `share_snapshots` | countable |
 | `snapshot_capacity` | GiB |
+
+When the `sharev2.prometheus_api_url` configuration option is set, usage data (including physical usage) will be scraped
+from the Prometheus metric `netapp_capacity_svm` instead of from Manila. The expected metric format is that of the
+[netapp-api-exporter](https://github.com/sapcc/netapp-api-exporter).
 
 ## `volumev2`: Cinder v2
 

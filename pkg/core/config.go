@@ -113,6 +113,9 @@ type ServiceConfiguration struct {
 		//TODO: remove this hidden feature flag when we have migrated to the new reporting style everywhere
 		ReportPhysicalUsage bool `yaml:"report_physical_usage"`
 	} `yaml:"database"`
+	ShareV2 struct {
+		PrometheusAPIURL string `yaml:"prometheus_api_url"`
+	} `yaml:"sharev2"`
 }
 
 //CapacitorConfiguration describes a capacity plugin that is enabled for a

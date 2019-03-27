@@ -41,10 +41,9 @@ func init() {
 	})
 }
 
-//Client relates to the prometheus client
-//requires the url to prometheus à la "http<s>://localhost<:9090>"
-//in our case even without port
-func (p *capacityPrometheusPlugin) Client(apiURL string) (prometheus.QueryAPI, error) {
+//Requires the url to prometheus à la "http<s>://localhost<:9090>",
+//in our case even without port.
+func prometheusClient(apiURL string) (prometheus.QueryAPI, error) {
 	//default value
 	if apiURL == "" {
 		apiURL = "https://localhost:9090"
@@ -61,6 +60,27 @@ func (p *capacityPrometheusPlugin) Client(apiURL string) (prometheus.QueryAPI, e
 	return prometheus.NewQueryAPI(client), nil
 }
 
+func prometheusGetSingleValue(client prometheus.QueryAPI, queryStr string) (float64, error) {
+	value, err := client.Query(context.Background(), queryStr, time.Now())
+	if err != nil {
+		return 0, fmt.Errorf("Prometheus query failed: %s: %s", queryStr, err.Error())
+	}
+	resultVector, ok := value.(model.Vector)
+	if !ok {
+		return 0, fmt.Errorf("Prometheus query failed: %s: unexpected type %T", queryStr, value)
+	}
+
+	switch resultVector.Len() {
+	case 0:
+		return 0, fmt.Errorf("Prometheus query returned empty result: %s", queryStr)
+	default:
+		logg.Info("Prometheus query returned more than one result: %s (only the first value will be used)", queryStr)
+		fallthrough
+	case 1:
+		return float64(resultVector[0].Value), nil
+	}
+}
+
 //ID implements the core.CapacityPlugin interface.
 func (p *capacityPrometheusPlugin) ID() string {
 	return "prometheus"
@@ -69,7 +89,7 @@ func (p *capacityPrometheusPlugin) ID() string {
 //Scrape implements the core.CapacityPlugin interface.
 func (p *capacityPrometheusPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]core.CapacityData, error) {
 
-	client, err := p.Client(p.cfg.Prometheus.APIURL)
+	client, err := prometheusClient(p.cfg.Prometheus.APIURL)
 	if err != nil {
 		return nil, err
 	}
@@ -78,29 +98,11 @@ func (p *capacityPrometheusPlugin) Scrape(provider *gophercloud.ProviderClient, 
 	for serviceType, queries := range p.cfg.Prometheus.Queries {
 		serviceResult := make(map[string]core.CapacityData)
 		for resourceName, query := range queries {
-
-			var value model.Value
-			var resultVector model.Vector
-
-			value, err = client.Query(context.Background(), query, time.Now())
+			value, err := prometheusGetSingleValue(client, query)
 			if err != nil {
-				return nil, fmt.Errorf("Prometheus query failed: %s: %s", query, err.Error())
+				return nil, err
 			}
-			resultVector, ok := value.(model.Vector)
-			if !ok {
-				return nil, fmt.Errorf("Prometheus query failed: %s: unexpected type %T", query, value)
-			}
-
-			switch resultVector.Len() {
-			case 0:
-				logg.Info("Prometheus query returned empty result: %s", query)
-			default:
-				logg.Info("Prometheus query returned more than one result: %s (only the first value will be used)", query)
-				fallthrough
-			case 1:
-				serviceResult[resourceName] = core.CapacityData{Capacity: uint64(resultVector[0].Value)}
-			}
-
+			serviceResult[resourceName] = core.CapacityData{Capacity: uint64(value)}
 		}
 		result[serviceType] = serviceResult
 	}

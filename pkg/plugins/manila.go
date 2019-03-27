@@ -21,6 +21,7 @@ package plugins
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
@@ -124,6 +125,13 @@ func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 	usage, err := manilaCollectUsage(client, projectUUID)
 	if err != nil {
 		return nil, err
+	}
+
+	if p.cfg.ShareV2.PrometheusAPIURL != "" {
+		err := manilaCollectPhysicalUsage(&usage, p.cfg.ShareV2.PrometheusAPIURL, projectUUID)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return map[string]core.ResourceData{
@@ -281,4 +289,38 @@ func manilaGetSnapshots(client *gophercloud.ServiceClient, projectUUID string) (
 			return
 		}
 	}
+}
+
+func manilaCollectPhysicalUsage(usage *manilaUsage, prometheusAPIURL, projectUUID string) error {
+	client, err := prometheusClient(prometheusAPIURL)
+	if err != nil {
+		return err
+	}
+
+	roundUp := func(bytes float64) *uint64 {
+		gigabytes := uint64(math.Ceil(bytes / (1 << 30)))
+		return &gigabytes
+	}
+
+	queryStr := fmt.Sprintf(
+		`sum(netapp_capacity_svm{project_id=%q,metric="size_used"})`,
+		projectUUID,
+	)
+	bytesPhysical, err := prometheusGetSingleValue(client, queryStr)
+	if err != nil {
+		return err
+	}
+	usage.GigabytesPhysical = roundUp(bytesPhysical)
+
+	queryStr = fmt.Sprintf(
+		`sum(netapp_capacity_svm{project_id=%q,metric="size_used_by_snapshots"})`,
+		projectUUID,
+	)
+	snapshotBytesPhysical, err := prometheusGetSingleValue(client, queryStr)
+	if err != nil {
+		return err
+	}
+	usage.SnapshotGigabytesPhysical = roundUp(snapshotBytesPhysical)
+
+	return nil
 }
