@@ -60,7 +60,7 @@ func prometheusClient(apiURL string) (prometheus.QueryAPI, error) {
 	return prometheus.NewQueryAPI(client), nil
 }
 
-func prometheusGetSingleValue(client prometheus.QueryAPI, queryStr string) (float64, error) {
+func prometheusGetSingleValue(client prometheus.QueryAPI, queryStr string, defaultValue *float64) (float64, error) {
 	value, err := client.Query(context.Background(), queryStr, time.Now())
 	if err != nil {
 		return 0, fmt.Errorf("Prometheus query failed: %s: %s", queryStr, err.Error())
@@ -72,6 +72,9 @@ func prometheusGetSingleValue(client prometheus.QueryAPI, queryStr string) (floa
 
 	switch resultVector.Len() {
 	case 0:
+		if defaultValue != nil {
+			return *defaultValue, nil
+		}
 		return 0, fmt.Errorf("Prometheus query returned empty result: %s", queryStr)
 	default:
 		logg.Info("Prometheus query returned more than one result: %s (only the first value will be used)", queryStr)
@@ -98,7 +101,7 @@ func (p *capacityPrometheusPlugin) Scrape(provider *gophercloud.ProviderClient, 
 	for serviceType, queries := range p.cfg.Prometheus.Queries {
 		serviceResult := make(map[string]core.CapacityData)
 		for resourceName, query := range queries {
-			value, err := prometheusGetSingleValue(client, query)
+			value, err := prometheusGetSingleValue(client, query, nil)
 			if err != nil {
 				return nil, err
 			}

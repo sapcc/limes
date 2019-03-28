@@ -301,12 +301,13 @@ func manilaCollectPhysicalUsage(usage *manilaUsage, prometheusAPIURL, projectUUI
 		gigabytes := uint64(math.Ceil(bytes / (1 << 30)))
 		return &gigabytes
 	}
+	defaultValue := float64(0)
 
 	queryStr := fmt.Sprintf(
 		`sum(netapp_capacity_svm{project_id=%q,metric="size_used"})`,
 		projectUUID,
 	)
-	bytesPhysical, err := prometheusGetSingleValue(client, queryStr)
+	bytesPhysical, err := prometheusGetSingleValue(client, queryStr, &defaultValue)
 	if err != nil {
 		return err
 	}
@@ -316,7 +317,7 @@ func manilaCollectPhysicalUsage(usage *manilaUsage, prometheusAPIURL, projectUUI
 		`sum(netapp_capacity_svm{project_id=%q,metric="size_used_by_snapshots"})`,
 		projectUUID,
 	)
-	snapshotBytesPhysical, err := prometheusGetSingleValue(client, queryStr)
+	snapshotBytesPhysical, err := prometheusGetSingleValue(client, queryStr, &defaultValue)
 	if err != nil {
 		return err
 	}
