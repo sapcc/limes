@@ -67,7 +67,7 @@ func (c QuotaConstraint) Validate(value uint64) *QuotaValidationError {
 		return nil
 	}
 	return &QuotaValidationError{
-		Status: http.StatusConflict,
+		Status: http.StatusUnprocessableEntity,
 		Message: fmt.Sprintf("requested value %q contradicts constraint %q",
 			limes.ValueWithUnit{Value: value, Unit: c.Unit}, c.String(),
 		),
