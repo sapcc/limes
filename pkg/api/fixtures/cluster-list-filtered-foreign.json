@@ -1,0 +1,49 @@
+{
+  "current_cluster": "east",
+  "clusters": [
+    {
+      "id": "east",
+      "services": [
+        {
+          "type": "shared",
+          "area": "shared",
+          "shared": true,
+          "resources": [
+            {
+              "name": "things",
+              "capacity": 246,
+              "domains_quota": 90,
+              "usage": 8
+            }
+          ],
+          "max_scraped_at": 88,
+          "min_scraped_at": 88
+        }
+      ],
+      "max_scraped_at": 1100,
+      "min_scraped_at": 1100
+    },
+    {
+      "id": "west",
+      "services": [
+        {
+          "type": "shared",
+          "area": "shared",
+          "shared": true,
+          "resources": [
+            {
+              "name": "things",
+              "capacity": 246,
+              "domains_quota": 90,
+              "usage": 8
+            }
+          ],
+          "max_scraped_at": 66,
+          "min_scraped_at": 22
+        }
+      ],
+      "max_scraped_at": 1100,
+      "min_scraped_at": 1100
+    }
+  ]
+}

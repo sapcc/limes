@@ -37,7 +37,12 @@ import (
 
 //ListClusters handles GET /v1/clusters.
 func (p *v1Provider) ListClusters(w http.ResponseWriter, r *http.Request) {
-	if !p.CheckToken(r).Require(w, "cluster:list") {
+	token := p.CheckToken(r)
+	if !token.Require(w, "cluster:list") {
+		return
+	}
+	currentCluster := p.FindClusterFromRequest(w, r, token)
+	if currentCluster == nil {
 		return
 	}
 
@@ -45,7 +50,7 @@ func (p *v1Provider) ListClusters(w http.ResponseWriter, r *http.Request) {
 		CurrentCluster string                 `json:"current_cluster"`
 		Clusters       []*limes.ClusterReport `json:"clusters"`
 	}
-	result.CurrentCluster = p.Cluster.ID
+	result.CurrentCluster = currentCluster.ID
 
 	var err error
 	_, localQuotaUsageOnly := r.URL.Query()["local"]

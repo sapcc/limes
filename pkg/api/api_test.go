@@ -249,6 +249,14 @@ func Test_ClusterOperations(t *testing.T) {
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-list-filtered.json"),
 	}.Check(t, router)
+	//should look identical with X-Limes-Cluster-ID *except* for the current_cluster field
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/v1/clusters?service=shared&resource=things",
+		Header:       map[string]string{"X-Limes-Cluster-Id": "east"},
+		ExpectStatus: 200,
+		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-list-filtered-foreign.json"),
+	}.Check(t, router)
 
 	//check PutCluster error cases
 	assert.HTTPRequest{
