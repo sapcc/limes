@@ -128,6 +128,7 @@ func (p *cinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 						Value: uint64(volume.Size),
 						Unit:  limes.UnitGibibytes,
 					},
+					"availability_zone": volume.AvailabilityZone,
 				})
 			}
 			return true, nil
