@@ -32,7 +32,7 @@ import (
 //
 //If the backend quotas recorded in the project service's resources already
 //match the expected values, nothing is done.
-func ApplyBackendQuota(dbi db.Interface, cluster *core.Cluster, domainUUID string, project db.Project, serviceID int64, serviceType string) error {
+func ApplyBackendQuota(dbi db.Interface, cluster *core.Cluster, domain core.KeystoneDomain, project db.Project, serviceID int64, serviceType string) error {
 	plugin := cluster.QuotaPlugins[serviceType]
 	if plugin == nil {
 		return fmt.Errorf("no quota plugin registered for service type %s", serviceType)
@@ -61,7 +61,7 @@ func ApplyBackendQuota(dbi db.Interface, cluster *core.Cluster, domainUUID strin
 
 		desiredQuota := res.Quota
 		if project.HasBursting {
-			behavior := cluster.BehaviorForResource(serviceType, res.Name)
+			behavior := cluster.BehaviorForResource(serviceType, res.Name, domain.Name+"/"+project.Name)
 			desiredQuota = behavior.MaxBurstMultiplier.ApplyTo(res.Quota)
 		}
 		quotaValues[res.Name] = desiredQuota
@@ -93,7 +93,7 @@ func ApplyBackendQuota(dbi db.Interface, cluster *core.Cluster, domainUUID strin
 
 	//apply quotas in backend
 	provider, eo := cluster.ProviderClientForService(serviceType)
-	err = plugin.SetQuota(provider, eo, cluster.ID, domainUUID, project.UUID, quotaValues)
+	err = plugin.SetQuota(provider, eo, cluster.ID, domain.UUID, project.UUID, quotaValues)
 	if err != nil {
 		return err
 	}

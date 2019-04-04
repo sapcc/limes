@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/sapcc/limes/pkg/audit"
+	"github.com/sapcc/limes/pkg/core"
 
 	gorp "gopkg.in/gorp.v2"
 
@@ -56,7 +57,7 @@ func (p *v1Provider) ListProjects(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_, withSubresources := r.URL.Query()["detail"]
-	projects, err := reports.GetProjects(cluster, dbDomain.ID, nil, db.DB, reports.ReadFilter(r), withSubresources)
+	projects, err := reports.GetProjects(cluster, *dbDomain, nil, db.DB, reports.ReadFilter(r), withSubresources)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -340,9 +341,13 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 		if !servicesToUpdate[srv.Type] {
 			continue
 		}
+		targetDomain := core.KeystoneDomain{
+			Name: updater.Domain.Name,
+			UUID: updater.Domain.UUID,
+		}
 		err := datamodel.ApplyBackendQuota(
 			db.DB,
-			updater.Cluster, updater.Domain.UUID, *updater.Project,
+			updater.Cluster, targetDomain, *updater.Project,
 			srv.ID, srv.Type,
 		)
 		if err != nil {
@@ -497,9 +502,13 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 		if !exists {
 			continue
 		}
+		targetDomain := core.KeystoneDomain{
+			Name: domain.Name,
+			UUID: domain.UUID,
+		}
 		err := datamodel.ApplyBackendQuota(
 			db.DB,
-			cluster, domain.UUID, *project,
+			cluster, targetDomain, *project,
 			srv.ID, srv.Type,
 		)
 		if err != nil {

@@ -117,7 +117,7 @@ func ValidateProjectServices(tx *gorp.Transaction, cluster *core.Cluster, domain
 					//also write the quotas into the backend.
 				}
 				if project.HasBursting {
-					behavior := cluster.BehaviorForResource(serviceType, resourceName)
+					behavior := cluster.BehaviorForResource(serviceType, resourceName, domain.Name+"/"+project.Name)
 					res.DesiredBackendQuota = behavior.MaxBurstMultiplier.ApplyTo(res.Quota)
 				} else {
 					res.DesiredBackendQuota = res.Quota

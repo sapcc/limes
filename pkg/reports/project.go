@@ -42,10 +42,10 @@ var projectReportQuery = `
 
 //GetProjects returns limes.ProjectReport reports for all projects in the given domain or,
 //if projectID is non-nil, for that project only.
-func GetProjects(cluster *core.Cluster, domainID int64, projectID *int64, dbi db.Interface, filter Filter, withSubresources bool) ([]*limes.ProjectReport, error) {
+func GetProjects(cluster *core.Cluster, domain db.Domain, projectID *int64, dbi db.Interface, filter Filter, withSubresources bool) ([]*limes.ProjectReport, error) {
 	clusterCanBurst := cluster.Config.Bursting.MaxMultiplier > 0
 
-	fields := map[string]interface{}{"p.domain_id": domainID}
+	fields := map[string]interface{}{"p.domain_id": domain.ID}
 	if projectID != nil {
 		fields["p.id"] = *projectID
 	}
@@ -124,7 +124,7 @@ func GetProjects(cluster *core.Cluster, domainID int64, projectID *int64, dbi db
 						subresourcesValue = *subresources
 					}
 
-					behavior := cluster.BehaviorForResource(*serviceType, *resourceName)
+					behavior := cluster.BehaviorForResource(*serviceType, *resourceName, domain.Name+"/"+projectName)
 					resource := &limes.ProjectResourceReport{
 						ResourceInfo:  cluster.InfoForResource(*serviceType, *resourceName),
 						Scaling:       behavior.ToScalingBehavior(),
@@ -132,6 +132,7 @@ func GetProjects(cluster *core.Cluster, domainID int64, projectID *int64, dbi db
 						PhysicalUsage: physicalUsage,
 						BackendQuota:  nil, //see below
 						Subresources:  limes.JSONString(subresourcesValue),
+						Annotations:   behavior.Annotations,
 					}
 					if usage != nil {
 						resource.Usage = *usage

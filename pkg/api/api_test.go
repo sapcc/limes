@@ -133,15 +133,40 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 	}
 	config.API.PolicyEnforcer = enforcer
 
-	config.Clusters["west"].Config.ResourceBehaviors = []*core.ResourceBehaviorConfiguration{{
-		Compiled: core.ResourceBehavior{
-			MaxBurstMultiplier:     limes.BurstingMultiplier(math.Inf(+1)),
-			FullResourceName:       regexp.MustCompile("^unshared/things$"),
-			ScalesWithResourceName: "things",
-			ScalesWithServiceType:  "shared",
-			ScalingFactor:          2,
+	config.Clusters["west"].Config.ResourceBehaviors = []*core.ResourceBehaviorConfiguration{
+		//check how scaling relations are reported
+		{
+			Compiled: core.ResourceBehavior{
+				MaxBurstMultiplier:     limes.BurstingMultiplier(math.Inf(+1)),
+				FullResourceNameRx:     regexp.MustCompile("^unshared/things$"),
+				ScalesWithResourceName: "things",
+				ScalesWithServiceType:  "shared",
+				ScalingFactor:          2,
+			},
 		},
-	}}
+		//check how annotations are reported
+		{
+			Compiled: core.ResourceBehavior{
+				MaxBurstMultiplier: limes.BurstingMultiplier(math.Inf(+1)),
+				FullResourceNameRx: regexp.MustCompile("^shared/.*things$"),
+				ScopeRx:            regexp.MustCompile("^germany(?:/dresden)?$"),
+				Annotations: map[string]interface{}{
+					"annotated": true,
+					"text":      "this annotation appears on shared things of domain germany and project dresden",
+				},
+			},
+		},
+		{
+			Compiled: core.ResourceBehavior{
+				MaxBurstMultiplier: limes.BurstingMultiplier(math.Inf(+1)),
+				FullResourceNameRx: regexp.MustCompile("^shared/external_things$"),
+				ScopeRx:            regexp.MustCompile("^germany/dresden$"),
+				Annotations: map[string]interface{}{
+					"text": "this annotation appears on shared/external_things of project dresden only",
+				},
+			},
+		},
+	}
 
 	cluster := config.Clusters[clusterName]
 	router, _ := NewV1Router(cluster, config)
@@ -477,14 +502,14 @@ func Test_ClusterOperations(t *testing.T) {
 	cluster.Config.ResourceBehaviors = []*core.ResourceBehaviorConfiguration{
 		{
 			Compiled: core.ResourceBehavior{
-				FullResourceName:   regexp.MustCompile("^shared/things$"),
+				FullResourceNameRx: regexp.MustCompile("^shared/things$"),
 				MaxBurstMultiplier: limes.BurstingMultiplier(math.Inf(+1)),
 				OvercommitFactor:   2.5,
 			},
 		},
 		{
 			Compiled: core.ResourceBehavior{
-				FullResourceName:   regexp.MustCompile("^unshared/things$"),
+				FullResourceNameRx: regexp.MustCompile("^unshared/things$"),
 				MaxBurstMultiplier: limes.BurstingMultiplier(math.Inf(+1)),
 				OvercommitFactor:   1.5,
 			},
