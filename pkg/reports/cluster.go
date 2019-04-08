@@ -194,7 +194,7 @@ func GetClusters(config core.Configuration, clusterID *string, localQuotaUsageOn
 		cluster, _, resource := clusters.Find(config, clusterID, &serviceType, resourceName)
 
 		if resource != nil {
-			overcommitFactor := config.Clusters[clusterID].BehaviorForResource(serviceType, *resourceName).OvercommitFactor
+			overcommitFactor := config.Clusters[clusterID].BehaviorForResource(serviceType, *resourceName, "").OvercommitFactor
 			if overcommitFactor == 0 {
 				resource.Capacity = rawCapacity
 			} else {
@@ -366,7 +366,7 @@ func GetClusters(config core.Configuration, clusterID *string, localQuotaUsageOn
 				_, _, resource := clusters.Find(config, cluster.ID, &serviceType, resourceName)
 
 				if resource != nil {
-					overcommitFactor := config.Clusters[cluster.ID].BehaviorForResource(serviceType, *resourceName).OvercommitFactor
+					overcommitFactor := config.Clusters[cluster.ID].BehaviorForResource(serviceType, *resourceName, "").OvercommitFactor
 					if overcommitFactor == 0 {
 						resource.Capacity = rawCapacity
 					} else {

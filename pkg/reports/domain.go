@@ -93,9 +93,7 @@ func GetDomains(cluster *core.Cluster, domainID *int64, dbi db.Interface, filter
 			return err
 		}
 
-		domain, service, resource := domains.Find(cluster, domainUUID, serviceType, resourceName)
-
-		domain.Name = domainName
+		_, service, resource := domains.Find(cluster, domainUUID, domainName, serviceType, resourceName)
 
 		if service != nil {
 			if maxScrapedAt != nil {
@@ -153,9 +151,7 @@ func GetDomains(cluster *core.Cluster, domainID *int64, dbi db.Interface, filter
 			return err
 		}
 
-		domain, _, resource := domains.Find(cluster, domainUUID, serviceType, resourceName)
-
-		domain.Name = domainName
+		_, _, resource := domains.Find(cluster, domainUUID, domainName, serviceType, resourceName)
 
 		if resource != nil && quota != nil {
 			resource.DomainQuota = *quota
@@ -195,11 +191,12 @@ func GetDomains(cluster *core.Cluster, domainID *int64, dbi db.Interface, filter
 
 type domains map[string]*limes.DomainReport
 
-func (d domains) Find(cluster *core.Cluster, domainUUID string, serviceType, resourceName *string) (*limes.DomainReport, *limes.DomainServiceReport, *limes.DomainResourceReport) {
+func (d domains) Find(cluster *core.Cluster, domainUUID, domainName string, serviceType, resourceName *string) (*limes.DomainReport, *limes.DomainServiceReport, *limes.DomainResourceReport) {
 	domain, exists := d[domainUUID]
 	if !exists {
 		domain = &limes.DomainReport{
 			UUID:     domainUUID,
+			Name:     domainName,
 			Services: make(limes.DomainServiceReports),
 		}
 		d[domainUUID] = domain
@@ -230,9 +227,11 @@ func (d domains) Find(cluster *core.Cluster, domainUUID string, serviceType, res
 		if !cluster.HasResource(*serviceType, *resourceName) {
 			return domain, service, resource
 		}
+		behavior := cluster.BehaviorForResource(*serviceType, *resourceName, domainName)
 		resource = &limes.DomainResourceReport{
 			ResourceInfo: cluster.InfoForResource(*serviceType, *resourceName),
-			Scaling:      cluster.BehaviorForResource(*serviceType, *resourceName).ToScalingBehavior(),
+			Scaling:      behavior.ToScalingBehavior(),
+			Annotations:  behavior.Annotations,
 		}
 		service.Resources[*resourceName] = resource
 	}

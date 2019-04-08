@@ -110,6 +110,7 @@ func (c *Collector) Scrape() {
 		}
 
 		logg.Debug("scraping %s for %s/%s", serviceType, domainName, projectName)
+		domain := core.KeystoneDomain{Name: domainName, UUID: domainUUID}
 		provider, eo := c.Cluster.ProviderClientForService(serviceType)
 		resourceData, err := c.Plugin.Scrape(provider, eo, c.Cluster.ID, domainUUID, projectUUID)
 		if err != nil {
@@ -125,7 +126,7 @@ func (c *Collector) Scrape() {
 
 				if serviceScrapedAt == nil {
 					//see explanation inside the called function's body
-					err := c.writeDummyResources(domainName, projectName, projectHasBursting, serviceType, serviceID)
+					err := c.writeDummyResources(domain, projectName, projectHasBursting, serviceType, serviceID)
 					if err != nil {
 						c.LogError("write dummy resource data for service %s for %s/%s failed: %s", serviceType, domainName, projectName, err.Error())
 					}
@@ -139,7 +140,7 @@ func (c *Collector) Scrape() {
 			continue
 		}
 
-		err = c.writeScrapeResult(domainName, domainUUID, projectName, projectUUID, projectID, projectHasBursting, serviceType, serviceID, resourceData, c.TimeNow())
+		err = c.writeScrapeResult(domain, projectName, projectUUID, projectID, projectHasBursting, serviceType, serviceID, resourceData, c.TimeNow())
 		if err != nil {
 			c.LogError("write %s backend data for %s/%s failed: %s", serviceType, domainName, projectName, err.Error())
 			scrapeFailedCounter.With(labels).Inc()
@@ -160,7 +161,7 @@ func (c *Collector) Scrape() {
 	}
 }
 
-func (c *Collector) writeScrapeResult(domainName, domainUUID, projectName, projectUUID string, projectID int64, projectHasBursting bool, serviceType string, serviceID int64, resourceData map[string]core.ResourceData, scrapedAt time.Time) error {
+func (c *Collector) writeScrapeResult(domain core.KeystoneDomain, projectName, projectUUID string, projectID int64, projectHasBursting bool, serviceType string, serviceID int64, resourceData map[string]core.ResourceData, scrapedAt time.Time) error {
 	tx, err := db.DB.Begin()
 	if err != nil {
 		return err
@@ -169,7 +170,7 @@ func (c *Collector) writeScrapeResult(domainName, domainUUID, projectName, proje
 
 	var serviceConstraints map[string]core.QuotaConstraint
 	if c.Cluster.QuotaConstraints != nil {
-		serviceConstraints = c.Cluster.QuotaConstraints.Projects[domainName][projectName][serviceType]
+		serviceConstraints = c.Cluster.QuotaConstraints.Projects[domain.Name][projectName][serviceType]
 	}
 
 	//update existing project_resources entries
@@ -197,7 +198,7 @@ func (c *Collector) writeScrapeResult(domainName, domainUUID, projectName, proje
 			resInfo := c.Cluster.InfoForResource(serviceType, res.Name)
 			newQuota := constraint.ApplyTo(res.Quota)
 			logg.Info("changing %s/%s quota for project %s/%s from %s to %s to satisfy constraint %q",
-				serviceType, res.Name, domainName, projectName,
+				serviceType, res.Name, domain.Name, projectName,
 				limes.ValueWithUnit{Value: res.Quota, Unit: resInfo.Unit},
 				limes.ValueWithUnit{Value: newQuota, Unit: resInfo.Unit},
 				constraint.String(),
@@ -274,7 +275,7 @@ func (c *Collector) writeScrapeResult(domainName, domainUUID, projectName, proje
 		}
 
 		if projectHasBursting {
-			behavior := c.Cluster.BehaviorForResource(serviceType, resMetadata.Name)
+			behavior := c.Cluster.BehaviorForResource(serviceType, resMetadata.Name, domain.Name+"/"+projectName)
 			res.DesiredBackendQuota = behavior.MaxBurstMultiplier.ApplyTo(res.Quota)
 		} else {
 			res.DesiredBackendQuota = res.Quota
@@ -333,7 +334,7 @@ func (c *Collector) writeScrapeResult(domainName, domainUUID, projectName, proje
 		var project db.Project
 		err := db.DB.SelectOne(&project, `SELECT * FROM projects WHERE id = $1`, projectID)
 		if err == nil {
-			err = datamodel.ApplyBackendQuota(db.DB, c.Cluster, domainUUID, project, serviceID, serviceType)
+			err = datamodel.ApplyBackendQuota(db.DB, c.Cluster, domain, project, serviceID, serviceType)
 		}
 		if err != nil {
 			logg.Error("could not rectify frontend/backend quota mismatch for service %s in project %s: %s",
@@ -345,7 +346,7 @@ func (c *Collector) writeScrapeResult(domainName, domainUUID, projectName, proje
 	return nil
 }
 
-func (c *Collector) writeDummyResources(domainName, projectName string, projectHasBursting bool, serviceType string, serviceID int64) error {
+func (c *Collector) writeDummyResources(domain core.KeystoneDomain, projectName string, projectHasBursting bool, serviceType string, serviceID int64) error {
 	//Rationale: This is called when we first try to scrape a project service,
 	//and the scraping fails (most likely due to some internal error in the
 	//backend service). We used to just not touch the database at this point,
@@ -366,7 +367,7 @@ func (c *Collector) writeDummyResources(domainName, projectName string, projectH
 
 	var serviceConstraints map[string]core.QuotaConstraint
 	if c.Cluster.QuotaConstraints != nil {
-		serviceConstraints = c.Cluster.QuotaConstraints.Projects[domainName][projectName][serviceType]
+		serviceConstraints = c.Cluster.QuotaConstraints.Projects[domain.Name][projectName][serviceType]
 	}
 
 	//find existing project_resources entries (we don't want to touch those)
@@ -403,7 +404,7 @@ func (c *Collector) writeDummyResources(domainName, projectName string, projectH
 		}
 
 		if projectHasBursting {
-			behavior := c.Cluster.BehaviorForResource(serviceType, resMetadata.Name)
+			behavior := c.Cluster.BehaviorForResource(serviceType, resMetadata.Name, domain.Name+"/"+projectName)
 			res.DesiredBackendQuota = behavior.MaxBurstMultiplier.ApplyTo(res.Quota)
 		} else {
 			res.DesiredBackendQuota = res.Quota

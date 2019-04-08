@@ -32,7 +32,11 @@
               "name": "things",
               "quota": 30,
               "projects_quota": 20,
-              "usage": 4
+              "usage": 4,
+              "annotations": {
+                "annotated": true,
+                "text": "this annotation appears on shared things of domain germany and project dresden"
+              }
             }
           ],
           "max_scraped_at": 44,

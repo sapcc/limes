@@ -277,10 +277,15 @@ func (c *Cluster) InfoForService(serviceType string) limes.ServiceInfo {
 	return plugin.ServiceInfo()
 }
 
-//BehaviorForResource returns the ResourceBehavior for the given resource. If
-//no special behavior has been configured for this resource, or if this
-//resource does not exist, a zero-initialized struct is returned.
-func (c *Cluster) BehaviorForResource(serviceType, resourceName string) ResourceBehavior {
+//BehaviorForResource returns the ResourceBehavior for the given resource in
+//the given scope. If no special behavior has been configured for this
+//resource, or if this resource does not exist, a zero-initialized struct is
+//returned.
+//
+//`scopeName` should be empty for cluster resources, equal to the domain name
+//for domain resources, or equal to `$DOMAIN_NAME/$PROJECT_NAME` for project
+//resources.
+func (c *Cluster) BehaviorForResource(serviceType, resourceName, scopeName string) ResourceBehavior {
 	//default behavior
 	result := ResourceBehavior{
 		MaxBurstMultiplier: c.Config.Bursting.MaxMultiplier,
@@ -290,7 +295,10 @@ func (c *Cluster) BehaviorForResource(serviceType, resourceName string) Resource
 	fullName := serviceType + "/" + resourceName
 	for _, behaviorConfig := range c.Config.ResourceBehaviors {
 		behavior := behaviorConfig.Compiled
-		if !behavior.FullResourceName.MatchString(fullName) {
+		if !behavior.FullResourceNameRx.MatchString(fullName) {
+			continue
+		}
+		if scopeName != "" && behavior.ScopeRx != nil && !behavior.ScopeRx.MatchString(scopeName) {
 			continue
 		}
 
@@ -305,6 +313,12 @@ func (c *Cluster) BehaviorForResource(serviceType, resourceName string) Resource
 			result.ScalesWithServiceType = behavior.ScalesWithServiceType
 			result.ScalesWithResourceName = behavior.ScalesWithResourceName
 			result.ScalingFactor = behavior.ScalingFactor
+		}
+		if len(behavior.Annotations) > 0 && result.Annotations == nil {
+			result.Annotations = make(map[string]interface{})
+		}
+		for k, v := range behavior.Annotations {
+			result.Annotations[k] = v
 		}
 	}
 

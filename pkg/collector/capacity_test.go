@@ -65,7 +65,7 @@ func Test_ScanCapacity(t *testing.T) {
 			//overcommit should be reflected in capacity metrics
 			ResourceBehaviors: []*core.ResourceBehaviorConfiguration{{
 				Compiled: core.ResourceBehavior{
-					FullResourceName:   regexp.MustCompile("^unshared2/capacity$"),
+					FullResourceNameRx: regexp.MustCompile("^unshared2/capacity$"),
 					OvercommitFactor:   2.5,
 					MaxBurstMultiplier: limes.BurstingMultiplier(math.Inf(+1)),
 				},

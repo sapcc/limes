@@ -54,6 +54,9 @@ type DomainResourceReport struct {
 	BackendQuota         *uint64          `json:"backend_quota,omitempty"`
 	InfiniteBackendQuota *bool            `json:"infinite_backend_quota,omitempty"`
 	Scaling              *ScalingBehavior `json:"scales_with,omitempty"`
+	//Annotations may contain arbitrary metadata that was configured for this
+	//resource in this scope by Limes' operator.
+	Annotations map[string]interface{} `json:"annotations,omitempty"`
 }
 
 //DomainServiceReports provides fast lookup of services using a map, but serializes

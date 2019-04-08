@@ -175,21 +175,25 @@ func (l LowPrivilegeRaiseConfiguration) IsAllowedForProjectsIn(domainName string
 //certain cluster.
 type ResourceBehaviorConfiguration struct {
 	FullResourceName   string                    `yaml:"resource"`
+	Scope              string                    `yaml:"scope"`
 	MaxBurstMultiplier *limes.BurstingMultiplier `yaml:"max_burst_multiplier"`
 	OvercommitFactor   float64                   `yaml:"overcommit_factor"`
 	ScalesWith         string                    `yaml:"scales_with"`
 	ScalingFactor      float64                   `yaml:"scaling_factor"`
 	Compiled           ResourceBehavior          `yaml:"-"`
+	Annotations        map[string]interface{}    `yaml:"annotations"`
 }
 
 //ResourceBehavior is the compiled version of ResourceBehaviorConfiguration.
 type ResourceBehavior struct {
-	FullResourceName       *regexp.Regexp
+	FullResourceNameRx     *regexp.Regexp
+	ScopeRx                *regexp.Regexp
 	MaxBurstMultiplier     limes.BurstingMultiplier
 	OvercommitFactor       float64
 	ScalesWithResourceName string
 	ScalesWithServiceType  string
 	ScalingFactor          float64
+	Annotations            map[string]interface{}
 }
 
 //ToScalingBehavior returns the limes.ScalingBehavior for this resource, or nil
@@ -386,13 +390,21 @@ func (cfg configurationInFile) validate() (success bool) {
 		for idx, behavior := range cluster.ResourceBehaviors {
 			behavior.Compiled = ResourceBehavior{
 				OvercommitFactor: behavior.OvercommitFactor,
+				Annotations:      behavior.Annotations,
 			}
 
 			if behavior.FullResourceName == "" {
 				missing(fmt.Sprintf(`resource_behavior[%d].resource`, idx))
 			} else {
-				pattern := `^` + behavior.FullResourceName + `$`
-				behavior.Compiled.FullResourceName = compileOptionalRx(pattern)
+				pattern := `^(?:` + behavior.FullResourceName + `)$`
+				behavior.Compiled.FullResourceNameRx = compileOptionalRx(pattern)
+			}
+
+			if behavior.Scope == "" {
+				behavior.Compiled.ScopeRx = nil
+			} else {
+				pattern := `^(?:` + behavior.Scope + `)$`
+				behavior.Compiled.ScopeRx = compileOptionalRx(pattern)
 			}
 
 			if behavior.MaxBurstMultiplier != nil {

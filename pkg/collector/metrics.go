@@ -346,7 +346,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			sharedString = "false"
 		}
 
-		behavior := c.Cluster.BehaviorForResource(serviceType, resourceName)
+		behavior := c.Cluster.BehaviorForResource(serviceType, resourceName, "")
 		overcommitFactor := float64(behavior.OvercommitFactor)
 		if overcommitFactor == 0 {
 			overcommitFactor = 1
