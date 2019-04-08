@@ -27,6 +27,7 @@ import (
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/availabilityzones"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/limits"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/quotasets"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
@@ -259,16 +260,21 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 		}
 
 		err := servers.List(client, listOpts).EachPage(func(page pagination.Page) (bool, error) {
-			instances, err := servers.ExtractServers(page)
+			var instances []struct {
+				servers.Server
+				availabilityzones.ServerAvailabilityZoneExt
+			}
+			err := servers.ExtractServersInto(page, &instances)
 			if err != nil {
 				return false, err
 			}
 
 			for _, instance := range instances {
 				subResource := map[string]interface{}{
-					"id":     instance.ID,
-					"name":   instance.Name,
-					"status": instance.Status,
+					"id":                instance.ID,
+					"name":              instance.Name,
+					"status":            instance.Status,
+					"availability_zone": instance.AvailabilityZone,
 				}
 				flavorID := instance.Flavor["id"].(string)
 				flavorInfo := p.getFlavorInfo(client, flavorID)
@@ -471,10 +477,6 @@ func (p *novaPlugin) findOSType(provider *gophercloud.ProviderClient, eo gopherc
 		osType = "unknown"
 	}
 	return osType, nil
-}
-
-func makeIntPointer(value int) *int {
-	return &value
 }
 
 type novaServerListOpts struct {
