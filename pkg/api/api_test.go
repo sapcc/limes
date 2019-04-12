@@ -771,6 +771,44 @@ func Test_DomainOperations(t *testing.T) {
 		},
 	}.Check(t, router)
 
+	//check PutDomain with bogus service types and resource names
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany",
+		ExpectStatus: 422,
+		ExpectBody:   assert.StringData("cannot change unknown/things quota: no such service\n"),
+		Body: assert.JSONObject{
+			"domain": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "unknown",
+						"resources": []assert.JSONObject{
+							{"name": "things", "quota": 100},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany",
+		ExpectStatus: 422,
+		ExpectBody:   assert.StringData("cannot change shared/unknown quota: no such resource\n"),
+		Body: assert.JSONObject{
+			"domain": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "shared",
+						"resources": []assert.JSONObject{
+							{"name": "unknown", "quota": 100},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+
 	//check PutDomain happy path
 	assert.HTTPRequest{
 		Method:       "PUT",
@@ -1217,6 +1255,44 @@ func Test_ProjectOperations(t *testing.T) {
 	if actualBackendQuota == 5 {
 		t.Error("backend quota was updated in database even though SetQuota failed")
 	}
+
+	//check PutProject with bogus service types and resource names
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 422,
+		ExpectBody:   assert.StringData("cannot change unknown/things quota: no such service\n"),
+		Body: assert.JSONObject{
+			"project": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "unknown",
+						"resources": []assert.JSONObject{
+							{"name": "things", "quota": 100},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 422,
+		ExpectBody:   assert.StringData("cannot change shared/unknown quota: no such resource\n"),
+		Body: assert.JSONObject{
+			"project": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "shared",
+						"resources": []assert.JSONObject{
+							{"name": "unknown", "quota": 100},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
 
 	//check PutProject happy path
 	plugin.SetQuotaFails = false

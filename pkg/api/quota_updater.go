@@ -160,6 +160,29 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 		}
 	}
 
+	//check if the request contains any services/resources that are not known to us
+	for srvType, srvInput := range input {
+		isUnknownService := !u.Cluster.HasService(srvType)
+		if isUnknownService {
+			u.Requests[srvType] = make(map[string]QuotaRequest)
+		}
+		for resName := range srvInput {
+			if !u.Cluster.HasResource(srvType, resName) {
+				msg := "no such resource"
+				if isUnknownService {
+					msg = "no such service"
+				}
+
+				u.Requests[srvType][resName] = QuotaRequest{
+					ValidationError: &core.QuotaValidationError{
+						Status:  http.StatusUnprocessableEntity,
+						Message: msg,
+					},
+				}
+			}
+		}
+	}
+
 	return nil
 }
 
