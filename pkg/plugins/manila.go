@@ -303,8 +303,10 @@ func manilaCollectPhysicalUsage(usage *manilaUsage, prometheusAPIURL, projectUUI
 	}
 	defaultValue := float64(0)
 
+	//NOTE: The `max by (share_id)` is necessary for when a share is being
+	//migrated to another shareserver and thus appears in the metrics twice.
 	queryStr := fmt.Sprintf(
-		`sum(netapp_capacity_svm{project_id=%q,metric="size_used"})`,
+		`sum(max by (share_id) (netapp_capacity_svm{project_id=%q,metric="size_used"}))`,
 		projectUUID,
 	)
 	bytesPhysical, err := prometheusGetSingleValue(client, queryStr, &defaultValue)
@@ -314,7 +316,7 @@ func manilaCollectPhysicalUsage(usage *manilaUsage, prometheusAPIURL, projectUUI
 	usage.GigabytesPhysical = roundUp(bytesPhysical)
 
 	queryStr = fmt.Sprintf(
-		`sum(netapp_capacity_svm{project_id=%q,metric="size_used_by_snapshots"})`,
+		`sum(max by (share_id) (netapp_capacity_svm{project_id=%q,metric="size_used_by_snapshots"}))`,
 		projectUUID,
 	)
 	snapshotBytesPhysical, err := prometheusGetSingleValue(client, queryStr, &defaultValue)
