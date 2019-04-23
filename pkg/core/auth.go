@@ -22,7 +22,6 @@ package core
 import (
 	"fmt"
 	"net/http"
-	"sync"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
@@ -31,15 +30,14 @@ import (
 //AuthParameters contains credentials for authenticating with Keystone (i.e.
 //everything that's needed to set up a gophercloud.ProviderClient instance).
 type AuthParameters struct {
-	AuthURL           string      `yaml:"auth_url"`
-	UserName          string      `yaml:"user_name"`
-	UserDomainName    string      `yaml:"user_domain_name"`
-	ProjectName       string      `yaml:"project_name"`
-	ProjectDomainName string      `yaml:"project_domain_name"`
-	Password          string      `yaml:"password"`
-	RegionName        string      `yaml:"region_name"`
-	Interface         string      `yaml:"interface"`
-	tokenRenewalMutex *sync.Mutex `yaml:"-"`
+	AuthURL           string `yaml:"auth_url"`
+	UserName          string `yaml:"user_name"`
+	UserDomainName    string `yaml:"user_domain_name"`
+	ProjectName       string `yaml:"project_name"`
+	ProjectDomainName string `yaml:"project_domain_name"`
+	Password          string `yaml:"password"`
+	RegionName        string `yaml:"region_name"`
+	Interface         string `yaml:"interface"`
 	//The following fields are only valid after calling Connect().
 	ProviderClient *gophercloud.ProviderClient `yaml:"-"`
 	EndpointOpts   gophercloud.EndpointOpts    `yaml:"-"`
@@ -47,10 +45,6 @@ type AuthParameters struct {
 
 //Connect creates the gophercloud.ProviderClient instance for these credentials.
 func (auth *AuthParameters) Connect() error {
-	if auth.tokenRenewalMutex == nil {
-		auth.tokenRenewalMutex = &sync.Mutex{}
-	}
-
 	if auth.ProviderClient != nil {
 		//already done
 		return nil
