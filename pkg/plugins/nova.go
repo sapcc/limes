@@ -20,6 +20,7 @@
 package plugins
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"sort"
@@ -270,11 +271,60 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 			}
 
 			for _, instance := range instances {
+				var ipAddresses []novaServerIPData
+				if len(instance.Addresses) > 0 {
+					//unmarshal instance.Addresses into a sane data structure
+					var addressesByNetwork map[string][]struct {
+						MAC     string `json:"OS-EXT-IPS-MAC:mac_addr"`
+						Type    string `json:"OS-EXT-IPS:type"`
+						Address string `json:"addr"`
+					}
+					b, err := json.Marshal(instance.Addresses)
+					if err == nil {
+						err = json.Unmarshal(b, &addressesByNetwork)
+					}
+					if err != nil {
+						logg.Error("error while trying to parse ip address data for instance %q: %v", instance.ID, err)
+					}
+
+					//sort ip addresses by MAC address
+					addressesByMac := make(map[string]*struct {
+						Fixed    string
+						Floating []string
+					})
+					for _, addresses := range addressesByNetwork {
+						for _, a := range addresses {
+							if _, ok := addressesByMac[a.MAC]; !ok {
+								addressesByMac[a.MAC] = &struct {
+									Fixed    string
+									Floating []string
+								}{}
+							}
+							if a.Type == "fixed" {
+								addressesByMac[a.MAC].Fixed = a.Address
+							} else {
+								addressesByMac[a.MAC].Floating = append(addressesByMac[a.MAC].Floating, a.Address)
+							}
+						}
+					}
+
+					for _, ip := range addressesByMac {
+						ipAddresses = append(ipAddresses, novaServerIPData{Address: ip.Fixed, Type: "fixed"})
+
+						if len(ip.Floating) > 0 {
+							for _, v := range ip.Floating {
+								ipAddresses = append(ipAddresses, novaServerIPData{Address: v, Type: "floating", Target: ip.Fixed})
+							}
+						}
+					}
+				}
+
 				subResource := map[string]interface{}{
 					"id":                instance.ID,
 					"name":              instance.Name,
 					"status":            instance.Status,
 					"availability_zone": instance.AvailabilityZone,
+					"ip_addresses":      ipAddresses,
 				}
 				flavorID := instance.Flavor["id"].(string)
 				flavorInfo := p.getFlavorInfo(client, flavorID)
@@ -497,4 +547,10 @@ func (opts novaQuotaUpdateOpts) ToComputeQuotaUpdateMap() (map[string]interface{
 		result[key] = val
 	}
 	return map[string]interface{}{"quota_set": result}, nil
+}
+
+type novaServerIPData struct {
+	Address string `json:"address"`
+	Type    string `json:"type"`
+	Target  string `json:"target,omitempty"`
 }
