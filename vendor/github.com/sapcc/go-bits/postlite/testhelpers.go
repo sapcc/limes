@@ -26,6 +26,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -82,7 +83,17 @@ func getDBContent(t *testing.T, db *sql.DB) string {
 	rows, err := db.Query(`
 		SELECT name FROM sqlite_master WHERE type='table'
 		AND name != 'schema_migrations' AND name NOT LIKE '%sqlite%'
+		ORDER BY name
 	`)
+	if err != nil {
+		//if this errors, then we're probably on Postgres, not on SQLite
+		rows, err = db.Query(`
+			SELECT table_name FROM information_schema.tables
+			WHERE table_schema = 'public' AND table_name != 'schema_migrations'
+			ORDER BY table_name
+		`)
+	}
+
 	failOnErr(t, err)
 	for rows.Next() {
 		var name string
@@ -93,7 +104,7 @@ func getDBContent(t *testing.T, db *sql.DB) string {
 	failOnErr(t, rows.Close())
 
 	//foreach table, dump each entry as an INSERT statement
-	var result string
+	serializedRows := make(map[string][]string)
 	for _, tableName := range tableNames {
 		rows, err := db.Query(`SELECT * FROM ` + tableName)
 		failOnErr(t, err)
@@ -104,27 +115,34 @@ func getDBContent(t *testing.T, db *sql.DB) string {
 		for idx := range scanTarget {
 			scanTarget[idx] = &sqlValueSerializer{}
 		}
-		formatStr := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s);\n",
+		formatStr := fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s);",
 			tableName,
 			strings.Join(columnNames, ", "),
 			strings.Join(times(len(columnNames), "%#v"), ", "),
 		)
 
-		hadRows := false
 		for rows.Next() {
 			failOnErr(t, rows.Scan(scanTarget...))
-			result += fmt.Sprintf(formatStr, scanTarget...)
-			hadRows = true
+			serialized := fmt.Sprintf(formatStr, scanTarget...)
+			serializedRows[tableName] = append(serializedRows[tableName], serialized)
 		}
 
 		failOnErr(t, rows.Err())
 		failOnErr(t, rows.Close())
-		if hadRows {
-			result += "\n"
-		}
 	}
 
-	return strings.TrimSuffix(result, "\n")
+	//sort rows into deterministic order
+	var results []string
+	for _, tableName := range tableNames {
+		rows := serializedRows[tableName]
+		if len(rows) == 0 {
+			continue
+		}
+		sort.Strings(rows)
+		results = append(results, strings.Join(rows, "\n"))
+	}
+
+	return strings.Join(results, "\n\n") + "\n"
 }
 
 func failOnErr(t *testing.T, err error) {

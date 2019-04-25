@@ -39,6 +39,7 @@ import (
 	"github.com/golang-migrate/migrate/database/sqlite3"
 	"github.com/golang-migrate/migrate/source"
 	bindata "github.com/golang-migrate/migrate/source/go_bindata"
+
 	//enable postgres driver for database/sql
 	_ "github.com/lib/pq"
 )
@@ -78,7 +79,7 @@ func Connect(cfg Configuration) (*sql.DB, error) {
 	if cfg.PostgresURL == nil {
 		migrations = translatePostgresDDLToSQLite(migrations)
 	} else {
-		migrations = wrapDDLInTransactions(migrations)
+		migrations = prepareDDLForPostgres(migrations)
 	}
 	migrations = stripWhitespace(migrations)
 
@@ -238,9 +239,14 @@ func stripWhitespace(in map[string]string) map[string]string {
 	return out
 }
 
-func wrapDDLInTransactions(in map[string]string) map[string]string {
+var skipInPostgresRx = regexp.MustCompile(`(?ms)^\s*--\s*BEGIN\s+skip\s+in\s+postgres\s*?$.*^\s*--\s*END\s+skip\s+in\s+postgres\s*?$`)
+
+func prepareDDLForPostgres(in map[string]string) map[string]string {
 	out := make(map[string]string, len(in))
 	for filename, sql := range in {
+		//remove DDL that is only used for SQLite
+		sql = skipInPostgresRx.ReplaceAllString(sql, "")
+		//wrap DDL in transactions
 		out[filename] = "BEGIN;\n" + strings.TrimSuffix(strings.TrimSpace(sql), ";") + ";\nCOMMIT;"
 	}
 	return out
