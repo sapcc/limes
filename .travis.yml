@@ -1,7 +1,12 @@
+addons:
+  postgresql: "9.5"
+services:
+  - postgresql
+
 language: go
 
 go:
-    - 1.11
+    - 1.12
 
 install:
     - go get -u golang.org/x/lint/golint

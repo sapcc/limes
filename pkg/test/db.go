@@ -20,6 +20,9 @@
 package test
 
 import (
+	"fmt"
+	"net/url"
+	"os"
 	"testing"
 
 	gorp "gopkg.in/gorp.v2"
@@ -28,26 +31,59 @@ import (
 	"github.com/sapcc/limes/pkg/db"
 )
 
-//InitDatabase initializes DB in pkg/db with an empty in-memory SQLite
-//database.
-func InitDatabase(t *testing.T) {
+//InitDatabase initializes DB in pkg/db for testing.
+func InitDatabase(t *testing.T, fixtureFile *string) {
 	t.Helper()
-	sqliteDB, err := postlite.Connect(postlite.Configuration{
-		Migrations: db.SQLMigrations,
+	var postgresURL *url.URL
+	if os.Getenv("TRAVIS") == "true" {
+		//cf. https://docs.travis-ci.com/user/database-setup/#postgresql
+		postgresURL, _ = url.Parse("postgres://postgres@localhost/limes?sslmode=disable")
+	} else {
+		//suitable for use with ./testing/with-postgres-db.sh
+		postgresURL, _ = url.Parse("postgres://postgres@localhost:54321/limes?sslmode=disable")
+	}
+	postgresDB, err := postlite.Connect(postlite.Configuration{
+		PostgresURL: postgresURL,
+		Migrations:  db.SQLMigrations,
 	})
 	if err != nil {
-		t.Fatal(err)
+		t.Error(err)
+		t.Log("Try prepending ./testing/with-postgres-db.sh to your command.")
+		t.FailNow()
 	}
 
-	db.DB = &gorp.DbMap{Db: sqliteDB, Dialect: gorp.SqliteDialect{}}
-	db.InitGorp()
-}
+	db.DB = &gorp.DbMap{Db: postgresDB, Dialect: gorp.PostgresDialect{}}
 
-//ExecSQLFile loads a file containing SQL statements and executes them all.
-//It implies that every SQL statement is on a single line.
-func ExecSQLFile(t *testing.T, path string) {
-	t.Helper()
-	postlite.ExecSQLFile(t, db.DB.Db, path)
+	//wipe the DB clean if there are any leftovers from the previous test run
+	//(this will also wipe all other tables because of ON DELETE CASCADE
+	//relations)
+	for _, tableName := range []string{"cluster_services", "domains"} {
+		_, err := db.DB.Exec(`DELETE FROM ` + tableName)
+		if err != nil {
+			t.Fatal(err.Error())
+		}
+	}
+
+	//populate with initial resources if a baseline fixture has been given
+	if fixtureFile != nil {
+		postlite.ExecSQLFile(t, db.DB.Db, *fixtureFile)
+	}
+
+	//reset all primary key sequences for reproducible row IDs
+	for _, tableName := range []string{"cluster_services", "domains", "domain_services", "projects", "project_services"} {
+		nextID, err := db.DB.SelectInt(fmt.Sprintf(
+			"SELECT 1 + COALESCE(MAX(id), 0) FROM %s", tableName,
+		))
+		if err != nil {
+			t.Fatal(err.Error())
+		}
+		_, err = db.DB.Exec(fmt.Sprintf(`ALTER SEQUENCE %s_id_seq RESTART WITH %d`, tableName, nextID))
+		if err != nil {
+			t.Fatal(err.Error())
+		}
+	}
+
+	db.InitGorp()
 }
 
 //AssertDBContent makes a dump of the database contents (as a sequence of

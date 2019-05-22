@@ -28,12 +28,10 @@ import (
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/test"
-
-	_ "github.com/mattn/go-sqlite3"
 )
 
 func keystoneTestCluster(t *testing.T) *core.Cluster {
-	test.InitDatabase(t)
+	test.InitDatabase(t, nil)
 
 	return &core.Cluster{
 		ID:              "west",

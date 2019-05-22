@@ -43,7 +43,7 @@ func p2u64(x uint64) *uint64 {
 
 func prepareScrapeTest(t *testing.T, numProjects int, quotaPlugins ...core.QuotaPlugin) *core.Cluster {
 	test.ResetTime()
-	test.InitDatabase(t)
+	test.InitDatabase(t, nil)
 
 	cluster := &core.Cluster{
 		ID:              "west",
@@ -150,11 +150,11 @@ func Test_ScrapeSuccess(t *testing.T) {
 
 	//set some new quota values (note that "capacity" already had a non-zero
 	//quota because of the cluster.QuotaConstraints)
-	_, err := db.DB.Exec(`UPDATE project_resources SET quota = ? WHERE name = ?`, 20, "capacity")
+	_, err := db.DB.Exec(`UPDATE project_resources SET quota = $1 WHERE name = $2`, 20, "capacity")
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = db.DB.Exec(`UPDATE project_resources SET quota = ? WHERE name = ?`, 13, "things")
+	_, err = db.DB.Exec(`UPDATE project_resources SET quota = $1 WHERE name = $2`, 13, "things")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -176,7 +176,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	test.AssertDBContent(t, "fixtures/scrape4.sql") //same as scrape3.sql except for scraped_at timestamp
 
 	//set a quota that contradicts the cluster.QuotaConstraints
-	_, err = db.DB.Exec(`UPDATE project_resources SET quota = ? WHERE name = ?`, 50, "capacity")
+	_, err = db.DB.Exec(`UPDATE project_resources SET quota = $1 WHERE name = $2`, 50, "capacity")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -204,7 +204,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 
 	//check that setting the quota of an externally-managed resource on our side
 	//is pointless
-	_, err = db.DB.Exec(`UPDATE project_resources SET quota = 42 WHERE name = ?`, "external_things")
+	_, err = db.DB.Exec(`UPDATE project_resources SET quota = 42 WHERE name = $1`, "external_things")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -242,7 +242,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 
 func setProjectServicesStale(t *testing.T) {
 	//make sure that the project is scraped again
-	_, err := db.DB.Exec(`UPDATE project_services SET stale = ?`, true)
+	_, err := db.DB.Exec(`UPDATE project_services SET stale = $1`, true)
 	if err != nil {
 		t.Fatal(err)
 	}

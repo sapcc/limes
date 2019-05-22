@@ -29,7 +29,6 @@ import (
 	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
-	"github.com/sapcc/limes/pkg/util"
 )
 
 var clusterReportQuery1 = `
@@ -96,8 +95,8 @@ func GetClusters(config core.Configuration, clusterID *string, localQuotaUsageOn
 			burstUsage        *uint64
 			physicalUsage     *uint64
 			showPhysicalUsage *bool
-			minScrapedAt      *util.Time
-			maxScrapedAt      *util.Time
+			minScrapedAt      *time.Time
+			maxScrapedAt      *time.Time
 		)
 		err := rows.Scan(&clusterID, &serviceType, &resourceName,
 			&projectsQuota, &usage, &burstUsage,
@@ -115,11 +114,15 @@ func GetClusters(config core.Configuration, clusterID *string, localQuotaUsageOn
 		if service != nil {
 			if maxScrapedAt != nil {
 				val := time.Time(*maxScrapedAt).Unix()
-				service.MaxScrapedAt = &val
+				if service.MaxScrapedAt == nil || *service.MaxScrapedAt < val {
+					service.MaxScrapedAt = &val
+				}
 			}
 			if minScrapedAt != nil {
 				val := time.Time(*minScrapedAt).Unix()
-				service.MinScrapedAt = &val
+				if service.MinScrapedAt == nil || *service.MinScrapedAt > val {
+					service.MinScrapedAt = &val
+				}
 			}
 		}
 
@@ -184,7 +187,7 @@ func GetClusters(config core.Configuration, clusterID *string, localQuotaUsageOn
 			rawCapacity   *uint64
 			comment       *string
 			subcapacities *string
-			scrapedAt     util.Time
+			scrapedAt     time.Time
 		)
 		err := rows.Scan(&clusterID, &serviceType, &resourceName, &rawCapacity, &comment, &subcapacities, &scrapedAt)
 		if err != nil {
@@ -351,7 +354,7 @@ func GetClusters(config core.Configuration, clusterID *string, localQuotaUsageOn
 				rawCapacity     *uint64
 				comment         *string
 				subcapacities   *string
-				scrapedAt       util.Time
+				scrapedAt       time.Time
 			)
 			err := rows.Scan(&sharedClusterID, &serviceType, &resourceName, &rawCapacity, &comment, &subcapacities, &scrapedAt)
 			if err != nil {

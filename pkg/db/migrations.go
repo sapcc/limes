@@ -114,16 +114,12 @@ var SQLMigrations = map[string]string{
 		ALTER TABLE projects ADD COLUMN parent_uuid TEXT NOT NULL DEFAULT '';
 	`,
 	"004_fix_domain_uuid_uniqueness.down.sql": `
-		-- BEGIN skip in sqlite
 		ALTER TABLE domains DROP CONSTRAINT domains_uuid_cluster_id_key;
 		ALTER TABLE domains ADD UNIQUE (uuid);
-		-- END skip in sqlite
 	`,
 	"004_fix_domain_uuid_uniqueness.up.sql": `
-		-- BEGIN skip in sqlite
 		ALTER TABLE domains DROP CONSTRAINT domains_uuid_key;
 		ALTER TABLE domains ADD UNIQUE (uuid, cluster_id);
-		-- END skip in sqlite
 	`,
 	"005_add_project_resource_subresources.down.sql": `
 		ALTER TABLE project_resources DROP COLUMN subresources;

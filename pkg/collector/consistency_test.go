@@ -81,20 +81,20 @@ func Test_Consistency(t *testing.T) {
 	}
 
 	//remove some *_services entries
-	_, err = db.DB.Exec(`DELETE FROM cluster_services WHERE type = ?`, "shared")
+	_, err = db.DB.Exec(`DELETE FROM cluster_services WHERE type = $1`, "shared")
 	if err != nil {
 		t.Error(err)
 	}
-	_, err = db.DB.Exec(`DELETE FROM domain_services WHERE type = ?`, "unshared")
+	_, err = db.DB.Exec(`DELETE FROM domain_services WHERE type = $1`, "unshared")
 	if err != nil {
 		t.Error(err)
 	}
-	_, err = db.DB.Exec(`DELETE FROM project_services WHERE type = ?`, "shared")
+	_, err = db.DB.Exec(`DELETE FROM project_services WHERE type = $1`, "shared")
 	if err != nil {
 		t.Error(err)
 	}
 	//add some useless *_services entries
-	epoch := time.Unix(0, 0)
+	epoch := time.Unix(0, 0).UTC()
 	err = db.DB.Insert(&db.ClusterService{
 		ClusterID: "shared",
 		Type:      "whatever",

@@ -46,14 +46,11 @@ Checkout the Limes repository into your GOPATH:
 $ go get github.com/sapcc/limes
 $ cd $GOPATH/src/github.com/sapcc/limes
 $ make
-$ make check
+$ ./testing/with-postgres-db.sh make check
 ```
 
 The `make check` will spew out a bit of bizarre-looking log, but you can easily see if it went well by looking for the
 friendly green "All tests successful" message at the end.
-
-If `make check` complains about a missing libsqlite3.so, you will need to install SQLite3 via your usual package
-manager. It's probably there already, though.
 
 ### Configuring
 

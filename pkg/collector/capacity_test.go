@@ -35,7 +35,7 @@ import (
 
 func Test_ScanCapacity(t *testing.T) {
 	test.ResetTime()
-	test.InitDatabase(t)
+	test.InitDatabase(t, nil)
 
 	cluster := &core.Cluster{
 		ID:              "west",
@@ -95,7 +95,7 @@ func Test_ScanCapacity(t *testing.T) {
 		t.Error(err)
 	}
 	_, err = db.DB.Exec(
-		`DELETE FROM cluster_resources WHERE service_id = ? AND name = ?`,
+		`DELETE FROM cluster_resources WHERE service_id = $1 AND name = $2`,
 		1, "things",
 	)
 	if err != nil {

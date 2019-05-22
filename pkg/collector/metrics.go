@@ -27,7 +27,6 @@ import (
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
-	"github.com/sapcc/limes/pkg/util"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -163,8 +162,8 @@ func (c *AggregateMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	err := db.ForeachRow(db.DB, scrapedAtAggregateQuery, queryArgs, func(rows *sql.Rows) error {
 		var (
 			serviceType  string
-			minScrapedAt util.Time
-			maxScrapedAt util.Time
+			minScrapedAt time.Time
+			maxScrapedAt time.Time
 		)
 		err := rows.Scan(&serviceType, &minScrapedAt, &maxScrapedAt)
 		if err != nil {

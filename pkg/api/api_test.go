@@ -46,8 +46,7 @@ func init() {
 func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http.Handler, *TestPolicyEnforcer) {
 	//load test database
 	t.Helper()
-	test.InitDatabase(t)
-	test.ExecSQLFile(t, startData)
+	test.InitDatabase(t, &startData)
 
 	//prepare test configuration
 	serviceTypes := []string{"shared", "unshared"}
@@ -538,7 +537,7 @@ func expectClusterCapacity(t *testing.T, clusterID, serviceType, resourceName st
 	SELECT cr.capacity, cr.comment
 	  FROM cluster_services cs
 	  JOIN cluster_resources cr ON cr.service_id = cs.id
-	 WHERE cs.cluster_id = ? AND cs.type = ? AND cr.name = ?
+	 WHERE cs.cluster_id = $1 AND cs.type = $2 AND cr.name = $3
 	`
 	var (
 		actualCapacity int64
@@ -991,7 +990,7 @@ func expectDomainQuota(t *testing.T, domainName, serviceType, resourceName strin
 		SELECT dr.quota FROM domain_resources dr
 		JOIN domain_services ds ON ds.id = dr.service_id
 		JOIN domains d ON d.id = ds.domain_id
-		WHERE d.name = ? AND ds.type = ? AND dr.name = ?`,
+		WHERE d.name = $1 AND ds.type = $2 AND dr.name = $3`,
 		domainName, serviceType, resourceName).Scan(&actualQuota)
 	if err != nil {
 		t.Fatal(err)
@@ -1244,7 +1243,7 @@ func Test_ProjectOperations(t *testing.T) {
 		SELECT pr.quota, pr.backend_quota FROM project_resources pr
 		JOIN project_services ps ON ps.id = pr.service_id
 		JOIN projects p ON p.id = ps.project_id
-		WHERE p.name = ? AND ps.type = ? AND pr.name = ?`,
+		WHERE p.name = $1 AND ps.type = $2 AND pr.name = $3`,
 		"berlin", "shared", "capacity").Scan(&actualQuota, &actualBackendQuota)
 	if err != nil {
 		t.Fatal(err)
@@ -1317,7 +1316,7 @@ func Test_ProjectOperations(t *testing.T) {
 		SELECT pr.quota, pr.backend_quota FROM project_resources pr
 		JOIN project_services ps ON ps.id = pr.service_id
 		JOIN projects p ON p.id = ps.project_id
-		WHERE p.name = ? AND ps.type = ? AND pr.name = ?`,
+		WHERE p.name = $1 AND ps.type = $2 AND pr.name = $3`,
 		"berlin", "shared", "capacity").Scan(&actualQuota, &actualBackendQuota)
 	if err != nil {
 		t.Fatal(err)

@@ -28,7 +28,6 @@ import (
 	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
-	"github.com/sapcc/limes/pkg/util"
 )
 
 var domainReportQuery1 = `
@@ -79,8 +78,8 @@ func GetDomains(cluster *core.Cluster, domainID *int64, dbi db.Interface, filter
 			infiniteBackendQuota *bool
 			physicalUsage        *uint64
 			showPhysicalUsage    *bool
-			minScrapedAt         *util.Time
-			maxScrapedAt         *util.Time
+			minScrapedAt         *time.Time
+			maxScrapedAt         *time.Time
 		)
 		err := rows.Scan(
 			&domainUUID, &domainName, &serviceType, &resourceName,
@@ -98,11 +97,15 @@ func GetDomains(cluster *core.Cluster, domainID *int64, dbi db.Interface, filter
 		if service != nil {
 			if maxScrapedAt != nil {
 				val := time.Time(*maxScrapedAt).Unix()
-				service.MaxScrapedAt = &val
+				if service.MaxScrapedAt == nil || *service.MaxScrapedAt < val {
+					service.MaxScrapedAt = &val
+				}
 			}
 			if minScrapedAt != nil {
 				val := time.Time(*minScrapedAt).Unix()
-				service.MinScrapedAt = &val
+				if service.MinScrapedAt == nil || *service.MinScrapedAt > val {
+					service.MinScrapedAt = &val
+				}
 			}
 		}
 

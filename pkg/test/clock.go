@@ -28,7 +28,7 @@ var clockSeconds int64 = -1
 //and then advances by one second on every call.
 func TimeNow() time.Time {
 	clockSeconds++
-	return time.Unix(clockSeconds, 0)
+	return time.Unix(clockSeconds, 0).UTC()
 }
 
 //ResetTime should be called at the start of unit tests that use TimeNow, to

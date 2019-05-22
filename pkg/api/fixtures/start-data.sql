@@ -1,7 +1,9 @@
+CREATE OR REPLACE FUNCTION unix(i integer) RETURNS timestamp AS $$ SELECT TO_TIMESTAMP(i) AT TIME ZONE 'Etc/UTC' $$ LANGUAGE SQL;
+
 -- two services, one shared, one unshared
-INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (1, 'west',   'unshared', 1000);
-INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (2, 'shared', 'shared',   1100);
-INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (3, 'east',   'unshared', 1200);
+INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (1, 'west',   'unshared', UNIX(1000));
+INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (2, 'shared', 'shared',   UNIX(1100));
+INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (3, 'east',   'unshared', UNIX(1200));
 
 -- both services have the resources "things" and "capacity"; we can only scrape capacity for "things"...
 INSERT INTO cluster_resources (service_id, name, capacity, comment, subcapacities) VALUES (1, 'things', 139, '', '[{"smaller_half":46},{"larger_half":93}]');
@@ -44,14 +46,14 @@ INSERT INTO projects (id, domain_id, name, uuid, parent_uuid, has_bursting) VALU
 INSERT INTO projects (id, domain_id, name, uuid, parent_uuid, has_bursting) VALUES (4, 3, 'warsaw', 'uuid-for-warsaw', 'uuid-for-poland', FALSE);
 
 -- project_services is fully populated (as ensured by the collector's consistency check)
-INSERT INTO project_services (id, project_id, type, scraped_at) VALUES (1, 1, 'unshared', 11);
-INSERT INTO project_services (id, project_id, type, scraped_at) VALUES (2, 1, 'shared',   22);
-INSERT INTO project_services (id, project_id, type, scraped_at) VALUES (3, 2, 'unshared', 33);
-INSERT INTO project_services (id, project_id, type, scraped_at) VALUES (4, 2, 'shared',   44);
-INSERT INTO project_services (id, project_id, type, scraped_at) VALUES (5, 3, 'unshared', 55);
-INSERT INTO project_services (id, project_id, type, scraped_at) VALUES (6, 3, 'shared',   66);
-INSERT INTO project_services (id, project_id, type, scraped_at) VALUES (7, 4, 'unshared', 77);
-INSERT INTO project_services (id, project_id, type, scraped_at) VALUES (8, 4, 'shared',   88);
+INSERT INTO project_services (id, project_id, type, scraped_at) VALUES (1, 1, 'unshared', UNIX(11));
+INSERT INTO project_services (id, project_id, type, scraped_at) VALUES (2, 1, 'shared',   UNIX(22));
+INSERT INTO project_services (id, project_id, type, scraped_at) VALUES (3, 2, 'unshared', UNIX(33));
+INSERT INTO project_services (id, project_id, type, scraped_at) VALUES (4, 2, 'shared',   UNIX(44));
+INSERT INTO project_services (id, project_id, type, scraped_at) VALUES (5, 3, 'unshared', UNIX(55));
+INSERT INTO project_services (id, project_id, type, scraped_at) VALUES (6, 3, 'shared',   UNIX(66));
+INSERT INTO project_services (id, project_id, type, scraped_at) VALUES (7, 4, 'unshared', UNIX(77));
+INSERT INTO project_services (id, project_id, type, scraped_at) VALUES (8, 4, 'shared',   UNIX(88));
 
 -- project_resources contains some pathological cases
 -- berlin (also used for test cases concerning subresources)
@@ -81,8 +83,8 @@ INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, su
 
 -- insert some bullshit data that should be filtered out by the pkg/reports/ logic
 -- (cluster "north", service "weird" and resource "items" are not configured)
-INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (101, 'north', 'unshared', 1000);
-INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (102, 'north', 'shared',   1100);
+INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (101, 'north', 'unshared', UNIX(1000));
+INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (102, 'north', 'shared',   UNIX(1100));
 INSERT INTO cluster_resources (service_id, name, capacity) VALUES (101, 'things', 1);
 INSERT INTO cluster_resources (service_id, name, capacity) VALUES (102, 'things', 1);
 

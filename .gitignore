@@ -5,8 +5,7 @@ build/install/
 build/docker.tar
 
 # test artifacts
-unittest.db
-unittest.db-journal
+testing/postgres*
 build/cover.out
 build/*.cover.out
 build/cover.html

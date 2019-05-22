@@ -31,8 +31,17 @@ Most of the tests are in the top-level packages `pkg/collector` and `pkg/api`. I
 else is used by these packages, except for the plugin implementations in `pkg/plugins`. We do not test these yet because
 `go test` cannot assume the presence of an OpenStack cluster anywhere near where the test runs.
 
-During `go test`, Postgres is substituted for SQLite. The `pkg/test` module provides mock implementations of
-`limes.Driver`, `limes.QuotaPlugin`, `limes.CapacityPlugin`, `limes.DiscoveryPlugin` and `time.Now`, and a few helper
-functions to load and assert SQL data as well as simulate HTTP requests.
+Limes requires a Postgres database. Tests can be run with the helper script `./testing/with-postgres-db.sh` to use a
+self-contained testing database located at `testing/postgresql*`. For example:
+
+```bash
+./testing/with-postgres-db.sh make check
+./testing/with-postgres-db.sh make quick-check
+./testing/with-postgres-db.sh go test ./pkg/api
+```
+
+The `pkg/test` module provides mock implementations of `limes.Driver`, `limes.QuotaPlugin`, `limes.CapacityPlugin`,
+`limes.DiscoveryPlugin` and `time.Now`, and a few helper functions to load and assert SQL data as well as simulate HTTP
+requests.
 
 [migrate]: https://github.com/golang-migrate/migrate

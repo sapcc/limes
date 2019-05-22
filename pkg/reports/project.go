@@ -29,7 +29,6 @@ import (
 	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
-	"github.com/sapcc/limes/pkg/util"
 )
 
 var projectReportQuery = `
@@ -66,7 +65,7 @@ func GetProjects(cluster *core.Cluster, domain db.Domain, projectID *int64, dbi 
 			projectParentUUID  string
 			projectHasBursting bool
 			serviceType        *string
-			scrapedAt          *util.Time
+			scrapedAt          *time.Time
 			resourceName       *string
 			quota              *uint64
 			usage              *uint64

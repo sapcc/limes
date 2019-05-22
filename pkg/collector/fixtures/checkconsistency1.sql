@@ -1,6 +1,6 @@
 INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (1, 'west', 'unshared', 0);
-INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (2, 'shared', 'whatever', 0);
-INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (3, 'west', 'shared', 0);
+INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (3, 'shared', 'whatever', 0);
+INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (4, 'west', 'shared', 0);
 
 INSERT INTO domain_resources (service_id, name, quota) VALUES (2, 'capacity', 200);
 
@@ -16,7 +16,7 @@ INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, su
 INSERT INTO project_services (id, project_id, type, scraped_at, stale) VALUES (1, 1, 'unshared', NULL, FALSE);
 INSERT INTO project_services (id, project_id, type, scraped_at, stale) VALUES (3, 2, 'unshared', NULL, FALSE);
 INSERT INTO project_services (id, project_id, type, scraped_at, stale) VALUES (5, 3, 'unshared', NULL, FALSE);
-INSERT INTO project_services (id, project_id, type, scraped_at, stale) VALUES (6, 1, 'whatever', NULL, FALSE);
+INSERT INTO project_services (id, project_id, type, scraped_at, stale) VALUES (7, 1, 'whatever', NULL, FALSE);
 
 INSERT INTO projects (id, domain_id, name, uuid, parent_uuid, has_bursting) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany', FALSE);
 INSERT INTO projects (id, domain_id, name, uuid, parent_uuid, has_bursting) VALUES (2, 1, 'dresden', 'uuid-for-dresden', 'uuid-for-berlin', FALSE);
