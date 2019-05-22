@@ -170,6 +170,11 @@ func NewCapacityPlugin(id string, resources ...string) *CapacityPlugin {
 	return &CapacityPlugin{id, resources, 42, false}
 }
 
+//Init implements the core.CapacityPlugin interface.
+func (p *CapacityPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
+	return nil
+}
+
 //ID implements the core.CapacityPlugin interface.
 func (p *CapacityPlugin) ID() string {
 	return p.PluginID
