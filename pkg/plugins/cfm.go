@@ -30,7 +30,8 @@ import (
 )
 
 type cfmPlugin struct {
-	cfg core.ServiceConfiguration
+	cfg       core.ServiceConfiguration
+	projectID string
 
 	shareserversCache        []cfmShareserver
 	shareserversCacheExpires time.Time
@@ -43,8 +44,9 @@ func init() {
 }
 
 //Init implements the core.QuotaPlugin interface.
-func (p *cfmPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
-	return nil
+func (p *cfmPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
+	p.projectID, err = getProjectIDForToken(provider, eo)
+	return err
 }
 
 //ServiceInfo implements the core.QuotaPlugin interface.
@@ -68,7 +70,7 @@ func (p *cfmPlugin) Resources() []limes.ResourceInfo {
 
 //Scrape implements the core.QuotaPlugin interface.
 func (p *cfmPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, error) {
-	client, err := newCFMClient(provider, eo)
+	client, err := newCFMClient(provider, eo, p.projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -152,7 +154,7 @@ func (p *cfmPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherclou
 		return errors.New("the database/cfm_share_capacity resource is externally managed")
 	}
 
-	client, err := newCFMClient(provider, eo)
+	client, err := newCFMClient(provider, eo, p.projectID)
 	if err != nil {
 		return err
 	}

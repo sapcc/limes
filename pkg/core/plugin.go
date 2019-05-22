@@ -119,6 +119,9 @@ type CapacityData struct {
 //for each type of hypervisor (KVM, VMware, etc.) which use the concrete APIs
 //of these hypervisors instead of the OpenStack Compute API.
 type CapacityPlugin interface {
+	//Init is guaranteed to be called before all other methods exposed by the
+	//interface.
+	Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error
 	//ID returns a unique identifier for this CapacityPlugin which is used to
 	//identify it in the configuration.
 	ID() string

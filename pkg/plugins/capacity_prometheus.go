@@ -84,6 +84,11 @@ func prometheusGetSingleValue(client prometheus.QueryAPI, queryStr string, defau
 	}
 }
 
+//Init implements the core.CapacityPlugin interface.
+func (p *capacityPrometheusPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
+	return nil
+}
+
 //ID implements the core.CapacityPlugin interface.
 func (p *capacityPrometheusPlugin) ID() string {
 	return "prometheus"

@@ -42,6 +42,11 @@ func init() {
 	})
 }
 
+//Init implements the core.CapacityPlugin interface.
+func (p *capacityNovaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
+	return nil
+}
+
 func (p *capacityNovaPlugin) ID() string {
 	return "nova"
 }

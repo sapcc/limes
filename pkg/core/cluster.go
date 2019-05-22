@@ -152,6 +152,16 @@ func (c *Cluster) Connect() error {
 		}
 	}
 
+	for _, plugin := range c.CapacityPlugins {
+		provider := c.Config.Auth.ProviderClient
+		eo := c.Config.Auth.EndpointOpts
+
+		err := plugin.Init(provider, eo)
+		if err != nil {
+			return fmt.Errorf("failed to initialize capacitor %s in cluster %s: %s", plugin.ID(), c.ID, err.Error())
+		}
+	}
+
 	//load quota constraints
 	if c.Config.ConstraintConfigPath != "" && c.QuotaConstraints == nil {
 		var errs []error

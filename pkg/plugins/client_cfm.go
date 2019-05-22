@@ -70,7 +70,7 @@ func getProjectIDForToken(provider *gophercloud.ProviderClient, eo gophercloud.E
 	return project.ID, nil
 }
 
-func newCFMClient(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (*cfmClient, error) {
+func newCFMClient(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, projectID string) (*cfmClient, error) {
 	serviceType := "database"
 	eoCFM := eo
 	eoCFM.ApplyDefaults(serviceType)
@@ -80,14 +80,13 @@ func newCFMClient(provider *gophercloud.ProviderClient, eo gophercloud.EndpointO
 		return nil, err
 	}
 
-	ourProjectID, err := getProjectIDForToken(provider, eo)
 	return &cfmClient{
 		ServiceClient: &gophercloud.ServiceClient{
 			ProviderClient: provider,
 			Endpoint:       url,
 			Type:           serviceType,
 		},
-		projectID: ourProjectID,
+		projectID: projectID,
 	}, nil
 }
 

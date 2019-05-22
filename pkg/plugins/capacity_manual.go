@@ -36,6 +36,11 @@ func init() {
 	})
 }
 
+//Init implements the core.CapacityPlugin interface.
+func (p *capacityManualPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
+	return nil
+}
+
 //ID implements the core.CapacityPlugin interface.
 func (p *capacityManualPlugin) ID() string {
 	return "manual"

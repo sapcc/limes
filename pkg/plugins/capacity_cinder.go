@@ -37,6 +37,11 @@ func init() {
 	})
 }
 
+//Init implements the core.CapacityPlugin interface.
+func (p *capacityCinderPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
+	return nil
+}
+
 //ID implements the core.CapacityPlugin interface.
 func (p *capacityCinderPlugin) ID() string {
 	return "cinder"

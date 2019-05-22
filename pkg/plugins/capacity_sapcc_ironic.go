@@ -53,6 +53,11 @@ func init() {
 	prometheus.MustRegister(ironicUnmatchedNodesGauge)
 }
 
+//Init implements the core.CapacityPlugin interface.
+func (p *capacitySapccIronicPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
+	return nil
+}
+
 //ID implements the core.CapacityPlugin interface.
 func (p *capacitySapccIronicPlugin) ID() string {
 	return "sapcc-ironic"

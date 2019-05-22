@@ -29,13 +29,20 @@ import (
 )
 
 type capacityCFMPlugin struct {
-	cfg core.CapacitorConfiguration
+	cfg       core.CapacitorConfiguration
+	projectID string
 }
 
 func init() {
 	core.RegisterCapacityPlugin(func(c core.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) core.CapacityPlugin {
-		return &capacityCFMPlugin{c}
+		return &capacityCFMPlugin{cfg: c}
 	})
+}
+
+//Init implements the core.CapacityPlugin interface.
+func (p *capacityCFMPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
+	p.projectID, err = getProjectIDForToken(provider, eo)
+	return err
 }
 
 //ID implements the core.CapacityPlugin interface.
@@ -45,7 +52,7 @@ func (p *capacityCFMPlugin) ID() string {
 
 //Scrape implements the core.CapacityPlugin interface.
 func (p *capacityCFMPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]core.CapacityData, error) {
-	client, err := newCFMClient(provider, eo)
+	client, err := newCFMClient(provider, eo, p.projectID)
 	if err != nil {
 		return nil, err
 	}
