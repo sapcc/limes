@@ -4,10 +4,6 @@ set -euo pipefail
 # set working directory to repo root
 cd "$(dirname "$(dirname "$(readlink -f "$0")")")"
 
-# defined language settings (this influences how Postgres orders results)
-export LANG=C
-unset LANGUAGE LC_ADDRESS LC_ALL LC_COLLATE LC_CTYPE LC_IDENTIFICATION LC_MEASUREMENT LC_MESSAGES LC_MONETARY LC_NAME LC_NUMERIC LC_PAPER LC_TELEPHONE LC_TIME
-
 step() {
   echo -e "\e[1;36m>>\e[0;36m $@...\e[0m"
 }

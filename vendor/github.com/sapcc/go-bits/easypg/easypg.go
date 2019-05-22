@@ -17,12 +17,10 @@
 *
 *******************************************************************************/
 
-//Package postlite is a database library for applications that use PostgreSQL
-//in production and in-memory SQLite for testing. It imports the necessary SQL
-//drivers and integrates github.com/golang-migrate/migrate for data definition.
-//When running with SQLite, executed SQL statements are logged with
-//logg.Debug() from github.com/sapcc/go-bits/logg.
-package postlite
+//Package easypg is a database library for applications that use PostgreSQL.
+//It imports the libpq SQL driver and integrates
+//github.com/golang-migrate/migrate for data definition.
+package easypg
 
 import (
 	"database/sql"
@@ -36,8 +34,6 @@ import (
 	"github.com/golang-migrate/migrate"
 	"github.com/golang-migrate/migrate/database"
 	"github.com/golang-migrate/migrate/database/postgres"
-	"github.com/golang-migrate/migrate/database/sqlite3"
-	"github.com/golang-migrate/migrate/source"
 	bindata "github.com/golang-migrate/migrate/source/go_bindata"
 
 	//enable postgres driver for database/sql
@@ -61,26 +57,26 @@ import (
 //    }
 //
 type Configuration struct {
-	//(required for Postgres, ignored for SQLite) A libpq connection URL, see:
+	//(required) A libpq connection URL, see:
 	//<https://www.postgresql.org/docs/9.6/static/libpq-connect.html#LIBPQ-CONNSTRING>
 	PostgresURL *net_url.URL
 	//(required) The schema migrations, in Postgres syntax. See above for details.
 	Migrations map[string]string
-	//(optional) If not empty, use this database/sql driver instead of "postgres"
-	//or "sqlite3-postlite". This is useful e.g. when using github.com/majewsky/sqlproxy.
+	//(optional) If not empty, use this database/sql driver instead of "postgres".
+	//This is useful e.g. when using github.com/majewsky/sqlproxy.
 	OverrideDriverName string
 }
 
-//Connect connects to a Postgres database if cfg.PostgresURL is set, or to an
-//in-memory SQLite3 database otherwise. Use of SQLite3 is only safe in unit
-//tests! Unit tests may not be run in parallel!
+var errNoPostgresURL = errors.New("no PostgresURL given")
+
+//Connect connects to a Postgres database.
 func Connect(cfg Configuration) (*sql.DB, error) {
-	migrations := cfg.Migrations
 	if cfg.PostgresURL == nil {
-		migrations = translatePostgresDDLToSQLite(migrations)
-	} else {
-		migrations = prepareDDLForPostgres(migrations)
+		return nil, errNoPostgresURL
 	}
+
+	migrations := cfg.Migrations
+	migrations = wrapDDLInTransactions(migrations)
 	migrations = stripWhitespace(migrations)
 
 	//use the "go-bindata" driver for github.com/golang-migrate/migrate
@@ -101,67 +97,16 @@ func Connect(cfg Configuration) (*sql.DB, error) {
 		return nil, err
 	}
 
-	var (
-		db      *sql.DB
-		dbd     database.Driver
-		dbdName string
-	)
-
-	if cfg.PostgresURL == nil {
-		db, dbd, err = connectToSQLite(cfg.OverrideDriverName, sourceDriver)
-		if err != nil {
-			return nil, fmt.Errorf("cannot create SQLite in-memory DB: %s", err.Error())
-		}
-		dbdName = "sqlite3"
-	} else {
-		db, dbd, err = connectToPostgres(cfg.PostgresURL, cfg.OverrideDriverName)
-		if err != nil {
-			return nil, fmt.Errorf("cannot connect to Postgres: %s", err.Error())
-		}
-		dbdName = "postgres"
+	db, dbd, err := connectToPostgres(cfg.PostgresURL, cfg.OverrideDriverName)
+	if err != nil {
+		return nil, fmt.Errorf("cannot connect to Postgres: %s", err.Error())
 	}
 
-	err = runMigration(migrate.NewWithInstance("go-bindata", sourceDriver, dbdName, dbd))
+	err = runMigration(migrate.NewWithInstance("go-bindata", sourceDriver, "postgres", dbd))
 	if err != nil {
 		return nil, fmt.Errorf("cannot apply database schema: %s", err.Error())
 	}
 	return db, nil
-}
-
-func connectToSQLite(driverName string, sourceDriver source.Driver) (*sql.DB, database.Driver, error) {
-	if driverName == "" {
-		driverName = "sqlite3-postlite"
-	}
-	//see FAQ in go-sqlite3 README about the connection string
-	dsn := "file::memory:?mode=memory&cache=shared"
-	db, err := sql.Open(driverName, dsn)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	//wipe leftovers from previous test runs
-	//(courtesy of https://stackoverflow.com/a/548297/334761)
-	for _, stmt := range []string{
-		"PRAGMA writable_schema = 1;",
-		"DELETE FROM sqlite_master WHERE TYPE IN ('table', 'index', 'trigger');",
-		"PRAGMA writable_schema = 0;",
-		"VACUUM;",
-		"PRAGMA INTEGRITY_CHECK;",
-	} {
-		_, err := db.Exec(stmt)
-		if err != nil {
-			return nil, nil, err
-		}
-	}
-
-	//we cannot use `db` for migrate; the sqlite3 driver for migrate gets
-	//confused by the customizations in the sqlite3-postlite SQL driver
-	dbForMigrate, err := sql.Open("sqlite3", dsn)
-	if err != nil {
-		return nil, nil, err
-	}
-	dbd, err := sqlite3.WithInstance(dbForMigrate, &sqlite3.Config{})
-	return db, dbd, err
 }
 
 var dbNotExistErrRx = regexp.MustCompile(`^pq: database "([^"]+)" does not exist$`)
@@ -191,7 +136,7 @@ func connectToPostgres(url *net_url.URL, driverName string) (*sql.DB, database.D
 	//execute CREATE DATABASE
 	urlWithoutDB := *url
 	urlWithoutDB.Path = "/"
-	db2, err := sql.Open("postgres", urlWithoutDB.String())
+	db2, err := sql.Open(driverName, urlWithoutDB.String())
 	if err == nil {
 		_, err = db2.Exec("CREATE DATABASE " + dbName)
 	}
@@ -205,7 +150,7 @@ func connectToPostgres(url *net_url.URL, driverName string) (*sql.DB, database.D
 	}
 
 	//now the actual database is there and we can connect to it
-	db, err = sql.Open("postgres", url.String())
+	db, err = sql.Open(driverName, url.String())
 	if err != nil {
 		return nil, nil, err
 	}
@@ -239,13 +184,9 @@ func stripWhitespace(in map[string]string) map[string]string {
 	return out
 }
 
-var skipInPostgresRx = regexp.MustCompile(`(?ms)^\s*--\s*BEGIN\s+skip\s+in\s+postgres\s*?$.*^\s*--\s*END\s+skip\s+in\s+postgres\s*?$`)
-
-func prepareDDLForPostgres(in map[string]string) map[string]string {
+func wrapDDLInTransactions(in map[string]string) map[string]string {
 	out := make(map[string]string, len(in))
 	for filename, sql := range in {
-		//remove DDL that is only used for SQLite
-		sql = skipInPostgresRx.ReplaceAllString(sql, "")
 		//wrap DDL in transactions
 		out[filename] = "BEGIN;\n" + strings.TrimSuffix(strings.TrimSpace(sql), ";") + ";\nCOMMIT;"
 	}

@@ -26,8 +26,8 @@ import (
 
 	gorp "gopkg.in/gorp.v2"
 
+	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/logg"
-	"github.com/sapcc/go-bits/postlite"
 )
 
 //DB holds the main database connection. It will be `nil` until InitDatabase() is called.
@@ -46,7 +46,7 @@ func Init(cfg Configuration) error {
 		return errors.New("malformed URL in database.location: " + err.Error())
 	}
 
-	db, err := postlite.Connect(postlite.Configuration{
+	db, err := easypg.Connect(easypg.Configuration{
 		PostgresURL: pgURL,
 		Migrations:  SQLMigrations,
 	})

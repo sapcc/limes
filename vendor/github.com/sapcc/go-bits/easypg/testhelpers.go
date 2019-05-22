@@ -1,6 +1,6 @@
 /*******************************************************************************
 *
-* Copyright 2017-2018 SAP SE
+* Copyright 2017-2019 SAP SE
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 *
 *******************************************************************************/
 
-package postlite
+package easypg
 
 import (
 	"database/sql"
@@ -81,18 +81,10 @@ func getDBContent(t *testing.T, db *sql.DB) string {
 	//list all tables
 	var tableNames []string
 	rows, err := db.Query(`
-		SELECT name FROM sqlite_master WHERE type='table'
-		AND name != 'schema_migrations' AND name NOT LIKE '%sqlite%'
-		ORDER BY name
+		SELECT table_name FROM information_schema.tables
+		WHERE table_schema = 'public' AND table_name != 'schema_migrations'
+		ORDER BY table_name COLLATE "C"
 	`)
-	if err != nil {
-		//if this errors, then we're probably on Postgres, not on SQLite
-		rows, err = db.Query(`
-			SELECT table_name FROM information_schema.tables
-			WHERE table_schema = 'public' AND table_name != 'schema_migrations'
-			ORDER BY table_name
-		`)
-	}
 
 	failOnErr(t, err)
 	for rows.Next() {
