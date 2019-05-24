@@ -114,6 +114,7 @@ func (c *Collector) Scrape() {
 		provider, eo := c.Cluster.ProviderClientForService(serviceType)
 		resourceData, err := c.Plugin.Scrape(provider, eo, c.Cluster.ID, domainUUID, projectUUID)
 		if err != nil {
+			scrapeFailedCounter.With(labels).Inc()
 			//special case: stop scraping for a while when the backend service is not
 			//yet registered in the catalog (this prevents log spamming during buildup)
 			sleepInterval := idleInterval
@@ -122,7 +123,6 @@ func (c *Collector) Scrape() {
 				c.LogError("suspending %s data scraping for %d minutes: %s", serviceType, sleepInterval/time.Minute, err.Error())
 			} else {
 				c.LogError("scrape %s data for %s/%s failed: %s", serviceType, domainName, projectName, util.ErrorToString(err))
-				scrapeFailedCounter.With(labels).Inc()
 
 				if serviceScrapedAt == nil {
 					//see explanation inside the called function's body
