@@ -443,6 +443,27 @@ The `volumes` resource supports subresource scraping. Subresources bear the foll
 Note that capacity for a resource only becomes visible when the corresponding service is enabled in the
 `clusters.$id.services` list as well.
 
+For each capacitor, an `auth:` section can be given to provide alternative credentials for read operations performed by
+this capacitor. This is particularly useful for shared services, when the service user with the required permissions is
+in a different cluster than the one for which quotas are managed. The structure is the same as for `clusters.$id.auth`.
+For example:
+
+```yaml
+capacitors:
+  - id: nova
+  - id: cinder
+    auth:
+      auth_url:            https://keystone.staging.example.com/v3
+      user_name:           limes
+      user_domain_name:    Default
+      project_name:        service
+      project_domain_name: Default
+      password:            swordfish
+      region_name:         staging
+    cinder:
+      volume_backend_name: "vmware"
+```
+
 ## `cfm`
 
 ```yaml

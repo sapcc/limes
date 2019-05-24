@@ -121,7 +121,8 @@ type ServiceConfiguration struct {
 //CapacitorConfiguration describes a capacity plugin that is enabled for a
 //certain cluster.
 type CapacitorConfiguration struct {
-	ID string `yaml:"id"`
+	ID   string          `yaml:"id"`
+	Auth *AuthParameters `yaml:"auth"`
 	//for capacitors that need configuration, add a field with the plugin's ID as
 	//name and put the config data in there (use a struct to be able to give
 	//config options meaningful names)

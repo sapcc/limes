@@ -152,13 +152,22 @@ func (c *Cluster) Connect() error {
 		}
 	}
 
-	for _, plugin := range c.CapacityPlugins {
+	for _, capa := range c.Config.Capacitors {
 		provider := c.Config.Auth.ProviderClient
 		eo := c.Config.Auth.EndpointOpts
 
-		err := plugin.Init(provider, eo)
+		if capa.Auth != nil {
+			err := capa.Auth.Connect()
+			if err != nil {
+				return fmt.Errorf("failed to authenticate for capacitor %s in cluster %s: %s", capa.ID, c.ID, err.Error())
+			}
+			provider = capa.Auth.ProviderClient
+			eo = capa.Auth.EndpointOpts
+		}
+
+		err := c.CapacityPlugins[capa.ID].Init(provider, eo)
 		if err != nil {
-			return fmt.Errorf("failed to initialize capacitor %s in cluster %s: %s", plugin.ID(), c.ID, err.Error())
+			return fmt.Errorf("failed to initialize capacitor %s in cluster %s: %s", capa.ID, c.ID, err.Error())
 		}
 	}
 
