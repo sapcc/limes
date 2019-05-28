@@ -175,6 +175,12 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 		}
 	}
 
+	//preserve the VCenter HA reserve, which is reported via Nova,
+	//but not accesible
+	//TODO: This must be replaced with a more generic attribute or solved in Nova
+	totalVcpus = uint64(float64(totalVcpus) * 0.9)
+	totalMemoryMb = uint64(float64(totalMemoryMb) * 0.9)
+
 	capacity := map[string]map[string]core.CapacityData{
 		"compute": {
 			"cores": core.CapacityData{Capacity: totalVcpus},
