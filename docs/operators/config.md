@@ -548,6 +548,8 @@ capacitors:
       extra_specs:
         first: 'foo'
         second: 'bar'
+      cpu_multiplier: 0.9
+      ram_multiplier: 0.9
 ```
 
 | Resource | Method |
@@ -563,6 +565,9 @@ uses the `hypervisor_type` reported by Nova instead.
 The `nova.extra_specs` parameter can be used to control how flavors are enumerated. Only those flavors will be
 considered which have all the extra specs noted in this map, with the same values as defined in the configuration file.
 This is particularly useful to filter Ironic flavors, which usually have much larger root disk sizes.
+
+If the `nova.cpu_multiplier` and/or `nova.ram_multiplier` values are set, the reported capacities are multipled with
+these factors. If you want to keep a reserve, set this to slightly smaller than 1. The default value is 1.
 
 ## `prometheus`
 
