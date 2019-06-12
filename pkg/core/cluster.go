@@ -236,6 +236,18 @@ func (c *Cluster) ProviderClient() (*gophercloud.ProviderClient, gophercloud.End
 	return c.Config.Auth.ProviderClient, c.Config.Auth.EndpointOpts
 }
 
+//ProviderClientForCapacitor returns the gophercloud.ProviderClient for this
+//capacitor. This returns nil unless Connect() is called first. (This usually
+//happens at program startup time for the current cluster.)
+func (c *Cluster) ProviderClientForCapacitor(capacitorID string) (*gophercloud.ProviderClient, gophercloud.EndpointOpts) {
+	for _, capa := range c.Config.Capacitors {
+		if capa.ID == capacitorID && capa.Auth != nil {
+			return capa.Auth.ProviderClient, capa.Auth.EndpointOpts
+		}
+	}
+	return c.Config.Auth.ProviderClient, c.Config.Auth.EndpointOpts
+}
+
 //ProviderClientForService returns the gophercloud.ProviderClient for this
 //service. This returns nil unless Connect() is called first. (This usually
 //happens at program startup time for the current cluster.)

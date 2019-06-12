@@ -66,7 +66,7 @@ func (c *Collector) scanCapacity() {
 		clusterCapacitorSuccessCounter.With(labels).Add(0)
 		clusterCapacitorFailedCounter.With(labels).Add(0)
 
-		provider, eo := c.Cluster.ProviderClient()
+		provider, eo := c.Cluster.ProviderClientForCapacitor(capacitorID)
 		capacities, err := plugin.Scrape(provider, eo, c.Cluster.ID)
 		if err != nil {
 			c.LogError("scan capacity with capacitor %s failed: %s", capacitorID, util.ErrorToString(err))

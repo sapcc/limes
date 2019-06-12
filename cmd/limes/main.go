@@ -300,7 +300,7 @@ func taskTestScanCapacity(config core.Configuration, cluster *core.Cluster, args
 
 	result := make(map[string]map[string]core.CapacityData)
 	for capacitorID, plugin := range cluster.CapacityPlugins {
-		provider, eo := cluster.ProviderClient()
+		provider, eo := cluster.ProviderClientForCapacitor(capacitorID)
 		capacities, err := plugin.Scrape(provider, eo, cluster.ID)
 		if err != nil {
 			logg.Error("scan capacity with capacitor %s failed: %s", capacitorID, util.ErrorToString(err))
