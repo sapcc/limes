@@ -118,19 +118,13 @@ func (p *swiftPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclou
 		"project_id": projectUUID,
 	}
 
-	containers, err := account.Containers().Collect()
+	containerInfos, err := account.Containers().CollectDetailed()
 	if err != nil {
 		logg.Error("Could not list containers in Swift account '%s': %v", projectUUID, err)
 	} else {
-		for _, container := range containers {
-			cHeaders, err := container.Headers()
-			if err != nil {
-				logg.Error("Could not get headers for container '%s' in Swift account '%s': %v", container.Name(), projectUUID, err)
-				continue
-			}
-
-			metricLabels["container_name"] = container.Name()
-			swiftObjectsCountGauge.With(metricLabels).Set(float64(cHeaders.ObjectCount().Get()))
+		for _, info := range containerInfos {
+			metricLabels["container_name"] = info.Container.Name()
+			swiftObjectsCountGauge.With(metricLabels).Set(float64(info.ObjectCount))
 		}
 	}
 
