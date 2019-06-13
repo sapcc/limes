@@ -79,6 +79,7 @@ func (c *Collector) Scrape() {
 	}
 	scrapeSuccessCounter.With(labels).Add(0)
 	scrapeFailedCounter.With(labels).Add(0)
+	scrapeSuspendedCounter.With(labels).Add(0)
 
 	for {
 		var (
@@ -121,6 +122,7 @@ func (c *Collector) Scrape() {
 			if _, ok := err.(*gophercloud.ErrEndpointNotFound); ok {
 				sleepInterval = serviceNotDeployedIdleInterval
 				c.LogError("suspending %s data scraping for %d minutes: %s", serviceType, sleepInterval/time.Minute, err.Error())
+				scrapeSuspendedCounter.With(labels).Inc()
 			} else {
 				c.LogError("scrape %s data for %s/%s failed: %s", serviceType, domainName, projectName, util.ErrorToString(err))
 
