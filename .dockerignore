@@ -3,10 +3,4 @@ build/
 .gopath/pkg/
 
 # test artifacts
-unittest.db
-unittest.db-journal
 *.actual
-
-# vendoring artifacts
-.golangvend-cache/
-
