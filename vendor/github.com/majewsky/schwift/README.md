@@ -6,7 +6,9 @@ This is a Go client library for [OpenStack Swift](https://github.com/openstack/s
 frustrated with the inflexible API design of [`ncw/swift`](https://github.com/ncw/swift); see [near the
 bottom](#why-another-swift-client-library) for details.
 
-<p style="color:red;font-weight:bold">WARNING: This is in a pre-alpha stage and neither complete nor tested.</p>
+This library is currently in **beta**: It's already used by some projects, and I'm working towards a
+stable 1.0 version with API compatibility promises, but [a few things are still
+missing](https://github.com/majewsky/schwift/issues/1).
 
 ## Installation
 
@@ -29,7 +31,7 @@ authOptions, err := openstack.AuthOptionsFromEnv()
 provider, err := openstack.AuthenticatedClient(authOptions)
 client, err := openstack.NewObjectStorageV1(provider, gophercloud.EndpointOpts{})
 
-account, err := gopherschwift.Wrap(client)
+account, err := gopherschwift.Wrap(client, nil)
 ```
 
 To connect to Swift using Swift's built-in authentication:
@@ -47,7 +49,7 @@ client, err := swauth.NewObjectStorageV1(provider, swauth.AuthOpts {
     Key:  "password",
 })
 
-account, err := gopherschwift.Wrap(client)
+account, err := gopherschwift.Wrap(client, nil)
 ```
 
 From this point, follow the [API documentation](https://godoc.org/github.com/majewsky/schwift) for what you can do with

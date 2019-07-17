@@ -30,6 +30,7 @@ import (
 type iteratorInterface interface {
 	getAccount() *Account
 	getContainerName() string
+	getDelimiter() string
 	getPrefix() string
 	getOptions() *RequestOptions
 	//putHeader initializes the AccountHeaders/ContainerHeaders field of the
@@ -39,6 +40,7 @@ type iteratorInterface interface {
 
 func (i ContainerIterator) getAccount() *Account        { return i.Account }
 func (i ContainerIterator) getContainerName() string    { return "" }
+func (i ContainerIterator) getDelimiter() string        { return "" }
 func (i ContainerIterator) getPrefix() string           { return i.Prefix }
 func (i ContainerIterator) getOptions() *RequestOptions { return i.Options }
 
@@ -53,6 +55,7 @@ func (i ContainerIterator) putHeader(hdr http.Header) error {
 
 func (i ObjectIterator) getAccount() *Account        { return i.Container.Account() }
 func (i ObjectIterator) getContainerName() string    { return i.Container.Name() }
+func (i ObjectIterator) getDelimiter() string        { return i.Delimiter }
 func (i ObjectIterator) getPrefix() string           { return i.Prefix }
 func (i ObjectIterator) getOptions() *RequestOptions { return i.Options }
 
@@ -79,6 +82,9 @@ func (b *iteratorBase) request(limit int, detailed bool) Request {
 		Options:       cloneRequestOptions(b.i.getOptions(), nil),
 	}
 
+	if delimiter := b.i.getDelimiter(); delimiter != "" {
+		r.Options.Values.Set("delimiter", delimiter)
+	}
 	if prefix := b.i.getPrefix(); prefix != "" {
 		r.Options.Values.Set("prefix", prefix)
 	}

@@ -22,12 +22,19 @@ import (
 	"net/http"
 )
 
-//Container represents a Swift container.
+//Container represents a Swift container. Instances are usually obtained by
+//traversing downwards from an account with Account.Container() or
+//Account.Containers(), or upwards from an object with Object.Container().
 type Container struct {
 	a    *Account
 	name string
 	//cache
 	headers *ContainerHeaders
+}
+
+//IsEqualTo returns true if both Container instances refer to the same container.
+func (c *Container) IsEqualTo(other *Container) bool {
+	return other.name == c.name && other.a.IsEqualTo(c.a)
 }
 
 //Container returns a handle to the container with the given name within this
@@ -193,4 +200,13 @@ func (c *Container) EnsureExists() (*Container, error) {
 //
 func (c *Container) Objects() *ObjectIterator {
 	return &ObjectIterator{Container: c}
+}
+
+//URL returns the canonical URL for this container on the server. This is
+//particularly useful when the ReadACL on the account or container is set to
+//allow anonymous read access.
+func (c *Container) URL() (string, error) {
+	return Request{
+		ContainerName: c.name,
+	}.URL(c.a.backend, nil)
 }

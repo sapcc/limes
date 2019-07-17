@@ -19,6 +19,7 @@
 package schwift
 
 import (
+	"context"
 	"io"
 	"io/ioutil"
 	"net/http"
@@ -26,7 +27,7 @@ import (
 	"strings"
 )
 
-//RequestOptions is used to pass additional headers and values to aa request.
+//RequestOptions is used to pass additional headers and values to a request.
 //
 //When preparing a RequestOptions instance with additional headers, the
 //preferred way is to create an AccountHeaders, ContainerHeaders and
@@ -41,6 +42,7 @@ import (
 type RequestOptions struct {
 	Headers Headers
 	Values  url.Values
+	Context context.Context
 }
 
 func cloneRequestOptions(orig *RequestOptions, additional Headers) *RequestOptions {
@@ -55,6 +57,7 @@ func cloneRequestOptions(orig *RequestOptions, additional Headers) *RequestOptio
 		for k, v := range orig.Values {
 			result.Values[k] = v
 		}
+		result.Context = orig.Context
 	}
 	for k, v := range additional {
 		result.Headers[k] = v
@@ -123,6 +126,9 @@ func (r Request) Do(backend Backend) (*http.Response, error) {
 	if r.Options != nil {
 		for k, v := range r.Options.Headers {
 			req.Header[k] = []string{v}
+		}
+		if r.Options.Context != nil {
+			req = req.WithContext(r.Options.Context)
 		}
 	}
 	if r.Body != nil {

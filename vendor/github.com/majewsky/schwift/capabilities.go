@@ -25,7 +25,7 @@ package schwift
 //
 //All direct members of struct Capabilities, except for "Swift", are pointers.
 //If any of these is nil, it indicates that the middleware corresponding to
-//that field is not supported on this server.
+//that field is not available on this server.
 type Capabilities struct {
 	BulkDelete *struct {
 		MaximumDeletesPerRequest uint `json:"max_deletes_per_request"`
@@ -67,6 +67,9 @@ type Capabilities struct {
 		MaximumUploadPartNumber   uint   `json:"max_upload_part_num"`
 		Version                   string `json:"version"`
 	} `json:"swift3"`
+	Symlink *struct {
+		MaximumLoopCount uint `json:"symloop_max"`
+	} `json:"symlink"`
 	TempAuth *struct {
 		AccountACLs bool `json:"account_acls"`
 	} `json:"tempauth"`

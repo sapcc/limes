@@ -20,6 +20,7 @@ package schwift
 
 import (
 	"fmt"
+	"regexp"
 	"time"
 )
 
@@ -33,6 +34,13 @@ type ObjectInfo struct {
 	ContentType  string
 	Etag         string
 	LastModified time.Time
+	//SymlinkTarget is only set for symlinks.
+	SymlinkTarget *Object
+	//If the ObjectInfo refers to an actual object, then SubDirectory is empty.
+	//If the ObjectInfo refers to a pseudo-directory, then SubDirectory contains
+	//the path of the pseudo-directory and all other fields are nil/zero/empty.
+	//Pseudo-directories will only be reported for ObjectIterator.Delimiter != "".
+	SubDirectory string
 }
 
 //ObjectIterator iterates over the objects in a container. It is typically
@@ -57,18 +65,24 @@ type ObjectInfo struct {
 //To obtain any other metadata, you can call Object.Headers() on the result
 //object, but this will issue a separate HEAD request for each object.
 //
-//Use the "Detailed" methods only when you can use the extra metadata in struct
+//Use the "Detailed" methods only when you use the extra metadata in struct
 //ObjectInfo; detailed GET requests are more expensive than simple ones that
 //return only object names.
+//
+//Note that, when Delimiter is set, instances of *Object that you receive from
+//the iterator may refer to a pseudo-directory instead of an actual object, in
+//which case Exists() will return false.
 type ObjectIterator struct {
 	Container *Container
 	//When Prefix is set, only objects whose name starts with this string are
 	//returned.
 	Prefix string
+	//When Delimiter is set, objects whose name contains this string (after the
+	//prefix, if any) will be condensed into pseudo-directories in the result.
+	//See documentation for Swift for details.
+	Delimiter string
 	//Options may contain additional headers and query parameters for the GET request.
 	Options *RequestOptions
-
-	//TODO: Delimiter field (and check if other stuff is missing)
 
 	base *iteratorBase
 }
@@ -81,7 +95,7 @@ func (i *ObjectIterator) getBase() *iteratorBase {
 }
 
 //NextPage queries Swift for the next page of object names. If limit is
-//>= 0, not more than that object names will be returned at once. Note
+//>= 0, not more than that many object names will be returned at once. Note
 //that the server also has a limit for how many objects to list in one
 //request; the lower limit wins.
 //
@@ -102,16 +116,23 @@ func (i *ObjectIterator) NextPage(limit int) ([]*Object, error) {
 	return result, nil
 }
 
+//The symlink_path attribute looks like "/v1/AUTH_foo/containername/obje/ctna/me".
+var symlinkPathRx = regexp.MustCompile(`^/v1/([^/]+)/([^/]+)/(.+)$`)
+
 //NextPageDetailed is like NextPage, but includes basic metadata.
 func (i *ObjectIterator) NextPageDetailed(limit int) ([]ObjectInfo, error) {
 	b := i.getBase()
 
 	var document []struct {
+		//either all of this:
 		SizeBytes       uint64 `json:"bytes"`
 		ContentType     string `json:"content_type"`
 		Etag            string `json:"hash"`
 		LastModifiedStr string `json:"last_modified"`
 		Name            string `json:"name"`
+		SymlinkPath     string `json:"symlink_path"`
+		//or just this:
+		Subdir string `json:"subdir"`
 	}
 	err := b.nextPageDetailed(limit, &document)
 	if err != nil {
@@ -123,19 +144,38 @@ func (i *ObjectIterator) NextPageDetailed(limit int) ([]ObjectInfo, error) {
 	}
 
 	result := make([]ObjectInfo, len(document))
+	marker := ""
 	for idx, data := range document {
-		result[idx].Object = i.Container.Object(data.Name)
-		result[idx].ContentType = data.ContentType
-		result[idx].Etag = data.Etag
-		result[idx].SizeBytes = data.SizeBytes
-		result[idx].LastModified, err = time.Parse(time.RFC3339Nano, data.LastModifiedStr+"Z")
-		if err != nil {
-			//this error is sufficiently obscure that we don't need to expose a type for it
-			return nil, fmt.Errorf("Bad field objects[%d].last_modified: %s", idx, err.Error())
+		if data.Subdir == "" {
+			marker = data.Name
+			result[idx].Object = i.Container.Object(data.Name)
+			result[idx].ContentType = data.ContentType
+			result[idx].Etag = data.Etag
+			result[idx].SizeBytes = data.SizeBytes
+			result[idx].LastModified, err = time.Parse(time.RFC3339Nano, data.LastModifiedStr+"Z")
+			if err != nil {
+				//this error is sufficiently obscure that we don't need to expose a type for it
+				return nil, fmt.Errorf("Bad field objects[%d].last_modified: %s", idx, err.Error())
+			}
+			if data.SymlinkPath != "" {
+				match := symlinkPathRx.FindStringSubmatch(data.SymlinkPath)
+				if match == nil {
+					//like above
+					return nil, fmt.Errorf("Bad field objects[%d].symlink_path: %q", idx, data.SymlinkPath)
+				}
+				a := i.Container.a
+				if a.Name() != match[1] {
+					a = a.SwitchAccount(match[1])
+				}
+				result[idx].SymlinkTarget = a.Container(match[2]).Object(match[3])
+			}
+		} else {
+			marker = data.Subdir
+			result[idx].SubDirectory = data.Subdir
 		}
 	}
 
-	b.setMarker(result[len(result)-1].Object.Name())
+	b.setMarker(marker)
 	return result, nil
 }
 

@@ -19,7 +19,6 @@
 package schwift
 
 import (
-	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -119,7 +118,7 @@ func (f FieldUnixTime) Get() time.Time {
 //Set writes a new value for this header into the corresponding headers
 //instance.
 func (f FieldUnixTime) Set(value time.Time) {
-	f.h.Set(f.k, fmt.Sprintf("%.9f", float64(value.UnixNano())/1e9))
+	f.h.Set(f.k, strconv.FormatUint(uint64(value.UnixNano())/1e9, 10))
 }
 
 //Del removes this key from the original headers instance, so that the key will

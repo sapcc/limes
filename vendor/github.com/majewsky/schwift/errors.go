@@ -40,13 +40,25 @@ var (
 	//etc. if the server does not support the requested operation.
 	ErrNotSupported = errors.New("operation not supported by this Swift server")
 	//ErrAccountMismatch is returned by operations on an account that accept
-	//objects as arguments, if (some of) the provided objects are located in a
-	//different account.
+	//containers/objects as arguments, if some or all of the provided
+	//containers/objects are located in a different account.
 	ErrAccountMismatch = errors.New("some of the given objects are not in this account")
+	//ErrContainerMismatch is returned by operations on a container that accept
+	//objects as arguments, if some or all of the provided objects are located in
+	//a different container.
+	ErrContainerMismatch = errors.New("some of the given objects are not in this container")
+	//ErrNotLarge is returned by Object.AsLargeObject() if the object does not
+	//exist, or if it is not a large object composed out of segments.
+	ErrNotLarge = errors.New("not a large object")
+	//ErrSegmentInvalid is returned by LargeObject.AddSegment() if the segment
+	//provided is malformed or uses features not supported by the LargeObject's
+	//strategy. See documentation for LargeObject.AddSegment() for details.
+	ErrSegmentInvalid = errors.New("segment invalid or incompatible with large object strategy")
 )
 
 //UnexpectedStatusCodeError is generated when a request to Swift does not yield
-//a response with the expected successful status code.
+//a response with the expected successful status code. The actual status code
+//can be checked with the Is() function; see documentation over there.
 type UnexpectedStatusCodeError struct {
 	ExpectedStatusCodes []int
 	ActualResponse      *http.Response
@@ -96,7 +108,7 @@ type BulkError struct {
 	//summary of which recoverable errors were encountered. It may be empty.
 	OverallError string
 	//ObjectErrors contains errors that occurred while working on individual
-	//objects. It may be empty if no such errors occurred.
+	//objects or containers. It may be empty if no such errors occurred.
 	ObjectErrors []BulkObjectError
 }
 
@@ -126,6 +138,8 @@ func (e BulkError) Error() string {
 //	        return err
 //	    }
 //	}
+//
+//It is safe to pass a nil error, in which case Is() always returns false.
 func Is(err error, code int) bool {
 	if e, ok := err.(UnexpectedStatusCodeError); ok {
 		return e.ActualResponse.StatusCode == code

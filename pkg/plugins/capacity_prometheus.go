@@ -24,7 +24,8 @@ import (
 	"time"
 
 	"github.com/gophercloud/gophercloud"
-	"github.com/prometheus/client_golang/api/prometheus"
+	prom_api "github.com/prometheus/client_golang/api"
+	prom_v1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes/pkg/core"
@@ -43,24 +44,20 @@ func init() {
 
 //Requires the url to prometheus à la "http<s>://localhost<:9090>",
 //in our case even without port.
-func prometheusClient(apiURL string) (prometheus.QueryAPI, error) {
+func prometheusClient(apiURL string) (prom_v1.API, error) {
 	//default value
 	if apiURL == "" {
 		apiURL = "https://localhost:9090"
 	}
 
-	config := prometheus.Config{
-		Address:   apiURL,
-		Transport: prometheus.DefaultTransport,
-	}
-	client, err := prometheus.New(config)
+	client, err := prom_api.NewClient(prom_api.Config{Address: apiURL})
 	if err != nil {
 		return nil, fmt.Errorf("cannot connect to Prometheus at %s: %s", apiURL, err.Error())
 	}
-	return prometheus.NewQueryAPI(client), nil
+	return prom_v1.NewAPI(client), nil
 }
 
-func prometheusGetSingleValue(client prometheus.QueryAPI, queryStr string, defaultValue *float64) (float64, error) {
+func prometheusGetSingleValue(client prom_v1.API, queryStr string, defaultValue *float64) (float64, error) {
 	value, err := client.Query(context.Background(), queryStr, time.Now())
 	if err != nil {
 		return 0, fmt.Errorf("Prometheus query failed: %s: %s", queryStr, err.Error())

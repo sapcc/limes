@@ -26,6 +26,8 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+
+	"github.com/majewsky/schwift/capabilities"
 )
 
 //BulkUploadFormat enumerates possible archive formats for Container.BulkUpload().
@@ -58,8 +60,7 @@ const (
 //if some files could not be saved individually (e.g. because a quota was
 //exceeded in the middle of the archive extraction).
 //
-//If not nil, the error return value is *usually* an instance of
-//BulkError.
+//If not nil, the error return value is *usually* an instance of BulkError.
 //
 //This operation returns (0, ErrNotSupported) if the server does not support
 //bulk-uploading.
@@ -123,7 +124,7 @@ func makeBulkObjectError(fullName string, statusCode int) BulkObjectError {
 //	var container *schwift.Container
 //
 //	objects, err := container.Objects().Collect()
-//	numDeleted, numNotFound, err := container.Account().BulkDelete(objects, nil, nil, nil)
+//	numDeleted, numNotFound, err := container.Account().BulkDelete(objects, nil, nil)
 //
 //To also delete the container:
 //
@@ -131,13 +132,12 @@ func makeBulkObjectError(fullName string, statusCode int) BulkObjectError {
 //
 //	objects, err := container.Objects().Collect()
 //	numDeleted, numNotFound, err := container.Account().BulkDelete(
-//	    objects, []*schwift.Container{container}, nil, nil)
+//	    objects, []*schwift.Container{container}, nil)
 //
 //If the server does not support bulk-deletion, this function falls back to
 //deleting each object and container individually, and aggregates the result.
 //
-//If not nil, the error return value is *usually* an instance of
-//BulkError.
+//If not nil, the error return value is *usually* an instance of BulkError.
 //
 //The objects may be located in multiple containers, but they and the
 //containers must all be located in the given account. (Otherwise,
@@ -145,14 +145,12 @@ func makeBulkObjectError(fullName string, statusCode int) BulkObjectError {
 func (a *Account) BulkDelete(objects []*Object, containers []*Container, opts *RequestOptions) (numDeleted int, numNotFound int, deleteError error) {
 	//validate that all given objects are in this account
 	for _, obj := range objects {
-		other := obj.Container().Account()
-		if other.baseURL != a.baseURL || other.name != a.name {
+		if !a.IsEqualTo(obj.Container().Account()) {
 			return 0, 0, ErrAccountMismatch
 		}
 	}
 	for _, container := range containers {
-		other := container.Account()
-		if other.baseURL != a.baseURL || other.name != a.name {
+		if !a.IsEqualTo(container.Account()) {
 			return 0, 0, ErrAccountMismatch
 		}
 	}
@@ -162,7 +160,7 @@ func (a *Account) BulkDelete(objects []*Object, containers []*Container, opts *R
 	if err != nil {
 		return 0, 0, err
 	}
-	if caps.BulkDelete == nil {
+	if caps.BulkDelete == nil || !capabilities.AllowBulkDelete {
 		return a.bulkDeleteSingle(objects, containers, opts)
 	}
 	chunkSize := int(caps.BulkDelete.MaximumDeletesPerRequest)
@@ -233,7 +231,7 @@ func (a *Account) bulkDeleteSingle(objects []*Object, containers []*Container, o
 	}
 
 	for _, obj := range objects {
-		err := obj.Delete(opts) //this implies Invalidate()
+		err := obj.Delete(nil, opts) //this implies Invalidate()
 		err = handleSingleError(obj.Container().Name(), obj.Name(), err)
 		if err != nil {
 			return numDeleted, numNotFound, err

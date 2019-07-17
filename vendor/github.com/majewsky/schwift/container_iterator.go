@@ -56,7 +56,7 @@ type ContainerInfo struct {
 //To obtain any other metadata, you can call Container.Headers() on the result
 //container, but this will issue a separate HEAD request for each container.
 //
-//Use the "Detailed" methods only when you can use the extra metadata in struct
+//Use the "Detailed" methods only when you use the extra metadata in struct
 //ContainerInfo; detailed GET requests are more expensive than simple ones that
 //return only container names.
 type ContainerIterator struct {
@@ -78,7 +78,7 @@ func (i *ContainerIterator) getBase() *iteratorBase {
 }
 
 //NextPage queries Swift for the next page of container names. If limit is
-//>= 0, not more than that container names will be returned at once. Note
+//>= 0, not more than that many container names will be returned at once. Note
 //that the server also has a limit for how many containers to list in one
 //request; the lower limit wins.
 //

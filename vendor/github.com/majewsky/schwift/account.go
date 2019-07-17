@@ -25,7 +25,9 @@ import (
 	"regexp"
 )
 
-//Account represents a Swift account.
+//Account represents a Swift account. Instances are usually obtained by
+//connecting to a backend (see package-level documentation), or by traversing
+//upwards from a container with Container.Account().
 type Account struct {
 	backend Backend
 	//URL parts
@@ -34,6 +36,11 @@ type Account struct {
 	//cache
 	headers *AccountHeaders
 	caps    *Capabilities
+}
+
+//IsEqualTo returns true if both Account instances refer to the same account.
+func (a *Account) IsEqualTo(other *Account) bool {
+	return other.baseURL == a.baseURL && other.name == a.name
 }
 
 var endpointURLRegexp = regexp.MustCompile(`^(.*/)v1/(.*)/$`)
@@ -53,12 +60,12 @@ func InitializeAccount(backend Backend) (*Account, error) {
 	}, nil
 }
 
-//SwitchAccount returns a handle on a different account on the same server. Note
+//SwitchAccount returns a handle to a different account on the same server. Note
 //that you need reseller permissions to access accounts other than that where
 //you originally authenticated. This method does not check whether the account
 //actually exists.
 //
-//The account name is usually the project name with an additional "AUTH_"
+//The account name is usually the Keystone project ID with an additional "AUTH_"
 //prefix.
 func (a *Account) SwitchAccount(accountName string) *Account {
 	newEndpointURL := a.baseURL + "v1/" + accountName + "/"
@@ -70,7 +77,7 @@ func (a *Account) SwitchAccount(accountName string) *Account {
 }
 
 //Name returns the name of the account (usually the prefix "AUTH_" followed by
-//the project ID).
+//the Keystone project ID).
 func (a *Account) Name() string {
 	return a.name
 }
