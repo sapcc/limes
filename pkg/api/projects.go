@@ -368,8 +368,6 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 
 func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *http.Request, simulate, hasBursting bool) {
 	requestTime := time.Now()
-	var trail audit.Trail
-
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:edit") {
 		return
@@ -389,7 +387,7 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 	if cluster.Config.Bursting.MaxMultiplier == 0 {
 		msg := "bursting is not available for this cluster"
 		http.Error(w, msg, http.StatusBadRequest)
-		trail.Add(audit.EventParams{
+		e := audit.NewEvent(audit.EventParams{
 			Token:      token,
 			Request:    r,
 			ReasonCode: http.StatusBadRequest,
@@ -400,7 +398,7 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 				RejectReason: msg,
 			},
 		})
-		trail.Commit(cluster.ID, cluster.Config.CADF)
+		audit.EventSinkPerCluster[cluster.ID] <- e
 		return
 	}
 
@@ -456,7 +454,7 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 					overbookedResources[0]
 			}
 			http.Error(w, msg, http.StatusConflict)
-			trail.Add(audit.EventParams{
+			e := audit.NewEvent(audit.EventParams{
 				Token:      token,
 				Request:    r,
 				ReasonCode: http.StatusConflict,
@@ -467,7 +465,7 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 					RejectReason: msg,
 				},
 			})
-			trail.Commit(cluster.ID, cluster.Config.CADF)
+			audit.EventSinkPerCluster[cluster.ID] <- e
 			return
 		}
 	}
@@ -517,7 +515,7 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 		}
 	}
 
-	trail.Add(audit.EventParams{
+	e := audit.NewEvent(audit.EventParams{
 		Token:      token,
 		Request:    r,
 		ReasonCode: http.StatusOK,
@@ -528,7 +526,7 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 			NewStatus: hasBursting,
 		},
 	})
-	trail.Commit(cluster.ID, cluster.Config.CADF)
+	audit.EventSinkPerCluster[cluster.ID] <- e
 
 	//report any backend errors to the user
 	if len(errors) > 0 {

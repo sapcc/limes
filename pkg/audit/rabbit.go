@@ -1,6 +1,6 @@
 /*******************************************************************************
 *
-* Copyright 2018 SAP SE
+* Copyright 2018-2019 SAP SE
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -21,54 +21,52 @@ package audit
 
 import (
 	"fmt"
+	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/sapcc/hermes/pkg/cadf"
 	"github.com/sapcc/hermes/pkg/rabbit"
-	"github.com/sapcc/limes/pkg/core"
 	"github.com/streadway/amqp"
 )
 
-//sendEvents sends audit events to a RabbitMQ server.
-func sendEvents(clusterID string, config core.CADFConfiguration, events []cadf.Event) error {
-	labels := prometheus.Labels{
-		"os_cluster": clusterID,
-	}
-	eventPublishSuccessCounter.With(labels).Add(0)
-	eventPublishFailedCounter.With(labels).Add(0)
+//rabbitConnection represents a unique connection to some RabbitMQ server with
+//an open Channel and a declared Queue.
+type rabbitConnection struct {
+	conn *amqp.Connection
+	ch   *amqp.Channel
+	q    amqp.Queue
+
+	isConnected bool
+	connectedAt time.Time
+}
+
+func (r *rabbitConnection) connect(uri, queueName string) error {
+	var err error
 
 	//establish a connection with the RabbitMQ server
-	conn, err := amqp.Dial(config.RabbitMQ.URL)
+	r.conn, err = amqp.Dial(uri)
 	if err != nil {
-		eventPublishFailedCounter.With(labels).Inc()
-		return fmt.Errorf("RabbitMQ -- %s -- Failed to establish a connection with the server: %s", events[0].ID, err)
+		return fmt.Errorf("RabbitMQ: failed to establish a connection with the server: %s", err.Error())
 	}
-	defer conn.Close()
+	r.connectedAt = time.Now()
 
 	//open a unique, concurrent server channel to process the bulk of AMQP messages
-	ch, err := conn.Channel()
+	r.ch, err = r.conn.Channel()
 	if err != nil {
-		eventPublishFailedCounter.With(labels).Inc()
-		return fmt.Errorf("RabbitMQ -- %s -- Failed to open a channel: %s", events[0].ID, err)
+		return fmt.Errorf("RabbitMQ: failed to open a channel: %s", err.Error())
 	}
-	defer ch.Close()
 
 	//declare a queue to hold and deliver messages to consumers
-	q, err := rabbit.DeclareQueue(ch, config.RabbitMQ.QueueName)
+	r.q, err = rabbit.DeclareQueue(r.ch, queueName)
 	if err != nil {
-		eventPublishFailedCounter.With(labels).Inc()
-		return fmt.Errorf("RabbitMQ -- %s -- Failed to declare a queue: %s", events[0].ID, err)
+		return fmt.Errorf("RabbitMQ: failed to declare a queue: %s", err.Error())
 	}
 
-	//publish the events to an exchange on the server
-	for _, event := range events {
-		err := rabbit.PublishEvent(ch, q.Name, &event)
-		if err != nil {
-			eventPublishFailedCounter.With(labels).Inc()
-			return fmt.Errorf("RabbitMQ -- %s -- Failed to publish the audit event: %s", event.ID, err)
-		}
-		eventPublishSuccessCounter.With(labels).Inc()
-	}
+	r.isConnected = true
 
 	return nil
+}
+
+func (r *rabbitConnection) disconnect() {
+	r.ch.Close()
+	r.conn.Close()
+	r.isConnected = false
 }

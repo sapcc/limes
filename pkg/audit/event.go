@@ -150,8 +150,8 @@ func (a attachmentContent) MarshalJSON() ([]byte, error) {
 	return json.Marshal(string(bytes))
 }
 
-//newEvent takes the necessary parameters and returns a new audit event.
-func (p EventParams) newEvent() cadf.Event {
+//NewEvent takes the necessary parameters and returns a new audit event.
+func NewEvent(p EventParams) cadf.Event {
 	outcome := "failure"
 	if p.ReasonCode == http.StatusOK {
 		outcome = "success"
