@@ -27,6 +27,7 @@ import (
 
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/retry"
+	"github.com/sapcc/hermes/pkg/cadf"
 	"github.com/sapcc/limes/pkg/core"
 )
 
@@ -42,7 +43,7 @@ var showAuditOnStdout = os.Getenv("LIMES_SILENT") != "1"
 //Trail is a list of CADF formatted events with log level AUDIT. It has a separate interface
 //from the rest of the logging to allow to withhold the logging until DB changes are committed.
 type Trail struct {
-	events []CADFEvent
+	events []cadf.Event
 }
 
 //Add adds an event to the audit trail.
