@@ -81,6 +81,17 @@ INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, su
 INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (8, 'capacity', 10, 2, 10, '', 10, 1);
 INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (8, 'external_things', 1, 0, 1, '', 10, NULL);
 
+-- project rate limits
+-- unshared
+INSERT INTO project_rate_limits (service_id, target_type_uri, action, rate_limit, unit) VALUES (1, 'service/unshared/instances',  'create', 5, 'r/m');
+INSERT INTO project_rate_limits (service_id, target_type_uri, action, rate_limit, unit) VALUES (1, 'service/unshared/instances',  'delete', 2, 'r/m');
+INSERT INTO project_rate_limits (service_id, target_type_uri, action, rate_limit, unit) VALUES (1, 'service/unshared/instances',  'update', 2, 'r/m');
+
+-- shared
+INSERT INTO project_rate_limits (service_id, target_type_uri, action, rate_limit, unit) VALUES (2, 'service/shared/objects',  'create', 5, 'r/m');
+INSERT INTO project_rate_limits (service_id, target_type_uri, action, rate_limit, unit) VALUES (2, 'service/shared/objects',  'delete', 2, 'r/m');
+INSERT INTO project_rate_limits (service_id, target_type_uri, action, rate_limit, unit) VALUES (2, 'service/shared/objects',  'update', 2, 'r/m');
+
 -- insert some bullshit data that should be filtered out by the pkg/reports/ logic
 -- (cluster "north", service "weird" and resource "items" are not configured)
 INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (101, 'north', 'unshared', UNIX(1000));

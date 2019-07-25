@@ -176,6 +176,44 @@ func (t burstEventTarget) Render() cadf.Resource {
 	}
 }
 
+//rateLimitEventTarget contains the structure for rendering a cadf.Event.Target for
+//changes regarding rate limits
+type rateLimitEventTarget struct {
+	DomainID,
+	ProjectID,
+	ServiceType,
+	TargetTypeURI,
+	Action string
+	OldLimit,
+	NewLimit uint64
+	OldUnit,
+	NewUnit limes.Unit
+	RejectReason string
+}
+
+//Render implements the audittools.TargetRenderer interface type.
+func (t rateLimitEventTarget) Render() cadf.Resource {
+	return cadf.Resource{
+		TypeURI:   fmt.Sprintf("service/%s/%s/%s/rates", t.ServiceType, t.TargetTypeURI, t.Action),
+		ID:        t.ProjectID,
+		DomainID:  t.DomainID,
+		ProjectID: t.ProjectID,
+		Attachments: []cadf.Attachment{
+			{
+				Name:    "payload",
+				TypeURI: "mime:application/json",
+				Content: targetAttachmentContent{
+					OldQuota:     t.OldLimit,
+					NewQuota:     t.NewLimit,
+					OldUnit:      t.OldUnit,
+					NewUnit:      t.NewUnit,
+					RejectReason: t.RejectReason,
+				},
+			},
+		},
+	}
+}
+
 //This type is needed for the custom MarshalJSON behavior.
 type targetAttachmentContent struct {
 	RejectReason string
@@ -185,6 +223,11 @@ type targetAttachmentContent struct {
 	Unit     limes.Unit
 	// for quota bursting
 	NewStatus bool
+	//For rate limits.
+	OldLimit,
+	NewLimit uint64
+	OldUnit,
+	NewUnit limes.Unit
 }
 
 //MarshalJSON implements the json.Marshaler interface.
@@ -196,12 +239,21 @@ func (a targetAttachmentContent) MarshalJSON() ([]byte, error) {
 		Unit         limes.Unit `json:"unit,omitempty"`
 		NewStatus    bool       `json:"newStatus,omitempty"`
 		RejectReason string     `json:"rejectReason,omitempty"`
+		//For rate limits.
+		OldLimit uint64     `json:"oldLimit,omitempty"`
+		NewLimit uint64     `json:"newLimit,omitempty"`
+		OldUnit  limes.Unit `json:"oldUnit,omitempty"`
+		NewUnit  limes.Unit `json:"newUnit,omitempty"`
 	}{
 		OldQuota:     a.OldQuota,
 		NewQuota:     a.NewQuota,
 		NewStatus:    a.NewStatus,
 		Unit:         a.Unit,
 		RejectReason: a.RejectReason,
+		OldLimit:     a.OldLimit,
+		NewLimit:     a.NewLimit,
+		OldUnit:      a.OldUnit,
+		NewUnit:      a.NewUnit,
 	}
 	//Hermes does not accept a JSON object at target.attachments[].content, so
 	//we need to wrap the marshaled JSON into a JSON string

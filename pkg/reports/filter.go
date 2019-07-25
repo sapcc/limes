@@ -20,6 +20,7 @@
 package reports
 
 import (
+	"github.com/sapcc/limes/pkg/util"
 	"net/http"
 	"regexp"
 
@@ -32,6 +33,21 @@ import (
 type Filter struct {
 	serviceTypes  []string
 	resourceNames []string
+
+	withRates,
+	onlyRates,
+	withSubresources bool
+}
+
+//NewFilter returns a new Filter.
+func NewFilter(serviceTypes, resourceNames []string, withRates, onlyRates, withSubresources bool) Filter {
+	return Filter{
+		serviceTypes:     serviceTypes,
+		resourceNames:    resourceNames,
+		withRates:        withRates,
+		onlyRates:        onlyRates,
+		withSubresources: withSubresources,
+	}
 }
 
 //ReadFilter extracts a Filter from the given Request.
@@ -46,6 +62,13 @@ func ReadFilter(r *http.Request) Filter {
 	}
 	if f.resourceNames, ok = queryValues["resource"]; !ok {
 		f.resourceNames = nil
+	}
+	if val, ok := queryValues["rates"]; ok {
+		f.withRates = ok
+		f.onlyRates = util.StringSliceContains(val, "only")
+	}
+	if _, ok := r.URL.Query()["detail"]; ok {
+		f.withSubresources = ok
 	}
 
 	if areas, ok := queryValues["area"]; ok {

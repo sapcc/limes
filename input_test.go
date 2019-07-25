@@ -27,14 +27,17 @@ import (
 
 var quotas = QuotaRequest{
 	"volumev2": ServiceQuotaRequest{
-		"capacity": ValueWithUnit{
-			Value: 1024,
-			Unit:  UnitBytes,
+		Resources: ResourceQuotaRequest{
+			"capacity": {
+				Value: 1024,
+				Unit:  UnitBytes,
+			},
+			"volumes": {
+				Value: 16,
+				Unit:  UnitNone,
+			},
 		},
-		"volumes": ValueWithUnit{
-			Value: 16,
-			Unit:  UnitNone,
-		},
+		Rates: RateQuotaRequest{},
 	},
 }
 
@@ -53,9 +56,42 @@ var quotaJSON = `
 					"quota": 16,
 					"unit": ""
 				}
-			]
+			],
+			"rates": []
 		}
 	]
+`
+
+var rateLimits = QuotaRequest{
+	"object-store": ServiceQuotaRequest{
+		Rates: RateQuotaRequest{
+			"object/account/container": {
+				"create": {Value: 1000, Unit: UnitRequestsPerSeconds},
+			},
+		},
+		Resources: ResourceQuotaRequest{},
+	},
+}
+
+var rateLimitJSON = `
+  [
+    {
+      "type": "object-store",
+      "resources": [],
+      "rates": [
+        {
+          "target_type_uri": "object/account/container",
+          "actions": [
+            {
+              "name": "create",
+              "limit": 1000,
+              "unit": "r/s"
+            }
+          ]
+        }
+      ]
+    }
+  ]
 `
 
 func TestQuotaRequestMarshall(t *testing.T) {
@@ -67,4 +103,15 @@ func TestQuotaRequestUnmarshall(t *testing.T) {
 	err := actual.UnmarshalJSON([]byte(quotaJSON))
 	th.AssertNoErr(t, err)
 	th.CheckDeepEquals(t, quotas, actual)
+}
+
+func TestQuotaRateLimitMarshall(t *testing.T) {
+	th.CheckJSONEquals(t, rateLimitJSON, rateLimits)
+}
+
+func TestRateLimitRequestUnmarshall(t *testing.T) {
+	actual := QuotaRequest{}
+	err := actual.UnmarshalJSON([]byte(rateLimitJSON))
+	th.AssertNoErr(t, err)
+	th.CheckDeepEquals(t, rateLimits, actual)
 }

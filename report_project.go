@@ -45,8 +45,9 @@ type ProjectBurstingInfo struct {
 //a single backend service.
 type ProjectServiceReport struct {
 	ServiceInfo
-	Resources ProjectResourceReports `json:"resources,keepempty"`
-	ScrapedAt *int64                 `json:"scraped_at,omitempty"`
+	Resources ProjectResourceReports  `json:"resources,keepempty"`
+	Rates     ProjectRateLimitReports `json:"rates,omitempty"`
+	ScrapedAt *int64                  `json:"scraped_at,omitempty"`
 }
 
 //ProjectResourceReport is a substructure of ProjectReport containing data for
@@ -65,6 +66,21 @@ type ProjectResourceReport struct {
 	//Annotations may contain arbitrary metadata that was configured for this
 	//resource in this scope by Limes' operator.
 	Annotations map[string]interface{} `json:"annotations,omitempty"`
+}
+
+// ProjectRateLimitReport is the structure for rate limits per target type URI and their rate limited actions.
+type ProjectRateLimitReport struct {
+	TargetTypeURI string                        `json:"target_type_uri,keepempty"`
+	Actions       ProjectRateLimitActionReports `json:"actions,keepempty"`
+}
+
+// ProjectRateLimitActionReport is defines an action and its rate limit.
+type ProjectRateLimitActionReport struct {
+	Name         string `json:"name,keepempty"`
+	Limit        uint64 `json:"limit,keepempty"`
+	Unit         Unit   `json:"unit,keepempty"`
+	DefaultLimit uint64 `json:"default_limit,omitempty"`
+	DefaultUnit  Unit   `json:"default_unit,omitempty"`
 }
 
 //ProjectServiceReports provides fast lookup of services using a map, but serializes
@@ -132,5 +148,71 @@ func (r *ProjectResourceReports) UnmarshalJSON(b []byte) error {
 		t[pr.Name] = pr
 	}
 	*r = ProjectResourceReports(t)
+	return nil
+}
+
+//ProjectRateLimitReports provides fast lookup of resources using a map, but serializes
+//to JSON as a list.
+type ProjectRateLimitReports map[string]*ProjectRateLimitReport
+
+//MarshalJSON implements the json.Marshaler interface.
+func (r ProjectRateLimitReports) MarshalJSON() ([]byte, error) {
+	names := make([]string, 0, len(r))
+	for name := range r {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	list := make([]*ProjectRateLimitReport, len(r))
+	for idx, name := range names {
+		list[idx] = r[name]
+	}
+	return json.Marshal(list)
+}
+
+//UnmarshalJSON implements the json.Unmarshaler interface.
+func (r *ProjectRateLimitReports) UnmarshalJSON(b []byte) error {
+	tmp := make([]*ProjectRateLimitReport, 0)
+	err := json.Unmarshal(b, &tmp)
+	if err != nil {
+		return err
+	}
+	t := make(ProjectRateLimitReports)
+	for _, prl := range tmp {
+		t[prl.TargetTypeURI] = prl
+	}
+	*r = ProjectRateLimitReports(t)
+	return nil
+}
+
+//ProjectRateLimitActionReports provides fast lookup of resources using a map, but serializes
+//to JSON as a list.
+type ProjectRateLimitActionReports map[string]*ProjectRateLimitActionReport
+
+//MarshalJSON implements the json.Marshaler interface.
+func (r ProjectRateLimitActionReports) MarshalJSON() ([]byte, error) {
+	names := make([]string, 0, len(r))
+	for name := range r {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	list := make([]*ProjectRateLimitActionReport, len(r))
+	for idx, name := range names {
+		list[idx] = r[name]
+	}
+	return json.Marshal(list)
+}
+
+//UnmarshalJSON implements the json.Unmarshaler interface.
+func (r *ProjectRateLimitActionReports) UnmarshalJSON(b []byte) error {
+	tmp := make([]*ProjectRateLimitActionReport, 0)
+	err := json.Unmarshal(b, &tmp)
+	if err != nil {
+		return err
+	}
+	t := make(ProjectRateLimitActionReports)
+	for _, a := range tmp {
+		t[a.Name] = a
+	}
+	*r = ProjectRateLimitActionReports(t)
 	return nil
 }

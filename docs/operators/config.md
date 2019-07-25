@@ -636,3 +636,39 @@ bear the following attributes:
 [ex-pol]: ../example-policy.json
 [prom]:   https://prometheus.io
 [shs]:    https://github.com/sapcc/swift-health-statsd
+
+## Rate Limits
+
+Rate limits can be configured per service on 2 levels: `global` and `project_default` as outlined below.  
+For further details see the [rate limits API specification](../users/api-v1-specification.md#rate-limits). 
+
+| Attribute | Type | Comment |
+| --- | --- | --- |
+| `global` | list |  Defines rate limits meant to protect the service from being overloaded. Requests are counted across all domains and projects. |
+| `project_default` | list | Defines default rate limits for every project. |
+| `$level[].target_type_uri` | string | The target type URI of the rate limit action. |
+| `$level[].actions[].name` | string | The name of the rate limit action. |
+| `$level[].actions[].limit` | integer | The rate limit as integer. |
+| `$level[].actions[].unit` | string | The unit of the rate limit. Available units are `r/ms`, `r/s`, `r/m`, `r/h`. | 
+
+
+Example configuration:
+```yaml
+clusters:
+  staging:
+    services:
+      - type: object-store
+        rates:
+           - global:
+               - target_type_uri: "services/swift/account/container/object"
+                 actions:
+                   - name:  create
+                     limit: 1000000
+                     unit:  "r/s"
+           - project_default:
+               - target_type_uri: "services/swift/account/container/object"
+                 actions:
+                   - name:  create
+                     limit: 1000
+                     unit:  "r/s"
+``` 

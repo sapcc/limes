@@ -1,0 +1,105 @@
+{
+  "project": {
+    "id": "uuid-for-berlin",
+    "name": "berlin",
+    "parent_id": "uuid-for-germany",
+    "services": [
+      {
+        "type": "shared",
+        "area": "shared",
+        "resources": [
+          {
+            "name": "capacity",
+            "unit": "B",
+            "quota": 10,
+            "usable_quota": 10,
+            "usage": 2
+          },
+          {
+            "name": "external_things",
+            "externally_managed": true,
+            "quota": 1,
+            "usable_quota": 1,
+            "usage": 0
+          },
+          {
+            "name": "things",
+            "quota": 10,
+            "usable_quota": 10,
+            "usage": 2
+          }
+        ],
+        "rates": [
+          {
+            "target_type_uri": "service/shared/objects",
+            "actions": [
+              {
+                "name": "create",
+                "limit": 5,
+                "unit": "r/m"
+              },
+              {
+                "name": "delete",
+                "limit": 2,
+                "unit": "r/m"
+              },
+              {
+                "name": "update",
+                "limit": 2,
+                "unit": "r/m"
+              }
+            ]
+          }
+        ],
+        "scraped_at": 22
+      },
+      {
+        "type": "unshared",
+        "area": "unshared",
+        "resources": [
+          {
+            "name": "capacity",
+            "unit": "B",
+            "quota": 10,
+            "usable_quota": 10,
+            "usage": 2
+          },
+          {
+            "name": "things",
+            "quota": 10,
+            "usable_quota": 10,
+            "usage": 2,
+            "scales_with": {
+              "resource_name": "things",
+              "service_type": "shared",
+              "factor": 2
+            }
+          }
+        ],
+        "rates": [
+          {
+            "target_type_uri": "service/unshared/instances",
+            "actions": [
+              {
+                "name": "create",
+                "limit": 5,
+                "unit": "r/m"
+              },
+              {
+                "name": "delete",
+                "limit": 2,
+                "unit": "r/m"
+              },
+              {
+                "name": "update",
+                "limit": 2,
+                "unit": "r/m"
+              }
+            ]
+          }
+        ],
+        "scraped_at": 11
+      }
+    ]
+  }
+}

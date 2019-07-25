@@ -26,18 +26,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sapcc/limes/pkg/core"
-
-	gorp "gopkg.in/gorp.v2"
-
 	"github.com/gorilla/mux"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/collector"
+	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/datamodel"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/reports"
 	"github.com/sapcc/limes/pkg/util"
+	gorp "gopkg.in/gorp.v2"
 )
 
 //ListProjects handles GET /v1/domains/:domain_id/projects.
@@ -54,9 +52,7 @@ func (p *v1Provider) ListProjects(w http.ResponseWriter, r *http.Request) {
 	if dbDomain == nil {
 		return
 	}
-
-	_, withSubresources := r.URL.Query()["detail"]
-	projects, err := reports.GetProjects(cluster, *dbDomain, nil, db.DB, reports.ReadFilter(r), withSubresources)
+	projects, err := reports.GetProjects(cluster, *dbDomain, nil, db.DB, reports.ReadFilter(r))
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -82,9 +78,7 @@ func (p *v1Provider) GetProject(w http.ResponseWriter, r *http.Request) {
 	if dbProject == nil {
 		return
 	}
-
-	_, withSubresources := r.URL.Query()["detail"]
-	project, err := GetProjectReport(cluster, *dbDomain, *dbProject, db.DB, reports.ReadFilter(r), withSubresources)
+	project, err := GetProjectReport(cluster, *dbDomain, *dbProject, db.DB, reports.ReadFilter(r))
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -279,42 +273,73 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-	var resourcesToUpdate []interface{}
+
+	var (
+		resourcesToUpdate  []interface{}
+		rateLimitsToUpdate []*db.ProjectRateLimit
+	)
 	servicesToUpdate := make(map[string]bool)
 
 	for _, srv := range services {
-		serviceRequests, exists := updater.Requests[srv.Type]
-		if !exists {
-			continue
-		}
-
-		//check all resources
-		var resources []db.ProjectResource
-		_, err = tx.Select(&resources,
-			`SELECT * FROM project_resources WHERE service_id = $1 ORDER BY name`, srv.ID)
-		if respondwith.ErrorText(w, err) {
-			return
-		}
-		for _, res := range resources {
-			req, exists := serviceRequests[res.Name]
-			if !exists {
-				continue
-			}
-			if res.Quota == req.NewValue {
-				continue //nothing to do
+		if serviceRequests, exists := updater.ResourceRequests[srv.Type]; exists {
+			//Check all resources.
+			var resources []db.ProjectResource
+			_, err = tx.Select(&resources,
+				`SELECT * FROM project_resources WHERE service_id = $1 ORDER BY name`, srv.ID)
+			if respondwith.ErrorText(w, err) {
+				return
 			}
 
-			//take a copy of the loop variable (it will be updated by the loop, so if
-			//we didn't take a copy manually, the resourcesToUpdate list would
-			//contain only identical pointers)
-			res := res
+			for _, res := range resources {
+				req, exists := serviceRequests[res.Name]
+				if !exists {
+					continue
+				}
+				if res.Quota == req.NewValue {
+					continue //nothing to do
+				}
 
-			res.Quota = req.NewValue
-			resourcesToUpdate = append(resourcesToUpdate, &res)
-			servicesToUpdate[srv.Type] = true
+				//take a copy of the loop variable (it will be updated by the loop, so if
+				//we didn't take a copy manually, the resourcesToUpdate list would
+				//contain only identical pointers)
+				res := res
+
+				res.Quota = req.NewValue
+				resourcesToUpdate = append(resourcesToUpdate, &res)
+				servicesToUpdate[srv.Type] = true
+			}
+		}
+
+		if rateLimitRequests, exists := updater.RateLimitRequests[srv.Type]; exists {
+			//Check all rate limits.
+			var rateLimits []db.ProjectRateLimit
+			_, err = tx.Select(&rateLimits, `SELECT * FROM project_rate_limits WHERE service_id = $1 ORDER BY name`)
+			if respondwith.ErrorText(w, err) {
+				return
+			}
+
+			for _, rl := range rateLimits {
+				rlPerTargetTypeURI, exists := rateLimitRequests[rl.TargetTypeURI]
+				if !exists {
+					continue
+				}
+
+				req, exists := rlPerTargetTypeURI[rl.Action]
+				if !exists {
+					continue
+				}
+
+				if rl.Limit == req.NewValue && rl.Unit == string(req.NewUnit) {
+					continue
+				}
+
+				rl.Limit = req.NewValue
+				rl.Unit = string(req.NewUnit)
+				rateLimitsToUpdate = append(rateLimitsToUpdate, &rl)
+				servicesToUpdate[srv.Type] = true
+			}
 		}
 	}
-
 	//update the DB with the new quotas
 	onlyQuota := func(c *gorp.ColumnMap) bool {
 		return c.ColumnName == "quota"
@@ -323,10 +348,24 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 	if respondwith.ErrorText(w, err) {
 		return
 	}
+
+	//Update the DB with the new rate limits.
+	stmt, err := dbi.Prepare(`UPDATE project_rate_limits SET rate_limit = $1, unit = $2 WHERE service_id = $3 AND target_type_uri = $4 AND action = $5`)
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+	for _, rl := range rateLimitsToUpdate {
+		_, err := stmt.Exec(rl.Limit, rl.Unit, rl.ServiceID, rl.TargetTypeURI, rl.Action)
+		if respondwith.ErrorText(w, err) {
+			return
+		}
+	}
+
 	err = tx.Commit()
 	if respondwith.ErrorText(w, err) {
 		return
 	}
+
 	updater.CommitAuditTrail(token, r, requestTime)
 
 	//attempt to write the quotas into the backend
