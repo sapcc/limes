@@ -482,7 +482,9 @@ func (u QuotaUpdater) CommitAuditTrail(token *gopherpolicy.Token, r *http.Reques
 					RejectReason: rejectReason,
 				},
 			})
-			audit.EventSinkPerCluster[u.Cluster.ID] <- e
+			if audit.EventSinkPerCluster != nil {
+				audit.EventSinkPerCluster[u.Cluster.ID] <- e
+			}
 		}
 	}
 }

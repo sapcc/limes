@@ -398,7 +398,9 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 				RejectReason: msg,
 			},
 		})
-		audit.EventSinkPerCluster[cluster.ID] <- e
+		if audit.EventSinkPerCluster != nil {
+			audit.EventSinkPerCluster[cluster.ID] <- e
+		}
 		return
 	}
 
@@ -465,7 +467,9 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 					RejectReason: msg,
 				},
 			})
-			audit.EventSinkPerCluster[cluster.ID] <- e
+			if audit.EventSinkPerCluster != nil {
+				audit.EventSinkPerCluster[cluster.ID] <- e
+			}
 			return
 		}
 	}
@@ -526,7 +530,9 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 			NewStatus: hasBursting,
 		},
 	})
-	audit.EventSinkPerCluster[cluster.ID] <- e
+	if audit.EventSinkPerCluster != nil {
+		audit.EventSinkPerCluster[cluster.ID] <- e
+	}
 
 	//report any backend errors to the user
 	if len(errors) > 0 {
