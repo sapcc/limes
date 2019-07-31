@@ -30,70 +30,11 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/hermes/pkg/cadf"
 	"github.com/sapcc/limes"
 )
 
-var observerUUID string
-
-func init() {
-	observerUUID = generateUUID()
-}
-
-//CADFEvent contains the CADF event format according to CADF spec (section
-//6.6.1 Event) and includes extensions for better auditing.
-type CADFEvent struct {
-	TypeURI     string       `json:"typeURI"`
-	ID          string       `json:"id"`
-	EventTime   string       `json:"eventTime"`
-	EventType   string       `json:"eventType"`
-	Action      string       `json:"action"`
-	Outcome     string       `json:"outcome"`
-	Reason      Reason       `json:"reason,omitempty"`
-	Initiator   Resource     `json:"initiator"`
-	Target      Resource     `json:"target"`
-	Observer    Resource     `json:"observer"`
-	Attachments []Attachment `json:"attachments,omitempty"`
-	RequestPath string       `json:"requestPath,omitempty"`
-}
-
-//Resource is a substructure of CADFEvent and contains attributes describing a
-//(OpenStack-) resource.
-type Resource struct {
-	TypeURI   string `json:"typeURI"`
-	Name      string `json:"name,omitempty"`
-	Domain    string `json:"domain,omitempty"`
-	ID        string `json:"id"`
-	Addresses []struct {
-		URL  string `json:"url"`
-		Name string `json:"name,omitempty"`
-	} `json:"addresses,omitempty"`
-	Host        *Host        `json:"host,omitempty"`
-	Attachments []Attachment `json:"attachments,omitempty"`
-	ProjectID   string       `json:"project_id,omitempty"`
-	DomainID    string       `json:"domain_id,omitempty"`
-}
-
-//Attachment is a substructure of CADFEvent and contains self-describing
-//extensions to the event.
-type Attachment struct {
-	Name    string      `json:"name,omitempty"`
-	TypeURI string      `json:"typeURI"`
-	Content interface{} `json:"content"`
-}
-
-//Reason is a substructure of CADFevent containing data for the event outcome's reason.
-type Reason struct {
-	ReasonType string `json:"reasonType"`
-	ReasonCode string `json:"reasonCode"`
-}
-
-//Host is a substructure of Resource containing data for the event initiator's host.
-type Host struct {
-	ID       string `json:"id,omitempty"`
-	Address  string `json:"address,omitempty"`
-	Agent    string `json:"agent,omitempty"`
-	Platform string `json:"platform,omitempty"`
-}
+var observerUUID = generateUUID()
 
 //EventParams contains parameters for creating an audit event.
 type EventParams struct {
@@ -107,7 +48,7 @@ type EventParams struct {
 //EventTarget is the interface that different event target types must implement
 //in order to render the respective Event.Target section.
 type EventTarget interface {
-	Render() Resource
+	Render() cadf.Resource
 }
 
 //QuotaEventTarget contains the structure for rendering a Event.Target for
@@ -124,18 +65,18 @@ type QuotaEventTarget struct {
 }
 
 // Render implements the EventTarget interface type.
-func (t QuotaEventTarget) Render() Resource {
+func (t QuotaEventTarget) Render() cadf.Resource {
 	targetID := t.ProjectID
 	if t.ProjectID == "" {
 		targetID = t.DomainID
 	}
 
-	return Resource{
+	return cadf.Resource{
 		TypeURI:   fmt.Sprintf("service/%s/%s/quota", t.ServiceType, t.ResourceName),
 		ID:        targetID,
 		DomainID:  t.DomainID,
 		ProjectID: t.ProjectID,
-		Attachments: []Attachment{{
+		Attachments: []cadf.Attachment{{
 			Name:    "payload",
 			TypeURI: "mime:application/json",
 			Content: attachmentContent{
@@ -157,13 +98,13 @@ type BurstEventTarget struct {
 }
 
 // Render implements the EventTarget interface type.
-func (t BurstEventTarget) Render() Resource {
-	return Resource{
+func (t BurstEventTarget) Render() cadf.Resource {
+	return cadf.Resource{
 		TypeURI:   "service/resources/bursting",
 		ID:        t.ProjectID,
 		DomainID:  t.DomainID,
 		ProjectID: t.ProjectID,
-		Attachments: []Attachment{{
+		Attachments: []cadf.Attachment{{
 			Name:    "payload",
 			TypeURI: "mime:application/json",
 			Content: attachmentContent{
@@ -209,38 +150,38 @@ func (a attachmentContent) MarshalJSON() ([]byte, error) {
 	return json.Marshal(string(bytes))
 }
 
-//newEvent takes the necessary parameters and returns a new audit event.
-func (p EventParams) newEvent() CADFEvent {
+//NewEvent takes the necessary parameters and returns a new audit event.
+func NewEvent(p EventParams) cadf.Event {
 	outcome := "failure"
 	if p.ReasonCode == http.StatusOK {
 		outcome = "success"
 	}
 
-	return CADFEvent{
+	return cadf.Event{
 		TypeURI:   "http://schemas.dmtf.org/cloud/audit/1.0/event",
 		ID:        generateUUID(),
 		EventTime: p.Time.Format("2006-01-02T15:04:05.999999+00:00"),
 		EventType: "activity",
 		Action:    "update",
 		Outcome:   outcome,
-		Reason: Reason{
+		Reason: cadf.Reason{
 			ReasonType: "HTTP",
 			ReasonCode: strconv.Itoa(p.ReasonCode),
 		},
-		Initiator: Resource{
+		Initiator: cadf.Resource{
 			TypeURI:   "service/security/account/user",
 			Name:      p.Token.Context.Auth["user_name"],
 			ID:        p.Token.Context.Auth["user_id"],
 			Domain:    p.Token.Context.Auth["domain_name"],
 			DomainID:  p.Token.Context.Auth["domain_id"],
 			ProjectID: p.Token.Context.Auth["project_id"],
-			Host: &Host{
+			Host: &cadf.Host{
 				Address: tryStripPort(p.Request.RemoteAddr),
 				Agent:   p.Request.Header.Get("User-Agent"),
 			},
 		},
 		Target: p.Target.Render(),
-		Observer: Resource{
+		Observer: cadf.Resource{
 			TypeURI: "service/resources",
 			Name:    "limes",
 			ID:      observerUUID,

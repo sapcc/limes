@@ -70,9 +70,11 @@ github.com/rs/cors
 github.com/sapcc/go-bits/logg
 github.com/sapcc/go-bits/respondwith
 github.com/sapcc/go-bits/gopherpolicy
-github.com/sapcc/go-bits/retry
 github.com/sapcc/go-bits/easypg
 github.com/sapcc/go-bits/assert
+# github.com/sapcc/hermes v0.0.0-20190722215605-d772f40f9fc6
+github.com/sapcc/hermes/pkg/cadf
+github.com/sapcc/hermes/pkg/rabbit
 # github.com/streadway/amqp v0.0.0-20190404075320-75d898a42a94
 github.com/streadway/amqp
 # golang.org/x/net v0.0.0-20190628185345-da137c7871d7

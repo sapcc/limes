@@ -420,8 +420,6 @@ func (u QuotaUpdater) WritePutErrorResponse(w http.ResponseWriter) {
 //CommitAuditTrail prepares an audit.Trail instance for this updater and
 //commits it.
 func (u QuotaUpdater) CommitAuditTrail(token *gopherpolicy.Token, r *http.Request, requestTime time.Time) {
-	var trail audit.Trail
-
 	projectUUID := ""
 	if u.Project != nil {
 		projectUUID = u.Project.UUID
@@ -468,7 +466,7 @@ func (u QuotaUpdater) CommitAuditTrail(token *gopherpolicy.Token, r *http.Reques
 				}
 			}
 
-			trail.Add(audit.EventParams{
+			e := audit.NewEvent(audit.EventParams{
 				Token:      token,
 				Request:    r,
 				ReasonCode: statusCode,
@@ -484,8 +482,7 @@ func (u QuotaUpdater) CommitAuditTrail(token *gopherpolicy.Token, r *http.Reques
 					RejectReason: rejectReason,
 				},
 			})
+			audit.EventSinkPerCluster[u.Cluster.ID] <- e
 		}
 	}
-
-	trail.Commit(u.Cluster.ID, u.Cluster.Config.CADF)
 }
