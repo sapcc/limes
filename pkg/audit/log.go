@@ -49,7 +49,7 @@ var EventSinkPerCluster map[string]chan<- cadf.Event
 func Start(configPerCluster map[string]core.CADFConfiguration) {
 	EventSinkPerCluster = make(map[string]chan<- cadf.Event)
 	for clusterID, config := range configPerCluster {
-		eventSink := make(chan cadf.Event)
+		eventSink := make(chan cadf.Event, 20)
 		EventSinkPerCluster[clusterID] = eventSink
 		go commit(clusterID, config, eventSink)
 	}
