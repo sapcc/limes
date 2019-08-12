@@ -27,6 +27,8 @@ github.com/golang/protobuf v1.3.1/go.mod h1:6lQm79b+lXiMfvg/cZm0SGofjICqVBUtrP5y
 github.com/gophercloud/gophercloud v0.0.0-20181019014921-0719c6b22f30/go.mod h1:3WdhXV3rUYy9p6AUW8d94kr+HS62Y4VL9mBnFxsD8q4=
 github.com/gophercloud/gophercloud v0.2.0 h1:lD2Bce2xBAMNNcFZ0dObTpXkGLlVIb33RPVUNVpw6ic=
 github.com/gophercloud/gophercloud v0.2.0/go.mod h1:vxM41WHh5uqHVBMZHzuwNOHh8XEoIEcSTewFxm1c5g8=
+github.com/gophercloud/gophercloud v0.3.0 h1:6sjpKIpVwRIIwmcEGp+WwNovNsem+c+2vm6oxshRpL8=
+github.com/gophercloud/gophercloud v0.3.0/go.mod h1:vxM41WHh5uqHVBMZHzuwNOHh8XEoIEcSTewFxm1c5g8=
 github.com/gorilla/context v1.1.1/go.mod h1:kBGZzfjB9CEq2AlWe17Uuf7NDRt0dE0s8S51q0aT7Yg=
 github.com/gorilla/mux v1.6.2/go.mod h1:1lud6UwP+6orDFRuTfBEV8e9/aOM/c4fVVCaMa2zaAs=
 github.com/gorilla/mux v1.7.3 h1:gnP5JzjVOuiZD07fKKToCAOjS0yOpj/qPETTXCCS6hw=
@@ -70,9 +72,14 @@ github.com/prometheus/procfs v0.0.0-20181204211112-1dc9a6cbc91a h1:9a8MnZMP0X2nL
 github.com/prometheus/procfs v0.0.0-20181204211112-1dc9a6cbc91a/go.mod h1:c3At6R/oaqEKCNdg8wHV1ftS6bRYblBhIjjI8uT2IGk=
 github.com/rs/cors v1.6.0 h1:G9tHG9lebljV9mfp9SNPDL36nCDxmo3zTlAf1YgvzmI=
 github.com/rs/cors v1.6.0/go.mod h1:gFx+x8UowdsKA9AchylcLynDq+nNFfI8FkUZdN/jGCU=
+github.com/sapcc/go-bits v0.0.0-20180828115508-ed29938ce01c h1:X5pz43M0/CoPJ6zo/OwudORXxl02S2XrXUBjMRlyuE0=
 github.com/sapcc/go-bits v0.0.0-20180828115508-ed29938ce01c/go.mod h1:KeP5OOqQIgrauiDb/8shKWOq1YoplBALYNvpV4jizPo=
 github.com/sapcc/go-bits v0.0.0-20190522121402-dabab492e20b h1:uNHlkQrn6OfRnZA7C/UBDJsD0QLsThgpLur3BVlRmdQ=
 github.com/sapcc/go-bits v0.0.0-20190522121402-dabab492e20b/go.mod h1:KeP5OOqQIgrauiDb/8shKWOq1YoplBALYNvpV4jizPo=
+github.com/sapcc/go-bits v0.0.0-20190812112007-b26ad73e819a h1:3pGX2Y7tkfcelDkrR9upuTrwyviD4KC6IzfaNT8hE+Q=
+github.com/sapcc/go-bits v0.0.0-20190812112007-b26ad73e819a/go.mod h1:8FpGeW8UtyHhnoVVFkicxva48n1XHh/S04Xe0/n6Wv4=
+github.com/sapcc/go-bits v0.0.0-20190812112942-8284c87bb311 h1:0LOr6lII5IEyupWfdu7UE5jMVVY86P27RIZOk1KdAj0=
+github.com/sapcc/go-bits v0.0.0-20190812112942-8284c87bb311/go.mod h1:8FpGeW8UtyHhnoVVFkicxva48n1XHh/S04Xe0/n6Wv4=
 github.com/sapcc/hermes v0.0.0-20190722215605-d772f40f9fc6 h1:iI+ew9JUORCqP+8pElkSayI/smvdiYoPRX6J4DmkVTI=
 github.com/sapcc/hermes v0.0.0-20190722215605-d772f40f9fc6/go.mod h1:WM5CVlqFCGM+AUE7lQgkLmPE89PWqJS3i+oRXaSztR8=
 github.com/sirupsen/logrus v1.2.0/go.mod h1:LxeOpSwHxABJmUn/MG1IvRgCAasNZTLOkJPxbbu5VWo=

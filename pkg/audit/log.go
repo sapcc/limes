@@ -23,12 +23,11 @@ import (
 	"encoding/json"
 	"log"
 	"os"
-	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sapcc/go-bits/audittools"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/hermes/pkg/cadf"
-	"github.com/sapcc/hermes/pkg/rabbit"
 	"github.com/sapcc/limes/pkg/core"
 )
 
@@ -49,84 +48,40 @@ var EventSinkPerCluster map[string]chan<- cadf.Event
 func Start(configPerCluster map[string]core.CADFConfiguration) {
 	EventSinkPerCluster = make(map[string]chan<- cadf.Event)
 	for clusterID, config := range configPerCluster {
-		eventSink := make(chan cadf.Event, 20)
-		EventSinkPerCluster[clusterID] = eventSink
-		go commit(clusterID, config, eventSink)
+		if config.Enabled {
+			labels := prometheus.Labels{
+				"os_cluster": clusterID,
+			}
+			eventPublishSuccessCounter.With(labels).Add(0)
+			eventPublishFailedCounter.With(labels).Add(0)
+
+			onSuccessFunc := func() {
+				eventPublishSuccessCounter.With(labels).Inc()
+			}
+			onFailFunc := func() {
+				eventPublishFailedCounter.With(labels).Inc()
+			}
+			eventSink := make(chan cadf.Event, 20)
+			EventSinkPerCluster[clusterID] = eventSink
+
+			go audittools.AuditTrail{
+				EventSink:           eventSink,
+				OnSuccessfulPublish: onSuccessFunc,
+				OnFailedPublish:     onFailFunc,
+			}.Commit(config.RabbitMQ.URL, config.RabbitMQ.QueueName)
+		}
 	}
 }
 
-//commit receives the audit events from an event sink channel and sends them to
-//a RabbitMQ server as per the configuration.
-func commit(clusterID string, config core.CADFConfiguration, eventSink <-chan cadf.Event) {
-	labels := prometheus.Labels{
-		"os_cluster": clusterID,
-	}
-	eventPublishSuccessCounter.With(labels).Add(0)
-	eventPublishFailedCounter.With(labels).Add(0)
-
-	rc := &rabbitConnection{}
-	connect := func() {
-		if !rc.isConnected {
-			err := rc.connect(config.RabbitMQ.URL, config.RabbitMQ.QueueName)
-			if err != nil {
-				logg.Error(err.Error())
-			}
-		}
-	}
-	sendEvent := func(e *cadf.Event) bool {
-		if !rc.isConnected {
-			return false
-		}
-		err := rabbit.PublishEvent(rc.ch, rc.q.Name, e)
-		if err != nil {
-			eventPublishFailedCounter.With(labels).Inc()
-			logg.Error("RabbitMQ: failed to publish audit event with ID %q: %s", e.ID, err.Error())
-			return false
-		}
-		eventPublishSuccessCounter.With(labels).Inc()
-		return true
+//LogAndPublishEvent logs the audit event to stdout and publishes it to a RabbitMQ server.
+func LogAndPublishEvent(clusterID string, event cadf.Event) {
+	if showAuditOnStdout {
+		msg, _ := json.Marshal(event)
+		logg.Other("AUDIT", string(msg))
 	}
 
-	var pendingEvents []cadf.Event
-
-	ticker := time.Tick(1 * time.Minute)
-	for {
-		select {
-		case e := <-eventSink:
-			if showAuditOnStdout {
-				msg, _ := json.Marshal(e)
-				logg.Other("AUDIT", string(msg))
-			}
-
-			if config.Enabled {
-				connect()
-				if successful := sendEvent(&e); !successful {
-					pendingEvents = append(pendingEvents, e)
-				}
-			}
-		case <-ticker:
-			if config.Enabled {
-				for len(pendingEvents) > 0 {
-					connect()
-					successful := false //until proven otherwise
-					nextEvent := pendingEvents[0]
-					if successful = sendEvent(&nextEvent); !successful {
-						//refresh connection, if old
-						if time.Since(rc.connectedAt) > (5 * time.Minute) {
-							rc.disconnect()
-							connect()
-						}
-						time.Sleep(5 * time.Second)
-						successful = sendEvent(&nextEvent) //one more try before giving up
-					}
-
-					if successful {
-						pendingEvents = pendingEvents[1:]
-					} else {
-						break
-					}
-				}
-			}
-		}
+	s := EventSinkPerCluster[clusterID]
+	if s != nil {
+		s <- event
 	}
 }
