@@ -26,7 +26,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sapcc/limes/pkg/audit"
 	"github.com/sapcc/limes/pkg/core"
 
 	gorp "gopkg.in/gorp.v2"
@@ -387,18 +386,12 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 	if cluster.Config.Bursting.MaxMultiplier == 0 {
 		msg := "bursting is not available for this cluster"
 		http.Error(w, msg, http.StatusBadRequest)
-		e := audit.NewEvent(audit.EventParams{
-			Token:      token,
-			Request:    r,
-			ReasonCode: http.StatusBadRequest,
-			Time:       requestTime,
-			Target: audit.BurstEventTarget{
+		logAndPublishEvent(cluster.ID, requestTime, r, token, http.StatusBadRequest,
+			burstEventTarget{
 				DomainID:     domain.UUID,
 				ProjectID:    project.UUID,
 				RejectReason: msg,
-			},
-		})
-		audit.LogAndPublishEvent(cluster.ID, e)
+			})
 		return
 	}
 
@@ -454,18 +447,12 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 					overbookedResources[0]
 			}
 			http.Error(w, msg, http.StatusConflict)
-			e := audit.NewEvent(audit.EventParams{
-				Token:      token,
-				Request:    r,
-				ReasonCode: http.StatusConflict,
-				Time:       requestTime,
-				Target: audit.BurstEventTarget{
+			logAndPublishEvent(cluster.ID, requestTime, r, token, http.StatusConflict,
+				burstEventTarget{
 					DomainID:     domain.UUID,
 					ProjectID:    project.UUID,
 					RejectReason: msg,
-				},
-			})
-			audit.LogAndPublishEvent(cluster.ID, e)
+				})
 			return
 		}
 	}
@@ -515,18 +502,12 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 		}
 	}
 
-	e := audit.NewEvent(audit.EventParams{
-		Token:      token,
-		Request:    r,
-		ReasonCode: http.StatusOK,
-		Time:       requestTime,
-		Target: audit.BurstEventTarget{
+	logAndPublishEvent(cluster.ID, requestTime, r, token, http.StatusConflict,
+		burstEventTarget{
 			DomainID:  domain.UUID,
 			ProjectID: project.UUID,
 			NewStatus: hasBursting,
-		},
-	})
-	audit.LogAndPublishEvent(cluster.ID, e)
+		})
 
 	//report any backend errors to the user
 	if len(errors) > 0 {

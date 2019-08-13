@@ -30,7 +30,6 @@ import (
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/limes"
-	"github.com/sapcc/limes/pkg/audit"
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/reports"
@@ -466,12 +465,8 @@ func (u QuotaUpdater) CommitAuditTrail(token *gopherpolicy.Token, r *http.Reques
 				}
 			}
 
-			e := audit.NewEvent(audit.EventParams{
-				Token:      token,
-				Request:    r,
-				ReasonCode: statusCode,
-				Time:       requestTime,
-				Target: audit.QuotaEventTarget{
+			logAndPublishEvent(u.Cluster.ID, requestTime, r, token, statusCode,
+				quotaEventTarget{
 					DomainID:     u.Domain.UUID,
 					ProjectID:    projectUUID, //is empty for domain quota updates, see above
 					ServiceType:  srvType,
@@ -480,9 +475,7 @@ func (u QuotaUpdater) CommitAuditTrail(token *gopherpolicy.Token, r *http.Reques
 					NewQuota:     req.NewValue,
 					QuotaUnit:    req.Unit,
 					RejectReason: rejectReason,
-				},
-			})
-			audit.LogAndPublishEvent(u.Cluster.ID, e)
+				})
 		}
 	}
 }
