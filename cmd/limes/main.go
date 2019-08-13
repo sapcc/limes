@@ -36,7 +36,6 @@ import (
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/limes/pkg/api"
-	"github.com/sapcc/limes/pkg/audit"
 	"github.com/sapcc/limes/pkg/collector"
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
@@ -84,7 +83,7 @@ func main() {
 	for _, cluster := range config.Clusters {
 		AuditConfigPerCluster[cluster.ID] = cluster.Config.CADF
 	}
-	audit.Start(AuditConfigPerCluster)
+	api.StartAuditTrail(AuditConfigPerCluster)
 
 	//select task
 	var task func(core.Configuration, *core.Cluster, []string) error

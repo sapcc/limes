@@ -1,6 +1,6 @@
 /*******************************************************************************
 *
-* Copyright 2018 SAP SE
+* Copyright 2019 SAP SE
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -17,43 +17,105 @@
 *
 *******************************************************************************/
 
-package audit
+package api
 
 import (
 	"encoding/json"
 	"fmt"
-	"net"
+	"log"
 	"net/http"
-	"strconv"
+	"os"
 	"time"
 
-	"github.com/gofrs/uuid"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sapcc/go-bits/audittools"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/hermes/pkg/cadf"
 	"github.com/sapcc/limes"
+	"github.com/sapcc/limes/pkg/core"
 )
 
-var observerUUID = generateUUID()
+var showAuditOnStdout = os.Getenv("LIMES_SILENT") != "1"
 
-//EventParams contains parameters for creating an audit event.
-type EventParams struct {
-	Token      *gopherpolicy.Token
-	Request    *http.Request
-	ReasonCode int
-	Time       time.Time
-	Target     EventTarget
+func init() {
+	log.SetOutput(os.Stdout)
+	if os.Getenv("LIMES_DEBUG") == "1" {
+		logg.ShowDebug = true
+	}
 }
 
-//EventTarget is the interface that different event target types must implement
-//in order to render the respective Event.Target section.
-type EventTarget interface {
-	Render() cadf.Resource
+//eventSinkPerCluster is a map of cluster ID to a channel that receives audit events.
+var eventSinkPerCluster map[string]chan<- cadf.Event
+
+//StartAuditTrail starts the audit trail by initializing the EventSinkPerCluster
+//and starting separate Commit() goroutines per Cluster.
+func StartAuditTrail(configPerCluster map[string]core.CADFConfiguration) {
+	eventSinkPerCluster = make(map[string]chan<- cadf.Event)
+	for clusterID, config := range configPerCluster {
+		if config.Enabled {
+			labels := prometheus.Labels{
+				"os_cluster": clusterID,
+			}
+			auditEventPublishSuccessCounter.With(labels).Add(0)
+			auditEventPublishFailedCounter.With(labels).Add(0)
+
+			onSuccessFunc := func() {
+				auditEventPublishSuccessCounter.With(labels).Inc()
+			}
+			onFailFunc := func() {
+				auditEventPublishFailedCounter.With(labels).Inc()
+			}
+			s := make(chan cadf.Event, 20)
+			eventSinkPerCluster[clusterID] = s
+
+			go audittools.AuditTrail{
+				EventSink:           s,
+				OnSuccessfulPublish: onSuccessFunc,
+				OnFailedPublish:     onFailFunc,
+			}.Commit(config.RabbitMQ.URL, config.RabbitMQ.QueueName)
+		}
+	}
 }
 
-//QuotaEventTarget contains the structure for rendering a Event.Target for
+var observerUUID = audittools.GenerateUUID()
+
+//logAndPublishEvent takes the necessary parameters and generates a cadf.Event.
+//It logs the event to stdout and publishes it to a RabbitMQ server.
+func logAndPublishEvent(clusterID string, time time.Time, req *http.Request, token *gopherpolicy.Token, reasonCode int, target audittools.TargetRenderer) {
+	p := audittools.EventParameters{
+		Time:       time,
+		Request:    req,
+		Token:      token,
+		ReasonCode: reasonCode,
+		Action:     "update",
+		Observer: struct {
+			TypeURI string
+			Name    string
+			ID      string
+		}{
+			TypeURI: "service/resources",
+			Name:    "limes",
+			ID:      observerUUID,
+		},
+		Target: target,
+	}
+	event := audittools.NewEvent(p)
+
+	if showAuditOnStdout {
+		msg, _ := json.Marshal(event)
+		logg.Other("AUDIT", string(msg))
+	}
+
+	s := eventSinkPerCluster[clusterID]
+	if s != nil {
+		s <- event
+	}
+}
+
+//quotaEventTarget contains the structure for rendering a cadf.Event.Target for
 //changes regarding resource quota.
-type QuotaEventTarget struct {
+type quotaEventTarget struct {
 	DomainID     string
 	ProjectID    string
 	ServiceType  string
@@ -64,8 +126,8 @@ type QuotaEventTarget struct {
 	RejectReason string
 }
 
-// Render implements the EventTarget interface type.
-func (t QuotaEventTarget) Render() cadf.Resource {
+//Render implements the audittools.TargetRenderer interface type.
+func (t quotaEventTarget) Render() cadf.Resource {
 	targetID := t.ProjectID
 	if t.ProjectID == "" {
 		targetID = t.DomainID
@@ -79,7 +141,7 @@ func (t QuotaEventTarget) Render() cadf.Resource {
 		Attachments: []cadf.Attachment{{
 			Name:    "payload",
 			TypeURI: "mime:application/json",
-			Content: attachmentContent{
+			Content: targetAttachmentContent{
 				OldQuota:     t.OldQuota,
 				NewQuota:     t.NewQuota,
 				Unit:         t.QuotaUnit,
@@ -88,17 +150,17 @@ func (t QuotaEventTarget) Render() cadf.Resource {
 	}
 }
 
-//BurstEventTarget contains the structure for rendering a Event.Target for
+//burstEventTarget contains the structure for rendering a cadf.Event.Target for
 //changes regarding quota bursting for some project.
-type BurstEventTarget struct {
+type burstEventTarget struct {
 	DomainID     string
 	ProjectID    string
 	NewStatus    bool
 	RejectReason string
 }
 
-// Render implements the EventTarget interface type.
-func (t BurstEventTarget) Render() cadf.Resource {
+//Render implements the audittools.TargetRenderer interface type.
+func (t burstEventTarget) Render() cadf.Resource {
 	return cadf.Resource{
 		TypeURI:   "service/resources/bursting",
 		ID:        t.ProjectID,
@@ -107,7 +169,7 @@ func (t BurstEventTarget) Render() cadf.Resource {
 		Attachments: []cadf.Attachment{{
 			Name:    "payload",
 			TypeURI: "mime:application/json",
-			Content: attachmentContent{
+			Content: targetAttachmentContent{
 				NewStatus:    t.NewStatus,
 				RejectReason: t.RejectReason},
 		}},
@@ -115,7 +177,7 @@ func (t BurstEventTarget) Render() cadf.Resource {
 }
 
 //This type is needed for the custom MarshalJSON behavior.
-type attachmentContent struct {
+type targetAttachmentContent struct {
 	RejectReason string
 	// for quota changes
 	OldQuota uint64
@@ -126,7 +188,7 @@ type attachmentContent struct {
 }
 
 //MarshalJSON implements the json.Marshaler interface.
-func (a attachmentContent) MarshalJSON() ([]byte, error) {
+func (a targetAttachmentContent) MarshalJSON() ([]byte, error) {
 	//copy data into a struct that does not have a custom MarshalJSON
 	data := struct {
 		OldQuota     uint64     `json:"oldQuota,omitempty"`
@@ -148,62 +210,4 @@ func (a attachmentContent) MarshalJSON() ([]byte, error) {
 		return nil, err
 	}
 	return json.Marshal(string(bytes))
-}
-
-//NewEvent takes the necessary parameters and returns a new audit event.
-func NewEvent(p EventParams) cadf.Event {
-	outcome := "failure"
-	if p.ReasonCode == http.StatusOK {
-		outcome = "success"
-	}
-
-	return cadf.Event{
-		TypeURI:   "http://schemas.dmtf.org/cloud/audit/1.0/event",
-		ID:        generateUUID(),
-		EventTime: p.Time.Format("2006-01-02T15:04:05.999999+00:00"),
-		EventType: "activity",
-		Action:    "update",
-		Outcome:   outcome,
-		Reason: cadf.Reason{
-			ReasonType: "HTTP",
-			ReasonCode: strconv.Itoa(p.ReasonCode),
-		},
-		Initiator: cadf.Resource{
-			TypeURI:   "service/security/account/user",
-			Name:      p.Token.Context.Auth["user_name"],
-			ID:        p.Token.Context.Auth["user_id"],
-			Domain:    p.Token.Context.Auth["domain_name"],
-			DomainID:  p.Token.Context.Auth["domain_id"],
-			ProjectID: p.Token.Context.Auth["project_id"],
-			Host: &cadf.Host{
-				Address: tryStripPort(p.Request.RemoteAddr),
-				Agent:   p.Request.Header.Get("User-Agent"),
-			},
-		},
-		Target: p.Target.Render(),
-		Observer: cadf.Resource{
-			TypeURI: "service/resources",
-			Name:    "limes",
-			ID:      observerUUID,
-		},
-		RequestPath: p.Request.URL.String(),
-	}
-}
-
-//Generate an UUID based on random numbers (RFC 4122).
-func generateUUID() string {
-	u, err := uuid.NewV4()
-	if err != nil {
-		logg.Fatal(err.Error())
-	}
-
-	return u.String()
-}
-
-func tryStripPort(hostPort string) string {
-	host, _, err := net.SplitHostPort(hostPort)
-	if err == nil {
-		return host
-	}
-	return hostPort
 }

@@ -49,9 +49,25 @@ var lowPrivilegeRaiseProjectFailureCounter = prometheus.NewCounterVec(
 		Help: "Counter for failed quota auto approval for some service/resource per project.",
 	}, lowPrivilegeRaiseMetricLabels)
 
+var auditEventPublishSuccessCounter = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "limes_successful_auditevent_publish",
+		Help: "Counter for successful audit event publish to RabbitMQ server.",
+	},
+	[]string{"os_cluster"})
+
+var auditEventPublishFailedCounter = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "limes_failed_auditevent_publish",
+		Help: "Counter for failed audit event publish to RabbitMQ server.",
+	},
+	[]string{"os_cluster"})
+
 func init() {
 	prometheus.MustRegister(lowPrivilegeRaiseDomainSuccessCounter)
 	prometheus.MustRegister(lowPrivilegeRaiseDomainFailureCounter)
 	prometheus.MustRegister(lowPrivilegeRaiseProjectSuccessCounter)
 	prometheus.MustRegister(lowPrivilegeRaiseProjectFailureCounter)
+	prometheus.MustRegister(auditEventPublishSuccessCounter)
+	prometheus.MustRegister(auditEventPublishFailedCounter)
 }
