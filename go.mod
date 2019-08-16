@@ -4,7 +4,7 @@ go 1.12
 
 require (
 	github.com/databus23/goslo.policy v0.0.0-20170317131957-3ae74dd07ebf
-	github.com/gofrs/uuid v3.2.0+incompatible
+	github.com/gofrs/uuid v3.2.0+incompatible // indirect
 	github.com/gophercloud/gophercloud v0.3.0
 	github.com/gorilla/mux v1.7.3
 	github.com/jpillora/longestcommon v0.0.0-20161227235612-adb9d91ee629 // indirect
@@ -14,7 +14,6 @@ require (
 	github.com/rs/cors v1.6.0
 	github.com/sapcc/go-bits v0.0.0-20190813130547-e51a5d1d13d3
 	github.com/sapcc/hermes v0.0.0-20190722215605-d772f40f9fc6
-	github.com/streadway/amqp v0.0.0-20190404075320-75d898a42a94
 	golang.org/x/net v0.0.0-20190628185345-da137c7871d7
 	gopkg.in/gorp.v2 v2.0.0
 	gopkg.in/yaml.v2 v2.2.2
