@@ -101,8 +101,29 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 				DiscoveryPlugin:  test.NewDiscoveryPlugin(),
 				QuotaPlugins:     quotaPlugins,
 				CapacityPlugins:  map[string]core.CapacityPlugin{},
-				Config:           &core.ClusterConfiguration{Auth: &core.AuthParameters{}},
 				QuotaConstraints: &westConstraintSet,
+				Config: &core.ClusterConfiguration{
+					Auth: &core.AuthParameters{},
+					Services: []core.ServiceConfiguration{
+						{
+							Type: "shared",
+							Rates: core.ServiceRateLimitConfiguration{
+								Global: []core.RateLimitConfiguration{
+									{
+										TargetTypeURI: "service/shared/objects",
+										Actions: []core.RateLimitActionConfiguration{
+											{
+												Name:  "create",
+												Limit: 5000,
+												Unit:  "r/s",
+											},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
 			},
 			"east": {
 				ID:              "east",
@@ -228,6 +249,18 @@ func Test_ClusterOperations(t *testing.T) {
 		Path:         "/v1/clusters/west",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west.json"),
+	}.Check(t, router)
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/v1/clusters/west?rates=only",
+		ExpectStatus: 200,
+		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-only-rates.json"),
+	}.Check(t, router)
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/v1/clusters/west?rates",
+		ExpectStatus: 200,
+		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-with-rates.json"),
 	}.Check(t, router)
 	assert.HTTPRequest{
 		Method:       "GET",

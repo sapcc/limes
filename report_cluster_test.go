@@ -50,6 +50,28 @@ var clusterResourcesMockJSON = `
 	]
 `
 
+var clusterServicesOnlyRatesMockJSON = `
+	[
+		{
+			"type": "compute",
+			"area": "compute",
+			"resources": [],
+			"rates": [
+				{
+					"target_type_uri": "service/shared/objects",
+					"actions": [
+						{
+							"name": "create",
+							"limit": 5000,
+							"unit": "r/s"
+						}
+					]
+				}
+			]
+		}
+	]
+`
+
 var clusterMockResources = &ClusterResourceReports{
 	"cores": &ClusterResourceReport{
 		ResourceInfo: ResourceInfo{
@@ -85,6 +107,28 @@ var clusterMockServices = &ClusterServiceReports{
 	},
 }
 
+var clusterServicesOnlyRates = &ClusterServiceReports{
+	"compute": &ClusterServiceReport{
+		ServiceInfo: ServiceInfo{
+			Type: "compute",
+			Area: "compute",
+		},
+		Resources: ClusterResourceReports{},
+		Rates: ClusterRateLimitReports{
+			"service/shared/objects": {
+				TargetTypeURI: "service/shared/objects",
+				Actions: ClusterRateLimitActionReports{
+					"create": &ClusterRateLimitActionReport{
+						Name:  "create",
+						Limit: 5000,
+						Unit:  UnitRequestsPerSeconds,
+					},
+				},
+			},
+		},
+	},
+}
+
 func p2i64(val int64) *int64 {
 	return &val
 }
@@ -109,4 +153,15 @@ func TestClusterResourcesUnmarshal(t *testing.T) {
 	err := actual.UnmarshalJSON([]byte(clusterResourcesMockJSON))
 	th.AssertNoErr(t, err)
 	th.CheckDeepEquals(t, clusterMockResources, actual)
+}
+
+func TestClusterServicesOnlyRatesMarshal(t *testing.T) {
+	th.CheckJSONEquals(t, clusterServicesOnlyRatesMockJSON, clusterServicesOnlyRates)
+}
+
+func TestClusterServicesOnlyRatesUnmarshal(t *testing.T) {
+	actual := &ClusterServiceReports{}
+	err := actual.UnmarshalJSON([]byte(clusterServicesOnlyRatesMockJSON))
+	th.AssertNoErr(t, err)
+	th.CheckDeepEquals(t, clusterServicesOnlyRates, actual)
 }

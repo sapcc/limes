@@ -136,7 +136,7 @@ type ServiceRateLimitConfiguration struct {
 	ProjectDefault []RateLimitConfiguration `yaml:"project_default"`
 }
 
-//GetProjectDefaultRateLimit returns the default project-level rate limit for a given target type URI and action or and error if not found.
+//GetProjectDefaultRateLimit returns the default project-level rate limit for a given target type URI and action or an error if not found.
 func (svcRlConfig *ServiceRateLimitConfiguration) GetProjectDefaultRateLimit(targetTypeURI, action string) (uint64, string, error) {
 	for _, rl := range svcRlConfig.ProjectDefault {
 		if rl.TargetTypeURI == targetTypeURI {
@@ -150,14 +150,31 @@ func (svcRlConfig *ServiceRateLimitConfiguration) GetProjectDefaultRateLimit(tar
 	return 0, "", fmt.Errorf("no rate limit found for %s/%s", targetTypeURI, action)
 }
 
+//GetGlobalRateLimit returns the global rate limit for a given target type URI and action or an error if not found.
+func (svcRlConfig *ServiceRateLimitConfiguration) GetGlobalRateLimit(targetTypeURI, action string) (uint64, string, error) {
+	for _, rl := range svcRlConfig.Global {
+		if rl.TargetTypeURI == targetTypeURI {
+			for _, act := range rl.Actions {
+				if act.Name == action {
+					return act.Limit, act.Unit, nil
+				}
+			}
+		}
+	}
+	return 0, "", fmt.Errorf("no rate limit found for %s/%s", targetTypeURI, action)
+}
+
 //RateLimitConfiguration describes a rate limit configuration.
 type RateLimitConfiguration struct {
-	TargetTypeURI string `yaml:"target_type_uri"`
-	Actions       []struct {
-		Name  string `yaml:"name"`
-		Limit uint64 `yaml:"limit"`
-		Unit  string `yaml:"unit"`
-	} `yaml:"actions"`
+	TargetTypeURI string                         `yaml:"target_type_uri"`
+	Actions       []RateLimitActionConfiguration `yaml:"actions"`
+}
+
+//RateLimitActionConfiguration describes a rate limit per action.
+type RateLimitActionConfiguration struct {
+	Name  string `yaml:"name"`
+	Limit uint64 `yaml:"limit"`
+	Unit  string `yaml:"unit"`
 }
 
 //CapacitorConfiguration describes a capacity plugin that is enabled for a
