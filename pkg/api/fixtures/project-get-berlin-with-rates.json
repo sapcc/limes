@@ -41,12 +41,14 @@
               {
                 "name": "delete",
                 "limit": 2,
-                "unit": "r/m"
+                "unit": "r/m",
+                "default_limit": 1
               },
               {
                 "name": "update",
                 "limit": 2,
-                "unit": "r/m"
+                "unit": "r/m",
+                "default_unit": "r/s"
               }
             ]
           }
@@ -88,12 +90,14 @@
               {
                 "name": "delete",
                 "limit": 2,
-                "unit": "r/m"
+                "unit": "r/m",
+                "default_limit": 1
               },
               {
                 "name": "update",
                 "limit": 2,
-                "unit": "r/m"
+                "unit": "r/m",
+                "default_unit": "r/s"
               }
             ]
           }

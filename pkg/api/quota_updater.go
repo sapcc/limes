@@ -205,7 +205,7 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 					//Add to the list of rate limit requests as the value and/or unit changed.
 					req.NewValue = newRateLimit.Value
 					req.NewUnit = newRateLimit.Unit
-					req.ValidationError = u.validateRateLimit(u.Cluster.InfoForService(svc.Type), rlActRep, req.NewValue, req.NewUnit)
+					req.ValidationError = u.validateRateLimit(u.Cluster.InfoForService(svc.Type), targetTypeURI, rlActRep, req.NewValue, req.NewUnit)
 					u.RateLimitRequests[svc.Type][targetTypeURI][action] = req
 				}
 			}
@@ -283,10 +283,24 @@ func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limes.ResourceInf
 	return u.validateProjectQuota(domRes, *projRes, newQuota)
 }
 
-func (u QuotaUpdater) validateRateLimit(srv limes.ServiceInfo, rateLimit *limes.ProjectRateLimitActionReport, newRateLimitValue uint64, newRateLimitUnit limes.Unit) *core.QuotaValidationError {
-	oldLimit := uint64(0)
-	oldUnit := limes.UnitRequestsPerHour
-	return u.validateAuthorizationRateLimit(oldLimit, newRateLimitValue, oldUnit, newRateLimitUnit)
+func (u QuotaUpdater) validateRateLimit(srv limes.ServiceInfo, targetTypeURI string, rateLimit *limes.ProjectRateLimitActionReport, newRateLimitValue uint64, newRateLimitUnit limes.Unit) *core.QuotaValidationError {
+
+	//Allow only setting rate limits for which a default was configured.
+	svcConfig, err := u.Cluster.Config.GetServiceConfigurationForType(srv.Type)
+	if err != nil {
+		return &core.QuotaValidationError{
+			Status:  http.StatusForbidden,
+			Message: "user is not allowed to create new rate limits",
+		}
+	}
+	if _, _, err := svcConfig.Rates.GetProjectDefaultRateLimit(targetTypeURI, rateLimit.Name); err != nil {
+		return &core.QuotaValidationError{
+			Status:  http.StatusForbidden,
+			Message: "user is not allowed to create new rate limits",
+		}
+	}
+
+	return u.validateAuthorizationRateLimit(rateLimit.Limit, newRateLimitValue, rateLimit.Unit, newRateLimitUnit)
 }
 
 func (u QuotaUpdater) validateAuthorization(oldQuota, newQuota, lprLimit uint64, unit limes.Unit) *core.QuotaValidationError {
@@ -476,7 +490,7 @@ func (u QuotaUpdater) WriteSimulationReport(w http.ResponseWriter) {
 		srvType1 := result.UnacceptableRateLimits[i].ServiceType
 		srvType2 := result.UnacceptableRateLimits[j].ServiceType
 		if srvType1 != srvType2 {
-			return srvType1 > srvType2
+			return srvType1 < srvType2
 		}
 
 		ttu1 := result.UnacceptableRateLimits[i].TargetTypeURI
@@ -620,22 +634,6 @@ func (u QuotaUpdater) CommitAuditTrail(token *gopherpolicy.Token, r *http.Reques
 	for srvType, rateLimits := range u.RateLimitRequests {
 		for targetTypeURI, requests := range rateLimits {
 			for action, req := range requests {
-				if u.CanRaiseLP && !u.CanRaise {
-					labels := prometheus.Labels{
-						"os_cluster":      u.Cluster.ID,
-						"service":         srvType,
-						"target_type_uri": targetTypeURI,
-						"action":          action,
-					}
-					if u.ScopeType() == "project" {
-						if invalid {
-							lowPrivilegeRaiseProjectFailureCounter.With(labels).Inc()
-						} else {
-							lowPrivilegeRaiseProjectSuccessCounter.With(labels).Inc()
-						}
-					}
-				}
-
 				//if !u.IsValid(), then all requested quotas in this PUT are considered
 				//invalid (and none are committed), so set the rejectReason to explain this
 				rejectReason := ""

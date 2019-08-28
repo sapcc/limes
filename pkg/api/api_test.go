@@ -92,6 +92,78 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 
 	quotaPlugins["shared"].(*test.Plugin).WithExternallyManagedResource = true
 
+	clusterConfig := &core.ClusterConfiguration{
+		Auth: &core.AuthParameters{},
+		Services: []core.ServiceConfiguration{
+			{
+				Type: "shared",
+				Rates: core.ServiceRateLimitConfiguration{
+					Global: []core.RateLimitConfiguration{
+						{
+							TargetTypeURI: "service/shared/objects",
+							Actions: []core.RateLimitActionConfiguration{
+								{
+									Name:  "create",
+									Limit: 5000,
+									Unit:  "r/s",
+								},
+							},
+						},
+					},
+					ProjectDefault: []core.RateLimitConfiguration{
+						{
+							TargetTypeURI: "service/shared/objects",
+							Actions: []core.RateLimitActionConfiguration{
+								{
+									Name:  "create",
+									Limit: 5,
+									Unit:  "r/m",
+								},
+								{
+									Name:  "delete",
+									Limit: 1,
+									Unit:  "r/m",
+								},
+								{
+									Name:  "update",
+									Limit: 2,
+									Unit:  "r/s",
+								},
+							},
+						},
+					},
+				},
+			},
+			{
+				Type: "unshared",
+				Rates: core.ServiceRateLimitConfiguration{
+					ProjectDefault: []core.RateLimitConfiguration{
+						{
+							TargetTypeURI: "service/unshared/instances",
+							Actions: []core.RateLimitActionConfiguration{
+								{
+									Name:  "create",
+									Limit: 5,
+									Unit:  "r/m",
+								},
+								{
+									Name:  "delete",
+									Limit: 1,
+									Unit:  "r/m",
+								},
+								{
+									Name:  "update",
+									Limit: 2,
+									Unit:  "r/s",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
 	config := core.Configuration{
 		Clusters: map[string]*core.Cluster{
 			"west": {
@@ -102,28 +174,7 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 				QuotaPlugins:     quotaPlugins,
 				CapacityPlugins:  map[string]core.CapacityPlugin{},
 				QuotaConstraints: &westConstraintSet,
-				Config: &core.ClusterConfiguration{
-					Auth: &core.AuthParameters{},
-					Services: []core.ServiceConfiguration{
-						{
-							Type: "shared",
-							Rates: core.ServiceRateLimitConfiguration{
-								Global: []core.RateLimitConfiguration{
-									{
-										TargetTypeURI: "service/shared/objects",
-										Actions: []core.RateLimitActionConfiguration{
-											{
-												Name:  "create",
-												Limit: 5000,
-												Unit:  "r/s",
-											},
-										},
-									},
-								},
-							},
-						},
-					},
-				},
+				Config:           clusterConfig,
 			},
 			"east": {
 				ID:              "east",
@@ -131,7 +182,7 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 				IsServiceShared: isServiceShared,
 				QuotaPlugins:    quotaPlugins,
 				CapacityPlugins: map[string]core.CapacityPlugin{},
-				Config:          &core.ClusterConfiguration{Auth: &core.AuthParameters{}},
+				Config:          clusterConfig,
 			},
 			"cloud": {
 				ID:              "cloud",
@@ -140,7 +191,7 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 				DiscoveryPlugin: test.NewDiscoveryPlugin(),
 				QuotaPlugins:    quotaPlugins,
 				CapacityPlugins: map[string]core.CapacityPlugin{},
-				Config:          &core.ClusterConfiguration{Auth: &core.AuthParameters{}},
+				Config:          clusterConfig,
 			},
 		},
 	}
@@ -1060,14 +1111,21 @@ func Test_ProjectOperations(t *testing.T) {
 		Method:       "GET",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin?rates=true",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-with-rates-berlin.json"),
+		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-berlin-with-rates.json"),
 	}.Check(t, router)
 	//check rendering of rates=only
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin?rates=only",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-only-rates-berlin.json"),
+		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-berlin-only-rates.json"),
+	}.Check(t, router)
+	//Only default project rates configured via ServiceConfiguration but not individual rates for project.
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/v1/domains/uuid-for-france/projects/uuid-for-paris?rates=only",
+		ExpectStatus: 200,
+		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-paris-only-default-rates.json"),
 	}.Check(t, router)
 	//dresden has a case of backend quota != quota
 	assert.HTTPRequest{
@@ -1387,6 +1445,60 @@ func Test_ProjectOperations(t *testing.T) {
 	}
 	if !reflect.DeepEqual(expectBackendQuota, backendQuota) {
 		t.Errorf("expected backend quota %#v, but got %#v", expectBackendQuota, backendQuota)
+	}
+
+	//Check PUT ../project with rate limits.
+	plugin.SetQuotaFails = false
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 202,
+		Body: assert.JSONObject{
+			"project": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "shared",
+						"rates": []assert.JSONObject{
+							{
+								"target_type_uri": "service/shared/things",
+								"actions": []assert.JSONObject{
+									{
+										"name":  "read/list",
+										"limit": 1,
+										"unit":  "r/h",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+	var (
+		actualLimit uint64
+		actualUnit  limes.Unit
+	)
+	err = db.DB.QueryRow(`
+		SELECT prl.rate_limit, prl.unit FROM project_rate_limits pr
+		JOIN project_services ps ON ps.id = pr.service_id
+		JOIN projects p ON p.id = ps.project_id
+		WHERE p.name = $1 AND ps.type = $2 AND prl.target_type_uri = $3 AND prl.action = $4`,
+		"berlin", "shared", "service/shared/things", "read/list").Scan(&actualLimit, &actualUnit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if actualLimit != 1 {
+		t.Errorf(
+			"rate limit was not updated in database for %s %s. expected limit %d but got %d",
+			"service/shared/things", "read/list", 1, actualLimit,
+		)
+	}
+	if actualUnit != limes.UnitRequestsPerHour {
+		t.Errorf(
+			"rate limit was not updated in database for %s %s. expected unit %s but got %s",
+			"service/shared/things", "read/list", limes.UnitRequestsPerHour, actualUnit,
+		)
 	}
 
 	//check SimulatePutProject for no actual changes (all quotas requested already are set like that)

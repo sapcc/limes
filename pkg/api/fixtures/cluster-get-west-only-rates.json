@@ -19,6 +19,11 @@
             ]
           }
         ]
+      },
+      {
+        "type": "unshared",
+        "area": "unshared",
+        "resources": []
       }
     ]
   }

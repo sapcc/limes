@@ -318,25 +318,23 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 				return
 			}
 
-			for _, rl := range rateLimits {
-				rlPerTargetTypeURI, exists := rateLimitRequests[rl.TargetTypeURI]
-				if !exists {
-					continue
+			for targetTypeURI, reqs := range rateLimitRequests {
+				for action, rl := range reqs {
+					dbRateLimit := searchProjectRateLimit(rateLimits, targetTypeURI, action)
+					if dbRateLimit == nil {
+						dbRateLimit = &db.ProjectRateLimit{
+							TargetTypeURI: targetTypeURI, Action: action, ServiceID: srv.ID,
+						}
+					}
+					//Skip if neither limit nor unit changed.
+					if dbRateLimit.Limit == rl.NewValue && dbRateLimit.Unit == string(rl.NewUnit) {
+						continue
+					}
+					dbRateLimit.Limit = rl.NewValue
+					dbRateLimit.Unit = string(rl.NewUnit)
+					rateLimitsToUpdate = append(rateLimitsToUpdate, dbRateLimit)
+					servicesToUpdate[srv.Type] = true
 				}
-
-				req, exists := rlPerTargetTypeURI[rl.Action]
-				if !exists {
-					continue
-				}
-
-				if rl.Limit == req.NewValue && rl.Unit == string(req.NewUnit) {
-					continue
-				}
-
-				rl.Limit = req.NewValue
-				rl.Unit = string(req.NewUnit)
-				rateLimitsToUpdate = append(rateLimitsToUpdate, &rl)
-				servicesToUpdate[srv.Type] = true
 			}
 		}
 	}
@@ -556,4 +554,14 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 	}
 	//otherwise, report success
 	w.WriteHeader(202)
+}
+
+//TODO: @auhlig
+func searchProjectRateLimit(dbProjectRateLimits []db.ProjectRateLimit, targetTypeURI, action string) *db.ProjectRateLimit {
+	for _, rl := range dbProjectRateLimits {
+		if rl.TargetTypeURI == targetTypeURI && rl.Action == action {
+			return &rl
+		}
+	}
+	return nil
 }

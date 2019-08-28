@@ -93,7 +93,7 @@ func GetProjects(cluster *core.Cluster, domain db.Domain, projectID *int64, dbi 
 				return err
 			}
 
-			projectReport, serviceReport, resReport, _ := projects.Find(cluster, projectUUID, projectName, projectParentUUID, serviceType, resourceName, nil, nil, scrapedAt)
+			projectReport, _, resReport, _ := projects.Find(cluster, projectUUID, projectName, projectParentUUID, serviceType, resourceName, nil, nil, scrapedAt)
 			if projectReport != nil && clusterCanBurst {
 				projectReport.Bursting = &limes.ProjectBurstingInfo{
 					Enabled:    projectHasBursting,
@@ -106,15 +106,13 @@ func GetProjects(cluster *core.Cluster, domain db.Domain, projectID *int64, dbi 
 				if subresources != nil {
 					subresourcesValue = *subresources
 				}
-				behavior := cluster.BehaviorForResource(*serviceType, *resourceName, domain.Name+"/"+projectName)
-				resReport.Scaling = behavior.ToScalingBehavior()
 				resReport.PhysicalUsage = physicalUsage
 				resReport.BackendQuota = nil //See below.
 				resReport.Subresources = limes.JSONString(subresourcesValue)
-				resReport.Annotations = behavior.Annotations
 
-				if clusterCanBurst {
-				}
+				behavior := cluster.BehaviorForResource(*serviceType, *resourceName, domain.Name+"/"+projectName)
+				resReport.Scaling = behavior.ToScalingBehavior()
+				resReport.Annotations = behavior.Annotations
 
 				if usage != nil {
 					resReport.Usage = *usage
@@ -134,7 +132,6 @@ func GetProjects(cluster *core.Cluster, domain db.Domain, projectID *int64, dbi 
 						resReport.BurstUsage = *usage - *quota
 					}
 				}
-				serviceReport.Resources[*resourceName] = resReport
 			}
 			return nil
 		})
@@ -167,27 +164,53 @@ func GetProjects(cluster *core.Cluster, domain db.Domain, projectID *int64, dbi 
 				return err
 			}
 
-			_, serviceReport, _, rateLimitReport := projects.Find(cluster, projectUUID, projectName, projectParentUUID, serviceType, nil, targetTypeURI, actionName, scrapedAt)
+			_, _, _, rateLimitReport := projects.Find(cluster, projectUUID, projectName, projectParentUUID, serviceType, nil, targetTypeURI, actionName, scrapedAt)
 			if rateLimitReport != nil && limit != nil && unit != nil {
 				rateLimitReport.Actions[*actionName].Limit = *limit
 				rateLimitReport.Actions[*actionName].Unit = limes.Unit(*unit)
-
-				//Check whether the project rate limit deviates from the default project rate limits.
-				//Errors are only used to indicate that no default project-level rate limit are configured.
-				if svcConfig, err := cluster.Config.GetServiceConfigurationForType(*serviceType); err == nil {
-					if defaultLimit, defaultUnit, err := svcConfig.Rates.GetProjectDefaultRateLimit(*targetTypeURI, *actionName); err == nil {
-						if *limit != defaultLimit || *unit != defaultUnit {
-							rateLimitReport.Actions[*actionName].DefaultLimit = defaultLimit
-							rateLimitReport.Actions[*actionName].DefaultUnit = limes.Unit(defaultUnit)
-						}
-					}
-				}
-				serviceReport.Rates[*targetTypeURI] = rateLimitReport
 			}
 			return nil
 		})
 		if err != nil {
 			return nil, err
+		}
+
+		//Enrich the report with the default rate limits.
+		for _, projectReport := range projects {
+			for _, serviceReport := range projectReport.Services {
+				if svcConfig, err := cluster.Config.GetServiceConfigurationForType(serviceReport.Type); err == nil {
+					for _, defaultRateLimit := range svcConfig.Rates.ProjectDefault {
+						rateLimitReport, exists := serviceReport.Rates[defaultRateLimit.TargetTypeURI]
+						if !exists {
+							rateLimitReport = &limes.ProjectRateLimitReport{
+								TargetTypeURI: defaultRateLimit.TargetTypeURI,
+								Actions:       make(limes.ProjectRateLimitActionReports),
+							}
+						}
+
+						for _, defaultAction := range defaultRateLimit.Actions {
+							rl, exists := rateLimitReport.Actions[defaultAction.Name]
+							if !exists {
+								rl = &limes.ProjectRateLimitActionReport{
+									Name:  defaultAction.Name,
+									Limit: defaultAction.Limit,
+									Unit:  limes.Unit(defaultAction.Unit),
+								}
+							}
+							//Indicate that the project rate limit or unit deviates from the default by adding
+							// defaultLimit and/or defaultUnit.
+							if rl.Limit != defaultAction.Limit {
+								rl.DefaultLimit = defaultAction.Limit
+							}
+							if rl.Unit != limes.Unit(defaultAction.Unit) {
+								rl.DefaultUnit = limes.Unit(defaultAction.Unit)
+							}
+							rateLimitReport.Actions[defaultAction.Name] = rl
+						}
+						serviceReport.Rates[defaultRateLimit.TargetTypeURI] = rateLimitReport
+					}
+				}
+			}
 		}
 	}
 
@@ -246,11 +269,8 @@ func (p projects) Find(cluster *core.Cluster, projectUUID, projectName, projectP
 	if resourceName != nil {
 		resource, exists = service.Resources[*resourceName]
 		if !exists && cluster.HasResource(*serviceType, *resourceName) {
-			resBehaviour := cluster.BehaviorForResource(*serviceType, *resourceName, projectName)
 			resource = &limes.ProjectResourceReport{
 				ResourceInfo: cluster.InfoForResource(*serviceType, *resourceName),
-				Scaling:      resBehaviour.ToScalingBehavior(),
-				Annotations:  resBehaviour.Annotations,
 			}
 			service.Resources[*resourceName] = resource
 		}
@@ -268,9 +288,7 @@ func (p projects) Find(cluster *core.Cluster, projectUUID, projectName, projectP
 		}
 		_, exists := rateLimit.Actions[*action]
 		if !exists {
-			rateLimit.Actions[*action] = &limes.ProjectRateLimitActionReport{
-				Name: *action,
-			}
+			rateLimit.Actions[*action] = &limes.ProjectRateLimitActionReport{Name: *action}
 		}
 		service.Rates[*targetTypeURI] = rateLimit
 	}
