@@ -156,12 +156,12 @@ var SQLMigrations = map[string]string{
 	`,
 	"010_add_project_rate_limits.up.sql": `
 		CREATE TABLE project_rate_limits (
-      service_id      BIGINT NOT NULL REFERENCES project_services ON DELETE CASCADE,
-      target_type_uri TEXT   NOT NULL,
-      action          TEXT   NOT NULL,
-      rate_limit   	  BIGINT NOT NULL,
-      unit            TEXT   NOT NULL,
-      PRIMARY KEY (service_id, target_type_uri, action)
-    );
+			service_id      BIGINT NOT NULL REFERENCES project_services ON DELETE CASCADE,
+			target_type_uri TEXT   NOT NULL,
+			action          TEXT   NOT NULL,
+			rate_limit      BIGINT NOT NULL,
+			unit            TEXT   NOT NULL,
+			PRIMARY KEY (service_id, target_type_uri, action)
+		);
 	`,
 }
