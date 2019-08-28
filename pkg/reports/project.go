@@ -61,10 +61,10 @@ func GetProjects(cluster *core.Cluster, domain db.Domain, projectID *int64, dbi 
 	projects := make(projects)
 
 	// Do not collect project resources if only rates are requested.
-	if !filter.onlyRates {
+	if !filter.OnlyRates {
 		//avoid collecting the potentially large subresources strings when possible
 		queryStr := projectReportQuery
-		if !filter.withSubresources {
+		if !filter.WithSubresources {
 			queryStr = strings.Replace(queryStr, "pr.subresources", "''", 1)
 		}
 		queryStr, joinArgs := filter.PrepareQuery(queryStr)
@@ -143,7 +143,7 @@ func GetProjects(cluster *core.Cluster, domain db.Domain, projectID *int64, dbi 
 		}
 	}
 
-	if filter.withRates {
+	if filter.WithRates {
 		queryStr, joinArgs := filter.PrepareQuery(projectRateLimitReportQuery)
 		whereStr, whereArgs := db.BuildSimpleWhereClause(fields, len(joinArgs))
 		err := db.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {

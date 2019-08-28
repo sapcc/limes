@@ -77,14 +77,14 @@ var clusterReportQuery5 = `
 //GetClusters returns reports for all clusters or, if clusterID is
 //non-nil, for that cluster only.
 //
-//In contrast to nearly everything else in Limes, his needs the full
+//In contrast to nearly everything else in Limes, this needs the full
 //core.Configuration (instead of just the current core.ClusterConfiguration)
 //to look at the services enabled in other clusters.
-func GetClusters(config core.Configuration, clusterID *string, localQuotaUsageOnly bool, withSubcapacities bool, dbi db.Interface, filter Filter) ([]*limes.ClusterReport, error) {
+func GetClusters(config core.Configuration, clusterID *string, dbi db.Interface, filter Filter) ([]*limes.ClusterReport, error) {
 	//first query: collect project usage data in these clusters
 	clusters := make(clusters)
 
-	if !filter.onlyRates {
+	if !filter.OnlyRates {
 		queryStr, joinArgs := filter.PrepareQuery(clusterReportQuery1)
 		whereStr, whereArgs := db.BuildSimpleWhereClause(makeClusterFilter("d", clusterID), len(joinArgs))
 		err := db.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
@@ -177,7 +177,7 @@ func GetClusters(config core.Configuration, clusterID *string, localQuotaUsageOn
 
 		//third query: collect capacity data for these clusters
 		queryStr, joinArgs = filter.PrepareQuery(clusterReportQuery3)
-		if !withSubcapacities {
+		if !filter.WithSubcapacities {
 			queryStr = strings.Replace(queryStr, "cr.subcapacities", "''", 1)
 		}
 		whereStr, whereArgs = db.BuildSimpleWhereClause(makeClusterFilter("cs", clusterID), len(joinArgs))
@@ -246,7 +246,7 @@ func GetClusters(config core.Configuration, clusterID *string, localQuotaUsageOn
 
 		if len(isSharedService) > 0 {
 
-			if !localQuotaUsageOnly {
+			if !filter.LocalQuotaUsageOnly {
 
 				//fourth query: aggregate domain quota for shared services
 				sharedQuotaSums := make(map[string]map[string]uint64)
@@ -342,7 +342,7 @@ func GetClusters(config core.Configuration, clusterID *string, localQuotaUsageOn
 
 			//third query again, but this time to collect shared capacities
 			queryStr, joinArgs = filter.PrepareQuery(clusterReportQuery3)
-			if !withSubcapacities {
+			if !filter.WithSubcapacities {
 				queryStr = strings.Replace(queryStr, "cr.subcapacities", "''", 1)
 			}
 			filter := map[string]interface{}{"cs.cluster_id": "shared"}
@@ -403,7 +403,7 @@ func GetClusters(config core.Configuration, clusterID *string, localQuotaUsageOn
 		}
 	}
 
-	if filter.withRates {
+	if filter.WithRates {
 		for _, clusterConfig := range config.Clusters {
 			for _, svcConfig := range clusterConfig.Config.Services {
 

@@ -102,8 +102,7 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 	//for project scope, we also need a project report for validation
 	var projectReport *limes.ProjectReport
 	if u.Project != nil {
-		reportFilter := reports.NewFilter(nil, nil, true, false, false)
-		projectReport, err = GetProjectReport(u.Cluster, *u.Domain, *u.Project, dbi, reportFilter)
+		projectReport, err = GetProjectReport(u.Cluster, *u.Domain, *u.Project, dbi, reports.Filter{WithRates: true})
 		if err != nil {
 			return err
 		}

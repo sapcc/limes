@@ -53,9 +53,7 @@ func (p *v1Provider) ListClusters(w http.ResponseWriter, r *http.Request) {
 	result.CurrentCluster = currentCluster.ID
 
 	var err error
-	_, localQuotaUsageOnly := r.URL.Query()["local"]
-	_, withSubcapacities := r.URL.Query()["detail"]
-	result.Clusters, err = reports.GetClusters(p.Config, nil, localQuotaUsageOnly, withSubcapacities, db.DB, reports.ReadFilter(r))
+	result.Clusters, err = reports.GetClusters(p.Config, nil, db.DB, reports.ReadFilter(r))
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -73,9 +71,7 @@ func (p *v1Provider) GetCluster(w http.ResponseWriter, r *http.Request) {
 	if clusterID == "current" {
 		clusterID = p.Cluster.ID
 	}
-	_, localQuotaUsageOnly := r.URL.Query()["local"]
-	_, withSubcapacities := r.URL.Query()["detail"]
-	clusters, err := reports.GetClusters(p.Config, &clusterID, localQuotaUsageOnly, withSubcapacities, db.DB, reports.ReadFilter(r))
+	clusters, err := reports.GetClusters(p.Config, &clusterID, db.DB, reports.ReadFilter(r))
 	if respondwith.ErrorText(w, err) {
 		return
 	}
