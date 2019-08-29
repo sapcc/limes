@@ -313,7 +313,7 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 		if rateLimitRequests, exists := updater.RateLimitRequests[srv.Type]; exists {
 			//Check all rate limits.
 			var rateLimits []db.ProjectRateLimit
-			_, err = tx.Select(&rateLimits, `SELECT * FROM project_rate_limits WHERE service_id = $1 ORDER BY name`)
+			_, err = tx.Select(&rateLimits, `SELECT * FROM project_rate_limits WHERE service_id = $1 ORDER BY target_type_uri, action`, srv.ID)
 			if respondwith.ErrorText(w, err) {
 				return
 			}
@@ -347,6 +347,7 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 		return
 	}
 
+	//TODO: @auhlig this bypasses the quotaUpdater.validateRateLimit(..)
 	//Update the DB with the new rate limits.
 	stmt, err := dbi.Prepare(`UPDATE project_rate_limits SET rate_limit = $1, unit = $2 WHERE service_id = $3 AND target_type_uri = $4 AND action = $5`)
 	if respondwith.ErrorText(w, err) {
@@ -556,7 +557,6 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 	w.WriteHeader(202)
 }
 
-//TODO: @auhlig
 func searchProjectRateLimit(dbProjectRateLimits []db.ProjectRateLimit, targetTypeURI, action string) *db.ProjectRateLimit {
 	for _, rl := range dbProjectRateLimits {
 		if rl.TargetTypeURI == targetTypeURI && rl.Action == action {

@@ -28,14 +28,3 @@ func StringSliceContains(strSlice []string, searchString string) bool {
 	}
 	return false
 }
-
-// StringSliceRemoveEmpty removes empty strings from a string slice.
-func StringSliceRemoveEmpty(strSlice []string) []string {
-	var eSlice []string
-	for _, val := range strSlice {
-		if val != "" {
-			eSlice = append(eSlice, val)
-		}
-	}
-	return eSlice
-}
