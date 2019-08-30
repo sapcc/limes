@@ -101,7 +101,7 @@ func GetProjects(cluster *core.Cluster, domain db.Domain, projectID *int64, dbi 
 				}
 			}
 
-			if resReport != nil && resourceName != nil {
+			if resReport != nil {
 				subresourcesValue := ""
 				if subresources != nil {
 					subresourcesValue = *subresources

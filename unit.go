@@ -52,8 +52,8 @@ const (
 
 	//UnitRequestsPerMillisecond is exactly that.
 	UnitRequestsPerMillisecond Unit = "r/ms"
-	//UnitRequestsPerSeconds is exactly that.
-	UnitRequestsPerSeconds Unit = "r/s"
+	//UnitRequestsPerSecond is exactly that.
+	UnitRequestsPerSecond Unit = "r/s"
 	//UnitRequestsPerMinute is exactly that.
 	UnitRequestsPerMinute Unit = "r/m"
 	//UnitRequestsPerHour is exactly that.
@@ -85,7 +85,7 @@ func (u Unit) Base() (Unit, uint64) {
 //IsGreaterThanOrEqual compares whether the base unit is of greater magnitude than or equal to the given unit.
 func (u Unit) IsGreaterThanOrEqual(cmpUnit Unit) bool {
 	//List of available rate limits in ascending order of magnitude.
-	rateLimitUnitList := []Unit{UnitRequestsPerMillisecond, UnitRequestsPerSeconds, UnitRequestsPerMinute, UnitRequestsPerHour}
+	rateLimitUnitList := []Unit{UnitRequestsPerMillisecond, UnitRequestsPerSecond, UnitRequestsPerMinute, UnitRequestsPerHour}
 	return IndexOf(rateLimitUnitList, u) < IndexOf(rateLimitUnitList, cmpUnit)
 }
 
@@ -154,7 +154,7 @@ func (v ValueWithUnit) String() string {
 		return str
 	}
 	switch v.Unit {
-	case UnitRequestsPerMillisecond, UnitRequestsPerSeconds, UnitRequestsPerMinute, UnitRequestsPerHour:
+	case UnitRequestsPerMillisecond, UnitRequestsPerSecond, UnitRequestsPerMinute, UnitRequestsPerHour:
 		return str + string(v.Unit)
 	default:
 		return str + " " + string(v.Unit)

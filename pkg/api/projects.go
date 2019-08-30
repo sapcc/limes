@@ -347,7 +347,6 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 		return
 	}
 
-	//TODO: @auhlig this bypasses the quotaUpdater.validateRateLimit(..)
 	//Update the DB with the new rate limits.
 	stmt, err := dbi.Prepare(`UPDATE project_rate_limits SET rate_limit = $1, unit = $2 WHERE service_id = $3 AND target_type_uri = $4 AND action = $5`)
 	if respondwith.ErrorText(w, err) {

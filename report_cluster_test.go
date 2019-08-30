@@ -121,7 +121,7 @@ var clusterServicesOnlyRates = &ClusterServiceReports{
 					"create": &ClusterRateLimitActionReport{
 						Name:  "create",
 						Limit: 5000,
-						Unit:  UnitRequestsPerSeconds,
+						Unit:  UnitRequestsPerSecond,
 					},
 				},
 			},

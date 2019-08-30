@@ -66,7 +66,7 @@ var rateLimits = QuotaRequest{
 	"object-store": ServiceQuotaRequest{
 		Rates: RateQuotaRequest{
 			"object/account/container": {
-				"create": {Value: 1000, Unit: UnitRequestsPerSeconds},
+				"create": {Value: 1000, Unit: UnitRequestsPerSecond},
 			},
 		},
 		Resources: ResourceQuotaRequest{},

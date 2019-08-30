@@ -203,8 +203,8 @@ func (t rateLimitEventTarget) Render() cadf.Resource {
 				Name:    "payload",
 				TypeURI: "mime:application/json",
 				Content: targetAttachmentContent{
-					OldQuota:     t.OldLimit,
-					NewQuota:     t.NewLimit,
+					OldLimit:     t.OldLimit,
+					NewLimit:     t.NewLimit,
 					OldUnit:      t.OldUnit,
 					NewUnit:      t.NewUnit,
 					RejectReason: t.RejectReason,
