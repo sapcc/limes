@@ -209,15 +209,17 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 	canRaise := token.Check("project:raise")
 	canRaiseLP := token.Check("project:raise_lowpriv")
 	canLower := token.Check("project:lower")
+	canSetRateLimit := token.Check("project:set_rate_limit")
 	if !canRaise && !canLower {
 		token.Require(w, "project:raise") //produce standard Unauthorized response
 		return
 	}
 
 	updater := QuotaUpdater{
-		CanRaise:   canRaise,
-		CanRaiseLP: canRaiseLP,
-		CanLower:   canLower,
+		CanRaise:        canRaise,
+		CanRaiseLP:      canRaiseLP,
+		CanLower:        canLower,
+		CanSetRateLimit: canSetRateLimit,
 	}
 	updater.Cluster = p.FindClusterFromRequest(w, r, token)
 	if updater.Cluster == nil {

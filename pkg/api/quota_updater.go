@@ -43,9 +43,10 @@ type QuotaUpdater struct {
 	Domain  *db.Domain  //always set (for project quota updates, contains the project's domain)
 	Project *db.Project //nil for domain quota updates
 	//AuthZ info
-	CanRaise   bool
-	CanRaiseLP bool //low-privilege raise
-	CanLower   bool
+	CanRaise        bool
+	CanRaiseLP      bool //low-privilege raise
+	CanLower        bool
+	CanSetRateLimit bool
 
 	//Filled by ValidateInput() with the key being the service type.
 	ResourceRequests  map[string]ResourceRequests
@@ -344,21 +345,12 @@ func (u QuotaUpdater) validateAuthorization(oldQuota, newQuota, lprLimit uint64,
 }
 
 func (u QuotaUpdater) validateAuthorizationRateLimit(oldLimit, newLimit uint64, oldUnit, newUnit limes.Unit) *core.QuotaValidationError {
-	if oldLimit >= newLimit || oldUnit.IsGreaterThanOrEqual(newUnit) {
-		if u.CanLower {
-			return nil
-		}
-		return &core.QuotaValidationError{
-			Status:  http.StatusForbidden,
-			Message: "user is not allowed to lower rate limits",
-		}
-	}
-	if u.CanRaise {
+	if u.CanSetRateLimit {
 		return nil
 	}
 	return &core.QuotaValidationError{
 		Status:  http.StatusForbidden,
-		Message: "user is not allowed to raise rate limits",
+		Message: "user is not allowed to set rate limits",
 	}
 }
 
