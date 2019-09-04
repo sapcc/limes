@@ -84,6 +84,7 @@ type Interface interface {
 	Prepare(query string) (*sql.Stmt, error)
 	Query(query string, args ...interface{}) (*sql.Rows, error)
 	QueryRow(query string, args ...interface{}) *sql.Row
+	Insert(args ...interface{}) error
 
 	//from gorp.v2
 	Select(i interface{}, query string, args ...interface{}) ([]interface{}, error)

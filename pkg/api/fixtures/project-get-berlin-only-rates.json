@@ -24,6 +24,11 @@
                 "default_limit": 1
               },
               {
+                "name": "read/list",
+                "limit": 3,
+                "unit": "r/s"
+              },
+              {
                 "name": "update",
                 "limit": 2,
                 "unit": "r/m",

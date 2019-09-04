@@ -325,11 +325,16 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 						dbRateLimit = &db.ProjectRateLimit{
 							TargetTypeURI: targetTypeURI, Action: action, ServiceID: srv.ID,
 						}
+						err := dbi.Insert(dbRateLimit)
+						if respondwith.ErrorText(w, err) {
+							return
+						}
 					}
 					//Skip if neither limit nor unit changed.
 					if dbRateLimit.Limit == rl.NewValue && dbRateLimit.Unit == string(rl.NewUnit) {
 						continue
 					}
+
 					dbRateLimit.Limit = rl.NewValue
 					dbRateLimit.Unit = string(rl.NewUnit)
 					rateLimitsToUpdate = append(rateLimitsToUpdate, dbRateLimit)

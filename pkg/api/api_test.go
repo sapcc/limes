@@ -129,6 +129,11 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 									Limit: 2,
 									Unit:  "r/s",
 								},
+								{
+									Name:  "read/list",
+									Limit: 3,
+									Unit:  "r/s",
+								},
 							},
 						},
 					},
@@ -1494,6 +1499,11 @@ func Test_ProjectOperations(t *testing.T) {
 	}
 
 	//Attempt setting a rate limit for which a default exists should be successful.
+	targetTypeURI := "service/shared/objects"
+	action := "read/list"
+	expectedLimit := uint64(100)
+	expectedUnit := limes.UnitRequestsPerSecond
+
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
@@ -1505,12 +1515,12 @@ func Test_ProjectOperations(t *testing.T) {
 						"type": "shared",
 						"rates": []assert.JSONObject{
 							{
-								"target_type_uri": "service/shared/objects",
+								"target_type_uri": targetTypeURI,
 								"actions": []assert.JSONObject{
 									{
-										"name":  "create",
-										"limit": 100,
-										"unit":  "r/s",
+										"name":  action,
+										"limit": expectedLimit,
+										"unit":  expectedUnit,
 									},
 								},
 							},
@@ -1526,20 +1536,20 @@ func Test_ProjectOperations(t *testing.T) {
 		JOIN project_services ps ON ps.id = prl.service_id
 		JOIN projects p ON p.id = ps.project_id
 		WHERE p.name = $1 AND ps.type = $2 AND prl.target_type_uri = $3 AND prl.action = $4`,
-		"berlin", "shared", "service/shared/objects", "create").Scan(&actualLimit, &actualUnit)
+		"berlin", "shared", targetTypeURI, action).Scan(&actualLimit, &actualUnit)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if actualLimit != 100 {
+	if actualLimit != expectedLimit {
 		t.Errorf(
 			"rate limit was not updated in database for %s %s. expected limit %d but got %d",
-			"service/shared/objects", "create", 100, actualLimit,
+			targetTypeURI, action, expectedLimit, actualLimit,
 		)
 	}
-	if actualUnit != limes.UnitRequestsPerSecond {
+	if actualUnit != expectedUnit {
 		t.Errorf(
 			"rate limit was not updated in database for %s %s. expected unit %s but got %s",
-			"service/shared/objects", "create", limes.UnitRequestsPerSecond, actualUnit,
+			targetTypeURI, action, expectedUnit, actualUnit,
 		)
 	}
 
