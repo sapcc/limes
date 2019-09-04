@@ -82,13 +82,6 @@ func (u Unit) Base() (Unit, uint64) {
 	}
 }
 
-//IsGreaterThanOrEqual compares whether the base unit is of greater magnitude than or equal to the given unit.
-func (u Unit) IsGreaterThanOrEqual(cmpUnit Unit) bool {
-	//List of available rate limits in ascending order of magnitude.
-	rateLimitUnitList := []Unit{UnitRequestsPerMillisecond, UnitRequestsPerSecond, UnitRequestsPerMinute, UnitRequestsPerHour}
-	return IndexOf(rateLimitUnitList, u) < IndexOf(rateLimitUnitList, cmpUnit)
-}
-
 //IndexOf returns the index of a Unit in a slice or -1 if not found.
 func IndexOf(unitSlice []Unit, searchUnit Unit) int {
 	for idx, s := range unitSlice {

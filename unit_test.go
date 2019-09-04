@@ -71,14 +71,3 @@ func TestValueWithUnitRateLimit(t *testing.T) {
 		}
 	}
 }
-
-func TestUnitIsGreaterThanOrEqual(t *testing.T) {
-	unit1 := UnitRequestsPerSecond
-	unit2 := UnitRequestsPerMinute
-	if unit1.IsGreaterThanOrEqual(unit2) == false {
-		t.Errorf("expected unit %s to be greater than %s", unit1, unit2)
-	}
-	if unit1.IsGreaterThanOrEqual(unit1) == true {
-		t.Errorf("expected unit %s to be equal to %s", unit1, unit1)
-	}
-}
