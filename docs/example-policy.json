@@ -15,7 +15,7 @@
   "project:raise":          "rule:domain_editor",
   "project:raise_lowpriv":  "rule:project_editor",
   "project:lower":          "rule:project_editor",
-  "project:set_rate_limit": "rule:project_editor",
+  "project:set_rate_limit": "rule:domain_editor",
   "project:discover":       "rule:domain_editor",
 
   "domain:list":          "rule:cluster_admin",
