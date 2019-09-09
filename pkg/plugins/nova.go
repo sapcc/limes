@@ -285,35 +285,35 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 					}
 					if err != nil {
 						logg.Error("error while trying to parse ip address data for instance %q: %v", instance.ID, err)
-					}
-
-					//sort ip addresses by MAC address
-					addressesByMac := make(map[string]*struct {
-						Fixed    string
-						Floating []string
-					})
-					for _, addresses := range addressesByNetwork {
-						for _, a := range addresses {
-							if _, ok := addressesByMac[a.MAC]; !ok {
-								addressesByMac[a.MAC] = &struct {
-									Fixed    string
-									Floating []string
-								}{}
-							}
-							if a.Type == "fixed" {
-								addressesByMac[a.MAC].Fixed = a.Address
-							} else {
-								addressesByMac[a.MAC].Floating = append(addressesByMac[a.MAC].Floating, a.Address)
+					} else {
+						//sort ip addresses by MAC address
+						addressesByMac := make(map[string]*struct {
+							Fixed    string
+							Floating []string
+						})
+						for _, addresses := range addressesByNetwork {
+							for _, a := range addresses {
+								if _, ok := addressesByMac[a.MAC]; !ok {
+									addressesByMac[a.MAC] = &struct {
+										Fixed    string
+										Floating []string
+									}{}
+								}
+								if a.Type == "fixed" {
+									addressesByMac[a.MAC].Fixed = a.Address
+								} else {
+									addressesByMac[a.MAC].Floating = append(addressesByMac[a.MAC].Floating, a.Address)
+								}
 							}
 						}
-					}
 
-					for _, ip := range addressesByMac {
-						ipAddresses = append(ipAddresses, novaServerIPData{Address: ip.Fixed, Type: "fixed"})
+						for _, ip := range addressesByMac {
+							ipAddresses = append(ipAddresses, novaServerIPData{Address: ip.Fixed, Type: "fixed"})
 
-						if len(ip.Floating) > 0 {
-							for _, v := range ip.Floating {
-								ipAddresses = append(ipAddresses, novaServerIPData{Address: v, Type: "floating", Target: ip.Fixed})
+							if len(ip.Floating) > 0 {
+								for _, v := range ip.Floating {
+									ipAddresses = append(ipAddresses, novaServerIPData{Address: v, Type: "floating", Target: ip.Fixed})
+								}
 							}
 						}
 					}
@@ -324,7 +324,9 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 					"name":              instance.Name,
 					"status":            instance.Status,
 					"availability_zone": instance.AvailabilityZone,
-					"ip_addresses":      ipAddresses,
+				}
+				if len(ipAddresses) > 0 {
+					subResource["ip_addresses"] = ipAddresses
 				}
 				flavorID := instance.Flavor["id"].(string)
 				flavorInfo := p.getFlavorInfo(client, flavorID)
