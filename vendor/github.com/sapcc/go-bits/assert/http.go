@@ -53,12 +53,17 @@ type HTTPRequest struct {
 	//response properties
 	ExpectStatus int
 	ExpectBody   HTTPResponseBody
+	ExpectHeader map[string]string
 }
 
 //Check performs the HTTP request described by this HTTPRequest against the
 //given http.Handler and compares the response with the expectations in the
 //HTTPRequest.
-func (r HTTPRequest) Check(t *testing.T, handler http.Handler) {
+//
+//The HTTP response is returned, along with the response body. (resp.Body is
+//already exhausted when the function returns.) This is useful for tests that
+//want to do further checks on `resp` or want to use data from the response.
+func (r HTTPRequest) Check(t *testing.T, handler http.Handler) (resp *http.Response, responseBody []byte) {
 	t.Helper()
 
 	var requestBody io.Reader
@@ -88,8 +93,19 @@ func (r HTTPRequest) Check(t *testing.T, handler http.Handler) {
 		)
 	}
 
+	for key, value := range r.ExpectHeader {
+		actual := response.Header.Get(key)
+		if actual != value {
+			t.Errorf("%s %s: expected %s: %q, got %s: %q",
+				r.Method, r.Path, key, value, key, actual,
+			)
+		}
+	}
+
 	if r.ExpectBody != nil {
 		requestInfo := fmt.Sprintf("%s %s", r.Method, r.Path)
 		r.ExpectBody.AssertResponseBody(t, requestInfo, responseBytes)
 	}
+
+	return response, responseBytes
 }
