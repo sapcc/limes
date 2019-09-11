@@ -74,12 +74,6 @@ var clusterReportQuery5 = `
 	 WHERE %s GROUP BY ps.type, pr.name
 `
 
-var clusterReportQuery6 = `
-	SELECT cs.cluster_id, cs.type
-	  FROM cluster_services cs
-     WHERE %s {{AND cs.type = $service_type}}
-`
-
 //GetClusters returns reports for all clusters or, if clusterID is
 //non-nil, for that cluster only.
 //
