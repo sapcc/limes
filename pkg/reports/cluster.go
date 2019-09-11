@@ -114,7 +114,7 @@ func GetClusters(config core.Configuration, clusterID *string, dbi db.Interface,
 				return err
 			}
 
-			_, service, resource, _ := clusters.Find(config, clusterID, serviceType, resourceName, nil, nil)
+			_, service, resource := clusters.Find(config, clusterID, serviceType, resourceName)
 
 			clusterConfig, exists := config.Clusters[clusterID]
 			clusterCanBurst := exists && clusterConfig.Config.Bursting.MaxMultiplier > 0
@@ -169,7 +169,7 @@ func GetClusters(config core.Configuration, clusterID *string, dbi db.Interface,
 				return err
 			}
 
-			_, _, resource, _ := clusters.Find(config, clusterID, serviceType, resourceName, nil, nil)
+			_, _, resource := clusters.Find(config, clusterID, serviceType, resourceName)
 
 			if resource != nil && quota != nil && !resource.ExternallyManaged {
 				resource.DomainsQuota = *quota
@@ -202,7 +202,7 @@ func GetClusters(config core.Configuration, clusterID *string, dbi db.Interface,
 				return err
 			}
 
-			cluster, _, resource, _ := clusters.Find(config, clusterID, &serviceType, resourceName, nil, nil)
+			cluster, _, resource := clusters.Find(config, clusterID, &serviceType, resourceName)
 
 			if resource != nil {
 				overcommitFactor := config.Clusters[clusterID].BehaviorForResource(serviceType, *resourceName, "").OvercommitFactor
@@ -373,7 +373,7 @@ func GetClusters(config core.Configuration, clusterID *string, dbi db.Interface,
 						continue
 					}
 
-					_, _, resource, _ := clusters.Find(config, cluster.ID, &serviceType, resourceName, nil, nil)
+					_, _, resource := clusters.Find(config, cluster.ID, &serviceType, resourceName)
 
 					if resource != nil {
 						overcommitFactor := config.Clusters[cluster.ID].BehaviorForResource(serviceType, *resourceName, "").OvercommitFactor
@@ -410,36 +410,35 @@ func GetClusters(config core.Configuration, clusterID *string, dbi db.Interface,
 	}
 
 	if filter.WithRates {
-		//Find cluster services for the ?rates=only case.
-		queryStr, joinArgs := filter.PrepareQuery(clusterReportQuery6)
-		whereStr, whereArgs := db.BuildSimpleWhereClause(makeClusterFilter("cs", clusterID), len(joinArgs))
-		err := db.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
-			var (
-				clusterID   string
-				serviceType *string
-			)
-			if err := rows.Scan(&clusterID, &serviceType); err != nil {
-				return err
-			}
-			clusterReport, _, _, _ := clusters.Find(config, clusterID, serviceType, nil, nil, nil)
-			if clusterConfig, exists := config.Clusters[clusterReport.ID]; exists {
-				for _, svcConfig := range clusterConfig.Config.Services {
-					for _, rateLimit := range svcConfig.Rates.Global {
-						for _, action := range rateLimit.Actions {
-							_, _, _, rateLimitReport := clusters.Find(config, clusterConfig.ID, &svcConfig.Type, nil, &rateLimit.TargetTypeURI, &action.Name)
-							if rateLimitReport != nil && &action.Limit != nil && &action.Unit != nil {
-								rateLimitReport.Actions[action.Name].Limit = action.Limit
-								rateLimitReport.Actions[action.Name].Unit = limes.Unit(action.Unit)
+		if clusterConfig, exists := config.Clusters[*clusterID]; exists {
+			for _, serviceConfig := range clusterConfig.Config.Services {
+				if _, serviceReport, _ := clusters.Find(config, *clusterID, &serviceConfig.Type, nil); serviceReport != nil {
+					serviceReport.Rates = limes.ClusterRateLimitReports{}
+
+					for _, configuredRateLimit := range serviceConfig.Rates.Global {
+						rl, exists := serviceReport.Rates[configuredRateLimit.TargetTypeURI]
+						if !exists {
+							rl = &limes.ClusterRateLimitReport{
+								TargetTypeURI: configuredRateLimit.TargetTypeURI,
+								Actions:       make(limes.ClusterRateLimitActionReports),
 							}
 						}
+
+						for _, configuredAction := range configuredRateLimit.Actions {
+							act, exists := rl.Actions[configuredAction.Name]
+							if !exists {
+								act = &limes.ClusterRateLimitActionReport{
+									Name: configuredAction.Name,
+								}
+							}
+							act.Limit = configuredAction.Limit
+							act.Unit = limes.Unit(configuredAction.Unit)
+							rl.Actions[act.Name] = act
+						}
+						serviceReport.Rates[rl.TargetTypeURI] = rl
 					}
 				}
 			}
-
-			return nil
-		})
-		if err != nil {
-			return nil, err
 		}
 	}
 
@@ -467,10 +466,10 @@ func makeClusterFilter(tableWithClusterID string, clusterID *string) map[string]
 
 type clusters map[string]*limes.ClusterReport
 
-func (c clusters) Find(config core.Configuration, clusterID string, serviceType, resourceName, targetTypeURI, action *string) (*limes.ClusterReport, *limes.ClusterServiceReport, *limes.ClusterResourceReport, *limes.ClusterRateLimitReport) {
+func (c clusters) Find(config core.Configuration, clusterID string, serviceType, resourceName *string) (*limes.ClusterReport, *limes.ClusterServiceReport, *limes.ClusterResourceReport) {
 	clusterConfig, exists := config.Clusters[clusterID]
 	if !exists {
-		return nil, nil, nil, nil
+		return nil, nil, nil
 	}
 
 	cluster, exists := c[clusterID]
@@ -483,13 +482,13 @@ func (c clusters) Find(config core.Configuration, clusterID string, serviceType,
 	}
 
 	if serviceType == nil {
-		return cluster, nil, nil, nil
+		return cluster, nil, nil
 	}
 
 	service, exists := cluster.Services[*serviceType]
 	if !exists {
 		if !clusterConfig.HasService(*serviceType) {
-			return cluster, nil, nil, nil
+			return cluster, nil, nil
 		}
 		service = &limes.ClusterServiceReport{
 			Shared:      clusterConfig.IsServiceShared[*serviceType],
@@ -500,31 +499,20 @@ func (c clusters) Find(config core.Configuration, clusterID string, serviceType,
 		cluster.Services[*serviceType] = service
 	}
 
-	var resource *limes.ClusterResourceReport
-	if resourceName != nil {
-		resource, exists = service.Resources[*resourceName]
-		if !exists && clusterConfig.HasResource(*serviceType, *resourceName) {
-			resource = &limes.ClusterResourceReport{
-				ResourceInfo: clusterConfig.InfoForResource(*serviceType, *resourceName),
-			}
-			service.Resources[*resourceName] = resource
-		}
+	if resourceName == nil {
+		return cluster, service, nil
 	}
 
-	var rateLimit *limes.ClusterRateLimitReport
-	if targetTypeURI != nil && action != nil {
-		rateLimit, exists = service.Rates[*targetTypeURI]
-		if !exists {
-			rateLimit = &limes.ClusterRateLimitReport{
-				TargetTypeURI: *targetTypeURI,
-				Actions:       make(limes.ClusterRateLimitActionReports),
-			}
+	resource, exists := service.Resources[*resourceName]
+	if !exists {
+		if !clusterConfig.HasResource(*serviceType, *resourceName) {
+			return cluster, service, nil
 		}
-		if _, exists := rateLimit.Actions[*action]; !exists {
-			rateLimit.Actions[*action] = &limes.ClusterRateLimitActionReport{Name: *action}
+		resource = &limes.ClusterResourceReport{
+			ResourceInfo: clusterConfig.InfoForResource(*serviceType, *resourceName),
 		}
-		service.Rates[*targetTypeURI] = rateLimit
+		service.Resources[*resourceName] = resource
 	}
 
-	return cluster, service, resource, rateLimit
+	return cluster, service, resource
 }
