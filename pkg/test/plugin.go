@@ -162,12 +162,13 @@ type CapacityPlugin struct {
 	PluginID          string
 	Resources         []string //each formatted as "servicetype/resourcename"
 	Capacity          uint64
+	WithAZCapData     bool
 	WithSubcapacities bool
 }
 
 //NewCapacityPlugin creates a new CapacityPlugin.
 func NewCapacityPlugin(id string, resources ...string) *CapacityPlugin {
-	return &CapacityPlugin{id, resources, 42, false}
+	return &CapacityPlugin{id, resources, 42, false, false}
 }
 
 //Init implements the core.CapacityPlugin interface.
@@ -182,6 +183,20 @@ func (p *CapacityPlugin) ID() string {
 
 //Scrape implements the core.CapacityPlugin interface.
 func (p *CapacityPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]core.CapacityData, error) {
+	var capacityPerAZ map[string]*core.AvailabilityZoneCapacityData
+	if p.WithAZCapData {
+		capacityPerAZ = map[string]*core.AvailabilityZoneCapacityData{
+			"az-one": &core.AvailabilityZoneCapacityData{
+				Capacity: p.Capacity / 2,
+				Usage:    uint64(float64(p.Capacity) * 0.1),
+			},
+			"az-two": &core.AvailabilityZoneCapacityData{
+				Capacity: p.Capacity / 2,
+				Usage:    uint64(float64(p.Capacity) * 0.1),
+			},
+		}
+	}
+
 	var subcapacities []interface{}
 	if p.WithSubcapacities {
 		subcapacities = []interface{}{
@@ -197,7 +212,7 @@ func (p *CapacityPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherc
 		if !exists {
 			result[parts[0]] = make(map[string]core.CapacityData)
 		}
-		result[parts[0]][parts[1]] = core.CapacityData{Capacity: p.Capacity, Subcapacities: subcapacities}
+		result[parts[0]][parts[1]] = core.CapacityData{Capacity: p.Capacity, CapacityPerAZ: capacityPerAZ, Subcapacities: subcapacities}
 	}
 	return result, nil
 }

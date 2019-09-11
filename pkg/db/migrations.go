@@ -34,7 +34,7 @@ var SQLMigrations = map[string]string{
 	`,
 	"001_initial.up.sql": `
 		---------- cluster level
-		
+
 		CREATE TABLE cluster_services (
 		  id         BIGSERIAL NOT NULL PRIMARY KEY,
 		  cluster_id TEXT      NOT NULL,
@@ -42,46 +42,46 @@ var SQLMigrations = map[string]string{
 		  scraped_at TIMESTAMP NOT NULL,
 		  UNIQUE (cluster_id, type)
 		);
-		
+
 		CREATE TABLE cluster_resources (
 		  service_id BIGINT NOT NULL REFERENCES cluster_services ON DELETE CASCADE,
 		  name       TEXT   NOT NULL,
 		  capacity   BIGINT NOT NULL,
 		  PRIMARY KEY (service_id, name)
 		);
-		
+
 		---------- domain level
-		
+
 		CREATE TABLE domains (
 		  id         BIGSERIAL NOT NULL PRIMARY KEY,
 		  cluster_id TEXT      NOT NULL,
 		  name       TEXT      NOT NULL,
 		  uuid       TEXT      NOT NULL UNIQUE
 		);
-		
+
 		CREATE TABLE domain_services (
 		  id         BIGSERIAL NOT NULL PRIMARY KEY,
 		  domain_id  BIGINT    NOT NULL REFERENCES domains ON DELETE CASCADE,
 		  type       TEXT      NOT NULL,
 		  UNIQUE (domain_id, type)
 		);
-		
+
 		CREATE TABLE domain_resources (
 		  service_id BIGINT NOT NULL REFERENCES domain_services ON DELETE CASCADE,
 		  name       TEXT   NOT NULL,
 		  quota      BIGINT NOT NULL,
 		  PRIMARY KEY (service_id, name)
 		);
-		
+
 		---------- project level
-		
+
 		CREATE TABLE projects (
 		  id        BIGSERIAL NOT NULL PRIMARY KEY,
 		  domain_id BIGINT    NOT NULL REFERENCES domains ON DELETE CASCADE,
 		  name      TEXT      NOT NULL,
 		  uuid      TEXT      NOT NULL UNIQUE
 		);
-		
+
 		CREATE TABLE project_services (
 		  id          BIGSERIAL NOT NULL PRIMARY KEY,
 		  project_id  BIGINT    NOT NULL REFERENCES projects ON DELETE CASCADE,
@@ -91,7 +91,7 @@ var SQLMigrations = map[string]string{
 		  UNIQUE (project_id, type)
 		);
 		CREATE INDEX project_services_stale_idx ON project_services (stale);
-		
+
 		CREATE TABLE project_resources (
 		  service_id    BIGINT NOT NULL REFERENCES project_services ON DELETE CASCADE,
 		  name          TEXT   NOT NULL,
@@ -127,34 +127,40 @@ var SQLMigrations = map[string]string{
 	"005_add_project_resource_subresources.up.sql": `
 		ALTER TABLE project_resources ADD COLUMN subresources TEXT NOT NULL DEFAULT '';
 	`,
-	"006_add_cluster_resources_subcapacities.down.sql": `
+	"006_add_cluster_resources_capacity_per_az.down.sql": `
+		ALTER TABLE cluster_resources DROP COLUMN capacity_per_az;
+	`,
+	"006_add_cluster_resources_capacity_per_az.up.sql": `
+		ALTER TABLE cluster_resources ADD COLUMN capacity_per_az TEXT NOT NULL DEFAULT '';
+	`,
+	"007_add_cluster_resources_subcapacities.down.sql": `
 		ALTER TABLE cluster_resources DROP COLUMN subcapacities;
 	`,
-	"006_add_cluster_resources_subcapacities.up.sql": `
+	"007_add_cluster_resources_subcapacities.up.sql": `
 		ALTER TABLE cluster_resources ADD COLUMN subcapacities TEXT NOT NULL DEFAULT '';
 	`,
-	"007_add_projects_has_bursting.down.sql": `
+	"008_add_projects_has_bursting.down.sql": `
 		ALTER TABLE projects DROP COLUMN has_bursting;
 	`,
-	"007_add_projects_has_bursting.up.sql": `
+	"008_add_projects_has_bursting.up.sql": `
 		ALTER TABLE projects ADD COLUMN has_bursting BOOLEAN NOT NULL DEFAULT TRUE;
 	`,
-	"008_add_project_resources_desired_backend_quota.down.sql": `
+	"009_add_project_resources_desired_backend_quota.down.sql": `
 		ALTER TABLE project_resources DROP COLUMN desired_backend_quota;
 	`,
-	"008_add_project_resources_desired_backend_quota.up.sql": `
+	"009_add_project_resources_desired_backend_quota.up.sql": `
 		ALTER TABLE project_resources ADD COLUMN desired_backend_quota BIGINT NOT NULL DEFAULT 0;
 	`,
-	"009_add_project_resources_physical_usage.down.sql": `
+	"010_add_project_resources_physical_usage.down.sql": `
 		ALTER TABLE project_resources DROP COLUMN physical_usage;
 	`,
-	"009_add_project_resources_physical_usage.up.sql": `
+	"010_add_project_resources_physical_usage.up.sql": `
 		ALTER TABLE project_resources ADD COLUMN physical_usage BIGINT DEFAULT NULL;
 	`,
-	"010_add_project_rate_limits.down.sql": `
+	"011_add_project_rate_limits.down.sql": `
 		DROP TABLE project_rate_limits;
 	`,
-	"010_add_project_rate_limits.up.sql": `
+	"011_add_project_rate_limits.up.sql": `
 		CREATE TABLE project_rate_limits (
 			service_id      BIGINT NOT NULL REFERENCES project_services ON DELETE CASCADE,
 			target_type_uri TEXT   NOT NULL,

@@ -160,6 +160,19 @@ func Test_ScanCapacity(t *testing.T) {
 	c.scanCapacity()
 	test.AssertDBContent(t, "fixtures/scancapacity6.sql")
 
+	//add a capacity plugin that also reports capacity per availability zone; check that
+	//these capacities are correctly written when creating a cluster_resources record
+	azCapacityPlugin := test.NewCapacityPlugin("unittest5", "unshared2/things")
+	azCapacityPlugin.WithAZCapData = true
+	cluster.CapacityPlugins["unittest5"] = azCapacityPlugin
+	c.scanCapacity()
+	test.AssertDBContent(t, "fixtures/scancapacity7.sql")
+
+	//check that scraping correctly updates the capacities on an existing record
+	azCapacityPlugin.Capacity = 30
+	c.scanCapacity()
+	test.AssertDBContent(t, "fixtures/scancapacity8.sql")
+
 	//check data metrics generated for these capacity data
 	registry := prometheus.NewPedanticRegistry()
 	dmc := &DataMetricsCollector{Cluster: cluster}
