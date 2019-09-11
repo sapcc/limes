@@ -187,7 +187,7 @@ func (p *v1Provider) putOrSimulatePutDomain(w http.ResponseWriter, r *http.Reque
 	var resourcesToUpdate []interface{}
 
 	for _, srv := range services {
-		serviceRequests, exists := updater.Requests[srv.Type]
+		serviceRequests, exists := updater.ResourceRequests[srv.Type]
 		if !exists {
 			continue
 		}

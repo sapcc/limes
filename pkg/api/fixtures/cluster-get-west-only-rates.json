@@ -1,0 +1,30 @@
+{
+  "cluster": {
+    "id": "west",
+    "services": [
+      {
+        "type": "shared",
+        "area": "shared",
+        "shared": true,
+        "resources": [],
+        "rates": [
+          {
+            "target_type_uri": "service/shared/objects",
+            "actions": [
+              {
+                "name": "create",
+                "limit": 5000,
+                "unit": "r/s"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "unshared",
+        "area": "unshared",
+        "resources": []
+      }
+    ]
+  }
+}

@@ -43,13 +43,21 @@ type QuotaUpdater struct {
 	Domain  *db.Domain  //always set (for project quota updates, contains the project's domain)
 	Project *db.Project //nil for domain quota updates
 	//AuthZ info
-	CanRaise   bool
-	CanRaiseLP bool //low-privilege raise
-	CanLower   bool
+	CanRaise        bool
+	CanRaiseLP      bool //low-privilege raise
+	CanLower        bool
+	CanSetRateLimit bool
 
-	//filled by ValidateInput(), key = service type + resource name
-	Requests map[string]map[string]QuotaRequest
+	//Filled by ValidateInput() with the key being the service type.
+	ResourceRequests  map[string]ResourceRequests
+	RateLimitRequests map[string]RateLimitRequests
 }
+
+//ResourceRequests with the key being the resource name.
+type ResourceRequests map[string]QuotaRequest
+
+//RateLimitRequests with the keys being the target type URI and action name.
+type RateLimitRequests map[string]map[string]QuotaRequest
 
 //QuotaRequest describes a single quota value that a PUT request wants to
 //change. It appears in type QuotaUpdater.
@@ -57,6 +65,7 @@ type QuotaRequest struct {
 	OldValue        uint64
 	NewValue        uint64
 	Unit            limes.Unit
+	NewUnit         limes.Unit
 	ValidationError *core.QuotaValidationError
 }
 
@@ -94,17 +103,17 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 	//for project scope, we also need a project report for validation
 	var projectReport *limes.ProjectReport
 	if u.Project != nil {
-		projectReport, err = GetProjectReport(u.Cluster, *u.Domain, *u.Project, dbi, reports.Filter{}, false)
+		projectReport, err = GetProjectReport(u.Cluster, *u.Domain, *u.Project, dbi, reports.Filter{WithRates: true})
 		if err != nil {
 			return err
 		}
 	}
 
 	//go through all services and resources and validate the requested quotas
-	u.Requests = make(map[string]map[string]QuotaRequest)
+	u.ResourceRequests = make(map[string]ResourceRequests)
 	for _, quotaPlugin := range u.Cluster.QuotaPlugins {
 		srv := quotaPlugin.ServiceInfo()
-		u.Requests[srv.Type] = make(map[string]QuotaRequest)
+		u.ResourceRequests[srv.Type] = ResourceRequests{}
 
 		for _, res := range quotaPlugin.Resources() {
 			//find the report data for this resource
@@ -136,7 +145,7 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 			}
 
 			//convert given value to correct unit
-			newQuota, exists := input[srv.Type][res.Name]
+			newQuota, exists := input[srv.Type].Resources[res.Name]
 			if !exists {
 				continue
 			}
@@ -155,7 +164,77 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 				req.ValidationError = u.validateQuota(srv, res, *domRes, projRes, req.NewValue)
 			}
 
-			u.Requests[srv.Type][res.Name] = req
+			u.ResourceRequests[srv.Type][res.Name] = req
+		}
+	}
+
+	//Rate limits are only available on project level.
+	if u.Project != nil {
+		u.RateLimitRequests = make(map[string]RateLimitRequests)
+
+		//Go through all services and validate the requested rate limits.
+		for svcType, in := range input {
+			svcConfig, err := u.Cluster.Config.GetServiceConfigurationForType(svcType)
+			if err != nil {
+				//Skip service if not configured.
+				continue
+			}
+			if _, ok := u.RateLimitRequests[svcType]; !ok {
+				u.RateLimitRequests[svcType] = make(RateLimitRequests)
+			}
+
+			for targetTypeURI, requests := range in.Rates {
+				for action, newRateLimit := range requests {
+					if _, ok := u.RateLimitRequests[svcType][targetTypeURI]; !ok {
+						u.RateLimitRequests[svcType][targetTypeURI] = make(map[string]QuotaRequest)
+					}
+
+					req := QuotaRequest{
+						NewValue: newRateLimit.Value,
+						NewUnit:  newRateLimit.Unit,
+					}
+
+					//Allow only setting rate limits for which a default exists.
+					defaultLimit, defaultUnit, err := svcConfig.Rates.GetProjectDefaultRateLimit(targetTypeURI, action)
+					if err != nil {
+						req.ValidationError = &core.QuotaValidationError{
+							Status:  http.StatusForbidden,
+							Message: "user is not allowed to create new rate limits",
+						}
+						u.RateLimitRequests[svcType][targetTypeURI][action] = req
+						continue
+					}
+
+					var rlActRep *limes.ProjectRateLimitActionReport
+					if projectService, exists := projectReport.Services[svcType]; exists {
+						projectRateLimit, exists := projectService.Rates[targetTypeURI]
+						if !exists {
+							projectRateLimit = &limes.ProjectRateLimitReport{Actions: make(limes.ProjectRateLimitActionReports)}
+						}
+
+						actionRateLimit, exists := projectRateLimit.Actions[action]
+						if !exists {
+							actionRateLimit = &limes.ProjectRateLimitActionReport{
+								Limit: defaultLimit,
+								Unit:  limes.Unit(defaultUnit),
+							}
+						}
+						rlActRep = actionRateLimit
+					}
+
+					req.OldValue = rlActRep.Limit
+					req.Unit = rlActRep.Unit
+
+					//Skip if rate limit value and unit were not changed.
+					if req.OldValue == newRateLimit.Value && req.Unit == newRateLimit.Unit {
+						continue
+					}
+
+					//Add to the list of rate limit requests as the value and/or unit changed.
+					req.ValidationError = u.validateRateLimit(u.Cluster.InfoForService(svcType), targetTypeURI, rlActRep, req.NewValue, req.NewUnit)
+					u.RateLimitRequests[svcType][targetTypeURI][action] = req
+				}
+			}
 		}
 	}
 
@@ -163,16 +242,16 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 	for srvType, srvInput := range input {
 		isUnknownService := !u.Cluster.HasService(srvType)
 		if isUnknownService {
-			u.Requests[srvType] = make(map[string]QuotaRequest)
+			u.ResourceRequests[srvType] = make(map[string]QuotaRequest)
 		}
-		for resName := range srvInput {
+		for resName := range srvInput.Resources {
 			if !u.Cluster.HasResource(srvType, resName) {
 				msg := "no such resource"
 				if isUnknownService {
 					msg = "no such service"
 				}
 
-				u.Requests[srvType][resName] = QuotaRequest{
+				u.ResourceRequests[srvType][resName] = QuotaRequest{
 					ValidationError: &core.QuotaValidationError{
 						Status:  http.StatusUnprocessableEntity,
 						Message: msg,
@@ -230,6 +309,10 @@ func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limes.ResourceInf
 	return u.validateProjectQuota(domRes, *projRes, newQuota)
 }
 
+func (u QuotaUpdater) validateRateLimit(srv limes.ServiceInfo, targetTypeURI string, rateLimit *limes.ProjectRateLimitActionReport, newRateLimitValue uint64, newRateLimitUnit limes.Unit) *core.QuotaValidationError {
+	return u.validateAuthorizationRateLimit(rateLimit.Limit, newRateLimitValue, rateLimit.Unit, newRateLimitUnit)
+}
+
 func (u QuotaUpdater) validateAuthorization(oldQuota, newQuota, lprLimit uint64, unit limes.Unit) *core.QuotaValidationError {
 	if oldQuota >= newQuota {
 		if u.CanLower {
@@ -258,6 +341,16 @@ func (u QuotaUpdater) validateAuthorization(oldQuota, newQuota, lprLimit uint64,
 	return &core.QuotaValidationError{
 		Status:  http.StatusForbidden,
 		Message: "user is not allowed to raise quotas",
+	}
+}
+
+func (u QuotaUpdater) validateAuthorizationRateLimit(oldLimit, newLimit uint64, oldUnit, newUnit limes.Unit) *core.QuotaValidationError {
+	if u.CanSetRateLimit {
+		return nil
+	}
+	return &core.QuotaValidationError{
+		Status:  http.StatusForbidden,
+		Message: "user is not allowed to set rate limits",
 	}
 }
 
@@ -315,10 +408,19 @@ func (u QuotaUpdater) validateProjectQuota(domRes limes.DomainResourceReport, pr
 
 //IsValid returns true if all u.Requests are valid (i.e. ValidationError == nil).
 func (u QuotaUpdater) IsValid() bool {
-	for _, reqs := range u.Requests {
+	for _, reqs := range u.ResourceRequests {
 		for _, req := range reqs {
 			if req.ValidationError != nil {
 				return false
+			}
+		}
+	}
+	for _, rlRequests := range u.RateLimitRequests {
+		for _, actions := range rlRequests {
+			for _, req := range actions {
+				if req.ValidationError != nil {
+					return false
+				}
 			}
 		}
 	}
@@ -328,18 +430,28 @@ func (u QuotaUpdater) IsValid() bool {
 //WriteSimulationReport produces the HTTP response for the POST /simulate-put
 //endpoints.
 func (u QuotaUpdater) WriteSimulationReport(w http.ResponseWriter) {
-	type unacceptableResource struct {
-		ServiceType  string `json:"service_type"`
-		ResourceName string `json:"resource_name"`
-		core.QuotaValidationError
-	}
+	type (
+		unacceptableResource struct {
+			ServiceType  string `json:"service_type"`
+			ResourceName string `json:"resource_name"`
+			core.QuotaValidationError
+		}
+
+		unacceptableRateLimit struct {
+			ServiceType   string `json:"service_type"`
+			TargetTypeURI string `json:"target_type_uri"`
+			Action        string `json:"action"`
+			core.QuotaValidationError
+		}
+	)
 	var result struct {
-		IsValid               bool                   `json:"success,keepempty"`
-		UnacceptableResources []unacceptableResource `json:"unacceptable_resources,omitempty"`
+		IsValid                bool                    `json:"success,keepempty"`
+		UnacceptableResources  []unacceptableResource  `json:"unacceptable_resources,omitempty"`
+		UnacceptableRateLimits []unacceptableRateLimit `json:"unacceptable_rates,omitempty"`
 	}
 	result.IsValid = true //until proven otherwise
 
-	for srvType, reqs := range u.Requests {
+	for srvType, reqs := range u.ResourceRequests {
 		for resName, req := range reqs {
 			if req.ValidationError != nil {
 				result.IsValid = false
@@ -350,6 +462,24 @@ func (u QuotaUpdater) WriteSimulationReport(w http.ResponseWriter) {
 						QuotaValidationError: *req.ValidationError,
 					},
 				)
+			}
+		}
+	}
+
+	for srvType, rateLimits := range u.RateLimitRequests {
+		for targetTypeURI, requests := range rateLimits {
+			for action, req := range requests {
+				if req.ValidationError != nil {
+					result.IsValid = false
+					result.UnacceptableRateLimits = append(result.UnacceptableRateLimits,
+						unacceptableRateLimit{
+							ServiceType:          srvType,
+							TargetTypeURI:        targetTypeURI,
+							Action:               action,
+							QuotaValidationError: *req.ValidationError,
+						},
+					)
+				}
 			}
 		}
 	}
@@ -366,6 +496,24 @@ func (u QuotaUpdater) WriteSimulationReport(w http.ResponseWriter) {
 		return resName1 < resName2
 	})
 
+	sort.Slice(result.UnacceptableRateLimits, func(i, j int) bool {
+		srvType1 := result.UnacceptableRateLimits[i].ServiceType
+		srvType2 := result.UnacceptableRateLimits[j].ServiceType
+		if srvType1 != srvType2 {
+			return srvType1 < srvType2
+		}
+
+		ttu1 := result.UnacceptableRateLimits[i].TargetTypeURI
+		ttu2 := result.UnacceptableRateLimits[j].TargetTypeURI
+		if ttu1 != ttu2 {
+			return ttu1 < ttu2
+		}
+
+		action1 := result.UnacceptableRateLimits[i].Action
+		action2 := result.UnacceptableRateLimits[j].Action
+		return action1 < action2
+	})
+
 	respondwith.JSON(w, http.StatusOK, result)
 }
 
@@ -376,7 +524,7 @@ func (u QuotaUpdater) WritePutErrorResponse(w http.ResponseWriter) {
 	hasSubstatus := make(map[int]bool)
 
 	//collect error messages
-	for srvType, reqs := range u.Requests {
+	for srvType, reqs := range u.ResourceRequests {
 		for resName, req := range reqs {
 			err := req.ValidationError
 			if err != nil {
@@ -396,6 +544,19 @@ func (u QuotaUpdater) WritePutErrorResponse(w http.ResponseWriter) {
 					line += fmt.Sprintf(" (%s)", strings.Join(notes, ", "))
 				}
 				lines = append(lines, line)
+			}
+		}
+	}
+	for srvType, rateLimits := range u.RateLimitRequests {
+		for targetTypeURI, requests := range rateLimits {
+			for action, req := range requests {
+				if err := req.ValidationError; err != nil {
+					hasSubstatus[err.Status] = true
+					lines = append(
+						lines,
+						fmt.Sprintf("cannot change %s/%s/%s rate limits: %s", srvType, targetTypeURI, action, err.Message),
+					)
+				}
 			}
 		}
 	}
@@ -430,7 +591,7 @@ func (u QuotaUpdater) CommitAuditTrail(token *gopherpolicy.Token, r *http.Reques
 		statusCode = http.StatusUnprocessableEntity
 	}
 
-	for srvType, reqs := range u.Requests {
+	for srvType, reqs := range u.ResourceRequests {
 		for resName, req := range reqs {
 			// low-privilege-raise metrics
 			if u.CanRaiseLP && !u.CanRaise {
@@ -476,6 +637,37 @@ func (u QuotaUpdater) CommitAuditTrail(token *gopherpolicy.Token, r *http.Reques
 					QuotaUnit:    req.Unit,
 					RejectReason: rejectReason,
 				})
+		}
+	}
+
+	for srvType, rateLimits := range u.RateLimitRequests {
+		for targetTypeURI, requests := range rateLimits {
+			for action, req := range requests {
+				//if !u.IsValid(), then all requested quotas in this PUT are considered
+				//invalid (and none are committed), so set the rejectReason to explain this
+				rejectReason := ""
+				if invalid {
+					if req.ValidationError == nil {
+						rejectReason = "cannot commit this because other values in this request are unacceptable"
+					} else {
+						rejectReason = req.ValidationError.Message
+					}
+				}
+
+				logAndPublishEvent(u.Cluster.ID, requestTime, r, token, statusCode,
+					rateLimitEventTarget{
+						DomainID:      u.Domain.UUID,
+						ProjectID:     projectUUID,
+						ServiceType:   srvType,
+						TargetTypeURI: targetTypeURI,
+						Action:        action,
+						OldLimit:      req.OldValue,
+						NewLimit:      req.NewValue,
+						OldUnit:       req.Unit,
+						NewUnit:       req.NewUnit,
+						RejectReason:  rejectReason,
+					})
+			}
 		}
 	}
 }

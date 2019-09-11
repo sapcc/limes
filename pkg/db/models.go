@@ -91,6 +91,15 @@ type ProjectResource struct {
 	SubresourcesJSON    string  `db:"subresources"`
 }
 
+// ProjectRateLimit contains a record from the `rate_limits` table.
+type ProjectRateLimit struct {
+	ServiceID     int64  `db:"service_id"`
+	TargetTypeURI string `db:"target_type_uri"`
+	Action        string `db:"action"`
+	Limit         uint64 `db:"rate_limit"`
+	Unit          string `db:"unit"`
+}
+
 //InitGorp is used by Init() to setup the ORM part of the database connection.
 //It's available as an exported function because the unit tests need to call
 //this while bypassing the normal Init() logic.
@@ -103,4 +112,5 @@ func InitGorp() {
 	DB.AddTableWithName(Project{}, "projects").SetKeys(true, "id")
 	DB.AddTableWithName(ProjectService{}, "project_services").SetKeys(true, "id")
 	DB.AddTableWithName(ProjectResource{}, "project_resources").SetKeys(false, "service_id", "name")
+	DB.AddTableWithName(ProjectRateLimit{}, "project_rate_limits").SetKeys(false, "service_id", "target_type_uri", "action")
 }

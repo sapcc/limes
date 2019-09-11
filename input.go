@@ -29,32 +29,57 @@ import (
 //request bodies in PUT requests on domains and projects.
 type QuotaRequest map[string]ServiceQuotaRequest
 
-//ServiceQuotaRequest contains new quota values for the resources in a single
-//service. The map key is the resource name. This type appears in type
-//QuotaRequest.
-type ServiceQuotaRequest map[string]ValueWithUnit
+//ServiceQuotaRequest contains new quota values for the resources or rate limits in a single
+//service. This type appears in type QuotaRequest.
+type ServiceQuotaRequest struct {
+	Resources ResourceQuotaRequest
+	Rates     RateQuotaRequest
+}
+
+//ResourceQuotaRequest contains new quota values for resources.
+//The map key is the resource name.
+type ResourceQuotaRequest map[string]ValueWithUnit
+
+//RateQuotaRequest contains new values for rate limits.
+//The map keys are the targetTypeURI and action.
+type RateQuotaRequest map[string]map[string]ValueWithUnit
 
 //MarshalJSON implements the json.Marshaler interface.
 func (r QuotaRequest) MarshalJSON() ([]byte, error) {
-	type resourceQuota struct {
-		Name  string `json:"name"`
-		Quota uint64 `json:"quota"`
-		Unit  Unit   `json:"unit"`
-	}
+	type (
+		resourceQuota struct {
+			Name  string `json:"name"`
+			Quota uint64 `json:"quota"`
+			Unit  Unit   `json:"unit"`
+		}
 
-	type serviceQuotas struct {
-		Type      string          `json:"type"`
-		Resources []resourceQuota `json:"resources"`
-	}
+		rateLimitAction struct {
+			Name  string `json:"name"`
+			Limit uint64 `json:"limit"`
+			Unit  Unit   `json:"unit"`
+		}
+
+		rateLimitQuota struct {
+			TargetTypeURI string            `json:"target_type_uri"`
+			Actions       []rateLimitAction `json:"actions"`
+		}
+
+		serviceQuotas struct {
+			Type      string           `json:"type"`
+			Resources []resourceQuota  `json:"resources"`
+			Rates     []rateLimitQuota `json:"rates"`
+		}
+	)
 
 	list := []serviceQuotas{}
 	for t, rqs := range r {
 		sqs := serviceQuotas{
 			Type:      t,
 			Resources: []resourceQuota{},
+			Rates:     []rateLimitQuota{},
 		}
 
-		for n, r := range rqs {
+		for n, r := range rqs.Resources {
 			sqs.Resources = append(sqs.Resources, resourceQuota{
 				Name:  n,
 				Quota: r.Value,
@@ -62,11 +87,28 @@ func (r QuotaRequest) MarshalJSON() ([]byte, error) {
 			})
 		}
 
+		for ttu, rl := range rqs.Rates {
+			rlQuota := rateLimitQuota{TargetTypeURI: ttu, Actions: []rateLimitAction{}}
+			for act, val := range rl {
+				rlQuota.Actions = append(rlQuota.Actions, rateLimitAction{
+					Name:  act,
+					Limit: val.Value,
+					Unit:  val.Unit,
+				})
+			}
+			sqs.Rates = append(sqs.Rates, rlQuota)
+		}
+
 		//ensure test reproducability
 		sort.Slice(sqs.Resources, func(i, j int) bool {
 			return sqs.Resources[i].Name < sqs.Resources[j].Name
 		})
-
+		sort.Slice(sqs.Rates, func(i, j int) bool {
+			sort.Slice(sqs.Rates, func(k, l int) bool {
+				return sqs.Rates[i].Actions[k].Name < sqs.Rates[j].Actions[l].Name
+			})
+			return sqs.Rates[i].TargetTypeURI < sqs.Rates[j].TargetTypeURI
+		})
 		list = append(list, sqs)
 	}
 
@@ -87,6 +129,14 @@ func (r *QuotaRequest) UnmarshalJSON(input []byte) error {
 			Quota uint64 `json:"quota"`
 			Unit  *Unit  `json:"unit"`
 		} `json:"resources"`
+		Rates []struct {
+			TargetTypeURI string `json:"target_type_uri"`
+			Actions       []struct {
+				Name  string `json:"name"`
+				Limit uint64 `json:"limit"`
+				Unit  *Unit  `json:"unit"`
+			} `json:"actions"`
+		} `json:"rates"`
 	}
 	err := json.Unmarshal(input, &data)
 	if err != nil {
@@ -100,15 +150,33 @@ func (r *QuotaRequest) UnmarshalJSON(input []byte) error {
 
 	//add new content
 	for _, srv := range data {
-		sr := make(ServiceQuotaRequest, len(srv.Resources))
+		sr := ServiceQuotaRequest{
+			Resources: make(ResourceQuotaRequest, len(srv.Resources)),
+			Rates:     make(RateQuotaRequest, len(srv.Rates)),
+		}
+
 		for _, res := range srv.Resources {
 			unit := UnitUnspecified
 			if res.Unit != nil {
 				unit = *res.Unit
 			}
-			sr[res.Name] = ValueWithUnit{
+			sr.Resources[res.Name] = ValueWithUnit{
 				Value: res.Quota,
 				Unit:  unit,
+			}
+		}
+		for _, rl := range srv.Rates {
+			for _, act := range rl.Actions {
+				unit := UnitUnspecified
+				if act.Unit != nil {
+					unit = *act.Unit
+				}
+				sr.Rates[rl.TargetTypeURI] = map[string]ValueWithUnit{
+					act.Name: {
+						Value: act.Limit,
+						Unit:  unit,
+					},
+				}
 			}
 		}
 		(*r)[srv.Type] = sr

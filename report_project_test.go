@@ -49,6 +49,88 @@ var projectResourcesMockJSON = `
 	]
 `
 
+var projectServicesRateLimitMockJSON = `
+	[
+		{
+			"type": "shared",
+			"area": "shared",
+			"resources": [],
+			"rates": [
+				{
+					"target_type_uri": "services/swift/account",
+					"actions": [
+						{
+							"name": "create",
+							"limit": 10,
+							"unit": "r/m"
+						}
+					]
+				},
+				{
+					"target_type_uri": "services/swift/account/container/object",
+					"actions": [
+						{
+							"name": "create",
+							"limit": 1000,
+							"unit": "r/s"
+						},
+						{
+							"name": "delete",
+							"limit": 1000,
+							"unit": "r/s"
+						}
+					]
+				}
+			],
+			"scraped_at": 22
+		}
+	]
+`
+
+var projectServicesRateLimitDeviatingFromDefaultsMockJSON = `
+	[
+		{
+			"type": "shared",
+			"area": "shared",
+			"resources": [],
+			"rates": [
+				{
+					"target_type_uri": "services/swift/account",
+					"actions": [
+						{
+							"name": "create",
+							"limit": 10,
+							"unit": "r/m",
+							"default_limit": 5,
+							"default_unit": "r/m"
+						}
+					]
+				},
+				{
+					"target_type_uri": "services/swift/account/container/object",
+					"actions": [
+						{
+							"name": "create",
+							"limit": 1000,
+							"unit": "r/s",
+							"default_limit": 500,
+							"default_unit": "r/s"
+						},
+						{
+							"name": "delete",
+							"limit": 1000,
+							"unit": "r/s",
+							"default_limit": 500,
+							"default_unit": "r/s"
+						}
+					]
+				}
+			],
+			"scraped_at": 22
+		}
+	]
+`
+
 var projectMockResources = &ProjectResourceReports{
 	"capacity": &ProjectResourceReport{
 		ResourceInfo: ResourceInfo{
@@ -80,6 +162,88 @@ var projectMockServices = &ProjectServiceReports{
 	},
 }
 
+var projectMockServicesRateLimit = &ProjectServiceReports{
+	"shared": &ProjectServiceReport{
+		ServiceInfo: ServiceInfo{
+			Type: "shared",
+			Area: "shared",
+		},
+		Resources: ProjectResourceReports{},
+		Rates: ProjectRateLimitReports{
+			"services/swift/account/container/object": &ProjectRateLimitReport{
+				TargetTypeURI: "services/swift/account/container/object",
+				Actions: ProjectRateLimitActionReports{
+					"create": &ProjectRateLimitActionReport{
+						Name:  "create",
+						Limit: 1000,
+						Unit:  UnitRequestsPerSecond,
+					},
+					"delete": &ProjectRateLimitActionReport{
+						Name:  "delete",
+						Limit: 1000,
+						Unit:  UnitRequestsPerSecond,
+					},
+				},
+			},
+			"services/swift/account": &ProjectRateLimitReport{
+				TargetTypeURI: "services/swift/account",
+				Actions: ProjectRateLimitActionReports{
+					"create": &ProjectRateLimitActionReport{
+						Name:  "create",
+						Limit: 10,
+						Unit:  UnitRequestsPerMinute,
+					},
+				},
+			},
+		},
+		ScrapedAt: p2i64(22),
+	},
+}
+
+var projectMockServicesRateLimitDeviatingFromDefaults = &ProjectServiceReports{
+	"shared": &ProjectServiceReport{
+		ServiceInfo: ServiceInfo{
+			Type: "shared",
+			Area: "shared",
+		},
+		Resources: ProjectResourceReports{},
+		Rates: ProjectRateLimitReports{
+			"services/swift/account/container/object": &ProjectRateLimitReport{
+				TargetTypeURI: "services/swift/account/container/object",
+				Actions: ProjectRateLimitActionReports{
+					"create": &ProjectRateLimitActionReport{
+						Name:         "create",
+						Limit:        1000,
+						Unit:         UnitRequestsPerSecond,
+						DefaultLimit: 500,
+						DefaultUnit:  UnitRequestsPerSecond,
+					},
+					"delete": &ProjectRateLimitActionReport{
+						Name:         "delete",
+						Limit:        1000,
+						Unit:         UnitRequestsPerSecond,
+						DefaultLimit: 500,
+						DefaultUnit:  UnitRequestsPerSecond,
+					},
+				},
+			},
+			"services/swift/account": &ProjectRateLimitReport{
+				TargetTypeURI: "services/swift/account",
+				Actions: ProjectRateLimitActionReports{
+					"create": &ProjectRateLimitActionReport{
+						Name:         "create",
+						Limit:        10,
+						Unit:         UnitRequestsPerMinute,
+						DefaultLimit: 5,
+						DefaultUnit:  UnitRequestsPerMinute,
+					},
+				},
+			},
+		},
+		ScrapedAt: p2i64(22),
+	},
+}
+
 func TestProjectServicesMarshall(t *testing.T) {
 	th.CheckJSONEquals(t, projectServicesMockJSON, projectMockServices)
 }
@@ -100,4 +264,26 @@ func TestProjectResourcesUnmarshall(t *testing.T) {
 	err := actual.UnmarshalJSON([]byte(projectResourcesMockJSON))
 	th.AssertNoErr(t, err)
 	th.CheckDeepEquals(t, projectMockResources, actual)
+}
+
+func TestProjectServicesRateLimitMarshall(t *testing.T) {
+	th.CheckJSONEquals(t, projectServicesRateLimitMockJSON, projectMockServicesRateLimit)
+}
+
+func TestProjectServicesRateLimitUnmarshall(t *testing.T) {
+	actual := &ProjectServiceReports{}
+	err := actual.UnmarshalJSON([]byte(projectServicesRateLimitMockJSON))
+	th.AssertNoErr(t, err)
+	th.CheckDeepEquals(t, projectMockServicesRateLimit, actual)
+}
+
+func TestProjectServicesRateLimitDeviatingFromDefaultsMarshall(t *testing.T) {
+	th.CheckJSONEquals(t, projectServicesRateLimitDeviatingFromDefaultsMockJSON, projectMockServicesRateLimitDeviatingFromDefaults)
+}
+
+func TestProjectServicesRateLimitDeviatingFromDefaultsUnmarshall(t *testing.T) {
+	actual := &ProjectServiceReports{}
+	err := actual.UnmarshalJSON([]byte(projectServicesRateLimitDeviatingFromDefaultsMockJSON))
+	th.AssertNoErr(t, err)
+	th.CheckDeepEquals(t, projectMockServicesRateLimitDeviatingFromDefaults, actual)
 }

@@ -29,7 +29,7 @@ import (
 	"strings"
 	"testing"
 
-	policy "github.com/databus23/goslo.policy"
+	"github.com/databus23/goslo.policy"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
@@ -92,6 +92,83 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 
 	quotaPlugins["shared"].(*test.Plugin).WithExternallyManagedResource = true
 
+	westClusterConfig := &core.ClusterConfiguration{
+		Auth: &core.AuthParameters{},
+		Services: []core.ServiceConfiguration{
+			{
+				Type: "shared",
+				Rates: core.ServiceRateLimitConfiguration{
+					Global: []core.RateLimitConfiguration{
+						{
+							TargetTypeURI: "service/shared/objects",
+							Actions: []core.RateLimitActionConfiguration{
+								{
+									Name:  "create",
+									Limit: 5000,
+									Unit:  "r/s",
+								},
+							},
+						},
+					},
+					ProjectDefault: []core.RateLimitConfiguration{
+						{
+							TargetTypeURI: "service/shared/objects",
+							Actions: []core.RateLimitActionConfiguration{
+								{
+									Name:  "create",
+									Limit: 5,
+									Unit:  "r/m",
+								},
+								{
+									Name:  "delete",
+									Limit: 1,
+									Unit:  "r/m",
+								},
+								{
+									Name:  "update",
+									Limit: 2,
+									Unit:  "r/s",
+								},
+								{
+									Name:  "read/list",
+									Limit: 3,
+									Unit:  "r/s",
+								},
+							},
+						},
+					},
+				},
+			},
+			{
+				Type: "unshared",
+				Rates: core.ServiceRateLimitConfiguration{
+					ProjectDefault: []core.RateLimitConfiguration{
+						{
+							TargetTypeURI: "service/unshared/instances",
+							Actions: []core.RateLimitActionConfiguration{
+								{
+									Name:  "create",
+									Limit: 5,
+									Unit:  "r/m",
+								},
+								{
+									Name:  "delete",
+									Limit: 1,
+									Unit:  "r/m",
+								},
+								{
+									Name:  "update",
+									Limit: 2,
+									Unit:  "r/s",
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
 	config := core.Configuration{
 		Clusters: map[string]*core.Cluster{
 			"west": {
@@ -101,8 +178,8 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 				DiscoveryPlugin:  test.NewDiscoveryPlugin(),
 				QuotaPlugins:     quotaPlugins,
 				CapacityPlugins:  map[string]core.CapacityPlugin{},
-				Config:           &core.ClusterConfiguration{Auth: &core.AuthParameters{}},
 				QuotaConstraints: &westConstraintSet,
+				Config:           westClusterConfig,
 			},
 			"east": {
 				ID:              "east",
@@ -228,6 +305,18 @@ func Test_ClusterOperations(t *testing.T) {
 		Path:         "/v1/clusters/west",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west.json"),
+	}.Check(t, router)
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/v1/clusters/west?rates=only",
+		ExpectStatus: 200,
+		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-only-rates.json"),
+	}.Check(t, router)
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/v1/clusters/west?rates",
+		ExpectStatus: 200,
+		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-with-rates.json"),
 	}.Check(t, router)
 	assert.HTTPRequest{
 		Method:       "GET",
@@ -1022,6 +1111,27 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-details-berlin.json"),
 	}.Check(t, router)
+	//check rendering of rates=true
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin?rates=true",
+		ExpectStatus: 200,
+		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-berlin-with-rates.json"),
+	}.Check(t, router)
+	//check rendering of rates=only
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin?rates=only",
+		ExpectStatus: 200,
+		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-berlin-only-rates.json"),
+	}.Check(t, router)
+	//Only default project rates configured via ServiceConfiguration but not individual rates for project.
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/v1/domains/uuid-for-france/projects/uuid-for-paris?rates=only",
+		ExpectStatus: 200,
+		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-paris-only-default-rates.json"),
+	}.Check(t, router)
 	//dresden has a case of backend quota != quota
 	assert.HTTPRequest{
 		Method:       "GET",
@@ -1340,6 +1450,107 @@ func Test_ProjectOperations(t *testing.T) {
 	}
 	if !reflect.DeepEqual(expectBackendQuota, backendQuota) {
 		t.Errorf("expected backend quota %#v, but got %#v", expectBackendQuota, backendQuota)
+	}
+
+	//Check PUT ../project with rate limits.
+	//Attempt setting a rate limit for which no default exists should fail.
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 403,
+		ExpectBody: assert.StringData(
+			"cannot change shared/service/shared/notexistent/bogus rate limits: user is not allowed to create new rate limits\n",
+		),
+		Body: assert.JSONObject{
+			"project": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "shared",
+						"rates": []assert.JSONObject{
+							{
+								"target_type_uri": "service/shared/notexistent",
+								"actions": []assert.JSONObject{
+									{
+										"name":  "bogus",
+										"limit": 1,
+										"unit":  "r/h",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+	var (
+		actualLimit uint64
+		actualUnit  limes.Unit
+	)
+	err = db.DB.QueryRow(`
+		SELECT prl.rate_limit, prl.unit FROM project_rate_limits prl
+		JOIN project_services ps ON ps.id = prl.service_id
+		JOIN projects p ON p.id = ps.project_id
+		WHERE p.name = $1 AND ps.type = $2 AND prl.target_type_uri = $3 AND prl.action = $4`,
+		"berlin", "shared", "service/shared/notexistent", "bogus").Scan(&actualLimit, &actualUnit)
+	//There shouldn't be anything in the DB.
+	if err.Error() != "sql: no rows in result set" {
+		t.Fatalf("expected error %v but got %v", "sql: no rows in result set", err)
+	}
+
+	//Attempt setting a rate limit for which a default exists should be successful.
+	targetTypeURI := "service/shared/objects"
+	action := "read/list"
+	expectedLimit := uint64(100)
+	expectedUnit := limes.UnitRequestsPerSecond
+
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 202,
+		Body: assert.JSONObject{
+			"project": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "shared",
+						"rates": []assert.JSONObject{
+							{
+								"target_type_uri": targetTypeURI,
+								"actions": []assert.JSONObject{
+									{
+										"name":  action,
+										"limit": expectedLimit,
+										"unit":  expectedUnit,
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+
+	err = db.DB.QueryRow(`
+		SELECT prl.rate_limit, prl.unit FROM project_rate_limits prl
+		JOIN project_services ps ON ps.id = prl.service_id
+		JOIN projects p ON p.id = ps.project_id
+		WHERE p.name = $1 AND ps.type = $2 AND prl.target_type_uri = $3 AND prl.action = $4`,
+		"berlin", "shared", targetTypeURI, action).Scan(&actualLimit, &actualUnit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if actualLimit != expectedLimit {
+		t.Errorf(
+			"rate limit was not updated in database for %s %s. expected limit %d but got %d",
+			targetTypeURI, action, expectedLimit, actualLimit,
+		)
+	}
+	if actualUnit != expectedUnit {
+		t.Errorf(
+			"rate limit was not updated in database for %s %s. expected unit %s but got %s",
+			targetTypeURI, action, expectedUnit, actualUnit,
+		)
 	}
 
 	//check SimulatePutProject for no actual changes (all quotas requested already are set like that)

@@ -1,0 +1,70 @@
+{
+  "project": {
+    "id": "uuid-for-paris",
+    "name": "paris",
+    "parent_id": "uuid-for-france",
+    "services": [
+      {
+        "type": "shared",
+        "area": "shared",
+        "resources": [],
+        "rates": [
+          {
+            "target_type_uri": "service/shared/objects",
+            "actions": [
+              {
+                "name": "create",
+                "limit": 5,
+                "unit": "r/m"
+              },
+              {
+                "name": "delete",
+                "limit": 1,
+                "unit": "r/m"
+              },
+              {
+                "name": "read/list",
+                "limit": 3,
+                "unit": "r/s"
+              },
+              {
+                "name": "update",
+                "limit": 2,
+                "unit": "r/s"
+              }
+            ]
+          }
+        ],
+        "scraped_at": 66
+      },
+      {
+        "type": "unshared",
+        "area": "unshared",
+        "resources": [],
+        "rates": [
+          {
+            "target_type_uri": "service/unshared/instances",
+            "actions": [
+              {
+                "name": "create",
+                "limit": 5,
+                "unit": "r/m"
+              },
+              {
+                "name": "delete",
+                "limit": 1,
+                "unit": "r/m"
+              },
+              {
+                "name": "update",
+                "limit": 2,
+                "unit": "r/s"
+              }
+            ]
+          }
+        ],
+        "scraped_at": 55
+      }
+    ]
+  }
+}
