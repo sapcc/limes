@@ -6,6 +6,34 @@ catalog under the service type `resources`.
 Where permission requirements are indicated, they refer to the default policy. Limes operators can configure their
 policy differently, so that certain requests may require other roles or token scopes.
 
+* [Request headers](#request-headers)
+  * [X\-Auth\-Token](#x-auth-token)
+  * [X\-Limes\-Cluster\-Id](#x-limes-cluster-id)
+* [GET /v1/domains/:domain\_id/projects](#get-v1domainsdomain_idprojects)
+* [GET /v1/domains/:domain\_id/projects/:project\_id](#get-v1domainsdomain_idprojectsproject_id)
+  * [Subresources](#subresources)
+  * [Quota bursting details](#quota-bursting-details)
+  * [Rate limits](#rate-limits)
+    * [Default rate limits](#default-rate-limits)
+* [GET /v1/domains](#get-v1domains)
+* [GET /v1/domains/:domain\_id](#get-v1domainsdomain_id)
+* [GET /v1/clusters](#get-v1clusters)
+* [GET /v1/clusters/:cluster\_id](#get-v1clusterscluster_id)
+* [GET /v1/clusters/current](#get-v1clusterscurrent)
+  * [Subcapacities](#subcapacities)
+* [GET /v1/inconsistencies](#get-v1inconsistencies)
+* [POST /v1/domains/discover](#post-v1domainsdiscover)
+* [POST /v1/domains/:domain\_id/projects/discover](#post-v1domainsdomain_idprojectsdiscover)
+* [POST /v1/domains/:domain\_id/projects/:project\_id/sync](#post-v1domainsdomain_idprojectsproject_idsync)
+* [PUT /v1/domains/:domain\_id](#put-v1domainsdomain_id)
+* [POST /v1/domains/:domain\_id/simulate\-put](#post-v1domainsdomain_idsimulate-put)
+* [PUT /v1/domains/:domain\_id/projects/:project\_id](#put-v1domainsdomain_idprojectsproject_id)
+* [POST /v1/domains/:domain\_id/projects/:project\_id/simulate\-put](#post-v1domainsdomain_idprojectsproject_idsimulate-put)
+* [PUT /v1/clusters/:cluster\_id](#put-v1clusterscluster_id)
+* [PUT /v1/clusters/current](#put-v1clusterscurrent)
+
+---
+
 ## Request headers
 
 ### X-Auth-Token
@@ -266,9 +294,9 @@ The following example shows a configured rate limit of 5 server creations per mi
 
 #### Default rate limits
 
-Default rate limits on a project level can be defined via the [service configuration](../operators/config.md#rate-limits).  
-The can be overwritten on a project level via the [API](#put-v1domainsdomain_idprojectsproject_id).  
-The fields `default_limit` and `default_unit` in the response to a `GET /v1/domains/:domain\_id/projects/:project\_id` request 
+Default rate limits on a project level can be defined via the [service configuration](../operators/config.md#rate-limits).
+The can be overwritten on a project level via the [API](#put-v1domainsdomain_idprojectsproject_id).
+The fields `default_limit` and `default_unit` in the response to a `GET /v1/domains/:domain\_id/projects/:project\_id` request
 are used to indicate deviations from the default project rate limits:
 ```json
 {
@@ -387,7 +415,8 @@ In contrast to project data, `scraped_at` is replaced by `min_scraped_at` and `m
 ## GET /v1/clusters/:cluster\_id
 ## GET /v1/clusters/current
 
-Query data for clusters. Requires a cloud-admin token. Arguments:
+Query data for clusters. `:cluster_id` is optional for cloud admins. Cloud admin token shows all clusters.
+With any other token, only that token's cluster may be shown. Arguments:
 
 * `service`: Limit query to resources in this service. May be given multiple times.
 * `area`: Limit query to resources in services in this area. May be given multiple times.
@@ -415,6 +444,16 @@ Returns 200 (OK) on success. Result is a JSON document like:
             {
               "name": "cores",
               "capacity": 1000,
+              "per_availability_zone": {
+                "az-one": {
+                  "capacity": 500,
+                  "usage": 0
+                },
+                "az-two": {
+                  "capacity": 500,
+                  "usage": 2
+                }
+              },
               "domains_quota": 100,
               "usage": 2
             },
@@ -423,6 +462,16 @@ Returns 200 (OK) on success. Result is a JSON document like:
               "unit": "MiB",
               "capacity": 1048576,
               "raw_capacity": 524288,
+              "per_availability_zone": {
+                "az-one": {
+                  "capacity": 262144,
+                  "usage": 2048
+                },
+                "az-two": {
+                  "capacity": 262144,
+                  "usage": 0
+                }
+              },
               "domains_quota": 204800,
               "usage": 2048,
               "burst_usage": 128
@@ -472,6 +521,8 @@ administrators, in which case a `comment` string will be present (such as for `o
 output above). The capacity is only informational: Cloud admins can choose to exceed the reported capacity when
 allocating quota to domains.
 
+The `per_availability_zone` key will only be supplied when capacity can be measured for each availability zone separately.
+
 When `raw_capacity` is given, it means that this resource is configured with an overcommitment. The `capacity` key will
 show the overcommitted capacity (`raw_capacity` times overcommitment factor).
 
@@ -490,13 +541,13 @@ cannot be shown on the service level here.
 
 For resources belonging to a cluster-local service (the default), the reported quota and usage is aggregated only over
 domains in this cluster. For resources belonging to a shared service, the reported quota and usage is aggregated over
-all domains in all clusters (and will thus be the same for every cluster listed), unless the query parameter `local` is
+all domains in all clusters (and will thus be the same for every cluster listed), unless the query parameter `local` (only for cloud admins) is
 given. Shared services are indicated by the `shared` key on the service level (which defaults to `false` if not
 specified).
 
 ### Subcapacities
 
-If the `?detail` query parameter is given (no value is required), capacity for a resource may be further broken down into
+The `?detail` requires a cloud admin token and if given (no value is required), capacity for a resource may be further broken down into
 *subcapacities*, i.e. a list of individual capacities with individual properties.
 
 Subcapacities will only be displayed for supported resources, and only if subcapacity scraping has been enabled for that
@@ -766,7 +817,7 @@ project-admin token for the specified project. Other than that, the call works i
   Note that it is currently not allowed to set quotas and `bursting.enabled` in the same request. This restriction may
   be lifted in the future.
 
-- The `rates` field can be provided to set rate limits for this project - given the user has sufficient privileges to raise or lower these.  
+- The `rates` field can be provided to set rate limits for this project - given the user has sufficient privileges to raise or lower these.
   Example:
   ```json
     {
