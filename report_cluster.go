@@ -51,6 +51,7 @@ type ClusterResourceReport struct {
 	Capacity      *uint64    `json:"capacity,omitempty"`
 	RawCapacity   *uint64    `json:"raw_capacity,omitempty"`
 	Comment       string     `json:"comment,omitempty"`
+	CapacityPerAZ JSONString `json:"per_availability_zone,omitempty"`
 	DomainsQuota  uint64     `json:"domains_quota,keepempty"`
 	Usage         uint64     `json:"usage,keepempty"`
 	BurstUsage    uint64     `json:"burst_usage,omitempty"`

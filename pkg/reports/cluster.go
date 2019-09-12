@@ -21,6 +21,7 @@ package reports
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -53,7 +54,8 @@ var clusterReportQuery2 = `
 `
 
 var clusterReportQuery3 = `
-	SELECT cs.cluster_id, cs.type, cr.name, cr.capacity, cr.comment, cr.subcapacities, cs.scraped_at
+	SELECT cs.cluster_id, cs.type, cr.name, cr.capacity, cr.comment,
+	       cr.capacity_per_az, cr.subcapacities, cs.scraped_at
 	  FROM cluster_services cs
 	  LEFT OUTER JOIN cluster_resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
 	 WHERE %s {{AND cs.type = $service_type}}
@@ -183,15 +185,17 @@ func GetClusters(config core.Configuration, clusterID *string, dbi db.Interface,
 		whereStr, whereArgs = db.BuildSimpleWhereClause(makeClusterFilter("cs", clusterID), len(joinArgs))
 		err = db.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 			var (
-				clusterID     string
-				serviceType   string
-				resourceName  *string
-				rawCapacity   *uint64
-				comment       *string
-				subcapacities *string
-				scrapedAt     time.Time
+				clusterID        string
+				serviceType      string
+				resourceName     *string
+				rawCapacity      *uint64
+				comment          *string
+				rawCapacityPerAZ *string
+				subcapacities    *string
+				scrapedAt        time.Time
 			)
-			err := rows.Scan(&clusterID, &serviceType, &resourceName, &rawCapacity, &comment, &subcapacities, &scrapedAt)
+			err := rows.Scan(&clusterID, &serviceType, &resourceName, &rawCapacity,
+				&comment, &rawCapacityPerAZ, &subcapacities, &scrapedAt)
 			if err != nil {
 				return err
 			}
@@ -212,6 +216,13 @@ func GetClusters(config core.Configuration, clusterID *string, dbi db.Interface,
 				}
 				if subcapacities != nil && *subcapacities != "" {
 					resource.Subcapacities = limes.JSONString(*subcapacities)
+				}
+				if rawCapacityPerAZ != nil && *rawCapacityPerAZ != "" {
+					jsonStr, err := applyOvercommitFactorToAZCaps(*rawCapacityPerAZ, overcommitFactor)
+					if err != nil {
+						return err
+					}
+					resource.CapacityPerAZ = jsonStr
 				}
 			}
 
@@ -349,15 +360,17 @@ func GetClusters(config core.Configuration, clusterID *string, dbi db.Interface,
 			whereStr, whereArgs = db.BuildSimpleWhereClause(filter, len(joinArgs))
 			err = db.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 				var (
-					sharedClusterID string
-					serviceType     string
-					resourceName    *string
-					rawCapacity     *uint64
-					comment         *string
-					subcapacities   *string
-					scrapedAt       time.Time
+					sharedClusterID  string
+					serviceType      string
+					resourceName     *string
+					rawCapacity      *uint64
+					comment          *string
+					rawCapacityPerAZ *string
+					subcapacities    *string
+					scrapedAt        time.Time
 				)
-				err := rows.Scan(&sharedClusterID, &serviceType, &resourceName, &rawCapacity, &comment, &subcapacities, &scrapedAt)
+				err := rows.Scan(&sharedClusterID, &serviceType, &resourceName, &rawCapacity,
+					&comment, &rawCapacityPerAZ, &subcapacities, &scrapedAt)
 				if err != nil {
 					return err
 				}
@@ -383,6 +396,13 @@ func GetClusters(config core.Configuration, clusterID *string, dbi db.Interface,
 						}
 						if subcapacities != nil && *subcapacities != "" {
 							resource.Subcapacities = limes.JSONString(*subcapacities)
+						}
+						if rawCapacityPerAZ != nil && *rawCapacityPerAZ != "" {
+							jsonStr, err := applyOvercommitFactorToAZCaps(*rawCapacityPerAZ, overcommitFactor)
+							if err != nil {
+								return err
+							}
+							resource.CapacityPerAZ = jsonStr
 						}
 					}
 
@@ -509,4 +529,24 @@ func (c clusters) Find(config core.Configuration, clusterID string, serviceType,
 	}
 
 	return cluster, service, resource
+}
+
+func applyOvercommitFactorToAZCaps(rawAZCapStr string, factor float64) (limes.JSONString, error) {
+	if factor == 0 {
+		return limes.JSONString(rawAZCapStr), nil
+	}
+
+	var data map[string]*core.AvailabilityZoneCapacityData
+	err := json.Unmarshal([]byte(rawAZCapStr), &data)
+	if err != nil {
+		return "", err
+	}
+	for _, element := range data {
+		element.Capacity = uint64(float64(element.Capacity) * factor)
+	}
+	bytes, err := json.Marshal(data)
+	if err != nil {
+		return "", err
+	}
+	return limes.JSONString(bytes), nil
 }

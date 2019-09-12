@@ -186,11 +186,11 @@ func (p *CapacityPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherc
 	var capacityPerAZ map[string]*core.AvailabilityZoneCapacityData
 	if p.WithAZCapData {
 		capacityPerAZ = map[string]*core.AvailabilityZoneCapacityData{
-			"az-one": &core.AvailabilityZoneCapacityData{
+			"az-one": {
 				Capacity: p.Capacity / 2,
 				Usage:    uint64(float64(p.Capacity) * 0.1),
 			},
-			"az-two": &core.AvailabilityZoneCapacityData{
+			"az-two": {
 				Capacity: p.Capacity / 2,
 				Usage:    uint64(float64(p.Capacity) * 0.1),
 			},
