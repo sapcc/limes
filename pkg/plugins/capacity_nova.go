@@ -77,13 +77,25 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 	}
 	var hypervisorData struct {
 		Hypervisors []struct {
-			Type     string `json:"hypervisor_type"`
-			Vcpus    uint64 `json:"vcpus"`
-			MemoryMb uint64 `json:"memory_mb"`
-			LocalGb  uint64 `json:"local_gb"`
+			ID           int    `json:"id"`
+			Type         string `json:"hypervisor_type"`
+			Vcpus        uint64 `json:"vcpus"`
+			VcpusUsed    uint64 `json:"vcpus_used"`
+			MemoryMb     uint64 `json:"memory_mb"`
+			MemoryMbUsed uint64 `json:"memory_mb_used"`
+			LocalGb      uint64 `json:"local_gb"`
+			LocalGbUsed  uint64 `json:"local_gb_used"`
+			Service      struct {
+				Host string `json:"host"`
+			} `json:"service"`
 		} `json:"hypervisors"`
 	}
 	err = result.ExtractInto(&hypervisorData)
+	if err != nil {
+		return nil, err
+	}
+
+	computeHostsPerAZ, err := getComputeHostsPerAZ(client)
 	if err != nil {
 		return nil, err
 	}
@@ -93,6 +105,10 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 		totalVcpus    uint64
 		totalMemoryMb uint64
 		totalLocalGb  uint64
+
+		vcpusPerAZ    = make(map[string]*core.AvailabilityZoneCapacityData)
+		memoryMbPerAZ = make(map[string]*core.AvailabilityZoneCapacityData)
+		localGbPerAZ  = make(map[string]*core.AvailabilityZoneCapacityData)
 	)
 	for _, hypervisor := range hypervisorData.Hypervisors {
 		if hypervisorTypeRx != nil {
@@ -104,6 +120,34 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 		totalVcpus += hypervisor.Vcpus
 		totalMemoryMb += hypervisor.MemoryMb
 		totalLocalGb += hypervisor.LocalGb
+
+		var hypervisorAZ string
+		for az, hosts := range computeHostsPerAZ {
+			for _, v := range hosts {
+				if hypervisor.Service.Host == v {
+					hypervisorAZ = az
+					break
+				}
+			}
+		}
+		if hypervisorAZ == "" {
+			logg.Error("Hypervisor %q with .service.host %q does not match any hosts from host aggregates", hypervisor.ID, hypervisor.Service.Host)
+		} else {
+			if _, ok := vcpusPerAZ[hypervisorAZ]; !ok {
+				vcpusPerAZ[hypervisorAZ] = new(core.AvailabilityZoneCapacityData)
+				memoryMbPerAZ[hypervisorAZ] = new(core.AvailabilityZoneCapacityData)
+				localGbPerAZ[hypervisorAZ] = new(core.AvailabilityZoneCapacityData)
+			}
+
+			vcpusPerAZ[hypervisorAZ].Capacity += hypervisor.Vcpus
+			vcpusPerAZ[hypervisorAZ].Usage += hypervisor.VcpusUsed
+
+			memoryMbPerAZ[hypervisorAZ].Capacity += hypervisor.MemoryMb
+			memoryMbPerAZ[hypervisorAZ].Usage += hypervisor.MemoryMbUsed
+
+			localGbPerAZ[hypervisorAZ].Capacity += hypervisor.LocalGb
+			localGbPerAZ[hypervisorAZ].Usage += hypervisor.LocalGbUsed
+		}
 	}
 
 	//Get availability zones
@@ -175,30 +219,45 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 		}
 	}
 
-	//preserve the VCenter HA reserve, which is reported via Nova, but not accesible
+	//preserve the VCenter HA reserve, which is reported via Nova, but not accessible
 	if multiplier := p.cfg.Nova.CPUMultiplier; multiplier != 0 {
 		totalVcpus = uint64(float64(totalVcpus) * multiplier)
+		for _, vcpus := range vcpusPerAZ {
+			vcpus.Capacity = uint64(float64(vcpus.Capacity) * multiplier)
+			vcpus.Usage = uint64(float64(vcpus.Usage) * multiplier)
+		}
 	}
 	if multiplier := p.cfg.Nova.RAMMultiplier; multiplier != 0 {
 		totalMemoryMb = uint64(float64(totalMemoryMb) * multiplier)
+		for _, memoryMb := range memoryMbPerAZ {
+			memoryMb.Capacity = uint64(float64(memoryMb.Capacity) * multiplier)
+			memoryMb.Usage = uint64(float64(memoryMb.Usage) * multiplier)
+		}
 	}
 
 	capacity := map[string]map[string]core.CapacityData{
 		"compute": {
-			"cores": core.CapacityData{Capacity: totalVcpus},
-			"ram":   core.CapacityData{Capacity: totalMemoryMb},
+			"cores": core.CapacityData{Capacity: totalVcpus, CapacityPerAZ: vcpusPerAZ},
+			"ram":   core.CapacityData{Capacity: totalMemoryMb, CapacityPerAZ: memoryMbPerAZ},
 		},
 	}
 
 	if maxFlavorSize != 0 {
-		instanceCapacity := uint64(math.Min(float64(10000*azCount), float64(totalLocalGb)/maxFlavorSize))
-		capacity["compute"]["instances"] = core.CapacityData{Capacity: instanceCapacity}
+		totalInstances := calculateInstanceAmount(azCount, totalLocalGb, maxFlavorSize)
+		instancesPerAZ := make(map[string]*core.AvailabilityZoneCapacityData)
+		for az, localGb := range localGbPerAZ {
+			instancesPerAZ[az] = &core.AvailabilityZoneCapacityData{
+				Capacity: calculateInstanceAmount(azCount, localGb.Capacity, maxFlavorSize),
+				Usage:    calculateInstanceAmount(azCount, localGb.Usage, maxFlavorSize),
+			}
+		}
+
+		capacity["compute"]["instances"] = core.CapacityData{Capacity: totalInstances, CapacityPerAZ: instancesPerAZ}
 	} else {
 		logg.Error("Nova Capacity: Maximal flavor size is 0. Not reporting instances.")
 	}
 
 	return capacity, nil
-
 }
 
 //get flavor extra-specs
@@ -223,4 +282,36 @@ func getFlavorExtras(client *gophercloud.ServiceClient, flavorUUID string) (map[
 	}
 
 	return extraSpecs.ExtraSpecs, nil
+}
+
+func getComputeHostsPerAZ(client *gophercloud.ServiceClient) (map[string][]string, error) {
+	var result gophercloud.Result
+	var data struct {
+		Aggregates []struct {
+			AvailabilityZone string   `json:"availability_zone"`
+			Hosts            []string `json:"hosts"`
+		} `json:"aggregates"`
+	}
+
+	url := client.ServiceURL("os-aggregates")
+	_, err := client.Get(url, &result.Body, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	err = result.ExtractInto(&data)
+	if err != nil {
+		return nil, err
+	}
+
+	computeHostsPerAZ := make(map[string][]string)
+	for _, aggr := range data.Aggregates {
+		computeHostsPerAZ[aggr.AvailabilityZone] = append(computeHostsPerAZ[aggr.AvailabilityZone], aggr.Hosts...)
+	}
+
+	return computeHostsPerAZ, nil
+}
+
+func calculateInstanceAmount(azCount int, localGb uint64, maxFlavorSize float64) uint64 {
+	return uint64(math.Min(float64(10000*azCount), float64(localGb)/maxFlavorSize))
 }
