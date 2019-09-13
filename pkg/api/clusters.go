@@ -75,13 +75,13 @@ func (p *v1Provider) GetCluster(w http.ResponseWriter, r *http.Request) {
 		clusterID = currentClusterID
 	}
 	if showBasic && (clusterID != currentClusterID) {
-		http.Error(w, "querying data for a cluster other than the current cluster requires a cloud-admin token", http.StatusUnauthorized)
+		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
 
 	filter := reports.ReadFilter(r)
 	if showBasic && (filter.WithSubresources || filter.WithSubcapacities || filter.LocalQuotaUsageOnly) {
-		http.Error(w, "\"?detail\" query parameter requires a cloud-admin token", http.StatusUnauthorized)
+		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
 
