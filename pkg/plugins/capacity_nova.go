@@ -24,6 +24,8 @@ import (
 	"math"
 	"regexp"
 
+	"github.com/sapcc/limes"
+
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
@@ -106,9 +108,9 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 		totalMemoryMb uint64
 		totalLocalGb  uint64
 
-		vcpusPerAZ    = make(map[string]*core.AvailabilityZoneCapacityData)
-		memoryMbPerAZ = make(map[string]*core.AvailabilityZoneCapacityData)
-		localGbPerAZ  = make(map[string]*core.AvailabilityZoneCapacityData)
+		vcpusPerAZ    = make(limes.ClusterAvailabilityZoneReports)
+		memoryMbPerAZ = make(limes.ClusterAvailabilityZoneReports)
+		localGbPerAZ  = make(limes.ClusterAvailabilityZoneReports)
 	)
 	for _, hypervisor := range hypervisorData.Hypervisors {
 		if hypervisorTypeRx != nil {
@@ -134,9 +136,9 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 			logg.Error("Hypervisor %q with .service.host %q does not match any hosts from host aggregates", hypervisor.ID, hypervisor.Service.Host)
 		} else {
 			if _, ok := vcpusPerAZ[hypervisorAZ]; !ok {
-				vcpusPerAZ[hypervisorAZ] = new(core.AvailabilityZoneCapacityData)
-				memoryMbPerAZ[hypervisorAZ] = new(core.AvailabilityZoneCapacityData)
-				localGbPerAZ[hypervisorAZ] = new(core.AvailabilityZoneCapacityData)
+				vcpusPerAZ[hypervisorAZ] = &limes.ClusterAvailabilityZoneReport{Name: hypervisorAZ}
+				memoryMbPerAZ[hypervisorAZ] = &limes.ClusterAvailabilityZoneReport{Name: hypervisorAZ}
+				localGbPerAZ[hypervisorAZ] = &limes.ClusterAvailabilityZoneReport{Name: hypervisorAZ}
 			}
 
 			vcpusPerAZ[hypervisorAZ].Capacity += hypervisor.Vcpus
@@ -244,11 +246,12 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 
 	if maxFlavorSize != 0 {
 		totalInstances := calculateInstanceAmount(azCount, totalLocalGb, maxFlavorSize)
-		instancesPerAZ := make(map[string]*core.AvailabilityZoneCapacityData)
+		instancesPerAZ := make(limes.ClusterAvailabilityZoneReports)
 		for az, localGb := range localGbPerAZ {
-			instancesPerAZ[az] = &core.AvailabilityZoneCapacityData{
-				Capacity: calculateInstanceAmount(azCount, localGb.Capacity, maxFlavorSize),
-				Usage:    calculateInstanceAmount(azCount, localGb.Usage, maxFlavorSize),
+			instancesPerAZ[az] = &limes.ClusterAvailabilityZoneReport{
+				Name:     az,
+				Capacity: calculateInstanceAmount(1, localGb.Capacity, maxFlavorSize),
+				Usage:    calculateInstanceAmount(1, localGb.Usage, maxFlavorSize),
 			}
 		}
 

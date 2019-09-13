@@ -444,16 +444,18 @@ Returns 200 (OK) on success. Result is a JSON document like:
             {
               "name": "cores",
               "capacity": 1000,
-              "per_availability_zone": {
-                "az-one": {
+              "per_availability_zone": [
+                {
+                  "name": "az-one",
                   "capacity": 500,
                   "usage": 0
                 },
-                "az-two": {
+                {
+                  "name": "az-two",
                   "capacity": 500,
                   "usage": 2
                 }
-              },
+              ],
               "domains_quota": 100,
               "usage": 2
             },
@@ -462,16 +464,18 @@ Returns 200 (OK) on success. Result is a JSON document like:
               "unit": "MiB",
               "capacity": 1048576,
               "raw_capacity": 524288,
-              "per_availability_zone": {
-                "az-one": {
+              "per_availability_zone": [
+                {
+                  "name": "az-one",
                   "capacity": 262144,
                   "usage": 2048
                 },
-                "az-two": {
+                {
+                  "name": "az-two",
                   "capacity": 262144,
                   "usage": 0
                 }
-              },
+              ],
               "domains_quota": 204800,
               "usage": 2048,
               "burst_usage": 128

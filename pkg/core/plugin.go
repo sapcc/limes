@@ -96,22 +96,16 @@ type QuotaPlugin interface {
 	SetQuota(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error
 }
 
-//CapacityData contains the total, and the per availability zone capacity data for a single resource.
+//CapacityData contains the total, and the per availability zone capacity data
+//for a single resource.
 //
 //The Subcapacities field may optionally be populated with subcapacities, if the
 //capacity plugin providing this CapacityData instance has been instructed to (and
 //is able to) scrape subcapacities for this resource.
 type CapacityData struct {
 	Capacity      uint64
-	CapacityPerAZ map[string]*AvailabilityZoneCapacityData
+	CapacityPerAZ limes.ClusterAvailabilityZoneReports
 	Subcapacities []interface{}
-}
-
-//AvailabilityZoneCapacityData contains the total capacity and the physical usage
-//for a single resource in an availability zone.
-type AvailabilityZoneCapacityData struct {
-	Capacity uint64 `json:"capacity"`
-	Usage    uint64 `json:"usage"`
 }
 
 //CapacityPlugin is the interface that all capacity collector plugins must
