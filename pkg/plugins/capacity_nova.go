@@ -311,6 +311,17 @@ func getComputeHostsPerAZ(client *gophercloud.ServiceClient) (map[string][]strin
 	for _, aggr := range data.Aggregates {
 		computeHostsPerAZ[aggr.AvailabilityZone] = append(computeHostsPerAZ[aggr.AvailabilityZone], aggr.Hosts...)
 	}
+	for az, hosts := range computeHostsPerAZ {
+		uniqueHosts := make([]string, 0, len(hosts))
+		isDuplicate := make(map[string]bool)
+		for _, v := range hosts {
+			if _, ok := isDuplicate[v]; !ok {
+				uniqueHosts = append(uniqueHosts, v)
+				isDuplicate[v] = true
+			}
+		}
+		computeHostsPerAZ[az] = uniqueHosts
+	}
 
 	return computeHostsPerAZ, nil
 }
