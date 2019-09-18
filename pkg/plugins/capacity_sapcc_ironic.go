@@ -160,15 +160,15 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 					}
 				}
 				if nodeAZ == "" {
-					logg.Error("Ironic node %q (%s) does not match any compute host from host aggregates", node.Name, node.ID)
-				} else {
-					if _, ok := data.CapacityPerAZ[nodeAZ]; !ok {
-						data.CapacityPerAZ[nodeAZ] = &limes.ClusterAvailabilityZoneReport{Name: nodeAZ}
-					}
-					data.CapacityPerAZ[nodeAZ].Capacity++
-					if node.StableProvisionState() == "active" {
-						data.CapacityPerAZ[nodeAZ].Usage++
-					}
+					logg.Info("Ironic node %q (%s) does not match any compute host from host aggregates", node.Name, node.ID)
+					nodeAZ = "unknown"
+				}
+				if _, ok := data.CapacityPerAZ[nodeAZ]; !ok {
+					data.CapacityPerAZ[nodeAZ] = &limes.ClusterAvailabilityZoneReport{Name: nodeAZ}
+				}
+				data.CapacityPerAZ[nodeAZ].Capacity++
+				if node.StableProvisionState() == "active" {
+					data.CapacityPerAZ[nodeAZ].Usage++
 				}
 
 				if p.reportSubcapacities {

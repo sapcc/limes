@@ -24,13 +24,12 @@ import (
 	"math"
 	"regexp"
 
-	"github.com/sapcc/limes"
-
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 )
 
@@ -133,23 +132,23 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 			}
 		}
 		if hypervisorAZ == "" {
-			logg.Error("Hypervisor %q with .service.host %q does not match any hosts from host aggregates", hypervisor.ID, hypervisor.Service.Host)
-		} else {
-			if _, ok := vcpusPerAZ[hypervisorAZ]; !ok {
-				vcpusPerAZ[hypervisorAZ] = &limes.ClusterAvailabilityZoneReport{Name: hypervisorAZ}
-				memoryMbPerAZ[hypervisorAZ] = &limes.ClusterAvailabilityZoneReport{Name: hypervisorAZ}
-				localGbPerAZ[hypervisorAZ] = &limes.ClusterAvailabilityZoneReport{Name: hypervisorAZ}
-			}
-
-			vcpusPerAZ[hypervisorAZ].Capacity += hypervisor.Vcpus
-			vcpusPerAZ[hypervisorAZ].Usage += hypervisor.VcpusUsed
-
-			memoryMbPerAZ[hypervisorAZ].Capacity += hypervisor.MemoryMb
-			memoryMbPerAZ[hypervisorAZ].Usage += hypervisor.MemoryMbUsed
-
-			localGbPerAZ[hypervisorAZ].Capacity += hypervisor.LocalGb
-			localGbPerAZ[hypervisorAZ].Usage += hypervisor.LocalGbUsed
+			logg.Info("Hypervisor %q with .service.host %q does not match any hosts from host aggregates", hypervisor.ID, hypervisor.Service.Host)
+			hypervisorAZ = "unknown"
 		}
+		if _, ok := vcpusPerAZ[hypervisorAZ]; !ok {
+			vcpusPerAZ[hypervisorAZ] = &limes.ClusterAvailabilityZoneReport{Name: hypervisorAZ}
+			memoryMbPerAZ[hypervisorAZ] = &limes.ClusterAvailabilityZoneReport{Name: hypervisorAZ}
+			localGbPerAZ[hypervisorAZ] = &limes.ClusterAvailabilityZoneReport{Name: hypervisorAZ}
+		}
+
+		vcpusPerAZ[hypervisorAZ].Capacity += hypervisor.Vcpus
+		vcpusPerAZ[hypervisorAZ].Usage += hypervisor.VcpusUsed
+
+		memoryMbPerAZ[hypervisorAZ].Capacity += hypervisor.MemoryMb
+		memoryMbPerAZ[hypervisorAZ].Usage += hypervisor.MemoryMbUsed
+
+		localGbPerAZ[hypervisorAZ].Capacity += hypervisor.LocalGb
+		localGbPerAZ[hypervisorAZ].Usage += hypervisor.LocalGbUsed
 	}
 
 	//Get availability zones
@@ -312,15 +311,15 @@ func getComputeHostsPerAZ(client *gophercloud.ServiceClient) (map[string][]strin
 		computeHostsPerAZ[aggr.AvailabilityZone] = append(computeHostsPerAZ[aggr.AvailabilityZone], aggr.Hosts...)
 	}
 	for az, hosts := range computeHostsPerAZ {
-		uniqueHosts := make([]string, 0, len(hosts))
-		isDuplicate := make(map[string]bool)
+		uniqueValues := make([]string, 0, len(hosts))
+		isDuplicate := make(map[string]bool, len(hosts))
 		for _, v := range hosts {
 			if _, ok := isDuplicate[v]; !ok {
-				uniqueHosts = append(uniqueHosts, v)
+				uniqueValues = append(uniqueValues, v)
 				isDuplicate[v] = true
 			}
 		}
-		computeHostsPerAZ[az] = uniqueHosts
+		computeHostsPerAZ[az] = uniqueValues
 	}
 
 	return computeHostsPerAZ, nil
