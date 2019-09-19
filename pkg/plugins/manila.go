@@ -127,8 +127,8 @@ func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 		return nil, err
 	}
 
-	if p.cfg.ShareV2.PrometheusAPIURL != "" {
-		err := manilaCollectPhysicalUsage(&usage, p.cfg.ShareV2.PrometheusAPIURL, projectUUID)
+	if p.cfg.ShareV2.PrometheusAPIConfig != nil {
+		err := manilaCollectPhysicalUsage(&usage, projectUUID, p.cfg.ShareV2.PrometheusAPIConfig)
 		if err != nil {
 			return nil, err
 		}
@@ -291,8 +291,8 @@ func manilaGetSnapshots(client *gophercloud.ServiceClient, projectUUID string) (
 	}
 }
 
-func manilaCollectPhysicalUsage(usage *manilaUsage, prometheusAPIURL, projectUUID string) error {
-	client, err := prometheusClient(prometheusAPIURL)
+func manilaCollectPhysicalUsage(usage *manilaUsage, projectUUID string, promAPIConfig *core.PrometheusAPIConfiguration) error {
+	client, err := prometheusClient(*promAPIConfig)
 	if err != nil {
 		return err
 	}

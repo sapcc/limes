@@ -33,7 +33,6 @@ import (
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/db"
-
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -126,7 +125,7 @@ type ServiceConfiguration struct {
 		ReportPhysicalUsage bool `yaml:"report_physical_usage"`
 	} `yaml:"database"`
 	ShareV2 struct {
-		PrometheusAPIURL string `yaml:"prometheus_api_url"`
+		PrometheusAPIConfig *PrometheusAPIConfiguration `yaml:"prometheus_api"`
 	} `yaml:"sharev2"`
 }
 
@@ -192,8 +191,8 @@ type CapacitorConfiguration struct {
 		RAMMultiplier         float64           `yaml:"ram_multiplier"`
 	} `yaml:"nova"`
 	Prometheus struct {
-		APIURL  string                       `yaml:"api_url"`
-		Queries map[string]map[string]string `yaml:"queries"`
+		APIConfig PrometheusAPIConfiguration   `yaml:"api"`
+		Queries   map[string]map[string]string `yaml:"queries"`
 	} `yaml:"prometheus"`
 	Cinder struct {
 		VolumeBackendName string `yaml:"volume_backend_name"`
@@ -304,6 +303,15 @@ type CollectorConfiguration struct {
 	MetricsListenAddress   string `yaml:"metrics"`
 	ExposeDataMetrics      bool   `yaml:"data_metrics"`
 	SkipZeroForDataMetrics bool   `yaml:"data_metrics_skip_zero"`
+}
+
+//PrometheusAPIConfiguration contains configuration parameters for a Prometheus API.
+//Only the URL field is required in the format: "http<s>://localhost<:9090>" (port is optional).
+type PrometheusAPIConfiguration struct {
+	URL                      string `yaml:"url"`
+	ClientCertificatePath    string `yaml:"cert"`
+	ClientCertificateKeyPath string `yaml:"key"`
+	ServerCACertificatePath  string `yaml:"ca_cert"`
 }
 
 //NewConfiguration reads and validates the given configuration file.

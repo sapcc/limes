@@ -20,7 +20,12 @@
 package plugins
 
 import (
+	"crypto/tls"
+	"crypto/x509"
+	"errors"
 	"fmt"
+	"io/ioutil"
+	"net/http"
 	"time"
 
 	"github.com/gophercloud/gophercloud"
@@ -42,17 +47,49 @@ func init() {
 	})
 }
 
-//Requires the url to prometheus à la "http<s>://localhost<:9090>",
-//in our case even without port.
-func prometheusClient(apiURL string) (prom_v1.API, error) {
-	//default value
-	if apiURL == "" {
-		apiURL = "https://localhost:9090"
+func prometheusClient(cfg core.PrometheusAPIConfiguration) (prom_v1.API, error) {
+	if cfg.URL == "" {
+		return nil, errors.New("missing configuration parameter: url")
 	}
 
-	client, err := prom_api.NewClient(prom_api.Config{Address: apiURL})
+	roundTripper := prom_api.DefaultRoundTripper
+
+	tlsConfig := &tls.Config{}
+	//If one of the following is set, so must be the other one
+	if cfg.ClientCertificatePath != "" || cfg.ClientCertificateKeyPath != "" {
+		if cfg.ClientCertificatePath == "" {
+			return nil, errors.New("missing configuration parameter: cert")
+		}
+		if cfg.ClientCertificateKeyPath == "" {
+			return nil, errors.New("missing configuration parameter: key")
+		}
+
+		clientCert, err := tls.LoadX509KeyPair(cfg.ClientCertificatePath, cfg.ClientCertificateKeyPath)
+		if err != nil {
+			return nil, err
+		}
+		tlsConfig.Certificates = []tls.Certificate{clientCert}
+	}
+	if cfg.ServerCACertificatePath != "" {
+		serverCACert, err := ioutil.ReadFile(cfg.ServerCACertificatePath)
+		if err != nil {
+			return nil, fmt.Errorf("cannot load CA certificate from %s: %s", cfg.ServerCACertificatePath, err.Error())
+		}
+
+		certPool := x509.NewCertPool()
+		certPool.AppendCertsFromPEM(serverCACert)
+		tlsConfig.RootCAs = certPool
+	}
+
+	if transport, ok := roundTripper.(*http.Transport); ok {
+		transport.TLSClientConfig = tlsConfig
+	} else {
+		return nil, fmt.Errorf("expected roundTripper of type \"*http.Transport\", got %T", roundTripper)
+	}
+
+	client, err := prom_api.NewClient(prom_api.Config{Address: cfg.URL, RoundTripper: roundTripper})
 	if err != nil {
-		return nil, fmt.Errorf("cannot connect to Prometheus at %s: %s", apiURL, err.Error())
+		return nil, fmt.Errorf("cannot connect to Prometheus at %s: %s", cfg.URL, err.Error())
 	}
 	return prom_v1.NewAPI(client), nil
 }
@@ -93,8 +130,7 @@ func (p *capacityPrometheusPlugin) ID() string {
 
 //Scrape implements the core.CapacityPlugin interface.
 func (p *capacityPrometheusPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]core.CapacityData, error) {
-
-	client, err := prometheusClient(p.cfg.Prometheus.APIURL)
+	client, err := prometheusClient(p.cfg.Prometheus.APIConfig)
 	if err != nil {
 		return nil, err
 	}
