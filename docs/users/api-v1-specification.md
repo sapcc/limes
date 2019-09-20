@@ -525,7 +525,10 @@ administrators, in which case a `comment` string will be present (such as for `o
 output above). The capacity is only informational: Cloud admins can choose to exceed the reported capacity when
 allocating quota to domains.
 
-The `per_availability_zone` key will only be supplied when capacity can be measured for each availability zone separately.
+The `per_availability_zone` key will only be supplied when capacity data can be
+measured for each availability zone separately. This data reflects the actual
+underlying hardware capacity, meaning that there may be disparity between this
+and the cluster level information.
 
 When `raw_capacity` is given, it means that this resource is configured with an overcommitment. The `capacity` key will
 show the overcommitted capacity (`raw_capacity` times overcommitment factor).
