@@ -85,7 +85,7 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 			MemoryMb     uint64 `json:"memory_mb"`
 			MemoryMbUsed uint64 `json:"memory_mb_used"`
 			LocalGb      uint64 `json:"local_gb"`
-			LocalGbUsed  uint64 `json:"local_gb_used"`
+			RunningVms   uint64 `json:"running_vms"`
 			Service      struct {
 				Host string `json:"host"`
 			} `json:"service"`
@@ -107,9 +107,11 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 		totalMemoryMb uint64
 		totalLocalGb  uint64
 
+		localGbPerAZ    = make(map[string]uint64)
+		runningVmsPerAZ = make(map[string]uint64)
+
 		vcpusPerAZ    = make(limes.ClusterAvailabilityZoneReports)
 		memoryMbPerAZ = make(limes.ClusterAvailabilityZoneReports)
-		localGbPerAZ  = make(limes.ClusterAvailabilityZoneReports)
 	)
 	for _, hypervisor := range hypervisorData.Hypervisors {
 		if hypervisorTypeRx != nil {
@@ -138,7 +140,6 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 		if _, ok := vcpusPerAZ[hypervisorAZ]; !ok {
 			vcpusPerAZ[hypervisorAZ] = &limes.ClusterAvailabilityZoneReport{Name: hypervisorAZ}
 			memoryMbPerAZ[hypervisorAZ] = &limes.ClusterAvailabilityZoneReport{Name: hypervisorAZ}
-			localGbPerAZ[hypervisorAZ] = &limes.ClusterAvailabilityZoneReport{Name: hypervisorAZ}
 		}
 
 		vcpusPerAZ[hypervisorAZ].Capacity += hypervisor.Vcpus
@@ -147,27 +148,8 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 		memoryMbPerAZ[hypervisorAZ].Capacity += hypervisor.MemoryMb
 		memoryMbPerAZ[hypervisorAZ].Usage += hypervisor.MemoryMbUsed
 
-		localGbPerAZ[hypervisorAZ].Capacity += hypervisor.LocalGb
-		localGbPerAZ[hypervisorAZ].Usage += hypervisor.LocalGbUsed
-	}
-
-	//Get availability zones
-	url = client.ServiceURL("os-availability-zone")
-	_, err = client.Get(url, &result.Body, nil)
-	if err != nil {
-		return nil, err
-	}
-	var availabilityZoneData struct {
-		AvailabilityZoneInfo []struct {
-			ZoneName  string `json:"zoneName"`
-			ZoneState struct {
-				Available bool `json:"available"`
-			} `json:"zoneState"`
-		} `json:"availabilityZoneInfo"`
-	}
-	err = result.ExtractInto(&availabilityZoneData)
-	if err != nil {
-		return nil, err
+		localGbPerAZ[hypervisorAZ] += hypervisor.LocalGb
+		runningVmsPerAZ[hypervisorAZ] += hypervisor.RunningVms
 	}
 
 	//list all flavors and get max(flavor_size)
@@ -211,15 +193,6 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 		return nil, err
 	}
 
-	var azCount int
-
-	//count availability zones
-	for _, element := range availabilityZoneData.AvailabilityZoneInfo {
-		if element.ZoneState.Available {
-			azCount++
-		}
-	}
-
 	//preserve the VCenter HA reserve, which is reported via Nova, but not accessible
 	if multiplier := p.cfg.Nova.CPUMultiplier; multiplier != 0 {
 		totalVcpus = uint64(float64(totalVcpus) * multiplier)
@@ -243,14 +216,17 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 		},
 	}
 
+	azCount := len(computeHostsPerAZ)
+
 	if maxFlavorSize != 0 {
 		totalInstances := calculateInstanceAmount(azCount, totalLocalGb, maxFlavorSize)
+
 		instancesPerAZ := make(limes.ClusterAvailabilityZoneReports)
 		for az, localGb := range localGbPerAZ {
 			instancesPerAZ[az] = &limes.ClusterAvailabilityZoneReport{
 				Name:     az,
-				Capacity: calculateInstanceAmount(1, localGb.Capacity, maxFlavorSize),
-				Usage:    calculateInstanceAmount(1, localGb.Usage, maxFlavorSize),
+				Capacity: calculateInstanceAmount(1, localGb, maxFlavorSize),
+				Usage:    runningVmsPerAZ[az],
 			}
 		}
 
@@ -310,6 +286,8 @@ func getComputeHostsPerAZ(client *gophercloud.ServiceClient) (map[string][]strin
 	for _, aggr := range data.Aggregates {
 		computeHostsPerAZ[aggr.AvailabilityZone] = append(computeHostsPerAZ[aggr.AvailabilityZone], aggr.Hosts...)
 	}
+	//multiple aggregates can contain the same host which results in
+	//duplicate host values per AZ
 	for az, hosts := range computeHostsPerAZ {
 		uniqueValues := make([]string, 0, len(hosts))
 		isDuplicate := make(map[string]bool, len(hosts))
