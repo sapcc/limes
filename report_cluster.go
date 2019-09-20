@@ -62,11 +62,10 @@ type ClusterResourceReport struct {
 //ClusterAvailabilityZoneReport is a substructure of ClusterResourceReport containing
 //capacity and usage data for a single resource in an availability zone.
 type ClusterAvailabilityZoneReport struct {
-	Name          string `json:"name"`
-	Capacity      uint64 `json:"capacity"`
-	RawCapacity   uint64 `json:"raw_capacity,omitempty"`
-	Usage         uint64 `json:"usage"`
-	PhysicalUsage uint64 `json:"physical_usage,omitempty"`
+	Name        string `json:"name"`
+	Capacity    uint64 `json:"capacity"`
+	RawCapacity uint64 `json:"raw_capacity,omitempty"`
+	Usage       uint64 `json:"usage,omitempty"`
 }
 
 // ClusterRateLimitReport is the structure for rate limits per target type URI and their rate limited actions.
