@@ -429,9 +429,9 @@ services:
   - type: sharev2
     sharev2:
       prometheus_api:
-          url: https://prometheus-infra-collector.qa-de-1.cloud.sap
-          cert: /path/to/client.pem
-          key: /path/to/client-key.pem
+          url: https://prometheus.example.com
+          cert:    /path/to/client.pem
+          key:     /path/to/client-key.pem
           ca_cert: /path/to/server-ca.pem
 ```
 
