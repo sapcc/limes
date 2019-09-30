@@ -618,7 +618,11 @@ these factors. If you want to keep a reserve, set this to slightly smaller than 
 capacitors:
   - id: prometheus
     prometheus:
-      api_url: https://prometheus.example.com
+      api:
+        url: https://prometheus.example.com
+        cert:    /path/to/client.pem
+        key:     /path/to/client-key.pem
+        ca_cert: /path/to/server-ca.pem
       queries:
         compute:
           cores:     sum(hypervisor_cores)
@@ -626,9 +630,14 @@ capacitors:
 ```
 
 Like the `manual` capacity plugin, this plugin can provide capacity values for arbitrary resources. A [Prometheus][prom]
-instance must be running at the URL given in `prometheus.api_url`. Each of the queries in `prometheus.queries` is
+instance must be running at the URL given in `prometheus.api.url`. Each of the queries in `prometheus.queries` is
 executed on this Prometheus instance, and the resulting value is reported as capacity for the resource named by the key
 of this query. Queries are grouped by service, then by resource.
+
+In `prometheus.api`, only the `url` field is required. You can pin the server's CA
+certificate (`prometheus.api.ca_cert`) and/or specify a TLS client certificate
+(`prometheus.api.cert`) and private key (`prometheus.api.key`) combination that
+will be used by the HTTP client to make requests to the Prometheus API.
 
 For example, the following configuration can be used with [swift-health-statsd][shs] to find the net capacity of a Swift cluster with 3 replicas:
 
