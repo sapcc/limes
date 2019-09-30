@@ -60,6 +60,7 @@ clean: FORCE
 	rm -f -- build/limes
 
 vendor: FORCE
+	$(GO) mod tidy
 	$(GO) mod vendor
 
 .PHONY: FORCE

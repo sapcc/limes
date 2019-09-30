@@ -35,6 +35,7 @@ type ClusterResource struct {
 	Name              string `db:"name"`
 	RawCapacity       uint64 `db:"capacity"`
 	Comment           string `db:"comment"`
+	CapacityPerAZJSON string `db:"capacity_per_az"`
 	SubcapacitiesJSON string `db:"subcapacities"`
 }
 

@@ -107,6 +107,18 @@
             {
               "name": "things",
               "capacity": 139,
+              "per_availability_zone": [
+                {
+                  "name": "az-one",
+                  "capacity": 69,
+                  "usage": 13
+                },
+                {
+                  "name": "az-two",
+                  "capacity": 69,
+                  "usage": 13
+                }
+              ],
               "domains_quota": 70,
               "usage": 6
             }

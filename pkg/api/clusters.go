@@ -63,15 +63,29 @@ func (p *v1Provider) ListClusters(w http.ResponseWriter, r *http.Request) {
 
 //GetCluster handles GET /v1/clusters/:cluster_id.
 func (p *v1Provider) GetCluster(w http.ResponseWriter, r *http.Request) {
-	if !p.CheckToken(r).Require(w, "cluster:show") {
+	token := p.CheckToken(r)
+	if !token.Require(w, "cluster:show_basic") {
+		return
+	}
+	showBasic := !token.Check("cluster:show")
+
+	clusterID := mux.Vars(r)["cluster_id"]
+	currentClusterID := p.Cluster.ID
+	if clusterID == "current" {
+		clusterID = currentClusterID
+	}
+	if showBasic && (clusterID != currentClusterID) {
+		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
 
-	clusterID := mux.Vars(r)["cluster_id"]
-	if clusterID == "current" {
-		clusterID = p.Cluster.ID
+	filter := reports.ReadFilter(r)
+	if showBasic && (filter.WithSubresources || filter.WithSubcapacities || filter.LocalQuotaUsageOnly) {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
 	}
-	clusters, err := reports.GetClusters(p.Config, &clusterID, db.DB, reports.ReadFilter(r))
+
+	clusters, err := reports.GetClusters(p.Config, &clusterID, db.DB, filter)
 	if respondwith.ErrorText(w, err) {
 		return
 	}

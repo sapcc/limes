@@ -48,6 +48,39 @@ clusters:
 
 Read on for the full list and description of all configuration options.
 
+### Table of Contents
+
+* [Configuration guide](#configuration-guide)
+  * [Section "database"](#section-database)
+  * [Section "api"](#section-api)
+  * [Section "collector"](#section-collector)
+  * [Section "clusters"](#section-clusters)
+    * [Audit trail](#audit-trail)
+    * [Low\-privilege quota raising](#low-privilege-quota-raising)
+    * [Resource behavior](#resource-behavior)
+* [Supported discovery methods](#supported-discovery-methods)
+  * [Method: list (default)](#method-list-default)
+  * [Method: role\-assignment](#method-role-assignment)
+* [Supported service types](#supported-service-types)
+  * [compute: Nova v2](#compute-nova-v2)
+  * [database: SAP Cloud Frame Manager](#database-sap-cloud-frame-manager)
+  * [dns: Designate v2](#dns-designate-v2)
+  * [network: Neutron v1](#network-neutron-v1)
+  * [object\-store: Swift v1](#object-store-swift-v1)
+  * [sharev2: Manila v2](#sharev2-manila-v2)
+  * [volumev2: Cinder v2](#volumev2-cinder-v2)
+* [Available capacity plugins](#available-capacity-plugins)
+  * [cfm](#cfm)
+  * [cinder](#cinder)
+  * [manila](#manila)
+  * [manual](#manual)
+  * [nova](#nova)
+  * [prometheus](#prometheus)
+  * [sapcc\-ironic](#sapcc-ironic)
+  * [Rate Limits](#rate-limits)
+
+---
+
 ## Section "database"
 
 Configuration options relating to the database connection of all services.
@@ -395,7 +428,11 @@ The area for this service is `storage`.
 services:
   - type: sharev2
     sharev2:
-      prometheus_api_url: https://prometheus.example.com
+      prometheus_api:
+          url: https://prometheus.example.com
+          cert:    /path/to/client.pem
+          key:     /path/to/client-key.pem
+          ca_cert: /path/to/server-ca.pem
 ```
 
 The area for this service is `storage`.
@@ -408,9 +445,15 @@ The area for this service is `storage`.
 | `share_snapshots` | countable |
 | `snapshot_capacity` | GiB |
 
-When the `sharev2.prometheus_api_url` configuration option is set, usage data (including physical usage) will be scraped
-from the Prometheus metric `netapp_capacity_svm` instead of from Manila. The expected metric format is that of the
+Optionally, when the `sharev2.prometheus_api` configuration option is set,
+physical usage data will be scraped from the Prometheus metric
+`netapp_capacity_svm`. The expected metric format is that of the
 [netapp-api-exporter](https://github.com/sapcc/netapp-api-exporter).
+
+Only the `prometheus_api.url` field is required. You can pin the server's CA
+certificate (`prometheus_api.ca_cert`) and/or specify a TLS client certificate
+(`prometheus_api.cert`) and private key (`prometheus_api.key`) combination that
+will be used by the HTTP client to make requests to the Prometheus API.
 
 ## `volumev2`: Cinder v2
 
@@ -575,7 +618,11 @@ these factors. If you want to keep a reserve, set this to slightly smaller than 
 capacitors:
   - id: prometheus
     prometheus:
-      api_url: https://prometheus.example.com
+      api:
+        url: https://prometheus.example.com
+        cert:    /path/to/client.pem
+        key:     /path/to/client-key.pem
+        ca_cert: /path/to/server-ca.pem
       queries:
         compute:
           cores:     sum(hypervisor_cores)
@@ -583,9 +630,14 @@ capacitors:
 ```
 
 Like the `manual` capacity plugin, this plugin can provide capacity values for arbitrary resources. A [Prometheus][prom]
-instance must be running at the URL given in `prometheus.api_url`. Each of the queries in `prometheus.queries` is
+instance must be running at the URL given in `prometheus.api.url`. Each of the queries in `prometheus.queries` is
 executed on this Prometheus instance, and the resulting value is reported as capacity for the resource named by the key
 of this query. Queries are grouped by service, then by resource.
+
+In `prometheus.api`, only the `url` field is required. You can pin the server's CA
+certificate (`prometheus.api.ca_cert`) and/or specify a TLS client certificate
+(`prometheus.api.cert`) and private key (`prometheus.api.key`) combination that
+will be used by the HTTP client to make requests to the Prometheus API.
 
 For example, the following configuration can be used with [swift-health-statsd][shs] to find the net capacity of a Swift cluster with 3 replicas:
 
@@ -639,8 +691,8 @@ bear the following attributes:
 
 ## Rate Limits
 
-Rate limits can be configured per service on 2 levels: `global` and `project_default` as outlined below.  
-For further details see the [rate limits API specification](../users/api-v1-specification.md#rate-limits). 
+Rate limits can be configured per service on 2 levels: `global` and `project_default` as outlined below.
+For further details see the [rate limits API specification](../users/api-v1-specification.md#rate-limits).
 
 | Attribute | Type | Comment |
 | --- | --- | --- |
@@ -649,7 +701,7 @@ For further details see the [rate limits API specification](../users/api-v1-spec
 | `$level[].target_type_uri` | string | The target type URI of the rate limit action. |
 | `$level[].actions[].name` | string | The name of the rate limit action. |
 | `$level[].actions[].limit` | integer | The rate limit as integer. |
-| `$level[].actions[].unit` | string | The unit of the rate limit. Available units are `r/ms`, `r/s`, `r/m`, `r/h`. | 
+| `$level[].actions[].unit` | string | The unit of the rate limit. Available units are `r/ms`, `r/s`, `r/m`, `r/h`. |
 
 
 Example configuration:
@@ -671,4 +723,4 @@ clusters:
                    - name:  create
                      limit: 1000
                      unit:  "r/s"
-``` 
+```

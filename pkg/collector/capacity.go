@@ -221,6 +221,16 @@ func (c *Collector) writeCapacity(clusterID string, values map[string]map[string
 					dbResource.SubcapacitiesJSON = string(bytes)
 				}
 
+				if len(data.CapacityPerAZ) == 0 {
+					dbResource.CapacityPerAZJSON = ""
+				} else {
+					bytes, err := json.Marshal(data.CapacityPerAZ)
+					if err != nil {
+						return fmt.Errorf("failed to convert capacities per availability zone to JSON: %s", err.Error())
+					}
+					dbResource.CapacityPerAZJSON = string(bytes)
+				}
+
 				//if this is a manually maintained record, upgrade it to automatically maintained
 				dbResource.Comment = ""
 				_, err := tx.Update(dbResource)
@@ -254,7 +264,8 @@ func (c *Collector) writeCapacity(clusterID string, values map[string]map[string
 				ServiceID:         serviceID,
 				Name:              name,
 				RawCapacity:       data.Capacity,
-				SubcapacitiesJSON: "", //but see below
+				CapacityPerAZJSON: "", //but see below
+				SubcapacitiesJSON: "",
 			}
 
 			if len(data.Subcapacities) != 0 {
@@ -263,6 +274,14 @@ func (c *Collector) writeCapacity(clusterID string, values map[string]map[string
 					return fmt.Errorf("failed to convert subcapacities to JSON: %s", err.Error())
 				}
 				res.SubcapacitiesJSON = string(bytes)
+			}
+
+			if len(data.CapacityPerAZ) != 0 {
+				bytes, err := json.Marshal(data.CapacityPerAZ)
+				if err != nil {
+					return fmt.Errorf("failed to convert capacities per availability zone to JSON: %s", err.Error())
+				}
+				res.CapacityPerAZJSON = string(bytes)
 			}
 
 			err := tx.Insert(res)

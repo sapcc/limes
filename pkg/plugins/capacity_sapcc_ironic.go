@@ -72,6 +72,13 @@ type ironicFlavorInfo struct {
 	Capabilities map[string]string
 }
 
+//Reference:
+//  Hosts are expected to be in one of the following format:
+//    - "nova-compute-xxxx"
+//    - "nova-compute-ironic-xxxx"
+//  where "xxxx" is unique among all hosts.
+var computeHostStubRx = regexp.MustCompile(`^nova-compute-(?:ironic-)?([a-zA-Z0-9]+)$`)
+
 //Scrape implements the core.CapacityPlugin interface.
 func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]core.CapacityData, error) {
 	//collect info about flavors with separate instance quota
@@ -87,7 +94,10 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 	//we are going to report capacity for all per-flavor instance quotas
 	result := make(map[string]*core.CapacityData)
 	for _, flavor := range flavors {
-		result["instances_"+flavor.Name] = &core.CapacityData{Capacity: 0}
+		result["instances_"+flavor.Name] = &core.CapacityData{
+			Capacity:      0,
+			CapacityPerAZ: limes.ClusterAvailabilityZoneReports{},
+		}
 	}
 
 	//count Ironic nodes
@@ -98,6 +108,26 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 	nodes, err := ironicClient.GetNodes()
 	if err != nil {
 		return nil, err
+	}
+
+	//Ironic bPods are expected to be listed as compute hosts assigned to
+	//host aggregates in the format: "nova-compute-ironic-xxxx".
+	computeHostsPerAZ, err := getComputeHostsPerAZ(novaClient)
+	if err != nil {
+		return nil, err
+	}
+	computeHostStubsPerAZ := make(map[string][]string, len(computeHostsPerAZ))
+	for az, hosts := range computeHostsPerAZ {
+		stubs := make([]string, 0, len(hosts))
+		for _, v := range hosts {
+			matchList := computeHostStubRx.FindStringSubmatch(v)
+			if matchList == nil {
+				logg.Error("Unexpected compute host format: expected \"nova-compute-(ironic-)xxxx\", got %q", v)
+			} else {
+				stubs = append(stubs, matchList[1])
+			}
+		}
+		computeHostStubsPerAZ[az] = stubs
 	}
 
 	unmatchedCounter := 0
@@ -111,8 +141,36 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 		for _, flavor := range flavors {
 			if node.Matches(flavor) {
 				logg.Debug("Ironic node %q (%s) matches flavor %s", node.Name, node.ID, flavor.Name)
+
 				data := result["instances_"+flavor.Name]
 				data.Capacity++
+
+				var nodeAZ string
+				fields := strings.Split(node.Name, "-")
+				if len(fields) != 2 {
+					logg.Error("Expected an Ironic node with name in the format \"nodeName-xxxx\", got %q (%s)", node.Name, node.ID)
+				} else {
+					for az, hostStubs := range computeHostStubsPerAZ {
+						for _, v := range hostStubs {
+							if fields[1] == v {
+								nodeAZ = az
+								break
+							}
+						}
+					}
+				}
+				if nodeAZ == "" {
+					logg.Info("Ironic node %q (%s) does not match any compute host from host aggregates", node.Name, node.ID)
+					nodeAZ = "unknown"
+				}
+				if _, ok := data.CapacityPerAZ[nodeAZ]; !ok {
+					data.CapacityPerAZ[nodeAZ] = &limes.ClusterAvailabilityZoneReport{Name: nodeAZ}
+				}
+				data.CapacityPerAZ[nodeAZ].Capacity++
+				if node.StableProvisionState() == "active" {
+					data.CapacityPerAZ[nodeAZ].Usage++
+				}
+
 				if p.reportSubcapacities {
 					sub := map[string]interface{}{
 						"id":   node.ID,

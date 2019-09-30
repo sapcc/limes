@@ -1,6 +1,6 @@
 /*******************************************************************************
 *
-* Copyright 2017-2018 SAP SE
+* Copyright 2017-2019 SAP SE
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -48,14 +48,24 @@ type ClusterServiceReport struct {
 //a single resource.
 type ClusterResourceReport struct {
 	ResourceInfo
-	Capacity      *uint64    `json:"capacity,omitempty"`
-	RawCapacity   *uint64    `json:"raw_capacity,omitempty"`
-	Comment       string     `json:"comment,omitempty"`
-	DomainsQuota  uint64     `json:"domains_quota,keepempty"`
-	Usage         uint64     `json:"usage,keepempty"`
-	BurstUsage    uint64     `json:"burst_usage,omitempty"`
-	PhysicalUsage *uint64    `json:"physical_usage,omitempty"`
-	Subcapacities JSONString `json:"subcapacities,omitempty"`
+	Capacity      *uint64                        `json:"capacity,omitempty"`
+	RawCapacity   *uint64                        `json:"raw_capacity,omitempty"`
+	Comment       string                         `json:"comment,omitempty"`
+	CapacityPerAZ ClusterAvailabilityZoneReports `json:"per_availability_zone,omitempty"`
+	DomainsQuota  uint64                         `json:"domains_quota,keepempty"`
+	Usage         uint64                         `json:"usage,keepempty"`
+	BurstUsage    uint64                         `json:"burst_usage,omitempty"`
+	PhysicalUsage *uint64                        `json:"physical_usage,omitempty"`
+	Subcapacities JSONString                     `json:"subcapacities,omitempty"`
+}
+
+//ClusterAvailabilityZoneReport is a substructure of ClusterResourceReport containing
+//capacity and usage data for a single resource in an availability zone.
+type ClusterAvailabilityZoneReport struct {
+	Name        string `json:"name"`
+	Capacity    uint64 `json:"capacity"`
+	RawCapacity uint64 `json:"raw_capacity,omitempty"`
+	Usage       uint64 `json:"usage,omitempty"`
 }
 
 // ClusterRateLimitReport is the structure for rate limits per target type URI and their rate limited actions.
@@ -64,7 +74,7 @@ type ClusterRateLimitReport struct {
 	Actions       ClusterRateLimitActionReports `json:"actions,keepempty"`
 }
 
-// ClusterRateLimitActionReport is defines an action and its rate limit.
+// ClusterRateLimitActionReport defines an action and its rate limit.
 type ClusterRateLimitActionReport struct {
 	Name  string `json:"name,keepempty"`
 	Limit uint64 `json:"limit,keepempty"`
@@ -139,6 +149,40 @@ func (r *ClusterResourceReports) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
+//ClusterAvailabilityZoneReports provides fast lookup of availability zones
+//using a map, but serializes to JSON as a list.
+type ClusterAvailabilityZoneReports map[string]*ClusterAvailabilityZoneReport
+
+//MarshalJSON implements the json.Marshaler interface.
+func (r ClusterAvailabilityZoneReports) MarshalJSON() ([]byte, error) {
+	//serialize with ordered keys to ensure testcase stability
+	names := make([]string, 0, len(r))
+	for name := range r {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	list := make([]*ClusterAvailabilityZoneReport, len(r))
+	for idx, name := range names {
+		list[idx] = r[name]
+	}
+	return json.Marshal(list)
+}
+
+//UnmarshalJSON implements the json.Unmarshaler interface
+func (r *ClusterAvailabilityZoneReports) UnmarshalJSON(b []byte) error {
+	tmp := make([]*ClusterAvailabilityZoneReport, 0)
+	err := json.Unmarshal(b, &tmp)
+	if err != nil {
+		return err
+	}
+	t := make(ClusterAvailabilityZoneReports)
+	for _, cr := range tmp {
+		t[cr.Name] = cr
+	}
+	*r = ClusterAvailabilityZoneReports(t)
+	return nil
+}
+
 //ClusterRateLimitReports provides fast lookup of global rate limits using a map, but serializes
 //to JSON as a list.
 type ClusterRateLimitReports map[string]*ClusterRateLimitReport
@@ -172,8 +216,8 @@ func (r *ClusterRateLimitReports) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-//ClusterRateLimitActionReports provides fast lookup of resources using a map, but serializes
-//to JSON as a list.
+//ClusterRateLimitActionReports provides fast lookup of rate limit actions using
+//a map, but serializes to JSON as a list.
 type ClusterRateLimitActionReports map[string]*ClusterRateLimitActionReport
 
 //MarshalJSON implements the json.Marshaler interface.

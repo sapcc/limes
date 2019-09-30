@@ -15,6 +15,18 @@ var clusterServicesMockJSON = `
 				{
 					"name": "cores",
 					"capacity": 500,
+					"per_availability_zone": [
+						{
+							"name": "az-one",
+							"capacity": 250,
+							"usage": 70
+						},
+						{
+							"name": "az-two",
+							"capacity": 250,
+							"usage": 30
+						}
+					],
 					"domains_quota": 200,
 					"usage": 100
 				},
@@ -37,6 +49,18 @@ var clusterResourcesMockJSON = `
 		{
 			"name": "cores",
 			"capacity": 500,
+			"per_availability_zone": [
+				{
+					"name": "az-one",
+					"capacity": 250,
+					"usage": 70
+				},
+				{
+					"name": "az-two",
+					"capacity": 250,
+					"usage": 30
+				}
+			],
 			"domains_quota": 200,
 			"usage": 100
 		},
@@ -77,7 +101,19 @@ var clusterMockResources = &ClusterResourceReports{
 		ResourceInfo: ResourceInfo{
 			Name: "cores",
 		},
-		Capacity:     &coresCap,
+		Capacity: &coresCap,
+		CapacityPerAZ: ClusterAvailabilityZoneReports{
+			"az-one": {
+				Name:     "az-one",
+				Capacity: 250,
+				Usage:    70,
+			},
+			"az-two": {
+				Name:     "az-two",
+				Capacity: 250,
+				Usage:    30,
+			},
+		},
 		DomainsQuota: 200,
 		Usage:        100,
 	},
