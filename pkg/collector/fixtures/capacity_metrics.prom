@@ -6,6 +6,14 @@ limes_cluster_capacity{os_cluster="west",resource="capacity",service="unshared2"
 limes_cluster_capacity{os_cluster="west",resource="things",service="shared",shared="true"} 23
 limes_cluster_capacity{os_cluster="west",resource="things",service="unshared",shared="false"} 10
 limes_cluster_capacity{os_cluster="west",resource="things",service="unshared2",shared="false"} 30
+# HELP limes_cluster_capacity_per_az Reported capacity of a Limes resource for an OpenStack cluster in a specific availability zone.
+# TYPE limes_cluster_capacity_per_az gauge
+limes_cluster_capacity_per_az{availability_zone="az-one",os_cluster="west",resource="things",service="unshared2",shared="false"} 15
+limes_cluster_capacity_per_az{availability_zone="az-two",os_cluster="west",resource="things",service="unshared2",shared="false"} 15
+# HELP limes_cluster_usage_per_az Actual usage of a Limes resource for an OpenStack cluster in a specific availability zone.
+# TYPE limes_cluster_usage_per_az gauge
+limes_cluster_usage_per_az{availability_zone="az-one",os_cluster="west",resource="things",service="unshared2",shared="false"} 3
+limes_cluster_usage_per_az{availability_zone="az-two",os_cluster="west",resource="things",service="unshared2",shared="false"} 3
 # HELP limes_unit_multiplier Conversion factor that a value of this resource must be multiplied with to obtain the base unit (e.g. bytes). For use with Grafana when only the base unit can be configured because of templating.
 # TYPE limes_unit_multiplier gauge
 limes_unit_multiplier{resource="capacity",service="shared"} 1

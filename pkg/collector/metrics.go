@@ -365,7 +365,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			capacity      uint64
 			capacityPerAZ string
 		)
-		err := rows.Scan(&clusterID, &serviceType, &resourceName, &capacity)
+		err := rows.Scan(&clusterID, &serviceType, &resourceName, &capacity, &capacityPerAZ)
 		if err != nil {
 			return err
 		}
