@@ -21,10 +21,12 @@ package collector
 
 import (
 	"database/sql"
+	"encoding/json"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
 )
@@ -212,6 +214,22 @@ var clusterCapacityGauge = prometheus.NewGaugeVec(
 	[]string{"os_cluster", "shared", "service", "resource"},
 )
 
+var clusterCapacityPerAZGauge = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "limes_cluster_capacity_per_az",
+		Help: "Reported capacity of a Limes resource for an OpenStack cluster in a specific availability zone.",
+	},
+	[]string{"os_cluster", "availability_zone", "shared", "service", "resource"},
+)
+
+var clusterUsagePerAZGauge = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "limes_cluster_usage_per_az",
+		Help: "Actual usage of a Limes resource for an OpenStack cluster in a specific availability zone.",
+	},
+	[]string{"os_cluster", "availability_zone", "shared", "service", "resource"},
+)
+
 var domainQuotaGauge = prometheus.NewGaugeVec(
 	prometheus.GaugeOpts{
 		Name: "limes_domain_quota",
@@ -272,6 +290,8 @@ type DataMetricsCollector struct {
 //Describe implements the prometheus.Collector interface.
 func (c *DataMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 	clusterCapacityGauge.Describe(ch)
+	clusterCapacityPerAZGauge.Describe(ch)
+	clusterUsagePerAZGauge.Describe(ch)
 	domainQuotaGauge.Describe(ch)
 	projectQuotaGauge.Describe(ch)
 	projectBackendQuotaGauge.Describe(ch)
@@ -281,7 +301,7 @@ func (c *DataMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 }
 
 var clusterMetricsQuery = `
-	SELECT cs.cluster_id, cs.type, cr.name, cr.capacity
+	SELECT cs.cluster_id, cs.type, cr.name, cr.capacity, cr.capacity_per_az
 	  FROM cluster_services cs
 	  JOIN cluster_resources cr ON cr.service_id = cs.id
 	 WHERE cs.cluster_id = $1 OR cs.cluster_id = 'shared'
@@ -317,6 +337,10 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	descCh := make(chan *prometheus.Desc, 1)
 	clusterCapacityGauge.Describe(descCh)
 	clusterCapacityDesc := <-descCh
+	clusterCapacityPerAZGauge.Describe(descCh)
+	clusterCapacityPerAZDesc := <-descCh
+	clusterUsagePerAZGauge.Describe(descCh)
+	clusterUsagePerAZDesc := <-descCh
 	domainQuotaGauge.Describe(descCh)
 	domainQuotaDesc := <-descCh
 	projectQuotaGauge.Describe(descCh)
@@ -335,10 +359,11 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	queryArgs := []interface{}{c.Cluster.ID}
 	err := db.ForeachRow(db.DB, clusterMetricsQuery, queryArgs, func(rows *sql.Rows) error {
 		var (
-			clusterID    string
-			serviceType  string
-			resourceName string
-			capacity     uint64
+			clusterID     string
+			serviceType   string
+			resourceName  string
+			capacity      uint64
+			capacityPerAZ string
 		)
 		err := rows.Scan(&clusterID, &serviceType, &resourceName, &capacity)
 		if err != nil {
@@ -358,6 +383,29 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		overcommitFactor := float64(behavior.OvercommitFactor)
 		if overcommitFactor == 0 {
 			overcommitFactor = 1
+		}
+
+		if capacityPerAZ != "" {
+			azReports := make(limes.ClusterAvailabilityZoneReports)
+			err := json.Unmarshal([]byte(capacityPerAZ), &azReports)
+			if err != nil {
+				return err
+			}
+			for _, report := range azReports {
+				ch <- prometheus.MustNewConstMetric(
+					clusterCapacityPerAZDesc,
+					prometheus.GaugeValue, float64(report.Capacity)*overcommitFactor,
+					c.Cluster.ID, report.Name, sharedString, serviceType, resourceName,
+				)
+				if report.Usage != 0 {
+					ch <- prometheus.MustNewConstMetric(
+						clusterUsagePerAZDesc,
+						prometheus.GaugeValue, float64(report.Usage),
+						c.Cluster.ID, report.Name, sharedString, serviceType, resourceName,
+					)
+				}
+			}
+
 		}
 
 		ch <- prometheus.MustNewConstMetric(
