@@ -29,7 +29,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/databus23/goslo.policy"
+	policy "github.com/databus23/goslo.policy"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
@@ -1069,6 +1069,48 @@ func Test_DomainOperations(t *testing.T) {
 			},
 		},
 	}.Check(t, router)
+
+	//When burst is in use, the sum of all project quotas may legitimately be
+	//higher than the domain quota.  In this case, the validation that
+	//domainQuota >= sum(projectQuota) should only produce an error when
+	//*decreasing* quota, not when increasing it. In other words, it should be
+	//allowed to decrease burst usage even if it is not possible to completely
+	//eliminate it.
+	domainGermanyID, err := db.DB.SelectInt(`SELECT id FROM domains WHERE name = $1`,
+		"germany")
+	if err != nil {
+		t.Fatal(err)
+	}
+	serviceGermanyUnsharedID, err := db.DB.SelectInt(`SELECT ID from domain_services WHERE domain_id = $1 AND type = $2`,
+		domainGermanyID, "unshared")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.DB.Exec(`UPDATE domain_resources SET quota = $1 WHERE service_id = $2 AND name = $3`,
+		10, //but sum(projectQuota) = 20!
+		serviceGermanyUnsharedID, "capacity",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany",
+		ExpectStatus: 202,
+		Body: assert.JSONObject{
+			"domain": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "unshared",
+						"resources": []assert.JSONObject{
+							//less than sum(projectQuota), but more than before, so it's okay
+							{"name": "capacity", "quota": 15},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
 }
 
 func expectDomainQuota(t *testing.T, domainName, serviceType, resourceName string, expected uint64) {
@@ -1640,6 +1682,52 @@ func Test_ProjectOperations(t *testing.T) {
 					"message":              "quota may not be lower than current usage",
 					"min_acceptable_quota": 2,
 					"unit":                 "B",
+				},
+			},
+		},
+	}.Check(t, router)
+
+	//When burst is in use, the project usage is legitimately higher than its
+	//quota.  In this case, the validation that projectQuota >= projectUsage
+	//should only produce an error when *decreasing* quota, not when increasing
+	//it. In other words, it should be allowed to decrease burst usage even if it
+	//is not possible to completely eliminate it.
+	domainGermanyID, err := db.DB.SelectInt(`SELECT id FROM domains WHERE name = $1`,
+		"germany")
+	if err != nil {
+		t.Fatal(err)
+	}
+	projectBerlinID, err := db.DB.SelectInt(`SELECT id FROM projects WHERE domain_id = $1 AND name = $2`,
+		domainGermanyID, "berlin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	serviceBerlinUnsharedID, err := db.DB.SelectInt(`SELECT ID from project_services WHERE project_id = $1 AND type = $2`,
+		projectBerlinID, "unshared")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.DB.Exec(`UPDATE project_resources SET quota = $1 WHERE service_id = $2 AND name = $3`,
+		0, //but usage = 2!
+		serviceBerlinUnsharedID, "capacity",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 202,
+		Body: assert.JSONObject{
+			"project": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "unshared",
+						"resources": []assert.JSONObject{
+							//less than usage, but more than before, so it's okay
+							{"name": "capacity", "quota": 1},
+						},
+					},
 				},
 			},
 		},

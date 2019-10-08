@@ -355,8 +355,9 @@ func (u QuotaUpdater) validateAuthorizationRateLimit(oldLimit, newLimit uint64, 
 }
 
 func (u QuotaUpdater) validateDomainQuota(report limes.DomainResourceReport, newQuota uint64) *core.QuotaValidationError {
-	//check that existing project quotas fit into new domain quota
-	if newQuota < report.ProjectsQuota {
+	//when reducing domain quota, existing project quotas must fit into new domain quota
+	oldQuota := report.DomainQuota
+	if newQuota < oldQuota && newQuota < report.ProjectsQuota {
 		min := report.ProjectsQuota
 		return &core.QuotaValidationError{
 			Status:       http.StatusConflict,
@@ -370,8 +371,9 @@ func (u QuotaUpdater) validateDomainQuota(report limes.DomainResourceReport, new
 }
 
 func (u QuotaUpdater) validateProjectQuota(domRes limes.DomainResourceReport, projRes limes.ProjectResourceReport, newQuota uint64) *core.QuotaValidationError {
-	//check that usage fits into quota
-	if projRes.Usage > newQuota {
+	//when reducing project quota, existing usage must fit into new quotaj
+	oldQuota := projRes.Quota
+	if newQuota < oldQuota && newQuota < projRes.Usage {
 		min := projRes.Usage
 		return &core.QuotaValidationError{
 			Status:       http.StatusConflict,
