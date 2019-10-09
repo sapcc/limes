@@ -252,6 +252,16 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 	//validate inputs (within the DB transaction, to ensure that we do not apply
 	//inconsistent values later)
 	err := updater.ValidateInput(serviceQuotas, dbi)
+	if _, ok := err.(MissingProjectReportError); ok {
+		//MissingProjectReportError indicates that the project is new and initial
+		//scraping is not yet done -> ask the user to wait until that's done, with
+		//a 4xx status code instead of a 5xx one so that this does not trigger
+		//alerts on the operator side
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusLocked)
+		fmt.Fprintf(w, "%s (please retry in a few seconds after initial scraping is done)", err.Error())
+		return
+	}
 	if respondwith.ErrorText(w, err) {
 		return
 	}

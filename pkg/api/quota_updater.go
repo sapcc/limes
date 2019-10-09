@@ -91,6 +91,19 @@ func (u QuotaUpdater) QuotaConstraints() core.QuotaConstraints {
 ////////////////////////////////////////////////////////////////////////////////
 // validation phase
 
+//MissingProjectReportError is returned by QuotaUpdater.ValidateInput() when a
+//project report is incomplete. This usually happens when a user tries to PUT a
+//quota on a new project that has not been scraped yet.
+type MissingProjectReportError struct {
+	ServiceType  string
+	ResourceName string
+}
+
+//Error implements the builtin/error interface.
+func (e MissingProjectReportError) Error() string {
+	return fmt.Sprintf("no project report for resource %s/%s", e.ServiceType, e.ResourceName)
+}
+
 //ValidateInput reads the given input and validates the quotas contained therein.
 //Results are collected into u.Requests. The return value is only set for unexpected
 //errors, not for validation errors.
@@ -132,7 +145,10 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 					projRes = projectService.Resources[res.Name]
 				}
 				if projRes == nil {
-					return fmt.Errorf("no project report for resource %s/%s", srv.Type, res.Name)
+					return MissingProjectReportError{
+						ServiceType:  srv.Type,
+						ResourceName: res.Name,
+					}
 				}
 			}
 
