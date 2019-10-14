@@ -134,7 +134,7 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 			}
 		}
 		if hypervisorAZ == "" {
-			logg.Info("Hypervisor %q with .service.host %q does not match any hosts from host aggregates", hypervisor.ID, hypervisor.Service.Host)
+			logg.Info("Hypervisor %d with .service.host %q does not match any hosts from host aggregates", hypervisor.ID, hypervisor.Service.Host)
 			hypervisorAZ = "unknown"
 		}
 		if _, ok := vcpusPerAZ[hypervisorAZ]; !ok {
