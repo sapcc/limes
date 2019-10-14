@@ -283,7 +283,7 @@ func getComputeHostsPerAZ(client *gophercloud.ServiceClient) (map[string][]strin
 	var result gophercloud.Result
 	var data struct {
 		Aggregates []struct {
-			AvailabilityZone string   `json:"availability_zone"`
+			AvailabilityZone *string  `json:"availability_zone"`
 			Hosts            []string `json:"hosts"`
 		} `json:"aggregates"`
 	}
@@ -301,7 +301,12 @@ func getComputeHostsPerAZ(client *gophercloud.ServiceClient) (map[string][]strin
 
 	computeHostsPerAZ := make(map[string][]string)
 	for _, aggr := range data.Aggregates {
-		computeHostsPerAZ[aggr.AvailabilityZone] = append(computeHostsPerAZ[aggr.AvailabilityZone], aggr.Hosts...)
+		//ignore host aggregates that just give scheduling hints but which don't
+		//contain an AZ assignment
+		if aggr.AvailabilityZone != nil {
+			az := *aggr.AvailabilityZone
+			computeHostsPerAZ[az] = append(computeHostsPerAZ[az], aggr.Hosts...)
+		}
 	}
 	//multiple aggregates can contain the same host which results in
 	//duplicate host values per AZ
