@@ -28,6 +28,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/pagination"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
@@ -37,10 +38,19 @@ type capacityNovaPlugin struct {
 	cfg core.CapacitorConfiguration
 }
 
+var novaUnmatchedHypervisorsGauge = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "limes_unmatched_nova_hypervisors",
+		Help: "Number of available/active Ironic nodes without matching flavor.",
+	},
+	[]string{"os_cluster"},
+)
+
 func init() {
 	core.RegisterCapacityPlugin(func(c core.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) core.CapacityPlugin {
 		return &capacityNovaPlugin{c}
 	})
+	prometheus.MustRegister(novaUnmatchedHypervisorsGauge)
 }
 
 //Init implements the core.CapacityPlugin interface.
@@ -112,6 +122,8 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 
 		vcpusPerAZ    = make(limes.ClusterAvailabilityZoneReports)
 		memoryMbPerAZ = make(limes.ClusterAvailabilityZoneReports)
+
+		unmatchedCounter = 0
 	)
 	for _, hypervisor := range hypervisorData.Hypervisors {
 		if hypervisorTypeRx != nil {
@@ -136,6 +148,7 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 		if hypervisorAZ == "" {
 			logg.Info("Hypervisor %d with .service.host %q does not match any hosts from host aggregates", hypervisor.ID, hypervisor.Service.Host)
 			hypervisorAZ = "unknown"
+			unmatchedCounter++
 		}
 		if _, ok := vcpusPerAZ[hypervisorAZ]; !ok {
 			vcpusPerAZ[hypervisorAZ] = &limes.ClusterAvailabilityZoneReport{Name: hypervisorAZ}
@@ -151,6 +164,10 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 		localGbPerAZ[hypervisorAZ] += hypervisor.LocalGb
 		runningVmsPerAZ[hypervisorAZ] += hypervisor.RunningVms
 	}
+
+	novaUnmatchedHypervisorsGauge.With(
+		prometheus.Labels{"os_cluster": clusterID},
+	).Set(float64(unmatchedCounter))
 
 	//list all flavors and get max(flavor_size)
 	pages, maxFlavorSize := 0, 0.0
