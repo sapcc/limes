@@ -7,7 +7,7 @@ require (
 	github.com/go-gorp/gorp v2.0.0+incompatible // indirect
 	github.com/go-sql-driver/mysql v1.4.1 // indirect
 	github.com/gofrs/uuid v3.2.0+incompatible // indirect
-	github.com/gophercloud/gophercloud v0.3.0
+	github.com/gophercloud/gophercloud v0.5.0
 	github.com/gorilla/mux v1.7.3
 	github.com/jpillora/longestcommon v0.0.0-20161227235612-adb9d91ee629 // indirect
 	github.com/majewsky/schwift v0.0.0-20180906125654-e1b3d5e2efc9
