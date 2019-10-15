@@ -283,6 +283,12 @@ type RequestOpts struct {
 	// ErrorContext specifies the resource error type to return if an error is encountered.
 	// This lets resources override default error messages based on the response status code.
 	ErrorContext error
+
+	// This flag indicates if we have reauthenticated during this request because of a 401 response.
+	// It ensures that we don't reauthenticate multiple times for a single request. If we
+	// reauthenticate, but keep getting 401 responses with the fresh token, reauthenticating some more
+	// will just get us into an infinite loop.
+	hasReauthenticated bool
 }
 
 var applicationJSON = "application/json"
@@ -392,7 +398,7 @@ func (client *ProviderClient) Request(method, url string, options *RequestOpts) 
 				err = error400er.Error400(respErr)
 			}
 		case http.StatusUnauthorized:
-			if client.ReauthFunc != nil {
+			if client.ReauthFunc != nil && !options.hasReauthenticated {
 				err = client.Reauthenticate(prereqtok)
 				if err != nil {
 					e := &ErrUnableToReauthenticate{}
@@ -404,6 +410,7 @@ func (client *ProviderClient) Request(method, url string, options *RequestOpts) 
 						seeker.Seek(0, 0)
 					}
 				}
+				options.hasReauthenticated = true
 				resp, err = client.Request(method, url, options)
 				if err != nil {
 					switch err.(type) {
