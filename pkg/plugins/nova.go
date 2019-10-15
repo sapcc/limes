@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/gophercloud/gophercloud"
@@ -340,6 +341,16 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 					subResource["disk"] = limes.ValueWithUnit{
 						Value: uint64(flavor.Disk),
 						Unit:  limes.UnitGibibytes,
+					}
+
+					if videoRAMStr, exists := flavorInfo.ExtraSpecs["hw_video:ram_max_mb"]; exists {
+						videoRAMVal, err := strconv.ParseUint(videoRAMStr, 10, 64)
+						if err == nil {
+							subResource["video_ram"] = limes.ValueWithUnit{
+								Value: videoRAMVal,
+								Unit:  limes.UnitMebibytes,
+							}
+						}
 					}
 				}
 
