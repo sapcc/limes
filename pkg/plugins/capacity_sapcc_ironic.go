@@ -79,15 +79,8 @@ type ironicFlavorInfo struct {
 //  where "xxxx" is unique among all hosts.
 var computeHostStubRx = regexp.MustCompile(`^nova-compute-(?:ironic-)?([a-zA-Z0-9]+)$`)
 
-//Reference:
-//  Node names are expected to be in one of the following formats:
-//    - "nodeXXX-bmYYY" (preferred)
-//    - "bpodYYY-nodeXXX" (legacy, cannot be renamed into preferred format while customer uses the node)
-//  Nodes with the legacy naming scheme belong to the "nova-compute-ironic" host without any suffix.
-var nodeNameRxs = []*regexp.Regexp{
-	regexp.MustCompile(`^node\d+-(bm\d+)$`),
-	regexp.MustCompile(`^(bpod\d+)-node\d+$`),
-}
+//Node names are expected to be in the form "nodeXXX-bmYYY", where the second half is the host stub (the match group from above).
+var nodeNameRx = regexp.MustCompile(`^node\d+-(bm\d+)$`)
 
 //Scrape implements the core.CapacityPlugin interface.
 func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]core.CapacityData, error) {
@@ -157,24 +150,15 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 				data := result["instances_"+flavor.Name]
 				data.Capacity++
 
-				var hostStub string
-				for _, rx := range nodeNameRxs {
-					match := rx.FindStringSubmatch(node.Name)
-					if match != nil {
-						hostStub = match[1]
-						break
-					}
-				}
-
 				var nodeAZ string
-				if hostStub == "" {
-					logg.Error(`Ironic node %q (%s) does not match the "nodeXXX-bmYYY" naming convention`, node.Name, node.ID)
-				} else {
-					nodeAZ = azForHostStub[hostStub]
+				if match := nodeNameRx.FindStringSubmatch(node.Name); match != nil {
+					nodeAZ = azForHostStub[match[1]]
 					if nodeAZ == "" {
 						logg.Info("Ironic node %q (%s) does not match any compute host from host aggregates", node.Name, node.ID)
 						nodeAZ = "unknown"
 					}
+				} else {
+					logg.Error(`Ironic node %q (%s) does not match the "nodeXXX-bmYYY" naming convention`, node.Name, node.ID)
 				}
 
 				if _, ok := data.CapacityPerAZ[nodeAZ]; !ok {
