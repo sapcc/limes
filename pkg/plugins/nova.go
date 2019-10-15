@@ -32,7 +32,6 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/availabilityzones"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/limits"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/quotasets"
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
 	"github.com/gophercloud/gophercloud/openstack/imageservice/v2/images"
 	"github.com/gophercloud/gophercloud/pagination"
@@ -62,13 +61,7 @@ type novaPlugin struct {
 	hypervisorTypeRules []novaHypervisorTypeRule
 	resources           []limes.ResourceInfo
 	//caches
-	flavorInfo     map[string]novaFlavorInfo
 	osTypeForImage map[string]string
-}
-
-type novaFlavorInfo struct {
-	Flavor     *flavors.Flavor
-	ExtraSpecs map[string]string
 }
 
 var novaDefaultResources = []limes.ResourceInfo{
@@ -261,6 +254,7 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 			"unknown": 0,
 		}
 
+		client.Microversion = "2.60"
 		err := servers.List(client, listOpts).EachPage(func(page pagination.Page) (bool, error) {
 			var instances []struct {
 				servers.Server
@@ -329,21 +323,25 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 				if len(ipAddresses) > 0 {
 					subResource["ip_addresses"] = ipAddresses
 				}
-				flavorID := instance.Flavor["id"].(string)
-				flavorInfo := p.getFlavorInfo(client, flavorID)
-				if flavor := flavorInfo.Flavor; flavor != nil {
-					subResource["flavor"] = flavor.Name
+
+				var flavorName string
+				flavor, err := unpackFlavorData(instance.Flavor)
+				if err != nil {
+					logg.Error("error while trying to parse flavor data for instance %s: %s", instance.ID, err.Error())
+				} else {
+					flavorName = flavor.OriginalName
+					subResource["flavor"] = flavor.OriginalName
 					subResource["vcpu"] = flavor.VCPUs
 					subResource["ram"] = limes.ValueWithUnit{
-						Value: uint64(flavor.RAM),
+						Value: uint64(flavor.MemoryMiB),
 						Unit:  limes.UnitMebibytes,
 					}
 					subResource["disk"] = limes.ValueWithUnit{
-						Value: uint64(flavor.Disk),
+						Value: uint64(flavor.DiskGiB),
 						Unit:  limes.UnitGibibytes,
 					}
 
-					if videoRAMStr, exists := flavorInfo.ExtraSpecs["hw_video:ram_max_mb"]; exists {
+					if videoRAMStr, exists := flavor.ExtraSpecs["hw_video:ram_max_mb"]; exists {
 						videoRAMVal, err := strconv.ParseUint(videoRAMStr, 10, 64)
 						if err == nil {
 							subResource["video_ram"] = limes.ValueWithUnit{
@@ -352,15 +350,12 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 							}
 						}
 					}
-				}
 
-				if len(p.hypervisorTypeRules) > 0 {
-					hypervisorType, err := p.getHypervisorType(client, flavorID)
-					if err != nil {
-						logg.Error("error while trying to find hypervisor type for flavor %s: %s", flavorID, util.ErrorToString(err))
+					if len(p.hypervisorTypeRules) > 0 {
+						hypervisorType := p.getHypervisorType(client, flavor)
+						subResource["hypervisor"] = hypervisorType
+						countsByHypervisor[hypervisorType]++
 					}
-					subResource["hypervisor"] = hypervisorType
-					countsByHypervisor[hypervisorType]++
 				}
 
 				if instance.Image == nil {
@@ -379,10 +374,6 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 					}
 				}
 
-				flavorName := ""
-				if flavorInfo.Flavor != nil {
-					flavorName = flavorInfo.Flavor.Name
-				}
 				resource, exists := result["instances_"+flavorName]
 				if !exists {
 					resource = result["instances"]
@@ -426,58 +417,42 @@ func (p *novaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherclo
 	return quotasets.Update(client, projectUUID, novaQuotaUpdateOpts(quotas)).Err
 }
 
-//Getting and caching flavor details and extra specs
-//Changing a flavor is not supported from OpenStack, so no invalidating of the cache needed
-//Access to the map is not thread safe
-//
-//Note that the fields of the result value can be nil, if the flavor has been deleted.
-func (p *novaPlugin) getFlavorInfo(client *gophercloud.ServiceClient, flavorID string) novaFlavorInfo {
-	if p.flavorInfo == nil {
-		p.flavorInfo = make(map[string]novaFlavorInfo)
-	}
-	if info, ok := p.flavorInfo[flavorID]; ok {
-		return info
-	}
-
-	var (
-		result novaFlavorInfo
-		err    error
-	)
-	result.Flavor, err = flavors.Get(client, flavorID).Extract()
-	if err != nil {
-		logg.Error("retrieve flavor %s: %s", flavorID, util.ErrorToString(err))
-	}
-	result.ExtraSpecs, err = getFlavorExtras(client, flavorID)
-	if err != nil {
-		logg.Error("retrieve flavor %s extra-specs: %s", flavorID, util.ErrorToString(err))
-	}
-
-	p.flavorInfo[flavorID] = result
-	return result
+//Information about a flavor, as it appears in GET /servers/:id in the "flavor"
+//key with newer Nova microversions.
+type novaFlavorInfo struct {
+	DiskGiB      uint64            `json:"disk"`
+	EphemeralGiB uint64            `json:"ephemeral"`
+	ExtraSpecs   map[string]string `json:"extra_specs"`
+	OriginalName string            `json:"original_name"`
+	MemoryMiB    uint64            `json:"ram"`
+	SwapMiB      uint64            `json:"swap"`
+	VCPUs        uint64            `json:"vcpus"`
 }
 
-func (p *novaPlugin) getHypervisorType(client *gophercloud.ServiceClient, flavorID string) (string, error) {
-	flavorInfo := p.getFlavorInfo(client, flavorID)
+func unpackFlavorData(input map[string]interface{}) (novaFlavorInfo, error) {
+	buf, err := json.Marshal(input)
+	if err != nil {
+		return novaFlavorInfo{}, err
+	}
+	var result novaFlavorInfo
+	err = json.Unmarshal(buf, &result)
+	return result, err
+}
 
+func (p *novaPlugin) getHypervisorType(client *gophercloud.ServiceClient, flavor novaFlavorInfo) string {
 	for _, rule := range p.hypervisorTypeRules {
 		switch {
 		case rule.MatchFlavorName:
-			if flavorInfo.Flavor == nil { //cannot evaluate this rule
-				return "flavor-deleted", nil
-			}
-			if rule.ValuePattern.MatchString(flavorInfo.Flavor.Name) {
-				return rule.HypervisorType, nil
+			if rule.ValuePattern.MatchString(flavor.OriginalName) {
+				return rule.HypervisorType
 			}
 		case rule.MatchExtraSpec != "":
-			if flavorInfo.Flavor == nil { //cannot evaluate this rule
-				return "flavor-deleted", nil
-			}
-			if rule.ValuePattern.MatchString(flavorInfo.ExtraSpecs[rule.MatchExtraSpec]) {
-				return rule.HypervisorType, nil
+			if rule.ValuePattern.MatchString(flavor.ExtraSpecs[rule.MatchExtraSpec]) {
+				return rule.HypervisorType
 			}
 		}
 	}
-	return "unknown", nil
+	return "unknown"
 }
 
 func (p *novaPlugin) getOSType(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, imageID string) (string, error) {
