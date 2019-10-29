@@ -6,7 +6,7 @@ github.com/databus23/goslo.policy
 github.com/gofrs/uuid
 # github.com/golang/protobuf v1.3.1
 github.com/golang/protobuf/proto
-# github.com/gophercloud/gophercloud v0.5.0
+# github.com/gophercloud/gophercloud v0.6.0
 github.com/gophercloud/gophercloud
 github.com/gophercloud/gophercloud/internal
 github.com/gophercloud/gophercloud/openstack
@@ -85,5 +85,5 @@ github.com/streadway/amqp
 golang.org/x/net/context
 # gopkg.in/gorp.v2 v2.0.0
 gopkg.in/gorp.v2
-# gopkg.in/yaml.v2 v2.2.2
+# gopkg.in/yaml.v2 v2.2.4
 gopkg.in/yaml.v2
