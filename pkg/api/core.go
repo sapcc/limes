@@ -31,6 +31,7 @@ import (
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/limes"
+	"github.com/sapcc/limes/pkg/api/sre"
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/reports"
@@ -105,7 +106,7 @@ func NewV1Router(cluster *core.Cluster, config core.Configuration) (http.Handler
 	r.Methods("POST").Path("/v1/domains/{domain_id}/projects/{project_id}/simulate-put").HandlerFunc(p.SimulatePutProject)
 	r.Methods("PUT").Path("/v1/domains/{domain_id}/projects/{project_id}").HandlerFunc(p.PutProject)
 
-	return r, p.VersionData
+	return sre.Instrument(r), p.VersionData
 }
 
 //RequireJSON will parse the request body into the given data structure, or
