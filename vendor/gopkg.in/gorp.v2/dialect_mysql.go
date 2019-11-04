@@ -2,19 +2,13 @@
 // Use of this source code is governed by a MIT-style
 // license that can be found in the LICENSE file.
 
-// Package gorp provides a simple way to marshal Go structs to and from
-// SQL databases.  It uses the database/sql package, and should work with any
-// compliant database/sql driver.
-//
-// Source code and project home:
-// https://github.com/go-gorp/gorp
-
 package gorp
 
 import (
 	"fmt"
 	"reflect"
 	"strings"
+	"time"
 )
 
 // Implementation of Dialect for MySQL databases.
@@ -125,16 +119,20 @@ func (d MySQLDialect) CreateTableSuffix() string {
 	return fmt.Sprintf(" engine=%s charset=%s", d.Engine, d.Encoding)
 }
 
-func (m MySQLDialect) CreateIndexSuffix() string {
+func (d MySQLDialect) CreateIndexSuffix() string {
 	return "using"
 }
 
-func (m MySQLDialect) DropIndexSuffix() string {
+func (d MySQLDialect) DropIndexSuffix() string {
 	return "on"
 }
 
-func (m MySQLDialect) TruncateClause() string {
+func (d MySQLDialect) TruncateClause() string {
 	return "truncate"
+}
+
+func (d MySQLDialect) SleepClause(s time.Duration) string {
+	return fmt.Sprintf("sleep(%f)", s.Seconds())
 }
 
 // Returns "?"

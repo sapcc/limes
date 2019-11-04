@@ -2,22 +2,16 @@
 // Use of this source code is governed by a MIT-style
 // license that can be found in the LICENSE file.
 
-// Package gorp provides a simple way to marshal Go structs to and from
-// SQL databases.  It uses the database/sql package, and should work with any
-// compliant database/sql driver.
-//
-// Source code and project home:
-// https://github.com/go-gorp/gorp
-
 package gorp
 
-import "reflect"
+import (
+	"reflect"
+)
 
 // The Dialect interface encapsulates behaviors that differ across
 // SQL databases.  At present the Dialect is only used by CreateTables()
 // but this could change in the future
 type Dialect interface {
-
 	// adds a suffix to any query, usually ";"
 	QuerySuffix() string
 
@@ -67,7 +61,7 @@ type Dialect interface {
 	// table - The table name
 	QuotedTableForQuery(schema string, table string) string
 
-	// Existance clause for table creation / deletion
+	// Existence clause for table creation / deletion
 	IfSchemaNotExists(command, schema string) string
 	IfTableExists(command, schema, table string) string
 	IfTableNotExists(command, schema, table string) string

@@ -2,16 +2,10 @@
 // Use of this source code is governed by a MIT-style
 // license that can be found in the LICENSE file.
 
-// Package gorp provides a simple way to marshal Go structs to and from
-// SQL databases.  It uses the database/sql package, and should work with any
-// compliant database/sql driver.
-//
-// Source code and project home:
-// https://github.com/go-gorp/gorp
-
 package gorp
 
 import (
+	"context"
 	"database/sql"
 	"time"
 )
@@ -21,9 +15,17 @@ import (
 // of that transaction.  Transactions should be terminated with
 // a call to Commit() or Rollback()
 type Transaction struct {
+	ctx    context.Context
 	dbmap  *DbMap
 	tx     *sql.Tx
 	closed bool
+}
+
+func (t *Transaction) WithContext(ctx context.Context) SqlExecutor {
+	copy := &Transaction{}
+	*copy = *t
+	copy.ctx = ctx
+	return copy
 }
 
 // Insert has the same behavior as DbMap.Insert(), but runs in a transaction.
@@ -53,50 +55,86 @@ func (t *Transaction) Get(i interface{}, keys ...interface{}) (interface{}, erro
 
 // Select has the same behavior as DbMap.Select(), but runs in a transaction.
 func (t *Transaction) Select(i interface{}, query string, args ...interface{}) ([]interface{}, error) {
+	if t.dbmap.ExpandSliceArgs {
+		expandSliceArgs(&query, args...)
+	}
+
 	return hookedselect(t.dbmap, t, i, query, args...)
 }
 
 // Exec has the same behavior as DbMap.Exec(), but runs in a transaction.
 func (t *Transaction) Exec(query string, args ...interface{}) (sql.Result, error) {
+	if t.dbmap.ExpandSliceArgs {
+		expandSliceArgs(&query, args...)
+	}
+
 	if t.dbmap.logger != nil {
 		now := time.Now()
 		defer t.dbmap.trace(now, query, args...)
 	}
-	return exec(t, query, args...)
+	return maybeExpandNamedQueryAndExec(t, query, args...)
 }
 
 // SelectInt is a convenience wrapper around the gorp.SelectInt function.
 func (t *Transaction) SelectInt(query string, args ...interface{}) (int64, error) {
+	if t.dbmap.ExpandSliceArgs {
+		expandSliceArgs(&query, args...)
+	}
+
 	return SelectInt(t, query, args...)
 }
 
 // SelectNullInt is a convenience wrapper around the gorp.SelectNullInt function.
 func (t *Transaction) SelectNullInt(query string, args ...interface{}) (sql.NullInt64, error) {
+	if t.dbmap.ExpandSliceArgs {
+		expandSliceArgs(&query, args...)
+	}
+
 	return SelectNullInt(t, query, args...)
 }
 
 // SelectFloat is a convenience wrapper around the gorp.SelectFloat function.
 func (t *Transaction) SelectFloat(query string, args ...interface{}) (float64, error) {
+	if t.dbmap.ExpandSliceArgs {
+		expandSliceArgs(&query, args...)
+	}
+
 	return SelectFloat(t, query, args...)
 }
 
 // SelectNullFloat is a convenience wrapper around the gorp.SelectNullFloat function.
 func (t *Transaction) SelectNullFloat(query string, args ...interface{}) (sql.NullFloat64, error) {
+	if t.dbmap.ExpandSliceArgs {
+		expandSliceArgs(&query, args...)
+	}
+
 	return SelectNullFloat(t, query, args...)
 }
 
 // SelectStr is a convenience wrapper around the gorp.SelectStr function.
 func (t *Transaction) SelectStr(query string, args ...interface{}) (string, error) {
+	if t.dbmap.ExpandSliceArgs {
+		expandSliceArgs(&query, args...)
+	}
+
 	return SelectStr(t, query, args...)
 }
 
 // SelectNullStr is a convenience wrapper around the gorp.SelectNullStr function.
 func (t *Transaction) SelectNullStr(query string, args ...interface{}) (sql.NullString, error) {
+	if t.dbmap.ExpandSliceArgs {
+		expandSliceArgs(&query, args...)
+	}
+
 	return SelectNullStr(t, query, args...)
 }
 
 // SelectOne is a convenience wrapper around the gorp.SelectOne function.
 func (t *Transaction) SelectOne(holder interface{}, query string, args ...interface{}) error {
+	if t.dbmap.ExpandSliceArgs {
+		expandSliceArgs(&query, args...)
+	}
+
 	return SelectOne(t.dbmap, t, holder, query, args...)
 }
 
@@ -137,7 +175,7 @@ func (t *Transaction) Savepoint(name string) error {
 		now := time.Now()
 		defer t.dbmap.trace(now, query, nil)
 	}
-	_, err := t.tx.Exec(query)
+	_, err := exec(t, query)
 	return err
 }
 
@@ -150,7 +188,7 @@ func (t *Transaction) RollbackToSavepoint(savepoint string) error {
 		now := time.Now()
 		defer t.dbmap.trace(now, query, nil)
 	}
-	_, err := t.tx.Exec(query)
+	_, err := exec(t, query)
 	return err
 }
 
@@ -163,7 +201,7 @@ func (t *Transaction) ReleaseSavepoint(savepoint string) error {
 		now := time.Now()
 		defer t.dbmap.trace(now, query, nil)
 	}
-	_, err := t.tx.Exec(query)
+	_, err := exec(t, query)
 	return err
 }
 
@@ -173,21 +211,29 @@ func (t *Transaction) Prepare(query string) (*sql.Stmt, error) {
 		now := time.Now()
 		defer t.dbmap.trace(now, query, nil)
 	}
-	return t.tx.Prepare(query)
+	return prepare(t, query)
 }
 
 func (t *Transaction) QueryRow(query string, args ...interface{}) *sql.Row {
+	if t.dbmap.ExpandSliceArgs {
+		expandSliceArgs(&query, args...)
+	}
+
 	if t.dbmap.logger != nil {
 		now := time.Now()
 		defer t.dbmap.trace(now, query, args...)
 	}
-	return t.tx.QueryRow(query, args...)
+	return queryRow(t, query, args...)
 }
 
-func (t *Transaction) Query(query string, args ...interface{}) (*sql.Rows, error) {
+func (t *Transaction) Query(q string, args ...interface{}) (*sql.Rows, error) {
+	if t.dbmap.ExpandSliceArgs {
+		expandSliceArgs(&q, args...)
+	}
+
 	if t.dbmap.logger != nil {
 		now := time.Now()
-		defer t.dbmap.trace(now, query, args...)
+		defer t.dbmap.trace(now, q, args...)
 	}
-	return t.tx.Query(query, args...)
+	return query(t, q, args...)
 }

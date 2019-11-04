@@ -95,7 +95,10 @@ func prometheusClient(cfg core.PrometheusAPIConfiguration) (prom_v1.API, error) 
 }
 
 func prometheusGetSingleValue(client prom_v1.API, queryStr string, defaultValue *float64) (float64, error) {
-	value, err := client.Query(context.Background(), queryStr, time.Now())
+	value, warnings, err := client.Query(context.Background(), queryStr, time.Now())
+	for _, warning := range warnings {
+		logg.Info("Prometheus query produced warning: %s", warning)
+	}
 	if err != nil {
 		return 0, fmt.Errorf("Prometheus query failed: %s: %s", queryStr, err.Error())
 	}

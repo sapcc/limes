@@ -1,6 +1,6 @@
 # Go Relational Persistence
 
-[![build status](https://img.shields.io/travis/go-gorp/gorp.svg)](http://travis-ci.org/go-gorp/gorp)
+[![build status](https://img.shields.io/travis/go-gorp/gorp/master.svg)](http://travis-ci.org/go-gorp/gorp)
 [![code coverage](https://img.shields.io/coveralls/go-gorp/gorp.svg)](https://coveralls.io/r/go-gorp/gorp)
 [![issues](https://img.shields.io/github/issues/go-gorp/gorp.svg)](https://github.com/go-gorp/gorp/issues)
 [![godoc v1](https://img.shields.io/badge/godoc-v1-375EAB.svg)](https://godoc.org/gopkg.in/gorp.v1)
@@ -318,7 +318,7 @@ See the `TestWithEmbeddedStruct` function in `gorp_test.go` for a full example.
 
 Automatically create / drop registered tables.  This is useful for unit tests
 but is entirely optional.  You can of course use gorp with tables created manually,
-or with a separate migration tool (like [goose](https://bitbucket.org/liamstask/goose) or [migrate](https://github.com/mattes/migrate)).
+or with a separate migration tool (like [sql-migrate](https://github.com/rubenv/sql-migrate), [goose](https://bitbucket.org/liamstask/goose) or [migrate](https://github.com/mattes/migrate)).
 
 ```go
 // create all registered tables
@@ -436,11 +436,13 @@ type InvoicePersonView struct {
 
 // Create some rows
 p1 := &Person{0, 0, 0, "bob", "smith"}
-dbmap.Insert(p1)
+err = dbmap.Insert(p1)
+checkErr(err, "Insert failed")
 
 // notice how we can wire up p1.Id to the invoice easily
 inv1 := &Invoice{0, 0, 0, "xmas order", p1.Id}
-dbmap.Insert(inv1)
+err = dbmap.Insert(inv1)
+checkErr(err, "Insert failed")
 
 // Run your query
 query := "select i.Id InvoiceId, p.Id PersonId, i.Memo, p.FName " +
@@ -503,9 +505,12 @@ func InsertInv(dbmap *DbMap, inv *Invoice, per *Person) error {
         return err
     }
 
-    trans.Insert(per)
+    err = trans.Insert(per)
+    checkErr(err, "Insert failed")
+
     inv.PersonId = per.Id
-    trans.Insert(inv)
+    err = trans.Insert(inv)
+    checkErr(err, "Insert failed")
 
     // if the commit is successful, a nil error is returned
     return trans.Commit()
@@ -591,12 +596,14 @@ type Person struct {
 }
 
 p1 := &Person{0, 0, 0, "Bob", "Smith", 0}
-dbmap.Insert(p1)  // Version is now 1
+err = dbmap.Insert(p1)  // Version is now 1
+checkErr(err, "Insert failed")
 
 obj, err := dbmap.Get(Person{}, p1.Id)
 p2 := obj.(*Person)
 p2.LName = "Edwards"
-dbmap.Update(p2)  // Version is now 2
+_,err = dbmap.Update(p2)  // Version is now 2
+checkErr(err, "Update failed")
 
 p1.LName = "Howard"
 
@@ -689,6 +696,32 @@ Note that these databases are not covered by CI and I (@coopernurse)
 have no good way to test them locally.  So please try them and send
 patches as needed, but expect a bit more unpredicability.
 
+## Sqlite3 Extensions
+
+In order to use sqlite3 extensions you need to first register a custom driver:
+
+```go
+import (
+	"database/sql"
+
+	// use whatever database/sql driver you wish
+	sqlite "github.com/mattn/go-sqlite3"
+)
+
+func customDriver() (*sql.DB, error) {
+
+	// create custom driver with extensions defined
+	sql.Register("sqlite3-custom", &sqlite.SQLiteDriver{
+		Extensions: []string{
+			"mod_spatialite",
+		},
+	})
+
+	// now you can then connect using the 'sqlite3-custom' driver instead of 'sqlite3'
+	return sql.Open("sqlite3-custom", "/tmp/post_db.bin")
+}
+```
+
 ## Known Issues
 
 ### SQL placeholder portability
@@ -706,14 +739,18 @@ Raw SQL strings passed to `Exec`, `Select`, `SelectOne`, `SelectInt`,
 etc will not be parsed.  Consequently you may have portability issues
 if you write a query like this:
 
-```go // works on MySQL and Sqlite3, but not with Postgresql err :=
-dbmap.SelectOne(&val, "select * from foo where id = ?", 30) ```
+```go 
+// works on MySQL and Sqlite3, but not with Postgresql err :=
+dbmap.SelectOne(&val, "select * from foo where id = ?", 30)
+```
 
 In `Select` and `SelectOne` you can use named parameters to work
 around this.  The following is portable:
 
-```go err := dbmap.SelectOne(&val, "select * from foo where id = :id",
-map[string]interface{} { "id": 30}) ```
+```go 
+err := dbmap.SelectOne(&val, "select * from foo where id = :id",
+map[string]interface{} { "id": 30})
+```
 
 Additionally, when using Postgres as your database, you should utilize
 `$1` instead of `?` placeholders as utilizing `?` placeholders when

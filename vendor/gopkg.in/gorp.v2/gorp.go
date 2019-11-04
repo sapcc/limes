@@ -2,16 +2,10 @@
 // Use of this source code is governed by a MIT-style
 // license that can be found in the LICENSE file.
 
-// Package gorp provides a simple way to marshal Go structs to and from
-// SQL databases.  It uses the database/sql package, and should work with any
-// compliant database/sql driver.
-//
-// Source code and project home:
-// https://github.com/go-gorp/gorp
-//
 package gorp
 
 import (
+	"context"
 	"database/sql"
 	"database/sql/driver"
 	"fmt"
@@ -50,6 +44,12 @@ func (os OracleString) Value() (driver.Value, error) {
 // it returns nil for its empty value, it needs to implement SqlTyper
 // to have its column type detected properly during table creation.
 type SqlTyper interface {
+	SqlType() driver.Value
+}
+
+// legacySqlTyper prevents breaking clients who depended on the previous
+// SqlTyper interface
+type legacySqlTyper interface {
 	SqlType() driver.Valuer
 }
 
@@ -83,12 +83,6 @@ type TypeConverter interface {
 	FromDb(target interface{}) (CustomScanner, bool)
 }
 
-// Executor exposes the sql.DB and sql.Tx Exec function so that it can be used
-// on internal functions that convert named parameters for the Exec function.
-type executor interface {
-	Exec(query string, args ...interface{}) (sql.Result, error)
-}
-
 // SqlExecutor exposes gorp operations that can be run from Pre/Post
 // hooks.  This hides whether the current operation that triggered the
 // hook is in a transaction.
@@ -96,13 +90,13 @@ type executor interface {
 // See the DbMap function docs for each of the functions below for more
 // information.
 type SqlExecutor interface {
+	WithContext(ctx context.Context) SqlExecutor
 	Get(i interface{}, keys ...interface{}) (interface{}, error)
 	Insert(list ...interface{}) error
 	Update(list ...interface{}) (int64, error)
 	Delete(list ...interface{}) (int64, error)
 	Exec(query string, args ...interface{}) (sql.Result, error)
-	Select(i interface{}, query string,
-		args ...interface{}) ([]interface{}, error)
+	Select(i interface{}, query string, args ...interface{}) ([]interface{}, error)
 	SelectInt(query string, args ...interface{}) (int64, error)
 	SelectNullInt(query string, args ...interface{}) (sql.NullInt64, error)
 	SelectFloat(query string, args ...interface{}) (float64, error)
@@ -126,16 +120,26 @@ type DynamicTable interface {
 // interface.
 var _, _ SqlExecutor = &DbMap{}, &Transaction{}
 
+func argValue(a interface{}) interface{} {
+	v, ok := a.(driver.Valuer)
+	if !ok {
+		return a
+	}
+	vV := reflect.ValueOf(v)
+	if vV.Kind() == reflect.Ptr && vV.IsNil() {
+		return nil
+	}
+	ret, err := v.Value()
+	if err != nil {
+		return a
+	}
+	return ret
+}
+
 func argsString(args ...interface{}) string {
 	var margs string
 	for i, a := range args {
-		var v interface{} = a
-		if x, ok := v.(driver.Valuer); ok {
-			y, err := x.Value()
-			if err == nil {
-				v = y
-			}
-		}
+		v := argValue(a)
 		switch v.(type) {
 		case string:
 			v = fmt.Sprintf("%q", v)
@@ -152,23 +156,47 @@ func argsString(args ...interface{}) string {
 
 // Calls the Exec function on the executor, but attempts to expand any eligible named
 // query arguments first.
-func exec(e SqlExecutor, query string, args ...interface{}) (sql.Result, error) {
-	var dbMap *DbMap
-	var executor executor
-	switch m := e.(type) {
-	case *DbMap:
-		executor = m.Db
-		dbMap = m
-	case *Transaction:
-		executor = m.tx
-		dbMap = m.dbmap
-	}
+func maybeExpandNamedQueryAndExec(e SqlExecutor, query string, args ...interface{}) (sql.Result, error) {
+	dbMap := extractDbMap(e)
 
 	if len(args) == 1 {
 		query, args = maybeExpandNamedQuery(dbMap, query, args)
 	}
 
-	return executor.Exec(query, args...)
+	return exec(e, query, args...)
+}
+
+func extractDbMap(e SqlExecutor) *DbMap {
+	switch m := e.(type) {
+	case *DbMap:
+		return m
+	case *Transaction:
+		return m.dbmap
+	}
+	return nil
+}
+
+// executor exposes the sql.DB and sql.Tx functions so that it can be used
+// on internal functions that need to be agnostic to the underlying object.
+type executor interface {
+	Exec(query string, args ...interface{}) (sql.Result, error)
+	Prepare(query string) (*sql.Stmt, error)
+	QueryRow(query string, args ...interface{}) *sql.Row
+	Query(query string, args ...interface{}) (*sql.Rows, error)
+	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+	PrepareContext(ctx context.Context, query string) (*sql.Stmt, error)
+	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
+	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
+}
+
+func extractExecutorAndContext(e SqlExecutor) (executor, context.Context) {
+	switch m := e.(type) {
+	case *DbMap:
+		return m.Db, m.ctx
+	case *Transaction:
+		return m.tx, m.ctx
+	}
+	return nil, nil
 }
 
 // maybeExpandNamedQuery checks the given arg to see if it's eligible to be used
@@ -593,4 +621,52 @@ func insert(m *DbMap, exec SqlExecutor, list ...interface{}) error {
 		}
 	}
 	return nil
+}
+
+func exec(e SqlExecutor, query string, args ...interface{}) (sql.Result, error) {
+	executor, ctx := extractExecutorAndContext(e)
+
+	if ctx != nil {
+		return executor.ExecContext(ctx, query, args...)
+	}
+
+	return executor.Exec(query, args...)
+}
+
+func prepare(e SqlExecutor, query string) (*sql.Stmt, error) {
+	executor, ctx := extractExecutorAndContext(e)
+
+	if ctx != nil {
+		return executor.PrepareContext(ctx, query)
+	}
+
+	return executor.Prepare(query)
+}
+
+func queryRow(e SqlExecutor, query string, args ...interface{}) *sql.Row {
+	executor, ctx := extractExecutorAndContext(e)
+
+	if ctx != nil {
+		return executor.QueryRowContext(ctx, query, args...)
+	}
+
+	return executor.QueryRow(query, args...)
+}
+
+func query(e SqlExecutor, query string, args ...interface{}) (*sql.Rows, error) {
+	executor, ctx := extractExecutorAndContext(e)
+
+	if ctx != nil {
+		return executor.QueryContext(ctx, query, args...)
+	}
+
+	return executor.Query(query, args...)
+}
+
+func begin(m *DbMap) (*sql.Tx, error) {
+	if m.ctx != nil {
+		return m.Db.BeginTx(m.ctx, nil)
+	}
+
+	return m.Db.Begin()
 }
