@@ -23,12 +23,14 @@ import (
 	"net/http"
 
 	"github.com/sapcc/go-bits/respondwith"
+	"github.com/sapcc/limes/pkg/api/sre"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/reports"
 )
 
 //ListInconsistencies handles GET /v1/inconsistencies.
 func (p *v1Provider) ListInconsistencies(w http.ResponseWriter, r *http.Request) {
+	sre.IdentifyEndpoint(r, "/v1/inconsistencies")
 	token := p.CheckToken(r)
 	if !token.Require(w, "cluster:show") {
 		return

@@ -30,6 +30,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/limes"
+	"github.com/sapcc/limes/pkg/api/sre"
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/reports"
@@ -37,6 +38,7 @@ import (
 
 //ListClusters handles GET /v1/clusters.
 func (p *v1Provider) ListClusters(w http.ResponseWriter, r *http.Request) {
+	sre.IdentifyEndpoint(r, "/v1/clusters")
 	token := p.CheckToken(r)
 	if !token.Require(w, "cluster:list") {
 		return
@@ -63,6 +65,7 @@ func (p *v1Provider) ListClusters(w http.ResponseWriter, r *http.Request) {
 
 //GetCluster handles GET /v1/clusters/:cluster_id.
 func (p *v1Provider) GetCluster(w http.ResponseWriter, r *http.Request) {
+	sre.IdentifyEndpoint(r, "/v1/clusters/:id")
 	token := p.CheckToken(r)
 	if !token.Require(w, "cluster:show_basic") {
 		return
@@ -99,6 +102,7 @@ func (p *v1Provider) GetCluster(w http.ResponseWriter, r *http.Request) {
 
 //PutCluster handles PUT /v1/clusters/:cluster_id.
 func (p *v1Provider) PutCluster(w http.ResponseWriter, r *http.Request) {
+	sre.IdentifyEndpoint(r, "/v1/clusters/:id")
 	if !p.CheckToken(r).Require(w, "cluster:edit") {
 		return
 	}

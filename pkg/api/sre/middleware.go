@@ -18,17 +18,18 @@
 
 //Package sre contains an instrumentation middleware similar to
 //github.com/prometheus/client_golang/prometheus/promhttp, but with an
-//additional "path" label identifying the github.com/gorilla/mux route taken by
-//the request.
+//additional "endpoint" label identifying the type of request. The final
+//request handler must identify itself to this middleware by calling
+//IdentifyEndpoint().
 package sre
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus"
 )
 
@@ -52,7 +53,7 @@ var (
 //Init sets up the metrics used by type Middleware. It must be called exactly once.
 func Init(cfg Config) {
 	appName = cfg.AppName
-	labelNames := []string{"app", "method", "status", "path"}
+	labelNames := []string{"app", "method", "status", "endpoint"}
 
 	metricFirstByteDuration = prometheus.NewHistogramVec(prometheus.HistogramOpts{
 		Name:    "httpmux_first_byte_seconds",
@@ -86,20 +87,47 @@ func Instrument(next http.Handler) http.Handler {
 	return handler{next}
 }
 
+type contextKey int
+
+const (
+	endpointIdentifyKey contextKey = iota
+)
+
+type endpointIdentifyFunc func(string)
+
+//IdentifyEndpoint is called by the final handler of `r` to identify itself to
+//this middleware.
+func IdentifyEndpoint(r *http.Request, endpoint string) {
+	fn, ok := r.Context().Value(endpointIdentifyKey).(endpointIdentifyFunc)
+	if ok {
+		fn(endpoint)
+	} else {
+		panic("sre.IdentifyEndpoint() called from non-instrumented request handler!")
+	}
+}
+
 type handler struct {
 	Next http.Handler
 }
 
 func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	endpoint := "unknown"
+	ctx := context.WithValue(r.Context(), endpointIdentifyKey,
+		endpointIdentifyFunc(func(val string) {
+			endpoint = val
+		}),
+	)
+	rr := r.WithContext(ctx)
+
 	startedAt := time.Now()
 	d := newDelegator(w, func(status int) {
-		labels := getLabels(status, r)
+		labels := getLabels(status, endpoint, rr)
 		metricFirstByteDuration.With(labels).Observe(time.Since(startedAt).Seconds())
 	})
 
-	h.Next.ServeHTTP(d, r)
+	h.Next.ServeHTTP(d, rr)
 
-	labels := getLabels(d.Status(), r)
+	labels := getLabels(d.Status(), endpoint, rr)
 	metricResponseDuration.With(labels).Observe(time.Since(startedAt).Seconds())
 	if r.ContentLength != -1 {
 		metricRequestBodySize.With(labels).Observe(float64(r.ContentLength))
@@ -107,11 +135,11 @@ func (h handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	metricResponseBodySize.With(labels).Observe(float64(d.Written()))
 }
 
-func getLabels(status int, r *http.Request) prometheus.Labels {
+func getLabels(status int, endpoint string, r *http.Request) prometheus.Labels {
 	l := prometheus.Labels{
-		"method": strings.ToUpper(r.Method),
-		"path":   "unknown",
-		"app":    appName,
+		"method":   strings.ToUpper(r.Method),
+		"endpoint": endpoint,
+		"app":      appName,
 	}
 
 	if status == 0 {
@@ -120,10 +148,5 @@ func getLabels(status int, r *http.Request) prometheus.Labels {
 		l["status"] = strconv.Itoa(status)
 	}
 
-	if route := mux.CurrentRoute(r); route != nil {
-		if path, err := route.GetPathTemplate(); err != nil {
-			l["path"] = path
-		}
-	}
 	return l
 }
