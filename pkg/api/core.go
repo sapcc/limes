@@ -223,6 +223,18 @@ func (p *v1Provider) FindProjectFromRequestIfExists(w http.ResponseWriter, r *ht
 	}
 }
 
+//GetClusterReport is a convenience wrapper around reports.GetClusters() for getting a single cluster report.
+func GetClusterReport(config core.Configuration, cluster *core.Cluster, dbi db.Interface, filter reports.Filter) (*limes.ClusterReport, error) {
+	clusterReports, err := reports.GetClusters(config, &cluster.ID, dbi, filter)
+	if err != nil {
+		return nil, err
+	}
+	if len(clusterReports) == 0 {
+		return nil, errors.New("no resource data found for cluster")
+	}
+	return clusterReports[0], nil
+}
+
 //GetDomainReport is a convenience wrapper around reports.GetDomains() for getting a single domain report.
 func GetDomainReport(cluster *core.Cluster, dbDomain db.Domain, dbi db.Interface, filter reports.Filter) (*limes.DomainReport, error) {
 	domainReports, err := reports.GetDomains(cluster, &dbDomain.ID, dbi, filter)

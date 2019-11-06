@@ -166,7 +166,11 @@ low-privilege users can be permitted to raise quotas within certain boundaries.
 | `clusters.$id.lowpriv_raise.only_projects_in_domains` | no | May contain a regex. If given, low-privilege quota raising will only be possible for projects in domains whose names match the regex. If `except_projects_in_domains` is also given, it takes precedence over `only_projects_in_domains`. |
 
 Both `limits.projects` and `limits.domains` contain two-level maps, first by service type, then by resource name.
-Values may also be specified relative to the cluster capacity, using the special syntax `<number>% of cluster capacity`.
+
+- Values may also be specified relative to the cluster capacity with the special syntax `<number>% of cluster capacity`.
+- For `limits.domains` only, the alternative special syntax `until <number>% of cluster capacity is assigned` will cause
+  quota requests to be approved as long as the sum of all domain quotas is below the given value.
+
 For example:
 
 ```yaml
@@ -182,7 +186,7 @@ clusters:
         domains:
           compute:
             cores: 1000
-            instances: 5% of cluster capacity
+            instances: until 80% of cluster capacity is assigned
             ram: 1 TiB
 ```
 

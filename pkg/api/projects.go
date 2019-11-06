@@ -223,6 +223,7 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 	}
 
 	updater := QuotaUpdater{
+		Config:          p.Config,
 		CanRaise:        canRaise,
 		CanRaiseLP:      canRaiseLP,
 		CanLower:        canLower,

@@ -1967,6 +1967,35 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 			},
 		},
 	}.Check(t, router)
+
+	//test low-privilege raise limits that are specified as percentage of assigned cluster capacity over all domains
+	cluster.LowPrivilegeRaise.LimitsForDomains = map[string]map[string]core.LowPrivilegeRaiseLimit{
+		// - shared/things capacity is 246, 45% thereof is 110.7 which rounds down to 110
+		// - all shared/things domain quotas sum up to 90, of which germany has 30
+		// -> germany should be able to go up to 50 before sum(domain quotas) exceeds 110
+		"shared": {"things": {UntilPercentOfClusterCapacityAssigned: 45}},
+	}
+
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany",
+		ExpectStatus: 403,
+		ExpectBody:   assert.StringData("cannot change shared/things quota: user is not allowed to raise quotas that high in this domain (maximum acceptable domain quota is 50)\n"),
+		Body: assert.JSONObject{
+			"domain": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "shared",
+						"resources": []assert.JSONObject{
+							//attempt to raise should fail because low-privilege exception
+							//only applies up to 50 (see comment above)
+							{"name": "things", "quota": 55},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
 }
 
 func expectStaleProjectServices(t *testing.T, pairs ...string) {

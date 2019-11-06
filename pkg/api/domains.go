@@ -125,6 +125,7 @@ func (p *v1Provider) putOrSimulatePutDomain(w http.ResponseWriter, r *http.Reque
 	}
 
 	updater := QuotaUpdater{
+		Config:     p.Config,
 		CanRaise:   canRaise,
 		CanRaiseLP: canRaiseLP,
 		CanLower:   canLower,

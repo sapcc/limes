@@ -38,19 +38,30 @@ func ConvertUnitFor(cluster *Cluster, serviceType, resourceName string, v limes.
 //low-privilege raise limit can be specified.
 type LowPrivilegeRaiseLimit struct {
 	//At most one of these will be non-zero.
-	AbsoluteValue            uint64
-	PercentOfClusterCapacity float64
+	AbsoluteValue                         uint64
+	PercentOfClusterCapacity              float64
+	UntilPercentOfClusterCapacityAssigned float64
 }
 
 //Evaluate converts this limit into an absolute value.
-func (l LowPrivilegeRaiseLimit) Evaluate(getCapacity func() (uint64, error)) (uint64, error) {
+func (l LowPrivilegeRaiseLimit) Evaluate(clusterReport limes.ClusterResourceReport, oldQuota uint64) uint64 {
 	switch {
 	case l.AbsoluteValue != 0:
-		return l.AbsoluteValue, nil
+		return l.AbsoluteValue
 	case l.PercentOfClusterCapacity != 0:
-		capacity, err := getCapacity()
-		return uint64(l.PercentOfClusterCapacity / 100 * float64(capacity)), err
+		if clusterReport.Capacity == nil {
+			return 0
+		}
+		percent := l.PercentOfClusterCapacity / 100
+		return uint64(percent * float64(*clusterReport.Capacity))
+	case l.UntilPercentOfClusterCapacityAssigned != 0:
+		if clusterReport.Capacity == nil {
+			return 0
+		}
+		percent := l.UntilPercentOfClusterCapacityAssigned / 100
+		otherDomainsQuota := float64(clusterReport.DomainsQuota - oldQuota)
+		return uint64(percent*float64(*clusterReport.Capacity) - otherDomainsQuota)
 	default:
-		return 0, nil
+		return 0
 	}
 }

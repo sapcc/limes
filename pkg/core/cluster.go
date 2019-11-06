@@ -187,12 +187,12 @@ func (c *Cluster) Connect() error {
 
 	//parse low-privilege raise limits
 	c.LowPrivilegeRaise.LimitsForDomains, err = c.parseLowPrivilegeRaiseLimits(
-		c.Config.LowPrivilegeRaise.Limits.ForDomains)
+		c.Config.LowPrivilegeRaise.Limits.ForDomains, "domain")
 	if err != nil {
 		return fmt.Errorf("could not parse low-privilege raise limit: %s", err.Error())
 	}
 	c.LowPrivilegeRaise.LimitsForProjects, err = c.parseLowPrivilegeRaiseLimits(
-		c.Config.LowPrivilegeRaise.Limits.ForProjects)
+		c.Config.LowPrivilegeRaise.Limits.ForProjects, "project")
 	if err != nil {
 		return fmt.Errorf("could not parse low-privilege raise limit: %s", err.Error())
 	}
@@ -213,8 +213,9 @@ func (c *Cluster) Connect() error {
 }
 
 var percentOfClusterRx = regexp.MustCompile(`^([0-9.]+)\s*% of cluster capacity$`)
+var untilPercentOfClusterAssignedRx = regexp.MustCompile(`until ^([0-9.]+)\s*% of cluster capacity is assigned$`)
 
-func (c Cluster) parseLowPrivilegeRaiseLimits(inputs map[string]map[string]string) (map[string]map[string]LowPrivilegeRaiseLimit, error) {
+func (c Cluster) parseLowPrivilegeRaiseLimits(inputs map[string]map[string]string, scopeType string) (map[string]map[string]LowPrivilegeRaiseLimit, error) {
 	result := make(map[string]map[string]LowPrivilegeRaiseLimit)
 	for srvType, quotaPlugin := range c.QuotaPlugins {
 		result[srvType] = make(map[string]LowPrivilegeRaiseLimit)
@@ -231,12 +232,30 @@ func (c Cluster) parseLowPrivilegeRaiseLimits(inputs map[string]map[string]strin
 					return nil, err
 				}
 				if percent < 0 || percent > 100 {
-					return nil, fmt.Errorf("value out of range: %s", limit)
+					return nil, fmt.Errorf("value out of range: %s%%", match[1])
 				}
 				result[srvType][res.Name] = LowPrivilegeRaiseLimit{
 					PercentOfClusterCapacity: percent,
 				}
 				continue
+			}
+
+			//the "until X% of cluster capacity is assigned" syntax is only allowed for domains
+			if scopeType == "domain" {
+				match := untilPercentOfClusterAssignedRx.FindStringSubmatch(limit)
+				if match != nil {
+					percent, err := strconv.ParseFloat(match[1], 64)
+					if err != nil {
+						return nil, err
+					}
+					if percent < 0 || percent > 100 {
+						return nil, fmt.Errorf("value out of range: %s%%", match[1])
+					}
+					result[srvType][res.Name] = LowPrivilegeRaiseLimit{
+						UntilPercentOfClusterCapacityAssigned: percent,
+					}
+					continue
+				}
 			}
 
 			rawValue, err := res.Unit.Parse(limit)
