@@ -31,7 +31,6 @@ import (
 
 	policy "github.com/databus23/goslo.policy"
 	"github.com/sapcc/go-bits/assert"
-	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
@@ -1928,7 +1927,6 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 		"shared": {"things": {PercentOfClusterCapacity: 5}},
 	}
 
-	logg.Info("hallo 1")
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany",
