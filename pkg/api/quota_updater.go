@@ -39,7 +39,6 @@ import (
 //See func PutDomain and func PutProject for how it's used.
 type QuotaUpdater struct {
 	//scope
-	Config  core.Configuration
 	Cluster *core.Cluster
 	Domain  *db.Domain  //always set (for project quota updates, contains the project's domain)
 	Project *db.Project //nil for domain quota updates
