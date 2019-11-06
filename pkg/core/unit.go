@@ -33,3 +33,24 @@ func ConvertUnitFor(cluster *Cluster, serviceType, resourceName string, v limes.
 	result, err := v.ConvertTo(targetUnit)
 	return result.Value, err
 }
+
+//LowPrivilegeRaiseLimit is a union type for the different ways in which a
+//low-privilege raise limit can be specified.
+type LowPrivilegeRaiseLimit struct {
+	//At most one of these will be non-zero.
+	AbsoluteValue            uint64
+	PercentOfClusterCapacity float64
+}
+
+//Evaluate converts this limit into an absolute value.
+func (l LowPrivilegeRaiseLimit) Evaluate(getCapacity func() (uint64, error)) (uint64, error) {
+	switch {
+	case l.AbsoluteValue != 0:
+		return l.AbsoluteValue, nil
+	case l.PercentOfClusterCapacity != 0:
+		capacity, err := getCapacity()
+		return uint64(l.PercentOfClusterCapacity / 100 * float64(capacity)), err
+	default:
+		return 0, nil
+	}
+}

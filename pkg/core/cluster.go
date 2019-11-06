@@ -21,7 +21,9 @@ package core
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
+	"strconv"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/sapcc/go-bits/logg"
@@ -42,8 +44,8 @@ type Cluster struct {
 	Authoritative     bool
 	QuotaConstraints  *QuotaConstraintSet
 	LowPrivilegeRaise struct {
-		LimitsForDomains  map[string]map[string]uint64
-		LimitsForProjects map[string]map[string]uint64
+		LimitsForDomains  map[string]map[string]LowPrivilegeRaiseLimit
+		LimitsForProjects map[string]map[string]LowPrivilegeRaiseLimit
 	}
 }
 
@@ -187,12 +189,12 @@ func (c *Cluster) Connect() error {
 	c.LowPrivilegeRaise.LimitsForDomains, err = c.parseLowPrivilegeRaiseLimits(
 		c.Config.LowPrivilegeRaise.Limits.ForDomains)
 	if err != nil {
-		return err
+		return fmt.Errorf("could not parse low-privilege raise limit: %s", err.Error())
 	}
 	c.LowPrivilegeRaise.LimitsForProjects, err = c.parseLowPrivilegeRaiseLimits(
 		c.Config.LowPrivilegeRaise.Limits.ForProjects)
 	if err != nil {
-		return err
+		return fmt.Errorf("could not parse low-privilege raise limit: %s", err.Error())
 	}
 
 	//validate scaling relations
@@ -210,19 +212,39 @@ func (c *Cluster) Connect() error {
 	return nil
 }
 
-func (c Cluster) parseLowPrivilegeRaiseLimits(inputs map[string]map[string]string) (map[string]map[string]uint64, error) {
-	result := make(map[string]map[string]uint64)
-	var err error
+var percentOfClusterRx = regexp.MustCompile(`^([0-9.]+)\s*% of cluster capacity$`)
+
+func (c Cluster) parseLowPrivilegeRaiseLimits(inputs map[string]map[string]string) (map[string]map[string]LowPrivilegeRaiseLimit, error) {
+	result := make(map[string]map[string]LowPrivilegeRaiseLimit)
 	for srvType, quotaPlugin := range c.QuotaPlugins {
-		result[srvType] = make(map[string]uint64)
+		result[srvType] = make(map[string]LowPrivilegeRaiseLimit)
 		for _, res := range quotaPlugin.Resources() {
 			limit, exists := inputs[srvType][res.Name]
 			if !exists {
 				continue
 			}
-			result[srvType][res.Name], err = res.Unit.Parse(limit)
+
+			match := percentOfClusterRx.FindStringSubmatch(limit)
+			if match != nil {
+				percent, err := strconv.ParseFloat(match[1], 64)
+				if err != nil {
+					return nil, err
+				}
+				if percent < 0 || percent > 100 {
+					return nil, fmt.Errorf("value out of range: %s", limit)
+				}
+				result[srvType][res.Name] = LowPrivilegeRaiseLimit{
+					PercentOfClusterCapacity: percent,
+				}
+				continue
+			}
+
+			rawValue, err := res.Unit.Parse(limit)
 			if err != nil {
-				return nil, fmt.Errorf("could not parse low-privilege raise limit: %s", err.Error())
+				return nil, err
+			}
+			result[srvType][res.Name] = LowPrivilegeRaiseLimit{
+				AbsoluteValue: rawValue,
 			}
 		}
 	}

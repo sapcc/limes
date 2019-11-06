@@ -39,9 +39,11 @@ import (
 //See func PutDomain and func PutProject for how it's used.
 type QuotaUpdater struct {
 	//scope
+	Config  core.Configuration
 	Cluster *core.Cluster
 	Domain  *db.Domain  //always set (for project quota updates, contains the project's domain)
 	Project *db.Project //nil for domain quota updates
+
 	//AuthZ info
 	CanRaise        bool
 	CanRaiseLP      bool //low-privilege raise
@@ -104,6 +106,12 @@ func (e MissingProjectReportError) Error() string {
 	return fmt.Sprintf("no project report for resource %s/%s", e.ServiceType, e.ResourceName)
 }
 
+var getCapacityQuery = `
+	SELECT capacity FROM cluster_resources WHERE service_id = (
+		SELECT id FROM cluster_services WHERE cluster_id = $1 AND type = $2
+	) AND name = $3
+`
+
 //ValidateInput reads the given input and validates the quotas contained therein.
 //Results are collected into u.Requests. The return value is only set for unexpected
 //errors, not for validation errors.
@@ -120,6 +128,31 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 		if err != nil {
 			return err
 		}
+	}
+
+	//helper function for LowPrivilegeRaiseLimit.Evaluate()
+	getCapacity := func(srvType, resName string) (uint64, error) {
+		clusterID := u.Cluster.ID
+		if u.Cluster.IsServiceShared[srvType] {
+			clusterID = "shared"
+		}
+		rows, err := dbi.Query(getCapacityQuery, clusterID, srvType, resName)
+		if err != nil {
+			return 0, err
+		}
+		if !rows.Next() {
+			//no rows in result set - not a fatal issue, but report zero capacity to
+			//effectively disable low-privilege raising
+			return 0, nil
+		}
+		var result uint64
+		err = rows.Scan(&result)
+		if err == nil {
+			err = rows.Close()
+		} else {
+			rows.Close()
+		}
+		return result, err
 	}
 
 	//go through all services and resources and validate the requested quotas
@@ -177,7 +210,12 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 					continue //with next resource
 				}
 				//value is valid and novel -> perform further validation
-				req.ValidationError = u.validateQuota(srv, res, *domRes, projRes, req.NewValue)
+				err := u.validateQuota(srv, res, getCapacity, *domRes, projRes, req.NewValue)
+				if verr, ok := err.(*core.QuotaValidationError); ok {
+					req.ValidationError = verr
+				} else {
+					return err
+				}
 			}
 
 			u.ResourceRequests[srv.Type][res.Name] = req
@@ -280,7 +318,11 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 	return nil
 }
 
-func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limes.ResourceInfo, domRes limes.DomainResourceReport, projRes *limes.ProjectResourceReport, newQuota uint64) *core.QuotaValidationError {
+func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limes.ResourceInfo, getCapacity func(srvType, resName string) (uint64, error), domRes limes.DomainResourceReport, projRes *limes.ProjectResourceReport, newQuota uint64) error {
+	getThisCapacity := func() (uint64, error) {
+		return getCapacity(srv.Type, res.Name)
+	}
+
 	//can we change this quota at all?
 	if res.ExternallyManaged {
 		return &core.QuotaValidationError{
@@ -291,31 +333,41 @@ func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limes.ResourceInf
 
 	//check quota constraints
 	constraint := u.QuotaConstraints()[srv.Type][res.Name]
-	err := constraint.Validate(newQuota)
-	if err != nil {
-		err.Message += fmt.Sprintf(" for this %s and resource", u.ScopeType())
-		return err
+	verr := constraint.Validate(newQuota)
+	if verr != nil {
+		verr.Message += fmt.Sprintf(" for this %s and resource", u.ScopeType())
+		return verr
 	}
 
 	//check authorization for quota change
 	var (
 		oldQuota uint64
 		lprLimit uint64
+		err      error
 	)
 	if u.Project == nil {
 		oldQuota = domRes.DomainQuota
-		lprLimit = u.Cluster.LowPrivilegeRaise.LimitsForDomains[srv.Type][res.Name]
+		limitSpec := u.Cluster.LowPrivilegeRaise.LimitsForDomains[srv.Type][res.Name]
+		lprLimit, err = limitSpec.Evaluate(getThisCapacity)
+		if err != nil {
+			return err
+		}
 	} else {
 		oldQuota = projRes.Quota
-		lprLimit = u.Cluster.LowPrivilegeRaise.LimitsForProjects[srv.Type][res.Name]
-		if !u.Cluster.Config.LowPrivilegeRaise.IsAllowedForProjectsIn(u.Domain.Name) {
+		if u.Cluster.Config.LowPrivilegeRaise.IsAllowedForProjectsIn(u.Domain.Name) {
+			limitSpec := u.Cluster.LowPrivilegeRaise.LimitsForProjects[srv.Type][res.Name]
+			lprLimit, err = limitSpec.Evaluate(getThisCapacity)
+			if err != nil {
+				return err
+			}
+		} else {
 			lprLimit = 0
 		}
 	}
-	err = u.validateAuthorization(oldQuota, newQuota, lprLimit, res.Unit)
-	if err != nil {
-		err.Message += fmt.Sprintf(" in this %s", u.ScopeType())
-		return err
+	verr = u.validateAuthorization(oldQuota, newQuota, lprLimit, res.Unit)
+	if verr != nil {
+		verr.Message += fmt.Sprintf(" in this %s", u.ScopeType())
+		return verr
 	}
 
 	//specific rules for domain quotas vs. project quotas

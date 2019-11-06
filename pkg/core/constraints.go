@@ -60,6 +60,13 @@ type QuotaValidationError struct {
 	Unit         limes.Unit `json:"unit,omitempty"`
 }
 
+func (e *QuotaValidationError) Error() string {
+	//Type QuotaUpdater has a function that can return either `error` or
+	//`*QuotaValidationError`. That's easier to write down if
+	//`*QuotaValidationError` is also `error`, even if I never use it as such.
+	panic("DO NOT USE ME")
+}
+
 //Validate checks if the given quota value satisfies this constraint, or
 //returns an error otherwise.
 func (c QuotaConstraint) Validate(value uint64) *QuotaValidationError {

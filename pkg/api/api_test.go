@@ -31,6 +31,7 @@ import (
 
 	policy "github.com/databus23/goslo.policy"
 	"github.com/sapcc/go-bits/assert"
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
@@ -1841,11 +1842,11 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 	enforcer.AllowRaiseLP = true
 	enforcer.AllowLower = true
 
-	cluster.LowPrivilegeRaise.LimitsForDomains = map[string]map[string]uint64{
-		"shared": {"capacity": 29, "things": 25},
+	cluster.LowPrivilegeRaise.LimitsForDomains = map[string]map[string]core.LowPrivilegeRaiseLimit{
+		"shared": {"capacity": {AbsoluteValue: 29}, "things": {AbsoluteValue: 35}},
 	}
-	cluster.LowPrivilegeRaise.LimitsForProjects = map[string]map[string]uint64{
-		"shared": {"capacity": 10, "things": 25},
+	cluster.LowPrivilegeRaise.LimitsForProjects = map[string]map[string]core.LowPrivilegeRaiseLimit{
+		"shared": {"capacity": {AbsoluteValue: 10}, "things": {AbsoluteValue: 25}},
 	}
 
 	assert.HTTPRequest{
@@ -1862,7 +1863,7 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 							//attempt to raise should fail because of lack of permissions
 							{"name": "capacity", "quota": 30},
 							//attempt to raise should be permitted by low-privilege exception
-							{"name": "things", "quota": 25},
+							{"name": "things", "quota": 35},
 						},
 					},
 				},
@@ -1909,6 +1910,59 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 							//attempt to raise should fail because low-privilege q.r. is
 							//disabled in this domain
 							{"name": "things", "quota": 11},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+
+	//test low-privilege raise limits that are specified as percent of cluster capacity
+	cluster.Config.LowPrivilegeRaise.ExcludeProjectDomainRx = nil
+	cluster.LowPrivilegeRaise.LimitsForDomains = map[string]map[string]core.LowPrivilegeRaiseLimit{
+		// shared/things capacity is 246, so 13% is 31.98 which rounds down to 31
+		"shared": {"things": {PercentOfClusterCapacity: 13}},
+	}
+	cluster.LowPrivilegeRaise.LimitsForProjects = map[string]map[string]core.LowPrivilegeRaiseLimit{
+		// shared/things capacity is 246, so 5% is 12.3 which rounds down to 12
+		"shared": {"things": {PercentOfClusterCapacity: 5}},
+	}
+
+	logg.Info("hallo 1")
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany",
+		ExpectStatus: 403,
+		ExpectBody:   assert.StringData("cannot change shared/things quota: user is not allowed to raise quotas that high in this domain (maximum acceptable domain quota is 31)\n"),
+		Body: assert.JSONObject{
+			"domain": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "shared",
+						"resources": []assert.JSONObject{
+							//attempt to raise should fail because low-privilege exception
+							//only applies up to 31
+							{"name": "things", "quota": 35},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 403,
+		ExpectBody:   assert.StringData("cannot change shared/things quota: user is not allowed to raise quotas that high in this project (maximum acceptable project quota is 12)\n"),
+		Body: assert.JSONObject{
+			"project": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "shared",
+						"resources": []assert.JSONObject{
+							//attempt to raise should fail because low-privilege exception
+							//only applies up to 12
+							{"name": "things", "quota": 15},
 						},
 					},
 				},
