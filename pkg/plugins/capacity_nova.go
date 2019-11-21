@@ -35,22 +35,46 @@ import (
 )
 
 type capacityNovaPlugin struct {
-	cfg core.CapacitorConfiguration
+	cfg      core.CapacitorConfiguration
+	hvStates []novaHypervisorState
 }
 
-var novaUnmatchedHypervisorsGauge = prometheus.NewGaugeVec(
-	prometheus.GaugeOpts{
-		Name: "limes_unmatched_nova_hypervisors",
-		Help: "Number of available/active Ironic nodes without matching flavor.",
-	},
-	[]string{"os_cluster"},
+type novaHypervisorState struct {
+	Name        string
+	Hostname    string
+	BelongsToAZ bool
+}
+
+func (s novaHypervisorState) Labels(clusterID string) prometheus.Labels {
+	return prometheus.Labels{
+		"os_cluster": clusterID,
+		"hypervisor": s.Name,
+		"hostname":   s.Hostname,
+	}
+}
+
+func bool2float(val bool) float64 {
+	if val {
+		return 1
+	}
+	return 0
+}
+
+var (
+	novaHypervisorHasAZGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "limes_nova_hypervisor_has_az",
+			Help: "Whether the given hypervisor belongs to an availability zone.",
+		},
+		[]string{"os_cluster", "hypervisor", "hostname"},
+	)
 )
 
 func init() {
 	core.RegisterCapacityPlugin(func(c core.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) core.CapacityPlugin {
-		return &capacityNovaPlugin{c}
+		return &capacityNovaPlugin{c, nil}
 	})
-	prometheus.MustRegister(novaUnmatchedHypervisorsGauge)
+	prometheus.MustRegister(novaHypervisorHasAZGauge)
 }
 
 //Init implements the core.CapacityPlugin interface.
@@ -89,6 +113,7 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 	var hypervisorData struct {
 		Hypervisors []struct {
 			ID           int    `json:"id"`
+			Hostname     string `json:"hypervisor_hostname"`
 			Type         string `json:"hypervisor_type"`
 			Vcpus        uint64 `json:"vcpus"`
 			VcpusUsed    uint64 `json:"vcpus_used"`
@@ -123,7 +148,7 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 		vcpusPerAZ    = make(limes.ClusterAvailabilityZoneReports)
 		memoryMbPerAZ = make(limes.ClusterAvailabilityZoneReports)
 
-		unmatchedCounter = 0
+		hvStates []novaHypervisorState
 	)
 	for _, hypervisor := range hypervisorData.Hypervisors {
 		if hypervisorTypeRx != nil {
@@ -148,7 +173,6 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 		if hypervisorAZ == "" {
 			logg.Info("Hypervisor %d with .service.host %q does not match any hosts from host aggregates", hypervisor.ID, hypervisor.Service.Host)
 			hypervisorAZ = "unknown"
-			unmatchedCounter++
 		}
 		if _, ok := vcpusPerAZ[hypervisorAZ]; !ok {
 			vcpusPerAZ[hypervisorAZ] = &limes.ClusterAvailabilityZoneReport{Name: hypervisorAZ}
@@ -163,11 +187,31 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 
 		localGbPerAZ[hypervisorAZ] += hypervisor.LocalGb
 		runningVmsPerAZ[hypervisorAZ] += hypervisor.RunningVms
+
+		hvStates = append(hvStates, novaHypervisorState{
+			Name:        hypervisor.Service.Host,
+			Hostname:    hypervisor.Hostname,
+			BelongsToAZ: hypervisorAZ != "unknown",
+		})
 	}
 
-	novaUnmatchedHypervisorsGauge.With(
-		prometheus.Labels{"os_cluster": clusterID},
-	).Set(float64(unmatchedCounter))
+	//commit changes to hypervisor metrics
+	for _, state := range hvStates {
+		novaHypervisorHasAZGauge.With(state.Labels(clusterID)).Set(bool2float(state.BelongsToAZ))
+	}
+	for _, state := range p.hvStates {
+		isDeleted := true
+		for _, otherState := range hvStates {
+			if state.Name == otherState.Name && state.Hostname == otherState.Hostname {
+				isDeleted = false
+				break
+			}
+		}
+		if isDeleted {
+			novaHypervisorHasAZGauge.Delete(state.Labels(clusterID))
+		}
+	}
+	p.hvStates = hvStates
 
 	//list all flavors and get max(flavor_size)
 	pages, maxFlavorSize := 0, 0.0
