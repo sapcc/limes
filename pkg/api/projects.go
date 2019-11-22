@@ -28,8 +28,8 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/sapcc/go-bits/respondwith"
+	"github.com/sapcc/go-bits/sre"
 	"github.com/sapcc/limes"
-	"github.com/sapcc/limes/pkg/api/sre"
 	"github.com/sapcc/limes/pkg/collector"
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/datamodel"

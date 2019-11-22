@@ -21,7 +21,7 @@ package api
 
 import (
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/sapcc/limes/pkg/api/sre"
+	"github.com/sapcc/go-bits/sre"
 )
 
 var lowPrivilegeRaiseMetricLabels = []string{"os_cluster", "service", "resource"}

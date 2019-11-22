@@ -23,7 +23,7 @@ import (
 	"net/http"
 
 	"github.com/sapcc/go-bits/respondwith"
-	"github.com/sapcc/limes/pkg/api/sre"
+	"github.com/sapcc/go-bits/sre"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/reports"
 )
