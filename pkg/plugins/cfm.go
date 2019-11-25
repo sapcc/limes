@@ -80,8 +80,8 @@ func (p *cfmPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.
 		StorageQuota struct {
 			SizeLimitBytes int64 `json:"size_limit"`
 			Usage          struct {
-				PotentialGrowthSize uint64 `json:"potential_growth_size"`
-				BytesUsed           uint64 `json:"size_used"`
+				Size      uint64 `json:"size"`
+				BytesUsed uint64 `json:"size_used"`
 			} `json:"usage"`
 		} `json:"storage_quota"`
 	}
@@ -100,7 +100,7 @@ func (p *cfmPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.
 		return map[string]core.ResourceData{
 			"cfm_share_capacity": {
 				Quota:         data.StorageQuota.SizeLimitBytes,
-				Usage:         data.StorageQuota.Usage.PotentialGrowthSize,
+				Usage:         data.StorageQuota.Usage.Size,
 				PhysicalUsage: &physicalUsage,
 			},
 		}, nil
