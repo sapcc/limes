@@ -129,11 +129,7 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 		totalMemoryMb uint64
 		totalLocalGb  uint64
 
-		localGbPerAZ    = make(map[string]uint64)
-		runningVmsPerAZ = make(map[string]uint64)
-
-		vcpusPerAZ    = make(map[string]*core.CapacityDataForAZ)
-		memoryMbPerAZ = make(map[string]*core.CapacityDataForAZ)
+		azCapacities = make(map[string]*partialNovaCapacity)
 
 		hvStates []novaHypervisorState
 	)
@@ -144,9 +140,11 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 			}
 		}
 
-		totalVcpus += hypervisor.VCPUs
-		totalMemoryMb += hypervisor.MemoryMB
-		totalLocalGb += hypervisor.LocalGB
+		hvCapacity := hypervisor.getCapacityViaNovaAPI()
+
+		totalVcpus += hvCapacity.VCPUs.Capacity
+		totalMemoryMb += hvCapacity.MemoryMB.Capacity
+		totalLocalGb += hvCapacity.LocalGB
 
 		var hypervisorAZ string
 		for az, hosts := range computeHostsPerAZ {
@@ -157,29 +155,26 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 				}
 			}
 		}
+
 		if hypervisorAZ == "" {
 			logg.Info("Hypervisor %d with .service.host %q does not match any hosts from host aggregates", hypervisor.ID, hypervisor.Service.Host)
 			hypervisorAZ = "unknown"
 		}
-		if _, ok := vcpusPerAZ[hypervisorAZ]; !ok {
-			vcpusPerAZ[hypervisorAZ] = &core.CapacityDataForAZ{}
-			memoryMbPerAZ[hypervisorAZ] = &core.CapacityDataForAZ{}
-		}
-
-		vcpusPerAZ[hypervisorAZ].Capacity += hypervisor.VCPUs
-		vcpusPerAZ[hypervisorAZ].Usage += hypervisor.VCPUsUsed
-
-		memoryMbPerAZ[hypervisorAZ].Capacity += hypervisor.MemoryMB
-		memoryMbPerAZ[hypervisorAZ].Usage += hypervisor.MemoryMBUsed
-
-		localGbPerAZ[hypervisorAZ] += hypervisor.LocalGB
-		runningVmsPerAZ[hypervisorAZ] += hypervisor.RunningVMs
-
 		hvStates = append(hvStates, novaHypervisorState{
 			Name:        hypervisor.Service.Host,
 			Hostname:    hypervisor.HypervisorHostname,
 			BelongsToAZ: hypervisorAZ != "unknown",
 		})
+
+		if _, ok := azCapacities[hypervisorAZ]; !ok {
+			azCapacities[hypervisorAZ] = &partialNovaCapacity{}
+		}
+		azCapacities[hypervisorAZ].VCPUs.Capacity += hvCapacity.VCPUs.Capacity
+		azCapacities[hypervisorAZ].VCPUs.Usage += hvCapacity.VCPUs.Usage
+		azCapacities[hypervisorAZ].MemoryMB.Capacity += hvCapacity.MemoryMB.Capacity
+		azCapacities[hypervisorAZ].MemoryMB.Usage += hvCapacity.MemoryMB.Usage
+		azCapacities[hypervisorAZ].LocalGB += hvCapacity.LocalGB
+		azCapacities[hypervisorAZ].RunningVMs += hvCapacity.RunningVMs
 	}
 
 	//commit changes to hypervisor metrics
@@ -244,44 +239,49 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 	//preserve the VCenter HA reserve, which is reported via Nova, but not accessible
 	if multiplier := p.cfg.Nova.CPUMultiplier; multiplier != 0 {
 		totalVcpus = uint64(float64(totalVcpus) * multiplier)
-		for _, vcpus := range vcpusPerAZ {
-			vcpus.Capacity = uint64(float64(vcpus.Capacity) * multiplier)
-			vcpus.Usage = uint64(float64(vcpus.Usage) * multiplier)
+		for _, azCapa := range azCapacities {
+			azCapa.VCPUs.Capacity = uint64(float64(azCapa.VCPUs.Capacity) * multiplier)
+			azCapa.VCPUs.Usage = uint64(float64(azCapa.VCPUs.Usage) * multiplier)
 		}
 	}
 	if multiplier := p.cfg.Nova.RAMMultiplier; multiplier != 0 {
 		totalMemoryMb = uint64(float64(totalMemoryMb) * multiplier)
-		for _, memoryMb := range memoryMbPerAZ {
-			memoryMb.Capacity = uint64(float64(memoryMb.Capacity) * multiplier)
-			memoryMb.Usage = uint64(float64(memoryMb.Usage) * multiplier)
+		for _, azCapa := range azCapacities {
+			azCapa.MemoryMB.Capacity = uint64(float64(azCapa.MemoryMB.Capacity) * multiplier)
+			azCapa.MemoryMB.Usage = uint64(float64(azCapa.MemoryMB.Usage) * multiplier)
 		}
 	}
 
 	capacity := map[string]map[string]core.CapacityData{
 		"compute": {
-			"cores": core.CapacityData{Capacity: totalVcpus, CapacityPerAZ: vcpusPerAZ},
-			"ram":   core.CapacityData{Capacity: totalMemoryMb, CapacityPerAZ: memoryMbPerAZ},
+			"cores": core.CapacityData{
+				Capacity:      totalVcpus,
+				CapacityPerAZ: make(map[string]*core.CapacityDataForAZ, len(azCapacities)),
+			},
+			"instances": core.CapacityData{
+				Capacity:      calculateInstanceAmount(len(computeHostsPerAZ), totalLocalGb, maxFlavorSize),
+				CapacityPerAZ: make(map[string]*core.CapacityDataForAZ, len(azCapacities)),
+			},
+			"ram": core.CapacityData{
+				Capacity:      totalMemoryMb,
+				CapacityPerAZ: make(map[string]*core.CapacityDataForAZ, len(azCapacities)),
+			},
 		},
 	}
 
-	azCount := len(computeHostsPerAZ)
-
-	if maxFlavorSize != 0 {
-		totalInstances := calculateInstanceAmount(azCount, totalLocalGb, maxFlavorSize)
-
-		instancesPerAZ := make(map[string]*core.CapacityDataForAZ)
-		for az, localGb := range localGbPerAZ {
-			instancesPerAZ[az] = &core.CapacityDataForAZ{
-				Capacity: calculateInstanceAmount(1, localGb, maxFlavorSize),
-				Usage:    runningVmsPerAZ[az],
-			}
+	for azName, azCapa := range azCapacities {
+		capacity["compute"]["cores"].CapacityPerAZ[azName] = &azCapa.VCPUs
+		capacity["compute"]["instances"].CapacityPerAZ[azName] = &core.CapacityDataForAZ{
+			Capacity: calculateInstanceAmount(1, azCapa.LocalGB, maxFlavorSize),
+			Usage:    azCapa.RunningVMs,
 		}
-
-		capacity["compute"]["instances"] = core.CapacityData{Capacity: totalInstances, CapacityPerAZ: instancesPerAZ}
-	} else {
-		logg.Error("Nova Capacity: Maximal flavor size is 0. Not reporting instances.")
+		capacity["compute"]["ram"].CapacityPerAZ[azName] = &azCapa.MemoryMB
 	}
 
+	if maxFlavorSize == 0 {
+		logg.Error("Nova Capacity: Maximal flavor size is 0. Not reporting instances.")
+		delete(capacity["compute"], "instances")
+	}
 	return capacity, nil
 }
 
@@ -296,6 +296,31 @@ type novaHypervisor struct {
 	Service            hypervisors.Service `json:"service"`
 	VCPUs              uint64              `json:"vcpus"`
 	VCPUsUsed          uint64              `json:"vcpus_used"`
+}
+
+//The capacity for either a single AZ or a single hypervisor.
+type partialNovaCapacity struct {
+	VCPUs      core.CapacityDataForAZ
+	MemoryMB   core.CapacityDataForAZ
+	LocalGB    uint64
+	RunningVMs uint64
+}
+
+func (h novaHypervisor) getCapacityViaNovaAPI() partialNovaCapacity {
+	//When only using the Nova API, we already have all the information we need
+	//from the hypervisors.List() call where we got this object.
+	return partialNovaCapacity{
+		VCPUs: core.CapacityDataForAZ{
+			Capacity: h.VCPUs,
+			Usage:    h.VCPUsUsed,
+		},
+		MemoryMB: core.CapacityDataForAZ{
+			Capacity: h.MemoryMB,
+			Usage:    h.MemoryMBUsed,
+		},
+		LocalGB:    h.LocalGB,
+		RunningVMs: h.RunningVMs,
+	}
 }
 
 //get flavor extra-specs
@@ -369,5 +394,12 @@ func getComputeHostsPerAZ(client *gophercloud.ServiceClient) (map[string][]strin
 }
 
 func calculateInstanceAmount(azCount int, localGb uint64, maxFlavorSize float64) uint64 {
-	return uint64(math.Min(float64(10000*azCount), float64(localGb)/maxFlavorSize))
+	amount := 10000 * uint64(azCount)
+	if maxFlavorSize != 0 {
+		maxAmount := uint64(float64(localGb) / maxFlavorSize)
+		if amount > maxAmount {
+			return maxAmount
+		}
+	}
+	return amount
 }
