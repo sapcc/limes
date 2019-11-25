@@ -21,6 +21,7 @@ package plugins
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"regexp"
 
@@ -123,6 +124,19 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 		return nil, err
 	}
 
+	//when using the placement API, we need to enumerate resource providers once
+	var resourceProviders []placementResourceProvider
+	if p.cfg.Nova.UsePlacementAPI {
+		placementClient, err := newPlacementClient(provider, eo)
+		if err != nil {
+			return nil, err
+		}
+		resourceProviders, err = placementClient.ListResourceProviders()
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	//compute sum of cores and RAM for matching hypervisors
 	var (
 		totalVcpus    uint64
@@ -133,6 +147,7 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 
 		hvStates []novaHypervisorState
 	)
+
 	for _, hypervisor := range hypervisorData.Hypervisors {
 		if hypervisorTypeRx != nil {
 			if !hypervisorTypeRx.MatchString(hypervisor.HypervisorType) {
@@ -140,7 +155,19 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 			}
 		}
 
-		hvCapacity := hypervisor.getCapacityViaNovaAPI()
+		var hvCapacity partialNovaCapacity
+		if p.cfg.Nova.UsePlacementAPI {
+			hvCapacity, err = hypervisor.getCapacityViaPlacementAPI(provider, eo, resourceProviders)
+			if err != nil {
+				logg.Error("cannot get capacity for hypervisor %d (%s) with .service.host %q from Placement API (falling back to Nova Hypervisor API): %s",
+					hypervisor.ID, hypervisor.HypervisorHostname, hypervisor.Service.Host,
+					err.Error(),
+				)
+				hvCapacity = hypervisor.getCapacityViaNovaAPI()
+			}
+		} else {
+			hvCapacity = hypervisor.getCapacityViaNovaAPI()
+		}
 
 		totalVcpus += hvCapacity.VCPUs.Capacity
 		totalMemoryMb += hvCapacity.MemoryMB.Capacity
@@ -321,6 +348,48 @@ func (h novaHypervisor) getCapacityViaNovaAPI() partialNovaCapacity {
 		LocalGB:    h.LocalGB,
 		RunningVMs: h.RunningVMs,
 	}
+}
+
+func (h novaHypervisor) getCapacityViaPlacementAPI(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, resourceProviders []placementResourceProvider) (partialNovaCapacity, error) {
+	//find the resource provider that corresponds to this hypervisor
+	var providerID string
+	for _, rp := range resourceProviders {
+		if rp.Name == h.HypervisorHostname {
+			providerID = rp.ID
+			break
+		}
+	}
+	if providerID == "" {
+		return partialNovaCapacity{}, fmt.Errorf(
+			"cannot find resource provider with name %q", h.HypervisorHostname)
+	}
+
+	//collect data about that resource provider from the Placement API
+	client, err := newPlacementClient(provider, eo)
+	if err != nil {
+		return partialNovaCapacity{}, err
+	}
+	inventory, err := client.GetInventory(providerID)
+	if err != nil {
+		return partialNovaCapacity{}, err
+	}
+	usages, err := client.GetUsages(providerID)
+	if err != nil {
+		return partialNovaCapacity{}, err
+	}
+
+	return partialNovaCapacity{
+		VCPUs: core.CapacityDataForAZ{
+			Capacity: inventory["VCPU"].Total,
+			Usage:    usages["VCPU"],
+		},
+		MemoryMB: core.CapacityDataForAZ{
+			Capacity: inventory["MEMORY_MB"].Total,
+			Usage:    usages["MEMORY_MB"],
+		},
+		LocalGB:    inventory["DISK_GB"].Total,
+		RunningVMs: h.RunningVMs,
+	}, nil
 }
 
 //get flavor extra-specs
