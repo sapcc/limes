@@ -99,7 +99,7 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 	for _, flavor := range flavors {
 		result["instances_"+flavor.Name] = &core.CapacityData{
 			Capacity:      0,
-			CapacityPerAZ: limes.ClusterAvailabilityZoneReports{},
+			CapacityPerAZ: map[string]*core.CapacityDataForAZ{},
 		}
 	}
 
@@ -162,7 +162,7 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 				}
 
 				if _, ok := data.CapacityPerAZ[nodeAZ]; !ok {
-					data.CapacityPerAZ[nodeAZ] = &limes.ClusterAvailabilityZoneReport{Name: nodeAZ}
+					data.CapacityPerAZ[nodeAZ] = &core.CapacityDataForAZ{}
 				}
 				data.CapacityPerAZ[nodeAZ].Capacity++
 				if node.StableProvisionState() == "active" {

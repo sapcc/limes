@@ -27,6 +27,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/util"
@@ -224,7 +225,7 @@ func (c *Collector) writeCapacity(clusterID string, values map[string]map[string
 				if len(data.CapacityPerAZ) == 0 {
 					dbResource.CapacityPerAZJSON = ""
 				} else {
-					bytes, err := json.Marshal(data.CapacityPerAZ)
+					bytes, err := json.Marshal(convertAZReport(data.CapacityPerAZ))
 					if err != nil {
 						return fmt.Errorf("failed to convert capacities per availability zone to JSON: %s", err.Error())
 					}
@@ -277,7 +278,7 @@ func (c *Collector) writeCapacity(clusterID string, values map[string]map[string
 			}
 
 			if len(data.CapacityPerAZ) != 0 {
-				bytes, err := json.Marshal(data.CapacityPerAZ)
+				bytes, err := json.Marshal(convertAZReport(data.CapacityPerAZ))
 				if err != nil {
 					return fmt.Errorf("failed to convert capacities per availability zone to JSON: %s", err.Error())
 				}
@@ -292,4 +293,20 @@ func (c *Collector) writeCapacity(clusterID string, values map[string]map[string
 	}
 
 	return tx.Commit()
+}
+
+func convertAZReport(capacityPerAZ map[string]*core.CapacityDataForAZ) limes.ClusterAvailabilityZoneReports {
+	//The initial implementation wrote limes.ClusterAvailabilityZoneReports into
+	//the CapacityPerAZJSON database field, even though
+	//map[string]*core.CapacityDataForAZ would have been more appropriate. Now we
+	//stick with it for compatibility's sake.
+	report := make(limes.ClusterAvailabilityZoneReports, len(capacityPerAZ))
+	for azName, azData := range capacityPerAZ {
+		report[azName] = &limes.ClusterAvailabilityZoneReport{
+			Name:     azName,
+			Capacity: azData.Capacity,
+			Usage:    azData.Usage,
+		}
+	}
+	return report
 }

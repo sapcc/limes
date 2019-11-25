@@ -31,7 +31,6 @@ import (
 	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/logg"
-	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 )
 
@@ -133,8 +132,8 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 		localGbPerAZ    = make(map[string]uint64)
 		runningVmsPerAZ = make(map[string]uint64)
 
-		vcpusPerAZ    = make(limes.ClusterAvailabilityZoneReports)
-		memoryMbPerAZ = make(limes.ClusterAvailabilityZoneReports)
+		vcpusPerAZ    = make(map[string]*core.CapacityDataForAZ)
+		memoryMbPerAZ = make(map[string]*core.CapacityDataForAZ)
 
 		hvStates []novaHypervisorState
 	)
@@ -163,8 +162,8 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 			hypervisorAZ = "unknown"
 		}
 		if _, ok := vcpusPerAZ[hypervisorAZ]; !ok {
-			vcpusPerAZ[hypervisorAZ] = &limes.ClusterAvailabilityZoneReport{Name: hypervisorAZ}
-			memoryMbPerAZ[hypervisorAZ] = &limes.ClusterAvailabilityZoneReport{Name: hypervisorAZ}
+			vcpusPerAZ[hypervisorAZ] = &core.CapacityDataForAZ{}
+			memoryMbPerAZ[hypervisorAZ] = &core.CapacityDataForAZ{}
 		}
 
 		vcpusPerAZ[hypervisorAZ].Capacity += hypervisor.VCPUs
@@ -270,10 +269,9 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 	if maxFlavorSize != 0 {
 		totalInstances := calculateInstanceAmount(azCount, totalLocalGb, maxFlavorSize)
 
-		instancesPerAZ := make(limes.ClusterAvailabilityZoneReports)
+		instancesPerAZ := make(map[string]*core.CapacityDataForAZ)
 		for az, localGb := range localGbPerAZ {
-			instancesPerAZ[az] = &limes.ClusterAvailabilityZoneReport{
-				Name:     az,
+			instancesPerAZ[az] = &core.CapacityDataForAZ{
 				Capacity: calculateInstanceAmount(1, localGb, maxFlavorSize),
 				Usage:    runningVmsPerAZ[az],
 			}

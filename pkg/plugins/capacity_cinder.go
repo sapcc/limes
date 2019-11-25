@@ -25,7 +25,6 @@ import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/sapcc/go-bits/logg"
-	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/util"
 )
@@ -109,7 +108,7 @@ func (p *capacityCinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo g
 
 	var (
 		totalCapacityGb uint64
-		capacityPerAZ   = make(limes.ClusterAvailabilityZoneReports)
+		capacityPerAZ   = make(map[string]*core.CapacityDataForAZ)
 
 		volumeBackendName = p.cfg.Cinder.VolumeBackendName
 	)
@@ -140,7 +139,7 @@ func (p *capacityCinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo g
 			poolAZ = "unknown"
 		}
 		if _, ok := capacityPerAZ[poolAZ]; !ok {
-			capacityPerAZ[poolAZ] = &limes.ClusterAvailabilityZoneReport{Name: poolAZ}
+			capacityPerAZ[poolAZ] = &core.CapacityDataForAZ{}
 		}
 
 		capacityPerAZ[poolAZ].Capacity += uint64(element.Capabilities.TotalCapacityGb)
