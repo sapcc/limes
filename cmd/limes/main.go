@@ -20,6 +20,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -33,6 +34,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/cors"
+	"github.com/sapcc/go-bits/httpee"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/limes/pkg/api"
@@ -163,7 +165,7 @@ func taskCollect(config core.Configuration, cluster *core.Cluster, args []string
 	}
 	http.Handle("/metrics", promhttp.Handler())
 	logg.Info("listening on " + config.Collector.MetricsListenAddress)
-	return http.ListenAndServe(config.Collector.MetricsListenAddress, nil)
+	return httpee.ListenAndServeContext(httpee.ContextWithSIGINT(context.Background()), config.Collector.MetricsListenAddress, nil)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -217,7 +219,7 @@ func taskServe(config core.Configuration, cluster *core.Cluster, args []string) 
 	//start HTTP server
 	http.Handle("/", handler)
 	logg.Info("listening on " + config.API.ListenAddress)
-	return http.ListenAndServe(config.API.ListenAddress, nil)
+	return httpee.ListenAndServeContext(httpee.ContextWithSIGINT(context.Background()), config.API.ListenAddress, nil)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
