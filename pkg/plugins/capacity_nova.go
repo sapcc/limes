@@ -26,6 +26,7 @@ import (
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/hypervisors"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/prometheus/client_golang/prometheus"
@@ -102,35 +103,22 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 		return nil, err
 	}
 
-	var result gophercloud.Result
-
-	//enumerate hypervisors
-	url := client.ServiceURL("os-hypervisors", "detail")
-	_, err = client.Get(url, &result.Body, nil)
+	//enumerate hypervisors (cannot use type Hypervisor provided by Gophercloud;
+	//in our clusters, it breaks because some hypervisor report unexpected NULL
+	//values on fields that we are not even interested in)
+	page, err := hypervisors.List(client).AllPages()
 	if err != nil {
 		return nil, err
 	}
 	var hypervisorData struct {
-		Hypervisors []struct {
-			ID           int    `json:"id"`
-			Hostname     string `json:"hypervisor_hostname"`
-			Type         string `json:"hypervisor_type"`
-			Vcpus        uint64 `json:"vcpus"`
-			VcpusUsed    uint64 `json:"vcpus_used"`
-			MemoryMb     uint64 `json:"memory_mb"`
-			MemoryMbUsed uint64 `json:"memory_mb_used"`
-			LocalGb      uint64 `json:"local_gb"`
-			RunningVms   uint64 `json:"running_vms"`
-			Service      struct {
-				Host string `json:"host"`
-			} `json:"service"`
-		} `json:"hypervisors"`
+		Hypervisors []novaHypervisor `json:"hypervisors"`
 	}
-	err = result.ExtractInto(&hypervisorData)
+	err = page.(hypervisors.HypervisorPage).ExtractInto(&hypervisorData)
 	if err != nil {
 		return nil, err
 	}
 
+	//enumerate compute hosts to establish hypervisor <-> AZ mapping
 	computeHostsPerAZ, err := getComputeHostsPerAZ(client)
 	if err != nil {
 		return nil, err
@@ -152,14 +140,14 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 	)
 	for _, hypervisor := range hypervisorData.Hypervisors {
 		if hypervisorTypeRx != nil {
-			if !hypervisorTypeRx.MatchString(hypervisor.Type) {
+			if !hypervisorTypeRx.MatchString(hypervisor.HypervisorType) {
 				continue
 			}
 		}
 
-		totalVcpus += hypervisor.Vcpus
-		totalMemoryMb += hypervisor.MemoryMb
-		totalLocalGb += hypervisor.LocalGb
+		totalVcpus += hypervisor.VCPUs
+		totalMemoryMb += hypervisor.MemoryMB
+		totalLocalGb += hypervisor.LocalGB
 
 		var hypervisorAZ string
 		for az, hosts := range computeHostsPerAZ {
@@ -179,18 +167,18 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 			memoryMbPerAZ[hypervisorAZ] = &limes.ClusterAvailabilityZoneReport{Name: hypervisorAZ}
 		}
 
-		vcpusPerAZ[hypervisorAZ].Capacity += hypervisor.Vcpus
-		vcpusPerAZ[hypervisorAZ].Usage += hypervisor.VcpusUsed
+		vcpusPerAZ[hypervisorAZ].Capacity += hypervisor.VCPUs
+		vcpusPerAZ[hypervisorAZ].Usage += hypervisor.VCPUsUsed
 
-		memoryMbPerAZ[hypervisorAZ].Capacity += hypervisor.MemoryMb
-		memoryMbPerAZ[hypervisorAZ].Usage += hypervisor.MemoryMbUsed
+		memoryMbPerAZ[hypervisorAZ].Capacity += hypervisor.MemoryMB
+		memoryMbPerAZ[hypervisorAZ].Usage += hypervisor.MemoryMBUsed
 
-		localGbPerAZ[hypervisorAZ] += hypervisor.LocalGb
-		runningVmsPerAZ[hypervisorAZ] += hypervisor.RunningVms
+		localGbPerAZ[hypervisorAZ] += hypervisor.LocalGB
+		runningVmsPerAZ[hypervisorAZ] += hypervisor.RunningVMs
 
 		hvStates = append(hvStates, novaHypervisorState{
 			Name:        hypervisor.Service.Host,
-			Hostname:    hypervisor.Hostname,
+			Hostname:    hypervisor.HypervisorHostname,
 			BelongsToAZ: hypervisorAZ != "unknown",
 		})
 	}
@@ -297,6 +285,19 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 	}
 
 	return capacity, nil
+}
+
+type novaHypervisor struct {
+	ID                 int                 `json:"id"`
+	HypervisorHostname string              `json:"hypervisor_hostname"`
+	HypervisorType     string              `json:"hypervisor_type"`
+	LocalGB            uint64              `json:"local_gb"`
+	MemoryMB           uint64              `json:"memory_mb"`
+	MemoryMBUsed       uint64              `json:"memory_mb_used"`
+	RunningVMs         uint64              `json:"running_vms"`
+	Service            hypervisors.Service `json:"service"`
+	VCPUs              uint64              `json:"vcpus"`
+	VCPUsUsed          uint64              `json:"vcpus_used"`
 }
 
 //get flavor extra-specs
