@@ -76,6 +76,10 @@ type placementInventoryRecord struct {
 	Total           uint64  `json:"total"`
 }
 
+func (r placementInventoryRecord) UsableCapacity() uint64 {
+	return r.Total - r.Reserved
+}
+
 func (c *placementClient) GetInventory(resourceProviderID string) (map[string]placementInventoryRecord, error) {
 	var result gophercloud.Result
 	url := c.ServiceURL("resource_providers", resourceProviderID, "inventories")

@@ -380,14 +380,14 @@ func (h novaHypervisor) getCapacityViaPlacementAPI(provider *gophercloud.Provide
 
 	return partialNovaCapacity{
 		VCPUs: core.CapacityDataForAZ{
-			Capacity: inventory["VCPU"].Total,
+			Capacity: inventory["VCPU"].UsableCapacity(),
 			Usage:    usages["VCPU"],
 		},
 		MemoryMB: core.CapacityDataForAZ{
-			Capacity: inventory["MEMORY_MB"].Total,
+			Capacity: inventory["MEMORY_MB"].UsableCapacity(),
 			Usage:    usages["MEMORY_MB"],
 		},
-		LocalGB:    inventory["DISK_GB"].Total,
+		LocalGB:    inventory["DISK_GB"].UsableCapacity(),
 		RunningVMs: h.RunningVMs,
 	}, nil
 }
