@@ -14,6 +14,7 @@ github.com/gophercloud/gophercloud/internal
 github.com/gophercloud/gophercloud/openstack
 github.com/gophercloud/gophercloud/openstack/blockstorage/v2/volumes
 github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/availabilityzones
+github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/hypervisors
 github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/limits
 github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/quotasets
 github.com/gophercloud/gophercloud/openstack/compute/v2/flavors

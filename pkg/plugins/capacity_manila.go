@@ -26,7 +26,6 @@ import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/sapcc/go-bits/logg"
-	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 )
 
@@ -159,27 +158,23 @@ func (p *capacityManilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo g
 
 	//derive availability zone usage and capacities
 	var (
-		shareCountPerAZ       = make(limes.ClusterAvailabilityZoneReports)
-		shareSnapshotsPerAZ   = make(limes.ClusterAvailabilityZoneReports)
-		shareCapacityPerAZ    = make(limes.ClusterAvailabilityZoneReports)
-		snapshotCapacityPerAZ = make(limes.ClusterAvailabilityZoneReports)
+		shareCountPerAZ       = make(map[string]*core.CapacityDataForAZ)
+		shareSnapshotsPerAZ   = make(map[string]*core.CapacityDataForAZ)
+		shareCapacityPerAZ    = make(map[string]*core.CapacityDataForAZ)
+		snapshotCapacityPerAZ = make(map[string]*core.CapacityDataForAZ)
 	)
 	for az := range availabilityZones {
-		shareCountPerAZ[az] = &limes.ClusterAvailabilityZoneReport{
-			Name:     az,
+		shareCountPerAZ[az] = &core.CapacityDataForAZ{
 			Capacity: getShareCount(poolCountPerAZ[az], cfg.SharesPerPool, (cfg.ShareNetworks / uint64(len(availabilityZones)))),
 		}
-		shareSnapshotsPerAZ[az] = &limes.ClusterAvailabilityZoneReport{
-			Name:     az,
+		shareSnapshotsPerAZ[az] = &core.CapacityDataForAZ{
 			Capacity: getShareSnapshots(shareCountPerAZ[az].Capacity, cfg.SnapshotsPerShare),
 		}
-		shareCapacityPerAZ[az] = &limes.ClusterAvailabilityZoneReport{
-			Name:     az,
+		shareCapacityPerAZ[az] = &core.CapacityDataForAZ{
 			Capacity: getShareCapacity(totalCapacityGbPerAZ[az], capBalance),
 			Usage:    getShareCapacity(allocatedCapacityGbPerAZ[az], capBalance),
 		}
-		snapshotCapacityPerAZ[az] = &limes.ClusterAvailabilityZoneReport{
-			Name:     az,
+		snapshotCapacityPerAZ[az] = &core.CapacityDataForAZ{
 			Capacity: getSnapshotCapacity(totalCapacityGbPerAZ[az], capBalance),
 			Usage:    getSnapshotCapacity(allocatedCapacityGbPerAZ[az], capBalance),
 		}

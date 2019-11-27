@@ -183,16 +183,14 @@ func (p *CapacityPlugin) ID() string {
 
 //Scrape implements the core.CapacityPlugin interface.
 func (p *CapacityPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]core.CapacityData, error) {
-	var capacityPerAZ limes.ClusterAvailabilityZoneReports
+	var capacityPerAZ map[string]*core.CapacityDataForAZ
 	if p.WithAZCapData {
-		capacityPerAZ = limes.ClusterAvailabilityZoneReports{
+		capacityPerAZ = map[string]*core.CapacityDataForAZ{
 			"az-one": {
-				Name:     "az-one",
 				Capacity: p.Capacity / 2,
 				Usage:    uint64(float64(p.Capacity) * 0.1),
 			},
 			"az-two": {
-				Name:     "az-two",
 				Capacity: p.Capacity / 2,
 				Usage:    uint64(float64(p.Capacity) * 0.1),
 			},

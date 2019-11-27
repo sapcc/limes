@@ -189,6 +189,7 @@ type CapacitorConfiguration struct {
 		HypervisorTypePattern string            `yaml:"hypervisor_type_pattern"`
 		CPUMultiplier         float64           `yaml:"cpu_multiplier"`
 		RAMMultiplier         float64           `yaml:"ram_multiplier"`
+		UsePlacementAPI       bool              `yaml:"use_placement_api"`
 	} `yaml:"nova"`
 	Prometheus struct {
 		APIConfig PrometheusAPIConfiguration   `yaml:"api"`
