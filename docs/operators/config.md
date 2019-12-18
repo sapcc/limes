@@ -65,6 +65,7 @@ Read on for the full list and description of all configuration options.
   * [compute: Nova v2](#compute-nova-v2)
   * [database: SAP Cloud Frame Manager](#database-sap-cloud-frame-manager)
   * [dns: Designate v2](#dns-designate-v2)
+  * [keppel: Keppel v1](#keppel-keppel-v1)
   * [network: Neutron v1](#network-neutron-v1)
   * [object\-store: Swift v1](#object-store-swift-v1)
   * [sharev2: Manila v2](#sharev2-manila-v2)
@@ -384,6 +385,19 @@ The area for this service is `dns`.
 | `zones` | countable |
 
 When the `recordsets` quota is set, the backend quota for records is set to 20 times that value, to fit into the `records_per_recordset` quota (which is set to 20 by default in Designate). The record quota cannot be controlled explicitly in Limes.
+
+## `keppel`: Keppel v1
+
+```
+services:
+  - type: keppel
+```
+
+The area for this service is `storage`.
+
+| Resource | Unit |
+| --- | --- |
+| `images` | countable |
 
 ## `network`: Neutron v1
 
