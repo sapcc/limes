@@ -468,7 +468,7 @@ func (p *novaPlugin) getOSType(provider *gophercloud.ProviderClient, eo gophercl
 	if err == nil {
 		p.osTypeForImage[imageID] = osType
 	} else {
-		fmt.Printf("internal error: %#v\n", err)
+		logg.Error("internal: %#v\n", err)
 	}
 	return osType, err
 }
