@@ -77,6 +77,14 @@ var novaDefaultResources = []limes.ResourceInfo{
 		Name: "ram",
 		Unit: limes.UnitMebibytes,
 	},
+	{
+		Name: "server_groups",
+		Unit: limes.UnitNone,
+	},
+	{
+		Name: "server_group_members",
+		Unit: limes.UnitNone,
+	},
 }
 
 var novaInstanceCountGauge = prometheus.NewGaugeVec(
@@ -188,12 +196,15 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 	var limitsData struct {
 		Limits struct {
 			Absolute struct {
-				MaxTotalCores      int64  `json:"maxTotalCores"`
-				MaxTotalInstances  int64  `json:"maxTotalInstances"`
-				MaxTotalRAMSize    int64  `json:"maxTotalRAMSize"`
-				TotalCoresUsed     uint64 `json:"totalCoresUsed"`
-				TotalInstancesUsed uint64 `json:"totalInstancesUsed"`
-				TotalRAMUsed       uint64 `json:"totalRAMUsed"`
+				MaxTotalCores         int64  `json:"maxTotalCores"`
+				MaxTotalInstances     int64  `json:"maxTotalInstances"`
+				MaxTotalRAMSize       int64  `json:"maxTotalRAMSize"`
+				MaxServerGroups       int64  `json:"maxServerGroups"`
+				MaxServerGroupMembers int64  `json:"maxServerGroupMembers"`
+				TotalCoresUsed        uint64 `json:"totalCoresUsed"`
+				TotalInstancesUsed    uint64 `json:"totalInstancesUsed"`
+				TotalRAMUsed          uint64 `json:"totalRAMUsed"`
+				TotalServerGroupsUsed uint64 `json:"totalServerGroupsUsed"`
 			} `json:"absolute"`
 			AbsolutePerFlavor map[string]struct {
 				MaxTotalInstances  int64  `json:"maxTotalInstances"`
@@ -204,6 +215,26 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 	err = limits.Get(client, limits.GetOpts{TenantID: projectUUID}).ExtractInto(&limitsData)
 	if err != nil {
 		return nil, err
+	}
+
+	totalServerGroupMembersUsed := 0
+	if limitsData.Limits.Absolute.TotalServerGroupsUsed > 0 {
+		var data struct {
+			ServerGroups []struct {
+				ProjectID string   `json:"project_id"`
+				Members   []string `json:"members"`
+			} `json:"server_groups"`
+		}
+		err = novaGetAllServerGroups(client).ExtractInto(&data)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, sg := range data.ServerGroups {
+			if sg.ProjectID == projectUUID {
+				totalServerGroupMembersUsed += len(sg.Members)
+			}
+		}
 	}
 
 	result := map[string]*core.ResourceData{
@@ -219,7 +250,16 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 			Quota: limitsData.Limits.Absolute.MaxTotalRAMSize,
 			Usage: limitsData.Limits.Absolute.TotalRAMUsed,
 		},
+		"server_groups": {
+			Quota: limitsData.Limits.Absolute.MaxServerGroups,
+			Usage: limitsData.Limits.Absolute.TotalServerGroupsUsed,
+		},
+		"server_group_members": {
+			Quota: limitsData.Limits.Absolute.MaxServerGroupMembers,
+			Usage: uint64(totalServerGroupMembersUsed),
+		},
 	}
+
 	if limitsData.Limits.AbsolutePerFlavor != nil {
 		for flavorName, flavorLimits := range limitsData.Limits.AbsolutePerFlavor {
 			if p.flavorNameRx == nil || p.flavorNameRx.MatchString(flavorName) {
@@ -541,4 +581,12 @@ type novaServerIPData struct {
 	Address string `json:"address"`
 	Type    string `json:"type"`
 	Target  string `json:"target,omitempty"`
+}
+
+func novaGetAllServerGroups(client *gophercloud.ServiceClient) (result gophercloud.Result) {
+	client.Microversion = "2.60"
+	url := client.ServiceURL("os-server-groups") + "?all_projects=True"
+	_, result.Err = client.Get(url, &result.Body, nil)
+	client.Microversion = ""
+	return
 }
