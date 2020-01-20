@@ -26,6 +26,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
@@ -62,6 +63,10 @@ type novaPlugin struct {
 	resources           []limes.ResourceInfo
 	//caches
 	osTypeForImage map[string]string
+	serverGroups   struct {
+		lastScrapeTime *time.Time
+		members        map[string]uint64 // per project
+	}
 }
 
 var novaDefaultResources = []limes.ResourceInfo{
@@ -217,23 +222,15 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 		return nil, err
 	}
 
-	totalServerGroupMembersUsed := 0
+	var totalServerGroupMembersUsed uint64
 	if limitsData.Limits.Absolute.TotalServerGroupsUsed > 0 {
-		var data struct {
-			ServerGroups []struct {
-				ProjectID string   `json:"project_id"`
-				Members   []string `json:"members"`
-			} `json:"server_groups"`
-		}
-		err = novaGetAllServerGroups(client).ExtractInto(&data)
+		err := p.getServerGroups(client)
 		if err != nil {
 			return nil, err
 		}
 
-		for _, sg := range data.ServerGroups {
-			if sg.ProjectID == projectUUID {
-				totalServerGroupMembersUsed += len(sg.Members)
-			}
+		if v, ok := p.serverGroups.members[projectUUID]; ok {
+			totalServerGroupMembersUsed = v
 		}
 	}
 
@@ -583,10 +580,38 @@ type novaServerIPData struct {
 	Target  string `json:"target,omitempty"`
 }
 
-func novaGetAllServerGroups(client *gophercloud.ServiceClient) (result gophercloud.Result) {
+func (p *novaPlugin) getServerGroups(client *gophercloud.ServiceClient) error {
+	if p.serverGroups.lastScrapeTime != nil {
+		if time.Since(*p.serverGroups.lastScrapeTime) < 3*time.Minute {
+			return nil // no need to refresh cache
+		}
+	}
+
+	var result gophercloud.Result
 	client.Microversion = "2.60"
 	url := client.ServiceURL("os-server-groups") + "?all_projects=True"
 	_, result.Err = client.Get(url, &result.Body, nil)
 	client.Microversion = ""
-	return
+
+	var data struct {
+		ServerGroups []struct {
+			ProjectID string   `json:"project_id"`
+			Members   []string `json:"members"`
+		} `json:"server_groups"`
+	}
+	err := result.ExtractInto(&data)
+	if err != nil {
+		return err
+	}
+
+	membersPerProject := make(map[string]uint64)
+	for _, sg := range data.ServerGroups {
+		membersPerProject[sg.ProjectID] += uint64(len(sg.Members))
+	}
+
+	p.serverGroups.members = membersPerProject
+	t := time.Now()
+	p.serverGroups.lastScrapeTime = &t
+
+	return nil
 }
