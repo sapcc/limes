@@ -1,18 +1,10 @@
 # build artifacts
-build/limes
 .gopath/pkg/
-build/install/
-build/docker.tar
+build/
 
 # test artifacts
 testing/postgres*
-build/cover.out
-build/*.cover.out
-build/cover.html
 *.actual
-
-# vendoring artifacts
-.golangvend-cache/
 
 # custom configuration files used during development
 *.yaml

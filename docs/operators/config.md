@@ -296,6 +296,8 @@ The area for this service is `compute`.
 | `cores` | countable |
 | `instances` | countable |
 | `ram` | MiB |
+| `server_groups` | countable |
+| `server_group_members` | countable |
 
 The `instances` resource supports subresource scraping. Subresources bear the following attributes:
 

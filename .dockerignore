@@ -3,4 +3,5 @@ build/
 .gopath/pkg/
 
 # test artifacts
+testing/postgres*
 *.actual

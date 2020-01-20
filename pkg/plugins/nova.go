@@ -26,6 +26,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
@@ -62,6 +63,10 @@ type novaPlugin struct {
 	resources           []limes.ResourceInfo
 	//caches
 	osTypeForImage map[string]string
+	serverGroups   struct {
+		lastScrapeTime *time.Time
+		members        map[string]uint64 // per project
+	}
 }
 
 var novaDefaultResources = []limes.ResourceInfo{
@@ -76,6 +81,14 @@ var novaDefaultResources = []limes.ResourceInfo{
 	{
 		Name: "ram",
 		Unit: limes.UnitMebibytes,
+	},
+	{
+		Name: "server_groups",
+		Unit: limes.UnitNone,
+	},
+	{
+		Name: "server_group_members",
+		Unit: limes.UnitNone,
 	},
 }
 
@@ -188,12 +201,15 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 	var limitsData struct {
 		Limits struct {
 			Absolute struct {
-				MaxTotalCores      int64  `json:"maxTotalCores"`
-				MaxTotalInstances  int64  `json:"maxTotalInstances"`
-				MaxTotalRAMSize    int64  `json:"maxTotalRAMSize"`
-				TotalCoresUsed     uint64 `json:"totalCoresUsed"`
-				TotalInstancesUsed uint64 `json:"totalInstancesUsed"`
-				TotalRAMUsed       uint64 `json:"totalRAMUsed"`
+				MaxTotalCores         int64  `json:"maxTotalCores"`
+				MaxTotalInstances     int64  `json:"maxTotalInstances"`
+				MaxTotalRAMSize       int64  `json:"maxTotalRAMSize"`
+				MaxServerGroups       int64  `json:"maxServerGroups"`
+				MaxServerGroupMembers int64  `json:"maxServerGroupMembers"`
+				TotalCoresUsed        uint64 `json:"totalCoresUsed"`
+				TotalInstancesUsed    uint64 `json:"totalInstancesUsed"`
+				TotalRAMUsed          uint64 `json:"totalRAMUsed"`
+				TotalServerGroupsUsed uint64 `json:"totalServerGroupsUsed"`
 			} `json:"absolute"`
 			AbsolutePerFlavor map[string]struct {
 				MaxTotalInstances  int64  `json:"maxTotalInstances"`
@@ -204,6 +220,18 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 	err = limits.Get(client, limits.GetOpts{TenantID: projectUUID}).ExtractInto(&limitsData)
 	if err != nil {
 		return nil, err
+	}
+
+	var totalServerGroupMembersUsed uint64
+	if limitsData.Limits.Absolute.TotalServerGroupsUsed > 0 {
+		err := p.getServerGroups(client)
+		if err != nil {
+			return nil, err
+		}
+
+		if v, ok := p.serverGroups.members[projectUUID]; ok {
+			totalServerGroupMembersUsed = v
+		}
 	}
 
 	result := map[string]*core.ResourceData{
@@ -219,7 +247,16 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 			Quota: limitsData.Limits.Absolute.MaxTotalRAMSize,
 			Usage: limitsData.Limits.Absolute.TotalRAMUsed,
 		},
+		"server_groups": {
+			Quota: limitsData.Limits.Absolute.MaxServerGroups,
+			Usage: limitsData.Limits.Absolute.TotalServerGroupsUsed,
+		},
+		"server_group_members": {
+			Quota: limitsData.Limits.Absolute.MaxServerGroupMembers,
+			Usage: uint64(totalServerGroupMembersUsed),
+		},
 	}
+
 	if limitsData.Limits.AbsolutePerFlavor != nil {
 		for flavorName, flavorLimits := range limitsData.Limits.AbsolutePerFlavor {
 			if p.flavorNameRx == nil || p.flavorNameRx.MatchString(flavorName) {
@@ -468,7 +505,7 @@ func (p *novaPlugin) getOSType(provider *gophercloud.ProviderClient, eo gophercl
 	if err == nil {
 		p.osTypeForImage[imageID] = osType
 	} else {
-		fmt.Printf("internal error: %#v\n", err)
+		logg.Error("internal: %#v\n", err)
 	}
 	return osType, err
 }
@@ -541,4 +578,40 @@ type novaServerIPData struct {
 	Address string `json:"address"`
 	Type    string `json:"type"`
 	Target  string `json:"target,omitempty"`
+}
+
+func (p *novaPlugin) getServerGroups(client *gophercloud.ServiceClient) error {
+	if p.serverGroups.lastScrapeTime != nil {
+		if time.Since(*p.serverGroups.lastScrapeTime) < 3*time.Minute {
+			return nil // no need to refresh cache
+		}
+	}
+
+	var result gophercloud.Result
+	client.Microversion = "2.60"
+	url := client.ServiceURL("os-server-groups") + "?all_projects=True"
+	_, result.Err = client.Get(url, &result.Body, nil)
+	client.Microversion = ""
+
+	var data struct {
+		ServerGroups []struct {
+			ProjectID string   `json:"project_id"`
+			Members   []string `json:"members"`
+		} `json:"server_groups"`
+	}
+	err := result.ExtractInto(&data)
+	if err != nil {
+		return err
+	}
+
+	membersPerProject := make(map[string]uint64)
+	for _, sg := range data.ServerGroups {
+		membersPerProject[sg.ProjectID] += uint64(len(sg.Members))
+	}
+
+	p.serverGroups.members = membersPerProject
+	t := time.Now()
+	p.serverGroups.lastScrapeTime = &t
+
+	return nil
 }
