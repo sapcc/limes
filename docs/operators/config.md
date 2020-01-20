@@ -468,9 +468,8 @@ The area for this service is `storage`.
 | `snapshot_capacity` | GiB |
 
 Optionally, when the `sharev2.prometheus_api` configuration option is set,
-physical usage data will be scraped from the Prometheus metric
-`netapp_capacity_svm`. The expected metric format is that of the
-[netapp-api-exporter](https://github.com/sapcc/netapp-api-exporter).
+physical usage data will be scraped using the Prometheus metrics exported by
+the [netapp-api-exporter](https://github.com/sapcc/netapp-api-exporter).
 
 Only the `prometheus_api.url` field is required. You can pin the server's CA
 certificate (`prometheus_api.ca_cert`) and/or specify a TLS client certificate
