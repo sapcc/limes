@@ -20,21 +20,16 @@
 package plugins
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
-	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 )
 
 type neutronPlugin struct {
-	cfg                     core.ServiceConfiguration
-	hasQuotaDetailsEndpoint bool
-	resources               []limes.ResourceInfo
-	resourcesMeta           []neutronResourceMetadata
+	cfg           core.ServiceConfiguration
+	resources     []limes.ResourceInfo
+	resourcesMeta []neutronResourceMetadata
 }
 
 var neutronResources = []limes.ResourceInfo{
@@ -114,66 +109,25 @@ var neutronResources = []limes.ResourceInfo{
 		Unit:     limes.UnitNone,
 		Category: "loadbalancing",
 	},
+	{
+		Name:     "pool_members",
+		Unit:     limes.UnitNone,
+		Category: "loadbalancing",
+	},
 }
 
 func init() {
 	core.RegisterQuotaPlugin(func(c core.ServiceConfiguration, scrapeSubresources map[string]bool) core.QuotaPlugin {
 		return &neutronPlugin{
-			cfg:                     c,
-			hasQuotaDetailsEndpoint: false, //until proven otherwise in Init()
-			resources:               neutronResources,
-			resourcesMeta:           neutronResourceMeta,
+			cfg:           c,
+			resources:     neutronResources,
+			resourcesMeta: neutronResourceMeta,
 		}
 	})
 }
 
 //Init implements the core.QuotaPlugin interface.
 func (p *neutronPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
-	client, err := openstack.NewNetworkV2(provider, eo)
-	if err != nil {
-		return err
-	}
-
-	//probe support for the quotas/:project_id/details endpoint (available in
-	//Pike and above)
-	var result gophercloud.Result
-	url := client.ServiceURL("quotas", "unknown", "details") //FIXME should use a valid project ID, such as AuthResult().GetProject().ID
-	_, err = client.Get(url, &result.Body, nil)
-	if err != nil {
-		if _, ok := err.(gophercloud.ErrDefault404); ok {
-			logg.Debug("Neutron does NOT have the /quotas/:project_id/details endpoint - falling back to counting usage manually")
-			p.hasQuotaDetailsEndpoint = false
-			return nil
-		}
-		return err
-	}
-	logg.Debug("Neutron HAS the /quotas/:project_id/details endpoint - usage can be scraped efficiently")
-	p.hasQuotaDetailsEndpoint = true
-
-	//probe support for specific resources
-	var data struct {
-		Quotas map[string]interface{} `json:"quota"`
-	}
-	data.Quotas = make(map[string]interface{})
-	err = result.ExtractInto(&data)
-	if err != nil {
-		return err
-	}
-
-	if _, exists := data.Quotas["member"]; exists {
-		logg.Debug("Neutron HAS the pool members resource")
-		p.resources = append(p.resources, limes.ResourceInfo{
-			Name:     "pool_members",
-			Unit:     limes.UnitNone,
-			Category: "loadbalancing",
-		})
-		p.resourcesMeta = append(p.resourcesMeta, neutronResourceMetadata{
-			LimesName:   "pool_members",
-			NeutronName: "member",
-		})
-	} else {
-		logg.Debug("Neutron does NOT have the pool members resource")
-	}
 	return nil
 }
 
@@ -192,96 +146,70 @@ func (p *neutronPlugin) Resources() []limes.ResourceInfo {
 }
 
 type neutronResourceMetadata struct {
-	LimesName       string
-	NeutronName     string
-	EndpointPath    []string
-	JSONToplevelKey string
+	LimesName   string
+	NeutronName string
 }
 
 var neutronResourceMeta = []neutronResourceMetadata{
 	{
-		LimesName:       "networks",
-		NeutronName:     "network",
-		EndpointPath:    []string{"networks"},
-		JSONToplevelKey: "networks",
+		LimesName:   "networks",
+		NeutronName: "network",
 	},
 	{
-		LimesName:       "subnets",
-		NeutronName:     "subnet",
-		EndpointPath:    []string{"subnets"},
-		JSONToplevelKey: "subnets",
+		LimesName:   "subnets",
+		NeutronName: "subnet",
 	},
 	{
-		LimesName:       "subnet_pools",
-		NeutronName:     "subnetpool",
-		EndpointPath:    []string{"subnetpools"},
-		JSONToplevelKey: "subnetpools",
+		LimesName:   "subnet_pools",
+		NeutronName: "subnetpool",
 	},
 	{
-		LimesName:       "floating_ips",
-		NeutronName:     "floatingip",
-		EndpointPath:    []string{"floatingips"},
-		JSONToplevelKey: "floatingips",
+		LimesName:   "floating_ips",
+		NeutronName: "floatingip",
 	},
 	{
-		LimesName:       "routers",
-		NeutronName:     "router",
-		EndpointPath:    []string{"routers"},
-		JSONToplevelKey: "routers",
+		LimesName:   "routers",
+		NeutronName: "router",
 	},
 	{
-		LimesName:       "ports",
-		NeutronName:     "port",
-		EndpointPath:    []string{"ports"},
-		JSONToplevelKey: "ports",
+		LimesName:   "ports",
+		NeutronName: "port",
 	},
 	{
-		LimesName:       "security_groups",
-		NeutronName:     "security_group",
-		EndpointPath:    []string{"security-groups"},
-		JSONToplevelKey: "security_groups",
+		LimesName:   "security_groups",
+		NeutronName: "security_group",
 	},
 	{
-		LimesName:       "security_group_rules",
-		NeutronName:     "security_group_rule",
-		EndpointPath:    []string{"security-group-rules"},
-		JSONToplevelKey: "security_group_rules",
+		LimesName:   "security_group_rules",
+		NeutronName: "security_group_rule",
 	},
 	{
-		LimesName:       "rbac_policies",
-		NeutronName:     "rbac_policy",
-		EndpointPath:    []string{"rbac-policies"},
-		JSONToplevelKey: "rbac_policies",
+		LimesName:   "rbac_policies",
+		NeutronName: "rbac_policy",
 	},
 	{
-		LimesName:       "loadbalancers",
-		NeutronName:     "loadbalancer",
-		EndpointPath:    []string{"lbaas", "loadbalancers"},
-		JSONToplevelKey: "loadbalancers",
+		LimesName:   "loadbalancers",
+		NeutronName: "loadbalancer",
 	},
 	{
-		LimesName:       "listeners",
-		NeutronName:     "listener",
-		EndpointPath:    []string{"lbaas", "listeners"},
-		JSONToplevelKey: "listeners",
+		LimesName:   "listeners",
+		NeutronName: "listener",
 	},
 	{
-		LimesName:       "pools",
-		NeutronName:     "pool",
-		EndpointPath:    []string{"lbaas", "pools"},
-		JSONToplevelKey: "pools",
+		LimesName:   "pools",
+		NeutronName: "pool",
 	},
 	{
-		LimesName:       "healthmonitors",
-		NeutronName:     "healthmonitor",
-		EndpointPath:    []string{"lbaas", "healthmonitors"},
-		JSONToplevelKey: "healthmonitors",
+		LimesName:   "healthmonitors",
+		NeutronName: "healthmonitor",
 	},
 	{
-		LimesName:       "l7policies",
-		NeutronName:     "l7policy",
-		EndpointPath:    []string{"lbaas", "l7policies"},
-		JSONToplevelKey: "l7policies",
+		LimesName:   "l7policies",
+		NeutronName: "l7policy",
+	},
+	{
+		LimesName:   "pool_members",
+		NeutronName: "member",
 	},
 }
 
@@ -297,16 +225,9 @@ func (p *neutronPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercl
 		return nil, err
 	}
 
-	if p.hasQuotaDetailsEndpoint {
-		return p.scrapeNewStyle(client, projectUUID)
-	}
-	return p.scrapeOldStyle(client, projectUUID)
-}
-
-func (p *neutronPlugin) scrapeNewStyle(client *gophercloud.ServiceClient, projectUUID string) (map[string]core.ResourceData, error) {
 	var result gophercloud.Result
 	url := client.ServiceURL("quotas", projectUUID, "details")
-	_, err := client.Get(url, &result.Body, nil)
+	_, err = client.Get(url, &result.Body, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -336,47 +257,6 @@ func (p *neutronPlugin) scrapeNewStyle(client *gophercloud.ServiceClient, projec
 	return data, nil
 }
 
-func (p *neutronPlugin) scrapeOldStyle(client *gophercloud.ServiceClient, projectUUID string) (map[string]core.ResourceData, error) {
-	data := make(map[string]core.ResourceData)
-
-	//query quotas
-	var result gophercloud.Result
-	url := client.ServiceURL("quotas", projectUUID)
-	_, err := client.Get(url, &result.Body, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	var quotas struct {
-		Values map[string]int64 `json:"quota"`
-	}
-	quotas.Values = make(map[string]int64)
-	err = result.ExtractInto(&quotas)
-	if err != nil {
-		return nil, err
-	}
-
-	//calculate usage by counting resources by hand
-	query, err := gophercloud.BuildQueryString(neutronQueryOpts{Fields: "id", ProjectUUID: projectUUID})
-	if err != nil {
-		return nil, err
-	}
-	for _, res := range p.resourcesMeta {
-		url := client.ServiceURL(res.EndpointPath...) + query.String()
-		count, err := countNeutronThings(client, url)
-		if err != nil {
-			return nil, err
-		}
-
-		data[res.LimesName] = core.ResourceData{
-			Quota: quotas.Values[res.NeutronName],
-			Usage: uint64(count),
-		}
-	}
-
-	return data, nil
-}
-
 //SetQuota implements the core.QuotaPlugin interface.
 func (p *neutronPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
 	//map resource names from Limes to Neutron
@@ -399,79 +279,4 @@ func (p *neutronPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopher
 	url := client.ServiceURL("quotas", projectUUID)
 	_, err = client.Put(url, requestData, nil, &gophercloud.RequestOpts{OkCodes: []int{200}})
 	return err
-}
-
-//I know that gophercloud has a pagination implementation, but it would lead to
-//a ton of code duplication because Gophercloud insists on using different
-//types for each resource.
-func countNeutronThings(client *gophercloud.ServiceClient, firstPageURL string) (int, error) {
-	url := firstPageURL
-	count := 0
-
-	type entry struct {
-		//if this entry is in the list of things, then this field is set
-		ID string `json:"id"`
-		//if this entry is in the list of links, then these fields are set
-		URL string `json:"href"`
-		Rel string `json:"rel"`
-	}
-
-	for {
-		jsonBody := make(map[string][]entry)
-		_, err := client.Get(url, &jsonBody, nil)
-		if err != nil {
-			return 0, err
-		}
-		keySetError := func() (int, error) {
-			allKeys := make([]string, 0, len(jsonBody))
-			for key := range jsonBody {
-				allKeys = append(allKeys, key)
-			}
-			return 0, fmt.Errorf("GET %s returned JSON with unexpected set of keys: %s", url, strings.Join(allKeys, ", "))
-		}
-
-		//we should have two keys, one for the list of things (e.g. "ports") and
-		//one for the list of links (e.g. "ports_links")
-		if len(jsonBody) > 2 {
-			return keySetError()
-		}
-
-		var (
-			links     []entry
-			hasLinks  bool
-			things    []entry
-			hasThings bool
-		)
-		for key, entries := range jsonBody {
-			if strings.HasSuffix(key, "_links") {
-				if hasLinks {
-					return keySetError()
-				}
-				links = entries
-				hasLinks = true
-			} else {
-				if hasThings {
-					return keySetError()
-				}
-				things = entries
-				hasThings = true
-			}
-		}
-
-		if !hasThings {
-			return keySetError()
-		}
-
-		//page is valid - count the things and find the next page (if any)
-		count += len(things)
-		url = ""
-		for _, link := range links {
-			if link.Rel == "next" {
-				url = link.URL
-			}
-		}
-		if url == "" {
-			return count, nil
-		}
-	}
 }
