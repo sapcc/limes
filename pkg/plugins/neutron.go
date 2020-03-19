@@ -222,7 +222,7 @@ var neutronResourceMeta = []neutronResourceMetadata{
 	{
 		LimesName:   "l7policies",
 		NeutronName: "l7policy",
-		InOctavia:   true,
+		InOctavia:   false, //for some reason, Octavia does not support this quota type
 	},
 	{
 		LimesName:   "pool_members",
