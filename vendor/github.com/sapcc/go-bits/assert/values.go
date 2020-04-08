@@ -31,6 +31,28 @@ import (
 	"testing"
 )
 
+//ByteData implements the HTTPRequestBody and HTTPResponseBody for plain bytestrings.
+type ByteData []byte
+
+//GetRequestBody implements the HTTPRequestBody interface.
+func (b ByteData) GetRequestBody() (io.Reader, error) {
+	return bytes.NewReader([]byte(b)), nil
+}
+
+//AssertResponseBody implements the HTTPResponseBody interface.
+func (b ByteData) AssertResponseBody(t *testing.T, requestInfo string, responseBody []byte) bool {
+	t.Helper()
+
+	if !bytes.Equal([]byte(b), responseBody) {
+		t.Error(requestInfo + ": got unexpected response body")
+		t.Logf("\texpected = %q\n", b)
+		t.Logf("\t  actual = %q\n", responseBody)
+		return false
+	}
+
+	return true
+}
+
 //StringData implements HTTPRequestBody and HTTPResponseBody for plain strings.
 type StringData string
 
@@ -40,16 +62,18 @@ func (s StringData) GetRequestBody() (io.Reader, error) {
 }
 
 //AssertResponseBody implements the HTTPResponseBody interface.
-func (s StringData) AssertResponseBody(t *testing.T, requestInfo string, responseBody []byte) {
+func (s StringData) AssertResponseBody(t *testing.T, requestInfo string, responseBody []byte) bool {
 	t.Helper()
 
 	responseStr := string(responseBody)
 	if responseStr != string(s) {
-		t.Error(requestInfo + ": got unexpected response body")
+		t.Errorf("%s: got unexpected response body", requestInfo)
 		t.Logf("\texpected = %q\n", string(s))
 		t.Logf("\t  actual = %q\n", responseStr)
-		t.FailNow()
+		return false
 	}
+
+	return true
 }
 
 //JSONObject implements HTTPRequestBody and HTTPResponseBody for JSON objects.
@@ -62,12 +86,13 @@ func (o JSONObject) GetRequestBody() (io.Reader, error) {
 }
 
 //AssertResponseBody implements the HTTPResponseBody interface.
-func (o JSONObject) AssertResponseBody(t *testing.T, requestInfo string, responseBody []byte) {
+func (o JSONObject) AssertResponseBody(t *testing.T, requestInfo string, responseBody []byte) bool {
 	t.Helper()
 
 	buf, err := json.Marshal(o)
 	if err != nil {
-		t.Fatal(err.Error())
+		t.Error(err.Error())
+		return false
 	}
 
 	//need to decode and re-encode the responseBody to ensure identical ordering of keys
@@ -78,11 +103,13 @@ func (o JSONObject) AssertResponseBody(t *testing.T, requestInfo string, respons
 	}
 
 	if string(responseBody) != string(buf) {
-		t.Error(requestInfo + ": got unexpected response body")
+		t.Errorf("%s: got unexpected response body", requestInfo)
 		t.Logf("\texpected = %q\n", string(buf))
 		t.Logf("\t  actual = %q\n", string(responseBody))
-		t.FailNow()
+		return false
 	}
+
+	return true
 }
 
 //JSONFixtureFile implements HTTPResponseBody by locating the expected JSON
@@ -90,7 +117,7 @@ func (o JSONObject) AssertResponseBody(t *testing.T, requestInfo string, respons
 type JSONFixtureFile string
 
 //AssertResponseBody implements the HTTPResponseBody interface.
-func (f JSONFixtureFile) AssertResponseBody(t *testing.T, requestInfo string, responseBody []byte) {
+func (f JSONFixtureFile) AssertResponseBody(t *testing.T, requestInfo string, responseBody []byte) bool {
 	t.Helper()
 
 	var buf bytes.Buffer
@@ -98,9 +125,10 @@ func (f JSONFixtureFile) AssertResponseBody(t *testing.T, requestInfo string, re
 	if err != nil {
 		t.Logf("Response body: %s", responseBody)
 		t.Fatal(err)
+		return false
 	}
 	buf.WriteByte('\n')
-	FixtureFile(f).AssertResponseBody(t, requestInfo, buf.Bytes())
+	return FixtureFile(f).AssertResponseBody(t, requestInfo, buf.Bytes())
 }
 
 //FixtureFile implements HTTPResponseBody by locating the expected
@@ -108,7 +136,7 @@ func (f JSONFixtureFile) AssertResponseBody(t *testing.T, requestInfo string, re
 type FixtureFile string
 
 //AssertResponseBody implements the HTTPResponseBody interface.
-func (f FixtureFile) AssertResponseBody(t *testing.T, requestInfo string, responseBody []byte) {
+func (f FixtureFile) AssertResponseBody(t *testing.T, requestInfo string, responseBody []byte) bool {
 	t.Helper()
 
 	//write actual content to file to make it easy to copy the computed result over
@@ -118,6 +146,7 @@ func (f FixtureFile) AssertResponseBody(t *testing.T, requestInfo string, respon
 	err := ioutil.WriteFile(actualPathAbs, responseBody, 0644)
 	if err != nil {
 		t.Fatal(err)
+		return false
 	}
 
 	cmd := exec.Command("diff", "-u", fixturePathAbs, actualPathAbs)
@@ -126,6 +155,8 @@ func (f FixtureFile) AssertResponseBody(t *testing.T, requestInfo string, respon
 	cmd.Stderr = os.Stderr
 	err = cmd.Run()
 	if err != nil {
-		t.Fatalf("%s: body does not match: %s", requestInfo, err.Error())
+		t.Errorf("%s: body does not match: %s", requestInfo, err.Error())
 	}
+
+	return err == nil
 }

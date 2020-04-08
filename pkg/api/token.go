@@ -29,6 +29,8 @@ import (
 	"github.com/sapcc/go-bits/logg"
 )
 
+var cacher = gopherpolicy.InMemoryCacher()
+
 //CheckToken checks the validity of the request's X-Auth-Token in Keystone, and
 //returns a Token instance for checking authorization. Any errors that occur
 //during this function are deferred until Require() is called.
@@ -50,6 +52,7 @@ func (p *v1Provider) CheckToken(r *http.Request) *gopherpolicy.Token {
 	validator := gopherpolicy.TokenValidator{
 		IdentityV3: client,
 		Enforcer:   p.Config.API.PolicyEnforcer,
+		Cacher:     cacher,
 	}
 	t := validator.CheckToken(r)
 	t.Context.Logger = logg.Debug

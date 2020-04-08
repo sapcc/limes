@@ -86,7 +86,7 @@ func logAndPublishEvent(clusterID string, time time.Time, req *http.Request, tok
 	p := audittools.EventParameters{
 		Time:       time,
 		Request:    req,
-		Token:      token,
+		User:       token,
 		ReasonCode: reasonCode,
 		Action:     "update",
 		Observer: struct {

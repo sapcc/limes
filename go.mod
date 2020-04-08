@@ -15,7 +15,7 @@ require (
 	github.com/prometheus/client_golang v1.4.0
 	github.com/prometheus/common v0.9.1
 	github.com/rs/cors v1.7.0
-	github.com/sapcc/go-bits v0.0.0-20191125140305-f4a863758644
+	github.com/sapcc/go-bits v0.0.0-20200408113334-fba3bcbf66ea
 	github.com/sapcc/hermes v0.0.0-20200113180615-22691208a86f
 	github.com/ziutek/mymysql v1.5.4 // indirect
 	golang.org/x/net v0.0.0-20200114155413-6afb5195e5aa
