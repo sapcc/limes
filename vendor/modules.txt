@@ -3,7 +3,12 @@ github.com/beorn7/perks/quantile
 # github.com/cespare/xxhash/v2 v2.1.1
 github.com/cespare/xxhash/v2
 # github.com/databus23/goslo.policy v0.0.0-20170317131957-3ae74dd07ebf
+## explicit
 github.com/databus23/goslo.policy
+# github.com/go-gorp/gorp v2.2.0+incompatible
+## explicit
+# github.com/go-sql-driver/mysql v1.5.0
+## explicit
 # github.com/gofrs/uuid v3.2.0+incompatible
 github.com/gofrs/uuid
 # github.com/golang/protobuf v1.3.2
@@ -12,7 +17,8 @@ github.com/golang/protobuf/ptypes
 github.com/golang/protobuf/ptypes/any
 github.com/golang/protobuf/ptypes/duration
 github.com/golang/protobuf/ptypes/timestamp
-# github.com/gophercloud/gophercloud v0.7.0
+# github.com/gophercloud/gophercloud v0.9.0
+## explicit
 github.com/gophercloud/gophercloud
 github.com/gophercloud/gophercloud/internal
 github.com/gophercloud/gophercloud/openstack
@@ -34,7 +40,8 @@ github.com/gophercloud/gophercloud/openstack/sharedfilesystems/v2/sharenetworks
 github.com/gophercloud/gophercloud/openstack/utils
 github.com/gophercloud/gophercloud/pagination
 github.com/gophercloud/gophercloud/testhelper
-# github.com/gorilla/mux v1.7.3
+# github.com/gorilla/mux v1.7.4
+## explicit
 github.com/gorilla/mux
 # github.com/hashicorp/errwrap v1.0.0
 github.com/hashicorp/errwrap
@@ -44,6 +51,7 @@ github.com/hashicorp/go-multierror
 github.com/hashicorp/golang-lru
 github.com/hashicorp/golang-lru/simplelru
 # github.com/jpillora/longestcommon v0.0.0-20161227235612-adb9d91ee629
+## explicit
 github.com/jpillora/longestcommon
 # github.com/json-iterator/go v1.1.9
 github.com/json-iterator/go
@@ -51,17 +59,23 @@ github.com/json-iterator/go
 github.com/lib/pq
 github.com/lib/pq/oid
 github.com/lib/pq/scram
-# github.com/majewsky/schwift v0.0.0-20180906125654-e1b3d5e2efc9
+# github.com/majewsky/schwift v0.0.0-20200224150542-3857990bb9f7
+## explicit
 github.com/majewsky/schwift
 github.com/majewsky/schwift/capabilities
 github.com/majewsky/schwift/gopherschwift
+# github.com/mattn/go-sqlite3 v2.0.3+incompatible
+## explicit
 # github.com/matttproud/golang_protobuf_extensions v1.0.1
 github.com/matttproud/golang_protobuf_extensions/pbutil
 # github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd
 github.com/modern-go/concurrent
 # github.com/modern-go/reflect2 v1.0.1
 github.com/modern-go/reflect2
-# github.com/prometheus/client_golang v1.4.0
+# github.com/poy/onpar v0.0.0-20190519213022-ee068f8ea4d1
+## explicit
+# github.com/prometheus/client_golang v1.5.1
+## explicit
 github.com/prometheus/client_golang/api
 github.com/prometheus/client_golang/api/prometheus/v1
 github.com/prometheus/client_golang/prometheus
@@ -70,6 +84,7 @@ github.com/prometheus/client_golang/prometheus/promhttp
 # github.com/prometheus/client_model v0.2.0
 github.com/prometheus/client_model/go
 # github.com/prometheus/common v0.9.1
+## explicit
 github.com/prometheus/common/expfmt
 github.com/prometheus/common/internal/bitbucket.org/ww/goautoneg
 github.com/prometheus/common/model
@@ -78,8 +93,10 @@ github.com/prometheus/procfs
 github.com/prometheus/procfs/internal/fs
 github.com/prometheus/procfs/internal/util
 # github.com/rs/cors v1.7.0
+## explicit
 github.com/rs/cors
 # github.com/sapcc/go-bits v0.0.0-20200408113334-fba3bcbf66ea
+## explicit
 github.com/sapcc/go-bits/assert
 github.com/sapcc/go-bits/audittools
 github.com/sapcc/go-bits/easypg
@@ -94,15 +111,21 @@ github.com/sapcc/go-bits/httpee
 github.com/sapcc/go-bits/logg
 github.com/sapcc/go-bits/respondwith
 github.com/sapcc/go-bits/sre
-# github.com/sapcc/hermes v0.0.0-20200113180615-22691208a86f
+# github.com/sapcc/hermes v0.0.0-20200212165508-e91370c3bcb4
+## explicit
 github.com/sapcc/hermes/pkg/cadf
 # github.com/streadway/amqp v0.0.0-20190827072141-edfb9018d271
 github.com/streadway/amqp
-# golang.org/x/net v0.0.0-20200114155413-6afb5195e5aa
+# github.com/ziutek/mymysql v1.5.4
+## explicit
+# golang.org/x/net v0.0.0-20200324143707-d3edc9973b7e
+## explicit
 golang.org/x/net/context
-# golang.org/x/sys v0.0.0-20200122134326-e047566fdf82
+# golang.org/x/sys v0.0.0-20200323222414-85ca7c5b95cd
 golang.org/x/sys/windows
 # gopkg.in/gorp.v2 v2.2.0
+## explicit
 gopkg.in/gorp.v2
 # gopkg.in/yaml.v2 v2.2.8
+## explicit
 gopkg.in/yaml.v2
