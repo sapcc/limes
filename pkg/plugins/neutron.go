@@ -144,7 +144,7 @@ func (p *neutronPlugin) Init(provider *gophercloud.ProviderClient, eo gopherclou
 	case nil:
 		p.hasLBaaS = true
 	default:
-		return r.Result.Err
+		return fmt.Errorf("cannot check for lbaasv2 support in Neutron: %s", r.Result.Err.Error())
 	}
 
 	// Octavia supported?
