@@ -22,6 +22,7 @@ package plugins
 import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
+	"github.com/gophercloud/gophercloud/openstack/common/extensions"
 	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 )
@@ -31,6 +32,7 @@ type neutronPlugin struct {
 	resources     []limes.ResourceInfo
 	resourcesMeta []neutronResourceMetadata
 	hasOctavia    bool
+	hasLBaaS      bool
 }
 
 var neutronResources = []limes.ResourceInfo{
@@ -129,7 +131,24 @@ func init() {
 
 //Init implements the core.QuotaPlugin interface.
 func (p *neutronPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
-	_, err := openstack.NewLoadBalancerV2(provider, eo)
+	client, err := openstack.NewNetworkV2(provider, eo)
+	if err != nil {
+		return err
+	}
+
+	// LBaaSv2 supported?
+	r := extensions.Get(client, "lbaasv2")
+	switch r.Result.Err.(type) {
+	case gophercloud.ErrDefault404:
+		p.hasLBaaS = false
+	case nil:
+		p.hasLBaaS = true
+	default:
+		return r.Result.Err
+	}
+
+	// Octavia supported?
+	_, err = openstack.NewLoadBalancerV2(provider, eo)
 	switch err.(type) {
 	case *gophercloud.ErrEndpointNotFound:
 		p.hasOctavia = false
@@ -160,6 +179,7 @@ type neutronResourceMetadata struct {
 	LimesName   string
 	NeutronName string
 	InOctavia   bool
+	InLBaaS     bool
 }
 
 var neutronResourceMeta = []neutronResourceMetadata{
@@ -203,31 +223,37 @@ var neutronResourceMeta = []neutronResourceMetadata{
 		LimesName:   "loadbalancers",
 		NeutronName: "loadbalancer",
 		InOctavia:   true,
+		InLBaaS:     true,
 	},
 	{
 		LimesName:   "listeners",
 		NeutronName: "listener",
 		InOctavia:   true,
+		InLBaaS:     true,
 	},
 	{
 		LimesName:   "pools",
 		NeutronName: "pool",
 		InOctavia:   true,
+		InLBaaS:     true,
 	},
 	{
 		LimesName:   "healthmonitors",
 		NeutronName: "healthmonitor",
 		InOctavia:   true,
+		InLBaaS:     true,
 	},
 	{
 		LimesName:   "l7policies",
 		NeutronName: "l7policy",
 		InOctavia:   false, //for some reason, Octavia does not support this quota type
+		InLBaaS:     true,
 	},
 	{
 		LimesName:   "pool_members",
 		NeutronName: "member",
 		InOctavia:   true,
+		InLBaaS:     true,
 	},
 }
 
@@ -288,7 +314,7 @@ func (p *neutronPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopher
 	octaviaRequestData.Quotas = make(map[string]uint64)
 	for _, res := range p.resourcesMeta {
 		quota, exists := quotas[res.LimesName]
-		if exists {
+		if exists && (!res.InLBaaS || p.hasLBaaS) {
 			neutronRequestData.Quotas[res.NeutronName] = quota
 		}
 		if exists && res.InOctavia {
