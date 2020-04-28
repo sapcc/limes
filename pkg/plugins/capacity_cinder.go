@@ -20,6 +20,7 @@
 package plugins
 
 import (
+	"errors"
 	"strings"
 
 	"github.com/gophercloud/gophercloud"
@@ -41,12 +42,27 @@ func init() {
 
 //Init implements the core.CapacityPlugin interface.
 func (p *capacityCinderPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
+	if len(p.cfg.Cinder.VolumeTypes) == 0 {
+		return errors.New("Cinder capacity plugin: missing required configuration field cinder.volume_types")
+	}
 	return nil
 }
 
 //ID implements the core.CapacityPlugin interface.
 func (p *capacityCinderPlugin) ID() string {
 	return "cinder"
+}
+
+func (p *capacityCinderPlugin) makeResourceName(volumeType string) string {
+	//the resources for the volume type marked as default don't get the volume
+	//type suffix for backwards compatibility reasons
+	if p.cfg.Cinder.VolumeTypes[volumeType].IsDefault {
+		return "capacity"
+	}
+	return "capacity_" + volumeType
+	//NOTE: We don't make estimates for no. of snapshots/volumes in this
+	//capacitor. These values depend highly on the backend. (On SAP CC, we
+	//configure capacity for snapshots/volumes via the "manual" capacitor.)
 }
 
 //Scrape implements the core.CapacityPlugin interface.
@@ -106,23 +122,28 @@ func (p *capacityCinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo g
 		}
 	}
 
-	var (
-		totalCapacityGb uint64
-		capacityPerAZ   = make(map[string]*core.CapacityDataForAZ)
-
-		volumeBackendName = p.cfg.Cinder.VolumeBackendName
-	)
+	capaData := make(map[string]*core.CapacityData)
+	volumeTypesByBackendName := make(map[string]string)
+	for volumeType, cfg := range p.cfg.Cinder.VolumeTypes {
+		volumeTypesByBackendName[cfg.VolumeBackendName] = volumeType
+		capaData[p.makeResourceName(volumeType)] = &core.CapacityData{
+			Capacity:      0,
+			CapacityPerAZ: make(map[string]*core.CapacityDataForAZ),
+		}
+	}
 
 	//add results from scheduler-stats
 	for _, element := range limitData.Pools {
-		if (volumeBackendName != "") && (element.Capabilities.VolumeBackendName != volumeBackendName) {
-			logg.Debug("Not considering %s with volume_backend_name %s", element.Name, element.Capabilities.VolumeBackendName)
+		volumeType, ok := volumeTypesByBackendName[element.Capabilities.VolumeBackendName]
+		if !ok {
+			logg.Info("Cinder capacity plugin: skipping pool %q with unknown volume_backend_name %q", element.Name, element.Capabilities.VolumeBackendName)
 			continue
 		}
 
-		logg.Debug("Considering %s with volume_backend_name %s", element.Name, element.Capabilities.VolumeBackendName)
+		logg.Debug("Cinder capacity plugin: considering pool %q with volume_backend_name %q for volume type %q", element.Name, element.Capabilities.VolumeBackendName, volumeType)
 
-		totalCapacityGb += uint64(element.Capabilities.TotalCapacityGb)
+		resourceName := p.makeResourceName(volumeType)
+		capaData[resourceName].Capacity += uint64(element.Capabilities.TotalCapacityGb)
 
 		var poolAZ string
 		for az, hosts := range serviceHostsPerAZ {
@@ -138,19 +159,18 @@ func (p *capacityCinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo g
 			logg.Info("Cinder storage pool %q does not match any service host", element.Name)
 			poolAZ = "unknown"
 		}
-		if _, ok := capacityPerAZ[poolAZ]; !ok {
-			capacityPerAZ[poolAZ] = &core.CapacityDataForAZ{}
+		if _, ok := capaData[resourceName].CapacityPerAZ[poolAZ]; !ok {
+			capaData[resourceName].CapacityPerAZ[poolAZ] = &core.CapacityDataForAZ{}
 		}
 
-		capacityPerAZ[poolAZ].Capacity += uint64(element.Capabilities.TotalCapacityGb)
-		capacityPerAZ[poolAZ].Usage += uint64(element.Capabilities.AllocatedCapacityGb)
+		azCapaData := capaData[resourceName].CapacityPerAZ[poolAZ]
+		azCapaData.Capacity += uint64(element.Capabilities.TotalCapacityGb)
+		azCapaData.Usage += uint64(element.Capabilities.AllocatedCapacityGb)
 	}
 
-	return map[string]map[string]core.CapacityData{
-		"volumev2": {
-			"capacity": core.CapacityData{Capacity: totalCapacityGb, CapacityPerAZ: capacityPerAZ},
-			//NOTE: no estimates for no. of snapshots/volumes here; this depends highly on the backend
-			//(on SAP CC, we configure capacity for snapshots/volumes via the "manual" capacitor)
-		},
-	}, nil
+	capaDataFinal := make(map[string]core.CapacityData)
+	for k, v := range capaData {
+		capaDataFinal[k] = *v
+	}
+	return map[string]map[string]core.CapacityData{"volumev2": capaDataFinal}, nil
 }

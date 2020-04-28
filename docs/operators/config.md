@@ -481,9 +481,11 @@ will be used by the HTTP client to make requests to the Prometheus API.
 ```yaml
 services:
   - type: volumev2
+    volumev2:
+      volume_types: [ vmware, vmware_hdd ]
 ```
 
-The area for this service is `storage`.
+The area for this service is `storage`. The following resources are always exposed:
 
 | Resource | Unit |
 | --- | --- |
@@ -491,9 +493,24 @@ The area for this service is `storage`.
 | `snapshots` | countable |
 | `volumes` | countable |
 
-Quotas per volume type cannot be controlled explicitly in Limes.
+If the `volumev2.volume_types` field lists more than one volume type, the
+aforementioned resources will refer to the quota for the first of these volume
+types. (This peculiar rule exists for backwards-compatibility reasons.) For
+each other volume type, the following resources are exposed:
 
-The `volumes` resource supports subresource scraping. Subresources bear the following attributes:
+| Resource | Unit |
+| --- | --- |
+| `capacity_${volume_type}` | GiB |
+| `snapshots_${volume_type}` | countable |
+| `volumes_${volume_type}` | countable |
+
+In Cinder, besides the volume-type-specific quotas, the general quotas
+(`gigabytes`, `snapshots`, `volumes`) are set to the sum across all volume
+types. If the `volumev2.volume_types` field is absent, only the general quotas
+are set and inspected.
+
+The `volumes` and `volumes_${volume_type}` resources supports subresource
+scraping. Subresources bear the following attributes:
 
 | Attribute | Type | Comment |
 | --- | --- | --- |
@@ -525,7 +542,9 @@ capacitors:
       password:            swordfish
       region_name:         staging
     cinder:
-      volume_backend_name: "vmware"
+      volume_types:
+        vmware:     { volume_backend_name: vmware_ssd, default: true }
+        vmware_hdd: { volume_backend_name: vmware_hdd, default: false }
 ```
 
 ## `cfm`
@@ -545,14 +564,15 @@ capacitors:
 capacitors:
   - id: cinder
     cinder:
-      volume_backend_name: "vmware"
+      volume_types:
+        vmware:     { volume_backend_name: vmware_ssd, default: true }
+        vmware_hdd: { volume_backend_name: vmware_hdd, default: false }
 ```
 
 | Resource | Method |
 | --- | --- |
-| `volumev2/capacity` | The sum over all pools reported by Cinder. |
-
-The `cinder.volume_backend_name` parameter can be used to filter the back-end storage pools by volume name.
+| `volumev2/capacity` | The sum over all pools reported by Cinder with `volume_backend_name` matching that of the default volume type. |
+| `volumev2/capacity_${volume_type}` | The sum over all pools reported by Cinder with `volume_backend_name` matching that of the given non-default volume type. |
 
 No estimates are made for the `snapshots` and `volumes` resources since capacity highly depends on
 the concrete Cinder backend.

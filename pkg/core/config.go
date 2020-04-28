@@ -127,6 +127,9 @@ type ServiceConfiguration struct {
 	ShareV2 struct {
 		PrometheusAPIConfig *PrometheusAPIConfiguration `yaml:"prometheus_api"`
 	} `yaml:"sharev2"`
+	VolumeV2 struct {
+		VolumeTypes []string `yaml:"volume_types"`
+	} `yaml:"volumev2"`
 }
 
 //ServiceRateLimitConfiguration describes the global and project-level default rate limits for a service.
@@ -196,7 +199,10 @@ type CapacitorConfiguration struct {
 		Queries   map[string]map[string]string `yaml:"queries"`
 	} `yaml:"prometheus"`
 	Cinder struct {
-		VolumeBackendName string `yaml:"volume_backend_name"`
+		VolumeTypes map[string]struct {
+			VolumeBackendName string `yaml:"volume_backend_name"`
+			IsDefault         bool   `yaml:"default"`
+		} `yaml:"volume_types"`
 	} `yaml:"cinder"`
 	Manila struct {
 		ShareNetworks     uint64  `yaml:"share_networks"`

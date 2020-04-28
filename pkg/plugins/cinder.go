@@ -20,6 +20,9 @@
 package plugins
 
 import (
+	"encoding/json"
+	"errors"
+
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v2/volumes"
@@ -33,21 +36,6 @@ type cinderPlugin struct {
 	scrapeVolumes bool
 }
 
-var cinderResources = []limes.ResourceInfo{
-	{
-		Name: "capacity",
-		Unit: limes.UnitGibibytes,
-	},
-	{
-		Name: "snapshots",
-		Unit: limes.UnitNone,
-	},
-	{
-		Name: "volumes",
-		Unit: limes.UnitNone,
-	},
-}
-
 func init() {
 	core.RegisterQuotaPlugin(func(c core.ServiceConfiguration, scrapeSubresources map[string]bool) core.QuotaPlugin {
 		return &cinderPlugin{
@@ -59,6 +47,9 @@ func init() {
 
 //Init implements the core.QuotaPlugin interface.
 func (p *cinderPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
+	if len(p.cfg.VolumeV2.VolumeTypes) == 0 {
+		return errors.New("quota plugin volumev2: missing required configuration field volumev2.volume_types")
+	}
 	return nil
 }
 
@@ -73,7 +64,54 @@ func (p *cinderPlugin) ServiceInfo() limes.ServiceInfo {
 
 //Resources implements the core.QuotaPlugin interface.
 func (p *cinderPlugin) Resources() []limes.ResourceInfo {
-	return cinderResources
+	result := make([]limes.ResourceInfo, 0, 3*len(p.cfg.VolumeV2.VolumeTypes))
+	for _, volumeType := range p.cfg.VolumeV2.VolumeTypes {
+		result = append(result,
+			limes.ResourceInfo{Name: p.makeResourceName("capacity", volumeType), Unit: limes.UnitGibibytes},
+			limes.ResourceInfo{Name: p.makeResourceName("snapshots", volumeType), Unit: limes.UnitNone},
+			limes.ResourceInfo{Name: p.makeResourceName("volumes", volumeType), Unit: limes.UnitNone},
+		)
+	}
+	return result
+}
+
+func (p *cinderPlugin) makeResourceName(kind, volumeType string) string {
+	if p.cfg.VolumeV2.VolumeTypes[0] == volumeType {
+		//the resources for the first volume type don't get the volume type suffix
+		//for backwards compatibility reasons
+		return kind
+	}
+	return kind + "_" + volumeType
+}
+
+type quotaSetField core.ResourceData
+
+func (f *quotaSetField) UnmarshalJSON(buf []byte) error {
+	//The `quota_set` field in the os-quota-sets response is mostly
+	//map[string]quotaSetField, but there is also an "id" key containing a
+	//string. Skip deserialization of that value.
+	if buf[0] == '"' {
+		return nil
+	}
+
+	var data struct {
+		Quota int64  `json:"limit"`
+		Usage uint64 `json:"in_use"`
+	}
+	err := json.Unmarshal(buf, &data)
+	if err == nil {
+		f.Quota = data.Quota
+		f.Usage = data.Usage
+	}
+	return err
+}
+
+func (f quotaSetField) ToResourceData(subresources []interface{}) core.ResourceData {
+	return core.ResourceData{
+		Quota:        f.Quota,
+		Usage:        f.Usage,
+		Subresources: subresources,
+	}
 }
 
 //Scrape implements the core.QuotaPlugin interface.
@@ -90,27 +128,24 @@ func (p *cinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 		return nil, err
 	}
 
-	type field struct {
-		Quota int64  `json:"limit"`
-		Usage uint64 `json:"in_use"`
-	}
 	var data struct {
-		QuotaSet struct {
-			Capacity  field `json:"gigabytes"`
-			Snapshots field `json:"snapshots"`
-			Volumes   field `json:"volumes"`
-		} `json:"quota_set"`
+		QuotaSet map[string]quotaSetField `json:"quota_set"`
 	}
 	err = result.ExtractInto(&data)
 	if err != nil {
 		return nil, err
 	}
 
-	var volumeData []interface{}
+	volumeData := make(map[string][]interface{})
 	if p.scrapeVolumes {
-		listOpts := cinderVolumeListOpts{
+		isVolumeType := make(map[string]bool)
+		for _, volumeType := range p.cfg.VolumeV2.VolumeTypes {
+			isVolumeType[volumeType] = true
+		}
+
+		listOpts := volumes.ListOpts{
 			AllTenants: true,
-			ProjectID:  projectUUID,
+			TenantID:   projectUUID,
 		}
 
 		err := volumes.List(client, listOpts).EachPage(func(page pagination.Page) (bool, error) {
@@ -120,7 +155,13 @@ func (p *cinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 			}
 
 			for _, volume := range vols {
-				volumeData = append(volumeData, map[string]interface{}{
+				volumeType := volume.VolumeType
+				//group subresources with unknown volume types under the default volume type
+				if !isVolumeType[volumeType] {
+					volumeType = p.cfg.VolumeV2.VolumeTypes[0]
+				}
+
+				volumeData[volumeType] = append(volumeData[volumeType], map[string]interface{}{
 					"id":     volume.ID,
 					"name":   volume.Name,
 					"status": volume.Status,
@@ -138,31 +179,36 @@ func (p *cinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 		}
 	}
 
-	return map[string]core.ResourceData{
-		"capacity": {
-			Quota: data.QuotaSet.Capacity.Quota,
-			Usage: data.QuotaSet.Capacity.Usage,
-		},
-		"snapshots": {
-			Quota: data.QuotaSet.Snapshots.Quota,
-			Usage: data.QuotaSet.Snapshots.Usage,
-		},
-		"volumes": {
-			Quota:        data.QuotaSet.Volumes.Quota,
-			Usage:        data.QuotaSet.Volumes.Usage,
-			Subresources: volumeData,
-		},
-	}, nil
+	rd := make(map[string]core.ResourceData)
+	for _, volumeType := range p.cfg.VolumeV2.VolumeTypes {
+		rd[p.makeResourceName("capacity", volumeType)] = data.QuotaSet["gigabytes_"+volumeType].ToResourceData(nil)
+		rd[p.makeResourceName("snapshots", volumeType)] = data.QuotaSet["snapshots_"+volumeType].ToResourceData(nil)
+		rd[p.makeResourceName("volumes", volumeType)] = data.QuotaSet["volumes_"+volumeType].ToResourceData(
+			volumeData[volumeType],
+		)
+	}
+	return rd, nil
 }
 
 //SetQuota implements the core.QuotaPlugin interface.
 func (p *cinderPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
-	requestData := map[string]map[string]uint64{
-		"quota_set": {
-			"gigabytes": quotas["capacity"],
-			"snapshots": quotas["snapshots"],
-			"volumes":   quotas["volumes"],
-		},
+	var requestData struct {
+		QuotaSet map[string]uint64 `json:"quota_set"`
+	}
+	requestData.QuotaSet = make(map[string]uint64)
+
+	for _, volumeType := range p.cfg.VolumeV2.VolumeTypes {
+		quotaCapacity := quotas[p.makeResourceName("capacity", volumeType)]
+		requestData.QuotaSet["gigabytes_"+volumeType] = quotaCapacity
+		requestData.QuotaSet["gigabytes"] += quotaCapacity
+
+		quotaSnapshots := quotas[p.makeResourceName("snapshots", volumeType)]
+		requestData.QuotaSet["snapshots_"+volumeType] = quotaSnapshots
+		requestData.QuotaSet["snapshots"] += quotaSnapshots
+
+		quotaVolumes := quotas[p.makeResourceName("volumes", volumeType)]
+		requestData.QuotaSet["volumes_"+volumeType] = quotaVolumes
+		requestData.QuotaSet["volumes"] += quotaVolumes
 	}
 
 	client, err := openstack.NewBlockStorageV2(provider, eo)
@@ -173,14 +219,4 @@ func (p *cinderPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherc
 	url := client.ServiceURL("os-quota-sets", projectUUID)
 	_, err = client.Put(url, requestData, nil, &gophercloud.RequestOpts{OkCodes: []int{200}})
 	return err
-}
-
-type cinderVolumeListOpts struct {
-	AllTenants bool   `q:"all_tenants"`
-	ProjectID  string `q:"project_id"`
-}
-
-func (opts cinderVolumeListOpts) ToVolumeListQuery() (string, error) {
-	q, err := gophercloud.BuildQueryString(opts)
-	return q.String(), err
 }
