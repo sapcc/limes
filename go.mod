@@ -6,7 +6,7 @@ require (
 	github.com/databus23/goslo.policy v0.0.0-20170317131957-3ae74dd07ebf
 	github.com/go-gorp/gorp v2.2.0+incompatible // indirect
 	github.com/go-sql-driver/mysql v1.5.0 // indirect
-	github.com/gophercloud/gophercloud v0.9.0
+	github.com/gophercloud/gophercloud v0.10.1-0.20200424014253-c3bfe50899e5
 	github.com/gorilla/mux v1.7.4
 	github.com/jpillora/longestcommon v0.0.0-20161227235612-adb9d91ee629 // indirect
 	github.com/majewsky/schwift v0.0.0-20200224150542-3857990bb9f7
