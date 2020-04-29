@@ -66,10 +66,23 @@ func (p *cinderPlugin) ServiceInfo() limes.ServiceInfo {
 func (p *cinderPlugin) Resources() []limes.ResourceInfo {
 	result := make([]limes.ResourceInfo, 0, 3*len(p.cfg.VolumeV2.VolumeTypes))
 	for _, volumeType := range p.cfg.VolumeV2.VolumeTypes {
+		category := p.makeResourceName("volumev2", volumeType)
 		result = append(result,
-			limes.ResourceInfo{Name: p.makeResourceName("capacity", volumeType), Unit: limes.UnitGibibytes},
-			limes.ResourceInfo{Name: p.makeResourceName("snapshots", volumeType), Unit: limes.UnitNone},
-			limes.ResourceInfo{Name: p.makeResourceName("volumes", volumeType), Unit: limes.UnitNone},
+			limes.ResourceInfo{
+				Name:     p.makeResourceName("capacity", volumeType),
+				Unit:     limes.UnitGibibytes,
+				Category: category,
+			},
+			limes.ResourceInfo{
+				Name:     p.makeResourceName("snapshots", volumeType),
+				Unit:     limes.UnitNone,
+				Category: category,
+			},
+			limes.ResourceInfo{
+				Name:     p.makeResourceName("volumes", volumeType),
+				Unit:     limes.UnitNone,
+				Category: category,
+			},
 		)
 	}
 	return result
