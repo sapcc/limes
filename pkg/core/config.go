@@ -242,14 +242,15 @@ func (l LowPrivilegeRaiseConfiguration) IsAllowedForProjectsIn(domainName string
 //specialized behaviors of a single resource (or a set of resources) in a
 //certain cluster.
 type ResourceBehaviorConfiguration struct {
-	FullResourceName   string                    `yaml:"resource"`
-	Scope              string                    `yaml:"scope"`
-	MaxBurstMultiplier *limes.BurstingMultiplier `yaml:"max_burst_multiplier"`
-	OvercommitFactor   float64                   `yaml:"overcommit_factor"`
-	ScalesWith         string                    `yaml:"scales_with"`
-	ScalingFactor      float64                   `yaml:"scaling_factor"`
-	Compiled           ResourceBehavior          `yaml:"-"`
-	Annotations        map[string]interface{}    `yaml:"annotations"`
+	FullResourceName       string                    `yaml:"resource"`
+	Scope                  string                    `yaml:"scope"`
+	MaxBurstMultiplier     *limes.BurstingMultiplier `yaml:"max_burst_multiplier"`
+	OvercommitFactor       float64                   `yaml:"overcommit_factor"`
+	ScalesWith             string                    `yaml:"scales_with"`
+	ScalingFactor          float64                   `yaml:"scaling_factor"`
+	MinNonZeroProjectQuota uint64                    `yaml:"min_nonzero_project_quota"`
+	Annotations            map[string]interface{}    `yaml:"annotations"`
+	Compiled               ResourceBehavior          `yaml:"-"`
 }
 
 //ResourceBehavior is the compiled version of ResourceBehaviorConfiguration.
@@ -261,6 +262,7 @@ type ResourceBehavior struct {
 	ScalesWithResourceName string
 	ScalesWithServiceType  string
 	ScalingFactor          float64
+	MinNonZeroProjectQuota uint64
 	Annotations            map[string]interface{}
 }
 
@@ -466,8 +468,9 @@ func (cfg configurationInFile) validate() (success bool) {
 
 		for idx, behavior := range cluster.ResourceBehaviors {
 			behavior.Compiled = ResourceBehavior{
-				OvercommitFactor: behavior.OvercommitFactor,
-				Annotations:      behavior.Annotations,
+				OvercommitFactor:       behavior.OvercommitFactor,
+				MinNonZeroProjectQuota: behavior.MinNonZeroProjectQuota,
+				Annotations:            behavior.Annotations,
 			}
 
 			if behavior.FullResourceName == "" {

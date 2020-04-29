@@ -203,6 +203,7 @@ Some special behaviors for resources can be configured in the `clusters[].resour
 | `clusters.$id.resource_behavior[].overcommit_factor` | no | If given, capacity for matching resources will be computed as `raw_capacity * overcommit_factor`, where `raw_capacity` is what the capacity plugin reports. |
 | `clusters.$id.resource_behavior[].scales_with` | no | If a resource is given, matching resources scales with this resource. The other resource may be specified by its name (for resources within the same service type), or by a slash-concatenated pair of service type and resource name, e.g. `compute/cores`. |
 | `clusters.$id.resource_behavior[].scaling_factor` | yes, if `scales_with` is given | The scaling factor that will be reported for these resources' scaling relation. |
+| `clusters.$id.resource_behavior[].min_nonzero_project_quota` | no | A lower boundary for project quota values that are not zero. |
 | `clusters.$id.resource_behavior[].annotations` | no | A map of extra key-value pairs that will be inserted into matching resources as-is in responses to GET requests, e.g. at `project.services[].resources[].annotations`. |
 
 For example:
@@ -219,6 +220,8 @@ clusters:
       - { resource: sharev2/.*_capacity, overcommit_factor: 2 }
       # disable bursting for the domain "foo"
       - { resource: .*, scope: foo/.*, max_burst_multiplier: 0 }
+      # require each project to take at least 100 GB of object storage if they use it at all
+      - { resource: object-store/capacity, min_nonzero_project_quota: 107374182400 }
 ```
 
 # Supported discovery methods

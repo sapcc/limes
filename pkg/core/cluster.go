@@ -350,9 +350,7 @@ func (c *Cluster) InfoForService(serviceType string) limes.ServiceInfo {
 }
 
 //BehaviorForResource returns the ResourceBehavior for the given resource in
-//the given scope. If no special behavior has been configured for this
-//resource, or if this resource does not exist, a zero-initialized struct is
-//returned.
+//the given scope.
 //
 //`scopeName` should be empty for cluster resources, equal to the domain name
 //for domain resources, or equal to `$DOMAIN_NAME/$PROJECT_NAME` for project
@@ -385,6 +383,9 @@ func (c *Cluster) BehaviorForResource(serviceType, resourceName, scopeName strin
 			result.ScalesWithServiceType = behavior.ScalesWithServiceType
 			result.ScalesWithResourceName = behavior.ScalesWithResourceName
 			result.ScalingFactor = behavior.ScalingFactor
+		}
+		if result.MinNonZeroProjectQuota < behavior.MinNonZeroProjectQuota {
+			result.MinNonZeroProjectQuota = behavior.MinNonZeroProjectQuota
 		}
 		if len(behavior.Annotations) > 0 && result.Annotations == nil {
 			result.Annotations = make(map[string]interface{})

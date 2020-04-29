@@ -210,6 +210,14 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 	config.API.PolicyEnforcer = enforcer
 
 	config.Clusters["west"].Config.ResourceBehaviors = []*core.ResourceBehaviorConfiguration{
+		//check minimum non-zero project quota constraint
+		{
+			Compiled: core.ResourceBehavior{
+				MaxBurstMultiplier:     limes.BurstingMultiplier(math.Inf(+1)),
+				FullResourceNameRx:     regexp.MustCompile("^unshared/things$"),
+				MinNonZeroProjectQuota: 10,
+			},
+		},
 		//check how scaling relations are reported
 		{
 			Compiled: core.ResourceBehavior{
@@ -1660,6 +1668,7 @@ func Test_ProjectOperations(t *testing.T) {
 						"resources": []assert.JSONObject{
 							//should fail with 409 because usage is higher than that
 							{"name": "capacity", "quota": 0},
+							//should fail with 422 because of minimum non-zero project quota constraint
 							{"name": "things", "quota": 4},
 						},
 					},
@@ -1682,6 +1691,13 @@ func Test_ProjectOperations(t *testing.T) {
 					"message":              "quota may not be lower than current usage",
 					"min_acceptable_quota": 2,
 					"unit":                 "B",
+				},
+				{
+					"service_type":         "unshared",
+					"resource_name":        "things",
+					"status":               422,
+					"message":              "must allocate at least 10 quota",
+					"min_acceptable_quota": 10,
 				},
 			},
 		},

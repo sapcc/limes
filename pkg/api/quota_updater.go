@@ -79,6 +79,14 @@ func (u QuotaUpdater) ScopeType() string {
 	return "project"
 }
 
+//ScopeName is "$DOMAIN_NAME" for domains and "$DOMAIN_NAME/$PROJECT_NAME" for projects.
+func (u QuotaUpdater) ScopeName() string {
+	if u.Project == nil {
+		return u.Domain.Name
+	}
+	return u.Domain.Name + "/" + u.Project.Name
+}
+
 //QuotaConstraints returns the quota constraints that apply to this updater's scope.
 func (u QuotaUpdater) QuotaConstraints() core.QuotaConstraints {
 	if u.Cluster.QuotaConstraints == nil {
@@ -159,7 +167,8 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 			if domRes == nil {
 				return fmt.Errorf("no domain report for resource %s/%s", srv.Type, res.Name)
 			}
-			if u.Project != nil {
+			if u.Project == nil {
+			} else {
 				if projectService, exists := projectReport.Services[srv.Type]; exists {
 					projRes = projectService.Resources[res.Name]
 				}
@@ -196,7 +205,8 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 					continue //with next resource
 				}
 				//value is valid and novel -> perform further validation
-				req.ValidationError = u.validateQuota(srv, res, *clusterRes, *domRes, projRes, req.NewValue)
+				behavior := u.Cluster.BehaviorForResource(srv.Type, res.Name, u.ScopeName())
+				req.ValidationError = u.validateQuota(srv, res, behavior, *clusterRes, *domRes, projRes, req.NewValue)
 			}
 
 			u.ResourceRequests[srv.Type][res.Name] = req
@@ -299,7 +309,7 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 	return nil
 }
 
-func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limes.ResourceInfo, clusterRes limes.ClusterResourceReport, domRes limes.DomainResourceReport, projRes *limes.ProjectResourceReport, newQuota uint64) *core.QuotaValidationError {
+func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limes.ResourceInfo, behavior core.ResourceBehavior, clusterRes limes.ClusterResourceReport, domRes limes.DomainResourceReport, projRes *limes.ProjectResourceReport, newQuota uint64) *core.QuotaValidationError {
 	//can we change this quota at all?
 	if res.ExternallyManaged {
 		return &core.QuotaValidationError{
@@ -314,6 +324,16 @@ func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limes.ResourceInf
 	if verr != nil {
 		verr.Message += fmt.Sprintf(" for this %s and resource", u.ScopeType())
 		return verr
+	}
+	if behavior.MinNonZeroProjectQuota > 0 && behavior.MinNonZeroProjectQuota > newQuota {
+		return &core.QuotaValidationError{
+			Status:       http.StatusUnprocessableEntity,
+			MinimumValue: &behavior.MinNonZeroProjectQuota,
+			Unit:         res.Unit,
+			Message: fmt.Sprintf("must allocate at least %s quota",
+				limes.ValueWithUnit{Value: behavior.MinNonZeroProjectQuota, Unit: res.Unit},
+			),
+		}
 	}
 
 	//check authorization for quota change
