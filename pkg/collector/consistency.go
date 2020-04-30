@@ -106,9 +106,10 @@ func (c *Collector) checkConsistencyCluster() {
 		}
 	}
 
-	//recurse into domains
+	//recurse into domains (with deterministic ordering for the unit test's sake;
+	//the DESC ordering is because I was too lazy to change the fixtures)
 	var domains []db.Domain
-	_, err = db.DB.Select(&domains, `SELECT * FROM domains WHERE cluster_id = $1`, c.Cluster.ID)
+	_, err = db.DB.Select(&domains, `SELECT * FROM domains WHERE cluster_id = $1 ORDER BY name DESC`, c.Cluster.ID)
 	if err != nil {
 		c.LogError(err.Error())
 		return
@@ -137,9 +138,9 @@ func (c *Collector) checkConsistencyDomain(domain db.Domain) {
 		return
 	}
 
-	//recurse into projects
+	//recurse into projects (with deterministic ordering for the unit test's sake)
 	var projects []db.Project
-	_, err = db.DB.Select(&projects, `SELECT * FROM projects WHERE domain_id = $1`, domain.ID)
+	_, err = db.DB.Select(&projects, `SELECT * FROM projects WHERE domain_id = $1 ORDER BY NAME`, domain.ID)
 	if err != nil {
 		c.LogError(err.Error())
 		return
