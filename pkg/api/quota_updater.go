@@ -325,7 +325,7 @@ func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limes.ResourceInf
 		verr.Message += fmt.Sprintf(" for this %s and resource", u.ScopeType())
 		return verr
 	}
-	if behavior.MinNonZeroProjectQuota > 0 && behavior.MinNonZeroProjectQuota > newQuota {
+	if behavior.MinNonZeroProjectQuota > 0 && newQuota > 0 && behavior.MinNonZeroProjectQuota > newQuota {
 		return &core.QuotaValidationError{
 			Status:       http.StatusUnprocessableEntity,
 			MinimumValue: &behavior.MinNonZeroProjectQuota,

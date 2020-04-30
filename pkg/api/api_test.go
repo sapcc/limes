@@ -1625,7 +1625,27 @@ func Test_ProjectOperations(t *testing.T) {
 		},
 	}.Check(t, router)
 
-	//check SimulatePutProject for acceptable changes
+	//check SimulatePutProject for acceptable changes (we have to set usage = 0
+	//on the unshared/things resource to check setting quota to 0 successfully)
+	domainGermanyID, err := db.DB.SelectInt(`SELECT id FROM domains WHERE name = $1`,
+		"germany")
+	if err != nil {
+		t.Fatal(err)
+	}
+	projectBerlinID, err := db.DB.SelectInt(`SELECT id FROM projects WHERE domain_id = $1 AND name = $2`,
+		domainGermanyID, "berlin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	serviceBerlinUnsharedID, err := db.DB.SelectInt(`SELECT ID from project_services WHERE project_id = $1 AND type = $2`,
+		projectBerlinID, "unshared")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.DB.Exec(`UPDATE project_resources SET usage = $1 WHERE service_id = $2 AND name = $3`,
+		0,
+		serviceBerlinUnsharedID, "things",
+	)
 	assert.HTTPRequest{
 		Method:       "POST",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/simulate-put",
@@ -1637,6 +1657,13 @@ func Test_ProjectOperations(t *testing.T) {
 						"type": "shared",
 						"resources": []assert.JSONObject{
 							{"name": "capacity", "quota": 5},
+						},
+					},
+					{
+						"type": "unshared",
+						"resources": []assert.JSONObject{
+							//MinNonZeroProjectQuota should not block setting a quota to 0
+							{"name": "things", "quota": 0},
 						},
 					},
 				},
@@ -1708,21 +1735,6 @@ func Test_ProjectOperations(t *testing.T) {
 	//should only produce an error when *decreasing* quota, not when increasing
 	//it. In other words, it should be allowed to decrease burst usage even if it
 	//is not possible to completely eliminate it.
-	domainGermanyID, err := db.DB.SelectInt(`SELECT id FROM domains WHERE name = $1`,
-		"germany")
-	if err != nil {
-		t.Fatal(err)
-	}
-	projectBerlinID, err := db.DB.SelectInt(`SELECT id FROM projects WHERE domain_id = $1 AND name = $2`,
-		domainGermanyID, "berlin")
-	if err != nil {
-		t.Fatal(err)
-	}
-	serviceBerlinUnsharedID, err := db.DB.SelectInt(`SELECT ID from project_services WHERE project_id = $1 AND type = $2`,
-		projectBerlinID, "unshared")
-	if err != nil {
-		t.Fatal(err)
-	}
 	_, err = db.DB.Exec(`UPDATE project_resources SET quota = $1 WHERE service_id = $2 AND name = $3`,
 		0, //but usage = 2!
 		serviceBerlinUnsharedID, "capacity",
