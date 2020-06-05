@@ -190,8 +190,6 @@ type CapacitorConfiguration struct {
 	Nova struct {
 		ExtraSpecs            map[string]string `yaml:"extra_specs"`
 		HypervisorTypePattern string            `yaml:"hypervisor_type_pattern"`
-		CPUMultiplier         float64           `yaml:"cpu_multiplier"`
-		RAMMultiplier         float64           `yaml:"ram_multiplier"`
 		UsePlacementAPI       bool              `yaml:"use_placement_api"`
 	} `yaml:"nova"`
 	Prometheus struct {

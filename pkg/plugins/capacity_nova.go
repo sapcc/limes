@@ -263,22 +263,6 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 		return nil, err
 	}
 
-	//preserve the VCenter HA reserve, which is reported via Nova, but not accessible
-	if multiplier := p.cfg.Nova.CPUMultiplier; multiplier != 0 {
-		totalVcpus = uint64(float64(totalVcpus) * multiplier)
-		for _, azCapa := range azCapacities {
-			azCapa.VCPUs.Capacity = uint64(float64(azCapa.VCPUs.Capacity) * multiplier)
-			azCapa.VCPUs.Usage = uint64(float64(azCapa.VCPUs.Usage) * multiplier)
-		}
-	}
-	if multiplier := p.cfg.Nova.RAMMultiplier; multiplier != 0 {
-		totalMemoryMb = uint64(float64(totalMemoryMb) * multiplier)
-		for _, azCapa := range azCapacities {
-			azCapa.MemoryMB.Capacity = uint64(float64(azCapa.MemoryMB.Capacity) * multiplier)
-			azCapa.MemoryMB.Usage = uint64(float64(azCapa.MemoryMB.Usage) * multiplier)
-		}
-	}
-
 	capacity := map[string]map[string]core.CapacityData{
 		"compute": {
 			"cores": core.CapacityData{
