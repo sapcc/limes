@@ -92,15 +92,12 @@ func (c *Collector) Scrape() {
 			domainName         string
 			domainUUID         string
 		)
-		err := db.DB.QueryRow(findProjectQuery, c.Cluster.ID, serviceType, c.TimeNow().Add(-scrapeInterval)).
+		scrapeStartedAt := c.TimeNow()
+		err := db.DB.QueryRow(findProjectQuery, c.Cluster.ID, serviceType, scrapeStartedAt.Add(-scrapeInterval)).
 			Scan(&serviceID, &serviceScrapedAt, &projectName, &projectUUID, &projectID, &projectHasBursting, &domainName, &domainUUID)
 		if err != nil {
 			//ErrNoRows is okay; it just means that nothing needs scraping right now
 			if err != sql.ErrNoRows {
-				//TODO: there should be some sort of detection for persistent DB errors
-				//(such as "the DB has burst into flames"); maybe a separate thread that
-				//just pings the DB every now and then and does os.Exit(1) if it fails);
-				//check if database/sql has something like that built-in
 				c.LogError("cannot select next project for which to scrape %s data: %s", serviceType, err.Error())
 			}
 			if c.Once {
@@ -142,7 +139,8 @@ func (c *Collector) Scrape() {
 			continue
 		}
 
-		err = c.writeScrapeResult(domain, projectName, projectUUID, projectID, projectHasBursting, serviceType, serviceID, resourceData, c.TimeNow())
+		scrapeEndedAt := c.TimeNow()
+		err = c.writeScrapeResult(domain, projectName, projectUUID, projectID, projectHasBursting, serviceType, serviceID, resourceData, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
 		if err != nil {
 			c.LogError("write %s backend data for %s/%s failed: %s", serviceType, domainName, projectName, err.Error())
 			scrapeFailedCounter.With(labels).Inc()
@@ -163,7 +161,7 @@ func (c *Collector) Scrape() {
 	}
 }
 
-func (c *Collector) writeScrapeResult(domain core.KeystoneDomain, projectName, projectUUID string, projectID int64, projectHasBursting bool, serviceType string, serviceID int64, resourceData map[string]core.ResourceData, scrapedAt time.Time) error {
+func (c *Collector) writeScrapeResult(domain core.KeystoneDomain, projectName, projectUUID string, projectID int64, projectHasBursting bool, serviceType string, serviceID int64, resourceData map[string]core.ResourceData, scrapedAt time.Time, scrapeDuration time.Duration) error {
 	tx, err := db.DB.Begin()
 	if err != nil {
 		return err
@@ -316,8 +314,8 @@ func (c *Collector) writeScrapeResult(domain core.KeystoneDomain, projectName, p
 	//update scraped_at timestamp and reset the stale flag on this service so
 	//that we don't scrape it again immediately afterwards
 	_, err = tx.Exec(
-		`UPDATE project_services SET scraped_at = $1, stale = $2 WHERE id = $3`,
-		scrapedAt, false, serviceID,
+		`UPDATE project_services SET scraped_at = $1, scrape_duration_secs = $2, stale = $3 WHERE id = $4`,
+		scrapedAt, scrapeDuration.Seconds(), false, serviceID,
 	)
 	if err != nil {
 		return err
@@ -423,8 +421,8 @@ func (c *Collector) writeDummyResources(domain core.KeystoneDomain, projectName 
 	//stale services to cover first
 	dummyScrapedAt := time.Unix(0, 0).UTC()
 	_, err = tx.Exec(
-		`UPDATE project_services SET scraped_at = $1, stale = $2 WHERE id = $3`,
-		dummyScrapedAt, false, serviceID,
+		`UPDATE project_services SET scraped_at = $1, scrape_duration_secs = $2, stale = $3 WHERE id = $4`,
+		dummyScrapedAt, 0.0, false, serviceID,
 	)
 	if err != nil {
 		return err

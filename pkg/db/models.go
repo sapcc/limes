@@ -73,11 +73,12 @@ type Project struct {
 
 //ProjectService contains a record from the `project_services` table.
 type ProjectService struct {
-	ID        int64      `db:"id"`
-	ProjectID int64      `db:"project_id"`
-	Type      string     `db:"type"`
-	ScrapedAt *time.Time `db:"scraped_at"` //pointer type to allow for NULL value
-	Stale     bool       `db:"stale"`
+	ID                 int64      `db:"id"`
+	ProjectID          int64      `db:"project_id"`
+	Type               string     `db:"type"`
+	ScrapedAt          *time.Time `db:"scraped_at"` //pointer type to allow for NULL value
+	Stale              bool       `db:"stale"`
+	ScrapeDurationSecs float64    `db:"scrape_duration_secs"`
 }
 
 //ProjectResource contains a record from the `project_resources` table.
