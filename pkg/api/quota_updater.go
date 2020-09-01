@@ -45,10 +45,10 @@ type QuotaUpdater struct {
 	Project *db.Project //nil for domain quota updates
 
 	//AuthZ info
-	CanRaise        bool
-	CanRaiseLP      bool //low-privilege raise
-	CanLower        bool
-	CanSetRateLimit bool
+	CanRaise        func(serviceType string) bool
+	CanRaiseLP      func(serviceType string) bool //low-privilege raise
+	CanLower        func(serviceType string) bool
+	CanSetRateLimit func(serviceType string) bool
 
 	//Filled by ValidateInput() with the key being the service type.
 	ResourceRequests  map[string]ResourceRequests
@@ -354,7 +354,7 @@ func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limes.ResourceInf
 			lprLimit = 0
 		}
 	}
-	verr = u.validateAuthorization(oldQuota, newQuota, lprLimit, res.Unit)
+	verr = u.validateAuthorization(srv, oldQuota, newQuota, lprLimit, res.Unit)
 	if verr != nil {
 		verr.Message += fmt.Sprintf(" in this %s", u.ScopeType())
 		return verr
@@ -368,47 +368,47 @@ func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limes.ResourceInf
 }
 
 func (u QuotaUpdater) validateRateLimit(srv limes.ServiceInfo, targetTypeURI string, rateLimit *limes.ProjectRateLimitActionReport, newRateLimitValue uint64, newRateLimitUnit limes.Unit) *core.QuotaValidationError {
-	return u.validateAuthorizationRateLimit(rateLimit.Limit, newRateLimitValue, rateLimit.Unit, newRateLimitUnit)
+	return u.validateAuthorizationRateLimit(srv, rateLimit.Limit, newRateLimitValue, rateLimit.Unit, newRateLimitUnit)
 }
 
-func (u QuotaUpdater) validateAuthorization(oldQuota, newQuota, lprLimit uint64, unit limes.Unit) *core.QuotaValidationError {
+func (u QuotaUpdater) validateAuthorization(srv limes.ServiceInfo, oldQuota, newQuota, lprLimit uint64, unit limes.Unit) *core.QuotaValidationError {
 	if oldQuota >= newQuota {
-		if u.CanLower {
+		if u.CanLower(srv.Type) {
 			return nil
 		}
 		return &core.QuotaValidationError{
 			Status:  http.StatusForbidden,
-			Message: "user is not allowed to lower quotas",
+			Message: fmt.Sprintf("user is not allowed to lower %q quotas", srv.Type),
 		}
 	}
 
-	if u.CanRaise {
+	if u.CanRaise(srv.Type) {
 		return nil
 	}
-	if u.CanRaiseLP && lprLimit > 0 {
+	if u.CanRaiseLP(srv.Type) && lprLimit > 0 {
 		if newQuota <= lprLimit {
 			return nil
 		}
 		return &core.QuotaValidationError{
 			Status:       http.StatusForbidden,
-			Message:      "user is not allowed to raise quotas that high",
+			Message:      fmt.Sprintf("user is not allowed to raise %q quotas that high", srv.Type),
 			MaximumValue: &lprLimit,
 			Unit:         unit,
 		}
 	}
 	return &core.QuotaValidationError{
 		Status:  http.StatusForbidden,
-		Message: "user is not allowed to raise quotas",
+		Message: fmt.Sprintf("user is not allowed to raise %q quotas", srv.Type),
 	}
 }
 
-func (u QuotaUpdater) validateAuthorizationRateLimit(oldLimit, newLimit uint64, oldUnit, newUnit limes.Unit) *core.QuotaValidationError {
-	if u.CanSetRateLimit {
+func (u QuotaUpdater) validateAuthorizationRateLimit(srv limes.ServiceInfo, oldLimit, newLimit uint64, oldUnit, newUnit limes.Unit) *core.QuotaValidationError {
+	if u.CanSetRateLimit(srv.Type) {
 		return nil
 	}
 	return &core.QuotaValidationError{
 		Status:  http.StatusForbidden,
-		Message: "user is not allowed to set rate limits",
+		Message: fmt.Sprintf("user is not allowed to set %q rate limits", srv.Type),
 	}
 }
 
@@ -654,7 +654,7 @@ func (u QuotaUpdater) CommitAuditTrail(token *gopherpolicy.Token, r *http.Reques
 	for srvType, reqs := range u.ResourceRequests {
 		for resName, req := range reqs {
 			// low-privilege-raise metrics
-			if u.CanRaiseLP && !u.CanRaise {
+			if u.CanRaiseLP(srvType) && !u.CanRaise(srvType) {
 				labels := prometheus.Labels{
 					"os_cluster": u.Cluster.ID,
 					"service":    srvType,

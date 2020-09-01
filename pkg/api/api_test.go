@@ -258,13 +258,17 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 }
 
 type TestPolicyEnforcer struct {
-	AllowRaise   bool
-	AllowRaiseLP bool
-	AllowLower   bool
+	AllowRaise        bool
+	AllowRaiseLP      bool
+	AllowLower        bool
+	RejectServiceType string
 }
 
 //Enforce implements the gopherpolicy.Enforcer interface.
-func (e TestPolicyEnforcer) Enforce(rule string, _ policy.Context) bool {
+func (e TestPolicyEnforcer) Enforce(rule string, ctx policy.Context) bool {
+	if e.RejectServiceType != "" && ctx.Request["service_type"] == e.RejectServiceType {
+		return false
+	}
 	fields := strings.Split(rule, ":")
 	switch fields[len(fields)-1] {
 	case "raise":
@@ -1779,7 +1783,7 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany",
 		ExpectStatus: 403,
-		ExpectBody:   assert.StringData("cannot change shared/capacity quota: user is not allowed to raise quotas in this domain\n"),
+		ExpectBody:   assert.StringData("cannot change shared/capacity quota: user is not allowed to raise \"shared\" quotas in this domain\n"),
 		Body: assert.JSONObject{
 			"domain": assert.JSONObject{
 				"services": []assert.JSONObject{
@@ -1800,7 +1804,7 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 403,
-		ExpectBody:   assert.StringData("cannot change shared/capacity quota: user is not allowed to raise quotas in this project\n"),
+		ExpectBody:   assert.StringData("cannot change shared/capacity quota: user is not allowed to raise \"shared\" quotas in this project\n"),
 		Body: assert.JSONObject{
 			"project": assert.JSONObject{
 				"services": []assert.JSONObject{
@@ -1826,7 +1830,7 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany",
 		ExpectStatus: 403,
-		ExpectBody:   assert.StringData("cannot change shared/things quota: user is not allowed to lower quotas in this domain\n"),
+		ExpectBody:   assert.StringData("cannot change shared/things quota: user is not allowed to lower \"shared\" quotas in this domain\n"),
 		Body: assert.JSONObject{
 			"domain": assert.JSONObject{
 				"services": []assert.JSONObject{
@@ -1847,7 +1851,7 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 403,
-		ExpectBody:   assert.StringData("cannot change shared/things quota: user is not allowed to lower quotas in this project\n"),
+		ExpectBody:   assert.StringData("cannot change shared/things quota: user is not allowed to lower \"shared\" quotas in this project\n"),
 		Body: assert.JSONObject{
 			"project": assert.JSONObject{
 				"services": []assert.JSONObject{
@@ -1865,9 +1869,66 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 		},
 	}.Check(t, router)
 
+	enforcer.AllowLower = true
+	enforcer.RejectServiceType = "shared"
+
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany",
+		ExpectStatus: 403,
+		ExpectBody:   assert.StringData("cannot change shared/things quota: user is not allowed to lower \"shared\" quotas in this domain\n"),
+		Body: assert.JSONObject{
+			"domain": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "shared",
+						"resources": []assert.JSONObject{
+							//attempt to lower should fail because of lack of permissions for this service type
+							{"name": "things", "quota": 25},
+						},
+					},
+					{
+						"type": "unshared",
+						"resources": []assert.JSONObject{
+							//attempt to lower should be permitted (but will not be executed)
+							{"name": "capacity", "quota": 40},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 403,
+		ExpectBody:   assert.StringData("cannot change shared/things quota: user is not allowed to lower \"shared\" quotas in this project\n"),
+		Body: assert.JSONObject{
+			"project": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "shared",
+						"resources": []assert.JSONObject{
+							//attempt to lower should fail because of lack of permissions for this service type
+							{"name": "things", "quota": 5},
+						},
+					},
+					{
+						"type": "unshared",
+						"resources": []assert.JSONObject{
+							//attempt to lower should be permitted (but will not be executed)
+							{"name": "capacity", "quota": 5},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+
 	enforcer.AllowRaise = false
 	enforcer.AllowRaiseLP = true
 	enforcer.AllowLower = true
+	enforcer.RejectServiceType = ""
 
 	cluster.LowPrivilegeRaise.LimitsForDomains = map[string]map[string]core.LowPrivilegeRaiseLimit{
 		"shared": {"capacity": {AbsoluteValue: 29}, "things": {AbsoluteValue: 35}},
@@ -1880,7 +1941,7 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany",
 		ExpectStatus: 403,
-		ExpectBody:   assert.StringData("cannot change shared/capacity quota: user is not allowed to raise quotas that high in this domain (maximum acceptable domain quota is 29 B)\n"),
+		ExpectBody:   assert.StringData("cannot change shared/capacity quota: user is not allowed to raise \"shared\" quotas that high in this domain (maximum acceptable domain quota is 29 B)\n"),
 		Body: assert.JSONObject{
 			"domain": assert.JSONObject{
 				"services": []assert.JSONObject{
@@ -1901,7 +1962,7 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 403,
-		ExpectBody:   assert.StringData("cannot change shared/capacity quota: user is not allowed to raise quotas that high in this project (maximum acceptable project quota is 10 B)\n"),
+		ExpectBody:   assert.StringData("cannot change shared/capacity quota: user is not allowed to raise \"shared\" quotas that high in this project (maximum acceptable project quota is 10 B)\n"),
 		Body: assert.JSONObject{
 			"project": assert.JSONObject{
 				"services": []assert.JSONObject{
@@ -1925,7 +1986,7 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 403,
-		ExpectBody:   assert.StringData("cannot change shared/capacity quota: user is not allowed to raise quotas in this project\ncannot change shared/things quota: user is not allowed to raise quotas in this project\n"),
+		ExpectBody:   assert.StringData("cannot change shared/capacity quota: user is not allowed to raise \"shared\" quotas in this project\ncannot change shared/things quota: user is not allowed to raise \"shared\" quotas in this project\n"),
 		Body: assert.JSONObject{
 			"project": assert.JSONObject{
 				"services": []assert.JSONObject{
@@ -1959,7 +2020,7 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany",
 		ExpectStatus: 403,
-		ExpectBody:   assert.StringData("cannot change shared/things quota: user is not allowed to raise quotas that high in this domain (maximum acceptable domain quota is 31)\n"),
+		ExpectBody:   assert.StringData("cannot change shared/things quota: user is not allowed to raise \"shared\" quotas that high in this domain (maximum acceptable domain quota is 31)\n"),
 		Body: assert.JSONObject{
 			"domain": assert.JSONObject{
 				"services": []assert.JSONObject{
@@ -1979,7 +2040,7 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 403,
-		ExpectBody:   assert.StringData("cannot change shared/things quota: user is not allowed to raise quotas that high in this project (maximum acceptable project quota is 12)\n"),
+		ExpectBody:   assert.StringData("cannot change shared/things quota: user is not allowed to raise \"shared\" quotas that high in this project (maximum acceptable project quota is 12)\n"),
 		Body: assert.JSONObject{
 			"project": assert.JSONObject{
 				"services": []assert.JSONObject{
@@ -2008,7 +2069,7 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany",
 		ExpectStatus: 403,
-		ExpectBody:   assert.StringData("cannot change shared/things quota: user is not allowed to raise quotas that high in this domain (maximum acceptable domain quota is 50)\n"),
+		ExpectBody:   assert.StringData("cannot change shared/things quota: user is not allowed to raise \"shared\" quotas that high in this domain (maximum acceptable domain quota is 50)\n"),
 		Body: assert.JSONObject{
 			"domain": assert.JSONObject{
 				"services": []assert.JSONObject{

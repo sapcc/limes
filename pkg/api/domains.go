@@ -116,19 +116,21 @@ func (p *v1Provider) SimulatePutDomain(w http.ResponseWriter, r *http.Request) {
 func (p *v1Provider) putOrSimulatePutDomain(w http.ResponseWriter, r *http.Request, simulate bool) {
 	requestTime := time.Now()
 	token := p.CheckToken(r)
-	canRaise := token.Check("domain:raise")
-	canRaiseLP := token.Check("domain:raise_lowpriv")
-	canLower := token.Check("domain:lower")
-	if !canRaise && !canLower {
-		token.Require(w, "domain:raise") //produce standard Unauthorized response
+	if !token.Require(w, "domain:show") {
 		return
+	}
+	checkToken := func(policy string) func(string) bool {
+		return func(serviceType string) bool {
+			token.Context.Request["service_type"] = serviceType
+			return token.Check(policy)
+		}
 	}
 
 	updater := QuotaUpdater{
 		Config:     p.Config,
-		CanRaise:   canRaise,
-		CanRaiseLP: canRaiseLP,
-		CanLower:   canLower,
+		CanRaise:   checkToken("domain:raise"),
+		CanRaiseLP: checkToken("domain:raise_lowpriv"),
+		CanLower:   checkToken("domain:lower"),
 	}
 	updater.Cluster = p.FindClusterFromRequest(w, r, token)
 	if updater.Cluster == nil {

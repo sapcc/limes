@@ -40,7 +40,9 @@ func (p *v1Provider) CheckToken(r *http.Request) *gopherpolicy.Token {
 	if auth.AuthURL == "" {
 		return &gopherpolicy.Token{
 			Enforcer: p.Config.API.PolicyEnforcer,
-			Context:  policy.Context{},
+			Context: policy.Context{
+				Request: map[string]string{}, //needs to be non-nil because fields are set later
+			},
 		}
 	}
 
