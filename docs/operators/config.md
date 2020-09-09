@@ -70,6 +70,7 @@ Read on for the full list and description of all configuration options.
   * [object\-store: Swift v1](#object-store-swift-v1)
   * [sharev2: Manila v2](#sharev2-manila-v2)
   * [volumev2: Cinder v2](#volumev2-cinder-v2)
+  * [cronus: Email V1](#cronus-email-v1)
 * [Available capacity plugins](#available-capacity-plugins)
   * [cfm](#cfm)
   * [cinder](#cinder)
@@ -404,11 +405,27 @@ The area for this service is `storage`.
 | --- | --- |
 | `images` | countable |
 
+## `cronus`: Email v1
+
+```yaml
+services:
+  - type: email-aws
+```
+
+The area for this service is `email`.
+
+| Resource | Unit |
+| --- | --- |
+| `recipients` | countable |
+| `data_transfer_in` | bytes |
+| `data_transfer_out` | bytes |
+| `attachments_size` | bytes |
+
 ## `network`: Neutron v1
 
 ```yaml
 services:
-  - type: object-store
+  - type: network
 ```
 
 The area for this service is `network`. Resources are categorized into `networking` for SDN resources and `loadbalancing` for LBaaS resources.
