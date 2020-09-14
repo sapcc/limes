@@ -53,6 +53,10 @@ func Init(cfg Configuration) error {
 	if err != nil {
 		return err
 	}
+
+	//ensure that this process does not starve other Limes processes for DB connections
+	db.SetMaxOpenConns(16)
+
 	DB = &gorp.DbMap{Db: db, Dialect: gorp.PostgresDialect{}}
 	InitGorp()
 	return nil

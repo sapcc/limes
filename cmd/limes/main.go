@@ -30,6 +30,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dlmiddlecote/sqlstats"
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -69,6 +70,7 @@ func main() {
 	if err != nil {
 		logg.Fatal(err.Error())
 	}
+	prometheus.MustRegister(sqlstats.NewStatsCollector("limes", db.DB.Db))
 
 	//connect to cluster
 	cluster, exists := config.Clusters[clusterID]

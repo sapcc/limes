@@ -4,6 +4,7 @@ go 1.14
 
 require (
 	github.com/databus23/goslo.policy v0.0.0-20170317131957-3ae74dd07ebf
+	github.com/dlmiddlecote/sqlstats v1.0.1
 	github.com/go-gorp/gorp v2.2.0+incompatible // indirect
 	github.com/gophercloud/gophercloud v0.12.0
 	github.com/gorilla/mux v1.7.4
