@@ -67,7 +67,7 @@ func (p *manilaPlugin) Resources() []limes.ResourceInfo {
 		Unit: limes.UnitNone,
 	})
 	for _, shareType := range p.cfg.ShareV2.ShareTypes {
-		category := p.makeResourceName("volumev2", shareType)
+		category := p.makeResourceName("sharev2", shareType)
 		result = append(result,
 			limes.ResourceInfo{
 				Name:     p.makeResourceName("share_capacity", shareType),
