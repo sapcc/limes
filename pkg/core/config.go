@@ -125,6 +125,7 @@ type ServiceConfiguration struct {
 		ReportPhysicalUsage bool `yaml:"report_physical_usage"`
 	} `yaml:"database"`
 	ShareV2 struct {
+		ShareTypes          []string                    `yaml:"share_types"`
 		PrometheusAPIConfig *PrometheusAPIConfiguration `yaml:"prometheus_api"`
 	} `yaml:"sharev2"`
 	VolumeV2 struct {
@@ -203,10 +204,11 @@ type CapacitorConfiguration struct {
 		} `yaml:"volume_types"`
 	} `yaml:"cinder"`
 	Manila struct {
-		ShareNetworks     uint64  `yaml:"share_networks"`
-		SharesPerPool     uint64  `yaml:"shares_per_pool"`
-		SnapshotsPerShare uint64  `yaml:"snapshots_per_share"`
-		CapacityBalance   float64 `yaml:"capacity_balance"`
+		ShareTypes        []string `yaml:"share_types"`
+		ShareNetworks     uint64   `yaml:"share_networks"`
+		SharesPerPool     uint64   `yaml:"shares_per_pool"`
+		SnapshotsPerShare uint64   `yaml:"snapshots_per_share"`
+		CapacityBalance   float64  `yaml:"capacity_balance"`
 	} `yaml:"manila"`
 	Manual map[string]map[string]uint64 `yaml:"manual"`
 }

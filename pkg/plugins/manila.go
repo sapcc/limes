@@ -20,6 +20,7 @@
 package plugins
 
 import (
+	"errors"
 	"fmt"
 	"math"
 
@@ -35,29 +36,6 @@ type manilaPlugin struct {
 	cfg core.ServiceConfiguration
 }
 
-var manilaResources = []limes.ResourceInfo{
-	{
-		Name: "share_networks",
-		Unit: limes.UnitNone,
-	},
-	{
-		Name: "share_capacity",
-		Unit: limes.UnitGibibytes,
-	},
-	{
-		Name: "shares",
-		Unit: limes.UnitNone,
-	},
-	{
-		Name: "snapshot_capacity",
-		Unit: limes.UnitGibibytes,
-	},
-	{
-		Name: "share_snapshots",
-		Unit: limes.UnitNone,
-	},
-}
-
 func init() {
 	core.RegisterQuotaPlugin(func(c core.ServiceConfiguration, scrapeSubresources map[string]bool) core.QuotaPlugin {
 		return &manilaPlugin{c}
@@ -66,6 +44,9 @@ func init() {
 
 //Init implements the core.QuotaPlugin interface.
 func (p *manilaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
+	if len(p.cfg.ShareV2.ShareTypes) == 0 {
+		return errors.New("quota plugin sharev2: missing required configuration field sharev2.share_types")
+	}
 	return nil
 }
 
@@ -80,17 +61,63 @@ func (p *manilaPlugin) ServiceInfo() limes.ServiceInfo {
 
 //Resources implements the core.QuotaPlugin interface.
 func (p *manilaPlugin) Resources() []limes.ResourceInfo {
-	return manilaResources
+	result := make([]limes.ResourceInfo, 0, 1+4*len(p.cfg.ShareV2.ShareTypes))
+	result = append(result, limes.ResourceInfo{
+		Name: "share_networks",
+		Unit: limes.UnitNone,
+	})
+	for _, shareType := range p.cfg.ShareV2.ShareTypes {
+		category := p.makeResourceName("volumev2", shareType)
+		result = append(result,
+			limes.ResourceInfo{
+				Name:     p.makeResourceName("share_capacity", shareType),
+				Unit:     limes.UnitGibibytes,
+				Category: category,
+			},
+			limes.ResourceInfo{
+				Name:     p.makeResourceName("shares", shareType),
+				Unit:     limes.UnitNone,
+				Category: category,
+			},
+			limes.ResourceInfo{
+				Name:     p.makeResourceName("snapshot_capacity", shareType),
+				Unit:     limes.UnitGibibytes,
+				Category: category,
+			},
+			limes.ResourceInfo{
+				Name:     p.makeResourceName("share_snapshots", shareType),
+				Unit:     limes.UnitNone,
+				Category: category,
+			},
+		)
+	}
+	return result
+}
+
+func (p *manilaPlugin) makeResourceName(kind, shareType string) string {
+	if p.cfg.ShareV2.ShareTypes[0] == shareType {
+		//the resources for the first share type don't get the share type suffix
+		//for backwards compatibility reasons
+		return kind
+	}
+	return kind + "_" + shareType
 }
 
 type manilaUsage struct {
-	ShareCount                uint64
-	SnapshotCount             uint64
+	ShareCount                map[string]uint64
+	SnapshotCount             map[string]uint64
 	ShareNetworkCount         uint64
-	Gigabytes                 uint64
+	Gigabytes                 map[string]uint64
 	GigabytesPhysical         *uint64
-	SnapshotGigabytes         uint64
+	SnapshotGigabytes         map[string]uint64
 	SnapshotGigabytesPhysical *uint64
+}
+type manilaQuotaSet struct {
+	Gigabytes         int64 `json:"gigabytes"`
+	Shares            int64 `json:"shares"`
+	SnapshotGigabytes int64 `json:"snapshot_gigabytes"`
+	Snapshots         int64 `json:"snapshots"`
+	ShareNetworks     int64 `json:"share_networks"`
 }
 
 //Scrape implements the core.QuotaPlugin interface.
@@ -99,30 +126,23 @@ func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 	if err != nil {
 		return nil, err
 	}
+	client.Microversion = "2.39" //for share-type-specific quota
 
-	var result gophercloud.Result
+	quotaSets := make(map[string]manilaQuotaSet)
+	for _, shareType := range p.cfg.ShareV2.ShareTypes {
+		quotaSets[shareType], err = manilaCollectQuota(client, projectUUID, shareType)
+		if err != nil {
+			return nil, err
+		}
+	}
 
-	//Get absolute quota limits per project
-	url := client.ServiceURL("os-quota-sets", projectUUID)
-	_, err = client.Get(url, &result.Body, nil)
-	if err != nil {
-		return nil, err
-	}
-	var manilaQuotaData struct {
-		QuotaSet struct {
-			Gigabytes         int64 `json:"gigabytes"`
-			Shares            int64 `json:"shares"`
-			SnapshotGigabytes int64 `json:"snapshot_gigabytes"`
-			Snapshots         int64 `json:"snapshots"`
-			ShareNetworks     int64 `json:"share_networks"`
-		} `json:"quota_set"`
-	}
-	err = result.ExtractInto(&manilaQuotaData)
+	//the share_networks quota is only shown when quering for no share_type in particular
+	quotaSets[""], err = manilaCollectQuota(client, projectUUID, "")
 	if err != nil {
 		return nil, err
 	}
 
-	usage, err := manilaCollectUsage(client, projectUUID)
+	usage, err := manilaCollectUsage(client, projectUUID, p.cfg.ShareV2.ShareTypes)
 	if err != nil {
 		return nil, err
 	}
@@ -134,30 +154,41 @@ func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 		}
 	}
 
-	return map[string]core.ResourceData{
-		"shares": {
-			Quota: manilaQuotaData.QuotaSet.Shares,
-			Usage: usage.ShareCount,
-		},
-		"share_snapshots": {
-			Quota: manilaQuotaData.QuotaSet.Snapshots,
-			Usage: usage.SnapshotCount,
-		},
+	result := map[string]core.ResourceData{
 		"share_networks": {
-			Quota: manilaQuotaData.QuotaSet.ShareNetworks,
+			Quota: quotaSets[""].ShareNetworks,
 			Usage: usage.ShareNetworkCount,
 		},
-		"share_capacity": {
-			Quota:         manilaQuotaData.QuotaSet.Gigabytes,
-			Usage:         usage.Gigabytes,
-			PhysicalUsage: usage.GigabytesPhysical,
-		},
-		"snapshot_capacity": {
-			Quota:         manilaQuotaData.QuotaSet.SnapshotGigabytes,
-			Usage:         usage.SnapshotGigabytes,
-			PhysicalUsage: usage.SnapshotGigabytesPhysical,
-		},
-	}, err
+	}
+	for idx, shareType := range p.cfg.ShareV2.ShareTypes {
+		gigabytesPhysical := (*uint64)(nil)
+		snapshotGigabytesPhysical := (*uint64)(nil)
+		if idx == 0 {
+			//FIXME: report physical usage per share type
+			gigabytesPhysical = usage.GigabytesPhysical
+			snapshotGigabytesPhysical = usage.SnapshotGigabytesPhysical
+		}
+
+		result[p.makeResourceName("shares", shareType)] = core.ResourceData{
+			Quota: quotaSets[shareType].Shares,
+			Usage: usage.ShareCount[shareType],
+		}
+		result[p.makeResourceName("share_snapshots", shareType)] = core.ResourceData{
+			Quota: quotaSets[shareType].Snapshots,
+			Usage: usage.SnapshotCount[shareType],
+		}
+		result[p.makeResourceName("share_capacity", shareType)] = core.ResourceData{
+			Quota:         quotaSets[shareType].Gigabytes,
+			Usage:         usage.Gigabytes[shareType],
+			PhysicalUsage: gigabytesPhysical,
+		}
+		result[p.makeResourceName("share_snapshot_capacity", shareType)] = core.ResourceData{
+			Quota:         quotaSets[shareType].SnapshotGigabytes,
+			Usage:         usage.SnapshotGigabytes[shareType],
+			PhysicalUsage: snapshotGigabytesPhysical,
+		}
+	}
+	return result, nil
 }
 
 //SetQuota implements the core.QuotaPlugin interface.
@@ -166,33 +197,90 @@ func (p *manilaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherc
 	if err != nil {
 		return err
 	}
+	client.Microversion = "2.39" //for share-type-specific quota
 
-	requestData := map[string]map[string]uint64{
-		"quota_set": {
-			"gigabytes":          quotas["share_capacity"],
-			"snapshots":          quotas["share_snapshots"],
-			"snapshot_gigabytes": quotas["snapshot_capacity"],
-			"shares":             quotas["shares"],
-			"share_networks":     quotas["share_networks"],
-		},
+	expect200 := &gophercloud.RequestOpts{OkCodes: []int{200}}
+	overallQuotas := manilaQuotaSet{
+		ShareNetworks: int64(quotas["share_networks"]),
 	}
 
-	url := client.ServiceURL("os-quota-sets", projectUUID)
-	_, err = client.Put(url, requestData, nil, &gophercloud.RequestOpts{OkCodes: []int{200}})
+	for _, shareType := range p.cfg.ShareV2.ShareTypes {
+		quotasForType := manilaQuotaSet{
+			Shares:            int64(quotas[p.makeResourceName("shares", shareType)]),
+			Gigabytes:         int64(quotas[p.makeResourceName("share_capacity", shareType)]),
+			Snapshots:         int64(quotas[p.makeResourceName("share_snapshots", shareType)]),
+			SnapshotGigabytes: int64(quotas[p.makeResourceName("snapshot_capacity", shareType)]),
+		}
 
+		url := client.ServiceURL("quota-sets", projectUUID) + "?share_type=" + shareType
+		_, err = client.Put(url, map[string]interface{}{"quota_set": quotasForType}, nil, expect200)
+		if err != nil {
+			return fmt.Errorf("could not set quotas for share type %q: %s", shareType, err.Error())
+		}
+
+		overallQuotas.Shares += quotasForType.Shares
+		overallQuotas.Gigabytes += quotasForType.Gigabytes
+		overallQuotas.Snapshots += quotasForType.Snapshots
+		overallQuotas.SnapshotGigabytes += quotasForType.SnapshotGigabytes
+	}
+
+	url := client.ServiceURL("quota-sets", projectUUID)
+	_, err = client.Put(url, map[string]interface{}{"quota_set": overallQuotas}, nil, expect200)
 	return err
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-func manilaCollectUsage(client *gophercloud.ServiceClient, projectUUID string) (result manilaUsage, err error) {
+func manilaCollectQuota(client *gophercloud.ServiceClient, projectUUID string, shareType string) (manilaQuotaSet, error) {
+	var result gophercloud.Result
+	url := client.ServiceURL("quota-sets", projectUUID)
+	if shareType != "" {
+		url += "?share_type=" + shareType
+	}
+	_, err := client.Get(url, &result.Body, nil)
+	if err != nil {
+		return manilaQuotaSet{}, err
+	}
+
+	var manilaQuotaData struct {
+		QuotaSet manilaQuotaSet `json:"quota_set"`
+	}
+	err = result.ExtractInto(&manilaQuotaData)
+	return manilaQuotaData.QuotaSet, err
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+func manilaCollectUsage(client *gophercloud.ServiceClient, projectUUID string, shareTypes []string) (result manilaUsage, err error) {
+	result = manilaUsage{
+		ShareCount:        make(map[string]uint64, len(shareTypes)),
+		SnapshotCount:     make(map[string]uint64, len(shareTypes)),
+		Gigabytes:         make(map[string]uint64, len(shareTypes)),
+		SnapshotGigabytes: make(map[string]uint64, len(shareTypes)),
+	}
+	for _, shareType := range shareTypes {
+		result.ShareCount[shareType] = 0
+		result.SnapshotCount[shareType] = 0
+		result.Gigabytes[shareType] = 0
+		result.SnapshotGigabytes[shareType] = 0
+	}
+
 	shares, err := manilaGetShares(client, projectUUID)
 	if err != nil {
 		return manilaUsage{}, err
 	}
-	result.ShareCount = uint64(len(shares))
+	shareTypeByID := make(map[string]string, len(shares))
 	for _, share := range shares {
-		result.Gigabytes += share.Size
+		shareType := share.Type
+		_, knownShareType := result.ShareCount[shareType]
+		if !knownShareType {
+			//group shares with unknown share type into the default share type
+			shareType = shareTypes[0]
+		}
+
+		shareTypeByID[share.ID] = shareType
+		result.ShareCount[shareType]++
+		result.Gigabytes[shareType] += share.Size
 	}
 
 	//Get usage of snapshots per project
@@ -200,9 +288,14 @@ func manilaCollectUsage(client *gophercloud.ServiceClient, projectUUID string) (
 	if err != nil {
 		return manilaUsage{}, err
 	}
-	result.SnapshotCount = uint64(len(snapshots))
 	for _, snapshot := range snapshots {
-		result.SnapshotGigabytes += snapshot.ShareSize
+		shareType, knownShareType := shareTypeByID[snapshot.ShareID]
+		if !knownShareType {
+			//group snapshots with invalid share reference into the default share type
+			shareType = shareTypes[0]
+		}
+		result.SnapshotCount[shareType]++
+		result.SnapshotGigabytes[shareType] += snapshot.ShareSize
 	}
 
 	//Get usage of shared networks
@@ -224,6 +317,7 @@ func manilaCollectUsage(client *gophercloud.ServiceClient, projectUUID string) (
 type manilaShare struct {
 	ID   string `json:"id"`
 	Size uint64 `json:"size"`
+	Type string `json:"share_type_name"`
 }
 
 func manilaGetShares(client *gophercloud.ServiceClient, projectUUID string) (result []manilaShare, err error) {
@@ -259,6 +353,7 @@ func manilaGetShares(client *gophercloud.ServiceClient, projectUUID string) (res
 type manilaSnapshot struct {
 	ID        string `json:"id"`
 	ShareSize uint64 `json:"share_size"`
+	ShareID   string `json:"share_id"`
 }
 
 func manilaGetSnapshots(client *gophercloud.ServiceClient, projectUUID string) (result []manilaSnapshot, err error) {

@@ -453,6 +453,7 @@ The area for this service is `storage`.
 services:
   - type: sharev2
     sharev2:
+      share_types: [ default, hypervisor_storage ]
       prometheus_api:
           url: https://prometheus.example.com
           cert:    /path/to/client.pem
@@ -460,15 +461,33 @@ services:
           ca_cert: /path/to/server-ca.pem
 ```
 
-The area for this service is `storage`.
+The area for this service is `storage`. The following resources are always exposed:
 
 | Resource | Unit |
 | --- | --- |
 | `shares` | countable |
 | `share_capacity` | GiB |
-| `share_networks` | countable |
 | `share_snapshots` | countable |
 | `snapshot_capacity` | GiB |
+| `share_networks` | countable |
+
+If the `volumev2.volume_types` field lists more than one volume type, the
+first four of the aforementioned five resources will refer to the quota for the
+first of these share types. (This peculiar rule exists for
+backwards-compatibility reasons.) For each other share type, the following
+resources are exposed:
+
+| Resource | Unit |
+| --- | --- |
+| `shares_${share_type}` | countable |
+| `share_capacity_${share_type}` | GiB |
+| `share_snapshots_${share_type}` | countable |
+| `snapshot_capacity_${share_type}` | GiB |
+
+In Manila, besides the share-type-specific quotas, the general quotas
+are set to the sum across all share types.
+
+### Physical usage
 
 Optionally, when the `sharev2.prometheus_api` configuration option is set,
 physical usage data will be scraped using the Prometheus metrics exported by
@@ -509,8 +528,7 @@ each other volume type, the following resources are exposed:
 
 In Cinder, besides the volume-type-specific quotas, the general quotas
 (`gigabytes`, `snapshots`, `volumes`) are set to the sum across all volume
-types. If the `volumev2.volume_types` field is absent, only the general quotas
-are set and inspected.
+types.
 
 The `volumes` and `volumes_${volume_type}` resources supports subresource
 scraping. Subresources bear the following attributes:
@@ -586,6 +604,7 @@ the concrete Cinder backend.
 capacitors:
 - id: manila
   manila:
+    share_types: [ default, hypervisor_storage ]
     share_networks: 250
     shares_per_pool: 1000
     snapshots_per_share: 5
@@ -598,6 +617,14 @@ capacitors:
 | `sharev2/shares` | Calculated as `shares_per_pool * count(pools) - share_networks`. |
 | `sharev2/share_snapshots` | Calculated as `snapshots_per_share` times the above value. |
 | `sharev2/share_capacity`<br>`sharev2/snapshot_capacity` | Calculated as `sum(pool.capabilities.totalCapacityGB)`, then divided among those two resources according to the `capacity_balance` (see below). |
+
+The last four of these five resources consider only pools with the share type
+that appears first in `manila.share_types` (to match the behavior of the quota
+plugin). For any other share type listed in `manila.share_types`, capacities
+will be reported analogously for `sharev2/shares_${share_type}` etc. by
+considering pools with that share type.
+
+### Capacity balance
 
 The capacity balance is defined as
 
