@@ -63,8 +63,9 @@ func (p *manilaPlugin) ServiceInfo() limes.ServiceInfo {
 func (p *manilaPlugin) Resources() []limes.ResourceInfo {
 	result := make([]limes.ResourceInfo, 0, 1+4*len(p.cfg.ShareV2.ShareTypes))
 	result = append(result, limes.ResourceInfo{
-		Name: "share_networks",
-		Unit: limes.UnitNone,
+		Name:     "share_networks",
+		Unit:     limes.UnitNone,
+		Category: "sharev2",
 	})
 	for _, shareType := range p.cfg.ShareV2.ShareTypes {
 		category := p.makeResourceName("sharev2", shareType)
