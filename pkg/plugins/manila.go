@@ -109,9 +109,9 @@ type manilaUsage struct {
 	SnapshotCount             map[string]uint64
 	ShareNetworkCount         uint64
 	Gigabytes                 map[string]uint64
-	GigabytesPhysical         *uint64
+	GigabytesPhysical         map[string]uint64
 	SnapshotGigabytes         map[string]uint64
-	SnapshotGigabytesPhysical *uint64
+	SnapshotGigabytesPhysical map[string]uint64
 }
 type manilaQuotaSet struct {
 	Gigabytes         int64 `json:"gigabytes"`
@@ -149,7 +149,7 @@ func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 	}
 
 	if p.cfg.ShareV2.PrometheusAPIConfig != nil {
-		err := manilaCollectPhysicalUsage(&usage, projectUUID, p.cfg.ShareV2.PrometheusAPIConfig)
+		err := manilaCollectPhysicalUsage(&usage, projectUUID, p.cfg.ShareV2.ShareTypes, p.cfg.ShareV2.PrometheusAPIConfig)
 		if err != nil {
 			return nil, err
 		}
@@ -165,9 +165,12 @@ func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 		gigabytesPhysical := (*uint64)(nil)
 		snapshotGigabytesPhysical := (*uint64)(nil)
 		if idx == 0 {
-			//FIXME: report physical usage per share type
-			gigabytesPhysical = usage.GigabytesPhysical
-			snapshotGigabytesPhysical = usage.SnapshotGigabytesPhysical
+			if val, exists := usage.GigabytesPhysical[shareType]; exists {
+				gigabytesPhysical = &val
+			}
+			if val, exists := usage.SnapshotGigabytesPhysical[shareType]; exists {
+				snapshotGigabytesPhysical = &val
+			}
 		}
 
 		result[p.makeResourceName("shares", shareType)] = core.ResourceData{
@@ -387,39 +390,43 @@ func manilaGetSnapshots(client *gophercloud.ServiceClient, projectUUID string) (
 	}
 }
 
-func manilaCollectPhysicalUsage(usage *manilaUsage, projectUUID string, promAPIConfig *core.PrometheusAPIConfiguration) error {
+func manilaCollectPhysicalUsage(usage *manilaUsage, projectUUID string, shareTypes []string, promAPIConfig *core.PrometheusAPIConfiguration) error {
+	usage.GigabytesPhysical = make(map[string]uint64)
+	usage.SnapshotGigabytesPhysical = make(map[string]uint64)
+
 	client, err := prometheusClient(*promAPIConfig)
 	if err != nil {
 		return err
 	}
 
-	roundUp := func(bytes float64) *uint64 {
-		gigabytes := uint64(math.Ceil(bytes / (1 << 30)))
-		return &gigabytes
+	roundUp := func(bytes float64) uint64 {
+		return uint64(math.Ceil(bytes / (1 << 30)))
 	}
 	defaultValue := float64(0)
 
-	//NOTE: The `max by (share_id)` is necessary for when a share is being
-	//migrated to another shareserver and thus appears in the metrics twice.
-	queryStr := fmt.Sprintf(
-		`sum(max by (share_id) (netapp_volume_used_bytes{project_id=%q}))`,
-		projectUUID,
-	)
-	bytesPhysical, err := prometheusGetSingleValue(client, queryStr, &defaultValue)
-	if err != nil {
-		return err
-	}
-	usage.GigabytesPhysical = roundUp(bytesPhysical)
+	for _, shareType := range shareTypes {
+		//NOTE: The `max by (share_id)` is necessary for when a share is being
+		//migrated to another shareserver and thus appears in the metrics twice.
+		queryStr := fmt.Sprintf(
+			`sum(max by (share_id) (netapp_volume_used_bytes{project_id=%q,share_type=%q}))`,
+			projectUUID, shareType,
+		)
+		bytesPhysical, err := prometheusGetSingleValue(client, queryStr, &defaultValue)
+		if err != nil {
+			return err
+		}
+		usage.GigabytesPhysical[shareType] = roundUp(bytesPhysical)
 
-	queryStr = fmt.Sprintf(
-		`sum(max by (share_id) (netapp_volume_snapshot_used_bytes{project_id=%q}))`,
-		projectUUID,
-	)
-	snapshotBytesPhysical, err := prometheusGetSingleValue(client, queryStr, &defaultValue)
-	if err != nil {
-		return err
+		queryStr = fmt.Sprintf(
+			`sum(max by (share_id) (netapp_volume_snapshot_used_bytes{project_id=%q,share_type=%q}))`,
+			projectUUID, shareType,
+		)
+		snapshotBytesPhysical, err := prometheusGetSingleValue(client, queryStr, &defaultValue)
+		if err != nil {
+			return err
+		}
+		usage.SnapshotGigabytesPhysical[shareType] = roundUp(snapshotBytesPhysical)
 	}
-	usage.SnapshotGigabytesPhysical = roundUp(snapshotBytesPhysical)
 
 	return nil
 }
