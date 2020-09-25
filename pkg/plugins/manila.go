@@ -114,11 +114,11 @@ type manilaUsage struct {
 	SnapshotGigabytesPhysical map[string]uint64
 }
 type manilaQuotaSet struct {
-	Gigabytes         int64 `json:"gigabytes"`
-	Shares            int64 `json:"shares"`
-	SnapshotGigabytes int64 `json:"snapshot_gigabytes"`
-	Snapshots         int64 `json:"snapshots"`
-	ShareNetworks     int64 `json:"share_networks"`
+	Gigabytes         int64  `json:"gigabytes"`
+	Shares            int64  `json:"shares"`
+	SnapshotGigabytes int64  `json:"snapshot_gigabytes"`
+	Snapshots         int64  `json:"snapshots"`
+	ShareNetworks     *int64 `json:"share_networks,omitempty"`
 }
 
 //Scrape implements the core.QuotaPlugin interface.
@@ -204,8 +204,9 @@ func (p *manilaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherc
 	client.Microversion = "2.39" //for share-type-specific quota
 
 	expect200 := &gophercloud.RequestOpts{OkCodes: []int{200}}
+	shareNetworkQuota := int64(quotas["share_networks"])
 	overallQuotas := manilaQuotaSet{
-		ShareNetworks: int64(quotas["share_networks"]),
+		ShareNetworks: &shareNetworkQuota,
 	}
 
 	for _, shareType := range p.cfg.ShareV2.ShareTypes {
@@ -214,6 +215,7 @@ func (p *manilaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherc
 			Gigabytes:         int64(quotas[p.makeResourceName("share_capacity", shareType)]),
 			Snapshots:         int64(quotas[p.makeResourceName("share_snapshots", shareType)]),
 			SnapshotGigabytes: int64(quotas[p.makeResourceName("snapshot_capacity", shareType)]),
+			ShareNetworks:     nil,
 		}
 
 		url := client.ServiceURL("quota-sets", projectUUID) + "?share_type=" + shareType
