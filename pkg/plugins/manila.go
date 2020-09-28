@@ -186,7 +186,7 @@ func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 			Usage:         usage.Gigabytes[shareType],
 			PhysicalUsage: gigabytesPhysical,
 		}
-		result[p.makeResourceName("share_snapshot_capacity", shareType)] = core.ResourceData{
+		result[p.makeResourceName("snapshot_capacity", shareType)] = core.ResourceData{
 			Quota:         quotaSets[shareType].SnapshotGigabytes,
 			Usage:         usage.SnapshotGigabytes[shareType],
 			PhysicalUsage: snapshotGigabytesPhysical,
