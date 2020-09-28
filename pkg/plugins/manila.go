@@ -157,7 +157,7 @@ func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 
 	result := map[string]core.ResourceData{
 		"share_networks": {
-			Quota: quotaSets[""].ShareNetworks,
+			Quota: derefOrZero(quotaSets[""].ShareNetworks),
 			Usage: usage.ShareNetworkCount,
 		},
 	}
@@ -193,6 +193,13 @@ func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 		}
 	}
 	return result, nil
+}
+
+func derefOrZero(val *int64) int64 {
+	if val == nil {
+		return 0
+	}
+	return *val
 }
 
 //SetQuota implements the core.QuotaPlugin interface.
