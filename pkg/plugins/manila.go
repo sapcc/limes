@@ -209,12 +209,17 @@ func (p *manilaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherc
 		return err
 	}
 	client.Microversion = "2.39" //for share-type-specific quota
-
 	expect200 := &gophercloud.RequestOpts{OkCodes: []int{200}}
+
+	//General note: Even though it complicates the code, we need to set overall
+	//quotas first, otherwise share-type-specific quotas may get rejected for not
+	//fitting in the overall quota.
+
 	shareNetworkQuota := int64(quotas["share_networks"])
 	overallQuotas := manilaQuotaSet{
 		ShareNetworks: &shareNetworkQuota,
 	}
+	shareTypeQuotas := make(map[string]manilaQuotaSet)
 
 	for _, shareType := range p.cfg.ShareV2.ShareTypes {
 		quotasForType := manilaQuotaSet{
@@ -224,12 +229,7 @@ func (p *manilaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherc
 			SnapshotGigabytes: int64(quotas[p.makeResourceName("snapshot_capacity", shareType)]),
 			ShareNetworks:     nil,
 		}
-
-		url := client.ServiceURL("quota-sets", projectUUID) + "?share_type=" + shareType
-		_, err = client.Put(url, map[string]interface{}{"quota_set": quotasForType}, nil, expect200)
-		if err != nil {
-			return fmt.Errorf("could not set quotas for share type %q: %s", shareType, err.Error())
-		}
+		shareTypeQuotas[shareType] = quotasForType
 
 		overallQuotas.Shares += quotasForType.Shares
 		overallQuotas.Gigabytes += quotasForType.Gigabytes
@@ -239,7 +239,19 @@ func (p *manilaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherc
 
 	url := client.ServiceURL("quota-sets", projectUUID)
 	_, err = client.Put(url, map[string]interface{}{"quota_set": overallQuotas}, nil, expect200)
-	return err
+	if err != nil {
+		return fmt.Errorf("could not set overall share quotas: %s", err.Error())
+	}
+
+	for shareType, quotasForType := range shareTypeQuotas {
+		url := client.ServiceURL("quota-sets", projectUUID) + "?share_type=" + shareType
+		_, err = client.Put(url, map[string]interface{}{"quota_set": quotasForType}, nil, expect200)
+		if err != nil {
+			return fmt.Errorf("could not set quotas for share type %q: %s", shareType, err.Error())
+		}
+	}
+
+	return nil
 }
 
 ////////////////////////////////////////////////////////////////////////////////
