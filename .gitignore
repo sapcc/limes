@@ -1,5 +1,4 @@
 # build artifacts
-.gopath/pkg/
 build/
 
 # test artifacts
@@ -8,3 +7,4 @@ testing/postgres*
 
 # custom configuration files used during development
 *.yaml
+!Makefile.maker.yaml

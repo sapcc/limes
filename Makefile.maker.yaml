@@ -1,0 +1,14 @@
+# Configuration file for <https://github.com/sapcc/go-makefile-maker>
+
+binaries:
+  - name:        limes
+    fromPackage: ./cmd/limes
+    installTo:   bin/
+
+coverageTest:
+  except: '/plugins'
+
+verbatim: |
+  # This is for manual testing.
+  run-api: build/keppel
+    set -euo pipefail && source ./.env && $(CURDIR)/build/keppel server api
