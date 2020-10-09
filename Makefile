@@ -19,7 +19,11 @@ build/limes: FORCE
 	go build $(GO_BUILDFLAGS) -ldflags '-s -w $(GO_LDFLAGS)' -o build/limes ./cmd/limes
 
 DESTDIR =
-PREFIX = /usr
+ifeq ($(shell uname -s),Darwin)
+  PREFIX = /usr/local
+else
+  PREFIX = /usr
+endif
 
 install: FORCE build/limes
 	install -D -m 0755 build/limes "$(DESTDIR)$(PREFIX)/bin/limes"
@@ -37,6 +41,7 @@ space := $(null) $(null)
 comma := ,
 
 check: build-all static-check build/cover.html FORCE
+	@printf "\e[1;32m>> All checks successful.\e[0m\n"
 
 static-check: FORCE
 	@if ! hash golint 2>/dev/null; then printf "\e[1;36m>> Installing golint...\e[0m\n"; GO111MODULE=off go get -u golang.org/x/lint/golint; fi
@@ -59,5 +64,8 @@ vendor: FORCE
 	go mod tidy
 	go mod vendor
 	go mod verify
+
+clean: FORCE
+	git clean -dxf build
 
 .PHONY: FORCE

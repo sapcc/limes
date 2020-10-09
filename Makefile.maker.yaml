@@ -8,6 +8,9 @@ binaries:
 coverageTest:
   except: '/plugins'
 
+vendoring:
+  enabled: true
+
 verbatim: |
   # This is for manual testing.
   run-api: build/keppel
