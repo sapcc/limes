@@ -169,6 +169,10 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 			hvCapacity = hypervisor.getCapacityViaNovaAPI()
 		}
 
+		logg.Debug("Nova hypervisor %d (%s) with .service.host %q reports capacity: %d CPUs, %d MiB RAM, %d GiB disk",
+			hypervisor.ID, hypervisor.HypervisorHostname, hypervisor.Service.Host,
+			hvCapacity.VCPUs.Capacity, hvCapacity.MemoryMB.Capacity, hvCapacity.LocalGB,
+		)
 		totalVcpus += hvCapacity.VCPUs.Capacity
 		totalMemoryMb += hvCapacity.MemoryMB.Capacity
 		totalLocalGb += hvCapacity.LocalGB
