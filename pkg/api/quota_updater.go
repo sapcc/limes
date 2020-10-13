@@ -114,11 +114,11 @@ func (e MissingProjectReportError) Error() string {
 	return fmt.Sprintf("no project report for resource %s/%s", e.ServiceType, e.ResourceName)
 }
 
-var getCapacityQuery = `
+var getCapacityQuery = db.SimplifyWhitespaceInSQL(`
 	SELECT capacity FROM cluster_resources WHERE service_id = (
 		SELECT id FROM cluster_services WHERE cluster_id = $1 AND type = $2
 	) AND name = $3
-`
+`)
 
 //ValidateInput reads the given input and validates the quotas contained therein.
 //Results are collected into u.Requests. The return value is only set for unexpected

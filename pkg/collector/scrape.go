@@ -46,7 +46,7 @@ var serviceNotDeployedIdleInterval = 10 * time.Minute
 var scrapeInterval = 30 * time.Minute
 
 //query that finds the next project that needs to be scraped
-var findProjectQuery = `
+var findProjectQuery = db.SimplifyWhitespaceInSQL(`
 	SELECT ps.id, ps.scraped_at, p.name, p.uuid, p.id, p.has_bursting, d.name, d.uuid
 	FROM project_services ps
 	JOIN projects p ON p.id = ps.project_id
@@ -59,7 +59,7 @@ var findProjectQuery = `
 	ORDER BY ps.stale DESC, COALESCE(ps.scraped_at, to_timestamp(-1)) ASC, ps.id ASC
 	-- find only one project to scrape per iteration
 	LIMIT 1
-`
+`)
 
 //Scrape checks the database periodically for outdated or missing resource
 //records for the given cluster and the given service type, and updates them by

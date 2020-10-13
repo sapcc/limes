@@ -136,11 +136,11 @@ func (c *Collector) scanCapacity() {
 	}
 }
 
-var listProtectedServicesQueryStr = `
+var listProtectedServicesQueryStr = db.SimplifyWhitespaceInSQL(`
 	SELECT DISTINCT cs.id FROM cluster_services cs
 		JOIN cluster_resources cr ON cr.service_id = cs.id
 	 WHERE cs.cluster_id = $1 AND cr.comment != ''
-`
+`)
 
 func (c *Collector) writeCapacity(clusterID string, values map[string]map[string]core.CapacityData, scrapedAt time.Time) error {
 	//NOTE: clusterID is not taken from c.Cluster because it can also be "shared".

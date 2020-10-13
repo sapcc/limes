@@ -32,7 +32,7 @@ import (
 	"github.com/sapcc/limes/pkg/db"
 )
 
-var clusterReportQuery1 = `
+var clusterReportQuery1 = db.SimplifyWhitespaceInSQL(`
 	SELECT d.cluster_id, ps.type, pr.name,
 	       SUM(pr.quota), SUM(pr.usage),
 	       SUM(GREATEST(pr.usage - pr.quota, 0)),
@@ -43,38 +43,38 @@ var clusterReportQuery1 = `
 	  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
 	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
 	 WHERE %s GROUP BY d.cluster_id, ps.type, pr.name
-`
+`)
 
-var clusterReportQuery2 = `
+var clusterReportQuery2 = db.SimplifyWhitespaceInSQL(`
 	SELECT d.cluster_id, ds.type, dr.name, SUM(dr.quota)
 	  FROM domains d
 	  LEFT OUTER JOIN domain_services ds ON ds.domain_id = d.id {{AND ds.type = $service_type}}
 	  LEFT OUTER JOIN domain_resources dr ON dr.service_id = ds.id {{AND dr.name = $resource_name}}
 	 WHERE %s GROUP BY d.cluster_id, ds.type, dr.name
-`
+`)
 
-var clusterReportQuery3 = `
+var clusterReportQuery3 = db.SimplifyWhitespaceInSQL(`
 	SELECT cs.cluster_id, cs.type, cr.name, cr.capacity, cr.comment,
 	       cr.capacity_per_az, cr.subcapacities, cs.scraped_at
 	  FROM cluster_services cs
 	  LEFT OUTER JOIN cluster_resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
 	 WHERE %s {{AND cs.type = $service_type}}
-`
+`)
 
-var clusterReportQuery4 = `
+var clusterReportQuery4 = db.SimplifyWhitespaceInSQL(`
 	SELECT ds.type, dr.name, SUM(dr.quota)
 	  FROM domain_services ds
 	  JOIN domain_resources dr ON dr.service_id = ds.id
 	 WHERE %s GROUP BY ds.type, dr.name
-`
+`)
 
-var clusterReportQuery5 = `
+var clusterReportQuery5 = db.SimplifyWhitespaceInSQL(`
 	SELECT ps.type, pr.name, SUM(pr.usage),
 	       SUM(COALESCE(pr.physical_usage, pr.usage)), COUNT(pr.physical_usage) > 0
 	  FROM project_services ps
 	  JOIN project_resources pr ON pr.service_id = ps.id
 	 WHERE %s GROUP BY ps.type, pr.name
-`
+`)
 
 //GetClusters returns reports for all clusters or, if clusterID is
 //non-nil, for that cluster only.

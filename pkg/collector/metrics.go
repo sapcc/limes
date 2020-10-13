@@ -149,14 +149,14 @@ func (c *AggregateMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 	maxScrapedAtGauge.Describe(ch)
 }
 
-var scrapedAtAggregateQuery = `
+var scrapedAtAggregateQuery = db.SimplifyWhitespaceInSQL(`
 	SELECT ps.type, MIN(ps.scraped_at), MAX(ps.scraped_at)
 	  FROM domains d
 	  JOIN projects p ON p.domain_id = d.id
 	  JOIN project_services ps ON ps.project_id = p.id
 	 WHERE d.cluster_id = $1 AND ps.scraped_at IS NOT NULL
 	 GROUP BY ps.type
-`
+`)
 
 //Collect implements the prometheus.Collector interface.
 func (c *AggregateMetricsCollector) Collect(ch chan<- prometheus.Metric) {
@@ -300,29 +300,29 @@ func (c *DataMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 	unitConversionGauge.Describe(ch)
 }
 
-var clusterMetricsQuery = `
+var clusterMetricsQuery = db.SimplifyWhitespaceInSQL(`
 	SELECT cs.cluster_id, cs.type, cr.name, cr.capacity, cr.capacity_per_az
 	  FROM cluster_services cs
 	  JOIN cluster_resources cr ON cr.service_id = cs.id
 	 WHERE cs.cluster_id = $1 OR cs.cluster_id = 'shared'
-`
+`)
 
-var domainMetricsQuery = `
+var domainMetricsQuery = db.SimplifyWhitespaceInSQL(`
 	SELECT d.name, d.uuid, ds.type, dr.name, dr.quota
 	  FROM domains d
 	  JOIN domain_services ds ON ds.domain_id = d.id
 	  JOIN domain_resources dr ON dr.service_id = ds.id
 	 WHERE d.cluster_id = $1
-`
+`)
 
-var projectMetricsQuery = `
+var projectMetricsQuery = db.SimplifyWhitespaceInSQL(`
 	SELECT d.name, d.uuid, p.name, p.uuid, ps.type, pr.name, pr.quota, pr.backend_quota, pr.usage, pr.physical_usage
 	  FROM domains d
 	  JOIN projects p ON p.domain_id = d.id
 	  JOIN project_services ps ON ps.project_id = p.id
 	  JOIN project_resources pr ON pr.service_id = ps.id
 	 WHERE d.cluster_id = $1
-`
+`)
 
 //Collect implements the prometheus.Collector interface.
 func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {

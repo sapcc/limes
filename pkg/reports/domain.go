@@ -30,7 +30,7 @@ import (
 	"github.com/sapcc/limes/pkg/db"
 )
 
-var domainReportQuery1 = `
+var domainReportQuery1 = db.SimplifyWhitespaceInSQL(`
 	SELECT d.uuid, d.name, ps.type, pr.name, SUM(pr.quota), SUM(pr.usage),
 	       SUM(GREATEST(pr.usage - pr.quota, 0)),
 	       SUM(GREATEST(pr.backend_quota, 0)), MIN(pr.backend_quota) < 0,
@@ -41,15 +41,15 @@ var domainReportQuery1 = `
 	  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
 	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
 	 WHERE %s GROUP BY d.uuid, d.name, ps.type, pr.name
-`
+`)
 
-var domainReportQuery2 = `
+var domainReportQuery2 = db.SimplifyWhitespaceInSQL(`
 	SELECT d.uuid, d.name, ds.type, dr.name, dr.quota
 	  FROM domains d
 	  LEFT OUTER JOIN domain_services ds ON ds.domain_id = d.id {{AND ds.type = $service_type}}
 	  LEFT OUTER JOIN domain_resources dr ON dr.service_id = ds.id {{AND dr.name = $resource_name}}
 	 WHERE %s
-`
+`)
 
 //GetDomains returns reports for all domains in the given cluster or, if
 //domainID is non-nil, for that domain only.

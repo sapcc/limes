@@ -22,6 +22,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -87,4 +88,14 @@ func ForeachRow(dbi Interface, query string, args []interface{}, action func(*sq
 		return err
 	}
 	return rows.Close()
+}
+
+var sqlWhitespaceOrCommentRx = regexp.MustCompile(`\s+(?m:--.*$)?`)
+
+//SimplifyWhitespaceInSQL takes an SQL query string that's hardcoded in the
+//program and simplifies all the whitespaces, esp. ensuring that there are no
+//comments and newlines. This makes the database log nicer when queries are
+//logged there (e.g. for running too long).
+func SimplifyWhitespaceInSQL(query string) string {
+	return sqlWhitespaceOrCommentRx.ReplaceAllString(query, " ")
 }

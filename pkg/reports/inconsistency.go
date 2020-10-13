@@ -93,7 +93,7 @@ type ProjectData struct {
 	Domain DomainData `json:"domain,keepempty"`
 }
 
-var ocdqReportQuery = `
+var ocdqReportQuery = db.SimplifyWhitespaceInSQL(`
 	SELECT d.uuid, d.name, ps.type, pr.name, MAX(COALESCE(dr.quota, 0)), SUM(pr.quota)
 	  FROM domains d
 	  JOIN projects p ON p.domain_id = d.id
@@ -104,9 +104,9 @@ var ocdqReportQuery = `
 	WHERE %s GROUP BY d.uuid, d.name, ps.type, pr.name
 	HAVING MAX(COALESCE(dr.quota, 0)) < SUM(pr.quota)
 	ORDER BY d.uuid ASC;
-`
+`)
 
-var ospqReportQuery = `
+var ospqReportQuery = db.SimplifyWhitespaceInSQL(`
 	SELECT d.uuid, d.name, p.uuid, p.name, ps.type, pr.name, SUM(pr.desired_backend_quota), SUM(pr.usage)
 	  FROM projects p
 	  LEFT OUTER JOIN domains d ON d.id=p.domain_id
@@ -115,9 +115,9 @@ var ospqReportQuery = `
 	WHERE %s GROUP BY d.uuid, d.name, p.uuid, p.name, ps.type, pr.name
 	HAVING SUM(pr.usage) > SUM(pr.desired_backend_quota)
 	ORDER BY p.uuid ASC
-`
+`)
 
-var mmpqReportQuery = `
+var mmpqReportQuery = db.SimplifyWhitespaceInSQL(`
 	SELECT d.uuid, d.name, p.uuid, p.name, ps.type, pr.name, SUM(pr.desired_backend_quota), SUM(pr.backend_quota)
 	  FROM projects p
 	  LEFT OUTER JOIN domains d ON d.id=p.domain_id
@@ -126,7 +126,7 @@ var mmpqReportQuery = `
 	WHERE %s GROUP BY d.uuid, d.name, p.uuid, p.name, ps.type, pr.name
 	HAVING SUM(pr.backend_quota) != SUM(pr.desired_backend_quota)
 	ORDER BY p.uuid ASC
-`
+`)
 
 //GetInconsistencies returns Inconsistency reports for all inconsistencies and their projects in the current cluster.
 func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter) (*Inconsistencies, error) {

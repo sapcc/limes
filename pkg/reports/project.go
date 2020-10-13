@@ -32,20 +32,20 @@ import (
 )
 
 var (
-	projectReportQuery = `
+	projectReportQuery = db.SimplifyWhitespaceInSQL(`
 	SELECT p.uuid, p.name, COALESCE(p.parent_uuid, ''), p.has_bursting, ps.type, ps.scraped_at, pr.name, pr.quota, pr.usage, pr.physical_usage, pr.backend_quota, pr.subresources
 	  FROM projects p
 	  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
 	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
 	 WHERE %s
-`
-	projectRateLimitReportQuery = `
+`)
+	projectRateLimitReportQuery = db.SimplifyWhitespaceInSQL(`
 	SELECT p.uuid, p.name, COALESCE(p.parent_uuid, ''), ps.type, ps.scraped_at, prl.target_type_uri, prl.action, prl.rate_limit, prl.unit
 	  FROM projects p
 	  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
 	  LEFT OUTER JOIN project_rate_limits prl ON prl.service_id = ps.id
 	 WHERE %s
-`
+`)
 )
 
 //GetProjects returns limes.ProjectReport reports for all projects in the given domain or,
