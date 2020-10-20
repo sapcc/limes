@@ -101,51 +101,13 @@ func Test_ScanCapacity(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-
-	//simulate manual maintenance of capacity value by user
-	insertTime := test.TimeNow()
-	err = db.DB.Insert(&db.ClusterService{
-		ClusterID: "west",
-		Type:      "unshared2",
-		ScrapedAt: &insertTime,
-	})
-	if err != nil {
-		t.Error(err)
-	}
-	err = db.DB.Insert(&db.ClusterResource{
-		ServiceID:   1,
-		Name:        "capacity",
-		RawCapacity: 50,
-		Comment:     "manual",
-	})
-	if err != nil {
-		t.Error(err)
-	}
-	err = db.DB.Insert(&db.ClusterResource{
-		ServiceID:   3,
-		Name:        "capacity",
-		RawCapacity: 50,
-		Comment:     "manual",
-	})
-	if err != nil {
-		t.Error(err)
-	}
-
 	test.AssertDBContent(t, "fixtures/scancapacity2.sql")
 
-	//next scan should throw out the crap records and recreate the deleted ones,
-	//but keep the manually maintained ones; also change the reported Capacity to
-	//see if updates are getting through
+	//next scan should throw out the crap records and recreate the deleted ones;
+	//also change the reported Capacity to see if updates are getting through
 	cluster.CapacityPlugins["unittest"].(*test.CapacityPlugin).Capacity = 23
 	c.scanCapacity()
 	test.AssertDBContent(t, "fixtures/scancapacity3.sql")
-
-	//add another capacity plugin covering a resource that currently has a
-	//manually maintained resource record; check that this resource is upgraded
-	//to automatically maintained by the next scan run
-	cluster.CapacityPlugins["unittest3"] = test.NewCapacityPlugin("unittest3", "shared/capacity")
-	c.scanCapacity()
-	test.AssertDBContent(t, "fixtures/scancapacity4.sql")
 
 	//add a capacity plugin that reports subcapacities; check that subcapacities
 	//are correctly written when creating a cluster_resources record

@@ -176,4 +176,10 @@ var SQLMigrations = map[string]string{
 	"012_add_project_services_scrape_duration_secs.up.sql": `
 		ALTER TABLE project_services ADD COLUMN scrape_duration_secs REAL NOT NULL DEFAULT 0;
 	`,
+	"013_remove_cluster_resource_comment.down.sql": `
+		ALTER TABLE cluster_resources ADD COLUMN comment TEXT NOT NULL DEFAULT '';
+	`,
+	"013_remove_cluster_resource_comment.up.sql": `
+		ALTER TABLE cluster_resources DROP COLUMN comment;
+	`,
 }
