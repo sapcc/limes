@@ -82,16 +82,6 @@ func (u Unit) Base() (Unit, uint64) {
 	}
 }
 
-//IndexOf returns the index of a Unit in a slice or -1 if not found.
-func IndexOf(unitSlice []Unit, searchUnit Unit) int {
-	for idx, s := range unitSlice {
-		if s == searchUnit {
-			return idx
-		}
-	}
-	return -1
-}
-
 var measuredQuotaValueRx = regexp.MustCompile(`^\s*([0-9]+)\s*([A-Za-z]+)$`)
 
 //Parse parses the string representation of a value with this unit (or any unit
