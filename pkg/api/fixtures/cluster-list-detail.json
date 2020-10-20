@@ -13,7 +13,6 @@
               "name": "capacity",
               "unit": "B",
               "capacity": 185,
-              "comment": "hand-counted",
               "domains_quota": 50,
               "usage": 8,
               "physical_usage": 7
@@ -50,7 +49,6 @@
               "name": "capacity",
               "unit": "B",
               "capacity": 1000,
-              "comment": "rough estimate",
               "domains_quota": 15,
               "usage": 2,
               "physical_usage": 1
@@ -89,7 +87,6 @@
               "name": "capacity",
               "unit": "B",
               "capacity": 185,
-              "comment": "hand-counted",
               "domains_quota": 50,
               "usage": 8,
               "physical_usage": 7

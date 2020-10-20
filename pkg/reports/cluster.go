@@ -54,7 +54,7 @@ var clusterReportQuery2 = db.SimplifyWhitespaceInSQL(`
 `)
 
 var clusterReportQuery3 = db.SimplifyWhitespaceInSQL(`
-	SELECT cs.cluster_id, cs.type, cr.name, cr.capacity, cr.comment,
+	SELECT cs.cluster_id, cs.type, cr.name, cr.capacity,
 	       cr.capacity_per_az, cr.subcapacities, cs.scraped_at
 	  FROM cluster_services cs
 	  LEFT OUTER JOIN cluster_resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
@@ -189,13 +189,12 @@ func GetClusters(config core.Configuration, clusterID *string, dbi db.Interface,
 				serviceType   string
 				resourceName  *string
 				rawCapacity   *uint64
-				comment       *string
 				capacityPerAZ *string
 				subcapacities *string
 				scrapedAt     time.Time
 			)
 			err := rows.Scan(&clusterID, &serviceType, &resourceName, &rawCapacity,
-				&comment, &capacityPerAZ, &subcapacities, &scrapedAt)
+				&capacityPerAZ, &subcapacities, &scrapedAt)
 			if err != nil {
 				return err
 			}
@@ -210,9 +209,6 @@ func GetClusters(config core.Configuration, clusterID *string, dbi db.Interface,
 					resource.RawCapacity = rawCapacity
 					capacity := uint64(float64(*rawCapacity) * overcommitFactor)
 					resource.Capacity = &capacity
-				}
-				if comment != nil {
-					resource.Comment = *comment
 				}
 				if subcapacities != nil && *subcapacities != "" {
 					resource.Subcapacities = limes.JSONString(*subcapacities)
@@ -364,13 +360,12 @@ func GetClusters(config core.Configuration, clusterID *string, dbi db.Interface,
 					serviceType     string
 					resourceName    *string
 					rawCapacity     *uint64
-					comment         *string
 					capacityPerAZ   *string
 					subcapacities   *string
 					scrapedAt       time.Time
 				)
 				err := rows.Scan(&sharedClusterID, &serviceType, &resourceName, &rawCapacity,
-					&comment, &capacityPerAZ, &subcapacities, &scrapedAt)
+					&capacityPerAZ, &subcapacities, &scrapedAt)
 				if err != nil {
 					return err
 				}
@@ -390,9 +385,6 @@ func GetClusters(config core.Configuration, clusterID *string, dbi db.Interface,
 							resource.RawCapacity = rawCapacity
 							capacity := uint64(float64(*rawCapacity) * overcommitFactor)
 							resource.Capacity = &capacity
-						}
-						if comment != nil {
-							resource.Comment = *comment
 						}
 						if subcapacities != nil && *subcapacities != "" {
 							resource.Subcapacities = limes.JSONString(*subcapacities)

@@ -29,8 +29,6 @@ policy differently, so that certain requests may require other roles or token sc
 * [POST /v1/domains/:domain\_id/simulate\-put](#post-v1domainsdomain_idsimulate-put)
 * [PUT /v1/domains/:domain\_id/projects/:project\_id](#put-v1domainsdomain_idprojectsproject_id)
 * [POST /v1/domains/:domain\_id/projects/:project\_id/simulate\-put](#post-v1domainsdomain_idprojectsproject_idsimulate-put)
-* [PUT /v1/clusters/:cluster\_id](#put-v1clusterscluster_id)
-* [PUT /v1/clusters/current](#put-v1clusterscurrent)
 
 ---
 
@@ -492,7 +490,6 @@ Returns 200 (OK) on success. Result is a JSON document like:
               "name": "capacity",
               "unit": "B",
               "capacity": 60000000000000,
-              "comment": "looked it up in `df`",
               "domains_quota": 107374182400,
               "usage": 104857600
             }
@@ -520,10 +517,8 @@ Clusters do not have a quota, but resources may be constrained by a `capacity` v
 just like the `projects_quota` key on domain level. Discrepancies between project quotas in Limes and in backing
 services will not be shown on this level, so there is no `backend_quota` key.
 
-The `capacity` key is will only be supplied when a capacity is known. Capacity values can be maintained by cluster
-administrators, in which case a `comment` string will be present (such as for `object_storage/capacity` in the example
-output above). The capacity is only informational: Cloud admins can choose to exceed the reported capacity when
-allocating quota to domains.
+The `capacity` key is will only be supplied when a capacity is known. The capacity is only informational: Cloud admins
+can choose to exceed the reported capacity when allocating quota to domains.
 
 The `per_availability_zone` key will only be supplied when capacity data can be
 measured for each availability zone separately. This data reflects the actual
@@ -847,55 +842,3 @@ project-admin token for the specified project. Other than that, the call works i
       ]
     }
   ```
-
-## PUT /v1/clusters/:cluster\_id
-
-## PUT /v1/clusters/current
-
-Set capacity values for the given cluster. Requires a cloud-admin token, and a request body that is a JSON document
-like:
-
-```json
-{
-  "cluster": {
-    "services": [
-      {
-        "type": "compute",
-        "resources": [
-          {
-            "name": "instances",
-            "capacity": 30,
-            "comment": "guesstimate"
-          },
-          {
-            "name": "cores",
-            "capacity": 150,
-            "comment": "counted them by hand"
-          }
-        ]
-      },
-      {
-        "type": "object-store",
-        "resources": [
-          {
-            "name": "capacity",
-            "capacity": 0,
-            "comment": "data center on fire"
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-For resources that are measured rather than counted, the values are interpreted with the same unit that is mentioned for
-this resource in `GET /clusters/:cluster_id`. However, a `unit` string may be given to override this default. All
-resources that are not mentioned in the request body remain unchanged. This operation will not affect any domain or
-project quotas.
-
-Capacity values can only be set for resources which Limes does not know how to measure automatically. A `comment` is
-always required, and should ideally contain a description of how the capacity value was derived. An existing
-capacity value can be deleted by setting it to `-1`, in which case no `comment` is required.
-
-Returns 202 (Accepted) on success, with an empty response body.

@@ -183,20 +183,3 @@ func (r *QuotaRequest) UnmarshalJSON(input []byte) error {
 	}
 	return nil
 }
-
-//ServiceCapacityRequest contains updated capacity values for some or all
-//resources in a single service. This type is used to serialize JSON request
-//bodies in PUT requests on clusters.
-type ServiceCapacityRequest struct {
-	Type      string                    `json:"type"`
-	Resources []ResourceCapacityRequest `json:"resources"`
-}
-
-//ResourceCapacityRequest contains an updated capacity value for a single resource.
-//It appears in type ServiceCapacityRequest.
-type ResourceCapacityRequest struct {
-	Name     string `json:"name"`
-	Capacity int64  `json:"capacity"`
-	Unit     *Unit  `json:"unit"`
-	Comment  string `json:"comment"`
-}
