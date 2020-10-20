@@ -136,12 +136,6 @@ func (c *Collector) scanCapacity() {
 	}
 }
 
-var listProtectedServicesQueryStr = db.SimplifyWhitespaceInSQL(`
-	SELECT DISTINCT cs.id FROM cluster_services cs
-		JOIN cluster_resources cr ON cr.service_id = cs.id
-	 WHERE cs.cluster_id = $1 AND cr.comment != ''
-`)
-
 func (c *Collector) writeCapacity(clusterID string, values map[string]map[string]core.CapacityData, scrapedAt time.Time) error {
 	//NOTE: clusterID is not taken from c.Cluster because it can also be "shared".
 
@@ -232,8 +226,6 @@ func (c *Collector) writeCapacity(clusterID string, values map[string]map[string
 					dbResource.CapacityPerAZJSON = string(bytes)
 				}
 
-				//if this is a manually maintained record, upgrade it to automatically maintained
-				dbResource.Comment = ""
 				_, err := tx.Update(dbResource)
 				if err != nil {
 					return err
@@ -242,7 +234,7 @@ func (c *Collector) writeCapacity(clusterID string, values map[string]map[string
 				//never delete capacity records for shared services (because the
 				//current cluster might not have all relevant capacity plugins enabled,
 				//thus serviceValues may not have the whole picture)
-				if clusterID != "shared" && dbResource.Comment == "" {
+				if clusterID != "shared" {
 					_, err := tx.Delete(dbResource)
 					if err != nil {
 						return err

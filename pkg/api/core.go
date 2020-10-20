@@ -89,7 +89,6 @@ func NewV1Router(cluster *core.Cluster, config core.Configuration) (http.Handler
 
 	r.Methods("GET").Path("/v1/clusters").HandlerFunc(p.ListClusters)
 	r.Methods("GET").Path("/v1/clusters/{cluster_id}").HandlerFunc(p.GetCluster)
-	r.Methods("PUT").Path("/v1/clusters/{cluster_id}").HandlerFunc(p.PutCluster)
 
 	r.Methods("GET").Path("/v1/inconsistencies").HandlerFunc(p.ListInconsistencies)
 
