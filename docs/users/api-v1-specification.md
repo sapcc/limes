@@ -271,7 +271,8 @@ in the large example above, the action `create` on the target\_type\_uri `servic
 Limes rate with the name `service/compute/servers:create`.
 
 Rates may have a `unit` if they do not refer to countable things like API requests. For example, network throughput
-rates usually have a `unit` of `B` or `KiB`.
+rates usually have a `unit` of `B` or `KiB`. The unit applies to the values in the fields `limit` and `usage_as_bigint`
+(see below).
 
 If the rate has a rate limit, it will be shown in the fields `limit` and `window` like this:
 
