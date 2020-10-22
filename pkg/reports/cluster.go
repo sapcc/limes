@@ -421,27 +421,13 @@ func GetClusters(config core.Configuration, clusterID *string, dbi db.Interface,
 				if _, serviceReport, _ := clusters.Find(config, *clusterID, &serviceConfig.Type, nil); serviceReport != nil {
 					serviceReport.Rates = limes.ClusterRateLimitReports{}
 
-					for _, configuredRateLimit := range serviceConfig.Rates.Global {
-						rl, exists := serviceReport.Rates[configuredRateLimit.TargetTypeURI]
-						if !exists {
-							rl = &limes.ClusterRateLimitReport{
-								TargetTypeURI: configuredRateLimit.TargetTypeURI,
-								Actions:       make(limes.ClusterRateLimitActionReports),
-							}
+					for _, rateCfg := range serviceConfig.RateLimits.Global {
+						serviceReport.Rates[rateCfg.Name] = &limes.ClusterRateLimitReport{
+							Name:   rateCfg.Name,
+							Unit:   rateCfg.Unit,
+							Limit:  rateCfg.Limit,
+							Window: rateCfg.Window,
 						}
-
-						for _, configuredAction := range configuredRateLimit.Actions {
-							act, exists := rl.Actions[configuredAction.Name]
-							if !exists {
-								act = &limes.ClusterRateLimitActionReport{
-									Name: configuredAction.Name,
-								}
-							}
-							act.Limit = configuredAction.Limit
-							act.Unit = limes.Unit(configuredAction.Unit)
-							rl.Actions[act.Name] = act
-						}
-						serviceReport.Rates[rl.TargetTypeURI] = rl
 					}
 				}
 			}

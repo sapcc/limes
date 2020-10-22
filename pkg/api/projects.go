@@ -1,6 +1,6 @@
 /*******************************************************************************
 *
-* Copyright 2017 SAP SE
+* Copyright 2017-2020 SAP SE
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -296,8 +296,8 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 	}
 
 	var (
-		resourcesToUpdate  []interface{}
-		rateLimitsToUpdate []*db.ProjectRateLimit
+		resourcesToUpdate []interface{}
+		ratesToUpdate     []db.ProjectRate
 	)
 	servicesToUpdate := make(map[string]bool)
 
@@ -333,34 +333,28 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 
 		if rateLimitRequests, exists := updater.RateLimitRequests[srv.Type]; exists {
 			//Check all rate limits.
-			var rateLimits []db.ProjectRateLimit
-			_, err = tx.Select(&rateLimits, `SELECT * FROM project_rate_limits WHERE service_id = $1 ORDER BY target_type_uri, action`, srv.ID)
+			var rates []db.ProjectRate
+			_, err = tx.Select(&rates, `SELECT * FROM project_rates WHERE service_id = $1 ORDER BY name`, srv.ID)
 			if respondwith.ErrorText(w, err) {
 				return
 			}
+			ratesByName := make(map[string]db.ProjectRate)
+			for _, rate := range rates {
+				ratesByName[rate.Name] = rate
+			}
 
-			for targetTypeURI, reqs := range rateLimitRequests {
-				for action, rl := range reqs {
-					dbRateLimit := searchProjectRateLimit(rateLimits, targetTypeURI, action)
-					if dbRateLimit == nil {
-						dbRateLimit = &db.ProjectRateLimit{
-							TargetTypeURI: targetTypeURI, Action: action, ServiceID: srv.ID,
-						}
-						err := dbi.Insert(dbRateLimit)
-						if respondwith.ErrorText(w, err) {
-							return
-						}
+			for rateName, req := range rateLimitRequests {
+				rate, exists := ratesByName[rateName]
+				if !exists {
+					rate = db.ProjectRate{
+						ServiceID: srv.ID,
+						Name:      rateName,
 					}
-					//Skip if neither limit nor unit changed.
-					if dbRateLimit.Limit == rl.NewValue && dbRateLimit.Unit == string(rl.NewUnit) {
-						continue
-					}
-
-					dbRateLimit.Limit = rl.NewValue
-					dbRateLimit.Unit = string(rl.NewUnit)
-					rateLimitsToUpdate = append(rateLimitsToUpdate, dbRateLimit)
-					servicesToUpdate[srv.Type] = true
 				}
+
+				rate.Limit = &req.NewLimit
+				rate.Window = &req.NewWindow
+				ratesToUpdate = append(ratesToUpdate, rate)
 			}
 		}
 	}
@@ -374,12 +368,12 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 	}
 
 	//Update the DB with the new rate limits.
-	stmt, err := dbi.Prepare(`UPDATE project_rate_limits SET rate_limit = $1, unit = $2 WHERE service_id = $3 AND target_type_uri = $4 AND action = $5`)
+	stmt, err := dbi.Prepare(`INSERT INTO project_rates (service_id, name, rate_limit, window_ns) VALUES ($1,$2,$3,$4) ON CONFLICT (service_id, name) DO UPDATE SET rate_limit = EXCLUDED.rate_limit, window_ns = EXCLUDED.window_ns`)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-	for _, rl := range rateLimitsToUpdate {
-		_, err := stmt.Exec(rl.Limit, rl.Unit, rl.ServiceID, rl.TargetTypeURI, rl.Action)
+	for _, rate := range ratesToUpdate {
+		_, err := stmt.Exec(rate.ServiceID, rate.Name, rate.Limit, rate.Window)
 		if respondwith.ErrorText(w, err) {
 			return
 		}
@@ -580,13 +574,4 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 	}
 	//otherwise, report success
 	w.WriteHeader(202)
-}
-
-func searchProjectRateLimit(dbProjectRateLimits []db.ProjectRateLimit, targetTypeURI, action string) *db.ProjectRateLimit {
-	for _, rl := range dbProjectRateLimits {
-		if rl.TargetTypeURI == targetTypeURI && rl.Action == action {
-			return &rl
-		}
-	}
-	return nil
 }

@@ -1,6 +1,6 @@
 /*******************************************************************************
 *
-* Copyright 2017 SAP SE
+* Copyright 2017-2020 SAP SE
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -19,7 +19,11 @@
 
 package db
 
-import "time"
+import (
+	"time"
+
+	"github.com/sapcc/limes"
+)
 
 //ClusterService contains a record from the `cluster_services` table.
 type ClusterService struct {
@@ -92,13 +96,16 @@ type ProjectResource struct {
 	SubresourcesJSON    string  `db:"subresources"`
 }
 
-// ProjectRateLimit contains a record from the `rate_limits` table.
-type ProjectRateLimit struct {
-	ServiceID     int64  `db:"service_id"`
-	TargetTypeURI string `db:"target_type_uri"`
-	Action        string `db:"action"`
-	Limit         uint64 `db:"rate_limit"`
-	Unit          string `db:"unit"`
+//ProjectRate contains a record from the `project_rates` table.
+type ProjectRate struct {
+	ServiceID     int64         `db:"service_id"`
+	Name          string        `db:"name"`
+	Limit         *uint64       `db:"rate_limit"`      // nil for rates that don't have a limit (just a usage)
+	Window        *limes.Window `db:"window_ns"`       // nil for rates that don't have a limit (just a usage)
+	UsageAsBigint string        `db:"usage_as_bigint"` // empty for rates that don't have a usage (just a limit)
+	//^ NOTE: Postgres has a NUMERIC type that would be large enough to hold an
+	//  uint128, but Go does not have a uint128 builtin, so it's easier to just
+	//  use strings throughout and cast into bigints in the scraper only.
 }
 
 //InitGorp is used by Init() to setup the ORM part of the database connection.
@@ -113,5 +120,5 @@ func InitGorp() {
 	DB.AddTableWithName(Project{}, "projects").SetKeys(true, "id")
 	DB.AddTableWithName(ProjectService{}, "project_services").SetKeys(true, "id")
 	DB.AddTableWithName(ProjectResource{}, "project_resources").SetKeys(false, "service_id", "name")
-	DB.AddTableWithName(ProjectRateLimit{}, "project_rate_limits").SetKeys(false, "service_id", "target_type_uri", "action")
+	DB.AddTableWithName(ProjectRate{}, "project_rates").SetKeys(false, "service_id", "name")
 }

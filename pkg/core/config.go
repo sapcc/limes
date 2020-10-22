@@ -104,8 +104,8 @@ type ServiceConfiguration struct {
 	Type   string          `yaml:"type"`
 	Shared bool            `yaml:"shared"`
 	Auth   *AuthParameters `yaml:"auth"`
-	// Rates describes the global rate limits (all requests for to a backend) and default project level rate limits.
-	Rates ServiceRateLimitConfiguration `yaml:"rates"`
+	// RateLimits describes the global rate limits (all requests for to a backend) and default project level rate limits.
+	RateLimits ServiceRateLimitConfiguration `yaml:"rate_limits"`
 	//for quota plugins that need configuration, add a field with the service type as
 	//name and put the config data in there (use a struct to be able to give
 	//config options meaningful names)
@@ -133,51 +133,28 @@ type ServiceConfiguration struct {
 	} `yaml:"volumev2"`
 }
 
-//ServiceRateLimitConfiguration describes the global and project-level default rate limits for a service.
+//ServiceRateLimitConfiguration describes the global and project-level default rate limit configurations for a service.
 type ServiceRateLimitConfiguration struct {
 	Global         []RateLimitConfiguration `yaml:"global"`
 	ProjectDefault []RateLimitConfiguration `yaml:"project_default"`
 }
 
 //GetProjectDefaultRateLimit returns the default project-level rate limit for a given target type URI and action or an error if not found.
-func (svcRlConfig *ServiceRateLimitConfiguration) GetProjectDefaultRateLimit(targetTypeURI, action string) (uint64, string, error) {
-	for _, rl := range svcRlConfig.ProjectDefault {
-		if rl.TargetTypeURI == targetTypeURI {
-			for _, act := range rl.Actions {
-				if act.Name == action {
-					return act.Limit, act.Unit, nil
-				}
-			}
+func (svcRlConfig *ServiceRateLimitConfiguration) GetProjectDefaultRateLimit(name string) (RateLimitConfiguration, bool) {
+	for _, rateCfg := range svcRlConfig.ProjectDefault {
+		if rateCfg.Name == name {
+			return rateCfg, true
 		}
 	}
-	return 0, "", fmt.Errorf("no rate limit found for %s/%s", targetTypeURI, action)
-}
-
-//GetGlobalRateLimit returns the global rate limit for a given target type URI and action or an error if not found.
-func (svcRlConfig *ServiceRateLimitConfiguration) GetGlobalRateLimit(targetTypeURI, action string) (uint64, string, error) {
-	for _, rl := range svcRlConfig.Global {
-		if rl.TargetTypeURI == targetTypeURI {
-			for _, act := range rl.Actions {
-				if act.Name == action {
-					return act.Limit, act.Unit, nil
-				}
-			}
-		}
-	}
-	return 0, "", fmt.Errorf("no rate limit found for %s/%s", targetTypeURI, action)
+	return RateLimitConfiguration{}, false
 }
 
 //RateLimitConfiguration describes a rate limit configuration.
 type RateLimitConfiguration struct {
-	TargetTypeURI string                         `yaml:"target_type_uri"`
-	Actions       []RateLimitActionConfiguration `yaml:"actions"`
-}
-
-//RateLimitActionConfiguration describes a rate limit per action.
-type RateLimitActionConfiguration struct {
-	Name  string `yaml:"name"`
-	Limit uint64 `yaml:"limit"`
-	Unit  string `yaml:"unit"`
+	Name   string       `yaml:"name"`
+	Unit   limes.Unit   `yaml:"unit"`
+	Limit  uint64       `yaml:"limit"`
+	Window limes.Window `yaml:"window"`
 }
 
 //CapacitorConfiguration describes a capacity plugin that is enabled for a

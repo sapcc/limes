@@ -70,17 +70,13 @@ type ProjectResourceReport struct {
 
 // ProjectRateLimitReport is the structure for rate limits per target type URI and their rate limited actions.
 type ProjectRateLimitReport struct {
-	TargetTypeURI string                        `json:"target_type_uri,keepempty"`
-	Actions       ProjectRateLimitActionReports `json:"actions,keepempty"`
-}
-
-// ProjectRateLimitActionReport is defines an action and its rate limit.
-type ProjectRateLimitActionReport struct {
-	Name         string `json:"name,keepempty"`
-	Limit        uint64 `json:"limit,keepempty"`
-	Unit         Unit   `json:"unit,keepempty"`
-	DefaultLimit uint64 `json:"default_limit,omitempty"`
-	DefaultUnit  Unit   `json:"default_unit,omitempty"`
+	Name          string `json:"name,keepempty"`
+	Unit          Unit   `json:"unit,omitempty"`
+	Limit         uint64 `json:"limit,keepempty"`
+	Window        Window `json:"window,keepempty"`
+	DefaultLimit  uint64 `json:"default_limit,omitempty"`
+	DefaultWindow Window `json:"default_window,omitempty"`
+	UsageAsBigint string `json:"usage_as_bigint,omitempty"`
 }
 
 //ProjectServiceReports provides fast lookup of services using a map, but serializes
@@ -178,41 +174,8 @@ func (r *ProjectRateLimitReports) UnmarshalJSON(b []byte) error {
 	}
 	t := make(ProjectRateLimitReports)
 	for _, prl := range tmp {
-		t[prl.TargetTypeURI] = prl
+		t[prl.Name] = prl
 	}
 	*r = ProjectRateLimitReports(t)
-	return nil
-}
-
-//ProjectRateLimitActionReports provides fast lookup of resources using a map, but serializes
-//to JSON as a list.
-type ProjectRateLimitActionReports map[string]*ProjectRateLimitActionReport
-
-//MarshalJSON implements the json.Marshaler interface.
-func (r ProjectRateLimitActionReports) MarshalJSON() ([]byte, error) {
-	names := make([]string, 0, len(r))
-	for name := range r {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	list := make([]*ProjectRateLimitActionReport, len(r))
-	for idx, name := range names {
-		list[idx] = r[name]
-	}
-	return json.Marshal(list)
-}
-
-//UnmarshalJSON implements the json.Unmarshaler interface.
-func (r *ProjectRateLimitActionReports) UnmarshalJSON(b []byte) error {
-	tmp := make([]*ProjectRateLimitActionReport, 0)
-	err := json.Unmarshal(b, &tmp)
-	if err != nil {
-		return err
-	}
-	t := make(ProjectRateLimitActionReports)
-	for _, a := range tmp {
-		t[a.Name] = a
-	}
-	*r = ProjectRateLimitActionReports(t)
 	return nil
 }

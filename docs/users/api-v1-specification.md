@@ -285,7 +285,8 @@ If the rate has a rate limit, it will be shown in the fields `limit` and `window
 ```
 
 This means that within any 1-minute window, not more than 2 API requests of this type are allowed for the project in
-question. The `window` is a string with the syntax `<number><unit>`, where `<unit>` is one of:
+question. (Rate limits are applied on a sliding window, not on fixed window boundaries.) The value of the `window` field
+is a string with the syntax `<number><unit>`, where `<unit>` is one of:
 
 ```
 ms    - millisecond

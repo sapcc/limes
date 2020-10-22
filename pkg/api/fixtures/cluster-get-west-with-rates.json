@@ -30,14 +30,9 @@
         ],
         "rates": [
           {
-            "target_type_uri": "service/shared/objects",
-            "actions": [
-              {
-                "name": "create",
-                "limit": 5000,
-                "unit": "r/s"
-              }
-            ]
+            "name": "service/shared/objects:create",
+            "limit": 5000,
+            "window": "1s"
           }
         ],
         "max_scraped_at": 66,

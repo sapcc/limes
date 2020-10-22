@@ -1,6 +1,6 @@
 /*******************************************************************************
 *
-* Copyright 2017 SAP SE
+* Copyright 2017-2020 SAP SE
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -21,7 +21,6 @@ package limes
 
 import (
 	"fmt"
-	"regexp"
 	"strconv"
 	"strings"
 )
@@ -49,16 +48,35 @@ const (
 	UnitExbibytes Unit = "EiB"
 	//UnitUnspecified is used as a placeholder when the unit is not known.
 	UnitUnspecified Unit = "UNSPECIFIED"
-
-	//UnitRequestsPerMillisecond is exactly that.
-	UnitRequestsPerMillisecond Unit = "r/ms"
-	//UnitRequestsPerSecond is exactly that.
-	UnitRequestsPerSecond Unit = "r/s"
-	//UnitRequestsPerMinute is exactly that.
-	UnitRequestsPerMinute Unit = "r/m"
-	//UnitRequestsPerHour is exactly that.
-	UnitRequestsPerHour Unit = "r/h"
 )
+
+var allValidUnits = []Unit{
+	UnitNone,
+	UnitBytes,
+	UnitKibibytes,
+	UnitMebibytes,
+	UnitGibibytes,
+	UnitTebibytes,
+	UnitPebibytes,
+	UnitExbibytes,
+}
+
+//UnmarshalYAML implements the yaml.Unmarshaler interface. This method validates
+//that units in the config file actually exist.
+func (u *Unit) UnmarshalYAML(unmarshal func(interface{}) error) error {
+	var s string
+	err := unmarshal(&s)
+	if err != nil {
+		return err
+	}
+	for _, unit := range allValidUnits {
+		if string(unit) == s {
+			*u = unit
+			return nil
+		}
+	}
+	return fmt.Errorf("unknown unit: %q", s)
+}
 
 //Base returns the base unit of this unit. For units defined as a multiple of
 //another unit, that unit is the base unit. Otherwise, the same unit and a
@@ -82,8 +100,6 @@ func (u Unit) Base() (Unit, uint64) {
 	}
 }
 
-var measuredQuotaValueRx = regexp.MustCompile(`^\s*([0-9]+)\s*([A-Za-z]+)$`)
-
 //Parse parses the string representation of a value with this unit (or any unit
 //that can be converted to it).
 //
@@ -103,14 +119,12 @@ func (u Unit) Parse(str string) (uint64, error) {
 	fields := strings.Fields(str)
 	// Measured resources are a number and unit with space.
 	if len(fields) != 2 {
-		return 0, fmt.Errorf("value %q does not match expected format \"<number> <unit>\"",
-			str)
+		return 0, fmt.Errorf("value %q does not match expected format \"<number> <unit>\"", str)
 	}
 
 	number, err := strconv.ParseUint(fields[0], 10, 64)
 	if err != nil {
-		return 0, fmt.Errorf("invalid value %q: %s",
-			str, err.Error())
+		return 0, fmt.Errorf("invalid value %q: %s", str, err.Error())
 	}
 	value := ValueWithUnit{
 		Value: number,
@@ -136,12 +150,7 @@ func (v ValueWithUnit) String() string {
 	if v.Unit == UnitNone {
 		return str
 	}
-	switch v.Unit {
-	case UnitRequestsPerMillisecond, UnitRequestsPerSecond, UnitRequestsPerMinute, UnitRequestsPerHour:
-		return str + string(v.Unit)
-	default:
-		return str + " " + string(v.Unit)
-	}
+	return str + " " + string(v.Unit)
 }
 
 //ConvertTo returns an equal value in the given Unit. IncompatibleUnitsError is

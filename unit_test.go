@@ -57,17 +57,3 @@ func Test_ValueWithUnit_ConvertTo(t *testing.T) {
 		"value of 42 B cannot be represented as integer number of MiB",
 	)
 }
-
-func TestValueWithUnitRateLimit(t *testing.T) {
-	tests := map[ValueWithUnit]string{
-		{1, UnitRequestsPerSecond}:    "1r/s",
-		{1000, UnitRequestsPerMinute}: "1000r/m",
-		{22, UnitRequestsPerHour}:     "22r/h",
-	}
-
-	for input, expected := range tests {
-		if input.String() != expected {
-			t.Errorf("expected %s but got %s", expected, input.String())
-		}
-	}
-}

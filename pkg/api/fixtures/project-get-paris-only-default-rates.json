@@ -10,29 +10,24 @@
         "resources": [],
         "rates": [
           {
-            "target_type_uri": "service/shared/objects",
-            "actions": [
-              {
-                "name": "create",
-                "limit": 5,
-                "unit": "r/m"
-              },
-              {
-                "name": "delete",
-                "limit": 1,
-                "unit": "r/m"
-              },
-              {
-                "name": "read/list",
-                "limit": 3,
-                "unit": "r/s"
-              },
-              {
-                "name": "update",
-                "limit": 2,
-                "unit": "r/s"
-              }
-            ]
+            "name": "service/shared/objects:create",
+            "limit": 5,
+            "window": "1m"
+          },
+          {
+            "name": "service/shared/objects:delete",
+            "limit": 1,
+            "window": "1m"
+          },
+          {
+            "name": "service/shared/objects:read/list",
+            "limit": 3,
+            "window": "1s"
+          },
+          {
+            "name": "service/shared/objects:update",
+            "limit": 2,
+            "window": "1s"
           }
         ],
         "scraped_at": 66
@@ -43,24 +38,19 @@
         "resources": [],
         "rates": [
           {
-            "target_type_uri": "service/unshared/instances",
-            "actions": [
-              {
-                "name": "create",
-                "limit": 5,
-                "unit": "r/m"
-              },
-              {
-                "name": "delete",
-                "limit": 1,
-                "unit": "r/m"
-              },
-              {
-                "name": "update",
-                "limit": 2,
-                "unit": "r/s"
-              }
-            ]
+            "name": "service/unshared/instances:create",
+            "limit": 5,
+            "window": "1m"
+          },
+          {
+            "name": "service/unshared/instances:delete",
+            "limit": 1,
+            "window": "1m"
+          },
+          {
+            "name": "service/unshared/instances:update",
+            "limit": 2,
+            "window": "1s"
           }
         ],
         "scraped_at": 55

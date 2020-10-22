@@ -769,29 +769,24 @@ For further details see the [rate limits API specification](../users/api-v1-spec
 | --- | --- | --- |
 | `global` | list |  Defines rate limits meant to protect the service from being overloaded. Requests are counted across all domains and projects. |
 | `project_default` | list | Defines default rate limits for every project. |
-| `$level[].target_type_uri` | string | The target type URI of the rate limit action. |
-| `$level[].actions[].name` | string | The name of the rate limit action. |
-| `$level[].actions[].limit` | integer | The rate limit as integer. |
-| `$level[].actions[].unit` | string | The unit of the rate limit. Available units are `r/ms`, `r/s`, `r/m`, `r/h`. |
-
+| `$level[].name` | string | The name of the rate. |
+| `$level[].unit` | string | The unit of the rate. Available units are `B`, `KiB`, `MiB` and so on. If not given, the resource is counted (e.g. API requests) rather than measured. |
+| `$level[].limit` | integer | The rate limit as integer. |
 
 Example configuration:
+
 ```yaml
 clusters:
   staging:
     services:
       - type: object-store
         rates:
-           - global:
-               - target_type_uri: "services/swift/account/container/object"
-                 actions:
-                   - name:  create
-                     limit: 1000000
-                     unit:  "r/s"
-           - project_default:
-               - target_type_uri: "services/swift/account/container/object"
-                 actions:
-                   - name:  create
-                     limit: 1000
-                     unit:  "r/s"
+          global:
+           - name:   services/swift/account/container/object:create
+             limit:  1000000
+             window: "1s"
+          project_default:
+           - name:   services/swift/account/container/object:create
+             limit:  1000
+             window: "1s"
 ```

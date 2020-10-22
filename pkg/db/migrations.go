@@ -1,6 +1,6 @@
 /*******************************************************************************
 *
-* Copyright 2017-2018 SAP SE
+* Copyright 2017-2020 SAP SE
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -181,5 +181,27 @@ var SQLMigrations = map[string]string{
 	`,
 	"013_remove_cluster_resource_comment.up.sql": `
 		ALTER TABLE cluster_resources DROP COLUMN comment;
+	`,
+	"014_restructure_project_rate_limits.down.sql": `
+		DROP TABLE project_rates;
+		CREATE TABLE project_rate_limits (
+			service_id      BIGINT NOT NULL REFERENCES project_services ON DELETE CASCADE,
+			target_type_uri TEXT   NOT NULL,
+			action          TEXT   NOT NULL,
+			rate_limit      BIGINT NOT NULL,
+			unit            TEXT   NOT NULL,
+			PRIMARY KEY (service_id, target_type_uri, action)
+		);
+	`,
+	"014_restructure_project_rate_limits.up.sql": `
+		DROP TABLE project_rate_limits;
+		CREATE TABLE project_rates (
+			service_id      BIGINT NOT NULL REFERENCES project_services ON DELETE CASCADE,
+			name            TEXT   NOT NULL,
+			rate_limit      BIGINT DEFAULT NULL,        -- null = not rate-limited
+			window_ns       BIGINT DEFAULT NULL,        -- null = not rate-limited, unit = nanoseconds
+			usage_as_bigint TEXT   NOT NULL DEFAULT '', -- empty = not scraped
+			PRIMARY KEY (service_id, name)
+		);
 	`,
 }

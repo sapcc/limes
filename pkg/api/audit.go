@@ -179,22 +179,22 @@ func (t burstEventTarget) Render() cadf.Resource {
 //rateLimitEventTarget contains the structure for rendering a cadf.Event.Target for
 //changes regarding rate limits
 type rateLimitEventTarget struct {
-	DomainID,
-	ProjectID,
-	ServiceType,
-	TargetTypeURI,
-	Action string
-	OldLimit,
-	NewLimit uint64
-	OldUnit,
-	NewUnit limes.Unit
+	DomainID     string
+	ProjectID    string
+	ServiceType  string
+	Name         string
+	Unit         limes.Unit
+	OldLimit     uint64
+	NewLimit     uint64
+	OldWindow    limes.Window
+	NewWindow    limes.Window
 	RejectReason string
 }
 
 //Render implements the audittools.TargetRenderer interface type.
 func (t rateLimitEventTarget) Render() cadf.Resource {
 	return cadf.Resource{
-		TypeURI:   fmt.Sprintf("service/%s/%s/%s/rates", t.ServiceType, t.TargetTypeURI, t.Action),
+		TypeURI:   fmt.Sprintf("service/%s/%s/rates", t.ServiceType, t.Name),
 		ID:        t.ProjectID,
 		DomainID:  t.DomainID,
 		ProjectID: t.ProjectID,
@@ -203,10 +203,11 @@ func (t rateLimitEventTarget) Render() cadf.Resource {
 				Name:    "payload",
 				TypeURI: "mime:application/json",
 				Content: targetAttachmentContent{
+					Unit:         t.Unit,
 					OldLimit:     t.OldLimit,
 					NewLimit:     t.NewLimit,
-					OldUnit:      t.OldUnit,
-					NewUnit:      t.NewUnit,
+					OldWindow:    t.OldWindow,
+					NewWindow:    t.NewWindow,
 					RejectReason: t.RejectReason,
 				},
 			},
@@ -217,33 +218,33 @@ func (t rateLimitEventTarget) Render() cadf.Resource {
 //This type is needed for the custom MarshalJSON behavior.
 type targetAttachmentContent struct {
 	RejectReason string
+	// for quota or rate limit changes
+	Unit limes.Unit
 	// for quota changes
 	OldQuota uint64
 	NewQuota uint64
-	Unit     limes.Unit
 	// for quota bursting
 	NewStatus bool
-	//For rate limits.
-	OldLimit,
-	NewLimit uint64
-	OldUnit,
-	NewUnit limes.Unit
+	// for rate limit changes
+	OldLimit  uint64
+	NewLimit  uint64
+	OldWindow limes.Window
+	NewWindow limes.Window
 }
 
 //MarshalJSON implements the json.Marshaler interface.
 func (a targetAttachmentContent) MarshalJSON() ([]byte, error) {
 	//copy data into a struct that does not have a custom MarshalJSON
 	data := struct {
-		OldQuota     uint64     `json:"oldQuota,omitempty"`
-		NewQuota     uint64     `json:"newQuota,omitempty"`
-		Unit         limes.Unit `json:"unit,omitempty"`
-		NewStatus    bool       `json:"newStatus,omitempty"`
-		RejectReason string     `json:"rejectReason,omitempty"`
-		//For rate limits.
-		OldLimit uint64     `json:"oldLimit,omitempty"`
-		NewLimit uint64     `json:"newLimit,omitempty"`
-		OldUnit  limes.Unit `json:"oldUnit,omitempty"`
-		NewUnit  limes.Unit `json:"newUnit,omitempty"`
+		OldQuota     uint64       `json:"oldQuota,omitempty"`
+		NewQuota     uint64       `json:"newQuota,omitempty"`
+		Unit         limes.Unit   `json:"unit,omitempty"`
+		NewStatus    bool         `json:"newStatus,omitempty"`
+		RejectReason string       `json:"rejectReason,omitempty"`
+		OldLimit     uint64       `json:"oldLimit,omitempty"`
+		NewLimit     uint64       `json:"newLimit,omitempty"`
+		OldWindow    limes.Window `json:"oldWindow,omitempty"`
+		NewWindow    limes.Window `json:"newWindow,omitempty"`
 	}{
 		OldQuota:     a.OldQuota,
 		NewQuota:     a.NewQuota,
@@ -252,8 +253,8 @@ func (a targetAttachmentContent) MarshalJSON() ([]byte, error) {
 		RejectReason: a.RejectReason,
 		OldLimit:     a.OldLimit,
 		NewLimit:     a.NewLimit,
-		OldUnit:      a.OldUnit,
-		NewUnit:      a.NewUnit,
+		OldWindow:    a.OldWindow,
+		NewWindow:    a.NewWindow,
 	}
 	//Hermes does not accept a JSON object at target.attachments[].content, so
 	//we need to wrap the marshaled JSON into a JSON string
