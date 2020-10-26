@@ -16,10 +16,12 @@
           },
           {
             "name": "service/shared/objects:delete",
+            "unit": "MiB",
             "limit": 2,
             "window": "1m",
             "default_limit": 1,
-            "default_window": "1m"
+            "default_window": "1m",
+            "usage_as_bigint": "23456"
           },
           {
             "name": "service/shared/objects:read/list",
@@ -51,7 +53,8 @@
             "limit": 2,
             "window": "1m",
             "default_limit": 1,
-            "default_window": "1m"
+            "default_window": "1m",
+            "usage_as_bigint": "12345"
           },
           {
             "name": "service/unshared/instances:update",

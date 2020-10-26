@@ -62,6 +62,11 @@ func (p *keppelPlugin) Resources() []limes.ResourceInfo {
 	return keppelResources
 }
 
+//Rates implements the core.QuotaPlugin interface.
+func (p *keppelPlugin) Rates() []limes.RateInfo {
+	return nil
+}
+
 //Scrape implements the core.QuotaPlugin interface.
 func (p *keppelPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, error) {
 	client, err := newKeppelClient(provider, eo)

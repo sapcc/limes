@@ -49,11 +49,22 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 	test.InitDatabase(t, &startData)
 
 	//prepare test configuration
+	sharedRatesThatReportUsage := []limes.RateInfo{
+		//NOTE: MiB makes no sense for for this rate, but I want to test as many
+		//combinations of "has unit or not", "has limit or not" and "has usage or
+		//not" as possible
+		{Name: "service/shared/objects:delete", Unit: limes.UnitMebibytes},
+		{Name: "service/shared/objects:unlimited", Unit: limes.UnitKibibytes},
+	}
+	unsharedRatesThatReportUsage := []limes.RateInfo{
+		{Name: "service/unshared/instances:delete", Unit: limes.UnitNone},
+	}
+
 	serviceTypes := []string{"shared", "unshared"}
 	isServiceShared := map[string]bool{"shared": true}
 	quotaPlugins := map[string]core.QuotaPlugin{
-		"shared":   test.NewPlugin("shared"),
-		"unshared": test.NewPlugin("unshared"),
+		"shared":   test.NewPlugin("shared", sharedRatesThatReportUsage...),
+		"unshared": test.NewPlugin("unshared", unsharedRatesThatReportUsage...),
 	}
 	westConstraintSet := core.QuotaConstraintSet{
 		Domains: map[string]core.QuotaConstraints{
@@ -913,13 +924,6 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-berlin-only-rates.json"),
 	}.Check(t, router)
-	//Only default project rates configured via ServiceConfiguration but not individual rates for project.
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/v1/domains/uuid-for-france/projects/uuid-for-paris?rates=only",
-		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-paris-only-default-rates.json"),
-	}.Check(t, router)
 	//dresden has a case of backend quota != quota
 	assert.HTTPRequest{
 		Method:       "GET",
@@ -927,12 +931,26 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-dresden.json"),
 	}.Check(t, router)
+	//dresden has some rates that only report usage
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden?rates=true",
+		ExpectStatus: 200,
+		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-dresden-with-rates.json"),
+	}.Check(t, router)
 	//paris has a case of infinite backend quota
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains/uuid-for-france/projects/uuid-for-paris",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-paris.json"),
+	}.Check(t, router)
+	//paris has no rates in the DB whatsoever, so we can check the rendering of the default rates
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/v1/domains/uuid-for-france/projects/uuid-for-paris?rates=only",
+		ExpectStatus: 200,
+		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-paris-only-default-rates.json"),
 	}.Check(t, router)
 	//warsaw is in a different cluster
 	assert.HTTPRequest{

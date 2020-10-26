@@ -255,9 +255,9 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 
 				if projectService, exists := projectReport.Services[svcType]; exists {
 					projectRate, exists := projectService.Rates[rateName]
-					if exists {
+					if exists && projectRate.Limit != 0 && projectRate.Window != nil {
 						req.OldLimit = projectRate.Limit
-						req.OldWindow = projectRate.Window
+						req.OldWindow = *projectRate.Window
 					} else {
 						req.OldLimit = defaultRateLimit.Limit
 						req.OldWindow = defaultRateLimit.Window

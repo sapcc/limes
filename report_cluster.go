@@ -69,8 +69,7 @@ type ClusterAvailabilityZoneReport struct {
 
 // ClusterRateLimitReport is the structure for rate limits per target type URI and their rate limited actions.
 type ClusterRateLimitReport struct {
-	Name   string `json:"name,keepempty"`
-	Unit   Unit   `json:"unit,omitempty"`
+	RateInfo
 	Limit  uint64 `json:"limit,omitempty"`
 	Window Window `json:"window,omitempty"`
 }

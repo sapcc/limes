@@ -16,6 +16,7 @@
           },
           {
             "name": "service/shared/objects:delete",
+            "unit": "MiB",
             "limit": 1,
             "window": "1m"
           },

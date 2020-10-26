@@ -70,13 +70,14 @@ type ProjectResourceReport struct {
 
 // ProjectRateLimitReport is the structure for rate limits per target type URI and their rate limited actions.
 type ProjectRateLimitReport struct {
-	Name          string `json:"name,keepempty"`
-	Unit          Unit   `json:"unit,omitempty"`
-	Limit         uint64 `json:"limit,keepempty"`
-	Window        Window `json:"window,keepempty"`
-	DefaultLimit  uint64 `json:"default_limit,omitempty"`
-	DefaultWindow Window `json:"default_window,omitempty"`
-	UsageAsBigint string `json:"usage_as_bigint,omitempty"`
+	RateInfo
+	//NOTE: Both Window fields must have pointer types because omitempty does not
+	//work directly on json.Marshaler-implementing types.
+	Limit         uint64  `json:"limit,omitempty"`
+	Window        *Window `json:"window,omitempty"`
+	DefaultLimit  uint64  `json:"default_limit,omitempty"`
+	DefaultWindow *Window `json:"default_window,omitempty"`
+	UsageAsBigint string  `json:"usage_as_bigint,omitempty"`
 }
 
 //ProjectServiceReports provides fast lookup of services using a map, but serializes

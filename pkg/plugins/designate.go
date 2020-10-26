@@ -69,6 +69,11 @@ func (p *designatePlugin) Resources() []limes.ResourceInfo {
 	return designateResources
 }
 
+//Rates implements the core.QuotaPlugin interface.
+func (p *designatePlugin) Rates() []limes.RateInfo {
+	return nil
+}
+
 //Scrape implements the core.QuotaPlugin interface.
 func (p *designatePlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, error) {
 	client, err := openstack.NewDNSV2(provider, eo)

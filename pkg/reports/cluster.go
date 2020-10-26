@@ -423,8 +423,10 @@ func GetClusters(config core.Configuration, clusterID *string, dbi db.Interface,
 
 					for _, rateCfg := range serviceConfig.RateLimits.Global {
 						serviceReport.Rates[rateCfg.Name] = &limes.ClusterRateLimitReport{
-							Name:   rateCfg.Name,
-							Unit:   rateCfg.Unit,
+							RateInfo: limes.RateInfo{
+								Name: rateCfg.Name,
+								Unit: rateCfg.Unit,
+							},
 							Limit:  rateCfg.Limit,
 							Window: rateCfg.Window,
 						}

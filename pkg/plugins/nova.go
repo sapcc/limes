@@ -191,6 +191,11 @@ func (p *novaPlugin) Resources() []limes.ResourceInfo {
 	return p.resources
 }
 
+//Rates implements the core.QuotaPlugin interface.
+func (p *novaPlugin) Rates() []limes.RateInfo {
+	return nil
+}
+
 //Scrape implements the core.QuotaPlugin interface.
 func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, error) {
 	client, err := openstack.NewComputeV2(provider, eo)

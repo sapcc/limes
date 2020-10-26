@@ -21,6 +21,7 @@ package plugins
 
 import (
 	"fmt"
+
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/common/extensions"
@@ -174,6 +175,11 @@ func (p *neutronPlugin) ServiceInfo() limes.ServiceInfo {
 //Resources implements the core.QuotaPlugin interface.
 func (p *neutronPlugin) Resources() []limes.ResourceInfo {
 	return p.resources
+}
+
+//Rates implements the core.QuotaPlugin interface.
+func (p *neutronPlugin) Rates() []limes.RateInfo {
+	return nil
 }
 
 type neutronResourceMetadata struct {

@@ -95,6 +95,11 @@ func (p *manilaPlugin) Resources() []limes.ResourceInfo {
 	return result
 }
 
+//Rates implements the core.QuotaPlugin interface.
+func (p *manilaPlugin) Rates() []limes.RateInfo {
+	return nil
+}
+
 func (p *manilaPlugin) makeResourceName(kind, shareType string) string {
 	if p.cfg.ShareV2.ShareTypes[0] == shareType {
 		//the resources for the first share type don't get the share type suffix

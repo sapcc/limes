@@ -154,10 +154,9 @@ func GetProjects(cluster *core.Cluster, domain db.Domain, projectID *int64, dbi 
 						serviceReport.Rates = make(limes.ProjectRateLimitReports, len(svcConfig.RateLimits.ProjectDefault))
 						for _, rateLimit := range svcConfig.RateLimits.ProjectDefault {
 							serviceReport.Rates[rateLimit.Name] = &limes.ProjectRateLimitReport{
-								Name:   rateLimit.Name,
-								Unit:   rateLimit.Unit,
-								Limit:  rateLimit.Limit,
-								Window: rateLimit.Window,
+								RateInfo: cluster.InfoForRate(serviceReport.Type, rateLimit.Name),
+								Limit:    rateLimit.Limit,
+								Window:   p2window(rateLimit.Window),
 							}
 						}
 					}
@@ -191,16 +190,29 @@ func GetProjects(cluster *core.Cluster, domain db.Domain, projectID *int64, dbi 
 			_, srvReport, _ := projects.Find(cluster, projectUUID, projectName, projectParentUUID, serviceType, nil, scrapedAt)
 			if srvReport != nil {
 				rateReport := srvReport.Rates[rateName]
+
+				//we previously created report entries for all rates that have a
+				//default limit; create missing report entries for rates that only have
+				//a usage
+				if rateReport == nil && usageAsBigint != "" && cluster.HasUsageForRate(*serviceType, rateName) {
+					rateReport = &limes.ProjectRateLimitReport{
+						RateInfo: cluster.InfoForRate(*serviceType, rateName),
+					}
+					srvReport.Rates[rateName] = rateReport
+				}
+
 				if rateReport != nil {
 					rateReport.UsageAsBigint = usageAsBigint
 
-					//overwrite the default limit if a different custom limit is configured
-					if limit != nil && window != nil {
-						if rateReport.Limit != *limit || rateReport.Window != *window {
+					//overwrite the default limit if a different custom limit is
+					//configured, but ignore custom limits where there is no default
+					//limit
+					if rateReport.Limit != 0 && limit != nil && window != nil {
+						if rateReport.Limit != *limit || *rateReport.Window != *window {
 							rateReport.DefaultLimit = rateReport.Limit
 							rateReport.DefaultWindow = rateReport.Window
 							rateReport.Limit = *limit
-							rateReport.Window = *window
+							rateReport.Window = window
 						}
 					}
 				}
@@ -225,6 +237,10 @@ func GetProjects(cluster *core.Cluster, domain db.Domain, projectID *int64, dbi 
 	}
 
 	return result, nil
+}
+
+func p2window(val limes.Window) *limes.Window {
+	return &val
 }
 
 type projects map[string]*limes.ProjectReport

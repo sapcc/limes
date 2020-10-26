@@ -78,6 +78,11 @@ func (p *swiftPlugin) Resources() []limes.ResourceInfo {
 	return swiftResources
 }
 
+//Rates implements the core.QuotaPlugin interface.
+func (p *swiftPlugin) Rates() []limes.RateInfo {
+	return nil
+}
+
 func (p *swiftPlugin) Account(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, projectUUID string) (*schwift.Account, error) {
 	client, err := openstack.NewObjectStorageV1(provider, eo)
 	if err != nil {

@@ -166,6 +166,9 @@ func (p quotaConstraintTestPlugin) Init(client *gophercloud.ProviderClient, eo g
 func (p quotaConstraintTestPlugin) ServiceInfo() limes.ServiceInfo {
 	return limes.ServiceInfo{Type: p.ServiceType}
 }
+func (p quotaConstraintTestPlugin) Rates() []limes.RateInfo {
+	return nil
+}
 func (p quotaConstraintTestPlugin) Scrape(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]ResourceData, error) {
 	return nil, nil
 }

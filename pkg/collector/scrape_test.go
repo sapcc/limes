@@ -330,6 +330,10 @@ func (p *autoApprovalTestPlugin) Resources() []limes.ResourceInfo {
 	}
 }
 
+func (p *autoApprovalTestPlugin) Rates() []limes.RateInfo {
+	return nil
+}
+
 func (p *autoApprovalTestPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, error) {
 	return map[string]core.ResourceData{
 		"approve":   {Usage: 0, Quota: int64(p.StaticBackendQuota)},

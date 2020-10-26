@@ -88,6 +88,11 @@ func (p *cinderPlugin) Resources() []limes.ResourceInfo {
 	return result
 }
 
+//Rates implements the core.QuotaPlugin interface.
+func (p *cinderPlugin) Rates() []limes.RateInfo {
+	return nil
+}
+
 func (p *cinderPlugin) makeResourceName(kind, volumeType string) string {
 	if p.cfg.VolumeV2.VolumeTypes[0] == volumeType {
 		//the resources for the first volume type don't get the volume type suffix

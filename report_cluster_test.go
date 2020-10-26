@@ -147,9 +147,9 @@ var clusterServicesOnlyRates = &ClusterServiceReports{
 		Resources: ClusterResourceReports{},
 		Rates: ClusterRateLimitReports{
 			"service/shared/objects:create": {
-				Name:   "service/shared/objects:create",
-				Limit:  5000,
-				Window: 1 * WindowSeconds,
+				RateInfo: RateInfo{Name: "service/shared/objects:create"},
+				Limit:    5000,
+				Window:   1 * WindowSeconds,
 			},
 		},
 	},

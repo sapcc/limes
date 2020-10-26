@@ -68,6 +68,11 @@ func (p *cfmPlugin) Resources() []limes.ResourceInfo {
 	}}
 }
 
+//Rates implements the core.QuotaPlugin interface.
+func (p *cfmPlugin) Rates() []limes.RateInfo {
+	return nil
+}
+
 //Scrape implements the core.QuotaPlugin interface.
 func (p *cfmPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, error) {
 	client, err := newCFMClient(provider, eo, p.projectID)

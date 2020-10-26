@@ -31,6 +31,7 @@ import (
 //Plugin is a core.QuotaPlugin implementation for unit tests.
 type Plugin struct {
 	StaticServiceType  string
+	StaticRateInfos    []limes.RateInfo
 	StaticResourceData map[string]*core.ResourceData
 	StaticCapacity     map[string]uint64
 	OverrideQuota      map[string]map[string]uint64
@@ -52,9 +53,10 @@ var resources = []limes.ResourceInfo{
 }
 
 //NewPlugin creates a new Plugin for the given service type.
-func NewPlugin(serviceType string) *Plugin {
+func NewPlugin(serviceType string, rates ...limes.RateInfo) *Plugin {
 	return &Plugin{
 		StaticServiceType: serviceType,
+		StaticRateInfos:   rates,
 		StaticResourceData: map[string]*core.ResourceData{
 			"things":          {Quota: 42, Usage: 2},
 			"capacity":        {Quota: 100, Usage: 0},
@@ -96,6 +98,11 @@ func (p *Plugin) Resources() []limes.ResourceInfo {
 		})
 	}
 	return result
+}
+
+//Rates implements the core.QuotaPlugin interface.
+func (p *Plugin) Rates() []limes.RateInfo {
+	return p.StaticRateInfos
 }
 
 //Scrape implements the core.QuotaPlugin interface.

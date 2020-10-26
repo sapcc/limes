@@ -397,3 +397,36 @@ func (c *Cluster) BehaviorForResource(serviceType, resourceName, scopeName strin
 
 	return result
 }
+
+//HasUsageForRate checks whether the given service is enabled in this cluster and
+//whether it scrapes usage for the given rate.
+func (c *Cluster) HasUsageForRate(serviceType, rateName string) bool {
+	plugin := c.QuotaPlugins[serviceType]
+	if plugin == nil {
+		return false
+	}
+	for _, rate := range plugin.Rates() {
+		if rate.Name == rateName {
+			return true
+		}
+	}
+	return false
+}
+
+//InfoForRate finds the plugin for the given serviceType and finds within that
+//plugin the RateInfo for the given rateName. If the service or rate does not
+//exist, an empty RateInfo (with .Unit == UnitNone) is returned. Note that this
+//only returns non-empty RateInfos for rates where a usage is reported. There
+//may be rates that only have a limit, as defined in the ClusterConfiguration.
+func (c *Cluster) InfoForRate(serviceType, rateName string) limes.RateInfo {
+	plugin := c.QuotaPlugins[serviceType]
+	if plugin == nil {
+		return limes.RateInfo{Name: rateName, Unit: limes.UnitNone}
+	}
+	for _, rate := range plugin.Rates() {
+		if rate.Name == rateName {
+			return rate
+		}
+	}
+	return limes.RateInfo{Name: rateName, Unit: limes.UnitNone}
+}
