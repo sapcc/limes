@@ -21,6 +21,7 @@ package core
 
 import (
 	"encoding/json"
+	"math/big"
 	"reflect"
 	"testing"
 
@@ -174,6 +175,9 @@ func (p quotaConstraintTestPlugin) Scrape(client *gophercloud.ProviderClient, eo
 }
 func (p quotaConstraintTestPlugin) SetQuota(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
 	return nil
+}
+func (p quotaConstraintTestPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+	return nil, "", nil
 }
 
 func (p quotaConstraintTestPlugin) Resources() []limes.ResourceInfo {

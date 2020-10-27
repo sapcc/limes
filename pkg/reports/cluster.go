@@ -37,7 +37,8 @@ var clusterReportQuery1 = db.SimplifyWhitespaceInSQL(`
 	       SUM(pr.quota), SUM(pr.usage),
 	       SUM(GREATEST(pr.usage - pr.quota, 0)),
 	       SUM(COALESCE(pr.physical_usage, pr.usage)), COUNT(pr.physical_usage) > 0,
-	       MIN(ps.scraped_at), MAX(ps.scraped_at)
+	       MIN(ps.scraped_at), MAX(ps.scraped_at),
+	       MIN(ps.rates_scraped_at), MAX(ps.rates_scraped_at)
 	  FROM domains d
 	  JOIN projects p ON p.domain_id = d.id
 	  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
@@ -101,11 +102,14 @@ func GetClusters(config core.Configuration, clusterID *string, dbi db.Interface,
 				showPhysicalUsage *bool
 				minScrapedAt      *time.Time
 				maxScrapedAt      *time.Time
+				minRatesScrapedAt *time.Time
+				maxRatesScrapedAt *time.Time
 			)
 			err := rows.Scan(&clusterID, &serviceType, &resourceName,
 				&projectsQuota, &usage, &burstUsage,
 				&physicalUsage, &showPhysicalUsage,
-				&minScrapedAt, &maxScrapedAt)
+				&minScrapedAt, &maxScrapedAt,
+				&minRatesScrapedAt, &maxRatesScrapedAt)
 			if err != nil {
 				return err
 			}
@@ -126,6 +130,18 @@ func GetClusters(config core.Configuration, clusterID *string, dbi db.Interface,
 					val := time.Time(*minScrapedAt).Unix()
 					if service.MinScrapedAt == nil || *service.MinScrapedAt > val {
 						service.MinScrapedAt = &val
+					}
+				}
+				if maxRatesScrapedAt != nil {
+					val := time.Time(*maxRatesScrapedAt).Unix()
+					if service.MaxRatesScrapedAt == nil || *service.MaxRatesScrapedAt < val {
+						service.MaxRatesScrapedAt = &val
+					}
+				}
+				if minRatesScrapedAt != nil {
+					val := time.Time(*minRatesScrapedAt).Unix()
+					if service.MinRatesScrapedAt == nil || *service.MinRatesScrapedAt > val {
+						service.MinRatesScrapedAt = &val
 					}
 				}
 			}

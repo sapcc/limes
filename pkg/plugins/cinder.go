@@ -22,6 +22,7 @@ package plugins
 import (
 	"encoding/json"
 	"errors"
+	"math/big"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
@@ -130,6 +131,11 @@ func (f quotaSetField) ToResourceData(subresources []interface{}) core.ResourceD
 		Usage:        f.Usage,
 		Subresources: subresources,
 	}
+}
+
+//ScrapeRates implements the core.QuotaPlugin interface.
+func (p *cinderPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+	return nil, "", nil
 }
 
 //Scrape implements the core.QuotaPlugin interface.

@@ -21,6 +21,7 @@ package plugins
 
 import (
 	"fmt"
+	"math/big"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
@@ -267,6 +268,11 @@ var neutronResourceMeta = []neutronResourceMetadata{
 type neutronQueryOpts struct {
 	Fields      string `q:"fields"`
 	ProjectUUID string `q:"tenant_id"`
+}
+
+//ScrapeRates implements the core.QuotaPlugin interface.
+func (p *neutronPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+	return nil, "", nil
 }
 
 //Scrape implements the core.QuotaPlugin interface.

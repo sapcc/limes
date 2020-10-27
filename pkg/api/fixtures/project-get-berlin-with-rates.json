@@ -57,7 +57,8 @@
             "default_window": "1s"
           }
         ],
-        "scraped_at": 22
+        "scraped_at": 22,
+        "rates_scraped_at": 23
       },
       {
         "type": "unshared",
@@ -104,7 +105,8 @@
             "default_window": "1s"
           }
         ],
-        "scraped_at": 11
+        "scraped_at": 11,
+        "rates_scraped_at": 12
       }
     ]
   }

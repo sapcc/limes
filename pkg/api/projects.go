@@ -163,7 +163,7 @@ func (p *v1Provider) SyncProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	//mark all project services as stale to force limes-collect to sync ASAP
-	_, err := db.DB.Exec(`UPDATE project_services SET stale = '1' WHERE project_id = $1`, dbProject.ID)
+	_, err := db.DB.Exec(`UPDATE project_services SET stale = '1', rates_stale = '1' WHERE project_id = $1`, dbProject.ID)
 	if respondwith.ErrorText(w, err) {
 		return
 	}

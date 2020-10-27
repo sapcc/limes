@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/big"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
@@ -124,6 +125,11 @@ type manilaQuotaSet struct {
 	SnapshotGigabytes int64  `json:"snapshot_gigabytes"`
 	Snapshots         int64  `json:"snapshots"`
 	ShareNetworks     *int64 `json:"share_networks,omitempty"`
+}
+
+//ScrapeRates implements the core.QuotaPlugin interface.
+func (p *manilaPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+	return nil, "", nil
 }
 
 //Scrape implements the core.QuotaPlugin interface.

@@ -1834,7 +1834,7 @@ func expectStaleProjectServices(t *testing.T, pairs ...string) {
 	queryStr := `
 		SELECT p.name, ps.type
 		  FROM projects p JOIN project_services ps ON ps.project_id = p.id
-		 WHERE ps.stale
+		 WHERE ps.stale AND ps.rates_stale
 		 ORDER BY p.name, ps.type
 	`
 	var actualPairs []string

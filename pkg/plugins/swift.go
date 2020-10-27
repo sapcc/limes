@@ -20,6 +20,7 @@
 package plugins
 
 import (
+	"math/big"
 	"net/http"
 
 	"github.com/gophercloud/gophercloud"
@@ -94,6 +95,11 @@ func (p *swiftPlugin) Account(provider *gophercloud.ProviderClient, eo gopherclo
 	}
 	//TODO Make Auth prefix configurable
 	return resellerAccount.SwitchAccount("AUTH_" + projectUUID), nil
+}
+
+//ScrapeRates implements the core.QuotaPlugin interface.
+func (p *swiftPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+	return nil, "", nil
 }
 
 //Scrape implements the core.QuotaPlugin interface.

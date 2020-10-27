@@ -33,14 +33,14 @@ import (
 
 var (
 	projectReportQuery = db.SimplifyWhitespaceInSQL(`
-	SELECT p.uuid, p.name, COALESCE(p.parent_uuid, ''), p.has_bursting, ps.type, ps.scraped_at, pr.name, pr.quota, pr.usage, pr.physical_usage, pr.backend_quota, pr.subresources
+	SELECT p.uuid, p.name, COALESCE(p.parent_uuid, ''), p.has_bursting, ps.type, ps.scraped_at, ps.rates_scraped_at, pr.name, pr.quota, pr.usage, pr.physical_usage, pr.backend_quota, pr.subresources
 	  FROM projects p
 	  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
 	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
 	 WHERE %s
 `)
 	projectRateLimitReportQuery = db.SimplifyWhitespaceInSQL(`
-	SELECT p.uuid, p.name, COALESCE(p.parent_uuid, ''), ps.type, ps.scraped_at, pra.name, pra.rate_limit, pra.window_ns, pra.usage_as_bigint
+	SELECT p.uuid, p.name, COALESCE(p.parent_uuid, ''), ps.type, ps.scraped_at, ps.rates_scraped_at, pra.name, pra.rate_limit, pra.window_ns, pra.usage_as_bigint
 	  FROM projects p
 	  JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
 	  JOIN project_rates pra ON pra.service_id = ps.id
@@ -83,6 +83,7 @@ func GetProjects(cluster *core.Cluster, domain db.Domain, projectID *int64, dbi 
 			projectHasBursting bool
 			serviceType        *string
 			scrapedAt          *time.Time
+			ratesScrapedAt     *time.Time
 			resourceName       *string
 			quota              *uint64
 			usage              *uint64
@@ -92,14 +93,14 @@ func GetProjects(cluster *core.Cluster, domain db.Domain, projectID *int64, dbi 
 		)
 		err := rows.Scan(
 			&projectUUID, &projectName, &projectParentUUID, &projectHasBursting,
-			&serviceType, &scrapedAt, &resourceName,
+			&serviceType, &scrapedAt, &ratesScrapedAt, &resourceName,
 			&quota, &usage, &physicalUsage, &backendQuota, &subresources,
 		)
 		if err != nil {
 			return err
 		}
 
-		projectReport, _, resReport := projects.Find(cluster, projectUUID, projectName, projectParentUUID, serviceType, resourceName, scrapedAt)
+		projectReport, _, resReport := projects.Find(cluster, projectUUID, projectName, projectParentUUID, serviceType, resourceName, timeIf(scrapedAt, !filter.OnlyRates), timeIf(ratesScrapedAt, filter.WithRates))
 		if projectReport != nil && clusterCanBurst {
 			projectReport.Bursting = &limes.ProjectBurstingInfo{
 				Enabled:    projectHasBursting,
@@ -173,6 +174,7 @@ func GetProjects(cluster *core.Cluster, domain db.Domain, projectID *int64, dbi 
 				projectParentUUID string
 				serviceType       *string
 				scrapedAt         *time.Time
+				ratesScrapedAt    *time.Time
 				rateName          string
 				limit             *uint64
 				window            *limes.Window
@@ -180,14 +182,14 @@ func GetProjects(cluster *core.Cluster, domain db.Domain, projectID *int64, dbi 
 			)
 			err := rows.Scan(
 				&projectUUID, &projectName, &projectParentUUID,
-				&serviceType, &scrapedAt,
+				&serviceType, &scrapedAt, &ratesScrapedAt,
 				&rateName, &limit, &window, &usageAsBigint,
 			)
 			if err != nil {
 				return err
 			}
 
-			_, srvReport, _ := projects.Find(cluster, projectUUID, projectName, projectParentUUID, serviceType, nil, scrapedAt)
+			_, srvReport, _ := projects.Find(cluster, projectUUID, projectName, projectParentUUID, serviceType, nil, scrapedAt, ratesScrapedAt)
 			if srvReport != nil {
 				rateReport := srvReport.Rates[rateName]
 
@@ -245,7 +247,7 @@ func p2window(val limes.Window) *limes.Window {
 
 type projects map[string]*limes.ProjectReport
 
-func (p projects) Find(cluster *core.Cluster, projectUUID, projectName, projectParentUUID string, serviceType, resourceName *string, scrapedAt *time.Time) (*limes.ProjectReport, *limes.ProjectServiceReport, *limes.ProjectResourceReport) {
+func (p projects) Find(cluster *core.Cluster, projectUUID, projectName, projectParentUUID string, serviceType, resourceName *string, scrapedAt, ratesScrapedAt *time.Time) (*limes.ProjectReport, *limes.ProjectServiceReport, *limes.ProjectResourceReport) {
 	//Ensure the ProjectReport exists.
 	project, exists := p[projectUUID]
 	if !exists {
@@ -276,6 +278,10 @@ func (p projects) Find(cluster *core.Cluster, projectUUID, projectName, projectP
 			scrapedAtUnix := time.Time(*scrapedAt).Unix()
 			service.ScrapedAt = &scrapedAtUnix
 		}
+		if ratesScrapedAt != nil {
+			ratesScrapedAtUnix := time.Time(*ratesScrapedAt).Unix()
+			service.RatesScrapedAt = &ratesScrapedAtUnix
+		}
 		project.Services[*serviceType] = service
 	}
 
@@ -292,4 +298,11 @@ func (p projects) Find(cluster *core.Cluster, projectUUID, projectName, projectP
 	}
 
 	return project, service, resource
+}
+
+func timeIf(t *time.Time, cond bool) *time.Time {
+	if !cond {
+		return nil
+	}
+	return t
 }

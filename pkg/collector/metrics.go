@@ -1,6 +1,6 @@
 /*******************************************************************************
 *
-* Copyright 2017 SAP SE
+* Copyright 2017-2020 SAP SE
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -22,6 +22,7 @@ package collector
 import (
 	"database/sql"
 	"encoding/json"
+	"math/big"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -37,7 +38,7 @@ import (
 var scrapeSuccessCounter = prometheus.NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "limes_successful_scrapes",
-		Help: "Counter for successful scrape operations per Keystone project.",
+		Help: "Counter for successful quota scrape operations per Keystone project.",
 	},
 	[]string{"os_cluster", "service", "service_name"},
 )
@@ -45,7 +46,7 @@ var scrapeSuccessCounter = prometheus.NewCounterVec(
 var scrapeFailedCounter = prometheus.NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "limes_failed_scrapes",
-		Help: "Counter for failed scrape operations per Keystone project.",
+		Help: "Counter for failed quota scrape operations per Keystone project.",
 	},
 	[]string{"os_cluster", "service", "service_name"},
 )
@@ -53,7 +54,7 @@ var scrapeFailedCounter = prometheus.NewCounterVec(
 var scrapeSuspendedCounter = prometheus.NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "limes_suspended_scrapes",
-		Help: "Counter for suspended scrape operations per Keystone project.",
+		Help: "Counter for suspended quota scrape operations per Keystone project.",
 	},
 	[]string{"os_cluster", "service", "service_name"},
 )
@@ -106,6 +107,30 @@ var clusterCapacitorFailedCounter = prometheus.NewCounterVec(
 	[]string{"os_cluster", "capacitor"},
 )
 
+var ratesScrapeSuccessCounter = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "limes_successful_rate_scrapes",
+		Help: "Counter for successful rate scrape operations per Keystone project.",
+	},
+	[]string{"os_cluster", "service", "service_name"},
+)
+
+var ratesScrapeFailedCounter = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "limes_failed_rate_scrapes",
+		Help: "Counter for failed rate scrape operations per Keystone project.",
+	},
+	[]string{"os_cluster", "service", "service_name"},
+)
+
+var ratesScrapeSuspendedCounter = prometheus.NewCounterVec(
+	prometheus.CounterOpts{
+		Name: "limes_suspended_rate_scrapes",
+		Help: "Counter for suspended rate scrape operations per Keystone project.",
+	},
+	[]string{"os_cluster", "service", "service_name"},
+)
+
 func init() {
 	prometheus.MustRegister(scrapeSuccessCounter)
 	prometheus.MustRegister(scrapeFailedCounter)
@@ -116,6 +141,9 @@ func init() {
 	prometheus.MustRegister(domainDiscoveryFailedCounter)
 	prometheus.MustRegister(clusterCapacitorSuccessCounter)
 	prometheus.MustRegister(clusterCapacitorFailedCounter)
+	prometheus.MustRegister(ratesScrapeSuccessCounter)
+	prometheus.MustRegister(ratesScrapeFailedCounter)
+	prometheus.MustRegister(ratesScrapeSuspendedCounter)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -137,6 +165,22 @@ var maxScrapedAtGauge = prometheus.NewGaugeVec(
 	[]string{"os_cluster", "service", "service_name"},
 )
 
+var minRatesScrapedAtGauge = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "limes_oldest_rates_scraped_at",
+		Help: "Oldest (i.e. smallest) rates_scraped_at timestamp for any project given a certain service in a certain OpenStack cluster.",
+	},
+	[]string{"os_cluster", "service", "service_name"},
+)
+
+var maxRatesScrapedAtGauge = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "limes_newest_rates_scraped_at",
+		Help: "Newest (i.e. largest) rates_scraped_at timestamp for any project given a certain service in a certain OpenStack cluster.",
+	},
+	[]string{"os_cluster", "service", "service_name"},
+)
+
 //AggregateMetricsCollector is a prometheus.Collector that submits
 //dynamically-calculated aggregate metrics about scraping progress.
 type AggregateMetricsCollector struct {
@@ -147,10 +191,12 @@ type AggregateMetricsCollector struct {
 func (c *AggregateMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 	minScrapedAtGauge.Describe(ch)
 	maxScrapedAtGauge.Describe(ch)
+	minRatesScrapedAtGauge.Describe(ch)
+	maxRatesScrapedAtGauge.Describe(ch)
 }
 
 var scrapedAtAggregateQuery = db.SimplifyWhitespaceInSQL(`
-	SELECT ps.type, MIN(ps.scraped_at), MAX(ps.scraped_at)
+	SELECT ps.type, MIN(ps.scraped_at), MAX(ps.scraped_at), MIN(ps.rates_scraped_at), MAX(ps.rates_scraped_at)
 	  FROM domains d
 	  JOIN projects p ON p.domain_id = d.id
 	  JOIN project_services ps ON ps.project_id = p.id
@@ -168,39 +214,67 @@ func (c *AggregateMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	minScrapedAtDesc := <-descCh
 	maxScrapedAtGauge.Describe(descCh)
 	maxScrapedAtDesc := <-descCh
+	minRatesScrapedAtGauge.Describe(descCh)
+	minRatesScrapedAtDesc := <-descCh
+	maxRatesScrapedAtGauge.Describe(descCh)
+	maxRatesScrapedAtDesc := <-descCh
 
 	queryArgs := []interface{}{c.Cluster.ID}
 	err := db.ForeachRow(db.DB, scrapedAtAggregateQuery, queryArgs, func(rows *sql.Rows) error {
 		var (
-			serviceType  string
-			minScrapedAt time.Time
-			maxScrapedAt time.Time
+			serviceType       string
+			minScrapedAt      *time.Time
+			maxScrapedAt      *time.Time
+			minRatesScrapedAt *time.Time
+			maxRatesScrapedAt *time.Time
 		)
-		err := rows.Scan(&serviceType, &minScrapedAt, &maxScrapedAt)
+		err := rows.Scan(&serviceType, &minScrapedAt, &maxScrapedAt, &minRatesScrapedAt, &maxRatesScrapedAt)
 		if err != nil {
 			return err
 		}
 
-		serviceName := ""
-		if plugin := c.Cluster.QuotaPlugins[serviceType]; plugin != nil {
-			serviceName = plugin.ServiceInfo().ProductName
+		plugin := c.Cluster.QuotaPlugins[serviceType]
+		if plugin == nil {
+			return nil
 		}
+		serviceName := plugin.ServiceInfo().ProductName
 
-		ch <- prometheus.MustNewConstMetric(
-			minScrapedAtDesc,
-			prometheus.GaugeValue, float64(time.Time(minScrapedAt).Unix()),
-			c.Cluster.ID, serviceType, serviceName,
-		)
-		ch <- prometheus.MustNewConstMetric(
-			maxScrapedAtDesc,
-			prometheus.GaugeValue, float64(time.Time(maxScrapedAt).Unix()),
-			c.Cluster.ID, serviceType, serviceName,
-		)
+		if len(plugin.Resources()) > 0 {
+			ch <- prometheus.MustNewConstMetric(
+				minScrapedAtDesc,
+				prometheus.GaugeValue, timeAsUnixOrZero(minScrapedAt),
+				c.Cluster.ID, serviceType, serviceName,
+			)
+			ch <- prometheus.MustNewConstMetric(
+				maxScrapedAtDesc,
+				prometheus.GaugeValue, timeAsUnixOrZero(maxScrapedAt),
+				c.Cluster.ID, serviceType, serviceName,
+			)
+		}
+		if len(plugin.Rates()) > 0 {
+			ch <- prometheus.MustNewConstMetric(
+				minRatesScrapedAtDesc,
+				prometheus.GaugeValue, timeAsUnixOrZero(minRatesScrapedAt),
+				c.Cluster.ID, serviceType, serviceName,
+			)
+			ch <- prometheus.MustNewConstMetric(
+				maxRatesScrapedAtDesc,
+				prometheus.GaugeValue, timeAsUnixOrZero(maxRatesScrapedAt),
+				c.Cluster.ID, serviceType, serviceName,
+			)
+		}
 		return nil
 	})
 	if err != nil {
 		logg.Error("collect cluster aggregate metrics failed: " + err.Error())
 	}
+}
+
+func timeAsUnixOrZero(t *time.Time) float64 {
+	if t == nil {
+		return 0
+	}
+	return float64(t.Unix())
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -270,6 +344,14 @@ var projectPhysicalUsageGauge = prometheus.NewGaugeVec(
 	[]string{"os_cluster", "domain", "domain_id", "project", "project_id", "service", "resource"},
 )
 
+var projectRateUsageGauge = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "limes_project_rate_usage",
+		Help: "Usage of a Limes rate for an OpenStack project. These are counters that never reset.",
+	},
+	[]string{"os_cluster", "domain", "domain_id", "project", "project_id", "service", "rate"},
+)
+
 var unitConversionGauge = prometheus.NewGaugeVec(
 	prometheus.GaugeOpts{
 		Name: "limes_unit_multiplier",
@@ -297,6 +379,7 @@ func (c *DataMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 	projectBackendQuotaGauge.Describe(ch)
 	projectUsageGauge.Describe(ch)
 	projectPhysicalUsageGauge.Describe(ch)
+	projectRateUsageGauge.Describe(ch)
 	unitConversionGauge.Describe(ch)
 }
 
@@ -322,6 +405,15 @@ var projectMetricsQuery = db.SimplifyWhitespaceInSQL(`
 	  JOIN project_services ps ON ps.project_id = p.id
 	  JOIN project_resources pr ON pr.service_id = ps.id
 	 WHERE d.cluster_id = $1
+`)
+
+var projectRateMetricsQuery = db.SimplifyWhitespaceInSQL(`
+	SELECT d.name, d.uuid, p.name, p.uuid, ps.type, pra.name, pra.usage_as_bigint
+	  FROM domains d
+	  JOIN projects p ON p.domain_id = d.id
+	  JOIN project_services ps ON ps.project_id = p.id
+	  JOIN project_rates pra ON pra.service_id = ps.id
+	 WHERE d.cluster_id = $1 AND pra.usage_as_bigint != ''
 `)
 
 //Collect implements the prometheus.Collector interface.
@@ -351,6 +443,8 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	projectUsageDesc := <-descCh
 	projectPhysicalUsageGauge.Describe(descCh)
 	projectPhysicalUsageDesc := <-descCh
+	projectRateUsageGauge.Describe(descCh)
+	projectRateUsageDesc := <-descCh
 	unitConversionGauge.Describe(descCh)
 	unitConversionDesc := <-descCh
 
@@ -471,7 +565,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		logg.Error("collect domain metrics failed: " + err.Error())
 	}
 
-	//fetch values for project level
+	//fetch values for project level (quota/usage)
 	err = db.ForeachRow(db.DB, projectMetricsQuery, queryArgs, func(rows *sql.Rows) error {
 		var (
 			domainName    string
@@ -537,4 +631,35 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			)
 		}
 	}
+
+	//fetch values for project level (rate usage)
+	err = db.ForeachRow(db.DB, projectRateMetricsQuery, queryArgs, func(rows *sql.Rows) error {
+		var (
+			domainName    string
+			domainUUID    string
+			projectName   string
+			projectUUID   string
+			serviceType   string
+			rateName      string
+			usageAsBigint string
+		)
+		err := rows.Scan(&domainName, &domainUUID, &projectName, &projectUUID, &serviceType, &rateName, &usageAsBigint)
+		if err != nil {
+			return err
+		}
+		usageAsBigFloat, _, err := big.NewFloat(0).Parse(usageAsBigint, 10)
+		if err != nil {
+			return err
+		}
+		usageAsFloat, _ := usageAsBigFloat.Float64()
+
+		if c.ReportZeroes || usageAsFloat != 0 {
+			ch <- prometheus.MustNewConstMetric(
+				projectRateUsageDesc,
+				prometheus.GaugeValue, usageAsFloat,
+				c.Cluster.ID, domainName, domainUUID, projectName, projectUUID, serviceType, rateName,
+			)
+		}
+		return nil
+	})
 }

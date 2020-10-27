@@ -1,6 +1,6 @@
 /*******************************************************************************
 *
-* Copyright 2017 SAP SE
+* Copyright 2017-2020 SAP SE
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -20,6 +20,8 @@
 package core
 
 import (
+	"math/big"
+
 	"github.com/gophercloud/gophercloud"
 	"github.com/sapcc/limes"
 )
@@ -74,9 +76,6 @@ type QuotaPlugin interface {
 	//Resources returns metadata for all the resources that this plugin scrapes
 	//from the backend service.
 	Resources() []limes.ResourceInfo
-	//Rates returns metadata for all the rates that this plugin scrapes
-	//from the backend service.
-	Rates() []limes.RateInfo
 	//Scrape queries the backend service for the quota and usage data of all
 	//known resources for the given project in the given domain. The string keys
 	//in the result map must be identical to the resource names
@@ -97,6 +96,24 @@ type QuotaPlugin interface {
 	//Prometheus metrics emitted by the plugin (if the plugin does that sort of
 	//thing).
 	SetQuota(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error
+	//Rates returns metadata for all the rates that this plugin scrapes
+	//from the backend service.
+	Rates() []limes.RateInfo
+	//ScrapeRates queries the backend service for the usage data of all the rates
+	//enumerated by Rates() for the given project in the given domain. The string
+	//keys in the result map must be identical to the rate names from Rates().
+	//
+	//The clusterID is usually not needed, but should be given as a label to
+	//Prometheus metrics emitted by the plugin (if the plugin does that sort of
+	//thing).
+	//
+	//The serializedState return value is persisted in the Limes DB and returned
+	//back to the next ScrapeRates() call for the same project in the
+	//prevSerializedState argument. Besides that, this field is not interpreted
+	//by the core application in any way. The plugin implementation can use this
+	//field to carry state between ScrapeRates() calls, esp. to detect and handle
+	//counter resets in the backend.
+	ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error)
 }
 
 //CapacityData contains the total and per-availability-zone capacity data for a

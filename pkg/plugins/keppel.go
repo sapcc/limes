@@ -19,6 +19,7 @@
 package plugins
 
 import (
+	"math/big"
 	"net/http"
 
 	"github.com/gophercloud/gophercloud"
@@ -65,6 +66,11 @@ func (p *keppelPlugin) Resources() []limes.ResourceInfo {
 //Rates implements the core.QuotaPlugin interface.
 func (p *keppelPlugin) Rates() []limes.RateInfo {
 	return nil
+}
+
+//ScrapeRates implements the core.QuotaPlugin interface.
+func (p *keppelPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+	return nil, "", nil
 }
 
 //Scrape implements the core.QuotaPlugin interface.

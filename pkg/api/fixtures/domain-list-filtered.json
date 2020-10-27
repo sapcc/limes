@@ -40,7 +40,9 @@
             }
           ],
           "max_scraped_at": 44,
-          "min_scraped_at": 22
+          "min_scraped_at": 22,
+          "max_rates_scraped_at": 45,
+          "min_rates_scraped_at": 23
         }
       ]
     }

@@ -204,4 +204,16 @@ var SQLMigrations = map[string]string{
 			PRIMARY KEY (service_id, name)
 		);
 	`,
+	"015_rate_scraping.down.sql": `
+		ALTER TABLE project_services DROP COLUMN rates_scraped_at;
+		ALTER TABLE project_services DROP COLUMN rates_stale;
+		ALTER TABLE project_services DROP COLUMN rates_scrape_duration_secs;
+		ALTER TABLE project_services DROP COLUMN rates_scrape_state;
+	`,
+	"015_rate_scraping.up.sql": `
+		ALTER TABLE project_services ADD COLUMN rates_scraped_at TIMESTAMP; -- defaults to NULL to indicate that scraping did not happen yet
+		ALTER TABLE project_services ADD COLUMN rates_stale BOOLEAN NOT NULL DEFAULT FALSE;
+		ALTER TABLE project_services ADD COLUMN rates_scrape_duration_secs REAL NOT NULL DEFAULT 0;
+		ALTER TABLE project_services ADD COLUMN rates_scrape_state TEXT NOT NULL DEFAULT '';
+	`,
 }

@@ -20,6 +20,8 @@
 package plugins
 
 import (
+	"math/big"
+
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/dns/v2/zones"
@@ -72,6 +74,11 @@ func (p *designatePlugin) Resources() []limes.ResourceInfo {
 //Rates implements the core.QuotaPlugin interface.
 func (p *designatePlugin) Rates() []limes.RateInfo {
 	return nil
+}
+
+//ScrapeRates implements the core.QuotaPlugin interface.
+func (p *designatePlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+	return nil, "", nil
 }
 
 //Scrape implements the core.QuotaPlugin interface.

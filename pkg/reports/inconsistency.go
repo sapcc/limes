@@ -103,7 +103,7 @@ var ocdqReportQuery = db.SimplifyWhitespaceInSQL(`
 	  LEFT OUTER JOIN domain_resources dr ON dr.service_id = ds.id AND dr.name = pr.name
 	WHERE %s GROUP BY d.uuid, d.name, ps.type, pr.name
 	HAVING MAX(COALESCE(dr.quota, 0)) < SUM(pr.quota)
-	ORDER BY d.uuid ASC;
+	ORDER BY d.name, ps.type, pr.name
 `)
 
 var ospqReportQuery = db.SimplifyWhitespaceInSQL(`
@@ -114,7 +114,7 @@ var ospqReportQuery = db.SimplifyWhitespaceInSQL(`
 	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
 	WHERE %s GROUP BY d.uuid, d.name, p.uuid, p.name, ps.type, pr.name
 	HAVING SUM(pr.usage) > SUM(pr.desired_backend_quota)
-	ORDER BY p.uuid ASC
+	ORDER BY d.name, p.name, ps.type, pr.name
 `)
 
 var mmpqReportQuery = db.SimplifyWhitespaceInSQL(`
@@ -125,7 +125,7 @@ var mmpqReportQuery = db.SimplifyWhitespaceInSQL(`
 	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
 	WHERE %s GROUP BY d.uuid, d.name, p.uuid, p.name, ps.type, pr.name
 	HAVING SUM(pr.backend_quota) != SUM(pr.desired_backend_quota)
-	ORDER BY p.uuid ASC
+	ORDER BY d.name, p.name, ps.type, pr.name
 `)
 
 //GetInconsistencies returns Inconsistency reports for all inconsistencies and their projects in the current cluster.

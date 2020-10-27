@@ -45,9 +45,10 @@ type ProjectBurstingInfo struct {
 //a single backend service.
 type ProjectServiceReport struct {
 	ServiceInfo
-	Resources ProjectResourceReports  `json:"resources,keepempty"`
-	Rates     ProjectRateLimitReports `json:"rates,omitempty"`
-	ScrapedAt *int64                  `json:"scraped_at,omitempty"`
+	Resources      ProjectResourceReports  `json:"resources,keepempty"`
+	Rates          ProjectRateLimitReports `json:"rates,omitempty"`
+	ScrapedAt      *int64                  `json:"scraped_at,omitempty"`
+	RatesScrapedAt *int64                  `json:"rates_scraped_at,omitempty"`
 }
 
 //ProjectResourceReport is a substructure of ProjectReport containing data for

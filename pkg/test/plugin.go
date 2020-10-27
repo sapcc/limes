@@ -21,6 +21,7 @@ package test
 
 import (
 	"errors"
+	"math/big"
 	"strings"
 
 	"github.com/gophercloud/gophercloud"
@@ -103,6 +104,16 @@ func (p *Plugin) Resources() []limes.ResourceInfo {
 //Rates implements the core.QuotaPlugin interface.
 func (p *Plugin) Rates() []limes.RateInfo {
 	return p.StaticRateInfos
+}
+
+//ScrapeRates implements the core.QuotaPlugin interface.
+func (p *Plugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+	if p.ScrapeFails {
+		return nil, "", errors.New("ScrapeRates failed as requested")
+	}
+
+	//TODO
+	return nil, "", nil
 }
 
 //Scrape implements the core.QuotaPlugin interface.
