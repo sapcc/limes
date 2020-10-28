@@ -391,6 +391,22 @@ The area for this service is `dns`.
 
 When the `recordsets` quota is set, the backend quota for records is set to 20 times that value, to fit into the `records_per_recordset` quota (which is set to 20 by default in Designate). The record quota cannot be controlled explicitly in Limes.
 
+## `cronus`: Email v1 (SAP Converged Cloud only)
+
+```yaml
+services:
+  - type: email-aws
+```
+
+The area for this service is `email`. This service has no resources, only rates.
+
+| Rate | Unit | Comment |
+| --- | --- | --- |
+| `attachments_size` | bytes | Size of attachments for outgoing emails. |
+| `data_transfer_in` | bytes | Total size of incoming emails. |
+| `data_transfer_out` | bytes | Total size of outgoing emails. |
+| `recipients` | countable | Number of recipients on outgoing emails. |
+
 ## `keppel`: Keppel v1
 
 ```
@@ -408,7 +424,7 @@ The area for this service is `storage`.
 
 ```yaml
 services:
-  - type: object-store
+  - type: network
 ```
 
 The area for this service is `network`. Resources are categorized into `networking` for SDN resources and `loadbalancing` for LBaaS resources.
