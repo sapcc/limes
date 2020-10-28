@@ -45,8 +45,8 @@ var serviceNotDeployedIdleInterval = 10 * time.Minute
 //how long to wait before scraping the same project and service again
 var scrapeInterval = 30 * time.Minute
 
-//query that finds the next project that needs to be scraped
-var findProjectQuery = db.SimplifyWhitespaceInSQL(`
+//query that finds the next project that needs to have resources scraped
+var findProjectForResourceScrapeQuery = db.SimplifyWhitespaceInSQL(`
 	SELECT ps.id, ps.scraped_at, p.name, p.uuid, p.id, p.has_bursting, d.name, d.uuid
 	FROM project_services ps
 	JOIN projects p ON p.id = ps.project_id
@@ -93,12 +93,12 @@ func (c *Collector) Scrape() {
 			domainUUID         string
 		)
 		scrapeStartedAt := c.TimeNow()
-		err := db.DB.QueryRow(findProjectQuery, c.Cluster.ID, serviceType, scrapeStartedAt.Add(-scrapeInterval)).
+		err := db.DB.QueryRow(findProjectForResourceScrapeQuery, c.Cluster.ID, serviceType, scrapeStartedAt.Add(-scrapeInterval)).
 			Scan(&serviceID, &serviceScrapedAt, &projectName, &projectUUID, &projectID, &projectHasBursting, &domainName, &domainUUID)
 		if err != nil {
 			//ErrNoRows is okay; it just means that nothing needs scraping right now
 			if err != sql.ErrNoRows {
-				c.LogError("cannot select next project for which to scrape %s data: %s", serviceType, err.Error())
+				c.LogError("cannot select next project for which to scrape %s resource data: %s", serviceType, err.Error())
 			}
 			if c.Once {
 				return
@@ -107,7 +107,7 @@ func (c *Collector) Scrape() {
 			continue
 		}
 
-		logg.Debug("scraping %s for %s/%s", serviceType, domainName, projectName)
+		logg.Debug("scraping %s resources for %s/%s", serviceType, domainName, projectName)
 		domain := core.KeystoneDomain{Name: domainName, UUID: domainUUID}
 		provider, eo := c.Cluster.ProviderClientForService(serviceType)
 		resourceData, err := c.Plugin.Scrape(provider, eo, c.Cluster.ID, domainUUID, projectUUID)
@@ -118,10 +118,10 @@ func (c *Collector) Scrape() {
 			sleepInterval := idleInterval
 			if _, ok := err.(*gophercloud.ErrEndpointNotFound); ok {
 				sleepInterval = serviceNotDeployedIdleInterval
-				c.LogError("suspending %s data scraping for %d minutes: %s", serviceType, sleepInterval/time.Minute, err.Error())
+				c.LogError("suspending %s resource scraping for %d minutes: %s", serviceType, sleepInterval/time.Minute, err.Error())
 				scrapeSuspendedCounter.With(labels).Inc()
 			} else {
-				c.LogError("scrape %s data for %s/%s failed: %s", serviceType, domainName, projectName, util.ErrorToString(err))
+				c.LogError("scrape %s resources for %s/%s failed: %s", serviceType, domainName, projectName, util.ErrorToString(err))
 
 				if serviceScrapedAt == nil {
 					//see explanation inside the called function's body
@@ -268,8 +268,7 @@ func (c *Collector) writeScrapeResult(domain core.KeystoneDomain, projectName, p
 		if res.Quota == 0 && data.Quota > 0 && uint64(data.Quota) == resMetadata.AutoApproveInitialQuota {
 			res.Quota = resMetadata.AutoApproveInitialQuota
 
-			//temp workaround until CADF audit trail is implemented
-			logg.Other("AUDIT", fmt.Sprintf("set quota %s.%s = 0 -> %d for project %s through auto-approval",
+			logg.Other("AUDIT", fmt.Sprintf("set quota %s/%s = 0 -> %d for project %s through auto-approval",
 				serviceType, resMetadata.Name, res.Quota, projectUUID),
 			)
 		}

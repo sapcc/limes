@@ -1,8 +1,8 @@
 {
   "project": {
-    "id": "uuid-for-berlin",
-    "name": "berlin",
-    "parent_id": "uuid-for-germany",
+    "id": "uuid-for-dresden",
+    "name": "dresden",
+    "parent_id": "uuid-for-berlin",
     "services": [
       {
         "type": "shared",
@@ -13,20 +13,29 @@
             "unit": "B",
             "quota": 10,
             "usable_quota": 10,
-            "usage": 2
+            "usage": 2,
+            "backend_quota": 100
           },
           {
             "name": "external_things",
             "externally_managed": true,
             "quota": 1,
             "usable_quota": 1,
-            "usage": 0
+            "usage": 0,
+            "annotations": {
+              "annotated": true,
+              "text": "this annotation appears on shared/external_things of project dresden only"
+            }
           },
           {
             "name": "things",
             "quota": 10,
             "usable_quota": 10,
-            "usage": 2
+            "usage": 2,
+            "annotations": {
+              "annotated": true,
+              "text": "this annotation appears on shared things of domain germany and project dresden"
+            }
           }
         ],
         "rates": [
@@ -38,11 +47,9 @@
           {
             "name": "service/shared/objects:delete",
             "unit": "MiB",
-            "limit": 2,
+            "limit": 1,
             "window": "1m",
-            "default_limit": 1,
-            "default_window": "1m",
-            "usage_as_bigint": "23456"
+            "usage_as_bigint": "0"
           },
           {
             "name": "service/shared/objects:read/list",
@@ -50,15 +57,18 @@
             "window": "1s"
           },
           {
+            "name": "service/shared/objects:unlimited",
+            "unit": "KiB",
+            "usage_as_bigint": "1048576"
+          },
+          {
             "name": "service/shared/objects:update",
             "limit": 2,
-            "window": "1m",
-            "default_limit": 2,
-            "default_window": "1s"
+            "window": "1s"
           }
         ],
-        "scraped_at": 22,
-        "rates_scraped_at": 23
+        "scraped_at": 44,
+        "rates_scraped_at": 45
       },
       {
         "type": "unshared",
@@ -91,22 +101,18 @@
           },
           {
             "name": "service/unshared/instances:delete",
-            "limit": 2,
+            "limit": 1,
             "window": "1m",
-            "default_limit": 1,
-            "default_window": "1m",
-            "usage_as_bigint": "12345"
+            "usage_as_bigint": "0"
           },
           {
             "name": "service/unshared/instances:update",
             "limit": 2,
-            "window": "1m",
-            "default_limit": 2,
-            "default_window": "1s"
+            "window": "1s"
           }
         ],
-        "scraped_at": 11,
-        "rates_scraped_at": 12
+        "scraped_at": 33,
+        "rates_scraped_at": 34
       }
     ]
   }

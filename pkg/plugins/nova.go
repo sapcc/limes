@@ -22,6 +22,7 @@ package plugins
 import (
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"regexp"
 	"sort"
 	"strconv"
@@ -189,6 +190,16 @@ func (p *novaPlugin) ServiceInfo() limes.ServiceInfo {
 //Resources implements the core.QuotaPlugin interface.
 func (p *novaPlugin) Resources() []limes.ResourceInfo {
 	return p.resources
+}
+
+//Rates implements the core.QuotaPlugin interface.
+func (p *novaPlugin) Rates() []limes.RateInfo {
+	return nil
+}
+
+//ScrapeRates implements the core.QuotaPlugin interface.
+func (p *novaPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+	return nil, "", nil
 }
 
 //Scrape implements the core.QuotaPlugin interface.

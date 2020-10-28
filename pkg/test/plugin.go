@@ -20,7 +20,9 @@
 package test
 
 import (
+	"encoding/json"
 	"errors"
+	"math/big"
 	"strings"
 
 	"github.com/gophercloud/gophercloud"
@@ -31,6 +33,7 @@ import (
 //Plugin is a core.QuotaPlugin implementation for unit tests.
 type Plugin struct {
 	StaticServiceType  string
+	StaticRateInfos    []limes.RateInfo
 	StaticResourceData map[string]*core.ResourceData
 	StaticCapacity     map[string]uint64
 	OverrideQuota      map[string]map[string]uint64
@@ -52,9 +55,10 @@ var resources = []limes.ResourceInfo{
 }
 
 //NewPlugin creates a new Plugin for the given service type.
-func NewPlugin(serviceType string) *Plugin {
+func NewPlugin(serviceType string, rates ...limes.RateInfo) *Plugin {
 	return &Plugin{
 		StaticServiceType: serviceType,
+		StaticRateInfos:   rates,
 		StaticResourceData: map[string]*core.ResourceData{
 			"things":          {Quota: 42, Usage: 2},
 			"capacity":        {Quota: 100, Usage: 0},
@@ -96,6 +100,41 @@ func (p *Plugin) Resources() []limes.ResourceInfo {
 		})
 	}
 	return result
+}
+
+//Rates implements the core.QuotaPlugin interface.
+func (p *Plugin) Rates() []limes.RateInfo {
+	return p.StaticRateInfos
+}
+
+//ScrapeRates implements the core.QuotaPlugin interface.
+func (p *Plugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+	if p.ScrapeFails {
+		return nil, "", errors.New("ScrapeRates failed as requested")
+	}
+
+	//this dummy implementation lets itself be influenced by the existing state, but also alters it a bit
+	state := make(map[string]int64)
+	if prevSerializedState == "" {
+		for _, rate := range p.StaticRateInfos {
+			state[rate.Name] = 0
+		}
+	} else {
+		err := json.Unmarshal([]byte(prevSerializedState), &state)
+		if err != nil {
+			return nil, "", err
+		}
+		for _, rate := range p.StaticRateInfos {
+			state[rate.Name] += 1024
+		}
+	}
+
+	result = make(map[string]*big.Int)
+	for _, rate := range p.StaticRateInfos {
+		result[rate.Name] = big.NewInt(state[rate.Name] + int64(len(rate.Name)))
+	}
+	serializedStateBytes, _ := json.Marshal(state)
+	return result, string(serializedStateBytes), nil
 }
 
 //Scrape implements the core.QuotaPlugin interface.

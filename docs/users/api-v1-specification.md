@@ -11,9 +11,10 @@ policy differently, so that certain requests may require other roles or token sc
   * [X\-Limes\-Cluster\-Id](#x-limes-cluster-id)
 * [GET /v1/domains/:domain\_id/projects](#get-v1domainsdomain_idprojects)
 * [GET /v1/domains/:domain\_id/projects/:project\_id](#get-v1domainsdomain_idprojectsproject_id)
+  * [Quota/usage for resources](#quota-usage-for-resources)
   * [Subresources](#subresources)
   * [Quota bursting details](#quota-bursting-details)
-  * [Rate limits](#rate-limits)
+  * [Rate limits and throughput tracking](#rate-limits-and-throughput-tracking)
     * [Default rate limits](#default-rate-limits)
 * [GET /v1/domains](#get-v1domains)
 * [GET /v1/domains/:domain\_id](#get-v1domainsdomain_id)
@@ -56,7 +57,7 @@ projects in that token's domain. With project member permission, shows that toke
   (e.g. `?service=compute&resource=instances`). May be given multiple times.
 * `detail`: If given, list subresources for resources that support it. (See subheading below for details.)
 * `rates`: If given, list rate limits for resources that support it. (See [subheading](#rate-limits) below for details.)
-  When combined with `?service=`, limit query to these rates (e.g. `?service=compute&rates). May be given multiple times.
+  When combined with `?service=`, limit query to these rates (e.g. `?service=compute&rates`). May be given multiple times.
 
 Returns 200 (OK) on success. Result is a JSON document like:
 
@@ -100,32 +101,24 @@ Returns 200 (OK) on success. Result is a JSON document like:
           ],
           "rates": [
             {
-              "target_type_uri": "service/compute/servers",
-              "actions": [
-                {
-                  "name": "create",
-                  "limit": 5,
-                  "unit": "r/m"
-                }
-              ]
+              "name": "service/compute/servers:create",
+              "limit": 5,
+              "window": "2m",
+              "usage_as_bigint": "1069298"
             },
             {
-              "target_type_uri": "service/compute/servers/action",
-              "actions": [
-                {
-                  "name": "update/addFloatingIp",
-                  "limit": 2,
-                  "unit": "r/m"
-                },
-                {
-                  "name": "update/removeFloatingIp",
-                  "limit": 2,
-                  "unit": "r/m"
-                }
-              ]
+              "name": "service/compute/servers/action:update/addFloatingIp",
+              "limit": 2,
+              "window": "1m"
+            },
+            {
+              "name": "service/compute/servers/action:update/removeFloatingIp",
+              "limit": 2,
+              "window": "1m"
             }
           ],
-          "scraped_at": 1486738599
+          "scraped_at": 1486738599,
+          "rates_scraped_at": 1486738206
         },
         {
           "type": "object-store",
@@ -153,6 +146,8 @@ If `:project_id` was given, the outer key is `project` and its value is the obje
 
 On the project level, the `id`, `name` and `parent_id` from Keystone are shown. (The parent ID refers to the parent
 project if there is one, otherwise it is identical to the domain ID.)
+
+### Quota/usage for resources
 
 Quota/usage data for the project is ordered into `services`, then into `resources`. In the example above, services
 include `compute` and `object_storage`, and the `compute` service has three resources, `instances`, `cores` and `ram`.
@@ -255,59 +250,73 @@ exists and is non-zero), then resources with `usage > quota` will display an add
 The `burst_usage` field is guaranteed to be equal to `usage - quota`. Applications should prefer to read the `quota` and
 `usage` values directly instead of using this field.
 
-### Rate limits
+### Rate limits and throughput tracking
 
- If the `?rates` query parameter is given, rate limits for the service are included in the response.
-Additionally the response can be limited to only include rate limits by providing the query parameter `?rates=only`.
-Rate limits can be used to control the traffic received by an API in order to prevent service capacities from being exhausted.
-They can be set on 2 levels:
-1. On *cluster* level in order to ensure a service does not receive more request than it can handle.
-2. Per *project* in order to ensure a fair usage among projects within a cluster.
+In Limes parlance, **resources** are strictly those things whose usage value refers to a consumption at a specific point
+in time, and where quota is the upper limit on usage at each individual point in time. In contrast, **rates** are all
+those things where the usage is accumulated over time. Instead of a quota, rates can have a **rate limit** that refers
+to the highest allowed increased in usage over a certain amount of time (the limit's **window**). Rate limits are
+typically applied to data throughput or to API request traffic, to prevent service capacities from being exhausted. Rate
+limits can be set on two levels:
 
- A prerequisite to traffic control is a normative scheme of classification for actions initiated by users.
-The [CADF specification](https://www.dmtf.org/sites/default/files/standards/documents/DSP2038_1.1.0.pdf) established such a classification for the OpenStack ecosystem.
-In terms of rate limits, requests sent to and OpenStack API are characterized by their `target_type_uri` and `action`.
-The `target_type_uri` represents the request path against which the activity was performed and the `action` the activity that was performed.
+1. on *cluster* level in order to ensure a service does not receive more requests or transfer more data than it can handle, and
+2. per *project* in order to ensure a fair usage among projects within a cluster.
 
- A rate limit entity in limes, as shown at the end of this subsection, consist of a `target_type_uri` which characterizes the request path and a list of `actions`.
-An action has a `name`, `limit` and `unit` which defines the maximum number of requests.
-The  `default_limit` and `default_unit` is used to reflect the default rate limit and unit set on cluster level.
-Valid action names can be `create`, `read`, `read/list`, `update`, `delete`, `authenticate`, etc. .
-Limits are defined using the following syntax: `<n>r/<unit>`.
-Valid units are `ms`, `s`, `m`, `h`.
+Each rate has a `name`. For rates that describe API request traffic, the
+[CADF specification](https://www.dmtf.org/sites/default/files/standards/documents/DSP2038_1.1.0.pdf) establishes a
+classification for the OpenStack ecosystem. Within CADF, requests sent to and OpenStack API are characterized by their
+`target_type_uri` and `action`. The `target_type_uri` represents the request path against which the activity was
+performed and the `action` the activity that was performed. Limes honors this structure for API request rates: As shown
+in the large example above, the action `create` on the target\_type\_uri `service/compute/servers` is represented by a
+Limes rate with the name `service/compute/servers:create`.
 
-The following example shows a configured rate limit of 5 server creations per minute in the compute (nova) service.
- ```json
+Rates may have a `unit` if they do not refer to countable things like API requests. For example, network throughput
+rates usually have a `unit` of `B` or `KiB`. The unit applies to the values in the fields `limit` and `usage_as_bigint`
+(see below).
+
+If the rate has a rate limit, it will be shown in the fields `limit` and `window` like this:
+
+```json
 {
-  "target_type_uri": "service/compute/servers",
-  "actions": [
-    {
-      "name": "create",
-      "limit": 5,
-      "unit": "r/m"
-    }
-  ]
+  "name": "service/compute/servers/action:update/addFloatingIp",
+  "limit": 2,
+  "window": "1m"
 }
 ```
+
+This means that within any 1-minute window, not more than 2 API requests of this type are allowed for the project in
+question. (Rate limits are applied on a sliding window, not on fixed window boundaries.) The value of the `window` field
+is a string with the syntax `<number><unit>`, where `<unit>` is one of:
+
+```
+ms    - millisecond
+s     - second
+m     - minute
+h     - hour
+```
+
+If Limes knows how to track usage for a certain rate, the field `usage_as_bigint` will be shown (like in the large
+example above). The value of this field is an ever-increasing counter, guaranteed to never reset. Most JSON parser
+libraries parse integers into 64-bit-wide types, a size which can be reasonably expected to overflow esp. for rates
+relating to data throughput. Therefore the `usage_as_bigint` field (as indicated by the name) is set up like a bigint
+and serialized as a string. For now, clients SHOULD be able to handle at least 128-bit-wide unsigned integers in this field.
+
+Each service that has at least one rate with usage tracking will show a `rates_scraped_at` timestamp, analogous to the
+`scraped_at` timestamp for resource usage.
 
 #### Default rate limits
 
 Default rate limits on a project level can be defined via the [service configuration](../operators/config.md#rate-limits).
 The can be overwritten on a project level via the [API](#put-v1domainsdomain_idprojectsproject_id).
-The fields `default_limit` and `default_unit` in the response to a `GET /v1/domains/:domain\_id/projects/:project\_id` request
-are used to indicate deviations from the default project rate limits:
+The fields `default_limit` and `default_window` in the response to a `GET /v1/domains/:domain\_id/projects/:project\_id`
+request are used to indicate deviations from the default project rate limits:
 ```json
 {
-  "target_type_uri": "service/compute/servers",
-  "actions": [
-    {
-      "name": "create",
-      "limit": 5,
-      "unit": "r/m",
-      "default_limit": 10,
-      "default_unit": "r/m"
-    }
-  ]
+  "name": "service/compute/servers:create",
+  "limit": 5,
+  "window": "1m",
+  "default_limit": 10,
+  "default_window": "1m"
 }
 ```
 
@@ -825,17 +834,12 @@ project-admin token for the specified project. Other than that, the call works i
     {
       "services": [
         {
-          "type": "object-store",
+          "type": "compute",
           "rates": [
             {
-              "target_type_uri": "service/compute/servers",
-              "actions": [
-                {
-                  "name": "create",
-                  "limit": 5,
-                  "unit": "r/m"
-                }
-              ]
+              "name": "service/compute/servers:create",
+              "limit": 5,
+              "unit": "r/m"
             }
           ]
         }

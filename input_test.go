@@ -37,7 +37,7 @@ var quotas = QuotaRequest{
 				Unit:  UnitNone,
 			},
 		},
-		Rates: RateQuotaRequest{},
+		Rates: map[string]RateLimitRequest{},
 	},
 }
 
@@ -64,34 +64,33 @@ var quotaJSON = `
 
 var rateLimits = QuotaRequest{
 	"object-store": ServiceQuotaRequest{
-		Rates: RateQuotaRequest{
-			"object/account/container": {
-				"create": {Value: 1000, Unit: UnitRequestsPerSecond},
-			},
+		Rates: map[string]RateLimitRequest{
+			"object/account/container:create": {Limit: 1000, Window: 1 * WindowSeconds},
+			"object/account/container:delete": {Limit: 100, Window: 1 * WindowSeconds},
 		},
 		Resources: ResourceQuotaRequest{},
 	},
 }
 
 var rateLimitJSON = `
-  [
-    {
-      "type": "object-store",
-      "resources": [],
-      "rates": [
-        {
-          "target_type_uri": "object/account/container",
-          "actions": [
-            {
-              "name": "create",
-              "limit": 1000,
-              "unit": "r/s"
-            }
-          ]
-        }
-      ]
-    }
-  ]
+	[
+		{
+			"type": "object-store",
+			"resources": [],
+			"rates": [
+				{
+					"name": "object/account/container:create",
+					"limit": 1000,
+					"window": "1s"
+				},
+				{
+					"name": "object/account/container:delete",
+					"limit": 100,
+					"window": "1s"
+				}
+			]
+		}
+	]
 `
 
 func TestQuotaRequestMarshall(t *testing.T) {

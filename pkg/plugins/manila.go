@@ -23,6 +23,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/big"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
@@ -95,6 +96,11 @@ func (p *manilaPlugin) Resources() []limes.ResourceInfo {
 	return result
 }
 
+//Rates implements the core.QuotaPlugin interface.
+func (p *manilaPlugin) Rates() []limes.RateInfo {
+	return nil
+}
+
 func (p *manilaPlugin) makeResourceName(kind, shareType string) string {
 	if p.cfg.ShareV2.ShareTypes[0] == shareType {
 		//the resources for the first share type don't get the share type suffix
@@ -119,6 +125,11 @@ type manilaQuotaSet struct {
 	SnapshotGigabytes int64  `json:"snapshot_gigabytes"`
 	Snapshots         int64  `json:"snapshots"`
 	ShareNetworks     *int64 `json:"share_networks,omitempty"`
+}
+
+//ScrapeRates implements the core.QuotaPlugin interface.
+func (p *manilaPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+	return nil, "", nil
 }
 
 //Scrape implements the core.QuotaPlugin interface.

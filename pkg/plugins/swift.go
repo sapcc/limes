@@ -20,6 +20,7 @@
 package plugins
 
 import (
+	"math/big"
 	"net/http"
 
 	"github.com/gophercloud/gophercloud"
@@ -78,6 +79,11 @@ func (p *swiftPlugin) Resources() []limes.ResourceInfo {
 	return swiftResources
 }
 
+//Rates implements the core.QuotaPlugin interface.
+func (p *swiftPlugin) Rates() []limes.RateInfo {
+	return nil
+}
+
 func (p *swiftPlugin) Account(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, projectUUID string) (*schwift.Account, error) {
 	client, err := openstack.NewObjectStorageV1(provider, eo)
 	if err != nil {
@@ -89,6 +95,11 @@ func (p *swiftPlugin) Account(provider *gophercloud.ProviderClient, eo gopherclo
 	}
 	//TODO Make Auth prefix configurable
 	return resellerAccount.SwitchAccount("AUTH_" + projectUUID), nil
+}
+
+//ScrapeRates implements the core.QuotaPlugin interface.
+func (p *swiftPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+	return nil, "", nil
 }
 
 //Scrape implements the core.QuotaPlugin interface.

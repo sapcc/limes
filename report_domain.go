@@ -36,9 +36,11 @@ type DomainReport struct {
 //a single backend service.
 type DomainServiceReport struct {
 	ServiceInfo
-	Resources    DomainResourceReports `json:"resources,keepempty"`
-	MaxScrapedAt *int64                `json:"max_scraped_at,omitempty"`
-	MinScrapedAt *int64                `json:"min_scraped_at,omitempty"`
+	Resources         DomainResourceReports `json:"resources,keepempty"`
+	MaxScrapedAt      *int64                `json:"max_scraped_at,omitempty"`
+	MinScrapedAt      *int64                `json:"min_scraped_at,omitempty"`
+	MaxRatesScrapedAt *int64                `json:"max_rates_scraped_at,omitempty"`
+	MinRatesScrapedAt *int64                `json:"min_rates_scraped_at,omitempty"`
 }
 
 //DomainResourceReport is a substructure of DomainReport containing data for

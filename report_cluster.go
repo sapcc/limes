@@ -37,11 +37,13 @@ type ClusterReport struct {
 //a single backend service.
 type ClusterServiceReport struct {
 	ServiceInfo
-	Shared       bool                    `json:"shared,omitempty"`
-	Resources    ClusterResourceReports  `json:"resources,keepempty"`
-	Rates        ClusterRateLimitReports `json:"rates,omitempty"`
-	MaxScrapedAt *int64                  `json:"max_scraped_at,omitempty"`
-	MinScrapedAt *int64                  `json:"min_scraped_at,omitempty"`
+	Shared            bool                    `json:"shared,omitempty"`
+	Resources         ClusterResourceReports  `json:"resources,keepempty"`
+	Rates             ClusterRateLimitReports `json:"rates,omitempty"`
+	MaxScrapedAt      *int64                  `json:"max_scraped_at,omitempty"`
+	MinScrapedAt      *int64                  `json:"min_scraped_at,omitempty"`
+	MaxRatesScrapedAt *int64                  `json:"max_rates_scraped_at,omitempty"`
+	MinRatesScrapedAt *int64                  `json:"min_rates_scraped_at,omitempty"`
 }
 
 //ClusterResourceReport is a substructure of ClusterReport containing data for
@@ -69,15 +71,9 @@ type ClusterAvailabilityZoneReport struct {
 
 // ClusterRateLimitReport is the structure for rate limits per target type URI and their rate limited actions.
 type ClusterRateLimitReport struct {
-	TargetTypeURI string                        `json:"target_type_uri,keepempty"`
-	Actions       ClusterRateLimitActionReports `json:"actions,keepempty"`
-}
-
-// ClusterRateLimitActionReport defines an action and its rate limit.
-type ClusterRateLimitActionReport struct {
-	Name  string `json:"name,keepempty"`
-	Limit uint64 `json:"limit,keepempty"`
-	Unit  Unit   `json:"unit,keepempty"`
+	RateInfo
+	Limit  uint64 `json:"limit,omitempty"`
+	Window Window `json:"window,omitempty"`
 }
 
 //ClusterServiceReports provides fast lookup of services by service type, but
@@ -209,41 +205,8 @@ func (r *ClusterRateLimitReports) UnmarshalJSON(b []byte) error {
 	}
 	t := make(ClusterRateLimitReports)
 	for _, prl := range tmp {
-		t[prl.TargetTypeURI] = prl
+		t[prl.Name] = prl
 	}
 	*r = ClusterRateLimitReports(t)
-	return nil
-}
-
-//ClusterRateLimitActionReports provides fast lookup of rate limit actions using
-//a map, but serializes to JSON as a list.
-type ClusterRateLimitActionReports map[string]*ClusterRateLimitActionReport
-
-//MarshalJSON implements the json.Marshaler interface.
-func (r ClusterRateLimitActionReports) MarshalJSON() ([]byte, error) {
-	names := make([]string, 0, len(r))
-	for name := range r {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	list := make([]*ClusterRateLimitActionReport, len(r))
-	for idx, name := range names {
-		list[idx] = r[name]
-	}
-	return json.Marshal(list)
-}
-
-//UnmarshalJSON implements the json.Unmarshaler interface.
-func (r *ClusterRateLimitActionReports) UnmarshalJSON(b []byte) error {
-	tmp := make([]*ClusterRateLimitActionReport, 0)
-	err := json.Unmarshal(b, &tmp)
-	if err != nil {
-		return err
-	}
-	t := make(ClusterRateLimitActionReports)
-	for _, a := range tmp {
-		t[a.Name] = a
-	}
-	*r = ClusterRateLimitActionReports(t)
 	return nil
 }

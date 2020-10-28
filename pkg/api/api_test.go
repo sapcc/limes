@@ -49,11 +49,22 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 	test.InitDatabase(t, &startData)
 
 	//prepare test configuration
+	sharedRatesThatReportUsage := []limes.RateInfo{
+		//NOTE: MiB makes no sense for for this rate, but I want to test as many
+		//combinations of "has unit or not", "has limit or not" and "has usage or
+		//not" as possible
+		{Name: "service/shared/objects:delete", Unit: limes.UnitMebibytes},
+		{Name: "service/shared/objects:unlimited", Unit: limes.UnitKibibytes},
+	}
+	unsharedRatesThatReportUsage := []limes.RateInfo{
+		{Name: "service/unshared/instances:delete", Unit: limes.UnitNone},
+	}
+
 	serviceTypes := []string{"shared", "unshared"}
 	isServiceShared := map[string]bool{"shared": true}
 	quotaPlugins := map[string]core.QuotaPlugin{
-		"shared":   test.NewPlugin("shared"),
-		"unshared": test.NewPlugin("unshared"),
+		"shared":   test.NewPlugin("shared", sharedRatesThatReportUsage...),
+		"unshared": test.NewPlugin("unshared", unsharedRatesThatReportUsage...),
 	}
 	westConstraintSet := core.QuotaConstraintSet{
 		Domains: map[string]core.QuotaConstraints{
@@ -97,71 +108,64 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 		Services: []core.ServiceConfiguration{
 			{
 				Type: "shared",
-				Rates: core.ServiceRateLimitConfiguration{
+				RateLimits: core.ServiceRateLimitConfiguration{
 					Global: []core.RateLimitConfiguration{
 						{
-							TargetTypeURI: "service/shared/objects",
-							Actions: []core.RateLimitActionConfiguration{
-								{
-									Name:  "create",
-									Limit: 5000,
-									Unit:  "r/s",
-								},
-							},
+							Name:   "service/shared/objects:create",
+							Unit:   limes.UnitNone,
+							Limit:  5000,
+							Window: 1 * limes.WindowSeconds,
 						},
 					},
 					ProjectDefault: []core.RateLimitConfiguration{
 						{
-							TargetTypeURI: "service/shared/objects",
-							Actions: []core.RateLimitActionConfiguration{
-								{
-									Name:  "create",
-									Limit: 5,
-									Unit:  "r/m",
-								},
-								{
-									Name:  "delete",
-									Limit: 1,
-									Unit:  "r/m",
-								},
-								{
-									Name:  "update",
-									Limit: 2,
-									Unit:  "r/s",
-								},
-								{
-									Name:  "read/list",
-									Limit: 3,
-									Unit:  "r/s",
-								},
-							},
+							Name:   "service/shared/objects:create",
+							Unit:   limes.UnitNone,
+							Limit:  5,
+							Window: 1 * limes.WindowMinutes,
+						},
+						{
+							Name:   "service/shared/objects:delete",
+							Unit:   limes.UnitNone,
+							Limit:  1,
+							Window: 1 * limes.WindowMinutes,
+						},
+						{
+							Name:   "service/shared/objects:update",
+							Unit:   limes.UnitNone,
+							Limit:  2,
+							Window: 1 * limes.WindowSeconds,
+						},
+						{
+							Name:   "service/shared/objects:read/list",
+							Unit:   limes.UnitNone,
+							Limit:  3,
+							Window: 1 * limes.WindowSeconds,
 						},
 					},
 				},
 			},
 			{
 				Type: "unshared",
-				Rates: core.ServiceRateLimitConfiguration{
+				RateLimits: core.ServiceRateLimitConfiguration{
 					ProjectDefault: []core.RateLimitConfiguration{
 						{
-							TargetTypeURI: "service/unshared/instances",
-							Actions: []core.RateLimitActionConfiguration{
-								{
-									Name:  "create",
-									Limit: 5,
-									Unit:  "r/m",
-								},
-								{
-									Name:  "delete",
-									Limit: 1,
-									Unit:  "r/m",
-								},
-								{
-									Name:  "update",
-									Limit: 2,
-									Unit:  "r/s",
-								},
-							},
+							Name:   "service/unshared/instances:create",
+							Unit:   limes.UnitNone,
+							Limit:  5,
+							Window: 1 * limes.WindowMinutes,
+						},
+						{
+							Name:   "service/unshared/instances:delete",
+							Unit:   limes.UnitNone,
+							Limit:  1,
+							Window: 1 * limes.WindowMinutes,
+						},
+						{
+							Name:   "service/unshared/instances:update",
+							Unit:   limes.UnitNone,
+							Limit:  2,
+							Window: 1 * limes.WindowSeconds,
 						},
 					},
 				},
@@ -920,13 +924,6 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-berlin-only-rates.json"),
 	}.Check(t, router)
-	//Only default project rates configured via ServiceConfiguration but not individual rates for project.
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/v1/domains/uuid-for-france/projects/uuid-for-paris?rates=only",
-		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-paris-only-default-rates.json"),
-	}.Check(t, router)
 	//dresden has a case of backend quota != quota
 	assert.HTTPRequest{
 		Method:       "GET",
@@ -934,12 +931,26 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-dresden.json"),
 	}.Check(t, router)
+	//dresden has some rates that only report usage
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden?rates=true",
+		ExpectStatus: 200,
+		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-dresden-with-rates.json"),
+	}.Check(t, router)
 	//paris has a case of infinite backend quota
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains/uuid-for-france/projects/uuid-for-paris",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-paris.json"),
+	}.Check(t, router)
+	//paris has no rates in the DB whatsoever, so we can check the rendering of the default rates
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/v1/domains/uuid-for-france/projects/uuid-for-paris?rates=only",
+		ExpectStatus: 200,
+		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-paris-only-default-rates.json"),
 	}.Check(t, router)
 	//warsaw is in a different cluster
 	assert.HTTPRequest{
@@ -1254,7 +1265,7 @@ func Test_ProjectOperations(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 403,
 		ExpectBody: assert.StringData(
-			"cannot change shared/service/shared/notexistent/bogus rate limits: user is not allowed to create new rate limits\n",
+			"cannot change shared/service/shared/notexistent:bogus rate limits: user is not allowed to create new rate limits\n",
 		),
 		Body: assert.JSONObject{
 			"project": assert.JSONObject{
@@ -1263,14 +1274,9 @@ func Test_ProjectOperations(t *testing.T) {
 						"type": "shared",
 						"rates": []assert.JSONObject{
 							{
-								"target_type_uri": "service/shared/notexistent",
-								"actions": []assert.JSONObject{
-									{
-										"name":  "bogus",
-										"limit": 1,
-										"unit":  "r/h",
-									},
-								},
+								"name":   "service/shared/notexistent:bogus",
+								"limit":  1,
+								"window": "1h",
 							},
 						},
 					},
@@ -1279,25 +1285,24 @@ func Test_ProjectOperations(t *testing.T) {
 		},
 	}.Check(t, router)
 	var (
-		actualLimit uint64
-		actualUnit  limes.Unit
+		actualLimit  uint64
+		actualWindow limes.Window
 	)
 	err = db.DB.QueryRow(`
-		SELECT prl.rate_limit, prl.unit FROM project_rate_limits prl
-		JOIN project_services ps ON ps.id = prl.service_id
+		SELECT pra.rate_limit, pra.window_ns FROM project_rates pra
+		JOIN project_services ps ON ps.id = pra.service_id
 		JOIN projects p ON p.id = ps.project_id
-		WHERE p.name = $1 AND ps.type = $2 AND prl.target_type_uri = $3 AND prl.action = $4`,
-		"berlin", "shared", "service/shared/notexistent", "bogus").Scan(&actualLimit, &actualUnit)
+		WHERE p.name = $1 AND ps.type = $2 AND pra.name = $3`,
+		"berlin", "shared", "service/shared/notexistent:bogus").Scan(&actualLimit, &actualWindow)
 	//There shouldn't be anything in the DB.
 	if err.Error() != "sql: no rows in result set" {
 		t.Fatalf("expected error %v but got %v", "sql: no rows in result set", err)
 	}
 
 	//Attempt setting a rate limit for which a default exists should be successful.
-	targetTypeURI := "service/shared/objects"
-	action := "read/list"
+	rateName := "service/shared/objects:read/list"
 	expectedLimit := uint64(100)
-	expectedUnit := limes.UnitRequestsPerSecond
+	expectedWindow := 1 * limes.WindowSeconds
 
 	assert.HTTPRequest{
 		Method:       "PUT",
@@ -1310,14 +1315,9 @@ func Test_ProjectOperations(t *testing.T) {
 						"type": "shared",
 						"rates": []assert.JSONObject{
 							{
-								"target_type_uri": targetTypeURI,
-								"actions": []assert.JSONObject{
-									{
-										"name":  action,
-										"limit": expectedLimit,
-										"unit":  expectedUnit,
-									},
-								},
+								"name":   rateName,
+								"limit":  expectedLimit,
+								"window": expectedWindow.String(),
 							},
 						},
 					},
@@ -1327,24 +1327,24 @@ func Test_ProjectOperations(t *testing.T) {
 	}.Check(t, router)
 
 	err = db.DB.QueryRow(`
-		SELECT prl.rate_limit, prl.unit FROM project_rate_limits prl
-		JOIN project_services ps ON ps.id = prl.service_id
+		SELECT pra.rate_limit, pra.window_ns FROM project_rates pra
+		JOIN project_services ps ON ps.id = pra.service_id
 		JOIN projects p ON p.id = ps.project_id
-		WHERE p.name = $1 AND ps.type = $2 AND prl.target_type_uri = $3 AND prl.action = $4`,
-		"berlin", "shared", targetTypeURI, action).Scan(&actualLimit, &actualUnit)
+		WHERE p.name = $1 AND ps.type = $2 AND pra.name = $3`,
+		"berlin", "shared", rateName).Scan(&actualLimit, &actualWindow)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if actualLimit != expectedLimit {
 		t.Errorf(
-			"rate limit was not updated in database for %s %s. expected limit %d but got %d",
-			targetTypeURI, action, expectedLimit, actualLimit,
+			"rate limit %s was not updated in database: expected limit %d, but got %d",
+			rateName, expectedLimit, actualLimit,
 		)
 	}
-	if actualUnit != expectedUnit {
+	if actualWindow != expectedWindow {
 		t.Errorf(
-			"rate limit was not updated in database for %s %s. expected unit %s but got %s",
-			targetTypeURI, action, expectedUnit, actualUnit,
+			"rate limit %s was not updated in database: expected window %d, but got %d",
+			rateName, expectedWindow, actualWindow,
 		)
 	}
 
@@ -1834,7 +1834,7 @@ func expectStaleProjectServices(t *testing.T, pairs ...string) {
 	queryStr := `
 		SELECT p.name, ps.type
 		  FROM projects p JOIN project_services ps ON ps.project_id = p.id
-		 WHERE ps.stale
+		 WHERE ps.stale AND ps.rates_stale
 		 ORDER BY p.name, ps.type
 	`
 	var actualPairs []string

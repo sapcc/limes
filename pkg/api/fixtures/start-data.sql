@@ -46,14 +46,14 @@ INSERT INTO projects (id, domain_id, name, uuid, parent_uuid, has_bursting) VALU
 INSERT INTO projects (id, domain_id, name, uuid, parent_uuid, has_bursting) VALUES (4, 3, 'warsaw', 'uuid-for-warsaw', 'uuid-for-poland', FALSE);
 
 -- project_services is fully populated (as ensured by the collector's consistency check)
-INSERT INTO project_services (id, project_id, type, scraped_at) VALUES (1, 1, 'unshared', UNIX(11));
-INSERT INTO project_services (id, project_id, type, scraped_at) VALUES (2, 1, 'shared',   UNIX(22));
-INSERT INTO project_services (id, project_id, type, scraped_at) VALUES (3, 2, 'unshared', UNIX(33));
-INSERT INTO project_services (id, project_id, type, scraped_at) VALUES (4, 2, 'shared',   UNIX(44));
-INSERT INTO project_services (id, project_id, type, scraped_at) VALUES (5, 3, 'unshared', UNIX(55));
-INSERT INTO project_services (id, project_id, type, scraped_at) VALUES (6, 3, 'shared',   UNIX(66));
-INSERT INTO project_services (id, project_id, type, scraped_at) VALUES (7, 4, 'unshared', UNIX(77));
-INSERT INTO project_services (id, project_id, type, scraped_at) VALUES (8, 4, 'shared',   UNIX(88));
+INSERT INTO project_services (id, project_id, type, scraped_at, rates_scraped_at) VALUES (1, 1, 'unshared', UNIX(11), UNIX(12));
+INSERT INTO project_services (id, project_id, type, scraped_at, rates_scraped_at) VALUES (2, 1, 'shared',   UNIX(22), UNIX(23));
+INSERT INTO project_services (id, project_id, type, scraped_at, rates_scraped_at) VALUES (3, 2, 'unshared', UNIX(33), UNIX(34));
+INSERT INTO project_services (id, project_id, type, scraped_at, rates_scraped_at) VALUES (4, 2, 'shared',   UNIX(44), UNIX(45));
+INSERT INTO project_services (id, project_id, type, scraped_at, rates_scraped_at) VALUES (5, 3, 'unshared', UNIX(55), NULL);
+INSERT INTO project_services (id, project_id, type, scraped_at, rates_scraped_at) VALUES (6, 3, 'shared',   UNIX(66), NULL);
+INSERT INTO project_services (id, project_id, type, scraped_at, rates_scraped_at) VALUES (7, 4, 'unshared', UNIX(77), NULL);
+INSERT INTO project_services (id, project_id, type, scraped_at, rates_scraped_at) VALUES (8, 4, 'shared',   UNIX(88), NULL);
 
 -- project_resources contains some pathological cases
 -- berlin (also used for test cases concerning subresources)
@@ -81,19 +81,23 @@ INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, su
 INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (8, 'capacity', 10, 2, 10, '', 10, 1);
 INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (8, 'external_things', 1, 0, 1, '', 10, NULL);
 
--- project rate limits
--- unshared
-INSERT INTO project_rate_limits (service_id, target_type_uri, action, rate_limit, unit) VALUES (1, 'service/unshared/instances',  'create', 5, 'r/m');
-INSERT INTO project_rate_limits (service_id, target_type_uri, action, rate_limit, unit) VALUES (1, 'service/unshared/instances',  'delete', 2, 'r/m');
-INSERT INTO project_rate_limits (service_id, target_type_uri, action, rate_limit, unit) VALUES (1, 'service/unshared/instances',  'update', 2, 'r/m');
-
--- shared
-INSERT INTO project_rate_limits (service_id, target_type_uri, action, rate_limit, unit) VALUES (2, 'service/shared/objects',  'create', 5, 'r/m');
-INSERT INTO project_rate_limits (service_id, target_type_uri, action, rate_limit, unit) VALUES (2, 'service/shared/objects',  'delete', 2, 'r/m');
-INSERT INTO project_rate_limits (service_id, target_type_uri, action, rate_limit, unit) VALUES (2, 'service/shared/objects',  'update', 2, 'r/m');
+-- project_rates also has multiple different setups to test different cases
+-- berlin has custom rate limits
+INSERT INTO project_rates (service_id, name, rate_limit, window_ns, usage_as_bigint) VALUES (1, 'service/unshared/instances:create', 5, 60000000000, '');
+INSERT INTO project_rates (service_id, name, rate_limit, window_ns, usage_as_bigint) VALUES (1, 'service/unshared/instances:delete', 2, 60000000000, '12345');
+INSERT INTO project_rates (service_id, name, rate_limit, window_ns, usage_as_bigint) VALUES (1, 'service/unshared/instances:update', 2, 60000000000, '');
+INSERT INTO project_rates (service_id, name, rate_limit, window_ns, usage_as_bigint) VALUES (2, 'service/shared/objects:create', 5, 60000000000, '');
+INSERT INTO project_rates (service_id, name, rate_limit, window_ns, usage_as_bigint) VALUES (2, 'service/shared/objects:delete', 2, 60000000000, '23456');
+INSERT INTO project_rates (service_id, name, rate_limit, window_ns, usage_as_bigint) VALUES (2, 'service/shared/objects:update', 2, 60000000000, '');
+-- dresden only has usage values, and it also shows usage for a rate that does not have rate limits
+-- also, dresden has some zero-valued usage values, which is different from empty string (empty string means "usage unknown", 0 means "no usage yet")
+INSERT INTO project_rates (service_id, name, rate_limit, window_ns, usage_as_bigint) VALUES (3, 'service/unshared/instances:delete', NULL, NULL, '0');
+INSERT INTO project_rates (service_id, name, rate_limit, window_ns, usage_as_bigint) VALUES (4, 'service/shared/objects:delete', NULL, NULL, '0');
+INSERT INTO project_rates (service_id, name, rate_limit, window_ns, usage_as_bigint) VALUES (4, 'service/shared/objects:unlimited', NULL, NULL, '1048576');
+-- not pictures: paris has no records at all, so the API will only display the default rate limits
 
 -- insert some bullshit data that should be filtered out by the pkg/reports/ logic
--- (cluster "north", service "weird" and resource "items" are not configured)
+-- (cluster "north", service "weird", resource "items" and rate "frobnicate" are not configured)
 INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (101, 'north', 'unshared', UNIX(1000));
 INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (102, 'north', 'shared',   UNIX(1100));
 INSERT INTO cluster_resources (service_id, name, capacity) VALUES (101, 'things', 1);
@@ -106,3 +110,6 @@ INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, su
 
 INSERT INTO domain_resources (service_id, name, quota) VALUES (1, 'items', 1);
 INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (1, 'items', 2, 1, 2, '', 2, 1);
+
+INSERT INTO project_rates (service_id, name, rate_limit, window_ns, usage_as_bigint) VALUES (1, 'service/unshared/instances:frobnicate', 5, 1000000000, '');
+INSERT INTO project_rates (service_id, name, rate_limit, window_ns, usage_as_bigint) VALUES (2, 'service/shared/objects:frobnicate', 5, 1000000000, '');

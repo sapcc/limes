@@ -1,6 +1,6 @@
 /*******************************************************************************
 *
-* Copyright 2017-2018 SAP SE
+* Copyright 2017-2020 SAP SE
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -181,5 +181,39 @@ var SQLMigrations = map[string]string{
 	`,
 	"013_remove_cluster_resource_comment.up.sql": `
 		ALTER TABLE cluster_resources DROP COLUMN comment;
+	`,
+	"014_restructure_project_rate_limits.down.sql": `
+		DROP TABLE project_rates;
+		CREATE TABLE project_rate_limits (
+			service_id      BIGINT NOT NULL REFERENCES project_services ON DELETE CASCADE,
+			target_type_uri TEXT   NOT NULL,
+			action          TEXT   NOT NULL,
+			rate_limit      BIGINT NOT NULL,
+			unit            TEXT   NOT NULL,
+			PRIMARY KEY (service_id, target_type_uri, action)
+		);
+	`,
+	"014_restructure_project_rate_limits.up.sql": `
+		DROP TABLE project_rate_limits;
+		CREATE TABLE project_rates (
+			service_id      BIGINT NOT NULL REFERENCES project_services ON DELETE CASCADE,
+			name            TEXT   NOT NULL,
+			rate_limit      BIGINT DEFAULT NULL,        -- null = not rate-limited
+			window_ns       BIGINT DEFAULT NULL,        -- null = not rate-limited, unit = nanoseconds
+			usage_as_bigint TEXT   NOT NULL DEFAULT '', -- empty = not scraped
+			PRIMARY KEY (service_id, name)
+		);
+	`,
+	"015_rate_scraping.down.sql": `
+		ALTER TABLE project_services DROP COLUMN rates_scraped_at;
+		ALTER TABLE project_services DROP COLUMN rates_stale;
+		ALTER TABLE project_services DROP COLUMN rates_scrape_duration_secs;
+		ALTER TABLE project_services DROP COLUMN rates_scrape_state;
+	`,
+	"015_rate_scraping.up.sql": `
+		ALTER TABLE project_services ADD COLUMN rates_scraped_at TIMESTAMP; -- defaults to NULL to indicate that scraping did not happen yet
+		ALTER TABLE project_services ADD COLUMN rates_stale BOOLEAN NOT NULL DEFAULT FALSE;
+		ALTER TABLE project_services ADD COLUMN rates_scrape_duration_secs REAL NOT NULL DEFAULT 0;
+		ALTER TABLE project_services ADD COLUMN rates_scrape_state TEXT NOT NULL DEFAULT '';
 	`,
 }

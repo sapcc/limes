@@ -32,7 +32,7 @@ var projectServicesMockJSON = `
 `
 
 var projectResourcesMockJSON = `
- [
+	[
 		{
 			"name": "capacity",
 			"unit": "B",
@@ -57,29 +57,19 @@ var projectServicesRateLimitMockJSON = `
 			"resources": [],
 			"rates": [
 				{
-					"target_type_uri": "services/swift/account",
-					"actions": [
-						{
-							"name": "create",
-							"limit": 10,
-							"unit": "r/m"
-						}
-					]
+					"name": "services/swift/account/container/object:create",
+					"limit": 1000,
+					"window": "1s"
 				},
 				{
-					"target_type_uri": "services/swift/account/container/object",
-					"actions": [
-						{
-							"name": "create",
-							"limit": 1000,
-							"unit": "r/s"
-						},
-						{
-							"name": "delete",
-							"limit": 1000,
-							"unit": "r/s"
-						}
-					]
+					"name": "services/swift/account/container/object:delete",
+					"limit": 1000,
+					"window": "1s"
+				},
+				{
+					"name": "services/swift/account:create",
+					"limit": 10,
+					"window": "1m"
 				}
 			],
 			"scraped_at": 22
@@ -95,35 +85,25 @@ var projectServicesRateLimitDeviatingFromDefaultsMockJSON = `
 			"resources": [],
 			"rates": [
 				{
-					"target_type_uri": "services/swift/account",
-					"actions": [
-						{
-							"name": "create",
-							"limit": 10,
-							"unit": "r/m",
-							"default_limit": 5,
-							"default_unit": "r/m"
-						}
-					]
+					"name": "services/swift/account/container/object:create",
+					"limit": 1000,
+					"window": "1s",
+					"default_limit": 500,
+					"default_window": "1s"
 				},
 				{
-					"target_type_uri": "services/swift/account/container/object",
-					"actions": [
-						{
-							"name": "create",
-							"limit": 1000,
-							"unit": "r/s",
-							"default_limit": 500,
-							"default_unit": "r/s"
-						},
-						{
-							"name": "delete",
-							"limit": 1000,
-							"unit": "r/s",
-							"default_limit": 500,
-							"default_unit": "r/s"
-						}
-					]
+					"name": "services/swift/account/container/object:delete",
+					"limit": 1000,
+					"window": "1s",
+					"default_limit": 500,
+					"default_window": "1s"
+				},
+				{
+					"name": "services/swift/account:create",
+					"limit": 10,
+					"window": "1m",
+					"default_limit": 5,
+					"default_window": "1m"
 				}
 			],
 			"scraped_at": 22
@@ -170,30 +150,20 @@ var projectMockServicesRateLimit = &ProjectServiceReports{
 		},
 		Resources: ProjectResourceReports{},
 		Rates: ProjectRateLimitReports{
-			"services/swift/account/container/object": &ProjectRateLimitReport{
-				TargetTypeURI: "services/swift/account/container/object",
-				Actions: ProjectRateLimitActionReports{
-					"create": &ProjectRateLimitActionReport{
-						Name:  "create",
-						Limit: 1000,
-						Unit:  UnitRequestsPerSecond,
-					},
-					"delete": &ProjectRateLimitActionReport{
-						Name:  "delete",
-						Limit: 1000,
-						Unit:  UnitRequestsPerSecond,
-					},
-				},
+			"services/swift/account/container/object:create": {
+				RateInfo: RateInfo{Name: "services/swift/account/container/object:create"},
+				Limit:    1000,
+				Window:   p2window(1 * WindowSeconds),
 			},
-			"services/swift/account": &ProjectRateLimitReport{
-				TargetTypeURI: "services/swift/account",
-				Actions: ProjectRateLimitActionReports{
-					"create": &ProjectRateLimitActionReport{
-						Name:  "create",
-						Limit: 10,
-						Unit:  UnitRequestsPerMinute,
-					},
-				},
+			"services/swift/account/container/object:delete": {
+				RateInfo: RateInfo{Name: "services/swift/account/container/object:delete"},
+				Limit:    1000,
+				Window:   p2window(1 * WindowSeconds),
+			},
+			"services/swift/account:create": {
+				RateInfo: RateInfo{Name: "services/swift/account:create"},
+				Limit:    10,
+				Window:   p2window(1 * WindowMinutes),
 			},
 		},
 		ScrapedAt: p2i64(22),
@@ -208,36 +178,26 @@ var projectMockServicesRateLimitDeviatingFromDefaults = &ProjectServiceReports{
 		},
 		Resources: ProjectResourceReports{},
 		Rates: ProjectRateLimitReports{
-			"services/swift/account/container/object": &ProjectRateLimitReport{
-				TargetTypeURI: "services/swift/account/container/object",
-				Actions: ProjectRateLimitActionReports{
-					"create": &ProjectRateLimitActionReport{
-						Name:         "create",
-						Limit:        1000,
-						Unit:         UnitRequestsPerSecond,
-						DefaultLimit: 500,
-						DefaultUnit:  UnitRequestsPerSecond,
-					},
-					"delete": &ProjectRateLimitActionReport{
-						Name:         "delete",
-						Limit:        1000,
-						Unit:         UnitRequestsPerSecond,
-						DefaultLimit: 500,
-						DefaultUnit:  UnitRequestsPerSecond,
-					},
-				},
+			"services/swift/account/container/object:create": {
+				RateInfo:      RateInfo{Name: "services/swift/account/container/object:create"},
+				Limit:         1000,
+				Window:        p2window(1 * WindowSeconds),
+				DefaultLimit:  500,
+				DefaultWindow: p2window(1 * WindowSeconds),
 			},
-			"services/swift/account": &ProjectRateLimitReport{
-				TargetTypeURI: "services/swift/account",
-				Actions: ProjectRateLimitActionReports{
-					"create": &ProjectRateLimitActionReport{
-						Name:         "create",
-						Limit:        10,
-						Unit:         UnitRequestsPerMinute,
-						DefaultLimit: 5,
-						DefaultUnit:  UnitRequestsPerMinute,
-					},
-				},
+			"services/swift/account/container/object:delete": {
+				RateInfo:      RateInfo{Name: "services/swift/account/container/object:delete"},
+				Limit:         1000,
+				Window:        p2window(1 * WindowSeconds),
+				DefaultLimit:  500,
+				DefaultWindow: p2window(1 * WindowSeconds),
+			},
+			"services/swift/account:create": {
+				RateInfo:      RateInfo{Name: "services/swift/account:create"},
+				Limit:         10,
+				Window:        p2window(1 * WindowMinutes),
+				DefaultLimit:  5,
+				DefaultWindow: p2window(1 * WindowMinutes),
 			},
 		},
 		ScrapedAt: p2i64(22),
@@ -286,4 +246,8 @@ func TestProjectServicesRateLimitDeviatingFromDefaultsUnmarshall(t *testing.T) {
 	err := actual.UnmarshalJSON([]byte(projectServicesRateLimitDeviatingFromDefaultsMockJSON))
 	th.AssertNoErr(t, err)
 	th.CheckDeepEquals(t, projectMockServicesRateLimitDeviatingFromDefaults, actual)
+}
+
+func p2window(val Window) *Window {
+	return &val
 }

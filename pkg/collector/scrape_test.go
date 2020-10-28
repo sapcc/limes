@@ -22,6 +22,7 @@ package collector
 import (
 	"errors"
 	"fmt"
+	"math/big"
 	"regexp"
 	"sort"
 	"testing"
@@ -241,6 +242,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 }
 
 func setProjectServicesStale(t *testing.T) {
+	t.Helper()
 	//make sure that the project is scraped again
 	_, err := db.DB.Exec(`UPDATE project_services SET stale = $1`, true)
 	if err != nil {
@@ -258,7 +260,7 @@ func Test_ScrapeFailure(t *testing.T) {
 		Once:    true,
 	}
 	//we will see an expected ERROR during testing, do not make the test fail because of this
-	expectedErrorRx := regexp.MustCompile(`^scrape unittest data for germany/(berlin|dresden) failed: Scrape failed as requested$`)
+	expectedErrorRx := regexp.MustCompile(`^scrape unittest resources for germany/(berlin|dresden) failed: Scrape failed as requested$`)
 	c.LogError = func(msg string, args ...interface{}) {
 		msg = fmt.Sprintf(msg, args...)
 		if expectedErrorRx.MatchString(msg) {
@@ -330,6 +332,13 @@ func (p *autoApprovalTestPlugin) Resources() []limes.ResourceInfo {
 	}
 }
 
+func (p *autoApprovalTestPlugin) Rates() []limes.RateInfo {
+	return nil
+}
+func (p *autoApprovalTestPlugin) ScrapeRates(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, prevSerializedState string) (map[string]*big.Int, string, error) {
+	return nil, "", nil
+}
+
 func (p *autoApprovalTestPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, error) {
 	return map[string]core.ResourceData{
 		"approve":   {Usage: 0, Quota: int64(p.StaticBackendQuota)},
@@ -364,4 +373,47 @@ func Test_AutoApproveInitialQuota(t *testing.T) {
 	setProjectServicesStale(t)
 	c.Scrape()
 	test.AssertDBContent(t, "fixtures/scrape-autoapprove2.sql")
+}
+
+//A quota plugin with absolutely no resources and rates.
+type noopQuotaPlugin struct{}
+
+func (noopQuotaPlugin) Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
+	return nil
+}
+func (noopQuotaPlugin) ServiceInfo() limes.ServiceInfo {
+	return limes.ServiceInfo{Type: "noop"}
+}
+func (noopQuotaPlugin) Resources() []limes.ResourceInfo {
+	return nil
+}
+func (noopQuotaPlugin) Scrape(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, error) {
+	return nil, nil
+}
+func (noopQuotaPlugin) SetQuota(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
+	return nil
+}
+func (noopQuotaPlugin) Rates() []limes.RateInfo {
+	return nil
+}
+func (noopQuotaPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+	return nil, "", nil
+}
+
+func Test_ScrapeButNoResources(t *testing.T) {
+	plugin := noopQuotaPlugin{}
+	cluster := prepareScrapeTest(t, 1, plugin)
+	c := Collector{
+		Cluster:  cluster,
+		Plugin:   plugin,
+		LogError: t.Errorf,
+		TimeNow:  test.TimeNow,
+		Once:     true,
+	}
+
+	//check that Scrape() behaves properly when encountering a quota plugin with
+	//no Resources() (in the wild, this can happen because some quota plugins
+	//only have Rates())
+	c.Scrape()
+	test.AssertDBContent(t, "fixtures/scrape-no-resources.sql")
 }

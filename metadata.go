@@ -39,6 +39,14 @@ type ResourceInfo struct {
 	ExternallyManaged bool `json:"externally_managed,omitempty"`
 }
 
+//RateInfo contains the metadata for a rate (i.e. some type of event that can
+//be rate-limited and for which there may a way to retrieve a count of past
+//events from a backend service).
+type RateInfo struct {
+	Name string `json:"name"`
+	Unit Unit   `json:"unit,omitempty"`
+}
+
 //ServiceInfo contains the metadata for a backend service.
 type ServiceInfo struct {
 	//Type returns the service type that the backend service for this

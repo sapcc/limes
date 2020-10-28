@@ -82,14 +82,9 @@ var clusterServicesOnlyRatesMockJSON = `
 			"resources": [],
 			"rates": [
 				{
-					"target_type_uri": "service/shared/objects",
-					"actions": [
-						{
-							"name": "create",
-							"limit": 5000,
-							"unit": "r/s"
-						}
-					]
+					"name": "service/shared/objects:create",
+					"limit": 5000,
+					"window": "1s"
 				}
 			]
 		}
@@ -151,15 +146,10 @@ var clusterServicesOnlyRates = &ClusterServiceReports{
 		},
 		Resources: ClusterResourceReports{},
 		Rates: ClusterRateLimitReports{
-			"service/shared/objects": {
-				TargetTypeURI: "service/shared/objects",
-				Actions: ClusterRateLimitActionReports{
-					"create": &ClusterRateLimitActionReport{
-						Name:  "create",
-						Limit: 5000,
-						Unit:  UnitRequestsPerSecond,
-					},
-				},
+			"service/shared/objects:create": {
+				RateInfo: RateInfo{Name: "service/shared/objects:create"},
+				Limit:    5000,
+				Window:   1 * WindowSeconds,
 			},
 		},
 	},

@@ -39,7 +39,9 @@
             }
           ],
           "max_scraped_at": 66,
-          "min_scraped_at": 22
+          "min_scraped_at": 22,
+          "max_rates_scraped_at": 45,
+          "min_rates_scraped_at": 23
         }
       ],
       "max_scraped_at": 1100,
