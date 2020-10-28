@@ -242,6 +242,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 }
 
 func setProjectServicesStale(t *testing.T) {
+	t.Helper()
 	//make sure that the project is scraped again
 	_, err := db.DB.Exec(`UPDATE project_services SET stale = $1`, true)
 	if err != nil {

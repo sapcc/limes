@@ -40,7 +40,7 @@ var findProjectForRateScrapeQuery = db.SimplifyWhitespaceInSQL(`
 	-- filter by cluster ID and service type
 	WHERE d.cluster_id = $1 AND ps.type = $2
 	-- filter by need to be updated (because of user request, because of missing data, or because of outdated data)
-	AND (ps.stale OR ps.rates_scraped_at IS NULL OR ps.rates_scraped_at < $3)
+	AND (ps.rates_stale OR ps.rates_scraped_at IS NULL OR ps.rates_scraped_at < $3)
 	-- order by update priority (in the same way: first user-requested, then new projects, then outdated projects, then ID for deterministic test behavior)
 	ORDER BY ps.rates_stale DESC, COALESCE(ps.rates_scraped_at, to_timestamp(-1)) ASC, ps.id ASC
 	-- find only one project to scrape per iteration
@@ -78,7 +78,7 @@ func (c *Collector) ScrapeRates() {
 			domainUUID              string
 		)
 		scrapeStartedAt := c.TimeNow()
-		err := db.DB.QueryRow(findProjectForResourceScrapeQuery, c.Cluster.ID, serviceType, scrapeStartedAt.Add(-scrapeInterval)).
+		err := db.DB.QueryRow(findProjectForRateScrapeQuery, c.Cluster.ID, serviceType, scrapeStartedAt.Add(-scrapeInterval)).
 			Scan(&serviceID, &serviceRatesScrapedAt, &serviceRatesScrapeState, &projectName, &projectUUID, &domainName, &domainUUID)
 		if err != nil {
 			//ErrNoRows is okay; it just means that nothing needs scraping right now
@@ -163,10 +163,12 @@ func (c *Collector) writeRateScrapeResult(domainName, projectName, serviceType s
 
 			usageData, exists := rateData[rate.Name]
 			if !exists {
-				c.LogError(
-					"could not scrape new data for rate %s in project service %d (was this rate type removed from the scraper plugin?)",
-					rate.Name, serviceID,
-				)
+				if rate.UsageAsBigint != "" {
+					c.LogError(
+						"could not scrape new data for rate %s in project service %d (was this rate type removed from the scraper plugin?)",
+						rate.Name, serviceID,
+					)
+				}
 				continue
 			}
 			usageAsBigint := usageData.String()
