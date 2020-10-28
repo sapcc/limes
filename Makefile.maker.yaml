@@ -10,8 +10,3 @@ coverageTest:
 
 vendoring:
   enabled: true
-
-verbatim: |
-  # This is for manual testing.
-  run-api: build/keppel
-    set -euo pipefail && source ./.env && $(CURDIR)/build/keppel server api

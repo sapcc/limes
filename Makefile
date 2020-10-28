@@ -5,10 +5,6 @@
 
 default: build-all
 
-# This is for manual testing.
-run-api: build/keppel
-	set -euo pipefail && source ./.env && $(CURDIR)/build/keppel server api
-
 build-all: build/limes
 
 GO_BUILDFLAGS = -mod vendor
