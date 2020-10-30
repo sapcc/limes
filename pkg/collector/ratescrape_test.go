@@ -172,3 +172,21 @@ func setProjectServicesRatesStale(t *testing.T) {
 func p2window(val limes.Window) *limes.Window {
 	return &val
 }
+
+func Test_ScrapeRatesButNoRates(t *testing.T) {
+	plugin := noopQuotaPlugin{}
+	cluster := prepareScrapeTest(t, 1, plugin)
+	c := Collector{
+		Cluster:  cluster,
+		Plugin:   plugin,
+		LogError: t.Errorf,
+		TimeNow:  test.TimeNow,
+		Once:     true,
+	}
+
+	//check that ScrapeRates() behaves properly when encountering a quota plugin
+	//with no Rates() (in the wild, this can happen because some quota plugins
+	//only have Resources())
+	c.ScrapeRates()
+	test.AssertDBContent(t, "fixtures/scrape-no-rates.sql")
+}

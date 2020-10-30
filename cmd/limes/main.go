@@ -138,12 +138,8 @@ func taskCollect(config core.Configuration, cluster *core.Cluster, args []string
 	//state, mostly through usage of DB transactions.)
 	for _, plugin := range cluster.QuotaPlugins {
 		c := collector.NewCollector(cluster, plugin, config.Collector)
-		if len(plugin.Resources()) > 0 {
-			go c.Scrape()
-		}
-		if len(plugin.Rates()) > 0 {
-			go c.ScrapeRates()
-		}
+		go c.Scrape()
+		go c.ScrapeRates()
 	}
 
 	//start those collector threads which operate over all services simultaneously
