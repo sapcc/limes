@@ -79,8 +79,8 @@ type ironicFlavorInfo struct {
 //  where "xxxx" is unique among all hosts.
 var computeHostStubRx = regexp.MustCompile(`^nova-compute-(?:ironic-)?([a-zA-Z0-9]+)$`)
 
-//Node names are expected to be in the form "nodeXXX-bmYYY", where the second half is the host stub (the match group from above).
-var nodeNameRx = regexp.MustCompile(`^node\d+-(bm\d+)$`)
+//Node names are expected to be in the form "nodeXXX-bmYYY" or "nodeXXX-bbYYY", where the second half is the host stub (the match group from above).
+var nodeNameRx = regexp.MustCompile(`^node\d+-(b[bm]\d+)$`)
 
 //Scrape implements the core.CapacityPlugin interface.
 func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]core.CapacityData, error) {
@@ -158,7 +158,7 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 						nodeAZ = "unknown"
 					}
 				} else {
-					logg.Error(`Ironic node %q (%s) does not match the "nodeXXX-bmYYY" naming convention`, node.Name, node.ID)
+					logg.Error(`Ironic node %q (%s) does not match the "nodeXXX-{bm,bb}YYY" naming convention`, node.Name, node.ID)
 				}
 
 				if _, ok := data.CapacityPerAZ[nodeAZ]; !ok {
