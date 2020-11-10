@@ -1,6 +1,6 @@
 /*******************************************************************************
 *
-* Copyright 2017 SAP SE
+* Copyright 2017-2020 SAP SE
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -96,8 +96,10 @@ func main() {
 		task = taskCollect
 	case "serve":
 		task = taskServe
-	case "test-scrape":
-		task = taskTestScrape
+	case "test-get-quota":
+		task = taskTestGetQuota
+	case "test-get-rates":
+		task = taskTestGetRates
 	case "test-scan-capacity":
 		task = taskTestScanCapacity
 	default:
@@ -107,14 +109,15 @@ func main() {
 	//run task
 	err = task(config, cluster, remainingArgs)
 	if err != nil {
-		logg.Fatal(err.Error())
+		logg.Fatal(util.ErrorToString(err))
 	}
 }
 
 var usageMessage = strings.Replace(strings.TrimSpace(`
 Usage:
 \t%s (collect|serve) <config-file> <cluster-id>
-\t%s test-scrape <config-file> <cluster-id> <project-id>
+\t%s test-get-quota <config-file> <cluster-id> <project-id> <service-type>
+\t%s test-get-rates <config-file> <cluster-id> <project-id> <service-type> [<prev-serialized-state>]
 \t%s test-scan-capacity <config-file> <cluster-id>
 `), `\t`, "\t", -1) + "\n"
 
@@ -226,36 +229,23 @@ func taskServe(config core.Configuration, cluster *core.Cluster, args []string) 
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// task: test-scrape
+// tasks: test quota plugin
 
-func taskTestScrape(config core.Configuration, cluster *core.Cluster, args []string) error {
-	if len(args) != 1 {
+func taskTestGetQuota(config core.Configuration, cluster *core.Cluster, args []string) error {
+	if len(args) != 2 {
 		printUsageAndExit()
 	}
+	domainUUID, projectUUID, serviceType := findProjectServiceForTesting(cluster, args[0], args[1])
 
-	var (
-		domainUUID  string
-		projectUUID string
-	)
-	err := db.DB.QueryRow(`
-		SELECT d.uuid, p.uuid
-		  FROM domains d JOIN projects p ON p.domain_id = d.id
-		 WHERE p.uuid = $1 AND d.cluster_id = $2
-	`, args[0], cluster.ID).Scan(&domainUUID, &projectUUID)
-	if err == sql.ErrNoRows {
-		return errors.New("no such project in this cluster")
+	provider, eo := cluster.ProviderClientForService(serviceType)
+	result, err := cluster.QuotaPlugins[serviceType].Scrape(provider, eo, cluster.ID, domainUUID, projectUUID)
+	if err != nil {
+		return err
 	}
 
-	result := make(map[string]map[string]core.ResourceData)
-
-	for serviceType, plugin := range cluster.QuotaPlugins {
-		provider, eo := cluster.ProviderClientForService(serviceType)
-		data, err := plugin.Scrape(provider, eo, cluster.ID, domainUUID, projectUUID)
-		if err != nil {
-			logg.Error("scrape failed for %s: %s", serviceType, util.ErrorToString(err))
-		}
-		if data != nil {
-			result[serviceType] = data
+	for resourceName := range result {
+		if !cluster.HasResource(serviceType, resourceName) {
+			return fmt.Errorf("scrape returned data for unknown resource: %s/%s", serviceType, resourceName)
 		}
 	}
 
@@ -264,6 +254,60 @@ func taskTestScrape(config core.Configuration, cluster *core.Cluster, args []str
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	return enc.Encode(result)
+}
+
+func taskTestGetRates(config core.Configuration, cluster *core.Cluster, args []string) error {
+	var prevSerializedState string
+	switch len(args) {
+	case 2:
+		prevSerializedState = ""
+	case 3:
+		prevSerializedState = args[2]
+	default:
+		printUsageAndExit()
+	}
+	domainUUID, projectUUID, serviceType := findProjectServiceForTesting(cluster, args[0], args[1])
+
+	provider, eo := cluster.ProviderClientForService(serviceType)
+	result, serializedState, err := cluster.QuotaPlugins[serviceType].ScrapeRates(provider, eo, cluster.ID, domainUUID, projectUUID, prevSerializedState)
+	if err != nil {
+		return err
+	}
+	if serializedState != "" {
+		logg.Info("scrape returned new serialized state: %s", serializedState)
+	}
+
+	for rateName := range result {
+		if !cluster.HasUsageForRate(serviceType, rateName) {
+			return fmt.Errorf("scrape returned data for unknown rate: %s/%s", serviceType, rateName)
+		}
+	}
+
+	dumpGeneratedPrometheusMetrics()
+
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	return enc.Encode(result)
+}
+
+func findProjectServiceForTesting(cluster *core.Cluster, inputProjectUUID, inputServiceType string) (domainUUID, projectUUID, serviceType string) {
+	serviceType = inputServiceType
+	if !cluster.HasService(serviceType) {
+		logg.Fatal("unknown service type: %s", serviceType)
+	}
+
+	err := db.DB.QueryRow(`
+		SELECT d.uuid, p.uuid
+		  FROM domains d JOIN projects p ON p.domain_id = d.id
+		 WHERE p.uuid = $1 AND d.cluster_id = $2
+	`, inputProjectUUID, cluster.ID).Scan(&domainUUID, &projectUUID)
+	if err == sql.ErrNoRows {
+		err = errors.New("no such project in this cluster")
+	}
+	if err != nil {
+		logg.Fatal(err.Error())
+	}
+	return
 }
 
 func dumpGeneratedPrometheusMetrics() {
