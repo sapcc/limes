@@ -20,10 +20,13 @@
 package plugins
 
 import (
+	"encoding/json"
+	"fmt"
 	"math/big"
-	"time"
+	"net/http"
 
 	"github.com/gophercloud/gophercloud"
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 )
@@ -91,13 +94,142 @@ func (p *cronusPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherc
 	return nil
 }
 
+type cronusState struct {
+	PreviousTotals struct {
+		AttachmentsSize *big.Int `json:"attachments_size"`
+		DataTransferIn  *big.Int `json:"data_transfer_in"`
+		DataTransferOut *big.Int `json:"data_transfer_out"`
+		Recipients      *big.Int `json:"recipients"`
+	} `json:"previous_totals"`
+	CurrentPeriod struct {
+		StartDate string `json:"start"`
+	} `json:"current_period"`
+}
+
 //ScrapeRates implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
-	dummyUsage := big.NewInt(time.Now().Unix())
+func (p *cronusPlugin) ScrapeRates(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+	//decode `prevSerializedState`
+	var state cronusState
+	if prevSerializedState == "" {
+		//on first scrape, start with a default value that causes us to open a new billing period immediately down below
+		state.PreviousTotals.AttachmentsSize = big.NewInt(0)
+		state.PreviousTotals.DataTransferIn = big.NewInt(0)
+		state.PreviousTotals.DataTransferOut = big.NewInt(0)
+		state.PreviousTotals.Recipients = big.NewInt(0)
+		state.CurrentPeriod.StartDate = "1970-01-01"
+	} else {
+		err := json.Unmarshal([]byte(prevSerializedState), &state)
+		if err != nil {
+			return nil, "", fmt.Errorf("cannot decode prevSerializedState: %w", err)
+		}
+	}
+
+	//get usage for the current billing period
+	client, err := newCronusClient(provider, eo)
+	if err != nil {
+		return nil, "", err
+	}
+	currentUsage, err := client.GetUsage(projectUUID, false)
+	if err != nil {
+		return nil, "", err
+	}
+	logg.Debug("currentUsage = %#v", currentUsage)
+
+	//if a new billing period has started, add the previous billing period's
+	//final tally into `state.PreviousTotals`
+	var newSerializedState string
+	if state.CurrentPeriod.StartDate == currentUsage.StartDate {
+		newSerializedState = prevSerializedState
+	} else {
+		prevUsage, err := client.GetUsage(projectUUID, true)
+		if err != nil {
+			return nil, "", err
+		}
+		logg.Debug("prevUsage = %#v", prevUsage)
+		if state.CurrentPeriod.StartDate != prevUsage.StartDate && state.CurrentPeriod.StartDate != "1970-01-01" {
+			return nil, "", fmt.Errorf(
+				"cannot start new billing period: expected previous billing period to end by %s, but actually ended %s",
+				state.CurrentPeriod.StartDate, prevUsage.StartDate,
+			)
+		}
+
+		state.PreviousTotals.AttachmentsSize = bigintPlusUint64(state.PreviousTotals.AttachmentsSize, prevUsage.AttachmentsSize)
+		state.PreviousTotals.DataTransferIn = bigintPlusUint64(state.PreviousTotals.DataTransferIn, prevUsage.DataTransferIn)
+		state.PreviousTotals.DataTransferOut = bigintPlusUint64(state.PreviousTotals.DataTransferOut, prevUsage.DataTransferOut)
+		state.PreviousTotals.Recipients = bigintPlusUint64(state.PreviousTotals.Recipients, prevUsage.Recipients)
+		state.CurrentPeriod.StartDate = currentUsage.StartDate
+
+		newSerializedStateBytes, err := json.Marshal(state)
+		if err != nil {
+			return nil, "", fmt.Errorf("cannot serialize new state: %w", err)
+		}
+		newSerializedState = string(newSerializedStateBytes)
+	}
+
+	//obtain the current running totals by adding the current billing period's
+	//running tally to the previous totals
 	return map[string]*big.Int{
-		"attachment_size":   dummyUsage,
-		"data_transfer_in":  dummyUsage,
-		"data_transfer_out": dummyUsage,
-		"recipients":        dummyUsage,
-	}, "", nil
+		"attachment_size":   bigintPlusUint64(state.PreviousTotals.AttachmentsSize, currentUsage.AttachmentsSize),
+		"data_transfer_in":  bigintPlusUint64(state.PreviousTotals.DataTransferIn, currentUsage.DataTransferIn),
+		"data_transfer_out": bigintPlusUint64(state.PreviousTotals.DataTransferOut, currentUsage.DataTransferOut),
+		"recipients":        bigintPlusUint64(state.PreviousTotals.Recipients, currentUsage.Recipients),
+	}, newSerializedState, nil
+}
+
+func bigintPlusUint64(a *big.Int, u uint64) *big.Int {
+	var b big.Int
+	b.SetUint64(u)
+	var c big.Int
+	return c.Add(a, &b)
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Gophercloud client for Cronus
+
+type cronusClient struct {
+	*gophercloud.ServiceClient
+}
+
+func newCronusClient(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (*cronusClient, error) {
+	serviceType := "email-aws"
+	eo.ApplyDefaults(serviceType)
+
+	url, err := provider.EndpointLocator(eo)
+	if err != nil {
+		return nil, err
+	}
+	return &cronusClient{
+		ServiceClient: &gophercloud.ServiceClient{
+			ProviderClient: provider,
+			Endpoint:       url,
+			Type:           serviceType,
+		},
+	}, nil
+}
+
+type cronusUsage struct {
+	AttachmentsSize uint64 `json:"attachments_size"`
+	DataTransferIn  uint64 `json:"data_transfer_in"`
+	DataTransferOut uint64 `json:"data_transfer_out"`
+	Recipients      uint64 `json:"recipients"`
+	StartDate       string `json:"start"`
+	EndDate         string `json:"end"`
+}
+
+func (c cronusClient) GetUsage(projectUUID string, previous bool) (cronusUsage, error) {
+	url := c.ServiceURL("v1", "usage", projectUUID)
+	if previous {
+		url += "?prev=true"
+	}
+
+	var result gophercloud.Result
+	_, result.Err = c.Get(url, &result.Body, &gophercloud.RequestOpts{
+		OkCodes: []int{http.StatusOK},
+	})
+
+	var data struct {
+		Usage cronusUsage `json:"usage"`
+	}
+	err := result.ExtractInto(&data)
+	return data.Usage, err
 }

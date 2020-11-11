@@ -391,7 +391,7 @@ The area for this service is `dns`.
 
 When the `recordsets` quota is set, the backend quota for records is set to 20 times that value, to fit into the `records_per_recordset` quota (which is set to 20 by default in Designate). The record quota cannot be controlled explicitly in Limes.
 
-## `cronus`: Email v1 (SAP Converged Cloud only)
+## `email-aws`: Cronus v1 (SAP Converged Cloud only)
 
 ```yaml
 services:
