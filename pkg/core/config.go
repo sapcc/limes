@@ -31,6 +31,7 @@ import (
 	policy "github.com/databus23/goslo.policy"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/go-bits/secrets"
 	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/db"
 	yaml "gopkg.in/yaml.v2"
@@ -266,8 +267,11 @@ type BurstingConfiguration struct {
 type CADFConfiguration struct {
 	Enabled  bool `yaml:"enabled"`
 	RabbitMQ struct {
-		URL       string `yaml:"url"`
-		QueueName string `yaml:"queue_name"`
+		QueueName string               `yaml:"queue_name"`
+		Username  string               `yaml:"username"`
+		Password  secrets.AuthPassword `yaml:"password"`
+		Hostname  string               `yaml:"hostname"`
+		Port      string               `yaml:"port"`
 	} `yaml:"rabbitmq"`
 }
 
@@ -351,9 +355,6 @@ func (cfg configurationInFile) validate() (success bool) {
 	missing := func(key string) {
 		logg.Error("missing %s configuration value", key)
 		success = false
-	}
-	if cfg.Database.Location == "" {
-		missing("database.location")
 	}
 	if len(cfg.Clusters) == 0 {
 		missing("clusters[]")

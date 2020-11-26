@@ -25,19 +25,20 @@ import (
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
+	"github.com/sapcc/go-bits/secrets"
 )
 
 //AuthParameters contains credentials for authenticating with Keystone (i.e.
 //everything that's needed to set up a gophercloud.ProviderClient instance).
 type AuthParameters struct {
-	AuthURL           string `yaml:"auth_url"`
-	UserName          string `yaml:"user_name"`
-	UserDomainName    string `yaml:"user_domain_name"`
-	ProjectName       string `yaml:"project_name"`
-	ProjectDomainName string `yaml:"project_domain_name"`
-	Password          string `yaml:"password"`
-	RegionName        string `yaml:"region_name"`
-	Interface         string `yaml:"interface"`
+	AuthURL           string               `yaml:"auth_url"`
+	UserName          string               `yaml:"user_name"`
+	UserDomainName    string               `yaml:"user_domain_name"`
+	ProjectName       string               `yaml:"project_name"`
+	ProjectDomainName string               `yaml:"project_domain_name"`
+	Password          secrets.AuthPassword `yaml:"password"`
+	RegionName        string               `yaml:"region_name"`
+	Interface         string               `yaml:"interface"`
 	//The following fields are only valid after calling Connect().
 	ProviderClient *gophercloud.ProviderClient `yaml:"-"`
 	EndpointOpts   gophercloud.EndpointOpts    `yaml:"-"`
@@ -64,7 +65,7 @@ func (auth *AuthParameters) Connect() error {
 		AllowReauth:      true,
 		Username:         auth.UserName,
 		DomainName:       auth.UserDomainName,
-		Password:         auth.Password,
+		Password:         string(auth.Password),
 		Scope: &gophercloud.AuthScope{
 			ProjectName: auth.ProjectName,
 			DomainName:  auth.ProjectDomainName,

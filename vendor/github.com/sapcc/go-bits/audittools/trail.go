@@ -80,7 +80,9 @@ func (t AuditTrail) Commit(rabbitmqURI, rabbitmqQueueName string) {
 				if successful = sendEvent(&nextEvent); !successful {
 					//refresh connection, if old
 					if rc == nil || time.Since(rc.LastConnectedAt) > (5*time.Minute) {
-						rc.Disconnect()
+						if rc != nil && rc.IsConnected {
+							rc.Disconnect()
+						}
 						connect()
 					}
 					time.Sleep(5 * time.Second)
