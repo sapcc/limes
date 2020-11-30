@@ -76,7 +76,7 @@ func StartAuditTrail(configPerCluster map[string]core.CADFConfiguration) {
 			if rabbitUserInfo != "" {
 				rabbitUserInfo += "@"
 			}
-			rabbitURI := fmt.Sprintf("amqp://%s%s:%s/", rabbitUserInfo, config.RabbitMQ.Hostname, config.RabbitMQ.Port)
+			rabbitURI := fmt.Sprintf("amqp://%s%s:%d/", rabbitUserInfo, config.RabbitMQ.Hostname, config.RabbitMQ.Port)
 
 			go audittools.AuditTrail{
 				EventSink:           s,

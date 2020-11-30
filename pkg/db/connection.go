@@ -22,6 +22,7 @@ package db
 import (
 	"database/sql"
 	"net/url"
+	"strconv"
 
 	gorp "gopkg.in/gorp.v2"
 
@@ -40,7 +41,7 @@ type Configuration struct {
 	Username          string               `yaml:"username"`
 	Password          secrets.AuthPassword `yaml:"password"`
 	Hostname          string               `yaml:"hostname"`
-	Port              string               `yaml:"port"`
+	Port              int                  `yaml:"port"`
 	ConnectionOptions string               `yaml:"connection_options"`
 }
 
@@ -55,14 +56,14 @@ func Init(cfg Configuration) error {
 	if cfg.Hostname == "" {
 		cfg.Hostname = "localhost"
 	}
-	if cfg.Port == "" {
-		cfg.Port = "5432"
+	if cfg.Port == 0 {
+		cfg.Port = 5432
 	}
 
 	dbURL := &url.URL{
 		Scheme:   "postgres",
 		User:     url.UserPassword(cfg.Username, string(cfg.Password)),
-		Host:     cfg.Hostname + ":" + cfg.Port,
+		Host:     cfg.Hostname + ":" + strconv.Itoa(cfg.Port),
 		Path:     cfg.Name,
 		RawQuery: cfg.ConnectionOptions,
 	}

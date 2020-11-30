@@ -271,7 +271,7 @@ type CADFConfiguration struct {
 		Username  string               `yaml:"username"`
 		Password  secrets.AuthPassword `yaml:"password"`
 		Hostname  string               `yaml:"hostname"`
-		Port      string               `yaml:"port"`
+		Port      int                  `yaml:"port"`
 	} `yaml:"rabbitmq"`
 }
 
