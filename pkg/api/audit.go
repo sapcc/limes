@@ -76,6 +76,12 @@ func StartAuditTrail(configPerCluster map[string]core.CADFConfiguration) {
 			if rabbitUserInfo != "" {
 				rabbitUserInfo += "@"
 			}
+			if config.RabbitMQ.Hostname == "" {
+				config.RabbitMQ.Hostname = "localhost"
+			}
+			if config.RabbitMQ.Port == 0 {
+				config.RabbitMQ.Port = 5672
+			}
 			rabbitURI := fmt.Sprintf("amqp://%s%s:%d/", rabbitUserInfo, config.RabbitMQ.Hostname, config.RabbitMQ.Port)
 
 			go audittools.AuditTrail{

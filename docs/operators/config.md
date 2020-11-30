@@ -171,8 +171,8 @@ Limes logs all quota changes at the domain and project level in an Open Standard
 | `clusters.$id.cadf.rabbitmq.queue_name` | *(required, if `enabled` is true)* | Name for the queue that will hold the audit events. The events are published to the default exchange. |
 | `clusters.$id.cadf.rabbitmq.username` | *(optional)* | RabbitMQ Username. |
 | `clusters.$id.cadf.rabbitmq.password` | *(optional)* | Password for the specified user. |
-| `clusters.$id.cadf.rabbitmq.hostname` | *(optional)* | Hostname of the RabbitMQ server. |
-| `clusters.$id.cadf.rabbitmq.port` | *(optional)* | Port number to which the underlying connection is made. |
+| `clusters.$id.cadf.rabbitmq.hostname` | `localhost` | Hostname of the RabbitMQ server. |
+| `clusters.$id.cadf.rabbitmq.port` | `5672` | Port number to which the underlying connection is made. |
 
 ### Low-privilege quota raising
 
