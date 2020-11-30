@@ -83,14 +83,14 @@ Read on for the full list and description of all configuration options.
 
 Configuration options relating to the database connection of all services.
 
-| Field | Required | Description |
+| Field | Default | Description |
 | --- | --- | --- |
-| `database.name` | no | The name of the database. |
-| `database.username` | no | Username of the user that Limes should use to connect to the database. |
-| `database.password` | no | Password for the specified user. |
-| `database.hostname` | no | Hostname of the database server. |
-| `database.port` | no | Port on which the PostgreSQL service is running on. |
-| `database.connection_options` | no | Database connection options. |
+| `database.name` | `limes` | The name of the database. |
+| `database.username` | `postgres` | Username of the user that Limes should use to connect to the database. |
+| `database.password` | *(optional)* | Password for the specified user. |
+| `database.hostname` | `localhost` | Hostname of the database server. |
+| `database.port` | `5432` | Port on which the PostgreSQL service is running on. |
+| `database.connection_options` | *(optional)* | Database connection options. |
 
 Instead of providing `database.password` as plain text in the config file, you
 can use a special syntax to read the respective password from an exported
@@ -165,14 +165,14 @@ password: { fromEnv: ENVIRONMENT_VARIABLE }
 
 Limes logs all quota changes at the domain and project level in an Open Standards [CADF format](https://www.dmtf.org/standards/cadf). These audit events can be sent to a RabbitMQ server which can then forward them to any cloud audit API, datastore, etc.
 
-| Field | Required | Description |
+| Field | Default | Description |
 | --- | --- | --- |
-| `clusters.$id.cadf.enabled` | no | Set this to true if you want to send the audit events to a RabbitMQ server. |
-| `clusters.$id.cadf.rabbitmq.queue_name` | yes, if `enabled` is true | Name for the queue that will hold the audit events. The events are published to the default exchange. |
-| `clusters.$id.cadf.rabbitmq.username` | no | RabbitMQ Username. |
-| `clusters.$id.cadf.rabbitmq.password` | no | Password for the specified user. |
-| `clusters.$id.cadf.rabbitmq.hostname` | no | Hostname of the RabbitMQ server. |
-| `clusters.$id.cadf.rabbitmq.port` | no | Port number to which the underlying connection is made. |
+| `clusters.$id.cadf.enabled` | `false` | Set this to true if you want to send the audit events to a RabbitMQ server. |
+| `clusters.$id.cadf.rabbitmq.queue_name` | *(required, if `enabled` is true)* | Name for the queue that will hold the audit events. The events are published to the default exchange. |
+| `clusters.$id.cadf.rabbitmq.username` | *(optional)* | RabbitMQ Username. |
+| `clusters.$id.cadf.rabbitmq.password` | *(optional)* | Password for the specified user. |
+| `clusters.$id.cadf.rabbitmq.hostname` | *(optional)* | Hostname of the RabbitMQ server. |
+| `clusters.$id.cadf.rabbitmq.port` | *(optional)* | Port number to which the underlying connection is made. |
 
 ### Low-privilege quota raising
 

@@ -505,6 +505,10 @@ func (cfg configurationInFile) validate() (success bool) {
 			logg.Error("quota seeds have been replaced by quota constraints: rename clusters[%s].seeds config key to clusters[%s].constraints and convert seed file into constraint file; documentation at https://github.com/sapcc/limes/blob/master/docs/operators/constraints.md", clusterID, clusterID)
 			success = false
 		}
+
+		if cluster.CADF.Enabled && cluster.CADF.RabbitMQ.QueueName == "" {
+			missing("cadf.rabbitmq.queue_name")
+		}
 	}
 
 	if cfg.API.ListenAddress == "" {
