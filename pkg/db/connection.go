@@ -21,13 +21,14 @@ package db
 
 import (
 	"database/sql"
-	"errors"
 	"net/url"
+	"strconv"
 
 	gorp "gopkg.in/gorp.v2"
 
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/go-bits/secrets"
 )
 
 //DB holds the main database connection. It will be `nil` until InitDatabase() is called.
@@ -36,18 +37,39 @@ var DB *gorp.DbMap
 //Configuration is the section of the global configuration file that
 //contains the connection info for the Postgres database.
 type Configuration struct {
-	Location string `yaml:"location"`
+	Name              string               `yaml:"name"`
+	Username          string               `yaml:"username"`
+	Password          secrets.AuthPassword `yaml:"password"`
+	Hostname          string               `yaml:"hostname"`
+	Port              int                  `yaml:"port"`
+	ConnectionOptions string               `yaml:"connection_options"`
 }
 
 //Init initializes the connection to the database.
 func Init(cfg Configuration) error {
-	pgURL, err := url.Parse(cfg.Location)
-	if err != nil {
-		return errors.New("malformed URL in database.location: " + err.Error())
+	if cfg.Name == "" {
+		cfg.Name = "limes"
+	}
+	if cfg.Username == "" {
+		cfg.Username = "postgres"
+	}
+	if cfg.Hostname == "" {
+		cfg.Hostname = "localhost"
+	}
+	if cfg.Port == 0 {
+		cfg.Port = 5432
+	}
+
+	dbURL := &url.URL{
+		Scheme:   "postgres",
+		User:     url.UserPassword(cfg.Username, string(cfg.Password)),
+		Host:     cfg.Hostname + ":" + strconv.Itoa(cfg.Port),
+		Path:     cfg.Name,
+		RawQuery: cfg.ConnectionOptions,
 	}
 
 	db, err := easypg.Connect(easypg.Configuration{
-		PostgresURL: pgURL,
+		PostgresURL: dbURL,
 		Migrations:  SQLMigrations,
 	})
 	if err != nil {

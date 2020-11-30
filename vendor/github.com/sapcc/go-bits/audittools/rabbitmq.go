@@ -97,7 +97,8 @@ func (c *RabbitConnection) PublishEvent(event *cadf.Event) error {
 	if err != nil {
 		return err
 	}
-	return c.Channel.Publish(
+
+	err = c.Channel.Publish(
 		"",           // exchange: publish to default
 		c.Queue.Name, // routing key: same as queue name
 		false,        // mandatory: don't publish if no queue is bound that matches the routing key
@@ -107,4 +108,9 @@ func (c *RabbitConnection) PublishEvent(event *cadf.Event) error {
 			Body:        b,
 		},
 	)
+	if err == amqp.ErrClosed {
+		// channel/connection is not open
+		c.IsConnected = false
+	}
+	return err
 }

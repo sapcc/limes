@@ -3,9 +3,6 @@
 Limes requires a configuration file in [YAML format][yaml]. A minimal complete configuration could look like this:
 
 ```yaml
-database:
-  location: "postgres://postgres@localhost/limes"
-
 api:
   listen: "127.0.0.1:8080"
   policy: "/etc/limes/policy.json"
@@ -86,9 +83,22 @@ Read on for the full list and description of all configuration options.
 
 Configuration options relating to the database connection of all services.
 
-| Field | Required | Description |
+| Field | Default | Description |
 | --- | --- | --- |
-| `database.location` | yes | A [libpq connection URI][pq-uri] that locates the Limes database. The non-URI "connection string" format is not allowed; it must be a URI. |
+| `database.name` | `limes` | The name of the database. |
+| `database.username` | `postgres` | Username of the user that Limes should use to connect to the database. |
+| `database.password` | *(optional)* | Password for the specified user. |
+| `database.hostname` | `localhost` | Hostname of the database server. |
+| `database.port` | `5432` | Port on which the PostgreSQL service is running on. |
+| `database.connection_options` | *(optional)* | Database connection options. |
+
+Instead of providing `database.password` as plain text in the config file, you
+can use a special syntax to read the respective password from an exported
+environment variable:
+
+```yaml
+password: { fromEnv: ENVIRONMENT_VARIABLE }
+```
 
 ## Section "api"
 
@@ -126,6 +136,14 @@ Configuration options describing the OpenStack clusters which Limes shall cover.
 | `clusters.$id.auth.region_name` | no | In multi-region OpenStack clusters, this selects the region to work on. | `OS_REGION_NAME` |
 | `clusters.$id.auth.interface` | no | The endpoint type Limes should use for the OpenStack services. | `OS_INTERFACE` |
 
+Instead of providing `clusters.$id.auth.password` as plain text in the config
+file, you can use a special syntax to read the respective password from an
+exported environment variable:
+
+```yaml
+password: { fromEnv: ENVIRONMENT_VARIABLE }
+```
+
 | Field | Required | Description |
 | --- | --- | --- |
 | `clusters.$id.catalog_url` | no | URL of Limes API service as it appears in the Keystone service catalog for this cluster. This is only used for version advertisements, and can be omitted if no client relies on the URLs in these version advertisements. |
@@ -147,11 +165,14 @@ Configuration options describing the OpenStack clusters which Limes shall cover.
 
 Limes logs all quota changes at the domain and project level in an Open Standards [CADF format](https://www.dmtf.org/standards/cadf). These audit events can be sent to a RabbitMQ server which can then forward them to any cloud audit API, datastore, etc.
 
-| Field | Required | Description |
+| Field | Default | Description |
 | --- | --- | --- |
-| `clusters.$id.cadf.enabled` | no | Set this to true if you want to send the audit events to a RabbitMQ server. |
-| `clusters.$id.cadf.rabbitmq.url` | yes, if `enabled` is true | URI for establishing a connection to the RabbitMQ server as per the [AMQP URI format](https://www.rabbitmq.com/uri-spec.html). |
-| `clusters.$id.cadf.rabbitmq.queue_name` | yes, if `enabled` is true | Name for the queue that will hold the audit events. The events are published to the default exchange. |
+| `clusters.$id.cadf.enabled` | `false` | Set this to true if you want to send the audit events to a RabbitMQ server. |
+| `clusters.$id.cadf.rabbitmq.queue_name` | *(required, if `enabled` is true)* | Name for the queue that will hold the audit events. The events are published to the default exchange. |
+| `clusters.$id.cadf.rabbitmq.username` | *(optional)* | RabbitMQ Username. |
+| `clusters.$id.cadf.rabbitmq.password` | *(optional)* | Password for the specified user. |
+| `clusters.$id.cadf.rabbitmq.hostname` | `localhost` | Hostname of the RabbitMQ server. |
+| `clusters.$id.cadf.rabbitmq.port` | `5672` | Port number to which the underlying connection is made. |
 
 ### Low-privilege quota raising
 

@@ -69,11 +69,26 @@ func StartAuditTrail(configPerCluster map[string]core.CADFConfiguration) {
 			s := make(chan cadf.Event, 20)
 			eventSinkPerCluster[clusterID] = s
 
+			rabbitUserInfo := config.RabbitMQ.Username
+			if config.RabbitMQ.Password != "" {
+				rabbitUserInfo += ":" + string(config.RabbitMQ.Password)
+			}
+			if rabbitUserInfo != "" {
+				rabbitUserInfo += "@"
+			}
+			if config.RabbitMQ.Hostname == "" {
+				config.RabbitMQ.Hostname = "localhost"
+			}
+			if config.RabbitMQ.Port == 0 {
+				config.RabbitMQ.Port = 5672
+			}
+			rabbitURI := fmt.Sprintf("amqp://%s%s:%d/", rabbitUserInfo, config.RabbitMQ.Hostname, config.RabbitMQ.Port)
+
 			go audittools.AuditTrail{
 				EventSink:           s,
 				OnSuccessfulPublish: onSuccessFunc,
 				OnFailedPublish:     onFailFunc,
-			}.Commit(config.RabbitMQ.URL, config.RabbitMQ.QueueName)
+			}.Commit(rabbitURI, config.RabbitMQ.QueueName)
 		}
 	}
 }
