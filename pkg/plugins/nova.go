@@ -1,6 +1,6 @@
 /*******************************************************************************
 *
-* Copyright 2017 SAP SE
+* Copyright 2017-2020 SAP SE
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -141,6 +141,37 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.E
 			Unit:     limes.UnitNone,
 		})
 	}
+
+	//add price class resources if requested
+	if p.scrapeInstances && p.cfg.Compute.BigVMMinMemoryMiB != 0 {
+		p.resources = append(p.resources,
+			limes.ResourceInfo{
+				Name: "cores_regular",
+				Unit: limes.UnitNone,
+			},
+			limes.ResourceInfo{
+				Name: "cores_bigvm",
+				Unit: limes.UnitNone,
+			},
+			limes.ResourceInfo{
+				Name: "ram_regular",
+				Unit: limes.UnitMebibytes,
+			},
+			limes.ResourceInfo{
+				Name: "ram_bigvm",
+				Unit: limes.UnitMebibytes,
+			},
+		)
+		for _, res := range p.resources {
+			if res.Name == "cores" {
+				res.Contains = []string{"cores_regular", "cores_bigvm"}
+			}
+			if res.Name == "ram" {
+				res.Contains = []string{"ram_regular", "ram_bigvm"}
+			}
+		}
+	}
+
 	sort.Slice(p.resources, func(i, j int) bool {
 		return p.resources[i].Name < p.resources[j].Name
 	})
@@ -281,6 +312,8 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 
 	//the Queens branch of sapcc/nova sometimes does not report zero quotas,
 	//so make sure that all known resources are reflected
+	//
+	//(this also ensures that we have the {cores|ram}_{regular|bigvm} quotas for below)
 	for _, res := range p.resources {
 		if _, exists := result[res.Name]; !exists {
 			result[res.Name] = &core.ResourceData{
@@ -381,11 +414,11 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 					subResource["flavor"] = flavor.OriginalName
 					subResource["vcpu"] = flavor.VCPUs
 					subResource["ram"] = limes.ValueWithUnit{
-						Value: uint64(flavor.MemoryMiB),
+						Value: flavor.MemoryMiB,
 						Unit:  limes.UnitMebibytes,
 					}
 					subResource["disk"] = limes.ValueWithUnit{
-						Value: uint64(flavor.DiskGiB),
+						Value: flavor.DiskGiB,
 						Unit:  limes.UnitGibibytes,
 					}
 
@@ -403,6 +436,16 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 						hypervisorType := p.getHypervisorType(client, flavor)
 						subResource["hypervisor"] = hypervisorType
 						countsByHypervisor[hypervisorType]++
+					}
+
+					if p.cfg.Compute.BigVMMinMemoryMiB > 0 {
+						class := "regular"
+						if uint64(flavor.MemoryMiB) >= p.cfg.Compute.BigVMMinMemoryMiB {
+							class = "bigvm"
+						}
+						subResource["class"] = class
+						result["cores_"+class].Usage += flavor.VCPUs
+						result["ram_"+class].Usage += flavor.MemoryMiB
 					}
 				}
 

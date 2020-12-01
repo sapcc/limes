@@ -323,6 +323,33 @@ The area for this service is `compute`.
 | `server_groups` | countable |
 | `server_group_members` | countable |
 
+### Instance price classes
+
+```yaml
+services:
+  - type: compute
+    compute:
+      bigvm_min_memory: 1048576
+```
+
+Instances can be split into two price groups (regular and big VMs) by setting the `compute.bigvm_min_memory` key as
+shown above. When enabled, the following extra resources become available:
+
+| Resource | Unit |
+| --- | --- |
+| `cores_regular` | countable |
+| `cores_bigvm` | countable |
+| `ram_regular` | MiB |
+| `ram_bigvm` | MiB |
+
+Those resources don't track quota; only usage will be reported. The `cores` and `ram` resources will have a `contains`
+relation on their respective `_regular` and `_bigvm` resources.
+
+Note that, as of now, this configuration is laser-focused on one specific usecase in SAP Converged Cloud. It might
+become more generic once I have more than this singular usecase and a general pattern arises.
+
+### Instance subresources
+
 The `instances` resource supports subresource scraping. Subresources bear the following attributes:
 
 | Attribute | Type | Comment |
@@ -334,6 +361,7 @@ The `instances` resource supports subresource scraping. Subresources bear the fo
 | `ram` | integer value with unit | amount of memory configured in flavor |
 | `vcpu` | integer | number of vCPUs configured in flavor |
 | `disk` | integer value with unit | root disk size configured in flavor |
+| `class` | string | either "regular" or "bigvm" (only if instance price classes are enabled, see above) |
 | `os_type` | string | identifier for OS type as configured in image (see below) |
 | `hypervisor` | string | identifier for the hypervisor type of this instance (only if configured, see below) |
 
@@ -363,6 +391,8 @@ services:
 Rules are evaluated in the order given, and the first matching rule will be taken. If no rule matches, the hypervisor
 will be reported as `unknown`. If rules cannot be evaluated because the instance's flavor has been deleted, the
 hypervisor will be reported as `flavor-deleted`.
+
+### Separate instance quotas
 
 On SAP Converged Cloud (or any other OpenStack cluster where Nova carries the relevant patches), there will be an
 additional resource `instances_<flavorname>` for each flavor with the `quota:separate = true` extra spec. These resources

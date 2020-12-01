@@ -111,6 +111,7 @@ type ServiceConfiguration struct {
 	//name and put the config data in there (use a struct to be able to give
 	//config options meaningful names)
 	Compute struct {
+		BigVMMinMemoryMiB   uint64 `yaml:"bigvm_min_memory"`
 		HypervisorTypeRules []struct {
 			Key     string `yaml:"match"`
 			Pattern string `yaml:"pattern"`
