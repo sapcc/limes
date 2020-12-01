@@ -112,13 +112,20 @@ func ValidateProjectServices(tx *gorp.Transaction, cluster *core.Cluster, domain
 				res := db.ProjectResource{
 					ServiceID: srv.ID,
 					Name:      resourceName,
-					Quota:     *(serviceConstraints[resourceName].Minimum),
+					Quota:     serviceConstraints[resourceName].Minimum,
 					//Scrape() will fill in the remaining backend attributes, and it will
 					//also write the quotas into the backend.
 				}
+				zeroBackendQuota := int64(0)
+				res.BackendQuota = &zeroBackendQuota
+				if res.Quota == nil {
+					zeroQuota := uint64(0)
+					res.Quota = &zeroQuota
+				}
 				if project.HasBursting {
 					behavior := cluster.BehaviorForResource(serviceType, resourceName, domain.Name+"/"+project.Name)
-					res.DesiredBackendQuota = behavior.MaxBurstMultiplier.ApplyTo(res.Quota)
+					desiredBackendQuota := behavior.MaxBurstMultiplier.ApplyTo(*res.Quota)
+					res.DesiredBackendQuota = &desiredBackendQuota
 				} else {
 					res.DesiredBackendQuota = res.Quota
 				}
@@ -149,7 +156,7 @@ func checkProjectResourcesAgainstConstraint(tx *gorp.Transaction, cluster *core.
 
 	for _, res := range resources {
 		constraint := serviceConstraints[res.Name]
-		if constraint.Validate(res.Quota) != nil {
+		if res.Quota != nil && constraint.Validate(*res.Quota) != nil {
 			return false, nil
 		}
 	}

@@ -109,7 +109,7 @@ var clusterMockResources = &ClusterResourceReports{
 				Usage:    30,
 			},
 		},
-		DomainsQuota: 200,
+		DomainsQuota: p2u64(200),
 		Usage:        100,
 	},
 	"ram": &ClusterResourceReport{
@@ -118,7 +118,7 @@ var clusterMockResources = &ClusterResourceReports{
 			Unit: UnitMebibytes,
 		},
 		Capacity:     &ramCap,
-		DomainsQuota: 102400,
+		DomainsQuota: p2u64(102400),
 		Usage:        40800,
 	},
 }
@@ -156,6 +156,10 @@ var clusterServicesOnlyRates = &ClusterServiceReports{
 }
 
 func p2i64(val int64) *int64 {
+	return &val
+}
+
+func p2u64(val uint64) *uint64 {
 	return &val
 }
 

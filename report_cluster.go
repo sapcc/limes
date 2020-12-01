@@ -1,6 +1,6 @@
 /*******************************************************************************
 *
-* Copyright 2017-2019 SAP SE
+* Copyright 2017-2020 SAP SE
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -49,11 +49,12 @@ type ClusterServiceReport struct {
 //ClusterResourceReport is a substructure of ClusterReport containing data for
 //a single resource.
 type ClusterResourceReport struct {
+	//Several fields are pointers to values to enable precise control over which fields are rendered in output.
 	ResourceInfo
 	Capacity      *uint64                        `json:"capacity,omitempty"`
 	RawCapacity   *uint64                        `json:"raw_capacity,omitempty"`
 	CapacityPerAZ ClusterAvailabilityZoneReports `json:"per_availability_zone,omitempty"`
-	DomainsQuota  uint64                         `json:"domains_quota,keepempty"`
+	DomainsQuota  *uint64                        `json:"domains_quota,omitempty"`
 	Usage         uint64                         `json:"usage,keepempty"`
 	BurstUsage    uint64                         `json:"burst_usage,omitempty"`
 	PhysicalUsage *uint64                        `json:"physical_usage,omitempty"`

@@ -40,7 +40,7 @@ func ApplyBackendQuota(dbi db.Interface, cluster *core.Cluster, domain core.Keys
 
 	isRelevantResource := make(map[string]bool)
 	for _, res := range plugin.Resources() {
-		if !res.ExternallyManaged {
+		if !res.ExternallyManaged && !res.NoQuota {
 			isRelevantResource[res.Name] = true
 		}
 	}
@@ -59,16 +59,23 @@ func ApplyBackendQuota(dbi db.Interface, cluster *core.Cluster, domain core.Keys
 			continue
 		}
 
-		desiredQuota := res.Quota
+		//NOTE: This may panic if a resource is not NoQuota, but its
+		//ProjectResource contains any NULL quota values. I considered putting
+		//validations in here to orderly log an error, but then the problem could
+		//go unnoticed for quite some time. Crashing ensures that we notice the
+		//problem sooner.
+
+		desiredQuota := *res.Quota
 		if project.HasBursting {
 			behavior := cluster.BehaviorForResource(serviceType, res.Name, domain.Name+"/"+project.Name)
-			desiredQuota = behavior.MaxBurstMultiplier.ApplyTo(res.Quota)
+			desiredQuota = behavior.MaxBurstMultiplier.ApplyTo(*res.Quota)
 		}
 		quotaValues[res.Name] = desiredQuota
 
-		if res.BackendQuota < 0 || desiredQuota != uint64(res.BackendQuota) || desiredQuota != res.DesiredBackendQuota {
-			res.DesiredBackendQuota = desiredQuota
-			res.BackendQuota = int64(desiredQuota)
+		if *res.BackendQuota < 0 || desiredQuota != uint64(*res.BackendQuota) || desiredQuota != *res.DesiredBackendQuota {
+			res.DesiredBackendQuota = &desiredQuota
+			desiredQuotaInt64 := int64(desiredQuota)
+			res.BackendQuota = &desiredQuotaInt64
 			resourcesToUpdate = append(resourcesToUpdate, res)
 		}
 	}

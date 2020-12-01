@@ -574,8 +574,8 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			projectUUID   string
 			serviceType   string
 			resourceName  string
-			quota         uint64
-			backendQuota  int64
+			quota         *uint64
+			backendQuota  *int64
 			usage         uint64
 			physicalUsage *uint64
 		)
@@ -584,19 +584,23 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			return err
 		}
 
-		if c.ReportZeroes || quota != 0 {
-			ch <- prometheus.MustNewConstMetric(
-				projectQuotaDesc,
-				prometheus.GaugeValue, float64(quota),
-				c.Cluster.ID, domainName, domainUUID, projectName, projectUUID, serviceType, resourceName,
-			)
+		if quota != nil {
+			if c.ReportZeroes || *quota != 0 {
+				ch <- prometheus.MustNewConstMetric(
+					projectQuotaDesc,
+					prometheus.GaugeValue, float64(*quota),
+					c.Cluster.ID, domainName, domainUUID, projectName, projectUUID, serviceType, resourceName,
+				)
+			}
 		}
-		if c.ReportZeroes || backendQuota != 0 {
-			ch <- prometheus.MustNewConstMetric(
-				projectBackendQuotaDesc,
-				prometheus.GaugeValue, float64(backendQuota),
-				c.Cluster.ID, domainName, domainUUID, projectName, projectUUID, serviceType, resourceName,
-			)
+		if backendQuota != nil {
+			if c.ReportZeroes || *backendQuota != 0 {
+				ch <- prometheus.MustNewConstMetric(
+					projectBackendQuotaDesc,
+					prometheus.GaugeValue, float64(*backendQuota),
+					c.Cluster.ID, domainName, domainUUID, projectName, projectUUID, serviceType, resourceName,
+				)
+			}
 		}
 		if c.ReportZeroes || usage != 0 {
 			ch <- prometheus.MustNewConstMetric(

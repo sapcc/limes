@@ -1,6 +1,6 @@
 /*******************************************************************************
 *
-* Copyright 2018 SAP SE
+* Copyright 2018-2020 SAP SE
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -56,8 +56,8 @@ type ProjectServiceReport struct {
 type ProjectResourceReport struct {
 	//Several fields are pointers to values to enable precise control over which fields are rendered in output.
 	ResourceInfo
-	Quota         uint64           `json:"quota,keepempty"`
-	UsableQuota   uint64           `json:"usable_quota,keepempty"`
+	Quota         *uint64          `json:"quota,omitempty"`
+	UsableQuota   *uint64          `json:"usable_quota,omitempty"`
 	Usage         uint64           `json:"usage,keepempty"`
 	BurstUsage    uint64           `json:"burst_usage,omitempty"`
 	PhysicalUsage *uint64          `json:"physical_usage,omitempty"`

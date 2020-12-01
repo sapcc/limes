@@ -226,7 +226,15 @@ func compileQuotaConstraints(cluster *Cluster, data map[string]map[string]string
 		values[serviceType] = make(map[string]QuotaConstraint)
 
 		for resourceName, constraintStr := range serviceData {
+			if !cluster.HasResource(serviceType, resourceName) {
+				errors = append(errors, fmt.Errorf("no such resource: %s/%s", serviceType, resourceName))
+				continue
+			}
 			resource := cluster.InfoForResource(serviceType, resourceName)
+			if resource.NoQuota {
+				errors = append(errors, fmt.Errorf("resource %s/%s does not track quota", serviceType, resourceName))
+				continue
+			}
 
 			var projectMinimumsSum *uint64
 			if projectsConstraints != nil {

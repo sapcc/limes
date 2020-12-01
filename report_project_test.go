@@ -117,16 +117,16 @@ var projectMockResources = &ProjectResourceReports{
 			Name: "capacity",
 			Unit: UnitBytes,
 		},
-		Quota:       10,
-		UsableQuota: 11,
+		Quota:       p2u64(10),
+		UsableQuota: p2u64(11),
 		Usage:       2,
 	},
 	"things": &ProjectResourceReport{
 		ResourceInfo: ResourceInfo{
 			Name: "things",
 		},
-		Quota:       10,
-		UsableQuota: 10,
+		Quota:       p2u64(10),
+		UsableQuota: p2u64(10),
 		Usage:       2,
 	},
 }

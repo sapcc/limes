@@ -1,6 +1,6 @@
 /*******************************************************************************
 *
-* Copyright 2017 SAP SE
+* Copyright 2017-2020 SAP SE
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -45,8 +45,14 @@ type Plugin struct {
 
 var resources = []limes.ResourceInfo{
 	{
-		Name: "capacity",
-		Unit: limes.UnitBytes,
+		Name:     "capacity",
+		Unit:     limes.UnitBytes,
+		Contains: []string{"capacity_portion"},
+	},
+	{
+		Name:    "capacity_portion",
+		Unit:    limes.UnitBytes,
+		NoQuota: true,
 	},
 	{
 		Name: "things",
@@ -154,6 +160,11 @@ func (p *Plugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.End
 		if key == "capacity" {
 			physUsage := val.Usage / 2
 			copyOfVal.PhysicalUsage = &physUsage
+
+			//derive a resource that does not track quota
+			result["capacity_portion"] = core.ResourceData{
+				Usage: val.Usage / 4,
+			}
 		}
 
 		result[key] = copyOfVal

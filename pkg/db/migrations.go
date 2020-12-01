@@ -216,4 +216,14 @@ var SQLMigrations = map[string]string{
 		ALTER TABLE project_services ADD COLUMN rates_scrape_duration_secs REAL NOT NULL DEFAULT 0;
 		ALTER TABLE project_services ADD COLUMN rates_scrape_state TEXT NOT NULL DEFAULT '';
 	`,
+	"016_resources_without_quota.down.sql": `
+		ALTER TABLE project_resources ALTER COLUMN quota                 SET NOT NULL;
+		ALTER TABLE project_resources ALTER COLUMN backend_quota         SET NOT NULL;
+		ALTER TABLE project_resources ALTER COLUMN desired_backend_quota SET NOT NULL;
+	`,
+	"016_resources_without_quota.up.sql": `
+		ALTER TABLE project_resources ALTER COLUMN quota                 DROP NOT NULL;
+		ALTER TABLE project_resources ALTER COLUMN backend_quota         DROP NOT NULL;
+		ALTER TABLE project_resources ALTER COLUMN desired_backend_quota DROP NOT NULL;
+	`,
 }

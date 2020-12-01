@@ -1,6 +1,6 @@
 /*******************************************************************************
 *
-* Copyright 2017 SAP SE
+* Copyright 2017-2020 SAP SE
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -147,8 +147,8 @@ func GetClusters(config core.Configuration, clusterID *string, dbi db.Interface,
 			}
 
 			if resource != nil {
-				if projectsQuota != nil && resource.ExternallyManaged {
-					resource.DomainsQuota = *projectsQuota
+				if projectsQuota != nil && resource.ExternallyManaged && !resource.NoQuota {
+					resource.DomainsQuota = projectsQuota
 				}
 				if usage != nil {
 					resource.Usage = *usage
@@ -183,8 +183,8 @@ func GetClusters(config core.Configuration, clusterID *string, dbi db.Interface,
 
 			_, _, resource := clusters.Find(config, clusterID, serviceType, resourceName)
 
-			if resource != nil && quota != nil && !resource.ExternallyManaged {
-				resource.DomainsQuota = *quota
+			if resource != nil && quota != nil && !resource.ExternallyManaged && !resource.NoQuota {
+				resource.DomainsQuota = quota
 			}
 
 			return nil
@@ -349,8 +349,8 @@ func GetClusters(config core.Configuration, clusterID *string, dbi db.Interface,
 						if isSharedService[service.Type] && sharedQuotaSums[service.Type] != nil {
 							for _, resource := range service.Resources {
 								quota, exists := sharedQuotaSums[service.Type][resource.Name]
-								if exists {
-									resource.DomainsQuota = quota
+								if exists && !resource.NoQuota {
+									resource.DomainsQuota = &quota
 								}
 								u, exists := sharedUsageSums[service.Type][resource.Name]
 								if exists {

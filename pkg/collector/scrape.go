@@ -194,29 +194,38 @@ func (c *Collector) writeScrapeResult(domain core.KeystoneDomain, projectName, p
 
 		//check if we need to enforce a constraint
 		constraint := serviceConstraints[res.Name]
-		if constraint.Validate(res.Quota) != nil {
+		if res.Quota != nil && constraint.Validate(*res.Quota) != nil {
 			resInfo := c.Cluster.InfoForResource(serviceType, res.Name)
-			newQuota := constraint.ApplyTo(res.Quota)
+			newQuota := constraint.ApplyTo(*res.Quota)
 			logg.Info("changing %s/%s quota for project %s/%s from %s to %s to satisfy constraint %q",
 				serviceType, res.Name, domain.Name, projectName,
-				limes.ValueWithUnit{Value: res.Quota, Unit: resInfo.Unit},
+				limes.ValueWithUnit{Value: *res.Quota, Unit: resInfo.Unit},
 				limes.ValueWithUnit{Value: newQuota, Unit: resInfo.Unit},
 				constraint.String(),
 			)
-			res.Quota = newQuota
+			res.Quota = &newQuota
 		}
 
 		//update existing resource record
+		resInfo := c.Cluster.InfoForResource(serviceType, res.Name)
 		res.Usage = data.Usage
 		res.PhysicalUsage = data.PhysicalUsage
-		res.BackendQuota = data.Quota
-		if c.Cluster.InfoForResource(serviceType, res.Name).ExternallyManaged {
-			if data.Quota >= 0 {
-				res.Quota = uint64(data.Quota)
-			} else {
-				res.Quota = math.MaxUint64
+		if resInfo.NoQuota {
+			res.Quota = nil
+			res.BackendQuota = nil
+			res.DesiredBackendQuota = nil
+		} else {
+			res.BackendQuota = &data.Quota
+			if resInfo.ExternallyManaged {
+				if data.Quota >= 0 {
+					quota := uint64(data.Quota)
+					res.Quota = &quota
+				} else {
+					infQuota := uint64(math.MaxUint64)
+					res.Quota = &infQuota
+				}
+				res.DesiredBackendQuota = res.Quota
 			}
-			res.DesiredBackendQuota = res.Quota
 		}
 
 		if len(data.Subresources) == 0 {
@@ -258,35 +267,41 @@ func (c *Collector) writeScrapeResult(domain core.KeystoneDomain, projectName, p
 		res := &db.ProjectResource{
 			ServiceID:        serviceID,
 			Name:             resMetadata.Name,
-			Quota:            initialQuota,
+			Quota:            &initialQuota,
 			Usage:            data.Usage,
 			PhysicalUsage:    data.PhysicalUsage,
-			BackendQuota:     data.Quota,
+			BackendQuota:     &data.Quota,
 			SubresourcesJSON: "", //but see below
 		}
 
-		if res.Quota == 0 && data.Quota > 0 && uint64(data.Quota) == resMetadata.AutoApproveInitialQuota {
-			res.Quota = resMetadata.AutoApproveInitialQuota
-
-			logg.Other("AUDIT", fmt.Sprintf("set quota %s/%s = 0 -> %d for project %s through auto-approval",
-				serviceType, resMetadata.Name, res.Quota, projectUUID),
-			)
-		}
-
-		if projectHasBursting {
-			behavior := c.Cluster.BehaviorForResource(serviceType, resMetadata.Name, domain.Name+"/"+projectName)
-			res.DesiredBackendQuota = behavior.MaxBurstMultiplier.ApplyTo(res.Quota)
-		} else {
-			res.DesiredBackendQuota = res.Quota
-		}
-
-		if resMetadata.ExternallyManaged {
+		if resMetadata.NoQuota {
+			res.Quota = nil
+			res.BackendQuota = nil
+		} else if resMetadata.ExternallyManaged {
 			if data.Quota >= 0 {
-				res.Quota = uint64(data.Quota)
+				quota := uint64(data.Quota)
+				res.Quota = &quota
 			} else {
-				res.Quota = math.MaxUint64
+				infQuota := uint64(math.MaxUint64)
+				res.Quota = &infQuota
 			}
 			res.DesiredBackendQuota = res.Quota
+		} else {
+			if *res.Quota == 0 && data.Quota > 0 && uint64(data.Quota) == resMetadata.AutoApproveInitialQuota {
+				res.Quota = &resMetadata.AutoApproveInitialQuota
+
+				logg.Other("AUDIT", fmt.Sprintf("set quota %s/%s = 0 -> %d for project %s through auto-approval",
+					serviceType, resMetadata.Name, res.Quota, projectUUID),
+				)
+			}
+
+			if projectHasBursting {
+				behavior := c.Cluster.BehaviorForResource(serviceType, resMetadata.Name, domain.Name+"/"+projectName)
+				desiredBackendQuota := behavior.MaxBurstMultiplier.ApplyTo(*res.Quota)
+				res.DesiredBackendQuota = &desiredBackendQuota
+			} else {
+				res.DesiredBackendQuota = res.Quota
+			}
 		}
 
 		if len(data.Subresources) != 0 {
@@ -392,21 +407,28 @@ func (c *Collector) writeDummyResources(domain core.KeystoneDomain, projectName 
 			initialQuota = *constraint.Minimum
 		}
 
+		dummyBackendQuota := int64(-1)
 		res := &db.ProjectResource{
 			ServiceID:        serviceID,
 			Name:             resMetadata.Name,
-			Quota:            initialQuota,
+			Quota:            &initialQuota,
 			Usage:            0,
 			PhysicalUsage:    nil,
-			BackendQuota:     -1,
+			BackendQuota:     &dummyBackendQuota,
 			SubresourcesJSON: "",
 		}
 
-		if projectHasBursting {
-			behavior := c.Cluster.BehaviorForResource(serviceType, resMetadata.Name, domain.Name+"/"+projectName)
-			res.DesiredBackendQuota = behavior.MaxBurstMultiplier.ApplyTo(res.Quota)
+		if resMetadata.NoQuota {
+			res.Quota = nil
+			res.BackendQuota = nil
 		} else {
-			res.DesiredBackendQuota = res.Quota
+			if projectHasBursting {
+				behavior := c.Cluster.BehaviorForResource(serviceType, resMetadata.Name, domain.Name+"/"+projectName)
+				desiredBackendQuota := behavior.MaxBurstMultiplier.ApplyTo(*res.Quota)
+				res.DesiredBackendQuota = &desiredBackendQuota
+			} else {
+				res.DesiredBackendQuota = res.Quota
+			}
 		}
 
 		err = tx.Insert(res)

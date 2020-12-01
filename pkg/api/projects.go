@@ -316,7 +316,7 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 				if !exists {
 					continue
 				}
-				if res.Quota == req.NewValue {
+				if res.Quota != nil && *res.Quota == req.NewValue {
 					continue //nothing to do
 				}
 
@@ -325,7 +325,7 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 				//contain only identical pointers)
 				res := res
 
-				res.Quota = req.NewValue
+				res.Quota = &req.NewValue
 				resourcesToUpdate = append(resourcesToUpdate, &res)
 				servicesToUpdate[srv.Type] = true
 			}

@@ -10,10 +10,18 @@
           {
             "name": "capacity",
             "unit": "B",
+            "contains": [
+              "capacity_portion"
+            ],
             "quota": 25,
             "projects_quota": 20,
             "usage": 4,
             "backend_quota": 110
+          },
+          {
+            "name": "capacity_portion",
+            "unit": "B",
+            "usage": 2
           },
           {
             "name": "external_things",
@@ -49,9 +57,17 @@
           {
             "name": "capacity",
             "unit": "B",
+            "contains": [
+              "capacity_portion"
+            ],
             "quota": 45,
             "projects_quota": 20,
             "usage": 4
+          },
+          {
+            "name": "capacity_portion",
+            "unit": "B",
+            "usage": 2
           },
           {
             "name": "things",

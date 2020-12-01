@@ -654,6 +654,26 @@ func Test_DomainOperations(t *testing.T) {
 		},
 	}.Check(t, router)
 
+	//check PutDomain with resource that does not track quota
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany",
+		ExpectStatus: 403,
+		ExpectBody:   assert.StringData("cannot change shared/capacity_portion quota: resource does not track quota\n"),
+		Body: assert.JSONObject{
+			"domain": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "shared",
+						"resources": []assert.JSONObject{
+							{"name": "capacity_portion", "quota": 1},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+
 	//check PutDomain happy path
 	assert.HTTPRequest{
 		Method:       "PUT",
@@ -1202,6 +1222,26 @@ func Test_ProjectOperations(t *testing.T) {
 						"type": "shared",
 						"resources": []assert.JSONObject{
 							{"name": "unknown", "quota": 100},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+
+	//check PutProject with resource that does not track quota
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 403,
+		ExpectBody:   assert.StringData("cannot change shared/capacity_portion quota: resource does not track quota\n"),
+		Body: assert.JSONObject{
+			"project": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "shared",
+						"resources": []assert.JSONObject{
+							{"name": "capacity_portion", "quota": 1},
 						},
 					},
 				},

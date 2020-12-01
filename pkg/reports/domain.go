@@ -1,6 +1,6 @@
 /*******************************************************************************
 *
-* Copyright 2017 SAP SE
+* Copyright 2017-2020 SAP SE
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -132,14 +132,16 @@ func GetDomains(cluster *core.Cluster, domainID *int64, dbi db.Interface, filter
 			if clusterCanBurst && burstUsage != nil {
 				resource.BurstUsage = *burstUsage
 			}
-			if projectsQuota != nil {
-				resource.ProjectsQuota = *projectsQuota
-				if backendQuota != nil && *projectsQuota != *backendQuota {
-					resource.BackendQuota = backendQuota
+			if !resource.NoQuota {
+				if projectsQuota != nil {
+					resource.ProjectsQuota = projectsQuota
+					if backendQuota != nil && *projectsQuota != *backendQuota {
+						resource.BackendQuota = backendQuota
+					}
 				}
-			}
-			if infiniteBackendQuota != nil && *infiniteBackendQuota {
-				resource.InfiniteBackendQuota = infiniteBackendQuota
+				if infiniteBackendQuota != nil && *infiniteBackendQuota {
+					resource.InfiniteBackendQuota = infiniteBackendQuota
+				}
 			}
 			if showPhysicalUsage != nil && *showPhysicalUsage {
 				resource.PhysicalUsage = physicalUsage
@@ -172,8 +174,8 @@ func GetDomains(cluster *core.Cluster, domainID *int64, dbi db.Interface, filter
 
 		_, _, resource := domains.Find(cluster, domainUUID, domainName, serviceType, resourceName)
 
-		if resource != nil && quota != nil {
-			resource.DomainQuota = *quota
+		if resource != nil && quota != nil && !resource.NoQuota {
+			resource.DomainQuota = quota
 		}
 
 		return nil
@@ -187,7 +189,7 @@ func GetDomains(cluster *core.Cluster, domainID *int64, dbi db.Interface, filter
 	for _, domain := range domains {
 		for _, srv := range domain.Services {
 			for _, res := range srv.Resources {
-				if res.ResourceInfo.ExternallyManaged {
+				if res.ExternallyManaged && !res.NoQuota {
 					res.DomainQuota = res.ProjectsQuota
 				}
 			}
@@ -251,6 +253,11 @@ func (d domains) Find(cluster *core.Cluster, domainUUID, domainName string, serv
 			ResourceInfo: cluster.InfoForResource(*serviceType, *resourceName),
 			Scaling:      behavior.ToScalingBehavior(),
 			Annotations:  behavior.Annotations,
+		}
+		if !resource.NoQuota {
+			//this default is used when no `domain_resources` entry exists for this resource
+			defaultQuota := uint64(0)
+			resource.DomainQuota = &defaultQuota
 		}
 		service.Resources[*resourceName] = resource
 	}

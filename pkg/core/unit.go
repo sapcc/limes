@@ -46,6 +46,9 @@ type LowPrivilegeRaiseLimit struct {
 //Evaluate converts this limit into an absolute value.
 func (l LowPrivilegeRaiseLimit) Evaluate(clusterReport limes.ClusterResourceReport, oldQuota uint64) uint64 {
 	switch {
+	case clusterReport.DomainsQuota == nil:
+		//defense in depth - we shouldn't be considering LPR limits at all for resources that don't track quota
+		return 0
 	case l.AbsoluteValue != 0:
 		return l.AbsoluteValue
 	case l.PercentOfClusterCapacity != 0:
@@ -59,7 +62,7 @@ func (l LowPrivilegeRaiseLimit) Evaluate(clusterReport limes.ClusterResourceRepo
 			return 0
 		}
 		percent := l.UntilPercentOfClusterCapacityAssigned / 100
-		otherDomainsQuota := float64(clusterReport.DomainsQuota - oldQuota)
+		otherDomainsQuota := float64(*clusterReport.DomainsQuota - oldQuota)
 		return uint64(percent*float64(*clusterReport.Capacity) - otherDomainsQuota)
 	default:
 		return 0

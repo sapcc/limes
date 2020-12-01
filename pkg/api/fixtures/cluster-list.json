@@ -12,10 +12,18 @@
             {
               "name": "capacity",
               "unit": "B",
+              "contains": [
+                "capacity_portion"
+              ],
               "capacity": 185,
               "domains_quota": 50,
               "usage": 8,
               "physical_usage": 7
+            },
+            {
+              "name": "capacity_portion",
+              "unit": "B",
+              "usage": 4
             },
             {
               "name": "external_things",
@@ -40,10 +48,18 @@
             {
               "name": "capacity",
               "unit": "B",
+              "contains": [
+                "capacity_portion"
+              ],
               "capacity": 1000,
               "domains_quota": 15,
               "usage": 2,
               "physical_usage": 1
+            },
+            {
+              "name": "capacity_portion",
+              "unit": "B",
+              "usage": 1
             },
             {
               "name": "things",
@@ -70,10 +86,18 @@
             {
               "name": "capacity",
               "unit": "B",
+              "contains": [
+                "capacity_portion"
+              ],
               "capacity": 185,
               "domains_quota": 50,
               "usage": 8,
               "physical_usage": 7
+            },
+            {
+              "name": "capacity_portion",
+              "unit": "B",
+              "usage": 4
             },
             {
               "name": "external_things",
@@ -100,8 +124,16 @@
             {
               "name": "capacity",
               "unit": "B",
+              "contains": [
+                "capacity_portion"
+              ],
               "domains_quota": 100,
               "usage": 6
+            },
+            {
+              "name": "capacity_portion",
+              "unit": "B",
+              "usage": 3
             },
             {
               "name": "things",

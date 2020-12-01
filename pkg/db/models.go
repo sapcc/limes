@@ -88,15 +88,16 @@ type ProjectService struct {
 	RatesScrapeState        string     `db:"rates_scrape_state"`
 }
 
-//ProjectResource contains a record from the `project_resources` table.
+//ProjectResource contains a record from the `project_resources` table. Quota
+//values are NULL for resources that do not track quota.
 type ProjectResource struct {
 	ServiceID           int64   `db:"service_id"`
 	Name                string  `db:"name"`
-	Quota               uint64  `db:"quota"`
+	Quota               *uint64 `db:"quota"`
 	Usage               uint64  `db:"usage"`
 	PhysicalUsage       *uint64 `db:"physical_usage"`
-	BackendQuota        int64   `db:"backend_quota"`
-	DesiredBackendQuota uint64  `db:"desired_backend_quota"`
+	BackendQuota        *int64  `db:"backend_quota"`
+	DesiredBackendQuota *uint64 `db:"desired_backend_quota"`
 	SubresourcesJSON    string  `db:"subresources"`
 }
 

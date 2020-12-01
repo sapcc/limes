@@ -5,13 +5,12 @@ INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (1, 'west
 INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (2, 'shared', 'shared',   UNIX(1100));
 INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (3, 'east',   'unshared', UNIX(1200));
 
--- both services have the resources "things" and "capacity"; we can only scrape capacity for "things"...
+-- both services have the resources "things" and "capacity"
 INSERT INTO cluster_resources (service_id, name, capacity, subcapacities, capacity_per_az) VALUES (1, 'things', 139, '[{"smaller_half":46},{"larger_half":93}]', '[{"name":"az-one","capacity":69,"usage":13},{"name":"az-two","capacity":69,"usage":13}]');
 INSERT INTO cluster_resources (service_id, name, capacity, subcapacities, capacity_per_az) VALUES (2, 'things', 246, '[{"smaller_half":82},{"larger_half":164}]', '');
 INSERT INTO cluster_resources (service_id, name, capacity, subcapacities, capacity_per_az) VALUES (3, 'things', 385, '[{"smaller_half":128},{"larger_half":257}]', '');
--- ...BUT we have manually-maintained capacity values for some of the "capacity" resources
-INSERT INTO cluster_resources (service_id, name, capacity, subcapacities) VALUES (2, 'capacity', 185, '');
-INSERT INTO cluster_resources (service_id, name, capacity, subcapacities) VALUES (3, 'capacity', 1000, '');
+INSERT INTO cluster_resources (service_id, name, capacity, subcapacities, capacity_per_az) VALUES (2, 'capacity', 185, '', '');
+INSERT INTO cluster_resources (service_id, name, capacity, subcapacities, capacity_per_az) VALUES (3, 'capacity', 1000, '', '');
 
 -- "west" has two domains, "east" has one domain
 INSERT INTO domains (id, cluster_id, name, uuid) VALUES (1, 'west', 'germany', 'uuid-for-germany');
@@ -26,7 +25,7 @@ INSERT INTO domain_services (id, domain_id, type) VALUES (4, 2, 'shared');
 INSERT INTO domain_services (id, domain_id, type) VALUES (5, 3, 'unshared');
 INSERT INTO domain_services (id, domain_id, type) VALUES (6, 3, 'shared');
 
--- domain_resources has some holes where no domain quotas have been set yet
+-- domain_resources has some holes where no domain quotas have been set yet (and we don't have anything for "capacity_portion" since it's NoQuota)
 INSERT INTO domain_resources (service_id, name, quota) VALUES (1, 'things',   50);
 INSERT INTO domain_resources (service_id, name, quota) VALUES (1, 'capacity', 45);
 INSERT INTO domain_resources (service_id, name, quota) VALUES (2, 'things',   30);
@@ -59,26 +58,34 @@ INSERT INTO project_services (id, project_id, type, scraped_at, rates_scraped_at
 -- berlin (also used for test cases concerning subresources)
 INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (1, 'things',   10, 2, 10, '[{"id":"firstthing","value":23},{"id":"secondthing","value":42}]', 10, NULL);
 INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (1, 'capacity', 10, 2, 10, '', 10, NULL);
+INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (1, 'capacity_portion', NULL, 1, NULL, '', NULL, NULL);
 INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (2, 'things',   10, 2, 10, '[{"id":"thirdthing","value":5},{"id":"fourththing","value":123}]', 10, NULL);
 INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (2, 'capacity', 10, 2, 10, '', 10, NULL);
+INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (2, 'capacity_portion', NULL, 1, NULL, '', NULL, NULL);
 INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (2, 'external_things', 1, 0, 1, '', 10, NULL);
 -- dresden (backend quota for shared/capacity mismatches approved quota and exceeds domain quota)
 INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (3, 'things',   10, 2, 10, '', 10, NULL);
 INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (3, 'capacity', 10, 2, 10, '', 10, NULL);
+INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (3, 'capacity_portion', NULL, 1, NULL, '', NULL, NULL);
 INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (4, 'things',   10, 2, 10, '', 10, NULL);
 INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (4, 'capacity', 10, 2, 100, '', 10, NULL);
+INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (4, 'capacity_portion', NULL, 1, NULL, '', NULL, NULL);
 INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (4, 'external_things', 1, 0, 1, '', 10, NULL);
 -- paris (infinite backend quota for unshared/things)
 INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (5, 'things',   10, 2, -1, '', 10, NULL);
 INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (5, 'capacity', 10, 2, 10, '', 10, NULL);
+INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (5, 'capacity_portion', NULL, 1, NULL, '', NULL, NULL);
 INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (6, 'things',   10, 2, 10, '', 10, NULL);
 INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (6, 'capacity', 10, 2, 10, '', 10, NULL);
+INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (6, 'capacity_portion', NULL, 1, NULL, '', NULL, NULL);
 INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (6, 'external_things', 1, 0, 1, '', 10, NULL);
 -- warsaw (only project with non-null physical_usage (for shared/capacity and unshared/capacity); all other projects should report physical_usage = usage in aggregations)
 INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (7, 'things',   10, 2, 10, '', 10, NULL);
 INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (7, 'capacity', 10, 2, 10, '', 10, 1);
+INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (7, 'capacity_portion', NULL, 1, NULL, '', NULL, NULL);
 INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (8, 'things',   10, 2, 10, '', 10, NULL);
 INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (8, 'capacity', 10, 2, 10, '', 10, 1);
+INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (8, 'capacity_portion', NULL, 1, NULL, '', NULL, NULL);
 INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (8, 'external_things', 1, 0, 1, '', 10, NULL);
 
 -- project_rates also has multiple different setups to test different cases
@@ -110,6 +117,7 @@ INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, su
 
 INSERT INTO domain_resources (service_id, name, quota) VALUES (1, 'items', 1);
 INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (1, 'items', 2, 1, 2, '', 2, 1);
+INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (1, 'items_portion', NULL, 1, NULL, '', NULL, NULL);
 
 INSERT INTO project_rates (service_id, name, rate_limit, window_ns, usage_as_bigint) VALUES (1, 'service/unshared/instances:frobnicate', 5, 1000000000, '');
 INSERT INTO project_rates (service_id, name, rate_limit, window_ns, usage_as_bigint) VALUES (2, 'service/shared/objects:frobnicate', 5, 1000000000, '');

@@ -186,33 +186,47 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 				}
 			}
 
-			req := QuotaRequest{
-				OldValue: domRes.DomainQuota,
-				Unit:     domRes.Unit,
-			}
-			if u.Project != nil {
-				req.OldValue = projRes.Quota
-			}
-
-			//convert given value to correct unit
+			//skip resources where no new quota was requested
 			newQuota, exists := input[srv.Type].Resources[res.Name]
 			if !exists {
 				continue
 			}
-			req.NewValue, err = core.ConvertUnitFor(u.Cluster, srv.Type, res.Name, newQuota)
-			if err != nil {
+
+			req := QuotaRequest{
+				Unit: domRes.Unit,
+			}
+			var oldValueAsPtr *uint64
+			if u.Project == nil {
+				oldValueAsPtr = domRes.DomainQuota
+			} else {
+				oldValueAsPtr = projRes.Quota
+			}
+			if oldValueAsPtr == nil || domRes.NoQuota {
 				req.ValidationError = &core.QuotaValidationError{
-					Status:  http.StatusUnprocessableEntity,
-					Message: err.Error(),
+					Status:  http.StatusForbidden,
+					Message: "resource does not track quota",
 				}
 			} else {
-				//skip this resource entirely if no change is requested
-				if req.OldValue == req.NewValue {
-					continue //with next resource
+				req.OldValue = *oldValueAsPtr
+			}
+
+			//convert given value to correct unit
+			if req.ValidationError == nil {
+				req.NewValue, err = core.ConvertUnitFor(u.Cluster, srv.Type, res.Name, newQuota)
+				if err != nil {
+					req.ValidationError = &core.QuotaValidationError{
+						Status:  http.StatusUnprocessableEntity,
+						Message: err.Error(),
+					}
+				} else {
+					//skip this resource entirely if no change is requested
+					if req.OldValue == req.NewValue {
+						continue //with next resource
+					}
+					//value is valid and novel -> perform further validation
+					behavior := u.Cluster.BehaviorForResource(srv.Type, res.Name, u.ScopeName())
+					req.ValidationError = u.validateQuota(srv, res, behavior, *clusterRes, *domRes, projRes, req.OldValue, req.NewValue)
 				}
-				//value is valid and novel -> perform further validation
-				behavior := u.Cluster.BehaviorForResource(srv.Type, res.Name, u.ScopeName())
-				req.ValidationError = u.validateQuota(srv, res, behavior, *clusterRes, *domRes, projRes, req.NewValue)
 			}
 
 			u.ResourceRequests[srv.Type][res.Name] = req
@@ -302,7 +316,7 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 	return nil
 }
 
-func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limes.ResourceInfo, behavior core.ResourceBehavior, clusterRes limes.ClusterResourceReport, domRes limes.DomainResourceReport, projRes *limes.ProjectResourceReport, newQuota uint64) *core.QuotaValidationError {
+func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limes.ResourceInfo, behavior core.ResourceBehavior, clusterRes limes.ClusterResourceReport, domRes limes.DomainResourceReport, projRes *limes.ProjectResourceReport, oldQuota, newQuota uint64) *core.QuotaValidationError {
 	//can we change this quota at all?
 	if res.ExternallyManaged {
 		return &core.QuotaValidationError{
@@ -330,16 +344,11 @@ func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limes.ResourceInf
 	}
 
 	//check authorization for quota change
-	var (
-		oldQuota uint64
-		lprLimit uint64
-	)
+	var lprLimit uint64
 	if u.Project == nil {
-		oldQuota = domRes.DomainQuota
 		limitSpec := u.Cluster.LowPrivilegeRaise.LimitsForDomains[srv.Type][res.Name]
 		lprLimit = limitSpec.Evaluate(clusterRes, oldQuota)
 	} else {
-		oldQuota = projRes.Quota
 		if u.Cluster.Config.LowPrivilegeRaise.IsAllowedForProjectsIn(u.Domain.Name) {
 			limitSpec := u.Cluster.LowPrivilegeRaise.LimitsForProjects[srv.Type][res.Name]
 			lprLimit = limitSpec.Evaluate(clusterRes, oldQuota)
@@ -402,14 +411,21 @@ func (u QuotaUpdater) validateAuthorization(srv limes.ServiceInfo, oldQuota, new
 }
 
 func (u QuotaUpdater) validateDomainQuota(report limes.DomainResourceReport, newQuota uint64) *core.QuotaValidationError {
+	if report.DomainQuota == nil || report.ProjectsQuota == nil {
+		//defense in depth: we should have detected NoQuota resources a long time ago
+		return &core.QuotaValidationError{
+			Status:  http.StatusInternalServerError,
+			Message: "missing input data for quota validation (please report this problem!)",
+		}
+	}
+
 	//when reducing domain quota, existing project quotas must fit into new domain quota
-	oldQuota := report.DomainQuota
-	if newQuota < oldQuota && newQuota < report.ProjectsQuota {
-		min := report.ProjectsQuota
+	oldQuota := *report.DomainQuota
+	if newQuota < oldQuota && newQuota < *report.ProjectsQuota {
 		return &core.QuotaValidationError{
 			Status:       http.StatusConflict,
 			Message:      "domain quota may not be smaller than sum of project quotas in that domain",
-			MinimumValue: &min,
+			MinimumValue: report.ProjectsQuota,
 			Unit:         report.Unit,
 		}
 	}
@@ -418,8 +434,16 @@ func (u QuotaUpdater) validateDomainQuota(report limes.DomainResourceReport, new
 }
 
 func (u QuotaUpdater) validateProjectQuota(domRes limes.DomainResourceReport, projRes limes.ProjectResourceReport, newQuota uint64) *core.QuotaValidationError {
+	if projRes.Quota == nil || domRes.ProjectsQuota == nil || domRes.DomainQuota == nil {
+		//defense in depth: we should have detected NoQuota resources a long time ago
+		return &core.QuotaValidationError{
+			Status:  http.StatusInternalServerError,
+			Message: "missing input data for quota validation (please report this problem!)",
+		}
+	}
+
 	//when reducing project quota, existing usage must fit into new quotaj
-	oldQuota := projRes.Quota
+	oldQuota := *projRes.Quota
 	if newQuota < oldQuota && newQuota < projRes.Usage {
 		min := projRes.Usage
 		return &core.QuotaValidationError{
@@ -438,10 +462,10 @@ func (u QuotaUpdater) validateProjectQuota(domRes limes.DomainResourceReport, pr
 	//quotas are all unsigned). Also, we're doing everything in a transaction, so
 	//an overflow because of concurrent quota changes is also out of the
 	//question.
-	newProjectsQuota := domRes.ProjectsQuota - projRes.Quota + newQuota
-	if newProjectsQuota > domRes.DomainQuota {
-		maxQuota := domRes.DomainQuota - (domRes.ProjectsQuota - projRes.Quota)
-		if domRes.DomainQuota < domRes.ProjectsQuota-projRes.Quota {
+	newProjectsQuota := *domRes.ProjectsQuota - *projRes.Quota + newQuota
+	if newProjectsQuota > *domRes.DomainQuota {
+		maxQuota := *domRes.DomainQuota - (*domRes.ProjectsQuota - *projRes.Quota)
+		if *domRes.DomainQuota < *domRes.ProjectsQuota-*projRes.Quota {
 			maxQuota = 0
 		}
 		return &core.QuotaValidationError{
