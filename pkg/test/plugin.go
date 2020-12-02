@@ -45,14 +45,14 @@ type Plugin struct {
 
 var resources = []limes.ResourceInfo{
 	{
-		Name:     "capacity",
-		Unit:     limes.UnitBytes,
-		Contains: []string{"capacity_portion"},
+		Name: "capacity",
+		Unit: limes.UnitBytes,
 	},
 	{
-		Name:    "capacity_portion",
-		Unit:    limes.UnitBytes,
-		NoQuota: true,
+		Name:        "capacity_portion",
+		Unit:        limes.UnitBytes,
+		NoQuota:     true,
+		ContainedIn: "capacity_portion",
 	},
 	{
 		Name: "things",

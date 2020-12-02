@@ -41,10 +41,10 @@ type ResourceInfo struct {
 	//resource will only report quota. This field is not shown in API responses.
 	//Check `res.Quota == nil` instead.
 	NoQuota bool `json:"-"`
-	//Contains is an optional hint that UIs can use to group resources. If non-empty,
-	//the items in this list are the names of resources in the same service and
-	//category that are semantically contained within this resource.
-	Contains []string `json:"contains,omitempty"`
+	//ContainedIn is an optional hint that UIs can use to group resources. If non-empty,
+	//this resource is semantically contained within the resource with that name
+	//in the same service.
+	ContainedIn string `json:"contained_in,omitempty"`
 }
 
 //RateInfo contains the metadata for a rate (i.e. some type of event that can

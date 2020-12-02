@@ -10,9 +10,6 @@
           {
             "name": "capacity",
             "unit": "B",
-            "contains": [
-              "capacity_portion"
-            ],
             "quota": 25,
             "projects_quota": 10,
             "usage": 2,
@@ -21,6 +18,7 @@
           {
             "name": "capacity_portion",
             "unit": "B",
+            "contained_in": "capacity_portion",
             "usage": 1
           },
           {
@@ -47,9 +45,6 @@
           {
             "name": "capacity",
             "unit": "B",
-            "contains": [
-              "capacity_portion"
-            ],
             "quota": 15,
             "projects_quota": 10,
             "usage": 2,
@@ -58,6 +53,7 @@
           {
             "name": "capacity_portion",
             "unit": "B",
+            "contained_in": "capacity_portion",
             "usage": 1
           },
           {

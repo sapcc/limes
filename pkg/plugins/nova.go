@@ -146,30 +146,26 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.E
 	if p.scrapeInstances && p.cfg.Compute.BigVMMinMemoryMiB != 0 {
 		p.resources = append(p.resources,
 			limes.ResourceInfo{
-				Name: "cores_regular",
-				Unit: limes.UnitNone,
+				Name:        "cores_regular",
+				Unit:        limes.UnitNone,
+				ContainedIn: "cores",
 			},
 			limes.ResourceInfo{
-				Name: "cores_bigvm",
-				Unit: limes.UnitNone,
+				Name:        "cores_bigvm",
+				Unit:        limes.UnitNone,
+				ContainedIn: "cores",
 			},
 			limes.ResourceInfo{
-				Name: "ram_regular",
-				Unit: limes.UnitMebibytes,
+				Name:        "ram_regular",
+				Unit:        limes.UnitMebibytes,
+				ContainedIn: "ram",
 			},
 			limes.ResourceInfo{
-				Name: "ram_bigvm",
-				Unit: limes.UnitMebibytes,
+				Name:        "ram_bigvm",
+				Unit:        limes.UnitMebibytes,
+				ContainedIn: "ram",
 			},
 		)
-		for _, res := range p.resources {
-			if res.Name == "cores" {
-				res.Contains = []string{"cores_regular", "cores_bigvm"}
-			}
-			if res.Name == "ram" {
-				res.Contains = []string{"ram_regular", "ram_bigvm"}
-			}
-		}
 	}
 
 	sort.Slice(p.resources, func(i, j int) bool {
