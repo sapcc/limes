@@ -227,7 +227,10 @@ func compileQuotaConstraints(cluster *Cluster, data map[string]map[string]string
 
 		for resourceName, constraintStr := range serviceData {
 			if !cluster.HasResource(serviceType, resourceName) {
-				errors = append(errors, fmt.Errorf("no such resource: %s/%s", serviceType, resourceName))
+				//this is not an error: our global constraint sets have domain quota
+				//constraints "at least 0 more than project constraints" for all
+				//existing per_flavor instance resources, but we don't have all of
+				//these in any region (depending on the regional hardware stock)
 				continue
 			}
 			resource := cluster.InfoForResource(serviceType, resourceName)
