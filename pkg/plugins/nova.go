@@ -148,21 +148,25 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.E
 			limes.ResourceInfo{
 				Name:        "cores_regular",
 				Unit:        limes.UnitNone,
+				NoQuota:     true,
 				ContainedIn: "cores",
 			},
 			limes.ResourceInfo{
 				Name:        "cores_bigvm",
 				Unit:        limes.UnitNone,
+				NoQuota:     true,
 				ContainedIn: "cores",
 			},
 			limes.ResourceInfo{
 				Name:        "ram_regular",
 				Unit:        limes.UnitMebibytes,
+				NoQuota:     true,
 				ContainedIn: "ram",
 			},
 			limes.ResourceInfo{
 				Name:        "ram_bigvm",
 				Unit:        limes.UnitMebibytes,
+				NoQuota:     true,
 				ContainedIn: "ram",
 			},
 		)
