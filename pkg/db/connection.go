@@ -21,6 +21,7 @@ package db
 
 import (
 	"database/sql"
+	"net"
 	"net/url"
 	"strconv"
 
@@ -63,7 +64,7 @@ func Init(cfg Configuration) error {
 	dbURL := &url.URL{
 		Scheme:   "postgres",
 		User:     url.UserPassword(cfg.Username, string(cfg.Password)),
-		Host:     cfg.Hostname + ":" + strconv.Itoa(cfg.Port),
+		Host:     net.JoinHostPort(cfg.Hostname, strconv.Itoa(cfg.Port)),
 		Path:     cfg.Name,
 		RawQuery: cfg.ConnectionOptions,
 	}

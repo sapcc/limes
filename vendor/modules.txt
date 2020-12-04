@@ -99,7 +99,7 @@ github.com/prometheus/procfs/internal/util
 # github.com/rs/cors v1.7.0
 ## explicit
 github.com/rs/cors
-# github.com/sapcc/go-bits v0.0.0-20201126124612-fcd600685fdb
+# github.com/sapcc/go-bits v0.0.0-20201203204854-32575942fc71
 ## explicit
 github.com/sapcc/go-bits/assert
 github.com/sapcc/go-bits/audittools
@@ -120,7 +120,7 @@ github.com/sapcc/go-bits/sre
 # github.com/sapcc/hermes v0.0.0-20200928164006-62559084bfce
 ## explicit
 github.com/sapcc/hermes/pkg/cadf
-# github.com/streadway/amqp v1.0.0
+# github.com/streadway/amqp v1.0.1-0.20200716223359-e6b33f460591
 ## explicit
 github.com/streadway/amqp
 # github.com/ziutek/mymysql v1.5.4
