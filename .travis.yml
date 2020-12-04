@@ -9,8 +9,8 @@ go:
     - 1.14
 
 install:
-    - go get -u golang.org/x/lint/golint
-    - go get -u github.com/mattn/goveralls
+    - GO111MODULE=off go get -u golang.org/x/lint/golint
+    - GO111MODULE=off go get -u github.com/mattn/goveralls
 
 script:
     - make check
