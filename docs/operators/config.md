@@ -339,11 +339,13 @@ shown above. When enabled, the following extra resources become available:
 | --- | --- |
 | `cores_regular` | countable |
 | `cores_bigvm` | countable |
+| `instances_regular` | countable |
+| `instances_bigvm` | countable |
 | `ram_regular` | MiB |
 | `ram_bigvm` | MiB |
 
-Those resources don't track quota; only usage will be reported. The `cores` and `ram` resources will have a `contains`
-relation on their respective `_regular` and `_bigvm` resources.
+Those resources don't track quota; only usage will be reported. Each of these resources has a `contained_in` relation,
+e.g. `instances_regular` is `contained_in: "instances"`.
 
 Note that, as of now, this configuration is laser-focused on one specific usecase in SAP Converged Cloud. It might
 become more generic once I have more than this singular usecase and a general pattern arises.

@@ -158,6 +158,18 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.E
 				ContainedIn: "cores",
 			},
 			limes.ResourceInfo{
+				Name:        "instances_regular",
+				Unit:        limes.UnitNone,
+				NoQuota:     true,
+				ContainedIn: "instances",
+			},
+			limes.ResourceInfo{
+				Name:        "instances_bigvm",
+				Unit:        limes.UnitNone,
+				NoQuota:     true,
+				ContainedIn: "instances",
+			},
+			limes.ResourceInfo{
 				Name:        "ram_regular",
 				Unit:        limes.UnitMebibytes,
 				NoQuota:     true,
@@ -445,6 +457,7 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 						}
 						subResource["class"] = class
 						result["cores_"+class].Usage += flavor.VCPUs
+						result["instances_"+class].Usage++
 						result["ram_"+class].Usage += flavor.MemoryMiB
 					}
 				}
