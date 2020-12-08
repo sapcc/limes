@@ -333,8 +333,8 @@ github.com/ryanuber/columnize v0.0.0-20160712163229-9b3edd62028f/go.mod h1:sm1tb
 github.com/samuel/go-zookeeper v0.0.0-20190923202752-2cc03de413da/go.mod h1:gi+0XIa01GRL2eRQVjQkKGqKF3SF9vZR/HnPullcV2E=
 github.com/sapcc/go-bits v0.0.0-20180828115508-ed29938ce01c/go.mod h1:KeP5OOqQIgrauiDb/8shKWOq1YoplBALYNvpV4jizPo=
 github.com/sapcc/go-bits v0.0.0-20190910095551-3863bd6b4943/go.mod h1:YpW83RbRSHPedMBfuvdfYJMQbejxSxzK1Kj/39szShw=
-github.com/sapcc/go-bits v0.0.0-20201126124612-fcd600685fdb h1:bvD4yq3nxjUryiy921Eld0i33PE1oST4GLxW6Wlhzk4=
-github.com/sapcc/go-bits v0.0.0-20201126124612-fcd600685fdb/go.mod h1:MvjxocNfMqx+sQ2xdfrLveBljrUmGPaJT/UHUwyZ8lM=
+github.com/sapcc/go-bits v0.0.0-20201203204854-32575942fc71 h1:WycbLaNKy5cLX8rEgG2dDyU9lRBP7DUtJeY7KoNFDiU=
+github.com/sapcc/go-bits v0.0.0-20201203204854-32575942fc71/go.mod h1:K/nymIfebyify6kJ9K62XSQHFw/M5QNo8BmYNmuUJbk=
 github.com/sapcc/hermes v0.0.0-20190722215605-d772f40f9fc6/go.mod h1:WM5CVlqFCGM+AUE7lQgkLmPE89PWqJS3i+oRXaSztR8=
 github.com/sapcc/hermes v0.0.0-20200928164006-62559084bfce h1:PjXa8mwhk8y7DJ4UpE8YT7YJeD8T2sX6MVGOpDLMXXU=
 github.com/sapcc/hermes v0.0.0-20200928164006-62559084bfce/go.mod h1:AoVNC9XhQ7x3oorZ+J3G1xrYWIgYJBhcN0+bH5S48lU=
@@ -367,8 +367,8 @@ github.com/streadway/amqp v0.0.0-20180806233856-70e15c650864/go.mod h1:1WNBiOZtZ
 github.com/streadway/amqp v0.0.0-20190404075320-75d898a42a94/go.mod h1:AZpEONHx3DKn8O/DFsRAY58/XVQiIPMTMB1SddzLXVw=
 github.com/streadway/amqp v0.0.0-20190827072141-edfb9018d271 h1:WhxRHzgeVGETMlmVfqhRn8RIeeNoPr2Czh33I4Zdccw=
 github.com/streadway/amqp v0.0.0-20190827072141-edfb9018d271/go.mod h1:AZpEONHx3DKn8O/DFsRAY58/XVQiIPMTMB1SddzLXVw=
-github.com/streadway/amqp v1.0.0 h1:kuuDrUJFZL1QYL9hUNuCxNObNzB0bV/ZG5jV3RWAQgo=
-github.com/streadway/amqp v1.0.0/go.mod h1:AZpEONHx3DKn8O/DFsRAY58/XVQiIPMTMB1SddzLXVw=
+github.com/streadway/amqp v1.0.1-0.20200716223359-e6b33f460591 h1:DY61wv7mWBLELSYAGfxjItovf7QQKxjLBSFldNbLS/Q=
+github.com/streadway/amqp v1.0.1-0.20200716223359-e6b33f460591/go.mod h1:AZpEONHx3DKn8O/DFsRAY58/XVQiIPMTMB1SddzLXVw=
 github.com/streadway/handy v0.0.0-20190108123426-d5acb3125c2a/go.mod h1:qNTQ5P5JnDBl6z3cMAg/SywNDC5ABu5ApDIw6lUbRmI=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/objx v0.1.1/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=

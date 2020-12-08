@@ -34,6 +34,7 @@ import (
 	"github.com/sapcc/hermes/pkg/cadf"
 	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
+	"github.com/streadway/amqp"
 )
 
 var showAuditOnStdout = os.Getenv("LIMES_SILENT") != "1"
@@ -69,12 +70,11 @@ func StartAuditTrail(configPerCluster map[string]core.CADFConfiguration) {
 			s := make(chan cadf.Event, 20)
 			eventSinkPerCluster[clusterID] = s
 
-			rabbitUserInfo := config.RabbitMQ.Username
-			if config.RabbitMQ.Password != "" {
-				rabbitUserInfo += ":" + string(config.RabbitMQ.Password)
+			if config.RabbitMQ.Username == "" {
+				config.RabbitMQ.Username = "guest"
 			}
-			if rabbitUserInfo != "" {
-				rabbitUserInfo += "@"
+			if config.RabbitMQ.Password == "" {
+				config.RabbitMQ.Password = "guest"
 			}
 			if config.RabbitMQ.Hostname == "" {
 				config.RabbitMQ.Hostname = "localhost"
@@ -82,13 +82,20 @@ func StartAuditTrail(configPerCluster map[string]core.CADFConfiguration) {
 			if config.RabbitMQ.Port == 0 {
 				config.RabbitMQ.Port = 5672
 			}
-			rabbitURI := fmt.Sprintf("amqp://%s%s:%d/", rabbitUserInfo, config.RabbitMQ.Hostname, config.RabbitMQ.Port)
+			rabbitURI := amqp.URI{
+				Scheme:   "amqp",
+				Host:     config.RabbitMQ.Hostname,
+				Port:     config.RabbitMQ.Port,
+				Username: config.RabbitMQ.Username,
+				Password: string(config.RabbitMQ.Password),
+				Vhost:    "/",
+			}
 
 			go audittools.AuditTrail{
 				EventSink:           s,
 				OnSuccessfulPublish: onSuccessFunc,
 				OnFailedPublish:     onFailFunc,
-			}.Commit(rabbitURI, config.RabbitMQ.QueueName)
+			}.Commit(config.RabbitMQ.QueueName, rabbitURI)
 		}
 	}
 }
