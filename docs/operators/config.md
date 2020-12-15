@@ -532,26 +532,30 @@ services:
 
 The area for this service is `storage`. The following resources are always exposed:
 
-| Resource | Unit |
-| --- | --- |
-| `shares` | countable |
-| `share_capacity` | GiB |
-| `share_snapshots` | countable |
-| `snapshot_capacity` | GiB |
-| `share_networks` | countable |
+| Resource | Unit | Comment |
+| --- | --- | --- |
+| `shares` | countable | |
+| `share_capacity` | GiB | |
+| `share_snapshots` | countable | |
+| `snapshot_capacity` | GiB | |
+| `share_replicas` | countable | only with Manila Victoria or later |
+| `replica_capacity` | GiB | only with Manila Victoria or later |
+| `share_networks` | countable | |
 
 If the `volumev2.volume_types` field lists more than one volume type, the
-first four of the aforementioned five resources will refer to the quota for the
+first six of the aforementioned seven resources will refer to the quota for the
 first of these share types. (This peculiar rule exists for
 backwards-compatibility reasons.) For each other share type, the following
 resources are exposed:
 
-| Resource | Unit |
-| --- | --- |
-| `shares_${share_type}` | countable |
-| `share_capacity_${share_type}` | GiB |
-| `share_snapshots_${share_type}` | countable |
-| `snapshot_capacity_${share_type}` | GiB |
+| Resource | Unit | Comment |
+| --- | --- | --- |
+| `shares_${share_type}` | countable | |
+| `share_capacity_${share_type}` | GiB | |
+| `share_snapshots_${share_type}` | countable | |
+| `snapshot_capacity_${share_type}` | GiB | |
+| `share_replicas_${share_type}` | countable | only with Manila Victoria or later |
+| `replica_capacity_${share_type}` | GiB | only with Manila Victoria or later |
 
 In Manila, besides the share-type-specific quotas, the general quotas
 are set to the sum across all share types.
