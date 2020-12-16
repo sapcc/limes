@@ -167,9 +167,13 @@ type manilaQuotaSet struct {
 	Shares            uint64  `json:"shares"`
 	SnapshotGigabytes uint64  `json:"snapshot_gigabytes"`
 	Snapshots         uint64  `json:"snapshots"`
-	ReplicaGigabytes  uint64  `json:"replica_gigabytes"`
-	Replicas          uint64  `json:"share_replicas"`
+	ReplicaGigabytes  uint64  `json:"-"`
+	Replicas          uint64  `json:"-"`
 	ShareNetworks     *uint64 `json:"share_networks,omitempty"`
+	//TODO: remove pointer types from replica quotas when making replica quota support mandatory
+	//(right now we need those because Manila without replica quota support chokes if these fields are present)
+	ReplicaGigabytesPtr *uint64 `json:"replica_gigabytes,omitempty"`
+	ReplicasPtr         *uint64 `json:"share_replicas,omitempty"`
 }
 
 //ScrapeRates implements the core.QuotaPlugin interface.
@@ -271,6 +275,10 @@ func (p *manilaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherc
 			ReplicaGigabytes:  quotas[p.makeResourceName("replica_capacity", shareType)],
 			ShareNetworks:     nil,
 		}
+		if p.hasReplicaQuotas {
+			quotasForType.ReplicasPtr = &quotasForType.Replicas
+			quotasForType.ReplicaGigabytesPtr = &quotasForType.ReplicaGigabytes
+		}
 		shareTypeQuotas[shareType] = quotasForType
 
 		overallQuotas.Shares += quotasForType.Shares
@@ -279,6 +287,11 @@ func (p *manilaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherc
 		overallQuotas.SnapshotGigabytes += quotasForType.SnapshotGigabytes
 		overallQuotas.Replicas += quotasForType.Replicas
 		overallQuotas.ReplicaGigabytes += quotasForType.ReplicaGigabytes
+	}
+
+	if p.hasReplicaQuotas {
+		overallQuotas.ReplicasPtr = &overallQuotas.Replicas
+		overallQuotas.ReplicaGigabytesPtr = &overallQuotas.ReplicaGigabytes
 	}
 
 	url := client.ServiceURL("quota-sets", projectUUID)
