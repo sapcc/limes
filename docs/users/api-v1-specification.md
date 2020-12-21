@@ -264,7 +264,7 @@ limits can be set on two levels:
 
 Each rate has a `name`. For rates that describe API request traffic, the
 [CADF specification](https://www.dmtf.org/sites/default/files/standards/documents/DSP2038_1.1.0.pdf) establishes a
-classification for the OpenStack ecosystem. Within CADF, requests sent to and OpenStack API are characterized by their
+classification for the OpenStack ecosystem. Within CADF, requests sent to an OpenStack API are characterized by their
 `target_type_uri` and `action`. The `target_type_uri` represents the request path against which the activity was
 performed and the `action` the activity that was performed. Limes honors this structure for API request rates: As shown
 in the large example above, the action `create` on the target\_type\_uri `service/compute/servers` is represented by a

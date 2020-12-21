@@ -35,7 +35,7 @@ all levels of the hierarchy.
 ## For users
 
 * [Index](./docs/users/index.md)
-* [CLI client](https://github.com/sapcc/limesctl)
+* [CLI](https://github.com/sapcc/limesctl)
 * [API specification](./docs/users/api-v1-specification.md)
 * [API usage example](./docs/users/api-example.md)
 * [Audit trail](./docs/users/audit.md)
