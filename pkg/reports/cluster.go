@@ -521,6 +521,13 @@ func (c clusters) Find(config core.Configuration, clusterID string, serviceType,
 		resource = &limes.ClusterResourceReport{
 			ResourceInfo: clusterConfig.InfoForResource(*serviceType, *resourceName),
 		}
+		if !resource.ResourceInfo.NoQuota {
+			//We need to set a default value here. Otherwise zero values will never
+			//be reported when there are no `domain_resources` entries to aggregate
+			//over.
+			defaultDomainsQuota := uint64(0)
+			resource.DomainsQuota = &defaultDomainsQuota
+		}
 		service.Resources[*resourceName] = resource
 	}
 
