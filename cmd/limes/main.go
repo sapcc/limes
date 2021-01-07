@@ -118,7 +118,7 @@ Usage:
 \t%s (collect|serve) <config-file> <cluster-id>
 \t%s test-get-quota <config-file> <cluster-id> <project-id> <service-type>
 \t%s test-get-rates <config-file> <cluster-id> <project-id> <service-type> [<prev-serialized-state>]
-\t%s test-scan-capacity <config-file> <cluster-id>
+\t%s test-scan-capacity <config-file> <cluster-id> <capacitor>
 `), `\t`, "\t", -1) + "\n"
 
 func printUsageAndExit() {
@@ -349,31 +349,34 @@ func dumpGeneratedPrometheusMetrics() {
 // task: test-scan-capacity
 
 func taskTestScanCapacity(config core.Configuration, cluster *core.Cluster, args []string) error {
-	if len(args) != 0 {
+	if len(args) != 1 {
 		printUsageAndExit()
 	}
 
-	result := make(map[string]map[string]core.CapacityData)
-	for capacitorID, plugin := range cluster.CapacityPlugins {
-		provider, eo := cluster.ProviderClientForCapacitor(capacitorID)
-		capacities, err := plugin.Scrape(provider, eo, cluster.ID)
-		if err != nil {
-			logg.Error("scan capacity with capacitor %s failed: %s", capacitorID, util.ErrorToString(err))
-		}
-		//merge capacities from this plugin into the overall capacity values map
-		for serviceType, resources := range capacities {
-			if _, ok := result[serviceType]; !ok {
-				result[serviceType] = make(map[string]core.CapacityData)
-			}
-			for resourceName, value := range resources {
-				result[serviceType][resourceName] = value
-			}
-		}
+	capacitorID := args[0]
+	plugin := cluster.CapacityPlugins[capacitorID]
+	if plugin == nil {
+		logg.Fatal("unknown capacitor: %s", capacitorID)
+	}
+
+	provider, eo := cluster.ProviderClientForCapacitor(capacitorID)
+	capacities, err := plugin.Scrape(provider, eo, cluster.ID)
+	if err != nil {
+		logg.Error("Scrape failed: %s", util.ErrorToString(err))
+		capacities = nil
 	}
 
 	dumpGeneratedPrometheusMetrics()
 
+	for srvType, srvCapacities := range capacities {
+		for resName := range srvCapacities {
+			if !cluster.HasResource(srvType, resName) {
+				logg.Error("Scrape reported capacity for unknown resource: %s/%s", srvType, resName)
+			}
+		}
+	}
+
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
-	return enc.Encode(result)
+	return enc.Encode(capacities)
 }
