@@ -736,6 +736,10 @@ capacitors:
         first: 'foo'
         second: 'bar'
       use_placement_api: true
+subcapacities:
+  - compute/cores
+  - compute/instances
+  - compute/ram
 ```
 
 | Resource | Method |
@@ -755,6 +759,18 @@ This is particularly useful to filter Ironic flavors, which usually have much la
 If the `nova.use_placement_api` parameter is set, capacity and usage data is gathered from the Placement API instead of
 from Nova's hypervisor list. The data from the Placement API is usually more reliable, but the Placement API may not be
 available in all OpenStack installations, so it remains opt-in for now.
+
+When subcapacity scraping is enabled (as shown above), subcapacities will be scraped for the respective resources. Each
+subcapacity corresponds to one Nova aggregate. If the `nova.hypervisor_type_pattern` parameter is set, only the capacity
+of matching hypervisors will be considered for each aggregate. Aggregates with no matching hypervisor will not be
+considered. Note that summing all subcapacities may yield a greater value than the actual capacity since one hypervisor
+may belong to multiple aggregates. Subcapacities bear the following attributes:
+
+| Attribute | Type | Comment |
+| --- | --- | --- |
+| `name` | string | aggregate name as reported by Nova |
+| `metadata` | object of strings | aggregate metadata as reported by Nova |
+| `capacity` | integer | sum of capacity of all matching hypervisors in this aggregate |
 
 ## `prometheus`
 

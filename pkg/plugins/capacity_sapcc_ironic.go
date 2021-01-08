@@ -115,21 +115,21 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 
 	//Ironic bPods are expected to be listed as compute hosts assigned to
 	//host aggregates in the format: "nova-compute-ironic-xxxx".
-	computeHostsPerAZ, err := getComputeHostsPerAZ(novaClient)
+	azs, _, err := getAggregates(novaClient)
 	if err != nil {
 		return nil, err
 	}
 	azForHostStub := make(map[string]string)
-	for az, hosts := range computeHostsPerAZ {
-		for _, host := range hosts {
+	for azName, az := range azs {
+		for host := range az.ContainsComputeHost {
 			if host == "nova-compute-ironic" {
-				azForHostStub["bpod001"] = az //hardcoded for the few nodes using legacy naming convention
+				azForHostStub["bpod001"] = azName //hardcoded for the few nodes using legacy naming convention
 			} else {
 				match := computeHostStubRx.FindStringSubmatch(host)
 				if match == nil {
 					logg.Error(`compute host %q does not match the "nova-compute-(ironic-)xxxx" naming convention`, host)
 				} else {
-					azForHostStub[match[1]] = az
+					azForHostStub[match[1]] = azName
 				}
 			}
 		}
