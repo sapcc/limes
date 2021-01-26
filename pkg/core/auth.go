@@ -59,6 +59,7 @@ func (auth *AuthParameters) Connect() error {
 
 	//use http.DefaultClient, esp. to pick up LIMES_INSECURE flag
 	auth.ProviderClient.HTTPClient = *http.DefaultClient
+	auth.ProviderClient.UserAgent.Prepend("limes")
 
 	err = openstack.Authenticate(auth.ProviderClient, gophercloud.AuthOptions{
 		IdentityEndpoint: auth.AuthURL,
