@@ -38,7 +38,7 @@ type ResourceInfo struct {
 	//value reported by the QuotaPlugin is always authoritative.
 	ExternallyManaged bool `json:"externally_managed,omitempty"`
 	//If NoQuota is true, quota is not tracked at all for this resource. The
-	//resource will only report quota. This field is not shown in API responses.
+	//resource will only report usage. This field is not shown in API responses.
 	//Check `res.Quota == nil` instead.
 	NoQuota bool `json:"-"`
 	//ContainedIn is an optional hint that UIs can use to group resources. If non-empty,
