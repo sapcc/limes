@@ -77,9 +77,16 @@ func (p *v1Provider) GetCluster(w http.ResponseWriter, r *http.Request) {
 	}
 
 	filter := reports.ReadFilter(r)
-	if showBasic && (filter.WithSubresources || filter.WithSubcapacities || filter.LocalQuotaUsageOnly) {
-		http.Error(w, "Forbidden", http.StatusForbidden)
-		return
+	if showBasic {
+		if filter.LocalQuotaUsageOnly {
+			http.Error(w, "Forbidden", http.StatusForbidden)
+			return
+		}
+		filter.IsSubcapacityAllowed = func(serviceType, resourceName string) bool {
+			token.Context.Request["service"] = serviceType
+			token.Context.Request["resource"] = resourceName
+			return token.Check("cluster:show_subcapacity")
+		}
 	}
 
 	clusters, err := reports.GetClusters(p.Config, &clusterID, db.DB, filter)

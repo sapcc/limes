@@ -25,10 +25,11 @@
   "domain:lower":         "rule:domain_editor",
   "domain:discover":      "rule:cluster_admin",
 
-  "cluster:list":       "rule:cluster_admin",
-  "cluster:show":       "rule:cluster_admin",
-  "cluster:show_basic": "role:admin or role:member or role:resource_admin or role:resource_viewer",
-  "cluster:edit":       "rule:cluster_admin",
+  "cluster:list":             "rule:cluster_admin",
+  "cluster:show":             "rule:cluster_admin",
+  "cluster:show_basic":       "role:admin or role:member or role:resource_admin or role:resource_viewer",
+  "cluster:show_subcapacity": "'compute':%(service)s and 'ram':%(resource)s",
+  "cluster:edit":             "rule:cluster_admin",
 
   "foreign:read":  "rule:cluster_admin",
   "foreign:write": "rule:cluster_admin"

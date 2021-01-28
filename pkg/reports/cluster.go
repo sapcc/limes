@@ -226,7 +226,7 @@ func GetClusters(config core.Configuration, clusterID *string, dbi db.Interface,
 					capacity := uint64(float64(*rawCapacity) * overcommitFactor)
 					resource.Capacity = &capacity
 				}
-				if subcapacities != nil && *subcapacities != "" {
+				if subcapacities != nil && *subcapacities != "" && filter.IsSubcapacityAllowed(serviceType, *resourceName) {
 					resource.Subcapacities = limes.JSONString(*subcapacities)
 				}
 				if capacityPerAZ != nil && *capacityPerAZ != "" {

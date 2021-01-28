@@ -20,9 +20,10 @@
 package reports
 
 import (
-	"github.com/sapcc/limes/pkg/util"
 	"net/http"
 	"regexp"
+
+	"github.com/sapcc/limes/pkg/util"
 
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
@@ -34,11 +35,13 @@ type Filter struct {
 	ServiceTypes  []string
 	ResourceNames []string
 
-	WithRates,
-	OnlyRates,
-	WithSubresources,
-	LocalQuotaUsageOnly,
-	WithSubcapacities bool
+	WithRates           bool
+	OnlyRates           bool
+	WithSubresources    bool
+	LocalQuotaUsageOnly bool
+	WithSubcapacities   bool
+
+	IsSubcapacityAllowed func(serviceType, resourceName string) bool
 }
 
 //ReadFilter extracts a Filter from the given Request.
@@ -96,6 +99,9 @@ func ReadFilter(r *http.Request) Filter {
 			f.ServiceTypes = []string{""}
 		}
 	}
+
+	//by default, all subcapacities can be included, but the caller can restrict this based on AuthZ
+	f.IsSubcapacityAllowed = func(string, string) bool { return true }
 
 	return f
 }
