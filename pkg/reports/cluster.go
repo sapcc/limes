@@ -368,8 +368,8 @@ func GetClusters(config core.Configuration, clusterID *string, dbi db.Interface,
 			if !filter.WithSubcapacities {
 				queryStr = strings.Replace(queryStr, "cr.subcapacities", "''", 1)
 			}
-			filter := map[string]interface{}{"cs.cluster_id": "shared"}
-			whereStr, whereArgs = db.BuildSimpleWhereClause(filter, len(joinArgs))
+			onlyShared := map[string]interface{}{"cs.cluster_id": "shared"}
+			whereStr, whereArgs = db.BuildSimpleWhereClause(onlyShared, len(joinArgs))
 			err = db.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 				var (
 					sharedClusterID string
@@ -402,7 +402,7 @@ func GetClusters(config core.Configuration, clusterID *string, dbi db.Interface,
 							capacity := uint64(float64(*rawCapacity) * overcommitFactor)
 							resource.Capacity = &capacity
 						}
-						if subcapacities != nil && *subcapacities != "" {
+						if subcapacities != nil && *subcapacities != "" && filter.IsSubcapacityAllowed(serviceType, *resourceName) {
 							resource.Subcapacities = limes.JSONString(*subcapacities)
 						}
 						if capacityPerAZ != nil && *capacityPerAZ != "" {
