@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/gorilla/mux"
 	"github.com/sapcc/go-bits/gopherpolicy"
@@ -56,6 +57,8 @@ type v1Provider struct {
 	Cluster     *core.Cluster
 	Config      core.Configuration
 	VersionData VersionData
+	//see comment in ListProjects() for details
+	listProjectsMutex sync.Mutex
 }
 
 //NewV1Router creates a http.Handler that serves the Limes v1 API.

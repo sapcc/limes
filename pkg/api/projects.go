@@ -54,6 +54,14 @@ func (p *v1Provider) ListProjects(w http.ResponseWriter, r *http.Request) {
 	if dbDomain == nil {
 		return
 	}
+
+	//This endpoints can generate reports so large, we shouldn't be rendering
+	//more than one at the same time in order to keep our memory usage in check.
+	//(For example, a full project list with all resources for a domain with 2000
+	//projects runs as large as 160 MiB for the pure JSON.)
+	p.listProjectsMutex.Lock()
+	defer p.listProjectsMutex.Unlock()
+
 	projects, err := reports.GetProjects(cluster, *dbDomain, nil, db.DB, reports.ReadFilter(r))
 	if respondwith.ErrorText(w, err) {
 		return
