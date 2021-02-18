@@ -542,7 +542,7 @@ The area for this service is `storage`. The following resources are always expos
 | `replica_capacity` | GiB | only with Manila Victoria or later |
 | `share_networks` | countable | |
 
-If the `volumev2.volume_types` field lists more than one volume type, the
+If the `sharev2.share_types` field lists more than one share type, the
 first six of the aforementioned seven resources will refer to the quota for the
 first of these share types. (This peculiar rule exists for
 backwards-compatibility reasons.) For each other share type, the following
