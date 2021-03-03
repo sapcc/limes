@@ -64,6 +64,11 @@ func (p *manilaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud
 	}
 	p.hasReplicaQuotas = microversion >= 53
 
+	//TODO remove this feature gate from the config once support is fully fleshed out
+	if !p.cfg.ShareV2.HasReplicaQuotas {
+		p.hasReplicaQuotas = false
+	}
+
 	return nil
 }
 
