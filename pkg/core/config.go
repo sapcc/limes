@@ -127,8 +127,10 @@ type ServiceConfiguration struct {
 		ReportPhysicalUsage bool `yaml:"report_physical_usage"`
 	} `yaml:"database"`
 	ShareV2 struct {
-		HasReplicaQuotas    bool                        `yaml:"has_replica_quotas"` //TODO remove once support is fully fleshed out
-		ShareTypes          []string                    `yaml:"share_types"`
+		ShareTypes []struct {
+			Name               string `yaml:"name"`
+			ReplicationEnabled bool   `yaml:"replication_enabled"`
+		} `yaml:"share_types"`
 		PrometheusAPIConfig *PrometheusAPIConfiguration `yaml:"prometheus_api"`
 	} `yaml:"sharev2"`
 	VolumeV2 struct {

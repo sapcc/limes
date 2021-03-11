@@ -64,11 +64,6 @@ func (p *manilaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud
 	}
 	p.hasReplicaQuotas = microversion >= 53
 
-	//TODO remove this feature gate from the config once support is fully fleshed out
-	if !p.cfg.ShareV2.HasReplicaQuotas {
-		p.hasReplicaQuotas = false
-	}
-
 	return nil
 }
 
@@ -112,43 +107,30 @@ func (p *manilaPlugin) Resources() []limes.ResourceInfo {
 		Category: "sharev2",
 	})
 	for _, shareType := range p.cfg.ShareV2.ShareTypes {
-		category := p.makeResourceName("sharev2", shareType)
+		stName := shareType.Name
+		category := p.makeResourceName("sharev2", stName)
 		result = append(result,
 			limes.ResourceInfo{
-				Name:     p.makeResourceName("share_capacity", shareType),
+				Name:     p.makeResourceName("share_capacity", stName),
 				Unit:     limes.UnitGibibytes,
 				Category: category,
 			},
 			limes.ResourceInfo{
-				Name:     p.makeResourceName("shares", shareType),
+				Name:     p.makeResourceName("shares", stName),
 				Unit:     limes.UnitNone,
 				Category: category,
 			},
 			limes.ResourceInfo{
-				Name:     p.makeResourceName("snapshot_capacity", shareType),
+				Name:     p.makeResourceName("snapshot_capacity", stName),
 				Unit:     limes.UnitGibibytes,
 				Category: category,
 			},
 			limes.ResourceInfo{
-				Name:     p.makeResourceName("share_snapshots", shareType),
+				Name:     p.makeResourceName("share_snapshots", stName),
 				Unit:     limes.UnitNone,
 				Category: category,
 			},
 		)
-		if p.hasReplicaQuotas {
-			result = append(result,
-				limes.ResourceInfo{
-					Name:     p.makeResourceName("replica_capacity", shareType),
-					Unit:     limes.UnitGibibytes,
-					Category: category,
-				},
-				limes.ResourceInfo{
-					Name:     p.makeResourceName("share_replicas", shareType),
-					Unit:     limes.UnitNone,
-					Category: category,
-				},
-			)
-		}
 	}
 	return result
 }
@@ -158,13 +140,13 @@ func (p *manilaPlugin) Rates() []limes.RateInfo {
 	return nil
 }
 
-func (p *manilaPlugin) makeResourceName(kind, shareType string) string {
-	if p.cfg.ShareV2.ShareTypes[0] == shareType {
+func (p *manilaPlugin) makeResourceName(kind, shareTypeName string) string {
+	if p.cfg.ShareV2.ShareTypes[0].Name == shareTypeName {
 		//the resources for the first share type don't get the share type suffix
 		//for backwards compatibility reasons
 		return kind
 	}
-	return kind + "_" + shareType
+	return kind + "_" + shareTypeName
 }
 
 type manilaQuotaSet struct {
@@ -201,7 +183,7 @@ func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 
 	quotaSets := make(map[string]manilaQuotaSetDetail)
 	for _, shareType := range p.cfg.ShareV2.ShareTypes {
-		quotaSets[shareType], err = manilaCollectQuota(client, projectUUID, shareType)
+		quotaSets[shareType.Name], err = manilaCollectQuota(client, projectUUID, shareType.Name)
 		if err != nil {
 			return nil, err
 		}
@@ -215,7 +197,7 @@ func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 
 	var physUsage manilaPhysicalUsage
 	if p.cfg.ShareV2.PrometheusAPIConfig != nil {
-		physUsage, err = manilaCollectPhysicalUsage(projectUUID, p.cfg.ShareV2.ShareTypes, p.cfg.ShareV2.PrometheusAPIConfig)
+		physUsage, err = p.collectPhysicalUsage(projectUUID)
 		if err != nil {
 			return nil, err
 		}
@@ -225,21 +207,29 @@ func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 		"share_networks": quotaSets[""].ShareNetworks.ToResourceData(nil),
 	}
 	for idx, shareType := range p.cfg.ShareV2.ShareTypes {
+		stName := shareType.Name
 		gigabytesPhysical := (*uint64)(nil)
 		snapshotGigabytesPhysical := (*uint64)(nil)
 		if idx == 0 {
-			if val, exists := physUsage.Gigabytes[shareType]; exists {
+			if val, exists := physUsage.Gigabytes[stName]; exists {
 				gigabytesPhysical = &val
 			}
-			if val, exists := physUsage.SnapshotGigabytes[shareType]; exists {
+			if val, exists := physUsage.SnapshotGigabytes[stName]; exists {
 				snapshotGigabytesPhysical = &val
 			}
 		}
 
-		result[p.makeResourceName("shares", shareType)] = quotaSets[shareType].Shares.ToResourceData(nil)
-		result[p.makeResourceName("share_snapshots", shareType)] = quotaSets[shareType].Snapshots.ToResourceData(nil)
-		result[p.makeResourceName("share_capacity", shareType)] = quotaSets[shareType].Gigabytes.ToResourceData(gigabytesPhysical)
-		result[p.makeResourceName("snapshot_capacity", shareType)] = quotaSets[shareType].SnapshotGigabytes.ToResourceData(snapshotGigabytesPhysical)
+		sharesData := quotaSets[stName].Shares.ToResourceData(nil)
+		shareCapacityData := quotaSets[stName].Gigabytes.ToResourceData(gigabytesPhysical)
+		if p.hasReplicaQuotas && shareType.ReplicationEnabled {
+			sharesData.Usage = quotaSets[stName].Replicas.Usage
+			shareCapacityData.Usage = quotaSets[stName].ReplicaGigabytes.Usage
+		}
+
+		result[p.makeResourceName("shares", stName)] = sharesData
+		result[p.makeResourceName("share_capacity", stName)] = shareCapacityData
+		result[p.makeResourceName("share_snapshots", stName)] = quotaSets[stName].Snapshots.ToResourceData(nil)
+		result[p.makeResourceName("snapshot_capacity", stName)] = quotaSets[stName].SnapshotGigabytes.ToResourceData(snapshotGigabytesPhysical)
 	}
 	return result, nil
 }
@@ -271,20 +261,23 @@ func (p *manilaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherc
 	shareTypeQuotas := make(map[string]manilaQuotaSet)
 
 	for _, shareType := range p.cfg.ShareV2.ShareTypes {
+		stName := shareType.Name
 		quotasForType := manilaQuotaSet{
-			Shares:            quotas[p.makeResourceName("shares", shareType)],
-			Gigabytes:         quotas[p.makeResourceName("share_capacity", shareType)],
-			Snapshots:         quotas[p.makeResourceName("share_snapshots", shareType)],
-			SnapshotGigabytes: quotas[p.makeResourceName("snapshot_capacity", shareType)],
-			Replicas:          quotas[p.makeResourceName("share_replicas", shareType)],
-			ReplicaGigabytes:  quotas[p.makeResourceName("replica_capacity", shareType)],
+			Shares:            quotas[p.makeResourceName("shares", stName)],
+			Gigabytes:         quotas[p.makeResourceName("share_capacity", stName)],
+			Snapshots:         quotas[p.makeResourceName("share_snapshots", stName)],
+			SnapshotGigabytes: quotas[p.makeResourceName("snapshot_capacity", stName)],
+			Replicas:          0,
+			ReplicaGigabytes:  0,
 			ShareNetworks:     nil,
 		}
-		if p.hasReplicaQuotas {
+		if p.hasReplicaQuotas && shareType.ReplicationEnabled {
+			quotasForType.Replicas = quotasForType.Shares
+			quotasForType.ReplicaGigabytes = quotasForType.Gigabytes
 			quotasForType.ReplicasPtr = &quotasForType.Replicas
 			quotasForType.ReplicaGigabytesPtr = &quotasForType.ReplicaGigabytes
 		}
-		shareTypeQuotas[shareType] = quotasForType
+		shareTypeQuotas[stName] = quotasForType
 
 		overallQuotas.Shares += quotasForType.Shares
 		overallQuotas.Gigabytes += quotasForType.Gigabytes
@@ -305,11 +298,11 @@ func (p *manilaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherc
 		return fmt.Errorf("could not set overall share quotas: %s", err.Error())
 	}
 
-	for shareType, quotasForType := range shareTypeQuotas {
-		url := client.ServiceURL("quota-sets", projectUUID) + "?share_type=" + shareType
+	for shareTypeName, quotasForType := range shareTypeQuotas {
+		url := client.ServiceURL("quota-sets", projectUUID) + "?share_type=" + shareTypeName
 		_, err = client.Put(url, map[string]interface{}{"quota_set": quotasForType}, nil, expect200)
 		if err != nil {
-			return fmt.Errorf("could not set quotas for share type %q: %s", shareType, err.Error())
+			return fmt.Errorf("could not set quotas for share type %q: %s", shareTypeName, err.Error())
 		}
 	}
 
@@ -341,11 +334,11 @@ func (q manilaQuotaDetail) ToResourceData(physicalUsage *uint64) core.ResourceDa
 	}
 }
 
-func manilaCollectQuota(client *gophercloud.ServiceClient, projectUUID string, shareType string) (manilaQuotaSetDetail, error) {
+func manilaCollectQuota(client *gophercloud.ServiceClient, projectUUID string, shareTypeName string) (manilaQuotaSetDetail, error) {
 	var result gophercloud.Result
 	url := client.ServiceURL("quota-sets", projectUUID, "detail")
-	if shareType != "" {
-		url += "?share_type=" + shareType
+	if shareTypeName != "" {
+		url += "?share_type=" + shareTypeName
 	}
 	_, err := client.Get(url, &result.Body, nil)
 	if err != nil {
@@ -366,13 +359,13 @@ type manilaPhysicalUsage struct {
 	SnapshotGigabytes map[string]uint64
 }
 
-func manilaCollectPhysicalUsage(projectUUID string, shareTypes []string, promAPIConfig *core.PrometheusAPIConfiguration) (manilaPhysicalUsage, error) {
+func (p *manilaPlugin) collectPhysicalUsage(projectUUID string) (manilaPhysicalUsage, error) {
 	usage := manilaPhysicalUsage{
 		Gigabytes:         make(map[string]uint64),
 		SnapshotGigabytes: make(map[string]uint64),
 	}
 
-	client, err := prometheusClient(*promAPIConfig)
+	client, err := prometheusClient(*p.cfg.ShareV2.PrometheusAPIConfig)
 	if err != nil {
 		return manilaPhysicalUsage{}, err
 	}
@@ -382,28 +375,30 @@ func manilaCollectPhysicalUsage(projectUUID string, shareTypes []string, promAPI
 	}
 	defaultValue := float64(0)
 
-	for _, shareType := range shareTypes {
+	for _, shareType := range p.cfg.ShareV2.ShareTypes {
+		stName := shareType.Name
+
 		//NOTE: The `max by (share_id)` is necessary for when a share is being
 		//migrated to another shareserver and thus appears in the metrics twice.
 		queryStr := fmt.Sprintf(
 			`sum(max by (share_id) (netapp_volume_used_bytes{project_id=%q,share_type=%q}))`,
-			projectUUID, shareType,
+			projectUUID, stName,
 		)
 		bytesPhysical, err := prometheusGetSingleValue(client, queryStr, &defaultValue)
 		if err != nil {
 			return manilaPhysicalUsage{}, err
 		}
-		usage.Gigabytes[shareType] = roundUp(bytesPhysical)
+		usage.Gigabytes[stName] = roundUp(bytesPhysical)
 
 		queryStr = fmt.Sprintf(
 			`sum(max by (share_id) (netapp_volume_snapshot_used_bytes{project_id=%q,share_type=%q}))`,
-			projectUUID, shareType,
+			projectUUID, stName,
 		)
 		snapshotBytesPhysical, err := prometheusGetSingleValue(client, queryStr, &defaultValue)
 		if err != nil {
 			return manilaPhysicalUsage{}, err
 		}
-		usage.SnapshotGigabytes[shareType] = roundUp(snapshotBytesPhysical)
+		usage.SnapshotGigabytes[stName] = roundUp(snapshotBytesPhysical)
 	}
 
 	return usage, nil

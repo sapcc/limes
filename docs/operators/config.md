@@ -522,7 +522,10 @@ The area for this service is `storage`.
 services:
   - type: sharev2
     sharev2:
-      share_types: [ default, hypervisor_storage ]
+      share_types:
+        - name: default
+          replication_enabled: true
+        - name: hypervisor_storage
       prometheus_api:
           url: https://prometheus.example.com
           cert:    /path/to/client.pem
@@ -538,8 +541,6 @@ The area for this service is `storage`. The following resources are always expos
 | `share_capacity` | GiB | |
 | `share_snapshots` | countable | |
 | `snapshot_capacity` | GiB | |
-| `share_replicas` | countable | only with Manila Victoria or later |
-| `replica_capacity` | GiB | only with Manila Victoria or later |
 | `share_networks` | countable | |
 
 If the `sharev2.share_types` field lists more than one share type, the
@@ -554,11 +555,17 @@ resources are exposed:
 | `share_capacity_${share_type}` | GiB | |
 | `share_snapshots_${share_type}` | countable | |
 | `snapshot_capacity_${share_type}` | GiB | |
-| `share_replicas_${share_type}` | countable | only with Manila Victoria or later |
-| `replica_capacity_${share_type}` | GiB | only with Manila Victoria or later |
 
-In Manila, besides the share-type-specific quotas, the general quotas
-are set to the sum across all share types.
+The quota values in Manila are assigned as follows:
+
+- When share replica quotas are available (in Victoria and above), share types
+  that have `replication_enabled: true` in our configuration will have their
+  replica and replica capacity quotas set to the same value as the share and
+  share capacity quotas. (This makes sense since the shares themselves also use
+  up replica quota.) If `replication_enabled` is false or unset, the replica
+  quotas will be set to 0 instead.
+- Besides the share-type-specific quotas, the general quotas are set to the sum
+  across all share types.
 
 ### Physical usage
 
