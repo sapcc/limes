@@ -267,8 +267,8 @@ func (p *manilaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherc
 			Gigabytes:         quotas[p.makeResourceName("share_capacity", stName)],
 			Snapshots:         quotas[p.makeResourceName("share_snapshots", stName)],
 			SnapshotGigabytes: quotas[p.makeResourceName("snapshot_capacity", stName)],
-			Replicas:          0,
-			ReplicaGigabytes:  0,
+			Replicas:          nil,
+			ReplicaGigabytes:  nil,
 			ShareNetworks:     nil,
 		}
 		if p.hasReplicaQuotas && shareType.ReplicationEnabled {
@@ -316,8 +316,8 @@ type manilaQuotaSetDetail struct {
 	Shares            manilaQuotaDetail `json:"shares"`
 	SnapshotGigabytes manilaQuotaDetail `json:"snapshot_gigabytes"`
 	Snapshots         manilaQuotaDetail `json:"snapshots"`
-	ReplicaGigabytes  manilaQuotaDetail `json:"replica_gigabytes"`
-	Replicas          manilaQuotaDetail `json:"share_replicas"`
+	ReplicaGigabytes  manilaQuotaDetail `json:"replica_gigabytes,omitempty"`
+	Replicas          manilaQuotaDetail `json:"share_replicas,omitempty"`
 	ShareNetworks     manilaQuotaDetail `json:"share_networks,omitempty"`
 }
 

@@ -563,7 +563,7 @@ The quota values in Manila are assigned as follows:
   replica and replica capacity quotas set to the same value as the share and
   share capacity quotas. (This makes sense since the shares themselves also use
   up replica quota.) If `replication_enabled` is false or unset, the replica
-  quotas will be set to 0 instead.
+  quotas will not be set.
 - Besides the share-type-specific quotas, the general quotas are set to the sum
   across all share types.
 
