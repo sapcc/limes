@@ -20,6 +20,7 @@
 package plugins
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -30,6 +31,7 @@ import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/sharedfilesystems/apiversions"
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 )
@@ -150,15 +152,13 @@ func (p *manilaPlugin) makeResourceName(kind, shareTypeName string) string {
 }
 
 type manilaQuotaSet struct {
-	Gigabytes         uint64  `json:"gigabytes"`
-	Shares            uint64  `json:"shares"`
-	SnapshotGigabytes uint64  `json:"snapshot_gigabytes"`
-	Snapshots         uint64  `json:"snapshots"`
-	ReplicaGigabytes  uint64  `json:"-"`
-	Replicas          uint64  `json:"-"`
-	ShareNetworks     *uint64 `json:"share_networks,omitempty"`
-	//TODO: remove pointer types from replica quotas when making replica quota support mandatory
-	//(right now we need those because Manila without replica quota support chokes if these fields are present)
+	Gigabytes           uint64  `json:"gigabytes"`
+	Shares              uint64  `json:"shares"`
+	SnapshotGigabytes   uint64  `json:"snapshot_gigabytes"`
+	Snapshots           uint64  `json:"snapshots"`
+	ReplicaGigabytes    uint64  `json:"-"`
+	Replicas            uint64  `json:"-"`
+	ShareNetworks       *uint64 `json:"share_networks,omitempty"`
 	ReplicaGigabytesPtr *uint64 `json:"replica_gigabytes,omitempty"`
 	ReplicasPtr         *uint64 `json:"share_replicas,omitempty"`
 }
@@ -295,12 +295,14 @@ func (p *manilaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherc
 	}
 
 	url := client.ServiceURL("quota-sets", projectUUID)
+	logDebugSetQuota(projectUUID, "overall", overallQuotas)
 	_, err = client.Put(url, map[string]interface{}{"quota_set": overallQuotas}, nil, expect200)
 	if err != nil {
 		return fmt.Errorf("could not set overall share quotas: %s", err.Error())
 	}
 
 	for shareTypeName, quotasForType := range shareTypeQuotas {
+		logDebugSetQuota(projectUUID, shareTypeName, quotasForType)
 		url := client.ServiceURL("quota-sets", projectUUID) + "?share_type=" + shareTypeName
 		_, err = client.Put(url, map[string]interface{}{"quota_set": quotasForType}, nil, expect200)
 		if err != nil {
@@ -309,6 +311,13 @@ func (p *manilaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherc
 	}
 
 	return nil
+}
+
+func logDebugSetQuota(projectUUID, shareTypeName string, quotas manilaQuotaSet) {
+	if logg.ShowDebug {
+		buf, _ := json.Marshal(quotas)
+		logg.Debug("manila: PUT quota-sets %s %s: %s", projectUUID, shareTypeName, string(buf))
+	}
 }
 
 ////////////////////////////////////////////////////////////////////////////////
