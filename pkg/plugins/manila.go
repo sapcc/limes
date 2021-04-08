@@ -259,6 +259,7 @@ func (p *manilaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherc
 		ShareNetworks: &shareNetworkQuota,
 	}
 	shareTypeQuotas := make(map[string]manilaQuotaSet)
+	anyReplicationEnabled := false
 
 	for _, shareType := range p.cfg.ShareV2.ShareTypes {
 		stName := shareType.Name
@@ -272,6 +273,7 @@ func (p *manilaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherc
 			ShareNetworks:     nil,
 		}
 		if p.hasReplicaQuotas && shareType.ReplicationEnabled {
+			anyReplicationEnabled = true
 			quotasForType.Replicas = quotasForType.Shares
 			quotasForType.ReplicaGigabytes = quotasForType.Gigabytes
 			quotasForType.ReplicasPtr = &quotasForType.Replicas
@@ -287,7 +289,7 @@ func (p *manilaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherc
 		overallQuotas.ReplicaGigabytes += quotasForType.ReplicaGigabytes
 	}
 
-	if p.hasReplicaQuotas {
+	if p.hasReplicaQuotas && anyReplicationEnabled {
 		overallQuotas.ReplicasPtr = &overallQuotas.Replicas
 		overallQuotas.ReplicaGigabytesPtr = &overallQuotas.ReplicaGigabytes
 	}
