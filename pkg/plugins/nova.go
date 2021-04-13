@@ -456,9 +456,13 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 							class = "bigvm"
 						}
 						subResource["class"] = class
-						result["cores_"+class].Usage += flavor.VCPUs
-						result["instances_"+class].Usage++
-						result["ram_"+class].Usage += flavor.MemoryMiB
+
+						//do not count baremetal instances into `{cores,instances,ram}_{bigvm,regular}`
+						if _, exists := result["instances_"+flavorName]; !exists {
+							result["cores_"+class].Usage += flavor.VCPUs
+							result["instances_"+class].Usage++
+							result["ram_"+class].Usage += flavor.MemoryMiB
+						}
 					}
 				}
 
