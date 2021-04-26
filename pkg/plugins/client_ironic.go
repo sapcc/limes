@@ -56,6 +56,7 @@ type ironicNode struct {
 	Name                 string  `json:"name"`
 	ProvisionState       string  `json:"provision_state"`
 	TargetProvisionState *string `json:"target_provision_state"`
+	InstanceID           *string `json:"instance_uuid"`
 	Properties           struct {
 		Cores           veryFlexibleUint64 `json:"cpus"`
 		DiskGiB         veryFlexibleUint64 `json:"local_gb"`

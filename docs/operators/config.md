@@ -844,6 +844,7 @@ bear the following attributes:
 | --- | --- | --- |
 | `id` | string | node UUID |
 | `name` | string | node name |
+| `instance_id` | string | UUID of the Nova instance running on this node (if any) |
 | `ram` | integer value with unit | amount of memory |
 | `cores` | integer | number of CPU cores |
 | `disk` | integer value with unit | root disk size |

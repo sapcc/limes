@@ -186,6 +186,9 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 					if node.Properties.SerialNumber != "" {
 						sub["serial"] = node.Properties.SerialNumber
 					}
+					if node.InstanceID != nil && *node.InstanceID != "" {
+						sub["instance_id"] = *node.InstanceID
+					}
 					data.Subcapacities = append(data.Subcapacities, sub)
 				}
 
