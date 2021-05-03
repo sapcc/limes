@@ -351,12 +351,17 @@ func (p *autoApprovalTestPlugin) Rates() []limes.RateInfo {
 func (p *autoApprovalTestPlugin) ScrapeRates(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, prevSerializedState string) (map[string]*big.Int, string, error) {
 	return nil, "", nil
 }
+func (p *autoApprovalTestPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
+}
+func (p *autoApprovalTestPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, domainUUID, projectUUID, serializedMetrics string) error {
+	return nil
+}
 
-func (p *autoApprovalTestPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, error) {
+func (p *autoApprovalTestPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, string, error) {
 	return map[string]core.ResourceData{
 		"approve":   {Usage: 0, Quota: int64(p.StaticBackendQuota)},
 		"noapprove": {Usage: 0, Quota: int64(p.StaticBackendQuota) + 10},
-	}, nil
+	}, "", nil
 }
 
 func (p *autoApprovalTestPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
@@ -400,8 +405,8 @@ func (noopQuotaPlugin) ServiceInfo() limes.ServiceInfo {
 func (noopQuotaPlugin) Resources() []limes.ResourceInfo {
 	return nil
 }
-func (noopQuotaPlugin) Scrape(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, error) {
-	return nil, nil
+func (noopQuotaPlugin) Scrape(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, string, error) {
+	return nil, "", nil
 }
 func (noopQuotaPlugin) SetQuota(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
 	return nil
@@ -411,6 +416,11 @@ func (noopQuotaPlugin) Rates() []limes.RateInfo {
 }
 func (noopQuotaPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
 	return nil, "", nil
+}
+func (noopQuotaPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
+}
+func (noopQuotaPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, domainUUID, projectUUID, serializedMetrics string) error {
+	return nil
 }
 
 func Test_ScrapeButNoResources(t *testing.T) {

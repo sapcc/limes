@@ -246,10 +246,10 @@ func (p *novaPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercl
 }
 
 //Scrape implements the core.QuotaPlugin interface.
-func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, error) {
+func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, string, error) {
 	client, err := openstack.NewComputeV2(provider, eo)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	var limitsData struct {
@@ -273,14 +273,14 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 	}
 	err = limits.Get(client, limits.GetOpts{TenantID: projectUUID}).ExtractInto(&limitsData)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	var totalServerGroupMembersUsed uint64
 	if limitsData.Limits.Absolute.TotalServerGroupsUsed > 0 {
 		err := p.getServerGroups(client)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 
 		if v, ok := p.serverGroups.members[projectUUID]; ok {
@@ -491,7 +491,7 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 			return true, nil
 		})
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 
 		//report Prometheus metrics
@@ -512,7 +512,7 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 	for name, data := range result {
 		result2[name] = *data
 	}
-	return result2, nil
+	return result2, "", nil
 }
 
 //SetQuota implements the core.QuotaPlugin interface.
@@ -523,6 +523,17 @@ func (p *novaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherclo
 	}
 
 	return quotasets.Update(client, projectUUID, novaQuotaUpdateOpts(quotas)).Err
+}
+
+//DescribeMetrics implements the core.QuotaPlugin interface.
+func (p *novaPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
+	//not used by this plugin
+}
+
+//CollectMetrics implements the core.QuotaPlugin interface.
+func (p *novaPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, domainUUID, projectUUID, serializedMetrics string) error {
+	//not used by this plugin
+	return nil
 }
 
 //Information about a flavor, as it appears in GET /servers/:id in the "flavor"

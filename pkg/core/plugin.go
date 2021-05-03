@@ -23,6 +23,7 @@ import (
 	"math/big"
 
 	"github.com/gophercloud/gophercloud"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/limes"
 )
 
@@ -84,7 +85,10 @@ type QuotaPlugin interface {
 	//The clusterID is usually not needed, but should be given as a label to
 	//Prometheus metrics emitted by the plugin (if the plugin does that sort of
 	//thing).
-	Scrape(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]ResourceData, error)
+	//
+	//The serializedMetrics return value is persisted in the Limes DB and
+	//supplied to all subsequent RenderMetrics calls.
+	Scrape(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (result map[string]ResourceData, serializedMetrics string, error error)
 	//SetQuota updates the backend service's quotas for the given project in the
 	//given domain to the values specified here. The map is guaranteed to contain
 	//values for all resources defined by Resources().
@@ -114,6 +118,25 @@ type QuotaPlugin interface {
 	//field to carry state between ScrapeRates() calls, esp. to detect and handle
 	//counter resets in the backend.
 	ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error)
+
+	//DescribeMetrics is called when Prometheus is scraping metrics from
+	//limes-collect, to provide an opportunity to the plugin to emit its own
+	//metrics.
+	//
+	//Together with CollectMetrics, this interface is roughly analogous to the
+	//prometheus.Collector interface; cf. documentation over there.
+	DescribeMetrics(ch chan<- *prometheus.Desc)
+	//CollectMetrics is called when Prometheus is scraping metrics from
+	//limes-collect, to provide an opportunity to the plugin to emit its own
+	//metrics. The serializedMetrics argument contains the respective value
+	//returned from the last Scrape call on the same project.
+	//
+	//The clusterID should be given as a label to all emitted metrics.
+	//
+	//Some plugins also emit metrics directly within Scrape. This newer interface
+	//should be preferred since metrics emitted here won't be lost between
+	//restarts of limes-collect.
+	CollectMetrics(ch chan<- prometheus.Metric, clusterID, domainUUID, projectUUID, serializedMetrics string) error
 }
 
 //CapacityData contains the total and per-availability-zone capacity data for a

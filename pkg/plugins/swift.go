@@ -103,10 +103,10 @@ func (p *swiftPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gopherc
 }
 
 //Scrape implements the core.QuotaPlugin interface.
-func (p *swiftPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, error) {
+func (p *swiftPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, string, error) {
 	account, err := p.Account(provider, eo, projectUUID)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	headers, err := account.Headers()
@@ -117,9 +117,9 @@ func (p *swiftPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclou
 				Quota: 0,
 				Usage: 0,
 			},
-		}, nil
+		}, "", nil
 	} else if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	// collect object count metrics per container
@@ -146,7 +146,7 @@ func (p *swiftPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclou
 	if !headers.BytesUsedQuota().Exists() {
 		data.Quota = -1
 	}
-	return map[string]core.ResourceData{"capacity": data}, nil
+	return map[string]core.ResourceData{"capacity": data}, "", nil
 }
 
 //SetQuota implements the core.QuotaPlugin interface.
@@ -170,4 +170,15 @@ func (p *swiftPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercl
 		}
 	}
 	return err
+}
+
+//DescribeMetrics implements the core.QuotaPlugin interface.
+func (p *swiftPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
+	//not used by this plugin
+}
+
+//CollectMetrics implements the core.QuotaPlugin interface.
+func (p *swiftPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, domainUUID, projectUUID, serializedMetrics string) error {
+	//not used by this plugin
+	return nil
 }

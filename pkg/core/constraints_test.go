@@ -26,6 +26,7 @@ import (
 	"testing"
 
 	"github.com/gophercloud/gophercloud"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/limes"
 )
 
@@ -170,14 +171,19 @@ func (p quotaConstraintTestPlugin) ServiceInfo() limes.ServiceInfo {
 func (p quotaConstraintTestPlugin) Rates() []limes.RateInfo {
 	return nil
 }
-func (p quotaConstraintTestPlugin) Scrape(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]ResourceData, error) {
-	return nil, nil
+func (p quotaConstraintTestPlugin) Scrape(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]ResourceData, string, error) {
+	return nil, "", nil
 }
 func (p quotaConstraintTestPlugin) SetQuota(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
 	return nil
 }
 func (p quotaConstraintTestPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
 	return nil, "", nil
+}
+func (p quotaConstraintTestPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
+}
+func (p quotaConstraintTestPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, domainUUID, projectUUID, serializedMetrics string) error {
+	return nil
 }
 
 func (p quotaConstraintTestPlugin) Resources() []limes.ResourceInfo {

@@ -26,6 +26,7 @@ import (
 	"net/http"
 
 	"github.com/gophercloud/gophercloud"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
@@ -85,8 +86,8 @@ func (p *cronusPlugin) Rates() []limes.RateInfo {
 }
 
 //Scrape implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, error) {
-	return nil, nil
+func (p *cronusPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, string, error) {
+	return nil, "", nil
 }
 
 //SetQuota implements the core.QuotaPlugin interface.
@@ -181,6 +182,17 @@ func bigintPlusUint64(a *big.Int, u uint64) *big.Int {
 	b.SetUint64(u)
 	var c big.Int
 	return c.Add(a, &b)
+}
+
+//DescribeMetrics implements the core.QuotaPlugin interface.
+func (p *cronusPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
+	//not used by this plugin
+}
+
+//CollectMetrics implements the core.QuotaPlugin interface.
+func (p *cronusPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, domainUUID, projectUUID, serializedMetrics string) error {
+	//not used by this plugin
+	return nil
 }
 
 ////////////////////////////////////////////////////////////////////////////////

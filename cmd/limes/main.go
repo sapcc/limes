@@ -238,7 +238,7 @@ func taskTestGetQuota(config core.Configuration, cluster *core.Cluster, args []s
 	domainUUID, projectUUID, serviceType := findProjectServiceForTesting(cluster, args[0], args[1])
 
 	provider, eo := cluster.ProviderClientForService(serviceType)
-	result, err := cluster.QuotaPlugins[serviceType].Scrape(provider, eo, cluster.ID, domainUUID, projectUUID)
+	result, _, err := cluster.QuotaPlugins[serviceType].Scrape(provider, eo, cluster.ID, domainUUID, projectUUID)
 	if err != nil {
 		return err
 	}

@@ -28,6 +28,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v2/volumes"
 	"github.com/gophercloud/gophercloud/pagination"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 )
@@ -139,17 +140,17 @@ func (p *cinderPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gopher
 }
 
 //Scrape implements the core.QuotaPlugin interface.
-func (p *cinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, error) {
+func (p *cinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, string, error) {
 	client, err := openstack.NewBlockStorageV2(provider, eo)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	var result gophercloud.Result
 	url := client.ServiceURL("os-quota-sets", projectUUID) + "?usage=True"
 	_, err = client.Get(url, &result.Body, nil)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	var data struct {
@@ -157,7 +158,7 @@ func (p *cinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 	}
 	err = result.ExtractInto(&data)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	volumeData := make(map[string][]interface{})
@@ -199,7 +200,7 @@ func (p *cinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 			return true, nil
 		})
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 	}
 
@@ -211,7 +212,7 @@ func (p *cinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 			volumeData[volumeType],
 		)
 	}
-	return rd, nil
+	return rd, "", nil
 }
 
 //SetQuota implements the core.QuotaPlugin interface.
@@ -243,4 +244,15 @@ func (p *cinderPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherc
 	url := client.ServiceURL("os-quota-sets", projectUUID)
 	_, err = client.Put(url, requestData, nil, &gophercloud.RequestOpts{OkCodes: []int{200}})
 	return err
+}
+
+//DescribeMetrics implements the core.QuotaPlugin interface.
+func (p *cinderPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
+	//not used by this plugin
+}
+
+//CollectMetrics implements the core.QuotaPlugin interface.
+func (p *cinderPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, domainUUID, projectUUID, serializedMetrics string) error {
+	//not used by this plugin
+	return nil
 }

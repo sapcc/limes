@@ -110,7 +110,7 @@ func (c *Collector) Scrape() {
 		logg.Debug("scraping %s resources for %s/%s", serviceType, domainName, projectName)
 		domain := core.KeystoneDomain{Name: domainName, UUID: domainUUID}
 		provider, eo := c.Cluster.ProviderClientForService(serviceType)
-		resourceData, err := c.Plugin.Scrape(provider, eo, c.Cluster.ID, domainUUID, projectUUID)
+		resourceData, serializedMetrics, err := c.Plugin.Scrape(provider, eo, c.Cluster.ID, domainUUID, projectUUID)
 		if err != nil {
 			scrapeFailedCounter.With(labels).Inc()
 			//special case: stop scraping for a while when the backend service is not
@@ -140,7 +140,7 @@ func (c *Collector) Scrape() {
 		}
 
 		scrapeEndedAt := c.TimeNow()
-		err = c.writeScrapeResult(domain, projectName, projectUUID, projectID, projectHasBursting, serviceType, serviceID, resourceData, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
+		err = c.writeScrapeResult(domain, projectName, projectUUID, projectID, projectHasBursting, serviceType, serviceID, resourceData, serializedMetrics, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
 		if err != nil {
 			c.LogError("write %s backend data for %s/%s failed: %s", serviceType, domainName, projectName, err.Error())
 			scrapeFailedCounter.With(labels).Inc()
@@ -161,7 +161,7 @@ func (c *Collector) Scrape() {
 	}
 }
 
-func (c *Collector) writeScrapeResult(domain core.KeystoneDomain, projectName, projectUUID string, projectID int64, projectHasBursting bool, serviceType string, serviceID int64, resourceData map[string]core.ResourceData, scrapedAt time.Time, scrapeDuration time.Duration) error {
+func (c *Collector) writeScrapeResult(domain core.KeystoneDomain, projectName, projectUUID string, projectID int64, projectHasBursting bool, serviceType string, serviceID int64, resourceData map[string]core.ResourceData, serializedMetrics string, scrapedAt time.Time, scrapeDuration time.Duration) error {
 	tx, err := db.DB.Begin()
 	if err != nil {
 		return err
@@ -326,10 +326,11 @@ func (c *Collector) writeScrapeResult(domain core.KeystoneDomain, projectName, p
 	}
 
 	//update scraped_at timestamp and reset the stale flag on this service so
-	//that we don't scrape it again immediately afterwards
+	//that we don't scrape it again immediately afterwards; also persist all other
+	//attributes that we have not written yet
 	_, err = tx.Exec(
-		`UPDATE project_services SET scraped_at = $1, scrape_duration_secs = $2, stale = $3 WHERE id = $4`,
-		scrapedAt, scrapeDuration.Seconds(), false, serviceID,
+		`UPDATE project_services SET scraped_at = $1, scrape_duration_secs = $2, stale = $3, serialized_metrics = $4 WHERE id = $5`,
+		scrapedAt, scrapeDuration.Seconds(), false, serializedMetrics, serviceID,
 	)
 	if err != nil {
 		return err

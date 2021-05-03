@@ -26,6 +26,7 @@ import (
 	"strings"
 
 	"github.com/gophercloud/gophercloud"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 )
@@ -144,9 +145,9 @@ func (p *Plugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.
 }
 
 //Scrape implements the core.QuotaPlugin interface.
-func (p *Plugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, error) {
+func (p *Plugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, string, error) {
 	if p.ScrapeFails {
-		return nil, errors.New("Scrape failed as requested")
+		return nil, "", errors.New("Scrape failed as requested")
 	}
 
 	result := make(map[string]core.ResourceData)
@@ -195,7 +196,7 @@ func (p *Plugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.End
 		Subresources: subres,
 	}
 
-	return result, nil
+	return result, "", nil
 }
 
 //SetQuota implements the core.QuotaPlugin interface.
@@ -204,6 +205,15 @@ func (p *Plugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.E
 		return errors.New("SetQuota failed as requested")
 	}
 	p.OverrideQuota[projectUUID] = quotas
+	return nil
+}
+
+//DescribeMetrics implements the core.QuotaPlugin interface.
+func (p *Plugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
+}
+
+//CollectMetrics implements the core.QuotaPlugin interface.
+func (p *Plugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, domainUUID, projectUUID, serializedMetrics string) error {
 	return nil
 }
 

@@ -31,6 +31,7 @@ import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/sharedfilesystems/apiversions"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
@@ -169,10 +170,10 @@ func (p *manilaPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gopher
 }
 
 //Scrape implements the core.QuotaPlugin interface.
-func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, error) {
+func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, string, error) {
 	client, err := openstack.NewSharedFileSystemV2(provider, eo)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	//share-type-specific quotas need 2.39, replica quotas need 2.53
 	if p.hasReplicaQuotas {
@@ -185,21 +186,21 @@ func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 	for _, shareType := range p.cfg.ShareV2.ShareTypes {
 		quotaSets[shareType.Name], err = manilaCollectQuota(client, projectUUID, shareType.Name)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 	}
 
 	//the share_networks quota is only shown when querying for no share_type in particular
 	quotaSets[""], err = manilaCollectQuota(client, projectUUID, "")
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	var physUsage manilaPhysicalUsage
 	if p.cfg.ShareV2.PrometheusAPIConfig != nil {
 		physUsage, err = p.collectPhysicalUsage(projectUUID)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 	}
 
@@ -231,7 +232,7 @@ func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 		result[p.makeResourceName("share_snapshots", stName)] = quotaSets[stName].Snapshots.ToResourceData(nil)
 		result[p.makeResourceName("snapshot_capacity", stName)] = quotaSets[stName].SnapshotGigabytes.ToResourceData(snapshotGigabytesPhysical)
 	}
-	return result, nil
+	return result, "", nil
 }
 
 func derefOrZero(val *int64) int64 {
@@ -318,6 +319,17 @@ func logDebugSetQuota(projectUUID, shareTypeName string, quotas manilaQuotaSet) 
 		buf, _ := json.Marshal(quotas)
 		logg.Debug("manila: PUT quota-sets %s %s: %s", projectUUID, shareTypeName, string(buf))
 	}
+}
+
+//DescribeMetrics implements the core.QuotaPlugin interface.
+func (p *manilaPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
+	//not used by this plugin
+}
+
+//CollectMetrics implements the core.QuotaPlugin interface.
+func (p *manilaPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, domainUUID, projectUUID, serializedMetrics string) error {
+	//not used by this plugin
+	return nil
 }
 
 ////////////////////////////////////////////////////////////////////////////////
