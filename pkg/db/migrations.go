@@ -226,4 +226,10 @@ var SQLMigrations = map[string]string{
 		ALTER TABLE project_resources ALTER COLUMN backend_quota         DROP NOT NULL;
 		ALTER TABLE project_resources ALTER COLUMN desired_backend_quota DROP NOT NULL;
 	`,
+	"017_add_project_services_serialized_metrics.down.sql": `
+		ALTER TABLE project_services DROP COLUMN serialized_metrics;
+	`,
+	"017_add_project_services_serialized_metrics.up.sql": `
+		ALTER TABLE project_services ADD COLUMN serialized_metrics TEXT NOT NULL DEFAULT '';
+	`,
 }
