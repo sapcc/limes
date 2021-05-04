@@ -86,6 +86,7 @@ type ProjectService struct {
 	RatesStale              bool       `db:"rates_stale"`
 	RatesScrapeDurationSecs float64    `db:"rates_scrape_duration_secs"`
 	RatesScrapeState        string     `db:"rates_scrape_state"`
+	SerializedMetrics       string     `db:"serialized_metrics"`
 }
 
 //ProjectResource contains a record from the `project_resources` table. Quota

@@ -20,6 +20,8 @@
 package plugins
 
 import (
+	"encoding/json"
+	"fmt"
 	"math/big"
 	"net/http"
 
@@ -44,20 +46,37 @@ var swiftResources = []limes.ResourceInfo{
 	},
 }
 
-var swiftObjectsCountGauge = prometheus.NewGaugeVec(
-	prometheus.GaugeOpts{
-		Name: "limes_swift_objects_per_container",
-		Help: "Number of objects per Swift container.",
-	},
-	[]string{"os_cluster", "domain_id", "project_id", "container_name"},
+var (
+	swiftObjectsCountGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "limes_swift_objects_per_container",
+			Help: "Number of objects for each Swift container.",
+		},
+		[]string{"os_cluster", "domain_id", "project_id", "container_name"},
+	)
+	swiftBytesUsedGauge = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{
+			Name: "limes_swift_size_bytes_per_container",
+			Help: "Total object size in bytes for each Swift container.",
+		},
+		[]string{"os_cluster", "domain_id", "project_id", "container_name"},
+	)
 )
+
+//This is a purely internal format, so we use 1-character keys to save a few
+//bytes and thus a few CPU cycles.
+type swiftSerializedMetrics struct {
+	Containers map[string]swiftSerializedContainerMetrics `json:"c"`
+}
+type swiftSerializedContainerMetrics struct {
+	ObjectCount uint64 `json:"o"`
+	BytesUsed   uint64 `json:"b"`
+}
 
 func init() {
 	core.RegisterQuotaPlugin(func(c core.ServiceConfiguration, scrapeSubresources map[string]bool) core.QuotaPlugin {
 		return &swiftPlugin{c}
 	})
-
-	prometheus.MustRegister(swiftObjectsCountGauge)
 }
 
 //Init implements the core.QuotaPlugin interface.
@@ -103,10 +122,10 @@ func (p *swiftPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gopherc
 }
 
 //Scrape implements the core.QuotaPlugin interface.
-func (p *swiftPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, error) {
+func (p *swiftPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, string, error) {
 	account, err := p.Account(provider, eo, projectUUID)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	headers, err := account.Headers()
@@ -117,26 +136,32 @@ func (p *swiftPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclou
 				Quota: 0,
 				Usage: 0,
 			},
-		}, nil
+		}, "", nil
 	} else if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	// collect object count metrics per container
-	metricLabels := prometheus.Labels{
-		"os_cluster": clusterID,
-		"domain_id":  domainUUID,
-		"project_id": projectUUID,
-	}
-
 	containerInfos, err := account.Containers().CollectDetailed()
 	if err != nil {
-		logg.Error("Could not list containers in Swift account '%s': %v", projectUUID, err)
-	} else {
-		for _, info := range containerInfos {
-			metricLabels["container_name"] = info.Container.Name()
-			swiftObjectsCountGauge.With(metricLabels).Set(float64(info.ObjectCount))
+		return nil, "", fmt.Errorf("cannot list containers: %w", err)
+	}
+	var metrics swiftSerializedMetrics
+	metrics.Containers = make(map[string]swiftSerializedContainerMetrics, len(containerInfos))
+	for _, info := range containerInfos {
+		metrics.Containers[info.Container.Name()] = swiftSerializedContainerMetrics{
+			ObjectCount: info.ObjectCount,
+			BytesUsed:   info.BytesUsed,
 		}
+	}
+	serializedMetrics, err := json.Marshal(metrics)
+	if err != nil {
+		return nil, "", err
+	}
+
+	//optimization: skip submitting metrics entirely if there are no metrics to submit
+	if len(containerInfos) == 0 {
+		serializedMetrics = nil
 	}
 
 	data := core.ResourceData{
@@ -146,7 +171,7 @@ func (p *swiftPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclou
 	if !headers.BytesUsedQuota().Exists() {
 		data.Quota = -1
 	}
-	return map[string]core.ResourceData{"capacity": data}, nil
+	return map[string]core.ResourceData{"capacity": data}, string(serializedMetrics), nil
 }
 
 //SetQuota implements the core.QuotaPlugin interface.
@@ -170,4 +195,43 @@ func (p *swiftPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercl
 		}
 	}
 	return err
+}
+
+//DescribeMetrics implements the core.QuotaPlugin interface.
+func (p *swiftPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
+	swiftObjectsCountGauge.Describe(ch)
+	swiftBytesUsedGauge.Describe(ch)
+}
+
+//CollectMetrics implements the core.QuotaPlugin interface.
+func (p *swiftPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, domainUUID, projectUUID, serializedMetrics string) error {
+	if serializedMetrics == "" {
+		return nil
+	}
+	var metrics swiftSerializedMetrics
+	err := json.Unmarshal([]byte(serializedMetrics), &metrics)
+	if err != nil {
+		return err
+	}
+
+	descCh := make(chan *prometheus.Desc, 1)
+	swiftObjectsCountGauge.Describe(descCh)
+	swiftObjectsCountDesc := <-descCh
+	swiftBytesUsedGauge.Describe(descCh)
+	swiftBytesUsedDesc := <-descCh
+
+	for containerName, containerMetrics := range metrics.Containers {
+		ch <- prometheus.MustNewConstMetric(
+			swiftObjectsCountDesc,
+			prometheus.GaugeValue, float64(containerMetrics.ObjectCount),
+			clusterID, domainUUID, projectUUID, containerName,
+		)
+		ch <- prometheus.MustNewConstMetric(
+			swiftBytesUsedDesc,
+			prometheus.GaugeValue, float64(containerMetrics.BytesUsed),
+			clusterID, domainUUID, projectUUID, containerName,
+		)
+	}
+
+	return nil
 }

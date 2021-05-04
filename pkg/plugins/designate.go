@@ -26,6 +26,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/dns/v2/zones"
 	"github.com/gophercloud/gophercloud/pagination"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 )
@@ -82,22 +83,22 @@ func (p *designatePlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gop
 }
 
 //Scrape implements the core.QuotaPlugin interface.
-func (p *designatePlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, error) {
+func (p *designatePlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, string, error) {
 	client, err := openstack.NewDNSV2(provider, eo)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	//query quotas
 	quotas, err := dnsGetQuota(client, projectUUID)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	//to query usage, start by listing all zones
 	zoneIDs, err := dnsListZoneIDs(client, projectUUID)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	//query "recordsets per zone" usage by counting recordsets in each zone
@@ -109,7 +110,7 @@ func (p *designatePlugin) Scrape(provider *gophercloud.ProviderClient, eo gopher
 	for _, zoneID := range zoneIDs {
 		count, err := dnsCountZoneRecordsets(client, projectUUID, zoneID)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		if maxRecordsetsPerZone < count {
 			maxRecordsetsPerZone = count
@@ -125,7 +126,7 @@ func (p *designatePlugin) Scrape(provider *gophercloud.ProviderClient, eo gopher
 			Quota: quotas.ZoneRecordsets,
 			Usage: maxRecordsetsPerZone,
 		},
-	}, nil
+	}, "", nil
 }
 
 //SetQuota implements the core.QuotaPlugin interface.
@@ -143,6 +144,17 @@ func (p *designatePlugin) SetQuota(provider *gophercloud.ProviderClient, eo goph
 		//ZoneRecords to 20 * ZoneRecordsets, this quota will not disturb us)
 		ZoneRecords: int64(quotas["recordsets"] * 20),
 	})
+}
+
+//DescribeMetrics implements the core.QuotaPlugin interface.
+func (p *designatePlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
+	//not used by this plugin
+}
+
+//CollectMetrics implements the core.QuotaPlugin interface.
+func (p *designatePlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, domainUUID, projectUUID, serializedMetrics string) error {
+	//not used by this plugin
+	return nil
 }
 
 ////////////////////////////////////////////////////////////////////////////////

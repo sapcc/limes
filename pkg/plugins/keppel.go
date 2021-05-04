@@ -23,6 +23,7 @@ import (
 	"net/http"
 
 	"github.com/gophercloud/gophercloud"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 )
@@ -74,21 +75,21 @@ func (p *keppelPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gopher
 }
 
 //Scrape implements the core.QuotaPlugin interface.
-func (p *keppelPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, error) {
+func (p *keppelPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, string, error) {
 	client, err := newKeppelClient(provider, eo)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	quotas, err := client.GetQuota(projectUUID)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	return map[string]core.ResourceData{
 		"images": {
 			Quota: quotas.Manifests.Quota,
 			Usage: quotas.Manifests.Usage,
 		},
-	}, nil
+	}, "", nil
 }
 
 //SetQuota implements the core.QuotaPlugin interface.
@@ -101,6 +102,17 @@ func (p *keppelPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherc
 	var qs keppelQuotaSet
 	qs.Manifests.Quota = int64(quotas["images"])
 	return client.SetQuota(projectUUID, qs)
+}
+
+//DescribeMetrics implements the core.QuotaPlugin interface.
+func (p *keppelPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
+	//not used by this plugin
+}
+
+//CollectMetrics implements the core.QuotaPlugin interface.
+func (p *keppelPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, domainUUID, projectUUID, serializedMetrics string) error {
+	//not used by this plugin
+	return nil
 }
 
 ////////////////////////////////////////////////////////////////////////////////

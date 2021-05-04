@@ -26,6 +26,7 @@ import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/common/extensions"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 )
@@ -276,17 +277,17 @@ func (p *neutronPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophe
 }
 
 //Scrape implements the core.QuotaPlugin interface.
-func (p *neutronPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, error) {
+func (p *neutronPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, string, error) {
 	client, err := openstack.NewNetworkV2(provider, eo)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	var result gophercloud.Result
 	url := client.ServiceURL("quotas", projectUUID, "details")
 	_, err = client.Get(url, &result.Body, nil)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	type neutronQuotaStruct struct {
@@ -299,7 +300,7 @@ func (p *neutronPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercl
 	quotas.Values = make(map[string]neutronQuotaStruct)
 	err = result.ExtractInto(&quotas)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	//convert data returned by Neutron into Limes' internal format
@@ -311,7 +312,7 @@ func (p *neutronPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercl
 			Usage: values.Usage,
 		}
 	}
-	return data, nil
+	return data, "", nil
 }
 
 //SetQuota implements the core.QuotaPlugin interface.
@@ -357,5 +358,16 @@ func (p *neutronPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopher
 		}
 	}
 
+	return nil
+}
+
+//DescribeMetrics implements the core.QuotaPlugin interface.
+func (p *neutronPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
+	//not used by this plugin
+}
+
+//CollectMetrics implements the core.QuotaPlugin interface.
+func (p *neutronPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, domainUUID, projectUUID, serializedMetrics string) error {
+	//not used by this plugin
 	return nil
 }

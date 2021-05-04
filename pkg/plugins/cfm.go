@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/gophercloud/gophercloud"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
@@ -80,10 +81,10 @@ func (p *cfmPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gopherclo
 }
 
 //Scrape implements the core.QuotaPlugin interface.
-func (p *cfmPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, error) {
+func (p *cfmPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, string, error) {
 	client, err := newCFMClient(provider, eo, p.projectID)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	//prefer the new quota API if it is available
@@ -105,7 +106,7 @@ func (p *cfmPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.
 					Quota: data.StorageQuota.SizeLimitBytes,
 					Usage: data.StorageQuota.Usage.BytesUsed,
 				},
-			}, nil
+			}, "", nil
 		}
 		physicalUsage := data.StorageQuota.Usage.BytesUsed
 		return map[string]core.ResourceData{
@@ -114,27 +115,27 @@ func (p *cfmPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.
 				Usage:         data.StorageQuota.Usage.Size,
 				PhysicalUsage: &physicalUsage,
 			},
-		}, nil
+		}, "", nil
 	}
 
 	//never use the old API when we're instructed to only read quotas
 	if p.cfg.CFM.Authoritative {
 		if _, ok := err.(cfmNotFoundError); ok {
-			return map[string]core.ResourceData{"cfm_share_capacity": {Quota: 0, Usage: 0}}, nil
+			return map[string]core.ResourceData{"cfm_share_capacity": {Quota: 0, Usage: 0}}, "", nil
 		}
-		return nil, err
+		return nil, "", err
 	}
 
 	return p.scrapeOld(client, projectUUID)
 }
 
-func (p *cfmPlugin) scrapeOld(client *cfmClient, projectUUID string) (map[string]core.ResourceData, error) {
+func (p *cfmPlugin) scrapeOld(client *cfmClient, projectUUID string) (map[string]core.ResourceData, string, error) {
 	//cache the result of cfmListShareservers(), it's mildly expensive
 	now := time.Now()
 	if p.shareserversCache == nil || p.shareserversCacheExpires.Before(now) {
 		shareservers, err := client.ListShareservers()
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		p.shareserversCache = shareservers
 		p.shareserversCacheExpires = now.Add(5 * time.Minute)
@@ -149,14 +150,14 @@ func (p *cfmPlugin) scrapeOld(client *cfmClient, projectUUID string) (map[string
 
 		shareserverDetailed, err := client.GetShareserver(shareserver.DetailsURL)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 
 		result.Quota += int64(shareserverDetailed.BytesUsed)
 		result.Usage += shareserverDetailed.BytesUsed
 	}
 
-	return map[string]core.ResourceData{"cfm_share_capacity": result}, nil
+	return map[string]core.ResourceData{"cfm_share_capacity": result}, "", nil
 }
 
 //SetQuota implements the core.QuotaPlugin interface.
@@ -178,4 +179,15 @@ func (p *cfmPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherclou
 		err = client.CreateQuotaSet(projectUUID, quotaBytes)
 	}
 	return err
+}
+
+//DescribeMetrics implements the core.QuotaPlugin interface.
+func (p *cfmPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
+	//not used by this plugin
+}
+
+//CollectMetrics implements the core.QuotaPlugin interface.
+func (p *cfmPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, domainUUID, projectUUID, serializedMetrics string) error {
+	//not used by this plugin
+	return nil
 }
