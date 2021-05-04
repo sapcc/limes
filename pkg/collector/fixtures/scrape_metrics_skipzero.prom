@@ -10,6 +10,10 @@ limes_newest_scraped_at{os_cluster="west",service="unittest",service_name=""} 36
 # HELP limes_oldest_scraped_at Oldest (i.e. smallest) scraped_at timestamp for any project given a certain service in a certain OpenStack cluster.
 # TYPE limes_oldest_scraped_at gauge
 limes_oldest_scraped_at{os_cluster="west",service="unittest",service_name=""} 34
+# HELP limes_plugin_metrics_ok Whether plugin metrics were rendered successfully for a particular project service. Only present when the project service emits metrics.
+# TYPE limes_plugin_metrics_ok gauge
+limes_plugin_metrics_ok{domain="germany",domain_id="uuid-for-germany",os_cluster="west",project="berlin",project_id="uuid-for-berlin",service="unittest"} 1
+limes_plugin_metrics_ok{domain="germany",domain_id="uuid-for-germany",os_cluster="west",project="dresden",project_id="uuid-for-dresden",service="unittest"} 1
 # HELP limes_project_backendquota Actual quota of a Limes resource for an OpenStack project.
 # TYPE limes_project_backendquota gauge
 limes_project_backendquota{domain="germany",domain_id="uuid-for-germany",os_cluster="west",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="unittest"} 40
@@ -44,3 +48,11 @@ limes_unit_multiplier{resource="capacity",service="unittest"} 1
 limes_unit_multiplier{resource="capacity_portion",service="unittest"} 1
 limes_unit_multiplier{resource="external_things",service="unittest"} 1
 limes_unit_multiplier{resource="things",service="unittest"} 1
+# HELP limes_unittest_capacity_usage 
+# TYPE limes_unittest_capacity_usage gauge
+limes_unittest_capacity_usage{domain_id="uuid-for-germany",os_cluster="west",project_id="uuid-for-berlin"} 20
+limes_unittest_capacity_usage{domain_id="uuid-for-germany",os_cluster="west",project_id="uuid-for-dresden"} 20
+# HELP limes_unittest_things_usage 
+# TYPE limes_unittest_things_usage gauge
+limes_unittest_things_usage{domain_id="uuid-for-germany",os_cluster="west",project_id="uuid-for-berlin"} 5
+limes_unittest_things_usage{domain_id="uuid-for-germany",os_cluster="west",project_id="uuid-for-dresden"} 5

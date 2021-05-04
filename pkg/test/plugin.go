@@ -22,6 +22,7 @@ package test
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math/big"
 	"strings"
 
@@ -196,7 +197,13 @@ func (p *Plugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.End
 		Subresources: subres,
 	}
 
-	return result, "", nil
+	//make up some serialized metrics (reporting usage as a metric is usually
+	//nonsensical since limes-collect already reports all usages as metrics, but
+	//this is only a testcase anyway)
+	serializedMetrics := fmt.Sprintf(`{"capacity_usage":%d,"things_usage":%d}`,
+		result["capacity"].Usage, result["things"].Usage)
+
+	return result, serializedMetrics, nil
 }
 
 //SetQuota implements the core.QuotaPlugin interface.
@@ -208,12 +215,52 @@ func (p *Plugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.E
 	return nil
 }
 
+var (
+	unittestCapacityUsageMetric = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{Name: "limes_unittest_capacity_usage"},
+		[]string{"os_cluster", "domain_id", "project_id"},
+	)
+	unittestThingsUsageMetric = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{Name: "limes_unittest_things_usage"},
+		[]string{"os_cluster", "domain_id", "project_id"},
+	)
+)
+
 //DescribeMetrics implements the core.QuotaPlugin interface.
 func (p *Plugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
+	unittestCapacityUsageMetric.Describe(ch)
+	unittestThingsUsageMetric.Describe(ch)
 }
 
 //CollectMetrics implements the core.QuotaPlugin interface.
 func (p *Plugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, domainUUID, projectUUID, serializedMetrics string) error {
+	if serializedMetrics == "" {
+		return nil
+	}
+
+	var data struct {
+		CapacityUsage uint64 `json:"capacity_usage"`
+		ThingsUsage   uint64 `json:"things_usage"`
+	}
+	err := json.Unmarshal([]byte(serializedMetrics), &data)
+	if err != nil {
+		return err
+	}
+
+	descCh := make(chan *prometheus.Desc, 1)
+	unittestCapacityUsageMetric.Describe(descCh)
+	unittestCapacityUsageDesc := <-descCh
+	unittestThingsUsageMetric.Describe(descCh)
+	unittestThingsUsageDesc := <-descCh
+
+	ch <- prometheus.MustNewConstMetric(
+		unittestCapacityUsageDesc, prometheus.GaugeValue, float64(data.CapacityUsage),
+		clusterID, domainUUID, projectUUID,
+	)
+	ch <- prometheus.MustNewConstMetric(
+		unittestThingsUsageDesc, prometheus.GaugeValue, float64(data.ThingsUsage),
+		clusterID, domainUUID, projectUUID,
+	)
 	return nil
 }
 
