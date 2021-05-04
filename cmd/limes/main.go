@@ -234,10 +234,10 @@ func taskTestGetQuota(config core.Configuration, cluster *core.Cluster, args []s
 	if len(args) != 2 {
 		printUsageAndExit()
 	}
-	domainUUID, projectUUID, serviceType := findProjectServiceForTesting(cluster, args[0], args[1])
+	domainName, domainUUID, projectName, projectUUID, serviceType := findProjectServiceForTesting(cluster, args[0], args[1])
 
 	provider, eo := cluster.ProviderClientForService(serviceType)
-	result, _, err := cluster.QuotaPlugins[serviceType].Scrape(provider, eo, cluster.ID, domainUUID, projectUUID)
+	result, serializedMetrics, err := cluster.QuotaPlugins[serviceType].Scrape(provider, eo, cluster.ID, domainUUID, projectUUID)
 	if err != nil {
 		return err
 	}
@@ -248,6 +248,17 @@ func taskTestGetQuota(config core.Configuration, cluster *core.Cluster, args []s
 		}
 	}
 
+	prometheus.MustRegister(&collector.PluginMetricsCollector{
+		Cluster: cluster,
+		Override: []collector.PluginMetricsInstance{{
+			DomainName:        domainName,
+			DomainUUID:        domainUUID,
+			ProjectName:       projectName,
+			ProjectUUID:       projectUUID,
+			ServiceType:       serviceType,
+			SerializedMetrics: serializedMetrics,
+		}},
+	})
 	dumpGeneratedPrometheusMetrics()
 
 	enc := json.NewEncoder(os.Stdout)
@@ -265,7 +276,7 @@ func taskTestGetRates(config core.Configuration, cluster *core.Cluster, args []s
 	default:
 		printUsageAndExit()
 	}
-	domainUUID, projectUUID, serviceType := findProjectServiceForTesting(cluster, args[0], args[1])
+	_, domainUUID, _, projectUUID, serviceType := findProjectServiceForTesting(cluster, args[0], args[1])
 
 	provider, eo := cluster.ProviderClientForService(serviceType)
 	result, serializedState, err := cluster.QuotaPlugins[serviceType].ScrapeRates(provider, eo, cluster.ID, domainUUID, projectUUID, prevSerializedState)
@@ -289,17 +300,17 @@ func taskTestGetRates(config core.Configuration, cluster *core.Cluster, args []s
 	return enc.Encode(result)
 }
 
-func findProjectServiceForTesting(cluster *core.Cluster, inputProjectUUID, inputServiceType string) (domainUUID, projectUUID, serviceType string) {
+func findProjectServiceForTesting(cluster *core.Cluster, inputProjectUUID, inputServiceType string) (domainName, domainUUID, projectName, projectUUID, serviceType string) {
 	serviceType = inputServiceType
 	if !cluster.HasService(serviceType) {
 		logg.Fatal("unknown service type: %s", serviceType)
 	}
 
 	err := db.DB.QueryRow(`
-		SELECT d.uuid, p.uuid
+		SELECT d.name, d.uuid, p.name, p.uuid
 		  FROM domains d JOIN projects p ON p.domain_id = d.id
 		 WHERE p.uuid = $1 AND d.cluster_id = $2
-	`, inputProjectUUID, cluster.ID).Scan(&domainUUID, &projectUUID)
+	`, inputProjectUUID, cluster.ID).Scan(&domainName, &domainUUID, &projectName, &projectUUID)
 	if err == sql.ErrNoRows {
 		err = errors.New("no such project in this cluster")
 	}

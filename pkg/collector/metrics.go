@@ -292,6 +292,20 @@ var pluginMetricsOkGauge = prometheus.NewGaugeVec(
 //which are specific to the selected quota plugins.
 type PluginMetricsCollector struct {
 	Cluster *core.Cluster
+	//When .Override is set, the DB is bypassed and only the given
+	//PluginMetricsInstances are considered. This is used for testing only.
+	Override []PluginMetricsInstance
+}
+
+//PluginMetricsInstance describes a single project service for which plugin
+//metrics are submitted. It appears in type PluginMetricsCollector.
+type PluginMetricsInstance struct {
+	DomainName        string
+	DomainUUID        string
+	ProjectName       string
+	ProjectUUID       string
+	ServiceType       string
+	SerializedMetrics string
 }
 
 //Describe implements the prometheus.Collector interface.
@@ -316,45 +330,46 @@ func (c *PluginMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	pluginMetricsOkGauge.Describe(descCh)
 	pluginMetricsOkDesc := <-descCh
 
+	if c.Override != nil {
+		for _, instance := range c.Override {
+			c.collectOneProjectService(ch, pluginMetricsOkDesc, instance)
+		}
+		return
+	}
+
 	queryArgs := []interface{}{c.Cluster.ID}
 	err := db.ForeachRow(db.DB, serializedMetricsGetQuery, queryArgs, func(rows *sql.Rows) error {
-		var (
-			domainName        string
-			domainUUID        string
-			projectName       string
-			projectUUID       string
-			serviceType       string
-			serializedMetrics string
-		)
-		err := rows.Scan(&domainName, &domainUUID, &projectName, &projectUUID, &serviceType, &serializedMetrics)
-		if err != nil {
-			return err
+		var i PluginMetricsInstance
+		err := rows.Scan(&i.DomainName, &i.DomainUUID, &i.ProjectName, &i.ProjectUUID, &i.ServiceType, &i.SerializedMetrics)
+		if err == nil {
+			c.collectOneProjectService(ch, pluginMetricsOkDesc, i)
 		}
-
-		plugin := c.Cluster.QuotaPlugins[serviceType]
-		if plugin == nil {
-			return nil
-		}
-		err = plugin.CollectMetrics(ch, c.Cluster.ID, domainUUID, projectUUID, serializedMetrics)
-		successAsFloat := 1.0
-		if err != nil {
-			successAsFloat = 0.0
-			//errors in plugin.CollectMetrics() are not fatal: we record a failure in
-			//the metrics and keep going with the other project services
-			logg.Error("while collecting plugin metrics for service %s in project %s: %s",
-				serviceType, projectUUID, err.Error())
-		}
-		ch <- prometheus.MustNewConstMetric(
-			pluginMetricsOkDesc,
-			prometheus.GaugeValue, successAsFloat,
-			c.Cluster.ID, domainName, domainUUID, projectName, projectUUID, serviceType,
-		)
-
-		return nil
+		return err
 	})
 	if err != nil {
 		logg.Error("collect plugin metrics failed: " + err.Error())
 	}
+}
+
+func (c *PluginMetricsCollector) collectOneProjectService(ch chan<- prometheus.Metric, pluginMetricsOkDesc *prometheus.Desc, instance PluginMetricsInstance) {
+	plugin := c.Cluster.QuotaPlugins[instance.ServiceType]
+	if plugin == nil {
+		return
+	}
+	err := plugin.CollectMetrics(ch, c.Cluster.ID, instance.DomainUUID, instance.ProjectUUID, instance.SerializedMetrics)
+	successAsFloat := 1.0
+	if err != nil {
+		successAsFloat = 0.0
+		//errors in plugin.CollectMetrics() are not fatal: we record a failure in
+		//the metrics and keep going with the other project services
+		logg.Error("while collecting plugin metrics for service %s in project %s: %s",
+			instance.ServiceType, instance.ProjectUUID, err.Error())
+	}
+	ch <- prometheus.MustNewConstMetric(
+		pluginMetricsOkDesc,
+		prometheus.GaugeValue, successAsFloat,
+		c.Cluster.ID, instance.DomainName, instance.DomainUUID, instance.ProjectName, instance.ProjectUUID, instance.ServiceType,
+	)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
