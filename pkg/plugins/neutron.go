@@ -20,23 +20,27 @@
 package plugins
 
 import (
-	"fmt"
 	"math/big"
+	"net/url"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
-	"github.com/gophercloud/gophercloud/openstack/common/extensions"
+	"github.com/gophercloud/gophercloud/openstack/loadbalancer/v2/l7policies"
+	"github.com/gophercloud/gophercloud/openstack/loadbalancer/v2/listeners"
+	"github.com/gophercloud/gophercloud/openstack/loadbalancer/v2/loadbalancers"
+	"github.com/gophercloud/gophercloud/openstack/loadbalancer/v2/monitors"
+	"github.com/gophercloud/gophercloud/openstack/loadbalancer/v2/pools"
+	octavia_quotas "github.com/gophercloud/gophercloud/openstack/loadbalancer/v2/quotas"
+	neutron_quotas "github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/quotas"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 )
 
 type neutronPlugin struct {
-	cfg           core.ServiceConfiguration
-	resources     []limes.ResourceInfo
-	resourcesMeta []neutronResourceMetadata
-	hasOctavia    bool
-	hasLBaaS      bool
+	cfg        core.ServiceConfiguration
+	resources  []limes.ResourceInfo
+	hasOctavia bool
 }
 
 var neutronResources = []limes.ResourceInfo{
@@ -126,33 +130,16 @@ var neutronResources = []limes.ResourceInfo{
 func init() {
 	core.RegisterQuotaPlugin(func(c core.ServiceConfiguration, scrapeSubresources map[string]bool) core.QuotaPlugin {
 		return &neutronPlugin{
-			cfg:           c,
-			resources:     neutronResources,
-			resourcesMeta: neutronResourceMeta,
+			cfg:       c,
+			resources: neutronResources,
 		}
 	})
 }
 
 //Init implements the core.QuotaPlugin interface.
 func (p *neutronPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
-	client, err := openstack.NewNetworkV2(provider, eo)
-	if err != nil {
-		return err
-	}
-
-	// LBaaSv2 supported?
-	r := extensions.Get(client, "lbaasv2")
-	switch r.Result.Err.(type) {
-	case gophercloud.ErrDefault404:
-		p.hasLBaaS = false
-	case nil:
-		p.hasLBaaS = true
-	default:
-		return fmt.Errorf("cannot check for lbaasv2 support in Neutron: %s", r.Result.Err.Error())
-	}
-
 	// Octavia supported?
-	_, err = openstack.NewLoadBalancerV2(provider, eo)
+	_, err := openstack.NewLoadBalancerV2(provider, eo)
 	switch err.(type) {
 	case *gophercloud.ErrEndpointNotFound:
 		p.hasOctavia = false
@@ -187,8 +174,6 @@ func (p *neutronPlugin) Rates() []limes.RateInfo {
 type neutronResourceMetadata struct {
 	LimesName   string
 	NeutronName string
-	InOctavia   bool
-	InLBaaS     bool
 }
 
 var neutronResourceMeta = []neutronResourceMetadata{
@@ -228,41 +213,42 @@ var neutronResourceMeta = []neutronResourceMetadata{
 		LimesName:   "rbac_policies",
 		NeutronName: "rbac_policy",
 	},
+}
+
+type octaviaResourceMetadata struct {
+	LimesName         string
+	OctaviaName       string
+	LegacyOctaviaName string
+	DoNotSetQuota     bool
+}
+
+var octaviaResourceMeta = []octaviaResourceMetadata{
 	{
-		LimesName:   "loadbalancers",
-		NeutronName: "loadbalancer",
-		InOctavia:   true,
-		InLBaaS:     true,
+		LimesName:         "loadbalancers",
+		OctaviaName:       "loadbalancer",
+		LegacyOctaviaName: "load_balancer",
 	},
 	{
 		LimesName:   "listeners",
-		NeutronName: "listener",
-		InOctavia:   true,
-		InLBaaS:     true,
+		OctaviaName: "listener",
 	},
 	{
 		LimesName:   "pools",
-		NeutronName: "pool",
-		InOctavia:   true,
-		InLBaaS:     true,
+		OctaviaName: "pool",
 	},
 	{
-		LimesName:   "healthmonitors",
-		NeutronName: "healthmonitor",
-		InOctavia:   true,
-		InLBaaS:     true,
+		LimesName:         "healthmonitors",
+		OctaviaName:       "healthmonitor",
+		LegacyOctaviaName: "health_monitor",
 	},
 	{
-		LimesName:   "l7policies",
-		NeutronName: "l7policy",
-		InOctavia:   false, //for some reason, Octavia does not support this quota type
-		InLBaaS:     true,
+		LimesName:     "l7policies",
+		OctaviaName:   "l7policy",
+		DoNotSetQuota: true, //this quota is supported from Victoria onwards, but we have an older Octavia at the moment
 	},
 	{
 		LimesName:   "pool_members",
-		NeutronName: "member",
-		InOctavia:   true,
-		InLBaaS:     true,
+		OctaviaName: "member",
 	},
 }
 
@@ -278,18 +264,30 @@ func (p *neutronPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophe
 
 //Scrape implements the core.QuotaPlugin interface.
 func (p *neutronPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, string, error) {
-	client, err := openstack.NewNetworkV2(provider, eo)
+	data := make(map[string]core.ResourceData)
+
+	err := p.scrapeNeutronInto(data, provider, eo, projectUUID)
 	if err != nil {
 		return nil, "", err
 	}
 
-	var result gophercloud.Result
-	url := client.ServiceURL("quotas", projectUUID, "details")
-	_, err = client.Get(url, &result.Body, nil)
-	if err != nil {
-		return nil, "", err
+	if p.hasOctavia {
+		err = p.scrapeOctaviaInto(data, provider, eo, projectUUID)
+		if err != nil {
+			return nil, "", err
+		}
 	}
 
+	return data, "", nil
+}
+
+func (p *neutronPlugin) scrapeNeutronInto(result map[string]core.ResourceData, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, projectUUID string) error {
+	networkV2, err := openstack.NewNetworkV2(provider, eo)
+	if err != nil {
+		return err
+	}
+
+	//read Neutron quota/usage
 	type neutronQuotaStruct struct {
 		Quota int64  `json:"limit"`
 		Usage uint64 `json:"used"`
@@ -298,61 +296,209 @@ func (p *neutronPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercl
 		Values map[string]neutronQuotaStruct `json:"quota"`
 	}
 	quotas.Values = make(map[string]neutronQuotaStruct)
-	err = result.ExtractInto(&quotas)
+	err = neutron_quotas.GetDetail(networkV2, projectUUID).ExtractInto(&quotas)
 	if err != nil {
-		return nil, "", err
+		return err
 	}
 
-	//convert data returned by Neutron into Limes' internal format
-	data := make(map[string]core.ResourceData)
-	for _, res := range p.resourcesMeta {
+	//convert data into Limes' internal format
+	for _, res := range neutronResourceMeta {
 		values := quotas.Values[res.NeutronName]
-		data[res.LimesName] = core.ResourceData{
+		result[res.LimesName] = core.ResourceData{
 			Quota: values.Quota,
 			Usage: values.Usage,
 		}
 	}
-	return data, "", nil
+	return nil
+}
+
+func (p *neutronPlugin) scrapeOctaviaInto(result map[string]core.ResourceData, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, projectUUID string) error {
+	octaviaV2, err := openstack.NewLoadBalancerV2(provider, eo)
+	if err != nil {
+		return err
+	}
+
+	//read Octavia quota
+	var quotas struct {
+		Values map[string]int64 `json:"quota"`
+	}
+	err = octavia_quotas.Get(octaviaV2, projectUUID).ExtractInto(&quotas)
+	if err != nil {
+		return err
+	}
+
+	//read Octavia usage (requires manual counting of assets for now)
+	usage, err := p.scrapeOctaviaUsage(octaviaV2, projectUUID)
+	if err != nil {
+		return err
+	}
+
+	for _, res := range octaviaResourceMeta {
+		quota, exists := quotas.Values[res.OctaviaName]
+		if !exists {
+			quota = quotas.Values[res.LegacyOctaviaName]
+		}
+		result[res.LimesName] = core.ResourceData{
+			Quota: quota,
+			Usage: usage[res.LimesName],
+		}
+	}
+	return nil
+}
+
+type octaviaGenericOpts struct {
+	ProjectID string
+}
+
+//ToLoadBalancerListQuery implements the loadbalancers.ListOptsBuilder interface.
+func (o octaviaGenericOpts) ToLoadBalancerListQuery() (string, error) {
+	return "?" + url.Values{"fields": {"id"}, "project_id": {o.ProjectID}}.Encode(), nil
+}
+
+//ToMonitorListQuery implements the monitors.ListOptsBuilder interface.
+func (o octaviaGenericOpts) ToMonitorListQuery() (string, error) {
+	return "?" + url.Values{"fields": {"id"}, "project_id": {o.ProjectID}}.Encode(), nil
+}
+
+//ToL7PolicyListQuery implements the l7policies.ListOptsBuilder interface.
+func (o octaviaGenericOpts) ToL7PolicyListQuery() (string, error) {
+	return "?" + url.Values{"fields": {"id"}, "project_id": {o.ProjectID}}.Encode(), nil
+}
+
+//ToListenerListQuery implements the listeners.ListOptsBuilder interface.
+func (o octaviaGenericOpts) ToListenerListQuery() (string, error) {
+	return "?" + url.Values{"fields": {"id"}, "project_id": {o.ProjectID}}.Encode(), nil
+}
+
+//ToPoolListQuery implements the pools.ListOptsBuilder interface.
+func (o octaviaGenericOpts) ToPoolListQuery() (string, error) {
+	return "?" + url.Values{"fields": {"id"}, "project_id": {o.ProjectID}}.Encode(), nil
+}
+
+//ToMembersListQuery implements the pools.ListMembersOptsBuilder interface.
+func (o octaviaGenericOpts) ToMembersListQuery() (string, error) {
+	return "?" + url.Values{"fields": {"id"}, "project_id": {o.ProjectID}}.Encode(), nil
+}
+
+func (p *neutronPlugin) scrapeOctaviaUsage(client *gophercloud.ServiceClient, projectUUID string) (map[string]uint64, error) {
+	result := make(map[string]uint64)
+	opts := octaviaGenericOpts{ProjectID: projectUUID}
+
+	//usage for loadbalancers
+	page, err := loadbalancers.List(client, opts).AllPages()
+	if err != nil {
+		return nil, err
+	}
+	allLoadBalancers, err := loadbalancers.ExtractLoadBalancers(page)
+	if err != nil {
+		return nil, err
+	}
+	result["loadbalancers"] = uint64(len(allLoadBalancers))
+
+	//usage for health monitors
+	page, err = monitors.List(client, opts).AllPages()
+	if err != nil {
+		return nil, err
+	}
+	allHealthMonitors, err := monitors.ExtractMonitors(page)
+	if err != nil {
+		return nil, err
+	}
+	result["healthmonitors"] = uint64(len(allHealthMonitors))
+
+	//usage for L7 policies
+	page, err = l7policies.List(client, opts).AllPages()
+	if err != nil {
+		return nil, err
+	}
+	allL7Policies, err := l7policies.ExtractL7Policies(page)
+	if err != nil {
+		return nil, err
+	}
+	result["l7policies"] = uint64(len(allL7Policies))
+
+	//usage for listeners
+	page, err = listeners.List(client, opts).AllPages()
+	if err != nil {
+		return nil, err
+	}
+	allListeners, err := listeners.ExtractListeners(page)
+	if err != nil {
+		return nil, err
+	}
+	result["listeners"] = uint64(len(allListeners))
+
+	//usage for pools
+	page, err = pools.List(client, opts).AllPages()
+	if err != nil {
+		return nil, err
+	}
+	allPools, err := pools.ExtractPools(page)
+	if err != nil {
+		return nil, err
+	}
+	result["pools"] = uint64(len(allPools))
+
+	//usage for pool members
+	for _, pool := range allPools {
+		page, err = pools.ListMembers(client, pool.ID, opts).AllPages()
+		if err != nil {
+			return nil, err
+		}
+		allPoolMembers, err := pools.ExtractMembers(page)
+		if err != nil {
+			return nil, err
+		}
+		result["pool_members"] += uint64(len(allPoolMembers))
+	}
+
+	return result, nil
+}
+
+type neutronOrOctaviaQuotaSet map[string]interface{}
+
+//ToQuotaUpdateMap implements the neutron_quotas.UpdateOpts and octavia_quotas.UpdateOpts interfaces.
+func (q neutronOrOctaviaQuotaSet) ToQuotaUpdateMap() (map[string]interface{}, error) {
+	return q, nil
 }
 
 //SetQuota implements the core.QuotaPlugin interface.
 func (p *neutronPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
-	//map resource names from Limes to Neutron/Octavia
-	var neutronRequestData struct {
-		Quotas map[string]uint64 `json:"quota"`
-	}
-	var octaviaRequestData struct {
-		Quotas map[string]uint64 `json:"quota"`
-	}
-	neutronRequestData.Quotas = make(map[string]uint64)
-	octaviaRequestData.Quotas = make(map[string]uint64)
-	for _, res := range p.resourcesMeta {
+	//collect Neutron quotas
+	neutronQuotas := make(neutronOrOctaviaQuotaSet)
+	for _, res := range neutronResourceMeta {
 		quota, exists := quotas[res.LimesName]
-		if exists && (!res.InLBaaS || p.hasLBaaS) {
-			neutronRequestData.Quotas[res.NeutronName] = quota
-		}
-		if exists && res.InOctavia {
-			octaviaRequestData.Quotas[res.NeutronName] = quota
+		if exists {
+			neutronQuotas[res.NeutronName] = quota
 		}
 	}
 
-	neutronClient, err := openstack.NewNetworkV2(provider, eo)
+	//set Neutron quotas
+	networkV2, err := openstack.NewNetworkV2(provider, eo)
 	if err != nil {
 		return err
 	}
-	neutronURL := neutronClient.ServiceURL("quotas", projectUUID)
-	_, err = neutronClient.Put(neutronURL, neutronRequestData, nil, &gophercloud.RequestOpts{OkCodes: []int{200}})
+	_, err = neutron_quotas.Update(networkV2, projectUUID, neutronQuotas).Extract()
 	if err != nil {
 		return err
 	}
 
 	if p.hasOctavia {
-		octaviaClient, err := openstack.NewLoadBalancerV2(provider, eo)
+		//collect Octavia quotas
+		octaviaQuotas := make(neutronOrOctaviaQuotaSet)
+		for _, res := range octaviaResourceMeta {
+			quota, exists := quotas[res.LimesName]
+			if exists && !res.DoNotSetQuota {
+				octaviaQuotas[res.OctaviaName] = quota
+			}
+		}
+
+		//set Octavia quotas
+		networkV2, err := openstack.NewNetworkV2(provider, eo)
 		if err != nil {
 			return err
 		}
-		octaviaURL := octaviaClient.ServiceURL("lbaas", "quotas", projectUUID)
-		_, err = octaviaClient.Put(octaviaURL, octaviaRequestData, nil, &gophercloud.RequestOpts{OkCodes: []int{202}})
+		_, err = octavia_quotas.Update(networkV2, projectUUID, octaviaQuotas).Extract()
 		if err != nil {
 			return err
 		}
