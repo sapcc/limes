@@ -494,11 +494,11 @@ func (p *neutronPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopher
 		}
 
 		//set Octavia quotas
-		networkV2, err := openstack.NewNetworkV2(provider, eo)
+		octaviaV2, err := openstack.NewLoadBalancerV2(provider, eo)
 		if err != nil {
 			return err
 		}
-		_, err = octavia_quotas.Update(networkV2, projectUUID, octaviaQuotas).Extract()
+		_, err = octavia_quotas.Update(octaviaV2, projectUUID, octaviaQuotas).Extract()
 		if err != nil {
 			return err
 		}
