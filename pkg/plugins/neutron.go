@@ -455,11 +455,11 @@ func (p *neutronPlugin) scrapeOctaviaUsage(client *gophercloud.ServiceClient, pr
 	return result, nil
 }
 
-type neutronOrOctaviaQuotaSet map[string]interface{}
+type neutronOrOctaviaQuotaSet map[string]uint64
 
 //ToQuotaUpdateMap implements the neutron_quotas.UpdateOpts and octavia_quotas.UpdateOpts interfaces.
 func (q neutronOrOctaviaQuotaSet) ToQuotaUpdateMap() (map[string]interface{}, error) {
-	return q, nil
+	return map[string]interface{}{"quota": map[string]uint64(q)}, nil
 }
 
 //SetQuota implements the core.QuotaPlugin interface.
