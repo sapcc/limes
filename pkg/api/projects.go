@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sre"
 	"github.com/sapcc/limes"
@@ -415,6 +416,7 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 			srv.ID, srv.Type,
 		)
 		if err != nil {
+			logg.Info("while applying new %s quota for project %s: %s", srv.Type, updater.Project.UUID, err.Error())
 			errors = append(errors, err.Error())
 			continue
 		}
