@@ -62,6 +62,7 @@ type novaPlugin struct {
 	flavorNameRx        *regexp.Regexp
 	hypervisorTypeRules []novaHypervisorTypeRule
 	resources           []limes.ResourceInfo
+	ftt                 novaFlavorTranslationTable
 	//caches
 	osTypeForImage map[string]string
 	serverGroups   struct {
@@ -107,6 +108,7 @@ func init() {
 			cfg:             c,
 			scrapeInstances: scrapeSubresources["instances"],
 			resources:       novaDefaultResources,
+			ftt:             newNovaFlavorTranslationTable(c.Compute.SeparateInstanceQuotas.FlavorAliases),
 		}
 	})
 	prometheus.MustRegister(novaInstanceCountGauge)
@@ -130,16 +132,18 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.E
 	}
 
 	//find per-flavor instance resources
-	resources, err := listPerFlavorInstanceResources(client, p.flavorNameRx)
+	flavorNames, err := p.ftt.ListFlavorsWithSeparateInstanceQuota(client)
 	if err != nil {
 		return err
 	}
-	for _, resourceName := range resources {
-		p.resources = append(p.resources, limes.ResourceInfo{
-			Name:     resourceName,
-			Category: "per_flavor",
-			Unit:     limes.UnitNone,
-		})
+	for _, flavorName := range flavorNames {
+		if p.flavorNameRx == nil || p.flavorNameRx.MatchString(flavorName) {
+			p.resources = append(p.resources, limes.ResourceInfo{
+				Name:     p.ftt.LimesResourceNameForFlavor(flavorName),
+				Category: "per_flavor",
+				Unit:     limes.UnitNone,
+			})
+		}
 	}
 
 	//add price class resources if requested
@@ -196,7 +200,7 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.E
 			return err
 		}
 		//the format of rule.Key is built for future extensibility, e.g. if it
-		//later becomes required to match against image capabilties or flavor name
+		//later becomes required to match against image capabilties
 		switch {
 		case rule.Key == "flavor-name":
 			p.hypervisorTypeRules = append(p.hypervisorTypeRules, novaHypervisorTypeRule{
@@ -314,7 +318,7 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 	if limitsData.Limits.AbsolutePerFlavor != nil {
 		for flavorName, flavorLimits := range limitsData.Limits.AbsolutePerFlavor {
 			if p.flavorNameRx == nil || p.flavorNameRx.MatchString(flavorName) {
-				result["instances_"+flavorName] = &core.ResourceData{
+				result[p.ftt.LimesResourceNameForFlavor(flavorName)] = &core.ResourceData{
 					Quota: flavorLimits.MaxTotalInstances,
 					Usage: flavorLimits.TotalInstancesUsed,
 				}
@@ -458,7 +462,7 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 						subResource["class"] = class
 
 						//do not count baremetal instances into `{cores,instances,ram}_{bigvm,regular}`
-						if _, exists := result["instances_"+flavorName]; !exists {
+						if _, exists := result[p.ftt.LimesResourceNameForFlavor(flavorName)]; !exists {
 							result["cores_"+class].Usage += flavor.VCPUs
 							result["instances_"+class].Usage++
 							result["ram_"+class].Usage += flavor.MemoryMiB
@@ -482,7 +486,7 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 					}
 				}
 
-				resource, exists := result["instances_"+flavorName]
+				resource, exists := result[p.ftt.LimesResourceNameForFlavor(flavorName)]
 				if !exists {
 					resource = result["instances"]
 				}
@@ -522,7 +526,19 @@ func (p *novaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherclo
 		return err
 	}
 
-	return quotasets.Update(client, projectUUID, novaQuotaUpdateOpts(quotas)).Err
+	//translate Limes resource names for separate instance quotas into Nova quota names
+	novaQuotas := make(novaQuotaUpdateOpts, len(quotas))
+	for resourceName, quota := range quotas {
+		novaQuotaName := p.ftt.NovaQuotaNameForLimesResourceName(resourceName)
+		if novaQuotaName == "" {
+			//not a separate instance quota - leave as-is
+			novaQuotas[resourceName] = quota
+		} else {
+			novaQuotas[novaQuotaName] = quota
+		}
+	}
+
+	return quotasets.Update(client, projectUUID, novaQuotas).Err
 }
 
 //DescribeMetrics implements the core.QuotaPlugin interface.
@@ -649,11 +665,7 @@ func (opts novaServerListOpts) ToServerListQuery() (string, error) {
 type novaQuotaUpdateOpts map[string]uint64
 
 func (opts novaQuotaUpdateOpts) ToComputeQuotaUpdateMap() (map[string]interface{}, error) {
-	result := make(map[string]interface{}, len(opts))
-	for key, val := range opts {
-		result[key] = val
-	}
-	return map[string]interface{}{"quota_set": result}, nil
+	return map[string]interface{}{"quota_set": opts}, nil
 }
 
 type novaServerIPData struct {

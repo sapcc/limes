@@ -35,6 +35,7 @@ import (
 
 type capacitySapccIronicPlugin struct {
 	cfg                 core.CapacitorConfiguration
+	ftt                 novaFlavorTranslationTable
 	reportSubcapacities bool
 }
 
@@ -48,7 +49,8 @@ var ironicUnmatchedNodesGauge = prometheus.NewGaugeVec(
 
 func init() {
 	core.RegisterCapacityPlugin(func(c core.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) core.CapacityPlugin {
-		return &capacitySapccIronicPlugin{c, scrapeSubcapacities["compute"]["instances-baremetal"]}
+		ftt := newNovaFlavorTranslationTable(c.SAPCCIronic.FlavorAliases)
+		return &capacitySapccIronicPlugin{c, ftt, scrapeSubcapacities["compute"]["instances-baremetal"]}
 	})
 	prometheus.MustRegister(ironicUnmatchedNodesGauge)
 }
@@ -89,7 +91,7 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 	if err != nil {
 		return nil, err
 	}
-	flavors, err := collectIronicFlavorInfo(novaClient)
+	flavors, err := p.collectIronicFlavorInfo(novaClient)
 	if err != nil {
 		return nil, err
 	}
@@ -97,7 +99,7 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 	//we are going to report capacity for all per-flavor instance quotas
 	result := make(map[string]*core.CapacityData)
 	for _, flavor := range flavors {
-		result["instances_"+flavor.Name] = &core.CapacityData{
+		result[p.ftt.LimesResourceNameForFlavor(flavor.Name)] = &core.CapacityData{
 			Capacity:      0,
 			CapacityPerAZ: map[string]*core.CapacityDataForAZ{},
 		}
@@ -147,7 +149,7 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 			if node.Matches(flavor) {
 				logg.Debug("Ironic node %q (%s) matches flavor %s", node.Name, node.ID, flavor.Name)
 
-				data := result["instances_"+flavor.Name]
+				data := result[p.ftt.LimesResourceNameForFlavor(flavor.Name)]
 				data.Capacity++
 
 				var nodeAZ string
@@ -215,56 +217,14 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 	return map[string]map[string]core.CapacityData{"compute": result2}, nil
 }
 
-//NOTE: This method is shared with the Nova quota plugin.
-func listPerFlavorInstanceResources(novaClient *gophercloud.ServiceClient, flavorNameRx *regexp.Regexp) ([]string, error) {
-	//look at quota class "default" to determine which quotas exist
-	url := novaClient.ServiceURL("os-quota-class-sets", "default")
-	var result gophercloud.Result
-	_, err := novaClient.Get(url, &result.Body, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	//At SAP Converged Cloud, we use per-flavor instance quotas for baremetal
-	//(Ironic) flavors, to control precisely how many baremetal machines can be
-	//used by each domain/project. Each such quota has the resource name
-	//"instances_${FLAVOR_NAME}".
-	var body struct {
-		//NOTE: cannot use map[string]int64 here because this object contains the
-		//field "id": "default" (curse you, untyped JSON)
-		QuotaClassSet map[string]interface{} `json:"quota_class_set"`
-	}
-	err = result.ExtractInto(&body)
-	if err != nil {
-		return nil, err
-	}
-
-	var resources []string
-	for key := range body.QuotaClassSet {
-		if strings.HasPrefix(key, "instances_") {
-			//if `flavorNameRx` is given, only consider flavors matching it
-			if flavorNameRx != nil {
-				flavorName := strings.TrimPrefix(key, "instances_")
-				if !flavorNameRx.MatchString(flavorName) {
-					continue
-				}
-			}
-			resources = append(resources, key)
-		}
-	}
-
-	return resources, nil
-}
-
-func collectIronicFlavorInfo(novaClient *gophercloud.ServiceClient) ([]ironicFlavorInfo, error) {
+func (p *capacitySapccIronicPlugin) collectIronicFlavorInfo(novaClient *gophercloud.ServiceClient) ([]ironicFlavorInfo, error) {
 	//which flavors have separate instance quota?
-	resources, err := listPerFlavorInstanceResources(novaClient, nil)
+	flavorNames, err := p.ftt.ListFlavorsWithSeparateInstanceQuota(novaClient)
 	if err != nil {
 		return nil, err
 	}
-	isRelevantFlavorName := make(map[string]bool, len(resources))
-	for _, resourceName := range resources {
-		flavorName := strings.TrimPrefix(resourceName, "instances_")
+	isRelevantFlavorName := make(map[string]bool, len(flavorNames))
+	for _, flavorName := range flavorNames {
 		isRelevantFlavorName[flavorName] = true
 	}
 

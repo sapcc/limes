@@ -118,7 +118,8 @@ type ServiceConfiguration struct {
 			Type    string `yaml:"type"`
 		} `yaml:"hypervisor_type_rules"`
 		SeparateInstanceQuotas struct {
-			FlavorNamePattern string `yaml:"flavor_name_pattern"`
+			FlavorNamePattern string              `yaml:"flavor_name_pattern"`
+			FlavorAliases     map[string][]string `yaml:"flavor_aliases"`
 		} `yaml:"separate_instance_quotas"`
 	} `yaml:"compute"`
 	CFM struct {
@@ -192,7 +193,10 @@ type CapacitorConfiguration struct {
 		SnapshotsPerShare uint64   `yaml:"snapshots_per_share"`
 		CapacityBalance   float64  `yaml:"capacity_balance"`
 	} `yaml:"manila"`
-	Manual map[string]map[string]uint64 `yaml:"manual"`
+	Manual      map[string]map[string]uint64 `yaml:"manual"`
+	SAPCCIronic struct {
+		FlavorAliases map[string][]string `yaml:"flavor_aliases"`
+	} `yaml:"sapcc_ironic"`
 }
 
 //LowPrivilegeRaiseConfiguration contains the configuration options for

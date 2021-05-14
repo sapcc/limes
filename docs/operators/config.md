@@ -407,13 +407,24 @@ services:
   - type: compute
     compute:
       separate_instance_quotas:
-        flavor_name_pattern: ^z
+        flavor_name_pattern: ^bm_
+        flavor_aliases:
+          bm_newflavor1: [ bm_oldflavor1 ]
+          bm_newflavor2: [ bm_oldflavor2, bm_oldflavor3 ]
 ```
 
 Sometimes Tempest creates resource classes or flavors that Limes recognizes as requiring a separate instance quota,
 which may not be desired. To control which flavors get a separate instance quota, give the
 `compute.separate_instance_quotas.flavor_name_pattern` option as shown above. Only flavors with a name matching that
 regex will be considered.
+
+On some Nova installations, some flavors can have multiple names, either as permanent aliases or temporarily while
+moving to a new flavor naming scheme. The `compute.separate_instance_quotas.flavor_aliases` option configures Limes to
+recognize flavor names that are aliased to each other, and decides which flavor name Limes prefers. For instance, in the
+config example above, the names `bm_newflavor2`, `bm_oldflavor2` and `bm_oldflavor3` are all aliases referring to the
+same flavor, and Limes prefers the name `bm_newflavor2`. The preferred name will be used when deriving a resource name
+for the respective separate instance quota. In the previous example, the resource will be called
+`instances_bm_newflavor2` since `bm_newflavor2` is the flavor alias that Limes prefers.
 
 ## `database`: SAP Cloud Frame Manager
 
@@ -823,11 +834,18 @@ capacitors:
 ```yaml
 capacitors:
   - id: sapcc-ironic
+    sapcc_ironic:
+      flavor_aliases:
+        newflavor1: [ oldflavor1 ]
+        newflavor2: [ oldflavor2, oldflavor3 ]
 ```
 
 This capacity plugin reports capacity for the special `compute/instances_<flavorname>` resources that exist on SAP
 Converged Cloud ([see above](#compute-nova-v2)). For each such flavor, it counts the number of Ironic nodes whose RAM
 size, disk size, number of cores, and capabilities match those in the flavor.
+
+The `sapcc_ironic.flavor_aliases` parameter has the same semantics as the respective parameter on the `compute` service type,
+and should have the same contents as well (unless you like unnecessary confusion).
 
 ```yaml
 capacitors:
