@@ -104,8 +104,6 @@ func (p *designatePlugin) Scrape(provider *gophercloud.ProviderClient, eo gopher
 	//query "recordsets per zone" usage by counting recordsets in each zone
 	//individually (we could count all recordsets over the all project at once,
 	//but that won't help since the quota applies per individual zone)
-	//TODO: this needs a lot of API requests for large projects; see if we can
-	//use Ceilometer instead
 	maxRecordsetsPerZone := uint64(0)
 	for _, zoneID := range zoneIDs {
 		count, err := dnsCountZoneRecordsets(client, projectUUID, zoneID)

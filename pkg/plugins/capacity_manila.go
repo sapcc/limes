@@ -35,7 +35,6 @@ type capacityManilaPlugin struct {
 
 func init() {
 	core.RegisterCapacityPlugin(func(c core.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) core.CapacityPlugin {
-		//TODO
 		return &capacityManilaPlugin{c}
 	})
 }

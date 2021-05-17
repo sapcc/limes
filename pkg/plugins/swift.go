@@ -112,7 +112,6 @@ func (p *swiftPlugin) Account(provider *gophercloud.ProviderClient, eo gopherclo
 	if err != nil {
 		return nil, err
 	}
-	//TODO Make Auth prefix configurable
 	return resellerAccount.SwitchAccount("AUTH_" + projectUUID), nil
 }
 
