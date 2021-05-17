@@ -27,6 +27,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -100,6 +102,8 @@ func main() {
 		task = taskTestGetQuota
 	case "test-get-rates":
 		task = taskTestGetRates
+	case "test-set-quota":
+		task = taskTestSetQuota
 	case "test-scan-capacity":
 		task = taskTestScanCapacity
 	default:
@@ -118,6 +122,7 @@ Usage:
 \t%s (collect|serve) <config-file> <cluster-id>
 \t%s test-get-quota <config-file> <cluster-id> <project-id> <service-type>
 \t%s test-get-rates <config-file> <cluster-id> <project-id> <service-type> [<prev-serialized-state>]
+\t%s test-set-quota <config-file> <cluster-id> <project-id> <service-type> <resource-name>=<integer-value>...
 \t%s test-scan-capacity <config-file> <cluster-id> <capacitor>
 `), `\t`, "\t", -1) + "\n"
 
@@ -353,6 +358,30 @@ func dumpGeneratedPrometheusMetrics() {
 			}
 		}
 	}
+}
+
+func taskTestSetQuota(config core.Configuration, cluster *core.Cluster, args []string) error {
+	if len(args) < 3 {
+		printUsageAndExit()
+	}
+	_, domainUUID, _, projectUUID, serviceType := findProjectServiceForTesting(cluster, args[0], args[1])
+
+	quotaValueRx := regexp.MustCompile(`^([^=]+)=(\d+)$`)
+	quotaValues := make(map[string]uint64)
+	for _, arg := range args[2:] {
+		match := quotaValueRx.FindStringSubmatch(arg)
+		if match == nil {
+			printUsageAndExit()
+		}
+		val, err := strconv.ParseUint(match[2], 10, 64)
+		if err != nil {
+			logg.Fatal(err.Error())
+		}
+		quotaValues[match[1]] = val
+	}
+
+	provider, eo := cluster.ProviderClientForService(serviceType)
+	return cluster.QuotaPlugins[serviceType].SetQuota(provider, eo, cluster.ID, domainUUID, projectUUID, quotaValues)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
