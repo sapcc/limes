@@ -20,11 +20,13 @@
 package plugins
 
 import (
+	"fmt"
 	"math/big"
 	"net/url"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
+	"github.com/gophercloud/gophercloud/openstack/common/extensions"
 	"github.com/gophercloud/gophercloud/openstack/loadbalancer/v2/l7policies"
 	"github.com/gophercloud/gophercloud/openstack/loadbalancer/v2/listeners"
 	"github.com/gophercloud/gophercloud/openstack/loadbalancer/v2/loadbalancers"
@@ -38,9 +40,10 @@ import (
 )
 
 type neutronPlugin struct {
-	cfg        core.ServiceConfiguration
-	resources  []limes.ResourceInfo
-	hasOctavia bool
+	cfg               core.ServiceConfiguration
+	resources         []limes.ResourceInfo
+	hasLBaaSExtension bool //TODO remove after migrating to newer Neutron
+	hasOctavia        bool
 }
 
 var neutronResources = []limes.ResourceInfo{
@@ -138,8 +141,24 @@ func init() {
 
 //Init implements the core.QuotaPlugin interface.
 func (p *neutronPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
+	client, err := openstack.NewNetworkV2(provider, eo)
+	if err != nil {
+		return err
+	}
+
+	// LBaaSv2 supported?
+	r := extensions.Get(client, "lbaasv2")
+	switch r.Result.Err.(type) {
+	case gophercloud.ErrDefault404:
+		p.hasLBaaSExtension = false
+	case nil:
+		p.hasLBaaSExtension = true
+	default:
+		return fmt.Errorf("cannot check for lbaasv2 support in Neutron: %s", r.Result.Err.Error())
+	}
+
 	// Octavia supported?
-	_, err := openstack.NewLoadBalancerV2(provider, eo)
+	_, err = openstack.NewLoadBalancerV2(provider, eo)
 	switch err.(type) {
 	case *gophercloud.ErrEndpointNotFound:
 		p.hasOctavia = false
@@ -470,6 +489,18 @@ func (p *neutronPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopher
 		quota, exists := quotas[res.LimesName]
 		if exists {
 			neutronQuotas[res.NeutronName] = quota
+		}
+	}
+	//even if Octavia is there, when Neutron has the LBaaS extension enabled
+	//(with the proxy driver for Octavia), it needs to know about LBaaS quotas as
+	//well since it also enforces them
+	if p.hasLBaaSExtension {
+		for _, res := range octaviaResourceMeta {
+			quota, exists := quotas[res.LimesName]
+			//NOTE: do not check DoNotSetQuota here, since Neutron knows how to deal with the "l7policy" quota
+			if exists {
+				neutronQuotas[res.OctaviaName] = quota
+			}
 		}
 	}
 
