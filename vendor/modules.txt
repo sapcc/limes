@@ -102,7 +102,7 @@ github.com/prometheus/procfs/internal/util
 # github.com/rs/cors v1.7.0
 ## explicit
 github.com/rs/cors
-# github.com/sapcc/go-bits v0.0.0-20210224200539-a8e93aa719ac
+# github.com/sapcc/go-bits v0.0.0-20210518135053-8a9465bb1339
 ## explicit
 github.com/sapcc/go-bits/assert
 github.com/sapcc/go-bits/audittools

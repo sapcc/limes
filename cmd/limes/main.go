@@ -175,7 +175,7 @@ func taskCollect(config core.Configuration, cluster *core.Cluster, args []string
 	}
 	http.Handle("/metrics", promhttp.Handler())
 	logg.Info("listening on " + config.Collector.MetricsListenAddress)
-	return httpee.ListenAndServeContext(httpee.ContextWithSIGINT(context.Background()), config.Collector.MetricsListenAddress, nil)
+	return httpee.ListenAndServeContext(httpee.ContextWithSIGINT(context.Background(), 10*time.Second), config.Collector.MetricsListenAddress, nil)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -229,7 +229,7 @@ func taskServe(config core.Configuration, cluster *core.Cluster, args []string) 
 	//start HTTP server
 	http.Handle("/", handler)
 	logg.Info("listening on " + config.API.ListenAddress)
-	return httpee.ListenAndServeContext(httpee.ContextWithSIGINT(context.Background()), config.API.ListenAddress, nil)
+	return httpee.ListenAndServeContext(httpee.ContextWithSIGINT(context.Background(), 10*time.Second), config.API.ListenAddress, nil)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
