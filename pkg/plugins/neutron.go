@@ -27,11 +27,6 @@ import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/common/extensions"
-	"github.com/gophercloud/gophercloud/openstack/loadbalancer/v2/l7policies"
-	"github.com/gophercloud/gophercloud/openstack/loadbalancer/v2/listeners"
-	"github.com/gophercloud/gophercloud/openstack/loadbalancer/v2/loadbalancers"
-	"github.com/gophercloud/gophercloud/openstack/loadbalancer/v2/monitors"
-	"github.com/gophercloud/gophercloud/openstack/loadbalancer/v2/pools"
 	octavia_quotas "github.com/gophercloud/gophercloud/openstack/loadbalancer/v2/quotas"
 	neutron_quotas "github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/quotas"
 	"github.com/prometheus/client_golang/prometheus"
@@ -346,7 +341,7 @@ func (p *neutronPlugin) scrapeOctaviaInto(result map[string]core.ResourceData, p
 		return err
 	}
 
-	//read Octavia usage (requires manual counting of assets for now)
+	//read Octavia quota
 	usage, err := p.scrapeOctaviaUsage(octaviaV2, projectUUID)
 	if err != nil {
 		return err
@@ -359,7 +354,7 @@ func (p *neutronPlugin) scrapeOctaviaInto(result map[string]core.ResourceData, p
 		}
 		result[res.LimesName] = core.ResourceData{
 			Quota: quota,
-			Usage: usage[res.LimesName],
+			Usage: usage[res.OctaviaName],
 		}
 	}
 	return nil
@@ -399,79 +394,29 @@ func (o octaviaGenericOpts) ToMembersListQuery() (string, error) {
 	return "?" + url.Values{"fields": {"id"}, "project_id": {o.ProjectID}}.Encode(), nil
 }
 
-func (p *neutronPlugin) scrapeOctaviaUsage(client *gophercloud.ServiceClient, projectUUID string) (map[string]uint64, error) {
-	result := make(map[string]uint64)
-	opts := octaviaGenericOpts{ProjectID: projectUUID}
-
-	//usage for loadbalancers
-	page, err := loadbalancers.List(client, opts).AllPages()
-	if err != nil {
-		return nil, err
-	}
-	allLoadBalancers, err := loadbalancers.ExtractLoadBalancers(page)
-	if err != nil {
-		return nil, err
-	}
-	result["loadbalancers"] = uint64(len(allLoadBalancers))
-
-	//usage for health monitors
-	page, err = monitors.List(client, opts).AllPages()
-	if err != nil {
-		return nil, err
-	}
-	allHealthMonitors, err := monitors.ExtractMonitors(page)
-	if err != nil {
-		return nil, err
-	}
-	result["healthmonitors"] = uint64(len(allHealthMonitors))
-
-	//usage for L7 policies
-	page, err = l7policies.List(client, opts).AllPages()
-	if err != nil {
-		return nil, err
-	}
-	allL7Policies, err := l7policies.ExtractL7Policies(page)
-	if err != nil {
-		return nil, err
-	}
-	result["l7policies"] = uint64(len(allL7Policies))
-
-	//usage for listeners
-	page, err = listeners.List(client, opts).AllPages()
-	if err != nil {
-		return nil, err
-	}
-	allListeners, err := listeners.ExtractListeners(page)
-	if err != nil {
-		return nil, err
-	}
-	result["listeners"] = uint64(len(allListeners))
-
-	//usage for pools
-	page, err = pools.List(client, opts).AllPages()
-	if err != nil {
-		return nil, err
-	}
-	allPools, err := pools.ExtractPools(page)
-	if err != nil {
-		return nil, err
-	}
-	result["pools"] = uint64(len(allPools))
-
-	//usage for pool members
-	for _, pool := range allPools {
-		page, err = pools.ListMembers(client, pool.ID, opts).AllPages()
-		if err != nil {
-			return nil, err
+// scrapeOctaviaUsage returns Octavia quota usage for a project.
+func (p *neutronPlugin) scrapeOctaviaUsage(client *gophercloud.ServiceClient, projectID string) (map[string]uint64, error) {
+	var (
+		usage struct {
+			Values map[string]uint64 `json:"quota_usage"`
 		}
-		allPoolMembers, err := pools.ExtractMembers(page)
-		if err != nil {
-			return nil, err
-		}
-		result["pool_members"] += uint64(len(allPoolMembers))
+		r gophercloud.Result
+	)
+	usage.Values = make(map[string]uint64)
+	resp, err := client.Get(client.ServiceURL("quota_usage", projectID), &r.Body, nil)
+	if err != nil {
+		return usage.Values, err
 	}
 
-	return result, nil
+	// parse response
+	_, r.Header, r.Err = gophercloud.ParseResponse(resp, err)
+
+	// read Octavia quota
+	if err := r.ExtractInto(&usage); err != nil {
+		return usage.Values, err
+	}
+
+	return usage.Values, err
 }
 
 type neutronOrOctaviaQuotaSet map[string]uint64
