@@ -54,7 +54,7 @@ var resources = []limes.ResourceInfo{
 		Name:        "capacity_portion",
 		Unit:        limes.UnitBytes,
 		NoQuota:     true,
-		ContainedIn: "capacity_portion",
+		ContainedIn: "capacity",
 	},
 	{
 		Name: "things",
