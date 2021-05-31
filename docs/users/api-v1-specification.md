@@ -11,7 +11,7 @@ policy differently, so that certain requests may require other roles or token sc
   * [X\-Limes\-Cluster\-Id](#x-limes-cluster-id)
 * [GET /v1/domains/:domain\_id/projects](#get-v1domainsdomain_idprojects)
 * [GET /v1/domains/:domain\_id/projects/:project\_id](#get-v1domainsdomain_idprojectsproject_id)
-  * [Quota/usage for resources](#quota-usage-for-resources)
+  * [Quota/usage for resources](#quotausage-for-resources)
   * [Subresources](#subresources)
   * [Quota bursting details](#quota-bursting-details)
   * [Rate limits and throughput tracking](#rate-limits-and-throughput-tracking)
@@ -56,7 +56,8 @@ projects in that token's domain. With project member permission, shows that toke
 * `resource`: When combined, with `?service=`, limit query to that resource
   (e.g. `?service=compute&resource=instances`). May be given multiple times.
 * `detail`: If given, list subresources for resources that support it. (See subheading below for details.)
-* `rates`: If given, list rate limits for resources that support it. (See [subheading](#rate-limits) below for details.)
+* `rates`: If given, list rate limits for services that support it. (See [subheading](#rate-limits-and-throughput-tracking) below for details.)
+  Use `rates=only` to only list rates (instead of resources).
   When combined with `?service=`, limit query to these rates (e.g. `?service=compute&rates`). May be given multiple times.
 
 Returns 200 (OK) on success. Result is a JSON document like:
