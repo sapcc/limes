@@ -56,7 +56,7 @@ projects in that token's domain. With project member permission, shows that toke
 * `resource`: When combined, with `?service=`, limit query to that resource
   (e.g. `?service=compute&resource=instances`). May be given multiple times.
 * `detail`: If given, list subresources for resources that support it. (See subheading below for details.)
-* `rates`: If given, list rate limits for resources that support it. (See [subheading](#rate-limits-and-throughput-tracking) below for details.)
+* `rates`: If given, list rate limits for services that support it. (See [subheading](#rate-limits-and-throughput-tracking) below for details.)
   When combined with `?service=`, limit query to these rates (e.g. `?service=compute&rates`). May be given multiple times.
 
 Returns 200 (OK) on success. Result is a JSON document like:
