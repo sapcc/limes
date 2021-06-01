@@ -31,9 +31,11 @@ import (
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
+	"github.com/gophercloud/gophercloud/openstack/blockstorage/v2/volumes"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/availabilityzones"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/limits"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/quotasets"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/volumeattach"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
 	"github.com/gophercloud/gophercloud/openstack/imageservice/v2/images"
 	"github.com/gophercloud/gophercloud/pagination"
@@ -255,6 +257,10 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 	if err != nil {
 		return nil, "", err
 	}
+	blockStorageV2, err := openstack.NewBlockStorageV2(provider, eo)
+	if err != nil {
+		return nil, "", err
+	}
 
 	var limitsData struct {
 		Limits struct {
@@ -471,15 +477,24 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 				}
 
 				if instance.Image == nil {
-					subResource["os_type"] = "image-missing"
+					//instance built from bootable volume -> look at bootable volume to find OS type
+					osType, err := p.getOSTypeFromBootVolume(client, blockStorageV2, eo, instance.ID)
+					if err == nil {
+						subResource["os_type"] = osType
+					} else {
+						logg.Error("error while trying to find OS type for instance %s from boot volume: %s", instance.ID, util.ErrorToString(err))
+						subResource["os_type"] = "rootdisk-inspect-error"
+					}
 				} else {
+					//instance built from image -> look at image to find OS type
 					imageID, ok := instance.Image["id"].(string)
 					if ok {
-						osType, err := p.getOSType(provider, eo, imageID)
+						osType, err := p.getOSTypeForImage(provider, eo, imageID)
 						if err == nil {
 							subResource["os_type"] = osType
 						} else {
 							logg.Error("error while trying to find OS type for image %s: %s", imageID, util.ErrorToString(err))
+							subResource["os_type"] = "image-inspect-error"
 						}
 					} else {
 						subResource["os_type"] = "image-missing"
@@ -590,7 +605,47 @@ func (p *novaPlugin) getHypervisorType(client *gophercloud.ServiceClient, flavor
 	return "unknown"
 }
 
-func (p *novaPlugin) getOSType(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, imageID string) (string, error) {
+func (p *novaPlugin) getOSTypeFromBootVolume(computeV2, blockStorageV2 *gophercloud.ServiceClient, eo gophercloud.EndpointOpts, instanceID string) (string, error) {
+	//list volume attachments
+	page, err := volumeattach.List(computeV2, instanceID).AllPages()
+	if err != nil {
+		return "", err
+	}
+	attachments, err := volumeattach.ExtractVolumeAttachments(page)
+	if err != nil {
+		return "", err
+	}
+
+	//find root volume among attachments
+	var rootVolumeID string
+	for _, attachment := range attachments {
+		if attachment.Device == "/dev/sda" || attachment.Device == "/dev/vda" {
+			rootVolumeID = attachment.VolumeID
+			break
+		}
+	}
+	if rootVolumeID == "" {
+		return "rootdisk-missing", nil
+	}
+
+	//check volume metadata
+	var volume struct {
+		ImageMetadata struct {
+			VMwareOSType string `json:"vmware_ostype"`
+		} `json:"volume_image_metadata"`
+	}
+	err = volumes.Get(blockStorageV2, rootVolumeID).ExtractInto(&volume)
+	if err != nil {
+		return "", err
+	}
+
+	if isValidVMwareOSType[volume.ImageMetadata.VMwareOSType] {
+		return volume.ImageMetadata.VMwareOSType, nil
+	}
+	return "unknown", nil
+}
+
+func (p *novaPlugin) getOSTypeForImage(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, imageID string) (string, error) {
 	if p.osTypeForImage == nil {
 		p.osTypeForImage = make(map[string]string)
 	}
@@ -599,7 +654,7 @@ func (p *novaPlugin) getOSType(provider *gophercloud.ProviderClient, eo gophercl
 		return osType, nil
 	}
 
-	osType, err := p.findOSType(provider, eo, imageID)
+	osType, err := p.findOSTypeForImage(provider, eo, imageID)
 	if err == nil {
 		p.osTypeForImage[imageID] = osType
 	} else {
@@ -608,7 +663,7 @@ func (p *novaPlugin) getOSType(provider *gophercloud.ProviderClient, eo gophercl
 	return osType, err
 }
 
-func (p *novaPlugin) findOSType(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, imageID string) (string, error) {
+func (p *novaPlugin) findOSTypeForImage(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, imageID string) (string, error) {
 	client, err := openstack.NewImageServiceV2(provider, eo)
 	if err != nil {
 		return "", err

@@ -28,6 +28,7 @@ github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/availabilityz
 github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/hypervisors
 github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/limits
 github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/quotasets
+github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/volumeattach
 github.com/gophercloud/gophercloud/openstack/compute/v2/flavors
 github.com/gophercloud/gophercloud/openstack/compute/v2/servers
 github.com/gophercloud/gophercloud/openstack/dns/v2/zones
