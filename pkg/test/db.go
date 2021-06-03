@@ -57,7 +57,7 @@ func InitDatabase(t *testing.T, fixtureFile *string) {
 	//wipe the DB clean if there are any leftovers from the previous test run
 	//(this will also wipe all other tables because of ON DELETE CASCADE
 	//relations)
-	for _, tableName := range []string{"cluster_services", "domains"} {
+	for _, tableName := range []string{"cluster_capacitors", "cluster_services", "domains"} {
 		_, err := db.DB.Exec(`DELETE FROM ` + tableName)
 		if err != nil {
 			t.Fatal(err.Error())

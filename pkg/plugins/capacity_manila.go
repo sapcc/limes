@@ -25,6 +25,7 @@ import (
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes/pkg/core"
 )
@@ -72,11 +73,11 @@ func (p *capacityManilaPlugin) makeResourceName(kind, shareType string) string {
 }
 
 //Scrape implements the core.CapacityPlugin interface.
-func (p *capacityManilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]core.CapacityData, error) {
+func (p *capacityManilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]core.CapacityData, string, error) {
 	cfg := p.cfg.Manila
 	client, err := openstack.NewSharedFileSystemV2(provider, eo)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	client.Microversion = "2.23" //required for filtering pools by share_type
 
@@ -85,7 +86,7 @@ func (p *capacityManilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo g
 	url := client.ServiceURL("services")
 	_, err = client.Get(url, &result.Body, nil)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	var servicesData struct {
@@ -98,7 +99,7 @@ func (p *capacityManilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo g
 	}
 	err = result.ExtractInto(&servicesData)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	azForServiceHost := make(map[string]string)
@@ -120,14 +121,25 @@ func (p *capacityManilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo g
 	for _, shareType := range p.cfg.Manila.ShareTypes {
 		capForType, err := p.scrapeForShareType(shareType, client, azForServiceHost)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		caps[p.makeResourceName("shares", shareType)] = capForType.Shares
 		caps[p.makeResourceName("share_snapshots", shareType)] = capForType.Snapshots
 		caps[p.makeResourceName("share_capacity", shareType)] = capForType.ShareGigabytes
 		caps[p.makeResourceName("snapshot_capacity", shareType)] = capForType.SnapshotGigabytes
 	}
-	return map[string]map[string]core.CapacityData{"sharev2": caps}, nil
+	return map[string]map[string]core.CapacityData{"sharev2": caps}, "", nil
+}
+
+//DescribeMetrics implements the core.CapacityPlugin interface.
+func (p *capacityManilaPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
+	//not used by this plugin
+}
+
+//CollectMetrics implements the core.CapacityPlugin interface.
+func (p *capacityManilaPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, serializedMetrics string) error {
+	//not used by this plugin
+	return nil
 }
 
 type capacityForShareType struct {

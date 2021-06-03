@@ -231,7 +231,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	registry := prometheus.NewPedanticRegistry()
 	amc := &AggregateMetricsCollector{Cluster: cluster}
 	registry.MustRegister(amc)
-	pmc := &PluginMetricsCollector{Cluster: cluster}
+	pmc := &QuotaPluginMetricsCollector{Cluster: cluster}
 	registry.MustRegister(pmc)
 	dmc := &DataMetricsCollector{Cluster: cluster, ReportZeroes: true}
 	registry.MustRegister(dmc)
@@ -246,7 +246,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	registry = prometheus.NewPedanticRegistry()
 	amc = &AggregateMetricsCollector{Cluster: cluster}
 	registry.MustRegister(amc)
-	pmc = &PluginMetricsCollector{Cluster: cluster}
+	pmc = &QuotaPluginMetricsCollector{Cluster: cluster}
 	registry.MustRegister(pmc)
 	dmc = &DataMetricsCollector{Cluster: cluster, ReportZeroes: false}
 	registry.MustRegister(dmc)

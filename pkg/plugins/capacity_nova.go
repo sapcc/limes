@@ -20,6 +20,7 @@
 package plugins
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -40,21 +41,16 @@ type capacityNovaPlugin struct {
 	reportSubcapaForCores     bool
 	reportSubcapaForInstances bool
 	reportSubcapaForRAM       bool
-	hvStates                  []novaHypervisorState
 }
 
-type novaHypervisorState struct {
-	Name        string
-	Hostname    string
-	BelongsToAZ bool
+type capacityNovaSerializedMetrics struct {
+	Hypervisors []novaHypervisorMetrics `json:"hypervisors"`
 }
 
-func (s novaHypervisorState) Labels(clusterID string) prometheus.Labels {
-	return prometheus.Labels{
-		"os_cluster": clusterID,
-		"hypervisor": s.Name,
-		"hostname":   s.Hostname,
-	}
+type novaHypervisorMetrics struct {
+	Name        string `json:"name"`
+	Hostname    string `json:"hostname"`
+	BelongsToAZ bool   `json:"belongs_to_az"`
 }
 
 func bool2float(val bool) float64 {
@@ -63,16 +59,6 @@ func bool2float(val bool) float64 {
 	}
 	return 0
 }
-
-var (
-	novaHypervisorHasAZGauge = prometheus.NewGaugeVec(
-		prometheus.GaugeOpts{
-			Name: "limes_nova_hypervisor_has_az",
-			Help: "Whether the given hypervisor belongs to an availability zone.",
-		},
-		[]string{"os_cluster", "hypervisor", "hostname"},
-	)
-)
 
 func init() {
 	core.RegisterCapacityPlugin(func(c core.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) core.CapacityPlugin {
@@ -83,7 +69,6 @@ func init() {
 			reportSubcapaForRAM:       scrapeSubcapacities["compute"]["ram"],
 		}
 	})
-	prometheus.MustRegister(novaHypervisorHasAZGauge)
 }
 
 //Init implements the core.CapacityPlugin interface.
@@ -96,19 +81,19 @@ func (p *capacityNovaPlugin) ID() string {
 }
 
 //Scrape implements the core.CapacityPlugin interface.
-func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]core.CapacityData, error) {
+func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]core.CapacityData, string, error) {
 	var hypervisorTypeRx *regexp.Regexp
 	if p.cfg.Nova.HypervisorTypePattern != "" {
 		var err error
 		hypervisorTypeRx, err = regexp.Compile(p.cfg.Nova.HypervisorTypePattern)
 		if err != nil {
-			return nil, errors.New("invalid value for hypervisor_type: " + err.Error())
+			return nil, "", errors.New("invalid value for hypervisor_type: " + err.Error())
 		}
 	}
 
 	client, err := openstack.NewComputeV2(provider, eo)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	//enumerate hypervisors (cannot use type Hypervisor provided by Gophercloud;
@@ -116,20 +101,20 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 	//values on fields that we are not even interested in)
 	page, err := hypervisors.List(client).AllPages()
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	var hypervisorData struct {
 		Hypervisors []novaHypervisor `json:"hypervisors"`
 	}
 	err = page.(hypervisors.HypervisorPage).ExtractInto(&hypervisorData)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	//enumerate compute hosts to establish hypervisor <-> AZ mapping
 	azs, aggrs, err := getAggregates(client)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	//when using the placement API, we need to enumerate resource providers once
@@ -137,18 +122,18 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 	if p.cfg.Nova.UsePlacementAPI {
 		placementClient, err := newPlacementClient(provider, eo)
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 		resourceProviders, err = placementClient.ListResourceProviders()
 		if err != nil {
-			return nil, err
+			return nil, "", err
 		}
 	}
 
 	//compute sum of cores and RAM for matching hypervisors
 	var (
-		total    partialNovaCapacity
-		hvStates []novaHypervisorState
+		total     partialNovaCapacity
+		hvMetrics []novaHypervisorMetrics
 	)
 
 	for _, hypervisor := range hypervisorData.Hypervisors {
@@ -198,30 +183,18 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 			logg.Info("Hypervisor %d with .service.host %q does not match any hosts from host aggregates", hypervisor.ID, hypervisor.Service.Host)
 			hypervisorAZ = "unknown"
 		}
-		hvStates = append(hvStates, novaHypervisorState{
+		hvMetrics = append(hvMetrics, novaHypervisorMetrics{
 			Name:        hypervisor.Service.Host,
 			Hostname:    hypervisor.HypervisorHostname,
 			BelongsToAZ: hypervisorAZ != "unknown",
 		})
 	}
 
-	//commit changes to hypervisor metrics
-	for _, state := range hvStates {
-		novaHypervisorHasAZGauge.With(state.Labels(clusterID)).Set(bool2float(state.BelongsToAZ))
+	//serialize hypervisor metrics
+	serializedMetrics, err := json.Marshal(capacityNovaSerializedMetrics{hvMetrics})
+	if err != nil {
+		return nil, "", err
 	}
-	for _, state := range p.hvStates {
-		isDeleted := true
-		for _, otherState := range hvStates {
-			if state.Name == otherState.Name && state.Hostname == otherState.Hostname {
-				isDeleted = false
-				break
-			}
-		}
-		if isDeleted {
-			novaHypervisorHasAZGauge.Delete(state.Labels(clusterID))
-		}
-	}
-	p.hvStates = hvStates
 
 	//list all flavors and get max(flavor_size)
 	pages, maxFlavorSize := 0, 0.0
@@ -261,7 +234,7 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 		return true, nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	collectSubcapacitiesIf := func(cond bool, getCapa func(*novaHypervisorGroup) *core.CapacityDataForAZ) []interface{} {
@@ -326,7 +299,45 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 		logg.Error("Nova Capacity: Maximal flavor size is 0. Not reporting instances.")
 		delete(capacity["compute"], "instances")
 	}
-	return capacity, nil
+	return capacity, string(serializedMetrics), nil
+}
+
+var novaHypervisorHasAZGauge = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "limes_nova_hypervisor_has_az",
+		Help: "Whether the given hypervisor belongs to an availability zone.",
+	},
+	[]string{"os_cluster", "hypervisor", "hostname"},
+)
+
+//DescribeMetrics implements the core.CapacityPlugin interface.
+func (p *capacityNovaPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
+	novaHypervisorHasAZGauge.Describe(ch)
+}
+
+//CollectMetrics implements the core.CapacityPlugin interface.
+func (p *capacityNovaPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, serializedMetrics string) error {
+	if serializedMetrics == "" {
+		return nil
+	}
+	var metrics capacityNovaSerializedMetrics
+	err := json.Unmarshal([]byte(serializedMetrics), &metrics)
+	if err != nil {
+		return err
+	}
+
+	descCh := make(chan *prometheus.Desc, 1)
+	novaHypervisorHasAZGauge.Describe(descCh)
+	novaHypervisorHasAZDesc := <-descCh
+
+	for _, hv := range metrics.Hypervisors {
+		ch <- prometheus.MustNewConstMetric(
+			novaHypervisorHasAZDesc,
+			prometheus.GaugeValue, bool2float(hv.BelongsToAZ),
+			clusterID, hv.Name, hv.Hostname,
+		)
+	}
+	return nil
 }
 
 type novaHypervisor struct {

@@ -289,7 +289,7 @@ func (p *CapacityPlugin) ID() string {
 }
 
 //Scrape implements the core.CapacityPlugin interface.
-func (p *CapacityPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]core.CapacityData, error) {
+func (p *CapacityPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]core.CapacityData, string, error) {
 	var capacityPerAZ map[string]*core.CapacityDataForAZ
 	if p.WithAZCapData {
 		capacityPerAZ = map[string]*core.CapacityDataForAZ{
@@ -304,12 +304,19 @@ func (p *CapacityPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherc
 		}
 	}
 
-	var subcapacities []interface{}
+	var (
+		serializedMetrics string
+		subcapacities     []interface{}
+	)
 	if p.WithSubcapacities {
+		smallerHalf := p.Capacity / 3
+		largerHalf := p.Capacity - smallerHalf
 		subcapacities = []interface{}{
-			map[string]uint64{"smaller_half": p.Capacity / 3},
-			map[string]uint64{"larger_half": p.Capacity - p.Capacity/3},
+			map[string]uint64{"smaller_half": smallerHalf},
+			map[string]uint64{"larger_half": largerHalf},
 		}
+		//this is also an opportunity to test serialized metrics
+		serializedMetrics = fmt.Sprintf(`{"smaller_half":%d,"larger_half":%d}`, smallerHalf, largerHalf)
 	}
 
 	result := make(map[string]map[string]core.CapacityData)
@@ -321,5 +328,56 @@ func (p *CapacityPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherc
 		}
 		result[parts[0]][parts[1]] = core.CapacityData{Capacity: p.Capacity, CapacityPerAZ: capacityPerAZ, Subcapacities: subcapacities}
 	}
-	return result, nil
+	return result, serializedMetrics, nil
+}
+
+var (
+	unittestCapacitySmallerHalfMetric = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{Name: "limes_unittest_capacity_smaller_half"},
+		[]string{"os_cluster"},
+	)
+	unittestCapacityLargerHalfMetric = prometheus.NewGaugeVec(
+		prometheus.GaugeOpts{Name: "limes_unittest_capacity_larger_half"},
+		[]string{"os_cluster"},
+	)
+)
+
+//DescribeMetrics implements the core.CapacityPlugin interface.
+func (p *CapacityPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
+	if p.WithSubcapacities {
+		unittestCapacitySmallerHalfMetric.Describe(ch)
+		unittestCapacityLargerHalfMetric.Describe(ch)
+	}
+}
+
+//CollectMetrics implements the core.CapacityPlugin interface.
+func (p *CapacityPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, serializedMetrics string) error {
+	if !p.WithSubcapacities {
+		return nil
+	}
+
+	var data struct {
+		SmallerHalf uint64 `json:"smaller_half"`
+		LargerHalf  uint64 `json:"larger_half"`
+	}
+	err := json.Unmarshal([]byte(serializedMetrics), &data)
+	if err != nil {
+		return err
+	}
+
+	descCh := make(chan *prometheus.Desc, 1)
+	unittestCapacitySmallerHalfMetric.Describe(descCh)
+	unittestCapacitySmallerHalfDesc := <-descCh
+	unittestCapacityLargerHalfMetric.Describe(descCh)
+	unittestCapacityLargerHalfDesc := <-descCh
+
+	ch <- prometheus.MustNewConstMetric(
+		unittestCapacitySmallerHalfDesc, prometheus.GaugeValue, float64(data.SmallerHalf),
+		clusterID,
+	)
+	ch <- prometheus.MustNewConstMetric(
+		unittestCapacityLargerHalfDesc, prometheus.GaugeValue, float64(data.LargerHalf),
+		clusterID,
+	)
+	return nil
 }

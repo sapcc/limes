@@ -278,28 +278,117 @@ func timeAsUnixOrZero(t *time.Time) float64 {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// plugin metrics
+// capacity plugin metrics
 
-var pluginMetricsOkGauge = prometheus.NewGaugeVec(
+var capacityPluginMetricsOkGauge = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "limes_capacity_plugin_metrics_ok",
+		Help: "Whether capacity plugin metrics were rendered successfully for a particular capacitor. Only present when the capacitor emits metrics.",
+	},
+	[]string{"os_cluster", "capacitor"},
+)
+
+//CapacityPluginMetricsCollector is a prometheus.Collector that submits metrics
+//which are specific to the selected capacity plugins.
+type CapacityPluginMetricsCollector struct {
+	Cluster *core.Cluster
+	//When .Override is set, the DB is bypassed and only the given
+	//CapacityPluginMetricsInstances are considered. This is used for testing only.
+	Override []CapacityPluginMetricsInstance
+}
+
+//CapacityPluginMetricsInstance describes a single project service for which plugin
+//metrics are submitted. It appears in type CapacityPluginMetricsCollector.
+type CapacityPluginMetricsInstance struct {
+	CapacitorID       string
+	SerializedMetrics string
+}
+
+//Describe implements the prometheus.Collector interface.
+func (c *CapacityPluginMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
+	capacityPluginMetricsOkGauge.Describe(ch)
+	for _, plugin := range c.Cluster.CapacityPlugins {
+		plugin.DescribeMetrics(ch)
+	}
+}
+
+var capacitySerializedMetricsGetQuery = db.SimplifyWhitespaceInSQL(`
+	SELECT capacitor_id, serialized_metrics
+	  FROM cluster_capacitors
+	 WHERE cluster_id = $1 AND serialized_metrics != ''
+`)
+
+//Collect implements the prometheus.Collector interface.
+func (c *CapacityPluginMetricsCollector) Collect(ch chan<- prometheus.Metric) {
+	descCh := make(chan *prometheus.Desc, 1)
+	capacityPluginMetricsOkGauge.Describe(descCh)
+	pluginMetricsOkDesc := <-descCh
+
+	if c.Override != nil {
+		for _, instance := range c.Override {
+			c.collectOneCapacitor(ch, pluginMetricsOkDesc, instance)
+		}
+		return
+	}
+
+	queryArgs := []interface{}{c.Cluster.ID}
+	err := db.ForeachRow(db.DB, capacitySerializedMetricsGetQuery, queryArgs, func(rows *sql.Rows) error {
+		var i CapacityPluginMetricsInstance
+		err := rows.Scan(&i.CapacitorID, &i.SerializedMetrics)
+		if err == nil {
+			c.collectOneCapacitor(ch, pluginMetricsOkDesc, i)
+		}
+		return err
+	})
+	if err != nil {
+		logg.Error("collect capacity plugin metrics failed: " + err.Error())
+	}
+}
+
+func (c *CapacityPluginMetricsCollector) collectOneCapacitor(ch chan<- prometheus.Metric, pluginMetricsOkDesc *prometheus.Desc, instance CapacityPluginMetricsInstance) {
+	plugin := c.Cluster.CapacityPlugins[instance.CapacitorID]
+	if plugin == nil {
+		return
+	}
+	err := plugin.CollectMetrics(ch, c.Cluster.ID, instance.SerializedMetrics)
+	successAsFloat := 1.0
+	if err != nil {
+		successAsFloat = 0.0
+		//errors in plugin.CollectMetrics() are not fatal: we record a failure in
+		//the metrics and keep going with the other project services
+		logg.Error("while collecting capacity metrics for capacitor %s: %s",
+			instance.CapacitorID, err.Error())
+	}
+	ch <- prometheus.MustNewConstMetric(
+		pluginMetricsOkDesc,
+		prometheus.GaugeValue, successAsFloat,
+		c.Cluster.ID, instance.CapacitorID,
+	)
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// quota plugin metrics
+
+var quotaPluginMetricsOkGauge = prometheus.NewGaugeVec(
 	prometheus.GaugeOpts{
 		Name: "limes_plugin_metrics_ok",
-		Help: "Whether plugin metrics were rendered successfully for a particular project service. Only present when the project service emits metrics.",
+		Help: "Whether quota plugin metrics were rendered successfully for a particular project service. Only present when the project service emits metrics.",
 	},
 	[]string{"os_cluster", "domain", "domain_id", "project", "project_id", "service"},
 )
 
-//PluginMetricsCollector is a prometheus.Collector that submits metrics
+//QuotaPluginMetricsCollector is a prometheus.Collector that submits metrics
 //which are specific to the selected quota plugins.
-type PluginMetricsCollector struct {
+type QuotaPluginMetricsCollector struct {
 	Cluster *core.Cluster
 	//When .Override is set, the DB is bypassed and only the given
-	//PluginMetricsInstances are considered. This is used for testing only.
-	Override []PluginMetricsInstance
+	//QuotaPluginMetricsInstances are considered. This is used for testing only.
+	Override []QuotaPluginMetricsInstance
 }
 
-//PluginMetricsInstance describes a single project service for which plugin
-//metrics are submitted. It appears in type PluginMetricsCollector.
-type PluginMetricsInstance struct {
+//QuotaPluginMetricsInstance describes a single project service for which plugin
+//metrics are submitted. It appears in type QuotaPluginMetricsCollector.
+type QuotaPluginMetricsInstance struct {
 	DomainName        string
 	DomainUUID        string
 	ProjectName       string
@@ -309,14 +398,14 @@ type PluginMetricsInstance struct {
 }
 
 //Describe implements the prometheus.Collector interface.
-func (c *PluginMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
-	pluginMetricsOkGauge.Describe(ch)
+func (c *QuotaPluginMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
+	quotaPluginMetricsOkGauge.Describe(ch)
 	for _, plugin := range c.Cluster.QuotaPlugins {
 		plugin.DescribeMetrics(ch)
 	}
 }
 
-var serializedMetricsGetQuery = db.SimplifyWhitespaceInSQL(`
+var quotaSerializedMetricsGetQuery = db.SimplifyWhitespaceInSQL(`
 	SELECT d.name, d.uuid, p.name, p.uuid, ps.type, ps.serialized_metrics
 	  FROM domains d
 	  JOIN projects p ON p.domain_id = d.id
@@ -325,9 +414,9 @@ var serializedMetricsGetQuery = db.SimplifyWhitespaceInSQL(`
 `)
 
 //Collect implements the prometheus.Collector interface.
-func (c *PluginMetricsCollector) Collect(ch chan<- prometheus.Metric) {
+func (c *QuotaPluginMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	descCh := make(chan *prometheus.Desc, 1)
-	pluginMetricsOkGauge.Describe(descCh)
+	quotaPluginMetricsOkGauge.Describe(descCh)
 	pluginMetricsOkDesc := <-descCh
 
 	if c.Override != nil {
@@ -338,8 +427,8 @@ func (c *PluginMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	queryArgs := []interface{}{c.Cluster.ID}
-	err := db.ForeachRow(db.DB, serializedMetricsGetQuery, queryArgs, func(rows *sql.Rows) error {
-		var i PluginMetricsInstance
+	err := db.ForeachRow(db.DB, quotaSerializedMetricsGetQuery, queryArgs, func(rows *sql.Rows) error {
+		var i QuotaPluginMetricsInstance
 		err := rows.Scan(&i.DomainName, &i.DomainUUID, &i.ProjectName, &i.ProjectUUID, &i.ServiceType, &i.SerializedMetrics)
 		if err == nil {
 			c.collectOneProjectService(ch, pluginMetricsOkDesc, i)
@@ -347,11 +436,11 @@ func (c *PluginMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		return err
 	})
 	if err != nil {
-		logg.Error("collect plugin metrics failed: " + err.Error())
+		logg.Error("collect quota plugin metrics failed: " + err.Error())
 	}
 }
 
-func (c *PluginMetricsCollector) collectOneProjectService(ch chan<- prometheus.Metric, pluginMetricsOkDesc *prometheus.Desc, instance PluginMetricsInstance) {
+func (c *QuotaPluginMetricsCollector) collectOneProjectService(ch chan<- prometheus.Metric, pluginMetricsOkDesc *prometheus.Desc, instance QuotaPluginMetricsInstance) {
 	plugin := c.Cluster.QuotaPlugins[instance.ServiceType]
 	if plugin == nil {
 		return

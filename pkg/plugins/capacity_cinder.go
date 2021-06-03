@@ -25,6 +25,7 @@ import (
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/util"
@@ -66,10 +67,10 @@ func (p *capacityCinderPlugin) makeResourceName(volumeType string) string {
 }
 
 //Scrape implements the core.CapacityPlugin interface.
-func (p *capacityCinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]core.CapacityData, error) {
+func (p *capacityCinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]core.CapacityData, string, error) {
 	client, err := openstack.NewBlockStorageV2(provider, eo)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	var result gophercloud.Result
@@ -78,7 +79,7 @@ func (p *capacityCinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo g
 	url := client.ServiceURL("scheduler-stats", "get_pools") + "?detail=True"
 	_, err = client.Get(url, &result.Body, nil)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	var limitData struct {
@@ -93,13 +94,13 @@ func (p *capacityCinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo g
 	}
 	err = result.ExtractInto(&limitData)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	url = client.ServiceURL("os-services")
 	_, err = client.Get(url, &result.Body, nil)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	var servicesData struct {
@@ -111,7 +112,7 @@ func (p *capacityCinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo g
 	}
 	err = result.ExtractInto(&servicesData)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	serviceHostsPerAZ := make(map[string][]string)
@@ -172,5 +173,16 @@ func (p *capacityCinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo g
 	for k, v := range capaData {
 		capaDataFinal[k] = *v
 	}
-	return map[string]map[string]core.CapacityData{"volumev2": capaDataFinal}, nil
+	return map[string]map[string]core.CapacityData{"volumev2": capaDataFinal}, "", nil
+}
+
+//DescribeMetrics implements the core.CapacityPlugin interface.
+func (p *capacityCinderPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
+	//not used by this plugin
+}
+
+//CollectMetrics implements the core.CapacityPlugin interface.
+func (p *capacityCinderPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, serializedMetrics string) error {
+	//not used by this plugin
+	return nil
 }

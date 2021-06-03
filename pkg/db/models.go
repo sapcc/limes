@@ -25,6 +25,15 @@ import (
 	"github.com/sapcc/limes"
 )
 
+//ClusterCapacitor contains a record from the `cluster_capacitors` table.
+type ClusterCapacitor struct {
+	ClusterID          string     `db:"cluster_id"`
+	CapacitorID        string     `db:"capacitor_id"`
+	ScrapedAt          *time.Time `db:"scraped_at"` //pointer type to allow for NULL value
+	ScrapeDurationSecs float64    `db:"scrape_duration_secs"`
+	SerializedMetrics  string     `db:"serialized_metrics"`
+}
+
 //ClusterService contains a record from the `cluster_services` table.
 type ClusterService struct {
 	ID        int64      `db:"id"`
@@ -118,6 +127,7 @@ type ProjectRate struct {
 //It's available as an exported function because the unit tests need to call
 //this while bypassing the normal Init() logic.
 func InitGorp() {
+	DB.AddTableWithName(ClusterCapacitor{}, "cluster_capacitors").SetKeys(false, "cluster_id", "capacitor_id")
 	DB.AddTableWithName(ClusterService{}, "cluster_services").SetKeys(true, "id")
 	DB.AddTableWithName(ClusterResource{}, "cluster_resources").SetKeys(false, "service_id", "name")
 	DB.AddTableWithName(Domain{}, "domains").SetKeys(true, "id")

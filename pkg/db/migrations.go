@@ -232,4 +232,17 @@ var SQLMigrations = map[string]string{
 	"017_add_project_services_serialized_metrics.up.sql": `
 		ALTER TABLE project_services ADD COLUMN serialized_metrics TEXT NOT NULL DEFAULT '';
 	`,
+	"018_add_cluster_capacitors.down.sql": `
+		DROP TABLE cluster_capacitors;
+	`,
+	"018_add_cluster_capacitors.up.sql": `
+		CREATE TABLE cluster_capacitors (
+		  cluster_id           TEXT      NOT NULL,
+		  capacitor_id         TEXT      NOT NULL,
+		  scraped_at           TIMESTAMP NOT NULL,
+		  scrape_duration_secs REAL      NOT NULL DEFAULT 0,
+		  serialized_metrics   TEXT      NOT NULL DEFAULT '',
+		  PRIMARY KEY (cluster_id, capacitor_id)
+		);
+	`,
 }

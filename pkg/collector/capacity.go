@@ -31,6 +31,7 @@ import (
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/util"
+	"gopkg.in/gorp.v2"
 )
 
 var scanInterval = 15 * time.Minute
@@ -58,6 +59,8 @@ func (c *Collector) scanCapacity() {
 	values := make(map[string]map[string]core.CapacityData)
 	scrapedAt := c.TimeNow()
 
+	capacitorInfo := make(map[string]db.ClusterCapacitor)
+
 	for capacitorID, plugin := range c.Cluster.CapacityPlugins {
 		labels := prometheus.Labels{
 			"os_cluster": c.Cluster.ID,
@@ -68,7 +71,9 @@ func (c *Collector) scanCapacity() {
 		clusterCapacitorFailedCounter.With(labels).Add(0)
 
 		provider, eo := c.Cluster.ProviderClientForCapacitor(capacitorID)
-		capacities, err := plugin.Scrape(provider, eo, c.Cluster.ID)
+		scrapeStart := c.TimeNow()
+		capacities, serializedMetrics, err := plugin.Scrape(provider, eo, c.Cluster.ID)
+		scrapeDuration := c.TimeNow().Sub(scrapeStart)
 		if err != nil {
 			c.LogError("scan capacity with capacitor %s failed: %s", capacitorID, util.ErrorToString(err))
 			clusterCapacitorFailedCounter.With(labels).Inc()
@@ -86,6 +91,13 @@ func (c *Collector) scanCapacity() {
 		}
 
 		clusterCapacitorSuccessCounter.With(labels).Inc()
+		capacitorInfo[capacitorID] = db.ClusterCapacitor{
+			ClusterID:          c.Cluster.ID,
+			CapacitorID:        capacitorID,
+			ScrapedAt:          &scrapedAt,
+			ScrapeDurationSecs: scrapeDuration.Seconds(),
+			SerializedMetrics:  serializedMetrics,
+		}
 	}
 
 	//skip values for services not enabled for this cluster
@@ -126,31 +138,76 @@ func (c *Collector) scanCapacity() {
 		}
 	}
 
-	err := c.writeCapacity("shared", sharedValues, scrapedAt)
+	//do the following in a transaction to avoid inconsistent DB state
+	tx, err := db.DB.Begin()
 	if err != nil {
 		c.LogError("write capacity failed: %s", err.Error())
 	}
-	err = c.writeCapacity(c.Cluster.ID, unsharedValues, scrapedAt)
+	defer db.RollbackUnlessCommitted(tx)
+
+	err = c.writeCapacitorInfo(tx, capacitorInfo)
+	if err != nil {
+		c.LogError("write capacity failed: %s", err.Error())
+	}
+	err = c.writeCapacity(tx, "shared", sharedValues, scrapedAt)
+	if err != nil {
+		c.LogError("write capacity failed: %s", err.Error())
+	}
+	err = c.writeCapacity(tx, c.Cluster.ID, unsharedValues, scrapedAt)
+	if err != nil {
+		c.LogError("write capacity failed: %s", err.Error())
+	}
+	err = tx.Commit()
 	if err != nil {
 		c.LogError("write capacity failed: %s", err.Error())
 	}
 }
 
-func (c *Collector) writeCapacity(clusterID string, values map[string]map[string]core.CapacityData, scrapedAt time.Time) error {
-	//NOTE: clusterID is not taken from c.Cluster because it can also be "shared".
-
-	//do the following in a transaction to avoid inconsistent DB state
-	tx, err := db.DB.Begin()
+func (c *Collector) writeCapacitorInfo(tx *gorp.Transaction, capacitorInfo map[string]db.ClusterCapacitor) error {
+	//remove superfluous cluster_capacitors
+	var dbCapacitors []db.ClusterCapacitor
+	_, err := tx.Select(&dbCapacitors, `SELECT * FROM cluster_capacitors WHERE cluster_id = $1`, c.Cluster.ID)
 	if err != nil {
 		return err
 	}
-	defer db.RollbackUnlessCommitted(tx)
+	isExistingCapacitor := make(map[string]bool)
+	for _, dbCapacitor := range dbCapacitors {
+		isExistingCapacitor[dbCapacitor.CapacitorID] = true
+		_, exists := c.Cluster.CapacityPlugins[dbCapacitor.CapacitorID]
+		if !exists {
+			_, err := tx.Delete(&dbCapacitor)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	//insert or update cluster_capacitors where a scrape was successful
+	for _, capacitor := range capacitorInfo {
+		if isExistingCapacitor[capacitor.CapacitorID] {
+			_, err := tx.Update(&capacitor)
+			if err != nil {
+				return err
+			}
+		} else {
+			err := tx.Insert(&capacitor)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
+func (c *Collector) writeCapacity(tx *gorp.Transaction, clusterID string, values map[string]map[string]core.CapacityData, scrapedAt time.Time) error {
+	//NOTE: clusterID is not taken from c.Cluster because it can also be "shared".
 
 	//create missing cluster_services entries (superfluous ones will be cleaned
 	//up by the CheckConsistency())
 	serviceIDForType := make(map[string]int64)
 	var dbServices []*db.ClusterService
-	_, err = tx.Select(&dbServices, `SELECT * FROM cluster_services WHERE cluster_id = $1`, clusterID)
+	_, err := tx.Select(&dbServices, `SELECT * FROM cluster_services WHERE cluster_id = $1`, clusterID)
 	if err != nil {
 		return err
 	}
@@ -284,7 +341,7 @@ func (c *Collector) writeCapacity(clusterID string, values map[string]map[string
 		}
 	}
 
-	return tx.Commit()
+	return nil
 }
 
 func convertAZReport(capacityPerAZ map[string]*core.CapacityDataForAZ) limes.ClusterAvailabilityZoneReports {

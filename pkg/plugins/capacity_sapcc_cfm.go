@@ -24,6 +24,7 @@ import (
 	"fmt"
 
 	"github.com/gophercloud/gophercloud"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes/pkg/core"
 )
@@ -51,14 +52,14 @@ func (p *capacityCFMPlugin) ID() string {
 }
 
 //Scrape implements the core.CapacityPlugin interface.
-func (p *capacityCFMPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]core.CapacityData, error) {
+func (p *capacityCFMPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]core.CapacityData, string, error) {
 	client, err := newCFMClient(provider, eo, p.projectID)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	pools, err := client.ListPools()
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	//The CFM API is weird and sometimes returns the same pools multiple times.
@@ -86,7 +87,7 @@ func (p *capacityCFMPlugin) Scrape(provider *gophercloud.ProviderClient, eo goph
 	}
 
 	if inconsistentData {
-		return nil, errors.New("some pools were reported with inconsistent sizes; see errors above")
+		return nil, "", errors.New("some pools were reported with inconsistent sizes; see errors above")
 	}
 
 	return map[string]map[string]core.CapacityData{
@@ -95,5 +96,16 @@ func (p *capacityCFMPlugin) Scrape(provider *gophercloud.ProviderClient, eo goph
 				Capacity: totalCapacityBytes,
 			},
 		},
-	}, nil
+	}, "", nil
+}
+
+//DescribeMetrics implements the core.CapacityPlugin interface.
+func (p *capacityCFMPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
+	//not used by this plugin
+}
+
+//CollectMetrics implements the core.CapacityPlugin interface.
+func (p *capacityCFMPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, serializedMetrics string) error {
+	//not used by this plugin
+	return nil
 }

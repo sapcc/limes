@@ -31,6 +31,7 @@ import (
 	"github.com/gophercloud/gophercloud"
 	prom_api "github.com/prometheus/client_golang/api"
 	prom_v1 "github.com/prometheus/client_golang/api/prometheus/v1"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes/pkg/core"
@@ -132,10 +133,10 @@ func (p *capacityPrometheusPlugin) ID() string {
 }
 
 //Scrape implements the core.CapacityPlugin interface.
-func (p *capacityPrometheusPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]core.CapacityData, error) {
+func (p *capacityPrometheusPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]core.CapacityData, string, error) {
 	client, err := prometheusClient(p.cfg.Prometheus.APIConfig)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	result := make(map[string]map[string]core.CapacityData)
@@ -144,11 +145,22 @@ func (p *capacityPrometheusPlugin) Scrape(provider *gophercloud.ProviderClient, 
 		for resourceName, query := range queries {
 			value, err := prometheusGetSingleValue(client, query, nil)
 			if err != nil {
-				return nil, err
+				return nil, "", err
 			}
 			serviceResult[resourceName] = core.CapacityData{Capacity: uint64(value)}
 		}
 		result[serviceType] = serviceResult
 	}
-	return result, nil
+	return result, "", nil
+}
+
+//DescribeMetrics implements the core.CapacityPlugin interface.
+func (p *capacityPrometheusPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
+	//not used by this plugin
+}
+
+//CollectMetrics implements the core.CapacityPlugin interface.
+func (p *capacityPrometheusPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, serializedMetrics string) error {
+	//not used by this plugin
+	return nil
 }
