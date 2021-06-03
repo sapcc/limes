@@ -166,6 +166,7 @@ func taskCollect(config core.Configuration, cluster *core.Cluster, args []string
 
 	//use main thread to emit Prometheus metrics
 	prometheus.MustRegister(&collector.AggregateMetricsCollector{Cluster: cluster})
+	prometheus.MustRegister(&collector.CapacityPluginMetricsCollector{Cluster: cluster})
 	prometheus.MustRegister(&collector.QuotaPluginMetricsCollector{Cluster: cluster})
 	if config.Collector.ExposeDataMetrics {
 		prometheus.MustRegister(&collector.DataMetricsCollector{
@@ -399,12 +400,19 @@ func taskTestScanCapacity(config core.Configuration, cluster *core.Cluster, args
 	}
 
 	provider, eo := cluster.ProviderClientForCapacitor(capacitorID)
-	capacities, err := plugin.Scrape(provider, eo, cluster.ID)
+	capacities, serializedMetrics, err := plugin.Scrape(provider, eo, cluster.ID)
 	if err != nil {
 		logg.Error("Scrape failed: %s", util.ErrorToString(err))
 		capacities = nil
 	}
 
+	prometheus.MustRegister(&collector.CapacityPluginMetricsCollector{
+		Cluster: cluster,
+		Override: []collector.CapacityPluginMetricsInstance{{
+			CapacitorID:       capacitorID,
+			SerializedMetrics: serializedMetrics,
+		}},
+	})
 	dumpGeneratedPrometheusMetrics()
 
 	for srvType, srvCapacities := range capacities {

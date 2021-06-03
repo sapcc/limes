@@ -139,6 +139,8 @@ func Test_ScanCapacity(t *testing.T) {
 	registry := prometheus.NewPedanticRegistry()
 	dmc := &DataMetricsCollector{Cluster: cluster}
 	registry.MustRegister(dmc)
+	pmc := &CapacityPluginMetricsCollector{Cluster: cluster}
+	registry.MustRegister(pmc)
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/metrics",

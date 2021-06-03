@@ -1,3 +1,6 @@
+# HELP limes_capacity_plugin_metrics_ok Whether capacity plugin metrics were rendered successfully for a particular capacitor. Only present when the capacitor emits metrics.
+# TYPE limes_capacity_plugin_metrics_ok gauge
+limes_capacity_plugin_metrics_ok{capacitor="unittest4",os_cluster="west"} 1
 # HELP limes_cluster_capacity Reported capacity of a Limes resource for an OpenStack cluster.
 # TYPE limes_cluster_capacity gauge
 limes_cluster_capacity{os_cluster="west",resource="capacity",service="shared",shared="true"} 0
@@ -28,3 +31,9 @@ limes_unit_multiplier{resource="capacity_portion",service="unshared2"} 1
 limes_unit_multiplier{resource="things",service="shared"} 1
 limes_unit_multiplier{resource="things",service="unshared"} 1
 limes_unit_multiplier{resource="things",service="unshared2"} 1
+# HELP limes_unittest_capacity_larger_half 
+# TYPE limes_unittest_capacity_larger_half gauge
+limes_unittest_capacity_larger_half{os_cluster="west"} 7
+# HELP limes_unittest_capacity_smaller_half 
+# TYPE limes_unittest_capacity_smaller_half gauge
+limes_unittest_capacity_smaller_half{os_cluster="west"} 3

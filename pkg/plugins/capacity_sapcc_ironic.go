@@ -85,15 +85,15 @@ var computeHostStubRx = regexp.MustCompile(`^nova-compute-(?:ironic-)?([a-zA-Z0-
 var nodeNameRx = regexp.MustCompile(`^node\d+-((?:b[bm]|ap)\d+)$`)
 
 //Scrape implements the core.CapacityPlugin interface.
-func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]core.CapacityData, error) {
+func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]core.CapacityData, string, error) {
 	//collect info about flavors with separate instance quota
 	novaClient, err := openstack.NewComputeV2(provider, eo)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	flavors, err := p.collectIronicFlavorInfo(novaClient)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	//we are going to report capacity for all per-flavor instance quotas
@@ -108,18 +108,18 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 	//count Ironic nodes
 	ironicClient, err := newIronicClient(provider, eo)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	nodes, err := ironicClient.GetNodes()
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	//Ironic bPods are expected to be listed as compute hosts assigned to
 	//host aggregates in the format: "nova-compute-ironic-xxxx".
 	azs, _, err := getAggregates(novaClient)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	azForHostStub := make(map[string]string)
 	for azName, az := range azs {
@@ -214,7 +214,18 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 		result2[resourceName] = *data
 	}
 
-	return map[string]map[string]core.CapacityData{"compute": result2}, nil
+	return map[string]map[string]core.CapacityData{"compute": result2}, "", nil
+}
+
+//DescribeMetrics implements the core.CapacityPlugin interface.
+func (p *capacitySapccIronicPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
+	//not used by this plugin
+}
+
+//CollectMetrics implements the core.CapacityPlugin interface.
+func (p *capacitySapccIronicPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, serializedMetrics string) error {
+	//not used by this plugin
+	return nil
 }
 
 func (p *capacitySapccIronicPlugin) collectIronicFlavorInfo(novaClient *gophercloud.ServiceClient) ([]ironicFlavorInfo, error) {

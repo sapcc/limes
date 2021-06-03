@@ -23,6 +23,7 @@ import (
 	"errors"
 
 	"github.com/gophercloud/gophercloud"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/limes/pkg/core"
 )
 
@@ -49,9 +50,9 @@ func (p *capacityManualPlugin) ID() string {
 var errNoManualData = errors.New(`missing values for capacitor plugin "manual"`)
 
 //Scrape implements the core.CapacityPlugin interface.
-func (p *capacityManualPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]core.CapacityData, error) {
+func (p *capacityManualPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]core.CapacityData, string, error) {
 	if p.cfg.Manual == nil {
-		return nil, errNoManualData
+		return nil, "", errNoManualData
 	}
 
 	result := make(map[string]map[string]core.CapacityData)
@@ -63,5 +64,16 @@ func (p *capacityManualPlugin) Scrape(provider *gophercloud.ProviderClient, eo g
 		result[serviceType] = serviceResult
 	}
 
-	return result, nil
+	return result, "", nil
+}
+
+//DescribeMetrics implements the core.CapacityPlugin interface.
+func (p *capacityManualPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
+	//not used by this plugin
+}
+
+//CollectMetrics implements the core.CapacityPlugin interface.
+func (p *capacityManualPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, serializedMetrics string) error {
+	//not used by this plugin
+	return nil
 }
