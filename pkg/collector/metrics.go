@@ -280,7 +280,7 @@ func timeAsUnixOrZero(t *time.Time) float64 {
 ////////////////////////////////////////////////////////////////////////////////
 // plugin metrics
 
-var pluginMetricsOkGauge = prometheus.NewGaugeVec(
+var quotaPluginMetricsOkGauge = prometheus.NewGaugeVec(
 	prometheus.GaugeOpts{
 		Name: "limes_plugin_metrics_ok",
 		Help: "Whether plugin metrics were rendered successfully for a particular project service. Only present when the project service emits metrics.",
@@ -288,18 +288,18 @@ var pluginMetricsOkGauge = prometheus.NewGaugeVec(
 	[]string{"os_cluster", "domain", "domain_id", "project", "project_id", "service"},
 )
 
-//PluginMetricsCollector is a prometheus.Collector that submits metrics
+//QuotaPluginMetricsCollector is a prometheus.Collector that submits metrics
 //which are specific to the selected quota plugins.
-type PluginMetricsCollector struct {
+type QuotaPluginMetricsCollector struct {
 	Cluster *core.Cluster
 	//When .Override is set, the DB is bypassed and only the given
-	//PluginMetricsInstances are considered. This is used for testing only.
-	Override []PluginMetricsInstance
+	//QuotaPluginMetricsInstances are considered. This is used for testing only.
+	Override []QuotaPluginMetricsInstance
 }
 
-//PluginMetricsInstance describes a single project service for which plugin
-//metrics are submitted. It appears in type PluginMetricsCollector.
-type PluginMetricsInstance struct {
+//QuotaPluginMetricsInstance describes a single project service for which plugin
+//metrics are submitted. It appears in type QuotaPluginMetricsCollector.
+type QuotaPluginMetricsInstance struct {
 	DomainName        string
 	DomainUUID        string
 	ProjectName       string
@@ -309,14 +309,14 @@ type PluginMetricsInstance struct {
 }
 
 //Describe implements the prometheus.Collector interface.
-func (c *PluginMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
-	pluginMetricsOkGauge.Describe(ch)
+func (c *QuotaPluginMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
+	quotaPluginMetricsOkGauge.Describe(ch)
 	for _, plugin := range c.Cluster.QuotaPlugins {
 		plugin.DescribeMetrics(ch)
 	}
 }
 
-var serializedMetricsGetQuery = db.SimplifyWhitespaceInSQL(`
+var quotaSerializedMetricsGetQuery = db.SimplifyWhitespaceInSQL(`
 	SELECT d.name, d.uuid, p.name, p.uuid, ps.type, ps.serialized_metrics
 	  FROM domains d
 	  JOIN projects p ON p.domain_id = d.id
@@ -325,9 +325,9 @@ var serializedMetricsGetQuery = db.SimplifyWhitespaceInSQL(`
 `)
 
 //Collect implements the prometheus.Collector interface.
-func (c *PluginMetricsCollector) Collect(ch chan<- prometheus.Metric) {
+func (c *QuotaPluginMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	descCh := make(chan *prometheus.Desc, 1)
-	pluginMetricsOkGauge.Describe(descCh)
+	quotaPluginMetricsOkGauge.Describe(descCh)
 	pluginMetricsOkDesc := <-descCh
 
 	if c.Override != nil {
@@ -338,8 +338,8 @@ func (c *PluginMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	queryArgs := []interface{}{c.Cluster.ID}
-	err := db.ForeachRow(db.DB, serializedMetricsGetQuery, queryArgs, func(rows *sql.Rows) error {
-		var i PluginMetricsInstance
+	err := db.ForeachRow(db.DB, quotaSerializedMetricsGetQuery, queryArgs, func(rows *sql.Rows) error {
+		var i QuotaPluginMetricsInstance
 		err := rows.Scan(&i.DomainName, &i.DomainUUID, &i.ProjectName, &i.ProjectUUID, &i.ServiceType, &i.SerializedMetrics)
 		if err == nil {
 			c.collectOneProjectService(ch, pluginMetricsOkDesc, i)
@@ -351,7 +351,7 @@ func (c *PluginMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 }
 
-func (c *PluginMetricsCollector) collectOneProjectService(ch chan<- prometheus.Metric, pluginMetricsOkDesc *prometheus.Desc, instance PluginMetricsInstance) {
+func (c *QuotaPluginMetricsCollector) collectOneProjectService(ch chan<- prometheus.Metric, pluginMetricsOkDesc *prometheus.Desc, instance QuotaPluginMetricsInstance) {
 	plugin := c.Cluster.QuotaPlugins[instance.ServiceType]
 	if plugin == nil {
 		return
