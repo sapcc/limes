@@ -20,6 +20,7 @@
 package plugins
 
 import (
+	"encoding/json"
 	"regexp"
 	"strings"
 
@@ -39,20 +40,15 @@ type capacitySapccIronicPlugin struct {
 	reportSubcapacities bool
 }
 
-var ironicUnmatchedNodesGauge = prometheus.NewGaugeVec(
-	prometheus.GaugeOpts{
-		Name: "limes_unmatched_ironic_nodes",
-		Help: "Number of available/active Ironic nodes without matching flavor.",
-	},
-	[]string{"os_cluster"},
-)
+type capacitySapccIronicSerializedMetrics struct {
+	UnmatchedNodeCount uint64 `json:"unmatched_nodes"`
+}
 
 func init() {
 	core.RegisterCapacityPlugin(func(c core.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) core.CapacityPlugin {
 		ftt := newNovaFlavorTranslationTable(c.SAPCCIronic.FlavorAliases)
 		return &capacitySapccIronicPlugin{c, ftt, scrapeSubcapacities["compute"]["instances-baremetal"]}
 	})
-	prometheus.MustRegister(ironicUnmatchedNodesGauge)
 }
 
 //Init implements the core.CapacityPlugin interface.
@@ -137,7 +133,7 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 		}
 	}
 
-	unmatchedCounter := 0
+	unmatchedCounter := uint64(0)
 	for _, node := range nodes {
 		//do not consider nodes that have not been made available for provisioning yet
 		if !isAvailableProvisionState[node.StableProvisionState()] {
@@ -204,27 +200,51 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 		}
 	}
 
-	ironicUnmatchedNodesGauge.With(
-		prometheus.Labels{"os_cluster": clusterID},
-	).Set(float64(unmatchedCounter))
-
 	//remove pointers from `result`
 	result2 := make(map[string]core.CapacityData, len(result))
 	for resourceName, data := range result {
 		result2[resourceName] = *data
 	}
 
-	return map[string]map[string]core.CapacityData{"compute": result2}, "", nil
+	serializedMetrics, _ := json.Marshal(capacitySapccIronicSerializedMetrics{
+		UnmatchedNodeCount: unmatchedCounter,
+	})
+	return map[string]map[string]core.CapacityData{"compute": result2}, string(serializedMetrics), nil
 }
+
+var ironicUnmatchedNodesGauge = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "limes_unmatched_ironic_nodes",
+		Help: "Number of available/active Ironic nodes without matching flavor.",
+	},
+	[]string{"os_cluster"},
+)
 
 //DescribeMetrics implements the core.CapacityPlugin interface.
 func (p *capacitySapccIronicPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
-	//not used by this plugin
+	ironicUnmatchedNodesGauge.Describe(ch)
 }
 
 //CollectMetrics implements the core.CapacityPlugin interface.
 func (p *capacitySapccIronicPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, serializedMetrics string) error {
-	//not used by this plugin
+	if serializedMetrics == "" {
+		return nil
+	}
+	var metrics capacitySapccIronicSerializedMetrics
+	err := json.Unmarshal([]byte(serializedMetrics), &metrics)
+	if err != nil {
+		return err
+	}
+
+	descCh := make(chan *prometheus.Desc, 1)
+	ironicUnmatchedNodesGauge.Describe(descCh)
+	ironicUnmatchedNodesDesc := <-descCh
+
+	ch <- prometheus.MustNewConstMetric(
+		ironicUnmatchedNodesDesc,
+		prometheus.GaugeValue, float64(metrics.UnmatchedNodeCount),
+		clusterID,
+	)
 	return nil
 }
 
