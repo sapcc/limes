@@ -73,6 +73,10 @@ type novaPlugin struct {
 	}
 }
 
+type novaSerializedMetrics struct {
+	InstanceCountsByHypervisor map[string]uint64 `json:"instances_by_hypervisor,omitempty"`
+}
+
 var novaDefaultResources = []limes.ResourceInfo{
 	{
 		Name: "cores",
@@ -96,14 +100,6 @@ var novaDefaultResources = []limes.ResourceInfo{
 	},
 }
 
-var novaInstanceCountGauge = prometheus.NewGaugeVec(
-	prometheus.GaugeOpts{
-		Name: "limes_instance_counts",
-		Help: "Number of Nova instances per project and hypervisor type.",
-	},
-	[]string{"os_cluster", "domain_id", "project_id", "hypervisor"},
-)
-
 func init() {
 	core.RegisterQuotaPlugin(func(c core.ServiceConfiguration, scrapeSubresources map[string]bool) core.QuotaPlugin {
 		return &novaPlugin{
@@ -113,7 +109,6 @@ func init() {
 			ftt:             newNovaFlavorTranslationTable(c.Compute.SeparateInstanceQuotas.FlavorAliases),
 		}
 	})
-	prometheus.MustRegister(novaInstanceCountGauge)
 }
 
 //Init implements the core.QuotaPlugin interface.
@@ -345,13 +340,15 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 		}
 	}
 
+	var sm novaSerializedMetrics
+
 	if p.scrapeInstances {
 		listOpts := novaServerListOpts{
 			AllTenants: true,
 			TenantID:   projectUUID,
 		}
 
-		countsByHypervisor := map[string]uint64{
+		sm.InstanceCountsByHypervisor = map[string]uint64{
 			"vmware":  0,
 			"none":    0,
 			"unknown": 0,
@@ -457,7 +454,7 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 					if len(p.hypervisorTypeRules) > 0 {
 						hypervisorType := p.getHypervisorType(client, flavor)
 						subResource["hypervisor"] = hypervisorType
-						countsByHypervisor[hypervisorType]++
+						sm.InstanceCountsByHypervisor[hypervisorType]++
 					}
 
 					if p.cfg.Compute.BigVMMinMemoryMiB > 0 {
@@ -512,18 +509,6 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 		if err != nil {
 			return nil, "", err
 		}
-
-		//report Prometheus metrics
-		if len(p.hypervisorTypeRules) > 0 {
-			for typeStr, count := range countsByHypervisor {
-				novaInstanceCountGauge.With(prometheus.Labels{
-					"os_cluster": clusterID,
-					"domain_id":  domainUUID,
-					"project_id": projectUUID,
-					"hypervisor": typeStr,
-				}).Set(float64(count))
-			}
-		}
 	}
 
 	//remove references (which we needed to apply the subresources correctly)
@@ -531,7 +516,8 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 	for name, data := range result {
 		result2[name] = *data
 	}
-	return result2, "", nil
+	serializedMetrics, _ := json.Marshal(sm)
+	return result2, string(serializedMetrics), nil
 }
 
 //SetQuota implements the core.QuotaPlugin interface.
@@ -556,14 +542,41 @@ func (p *novaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherclo
 	return quotasets.Update(client, projectUUID, novaQuotas).Err
 }
 
+var novaInstanceCountGauge = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "limes_instance_counts",
+		Help: "Number of Nova instances per project and hypervisor type.",
+	},
+	[]string{"os_cluster", "domain_id", "project_id", "hypervisor"},
+)
+
 //DescribeMetrics implements the core.QuotaPlugin interface.
 func (p *novaPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
-	//not used by this plugin
+	novaInstanceCountGauge.Describe(ch)
 }
 
 //CollectMetrics implements the core.QuotaPlugin interface.
 func (p *novaPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, domainUUID, projectUUID, serializedMetrics string) error {
-	//not used by this plugin
+	if serializedMetrics == "" {
+		return nil
+	}
+	var metrics novaSerializedMetrics
+	err := json.Unmarshal([]byte(serializedMetrics), &metrics)
+	if err != nil {
+		return err
+	}
+
+	descCh := make(chan *prometheus.Desc, 1)
+	novaInstanceCountGauge.Describe(descCh)
+	novaInstanceCountDesc := <-descCh
+
+	for hypervisorName, instanceCount := range metrics.InstanceCountsByHypervisor {
+		ch <- prometheus.MustNewConstMetric(
+			novaInstanceCountDesc,
+			prometheus.GaugeValue, float64(instanceCount),
+			clusterID, domainUUID, projectUUID, hypervisorName,
+		)
+	}
 	return nil
 }
 
