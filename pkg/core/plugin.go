@@ -82,28 +82,16 @@ type QuotaPlugin interface {
 	//in the result map must be identical to the resource names
 	//from Resources().
 	//
-	//The clusterID is usually not needed, but should be given as a label to
-	//Prometheus metrics emitted by the plugin (if the plugin does that sort of
-	//thing).
-	//
 	//The serializedMetrics return value is persisted in the Limes DB and
 	//supplied to all subsequent RenderMetrics calls.
-	//
-	//TODO Remove clusterID argument after migrating all plugins to serializedMetrics.
-	Scrape(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (result map[string]ResourceData, serializedMetrics string, error error)
+	Scrape(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string) (result map[string]ResourceData, serializedMetrics string, error error)
 	//SetQuota updates the backend service's quotas for the given project in the
 	//given domain to the values specified here. The map is guaranteed to contain
 	//values for all resources defined by Resources().
 	//
 	//An error shall be returned if a value is given in `quotas` for any resource
 	//that is ExternallyManaged.
-	//
-	//The clusterID is usually not needed, but should be given as a label to
-	//Prometheus metrics emitted by the plugin (if the plugin does that sort of
-	//thing).
-	//
-	//TODO Remove clusterID argument after migrating all plugins to serializedMetrics.
-	SetQuota(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error
+	SetQuota(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string, quotas map[string]uint64) error
 	//Rates returns metadata for all the rates that this plugin scrapes
 	//from the backend service.
 	Rates() []limes.RateInfo
@@ -111,19 +99,13 @@ type QuotaPlugin interface {
 	//enumerated by Rates() for the given project in the given domain. The string
 	//keys in the result map must be identical to the rate names from Rates().
 	//
-	//The clusterID is usually not needed, but should be given as a label to
-	//Prometheus metrics emitted by the plugin (if the plugin does that sort of
-	//thing).
-	//
 	//The serializedState return value is persisted in the Limes DB and returned
 	//back to the next ScrapeRates() call for the same project in the
 	//prevSerializedState argument. Besides that, this field is not interpreted
 	//by the core application in any way. The plugin implementation can use this
 	//field to carry state between ScrapeRates() calls, esp. to detect and handle
 	//counter resets in the backend.
-	//
-	//TODO Remove clusterID argument after migrating all plugins to serializedMetrics.
-	ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error)
+	ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error)
 
 	//DescribeMetrics is called when Prometheus is scraping metrics from
 	//limes-collect, to provide an opportunity to the plugin to emit its own
@@ -189,15 +171,9 @@ type CapacityPlugin interface {
 	//there is no QuotaPlugin, and resources which are not advertised by that
 	//QuotaPlugin.
 	//
-	//The clusterID is usually not needed, but should be given as a label to
-	//Prometheus metrics emitted by the plugin (if the plugin does that sort of
-	//thing).
-	//
 	//The serializedMetrics return value is persisted in the Limes DB and
 	//supplied to all subsequent RenderMetrics calls.
-	//
-	//TODO Remove clusterID argument after migrating all plugins to serializedMetrics.
-	Scrape(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (result map[string]map[string]CapacityData, serializedMetrics string, err error)
+	Scrape(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (result map[string]map[string]CapacityData, serializedMetrics string, err error)
 
 	//DescribeMetrics is called when Prometheus is scraping metrics from
 	//limes-collect, to provide an opportunity to the plugin to emit its own

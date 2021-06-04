@@ -133,7 +133,7 @@ func (p *capacityPrometheusPlugin) ID() string {
 }
 
 //Scrape implements the core.CapacityPlugin interface.
-func (p *capacityPrometheusPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]core.CapacityData, string, error) {
+func (p *capacityPrometheusPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (map[string]map[string]core.CapacityData, string, error) {
 	client, err := prometheusClient(p.cfg.Prometheus.APIConfig)
 	if err != nil {
 		return nil, "", err

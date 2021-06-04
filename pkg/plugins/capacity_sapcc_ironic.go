@@ -81,7 +81,7 @@ var computeHostStubRx = regexp.MustCompile(`^nova-compute-(?:ironic-)?([a-zA-Z0-
 var nodeNameRx = regexp.MustCompile(`^node\d+-((?:b[bm]|ap)\d+)$`)
 
 //Scrape implements the core.CapacityPlugin interface.
-func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]core.CapacityData, string, error) {
+func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (map[string]map[string]core.CapacityData, string, error) {
 	//collect info about flavors with separate instance quota
 	novaClient, err := openstack.NewComputeV2(provider, eo)
 	if err != nil {

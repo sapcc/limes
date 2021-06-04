@@ -110,7 +110,7 @@ func (c *Collector) Scrape() {
 		logg.Debug("scraping %s resources for %s/%s", serviceType, domainName, projectName)
 		domain := core.KeystoneDomain{Name: domainName, UUID: domainUUID}
 		provider, eo := c.Cluster.ProviderClientForService(serviceType)
-		resourceData, serializedMetrics, err := c.Plugin.Scrape(provider, eo, c.Cluster.ID, domainUUID, projectUUID)
+		resourceData, serializedMetrics, err := c.Plugin.Scrape(provider, eo, domainUUID, projectUUID)
 		if err != nil {
 			scrapeFailedCounter.With(labels).Inc()
 			//special case: stop scraping for a while when the backend service is not

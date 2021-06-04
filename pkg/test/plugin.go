@@ -116,7 +116,7 @@ func (p *Plugin) Rates() []limes.RateInfo {
 }
 
 //ScrapeRates implements the core.QuotaPlugin interface.
-func (p *Plugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+func (p *Plugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
 	if p.ScrapeFails {
 		return nil, "", errors.New("ScrapeRates failed as requested")
 	}
@@ -146,7 +146,7 @@ func (p *Plugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.
 }
 
 //Scrape implements the core.QuotaPlugin interface.
-func (p *Plugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, string, error) {
+func (p *Plugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string) (map[string]core.ResourceData, string, error) {
 	if p.ScrapeFails {
 		return nil, "", errors.New("Scrape failed as requested")
 	}
@@ -207,7 +207,7 @@ func (p *Plugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.End
 }
 
 //SetQuota implements the core.QuotaPlugin interface.
-func (p *Plugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
+func (p *Plugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string, quotas map[string]uint64) error {
 	if p.SetQuotaFails {
 		return errors.New("SetQuota failed as requested")
 	}
@@ -289,7 +289,7 @@ func (p *CapacityPlugin) ID() string {
 }
 
 //Scrape implements the core.CapacityPlugin interface.
-func (p *CapacityPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]core.CapacityData, string, error) {
+func (p *CapacityPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (map[string]map[string]core.CapacityData, string, error) {
 	var capacityPerAZ map[string]*core.CapacityDataForAZ
 	if p.WithAZCapData {
 		capacityPerAZ = map[string]*core.CapacityDataForAZ{

@@ -94,7 +94,7 @@ func (c *Collector) ScrapeRates() {
 
 		logg.Debug("scraping %s rates for %s/%s", serviceType, domainName, projectName)
 		provider, eo := c.Cluster.ProviderClientForService(serviceType)
-		rateData, serviceRatesScrapeState, err := c.Plugin.ScrapeRates(provider, eo, c.Cluster.ID, domainUUID, projectUUID, serviceRatesScrapeState)
+		rateData, serviceRatesScrapeState, err := c.Plugin.ScrapeRates(provider, eo, domainUUID, projectUUID, serviceRatesScrapeState)
 		if err != nil {
 			ratesScrapeFailedCounter.With(labels).Inc()
 			//special case: stop scraping for a while when the backend service is not

@@ -73,7 +73,7 @@ func (p *capacityManilaPlugin) makeResourceName(kind, shareType string) string {
 }
 
 //Scrape implements the core.CapacityPlugin interface.
-func (p *capacityManilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]core.CapacityData, string, error) {
+func (p *capacityManilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (map[string]map[string]core.CapacityData, string, error) {
 	cfg := p.cfg.Manila
 	client, err := openstack.NewSharedFileSystemV2(provider, eo)
 	if err != nil {

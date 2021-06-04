@@ -81,7 +81,7 @@ func (p *capacityNovaPlugin) ID() string {
 }
 
 //Scrape implements the core.CapacityPlugin interface.
-func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]core.CapacityData, string, error) {
+func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (map[string]map[string]core.CapacityData, string, error) {
 	var hypervisorTypeRx *regexp.Regexp
 	if p.cfg.Nova.HypervisorTypePattern != "" {
 		var err error

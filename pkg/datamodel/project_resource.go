@@ -100,7 +100,7 @@ func ApplyBackendQuota(dbi db.Interface, cluster *core.Cluster, domain core.Keys
 
 	//apply quotas in backend
 	provider, eo := cluster.ProviderClientForService(serviceType)
-	err = plugin.SetQuota(provider, eo, cluster.ID, domain.UUID, project.UUID, quotaValues)
+	err = plugin.SetQuota(provider, eo, domain.UUID, project.UUID, quotaValues)
 	if err != nil {
 		return err
 	}

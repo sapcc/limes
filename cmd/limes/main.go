@@ -243,7 +243,7 @@ func taskTestGetQuota(config core.Configuration, cluster *core.Cluster, args []s
 	domainName, domainUUID, projectName, projectUUID, serviceType := findProjectServiceForTesting(cluster, args[0], args[1])
 
 	provider, eo := cluster.ProviderClientForService(serviceType)
-	result, serializedMetrics, err := cluster.QuotaPlugins[serviceType].Scrape(provider, eo, cluster.ID, domainUUID, projectUUID)
+	result, serializedMetrics, err := cluster.QuotaPlugins[serviceType].Scrape(provider, eo, domainUUID, projectUUID)
 	if err != nil {
 		return err
 	}
@@ -285,7 +285,7 @@ func taskTestGetRates(config core.Configuration, cluster *core.Cluster, args []s
 	_, domainUUID, _, projectUUID, serviceType := findProjectServiceForTesting(cluster, args[0], args[1])
 
 	provider, eo := cluster.ProviderClientForService(serviceType)
-	result, serializedState, err := cluster.QuotaPlugins[serviceType].ScrapeRates(provider, eo, cluster.ID, domainUUID, projectUUID, prevSerializedState)
+	result, serializedState, err := cluster.QuotaPlugins[serviceType].ScrapeRates(provider, eo, domainUUID, projectUUID, prevSerializedState)
 	if err != nil {
 		return err
 	}
@@ -382,7 +382,7 @@ func taskTestSetQuota(config core.Configuration, cluster *core.Cluster, args []s
 	}
 
 	provider, eo := cluster.ProviderClientForService(serviceType)
-	return cluster.QuotaPlugins[serviceType].SetQuota(provider, eo, cluster.ID, domainUUID, projectUUID, quotaValues)
+	return cluster.QuotaPlugins[serviceType].SetQuota(provider, eo, domainUUID, projectUUID, quotaValues)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -400,7 +400,7 @@ func taskTestScanCapacity(config core.Configuration, cluster *core.Cluster, args
 	}
 
 	provider, eo := cluster.ProviderClientForCapacitor(capacitorID)
-	capacities, serializedMetrics, err := plugin.Scrape(provider, eo, cluster.ID)
+	capacities, serializedMetrics, err := plugin.Scrape(provider, eo)
 	if err != nil {
 		logg.Error("Scrape failed: %s", util.ErrorToString(err))
 		capacities = nil

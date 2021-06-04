@@ -86,12 +86,12 @@ func (p *cronusPlugin) Rates() []limes.RateInfo {
 }
 
 //Scrape implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, string, error) {
+func (p *cronusPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string) (map[string]core.ResourceData, string, error) {
 	return nil, "", nil
 }
 
 //SetQuota implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
+func (p *cronusPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string, quotas map[string]uint64) error {
 	return nil
 }
 
@@ -108,7 +108,7 @@ type cronusState struct {
 }
 
 //ScrapeRates implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) ScrapeRates(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+func (p *cronusPlugin) ScrapeRates(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
 	//decode `prevSerializedState`
 	var state cronusState
 	if prevSerializedState == "" {

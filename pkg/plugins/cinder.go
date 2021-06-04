@@ -135,12 +135,12 @@ func (f quotaSetField) ToResourceData(subresources []interface{}) core.ResourceD
 }
 
 //ScrapeRates implements the core.QuotaPlugin interface.
-func (p *cinderPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+func (p *cinderPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
 //Scrape implements the core.QuotaPlugin interface.
-func (p *cinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, string, error) {
+func (p *cinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string) (map[string]core.ResourceData, string, error) {
 	client, err := openstack.NewBlockStorageV2(provider, eo)
 	if err != nil {
 		return nil, "", err
@@ -216,7 +216,7 @@ func (p *cinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 }
 
 //SetQuota implements the core.QuotaPlugin interface.
-func (p *cinderPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
+func (p *cinderPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string, quotas map[string]uint64) error {
 	var requestData struct {
 		QuotaSet map[string]uint64 `json:"quota_set"`
 	}

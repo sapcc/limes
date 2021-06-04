@@ -52,7 +52,7 @@ func (p *capacityCFMPlugin) ID() string {
 }
 
 //Scrape implements the core.CapacityPlugin interface.
-func (p *capacityCFMPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID string) (map[string]map[string]core.CapacityData, string, error) {
+func (p *capacityCFMPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (map[string]map[string]core.CapacityData, string, error) {
 	client, err := newCFMClient(provider, eo, p.projectID)
 	if err != nil {
 		return nil, "", err

@@ -116,12 +116,12 @@ func (p *swiftPlugin) Account(provider *gophercloud.ProviderClient, eo gopherclo
 }
 
 //ScrapeRates implements the core.QuotaPlugin interface.
-func (p *swiftPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+func (p *swiftPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
 //Scrape implements the core.QuotaPlugin interface.
-func (p *swiftPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, string, error) {
+func (p *swiftPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string) (map[string]core.ResourceData, string, error) {
 	account, err := p.Account(provider, eo, projectUUID)
 	if err != nil {
 		return nil, "", err
@@ -174,7 +174,7 @@ func (p *swiftPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclou
 }
 
 //SetQuota implements the core.QuotaPlugin interface.
-func (p *swiftPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
+func (p *swiftPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string, quotas map[string]uint64) error {
 	account, err := p.Account(provider, eo, projectUUID)
 	if err != nil {
 		return err

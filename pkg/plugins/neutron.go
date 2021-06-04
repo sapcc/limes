@@ -277,12 +277,12 @@ type neutronQueryOpts struct {
 }
 
 //ScrapeRates implements the core.QuotaPlugin interface.
-func (p *neutronPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+func (p *neutronPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
 //Scrape implements the core.QuotaPlugin interface.
-func (p *neutronPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string) (map[string]core.ResourceData, string, error) {
+func (p *neutronPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string) (map[string]core.ResourceData, string, error) {
 	data := make(map[string]core.ResourceData)
 
 	err := p.scrapeNeutronInto(data, provider, eo, projectUUID)
@@ -482,7 +482,7 @@ func (q neutronOrOctaviaQuotaSet) ToQuotaUpdateMap() (map[string]interface{}, er
 }
 
 //SetQuota implements the core.QuotaPlugin interface.
-func (p *neutronPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, clusterID, domainUUID, projectUUID string, quotas map[string]uint64) error {
+func (p *neutronPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string, quotas map[string]uint64) error {
 	//collect Neutron quotas
 	neutronQuotas := make(neutronOrOctaviaQuotaSet)
 	for _, res := range neutronResourceMeta {
