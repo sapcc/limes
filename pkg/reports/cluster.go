@@ -80,7 +80,7 @@ var clusterReportQuery5 = db.SimplifyWhitespaceInSQL(`
 //GetClusters returns reports for all clusters or, if clusterID is
 //non-nil, for that cluster only.
 //
-//In contrast to nearly everything else in Limes, his needs the full
+//In contrast to nearly everything else in Limes, this needs the full
 //core.Configuration (instead of just the current core.ClusterConfiguration)
 //to look at the services enabled in other clusters.
 func GetClusters(config core.Configuration, clusterID *string, dbi db.Interface, filter Filter) ([]*limes.ClusterReport, error) {
