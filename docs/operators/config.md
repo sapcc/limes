@@ -847,8 +847,8 @@ capacitors:
 ```
 
 This capacity plugin reports capacity for the special `compute/instances_<flavorname>` resources that exist on SAP
-Converged Cloud ([see above](#compute-nova-v2)). For each such flavor, it counts the number of Ironic nodes whose RAM
-size, disk size, number of cores, and capabilities match those in the flavor.
+Converged Cloud ([see above](#compute-nova-v2)). For each such flavor, it uses the Ironic node's resource class to
+match it to a flavor with the **same name**.
 
 The `sapcc_ironic.flavor_aliases` parameter has the same semantics as the respective parameter on the `compute` service type,
 and should have the same contents as well (unless you like unnecessary confusion).
