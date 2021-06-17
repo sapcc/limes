@@ -22,7 +22,6 @@ package plugins
 import (
 	"fmt"
 	"math/big"
-	"net/url"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
@@ -358,40 +357,6 @@ func (p *neutronPlugin) scrapeOctaviaInto(result map[string]core.ResourceData, p
 		}
 	}
 	return nil
-}
-
-type octaviaGenericOpts struct {
-	ProjectID string
-}
-
-//ToLoadBalancerListQuery implements the loadbalancers.ListOptsBuilder interface.
-func (o octaviaGenericOpts) ToLoadBalancerListQuery() (string, error) {
-	return "?" + url.Values{"fields": {"id"}, "project_id": {o.ProjectID}}.Encode(), nil
-}
-
-//ToMonitorListQuery implements the monitors.ListOptsBuilder interface.
-func (o octaviaGenericOpts) ToMonitorListQuery() (string, error) {
-	return "?" + url.Values{"fields": {"id"}, "project_id": {o.ProjectID}}.Encode(), nil
-}
-
-//ToL7PolicyListQuery implements the l7policies.ListOptsBuilder interface.
-func (o octaviaGenericOpts) ToL7PolicyListQuery() (string, error) {
-	return "?" + url.Values{"fields": {"id"}, "project_id": {o.ProjectID}}.Encode(), nil
-}
-
-//ToListenerListQuery implements the listeners.ListOptsBuilder interface.
-func (o octaviaGenericOpts) ToListenerListQuery() (string, error) {
-	return "?" + url.Values{"fields": {"id"}, "project_id": {o.ProjectID}}.Encode(), nil
-}
-
-//ToPoolListQuery implements the pools.ListOptsBuilder interface.
-func (o octaviaGenericOpts) ToPoolListQuery() (string, error) {
-	return "?" + url.Values{"fields": {"id"}, "project_id": {o.ProjectID}}.Encode(), nil
-}
-
-//ToMembersListQuery implements the pools.ListMembersOptsBuilder interface.
-func (o octaviaGenericOpts) ToMembersListQuery() (string, error) {
-	return "?" + url.Values{"fields": {"id"}, "project_id": {o.ProjectID}}.Encode(), nil
 }
 
 // scrapeOctaviaUsage returns Octavia quota usage for a project.
