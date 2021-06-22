@@ -22,7 +22,6 @@ package plugins
 import (
 	"encoding/json"
 	"regexp"
-	"strings"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
@@ -61,15 +60,6 @@ func (p *capacitySapccIronicPlugin) ID() string {
 	return "sapcc-ironic"
 }
 
-type ironicFlavorInfo struct {
-	ID           string
-	Name         string
-	Cores        uint64
-	MemoryMiB    uint64
-	DiskGiB      uint64
-	Capabilities map[string]string
-}
-
 //Reference:
 //  Hosts are expected to be in one of the following format:
 //    - "nova-compute-xxxx"
@@ -87,7 +77,7 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 	if err != nil {
 		return nil, "", err
 	}
-	flavors, err := p.collectIronicFlavorInfo(novaClient)
+	flavors, err := p.getIronicFlavorNames(novaClient)
 	if err != nil {
 		return nil, "", err
 	}
@@ -95,7 +85,7 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 	//we are going to report capacity for all per-flavor instance quotas
 	result := make(map[string]*core.CapacityData)
 	for _, flavor := range flavors {
-		result[p.ftt.LimesResourceNameForFlavor(flavor.Name)] = &core.CapacityData{
+		result[p.ftt.LimesResourceNameForFlavor(flavor)] = &core.CapacityData{
 			Capacity:      0,
 			CapacityPerAZ: map[string]*core.CapacityDataForAZ{},
 		}
@@ -143,9 +133,9 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 		matched := false
 		for _, flavor := range flavors {
 			if node.Matches(flavor) {
-				logg.Debug("Ironic node %q (%s) matches flavor %s", node.Name, node.ID, flavor.Name)
+				logg.Debug("Ironic node %q (%s) matches flavor %s", node.Name, node.ID, flavor)
 
-				data := result[p.ftt.LimesResourceNameForFlavor(flavor.Name)]
+				data := result[p.ftt.LimesResourceNameForFlavor(flavor)]
 				data.Capacity++
 
 				var nodeAZ string
@@ -248,7 +238,7 @@ func (p *capacitySapccIronicPlugin) CollectMetrics(ch chan<- prometheus.Metric, 
 	return nil
 }
 
-func (p *capacitySapccIronicPlugin) collectIronicFlavorInfo(novaClient *gophercloud.ServiceClient) ([]ironicFlavorInfo, error) {
+func (p *capacitySapccIronicPlugin) getIronicFlavorNames(novaClient *gophercloud.ServiceClient) ([]string, error) {
 	//which flavors have separate instance quota?
 	flavorNames, err := p.ftt.ListFlavorsWithSeparateInstanceQuota(novaClient)
 	if err != nil {
@@ -259,8 +249,8 @@ func (p *capacitySapccIronicPlugin) collectIronicFlavorInfo(novaClient *gophercl
 		isRelevantFlavorName[flavorName] = true
 	}
 
-	//collect basic attributes for flavors
-	var result []ironicFlavorInfo
+	//check flavor relevancy
+	var result []string
 	err = flavorsmodule.ListDetail(novaClient, nil).EachPage(func(page pagination.Page) (bool, error) {
 		flavors, err := flavorsmodule.ExtractFlavors(page)
 		if err != nil {
@@ -269,14 +259,7 @@ func (p *capacitySapccIronicPlugin) collectIronicFlavorInfo(novaClient *gophercl
 
 		for _, flavor := range flavors {
 			if isRelevantFlavorName[flavor.Name] {
-				result = append(result, ironicFlavorInfo{
-					ID:           flavor.ID,
-					Name:         flavor.Name,
-					Cores:        uint64(flavor.VCPUs),
-					MemoryMiB:    uint64(flavor.RAM),
-					DiskGiB:      uint64(flavor.Disk),
-					Capabilities: make(map[string]string),
-				})
+				result = append(result, flavor.Name)
 			}
 		}
 		return true, nil
@@ -285,54 +268,12 @@ func (p *capacitySapccIronicPlugin) collectIronicFlavorInfo(novaClient *gophercl
 		return nil, err
 	}
 
-	//retrieve extra specs - the ones in the "capabilities" namespace are
-	//relevant for Ironic node selection
-	for _, flavor := range result {
-		extraSpecs, err := getFlavorExtras(novaClient, flavor.ID)
-		if err != nil {
-			return nil, err
-		}
-		for key, value := range extraSpecs {
-			if strings.HasPrefix(key, "capabilities:") {
-				capability := strings.TrimPrefix(key, "capabilities:")
-				flavor.Capabilities[capability] = value
-			}
-		}
-	}
 	return result, nil
 }
 
-func (n ironicNode) Matches(f ironicFlavorInfo) bool {
-	if uint64(n.Properties.Cores) != f.Cores {
-		logg.Debug("core mismatch: %d != %d", n.Properties.Cores, f.Cores)
-		return false
+func (n ironicNode) Matches(flavorName string) bool {
+	if n.ResourceClass != nil {
+		return *n.ResourceClass == flavorName
 	}
-	if uint64(n.Properties.MemoryMiB) != f.MemoryMiB {
-		logg.Debug("memory mismatch: %d != %d", n.Properties.MemoryMiB, f.MemoryMiB)
-		return false
-	}
-	if uint64(n.Properties.DiskGiB) != f.DiskGiB {
-		logg.Debug("disk mismatch: %d != %d", n.Properties.DiskGiB, f.DiskGiB)
-		return false
-	}
-
-	nodeCaps := make(map[string]string)
-	if n.Properties.CPUArchitecture != "" {
-		nodeCaps["cpu_arch"] = n.Properties.CPUArchitecture
-	}
-	for _, field := range strings.Split(n.Properties.Capabilities, ",") {
-		fields := strings.SplitN(field, ":", 2)
-		if len(fields) == 2 {
-			nodeCaps[fields[0]] = fields[1]
-		}
-	}
-
-	for key, flavorValue := range f.Capabilities {
-		nodeValue, exists := nodeCaps[key]
-		if !exists || nodeValue != flavorValue {
-			logg.Debug("capability %s mismatch: %q != %q", key, nodeValue, flavorValue)
-			return false
-		}
-	}
-	return true
+	return false
 }

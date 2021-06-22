@@ -471,7 +471,7 @@ func getFlavorExtras(client *gophercloud.ServiceClient, flavorUUID string) (map[
 type novaHypervisorGroup struct {
 	Name                string
 	Metadata            map[string]string //only used for aggregates
-	ContainsComputeHost map[string]bool   //only used for aggrgates and AZs
+	ContainsComputeHost map[string]bool   //only used for aggregates and AZs
 	HypervisorCount     uint64
 	Capacity            partialNovaCapacity
 }

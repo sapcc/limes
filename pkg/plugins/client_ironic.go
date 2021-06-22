@@ -57,6 +57,7 @@ type ironicNode struct {
 	ProvisionState       string  `json:"provision_state"`
 	TargetProvisionState *string `json:"target_provision_state"`
 	InstanceID           *string `json:"instance_uuid"`
+	ResourceClass        *string `json:"resource_class"`
 	Properties           struct {
 		Cores           veryFlexibleUint64 `json:"cpus"`
 		DiskGiB         veryFlexibleUint64 `json:"local_gb"`
@@ -103,10 +104,13 @@ func (c ironicClient) GetNodes() ([]ironicNode, error) {
 		page.MarkerPageBase.Owner = page
 		return page
 	})
-	//if this is not set, the provision_state fields will be there,
-	//but always be null ... #justopenstackthings
+
+	// From OpenStack docs:
+	// Beginning with the Kilo release, `X-OpenStack-Ironic-API-Version` header
+	// SHOULD be supplied with every request. In the absence of this header,
+	// each request is treated as though coming from an older pre-Kilo client.
 	pager.Headers = map[string]string{
-		"X-Openstack-Ironic-Api-Version": "1.22",
+		"X-OpenStack-Ironic-API-Version": "1.58",
 	}
 
 	var result []ironicNode
