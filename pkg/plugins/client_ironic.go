@@ -110,7 +110,7 @@ func (c ironicClient) GetNodes() ([]ironicNode, error) {
 	// SHOULD be supplied with every request. In the absence of this header,
 	// each request is treated as though coming from an older pre-Kilo client.
 	pager.Headers = map[string]string{
-		"X-OpenStack-Ironic-API-Version": "1.58",
+		"X-OpenStack-Ironic-API-Version": "1.22",
 	}
 
 	var result []ironicNode
