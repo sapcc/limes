@@ -1,6 +1,6 @@
 # Limes
 
-[![Build Status](https://travis-ci.org/sapcc/limes.svg?branch=master)](https://travis-ci.org/sapcc/limes)
+[![CI](https://github.com/sapcc/limes/actions/workflows/ci.yaml/badge.svg)](https://github.com/sapcc/limes/actions/workflows/ci.yaml)
 [![Coverage Status](https://coveralls.io/repos/github/sapcc/limes/badge.svg?branch=master)](https://coveralls.io/github/sapcc/limes?branch=master)
 [![Go Report Card](https://goreportcard.com/badge/github.com/sapcc/limes)](https://goreportcard.com/report/github.com/sapcc/limes)
 [![GoDoc](https://godoc.org/github.com/sapcc/limes?status.svg)](https://godoc.org/github.com/sapcc/limes)

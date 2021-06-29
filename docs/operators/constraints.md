@@ -33,7 +33,7 @@ projects:
 ```
 
 In this example, when Limes discovers the "Default" domain, it will assign 1 TiB of domain quota for the "capacity"
-resource in the "object-store" service to fulfil the "at least" constraint. Moreover, when Limes discovers the
+resource in the "object-store" service to fulfill the "at least" constraint. Moreover, when Limes discovers the
 "swift-tests" project in said domain, it will assign 200 MiB of project quota for the same resource.
 
 Requests to change the quota for the "swift-tests" project will be rejected because of the "exactly" constraint.

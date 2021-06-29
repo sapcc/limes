@@ -5,7 +5,7 @@
 Limes consists of two basic services:
 
 - The **API service** `limes serve` exposes an OpenStack-style REST API that shall be exposed to users. It talks to
-  - Keystone for authorization of users and to fulfil project/domain discovery requests synchronously, and to
+  - Keystone for authorization of users and to fulfill project/domain discovery requests synchronously, and to
   - all other supported OpenStack services to set quotas.
 - The **collector service** `limes collect` performs various regular upkeep jobs. It talks to
   - Keystone to discover new domains/projects or updates to existing ones, and to

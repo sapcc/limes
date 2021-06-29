@@ -8,3 +8,4 @@ testing/postgres*
 # custom configuration files used during development
 *.yaml
 !Makefile.maker.yaml
+!.github/workflows/*.yaml

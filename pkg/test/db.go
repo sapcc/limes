@@ -22,7 +22,6 @@ package test
 import (
 	"fmt"
 	"net/url"
-	"os"
 	"testing"
 
 	gorp "gopkg.in/gorp.v2"
@@ -34,14 +33,7 @@ import (
 //InitDatabase initializes DB in pkg/db for testing.
 func InitDatabase(t *testing.T, fixtureFile *string) {
 	t.Helper()
-	var postgresURL *url.URL
-	if os.Getenv("TRAVIS") == "true" {
-		//cf. https://docs.travis-ci.com/user/database-setup/#postgresql
-		postgresURL, _ = url.Parse("postgres://postgres@localhost/limes?sslmode=disable")
-	} else {
-		//suitable for use with ./testing/with-postgres-db.sh
-		postgresURL, _ = url.Parse("postgres://postgres@localhost:54321/limes?sslmode=disable")
-	}
+	postgresURL, _ := url.Parse("postgres://postgres:postgres@localhost:54321/limes?sslmode=disable")
 	postgresDB, err := easypg.Connect(easypg.Configuration{
 		PostgresURL: postgresURL,
 		Migrations:  db.SQLMigrations,
