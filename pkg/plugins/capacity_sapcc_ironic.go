@@ -159,8 +159,15 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 
 				if p.reportSubcapacities {
 					sub := map[string]interface{}{
-						"id":   node.ID,
-						"name": node.Name,
+						"id":              node.ID,
+						"name":            node.Name,
+						"provision_state": node.ProvisionState,
+					}
+					if node.TargetProvisionState != nil && *node.TargetProvisionState != "" {
+						sub["target_provision_state"] = *node.TargetProvisionState
+					}
+					if nodeAZ != "" {
+						sub["availability_zone"] = nodeAZ
 					}
 					if node.Properties.MemoryMiB > 0 {
 						sub["ram"] = limes.ValueWithUnit{Unit: limes.UnitMebibytes, Value: uint64(node.Properties.MemoryMiB)}
