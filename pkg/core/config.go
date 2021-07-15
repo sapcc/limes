@@ -98,6 +98,17 @@ type DiscoveryConfiguration struct {
 	RoleAssignment struct {
 		RoleName string `yaml:"role"`
 	} `yaml:"role-assignment"`
+	Static struct {
+		Domains []struct {
+			UUID     string `yaml:"id"`
+			Name     string `yaml:"name"`
+			Projects []struct {
+				UUID       string `yaml:"id"`
+				Name       string `yaml:"name"`
+				ParentUUID string `yaml:"parent_id"`
+			} `yaml:"projects"`
+		} `yaml:"domains"`
+	} `yaml:"static"`
 }
 
 //ServiceConfiguration describes a service that is enabled for a certain cluster.
