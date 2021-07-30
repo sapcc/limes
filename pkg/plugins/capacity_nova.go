@@ -99,7 +99,7 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 	//enumerate hypervisors (cannot use type Hypervisor provided by Gophercloud;
 	//in our clusters, it breaks because some hypervisor report unexpected NULL
 	//values on fields that we are not even interested in)
-	page, err := hypervisors.List(client).AllPages()
+	page, err := hypervisors.List(client, nil).AllPages()
 	if err != nil {
 		return nil, "", err
 	}
