@@ -291,7 +291,7 @@ func (c *Collector) writeScrapeResult(domain core.KeystoneDomain, projectName, p
 				res.Quota = &resMetadata.AutoApproveInitialQuota
 
 				logg.Other("AUDIT", fmt.Sprintf("set quota %s/%s = 0 -> %d for project %s through auto-approval",
-					serviceType, resMetadata.Name, res.Quota, projectUUID),
+					serviceType, resMetadata.Name, *res.Quota, projectUUID),
 				)
 			}
 
