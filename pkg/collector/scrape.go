@@ -342,7 +342,7 @@ func (c *Collector) writeScrapeResult(domain core.KeystoneDomain, projectName, p
 	}
 
 	if scrapeDuration > 5*time.Minute {
-		logg.Info("scrape of %s in project %ss has taken excessively long (%s)", serviceType, projectUUID, scrapeDuration.String())
+		logg.Info("scrape of %s in project %s has taken excessively long (%s)", serviceType, projectUUID, scrapeDuration.String())
 	}
 
 	//if a mismatch between frontend and backend quota was detected, try to
