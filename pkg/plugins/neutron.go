@@ -38,7 +38,7 @@ type neutronPlugin struct {
 	cfg               core.ServiceConfiguration
 	resources         []limes.ResourceInfo
 	hasLBaaSExtension bool //TODO remove after migrating to newer Neutron
-	extensions        map[string]bool
+	hasExtension      map[string]bool
 	hasOctavia        bool
 }
 
@@ -160,21 +160,21 @@ func (p *neutronPlugin) Init(provider *gophercloud.ProviderClient, eo gopherclou
 	}
 
 	// Check required Neutron extensions
-	p.extensions = map[string]bool{}
+	p.hasExtension = map[string]bool{}
 	for _, resource := range neutronResourceMeta {
 		if resource.Extension == "" {
 			continue
 		}
-		r := extensions.Get(client, resource.Extension)
-		switch r.Result.Err.(type) {
+		_, err := extensions.Get(client, resource.Extension).Extract()
+		switch err.(type) {
 		case gophercloud.ErrDefault404:
-			p.extensions[resource.Extension] = false
+			p.hasExtension[resource.Extension] = false
 		case nil:
-			p.extensions[resource.Extension] = true
+			p.hasExtension[resource.Extension] = true
 		default:
-			return fmt.Errorf("cannot check for %q support in Neutron: %s", resource.Extension, r.Result.Err.Error())
+			return fmt.Errorf("cannot check for %q support in Neutron: %w", resource.Extension, err)
 		}
-		logg.Info("Neutron extension %s is enabled = %t", resource.Extension, p.extensions[resource.Extension])
+		logg.Info("Neutron extension %s is enabled = %t", resource.Extension, p.hasExtension[resource.Extension])
 	}
 
 	// Octavia supported?
@@ -348,7 +348,7 @@ func (p *neutronPlugin) scrapeNeutronInto(result map[string]core.ResourceData, p
 
 	//convert data into Limes' internal format
 	for _, res := range neutronResourceMeta {
-		if res.Extension != "" && !p.isExtensionEnabled(res.Extension) {
+		if res.Extension != "" && !p.hasExtension[res.Extension] {
 			continue
 		}
 		values := quotas.Values[res.NeutronName]
@@ -358,11 +358,6 @@ func (p *neutronPlugin) scrapeNeutronInto(result map[string]core.ResourceData, p
 		}
 	}
 	return nil
-}
-
-func (p *neutronPlugin) isExtensionEnabled(extensionAlias string) bool {
-	enabled, ok := p.extensions[extensionAlias]
-	return ok && enabled
 }
 
 func (p *neutronPlugin) scrapeOctaviaInto(result map[string]core.ResourceData, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, projectUUID string) error {
