@@ -34,12 +34,11 @@ import (
 )
 
 type neutronPlugin struct {
-	cfg                core.ServiceConfiguration
-	resources          []limes.ResourceInfo
-	hasLBaaSExtension  bool //TODO remove after migrating to newer Neutron
-	hasBGPVPNExtension bool
-	extensions         map[string]bool
-	hasOctavia         bool
+	cfg               core.ServiceConfiguration
+	resources         []limes.ResourceInfo
+	hasLBaaSExtension bool //TODO remove after migrating to newer Neutron
+	extensions        map[string]bool
+	hasOctavia        bool
 }
 
 var neutronResources = []limes.ResourceInfo{
