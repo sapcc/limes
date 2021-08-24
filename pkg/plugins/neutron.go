@@ -29,6 +29,7 @@ import (
 	octavia_quotas "github.com/gophercloud/gophercloud/openstack/loadbalancer/v2/quotas"
 	neutron_quotas "github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/quotas"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 )
@@ -173,6 +174,7 @@ func (p *neutronPlugin) Init(provider *gophercloud.ProviderClient, eo gopherclou
 		default:
 			return fmt.Errorf("cannot check for %q support in Neutron: %s", resource.Extension, r.Result.Err.Error())
 		}
+		logg.Info("Neutron extension %s is enabled = %t", resource.Extension, p.extensions[resource.Extension])
 	}
 
 	// Octavia supported?
@@ -347,7 +349,6 @@ func (p *neutronPlugin) scrapeNeutronInto(result map[string]core.ResourceData, p
 	//convert data into Limes' internal format
 	for _, res := range neutronResourceMeta {
 		if res.Extension != "" && !p.isExtensionEnabled(res.Extension) {
-			fmt.Printf("WARNING: resource %q was ignored because extension %q disabled.", res.NeutronName, res.Extension)
 			continue
 		}
 		values := quotas.Values[res.NeutronName]
