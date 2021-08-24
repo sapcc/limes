@@ -34,10 +34,12 @@ import (
 )
 
 type neutronPlugin struct {
-	cfg               core.ServiceConfiguration
-	resources         []limes.ResourceInfo
-	hasLBaaSExtension bool //TODO remove after migrating to newer Neutron
-	hasOctavia        bool
+	cfg                core.ServiceConfiguration
+	resources          []limes.ResourceInfo
+	hasLBaaSExtension  bool //TODO remove after migrating to newer Neutron
+	hasBGPVPNExtension bool
+	extensions         map[string]bool
+	hasOctavia         bool
 }
 
 var neutronResources = []limes.ResourceInfo{
@@ -88,6 +90,12 @@ var neutronResources = []limes.ResourceInfo{
 	},
 	{
 		Name:     "subnets",
+		Unit:     limes.UnitNone,
+		Category: "networking",
+	},
+	//////////  BGPV VPN plugin resources
+	{
+		Name:     "bgpvpns",
 		Unit:     limes.UnitNone,
 		Category: "networking",
 	},
@@ -151,6 +159,23 @@ func (p *neutronPlugin) Init(provider *gophercloud.ProviderClient, eo gopherclou
 		return fmt.Errorf("cannot check for lbaasv2 support in Neutron: %s", r.Result.Err.Error())
 	}
 
+	// Check required Neturon extensions
+	p.extensions = map[string]bool{}
+	for _, resource := range neutronResourceMeta {
+		if resource.Extension == "" {
+			continue
+		}
+		r := extensions.Get(client, resource.Extension)
+		switch r.Result.Err.(type) {
+		case gophercloud.ErrDefault404:
+			p.extensions[resource.Extension] = false
+		case nil:
+			p.extensions[resource.Extension] = true
+		default:
+			return fmt.Errorf("cannot check for %q support in Neutron: %s", resource.Extension, r.Result.Err.Error())
+		}
+	}
+
 	// Octavia supported?
 	_, err = openstack.NewLoadBalancerV2(provider, eo)
 	switch err.(type) {
@@ -187,44 +212,59 @@ func (p *neutronPlugin) Rates() []limes.RateInfo {
 type neutronResourceMetadata struct {
 	LimesName   string
 	NeutronName string
+	Extension   string
 }
 
 var neutronResourceMeta = []neutronResourceMetadata{
 	{
 		LimesName:   "networks",
 		NeutronName: "network",
+		Extension:   "",
 	},
 	{
 		LimesName:   "subnets",
 		NeutronName: "subnet",
+		Extension:   "",
 	},
 	{
 		LimesName:   "subnet_pools",
 		NeutronName: "subnetpool",
+		Extension:   "",
 	},
 	{
 		LimesName:   "floating_ips",
 		NeutronName: "floatingip",
+		Extension:   "",
 	},
 	{
 		LimesName:   "routers",
 		NeutronName: "router",
+		Extension:   "",
 	},
 	{
 		LimesName:   "ports",
 		NeutronName: "port",
+		Extension:   "",
 	},
 	{
 		LimesName:   "security_groups",
 		NeutronName: "security_group",
+		Extension:   "",
 	},
 	{
 		LimesName:   "security_group_rules",
 		NeutronName: "security_group_rule",
+		Extension:   "",
 	},
 	{
 		LimesName:   "rbac_policies",
 		NeutronName: "rbac_policy",
+		Extension:   "",
+	},
+	{
+		LimesName:   "bgpvpns",
+		NeutronName: "bgpvpn",
+		Extension:   "bgpvpn",
 	},
 }
 
@@ -316,6 +356,10 @@ func (p *neutronPlugin) scrapeNeutronInto(result map[string]core.ResourceData, p
 
 	//convert data into Limes' internal format
 	for _, res := range neutronResourceMeta {
+		if res.Extension != "" && !p.isExtensionEnabled(res.Extension) {
+			fmt.Printf("WARNING: resource %q was ignored because extension %q disabled.", res.NeutronName, res.Extension)
+			continue
+		}
 		values := quotas.Values[res.NeutronName]
 		result[res.LimesName] = core.ResourceData{
 			Quota: values.Quota,
@@ -323,6 +367,11 @@ func (p *neutronPlugin) scrapeNeutronInto(result map[string]core.ResourceData, p
 		}
 	}
 	return nil
+}
+
+func (p *neutronPlugin) isExtensionEnabled(extensionAlias string) bool {
+	enabled, ok := p.extensions[extensionAlias]
+	return ok && enabled
 }
 
 func (p *neutronPlugin) scrapeOctaviaInto(result map[string]core.ResourceData, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, projectUUID string) error {

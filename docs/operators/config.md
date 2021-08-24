@@ -510,11 +510,13 @@ The area for this service is `network`. Resources are categorized into `networki
 || `security_groups` | countable | See note about auto-approval below. |
 || `subnet_pools` | countable ||
 || `subnets` | countable ||
+|| `bgpvpns` | countable ||
 | `loadbalancing` | `healthmonitors` | countable ||
 || `l7policies` | countable ||
 || `listeners` | countable ||
 || `loadbalancers` | countable ||
 || `pools` | countable ||
+|| `pool_members` | countable ||
 
 When a new project is scraped for the first time, and usage for `security_groups` and `security_group_rules` is 1 and 4,
 respectively, quota of the same size is approved automatically. This covers the `default` security group that is
