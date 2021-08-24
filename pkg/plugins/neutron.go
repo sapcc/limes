@@ -92,7 +92,7 @@ var neutronResources = []limes.ResourceInfo{
 		Unit:     limes.UnitNone,
 		Category: "networking",
 	},
-	//////////  BGPV VPN plugin resources
+	//////////  BGP VPN plugin resources
 	{
 		Name:     "bgpvpns",
 		Unit:     limes.UnitNone,
@@ -218,47 +218,38 @@ var neutronResourceMeta = []neutronResourceMetadata{
 	{
 		LimesName:   "networks",
 		NeutronName: "network",
-		Extension:   "",
 	},
 	{
 		LimesName:   "subnets",
 		NeutronName: "subnet",
-		Extension:   "",
 	},
 	{
 		LimesName:   "subnet_pools",
 		NeutronName: "subnetpool",
-		Extension:   "",
 	},
 	{
 		LimesName:   "floating_ips",
 		NeutronName: "floatingip",
-		Extension:   "",
 	},
 	{
 		LimesName:   "routers",
 		NeutronName: "router",
-		Extension:   "",
 	},
 	{
 		LimesName:   "ports",
 		NeutronName: "port",
-		Extension:   "",
 	},
 	{
 		LimesName:   "security_groups",
 		NeutronName: "security_group",
-		Extension:   "",
 	},
 	{
 		LimesName:   "security_group_rules",
 		NeutronName: "security_group_rule",
-		Extension:   "",
 	},
 	{
 		LimesName:   "rbac_policies",
 		NeutronName: "rbac_policy",
-		Extension:   "",
 	},
 	{
 		LimesName:   "bgpvpns",
