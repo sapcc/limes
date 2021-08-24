@@ -158,7 +158,7 @@ func (p *neutronPlugin) Init(provider *gophercloud.ProviderClient, eo gopherclou
 		return fmt.Errorf("cannot check for lbaasv2 support in Neutron: %s", r.Result.Err.Error())
 	}
 
-	// Check required Neturon extensions
+	// Check required Neutron extensions
 	p.extensions = map[string]bool{}
 	for _, resource := range neutronResourceMeta {
 		if resource.Extension == "" {
