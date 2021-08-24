@@ -35,11 +35,10 @@ import (
 )
 
 type neutronPlugin struct {
-	cfg               core.ServiceConfiguration
-	resources         []limes.ResourceInfo
-	hasLBaaSExtension bool //TODO remove after migrating to newer Neutron
-	hasExtension      map[string]bool
-	hasOctavia        bool
+	cfg          core.ServiceConfiguration
+	resources    []limes.ResourceInfo
+	hasExtension map[string]bool
+	hasOctavia   bool
 }
 
 var neutronResources = []limes.ResourceInfo{
@@ -134,10 +133,7 @@ var neutronResources = []limes.ResourceInfo{
 
 func init() {
 	core.RegisterQuotaPlugin(func(c core.ServiceConfiguration, scrapeSubresources map[string]bool) core.QuotaPlugin {
-		return &neutronPlugin{
-			cfg:       c,
-			resources: neutronResources,
-		}
+		return &neutronPlugin{cfg: c}
 	})
 }
 
@@ -146,17 +142,6 @@ func (p *neutronPlugin) Init(provider *gophercloud.ProviderClient, eo gopherclou
 	client, err := openstack.NewNetworkV2(provider, eo)
 	if err != nil {
 		return err
-	}
-
-	// LBaaSv2 supported?
-	r := extensions.Get(client, "lbaasv2")
-	switch r.Result.Err.(type) {
-	case gophercloud.ErrDefault404:
-		p.hasLBaaSExtension = false
-	case nil:
-		p.hasLBaaSExtension = true
-	default:
-		return fmt.Errorf("cannot check for lbaasv2 support in Neutron: %s", r.Result.Err.Error())
 	}
 
 	// Check required Neutron extensions
@@ -186,6 +171,24 @@ func (p *neutronPlugin) Init(provider *gophercloud.ProviderClient, eo gopherclou
 		p.hasOctavia = true
 	default:
 		return err
+	}
+
+	//filter resource list to reflect supported extensions and services
+	hasNeutronResource := make(map[string]bool)
+	for _, resource := range neutronResourceMeta {
+		hasNeutronResource[resource.LimesName] = resource.Extension == "" || p.hasExtension[resource.Extension]
+	}
+	p.resources = nil
+	for _, res := range neutronResources {
+		var hasResource bool
+		if res.Category == "loadbalancing" {
+			hasResource = p.hasOctavia
+		} else {
+			hasResource = hasNeutronResource[res.Name]
+		}
+		if hasResource {
+			p.resources = append(p.resources, res)
+		}
 	}
 
 	return nil
@@ -375,7 +378,7 @@ func (p *neutronPlugin) scrapeOctaviaInto(result map[string]core.ResourceData, p
 		return err
 	}
 
-	//read Octavia quota
+	//read Octavia usage
 	usage, err := p.scrapeOctaviaUsage(octaviaV2, projectUUID)
 	if err != nil {
 		return err
@@ -431,21 +434,13 @@ func (p *neutronPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopher
 	//collect Neutron quotas
 	neutronQuotas := make(neutronOrOctaviaQuotaSet)
 	for _, res := range neutronResourceMeta {
+		if res.Extension != "" && !p.hasExtension[res.Extension] {
+			continue
+		}
+
 		quota, exists := quotas[res.LimesName]
 		if exists {
 			neutronQuotas[res.NeutronName] = quota
-		}
-	}
-	//even if Octavia is there, when Neutron has the LBaaS extension enabled
-	//(with the proxy driver for Octavia), it needs to know about LBaaS quotas as
-	//well since it also enforces them
-	if p.hasLBaaSExtension {
-		for _, res := range octaviaResourceMeta {
-			quota, exists := quotas[res.LimesName]
-			//NOTE: do not check DoNotSetQuota here, since Neutron knows how to deal with the "l7policy" quota
-			if exists {
-				neutronQuotas[res.OctaviaName] = quota
-			}
 		}
 	}
 
