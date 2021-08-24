@@ -29,6 +29,7 @@ import (
 	octavia_quotas "github.com/gophercloud/gophercloud/openstack/loadbalancer/v2/quotas"
 	neutron_quotas "github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/quotas"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 )
@@ -37,6 +38,7 @@ type neutronPlugin struct {
 	cfg               core.ServiceConfiguration
 	resources         []limes.ResourceInfo
 	hasLBaaSExtension bool //TODO remove after migrating to newer Neutron
+	hasExtension      map[string]bool
 	hasOctavia        bool
 }
 
@@ -88,6 +90,12 @@ var neutronResources = []limes.ResourceInfo{
 	},
 	{
 		Name:     "subnets",
+		Unit:     limes.UnitNone,
+		Category: "networking",
+	},
+	//////////  BGP VPN plugin resources
+	{
+		Name:     "bgpvpns",
 		Unit:     limes.UnitNone,
 		Category: "networking",
 	},
@@ -151,6 +159,24 @@ func (p *neutronPlugin) Init(provider *gophercloud.ProviderClient, eo gopherclou
 		return fmt.Errorf("cannot check for lbaasv2 support in Neutron: %s", r.Result.Err.Error())
 	}
 
+	// Check required Neutron extensions
+	p.hasExtension = map[string]bool{}
+	for _, resource := range neutronResourceMeta {
+		if resource.Extension == "" {
+			continue
+		}
+		_, err := extensions.Get(client, resource.Extension).Extract()
+		switch err.(type) {
+		case gophercloud.ErrDefault404:
+			p.hasExtension[resource.Extension] = false
+		case nil:
+			p.hasExtension[resource.Extension] = true
+		default:
+			return fmt.Errorf("cannot check for %q support in Neutron: %w", resource.Extension, err)
+		}
+		logg.Info("Neutron extension %s is enabled = %t", resource.Extension, p.hasExtension[resource.Extension])
+	}
+
 	// Octavia supported?
 	_, err = openstack.NewLoadBalancerV2(provider, eo)
 	switch err.(type) {
@@ -187,6 +213,7 @@ func (p *neutronPlugin) Rates() []limes.RateInfo {
 type neutronResourceMetadata struct {
 	LimesName   string
 	NeutronName string
+	Extension   string
 }
 
 var neutronResourceMeta = []neutronResourceMetadata{
@@ -225,6 +252,11 @@ var neutronResourceMeta = []neutronResourceMetadata{
 	{
 		LimesName:   "rbac_policies",
 		NeutronName: "rbac_policy",
+	},
+	{
+		LimesName:   "bgpvpns",
+		NeutronName: "bgpvpn",
+		Extension:   "bgpvpn",
 	},
 }
 
@@ -316,6 +348,9 @@ func (p *neutronPlugin) scrapeNeutronInto(result map[string]core.ResourceData, p
 
 	//convert data into Limes' internal format
 	for _, res := range neutronResourceMeta {
+		if res.Extension != "" && !p.hasExtension[res.Extension] {
+			continue
+		}
 		values := quotas.Values[res.NeutronName]
 		result[res.LimesName] = core.ResourceData{
 			Quota: values.Quota,
