@@ -510,7 +510,8 @@ The area for this service is `network`. Resources are categorized into `networki
 || `security_groups` | countable | See note about auto-approval below. |
 || `subnet_pools` | countable ||
 || `subnets` | countable ||
-|| `bgpvpns` | countable ||
+|| `bgpvpns` | countable | Only when Neutron has the `bgpvpn` extension. |
+|| `trunks` | countable | Only when Neutron has the `trunk` extension. |
 | `loadbalancing` | `healthmonitors` | countable ||
 || `l7policies` | countable ||
 || `listeners` | countable ||

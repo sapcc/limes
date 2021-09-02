@@ -92,9 +92,14 @@ var neutronResources = []limes.ResourceInfo{
 		Unit:     limes.UnitNone,
 		Category: "networking",
 	},
-	//////////  BGP VPN plugin resources
+	////////// network resources belonging to optional extensions
 	{
 		Name:     "bgpvpns",
+		Unit:     limes.UnitNone,
+		Category: "networking",
+	},
+	{
+		Name:     "trunks",
 		Unit:     limes.UnitNone,
 		Category: "networking",
 	},
@@ -260,6 +265,11 @@ var neutronResourceMeta = []neutronResourceMetadata{
 		LimesName:   "bgpvpns",
 		NeutronName: "bgpvpn",
 		Extension:   "bgpvpn",
+	},
+	{
+		LimesName:   "trunks",
+		NeutronName: "trunk",
+		Extension:   "trunk",
 	},
 }
 
