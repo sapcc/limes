@@ -235,13 +235,6 @@ func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 	return result, "", nil
 }
 
-func derefOrZero(val *int64) int64 {
-	if val == nil {
-		return 0
-	}
-	return *val
-}
-
 //SetQuota implements the core.QuotaPlugin interface.
 func (p *manilaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string, quotas map[string]uint64) error {
 	client, err := openstack.NewSharedFileSystemV2(provider, eo)

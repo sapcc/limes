@@ -1900,11 +1900,6 @@ func expectStaleProjectServices(t *testing.T, pairs ...string) {
 	}
 }
 
-//p2s makes a "pointer to string".
-func p2s(val string) *string {
-	return &val
-}
-
 //p2u64 makes a "pointer to uint64".
 func p2u64(val uint64) *uint64 {
 	return &val
