@@ -1427,7 +1427,7 @@ func Test_ProjectOperations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = db.DB.Exec(`UPDATE project_resources SET usage = $1 WHERE service_id = $2 AND name = $3`,
+	_, _ = db.DB.Exec(`UPDATE project_resources SET usage = $1 WHERE service_id = $2 AND name = $3`,
 		0,
 		serviceBerlinUnsharedID, "things",
 	)
