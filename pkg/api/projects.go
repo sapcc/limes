@@ -425,11 +425,11 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 	//report any backend errors to the user
 	if len(errors) > 0 {
 		msg := "quotas have been accepted, but some error(s) occurred while trying to write the quotas into the backend services:"
-		http.Error(w, msg+"\n"+strings.Join(errors, "\n"), 202)
+		http.Error(w, msg+"\n"+strings.Join(errors, "\n"), http.StatusAccepted)
 		return
 	}
 	//otherwise, report success
-	w.WriteHeader(202)
+	w.WriteHeader(http.StatusAccepted)
 }
 
 func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *http.Request, simulate, hasBursting bool) {
