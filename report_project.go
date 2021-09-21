@@ -30,22 +30,22 @@ type ProjectReport struct {
 	Name       string                `json:"name"`
 	ParentUUID string                `json:"parent_id"`
 	Bursting   *ProjectBurstingInfo  `json:"bursting,omitempty"`
-	Services   ProjectServiceReports `json:"services,keepempty"`
+	Services   ProjectServiceReports `json:"services"`
 }
 
 //ProjectBurstingInfo is a substructure of ProjectReport containing information about
 //quota bursting. (It is omitted if bursting is not supported for the project's
 //cluster.)
 type ProjectBurstingInfo struct {
-	Enabled    bool               `json:"enabled,keepempty"`
-	Multiplier BurstingMultiplier `json:"multiplier,keepempty"`
+	Enabled    bool               `json:"enabled"`
+	Multiplier BurstingMultiplier `json:"multiplier"`
 }
 
 //ProjectServiceReport is a substructure of ProjectReport containing data for
 //a single backend service.
 type ProjectServiceReport struct {
 	ServiceInfo
-	Resources      ProjectResourceReports  `json:"resources,keepempty"`
+	Resources      ProjectResourceReports  `json:"resources"`
 	Rates          ProjectRateLimitReports `json:"rates,omitempty"`
 	ScrapedAt      *int64                  `json:"scraped_at,omitempty"`
 	RatesScrapedAt *int64                  `json:"rates_scraped_at,omitempty"`
@@ -58,7 +58,7 @@ type ProjectResourceReport struct {
 	ResourceInfo
 	Quota         *uint64          `json:"quota,omitempty"`
 	UsableQuota   *uint64          `json:"usable_quota,omitempty"`
-	Usage         uint64           `json:"usage,keepempty"`
+	Usage         uint64           `json:"usage"`
 	BurstUsage    uint64           `json:"burst_usage,omitempty"`
 	PhysicalUsage *uint64          `json:"physical_usage,omitempty"`
 	BackendQuota  *int64           `json:"backend_quota,omitempty"`

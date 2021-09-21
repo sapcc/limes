@@ -28,7 +28,7 @@ import (
 //It is returned by GET endpoints for clusters.
 type ClusterReport struct {
 	ID           string                `json:"id"`
-	Services     ClusterServiceReports `json:"services,keepempty"`
+	Services     ClusterServiceReports `json:"services"`
 	MaxScrapedAt *int64                `json:"max_scraped_at,omitempty"`
 	MinScrapedAt *int64                `json:"min_scraped_at,omitempty"`
 }
@@ -38,7 +38,7 @@ type ClusterReport struct {
 type ClusterServiceReport struct {
 	ServiceInfo
 	Shared            bool                    `json:"shared,omitempty"`
-	Resources         ClusterResourceReports  `json:"resources,keepempty"`
+	Resources         ClusterResourceReports  `json:"resources"`
 	Rates             ClusterRateLimitReports `json:"rates,omitempty"`
 	MaxScrapedAt      *int64                  `json:"max_scraped_at,omitempty"`
 	MinScrapedAt      *int64                  `json:"min_scraped_at,omitempty"`
@@ -55,7 +55,7 @@ type ClusterResourceReport struct {
 	RawCapacity   *uint64                        `json:"raw_capacity,omitempty"`
 	CapacityPerAZ ClusterAvailabilityZoneReports `json:"per_availability_zone,omitempty"`
 	DomainsQuota  *uint64                        `json:"domains_quota,omitempty"`
-	Usage         uint64                         `json:"usage,keepempty"`
+	Usage         uint64                         `json:"usage"`
 	BurstUsage    uint64                         `json:"burst_usage,omitempty"`
 	PhysicalUsage *uint64                        `json:"physical_usage,omitempty"`
 	Subcapacities JSONString                     `json:"subcapacities,omitempty"`

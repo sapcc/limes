@@ -31,21 +31,21 @@ import (
 //domains and projects in the current cluster.
 type Inconsistencies struct {
 	ClusterID           string                     `json:"cluster_id"`
-	OvercommittedQuotas []OvercommittedDomainQuota `json:"domain_quota_overcommitted,keepempty"`
-	OverspentQuotas     []OverspentProjectQuota    `json:"project_quota_overspent,keepempty"`
-	MismatchQuotas      []MismatchProjectQuota     `json:"project_quota_mismatch,keepempty"`
+	OvercommittedQuotas []OvercommittedDomainQuota `json:"domain_quota_overcommitted"`
+	OverspentQuotas     []OverspentProjectQuota    `json:"project_quota_overspent"`
+	MismatchQuotas      []MismatchProjectQuota     `json:"project_quota_mismatch"`
 }
 
 //OvercommittedDomainQuota is a substructure of Inconsistency containing data
 //for the inconsistency type where for a domain the 'sum(projects_quota) > domain_quota'
 //for a single resource.
 type OvercommittedDomainQuota struct {
-	Domain        DomainData `json:"domain,keepempty"`
-	Service       string     `json:"service,keepempty"`
-	Resource      string     `json:"resource,keepempty"`
+	Domain        DomainData `json:"domain"`
+	Service       string     `json:"service"`
+	Resource      string     `json:"resource"`
 	Unit          limes.Unit `json:"unit,omitempty"`
-	DomainQuota   uint64     `json:"domain_quota,keepempty"`
-	ProjectsQuota uint64     `json:"projects_quota,keepempty"`
+	DomainQuota   uint64     `json:"domain_quota"`
+	ProjectsQuota uint64     `json:"projects_quota"`
 }
 
 //OverspentProjectQuota is a substructure of Inconsistency containing data for
@@ -56,12 +56,12 @@ type OvercommittedDomainQuota struct {
 //and for projects with quota bursting enabled the
 //'desired_backend_quota == floor(quota * (1 + bursting.multiplier))'.
 type OverspentProjectQuota struct {
-	Project  ProjectData `json:"project,keepempty"`
-	Service  string      `json:"service,keepempty"`
-	Resource string      `json:"resource,keepempty"`
+	Project  ProjectData `json:"project"`
+	Service  string      `json:"service"`
+	Resource string      `json:"resource"`
 	Unit     limes.Unit  `json:"unit,omitempty"`
-	Quota    uint64      `json:"quota,keepempty"`
-	Usage    uint64      `json:"usage,keepempty"`
+	Quota    uint64      `json:"quota"`
+	Usage    uint64      `json:"usage"`
 }
 
 //MismatchProjectQuota is a substructure of Inconsistency containing data for
@@ -72,12 +72,12 @@ type OverspentProjectQuota struct {
 //and for projects with quota bursting enabled the
 //'desired_backend_quota == floor(quota * (1 + bursting.multiplier))'.
 type MismatchProjectQuota struct {
-	Project      ProjectData `json:"project,keepempty"`
-	Service      string      `json:"service,keepempty"`
-	Resource     string      `json:"resource,keepempty"`
+	Project      ProjectData `json:"project"`
+	Service      string      `json:"service"`
+	Resource     string      `json:"resource"`
 	Unit         limes.Unit  `json:"unit,omitempty"`
-	Quota        uint64      `json:"quota,keepempty"`
-	BackendQuota int64       `json:"backend_quota,keepempty"`
+	Quota        uint64      `json:"quota"`
+	BackendQuota int64       `json:"backend_quota"`
 }
 
 //DomainData is a substructure containing domain data for a single inconsistency
@@ -90,7 +90,7 @@ type DomainData struct {
 type ProjectData struct {
 	UUID   string     `json:"id"`
 	Name   string     `json:"name"`
-	Domain DomainData `json:"domain,keepempty"`
+	Domain DomainData `json:"domain"`
 }
 
 var ocdqReportQuery = db.SimplifyWhitespaceInSQL(`

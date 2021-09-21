@@ -509,7 +509,7 @@ func (u QuotaUpdater) WriteSimulationReport(w http.ResponseWriter) {
 		}
 	)
 	var result struct {
-		IsValid                bool                    `json:"success,keepempty"`
+		IsValid                bool                    `json:"success"`
 		UnacceptableResources  []unacceptableResource  `json:"unacceptable_resources,omitempty"`
 		UnacceptableRateLimits []unacceptableRateLimit `json:"unacceptable_rates,omitempty"`
 	}

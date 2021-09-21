@@ -29,14 +29,14 @@ import (
 type DomainReport struct {
 	UUID     string               `json:"id"`
 	Name     string               `json:"name"`
-	Services DomainServiceReports `json:"services,keepempty"`
+	Services DomainServiceReports `json:"services"`
 }
 
 //DomainServiceReport is a substructure of DomainReport containing data for
 //a single backend service.
 type DomainServiceReport struct {
 	ServiceInfo
-	Resources         DomainResourceReports `json:"resources,keepempty"`
+	Resources         DomainResourceReports `json:"resources"`
 	MaxScrapedAt      *int64                `json:"max_scraped_at,omitempty"`
 	MinScrapedAt      *int64                `json:"min_scraped_at,omitempty"`
 	MaxRatesScrapedAt *int64                `json:"max_rates_scraped_at,omitempty"`
@@ -50,7 +50,7 @@ type DomainResourceReport struct {
 	ResourceInfo
 	DomainQuota          *uint64          `json:"quota,omitempty"`
 	ProjectsQuota        *uint64          `json:"projects_quota,omitempty"`
-	Usage                uint64           `json:"usage,keepempty"`
+	Usage                uint64           `json:"usage"`
 	BurstUsage           uint64           `json:"burst_usage,omitempty"`
 	PhysicalUsage        *uint64          `json:"physical_usage,omitempty"`
 	BackendQuota         *uint64          `json:"backend_quota,omitempty"`
