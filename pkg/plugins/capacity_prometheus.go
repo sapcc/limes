@@ -101,10 +101,12 @@ func prometheusGetSingleValue(client prom_v1.API, queryStr string, defaultValue 
 		logg.Info("Prometheus query produced warning: %s", warning)
 	}
 	if err != nil {
+		//lint:ignore ST1005 Prometheus is a proper name
 		return 0, fmt.Errorf("Prometheus query failed: %s: %s", queryStr, err.Error())
 	}
 	resultVector, ok := value.(model.Vector)
 	if !ok {
+		//lint:ignore ST1005 Prometheus is a proper name
 		return 0, fmt.Errorf("Prometheus query failed: %s: unexpected type %T", queryStr, value)
 	}
 
@@ -113,6 +115,7 @@ func prometheusGetSingleValue(client prom_v1.API, queryStr string, defaultValue 
 		if defaultValue != nil {
 			return *defaultValue, nil
 		}
+		//lint:ignore ST1005 Prometheus is a proper name
 		return 0, fmt.Errorf("Prometheus query returned empty result: %s", queryStr)
 	default:
 		logg.Info("Prometheus query returned more than one result: %s (only the first value will be used)", queryStr)
