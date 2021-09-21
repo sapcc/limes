@@ -579,7 +579,7 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 	//report any backend errors to the user
 	if len(errors) > 0 {
 		msg := "bursting mode has been updated, but some error(s) occurred while trying to write quotas into the backend services:"
-		http.Error(w, msg+"\n"+strings.Join(errors, "\n"), 202)
+		http.Error(w, msg+"\n"+strings.Join(errors, "\n"), http.StatusAccepted)
 		return
 	}
 	//otherwise, report success
