@@ -821,7 +821,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	//fetch values for project level (rate usage)
-	err = db.ForeachRow(db.DB, projectRateMetricsQuery, queryArgs, func(rows *sql.Rows) error {
+	_ = db.ForeachRow(db.DB, projectRateMetricsQuery, queryArgs, func(rows *sql.Rows) error {
 		var (
 			domainName    string
 			domainUUID    string

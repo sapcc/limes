@@ -310,11 +310,6 @@ var octaviaResourceMeta = []octaviaResourceMetadata{
 	},
 }
 
-type neutronQueryOpts struct {
-	Fields      string `q:"fields"`
-	ProjectUUID string `q:"tenant_id"`
-}
-
 //ScrapeRates implements the core.QuotaPlugin interface.
 func (p *neutronPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
 	return nil, "", nil

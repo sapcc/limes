@@ -1427,7 +1427,7 @@ func Test_ProjectOperations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = db.DB.Exec(`UPDATE project_resources SET usage = $1 WHERE service_id = $2 AND name = $3`,
+	_, _ = db.DB.Exec(`UPDATE project_resources SET usage = $1 WHERE service_id = $2 AND name = $3`,
 		0,
 		serviceBerlinUnsharedID, "things",
 	)
@@ -1898,11 +1898,6 @@ func expectStaleProjectServices(t *testing.T, pairs ...string) {
 	if !reflect.DeepEqual(pairs, actualPairs) {
 		t.Errorf("expected stale project services %v, but got %v", pairs, actualPairs)
 	}
-}
-
-//p2s makes a "pointer to string".
-func p2s(val string) *string {
-	return &val
 }
 
 //p2u64 makes a "pointer to uint64".
