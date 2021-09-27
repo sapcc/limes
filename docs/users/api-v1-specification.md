@@ -256,7 +256,7 @@ The `burst_usage` field is guaranteed to be equal to `usage - quota`. Applicatio
 In Limes parlance, **resources** are strictly those things whose usage value refers to a consumption at a specific point
 in time, and where quota is the upper limit on usage at each individual point in time. In contrast, **rates** are all
 those things where the usage is accumulated over time. Instead of a quota, rates can have a **rate limit** that refers
-to the highest allowed increased in usage over a certain amount of time (the limit's **window**). Rate limits are
+to the highest allowed increase in usage over a certain amount of time (the limit's **window**). Rate limits are
 typically applied to data throughput or to API request traffic, to prevent service capacities from being exhausted. Rate
 limits can be set on two levels:
 
