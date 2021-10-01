@@ -64,15 +64,15 @@ func (p *staticDiscoveryPlugin) ListDomains(provider *gophercloud.ProviderClient
 }
 
 //ListProjects implements the core.DiscoveryPlugin interface.
-func (p *staticDiscoveryPlugin) ListProjects(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID string) ([]core.KeystoneProject, error) {
+func (p *staticDiscoveryPlugin) ListProjects(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, queryDomain core.KeystoneDomain) ([]core.KeystoneProject, error) {
 	var result []core.KeystoneProject
 	if len(p.cfg.Static.Domains) == 0 {
 		return nil, errors.New("no domains configured")
 	}
 	for _, domain := range p.cfg.Static.Domains {
-		if domain.UUID == domainUUID {
+		if domain.UUID == queryDomain.UUID {
 			if len(domain.Projects) == 0 {
-				return nil, fmt.Errorf("no projects configured for domain %s", domainUUID)
+				return nil, fmt.Errorf("no projects configured for domain %s", queryDomain.UUID)
 			}
 			for _, project := range domain.Projects {
 				if project.UUID == "" {
@@ -88,6 +88,7 @@ func (p *staticDiscoveryPlugin) ListProjects(provider *gophercloud.ProviderClien
 					UUID:       project.UUID,
 					Name:       project.Name,
 					ParentUUID: project.ParentUUID,
+					Domain:     queryDomain,
 				})
 			}
 		}

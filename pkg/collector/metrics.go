@@ -389,10 +389,7 @@ type QuotaPluginMetricsCollector struct {
 //QuotaPluginMetricsInstance describes a single project service for which plugin
 //metrics are submitted. It appears in type QuotaPluginMetricsCollector.
 type QuotaPluginMetricsInstance struct {
-	DomainName        string
-	DomainUUID        string
-	ProjectName       string
-	ProjectUUID       string
+	Project           core.KeystoneProject
 	ServiceType       string
 	SerializedMetrics string
 }
@@ -406,7 +403,7 @@ func (c *QuotaPluginMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 }
 
 var quotaSerializedMetricsGetQuery = db.SimplifyWhitespaceInSQL(`
-	SELECT d.name, d.uuid, p.name, p.uuid, ps.type, ps.serialized_metrics
+	SELECT d.name, d.uuid, p.name, p.uuid, p.parent_uuid, ps.type, ps.serialized_metrics
 	  FROM domains d
 	  JOIN projects p ON p.domain_id = d.id
 	  JOIN project_services ps ON ps.project_id = p.id
@@ -429,7 +426,10 @@ func (c *QuotaPluginMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	queryArgs := []interface{}{c.Cluster.ID}
 	err := db.ForeachRow(db.DB, quotaSerializedMetricsGetQuery, queryArgs, func(rows *sql.Rows) error {
 		var i QuotaPluginMetricsInstance
-		err := rows.Scan(&i.DomainName, &i.DomainUUID, &i.ProjectName, &i.ProjectUUID, &i.ServiceType, &i.SerializedMetrics)
+		err := rows.Scan(
+			&i.Project.Domain.Name, &i.Project.Domain.UUID,
+			&i.Project.Name, &i.Project.UUID, &i.Project.ParentUUID,
+			&i.ServiceType, &i.SerializedMetrics)
 		if err == nil {
 			c.collectOneProjectService(ch, pluginMetricsOkDesc, i)
 		}
@@ -445,19 +445,19 @@ func (c *QuotaPluginMetricsCollector) collectOneProjectService(ch chan<- prometh
 	if plugin == nil {
 		return
 	}
-	err := plugin.CollectMetrics(ch, c.Cluster.ID, instance.DomainUUID, instance.ProjectUUID, instance.SerializedMetrics)
+	err := plugin.CollectMetrics(ch, c.Cluster.ID, instance.Project, instance.SerializedMetrics)
 	successAsFloat := 1.0
 	if err != nil {
 		successAsFloat = 0.0
 		//errors in plugin.CollectMetrics() are not fatal: we record a failure in
 		//the metrics and keep going with the other project services
 		logg.Error("while collecting plugin metrics for service %s in project %s: %s",
-			instance.ServiceType, instance.ProjectUUID, err.Error())
+			instance.ServiceType, instance.Project.UUID, err.Error())
 	}
 	ch <- prometheus.MustNewConstMetric(
 		pluginMetricsOkDesc,
 		prometheus.GaugeValue, successAsFloat,
-		c.Cluster.ID, instance.DomainName, instance.DomainUUID, instance.ProjectName, instance.ProjectUUID, instance.ServiceType,
+		c.Cluster.ID, instance.Project.Domain.Name, instance.Project.Domain.UUID, instance.Project.Name, instance.Project.UUID, instance.ServiceType,
 	)
 }
 

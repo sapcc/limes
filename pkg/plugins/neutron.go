@@ -311,21 +311,21 @@ var octaviaResourceMeta = []octaviaResourceMetadata{
 }
 
 //ScrapeRates implements the core.QuotaPlugin interface.
-func (p *neutronPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+func (p *neutronPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
 //Scrape implements the core.QuotaPlugin interface.
-func (p *neutronPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string) (map[string]core.ResourceData, string, error) {
+func (p *neutronPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (map[string]core.ResourceData, string, error) {
 	data := make(map[string]core.ResourceData)
 
-	err := p.scrapeNeutronInto(data, provider, eo, projectUUID)
+	err := p.scrapeNeutronInto(data, provider, eo, project.UUID)
 	if err != nil {
 		return nil, "", err
 	}
 
 	if p.hasOctavia {
-		err = p.scrapeOctaviaInto(data, provider, eo, projectUUID)
+		err = p.scrapeOctaviaInto(data, provider, eo, project.UUID)
 		if err != nil {
 			return nil, "", err
 		}
@@ -435,7 +435,7 @@ func (q neutronOrOctaviaQuotaSet) ToQuotaUpdateMap() (map[string]interface{}, er
 }
 
 //SetQuota implements the core.QuotaPlugin interface.
-func (p *neutronPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string, quotas map[string]uint64) error {
+func (p *neutronPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
 	//collect Neutron quotas
 	neutronQuotas := make(neutronOrOctaviaQuotaSet)
 	for _, res := range neutronResourceMeta {
@@ -454,7 +454,7 @@ func (p *neutronPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopher
 	if err != nil {
 		return err
 	}
-	_, err = neutron_quotas.Update(networkV2, projectUUID, neutronQuotas).Extract()
+	_, err = neutron_quotas.Update(networkV2, project.UUID, neutronQuotas).Extract()
 	if err != nil {
 		return err
 	}
@@ -474,7 +474,7 @@ func (p *neutronPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopher
 		if err != nil {
 			return err
 		}
-		_, err = octavia_quotas.Update(octaviaV2, projectUUID, octaviaQuotas).Extract()
+		_, err = octavia_quotas.Update(octaviaV2, project.UUID, octaviaQuotas).Extract()
 		if err != nil {
 			return err
 		}
@@ -489,7 +489,7 @@ func (p *neutronPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 }
 
 //CollectMetrics implements the core.QuotaPlugin interface.
-func (p *neutronPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, domainUUID, projectUUID, serializedMetrics string) error {
+func (p *neutronPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID string, project core.KeystoneProject, serializedMetrics string) error {
 	//not used by this plugin
 	return nil
 }

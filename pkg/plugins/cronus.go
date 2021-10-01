@@ -86,12 +86,12 @@ func (p *cronusPlugin) Rates() []limes.RateInfo {
 }
 
 //Scrape implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string) (map[string]core.ResourceData, string, error) {
+func (p *cronusPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (map[string]core.ResourceData, string, error) {
 	return nil, "", nil
 }
 
 //SetQuota implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string, quotas map[string]uint64) error {
+func (p *cronusPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
 	return nil
 }
 
@@ -108,7 +108,7 @@ type cronusState struct {
 }
 
 //ScrapeRates implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) ScrapeRates(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+func (p *cronusPlugin) ScrapeRates(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
 	//decode `prevSerializedState`
 	var state cronusState
 	if prevSerializedState == "" {
@@ -130,7 +130,7 @@ func (p *cronusPlugin) ScrapeRates(provider *gophercloud.ProviderClient, eo goph
 	if err != nil {
 		return nil, "", err
 	}
-	currentUsage, err := client.GetUsage(projectUUID, false)
+	currentUsage, err := client.GetUsage(project.UUID, false)
 	if err != nil {
 		return nil, "", err
 	}
@@ -142,7 +142,7 @@ func (p *cronusPlugin) ScrapeRates(provider *gophercloud.ProviderClient, eo goph
 	if state.CurrentPeriod.StartDate == currentUsage.StartDate {
 		newSerializedState = prevSerializedState
 	} else {
-		prevUsage, err := client.GetUsage(projectUUID, true)
+		prevUsage, err := client.GetUsage(project.UUID, true)
 		if err != nil {
 			return nil, "", err
 		}
@@ -190,7 +190,7 @@ func (p *cronusPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 }
 
 //CollectMetrics implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, domainUUID, projectUUID, serializedMetrics string) error {
+func (p *cronusPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID string, project core.KeystoneProject, serializedMetrics string) error {
 	//not used by this plugin
 	return nil
 }

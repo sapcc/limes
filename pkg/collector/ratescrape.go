@@ -27,13 +27,14 @@ import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/util"
 )
 
 //query that finds the next project that needs to have rates scraped
 var findProjectForRateScrapeQuery = db.SimplifyWhitespaceInSQL(`
-	SELECT ps.id, ps.rates_scraped_at, ps.rates_scrape_state, p.name, p.uuid, d.name, d.uuid
+	SELECT ps.id, ps.rates_scraped_at, ps.rates_scrape_state, p.name, p.uuid, p.parent_uuid, d.name, d.uuid
 	FROM project_services ps
 	JOIN projects p ON p.id = ps.project_id
 	JOIN domains d ON d.id = p.domain_id
@@ -72,14 +73,11 @@ func (c *Collector) ScrapeRates() {
 			serviceID               int64
 			serviceRatesScrapedAt   *time.Time
 			serviceRatesScrapeState string
-			projectName             string
-			projectUUID             string
-			domainName              string
-			domainUUID              string
+			project                 core.KeystoneProject
 		)
 		scrapeStartedAt := c.TimeNow()
 		err := db.DB.QueryRow(findProjectForRateScrapeQuery, c.Cluster.ID, serviceType, scrapeStartedAt.Add(-scrapeInterval)).
-			Scan(&serviceID, &serviceRatesScrapedAt, &serviceRatesScrapeState, &projectName, &projectUUID, &domainName, &domainUUID)
+			Scan(&serviceID, &serviceRatesScrapedAt, &serviceRatesScrapeState, &project.Name, &project.UUID, &project.ParentUUID, &project.Domain.Name, &project.Domain.UUID)
 		if err != nil {
 			//ErrNoRows is okay; it just means that nothing needs scraping right now
 			if err != sql.ErrNoRows {
@@ -92,9 +90,9 @@ func (c *Collector) ScrapeRates() {
 			continue
 		}
 
-		logg.Debug("scraping %s rates for %s/%s", serviceType, domainName, projectName)
+		logg.Debug("scraping %s rates for %s/%s", serviceType, project.Domain.Name, project.Name)
 		provider, eo := c.Cluster.ProviderClientForService(serviceType)
-		rateData, serviceRatesScrapeState, err := c.Plugin.ScrapeRates(provider, eo, domainUUID, projectUUID, serviceRatesScrapeState)
+		rateData, serviceRatesScrapeState, err := c.Plugin.ScrapeRates(provider, eo, project, serviceRatesScrapeState)
 		if err != nil {
 			ratesScrapeFailedCounter.With(labels).Inc()
 			//special case: stop scraping for a while when the backend service is not
@@ -105,7 +103,7 @@ func (c *Collector) ScrapeRates() {
 				c.LogError("suspending %s rate scraping for %d minutes: %s", serviceType, sleepInterval/time.Minute, err.Error())
 				ratesScrapeSuspendedCounter.With(labels).Inc()
 			} else {
-				c.LogError("scrape %s rate data for %s/%s failed: %s", serviceType, domainName, projectName, util.ErrorToString(err))
+				c.LogError("scrape %s rate data for %s/%s failed: %s", serviceType, project.Domain.Name, project.Name, util.ErrorToString(err))
 			}
 
 			if c.Once {
@@ -116,9 +114,9 @@ func (c *Collector) ScrapeRates() {
 		}
 
 		scrapeEndedAt := c.TimeNow()
-		err = c.writeRateScrapeResult(domainName, projectName, serviceType, serviceID, rateData, serviceRatesScrapeState, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
+		err = c.writeRateScrapeResult(serviceType, serviceID, rateData, serviceRatesScrapeState, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
 		if err != nil {
-			c.LogError("write %s rate data for %s/%s failed: %s", serviceType, domainName, projectName, err.Error())
+			c.LogError("write %s rate data for %s/%s failed: %s", serviceType, project.Domain.Name, project.Name, err.Error())
 			ratesScrapeFailedCounter.With(labels).Inc()
 			if c.Once {
 				return
@@ -137,7 +135,7 @@ func (c *Collector) ScrapeRates() {
 	}
 }
 
-func (c *Collector) writeRateScrapeResult(domainName, projectName, serviceType string, serviceID int64, rateData map[string]*big.Int, serviceRatesScrapeState string, scrapedAt time.Time, scrapeDuration time.Duration) error {
+func (c *Collector) writeRateScrapeResult(serviceType string, serviceID int64, rateData map[string]*big.Int, serviceRatesScrapeState string, scrapedAt time.Time, scrapeDuration time.Duration) error {
 	tx, err := db.DB.Begin()
 	if err != nil {
 		return err

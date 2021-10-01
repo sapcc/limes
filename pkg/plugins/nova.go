@@ -242,12 +242,12 @@ func (p *novaPlugin) Rates() []limes.RateInfo {
 }
 
 //ScrapeRates implements the core.QuotaPlugin interface.
-func (p *novaPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+func (p *novaPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
 //Scrape implements the core.QuotaPlugin interface.
-func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string) (map[string]core.ResourceData, string, error) {
+func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (map[string]core.ResourceData, string, error) {
 	client, err := openstack.NewComputeV2(provider, eo)
 	if err != nil {
 		return nil, "", err
@@ -276,7 +276,7 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 			} `json:"absolutePerFlavor"`
 		} `json:"limits"`
 	}
-	err = limits.Get(client, limits.GetOpts{TenantID: projectUUID}).ExtractInto(&limitsData)
+	err = limits.Get(client, limits.GetOpts{TenantID: project.UUID}).ExtractInto(&limitsData)
 	if err != nil {
 		return nil, "", err
 	}
@@ -288,7 +288,7 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 			return nil, "", err
 		}
 
-		if v, ok := p.serverGroups.members[projectUUID]; ok {
+		if v, ok := p.serverGroups.members[project.UUID]; ok {
 			totalServerGroupMembersUsed = v
 		}
 	}
@@ -345,7 +345,7 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 	if p.scrapeInstances {
 		listOpts := novaServerListOpts{
 			AllTenants: true,
-			TenantID:   projectUUID,
+			TenantID:   project.UUID,
 		}
 
 		sm.InstanceCountsByHypervisor = map[string]uint64{
@@ -521,7 +521,7 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 }
 
 //SetQuota implements the core.QuotaPlugin interface.
-func (p *novaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string, quotas map[string]uint64) error {
+func (p *novaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
 	client, err := openstack.NewComputeV2(provider, eo)
 	if err != nil {
 		return err
@@ -539,7 +539,7 @@ func (p *novaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherclo
 		}
 	}
 
-	return quotasets.Update(client, projectUUID, novaQuotas).Err
+	return quotasets.Update(client, project.UUID, novaQuotas).Err
 }
 
 var novaInstanceCountGauge = prometheus.NewGaugeVec(
@@ -556,7 +556,7 @@ func (p *novaPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 }
 
 //CollectMetrics implements the core.QuotaPlugin interface.
-func (p *novaPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, domainUUID, projectUUID, serializedMetrics string) error {
+func (p *novaPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID string, project core.KeystoneProject, serializedMetrics string) error {
 	if serializedMetrics == "" {
 		return nil
 	}
@@ -574,7 +574,7 @@ func (p *novaPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, doma
 		ch <- prometheus.MustNewConstMetric(
 			novaInstanceCountDesc,
 			prometheus.GaugeValue, float64(instanceCount),
-			clusterID, domainUUID, projectUUID, hypervisorName,
+			clusterID, project.Domain.UUID, project.UUID, hypervisorName,
 		)
 	}
 	return nil

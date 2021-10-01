@@ -165,12 +165,12 @@ type manilaQuotaSet struct {
 }
 
 //ScrapeRates implements the core.QuotaPlugin interface.
-func (p *manilaPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+func (p *manilaPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
 //Scrape implements the core.QuotaPlugin interface.
-func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string) (map[string]core.ResourceData, string, error) {
+func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (map[string]core.ResourceData, string, error) {
 	client, err := openstack.NewSharedFileSystemV2(provider, eo)
 	if err != nil {
 		return nil, "", err
@@ -184,21 +184,21 @@ func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 
 	quotaSets := make(map[string]manilaQuotaSetDetail)
 	for _, shareType := range p.cfg.ShareV2.ShareTypes {
-		quotaSets[shareType.Name], err = manilaCollectQuota(client, projectUUID, shareType.Name)
+		quotaSets[shareType.Name], err = manilaCollectQuota(client, project.UUID, shareType.Name)
 		if err != nil {
 			return nil, "", err
 		}
 	}
 
 	//the share_networks quota is only shown when querying for no share_type in particular
-	quotaSets[""], err = manilaCollectQuota(client, projectUUID, "")
+	quotaSets[""], err = manilaCollectQuota(client, project.UUID, "")
 	if err != nil {
 		return nil, "", err
 	}
 
 	var physUsage manilaPhysicalUsage
 	if p.cfg.ShareV2.PrometheusAPIConfig != nil {
-		physUsage, err = p.collectPhysicalUsage(projectUUID)
+		physUsage, err = p.collectPhysicalUsage(project.UUID)
 		if err != nil {
 			return nil, "", err
 		}
@@ -236,7 +236,7 @@ func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 }
 
 //SetQuota implements the core.QuotaPlugin interface.
-func (p *manilaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string, quotas map[string]uint64) error {
+func (p *manilaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
 	client, err := openstack.NewSharedFileSystemV2(provider, eo)
 	if err != nil {
 		return err
@@ -288,16 +288,16 @@ func (p *manilaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherc
 		overallQuotas.ReplicaGigabytesPtr = &overallQuotas.ReplicaGigabytes
 	}
 
-	url := client.ServiceURL("quota-sets", projectUUID)
-	logDebugSetQuota(projectUUID, "overall", overallQuotas)
+	url := client.ServiceURL("quota-sets", project.UUID)
+	logDebugSetQuota(project.UUID, "overall", overallQuotas)
 	_, err = client.Put(url, map[string]interface{}{"quota_set": overallQuotas}, nil, expect200)
 	if err != nil {
 		return fmt.Errorf("could not set overall share quotas: %s", err.Error())
 	}
 
 	for shareTypeName, quotasForType := range shareTypeQuotas {
-		logDebugSetQuota(projectUUID, shareTypeName, quotasForType)
-		url := client.ServiceURL("quota-sets", projectUUID) + "?share_type=" + shareTypeName
+		logDebugSetQuota(project.UUID, shareTypeName, quotasForType)
+		url := client.ServiceURL("quota-sets", project.UUID) + "?share_type=" + shareTypeName
 		_, err = client.Put(url, map[string]interface{}{"quota_set": quotasForType}, nil, expect200)
 		if err != nil {
 			return fmt.Errorf("could not set quotas for share type %q: %s", shareTypeName, err.Error())
@@ -320,7 +320,7 @@ func (p *manilaPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 }
 
 //CollectMetrics implements the core.QuotaPlugin interface.
-func (p *manilaPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, domainUUID, projectUUID, serializedMetrics string) error {
+func (p *manilaPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID string, project core.KeystoneProject, serializedMetrics string) error {
 	//not used by this plugin
 	return nil
 }

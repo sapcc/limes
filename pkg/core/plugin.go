@@ -25,6 +25,7 @@ import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/limes"
+	"github.com/sapcc/limes/pkg/db"
 )
 
 //KeystoneDomain describes the basic attributes of a Keystone domain.
@@ -33,11 +34,30 @@ type KeystoneDomain struct {
 	Name string `json:"name"`
 }
 
+//KeystoneDomainFromDB converts a db.Domain into a KeystoneDomain.
+func KeystoneDomainFromDB(dbDomain db.Domain) KeystoneDomain {
+	return KeystoneDomain{
+		UUID: dbDomain.UUID,
+		Name: dbDomain.Name,
+	}
+}
+
 //KeystoneProject describes the basic attributes of a Keystone project.
 type KeystoneProject struct {
-	UUID       string `json:"id"`
-	Name       string `json:"name"`
-	ParentUUID string `json:"parent_id"`
+	UUID       string         `json:"id"`
+	Name       string         `json:"name"`
+	ParentUUID string         `json:"parent_id,omitempty"`
+	Domain     KeystoneDomain `json:"domain"`
+}
+
+//KeystoneProjectFromDB converts a db.Project into a KeystoneProject.
+func KeystoneProjectFromDB(dbProject db.Project, domain KeystoneDomain) KeystoneProject {
+	return KeystoneProject{
+		UUID:       dbProject.UUID,
+		Name:       dbProject.Name,
+		ParentUUID: dbProject.ParentUUID,
+		Domain:     domain,
+	}
 }
 
 //DiscoveryPlugin is the interface that the collector uses to discover Keystone
@@ -49,7 +69,7 @@ type DiscoveryPlugin interface {
 	//ListDomains returns all Keystone domains in the cluster.
 	ListDomains(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) ([]KeystoneDomain, error)
 	//ListProjects returns all Keystone projects in the given domain.
-	ListProjects(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID string) ([]KeystoneProject, error)
+	ListProjects(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domain KeystoneDomain) ([]KeystoneProject, error)
 }
 
 //ResourceData contains quota and usage data for a single resource.
@@ -84,14 +104,14 @@ type QuotaPlugin interface {
 	//
 	//The serializedMetrics return value is persisted in the Limes DB and
 	//supplied to all subsequent RenderMetrics calls.
-	Scrape(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string) (result map[string]ResourceData, serializedMetrics string, error error)
+	Scrape(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project KeystoneProject) (result map[string]ResourceData, serializedMetrics string, error error)
 	//SetQuota updates the backend service's quotas for the given project in the
 	//given domain to the values specified here. The map is guaranteed to contain
 	//values for all resources defined by Resources().
 	//
 	//An error shall be returned if a value is given in `quotas` for any resource
 	//that is ExternallyManaged.
-	SetQuota(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string, quotas map[string]uint64) error
+	SetQuota(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project KeystoneProject, quotas map[string]uint64) error
 	//Rates returns metadata for all the rates that this plugin scrapes
 	//from the backend service.
 	Rates() []limes.RateInfo
@@ -105,7 +125,7 @@ type QuotaPlugin interface {
 	//by the core application in any way. The plugin implementation can use this
 	//field to carry state between ScrapeRates() calls, esp. to detect and handle
 	//counter resets in the backend.
-	ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error)
+	ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error)
 
 	//DescribeMetrics is called when Prometheus is scraping metrics from
 	//limes-collect, to provide an opportunity to the plugin to emit its own
@@ -124,7 +144,7 @@ type QuotaPlugin interface {
 	//Some plugins also emit metrics directly within Scrape. This newer interface
 	//should be preferred since metrics emitted here won't be lost between
 	//restarts of limes-collect.
-	CollectMetrics(ch chan<- prometheus.Metric, clusterID, domainUUID, projectUUID, serializedMetrics string) error
+	CollectMetrics(ch chan<- prometheus.Metric, clusterID string, project KeystoneProject, serializedMetrics string) error
 }
 
 //CapacityData contains the total and per-availability-zone capacity data for a

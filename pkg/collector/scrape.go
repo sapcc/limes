@@ -47,7 +47,7 @@ var scrapeInterval = 30 * time.Minute
 
 //query that finds the next project that needs to have resources scraped
 var findProjectForResourceScrapeQuery = db.SimplifyWhitespaceInSQL(`
-	SELECT ps.id, ps.scraped_at, p.name, p.uuid, p.id, p.has_bursting, d.name, d.uuid
+	SELECT ps.id, ps.scraped_at, p.name, p.uuid, p.parent_uuid, p.id, p.has_bursting, d.name, d.uuid
 	FROM project_services ps
 	JOIN projects p ON p.id = ps.project_id
 	JOIN domains d ON d.id = p.domain_id
@@ -85,16 +85,13 @@ func (c *Collector) Scrape() {
 		var (
 			serviceID          int64
 			serviceScrapedAt   *time.Time
-			projectName        string
-			projectUUID        string
+			project            core.KeystoneProject
 			projectID          int64
 			projectHasBursting bool
-			domainName         string
-			domainUUID         string
 		)
 		scrapeStartedAt := c.TimeNow()
 		err := db.DB.QueryRow(findProjectForResourceScrapeQuery, c.Cluster.ID, serviceType, scrapeStartedAt.Add(-scrapeInterval)).
-			Scan(&serviceID, &serviceScrapedAt, &projectName, &projectUUID, &projectID, &projectHasBursting, &domainName, &domainUUID)
+			Scan(&serviceID, &serviceScrapedAt, &project.Name, &project.UUID, &project.ParentUUID, &projectID, &projectHasBursting, &project.Domain.Name, &project.Domain.UUID)
 		if err != nil {
 			//ErrNoRows is okay; it just means that nothing needs scraping right now
 			if err != sql.ErrNoRows {
@@ -107,10 +104,9 @@ func (c *Collector) Scrape() {
 			continue
 		}
 
-		logg.Debug("scraping %s resources for %s/%s", serviceType, domainName, projectName)
-		domain := core.KeystoneDomain{Name: domainName, UUID: domainUUID}
+		logg.Debug("scraping %s resources for %s/%s", serviceType, project.Domain.Name, project.Name)
 		provider, eo := c.Cluster.ProviderClientForService(serviceType)
-		resourceData, serializedMetrics, err := c.Plugin.Scrape(provider, eo, domainUUID, projectUUID)
+		resourceData, serializedMetrics, err := c.Plugin.Scrape(provider, eo, project)
 		if err != nil {
 			scrapeFailedCounter.With(labels).Inc()
 			//special case: stop scraping for a while when the backend service is not
@@ -121,13 +117,13 @@ func (c *Collector) Scrape() {
 				c.LogError("suspending %s resource scraping for %d minutes: %s", serviceType, sleepInterval/time.Minute, err.Error())
 				scrapeSuspendedCounter.With(labels).Inc()
 			} else {
-				c.LogError("scrape %s resources for %s/%s failed: %s", serviceType, domainName, projectName, util.ErrorToString(err))
+				c.LogError("scrape %s resources for %s/%s failed: %s", serviceType, project.Domain.Name, project.Name, util.ErrorToString(err))
 
 				if serviceScrapedAt == nil {
 					//see explanation inside the called function's body
-					err := c.writeDummyResources(domain, projectName, projectHasBursting, serviceType, serviceID)
+					err := c.writeDummyResources(project, projectHasBursting, serviceType, serviceID)
 					if err != nil {
-						c.LogError("write dummy resource data for service %s for %s/%s failed: %s", serviceType, domainName, projectName, err.Error())
+						c.LogError("write dummy resource data for service %s for %s/%s failed: %s", serviceType, project.Domain.Name, project.Name, err.Error())
 					}
 				}
 			}
@@ -140,9 +136,9 @@ func (c *Collector) Scrape() {
 		}
 
 		scrapeEndedAt := c.TimeNow()
-		err = c.writeScrapeResult(domain, projectName, projectUUID, projectID, projectHasBursting, serviceType, serviceID, resourceData, serializedMetrics, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
+		err = c.writeScrapeResult(project, projectID, projectHasBursting, serviceType, serviceID, resourceData, serializedMetrics, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
 		if err != nil {
-			c.LogError("write %s backend data for %s/%s failed: %s", serviceType, domainName, projectName, err.Error())
+			c.LogError("write %s backend data for %s/%s failed: %s", serviceType, project.Domain.Name, project.Name, err.Error())
 			scrapeFailedCounter.With(labels).Inc()
 			if c.Once {
 				return
@@ -161,7 +157,7 @@ func (c *Collector) Scrape() {
 	}
 }
 
-func (c *Collector) writeScrapeResult(domain core.KeystoneDomain, projectName, projectUUID string, projectID int64, projectHasBursting bool, serviceType string, serviceID int64, resourceData map[string]core.ResourceData, serializedMetrics string, scrapedAt time.Time, scrapeDuration time.Duration) error {
+func (c *Collector) writeScrapeResult(project core.KeystoneProject, projectID int64, projectHasBursting bool, serviceType string, serviceID int64, resourceData map[string]core.ResourceData, serializedMetrics string, scrapedAt time.Time, scrapeDuration time.Duration) error {
 	tx, err := db.DB.Begin()
 	if err != nil {
 		return err
@@ -170,7 +166,7 @@ func (c *Collector) writeScrapeResult(domain core.KeystoneDomain, projectName, p
 
 	var serviceConstraints map[string]core.QuotaConstraint
 	if c.Cluster.QuotaConstraints != nil {
-		serviceConstraints = c.Cluster.QuotaConstraints.Projects[domain.Name][projectName][serviceType]
+		serviceConstraints = c.Cluster.QuotaConstraints.Projects[project.Domain.Name][project.Name][serviceType]
 	}
 
 	//update existing project_resources entries
@@ -198,7 +194,7 @@ func (c *Collector) writeScrapeResult(domain core.KeystoneDomain, projectName, p
 			resInfo := c.Cluster.InfoForResource(serviceType, res.Name)
 			newQuota := constraint.ApplyTo(*res.Quota)
 			logg.Info("changing %s/%s quota for project %s/%s from %s to %s to satisfy constraint %q",
-				serviceType, res.Name, domain.Name, projectName,
+				serviceType, res.Name, project.Domain.Name, project.Name,
 				limes.ValueWithUnit{Value: *res.Quota, Unit: resInfo.Unit},
 				limes.ValueWithUnit{Value: newQuota, Unit: resInfo.Unit},
 				constraint.String(),
@@ -234,7 +230,7 @@ func (c *Collector) writeScrapeResult(domain core.KeystoneDomain, projectName, p
 			//warn when the backend is inconsistent with itself
 			if uint64(len(data.Subresources)) != res.Usage {
 				logg.Info("resource quantity mismatch in project %s, resource %s/%s: usage = %d, but found %d subresources",
-					projectUUID, serviceType, res.Name,
+					project.UUID, serviceType, res.Name,
 					res.Usage, len(data.Subresources),
 				)
 			}
@@ -291,12 +287,12 @@ func (c *Collector) writeScrapeResult(domain core.KeystoneDomain, projectName, p
 				res.Quota = &resMetadata.AutoApproveInitialQuota
 
 				logg.Other("AUDIT", fmt.Sprintf("set quota %s/%s = 0 -> %d for project %s through auto-approval",
-					serviceType, resMetadata.Name, *res.Quota, projectUUID),
+					serviceType, resMetadata.Name, *res.Quota, project.UUID),
 				)
 			}
 
 			if projectHasBursting {
-				behavior := c.Cluster.BehaviorForResource(serviceType, resMetadata.Name, domain.Name+"/"+projectName)
+				behavior := c.Cluster.BehaviorForResource(serviceType, resMetadata.Name, project.Domain.Name+"/"+project.Name)
 				desiredBackendQuota := behavior.MaxBurstMultiplier.ApplyTo(*res.Quota)
 				res.DesiredBackendQuota = &desiredBackendQuota
 			} else {
@@ -308,7 +304,7 @@ func (c *Collector) writeScrapeResult(domain core.KeystoneDomain, projectName, p
 			//warn when the backend is inconsistent with itself
 			if uint64(len(data.Subresources)) != data.Usage {
 				logg.Info("resource quantity mismatch in project %s, resource %s/%s: usage = %d, but found %d subresources",
-					projectUUID, serviceType, res.Name,
+					project.UUID, serviceType, res.Name,
 					data.Usage, len(data.Subresources),
 				)
 			}
@@ -342,7 +338,7 @@ func (c *Collector) writeScrapeResult(domain core.KeystoneDomain, projectName, p
 	}
 
 	if scrapeDuration > 5*time.Minute {
-		logg.Info("scrape of %s in project %s has taken excessively long (%s)", serviceType, projectUUID, scrapeDuration.String())
+		logg.Info("scrape of %s in project %s has taken excessively long (%s)", serviceType, project.UUID, scrapeDuration.String())
 	}
 
 	//if a mismatch between frontend and backend quota was detected, try to
@@ -350,14 +346,14 @@ func (c *Collector) writeScrapeResult(domain core.KeystoneDomain, projectName, p
 	//to get stuck because some project has backend_quota > usage > quota, for
 	//example)
 	if c.Cluster.Authoritative {
-		var project db.Project
-		err := db.DB.SelectOne(&project, `SELECT * FROM projects WHERE id = $1`, projectID)
+		var dbProject db.Project
+		err := db.DB.SelectOne(&dbProject, `SELECT * FROM projects WHERE id = $1`, projectID)
 		if err == nil {
-			err = datamodel.ApplyBackendQuota(db.DB, c.Cluster, domain, project, serviceID, serviceType)
+			err = datamodel.ApplyBackendQuota(db.DB, c.Cluster, project.Domain, dbProject, serviceID, serviceType)
 		}
 		if err != nil {
 			logg.Error("could not rectify frontend/backend quota mismatch for service %s in project %s: %s",
-				serviceType, projectUUID, err.Error(),
+				serviceType, project.UUID, err.Error(),
 			)
 		}
 	}
@@ -365,7 +361,7 @@ func (c *Collector) writeScrapeResult(domain core.KeystoneDomain, projectName, p
 	return nil
 }
 
-func (c *Collector) writeDummyResources(domain core.KeystoneDomain, projectName string, projectHasBursting bool, serviceType string, serviceID int64) error {
+func (c *Collector) writeDummyResources(project core.KeystoneProject, projectHasBursting bool, serviceType string, serviceID int64) error {
 	//Rationale: This is called when we first try to scrape a project service,
 	//and the scraping fails (most likely due to some internal error in the
 	//backend service). We used to just not touch the database at this point,
@@ -386,7 +382,7 @@ func (c *Collector) writeDummyResources(domain core.KeystoneDomain, projectName 
 
 	var serviceConstraints map[string]core.QuotaConstraint
 	if c.Cluster.QuotaConstraints != nil {
-		serviceConstraints = c.Cluster.QuotaConstraints.Projects[domain.Name][projectName][serviceType]
+		serviceConstraints = c.Cluster.QuotaConstraints.Projects[project.Domain.Name][project.Name][serviceType]
 	}
 
 	//find existing project_resources entries (we don't want to touch those)
@@ -428,7 +424,7 @@ func (c *Collector) writeDummyResources(domain core.KeystoneDomain, projectName 
 			res.BackendQuota = nil
 		} else {
 			if projectHasBursting {
-				behavior := c.Cluster.BehaviorForResource(serviceType, resMetadata.Name, domain.Name+"/"+projectName)
+				behavior := c.Cluster.BehaviorForResource(serviceType, resMetadata.Name, project.Domain.Name+"/"+project.Name)
 				desiredBackendQuota := behavior.MaxBurstMultiplier.ApplyTo(*res.Quota)
 				res.DesiredBackendQuota = &desiredBackendQuota
 			} else {

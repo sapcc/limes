@@ -70,17 +70,17 @@ func (p *keppelPlugin) Rates() []limes.RateInfo {
 }
 
 //ScrapeRates implements the core.QuotaPlugin interface.
-func (p *keppelPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+func (p *keppelPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
 //Scrape implements the core.QuotaPlugin interface.
-func (p *keppelPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string) (map[string]core.ResourceData, string, error) {
+func (p *keppelPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (map[string]core.ResourceData, string, error) {
 	client, err := newKeppelClient(provider, eo)
 	if err != nil {
 		return nil, "", err
 	}
-	quotas, err := client.GetQuota(projectUUID)
+	quotas, err := client.GetQuota(project.UUID)
 	if err != nil {
 		return nil, "", err
 	}
@@ -93,7 +93,7 @@ func (p *keppelPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 }
 
 //SetQuota implements the core.QuotaPlugin interface.
-func (p *keppelPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string, quotas map[string]uint64) error {
+func (p *keppelPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
 	client, err := newKeppelClient(provider, eo)
 	if err != nil {
 		return err
@@ -101,7 +101,7 @@ func (p *keppelPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherc
 
 	var qs keppelQuotaSet
 	qs.Manifests.Quota = int64(quotas["images"])
-	return client.SetQuota(projectUUID, qs)
+	return client.SetQuota(project.UUID, qs)
 }
 
 //DescribeMetrics implements the core.QuotaPlugin interface.
@@ -110,7 +110,7 @@ func (p *keppelPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 }
 
 //CollectMetrics implements the core.QuotaPlugin interface.
-func (p *keppelPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, domainUUID, projectUUID, serializedMetrics string) error {
+func (p *keppelPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID string, project core.KeystoneProject, serializedMetrics string) error {
 	//not used by this plugin
 	return nil
 }

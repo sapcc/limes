@@ -207,7 +207,7 @@ func ScanProjects(cluster *core.Cluster, domain *db.Domain) (result []string, re
 
 	//list projects in Keystone
 	provider, eo := cluster.ProviderClient()
-	projects, err := cluster.DiscoveryPlugin.ListProjects(provider, eo, domain.UUID)
+	projects, err := cluster.DiscoveryPlugin.ListProjects(provider, eo, core.KeystoneDomainFromDB(*domain))
 	if err != nil {
 		return nil, err
 	}

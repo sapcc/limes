@@ -76,12 +76,12 @@ func (p *cfmPlugin) Rates() []limes.RateInfo {
 }
 
 //ScrapeRates implements the core.QuotaPlugin interface.
-func (p *cfmPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+func (p *cfmPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
 //Scrape implements the core.QuotaPlugin interface.
-func (p *cfmPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string) (map[string]core.ResourceData, string, error) {
+func (p *cfmPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (map[string]core.ResourceData, string, error) {
 	client, err := newCFMClient(provider, eo, p.projectID)
 	if err != nil {
 		return nil, "", err
@@ -97,9 +97,9 @@ func (p *cfmPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.
 			} `json:"usage"`
 		} `json:"storage_quota"`
 	}
-	err = client.GetQuotaSet(projectUUID).ExtractInto(&data)
+	err = client.GetQuotaSet(project.UUID).ExtractInto(&data)
 	if err == nil {
-		logg.Info("using CFM quota set for project %s", projectUUID)
+		logg.Info("using CFM quota set for project %s", project.UUID)
 		if !p.cfg.CFM.ReportPhysicalUsage {
 			return map[string]core.ResourceData{
 				"cfm_share_capacity": {
@@ -126,7 +126,7 @@ func (p *cfmPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.
 		return nil, "", err
 	}
 
-	return p.scrapeOld(client, projectUUID)
+	return p.scrapeOld(client, project.UUID)
 }
 
 func (p *cfmPlugin) scrapeOld(client *cfmClient, projectUUID string) (map[string]core.ResourceData, string, error) {
@@ -161,7 +161,7 @@ func (p *cfmPlugin) scrapeOld(client *cfmClient, projectUUID string) (map[string
 }
 
 //SetQuota implements the core.QuotaPlugin interface.
-func (p *cfmPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string, quotas map[string]uint64) error {
+func (p *cfmPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
 	if !p.cfg.CFM.Authoritative {
 		return errors.New("the database/cfm_share_capacity resource is externally managed")
 	}
@@ -171,12 +171,12 @@ func (p *cfmPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherclou
 		return err
 	}
 	quotaBytes := quotas["cfm_share_capacity"]
-	err = client.UpdateQuotaSet(projectUUID, quotaBytes)
+	err = client.UpdateQuotaSet(project.UUID, quotaBytes)
 	if _, ok := err.(cfmNotFoundError); ok {
 		if quotaBytes == 0 {
 			return nil //nothing to do: quota does not exist, but is also not wanted
 		}
-		err = client.CreateQuotaSet(projectUUID, quotaBytes)
+		err = client.CreateQuotaSet(project.UUID, quotaBytes)
 	}
 	return err
 }
@@ -187,7 +187,7 @@ func (p *cfmPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 }
 
 //CollectMetrics implements the core.QuotaPlugin interface.
-func (p *cfmPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, domainUUID, projectUUID, serializedMetrics string) error {
+func (p *cfmPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID string, project core.KeystoneProject, serializedMetrics string) error {
 	//not used by this plugin
 	return nil
 }

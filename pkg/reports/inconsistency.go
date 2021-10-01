@@ -40,12 +40,12 @@ type Inconsistencies struct {
 //for the inconsistency type where for a domain the 'sum(projects_quota) > domain_quota'
 //for a single resource.
 type OvercommittedDomainQuota struct {
-	Domain        DomainData `json:"domain"`
-	Service       string     `json:"service"`
-	Resource      string     `json:"resource"`
-	Unit          limes.Unit `json:"unit,omitempty"`
-	DomainQuota   uint64     `json:"domain_quota"`
-	ProjectsQuota uint64     `json:"projects_quota"`
+	Domain        core.KeystoneDomain `json:"domain"`
+	Service       string              `json:"service"`
+	Resource      string              `json:"resource"`
+	Unit          limes.Unit          `json:"unit,omitempty"`
+	DomainQuota   uint64              `json:"domain_quota"`
+	ProjectsQuota uint64              `json:"projects_quota"`
 }
 
 //OverspentProjectQuota is a substructure of Inconsistency containing data for
@@ -56,12 +56,12 @@ type OvercommittedDomainQuota struct {
 //and for projects with quota bursting enabled the
 //'desired_backend_quota == floor(quota * (1 + bursting.multiplier))'.
 type OverspentProjectQuota struct {
-	Project  ProjectData `json:"project"`
-	Service  string      `json:"service"`
-	Resource string      `json:"resource"`
-	Unit     limes.Unit  `json:"unit,omitempty"`
-	Quota    uint64      `json:"quota"`
-	Usage    uint64      `json:"usage"`
+	Project  core.KeystoneProject `json:"project"`
+	Service  string               `json:"service"`
+	Resource string               `json:"resource"`
+	Unit     limes.Unit           `json:"unit,omitempty"`
+	Quota    uint64               `json:"quota"`
+	Usage    uint64               `json:"usage"`
 }
 
 //MismatchProjectQuota is a substructure of Inconsistency containing data for
@@ -72,25 +72,12 @@ type OverspentProjectQuota struct {
 //and for projects with quota bursting enabled the
 //'desired_backend_quota == floor(quota * (1 + bursting.multiplier))'.
 type MismatchProjectQuota struct {
-	Project      ProjectData `json:"project"`
-	Service      string      `json:"service"`
-	Resource     string      `json:"resource"`
-	Unit         limes.Unit  `json:"unit,omitempty"`
-	Quota        uint64      `json:"quota"`
-	BackendQuota int64       `json:"backend_quota"`
-}
-
-//DomainData is a substructure containing domain data for a single inconsistency
-type DomainData struct {
-	UUID string `json:"id"`
-	Name string `json:"name"`
-}
-
-//ProjectData is a substructure containing project data for a single inconsistency
-type ProjectData struct {
-	UUID   string     `json:"id"`
-	Name   string     `json:"name"`
-	Domain DomainData `json:"domain"`
+	Project      core.KeystoneProject `json:"project"`
+	Service      string               `json:"service"`
+	Resource     string               `json:"resource"`
+	Unit         limes.Unit           `json:"unit,omitempty"`
+	Quota        uint64               `json:"quota"`
+	BackendQuota int64                `json:"backend_quota"`
 }
 
 var ocdqReportQuery = db.SimplifyWhitespaceInSQL(`

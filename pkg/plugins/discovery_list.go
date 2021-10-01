@@ -22,6 +22,7 @@ package plugins
 import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
+	"github.com/gophercloud/gophercloud/openstack/identity/v3/projects"
 	"github.com/sapcc/limes/pkg/core"
 )
 
@@ -63,33 +64,29 @@ func (p *listDiscoveryPlugin) ListDomains(provider *gophercloud.ProviderClient, 
 }
 
 //ListProjects implements the core.DiscoveryPlugin interface.
-func (p *listDiscoveryPlugin) ListProjects(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID string) ([]core.KeystoneProject, error) {
+func (p *listDiscoveryPlugin) ListProjects(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domain core.KeystoneDomain) ([]core.KeystoneProject, error) {
 	client, err := openstack.NewIdentityV3(provider, eo)
 	if err != nil {
 		return nil, err
 	}
 
-	//gophercloud does not support project listing yet - do it manually
-	url := client.ServiceURL("projects")
-	var opts struct {
-		DomainUUID string `q:"domain_id"`
-	}
-	opts.DomainUUID = domainUUID
-	query, err := gophercloud.BuildQueryString(opts)
+	allPages, err := projects.List(client, projects.ListOpts{DomainID: domain.UUID}).AllPages()
 	if err != nil {
 		return nil, err
 	}
-	url += query.String()
-
-	var result gophercloud.Result
-	_, err = client.Get(url, &result.Body, nil)
+	allProjects, err := projects.ExtractProjects(allPages)
 	if err != nil {
 		return nil, err
 	}
 
-	var data struct {
-		Projects []core.KeystoneProject `json:"projects"`
+	var result []core.KeystoneProject
+	for _, p := range allProjects {
+		result = append(result, core.KeystoneProject{
+			UUID:       p.ID,
+			Name:       p.Name,
+			ParentUUID: p.ParentID,
+			Domain:     domain,
+		})
 	}
-	err = result.ExtractInto(&data)
-	return data.Projects, err
+	return result, nil
 }

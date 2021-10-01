@@ -61,6 +61,10 @@ func (p *DiscoveryPlugin) ListDomains(provider *gophercloud.ProviderClient, eo g
 }
 
 //ListProjects implements the core.DiscoveryPlugin interface.
-func (p *DiscoveryPlugin) ListProjects(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID string) ([]core.KeystoneProject, error) {
-	return p.StaticProjects[domainUUID], nil
+func (p *DiscoveryPlugin) ListProjects(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domain core.KeystoneDomain) ([]core.KeystoneProject, error) {
+	result := p.StaticProjects[domain.UUID]
+	for _, project := range result {
+		project.Domain = domain
+	}
+	return result, nil
 }

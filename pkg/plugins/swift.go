@@ -118,13 +118,13 @@ func (p *swiftPlugin) Account(provider *gophercloud.ProviderClient, eo gopherclo
 }
 
 //ScrapeRates implements the core.QuotaPlugin interface.
-func (p *swiftPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+func (p *swiftPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
 //Scrape implements the core.QuotaPlugin interface.
-func (p *swiftPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string) (map[string]core.ResourceData, string, error) {
-	account, err := p.Account(provider, eo, projectUUID)
+func (p *swiftPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (map[string]core.ResourceData, string, error) {
+	account, err := p.Account(provider, eo, project.UUID)
 	if err != nil {
 		return nil, "", err
 	}
@@ -176,8 +176,8 @@ func (p *swiftPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclou
 }
 
 //SetQuota implements the core.QuotaPlugin interface.
-func (p *swiftPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string, quotas map[string]uint64) error {
-	account, err := p.Account(provider, eo, projectUUID)
+func (p *swiftPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
+	account, err := p.Account(provider, eo, project.UUID)
 	if err != nil {
 		return err
 	}
@@ -185,14 +185,14 @@ func (p *swiftPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercl
 	headers := schwift.NewAccountHeaders()
 	headers.BytesUsedQuota().Set(quotas["capacity"])
 	//this header brought to you by https://github.com/sapcc/swift-addons
-	headers.Set("X-Account-Project-Domain-Id-Override", domainUUID)
+	headers.Set("X-Account-Project-Domain-Id-Override", project.Domain.UUID)
 
 	err = account.Update(headers, nil)
 	if schwift.Is(err, http.StatusNotFound) && quotas["capacity"] > 0 {
 		//account does not exist yet - if there is a non-zero quota, enable it now
 		err = account.Create(headers.ToOpts())
 		if err == nil {
-			logg.Info("Swift Account %s created", projectUUID)
+			logg.Info("Swift Account %s created", project.UUID)
 		}
 	}
 	return err
@@ -205,7 +205,7 @@ func (p *swiftPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 }
 
 //CollectMetrics implements the core.QuotaPlugin interface.
-func (p *swiftPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, domainUUID, projectUUID, serializedMetrics string) error {
+func (p *swiftPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID string, project core.KeystoneProject, serializedMetrics string) error {
 	if serializedMetrics == "" {
 		return nil
 	}
@@ -225,12 +225,12 @@ func (p *swiftPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, dom
 		ch <- prometheus.MustNewConstMetric(
 			swiftObjectsCountDesc,
 			prometheus.GaugeValue, float64(containerMetrics.ObjectCount),
-			clusterID, domainUUID, projectUUID, containerName,
+			clusterID, project.Domain.UUID, project.UUID, containerName,
 		)
 		ch <- prometheus.MustNewConstMetric(
 			swiftBytesUsedDesc,
 			prometheus.GaugeValue, float64(containerMetrics.BytesUsed),
-			clusterID, domainUUID, projectUUID, containerName,
+			clusterID, project.Domain.UUID, project.UUID, containerName,
 		)
 	}
 

@@ -25,6 +25,7 @@ import (
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
+	"github.com/gophercloud/gophercloud/openstack/identity/v3/projects"
 	"github.com/gophercloud/gophercloud/openstack/identity/v3/roles"
 	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/sapcc/go-bits/logg"
@@ -58,7 +59,7 @@ func (p *roleAssignmentDiscoveryPlugin) ListDomains(provider *gophercloud.Provid
 }
 
 //ListProjects implements the core.DiscoveryPlugin interface.
-func (p *roleAssignmentDiscoveryPlugin) ListProjects(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID string) ([]core.KeystoneProject, error) {
+func (p *roleAssignmentDiscoveryPlugin) ListProjects(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domain core.KeystoneDomain) ([]core.KeystoneProject, error) {
 	if p.cfg.RoleAssignment.RoleName == "" {
 		logg.Fatal(`missing role name for discovery plugin "role-assignment"`)
 	}
@@ -95,43 +96,30 @@ func (p *roleAssignmentDiscoveryPlugin) ListProjects(provider *gophercloud.Provi
 	}
 
 	//filter projects by domain and get name
-	var projects []core.KeystoneProject
+	var result []core.KeystoneProject
 	for projectID := range projectIDs {
 		if projectID == "" {
 			continue
 		}
 
-		var result gophercloud.Result
-		_, err := client.Get(client.ServiceURL("projects", projectID), &result.Body, nil)
+		project, err := projects.Get(client, projectID).Extract()
 		if err != nil {
 			return nil, fmt.Errorf(`cannot query project %s: %s`, projectID, util.ErrorToString(err))
 		}
-
-		var data1 struct {
-			Project struct {
-				DomainUUID string `json:"domain_id"`
-			} `json:"project"`
-		}
-		err = result.ExtractInto(&data1)
-		if err != nil {
-			return nil, err
-		}
-		if data1.Project.DomainUUID != domainUUID {
+		if project.DomainID != domain.UUID {
 			continue
 		}
 
-		var data2 struct {
-			Project core.KeystoneProject `json:"project"`
-		}
-		err = result.ExtractInto(&data2)
-		if err != nil {
-			return nil, err
-		}
-		projects = append(projects, data2.Project)
+		result = append(result, core.KeystoneProject{
+			UUID:       project.ID,
+			Name:       project.Name,
+			ParentUUID: project.ParentID,
+			Domain:     domain,
+		})
 	}
 
-	logg.Debug("domain = %s -> projects = %#v", domainUUID, projects)
-	return projects, nil
+	logg.Debug("domain = %s -> projects = %#v", domain.UUID, result)
+	return result, nil
 }
 
 func getRoleIDForName(client *gophercloud.ServiceClient, roleName string) (string, error) {

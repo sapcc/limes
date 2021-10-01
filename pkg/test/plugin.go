@@ -116,7 +116,7 @@ func (p *Plugin) Rates() []limes.RateInfo {
 }
 
 //ScrapeRates implements the core.QuotaPlugin interface.
-func (p *Plugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+func (p *Plugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
 	if p.ScrapeFails {
 		return nil, "", errors.New("ScrapeRates failed as requested")
 	}
@@ -146,7 +146,7 @@ func (p *Plugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.
 }
 
 //Scrape implements the core.QuotaPlugin interface.
-func (p *Plugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string) (map[string]core.ResourceData, string, error) {
+func (p *Plugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (map[string]core.ResourceData, string, error) {
 	if p.ScrapeFails {
 		return nil, "", errors.New("Scrape failed as requested")
 	}
@@ -172,7 +172,7 @@ func (p *Plugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.End
 		result[key] = copyOfVal
 	}
 
-	data, exists := p.OverrideQuota[projectUUID]
+	data, exists := p.OverrideQuota[project.UUID]
 	if exists {
 		for resourceName, quota := range data {
 			result[resourceName] = core.ResourceData{
@@ -207,11 +207,11 @@ func (p *Plugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.End
 }
 
 //SetQuota implements the core.QuotaPlugin interface.
-func (p *Plugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domainUUID, projectUUID string, quotas map[string]uint64) error {
+func (p *Plugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
 	if p.SetQuotaFails {
 		return errors.New("SetQuota failed as requested")
 	}
-	p.OverrideQuota[projectUUID] = quotas
+	p.OverrideQuota[project.UUID] = quotas
 	return nil
 }
 
@@ -233,7 +233,7 @@ func (p *Plugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 }
 
 //CollectMetrics implements the core.QuotaPlugin interface.
-func (p *Plugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, domainUUID, projectUUID, serializedMetrics string) error {
+func (p *Plugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID string, project core.KeystoneProject, serializedMetrics string) error {
 	if serializedMetrics == "" {
 		return nil
 	}
@@ -255,11 +255,11 @@ func (p *Plugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, domainUU
 
 	ch <- prometheus.MustNewConstMetric(
 		unittestCapacityUsageDesc, prometheus.GaugeValue, float64(data.CapacityUsage),
-		clusterID, domainUUID, projectUUID,
+		clusterID, project.Domain.UUID, project.UUID,
 	)
 	ch <- prometheus.MustNewConstMetric(
 		unittestThingsUsageDesc, prometheus.GaugeValue, float64(data.ThingsUsage),
-		clusterID, domainUUID, projectUUID,
+		clusterID, project.Domain.UUID, project.UUID,
 	)
 	return nil
 }

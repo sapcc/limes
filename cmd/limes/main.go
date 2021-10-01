@@ -240,10 +240,10 @@ func taskTestGetQuota(config core.Configuration, cluster *core.Cluster, args []s
 	if len(args) != 2 {
 		printUsageAndExit()
 	}
-	domainName, domainUUID, projectName, projectUUID, serviceType := findProjectServiceForTesting(cluster, args[0], args[1])
+	project, serviceType := findProjectServiceForTesting(cluster, args[0], args[1])
 
 	provider, eo := cluster.ProviderClientForService(serviceType)
-	result, serializedMetrics, err := cluster.QuotaPlugins[serviceType].Scrape(provider, eo, domainUUID, projectUUID)
+	result, serializedMetrics, err := cluster.QuotaPlugins[serviceType].Scrape(provider, eo, project)
 	if err != nil {
 		return err
 	}
@@ -257,10 +257,7 @@ func taskTestGetQuota(config core.Configuration, cluster *core.Cluster, args []s
 	prometheus.MustRegister(&collector.QuotaPluginMetricsCollector{
 		Cluster: cluster,
 		Override: []collector.QuotaPluginMetricsInstance{{
-			DomainName:        domainName,
-			DomainUUID:        domainUUID,
-			ProjectName:       projectName,
-			ProjectUUID:       projectUUID,
+			Project:           project,
 			ServiceType:       serviceType,
 			SerializedMetrics: serializedMetrics,
 		}},
@@ -282,10 +279,10 @@ func taskTestGetRates(config core.Configuration, cluster *core.Cluster, args []s
 	default:
 		printUsageAndExit()
 	}
-	_, domainUUID, _, projectUUID, serviceType := findProjectServiceForTesting(cluster, args[0], args[1])
+	project, serviceType := findProjectServiceForTesting(cluster, args[0], args[1])
 
 	provider, eo := cluster.ProviderClientForService(serviceType)
-	result, serializedState, err := cluster.QuotaPlugins[serviceType].ScrapeRates(provider, eo, domainUUID, projectUUID, prevSerializedState)
+	result, serializedState, err := cluster.QuotaPlugins[serviceType].ScrapeRates(provider, eo, project, prevSerializedState)
 	if err != nil {
 		return err
 	}
@@ -306,17 +303,17 @@ func taskTestGetRates(config core.Configuration, cluster *core.Cluster, args []s
 	return enc.Encode(result)
 }
 
-func findProjectServiceForTesting(cluster *core.Cluster, inputProjectUUID, inputServiceType string) (domainName, domainUUID, projectName, projectUUID, serviceType string) {
+func findProjectServiceForTesting(cluster *core.Cluster, inputProjectUUID, inputServiceType string) (project core.KeystoneProject, serviceType string) {
 	serviceType = inputServiceType
 	if !cluster.HasService(serviceType) {
 		logg.Fatal("unknown service type: %s", serviceType)
 	}
 
 	err := db.DB.QueryRow(`
-		SELECT d.name, d.uuid, p.name, p.uuid
+		SELECT d.name, d.uuid, p.name, p.uuid, p.parent_uuid
 		  FROM domains d JOIN projects p ON p.domain_id = d.id
 		 WHERE p.uuid = $1 AND d.cluster_id = $2
-	`, inputProjectUUID, cluster.ID).Scan(&domainName, &domainUUID, &projectName, &projectUUID)
+	`, inputProjectUUID, cluster.ID).Scan(&project.Domain.Name, &project.Domain.UUID, &project.Name, &project.UUID, &project.ParentUUID)
 	if err == sql.ErrNoRows {
 		err = errors.New("no such project in this cluster")
 	}
@@ -365,7 +362,7 @@ func taskTestSetQuota(config core.Configuration, cluster *core.Cluster, args []s
 	if len(args) < 3 {
 		printUsageAndExit()
 	}
-	_, domainUUID, _, projectUUID, serviceType := findProjectServiceForTesting(cluster, args[0], args[1])
+	project, serviceType := findProjectServiceForTesting(cluster, args[0], args[1])
 
 	quotaValueRx := regexp.MustCompile(`^([^=]+)=(\d+)$`)
 	quotaValues := make(map[string]uint64)
@@ -382,7 +379,7 @@ func taskTestSetQuota(config core.Configuration, cluster *core.Cluster, args []s
 	}
 
 	provider, eo := cluster.ProviderClientForService(serviceType)
-	return cluster.QuotaPlugins[serviceType].SetQuota(provider, eo, domainUUID, projectUUID, quotaValues)
+	return cluster.QuotaPlugins[serviceType].SetQuota(provider, eo, project, quotaValues)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
