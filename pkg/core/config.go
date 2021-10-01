@@ -20,7 +20,6 @@
 package core
 
 import (
-	"encoding/json"
 	"fmt"
 	"io/ioutil"
 	"math"
@@ -550,7 +549,7 @@ func loadPolicyFile(path string) (gopherpolicy.Enforcer, error) {
 		return nil, err
 	}
 	var rules map[string]string
-	err = json.Unmarshal(bytes, &rules)
+	err = yaml.Unmarshal(bytes, &rules)
 	if err != nil {
 		return nil, err
 	}
