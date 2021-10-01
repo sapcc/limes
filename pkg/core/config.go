@@ -138,10 +138,7 @@ type ServiceConfiguration struct {
 		ReportPhysicalUsage bool `yaml:"report_physical_usage"`
 	} `yaml:"database"`
 	ShareV2 struct {
-		ShareTypes []struct {
-			Name               string `yaml:"name"`
-			ReplicationEnabled bool   `yaml:"replication_enabled"`
-		} `yaml:"share_types"`
+		ShareTypes          []ManilaShareTypeSpec       `yaml:"share_types"`
 		PrometheusAPIConfig *PrometheusAPIConfiguration `yaml:"prometheus_api"`
 	} `yaml:"sharev2"`
 	VolumeV2 struct {
@@ -197,16 +194,27 @@ type CapacitorConfiguration struct {
 		} `yaml:"volume_types"`
 	} `yaml:"cinder"`
 	Manila struct {
-		ShareTypes        []string `yaml:"share_types"`
-		ShareNetworks     uint64   `yaml:"share_networks"`
-		SharesPerPool     uint64   `yaml:"shares_per_pool"`
-		SnapshotsPerShare uint64   `yaml:"snapshots_per_share"`
-		CapacityBalance   float64  `yaml:"capacity_balance"`
+		ShareTypes        []ManilaShareTypeSpec `yaml:"share_types"`
+		ShareNetworks     uint64                `yaml:"share_networks"`
+		SharesPerPool     uint64                `yaml:"shares_per_pool"`
+		SnapshotsPerShare uint64                `yaml:"snapshots_per_share"`
+		CapacityBalance   float64               `yaml:"capacity_balance"`
 	} `yaml:"manila"`
 	Manual      map[string]map[string]uint64 `yaml:"manual"`
 	SAPCCIronic struct {
 		FlavorAliases map[string][]string `yaml:"flavor_aliases"`
 	} `yaml:"sapcc_ironic"`
+}
+
+//ManilaMappingRule appears in both ServiceConfiguration and CapacitorConfiguration.
+type ManilaShareTypeSpec struct {
+	Name               string `yaml:"name"`
+	ReplicationEnabled bool   `yaml:"replication_enabled"` //only used by QuotaPlugin
+	MappingRules       []*struct {
+		NamePattern string         `yaml:"name_pattern"`
+		NameRx      *regexp.Regexp `yaml:"-"`
+		ShareType   string         `yaml:"share_type"`
+	} `yaml:"mapping_rules"`
 }
 
 //LowPrivilegeRaiseConfiguration contains the configuration options for

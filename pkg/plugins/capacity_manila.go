@@ -46,6 +46,10 @@ func (p *capacityManilaPlugin) Init(provider *gophercloud.ProviderClient, eo gop
 	if len(cfg.ShareTypes) == 0 {
 		return errors.New("capacity plugin manila: missing required configuration field manila.share_types")
 	}
+	err := compileManilaShareTypeSpecs(cfg.ShareTypes)
+	if err != nil {
+		return err
+	}
 	if cfg.ShareNetworks == 0 {
 		return errors.New("capacity plugin manila: missing required configuration field manila.share_networks")
 	}
@@ -63,13 +67,13 @@ func (p *capacityManilaPlugin) ID() string {
 	return "manila"
 }
 
-func (p *capacityManilaPlugin) makeResourceName(kind, shareType string) string {
-	if p.cfg.Manila.ShareTypes[0] == shareType {
+func (p *capacityManilaPlugin) makeResourceName(kind string, shareType core.ManilaShareTypeSpec) string {
+	if p.cfg.Manila.ShareTypes[0].Name == shareType.Name {
 		//the resources for the first share type don't get the share type suffix
 		//for backwards compatibility reasons
 		return kind
 	}
-	return kind + "_" + shareType
+	return kind + "_" + shareType.Name
 }
 
 //Scrape implements the core.CapacityPlugin interface.
@@ -149,32 +153,38 @@ type capacityForShareType struct {
 	SnapshotGigabytes core.CapacityData
 }
 
-func (p *capacityManilaPlugin) scrapeForShareType(shareType string, client *gophercloud.ServiceClient, azForServiceHost map[string]string) (capacityForShareType, error) {
+type manilaPool struct {
+	Name         string `json:"name"`
+	Host         string `json:"host"`
+	Capabilities struct {
+		TotalCapacityGb     float64 `json:"total_capacity_gb"`
+		AllocatedCapacityGb float64 `json:"allocated_capacity_gb"`
+	} `json:"capabilities"`
+}
+
+func (p *capacityManilaPlugin) scrapeForShareType(shareType core.ManilaShareTypeSpec, client *gophercloud.ServiceClient, azForServiceHost map[string]string) (capacityForShareType, error) {
 	cfg := p.cfg.Manila
 
-	//list all pools for this share type
-	var result gophercloud.Result
-	url := client.ServiceURL("scheduler-stats", "pools", "detail") + "?share_type=" + shareType
-	_, result.Err = client.Get(url, &result.Body, nil)
+	//list all pools for the Manila share types corresponding to this virtual share type
+	var allPools []manilaPool
+	for _, stName := range getAllManilaShareTypes(shareType) {
+		var result gophercloud.Result
+		url := client.ServiceURL("scheduler-stats", "pools", "detail") + "?share_type=" + stName
+		_, result.Err = client.Get(url, &result.Body, nil)
 
-	var poolData struct {
-		Pools []struct {
-			Name         string `json:"name"`
-			Host         string `json:"host"`
-			Capabilities struct {
-				TotalCapacityGb     float64 `json:"total_capacity_gb"`
-				AllocatedCapacityGb float64 `json:"allocated_capacity_gb"`
-			} `json:"capabilities"`
-		} `json:"pools"`
-	}
-	err := result.ExtractInto(&poolData)
-	if err != nil {
-		return capacityForShareType{}, err
+		var poolData struct {
+			Pools []manilaPool `json:"pools"`
+		}
+		err := result.ExtractInto(&poolData)
+		if err != nil {
+			return capacityForShareType{}, err
+		}
+		allPools = append(allPools, poolData.Pools...)
 	}
 
 	//count pools and their capacities
 	var (
-		totalPoolCount  = uint64(len(poolData.Pools))
+		totalPoolCount  = uint64(len(allPools))
 		totalCapacityGb = float64(0)
 
 		availabilityZones        = make(map[string]bool)
@@ -182,12 +192,12 @@ func (p *capacityManilaPlugin) scrapeForShareType(shareType string, client *goph
 		totalCapacityGbPerAZ     = make(map[string]float64)
 		allocatedCapacityGbPerAZ = make(map[string]float64)
 	)
-	for _, pool := range poolData.Pools {
+	for _, pool := range allPools {
 		totalCapacityGb += pool.Capabilities.TotalCapacityGb
 
 		poolAZ := azForServiceHost[pool.Host]
 		if poolAZ == "" {
-			logg.Info("Manila storage pool %q (share type %q) does not match any service host", pool.Name, shareType)
+			logg.Info("Manila storage pool %q (share type %q) does not match any service host", pool.Name, shareType.Name)
 			poolAZ = "unknown"
 		}
 		availabilityZones[poolAZ] = true
