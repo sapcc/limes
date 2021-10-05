@@ -53,6 +53,10 @@ func (p *manilaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud
 	if len(p.cfg.ShareV2.ShareTypes) == 0 {
 		return errors.New("quota plugin sharev2: missing required configuration field sharev2.share_types")
 	}
+	err := compileManilaShareTypeSpecs(p.cfg.ShareV2.ShareTypes)
+	if err != nil {
+		return err
+	}
 
 	client, err := openstack.NewSharedFileSystemV2(provider, eo)
 	if err != nil {
@@ -110,26 +114,25 @@ func (p *manilaPlugin) Resources() []limes.ResourceInfo {
 		Category: "sharev2",
 	})
 	for _, shareType := range p.cfg.ShareV2.ShareTypes {
-		stName := shareType.Name
-		category := p.makeResourceName("sharev2", stName)
+		category := p.makeResourceName("sharev2", shareType)
 		result = append(result,
 			limes.ResourceInfo{
-				Name:     p.makeResourceName("share_capacity", stName),
+				Name:     p.makeResourceName("share_capacity", shareType),
 				Unit:     limes.UnitGibibytes,
 				Category: category,
 			},
 			limes.ResourceInfo{
-				Name:     p.makeResourceName("shares", stName),
+				Name:     p.makeResourceName("shares", shareType),
 				Unit:     limes.UnitNone,
 				Category: category,
 			},
 			limes.ResourceInfo{
-				Name:     p.makeResourceName("snapshot_capacity", stName),
+				Name:     p.makeResourceName("snapshot_capacity", shareType),
 				Unit:     limes.UnitGibibytes,
 				Category: category,
 			},
 			limes.ResourceInfo{
-				Name:     p.makeResourceName("share_snapshots", stName),
+				Name:     p.makeResourceName("share_snapshots", shareType),
 				Unit:     limes.UnitNone,
 				Category: category,
 			},
@@ -143,13 +146,13 @@ func (p *manilaPlugin) Rates() []limes.RateInfo {
 	return nil
 }
 
-func (p *manilaPlugin) makeResourceName(kind, shareTypeName string) string {
-	if p.cfg.ShareV2.ShareTypes[0].Name == shareTypeName {
+func (p *manilaPlugin) makeResourceName(kind string, shareType core.ManilaShareTypeSpec) string {
+	if p.cfg.ShareV2.ShareTypes[0].Name == shareType.Name {
 		//the resources for the first share type don't get the share type suffix
 		//for backwards compatibility reasons
 		return kind
 	}
-	return kind + "_" + shareTypeName
+	return kind + "_" + shareType.Name
 }
 
 type manilaQuotaSet struct {
@@ -184,7 +187,11 @@ func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 
 	quotaSets := make(map[string]manilaQuotaSetDetail)
 	for _, shareType := range p.cfg.ShareV2.ShareTypes {
-		quotaSets[shareType.Name], err = manilaCollectQuota(client, project.UUID, shareType.Name)
+		stName := resolveManilaShareType(shareType, project)
+		if stName == "" {
+			continue
+		}
+		quotaSets[stName], err = manilaCollectQuota(client, project.UUID, stName)
 		if err != nil {
 			return nil, "", err
 		}
@@ -198,7 +205,7 @@ func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 
 	var physUsage manilaPhysicalUsage
 	if p.cfg.ShareV2.PrometheusAPIConfig != nil {
-		physUsage, err = p.collectPhysicalUsage(project.UUID)
+		physUsage, err = p.collectPhysicalUsage(project)
 		if err != nil {
 			return nil, "", err
 		}
@@ -208,7 +215,15 @@ func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 		"share_networks": quotaSets[""].ShareNetworks.ToResourceData(nil),
 	}
 	for idx, shareType := range p.cfg.ShareV2.ShareTypes {
-		stName := shareType.Name
+		stName := resolveManilaShareType(shareType, project)
+		if stName == "" {
+			result[p.makeResourceName("shares", shareType)] = core.ResourceData{Quota: 0, Usage: 0}
+			result[p.makeResourceName("share_capacity", shareType)] = core.ResourceData{Quota: 0, Usage: 0}
+			result[p.makeResourceName("share_snapshots", shareType)] = core.ResourceData{Quota: 0, Usage: 0}
+			result[p.makeResourceName("snapshot_capacity", shareType)] = core.ResourceData{Quota: 0, Usage: 0}
+			continue
+		}
+
 		gigabytesPhysical := (*uint64)(nil)
 		snapshotGigabytesPhysical := (*uint64)(nil)
 		if idx == 0 {
@@ -227,10 +242,10 @@ func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 			shareCapacityData.Usage = quotaSets[stName].ReplicaGigabytes.Usage
 		}
 
-		result[p.makeResourceName("shares", stName)] = sharesData
-		result[p.makeResourceName("share_capacity", stName)] = shareCapacityData
-		result[p.makeResourceName("share_snapshots", stName)] = quotaSets[stName].Snapshots.ToResourceData(nil)
-		result[p.makeResourceName("snapshot_capacity", stName)] = quotaSets[stName].SnapshotGigabytes.ToResourceData(snapshotGigabytesPhysical)
+		result[p.makeResourceName("shares", shareType)] = sharesData
+		result[p.makeResourceName("share_capacity", shareType)] = shareCapacityData
+		result[p.makeResourceName("share_snapshots", shareType)] = quotaSets[stName].Snapshots.ToResourceData(nil)
+		result[p.makeResourceName("snapshot_capacity", shareType)] = quotaSets[stName].SnapshotGigabytes.ToResourceData(snapshotGigabytesPhysical)
 	}
 	return result, "", nil
 }
@@ -256,12 +271,21 @@ func (p *manilaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherc
 	anyReplicationEnabled := false
 
 	for _, shareType := range p.cfg.ShareV2.ShareTypes {
-		stName := shareType.Name
+		stName := resolveManilaShareType(shareType, project)
+		if stName == "" {
+			//share type is inaccessible for this project
+			for _, kind := range []string{"shares", "share_capacity", "share_snapshots", "snapshot_capacity"} {
+				if quotas[p.makeResourceName(kind, shareType)] > 0 {
+					return fmt.Errorf("share type %q may not be used in this project", shareType.Name)
+				}
+			}
+		}
+
 		quotasForType := manilaQuotaSet{
-			Shares:            quotas[p.makeResourceName("shares", stName)],
-			Gigabytes:         quotas[p.makeResourceName("share_capacity", stName)],
-			Snapshots:         quotas[p.makeResourceName("share_snapshots", stName)],
-			SnapshotGigabytes: quotas[p.makeResourceName("snapshot_capacity", stName)],
+			Shares:            quotas[p.makeResourceName("shares", shareType)],
+			Gigabytes:         quotas[p.makeResourceName("share_capacity", shareType)],
+			Snapshots:         quotas[p.makeResourceName("share_snapshots", shareType)],
+			SnapshotGigabytes: quotas[p.makeResourceName("snapshot_capacity", shareType)],
 			Replicas:          0,
 			ReplicaGigabytes:  0,
 			ShareNetworks:     nil,
@@ -375,7 +399,7 @@ type manilaPhysicalUsage struct {
 	SnapshotGigabytes map[string]uint64
 }
 
-func (p *manilaPlugin) collectPhysicalUsage(projectUUID string) (manilaPhysicalUsage, error) {
+func (p *manilaPlugin) collectPhysicalUsage(project core.KeystoneProject) (manilaPhysicalUsage, error) {
 	usage := manilaPhysicalUsage{
 		Gigabytes:         make(map[string]uint64),
 		SnapshotGigabytes: make(map[string]uint64),
@@ -392,13 +416,16 @@ func (p *manilaPlugin) collectPhysicalUsage(projectUUID string) (manilaPhysicalU
 	defaultValue := float64(0)
 
 	for _, shareType := range p.cfg.ShareV2.ShareTypes {
-		stName := shareType.Name
+		stName := resolveManilaShareType(shareType, project)
+		if stName == "" {
+			continue
+		}
 
 		//NOTE: The `max by (share_id)` is necessary for when a share is being
 		//migrated to another shareserver and thus appears in the metrics twice.
 		queryStr := fmt.Sprintf(
 			`sum(max by (share_id) (netapp_volume_used_bytes{project_id=%q,share_type=%q}))`,
-			projectUUID, stName,
+			project.UUID, stName,
 		)
 		bytesPhysical, err := prometheusGetSingleValue(client, queryStr, &defaultValue)
 		if err != nil {
@@ -408,7 +435,7 @@ func (p *manilaPlugin) collectPhysicalUsage(projectUUID string) (manilaPhysicalU
 
 		queryStr = fmt.Sprintf(
 			`sum(max by (share_id) (netapp_volume_snapshot_used_bytes{project_id=%q,share_type=%q}))`,
-			projectUUID, stName,
+			project.UUID, stName,
 		)
 		snapshotBytesPhysical, err := prometheusGetSingleValue(client, queryStr, &defaultValue)
 		if err != nil {

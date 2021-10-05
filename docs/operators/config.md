@@ -546,6 +546,10 @@ services:
         - name: default
           replication_enabled: true
         - name: hypervisor_storage
+          mapping_rules:
+            - { name_pattern: "fooproject-.*", share_type: hypervisor_storage_foo }
+            - { name_pattern: ".*@bardomain",  share_type: hypervisor_storage_bar }
+            - { name_pattern: ".*",            share_type: '' }
       prometheus_api:
           url: https://prometheus.example.com
           cert:    /path/to/client.pem
@@ -563,11 +567,12 @@ The area for this service is `storage`. The following resources are always expos
 | `snapshot_capacity` | GiB | |
 | `share_networks` | countable | |
 
-If the `sharev2.share_types` field lists more than one share type, the
-first six of the aforementioned seven resources will refer to the quota for the
-first of these share types. (This peculiar rule exists for
-backwards-compatibility reasons.) For each other share type, the following
-resources are exposed:
+### Multiple share types
+
+If the `sharev2.share_types` field lists more than one share type, the first
+four of the aforementioned five resources will refer to the quota for the first
+of these share types. (This peculiar rule exists for backwards-compatibility
+reasons.) For each other share type, the following resources are exposed:
 
 | Resource | Unit | Comment |
 | --- | --- | --- |
@@ -586,6 +591,23 @@ The quota values in Manila are assigned as follows:
   quotas will be set to 0 instead.
 - Besides the share-type-specific quotas, the general quotas are set to the sum
   across all share types.
+
+### Virtual share types
+
+Multiple Manila share types can be grouped into a single set of resources by adding `mapping_rules` to the share type as
+shown in the example above for the `hypervisor_storage` share type. In this case, `hypervisor_storage` is the share type
+name from which the Limes resource names are derived, but the actual Manila share types (for which quota is set and for
+which usage is retrieved) are `hypervisor_storage_foo` and `hypervisor_storage_bar`.
+
+In each mapping rule, `name_pattern` is a regex that is matched against `$PROJECT_NAME@$DOMAIN_NAME` (with `^` and `$`
+automatically implied at the end of the regex). Mapping rules are evaluated in order: The first matching pattern
+determines the Manila share type for that particular project scope. If no mapping rule matches, the original share type is used unaltered.
+
+If the matching mapping rule sets the share type to the empty string, this share type is ignored for this project in the
+following way: For each resource belonging to this share type,
+
+- usage is always reported as 0, and
+- trying to set a non-zero quota is an error.
 
 ### Physical usage
 
@@ -704,7 +726,13 @@ the concrete Cinder backend.
 capacitors:
 - id: manila
   manila:
-    share_types: [ default, hypervisor_storage ]
+    share_types:
+      - name: default
+      - name: hypervisor_storage
+        mapping_rules:
+          - { name_pattern: "fooproject-.*", share_type: hypervisor_storage_foo }
+          - { name_pattern: ".*@bardomain",  share_type: hypervisor_storage_bar }
+          - { name_pattern: ".*",            share_type: '' }
     share_networks: 250
     shares_per_pool: 1000
     snapshots_per_share: 5
@@ -723,6 +751,9 @@ that appears first in `manila.share_types` (to match the behavior of the quota
 plugin). For any other share type listed in `manila.share_types`, capacities
 will be reported analogously for `sharev2/shares_${share_type}` etc. by
 considering pools with that share type.
+
+The `mapping_rules` inside a share type have the same semantics as for the `sharev2` quota plugin, and must be set
+identically to ensure that the capacity values make sense in context.
 
 ### Capacity balance
 
