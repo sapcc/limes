@@ -167,7 +167,8 @@ func (t quotaEventTarget) Render() cadf.Resource {
 				OldQuota:     t.OldQuota,
 				NewQuota:     t.NewQuota,
 				Unit:         t.QuotaUnit,
-				RejectReason: t.RejectReason},
+				RejectReason: t.RejectReason,
+			},
 		}},
 	}
 }
@@ -193,7 +194,8 @@ func (t burstEventTarget) Render() cadf.Resource {
 			TypeURI: "mime:application/json",
 			Content: targetAttachmentContent{
 				NewStatus:    t.NewStatus,
-				RejectReason: t.RejectReason},
+				RejectReason: t.RejectReason,
+			},
 		}},
 	}
 }

@@ -374,7 +374,7 @@ func (q manilaQuotaDetail) ToResourceData(physicalUsage *uint64) core.ResourceDa
 	}
 }
 
-func manilaCollectQuota(client *gophercloud.ServiceClient, projectUUID string, shareTypeName string) (manilaQuotaSetDetail, error) {
+func manilaCollectQuota(client *gophercloud.ServiceClient, projectUUID, shareTypeName string) (manilaQuotaSetDetail, error) {
 	var result gophercloud.Result
 	url := client.ServiceURL("quota-sets", projectUUID, "detail")
 	if shareTypeName != "" {

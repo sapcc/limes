@@ -234,10 +234,12 @@ type QuotaPluginFactory func(cfg ServiceConfiguration, scrapeSubresources map[st
 //service type, the second key is the resource name).
 type CapacityPluginFactory func(cfg CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) CapacityPlugin
 
-var discoveryPluginFactories = map[string]DiscoveryPluginFactory{}
-var quotaPluginFactories = map[string]QuotaPluginFactory{}
-var capacityPluginFactories = map[string]CapacityPluginFactory{}
-var serviceTypesByArea = map[string][]string{}
+var (
+	discoveryPluginFactories = map[string]DiscoveryPluginFactory{}
+	quotaPluginFactories     = map[string]QuotaPluginFactory{}
+	capacityPluginFactories  = map[string]CapacityPluginFactory{}
+	serviceTypesByArea       = map[string][]string{}
+)
 
 //RegisterDiscoveryPlugin registers a DiscoveryPlugin with this package. It may
 //only be called once, typically in a func init() for the package that offers

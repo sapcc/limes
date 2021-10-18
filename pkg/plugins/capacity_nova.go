@@ -483,7 +483,7 @@ type novaAggregateSubcapacity struct {
 	Usage    uint64            `json:"usage"`
 }
 
-func getAggregates(client *gophercloud.ServiceClient) (availabilityZones map[string]*novaHypervisorGroup, aggregates map[string]*novaHypervisorGroup, err error) {
+func getAggregates(client *gophercloud.ServiceClient) (availabilityZones, aggregates map[string]*novaHypervisorGroup, err error) {
 	var data struct {
 		Aggregates []struct {
 			Name             string            `json:"name"`

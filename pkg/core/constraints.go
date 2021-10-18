@@ -265,10 +265,12 @@ func compileQuotaConstraints(cluster *Cluster, data map[string]map[string]string
 	return values, errors
 }
 
-var atLeastRx = regexp.MustCompile(`^at\s+least\s+(.+)$`)
-var atMostRx = regexp.MustCompile(`^at\s+most\s+(.+)$`)
-var exactlyRx = regexp.MustCompile(`^exactly\s+(.+)$`)
-var atLeastMoreRx = regexp.MustCompile(`^at\s+least\s+(.+)\s+more\s+than\s+project\s+constraints$`)
+var (
+	atLeastRx     = regexp.MustCompile(`^at\s+least\s+(.+)$`)
+	atMostRx      = regexp.MustCompile(`^at\s+most\s+(.+)$`)
+	exactlyRx     = regexp.MustCompile(`^exactly\s+(.+)$`)
+	atLeastMoreRx = regexp.MustCompile(`^at\s+least\s+(.+)\s+more\s+than\s+project\s+constraints$`)
+)
 
 //When parsing a constraint for a project, `projectMinimumsSum` will be nil.
 //When parsing a constraint for a domain, `projectMinimumsSum` will be non-nil.

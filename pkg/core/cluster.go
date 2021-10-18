@@ -212,8 +212,10 @@ func (c *Cluster) Connect() error {
 	return nil
 }
 
-var percentOfClusterRx = regexp.MustCompile(`^([0-9.]+)\s*% of cluster capacity$`)
-var untilPercentOfClusterAssignedRx = regexp.MustCompile(`^until ([0-9.]+)\s*% of cluster capacity is assigned$`)
+var (
+	percentOfClusterRx              = regexp.MustCompile(`^([0-9.]+)\s*% of cluster capacity$`)
+	untilPercentOfClusterAssignedRx = regexp.MustCompile(`^until ([0-9.]+)\s*% of cluster capacity is assigned$`)
+)
 
 func (c Cluster) parseLowPrivilegeRaiseLimits(inputs map[string]map[string]string, scopeType string) (map[string]map[string]LowPrivilegeRaiseLimit, error) {
 	result := make(map[string]map[string]LowPrivilegeRaiseLimit)

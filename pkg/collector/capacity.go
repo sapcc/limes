@@ -34,8 +34,10 @@ import (
 	"gopkg.in/gorp.v2"
 )
 
-var scanInterval = 15 * time.Minute
-var scanInitialDelay = 1 * time.Minute
+var (
+	scanInterval     = 15 * time.Minute
+	scanInitialDelay = 1 * time.Minute
+)
 
 //ScanCapacity queries the cluster's capacity (across all enabled backend
 //services) periodically.
