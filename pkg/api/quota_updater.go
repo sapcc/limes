@@ -307,6 +307,54 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 		}
 	}
 
+	//perform project-specific checks via QuotaPlugin.IsQuotaAcceptableForProject
+	if u.Project != nil {
+		for srvType, srvInput := range input {
+			//only check if there were no other validation errors
+			hasAnyPreviousErrors := false
+			for resName := range srvInput.Resources {
+				if u.ResourceRequests[srvType][resName].ValidationError != nil {
+					hasAnyPreviousErrors = true
+					break
+				}
+			}
+			if hasAnyPreviousErrors {
+				continue
+			}
+
+			//collect the full set of quotas for this service as requested by the user
+			quotaValues := make(map[string]uint64)
+			if projectService, exists := projectReport.Services[srvType]; exists {
+				for resName, res := range projectService.Resources {
+					if !res.ExternallyManaged && !res.NoQuota && res.Quota != nil {
+						quotaValues[resName] = *res.Quota
+					}
+				}
+			}
+			for resName := range srvInput.Resources {
+				quotaValues[resName] = u.ResourceRequests[srvType][resName].NewValue
+			}
+
+			//perform validation
+			if plugin, exists := u.Cluster.QuotaPlugins[srvType]; exists {
+				provider, eo := u.Cluster.ProviderClientForService(srvType)
+				domain := core.KeystoneDomainFromDB(*u.Domain)
+				project := core.KeystoneProjectFromDB(*u.Project, domain)
+				err := plugin.IsQuotaAcceptableForProject(provider, eo, project, quotaValues)
+				if err != nil {
+					for resName := range srvInput.Resources {
+						u.ResourceRequests[srvType][resName] = QuotaRequest{
+							ValidationError: &core.QuotaValidationError{
+								Status:  http.StatusUnprocessableEntity,
+								Message: "not acceptable for this project: " + err.Error(),
+							},
+						}
+					}
+				}
+			}
+		}
+	}
+
 	return nil
 }
 

@@ -1149,9 +1149,30 @@ func Test_ProjectOperations(t *testing.T) {
 		},
 	}.Check(t, router)
 
+	plugin := cluster.QuotaPlugins["shared"].(*test.Plugin)
+	plugin.QuotaIsNotAcceptable = true
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 422,
+		ExpectBody:   assert.StringData("cannot change shared/capacity quota: not acceptable for this project: IsQuotaAcceptableForProject failed as requested for quota set capacity=5, things=10\n"),
+		Body: assert.JSONObject{
+			"project": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "shared",
+						"resources": []assert.JSONObject{
+							{"name": "capacity", "quota": 5},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+	plugin.QuotaIsNotAcceptable = false
+
 	//check PutProject: quota admissible (i.e. will be persisted in DB), but
 	//SetQuota fails for some reason (e.g. backend service down)
-	plugin := cluster.QuotaPlugins["shared"].(*test.Plugin)
 	plugin.SetQuotaFails = true
 	assert.HTTPRequest{
 		Method:       "PUT",

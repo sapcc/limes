@@ -24,6 +24,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"sort"
 	"strings"
 
 	"github.com/gophercloud/gophercloud"
@@ -210,7 +211,12 @@ func (p *Plugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.End
 //IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
 func (p *Plugin) IsQuotaAcceptableForProject(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
 	if p.QuotaIsNotAcceptable {
-		return errors.New("IsQuotaAcceptableForProjectFails failed as requested")
+		var quotasStr []string
+		for resName, quota := range quotas {
+			quotasStr = append(quotasStr, fmt.Sprintf("%s=%d", resName, quota))
+		}
+		sort.Strings(quotasStr)
+		return fmt.Errorf("IsQuotaAcceptableForProject failed as requested for quota set %s", strings.Join(quotasStr, ", "))
 	}
 	return nil
 }
