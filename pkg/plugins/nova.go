@@ -520,6 +520,12 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 	return result2, string(serializedMetrics), nil
 }
 
+//IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
+func (p *novaPlugin) IsQuotaAcceptableForProject(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
+	//not required for this plugin
+	return nil
+}
+
 //SetQuota implements the core.QuotaPlugin interface.
 func (p *novaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
 	client, err := openstack.NewComputeV2(provider, eo)

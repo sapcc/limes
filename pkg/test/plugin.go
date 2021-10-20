@@ -24,6 +24,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"sort"
 	"strings"
 
 	"github.com/gophercloud/gophercloud"
@@ -41,6 +42,7 @@ type Plugin struct {
 	OverrideQuota      map[string]map[string]uint64
 	//behavior flags that can be set by a unit test
 	ScrapeFails                   bool
+	QuotaIsNotAcceptable          bool
 	SetQuotaFails                 bool
 	WithExternallyManagedResource bool
 }
@@ -204,6 +206,19 @@ func (p *Plugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.End
 		result["capacity"].Usage, result["things"].Usage)
 
 	return result, serializedMetrics, nil
+}
+
+//IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
+func (p *Plugin) IsQuotaAcceptableForProject(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
+	if p.QuotaIsNotAcceptable {
+		var quotasStr []string
+		for resName, quota := range quotas {
+			quotasStr = append(quotasStr, fmt.Sprintf("%s=%d", resName, quota))
+		}
+		sort.Strings(quotasStr)
+		return fmt.Errorf("IsQuotaAcceptableForProject failed as requested for quota set %s", strings.Join(quotasStr, ", "))
+	}
+	return nil
 }
 
 //SetQuota implements the core.QuotaPlugin interface.

@@ -250,8 +250,30 @@ func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 	return result, "", nil
 }
 
+//IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
+func (p *manilaPlugin) IsQuotaAcceptableForProject(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
+	//check if an inaccessible share type is used
+	for _, shareType := range p.cfg.ShareV2.ShareTypes {
+		stName := resolveManilaShareType(shareType, project)
+		if stName == "" {
+			for _, kind := range []string{"shares", "share_capacity", "share_snapshots", "snapshot_capacity"} {
+				if quotas[p.makeResourceName(kind, shareType)] > 0 {
+					return fmt.Errorf("share type %q may not be used in this project", shareType.Name)
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
 //SetQuota implements the core.QuotaPlugin interface.
 func (p *manilaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
+	err := p.IsQuotaAcceptableForProject(provider, eo, project, quotas)
+	if err != nil {
+		return err
+	}
+
 	client, err := openstack.NewSharedFileSystemV2(provider, eo)
 	if err != nil {
 		return err
@@ -273,12 +295,10 @@ func (p *manilaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherc
 	for _, shareType := range p.cfg.ShareV2.ShareTypes {
 		stName := resolveManilaShareType(shareType, project)
 		if stName == "" {
-			//share type is inaccessible for this project
-			for _, kind := range []string{"shares", "share_capacity", "share_snapshots", "snapshot_capacity"} {
-				if quotas[p.makeResourceName(kind, shareType)] > 0 {
-					return fmt.Errorf("share type %q may not be used in this project", shareType.Name)
-				}
-			}
+			//NOTE: In this case, we already know that all quotas for this share type
+			//are 0 since we called IsQuotaAcceptableForProject at the start of this
+			//function. So we are guaranteed to not ignore non-zero quotas here.
+			continue
 		}
 
 		quotasForType := manilaQuotaSet{

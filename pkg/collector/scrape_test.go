@@ -368,6 +368,10 @@ func (p *autoApprovalTestPlugin) Scrape(provider *gophercloud.ProviderClient, eo
 	}, "", nil
 }
 
+func (p *autoApprovalTestPlugin) IsQuotaAcceptableForProject(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
+	return errors.New("unimplemented")
+}
+
 func (p *autoApprovalTestPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
 	return errors.New("unimplemented")
 }
@@ -411,6 +415,9 @@ func (noopQuotaPlugin) Resources() []limes.ResourceInfo {
 }
 func (noopQuotaPlugin) Scrape(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (map[string]core.ResourceData, string, error) {
 	return nil, "", nil
+}
+func (noopQuotaPlugin) IsQuotaAcceptableForProject(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
+	return nil
 }
 func (noopQuotaPlugin) SetQuota(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
 	return nil

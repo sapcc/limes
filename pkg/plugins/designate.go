@@ -127,6 +127,12 @@ func (p *designatePlugin) Scrape(provider *gophercloud.ProviderClient, eo gopher
 	}, "", nil
 }
 
+//IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
+func (p *designatePlugin) IsQuotaAcceptableForProject(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
+	//not required for this plugin
+	return nil
+}
+
 //SetQuota implements the core.QuotaPlugin interface.
 func (p *designatePlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
 	client, err := openstack.NewDNSV2(provider, eo)
