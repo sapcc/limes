@@ -160,6 +160,12 @@ func (p *cfmPlugin) scrapeOld(client *cfmClient, projectUUID string) (map[string
 	return map[string]core.ResourceData{"cfm_share_capacity": result}, "", nil
 }
 
+//IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
+func (p *cfmPlugin) IsQuotaAcceptableForProject(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
+	//not required for this plugin
+	return nil
+}
+
 //SetQuota implements the core.QuotaPlugin interface.
 func (p *cfmPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
 	if !p.cfg.CFM.Authoritative {

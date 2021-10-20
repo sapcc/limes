@@ -215,6 +215,12 @@ func (p *cinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 	return rd, "", nil
 }
 
+//IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
+func (p *cinderPlugin) IsQuotaAcceptableForProject(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
+	//not required for this plugin
+	return nil
+}
+
 //SetQuota implements the core.QuotaPlugin interface.
 func (p *cinderPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
 	var requestData struct {

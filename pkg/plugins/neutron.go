@@ -434,6 +434,12 @@ func (q neutronOrOctaviaQuotaSet) ToQuotaUpdateMap() (map[string]interface{}, er
 	return map[string]interface{}{"quota": map[string]uint64(q)}, nil
 }
 
+//IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
+func (p *neutronPlugin) IsQuotaAcceptableForProject(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
+	//not required for this plugin
+	return nil
+}
+
 //SetQuota implements the core.QuotaPlugin interface.
 func (p *neutronPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
 	//collect Neutron quotas

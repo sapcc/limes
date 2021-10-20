@@ -105,6 +105,11 @@ type QuotaPlugin interface {
 	//The serializedMetrics return value is persisted in the Limes DB and
 	//supplied to all subsequent RenderMetrics calls.
 	Scrape(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project KeystoneProject) (result map[string]ResourceData, serializedMetrics string, error error)
+	//IsQuotaAcceptableForProject checks if the given quota value is acceptable
+	//for the given project, and returns nil if the quota is acceptable, or a
+	//human-readable error otherwise. This should only be used when the
+	//acceptability of a specific quota value is tied to the project identity.
+	IsQuotaAcceptableForProject(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project KeystoneProject, quotas map[string]uint64) error
 	//SetQuota updates the backend service's quotas for the given project in the
 	//given domain to the values specified here. The map is guaranteed to contain
 	//values for all resources defined by Resources().
