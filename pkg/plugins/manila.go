@@ -69,6 +69,7 @@ func (p *manilaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud
 	if microversion == 0 {
 		return errors.New(`cannot find API microversion: no version of the form "2.x" found in advertisement`)
 	}
+	logg.Info("Manila microversion = 2.%d", microversion)
 	p.hasReplicaQuotas = microversion >= 53
 
 	return nil
@@ -240,6 +241,17 @@ func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 		if p.hasReplicaQuotas && shareType.ReplicationEnabled {
 			sharesData.Usage = quotaSets[stName].Replicas.Usage
 			shareCapacityData.Usage = quotaSets[stName].ReplicaGigabytes.Usage
+			//if share quotas and replica quotas disagree, report quota = -1 to force Limes to reapply the replica quota
+			if quotaSets[stName].Replicas.Quota != sharesData.Quota {
+				logg.Info("found mismatch between share quota (%d) and replica quota (%d) for share type %q in project %s",
+					sharesData.Quota, quotaSets[stName].Replicas.Quota, stName, project.UUID)
+				sharesData.Quota = -1
+			}
+			if quotaSets[stName].ReplicaGigabytes.Quota != shareCapacityData.Quota {
+				logg.Info("found mismatch between share capacity quota (%d) and replica capacity quota (%d) for share type %q in project %s",
+					shareCapacityData.Quota, quotaSets[stName].ReplicaGigabytes.Quota, stName, project.UUID)
+				shareCapacityData.Quota = -1
+			}
 		}
 
 		result[p.makeResourceName("shares", shareType)] = sharesData
