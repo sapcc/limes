@@ -23,6 +23,7 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sre"
 	"github.com/sapcc/limes"
@@ -41,6 +42,7 @@ func (p *v1Provider) ListClusters(w http.ResponseWriter, r *http.Request) {
 	if currentCluster == nil {
 		return
 	}
+	logg.Info("multi-cluster support is deprecated: GET /v1/clusters has been called by user %s@%s with UA %q", token.UserName(), token.UserDomainName(), r.Header.Get("User-Agent"))
 
 	var result struct {
 		CurrentCluster string                 `json:"current_cluster"`
@@ -67,6 +69,9 @@ func (p *v1Provider) GetCluster(w http.ResponseWriter, r *http.Request) {
 	showBasic := !token.Check("cluster:show")
 
 	clusterID := mux.Vars(r)["cluster_id"]
+	if clusterID != "current" {
+		logg.Info(`multi-cluster support is deprecated: GET /v1/clusters/:id has been called with ID != "current" by user %s@%s with UA %q`, token.UserName(), token.UserDomainName(), r.Header.Get("User-Agent"))
+	}
 	currentClusterID := p.Cluster.ID
 	if clusterID == "current" {
 		clusterID = currentClusterID

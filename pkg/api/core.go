@@ -30,6 +30,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/sapcc/go-bits/gopherpolicy"
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sre"
 	"github.com/sapcc/limes"
@@ -137,6 +138,11 @@ func (p *v1Provider) Path(elements ...string) string {
 //no such header). Any errors will be written into the response immediately and
 //cause a nil return value.
 func (p *v1Provider) FindClusterFromRequest(w http.ResponseWriter, r *http.Request, token *gopherpolicy.Token) *core.Cluster {
+	//log deprecation warning when X-Limes-Cluster-Id is given
+	if len(r.Header[http.CanonicalHeaderKey("X-Limes-Cluster-Id")]) > 0 {
+		logg.Info("multi-cluster support is deprecated: X-Limes-Cluster-Id header has been given by user %s@%s with UA %q", token.UserName(), token.UserDomainName(), r.Header.Get("User-Agent"))
+	}
+
 	//use current cluster if nothing else specified
 	clusterID := r.Header.Get("X-Limes-Cluster-Id")
 	if clusterID == "" || clusterID == p.Cluster.ID {
