@@ -221,7 +221,7 @@ func (c *Collector) writeCapacity(tx *gorp.Transaction, clusterID string, values
 	for serviceType := range values {
 		allServiceTypes = append(allServiceTypes, serviceType)
 	}
-	sort.Strings(allServiceTypes) //for reproducability in unit test
+	sort.Strings(allServiceTypes) //for reproducibility in unit test
 
 	for _, serviceType := range allServiceTypes {
 		_, exists := serviceIDForType[serviceType]
@@ -309,7 +309,7 @@ func (c *Collector) writeCapacity(tx *gorp.Transaction, clusterID string, values
 				missingResourceNames = append(missingResourceNames, name)
 			}
 		}
-		sort.Strings(missingResourceNames) //for reproducability in unit test
+		sort.Strings(missingResourceNames) //for reproducibility in unit test
 		for _, name := range missingResourceNames {
 			data := serviceValues[name]
 			res := &db.ClusterResource{

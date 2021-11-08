@@ -93,7 +93,7 @@ func (r QuotaRequest) MarshalJSON() ([]byte, error) {
 			})
 		}
 
-		//ensure test reproducability
+		//ensure test reproducibility
 		sort.Slice(sqs.Resources, func(i, j int) bool {
 			return sqs.Resources[i].Name < sqs.Resources[j].Name
 		})
@@ -103,7 +103,7 @@ func (r QuotaRequest) MarshalJSON() ([]byte, error) {
 		list = append(list, sqs)
 	}
 
-	//ensure test reproducability
+	//ensure test reproducibility
 	sort.Slice(list, func(i, j int) bool {
 		return list[i].Type < list[j].Type
 	})
