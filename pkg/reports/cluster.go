@@ -122,25 +122,25 @@ func GetClusters(config core.Configuration, clusterID *string, dbi db.Interface,
 
 			if service != nil {
 				if maxScrapedAt != nil {
-					val := time.Time(*maxScrapedAt).Unix()
+					val := maxScrapedAt.Unix()
 					if service.MaxScrapedAt == nil || *service.MaxScrapedAt < val {
 						service.MaxScrapedAt = &val
 					}
 				}
 				if minScrapedAt != nil {
-					val := time.Time(*minScrapedAt).Unix()
+					val := minScrapedAt.Unix()
 					if service.MinScrapedAt == nil || *service.MinScrapedAt > val {
 						service.MinScrapedAt = &val
 					}
 				}
 				if maxRatesScrapedAt != nil {
-					val := time.Time(*maxRatesScrapedAt).Unix()
+					val := maxRatesScrapedAt.Unix()
 					if service.MaxRatesScrapedAt == nil || *service.MaxRatesScrapedAt < val {
 						service.MaxRatesScrapedAt = &val
 					}
 				}
 				if minRatesScrapedAt != nil {
-					val := time.Time(*minRatesScrapedAt).Unix()
+					val := minRatesScrapedAt.Unix()
 					if service.MinRatesScrapedAt == nil || *service.MinRatesScrapedAt > val {
 						service.MinRatesScrapedAt = &val
 					}
@@ -240,7 +240,7 @@ func GetClusters(config core.Configuration, clusterID *string, dbi db.Interface,
 			}
 
 			if cluster != nil {
-				scrapedAtUnix := time.Time(scrapedAt).Unix()
+				scrapedAtUnix := scrapedAt.Unix()
 				if cluster.MaxScrapedAt == nil || *cluster.MaxScrapedAt < scrapedAtUnix {
 					cluster.MaxScrapedAt = &scrapedAtUnix
 				}
@@ -415,7 +415,7 @@ func GetClusters(config core.Configuration, clusterID *string, dbi db.Interface,
 						}
 					}
 
-					scrapedAtUnix := time.Time(scrapedAt).Unix()
+					scrapedAtUnix := scrapedAt.Unix()
 					if cluster.MaxScrapedAt == nil || *cluster.MaxScrapedAt < scrapedAtUnix {
 						cluster.MaxScrapedAt = &scrapedAtUnix
 					}

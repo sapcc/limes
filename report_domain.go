@@ -91,7 +91,7 @@ func (s *DomainServiceReports) UnmarshalJSON(b []byte) error {
 	for _, ds := range tmp {
 		t[ds.Type] = ds
 	}
-	*s = DomainServiceReports(t)
+	*s = t
 	return nil
 }
 
@@ -125,6 +125,6 @@ func (r *DomainResourceReports) UnmarshalJSON(b []byte) error {
 	for _, dr := range tmp {
 		t[dr.Name] = dr
 	}
-	*r = DomainResourceReports(t)
+	*r = t
 	return nil
 }

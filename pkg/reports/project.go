@@ -277,11 +277,11 @@ func (p projects) Find(cluster *core.Cluster, projectUUID, projectName, projectP
 			Rates:       make(limes.ProjectRateLimitReports),
 		}
 		if scrapedAt != nil {
-			scrapedAtUnix := time.Time(*scrapedAt).Unix()
+			scrapedAtUnix := scrapedAt.Unix()
 			service.ScrapedAt = &scrapedAtUnix
 		}
 		if ratesScrapedAt != nil {
-			ratesScrapedAtUnix := time.Time(*ratesScrapedAt).Unix()
+			ratesScrapedAtUnix := ratesScrapedAt.Unix()
 			service.RatesScrapedAt = &ratesScrapedAtUnix
 		}
 		project.Services[*serviceType] = service

@@ -312,7 +312,7 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 		},
 		"server_group_members": {
 			Quota: limitsData.Limits.Absolute.MaxServerGroupMembers,
-			Usage: uint64(totalServerGroupMembersUsed),
+			Usage: totalServerGroupMembersUsed,
 		},
 	}
 
@@ -459,7 +459,7 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 
 					if p.cfg.Compute.BigVMMinMemoryMiB > 0 {
 						class := "regular"
-						if uint64(flavor.MemoryMiB) >= p.cfg.Compute.BigVMMinMemoryMiB {
+						if flavor.MemoryMiB >= p.cfg.Compute.BigVMMinMemoryMiB {
 							class = "bigvm"
 						}
 						subResource["class"] = class

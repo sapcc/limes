@@ -111,7 +111,7 @@ func (s *ProjectServiceReports) UnmarshalJSON(b []byte) error {
 	for _, ps := range tmp {
 		t[ps.Type] = ps
 	}
-	*s = ProjectServiceReports(t)
+	*s = t
 	return nil
 }
 
@@ -145,7 +145,7 @@ func (r *ProjectResourceReports) UnmarshalJSON(b []byte) error {
 	for _, pr := range tmp {
 		t[pr.Name] = pr
 	}
-	*r = ProjectResourceReports(t)
+	*r = t
 	return nil
 }
 
@@ -178,6 +178,6 @@ func (r *ProjectRateLimitReports) UnmarshalJSON(b []byte) error {
 	for _, prl := range tmp {
 		t[prl.Name] = prl
 	}
-	*r = ProjectRateLimitReports(t)
+	*r = t
 	return nil
 }

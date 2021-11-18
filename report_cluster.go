@@ -107,7 +107,7 @@ func (s *ClusterServiceReports) UnmarshalJSON(b []byte) error {
 	for _, cs := range tmp {
 		t[cs.Type] = cs
 	}
-	*s = ClusterServiceReports(t)
+	*s = t
 	return nil
 }
 
@@ -141,7 +141,7 @@ func (r *ClusterResourceReports) UnmarshalJSON(b []byte) error {
 	for _, cr := range tmp {
 		t[cr.Name] = cr
 	}
-	*r = ClusterResourceReports(t)
+	*r = t
 	return nil
 }
 
@@ -175,7 +175,7 @@ func (r *ClusterAvailabilityZoneReports) UnmarshalJSON(b []byte) error {
 	for _, cr := range tmp {
 		t[cr.Name] = cr
 	}
-	*r = ClusterAvailabilityZoneReports(t)
+	*r = t
 	return nil
 }
 
@@ -208,6 +208,6 @@ func (r *ClusterRateLimitReports) UnmarshalJSON(b []byte) error {
 	for _, prl := range tmp {
 		t[prl.Name] = prl
 	}
-	*r = ClusterRateLimitReports(t)
+	*r = t
 	return nil
 }
