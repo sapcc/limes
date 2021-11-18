@@ -61,7 +61,7 @@ func ValidateProjectServices(tx *gorp.Transaction, cluster *core.Cluster, domain
 		}
 
 		//valid service -> check whether the existing quota values violate any constraints
-		compliant, err := checkProjectResourcesAgainstConstraint(tx, cluster, domain, project, srv, constraints[srv.Type])
+		compliant, err := checkProjectResourcesAgainstConstraint(tx, srv, constraints[srv.Type])
 		if err != nil {
 			return nil, err
 		}
@@ -141,7 +141,7 @@ func ValidateProjectServices(tx *gorp.Transaction, cluster *core.Cluster, domain
 	return services, nil
 }
 
-func checkProjectResourcesAgainstConstraint(tx *gorp.Transaction, cluster *core.Cluster, domain db.Domain, project db.Project, srv db.ProjectService, serviceConstraints map[string]core.QuotaConstraint) (ok bool, err error) {
+func checkProjectResourcesAgainstConstraint(tx *gorp.Transaction, srv db.ProjectService, serviceConstraints map[string]core.QuotaConstraint) (ok bool, err error) {
 	//do not hit the database if there are no constraints to check
 	if len(serviceConstraints) == 0 {
 		return true, nil

@@ -452,7 +452,7 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 					}
 
 					if len(p.hypervisorTypeRules) > 0 {
-						hypervisorType := p.getHypervisorType(client, flavor)
+						hypervisorType := p.getHypervisorType(flavor)
 						subResource["hypervisor"] = hypervisorType
 						sm.InstanceCountsByHypervisor[hypervisorType]++
 					}
@@ -475,7 +475,7 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 
 				if instance.Image == nil {
 					//instance built from bootable volume -> look at bootable volume to find OS type
-					osType, err := p.getOSTypeFromBootVolume(client, blockStorageV2, eo, instance.ID)
+					osType, err := p.getOSTypeFromBootVolume(client, blockStorageV2, instance.ID)
 					if err == nil {
 						subResource["os_type"] = osType
 					} else {
@@ -608,7 +608,7 @@ func unpackFlavorData(input map[string]interface{}) (novaFlavorInfo, error) {
 	return result, err
 }
 
-func (p *novaPlugin) getHypervisorType(client *gophercloud.ServiceClient, flavor novaFlavorInfo) string {
+func (p *novaPlugin) getHypervisorType(flavor novaFlavorInfo) string {
 	for _, rule := range p.hypervisorTypeRules {
 		switch {
 		case rule.MatchFlavorName:
@@ -624,7 +624,7 @@ func (p *novaPlugin) getHypervisorType(client *gophercloud.ServiceClient, flavor
 	return "unknown"
 }
 
-func (p *novaPlugin) getOSTypeFromBootVolume(computeV2, blockStorageV2 *gophercloud.ServiceClient, eo gophercloud.EndpointOpts, instanceID string) (string, error) {
+func (p *novaPlugin) getOSTypeFromBootVolume(computeV2, blockStorageV2 *gophercloud.ServiceClient, instanceID string) (string, error) {
 	//list volume attachments
 	page, err := volumeattach.List(computeV2, instanceID).AllPages()
 	if err != nil {

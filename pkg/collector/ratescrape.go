@@ -163,8 +163,8 @@ func (c *Collector) writeRateScrapeResult(serviceType string, serviceID int64, r
 			if !exists {
 				if rate.UsageAsBigint != "" {
 					c.LogError(
-						"could not scrape new data for rate %s in project service %d (was this rate type removed from the scraper plugin?)",
-						rate.Name, serviceID,
+						"could not scrape new data for rate %s in project service %d (was this rate type removed from the scraper plugin for %s?)",
+						rate.Name, serviceID, serviceType,
 					)
 				}
 				continue
