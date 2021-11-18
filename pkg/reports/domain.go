@@ -54,6 +54,7 @@ var domainReportQuery2 = db.SimplifyWhitespaceInSQL(`
 
 //GetDomains returns reports for all domains in the given cluster or, if
 //domainID is non-nil, for that domain only.
+// TODO: should db be replaced with dbi?
 func GetDomains(cluster *core.Cluster, domainID *int64, dbi db.Interface, filter Filter) ([]*limes.DomainReport, error) {
 	clusterCanBurst := cluster.Config.Bursting.MaxMultiplier > 0
 

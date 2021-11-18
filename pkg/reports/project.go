@@ -50,6 +50,7 @@ var (
 
 //GetProjects returns limes.ProjectReport reports for all projects in the given domain or,
 //if projectID is non-nil, for that project only.
+// TODO: should db be replaced with dbi?
 func GetProjects(cluster *core.Cluster, domain db.Domain, projectID *int64, dbi db.Interface, filter Filter) ([]*limes.ProjectReport, error) {
 	clusterCanBurst := cluster.Config.Bursting.MaxMultiplier > 0
 

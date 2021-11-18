@@ -116,6 +116,7 @@ var mmpqReportQuery = db.SimplifyWhitespaceInSQL(`
 `)
 
 //GetInconsistencies returns Inconsistency reports for all inconsistencies and their projects in the current cluster.
+// TODO: should db be replaced with dbi?
 func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter) (*Inconsistencies, error) {
 	fields := map[string]interface{}{"d.cluster_id": cluster.ID}
 
