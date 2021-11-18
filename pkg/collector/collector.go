@@ -44,7 +44,7 @@ type Collector struct {
 }
 
 //NewCollector creates a Collector instance.
-func NewCollector(cluster *core.Cluster, plugin core.QuotaPlugin, cfg core.CollectorConfiguration) *Collector {
+func NewCollector(cluster *core.Cluster, plugin core.QuotaPlugin) *Collector {
 	return &Collector{
 		Cluster:  cluster,
 		Plugin:   plugin,

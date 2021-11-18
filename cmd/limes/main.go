@@ -145,13 +145,13 @@ func taskCollect(config core.Configuration, cluster *core.Cluster, args []string
 	//can be terminated at any time without leaving the system in an inconsistent
 	//state, mostly through usage of DB transactions.)
 	for _, plugin := range cluster.QuotaPlugins {
-		c := collector.NewCollector(cluster, plugin, config.Collector)
+		c := collector.NewCollector(cluster, plugin)
 		go c.Scrape()
 		go c.ScrapeRates()
 	}
 
 	//start those collector threads which operate over all services simultaneously
-	c := collector.NewCollector(cluster, nil, config.Collector)
+	c := collector.NewCollector(cluster, nil)
 	go c.CheckConsistency()
 	go c.ScanCapacity()
 	go func() {
