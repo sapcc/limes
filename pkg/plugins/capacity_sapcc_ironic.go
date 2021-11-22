@@ -67,8 +67,17 @@ func (p *capacitySapccIronicPlugin) ID() string {
 //  where "xxxx" is unique among all hosts.
 var computeHostStubRx = regexp.MustCompile(`^nova-compute-(?:ironic-)?([a-zA-Z0-9]+)$`)
 
-//Node names are expected to be in the form "nodeXXX-bmYYY" or "nodeXXX-bbYYY" or "nodeXXX-apYYY" or such, where the second half is the host stub (the match group from above).
-var nodeNameRx = regexp.MustCompile(`^node\d+-([a-z][a-z]\d+)$`)
+//Node names are expected to be in the form "nodeXXX-bmYYY" or "nodeXXX-bbYYY"
+//or "nodeXXX-apYYY" or "nodeXXX-mdYYY", where the second half is the host stub
+//(the match group from above).
+var nodeNameRx = regexp.MustCompile(`^node\d+-((?:b[bm]|ap|md)\d+)$`)
+
+//As a special case, nodes in the control plane do not belong to any
+//user-accessible Nova aggregates, so we cannot establish an AZ association.
+//However, we don't really need the AZ association anyway: AZ capacities are
+//presented to the customer as a sort of manual scheduling hint, but CP nodes
+//are earmarked for internal use and thus are not relevant there.
+var cpNodeNameRx = regexp.MustCompile(`^node(?:swift)?\d+-(cp\d+)$`)
 
 //Scrape implements the core.CapacityPlugin interface.
 func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (map[string]map[string]core.CapacityData, string, error) {
@@ -139,14 +148,17 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 				data.Capacity++
 
 				var nodeAZ string
-				if match := nodeNameRx.FindStringSubmatch(node.Name); match != nil {
+				if match := cpNodeNameRx.FindStringSubmatch(node.Name); match != nil {
+					//special case as explained above (near definition of `cpNodeNameRx`)
+					nodeAZ = match[1]
+				} else if match := nodeNameRx.FindStringSubmatch(node.Name); match != nil {
 					nodeAZ = azForHostStub[match[1]]
 					if nodeAZ == "" {
 						logg.Info("Ironic node %q (%s) does not match any compute host from host aggregates", node.Name, node.ID)
 						nodeAZ = "unknown"
 					}
 				} else {
-					logg.Error(`Ironic node %q (%s) does not match the "nodeXXX-{bm,bb}YYY" naming convention`, node.Name, node.ID)
+					logg.Error(`Ironic node %q (%s) does not match the "nodeXXX-{bm,bb,ap,md}YYY" naming convention`, node.Name, node.ID)
 				}
 
 				if _, ok := data.CapacityPerAZ[nodeAZ]; !ok {
