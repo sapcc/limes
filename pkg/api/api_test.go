@@ -1862,7 +1862,7 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 	//test low-privilege raise limits that are specified as percentage of assigned cluster capacity over all domains
 	cluster.LowPrivilegeRaise.LimitsForDomains = map[string]map[string]core.LowPrivilegeRaiseLimit{
 		// - shared/things capacity is 246, 45% thereof is 110.7 which rounds down to 110
-		// - all shared/things domain quotas sum up to 90, of which germany has 30
+		// - current shared/things domain quotas: poland = 60, germany = 30
 		// -> germany should be able to go up to 50 before sum(domain quotas) exceeds 110
 		"shared": {"things": {UntilPercentOfClusterCapacityAssigned: 45}},
 	}
@@ -1887,6 +1887,52 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 			},
 		},
 	}.Check(t, router)
+
+	//raise another domain quota such that the auto-approval limit would be
+	//exceeded even if the "germany" domain had zero quota
+	domainPolandID, err := db.DB.SelectInt(`SELECT id FROM domains WHERE name = $1`,
+		"poland")
+	if err != nil {
+		t.Fatal(err)
+	}
+	servicePolandSharedID, err := db.DB.SelectInt(`SELECT id FROM domain_services WHERE domain_id = $1 AND type = $2`,
+		domainPolandID, "shared")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = db.DB.Exec(`UPDATE domain_resources SET quota = $1 WHERE service_id = $2 AND name = $3`,
+		130, //more than the auto-approval limit of 110
+		servicePolandSharedID, "things",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	//check a particular case that was going wrong at some point: when all
+	//other domains together already exceed the auto-approval threshold, the
+	//maximum acceptable domain quota is computed as negative and thus the
+	//conversion to uint64 goes out of bounds if not checked properly
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany",
+		ExpectStatus: 403,
+		ExpectBody:   assert.StringData("cannot change shared/things quota: user is not allowed to raise \"shared\" quotas in this domain\n"),
+		Body: assert.JSONObject{
+			"domain": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "shared",
+						"resources": []assert.JSONObject{
+							//attempt to raise should fail because low-privilege exception
+							//is not applicable because of other domain's quotas
+							{"name": "things", "quota": 35},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+
 }
 
 func expectStaleProjectServices(t *testing.T, pairs ...string) {

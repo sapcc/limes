@@ -63,7 +63,11 @@ func (l LowPrivilegeRaiseLimit) Evaluate(clusterReport limes.ClusterResourceRepo
 		}
 		percent := l.UntilPercentOfClusterCapacityAssigned / 100
 		otherDomainsQuota := float64(*clusterReport.DomainsQuota - oldQuota)
-		return uint64(percent*float64(*clusterReport.Capacity) - otherDomainsQuota)
+		maxQuota := percent*float64(*clusterReport.Capacity) - otherDomainsQuota
+		if maxQuota < 0 {
+			return 0
+		}
+		return uint64(maxQuota)
 	default:
 		return 0
 	}
