@@ -24,8 +24,8 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/gophercloud/gophercloud"
@@ -72,7 +72,7 @@ func prometheusClient(cfg core.PrometheusAPIConfiguration) (prom_v1.API, error) 
 		tlsConfig.Certificates = []tls.Certificate{clientCert}
 	}
 	if cfg.ServerCACertificatePath != "" {
-		serverCACert, err := ioutil.ReadFile(cfg.ServerCACertificatePath)
+		serverCACert, err := os.ReadFile(cfg.ServerCACertificatePath)
 		if err != nil {
 			return nil, fmt.Errorf("cannot load CA certificate from %s: %s", cfg.ServerCACertificatePath, err.Error())
 		}

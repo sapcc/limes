@@ -21,8 +21,8 @@ package core
 
 import (
 	"fmt"
-	"io/ioutil"
 	"net/http"
+	"os"
 	"regexp"
 	"strings"
 
@@ -122,7 +122,7 @@ func (c QuotaConstraint) String() string {
 //QuotaPlugin.Resources(). Hence, `cluster.Init()` needs to have been called
 //before this function is called.
 func NewQuotaConstraints(cluster *Cluster, constraintConfigPath string) (*QuotaConstraintSet, []error) {
-	buf, err := ioutil.ReadFile(constraintConfigPath)
+	buf, err := os.ReadFile(constraintConfigPath)
 	if err != nil {
 		return nil, []error{err}
 	}

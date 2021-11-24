@@ -21,7 +21,6 @@ package core
 
 import (
 	"fmt"
-	"io/ioutil"
 	"math"
 	"os"
 	"regexp"
@@ -335,7 +334,7 @@ type PrometheusAPIConfiguration struct {
 //program termination, causing the function to not return.
 func NewConfiguration(path string) (cfg Configuration) {
 	//read config file
-	configBytes, err := ioutil.ReadFile(path)
+	configBytes, err := os.ReadFile(path)
 	if err != nil {
 		logg.Fatal("read configuration file: %s", err.Error())
 	}
@@ -552,7 +551,7 @@ func (cfg configurationInFile) validate() (success bool) {
 }
 
 func loadPolicyFile(path string) (gopherpolicy.Enforcer, error) {
-	bytes, err := ioutil.ReadFile(path)
+	bytes, err := os.ReadFile(path)
 	if err != nil {
 		return nil, err
 	}
