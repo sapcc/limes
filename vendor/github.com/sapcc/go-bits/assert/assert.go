@@ -20,8 +20,11 @@
 package assert
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
+
+	"github.com/sergi/go-diff/diffmatchpatch"
 )
 
 //DeepEqual checks if the actual and expected value are equal as
@@ -32,8 +35,18 @@ func DeepEqual(t *testing.T, variable string, actual, expected interface{}) bool
 		return true
 	}
 
+	//NOTE: We HAVE TO use %#v here, even if it's verbose. Every other generic
+	//formatting directive will not correctly distinguish all values, and thus
+	//possibly render empty diffs on failure. For example,
+	//
+	//	fmt.Sprintf("%+v\n", []string{})    == "[]\n"
+	//	fmt.Sprintf("%+v\n", []string(nil)) == "[]\n"
+	//
+	dmp := diffmatchpatch.New()
+	diffs := dmp.DiffMain(fmt.Sprintf("%#v\n", actual), fmt.Sprintf("%#v\n", expected), false)
+
 	t.Error("assert.DeepEqual failed for " + variable)
-	t.Logf("\texpected = %#v\n", expected)
-	t.Logf("\t  actual = %#v\n", actual)
+	t.Logf(dmp.DiffPrettyText(diffs))
+
 	return false
 }
