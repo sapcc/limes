@@ -756,7 +756,7 @@ type novaServerGroup struct {
 
 func (p *novaPlugin) getServerGroups(client *gophercloud.ServiceClient) error {
 	if p.serverGroups.lastScrapeTime != nil {
-		if time.Since(*p.serverGroups.lastScrapeTime) < 3*time.Minute {
+		if time.Since(*p.serverGroups.lastScrapeTime) < 10*time.Minute {
 			return nil // no need to refresh cache
 		}
 	}
