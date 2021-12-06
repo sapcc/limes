@@ -66,8 +66,9 @@ type novaPlugin struct {
 	resources           []limes.ResourceInfo
 	ftt                 novaFlavorTranslationTable
 	//caches
-	osTypeForImage map[string]string
-	serverGroups   struct {
+	osTypeForImage    map[string]string
+	osTypeForInstance map[string]string
+	serverGroups      struct {
 		lastScrapeTime *time.Time
 		members        map[string]uint64 // per project
 	}
@@ -103,10 +104,12 @@ var novaDefaultResources = []limes.ResourceInfo{
 func init() {
 	core.RegisterQuotaPlugin(func(c core.ServiceConfiguration, scrapeSubresources map[string]bool) core.QuotaPlugin {
 		return &novaPlugin{
-			cfg:             c,
-			scrapeInstances: scrapeSubresources["instances"],
-			resources:       novaDefaultResources,
-			ftt:             newNovaFlavorTranslationTable(c.Compute.SeparateInstanceQuotas.FlavorAliases),
+			cfg:               c,
+			scrapeInstances:   scrapeSubresources["instances"],
+			resources:         novaDefaultResources,
+			ftt:               newNovaFlavorTranslationTable(c.Compute.SeparateInstanceQuotas.FlavorAliases),
+			osTypeForImage:    make(map[string]string),
+			osTypeForInstance: make(map[string]string),
 		}
 	})
 }
@@ -625,6 +628,11 @@ func (p *novaPlugin) getHypervisorType(flavor novaFlavorInfo) string {
 }
 
 func (p *novaPlugin) getOSTypeFromBootVolume(computeV2, blockStorageV2 *gophercloud.ServiceClient, instanceID string) (string, error) {
+	cachedResult, ok := p.osTypeForInstance[instanceID]
+	if ok {
+		return cachedResult, nil
+	}
+
 	//list volume attachments
 	page, err := volumeattach.List(computeV2, instanceID).AllPages()
 	if err != nil {
@@ -659,16 +667,13 @@ func (p *novaPlugin) getOSTypeFromBootVolume(computeV2, blockStorageV2 *gophercl
 	}
 
 	if isValidVMwareOSType[volume.ImageMetadata.VMwareOSType] {
+		p.osTypeForInstance[instanceID] = volume.ImageMetadata.VMwareOSType
 		return volume.ImageMetadata.VMwareOSType, nil
 	}
 	return "unknown", nil
 }
 
 func (p *novaPlugin) getOSTypeForImage(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, imageID string) (string, error) {
-	if p.osTypeForImage == nil {
-		p.osTypeForImage = make(map[string]string)
-	}
-
 	if osType, ok := p.osTypeForImage[imageID]; ok {
 		return osType, nil
 	}
