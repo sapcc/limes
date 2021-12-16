@@ -38,14 +38,12 @@ import (
 
 //Configuration contains all the data from the configuration file.
 type Configuration struct {
-	Clusters  map[string]*Cluster    `yaml:"-"`
-	API       APIConfiguration       `yaml:"api"`
-	Collector CollectorConfiguration `yaml:"collector"`
+	Clusters map[string]*Cluster
+	API      APIConfiguration
 }
 
 type configurationInFile struct {
-	Clusters  map[string]*ClusterConfiguration `yaml:"clusters"`
-	Collector CollectorConfiguration           `yaml:"collector"`
+	Clusters map[string]*ClusterConfiguration `yaml:"clusters"`
 }
 
 //ClusterConfiguration contains all the configuration data for a single cluster.
@@ -310,13 +308,6 @@ type APIConfiguration struct {
 	}
 }
 
-//CollectorConfiguration contains configuration parameters for limes-collect.
-type CollectorConfiguration struct {
-	MetricsListenAddress   string `yaml:"metrics"`
-	ExposeDataMetrics      bool   `yaml:"data_metrics"`
-	SkipZeroForDataMetrics bool   `yaml:"data_metrics_skip_zero"`
-}
-
 //PrometheusAPIConfiguration contains configuration parameters for a Prometheus API.
 //Only the URL field is required in the format: "http<s>://localhost<:9090>" (port is optional).
 type PrometheusAPIConfiguration struct {
@@ -369,9 +360,8 @@ func NewConfiguration(path string) (cfg Configuration) {
 	//the existence of the requested quota and capacity plugins and initializing
 	//some handy lookup tables
 	cfg = Configuration{
-		Clusters:  make(map[string]*Cluster),
-		API:       apiCfg,
-		Collector: cfgFile.Collector,
+		Clusters: make(map[string]*Cluster),
+		API:      apiCfg,
 	}
 	for clusterID, config := range cfgFile.Clusters {
 		if config.Discovery.Method == "" {
@@ -545,10 +535,6 @@ func (cfg configurationInFile) validate() (success bool) {
 		if cluster.CADF.Enabled && cluster.CADF.RabbitMQ.QueueName == "" {
 			missing("cadf.rabbitmq.queue_name")
 		}
-	}
-
-	if cfg.Collector.MetricsListenAddress == "" {
-		missing("collector.metrics")
 	}
 
 	return

@@ -168,15 +168,17 @@ func taskCollect(config core.Configuration, cluster *core.Cluster, args []string
 	prometheus.MustRegister(&collector.AggregateMetricsCollector{Cluster: cluster})
 	prometheus.MustRegister(&collector.CapacityPluginMetricsCollector{Cluster: cluster})
 	prometheus.MustRegister(&collector.QuotaPluginMetricsCollector{Cluster: cluster})
-	if config.Collector.ExposeDataMetrics {
+	if exposeMetrics, _ := strconv.ParseBool("LIMES_COLLECTOR_DATA_METRICS_EXPOSE"); exposeMetrics {
+		skipZero, _ := strconv.ParseBool("LIMES_COLLECTOR_DATA_METRICS_SKIP_ZERO")
 		prometheus.MustRegister(&collector.DataMetricsCollector{
 			Cluster:      cluster,
-			ReportZeroes: !config.Collector.SkipZeroForDataMetrics,
+			ReportZeroes: !skipZero,
 		})
 	}
 	http.Handle("/metrics", promhttp.Handler())
-	logg.Info("listening on " + config.Collector.MetricsListenAddress)
-	return httpee.ListenAndServeContext(httpee.ContextWithSIGINT(context.Background(), 10*time.Second), config.Collector.MetricsListenAddress, nil)
+	metricsListenAddr := util.EnvOrDefault("LIMES_COLLECTOR_METRICS_LISTEN_ADDRESS", ":8080")
+	logg.Info("listening on " + metricsListenAddr)
+	return httpee.ListenAndServeContext(httpee.ContextWithSIGINT(context.Background(), 10*time.Second), metricsListenAddr, nil)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
