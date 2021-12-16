@@ -24,6 +24,7 @@ import (
 	"math"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 
 	policy "github.com/databus23/goslo.policy"
@@ -31,6 +32,7 @@ import (
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/secrets"
 	"github.com/sapcc/limes"
+	"github.com/sapcc/limes/pkg/util"
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -43,7 +45,6 @@ type Configuration struct {
 
 type configurationInFile struct {
 	Clusters  map[string]*ClusterConfiguration `yaml:"clusters"`
-	API       APIConfiguration                 `yaml:"api"`
 	Collector CollectorConfiguration           `yaml:"collector"`
 }
 
@@ -299,15 +300,14 @@ type CADFConfiguration struct {
 
 //APIConfiguration contains configuration parameters for limes-serve.
 type APIConfiguration struct {
-	ListenAddress  string                `yaml:"listen"`
-	PolicyFilePath string                `yaml:"policy"`
-	PolicyEnforcer gopherpolicy.Enforcer `yaml:"-"`
+	ListenAddress  string
+	PolicyEnforcer gopherpolicy.Enforcer
 	RequestLog     struct {
-		ExceptStatusCodes []int `yaml:"except_status_codes"`
-	} `yaml:"request_log"`
+		ExceptStatusCodes []int
+	}
 	CORS struct {
-		AllowedOrigins []string `yaml:"allowed_origins"`
-	} `yaml:"cors"`
+		AllowedOrigins []string
+	}
 }
 
 //CollectorConfiguration contains configuration parameters for limes-collect.
@@ -344,12 +344,33 @@ func NewConfiguration(path string) (cfg Configuration) {
 		os.Exit(1)
 	}
 
+	//load the policy file
+	policyEnforcer, err := loadPolicyFile(util.EnvOrDefault("LIMES_API_POLICY_PATH", "/etc/limes/policy.yaml"))
+	if err != nil {
+		logg.Fatal(err.Error())
+	}
+	apiCfg := APIConfiguration{
+		ListenAddress:  util.EnvOrDefault("LIMES_API_LISTEN_ADDRESS", ":80"),
+		PolicyEnforcer: policyEnforcer,
+	}
+	apiCfg.CORS.AllowedOrigins = strings.Split(os.Getenv("LIMES_API_CORS_ALLOWED_ORIGINS"), "|")
+	exceptCodeStrings := strings.Split(os.Getenv("LIMES_API_REQUEST_LOG_EXCEPT_STATUS_CODES"), ",")
+	exceptCodes := make([]int, 0, len(exceptCodeStrings))
+	for _, v := range exceptCodeStrings {
+		code, err := strconv.Atoi(v)
+		if err != nil {
+			logg.Fatal(err.Error())
+		}
+		exceptCodes = append(exceptCodes, code)
+	}
+	apiCfg.RequestLog.ExceptStatusCodes = exceptCodes
+
 	//inflate the ClusterConfiguration instances into Cluster, thereby validating
 	//the existence of the requested quota and capacity plugins and initializing
 	//some handy lookup tables
 	cfg = Configuration{
 		Clusters:  make(map[string]*Cluster),
-		API:       cfgFile.API,
+		API:       apiCfg,
 		Collector: cfgFile.Collector,
 	}
 	for clusterID, config := range cfgFile.Clusters {
@@ -358,12 +379,6 @@ func NewConfiguration(path string) (cfg Configuration) {
 			config.Discovery.Method = "list"
 		}
 		cfg.Clusters[clusterID] = NewCluster(clusterID, config)
-	}
-
-	//load the policy file
-	cfg.API.PolicyEnforcer, err = loadPolicyFile(cfg.API.PolicyFilePath)
-	if err != nil {
-		logg.Fatal(err.Error())
 	}
 
 	return
@@ -530,13 +545,6 @@ func (cfg configurationInFile) validate() (success bool) {
 		if cluster.CADF.Enabled && cluster.CADF.RabbitMQ.QueueName == "" {
 			missing("cadf.rabbitmq.queue_name")
 		}
-	}
-
-	if cfg.API.ListenAddress == "" {
-		missing("api.listen")
-	}
-	if cfg.API.PolicyFilePath == "" {
-		missing("api.policy")
 	}
 
 	if cfg.Collector.MetricsListenAddress == "" {
