@@ -211,7 +211,6 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 		AllowRaiseLP: true,
 		AllowLower:   true,
 	}
-	config.API.PolicyEnforcer = enforcer
 
 	config.Clusters["west"].Config.ResourceBehaviors = []*core.ResourceBehaviorConfiguration{
 		//check minimum non-zero project quota constraint
@@ -257,7 +256,7 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 	}
 
 	cluster := config.Clusters[clusterName]
-	router, _ := NewV1Router(cluster, config)
+	router, _ := NewV1Router(cluster, config, enforcer)
 	return cluster, router, enforcer
 }
 

@@ -24,22 +24,17 @@ import (
 	"math"
 	"os"
 	"regexp"
-	"strconv"
 	"strings"
 
-	policy "github.com/databus23/goslo.policy"
-	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/secrets"
 	"github.com/sapcc/limes"
-	"github.com/sapcc/limes/pkg/util"
 	yaml "gopkg.in/yaml.v2"
 )
 
 //Configuration contains all the data from the configuration file.
 type Configuration struct {
 	Clusters map[string]*Cluster
-	API      APIConfiguration
 }
 
 type configurationInFile struct {
@@ -296,18 +291,6 @@ type CADFConfiguration struct {
 	} `yaml:"rabbitmq"`
 }
 
-//APIConfiguration contains configuration parameters for limes-serve.
-type APIConfiguration struct {
-	ListenAddress  string
-	PolicyEnforcer gopherpolicy.Enforcer
-	RequestLog     struct {
-		ExceptStatusCodes []int
-	}
-	CORS struct {
-		AllowedOrigins []string
-	}
-}
-
 //PrometheusAPIConfiguration contains configuration parameters for a Prometheus API.
 //Only the URL field is required in the format: "http<s>://localhost<:9090>" (port is optional).
 type PrometheusAPIConfiguration struct {
@@ -335,35 +318,11 @@ func NewConfiguration(path string) (cfg Configuration) {
 		os.Exit(1)
 	}
 
-	//load the policy file
-	policyEnforcer, err := loadPolicyFile(util.EnvOrDefault("LIMES_API_POLICY_PATH", "/etc/limes/policy.yaml"))
-	if err != nil {
-		logg.Fatal(err.Error())
-	}
-	apiCfg := APIConfiguration{
-		ListenAddress:  util.EnvOrDefault("LIMES_API_LISTEN_ADDRESS", ":80"),
-		PolicyEnforcer: policyEnforcer,
-	}
-	allowedOrigins := strings.ReplaceAll(os.Getenv("LIMES_API_CORS_ALLOWED_ORIGINS"), " ", "")
-	apiCfg.CORS.AllowedOrigins = strings.Split(allowedOrigins, "||")
-	exceptCodeStrings := strings.Split(os.Getenv("LIMES_API_REQUEST_LOG_EXCEPT_STATUS_CODES"), ",")
-	exceptCodes := make([]int, 0, len(exceptCodeStrings))
-	for _, v := range exceptCodeStrings {
-		v := strings.TrimSpace(v)
-		code, err := strconv.Atoi(v)
-		if err != nil {
-			logg.Fatal("could not parse LIMES_API_REQUEST_LOG_EXCEPT_STATUS_CODES: %s", err.Error())
-		}
-		exceptCodes = append(exceptCodes, code)
-	}
-	apiCfg.RequestLog.ExceptStatusCodes = exceptCodes
-
 	//inflate the ClusterConfiguration instances into Cluster, thereby validating
 	//the existence of the requested quota and capacity plugins and initializing
 	//some handy lookup tables
 	cfg = Configuration{
 		Clusters: make(map[string]*Cluster),
-		API:      apiCfg,
 	}
 	for clusterID, config := range cfgFile.Clusters {
 		if config.Discovery.Method == "" {
@@ -540,17 +499,4 @@ func (cfg configurationInFile) validate() (success bool) {
 	}
 
 	return
-}
-
-func loadPolicyFile(path string) (gopherpolicy.Enforcer, error) {
-	bytes, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	var rules map[string]string
-	err = yaml.Unmarshal(bytes, &rules)
-	if err != nil {
-		return nil, err
-	}
-	return policy.NewEnforcer(rules)
 }

@@ -32,11 +32,13 @@ import (
 	"strings"
 	"time"
 
+	policy "github.com/databus23/goslo.policy"
 	"github.com/dlmiddlecote/sqlstats"
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/cors"
+	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpee"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/respondwith"
@@ -45,6 +47,7 @@ import (
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/util"
+	"gopkg.in/yaml.v2"
 
 	_ "github.com/sapcc/limes/pkg/plugins"
 )
@@ -189,6 +192,12 @@ func taskServe(config core.Configuration, cluster *core.Cluster, args []string) 
 		printUsageAndExit()
 	}
 
+	//load oslo.policy file
+	policyEnforcer, err := loadPolicyFile(util.EnvOrDefault("LIMES_API_POLICY_PATH", "/etc/limes/policy.yaml"))
+	if err != nil {
+		logg.Fatal("could not load policy file: %s", err.Error())
+	}
+
 	//connect to *all* clusters - we may have to service cross-cluster requests
 	for _, otherCluster := range config.Clusters {
 		//Note that Connect() is idempotent, so this is safe even for `otherCluster == cluster`.
@@ -202,7 +211,7 @@ func taskServe(config core.Configuration, cluster *core.Cluster, args []string) 
 
 	//hook up the v1 API (this code is structured so that a newer API version can
 	//be added easily later)
-	v1Router, v1VersionData := api.NewV1Router(cluster, config)
+	v1Router, v1VersionData := api.NewV1Router(cluster, config, policyEnforcer)
 	mainRouter.PathPrefix("/v1/").Handler(v1Router)
 
 	//add the version advertisement that lists all available API versions
@@ -218,12 +227,24 @@ func taskServe(config core.Configuration, cluster *core.Cluster, args []string) 
 	http.Handle("/metrics", promhttp.Handler())
 
 	//add logging instrumentation
-	handler = logg.Middleware{ExceptStatusCodes: config.API.RequestLog.ExceptStatusCodes}.Wrap(handler)
+	exceptCodeStrings := strings.Split(os.Getenv("LIMES_API_REQUEST_LOG_EXCEPT_STATUS_CODES"), ",")
+	var exceptCodes []int
+	for _, v := range exceptCodeStrings {
+		v := strings.TrimSpace(v)
+		code, err := strconv.Atoi(v)
+		if err != nil {
+			logg.Fatal("could not parse LIMES_API_REQUEST_LOG_EXCEPT_STATUS_CODES: %s", err.Error())
+		}
+		exceptCodes = append(exceptCodes, code)
+	}
+	handler = logg.Middleware{ExceptStatusCodes: exceptCodes}.Wrap(handler)
 
 	//add CORS support
-	if len(config.API.CORS.AllowedOrigins) > 0 {
+	allowedOriginStr := strings.ReplaceAll(os.Getenv("LIMES_API_CORS_ALLOWED_ORIGINS"), " ", "")
+	allowedOrigins := strings.Split(allowedOriginStr, "||")
+	if len(allowedOrigins) > 0 {
 		handler = cors.New(cors.Options{
-			AllowedOrigins: config.API.CORS.AllowedOrigins,
+			AllowedOrigins: allowedOrigins,
 			AllowedMethods: []string{"HEAD", "GET", "POST", "PUT"},
 			AllowedHeaders: []string{"Content-Type", "User-Agent", "X-Auth-Token", "X-Limes-Cluster-Id"},
 		}).Handler(handler)
@@ -231,8 +252,9 @@ func taskServe(config core.Configuration, cluster *core.Cluster, args []string) 
 
 	//start HTTP server
 	http.Handle("/", handler)
-	logg.Info("listening on " + config.API.ListenAddress)
-	return httpee.ListenAndServeContext(httpee.ContextWithSIGINT(context.Background(), 10*time.Second), config.API.ListenAddress, nil)
+	apiListenAddr := util.EnvOrDefault("LIMES_API_LISTEN_ADDRESS", ":80")
+	logg.Info("listening on " + apiListenAddr)
+	return httpee.ListenAndServeContext(httpee.ContextWithSIGINT(context.Background(), 10*time.Second), apiListenAddr, nil)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -425,4 +447,19 @@ func taskTestScanCapacity(config core.Configuration, cluster *core.Cluster, args
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	return enc.Encode(capacities)
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Helper functions
+func loadPolicyFile(path string) (gopherpolicy.Enforcer, error) {
+	bytes, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var rules map[string]string
+	err = yaml.Unmarshal(bytes, &rules)
+	if err != nil {
+		return nil, err
+	}
+	return policy.NewEnforcer(rules)
 }
