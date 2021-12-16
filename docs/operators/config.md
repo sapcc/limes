@@ -1,7 +1,7 @@
 # Configuration guide
 
 Limes accepts configuration options via environment variables for some components and
-requires a config file ([see below](#section-clusters)) for cluster options in the [YAML format][yaml].
+requires a config file ([see below](#configuration-file)) for cluster options in the [YAML format][yaml].
 
 Use the table of contents icon
 <img src="https://github.com/github/docs/raw/main/assets/images/table-of-contents.png" width="25" height="25" />
