@@ -352,7 +352,7 @@ func NewConfiguration(path string) (cfg Configuration) {
 		v := strings.TrimSpace(v)
 		code, err := strconv.Atoi(v)
 		if err != nil {
-			logg.Fatal(err.Error())
+			logg.Fatal("could not parse LIMES_API_REQUEST_LOG_EXCEPT_STATUS_CODES: %s", err.Error())
 		}
 		exceptCodes = append(exceptCodes, code)
 	}
