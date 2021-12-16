@@ -344,10 +344,12 @@ func NewConfiguration(path string) (cfg Configuration) {
 		ListenAddress:  util.EnvOrDefault("LIMES_API_LISTEN_ADDRESS", ":80"),
 		PolicyEnforcer: policyEnforcer,
 	}
-	apiCfg.CORS.AllowedOrigins = strings.Split(os.Getenv("LIMES_API_CORS_ALLOWED_ORIGINS"), "|")
+	allowedOrigins := strings.ReplaceAll(os.Getenv("LIMES_API_CORS_ALLOWED_ORIGINS"), " ", "")
+	apiCfg.CORS.AllowedOrigins = strings.Split(allowedOrigins, "||")
 	exceptCodeStrings := strings.Split(os.Getenv("LIMES_API_REQUEST_LOG_EXCEPT_STATUS_CODES"), ",")
 	exceptCodes := make([]int, 0, len(exceptCodeStrings))
 	for _, v := range exceptCodeStrings {
+		v := strings.TrimSpace(v)
 		code, err := strconv.Atoi(v)
 		if err != nil {
 			logg.Fatal(err.Error())
