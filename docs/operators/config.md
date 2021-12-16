@@ -136,7 +136,7 @@ Limes logs all quota changes at the domain and project level in an Open Standard
 
 ### Low-privilege quota raising
 
-The Oslo policy for Limes (see [example policy](../example-policy.json)) is structured such that raising quotas requires
+The Oslo policy for Limes (see [example policy][ex-pol]) is structured such that raising quotas requires
 a different (usually higher) permission level than lowering quotas. However, through the `*:raise_lowpriv` rules,
 low-privilege users can be permitted to raise quotas within certain boundaries.
 
@@ -865,7 +865,7 @@ bear the following attributes:
 [yaml]:   http://yaml.org/
 [pq-uri]: https://www.postgresql.org/docs/9.6/static/libpq-connect.html#LIBPQ-CONNSTRING
 [policy]: https://docs.openstack.org/security-guide/identity/policies.html
-[ex-pol]: ../example-policy.json
+[ex-pol]: ../example-policy.yaml
 [prom]:   https://prometheus.io
 [shs]:    https://github.com/sapcc/swift-health-statsd
 
