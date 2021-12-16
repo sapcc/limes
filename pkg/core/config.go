@@ -31,20 +31,17 @@ import (
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/secrets"
 	"github.com/sapcc/limes"
-	"github.com/sapcc/limes/pkg/db"
 	yaml "gopkg.in/yaml.v2"
 )
 
 //Configuration contains all the data from the configuration file.
 type Configuration struct {
-	Database  db.Configuration       `yaml:"database"`
 	Clusters  map[string]*Cluster    `yaml:"-"`
 	API       APIConfiguration       `yaml:"api"`
 	Collector CollectorConfiguration `yaml:"collector"`
 }
 
 type configurationInFile struct {
-	Database  db.Configuration                 `yaml:"database"`
 	Clusters  map[string]*ClusterConfiguration `yaml:"clusters"`
 	API       APIConfiguration                 `yaml:"api"`
 	Collector CollectorConfiguration           `yaml:"collector"`
@@ -351,7 +348,6 @@ func NewConfiguration(path string) (cfg Configuration) {
 	//the existence of the requested quota and capacity plugins and initializing
 	//some handy lookup tables
 	cfg = Configuration{
-		Database:  cfgFile.Database,
 		Clusters:  make(map[string]*Cluster),
 		API:       cfgFile.API,
 		Collector: cfgFile.Collector,

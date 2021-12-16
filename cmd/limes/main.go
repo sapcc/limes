@@ -68,7 +68,7 @@ func main() {
 	clusterID, remainingArgs := os.Args[3], os.Args[4:]
 
 	//connect to database
-	err := db.Init(config.Database)
+	err := db.Init()
 	if err != nil {
 		logg.Fatal(err.Error())
 	}
