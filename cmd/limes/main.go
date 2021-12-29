@@ -21,7 +21,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -34,6 +33,7 @@ import (
 
 	policy "github.com/databus23/goslo.policy"
 	"github.com/dlmiddlecote/sqlstats"
+	"github.com/gophercloud/gophercloud"
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -64,25 +64,18 @@ func main() {
 	//load configuration
 	config := core.NewConfiguration(configPath)
 
-	//all other tasks have the <cluster-id> as os.Args[3]
+	//all tasks have the <cluster-id> as os.Args[3]
 	if len(os.Args) < 4 {
 		printUsageAndExit()
 	}
 	clusterID, remainingArgs := os.Args[3], os.Args[4:]
-
-	//connect to database
-	err := db.Init()
-	if err != nil {
-		logg.Fatal(err.Error())
-	}
-	prometheus.MustRegister(sqlstats.NewStatsCollector("limes", db.DB.Db))
 
 	//connect to cluster
 	cluster, exists := config.Clusters[clusterID]
 	if !exists {
 		logg.Fatal("no such cluster configured: " + clusterID)
 	}
-	err = cluster.Connect()
+	err := cluster.Connect()
 	if err != nil {
 		logg.Fatal(util.ErrorToString(err))
 	}
@@ -142,6 +135,13 @@ func taskCollect(config core.Configuration, cluster *core.Cluster, args []string
 		printUsageAndExit()
 	}
 
+	//connect to database
+	err := db.Init()
+	if err != nil {
+		logg.Fatal(err.Error())
+	}
+	prometheus.MustRegister(sqlstats.NewStatsCollector("limes", db.DB.Db))
+
 	//start scraping threads (NOTE: Many people use a pair of sync.WaitGroup and
 	//stop channel to shutdown threads in a controlled manner. I decided against
 	//that for now, and instead construct worker threads in such a way that they
@@ -191,6 +191,13 @@ func taskServe(config core.Configuration, cluster *core.Cluster, args []string) 
 	if len(args) != 0 {
 		printUsageAndExit()
 	}
+
+	//connect to database
+	err := db.Init()
+	if err != nil {
+		logg.Fatal(err.Error())
+	}
+	prometheus.MustRegister(sqlstats.NewStatsCollector("limes", db.DB.Db))
 
 	//load oslo.policy file
 	policyEnforcer, err := loadPolicyFile(util.EnvOrDefault("LIMES_API_POLICY_PATH", "/etc/limes/policy.yaml"))
@@ -264,9 +271,14 @@ func taskTestGetQuota(config core.Configuration, cluster *core.Cluster, args []s
 	if len(args) != 2 {
 		printUsageAndExit()
 	}
-	project, serviceType := findProjectServiceForTesting(cluster, args[0], args[1])
 
-	provider, eo := cluster.ProviderClientForService(serviceType)
+	serviceType := args[1]
+	provider, eo := getServiceProviderClient(cluster, serviceType)
+	project, err := findProjectForTesting(cluster, provider, eo, args[0])
+	if err != nil {
+		return err
+	}
+
 	result, serializedMetrics, err := cluster.QuotaPlugins[serviceType].Scrape(provider, eo, project)
 	if err != nil {
 		return err
@@ -303,9 +315,14 @@ func taskTestGetRates(config core.Configuration, cluster *core.Cluster, args []s
 	default:
 		printUsageAndExit()
 	}
-	project, serviceType := findProjectServiceForTesting(cluster, args[0], args[1])
 
-	provider, eo := cluster.ProviderClientForService(serviceType)
+	serviceType := args[1]
+	provider, eo := getServiceProviderClient(cluster, serviceType)
+	project, err := findProjectForTesting(cluster, provider, eo, args[0])
+	if err != nil {
+		return err
+	}
+
 	result, serializedState, err := cluster.QuotaPlugins[serviceType].ScrapeRates(provider, eo, project, prevSerializedState)
 	if err != nil {
 		return err
@@ -327,24 +344,30 @@ func taskTestGetRates(config core.Configuration, cluster *core.Cluster, args []s
 	return enc.Encode(result)
 }
 
-func findProjectServiceForTesting(cluster *core.Cluster, inputProjectUUID, inputServiceType string) (project core.KeystoneProject, serviceType string) {
-	serviceType = inputServiceType
+func getServiceProviderClient(cluster *core.Cluster, serviceType string) (*gophercloud.ProviderClient, gophercloud.EndpointOpts) {
 	if !cluster.HasService(serviceType) {
 		logg.Fatal("unknown service type: %s", serviceType)
 	}
+	return cluster.ProviderClientForService(serviceType)
+}
 
-	err := db.DB.QueryRow(`
-		SELECT d.name, d.uuid, p.name, p.uuid, p.parent_uuid
-		  FROM domains d JOIN projects p ON p.domain_id = d.id
-		 WHERE p.uuid = $1 AND d.cluster_id = $2
-	`, inputProjectUUID, cluster.ID).Scan(&project.Domain.Name, &project.Domain.UUID, &project.Name, &project.UUID, &project.ParentUUID)
-	if err == sql.ErrNoRows {
-		err = errors.New("no such project in this cluster")
-	}
+func findProjectForTesting(cluster *core.Cluster, client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, projectUUID string) (core.KeystoneProject, error) {
+	domains, err := cluster.DiscoveryPlugin.ListDomains(client, eo)
 	if err != nil {
-		logg.Fatal(err.Error())
+		return core.KeystoneProject{}, err
 	}
-	return
+	for _, d := range domains {
+		projects, err := cluster.DiscoveryPlugin.ListProjects(client, eo, d)
+		if err != nil {
+			return core.KeystoneProject{}, err
+		}
+		for _, p := range projects {
+			if projectUUID == p.UUID {
+				return p, nil
+			}
+		}
+	}
+	return core.KeystoneProject{}, errors.New("no such project in this cluster")
 }
 
 func dumpGeneratedPrometheusMetrics() {
@@ -386,7 +409,13 @@ func taskTestSetQuota(config core.Configuration, cluster *core.Cluster, args []s
 	if len(args) < 3 {
 		printUsageAndExit()
 	}
-	project, serviceType := findProjectServiceForTesting(cluster, args[0], args[1])
+
+	serviceType := args[1]
+	provider, eo := getServiceProviderClient(cluster, serviceType)
+	project, err := findProjectForTesting(cluster, provider, eo, args[0])
+	if err != nil {
+		return err
+	}
 
 	quotaValueRx := regexp.MustCompile(`^([^=]+)=(\d+)$`)
 	quotaValues := make(map[string]uint64)
@@ -402,7 +431,6 @@ func taskTestSetQuota(config core.Configuration, cluster *core.Cluster, args []s
 		quotaValues[match[1]] = val
 	}
 
-	provider, eo := cluster.ProviderClientForService(serviceType)
 	return cluster.QuotaPlugins[serviceType].SetQuota(provider, eo, project, quotaValues)
 }
 
