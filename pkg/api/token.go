@@ -39,7 +39,7 @@ func (p *v1Provider) CheckToken(r *http.Request) *gopherpolicy.Token {
 	auth := p.Cluster.Config.Auth
 	if auth.AuthURL == "" {
 		return &gopherpolicy.Token{
-			Enforcer: p.Config.API.PolicyEnforcer,
+			Enforcer: p.PolicyEnforcer,
 			Context: policy.Context{
 				Request: map[string]string{}, //needs to be non-nil because fields are set later
 			},
@@ -53,7 +53,7 @@ func (p *v1Provider) CheckToken(r *http.Request) *gopherpolicy.Token {
 
 	validator := gopherpolicy.TokenValidator{
 		IdentityV3: client,
-		Enforcer:   p.Config.API.PolicyEnforcer,
+		Enforcer:   p.PolicyEnforcer,
 		Cacher:     cacher,
 	}
 	t := validator.CheckToken(r)

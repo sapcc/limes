@@ -21,7 +21,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -32,11 +31,14 @@ import (
 	"strings"
 	"time"
 
+	policy "github.com/databus23/goslo.policy"
 	"github.com/dlmiddlecote/sqlstats"
+	"github.com/gophercloud/gophercloud"
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/cors"
+	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpee"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/respondwith"
@@ -45,6 +47,7 @@ import (
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/util"
+	"gopkg.in/yaml.v2"
 
 	_ "github.com/sapcc/limes/pkg/plugins"
 )
@@ -61,25 +64,18 @@ func main() {
 	//load configuration
 	config := core.NewConfiguration(configPath)
 
-	//all other tasks have the <cluster-id> as os.Args[3]
+	//all tasks have the <cluster-id> as os.Args[3]
 	if len(os.Args) < 4 {
 		printUsageAndExit()
 	}
 	clusterID, remainingArgs := os.Args[3], os.Args[4:]
-
-	//connect to database
-	err := db.Init(config.Database)
-	if err != nil {
-		logg.Fatal(err.Error())
-	}
-	prometheus.MustRegister(sqlstats.NewStatsCollector("limes", db.DB.Db))
 
 	//connect to cluster
 	cluster, exists := config.Clusters[clusterID]
 	if !exists {
 		logg.Fatal("no such cluster configured: " + clusterID)
 	}
-	err = cluster.Connect()
+	err := cluster.Connect()
 	if err != nil {
 		logg.Fatal(util.ErrorToString(err))
 	}
@@ -139,6 +135,13 @@ func taskCollect(config core.Configuration, cluster *core.Cluster, args []string
 		printUsageAndExit()
 	}
 
+	//connect to database
+	err := db.Init()
+	if err != nil {
+		logg.Fatal(err.Error())
+	}
+	prometheus.MustRegister(sqlstats.NewStatsCollector("limes", db.DB.Db))
+
 	//start scraping threads (NOTE: Many people use a pair of sync.WaitGroup and
 	//stop channel to shutdown threads in a controlled manner. I decided against
 	//that for now, and instead construct worker threads in such a way that they
@@ -168,15 +171,17 @@ func taskCollect(config core.Configuration, cluster *core.Cluster, args []string
 	prometheus.MustRegister(&collector.AggregateMetricsCollector{Cluster: cluster})
 	prometheus.MustRegister(&collector.CapacityPluginMetricsCollector{Cluster: cluster})
 	prometheus.MustRegister(&collector.QuotaPluginMetricsCollector{Cluster: cluster})
-	if config.Collector.ExposeDataMetrics {
+	if exposeMetrics, _ := strconv.ParseBool("LIMES_COLLECTOR_DATA_METRICS_EXPOSE"); exposeMetrics {
+		skipZero, _ := strconv.ParseBool("LIMES_COLLECTOR_DATA_METRICS_SKIP_ZERO")
 		prometheus.MustRegister(&collector.DataMetricsCollector{
 			Cluster:      cluster,
-			ReportZeroes: !config.Collector.SkipZeroForDataMetrics,
+			ReportZeroes: !skipZero,
 		})
 	}
 	http.Handle("/metrics", promhttp.Handler())
-	logg.Info("listening on " + config.Collector.MetricsListenAddress)
-	return httpee.ListenAndServeContext(httpee.ContextWithSIGINT(context.Background(), 10*time.Second), config.Collector.MetricsListenAddress, nil)
+	metricsListenAddr := util.EnvOrDefault("LIMES_COLLECTOR_METRICS_LISTEN_ADDRESS", ":8080")
+	logg.Info("listening on " + metricsListenAddr)
+	return httpee.ListenAndServeContext(httpee.ContextWithSIGINT(context.Background(), 10*time.Second), metricsListenAddr, nil)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -185,6 +190,19 @@ func taskCollect(config core.Configuration, cluster *core.Cluster, args []string
 func taskServe(config core.Configuration, cluster *core.Cluster, args []string) error {
 	if len(args) != 0 {
 		printUsageAndExit()
+	}
+
+	//connect to database
+	err := db.Init()
+	if err != nil {
+		logg.Fatal(err.Error())
+	}
+	prometheus.MustRegister(sqlstats.NewStatsCollector("limes", db.DB.Db))
+
+	//load oslo.policy file
+	policyEnforcer, err := loadPolicyFile(util.EnvOrDefault("LIMES_API_POLICY_PATH", "/etc/limes/policy.yaml"))
+	if err != nil {
+		logg.Fatal("could not load policy file: %s", err.Error())
 	}
 
 	//connect to *all* clusters - we may have to service cross-cluster requests
@@ -200,7 +218,7 @@ func taskServe(config core.Configuration, cluster *core.Cluster, args []string) 
 
 	//hook up the v1 API (this code is structured so that a newer API version can
 	//be added easily later)
-	v1Router, v1VersionData := api.NewV1Router(cluster, config)
+	v1Router, v1VersionData := api.NewV1Router(cluster, config, policyEnforcer)
 	mainRouter.PathPrefix("/v1/").Handler(v1Router)
 
 	//add the version advertisement that lists all available API versions
@@ -216,12 +234,24 @@ func taskServe(config core.Configuration, cluster *core.Cluster, args []string) 
 	http.Handle("/metrics", promhttp.Handler())
 
 	//add logging instrumentation
-	handler = logg.Middleware{ExceptStatusCodes: config.API.RequestLog.ExceptStatusCodes}.Wrap(handler)
+	exceptCodeStrings := strings.Split(os.Getenv("LIMES_API_REQUEST_LOG_EXCEPT_STATUS_CODES"), ",")
+	var exceptCodes []int
+	for _, v := range exceptCodeStrings {
+		v := strings.TrimSpace(v)
+		code, err := strconv.Atoi(v)
+		if err != nil {
+			logg.Fatal("could not parse LIMES_API_REQUEST_LOG_EXCEPT_STATUS_CODES: %s", err.Error())
+		}
+		exceptCodes = append(exceptCodes, code)
+	}
+	handler = logg.Middleware{ExceptStatusCodes: exceptCodes}.Wrap(handler)
 
 	//add CORS support
-	if len(config.API.CORS.AllowedOrigins) > 0 {
+	allowedOriginStr := strings.ReplaceAll(os.Getenv("LIMES_API_CORS_ALLOWED_ORIGINS"), " ", "")
+	allowedOrigins := strings.Split(allowedOriginStr, "||")
+	if len(allowedOrigins) > 0 {
 		handler = cors.New(cors.Options{
-			AllowedOrigins: config.API.CORS.AllowedOrigins,
+			AllowedOrigins: allowedOrigins,
 			AllowedMethods: []string{"HEAD", "GET", "POST", "PUT"},
 			AllowedHeaders: []string{"Content-Type", "User-Agent", "X-Auth-Token", "X-Limes-Cluster-Id"},
 		}).Handler(handler)
@@ -229,8 +259,9 @@ func taskServe(config core.Configuration, cluster *core.Cluster, args []string) 
 
 	//start HTTP server
 	http.Handle("/", handler)
-	logg.Info("listening on " + config.API.ListenAddress)
-	return httpee.ListenAndServeContext(httpee.ContextWithSIGINT(context.Background(), 10*time.Second), config.API.ListenAddress, nil)
+	apiListenAddr := util.EnvOrDefault("LIMES_API_LISTEN_ADDRESS", ":80")
+	logg.Info("listening on " + apiListenAddr)
+	return httpee.ListenAndServeContext(httpee.ContextWithSIGINT(context.Background(), 10*time.Second), apiListenAddr, nil)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -240,9 +271,14 @@ func taskTestGetQuota(config core.Configuration, cluster *core.Cluster, args []s
 	if len(args) != 2 {
 		printUsageAndExit()
 	}
-	project, serviceType := findProjectServiceForTesting(cluster, args[0], args[1])
 
-	provider, eo := cluster.ProviderClientForService(serviceType)
+	serviceType := args[1]
+	provider, eo := getServiceProviderClient(cluster, serviceType)
+	project, err := findProjectForTesting(cluster, provider, eo, args[0])
+	if err != nil {
+		return err
+	}
+
 	result, serializedMetrics, err := cluster.QuotaPlugins[serviceType].Scrape(provider, eo, project)
 	if err != nil {
 		return err
@@ -279,9 +315,14 @@ func taskTestGetRates(config core.Configuration, cluster *core.Cluster, args []s
 	default:
 		printUsageAndExit()
 	}
-	project, serviceType := findProjectServiceForTesting(cluster, args[0], args[1])
 
-	provider, eo := cluster.ProviderClientForService(serviceType)
+	serviceType := args[1]
+	provider, eo := getServiceProviderClient(cluster, serviceType)
+	project, err := findProjectForTesting(cluster, provider, eo, args[0])
+	if err != nil {
+		return err
+	}
+
 	result, serializedState, err := cluster.QuotaPlugins[serviceType].ScrapeRates(provider, eo, project, prevSerializedState)
 	if err != nil {
 		return err
@@ -303,24 +344,30 @@ func taskTestGetRates(config core.Configuration, cluster *core.Cluster, args []s
 	return enc.Encode(result)
 }
 
-func findProjectServiceForTesting(cluster *core.Cluster, inputProjectUUID, inputServiceType string) (project core.KeystoneProject, serviceType string) {
-	serviceType = inputServiceType
+func getServiceProviderClient(cluster *core.Cluster, serviceType string) (*gophercloud.ProviderClient, gophercloud.EndpointOpts) {
 	if !cluster.HasService(serviceType) {
 		logg.Fatal("unknown service type: %s", serviceType)
 	}
+	return cluster.ProviderClientForService(serviceType)
+}
 
-	err := db.DB.QueryRow(`
-		SELECT d.name, d.uuid, p.name, p.uuid, p.parent_uuid
-		  FROM domains d JOIN projects p ON p.domain_id = d.id
-		 WHERE p.uuid = $1 AND d.cluster_id = $2
-	`, inputProjectUUID, cluster.ID).Scan(&project.Domain.Name, &project.Domain.UUID, &project.Name, &project.UUID, &project.ParentUUID)
-	if err == sql.ErrNoRows {
-		err = errors.New("no such project in this cluster")
-	}
+func findProjectForTesting(cluster *core.Cluster, client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, projectUUID string) (core.KeystoneProject, error) {
+	domains, err := cluster.DiscoveryPlugin.ListDomains(client, eo)
 	if err != nil {
-		logg.Fatal(err.Error())
+		return core.KeystoneProject{}, err
 	}
-	return
+	for _, d := range domains {
+		projects, err := cluster.DiscoveryPlugin.ListProjects(client, eo, d)
+		if err != nil {
+			return core.KeystoneProject{}, err
+		}
+		for _, p := range projects {
+			if projectUUID == p.UUID {
+				return p, nil
+			}
+		}
+	}
+	return core.KeystoneProject{}, errors.New("no such project in this cluster")
 }
 
 func dumpGeneratedPrometheusMetrics() {
@@ -362,7 +409,13 @@ func taskTestSetQuota(config core.Configuration, cluster *core.Cluster, args []s
 	if len(args) < 3 {
 		printUsageAndExit()
 	}
-	project, serviceType := findProjectServiceForTesting(cluster, args[0], args[1])
+
+	serviceType := args[1]
+	provider, eo := getServiceProviderClient(cluster, serviceType)
+	project, err := findProjectForTesting(cluster, provider, eo, args[0])
+	if err != nil {
+		return err
+	}
 
 	quotaValueRx := regexp.MustCompile(`^([^=]+)=(\d+)$`)
 	quotaValues := make(map[string]uint64)
@@ -378,7 +431,6 @@ func taskTestSetQuota(config core.Configuration, cluster *core.Cluster, args []s
 		quotaValues[match[1]] = val
 	}
 
-	provider, eo := cluster.ProviderClientForService(serviceType)
 	return cluster.QuotaPlugins[serviceType].SetQuota(provider, eo, project, quotaValues)
 }
 
@@ -423,4 +475,19 @@ func taskTestScanCapacity(config core.Configuration, cluster *core.Cluster, args
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	return enc.Encode(capacities)
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Helper functions
+func loadPolicyFile(path string) (gopherpolicy.Enforcer, error) {
+	bytes, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var rules map[string]string
+	err = yaml.Unmarshal(bytes, &rules)
+	if err != nil {
+		return nil, err
+	}
+	return policy.NewEnforcer(rules)
 }

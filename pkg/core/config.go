@@ -26,28 +26,19 @@ import (
 	"regexp"
 	"strings"
 
-	policy "github.com/databus23/goslo.policy"
-	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/secrets"
 	"github.com/sapcc/limes"
-	"github.com/sapcc/limes/pkg/db"
 	yaml "gopkg.in/yaml.v2"
 )
 
 //Configuration contains all the data from the configuration file.
 type Configuration struct {
-	Database  db.Configuration       `yaml:"database"`
-	Clusters  map[string]*Cluster    `yaml:"-"`
-	API       APIConfiguration       `yaml:"api"`
-	Collector CollectorConfiguration `yaml:"collector"`
+	Clusters map[string]*Cluster
 }
 
 type configurationInFile struct {
-	Database  db.Configuration                 `yaml:"database"`
-	Clusters  map[string]*ClusterConfiguration `yaml:"clusters"`
-	API       APIConfiguration                 `yaml:"api"`
-	Collector CollectorConfiguration           `yaml:"collector"`
+	Clusters map[string]*ClusterConfiguration `yaml:"clusters"`
 }
 
 //ClusterConfiguration contains all the configuration data for a single cluster.
@@ -300,26 +291,6 @@ type CADFConfiguration struct {
 	} `yaml:"rabbitmq"`
 }
 
-//APIConfiguration contains configuration parameters for limes-serve.
-type APIConfiguration struct {
-	ListenAddress  string                `yaml:"listen"`
-	PolicyFilePath string                `yaml:"policy"`
-	PolicyEnforcer gopherpolicy.Enforcer `yaml:"-"`
-	RequestLog     struct {
-		ExceptStatusCodes []int `yaml:"except_status_codes"`
-	} `yaml:"request_log"`
-	CORS struct {
-		AllowedOrigins []string `yaml:"allowed_origins"`
-	} `yaml:"cors"`
-}
-
-//CollectorConfiguration contains configuration parameters for limes-collect.
-type CollectorConfiguration struct {
-	MetricsListenAddress   string `yaml:"metrics"`
-	ExposeDataMetrics      bool   `yaml:"data_metrics"`
-	SkipZeroForDataMetrics bool   `yaml:"data_metrics_skip_zero"`
-}
-
 //PrometheusAPIConfiguration contains configuration parameters for a Prometheus API.
 //Only the URL field is required in the format: "http<s>://localhost<:9090>" (port is optional).
 type PrometheusAPIConfiguration struct {
@@ -351,10 +322,7 @@ func NewConfiguration(path string) (cfg Configuration) {
 	//the existence of the requested quota and capacity plugins and initializing
 	//some handy lookup tables
 	cfg = Configuration{
-		Database:  cfgFile.Database,
-		Clusters:  make(map[string]*Cluster),
-		API:       cfgFile.API,
-		Collector: cfgFile.Collector,
+		Clusters: make(map[string]*Cluster),
 	}
 	for clusterID, config := range cfgFile.Clusters {
 		if config.Discovery.Method == "" {
@@ -362,12 +330,6 @@ func NewConfiguration(path string) (cfg Configuration) {
 			config.Discovery.Method = "list"
 		}
 		cfg.Clusters[clusterID] = NewCluster(clusterID, config)
-	}
-
-	//load the policy file
-	cfg.API.PolicyEnforcer, err = loadPolicyFile(cfg.API.PolicyFilePath)
-	if err != nil {
-		logg.Fatal(err.Error())
 	}
 
 	return
@@ -536,29 +498,5 @@ func (cfg configurationInFile) validate() (success bool) {
 		}
 	}
 
-	if cfg.API.ListenAddress == "" {
-		missing("api.listen")
-	}
-	if cfg.API.PolicyFilePath == "" {
-		missing("api.policy")
-	}
-
-	if cfg.Collector.MetricsListenAddress == "" {
-		missing("collector.metrics")
-	}
-
 	return
-}
-
-func loadPolicyFile(path string) (gopherpolicy.Enforcer, error) {
-	bytes, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	var rules map[string]string
-	err = yaml.Unmarshal(bytes, &rules)
-	if err != nil {
-		return nil, err
-	}
-	return policy.NewEnforcer(rules)
 }

@@ -23,50 +23,34 @@ import (
 	"database/sql"
 	"net"
 	"net/url"
-	"strconv"
+	"os"
 
 	gorp "gopkg.in/gorp.v2"
 
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/logg"
-	"github.com/sapcc/go-bits/secrets"
+	"github.com/sapcc/limes/pkg/util"
 )
 
-//DB holds the main database connection. It will be `nil` until InitDatabase() is called.
+//DB holds the main database connection. It will be `nil` until either Init() or
+//test.InitDatabase() is called.
 var DB *gorp.DbMap
 
-//Configuration is the section of the global configuration file that
-//contains the connection info for the Postgres database.
-type Configuration struct {
-	Name              string               `yaml:"name"`
-	Username          string               `yaml:"username"`
-	Password          secrets.AuthPassword `yaml:"password"`
-	Hostname          string               `yaml:"hostname"`
-	Port              int                  `yaml:"port"`
-	ConnectionOptions string               `yaml:"connection_options"`
-}
-
 //Init initializes the connection to the database.
-func Init(cfg Configuration) error {
-	if cfg.Name == "" {
-		cfg.Name = "limes"
-	}
-	if cfg.Username == "" {
-		cfg.Username = "postgres"
-	}
-	if cfg.Hostname == "" {
-		cfg.Hostname = "localhost"
-	}
-	if cfg.Port == 0 {
-		cfg.Port = 5432
-	}
+func Init() error {
+	username := util.EnvOrDefault("LIMES_DB_USERNAME", "postgres")
+	pass := os.Getenv("LIMES_DB_PASSWORD")
+	host := util.EnvOrDefault("LIMES_DB_HOSTNAME", "localhost")
+	port := util.EnvOrDefault("LIMES_DB_PORT", "5432")
+	name := util.EnvOrDefault("LIMES_DB_NAME", "limes")
+	connOpts := os.Getenv("LIMES_DB_CONNECTION_OPTIONS")
 
 	dbURL := &url.URL{
 		Scheme:   "postgres",
-		User:     url.UserPassword(cfg.Username, string(cfg.Password)),
-		Host:     net.JoinHostPort(cfg.Hostname, strconv.Itoa(cfg.Port)),
-		Path:     cfg.Name,
-		RawQuery: cfg.ConnectionOptions,
+		User:     url.UserPassword(username, pass),
+		Host:     net.JoinHostPort(host, port),
+		Path:     name,
+		RawQuery: connOpts,
 	}
 
 	db, err := easypg.Connect(easypg.Configuration{

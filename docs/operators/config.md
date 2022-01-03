@@ -1,17 +1,53 @@
 # Configuration guide
 
-Limes requires a configuration file in [YAML format][yaml]. A minimal complete configuration could look like this:
+Limes accepts configuration options via environment variables for some components and
+requires a config file ([see below](#configuration-file)) for cluster options in the [YAML format][yaml].
+
+Use the table of contents icon
+<img src="https://github.com/github/docs/raw/main/assets/images/table-of-contents.png" width="25" height="25" />
+on the top left corner of this document to get to a specific section of this guide quickly.
+
+# Configuration options
+
+## Database
+
+Configuration options relating to the database connection of all services.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `LIMES_DB_NAME` | `limes` | The name of the database. |
+| `LIMES_DB_USERNAME` | `postgres` | Username of the user that Limes should use to connect to the database. |
+| `LIMES_DB_PASSWORD` | *(optional)* | Password for the specified user. |
+| `LIMES_DB_HOSTNAME` | `localhost` | Hostname of the database server. |
+| `LIMES_DB_PORT` | `5432` | Port on which the PostgreSQL service is running on. |
+| `LIMES_DB_CONNECTION_OPTIONS` | *(optional)* | Database connection options. |
+
+## API
+
+Configuration options relating to the behavior of the API service.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `LIMES_API_LISTEN_ADDRESS` | `:80` | Bind address for the HTTP API exposed by this service, e.g. `127.0.0.1:80` to bind only on one IP, or `:80` to bind on all interfaces and addresses. |
+| `LIMES_API_POLICY_PATH` | `/etc/limes/policy.yaml` | Path to the oslo.policy file that describes authorization behavior for this service. Please refer to the [OpenStack documentation on policies][policy] for syntax reference. This repository includes an [example policy][ex-pol] that can be used for development setups, or as a basis for writing your own policy. For `:raise`, `:raise_lowpriv`, `:lower` and `:set_rate_limit` policies, the object attribute `%(service_type)s` is available to restrict editing to certain service types. |
+| `LIMES_API_REQUEST_LOG_EXCEPT_STATUS_CODES` | *(optional)* | A comma-separated list of HTTP status codes for which requests will not be logged. A useful setting is `300` when using `GET /` requests as a healthcheck. |
+| `LIMES_API_CORS_ALLOWED_ORIGINS` | no | A list of CORS origins from which requests to the API are permitted. List elements should have `\|\|` as separator. E.g. `https://one.com\|\|https://two.com`. |
+
+## Collector
+
+Configuration options relating to the behavior of the collector service.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `LIMES_COLLECTOR_METRICS_LISTEN_ADDRESS` | `:8080` | Bind address for the Prometheus metrics endpoint provided by this service. See `LIMES_API_LISTEN_ADDRESS` for acceptable values. |
+| `LIMES_COLLECTOR_DATA_METRICS_EXPOSE` | `false` | If set to `true`, expose all quota/usage/capacity data as Prometheus gauges. This is disabled by default because this can be a lot of data for OpenStack clusters containing many projects, domains and services. |
+| `LIMES_COLLECTOR_DATA_METRICS_SKIP_ZERO` | `false` | If set to `true`, data metrics will only be emitted for non-zero values. In large deployments, this can substantially reduce the amount of timeseries emitted. |
+
+# Configuration file
+
+A minimal config file could look like this:
 
 ```yaml
-api:
-  listen: "127.0.0.1:8080"
-  policy: "/etc/limes/policy.json"
-  cors:
-    allowed_origins: [ "https://dashboard.example.com" ]
-
-collector:
-  metrics: "127.0.0.1:8081"
-
 clusters:
   staging:
     auth:
@@ -43,91 +79,17 @@ clusters:
       max_multiplier: 0.2
 ```
 
-Read on for the full list and description of all configuration options.
-
-### Table of Contents
-
-* [Configuration guide](#configuration-guide)
-  * [Section "database"](#section-database)
-  * [Section "api"](#section-api)
-  * [Section "collector"](#section-collector)
-  * [Section "clusters"](#section-clusters)
-    * [Audit trail](#audit-trail)
-    * [Low\-privilege quota raising](#low-privilege-quota-raising)
-    * [Resource behavior](#resource-behavior)
-* [Supported discovery methods](#supported-discovery-methods)
-  * [Method: list (default)](#method-list-default)
-  * [Method: role\-assignment](#method-role-assignment)
-* [Supported service types](#supported-service-types)
-  * [compute: Nova v2](#compute-nova-v2)
-    * [Instance price classes](#instance-price-classes)
-    * [Instance subresources](#instance-subresources)
-    * [Separate instance quotas](#separate-instance-quotas)
-  * [database: SAP Cloud Frame Manager](#database-sap-cloud-frame-manager)
-  * [dns: Designate v2](#dns-designate-v2)
-  * [email\-aws: Cronus v1 (SAP Converged Cloud only)](#email-aws-cronus-v1-sap-converged-cloud-only)
-  * [keppel: Keppel v1](#keppel-keppel-v1)
-  * [network: Neutron v1](#network-neutron-v1)
-  * [object\-store: Swift v1](#object-store-swift-v1)
-  * [sharev2: Manila v2](#sharev2-manila-v2)
-    * [Physical usage](#physical-usage)
-  * [volumev2: Cinder v2](#volumev2-cinder-v2)
-* [Available capacity plugins](#available-capacity-plugins)
-  * [cfm](#cfm)
-  * [cinder](#cinder)
-  * [manila](#manila)
-    * [Capacity balance](#capacity-balance)
-  * [manual](#manual)
-  * [nova](#nova)
-  * [prometheus](#prometheus)
-  * [sapcc\-ironic](#sapcc-ironic)
-  * [Rate Limits](#rate-limits)
-
----
-
-## Section "database"
-
-Configuration options relating to the database connection of all services.
-
-| Field | Default | Description |
-| --- | --- | --- |
-| `database.name` | `limes` | The name of the database. |
-| `database.username` | `postgres` | Username of the user that Limes should use to connect to the database. |
-| `database.password` | *(optional)* | Password for the specified user. |
-| `database.hostname` | `localhost` | Hostname of the database server. |
-| `database.port` | `5432` | Port on which the PostgreSQL service is running on. |
-| `database.connection_options` | *(optional)* | Database connection options. |
-
-Instead of providing `database.password` as plain text in the config file, you
-can use a special syntax to read the respective password from an exported
-environment variable:
+Instead of providing `clusters.$id.auth.password` as plain text in the config
+file, you can use a special syntax to read the respective password from an
+exported environment variable:
 
 ```yaml
 password: { fromEnv: ENVIRONMENT_VARIABLE }
 ```
 
-## Section "api"
+Read on for the full list and description of all configuration fields.
 
-Configuration options relating to the behavior of the API service.
-
-| Field | Required | Description |
-| --- | --- | --- |
-| `api.listen` | yes | Bind address for the HTTP API exposed by this service, e.g. `127.0.0.1:8080` to bind only on one IP, or `:8080` to bind on all interfaces and addresses. |
-| `api.policy` | yes | Path to the oslo.policy file that describes authorization behavior for this service. Please refer to the [OpenStack documentation on policies][policy] for syntax reference. This repository includes an [example policy][ex-pol] that can be used for development setups, or as a basis for writing your own policy. For `:raise`, `:raise_lowpriv`, `:lower` and `:set_rate_limit` policies, the object attribute `%(service_type)s` is available to restrict editing to certain service types. |
-| `api.request_log.except_status_codes` | no | A list of HTTP status codes for which requests will not be logged. A useful setting is `[300]` when using `GET /` requests as a healthcheck. |
-| `api.cors.allowed_origins` | no | A list of CORS origins from which requests to the API are permitted. |
-
-## Section "collector"
-
-Configuration options relating to the behavior of the collector service.
-
-| Field | Required | Description |
-| --- | --- | --- |
-| `collector.metrics` | yes | Bind address for the Prometheus metrics endpoint provided by this service. See `api.listen` for acceptable values. |
-| `collector.data_metrics` | no | If set to `true`, expose all quota/usage/capacity data as Prometheus gauges. This is disabled by default because this can be a lot of data for OpenStack clusters containing many projects, domains and services. |
-| `collector.data_metrics_skip_zero` | no | If set to `true`, data metrics will only be emitted for non-zero values. In large deployments, this can substantially reduce the amount of timeseries emitted. |
-
-## Section "clusters"
+## Clusters
 
 Configuration options describing the OpenStack clusters which Limes shall cover. `$id` is the internal *cluster ID*, which may be chosen freely, but should not be changed afterwards. (It *can* be changed, but that requires a shutdown of all Limes components and manual editing of the database.)
 
@@ -182,7 +144,7 @@ Limes logs all quota changes at the domain and project level in an Open Standard
 
 ### Low-privilege quota raising
 
-The Oslo policy for Limes (see [example policy](../example-policy.json)) is structured such that raising quotas requires
+The Oslo policy for Limes (see [example policy][ex-pol]) is structured such that raising quotas requires
 a different (usually higher) permission level than lowering quotas. However, through the `*:raise_lowpriv` rules,
 low-privilege users can be permitted to raise quotas within certain boundaries.
 
@@ -911,7 +873,7 @@ bear the following attributes:
 [yaml]:   http://yaml.org/
 [pq-uri]: https://www.postgresql.org/docs/9.6/static/libpq-connect.html#LIBPQ-CONNSTRING
 [policy]: https://docs.openstack.org/security-guide/identity/policies.html
-[ex-pol]: ../example-policy.json
+[ex-pol]: ../example-policy.yaml
 [prom]:   https://prometheus.io
 [shs]:    https://github.com/sapcc/swift-health-statsd
 

@@ -55,9 +55,10 @@ type VersionLinkData struct {
 }
 
 type v1Provider struct {
-	Cluster     *core.Cluster
-	Config      core.Configuration
-	VersionData VersionData
+	Cluster        *core.Cluster
+	Config         core.Configuration
+	PolicyEnforcer gopherpolicy.Enforcer
+	VersionData    VersionData
 	//see comment in ListProjects() for details
 	listProjectsMutex sync.Mutex
 }
@@ -65,11 +66,12 @@ type v1Provider struct {
 //NewV1Router creates a http.Handler that serves the Limes v1 API.
 //It also returns the VersionData for this API version which is needed for the
 //version advertisement on "GET /".
-func NewV1Router(cluster *core.Cluster, config core.Configuration) (http.Handler, VersionData) {
+func NewV1Router(cluster *core.Cluster, config core.Configuration, policyEnforcer gopherpolicy.Enforcer) (http.Handler, VersionData) {
 	r := mux.NewRouter()
 	p := &v1Provider{
-		Cluster: cluster,
-		Config:  config,
+		Cluster:        cluster,
+		Config:         config,
+		PolicyEnforcer: policyEnforcer,
 	}
 	p.VersionData = VersionData{
 		Status: "CURRENT",
