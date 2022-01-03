@@ -171,8 +171,8 @@ func taskCollect(config core.Configuration, cluster *core.Cluster, args []string
 	prometheus.MustRegister(&collector.AggregateMetricsCollector{Cluster: cluster})
 	prometheus.MustRegister(&collector.CapacityPluginMetricsCollector{Cluster: cluster})
 	prometheus.MustRegister(&collector.QuotaPluginMetricsCollector{Cluster: cluster})
-	if exposeMetrics, _ := strconv.ParseBool("LIMES_COLLECTOR_DATA_METRICS_EXPOSE"); exposeMetrics {
-		skipZero, _ := strconv.ParseBool("LIMES_COLLECTOR_DATA_METRICS_SKIP_ZERO")
+	if exposeMetrics, _ := strconv.ParseBool(os.Getenv("LIMES_COLLECTOR_DATA_METRICS_EXPOSE")); exposeMetrics {
+		skipZero, _ := strconv.ParseBool(os.Getenv("LIMES_COLLECTOR_DATA_METRICS_SKIP_ZERO"))
 		prometheus.MustRegister(&collector.DataMetricsCollector{
 			Cluster:      cluster,
 			ReportZeroes: !skipZero,
