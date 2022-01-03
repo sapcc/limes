@@ -31,7 +31,7 @@ Configuration options relating to the behavior of the API service.
 | `LIMES_API_LISTEN_ADDRESS` | `:80` | Bind address for the HTTP API exposed by this service, e.g. `127.0.0.1:80` to bind only on one IP, or `:80` to bind on all interfaces and addresses. |
 | `LIMES_API_POLICY_PATH` | `/etc/limes/policy.yaml` | Path to the oslo.policy file that describes authorization behavior for this service. Please refer to the [OpenStack documentation on policies][policy] for syntax reference. This repository includes an [example policy][ex-pol] that can be used for development setups, or as a basis for writing your own policy. For `:raise`, `:raise_lowpriv`, `:lower` and `:set_rate_limit` policies, the object attribute `%(service_type)s` is available to restrict editing to certain service types. |
 | `LIMES_API_REQUEST_LOG_EXCEPT_STATUS_CODES` | *(optional)* | A comma-separated list of HTTP status codes for which requests will not be logged. A useful setting is `300` when using `GET /` requests as a healthcheck. |
-| `LIMES_API_CORS_ALLOWED_ORIGINS` | no | A list of CORS origins from which requests to the API are permitted. List elements should have `\|\|` as separator. E.g. `https://one.com \|\| https://two.com`. |
+| `LIMES_API_CORS_ALLOWED_ORIGINS` | no | A list of CORS origins from which requests to the API are permitted. List elements should have `\|\|` as separator. E.g. `https://one.com\|\|https://two.com`. |
 
 ## Collector
 
@@ -39,7 +39,7 @@ Configuration options relating to the behavior of the collector service.
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `LIMES_COLLECTOR_METRICS_LISTEN_ADDRESS` | `:8080` | Bind address for the Prometheus metrics endpoint provided by this service. See `api.listen` for acceptable values. |
+| `LIMES_COLLECTOR_METRICS_LISTEN_ADDRESS` | `:8080` | Bind address for the Prometheus metrics endpoint provided by this service. See `LIMES_API_LISTEN_ADDRESS` for acceptable values. |
 | `LIMES_COLLECTOR_DATA_METRICS_EXPOSE` | `false` | If set to `true`, expose all quota/usage/capacity data as Prometheus gauges. This is disabled by default because this can be a lot of data for OpenStack clusters containing many projects, domains and services. |
 | `LIMES_COLLECTOR_DATA_METRICS_SKIP_ZERO` | `false` | If set to `true`, data metrics will only be emitted for non-zero values. In large deployments, this can substantially reduce the amount of timeseries emitted. |
 
@@ -77,6 +77,14 @@ clusters:
     constraints: /etc/limes/constraints-for-staging.yaml
     bursting:
       max_multiplier: 0.2
+```
+
+Instead of providing `clusters.$id.auth.password` as plain text in the config
+file, you can use a special syntax to read the respective password from an
+exported environment variable:
+
+```yaml
+password: { fromEnv: ENVIRONMENT_VARIABLE }
 ```
 
 Read on for the full list and description of all configuration fields.
