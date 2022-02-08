@@ -22,6 +22,7 @@ package plugins
 import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
+	"github.com/gophercloud/gophercloud/openstack/identity/v3/domains"
 	"github.com/gophercloud/gophercloud/openstack/identity/v3/projects"
 	"github.com/sapcc/limes/pkg/core"
 )
@@ -48,19 +49,23 @@ func (p *listDiscoveryPlugin) ListDomains(provider *gophercloud.ProviderClient, 
 		return nil, err
 	}
 
-	//gophercloud does not support domain listing yet - do it manually
-	url := client.ServiceURL("domains")
-	var result gophercloud.Result
-	_, err = client.Get(url, &result.Body, nil)
+	allPages, err := domains.List(client, nil).AllPages()
+	if err != nil {
+		return nil, err
+	}
+	allDomains, err := domains.ExtractDomains(allPages)
 	if err != nil {
 		return nil, err
 	}
 
-	var data struct {
-		Domains []core.KeystoneDomain `json:"domains"`
+	var result []core.KeystoneDomain
+	for _, p := range allDomains {
+		result = append(result, core.KeystoneDomain{
+			UUID: p.ID,
+			Name: p.Name,
+		})
 	}
-	err = result.ExtractInto(&data)
-	return data.Domains, err
+	return result, nil
 }
 
 //ListProjects implements the core.DiscoveryPlugin interface.
