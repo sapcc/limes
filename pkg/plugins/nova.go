@@ -200,7 +200,7 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.E
 			return err
 		}
 		//the format of rule.Key is built for future extensibility, e.g. if it
-		//later becomes required to match against image capabilties
+		//later becomes required to match against image capabilities
 		switch {
 		case rule.Key == "flavor-name":
 			p.hypervisorTypeRules = append(p.hypervisorTypeRules, novaHypervisorTypeRule{
