@@ -43,3 +43,5 @@ require (
 	golang.org/x/sys v0.0.0-20220114195835-da31bd327af9 // indirect
 	google.golang.org/protobuf v1.26.0 // indirect
 )
+
+replace github.com/gophercloud/gophercloud => github.com/gophercloud/gophercloud v0.24.1-0.20220209210756-c2c9a5564161

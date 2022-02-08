@@ -25,10 +25,11 @@ import (
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
+	"github.com/gophercloud/gophercloud/openstack/blockstorage/extensions/schedulerstats"
+	"github.com/gophercloud/gophercloud/openstack/blockstorage/extensions/services"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes/pkg/core"
-	"github.com/sapcc/limes/pkg/util"
 )
 
 type capacityCinderPlugin struct {
@@ -74,53 +75,30 @@ func (p *capacityCinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo g
 		return nil, "", err
 	}
 
-	var result gophercloud.Result
-
 	//Get absolute limits for a tenant
-	url := client.ServiceURL("scheduler-stats", "get_pools") + "?detail=True"
-	_, err = client.Get(url, &result.Body, nil)
+	allPages, err := schedulerstats.List(client, schedulerstats.ListOpts{Detail: true}).AllPages()
+	if err != nil {
+		return nil, "", err
+	}
+	allStoragePools, err := schedulerstats.ExtractStoragePools(allPages)
 	if err != nil {
 		return nil, "", err
 	}
 
-	var limitData struct {
-		Pools []struct {
-			Name         string `json:"name"`
-			Capabilities struct {
-				TotalCapacityGb     util.Float64OrUnknown `json:"total_capacity_gb"`
-				AllocatedCapacityGb util.Float64OrUnknown `json:"allocated_capacity_gb"`
-				VolumeBackendName   string                `json:"volume_backend_name"`
-			} `json:"capabilities"`
-		} `json:"pools"`
-	}
-	err = result.ExtractInto(&limitData)
+	allPages, err = services.List(client, nil).AllPages()
 	if err != nil {
 		return nil, "", err
 	}
-
-	url = client.ServiceURL("os-services")
-	_, err = client.Get(url, &result.Body, nil)
-	if err != nil {
-		return nil, "", err
-	}
-
-	var servicesData struct {
-		Services []struct {
-			Binary           string `json:"binary"`
-			AvailabilityZone string `json:"zone"`
-			Host             string `json:"host"`
-		} `json:"services"`
-	}
-	err = result.ExtractInto(&servicesData)
+	allServices, err := services.ExtractServices(allPages)
 	if err != nil {
 		return nil, "", err
 	}
 
 	serviceHostsPerAZ := make(map[string][]string)
-	for _, element := range servicesData.Services {
+	for _, element := range allServices {
 		if element.Binary == "cinder-volume" {
 			//element.Host has the format backendHostname@backendName
-			serviceHostsPerAZ[element.AvailabilityZone] = append(serviceHostsPerAZ[element.AvailabilityZone], element.Host)
+			serviceHostsPerAZ[element.Zone] = append(serviceHostsPerAZ[element.Zone], element.Host)
 		}
 	}
 
@@ -135,7 +113,7 @@ func (p *capacityCinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo g
 	}
 
 	//add results from scheduler-stats
-	for _, element := range limitData.Pools {
+	for _, element := range allStoragePools {
 		volumeType, ok := volumeTypesByBackendName[element.Capabilities.VolumeBackendName]
 		if !ok {
 			logg.Info("Cinder capacity plugin: skipping pool %q with unknown volume_backend_name %q", element.Name, element.Capabilities.VolumeBackendName)
@@ -145,7 +123,7 @@ func (p *capacityCinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo g
 		logg.Debug("Cinder capacity plugin: considering pool %q with volume_backend_name %q for volume type %q", element.Name, element.Capabilities.VolumeBackendName, volumeType)
 
 		resourceName := p.makeResourceName(volumeType)
-		capaData[resourceName].Capacity += uint64(element.Capabilities.TotalCapacityGb)
+		capaData[resourceName].Capacity += uint64(element.Capabilities.TotalCapacityGB)
 
 		var poolAZ string
 		for az, hosts := range serviceHostsPerAZ {
@@ -166,8 +144,8 @@ func (p *capacityCinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo g
 		}
 
 		azCapaData := capaData[resourceName].CapacityPerAZ[poolAZ]
-		azCapaData.Capacity += uint64(element.Capabilities.TotalCapacityGb)
-		azCapaData.Usage += uint64(element.Capabilities.AllocatedCapacityGb)
+		azCapaData.Capacity += uint64(element.Capabilities.TotalCapacityGB)
+		azCapaData.Usage += uint64(element.Capabilities.AllocatedCapacityGB)
 	}
 
 	capaDataFinal := make(map[string]core.CapacityData)
