@@ -422,6 +422,7 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 					"name":              instance.Name,
 					"status":            instance.Status,
 					"availability_zone": instance.AvailabilityZone,
+					"metadata":          instance.Metadata,
 				}
 				if len(ipAddresses) > 0 {
 					subResource["ip_addresses"] = ipAddresses
