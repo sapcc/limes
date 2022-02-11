@@ -24,10 +24,12 @@ github.com/golang/protobuf/ptypes
 github.com/golang/protobuf/ptypes/any
 github.com/golang/protobuf/ptypes/duration
 github.com/golang/protobuf/ptypes/timestamp
-# github.com/gophercloud/gophercloud v0.24.0
+# github.com/gophercloud/gophercloud v0.24.0 => github.com/gophercloud/gophercloud v0.24.1-0.20220209210756-c2c9a5564161
 ## explicit; go 1.14
 github.com/gophercloud/gophercloud
 github.com/gophercloud/gophercloud/openstack
+github.com/gophercloud/gophercloud/openstack/blockstorage/extensions/schedulerstats
+github.com/gophercloud/gophercloud/openstack/blockstorage/extensions/services
 github.com/gophercloud/gophercloud/openstack/blockstorage/v2/volumes
 github.com/gophercloud/gophercloud/openstack/common/extensions
 github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/availabilityzones
@@ -191,3 +193,4 @@ gopkg.in/gorp.v2
 # gopkg.in/yaml.v2 v2.4.0
 ## explicit; go 1.15
 gopkg.in/yaml.v2
+# github.com/gophercloud/gophercloud => github.com/gophercloud/gophercloud v0.24.1-0.20220209210756-c2c9a5564161
