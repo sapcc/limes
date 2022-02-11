@@ -28,6 +28,7 @@ import (
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/aggregates"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/hypervisors"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/pagination"
@@ -448,23 +449,12 @@ func (h novaHypervisor) getCapacityViaPlacementAPI(provider *gophercloud.Provide
 //{ "vmware:hv_enabled" : 'True' }
 //which identifies a VM flavor
 func getFlavorExtras(client *gophercloud.ServiceClient, flavorUUID string) (map[string]string, error) {
-	var result gophercloud.Result
-	var extraSpecs struct {
-		ExtraSpecs map[string]string `json:"extra_specs"`
-	}
-
-	url := client.ServiceURL("flavors", flavorUUID, "os-extra_specs")
-	_, err := client.Get(url, &result.Body, nil)
+	allExtraSpecs, err := flavors.ListExtraSpecs(client, flavorUUID).Extract()
 	if err != nil {
 		return nil, err
 	}
 
-	err = result.ExtractInto(&extraSpecs)
-	if err != nil {
-		return nil, err
-	}
-
-	return extraSpecs.ExtraSpecs, nil
+	return allExtraSpecs, nil
 }
 
 //novaHypervisorGroup is any group of hypervisors. We use hypervisor groups to model aggregates, AZs, as well as the entire cluster.
@@ -483,27 +473,19 @@ type novaAggregateSubcapacity struct {
 	Usage    uint64            `json:"usage"`
 }
 
-func getAggregates(client *gophercloud.ServiceClient) (availabilityZones, aggregates map[string]*novaHypervisorGroup, err error) {
-	var data struct {
-		Aggregates []struct {
-			Name             string            `json:"name"`
-			Metadata         map[string]string `json:"metadata"`
-			AvailabilityZone *string           `json:"availability_zone"`
-			Hosts            []string          `json:"hosts"`
-		} `json:"aggregates"`
+func getAggregates(client *gophercloud.ServiceClient) (availabilityZones, collectedAggregates map[string]*novaHypervisorGroup, err error) {
+	allPages, err := aggregates.List(client).AllPages()
+	if err != nil {
+		return nil, nil, err
 	}
-
-	var result gophercloud.Result
-	url := client.ServiceURL("os-aggregates")
-	_, result.Err = client.Get(url, &result.Body, nil)
-	err = result.ExtractInto(&data)
+	allAggregates, err := aggregates.ExtractAggregates(allPages)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	availabilityZones = make(map[string]*novaHypervisorGroup)
-	aggregates = make(map[string]*novaHypervisorGroup)
-	for _, apiAggregate := range data.Aggregates {
+	collectedAggregates = make(map[string]*novaHypervisorGroup)
+	for _, apiAggregate := range allAggregates {
 		//never show `metadata: null` on the API for subcapacities
 		if apiAggregate.Metadata == nil {
 			apiAggregate.Metadata = make(map[string]string)
@@ -518,13 +500,13 @@ func getAggregates(client *gophercloud.ServiceClient) (availabilityZones, aggreg
 		for _, host := range apiAggregate.Hosts {
 			aggr.ContainsComputeHost[host] = true
 		}
-		aggregates[aggr.Name] = aggr
+		collectedAggregates[aggr.Name] = aggr
 
 		//create one pseudo-aggregate per AZ
-		if apiAggregate.AvailabilityZone == nil {
+		if apiAggregate.AvailabilityZone == "" {
 			continue
 		}
-		azName := *apiAggregate.AvailabilityZone
+		azName := apiAggregate.AvailabilityZone
 		az := availabilityZones[azName]
 		if az == nil {
 			az = &novaHypervisorGroup{
