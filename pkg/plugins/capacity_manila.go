@@ -25,6 +25,8 @@ import (
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
+	"github.com/gophercloud/gophercloud/openstack/sharedfilesystems/v2/schedulerstats"
+	"github.com/gophercloud/gophercloud/openstack/sharedfilesystems/v2/services"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/logg"
 
@@ -86,36 +88,24 @@ func (p *capacityManilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo g
 	}
 	client.Microversion = "2.23" //required for filtering pools by share_type
 
-	//enumerate services to establish a mapping between AZs and backend hosts
-	var result gophercloud.Result
-	url := client.ServiceURL("services")
-	_, err = client.Get(url, &result.Body, nil)
+	allPages, err := services.List(client, nil).AllPages()
 	if err != nil {
 		return nil, "", err
 	}
-
-	var servicesData struct {
-		Services []struct {
-			ID               int    `json:"id"`
-			Binary           string `json:"binary"`
-			AvailabilityZone string `json:"zone"`
-			Host             string `json:"host"`
-		} `json:"services"`
-	}
-	err = result.ExtractInto(&servicesData)
+	allServices, err := services.ExtractServices(allPages)
 	if err != nil {
 		return nil, "", err
 	}
 
 	azForServiceHost := make(map[string]string)
-	for _, element := range servicesData.Services {
+	for _, element := range allServices {
 		if element.Binary == "manila-share" {
 			//element.Host has the format backendHostname@backendName
 			fields := strings.Split(element.Host, "@")
 			if len(fields) != 2 {
 				logg.Error("Expected a Manila service host in the format \"backendHostname@backendName\", got %q with ID %d", element.Host, element.ID)
 			} else {
-				azForServiceHost[fields[0]] = element.AvailabilityZone
+				azForServiceHost[fields[0]] = element.Zone
 			}
 		}
 	}
@@ -154,33 +144,21 @@ type capacityForShareType struct {
 	SnapshotGigabytes core.CapacityData
 }
 
-type manilaPool struct {
-	Name         string `json:"name"`
-	Host         string `json:"host"`
-	Capabilities struct {
-		TotalCapacityGb     float64 `json:"total_capacity_gb"`
-		AllocatedCapacityGb float64 `json:"allocated_capacity_gb"`
-	} `json:"capabilities"`
-}
-
 func (p *capacityManilaPlugin) scrapeForShareType(shareType core.ManilaShareTypeSpec, client *gophercloud.ServiceClient, azForServiceHost map[string]string) (capacityForShareType, error) {
 	cfg := p.cfg.Manila
 
 	//list all pools for the Manila share types corresponding to this virtual share type
-	var allPools []manilaPool
+	var allPools []schedulerstats.Pool
 	for _, stName := range getAllManilaShareTypes(shareType) {
-		var result gophercloud.Result
-		url := client.ServiceURL("scheduler-stats", "pools", "detail") + "?share_type=" + stName
-		_, result.Err = client.Get(url, &result.Body, nil)
-
-		var poolData struct {
-			Pools []manilaPool `json:"pools"`
-		}
-		err := result.ExtractInto(&poolData)
+		allPages, err := schedulerstats.ListDetail(client, schedulerstats.ListDetailOpts{ShareType: stName}).AllPages()
 		if err != nil {
 			return capacityForShareType{}, err
 		}
-		allPools = append(allPools, poolData.Pools...)
+		pools, err := schedulerstats.ExtractPools(allPages)
+		if err != nil {
+			return capacityForShareType{}, err
+		}
+		allPools = append(allPools, pools...)
 	}
 
 	//count pools and their capacities
@@ -194,7 +172,7 @@ func (p *capacityManilaPlugin) scrapeForShareType(shareType core.ManilaShareType
 		allocatedCapacityGbPerAZ = make(map[string]float64)
 	)
 	for _, pool := range allPools {
-		totalCapacityGb += pool.Capabilities.TotalCapacityGb
+		totalCapacityGb += pool.Capabilities.TotalCapacityGB
 
 		poolAZ := azForServiceHost[pool.Host]
 		if poolAZ == "" {
@@ -203,8 +181,8 @@ func (p *capacityManilaPlugin) scrapeForShareType(shareType core.ManilaShareType
 		}
 		availabilityZones[poolAZ] = true
 		poolCountPerAZ[poolAZ]++
-		totalCapacityGbPerAZ[poolAZ] += pool.Capabilities.TotalCapacityGb
-		allocatedCapacityGbPerAZ[poolAZ] += pool.Capabilities.AllocatedCapacityGb
+		totalCapacityGbPerAZ[poolAZ] += pool.Capabilities.TotalCapacityGB
+		allocatedCapacityGbPerAZ[poolAZ] += pool.Capabilities.AllocatedCapacityGB
 	}
 
 	//NOTE: The value of `cfg.CapacityBalance` is how many capacity we give out
