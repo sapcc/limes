@@ -2,10 +2,6 @@
   "current_cluster": "west",
   "clusters": [
     {
-      "id": "east",
-      "services": []
-    },
-    {
       "id": "west",
       "services": []
     }

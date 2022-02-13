@@ -2,21 +2,6 @@
   "current_cluster": "west",
   "clusters": [
     {
-      "id": "east",
-      "services": [
-        {
-          "type": "shared",
-          "area": "shared",
-          "shared": true,
-          "resources": [],
-          "max_scraped_at": 88,
-          "min_scraped_at": 88
-        }
-      ],
-      "max_scraped_at": 1100,
-      "min_scraped_at": 1100
-    },
-    {
       "id": "west",
       "services": [
         {

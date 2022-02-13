@@ -185,14 +185,6 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 				QuotaConstraints: &westConstraintSet,
 				Config:           westClusterConfig,
 			},
-			"east": {
-				ID:              "east",
-				ServiceTypes:    serviceTypes,
-				IsServiceShared: isServiceShared,
-				QuotaPlugins:    quotaPlugins,
-				CapacityPlugins: map[string]core.CapacityPlugin{},
-				Config:          &core.ClusterConfiguration{Auth: &core.AuthParameters{}},
-			},
 			"cloud": {
 				ID:              "cloud",
 				ServiceTypes:    serviceTypes,
@@ -377,14 +369,6 @@ func Test_ClusterOperations(t *testing.T) {
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-list-filtered.json"),
 	}.Check(t, router)
-	//should look identical with X-Limes-Cluster-ID *except* for the current_cluster field
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/v1/clusters?service=shared&resource=things",
-		Header:       map[string]string{"X-Limes-Cluster-Id": "east"},
-		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-list-filtered-foreign.json"),
-	}.Check(t, router)
 
 	//check rendering of overcommit factors
 	cluster.Config.ResourceBehaviors = []*core.ResourceBehaviorConfiguration{
@@ -432,22 +416,6 @@ func Test_DomainOperations(t *testing.T) {
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/domain-get-france.json"),
 	}.Check(t, router)
 
-	//domain "poland" is in a different cluster, so the X-Limes-Cluster-Id header
-	//needs to be given
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/v1/domains/uuid-for-poland",
-		ExpectStatus: 404,
-		ExpectBody:   assert.StringData("no such domain (if it was just created, try to POST /domains/discover)\n"),
-	}.Check(t, router)
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/v1/domains/uuid-for-poland",
-		Header:       map[string]string{"X-Limes-Cluster-Id": "east"},
-		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/domain-get-poland.json"),
-	}.Check(t, router)
-
 	//check ListDomains
 	assert.HTTPRequest{
 		Method:       "GET",
@@ -475,13 +443,6 @@ func Test_DomainOperations(t *testing.T) {
 	}.Check(t, router)
 
 	//check cross-cluster ListDomains
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/v1/domains",
-		Header:       map[string]string{"X-Limes-Cluster-Id": "east"},
-		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/domain-list-east.json"),
-	}.Check(t, router)
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains",
@@ -971,19 +932,19 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-paris-only-default-rates.json"),
 	}.Check(t, router)
-	//warsaw is in a different cluster
+
+	//check non-existent domains/projects
 	assert.HTTPRequest{
 		Method:       "GET",
-		Path:         "/v1/domains/uuid-for-poland/projects/uuid-for-warsaw",
+		Path:         "/v1/domains/uuid-for-switzerland/projects/uuid-for-bern",
 		ExpectStatus: 404,
 		ExpectBody:   assert.StringData("no such domain (if it was just created, try to POST /domains/discover)\n"),
 	}.Check(t, router)
 	assert.HTTPRequest{
 		Method:       "GET",
-		Path:         "/v1/domains/uuid-for-poland/projects/uuid-for-warsaw",
-		Header:       map[string]string{"X-Limes-Cluster-Id": "east"},
-		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-warsaw.json"),
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-hamburg",
+		ExpectStatus: 404,
+		ExpectBody:   assert.StringData("no such project (if it was just created, try to POST /domains/uuid-for-germany/projects/discover)\n"),
 	}.Check(t, router)
 
 	//check ListProjects
@@ -1030,22 +991,6 @@ func Test_ProjectOperations(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects?area=shared&resource=things",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-list-filtered.json"),
-	}.Check(t, router)
-
-	//check cross-cluster ListProjects
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/v1/domains/uuid-for-poland/projects",
-		Header:       map[string]string{"X-Limes-Cluster-Id": "east"},
-		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-list-poland.json"),
-	}.Check(t, router)
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/v1/domains/uuid-for-poland/projects",
-		Header:       map[string]string{"X-Limes-Cluster-Id": "unknown"},
-		ExpectStatus: 404,
-		ExpectBody:   assert.StringData("no such cluster\n"),
 	}.Check(t, router)
 
 	//check DiscoverProjects
@@ -1861,8 +1806,8 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 	//test low-privilege raise limits that are specified as percentage of assigned cluster capacity over all domains
 	cluster.LowPrivilegeRaise.LimitsForDomains = map[string]map[string]core.LowPrivilegeRaiseLimit{
 		// - shared/things capacity is 246, 45% thereof is 110.7 which rounds down to 110
-		// - current shared/things domain quotas: poland = 60, germany = 30
-		// -> germany should be able to go up to 50 before sum(domain quotas) exceeds 110
+		// - current shared/things domain quotas: france = 0, germany = 30
+		// -> germany should be able to go up to 80 before sum(domain quotas) exceeds 110
 		"shared": {"things": {UntilPercentOfClusterCapacityAssigned: 45}},
 	}
 
@@ -1870,7 +1815,7 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany",
 		ExpectStatus: 403,
-		ExpectBody:   assert.StringData("cannot change shared/things quota: user is not allowed to raise \"shared\" quotas that high in this domain (maximum acceptable domain quota is 50)\n"),
+		ExpectBody:   assert.StringData("cannot change shared/things quota: user is not allowed to raise \"shared\" quotas that high in this domain (maximum acceptable domain quota is 110)\n"),
 		Body: assert.JSONObject{
 			"domain": assert.JSONObject{
 				"services": []assert.JSONObject{
@@ -1878,8 +1823,8 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 						"type": "shared",
 						"resources": []assert.JSONObject{
 							//attempt to raise should fail because low-privilege exception
-							//only applies up to 50 (see comment above)
-							{"name": "things", "quota": 55},
+							//only applies up to 110 (see comment above)
+							{"name": "things", "quota": 115},
 						},
 					},
 				},
@@ -1889,19 +1834,19 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 
 	//raise another domain quota such that the auto-approval limit would be
 	//exceeded even if the "germany" domain had zero quota
-	domainPolandID, err := db.DB.SelectInt(`SELECT id FROM domains WHERE name = $1`,
-		"poland")
+	domainFranceID, err := db.DB.SelectInt(`SELECT id FROM domains WHERE name = $1`,
+		"france")
 	if err != nil {
 		t.Fatal(err)
 	}
-	servicePolandSharedID, err := db.DB.SelectInt(`SELECT id FROM domain_services WHERE domain_id = $1 AND type = $2`,
-		domainPolandID, "shared")
+	serviceFranceSharedID, err := db.DB.SelectInt(`SELECT id FROM domain_services WHERE domain_id = $1 AND type = $2`,
+		domainFranceID, "shared")
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = db.DB.Exec(`UPDATE domain_resources SET quota = $1 WHERE service_id = $2 AND name = $3`,
+	_, err = db.DB.Exec(`INSERT INTO domain_resources (service_id, name, quota) VALUES ($1, $2, $3)`,
+		serviceFranceSharedID, "things",
 		130, //more than the auto-approval limit of 110
-		servicePolandSharedID, "things",
 	)
 	if err != nil {
 		t.Fatal(err)
