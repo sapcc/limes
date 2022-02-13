@@ -71,12 +71,12 @@ INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, su
 INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (4, 'capacity', 10, 2, 100, '', 10, NULL);
 INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (4, 'capacity_portion', NULL, 1, NULL, '', NULL, NULL);
 INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (4, 'external_things', 1, 0, 1, '', 10, NULL);
--- paris (infinite backend quota for unshared/things)
+-- paris (infinite backend quota for unshared/things; non-null physical_usage for */capacity, all other project resources should report physical_usage = usage in aggregations)
 INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (5, 'things',   10, 2, -1, '', 10, NULL);
-INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (5, 'capacity', 10, 2, 10, '', 10, NULL);
+INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (5, 'capacity', 10, 2, 10, '', 10, 1);
 INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (5, 'capacity_portion', NULL, 1, NULL, '', NULL, NULL);
 INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (6, 'things',   10, 2, 10, '', 10, NULL);
-INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (6, 'capacity', 10, 2, 10, '', 10, NULL);
+INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (6, 'capacity', 10, 2, 10, '', 10, 1);
 INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (6, 'capacity_portion', NULL, 1, NULL, '', NULL, NULL);
 INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (6, 'external_things', 1, 0, 1, '', 10, NULL);
 -- warsaw (only project with non-null physical_usage (for shared/capacity and unshared/capacity); all other projects should report physical_usage = usage in aggregations)

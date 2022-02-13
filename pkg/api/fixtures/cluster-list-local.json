@@ -84,7 +84,8 @@
               "unit": "B",
               "capacity": 185,
               "domains_quota": 25,
-              "usage": 6
+              "usage": 6,
+              "physical_usage": 5
             },
             {
               "name": "capacity_portion",
@@ -118,7 +119,8 @@
               "name": "capacity",
               "unit": "B",
               "domains_quota": 100,
-              "usage": 6
+              "usage": 6,
+              "physical_usage": 5
             },
             {
               "name": "capacity_portion",
