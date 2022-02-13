@@ -84,6 +84,7 @@ var clusterReportQuery5 = db.SimplifyWhitespaceInSQL(`
 //core.Configuration (instead of just the current core.ClusterConfiguration)
 //to look at the services enabled in other clusters.
 // TODO: should db be replaced with dbi?
+// TODO: [multi-cluster removal] replace with GetCluster()
 func GetClusters(config core.Configuration, clusterID *string, dbi db.Interface, filter Filter) ([]*limes.ClusterReport, error) {
 	//first query: collect project usage data in these clusters
 	clusters := make(clusters)

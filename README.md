@@ -26,7 +26,6 @@ all levels of the hierarchy.
 ## Unique features
 
 * Limes can take over the handling of initial project quotas: All quotas for a new project (or domain) will be set to zero initially, until a sufficiently privileged user approves quota explicitly.
-* As a unique feature, Limes can also track physical resources that are shared between multiple OpenStack clusters.
 * Limes records quota changes in an Open Standards [CADF Format](https://www.dmtf.org/sites/default/files/standards/documents/DSP0262_1.0.0.pdf), and is compatible with other cloud based audit APIs (e.g. [Hermes](https://github.com/sapcc/hermes)).
 * Quota and usage data can be exposed as [Prometheus metrics](https://prometheus.io) for monitoring and alerting.
 

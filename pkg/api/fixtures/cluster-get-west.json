@@ -1,6 +1,6 @@
 {
   "cluster": {
-    "id": "west",
+    "id": "current",
     "services": [
       {
         "type": "shared",

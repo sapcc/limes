@@ -309,65 +309,39 @@ func Test_ClusterOperations(t *testing.T) {
 	//check GetCluster
 	assert.HTTPRequest{
 		Method:       "GET",
-		Path:         "/v1/clusters/west",
+		Path:         "/v1/clusters/current",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west.json"),
 	}.Check(t, router)
 	assert.HTTPRequest{
 		Method:       "GET",
-		Path:         "/v1/clusters/west?rates=only",
+		Path:         "/v1/clusters/current?rates=only",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-only-rates.json"),
 	}.Check(t, router)
 	assert.HTTPRequest{
 		Method:       "GET",
-		Path:         "/v1/clusters/west?rates",
+		Path:         "/v1/clusters/current?rates",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-with-rates.json"),
 	}.Check(t, router)
 	assert.HTTPRequest{
 		Method:       "GET",
-		Path:         "/v1/clusters/current",
+		Path:         "/v1/clusters/current?service=unknown",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west.json"),
-	}.Check(t, router)
-
-	//check ListClusters
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/v1/clusters",
-		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-list.json"),
+		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-no-services.json"),
 	}.Check(t, router)
 	assert.HTTPRequest{
 		Method:       "GET",
-		Path:         "/v1/clusters?detail",
+		Path:         "/v1/clusters/current?service=shared&resource=unknown",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-list-detail.json"),
+		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-no-resources.json"),
 	}.Check(t, router)
 	assert.HTTPRequest{
 		Method:       "GET",
-		Path:         "/v1/clusters?local",
+		Path:         "/v1/clusters/current?service=shared&resource=things",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-list-local.json"),
-	}.Check(t, router)
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/v1/clusters?service=unknown",
-		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/cluster-list-no-services.json"),
-	}.Check(t, router)
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/v1/clusters?service=shared&resource=unknown",
-		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/cluster-list-no-resources.json"),
-	}.Check(t, router)
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/v1/clusters?service=shared&resource=things",
-		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-list-filtered.json"),
+		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-filtered.json"),
 	}.Check(t, router)
 
 	//check rendering of overcommit factors
@@ -389,7 +363,7 @@ func Test_ClusterOperations(t *testing.T) {
 	}
 	assert.HTTPRequest{
 		Method:       "GET",
-		Path:         "/v1/clusters/west",
+		Path:         "/v1/clusters/current",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-with-overcommit.json"),
 	}.Check(t, router)
@@ -447,8 +421,8 @@ func Test_DomainOperations(t *testing.T) {
 		Method:       "GET",
 		Path:         "/v1/domains",
 		Header:       map[string]string{"X-Limes-Cluster-Id": "unknown"},
-		ExpectStatus: 404,
-		ExpectBody:   assert.StringData("no such cluster\n"),
+		ExpectStatus: 400,
+		ExpectBody:   assert.StringData("multi-cluster support is removed: the X-Limes-Cluster-Id header is not allowed anymore\n"),
 	}.Check(t, router)
 
 	//check DiscoverDomains

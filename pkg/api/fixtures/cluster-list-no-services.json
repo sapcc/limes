@@ -1,9 +1,0 @@
-{
-  "current_cluster": "west",
-  "clusters": [
-    {
-      "id": "west",
-      "services": []
-    }
-  ]
-}
