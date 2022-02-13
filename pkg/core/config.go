@@ -59,8 +59,6 @@ type ClusterConfiguration struct {
 	LowPrivilegeRaise    LowPrivilegeRaiseConfiguration   `yaml:"lowpriv_raise"`
 	ResourceBehaviors    []*ResourceBehaviorConfiguration `yaml:"resource_behavior"`
 	Bursting             BurstingConfiguration            `yaml:"bursting"`
-	//The following is only read to warn that users need to upgrade from seeds to constraints.
-	OldSeedConfigPath string `yaml:"seeds"`
 }
 
 //GetServiceConfigurationForType returns the ServiceConfiguration or an error.
@@ -484,12 +482,6 @@ func (cfg configurationInFile) validate() (success bool) {
 
 		if cluster.Bursting.MaxMultiplier < 0 {
 			logg.Error("clusters[%s].bursting.max_multiplier may not be negative")
-			success = false
-		}
-
-		//warn about removed configuration options
-		if cluster.OldSeedConfigPath != "" {
-			logg.Error("quota seeds have been replaced by quota constraints: rename clusters[%s].seeds config key to clusters[%s].constraints and convert seed file into constraint file; documentation at https://github.com/sapcc/limes/blob/master/docs/operators/constraints.md", clusterID, clusterID)
 			success = false
 		}
 
