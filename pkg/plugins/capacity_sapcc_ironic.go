@@ -86,21 +86,6 @@ func (n ironicNode) StableProvisionState() string {
 	return n.ProvisionState
 }
 
-func GetIronicNodes(client *gophercloud.ServiceClient) ([]ironicNode, error) {
-	client.Microversion = "1.22"
-	allPages, err := nodes.ListDetail(client, nil).AllPages()
-	if err != nil {
-		return nil, err
-	}
-	var result []ironicNode
-	err = nodes.ExtractNodesInto(allPages, &result)
-	if err != nil {
-		return nil, err
-	}
-
-	return result, nil
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 // OpenStack is being inconsistent with itself again
 
@@ -176,7 +161,13 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 	if err != nil {
 		return nil, "", err
 	}
-	nodes, err := GetIronicNodes(ironicClient)
+	ironicClient.Microversion = "1.22"
+	allPages, err := nodes.ListDetail(ironicClient, nil).AllPages()
+	if err != nil {
+		return nil, "", err
+	}
+	var allNodes []ironicNode
+	err = nodes.ExtractNodesInto(allPages, &allNodes)
 	if err != nil {
 		return nil, "", err
 	}
@@ -204,7 +195,7 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 	}
 
 	unmatchedCounter := uint64(0)
-	for _, node := range nodes {
+	for _, node := range allNodes {
 		//do not consider nodes that have not been made available for provisioning yet
 		if !isAvailableProvisionState[node.StableProvisionState()] {
 			continue
