@@ -22,9 +22,11 @@ package plugins
 import (
 	"encoding/json"
 	"regexp"
+	"strconv"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
+	"github.com/gophercloud/gophercloud/openstack/baremetal/v1/nodes"
 	flavorsmodule "github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/prometheus/client_golang/prometheus"
@@ -58,6 +60,75 @@ func (p *capacitySapccIronicPlugin) Init(provider *gophercloud.ProviderClient, e
 //ID implements the core.CapacityPlugin interface.
 func (p *capacitySapccIronicPlugin) ID() string {
 	return "sapcc-ironic"
+}
+
+type ironicNode struct {
+	ID                   string  `json:"uuid"`
+	Name                 string  `json:"name"`
+	ProvisionState       string  `json:"provision_state"`
+	TargetProvisionState *string `json:"target_provision_state"`
+	InstanceID           *string `json:"instance_uuid"`
+	ResourceClass        *string `json:"resource_class"`
+	Properties           struct {
+		Cores           veryFlexibleUint64 `json:"cpus"`
+		DiskGiB         veryFlexibleUint64 `json:"local_gb"`
+		MemoryMiB       veryFlexibleUint64 `json:"memory_mb"`
+		CPUArchitecture string             `json:"cpu_arch"`
+		Capabilities    string             `json:"capabilities"` //e.g. "cpu_txt:true,cpu_aes:true"
+		SerialNumber    string             `json:"serial"`
+	} `json:"properties"`
+}
+
+func (n ironicNode) StableProvisionState() string {
+	if n.TargetProvisionState != nil {
+		return *n.TargetProvisionState
+	}
+	return n.ProvisionState
+}
+
+func GetIronicNodes(client *gophercloud.ServiceClient) ([]ironicNode, error) {
+	client.Microversion = "1.22"
+	allPages, err := nodes.ListDetail(client, nil).AllPages()
+	if err != nil {
+		return nil, err
+	}
+	var result []ironicNode
+	err = nodes.ExtractNodesInto(allPages, &result)
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// OpenStack is being inconsistent with itself again
+
+//For fields that are sometimes missing, sometimes an integer, sometimes a string.
+type veryFlexibleUint64 uint64
+
+//UnmarshalJSON implements the json.Unmarshaler interface.
+func (value *veryFlexibleUint64) UnmarshalJSON(buf []byte) error {
+	if string(buf) == "null" {
+		*value = 0
+		return nil
+	}
+
+	if buf[0] == '"' {
+		var str string
+		err := json.Unmarshal(buf, &str)
+		if err != nil {
+			return err
+		}
+		val, err := strconv.ParseUint(str, 10, 64)
+		*value = veryFlexibleUint64(val)
+		return err
+	}
+
+	var val uint64
+	err := json.Unmarshal(buf, &val)
+	*value = veryFlexibleUint64(val)
+	return err
 }
 
 //Reference:
@@ -101,11 +172,11 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 	}
 
 	//count Ironic nodes
-	ironicClient, err := newIronicClient(provider, eo)
+	ironicClient, err := openstack.NewBareMetalV1(provider, eo)
 	if err != nil {
 		return nil, "", err
 	}
-	nodes, err := ironicClient.GetNodes()
+	nodes, err := GetIronicNodes(ironicClient)
 	if err != nil {
 		return nil, "", err
 	}
