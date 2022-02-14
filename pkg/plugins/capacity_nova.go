@@ -206,7 +206,7 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 			return false, err
 		}
 		for _, element := range f {
-			extras, err := getFlavorExtras(client, element.ID)
+			extras, err := flavors.ListExtraSpecs(client, element.ID).Extract()
 			if err != nil {
 				logg.Debug("Failed to get extra specs for flavor: %s.", element.ID)
 				return false, err
@@ -442,19 +442,6 @@ func (h novaHypervisor) getCapacityViaPlacementAPI(provider *gophercloud.Provide
 		LocalGB:    inventory["DISK_GB"].UsableCapacity(),
 		RunningVMs: h.RunningVMs,
 	}, nil
-}
-
-//get flavor extra-specs
-//result contains
-//{ "vmware:hv_enabled" : 'True' }
-//which identifies a VM flavor
-func getFlavorExtras(client *gophercloud.ServiceClient, flavorUUID string) (map[string]string, error) {
-	allExtraSpecs, err := flavors.ListExtraSpecs(client, flavorUUID).Extract()
-	if err != nil {
-		return nil, err
-	}
-
-	return allExtraSpecs, nil
 }
 
 //novaHypervisorGroup is any group of hypervisors. We use hypervisor groups to model aggregates, AZs, as well as the entire cluster.
