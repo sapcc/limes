@@ -117,6 +117,7 @@ func prometheusGetSingleValue(client prom_v1.API, queryStr string, defaultValue 
 		}
 		//lint:ignore ST1005 Prometheus is a proper name
 		return 0, fmt.Errorf("Prometheus query returned empty result: %s", queryStr)
+	//lint:ignore ST1015 ordering is required for fallthrough to work
 	default:
 		logg.Info("Prometheus query returned more than one result: %s (only the first value will be used)", queryStr)
 		fallthrough
