@@ -35,11 +35,10 @@ type Filter struct {
 	ServiceTypes  []string
 	ResourceNames []string
 
-	WithRates           bool
-	OnlyRates           bool
-	WithSubresources    bool
-	LocalQuotaUsageOnly bool
-	WithSubcapacities   bool
+	WithRates         bool
+	OnlyRates         bool
+	WithSubresources  bool
+	WithSubcapacities bool
 
 	IsSubcapacityAllowed func(serviceType, resourceName string) bool
 }
@@ -64,9 +63,6 @@ func ReadFilter(r *http.Request) Filter {
 	if _, ok := r.URL.Query()["detail"]; ok {
 		f.WithSubresources = ok
 		f.WithSubcapacities = ok
-	}
-	if _, ok := r.URL.Query()["local"]; ok {
-		f.LocalQuotaUsageOnly = ok
 	}
 
 	if areas, ok := queryValues["area"]; ok {

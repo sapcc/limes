@@ -39,10 +39,6 @@ func (p *v1Provider) GetCluster(w http.ResponseWriter, r *http.Request) {
 
 	filter := reports.ReadFilter(r)
 	if showBasic {
-		if filter.LocalQuotaUsageOnly {
-			http.Error(w, "Forbidden", http.StatusForbidden)
-			return
-		}
 		filter.IsSubcapacityAllowed = func(serviceType, resourceName string) bool {
 			token.Context.Request["service"] = serviceType
 			token.Context.Request["resource"] = resourceName

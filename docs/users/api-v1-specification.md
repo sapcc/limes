@@ -424,7 +424,6 @@ Query data for the cluster level. Arguments:
 * `service`: Limit query to resources in this service. May be given multiple times.
 * `area`: Limit query to resources in services in this area. May be given multiple times.
 * `resource`: When combined, with `?service=`, limit query to that resource.
-* `local`: **Deprecated.** Will be removed soon.
 * `detail`: If given, list subcapacities for resources that support it. (See subheading below for details.)
 
 Returns 200 (OK) on success. Result is a JSON document like:
