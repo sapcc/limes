@@ -116,12 +116,12 @@ Limes logs all quota changes at the domain and project level in an Open Standard
 
 | Field | Default | Description |
 | --- | --- | --- |
-| `clusters.$id.cadf.enabled` | `false` | Set this to true if you want to send the audit events to a RabbitMQ server. |
-| `clusters.$id.cadf.rabbitmq.queue_name` | *(required, if `enabled` is true)* | Name for the queue that will hold the audit events. The events are published to the default exchange. |
-| `clusters.$id.cadf.rabbitmq.username` | `guest` | RabbitMQ Username. |
-| `clusters.$id.cadf.rabbitmq.password` | `guest` | Password for the specified user. |
-| `clusters.$id.cadf.rabbitmq.hostname` | `localhost` | Hostname of the RabbitMQ server. |
-| `clusters.$id.cadf.rabbitmq.port` | `5672` | Port number to which the underlying connection is made. |
+| `cadf.enabled` | `false` | Set this to true if you want to send the audit events to a RabbitMQ server. |
+| `cadf.rabbitmq.queue_name` | *(required, if `enabled` is true)* | Name for the queue that will hold the audit events. The events are published to the default exchange. |
+| `cadf.rabbitmq.username` | `guest` | RabbitMQ Username. |
+| `cadf.rabbitmq.password` | `guest` | Password for the specified user. |
+| `cadf.rabbitmq.hostname` | `localhost` | Hostname of the RabbitMQ server. |
+| `cadf.rabbitmq.port` | `5672` | Port number to which the underlying connection is made. |
 
 ### Low-privilege quota raising
 
@@ -131,10 +131,10 @@ low-privilege users can be permitted to raise quotas within certain boundaries.
 
 | Field | Required | Description |
 | --- | --- | --- |
-| `clusters.$id.lowpriv_raise.limits.projects` | no | Limits up to which project quotas can be raised by a low-privilege user. |
-| `clusters.$id.lowpriv_raise.limits.domains` | no | Limits up to which domain quotas can be raised by a low-privilege user. |
-| `clusters.$id.lowpriv_raise.except_projects_in_domains` | no | May contain a regex. If given, low-privilege quota raising will not be allowed for projects in domains whose names match the regex. |
-| `clusters.$id.lowpriv_raise.only_projects_in_domains` | no | May contain a regex. If given, low-privilege quota raising will only be possible for projects in domains whose names match the regex. If `except_projects_in_domains` is also given, it takes precedence over `only_projects_in_domains`. |
+| `lowpriv_raise.limits.projects` | no | Limits up to which project quotas can be raised by a low-privilege user. |
+| `lowpriv_raise.limits.domains` | no | Limits up to which domain quotas can be raised by a low-privilege user. |
+| `lowpriv_raise.except_projects_in_domains` | no | May contain a regex. If given, low-privilege quota raising will not be allowed for projects in domains whose names match the regex. |
+| `lowpriv_raise.only_projects_in_domains` | no | May contain a regex. If given, low-privilege quota raising will only be possible for projects in domains whose names match the regex. If `except_projects_in_domains` is also given, it takes precedence over `only_projects_in_domains`. |
 
 Both `limits.projects` and `limits.domains` contain two-level maps, first by service type, then by resource name.
 
@@ -162,18 +162,18 @@ lowpriv_raise:
 
 ### Resource behavior
 
-Some special behaviors for resources can be configured in the `clusters[].resource_behavior[]` section. Each entry in this section can match multiple resources.
+Some special behaviors for resources can be configured in the `resource_behavior[]` section. Each entry in this section can match multiple resources.
 
 | Field | Required | Description |
 | --- | --- | --- |
-| `clusters.$id.resource_behavior[].resource` | yes | Must contain a regex. The behavior entry applies to all resources where this regex matches against a slash-concatenated pair of service type and resource name. The anchors `^` and `$` are implied at both ends, so the regex must match the entire phrase. |
-| `clusters.$id.resource_behavior[].scope` | yes | May contain a regex. The behavior entry applies to matching resources in all domains where this regex matches against the domain name, and in all projects where this regex matches against a slash-concatenated pair of domain and project name, i.e. `domainname/projectname`. The anchors `^` and `$` are implied at both ends, so the regex must match the entire phrase. This regex is ignored for cluster-level resources. |
-| `clusters.$id.resource_behavior[].max_burst_multiplier` | no | If given, the bursting multiplier for matching resources will be restricted to this value (see also `clusters.$id.bursting.max_multiplier`). |
-| `clusters.$id.resource_behavior[].overcommit_factor` | no | If given, capacity for matching resources will be computed as `raw_capacity * overcommit_factor`, where `raw_capacity` is what the capacity plugin reports. |
-| `clusters.$id.resource_behavior[].scales_with` | no | If a resource is given, matching resources scales with this resource. The other resource may be specified by its name (for resources within the same service type), or by a slash-concatenated pair of service type and resource name, e.g. `compute/cores`. |
-| `clusters.$id.resource_behavior[].scaling_factor` | yes, if `scales_with` is given | The scaling factor that will be reported for these resources' scaling relation. |
-| `clusters.$id.resource_behavior[].min_nonzero_project_quota` | no | A lower boundary for project quota values that are not zero. |
-| `clusters.$id.resource_behavior[].annotations` | no | A map of extra key-value pairs that will be inserted into matching resources as-is in responses to GET requests, e.g. at `project.services[].resources[].annotations`. |
+| `resource_behavior[].resource` | yes | Must contain a regex. The behavior entry applies to all resources where this regex matches against a slash-concatenated pair of service type and resource name. The anchors `^` and `$` are implied at both ends, so the regex must match the entire phrase. |
+| `resource_behavior[].scope` | yes | May contain a regex. The behavior entry applies to matching resources in all domains where this regex matches against the domain name, and in all projects where this regex matches against a slash-concatenated pair of domain and project name, i.e. `domainname/projectname`. The anchors `^` and `$` are implied at both ends, so the regex must match the entire phrase. This regex is ignored for cluster-level resources. |
+| `resource_behavior[].max_burst_multiplier` | no | If given, the bursting multiplier for matching resources will be restricted to this value (see also `bursting.max_multiplier`). |
+| `resource_behavior[].overcommit_factor` | no | If given, capacity for matching resources will be computed as `raw_capacity * overcommit_factor`, where `raw_capacity` is what the capacity plugin reports. |
+| `resource_behavior[].scales_with` | no | If a resource is given, matching resources scales with this resource. The other resource may be specified by its name (for resources within the same service type), or by a slash-concatenated pair of service type and resource name, e.g. `compute/cores`. |
+| `resource_behavior[].scaling_factor` | yes, if `scales_with` is given | The scaling factor that will be reported for these resources' scaling relation. |
+| `resource_behavior[].min_nonzero_project_quota` | no | A lower boundary for project quota values that are not zero. |
+| `resource_behavior[].annotations` | no | A map of extra key-value pairs that will be inserted into matching resources as-is in responses to GET requests, e.g. at `project.services[].resources[].annotations`. |
 
 For example:
 
@@ -576,7 +576,7 @@ scraping. Subresources bear the following attributes:
 ## Available capacity plugins
 
 Note that capacity for a resource only becomes visible when the corresponding service is enabled in the
-`clusters.$id.services` list as well.
+`services` list as well.
 
 ### `cfm`
 
