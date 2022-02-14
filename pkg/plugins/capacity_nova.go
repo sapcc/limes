@@ -31,6 +31,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/aggregates"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/hypervisors"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
+	"github.com/gophercloud/gophercloud/openstack/placement/v1/resourceproviders"
 	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/logg"
@@ -119,13 +120,17 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 	}
 
 	//when using the placement API, we need to enumerate resource providers once
-	var resourceProviders []placementResourceProvider
+	var allResourceProviders []resourceproviders.ResourceProvider
 	if p.cfg.Nova.UsePlacementAPI {
-		placementClient, err := newPlacementClient(provider, eo)
+		client, err := openstack.NewPlacementV1(provider, eo)
 		if err != nil {
 			return nil, "", err
 		}
-		resourceProviders, err = placementClient.ListResourceProviders()
+		allPages, err := resourceproviders.List(client, nil).AllPages()
+		if err != nil {
+			return nil, "", err
+		}
+		allResourceProviders, err = resourceproviders.ExtractResourceProviders(allPages)
 		if err != nil {
 			return nil, "", err
 		}
@@ -146,7 +151,7 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 
 		var hvCapacity partialNovaCapacity
 		if p.cfg.Nova.UsePlacementAPI {
-			hvCapacity, err = hypervisor.getCapacityViaPlacementAPI(provider, eo, resourceProviders)
+			hvCapacity, err = hypervisor.getCapacityViaPlacementAPI(provider, eo, allResourceProviders)
 			if err != nil {
 				logg.Error("cannot get capacity for hypervisor %d (%s) with .service.host %q from Placement API (falling back to Nova Hypervisor API): %s",
 					hypervisor.ID, hypervisor.HypervisorHostname, hypervisor.Service.Host,
@@ -402,12 +407,12 @@ func (h novaHypervisor) getCapacityViaNovaAPI() partialNovaCapacity {
 	}
 }
 
-func (h novaHypervisor) getCapacityViaPlacementAPI(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, resourceProviders []placementResourceProvider) (partialNovaCapacity, error) {
+func (h novaHypervisor) getCapacityViaPlacementAPI(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, resourceProviders []resourceproviders.ResourceProvider) (partialNovaCapacity, error) {
 	//find the resource provider that corresponds to this hypervisor
 	var providerID string
 	for _, rp := range resourceProviders {
 		if rp.Name == h.HypervisorHostname {
-			providerID = rp.ID
+			providerID = rp.UUID
 			break
 		}
 	}
@@ -417,29 +422,29 @@ func (h novaHypervisor) getCapacityViaPlacementAPI(provider *gophercloud.Provide
 	}
 
 	//collect data about that resource provider from the Placement API
-	client, err := newPlacementClient(provider, eo)
+	client, err := openstack.NewPlacementV1(provider, eo)
 	if err != nil {
 		return partialNovaCapacity{}, err
 	}
-	inventory, err := client.GetInventory(providerID)
+	inventory, err := resourceproviders.GetInventories(client, providerID).Extract()
 	if err != nil {
 		return partialNovaCapacity{}, err
 	}
-	usages, err := client.GetUsages(providerID)
+	usages, err := resourceproviders.GetUsages(client, providerID).Extract()
 	if err != nil {
 		return partialNovaCapacity{}, err
 	}
 
 	return partialNovaCapacity{
 		VCPUs: core.CapacityDataForAZ{
-			Capacity: inventory["VCPU"].UsableCapacity(),
-			Usage:    usages["VCPU"],
+			Capacity: uint64(inventory.Inventories["VCPU"].Total - inventory.Inventories["VCPU"].Reserved),
+			Usage:    uint64(usages.Usages["VCPU"]),
 		},
 		MemoryMB: core.CapacityDataForAZ{
-			Capacity: inventory["MEMORY_MB"].UsableCapacity(),
-			Usage:    usages["MEMORY_MB"],
+			Capacity: uint64(inventory.Inventories["MEMORY_MB"].Total - inventory.Inventories["MEMORY_MB"].Reserved),
+			Usage:    uint64(usages.Usages["MEMORY_MB"]),
 		},
-		LocalGB:    inventory["DISK_GB"].UsableCapacity(),
+		LocalGB:    uint64(inventory.Inventories["DISK_GB"].Total - inventory.Inventories["DISK_GB"].Reserved),
 		RunningVMs: h.RunningVMs,
 	}, nil
 }
