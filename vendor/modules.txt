@@ -32,6 +32,7 @@ github.com/gophercloud/gophercloud/openstack/blockstorage/extensions/schedulerst
 github.com/gophercloud/gophercloud/openstack/blockstorage/extensions/services
 github.com/gophercloud/gophercloud/openstack/blockstorage/v2/volumes
 github.com/gophercloud/gophercloud/openstack/common/extensions
+github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/aggregates
 github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/availabilityzones
 github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/hypervisors
 github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/limits
