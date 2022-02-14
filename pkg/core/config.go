@@ -100,9 +100,9 @@ type DiscoveryConfiguration struct {
 
 //ServiceConfiguration describes a service that is enabled for a certain cluster.
 type ServiceConfiguration struct {
-	Type   string          `yaml:"type"`
-	Shared bool            `yaml:"shared"`
-	Auth   *AuthParameters `yaml:"auth"`
+	Type   string                 `yaml:"type"`
+	Shared bool                   `yaml:"shared"`
+	Auth   map[string]interface{} `yaml:"auth"`
 	// RateLimits describes the global rate limits (all requests for to a backend) and default project level rate limits.
 	RateLimits ServiceRateLimitConfiguration `yaml:"rate_limits"`
 	//for quota plugins that need configuration, add a field with the service type as
@@ -161,8 +161,8 @@ type RateLimitConfiguration struct {
 //CapacitorConfiguration describes a capacity plugin that is enabled for a
 //certain cluster.
 type CapacitorConfiguration struct {
-	ID   string          `yaml:"id"`
-	Auth *AuthParameters `yaml:"auth"`
+	ID   string                 `yaml:"id"`
+	Auth map[string]interface{} `yaml:"auth"`
 	//for capacitors that need configuration, add a field with the plugin's ID as
 	//name and put the config data in there (use a struct to be able to give
 	//config options meaningful names)
@@ -417,13 +417,24 @@ func (cfg configurationInFile) validate() (success bool) {
 				missing(fmt.Sprintf("services[%d].type", idx))
 			}
 			if srv.Shared {
+				//TODO remove this deprecation warning once the change was rolled out everywhere
 				logg.Error("clusters[%s].services[%d].shared is true, which is not supported anymore", clusterID, idx)
+				success = false
+			}
+			if len(srv.Auth) > 0 {
+				//TODO remove this deprecation warning once the change was rolled out everywhere
+				logg.Error("clusters[%s].services[%d].auth was provided, but is not supported anymore", clusterID, idx)
 				success = false
 			}
 		}
 		for idx, capa := range cluster.Capacitors {
 			if capa.ID == "" {
 				missing(fmt.Sprintf("capacitors[%d].id", idx))
+			}
+			if len(capa.Auth) > 0 {
+				//TODO remove this deprecation warning once the change was rolled out everywhere
+				logg.Error("clusters[%s].capacitors[%d].auth was provided, but is not supported anymore", clusterID, idx)
+				success = false
 			}
 		}
 

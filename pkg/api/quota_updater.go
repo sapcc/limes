@@ -337,7 +337,7 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 
 			//perform validation
 			if plugin, exists := u.Cluster.QuotaPlugins[srvType]; exists {
-				provider, eo := u.Cluster.ProviderClientForService(srvType)
+				provider, eo := u.Cluster.ProviderClient()
 				domain := core.KeystoneDomainFromDB(*u.Domain)
 				project := core.KeystoneProjectFromDB(*u.Project, domain)
 				err := plugin.IsQuotaAcceptableForProject(provider, eo, project, quotaValues)

@@ -243,25 +243,6 @@ This method is useful when there are a lot of projects (e.g. more than 10 000)
 
 This section lists all supported service types and the resources that are understood for each service. The `type` string is always equal to the one that appears in the Keystone service catalog.
 
-For each service, an `auth:` section can be given to provide alternative credentials for operations on this service type
-(i.e. get quota/usage, set quota). This is particularly useful for shared services, when the service user with the
-required permissions is in a different cluster than the one for which quotas are managed. The structure is the same as
-for `clusters.$id.auth`. For example:
-
-```yaml
-services:
-  - type: compute
-  - type: object-store
-    auth:
-      auth_url:            https://keystone.staging.example.com/v3
-      user_name:           limes
-      user_domain_name:    Default
-      project_name:        service
-      project_domain_name: Default
-      password:            swordfish
-      region_name:         staging
-```
-
 ## `compute`: Nova v2
 
 ```yaml
@@ -617,29 +598,6 @@ scraping. Subresources bear the following attributes:
 
 Note that capacity for a resource only becomes visible when the corresponding service is enabled in the
 `clusters.$id.services` list as well.
-
-For each capacitor, an `auth:` section can be given to provide alternative credentials for read operations performed by
-this capacitor. This is particularly useful for shared services, when the service user with the required permissions is
-in a different cluster than the one for which quotas are managed. The structure is the same as for `clusters.$id.auth`.
-For example:
-
-```yaml
-capacitors:
-  - id: nova
-  - id: cinder
-    auth:
-      auth_url:            https://keystone.staging.example.com/v3
-      user_name:           limes
-      user_domain_name:    Default
-      project_name:        service
-      project_domain_name: Default
-      password:            swordfish
-      region_name:         staging
-    cinder:
-      volume_types:
-        vmware:     { volume_backend_name: vmware_ssd, default: true }
-        vmware_hdd: { volume_backend_name: vmware_hdd, default: false }
-```
 
 ## `cfm`
 

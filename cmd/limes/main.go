@@ -273,7 +273,7 @@ func taskTestGetQuota(config core.Configuration, cluster *core.Cluster, args []s
 	}
 
 	serviceType := args[1]
-	provider, eo := getServiceProviderClient(cluster, serviceType)
+	provider, eo := cluster.ProviderClient()
 	project, err := findProjectForTesting(cluster, provider, eo, args[0])
 	if err != nil {
 		return err
@@ -317,7 +317,7 @@ func taskTestGetRates(config core.Configuration, cluster *core.Cluster, args []s
 	}
 
 	serviceType := args[1]
-	provider, eo := getServiceProviderClient(cluster, serviceType)
+	provider, eo := cluster.ProviderClient()
 	project, err := findProjectForTesting(cluster, provider, eo, args[0])
 	if err != nil {
 		return err
@@ -342,13 +342,6 @@ func taskTestGetRates(config core.Configuration, cluster *core.Cluster, args []s
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	return enc.Encode(result)
-}
-
-func getServiceProviderClient(cluster *core.Cluster, serviceType string) (*gophercloud.ProviderClient, gophercloud.EndpointOpts) {
-	if !cluster.HasService(serviceType) {
-		logg.Fatal("unknown service type: %s", serviceType)
-	}
-	return cluster.ProviderClientForService(serviceType)
 }
 
 func findProjectForTesting(cluster *core.Cluster, client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, projectUUID string) (core.KeystoneProject, error) {
@@ -411,7 +404,7 @@ func taskTestSetQuota(config core.Configuration, cluster *core.Cluster, args []s
 	}
 
 	serviceType := args[1]
-	provider, eo := getServiceProviderClient(cluster, serviceType)
+	provider, eo := cluster.ProviderClient()
 	project, err := findProjectForTesting(cluster, provider, eo, args[0])
 	if err != nil {
 		return err
@@ -448,7 +441,7 @@ func taskTestScanCapacity(config core.Configuration, cluster *core.Cluster, args
 		logg.Fatal("unknown capacitor: %s", capacitorID)
 	}
 
-	provider, eo := cluster.ProviderClientForCapacitor(capacitorID)
+	provider, eo := cluster.ProviderClient()
 	capacities, serializedMetrics, err := plugin.Scrape(provider, eo)
 	if err != nil {
 		logg.Error("Scrape failed: %s", util.ErrorToString(err))

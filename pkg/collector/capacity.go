@@ -72,7 +72,7 @@ func (c *Collector) scanCapacity() {
 		clusterCapacitorSuccessCounter.With(labels).Add(0)
 		clusterCapacitorFailedCounter.With(labels).Add(0)
 
-		provider, eo := c.Cluster.ProviderClientForCapacitor(capacitorID)
+		provider, eo := c.Cluster.ProviderClient()
 		scrapeStart := c.TimeNow()
 		capacities, serializedMetrics, err := plugin.Scrape(provider, eo)
 		scrapeDuration := c.TimeNow().Sub(scrapeStart)

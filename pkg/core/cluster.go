@@ -131,20 +131,10 @@ func (c *Cluster) Connect() error {
 	if err != nil {
 		return fmt.Errorf("failed to authenticate in cluster %s: %s", c.ID, err.Error())
 	}
+	provider := c.Config.Auth.ProviderClient
+	eo := c.Config.Auth.EndpointOpts
 
 	for _, srv := range c.Config.Services {
-		provider := c.Config.Auth.ProviderClient
-		eo := c.Config.Auth.EndpointOpts
-
-		if srv.Auth != nil {
-			err := srv.Auth.Connect()
-			if err != nil {
-				return fmt.Errorf("failed to authenticate for service %s in cluster %s: %s", srv.Type, c.ID, err.Error())
-			}
-			provider = srv.Auth.ProviderClient
-			eo = srv.Auth.EndpointOpts
-		}
-
 		err := c.QuotaPlugins[srv.Type].Init(provider, eo)
 		if err != nil {
 			return fmt.Errorf("failed to initialize service %s in cluster %s: %s", srv.Type, c.ID, err.Error())
@@ -152,18 +142,6 @@ func (c *Cluster) Connect() error {
 	}
 
 	for _, capa := range c.Config.Capacitors {
-		provider := c.Config.Auth.ProviderClient
-		eo := c.Config.Auth.EndpointOpts
-
-		if capa.Auth != nil {
-			err := capa.Auth.Connect()
-			if err != nil {
-				return fmt.Errorf("failed to authenticate for capacitor %s in cluster %s: %s", capa.ID, c.ID, err.Error())
-			}
-			provider = capa.Auth.ProviderClient
-			eo = capa.Auth.EndpointOpts
-		}
-
 		err := c.CapacityPlugins[capa.ID].Init(provider, eo)
 		if err != nil {
 			return fmt.Errorf("failed to initialize capacitor %s in cluster %s: %s", capa.ID, c.ID, err.Error())
@@ -273,30 +251,6 @@ func (c Cluster) parseLowPrivilegeRaiseLimits(inputs map[string]map[string]strin
 //returns nil unless Connect() is called first. (This usually happens at
 //program startup time for the current cluster.)
 func (c *Cluster) ProviderClient() (*gophercloud.ProviderClient, gophercloud.EndpointOpts) {
-	return c.Config.Auth.ProviderClient, c.Config.Auth.EndpointOpts
-}
-
-//ProviderClientForCapacitor returns the gophercloud.ProviderClient for this
-//capacitor. This returns nil unless Connect() is called first. (This usually
-//happens at program startup time for the current cluster.)
-func (c *Cluster) ProviderClientForCapacitor(capacitorID string) (*gophercloud.ProviderClient, gophercloud.EndpointOpts) {
-	for _, capa := range c.Config.Capacitors {
-		if capa.ID == capacitorID && capa.Auth != nil {
-			return capa.Auth.ProviderClient, capa.Auth.EndpointOpts
-		}
-	}
-	return c.Config.Auth.ProviderClient, c.Config.Auth.EndpointOpts
-}
-
-//ProviderClientForService returns the gophercloud.ProviderClient for this
-//service. This returns nil unless Connect() is called first. (This usually
-//happens at program startup time for the current cluster.)
-func (c *Cluster) ProviderClientForService(serviceType string) (*gophercloud.ProviderClient, gophercloud.EndpointOpts) {
-	for _, srv := range c.Config.Services {
-		if srv.Type == serviceType && srv.Auth != nil {
-			return srv.Auth.ProviderClient, srv.Auth.EndpointOpts
-		}
-	}
 	return c.Config.Auth.ProviderClient, c.Config.Auth.EndpointOpts
 }
 
