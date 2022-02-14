@@ -23,7 +23,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -33,7 +32,7 @@ import (
 )
 
 var clusterReportQuery1 = db.SimplifyWhitespaceInSQL(`
-	SELECT d.cluster_id, ps.type, pr.name,
+	SELECT ps.type, pr.name,
 	       SUM(pr.quota), SUM(pr.usage),
 	       SUM(GREATEST(pr.usage - pr.quota, 0)),
 	       SUM(COALESCE(pr.physical_usage, pr.usage)), COUNT(pr.physical_usage) > 0,
@@ -41,46 +40,42 @@ var clusterReportQuery1 = db.SimplifyWhitespaceInSQL(`
 	       MIN(ps.rates_scraped_at), MAX(ps.rates_scraped_at)
 	  FROM domains d
 	  JOIN projects p ON p.domain_id = d.id
-	  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
+	  JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
 	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
 	 WHERE %s GROUP BY d.cluster_id, ps.type, pr.name
 `)
 
 var clusterReportQuery2 = db.SimplifyWhitespaceInSQL(`
-	SELECT d.cluster_id, ds.type, dr.name, SUM(dr.quota)
+	SELECT ds.type, dr.name, SUM(dr.quota)
 	  FROM domains d
-	  LEFT OUTER JOIN domain_services ds ON ds.domain_id = d.id {{AND ds.type = $service_type}}
+	  JOIN domain_services ds ON ds.domain_id = d.id {{AND ds.type = $service_type}}
 	  LEFT OUTER JOIN domain_resources dr ON dr.service_id = ds.id {{AND dr.name = $resource_name}}
 	 WHERE %s GROUP BY d.cluster_id, ds.type, dr.name
 `)
 
 var clusterReportQuery3 = db.SimplifyWhitespaceInSQL(`
-	SELECT cs.cluster_id, cs.type, cr.name, cr.capacity,
+	SELECT cs.type, cr.name, cr.capacity,
 	       cr.capacity_per_az, cr.subcapacities, cs.scraped_at
 	  FROM cluster_services cs
 	  LEFT OUTER JOIN cluster_resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
 	 WHERE %s {{AND cs.type = $service_type}}
 `)
 
-//GetClusters returns reports for all clusters or, if clusterID is
-//non-nil, for that cluster only.
-//
-//In contrast to nearly everything else in Limes, this needs the full
-//core.Configuration (instead of just the current core.ClusterConfiguration)
-//to look at the services enabled in other clusters.
+//GetCluster returns the report for the whole cluster.
 // TODO: should db be replaced with dbi?
-// TODO: [multi-cluster removal] replace with GetCluster()
-func GetClusters(config core.Configuration, clusterID *string, dbi db.Interface, filter Filter) ([]*limes.ClusterReport, error) {
-	clusters := make(clusters)
+func GetCluster(cluster *core.Cluster, dbi db.Interface, filter Filter) (*limes.ClusterReport, error) {
+	report := &limes.ClusterReport{
+		ID:       "current", //the actual cluster ID is now an implementation detail and not shown on the API
+		Services: make(limes.ClusterServiceReports),
+	}
 
 	if !filter.OnlyRates {
 		//first query: collect project usage data in these clusters
 		queryStr, joinArgs := filter.PrepareQuery(clusterReportQuery1)
-		whereStr, whereArgs := db.BuildSimpleWhereClause(makeClusterFilter("d", clusterID), len(joinArgs))
+		whereStr, whereArgs := db.BuildSimpleWhereClause(makeClusterFilter("d", cluster.ID), len(joinArgs))
 		err := db.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 			var (
-				clusterID         string
-				serviceType       *string
+				serviceType       string
 				resourceName      *string
 				projectsQuota     *uint64
 				usage             *uint64
@@ -92,7 +87,7 @@ func GetClusters(config core.Configuration, clusterID *string, dbi db.Interface,
 				minRatesScrapedAt *time.Time
 				maxRatesScrapedAt *time.Time
 			)
-			err := rows.Scan(&clusterID, &serviceType, &resourceName,
+			err := rows.Scan(&serviceType, &resourceName,
 				&projectsQuota, &usage, &burstUsage,
 				&physicalUsage, &showPhysicalUsage,
 				&minScrapedAt, &maxScrapedAt,
@@ -101,10 +96,9 @@ func GetClusters(config core.Configuration, clusterID *string, dbi db.Interface,
 				return err
 			}
 
-			_, service, resource := clusters.Find(config, clusterID, serviceType, resourceName)
+			service, resource := findInClusterReport(cluster, report, serviceType, resourceName)
 
-			clusterConfig, exists := config.Clusters[clusterID]
-			clusterCanBurst := exists && clusterConfig.Config.Bursting.MaxMultiplier > 0
+			clusterCanBurst := cluster.Config.Bursting.MaxMultiplier > 0
 
 			if service != nil {
 				if maxScrapedAt != nil {
@@ -155,21 +149,19 @@ func GetClusters(config core.Configuration, clusterID *string, dbi db.Interface,
 
 		//second query: collect domain quota data in these clusters
 		queryStr, joinArgs = filter.PrepareQuery(clusterReportQuery2)
-		whereStr, whereArgs = db.BuildSimpleWhereClause(makeClusterFilter("d", clusterID), len(joinArgs))
+		whereStr, whereArgs = db.BuildSimpleWhereClause(makeClusterFilter("d", cluster.ID), len(joinArgs))
 		err = db.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 			var (
-				clusterID    string
-				serviceType  *string
+				serviceType  string
 				resourceName *string
 				quota        *uint64
 			)
-			err := rows.Scan(&clusterID, &serviceType, &resourceName, &quota)
+			err := rows.Scan(&serviceType, &resourceName, &quota)
 			if err != nil {
 				return err
 			}
 
-			_, _, resource := clusters.Find(config, clusterID, serviceType, resourceName)
-
+			_, resource := findInClusterReport(cluster, report, serviceType, resourceName)
 			if resource != nil && quota != nil && !resource.ExternallyManaged && !resource.NoQuota {
 				resource.DomainsQuota = quota
 			}
@@ -185,10 +177,9 @@ func GetClusters(config core.Configuration, clusterID *string, dbi db.Interface,
 		if !filter.WithSubcapacities {
 			queryStr = strings.Replace(queryStr, "cr.subcapacities", "''", 1)
 		}
-		whereStr, whereArgs = db.BuildSimpleWhereClause(makeClusterFilter("cs", clusterID), len(joinArgs))
+		whereStr, whereArgs = db.BuildSimpleWhereClause(makeClusterFilter("cs", cluster.ID), len(joinArgs))
 		err = db.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 			var (
-				clusterID     string
 				serviceType   string
 				resourceName  *string
 				rawCapacity   *uint64
@@ -196,16 +187,16 @@ func GetClusters(config core.Configuration, clusterID *string, dbi db.Interface,
 				subcapacities *string
 				scrapedAt     time.Time
 			)
-			err := rows.Scan(&clusterID, &serviceType, &resourceName, &rawCapacity,
+			err := rows.Scan(&serviceType, &resourceName, &rawCapacity,
 				&capacityPerAZ, &subcapacities, &scrapedAt)
 			if err != nil {
 				return err
 			}
 
-			cluster, _, resource := clusters.Find(config, clusterID, &serviceType, resourceName)
+			_, resource := findInClusterReport(cluster, report, serviceType, resourceName)
 
 			if resource != nil {
-				overcommitFactor := config.Clusters[clusterID].BehaviorForResource(serviceType, *resourceName, "").OvercommitFactor
+				overcommitFactor := cluster.BehaviorForResource(serviceType, *resourceName, "").OvercommitFactor
 				if overcommitFactor == 0 {
 					resource.Capacity = rawCapacity
 				} else {
@@ -225,14 +216,12 @@ func GetClusters(config core.Configuration, clusterID *string, dbi db.Interface,
 				}
 			}
 
-			if cluster != nil {
-				scrapedAtUnix := scrapedAt.Unix()
-				if cluster.MaxScrapedAt == nil || *cluster.MaxScrapedAt < scrapedAtUnix {
-					cluster.MaxScrapedAt = &scrapedAtUnix
-				}
-				if cluster.MinScrapedAt == nil || *cluster.MinScrapedAt > scrapedAtUnix {
-					cluster.MinScrapedAt = &scrapedAtUnix
-				}
+			scrapedAtUnix := scrapedAt.Unix()
+			if report.MaxScrapedAt == nil || *report.MaxScrapedAt < scrapedAtUnix {
+				report.MaxScrapedAt = &scrapedAtUnix
+			}
+			if report.MinScrapedAt == nil || *report.MinScrapedAt > scrapedAtUnix {
+				report.MinScrapedAt = &scrapedAtUnix
 			}
 
 			return nil
@@ -244,94 +233,59 @@ func GetClusters(config core.Configuration, clusterID *string, dbi db.Interface,
 
 	//include global rate limits from configuration
 	if filter.WithRates {
-		if clusterConfig, exists := config.Clusters[*clusterID]; exists {
-			for _, serviceConfig := range clusterConfig.Config.Services {
-				if _, serviceReport, _ := clusters.Find(config, *clusterID, &serviceConfig.Type, nil); serviceReport != nil {
-					serviceReport.Rates = limes.ClusterRateLimitReports{}
+		for _, serviceConfig := range cluster.Config.Services {
+			if serviceReport, _ := findInClusterReport(cluster, report, serviceConfig.Type, nil); serviceReport != nil {
+				serviceReport.Rates = limes.ClusterRateLimitReports{}
 
-					for _, rateCfg := range serviceConfig.RateLimits.Global {
-						serviceReport.Rates[rateCfg.Name] = &limes.ClusterRateLimitReport{
-							RateInfo: limes.RateInfo{
-								Name: rateCfg.Name,
-								Unit: rateCfg.Unit,
-							},
-							Limit:  rateCfg.Limit,
-							Window: rateCfg.Window,
-						}
+				for _, rateCfg := range serviceConfig.RateLimits.Global {
+					serviceReport.Rates[rateCfg.Name] = &limes.ClusterRateLimitReport{
+						RateInfo: limes.RateInfo{
+							Name: rateCfg.Name,
+							Unit: rateCfg.Unit,
+						},
+						Limit:  rateCfg.Limit,
+						Window: rateCfg.Window,
 					}
 				}
 			}
 		}
 	}
 
-	//flatten result (with stable order to keep the tests happy)
-	ids := make([]string, 0, len(clusters))
-	for id := range clusters {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-	result := make([]*limes.ClusterReport, len(clusters))
-	for idx, id := range ids {
-		result[idx] = clusters[id]
-	}
-
-	return result, nil
+	return report, nil
 }
 
-func makeClusterFilter(tableWithClusterID string, clusterID *string) map[string]interface{} {
-	fields := make(map[string]interface{})
-	if clusterID != nil {
-		fields[tableWithClusterID+".cluster_id"] = *clusterID
+func makeClusterFilter(tableWithClusterID string, clusterID string) map[string]interface{} {
+	return map[string]interface{}{
+		tableWithClusterID + ".cluster_id": clusterID,
 	}
-	return fields
 }
 
-type clusters map[string]*limes.ClusterReport
-
-func (c clusters) Find(config core.Configuration, clusterID string, serviceType, resourceName *string) (*limes.ClusterReport, *limes.ClusterServiceReport, *limes.ClusterResourceReport) {
-	clusterConfig, exists := config.Clusters[clusterID]
+func findInClusterReport(cluster *core.Cluster, report *limes.ClusterReport, serviceType string, resourceName *string) (*limes.ClusterServiceReport, *limes.ClusterResourceReport) {
+	service, exists := report.Services[serviceType]
 	if !exists {
-		return nil, nil, nil
-	}
-
-	cluster, exists := c[clusterID]
-	if !exists {
-		cluster = &limes.ClusterReport{
-			ID:       clusterID,
-			Services: make(limes.ClusterServiceReports),
-		}
-		c[clusterID] = cluster
-	}
-
-	if serviceType == nil {
-		return cluster, nil, nil
-	}
-
-	service, exists := cluster.Services[*serviceType]
-	if !exists {
-		if !clusterConfig.HasService(*serviceType) {
-			return cluster, nil, nil
+		if !cluster.HasService(serviceType) {
+			return nil, nil
 		}
 		service = &limes.ClusterServiceReport{
 			Shared:      false,
-			ServiceInfo: clusterConfig.InfoForService(*serviceType),
+			ServiceInfo: cluster.InfoForService(serviceType),
 			Resources:   make(limes.ClusterResourceReports),
 			Rates:       make(limes.ClusterRateLimitReports),
 		}
-		cluster.Services[*serviceType] = service
+		report.Services[serviceType] = service
 	}
 
 	if resourceName == nil {
-		return cluster, service, nil
+		return service, nil
 	}
 
 	resource, exists := service.Resources[*resourceName]
 	if !exists {
-		if !clusterConfig.HasResource(*serviceType, *resourceName) {
-			return cluster, service, nil
+		if !cluster.HasResource(serviceType, *resourceName) {
+			return service, nil
 		}
 		resource = &limes.ClusterResourceReport{
-			ResourceInfo: clusterConfig.InfoForResource(*serviceType, *resourceName),
+			ResourceInfo: cluster.InfoForResource(serviceType, *resourceName),
 		}
 		if !resource.ResourceInfo.NoQuota {
 			//We need to set a default value here. Otherwise zero values will never
@@ -343,7 +297,7 @@ func (c clusters) Find(config core.Configuration, clusterID string, serviceType,
 		service.Resources[*resourceName] = resource
 	}
 
-	return cluster, service, resource
+	return service, resource
 }
 
 func getClusterAZReports(capacityPerAZ string, overcommitFactor float64) (limes.ClusterAvailabilityZoneReports, error) {

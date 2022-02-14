@@ -50,16 +50,9 @@ func (p *v1Provider) GetCluster(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	currentClusterID := p.Cluster.ID
-	clusters, err := reports.GetClusters(p.Config, &currentClusterID, db.DB, filter)
+	cluster, err := reports.GetCluster(p.Cluster, db.DB, filter)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-	if len(clusters) == 0 {
-		http.Error(w, "no such cluster", 404)
-		return
-	}
-
-	clusters[0].ID = "current" //the actual cluster IDs are an implementation detail now
-	respondwith.JSON(w, 200, map[string]interface{}{"cluster": clusters[0]})
+	respondwith.JSON(w, 200, map[string]interface{}{"cluster": cluster})
 }
