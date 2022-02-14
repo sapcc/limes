@@ -5,7 +5,6 @@
       {
         "type": "shared",
         "area": "shared",
-        "shared": true,
         "resources": [],
         "rates": [
           {

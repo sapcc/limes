@@ -37,7 +37,6 @@ type Cluster struct {
 	ID                string
 	Config            *ClusterConfiguration
 	ServiceTypes      []string
-	IsServiceShared   map[string]bool
 	DiscoveryPlugin   DiscoveryPlugin
 	QuotaPlugins      map[string]QuotaPlugin
 	CapacityPlugins   map[string]CapacityPlugin
@@ -61,7 +60,6 @@ func NewCluster(id string, config *ClusterConfiguration) *Cluster {
 	c := &Cluster{
 		ID:              id,
 		Config:          config,
-		IsServiceShared: make(map[string]bool),
 		DiscoveryPlugin: factory(config.Discovery),
 		QuotaPlugins:    make(map[string]QuotaPlugin),
 		CapacityPlugins: make(map[string]CapacityPlugin),
@@ -88,7 +86,6 @@ func NewCluster(id string, config *ClusterConfiguration) *Cluster {
 
 		c.ServiceTypes = append(c.ServiceTypes, srv.Type)
 		c.QuotaPlugins[srv.Type] = plugin
-		c.IsServiceShared[srv.Type] = srv.Shared
 	}
 
 	scrapeSubcapacities := make(map[string]map[string]bool)

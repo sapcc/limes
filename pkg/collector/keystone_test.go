@@ -37,7 +37,6 @@ func keystoneTestCluster(t *testing.T) *core.Cluster {
 		ID:              "west",
 		Config:          &core.ClusterConfiguration{Auth: &core.AuthParameters{}},
 		ServiceTypes:    []string{"unshared", "shared"},
-		IsServiceShared: map[string]bool{"shared": true},
 		DiscoveryPlugin: test.NewDiscoveryPlugin(),
 		QuotaPlugins: map[string]core.QuotaPlugin{
 			"shared":   test.NewPlugin("shared"),

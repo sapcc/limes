@@ -416,6 +416,10 @@ func (cfg configurationInFile) validate() (success bool) {
 			if srv.Type == "" {
 				missing(fmt.Sprintf("services[%d].type", idx))
 			}
+			if srv.Shared {
+				logg.Error("clusters[%s].services[%d].shared is true, which is not supported anymore", clusterID, idx)
+				success = false
+			}
 		}
 		for idx, capa := range cluster.Capacitors {
 			if capa.ID == "" {

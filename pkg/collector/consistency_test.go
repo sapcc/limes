@@ -96,18 +96,8 @@ func Test_Consistency(t *testing.T) {
 	//add some useless *_services entries
 	epoch := time.Unix(0, 0).UTC()
 	err = db.DB.Insert(&db.ClusterService{
-		ClusterID: "shared",
-		Type:      "whatever",
-		ScrapedAt: &epoch,
-	})
-	if err != nil {
-		t.Error(err)
-	}
-	err = db.DB.Insert(&db.ClusterService{
-		//this one is particularly interesting: the "shared" service type exists,
-		//but it may not be unshared as it is here (i.e. ClusterID should be "shared")
 		ClusterID: "west",
-		Type:      "shared",
+		Type:      "whatever",
 		ScrapedAt: &epoch,
 	})
 	if err != nil {
@@ -153,10 +143,7 @@ func Test_Consistency(t *testing.T) {
 	}
 	test.AssertDBContent(t, "fixtures/checkconsistency1.sql")
 
-	//check that CheckConsistency() brings everything back into a nice state (BUT
-	//cluster_service shared/whatever is left as it is even though this service
-	//is not enabled, because CheckConsistency() only looks at one cluster and
-	//cannot know whether another cluster has this service enabled)
+	//check that CheckConsistency() brings everything back into a nice state
 	//
 	//Also, for all services that are created here, resources are added where the
 	//quota constraint contains some Minimum values.

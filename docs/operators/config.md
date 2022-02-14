@@ -243,17 +243,6 @@ This method is useful when there are a lot of projects (e.g. more than 10 000)
 
 This section lists all supported service types and the resources that are understood for each service. The `type` string is always equal to the one that appears in the Keystone service catalog.
 
-For each service, `shared: true` can be set to indicate that the resources of this service are shared among all clusters that specify this service type. For example:
-
-```yaml
-services:
-  # unshared service
-  - type: compute
-  # shared service
-  - type: object-store
-    shared: true
-```
-
 For each service, an `auth:` section can be given to provide alternative credentials for operations on this service type
 (i.e. get quota/usage, set quota). This is particularly useful for shared services, when the service user with the
 required permissions is in a different cluster than the one for which quotas are managed. The structure is the same as
@@ -263,7 +252,6 @@ for `clusters.$id.auth`. For example:
 services:
   - type: compute
   - type: object-store
-    shared: true
     auth:
       auth_url:            https://keystone.staging.example.com/v3
       user_name:           limes

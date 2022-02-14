@@ -61,7 +61,6 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 	}
 
 	serviceTypes := []string{"shared", "unshared"}
-	isServiceShared := map[string]bool{"shared": true}
 	quotaPlugins := map[string]core.QuotaPlugin{
 		"shared":   test.NewPlugin("shared", sharedRatesThatReportUsage...),
 		"unshared": test.NewPlugin("unshared", unsharedRatesThatReportUsage...),
@@ -178,7 +177,6 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 			"west": {
 				ID:               "west",
 				ServiceTypes:     serviceTypes,
-				IsServiceShared:  isServiceShared,
 				DiscoveryPlugin:  test.NewDiscoveryPlugin(),
 				QuotaPlugins:     quotaPlugins,
 				CapacityPlugins:  map[string]core.CapacityPlugin{},
@@ -188,7 +186,6 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 			"cloud": {
 				ID:              "cloud",
 				ServiceTypes:    serviceTypes,
-				IsServiceShared: isServiceShared,
 				DiscoveryPlugin: test.NewDiscoveryPlugin(),
 				QuotaPlugins:    quotaPlugins,
 				CapacityPlugins: map[string]core.CapacityPlugin{},

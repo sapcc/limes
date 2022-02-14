@@ -49,27 +49,18 @@ func (c *Collector) checkConsistencyCluster() {
 
 	//check cluster_services entries
 	var services []db.ClusterService
-	_, err := db.DB.Select(&services, `SELECT * FROM cluster_services WHERE cluster_id IN ($1,'shared')`, c.Cluster.ID)
+	_, err := db.DB.Select(&services, `SELECT * FROM cluster_services WHERE cluster_id = $1`, c.Cluster.ID)
 	if err != nil {
 		c.LogError(err.Error())
 		return
 	}
 
 	//cleanup entries for services that have been disabled
-	sharedSeen := make(map[string]bool)
-	unsharedSeen := make(map[string]bool)
+	seen := make(map[string]bool)
 	for _, service := range services {
-		if service.ClusterID == "shared" {
-			sharedSeen[service.Type] = true
-			//cannot cleanup entries for shared services since we're only looking at
-			//one cluster and thus cannot know if a shared service is disabled in all
-			//clusters
-			continue
-		} else {
-			unsharedSeen[service.Type] = true
-		}
+		seen[service.Type] = true
 
-		if !c.Cluster.HasService(service.Type) || c.Cluster.IsServiceShared[service.Type] {
+		if !c.Cluster.HasService(service.Type) {
 			logg.Info("cleaning up %s service entry for domain %s", service.Type, c.Cluster.ID)
 			_, err := db.DB.Delete(&service)
 			if err != nil {
@@ -80,27 +71,16 @@ func (c *Collector) checkConsistencyCluster() {
 
 	//create missing service entries
 	for _, serviceType := range c.Cluster.ServiceTypes {
-		shared := c.Cluster.IsServiceShared[serviceType]
-		if shared {
-			if sharedSeen[serviceType] {
-				continue
-			}
-		} else {
-			if unsharedSeen[serviceType] {
-				continue
-			}
+		if seen[serviceType] {
+			continue
 		}
 
 		logg.Info("creating missing %s service entry for cluster %s", serviceType, c.Cluster.ID)
-		service := &db.ClusterService{
+		err := db.DB.Insert(&db.ClusterService{
 			ClusterID: c.Cluster.ID,
 			Type:      serviceType,
 			ScrapedAt: &now,
-		}
-		if shared {
-			service.ClusterID = "shared"
-		}
-		err := db.DB.Insert(service)
+		})
 		if err != nil {
 			c.LogError(err.Error())
 		}

@@ -1,8 +1,8 @@
 CREATE OR REPLACE FUNCTION unix(i integer) RETURNS timestamp AS $$ SELECT TO_TIMESTAMP(i) AT TIME ZONE 'Etc/UTC' $$ LANGUAGE SQL;
 
 -- two services, one shared, one unshared
-INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (1, 'west',   'unshared', UNIX(1000));
-INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (2, 'shared', 'shared',   UNIX(1100));
+INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (1, 'west', 'unshared', UNIX(1000));
+INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (2, 'west', 'shared',   UNIX(1100));
 
 -- both services have the resources "things" and "capacity"
 INSERT INTO cluster_resources (service_id, name, capacity, subcapacities, capacity_per_az) VALUES (1, 'things', 139, '[{"smaller_half":46},{"larger_half":93}]', '[{"name":"az-one","capacity":69,"usage":13},{"name":"az-two","capacity":69,"usage":13}]');

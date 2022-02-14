@@ -1,5 +1,5 @@
 INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (1, 'west', 'unshared', 0);
-INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (2, 'shared', 'shared', 0);
+INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (2, 'west', 'shared', 0);
 
 INSERT INTO domain_services (id, domain_id, type) VALUES (1, 1, 'unshared');
 INSERT INTO domain_services (id, domain_id, type) VALUES (2, 1, 'shared');

@@ -5,7 +5,6 @@
       {
         "type": "shared",
         "area": "shared",
-        "shared": true,
         "resources": [],
         "max_scraped_at": 66,
         "min_scraped_at": 22,
