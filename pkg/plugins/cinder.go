@@ -26,6 +26,7 @@ import (
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
+	"github.com/gophercloud/gophercloud/openstack/blockstorage/extensions/quotasets"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v2/volumes"
 	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/prometheus/client_golang/prometheus"
@@ -145,18 +146,10 @@ func (p *cinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 	if err != nil {
 		return nil, "", err
 	}
-
-	var result gophercloud.Result
-	url := client.ServiceURL("os-quota-sets", project.UUID) + "?usage=True"
-	_, err = client.Get(url, &result.Body, nil)
-	if err != nil {
-		return nil, "", err
-	}
-
 	var data struct {
 		QuotaSet map[string]quotaSetField `json:"quota_set"`
 	}
-	err = result.ExtractInto(&data)
+	err = quotasets.GetUsage(client, project.UUID).ExtractInto(&data)
 	if err != nil {
 		return nil, "", err
 	}
