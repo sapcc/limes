@@ -46,57 +46,54 @@ func init() {
 	}
 }
 
-//eventSinkPerCluster is a map of cluster ID to a channel that receives audit events.
-var eventSinkPerCluster map[string]chan<- cadf.Event
+//eventSink is a channel that receives audit events.
+var eventSink chan<- cadf.Event
 
-//StartAuditTrail starts the audit trail by initializing the EventSinkPerCluster
-//and starting separate Commit() goroutines per Cluster.
-func StartAuditTrail(configPerCluster map[string]core.CADFConfiguration) {
-	eventSinkPerCluster = make(map[string]chan<- cadf.Event)
-	for clusterID, config := range configPerCluster {
-		if config.Enabled {
-			labels := prometheus.Labels{
-				"os_cluster": clusterID,
-			}
-			auditEventPublishSuccessCounter.With(labels).Add(0)
-			auditEventPublishFailedCounter.With(labels).Add(0)
-
-			onSuccessFunc := func() {
-				auditEventPublishSuccessCounter.With(labels).Inc()
-			}
-			onFailFunc := func() {
-				auditEventPublishFailedCounter.With(labels).Inc()
-			}
-			s := make(chan cadf.Event, 20)
-			eventSinkPerCluster[clusterID] = s
-
-			if config.RabbitMQ.Username == "" {
-				config.RabbitMQ.Username = "guest"
-			}
-			if config.RabbitMQ.Password == "" {
-				config.RabbitMQ.Password = "guest"
-			}
-			if config.RabbitMQ.Hostname == "" {
-				config.RabbitMQ.Hostname = "localhost"
-			}
-			if config.RabbitMQ.Port == 0 {
-				config.RabbitMQ.Port = 5672
-			}
-			rabbitURI := amqp.URI{
-				Scheme:   "amqp",
-				Host:     config.RabbitMQ.Hostname,
-				Port:     config.RabbitMQ.Port,
-				Username: config.RabbitMQ.Username,
-				Password: string(config.RabbitMQ.Password),
-				Vhost:    "/",
-			}
-
-			go audittools.AuditTrail{
-				EventSink:           s,
-				OnSuccessfulPublish: onSuccessFunc,
-				OnFailedPublish:     onFailFunc,
-			}.Commit(config.RabbitMQ.QueueName, rabbitURI)
+//StartAuditTrail starts the audit trail by initializing the event sink and
+//starting a Commit() goroutine.
+func StartAuditTrail(clusterID string, config core.CADFConfiguration) {
+	if config.Enabled {
+		labels := prometheus.Labels{
+			"os_cluster": clusterID,
 		}
+		auditEventPublishSuccessCounter.With(labels).Add(0)
+		auditEventPublishFailedCounter.With(labels).Add(0)
+
+		onSuccessFunc := func() {
+			auditEventPublishSuccessCounter.With(labels).Inc()
+		}
+		onFailFunc := func() {
+			auditEventPublishFailedCounter.With(labels).Inc()
+		}
+		s := make(chan cadf.Event, 20)
+		eventSink = s
+
+		if config.RabbitMQ.Username == "" {
+			config.RabbitMQ.Username = "guest"
+		}
+		if config.RabbitMQ.Password == "" {
+			config.RabbitMQ.Password = "guest"
+		}
+		if config.RabbitMQ.Hostname == "" {
+			config.RabbitMQ.Hostname = "localhost"
+		}
+		if config.RabbitMQ.Port == 0 {
+			config.RabbitMQ.Port = 5672
+		}
+		rabbitURI := amqp.URI{
+			Scheme:   "amqp",
+			Host:     config.RabbitMQ.Hostname,
+			Port:     config.RabbitMQ.Port,
+			Username: config.RabbitMQ.Username,
+			Password: string(config.RabbitMQ.Password),
+			Vhost:    "/",
+		}
+
+		go audittools.AuditTrail{
+			EventSink:           s,
+			OnSuccessfulPublish: onSuccessFunc,
+			OnFailedPublish:     onFailFunc,
+		}.Commit(config.RabbitMQ.QueueName, rabbitURI)
 	}
 }
 
@@ -104,7 +101,7 @@ var observerUUID = audittools.GenerateUUID()
 
 //logAndPublishEvent takes the necessary parameters and generates a cadf.Event.
 //It logs the event to stdout and publishes it to a RabbitMQ server.
-func logAndPublishEvent(clusterID string, time time.Time, req *http.Request, token *gopherpolicy.Token, reasonCode int, target audittools.TargetRenderer) {
+func logAndPublishEvent(time time.Time, req *http.Request, token *gopherpolicy.Token, reasonCode int, target audittools.TargetRenderer) {
 	p := audittools.EventParameters{
 		Time:       time,
 		Request:    req,
@@ -129,9 +126,8 @@ func logAndPublishEvent(clusterID string, time time.Time, req *http.Request, tok
 		logg.Other("AUDIT", string(msg))
 	}
 
-	s := eventSinkPerCluster[clusterID]
-	if s != nil {
-		s <- event
+	if eventSink != nil {
+		eventSink <- event
 	}
 }
 

@@ -32,19 +32,11 @@ import (
 	yaml "gopkg.in/yaml.v2"
 )
 
-//Configuration contains all the data from the configuration file.
-type Configuration struct {
-	Clusters map[string]*Cluster
-}
-
-type configurationInFile struct {
-	Clusters map[string]*ClusterConfiguration `yaml:"clusters"`
-}
-
 //ClusterConfiguration contains all the configuration data for a single cluster.
 //It is passed around in a lot of Limes code, mostly for the cluster ID and the
 //list of enabled services.
 type ClusterConfiguration struct {
+	ClusterID  string                   `yaml:"cluster_id"`
 	Auth       *AuthParameters          `yaml:"auth"`
 	CatalogURL string                   `yaml:"catalog_url"`
 	Discovery  DiscoveryConfiguration   `yaml:"discovery"`
@@ -301,39 +293,32 @@ type PrometheusAPIConfiguration struct {
 //NewConfiguration reads and validates the given configuration file.
 //Errors are logged and will result in
 //program termination, causing the function to not return.
-func NewConfiguration(path string) (cfg Configuration) {
+func NewConfiguration(path string) (cluster *Cluster) {
 	//read config file
 	configBytes, err := os.ReadFile(path)
 	if err != nil {
 		logg.Fatal("read configuration file: %s", err.Error())
 	}
-	var cfgFile configurationInFile
-	err = yaml.Unmarshal(configBytes, &cfgFile)
+	var config ClusterConfiguration
+	err = yaml.Unmarshal(configBytes, &config)
 	if err != nil {
 		logg.Fatal("parse configuration: %s", err.Error())
 	}
-	if !cfgFile.validate() {
+	if !config.validateConfig() {
 		os.Exit(1)
 	}
 
 	//inflate the ClusterConfiguration instances into Cluster, thereby validating
 	//the existence of the requested quota and capacity plugins and initializing
 	//some handy lookup tables
-	cfg = Configuration{
-		Clusters: make(map[string]*Cluster),
+	if config.Discovery.Method == "" {
+		//choose default discovery method
+		config.Discovery.Method = "list"
 	}
-	for clusterID, config := range cfgFile.Clusters {
-		if config.Discovery.Method == "" {
-			//choose default discovery method
-			config.Discovery.Method = "list"
-		}
-		cfg.Clusters[clusterID] = NewCluster(clusterID, config)
-	}
-
-	return
+	return NewCluster(config)
 }
 
-func (cfg configurationInFile) validate() (success bool) {
+func (cluster ClusterConfiguration) validateConfig() (success bool) {
 	//do not fail on first error; keep going and report all errors at once
 	success = true //until proven otherwise
 
@@ -341,168 +326,153 @@ func (cfg configurationInFile) validate() (success bool) {
 		logg.Error("missing %s configuration value", key)
 		success = false
 	}
-	if len(cfg.Clusters) == 0 {
-		missing("clusters[]")
+	if cluster.ClusterID == "" {
+		missing("cluster_id")
 	}
 
-	for clusterID, cluster := range cfg.Clusters {
-		switch clusterID {
-		case "current":
-			logg.Error("\"current\" is not an acceptable cluster ID (it would make the URL /v1/clusters/current ambiguous)")
+	compileOptionalRx := func(pattern string) *regexp.Regexp {
+		if pattern == "" {
+			return nil
+		}
+		rx, err := regexp.Compile(pattern)
+		if err != nil {
+			logg.Error("failed to compile regex %#v: %s", pattern, err.Error())
 			success = false
-		case "shared":
-			logg.Error("\"shared\" is not an acceptable cluster ID (it is used for internal accounting)")
+		}
+		return rx
+	}
+
+	if cluster.Auth == nil {
+		//Avoid nil pointer access if section cluster.auth not provided but still alert on the missing values
+		cluster.Auth = new(AuthParameters)
+	}
+	//gophercloud is very strict about requiring a trailing slash here
+	if cluster.Auth.AuthURL != "" && !strings.HasSuffix(cluster.Auth.AuthURL, "/") {
+		cluster.Auth.AuthURL += "/"
+	}
+
+	switch {
+	case cluster.Auth.AuthURL == "":
+		missing("auth.auth_url")
+	case !strings.HasPrefix(cluster.Auth.AuthURL, "http://") && !strings.HasPrefix(cluster.Auth.AuthURL, "https://"):
+		logg.Error("auth.auth_url does not look like a HTTP URL")
+		success = false
+	case !strings.HasSuffix(cluster.Auth.AuthURL, "/v3/"):
+		logg.Error("auth.auth_url does not end with \"/v3/\"")
+		success = false
+	}
+
+	if cluster.Auth.UserName == "" {
+		missing("auth.user_name")
+	}
+	if cluster.Auth.UserDomainName == "" {
+		missing("auth.user_domain_name")
+	}
+	if cluster.Auth.ProjectName == "" {
+		missing("auth.project_name")
+	}
+	if cluster.Auth.ProjectDomainName == "" {
+		missing("auth.project_domain_name")
+	}
+	if cluster.Auth.Password == "" {
+		missing("auth.password")
+	}
+	//NOTE: cluster.RegionName is optional
+	if len(cluster.Services) == 0 {
+		missing("services[]")
+	}
+	//NOTE: cluster.Capacitors is optional
+
+	for idx, srv := range cluster.Services {
+		if srv.Type == "" {
+			missing(fmt.Sprintf("services[%d].type", idx))
+		}
+		if srv.Shared {
+			//TODO remove this deprecation warning once the change was rolled out everywhere
+			logg.Error("services[%d].shared is true, which is not supported anymore", idx)
 			success = false
+		}
+		if len(srv.Auth) > 0 {
+			//TODO remove this deprecation warning once the change was rolled out everywhere
+			logg.Error("services[%d].auth was provided, but is not supported anymore", idx)
+			success = false
+		}
+	}
+	for idx, capa := range cluster.Capacitors {
+		if capa.ID == "" {
+			missing(fmt.Sprintf("capacitors[%d].id", idx))
+		}
+		if len(capa.Auth) > 0 {
+			//TODO remove this deprecation warning once the change was rolled out everywhere
+			logg.Error("capacitors[%d].auth was provided, but is not supported anymore", idx)
+			success = false
+		}
+	}
+
+	cluster.Discovery.IncludeDomainRx = compileOptionalRx(cluster.Discovery.IncludeDomainPattern)
+	cluster.Discovery.ExcludeDomainRx = compileOptionalRx(cluster.Discovery.ExcludeDomainPattern)
+
+	cluster.LowPrivilegeRaise.IncludeProjectDomainRx = compileOptionalRx(cluster.LowPrivilegeRaise.IncludeProjectDomainPattern)
+	cluster.LowPrivilegeRaise.ExcludeProjectDomainRx = compileOptionalRx(cluster.LowPrivilegeRaise.ExcludeProjectDomainPattern)
+
+	for idx, behavior := range cluster.ResourceBehaviors {
+		behavior.Compiled = ResourceBehavior{
+			OvercommitFactor:       behavior.OvercommitFactor,
+			MinNonZeroProjectQuota: behavior.MinNonZeroProjectQuota,
+			Annotations:            behavior.Annotations,
 		}
 
-		missing := func(key string) {
-			logg.Error("missing clusters[%s].%s configuration value", clusterID, key)
-			success = false
+		if behavior.FullResourceName == "" {
+			missing(fmt.Sprintf(`resource_behavior[%d].resource`, idx))
+		} else {
+			pattern := `^(?:` + behavior.FullResourceName + `)$`
+			behavior.Compiled.FullResourceNameRx = compileOptionalRx(pattern)
 		}
-		compileOptionalRx := func(pattern string) *regexp.Regexp {
-			if pattern == "" {
-				return nil
-			}
-			rx, err := regexp.Compile(pattern)
-			if err != nil {
-				logg.Error("failed to compile regex %#v: %s", pattern, err.Error())
+
+		if behavior.Scope == "" {
+			behavior.Compiled.ScopeRx = nil
+		} else {
+			pattern := `^(?:` + behavior.Scope + `)$`
+			behavior.Compiled.ScopeRx = compileOptionalRx(pattern)
+		}
+
+		if behavior.MaxBurstMultiplier != nil {
+			behavior.Compiled.MaxBurstMultiplier = *behavior.MaxBurstMultiplier
+			if *behavior.MaxBurstMultiplier < 0 {
+				logg.Error(`resource_behavior[%d].max_burst_multiplier may not be negative`, idx)
 				success = false
 			}
-			return rx
+		} else {
+			behavior.Compiled.MaxBurstMultiplier = limes.BurstingMultiplier(math.Inf(+1))
 		}
 
-		if cluster.Auth == nil {
-			//Avoid nil pointer access if section cluster.auth not provided but still alert on the missing values
-			cluster.Auth = new(AuthParameters)
-		}
-		//gophercloud is very strict about requiring a trailing slash here
-		if cluster.Auth.AuthURL != "" && !strings.HasSuffix(cluster.Auth.AuthURL, "/") {
-			cluster.Auth.AuthURL += "/"
-		}
-
-		switch {
-		case cluster.Auth.AuthURL == "":
-			missing("auth.auth_url")
-		case !strings.HasPrefix(cluster.Auth.AuthURL, "http://") && !strings.HasPrefix(cluster.Auth.AuthURL, "https://"):
-			logg.Error("clusters[%s].auth.auth_url does not look like a HTTP URL", clusterID)
-			success = false
-		case !strings.HasSuffix(cluster.Auth.AuthURL, "/v3/"):
-			logg.Error("clusters[%s].auth.auth_url does not end with \"/v3/\"", clusterID)
-			success = false
-		}
-
-		if cluster.Auth.UserName == "" {
-			missing("auth.user_name")
-		}
-		if cluster.Auth.UserDomainName == "" {
-			missing("auth.user_domain_name")
-		}
-		if cluster.Auth.ProjectName == "" {
-			missing("auth.project_name")
-		}
-		if cluster.Auth.ProjectDomainName == "" {
-			missing("auth.project_domain_name")
-		}
-		if cluster.Auth.Password == "" {
-			missing("auth.password")
-		}
-		//NOTE: cluster.RegionName is optional
-		if len(cluster.Services) == 0 {
-			missing("services[]")
-		}
-		//NOTE: cluster.Capacitors is optional
-
-		for idx, srv := range cluster.Services {
-			if srv.Type == "" {
-				missing(fmt.Sprintf("services[%d].type", idx))
-			}
-			if srv.Shared {
-				//TODO remove this deprecation warning once the change was rolled out everywhere
-				logg.Error("clusters[%s].services[%d].shared is true, which is not supported anymore", clusterID, idx)
-				success = false
-			}
-			if len(srv.Auth) > 0 {
-				//TODO remove this deprecation warning once the change was rolled out everywhere
-				logg.Error("clusters[%s].services[%d].auth was provided, but is not supported anymore", clusterID, idx)
-				success = false
-			}
-		}
-		for idx, capa := range cluster.Capacitors {
-			if capa.ID == "" {
-				missing(fmt.Sprintf("capacitors[%d].id", idx))
-			}
-			if len(capa.Auth) > 0 {
-				//TODO remove this deprecation warning once the change was rolled out everywhere
-				logg.Error("clusters[%s].capacitors[%d].auth was provided, but is not supported anymore", clusterID, idx)
-				success = false
-			}
-		}
-
-		cluster.Discovery.IncludeDomainRx = compileOptionalRx(cluster.Discovery.IncludeDomainPattern)
-		cluster.Discovery.ExcludeDomainRx = compileOptionalRx(cluster.Discovery.ExcludeDomainPattern)
-
-		cluster.LowPrivilegeRaise.IncludeProjectDomainRx = compileOptionalRx(cluster.LowPrivilegeRaise.IncludeProjectDomainPattern)
-		cluster.LowPrivilegeRaise.ExcludeProjectDomainRx = compileOptionalRx(cluster.LowPrivilegeRaise.ExcludeProjectDomainPattern)
-
-		for idx, behavior := range cluster.ResourceBehaviors {
-			behavior.Compiled = ResourceBehavior{
-				OvercommitFactor:       behavior.OvercommitFactor,
-				MinNonZeroProjectQuota: behavior.MinNonZeroProjectQuota,
-				Annotations:            behavior.Annotations,
-			}
-
-			if behavior.FullResourceName == "" {
-				missing(fmt.Sprintf(`resource_behavior[%d].resource`, idx))
+		if behavior.ScalesWith != "" {
+			if behavior.ScalingFactor == 0 {
+				missing(fmt.Sprintf(
+					`resource_behavior[%d].scaling_factor (must be given since "scales_with" is given)`,
+					idx,
+				))
 			} else {
-				pattern := `^(?:` + behavior.FullResourceName + `)$`
-				behavior.Compiled.FullResourceNameRx = compileOptionalRx(pattern)
-			}
-
-			if behavior.Scope == "" {
-				behavior.Compiled.ScopeRx = nil
-			} else {
-				pattern := `^(?:` + behavior.Scope + `)$`
-				behavior.Compiled.ScopeRx = compileOptionalRx(pattern)
-			}
-
-			if behavior.MaxBurstMultiplier != nil {
-				behavior.Compiled.MaxBurstMultiplier = *behavior.MaxBurstMultiplier
-				if *behavior.MaxBurstMultiplier < 0 {
-					logg.Error(`clusters[%s].resource_behavior[%d].max_burst_multiplier may not be negative`, clusterID, idx)
+				if strings.Contains(behavior.ScalesWith, "/") {
+					fields := strings.SplitN(behavior.ScalesWith, "/", 2)
+					behavior.Compiled.ScalesWithServiceType = fields[0]
+					behavior.Compiled.ScalesWithResourceName = fields[1]
+					behavior.Compiled.ScalingFactor = behavior.ScalingFactor
+				} else {
+					logg.Error(`resource_behavior[%d].scales_with must have the format "service_type/resource_name"`, idx)
 					success = false
 				}
-			} else {
-				behavior.Compiled.MaxBurstMultiplier = limes.BurstingMultiplier(math.Inf(+1))
-			}
-
-			if behavior.ScalesWith != "" {
-				if behavior.ScalingFactor == 0 {
-					missing(fmt.Sprintf(
-						`resource_behavior[%d].scaling_factor (must be given since "scales_with" is given)`,
-						idx,
-					))
-				} else {
-					if strings.Contains(behavior.ScalesWith, "/") {
-						fields := strings.SplitN(behavior.ScalesWith, "/", 2)
-						behavior.Compiled.ScalesWithServiceType = fields[0]
-						behavior.Compiled.ScalesWithResourceName = fields[1]
-						behavior.Compiled.ScalingFactor = behavior.ScalingFactor
-					} else {
-						logg.Error(`clusters[%s].resource_behavior[%d].scales_with must have the format "service_type/resource_name"`, clusterID, idx)
-						success = false
-					}
-				}
 			}
 		}
+	}
 
-		if cluster.Bursting.MaxMultiplier < 0 {
-			logg.Error("clusters[%s].bursting.max_multiplier may not be negative")
-			success = false
-		}
+	if cluster.Bursting.MaxMultiplier < 0 {
+		logg.Error("bursting.max_multiplier may not be negative")
+		success = false
+	}
 
-		if cluster.CADF.Enabled && cluster.CADF.RabbitMQ.QueueName == "" {
-			missing("cadf.rabbitmq.queue_name")
-		}
+	if cluster.CADF.Enabled && cluster.CADF.RabbitMQ.QueueName == "" {
+		missing("cadf.rabbitmq.queue_name")
 	}
 
 	return

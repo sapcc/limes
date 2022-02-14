@@ -39,7 +39,6 @@ import (
 //See func PutDomain and func PutProject for how it's used.
 type QuotaUpdater struct {
 	//scope
-	Config  core.Configuration
 	Cluster *core.Cluster
 	Domain  *db.Domain  //always set (for project quota updates, contains the project's domain)
 	Project *db.Project //nil for domain quota updates
@@ -726,7 +725,7 @@ func (u QuotaUpdater) CommitAuditTrail(token *gopherpolicy.Token, r *http.Reques
 				}
 			}
 
-			logAndPublishEvent(u.Cluster.ID, requestTime, r, token, statusCode,
+			logAndPublishEvent(requestTime, r, token, statusCode,
 				quotaEventTarget{
 					DomainID:     u.Domain.UUID,
 					ProjectID:    projectUUID, //is empty for domain quota updates, see above
@@ -753,7 +752,7 @@ func (u QuotaUpdater) CommitAuditTrail(token *gopherpolicy.Token, r *http.Reques
 				}
 			}
 
-			logAndPublishEvent(u.Cluster.ID, requestTime, r, token, statusCode,
+			logAndPublishEvent(requestTime, r, token, statusCode,
 				rateLimitEventTarget{
 					DomainID:     u.Domain.UUID,
 					ProjectID:    projectUUID,

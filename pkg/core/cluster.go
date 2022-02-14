@@ -20,6 +20,7 @@
 package core
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"sort"
@@ -35,7 +36,7 @@ import (
 //the list of enabled services, and access to the quota and capacity plugins.
 type Cluster struct {
 	ID                string
-	Config            *ClusterConfiguration
+	Config            ClusterConfiguration
 	ServiceTypes      []string
 	DiscoveryPlugin   DiscoveryPlugin
 	QuotaPlugins      map[string]QuotaPlugin
@@ -51,14 +52,14 @@ type Cluster struct {
 //NewCluster creates a new Cluster instance with the given ID and
 //configuration, and also initializes all quota and capacity plugins. Errors
 //will be logged when some of the requested plugins cannot be found.
-func NewCluster(id string, config *ClusterConfiguration) *Cluster {
+func NewCluster(config ClusterConfiguration) *Cluster {
 	factory, exists := discoveryPluginFactories[config.Discovery.Method]
 	if !exists {
-		logg.Fatal("setup for cluster %s failed: no suitable discovery plugin found", id)
+		logg.Fatal("setup for cluster %s failed: no suitable discovery plugin found", config.ClusterID)
 	}
 
 	c := &Cluster{
-		ID:              id,
+		ID:              config.ClusterID,
 		Config:          config,
 		DiscoveryPlugin: factory(config.Discovery),
 		QuotaPlugins:    make(map[string]QuotaPlugin),
@@ -129,7 +130,7 @@ func NewCluster(id string, config *ClusterConfiguration) *Cluster {
 func (c *Cluster) Connect() error {
 	err := c.Config.Auth.Connect()
 	if err != nil {
-		return fmt.Errorf("failed to authenticate in cluster %s: %s", c.ID, err.Error())
+		return fmt.Errorf("failed to authenticate: %s", err.Error())
 	}
 	provider := c.Config.Auth.ProviderClient
 	eo := c.Config.Auth.EndpointOpts
@@ -137,14 +138,14 @@ func (c *Cluster) Connect() error {
 	for _, srv := range c.Config.Services {
 		err := c.QuotaPlugins[srv.Type].Init(provider, eo)
 		if err != nil {
-			return fmt.Errorf("failed to initialize service %s in cluster %s: %s", srv.Type, c.ID, err.Error())
+			return fmt.Errorf("failed to initialize service %s: %s", srv.Type, err.Error())
 		}
 	}
 
 	for _, capa := range c.Config.Capacitors {
 		err := c.CapacityPlugins[capa.ID].Init(provider, eo)
 		if err != nil {
-			return fmt.Errorf("failed to initialize capacitor %s in cluster %s: %s", capa.ID, c.ID, err.Error())
+			return fmt.Errorf("failed to initialize capacitor %s: %s", capa.ID, err.Error())
 		}
 	}
 
@@ -156,7 +157,7 @@ func (c *Cluster) Connect() error {
 			for _, err := range errs {
 				logg.Error(err.Error())
 			}
-			return fmt.Errorf("cannot load quota constraints for cluster %s (see errors above)", c.ID)
+			return errors.New("cannot load quota constraints (see errors above)")
 		}
 	}
 

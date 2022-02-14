@@ -41,12 +41,8 @@ func (p *v1Provider) ListDomains(w http.ResponseWriter, r *http.Request) {
 	if !token.Require(w, "domain:list") {
 		return
 	}
-	cluster := p.FindClusterFromRequest(w, r, token)
-	if cluster == nil {
-		return
-	}
 
-	domains, err := reports.GetDomains(cluster, nil, db.DB, reports.ReadFilter(r))
+	domains, err := reports.GetDomains(p.Cluster, nil, db.DB, reports.ReadFilter(r))
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -61,16 +57,12 @@ func (p *v1Provider) GetDomain(w http.ResponseWriter, r *http.Request) {
 	if !token.Require(w, "domain:show") {
 		return
 	}
-	cluster := p.FindClusterFromRequest(w, r, token)
-	if cluster == nil {
-		return
-	}
-	dbDomain := p.FindDomainFromRequest(w, r, cluster)
+	dbDomain := p.FindDomainFromRequest(w, r)
 	if dbDomain == nil {
 		return
 	}
 
-	domain, err := GetDomainReport(cluster, *dbDomain, db.DB, reports.ReadFilter(r))
+	domain, err := GetDomainReport(p.Cluster, *dbDomain, db.DB, reports.ReadFilter(r))
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -84,12 +76,8 @@ func (p *v1Provider) DiscoverDomains(w http.ResponseWriter, r *http.Request) {
 	if !token.Require(w, "domain:discover") {
 		return
 	}
-	cluster := p.FindClusterFromRequest(w, r, token)
-	if cluster == nil {
-		return
-	}
 
-	newDomainUUIDs, err := collector.ScanDomains(cluster, collector.ScanDomainsOpts{})
+	newDomainUUIDs, err := collector.ScanDomains(p.Cluster, collector.ScanDomainsOpts{})
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -127,16 +115,12 @@ func (p *v1Provider) putOrSimulatePutDomain(w http.ResponseWriter, r *http.Reque
 	}
 
 	updater := QuotaUpdater{
-		Config:     p.Config,
+		Cluster:    p.Cluster,
 		CanRaise:   checkToken("domain:raise"),
 		CanRaiseLP: checkToken("domain:raise_lowpriv"),
 		CanLower:   checkToken("domain:lower"),
 	}
-	updater.Cluster = p.FindClusterFromRequest(w, r, token)
-	if updater.Cluster == nil {
-		return
-	}
-	updater.Domain = p.FindDomainFromRequest(w, r, updater.Cluster)
+	updater.Domain = p.FindDomainFromRequest(w, r)
 	if updater.Domain == nil {
 		return
 	}

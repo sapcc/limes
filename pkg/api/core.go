@@ -55,7 +55,6 @@ type VersionLinkData struct {
 
 type v1Provider struct {
 	Cluster        *core.Cluster
-	Config         core.Configuration
 	PolicyEnforcer gopherpolicy.Enforcer
 	VersionData    VersionData
 	//see comment in ListProjects() for details
@@ -65,11 +64,10 @@ type v1Provider struct {
 //NewV1Router creates a http.Handler that serves the Limes v1 API.
 //It also returns the VersionData for this API version which is needed for the
 //version advertisement on "GET /".
-func NewV1Router(cluster *core.Cluster, config core.Configuration, policyEnforcer gopherpolicy.Enforcer) (http.Handler, VersionData) {
+func NewV1Router(cluster *core.Cluster, policyEnforcer gopherpolicy.Enforcer) (http.Handler, VersionData) {
 	r := mux.NewRouter()
 	p := &v1Provider{
 		Cluster:        cluster,
-		Config:         config,
 		PolicyEnforcer: policyEnforcer,
 	}
 	p.VersionData = VersionData{
@@ -109,7 +107,17 @@ func NewV1Router(cluster *core.Cluster, config core.Configuration, policyEnforce
 	r.Methods("POST").Path("/v1/domains/{domain_id}/projects/{project_id}/simulate-put").HandlerFunc(p.SimulatePutProject)
 	r.Methods("PUT").Path("/v1/domains/{domain_id}/projects/{project_id}").HandlerFunc(p.PutProject)
 
-	return sre.Instrument(r), p.VersionData
+	return sre.Instrument(forbidClusterIDHeader(r)), p.VersionData
+}
+
+func forbidClusterIDHeader(inner http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if len(r.Header[http.CanonicalHeaderKey("X-Limes-Cluster-Id")]) > 0 {
+			http.Error(w, "multi-cluster support is removed: the X-Limes-Cluster-Id header is not allowed anymore", http.StatusBadRequest)
+		} else {
+			inner.ServeHTTP(w, r)
+		}
+	})
 }
 
 //RequireJSON will parse the request body into the given data structure, or
@@ -133,44 +141,10 @@ func (p *v1Provider) Path(elements ...string) string {
 	return strings.Join(parts, "/")
 }
 
-//FindClusterFromRequest loads the core.Cluster referenced by the
-//X-Limes-Cluster-Id request header (or returns the current cluster if there is
-//no such header). Any errors will be written into the response immediately and
-//cause a nil return value.
-func (p *v1Provider) FindClusterFromRequest(w http.ResponseWriter, r *http.Request, token *gopherpolicy.Token) *core.Cluster {
-	//log deprecation warning when X-Limes-Cluster-Id is given
-	if len(r.Header[http.CanonicalHeaderKey("X-Limes-Cluster-Id")]) > 0 {
-		http.Error(w, "multi-cluster support is removed: the X-Limes-Cluster-Id header is not allowed anymore", http.StatusBadRequest)
-		return nil
-	}
-
-	//use current cluster if nothing else specified
-	clusterID := r.Header.Get("X-Limes-Cluster-Id")
-	if clusterID == "" || clusterID == p.Cluster.ID {
-		return p.Cluster
-	}
-
-	//if foreign cluster specified, user needs permission to access it
-	requiredAccess := "foreign:write"
-	if r.Method == "GET" || r.Method == "HEAD" {
-		requiredAccess = "foreign:read"
-	}
-	if !token.Require(w, requiredAccess) {
-		return nil
-	}
-
-	cluster, exists := p.Config.Clusters[clusterID]
-	if !exists {
-		http.Error(w, "no such cluster", 404)
-		return nil
-	}
-	return cluster
-}
-
 //FindDomainFromRequest loads the db.Domain referenced by the :domain_id path
 //parameter. Any errors will be written into the response immediately and cause
 //a nil return value.
-func (p *v1Provider) FindDomainFromRequest(w http.ResponseWriter, r *http.Request, cluster *core.Cluster) *db.Domain {
+func (p *v1Provider) FindDomainFromRequest(w http.ResponseWriter, r *http.Request) *db.Domain {
 	domainUUID := mux.Vars(r)["domain_id"]
 	if domainUUID == "" {
 		http.Error(w, "domain ID missing", 400)
@@ -179,7 +153,7 @@ func (p *v1Provider) FindDomainFromRequest(w http.ResponseWriter, r *http.Reques
 
 	var domain db.Domain
 	err := db.DB.SelectOne(&domain, `SELECT * FROM domains WHERE uuid = $1 AND cluster_id = $2`,
-		domainUUID, cluster.ID,
+		domainUUID, p.Cluster.ID,
 	)
 	switch {
 	case err == sql.ErrNoRows:

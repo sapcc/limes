@@ -55,7 +55,7 @@ func prepareScrapeTest(t *testing.T, numProjects int, quotaPlugins ...core.Quota
 		DiscoveryPlugin: test.NewDiscoveryPlugin(),
 		QuotaPlugins:    map[string]core.QuotaPlugin{},
 		CapacityPlugins: map[string]core.CapacityPlugin{},
-		Config:          &core.ClusterConfiguration{Auth: &core.AuthParameters{}},
+		Config:          core.ClusterConfiguration{Auth: &core.AuthParameters{}},
 	}
 	for _, plugin := range quotaPlugins {
 		info := plugin.ServiceInfo()

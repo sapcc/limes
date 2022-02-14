@@ -102,9 +102,11 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 
 	quotaPlugins["shared"].(*test.Plugin).WithExternallyManagedResource = true
 
-	westClusterConfig := &core.ClusterConfiguration{
+	clusterConfig := core.ClusterConfiguration{
 		Auth: &core.AuthParameters{},
-		Services: []core.ServiceConfiguration{
+	}
+	if clusterName == "west" {
+		clusterConfig.Services = []core.ServiceConfiguration{
 			{
 				Type: "shared",
 				RateLimits: core.ServiceRateLimitConfiguration{
@@ -169,29 +171,19 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 					},
 				},
 			},
-		},
+		}
 	}
 
-	config := core.Configuration{
-		Clusters: map[string]*core.Cluster{
-			"west": {
-				ID:               "west",
-				ServiceTypes:     serviceTypes,
-				DiscoveryPlugin:  test.NewDiscoveryPlugin(),
-				QuotaPlugins:     quotaPlugins,
-				CapacityPlugins:  map[string]core.CapacityPlugin{},
-				QuotaConstraints: &westConstraintSet,
-				Config:           westClusterConfig,
-			},
-			"cloud": {
-				ID:              "cloud",
-				ServiceTypes:    serviceTypes,
-				DiscoveryPlugin: test.NewDiscoveryPlugin(),
-				QuotaPlugins:    quotaPlugins,
-				CapacityPlugins: map[string]core.CapacityPlugin{},
-				Config:          &core.ClusterConfiguration{Auth: &core.AuthParameters{}},
-			},
-		},
+	cluster := &core.Cluster{
+		ID:              clusterName,
+		ServiceTypes:    serviceTypes,
+		DiscoveryPlugin: test.NewDiscoveryPlugin(),
+		QuotaPlugins:    quotaPlugins,
+		CapacityPlugins: map[string]core.CapacityPlugin{},
+		Config:          clusterConfig,
+	}
+	if clusterName == "west" {
+		cluster.QuotaConstraints = &westConstraintSet
 	}
 
 	//load mock policy (where everything is allowed)
@@ -201,51 +193,52 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 		AllowLower:   true,
 	}
 
-	config.Clusters["west"].Config.ResourceBehaviors = []*core.ResourceBehaviorConfiguration{
-		//check minimum non-zero project quota constraint
-		{
-			Compiled: core.ResourceBehavior{
-				MaxBurstMultiplier:     limes.BurstingMultiplier(math.Inf(+1)),
-				FullResourceNameRx:     regexp.MustCompile("^unshared/things$"),
-				MinNonZeroProjectQuota: 10,
-			},
-		},
-		//check how scaling relations are reported
-		{
-			Compiled: core.ResourceBehavior{
-				MaxBurstMultiplier:     limes.BurstingMultiplier(math.Inf(+1)),
-				FullResourceNameRx:     regexp.MustCompile("^unshared/things$"),
-				ScalesWithResourceName: "things",
-				ScalesWithServiceType:  "shared",
-				ScalingFactor:          2,
-			},
-		},
-		//check how annotations are reported
-		{
-			Compiled: core.ResourceBehavior{
-				MaxBurstMultiplier: limes.BurstingMultiplier(math.Inf(+1)),
-				FullResourceNameRx: regexp.MustCompile("^shared/.*things$"),
-				ScopeRx:            regexp.MustCompile("^germany(?:/dresden)?$"),
-				Annotations: map[string]interface{}{
-					"annotated": true,
-					"text":      "this annotation appears on shared things of domain germany and project dresden",
+	if clusterName == "west" {
+		cluster.Config.ResourceBehaviors = []*core.ResourceBehaviorConfiguration{
+			//check minimum non-zero project quota constraint
+			{
+				Compiled: core.ResourceBehavior{
+					MaxBurstMultiplier:     limes.BurstingMultiplier(math.Inf(+1)),
+					FullResourceNameRx:     regexp.MustCompile("^unshared/things$"),
+					MinNonZeroProjectQuota: 10,
 				},
 			},
-		},
-		{
-			Compiled: core.ResourceBehavior{
-				MaxBurstMultiplier: limes.BurstingMultiplier(math.Inf(+1)),
-				FullResourceNameRx: regexp.MustCompile("^shared/external_things$"),
-				ScopeRx:            regexp.MustCompile("^germany/dresden$"),
-				Annotations: map[string]interface{}{
-					"text": "this annotation appears on shared/external_things of project dresden only",
+			//check how scaling relations are reported
+			{
+				Compiled: core.ResourceBehavior{
+					MaxBurstMultiplier:     limes.BurstingMultiplier(math.Inf(+1)),
+					FullResourceNameRx:     regexp.MustCompile("^unshared/things$"),
+					ScalesWithResourceName: "things",
+					ScalesWithServiceType:  "shared",
+					ScalingFactor:          2,
 				},
 			},
-		},
+			//check how annotations are reported
+			{
+				Compiled: core.ResourceBehavior{
+					MaxBurstMultiplier: limes.BurstingMultiplier(math.Inf(+1)),
+					FullResourceNameRx: regexp.MustCompile("^shared/.*things$"),
+					ScopeRx:            regexp.MustCompile("^germany(?:/dresden)?$"),
+					Annotations: map[string]interface{}{
+						"annotated": true,
+						"text":      "this annotation appears on shared things of domain germany and project dresden",
+					},
+				},
+			},
+			{
+				Compiled: core.ResourceBehavior{
+					MaxBurstMultiplier: limes.BurstingMultiplier(math.Inf(+1)),
+					FullResourceNameRx: regexp.MustCompile("^shared/external_things$"),
+					ScopeRx:            regexp.MustCompile("^germany/dresden$"),
+					Annotations: map[string]interface{}{
+						"text": "this annotation appears on shared/external_things of project dresden only",
+					},
+				},
+			},
+		}
 	}
 
-	cluster := config.Clusters[clusterName]
-	router, _ := NewV1Router(cluster, config, enforcer)
+	router, _ := NewV1Router(cluster, enforcer)
 	return cluster, router, enforcer
 }
 
