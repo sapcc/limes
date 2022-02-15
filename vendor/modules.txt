@@ -37,7 +37,7 @@ github.com/gofrs/uuid
 ## explicit; go 1.9
 github.com/golang/protobuf/proto
 github.com/golang/protobuf/ptypes/timestamp
-# github.com/gophercloud/gophercloud v0.24.0 => github.com/gophercloud/gophercloud v0.24.1-0.20220510134014-0ffab06fc18e
+# github.com/gophercloud/gophercloud v0.24.0 => github.com/sapcc/gophercloud v0.0.0-20220510151119-9b193d901d47
 ## explicit; go 1.14
 github.com/gophercloud/gophercloud
 github.com/gophercloud/gophercloud/openstack
@@ -56,6 +56,8 @@ github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/servergroups
 github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/volumeattach
 github.com/gophercloud/gophercloud/openstack/compute/v2/flavors
 github.com/gophercloud/gophercloud/openstack/compute/v2/servers
+github.com/gophercloud/gophercloud/openstack/dns/v2/quotas
+github.com/gophercloud/gophercloud/openstack/dns/v2/recordsets
 github.com/gophercloud/gophercloud/openstack/dns/v2/zones
 github.com/gophercloud/gophercloud/openstack/identity/v2/tenants
 github.com/gophercloud/gophercloud/openstack/identity/v2/tokens
@@ -296,4 +298,4 @@ gopkg.in/gorp.v2
 # gopkg.in/yaml.v2 v2.4.0
 ## explicit; go 1.15
 gopkg.in/yaml.v2
-# github.com/gophercloud/gophercloud => github.com/gophercloud/gophercloud v0.24.1-0.20220510134014-0ffab06fc18e
+# github.com/gophercloud/gophercloud => github.com/sapcc/gophercloud v0.0.0-20220510151119-9b193d901d47
