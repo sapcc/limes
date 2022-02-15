@@ -13,7 +13,6 @@ require (
 	github.com/rs/cors v1.8.2
 	github.com/sapcc/go-bits v0.0.0-20220223123017-b00971956813
 	github.com/sapcc/hermes v0.0.0-20220216215340-12b4f661924a
-	github.com/streadway/amqp v1.0.0
 	golang.org/x/net v0.0.0-20220127200216-cd36cc0744dd
 	gopkg.in/gorp.v2 v2.2.0
 	gopkg.in/yaml.v2 v2.4.0
@@ -39,9 +38,10 @@ require (
 	github.com/prometheus/client_model v0.2.0 // indirect
 	github.com/prometheus/procfs v0.7.3 // indirect
 	github.com/sergi/go-diff v1.2.0 // indirect
+	github.com/streadway/amqp v1.0.0 // indirect
 	github.com/ziutek/mymysql v1.5.4 // indirect
 	golang.org/x/sys v0.0.0-20220209214540-3681064d5158 // indirect
 	google.golang.org/protobuf v1.27.1 // indirect
 )
 
-replace github.com/gophercloud/gophercloud => github.com/gophercloud/gophercloud v0.24.1-0.20220209210756-c2c9a5564161
+replace github.com/gophercloud/gophercloud => github.com/gophercloud/gophercloud v0.24.1-0.20220228183853-beef396efca5
