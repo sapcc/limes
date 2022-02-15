@@ -341,6 +341,10 @@ func (c *Cluster) BehaviorForResource(serviceType, resourceName, scopeName strin
 		if result.MinNonZeroProjectQuota < behavior.MinNonZeroProjectQuota {
 			result.MinNonZeroProjectQuota = behavior.MinNonZeroProjectQuota
 		}
+		if behavior.NoneZeroDependedQuotaServiceType != "" {
+			result.NoneZeroDependedQuotaServiceType = behavior.NoneZeroDependedQuotaServiceType
+			result.NoneZeroDependedQuotaResourceName = behavior.NoneZeroDependedQuotaResourceName
+		}
 		if len(behavior.Annotations) > 0 && result.Annotations == nil {
 			result.Annotations = make(map[string]interface{})
 		}

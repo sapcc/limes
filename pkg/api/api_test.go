@@ -819,6 +819,103 @@ func Test_DomainOperations(t *testing.T) {
 			},
 		},
 	}.Check(t, router)
+
+	// check NoneZeroDependedQuota
+	cluster.Config.ResourceBehaviors = []*core.ResourceBehaviorConfiguration{
+		{
+			Compiled: core.ResourceBehavior{
+				MaxBurstMultiplier:                limes.BurstingMultiplier(math.Inf(+1)),
+				FullResourceNameRx:                regexp.MustCompile("^shared/things$"),
+				NoneZeroDependedQuotaServiceType:  "shared",
+				NoneZeroDependedQuotaResourceName: "capacity",
+			},
+		},
+	}
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany",
+		ExpectStatus: 202,
+		ExpectBody:   assert.StringData(""),
+		Body: assert.JSONObject{
+			"domain": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "shared",
+						"resources": []assert.JSONObject{
+							{"name": "things", "quota": 30},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany",
+		ExpectStatus: 202,
+		ExpectBody:   assert.StringData(""),
+		Body: assert.JSONObject{
+			"domain": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "shared",
+						"resources": []assert.JSONObject{
+							{"name": "capacity", "quota": 30},
+							{"name": "things", "quota": 20},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+	cluster.Config.ResourceBehaviors = []*core.ResourceBehaviorConfiguration{
+		{
+			Compiled: core.ResourceBehavior{
+				MaxBurstMultiplier:                limes.BurstingMultiplier(math.Inf(+1)),
+				FullResourceNameRx:                regexp.MustCompile("^shared/things$"),
+				NoneZeroDependedQuotaServiceType:  "unshared",
+				NoneZeroDependedQuotaResourceName: "does-not-exist",
+			},
+		},
+	}
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany",
+		ExpectStatus: 422,
+		ExpectBody:   assert.StringData("cannot change shared/things quota: must allocate unshared/does-not-exist quota before\n"),
+		Body: assert.JSONObject{
+			"domain": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "shared",
+						"resources": []assert.JSONObject{
+							{"name": "things", "quota": 10},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany",
+		ExpectStatus: 422,
+		ExpectBody:   assert.StringData("cannot change shared/things quota: must allocate unshared/does-not-exist quota before\n"),
+		Body: assert.JSONObject{
+			"domain": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "shared",
+						"resources": []assert.JSONObject{
+							{"name": "capacity", "quota": 35},
+							// something different than the current quota (20) because otherwise the validation for depended quota is not run
+							{"name": "things", "quota": 25},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
 }
 
 func expectDomainQuota(t *testing.T, domainName, serviceType, resourceName string, expected uint64) {

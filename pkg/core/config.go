@@ -233,21 +233,24 @@ type ResourceBehaviorConfiguration struct {
 	ScalesWith             string                    `yaml:"scales_with"`
 	ScalingFactor          float64                   `yaml:"scaling_factor"`
 	MinNonZeroProjectQuota uint64                    `yaml:"min_nonzero_project_quota"`
+	NoneZeroDependedQuota  string                    `yaml:"nonzero_depended_quota"`
 	Annotations            map[string]interface{}    `yaml:"annotations"`
 	Compiled               ResourceBehavior          `yaml:"-"`
 }
 
 //ResourceBehavior is the compiled version of ResourceBehaviorConfiguration.
 type ResourceBehavior struct {
-	FullResourceNameRx     *regexp.Regexp
-	ScopeRx                *regexp.Regexp
-	MaxBurstMultiplier     limes.BurstingMultiplier
-	OvercommitFactor       float64
-	ScalesWithResourceName string
-	ScalesWithServiceType  string
-	ScalingFactor          float64
-	MinNonZeroProjectQuota uint64
-	Annotations            map[string]interface{}
+	FullResourceNameRx                *regexp.Regexp
+	ScopeRx                           *regexp.Regexp
+	MaxBurstMultiplier                limes.BurstingMultiplier
+	OvercommitFactor                  float64
+	ScalesWithResourceName            string
+	ScalesWithServiceType             string
+	ScalingFactor                     float64
+	MinNonZeroProjectQuota            uint64
+	NoneZeroDependedQuotaResourceName string
+	NoneZeroDependedQuotaServiceType  string
+	Annotations                       map[string]interface{}
 }
 
 //ToScalingBehavior returns the limes.ScalingBehavior for this resource, or nil
@@ -462,6 +465,17 @@ func (cluster ClusterConfiguration) validateConfig() (success bool) {
 					logg.Error(`resource_behavior[%d].scales_with must have the format "service_type/resource_name"`, idx)
 					success = false
 				}
+			}
+		}
+
+		if behavior.NoneZeroDependedQuota != "" {
+			if strings.Contains(behavior.NoneZeroDependedQuota, "/") {
+				fields := strings.SplitN(behavior.NoneZeroDependedQuota, "/", 2)
+				behavior.Compiled.NoneZeroDependedQuotaServiceType = fields[0]
+				behavior.Compiled.NoneZeroDependedQuotaResourceName = fields[1]
+			} else {
+				logg.Error(`resource_behavior[%d].nonzero_depended_quota must have the format "service_type/resource_name"`, idx)
+				success = false
 			}
 		}
 	}

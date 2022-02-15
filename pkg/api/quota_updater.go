@@ -218,7 +218,7 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 					}
 					//value is valid and novel -> perform further validation
 					behavior := u.Cluster.BehaviorForResource(srv.Type, res.Name, u.ScopeName())
-					req.ValidationError = u.validateQuota(srv, res, behavior, *clusterRes, *domRes, projRes, req.OldValue, req.NewValue)
+					req.ValidationError = u.validateQuota(srv, res, behavior, domainReport, projectReport, *clusterRes, *domRes, projRes, req.OldValue, req.NewValue)
 				}
 			}
 
@@ -357,7 +357,7 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 	return nil
 }
 
-func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limes.ResourceInfo, behavior core.ResourceBehavior, clusterRes limes.ClusterResourceReport, domRes limes.DomainResourceReport, projRes *limes.ProjectResourceReport, oldQuota, newQuota uint64) *core.QuotaValidationError {
+func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limes.ResourceInfo, behavior core.ResourceBehavior, domainReport *limes.DomainReport, projectReport *limes.ProjectReport, clusterRes limes.ClusterResourceReport, domRes limes.DomainResourceReport, projRes *limes.ProjectResourceReport, oldQuota, newQuota uint64) *core.QuotaValidationError {
 	//can we change this quota at all?
 	if res.ExternallyManaged {
 		return &core.QuotaValidationError{
@@ -405,9 +405,9 @@ func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limes.ResourceInf
 
 	//specific rules for domain quotas vs. project quotas
 	if u.Project == nil {
-		return u.validateDomainQuota(domRes, newQuota)
+		return u.validateDomainQuota(behavior, domainReport, domRes, newQuota)
 	}
-	return u.validateProjectQuota(domRes, *projRes, newQuota)
+	return u.validateProjectQuota(behavior, projectReport, domRes, *projRes, newQuota)
 }
 
 func (u QuotaUpdater) validateRateLimit(srv limes.ServiceInfo) *core.QuotaValidationError {
@@ -451,8 +451,22 @@ func (u QuotaUpdater) validateAuthorization(srv limes.ServiceInfo, oldQuota, new
 	}
 }
 
-func (u QuotaUpdater) validateDomainQuota(report limes.DomainResourceReport, newQuota uint64) *core.QuotaValidationError {
-	if report.DomainQuota == nil || report.ProjectsQuota == nil {
+func (u QuotaUpdater) validateDomainQuota(behavior core.ResourceBehavior, report *limes.DomainReport, domRes limes.DomainResourceReport, newQuota uint64) *core.QuotaValidationError {
+	if behavior.NoneZeroDependedQuotaServiceType != "" && behavior.NoneZeroDependedQuotaResourceName != "" {
+		if domainService, exists := report.Services[behavior.NoneZeroDependedQuotaServiceType]; exists {
+			if _, exists := domainService.Resources[behavior.NoneZeroDependedQuotaResourceName]; !exists {
+				return &core.QuotaValidationError{
+					Status: http.StatusUnprocessableEntity,
+					Unit:   domRes.Unit,
+					Message: fmt.Sprintf("must allocate %s/%s quota before",
+						behavior.NoneZeroDependedQuotaServiceType, behavior.NoneZeroDependedQuotaResourceName,
+					),
+				}
+			}
+		}
+	}
+
+	if domRes.DomainQuota == nil || domRes.ProjectsQuota == nil {
 		//defense in depth: we should have detected NoQuota resources a long time ago
 		return &core.QuotaValidationError{
 			Status:  http.StatusInternalServerError,
@@ -461,20 +475,34 @@ func (u QuotaUpdater) validateDomainQuota(report limes.DomainResourceReport, new
 	}
 
 	//when reducing domain quota, existing project quotas must fit into new domain quota
-	oldQuota := *report.DomainQuota
-	if newQuota < oldQuota && newQuota < *report.ProjectsQuota {
+	oldQuota := *domRes.DomainQuota
+	if newQuota < oldQuota && newQuota < *domRes.ProjectsQuota {
 		return &core.QuotaValidationError{
 			Status:       http.StatusConflict,
 			Message:      "domain quota may not be smaller than sum of project quotas in that domain",
-			MinimumValue: report.ProjectsQuota,
-			Unit:         report.Unit,
+			MinimumValue: domRes.ProjectsQuota,
+			Unit:         domRes.Unit,
 		}
 	}
 
 	return nil
 }
 
-func (u QuotaUpdater) validateProjectQuota(domRes limes.DomainResourceReport, projRes limes.ProjectResourceReport, newQuota uint64) *core.QuotaValidationError {
+func (u QuotaUpdater) validateProjectQuota(behavior core.ResourceBehavior, report *limes.ProjectReport, domRes limes.DomainResourceReport, projRes limes.ProjectResourceReport, newQuota uint64) *core.QuotaValidationError {
+	if behavior.NoneZeroDependedQuotaServiceType != "" && behavior.NoneZeroDependedQuotaResourceName != "" {
+		if projectService, exists := report.Services[behavior.NoneZeroDependedQuotaServiceType]; exists {
+			if _, exists := projectService.Resources[behavior.NoneZeroDependedQuotaResourceName]; !exists {
+				return &core.QuotaValidationError{
+					Status: http.StatusUnprocessableEntity,
+					Unit:   domRes.Unit,
+					Message: fmt.Sprintf("must allocate %s/%s quota before",
+						behavior.NoneZeroDependedQuotaServiceType, behavior.NoneZeroDependedQuotaResourceName,
+					),
+				}
+			}
+		}
+	}
+
 	if projRes.Quota == nil || domRes.ProjectsQuota == nil || domRes.DomainQuota == nil {
 		//defense in depth: we should have detected NoQuota resources a long time ago
 		return &core.QuotaValidationError{
