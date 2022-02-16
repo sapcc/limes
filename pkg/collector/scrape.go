@@ -242,6 +242,7 @@ func (c *Collector) writeScrapeResult(project core.KeystoneProject, projectID in
 		}
 
 		//TODO: Update() only if required
+		logg.Debug("writing scrape result: %#v", res)
 		_, err := tx.Update(&res)
 		if err != nil {
 			return err
