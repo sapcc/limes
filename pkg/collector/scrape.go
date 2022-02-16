@@ -160,7 +160,7 @@ func (c *Collector) Scrape() {
 func (c *Collector) writeScrapeResult(project core.KeystoneProject, projectID int64, projectHasBursting bool, serviceType string, serviceID int64, resourceData map[string]core.ResourceData, serializedMetrics string, scrapedAt time.Time, scrapeDuration time.Duration) error {
 	tx, err := db.DB.Begin()
 	if err != nil {
-		return err
+		return fmt.Errorf("while beginning transaction: %w", err)
 	}
 	defer db.RollbackUnlessCommitted(tx)
 
@@ -171,7 +171,7 @@ func (c *Collector) writeScrapeResult(project core.KeystoneProject, projectID in
 	//TODO: consider setting this for the entire connection if it helps
 	_, err = tx.Exec(`SET LOCAL idle_in_transaction_session_timeout = 5000`) // 5000 ms = 5 seconds
 	if err != nil {
-		return err
+		return fmt.Errorf("while applying idle_in_transaction_session_timeout: %w", err)
 	}
 
 	var serviceConstraints map[string]core.QuotaConstraint
@@ -184,7 +184,7 @@ func (c *Collector) writeScrapeResult(project core.KeystoneProject, projectID in
 	var resources []db.ProjectResource
 	_, err = tx.Select(&resources, `SELECT * FROM project_resources WHERE service_id = $1`, serviceID)
 	if err != nil {
-		return err
+		return fmt.Errorf("while loading existing project resources: %w", err)
 	}
 	for _, res := range resources {
 		resourceExists[res.Name] = true
@@ -255,7 +255,7 @@ func (c *Collector) writeScrapeResult(project core.KeystoneProject, projectID in
 		logg.Debug("writing scrape result: %#v", res)
 		_, err := tx.Update(&res)
 		if err != nil {
-			return err
+			return fmt.Errorf("while writing %q project resource: %w", res.Name, err)
 		}
 	}
 
@@ -328,7 +328,7 @@ func (c *Collector) writeScrapeResult(project core.KeystoneProject, projectID in
 
 		err = tx.Insert(res)
 		if err != nil {
-			return err
+			return fmt.Errorf("while creating %q project resource: %w", res.Name, err)
 		}
 	}
 
@@ -341,12 +341,12 @@ func (c *Collector) writeScrapeResult(project core.KeystoneProject, projectID in
 		scrapedAt, scrapeDuration.Seconds(), false, serializedMetrics, serviceID,
 	)
 	if err != nil {
-		return err
+		return fmt.Errorf("while updating metadata on project service: %w", err)
 	}
 
 	err = tx.Commit()
 	if err != nil {
-		return err
+		return fmt.Errorf("while committing transaction: %w", err)
 	}
 
 	if scrapeDuration > 5*time.Minute {
