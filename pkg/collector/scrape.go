@@ -325,6 +325,7 @@ func (c *Collector) writeScrapeResult(project core.KeystoneProject, projectID in
 	//update scraped_at timestamp and reset the stale flag on this service so
 	//that we don't scrape it again immediately afterwards; also persist all other
 	//attributes that we have not written yet
+	logg.Debug("writing scrape result into service %d", serviceID)
 	_, err = tx.Exec(
 		`UPDATE project_services SET scraped_at = $1, scrape_duration_secs = $2, stale = $3, serialized_metrics = $4 WHERE id = $5`,
 		scrapedAt, scrapeDuration.Seconds(), false, serializedMetrics, serviceID,
