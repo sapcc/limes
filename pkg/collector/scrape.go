@@ -164,6 +164,16 @@ func (c *Collector) writeScrapeResult(project core.KeystoneProject, projectID in
 	}
 	defer db.RollbackUnlessCommitted(tx)
 
+	//we have seen UPDATEs in this transaction getting stuck in the past, this
+	//should hopefully prevent this (or at least cause loud complaints when it
+	//happens)
+	//
+	//TODO: consider setting this for the entire connection if it helps
+	_, err = tx.Exec(`SET LOCAL idle_in_transaction_session_timeout = 5000`) // 5000 ms = 5 seconds
+	if err != nil {
+		return err
+	}
+
 	var serviceConstraints map[string]core.QuotaConstraint
 	if c.Cluster.QuotaConstraints != nil {
 		serviceConstraints = c.Cluster.QuotaConstraints.Projects[project.Domain.Name][project.Name][serviceType]
