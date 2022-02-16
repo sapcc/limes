@@ -23,12 +23,12 @@ INSERT INTO projects (id, domain_id, name, uuid, parent_uuid, has_bursting) VALU
 INSERT INTO projects (id, domain_id, name, uuid, parent_uuid, has_bursting) VALUES (3, 2, 'lahore',  'uuid-for-lahore',  'uuid-for-karachi', FALSE);
 
 -- project_services is fully populated (as ensured by the collector's consistency check)
-INSERT INTO project_services (id, project_id, type, scraped_at) VALUES (1, 1, 'compute', '2018-06-13 15:06:37');
-INSERT INTO project_services (id, project_id, type, scraped_at) VALUES (2, 1, 'network', '2018-06-13 15:06:37');
-INSERT INTO project_services (id, project_id, type, scraped_at) VALUES (3, 2, 'compute', '2018-06-13 15:06:37');
-INSERT INTO project_services (id, project_id, type, scraped_at) VALUES (4, 2, 'network', '2018-06-13 15:06:37');
-INSERT INTO project_services (id, project_id, type, scraped_at) VALUES (5, 3, 'compute', '2018-06-13 15:06:37');
-INSERT INTO project_services (id, project_id, type, scraped_at) VALUES (6, 3, 'network', '2018-06-13 15:06:37');
+INSERT INTO project_services (id, project_id, type, scraped_at, checked_at) VALUES (1, 1, 'compute', '2018-06-13 15:06:37', '2018-06-13 15:06:37');
+INSERT INTO project_services (id, project_id, type, scraped_at, checked_at) VALUES (2, 1, 'network', '2018-06-13 15:06:37', '2018-06-13 15:06:37');
+INSERT INTO project_services (id, project_id, type, scraped_at, checked_at) VALUES (3, 2, 'compute', '2018-06-13 15:06:37', '2018-06-13 15:06:37');
+INSERT INTO project_services (id, project_id, type, scraped_at, checked_at) VALUES (4, 2, 'network', '2018-06-13 15:06:37', '2018-06-13 15:06:37');
+INSERT INTO project_services (id, project_id, type, scraped_at, checked_at) VALUES (5, 3, 'compute', '2018-06-13 15:06:37', '2018-06-13 15:06:37');
+INSERT INTO project_services (id, project_id, type, scraped_at, checked_at) VALUES (6, 3, 'network', '2018-06-13 15:06:37', '2018-06-13 15:06:37');
 
 -- project_resources contains some pathological cases
 INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (1, 'cores',         30,  14, 10,  '', 30, NULL);

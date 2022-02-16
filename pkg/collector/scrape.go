@@ -36,14 +36,16 @@ import (
 	"github.com/sapcc/limes/pkg/util"
 )
 
-//how long to sleep after a scraping error, or when nothing needed scraping
-var idleInterval = 10 * time.Second
-
-//how long to sleep when scraping fails because the backend service is not in the catalog
-var serviceNotDeployedIdleInterval = 10 * time.Minute
-
-//how long to wait before scraping the same project and service again
-var scrapeInterval = 30 * time.Minute
+const (
+	//how long to sleep after a scraping error, or when nothing needed scraping
+	idleInterval = 5 * time.Second
+	//how long to sleep when scraping fails because the backend service is not in the catalog
+	serviceNotDeployedIdleInterval = 5 * time.Minute
+	//how long to wait before scraping the same project and service again
+	scrapeInterval = 30 * time.Minute
+	//how long to wait before re-checking a project service that failed scraping
+	recheckInterval = 5 * time.Minute
+)
 
 //query that finds the next project that needs to have resources scraped
 var findProjectForResourceScrapeQuery = db.SimplifyWhitespaceInSQL(`
@@ -54,9 +56,9 @@ var findProjectForResourceScrapeQuery = db.SimplifyWhitespaceInSQL(`
 	-- filter by cluster ID and service type
 	WHERE d.cluster_id = $1 AND ps.type = $2
 	-- filter by need to be updated (because of user request, because of missing data, or because of outdated data)
-	AND (ps.stale OR ps.scraped_at IS NULL OR ps.scraped_at < $3)
-	-- order by update priority (in the same way: first user-requested, then new projects, then outdated projects, then ID for deterministic test behavior)
-	ORDER BY ps.stale DESC, COALESCE(ps.scraped_at, to_timestamp(-1)) ASC, ps.id ASC
+	AND (ps.stale OR ps.scraped_at IS NULL OR ps.scraped_at < $3 OR (ps.scraped_at != ps.checked_at AND ps.checked_at < $4))
+	-- order by update priority (in the same way: first user-requested, then new projects, then outdated projects, then failed projects, then ID for deterministic test behavior)
+	ORDER BY ps.stale DESC, COALESCE(ps.checked_at, to_timestamp(-1)) ASC, ps.id ASC
 	-- find only one project to scrape per iteration
 	LIMIT 1
 `)
@@ -90,7 +92,7 @@ func (c *Collector) Scrape() {
 			projectHasBursting bool
 		)
 		scrapeStartedAt := c.TimeNow()
-		err := db.DB.QueryRow(findProjectForResourceScrapeQuery, c.Cluster.ID, serviceType, scrapeStartedAt.Add(-scrapeInterval)).
+		err := db.DB.QueryRow(findProjectForResourceScrapeQuery, c.Cluster.ID, serviceType, scrapeStartedAt.Add(-scrapeInterval), scrapeStartedAt.Add(-recheckInterval)).
 			Scan(&serviceID, &serviceScrapedAt, &project.Name, &project.UUID, &project.ParentUUID, &projectID, &projectHasBursting, &project.Domain.Name, &project.Domain.UUID)
 		if err != nil {
 			//ErrNoRows is okay; it just means that nothing needs scraping right now
@@ -107,7 +109,9 @@ func (c *Collector) Scrape() {
 		logg.Debug("scraping %s resources for %s/%s", serviceType, project.Domain.Name, project.Name)
 		provider, eo := c.Cluster.ProviderClient()
 		resourceData, serializedMetrics, err := c.Plugin.Scrape(provider, eo, project)
+		scrapeEndedAt := c.TimeNow()
 		if err != nil {
+			c.writeScrapeError(project, serviceType, serviceID, err, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
 			scrapeFailedCounter.With(labels).Inc()
 			//special case: stop scraping for a while when the backend service is not
 			//yet registered in the catalog (this prevents log spamming during buildup)
@@ -135,9 +139,9 @@ func (c *Collector) Scrape() {
 			continue
 		}
 
-		scrapeEndedAt := c.TimeNow()
 		err = c.writeScrapeResult(project, projectID, projectHasBursting, serviceType, serviceID, resourceData, serializedMetrics, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
 		if err != nil {
+			c.writeScrapeError(project, serviceType, serviceID, err, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
 			c.LogError("write %s backend data for %s/%s failed: %s", serviceType, project.Domain.Name, project.Name, err.Error())
 			scrapeFailedCounter.With(labels).Inc()
 			if c.Once {
@@ -340,7 +344,7 @@ func (c *Collector) writeScrapeResult(project core.KeystoneProject, projectID in
 	//attributes that we have not written yet
 	logg.Debug("writing scrape result into service %d", serviceID)
 	_, err = tx.Exec(
-		`UPDATE project_services SET scraped_at = $1, scrape_duration_secs = $2, stale = $3, serialized_metrics = $4 WHERE id = $5`,
+		`UPDATE project_services SET checked_at = $1, scraped_at = $1, scrape_duration_secs = $2, stale = $3, serialized_metrics = $4, scrape_error_message = '' WHERE id = $5`,
 		scrapedAt, scrapeDuration.Seconds(), false, serializedMetrics, serviceID,
 	)
 	if err != nil {
@@ -374,6 +378,18 @@ func (c *Collector) writeScrapeResult(project core.KeystoneProject, projectID in
 	}
 
 	return nil
+}
+
+func (c *Collector) writeScrapeError(project core.KeystoneProject, serviceType string, serviceID int64, scrapeErr error, checkedAt time.Time, checkDuration time.Duration) {
+	_, err := db.DB.Exec(
+		`UPDATE project_services SET checked_at = $1, scrape_duration_secs = $2, scrape_error_message = $3, stale = $4 WHERE id = $5`,
+		checkedAt, checkDuration.Seconds(), util.ErrorToString(scrapeErr), false, serviceID,
+	)
+	if err != nil {
+		logg.Error("additional DB error while trying to write scraping error for service %s in project %s: %s",
+			serviceType, project.UUID, err.Error(),
+		)
+	}
 }
 
 func (c *Collector) writeDummyResources(project core.KeystoneProject, projectHasBursting bool, serviceType string, serviceID int64) error {

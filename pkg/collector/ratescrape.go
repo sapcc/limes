@@ -41,9 +41,9 @@ var findProjectForRateScrapeQuery = db.SimplifyWhitespaceInSQL(`
 	-- filter by cluster ID and service type
 	WHERE d.cluster_id = $1 AND ps.type = $2
 	-- filter by need to be updated (because of user request, because of missing data, or because of outdated data)
-	AND (ps.rates_stale OR ps.rates_scraped_at IS NULL OR ps.rates_scraped_at < $3)
-	-- order by update priority (in the same way: first user-requested, then new projects, then outdated projects, then ID for deterministic test behavior)
-	ORDER BY ps.rates_stale DESC, COALESCE(ps.rates_scraped_at, to_timestamp(-1)) ASC, ps.id ASC
+	AND (ps.rates_stale OR ps.rates_scraped_at IS NULL OR ps.rates_scraped_at < $3 OR (ps.rates_scraped_at != ps.rates_checked_at AND ps.rates_checked_at < $4))
+	-- order by update priority (in the same way: first user-requested, then new projects, then outdated projects, then failed projects, then ID for deterministic test behavior)
+	ORDER BY ps.rates_stale DESC, COALESCE(ps.rates_checked_at, to_timestamp(-1)) ASC, ps.id ASC
 	-- find only one project to scrape per iteration
 	LIMIT 1
 `)
@@ -76,7 +76,7 @@ func (c *Collector) ScrapeRates() {
 			project                 core.KeystoneProject
 		)
 		scrapeStartedAt := c.TimeNow()
-		err := db.DB.QueryRow(findProjectForRateScrapeQuery, c.Cluster.ID, serviceType, scrapeStartedAt.Add(-scrapeInterval)).
+		err := db.DB.QueryRow(findProjectForRateScrapeQuery, c.Cluster.ID, serviceType, scrapeStartedAt.Add(-scrapeInterval), scrapeStartedAt.Add(-recheckInterval)).
 			Scan(&serviceID, &serviceRatesScrapedAt, &serviceRatesScrapeState, &project.Name, &project.UUID, &project.ParentUUID, &project.Domain.Name, &project.Domain.UUID)
 		if err != nil {
 			//ErrNoRows is okay; it just means that nothing needs scraping right now
@@ -93,7 +93,9 @@ func (c *Collector) ScrapeRates() {
 		logg.Debug("scraping %s rates for %s/%s", serviceType, project.Domain.Name, project.Name)
 		provider, eo := c.Cluster.ProviderClient()
 		rateData, serviceRatesScrapeState, err := c.Plugin.ScrapeRates(provider, eo, project, serviceRatesScrapeState)
+		scrapeEndedAt := c.TimeNow()
 		if err != nil {
+			c.writeRateScrapeError(project, serviceType, serviceID, err, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
 			ratesScrapeFailedCounter.With(labels).Inc()
 			//special case: stop scraping for a while when the backend service is not
 			//yet registered in the catalog (this prevents log spamming during buildup)
@@ -113,9 +115,9 @@ func (c *Collector) ScrapeRates() {
 			continue
 		}
 
-		scrapeEndedAt := c.TimeNow()
 		err = c.writeRateScrapeResult(serviceType, serviceID, rateData, serviceRatesScrapeState, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
 		if err != nil {
+			c.writeRateScrapeError(project, serviceType, serviceID, err, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
 			c.LogError("write %s rate data for %s/%s failed: %s", serviceType, project.Domain.Name, project.Name, err.Error())
 			ratesScrapeFailedCounter.With(labels).Inc()
 			if c.Once {
@@ -203,7 +205,7 @@ func (c *Collector) writeRateScrapeResult(serviceType string, serviceID int64, r
 	//update rate scraping metadata and also reset the rates_stale flag on this
 	//service so that we don't scrape it again immediately afterwards
 	_, err = tx.Exec(
-		`UPDATE project_services SET rates_scraped_at = $1, rates_scrape_duration_secs = $2, rates_scrape_state = $3, rates_stale = $4 WHERE id = $5`,
+		`UPDATE project_services SET rates_checked_at = $1, rates_scraped_at = $1, rates_scrape_duration_secs = $2, rates_scrape_state = $3, rates_stale = $4, rates_scrape_error_message = '' WHERE id = $5`,
 		scrapedAt, scrapeDuration.Seconds(), serviceRatesScrapeState, false, serviceID,
 	)
 	if err != nil {
@@ -211,4 +213,16 @@ func (c *Collector) writeRateScrapeResult(serviceType string, serviceID int64, r
 	}
 
 	return tx.Commit()
+}
+
+func (c *Collector) writeRateScrapeError(project core.KeystoneProject, serviceType string, serviceID int64, scrapeErr error, checkedAt time.Time, checkDuration time.Duration) {
+	_, err := db.DB.Exec(
+		`UPDATE project_services SET rates_checked_at = $1, rates_scrape_duration_secs = $2, rates_scrape_error_message = $3, rates_stale = $4 WHERE id = $5`,
+		checkedAt, checkDuration.Seconds(), util.ErrorToString(scrapeErr), false, serviceID,
+	)
+	if err != nil {
+		logg.Error("additional DB error while trying to write rate scraping error for service %s in project %s: %s",
+			serviceType, project.UUID, err.Error(),
+		)
+	}
 }

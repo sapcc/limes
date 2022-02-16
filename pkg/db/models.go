@@ -89,12 +89,16 @@ type ProjectService struct {
 	ProjectID               int64      `db:"project_id"`
 	Type                    string     `db:"type"`
 	ScrapedAt               *time.Time `db:"scraped_at"` //pointer type to allow for NULL value
+	CheckedAt               *time.Time `db:"checked_at"`
 	Stale                   bool       `db:"stale"`
 	ScrapeDurationSecs      float64    `db:"scrape_duration_secs"`
+	ScrapeErrorMessage      string     `db:"scrape_error_message"`
 	RatesScrapedAt          *time.Time `db:"rates_scraped_at"` //same as above
+	RatesCheckedAt          *time.Time `db:"rates_checked_at"`
 	RatesStale              bool       `db:"rates_stale"`
 	RatesScrapeDurationSecs float64    `db:"rates_scrape_duration_secs"`
 	RatesScrapeState        string     `db:"rates_scrape_state"`
+	RatesScrapeErrorMessage string     `db:"rates_scrape_error_message"`
 	SerializedMetrics       string     `db:"serialized_metrics"`
 }
 

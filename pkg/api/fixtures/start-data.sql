@@ -34,12 +34,12 @@ INSERT INTO projects (id, domain_id, name, uuid, parent_uuid, has_bursting) VALU
 INSERT INTO projects (id, domain_id, name, uuid, parent_uuid, has_bursting) VALUES (3, 2, 'paris', 'uuid-for-paris', 'uuid-for-france', FALSE);
 
 -- project_services is fully populated (as ensured by the collector's consistency check)
-INSERT INTO project_services (id, project_id, type, scraped_at, rates_scraped_at) VALUES (1, 1, 'unshared', UNIX(11), UNIX(12));
-INSERT INTO project_services (id, project_id, type, scraped_at, rates_scraped_at) VALUES (2, 1, 'shared',   UNIX(22), UNIX(23));
-INSERT INTO project_services (id, project_id, type, scraped_at, rates_scraped_at) VALUES (3, 2, 'unshared', UNIX(33), UNIX(34));
-INSERT INTO project_services (id, project_id, type, scraped_at, rates_scraped_at) VALUES (4, 2, 'shared',   UNIX(44), UNIX(45));
-INSERT INTO project_services (id, project_id, type, scraped_at, rates_scraped_at) VALUES (5, 3, 'unshared', UNIX(55), NULL);
-INSERT INTO project_services (id, project_id, type, scraped_at, rates_scraped_at) VALUES (6, 3, 'shared',   UNIX(66), NULL);
+INSERT INTO project_services (id, project_id, type, scraped_at, rates_scraped_at, checked_at, rates_checked_at) VALUES (1, 1, 'unshared', UNIX(11), UNIX(12), UNIX(11), UNIX(12));
+INSERT INTO project_services (id, project_id, type, scraped_at, rates_scraped_at, checked_at, rates_checked_at) VALUES (2, 1, 'shared',   UNIX(22), UNIX(23), UNIX(22), UNIX(23));
+INSERT INTO project_services (id, project_id, type, scraped_at, rates_scraped_at, checked_at, rates_checked_at) VALUES (3, 2, 'unshared', UNIX(33), UNIX(34), UNIX(33), UNIX(34));
+INSERT INTO project_services (id, project_id, type, scraped_at, rates_scraped_at, checked_at, rates_checked_at) VALUES (4, 2, 'shared',   UNIX(44), UNIX(45), UNIX(44), UNIX(45));
+INSERT INTO project_services (id, project_id, type, scraped_at, rates_scraped_at, checked_at, rates_checked_at) VALUES (5, 3, 'unshared', UNIX(55), NULL, UNIX(55), NULL);
+INSERT INTO project_services (id, project_id, type, scraped_at, rates_scraped_at, checked_at, rates_checked_at) VALUES (6, 3, 'shared',   UNIX(66), NULL, UNIX(66), NULL);
 
 -- project_resources contains some pathological cases
 -- berlin (also used for test cases concerning subresources)

@@ -245,4 +245,19 @@ var SQLMigrations = map[string]string{
 		  PRIMARY KEY (cluster_id, capacitor_id)
 		);
 	`,
+	"019_scrape_errors.down.sql": `
+		ALTER TABLE project_services
+			DROP COLUMN checked_at,
+			DROP COLUMN scrape_error_message,
+			DROP COLUMN rates_checked_at,
+			DROP COLUMN rates_scrape_error_message;
+	`,
+	"019_scrape_errors.up.sql": `
+		ALTER TABLE project_services
+			ADD COLUMN checked_at TIMESTAMP DEFAULT NULL,
+			ADD COLUMN scrape_error_message TEXT NOT NULL DEFAULT '',
+			ADD COLUMN rates_checked_at TIMESTAMP DEFAULT NULL,
+			ADD COLUMN rates_scrape_error_message TEXT NOT NULL DEFAULT '';
+		UPDATE project_services SET checked_at = scraped_at, rates_checked_at = rates_scraped_at;
+	`,
 }

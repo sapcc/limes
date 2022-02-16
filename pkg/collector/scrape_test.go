@@ -145,8 +145,8 @@ func Test_ScrapeSuccess(t *testing.T) {
 		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (2, 'capacity', 10, 0, 100, '', 12, 0);
 		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (2, 'capacity_portion', NULL, 0, NULL, '', NULL, NULL);
 		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (2, 'things', 0, 2, 42, '[{"index":0},{"index":1}]', 0, NULL);
-		UPDATE project_services SET scraped_at = 1, scrape_duration_secs = 1, serialized_metrics = '{"capacity_usage":0,"things_usage":2}' WHERE id = 1 AND project_id = 1 AND type = 'unittest';
-		UPDATE project_services SET scraped_at = 3, scrape_duration_secs = 1, serialized_metrics = '{"capacity_usage":0,"things_usage":2}' WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = 1, scrape_duration_secs = 1, serialized_metrics = '{"capacity_usage":0,"things_usage":2}', checked_at = 1 WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = 3, scrape_duration_secs = 1, serialized_metrics = '{"capacity_usage":0,"things_usage":2}', checked_at = 3 WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`)
 
 	//second Scrape should not change anything (not even the timestamps) since
@@ -166,8 +166,8 @@ func Test_ScrapeSuccess(t *testing.T) {
 		UPDATE project_resources SET usage = 5, subresources = '[{"index":0},{"index":1},{"index":2},{"index":3},{"index":4}]' WHERE service_id = 1 AND name = 'things';
 		UPDATE project_resources SET backend_quota = 110 WHERE service_id = 2 AND name = 'capacity';
 		UPDATE project_resources SET usage = 5, subresources = '[{"index":0},{"index":1},{"index":2},{"index":3},{"index":4}]' WHERE service_id = 2 AND name = 'things';
-		UPDATE project_services SET scraped_at = 6, serialized_metrics = '{"capacity_usage":0,"things_usage":5}' WHERE id = 1 AND project_id = 1 AND type = 'unittest';
-		UPDATE project_services SET scraped_at = 8, serialized_metrics = '{"capacity_usage":0,"things_usage":5}' WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = 6, serialized_metrics = '{"capacity_usage":0,"things_usage":5}', checked_at = 6 WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = 8, serialized_metrics = '{"capacity_usage":0,"things_usage":5}', checked_at = 8 WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`)
 
 	//set some new quota values (note that "capacity" already had a non-zero
@@ -192,8 +192,8 @@ func Test_ScrapeSuccess(t *testing.T) {
 		UPDATE project_resources SET quota = 13, backend_quota = 13, desired_backend_quota = 13 WHERE service_id = 1 AND name = 'things';
 		UPDATE project_resources SET quota = 20, backend_quota = 24, desired_backend_quota = 24 WHERE service_id = 2 AND name = 'capacity';
 		UPDATE project_resources SET quota = 13, backend_quota = 15, desired_backend_quota = 15 WHERE service_id = 2 AND name = 'things';
-		UPDATE project_services SET scraped_at = 10 WHERE id = 1 AND project_id = 1 AND type = 'unittest';
-		UPDATE project_services SET scraped_at = 12 WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = 10, checked_at = 10 WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = 12, checked_at = 12 WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`)
 
 	//another Scrape (with SetQuota disabled again) should show that the quota
@@ -203,8 +203,8 @@ func Test_ScrapeSuccess(t *testing.T) {
 	c.Scrape() //twice because there are two projects
 	c.Scrape()
 	tr.DBChanges().AssertEqualf(`
-		UPDATE project_services SET scraped_at = 14 WHERE id = 1 AND project_id = 1 AND type = 'unittest';
-		UPDATE project_services SET scraped_at = 16 WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = 14, checked_at = 14 WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = 16, checked_at = 16 WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`)
 
 	//set a quota that contradicts the cluster.QuotaConstraints
@@ -221,8 +221,8 @@ func Test_ScrapeSuccess(t *testing.T) {
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_resources SET quota = 40, backend_quota = 40, desired_backend_quota = 40 WHERE service_id = 1 AND name = 'capacity';
 		UPDATE project_resources SET quota = 40, backend_quota = 48, desired_backend_quota = 48 WHERE service_id = 2 AND name = 'capacity';
-		UPDATE project_services SET scraped_at = 18 WHERE id = 1 AND project_id = 1 AND type = 'unittest';
-		UPDATE project_services SET scraped_at = 20 WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = 18, checked_at = 18 WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = 20, checked_at = 20 WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`)
 
 	//add an externally-managed resource, scrape it twice (first time adds the
@@ -234,8 +234,8 @@ func Test_ScrapeSuccess(t *testing.T) {
 	tr.DBChanges().AssertEqualf(`
 		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (1, 'external_things', 5, 0, 5, '', 5, NULL);
 		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (2, 'external_things', 5, 0, 5, '', 5, NULL);
-		UPDATE project_services SET scraped_at = 22 WHERE id = 1 AND project_id = 1 AND type = 'unittest';
-		UPDATE project_services SET scraped_at = 24 WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = 22, checked_at = 22 WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = 24, checked_at = 24 WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`)
 
 	plugin.StaticResourceData["external_things"].Quota = 10
@@ -245,8 +245,8 @@ func Test_ScrapeSuccess(t *testing.T) {
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_resources SET quota = 10, backend_quota = 10, desired_backend_quota = 10 WHERE service_id = 1 AND name = 'external_things';
 		UPDATE project_resources SET quota = 10, backend_quota = 10, desired_backend_quota = 10 WHERE service_id = 2 AND name = 'external_things';
-		UPDATE project_services SET scraped_at = 26 WHERE id = 1 AND project_id = 1 AND type = 'unittest';
-		UPDATE project_services SET scraped_at = 28 WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = 26, checked_at = 26 WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = 28, checked_at = 28 WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`)
 
 	//check that setting the quota of an externally-managed resource on our side
@@ -259,8 +259,8 @@ func Test_ScrapeSuccess(t *testing.T) {
 	c.Scrape() //twice because there are two projects
 	c.Scrape()
 	tr.DBChanges().AssertEqualf(`
-		UPDATE project_services SET scraped_at = 30 WHERE id = 1 AND project_id = 1 AND type = 'unittest';
-		UPDATE project_services SET scraped_at = 32 WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = 30, checked_at = 30 WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = 32, checked_at = 32 WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`)
 
 	//set "capacity" to a non-zero usage to observe a non-zero usage on
@@ -275,8 +275,8 @@ func Test_ScrapeSuccess(t *testing.T) {
 		UPDATE project_resources SET usage = 5 WHERE service_id = 1 AND name = 'capacity_portion';
 		UPDATE project_resources SET usage = 20, physical_usage = 10 WHERE service_id = 2 AND name = 'capacity';
 		UPDATE project_resources SET usage = 5 WHERE service_id = 2 AND name = 'capacity_portion';
-		UPDATE project_services SET scraped_at = 34, serialized_metrics = '{"capacity_usage":20,"things_usage":5}' WHERE id = 1 AND project_id = 1 AND type = 'unittest';
-		UPDATE project_services SET scraped_at = 36, serialized_metrics = '{"capacity_usage":20,"things_usage":5}' WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = 34, serialized_metrics = '{"capacity_usage":20,"things_usage":5}', checked_at = 34 WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = 36, serialized_metrics = '{"capacity_usage":20,"things_usage":5}', checked_at = 36 WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`)
 
 	//check data metrics generated by this scraping pass
@@ -355,8 +355,8 @@ func Test_ScrapeFailure(t *testing.T) {
 		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (2, 'capacity', 10, 0, -1, '', 12, NULL);
 		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (2, 'capacity_portion', NULL, 0, NULL, '', NULL, NULL);
 		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (2, 'things', 0, 0, -1, '', 0, NULL);
-		UPDATE project_services SET scraped_at = 0 WHERE id = 1 AND project_id = 1 AND type = 'unittest';
-		UPDATE project_services SET scraped_at = 0 WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = 0, checked_at = 1, scrape_error_message = 'Scrape failed as requested' WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = 0, checked_at = 3, scrape_error_message = 'Scrape failed as requested' WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`)
 
 	//next Scrape should yield the same result
@@ -374,19 +374,20 @@ func Test_ScrapeFailure(t *testing.T) {
 		UPDATE project_resources SET usage = 2, backend_quota = 42, subresources = '[{"index":0},{"index":1}]' WHERE service_id = 1 AND name = 'things';
 		UPDATE project_resources SET backend_quota = 100, physical_usage = 0 WHERE service_id = 2 AND name = 'capacity';
 		UPDATE project_resources SET usage = 2, backend_quota = 42, subresources = '[{"index":0},{"index":1}]' WHERE service_id = 2 AND name = 'things';
-		UPDATE project_services SET scraped_at = 5, scrape_duration_secs = 1, serialized_metrics = '{"capacity_usage":0,"things_usage":2}' WHERE id = 1 AND project_id = 1 AND type = 'unittest';
-		UPDATE project_services SET scraped_at = 7, scrape_duration_secs = 1, serialized_metrics = '{"capacity_usage":0,"things_usage":2}' WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = 7, scrape_duration_secs = 1, serialized_metrics = '{"capacity_usage":0,"things_usage":2}', checked_at = 7, scrape_error_message = '' WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = 9, scrape_duration_secs = 1, serialized_metrics = '{"capacity_usage":0,"things_usage":2}', checked_at = 9, scrape_error_message = '' WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`)
 
 	//backend fails again and we need to scrape because of the stale flag ->
-	//touch neither scraped_at nor the existing resources
+	//touch neither scraped_at nor the existing resources (this also tests that a
+	//failed check causes Scrape() to continue with the next resource afterwards)
 	plugin.ScrapeFails = true
 	setProjectServicesStale(t)
 	c.Scrape()
 	c.Scrape() //twice because there are two projects
 	tr.DBChanges().AssertEqualf(`
-		UPDATE project_services SET stale = TRUE WHERE id = 1 AND project_id = 1 AND type = 'unittest';
-		UPDATE project_services SET stale = TRUE WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+		UPDATE project_services SET checked_at = 11, scrape_error_message = 'Scrape failed as requested' WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET checked_at = 13, scrape_error_message = 'Scrape failed as requested' WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`)
 }
 
@@ -469,7 +470,7 @@ func Test_AutoApproveInitialQuota(t *testing.T) {
 	tr.DBChanges().AssertEqualf(`
 		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (1, 'approve', 10, 0, 10, '', 10, NULL);
 		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (1, 'noapprove', 0, 0, 20, '', 0, NULL);
-		UPDATE project_services SET scraped_at = 1, scrape_duration_secs = 1 WHERE id = 1 AND project_id = 1 AND type = 'autoapprovaltest';
+		UPDATE project_services SET scraped_at = 1, scrape_duration_secs = 1, checked_at = 1 WHERE id = 1 AND project_id = 1 AND type = 'autoapprovaltest';
 	`)
 
 	//modify the backend quota; verify that the second scrape does not
@@ -481,7 +482,7 @@ func Test_AutoApproveInitialQuota(t *testing.T) {
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_resources SET backend_quota = 20 WHERE service_id = 1 AND name = 'approve';
 		UPDATE project_resources SET backend_quota = 30 WHERE service_id = 1 AND name = 'noapprove';
-		UPDATE project_services SET scraped_at = 3 WHERE id = 1 AND project_id = 1 AND type = 'autoapprovaltest';
+		UPDATE project_services SET scraped_at = 3, checked_at = 3 WHERE id = 1 AND project_id = 1 AND type = 'autoapprovaltest';
 	`)
 }
 
@@ -537,7 +538,7 @@ func Test_ScrapeButNoResources(t *testing.T) {
 	tr0.AssertEqualf(`
 		INSERT INTO domain_services (id, domain_id, type) VALUES (1, 1, 'noop');
 		INSERT INTO domains (id, cluster_id, name, uuid) VALUES (1, 'west', 'germany', 'uuid-for-germany');
-		INSERT INTO project_services (id, project_id, type, scraped_at, stale, scrape_duration_secs, rates_scraped_at, rates_stale, rates_scrape_duration_secs, rates_scrape_state, serialized_metrics) VALUES (1, 1, 'noop', 1, FALSE, 1, NULL, FALSE, 0, '', '');
+		INSERT INTO project_services (id, project_id, type, scraped_at, stale, scrape_duration_secs, rates_scraped_at, rates_stale, rates_scrape_duration_secs, rates_scrape_state, serialized_metrics, checked_at, scrape_error_message, rates_checked_at, rates_scrape_error_message) VALUES (1, 1, 'noop', 1, FALSE, 1, NULL, FALSE, 0, '', '', 1, '', NULL, '');
 		INSERT INTO projects (id, domain_id, name, uuid, parent_uuid, has_bursting) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany', FALSE);
 	`)
 }
