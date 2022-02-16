@@ -13,7 +13,8 @@
               "unit": "B",
               "quota": 0,
               "projects_quota": 10,
-              "usage": 2
+              "usage": 2,
+              "physical_usage": 1
             },
             {
               "name": "capacity_portion",
@@ -47,7 +48,8 @@
               "unit": "B",
               "quota": 55,
               "projects_quota": 10,
-              "usage": 2
+              "usage": 2,
+              "physical_usage": 1
             },
             {
               "name": "capacity_portion",

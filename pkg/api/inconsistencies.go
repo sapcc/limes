@@ -35,12 +35,8 @@ func (p *v1Provider) ListInconsistencies(w http.ResponseWriter, r *http.Request)
 	if !token.Require(w, "cluster:show") {
 		return
 	}
-	cluster := p.FindClusterFromRequest(w, r, token)
-	if cluster == nil {
-		return
-	}
 
-	inconsistencies, err := reports.GetInconsistencies(cluster, db.DB, reports.ReadFilter(r))
+	inconsistencies, err := reports.GetInconsistencies(p.Cluster, db.DB, reports.ReadFilter(r))
 	if respondwith.ErrorText(w, err) {
 		return
 	}

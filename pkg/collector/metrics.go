@@ -469,7 +469,7 @@ var clusterCapacityGauge = prometheus.NewGaugeVec(
 		Name: "limes_cluster_capacity",
 		Help: "Reported capacity of a Limes resource for an OpenStack cluster.",
 	},
-	[]string{"os_cluster", "shared", "service", "resource"},
+	[]string{"os_cluster", "service", "resource"},
 )
 
 var clusterCapacityPerAZGauge = prometheus.NewGaugeVec(
@@ -477,7 +477,7 @@ var clusterCapacityPerAZGauge = prometheus.NewGaugeVec(
 		Name: "limes_cluster_capacity_per_az",
 		Help: "Reported capacity of a Limes resource for an OpenStack cluster in a specific availability zone.",
 	},
-	[]string{"os_cluster", "availability_zone", "shared", "service", "resource"},
+	[]string{"os_cluster", "availability_zone", "service", "resource"},
 )
 
 var clusterUsagePerAZGauge = prometheus.NewGaugeVec(
@@ -485,7 +485,7 @@ var clusterUsagePerAZGauge = prometheus.NewGaugeVec(
 		Name: "limes_cluster_usage_per_az",
 		Help: "Actual usage of a Limes resource for an OpenStack cluster in a specific availability zone.",
 	},
-	[]string{"os_cluster", "availability_zone", "shared", "service", "resource"},
+	[]string{"os_cluster", "availability_zone", "service", "resource"},
 )
 
 var domainQuotaGauge = prometheus.NewGaugeVec(
@@ -568,10 +568,10 @@ func (c *DataMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 }
 
 var clusterMetricsQuery = db.SimplifyWhitespaceInSQL(`
-	SELECT cs.cluster_id, cs.type, cr.name, cr.capacity, cr.capacity_per_az
+	SELECT cs.type, cr.name, cr.capacity, cr.capacity_per_az
 	  FROM cluster_services cs
 	  JOIN cluster_resources cr ON cr.service_id = cs.id
-	 WHERE cs.cluster_id = $1 OR cs.cluster_id = 'shared'
+	 WHERE cs.cluster_id = $1
 `)
 
 var domainMetricsQuery = db.SimplifyWhitespaceInSQL(`
@@ -637,24 +637,14 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	queryArgs := []interface{}{c.Cluster.ID}
 	err := db.ForeachRow(db.DB, clusterMetricsQuery, queryArgs, func(rows *sql.Rows) error {
 		var (
-			clusterID     string
 			serviceType   string
 			resourceName  string
 			capacity      uint64
 			capacityPerAZ string
 		)
-		err := rows.Scan(&clusterID, &serviceType, &resourceName, &capacity, &capacityPerAZ)
+		err := rows.Scan(&serviceType, &resourceName, &capacity, &capacityPerAZ)
 		if err != nil {
 			return err
-		}
-		var sharedString string
-		if clusterID == "shared" {
-			sharedString = "true"
-			if !c.Cluster.IsServiceShared[serviceType] {
-				return nil //continue with next row
-			}
-		} else {
-			sharedString = "false"
 		}
 
 		behavior := c.Cluster.BehaviorForResource(serviceType, resourceName, "")
@@ -673,13 +663,13 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 				ch <- prometheus.MustNewConstMetric(
 					clusterCapacityPerAZDesc,
 					prometheus.GaugeValue, float64(report.Capacity)*overcommitFactor,
-					c.Cluster.ID, report.Name, sharedString, serviceType, resourceName,
+					c.Cluster.ID, report.Name, serviceType, resourceName,
 				)
 				if report.Usage != 0 {
 					ch <- prometheus.MustNewConstMetric(
 						clusterUsagePerAZDesc,
 						prometheus.GaugeValue, float64(report.Usage),
-						c.Cluster.ID, report.Name, sharedString, serviceType, resourceName,
+						c.Cluster.ID, report.Name, serviceType, resourceName,
 					)
 				}
 			}
@@ -689,7 +679,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(
 			clusterCapacityDesc,
 			prometheus.GaugeValue, float64(capacity)*overcommitFactor,
-			c.Cluster.ID, sharedString, serviceType, resourceName,
+			c.Cluster.ID, serviceType, resourceName,
 		)
 
 		_, exists := capacityReported[serviceType]
@@ -713,14 +703,10 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 				continue
 			}
 
-			sharedString := "false"
-			if c.Cluster.IsServiceShared[serviceType] {
-				sharedString = "true"
-			}
 			ch <- prometheus.MustNewConstMetric(
 				clusterCapacityDesc,
 				prometheus.GaugeValue, 0,
-				c.Cluster.ID, sharedString, serviceType, res.Name,
+				c.Cluster.ID, serviceType, res.Name,
 			)
 		}
 	}

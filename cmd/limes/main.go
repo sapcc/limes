@@ -59,36 +59,18 @@ func main() {
 	if len(os.Args) < 3 {
 		printUsageAndExit()
 	}
-	taskName, configPath := os.Args[1], os.Args[2]
+	taskName, configPath, remainingArgs := os.Args[1], os.Args[2], os.Args[3:]
 
-	//load configuration
-	config := core.NewConfiguration(configPath)
-
-	//all tasks have the <cluster-id> as os.Args[3]
-	if len(os.Args) < 4 {
-		printUsageAndExit()
-	}
-	clusterID, remainingArgs := os.Args[3], os.Args[4:]
-
-	//connect to cluster
-	cluster, exists := config.Clusters[clusterID]
-	if !exists {
-		logg.Fatal("no such cluster configured: " + clusterID)
-	}
+	//load configuration and connect to cluster
+	cluster := core.NewConfiguration(configPath)
 	err := cluster.Connect()
 	if err != nil {
 		logg.Fatal(util.ErrorToString(err))
 	}
-
-	//start audit trail
-	AuditConfigPerCluster := make(map[string]core.CADFConfiguration)
-	for _, cluster := range config.Clusters {
-		AuditConfigPerCluster[cluster.ID] = cluster.Config.CADF
-	}
-	api.StartAuditTrail(AuditConfigPerCluster)
+	api.StartAuditTrail(cluster.ID, cluster.Config.CADF)
 
 	//select task
-	var task func(core.Configuration, *core.Cluster, []string) error
+	var task func(*core.Cluster, []string) error
 	switch taskName {
 	case "collect":
 		task = taskCollect
@@ -107,7 +89,7 @@ func main() {
 	}
 
 	//run task
-	err = task(config, cluster, remainingArgs)
+	err = task(cluster, remainingArgs)
 	if err != nil {
 		logg.Fatal(util.ErrorToString(err))
 	}
@@ -115,11 +97,11 @@ func main() {
 
 var usageMessage = strings.Replace(strings.TrimSpace(`
 Usage:
-\t%s (collect|serve) <config-file> <cluster-id>
-\t%s test-get-quota <config-file> <cluster-id> <project-id> <service-type>
-\t%s test-get-rates <config-file> <cluster-id> <project-id> <service-type> [<prev-serialized-state>]
-\t%s test-set-quota <config-file> <cluster-id> <project-id> <service-type> <resource-name>=<integer-value>...
-\t%s test-scan-capacity <config-file> <cluster-id> <capacitor>
+\t%s (collect|serve) <config-file>
+\t%s test-get-quota <config-file> <project-id> <service-type>
+\t%s test-get-rates <config-file> <project-id> <service-type> [<prev-serialized-state>]
+\t%s test-set-quota <config-file> <project-id> <service-type> <resource-name>=<integer-value>...
+\t%s test-scan-capacity <config-file> <capacitor>
 `), `\t`, "\t", -1) + "\n"
 
 func printUsageAndExit() {
@@ -130,7 +112,7 @@ func printUsageAndExit() {
 ////////////////////////////////////////////////////////////////////////////////
 // task: collect
 
-func taskCollect(config core.Configuration, cluster *core.Cluster, args []string) error {
+func taskCollect(cluster *core.Cluster, args []string) error {
 	if len(args) != 0 {
 		printUsageAndExit()
 	}
@@ -187,7 +169,7 @@ func taskCollect(config core.Configuration, cluster *core.Cluster, args []string
 ////////////////////////////////////////////////////////////////////////////////
 // task: serve
 
-func taskServe(config core.Configuration, cluster *core.Cluster, args []string) error {
+func taskServe(cluster *core.Cluster, args []string) error {
 	if len(args) != 0 {
 		printUsageAndExit()
 	}
@@ -205,20 +187,11 @@ func taskServe(config core.Configuration, cluster *core.Cluster, args []string) 
 		logg.Fatal("could not load policy file: %s", err.Error())
 	}
 
-	//connect to *all* clusters - we may have to service cross-cluster requests
-	for _, otherCluster := range config.Clusters {
-		//Note that Connect() is idempotent, so this is safe even for `otherCluster == cluster`.
-		err := otherCluster.Connect()
-		if err != nil {
-			logg.Fatal(util.ErrorToString(err))
-		}
-	}
-
 	mainRouter := mux.NewRouter()
 
 	//hook up the v1 API (this code is structured so that a newer API version can
 	//be added easily later)
-	v1Router, v1VersionData := api.NewV1Router(cluster, config, policyEnforcer)
+	v1Router, v1VersionData := api.NewV1Router(cluster, policyEnforcer)
 	mainRouter.PathPrefix("/v1/").Handler(v1Router)
 
 	//add the version advertisement that lists all available API versions
@@ -267,13 +240,13 @@ func taskServe(config core.Configuration, cluster *core.Cluster, args []string) 
 ////////////////////////////////////////////////////////////////////////////////
 // tasks: test quota plugin
 
-func taskTestGetQuota(config core.Configuration, cluster *core.Cluster, args []string) error {
+func taskTestGetQuota(cluster *core.Cluster, args []string) error {
 	if len(args) != 2 {
 		printUsageAndExit()
 	}
 
 	serviceType := args[1]
-	provider, eo := getServiceProviderClient(cluster, serviceType)
+	provider, eo := cluster.ProviderClient()
 	project, err := findProjectForTesting(cluster, provider, eo, args[0])
 	if err != nil {
 		return err
@@ -305,7 +278,7 @@ func taskTestGetQuota(config core.Configuration, cluster *core.Cluster, args []s
 	return enc.Encode(result)
 }
 
-func taskTestGetRates(config core.Configuration, cluster *core.Cluster, args []string) error {
+func taskTestGetRates(cluster *core.Cluster, args []string) error {
 	var prevSerializedState string
 	switch len(args) {
 	case 2:
@@ -317,7 +290,7 @@ func taskTestGetRates(config core.Configuration, cluster *core.Cluster, args []s
 	}
 
 	serviceType := args[1]
-	provider, eo := getServiceProviderClient(cluster, serviceType)
+	provider, eo := cluster.ProviderClient()
 	project, err := findProjectForTesting(cluster, provider, eo, args[0])
 	if err != nil {
 		return err
@@ -342,13 +315,6 @@ func taskTestGetRates(config core.Configuration, cluster *core.Cluster, args []s
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	return enc.Encode(result)
-}
-
-func getServiceProviderClient(cluster *core.Cluster, serviceType string) (*gophercloud.ProviderClient, gophercloud.EndpointOpts) {
-	if !cluster.HasService(serviceType) {
-		logg.Fatal("unknown service type: %s", serviceType)
-	}
-	return cluster.ProviderClientForService(serviceType)
 }
 
 func findProjectForTesting(cluster *core.Cluster, client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, projectUUID string) (core.KeystoneProject, error) {
@@ -405,13 +371,13 @@ func dumpGeneratedPrometheusMetrics() {
 	}
 }
 
-func taskTestSetQuota(config core.Configuration, cluster *core.Cluster, args []string) error {
+func taskTestSetQuota(cluster *core.Cluster, args []string) error {
 	if len(args) < 3 {
 		printUsageAndExit()
 	}
 
 	serviceType := args[1]
-	provider, eo := getServiceProviderClient(cluster, serviceType)
+	provider, eo := cluster.ProviderClient()
 	project, err := findProjectForTesting(cluster, provider, eo, args[0])
 	if err != nil {
 		return err
@@ -437,7 +403,7 @@ func taskTestSetQuota(config core.Configuration, cluster *core.Cluster, args []s
 ////////////////////////////////////////////////////////////////////////////////
 // task: test-scan-capacity
 
-func taskTestScanCapacity(config core.Configuration, cluster *core.Cluster, args []string) error {
+func taskTestScanCapacity(cluster *core.Cluster, args []string) error {
 	if len(args) != 1 {
 		printUsageAndExit()
 	}
@@ -448,7 +414,7 @@ func taskTestScanCapacity(config core.Configuration, cluster *core.Cluster, args
 		logg.Fatal("unknown capacitor: %s", capacitorID)
 	}
 
-	provider, eo := cluster.ProviderClientForCapacitor(capacitorID)
+	provider, eo := cluster.ProviderClient()
 	capacities, serializedMetrics, err := plugin.Scrape(provider, eo)
 	if err != nil {
 		logg.Error("Scrape failed: %s", util.ErrorToString(err))

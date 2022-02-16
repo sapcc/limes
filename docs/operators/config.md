@@ -43,91 +43,72 @@ Configuration options relating to the behavior of the collector service.
 | `LIMES_COLLECTOR_DATA_METRICS_EXPOSE` | `false` | If set to `true`, expose all quota/usage/capacity data as Prometheus gauges. This is disabled by default because this can be a lot of data for OpenStack clusters containing many projects, domains and services. |
 | `LIMES_COLLECTOR_DATA_METRICS_SKIP_ZERO` | `false` | If set to `true`, data metrics will only be emitted for non-zero values. In large deployments, this can substantially reduce the amount of timeseries emitted. |
 
-# Configuration file
+## Configuration file
 
-A minimal config file could look like this:
-
-```yaml
-clusters:
-  staging:
-    auth:
-      auth_url:            https://keystone.staging.example.com/v3
-      user_name:           limes
-      user_domain_name:    Default
-      project_name:        service
-      project_domain_name: Default
-      password:            swordfish
-    cadf:
-      enabled: true
-      rabbitmq:
-        url: "amqp://guest:guest@localhost:5672/"
-        queue_name: "limes.notifications.info"
-    services:
-      - type: compute
-      - type: network
-    capacitors:
-      - id: nova
-    subresources:
-      compute:
-        - instances
-    subcapacities:
-      compute:
-        - cores
-        - ram
-    constraints: /etc/limes/constraints-for-staging.yaml
-    bursting:
-      max_multiplier: 0.2
-```
-
-Instead of providing `clusters.$id.auth.password` as plain text in the config
-file, you can use a special syntax to read the respective password from an
-exported environment variable:
+The configuration file configuration options relating to the targeted OpenStack cluster. A minimal config file could look like this:
 
 ```yaml
-password: { fromEnv: ENVIRONMENT_VARIABLE }
+cluster_id: staging
+auth:
+  auth_url:            https://keystone.staging.example.com/v3
+  user_name:           limes
+  user_domain_name:    Default
+  project_name:        service
+  project_domain_name: Default
+  password:            swordfish
+cadf:
+  enabled: false
+services:
+  - type: compute
+  - type: network
+capacitors:
+  - id: nova
+subresources:
+  compute:
+    - instances
+subcapacities:
+  compute:
+    - cores
+    - ram
+constraints: /etc/limes/constraints-for-staging.yaml
+bursting:
+  max_multiplier: 0.2
 ```
 
-Read on for the full list and description of all configuration fields.
-
-## Clusters
-
-Configuration options describing the OpenStack clusters which Limes shall cover. `$id` is the internal *cluster ID*, which may be chosen freely, but should not be changed afterwards. (It *can* be changed, but that requires a shutdown of all Limes components and manual editing of the database.)
-
-| Field | Required | Description | Equivalent to |
-| --- | --- | --- | :--- |
-| `clusters.$id.auth.auth_url` | yes | URL for Keystone v3 API in this cluster. Should end in `/v3`. Other Keystone API versions are not supported. | `$OS_AUTH_URL` |
-| `clusters.$id.auth.user_name` | yes | Limes service user. | `OS_USERNAME` |
-| `clusters.$id.auth.user_domain_name` | yes | Domain containing Limes service user. | `OS_USER_DOMAIN_NAME` |
-| `clusters.$id.auth.project_name` | yes | Project where Limes service user has access. | `OS_PROJECT_NAME` |
-| `clusters.$id.auth.project_domain_name` | yes | Domain containing that project. | `OS_PROJECT_DOMAIN_NAME` |
-| `clusters.$id.auth.password` | yes | Password for Limes service user. | `OS_PASSWORD` |
-| `clusters.$id.auth.region_name` | no | In multi-region OpenStack clusters, this selects the region to work on. | `OS_REGION_NAME` |
-| `clusters.$id.auth.interface` | no | The endpoint type Limes should use for the OpenStack services. | `OS_INTERFACE` |
-
-Instead of providing `clusters.$id.auth.password` as plain text in the config
-file, you can use a special syntax to read the respective password from an
-exported environment variable:
-
-```yaml
-password: { fromEnv: ENVIRONMENT_VARIABLE }
-```
+The following fields and sections are supported:
 
 | Field | Required | Description |
-| --- | --- | --- |
-| `clusters.$id.catalog_url` | no | URL of Limes API service as it appears in the Keystone service catalog for this cluster. This is only used for version advertisements, and can be omitted if no client relies on the URLs in these version advertisements. |
-| `clusters.$id.discovery.method` | no | Defines which method to use to discover Keystone domains and projects in this cluster. If not given, the default value is `list`. |
-| `clusters.$id.discovery.except_domains` | no | May contain a regex. Domains whose names match the regex will not be considered by Limes. |
-| `clusters.$id.discovery.only_domains` | no | May contain a regex. If given, only domains whose names match the regex will be considered by Limes. If `except_domains` is also given, it takes precedence over `only_domains`. |
-| `clusters.$id.services` | yes | List of backend services for which to scrape quota/usage data. Service types for which Limes does not include a suitable *quota plugin* will be ignored. See below for supported service types. |
-| `clusters.$id.subresources` | no | List of resources where subresource scraping is requested. This is an object with service types as keys, and a list of resource names as values. |
-| `clusters.$id.subcapacities` | no | List of resources where subcapacity scraping is requested. This is an object with service types as keys, and a list of resource names as values. |
-| `clusters.$id.capacitors` | no | List of capacity plugins to use for scraping capacity data. See below for supported capacity plugins. |
-| `clusters.$id.authoritative` | no | If set to `true`, the collector will write the quota from its own database into the backend service whenever scraping encounters a backend quota that differs from the expectation. This flag is strongly recommended in production systems to avoid divergence of Limes quotas from backend quotas, but should be used with care during development. |
-| `clusters.$id.constraints` | no | Path to a YAML file containing the quota constraints for this cluster. See [*quota constraints*](constraints.md) for details. |
-| `clusters.$id.cadf` | no | Audit trail configuration options. See [*audit trail*](#audit-trail) for details. |
-| `clusters.$id.lowpriv_raise` | no | Configuration options for low-privilege quota raising. See [*low-privilege quota raising*](#low-privilege-quota-raising) for details. |
-| `clusters.$id.resource_behavior` | no | Configuration options for special resource behaviors. See [*resource behavior*](#resource-behavior) for details. |
-| `clusters.$id.bursting.max_multiplier` | no | If given, permits quota bursting in this cluster. When projects enable quota bursting, the backend quota is set to `quota * (1 + max_multiplier)`. In the future, Limes may autonomously adjust the multiplier between 0 and the configured maximum based on cluster-wide resource utilization. |
+| --- | --- | --- | :--- |
+| `cluster_id` | yes | Must be given for historical reasons. May be chosen freely, but should not be changed afterwards. (It *can* be changed, but that requires a shutdown of all Limes components and manual editing of the database.) |
+| `auth.auth_url` | yes | URL for Keystone v3 API in this cluster. Should end in `/v3`. Other Keystone API versions are not supported (`OS_AUTH_URL`). |
+| `auth.user_name` | yes | Limes service user (`OS_USERNAME`). |
+| `auth.user_domain_name` | yes | Domain containing Limes service user (`OS_USER_DOMAIN_NAME`). |
+| `auth.project_name` | yes | Project where Limes service user has access (`OS_PROJECT_NAME`). |
+| `auth.project_domain_name` | yes | Domain containing that project (`OS_PROJECT_DOMAIN_NAME`). |
+| `auth.password` | yes | Password for Limes service user (`OS_PASSWORD`). |
+| `auth.region_name` | no | In multi-region OpenStack clusters, this selects the region to work on (`OS_REGION_NAME`). |
+| `auth.interface` | no | The endpoint type Limes should use for the OpenStack services (`OS_INTERFACE`). |
+| `catalog_url` | no | URL of Limes API service as it appears in the Keystone service catalog for this cluster. This is only used for version advertisements, and can be omitted if no client relies on the URLs in these version advertisements. |
+| `discovery.method` | no | Defines which method to use to discover Keystone domains and projects in this cluster. If not given, the default value is `list`. |
+| `discovery.except_domains` | no | May contain a regex. Domains whose names match the regex will not be considered by Limes. |
+| `discovery.only_domains` | no | May contain a regex. If given, only domains whose names match the regex will be considered by Limes. If `except_domains` is also given, it takes precedence over `only_domains`. |
+| `services` | yes | List of backend services for which to scrape quota/usage data. Service types for which Limes does not include a suitable *quota plugin* will be ignored. See below for supported service types. |
+| `subresources` | no | List of resources where subresource scraping is requested. This is an object with service types as keys, and a list of resource names as values. |
+| `subcapacities` | no | List of resources where subcapacity scraping is requested. This is an object with service types as keys, and a list of resource names as values. |
+| `capacitors` | no | List of capacity plugins to use for scraping capacity data. See below for supported capacity plugins. |
+| `authoritative` | no | If set to `true`, the collector will write the quota from its own database into the backend service whenever scraping encounters a backend quota that differs from the expectation. This flag is strongly recommended in production systems to avoid divergence of Limes quotas from backend quotas, but should be used with care during development. |
+| `constraints` | no | Path to a YAML file containing the quota constraints for this cluster. See [*quota constraints*](constraints.md) for details. |
+| `cadf` | no | Audit trail configuration options. See [*audit trail*](#audit-trail) for details. |
+| `lowpriv_raise` | no | Configuration options for low-privilege quota raising. See [*low-privilege quota raising*](#low-privilege-quota-raising) for details. |
+| `resource_behavior` | no | Configuration options for special resource behaviors. See [*resource behavior*](#resource-behavior) for details. |
+| `bursting.max_multiplier` | no | If given, permits quota bursting in this cluster. When projects enable quota bursting, the backend quota is set to `quota * (1 + max_multiplier)`. In the future, Limes may autonomously adjust the multiplier between 0 and the configured maximum based on cluster-wide resource utilization. |
+
+Instead of providing `auth.password` as plain text in the config file, you can use a special syntax to read the
+respective password from an exported environment variable:
+
+```yaml
+password: { fromEnv: ENVIRONMENT_VARIABLE }
+```
 
 ### Audit trail
 
@@ -135,12 +116,12 @@ Limes logs all quota changes at the domain and project level in an Open Standard
 
 | Field | Default | Description |
 | --- | --- | --- |
-| `clusters.$id.cadf.enabled` | `false` | Set this to true if you want to send the audit events to a RabbitMQ server. |
-| `clusters.$id.cadf.rabbitmq.queue_name` | *(required, if `enabled` is true)* | Name for the queue that will hold the audit events. The events are published to the default exchange. |
-| `clusters.$id.cadf.rabbitmq.username` | `guest` | RabbitMQ Username. |
-| `clusters.$id.cadf.rabbitmq.password` | `guest` | Password for the specified user. |
-| `clusters.$id.cadf.rabbitmq.hostname` | `localhost` | Hostname of the RabbitMQ server. |
-| `clusters.$id.cadf.rabbitmq.port` | `5672` | Port number to which the underlying connection is made. |
+| `cadf.enabled` | `false` | Set this to true if you want to send the audit events to a RabbitMQ server. |
+| `cadf.rabbitmq.queue_name` | *(required, if `enabled` is true)* | Name for the queue that will hold the audit events. The events are published to the default exchange. |
+| `cadf.rabbitmq.username` | `guest` | RabbitMQ Username. |
+| `cadf.rabbitmq.password` | `guest` | Password for the specified user. |
+| `cadf.rabbitmq.hostname` | `localhost` | Hostname of the RabbitMQ server. |
+| `cadf.rabbitmq.port` | `5672` | Port number to which the underlying connection is made. |
 
 ### Low-privilege quota raising
 
@@ -150,10 +131,10 @@ low-privilege users can be permitted to raise quotas within certain boundaries.
 
 | Field | Required | Description |
 | --- | --- | --- |
-| `clusters.$id.lowpriv_raise.limits.projects` | no | Limits up to which project quotas can be raised by a low-privilege user. |
-| `clusters.$id.lowpriv_raise.limits.domains` | no | Limits up to which domain quotas can be raised by a low-privilege user. |
-| `clusters.$id.lowpriv_raise.except_projects_in_domains` | no | May contain a regex. If given, low-privilege quota raising will not be allowed for projects in domains whose names match the regex. |
-| `clusters.$id.lowpriv_raise.only_projects_in_domains` | no | May contain a regex. If given, low-privilege quota raising will only be possible for projects in domains whose names match the regex. If `except_projects_in_domains` is also given, it takes precedence over `only_projects_in_domains`. |
+| `lowpriv_raise.limits.projects` | no | Limits up to which project quotas can be raised by a low-privilege user. |
+| `lowpriv_raise.limits.domains` | no | Limits up to which domain quotas can be raised by a low-privilege user. |
+| `lowpriv_raise.except_projects_in_domains` | no | May contain a regex. If given, low-privilege quota raising will not be allowed for projects in domains whose names match the regex. |
+| `lowpriv_raise.only_projects_in_domains` | no | May contain a regex. If given, low-privilege quota raising will only be possible for projects in domains whose names match the regex. If `except_projects_in_domains` is also given, it takes precedence over `only_projects_in_domains`. |
 
 Both `limits.projects` and `limits.domains` contain two-level maps, first by service type, then by resource name.
 
@@ -164,60 +145,58 @@ Both `limits.projects` and `limits.domains` contain two-level maps, first by ser
 For example:
 
 ```yaml
-clusters:
-  example:
-    lowpriv_raise:
-      limits:
-        projects:
-          compute:
-            cores: 10
-            instances: 0.5% of cluster capacity
-            ram: 10 GiB
-        domains:
-          compute:
-            cores: 1000
-            instances: until 80% of cluster capacity is assigned
-            ram: 1 TiB
+cluster_id: example
+lowpriv_raise:
+  limits:
+    projects:
+      compute:
+        cores: 10
+        instances: 0.5% of cluster capacity
+        ram: 10 GiB
+    domains:
+      compute:
+        cores: 1000
+        instances: until 80% of cluster capacity is assigned
+        ram: 1 TiB
 ```
 
 ### Resource behavior
 
-Some special behaviors for resources can be configured in the `clusters[].resource_behavior[]` section. Each entry in this section can match multiple resources.
+Some special behaviors for resources can be configured in the `resource_behavior[]` section. Each entry in this section can match multiple resources.
 
 | Field | Required | Description |
 | --- | --- | --- |
-| `clusters.$id.resource_behavior[].resource` | yes | Must contain a regex. The behavior entry applies to all resources where this regex matches against a slash-concatenated pair of service type and resource name. The anchors `^` and `$` are implied at both ends, so the regex must match the entire phrase. |
-| `clusters.$id.resource_behavior[].scope` | yes | May contain a regex. The behavior entry applies to matching resources in all domains where this regex matches against the domain name, and in all projects where this regex matches against a slash-concatenated pair of domain and project name, i.e. `domainname/projectname`. The anchors `^` and `$` are implied at both ends, so the regex must match the entire phrase. This regex is ignored for cluster-level resources. |
-| `clusters.$id.resource_behavior[].max_burst_multiplier` | no | If given, the bursting multiplier for matching resources will be restricted to this value (see also `clusters.$id.bursting.max_multiplier`). |
-| `clusters.$id.resource_behavior[].overcommit_factor` | no | If given, capacity for matching resources will be computed as `raw_capacity * overcommit_factor`, where `raw_capacity` is what the capacity plugin reports. |
-| `clusters.$id.resource_behavior[].scales_with` | no | If a resource is given, matching resources scales with this resource. The other resource may be specified by its name (for resources within the same service type), or by a slash-concatenated pair of service type and resource name, e.g. `compute/cores`. |
-| `clusters.$id.resource_behavior[].scaling_factor` | yes, if `scales_with` is given | The scaling factor that will be reported for these resources' scaling relation. |
-| `clusters.$id.resource_behavior[].min_nonzero_project_quota` | no | A lower boundary for project quota values that are not zero. |
-| `clusters.$id.resource_behavior[].annotations` | no | A map of extra key-value pairs that will be inserted into matching resources as-is in responses to GET requests, e.g. at `project.services[].resources[].annotations`. |
+| `resource_behavior[].resource` | yes | Must contain a regex. The behavior entry applies to all resources where this regex matches against a slash-concatenated pair of service type and resource name. The anchors `^` and `$` are implied at both ends, so the regex must match the entire phrase. |
+| `resource_behavior[].scope` | yes | May contain a regex. The behavior entry applies to matching resources in all domains where this regex matches against the domain name, and in all projects where this regex matches against a slash-concatenated pair of domain and project name, i.e. `domainname/projectname`. The anchors `^` and `$` are implied at both ends, so the regex must match the entire phrase. This regex is ignored for cluster-level resources. |
+| `resource_behavior[].max_burst_multiplier` | no | If given, the bursting multiplier for matching resources will be restricted to this value (see also `bursting.max_multiplier`). |
+| `resource_behavior[].overcommit_factor` | no | If given, capacity for matching resources will be computed as `raw_capacity * overcommit_factor`, where `raw_capacity` is what the capacity plugin reports. |
+| `resource_behavior[].scales_with` | no | If a resource is given, matching resources scales with this resource. The other resource may be specified by its name (for resources within the same service type), or by a slash-concatenated pair of service type and resource name, e.g. `compute/cores`. |
+| `resource_behavior[].scaling_factor` | yes, if `scales_with` is given | The scaling factor that will be reported for these resources' scaling relation. |
+| `resource_behavior[].min_nonzero_project_quota` | no | A lower boundary for project quota values that are not zero. |
+| `resource_behavior[].annotations` | no | A map of extra key-value pairs that will be inserted into matching resources as-is in responses to GET requests, e.g. at `project.services[].resources[].annotations`. |
 
 For example:
 
 ```yaml
-clusters:
-  example:
-    resource_behavior:
-      - { resource: network/healthmonitors, scales_with: network/loadbalancers, scaling_factor: 1 }
-      - { resource: network/listeners,      scales_with: network/loadbalancers, scaling_factor: 2 }
-      - { resource: network/l7policies,     scales_with: network/loadbalancers, scaling_factor: 1 }
-      - { resource: network/pools,          scales_with: network/loadbalancers, scaling_factor: 1 }
-      # matches both sharev2/share_capacity and sharev2/snapshot_capacity
-      - { resource: sharev2/.*_capacity, overcommit_factor: 2 }
-      # disable bursting for the domain "foo"
-      - { resource: .*, scope: foo/.*, max_burst_multiplier: 0 }
-      # require each project to take at least 100 GB of object storage if they use it at all
-      - { resource: object-store/capacity, min_nonzero_project_quota: 107374182400 }
+cluster_id: example
+resource_behavior:
+  - { resource: network/healthmonitors, scales_with: network/loadbalancers, scaling_factor: 1 }
+  - { resource: network/listeners,      scales_with: network/loadbalancers, scaling_factor: 2 }
+  - { resource: network/l7policies,     scales_with: network/loadbalancers, scaling_factor: 1 }
+  - { resource: network/pools,          scales_with: network/loadbalancers, scaling_factor: 1 }
+  # matches both sharev2/share_capacity and sharev2/snapshot_capacity
+  - { resource: sharev2/.*_capacity, overcommit_factor: 2 }
+  # disable bursting for the domain "foo"
+  - { resource: .*, scope: foo/.*, max_burst_multiplier: 0 }
+  # require each project to take at least 100 GB of object storage if they use it at all
+  - { resource: object-store/capacity, min_nonzero_project_quota: 107374182400 }
 ```
 
-# Supported discovery methods
+## Supported discovery methods
 
 This section lists all supported discovery methods for Keystone domains and projects.
 
-## Method: `list` (default)
+### Method: `list` (default)
 
 ```yaml
 discovery:
@@ -226,7 +205,7 @@ discovery:
 
 When this method is configured, Limes will simply list all Keystone domains and projects with the standard API calls, equivalent to what the CLI commands `openstack domain list` and `openstack project list --domain $DOMAIN_ID` do.
 
-## Method: `role-assignment`
+### Method: `role-assignment`
 
 ```yaml
 discovery:
@@ -239,42 +218,11 @@ When this method is configured, Limes will only consider those Keystone projects
 
 This method is useful when there are a lot of projects (e.g. more than 10 000), but only a few of them (e.g. a few dozen) need to be considered by Limes. Since this method requires one API call per project (times the number of domains) every three minutes, it is not advisable when a lot of projects need to be considered by Limes.
 
-# Supported service types
+## Supported service types
 
 This section lists all supported service types and the resources that are understood for each service. The `type` string is always equal to the one that appears in the Keystone service catalog.
 
-For each service, `shared: true` can be set to indicate that the resources of this service are shared among all clusters that specify this service type. For example:
-
-```yaml
-services:
-  # unshared service
-  - type: compute
-  # shared service
-  - type: object-store
-    shared: true
-```
-
-For each service, an `auth:` section can be given to provide alternative credentials for operations on this service type
-(i.e. get quota/usage, set quota). This is particularly useful for shared services, when the service user with the
-required permissions is in a different cluster than the one for which quotas are managed. The structure is the same as
-for `clusters.$id.auth`. For example:
-
-```yaml
-services:
-  - type: compute
-  - type: object-store
-    shared: true
-    auth:
-      auth_url:            https://keystone.staging.example.com/v3
-      user_name:           limes
-      user_domain_name:    Default
-      project_name:        service
-      project_domain_name: Default
-      password:            swordfish
-      region_name:         staging
-```
-
-## `compute`: Nova v2
+### `compute`: Nova v2
 
 ```yaml
 services:
@@ -291,7 +239,7 @@ The area for this service is `compute`.
 | `server_groups` | countable |
 | `server_group_members` | countable |
 
-### Instance price classes
+#### Instance price classes
 
 ```yaml
 services:
@@ -318,7 +266,7 @@ e.g. `instances_regular` is `contained_in: "instances"`.
 Note that, as of now, this configuration is laser-focused on one specific usecase in SAP Converged Cloud. It might
 become more generic once I have more than this singular usecase and a general pattern arises.
 
-### Instance subresources
+#### Instance subresources
 
 The `instances` resource supports subresource scraping. Subresources bear the following attributes:
 
@@ -363,7 +311,7 @@ Rules are evaluated in the order given, and the first matching rule will be take
 will be reported as `unknown`. If rules cannot be evaluated because the instance's flavor has been deleted, the
 hypervisor will be reported as `flavor-deleted`.
 
-### Separate instance quotas
+#### Separate instance quotas
 
 On SAP Converged Cloud (or any other OpenStack cluster where Nova carries the relevant patches), there will be an
 additional resource `instances_<flavorname>` for each flavor with the `quota:separate = true` extra spec. These resources
@@ -395,7 +343,7 @@ same flavor, and Limes prefers the name `bm_newflavor2`. The preferred name will
 for the respective separate instance quota. In the previous example, the resource will be called
 `instances_bm_newflavor2` since `bm_newflavor2` is the flavor alias that Limes prefers.
 
-## `database`: SAP Cloud Frame Manager
+### `database`: SAP Cloud Frame Manager
 
 ```yaml
 services:
@@ -408,7 +356,7 @@ The area for this service is `storage`.
 | --- | --- |
 | `cfm_share_capacity` | bytes |
 
-## `dns`: Designate v2
+### `dns`: Designate v2
 
 ```yaml
 services:
@@ -424,7 +372,7 @@ The area for this service is `dns`.
 
 When the `recordsets` quota is set, the backend quota for records is set to 20 times that value, to fit into the `records_per_recordset` quota (which is set to 20 by default in Designate). The record quota cannot be controlled explicitly in Limes.
 
-## `email-aws`: Cronus v1 (SAP Converged Cloud only)
+### `email-aws`: Cronus v1 (SAP Converged Cloud only)
 
 ```yaml
 services:
@@ -440,7 +388,7 @@ The area for this service is `email`. This service has no resources, only rates.
 | `data_transfer_out` | bytes | Total size of outgoing emails. |
 | `recipients` | countable | Number of recipients on outgoing emails. |
 
-## `keppel`: Keppel v1
+### `keppel`: Keppel v1
 
 ```
 services:
@@ -453,7 +401,7 @@ The area for this service is `storage`.
 | --- | --- |
 | `images` | countable |
 
-## `network`: Neutron v1
+### `network`: Neutron v1
 
 ```yaml
 services:
@@ -486,7 +434,7 @@ When a new project is scraped for the first time, and usage for `security_groups
 respectively, quota of the same size is approved automatically. This covers the `default` security group that is
 automatically created in a new project.
 
-## `object-store`: Swift v1
+### `object-store`: Swift v1
 
 ```yaml
 services:
@@ -499,7 +447,7 @@ The area for this service is `storage`.
 | --- | --- |
 | `capacity` | Bytes |
 
-## `sharev2`: Manila v2
+### `sharev2`: Manila v2
 
 ```yaml
 services:
@@ -530,7 +478,7 @@ The area for this service is `storage`. The following resources are always expos
 | `snapshot_capacity` | GiB | |
 | `share_networks` | countable | |
 
-### Multiple share types
+#### Multiple share types
 
 If the `sharev2.share_types` field lists more than one share type, the first
 four of the aforementioned five resources will refer to the quota for the first
@@ -555,7 +503,7 @@ The quota values in Manila are assigned as follows:
 - Besides the share-type-specific quotas, the general quotas are set to the sum
   across all share types.
 
-### Virtual share types
+#### Virtual share types
 
 Multiple Manila share types can be grouped into a single set of resources by adding `mapping_rules` to the share type as
 shown in the example above for the `hypervisor_storage` share type. In this case, `hypervisor_storage` is the share type
@@ -572,7 +520,7 @@ following way: For each resource belonging to this share type,
 - usage is always reported as 0, and
 - trying to set a non-zero quota is an error.
 
-### Physical usage
+#### Physical usage
 
 Optionally, when the `sharev2.prometheus_api` configuration option is set,
 physical usage data will be scraped using the Prometheus metrics exported by
@@ -583,7 +531,7 @@ certificate (`prometheus_api.ca_cert`) and/or specify a TLS client certificate
 (`prometheus_api.cert`) and private key (`prometheus_api.key`) combination that
 will be used by the HTTP client to make requests to the Prometheus API.
 
-## `volumev2`: Cinder v2
+### `volumev2`: Cinder v2
 
 ```yaml
 services:
@@ -625,35 +573,12 @@ scraping. Subresources bear the following attributes:
 | `status` | string | volume status [as reported by OpenStack Cinder](https://developer.openstack.org/api-ref/block-storage/v2/index.html#volumes-volumes) |
 | `size` | integer value with unit | volume size |
 
-# Available capacity plugins
+## Available capacity plugins
 
 Note that capacity for a resource only becomes visible when the corresponding service is enabled in the
-`clusters.$id.services` list as well.
+`services` list as well.
 
-For each capacitor, an `auth:` section can be given to provide alternative credentials for read operations performed by
-this capacitor. This is particularly useful for shared services, when the service user with the required permissions is
-in a different cluster than the one for which quotas are managed. The structure is the same as for `clusters.$id.auth`.
-For example:
-
-```yaml
-capacitors:
-  - id: nova
-  - id: cinder
-    auth:
-      auth_url:            https://keystone.staging.example.com/v3
-      user_name:           limes
-      user_domain_name:    Default
-      project_name:        service
-      project_domain_name: Default
-      password:            swordfish
-      region_name:         staging
-    cinder:
-      volume_types:
-        vmware:     { volume_backend_name: vmware_ssd, default: true }
-        vmware_hdd: { volume_backend_name: vmware_hdd, default: false }
-```
-
-## `cfm`
+### `cfm`
 
 ```yaml
 capacitors:
@@ -664,7 +589,7 @@ capacitors:
 | --- | --- |
 | `database/cfm_share_capacity` | Calculated as `sum(pool.capabilities.total_capacity)` over all pools. |
 
-## `cinder`
+### `cinder`
 
 ```yaml
 capacitors:
@@ -683,7 +608,7 @@ capacitors:
 No estimates are made for the `snapshots` and `volumes` resources since capacity highly depends on
 the concrete Cinder backend.
 
-## `manila`
+### `manila`
 
 ```yaml
 capacitors:
@@ -718,7 +643,7 @@ considering pools with that share type.
 The `mapping_rules` inside a share type have the same semantics as for the `sharev2` quota plugin, and must be set
 identically to ensure that the capacity values make sense in context.
 
-### Capacity balance
+#### Capacity balance
 
 The capacity balance is defined as
 
@@ -728,7 +653,7 @@ snapshot_capacity = capacity_balance * share_capacity,
 
 that is, there is `capacity_balance` as much snapshot capacity as there is share capacity. For example, `capacity_balance = 0.5` means that the capacity for snapshots is half as big as that for shares, meaning that shares get 2/3 of the total capacity and snapshots get the other 1/3.
 
-## `manual`
+### `manual`
 
 ```yaml
 capacitors:
@@ -746,7 +671,7 @@ This is useful for capacities that cannot be queried automatically, but can be i
 also allows to configure such capacities via the API, but operators might prefer the `manual` capacity plugin because it
 allows to track capacity values along with other configuration in a Git repository or similar.
 
-## `nova`
+### `nova`
 
 ```yaml
 capacitors:
@@ -793,7 +718,7 @@ may belong to multiple aggregates. Subcapacities bear the following attributes:
 | `metadata` | object of strings | aggregate metadata as reported by Nova |
 | `capacity` | integer | sum of capacity of all matching hypervisors in this aggregate |
 
-## `prometheus`
+### `prometheus`
 
 ```yaml
 capacitors:
@@ -832,7 +757,7 @@ capacitors:
           capacity: min(swift_cluster_storage_capacity_bytes < inf) / 3
 ```
 
-## `sapcc-ironic`
+### `sapcc-ironic`
 
 ```yaml
 capacitors:
@@ -894,17 +819,16 @@ For further details see the [rate limits API specification](../users/api-v1-spec
 Example configuration:
 
 ```yaml
-clusters:
-  staging:
-    services:
-      - type: object-store
-        rates:
-          global:
-           - name:   services/swift/account/container/object:create
-             limit:  1000000
-             window: "1s"
-          project_default:
-           - name:   services/swift/account/container/object:create
-             limit:  1000
-             window: "1s"
+cluster_id: staging
+services:
+  - type: object-store
+    rates:
+      global:
+       - name:   services/swift/account/container/object:create
+         limit:  1000000
+         window: "1s"
+      project_default:
+       - name:   services/swift/account/container/object:create
+         limit:  1000
+         window: "1s"
 ```

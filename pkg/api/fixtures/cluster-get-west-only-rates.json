@@ -1,11 +1,10 @@
 {
   "cluster": {
-    "id": "west",
+    "id": "current",
     "services": [
       {
         "type": "shared",
         "area": "shared",
-        "shared": true,
         "resources": [],
         "rates": [
           {

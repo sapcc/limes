@@ -91,7 +91,7 @@ func (c *Collector) ScrapeRates() {
 		}
 
 		logg.Debug("scraping %s rates for %s/%s", serviceType, project.Domain.Name, project.Name)
-		provider, eo := c.Cluster.ProviderClientForService(serviceType)
+		provider, eo := c.Cluster.ProviderClient()
 		rateData, serviceRatesScrapeState, err := c.Plugin.ScrapeRates(provider, eo, project, serviceRatesScrapeState)
 		if err != nil {
 			ratesScrapeFailedCounter.With(labels).Inc()

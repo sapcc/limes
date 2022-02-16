@@ -39,12 +39,6 @@ policy differently, so that certain requests may require other roles or token sc
 
 As with all OpenStack services, this header must contain a Keystone token.
 
-### X-Limes-Cluster-Id
-
-Each Limes API is bound to a certain OpenStack cluster, usually the one where it is configured in the service catalog.
-To make a request concerning a domain or project in a different cluster, the `X-Limes-Cluster-Id` header must be given.
-Using this header requires special permission (usually a cloud-admin token).
-
 ## GET /v1/domains/:domain\_id/projects
 ## GET /v1/domains/:domain\_id/projects/:project\_id
 
@@ -419,111 +413,101 @@ over all projects. If the `physical_usage` is not present in the output, it shal
 In contrast to project data, `scraped_at` is replaced by `min_scraped_at` and `max_scraped_at`, which aggregate over the
 `scraped_at` timestamps of all project data for that service and domain.
 
-## GET /v1/clusters
-## GET /v1/clusters/:cluster\_id
 ## GET /v1/clusters/current
 
-Query data for clusters. `:cluster_id` is optional for cloud admins. Cloud admin token shows all clusters.
-With any other token, only that token's cluster may be shown. Arguments:
+_Historical note: Multi-cluster support was removed from Limes._ It used to be possible to `GET /v1/clusters` and `GET
+/v1/clusters/:cluster_id` with a cluster ID other than "current". By now, only the exact endpoint URL shown in the
+heading is supported.
+
+Query data for the cluster level. Arguments:
 
 * `service`: Limit query to resources in this service. May be given multiple times.
 * `area`: Limit query to resources in services in this area. May be given multiple times.
 * `resource`: When combined, with `?service=`, limit query to that resource.
-* `local`: When given, quota and usage for shared resources is not aggregated across clusters (see below).
 * `detail`: If given, list subcapacities for resources that support it. (See subheading below for details.)
 
 Returns 200 (OK) on success. Result is a JSON document like:
 
 ```json
 {
-  "current_cluster": "example-cluster-2",
-  "clusters": [
-    {
-      "id": "example-cluster",
-      "services": [
-        {
-          "type": "compute",
-          "resources": [
-            {
-              "name": "instances",
-              "domains_quota": 20,
-              "usage": 1
-            },
-            {
-              "name": "cores",
-              "capacity": 1000,
-              "per_availability_zone": [
-                {
-                  "name": "az-one",
-                  "capacity": 500,
-                  "usage": 0
-                },
-                {
-                  "name": "az-two",
-                  "capacity": 500,
-                  "usage": 2
-                }
-              ],
-              "domains_quota": 100,
-              "usage": 2
-            },
-            {
-              "name": "ram",
-              "unit": "MiB",
-              "capacity": 1048576,
-              "raw_capacity": 524288,
-              "per_availability_zone": [
-                {
-                  "name": "az-one",
-                  "capacity": 262144,
-                  "usage": 2048
-                },
-                {
-                  "name": "az-two",
-                  "capacity": 262144,
-                  "usage": 0
-                }
-              ],
-              "domains_quota": 204800,
-              "usage": 2048,
-              "burst_usage": 128
-            }
-          ],
-          "max_scraped_at": 1486738599,
-          "min_scraped_at": 1486728599
-        },
-        {
-          "type": "object-store",
-          "shared": true,
-          "resources": [
-            {
-              "name": "capacity",
-              "unit": "B",
-              "capacity": 60000000000000,
-              "domains_quota": 107374182400,
-              "usage": 104857600
-            }
-          ],
-          "max_scraped_at": 1486733778,
-          "min_scraped_at": 1486723778
-        },
-        ...
-      ],
-      "max_scraped_at": 1486712957,
-      "min_scraped_at": 1486701582
-    },
-    ...
-  ]
+  "cluster": {
+    "id": "example-cluster",
+    "services": [
+      {
+        "type": "compute",
+        "resources": [
+          {
+            "name": "instances",
+            "domains_quota": 20,
+            "usage": 1
+          },
+          {
+            "name": "cores",
+            "capacity": 1000,
+            "per_availability_zone": [
+              {
+                "name": "az-one",
+                "capacity": 500,
+                "usage": 0
+              },
+              {
+                "name": "az-two",
+                "capacity": 500,
+                "usage": 2
+              }
+            ],
+            "domains_quota": 100,
+            "usage": 2
+          },
+          {
+            "name": "ram",
+            "unit": "MiB",
+            "capacity": 1048576,
+            "raw_capacity": 524288,
+            "per_availability_zone": [
+              {
+                "name": "az-one",
+                "capacity": 262144,
+                "usage": 2048
+              },
+              {
+                "name": "az-two",
+                "capacity": 262144,
+                "usage": 0
+              }
+            ],
+            "domains_quota": 204800,
+            "usage": 2048,
+            "burst_usage": 128
+          }
+        ],
+        "max_scraped_at": 1486738599,
+        "min_scraped_at": 1486728599
+      },
+      {
+        "type": "object-store",
+        "shared": true,
+        "resources": [
+          {
+            "name": "capacity",
+            "unit": "B",
+            "capacity": 60000000000000,
+            "domains_quota": 107374182400,
+            "usage": 104857600
+          }
+        ],
+        "max_scraped_at": 1486733778,
+        "min_scraped_at": 1486723778
+      },
+      ...
+    ],
+    "max_scraped_at": 1486712957,
+    "min_scraped_at": 1486701582
+  }
 }
 ```
 
-The `current_cluster` key is only present if no `:cluster_id` was given.
-
-If `:cluster_id` was given, the outer key is `cluster` and its value is the object without the array surrounding it. As
-a special case, a cluster ID of `current` will be substituted by the current cluster (i.e. the one for which domains and
-projects can be inspected on this endpoint).
-
-Clusters do not have a quota, but resources may be constrained by a `capacity` value. The `domains_quota` field behaves
+Clusters do not have quota, but resources may be constrained by a `capacity` value. The `domains_quota` field behaves
 just like the `projects_quota` key on domain level. Discrepancies between project quotas in Limes and in backing
 services will not be shown on this level, so there is no `backend_quota` key.
 
@@ -550,12 +534,6 @@ projects just like for `GET /domains`).
 The `min_scraped_at` and `max_scraped_at` timestamps on the cluster level refer to the cluster capacity values. Capacity
 plugins (and thus, capacity scraping events) are not bound to a single service, which is why the scraping timestamps
 cannot be shown on the service level here.
-
-For resources belonging to a cluster-local service (the default), the reported quota and usage is aggregated only over
-domains in this cluster. For resources belonging to a shared service, the reported quota and usage is aggregated over
-all domains in all clusters (and will thus be the same for every cluster listed), unless the query parameter `local` (only for cloud admins) is
-given. Shared services are indicated by the `shared` key on the service level (which defaults to `false` if not
-specified).
 
 ### Subcapacities
 

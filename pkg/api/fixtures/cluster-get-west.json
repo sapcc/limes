@@ -1,25 +1,24 @@
 {
   "cluster": {
-    "id": "west",
+    "id": "current",
     "services": [
       {
         "type": "shared",
         "area": "shared",
-        "shared": true,
         "resources": [
           {
             "name": "capacity",
             "unit": "B",
             "capacity": 185,
-            "domains_quota": 50,
-            "usage": 8,
-            "physical_usage": 7
+            "domains_quota": 25,
+            "usage": 6,
+            "physical_usage": 5
           },
           {
             "name": "capacity_portion",
             "unit": "B",
             "contained_in": "capacity",
-            "usage": 4
+            "usage": 3
           },
           {
             "name": "external_things",
@@ -30,8 +29,8 @@
           {
             "name": "things",
             "capacity": 246,
-            "domains_quota": 90,
-            "usage": 8
+            "domains_quota": 30,
+            "usage": 6
           }
         ],
         "max_scraped_at": 66,
@@ -47,7 +46,8 @@
             "name": "capacity",
             "unit": "B",
             "domains_quota": 100,
-            "usage": 6
+            "usage": 6,
+            "physical_usage": 5
           },
           {
             "name": "capacity_portion",

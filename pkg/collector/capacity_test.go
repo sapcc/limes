@@ -38,9 +38,8 @@ func Test_ScanCapacity(t *testing.T) {
 	test.InitDatabase(t, nil)
 
 	cluster := &core.Cluster{
-		ID:              "west",
-		IsServiceShared: map[string]bool{"shared": true},
-		ServiceTypes:    []string{"shared", "unshared", "unshared2"},
+		ID:           "west",
+		ServiceTypes: []string{"shared", "unshared", "unshared2"},
 		QuotaPlugins: map[string]core.QuotaPlugin{
 			"shared":    test.NewPlugin("shared"),
 			"unshared":  test.NewPlugin("unshared"),
@@ -60,7 +59,7 @@ func Test_ScanCapacity(t *testing.T) {
 				"someother/capacity",
 			),
 		},
-		Config: &core.ClusterConfiguration{
+		Config: core.ClusterConfiguration{
 			Auth: &core.AuthParameters{},
 			//overcommit should be reflected in capacity metrics
 			ResourceBehaviors: []*core.ResourceBehaviorConfiguration{{

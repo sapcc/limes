@@ -105,7 +105,7 @@ func (c *Collector) Scrape() {
 		}
 
 		logg.Debug("scraping %s resources for %s/%s", serviceType, project.Domain.Name, project.Name)
-		provider, eo := c.Cluster.ProviderClientForService(serviceType)
+		provider, eo := c.Cluster.ProviderClient()
 		resourceData, serializedMetrics, err := c.Plugin.Scrape(provider, eo, project)
 		if err != nil {
 			scrapeFailedCounter.With(labels).Inc()

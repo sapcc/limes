@@ -61,7 +61,6 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 	}
 
 	serviceTypes := []string{"shared", "unshared"}
-	isServiceShared := map[string]bool{"shared": true}
 	quotaPlugins := map[string]core.QuotaPlugin{
 		"shared":   test.NewPlugin("shared", sharedRatesThatReportUsage...),
 		"unshared": test.NewPlugin("unshared", unsharedRatesThatReportUsage...),
@@ -103,9 +102,11 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 
 	quotaPlugins["shared"].(*test.Plugin).WithExternallyManagedResource = true
 
-	westClusterConfig := &core.ClusterConfiguration{
+	clusterConfig := core.ClusterConfiguration{
 		Auth: &core.AuthParameters{},
-		Services: []core.ServiceConfiguration{
+	}
+	if clusterName == "west" {
+		clusterConfig.Services = []core.ServiceConfiguration{
 			{
 				Type: "shared",
 				RateLimits: core.ServiceRateLimitConfiguration{
@@ -170,39 +171,19 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 					},
 				},
 			},
-		},
+		}
 	}
 
-	config := core.Configuration{
-		Clusters: map[string]*core.Cluster{
-			"west": {
-				ID:               "west",
-				ServiceTypes:     serviceTypes,
-				IsServiceShared:  isServiceShared,
-				DiscoveryPlugin:  test.NewDiscoveryPlugin(),
-				QuotaPlugins:     quotaPlugins,
-				CapacityPlugins:  map[string]core.CapacityPlugin{},
-				QuotaConstraints: &westConstraintSet,
-				Config:           westClusterConfig,
-			},
-			"east": {
-				ID:              "east",
-				ServiceTypes:    serviceTypes,
-				IsServiceShared: isServiceShared,
-				QuotaPlugins:    quotaPlugins,
-				CapacityPlugins: map[string]core.CapacityPlugin{},
-				Config:          &core.ClusterConfiguration{Auth: &core.AuthParameters{}},
-			},
-			"cloud": {
-				ID:              "cloud",
-				ServiceTypes:    serviceTypes,
-				IsServiceShared: isServiceShared,
-				DiscoveryPlugin: test.NewDiscoveryPlugin(),
-				QuotaPlugins:    quotaPlugins,
-				CapacityPlugins: map[string]core.CapacityPlugin{},
-				Config:          &core.ClusterConfiguration{Auth: &core.AuthParameters{}},
-			},
-		},
+	cluster := &core.Cluster{
+		ID:              clusterName,
+		ServiceTypes:    serviceTypes,
+		DiscoveryPlugin: test.NewDiscoveryPlugin(),
+		QuotaPlugins:    quotaPlugins,
+		CapacityPlugins: map[string]core.CapacityPlugin{},
+		Config:          clusterConfig,
+	}
+	if clusterName == "west" {
+		cluster.QuotaConstraints = &westConstraintSet
 	}
 
 	//load mock policy (where everything is allowed)
@@ -212,51 +193,52 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 		AllowLower:   true,
 	}
 
-	config.Clusters["west"].Config.ResourceBehaviors = []*core.ResourceBehaviorConfiguration{
-		//check minimum non-zero project quota constraint
-		{
-			Compiled: core.ResourceBehavior{
-				MaxBurstMultiplier:     limes.BurstingMultiplier(math.Inf(+1)),
-				FullResourceNameRx:     regexp.MustCompile("^unshared/things$"),
-				MinNonZeroProjectQuota: 10,
-			},
-		},
-		//check how scaling relations are reported
-		{
-			Compiled: core.ResourceBehavior{
-				MaxBurstMultiplier:     limes.BurstingMultiplier(math.Inf(+1)),
-				FullResourceNameRx:     regexp.MustCompile("^unshared/things$"),
-				ScalesWithResourceName: "things",
-				ScalesWithServiceType:  "shared",
-				ScalingFactor:          2,
-			},
-		},
-		//check how annotations are reported
-		{
-			Compiled: core.ResourceBehavior{
-				MaxBurstMultiplier: limes.BurstingMultiplier(math.Inf(+1)),
-				FullResourceNameRx: regexp.MustCompile("^shared/.*things$"),
-				ScopeRx:            regexp.MustCompile("^germany(?:/dresden)?$"),
-				Annotations: map[string]interface{}{
-					"annotated": true,
-					"text":      "this annotation appears on shared things of domain germany and project dresden",
+	if clusterName == "west" {
+		cluster.Config.ResourceBehaviors = []*core.ResourceBehaviorConfiguration{
+			//check minimum non-zero project quota constraint
+			{
+				Compiled: core.ResourceBehavior{
+					MaxBurstMultiplier:     limes.BurstingMultiplier(math.Inf(+1)),
+					FullResourceNameRx:     regexp.MustCompile("^unshared/things$"),
+					MinNonZeroProjectQuota: 10,
 				},
 			},
-		},
-		{
-			Compiled: core.ResourceBehavior{
-				MaxBurstMultiplier: limes.BurstingMultiplier(math.Inf(+1)),
-				FullResourceNameRx: regexp.MustCompile("^shared/external_things$"),
-				ScopeRx:            regexp.MustCompile("^germany/dresden$"),
-				Annotations: map[string]interface{}{
-					"text": "this annotation appears on shared/external_things of project dresden only",
+			//check how scaling relations are reported
+			{
+				Compiled: core.ResourceBehavior{
+					MaxBurstMultiplier:     limes.BurstingMultiplier(math.Inf(+1)),
+					FullResourceNameRx:     regexp.MustCompile("^unshared/things$"),
+					ScalesWithResourceName: "things",
+					ScalesWithServiceType:  "shared",
+					ScalingFactor:          2,
 				},
 			},
-		},
+			//check how annotations are reported
+			{
+				Compiled: core.ResourceBehavior{
+					MaxBurstMultiplier: limes.BurstingMultiplier(math.Inf(+1)),
+					FullResourceNameRx: regexp.MustCompile("^shared/.*things$"),
+					ScopeRx:            regexp.MustCompile("^germany(?:/dresden)?$"),
+					Annotations: map[string]interface{}{
+						"annotated": true,
+						"text":      "this annotation appears on shared things of domain germany and project dresden",
+					},
+				},
+			},
+			{
+				Compiled: core.ResourceBehavior{
+					MaxBurstMultiplier: limes.BurstingMultiplier(math.Inf(+1)),
+					FullResourceNameRx: regexp.MustCompile("^shared/external_things$"),
+					ScopeRx:            regexp.MustCompile("^germany/dresden$"),
+					Annotations: map[string]interface{}{
+						"text": "this annotation appears on shared/external_things of project dresden only",
+					},
+				},
+			},
+		}
 	}
 
-	cluster := config.Clusters[clusterName]
-	router, _ := NewV1Router(cluster, config, enforcer)
+	router, _ := NewV1Router(cluster, enforcer)
 	return cluster, router, enforcer
 }
 
@@ -317,73 +299,46 @@ func Test_ClusterOperations(t *testing.T) {
 	//check GetCluster
 	assert.HTTPRequest{
 		Method:       "GET",
-		Path:         "/v1/clusters/west",
+		Path:         "/v1/clusters/current",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west.json"),
 	}.Check(t, router)
 	assert.HTTPRequest{
 		Method:       "GET",
-		Path:         "/v1/clusters/west?rates=only",
+		Path:         "/v1/clusters/current",
+		Header:       map[string]string{"X-Limes-Cluster-Id": "current"}, //still allowed for backwards compatibility
+		ExpectStatus: 200,
+		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west.json"),
+	}.Check(t, router)
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/v1/clusters/current?rates=only",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-only-rates.json"),
 	}.Check(t, router)
 	assert.HTTPRequest{
 		Method:       "GET",
-		Path:         "/v1/clusters/west?rates",
+		Path:         "/v1/clusters/current?rates",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-with-rates.json"),
 	}.Check(t, router)
 	assert.HTTPRequest{
 		Method:       "GET",
-		Path:         "/v1/clusters/current",
+		Path:         "/v1/clusters/current?service=unknown",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west.json"),
-	}.Check(t, router)
-
-	//check ListClusters
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/v1/clusters",
-		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-list.json"),
+		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-no-services.json"),
 	}.Check(t, router)
 	assert.HTTPRequest{
 		Method:       "GET",
-		Path:         "/v1/clusters?detail",
+		Path:         "/v1/clusters/current?service=shared&resource=unknown",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-list-detail.json"),
+		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-no-resources.json"),
 	}.Check(t, router)
 	assert.HTTPRequest{
 		Method:       "GET",
-		Path:         "/v1/clusters?local",
+		Path:         "/v1/clusters/current?service=shared&resource=things",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-list-local.json"),
-	}.Check(t, router)
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/v1/clusters?service=unknown",
-		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/cluster-list-no-services.json"),
-	}.Check(t, router)
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/v1/clusters?service=shared&resource=unknown",
-		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/cluster-list-no-resources.json"),
-	}.Check(t, router)
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/v1/clusters?service=shared&resource=things",
-		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-list-filtered.json"),
-	}.Check(t, router)
-	//should look identical with X-Limes-Cluster-ID *except* for the current_cluster field
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/v1/clusters?service=shared&resource=things",
-		Header:       map[string]string{"X-Limes-Cluster-Id": "east"},
-		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-list-filtered-foreign.json"),
+		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-filtered.json"),
 	}.Check(t, router)
 
 	//check rendering of overcommit factors
@@ -405,7 +360,7 @@ func Test_ClusterOperations(t *testing.T) {
 	}
 	assert.HTTPRequest{
 		Method:       "GET",
-		Path:         "/v1/clusters/west",
+		Path:         "/v1/clusters/current",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-with-overcommit.json"),
 	}.Check(t, router)
@@ -430,22 +385,6 @@ func Test_DomainOperations(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-france",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/domain-get-france.json"),
-	}.Check(t, router)
-
-	//domain "poland" is in a different cluster, so the X-Limes-Cluster-Id header
-	//needs to be given
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/v1/domains/uuid-for-poland",
-		ExpectStatus: 404,
-		ExpectBody:   assert.StringData("no such domain (if it was just created, try to POST /domains/discover)\n"),
-	}.Check(t, router)
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/v1/domains/uuid-for-poland",
-		Header:       map[string]string{"X-Limes-Cluster-Id": "east"},
-		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/domain-get-poland.json"),
 	}.Check(t, router)
 
 	//check ListDomains
@@ -478,16 +417,9 @@ func Test_DomainOperations(t *testing.T) {
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains",
-		Header:       map[string]string{"X-Limes-Cluster-Id": "east"},
-		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/domain-list-east.json"),
-	}.Check(t, router)
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/v1/domains",
 		Header:       map[string]string{"X-Limes-Cluster-Id": "unknown"},
-		ExpectStatus: 404,
-		ExpectBody:   assert.StringData("no such cluster\n"),
+		ExpectStatus: 400,
+		ExpectBody:   assert.StringData("multi-cluster support is removed: the X-Limes-Cluster-Id header is not allowed anymore\n"),
 	}.Check(t, router)
 
 	//check DiscoverDomains
@@ -971,19 +903,19 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-paris-only-default-rates.json"),
 	}.Check(t, router)
-	//warsaw is in a different cluster
+
+	//check non-existent domains/projects
 	assert.HTTPRequest{
 		Method:       "GET",
-		Path:         "/v1/domains/uuid-for-poland/projects/uuid-for-warsaw",
+		Path:         "/v1/domains/uuid-for-switzerland/projects/uuid-for-bern",
 		ExpectStatus: 404,
 		ExpectBody:   assert.StringData("no such domain (if it was just created, try to POST /domains/discover)\n"),
 	}.Check(t, router)
 	assert.HTTPRequest{
 		Method:       "GET",
-		Path:         "/v1/domains/uuid-for-poland/projects/uuid-for-warsaw",
-		Header:       map[string]string{"X-Limes-Cluster-Id": "east"},
-		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-warsaw.json"),
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-hamburg",
+		ExpectStatus: 404,
+		ExpectBody:   assert.StringData("no such project (if it was just created, try to POST /domains/uuid-for-germany/projects/discover)\n"),
 	}.Check(t, router)
 
 	//check ListProjects
@@ -1030,22 +962,6 @@ func Test_ProjectOperations(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects?area=shared&resource=things",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-list-filtered.json"),
-	}.Check(t, router)
-
-	//check cross-cluster ListProjects
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/v1/domains/uuid-for-poland/projects",
-		Header:       map[string]string{"X-Limes-Cluster-Id": "east"},
-		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-list-poland.json"),
-	}.Check(t, router)
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/v1/domains/uuid-for-poland/projects",
-		Header:       map[string]string{"X-Limes-Cluster-Id": "unknown"},
-		ExpectStatus: 404,
-		ExpectBody:   assert.StringData("no such cluster\n"),
 	}.Check(t, router)
 
 	//check DiscoverProjects
@@ -1861,8 +1777,8 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 	//test low-privilege raise limits that are specified as percentage of assigned cluster capacity over all domains
 	cluster.LowPrivilegeRaise.LimitsForDomains = map[string]map[string]core.LowPrivilegeRaiseLimit{
 		// - shared/things capacity is 246, 45% thereof is 110.7 which rounds down to 110
-		// - current shared/things domain quotas: poland = 60, germany = 30
-		// -> germany should be able to go up to 50 before sum(domain quotas) exceeds 110
+		// - current shared/things domain quotas: france = 0, germany = 30
+		// -> germany should be able to go up to 80 before sum(domain quotas) exceeds 110
 		"shared": {"things": {UntilPercentOfClusterCapacityAssigned: 45}},
 	}
 
@@ -1870,7 +1786,7 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany",
 		ExpectStatus: 403,
-		ExpectBody:   assert.StringData("cannot change shared/things quota: user is not allowed to raise \"shared\" quotas that high in this domain (maximum acceptable domain quota is 50)\n"),
+		ExpectBody:   assert.StringData("cannot change shared/things quota: user is not allowed to raise \"shared\" quotas that high in this domain (maximum acceptable domain quota is 110)\n"),
 		Body: assert.JSONObject{
 			"domain": assert.JSONObject{
 				"services": []assert.JSONObject{
@@ -1878,8 +1794,8 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 						"type": "shared",
 						"resources": []assert.JSONObject{
 							//attempt to raise should fail because low-privilege exception
-							//only applies up to 50 (see comment above)
-							{"name": "things", "quota": 55},
+							//only applies up to 110 (see comment above)
+							{"name": "things", "quota": 115},
 						},
 					},
 				},
@@ -1889,19 +1805,19 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 
 	//raise another domain quota such that the auto-approval limit would be
 	//exceeded even if the "germany" domain had zero quota
-	domainPolandID, err := db.DB.SelectInt(`SELECT id FROM domains WHERE name = $1`,
-		"poland")
+	domainFranceID, err := db.DB.SelectInt(`SELECT id FROM domains WHERE name = $1`,
+		"france")
 	if err != nil {
 		t.Fatal(err)
 	}
-	servicePolandSharedID, err := db.DB.SelectInt(`SELECT id FROM domain_services WHERE domain_id = $1 AND type = $2`,
-		domainPolandID, "shared")
+	serviceFranceSharedID, err := db.DB.SelectInt(`SELECT id FROM domain_services WHERE domain_id = $1 AND type = $2`,
+		domainFranceID, "shared")
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = db.DB.Exec(`UPDATE domain_resources SET quota = $1 WHERE service_id = $2 AND name = $3`,
+	_, err = db.DB.Exec(`INSERT INTO domain_resources (service_id, name, quota) VALUES ($1, $2, $3)`,
+		serviceFranceSharedID, "things",
 		130, //more than the auto-approval limit of 110
-		servicePolandSharedID, "things",
 	)
 	if err != nil {
 		t.Fatal(err)

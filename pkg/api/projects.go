@@ -47,11 +47,7 @@ func (p *v1Provider) ListProjects(w http.ResponseWriter, r *http.Request) {
 	if !token.Require(w, "project:list") {
 		return
 	}
-	cluster := p.FindClusterFromRequest(w, r, token)
-	if cluster == nil {
-		return
-	}
-	dbDomain := p.FindDomainFromRequest(w, r, cluster)
+	dbDomain := p.FindDomainFromRequest(w, r)
 	if dbDomain == nil {
 		return
 	}
@@ -63,7 +59,7 @@ func (p *v1Provider) ListProjects(w http.ResponseWriter, r *http.Request) {
 	p.listProjectsMutex.Lock()
 	defer p.listProjectsMutex.Unlock()
 
-	projects, err := reports.GetProjects(cluster, *dbDomain, nil, db.DB, reports.ReadFilter(r))
+	projects, err := reports.GetProjects(p.Cluster, *dbDomain, nil, db.DB, reports.ReadFilter(r))
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -78,11 +74,7 @@ func (p *v1Provider) GetProject(w http.ResponseWriter, r *http.Request) {
 	if !token.Require(w, "project:show") {
 		return
 	}
-	cluster := p.FindClusterFromRequest(w, r, token)
-	if cluster == nil {
-		return
-	}
-	dbDomain := p.FindDomainFromRequest(w, r, cluster)
+	dbDomain := p.FindDomainFromRequest(w, r)
 	if dbDomain == nil {
 		return
 	}
@@ -90,7 +82,7 @@ func (p *v1Provider) GetProject(w http.ResponseWriter, r *http.Request) {
 	if dbProject == nil {
 		return
 	}
-	project, err := GetProjectReport(cluster, *dbDomain, *dbProject, db.DB, reports.ReadFilter(r))
+	project, err := GetProjectReport(p.Cluster, *dbDomain, *dbProject, db.DB, reports.ReadFilter(r))
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -104,16 +96,12 @@ func (p *v1Provider) DiscoverProjects(w http.ResponseWriter, r *http.Request) {
 	if !token.Require(w, "project:discover") {
 		return
 	}
-	cluster := p.FindClusterFromRequest(w, r, token)
-	if cluster == nil {
-		return
-	}
-	dbDomain := p.FindDomainFromRequest(w, r, cluster)
+	dbDomain := p.FindDomainFromRequest(w, r)
 	if dbDomain == nil {
 		return
 	}
 
-	newProjectUUIDs, err := collector.ScanProjects(cluster, dbDomain)
+	newProjectUUIDs, err := collector.ScanProjects(p.Cluster, dbDomain)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -132,11 +120,7 @@ func (p *v1Provider) SyncProject(w http.ResponseWriter, r *http.Request) {
 	if !token.Require(w, "project:show") {
 		return
 	}
-	cluster := p.FindClusterFromRequest(w, r, token)
-	if cluster == nil {
-		return
-	}
-	dbDomain := p.FindDomainFromRequest(w, r, cluster)
+	dbDomain := p.FindDomainFromRequest(w, r)
 	if dbDomain == nil {
 		return
 	}
@@ -147,7 +131,7 @@ func (p *v1Provider) SyncProject(w http.ResponseWriter, r *http.Request) {
 
 	//check if project needs to be discovered
 	if dbProject == nil {
-		newProjectUUIDs, err := collector.ScanProjects(cluster, dbDomain)
+		newProjectUUIDs, err := collector.ScanProjects(p.Cluster, dbDomain)
 		if respondwith.ErrorText(w, err) {
 			return
 		}
@@ -233,17 +217,13 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 	}
 
 	updater := QuotaUpdater{
-		Config:          p.Config,
+		Cluster:         p.Cluster,
 		CanRaise:        checkToken("project:raise"),
 		CanRaiseLP:      checkToken("project:raise_lowpriv"),
 		CanLower:        checkToken("project:lower"),
 		CanSetRateLimit: checkToken("project:set_rate_limit"),
 	}
-	updater.Cluster = p.FindClusterFromRequest(w, r, token)
-	if updater.Cluster == nil {
-		return
-	}
-	updater.Domain = p.FindDomainFromRequest(w, r, updater.Cluster)
+	updater.Domain = p.FindDomainFromRequest(w, r)
 	if updater.Domain == nil {
 		return
 	}
@@ -438,11 +418,7 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 	if !token.Require(w, "project:edit") {
 		return
 	}
-	cluster := p.FindClusterFromRequest(w, r, token)
-	if cluster == nil {
-		return
-	}
-	domain := p.FindDomainFromRequest(w, r, cluster)
+	domain := p.FindDomainFromRequest(w, r)
 	if domain == nil {
 		return
 	}
@@ -450,10 +426,10 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 	if project == nil {
 		return
 	}
-	if cluster.Config.Bursting.MaxMultiplier == 0 {
+	if p.Cluster.Config.Bursting.MaxMultiplier == 0 {
 		msg := "bursting is not available for this cluster"
 		http.Error(w, msg, http.StatusBadRequest)
-		logAndPublishEvent(cluster.ID, requestTime, r, token, http.StatusBadRequest,
+		logAndPublishEvent(requestTime, r, token, http.StatusBadRequest,
 			burstEventTarget{
 				DomainID:     domain.UUID,
 				ProjectID:    project.UUID,
@@ -514,7 +490,7 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 					overbookedResources[0]
 			}
 			http.Error(w, msg, http.StatusConflict)
-			logAndPublishEvent(cluster.ID, requestTime, r, token, http.StatusConflict,
+			logAndPublishEvent(requestTime, r, token, http.StatusConflict,
 				burstEventTarget{
 					DomainID:     domain.UUID,
 					ProjectID:    project.UUID,
@@ -550,7 +526,7 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 
 	var errors []string
 	for _, srv := range services {
-		_, exists := cluster.QuotaPlugins[srv.Type]
+		_, exists := p.Cluster.QuotaPlugins[srv.Type]
 		if !exists {
 			continue
 		}
@@ -560,7 +536,7 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 		}
 		err := datamodel.ApplyBackendQuota(
 			db.DB,
-			cluster, targetDomain, *project,
+			p.Cluster, targetDomain, *project,
 			srv.ID, srv.Type,
 		)
 		if err != nil {
@@ -569,7 +545,7 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 		}
 	}
 
-	logAndPublishEvent(cluster.ID, requestTime, r, token, http.StatusConflict,
+	logAndPublishEvent(requestTime, r, token, http.StatusConflict,
 		burstEventTarget{
 			DomainID:  domain.UUID,
 			ProjectID: project.UUID,

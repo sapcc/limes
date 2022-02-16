@@ -30,7 +30,6 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/sapcc/go-bits/gopherpolicy"
-	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sre"
 	"github.com/sapcc/limes"
@@ -56,7 +55,6 @@ type VersionLinkData struct {
 
 type v1Provider struct {
 	Cluster        *core.Cluster
-	Config         core.Configuration
 	PolicyEnforcer gopherpolicy.Enforcer
 	VersionData    VersionData
 	//see comment in ListProjects() for details
@@ -66,11 +64,10 @@ type v1Provider struct {
 //NewV1Router creates a http.Handler that serves the Limes v1 API.
 //It also returns the VersionData for this API version which is needed for the
 //version advertisement on "GET /".
-func NewV1Router(cluster *core.Cluster, config core.Configuration, policyEnforcer gopherpolicy.Enforcer) (http.Handler, VersionData) {
+func NewV1Router(cluster *core.Cluster, policyEnforcer gopherpolicy.Enforcer) (http.Handler, VersionData) {
 	r := mux.NewRouter()
 	p := &v1Provider{
 		Cluster:        cluster,
-		Config:         config,
 		PolicyEnforcer: policyEnforcer,
 	}
 	p.VersionData = VersionData{
@@ -93,8 +90,7 @@ func NewV1Router(cluster *core.Cluster, config core.Configuration, policyEnforce
 		respondwith.JSON(w, 200, map[string]interface{}{"version": p.VersionData})
 	})
 
-	r.Methods("GET").Path("/v1/clusters").HandlerFunc(p.ListClusters)
-	r.Methods("GET").Path("/v1/clusters/{cluster_id}").HandlerFunc(p.GetCluster)
+	r.Methods("GET").Path("/v1/clusters/current").HandlerFunc(p.GetCluster)
 
 	r.Methods("GET").Path("/v1/inconsistencies").HandlerFunc(p.ListInconsistencies)
 
@@ -111,7 +107,18 @@ func NewV1Router(cluster *core.Cluster, config core.Configuration, policyEnforce
 	r.Methods("POST").Path("/v1/domains/{domain_id}/projects/{project_id}/simulate-put").HandlerFunc(p.SimulatePutProject)
 	r.Methods("PUT").Path("/v1/domains/{domain_id}/projects/{project_id}").HandlerFunc(p.PutProject)
 
-	return sre.Instrument(r), p.VersionData
+	return sre.Instrument(forbidClusterIDHeader(r)), p.VersionData
+}
+
+func forbidClusterIDHeader(inner http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		clusterID := r.Header.Get("X-Limes-Cluster-Id")
+		if clusterID != "" && clusterID != "current" {
+			http.Error(w, "multi-cluster support is removed: the X-Limes-Cluster-Id header is not allowed anymore", http.StatusBadRequest)
+		} else {
+			inner.ServeHTTP(w, r)
+		}
+	})
 }
 
 //RequireJSON will parse the request body into the given data structure, or
@@ -135,43 +142,10 @@ func (p *v1Provider) Path(elements ...string) string {
 	return strings.Join(parts, "/")
 }
 
-//FindClusterFromRequest loads the core.Cluster referenced by the
-//X-Limes-Cluster-Id request header (or returns the current cluster if there is
-//no such header). Any errors will be written into the response immediately and
-//cause a nil return value.
-func (p *v1Provider) FindClusterFromRequest(w http.ResponseWriter, r *http.Request, token *gopherpolicy.Token) *core.Cluster {
-	//log deprecation warning when X-Limes-Cluster-Id is given
-	if len(r.Header[http.CanonicalHeaderKey("X-Limes-Cluster-Id")]) > 0 {
-		logg.Info("multi-cluster support is deprecated: X-Limes-Cluster-Id header has been given by user %s@%s with UA %q", token.UserName(), token.UserDomainName(), r.Header.Get("User-Agent"))
-	}
-
-	//use current cluster if nothing else specified
-	clusterID := r.Header.Get("X-Limes-Cluster-Id")
-	if clusterID == "" || clusterID == p.Cluster.ID {
-		return p.Cluster
-	}
-
-	//if foreign cluster specified, user needs permission to access it
-	requiredAccess := "foreign:write"
-	if r.Method == "GET" || r.Method == "HEAD" {
-		requiredAccess = "foreign:read"
-	}
-	if !token.Require(w, requiredAccess) {
-		return nil
-	}
-
-	cluster, exists := p.Config.Clusters[clusterID]
-	if !exists {
-		http.Error(w, "no such cluster", 404)
-		return nil
-	}
-	return cluster
-}
-
 //FindDomainFromRequest loads the db.Domain referenced by the :domain_id path
 //parameter. Any errors will be written into the response immediately and cause
 //a nil return value.
-func (p *v1Provider) FindDomainFromRequest(w http.ResponseWriter, r *http.Request, cluster *core.Cluster) *db.Domain {
+func (p *v1Provider) FindDomainFromRequest(w http.ResponseWriter, r *http.Request) *db.Domain {
 	domainUUID := mux.Vars(r)["domain_id"]
 	if domainUUID == "" {
 		http.Error(w, "domain ID missing", 400)
@@ -180,7 +154,7 @@ func (p *v1Provider) FindDomainFromRequest(w http.ResponseWriter, r *http.Reques
 
 	var domain db.Domain
 	err := db.DB.SelectOne(&domain, `SELECT * FROM domains WHERE uuid = $1 AND cluster_id = $2`,
-		domainUUID, cluster.ID,
+		domainUUID, p.Cluster.ID,
 	)
 	switch {
 	case err == sql.ErrNoRows:
@@ -231,18 +205,6 @@ func (p *v1Provider) FindProjectFromRequestIfExists(w http.ResponseWriter, r *ht
 	default:
 		return project, true
 	}
-}
-
-//GetClusterReport is a convenience wrapper around reports.GetClusters() for getting a single cluster report.
-func GetClusterReport(config core.Configuration, cluster *core.Cluster, dbi db.Interface, filter reports.Filter) (*limes.ClusterReport, error) {
-	clusterReports, err := reports.GetClusters(config, &cluster.ID, dbi, filter)
-	if err != nil {
-		return nil, err
-	}
-	if len(clusterReports) == 0 {
-		return nil, errors.New("no resource data found for cluster")
-	}
-	return clusterReports[0], nil
 }
 
 //GetDomainReport is a convenience wrapper around reports.GetDomains() for getting a single domain report.

@@ -72,7 +72,7 @@ func (c *Collector) scanCapacity() {
 		clusterCapacitorSuccessCounter.With(labels).Add(0)
 		clusterCapacitorFailedCounter.With(labels).Add(0)
 
-		provider, eo := c.Cluster.ProviderClientForCapacitor(capacitorID)
+		provider, eo := c.Cluster.ProviderClient()
 		scrapeStart := c.TimeNow()
 		capacities, serializedMetrics, err := plugin.Scrape(provider, eo)
 		scrapeDuration := c.TimeNow().Sub(scrapeStart)
@@ -129,17 +129,6 @@ func (c *Collector) scanCapacity() {
 		}
 	}
 
-	//split values into sharedValues and unsharedValues
-	sharedValues := make(map[string]map[string]core.CapacityData)
-	unsharedValues := make(map[string]map[string]core.CapacityData)
-	for serviceType, subvalues := range values {
-		if c.Cluster.IsServiceShared[serviceType] {
-			sharedValues[serviceType] = subvalues
-		} else {
-			unsharedValues[serviceType] = subvalues
-		}
-	}
-
 	//do the following in a transaction to avoid inconsistent DB state
 	tx, err := db.DB.Begin()
 	if err != nil {
@@ -151,11 +140,7 @@ func (c *Collector) scanCapacity() {
 	if err != nil {
 		c.LogError("write capacity failed: %s", err.Error())
 	}
-	err = c.writeCapacity(tx, "shared", sharedValues, scrapedAt)
-	if err != nil {
-		c.LogError("write capacity failed: %s", err.Error())
-	}
-	err = c.writeCapacity(tx, c.Cluster.ID, unsharedValues, scrapedAt)
+	err = c.writeCapacity(tx, values, scrapedAt)
 	if err != nil {
 		c.LogError("write capacity failed: %s", err.Error())
 	}
@@ -202,14 +187,12 @@ func (c *Collector) writeCapacitorInfo(tx *gorp.Transaction, capacitorInfo map[s
 	return nil
 }
 
-func (c *Collector) writeCapacity(tx *gorp.Transaction, clusterID string, values map[string]map[string]core.CapacityData, scrapedAt time.Time) error {
-	//NOTE: clusterID is not taken from c.Cluster because it can also be "shared".
-
+func (c *Collector) writeCapacity(tx *gorp.Transaction, values map[string]map[string]core.CapacityData, scrapedAt time.Time) error {
 	//create missing cluster_services entries (superfluous ones will be cleaned
 	//up by the CheckConsistency())
 	serviceIDForType := make(map[string]int64)
 	var dbServices []*db.ClusterService
-	_, err := tx.Select(&dbServices, `SELECT * FROM cluster_services WHERE cluster_id = $1`, clusterID)
+	_, err := tx.Select(&dbServices, `SELECT * FROM cluster_services WHERE cluster_id = $1`, c.Cluster.ID)
 	if err != nil {
 		return err
 	}
@@ -230,7 +213,7 @@ func (c *Collector) writeCapacity(tx *gorp.Transaction, clusterID string, values
 		}
 
 		dbService := &db.ClusterService{
-			ClusterID: clusterID,
+			ClusterID: c.Cluster.ID,
 			Type:      serviceType,
 			ScrapedAt: &scrapedAt,
 		}
@@ -242,7 +225,7 @@ func (c *Collector) writeCapacity(tx *gorp.Transaction, clusterID string, values
 	}
 
 	//update scraped_at timestamp on all cluster services in one step
-	_, err = tx.Exec(`UPDATE cluster_services SET scraped_at = $1 WHERE cluster_id = $2`, scrapedAt, clusterID)
+	_, err = tx.Exec(`UPDATE cluster_services SET scraped_at = $1 WHERE cluster_id = $2`, scrapedAt, c.Cluster.ID)
 	if err != nil {
 		return err
 	}
@@ -290,14 +273,9 @@ func (c *Collector) writeCapacity(tx *gorp.Transaction, clusterID string, values
 					return err
 				}
 			} else {
-				//never delete capacity records for shared services (because the
-				//current cluster might not have all relevant capacity plugins enabled,
-				//thus serviceValues may not have the whole picture)
-				if clusterID != "shared" {
-					_, err := tx.Delete(dbResource)
-					if err != nil {
-						return err
-					}
+				_, err := tx.Delete(dbResource)
+				if err != nil {
+					return err
 				}
 			}
 		}

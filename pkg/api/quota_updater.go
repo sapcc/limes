@@ -39,7 +39,6 @@ import (
 //See func PutDomain and func PutProject for how it's used.
 type QuotaUpdater struct {
 	//scope
-	Config  core.Configuration
 	Cluster *core.Cluster
 	Domain  *db.Domain  //always set (for project quota updates, contains the project's domain)
 	Project *db.Project //nil for domain quota updates
@@ -125,7 +124,7 @@ func (e MissingProjectReportError) Error() string {
 //errors, not for validation errors.
 func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface) error {
 	//gather reports on the cluster's capacity and domain's quotas to decide whether a quota update is legal
-	clusterReport, err := GetClusterReport(u.Config, u.Cluster, dbi, reports.Filter{})
+	clusterReport, err := reports.GetCluster(u.Cluster, dbi, reports.Filter{})
 	if err != nil {
 		return err
 	}
@@ -337,7 +336,7 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 
 			//perform validation
 			if plugin, exists := u.Cluster.QuotaPlugins[srvType]; exists {
-				provider, eo := u.Cluster.ProviderClientForService(srvType)
+				provider, eo := u.Cluster.ProviderClient()
 				domain := core.KeystoneDomainFromDB(*u.Domain)
 				project := core.KeystoneProjectFromDB(*u.Project, domain)
 				err := plugin.IsQuotaAcceptableForProject(provider, eo, project, quotaValues)
@@ -726,7 +725,7 @@ func (u QuotaUpdater) CommitAuditTrail(token *gopherpolicy.Token, r *http.Reques
 				}
 			}
 
-			logAndPublishEvent(u.Cluster.ID, requestTime, r, token, statusCode,
+			logAndPublishEvent(requestTime, r, token, statusCode,
 				quotaEventTarget{
 					DomainID:     u.Domain.UUID,
 					ProjectID:    projectUUID, //is empty for domain quota updates, see above
@@ -753,7 +752,7 @@ func (u QuotaUpdater) CommitAuditTrail(token *gopherpolicy.Token, r *http.Reques
 				}
 			}
 
-			logAndPublishEvent(u.Cluster.ID, requestTime, r, token, statusCode,
+			logAndPublishEvent(requestTime, r, token, statusCode,
 				rateLimitEventTarget{
 					DomainID:     u.Domain.UUID,
 					ProjectID:    projectUUID,

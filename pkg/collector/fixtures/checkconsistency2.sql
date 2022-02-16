@@ -1,6 +1,5 @@
 INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (1, 'west', 'unshared', 0);
-INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (3, 'shared', 'whatever', 0);
-INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (5, 'shared', 'shared', 1);
+INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (4, 'west', 'shared', 1);
 
 INSERT INTO domain_resources (service_id, name, quota) VALUES (2, 'capacity', 100);
 INSERT INTO domain_resources (service_id, name, quota) VALUES (6, 'capacity', 10);
