@@ -26,7 +26,9 @@ import (
 	"testing"
 
 	"github.com/sapcc/go-bits/assert"
+	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/limes/pkg/core"
+	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/test"
 )
 
@@ -94,7 +96,8 @@ func Test_ScanDomains(t *testing.T) {
 	sort.Strings(expectedNewDomains) //order does not matter
 	sort.Strings(actualNewDomains)
 	assert.DeepEqual(t, "new domains after ScanDomains #1", actualNewDomains, expectedNewDomains)
-	test.AssertDBContent(t, "fixtures/scandomains1.sql")
+	tr, tr0 := easypg.NewTracker(t, db.DB.Db)
+	tr0.AssertEqualToFile("fixtures/scandomains1.sql")
 
 	//first ScanDomains should not discover anything new
 	actualNewDomains, err = ScanDomains(cluster, ScanDomainsOpts{})
@@ -102,7 +105,7 @@ func Test_ScanDomains(t *testing.T) {
 		t.Errorf("ScanDomains #2 failed: %v", err)
 	}
 	assert.DeepEqual(t, "new domains after ScanDomains #2", actualNewDomains, []string(nil))
-	test.AssertDBContent(t, "fixtures/scandomains1.sql")
+	tr.DBChanges().AssertEmpty()
 
 	//add another project
 	domainUUID := "uuid-for-france"
@@ -116,7 +119,7 @@ func Test_ScanDomains(t *testing.T) {
 		t.Errorf("ScanDomains #3 failed: %v", err)
 	}
 	assert.DeepEqual(t, "new domains after ScanDomains #3", actualNewDomains, []string(nil))
-	test.AssertDBContent(t, "fixtures/scandomains1.sql")
+	tr.DBChanges().AssertEmpty()
 
 	//ScanDomains with ScanAllProjects should discover the new project
 	actualNewDomains, err = ScanDomains(cluster, ScanDomainsOpts{ScanAllProjects: true})
@@ -124,7 +127,11 @@ func Test_ScanDomains(t *testing.T) {
 		t.Errorf("ScanDomains #4 failed: %v", err)
 	}
 	assert.DeepEqual(t, "new domains after ScanDomains #4", actualNewDomains, []string(nil))
-	test.AssertDBContent(t, "fixtures/scandomains2.sql")
+	tr.DBChanges().AssertEqualf(`
+		INSERT INTO project_services (id, project_id, type, scraped_at, stale, scrape_duration_secs, rates_scraped_at, rates_stale, rates_scrape_duration_secs, rates_scrape_state, serialized_metrics) VALUES (7, 4, 'unshared', NULL, FALSE, 0, NULL, FALSE, 0, '', '');
+		INSERT INTO project_services (id, project_id, type, scraped_at, stale, scrape_duration_secs, rates_scraped_at, rates_stale, rates_scrape_duration_secs, rates_scrape_state, serialized_metrics) VALUES (8, 4, 'shared', NULL, FALSE, 0, NULL, FALSE, 0, '', '');
+		INSERT INTO projects (id, domain_id, name, uuid, parent_uuid, has_bursting) VALUES (4, 2, 'bordeaux', 'uuid-for-bordeaux', 'uuid-for-france', FALSE);
+	`)
 
 	//remove the project again
 	discovery.StaticProjects[domainUUID] = discovery.StaticProjects[domainUUID][0:1]
@@ -135,7 +142,7 @@ func Test_ScanDomains(t *testing.T) {
 		t.Errorf("ScanDomains #5 failed: %v", err)
 	}
 	assert.DeepEqual(t, "new domains after ScanDomains #5", actualNewDomains, []string(nil))
-	test.AssertDBContent(t, "fixtures/scandomains2.sql")
+	tr.DBChanges().AssertEmpty()
 
 	//ScanDomains with ScanAllProjects should notice the deleted project and cleanup its records
 	actualNewDomains, err = ScanDomains(cluster, ScanDomainsOpts{ScanAllProjects: true})
@@ -143,7 +150,11 @@ func Test_ScanDomains(t *testing.T) {
 		t.Errorf("ScanDomains #6 failed: %v", err)
 	}
 	assert.DeepEqual(t, "new domains after ScanDomains #6", actualNewDomains, []string(nil))
-	test.AssertDBContent(t, "fixtures/scandomains1.sql")
+	tr.DBChanges().AssertEqualf(`
+		DELETE FROM project_services WHERE id = 7 AND project_id = 4 AND type = 'unshared';
+		DELETE FROM project_services WHERE id = 8 AND project_id = 4 AND type = 'shared';
+		DELETE FROM projects WHERE id = 4 AND uuid = 'uuid-for-bordeaux';
+	`)
 
 	//remove a whole domain
 	discovery.StaticDomains = discovery.StaticDomains[0:1]
@@ -154,7 +165,14 @@ func Test_ScanDomains(t *testing.T) {
 		t.Errorf("ScanDomains #7 failed: %v", err)
 	}
 	assert.DeepEqual(t, "new domains after ScanDomains #7", actualNewDomains, []string(nil))
-	test.AssertDBContent(t, "fixtures/scandomains3.sql")
+	tr.DBChanges().AssertEqualf(`
+		DELETE FROM domain_services WHERE id = 3 AND domain_id = 2 AND type = 'unshared';
+		DELETE FROM domain_services WHERE id = 4 AND domain_id = 2 AND type = 'shared';
+		DELETE FROM domains WHERE id = 2 AND cluster_id = 'west' AND uuid = 'uuid-for-france';
+		DELETE FROM project_services WHERE id = 5 AND project_id = 3 AND type = 'unshared';
+		DELETE FROM project_services WHERE id = 6 AND project_id = 3 AND type = 'shared';
+		DELETE FROM projects WHERE id = 3 AND uuid = 'uuid-for-paris';
+	`)
 
 	//rename a domain and a project
 	discovery.StaticDomains[0].Name = "germany-changed"
@@ -166,7 +184,10 @@ func Test_ScanDomains(t *testing.T) {
 		t.Errorf("ScanDomains #8 failed: %v", err)
 	}
 	assert.DeepEqual(t, "new domains after ScanDomains #8", actualNewDomains, []string(nil))
-	test.AssertDBContent(t, "fixtures/scandomains4.sql")
+	tr.DBChanges().AssertEqualf(`
+		UPDATE domains SET name = 'germany-changed' WHERE id = 1 AND cluster_id = 'west' AND uuid = 'uuid-for-germany';
+		UPDATE projects SET name = 'berlin-changed' WHERE id = 1 AND uuid = 'uuid-for-berlin';
+	`)
 }
 
 func Test_listDomainsFiltered(t *testing.T) {

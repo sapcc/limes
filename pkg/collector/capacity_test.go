@@ -27,6 +27,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sapcc/go-bits/assert"
+	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
@@ -79,10 +80,21 @@ func Test_ScanCapacity(t *testing.T) {
 		TimeNow:  test.TimeNow,
 	}
 
+	//check baseline
+	tr, tr0 := easypg.NewTracker(t, db.DB.Db)
+	tr0.AssertEmpty()
+
 	//check that capacity records are created correctly (and that nonexistent
 	//resources are ignored by the scraper)
 	c.scanCapacity()
-	test.AssertDBContent(t, "fixtures/scancapacity1.sql")
+	tr.DBChanges().AssertEqualf(`
+		INSERT INTO cluster_capacitors (cluster_id, capacitor_id, scraped_at, scrape_duration_secs, serialized_metrics) VALUES ('west', 'unittest', 0, 1, '');
+		INSERT INTO cluster_capacitors (cluster_id, capacitor_id, scraped_at, scrape_duration_secs, serialized_metrics) VALUES ('west', 'unittest2', 0, 1, '');
+		INSERT INTO cluster_resources (service_id, name, capacity, subcapacities, capacity_per_az) VALUES (1, 'things', 42, '', '');
+		INSERT INTO cluster_resources (service_id, name, capacity, subcapacities, capacity_per_az) VALUES (2, 'capacity', 42, '', '');
+		INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (1, 'west', 'shared', 0);
+		INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (2, 'west', 'unshared', 0);
+	`)
 
 	//insert some crap records
 	err := db.DB.Insert(&db.ClusterResource{
@@ -100,13 +112,18 @@ func Test_ScanCapacity(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	test.AssertDBContent(t, "fixtures/scancapacity2.sql")
 
 	//next scan should throw out the crap records and recreate the deleted ones;
 	//also change the reported Capacity to see if updates are getting through
 	cluster.CapacityPlugins["unittest"].(*test.CapacityPlugin).Capacity = 23
 	c.scanCapacity()
-	test.AssertDBContent(t, "fixtures/scancapacity3.sql")
+	tr.DBChanges().AssertEqualf(`
+		UPDATE cluster_capacitors SET scraped_at = 5 WHERE cluster_id = 'west' AND capacitor_id = 'unittest';
+		UPDATE cluster_capacitors SET scraped_at = 5 WHERE cluster_id = 'west' AND capacitor_id = 'unittest2';
+		UPDATE cluster_resources SET capacity = 23 WHERE service_id = 1 AND name = 'things';
+		UPDATE cluster_services SET scraped_at = 5 WHERE id = 1 AND cluster_id = 'west' AND type = 'shared';
+		UPDATE cluster_services SET scraped_at = 5 WHERE id = 2 AND cluster_id = 'west' AND type = 'unshared';
+	`)
 
 	//add a capacity plugin that reports subcapacities; check that subcapacities
 	//are correctly written when creating a cluster_resources record
@@ -114,12 +131,26 @@ func Test_ScanCapacity(t *testing.T) {
 	subcapacityPlugin.WithSubcapacities = true
 	cluster.CapacityPlugins["unittest4"] = subcapacityPlugin
 	c.scanCapacity()
-	test.AssertDBContent(t, "fixtures/scancapacity5.sql")
+	tr.DBChanges().AssertEqualf(`
+		UPDATE cluster_capacitors SET scraped_at = 10 WHERE cluster_id = 'west' AND capacitor_id = 'unittest';
+		UPDATE cluster_capacitors SET scraped_at = 10 WHERE cluster_id = 'west' AND capacitor_id = 'unittest2';
+		INSERT INTO cluster_capacitors (cluster_id, capacitor_id, scraped_at, scrape_duration_secs, serialized_metrics) VALUES ('west', 'unittest4', 10, 1, '{"smaller_half":14,"larger_half":28}');
+		INSERT INTO cluster_resources (service_id, name, capacity, subcapacities, capacity_per_az) VALUES (2, 'things', 42, '[{"smaller_half":14},{"larger_half":28}]', '');
+		UPDATE cluster_services SET scraped_at = 10 WHERE id = 1 AND cluster_id = 'west' AND type = 'shared';
+		UPDATE cluster_services SET scraped_at = 10 WHERE id = 2 AND cluster_id = 'west' AND type = 'unshared';
+	`)
 
 	//check that scraping correctly updates subcapacities on an existing record
 	subcapacityPlugin.Capacity = 10
 	c.scanCapacity()
-	test.AssertDBContent(t, "fixtures/scancapacity6.sql")
+	tr.DBChanges().AssertEqualf(`
+		UPDATE cluster_capacitors SET scraped_at = 17 WHERE cluster_id = 'west' AND capacitor_id = 'unittest';
+		UPDATE cluster_capacitors SET scraped_at = 17 WHERE cluster_id = 'west' AND capacitor_id = 'unittest2';
+		UPDATE cluster_capacitors SET scraped_at = 17, serialized_metrics = '{"smaller_half":3,"larger_half":7}' WHERE cluster_id = 'west' AND capacitor_id = 'unittest4';
+		UPDATE cluster_resources SET capacity = 10, subcapacities = '[{"smaller_half":3},{"larger_half":7}]' WHERE service_id = 2 AND name = 'things';
+		UPDATE cluster_services SET scraped_at = 17 WHERE id = 1 AND cluster_id = 'west' AND type = 'shared';
+		UPDATE cluster_services SET scraped_at = 17 WHERE id = 2 AND cluster_id = 'west' AND type = 'unshared';
+	`)
 
 	//add a capacity plugin that also reports capacity per availability zone; check that
 	//these capacities are correctly written when creating a cluster_resources record
@@ -127,12 +158,30 @@ func Test_ScanCapacity(t *testing.T) {
 	azCapacityPlugin.WithAZCapData = true
 	cluster.CapacityPlugins["unittest5"] = azCapacityPlugin
 	c.scanCapacity()
-	test.AssertDBContent(t, "fixtures/scancapacity7.sql")
+	tr.DBChanges().AssertEqualf(`
+		UPDATE cluster_capacitors SET scraped_at = 24 WHERE cluster_id = 'west' AND capacitor_id = 'unittest';
+		UPDATE cluster_capacitors SET scraped_at = 24 WHERE cluster_id = 'west' AND capacitor_id = 'unittest2';
+		UPDATE cluster_capacitors SET scraped_at = 24 WHERE cluster_id = 'west' AND capacitor_id = 'unittest4';
+		INSERT INTO cluster_capacitors (cluster_id, capacitor_id, scraped_at, scrape_duration_secs, serialized_metrics) VALUES ('west', 'unittest5', 24, 1, '');
+		INSERT INTO cluster_resources (service_id, name, capacity, subcapacities, capacity_per_az) VALUES (3, 'things', 42, '', '[{"name":"az-one","capacity":21,"usage":4},{"name":"az-two","capacity":21,"usage":4}]');
+		UPDATE cluster_services SET scraped_at = 24 WHERE id = 1 AND cluster_id = 'west' AND type = 'shared';
+		UPDATE cluster_services SET scraped_at = 24 WHERE id = 2 AND cluster_id = 'west' AND type = 'unshared';
+		INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (3, 'west', 'unshared2', 24);
+	`)
 
 	//check that scraping correctly updates the capacities on an existing record
 	azCapacityPlugin.Capacity = 30
 	c.scanCapacity()
-	test.AssertDBContent(t, "fixtures/scancapacity8.sql")
+	tr.DBChanges().AssertEqualf(`
+		UPDATE cluster_capacitors SET scraped_at = 33 WHERE cluster_id = 'west' AND capacitor_id = 'unittest';
+		UPDATE cluster_capacitors SET scraped_at = 33 WHERE cluster_id = 'west' AND capacitor_id = 'unittest2';
+		UPDATE cluster_capacitors SET scraped_at = 33 WHERE cluster_id = 'west' AND capacitor_id = 'unittest4';
+		UPDATE cluster_capacitors SET scraped_at = 33 WHERE cluster_id = 'west' AND capacitor_id = 'unittest5';
+		UPDATE cluster_resources SET capacity = 30, capacity_per_az = '[{"name":"az-one","capacity":15,"usage":3},{"name":"az-two","capacity":15,"usage":3}]' WHERE service_id = 3 AND name = 'things';
+		UPDATE cluster_services SET scraped_at = 33 WHERE id = 1 AND cluster_id = 'west' AND type = 'shared';
+		UPDATE cluster_services SET scraped_at = 33 WHERE id = 2 AND cluster_id = 'west' AND type = 'unshared';
+		UPDATE cluster_services SET scraped_at = 33 WHERE id = 3 AND cluster_id = 'west' AND type = 'unshared2';
+	`)
 
 	//check data metrics generated for these capacity data
 	registry := prometheus.NewPedanticRegistry()
