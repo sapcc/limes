@@ -186,7 +186,9 @@ func (c *Collector) writeScrapeResult(project core.KeystoneProject, projectID in
 	if err != nil {
 		return fmt.Errorf("while loading existing project resources: %w", err)
 	}
-	for _, res := range resources {
+	for _, resOriginal := range resources {
+		res := resOriginal
+
 		resourceExists[res.Name] = true
 
 		data, exists := resourceData[res.Name]
@@ -251,11 +253,12 @@ func (c *Collector) writeScrapeResult(project core.KeystoneProject, projectID in
 			res.SubresourcesJSON = string(bytes)
 		}
 
-		//TODO: Update() only if required
-		logg.Debug("writing scrape result: %#v", res)
-		_, err := tx.Update(&res)
-		if err != nil {
-			return fmt.Errorf("while writing %q project resource: %w", res.Name, err)
+		if res != resOriginal {
+			logg.Debug("writing scrape result: %#v", res)
+			_, err := tx.Update(&res)
+			if err != nil {
+				return fmt.Errorf("while writing %q project resource: %w", res.Name, err)
+			}
 		}
 	}
 
