@@ -31,6 +31,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sapcc/go-bits/assert"
+	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
@@ -128,7 +129,8 @@ func Test_ScrapeSuccess(t *testing.T) {
 	}
 
 	//check that ScanDomains created the domain, project and their services
-	test.AssertDBContent(t, "fixtures/scrape0.sql")
+	tr, tr0 := easypg.NewTracker(t, db.DB.Db)
+	tr0.AssertEqualToFile("fixtures/scrape0.sql")
 
 	//first Scrape should create the entries in `project_resources` with the
 	//correct usage and backend quota values (and quota = 0 because nothing was approved yet)
@@ -136,12 +138,21 @@ func Test_ScrapeSuccess(t *testing.T) {
 	plugin.SetQuotaFails = true
 	c.Scrape()
 	c.Scrape() //twice because there are two projects
-	test.AssertDBContent(t, "fixtures/scrape1.sql")
+	tr.DBChanges().AssertEqualf(`
+		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (1, 'capacity', 10, 0, 100, '', 10, 0);
+		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (1, 'capacity_portion', NULL, 0, NULL, '', NULL, NULL);
+		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (1, 'things', 0, 2, 42, '[{"index":0},{"index":1}]', 0, NULL);
+		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (2, 'capacity', 10, 0, 100, '', 12, 0);
+		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (2, 'capacity_portion', NULL, 0, NULL, '', NULL, NULL);
+		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (2, 'things', 0, 2, 42, '[{"index":0},{"index":1}]', 0, NULL);
+		UPDATE project_services SET scraped_at = 1, scrape_duration_secs = 1, serialized_metrics = '{"capacity_usage":0,"things_usage":2}' WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = 3, scrape_duration_secs = 1, serialized_metrics = '{"capacity_usage":0,"things_usage":2}' WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+	`)
 
 	//second Scrape should not change anything (not even the timestamps) since
 	//less than 30 minutes have passed since the last Scrape()
 	c.Scrape()
-	test.AssertDBContent(t, "fixtures/scrape1.sql")
+	tr.DBChanges().AssertEmpty()
 
 	//change the data that is reported by the plugin
 	plugin.StaticResourceData["capacity"].Quota = 110
@@ -150,7 +161,14 @@ func Test_ScrapeSuccess(t *testing.T) {
 	//Scrape should pick up the changed resource data
 	c.Scrape()
 	c.Scrape() //twice because there are two projects
-	test.AssertDBContent(t, "fixtures/scrape2.sql")
+	tr.DBChanges().AssertEqualf(`
+		UPDATE project_resources SET backend_quota = 110 WHERE service_id = 1 AND name = 'capacity';
+		UPDATE project_resources SET usage = 5, subresources = '[{"index":0},{"index":1},{"index":2},{"index":3},{"index":4}]' WHERE service_id = 1 AND name = 'things';
+		UPDATE project_resources SET backend_quota = 110 WHERE service_id = 2 AND name = 'capacity';
+		UPDATE project_resources SET usage = 5, subresources = '[{"index":0},{"index":1},{"index":2},{"index":3},{"index":4}]' WHERE service_id = 2 AND name = 'things';
+		UPDATE project_services SET scraped_at = 6, serialized_metrics = '{"capacity_usage":0,"things_usage":5}' WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = 8, serialized_metrics = '{"capacity_usage":0,"things_usage":5}' WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+	`)
 
 	//set some new quota values (note that "capacity" already had a non-zero
 	//quota because of the cluster.QuotaConstraints)
@@ -169,7 +187,14 @@ func Test_ScrapeSuccess(t *testing.T) {
 	setProjectServicesStale(t)
 	c.Scrape()
 	c.Scrape() //twice because there are two projects
-	test.AssertDBContent(t, "fixtures/scrape3.sql")
+	tr.DBChanges().AssertEqualf(`
+		UPDATE project_resources SET quota = 20, backend_quota = 20, desired_backend_quota = 20 WHERE service_id = 1 AND name = 'capacity';
+		UPDATE project_resources SET quota = 13, backend_quota = 13, desired_backend_quota = 13 WHERE service_id = 1 AND name = 'things';
+		UPDATE project_resources SET quota = 20, backend_quota = 24, desired_backend_quota = 24 WHERE service_id = 2 AND name = 'capacity';
+		UPDATE project_resources SET quota = 13, backend_quota = 15, desired_backend_quota = 15 WHERE service_id = 2 AND name = 'things';
+		UPDATE project_services SET scraped_at = 10 WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = 12 WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+	`)
 
 	//another Scrape (with SetQuota disabled again) should show that the quota
 	//update was durable
@@ -177,7 +202,10 @@ func Test_ScrapeSuccess(t *testing.T) {
 	setProjectServicesStale(t)
 	c.Scrape() //twice because there are two projects
 	c.Scrape()
-	test.AssertDBContent(t, "fixtures/scrape4.sql") //same as scrape3.sql except for scraped_at timestamp
+	tr.DBChanges().AssertEqualf(`
+		UPDATE project_services SET scraped_at = 14 WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = 16 WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+	`)
 
 	//set a quota that contradicts the cluster.QuotaConstraints
 	_, err = db.DB.Exec(`UPDATE project_resources SET quota = $1 WHERE name = $2`, 50, "capacity")
@@ -190,7 +218,12 @@ func Test_ScrapeSuccess(t *testing.T) {
 	setProjectServicesStale(t)
 	c.Scrape()
 	c.Scrape() //twice because there are two projects
-	test.AssertDBContent(t, "fixtures/scrape5.sql")
+	tr.DBChanges().AssertEqualf(`
+		UPDATE project_resources SET quota = 40, backend_quota = 40, desired_backend_quota = 40 WHERE service_id = 1 AND name = 'capacity';
+		UPDATE project_resources SET quota = 40, backend_quota = 48, desired_backend_quota = 48 WHERE service_id = 2 AND name = 'capacity';
+		UPDATE project_services SET scraped_at = 18 WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = 20 WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+	`)
 
 	//add an externally-managed resource, scrape it twice (first time adds the
 	//project_resources entry, second time updates it)
@@ -198,13 +231,23 @@ func Test_ScrapeSuccess(t *testing.T) {
 	setProjectServicesStale(t)
 	c.Scrape()
 	c.Scrape() //twice because there are two projects
-	test.AssertDBContent(t, "fixtures/scrape6.sql")
+	tr.DBChanges().AssertEqualf(`
+		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (1, 'external_things', 5, 0, 5, '', 5, NULL);
+		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (2, 'external_things', 5, 0, 5, '', 5, NULL);
+		UPDATE project_services SET scraped_at = 22 WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = 24 WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+	`)
 
 	plugin.StaticResourceData["external_things"].Quota = 10
 	setProjectServicesStale(t)
 	c.Scrape()
 	c.Scrape() //twice because there are two projects
-	test.AssertDBContent(t, "fixtures/scrape7.sql")
+	tr.DBChanges().AssertEqualf(`
+		UPDATE project_resources SET quota = 10, backend_quota = 10, desired_backend_quota = 10 WHERE service_id = 1 AND name = 'external_things';
+		UPDATE project_resources SET quota = 10, backend_quota = 10, desired_backend_quota = 10 WHERE service_id = 2 AND name = 'external_things';
+		UPDATE project_services SET scraped_at = 26 WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = 28 WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+	`)
 
 	//check that setting the quota of an externally-managed resource on our side
 	//is pointless
@@ -215,7 +258,10 @@ func Test_ScrapeSuccess(t *testing.T) {
 	setProjectServicesStale(t)
 	c.Scrape() //twice because there are two projects
 	c.Scrape()
-	test.AssertDBContent(t, "fixtures/scrape8.sql") //identical to scrape7.sql except for timestamps
+	tr.DBChanges().AssertEqualf(`
+		UPDATE project_services SET scraped_at = 30 WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = 32 WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+	`)
 
 	//set "capacity" to a non-zero usage to observe a non-zero usage on
 	//"capacity_portion" (otherwise this resource has been all zeroes this entire
@@ -224,7 +270,14 @@ func Test_ScrapeSuccess(t *testing.T) {
 	setProjectServicesStale(t)
 	c.Scrape()
 	c.Scrape() //twice because there are two projects
-	test.AssertDBContent(t, "fixtures/scrape9.sql")
+	tr.DBChanges().AssertEqualf(`
+		UPDATE project_resources SET usage = 20, physical_usage = 10 WHERE service_id = 1 AND name = 'capacity';
+		UPDATE project_resources SET usage = 5 WHERE service_id = 1 AND name = 'capacity_portion';
+		UPDATE project_resources SET usage = 20, physical_usage = 10 WHERE service_id = 2 AND name = 'capacity';
+		UPDATE project_resources SET usage = 5 WHERE service_id = 2 AND name = 'capacity_portion';
+		UPDATE project_services SET scraped_at = 34, serialized_metrics = '{"capacity_usage":20,"things_usage":5}' WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = 36, serialized_metrics = '{"capacity_usage":20,"things_usage":5}' WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+	`)
 
 	//check data metrics generated by this scraping pass
 	registry := prometheus.NewPedanticRegistry()
@@ -287,26 +340,43 @@ func Test_ScrapeFailure(t *testing.T) {
 	}
 
 	//check that ScanDomains created the domain, project and their services
-	test.AssertDBContent(t, "fixtures/scrape0.sql")
+	tr, tr0 := easypg.NewTracker(t, db.DB.Db)
+	tr0.AssertEqualToFile("fixtures/scrape0.sql")
 
 	//failing Scrape should create dummy records to ensure that the API finds
 	//plausibly-structured data
 	plugin.ScrapeFails = true
 	c.Scrape()
 	c.Scrape() //twice because there are two projects
-	test.AssertDBContent(t, "fixtures/scrape-failures1.sql")
+	tr.DBChanges().AssertEqualf(`
+		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (1, 'capacity', 10, 0, -1, '', 10, NULL);
+		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (1, 'capacity_portion', NULL, 0, NULL, '', NULL, NULL);
+		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (1, 'things', 0, 0, -1, '', 0, NULL);
+		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (2, 'capacity', 10, 0, -1, '', 12, NULL);
+		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (2, 'capacity_portion', NULL, 0, NULL, '', NULL, NULL);
+		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (2, 'things', 0, 0, -1, '', 0, NULL);
+		UPDATE project_services SET scraped_at = 0 WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = 0 WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+	`)
 
 	//next Scrape should yield the same result
 	c.Scrape()
 	c.Scrape() //twice because there are two projects
-	test.AssertDBContent(t, "fixtures/scrape-failures1.sql")
+	tr.DBChanges().AssertEmpty()
 
 	//once the backend starts working, we start to see plausible data again
 	plugin.ScrapeFails = false
 	setProjectServicesStale(t)
 	c.Scrape()
 	c.Scrape() //twice because there are two projects
-	test.AssertDBContent(t, "fixtures/scrape-failures2.sql")
+	tr.DBChanges().AssertEqualf(`
+		UPDATE project_resources SET backend_quota = 100, physical_usage = 0 WHERE service_id = 1 AND name = 'capacity';
+		UPDATE project_resources SET usage = 2, backend_quota = 42, subresources = '[{"index":0},{"index":1}]' WHERE service_id = 1 AND name = 'things';
+		UPDATE project_resources SET backend_quota = 100, physical_usage = 0 WHERE service_id = 2 AND name = 'capacity';
+		UPDATE project_resources SET usage = 2, backend_quota = 42, subresources = '[{"index":0},{"index":1}]' WHERE service_id = 2 AND name = 'things';
+		UPDATE project_services SET scraped_at = 5, scrape_duration_secs = 1, serialized_metrics = '{"capacity_usage":0,"things_usage":2}' WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = 7, scrape_duration_secs = 1, serialized_metrics = '{"capacity_usage":0,"things_usage":2}' WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+	`)
 
 	//backend fails again and we need to scrape because of the stale flag ->
 	//touch neither scraped_at nor the existing resources
@@ -314,7 +384,10 @@ func Test_ScrapeFailure(t *testing.T) {
 	setProjectServicesStale(t)
 	c.Scrape()
 	c.Scrape() //twice because there are two projects
-	test.AssertDBContent(t, "fixtures/scrape-failures3.sql")
+	tr.DBChanges().AssertEqualf(`
+		UPDATE project_services SET stale = TRUE WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET stale = TRUE WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+	`)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -386,10 +459,18 @@ func Test_AutoApproveInitialQuota(t *testing.T) {
 		Once:     true,
 	}
 
+	//check that ScanDomains created the domain, project and their services
+	tr, tr0 := easypg.NewTracker(t, db.DB.Db)
+	_ = tr0
+
 	//when first scraping, the initial backend quota of the "approve" resource
 	//shall be approved automatically
 	c.Scrape()
-	test.AssertDBContent(t, "fixtures/scrape-autoapprove1.sql")
+	tr.DBChanges().AssertEqualf(`
+		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (1, 'approve', 10, 0, 10, '', 10, NULL);
+		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (1, 'noapprove', 0, 0, 20, '', 0, NULL);
+		UPDATE project_services SET scraped_at = 1, scrape_duration_secs = 1 WHERE id = 1 AND project_id = 1 AND type = 'autoapprovaltest';
+	`)
 
 	//modify the backend quota; verify that the second scrape does not
 	//auto-approve the changed value again (auto-approval is limited to the
@@ -397,7 +478,11 @@ func Test_AutoApproveInitialQuota(t *testing.T) {
 	plugin.StaticBackendQuota += 10
 	setProjectServicesStale(t)
 	c.Scrape()
-	test.AssertDBContent(t, "fixtures/scrape-autoapprove2.sql")
+	tr.DBChanges().AssertEqualf(`
+		UPDATE project_resources SET backend_quota = 20 WHERE service_id = 1 AND name = 'approve';
+		UPDATE project_resources SET backend_quota = 30 WHERE service_id = 1 AND name = 'noapprove';
+		UPDATE project_services SET scraped_at = 3 WHERE id = 1 AND project_id = 1 AND type = 'autoapprovaltest';
+	`)
 }
 
 //A quota plugin with absolutely no resources and rates.
