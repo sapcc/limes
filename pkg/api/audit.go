@@ -135,7 +135,9 @@ func logAndPublishEvent(time time.Time, req *http.Request, token *gopherpolicy.T
 //changes regarding resource quota.
 type quotaEventTarget struct {
 	DomainID     string
+	DomainName   string
 	ProjectID    string
+	ProjectName  string
 	ServiceType  string
 	ResourceName string
 	OldQuota     uint64
@@ -152,10 +154,12 @@ func (t quotaEventTarget) Render() cadf.Resource {
 	}
 
 	return cadf.Resource{
-		TypeURI:   fmt.Sprintf("service/%s/%s/quota", t.ServiceType, t.ResourceName),
-		ID:        targetID,
-		DomainID:  t.DomainID,
-		ProjectID: t.ProjectID,
+		TypeURI:     fmt.Sprintf("service/%s/%s/quota", t.ServiceType, t.ResourceName),
+		ID:          targetID,
+		DomainID:    t.DomainID,
+		DomainName:  t.DomainName,
+		ProjectID:   t.ProjectID,
+		ProjectName: t.ProjectName,
 		Attachments: []cadf.Attachment{{
 			Name:    "payload",
 			TypeURI: "mime:application/json",
@@ -173,7 +177,9 @@ func (t quotaEventTarget) Render() cadf.Resource {
 //changes regarding quota bursting for some project.
 type burstEventTarget struct {
 	DomainID     string
+	DomainName   string
 	ProjectID    string
+	ProjectName  string
 	NewStatus    bool
 	RejectReason string
 }
@@ -181,10 +187,12 @@ type burstEventTarget struct {
 //Render implements the audittools.TargetRenderer interface type.
 func (t burstEventTarget) Render() cadf.Resource {
 	return cadf.Resource{
-		TypeURI:   "service/resources/bursting",
-		ID:        t.ProjectID,
-		DomainID:  t.DomainID,
-		ProjectID: t.ProjectID,
+		TypeURI:     "service/resources/bursting",
+		ID:          t.ProjectID,
+		DomainID:    t.DomainID,
+		DomainName:  t.DomainName,
+		ProjectID:   t.ProjectID,
+		ProjectName: t.ProjectName,
 		Attachments: []cadf.Attachment{{
 			Name:    "payload",
 			TypeURI: "mime:application/json",
@@ -200,7 +208,9 @@ func (t burstEventTarget) Render() cadf.Resource {
 //changes regarding rate limits
 type rateLimitEventTarget struct {
 	DomainID     string
+	DomainName   string
 	ProjectID    string
+	ProjectName  string
 	ServiceType  string
 	Name         string
 	Unit         limes.Unit
@@ -214,10 +224,12 @@ type rateLimitEventTarget struct {
 //Render implements the audittools.TargetRenderer interface type.
 func (t rateLimitEventTarget) Render() cadf.Resource {
 	return cadf.Resource{
-		TypeURI:   fmt.Sprintf("service/%s/%s/rates", t.ServiceType, t.Name),
-		ID:        t.ProjectID,
-		DomainID:  t.DomainID,
-		ProjectID: t.ProjectID,
+		TypeURI:     fmt.Sprintf("service/%s/%s/rates", t.ServiceType, t.Name),
+		ID:          t.ProjectID,
+		DomainID:    t.DomainID,
+		DomainName:  t.DomainName,
+		ProjectID:   t.ProjectID,
+		ProjectName: t.ProjectName,
 		Attachments: []cadf.Attachment{
 			{
 				Name:    "payload",

@@ -432,7 +432,9 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 		logAndPublishEvent(requestTime, r, token, http.StatusBadRequest,
 			burstEventTarget{
 				DomainID:     domain.UUID,
+				DomainName:   domain.Name,
 				ProjectID:    project.UUID,
+				ProjectName:  project.Name,
 				RejectReason: msg,
 			})
 		return
@@ -493,7 +495,9 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 			logAndPublishEvent(requestTime, r, token, http.StatusConflict,
 				burstEventTarget{
 					DomainID:     domain.UUID,
+					DomainName:   domain.Name,
 					ProjectID:    project.UUID,
+					ProjectName:  project.Name,
 					RejectReason: msg,
 				})
 			return
@@ -547,9 +551,11 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 
 	logAndPublishEvent(requestTime, r, token, http.StatusConflict,
 		burstEventTarget{
-			DomainID:  domain.UUID,
-			ProjectID: project.UUID,
-			NewStatus: hasBursting,
+			DomainID:    domain.UUID,
+			DomainName:  domain.Name,
+			ProjectID:   project.UUID,
+			ProjectName: project.Name,
+			NewStatus:   hasBursting,
 		})
 
 	//report any backend errors to the user

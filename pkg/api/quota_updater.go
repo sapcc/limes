@@ -679,8 +679,10 @@ func (u QuotaUpdater) WritePutErrorResponse(w http.ResponseWriter) {
 //CommitAuditTrail prepares an audit.Trail instance for this updater and
 //commits it.
 func (u QuotaUpdater) CommitAuditTrail(token *gopherpolicy.Token, r *http.Request, requestTime time.Time) {
+	projectName := ""
 	projectUUID := ""
 	if u.Project != nil {
+		projectName = u.Project.Name
 		projectUUID = u.Project.UUID
 	}
 
@@ -728,7 +730,9 @@ func (u QuotaUpdater) CommitAuditTrail(token *gopherpolicy.Token, r *http.Reques
 			logAndPublishEvent(requestTime, r, token, statusCode,
 				quotaEventTarget{
 					DomainID:     u.Domain.UUID,
+					DomainName:   u.Domain.Name,
 					ProjectID:    projectUUID, //is empty for domain quota updates, see above
+					ProjectName:  projectName,
 					ServiceType:  srvType,
 					ResourceName: resName,
 					OldQuota:     req.OldValue,
@@ -755,7 +759,9 @@ func (u QuotaUpdater) CommitAuditTrail(token *gopherpolicy.Token, r *http.Reques
 			logAndPublishEvent(requestTime, r, token, statusCode,
 				rateLimitEventTarget{
 					DomainID:     u.Domain.UUID,
+					DomainName:   u.Domain.Name,
 					ProjectID:    projectUUID,
+					ProjectName:  projectName,
 					ServiceType:  srvType,
 					Name:         rateName,
 					OldLimit:     req.OldLimit,
