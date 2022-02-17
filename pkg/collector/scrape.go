@@ -258,7 +258,7 @@ func (c *Collector) writeScrapeResult(project core.KeystoneProject, projectID in
 		}
 
 		if res != resOriginal {
-			logg.Debug("writing scrape result: %#v", res)
+			logg.Debug("writing scrape result in service %d: %#v", serviceID, res)
 			_, err := tx.Update(&res)
 			if err != nil {
 				return fmt.Errorf("while writing %q project resource: %w", res.Name, err)
@@ -333,6 +333,7 @@ func (c *Collector) writeScrapeResult(project core.KeystoneProject, projectID in
 			res.SubresourcesJSON = string(bytes)
 		}
 
+		logg.Debug("writing scrape result in service %d: %#v", serviceID, res)
 		err = tx.Insert(res)
 		if err != nil {
 			return fmt.Errorf("while creating %q project resource: %w", res.Name, err)
@@ -351,6 +352,7 @@ func (c *Collector) writeScrapeResult(project core.KeystoneProject, projectID in
 		return fmt.Errorf("while updating metadata on project service: %w", err)
 	}
 
+	logg.Debug("committing scrape result in service %d", serviceID)
 	err = tx.Commit()
 	if err != nil {
 		return fmt.Errorf("while committing transaction: %w", err)
@@ -366,8 +368,10 @@ func (c *Collector) writeScrapeResult(project core.KeystoneProject, projectID in
 	//example)
 	if c.Cluster.Authoritative {
 		var dbProject db.Project
+		logg.Debug("collecting project information for ApplyBackendQuota in service %d", serviceID)
 		err := db.DB.SelectOne(&dbProject, `SELECT * FROM projects WHERE id = $1`, projectID)
 		if err == nil {
+			logg.Debug("calling into ApplyBackendQuota for service %d", serviceID)
 			err = datamodel.ApplyBackendQuota(db.DB, c.Cluster, project.Domain, dbProject, serviceID, serviceType)
 		}
 		if err != nil {
