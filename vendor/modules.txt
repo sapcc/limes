@@ -122,7 +122,7 @@ github.com/prometheus/procfs/internal/util
 # github.com/rs/cors v1.8.2
 ## explicit; go 1.13
 github.com/rs/cors
-# github.com/sapcc/go-bits v0.0.0-20220204120448-40f0b29218db
+# github.com/sapcc/go-bits v0.0.0-20220217100829-b28780f98e51
 ## explicit; go 1.17
 github.com/sapcc/go-bits/assert
 github.com/sapcc/go-bits/audittools
@@ -140,7 +140,7 @@ github.com/sapcc/go-bits/logg
 github.com/sapcc/go-bits/respondwith
 github.com/sapcc/go-bits/secrets
 github.com/sapcc/go-bits/sre
-# github.com/sapcc/hermes v0.0.0-20211212013121-4426e1b79ccc
+# github.com/sapcc/hermes v0.0.0-20220216215340-12b4f661924a
 ## explicit; go 1.13
 github.com/sapcc/hermes/pkg/cadf
 # github.com/sergi/go-diff v1.2.0
@@ -154,12 +154,12 @@ github.com/streadway/amqp
 # golang.org/x/net v0.0.0-20220127200216-cd36cc0744dd
 ## explicit; go 1.17
 golang.org/x/net/context
-# golang.org/x/sys v0.0.0-20220114195835-da31bd327af9
+# golang.org/x/sys v0.0.0-20220209214540-3681064d5158
 ## explicit; go 1.17
 golang.org/x/sys/internal/unsafeheader
 golang.org/x/sys/unix
 golang.org/x/sys/windows
-# google.golang.org/protobuf v1.26.0
+# google.golang.org/protobuf v1.27.1
 ## explicit; go 1.9
 google.golang.org/protobuf/encoding/prototext
 google.golang.org/protobuf/encoding/protowire
