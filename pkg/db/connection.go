@@ -21,6 +21,7 @@ package db
 
 import (
 	"database/sql"
+	"fmt"
 	"net"
 	"net/url"
 	"os"
@@ -43,14 +44,24 @@ func Init() error {
 	host := util.EnvOrDefault("LIMES_DB_HOSTNAME", "localhost")
 	port := util.EnvOrDefault("LIMES_DB_PORT", "5432")
 	name := util.EnvOrDefault("LIMES_DB_NAME", "limes")
-	connOpts := os.Getenv("LIMES_DB_CONNECTION_OPTIONS")
+
+	connOpts, err := url.ParseQuery(os.Getenv("LIMES_DB_CONNECTION_OPTIONS"))
+	if err != nil {
+		return fmt.Errorf("while parsing LIMES_DB_CONNECTION_OPTIONS: %w", err)
+	}
+	hostname, err := os.Hostname()
+	if err == nil {
+		connOpts.Set("application_name", fmt.Sprintf("%s@%s", util.Component, hostname))
+	} else {
+		connOpts.Set("application_name", util.Component)
+	}
 
 	dbURL := &url.URL{
 		Scheme:   "postgres",
 		User:     url.UserPassword(username, pass),
 		Host:     net.JoinHostPort(host, port),
 		Path:     name,
-		RawQuery: connOpts,
+		RawQuery: connOpts.Encode(),
 	}
 
 	db, err := easypg.Connect(easypg.Configuration{

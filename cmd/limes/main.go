@@ -60,6 +60,7 @@ func main() {
 		printUsageAndExit()
 	}
 	taskName, configPath, remainingArgs := os.Args[1], os.Args[2], os.Args[3:]
+	util.Component = "limes-" + taskName
 
 	//load configuration and connect to cluster
 	cluster := core.NewConfiguration(configPath)
