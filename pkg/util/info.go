@@ -19,7 +19,7 @@
 
 package util
 
-//Component is set at startup time to identify which component of Keppel is running (e.g. "limes-serve" or "limes-collect").
+//Component is set at startup time to identify which component of Limes is running (e.g. "limes-serve" or "limes-collect").
 //
 //It would make more sense to put this in `package core`, but we cannot place it there without creating import cycles.
 var Component = "limes"
