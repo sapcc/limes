@@ -283,6 +283,7 @@ The `instances` resource supports subresource scraping. Subresources bear the fo
 | `os_type` | string | identifier for OS type as configured in image (see below) |
 | `hypervisor` | string | identifier for the hypervisor type of this instance (only if configured, see below) |
 | `metadata` | object of strings | user-supplied key-value data for this instance as reported by OpenStack Nova |
+| `tags` | array of strings | user-supplied tags for this instance as reported by OpenStack Nova |
 
 The `os_type` field contains:
 - for VMware images: the value of the `vmware_ostype` property of the instance's image, or

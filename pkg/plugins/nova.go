@@ -423,6 +423,7 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 					"status":            instance.Status,
 					"availability_zone": instance.AvailabilityZone,
 					"metadata":          instance.Metadata,
+					"tags":              derefSlicePtrOrEmpty(instance.Tags),
 				}
 				if len(ipAddresses) > 0 {
 					subResource["ip_addresses"] = ipAddresses
@@ -522,6 +523,13 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 	}
 	serializedMetrics, _ := json.Marshal(sm)
 	return result2, string(serializedMetrics), nil
+}
+
+func derefSlicePtrOrEmpty(val *[]string) []string {
+	if val == nil {
+		return nil
+	}
+	return *val
 }
 
 //IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
