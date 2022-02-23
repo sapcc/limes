@@ -23,8 +23,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -34,7 +37,6 @@ import (
 	"github.com/sapcc/hermes/pkg/cadf"
 	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
-	"github.com/streadway/amqp"
 )
 
 var showAuditOnStdout = os.Getenv("LIMES_SILENT") != "1"
@@ -80,20 +82,18 @@ func StartAuditTrail(clusterID string, config core.CADFConfiguration) {
 		if config.RabbitMQ.Port == 0 {
 			config.RabbitMQ.Port = 5672
 		}
-		rabbitURI := amqp.URI{
-			Scheme:   "amqp",
-			Host:     config.RabbitMQ.Hostname,
-			Port:     config.RabbitMQ.Port,
-			Username: config.RabbitMQ.Username,
-			Password: string(config.RabbitMQ.Password),
-			Vhost:    "/",
+		rabbitURI := url.URL{
+			Scheme: "amqp",
+			Host:   net.JoinHostPort(config.RabbitMQ.Hostname, strconv.Itoa(config.RabbitMQ.Port)),
+			User:   url.UserPassword(config.RabbitMQ.Username, string(config.RabbitMQ.Password)),
+			Path:   "/",
 		}
 
 		go audittools.AuditTrail{
 			EventSink:           s,
 			OnSuccessfulPublish: onSuccessFunc,
 			OnFailedPublish:     onFailFunc,
-		}.Commit(config.RabbitMQ.QueueName, rabbitURI)
+		}.Commit(rabbitURI, config.RabbitMQ.QueueName)
 	}
 }
 

@@ -20,11 +20,11 @@
 package audittools
 
 import (
+	"net/url"
 	"time"
 
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/hermes/pkg/cadf"
-	"github.com/streadway/amqp"
 )
 
 // AuditTrail holds an event sink for receiving audit events and closure functions
@@ -39,15 +39,14 @@ type AuditTrail struct {
 // a specific RabbitMQ Connection using the specified amqp URI and queue name.
 // The OnSuccessfulPublish and OnFailedPublish closures are executed as per
 // their respective case.
-func (t AuditTrail) Commit(rabbitmqQueueName string, rabbitmqURI amqp.URI) {
-	uriStr := rabbitmqURI.String()
-	rc, err := NewRabbitConnection(uriStr, rabbitmqQueueName)
+func (t AuditTrail) Commit(rabbitmqURI url.URL, rabbitmqQueueName string) {
+	rc, err := NewRabbitConnection(rabbitmqURI, rabbitmqQueueName)
 	if err != nil {
 		logg.Error(err.Error())
 	}
 
 	sendEvent := func(e *cadf.Event) bool {
-		rc = refreshConnectionIfClosedOrOld(rc, uriStr, rabbitmqQueueName)
+		rc = refreshConnectionIfClosedOrOld(rc, rabbitmqURI, rabbitmqQueueName)
 		err := rc.PublishEvent(e)
 		if err != nil {
 			t.OnFailedPublish()
@@ -91,7 +90,7 @@ func (t AuditTrail) Commit(rabbitmqQueueName string, rabbitmqURI amqp.URI) {
 	}
 }
 
-func refreshConnectionIfClosedOrOld(rc *RabbitConnection, uri, queueName string) *RabbitConnection {
+func refreshConnectionIfClosedOrOld(rc *RabbitConnection, uri url.URL, queueName string) *RabbitConnection {
 	if !rc.IsNilOrClosed() {
 		if time.Since(rc.LastConnectedAt) < 5*time.Minute {
 			return rc
