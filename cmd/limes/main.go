@@ -253,6 +253,10 @@ func taskTestGetQuota(cluster *core.Cluster, args []string) error {
 		return err
 	}
 
+	if _, ok := cluster.QuotaPlugins[serviceType]; !ok {
+		return fmt.Errorf("unknown service type: %s", serviceType)
+	}
+
 	result, serializedMetrics, err := cluster.QuotaPlugins[serviceType].Scrape(provider, eo, project)
 	if err != nil {
 		return err
