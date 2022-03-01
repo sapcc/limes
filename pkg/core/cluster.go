@@ -20,13 +20,16 @@
 package core
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"os"
 	"regexp"
 	"sort"
 	"strconv"
 
 	"github.com/gophercloud/gophercloud"
+	"github.com/open-policy-agent/opa/rego"
 	"github.com/sapcc/go-bits/logg"
 
 	"github.com/sapcc/limes"
@@ -115,7 +118,37 @@ func NewCluster(config ClusterConfiguration) *Cluster {
 
 	sort.Strings(c.ServiceTypes) //determinism is useful for unit tests
 
+	c.Config.SetupOPA(config.OPA.DomainQuotaPolicyPath, config.OPA.ProjectQuotaPolicyPath)
+
 	return c
+}
+
+func (cluster *ClusterConfiguration) SetupOPA(domainFile, projectFile string) {
+	domainModule, err := os.ReadFile(domainFile)
+	if err != nil {
+		logg.Fatal("loading OPA configuration failed: %s", err)
+	}
+	domainQuery, err := rego.New(
+		rego.Query("violations = data.limes.violations"),
+		rego.Module("limes.rego", string(domainModule)),
+	).PrepareForEval(context.Background())
+	if err != nil {
+		logg.Fatal("preparing OPA domain query failed: %s", err)
+	}
+	cluster.OPA.DomainQuotaQuery = domainQuery
+
+	projectModule, err := os.ReadFile(projectFile)
+	if err != nil {
+		logg.Fatal("loading OPA configuration failed: %s", err)
+	}
+	projectQuery, err := rego.New(
+		rego.Query("violations = data.limes.violations"),
+		rego.Module("limes.rego", string(projectModule)),
+	).PrepareForEval(context.Background())
+	if err != nil {
+		logg.Fatal("preparing OPA domain query failed: %s", err)
+	}
+	cluster.OPA.ProjectQuotaQuery = projectQuery
 }
 
 //Connect calls Connect() on all AuthParameters for this Cluster, thus ensuring

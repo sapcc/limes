@@ -825,6 +825,78 @@ func Test_DomainOperations(t *testing.T) {
 	}.Check(t, router)
 }
 
+func Test_DomainOPA(t *testing.T) {
+	clusterName, pathtoData := "west", "fixtures/start-data-opa.sql"
+	cluster, router, _ := setupTest(t, clusterName, pathtoData)
+	cluster.Config.SetupOPA("fixtures/limes.rego", "fixtures/limes.rego")
+
+	// try if valid operations still work
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany",
+		ExpectStatus: 202,
+		ExpectBody:   assert.StringData(""),
+		Body: assert.JSONObject{
+			"domain": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "shared",
+						"resources": []assert.JSONObject{
+							{"name": "capacity", "quota": 30},
+							{"name": "things", "quota": 20},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+
+	// try invalid operations which should trigger a violation
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany",
+		ExpectStatus: 422,
+		ExpectBody:   assert.StringData("cannot change shared/capacity quota: must allocate shared/things quota before\n"),
+		Body: assert.JSONObject{
+			"domain": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "shared",
+						"resources": []assert.JSONObject{
+							{"name": "things", "quota": 0},
+							{"name": "capacity", "quota": 30},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany",
+		ExpectStatus: 422,
+		ExpectBody:   assert.StringData("cannot change shared/capacity quota: must not allocate shared/capacity and unshared/capacity at the same time\n"),
+		Body: assert.JSONObject{
+			"domain": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "shared",
+						"resources": []assert.JSONObject{
+							{"name": "capacity", "quota": 35},
+						},
+					},
+					{
+						"type": "unshared",
+						"resources": []assert.JSONObject{
+							{"name": "capacity", "quota": 35},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+}
+
 //nolint:unparam //Even though serviceType parameter always receives "shared" but this is
 //intentional as it improves code readability. Additionally, this behavior could change
 //with future unit tests.

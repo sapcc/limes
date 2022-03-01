@@ -20,14 +20,18 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/mohae/deepcopy"
+	"github.com/open-policy-agent/opa/rego"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/gopherpolicy"
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/respondwith"
 
 	"github.com/sapcc/limes"
@@ -142,6 +146,7 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 		}
 	}
 
+	// TODO: convert to OPA and combine with OPA section
 	//go through all services and resources and validate the requested quotas
 	u.ResourceRequests = make(map[string]map[string]QuotaRequest)
 	for _, quotaPlugin := range u.Cluster.QuotaPlugins {
@@ -224,6 +229,50 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 			}
 
 			u.ResourceRequests[srv.Type][res.Name] = req
+		}
+	}
+
+	// OPA policy handling
+	// skip if no OPA policy was loaded before
+	if u.Cluster.Config.OPA != (core.OPAConfiguration{}) {
+		desiredDomainReport := deepcopy.Copy(domainReport).(*limes.DomainReport)    //nolint:errcheck
+		desiredProjectReport := deepcopy.Copy(projectReport).(*limes.ProjectReport) //nolint:errcheck
+
+		var policyInput checkPolicyInput
+		for _, quotaPlugin := range u.Cluster.QuotaPlugins {
+			srv := quotaPlugin.ServiceInfo()
+			for _, res := range quotaPlugin.Resources() {
+				newValue := input[srv.Type].Resources[res.Name].Value
+				if u.Project == nil {
+					desiredDomainReport.Services[srv.Type].Resources[res.Name].DomainQuota = &newValue
+					policyInput = checkPolicyInput{TargetDomainReport: desiredDomainReport}
+				} else {
+					desiredProjectReport.Services[srv.Type].Resources[res.Name].Quota = &newValue
+					policyInput = checkPolicyInput{TargetProjectReport: desiredProjectReport}
+				}
+			}
+		}
+
+		violations, validationError := u.checkPolicy(policyInput)
+
+		for _, quotaPlugin := range u.Cluster.QuotaPlugins {
+			srv := quotaPlugin.ServiceInfo()
+			for _, res := range quotaPlugin.Resources() {
+				if validationError != nil {
+					req := u.ResourceRequests[srv.Type][res.Name]
+					req.ValidationError = validationError
+					u.ResourceRequests[srv.Type][res.Name] = req
+				}
+			}
+		}
+
+		for _, violation := range violations {
+			req := u.ResourceRequests[violation["service"]][violation["resource"]]
+			req.ValidationError = &core.QuotaValidationError{
+				Status:  http.StatusUnprocessableEntity,
+				Message: violation["msg"],
+			}
+			u.ResourceRequests[violation["service"]][violation["resource"]] = req
 		}
 	}
 
@@ -449,6 +498,70 @@ func (u QuotaUpdater) validateAuthorization(srv limes.ServiceInfo, oldQuota, new
 	return &core.QuotaValidationError{
 		Status:  http.StatusForbidden,
 		Message: fmt.Sprintf("user is not allowed to raise %q quotas", srv.Type),
+	}
+}
+
+type checkPolicyInput struct {
+	TargetDomainReport  *limes.DomainReport  `json:"targetdomainreport"`
+	TargetProjectReport *limes.ProjectReport `json:"targetprojectreport"`
+}
+
+// checkPolicy checks the input data against all OPA policies.
+func (u QuotaUpdater) checkPolicy(input checkPolicyInput) ([]map[string]string, *core.QuotaValidationError) {
+	var (
+		results rego.ResultSet
+		err     error
+	)
+	if input.TargetProjectReport == nil {
+		results, err = u.Cluster.Config.OPA.DomainQuotaQuery.Eval(context.Background(), rego.EvalInput(input))
+	} else {
+		results, err = u.Cluster.Config.OPA.ProjectQuotaQuery.Eval(context.Background(), rego.EvalInput(input))
+	}
+	if err != nil {
+		return nil, &core.QuotaValidationError{
+			Status:  http.StatusInternalServerError,
+			Message: err.Error(),
+		}
+	}
+	if len(results) != 1 {
+		return nil, &core.QuotaValidationError{
+			Status:  http.StatusInternalServerError,
+			Message: "OPA returned unexpected amount of results (please report this problem!)",
+		}
+	}
+
+	if resultViolations, ok := results[0].Bindings["violations"].([]interface{}); ok {
+		var violations []map[string]string
+		for _, resultViolationEntry := range resultViolations {
+			if resultViolation, ok := resultViolationEntry.(map[string]interface{}); ok {
+				if _, ok := resultViolation["msg"].(string); ok {
+					violations = append(violations, map[string]string{
+						"msg":      resultViolation["msg"].(string),
+						"service":  resultViolation["service"].(string),
+						"resource": resultViolation["resource"].(string),
+					})
+				} else {
+					logg.Error("OPA violation msg has wrong format: %#v", resultViolation["msg"])
+					return nil, &core.QuotaValidationError{
+						Status:  http.StatusInternalServerError,
+						Message: "OPA violation msg has wrong format (please report this problem!)",
+					}
+				}
+			} else {
+				logg.Error("OPA violation has wrong format: %T", resultViolation)
+				return nil, &core.QuotaValidationError{
+					Status:  http.StatusInternalServerError,
+					Message: "OPA violation has wrong format (please report this problem!)",
+				}
+			}
+		}
+		return violations, nil
+	} else {
+		logg.Error("OPA returned unsupported data: %#v", results[0].Bindings)
+		return nil, &core.QuotaValidationError{
+			Status:  http.StatusInternalServerError,
+			Message: "OPA returned unsupported data (please report this problem!)",
+		}
 	}
 }
 
