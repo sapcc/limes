@@ -35,6 +35,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/availabilityzones"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/limits"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/quotasets"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/servergroups"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/volumeattach"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
 	"github.com/gophercloud/gophercloud/openstack/imageservice/v2/images"
@@ -762,12 +763,6 @@ type novaServerIPData struct {
 	Target  string `json:"target,omitempty"`
 }
 
-type novaServerGroup struct {
-	ProjectID string   `json:"project_id"`
-	ID        string   `json:"id"`
-	Members   []string `json:"members"`
-}
-
 func (p *novaPlugin) getServerGroups(client *gophercloud.ServiceClient) error {
 	if p.serverGroups.lastScrapeTime != nil {
 		if time.Since(*p.serverGroups.lastScrapeTime) < 10*time.Minute {
@@ -779,9 +774,9 @@ func (p *novaPlugin) getServerGroups(client *gophercloud.ServiceClient) error {
 	//smaller than the actual page size, in order to correctly detect insertions
 	//and deletions that may cause list entries to shift around while we iterate
 	//over them.
-	const pageSize uint = 500
-	var stepSize uint = pageSize * 9 / 10
-	var currentOffset uint
+	const pageSize int = 500
+	var stepSize int = pageSize * 9 / 10
+	var currentOffset int
 	serverGroupSeen := make(map[string]bool)
 	membersPerProject := make(map[string]uint64)
 	for {
@@ -797,7 +792,7 @@ func (p *novaPlugin) getServerGroups(client *gophercloud.ServiceClient) error {
 		}
 
 		//abort after the last page
-		if uint(len(groups)) < pageSize {
+		if len(groups) < pageSize {
 			break
 		}
 		currentOffset += stepSize
@@ -810,17 +805,16 @@ func (p *novaPlugin) getServerGroups(client *gophercloud.ServiceClient) error {
 	return nil
 }
 
-func (p *novaPlugin) getServerGroupsPage(client *gophercloud.ServiceClient, limit, offset uint) ([]novaServerGroup, error) {
-	var result gophercloud.Result
+func (p *novaPlugin) getServerGroupsPage(client *gophercloud.ServiceClient, limit, offset int) ([]servergroups.ServerGroup, error) {
 	client.Microversion = "2.60"
-	url := fmt.Sprintf("%s?all_projects=True&limit=%d&offset=%d",
-		client.ServiceURL("os-server-groups"), limit, offset)
-	_, result.Err = client.Get(url, &result.Body, nil)
-	client.Microversion = ""
-
-	var data struct {
-		ServerGroups []novaServerGroup `json:"server_groups"`
+	allPages, err := servergroups.List(client, servergroups.ListOpts{AllProjects: true, Limit: limit, Offset: offset}).AllPages()
+	if err != nil {
+		return nil, err
 	}
-	err := result.ExtractInto(&data)
-	return data.ServerGroups, err
+	client.Microversion = ""
+	allServerGroups, err := servergroups.ExtractServerGroups(allPages)
+	if err != nil {
+		return nil, err
+	}
+	return allServerGroups, nil
 }
