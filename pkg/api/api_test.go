@@ -305,13 +305,6 @@ func Test_ClusterOperations(t *testing.T) {
 	}.Check(t, router)
 	assert.HTTPRequest{
 		Method:       "GET",
-		Path:         "/v1/clusters/current",
-		Header:       map[string]string{"X-Limes-Cluster-Id": "current"}, //still allowed for backwards compatibility
-		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west.json"),
-	}.Check(t, router)
-	assert.HTTPRequest{
-		Method:       "GET",
 		Path:         "/v1/clusters/current?rates=only",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-only-rates.json"),

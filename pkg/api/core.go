@@ -112,8 +112,7 @@ func NewV1Router(cluster *core.Cluster, policyEnforcer gopherpolicy.Enforcer) (h
 
 func forbidClusterIDHeader(inner http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		clusterID := r.Header.Get("X-Limes-Cluster-Id")
-		if clusterID != "" && clusterID != "current" {
+		if len(r.Header[http.CanonicalHeaderKey("X-Limes-Cluster-Id")]) > 0 {
 			http.Error(w, "multi-cluster support is removed: the X-Limes-Cluster-Id header is not allowed anymore", http.StatusBadRequest)
 		} else {
 			inner.ServeHTTP(w, r)
