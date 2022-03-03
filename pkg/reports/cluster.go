@@ -267,7 +267,6 @@ func findInClusterReport(cluster *core.Cluster, report *limes.ClusterReport, ser
 			return nil, nil
 		}
 		service = &limes.ClusterServiceReport{
-			Shared:      false,
 			ServiceInfo: cluster.InfoForService(serviceType),
 			Resources:   make(limes.ClusterResourceReports),
 			Rates:       make(limes.ClusterRateLimitReports),

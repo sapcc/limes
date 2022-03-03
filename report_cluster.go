@@ -37,7 +37,6 @@ type ClusterReport struct {
 //a single backend service.
 type ClusterServiceReport struct {
 	ServiceInfo
-	Shared            bool                    `json:"shared,omitempty"`
 	Resources         ClusterResourceReports  `json:"resources"`
 	Rates             ClusterRateLimitReports `json:"rates,omitempty"`
 	MaxScrapedAt      *int64                  `json:"max_scraped_at,omitempty"`
