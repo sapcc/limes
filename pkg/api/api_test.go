@@ -2108,3 +2108,22 @@ func Test_QuotaBursting(t *testing.T) {
 		Body:         body,
 	}.Check(t, router)
 }
+
+func Test_EmptyProjectList(t *testing.T) {
+	clusterName, pathtoData := "west", "fixtures/start-data.sql"
+	_, router, _ := setupTest(t, clusterName, pathtoData)
+
+	_, err := db.DB.Exec(`DELETE FROM projects`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	//This warrants its own unit test since the rendering of empty project lists
+	//uses a different code path than the rendering of non-empty project lists.
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/v1/domains/uuid-for-germany/projects",
+		ExpectStatus: 200,
+		ExpectBody:   assert.JSONObject{"projects": []assert.JSONObject{}},
+	}.Check(t, router)
+}

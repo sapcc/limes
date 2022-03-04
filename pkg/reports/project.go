@@ -49,14 +49,18 @@ var (
 )
 
 //GetProjects returns limes.ProjectReport reports for all projects in the given domain or,
-//if projectID is non-nil, for that project only.
-// TODO: should db be replaced with dbi?
-func GetProjects(cluster *core.Cluster, domain db.Domain, projectID *int64, dbi db.Interface, filter Filter) ([]*limes.ProjectReport, error) {
+//if project is non-nil, for that project only.
+//
+//Since large domains can contain thousands of project reports, and project
+//reports with the highest detail levels can be several MB large, we don't just
+//return them all in a big list. Instead, the `submit` callback gets called
+//once for each project report once that report is complete.
+func GetProjects(cluster *core.Cluster, domain db.Domain, project *db.Project, dbi db.Interface, filter Filter, submit func(*limes.ProjectReport) error) error {
 	clusterCanBurst := cluster.Config.Bursting.MaxMultiplier > 0
 
 	fields := map[string]interface{}{"p.domain_id": domain.ID}
-	if projectID != nil {
-		fields["p.id"] = *projectID
+	if project != nil {
+		fields["p.id"] = project.ID
 	}
 
 	projects := make(projects)
@@ -76,7 +80,7 @@ func GetProjects(cluster *core.Cluster, domain db.Domain, projectID *int64, dbi 
 		queryStr, joinArgs = filter.PrepareQuery(queryStr)
 	}
 	whereStr, whereArgs := db.BuildSimpleWhereClause(fields, len(joinArgs))
-	err := db.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
+	err := db.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		var (
 			projectUUID        string
 			projectName        string
@@ -145,7 +149,7 @@ func GetProjects(cluster *core.Cluster, domain db.Domain, projectID *int64, dbi 
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	if filter.WithRates {
@@ -169,7 +173,7 @@ func GetProjects(cluster *core.Cluster, domain db.Domain, projectID *int64, dbi 
 
 		queryStr, joinArgs := filter.PrepareQuery(projectRateLimitReportQuery)
 		whereStr, whereArgs := db.BuildSimpleWhereClause(fields, len(joinArgs))
-		err := db.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
+		err := db.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 			var (
 				projectUUID       string
 				projectName       string
@@ -225,7 +229,7 @@ func GetProjects(cluster *core.Cluster, domain db.Domain, projectID *int64, dbi 
 			return nil
 		})
 		if err != nil {
-			return nil, err
+			return err
 		}
 	}
 
@@ -235,12 +239,14 @@ func GetProjects(cluster *core.Cluster, domain db.Domain, projectID *int64, dbi 
 		uuids = append(uuids, uuid)
 	}
 	sort.Strings(uuids)
-	result := make([]*limes.ProjectReport, len(projects))
-	for idx, uuid := range uuids {
-		result[idx] = projects[uuid]
+	for _, uuid := range uuids {
+		err := submit(projects[uuid])
+		if err != nil {
+			return err
+		}
 	}
 
-	return result, nil
+	return nil
 }
 
 func p2window(val limes.Window) *limes.Window {
