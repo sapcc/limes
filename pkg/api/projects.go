@@ -61,6 +61,11 @@ func (p *v1Provider) ListProjects(w http.ResponseWriter, r *http.Request) {
 	p.listProjectsMutex.Lock()
 	defer p.listProjectsMutex.Unlock()
 
+	filter := reports.ReadFilter(r)
+	if filter.WithRates {
+		logg.Info("rate data on resource endpoint is deprecated: GET %s by user %s@%s with UA %q requests WithRates = true, OnlyRates = %t", r.URL.Path, token.UserName(), token.UserDomainName(), r.Header.Get("User-Agent"), filter.OnlyRates)
+	}
+
 	//We do not wait for the entire response body JSON to be compiled before
 	//sending it out because the JSON can grow to several 100 MiB for large
 	//domains and high detail settings, which would lead to OOM on the API
@@ -79,7 +84,7 @@ func (p *v1Provider) ListProjects(w http.ResponseWriter, r *http.Request) {
 
 	outputStarted := false
 	bufWriter := bufio.NewWriter(w)
-	err := reports.GetProjects(p.Cluster, *dbDomain, nil, db.DB, reports.ReadFilter(r), func(report *limes.ProjectReport) error {
+	err := reports.GetProjects(p.Cluster, *dbDomain, nil, db.DB, filter, func(report *limes.ProjectReport) error {
 		if outputStarted {
 			//write commas between reports
 			_, err := bufWriter.Write([]byte(`,`))
@@ -141,7 +146,13 @@ func (p *v1Provider) GetProject(w http.ResponseWriter, r *http.Request) {
 	if dbProject == nil {
 		return
 	}
-	project, err := GetProjectReport(p.Cluster, *dbDomain, *dbProject, db.DB, reports.ReadFilter(r))
+
+	filter := reports.ReadFilter(r)
+	if filter.WithRates {
+		logg.Info("rate data on resource endpoint is deprecated: GET %s by user %s@%s with UA %q requests WithRates = true, OnlyRates = %t", r.URL.Path, token.UserName(), token.UserDomainName(), r.Header.Get("User-Agent"), filter.OnlyRates)
+	}
+
+	project, err := GetProjectReport(p.Cluster, *dbDomain, *dbProject, db.DB, filter)
 	if respondwith.ErrorText(w, err) {
 		return
 	}

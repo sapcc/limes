@@ -25,6 +25,7 @@ import (
 
 	gorp "gopkg.in/gorp.v2"
 
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sre"
 	"github.com/sapcc/limes"
@@ -42,7 +43,12 @@ func (p *v1Provider) ListDomains(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	domains, err := reports.GetDomains(p.Cluster, nil, db.DB, reports.ReadFilter(r))
+	filter := reports.ReadFilter(r)
+	if filter.WithRates {
+		logg.Info("rate data on resource endpoint is deprecated: GET %s by user %s@%s with UA %q requests WithRates = true, OnlyRates = %t", r.URL.Path, token.UserName(), token.UserDomainName(), r.Header.Get("User-Agent"), filter.OnlyRates)
+	}
+
+	domains, err := reports.GetDomains(p.Cluster, nil, db.DB, filter)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -62,7 +68,12 @@ func (p *v1Provider) GetDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	domain, err := GetDomainReport(p.Cluster, *dbDomain, db.DB, reports.ReadFilter(r))
+	filter := reports.ReadFilter(r)
+	if filter.WithRates {
+		logg.Info("rate data on resource endpoint is deprecated: GET %s by user %s@%s with UA %q requests WithRates = true, OnlyRates = %t", r.URL.Path, token.UserName(), token.UserDomainName(), r.Header.Get("User-Agent"), filter.OnlyRates)
+	}
+
+	domain, err := GetDomainReport(p.Cluster, *dbDomain, db.DB, filter)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
