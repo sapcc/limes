@@ -34,6 +34,12 @@ import (
 //NOTE: Both queries use LEFT OUTER JOIN to generate at least one result row
 //per known project, to ensure that each project gets a report even if its
 //resource data and/or rate data is incomplete.
+//
+//The query for resource data uses "ORDER BY p.uuid" to ensure that a) the
+//output order is reproducible to keep the tests happy and b) records for the
+//same project appear in a cluster, so that the implementation can publish
+//completed project reports (and then reclaim their memory usage) as soon as
+//possible.
 var (
 	projectRateLimitReportQuery = db.SimplifyWhitespaceInSQL(`
 	SELECT p.uuid, p.name, COALESCE(p.parent_uuid, ''), ps.type, ps.scraped_at, ps.rates_scraped_at, pra.name, pra.rate_limit, pra.window_ns, pra.usage_as_bigint
@@ -48,6 +54,7 @@ var (
 	  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
 	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
 	 WHERE %s
+	 ORDER BY p.uuid
 `)
 )
 
@@ -159,7 +166,9 @@ func GetProjects(cluster *core.Cluster, domain db.Domain, project *db.Project, d
 	//phase 2: collect resource data
 	//
 	//Data collected in this phase can be very large if subresources are requested.
-	//TODO: send reports as soon as they are finished
+	//To ensure that we don't run OOM, we retrieve data ordered by project and
+	//send out a completed project report as soon as the data for the next
+	//project comes in.
 
 	if !filter.OnlyRates {
 		//avoid collecting the potentially large subresources strings when possible
@@ -169,6 +178,7 @@ func GetProjects(cluster *core.Cluster, domain db.Domain, project *db.Project, d
 		}
 		queryStr, joinArgs := filter.PrepareQuery(queryStr)
 		whereStr, whereArgs := db.BuildSimpleWhereClause(fields, len(joinArgs))
+		var currentProjectUUID string
 		err := db.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 			var (
 				projectUUID        string
@@ -192,6 +202,16 @@ func GetProjects(cluster *core.Cluster, domain db.Domain, project *db.Project, d
 			)
 			if err != nil {
 				return err
+			}
+
+			if currentProjectUUID != projectUUID {
+				//we're moving to a different project, so it's time to publish the
+				//finished project report and then allow for it to be GCd
+				if currentProjectUUID != "" {
+					submit(projects[currentProjectUUID])
+					delete(projects, currentProjectUUID)
+				}
+				currentProjectUUID = projectUUID
 			}
 
 			projectReport, _, resReport := projects.Find(cluster, projectUUID, projectName, projectParentUUID, serviceType, resourceName, timeIf(scrapedAt, !filter.OnlyRates), timeIf(ratesScrapedAt, filter.WithRates), onCreateService)
@@ -242,7 +262,13 @@ func GetProjects(cluster *core.Cluster, domain db.Domain, project *db.Project, d
 		}
 	}
 
-	//flatten result (with stable order to keep the tests happy)
+	//phase 3: submit all remaining reports
+	//
+	//Either we did have phase 2 and only the last project report remains to be
+	//published, or we did not have phase 2 and all project reports need to be
+	//published now.
+
+	//submit with stable order to keep the tests happy
 	uuids := make([]string, 0, len(projects))
 	for uuid := range projects {
 		uuids = append(uuids, uuid)
