@@ -30,7 +30,8 @@
             "limit": 2,
             "window": "1s"
           }
-        ]
+        ],
+        "scraped_at": 66
       },
       {
         "type": "unshared",
@@ -52,7 +53,8 @@
             "limit": 2,
             "window": "1s"
           }
-        ]
+        ],
+        "scraped_at": 55
       }
     ]
   }
