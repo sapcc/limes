@@ -121,8 +121,12 @@ func (p *v1Provider) ListProjects(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		if outputStarted {
-			//we are already writing a 200 response, so we can only log the error,
-			//but we cannot send it to the client
+			//deliberately destroy the ongoing JSON document to make it clear to the
+			//client that an error occurred
+			fmt.Fprintf(w, "\naborting because of error: %s\n", err.Error())
+			//usually we don't need to log errors in handlers because the
+			//logg.Middleware does it for us, but since this is a 200 response, we
+			//need to do it ourselves
 			logg.Error("late error during GET %s: %s", r.URL.String(), err.Error())
 		} else {
 			//the callback was never called, so we can properly report the error to the client
