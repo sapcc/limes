@@ -40,8 +40,11 @@ jobs:
       uses: actions/setup-go@v2
       with:
         go-version: "1.17"
-    - name: Run gofmt, go vet, staticcheck
-      run: GO_BUILDFLAGS='-mod vendor' make static-check
+    - name: Run golangci-lint
+      uses: golangci/golangci-lint-action@v2
+      with:
+        skip-go-installation: true
+        version: latest
   test:
     name: Test
     needs:
