@@ -155,6 +155,7 @@ func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter) 
 	//ospqReportQuery: data for overspent project quota inconsistencies
 	queryStr, joinArgs = filter.PrepareQuery(ospqReportQuery)
 	whereStr, whereArgs = db.BuildSimpleWhereClause(fields, len(joinArgs))
+	//nolint:dupl
 	err = db.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		ospq := OverspentProjectQuota{}
 		err := rows.Scan(
@@ -178,6 +179,7 @@ func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter) 
 	//mmpqReportQuery: data for mismatch project quota inconsistencies
 	queryStr, joinArgs = filter.PrepareQuery(mmpqReportQuery)
 	whereStr, whereArgs = db.BuildSimpleWhereClause(fields, len(joinArgs))
+	//nolint:dupl
 	err = db.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		mmpq := MismatchProjectQuota{}
 		err := rows.Scan(

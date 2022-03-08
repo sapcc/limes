@@ -99,6 +99,7 @@ func GetDomains(cluster *core.Cluster, domainID *int64, dbi db.Interface, filter
 
 		_, service, resource := domains.Find(cluster, domainUUID, domainName, serviceType, resourceName)
 
+		//nolint:dupl
 		if service != nil {
 			if maxScrapedAt != nil {
 				val := maxScrapedAt.Unix()

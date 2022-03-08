@@ -100,6 +100,7 @@ func GetCluster(cluster *core.Cluster, dbi db.Interface, filter Filter) (*limes.
 
 			clusterCanBurst := cluster.Config.Bursting.MaxMultiplier > 0
 
+			//nolint:dupl
 			if service != nil {
 				if maxScrapedAt != nil {
 					val := maxScrapedAt.Unix()
