@@ -221,12 +221,16 @@ func GetDomainReport(cluster *core.Cluster, dbDomain db.Domain, dbi db.Interface
 
 //GetProjectReport is a convenience wrapper around reports.GetProjects() for getting a single project report.
 func GetProjectReport(cluster *core.Cluster, dbDomain db.Domain, dbProject db.Project, dbi db.Interface, filter reports.Filter) (*limes.ProjectReport, error) {
-	projectReports, err := reports.GetProjects(cluster, dbDomain, &dbProject.ID, dbi, filter)
+	var result *limes.ProjectReport
+	err := reports.GetProjects(cluster, dbDomain, &dbProject, dbi, filter, func(r *limes.ProjectReport) error {
+		result = r
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	if len(projectReports) == 0 {
+	if result == nil {
 		return nil, errors.New("no resource data found for project")
 	}
-	return projectReports[0], nil
+	return result, nil
 }

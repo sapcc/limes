@@ -80,7 +80,7 @@ INSERT INTO project_rates (service_id, name, rate_limit, window_ns, usage_as_big
 INSERT INTO project_rates (service_id, name, rate_limit, window_ns, usage_as_bigint) VALUES (3, 'service/unshared/instances:delete', NULL, NULL, '0');
 INSERT INTO project_rates (service_id, name, rate_limit, window_ns, usage_as_bigint) VALUES (4, 'service/shared/objects:delete', NULL, NULL, '0');
 INSERT INTO project_rates (service_id, name, rate_limit, window_ns, usage_as_bigint) VALUES (4, 'service/shared/objects:unlimited', NULL, NULL, '1048576');
--- not pictures: paris has no records at all, so the API will only display the default rate limits
+-- not pictured: paris has no records at all, so the API will only display the default rate limits
 
 -- insert some bullshit data that should be filtered out by the pkg/reports/ logic
 -- (cluster "north", service "weird", resource "items" and rate "frobnicate" are not configured)
