@@ -34,6 +34,7 @@ import (
 //InitDatabase initializes DB in pkg/db for testing.
 func InitDatabase(t *testing.T, fixtureFile *string) {
 	t.Helper()
+	//nolint:errcheck
 	postgresURL, _ := url.Parse("postgres://postgres:postgres@localhost:54321/limes?sslmode=disable")
 	postgresDB, err := easypg.Connect(easypg.Configuration{
 		PostgresURL: postgresURL,

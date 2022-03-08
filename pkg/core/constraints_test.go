@@ -102,6 +102,7 @@ func TestQuotaConstraintParsingSuccess(t *testing.T) {
 			},
 		},
 	}
+	//nolint:errcheck
 	if !reflect.DeepEqual(constraints, &expected) {
 		buf, _ := json.Marshal(constraints)
 		t.Errorf("  actual = %s\n", buf)

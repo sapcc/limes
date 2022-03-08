@@ -67,7 +67,7 @@ func prepareScrapeTest(t *testing.T, numProjects int, quotaPlugins ...core.Quota
 	sort.Strings(cluster.ServiceTypes)
 
 	//one domain is enough; one or two projects is enough
-	discovery := cluster.DiscoveryPlugin.(*test.DiscoveryPlugin)
+	discovery := cluster.DiscoveryPlugin.(*test.DiscoveryPlugin) //nolint:errcheck
 	domain1 := discovery.StaticDomains[0]
 	project1 := discovery.StaticProjects[domain1.UUID][0]
 	project2 := discovery.StaticProjects[domain1.UUID][1]

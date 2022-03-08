@@ -51,7 +51,7 @@ func keystoneTestCluster(t *testing.T) *core.Cluster {
 
 func Test_ScanDomains(t *testing.T) {
 	cluster := keystoneTestCluster(t)
-	discovery := cluster.DiscoveryPlugin.(*test.DiscoveryPlugin)
+	discovery := cluster.DiscoveryPlugin.(*test.DiscoveryPlugin) //nolint:errcheck
 
 	//construct expectation for return value
 	var expectedNewDomains []string

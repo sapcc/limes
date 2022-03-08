@@ -123,8 +123,11 @@ func logAndPublishEvent(time time.Time, req *http.Request, token *gopherpolicy.T
 	event := audittools.NewEvent(p)
 
 	if showAuditOnStdout {
-		msg, _ := json.Marshal(event)
-		logg.Other("AUDIT", string(msg))
+		if msg, err := json.Marshal(event); err == nil {
+			logg.Other("AUDIT", string(msg))
+		} else {
+			logg.Error("could not marshal audit event: %s", err.Error())
+		}
 	}
 
 	if eventSink != nil {

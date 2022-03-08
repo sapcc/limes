@@ -144,7 +144,7 @@ func (p *Plugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.
 	for _, rate := range p.StaticRateInfos {
 		result[rate.Name] = big.NewInt(state[rate.Name] + int64(len(rate.Name)))
 	}
-	serializedStateBytes, _ := json.Marshal(state)
+	serializedStateBytes, _ := json.Marshal(state) //nolint:errcheck
 	return result, string(serializedStateBytes), nil
 }
 

@@ -278,9 +278,13 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 		result2[resourceName] = *data
 	}
 
-	serializedMetrics, _ := json.Marshal(capacitySapccIronicSerializedMetrics{
+	serializedMetrics, err := json.Marshal(capacitySapccIronicSerializedMetrics{
 		UnmatchedNodeCount: unmatchedCounter,
 	})
+	if err != nil {
+		return nil, "", err
+	}
+
 	return map[string]map[string]core.CapacityData{"compute": result2}, string(serializedMetrics), nil
 }
 

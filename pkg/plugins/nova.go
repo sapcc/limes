@@ -523,7 +523,11 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 	for name, data := range result {
 		result2[name] = *data
 	}
-	serializedMetrics, _ := json.Marshal(sm)
+	serializedMetrics, err := json.Marshal(sm)
+	if err != nil {
+		return nil, "", err
+	}
+
 	return result2, string(serializedMetrics), nil
 }
 

@@ -373,7 +373,7 @@ func Test_ClusterOperations(t *testing.T) {
 func Test_DomainOperations(t *testing.T) {
 	clusterName, pathtoData := "west", "fixtures/start-data.sql"
 	cluster, router, _ := setupTest(t, clusterName, pathtoData)
-	discovery := cluster.DiscoveryPlugin.(*test.DiscoveryPlugin)
+	discovery := cluster.DiscoveryPlugin.(*test.DiscoveryPlugin) //nolint:errcheck
 
 	//check GetDomain
 	assert.HTTPRequest{
@@ -852,7 +852,7 @@ func expectDomainQuota(t *testing.T, domainName, serviceType, resourceName strin
 func Test_ProjectOperations(t *testing.T) {
 	clusterName, pathtoData := "west", "fixtures/start-data.sql"
 	cluster, router, _ := setupTest(t, clusterName, pathtoData)
-	discovery := cluster.DiscoveryPlugin.(*test.DiscoveryPlugin)
+	discovery := cluster.DiscoveryPlugin.(*test.DiscoveryPlugin) //nolint:errcheck
 
 	//check GetProject
 	assert.HTTPRequest{
@@ -1071,7 +1071,7 @@ func Test_ProjectOperations(t *testing.T) {
 		},
 	}.Check(t, router)
 
-	plugin := cluster.QuotaPlugins["shared"].(*test.Plugin)
+	plugin := cluster.QuotaPlugins["shared"].(*test.Plugin) //nolint:errcheck
 	plugin.QuotaIsNotAcceptable = true
 	assert.HTTPRequest{
 		Method:       "PUT",
@@ -1370,6 +1370,7 @@ func Test_ProjectOperations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	//nolint:errcheck
 	_, _ = db.DB.Exec(`UPDATE project_resources SET usage = $1 WHERE service_id = $2 AND name = $3`,
 		0,
 		serviceBerlinUnsharedID, "things",
@@ -1996,7 +1997,7 @@ func Test_QuotaBursting(t *testing.T) {
 	}.Check(t, router)
 
 	//check that backend_quota has been updated in backend
-	plugin := cluster.QuotaPlugins["shared"].(*test.Plugin)
+	plugin := cluster.QuotaPlugins["shared"].(*test.Plugin) //nolint:errcheck
 	expectBackendQuota := map[string]uint64{
 		"capacity": 11, //original value (10) * multiplier (110%)
 		"things":   11, //original value (10) * multiplier (110%)
@@ -2009,7 +2010,7 @@ func Test_QuotaBursting(t *testing.T) {
 		t.Errorf("expected backend quota %#v, but got %#v", expectBackendQuota, backendQuota)
 	}
 
-	plugin = cluster.QuotaPlugins["unshared"].(*test.Plugin)
+	plugin = cluster.QuotaPlugins["unshared"].(*test.Plugin) //nolint:errcheck
 	expectBackendQuota = map[string]uint64{
 		"capacity": 11, //original value (10) * multiplier (110%)
 		"things":   44, //as set above (40) * multiplier (110%)
