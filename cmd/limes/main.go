@@ -212,8 +212,7 @@ func taskServe(cluster *core.Cluster, args []string) error {
 	exceptCodeStrings := strings.Split(os.Getenv("LIMES_API_REQUEST_LOG_EXCEPT_STATUS_CODES"), ",")
 	var exceptCodes []int
 	for _, v := range exceptCodeStrings {
-		v := strings.TrimSpace(v)
-		code, err := strconv.Atoi(v)
+		code, err := strconv.Atoi(strings.TrimSpace(v))
 		if err != nil {
 			logg.Fatal("could not parse LIMES_API_REQUEST_LOG_EXCEPT_STATUS_CODES: %s", err.Error())
 		}

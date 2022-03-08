@@ -94,7 +94,7 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 		}
 	}
 
-	client, err := openstack.NewComputeV2(provider, eo)
+	novaClient, err := openstack.NewComputeV2(provider, eo)
 	if err != nil {
 		return nil, "", err
 	}
@@ -102,7 +102,7 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 	//enumerate hypervisors (cannot use type Hypervisor provided by Gophercloud;
 	//in our clusters, it breaks because some hypervisor report unexpected NULL
 	//values on fields that we are not even interested in)
-	page, err := hypervisors.List(client, nil).AllPages()
+	page, err := hypervisors.List(novaClient, nil).AllPages()
 	if err != nil {
 		return nil, "", err
 	}
@@ -115,7 +115,7 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 	}
 
 	//enumerate compute hosts to establish hypervisor <-> AZ mapping
-	azs, aggrs, err := getAggregates(client)
+	azs, aggrs, err := getAggregates(novaClient)
 	if err != nil {
 		return nil, "", err
 	}
@@ -205,14 +205,14 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 
 	//list all flavors and get max(flavor_size)
 	pages, maxFlavorSize := 0, 0.0
-	err = flavors.ListDetail(client, nil).EachPage(func(page pagination.Page) (bool, error) {
+	err = flavors.ListDetail(novaClient, nil).EachPage(func(page pagination.Page) (bool, error) {
 		pages++
 		f, err := flavors.ExtractFlavors(page)
 		if err != nil {
 			return false, err
 		}
 		for _, element := range f {
-			extras, err := flavors.ListExtraSpecs(client, element.ID).Extract()
+			extras, err := flavors.ListExtraSpecs(novaClient, element.ID).Extract()
 			if err != nil {
 				logg.Debug("Failed to get extra specs for flavor: %s.", element.ID)
 				return false, err
