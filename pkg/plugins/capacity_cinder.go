@@ -46,7 +46,7 @@ func init() {
 //Init implements the core.CapacityPlugin interface.
 func (p *capacityCinderPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
 	if len(p.cfg.Cinder.VolumeTypes) == 0 {
-		//lint:ignore ST1005 Cinder is a proper name
+		//nolint:stylecheck //Cinder is a proper name
 		return errors.New("Cinder capacity plugin: missing required configuration field cinder.volume_types")
 	}
 	return nil

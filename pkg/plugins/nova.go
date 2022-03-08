@@ -776,7 +776,7 @@ func (p *novaPlugin) getServerGroups(client *gophercloud.ServiceClient) error {
 	//and deletions that may cause list entries to shift around while we iterate
 	//over them.
 	const pageSize int = 500
-	var stepSize int = pageSize * 9 / 10
+	stepSize := pageSize * 9 / 10
 	var currentOffset int
 	serverGroupSeen := make(map[string]bool)
 	membersPerProject := make(map[string]uint64)

@@ -825,6 +825,9 @@ func Test_DomainOperations(t *testing.T) {
 	}.Check(t, router)
 }
 
+//nolint:unparam //Even though serviceType parameter always receives "shared" but this is
+//intentional as it improves code readability. Additionally, this behavior could change
+//with future unit tests.
 func expectDomainQuota(t *testing.T, domainName, serviceType, resourceName string, expected uint64) {
 	t.Helper()
 
