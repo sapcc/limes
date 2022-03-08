@@ -23,9 +23,10 @@ import (
 	"sort"
 
 	"github.com/sapcc/go-bits/logg"
+	gorp "gopkg.in/gorp.v2"
+
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
-	gorp "gopkg.in/gorp.v2"
 )
 
 //ValidateProjectServices ensures that all required ProjectService records for

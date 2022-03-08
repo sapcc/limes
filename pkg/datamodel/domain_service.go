@@ -23,10 +23,11 @@ import (
 	"sort"
 
 	"github.com/sapcc/go-bits/logg"
+	gorp "gopkg.in/gorp.v2"
+
 	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
-	gorp "gopkg.in/gorp.v2"
 )
 
 //ValidateDomainServices ensures that all required DomainService records for

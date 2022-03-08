@@ -28,8 +28,9 @@ import (
 
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/secrets"
-	"github.com/sapcc/limes"
 	yaml "gopkg.in/yaml.v2"
+
+	"github.com/sapcc/limes"
 )
 
 //ClusterConfiguration contains all the configuration data for a single cluster.

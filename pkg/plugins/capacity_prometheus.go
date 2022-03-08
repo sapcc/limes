@@ -34,8 +34,9 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/sapcc/go-bits/logg"
-	"github.com/sapcc/limes/pkg/core"
 	"golang.org/x/net/context"
+
+	"github.com/sapcc/limes/pkg/core"
 )
 
 type capacityPrometheusPlugin struct {

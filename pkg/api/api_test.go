@@ -34,6 +34,7 @@ import (
 	policy "github.com/databus23/goslo.policy"
 	"github.com/gofrs/uuid"
 	"github.com/sapcc/go-bits/assert"
+
 	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
@@ -1850,7 +1851,6 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 			},
 		},
 	}.Check(t, router)
-
 }
 
 func expectStaleProjectServices(t *testing.T, pairs ...string) {

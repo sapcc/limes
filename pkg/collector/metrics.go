@@ -27,6 +27,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/logg"
+
 	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
@@ -673,7 +674,6 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 					)
 				}
 			}
-
 		}
 
 		ch <- prometheus.MustNewConstMetric(

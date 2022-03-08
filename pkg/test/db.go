@@ -27,6 +27,7 @@ import (
 	gorp "gopkg.in/gorp.v2"
 
 	"github.com/sapcc/go-bits/easypg"
+
 	"github.com/sapcc/limes/pkg/db"
 )
 

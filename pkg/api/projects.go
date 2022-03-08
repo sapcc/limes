@@ -32,6 +32,8 @@ import (
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sre"
+	gorp "gopkg.in/gorp.v2"
+
 	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/collector"
 	"github.com/sapcc/limes/pkg/core"
@@ -39,7 +41,6 @@ import (
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/reports"
 	"github.com/sapcc/limes/pkg/util"
-	gorp "gopkg.in/gorp.v2"
 )
 
 //ListProjects handles GET /v1/domains/:domain_id/projects.

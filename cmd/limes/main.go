@@ -42,12 +42,13 @@ import (
 	"github.com/sapcc/go-bits/httpee"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/respondwith"
+	"gopkg.in/yaml.v2"
+
 	"github.com/sapcc/limes/pkg/api"
 	"github.com/sapcc/limes/pkg/collector"
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/util"
-	"gopkg.in/yaml.v2"
 
 	_ "github.com/sapcc/limes/pkg/plugins"
 )

@@ -21,6 +21,7 @@ package test
 
 import (
 	"github.com/gophercloud/gophercloud"
+
 	"github.com/sapcc/limes/pkg/core"
 )
 
