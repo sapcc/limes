@@ -26,10 +26,13 @@ import (
 	"net/http"
 	"reflect"
 	"regexp"
+	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	policy "github.com/databus23/goslo.policy"
+	"github.com/gofrs/uuid"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
@@ -1887,6 +1890,11 @@ func p2u64(val uint64) *uint64 {
 	return &val
 }
 
+//p2i64 makes a "pointer to int64".
+func p2i64(val int64) *int64 {
+	return &val
+}
+
 func Test_QuotaBursting(t *testing.T) {
 	clusterName, pathtoData := "west", "fixtures/start-data.sql"
 	cluster, router, _ := setupTest(t, clusterName, pathtoData)
@@ -2125,5 +2133,134 @@ func Test_EmptyProjectList(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONObject{"projects": []assert.JSONObject{}},
+	}.Check(t, router)
+}
+
+func Test_LargeProjectList(t *testing.T) {
+	//start without any projects pre-defined in the start data
+	clusterName, pathtoData := "west", "fixtures/start-data-minimal.sql"
+	cluster, router, _ := setupTest(t, clusterName, pathtoData)
+	//we don't care about the various ResourceBehaviors in this test
+	cluster.Config.ResourceBehaviors = nil
+
+	//template for how a single project will look in the output JSON
+	makeProjectJSON := func(idx int, projectName, projectUUID string) assert.JSONObject {
+		return assert.JSONObject{
+			"id":        projectUUID,
+			"name":      projectName,
+			"parent_id": "uuid-for-germany",
+			"services": []assert.JSONObject{
+				{
+					"type":       "shared",
+					"area":       "shared",
+					"scraped_at": idx,
+					"resources": []assert.JSONObject{
+						{
+							"name":         "capacity",
+							"unit":         "B",
+							"quota":        0,
+							"usable_quota": 0,
+							"usage":        0,
+						},
+						{
+							"name":         "things",
+							"quota":        0,
+							"usable_quota": 0,
+							"usage":        0,
+						},
+					},
+				},
+				{
+					"type":       "unshared",
+					"area":       "unshared",
+					"scraped_at": idx,
+					"resources": []assert.JSONObject{
+						{
+							"name":         "capacity",
+							"unit":         "B",
+							"quota":        0,
+							"usable_quota": 0,
+							"usage":        0,
+						},
+						{
+							"name":         "things",
+							"quota":        idx,
+							"usable_quota": idx,
+							"usage":        idx / 2,
+						},
+					},
+				},
+			},
+		}
+	}
+	var expectedProjectsJSON []assert.JSONObject
+
+	//set up a large number of projects to test the behavior of the project list endpoint for large lists
+	projectCount := 100
+	for idx := 1; idx <= projectCount; idx++ {
+		projectUUIDGen, err := uuid.NewV4()
+		if err != nil {
+			t.Fatal(err)
+		}
+		projectName := fmt.Sprintf("test-project%04d", idx)
+		projectUUID := projectUUIDGen.String()
+		scrapedAt := time.Unix(int64(idx), 0).UTC()
+		expectedProjectsJSON = append(expectedProjectsJSON, makeProjectJSON(idx, projectName, projectUUID))
+
+		project := db.Project{
+			DomainID:   1,
+			ParentUUID: "uuid-for-germany",
+			Name:       projectName,
+			UUID:       projectUUID,
+		}
+		err = db.DB.Insert(&project)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, serviceType := range []string{"shared", "unshared"} {
+			service := db.ProjectService{
+				ProjectID:      project.ID,
+				Type:           serviceType,
+				ScrapedAt:      &scrapedAt,
+				CheckedAt:      &scrapedAt,
+				RatesScrapedAt: &scrapedAt,
+				RatesCheckedAt: &scrapedAt,
+			}
+			err = db.DB.Insert(&service)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, resourceName := range []string{"things", "capacity"} {
+				resource := db.ProjectResource{
+					ServiceID:           service.ID,
+					Name:                resourceName,
+					Quota:               p2u64(0),
+					BackendQuota:        p2i64(0),
+					DesiredBackendQuota: p2u64(0),
+				}
+				if serviceType == "unshared" && resourceName == "things" {
+					resource.Quota = p2u64(uint64(idx))
+					resource.Usage = uint64(idx / 2)
+					resource.BackendQuota = p2i64(int64(idx))
+					resource.DesiredBackendQuota = p2u64(uint64(idx))
+				}
+				err = db.DB.Insert(&resource)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+		}
+	}
+
+	sort.Slice(expectedProjectsJSON, func(i, j int) bool {
+		left := expectedProjectsJSON[i]
+		right := expectedProjectsJSON[j]
+		return left["id"].(string) < right["id"].(string)
+	})
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/v1/domains/uuid-for-germany/projects",
+		ExpectStatus: 200,
+		ExpectBody:   assert.JSONObject{"projects": expectedProjectsJSON},
 	}.Check(t, router)
 }
