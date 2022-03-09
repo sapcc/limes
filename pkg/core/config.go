@@ -28,8 +28,9 @@ import (
 
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/secrets"
-	"github.com/sapcc/limes"
 	yaml "gopkg.in/yaml.v2"
+
+	"github.com/sapcc/limes"
 )
 
 //ClusterConfiguration contains all the configuration data for a single cluster.
@@ -54,8 +55,8 @@ type ClusterConfiguration struct {
 }
 
 //GetServiceConfigurationForType returns the ServiceConfiguration or an error.
-func (clusterCfg *ClusterConfiguration) GetServiceConfigurationForType(serviceType string) (ServiceConfiguration, error) {
-	for _, svc := range clusterCfg.Services {
+func (cluster *ClusterConfiguration) GetServiceConfigurationForType(serviceType string) (ServiceConfiguration, error) {
+	for _, svc := range cluster.Services {
 		if serviceType == svc.Type {
 			return svc, nil
 		}

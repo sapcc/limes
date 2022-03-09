@@ -26,8 +26,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/sapcc/limes"
 	yaml "gopkg.in/yaml.v2"
+
+	"github.com/sapcc/limes"
 )
 
 //QuotaConstraintSet contains the contents of the constraint configuration file

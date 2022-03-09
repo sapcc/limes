@@ -208,7 +208,10 @@ func GetProjects(cluster *core.Cluster, domain db.Domain, project *db.Project, d
 				//we're moving to a different project, so it's time to publish the
 				//finished project report and then allow for it to be GCd
 				if currentProjectUUID != "" {
-					submit(projects[currentProjectUUID])
+					err := submit(projects[currentProjectUUID])
+					if err != nil {
+						return err
+					}
 					delete(projects, currentProjectUUID)
 				}
 				currentProjectUUID = projectUUID

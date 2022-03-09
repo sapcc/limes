@@ -27,6 +27,7 @@ import (
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/prometheus/client_golang/prometheus"
+
 	"github.com/sapcc/limes"
 )
 
@@ -101,6 +102,7 @@ func TestQuotaConstraintParsingSuccess(t *testing.T) {
 			},
 		},
 	}
+	//nolint:errcheck
 	if !reflect.DeepEqual(constraints, &expected) {
 		buf, _ := json.Marshal(constraints)
 		t.Errorf("  actual = %s\n", buf)

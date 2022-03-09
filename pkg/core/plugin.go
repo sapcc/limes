@@ -24,6 +24,7 @@ import (
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/prometheus/client_golang/prometheus"
+
 	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/db"
 )

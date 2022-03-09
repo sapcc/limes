@@ -42,6 +42,7 @@ import (
 	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/logg"
+
 	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/util"
@@ -522,7 +523,11 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 	for name, data := range result {
 		result2[name] = *data
 	}
-	serializedMetrics, _ := json.Marshal(sm)
+	serializedMetrics, err := json.Marshal(sm)
+	if err != nil {
+		return nil, "", err
+	}
+
 	return result2, string(serializedMetrics), nil
 }
 
@@ -775,7 +780,7 @@ func (p *novaPlugin) getServerGroups(client *gophercloud.ServiceClient) error {
 	//and deletions that may cause list entries to shift around while we iterate
 	//over them.
 	const pageSize int = 500
-	var stepSize int = pageSize * 9 / 10
+	stepSize := pageSize * 9 / 10
 	var currentOffset int
 	serverGroupSeen := make(map[string]bool)
 	membersPerProject := make(map[string]uint64)

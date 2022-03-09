@@ -33,6 +33,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/sharedfilesystems/apiversions"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/logg"
+
 	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 )
@@ -365,8 +366,11 @@ func (p *manilaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherc
 
 func logDebugSetQuota(projectUUID, shareTypeName string, quotas manilaQuotaSet) {
 	if logg.ShowDebug {
-		buf, _ := json.Marshal(quotas)
-		logg.Debug("manila: PUT quota-sets %s %s: %s", projectUUID, shareTypeName, string(buf))
+		if buf, err := json.Marshal(quotas); err == nil {
+			logg.Debug("manila: PUT quota-sets %s %s: %s", projectUUID, shareTypeName, string(buf))
+		} else {
+			logg.Error("manila: could not marshal quota-sets %s %s in PUT request: %s", projectUUID, shareTypeName, err.Error())
+		}
 	}
 }
 

@@ -27,12 +27,14 @@ import (
 	gorp "gopkg.in/gorp.v2"
 
 	"github.com/sapcc/go-bits/easypg"
+
 	"github.com/sapcc/limes/pkg/db"
 )
 
 //InitDatabase initializes DB in pkg/db for testing.
 func InitDatabase(t *testing.T, fixtureFile *string) {
 	t.Helper()
+	//nolint:errcheck
 	postgresURL, _ := url.Parse("postgres://postgres:postgres@localhost:54321/limes?sslmode=disable")
 	postgresDB, err := easypg.Connect(easypg.Configuration{
 		PostgresURL: postgresURL,

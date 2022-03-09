@@ -42,12 +42,13 @@ import (
 	"github.com/sapcc/go-bits/httpee"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/respondwith"
+	"gopkg.in/yaml.v2"
+
 	"github.com/sapcc/limes/pkg/api"
 	"github.com/sapcc/limes/pkg/collector"
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/util"
-	"gopkg.in/yaml.v2"
 
 	_ "github.com/sapcc/limes/pkg/plugins"
 )
@@ -154,6 +155,7 @@ func taskCollect(cluster *core.Cluster, args []string) error {
 	prometheus.MustRegister(&collector.AggregateMetricsCollector{Cluster: cluster})
 	prometheus.MustRegister(&collector.CapacityPluginMetricsCollector{Cluster: cluster})
 	prometheus.MustRegister(&collector.QuotaPluginMetricsCollector{Cluster: cluster})
+	//nolint:errcheck
 	if exposeMetrics, _ := strconv.ParseBool(os.Getenv("LIMES_COLLECTOR_DATA_METRICS_EXPOSE")); exposeMetrics {
 		skipZero, _ := strconv.ParseBool(os.Getenv("LIMES_COLLECTOR_DATA_METRICS_SKIP_ZERO"))
 		prometheus.MustRegister(&collector.DataMetricsCollector{
@@ -211,8 +213,7 @@ func taskServe(cluster *core.Cluster, args []string) error {
 	exceptCodeStrings := strings.Split(os.Getenv("LIMES_API_REQUEST_LOG_EXCEPT_STATUS_CODES"), ",")
 	var exceptCodes []int
 	for _, v := range exceptCodeStrings {
-		v := strings.TrimSpace(v)
-		code, err := strconv.Atoi(v)
+		code, err := strconv.Atoi(strings.TrimSpace(v))
 		if err != nil {
 			logg.Fatal("could not parse LIMES_API_REQUEST_LOG_EXCEPT_STATUS_CODES: %s", err.Error())
 		}

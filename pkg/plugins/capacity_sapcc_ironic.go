@@ -31,6 +31,7 @@ import (
 	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/logg"
+
 	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 )
@@ -277,9 +278,13 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 		result2[resourceName] = *data
 	}
 
-	serializedMetrics, _ := json.Marshal(capacitySapccIronicSerializedMetrics{
+	serializedMetrics, err := json.Marshal(capacitySapccIronicSerializedMetrics{
 		UnmatchedNodeCount: unmatchedCounter,
 	})
+	if err != nil {
+		return nil, "", err
+	}
+
 	return map[string]map[string]core.CapacityData{"compute": result2}, string(serializedMetrics), nil
 }
 

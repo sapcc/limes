@@ -27,6 +27,7 @@ import (
 
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
+
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/test"
@@ -50,7 +51,7 @@ func keystoneTestCluster(t *testing.T) *core.Cluster {
 
 func Test_ScanDomains(t *testing.T) {
 	cluster := keystoneTestCluster(t)
-	discovery := cluster.DiscoveryPlugin.(*test.DiscoveryPlugin)
+	discovery := cluster.DiscoveryPlugin.(*test.DiscoveryPlugin) //nolint:errcheck
 
 	//construct expectation for return value
 	var expectedNewDomains []string

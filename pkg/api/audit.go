@@ -35,6 +35,7 @@ import (
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/hermes/pkg/cadf"
+
 	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 )
@@ -122,8 +123,11 @@ func logAndPublishEvent(time time.Time, req *http.Request, token *gopherpolicy.T
 	event := audittools.NewEvent(p)
 
 	if showAuditOnStdout {
-		msg, _ := json.Marshal(event)
-		logg.Other("AUDIT", string(msg))
+		if msg, err := json.Marshal(event); err == nil {
+			logg.Other("AUDIT", string(msg))
+		} else {
+			logg.Error("could not marshal audit event: %s", err.Error())
+		}
 	}
 
 	if eventSink != nil {
