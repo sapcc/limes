@@ -78,7 +78,7 @@ bursting:
 The following fields and sections are supported:
 
 | Field | Required | Description |
-| --- | --- | --- | :--- |
+| --- | --- | --- |
 | `cluster_id` | yes | Must be given for historical reasons. May be chosen freely, but should not be changed afterwards. (It *can* be changed, but that requires a shutdown of all Limes components and manual editing of the database.) |
 | `auth.auth_url` | yes | URL for Keystone v3 API in this cluster. Should end in `/v3`. Other Keystone API versions are not supported (`OS_AUTH_URL`). |
 | `auth.user_name` | yes | Limes service user (`OS_USERNAME`). |
