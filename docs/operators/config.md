@@ -102,6 +102,9 @@ The following fields and sections are supported:
 | `lowpriv_raise` | no | Configuration options for low-privilege quota raising. See [*low-privilege quota raising*](#low-privilege-quota-raising) for details. |
 | `resource_behavior` | no | Configuration options for special resource behaviors. See [*resource behavior*](#resource-behavior) for details. |
 | `bursting.max_multiplier` | no | If given, permits quota bursting in this cluster. When projects enable quota bursting, the backend quota is set to `quota * (1 + max_multiplier)`. In the future, Limes may autonomously adjust the multiplier between 0 and the configured maximum based on cluster-wide resource utilization. |
+| `opa` | no | If given, enables custom validations using the [Open Policy Agent](https://www.openpolicyagent.org/) library. |
+| `opa.project_quota_policy_path` | yes, when `opa` section is given | Path to a Rego file. This policy will be evaluated whenever a user tries to change a project quota. If the policy reports any violations, the PUT will fail and the generated error messages will be reported to the user. See [../example-quota-policy.rego](../example-quota-policy.rego) for an example illustrating the expected structure of the policy. |
+| `opa.domain_quota_policy_path` | yes, when `opa` section is given | Like `opa.project_quota_policy_path`, but this policy is used for validating domain quota changes instead. |
 
 Instead of providing `auth.password` as plain text in the config file, you can use a special syntax to read the
 respective password from an exported environment variable:
