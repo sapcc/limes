@@ -234,7 +234,7 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 
 	// OPA policy handling
 	// skip if no OPA policy was loaded before
-	if u.Cluster.Config.OPA != (core.OPAConfiguration{}) {
+	if u.Cluster.Config.OPA != nil {
 		desiredDomainReport := deepcopy.Copy(domainReport).(*limes.DomainReport)    //nolint:errcheck
 		desiredProjectReport := deepcopy.Copy(projectReport).(*limes.ProjectReport) //nolint:errcheck
 

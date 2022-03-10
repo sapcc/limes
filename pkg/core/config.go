@@ -56,7 +56,7 @@ type ClusterConfiguration struct {
 	Subcapacities        map[string][]string              `yaml:"subcapacities"`
 	Authoritative        bool                             `yaml:"authoritative"`
 	ConstraintConfigPath string                           `yaml:"constraints"`
-	OPA                  OPAConfiguration                 `yaml:"opa"`
+	OPA                  *OPAConfiguration                `yaml:"opa"`
 	CADF                 CADFConfiguration                `yaml:"cadf"`
 	LowPrivilegeRaise    LowPrivilegeRaiseConfiguration   `yaml:"lowpriv_raise"`
 	ResourceBehaviors    []*ResourceBehaviorConfiguration `yaml:"resource_behavior"`

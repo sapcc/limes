@@ -118,13 +118,17 @@ func NewCluster(config ClusterConfiguration) *Cluster {
 
 	sort.Strings(c.ServiceTypes) //determinism is useful for unit tests
 
-	c.Config.SetupOPA(config.OPA.DomainQuotaPolicyPath, config.OPA.ProjectQuotaPolicyPath)
+	c.Config.SetupOPA()
 
 	return c
 }
 
-func (cluster *ClusterConfiguration) SetupOPA(domainFile, projectFile string) {
-	domainModule, err := os.ReadFile(domainFile)
+func (cluster *ClusterConfiguration) SetupOPA() {
+	if cluster.OPA == nil {
+		return
+	}
+
+	domainModule, err := os.ReadFile(cluster.OPA.DomainQuotaPolicyPath)
 	if err != nil {
 		logg.Fatal("loading OPA configuration failed: %s", err)
 	}
@@ -137,7 +141,7 @@ func (cluster *ClusterConfiguration) SetupOPA(domainFile, projectFile string) {
 	}
 	cluster.OPA.DomainQuotaQuery = domainQuery
 
-	projectModule, err := os.ReadFile(projectFile)
+	projectModule, err := os.ReadFile(cluster.OPA.ProjectQuotaPolicyPath)
 	if err != nil {
 		logg.Fatal("loading OPA configuration failed: %s", err)
 	}

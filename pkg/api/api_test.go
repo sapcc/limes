@@ -242,6 +242,9 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 		}
 	}
 
+	//validate that this is a no-op when no OPAConfiguration is provided
+	cluster.Config.SetupOPA()
+
 	router, _ := NewV1Router(cluster, enforcer)
 	return cluster, router, enforcer
 }
@@ -828,7 +831,11 @@ func Test_DomainOperations(t *testing.T) {
 func Test_DomainOPA(t *testing.T) {
 	clusterName, pathtoData := "west", "fixtures/start-data-opa.sql"
 	cluster, router, _ := setupTest(t, clusterName, pathtoData)
-	cluster.Config.SetupOPA("fixtures/limes.rego", "fixtures/limes.rego")
+	cluster.Config.OPA = &core.OPAConfiguration{
+		DomainQuotaPolicyPath:  "fixtures/limes.rego",
+		ProjectQuotaPolicyPath: "fixtures/limes.rego",
+	}
+	cluster.Config.SetupOPA()
 
 	// try if valid operations still work
 	assert.HTTPRequest{
