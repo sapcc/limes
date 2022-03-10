@@ -15,4 +15,6 @@ violations[{"msg": msg, "service": srv.type, "resource": res.name }] {
   res := srv.resources[_]
   res.name == "rbac_policies"
   res.quota != 0
+
+  msg := "only projects called \"network-infra\" may request quota for network/rbac_policies"
 }
