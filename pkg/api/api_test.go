@@ -242,6 +242,9 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 		}
 	}
 
+	//validate that this is a no-op when no OPAConfiguration is provided
+	cluster.Config.SetupOPA()
+
 	router, _ := NewV1Router(cluster, enforcer)
 	return cluster, router, enforcer
 }
@@ -817,6 +820,82 @@ func Test_DomainOperations(t *testing.T) {
 						"resources": []assert.JSONObject{
 							//less than sum(projectQuota), but more than before, so it's okay
 							{"name": "capacity", "quota": 15},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+}
+
+func Test_DomainOPA(t *testing.T) {
+	clusterName, pathtoData := "west", "fixtures/start-data-opa.sql"
+	cluster, router, _ := setupTest(t, clusterName, pathtoData)
+	cluster.Config.OPA = &core.OPAConfiguration{
+		DomainQuotaPolicyPath:  "fixtures/limes.rego",
+		ProjectQuotaPolicyPath: "fixtures/limes.rego",
+	}
+	cluster.Config.SetupOPA()
+
+	// try if valid operations still work
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany",
+		ExpectStatus: 202,
+		ExpectBody:   assert.StringData(""),
+		Body: assert.JSONObject{
+			"domain": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "shared",
+						"resources": []assert.JSONObject{
+							{"name": "capacity", "quota": 30},
+							{"name": "things", "quota": 20},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+
+	// try invalid operations which should trigger a violation
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany",
+		ExpectStatus: 422,
+		ExpectBody:   assert.StringData("cannot change shared/capacity quota: must allocate shared/things quota before\n"),
+		Body: assert.JSONObject{
+			"domain": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "shared",
+						"resources": []assert.JSONObject{
+							{"name": "things", "quota": 0},
+							{"name": "capacity", "quota": 30},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany",
+		ExpectStatus: 422,
+		ExpectBody:   assert.StringData("cannot change shared/capacity quota: must not allocate shared/capacity and unshared/capacity at the same time\n"),
+		Body: assert.JSONObject{
+			"domain": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "shared",
+						"resources": []assert.JSONObject{
+							{"name": "capacity", "quota": 35},
+						},
+					},
+					{
+						"type": "unshared",
+						"resources": []assert.JSONObject{
+							{"name": "capacity", "quota": 35},
 						},
 					},
 				},
