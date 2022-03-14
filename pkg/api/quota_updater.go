@@ -250,7 +250,10 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 			}
 		}
 
-		policyInput := checkPolicyInput{TargetDomainReport: desiredDomainReport}
+		policyInput := checkPolicyInput{
+			TargetDomainReport:  desiredDomainReport,
+			TargetProjectReport: desiredProjectReport,
+		}
 		violations, validationError := u.checkPolicy(policyInput)
 
 		for _, quotaPlugin := range u.Cluster.QuotaPlugins {
