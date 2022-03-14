@@ -858,6 +858,28 @@ func Test_DomainOPA(t *testing.T) {
 		},
 	}.Check(t, router)
 
+	//same as above, but we don't include the "shared/things" quota value in the
+	//request (this is to prove fixing of a bug where all quotas not supplied in
+	//the request were set to 0 in the policy input data)
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany",
+		ExpectStatus: 202,
+		ExpectBody:   assert.StringData(""),
+		Body: assert.JSONObject{
+			"domain": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "shared",
+						"resources": []assert.JSONObject{
+							{"name": "capacity", "quota": 30},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+
 	// try invalid operations which should trigger a violation
 	assert.HTTPRequest{
 		Method:       "PUT",

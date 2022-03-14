@@ -239,21 +239,18 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 		desiredDomainReport := deepcopy.Copy(domainReport).(*limes.DomainReport)    //nolint:errcheck
 		desiredProjectReport := deepcopy.Copy(projectReport).(*limes.ProjectReport) //nolint:errcheck
 
-		var policyInput checkPolicyInput
-		for _, quotaPlugin := range u.Cluster.QuotaPlugins {
-			srv := quotaPlugin.ServiceInfo()
-			for _, res := range quotaPlugin.Resources() {
-				newValue := input[srv.Type].Resources[res.Name].Value
+		for serviceType, requestsForService := range u.ResourceRequests {
+			for resourceName, requestForResource := range requestsForService {
+				newValue := requestForResource.NewValue
 				if u.Project == nil {
-					desiredDomainReport.Services[srv.Type].Resources[res.Name].DomainQuota = &newValue
-					policyInput = checkPolicyInput{TargetDomainReport: desiredDomainReport}
+					desiredDomainReport.Services[serviceType].Resources[resourceName].DomainQuota = &newValue
 				} else {
-					desiredProjectReport.Services[srv.Type].Resources[res.Name].Quota = &newValue
-					policyInput = checkPolicyInput{TargetProjectReport: desiredProjectReport}
+					desiredProjectReport.Services[serviceType].Resources[resourceName].Quota = &newValue
 				}
 			}
 		}
 
+		policyInput := checkPolicyInput{TargetDomainReport: desiredDomainReport}
 		violations, validationError := u.checkPolicy(policyInput)
 
 		for _, quotaPlugin := range u.Cluster.QuotaPlugins {
