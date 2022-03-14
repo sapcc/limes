@@ -583,7 +583,6 @@ above). Returns 200 (OK) on success. Result is a JSON document like:
 ```json
 {
   "inconsistencies": {
-    "cluster_id": "current-cluster",
     "domain_quota_overcommitted": [
       {
         "domain": {

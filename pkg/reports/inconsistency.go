@@ -30,7 +30,6 @@ import (
 //Inconsistencies contains aggregated data about inconsistent quota setups for
 //domains and projects in the current cluster.
 type Inconsistencies struct {
-	ClusterID           string                     `json:"cluster_id"`
 	OvercommittedQuotas []OvercommittedDomainQuota `json:"domain_quota_overcommitted"`
 	OverspentQuotas     []OverspentProjectQuota    `json:"project_quota_overspent"`
 	MismatchQuotas      []MismatchProjectQuota     `json:"project_quota_mismatch"`
@@ -120,10 +119,9 @@ var mmpqReportQuery = db.SimplifyWhitespaceInSQL(`
 func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter) (*Inconsistencies, error) {
 	fields := map[string]interface{}{"d.cluster_id": cluster.ID}
 
-	//Initialize inconsistencies as Inconsistencies type and assign ClusterID.
+	//Initialize inconsistencies as Inconsistencies type.
 	//The inconsistency data will be assigned in the respective SQL queries.
 	inconsistencies := Inconsistencies{
-		ClusterID: cluster.ID,
 		//ensure that empty lists get serialized as `[]` rather than as `null`
 		OvercommittedQuotas: []OvercommittedDomainQuota{},
 		OverspentQuotas:     []OverspentProjectQuota{},
