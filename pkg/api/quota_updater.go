@@ -21,6 +21,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"sort"
@@ -512,6 +513,10 @@ func (u QuotaUpdater) checkPolicy(input checkPolicyInput) ([]map[string]string, 
 		results rego.ResultSet
 		err     error
 	)
+	if logg.ShowDebug {
+		inputJSON, _ := json.Marshal(input) //nolint:errcheck
+		logg.Debug("evaluating OPA query with input = %s", inputJSON)
+	}
 	if input.TargetProjectReport == nil {
 		results, err = u.Cluster.Config.OPA.DomainQuotaQuery.Eval(context.Background(), rego.EvalInput(input))
 	} else {
