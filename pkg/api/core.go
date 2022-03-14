@@ -81,7 +81,7 @@ func NewV1Router(cluster *core.Cluster, policyEnforcer gopherpolicy.Enforcer) (h
 			},
 			{
 				Relation: "describedby",
-				URL:      "https://github.com/sapcc/limes/tree/master/docs",
+				URL:      "https://github.com/sapcc/limes/blob/master/docs/users/api-v1-specification.md",
 				Type:     "text/html",
 			},
 		},
