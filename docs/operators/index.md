@@ -1,6 +1,24 @@
 # Overview
 
-![Architecture diagram](./structure.png)
+```mermaid
+graph LR
+   subgraph limes [Limes Deployment]
+      db[(PostgreSQL Database)]
+      serve(Limes serve)
+      collect(Limes collect)
+   end
+   subgraph OS [OpenStack]
+      otherOS(Nova, Swift, etc.)
+      keystone(Keystone)
+   end
+
+   db --- serve
+   serve -- set quota --> otherOS
+
+   db --- collect
+   collect -- scrape quota, usage, capacity --> otherOS
+   collect -- discover domains/projects --> keystone
+```
 
 Limes consists of two basic services:
 
