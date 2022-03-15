@@ -8,7 +8,6 @@ policy differently, so that certain requests may require other roles or token sc
 
 * [Request headers](#request-headers)
   * [X\-Auth\-Token](#x-auth-token)
-  * [X\-Limes\-Cluster\-Id](#x-limes-cluster-id)
 * [GET /v1/domains/:domain\_id/projects](#get-v1domainsdomain_idprojects)
 * [GET /v1/domains/:domain\_id/projects/:project\_id](#get-v1domainsdomain_idprojectsproject_id)
   * [Quota/usage for resources](#quotausage-for-resources)
@@ -18,8 +17,6 @@ policy differently, so that certain requests may require other roles or token sc
     * [Default rate limits](#default-rate-limits)
 * [GET /v1/domains](#get-v1domains)
 * [GET /v1/domains/:domain\_id](#get-v1domainsdomain_id)
-* [GET /v1/clusters](#get-v1clusters)
-* [GET /v1/clusters/:cluster\_id](#get-v1clusterscluster_id)
 * [GET /v1/clusters/current](#get-v1clusterscurrent)
   * [Subcapacities](#subcapacities)
 * [GET /v1/inconsistencies](#get-v1inconsistencies)
