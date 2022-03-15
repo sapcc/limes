@@ -299,6 +299,50 @@ func Test_EmptyInconsistencyReport(t *testing.T) {
 	}.Check(t, router)
 }
 
+func Test_ScrapeErrorOperations(t *testing.T) {
+	clusterName, pathtoData := "west", "fixtures/start-data.sql"
+	_, router, _ := setupTest(t, clusterName, pathtoData)
+
+	//Add a scrape error to one specific service with type 'unshared'.
+	_, err := db.DB.Exec(`UPDATE project_services SET scrape_error_message = $1 WHERE id = $2 AND type = $3`,
+		"could not scrape this specific unshared service",
+		1, "unshared",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	//Add the same scrape error to all services with type 'shared'. This will ensure that
+	//they get grouped under a dummy project.
+	_, err = db.DB.Exec(`UPDATE project_services SET scrape_error_message = $1 WHERE type = $2`,
+		"could not scrape shared service",
+		"shared",
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	//check ListInconsistencies
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/v1/admin/scrape-errors",
+		ExpectStatus: http.StatusOK,
+		ExpectBody:   assert.JSONFixtureFile("./fixtures/scrape-error-list.json"),
+	}.Check(t, router)
+}
+
+func Test_EmptyScrapeErrorReport(t *testing.T) {
+	_, router, _ := setupTest(t, "cloud", "/dev/null")
+
+	//check ListInconsistencies
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/v1/admin/scrape-errors",
+		ExpectStatus: http.StatusOK,
+		ExpectBody:   assert.JSONFixtureFile("./fixtures/scrape-error-empty.json"),
+	}.Check(t, router)
+}
+
 func Test_ClusterOperations(t *testing.T) {
 	clusterName, pathtoData := "west", "fixtures/start-data.sql"
 	cluster, router, _ := setupTest(t, clusterName, pathtoData)

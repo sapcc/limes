@@ -95,6 +95,8 @@ func NewV1Router(cluster *core.Cluster, policyEnforcer gopherpolicy.Enforcer) (h
 
 	r.Methods("GET").Path("/v1/inconsistencies").HandlerFunc(p.ListInconsistencies)
 
+	r.Methods("GET").Path("/v1/admin/scrape-errors").HandlerFunc(p.ListScrapeErrors)
+
 	r.Methods("GET").Path("/v1/domains").HandlerFunc(p.ListDomains)
 	r.Methods("GET").Path("/v1/domains/{domain_id}").HandlerFunc(p.GetDomain)
 	r.Methods("POST").Path("/v1/domains/discover").HandlerFunc(p.DiscoverDomains)

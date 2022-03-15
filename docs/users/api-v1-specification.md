@@ -820,3 +820,46 @@ above). Returns 200 (OK) on success. Result is a JSON document like:
 Each entry in those three lists concerns exactly one resource in one project or domain. If multiple resources in the
 same project are inconsistent, they will appear as multiple entries. Like in the example above, the same project and
 resource may appear in both `project_quota_overspent` and `project_quota_mismatch` if `quota < usage < backend_quota`.
+
+## GET /v1/admin/scrape-errors
+
+Shows information about project scrape errors. This is intended to give operators a view
+of scrape errors for all services across all projects.
+
+In order to avoid excessively large responses, identical scrape errors for multiple
+project services of the same type will be grouped into one item with a dummy project ID.
+
+Returns 200 (OK) on success. Result is a JSON document like:
+
+```json
+{
+  "scrape_errors": [
+    {
+      "project": {
+        "id": "8ad3bf54-2401-435e-88ad-e80fbf984c19",
+        "name": "example-project",
+        "domain": {
+          "id": "d5fbe312-1f48-42ef-a36e-484659784aa0",
+          "name": "example-domain"
+        }
+      },
+      "service_type": "object-store",
+      "checked_at": 1486738599,
+      "message": "could not scrape object-store due to some issue"
+    },
+    {
+      "project": {
+        "id": "uuid-for-dummy-project",
+        "name": "dummy-project",
+        "domain": {
+          "id": "uuid-for-dummy-domain",
+          "name": "dummy-domain"
+        }
+      },
+      "service_type": "compute",
+      "checked_at": 1486738599,
+      "message": "json: cannot unmarshal number into Go struct field"
+    }
+  ]
+}
+```
