@@ -55,8 +55,7 @@ type ScrapeError struct {
 func GetScrapeErrors(cluster *core.Cluster, dbi db.Interface, filter Filter) ([]ScrapeError, error) {
 	fields := map[string]interface{}{"d.cluster_id": cluster.ID}
 
-	//Ensure that empty list gets serialized as `[]` rather than as `null`.
-	result := []ScrapeError{}
+	var result []ScrapeError
 	queryStr, joinArgs := filter.PrepareQuery(scrapeErrorsQuery)
 	whereStr, whereArgs := db.BuildSimpleWhereClause(fields, len(joinArgs))
 	err := db.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
@@ -80,6 +79,11 @@ func GetScrapeErrors(cluster *core.Cluster, dbi db.Interface, filter Filter) ([]
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	if len(result) == 0 {
+		//Ensure that empty list gets serialized as `[]` rather than as `null`.
+		return []ScrapeError{}, nil
 	}
 
 	//To avoid excessively large responses, we group identical scrape errors for multiple
