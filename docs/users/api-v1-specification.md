@@ -27,6 +27,8 @@ policy differently, so that certain requests may require other roles or token sc
 * [POST /v1/domains/:domain\_id/projects/discover](#post-v1domainsdomain_idprojectsdiscover)
 * [POST /v1/domains/:domain\_id/projects/:project\_id/sync](#post-v1domainsdomain_idprojectsproject_idsync)
 * [GET /v1/inconsistencies](#get-v1inconsistencies)
+* [GET /v1/admin/scrape\-errors](#get-v1adminscrape-errors)
+* [GET /v1/admin/rate\-scrape\-errors](#get-v1adminrate-scrape-errors)
 
 ---
 
@@ -823,7 +825,7 @@ resource may appear in both `project_quota_overspent` and `project_quota_mismatc
 
 ## GET /v1/admin/scrape-errors
 
-Shows information about project scrape errors. This is intended to give operators a view
+Requires a cloud-admin token. Shows information about project scrape errors. This is intended to give operators a view
 of scrape errors for all services across all projects.
 
 In order to avoid excessively large responses, identical scrape errors for multiple
@@ -834,6 +836,50 @@ Returns 200 (OK) on success. Result is a JSON document like:
 ```json
 {
   "scrape_errors": [
+    {
+      "project": {
+        "id": "8ad3bf54-2401-435e-88ad-e80fbf984c19",
+        "name": "example-project",
+        "domain": {
+          "id": "d5fbe312-1f48-42ef-a36e-484659784aa0",
+          "name": "example-domain"
+        }
+      },
+      "service_type": "object-store",
+      "checked_at": 1486738599,
+      "message": "could not scrape object-store due to some issue"
+    },
+    {
+      "project": {
+        "id": "uuid-for-dummy-project",
+        "name": "dummy-project",
+        "domain": {
+          "id": "uuid-for-dummy-domain",
+          "name": "dummy-domain"
+        }
+      },
+      "service_type": "compute",
+      "checked_at": 1486738599,
+      "message": "json: cannot unmarshal number into Go struct field"
+    }
+  ]
+}
+```
+
+## GET /v1/admin/rate-scrape-errors
+
+Requires a cloud-admin token. Shows information about project rate data scrape errors.
+This is intended to give operators a view of rate data scrape errors for all services
+across all projects.
+
+In order to avoid excessively large responses, identical scrape errors for multiple
+project services of the same type will be grouped into one item with a dummy project ID.
+
+Returns 200 (OK) on success. Result is a JSON document like:
+
+```json
+{
+  "rate_scrape_errors": [
     {
       "project": {
         "id": "8ad3bf54-2401-435e-88ad-e80fbf984c19",

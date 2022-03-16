@@ -1,0 +1,30 @@
+{
+  "rate_scrape_errors": [
+    {
+      "project": {
+        "id": "uuid-for-dummy-project",
+        "name": "dummy-project",
+        "domain": {
+          "id": "uuid-for-dummy-domain",
+          "name": "dummy-domain"
+        }
+      },
+      "service_type": "shared",
+      "checked_at": 45,
+      "message": "could not scrape rate data for shared service"
+    },
+    {
+      "project": {
+        "id": "uuid-for-berlin",
+        "name": "berlin",
+        "domain": {
+          "id": "uuid-for-germany",
+          "name": "germany"
+        }
+      },
+      "service_type": "unshared",
+      "checked_at": 12,
+      "message": "could not scrape rate data for this specific unshared service"
+    }
+  ]
+}

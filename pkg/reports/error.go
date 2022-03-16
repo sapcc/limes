@@ -22,6 +22,7 @@ package reports
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/sapcc/limes/pkg/core"
@@ -53,10 +54,20 @@ type ScrapeError struct {
 }
 
 func GetScrapeErrors(cluster *core.Cluster, dbi db.Interface, filter Filter) ([]ScrapeError, error) {
+	return getScrapeErrors(cluster, dbi, filter, scrapeErrorsQuery)
+}
+
+func GetRateScrapeErrors(cluster *core.Cluster, dbi db.Interface, filter Filter) ([]ScrapeError, error) {
+	dbQuery := strings.ReplaceAll(scrapeErrorsQuery, "scrape_error_message", "rates_scrape_error_message")
+	dbQuery = strings.ReplaceAll(dbQuery, "checked_at", "rates_checked_at")
+	return getScrapeErrors(cluster, dbi, filter, dbQuery)
+}
+
+func getScrapeErrors(cluster *core.Cluster, dbi db.Interface, filter Filter, dbQuery string) ([]ScrapeError, error) {
 	fields := map[string]interface{}{"d.cluster_id": cluster.ID}
 
 	var result []ScrapeError
-	queryStr, joinArgs := filter.PrepareQuery(scrapeErrorsQuery)
+	queryStr, joinArgs := filter.PrepareQuery(dbQuery)
 	whereStr, whereArgs := db.BuildSimpleWhereClause(fields, len(joinArgs))
 	err := db.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		sErr := ScrapeError{}
