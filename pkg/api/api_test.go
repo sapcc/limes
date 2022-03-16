@@ -322,7 +322,7 @@ func Test_ScrapeErrorOperations(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	//check ListInconsistencies
+	//check ListScrapeErrors
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/admin/scrape-errors",
@@ -334,7 +334,7 @@ func Test_ScrapeErrorOperations(t *testing.T) {
 func Test_EmptyScrapeErrorReport(t *testing.T) {
 	_, router, _ := setupTest(t, "cloud", "/dev/null")
 
-	//check ListInconsistencies
+	//check ListScrapeErrors
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/admin/scrape-errors",
@@ -366,7 +366,7 @@ func Test_RateScrapeErrorOperations(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	//check ListInconsistencies
+	//check ListRateScrapeErrors
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/admin/rate-scrape-errors",
@@ -378,7 +378,7 @@ func Test_RateScrapeErrorOperations(t *testing.T) {
 func Test_EmptyRateScrapeErrorReport(t *testing.T) {
 	_, router, _ := setupTest(t, "cloud", "/dev/null")
 
-	//check ListInconsistencies
+	//check ListRateScrapeErrors
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/admin/rate-scrape-errors",
