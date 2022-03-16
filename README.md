@@ -47,7 +47,6 @@ all levels of the hierarchy.
 
 ## For developers
 
-* [Developer's guide](./docs/developers/guide.md)
-* [Code structure overview](./docs/developers/code-overview.md)
+* [Developer's guide](./CONTRIBUTING.md)
 
 [wp-limes]: https://en.wikipedia.org/wiki/Limes
