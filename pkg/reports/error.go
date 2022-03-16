@@ -22,6 +22,7 @@ package reports
 import (
 	"database/sql"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -122,6 +123,17 @@ func getScrapeErrors(cluster *core.Cluster, dbi db.Interface, filter Filter, dbQ
 			new = append(new, sErr)
 		}
 	}
+	//Deterministic ordering for unit tests
+	sort.Slice(new, func(i, j int) bool {
+		srvType1 := new[i].ServiceType
+		srvType2 := new[j].ServiceType
+		if srvType1 != srvType2 {
+			return srvType1 < srvType2
+		}
+		pID1 := new[i].Project.ID
+		pID2 := new[i].Project.ID
+		return pID1 < pID2
+	})
 	result = new
 
 	return result, nil
