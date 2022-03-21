@@ -24,6 +24,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"net/http"
 	"strings"
 	"sync"
@@ -175,7 +176,7 @@ func (p *v1Provider) FindProjectFromRequest(w http.ResponseWriter, r *http.Reque
 	if ok && project == nil {
 		msg := fmt.Sprintf(
 			"no such project (if it was just created, try to POST /domains/%s/projects/discover)",
-			mux.Vars(r)["domain_id"],
+			html.EscapeString(mux.Vars(r)["domain_id"]),
 		)
 		http.Error(w, msg, 404)
 		return nil
