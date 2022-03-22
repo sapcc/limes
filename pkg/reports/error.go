@@ -48,9 +48,10 @@ type ScrapeError struct {
 			Name string `json:"name"`
 		} `json:"domain"`
 	} `json:"project"`
-	ServiceType string `json:"service_type"`
-	CheckedAt   *int64 `json:"checked_at"`
-	Message     string `json:"message"`
+	AffectedProjects int    `json:"affected_projects,omitempty"`
+	ServiceType      string `json:"service_type"`
+	CheckedAt        *int64 `json:"checked_at"`
+	Message          string `json:"message"`
 }
 
 func GetScrapeErrors(cluster *core.Cluster, dbi db.Interface, filter Filter) ([]ScrapeError, error) {
@@ -70,7 +71,7 @@ func getScrapeErrors(cluster *core.Cluster, dbi db.Interface, filter Filter, dbQ
 	queryStr, joinArgs := filter.PrepareQuery(dbQuery)
 	whereStr, whereArgs := db.BuildSimpleWhereClause(fields, len(joinArgs))
 	err := db.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
-		sErr := ScrapeError{}
+		var sErr ScrapeError
 		var checkedAtAsTime *time.Time
 		err := rows.Scan(
 			&sErr.Project.Domain.ID, &sErr.Project.Domain.Name, &sErr.Project.ID,
@@ -98,27 +99,27 @@ func getScrapeErrors(cluster *core.Cluster, dbi db.Interface, filter Filter, dbQ
 	}
 
 	//To avoid excessively large responses, we group identical scrape errors for multiple
-	//project services of the same type into one item with a dummy project ID.
+	//project services of the same type into one item.
 	uniqueErrors := make(map[string]map[string]ScrapeError) //map[serviceType]map[Message]ScrapeError
 	for _, v := range result {
-		if _, found := uniqueErrors[v.ServiceType][v.Message]; found {
-			if v.Project.Name == "dummy-project" {
-				continue
-			}
-			v.Project.ID = "uuid-for-dummy-project"
-			v.Project.Name = "dummy-project"
-			v.Project.Domain.ID = "uuid-for-dummy-domain"
-			v.Project.Domain.Name = "dummy-domain"
+		if vFromMap, found := uniqueErrors[v.ServiceType][v.Message]; found {
+			//Use the value from map so we can preserve AffectedProject count.
+			v = vFromMap
 		}
-
 		if _, ok := uniqueErrors[v.ServiceType]; !ok {
 			uniqueErrors[v.ServiceType] = make(map[string]ScrapeError)
 		}
+		v.AffectedProjects++
 		uniqueErrors[v.ServiceType][v.Message] = v
 	}
 	var new []ScrapeError
 	for _, errMsgs := range uniqueErrors {
 		for _, sErr := range errMsgs {
+			if sErr.AffectedProjects == 1 {
+				//If only one project is affected then set to 0 so that this field can
+				//omitted in JSON response.
+				sErr.AffectedProjects = 0
+			}
 			new = append(new, sErr)
 		}
 	}

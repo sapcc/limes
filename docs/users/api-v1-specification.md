@@ -829,7 +829,9 @@ Requires a cloud-admin token. Shows information about project scrape errors. Thi
 of scrape errors for all services across all projects.
 
 In order to avoid excessively large responses, identical scrape errors for multiple
-project services of the same type will be grouped into one item with a dummy project ID.
+project services of the same type will be grouped into one item and an additional field
+will be included in the response, `affected_projects`, which will reflect the number of
+projects affected by this particular scrape issue.
 
 Returns 200 (OK) on success. Result is a JSON document like:
 
@@ -851,13 +853,14 @@ Returns 200 (OK) on success. Result is a JSON document like:
     },
     {
       "project": {
-        "id": "uuid-for-dummy-project",
-        "name": "dummy-project",
+        "id": "8ad3bf54-2401-435e-88ad-e80fbf984c19",
+        "name": "example-project-2",
         "domain": {
-          "id": "uuid-for-dummy-domain",
-          "name": "dummy-domain"
+          "id": "d5fbe312-1f48-42ef-a36e-484659784aa0",
+          "name": "example-domain"
         }
       },
+      "affected_projects": 2,
       "service_type": "compute",
       "checked_at": 1486738599,
       "message": "json: cannot unmarshal number into Go struct field"
@@ -873,7 +876,9 @@ This is intended to give operators a view of rate data scrape errors for all ser
 across all projects.
 
 In order to avoid excessively large responses, identical scrape errors for multiple
-project services of the same type will be grouped into one item with a dummy project ID.
+project services of the same type will be grouped into one item and an additional field
+will be included in the response, `affected_projects`, which will reflect the number of
+projects affected by this particular scrape issue.
 
 Returns 200 (OK) on success. Result is a JSON document like:
 
@@ -895,13 +900,14 @@ Returns 200 (OK) on success. Result is a JSON document like:
     },
     {
       "project": {
-        "id": "uuid-for-dummy-project",
-        "name": "dummy-project",
+        "id": "8ad3bf54-2401-435e-88ad-e80fbf984c19",
+        "name": "example-project-2",
         "domain": {
-          "id": "uuid-for-dummy-domain",
-          "name": "dummy-domain"
+          "id": "d5fbe312-1f48-42ef-a36e-484659784aa0",
+          "name": "example-domain"
         }
       },
+      "affected_projects": 2,
       "service_type": "compute",
       "checked_at": 1486738599,
       "message": "json: cannot unmarshal number into Go struct field"

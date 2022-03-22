@@ -2,15 +2,16 @@
   "scrape_errors": [
     {
       "project": {
-        "id": "uuid-for-dummy-project",
-        "name": "dummy-project",
+        "id": "uuid-for-paris",
+        "name": "paris",
         "domain": {
-          "id": "uuid-for-dummy-domain",
-          "name": "dummy-domain"
+          "id": "uuid-for-france",
+          "name": "france"
         }
       },
+      "affected_projects": 3,
       "service_type": "shared",
-      "checked_at": 44,
+      "checked_at": 66,
       "message": "could not scrape shared service"
     },
     {
