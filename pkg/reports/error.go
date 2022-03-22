@@ -33,10 +33,9 @@ import (
 var scrapeErrorsQuery = db.SimplifyWhitespaceInSQL(`
 	SELECT d.uuid, d.name, p.uuid, p.name, ps.type, ps.checked_at, ps.scrape_error_message
 	  FROM projects p
-	  LEFT OUTER JOIN domains d ON d.id = p.domain_id
-	  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id
-	WHERE %s GROUP BY d.uuid, d.name, p.uuid, p.name, ps.type, ps.checked_at, ps.scrape_error_message
-	HAVING ps.scrape_error_message != ''
+	  JOIN domains d ON d.id = p.domain_id
+	  JOIN project_services ps ON ps.project_id = p.id
+	WHERE %s AND ps.scrape_error_message != ''
 	ORDER BY d.name, p.name, ps.type, ps.scrape_error_message
 `)
 
