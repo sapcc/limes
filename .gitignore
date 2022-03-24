@@ -8,5 +8,7 @@ testing/postgres*
 # custom configuration files used during development
 /*.yaml
 /*.yml
+/*.envrc
+/*.env
 !Makefile.maker.yaml
 !.golangci.yaml

@@ -82,7 +82,7 @@ func NewV1Router(cluster *core.Cluster, policyEnforcer gopherpolicy.Enforcer) (h
 			},
 			{
 				Relation: "describedby",
-				URL:      "https://github.com/sapcc/limes/tree/master/docs",
+				URL:      "https://github.com/sapcc/limes/blob/master/docs/users/api-v1-specification.md",
 				Type:     "text/html",
 			},
 		},
@@ -95,6 +95,9 @@ func NewV1Router(cluster *core.Cluster, policyEnforcer gopherpolicy.Enforcer) (h
 	r.Methods("GET").Path("/v1/clusters/current").HandlerFunc(p.GetCluster)
 
 	r.Methods("GET").Path("/v1/inconsistencies").HandlerFunc(p.ListInconsistencies)
+
+	r.Methods("GET").Path("/v1/admin/scrape-errors").HandlerFunc(p.ListScrapeErrors)
+	r.Methods("GET").Path("/v1/admin/rate-scrape-errors").HandlerFunc(p.ListRateScrapeErrors)
 
 	r.Methods("GET").Path("/v1/domains").HandlerFunc(p.ListDomains)
 	r.Methods("GET").Path("/v1/domains/{domain_id}").HandlerFunc(p.GetDomain)

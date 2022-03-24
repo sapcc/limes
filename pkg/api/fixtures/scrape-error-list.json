@@ -1,0 +1,31 @@
+{
+  "scrape_errors": [
+    {
+      "project": {
+        "id": "uuid-for-paris",
+        "name": "paris",
+        "domain": {
+          "id": "uuid-for-france",
+          "name": "france"
+        }
+      },
+      "affected_projects": 3,
+      "service_type": "shared",
+      "checked_at": 66,
+      "message": "could not scrape shared service"
+    },
+    {
+      "project": {
+        "id": "uuid-for-berlin",
+        "name": "berlin",
+        "domain": {
+          "id": "uuid-for-germany",
+          "name": "germany"
+        }
+      },
+      "service_type": "unshared",
+      "checked_at": 11,
+      "message": "could not scrape this specific unshared service"
+    }
+  ]
+}
