@@ -33,7 +33,7 @@ import (
 func (p *v1Provider) ListScrapeErrors(w http.ResponseWriter, r *http.Request) {
 	sre.IdentifyEndpoint(r, "/v1/admin/scrape-errors")
 	token := p.CheckToken(r)
-	if !token.Require(w, "cluster:show") {
+	if !token.Require(w, "cluster:show_errors") {
 		return
 	}
 
@@ -49,7 +49,7 @@ func (p *v1Provider) ListScrapeErrors(w http.ResponseWriter, r *http.Request) {
 func (p *v1Provider) ListRateScrapeErrors(w http.ResponseWriter, r *http.Request) {
 	sre.IdentifyEndpoint(r, "/v1/admin/rate-scrape-errors")
 	token := p.CheckToken(r)
-	if !token.Require(w, "cluster:show") {
+	if !token.Require(w, "cluster:show_errors") {
 		return
 	}
 
