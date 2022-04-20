@@ -16,7 +16,7 @@ require (
 	github.com/rs/cors v1.8.2
 	github.com/sapcc/go-bits v0.0.0-20220223123017-b00971956813
 	github.com/sapcc/hermes v0.0.0-20220216215340-12b4f661924a
-	golang.org/x/net v0.0.0-20220127200216-cd36cc0744dd
+	golang.org/x/net v0.0.0-20220418201149-a630d4f3e7a2
 	gopkg.in/gorp.v2 v2.2.0
 	gopkg.in/yaml.v2 v2.4.0
 )
