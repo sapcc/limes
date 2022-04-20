@@ -384,8 +384,8 @@ github.com/sapcc/go-bits v0.0.0-20190910095551-3863bd6b4943/go.mod h1:YpW83RbRSH
 github.com/sapcc/go-bits v0.0.0-20220420152706-c002200421a4 h1:7OKHVOxzgxURq1tKFZudmKRRZvEDT+VJ0LTleHWdeaU=
 github.com/sapcc/go-bits v0.0.0-20220420152706-c002200421a4/go.mod h1:uXnK2L4Ll1M3Ne4g1SPQsflodHbgevVruP8fuF3AqF8=
 github.com/sapcc/hermes v0.0.0-20190722215605-d772f40f9fc6/go.mod h1:WM5CVlqFCGM+AUE7lQgkLmPE89PWqJS3i+oRXaSztR8=
-github.com/sapcc/hermes v0.0.0-20220216215340-12b4f661924a h1:eugynT9mfMvVlEqt+EF3IlP2wC8OXSAfyPEjliP3vxs=
-github.com/sapcc/hermes v0.0.0-20220216215340-12b4f661924a/go.mod h1:1fxCUJjYnq0n63o61aXG+5G1oCKApPb667aiGawNvHQ=
+github.com/sapcc/hermes v0.0.0-20220420153120-c379b6e9ec52 h1:m8cuKhbIntjHXHsyKGP5QTAGwPwx+a/F3Uj/PWB02U0=
+github.com/sapcc/hermes v0.0.0-20220420153120-c379b6e9ec52/go.mod h1:1fxCUJjYnq0n63o61aXG+5G1oCKApPb667aiGawNvHQ=
 github.com/sergi/go-diff v1.2.0 h1:XU+rvMAioB0UC3q1MFrIQy4Vo5/4VsRDQQXHsEya6xQ=
 github.com/sergi/go-diff v1.2.0/go.mod h1:STckp+ISIX8hZLjrqAeVduY0gWCT9IjLuqbuNXdaHfM=
 github.com/shurcooL/sanitized_anchor_name v1.0.0/go.mod h1:1NzhyTcUVG4SuEtjjoZeVRXNmyL/1OwPU0+IJeTBvfc=
