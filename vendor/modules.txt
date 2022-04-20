@@ -228,7 +228,7 @@ github.com/sapcc/go-bits/logg
 github.com/sapcc/go-bits/respondwith
 github.com/sapcc/go-bits/secrets
 github.com/sapcc/go-bits/sre
-# github.com/sapcc/hermes v0.0.0-20220420153120-c379b6e9ec52
+# github.com/sapcc/hermes v0.0.0-20220420171133-3c3173acbc6e
 ## explicit; go 1.13
 github.com/sapcc/hermes/pkg/cadf
 # github.com/sergi/go-diff v1.2.0
