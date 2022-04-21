@@ -26,7 +26,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sapcc/limes"
+	"github.com/sapcc/go-api-declarations/limes"
+
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
 )
@@ -206,7 +207,7 @@ func GetCluster(cluster *core.Cluster, dbi db.Interface, filter Filter) (*limes.
 					resource.Capacity = &capacity
 				}
 				if subcapacities != nil && *subcapacities != "" && filter.IsSubcapacityAllowed(serviceType, *resourceName) {
-					resource.Subcapacities = limes.JSONString(*subcapacities)
+					resource.Subcapacities = json.RawMessage(*subcapacities)
 				}
 				if capacityPerAZ != nil && *capacityPerAZ != "" {
 					azReports, err := getClusterAZReports(*capacityPerAZ, overcommitFactor)

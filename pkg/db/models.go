@@ -22,7 +22,7 @@ package db
 import (
 	"time"
 
-	"github.com/sapcc/limes"
+	"github.com/sapcc/go-api-declarations/limes"
 )
 
 //ClusterCapacitor contains a record from the `cluster_capacitors` table.

@@ -30,11 +30,11 @@ import (
 	"sync"
 
 	"github.com/gorilla/mux"
+	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sre"
 
-	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/reports"

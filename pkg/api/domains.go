@@ -25,11 +25,11 @@ import (
 
 	gorp "gopkg.in/gorp.v2"
 
+	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sre"
 
-	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/collector"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/reports"

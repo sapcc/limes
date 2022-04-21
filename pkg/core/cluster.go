@@ -30,9 +30,8 @@ import (
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/open-policy-agent/opa/rego"
+	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/logg"
-
-	"github.com/sapcc/limes"
 )
 
 //Cluster contains all configuration and runtime information about a single

@@ -57,7 +57,7 @@ type ClusterResourceReport struct {
 	Usage         uint64                         `json:"usage"`
 	BurstUsage    uint64                         `json:"burst_usage,omitempty"`
 	PhysicalUsage *uint64                        `json:"physical_usage,omitempty"`
-	Subcapacities JSONString                     `json:"subcapacities,omitempty"`
+	Subcapacities json.RawMessage                `json:"subcapacities,omitempty"`
 }
 
 //ClusterAvailabilityZoneReport is a substructure of ClusterResourceReport containing

@@ -26,10 +26,10 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/logg"
 	"gopkg.in/gorp.v2"
 
-	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/util"

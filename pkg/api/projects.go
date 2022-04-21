@@ -29,12 +29,12 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sre"
 	gorp "gopkg.in/gorp.v2"
 
-	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/collector"
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/datamodel"

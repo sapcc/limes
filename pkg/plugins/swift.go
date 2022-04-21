@@ -30,9 +30,9 @@ import (
 	"github.com/majewsky/schwift"
 	"github.com/majewsky/schwift/gopherschwift"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/logg"
 
-	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 )
 

@@ -29,9 +29,9 @@ import (
 	octavia_quotas "github.com/gophercloud/gophercloud/openstack/loadbalancer/v2/quotas"
 	neutron_quotas "github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/quotas"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/logg"
 
-	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 )
 

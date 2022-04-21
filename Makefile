@@ -21,7 +21,7 @@ GO_TESTENV =
 build-all: build/limes
 
 build/limes: FORCE
-	go build $(GO_BUILDFLAGS) -ldflags '-s -w $(GO_LDFLAGS)' -o build/limes ./cmd/limes
+	go build $(GO_BUILDFLAGS) -ldflags '-s -w $(GO_LDFLAGS)' -o build/limes .
 
 DESTDIR =
 ifeq ($(shell uname -s),Darwin)

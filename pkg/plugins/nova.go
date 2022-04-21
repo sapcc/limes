@@ -41,9 +41,9 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/imageservice/v2/images"
 	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/logg"
 
-	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/util"
 )

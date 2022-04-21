@@ -25,7 +25,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/sapcc/limes"
+	"github.com/sapcc/go-api-declarations/limes"
+
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
 )

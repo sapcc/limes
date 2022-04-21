@@ -19,7 +19,7 @@
 
 package core
 
-import "github.com/sapcc/limes"
+import "github.com/sapcc/go-api-declarations/limes"
 
 //ConvertUnitFor works like ConvertTo, but instead of taking a unit as an
 //argument, it uses the native unit of the specified resource. In contrast to

@@ -12,6 +12,5 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//Package limes contains data structures used by Limes that are also exported to
-//other applications that consume the Limes API.
+//Package limes contains data structures that appear on the Limes API.
 package limes

@@ -30,8 +30,8 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v2/volumes"
 	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sapcc/go-api-declarations/limes"
 
-	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 )
 

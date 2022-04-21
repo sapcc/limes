@@ -62,7 +62,7 @@ type ProjectResourceReport struct {
 	BurstUsage    uint64           `json:"burst_usage,omitempty"`
 	PhysicalUsage *uint64          `json:"physical_usage,omitempty"`
 	BackendQuota  *int64           `json:"backend_quota,omitempty"`
-	Subresources  JSONString       `json:"subresources,omitempty"`
+	Subresources  json.RawMessage  `json:"subresources,omitempty"`
 	Scaling       *ScalingBehavior `json:"scales_with,omitempty"`
 	//Annotations may contain arbitrary metadata that was configured for this
 	//resource in this scope by Limes' operator.

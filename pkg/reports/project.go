@@ -21,12 +21,14 @@ package reports
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
 	"time"
 
-	"github.com/sapcc/limes"
+	"github.com/sapcc/go-api-declarations/limes"
+
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
 )
@@ -232,7 +234,7 @@ func GetProjects(cluster *core.Cluster, domain db.Domain, project *db.Project, d
 				}
 				resReport.PhysicalUsage = physicalUsage
 				resReport.BackendQuota = nil //See below.
-				resReport.Subresources = limes.JSONString(subresourcesValue)
+				resReport.Subresources = json.RawMessage(subresourcesValue)
 
 				behavior := cluster.BehaviorForResource(*serviceType, *resourceName, domain.Name+"/"+projectName)
 				resReport.Scaling = behavior.ToScalingBehavior()

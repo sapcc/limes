@@ -2,7 +2,7 @@
 
 binaries:
   - name:        limes
-    fromPackage: ./cmd/limes
+    fromPackage: .
     installTo:   bin/
 
 coverageTest:

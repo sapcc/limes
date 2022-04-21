@@ -31,11 +31,11 @@ import (
 	"github.com/mohae/deepcopy"
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/respondwith"
 
-	"github.com/sapcc/limes"
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/reports"

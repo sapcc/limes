@@ -27,11 +27,10 @@ import (
 	"strings"
 
 	"github.com/open-policy-agent/opa/rego"
+	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/secrets"
 	yaml "gopkg.in/yaml.v2"
-
-	"github.com/sapcc/limes"
 )
 
 type OPAConfiguration struct {
