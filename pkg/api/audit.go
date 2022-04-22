@@ -31,11 +31,11 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sapcc/go-api-declarations/cadf"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/audittools"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/logg"
-	"github.com/sapcc/hermes/pkg/cadf"
 
 	"github.com/sapcc/limes/pkg/core"
 )
@@ -108,7 +108,7 @@ func logAndPublishEvent(time time.Time, req *http.Request, token *gopherpolicy.T
 		Request:    req,
 		User:       token,
 		ReasonCode: reasonCode,
-		Action:     "update",
+		Action:     cadf.UpdateAction,
 		Observer: struct {
 			TypeURI string
 			Name    string
