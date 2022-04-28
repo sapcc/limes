@@ -111,6 +111,8 @@ func NewV1Router(cluster *core.Cluster, policyEnforcer gopherpolicy.Enforcer) (h
 	r.Methods("POST").Path("/v1/domains/{domain_id}/projects/{project_id}/sync").HandlerFunc(p.SyncProject)
 	r.Methods("POST").Path("/v1/domains/{domain_id}/projects/{project_id}/simulate-put").HandlerFunc(p.SimulatePutProject)
 	r.Methods("PUT").Path("/v1/domains/{domain_id}/projects/{project_id}").HandlerFunc(p.PutProject)
+	r.Methods("GET").Path("/rates/v1/domains/{domain_id}/projects").HandlerFunc(p.ListProjectRates)
+	r.Methods("GET").Path("/rates/v1/domains/{domain_id}/projects/{project_id}").HandlerFunc(p.GetProjectRates)
 
 	return sre.Instrument(forbidClusterIDHeader(r)), p.VersionData
 }

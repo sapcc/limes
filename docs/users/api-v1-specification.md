@@ -391,6 +391,9 @@ projects in that token's domain. With project member permission, shows that toke
   Use `rates=only` to only list rates (instead of resources).
   When combined with `?service=`, limit query to these rates (e.g. `?service=compute&rates`). May be given multiple times.
 
+  **Warning:** Usage of `?rates` on these endpoints is deprecated. Use the new
+  `GET /rates/v1/domains/:domain_id/projects` and `GET /rates/v1/domains/:domain_id/projects/:project_id` endpoints instead.
+
 Returns 200 (OK) on success. Result is a JSON document like:
 
 ```json
@@ -760,6 +763,12 @@ Returns 200 (OK) on success. Result is a JSON document like:
   }
 }
 ```
+
+## GET /rates/v1/domains/:domain\_id/projects
+## GET /rates/v1/domains/:domain\_id/projects/:project\_id
+
+Same behavior as the respective endpoints without the `/rates` prefix, but always implies `?rates=only` and therefore
+shows only rate data. Specifiying the `rates` query parameter explicitly is an error.
 
 ## GET /v1/inconsistencies
 

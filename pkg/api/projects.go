@@ -55,17 +55,21 @@ func (p *v1Provider) ListProjects(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	filter := reports.ReadFilter(r)
+	if filter.WithRates {
+		logg.Info("rate data on resource endpoint is deprecated: GET %s by user %s@%s with UA %q requests WithRates = true, OnlyRates = %t", r.URL.Path, token.UserName(), token.UserDomainName(), r.Header.Get("User-Agent"), filter.OnlyRates)
+	}
+
+	p.doListProjects(w, r, dbDomain, filter)
+}
+
+func (p *v1Provider) doListProjects(w http.ResponseWriter, r *http.Request, dbDomain *db.Domain, filter reports.Filter) {
 	//This endpoints can generate reports so large, we shouldn't be rendering
 	//more than one at the same time in order to keep our memory usage in check.
 	//(For example, a full project list with all resources for a domain with 2000
 	//projects runs as large as 160 MiB for the pure JSON.)
 	p.listProjectsMutex.Lock()
 	defer p.listProjectsMutex.Unlock()
-
-	filter := reports.ReadFilter(r)
-	if filter.WithRates {
-		logg.Info("rate data on resource endpoint is deprecated: GET %s by user %s@%s with UA %q requests WithRates = true, OnlyRates = %t", r.URL.Path, token.UserName(), token.UserDomainName(), r.Header.Get("User-Agent"), filter.OnlyRates)
-	}
 
 	//We do not wait for the entire response body JSON to be compiled before
 	//sending it out because the JSON can grow to several 100 MiB for large

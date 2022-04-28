@@ -24,6 +24,7 @@ import (
 
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sre"
+
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/reports"
 )
@@ -50,4 +51,60 @@ func (p *v1Provider) GetClusterRates(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respondwith.JSON(w, 200, map[string]interface{}{"cluster": cluster})
+}
+
+//ListProjectRates handles GET /rates/v1/domains/:domain_id/projects.
+func (p *v1Provider) ListProjectRates(w http.ResponseWriter, r *http.Request) {
+	sre.IdentifyEndpoint(r, "/rates/v1/domains/:id/projects")
+	token := p.CheckToken(r)
+	if !token.Require(w, "project:list") {
+		return
+	}
+	dbDomain := p.FindDomainFromRequest(w, r)
+	if dbDomain == nil {
+		return
+	}
+
+	if _, ok := r.URL.Query()["rates"]; ok {
+		http.Error(w, "the `rates` query parameter is not allowed here", http.StatusBadRequest)
+		return
+	}
+
+	filter := reports.ReadFilter(r)
+	filter.WithRates = true
+	filter.OnlyRates = true
+
+	p.doListProjects(w, r, dbDomain, filter)
+}
+
+//GetProjectRates handles GET /rates/v1/domains/:domain_id/projects/:project_id.
+func (p *v1Provider) GetProjectRates(w http.ResponseWriter, r *http.Request) {
+	sre.IdentifyEndpoint(r, "/rates/v1/domains/:id/projects/:id")
+	token := p.CheckToken(r)
+	if !token.Require(w, "project:show") {
+		return
+	}
+	dbDomain := p.FindDomainFromRequest(w, r)
+	if dbDomain == nil {
+		return
+	}
+	dbProject := p.FindProjectFromRequest(w, r, dbDomain)
+	if dbProject == nil {
+		return
+	}
+
+	if _, ok := r.URL.Query()["rates"]; ok {
+		http.Error(w, "the `rates` query parameter is not allowed here", http.StatusBadRequest)
+		return
+	}
+
+	filter := reports.ReadFilter(r)
+	filter.WithRates = true
+	filter.OnlyRates = true
+
+	project, err := GetProjectReport(p.Cluster, *dbDomain, *dbProject, db.DB, filter)
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+	respondwith.JSON(w, 200, map[string]interface{}{"project": project})
 }
