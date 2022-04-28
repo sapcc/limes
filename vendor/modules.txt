@@ -214,13 +214,14 @@ github.com/rs/cors
 ## explicit; go 1.17
 github.com/sapcc/go-api-declarations/cadf
 github.com/sapcc/go-api-declarations/limes
-# github.com/sapcc/go-bits v0.0.0-20220426011237-e04e063832cc
+# github.com/sapcc/go-bits v0.0.0-20220427115030-0d611a8923fc
 ## explicit; go 1.17
 github.com/sapcc/go-bits/assert
 github.com/sapcc/go-bits/audittools
 github.com/sapcc/go-bits/easypg
 github.com/sapcc/go-bits/easypg/migrate
 github.com/sapcc/go-bits/easypg/migrate/database
+github.com/sapcc/go-bits/easypg/migrate/database/multistmt
 github.com/sapcc/go-bits/easypg/migrate/database/postgres
 github.com/sapcc/go-bits/easypg/migrate/internal/url
 github.com/sapcc/go-bits/easypg/migrate/source
@@ -246,6 +247,9 @@ github.com/xeipuuv/gojsonreference
 github.com/yashtewari/glob-intersection
 # github.com/ziutek/mymysql v1.5.4
 ## explicit
+# go.uber.org/atomic v1.9.0
+## explicit; go 1.13
+go.uber.org/atomic
 # golang.org/x/net v0.0.0-20220425223048-2871e0cb64e4
 ## explicit; go 1.17
 golang.org/x/net/context
