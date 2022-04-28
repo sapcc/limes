@@ -436,6 +436,20 @@ func Test_ClusterOperations(t *testing.T) {
 		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-filtered.json"),
 	}.Check(t, router)
 
+	//check GetClusterRates
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/rates/v1/clusters/current",
+		ExpectStatus: 200,
+		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-only-rates.json"),
+	}.Check(t, router)
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/rates/v1/clusters/current?rates",
+		ExpectStatus: 400,
+		ExpectBody:   assert.StringData("the `rates` query parameter is not allowed here\n"),
+	}.Check(t, router)
+
 	//check rendering of overcommit factors
 	cluster.Config.ResourceBehaviors = []*core.ResourceBehaviorConfiguration{
 		{

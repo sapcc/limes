@@ -1,6 +1,6 @@
 /*******************************************************************************
 *
-* Copyright 2017 SAP SE
+* Copyright 2022 SAP SE
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -22,34 +22,28 @@ package api
 import (
 	"net/http"
 
-	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sre"
-
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/reports"
 )
 
-//GetCluster handles GET /v1/clusters/current.
-func (p *v1Provider) GetCluster(w http.ResponseWriter, r *http.Request) {
-	sre.IdentifyEndpoint(r, "/v1/clusters/current")
+//GetClusterRates handles GET /v1/clusters/:cluster_id.
+func (p *v1Provider) GetClusterRates(w http.ResponseWriter, r *http.Request) {
+	sre.IdentifyEndpoint(r, "/rates/v1/clusters/current")
 	token := p.CheckToken(r)
-	if !token.Require(w, "cluster:show_basic") {
+	if !token.Require(w, "cluster:show") {
 		return
 	}
-	showBasic := !token.Check("cluster:show")
+
+	if _, ok := r.URL.Query()["rates"]; ok {
+		http.Error(w, "the `rates` query parameter is not allowed here", http.StatusBadRequest)
+		return
+	}
 
 	filter := reports.ReadFilter(r)
-	if filter.WithRates {
-		logg.Info("rate data on resource endpoint is deprecated: GET %s by user %s@%s with UA %q requests WithRates = true, OnlyRates = %t", r.URL.Path, token.UserName(), token.UserDomainName(), r.Header.Get("User-Agent"), filter.OnlyRates)
-	}
-	if showBasic {
-		filter.IsSubcapacityAllowed = func(serviceType, resourceName string) bool {
-			token.Context.Request["service"] = serviceType
-			token.Context.Request["resource"] = resourceName
-			return token.Check("cluster:show_subcapacity")
-		}
-	}
+	filter.WithRates = true
+	filter.OnlyRates = true
 
 	cluster, err := reports.GetCluster(p.Cluster, db.DB, filter)
 	if respondwith.ErrorText(w, err) {

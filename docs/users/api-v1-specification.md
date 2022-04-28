@@ -6,32 +6,6 @@ catalog under the service type `resources`.
 Where permission requirements are indicated, they refer to the default policy. Limes operators can configure their
 policy differently, so that certain requests may require other roles or token scopes.
 
-* [Request headers](#request-headers)
-  * [X\-Auth\-Token](#x-auth-token)
-* [GET /v1/clusters/current](#get-v1clusterscurrent)
-  * [Subcapacities](#subcapacities)
-* [GET /v1/domains](#get-v1domains)
-* [GET /v1/domains/:domain\_id](#get-v1domainsdomain_id)
-* [PUT /v1/domains/:domain\_id](#put-v1domainsdomain_id)
-* [POST /v1/domains/:domain\_id/simulate\-put](#post-v1domainsdomain_idsimulate-put)
-* [POST /v1/domains/discover](#post-v1domainsdiscover)
-* [GET /v1/domains/:domain\_id/projects](#get-v1domainsdomain_idprojects)
-* [GET /v1/domains/:domain\_id/projects/:project\_id](#get-v1domainsdomain_idprojectsproject_id)
-  * [Quota/usage for resources](#quotausage-for-resources)
-  * [Subresources](#subresources)
-  * [Quota bursting details](#quota-bursting-details)
-  * [Rate limits and throughput tracking](#rate-limits-and-throughput-tracking)
-    * [Default rate limits](#default-rate-limits)
-* [PUT /v1/domains/:domain\_id/projects/:project\_id](#put-v1domainsdomain_idprojectsproject_id)
-* [POST /v1/domains/:domain\_id/projects/:project\_id/simulate\-put](#post-v1domainsdomain_idprojectsproject_idsimulate-put)
-* [POST /v1/domains/:domain\_id/projects/discover](#post-v1domainsdomain_idprojectsdiscover)
-* [POST /v1/domains/:domain\_id/projects/:project\_id/sync](#post-v1domainsdomain_idprojectsproject_idsync)
-* [GET /v1/inconsistencies](#get-v1inconsistencies)
-* [GET /v1/admin/scrape\-errors](#get-v1adminscrape-errors)
-* [GET /v1/admin/rate\-scrape\-errors](#get-v1adminrate-scrape-errors)
-
----
-
 ## Request headers
 
 ### X-Auth-Token
@@ -56,7 +30,7 @@ Returns 200 (OK) on success. Result is a JSON document like:
 ```json
 {
   "cluster": {
-    "id": "example-cluster",
+    "id": "current",
     "services": [
       {
         "type": "compute",
@@ -743,6 +717,49 @@ If the project does not exist in Limes' database yet, query Keystone to see if t
 *Rationale:* When a project administrator wants to adjust her project's quotas, she might discover that the usage data
 shown by Limes is out-of-date. She can then use this call to refresh the usage data in order to make a more informed
 decision about how to adjust her quotas.
+
+## GET /rates/v1/clusters/current
+
+Query global rate limits for the cluster level. These rate limits apply to all users in aggregate. Arguments:
+
+* `service`: Limit query to resources in this service. May be given multiple times.
+* `area`: Limit query to resources in services in this area. May be given multiple times.
+* `resource`: When combined, with `?service=`, limit query to that resource.
+
+Returns 200 (OK) on success. Result is a JSON document like:
+
+```json
+{
+  "cluster": {
+    "id": "current",
+    "services": [
+      {
+        "type": "object-store",
+        "area": "storage",
+        "rates": [
+          {
+            "name": "service/shared/objects:create",
+            "limit": 5000,
+            "window": "1s"
+          },
+          {
+            "name": "service/shared/objects:update",
+            "limit": 10000,
+            "window": "1s"
+          },
+          {
+            "name": "service/shared/objects:delete",
+            "limit": 5000,
+            "window": "1s"
+          },
+          ...
+        ]
+      },
+      ...
+    ]
+  }
+}
+```
 
 ## GET /v1/inconsistencies
 

@@ -93,9 +93,9 @@ func NewV1Router(cluster *core.Cluster, policyEnforcer gopherpolicy.Enforcer) (h
 	})
 
 	r.Methods("GET").Path("/v1/clusters/current").HandlerFunc(p.GetCluster)
+	r.Methods("GET").Path("/rates/v1/clusters/current").HandlerFunc(p.GetClusterRates)
 
 	r.Methods("GET").Path("/v1/inconsistencies").HandlerFunc(p.ListInconsistencies)
-
 	r.Methods("GET").Path("/v1/admin/scrape-errors").HandlerFunc(p.ListScrapeErrors)
 	r.Methods("GET").Path("/v1/admin/rate-scrape-errors").HandlerFunc(p.ListRateScrapeErrors)
 
