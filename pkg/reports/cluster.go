@@ -115,16 +115,18 @@ func GetCluster(cluster *core.Cluster, dbi db.Interface, filter Filter) (*limes.
 						service.MinScrapedAt = &val
 					}
 				}
-				if maxRatesScrapedAt != nil {
-					val := maxRatesScrapedAt.Unix()
-					if service.MaxRatesScrapedAt == nil || *service.MaxRatesScrapedAt < val {
-						service.MaxRatesScrapedAt = &val
+				if filter.WithRates {
+					if maxRatesScrapedAt != nil {
+						val := maxRatesScrapedAt.Unix()
+						if service.MaxRatesScrapedAt == nil || *service.MaxRatesScrapedAt < val {
+							service.MaxRatesScrapedAt = &val
+						}
 					}
-				}
-				if minRatesScrapedAt != nil {
-					val := minRatesScrapedAt.Unix()
-					if service.MinRatesScrapedAt == nil || *service.MinRatesScrapedAt > val {
-						service.MinRatesScrapedAt = &val
+					if minRatesScrapedAt != nil {
+						val := minRatesScrapedAt.Unix()
+						if service.MinRatesScrapedAt == nil || *service.MinRatesScrapedAt > val {
+							service.MinRatesScrapedAt = &val
+						}
 					}
 				}
 			}

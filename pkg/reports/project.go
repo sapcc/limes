@@ -125,7 +125,7 @@ func GetProjects(cluster *core.Cluster, domain db.Domain, project *db.Project, d
 				return err
 			}
 
-			_, srvReport, _ := projects.Find(cluster, projectUUID, projectName, projectParentUUID, serviceType, nil, scrapedAt, ratesScrapedAt, onCreateService)
+			_, srvReport, _ := projects.Find(cluster, projectUUID, projectName, projectParentUUID, serviceType, nil, timeIf(scrapedAt, !filter.OnlyRates), timeIf(ratesScrapedAt, filter.WithRates), onCreateService)
 			if srvReport != nil && rateName != nil {
 				rateReport := srvReport.Rates[*rateName]
 
