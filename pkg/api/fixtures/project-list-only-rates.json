@@ -1,0 +1,139 @@
+{
+  "projects": [
+    {
+      "id": "uuid-for-berlin",
+      "name": "berlin",
+      "parent_id": "uuid-for-germany",
+      "services": [
+        {
+          "type": "shared",
+          "area": "shared",
+          "resources": [],
+          "rates": [
+            {
+              "name": "service/shared/objects:create",
+              "limit": 5,
+              "window": "1m"
+            },
+            {
+              "name": "service/shared/objects:delete",
+              "unit": "MiB",
+              "limit": 2,
+              "window": "1m",
+              "default_limit": 1,
+              "default_window": "1m",
+              "usage_as_bigint": "23456"
+            },
+            {
+              "name": "service/shared/objects:read/list",
+              "limit": 3,
+              "window": "1s"
+            },
+            {
+              "name": "service/shared/objects:update",
+              "limit": 2,
+              "window": "1m",
+              "default_limit": 2,
+              "default_window": "1s"
+            }
+          ],
+          "rates_scraped_at": 23
+        },
+        {
+          "type": "unshared",
+          "area": "unshared",
+          "resources": [],
+          "rates": [
+            {
+              "name": "service/unshared/instances:create",
+              "limit": 5,
+              "window": "1m"
+            },
+            {
+              "name": "service/unshared/instances:delete",
+              "limit": 2,
+              "window": "1m",
+              "default_limit": 1,
+              "default_window": "1m",
+              "usage_as_bigint": "12345"
+            },
+            {
+              "name": "service/unshared/instances:update",
+              "limit": 2,
+              "window": "1m",
+              "default_limit": 2,
+              "default_window": "1s"
+            }
+          ],
+          "rates_scraped_at": 12
+        }
+      ]
+    },
+    {
+      "id": "uuid-for-dresden",
+      "name": "dresden",
+      "parent_id": "uuid-for-berlin",
+      "services": [
+        {
+          "type": "shared",
+          "area": "shared",
+          "resources": [],
+          "rates": [
+            {
+              "name": "service/shared/objects:create",
+              "limit": 5,
+              "window": "1m"
+            },
+            {
+              "name": "service/shared/objects:delete",
+              "unit": "MiB",
+              "limit": 1,
+              "window": "1m",
+              "usage_as_bigint": "0"
+            },
+            {
+              "name": "service/shared/objects:read/list",
+              "limit": 3,
+              "window": "1s"
+            },
+            {
+              "name": "service/shared/objects:unlimited",
+              "unit": "KiB",
+              "usage_as_bigint": "1048576"
+            },
+            {
+              "name": "service/shared/objects:update",
+              "limit": 2,
+              "window": "1s"
+            }
+          ],
+          "rates_scraped_at": 45
+        },
+        {
+          "type": "unshared",
+          "area": "unshared",
+          "resources": [],
+          "rates": [
+            {
+              "name": "service/unshared/instances:create",
+              "limit": 5,
+              "window": "1m"
+            },
+            {
+              "name": "service/unshared/instances:delete",
+              "limit": 1,
+              "window": "1m",
+              "usage_as_bigint": "0"
+            },
+            {
+              "name": "service/unshared/instances:update",
+              "limit": 2,
+              "window": "1s"
+            }
+          ],
+          "rates_scraped_at": 34
+        }
+      ]
+    }
+  ]
+}

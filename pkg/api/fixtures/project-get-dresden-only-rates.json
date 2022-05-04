@@ -1,8 +1,8 @@
 {
   "project": {
-    "id": "uuid-for-paris",
-    "name": "paris",
-    "parent_id": "uuid-for-france",
+    "id": "uuid-for-dresden",
+    "name": "dresden",
+    "parent_id": "uuid-for-berlin",
     "services": [
       {
         "type": "shared",
@@ -18,7 +18,8 @@
             "name": "service/shared/objects:delete",
             "unit": "MiB",
             "limit": 1,
-            "window": "1m"
+            "window": "1m",
+            "usage_as_bigint": "0"
           },
           {
             "name": "service/shared/objects:read/list",
@@ -26,11 +27,17 @@
             "window": "1s"
           },
           {
+            "name": "service/shared/objects:unlimited",
+            "unit": "KiB",
+            "usage_as_bigint": "1048576"
+          },
+          {
             "name": "service/shared/objects:update",
             "limit": 2,
             "window": "1s"
           }
-        ]
+        ],
+        "rates_scraped_at": 45
       },
       {
         "type": "unshared",
@@ -45,14 +52,16 @@
           {
             "name": "service/unshared/instances:delete",
             "limit": 1,
-            "window": "1m"
+            "window": "1m",
+            "usage_as_bigint": "0"
           },
           {
             "name": "service/unshared/instances:update",
             "limit": 2,
             "window": "1s"
           }
-        ]
+        ],
+        "rates_scraped_at": 34
       }
     ]
   }

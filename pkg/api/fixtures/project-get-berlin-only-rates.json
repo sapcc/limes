@@ -36,7 +36,6 @@
             "default_window": "1s"
           }
         ],
-        "scraped_at": 22,
         "rates_scraped_at": 23
       },
       {
@@ -65,7 +64,6 @@
             "default_window": "1s"
           }
         ],
-        "scraped_at": 11,
         "rates_scraped_at": 12
       }
     ]
