@@ -768,7 +768,7 @@ Returns 200 (OK) on success. Result is a JSON document like:
 ## GET /rates/v1/domains/:domain\_id/projects/:project\_id
 
 Same behavior as the respective endpoints without the `/rates` prefix, but always implies `?rates=only` and therefore
-shows only rate data. Specifiying the `rates` query parameter explicitly is an error.
+shows only rate data. Specifying the `rates` query parameter explicitly is an error.
 
 ## GET /v1/inconsistencies
 
