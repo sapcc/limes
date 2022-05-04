@@ -196,6 +196,7 @@ func taskServe(cluster *core.Cluster, args []string) error {
 	//be added easily later)
 	v1Router, v1VersionData := api.NewV1Router(cluster, policyEnforcer)
 	mainRouter.PathPrefix("/v1/").Handler(v1Router)
+	mainRouter.PathPrefix("/rates/v1/").Handler(v1Router)
 
 	//add the version advertisement that lists all available API versions
 	mainRouter.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
