@@ -26,6 +26,12 @@
         "k8s.io/"
       ],
       "allowedVersions": "<0.23"
+    },
+    {
+      "matchPackagePrefixes": [
+        "github.com/sapcc/go-bits"
+      ],
+      "automerge": true
     }
   ],
   "prHourlyLimit": 0
