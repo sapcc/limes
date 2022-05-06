@@ -5,6 +5,9 @@
     "docker:enableMajor",
     "regexManagers:dockerfileVersions"
   ],
+  "github-actions": {
+    "enabled": false
+  },
   "assignees": [
     "majewsky",
     "SuperSandro2000"
@@ -15,6 +18,15 @@
   "postUpdateOptions": [
     "gomodTidy1.17",
     "gomodUpdateImportPaths"
+  ],
+  "packageRules": [
+    {
+      "enabled": false,
+      "matchPackagePrefixes": [
+        "k8s.io/"
+      ],
+      "allowedVersions": "<0.23"
+    }
   ],
   "prHourlyLimit": 0
 }
