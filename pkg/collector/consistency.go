@@ -55,6 +55,7 @@ func (c *Collector) checkConsistencyCluster() {
 		c.LogError(err.Error())
 		return
 	}
+	logg.Info("checking consistency for %d cluster services...", len(services))
 
 	//cleanup entries for services that have been disabled
 	seen := make(map[string]bool)
@@ -126,6 +127,7 @@ func (c *Collector) checkConsistencyDomain(domain db.Domain) {
 		c.LogError(err.Error())
 		return
 	}
+	logg.Info("checking consistency for %d projects in domain %q...", len(projects), domain.Name)
 
 	for _, project := range projects {
 		err := c.checkConsistencyProject(project, domain)

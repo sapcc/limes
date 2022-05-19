@@ -41,6 +41,7 @@ func ValidateDomainServices(tx *gorp.Transaction, cluster *core.Cluster, domain 
 	if err != nil {
 		return nil, err
 	}
+	logg.Info("checking consistency for %d domain services in domain %s...", len(services), domain.UUID)
 
 	var constraints core.QuotaConstraints
 	if cluster.QuotaConstraints != nil {

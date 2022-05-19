@@ -43,6 +43,7 @@ func ValidateProjectServices(tx *gorp.Transaction, cluster *core.Cluster, domain
 	if err != nil {
 		return nil, err
 	}
+	logg.Debug("checking consistency for %d project services in project %s...", len(services), project.UUID)
 
 	var constraints core.QuotaConstraints
 	if cluster.QuotaConstraints != nil {
