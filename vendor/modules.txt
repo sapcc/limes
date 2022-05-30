@@ -37,7 +37,7 @@ github.com/gofrs/uuid
 ## explicit; go 1.9
 github.com/golang/protobuf/proto
 github.com/golang/protobuf/ptypes/timestamp
-# github.com/gophercloud/gophercloud v0.25.0 => github.com/gophercloud/gophercloud v0.24.1-0.20220510134014-0ffab06fc18e
+# github.com/gophercloud/gophercloud v0.25.0 => github.com/gophercloud/gophercloud v0.25.0
 ## explicit; go 1.14
 github.com/gophercloud/gophercloud
 github.com/gophercloud/gophercloud/openstack
@@ -296,4 +296,4 @@ gopkg.in/gorp.v2
 # gopkg.in/yaml.v2 v2.4.0
 ## explicit; go 1.15
 gopkg.in/yaml.v2
-# github.com/gophercloud/gophercloud => github.com/gophercloud/gophercloud v0.24.1-0.20220510134014-0ffab06fc18e
+# github.com/gophercloud/gophercloud => github.com/gophercloud/gophercloud v0.25.0
