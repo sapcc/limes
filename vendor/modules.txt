@@ -37,7 +37,7 @@ github.com/gofrs/uuid
 ## explicit; go 1.9
 github.com/golang/protobuf/proto
 github.com/golang/protobuf/ptypes/timestamp
-# github.com/gophercloud/gophercloud v0.24.0 => github.com/gophercloud/gophercloud v0.24.1-0.20220510134014-0ffab06fc18e
+# github.com/gophercloud/gophercloud v0.25.0 => github.com/gophercloud/gophercloud v0.24.1-0.20220510134014-0ffab06fc18e
 ## explicit; go 1.14
 github.com/gophercloud/gophercloud
 github.com/gophercloud/gophercloud/openstack
@@ -216,7 +216,7 @@ github.com/rs/cors
 ## explicit; go 1.17
 github.com/sapcc/go-api-declarations/cadf
 github.com/sapcc/go-api-declarations/limes
-# github.com/sapcc/go-bits v0.0.0-20220517080651-baba74caa927
+# github.com/sapcc/go-bits v0.0.0-20220530163628-4dafc5c6baa2
 ## explicit; go 1.17
 github.com/sapcc/go-bits/assert
 github.com/sapcc/go-bits/audittools
