@@ -6,6 +6,10 @@ catalog under the service type `resources`.
 Where permission requirements are indicated, they refer to the default policy. Limes operators can configure their
 policy differently, so that certain requests may require other roles or token scopes.
 
+Use the table of contents icon
+<img src="https://github.com/github/docs/raw/main/assets/images/table-of-contents.png" width="25" height="25" />
+on the top left corner of this document to jump to a specific section on this page.
+
 ## Request headers
 
 ### X-Auth-Token
