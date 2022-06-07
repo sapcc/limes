@@ -1,5 +1,8 @@
 # Configuration file for <https://github.com/sapcc/go-makefile-maker>
 
+metadata:
+  url: https://github.com/sapcc/limes
+
 binaries:
   - name:        limes
     fromPackage: .
@@ -10,6 +13,11 @@ coverageTest:
 
 vendoring:
   enabled: true
+
+docker:
+  enabled: true
+  extraIgnores:
+    - /*.yaml
 
 golangciLint:
   createConfig: true
