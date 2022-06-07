@@ -9,7 +9,6 @@
 build/
 CONTRIBUTING.md
 Dockerfile
-Dockerfile.template
 docs/
 LICENSE*
 Makefile.maker.yaml

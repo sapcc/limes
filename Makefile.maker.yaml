@@ -14,7 +14,7 @@ coverageTest:
 vendoring:
   enabled: true
 
-docker:
+dockerfile:
   enabled: true
   extraIgnores:
     - /*.yaml
