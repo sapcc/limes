@@ -19,7 +19,7 @@ COPY --from=builder /pkg/ /usr/
 ARG COMMIT_ID=unknown
 LABEL source_repository="https://github.com/sapcc/limes" \
   org.opencontainers.image.url="https://github.com/sapcc/limes" \
-  org.opencontainers.image.revision=$(COMMIT_ID)
+  org.opencontainers.image.revision=${COMMIT_ID}
 
 USER nobody:nobody
 WORKDIR /var/empty
