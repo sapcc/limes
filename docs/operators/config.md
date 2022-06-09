@@ -63,6 +63,7 @@ services:
   - type: network
 capacitors:
   - id: nova
+    type: nova
 subresources:
   compute:
     - instances
@@ -582,11 +583,18 @@ scraping. Subresources bear the following attributes:
 Note that capacity for a resource only becomes visible when the corresponding service is enabled in the
 `services` list as well.
 
+Capacity plugins have a `type` (as specified in the subheadings for this section) and an `id`. For most capacity
+plugins, having more than one does not make sense because they refer to other service's APIs (which only exist once per
+cluster anyway). In these cases, `id` is conventionally set to the same as `type`. For capacity plugins like
+`prometheus` or `manual`, it's possible to have multiple plugins of the same type at once. In that case, the `id` must
+be unique for each plugin.
+
 ### `cfm`
 
 ```yaml
 capacitors:
   - id: cfm
+    type: cfm
 ```
 
 | Resource | Method |
@@ -598,6 +606,7 @@ capacitors:
 ```yaml
 capacitors:
   - id: cinder
+    type: cinder
     cinder:
       volume_types:
         vmware:     { volume_backend_name: vmware_ssd, default: true }
@@ -617,6 +626,7 @@ the concrete Cinder backend.
 ```yaml
 capacitors:
 - id: manila
+  type: manila
   manila:
     share_types:
       - name: default
@@ -662,6 +672,7 @@ that is, there is `capacity_balance` as much snapshot capacity as there is share
 ```yaml
 capacitors:
   - id: manual
+    type: manual-network
     manual:
       network:
         floating_ips: 8192
@@ -680,6 +691,7 @@ allows to track capacity values along with other configuration in a Git reposito
 ```yaml
 capacitors:
   - id: nova
+    type: nova
     nova:
       hypervisor_type_pattern: '^(?:VMware|QEMU)'
       extra_specs:
@@ -727,6 +739,7 @@ may belong to multiple aggregates. Subcapacities bear the following attributes:
 ```yaml
 capacitors:
   - id: prometheus
+    type: prometheus-compute
     prometheus:
       api:
         url: https://prometheus.example.com
@@ -754,6 +767,7 @@ For example, the following configuration can be used with [swift-health-statsd][
 ```yaml
 capacitors:
   - id: prometheus
+    type: prometheus-swift
     prometheus:
       api_url: https://prometheus.example.com
       queries:
@@ -766,6 +780,7 @@ capacitors:
 ```yaml
 capacitors:
   - id: sapcc-ironic
+    type: sapcc-ironic
     sapcc_ironic:
       flavor_aliases:
         newflavor1: [ oldflavor1 ]
@@ -782,6 +797,7 @@ and should have the same contents as well (unless you like unnecessary confusion
 ```yaml
 capacitors:
   - id: sapcc-ironic
+    type: sapcc-ironic
 subcapacities:
   - compute: [ instances-baremetal ]
 ```

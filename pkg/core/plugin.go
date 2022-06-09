@@ -187,9 +187,9 @@ type CapacityPlugin interface {
 	//Init is guaranteed to be called before all other methods exposed by the
 	//interface.
 	Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error
-	//ID returns a unique identifier for this CapacityPlugin which is used to
+	//Type returns a unique identifier for this CapacityPlugin which is used to
 	//identify it in the configuration.
-	ID() string
+	Type() string
 	//Scrape queries the backend service(s) for the capacities of the resources
 	//that this plugin is concerned with. The result is a two-dimensional map,
 	//with the first key being the service type, and the second key being the
@@ -302,17 +302,17 @@ func GetServiceTypesForArea(area string) []string {
 //the CapacityPlugin.
 //
 //When called, this function will use the factory with a zero
-//CapacitorConfiguration to determine the ID of the capacity plugin.
+//CapacitorConfiguration to determine the type of the capacity plugin.
 func RegisterCapacityPlugin(factory CapacityPluginFactory) {
 	if factory == nil {
 		panic("collector.RegisterCapacityPlugin() called with nil CapacityPluginFactory instance")
 	}
-	id := factory(CapacitorConfiguration{}, nil).ID()
-	if id == "" {
-		panic("CapacityPlugin instance with empty ID!")
+	typeStr := factory(CapacitorConfiguration{}, nil).Type()
+	if typeStr == "" {
+		panic("CapacityPlugin instance with empty type!")
 	}
-	if capacityPluginFactories[id] != nil {
-		panic("collector.RegisterCapacityPlugin() called multiple times for ID: " + id)
+	if capacityPluginFactories[typeStr] != nil {
+		panic("collector.RegisterCapacityPlugin() called multiple times for type: " + typeStr)
 	}
-	capacityPluginFactories[id] = factory
+	capacityPluginFactories[typeStr] = factory
 }

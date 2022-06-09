@@ -52,8 +52,8 @@ func (p *capacityCinderPlugin) Init(provider *gophercloud.ProviderClient, eo gop
 	return nil
 }
 
-//ID implements the core.CapacityPlugin interface.
-func (p *capacityCinderPlugin) ID() string {
+//Type implements the core.CapacityPlugin interface.
+func (p *capacityCinderPlugin) Type() string {
 	return "cinder"
 }
 

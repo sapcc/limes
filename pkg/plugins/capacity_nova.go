@@ -79,7 +79,7 @@ func (p *capacityNovaPlugin) Init(provider *gophercloud.ProviderClient, eo gophe
 	return nil
 }
 
-func (p *capacityNovaPlugin) ID() string {
+func (p *capacityNovaPlugin) Type() string {
 	return "nova"
 }
 

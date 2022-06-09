@@ -58,8 +58,8 @@ func (p *capacitySapccIronicPlugin) Init(provider *gophercloud.ProviderClient, e
 	return nil
 }
 
-//ID implements the core.CapacityPlugin interface.
-func (p *capacitySapccIronicPlugin) ID() string {
+//Type implements the core.CapacityPlugin interface.
+func (p *capacitySapccIronicPlugin) Type() string {
 	return "sapcc-ironic"
 }
 

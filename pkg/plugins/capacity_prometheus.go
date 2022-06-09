@@ -132,8 +132,8 @@ func (p *capacityPrometheusPlugin) Init(provider *gophercloud.ProviderClient, eo
 	return nil
 }
 
-//ID implements the core.CapacityPlugin interface.
-func (p *capacityPrometheusPlugin) ID() string {
+//Type implements the core.CapacityPlugin interface.
+func (p *capacityPrometheusPlugin) Type() string {
 	return "prometheus"
 }
 

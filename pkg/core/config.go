@@ -163,6 +163,7 @@ type RateLimitConfiguration struct {
 //certain cluster.
 type CapacitorConfiguration struct {
 	ID   string                 `yaml:"id"`
+	Type string                 `yaml:"type"`
 	Auth map[string]interface{} `yaml:"auth"`
 	//for capacitors that need configuration, add a field with the plugin's ID as
 	//name and put the config data in there (use a struct to be able to give
@@ -410,6 +411,9 @@ func (cluster ClusterConfiguration) validateConfig() (success bool) {
 	for idx, capa := range cluster.Capacitors {
 		if capa.ID == "" {
 			missing(fmt.Sprintf("capacitors[%d].id", idx))
+		}
+		if capa.Type == "" {
+			missing(fmt.Sprintf("capacitors[%d].type", idx))
 		}
 		if len(capa.Auth) > 0 {
 			//TODO remove this deprecation warning once the change was rolled out everywhere

@@ -43,8 +43,8 @@ func (p *capacityManualPlugin) Init(provider *gophercloud.ProviderClient, eo gop
 	return nil
 }
 
-//ID implements the core.CapacityPlugin interface.
-func (p *capacityManualPlugin) ID() string {
+//Type implements the core.CapacityPlugin interface.
+func (p *capacityManualPlugin) Type() string {
 	return "manual"
 }
 

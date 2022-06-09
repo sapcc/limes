@@ -102,13 +102,13 @@ func NewCluster(config ClusterConfiguration) *Cluster {
 	}
 
 	for _, capa := range config.Capacitors {
-		factory, exists := capacityPluginFactories[capa.ID]
+		factory, exists := capacityPluginFactories[capa.Type]
 		if !exists {
 			logg.Error("skipping capacitor %s: no suitable collector plugin found", capa.ID)
 			continue
 		}
 		plugin := factory(capa, scrapeSubcapacities)
-		if plugin == nil || plugin.ID() != capa.ID {
+		if plugin == nil || plugin.Type() != capa.Type {
 			logg.Error("skipping capacitor %s: failed to initialize collector plugin", capa.ID)
 			continue
 		}

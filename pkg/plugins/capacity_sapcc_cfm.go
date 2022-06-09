@@ -47,8 +47,8 @@ func (p *capacityCFMPlugin) Init(provider *gophercloud.ProviderClient, eo gopher
 	return err
 }
 
-//ID implements the core.CapacityPlugin interface.
-func (p *capacityCFMPlugin) ID() string {
+//Type implements the core.CapacityPlugin interface.
+func (p *capacityCFMPlugin) Type() string {
 	return "cfm"
 }
 
