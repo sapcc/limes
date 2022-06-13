@@ -10,10 +10,10 @@
     "SuperSandro2000"
   ],
   "constraints": {
-    "go": "1.17"
+    "go": "1.18"
   },
   "postUpdateOptions": [
-    "gomodTidy1.17",
+    "gomodTidy",
     "gomodUpdateImportPaths"
   ],
   "packageRules": [
@@ -27,7 +27,7 @@
       "matchPackageNames": [
         "golang"
       ],
-      "allowedVersions": "1.17.x"
+      "allowedVersions": "1.18.x"
     },
     {
       "matchPackagePrefixes": [
