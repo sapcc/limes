@@ -26,7 +26,6 @@ import (
 	gorp "gopkg.in/gorp.v2"
 
 	"github.com/sapcc/go-api-declarations/limes"
-	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sre"
 
@@ -46,7 +45,8 @@ func (p *v1Provider) ListDomains(w http.ResponseWriter, r *http.Request) {
 
 	filter := reports.ReadFilter(r)
 	if filter.WithRates {
-		logg.Info("rate data on resource endpoint is deprecated: GET %s by user %s@%s with UA %q requests WithRates = true, OnlyRates = %t", r.URL.Path, token.UserName(), token.UserDomainName(), r.Header.Get("User-Agent"), filter.OnlyRates)
+		http.Error(w, `query parameter "rates" is not supported anymore`, http.StatusBadRequest)
+		return
 	}
 
 	domains, err := reports.GetDomains(p.Cluster, nil, db.DB, filter)
@@ -71,7 +71,8 @@ func (p *v1Provider) GetDomain(w http.ResponseWriter, r *http.Request) {
 
 	filter := reports.ReadFilter(r)
 	if filter.WithRates {
-		logg.Info("rate data on resource endpoint is deprecated: GET %s by user %s@%s with UA %q requests WithRates = true, OnlyRates = %t", r.URL.Path, token.UserName(), token.UserDomainName(), r.Header.Get("User-Agent"), filter.OnlyRates)
+		http.Error(w, `query parameter "rates" is not supported anymore`, http.StatusBadRequest)
+		return
 	}
 
 	domain, err := GetDomainReport(p.Cluster, *dbDomain, db.DB, filter)

@@ -383,20 +383,14 @@ time through scheduled auto-discovery, but this call can be used to reduce the w
 ## GET /v1/domains/:domain\_id/projects
 ## GET /v1/domains/:domain\_id/projects/:project\_id
 
-Query data for projects in a domain. `:project_id` is optional for domain admins. With domain admin token, shows
-projects in that token's domain. With project member permission, shows that token's project only. Arguments:
+Query resource data for projects in a domain. `:project_id` is optional for domain admins. With domain admin token,
+shows projects in that token's domain. With project member permission, shows that token's project only. Arguments:
 
 * `service`: Limit query to resources in this service (e.g. `?service=compute`). May be given multiple times.
 * `area`: Limit query to resources in services in this area. May be given multiple times.
 * `resource`: When combined, with `?service=`, limit query to that resource
   (e.g. `?service=compute&resource=instances`). May be given multiple times.
 * `detail`: If given, list subresources for resources that support it. (See subheading below for details.)
-* `rates`: If given, list rate limits for services that support it. (See [subheading](#rate-limits-and-throughput-tracking) below for details.)
-  Use `rates=only` to only list rates (instead of resources).
-  When combined with `?service=`, limit query to these rates (e.g. `?service=compute&rates`). May be given multiple times.
-
-  **Warning:** Usage of `?rates` on these endpoints is deprecated. Use the new
-  `GET /rates/v1/domains/:domain_id/projects` and `GET /rates/v1/domains/:domain_id/projects/:project_id` endpoints instead.
 
 Returns 200 (OK) on success. Result is a JSON document like:
 
@@ -589,76 +583,6 @@ exists and is non-zero), then resources with `usage > quota` will display an add
 The `burst_usage` field is guaranteed to be equal to `usage - quota`. Applications should prefer to read the `quota` and
 `usage` values directly instead of using this field.
 
-### Rate limits and throughput tracking
-
-In Limes parlance, **resources** are strictly those things whose usage value refers to a consumption at a specific point
-in time, and where quota is the upper limit on usage at each individual point in time. In contrast, **rates** are all
-those things where the usage is accumulated over time. Instead of a quota, rates can have a **rate limit** that refers
-to the highest allowed increase in usage over a certain amount of time (the limit's **window**). Rate limits are
-typically applied to data throughput or to API request traffic, to prevent service capacities from being exhausted. Rate
-limits can be set on two levels:
-
-1. on *cluster* level in order to ensure a service does not receive more requests or transfer more data than it can handle, and
-2. per *project* in order to ensure a fair usage among projects within a cluster.
-
-Each rate has a `name`. For rates that describe API request traffic, the
-[CADF specification](https://www.dmtf.org/sites/default/files/standards/documents/DSP2038_1.1.0.pdf) establishes a
-classification for the OpenStack ecosystem. Within CADF, requests sent to an OpenStack API are characterized by their
-`target_type_uri` and `action`. The `target_type_uri` represents the request path against which the activity was
-performed and the `action` the activity that was performed. Limes honors this structure for API request rates: As shown
-in the large example above, the action `create` on the target\_type\_uri `service/compute/servers` is represented by a
-Limes rate with the name `service/compute/servers:create`.
-
-Rates may have a `unit` if they do not refer to countable things like API requests. For example, network throughput
-rates usually have a `unit` of `B` or `KiB`. The unit applies to the values in the fields `limit` and `usage_as_bigint`
-(see below).
-
-If the rate has a rate limit, it will be shown in the fields `limit` and `window` like this:
-
-```json
-{
-  "name": "service/compute/servers/action:update/addFloatingIp",
-  "limit": 2,
-  "window": "1m"
-}
-```
-
-This means that within any 1-minute window, not more than 2 API requests of this type are allowed for the project in
-question. (Rate limits are applied on a sliding window, not on fixed window boundaries.) The value of the `window` field
-is a string with the syntax `<number><unit>`, where `<unit>` is one of:
-
-```
-ms    - millisecond
-s     - second
-m     - minute
-h     - hour
-```
-
-If Limes knows how to track usage for a certain rate, the field `usage_as_bigint` will be shown (like in the large
-example above). The value of this field is an ever-increasing counter, guaranteed to never reset. Most JSON parser
-libraries parse integers into 64-bit-wide types, a size which can be reasonably expected to overflow esp. for rates
-relating to data throughput. Therefore the `usage_as_bigint` field (as indicated by the name) is set up like a bigint
-and serialized as a string. For now, clients SHOULD be able to handle at least 128-bit-wide unsigned integers in this field.
-
-Each service that has at least one rate with usage tracking will show a `rates_scraped_at` timestamp, analogous to the
-`scraped_at` timestamp for resource usage.
-
-#### Default rate limits
-
-Default rate limits on a project level can be defined via the [service configuration](../operators/config.md#rate-limits).
-The can be overwritten on a project level via the [API](#put-v1domainsdomain_idprojectsproject_id).
-The fields `default_limit` and `default_window` in the response to a `GET /v1/domains/:domain\_id/projects/:project\_id`
-request are used to indicate deviations from the default project rate limits:
-```json
-{
-  "name": "service/compute/servers:create",
-  "limit": 5,
-  "window": "1m",
-  "default_limit": 10,
-  "default_window": "1m"
-}
-```
-
 ## PUT /v1/domains/:domain\_id/projects/:project\_id
 ## POST /v1/domains/:domain\_id/projects/:project\_id/simulate-put
 
@@ -771,8 +695,127 @@ Returns 200 (OK) on success. Result is a JSON document like:
 ## GET /rates/v1/domains/:domain\_id/projects
 ## GET /rates/v1/domains/:domain\_id/projects/:project\_id
 
-Same behavior as the respective endpoints without the `/rates` prefix, but always implies `?rates=only` and therefore
-shows only rate data. Specifying the `rates` query parameter explicitly is an error.
+Query rate data for projects in a domain. `:project_id` is optional for domain admins. With domain admin token,
+shows projects in that token's domain. With project member permission, shows that token's project only. Arguments:
+
+* `service`: Limit query to resources in this service (e.g. `?service=compute`). May be given multiple times.
+* `area`: Limit query to resources in services in this area. May be given multiple times.
+* `resource`: When combined, with `?service=`, limit query to that resource
+  (e.g. `?service=compute&resource=instances`). May be given multiple times.
+* `detail`: If given, list subresources for resources that support it. (See subheading below for details.)
+
+Returns 200 (OK) on success. Result is a JSON document like:
+
+```json
+{
+  "projects": [
+    {
+      "id": "8ad3bf54-2401-435e-88ad-e80fbf984c19",
+      "name": "example-project",
+      "parent_id": "e4864dd1-1929-4b41-bb69-e5a724f20fa2",
+      "services": [
+        {
+          "type": "compute",
+          "area": "compute",
+          "rates": [
+            {
+              "name": "service/compute/servers:create",
+              "limit": 5,
+              "window": "2m",
+              "usage_as_bigint": "1069298"
+            },
+            {
+              "name": "service/compute/servers/action:update/addFloatingIp",
+              "limit": 2,
+              "window": "1m"
+            },
+            {
+              "name": "service/compute/servers/action:update/removeFloatingIp",
+              "limit": 2,
+              "window": "1m"
+            }
+          ],
+          "rates_scraped_at": 1486738206
+        },
+        ...
+      ]
+    },
+    ...
+  ]
+}
+```
+
+If `:project_id` was given, the outer key is `project` and its value is the object without the array surrounding it.
+
+Most of the general remarks from the documentation of the equivalent endpoint for resource data apply to this endpoint
+equivalently. This endpoint is about rate data instead.
+
+In Limes parlance, **resources** are strictly those things whose usage value refers to a consumption at a specific point
+in time, and where quota is the upper limit on usage at each individual point in time. In contrast, **rates** are all
+those things where the usage is accumulated over time. Instead of a quota, rates can have a **rate limit** that refers
+to the highest allowed increase in usage over a certain amount of time (the limit's **window**). Rate limits are
+typically applied to data throughput or to API request traffic, to prevent service capacities from being exhausted. Rate
+limits can be set on two levels:
+
+1. on *cluster* level in order to ensure a service does not receive more requests or transfer more data than it can handle, and
+2. per *project* in order to ensure a fair usage among projects within a cluster.
+
+Each rate has a `name`. For rates that describe API request traffic, the
+[CADF specification](https://www.dmtf.org/sites/default/files/standards/documents/DSP2038_1.1.0.pdf) establishes a
+classification for the OpenStack ecosystem. Within CADF, requests sent to an OpenStack API are characterized by their
+`target_type_uri` and `action`. The `target_type_uri` represents the request path against which the activity was
+performed and the `action` the activity that was performed. Limes honors this structure for API request rates: As shown
+in the large example above, the action `create` on the target\_type\_uri `service/compute/servers` is represented by a
+Limes rate with the name `service/compute/servers:create`.
+
+Rates may have a `unit` if they do not refer to countable things like API requests. For example, network throughput
+rates usually have a `unit` of `B` or `KiB`. The unit applies to the values in the fields `limit` and `usage_as_bigint`
+(see below).
+
+If the rate has a rate limit, it will be shown in the fields `limit` and `window` like this:
+
+```json
+{
+  "name": "service/compute/servers/action:update/addFloatingIp",
+  "limit": 2,
+  "window": "1m"
+}
+```
+
+This means that within any 1-minute window, not more than 2 API requests of this type are allowed for the project in
+question. (Rate limits are applied on a sliding window, not on fixed window boundaries.) The value of the `window` field
+is a string with the syntax `<number><unit>`, where `<unit>` is one of:
+
+```
+ms    - millisecond
+s     - second
+m     - minute
+h     - hour
+```
+
+If Limes knows how to track usage for a certain rate, the field `usage_as_bigint` will be shown (like in the large
+example above). The value of this field is an ever-increasing counter, guaranteed to never reset. Most JSON parser
+libraries parse integers into 64-bit-wide types, a size which can be reasonably expected to overflow esp. for rates
+relating to data throughput. Therefore the `usage_as_bigint` field (as indicated by the name) is set up like a bigint
+and serialized as a string. For now, clients SHOULD be able to handle at least 128-bit-wide unsigned integers in this
+field.
+
+#### Default rate limits
+
+Default rate limits on a project level can be defined via the
+[service configuration](../operators/config.md#rate-limits). They can be overwritten on a project level via the
+[API](#put-v1domainsdomain_idprojectsproject_id). If the actual rate limit differs from the default value, the fields
+`default_limit` and `default_window` will be included in the response like so:
+
+```json
+{
+  "name": "service/compute/servers:create",
+  "limit": 5,
+  "window": "1m",
+  "default_limit": 10,
+  "default_window": "1m"
+}
+```
 
 ## GET /v1/inconsistencies
 

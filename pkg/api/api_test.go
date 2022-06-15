@@ -407,18 +407,6 @@ func Test_ClusterOperations(t *testing.T) {
 	}.Check(t, router)
 	assert.HTTPRequest{
 		Method:       "GET",
-		Path:         "/v1/clusters/current?rates=only",
-		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-only-rates.json"),
-	}.Check(t, router)
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/v1/clusters/current?rates",
-		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-with-rates.json"),
-	}.Check(t, router)
-	assert.HTTPRequest{
-		Method:       "GET",
 		Path:         "/v1/clusters/current?service=unknown",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-no-services.json"),
@@ -1071,20 +1059,6 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-details-berlin.json"),
 	}.Check(t, router)
-	//check rendering of rates=true
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin?rates=true",
-		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-berlin-with-rates.json"),
-	}.Check(t, router)
-	//check rendering of rates=only
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin?rates=only",
-		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-berlin-only-rates.json"),
-	}.Check(t, router)
 	//dresden has a case of backend quota != quota
 	assert.HTTPRequest{
 		Method:       "GET",
@@ -1092,32 +1066,12 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-dresden.json"),
 	}.Check(t, router)
-	//dresden has some rates that only report usage
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden?rates=true",
-		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-dresden-with-rates.json"),
-	}.Check(t, router)
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden?rates=only",
-		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-dresden-only-rates.json"),
-	}.Check(t, router)
 	//paris has a case of infinite backend quota
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains/uuid-for-france/projects/uuid-for-paris",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-paris.json"),
-	}.Check(t, router)
-	//paris has no rates in the DB whatsoever, so we can check the rendering of the default rates
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/v1/domains/uuid-for-france/projects/uuid-for-paris?rates=only",
-		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-paris-only-default-rates.json"),
 	}.Check(t, router)
 
 	//check GetProjectRates
@@ -1127,11 +1081,19 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-berlin-only-rates.json"),
 	}.Check(t, router)
+	//dresden has some rates that only report usage
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/rates/v1/domains/uuid-for-germany/projects/uuid-for-dresden",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-dresden-only-rates.json"),
+	}.Check(t, router)
+	//paris has no rates in the DB whatsoever, so we can check the rendering of the default rates
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/rates/v1/domains/uuid-for-france/projects/uuid-for-paris",
+		ExpectStatus: 200,
+		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-paris-only-default-rates.json"),
 	}.Check(t, router)
 
 	//check non-existent domains/projects
@@ -1154,12 +1116,6 @@ func Test_ProjectOperations(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-list.json"),
-	}.Check(t, router)
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/v1/domains/uuid-for-germany/projects?rates=only",
-		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-list-only-rates.json"),
 	}.Check(t, router)
 	assert.HTTPRequest{
 		Method:       "GET",

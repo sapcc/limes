@@ -22,7 +22,6 @@ package api
 import (
 	"net/http"
 
-	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sre"
 
@@ -41,7 +40,8 @@ func (p *v1Provider) GetCluster(w http.ResponseWriter, r *http.Request) {
 
 	filter := reports.ReadFilter(r)
 	if filter.WithRates {
-		logg.Info("rate data on resource endpoint is deprecated: GET %s by user %s@%s with UA %q requests WithRates = true, OnlyRates = %t", r.URL.Path, token.UserName(), token.UserDomainName(), r.Header.Get("User-Agent"), filter.OnlyRates)
+		http.Error(w, `query parameter "rates" is not supported anymore`, http.StatusBadRequest)
+		return
 	}
 	if showBasic {
 		filter.IsSubcapacityAllowed = func(serviceType, resourceName string) bool {

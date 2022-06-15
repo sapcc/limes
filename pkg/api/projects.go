@@ -57,7 +57,8 @@ func (p *v1Provider) ListProjects(w http.ResponseWriter, r *http.Request) {
 
 	filter := reports.ReadFilter(r)
 	if filter.WithRates {
-		logg.Info("rate data on resource endpoint is deprecated: GET %s by user %s@%s with UA %q requests WithRates = true, OnlyRates = %t", r.URL.Path, token.UserName(), token.UserDomainName(), r.Header.Get("User-Agent"), filter.OnlyRates)
+		http.Error(w, `query parameter "rates" is not supported anymore`, http.StatusBadRequest)
+		return
 	}
 
 	p.doListProjects(w, r, dbDomain, filter)
@@ -158,7 +159,8 @@ func (p *v1Provider) GetProject(w http.ResponseWriter, r *http.Request) {
 
 	filter := reports.ReadFilter(r)
 	if filter.WithRates {
-		logg.Info("rate data on resource endpoint is deprecated: GET %s by user %s@%s with UA %q requests WithRates = true, OnlyRates = %t", r.URL.Path, token.UserName(), token.UserDomainName(), r.Header.Get("User-Agent"), filter.OnlyRates)
+		http.Error(w, `query parameter "rates" is not supported anymore`, http.StatusBadRequest)
+		return
 	}
 
 	project, err := GetProjectReport(p.Cluster, *dbDomain, *dbProject, db.DB, filter)

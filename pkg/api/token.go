@@ -66,13 +66,5 @@ func (p *v1Provider) CheckToken(r *http.Request) *gopherpolicy.Token {
 		t.Context.Auth["cluster_id"] = p.Cluster.ID
 	}
 
-	if _, hasQueryForRates := r.URL.Query()["rates"]; hasQueryForRates {
-		logg.Info("support for rate data on resources API is deprecated: %s %s has been called by user %s@%s with UA %q",
-			r.Method, r.URL.String(),
-			t.UserName(), t.UserDomainName(),
-			r.Header.Get("User-Agent"),
-		)
-	}
-
 	return t
 }
