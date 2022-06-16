@@ -25,9 +25,8 @@ import (
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
+	"github.com/sapcc/go-api-declarations/bininfo"
 	"github.com/sapcc/go-bits/secrets"
-
-	"github.com/sapcc/limes/pkg/util"
 )
 
 //AuthParameters contains credentials for authenticating with Keystone (i.e.
@@ -61,7 +60,8 @@ func (auth *AuthParameters) Connect() error {
 
 	//use http.DefaultClient, esp. to pick up LIMES_INSECURE flag
 	auth.ProviderClient.HTTPClient = *http.DefaultClient
-	auth.ProviderClient.UserAgent.Prepend(util.Component)
+	userAgent := fmt.Sprintf("%s@%s", bininfo.Component(), bininfo.VersionOr("rolling"))
+	auth.ProviderClient.UserAgent.Prepend(userAgent)
 
 	err = openstack.Authenticate(auth.ProviderClient, gophercloud.AuthOptions{
 		IdentityEndpoint: auth.AuthURL,

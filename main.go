@@ -38,6 +38,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/cors"
+	"github.com/sapcc/go-api-declarations/bininfo"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpee"
 	"github.com/sapcc/go-bits/logg"
@@ -61,7 +62,7 @@ func main() {
 		printUsageAndExit()
 	}
 	taskName, configPath, remainingArgs := os.Args[1], os.Args[2], os.Args[3:]
-	util.Component = "limes-" + taskName
+	bininfo.SetTaskName(taskName)
 
 	//load configuration and connect to cluster
 	cluster := core.NewConfiguration(configPath)

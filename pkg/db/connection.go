@@ -28,6 +28,7 @@ import (
 
 	gorp "gopkg.in/gorp.v2"
 
+	"github.com/sapcc/go-api-declarations/bininfo"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/logg"
 
@@ -52,9 +53,9 @@ func Init() error {
 	}
 	hostname, err := os.Hostname()
 	if err == nil {
-		connOpts.Set("application_name", fmt.Sprintf("%s@%s", util.Component, hostname))
+		connOpts.Set("application_name", fmt.Sprintf("%s@%s", bininfo.Component(), hostname))
 	} else {
-		connOpts.Set("application_name", util.Component)
+		connOpts.Set("application_name", bininfo.Component())
 	}
 
 	dbURL := &url.URL{

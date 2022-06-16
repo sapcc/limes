@@ -217,6 +217,7 @@ github.com/rcrowley/go-metrics
 github.com/rs/cors
 # github.com/sapcc/go-api-declarations v1.2.0
 ## explicit; go 1.17
+github.com/sapcc/go-api-declarations/bininfo
 github.com/sapcc/go-api-declarations/cadf
 github.com/sapcc/go-api-declarations/limes
 # github.com/sapcc/go-bits v0.0.0-20220615160326-b161539f0d95
