@@ -220,7 +220,7 @@ github.com/rs/cors
 github.com/sapcc/go-api-declarations/bininfo
 github.com/sapcc/go-api-declarations/cadf
 github.com/sapcc/go-api-declarations/limes
-# github.com/sapcc/go-bits v0.0.0-20220615160326-b161539f0d95
+# github.com/sapcc/go-bits v0.0.0-20220620113803-c6fe6bc10906
 ## explicit; go 1.18
 github.com/sapcc/go-bits/assert
 github.com/sapcc/go-bits/audittools
