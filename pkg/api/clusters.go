@@ -22,8 +22,8 @@ package api
 import (
 	"net/http"
 
+	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/respondwith"
-	"github.com/sapcc/go-bits/sre"
 
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/reports"
@@ -31,7 +31,7 @@ import (
 
 //GetCluster handles GET /v1/clusters/current.
 func (p *v1Provider) GetCluster(w http.ResponseWriter, r *http.Request) {
-	sre.IdentifyEndpoint(r, "/v1/clusters/current")
+	httpapi.IdentifyEndpoint(r, "/v1/clusters/current")
 	token := p.CheckToken(r)
 	if !token.Require(w, "cluster:show_basic") {
 		return

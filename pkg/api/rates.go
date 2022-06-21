@@ -22,8 +22,8 @@ package api
 import (
 	"net/http"
 
+	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/respondwith"
-	"github.com/sapcc/go-bits/sre"
 
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/reports"
@@ -31,7 +31,7 @@ import (
 
 //GetClusterRates handles GET /v1/clusters/:cluster_id.
 func (p *v1Provider) GetClusterRates(w http.ResponseWriter, r *http.Request) {
-	sre.IdentifyEndpoint(r, "/rates/v1/clusters/current")
+	httpapi.IdentifyEndpoint(r, "/rates/v1/clusters/current")
 	token := p.CheckToken(r)
 	if !token.Require(w, "cluster:show") {
 		return
@@ -55,7 +55,7 @@ func (p *v1Provider) GetClusterRates(w http.ResponseWriter, r *http.Request) {
 
 //ListProjectRates handles GET /rates/v1/domains/:domain_id/projects.
 func (p *v1Provider) ListProjectRates(w http.ResponseWriter, r *http.Request) {
-	sre.IdentifyEndpoint(r, "/rates/v1/domains/:id/projects")
+	httpapi.IdentifyEndpoint(r, "/rates/v1/domains/:id/projects")
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:list") {
 		return
@@ -79,7 +79,7 @@ func (p *v1Provider) ListProjectRates(w http.ResponseWriter, r *http.Request) {
 
 //GetProjectRates handles GET /rates/v1/domains/:domain_id/projects/:project_id.
 func (p *v1Provider) GetProjectRates(w http.ResponseWriter, r *http.Request) {
-	sre.IdentifyEndpoint(r, "/rates/v1/domains/:id/projects/:id")
+	httpapi.IdentifyEndpoint(r, "/rates/v1/domains/:id/projects/:id")
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:show") {
 		return

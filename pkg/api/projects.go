@@ -30,9 +30,9 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/sapcc/go-api-declarations/limes"
+	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/respondwith"
-	"github.com/sapcc/go-bits/sre"
 	gorp "gopkg.in/gorp.v2"
 
 	"github.com/sapcc/limes/pkg/collector"
@@ -45,7 +45,7 @@ import (
 
 //ListProjects handles GET /v1/domains/:domain_id/projects.
 func (p *v1Provider) ListProjects(w http.ResponseWriter, r *http.Request) {
-	sre.IdentifyEndpoint(r, "/v1/domains/:id/projects")
+	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects")
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:list") {
 		return
@@ -143,7 +143,7 @@ func (p *v1Provider) doListProjects(w http.ResponseWriter, r *http.Request, dbDo
 
 //GetProject handles GET /v1/domains/:domain_id/projects/:project_id.
 func (p *v1Provider) GetProject(w http.ResponseWriter, r *http.Request) {
-	sre.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id")
+	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id")
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:show") {
 		return
@@ -172,7 +172,7 @@ func (p *v1Provider) GetProject(w http.ResponseWriter, r *http.Request) {
 
 //DiscoverProjects handles POST /v1/domains/:domain_id/projects/discover.
 func (p *v1Provider) DiscoverProjects(w http.ResponseWriter, r *http.Request) {
-	sre.IdentifyEndpoint(r, "/v1/domains/:id/projects/discover")
+	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/discover")
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:discover") {
 		return
@@ -196,7 +196,7 @@ func (p *v1Provider) DiscoverProjects(w http.ResponseWriter, r *http.Request) {
 
 //SyncProject handles POST /v1/domains/:domain_id/projects/:project_id/sync.
 func (p *v1Provider) SyncProject(w http.ResponseWriter, r *http.Request) {
-	sre.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/sync")
+	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/sync")
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:show") {
 		return
@@ -247,13 +247,13 @@ func (p *v1Provider) SyncProject(w http.ResponseWriter, r *http.Request) {
 
 //PutProject handles PUT /v1/domains/:domain_id/projects/:project_id.
 func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
-	sre.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id")
+	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id")
 	p.putOrSimulatePutProject(w, r, false)
 }
 
 //SimulatePutProject handles POST /v1/domains/:domain_id/projects/:project_id/simulate-put.
 func (p *v1Provider) SimulatePutProject(w http.ResponseWriter, r *http.Request) {
-	sre.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/simulate-put")
+	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/simulate-put")
 	p.putOrSimulatePutProject(w, r, true)
 }
 

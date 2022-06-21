@@ -22,8 +22,8 @@ package api
 import (
 	"net/http"
 
+	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/respondwith"
-	"github.com/sapcc/go-bits/sre"
 
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/reports"
@@ -31,7 +31,7 @@ import (
 
 //ListScrapeErrors handles GET /v1/admin/scrape-errors.
 func (p *v1Provider) ListScrapeErrors(w http.ResponseWriter, r *http.Request) {
-	sre.IdentifyEndpoint(r, "/v1/admin/scrape-errors")
+	httpapi.IdentifyEndpoint(r, "/v1/admin/scrape-errors")
 	token := p.CheckToken(r)
 	if !token.Require(w, "cluster:show_errors") {
 		return
@@ -47,7 +47,7 @@ func (p *v1Provider) ListScrapeErrors(w http.ResponseWriter, r *http.Request) {
 
 //ListRateScrapeErrors handles GET /v1/admin/rate-scrape-errors.
 func (p *v1Provider) ListRateScrapeErrors(w http.ResponseWriter, r *http.Request) {
-	sre.IdentifyEndpoint(r, "/v1/admin/rate-scrape-errors")
+	httpapi.IdentifyEndpoint(r, "/v1/admin/rate-scrape-errors")
 	token := p.CheckToken(r)
 	if !token.Require(w, "cluster:show_errors") {
 		return

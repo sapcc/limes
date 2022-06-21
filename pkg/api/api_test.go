@@ -35,6 +35,7 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/assert"
+	"github.com/sapcc/go-bits/httpapi"
 
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
@@ -245,8 +246,12 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 	//validate that this is a no-op when no OPAConfiguration is provided
 	cluster.Config.SetupOPA()
 
-	router, _ := NewV1Router(cluster, enforcer)
-	return cluster, router, enforcer
+	handler := httpapi.Compose(
+		NewV1API(cluster, enforcer),
+		httpapi.WithGlobalMiddleware(ForbidClusterIDHeader),
+		httpapi.WithoutLogging(),
+	)
+	return cluster, handler, enforcer
 }
 
 type TestPolicyEnforcer struct {

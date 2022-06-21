@@ -32,8 +32,8 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/gopherpolicy"
+	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/respondwith"
-	"github.com/sapcc/go-bits/sre"
 
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
@@ -63,11 +63,10 @@ type v1Provider struct {
 	listProjectsMutex sync.Mutex
 }
 
-//NewV1Router creates a http.Handler that serves the Limes v1 API.
+//NewV1API creates an httpapi.API that serves the Limes v1 API.
 //It also returns the VersionData for this API version which is needed for the
 //version advertisement on "GET /".
-func NewV1Router(cluster *core.Cluster, policyEnforcer gopherpolicy.Enforcer) (http.Handler, VersionData) {
-	r := mux.NewRouter()
+func NewV1API(cluster *core.Cluster, policyEnforcer gopherpolicy.Enforcer) httpapi.API {
 	p := &v1Provider{
 		Cluster:        cluster,
 		PolicyEnforcer: policyEnforcer,
@@ -88,7 +87,20 @@ func NewV1Router(cluster *core.Cluster, policyEnforcer gopherpolicy.Enforcer) (h
 		},
 	}
 
+	return p
+}
+
+//AddTo implements the httpapi.API interface.
+func (p *v1Provider) AddTo(r *mux.Router) {
+	r.Methods("HEAD", "GET").Path("/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		httpapi.IdentifyEndpoint(r, "/")
+		httpapi.SkipRequestLog(r)
+		respondwith.JSON(w, 300, map[string]interface{}{"versions": []VersionData{p.VersionData}})
+	})
+
 	r.Methods("GET").Path("/v1/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		httpapi.IdentifyEndpoint(r, "/v1/")
+		httpapi.SkipRequestLog(r)
 		respondwith.JSON(w, 200, map[string]interface{}{"version": p.VersionData})
 	})
 
@@ -113,11 +125,11 @@ func NewV1Router(cluster *core.Cluster, policyEnforcer gopherpolicy.Enforcer) (h
 	r.Methods("PUT").Path("/v1/domains/{domain_id}/projects/{project_id}").HandlerFunc(p.PutProject)
 	r.Methods("GET").Path("/rates/v1/domains/{domain_id}/projects").HandlerFunc(p.ListProjectRates)
 	r.Methods("GET").Path("/rates/v1/domains/{domain_id}/projects/{project_id}").HandlerFunc(p.GetProjectRates)
-
-	return sre.Instrument(forbidClusterIDHeader(r)), p.VersionData
 }
 
-func forbidClusterIDHeader(inner http.Handler) http.Handler {
+//ForbidClusterIDHeader is a global middleware that rejects the
+//X-Limes-Cluster-Id header (which was removed from the API spec).
+func ForbidClusterIDHeader(inner http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		clusterID := r.Header.Get("X-Limes-Cluster-Id")
 		if clusterID != "" && clusterID != "current" {

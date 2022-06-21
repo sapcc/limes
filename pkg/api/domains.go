@@ -26,8 +26,8 @@ import (
 	gorp "gopkg.in/gorp.v2"
 
 	"github.com/sapcc/go-api-declarations/limes"
+	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/respondwith"
-	"github.com/sapcc/go-bits/sre"
 
 	"github.com/sapcc/limes/pkg/collector"
 	"github.com/sapcc/limes/pkg/db"
@@ -37,7 +37,7 @@ import (
 
 //ListDomains handles GET /v1/domains.
 func (p *v1Provider) ListDomains(w http.ResponseWriter, r *http.Request) {
-	sre.IdentifyEndpoint(r, "/v1/domains")
+	httpapi.IdentifyEndpoint(r, "/v1/domains")
 	token := p.CheckToken(r)
 	if !token.Require(w, "domain:list") {
 		return
@@ -59,7 +59,7 @@ func (p *v1Provider) ListDomains(w http.ResponseWriter, r *http.Request) {
 
 //GetDomain handles GET /v1/domains/:domain_id.
 func (p *v1Provider) GetDomain(w http.ResponseWriter, r *http.Request) {
-	sre.IdentifyEndpoint(r, "/v1/domains/:id")
+	httpapi.IdentifyEndpoint(r, "/v1/domains/:id")
 	token := p.CheckToken(r)
 	if !token.Require(w, "domain:show") {
 		return
@@ -84,7 +84,7 @@ func (p *v1Provider) GetDomain(w http.ResponseWriter, r *http.Request) {
 
 //DiscoverDomains handles POST /v1/domains/discover.
 func (p *v1Provider) DiscoverDomains(w http.ResponseWriter, r *http.Request) {
-	sre.IdentifyEndpoint(r, "/v1/domains/discover")
+	httpapi.IdentifyEndpoint(r, "/v1/domains/discover")
 	token := p.CheckToken(r)
 	if !token.Require(w, "domain:discover") {
 		return
@@ -104,13 +104,13 @@ func (p *v1Provider) DiscoverDomains(w http.ResponseWriter, r *http.Request) {
 
 //PutDomain handles PUT /v1/domains/:domain_id.
 func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
-	sre.IdentifyEndpoint(r, "/v1/domains/:id")
+	httpapi.IdentifyEndpoint(r, "/v1/domains/:id")
 	p.putOrSimulatePutDomain(w, r, false)
 }
 
 //SimulatePutDomain handles POST /v1/domains/:domain_id/simulate-put.
 func (p *v1Provider) SimulatePutDomain(w http.ResponseWriter, r *http.Request) {
-	sre.IdentifyEndpoint(r, "/v1/domains/:id/simulate-put")
+	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/simulate-put")
 	p.putOrSimulatePutDomain(w, r, true)
 }
 

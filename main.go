@@ -34,15 +34,14 @@ import (
 	policy "github.com/databus23/goslo.policy"
 	"github.com/dlmiddlecote/sqlstats"
 	"github.com/gophercloud/gophercloud"
-	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/cors"
 	"github.com/sapcc/go-api-declarations/bininfo"
 	"github.com/sapcc/go-bits/gopherpolicy"
-	"github.com/sapcc/go-bits/httpee"
+	"github.com/sapcc/go-bits/httpapi"
+	"github.com/sapcc/go-bits/httpext"
 	"github.com/sapcc/go-bits/logg"
-	"github.com/sapcc/go-bits/respondwith"
 	"gopkg.in/yaml.v2"
 
 	"github.com/sapcc/limes/pkg/api"
@@ -167,7 +166,7 @@ func taskCollect(cluster *core.Cluster, args []string) error {
 	http.Handle("/metrics", promhttp.Handler())
 	metricsListenAddr := util.EnvOrDefault("LIMES_COLLECTOR_METRICS_LISTEN_ADDRESS", ":8080")
 	logg.Info("listening on " + metricsListenAddr)
-	return httpee.ListenAndServeContext(httpee.ContextWithSIGINT(context.Background(), 10*time.Second), metricsListenAddr, nil)
+	return httpext.ListenAndServeContext(httpext.ContextWithSIGINT(context.Background(), 10*time.Second), metricsListenAddr, nil)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -191,54 +190,23 @@ func taskServe(cluster *core.Cluster, args []string) error {
 		logg.Fatal("could not load policy file: %s", err.Error())
 	}
 
-	mainRouter := mux.NewRouter()
-
-	//hook up the v1 API (this code is structured so that a newer API version can
-	//be added easily later)
-	v1Router, v1VersionData := api.NewV1Router(cluster, policyEnforcer)
-	mainRouter.PathPrefix("/v1/").Handler(v1Router)
-	mainRouter.PathPrefix("/rates/v1/").Handler(v1Router)
-
-	//add the version advertisement that lists all available API versions
-	mainRouter.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		allVersions := struct {
-			Versions []api.VersionData `json:"versions"`
-		}{[]api.VersionData{v1VersionData}}
-		respondwith.JSON(w, 300, allVersions)
+	//collect all API endpoints and middlewares
+	corsMiddleware := cors.New(cors.Options{
+		AllowedOrigins: []string{"*"},
+		AllowedMethods: []string{"HEAD", "GET", "POST", "PUT"},
+		AllowedHeaders: []string{"Content-Type", "User-Agent", "X-Auth-Token", "X-Limes-Cluster-Id"},
 	})
-	var handler http.Handler = mainRouter
-
-	//add Prometheus instrumentation
+	http.Handle("/", httpapi.Compose(
+		api.NewV1API(cluster, policyEnforcer),
+		httpapi.WithGlobalMiddleware(api.ForbidClusterIDHeader),
+		httpapi.WithGlobalMiddleware(corsMiddleware.Handler),
+	))
 	http.Handle("/metrics", promhttp.Handler())
 
-	//add logging instrumentation
-	exceptCodeStrings := strings.Split(os.Getenv("LIMES_API_REQUEST_LOG_EXCEPT_STATUS_CODES"), ",")
-	var exceptCodes []int
-	for _, v := range exceptCodeStrings {
-		code, err := strconv.Atoi(strings.TrimSpace(v))
-		if err != nil {
-			logg.Fatal("could not parse LIMES_API_REQUEST_LOG_EXCEPT_STATUS_CODES: %s", err.Error())
-		}
-		exceptCodes = append(exceptCodes, code)
-	}
-	handler = logg.Middleware{ExceptStatusCodes: exceptCodes}.Wrap(handler)
-
-	//add CORS support
-	allowedOriginStr := strings.ReplaceAll(os.Getenv("LIMES_API_CORS_ALLOWED_ORIGINS"), " ", "")
-	allowedOrigins := strings.Split(allowedOriginStr, "||")
-	if len(allowedOrigins) > 0 {
-		handler = cors.New(cors.Options{
-			AllowedOrigins: allowedOrigins,
-			AllowedMethods: []string{"HEAD", "GET", "POST", "PUT"},
-			AllowedHeaders: []string{"Content-Type", "User-Agent", "X-Auth-Token", "X-Limes-Cluster-Id"},
-		}).Handler(handler)
-	}
-
 	//start HTTP server
-	http.Handle("/", handler)
 	apiListenAddr := util.EnvOrDefault("LIMES_API_LISTEN_ADDRESS", ":80")
 	logg.Info("listening on " + apiListenAddr)
-	return httpee.ListenAndServeContext(httpee.ContextWithSIGINT(context.Background(), 10*time.Second), apiListenAddr, nil)
+	return httpext.ListenAndServeContext(httpext.ContextWithSIGINT(context.Background(), 10*time.Second), apiListenAddr, nil)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
