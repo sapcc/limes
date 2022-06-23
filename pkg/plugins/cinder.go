@@ -27,7 +27,7 @@ import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/extensions/quotasets"
-	"github.com/gophercloud/gophercloud/openstack/blockstorage/v2/volumes"
+	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
 	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
@@ -143,7 +143,7 @@ func (p *cinderPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gopher
 
 //Scrape implements the core.QuotaPlugin interface.
 func (p *cinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (map[string]core.ResourceData, string, error) {
-	client, err := openstack.NewBlockStorageV2(provider, eo)
+	client, err := openstack.NewBlockStorageV3(provider, eo)
 	if err != nil {
 		return nil, "", err
 	}
@@ -236,7 +236,7 @@ func (p *cinderPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherc
 		requestData.QuotaSet["volumes"] += quotaVolumes
 	}
 
-	client, err := openstack.NewBlockStorageV2(provider, eo)
+	client, err := openstack.NewBlockStorageV3(provider, eo)
 	if err != nil {
 		return err
 	}

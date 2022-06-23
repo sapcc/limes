@@ -31,7 +31,7 @@ import (
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
-	"github.com/gophercloud/gophercloud/openstack/blockstorage/v2/volumes"
+	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/availabilityzones"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/limits"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/quotasets"
@@ -257,7 +257,7 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 	if err != nil {
 		return nil, "", err
 	}
-	blockStorageV2, err := openstack.NewBlockStorageV2(provider, eo)
+	blockStorageV2, err := openstack.NewBlockStorageV3(provider, eo)
 	if err != nil {
 		return nil, "", err
 	}
