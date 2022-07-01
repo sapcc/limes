@@ -81,6 +81,8 @@ type Project struct {
 	UUID        string `db:"uuid"`
 	ParentUUID  string `db:"parent_uuid"`
 	HasBursting bool   `db:"has_bursting"`
+	//TagList is comma-separated. This is safe since Keystone forbids commas in tag names.
+	TagList string `db:"tags"`
 }
 
 //ProjectService contains a record from the `project_services` table.

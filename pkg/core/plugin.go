@@ -48,6 +48,7 @@ type KeystoneProject struct {
 	UUID       string         `json:"id"`
 	Name       string         `json:"name"`
 	ParentUUID string         `json:"parent_id,omitempty"`
+	Tags       []string       `json:"tags,omitempty"`
 	Domain     KeystoneDomain `json:"domain"`
 }
 

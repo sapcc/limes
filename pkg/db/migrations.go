@@ -260,4 +260,10 @@ var SQLMigrations = map[string]string{
 			ADD COLUMN rates_scrape_error_message TEXT NOT NULL DEFAULT '';
 		UPDATE project_services SET checked_at = scraped_at, rates_checked_at = rates_scraped_at;
 	`,
+	"020_add_project_tags.down.sql": `
+		ALTER TABLE projects DROP COLUMN tags;
+	`,
+	"020_add_project_tags.up.sql": `
+		ALTER TABLE projects ADD COLUMN tags TEXT NOT NULL DEFAULT '';
+	`,
 }
