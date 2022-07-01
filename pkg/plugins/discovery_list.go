@@ -91,6 +91,7 @@ func (p *listDiscoveryPlugin) ListProjects(provider *gophercloud.ProviderClient,
 			UUID:       p.ID,
 			Name:       p.Name,
 			ParentUUID: p.ParentID,
+			Tags:       p.Tags,
 			Domain:     domain,
 		})
 	}
