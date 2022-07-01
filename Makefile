@@ -14,6 +14,9 @@ endif
 
 default: build-all
 
+copy-fixtures:
+	find -name '*.actual' | xargs -I{} bash -c 'mv {} $$(echo {} | sed "s/.actual//g")'
+
 GO_BUILDFLAGS = -mod vendor
 GO_LDFLAGS =
 GO_TESTENV =
