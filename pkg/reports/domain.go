@@ -26,12 +26,13 @@ import (
 	"time"
 
 	"github.com/sapcc/go-api-declarations/limes"
+	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
 )
 
-var domainReportQuery1 = db.SimplifyWhitespaceInSQL(`
+var domainReportQuery1 = sqlext.SimplifyWhitespace(`
 	SELECT d.uuid, d.name, ps.type, pr.name, SUM(pr.quota), SUM(pr.usage),
 	       SUM(GREATEST(pr.usage - pr.quota, 0)),
 	       SUM(GREATEST(pr.backend_quota, 0)), MIN(pr.backend_quota) < 0,
@@ -45,7 +46,7 @@ var domainReportQuery1 = db.SimplifyWhitespaceInSQL(`
 	 WHERE %s GROUP BY d.uuid, d.name, ps.type, pr.name
 `)
 
-var domainReportQuery2 = db.SimplifyWhitespaceInSQL(`
+var domainReportQuery2 = sqlext.SimplifyWhitespace(`
 	SELECT d.uuid, d.name, ds.type, dr.name, dr.quota
 	  FROM domains d
 	  LEFT OUTER JOIN domain_services ds ON ds.domain_id = d.id {{AND ds.type = $service_type}}
@@ -68,7 +69,7 @@ func GetDomains(cluster *core.Cluster, domainID *int64, dbi db.Interface, filter
 	domains := make(domains)
 	queryStr, joinArgs := filter.PrepareQuery(domainReportQuery1)
 	whereStr, whereArgs := db.BuildSimpleWhereClause(fields, len(joinArgs))
-	err := db.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
+	err := sqlext.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		var (
 			domainUUID           string
 			domainName           string
@@ -160,7 +161,7 @@ func GetDomains(cluster *core.Cluster, domainID *int64, dbi db.Interface, filter
 	//second query: add domain quotas
 	queryStr, joinArgs = filter.PrepareQuery(domainReportQuery2)
 	whereStr, whereArgs = db.BuildSimpleWhereClause(fields, len(joinArgs))
-	err = db.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
+	err = sqlext.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		var (
 			domainUUID   string
 			domainName   string

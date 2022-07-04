@@ -36,6 +36,7 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/httpapi"
+	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
@@ -2066,7 +2067,7 @@ func expectStaleProjectServices(t *testing.T, pairs ...string) {
 	`
 	var actualPairs []string
 
-	err := db.ForeachRow(db.DB, queryStr, nil, func(rows *sql.Rows) error {
+	err := sqlext.ForeachRow(db.DB, queryStr, nil, func(rows *sql.Rows) error {
 		var (
 			projectName string
 			serviceType string

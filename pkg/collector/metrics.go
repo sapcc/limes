@@ -28,6 +28,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
@@ -196,7 +197,7 @@ func (c *AggregateMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 	maxRatesScrapedAtGauge.Describe(ch)
 }
 
-var scrapedAtAggregateQuery = db.SimplifyWhitespaceInSQL(`
+var scrapedAtAggregateQuery = sqlext.SimplifyWhitespace(`
 	SELECT ps.type, MIN(ps.scraped_at), MAX(ps.scraped_at), MIN(ps.rates_scraped_at), MAX(ps.rates_scraped_at)
 	  FROM domains d
 	  JOIN projects p ON p.domain_id = d.id
@@ -221,7 +222,7 @@ func (c *AggregateMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	maxRatesScrapedAtDesc := <-descCh
 
 	queryArgs := []interface{}{c.Cluster.ID}
-	err := db.ForeachRow(db.DB, scrapedAtAggregateQuery, queryArgs, func(rows *sql.Rows) error {
+	err := sqlext.ForeachRow(db.DB, scrapedAtAggregateQuery, queryArgs, func(rows *sql.Rows) error {
 		var (
 			serviceType       string
 			minScrapedAt      *time.Time
@@ -313,7 +314,7 @@ func (c *CapacityPluginMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 	}
 }
 
-var capacitySerializedMetricsGetQuery = db.SimplifyWhitespaceInSQL(`
+var capacitySerializedMetricsGetQuery = sqlext.SimplifyWhitespace(`
 	SELECT capacitor_id, serialized_metrics
 	  FROM cluster_capacitors
 	 WHERE cluster_id = $1 AND serialized_metrics != ''
@@ -333,7 +334,7 @@ func (c *CapacityPluginMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	queryArgs := []interface{}{c.Cluster.ID}
-	err := db.ForeachRow(db.DB, capacitySerializedMetricsGetQuery, queryArgs, func(rows *sql.Rows) error {
+	err := sqlext.ForeachRow(db.DB, capacitySerializedMetricsGetQuery, queryArgs, func(rows *sql.Rows) error {
 		var i CapacityPluginMetricsInstance
 		err := rows.Scan(&i.CapacitorID, &i.SerializedMetrics)
 		if err == nil {
@@ -403,7 +404,7 @@ func (c *QuotaPluginMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 	}
 }
 
-var quotaSerializedMetricsGetQuery = db.SimplifyWhitespaceInSQL(`
+var quotaSerializedMetricsGetQuery = sqlext.SimplifyWhitespace(`
 	SELECT d.name, d.uuid, p.name, p.uuid, p.parent_uuid, ps.type, ps.serialized_metrics
 	  FROM domains d
 	  JOIN projects p ON p.domain_id = d.id
@@ -425,7 +426,7 @@ func (c *QuotaPluginMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	queryArgs := []interface{}{c.Cluster.ID}
-	err := db.ForeachRow(db.DB, quotaSerializedMetricsGetQuery, queryArgs, func(rows *sql.Rows) error {
+	err := sqlext.ForeachRow(db.DB, quotaSerializedMetricsGetQuery, queryArgs, func(rows *sql.Rows) error {
 		var i QuotaPluginMetricsInstance
 		err := rows.Scan(
 			&i.Project.Domain.Name, &i.Project.Domain.UUID,
@@ -568,14 +569,14 @@ func (c *DataMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 	unitConversionGauge.Describe(ch)
 }
 
-var clusterMetricsQuery = db.SimplifyWhitespaceInSQL(`
+var clusterMetricsQuery = sqlext.SimplifyWhitespace(`
 	SELECT cs.type, cr.name, cr.capacity, cr.capacity_per_az
 	  FROM cluster_services cs
 	  JOIN cluster_resources cr ON cr.service_id = cs.id
 	 WHERE cs.cluster_id = $1
 `)
 
-var domainMetricsQuery = db.SimplifyWhitespaceInSQL(`
+var domainMetricsQuery = sqlext.SimplifyWhitespace(`
 	SELECT d.name, d.uuid, ds.type, dr.name, dr.quota
 	  FROM domains d
 	  JOIN domain_services ds ON ds.domain_id = d.id
@@ -583,7 +584,7 @@ var domainMetricsQuery = db.SimplifyWhitespaceInSQL(`
 	 WHERE d.cluster_id = $1
 `)
 
-var projectMetricsQuery = db.SimplifyWhitespaceInSQL(`
+var projectMetricsQuery = sqlext.SimplifyWhitespace(`
 	SELECT d.name, d.uuid, p.name, p.uuid, ps.type, pr.name, pr.quota, pr.backend_quota, pr.usage, pr.physical_usage
 	  FROM domains d
 	  JOIN projects p ON p.domain_id = d.id
@@ -592,7 +593,7 @@ var projectMetricsQuery = db.SimplifyWhitespaceInSQL(`
 	 WHERE d.cluster_id = $1
 `)
 
-var projectRateMetricsQuery = db.SimplifyWhitespaceInSQL(`
+var projectRateMetricsQuery = sqlext.SimplifyWhitespace(`
 	SELECT d.name, d.uuid, p.name, p.uuid, ps.type, pra.name, pra.usage_as_bigint
 	  FROM domains d
 	  JOIN projects p ON p.domain_id = d.id
@@ -636,7 +637,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	//fetch values for cluster level
 	capacityReported := make(map[string]map[string]bool)
 	queryArgs := []interface{}{c.Cluster.ID}
-	err := db.ForeachRow(db.DB, clusterMetricsQuery, queryArgs, func(rows *sql.Rows) error {
+	err := sqlext.ForeachRow(db.DB, clusterMetricsQuery, queryArgs, func(rows *sql.Rows) error {
 		var (
 			serviceType   string
 			resourceName  string
@@ -712,7 +713,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	//fetch values for domain level
-	err = db.ForeachRow(db.DB, domainMetricsQuery, queryArgs, func(rows *sql.Rows) error {
+	err = sqlext.ForeachRow(db.DB, domainMetricsQuery, queryArgs, func(rows *sql.Rows) error {
 		var (
 			domainName   string
 			domainUUID   string
@@ -736,7 +737,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	//fetch values for project level (quota/usage)
-	err = db.ForeachRow(db.DB, projectMetricsQuery, queryArgs, func(rows *sql.Rows) error {
+	err = sqlext.ForeachRow(db.DB, projectMetricsQuery, queryArgs, func(rows *sql.Rows) error {
 		var (
 			domainName    string
 			domainUUID    string
@@ -807,7 +808,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	//fetch values for project level (rate usage)
-	err = db.ForeachRow(db.DB, projectRateMetricsQuery, queryArgs, func(rows *sql.Rows) error {
+	err = sqlext.ForeachRow(db.DB, projectRateMetricsQuery, queryArgs, func(rows *sql.Rows) error {
 		var (
 			domainName    string
 			domainUUID    string

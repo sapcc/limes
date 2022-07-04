@@ -20,7 +20,6 @@
 package test
 
 import (
-	"fmt"
 	"net/url"
 	"testing"
 
@@ -48,34 +47,12 @@ func InitDatabase(t *testing.T, fixtureFile *string) {
 
 	db.DB = &gorp.DbMap{Db: postgresDB, Dialect: gorp.PostgresDialect{}}
 
-	//wipe the DB clean if there are any leftovers from the previous test run
-	//(this will also wipe all other tables because of ON DELETE CASCADE
-	//relations)
-	for _, tableName := range []string{"cluster_capacitors", "cluster_services", "domains"} {
-		_, err := db.DB.Exec(`DELETE FROM ` + tableName)
-		if err != nil {
-			t.Fatal(err.Error())
-		}
-	}
-
-	//populate with initial resources if a baseline fixture has been given
+	//reset the DB contents and populate with initial resources if requested
+	easypg.ClearTables(t, db.DB.Db, "cluster_capacitors", "cluster_services", "domains") //all other tables via "ON DELETE CASCADE"
 	if fixtureFile != nil {
 		easypg.ExecSQLFile(t, db.DB.Db, *fixtureFile)
 	}
-
-	//reset all primary key sequences for reproducible row IDs
-	for _, tableName := range []string{"cluster_services", "domains", "domain_services", "projects", "project_services"} {
-		nextID, err := db.DB.SelectInt(fmt.Sprintf(
-			"SELECT 1 + COALESCE(MAX(id), 0) FROM %s", tableName,
-		))
-		if err != nil {
-			t.Fatal(err.Error())
-		}
-		_, err = db.DB.Exec(fmt.Sprintf(`ALTER SEQUENCE %s_id_seq RESTART WITH %d`, tableName, nextID))
-		if err != nil {
-			t.Fatal(err.Error())
-		}
-	}
+	easypg.ResetPrimaryKeys(t, db.DB.Db, "cluster_services", "domains", "domain_services", "projects", "project_services")
 
 	db.InitGorp()
 }

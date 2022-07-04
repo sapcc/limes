@@ -28,6 +28,7 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/respondwith"
+	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/pkg/collector"
 	"github.com/sapcc/limes/pkg/db"
@@ -160,7 +161,7 @@ func (p *v1Provider) putOrSimulatePutDomain(w http.ResponseWriter, r *http.Reque
 		if respondwith.ErrorText(w, err) {
 			return
 		}
-		defer db.RollbackUnlessCommitted(tx)
+		defer sqlext.RollbackUnlessCommitted(tx)
 		dbi = tx
 	}
 

@@ -28,6 +28,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/go-bits/sqlext"
 	"gopkg.in/gorp.v2"
 
 	"github.com/sapcc/limes/pkg/core"
@@ -135,7 +136,7 @@ func (c *Collector) scanCapacity() {
 	if err != nil {
 		c.LogError("write capacity failed: %s", err.Error())
 	}
-	defer db.RollbackUnlessCommitted(tx)
+	defer sqlext.RollbackUnlessCommitted(tx)
 
 	err = c.writeCapacitorInfo(tx, capacitorInfo)
 	if err != nil {

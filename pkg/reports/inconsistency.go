@@ -23,6 +23,7 @@ import (
 	"fmt"
 
 	"github.com/sapcc/go-api-declarations/limes"
+	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
@@ -80,7 +81,7 @@ type MismatchProjectQuota struct {
 	BackendQuota int64                `json:"backend_quota"`
 }
 
-var ocdqReportQuery = db.SimplifyWhitespaceInSQL(`
+var ocdqReportQuery = sqlext.SimplifyWhitespace(`
 	SELECT d.uuid, d.name, ps.type, pr.name, MAX(COALESCE(dr.quota, 0)), SUM(pr.quota)
 	  FROM domains d
 	  JOIN projects p ON p.domain_id = d.id
@@ -93,7 +94,7 @@ var ocdqReportQuery = db.SimplifyWhitespaceInSQL(`
 	ORDER BY d.name, ps.type, pr.name
 `)
 
-var ospqReportQuery = db.SimplifyWhitespaceInSQL(`
+var ospqReportQuery = sqlext.SimplifyWhitespace(`
 	SELECT d.uuid, d.name, p.uuid, p.name, ps.type, pr.name, SUM(pr.desired_backend_quota), SUM(pr.usage)
 	  FROM projects p
 	  LEFT OUTER JOIN domains d ON d.id=p.domain_id
@@ -104,7 +105,7 @@ var ospqReportQuery = db.SimplifyWhitespaceInSQL(`
 	ORDER BY d.name, p.name, ps.type, pr.name
 `)
 
-var mmpqReportQuery = db.SimplifyWhitespaceInSQL(`
+var mmpqReportQuery = sqlext.SimplifyWhitespace(`
 	SELECT d.uuid, d.name, p.uuid, p.name, ps.type, pr.name, SUM(pr.desired_backend_quota), SUM(pr.backend_quota)
 	  FROM projects p
 	  LEFT OUTER JOIN domains d ON d.id=p.domain_id
@@ -132,7 +133,7 @@ func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter) 
 	//ocdqReportQuery: data for overcommitted domain quota inconsistencies
 	queryStr, joinArgs := filter.PrepareQuery(ocdqReportQuery)
 	whereStr, whereArgs := db.BuildSimpleWhereClause(fields, len(joinArgs))
-	err := db.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
+	err := sqlext.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		ocdq := OvercommittedDomainQuota{}
 		err := rows.Scan(
 			&ocdq.Domain.UUID, &ocdq.Domain.Name, &ocdq.Service,
@@ -155,7 +156,7 @@ func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter) 
 	queryStr, joinArgs = filter.PrepareQuery(ospqReportQuery)
 	whereStr, whereArgs = db.BuildSimpleWhereClause(fields, len(joinArgs))
 	//nolint:dupl
-	err = db.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
+	err = sqlext.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		ospq := OverspentProjectQuota{}
 		err := rows.Scan(
 			&ospq.Project.Domain.UUID, &ospq.Project.Domain.Name,
@@ -179,7 +180,7 @@ func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter) 
 	queryStr, joinArgs = filter.PrepareQuery(mmpqReportQuery)
 	whereStr, whereArgs = db.BuildSimpleWhereClause(fields, len(joinArgs))
 	//nolint:dupl
-	err = db.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
+	err = sqlext.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		mmpq := MismatchProjectQuota{}
 		err := rows.Scan(
 			&mmpq.Project.Domain.UUID, &mmpq.Project.Domain.Name,

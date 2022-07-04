@@ -27,6 +27,7 @@ import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
@@ -34,7 +35,7 @@ import (
 )
 
 //query that finds the next project that needs to have rates scraped
-var findProjectForRateScrapeQuery = db.SimplifyWhitespaceInSQL(`
+var findProjectForRateScrapeQuery = sqlext.SimplifyWhitespace(`
 	SELECT ps.id, ps.rates_scraped_at, ps.rates_scrape_state, p.name, p.uuid, p.parent_uuid, d.name, d.uuid
 	FROM project_services ps
 	JOIN projects p ON p.id = ps.project_id
@@ -143,7 +144,7 @@ func (c *Collector) writeRateScrapeResult(serviceType string, serviceID int64, r
 	if err != nil {
 		return err
 	}
-	defer db.RollbackUnlessCommitted(tx)
+	defer sqlext.RollbackUnlessCommitted(tx)
 
 	//update existing project_rates entries
 	rateExists := make(map[string]bool)

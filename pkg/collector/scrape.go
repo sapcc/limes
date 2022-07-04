@@ -30,6 +30,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/datamodel"
@@ -49,7 +50,7 @@ const (
 )
 
 //query that finds the next project that needs to have resources scraped
-var findProjectForResourceScrapeQuery = db.SimplifyWhitespaceInSQL(`
+var findProjectForResourceScrapeQuery = sqlext.SimplifyWhitespace(`
 	SELECT ps.id, ps.scraped_at, p.name, p.uuid, p.parent_uuid, p.id, p.has_bursting, d.name, d.uuid
 	FROM project_services ps
 	JOIN projects p ON p.id = ps.project_id
@@ -167,7 +168,7 @@ func (c *Collector) writeScrapeResult(project core.KeystoneProject, projectID in
 	if err != nil {
 		return fmt.Errorf("while beginning transaction: %w", err)
 	}
-	defer db.RollbackUnlessCommitted(tx)
+	defer sqlext.RollbackUnlessCommitted(tx)
 
 	//we have seen UPDATEs in this transaction getting stuck in the past, this
 	//should hopefully prevent this (or at least cause loud complaints when it
@@ -414,7 +415,7 @@ func (c *Collector) writeDummyResources(project core.KeystoneProject, projectHas
 	if err != nil {
 		return err
 	}
-	defer db.RollbackUnlessCommitted(tx)
+	defer sqlext.RollbackUnlessCommitted(tx)
 
 	var serviceConstraints map[string]core.QuotaConstraint
 	if c.Cluster.QuotaConstraints != nil {

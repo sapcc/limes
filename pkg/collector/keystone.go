@@ -22,6 +22,7 @@ package collector
 import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/datamodel"
@@ -166,7 +167,7 @@ func initDomain(cluster *core.Cluster, domain core.KeystoneDomain) (*db.Domain, 
 	if err != nil {
 		return nil, err
 	}
-	defer db.RollbackUnlessCommitted(tx)
+	defer sqlext.RollbackUnlessCommitted(tx)
 
 	//add record to `domains` table
 	dbDomain := &db.Domain{
@@ -285,7 +286,7 @@ func initProject(cluster *core.Cluster, domain *db.Domain, project core.Keystone
 	if err != nil {
 		return err
 	}
-	defer db.RollbackUnlessCommitted(tx)
+	defer sqlext.RollbackUnlessCommitted(tx)
 
 	//add record to `projects` table
 	dbProject := &db.Project{

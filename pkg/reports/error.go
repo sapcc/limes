@@ -26,11 +26,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sapcc/go-bits/sqlext"
+
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
 )
 
-var scrapeErrorsQuery = db.SimplifyWhitespaceInSQL(`
+var scrapeErrorsQuery = sqlext.SimplifyWhitespace(`
 	SELECT d.uuid, d.name, p.uuid, p.name, ps.type, ps.checked_at, ps.scrape_error_message
 	  FROM projects p
 	  JOIN domains d ON d.id = p.domain_id
@@ -70,7 +72,7 @@ func getScrapeErrors(cluster *core.Cluster, dbi db.Interface, filter Filter, dbQ
 	var result []ScrapeError
 	queryStr, joinArgs := filter.PrepareQuery(dbQuery)
 	whereStr, whereArgs := db.BuildSimpleWhereClause(fields, len(joinArgs))
-	err := db.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
+	err := sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		var sErr ScrapeError
 		var checkedAtAsTime *time.Time
 		err := rows.Scan(

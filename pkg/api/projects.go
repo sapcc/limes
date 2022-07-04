@@ -33,6 +33,7 @@ import (
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/respondwith"
+	"github.com/sapcc/go-bits/sqlext"
 	gorp "gopkg.in/gorp.v2"
 
 	"github.com/sapcc/limes/pkg/collector"
@@ -324,7 +325,7 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 		if respondwith.ErrorText(w, err) {
 			return
 		}
-		defer db.RollbackUnlessCommitted(tx)
+		defer sqlext.RollbackUnlessCommitted(tx)
 		dbi = tx
 	}
 
@@ -532,7 +533,7 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 		if respondwith.ErrorText(w, err) {
 			return
 		}
-		defer db.RollbackUnlessCommitted(tx)
+		defer sqlext.RollbackUnlessCommitted(tx)
 		dbi = tx
 	}
 
@@ -555,7 +556,7 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 				FROM project_services ps
 				JOIN project_resources pr ON ps.id = pr.service_id
 			 WHERE ps.project_id = $1 AND pr.usage > pr.quota`
-		err := db.ForeachRow(dbi, query, []interface{}{project.ID}, func(rows *sql.Rows) error {
+		err := sqlext.ForeachRow(dbi, query, []interface{}{project.ID}, func(rows *sql.Rows) error {
 			var serviceType, resourceName string
 			err := rows.Scan(&serviceType, &resourceName)
 			overbookedResources = append(overbookedResources, serviceType+"/"+resourceName)

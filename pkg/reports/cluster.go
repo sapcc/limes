@@ -27,12 +27,13 @@ import (
 	"time"
 
 	"github.com/sapcc/go-api-declarations/limes"
+	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
 )
 
-var clusterReportQuery1 = db.SimplifyWhitespaceInSQL(`
+var clusterReportQuery1 = sqlext.SimplifyWhitespace(`
 	SELECT ps.type, pr.name,
 	       SUM(pr.quota), SUM(pr.usage),
 	       SUM(GREATEST(pr.usage - pr.quota, 0)),
@@ -46,7 +47,7 @@ var clusterReportQuery1 = db.SimplifyWhitespaceInSQL(`
 	 WHERE %s GROUP BY d.cluster_id, ps.type, pr.name
 `)
 
-var clusterReportQuery2 = db.SimplifyWhitespaceInSQL(`
+var clusterReportQuery2 = sqlext.SimplifyWhitespace(`
 	SELECT ds.type, dr.name, SUM(dr.quota)
 	  FROM domains d
 	  JOIN domain_services ds ON ds.domain_id = d.id {{AND ds.type = $service_type}}
@@ -54,7 +55,7 @@ var clusterReportQuery2 = db.SimplifyWhitespaceInSQL(`
 	 WHERE %s GROUP BY d.cluster_id, ds.type, dr.name
 `)
 
-var clusterReportQuery3 = db.SimplifyWhitespaceInSQL(`
+var clusterReportQuery3 = sqlext.SimplifyWhitespace(`
 	SELECT cs.type, cr.name, cr.capacity,
 	       cr.capacity_per_az, cr.subcapacities, cs.scraped_at
 	  FROM cluster_services cs
@@ -74,7 +75,7 @@ func GetCluster(cluster *core.Cluster, dbi db.Interface, filter Filter) (*limes.
 		//first query: collect project usage data in these clusters
 		queryStr, joinArgs := filter.PrepareQuery(clusterReportQuery1)
 		whereStr, whereArgs := db.BuildSimpleWhereClause(makeClusterFilter("d", cluster.ID), len(joinArgs))
-		err := db.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
+		err := sqlext.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 			var (
 				serviceType       string
 				resourceName      *string
@@ -154,7 +155,7 @@ func GetCluster(cluster *core.Cluster, dbi db.Interface, filter Filter) (*limes.
 		//second query: collect domain quota data in these clusters
 		queryStr, joinArgs = filter.PrepareQuery(clusterReportQuery2)
 		whereStr, whereArgs = db.BuildSimpleWhereClause(makeClusterFilter("d", cluster.ID), len(joinArgs))
-		err = db.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
+		err = sqlext.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 			var (
 				serviceType  string
 				resourceName *string
@@ -182,7 +183,7 @@ func GetCluster(cluster *core.Cluster, dbi db.Interface, filter Filter) (*limes.
 			queryStr = strings.Replace(queryStr, "cr.subcapacities", "''", 1)
 		}
 		whereStr, whereArgs = db.BuildSimpleWhereClause(makeClusterFilter("cs", cluster.ID), len(joinArgs))
-		err = db.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
+		err = sqlext.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 			var (
 				serviceType   string
 				resourceName  *string

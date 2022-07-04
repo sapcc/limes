@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/sapcc/go-api-declarations/limes"
+	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
@@ -43,14 +44,14 @@ import (
 //completed project reports (and then reclaim their memory usage) as soon as
 //possible.
 var (
-	projectRateLimitReportQuery = db.SimplifyWhitespaceInSQL(`
+	projectRateLimitReportQuery = sqlext.SimplifyWhitespace(`
 	SELECT p.uuid, p.name, COALESCE(p.parent_uuid, ''), ps.type, ps.scraped_at, ps.rates_scraped_at, pra.name, pra.rate_limit, pra.window_ns, pra.usage_as_bigint
 	  FROM projects p
 	  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
 	  LEFT OUTER JOIN project_rates pra ON pra.service_id = ps.id
 	 WHERE %s
 `)
-	projectReportQuery = db.SimplifyWhitespaceInSQL(`
+	projectReportQuery = sqlext.SimplifyWhitespace(`
 	SELECT p.uuid, p.name, COALESCE(p.parent_uuid, ''), p.has_bursting, ps.type, ps.scraped_at, ps.rates_scraped_at, pr.name, pr.quota, pr.usage, pr.physical_usage, pr.backend_quota, pr.subresources
 	  FROM projects p
 	  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
@@ -103,7 +104,7 @@ func GetProjects(cluster *core.Cluster, domain db.Domain, project *db.Project, d
 	if filter.WithRates {
 		queryStr, joinArgs := filter.PrepareQuery(projectRateLimitReportQuery)
 		whereStr, whereArgs := db.BuildSimpleWhereClause(fields, len(joinArgs))
-		err := db.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
+		err := sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 			var (
 				projectUUID       string
 				projectName       string
@@ -181,7 +182,7 @@ func GetProjects(cluster *core.Cluster, domain db.Domain, project *db.Project, d
 		queryStr, joinArgs := filter.PrepareQuery(queryStr)
 		whereStr, whereArgs := db.BuildSimpleWhereClause(fields, len(joinArgs))
 		var currentProjectUUID string
-		err := db.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
+		err := sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 			var (
 				projectUUID        string
 				projectName        string

@@ -20,9 +20,7 @@
 package db
 
 import (
-	"database/sql"
 	"fmt"
-	"regexp"
 	"strings"
 )
 
@@ -65,37 +63,4 @@ func makePlaceholderList(count, offset int) string {
 		placeholders[idx] = fmt.Sprintf("$%d", offset+idx)
 	}
 	return strings.Join(placeholders, ",")
-}
-
-//ForeachRow calls dbi.Query() with the given query and args, then executes the
-//given action one for every row in the result set. It then cleans up the
-//result set, and it handles any errors that occur during all of this.
-func ForeachRow(dbi Interface, query string, args []interface{}, action func(*sql.Rows) error) error {
-	rows, err := dbi.Query(query, args...)
-	if err != nil {
-		return err
-	}
-	for rows.Next() {
-		err = action(rows)
-		if err != nil {
-			rows.Close()
-			return err
-		}
-	}
-	err = rows.Err()
-	if err != nil {
-		rows.Close()
-		return err
-	}
-	return rows.Close()
-}
-
-var sqlWhitespaceOrCommentRx = regexp.MustCompile(`\s+(?m:--.*$)?`)
-
-//SimplifyWhitespaceInSQL takes an SQL query string that's hardcoded in the
-//program and simplifies all the whitespaces, esp. ensuring that there are no
-//comments and newlines. This makes the database log nicer when queries are
-//logged there (e.g. for running too long).
-func SimplifyWhitespaceInSQL(query string) string {
-	return sqlWhitespaceOrCommentRx.ReplaceAllString(query, " ")
 }

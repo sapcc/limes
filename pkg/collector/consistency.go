@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/pkg/datamodel"
 	"github.com/sapcc/limes/pkg/db"
@@ -108,7 +109,7 @@ func (c *Collector) checkConsistencyDomain(domain db.Domain) {
 		c.LogError(err.Error())
 		return
 	}
-	defer db.RollbackUnlessCommitted(tx)
+	defer sqlext.RollbackUnlessCommitted(tx)
 
 	//validate domain_services entries
 	_, err = datamodel.ValidateDomainServices(tx, c.Cluster, domain)
@@ -142,7 +143,7 @@ func (c *Collector) checkConsistencyProject(project db.Project, domain db.Domain
 	if err != nil {
 		return err
 	}
-	defer db.RollbackUnlessCommitted(tx)
+	defer sqlext.RollbackUnlessCommitted(tx)
 
 	//validate project_services entries
 	_, err = datamodel.ValidateProjectServices(tx, c.Cluster, domain, project)

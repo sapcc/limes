@@ -20,7 +20,6 @@
 package db
 
 import (
-	"database/sql"
 	"fmt"
 	"net"
 	"net/url"
@@ -30,7 +29,7 @@ import (
 
 	"github.com/sapcc/go-api-declarations/bininfo"
 	"github.com/sapcc/go-bits/easypg"
-	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/pkg/util"
 )
@@ -82,34 +81,13 @@ func Init() error {
 	return nil
 }
 
-//RollbackUnlessCommitted calls Rollback() on a transaction if it hasn't been
-//committed or rolled back yet. Use this with the defer keyword to make sure
-//that a transaction is automatically rolled back when a function fails.
-func RollbackUnlessCommitted(tx *gorp.Transaction) {
-	err := tx.Rollback()
-	switch err {
-	case nil:
-		//rolled back successfully
-		logg.Info("implicit rollback done")
-		return
-	case sql.ErrTxDone:
-		//already committed or rolled back - nothing to do
-		return
-	default:
-		logg.Error("implicit rollback failed: %s", err.Error())
-	}
-}
-
 //Interface provides the common methods that both SQL connections and
 //transactions implement.
 type Interface interface {
 	//from database/sql
-	Exec(query string, args ...interface{}) (sql.Result, error)
-	Prepare(query string) (*sql.Stmt, error)
-	Query(query string, args ...interface{}) (*sql.Rows, error)
-	QueryRow(query string, args ...interface{}) *sql.Row
-	Insert(args ...interface{}) error
+	sqlext.Executor
 
 	//from gorp.v2
+	Insert(args ...interface{}) error
 	Select(i interface{}, query string, args ...interface{}) ([]interface{}, error)
 }
