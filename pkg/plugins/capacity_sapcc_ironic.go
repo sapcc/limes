@@ -26,7 +26,6 @@ import (
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
-	"github.com/gophercloud/gophercloud/openstack/baremetal/v1/nodes"
 	flavorsmodule "github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/prometheus/client_golang/prometheus"
@@ -163,12 +162,12 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 		return nil, "", err
 	}
 	ironicClient.Microversion = "1.22"
-	allPages, err := nodes.ListDetail(ironicClient, nil).AllPages()
+	allPages, err := ironicNodesListDetail(ironicClient).AllPages()
 	if err != nil {
 		return nil, "", err
 	}
 	var allNodes []ironicNode
-	err = nodes.ExtractNodesInto(allPages, &allNodes)
+	err = ironicExtractNodesInto(allPages, &allNodes)
 	if err != nil {
 		return nil, "", err
 	}
