@@ -486,7 +486,7 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 					if err == nil {
 						subResource["os_type"] = osType
 					} else {
-						logg.Error("error while trying to find OS type for instance %s from boot volume: %s", instance.ID, util.ErrorToString(err))
+						logg.Error("error while trying to find OS type for instance %s from boot volume: %s", instance.ID, util.UnpackError(err).Error())
 						subResource["os_type"] = "rootdisk-inspect-error"
 					}
 				} else {
@@ -497,7 +497,7 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 						if err == nil {
 							subResource["os_type"] = osType
 						} else {
-							logg.Error("error while trying to find OS type for image %s: %s", imageID, util.ErrorToString(err))
+							logg.Error("error while trying to find OS type for image %s: %s", imageID, util.UnpackError(err).Error())
 							subResource["os_type"] = "image-inspect-error"
 						}
 					} else {

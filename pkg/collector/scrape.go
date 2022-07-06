@@ -123,7 +123,7 @@ func (c *Collector) Scrape() {
 				c.LogError("suspending %s resource scraping for %d minutes: %s", serviceType, sleepInterval/time.Minute, err.Error())
 				scrapeSuspendedCounter.With(labels).Inc()
 			} else {
-				c.LogError("scrape %s resources for %s/%s failed: %s", serviceType, project.Domain.Name, project.Name, util.ErrorToString(err))
+				c.LogError("scrape %s resources for %s/%s failed: %s", serviceType, project.Domain.Name, project.Name, util.UnpackError(err).Error())
 
 				if serviceScrapedAt == nil {
 					//see explanation inside the called function's body
@@ -389,7 +389,7 @@ func (c *Collector) writeScrapeResult(project core.KeystoneProject, projectID in
 func (c *Collector) writeScrapeError(project core.KeystoneProject, serviceType string, serviceID int64, scrapeErr error, checkedAt time.Time, checkDuration time.Duration) {
 	_, err := db.DB.Exec(
 		`UPDATE project_services SET checked_at = $1, scrape_duration_secs = $2, scrape_error_message = $3, stale = $4 WHERE id = $5`,
-		checkedAt, checkDuration.Seconds(), util.ErrorToString(scrapeErr), false, serviceID,
+		checkedAt, checkDuration.Seconds(), util.UnpackError(scrapeErr).Error(), false, serviceID,
 	)
 	if err != nil {
 		logg.Error("additional DB error while trying to write scraping error for service %s in project %s: %s",

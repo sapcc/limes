@@ -64,7 +64,7 @@ func main() {
 	cluster := core.NewConfiguration(configPath)
 	err := cluster.Connect()
 	if err != nil {
-		logg.Fatal(util.ErrorToString(err))
+		logg.Fatal(util.UnpackError(err).Error())
 	}
 	api.StartAuditTrail(cluster.ID, cluster.Config.CADF)
 
@@ -90,7 +90,7 @@ func main() {
 	//run task
 	err = task(cluster, remainingArgs)
 	if err != nil {
-		logg.Fatal(util.ErrorToString(err))
+		logg.Fatal(util.UnpackError(err).Error())
 	}
 }
 
@@ -142,7 +142,7 @@ func taskCollect(cluster *core.Cluster, args []string) error {
 		for {
 			_, err := collector.ScanDomains(cluster, collector.ScanDomainsOpts{ScanAllProjects: true})
 			if err != nil {
-				logg.Error(util.ErrorToString(err))
+				logg.Error(util.UnpackError(err).Error())
 			}
 			time.Sleep(discoverInterval)
 		}
@@ -384,7 +384,7 @@ func taskTestScanCapacity(cluster *core.Cluster, args []string) error {
 	provider, eo := cluster.ProviderClient()
 	capacities, serializedMetrics, err := plugin.Scrape(provider, eo)
 	if err != nil {
-		logg.Error("Scrape failed: %s", util.ErrorToString(err))
+		logg.Error("Scrape failed: %s", util.UnpackError(err).Error())
 		capacities = nil
 	}
 
