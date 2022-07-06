@@ -22,11 +22,9 @@ package api
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net"
 	"net/http"
 	"net/url"
-	"os"
 	"strconv"
 	"time"
 
@@ -36,18 +34,12 @@ import (
 	"github.com/sapcc/go-bits/audittools"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/go-bits/osext"
 
 	"github.com/sapcc/limes/pkg/core"
 )
 
-var showAuditOnStdout = os.Getenv("LIMES_SILENT") != "1"
-
-func init() {
-	log.SetOutput(os.Stdout)
-	if os.Getenv("LIMES_DEBUG") == "1" {
-		logg.ShowDebug = true
-	}
-}
+var showAuditOnStdout = !osext.GetenvBool("LIMES_SILENT")
 
 //eventSink is a channel that receives audit events.
 var eventSink chan<- cadf.Event

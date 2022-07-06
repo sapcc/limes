@@ -32,6 +32,8 @@ import (
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/logg"
+
+	"github.com/sapcc/limes/pkg/util"
 )
 
 //Cluster contains all configuration and runtime information about a single
@@ -175,14 +177,14 @@ func (c *Cluster) Connect() error {
 	for _, srv := range c.Config.Services {
 		err := c.QuotaPlugins[srv.Type].Init(provider, eo)
 		if err != nil {
-			return fmt.Errorf("failed to initialize service %s: %s", srv.Type, err.Error())
+			return fmt.Errorf("failed to initialize service %s: %w", srv.Type, util.UnpackError(err))
 		}
 	}
 
 	for _, capa := range c.Config.Capacitors {
 		err := c.CapacityPlugins[capa.ID].Init(provider, eo)
 		if err != nil {
-			return fmt.Errorf("failed to initialize capacitor %s: %s", capa.ID, err.Error())
+			return fmt.Errorf("failed to initialize capacitor %s: %w", capa.ID, util.UnpackError(err))
 		}
 	}
 
