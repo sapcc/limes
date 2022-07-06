@@ -29,7 +29,7 @@ import (
 func ironicNodesListDetail(client *gophercloud.ServiceClient) pagination.Pager {
 	url := client.ServiceURL("nodes", "detail")
 	return pagination.NewPager(client, url, func(r pagination.PageResult) pagination.Page {
-		return ironicNodePage{nodes.NodePage{pagination.LinkedPageBase{PageResult: r}}}
+		return ironicNodePage{nodes.NodePage{LinkedPageBase: pagination.LinkedPageBase{PageResult: r}}}
 	})
 }
 
