@@ -22,8 +22,7 @@
 package secrets
 
 import (
-	"fmt"
-	"os"
+	"github.com/sapcc/go-bits/osext"
 )
 
 //AuthPassword holds either a plain text password or a key for the environment
@@ -52,9 +51,9 @@ func (p *AuthPassword) UnmarshalYAML(unmarshal func(interface{}) error) error {
 		return err
 	}
 
-	passFromEnv := os.Getenv(envVariableInput.Key)
-	if passFromEnv == "" {
-		return fmt.Errorf(`environment variable %q is not set`, envVariableInput.Key)
+	passFromEnv, err := osext.NeedGetenv(envVariableInput.Key)
+	if err != nil {
+		return err
 	}
 
 	*p = AuthPassword(passFromEnv)
