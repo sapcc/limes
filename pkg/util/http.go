@@ -41,7 +41,7 @@ func init() {
 		}
 	}
 
-	http.DefaultClient.Transport = loggingRoundTripper{http.DefaultTransport}
+	http.DefaultTransport = loggingRoundTripper{http.DefaultTransport}
 }
 
 //loggingRoundTripper adds logging for long round trips to http.RoundTripper.

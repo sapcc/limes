@@ -21,7 +21,6 @@ package core
 
 import (
 	"fmt"
-	"net/http"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
@@ -58,8 +57,6 @@ func (auth *AuthParameters) Connect() error {
 		return fmt.Errorf("cannot initialize OpenStack client: %v", err)
 	}
 
-	//use http.DefaultClient, esp. to pick up LIMES_INSECURE flag
-	auth.ProviderClient.HTTPClient = *http.DefaultClient
 	userAgent := fmt.Sprintf("%s@%s", bininfo.Component(), bininfo.VersionOr("rolling"))
 	auth.ProviderClient.UserAgent.Prepend(userAgent)
 
