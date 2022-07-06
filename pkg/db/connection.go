@@ -20,18 +20,13 @@
 package db
 
 import (
-	"fmt"
-	"net"
-	"net/url"
 	"os"
 
 	gorp "gopkg.in/gorp.v2"
 
-	"github.com/sapcc/go-api-declarations/bininfo"
 	"github.com/sapcc/go-bits/easypg"
+	"github.com/sapcc/go-bits/osext"
 	"github.com/sapcc/go-bits/sqlext"
-
-	"github.com/sapcc/limes/pkg/util"
 )
 
 //DB holds the main database connection. It will be `nil` until either Init() or
@@ -40,29 +35,16 @@ var DB *gorp.DbMap
 
 //Init initializes the connection to the database.
 func Init() error {
-	username := util.EnvOrDefault("LIMES_DB_USERNAME", "postgres")
-	pass := os.Getenv("LIMES_DB_PASSWORD")
-	host := util.EnvOrDefault("LIMES_DB_HOSTNAME", "localhost")
-	port := util.EnvOrDefault("LIMES_DB_PORT", "5432")
-	name := util.EnvOrDefault("LIMES_DB_NAME", "limes")
-
-	connOpts, err := url.ParseQuery(os.Getenv("LIMES_DB_CONNECTION_OPTIONS"))
+	dbURL, err := easypg.URLFrom(easypg.URLParts{
+		HostName:          osext.GetenvOrDefault("LIMES_DB_HOSTNAME", "localhost"),
+		Port:              osext.GetenvOrDefault("LIMES_DB_PORT", "5432"),
+		UserName:          osext.GetenvOrDefault("LIMES_DB_USERNAME", "postgres"),
+		Password:          os.Getenv("LIMES_DB_PASSWORD"),
+		ConnectionOptions: os.Getenv("LIMES_DB_CONNECTION_OPTIONS"),
+		DatabaseName:      osext.GetenvOrDefault("LIMES_DB_NAME", "limes"),
+	})
 	if err != nil {
-		return fmt.Errorf("while parsing LIMES_DB_CONNECTION_OPTIONS: %w", err)
-	}
-	hostname, err := os.Hostname()
-	if err == nil {
-		connOpts.Set("application_name", fmt.Sprintf("%s@%s", bininfo.Component(), hostname))
-	} else {
-		connOpts.Set("application_name", bininfo.Component())
-	}
-
-	dbURL := &url.URL{
-		Scheme:   "postgres",
-		User:     url.UserPassword(username, pass),
-		Host:     net.JoinHostPort(host, port),
-		Path:     name,
-		RawQuery: connOpts.Encode(),
+		return err
 	}
 
 	db, err := easypg.Connect(easypg.Configuration{
