@@ -31,7 +31,6 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/sapcc/go-api-declarations/limes"
-	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/respondwith"
 
@@ -56,9 +55,8 @@ type VersionLinkData struct {
 }
 
 type v1Provider struct {
-	Cluster        *core.Cluster
-	PolicyEnforcer gopherpolicy.Enforcer
-	VersionData    VersionData
+	Cluster     *core.Cluster
+	VersionData VersionData
 	//see comment in ListProjects() for details
 	listProjectsMutex sync.Mutex
 }
@@ -66,11 +64,8 @@ type v1Provider struct {
 //NewV1API creates an httpapi.API that serves the Limes v1 API.
 //It also returns the VersionData for this API version which is needed for the
 //version advertisement on "GET /".
-func NewV1API(cluster *core.Cluster, policyEnforcer gopherpolicy.Enforcer) httpapi.API {
-	p := &v1Provider{
-		Cluster:        cluster,
-		PolicyEnforcer: policyEnforcer,
-	}
+func NewV1API(cluster *core.Cluster) httpapi.API {
+	p := &v1Provider{Cluster: cluster}
 	p.VersionData = VersionData{
 		Status: "CURRENT",
 		ID:     "v1",

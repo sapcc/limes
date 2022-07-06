@@ -31,18 +31,15 @@ import (
 	"strings"
 	"time"
 
-	policy "github.com/databus23/goslo.policy"
 	"github.com/dlmiddlecote/sqlstats"
 	"github.com/gophercloud/gophercloud"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/cors"
 	"github.com/sapcc/go-api-declarations/bininfo"
-	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/httpext"
 	"github.com/sapcc/go-bits/logg"
-	"gopkg.in/yaml.v2"
 
 	"github.com/sapcc/limes/pkg/api"
 	"github.com/sapcc/limes/pkg/collector"
@@ -184,12 +181,6 @@ func taskServe(cluster *core.Cluster, args []string) error {
 	}
 	prometheus.MustRegister(sqlstats.NewStatsCollector("limes", db.DB.Db))
 
-	//load oslo.policy file
-	policyEnforcer, err := loadPolicyFile(util.EnvOrDefault("LIMES_API_POLICY_PATH", "/etc/limes/policy.yaml"))
-	if err != nil {
-		logg.Fatal("could not load policy file: %s", err.Error())
-	}
-
 	//collect all API endpoints and middlewares
 	corsMiddleware := cors.New(cors.Options{
 		AllowedOrigins: []string{"*"},
@@ -197,7 +188,7 @@ func taskServe(cluster *core.Cluster, args []string) error {
 		AllowedHeaders: []string{"Content-Type", "User-Agent", "X-Auth-Token", "X-Limes-Cluster-Id"},
 	})
 	http.Handle("/", httpapi.Compose(
-		api.NewV1API(cluster, policyEnforcer),
+		api.NewV1API(cluster),
 		httpapi.WithGlobalMiddleware(api.ForbidClusterIDHeader),
 		httpapi.WithGlobalMiddleware(corsMiddleware.Handler),
 	))
@@ -417,19 +408,4 @@ func taskTestScanCapacity(cluster *core.Cluster, args []string) error {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	return enc.Encode(capacities)
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// Helper functions
-func loadPolicyFile(path string) (gopherpolicy.Enforcer, error) {
-	bytes, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	var rules map[string]string
-	err = yaml.Unmarshal(bytes, &rules)
-	if err != nil {
-		return nil, err
-	}
-	return policy.NewEnforcer(rules)
 }
