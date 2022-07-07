@@ -22,10 +22,10 @@ package util
 import (
 	"crypto/tls"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/go-bits/osext"
 )
 
 func init() {
@@ -35,7 +35,7 @@ func init() {
 	//with an env variable. (It's very important that this is not the standard
 	//"DEBUG" variable. "DEBUG" is meant to be useful for production systems,
 	//where you definitely don't want to turn off certificate verification.)
-	if os.Getenv("LIMES_INSECURE") == "1" {
+	if osext.GetenvBool("LIMES_INSECURE") {
 		http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{
 			InsecureSkipVerify: true,
 		}

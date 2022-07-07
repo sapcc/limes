@@ -22,49 +22,19 @@ package api
 import (
 	"net/http"
 
-	policy "github.com/databus23/goslo.policy"
-	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gorilla/mux"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/logg"
 )
-
-var cacher = gopherpolicy.InMemoryCacher()
 
 //CheckToken checks the validity of the request's X-Auth-Token in Keystone, and
 //returns a Token instance for checking authorization. Any errors that occur
 //during this function are deferred until Require() is called.
 func (p *v1Provider) CheckToken(r *http.Request) *gopherpolicy.Token {
 	//special case for unit tests
-	auth := p.Cluster.Config.Auth
-	if auth.AuthURL == "" {
-		return &gopherpolicy.Token{
-			Enforcer: p.PolicyEnforcer,
-			Context: policy.Context{
-				Request: map[string]string{}, //needs to be non-nil because fields are set later
-			},
-		}
-	}
-
-	client, err := openstack.NewIdentityV3(auth.ProviderClient, auth.EndpointOpts)
-	if err != nil {
-		return &gopherpolicy.Token{Err: err}
-	}
-
-	validator := gopherpolicy.TokenValidator{
-		IdentityV3: client,
-		Enforcer:   p.PolicyEnforcer,
-		Cacher:     cacher,
-	}
-	t := validator.CheckToken(r)
+	t := p.Cluster.Config.Auth.TokenValidator.CheckToken(r)
 	t.Context.Logger = logg.Debug
 	t.Context.Request = mux.Vars(r)
-
-	//provide the cluster ID to the policy (this can be used e.g. to restrict
-	//cloud-admin operations to a certain cluster)
-	if t.Context.Auth != nil {
-		t.Context.Auth["cluster_id"] = p.Cluster.ID
-	}
 
 	return t
 }

@@ -21,29 +21,29 @@ package util
 
 import "github.com/gophercloud/gophercloud"
 
-//ErrorToString is like err.Error(), but for some Gophercloud errors, it
-//returns more informative messages.
-func ErrorToString(err error) string {
+//UnpackError is usually a no-op, but for some Gophercloud errors, it removes
+//the outer layer that obscures the better error message hidden within.
+func UnpackError(err error) error {
 	switch err := err.(type) {
 	case gophercloud.ErrDefault400:
-		return err.ErrUnexpectedResponseCode.Error()
+		return err.ErrUnexpectedResponseCode
 	case gophercloud.ErrDefault401:
-		return err.ErrUnexpectedResponseCode.Error()
+		return err.ErrUnexpectedResponseCode
 	case gophercloud.ErrDefault403:
-		return err.ErrUnexpectedResponseCode.Error()
+		return err.ErrUnexpectedResponseCode
 	case gophercloud.ErrDefault404:
-		return err.ErrUnexpectedResponseCode.Error()
+		return err.ErrUnexpectedResponseCode
 	case gophercloud.ErrDefault405:
-		return err.ErrUnexpectedResponseCode.Error()
+		return err.ErrUnexpectedResponseCode
 	case gophercloud.ErrDefault408:
-		return err.ErrUnexpectedResponseCode.Error()
+		return err.ErrUnexpectedResponseCode
 	case gophercloud.ErrDefault429:
-		return err.ErrUnexpectedResponseCode.Error()
+		return err.ErrUnexpectedResponseCode
 	case gophercloud.ErrDefault500:
-		return err.ErrUnexpectedResponseCode.Error()
+		return err.ErrUnexpectedResponseCode
 	case gophercloud.ErrDefault503:
-		return err.ErrUnexpectedResponseCode.Error()
+		return err.ErrUnexpectedResponseCode
 	default:
-		return err.Error()
+		return err
 	}
 }

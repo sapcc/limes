@@ -35,6 +35,7 @@ import (
 	"github.com/gofrs/uuid"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/assert"
+	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/sqlext"
 
@@ -198,6 +199,7 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 		AllowRaiseLP: true,
 		AllowLower:   true,
 	}
+	cluster.Config.Auth.TokenValidator = TestTokenValidator{enforcer}
 
 	if clusterName == "west" {
 		cluster.Config.ResourceBehaviors = []*core.ResourceBehaviorConfiguration{
@@ -248,7 +250,7 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 	cluster.Config.SetupOPA()
 
 	handler := httpapi.Compose(
-		NewV1API(cluster, enforcer),
+		NewV1API(cluster),
 		httpapi.WithGlobalMiddleware(ForbidClusterIDHeader),
 		httpapi.WithoutLogging(),
 	)
@@ -277,6 +279,20 @@ func (e TestPolicyEnforcer) Enforce(rule string, ctx policy.Context) bool {
 		return e.AllowLower
 	default:
 		return true
+	}
+}
+
+type TestTokenValidator struct {
+	Enforcer gopherpolicy.Enforcer
+}
+
+//CheckToken implements the gopherpolicy.Validator interface.
+func (v TestTokenValidator) CheckToken(r *http.Request) *gopherpolicy.Token {
+	return &gopherpolicy.Token{
+		Enforcer: v.Enforcer,
+		Context: policy.Context{
+			Request: map[string]string{}, //needs to be non-nil because fields are set later
+		},
 	}
 }
 

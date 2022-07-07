@@ -25,6 +25,8 @@ import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/sapcc/go-api-declarations/bininfo"
+	"github.com/sapcc/go-bits/gopherpolicy"
+	"github.com/sapcc/go-bits/osext"
 	"github.com/sapcc/go-bits/secrets"
 )
 
@@ -42,6 +44,7 @@ type AuthParameters struct {
 	//The following fields are only valid after calling Connect().
 	ProviderClient *gophercloud.ProviderClient `yaml:"-"`
 	EndpointOpts   gophercloud.EndpointOpts    `yaml:"-"`
+	TokenValidator gopherpolicy.Validator      `yaml:"-"`
 }
 
 //Connect creates the gophercloud.ProviderClient instance for these credentials.
@@ -54,7 +57,7 @@ func (auth *AuthParameters) Connect() error {
 	var err error
 	auth.ProviderClient, err = openstack.NewClient(auth.AuthURL)
 	if err != nil {
-		return fmt.Errorf("cannot initialize OpenStack client: %v", err)
+		return fmt.Errorf("cannot initialize OpenStack client: %w", err)
 	}
 
 	userAgent := fmt.Sprintf("%s@%s", bininfo.Component(), bininfo.VersionOr("rolling"))
@@ -72,12 +75,27 @@ func (auth *AuthParameters) Connect() error {
 		},
 	})
 	if err != nil {
-		return fmt.Errorf("cannot fetch initial Keystone token: %v", err)
+		return fmt.Errorf("cannot fetch initial Keystone token: %w", err)
 	}
 
 	auth.EndpointOpts = gophercloud.EndpointOpts{
 		Availability: gophercloud.Availability(auth.Interface),
 		Region:       auth.RegionName,
 	}
+
+	identityV3, err := openstack.NewIdentityV3(auth.ProviderClient, auth.EndpointOpts)
+	if err != nil {
+		return fmt.Errorf("cannot initialize Keystone v3 client: %w", err)
+	}
+	tv := gopherpolicy.TokenValidator{
+		IdentityV3: identityV3,
+		Cacher:     gopherpolicy.InMemoryCacher(),
+	}
+	err = tv.LoadPolicyFile(osext.GetenvOrDefault("LIMES_API_POLICY_PATH", "/etc/limes/policy.yaml"))
+	if err != nil {
+		return err
+	}
+	auth.TokenValidator = &tv
+
 	return nil
 }

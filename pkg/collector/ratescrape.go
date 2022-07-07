@@ -107,7 +107,7 @@ func (c *Collector) ScrapeRates() {
 				c.LogError("suspending %s rate scraping for %d minutes: %s", serviceType, sleepInterval/time.Minute, err.Error())
 				ratesScrapeSuspendedCounter.With(labels).Inc()
 			} else {
-				c.LogError("scrape %s rate data for %s/%s failed: %s", serviceType, project.Domain.Name, project.Name, util.ErrorToString(err))
+				c.LogError("scrape %s rate data for %s/%s failed: %s", serviceType, project.Domain.Name, project.Name, util.UnpackError(err).Error())
 			}
 
 			if c.Once {
@@ -220,7 +220,7 @@ func (c *Collector) writeRateScrapeResult(serviceType string, serviceID int64, r
 func (c *Collector) writeRateScrapeError(project core.KeystoneProject, serviceType string, serviceID int64, scrapeErr error, checkedAt time.Time, checkDuration time.Duration) {
 	_, err := db.DB.Exec(
 		`UPDATE project_services SET rates_checked_at = $1, rates_scrape_duration_secs = $2, rates_scrape_error_message = $3, rates_stale = $4 WHERE id = $5`,
-		checkedAt, checkDuration.Seconds(), util.ErrorToString(scrapeErr), false, serviceID,
+		checkedAt, checkDuration.Seconds(), util.UnpackError(scrapeErr).Error(), false, serviceID,
 	)
 	if err != nil {
 		logg.Error("additional DB error while trying to write rate scraping error for service %s in project %s: %s",
