@@ -126,7 +126,7 @@ var computeHostStubRx = regexp.MustCompile(`^nova-compute-(?:ironic-)?([a-zA-Z0-
 //Node names are expected to be in the form "nodeXXX-bmYYY" or "nodeXXX-bbYYY"
 //or "nodeXXX-apYYY" or "nodeXXX-mdYYY", where the second half is the host stub
 //(the match group from above).
-var nodeNameRx = regexp.MustCompile(`^node(?:swift)?\d+-((?:b[bm]|ap|md|st)\d+)$`)
+var nodeNameRx = regexp.MustCompile(`^node(?:swift)?\d+-((?:b[bm]|ap|md|st|swf)\d+)$`)
 
 //As a special case, nodes in the control plane do not belong to any
 //user-accessible Nova aggregates, so we cannot establish an AZ association.
@@ -220,7 +220,7 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 						nodeAZ = "unknown"
 					}
 				} else {
-					logg.Error(`Ironic node %q (%s) does not match the "nodeXXX-{bm,bb,ap,md}YYY" naming convention`, node.Name, node.ID)
+					logg.Error(`Ironic node %q (%s) does not match the "nodeXXX-{bm,bb,ap,md,st,swf}YYY" naming convention`, node.Name, node.ID)
 				}
 
 				if _, ok := data.CapacityPerAZ[nodeAZ]; !ok {
