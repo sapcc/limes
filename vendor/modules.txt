@@ -267,7 +267,7 @@ github.com/yashtewari/glob-intersection
 # go.uber.org/atomic v1.9.0
 ## explicit; go 1.13
 go.uber.org/atomic
-# golang.org/x/net v0.0.0-20220708220712-1185a9018129
+# golang.org/x/net v0.0.0-20220722155237-a158d28d115b
 ## explicit; go 1.17
 golang.org/x/net/context
 # golang.org/x/sys v0.0.0-20220520151302-bc2c85ada10a
