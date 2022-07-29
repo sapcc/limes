@@ -117,7 +117,7 @@ github.com/modern-go/reflect2
 # github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826
 ## explicit
 github.com/mohae/deepcopy
-# github.com/open-policy-agent/opa v0.42.2
+# github.com/open-policy-agent/opa v0.43.0
 ## explicit; go 1.16
 github.com/open-policy-agent/opa/ast
 github.com/open-policy-agent/opa/ast/internal/scanner
@@ -244,7 +244,7 @@ github.com/sapcc/go-bits/sqlext
 # github.com/sergi/go-diff v1.2.0
 ## explicit; go 1.12
 github.com/sergi/go-diff/diffmatchpatch
-# github.com/vektah/gqlparser/v2 v2.4.5
+# github.com/vektah/gqlparser/v2 v2.4.6
 ## explicit; go 1.16
 github.com/vektah/gqlparser/v2
 github.com/vektah/gqlparser/v2/ast
