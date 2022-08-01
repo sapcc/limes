@@ -23,7 +23,6 @@ type Capabilities struct {
     // since we are not using it, it is disabled for now
 	// The driver version of the back end.
     // DriverVersion     string  `json:"driver_version"`
-	DriverVersion []float64 `json:"driver_version"`
 	// The amount of free capacity for the back end, in GiBs. A valid value is a string, such as unknown, or an integer.
 	FreeCapacityGB float64 `json:"-"`
 	// The storage protocol for the back end. For example, NFS_CIFS, glusterfs, HDFS, etc.
