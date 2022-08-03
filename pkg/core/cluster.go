@@ -32,6 +32,7 @@ import (
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/go-bits/osext"
 
 	"github.com/sapcc/limes/pkg/util"
 )
@@ -69,7 +70,7 @@ func NewCluster(config ClusterConfiguration) *Cluster {
 		DiscoveryPlugin: factory(config.Discovery),
 		QuotaPlugins:    make(map[string]QuotaPlugin),
 		CapacityPlugins: make(map[string]CapacityPlugin),
-		Authoritative:   config.Authoritative,
+		Authoritative:   osext.GetenvBool("LIMES_AUTHORITATIVE"),
 	}
 
 	for _, srv := range config.Services {
@@ -119,17 +120,17 @@ func NewCluster(config ClusterConfiguration) *Cluster {
 
 	sort.Strings(c.ServiceTypes) //determinism is useful for unit tests
 
-	c.Config.SetupOPA()
+	c.Config.SetupOPA(os.Getenv("LIMES_OPA_DOMAIN_QUOTA_POLICY_PATH"), os.Getenv("LIMES_OPA_PROJECT_QUOTA_POLICY_PATH"))
 
 	return c
 }
 
-func (cluster *ClusterConfiguration) SetupOPA() {
+func (cluster *ClusterConfiguration) SetupOPA(domainQuotaPolicyPath, projectQuotaPolicyPath string) {
 	if cluster.OPA == nil {
 		return
 	}
 
-	domainModule, err := os.ReadFile(cluster.OPA.DomainQuotaPolicyPath)
+	domainModule, err := os.ReadFile(domainQuotaPolicyPath)
 	if err != nil {
 		logg.Fatal("loading OPA configuration failed: %s", err)
 	}
@@ -142,7 +143,7 @@ func (cluster *ClusterConfiguration) SetupOPA() {
 	}
 	cluster.OPA.DomainQuotaQuery = domainQuery
 
-	projectModule, err := os.ReadFile(cluster.OPA.ProjectQuotaPolicyPath)
+	projectModule, err := os.ReadFile(projectQuotaPolicyPath)
 	if err != nil {
 		logg.Fatal("loading OPA configuration failed: %s", err)
 	}
@@ -189,9 +190,10 @@ func (c *Cluster) Connect() error {
 	}
 
 	//load quota constraints
-	if c.Config.ConstraintConfigPath != "" && c.QuotaConstraints == nil {
+	constraintPath := os.Getenv("LIMES_CONSTRAINTS_PATH")
+	if constraintPath != "" && c.QuotaConstraints == nil {
 		var errs []error
-		c.QuotaConstraints, errs = NewQuotaConstraints(c, c.Config.ConstraintConfigPath)
+		c.QuotaConstraints, errs = NewQuotaConstraints(c, constraintPath)
 		if len(errs) > 0 {
 			for _, err := range errs {
 				logg.Error(err.Error())

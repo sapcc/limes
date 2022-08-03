@@ -34,10 +34,8 @@ import (
 )
 
 type OPAConfiguration struct {
-	ProjectQuotaPolicyPath string                 `yaml:"project_quota_policy_path"`
-	ProjectQuotaQuery      rego.PreparedEvalQuery `yaml:"-"`
-	DomainQuotaPolicyPath  string                 `yaml:"domain_quota_policy_path"`
-	DomainQuotaQuery       rego.PreparedEvalQuery `yaml:"-"`
+	ProjectQuotaQuery rego.PreparedEvalQuery
+	DomainQuotaQuery  rego.PreparedEvalQuery
 }
 
 // ClusterConfiguration contains all the configuration data for a single cluster.
@@ -45,21 +43,18 @@ type OPAConfiguration struct {
 // list of enabled services.
 type ClusterConfiguration struct {
 	ClusterID  string                   `yaml:"cluster_id"`
-	Auth       *AuthParameters          `yaml:"auth"`
+	Auth       *AuthParameters          `yaml:"-"`
 	CatalogURL string                   `yaml:"catalog_url"`
 	Discovery  DiscoveryConfiguration   `yaml:"discovery"`
 	Services   []ServiceConfiguration   `yaml:"services"`
 	Capacitors []CapacitorConfiguration `yaml:"capacitors"`
 	//^ Sorry for the stupid pun. Not.
-	Subresources         map[string][]string              `yaml:"subresources"`
-	Subcapacities        map[string][]string              `yaml:"subcapacities"`
-	Authoritative        bool                             `yaml:"authoritative"`
-	ConstraintConfigPath string                           `yaml:"constraints"`
-	OPA                  *OPAConfiguration                `yaml:"opa"`
-	CADF                 CADFConfiguration                `yaml:"cadf"`
-	LowPrivilegeRaise    LowPrivilegeRaiseConfiguration   `yaml:"lowpriv_raise"`
-	ResourceBehaviors    []*ResourceBehaviorConfiguration `yaml:"resource_behavior"`
-	Bursting             BurstingConfiguration            `yaml:"bursting"`
+	Subresources      map[string][]string              `yaml:"subresources"`
+	Subcapacities     map[string][]string              `yaml:"subcapacities"`
+	OPA               *OPAConfiguration                `yaml:"-"`
+	LowPrivilegeRaise LowPrivilegeRaiseConfiguration   `yaml:"lowpriv_raise"`
+	ResourceBehaviors []*ResourceBehaviorConfiguration `yaml:"resource_behavior"`
+	Bursting          BurstingConfiguration            `yaml:"bursting"`
 }
 
 // GetServiceConfigurationForType returns the ServiceConfiguration or an error.
@@ -352,41 +347,6 @@ func (cluster ClusterConfiguration) validateConfig() (success bool) {
 		return rx
 	}
 
-	if cluster.Auth == nil {
-		//Avoid nil pointer access if section cluster.auth not provided but still alert on the missing values
-		cluster.Auth = new(AuthParameters)
-	}
-	//gophercloud is very strict about requiring a trailing slash here
-	if cluster.Auth.AuthURL != "" && !strings.HasSuffix(cluster.Auth.AuthURL, "/") {
-		cluster.Auth.AuthURL += "/"
-	}
-
-	switch {
-	case cluster.Auth.AuthURL == "":
-		missing("auth.auth_url")
-	case !strings.HasPrefix(cluster.Auth.AuthURL, "http://") && !strings.HasPrefix(cluster.Auth.AuthURL, "https://"):
-		logg.Error("auth.auth_url does not look like a HTTP URL")
-		success = false
-	case !strings.HasSuffix(cluster.Auth.AuthURL, "/v3/"):
-		logg.Error("auth.auth_url does not end with \"/v3/\"")
-		success = false
-	}
-
-	if cluster.Auth.UserName == "" {
-		missing("auth.user_name")
-	}
-	if cluster.Auth.UserDomainName == "" {
-		missing("auth.user_domain_name")
-	}
-	if cluster.Auth.ProjectName == "" {
-		missing("auth.project_name")
-	}
-	if cluster.Auth.ProjectDomainName == "" {
-		missing("auth.project_domain_name")
-	}
-	if cluster.Auth.Password == "" {
-		missing("auth.password")
-	}
 	//NOTE: cluster.RegionName is optional
 	if len(cluster.Services) == 0 {
 		missing("services[]")
@@ -482,10 +442,6 @@ func (cluster ClusterConfiguration) validateConfig() (success bool) {
 	if cluster.Bursting.MaxMultiplier < 0 {
 		logg.Error("bursting.max_multiplier may not be negative")
 		success = false
-	}
-
-	if cluster.CADF.Enabled && cluster.CADF.RabbitMQ.QueueName == "" {
-		missing("cadf.rabbitmq.queue_name")
 	}
 
 	return

@@ -21,29 +21,22 @@ package core
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
+	"github.com/gophercloud/utils/openstack/clientconfig"
 	"github.com/sapcc/go-bits/gopherpolicy"
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/osext"
-	"github.com/sapcc/go-bits/secrets"
 )
 
-// AuthParameters contains credentials for authenticating with Keystone (i.e.
-// everything that's needed to set up a gophercloud.ProviderClient instance).
+// AuthParameters contains the gophercloud authentication things
 type AuthParameters struct {
-	AuthURL           string               `yaml:"auth_url"`
-	UserName          string               `yaml:"user_name"`
-	UserDomainName    string               `yaml:"user_domain_name"`
-	ProjectName       string               `yaml:"project_name"`
-	ProjectDomainName string               `yaml:"project_domain_name"`
-	Password          secrets.AuthPassword `yaml:"password"`
-	RegionName        string               `yaml:"region_name"`
-	Interface         string               `yaml:"interface"`
 	//The following fields are only valid after calling Connect().
-	ProviderClient *gophercloud.ProviderClient `yaml:"-"`
-	EndpointOpts   gophercloud.EndpointOpts    `yaml:"-"`
-	TokenValidator gopherpolicy.Validator      `yaml:"-"`
+	ProviderClient *gophercloud.ProviderClient
+	EndpointOpts   gophercloud.EndpointOpts
+	TokenValidator gopherpolicy.Validator
 }
 
 // Connect creates the gophercloud.ProviderClient instance for these credentials.
@@ -53,25 +46,20 @@ func (auth *AuthParameters) Connect() error {
 		return nil
 	}
 
-	var err error
-	auth.ProviderClient, err = openstack.AuthenticatedClient(gophercloud.AuthOptions{
-		IdentityEndpoint: auth.AuthURL,
-		AllowReauth:      true,
-		Username:         auth.UserName,
-		DomainName:       auth.UserDomainName,
-		Password:         string(auth.Password),
-		Scope: &gophercloud.AuthScope{
-			ProjectName: auth.ProjectName,
-			DomainName:  auth.ProjectDomainName,
-		},
-	})
+	//initialize OpenStack connection
+	ao, err := clientconfig.AuthOptions(nil)
+	if err != nil {
+		logg.Fatal("cannot find OpenStack credentials: " + err.Error())
+	}
+	ao.AllowReauth = true
+	auth.ProviderClient, err = openstack.AuthenticatedClient(*ao)
 	if err != nil {
 		return fmt.Errorf("cannot initialize OpenStack client: %w", err)
 	}
 
 	auth.EndpointOpts = gophercloud.EndpointOpts{
-		Availability: gophercloud.Availability(auth.Interface),
-		Region:       auth.RegionName,
+		Availability: gophercloud.Availability(os.Getenv("OS_INTERFACE")),
+		Region:       os.Getenv("OS_REGION_NAME"),
 	}
 
 	identityV3, err := openstack.NewIdentityV3(auth.ProviderClient, auth.EndpointOpts)
