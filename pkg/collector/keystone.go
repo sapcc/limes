@@ -29,15 +29,15 @@ import (
 	"github.com/sapcc/limes/pkg/db"
 )
 
-//ScanDomainsOpts contains additional options for ScanDomains().
+// ScanDomainsOpts contains additional options for ScanDomains().
 type ScanDomainsOpts struct {
 	//Recurse into ScanProjects for all domains in the selected cluster,
 	//rather than just for new domains.
 	ScanAllProjects bool
 }
 
-//This extends ListDomains() by handling of the {Include,Exclude}DomainRx. It's
-//a separate function for unit test accessibility.
+// This extends ListDomains() by handling of the {Include,Exclude}DomainRx. It's
+// a separate function for unit test accessibility.
 func listDomainsFiltered(cluster *core.Cluster) ([]core.KeystoneDomain, error) {
 	domains, err := cluster.DiscoveryPlugin.ListDomains(cluster.ProviderClient())
 	if err != nil {
@@ -64,8 +64,8 @@ func listDomainsFiltered(cluster *core.Cluster) ([]core.KeystoneDomain, error) {
 	return result, nil
 }
 
-//ScanDomains queries Keystone to discover new domains, and returns a
-//list of UUIDs for the newly discovered domains.
+// ScanDomains queries Keystone to discover new domains, and returns a
+// list of UUIDs for the newly discovered domains.
 func ScanDomains(cluster *core.Cluster, opts ScanDomainsOpts) (result []string, resultErr error) {
 	//make sure that the counters are reported
 	labels := prometheus.Labels{
@@ -188,7 +188,7 @@ func initDomain(cluster *core.Cluster, domain core.KeystoneDomain) (*db.Domain, 
 	return dbDomain, tx.Commit()
 }
 
-//ScanProjects queries Keystone to discover new projects in the given domain.
+// ScanProjects queries Keystone to discover new projects in the given domain.
 func ScanProjects(cluster *core.Cluster, domain *db.Domain) (result []string, resultErr error) {
 	//make sure that the counters are reported
 	labels := prometheus.Labels{
@@ -278,8 +278,8 @@ func ScanProjects(cluster *core.Cluster, domain *db.Domain) (result []string, re
 	return result, nil
 }
 
-//Initialize all the database records for a project (in both `projects` and
-//`project_services`).
+// Initialize all the database records for a project (in both `projects` and
+// `project_services`).
 func initProject(cluster *core.Cluster, domain *db.Domain, project core.KeystoneProject) error {
 	//do this in a transaction to avoid half-initialized projects
 	tx, err := db.DB.Begin()

@@ -24,11 +24,11 @@ import (
 	"strings"
 )
 
-//BuildSimpleWhereClause constructs a WHERE clause of the form "field1 = val1 AND
-//field2 = val2 AND field3 IN (val3, val4)".
+// BuildSimpleWhereClause constructs a WHERE clause of the form "field1 = val1 AND
+// field2 = val2 AND field3 IN (val3, val4)".
 //
-//If parameterOffset is not 0, start counting placeholders ("$1", "$2", etc.)
-//after that offset.
+// If parameterOffset is not 0, start counting placeholders ("$1", "$2", etc.)
+// after that offset.
 func BuildSimpleWhereClause(fields map[string]interface{}, parameterOffset int) (queryFragment string, queryArgs []interface{}) {
 	var (
 		conditions []string

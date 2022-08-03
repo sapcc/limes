@@ -46,12 +46,12 @@ func init() {
 	})
 }
 
-//Init implements the core.QuotaPlugin interface.
+// Init implements the core.QuotaPlugin interface.
 func (p *keppelPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
 	return nil
 }
 
-//ServiceInfo implements the core.QuotaPlugin interface.
+// ServiceInfo implements the core.QuotaPlugin interface.
 func (p *keppelPlugin) ServiceInfo() limes.ServiceInfo {
 	return limes.ServiceInfo{
 		Type:        "keppel",
@@ -60,22 +60,22 @@ func (p *keppelPlugin) ServiceInfo() limes.ServiceInfo {
 	}
 }
 
-//Resources implements the core.QuotaPlugin interface.
+// Resources implements the core.QuotaPlugin interface.
 func (p *keppelPlugin) Resources() []limes.ResourceInfo {
 	return keppelResources
 }
 
-//Rates implements the core.QuotaPlugin interface.
+// Rates implements the core.QuotaPlugin interface.
 func (p *keppelPlugin) Rates() []limes.RateInfo {
 	return nil
 }
 
-//ScrapeRates implements the core.QuotaPlugin interface.
+// ScrapeRates implements the core.QuotaPlugin interface.
 func (p *keppelPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
-//Scrape implements the core.QuotaPlugin interface.
+// Scrape implements the core.QuotaPlugin interface.
 func (p *keppelPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (map[string]core.ResourceData, string, error) {
 	client, err := newKeppelClient(provider, eo)
 	if err != nil {
@@ -93,13 +93,13 @@ func (p *keppelPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 	}, "", nil
 }
 
-//IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
+// IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
 func (p *keppelPlugin) IsQuotaAcceptableForProject(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
 	//not required for this plugin
 	return nil
 }
 
-//SetQuota implements the core.QuotaPlugin interface.
+// SetQuota implements the core.QuotaPlugin interface.
 func (p *keppelPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
 	client, err := newKeppelClient(provider, eo)
 	if err != nil {
@@ -111,12 +111,12 @@ func (p *keppelPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherc
 	return client.SetQuota(project.UUID, qs)
 }
 
-//DescribeMetrics implements the core.QuotaPlugin interface.
+// DescribeMetrics implements the core.QuotaPlugin interface.
 func (p *keppelPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 	//not used by this plugin
 }
 
-//CollectMetrics implements the core.QuotaPlugin interface.
+// CollectMetrics implements the core.QuotaPlugin interface.
 func (p *keppelPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID string, project core.KeystoneProject, serializedMetrics string) error {
 	//not used by this plugin
 	return nil

@@ -30,8 +30,8 @@ import (
 	"github.com/sapcc/limes/pkg/db"
 )
 
-//ValidateDomainServices ensures that all required DomainService records for
-//this domain exist (and none other). It returns the full set of domain services.
+// ValidateDomainServices ensures that all required DomainService records for
+// this domain exist (and none other). It returns the full set of domain services.
 func ValidateDomainServices(tx *gorp.Transaction, cluster *core.Cluster, domain db.Domain) ([]db.DomainService, error) {
 	//list existing records
 	seen := make(map[string]bool)

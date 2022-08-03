@@ -74,7 +74,7 @@ func init() {
 	})
 }
 
-//Init implements the core.CapacityPlugin interface.
+// Init implements the core.CapacityPlugin interface.
 func (p *capacityNovaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
 	return nil
 }
@@ -83,7 +83,7 @@ func (p *capacityNovaPlugin) Type() string {
 	return "nova"
 }
 
-//Scrape implements the core.CapacityPlugin interface.
+// Scrape implements the core.CapacityPlugin interface.
 func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (map[string]map[string]core.CapacityData, string, error) {
 	var hypervisorTypeRx *regexp.Regexp
 	if p.cfg.Nova.HypervisorTypePattern != "" {
@@ -317,12 +317,12 @@ var novaHypervisorHasAZGauge = prometheus.NewGaugeVec(
 	[]string{"os_cluster", "hypervisor", "hostname"},
 )
 
-//DescribeMetrics implements the core.CapacityPlugin interface.
+// DescribeMetrics implements the core.CapacityPlugin interface.
 func (p *capacityNovaPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 	novaHypervisorHasAZGauge.Describe(ch)
 }
 
-//CollectMetrics implements the core.CapacityPlugin interface.
+// CollectMetrics implements the core.CapacityPlugin interface.
 func (p *capacityNovaPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, serializedMetrics string) error {
 	if serializedMetrics == "" {
 		return nil
@@ -360,7 +360,7 @@ type novaHypervisor struct {
 	VCPUsUsed          uint64              `json:"vcpus_used"`
 }
 
-//The capacity of any level of the Nova superstructure (hypervisor, aggregate, AZ, cluster).
+// The capacity of any level of the Nova superstructure (hypervisor, aggregate, AZ, cluster).
 type partialNovaCapacity struct {
 	VCPUs      core.CapacityDataForAZ
 	MemoryMB   core.CapacityDataForAZ
@@ -450,7 +450,7 @@ func (h novaHypervisor) getCapacityViaPlacementAPI(provider *gophercloud.Provide
 	}, nil
 }
 
-//novaHypervisorGroup is any group of hypervisors. We use hypervisor groups to model aggregates, AZs, as well as the entire cluster.
+// novaHypervisorGroup is any group of hypervisors. We use hypervisor groups to model aggregates, AZs, as well as the entire cluster.
 type novaHypervisorGroup struct {
 	Name                string
 	Metadata            map[string]string //only used for aggregates

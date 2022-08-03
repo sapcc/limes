@@ -26,12 +26,12 @@ import (
 	"github.com/sapcc/limes/pkg/db"
 )
 
-//ApplyBackendQuota applies the backend quota for the given project service.
-//The caller must ensure that the given service is in the given project is in
-//the given domain is in the given cluster.
+// ApplyBackendQuota applies the backend quota for the given project service.
+// The caller must ensure that the given service is in the given project is in
+// the given domain is in the given cluster.
 //
-//If the backend quotas recorded in the project service's resources already
-//match the expected values, nothing is done.
+// If the backend quotas recorded in the project service's resources already
+// match the expected values, nothing is done.
 func ApplyBackendQuota(dbi db.Interface, cluster *core.Cluster, domain core.KeystoneDomain, project db.Project, serviceID int64, serviceType string) error {
 	plugin := cluster.QuotaPlugins[serviceType]
 	if plugin == nil {

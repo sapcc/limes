@@ -25,7 +25,7 @@ import (
 	"github.com/gophercloud/gophercloud/pagination"
 )
 
-//Like `nodes.ListDetail(client, nil)`, but works around <https://github.com/gophercloud/gophercloud/issues/2431>.
+// Like `nodes.ListDetail(client, nil)`, but works around <https://github.com/gophercloud/gophercloud/issues/2431>.
 func ironicNodesListDetail(client *gophercloud.ServiceClient) pagination.Pager {
 	url := client.ServiceURL("nodes", "detail")
 	return pagination.NewPager(client, url, func(r pagination.PageResult) pagination.Page {
@@ -33,7 +33,7 @@ func ironicNodesListDetail(client *gophercloud.ServiceClient) pagination.Pager {
 	})
 }
 
-//Like `nodes.ExtractNodesInto()`, but casts into the correct pagination.Page type.
+// Like `nodes.ExtractNodesInto()`, but casts into the correct pagination.Page type.
 func ironicExtractNodesInto(r pagination.Page, v interface{}) error {
 	return r.(ironicNodePage).Result.ExtractIntoSlicePtr(v, "nodes")
 }
@@ -42,7 +42,6 @@ type ironicNodePage struct {
 	nodes.NodePage
 }
 
-//
 // NextPageURL uses the response's embedded link reference to navigate to the
 // next page of results.
 func (r ironicNodePage) NextPageURL() (string, error) {

@@ -64,8 +64,8 @@ var (
 	)
 )
 
-//This is a purely internal format, so we use 1-character keys to save a few
-//bytes and thus a few CPU cycles.
+// This is a purely internal format, so we use 1-character keys to save a few
+// bytes and thus a few CPU cycles.
 type swiftSerializedMetrics struct {
 	Containers map[string]swiftSerializedContainerMetrics `json:"c"`
 }
@@ -80,12 +80,12 @@ func init() {
 	})
 }
 
-//Init implements the core.QuotaPlugin interface.
+// Init implements the core.QuotaPlugin interface.
 func (p *swiftPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
 	return nil
 }
 
-//ServiceInfo implements the core.QuotaPlugin interface.
+// ServiceInfo implements the core.QuotaPlugin interface.
 func (p *swiftPlugin) ServiceInfo() limes.ServiceInfo {
 	return limes.ServiceInfo{
 		Type:        "object-store",
@@ -94,12 +94,12 @@ func (p *swiftPlugin) ServiceInfo() limes.ServiceInfo {
 	}
 }
 
-//Resources implements the core.QuotaPlugin interface.
+// Resources implements the core.QuotaPlugin interface.
 func (p *swiftPlugin) Resources() []limes.ResourceInfo {
 	return swiftResources
 }
 
-//Rates implements the core.QuotaPlugin interface.
+// Rates implements the core.QuotaPlugin interface.
 func (p *swiftPlugin) Rates() []limes.RateInfo {
 	return nil
 }
@@ -118,12 +118,12 @@ func (p *swiftPlugin) Account(provider *gophercloud.ProviderClient, eo gopherclo
 	return resellerAccount.SwitchAccount("AUTH_" + projectUUID), nil
 }
 
-//ScrapeRates implements the core.QuotaPlugin interface.
+// ScrapeRates implements the core.QuotaPlugin interface.
 func (p *swiftPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
-//Scrape implements the core.QuotaPlugin interface.
+// Scrape implements the core.QuotaPlugin interface.
 func (p *swiftPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (map[string]core.ResourceData, string, error) {
 	account, err := p.Account(provider, eo, project.UUID)
 	if err != nil {
@@ -176,13 +176,13 @@ func (p *swiftPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclou
 	return map[string]core.ResourceData{"capacity": data}, string(serializedMetrics), nil
 }
 
-//IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
+// IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
 func (p *swiftPlugin) IsQuotaAcceptableForProject(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
 	//not required for this plugin
 	return nil
 }
 
-//SetQuota implements the core.QuotaPlugin interface.
+// SetQuota implements the core.QuotaPlugin interface.
 func (p *swiftPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
 	account, err := p.Account(provider, eo, project.UUID)
 	if err != nil {
@@ -205,13 +205,13 @@ func (p *swiftPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercl
 	return err
 }
 
-//DescribeMetrics implements the core.QuotaPlugin interface.
+// DescribeMetrics implements the core.QuotaPlugin interface.
 func (p *swiftPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 	swiftObjectsCountGauge.Describe(ch)
 	swiftBytesUsedGauge.Describe(ch)
 }
 
-//CollectMetrics implements the core.QuotaPlugin interface.
+// CollectMetrics implements the core.QuotaPlugin interface.
 func (p *swiftPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID string, project core.KeystoneProject, serializedMetrics string) error {
 	if serializedMetrics == "" {
 		return nil

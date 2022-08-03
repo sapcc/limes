@@ -36,7 +36,7 @@ import (
 	"github.com/sapcc/limes/pkg/util"
 )
 
-//ListDomains handles GET /v1/domains.
+// ListDomains handles GET /v1/domains.
 func (p *v1Provider) ListDomains(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/domains")
 	token := p.CheckToken(r)
@@ -58,7 +58,7 @@ func (p *v1Provider) ListDomains(w http.ResponseWriter, r *http.Request) {
 	respondwith.JSON(w, 200, map[string]interface{}{"domains": domains})
 }
 
-//GetDomain handles GET /v1/domains/:domain_id.
+// GetDomain handles GET /v1/domains/:domain_id.
 func (p *v1Provider) GetDomain(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:id")
 	token := p.CheckToken(r)
@@ -83,7 +83,7 @@ func (p *v1Provider) GetDomain(w http.ResponseWriter, r *http.Request) {
 	respondwith.JSON(w, 200, map[string]interface{}{"domain": domain})
 }
 
-//DiscoverDomains handles POST /v1/domains/discover.
+// DiscoverDomains handles POST /v1/domains/discover.
 func (p *v1Provider) DiscoverDomains(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/domains/discover")
 	token := p.CheckToken(r)
@@ -103,13 +103,13 @@ func (p *v1Provider) DiscoverDomains(w http.ResponseWriter, r *http.Request) {
 	respondwith.JSON(w, 202, map[string]interface{}{"new_domains": util.IDsToJSON(newDomainUUIDs)})
 }
 
-//PutDomain handles PUT /v1/domains/:domain_id.
+// PutDomain handles PUT /v1/domains/:domain_id.
 func (p *v1Provider) PutDomain(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:id")
 	p.putOrSimulatePutDomain(w, r, false)
 }
 
-//SimulatePutDomain handles POST /v1/domains/:domain_id/simulate-put.
+// SimulatePutDomain handles POST /v1/domains/:domain_id/simulate-put.
 func (p *v1Provider) SimulatePutDomain(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/simulate-put")
 	p.putOrSimulatePutDomain(w, r, true)

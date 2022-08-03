@@ -30,7 +30,7 @@ import (
 	"github.com/sapcc/limes/pkg/db"
 )
 
-//InitDatabase initializes DB in pkg/db for testing.
+// InitDatabase initializes DB in pkg/db for testing.
 func InitDatabase(t *testing.T, fixtureFile *string) {
 	t.Helper()
 	//nolint:errcheck
@@ -57,9 +57,9 @@ func InitDatabase(t *testing.T, fixtureFile *string) {
 	db.InitGorp()
 }
 
-//AssertDBContent makes a dump of the database contents (as a sequence of
-//INSERT statements) and runs diff(1) against the given file, producing a test
-//error if these two are different from each other.
+// AssertDBContent makes a dump of the database contents (as a sequence of
+// INSERT statements) and runs diff(1) against the given file, producing a test
+// error if these two are different from each other.
 func AssertDBContent(t *testing.T, fixtureFile string) {
 	t.Helper()
 	easypg.AssertDBContent(t, db.DB.Db, fixtureFile)

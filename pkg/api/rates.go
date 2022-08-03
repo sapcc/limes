@@ -29,7 +29,7 @@ import (
 	"github.com/sapcc/limes/pkg/reports"
 )
 
-//GetClusterRates handles GET /v1/clusters/:cluster_id.
+// GetClusterRates handles GET /v1/clusters/:cluster_id.
 func (p *v1Provider) GetClusterRates(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/rates/v1/clusters/current")
 	token := p.CheckToken(r)
@@ -53,7 +53,7 @@ func (p *v1Provider) GetClusterRates(w http.ResponseWriter, r *http.Request) {
 	respondwith.JSON(w, 200, map[string]interface{}{"cluster": cluster})
 }
 
-//ListProjectRates handles GET /rates/v1/domains/:domain_id/projects.
+// ListProjectRates handles GET /rates/v1/domains/:domain_id/projects.
 func (p *v1Provider) ListProjectRates(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/rates/v1/domains/:id/projects")
 	token := p.CheckToken(r)
@@ -77,7 +77,7 @@ func (p *v1Provider) ListProjectRates(w http.ResponseWriter, r *http.Request) {
 	p.doListProjects(w, r, dbDomain, filter)
 }
 
-//GetProjectRates handles GET /rates/v1/domains/:domain_id/projects/:project_id.
+// GetProjectRates handles GET /rates/v1/domains/:domain_id/projects/:project_id.
 func (p *v1Provider) GetProjectRates(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/rates/v1/domains/:id/projects/:id")
 	token := p.CheckToken(r)

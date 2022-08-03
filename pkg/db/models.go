@@ -25,7 +25,7 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 )
 
-//ClusterCapacitor contains a record from the `cluster_capacitors` table.
+// ClusterCapacitor contains a record from the `cluster_capacitors` table.
 type ClusterCapacitor struct {
 	ClusterID          string     `db:"cluster_id"`
 	CapacitorID        string     `db:"capacitor_id"`
@@ -34,7 +34,7 @@ type ClusterCapacitor struct {
 	SerializedMetrics  string     `db:"serialized_metrics"`
 }
 
-//ClusterService contains a record from the `cluster_services` table.
+// ClusterService contains a record from the `cluster_services` table.
 type ClusterService struct {
 	ID        int64      `db:"id"`
 	ClusterID string     `db:"cluster_id"`
@@ -42,7 +42,7 @@ type ClusterService struct {
 	ScrapedAt *time.Time `db:"scraped_at"` //pointer type to allow for NULL value
 }
 
-//ClusterResource contains a record from the `cluster_resources` table.
+// ClusterResource contains a record from the `cluster_resources` table.
 type ClusterResource struct {
 	ServiceID         int64  `db:"service_id"`
 	Name              string `db:"name"`
@@ -51,7 +51,7 @@ type ClusterResource struct {
 	SubcapacitiesJSON string `db:"subcapacities"`
 }
 
-//Domain contains a record from the `domains` table.
+// Domain contains a record from the `domains` table.
 type Domain struct {
 	ID        int64  `db:"id"`
 	ClusterID string `db:"cluster_id"`
@@ -59,21 +59,21 @@ type Domain struct {
 	UUID      string `db:"uuid"`
 }
 
-//DomainService contains a record from the `domain_services` table.
+// DomainService contains a record from the `domain_services` table.
 type DomainService struct {
 	ID       int64  `db:"id"`
 	DomainID int64  `db:"domain_id"`
 	Type     string `db:"type"`
 }
 
-//DomainResource contains a record from the `domain_resources` table.
+// DomainResource contains a record from the `domain_resources` table.
 type DomainResource struct {
 	ServiceID int64  `db:"service_id"`
 	Name      string `db:"name"`
 	Quota     uint64 `db:"quota"`
 }
 
-//Project contains a record from the `projects` table.
+// Project contains a record from the `projects` table.
 type Project struct {
 	ID          int64  `db:"id"`
 	DomainID    int64  `db:"domain_id"`
@@ -83,7 +83,7 @@ type Project struct {
 	HasBursting bool   `db:"has_bursting"`
 }
 
-//ProjectService contains a record from the `project_services` table.
+// ProjectService contains a record from the `project_services` table.
 type ProjectService struct {
 	ID                      int64      `db:"id"`
 	ProjectID               int64      `db:"project_id"`
@@ -102,8 +102,8 @@ type ProjectService struct {
 	SerializedMetrics       string     `db:"serialized_metrics"`
 }
 
-//ProjectResource contains a record from the `project_resources` table. Quota
-//values are NULL for resources that do not track quota.
+// ProjectResource contains a record from the `project_resources` table. Quota
+// values are NULL for resources that do not track quota.
 type ProjectResource struct {
 	ServiceID           int64   `db:"service_id"`
 	Name                string  `db:"name"`
@@ -115,7 +115,7 @@ type ProjectResource struct {
 	SubresourcesJSON    string  `db:"subresources"`
 }
 
-//ProjectRate contains a record from the `project_rates` table.
+// ProjectRate contains a record from the `project_rates` table.
 type ProjectRate struct {
 	ServiceID     int64         `db:"service_id"`
 	Name          string        `db:"name"`
@@ -127,9 +127,9 @@ type ProjectRate struct {
 	//  use strings throughout and cast into bigints in the scraper only.
 }
 
-//InitGorp is used by Init() to setup the ORM part of the database connection.
-//It's available as an exported function because the unit tests need to call
-//this while bypassing the normal Init() logic.
+// InitGorp is used by Init() to setup the ORM part of the database connection.
+// It's available as an exported function because the unit tests need to call
+// this while bypassing the normal Init() logic.
 func InitGorp() {
 	DB.AddTableWithName(ClusterCapacitor{}, "cluster_capacitors").SetKeys(false, "cluster_id", "capacitor_id")
 	DB.AddTableWithName(ClusterService{}, "cluster_services").SetKeys(true, "id")

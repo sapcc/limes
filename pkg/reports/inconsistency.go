@@ -29,17 +29,17 @@ import (
 	"github.com/sapcc/limes/pkg/db"
 )
 
-//Inconsistencies contains aggregated data about inconsistent quota setups for
-//domains and projects in the current cluster.
+// Inconsistencies contains aggregated data about inconsistent quota setups for
+// domains and projects in the current cluster.
 type Inconsistencies struct {
 	OvercommittedQuotas []OvercommittedDomainQuota `json:"domain_quota_overcommitted"`
 	OverspentQuotas     []OverspentProjectQuota    `json:"project_quota_overspent"`
 	MismatchQuotas      []MismatchProjectQuota     `json:"project_quota_mismatch"`
 }
 
-//OvercommittedDomainQuota is a substructure of Inconsistency containing data
-//for the inconsistency type where for a domain the 'sum(projects_quota) > domain_quota'
-//for a single resource.
+// OvercommittedDomainQuota is a substructure of Inconsistency containing data
+// for the inconsistency type where for a domain the 'sum(projects_quota) > domain_quota'
+// for a single resource.
 type OvercommittedDomainQuota struct {
 	Domain        core.KeystoneDomain `json:"domain"`
 	Service       string              `json:"service"`
@@ -49,13 +49,13 @@ type OvercommittedDomainQuota struct {
 	ProjectsQuota uint64              `json:"projects_quota"`
 }
 
-//OverspentProjectQuota is a substructure of Inconsistency containing data for
-//the inconsistency type where for some project the 'usage > desired_backend_quota' for a
-//single resource.
+// OverspentProjectQuota is a substructure of Inconsistency containing data for
+// the inconsistency type where for some project the 'usage > desired_backend_quota' for a
+// single resource.
 //
-//For projects with quota bursting disabled the 'desired_backend_quota == quota',
-//and for projects with quota bursting enabled the
-//'desired_backend_quota == floor(quota * (1 + bursting.multiplier))'.
+// For projects with quota bursting disabled the 'desired_backend_quota == quota',
+// and for projects with quota bursting enabled the
+// 'desired_backend_quota == floor(quota * (1 + bursting.multiplier))'.
 type OverspentProjectQuota struct {
 	Project  core.KeystoneProject `json:"project"`
 	Service  string               `json:"service"`
@@ -65,13 +65,13 @@ type OverspentProjectQuota struct {
 	Usage    uint64               `json:"usage"`
 }
 
-//MismatchProjectQuota is a substructure of Inconsistency containing data for
-//the inconsistency type where for some project the 'backend_quota != desired_backend_quota'
-//for a single resource.
+// MismatchProjectQuota is a substructure of Inconsistency containing data for
+// the inconsistency type where for some project the 'backend_quota != desired_backend_quota'
+// for a single resource.
 //
-//For projects with quota bursting disabled the 'desired_backend_quota == quota',
-//and for projects with quota bursting enabled the
-//'desired_backend_quota == floor(quota * (1 + bursting.multiplier))'.
+// For projects with quota bursting disabled the 'desired_backend_quota == quota',
+// and for projects with quota bursting enabled the
+// 'desired_backend_quota == floor(quota * (1 + bursting.multiplier))'.
 type MismatchProjectQuota struct {
 	Project      core.KeystoneProject `json:"project"`
 	Service      string               `json:"service"`
@@ -116,7 +116,7 @@ var mmpqReportQuery = sqlext.SimplifyWhitespace(`
 	ORDER BY d.name, p.name, ps.type, pr.name
 `)
 
-//GetInconsistencies returns Inconsistency reports for all inconsistencies and their projects in the current cluster.
+// GetInconsistencies returns Inconsistency reports for all inconsistencies and their projects in the current cluster.
 // TODO: should db be replaced with dbi?
 func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter) (*Inconsistencies, error) {
 	fields := map[string]interface{}{"d.cluster_id": cluster.ID}

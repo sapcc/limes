@@ -25,14 +25,14 @@ import (
 	"github.com/sapcc/limes/pkg/core"
 )
 
-//DiscoveryPlugin is a core.DiscoveryPlugin implementation for unit tests that
-//reports a static set of domains and projects.
+// DiscoveryPlugin is a core.DiscoveryPlugin implementation for unit tests that
+// reports a static set of domains and projects.
 type DiscoveryPlugin struct {
 	StaticDomains  []core.KeystoneDomain
 	StaticProjects map[string][]core.KeystoneProject
 }
 
-//NewDiscoveryPlugin creates a DiscoveryPlugin instance.
+// NewDiscoveryPlugin creates a DiscoveryPlugin instance.
 func NewDiscoveryPlugin() *DiscoveryPlugin {
 	return &DiscoveryPlugin{
 		StaticDomains: []core.KeystoneDomain{
@@ -51,17 +51,17 @@ func NewDiscoveryPlugin() *DiscoveryPlugin {
 	}
 }
 
-//Method implements the core.DiscoveryPlugin interface.
+// Method implements the core.DiscoveryPlugin interface.
 func (p *DiscoveryPlugin) Method() string {
 	return "unittest"
 }
 
-//ListDomains implements the core.DiscoveryPlugin interface.
+// ListDomains implements the core.DiscoveryPlugin interface.
 func (p *DiscoveryPlugin) ListDomains(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) ([]core.KeystoneDomain, error) {
 	return p.StaticDomains, nil
 }
 
-//ListProjects implements the core.DiscoveryPlugin interface.
+// ListProjects implements the core.DiscoveryPlugin interface.
 func (p *DiscoveryPlugin) ListProjects(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domain core.KeystoneDomain) ([]core.KeystoneProject, error) {
 	result := p.StaticProjects[domain.UUID]
 	for _, project := range result {

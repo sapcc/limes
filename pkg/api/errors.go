@@ -29,7 +29,7 @@ import (
 	"github.com/sapcc/limes/pkg/reports"
 )
 
-//ListScrapeErrors handles GET /v1/admin/scrape-errors.
+// ListScrapeErrors handles GET /v1/admin/scrape-errors.
 func (p *v1Provider) ListScrapeErrors(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/admin/scrape-errors")
 	token := p.CheckToken(r)
@@ -45,7 +45,7 @@ func (p *v1Provider) ListScrapeErrors(w http.ResponseWriter, r *http.Request) {
 	respondwith.JSON(w, http.StatusOK, map[string]interface{}{"scrape_errors": scrapeErrors})
 }
 
-//ListRateScrapeErrors handles GET /v1/admin/rate-scrape-errors.
+// ListRateScrapeErrors handles GET /v1/admin/rate-scrape-errors.
 func (p *v1Provider) ListRateScrapeErrors(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/admin/rate-scrape-errors")
 	token := p.CheckToken(r)

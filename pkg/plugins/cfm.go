@@ -46,13 +46,13 @@ func init() {
 	})
 }
 
-//Init implements the core.QuotaPlugin interface.
+// Init implements the core.QuotaPlugin interface.
 func (p *cfmPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
 	p.projectID, err = getProjectIDForToken(provider, eo)
 	return err
 }
 
-//ServiceInfo implements the core.QuotaPlugin interface.
+// ServiceInfo implements the core.QuotaPlugin interface.
 func (p *cfmPlugin) ServiceInfo() limes.ServiceInfo {
 	return limes.ServiceInfo{
 		Type:        "database",
@@ -61,7 +61,7 @@ func (p *cfmPlugin) ServiceInfo() limes.ServiceInfo {
 	}
 }
 
-//Resources implements the core.QuotaPlugin interface.
+// Resources implements the core.QuotaPlugin interface.
 func (p *cfmPlugin) Resources() []limes.ResourceInfo {
 	return []limes.ResourceInfo{{
 		Name: "cfm_share_capacity",
@@ -71,17 +71,17 @@ func (p *cfmPlugin) Resources() []limes.ResourceInfo {
 	}}
 }
 
-//Rates implements the core.QuotaPlugin interface.
+// Rates implements the core.QuotaPlugin interface.
 func (p *cfmPlugin) Rates() []limes.RateInfo {
 	return nil
 }
 
-//ScrapeRates implements the core.QuotaPlugin interface.
+// ScrapeRates implements the core.QuotaPlugin interface.
 func (p *cfmPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
-//Scrape implements the core.QuotaPlugin interface.
+// Scrape implements the core.QuotaPlugin interface.
 func (p *cfmPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (map[string]core.ResourceData, string, error) {
 	client, err := newCFMClient(provider, eo, p.projectID)
 	if err != nil {
@@ -161,13 +161,13 @@ func (p *cfmPlugin) scrapeOld(client *cfmClient, projectUUID string) (map[string
 	return map[string]core.ResourceData{"cfm_share_capacity": result}, "", nil
 }
 
-//IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
+// IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
 func (p *cfmPlugin) IsQuotaAcceptableForProject(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
 	//not required for this plugin
 	return nil
 }
 
-//SetQuota implements the core.QuotaPlugin interface.
+// SetQuota implements the core.QuotaPlugin interface.
 func (p *cfmPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
 	if !p.cfg.CFM.Authoritative {
 		return errors.New("the database/cfm_share_capacity resource is externally managed")
@@ -188,12 +188,12 @@ func (p *cfmPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherclou
 	return err
 }
 
-//DescribeMetrics implements the core.QuotaPlugin interface.
+// DescribeMetrics implements the core.QuotaPlugin interface.
 func (p *cfmPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 	//not used by this plugin
 }
 
-//CollectMetrics implements the core.QuotaPlugin interface.
+// CollectMetrics implements the core.QuotaPlugin interface.
 func (p *cfmPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID string, project core.KeystoneProject, serializedMetrics string) error {
 	//not used by this plugin
 	return nil

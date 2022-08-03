@@ -34,15 +34,15 @@ import (
 	"github.com/sapcc/limes/pkg/db"
 )
 
-//NOTE: Both queries use LEFT OUTER JOIN to generate at least one result row
-//per known project, to ensure that each project gets a report even if its
-//resource data and/or rate data is incomplete.
+// NOTE: Both queries use LEFT OUTER JOIN to generate at least one result row
+// per known project, to ensure that each project gets a report even if its
+// resource data and/or rate data is incomplete.
 //
-//The query for resource data uses "ORDER BY p.uuid" to ensure that a) the
-//output order is reproducible to keep the tests happy and b) records for the
-//same project appear in a cluster, so that the implementation can publish
-//completed project reports (and then reclaim their memory usage) as soon as
-//possible.
+// The query for resource data uses "ORDER BY p.uuid" to ensure that a) the
+// output order is reproducible to keep the tests happy and b) records for the
+// same project appear in a cluster, so that the implementation can publish
+// completed project reports (and then reclaim their memory usage) as soon as
+// possible.
 var (
 	projectRateLimitReportQuery = sqlext.SimplifyWhitespace(`
 	SELECT p.uuid, p.name, COALESCE(p.parent_uuid, ''), ps.type, ps.scraped_at, ps.rates_scraped_at, pra.name, pra.rate_limit, pra.window_ns, pra.usage_as_bigint
@@ -61,13 +61,13 @@ var (
 `)
 )
 
-//GetProjects returns limes.ProjectReport reports for all projects in the given domain or,
-//if project is non-nil, for that project only.
+// GetProjects returns limes.ProjectReport reports for all projects in the given domain or,
+// if project is non-nil, for that project only.
 //
-//Since large domains can contain thousands of project reports, and project
-//reports with the highest detail levels can be several MB large, we don't just
-//return them all in a big list. Instead, the `submit` callback gets called
-//once for each project report once that report is complete.
+// Since large domains can contain thousands of project reports, and project
+// reports with the highest detail levels can be several MB large, we don't just
+// return them all in a big list. Instead, the `submit` callback gets called
+// once for each project report once that report is complete.
 func GetProjects(cluster *core.Cluster, domain db.Domain, project *db.Project, dbi db.Interface, filter Filter, submit func(*limes.ProjectReport) error) error {
 	clusterCanBurst := cluster.Config.Bursting.MaxMultiplier > 0
 

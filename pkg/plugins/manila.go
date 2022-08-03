@@ -49,7 +49,7 @@ func init() {
 	})
 }
 
-//Init implements the core.QuotaPlugin interface.
+// Init implements the core.QuotaPlugin interface.
 func (p *manilaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
 	if len(p.cfg.ShareV2.ShareTypes) == 0 {
 		return errors.New("quota plugin sharev2: missing required configuration field sharev2.share_types")
@@ -98,7 +98,7 @@ func (p *manilaPlugin) findMicroversion(client *gophercloud.ServiceClient) (int,
 	return 0, nil
 }
 
-//ServiceInfo implements the core.QuotaPlugin interface.
+// ServiceInfo implements the core.QuotaPlugin interface.
 func (p *manilaPlugin) ServiceInfo() limes.ServiceInfo {
 	return limes.ServiceInfo{
 		Type:        "sharev2",
@@ -107,7 +107,7 @@ func (p *manilaPlugin) ServiceInfo() limes.ServiceInfo {
 	}
 }
 
-//Resources implements the core.QuotaPlugin interface.
+// Resources implements the core.QuotaPlugin interface.
 func (p *manilaPlugin) Resources() []limes.ResourceInfo {
 	result := make([]limes.ResourceInfo, 0, 1+4*len(p.cfg.ShareV2.ShareTypes))
 	result = append(result, limes.ResourceInfo{
@@ -143,7 +143,7 @@ func (p *manilaPlugin) Resources() []limes.ResourceInfo {
 	return result
 }
 
-//Rates implements the core.QuotaPlugin interface.
+// Rates implements the core.QuotaPlugin interface.
 func (p *manilaPlugin) Rates() []limes.RateInfo {
 	return nil
 }
@@ -169,12 +169,12 @@ type manilaQuotaSet struct {
 	ReplicasPtr         *uint64 `json:"share_replicas,omitempty"`
 }
 
-//ScrapeRates implements the core.QuotaPlugin interface.
+// ScrapeRates implements the core.QuotaPlugin interface.
 func (p *manilaPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
-//Scrape implements the core.QuotaPlugin interface.
+// Scrape implements the core.QuotaPlugin interface.
 func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (map[string]core.ResourceData, string, error) {
 	client, err := openstack.NewSharedFileSystemV2(provider, eo)
 	if err != nil {
@@ -263,7 +263,7 @@ func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 	return result, "", nil
 }
 
-//IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
+// IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
 func (p *manilaPlugin) IsQuotaAcceptableForProject(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
 	//check if an inaccessible share type is used
 	for _, shareType := range p.cfg.ShareV2.ShareTypes {
@@ -280,7 +280,7 @@ func (p *manilaPlugin) IsQuotaAcceptableForProject(client *gophercloud.ProviderC
 	return nil
 }
 
-//SetQuota implements the core.QuotaPlugin interface.
+// SetQuota implements the core.QuotaPlugin interface.
 func (p *manilaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
 	err := p.IsQuotaAcceptableForProject(provider, eo, project, quotas)
 	if err != nil {
@@ -374,12 +374,12 @@ func logDebugSetQuota(projectUUID, shareTypeName string, quotas manilaQuotaSet) 
 	}
 }
 
-//DescribeMetrics implements the core.QuotaPlugin interface.
+// DescribeMetrics implements the core.QuotaPlugin interface.
 func (p *manilaPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 	//not used by this plugin
 }
 
-//CollectMetrics implements the core.QuotaPlugin interface.
+// CollectMetrics implements the core.QuotaPlugin interface.
 func (p *manilaPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID string, project core.KeystoneProject, serializedMetrics string) error {
 	//not used by this plugin
 	return nil

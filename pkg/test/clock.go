@@ -23,16 +23,16 @@ import "time"
 
 var clockSeconds int64 = -1
 
-//TimeNow replaces time.Now in unit tests. It provides a simulated clock that
-//behaves the same in every test run: It returns the UNIX epoch the first time,
-//and then advances by one second on every call.
+// TimeNow replaces time.Now in unit tests. It provides a simulated clock that
+// behaves the same in every test run: It returns the UNIX epoch the first time,
+// and then advances by one second on every call.
 func TimeNow() time.Time {
 	clockSeconds++
 	return time.Unix(clockSeconds, 0).UTC()
 }
 
-//ResetTime should be called at the start of unit tests that use TimeNow, to
-//ensure a reproducible flow of time.
+// ResetTime should be called at the start of unit tests that use TimeNow, to
+// ensure a reproducible flow of time.
 func ResetTime() {
 	clockSeconds = -1
 }

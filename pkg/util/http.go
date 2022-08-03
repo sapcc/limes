@@ -44,8 +44,8 @@ func init() {
 	http.DefaultTransport = loggingRoundTripper{http.DefaultTransport}
 }
 
-//loggingRoundTripper adds logging for long round trips to http.RoundTripper.
-//This is used to provide visibility into slow backend API calls.
+// loggingRoundTripper adds logging for long round trips to http.RoundTripper.
+// This is used to provide visibility into slow backend API calls.
 type loggingRoundTripper struct {
 	Inner http.RoundTripper
 }

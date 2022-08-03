@@ -25,15 +25,15 @@ import (
 	"github.com/gophercloud/gophercloud"
 )
 
-//novaFlavorTranslationTable is used in situations where certain flavors can
-//have more than one name in Nova, to translate between the names preferred by
-//Nova and those preferred by Limes.
+// novaFlavorTranslationTable is used in situations where certain flavors can
+// have more than one name in Nova, to translate between the names preferred by
+// Nova and those preferred by Limes.
 type novaFlavorTranslationTable struct {
 	Entries []*novaFlavorTranslationEntry
 }
 
-//novaFlavorTranslationEntry is an entry for one particular flavor in type
-//novaFlavorTranslationTable.
+// novaFlavorTranslationEntry is an entry for one particular flavor in type
+// novaFlavorTranslationTable.
 type novaFlavorTranslationEntry struct {
 	//All possible names for this flavor, including the preferred names that have
 	//their separate fields below.
@@ -71,8 +71,8 @@ func (t novaFlavorTranslationTable) findEntry(flavorName string) *novaFlavorTran
 	return nil
 }
 
-//Used by ListFlavorsWithSeparateInstanceQuota() to record the fact that the
-//given `flavorName` is used by Nova for a separate instance quota.
+// Used by ListFlavorsWithSeparateInstanceQuota() to record the fact that the
+// given `flavorName` is used by Nova for a separate instance quota.
 func (t novaFlavorTranslationTable) recordNovaPreferredName(flavorName string) {
 	entry := t.findEntry(flavorName)
 	if entry != nil {
@@ -80,7 +80,7 @@ func (t novaFlavorTranslationTable) recordNovaPreferredName(flavorName string) {
 	}
 }
 
-//Returns the Limes resource name for a flavor with a separate instance quota.
+// Returns the Limes resource name for a flavor with a separate instance quota.
 func (t novaFlavorTranslationTable) LimesResourceNameForFlavor(flavorName string) string {
 	entry := t.findEntry(flavorName)
 	if entry == nil {
@@ -89,8 +89,8 @@ func (t novaFlavorTranslationTable) LimesResourceNameForFlavor(flavorName string
 	return "instances_" + entry.LimesPreferredName
 }
 
-//Returns the Nova quota name for the given Limes resource name, or "" if the
-//given resource name does not refer to a separate instance quota.
+// Returns the Nova quota name for the given Limes resource name, or "" if the
+// given resource name does not refer to a separate instance quota.
 func (t novaFlavorTranslationTable) NovaQuotaNameForLimesResourceName(resourceName string) string {
 	//NOTE: Know the difference!
 	//  novaQuotaName = "instances_${novaPreferredName}"
@@ -109,8 +109,8 @@ func (t novaFlavorTranslationTable) NovaQuotaNameForLimesResourceName(resourceNa
 	return "instances_" + entry.NovaPreferredName
 }
 
-//Queries Nova for all separate instance quotas, and returns the flavor names
-//that Nova prefers for each.
+// Queries Nova for all separate instance quotas, and returns the flavor names
+// that Nova prefers for each.
 func (t novaFlavorTranslationTable) ListFlavorsWithSeparateInstanceQuota(computeV2 *gophercloud.ServiceClient) ([]string, error) {
 	//look at quota class "default" to determine which quotas exist
 	url := computeV2.ServiceURL("os-quota-class-sets", "default")

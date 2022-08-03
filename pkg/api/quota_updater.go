@@ -41,8 +41,8 @@ import (
 	"github.com/sapcc/limes/pkg/reports"
 )
 
-//QuotaUpdater contains the shared code for domain and project PUT requests.
-//See func PutDomain and func PutProject for how it's used.
+// QuotaUpdater contains the shared code for domain and project PUT requests.
+// See func PutDomain and func PutProject for how it's used.
 type QuotaUpdater struct {
 	//scope
 	Cluster *core.Cluster
@@ -61,8 +61,8 @@ type QuotaUpdater struct {
 	RateLimitRequests map[string]map[string]RateLimitRequest
 }
 
-//QuotaRequest describes a single quota value that a PUT request wants to
-//change. It appears in type QuotaUpdater.
+// QuotaRequest describes a single quota value that a PUT request wants to
+// change. It appears in type QuotaUpdater.
 type QuotaRequest struct {
 	OldValue        uint64
 	NewValue        uint64
@@ -71,8 +71,8 @@ type QuotaRequest struct {
 	ValidationError *core.QuotaValidationError
 }
 
-//RateLimitRequest describes a single rate limit that a PUT requests wants to
-//change. It appears in type QuotaUpdater.
+// RateLimitRequest describes a single rate limit that a PUT requests wants to
+// change. It appears in type QuotaUpdater.
 type RateLimitRequest struct {
 	Unit            limes.Unit
 	OldLimit        uint64
@@ -82,7 +82,7 @@ type RateLimitRequest struct {
 	ValidationError *core.QuotaValidationError
 }
 
-//ScopeType is used for constructing error messages.
+// ScopeType is used for constructing error messages.
 func (u QuotaUpdater) ScopeType() string {
 	if u.Project == nil {
 		return "domain"
@@ -90,7 +90,7 @@ func (u QuotaUpdater) ScopeType() string {
 	return "project"
 }
 
-//ScopeName is "$DOMAIN_NAME" for domains and "$DOMAIN_NAME/$PROJECT_NAME" for projects.
+// ScopeName is "$DOMAIN_NAME" for domains and "$DOMAIN_NAME/$PROJECT_NAME" for projects.
 func (u QuotaUpdater) ScopeName() string {
 	if u.Project == nil {
 		return u.Domain.Name
@@ -98,7 +98,7 @@ func (u QuotaUpdater) ScopeName() string {
 	return u.Domain.Name + "/" + u.Project.Name
 }
 
-//QuotaConstraints returns the quota constraints that apply to this updater's scope.
+// QuotaConstraints returns the quota constraints that apply to this updater's scope.
 func (u QuotaUpdater) QuotaConstraints() core.QuotaConstraints {
 	if u.Cluster.QuotaConstraints == nil {
 		return nil
@@ -112,22 +112,22 @@ func (u QuotaUpdater) QuotaConstraints() core.QuotaConstraints {
 ////////////////////////////////////////////////////////////////////////////////
 // validation phase
 
-//MissingProjectReportError is returned by QuotaUpdater.ValidateInput() when a
-//project report is incomplete. This usually happens when a user tries to PUT a
-//quota on a new project that has not been scraped yet.
+// MissingProjectReportError is returned by QuotaUpdater.ValidateInput() when a
+// project report is incomplete. This usually happens when a user tries to PUT a
+// quota on a new project that has not been scraped yet.
 type MissingProjectReportError struct {
 	ServiceType  string
 	ResourceName string
 }
 
-//Error implements the builtin/error interface.
+// Error implements the builtin/error interface.
 func (e MissingProjectReportError) Error() string {
 	return fmt.Sprintf("no project report for resource %s/%s", e.ServiceType, e.ResourceName)
 }
 
-//ValidateInput reads the given input and validates the quotas contained therein.
-//Results are collected into u.Requests. The return value is only set for unexpected
-//errors, not for validation errors.
+// ValidateInput reads the given input and validates the quotas contained therein.
+// Results are collected into u.Requests. The return value is only set for unexpected
+// errors, not for validation errors.
 func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface) error {
 	//gather reports on the cluster's capacity and domain's quotas to decide whether a quota update is legal
 	clusterReport, err := reports.GetCluster(u.Cluster, dbi, reports.Filter{})
@@ -639,7 +639,7 @@ func (u QuotaUpdater) validateProjectQuota(domRes limes.DomainResourceReport, pr
 	return nil
 }
 
-//IsValid returns true if all u.Requests are valid (i.e. ValidationError == nil).
+// IsValid returns true if all u.Requests are valid (i.e. ValidationError == nil).
 func (u QuotaUpdater) IsValid() bool {
 	for _, reqs := range u.ResourceRequests {
 		for _, req := range reqs {
@@ -658,8 +658,8 @@ func (u QuotaUpdater) IsValid() bool {
 	return true
 }
 
-//WriteSimulationReport produces the HTTP response for the POST /simulate-put
-//endpoints.
+// WriteSimulationReport produces the HTTP response for the POST /simulate-put
+// endpoints.
 func (u QuotaUpdater) WriteSimulationReport(w http.ResponseWriter) {
 	type (
 		unacceptableResource struct {
@@ -737,8 +737,8 @@ func (u QuotaUpdater) WriteSimulationReport(w http.ResponseWriter) {
 	respondwith.JSON(w, http.StatusOK, result)
 }
 
-//WritePutErrorResponse produces a negative HTTP response for this PUT request.
-//It may only be used when `u.IsValid()` is false.
+// WritePutErrorResponse produces a negative HTTP response for this PUT request.
+// It may only be used when `u.IsValid()` is false.
 func (u QuotaUpdater) WritePutErrorResponse(w http.ResponseWriter) {
 	var lines []string
 	hasSubstatus := make(map[int]bool)
@@ -795,8 +795,8 @@ func (u QuotaUpdater) WritePutErrorResponse(w http.ResponseWriter) {
 ////////////////////////////////////////////////////////////////////////////////
 // integration with package audit
 
-//CommitAuditTrail prepares an audit.Trail instance for this updater and
-//commits it.
+// CommitAuditTrail prepares an audit.Trail instance for this updater and
+// commits it.
 func (u QuotaUpdater) CommitAuditTrail(token *gopherpolicy.Token, r *http.Request, requestTime time.Time) {
 	projectName := ""
 	projectUUID := ""

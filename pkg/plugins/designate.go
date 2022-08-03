@@ -54,12 +54,12 @@ func init() {
 	})
 }
 
-//Init implements the core.QuotaPlugin interface.
+// Init implements the core.QuotaPlugin interface.
 func (p *designatePlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
 	return nil
 }
 
-//ServiceInfo implements the core.QuotaPlugin interface.
+// ServiceInfo implements the core.QuotaPlugin interface.
 func (p *designatePlugin) ServiceInfo() limes.ServiceInfo {
 	return limes.ServiceInfo{
 		Type:        "dns",
@@ -68,22 +68,22 @@ func (p *designatePlugin) ServiceInfo() limes.ServiceInfo {
 	}
 }
 
-//Resources implements the core.QuotaPlugin interface.
+// Resources implements the core.QuotaPlugin interface.
 func (p *designatePlugin) Resources() []limes.ResourceInfo {
 	return designateResources
 }
 
-//Rates implements the core.QuotaPlugin interface.
+// Rates implements the core.QuotaPlugin interface.
 func (p *designatePlugin) Rates() []limes.RateInfo {
 	return nil
 }
 
-//ScrapeRates implements the core.QuotaPlugin interface.
+// ScrapeRates implements the core.QuotaPlugin interface.
 func (p *designatePlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
-//Scrape implements the core.QuotaPlugin interface.
+// Scrape implements the core.QuotaPlugin interface.
 func (p *designatePlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (map[string]core.ResourceData, string, error) {
 	client, err := openstack.NewDNSV2(provider, eo)
 	if err != nil {
@@ -128,13 +128,13 @@ func (p *designatePlugin) Scrape(provider *gophercloud.ProviderClient, eo gopher
 	}, "", nil
 }
 
-//IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
+// IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
 func (p *designatePlugin) IsQuotaAcceptableForProject(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
 	//not required for this plugin
 	return nil
 }
 
-//SetQuota implements the core.QuotaPlugin interface.
+// SetQuota implements the core.QuotaPlugin interface.
 func (p *designatePlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
 	client, err := openstack.NewDNSV2(provider, eo)
 	if err != nil {
@@ -151,12 +151,12 @@ func (p *designatePlugin) SetQuota(provider *gophercloud.ProviderClient, eo goph
 	})
 }
 
-//DescribeMetrics implements the core.QuotaPlugin interface.
+// DescribeMetrics implements the core.QuotaPlugin interface.
 func (p *designatePlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 	//not used by this plugin
 }
 
-//CollectMetrics implements the core.QuotaPlugin interface.
+// CollectMetrics implements the core.QuotaPlugin interface.
 func (p *designatePlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID string, project core.KeystoneProject, serializedMetrics string) error {
 	//not used by this plugin
 	return nil

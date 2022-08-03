@@ -52,12 +52,12 @@ func init() {
 	})
 }
 
-//Init implements the core.CapacityPlugin interface.
+// Init implements the core.CapacityPlugin interface.
 func (p *capacitySapccIronicPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
 	return nil
 }
 
-//Type implements the core.CapacityPlugin interface.
+// Type implements the core.CapacityPlugin interface.
 func (p *capacitySapccIronicPlugin) Type() string {
 	return "sapcc-ironic"
 }
@@ -89,10 +89,10 @@ func (n ironicNode) StableProvisionState() string {
 ////////////////////////////////////////////////////////////////////////////////
 // OpenStack is being inconsistent with itself again
 
-//For fields that are sometimes missing, sometimes an integer, sometimes a string.
+// For fields that are sometimes missing, sometimes an integer, sometimes a string.
 type veryFlexibleUint64 uint64
 
-//UnmarshalJSON implements the json.Unmarshaler interface.
+// UnmarshalJSON implements the json.Unmarshaler interface.
 func (value *veryFlexibleUint64) UnmarshalJSON(buf []byte) error {
 	if string(buf) == "null" {
 		*value = 0
@@ -116,26 +116,27 @@ func (value *veryFlexibleUint64) UnmarshalJSON(buf []byte) error {
 	return err
 }
 
-//Reference:
-//  Hosts are expected to be in one of the following format:
-//    - "nova-compute-xxxx"
-//    - "nova-compute-ironic-xxxx"
-//  where "xxxx" is unique among all hosts.
+// Reference:
+//
+//	Hosts are expected to be in one of the following format:
+//	  - "nova-compute-xxxx"
+//	  - "nova-compute-ironic-xxxx"
+//	where "xxxx" is unique among all hosts.
 var computeHostStubRx = regexp.MustCompile(`^nova-compute-(?:ironic-)?([a-zA-Z0-9]+)$`)
 
-//Node names are expected to be in the form "nodeXXX-bmYYY" or "nodeXXX-bbYYY"
-//or "nodeXXX-apYYY" or "nodeXXX-mdYYY", where the second half is the host stub
-//(the match group from above).
+// Node names are expected to be in the form "nodeXXX-bmYYY" or "nodeXXX-bbYYY"
+// or "nodeXXX-apYYY" or "nodeXXX-mdYYY", where the second half is the host stub
+// (the match group from above).
 var nodeNameRx = regexp.MustCompile(`^node(?:swift)?\d+-((?:b[bm]|ap|md|st|swf)\d+)$`)
 
-//As a special case, nodes in the control plane do not belong to any
-//user-accessible Nova aggregates, so we cannot establish an AZ association.
-//However, we don't really need the AZ association anyway: AZ capacities are
-//presented to the customer as a sort of manual scheduling hint, but CP nodes
-//are earmarked for internal use and thus are not relevant there.
+// As a special case, nodes in the control plane do not belong to any
+// user-accessible Nova aggregates, so we cannot establish an AZ association.
+// However, we don't really need the AZ association anyway: AZ capacities are
+// presented to the customer as a sort of manual scheduling hint, but CP nodes
+// are earmarked for internal use and thus are not relevant there.
 var cpNodeNameRx = regexp.MustCompile(`^node(?:swift)?\d+-(cp\d+)$`)
 
-//Scrape implements the core.CapacityPlugin interface.
+// Scrape implements the core.CapacityPlugin interface.
 func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (map[string]map[string]core.CapacityData, string, error) {
 	//collect info about flavors with separate instance quota
 	novaClient, err := openstack.NewComputeV2(provider, eo)
@@ -295,12 +296,12 @@ var ironicUnmatchedNodesGauge = prometheus.NewGaugeVec(
 	[]string{"os_cluster"},
 )
 
-//DescribeMetrics implements the core.CapacityPlugin interface.
+// DescribeMetrics implements the core.CapacityPlugin interface.
 func (p *capacitySapccIronicPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 	ironicUnmatchedNodesGauge.Describe(ch)
 }
 
-//CollectMetrics implements the core.CapacityPlugin interface.
+// CollectMetrics implements the core.CapacityPlugin interface.
 func (p *capacitySapccIronicPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, serializedMetrics string) error {
 	if serializedMetrics == "" {
 		return nil

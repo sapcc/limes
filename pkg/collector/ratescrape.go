@@ -34,7 +34,7 @@ import (
 	"github.com/sapcc/limes/pkg/util"
 )
 
-//query that finds the next project that needs to have rates scraped
+// query that finds the next project that needs to have rates scraped
 var findProjectForRateScrapeQuery = sqlext.SimplifyWhitespace(`
 	SELECT ps.id, ps.rates_scraped_at, ps.rates_scrape_state, p.name, p.uuid, p.parent_uuid, d.name, d.uuid
 	FROM project_services ps
@@ -50,12 +50,12 @@ var findProjectForRateScrapeQuery = sqlext.SimplifyWhitespace(`
 	LIMIT 1
 `)
 
-//ScrapeRates checks the database periodically for outdated or missing rate
-//records for the given cluster and the given service type, and updates them by
-//querying the backend service.
+// ScrapeRates checks the database periodically for outdated or missing rate
+// records for the given cluster and the given service type, and updates them by
+// querying the backend service.
 //
-//Errors are logged instead of returned. The function will not return unless
-//startup fails.
+// Errors are logged instead of returned. The function will not return unless
+// startup fails.
 func (c *Collector) ScrapeRates() {
 	serviceInfo := c.Plugin.ServiceInfo()
 	serviceType := serviceInfo.Type

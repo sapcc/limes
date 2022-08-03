@@ -40,9 +40,9 @@ func compileManilaShareTypeSpecs(specs []core.ManilaShareTypeSpec) (err error) {
 	return nil
 }
 
-//Given a virtual share type, returns the actual share type name that we have
-//to use on the Manila API for this particular project, or "" if this share
-//type shall be skipped for this project.
+// Given a virtual share type, returns the actual share type name that we have
+// to use on the Manila API for this particular project, or "" if this share
+// type shall be skipped for this project.
 func resolveManilaShareType(spec core.ManilaShareTypeSpec, project core.KeystoneProject) string {
 	fullName := fmt.Sprintf(`%s@%s`, project.Name, project.Domain.Name)
 	for _, rule := range spec.MappingRules {
@@ -53,8 +53,8 @@ func resolveManilaShareType(spec core.ManilaShareTypeSpec, project core.Keystone
 	return spec.Name
 }
 
-//Given a virtual share type, list all share type names that can be used on the
-//Manila API to set quota or read usage for it.
+// Given a virtual share type, list all share type names that can be used on the
+// Manila API to set quota or read usage for it.
 func getAllManilaShareTypes(spec core.ManilaShareTypeSpec) []string {
 	var result []string
 	for _, rule := range spec.MappingRules {

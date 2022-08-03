@@ -34,7 +34,7 @@ import (
 	"github.com/sapcc/limes/pkg/core"
 )
 
-//Plugin is a core.QuotaPlugin implementation for unit tests.
+// Plugin is a core.QuotaPlugin implementation for unit tests.
 type Plugin struct {
 	StaticServiceType  string
 	StaticRateInfos    []limes.RateInfo
@@ -65,7 +65,7 @@ var resources = []limes.ResourceInfo{
 	},
 }
 
-//NewPlugin creates a new Plugin for the given service type.
+// NewPlugin creates a new Plugin for the given service type.
 func NewPlugin(serviceType string, rates ...limes.RateInfo) *Plugin {
 	return &Plugin{
 		StaticServiceType: serviceType,
@@ -79,7 +79,7 @@ func NewPlugin(serviceType string, rates ...limes.RateInfo) *Plugin {
 	}
 }
 
-//NewPluginFactory creates a new PluginFactory for core.RegisterQuotaPlugin.
+// NewPluginFactory creates a new PluginFactory for core.RegisterQuotaPlugin.
 func NewPluginFactory(serviceType string) func(core.ServiceConfiguration, map[string]bool) core.QuotaPlugin {
 	return func(cfg core.ServiceConfiguration, scrapeSubresources map[string]bool) core.QuotaPlugin {
 		//cfg and scrapeSubresources is ignored
@@ -87,12 +87,12 @@ func NewPluginFactory(serviceType string) func(core.ServiceConfiguration, map[st
 	}
 }
 
-//Init implements the core.QuotaPlugin interface.
+// Init implements the core.QuotaPlugin interface.
 func (p *Plugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
 	return nil
 }
 
-//ServiceInfo implements the core.QuotaPlugin interface.
+// ServiceInfo implements the core.QuotaPlugin interface.
 func (p *Plugin) ServiceInfo() limes.ServiceInfo {
 	return limes.ServiceInfo{
 		Type: p.StaticServiceType,
@@ -100,7 +100,7 @@ func (p *Plugin) ServiceInfo() limes.ServiceInfo {
 	}
 }
 
-//Resources implements the core.QuotaPlugin interface.
+// Resources implements the core.QuotaPlugin interface.
 func (p *Plugin) Resources() []limes.ResourceInfo {
 	result := resources
 	if p.WithExternallyManagedResource {
@@ -113,12 +113,12 @@ func (p *Plugin) Resources() []limes.ResourceInfo {
 	return result
 }
 
-//Rates implements the core.QuotaPlugin interface.
+// Rates implements the core.QuotaPlugin interface.
 func (p *Plugin) Rates() []limes.RateInfo {
 	return p.StaticRateInfos
 }
 
-//ScrapeRates implements the core.QuotaPlugin interface.
+// ScrapeRates implements the core.QuotaPlugin interface.
 func (p *Plugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
 	if p.ScrapeFails {
 		return nil, "", errors.New("ScrapeRates failed as requested")
@@ -148,7 +148,7 @@ func (p *Plugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.
 	return result, string(serializedStateBytes), nil
 }
 
-//Scrape implements the core.QuotaPlugin interface.
+// Scrape implements the core.QuotaPlugin interface.
 func (p *Plugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (map[string]core.ResourceData, string, error) {
 	if p.ScrapeFails {
 		return nil, "", errors.New("Scrape failed as requested")
@@ -209,7 +209,7 @@ func (p *Plugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.End
 	return result, serializedMetrics, nil
 }
 
-//IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
+// IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
 func (p *Plugin) IsQuotaAcceptableForProject(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
 	if p.QuotaIsNotAcceptable {
 		var quotasStr []string
@@ -222,7 +222,7 @@ func (p *Plugin) IsQuotaAcceptableForProject(client *gophercloud.ProviderClient,
 	return nil
 }
 
-//SetQuota implements the core.QuotaPlugin interface.
+// SetQuota implements the core.QuotaPlugin interface.
 func (p *Plugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
 	if p.SetQuotaFails {
 		return errors.New("SetQuota failed as requested")
@@ -242,13 +242,13 @@ var (
 	)
 )
 
-//DescribeMetrics implements the core.QuotaPlugin interface.
+// DescribeMetrics implements the core.QuotaPlugin interface.
 func (p *Plugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 	unittestCapacityUsageMetric.Describe(ch)
 	unittestThingsUsageMetric.Describe(ch)
 }
 
-//CollectMetrics implements the core.QuotaPlugin interface.
+// CollectMetrics implements the core.QuotaPlugin interface.
 func (p *Plugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID string, project core.KeystoneProject, serializedMetrics string) error {
 	if serializedMetrics == "" {
 		return nil
@@ -280,7 +280,7 @@ func (p *Plugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID string, p
 	return nil
 }
 
-//CapacityPlugin is a core.CapacityPlugin implementation for unit tests.
+// CapacityPlugin is a core.CapacityPlugin implementation for unit tests.
 type CapacityPlugin struct {
 	PluginType        string
 	Resources         []string //each formatted as "servicetype/resourcename"
@@ -289,22 +289,22 @@ type CapacityPlugin struct {
 	WithSubcapacities bool
 }
 
-//NewCapacityPlugin creates a new CapacityPlugin.
+// NewCapacityPlugin creates a new CapacityPlugin.
 func NewCapacityPlugin(pluginType string, resources ...string) *CapacityPlugin {
 	return &CapacityPlugin{pluginType, resources, 42, false, false}
 }
 
-//Init implements the core.CapacityPlugin interface.
+// Init implements the core.CapacityPlugin interface.
 func (p *CapacityPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
 	return nil
 }
 
-//Type implements the core.CapacityPlugin interface.
+// Type implements the core.CapacityPlugin interface.
 func (p *CapacityPlugin) Type() string {
 	return p.PluginType
 }
 
-//Scrape implements the core.CapacityPlugin interface.
+// Scrape implements the core.CapacityPlugin interface.
 func (p *CapacityPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (map[string]map[string]core.CapacityData, string, error) {
 	var capacityPerAZ map[string]*core.CapacityDataForAZ
 	if p.WithAZCapData {
@@ -358,7 +358,7 @@ var (
 	)
 )
 
-//DescribeMetrics implements the core.CapacityPlugin interface.
+// DescribeMetrics implements the core.CapacityPlugin interface.
 func (p *CapacityPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 	if p.WithSubcapacities {
 		unittestCapacitySmallerHalfMetric.Describe(ch)
@@ -366,7 +366,7 @@ func (p *CapacityPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 	}
 }
 
-//CollectMetrics implements the core.CapacityPlugin interface.
+// CollectMetrics implements the core.CapacityPlugin interface.
 func (p *CapacityPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, serializedMetrics string) error {
 	if !p.WithSubcapacities {
 		return nil

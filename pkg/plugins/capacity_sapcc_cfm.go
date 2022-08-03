@@ -41,18 +41,18 @@ func init() {
 	})
 }
 
-//Init implements the core.CapacityPlugin interface.
+// Init implements the core.CapacityPlugin interface.
 func (p *capacityCFMPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
 	p.projectID, err = getProjectIDForToken(provider, eo)
 	return err
 }
 
-//Type implements the core.CapacityPlugin interface.
+// Type implements the core.CapacityPlugin interface.
 func (p *capacityCFMPlugin) Type() string {
 	return "cfm"
 }
 
-//Scrape implements the core.CapacityPlugin interface.
+// Scrape implements the core.CapacityPlugin interface.
 func (p *capacityCFMPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (map[string]map[string]core.CapacityData, string, error) {
 	client, err := newCFMClient(provider, eo, p.projectID)
 	if err != nil {
@@ -100,12 +100,12 @@ func (p *capacityCFMPlugin) Scrape(provider *gophercloud.ProviderClient, eo goph
 	}, "", nil
 }
 
-//DescribeMetrics implements the core.CapacityPlugin interface.
+// DescribeMetrics implements the core.CapacityPlugin interface.
 func (p *capacityCFMPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 	//not used by this plugin
 }
 
-//CollectMetrics implements the core.CapacityPlugin interface.
+// CollectMetrics implements the core.CapacityPlugin interface.
 func (p *capacityCFMPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, serializedMetrics string) error {
 	//not used by this plugin
 	return nil

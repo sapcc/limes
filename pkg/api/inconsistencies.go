@@ -29,7 +29,7 @@ import (
 	"github.com/sapcc/limes/pkg/reports"
 )
 
-//ListInconsistencies handles GET /v1/inconsistencies.
+// ListInconsistencies handles GET /v1/inconsistencies.
 func (p *v1Provider) ListInconsistencies(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/inconsistencies")
 	token := p.CheckToken(r)

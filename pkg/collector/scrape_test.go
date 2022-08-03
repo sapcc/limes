@@ -487,7 +487,7 @@ func Test_AutoApproveInitialQuota(t *testing.T) {
 	`)
 }
 
-//A quota plugin with absolutely no resources and rates.
+// A quota plugin with absolutely no resources and rates.
 type noopQuotaPlugin struct{}
 
 func (noopQuotaPlugin) Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {

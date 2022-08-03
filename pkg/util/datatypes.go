@@ -23,11 +23,11 @@ import (
 	"encoding/json"
 )
 
-//Float64OrUnknown extracts a value of type float64 or unknown from a json
-//result is an float64
+// Float64OrUnknown extracts a value of type float64 or unknown from a json
+// result is an float64
 type Float64OrUnknown float64
 
-//UnmarshalJSON implements the json.Unmarshaler interface
+// UnmarshalJSON implements the json.Unmarshaler interface
 func (f *Float64OrUnknown) UnmarshalJSON(buffer []byte) error {
 	if buffer[0] == '"' {
 		*f = 0

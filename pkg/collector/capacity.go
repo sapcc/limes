@@ -41,11 +41,11 @@ var (
 	scanInitialDelay = 1 * time.Minute
 )
 
-//ScanCapacity queries the cluster's capacity (across all enabled backend
-//services) periodically.
+// ScanCapacity queries the cluster's capacity (across all enabled backend
+// services) periodically.
 //
-//Errors are logged instead of returned. The function will not return unless
-//startup fails.
+// Errors are logged instead of returned. The function will not return unless
+// startup fails.
 func (c *Collector) ScanCapacity() {
 	//don't start scanning capacity immediately to avoid too much load on the
 	//backend services when the collector comes up

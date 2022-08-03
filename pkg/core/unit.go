@@ -21,10 +21,10 @@ package core
 
 import "github.com/sapcc/go-api-declarations/limes"
 
-//ConvertUnitFor works like ConvertTo, but instead of taking a unit as an
-//argument, it uses the native unit of the specified resource. In contrast to
-//ConvertTo(), this also handles UnitUnspecified. Values with unspecified unit
-//will be interpreted as being in the native unit, and will not be converted.
+// ConvertUnitFor works like ConvertTo, but instead of taking a unit as an
+// argument, it uses the native unit of the specified resource. In contrast to
+// ConvertTo(), this also handles UnitUnspecified. Values with unspecified unit
+// will be interpreted as being in the native unit, and will not be converted.
 func ConvertUnitFor(cluster *Cluster, serviceType, resourceName string, v limes.ValueWithUnit) (uint64, error) {
 	if v.Unit == limes.UnitUnspecified {
 		return v.Value, nil
@@ -34,8 +34,8 @@ func ConvertUnitFor(cluster *Cluster, serviceType, resourceName string, v limes.
 	return result.Value, err
 }
 
-//LowPrivilegeRaiseLimit is a union type for the different ways in which a
-//low-privilege raise limit can be specified.
+// LowPrivilegeRaiseLimit is a union type for the different ways in which a
+// low-privilege raise limit can be specified.
 type LowPrivilegeRaiseLimit struct {
 	//At most one of these will be non-zero.
 	AbsoluteValue                         uint64
@@ -43,7 +43,7 @@ type LowPrivilegeRaiseLimit struct {
 	UntilPercentOfClusterCapacityAssigned float64
 }
 
-//Evaluate converts this limit into an absolute value.
+// Evaluate converts this limit into an absolute value.
 func (l LowPrivilegeRaiseLimit) Evaluate(clusterReport limes.ClusterResourceReport, oldQuota uint64) uint64 {
 	switch {
 	case clusterReport.DomainsQuota == nil:

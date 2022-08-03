@@ -36,9 +36,9 @@ import (
 	"github.com/sapcc/limes/pkg/util"
 )
 
-//Cluster contains all configuration and runtime information about a single
-//cluster. It is passed around a lot in Limes code, mostly for the cluster ID,
-//the list of enabled services, and access to the quota and capacity plugins.
+// Cluster contains all configuration and runtime information about a single
+// cluster. It is passed around a lot in Limes code, mostly for the cluster ID,
+// the list of enabled services, and access to the quota and capacity plugins.
 type Cluster struct {
 	ID                string
 	Config            ClusterConfiguration
@@ -54,9 +54,9 @@ type Cluster struct {
 	}
 }
 
-//NewCluster creates a new Cluster instance with the given ID and
-//configuration, and also initializes all quota and capacity plugins. Errors
-//will be logged when some of the requested plugins cannot be found.
+// NewCluster creates a new Cluster instance with the given ID and
+// configuration, and also initializes all quota and capacity plugins. Errors
+// will be logged when some of the requested plugins cannot be found.
 func NewCluster(config ClusterConfiguration) *Cluster {
 	factory, exists := discoveryPluginFactories[config.Discovery.Method]
 	if !exists {
@@ -156,16 +156,16 @@ func (cluster *ClusterConfiguration) SetupOPA() {
 	cluster.OPA.ProjectQuotaQuery = projectQuery
 }
 
-//Connect calls Connect() on all AuthParameters for this Cluster, thus ensuring
-//that all ProviderClient instances are available. It also calls Init() on all
-//quota plugins.
+// Connect calls Connect() on all AuthParameters for this Cluster, thus ensuring
+// that all ProviderClient instances are available. It also calls Init() on all
+// quota plugins.
 //
-//It also loads the QuotaConstraints for this cluster, if configured. The
-//LowPrivilegeRaise.Limits fields are also initialized here. We also validate
-//if Config.ResourceBehavior[].ScalesWith refers to existing resources.
+// It also loads the QuotaConstraints for this cluster, if configured. The
+// LowPrivilegeRaise.Limits fields are also initialized here. We also validate
+// if Config.ResourceBehavior[].ScalesWith refers to existing resources.
 //
-//We cannot do any of this earlier because we only know all resources after
-//calling Init() on all quota plugins.
+// We cannot do any of this earlier because we only know all resources after
+// calling Init() on all quota plugins.
 func (c *Cluster) Connect() error {
 	err := c.Config.Auth.Connect()
 	if err != nil {
@@ -287,20 +287,20 @@ func (c Cluster) parseLowPrivilegeRaiseLimits(inputs map[string]map[string]strin
 	return result, nil
 }
 
-//ProviderClient returns the gophercloud.ProviderClient for this cluster. This
-//returns nil unless Connect() is called first. (This usually happens at
-//program startup time for the current cluster.)
+// ProviderClient returns the gophercloud.ProviderClient for this cluster. This
+// returns nil unless Connect() is called first. (This usually happens at
+// program startup time for the current cluster.)
 func (c *Cluster) ProviderClient() (*gophercloud.ProviderClient, gophercloud.EndpointOpts) {
 	return c.Config.Auth.ProviderClient, c.Config.Auth.EndpointOpts
 }
 
-//HasService checks whether the given service is enabled in this cluster.
+// HasService checks whether the given service is enabled in this cluster.
 func (c *Cluster) HasService(serviceType string) bool {
 	return c.QuotaPlugins[serviceType] != nil
 }
 
-//HasResource checks whether the given service is enabled in this cluster and
-//whether it advertises the given resource.
+// HasResource checks whether the given service is enabled in this cluster and
+// whether it advertises the given resource.
 func (c *Cluster) HasResource(serviceType, resourceName string) bool {
 	plugin := c.QuotaPlugins[serviceType]
 	if plugin == nil {
@@ -314,10 +314,10 @@ func (c *Cluster) HasResource(serviceType, resourceName string) bool {
 	return false
 }
 
-//InfoForResource finds the plugin for the given serviceType and finds within that
-//plugin the ResourceInfo for the given resourceName. If the service or
-//resource does not exist, an empty ResourceInfo (with .Unit == UnitNone and
-//.Category == "") is returned.
+// InfoForResource finds the plugin for the given serviceType and finds within that
+// plugin the ResourceInfo for the given resourceName. If the service or
+// resource does not exist, an empty ResourceInfo (with .Unit == UnitNone and
+// .Category == "") is returned.
 func (c *Cluster) InfoForResource(serviceType, resourceName string) limes.ResourceInfo {
 	plugin := c.QuotaPlugins[serviceType]
 	if plugin == nil {
@@ -331,9 +331,9 @@ func (c *Cluster) InfoForResource(serviceType, resourceName string) limes.Resour
 	return limes.ResourceInfo{Name: resourceName, Unit: limes.UnitNone}
 }
 
-//InfoForService finds the plugin for the given serviceType and returns its
-//ServiceInfo(), or an empty ServiceInfo (with .Area == "") when no such
-//service exists in this cluster.
+// InfoForService finds the plugin for the given serviceType and returns its
+// ServiceInfo(), or an empty ServiceInfo (with .Area == "") when no such
+// service exists in this cluster.
 func (c *Cluster) InfoForService(serviceType string) limes.ServiceInfo {
 	plugin := c.QuotaPlugins[serviceType]
 	if plugin == nil {
@@ -342,12 +342,12 @@ func (c *Cluster) InfoForService(serviceType string) limes.ServiceInfo {
 	return plugin.ServiceInfo()
 }
 
-//BehaviorForResource returns the ResourceBehavior for the given resource in
-//the given scope.
+// BehaviorForResource returns the ResourceBehavior for the given resource in
+// the given scope.
 //
-//`scopeName` should be empty for cluster resources, equal to the domain name
-//for domain resources, or equal to `$DOMAIN_NAME/$PROJECT_NAME` for project
-//resources.
+// `scopeName` should be empty for cluster resources, equal to the domain name
+// for domain resources, or equal to `$DOMAIN_NAME/$PROJECT_NAME` for project
+// resources.
 func (c *Cluster) BehaviorForResource(serviceType, resourceName, scopeName string) ResourceBehavior {
 	//default behavior
 	result := ResourceBehavior{
@@ -391,8 +391,8 @@ func (c *Cluster) BehaviorForResource(serviceType, resourceName, scopeName strin
 	return result
 }
 
-//HasUsageForRate checks whether the given service is enabled in this cluster and
-//whether it scrapes usage for the given rate.
+// HasUsageForRate checks whether the given service is enabled in this cluster and
+// whether it scrapes usage for the given rate.
 func (c *Cluster) HasUsageForRate(serviceType, rateName string) bool {
 	plugin := c.QuotaPlugins[serviceType]
 	if plugin == nil {
@@ -406,11 +406,11 @@ func (c *Cluster) HasUsageForRate(serviceType, rateName string) bool {
 	return false
 }
 
-//InfoForRate finds the plugin for the given serviceType and finds within that
-//plugin the RateInfo for the given rateName. If the service or rate does not
-//exist, an empty RateInfo (with .Unit == UnitNone) is returned. Note that this
-//only returns non-empty RateInfos for rates where a usage is reported. There
-//may be rates that only have a limit, as defined in the ClusterConfiguration.
+// InfoForRate finds the plugin for the given serviceType and finds within that
+// plugin the RateInfo for the given rateName. If the service or rate does not
+// exist, an empty RateInfo (with .Unit == UnitNone) is returned. Note that this
+// only returns non-empty RateInfos for rates where a usage is reported. There
+// may be rates that only have a limit, as defined in the ClusterConfiguration.
 func (c *Cluster) InfoForRate(serviceType, rateName string) limes.RateInfo {
 	plugin := c.QuotaPlugins[serviceType]
 	if plugin == nil {

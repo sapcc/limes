@@ -48,8 +48,8 @@ import (
 	"github.com/sapcc/limes/pkg/util"
 )
 
-//use a name that's unique to github.com/gophercloud/gophercloud/openstack/imageservice/v2/images
-//to ensure that goimports does not mistakenly replace it by .../compute/v2/images
+// use a name that's unique to github.com/gophercloud/gophercloud/openstack/imageservice/v2/images
+// to ensure that goimports does not mistakenly replace it by .../compute/v2/images
 var _ images.ImageVisibility
 
 type novaHypervisorTypeRule struct {
@@ -116,7 +116,7 @@ func init() {
 	})
 }
 
-//Init implements the core.QuotaPlugin interface.
+// Init implements the core.QuotaPlugin interface.
 func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
 	//if a non-empty `flavorNamePattern` is given, only flavors matching
 	//it are considered
@@ -227,7 +227,7 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.E
 	return nil
 }
 
-//ServiceInfo implements the core.QuotaPlugin interface.
+// ServiceInfo implements the core.QuotaPlugin interface.
 func (p *novaPlugin) ServiceInfo() limes.ServiceInfo {
 	return limes.ServiceInfo{
 		Type:        "compute",
@@ -236,22 +236,22 @@ func (p *novaPlugin) ServiceInfo() limes.ServiceInfo {
 	}
 }
 
-//Resources implements the core.QuotaPlugin interface.
+// Resources implements the core.QuotaPlugin interface.
 func (p *novaPlugin) Resources() []limes.ResourceInfo {
 	return p.resources
 }
 
-//Rates implements the core.QuotaPlugin interface.
+// Rates implements the core.QuotaPlugin interface.
 func (p *novaPlugin) Rates() []limes.RateInfo {
 	return nil
 }
 
-//ScrapeRates implements the core.QuotaPlugin interface.
+// ScrapeRates implements the core.QuotaPlugin interface.
 func (p *novaPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
-//Scrape implements the core.QuotaPlugin interface.
+// Scrape implements the core.QuotaPlugin interface.
 func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (map[string]core.ResourceData, string, error) {
 	client, err := openstack.NewComputeV2(provider, eo)
 	if err != nil {
@@ -538,13 +538,13 @@ func derefSlicePtrOrEmpty(val *[]string) []string {
 	return *val
 }
 
-//IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
+// IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
 func (p *novaPlugin) IsQuotaAcceptableForProject(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
 	//not required for this plugin
 	return nil
 }
 
-//SetQuota implements the core.QuotaPlugin interface.
+// SetQuota implements the core.QuotaPlugin interface.
 func (p *novaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
 	client, err := openstack.NewComputeV2(provider, eo)
 	if err != nil {
@@ -574,12 +574,12 @@ var novaInstanceCountGauge = prometheus.NewGaugeVec(
 	[]string{"os_cluster", "domain_id", "project_id", "hypervisor"},
 )
 
-//DescribeMetrics implements the core.QuotaPlugin interface.
+// DescribeMetrics implements the core.QuotaPlugin interface.
 func (p *novaPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 	novaInstanceCountGauge.Describe(ch)
 }
 
-//CollectMetrics implements the core.QuotaPlugin interface.
+// CollectMetrics implements the core.QuotaPlugin interface.
 func (p *novaPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID string, project core.KeystoneProject, serializedMetrics string) error {
 	if serializedMetrics == "" {
 		return nil
@@ -604,8 +604,8 @@ func (p *novaPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID strin
 	return nil
 }
 
-//Information about a flavor, as it appears in GET /servers/:id in the "flavor"
-//key with newer Nova microversions.
+// Information about a flavor, as it appears in GET /servers/:id in the "flavor"
+// key with newer Nova microversions.
 type novaFlavorInfo struct {
 	DiskGiB      uint64            `json:"disk"`
 	EphemeralGiB uint64            `json:"ephemeral"`

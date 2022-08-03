@@ -29,11 +29,11 @@ import (
 	"github.com/sapcc/go-bits/sqlext"
 )
 
-//DB holds the main database connection. It will be `nil` until either Init() or
-//test.InitDatabase() is called.
+// DB holds the main database connection. It will be `nil` until either Init() or
+// test.InitDatabase() is called.
 var DB *gorp.DbMap
 
-//Init initializes the connection to the database.
+// Init initializes the connection to the database.
 func Init() error {
 	dbURL, err := easypg.URLFrom(easypg.URLParts{
 		HostName:          osext.GetenvOrDefault("LIMES_DB_HOSTNAME", "localhost"),
@@ -63,8 +63,8 @@ func Init() error {
 	return nil
 }
 
-//Interface provides the common methods that both SQL connections and
-//transactions implement.
+// Interface provides the common methods that both SQL connections and
+// transactions implement.
 type Interface interface {
 	//from database/sql
 	sqlext.Executor

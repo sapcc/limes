@@ -41,11 +41,11 @@ import (
 
 var showAuditOnStdout = !osext.GetenvBool("LIMES_SILENT")
 
-//eventSink is a channel that receives audit events.
+// eventSink is a channel that receives audit events.
 var eventSink chan<- cadf.Event
 
-//StartAuditTrail starts the audit trail by initializing the event sink and
-//starting a Commit() goroutine.
+// StartAuditTrail starts the audit trail by initializing the event sink and
+// starting a Commit() goroutine.
 func StartAuditTrail(clusterID string, config core.CADFConfiguration) {
 	if config.Enabled {
 		labels := prometheus.Labels{
@@ -92,8 +92,8 @@ func StartAuditTrail(clusterID string, config core.CADFConfiguration) {
 
 var observerUUID = audittools.GenerateUUID()
 
-//logAndPublishEvent takes the necessary parameters and generates a cadf.Event.
-//It logs the event to stdout and publishes it to a RabbitMQ server.
+// logAndPublishEvent takes the necessary parameters and generates a cadf.Event.
+// It logs the event to stdout and publishes it to a RabbitMQ server.
 func logAndPublishEvent(time time.Time, req *http.Request, token *gopherpolicy.Token, reasonCode int, target audittools.TargetRenderer) {
 	p := audittools.EventParameters{
 		Time:       time,
@@ -127,8 +127,8 @@ func logAndPublishEvent(time time.Time, req *http.Request, token *gopherpolicy.T
 	}
 }
 
-//quotaEventTarget contains the structure for rendering a cadf.Event.Target for
-//changes regarding resource quota.
+// quotaEventTarget contains the structure for rendering a cadf.Event.Target for
+// changes regarding resource quota.
 type quotaEventTarget struct {
 	DomainID     string
 	DomainName   string
@@ -142,7 +142,7 @@ type quotaEventTarget struct {
 	RejectReason string
 }
 
-//Render implements the audittools.TargetRenderer interface type.
+// Render implements the audittools.TargetRenderer interface type.
 func (t quotaEventTarget) Render() cadf.Resource {
 	targetID := t.ProjectID
 	if t.ProjectID == "" {
@@ -169,8 +169,8 @@ func (t quotaEventTarget) Render() cadf.Resource {
 	}
 }
 
-//burstEventTarget contains the structure for rendering a cadf.Event.Target for
-//changes regarding quota bursting for some project.
+// burstEventTarget contains the structure for rendering a cadf.Event.Target for
+// changes regarding quota bursting for some project.
 type burstEventTarget struct {
 	DomainID     string
 	DomainName   string
@@ -180,7 +180,7 @@ type burstEventTarget struct {
 	RejectReason string
 }
 
-//Render implements the audittools.TargetRenderer interface type.
+// Render implements the audittools.TargetRenderer interface type.
 func (t burstEventTarget) Render() cadf.Resource {
 	return cadf.Resource{
 		TypeURI:     "service/resources/bursting",
@@ -200,8 +200,8 @@ func (t burstEventTarget) Render() cadf.Resource {
 	}
 }
 
-//rateLimitEventTarget contains the structure for rendering a cadf.Event.Target for
-//changes regarding rate limits
+// rateLimitEventTarget contains the structure for rendering a cadf.Event.Target for
+// changes regarding rate limits
 type rateLimitEventTarget struct {
 	DomainID     string
 	DomainName   string
@@ -217,7 +217,7 @@ type rateLimitEventTarget struct {
 	RejectReason string
 }
 
-//Render implements the audittools.TargetRenderer interface type.
+// Render implements the audittools.TargetRenderer interface type.
 func (t rateLimitEventTarget) Render() cadf.Resource {
 	return cadf.Resource{
 		TypeURI:     fmt.Sprintf("service/%s/%s/rates", t.ServiceType, t.Name),
@@ -243,7 +243,7 @@ func (t rateLimitEventTarget) Render() cadf.Resource {
 	}
 }
 
-//This type is needed for the custom MarshalJSON behavior.
+// This type is needed for the custom MarshalJSON behavior.
 type targetAttachmentContent struct {
 	RejectReason string
 	// for quota or rate limit changes
@@ -260,7 +260,7 @@ type targetAttachmentContent struct {
 	NewWindow limes.Window
 }
 
-//MarshalJSON implements the json.Marshaler interface.
+// MarshalJSON implements the json.Marshaler interface.
 func (a targetAttachmentContent) MarshalJSON() ([]byte, error) {
 	//copy data into a struct that does not have a custom MarshalJSON
 	data := struct {

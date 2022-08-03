@@ -39,15 +39,15 @@ import (
 	"github.com/sapcc/limes/pkg/reports"
 )
 
-//VersionData is used by version advertisement handlers.
+// VersionData is used by version advertisement handlers.
 type VersionData struct {
 	Status string            `json:"status"`
 	ID     string            `json:"id"`
 	Links  []VersionLinkData `json:"links"`
 }
 
-//VersionLinkData is used by version advertisement handlers, as part of the
-//VersionData struct.
+// VersionLinkData is used by version advertisement handlers, as part of the
+// VersionData struct.
 type VersionLinkData struct {
 	URL      string `json:"href"`
 	Relation string `json:"rel"`
@@ -61,9 +61,9 @@ type v1Provider struct {
 	listProjectsMutex sync.Mutex
 }
 
-//NewV1API creates an httpapi.API that serves the Limes v1 API.
-//It also returns the VersionData for this API version which is needed for the
-//version advertisement on "GET /".
+// NewV1API creates an httpapi.API that serves the Limes v1 API.
+// It also returns the VersionData for this API version which is needed for the
+// version advertisement on "GET /".
 func NewV1API(cluster *core.Cluster) httpapi.API {
 	p := &v1Provider{Cluster: cluster}
 	p.VersionData = VersionData{
@@ -85,7 +85,7 @@ func NewV1API(cluster *core.Cluster) httpapi.API {
 	return p
 }
 
-//AddTo implements the httpapi.API interface.
+// AddTo implements the httpapi.API interface.
 func (p *v1Provider) AddTo(r *mux.Router) {
 	r.Methods("HEAD", "GET").Path("/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		httpapi.IdentifyEndpoint(r, "/")
@@ -122,8 +122,8 @@ func (p *v1Provider) AddTo(r *mux.Router) {
 	r.Methods("GET").Path("/rates/v1/domains/{domain_id}/projects/{project_id}").HandlerFunc(p.GetProjectRates)
 }
 
-//ForbidClusterIDHeader is a global middleware that rejects the
-//X-Limes-Cluster-Id header (which was removed from the API spec).
+// ForbidClusterIDHeader is a global middleware that rejects the
+// X-Limes-Cluster-Id header (which was removed from the API spec).
 func ForbidClusterIDHeader(inner http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		clusterID := r.Header.Get("X-Limes-Cluster-Id")
@@ -135,8 +135,8 @@ func ForbidClusterIDHeader(inner http.Handler) http.Handler {
 	})
 }
 
-//RequireJSON will parse the request body into the given data structure, or
-//write an error response if that fails.
+// RequireJSON will parse the request body into the given data structure, or
+// write an error response if that fails.
 func RequireJSON(w http.ResponseWriter, r *http.Request, data interface{}) bool {
 	err := json.NewDecoder(r.Body).Decode(data)
 	if err != nil {
@@ -146,7 +146,7 @@ func RequireJSON(w http.ResponseWriter, r *http.Request, data interface{}) bool 
 	return true
 }
 
-//Path constructs a full URL for a given URL path below the /v1/ endpoint.
+// Path constructs a full URL for a given URL path below the /v1/ endpoint.
 func (p *v1Provider) Path(elements ...string) string {
 	parts := []string{
 		strings.TrimSuffix(p.Cluster.Config.CatalogURL, "/"),
@@ -156,9 +156,9 @@ func (p *v1Provider) Path(elements ...string) string {
 	return strings.Join(parts, "/")
 }
 
-//FindDomainFromRequest loads the db.Domain referenced by the :domain_id path
-//parameter. Any errors will be written into the response immediately and cause
-//a nil return value.
+// FindDomainFromRequest loads the db.Domain referenced by the :domain_id path
+// parameter. Any errors will be written into the response immediately and cause
+// a nil return value.
 func (p *v1Provider) FindDomainFromRequest(w http.ResponseWriter, r *http.Request) *db.Domain {
 	domainUUID := mux.Vars(r)["domain_id"]
 	if domainUUID == "" {
@@ -181,8 +181,8 @@ func (p *v1Provider) FindDomainFromRequest(w http.ResponseWriter, r *http.Reques
 	}
 }
 
-//FindProjectFromRequest loads the db.Project referenced by the :project_id
-//path parameter, and verifies that it is located within the given domain.
+// FindProjectFromRequest loads the db.Project referenced by the :project_id
+// path parameter, and verifies that it is located within the given domain.
 func (p *v1Provider) FindProjectFromRequest(w http.ResponseWriter, r *http.Request, domain *db.Domain) *db.Project {
 	project, ok := p.FindProjectFromRequestIfExists(w, r, domain)
 	if ok && project == nil {
@@ -196,9 +196,9 @@ func (p *v1Provider) FindProjectFromRequest(w http.ResponseWriter, r *http.Reque
 	return project
 }
 
-//FindProjectFromRequestIfExists works like FindProjectFromRequest, but returns
-//a nil project instead of producing an error if the project does not exist in
-//the local DB yet.
+// FindProjectFromRequestIfExists works like FindProjectFromRequest, but returns
+// a nil project instead of producing an error if the project does not exist in
+// the local DB yet.
 func (p *v1Provider) FindProjectFromRequestIfExists(w http.ResponseWriter, r *http.Request, domain *db.Domain) (project *db.Project, ok bool) {
 	projectUUID := mux.Vars(r)["project_id"]
 	if projectUUID == "" {
@@ -221,7 +221,7 @@ func (p *v1Provider) FindProjectFromRequestIfExists(w http.ResponseWriter, r *ht
 	}
 }
 
-//GetDomainReport is a convenience wrapper around reports.GetDomains() for getting a single domain report.
+// GetDomainReport is a convenience wrapper around reports.GetDomains() for getting a single domain report.
 func GetDomainReport(cluster *core.Cluster, dbDomain db.Domain, dbi db.Interface, filter reports.Filter) (*limes.DomainReport, error) {
 	domainReports, err := reports.GetDomains(cluster, &dbDomain.ID, dbi, filter)
 	if err != nil {
@@ -233,7 +233,7 @@ func GetDomainReport(cluster *core.Cluster, dbDomain db.Domain, dbi db.Interface
 	return domainReports[0], nil
 }
 
-//GetProjectReport is a convenience wrapper around reports.GetProjects() for getting a single project report.
+// GetProjectReport is a convenience wrapper around reports.GetProjects() for getting a single project report.
 func GetProjectReport(cluster *core.Cluster, dbDomain db.Domain, dbProject db.Project, dbi db.Interface, filter reports.Filter) (*limes.ProjectReport, error) {
 	var result *limes.ProjectReport
 	err := reports.GetProjects(cluster, dbDomain, &dbProject, dbi, filter, func(r *limes.ProjectReport) error {

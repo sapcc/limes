@@ -63,7 +63,7 @@ var clusterReportQuery3 = sqlext.SimplifyWhitespace(`
 	 WHERE %s {{AND cs.type = $service_type}}
 `)
 
-//GetCluster returns the report for the whole cluster.
+// GetCluster returns the report for the whole cluster.
 // TODO: should db be replaced with dbi?
 func GetCluster(cluster *core.Cluster, dbi db.Interface, filter Filter) (*limes.ClusterReport, error) {
 	report := &limes.ClusterReport{

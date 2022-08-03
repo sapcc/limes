@@ -38,12 +38,12 @@ func init() {
 	})
 }
 
-//Method implements the core.DiscoveryPlugin interface.
+// Method implements the core.DiscoveryPlugin interface.
 func (p *staticDiscoveryPlugin) Method() string {
 	return "static"
 }
 
-//ListDomains implements the core.DiscoveryPlugin interface.
+// ListDomains implements the core.DiscoveryPlugin interface.
 func (p *staticDiscoveryPlugin) ListDomains(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) ([]core.KeystoneDomain, error) {
 	var result []core.KeystoneDomain
 	if len(p.cfg.Static.Domains) == 0 {
@@ -64,7 +64,7 @@ func (p *staticDiscoveryPlugin) ListDomains(provider *gophercloud.ProviderClient
 	return result, nil
 }
 
-//ListProjects implements the core.DiscoveryPlugin interface.
+// ListProjects implements the core.DiscoveryPlugin interface.
 func (p *staticDiscoveryPlugin) ListProjects(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, queryDomain core.KeystoneDomain) ([]core.KeystoneProject, error) {
 	var result []core.KeystoneProject
 	if len(p.cfg.Static.Domains) == 0 {

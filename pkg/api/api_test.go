@@ -264,7 +264,7 @@ type TestPolicyEnforcer struct {
 	RejectServiceType string
 }
 
-//Enforce implements the gopherpolicy.Enforcer interface.
+// Enforce implements the gopherpolicy.Enforcer interface.
 func (e TestPolicyEnforcer) Enforce(rule string, ctx policy.Context) bool {
 	if e.RejectServiceType != "" && ctx.Request["service_type"] == e.RejectServiceType {
 		return false
@@ -286,7 +286,7 @@ type TestTokenValidator struct {
 	Enforcer gopherpolicy.Enforcer
 }
 
-//CheckToken implements the gopherpolicy.Validator interface.
+// CheckToken implements the gopherpolicy.Validator interface.
 func (v TestTokenValidator) CheckToken(r *http.Request) *gopherpolicy.Token {
 	return &gopherpolicy.Token{
 		Enforcer: v.Enforcer,
@@ -1038,9 +1038,11 @@ func Test_DomainOPA(t *testing.T) {
 	}.Check(t, router)
 }
 
-//nolint:unparam //Even though serviceType parameter always receives "shared" but this is
-//intentional as it improves code readability. Additionally, this behavior could change
-//with future unit tests.
+// Even though serviceType parameter always receives "shared" but this is
+// intentional as it improves code readability. Additionally, this behavior could change
+// with future unit tests.
+//
+//nolint:unparam
 func expectDomainQuota(t *testing.T, domainName, serviceType, resourceName string, expected uint64) {
 	t.Helper()
 
@@ -2104,12 +2106,12 @@ func expectStaleProjectServices(t *testing.T, pairs ...string) {
 	}
 }
 
-//p2u64 makes a "pointer to uint64".
+// p2u64 makes a "pointer to uint64".
 func p2u64(val uint64) *uint64 {
 	return &val
 }
 
-//p2i64 makes a "pointer to int64".
+// p2i64 makes a "pointer to int64".
 func p2i64(val int64) *int64 {
 	return &val
 }

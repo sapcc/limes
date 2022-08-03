@@ -38,19 +38,19 @@ func init() {
 	})
 }
 
-//Init implements the core.CapacityPlugin interface.
+// Init implements the core.CapacityPlugin interface.
 func (p *capacityManualPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
 	return nil
 }
 
-//Type implements the core.CapacityPlugin interface.
+// Type implements the core.CapacityPlugin interface.
 func (p *capacityManualPlugin) Type() string {
 	return "manual"
 }
 
 var errNoManualData = errors.New(`missing values for capacitor plugin "manual"`)
 
-//Scrape implements the core.CapacityPlugin interface.
+// Scrape implements the core.CapacityPlugin interface.
 func (p *capacityManualPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (map[string]map[string]core.CapacityData, string, error) {
 	if p.cfg.Manual == nil {
 		return nil, "", errNoManualData
@@ -68,12 +68,12 @@ func (p *capacityManualPlugin) Scrape(provider *gophercloud.ProviderClient, eo g
 	return result, "", nil
 }
 
-//DescribeMetrics implements the core.CapacityPlugin interface.
+// DescribeMetrics implements the core.CapacityPlugin interface.
 func (p *capacityManualPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 	//not used by this plugin
 }
 
-//CollectMetrics implements the core.CapacityPlugin interface.
+// CollectMetrics implements the core.CapacityPlugin interface.
 func (p *capacityManualPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, serializedMetrics string) error {
 	//not used by this plugin
 	return nil

@@ -27,11 +27,11 @@ import (
 	"github.com/sapcc/limes/pkg/core"
 )
 
-//Collector provides methods that implement the collection jobs performed by
-//limes-collect. The struct contains references to the driver used, the plugin
-//(which defines the service type to be targeted), and a few other things;
-//basically everything that needs to be replaced by a mock implementation for
-//the collector's unit tests.
+// Collector provides methods that implement the collection jobs performed by
+// limes-collect. The struct contains references to the driver used, the plugin
+// (which defines the service type to be targeted), and a few other things;
+// basically everything that needs to be replaced by a mock implementation for
+// the collector's unit tests.
 type Collector struct {
 	Cluster *core.Cluster
 	Plugin  core.QuotaPlugin
@@ -44,7 +44,7 @@ type Collector struct {
 	Once bool
 }
 
-//NewCollector creates a Collector instance.
+// NewCollector creates a Collector instance.
 func NewCollector(cluster *core.Cluster, plugin core.QuotaPlugin) *Collector {
 	return &Collector{
 		Cluster:  cluster,

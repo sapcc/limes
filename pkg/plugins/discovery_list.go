@@ -38,12 +38,12 @@ func init() {
 	})
 }
 
-//Method implements the core.DiscoveryPlugin interface.
+// Method implements the core.DiscoveryPlugin interface.
 func (p *listDiscoveryPlugin) Method() string {
 	return "list"
 }
 
-//ListDomains implements the core.DiscoveryPlugin interface.
+// ListDomains implements the core.DiscoveryPlugin interface.
 func (p *listDiscoveryPlugin) ListDomains(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) ([]core.KeystoneDomain, error) {
 	client, err := openstack.NewIdentityV3(provider, eo)
 	if err != nil {
@@ -69,7 +69,7 @@ func (p *listDiscoveryPlugin) ListDomains(provider *gophercloud.ProviderClient, 
 	return result, nil
 }
 
-//ListProjects implements the core.DiscoveryPlugin interface.
+// ListProjects implements the core.DiscoveryPlugin interface.
 func (p *listDiscoveryPlugin) ListProjects(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domain core.KeystoneDomain) ([]core.KeystoneProject, error) {
 	client, err := openstack.NewIdentityV3(provider, eo)
 	if err != nil {

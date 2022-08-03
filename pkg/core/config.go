@@ -40,9 +40,9 @@ type OPAConfiguration struct {
 	DomainQuotaQuery       rego.PreparedEvalQuery `yaml:"-"`
 }
 
-//ClusterConfiguration contains all the configuration data for a single cluster.
-//It is passed around in a lot of Limes code, mostly for the cluster ID and the
-//list of enabled services.
+// ClusterConfiguration contains all the configuration data for a single cluster.
+// It is passed around in a lot of Limes code, mostly for the cluster ID and the
+// list of enabled services.
 type ClusterConfiguration struct {
 	ClusterID  string                   `yaml:"cluster_id"`
 	Auth       *AuthParameters          `yaml:"auth"`
@@ -62,7 +62,7 @@ type ClusterConfiguration struct {
 	Bursting             BurstingConfiguration            `yaml:"bursting"`
 }
 
-//GetServiceConfigurationForType returns the ServiceConfiguration or an error.
+// GetServiceConfigurationForType returns the ServiceConfiguration or an error.
 func (cluster *ClusterConfiguration) GetServiceConfigurationForType(serviceType string) (ServiceConfiguration, error) {
 	for _, svc := range cluster.Services {
 		if serviceType == svc.Type {
@@ -72,8 +72,8 @@ func (cluster *ClusterConfiguration) GetServiceConfigurationForType(serviceType 
 	return ServiceConfiguration{}, fmt.Errorf("no configuration found for service %s", serviceType)
 }
 
-//DiscoveryConfiguration describes the method of discovering Keystone domains
-//and projects.
+// DiscoveryConfiguration describes the method of discovering Keystone domains
+// and projects.
 type DiscoveryConfiguration struct {
 	Method               string         `yaml:"method"`
 	ExcludeDomainPattern string         `yaml:"except_domains"`
@@ -99,7 +99,7 @@ type DiscoveryConfiguration struct {
 	} `yaml:"static"`
 }
 
-//ServiceConfiguration describes a service that is enabled for a certain cluster.
+// ServiceConfiguration describes a service that is enabled for a certain cluster.
 type ServiceConfiguration struct {
 	Type   string                 `yaml:"type"`
 	Shared bool                   `yaml:"shared"`
@@ -135,13 +135,13 @@ type ServiceConfiguration struct {
 	} `yaml:"volumev2"`
 }
 
-//ServiceRateLimitConfiguration describes the global and project-level default rate limit configurations for a service.
+// ServiceRateLimitConfiguration describes the global and project-level default rate limit configurations for a service.
 type ServiceRateLimitConfiguration struct {
 	Global         []RateLimitConfiguration `yaml:"global"`
 	ProjectDefault []RateLimitConfiguration `yaml:"project_default"`
 }
 
-//GetProjectDefaultRateLimit returns the default project-level rate limit for a given target type URI and action or an error if not found.
+// GetProjectDefaultRateLimit returns the default project-level rate limit for a given target type URI and action or an error if not found.
 func (svcRlConfig *ServiceRateLimitConfiguration) GetProjectDefaultRateLimit(name string) (RateLimitConfiguration, bool) {
 	for _, rateCfg := range svcRlConfig.ProjectDefault {
 		if rateCfg.Name == name {
@@ -151,7 +151,7 @@ func (svcRlConfig *ServiceRateLimitConfiguration) GetProjectDefaultRateLimit(nam
 	return RateLimitConfiguration{}, false
 }
 
-//RateLimitConfiguration describes a rate limit configuration.
+// RateLimitConfiguration describes a rate limit configuration.
 type RateLimitConfiguration struct {
 	Name   string       `yaml:"name"`
 	Unit   limes.Unit   `yaml:"unit"`
@@ -159,8 +159,8 @@ type RateLimitConfiguration struct {
 	Window limes.Window `yaml:"window"`
 }
 
-//CapacitorConfiguration describes a capacity plugin that is enabled for a
-//certain cluster.
+// CapacitorConfiguration describes a capacity plugin that is enabled for a
+// certain cluster.
 type CapacitorConfiguration struct {
 	ID   string                 `yaml:"id"`
 	Type string                 `yaml:"type"`
@@ -196,7 +196,7 @@ type CapacitorConfiguration struct {
 	} `yaml:"sapcc_ironic"`
 }
 
-//ManilaMappingRule appears in both ServiceConfiguration and CapacitorConfiguration.
+// ManilaMappingRule appears in both ServiceConfiguration and CapacitorConfiguration.
 type ManilaShareTypeSpec struct {
 	Name               string `yaml:"name"`
 	ReplicationEnabled bool   `yaml:"replication_enabled"` //only used by QuotaPlugin
@@ -207,8 +207,8 @@ type ManilaShareTypeSpec struct {
 	} `yaml:"mapping_rules"`
 }
 
-//LowPrivilegeRaiseConfiguration contains the configuration options for
-//low-privilege quota raising in a certain cluster.
+// LowPrivilegeRaiseConfiguration contains the configuration options for
+// low-privilege quota raising in a certain cluster.
 type LowPrivilegeRaiseConfiguration struct {
 	Limits struct {
 		ForDomains  map[string]map[string]string `yaml:"domains"`
@@ -220,8 +220,8 @@ type LowPrivilegeRaiseConfiguration struct {
 	ExcludeProjectDomainRx      *regexp.Regexp `yaml:"-"`
 }
 
-//IsAllowedForProjectsIn checks if low-privilege quota raising is enabled by this config
-//for the domain with the given name.
+// IsAllowedForProjectsIn checks if low-privilege quota raising is enabled by this config
+// for the domain with the given name.
 func (l LowPrivilegeRaiseConfiguration) IsAllowedForProjectsIn(domainName string) bool {
 	if l.ExcludeProjectDomainRx != nil && l.ExcludeProjectDomainRx.MatchString(domainName) {
 		return false
@@ -232,9 +232,9 @@ func (l LowPrivilegeRaiseConfiguration) IsAllowedForProjectsIn(domainName string
 	return l.IncludeProjectDomainRx.MatchString(domainName)
 }
 
-//ResourceBehaviorConfiguration contains the configuration options for
-//specialized behaviors of a single resource (or a set of resources) in a
-//certain cluster.
+// ResourceBehaviorConfiguration contains the configuration options for
+// specialized behaviors of a single resource (or a set of resources) in a
+// certain cluster.
 type ResourceBehaviorConfiguration struct {
 	FullResourceName       string                    `yaml:"resource"`
 	Scope                  string                    `yaml:"scope"`
@@ -247,7 +247,7 @@ type ResourceBehaviorConfiguration struct {
 	Compiled               ResourceBehavior          `yaml:"-"`
 }
 
-//ResourceBehavior is the compiled version of ResourceBehaviorConfiguration.
+// ResourceBehavior is the compiled version of ResourceBehaviorConfiguration.
 type ResourceBehavior struct {
 	FullResourceNameRx     *regexp.Regexp
 	ScopeRx                *regexp.Regexp
@@ -260,8 +260,8 @@ type ResourceBehavior struct {
 	Annotations            map[string]interface{}
 }
 
-//ToScalingBehavior returns the limes.ScalingBehavior for this resource, or nil
-//if no scaling has been configured.
+// ToScalingBehavior returns the limes.ScalingBehavior for this resource, or nil
+// if no scaling has been configured.
 func (b ResourceBehavior) ToScalingBehavior() *limes.ScalingBehavior {
 	if b.ScalesWithResourceName == "" {
 		return nil
@@ -273,13 +273,13 @@ func (b ResourceBehavior) ToScalingBehavior() *limes.ScalingBehavior {
 	}
 }
 
-//BurstingConfiguration contains the configuration options for quota bursting.
+// BurstingConfiguration contains the configuration options for quota bursting.
 type BurstingConfiguration struct {
 	//If MaxMultiplier is zero, bursting is disabled.
 	MaxMultiplier limes.BurstingMultiplier `yaml:"max_multiplier"`
 }
 
-//CADFConfiguration contains configuration parameters for audit trail.
+// CADFConfiguration contains configuration parameters for audit trail.
 type CADFConfiguration struct {
 	Enabled  bool `yaml:"enabled"`
 	RabbitMQ struct {
@@ -291,8 +291,8 @@ type CADFConfiguration struct {
 	} `yaml:"rabbitmq"`
 }
 
-//PrometheusAPIConfiguration contains configuration parameters for a Prometheus API.
-//Only the URL field is required in the format: "http<s>://localhost<:9090>" (port is optional).
+// PrometheusAPIConfiguration contains configuration parameters for a Prometheus API.
+// Only the URL field is required in the format: "http<s>://localhost<:9090>" (port is optional).
 type PrometheusAPIConfiguration struct {
 	URL                      string `yaml:"url"`
 	ClientCertificatePath    string `yaml:"cert"`
@@ -300,9 +300,9 @@ type PrometheusAPIConfiguration struct {
 	ServerCACertificatePath  string `yaml:"ca_cert"`
 }
 
-//NewConfiguration reads and validates the given configuration file.
-//Errors are logged and will result in
-//program termination, causing the function to not return.
+// NewConfiguration reads and validates the given configuration file.
+// Errors are logged and will result in
+// program termination, causing the function to not return.
 func NewConfiguration(path string) (cluster *Cluster) {
 	//read config file
 	configBytes, err := os.ReadFile(path)

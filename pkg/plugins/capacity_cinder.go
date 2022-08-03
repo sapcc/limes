@@ -43,7 +43,7 @@ func init() {
 	})
 }
 
-//Init implements the core.CapacityPlugin interface.
+// Init implements the core.CapacityPlugin interface.
 func (p *capacityCinderPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
 	if len(p.cfg.Cinder.VolumeTypes) == 0 {
 		//nolint:stylecheck //Cinder is a proper name
@@ -52,7 +52,7 @@ func (p *capacityCinderPlugin) Init(provider *gophercloud.ProviderClient, eo gop
 	return nil
 }
 
-//Type implements the core.CapacityPlugin interface.
+// Type implements the core.CapacityPlugin interface.
 func (p *capacityCinderPlugin) Type() string {
 	return "cinder"
 }
@@ -69,7 +69,7 @@ func (p *capacityCinderPlugin) makeResourceName(volumeType string) string {
 	//configure capacity for snapshots/volumes via the "manual" capacitor.)
 }
 
-//Scrape implements the core.CapacityPlugin interface.
+// Scrape implements the core.CapacityPlugin interface.
 func (p *capacityCinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (map[string]map[string]core.CapacityData, string, error) {
 	client, err := openstack.NewBlockStorageV3(provider, eo)
 	if err != nil {
@@ -156,12 +156,12 @@ func (p *capacityCinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo g
 	return map[string]map[string]core.CapacityData{"volumev2": capaDataFinal}, "", nil
 }
 
-//DescribeMetrics implements the core.CapacityPlugin interface.
+// DescribeMetrics implements the core.CapacityPlugin interface.
 func (p *capacityCinderPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 	//not used by this plugin
 }
 
-//CollectMetrics implements the core.CapacityPlugin interface.
+// CollectMetrics implements the core.CapacityPlugin interface.
 func (p *capacityCinderPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, serializedMetrics string) error {
 	//not used by this plugin
 	return nil

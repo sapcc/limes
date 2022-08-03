@@ -44,7 +44,7 @@ import (
 	"github.com/sapcc/limes/pkg/util"
 )
 
-//ListProjects handles GET /v1/domains/:domain_id/projects.
+// ListProjects handles GET /v1/domains/:domain_id/projects.
 func (p *v1Provider) ListProjects(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects")
 	token := p.CheckToken(r)
@@ -142,7 +142,7 @@ func (p *v1Provider) doListProjects(w http.ResponseWriter, r *http.Request, dbDo
 	}
 }
 
-//GetProject handles GET /v1/domains/:domain_id/projects/:project_id.
+// GetProject handles GET /v1/domains/:domain_id/projects/:project_id.
 func (p *v1Provider) GetProject(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id")
 	token := p.CheckToken(r)
@@ -171,7 +171,7 @@ func (p *v1Provider) GetProject(w http.ResponseWriter, r *http.Request) {
 	respondwith.JSON(w, 200, map[string]interface{}{"project": project})
 }
 
-//DiscoverProjects handles POST /v1/domains/:domain_id/projects/discover.
+// DiscoverProjects handles POST /v1/domains/:domain_id/projects/discover.
 func (p *v1Provider) DiscoverProjects(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/discover")
 	token := p.CheckToken(r)
@@ -195,7 +195,7 @@ func (p *v1Provider) DiscoverProjects(w http.ResponseWriter, r *http.Request) {
 	respondwith.JSON(w, 202, map[string]interface{}{"new_projects": util.IDsToJSON(newProjectUUIDs)})
 }
 
-//SyncProject handles POST /v1/domains/:domain_id/projects/:project_id/sync.
+// SyncProject handles POST /v1/domains/:domain_id/projects/:project_id/sync.
 func (p *v1Provider) SyncProject(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/sync")
 	token := p.CheckToken(r)
@@ -246,13 +246,13 @@ func (p *v1Provider) SyncProject(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(202)
 }
 
-//PutProject handles PUT /v1/domains/:domain_id/projects/:project_id.
+// PutProject handles PUT /v1/domains/:domain_id/projects/:project_id.
 func (p *v1Provider) PutProject(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id")
 	p.putOrSimulatePutProject(w, r, false)
 }
 
-//SimulatePutProject handles POST /v1/domains/:domain_id/projects/:project_id/simulate-put.
+// SimulatePutProject handles POST /v1/domains/:domain_id/projects/:project_id/simulate-put.
 func (p *v1Provider) SimulatePutProject(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/simulate-put")
 	p.putOrSimulatePutProject(w, r, true)

@@ -29,11 +29,11 @@ import (
 	"github.com/sapcc/limes/pkg/db"
 )
 
-//ValidateProjectServices ensures that all required ProjectService records for
-//this project exist (and none other). It also marks all services as stale
-//where quota values contradict the project's quota constraints.
+// ValidateProjectServices ensures that all required ProjectService records for
+// this project exist (and none other). It also marks all services as stale
+// where quota values contradict the project's quota constraints.
 //
-//It returns the full set of project services.
+// It returns the full set of project services.
 func ValidateProjectServices(tx *gorp.Transaction, cluster *core.Cluster, domain db.Domain, project db.Project) ([]db.ProjectService, error) {
 	//list existing records
 	seen := make(map[string]bool)

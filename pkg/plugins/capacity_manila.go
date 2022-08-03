@@ -43,7 +43,7 @@ func init() {
 	})
 }
 
-//Init implements the core.CapacityPlugin interface.
+// Init implements the core.CapacityPlugin interface.
 func (p *capacityManilaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
 	cfg := p.cfg.Manila
 	if len(cfg.ShareTypes) == 0 {
@@ -65,7 +65,7 @@ func (p *capacityManilaPlugin) Init(provider *gophercloud.ProviderClient, eo gop
 	return nil
 }
 
-//Type implements the core.CapacityPlugin interface.
+// Type implements the core.CapacityPlugin interface.
 func (p *capacityManilaPlugin) Type() string {
 	return "manila"
 }
@@ -79,7 +79,7 @@ func (p *capacityManilaPlugin) makeResourceName(kind string, shareType core.Mani
 	return kind + "_" + shareType.Name
 }
 
-//Scrape implements the core.CapacityPlugin interface.
+// Scrape implements the core.CapacityPlugin interface.
 func (p *capacityManilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (map[string]map[string]core.CapacityData, string, error) {
 	cfg := p.cfg.Manila
 	client, err := openstack.NewSharedFileSystemV2(provider, eo)
@@ -126,12 +126,12 @@ func (p *capacityManilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo g
 	return map[string]map[string]core.CapacityData{"sharev2": caps}, "", nil
 }
 
-//DescribeMetrics implements the core.CapacityPlugin interface.
+// DescribeMetrics implements the core.CapacityPlugin interface.
 func (p *capacityManilaPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 	//not used by this plugin
 }
 
-//CollectMetrics implements the core.CapacityPlugin interface.
+// CollectMetrics implements the core.CapacityPlugin interface.
 func (p *capacityManilaPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, serializedMetrics string) error {
 	//not used by this plugin
 	return nil

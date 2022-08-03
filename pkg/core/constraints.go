@@ -30,8 +30,8 @@ import (
 	yaml "gopkg.in/yaml.v2"
 )
 
-//QuotaConstraintSet contains the contents of the constraint configuration file
-//for a limes.Cluster.
+// QuotaConstraintSet contains the contents of the constraint configuration file
+// for a limes.Cluster.
 type QuotaConstraintSet struct {
 	//Indexed by domain name.
 	Domains map[string]QuotaConstraints
@@ -39,19 +39,19 @@ type QuotaConstraintSet struct {
 	Projects map[string]map[string]QuotaConstraints
 }
 
-//QuotaConstraints contains the quota constraints for a single domain or project.
-//The outer key is the service type, the inner key is the resource name.
+// QuotaConstraints contains the quota constraints for a single domain or project.
+// The outer key is the service type, the inner key is the resource name.
 type QuotaConstraints map[string]map[string]QuotaConstraint
 
-//QuotaConstraint contains the quota constraints for a single resource within a
-//single domain or project.
+// QuotaConstraint contains the quota constraints for a single resource within a
+// single domain or project.
 type QuotaConstraint struct {
 	Minimum *uint64
 	Maximum *uint64
 	Unit    limes.Unit
 }
 
-//QuotaValidationError appears in the Limes API in the POST .../simulate-put responses.
+// QuotaValidationError appears in the Limes API in the POST .../simulate-put responses.
 type QuotaValidationError struct {
 	Status       int        `json:"status"` //an HTTP status code, e.g. http.StatusForbidden
 	Message      string     `json:"message"`
@@ -67,8 +67,8 @@ func (e *QuotaValidationError) Error() string {
 	panic("DO NOT USE ME")
 }
 
-//Validate checks if the given quota value satisfies this constraint, or
-//returns an error otherwise.
+// Validate checks if the given quota value satisfies this constraint, or
+// returns an error otherwise.
 func (c QuotaConstraint) Validate(value uint64) *QuotaValidationError {
 	if (c.Minimum == nil || *c.Minimum <= value) && (c.Maximum == nil || *c.Maximum >= value) {
 		return nil
@@ -84,8 +84,8 @@ func (c QuotaConstraint) Validate(value uint64) *QuotaValidationError {
 	}
 }
 
-//ApplyTo modifies the given value such that it satisfies this constraint. If
-//c.Allows(value), then the value is returned unchanged.
+// ApplyTo modifies the given value such that it satisfies this constraint. If
+// c.Allows(value), then the value is returned unchanged.
 func (c QuotaConstraint) ApplyTo(value uint64) uint64 {
 	if c.Minimum != nil && *c.Minimum > value {
 		return *c.Minimum
@@ -96,8 +96,8 @@ func (c QuotaConstraint) ApplyTo(value uint64) uint64 {
 	return value
 }
 
-//String returns a compact string representation of this QuotaConstraint.
-//The result is valid input syntax for parseQuotaConstraint().
+// String returns a compact string representation of this QuotaConstraint.
+// The result is valid input syntax for parseQuotaConstraint().
 func (c QuotaConstraint) String() string {
 	var parts []string
 	hasExactly := false
@@ -116,11 +116,11 @@ func (c QuotaConstraint) String() string {
 	return strings.Join(parts, ", ")
 }
 
-//NewQuotaConstraints parses the quota constraints at `constraintConfigPath`.
-//The `cluster` argument is required because quota values need to be converted
-//into the base unit of their resource, for which we need to access the
-//QuotaPlugin.Resources(). Hence, `cluster.Init()` needs to have been called
-//before this function is called.
+// NewQuotaConstraints parses the quota constraints at `constraintConfigPath`.
+// The `cluster` argument is required because quota values need to be converted
+// into the base unit of their resource, for which we need to access the
+// QuotaPlugin.Resources(). Hence, `cluster.Init()` needs to have been called
+// before this function is called.
 func NewQuotaConstraints(cluster *Cluster, constraintConfigPath string) (*QuotaConstraintSet, []error) {
 	buf, err := os.ReadFile(constraintConfigPath)
 	if err != nil {
@@ -213,8 +213,8 @@ func NewQuotaConstraints(cluster *Cluster, constraintConfigPath string) (*QuotaC
 	return result, errors
 }
 
-//When `data` contains the constraints for a project, `projectsConstraints` will be nil.
-//When `data` contains the constraints for a domain, `projectsConstraints` will be non-nil.
+// When `data` contains the constraints for a project, `projectsConstraints` will be nil.
+// When `data` contains the constraints for a domain, `projectsConstraints` will be non-nil.
 func compileQuotaConstraints(cluster *Cluster, data map[string]map[string]string, projectsConstraints map[string]QuotaConstraints) (values QuotaConstraints, errors []error) {
 	values = make(QuotaConstraints)
 
@@ -272,8 +272,8 @@ var (
 	atLeastMoreRx = regexp.MustCompile(`^at\s+least\s+(.+)\s+more\s+than\s+project\s+constraints$`)
 )
 
-//When parsing a constraint for a project, `projectMinimumsSum` will be nil.
-//When parsing a constraint for a domain, `projectMinimumsSum` will be non-nil.
+// When parsing a constraint for a project, `projectMinimumsSum` will be nil.
+// When parsing a constraint for a domain, `projectMinimumsSum` will be non-nil.
 func parseQuotaConstraint(resource limes.ResourceInfo, str string, projectMinimumsSum *uint64) (*QuotaConstraint, error) {
 	var lowerBounds []uint64
 	var upperBounds []uint64

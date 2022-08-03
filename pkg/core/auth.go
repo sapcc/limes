@@ -30,8 +30,8 @@ import (
 	"github.com/sapcc/go-bits/secrets"
 )
 
-//AuthParameters contains credentials for authenticating with Keystone (i.e.
-//everything that's needed to set up a gophercloud.ProviderClient instance).
+// AuthParameters contains credentials for authenticating with Keystone (i.e.
+// everything that's needed to set up a gophercloud.ProviderClient instance).
 type AuthParameters struct {
 	AuthURL           string               `yaml:"auth_url"`
 	UserName          string               `yaml:"user_name"`
@@ -47,7 +47,7 @@ type AuthParameters struct {
 	TokenValidator gopherpolicy.Validator      `yaml:"-"`
 }
 
-//Connect creates the gophercloud.ProviderClient instance for these credentials.
+// Connect creates the gophercloud.ProviderClient instance for these credentials.
 func (auth *AuthParameters) Connect() error {
 	if auth.ProviderClient != nil {
 		//already done

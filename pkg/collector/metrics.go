@@ -183,13 +183,13 @@ var maxRatesScrapedAtGauge = prometheus.NewGaugeVec(
 	[]string{"os_cluster", "service", "service_name"},
 )
 
-//AggregateMetricsCollector is a prometheus.Collector that submits
-//dynamically-calculated aggregate metrics about scraping progress.
+// AggregateMetricsCollector is a prometheus.Collector that submits
+// dynamically-calculated aggregate metrics about scraping progress.
 type AggregateMetricsCollector struct {
 	Cluster *core.Cluster
 }
 
-//Describe implements the prometheus.Collector interface.
+// Describe implements the prometheus.Collector interface.
 func (c *AggregateMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 	minScrapedAtGauge.Describe(ch)
 	maxScrapedAtGauge.Describe(ch)
@@ -206,7 +206,7 @@ var scrapedAtAggregateQuery = sqlext.SimplifyWhitespace(`
 	 GROUP BY ps.type
 `)
 
-//Collect implements the prometheus.Collector interface.
+// Collect implements the prometheus.Collector interface.
 func (c *AggregateMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	//NOTE: I use NewConstMetric() instead of storing the values in the GaugeVec
 	//instances because it is faster.
@@ -290,8 +290,8 @@ var capacityPluginMetricsOkGauge = prometheus.NewGaugeVec(
 	[]string{"os_cluster", "capacitor"},
 )
 
-//CapacityPluginMetricsCollector is a prometheus.Collector that submits metrics
-//which are specific to the selected capacity plugins.
+// CapacityPluginMetricsCollector is a prometheus.Collector that submits metrics
+// which are specific to the selected capacity plugins.
 type CapacityPluginMetricsCollector struct {
 	Cluster *core.Cluster
 	//When .Override is set, the DB is bypassed and only the given
@@ -299,14 +299,14 @@ type CapacityPluginMetricsCollector struct {
 	Override []CapacityPluginMetricsInstance
 }
 
-//CapacityPluginMetricsInstance describes a single project service for which plugin
-//metrics are submitted. It appears in type CapacityPluginMetricsCollector.
+// CapacityPluginMetricsInstance describes a single project service for which plugin
+// metrics are submitted. It appears in type CapacityPluginMetricsCollector.
 type CapacityPluginMetricsInstance struct {
 	CapacitorID       string
 	SerializedMetrics string
 }
 
-//Describe implements the prometheus.Collector interface.
+// Describe implements the prometheus.Collector interface.
 func (c *CapacityPluginMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 	capacityPluginMetricsOkGauge.Describe(ch)
 	for _, plugin := range c.Cluster.CapacityPlugins {
@@ -320,7 +320,7 @@ var capacitySerializedMetricsGetQuery = sqlext.SimplifyWhitespace(`
 	 WHERE cluster_id = $1 AND serialized_metrics != ''
 `)
 
-//Collect implements the prometheus.Collector interface.
+// Collect implements the prometheus.Collector interface.
 func (c *CapacityPluginMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	descCh := make(chan *prometheus.Desc, 1)
 	capacityPluginMetricsOkGauge.Describe(descCh)
@@ -379,8 +379,8 @@ var quotaPluginMetricsOkGauge = prometheus.NewGaugeVec(
 	[]string{"os_cluster", "domain", "domain_id", "project", "project_id", "service"},
 )
 
-//QuotaPluginMetricsCollector is a prometheus.Collector that submits metrics
-//which are specific to the selected quota plugins.
+// QuotaPluginMetricsCollector is a prometheus.Collector that submits metrics
+// which are specific to the selected quota plugins.
 type QuotaPluginMetricsCollector struct {
 	Cluster *core.Cluster
 	//When .Override is set, the DB is bypassed and only the given
@@ -388,15 +388,15 @@ type QuotaPluginMetricsCollector struct {
 	Override []QuotaPluginMetricsInstance
 }
 
-//QuotaPluginMetricsInstance describes a single project service for which plugin
-//metrics are submitted. It appears in type QuotaPluginMetricsCollector.
+// QuotaPluginMetricsInstance describes a single project service for which plugin
+// metrics are submitted. It appears in type QuotaPluginMetricsCollector.
 type QuotaPluginMetricsInstance struct {
 	Project           core.KeystoneProject
 	ServiceType       string
 	SerializedMetrics string
 }
 
-//Describe implements the prometheus.Collector interface.
+// Describe implements the prometheus.Collector interface.
 func (c *QuotaPluginMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 	quotaPluginMetricsOkGauge.Describe(ch)
 	for _, plugin := range c.Cluster.QuotaPlugins {
@@ -412,7 +412,7 @@ var quotaSerializedMetricsGetQuery = sqlext.SimplifyWhitespace(`
 	 WHERE d.cluster_id = $1 AND ps.serialized_metrics != ''
 `)
 
-//Collect implements the prometheus.Collector interface.
+// Collect implements the prometheus.Collector interface.
 func (c *QuotaPluginMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	descCh := make(chan *prometheus.Desc, 1)
 	quotaPluginMetricsOkGauge.Describe(descCh)
@@ -548,14 +548,14 @@ var unitConversionGauge = prometheus.NewGaugeVec(
 	[]string{"service", "resource"},
 )
 
-//DataMetricsCollector is a prometheus.Collector that submits
-//quota/usage/backend quota from an OpenStack cluster as Prometheus metrics.
+// DataMetricsCollector is a prometheus.Collector that submits
+// quota/usage/backend quota from an OpenStack cluster as Prometheus metrics.
 type DataMetricsCollector struct {
 	Cluster      *core.Cluster
 	ReportZeroes bool
 }
 
-//Describe implements the prometheus.Collector interface.
+// Describe implements the prometheus.Collector interface.
 func (c *DataMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 	clusterCapacityGauge.Describe(ch)
 	clusterCapacityPerAZGauge.Describe(ch)
@@ -602,7 +602,7 @@ var projectRateMetricsQuery = sqlext.SimplifyWhitespace(`
 	 WHERE d.cluster_id = $1 AND pra.usage_as_bigint != ''
 `)
 
-//Collect implements the prometheus.Collector interface.
+// Collect implements the prometheus.Collector interface.
 func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	//NOTE: I use NewConstMetric() instead of storing the values in the GaugeVec
 	//instances,

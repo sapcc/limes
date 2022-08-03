@@ -19,15 +19,15 @@
 
 package plugins
 
-//This is the list of all valid values for an image's "vmware_ostype" attribute
-//in Nova/Glance. This list was copied from
-//https://github.com/openstack/nova/blob/master/nova/virt/vmwareapi/constants.py
-//and the comment over there says:
+// This is the list of all valid values for an image's "vmware_ostype" attribute
+// in Nova/Glance. This list was copied from
+// https://github.com/openstack/nova/blob/master/nova/virt/vmwareapi/constants.py
+// and the comment over there says:
 //
-//      This list was extracted from a file on an installation of ESX 6.5. The
-//      file can be found in /usr/lib/vmware/hostd/vimLocale/en/gos.vmsg
-//      The contents of this list should be updated whenever there is a new
-//      release of ESX.
+//	This list was extracted from a file on an installation of ESX 6.5. The
+//	file can be found in /usr/lib/vmware/hostd/vimLocale/en/gos.vmsg
+//	The contents of this list should be updated whenever there is a new
+//	release of ESX.
 var isValidVMwareOSType = map[string]bool{
 	"asianux3_64Guest":        true,
 	"asianux3Guest":           true,
@@ -179,10 +179,10 @@ var isValidVMwareOSType = map[string]bool{
 	"winXPProGuest":           true,
 }
 
-//This is a list of all *stable* provisioning states of an Ironic node which will
-//cause that node to not be considered when counting capacity.
+// This is a list of all *stable* provisioning states of an Ironic node which will
+// cause that node to not be considered when counting capacity.
 //
-//Reference: https://github.com/openstack/ironic/blob/master/ironic/common/states.py
+// Reference: https://github.com/openstack/ironic/blob/master/ironic/common/states.py
 var isAvailableProvisionState = map[string]bool{
 	"enroll":     false,
 	"manageable": false,

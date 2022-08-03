@@ -31,8 +31,8 @@ import (
 
 var consistencyCheckInterval = 1 * time.Hour
 
-//CheckConsistency ensures that all active domains and projects in this cluster
-//have a service entry for this plugin's service type.
+// CheckConsistency ensures that all active domains and projects in this cluster
+// have a service entry for this plugin's service type.
 func (c *Collector) CheckConsistency() {
 	for {
 		c.checkConsistencyCluster()

@@ -112,7 +112,7 @@ func (c *cfmClient) CreateQuotaSet(projectID string, quotaBytes uint64) error {
 	return err
 }
 
-//UpdateQuotaSet may return cfmNotFoundError.
+// UpdateQuotaSet may return cfmNotFoundError.
 func (c *cfmClient) UpdateQuotaSet(projectID string, quotaBytes uint64) error {
 	body := struct {
 		StorageQuota struct {
@@ -125,15 +125,15 @@ func (c *cfmClient) UpdateQuotaSet(projectID string, quotaBytes uint64) error {
 	return err
 }
 
-//An error type that can be used in gophercloud's weird ErrorContext interface.
+// An error type that can be used in gophercloud's weird ErrorContext interface.
 type cfmNotFoundError struct{}
 
-//Error implements the builtin/error interface.
+// Error implements the builtin/error interface.
 func (cfmNotFoundError) Error() string {
 	return "not found"
 }
 
-//Error404 implements the gophercloud.Err404er interface.
+// Error404 implements the gophercloud.Err404er interface.
 func (cfmNotFoundError) Error404(gophercloud.ErrUnexpectedResponseCode) error {
 	return cfmNotFoundError{}
 }

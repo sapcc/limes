@@ -29,7 +29,7 @@ import (
 	"github.com/sapcc/limes/pkg/reports"
 )
 
-//GetCluster handles GET /v1/clusters/current.
+// GetCluster handles GET /v1/clusters/current.
 func (p *v1Provider) GetCluster(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/clusters/current")
 	token := p.CheckToken(r)

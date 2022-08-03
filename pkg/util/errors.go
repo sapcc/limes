@@ -21,8 +21,8 @@ package util
 
 import "github.com/gophercloud/gophercloud"
 
-//UnpackError is usually a no-op, but for some Gophercloud errors, it removes
-//the outer layer that obscures the better error message hidden within.
+// UnpackError is usually a no-op, but for some Gophercloud errors, it removes
+// the outer layer that obscures the better error message hidden within.
 func UnpackError(err error) error {
 	switch err := err.(type) {
 	case gophercloud.ErrDefault400:

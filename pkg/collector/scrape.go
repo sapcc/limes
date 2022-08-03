@@ -49,7 +49,7 @@ const (
 	recheckInterval = 5 * time.Minute
 )
 
-//query that finds the next project that needs to have resources scraped
+// query that finds the next project that needs to have resources scraped
 var findProjectForResourceScrapeQuery = sqlext.SimplifyWhitespace(`
 	SELECT ps.id, ps.scraped_at, p.name, p.uuid, p.parent_uuid, p.id, p.has_bursting, d.name, d.uuid
 	FROM project_services ps
@@ -65,12 +65,12 @@ var findProjectForResourceScrapeQuery = sqlext.SimplifyWhitespace(`
 	LIMIT 1
 `)
 
-//Scrape checks the database periodically for outdated or missing resource
-//records for the given cluster and the given service type, and updates them by
-//querying the backend service.
+// Scrape checks the database periodically for outdated or missing resource
+// records for the given cluster and the given service type, and updates them by
+// querying the backend service.
 //
-//Errors are logged instead of returned. The function will not return unless
-//startup fails.
+// Errors are logged instead of returned. The function will not return unless
+// startup fails.
 func (c *Collector) Scrape() {
 	serviceInfo := c.Plugin.ServiceInfo()
 	serviceType := serviceInfo.Type
