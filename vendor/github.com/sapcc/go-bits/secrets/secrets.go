@@ -25,14 +25,14 @@ import (
 	"github.com/sapcc/go-bits/osext"
 )
 
-//AuthPassword holds either a plain text password or a key for the environment
-//variable that has the password as its value.
-//The key has the format: `{ fromEnv: ENVIRONMENT_VARIABLE }`.
+// AuthPassword holds either a plain text password or a key for the environment
+// variable that has the password as its value.
+// The key has the format: `{ fromEnv: ENVIRONMENT_VARIABLE }`.
 //
-//If a key is given then the password is retrieved from that env variable.
+// If a key is given then the password is retrieved from that env variable.
 type AuthPassword string
 
-//UnmarshalYAML implements the yaml.Unmarshaler interface.
+// UnmarshalYAML implements the yaml.Unmarshaler interface.
 func (p *AuthPassword) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	//plain text password
 	var plainTextInput string
