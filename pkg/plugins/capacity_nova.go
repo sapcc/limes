@@ -277,7 +277,7 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 			"instances": core.CapacityData{
 				Capacity:      total.GetInstanceCapacity(len(azs), maxFlavorSize).Capacity,
 				CapacityPerAZ: make(map[string]*core.CapacityDataForAZ, len(azs)),
-				Subcapacities: collectSubcapacitiesIf(p.reportSubcapaForCores,
+				Subcapacities: collectSubcapacitiesIf(p.reportSubcapaForInstances,
 					func(aggr *novaHypervisorGroup) *core.CapacityDataForAZ {
 						return aggr.Capacity.GetInstanceCapacity(1, maxFlavorSize)
 					},
@@ -286,7 +286,7 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 			"ram": core.CapacityData{
 				Capacity:      total.MemoryMB.Capacity,
 				CapacityPerAZ: make(map[string]*core.CapacityDataForAZ, len(azs)),
-				Subcapacities: collectSubcapacitiesIf(p.reportSubcapaForCores,
+				Subcapacities: collectSubcapacitiesIf(p.reportSubcapaForRAM,
 					func(aggr *novaHypervisorGroup) *core.CapacityDataForAZ {
 						return &aggr.Capacity.MemoryMB
 					},
