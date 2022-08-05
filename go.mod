@@ -16,7 +16,7 @@ require (
 	github.com/rs/cors v1.8.2
 	github.com/sapcc/go-api-declarations v1.2.0
 	github.com/sapcc/go-bits v0.0.0-20220803132021-fd783720dde3
-	golang.org/x/net v0.0.0-20220802222814-0bcc04d9c69b
+	golang.org/x/net v0.0.0-20220805013720-a33c5aa5df48
 	gopkg.in/gorp.v2 v2.2.0
 	gopkg.in/yaml.v2 v2.4.0
 )
