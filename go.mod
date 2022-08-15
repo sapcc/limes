@@ -15,7 +15,7 @@ require (
 	github.com/prometheus/common v0.37.0
 	github.com/rs/cors v1.8.2
 	github.com/sapcc/go-api-declarations v1.2.0
-	github.com/sapcc/go-bits v0.0.0-20220806113733-304e620cef60
+	github.com/sapcc/go-bits v0.0.0-20220815140959-384e4e0b2d84
 	golang.org/x/net v0.0.0-20220812174116-3211cb980234
 	gopkg.in/gorp.v2 v2.2.0
 	gopkg.in/yaml.v2 v2.4.0
@@ -52,7 +52,7 @@ require (
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect
 	github.com/yashtewari/glob-intersection v0.1.0 // indirect
 	github.com/ziutek/mymysql v1.5.4 // indirect
-	go.uber.org/atomic v1.9.0 // indirect
+	go.uber.org/atomic v1.10.0 // indirect
 	golang.org/x/sys v0.0.0-20220728004956-3c1f35247d10 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
 )
