@@ -37,7 +37,8 @@ else
 endif
 
 install: FORCE build/limes
-	install -D -m 0755 build/limes "$(DESTDIR)$(PREFIX)/bin/limes"
+	install -d -m 0755 "$(DESTDIR)$(PREFIX)/bin"
+	install -m 0755 build/limes "$(DESTDIR)$(PREFIX)/bin/limes"
 
 # which packages to test with "go test"
 GO_TESTPKGS := $(shell go list -f '{{if or .TestGoFiles .XTestGoFiles}}{{.ImportPath}}{{end}}' ./...)
