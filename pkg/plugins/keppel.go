@@ -76,7 +76,7 @@ func (p *keppelPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gopher
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *keppelPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (map[string]core.ResourceData, string, error) {
+func (p *keppelPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics string, err error) {
 	client, err := newKeppelClient(provider, eo)
 	if err != nil {
 		return nil, "", err
@@ -157,7 +157,7 @@ func (c keppelClient) GetQuota(projectUUID string) (keppelQuotaSet, error) {
 	url := c.ServiceURL("keppel", "v1", "quotas", projectUUID)
 
 	var result gophercloud.Result
-	_, result.Err = c.Get(url, &result.Body, &gophercloud.RequestOpts{
+	_, result.Err = c.Get(url, &result.Body, &gophercloud.RequestOpts{ //nolint:bodyclose // already closed by gophercloud
 		OkCodes: []int{http.StatusOK},
 	})
 
@@ -168,7 +168,7 @@ func (c keppelClient) GetQuota(projectUUID string) (keppelQuotaSet, error) {
 
 func (c keppelClient) SetQuota(projectUUID string, qs keppelQuotaSet) error {
 	url := c.ServiceURL("keppel", "v1", "quotas", projectUUID)
-	_, err := c.Put(url, &qs, nil, &gophercloud.RequestOpts{
+	_, err := c.Put(url, &qs, nil, &gophercloud.RequestOpts{ //nolint:bodyclose // already closed by gophercloud
 		OkCodes: []int{http.StatusOK},
 	})
 	return err

@@ -102,7 +102,6 @@ func GetCluster(cluster *core.Cluster, dbi db.Interface, filter Filter) (*limes.
 
 			clusterCanBurst := cluster.Config.Bursting.MaxMultiplier > 0
 
-			//nolint:dupl
 			if service != nil {
 				if maxScrapedAt != nil {
 					val := maxScrapedAt.Unix()
@@ -259,7 +258,7 @@ func GetCluster(cluster *core.Cluster, dbi db.Interface, filter Filter) (*limes.
 	return report, nil
 }
 
-func makeClusterFilter(tableWithClusterID string, clusterID string) map[string]interface{} {
+func makeClusterFilter(tableWithClusterID, clusterID string) map[string]interface{} {
 	return map[string]interface{}{
 		tableWithClusterID + ".cluster_id": clusterID,
 	}

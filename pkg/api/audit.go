@@ -94,9 +94,9 @@ var observerUUID = audittools.GenerateUUID()
 
 // logAndPublishEvent takes the necessary parameters and generates a cadf.Event.
 // It logs the event to stdout and publishes it to a RabbitMQ server.
-func logAndPublishEvent(time time.Time, req *http.Request, token *gopherpolicy.Token, reasonCode int, target audittools.TargetRenderer) {
+func logAndPublishEvent(eventTime time.Time, req *http.Request, token *gopherpolicy.Token, reasonCode int, target audittools.TargetRenderer) {
 	p := audittools.EventParameters{
-		Time:       time,
+		Time:       eventTime,
 		Request:    req,
 		User:       token,
 		ReasonCode: reasonCode,

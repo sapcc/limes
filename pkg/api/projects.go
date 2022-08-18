@@ -189,7 +189,7 @@ func (p *v1Provider) DiscoverProjects(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(newProjectUUIDs) == 0 {
-		w.WriteHeader(204)
+		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	respondwith.JSON(w, 202, map[string]interface{}{"new_projects": util.IDsToJSON(newProjectUUIDs)})
@@ -243,7 +243,7 @@ func (p *v1Provider) SyncProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.WriteHeader(202)
+	w.WriteHeader(http.StatusAccepted)
 }
 
 // PutProject handles PUT /v1/domains/:domain_id/projects/:project_id.
@@ -647,5 +647,5 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 		return
 	}
 	//otherwise, report success
-	w.WriteHeader(202)
+	w.WriteHeader(http.StatusAccepted)
 }

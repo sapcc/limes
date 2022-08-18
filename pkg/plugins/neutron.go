@@ -317,10 +317,10 @@ func (p *neutronPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophe
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *neutronPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (map[string]core.ResourceData, string, error) {
+func (p *neutronPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics string, err error) {
 	data := make(map[string]core.ResourceData)
 
-	err := p.scrapeNeutronInto(data, provider, eo, project.UUID)
+	err = p.scrapeNeutronInto(data, provider, eo, project.UUID)
 	if err != nil {
 		return nil, "", err
 	}
@@ -412,7 +412,7 @@ func (p *neutronPlugin) scrapeOctaviaUsage(client *gophercloud.ServiceClient, pr
 		r gophercloud.Result
 	)
 	usage.Values = make(map[string]uint64)
-	resp, err := client.Get(client.ServiceURL("quota_usage", projectID), &r.Body, nil)
+	resp, err := client.Get(client.ServiceURL("quota_usage", projectID), &r.Body, nil) //nolint:bodyclose // already closed by gophercloud
 	if err != nil {
 		return usage.Values, err
 	}

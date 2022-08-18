@@ -164,7 +164,7 @@ func (c *Collector) writeCapacitorInfo(tx *gorp.Transaction, capacitorInfo map[s
 		isExistingCapacitor[dbCapacitor.CapacitorID] = true
 		_, exists := c.Cluster.CapacityPlugins[dbCapacitor.CapacitorID]
 		if !exists {
-			_, err := tx.Delete(&dbCapacitor)
+			_, err := tx.Delete(&dbCapacitor) //nolint:gosec // Delete is not holding onto the pointer after it returns
 			if err != nil {
 				return err
 			}
@@ -174,12 +174,12 @@ func (c *Collector) writeCapacitorInfo(tx *gorp.Transaction, capacitorInfo map[s
 	//insert or update cluster_capacitors where a scrape was successful
 	for _, capacitor := range capacitorInfo {
 		if isExistingCapacitor[capacitor.CapacitorID] {
-			_, err := tx.Update(&capacitor)
+			_, err := tx.Update(&capacitor) //nolint:gosec // Update is not holding onto the pointer after it returns
 			if err != nil {
 				return err
 			}
 		} else {
-			err := tx.Insert(&capacitor)
+			err := tx.Insert(&capacitor) //nolint:gosec // Insert is not holding onto the pointer after it returns
 			if err != nil {
 				return err
 			}

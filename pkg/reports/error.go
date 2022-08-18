@@ -115,7 +115,7 @@ func getScrapeErrors(cluster *core.Cluster, dbi db.Interface, filter Filter, dbQ
 		uniqueErrors[v.ServiceType][v.Message] = v
 	}
 
-	var new []ScrapeError
+	result = nil
 	for _, errMsgs := range uniqueErrors {
 		for _, sErr := range errMsgs {
 			if sErr.AffectedProjects == 1 {
@@ -123,22 +123,21 @@ func getScrapeErrors(cluster *core.Cluster, dbi db.Interface, filter Filter, dbQ
 				//omitted in JSON response.
 				sErr.AffectedProjects = 0
 			}
-			new = append(new, sErr)
+			result = append(result, sErr)
 		}
 	}
 
 	//Deterministic ordering for unit tests
-	sort.Slice(new, func(i, j int) bool {
-		srvType1 := new[i].ServiceType
-		srvType2 := new[j].ServiceType
+	sort.Slice(result, func(i, j int) bool {
+		srvType1 := result[i].ServiceType
+		srvType2 := result[j].ServiceType
 		if srvType1 != srvType2 {
 			return srvType1 < srvType2
 		}
-		pID1 := new[i].Project.ID
-		pID2 := new[j].Project.ID
+		pID1 := result[i].Project.ID
+		pID2 := result[j].Project.ID
 		return pID1 < pID2
 	})
-	result = new
 
 	return result, nil
 }

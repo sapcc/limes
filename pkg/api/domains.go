@@ -97,7 +97,7 @@ func (p *v1Provider) DiscoverDomains(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(newDomainUUIDs) == 0 {
-		w.WriteHeader(204)
+		w.WriteHeader(http.StatusNoContent)
 		return
 	}
 	respondwith.JSON(w, 202, map[string]interface{}{"new_domains": util.IDsToJSON(newDomainUUIDs)})
@@ -258,5 +258,5 @@ func (p *v1Provider) putOrSimulatePutDomain(w http.ResponseWriter, r *http.Reque
 	updater.CommitAuditTrail(token, r, requestTime)
 
 	//report success
-	w.WriteHeader(202)
+	w.WriteHeader(http.StatusAccepted)
 }

@@ -252,7 +252,7 @@ func (p *novaPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercl
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (map[string]core.ResourceData, string, error) {
+func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics string, err error) {
 	client, err := openstack.NewComputeV2(provider, eo)
 	if err != nil {
 		return nil, "", err
@@ -298,7 +298,7 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 		}
 	}
 
-	result := map[string]*core.ResourceData{
+	resultPtr := map[string]*core.ResourceData{
 		"cores": {
 			Quota: limitsData.Limits.Absolute.MaxTotalCores,
 			Usage: limitsData.Limits.Absolute.TotalCoresUsed,
@@ -324,7 +324,7 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 	if limitsData.Limits.AbsolutePerFlavor != nil {
 		for flavorName, flavorLimits := range limitsData.Limits.AbsolutePerFlavor {
 			if p.flavorNameRx == nil || p.flavorNameRx.MatchString(flavorName) {
-				result[p.ftt.LimesResourceNameForFlavor(flavorName)] = &core.ResourceData{
+				resultPtr[p.ftt.LimesResourceNameForFlavor(flavorName)] = &core.ResourceData{
 					Quota: flavorLimits.MaxTotalInstances,
 					Usage: flavorLimits.TotalInstancesUsed,
 				}
@@ -337,8 +337,8 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 	//
 	//(this also ensures that we have the {cores|ram}_{regular|bigvm} quotas for below)
 	for _, res := range p.resources {
-		if _, exists := result[res.Name]; !exists {
-			result[res.Name] = &core.ResourceData{
+		if _, exists := resultPtr[res.Name]; !exists {
+			resultPtr[res.Name] = &core.ResourceData{
 				Quota: 0,
 				Usage: 0,
 			}
@@ -472,10 +472,10 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 						subResource["class"] = class
 
 						//do not count baremetal instances into `{cores,instances,ram}_{bigvm,regular}`
-						if _, exists := result[p.ftt.LimesResourceNameForFlavor(flavorName)]; !exists {
-							result["cores_"+class].Usage += flavor.VCPUs
-							result["instances_"+class].Usage++
-							result["ram_"+class].Usage += flavor.MemoryMiB
+						if _, exists := resultPtr[p.ftt.LimesResourceNameForFlavor(flavorName)]; !exists {
+							resultPtr["cores_"+class].Usage += flavor.VCPUs
+							resultPtr["instances_"+class].Usage++
+							resultPtr["ram_"+class].Usage += flavor.MemoryMiB
 						}
 					}
 				}
@@ -505,9 +505,9 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 					}
 				}
 
-				resource, exists := result[p.ftt.LimesResourceNameForFlavor(flavorName)]
+				resource, exists := resultPtr[p.ftt.LimesResourceNameForFlavor(flavorName)]
 				if !exists {
-					resource = result["instances"]
+					resource = resultPtr["instances"]
 				}
 				resource.Subresources = append(resource.Subresources, subResource)
 			}
@@ -519,16 +519,16 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 	}
 
 	//remove references (which we needed to apply the subresources correctly)
-	result2 := make(map[string]core.ResourceData, len(result))
-	for name, data := range result {
+	result2 := make(map[string]core.ResourceData, len(resultPtr))
+	for name, data := range resultPtr {
 		result2[name] = *data
 	}
-	serializedMetrics, err := json.Marshal(sm)
+	serializedMetricsBytes, err := json.Marshal(sm)
 	if err != nil {
 		return nil, "", err
 	}
 
-	return result2, string(serializedMetrics), nil
+	return result2, string(serializedMetricsBytes), nil
 }
 
 func derefSlicePtrOrEmpty(val *[]string) []string {

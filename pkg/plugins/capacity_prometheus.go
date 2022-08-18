@@ -56,7 +56,7 @@ func prometheusClient(cfg core.PrometheusAPIConfiguration) (prom_v1.API, error) 
 
 	roundTripper := prom_api.DefaultRoundTripper
 
-	tlsConfig := &tls.Config{}
+	tlsConfig := &tls.Config{} //nolint:gosec // used for a client which defaults to TLS version 1.2
 	//If one of the following is set, so must be the other one
 	if cfg.ClientCertificatePath != "" || cfg.ClientCertificateKeyPath != "" {
 		if cfg.ClientCertificatePath == "" {
@@ -121,7 +121,6 @@ func prometheusGetSingleValue(client prom_v1.API, queryStr string, defaultValue 
 	case 1:
 		return float64(resultVector[0].Value), nil
 	default:
-		//nolint:stylecheck //Prometheus is a proper name
 		logg.Info("Prometheus query returned more than one result: %s (only the first value will be used)", queryStr)
 		return float64(resultVector[0].Value), nil
 	}
@@ -138,13 +137,13 @@ func (p *capacityPrometheusPlugin) Type() string {
 }
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *capacityPrometheusPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (map[string]map[string]core.CapacityData, string, error) {
+func (p *capacityPrometheusPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (result map[string]map[string]core.CapacityData, _ string, err error) {
 	client, err := prometheusClient(p.cfg.Prometheus.APIConfig)
 	if err != nil {
 		return nil, "", err
 	}
 
-	result := make(map[string]map[string]core.CapacityData)
+	result = make(map[string]map[string]core.CapacityData)
 	for serviceType, queries := range p.cfg.Prometheus.Queries {
 		serviceResult := make(map[string]core.CapacityData)
 		for resourceName, query := range queries {

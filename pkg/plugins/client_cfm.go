@@ -94,7 +94,7 @@ func (c *cfmClient) reqOpts(okCodes ...int) *gophercloud.RequestOpts {
 
 func (c *cfmClient) GetQuotaSet(projectID string) (result gophercloud.Result) {
 	url := c.ServiceURL("v1.0", "quota-sets", projectID) + "/"
-	_, result.Err = c.Get(url, &result.Body, c.reqOpts(200))
+	_, result.Err = c.Get(url, &result.Body, c.reqOpts(200)) //nolint:bodyclose // already closed by gophercloud
 	return
 }
 
@@ -108,7 +108,7 @@ func (c *cfmClient) CreateQuotaSet(projectID string, quotaBytes uint64) error {
 	body.StorageQuota.ProjectID = projectID
 	body.StorageQuota.SizeLimit = quotaBytes
 	url := c.ServiceURL("v1.0", "quota-sets") + "/"
-	_, err := c.Post(url, body, nil, c.reqOpts(202))
+	_, err := c.Post(url, body, nil, c.reqOpts(202)) //nolint:bodyclose // already closed by gophercloud
 	return err
 }
 
@@ -121,7 +121,7 @@ func (c *cfmClient) UpdateQuotaSet(projectID string, quotaBytes uint64) error {
 	}{}
 	body.StorageQuota.SizeLimit = quotaBytes
 	url := c.ServiceURL("v1.0", "quota-sets", projectID) + "/"
-	_, err := c.Put(url, body, nil, c.reqOpts(200))
+	_, err := c.Put(url, body, nil, c.reqOpts(200)) //nolint:bodyclose // already closed by gophercloud
 	return err
 }
 
@@ -152,7 +152,7 @@ type cfmShareserver struct {
 func (c *cfmClient) ListShareservers() ([]cfmShareserver, error) {
 	url := c.ServiceURL("v1.0", "shareservers") + "/"
 	var result gophercloud.Result
-	_, err := c.Get(url, &result.Body, c.reqOpts(200))
+	_, err := c.Get(url, &result.Body, c.reqOpts(200)) //nolint:bodyclose // already closed by gophercloud
 	if err != nil {
 		return nil, err
 	}
@@ -182,7 +182,7 @@ func (c *cfmClient) ListShareservers() ([]cfmShareserver, error) {
 
 func (c *cfmClient) GetShareserver(url string) (*cfmShareserver, error) {
 	var result gophercloud.Result
-	_, err := c.Get(url, &result.Body, c.reqOpts(200))
+	_, err := c.Get(url, &result.Body, c.reqOpts(200)) //nolint:bodyclose // already closed by gophercloud
 	if err != nil {
 		return nil, err
 	}
@@ -244,7 +244,7 @@ type cfmPool struct {
 func (c *cfmClient) ListPools() ([]cfmPool, error) {
 	url := c.ServiceURL("v1.0", "scheduler-stats", "pools", "detail") + "/"
 	var result gophercloud.Result
-	_, err := c.Get(url, &result.Body, c.reqOpts(200))
+	_, err := c.Get(url, &result.Body, c.reqOpts(200)) //nolint:bodyclose // already closed by gophercloud
 	if err != nil {
 		return nil, err
 	}

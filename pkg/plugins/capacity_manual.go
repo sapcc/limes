@@ -51,12 +51,12 @@ func (p *capacityManualPlugin) Type() string {
 var errNoManualData = errors.New(`missing values for capacitor plugin "manual"`)
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *capacityManualPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (map[string]map[string]core.CapacityData, string, error) {
+func (p *capacityManualPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (result map[string]map[string]core.CapacityData, _ string, err error) {
 	if p.cfg.Manual == nil {
 		return nil, "", errNoManualData
 	}
 
-	result := make(map[string]map[string]core.CapacityData)
+	result = make(map[string]map[string]core.CapacityData)
 	for serviceType, serviceData := range p.cfg.Manual {
 		serviceResult := make(map[string]core.CapacityData)
 		for resourceName, capacity := range serviceData {

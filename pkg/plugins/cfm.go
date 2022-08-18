@@ -82,7 +82,7 @@ func (p *cfmPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gopherclo
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *cfmPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (map[string]core.ResourceData, string, error) {
+func (p *cfmPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (result map[string]core.ResourceData, _ string, err error) {
 	client, err := newCFMClient(provider, eo, p.projectID)
 	if err != nil {
 		return nil, "", err
@@ -130,7 +130,7 @@ func (p *cfmPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.
 	return p.scrapeOld(client, project.UUID)
 }
 
-func (p *cfmPlugin) scrapeOld(client *cfmClient, projectUUID string) (map[string]core.ResourceData, string, error) {
+func (p *cfmPlugin) scrapeOld(client *cfmClient, projectUUID string) (result map[string]core.ResourceData, _ string, err error) {
 	//cache the result of cfmListShareservers(), it's mildly expensive
 	now := time.Now()
 	if p.shareserversCache == nil || p.shareserversCacheExpires.Before(now) {
@@ -143,7 +143,7 @@ func (p *cfmPlugin) scrapeOld(client *cfmClient, projectUUID string) (map[string
 	}
 	shareservers := p.shareserversCache
 
-	result := core.ResourceData{Quota: 0, Usage: 0}
+	resultCfmShareCapacity := core.ResourceData{Quota: 0, Usage: 0}
 	for _, shareserver := range shareservers {
 		if shareserver.ProjectUUID != projectUUID {
 			continue
@@ -154,11 +154,11 @@ func (p *cfmPlugin) scrapeOld(client *cfmClient, projectUUID string) (map[string
 			return nil, "", err
 		}
 
-		result.Quota += int64(shareserverDetailed.BytesUsed)
-		result.Usage += shareserverDetailed.BytesUsed
+		resultCfmShareCapacity.Quota += int64(shareserverDetailed.BytesUsed)
+		resultCfmShareCapacity.Usage += shareserverDetailed.BytesUsed
 	}
 
-	return map[string]core.ResourceData{"cfm_share_capacity": result}, "", nil
+	return map[string]core.ResourceData{"cfm_share_capacity": resultCfmShareCapacity}, "", nil
 }
 
 // IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.

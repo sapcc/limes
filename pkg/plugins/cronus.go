@@ -87,7 +87,7 @@ func (p *cronusPlugin) Rates() []limes.RateInfo {
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (map[string]core.ResourceData, string, error) {
+func (p *cronusPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics string, err error) {
 	return nil, "", nil
 }
 
@@ -242,7 +242,7 @@ func (c cronusClient) GetUsage(projectUUID string, previous bool) (cronusUsage, 
 	}
 
 	var result gophercloud.Result
-	_, result.Err = c.Get(url, &result.Body, &gophercloud.RequestOpts{
+	_, result.Err = c.Get(url, &result.Body, &gophercloud.RequestOpts{ //nolint:bodyclose // already closed by gophercloud
 		OkCodes: []int{http.StatusOK},
 	})
 

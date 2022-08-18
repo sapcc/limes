@@ -124,7 +124,7 @@ func (p *swiftPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gopherc
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *swiftPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (map[string]core.ResourceData, string, error) {
+func (p *swiftPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics string, err error) {
 	account, err := p.Account(provider, eo, project.UUID)
 	if err != nil {
 		return nil, "", err
@@ -156,14 +156,14 @@ func (p *swiftPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclou
 			BytesUsed:   info.BytesUsed,
 		}
 	}
-	serializedMetrics, err := json.Marshal(metrics)
+	serializedMetricsBytes, err := json.Marshal(metrics)
 	if err != nil {
 		return nil, "", err
 	}
 
 	//optimization: skip submitting metrics entirely if there are no metrics to submit
 	if len(containerInfos) == 0 {
-		serializedMetrics = nil
+		serializedMetricsBytes = nil
 	}
 
 	data := core.ResourceData{
@@ -173,7 +173,7 @@ func (p *swiftPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclou
 	if !headers.BytesUsedQuota().Exists() {
 		data.Quota = -1
 	}
-	return map[string]core.ResourceData{"capacity": data}, string(serializedMetrics), nil
+	return map[string]core.ResourceData{"capacity": data}, string(serializedMetricsBytes), nil
 }
 
 // IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
