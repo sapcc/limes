@@ -867,8 +867,8 @@ github.com/safchain/ethtool v0.0.0-20190326074333-42ed695e3de8/go.mod h1:Z0q5wiB
 github.com/safchain/ethtool v0.0.0-20210803160452-9aa261dae9b1/go.mod h1:Z0q5wiBQGYcxhMZ6gUqHn6pYNLypFAvaL3UvgZLR0U4=
 github.com/sapcc/go-api-declarations v1.2.0 h1:ypzrA7dc18VgtOLVaZnJ8vJ26T3ZFskr/2JLzgInd9s=
 github.com/sapcc/go-api-declarations v1.2.0/go.mod h1:zS+2xqmbtAyQxQz1liJp0qxDgop78fb4Sfk/IB0PvH0=
-github.com/sapcc/go-bits v0.0.0-20220817133639-c16f13731441 h1:ePB4c+D0V+6zdT504xFqrdEmEdv7FGs0UAoFA5VdrPQ=
-github.com/sapcc/go-bits v0.0.0-20220817133639-c16f13731441/go.mod h1:pvgkXudPgX2vTT+VrppW5dq6eGCQ7TAFMW/Y4GHk0a4=
+github.com/sapcc/go-bits v0.0.0-20220818150340-83be1a419ef1 h1:TZsVSr48Cf9lrpjzeZe8AfOmedrXb2e3rX4xLNvb27k=
+github.com/sapcc/go-bits v0.0.0-20220818150340-83be1a419ef1/go.mod h1:pvgkXudPgX2vTT+VrppW5dq6eGCQ7TAFMW/Y4GHk0a4=
 github.com/sapcc/gophercloud v0.0.0-20220801091325-3b718810fdb6 h1:X5HQA7usqhBJObU8LZ5sZHDi9K6OOI5eTfSX7I/3rog=
 github.com/sapcc/gophercloud v0.0.0-20220801091325-3b718810fdb6/go.mod h1:Q8fZtyi5zZxPS/j9aj3sSxtvj41AdQMDwyo1myduD5c=
 github.com/satori/go.uuid v1.2.0/go.mod h1:dA0hQrYB0VpLJoorglMZABFdXlWrHn1NEOzdhQKdks0=
