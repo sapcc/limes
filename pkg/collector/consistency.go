@@ -65,7 +65,8 @@ func (c *Collector) checkConsistencyCluster() {
 
 		if !c.Cluster.HasService(service.Type) {
 			logg.Info("cleaning up %s service entry for domain %s", service.Type, c.Cluster.ID)
-			_, err := db.DB.Delete(&service)
+			_, err := db.DB.Delete(&service) //nolint:gosec // Delete is not holding onto the pointer after it returns
+
 			if err != nil {
 				c.LogError(err.Error())
 			}

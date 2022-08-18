@@ -175,7 +175,7 @@ func (p *manilaPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gopher
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (map[string]core.ResourceData, string, error) {
+func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics string, err error) {
 	client, err := openstack.NewSharedFileSystemV2(provider, eo)
 	if err != nil {
 		return nil, "", err
@@ -213,7 +213,7 @@ func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 		}
 	}
 
-	result := map[string]core.ResourceData{
+	result = map[string]core.ResourceData{
 		"share_networks": quotaSets[""].ShareNetworks.ToResourceData(nil),
 	}
 	for idx, shareType := range p.cfg.ShareV2.ShareTypes {
@@ -347,7 +347,7 @@ func (p *manilaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherc
 
 	url := client.ServiceURL("quota-sets", project.UUID)
 	logDebugSetQuota(project.UUID, "overall", overallQuotas)
-	_, err = client.Put(url, map[string]interface{}{"quota_set": overallQuotas}, nil, expect200)
+	_, err = client.Put(url, map[string]interface{}{"quota_set": overallQuotas}, nil, expect200) //nolint:bodyclose // already closed by gophercloud
 	if err != nil {
 		return fmt.Errorf("could not set overall share quotas: %s", err.Error())
 	}
@@ -355,7 +355,7 @@ func (p *manilaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherc
 	for shareTypeName, quotasForType := range shareTypeQuotas {
 		logDebugSetQuota(project.UUID, shareTypeName, quotasForType)
 		url := client.ServiceURL("quota-sets", project.UUID) + "?share_type=" + shareTypeName
-		_, err = client.Put(url, map[string]interface{}{"quota_set": quotasForType}, nil, expect200)
+		_, err = client.Put(url, map[string]interface{}{"quota_set": quotasForType}, nil, expect200) //nolint:bodyclose // already closed by gophercloud
 		if err != nil {
 			return fmt.Errorf("could not set quotas for share type %q: %s", shareTypeName, err.Error())
 		}
@@ -416,7 +416,7 @@ func manilaCollectQuota(client *gophercloud.ServiceClient, projectUUID, shareTyp
 	if shareTypeName != "" {
 		url += "?share_type=" + shareTypeName
 	}
-	_, err := client.Get(url, &result.Body, nil)
+	_, err := client.Get(url, &result.Body, nil) //nolint:bodyclose // already closed by gophercloud
 	if err != nil {
 		return manilaQuotaSetDetail{}, err
 	}

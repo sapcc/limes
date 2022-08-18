@@ -37,7 +37,7 @@ func init() {
 	//where you definitely don't want to turn off certificate verification.)
 	if osext.GetenvBool("LIMES_INSECURE") {
 		http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{
-			InsecureSkipVerify: true,
+			InsecureSkipVerify: true, //nolint:gosec // only used in development environments
 		}
 	}
 

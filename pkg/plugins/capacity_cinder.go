@@ -70,7 +70,7 @@ func (p *capacityCinderPlugin) makeResourceName(volumeType string) string {
 }
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *capacityCinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (map[string]map[string]core.CapacityData, string, error) {
+func (p *capacityCinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (result map[string]map[string]core.CapacityData, serializedMetrics string, err error) {
 	client, err := openstack.NewBlockStorageV3(provider, eo)
 	if err != nil {
 		return nil, "", err

@@ -137,7 +137,7 @@ var nodeNameRx = regexp.MustCompile(`^node(?:swift)?\d+-((?:b[bm]|ap|md|st|swf)\
 var cpNodeNameRx = regexp.MustCompile(`^node(?:swift)?\d+-(cp\d+)$`)
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (map[string]map[string]core.CapacityData, string, error) {
+func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (result map[string]map[string]core.CapacityData, serializedMetrics string, err error) {
 	//collect info about flavors with separate instance quota
 	novaClient, err := openstack.NewComputeV2(provider, eo)
 	if err != nil {
@@ -149,9 +149,9 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 	}
 
 	//we are going to report capacity for all per-flavor instance quotas
-	result := make(map[string]*core.CapacityData)
+	resultCompute := make(map[string]*core.CapacityData)
 	for _, flavor := range flavors {
-		result[p.ftt.LimesResourceNameForFlavor(flavor)] = &core.CapacityData{
+		resultCompute[p.ftt.LimesResourceNameForFlavor(flavor)] = &core.CapacityData{
 			Capacity:      0,
 			CapacityPerAZ: map[string]*core.CapacityDataForAZ{},
 		}
@@ -207,7 +207,7 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 			if node.Matches(flavor) {
 				logg.Debug("Ironic node %q (%s) matches flavor %s", node.Name, node.ID, flavor)
 
-				data := result[p.ftt.LimesResourceNameForFlavor(flavor)]
+				data := resultCompute[p.ftt.LimesResourceNameForFlavor(flavor)]
 				data.Capacity++
 
 				var nodeAZ string
@@ -273,19 +273,19 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 	}
 
 	//remove pointers from `result`
-	result2 := make(map[string]core.CapacityData, len(result))
-	for resourceName, data := range result {
+	result2 := make(map[string]core.CapacityData, len(resultCompute))
+	for resourceName, data := range resultCompute {
 		result2[resourceName] = *data
 	}
 
-	serializedMetrics, err := json.Marshal(capacitySapccIronicSerializedMetrics{
+	serializedMetricsBytes, err := json.Marshal(capacitySapccIronicSerializedMetrics{
 		UnmatchedNodeCount: unmatchedCounter,
 	})
 	if err != nil {
 		return nil, "", err
 	}
 
-	return map[string]map[string]core.CapacityData{"compute": result2}, string(serializedMetrics), nil
+	return map[string]map[string]core.CapacityData{"compute": result2}, string(serializedMetricsBytes), nil
 }
 
 var ironicUnmatchedNodesGauge = prometheus.NewGaugeVec(

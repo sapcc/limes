@@ -149,12 +149,12 @@ func (p *Plugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *Plugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (map[string]core.ResourceData, string, error) {
+func (p *Plugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics string, err error) {
 	if p.ScrapeFails {
 		return nil, "", errors.New("Scrape failed as requested")
 	}
 
-	result := make(map[string]core.ResourceData)
+	result = make(map[string]core.ResourceData)
 	for key, val := range p.StaticResourceData {
 		if !p.WithExternallyManagedResource && key == "external_things" {
 			continue
@@ -203,7 +203,7 @@ func (p *Plugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.End
 	//make up some serialized metrics (reporting usage as a metric is usually
 	//nonsensical since limes-collect already reports all usages as metrics, but
 	//this is only a testcase anyway)
-	serializedMetrics := fmt.Sprintf(`{"capacity_usage":%d,"things_usage":%d}`,
+	serializedMetrics = fmt.Sprintf(`{"capacity_usage":%d,"things_usage":%d}`,
 		result["capacity"].Usage, result["things"].Usage)
 
 	return result, serializedMetrics, nil
@@ -305,7 +305,7 @@ func (p *CapacityPlugin) Type() string {
 }
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *CapacityPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (map[string]map[string]core.CapacityData, string, error) {
+func (p *CapacityPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (result map[string]map[string]core.CapacityData, serializedMetrics string, err error) {
 	var capacityPerAZ map[string]*core.CapacityDataForAZ
 	if p.WithAZCapData {
 		capacityPerAZ = map[string]*core.CapacityDataForAZ{
@@ -320,10 +320,7 @@ func (p *CapacityPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherc
 		}
 	}
 
-	var (
-		serializedMetrics string
-		subcapacities     []interface{}
-	)
+	var subcapacities []interface{}
 	if p.WithSubcapacities {
 		smallerHalf := p.Capacity / 3
 		largerHalf := p.Capacity - smallerHalf
@@ -335,7 +332,7 @@ func (p *CapacityPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherc
 		serializedMetrics = fmt.Sprintf(`{"smaller_half":%d,"larger_half":%d}`, smallerHalf, largerHalf)
 	}
 
-	result := make(map[string]map[string]core.CapacityData)
+	result = make(map[string]map[string]core.CapacityData)
 	for _, str := range p.Resources {
 		parts := strings.SplitN(str, "/", 2)
 		_, exists := result[parts[0]]

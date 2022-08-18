@@ -142,7 +142,7 @@ func (p *cinderPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gopher
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *cinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (map[string]core.ResourceData, string, error) {
+func (p *cinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (result map[string]core.ResourceData, _ string, err error) {
 	client, err := openstack.NewBlockStorageV3(provider, eo)
 	if err != nil {
 		return nil, "", err
@@ -242,7 +242,7 @@ func (p *cinderPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherc
 	}
 
 	url := client.ServiceURL("os-quota-sets", project.UUID)
-	_, err = client.Put(url, requestData, nil, &gophercloud.RequestOpts{OkCodes: []int{200}})
+	_, err = client.Put(url, requestData, nil, &gophercloud.RequestOpts{OkCodes: []int{200}}) //nolint:bodyclose // already closed by gophercloud
 	return err
 }
 

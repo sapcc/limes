@@ -84,7 +84,7 @@ func (p *capacityNovaPlugin) Type() string {
 }
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (map[string]map[string]core.CapacityData, string, error) {
+func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (result map[string]map[string]core.CapacityData, serializedMetrics string, err error) {
 	var hypervisorTypeRx *regexp.Regexp
 	if p.cfg.Nova.HypervisorTypePattern != "" {
 		var err error
@@ -198,7 +198,7 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 	}
 
 	//serialize hypervisor metrics
-	serializedMetrics, err := json.Marshal(capacityNovaSerializedMetrics{hvMetrics})
+	serializedMetricsBytes, err := json.Marshal(capacityNovaSerializedMetrics{hvMetrics})
 	if err != nil {
 		return nil, "", err
 	}
@@ -306,7 +306,7 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 		logg.Error("Nova Capacity: Maximal flavor size is 0. Not reporting instances.")
 		delete(capacity["compute"], "instances")
 	}
-	return capacity, string(serializedMetrics), nil
+	return capacity, string(serializedMetricsBytes), nil
 }
 
 var novaHypervisorHasAZGauge = prometheus.NewGaugeVec(

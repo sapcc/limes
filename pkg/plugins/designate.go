@@ -84,7 +84,7 @@ func (p *designatePlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gop
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *designatePlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (map[string]core.ResourceData, string, error) {
+func (p *designatePlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics string, err error) {
 	client, err := openstack.NewDNSV2(provider, eo)
 	if err != nil {
 		return nil, "", err
@@ -179,7 +179,7 @@ func dnsGetQuota(client *gophercloud.ServiceClient, projectUUID string) (*dnsQuo
 
 	var result gophercloud.Result
 	var data dnsQuota
-	_, result.Err = client.Get(url, &result.Body, &opts)
+	_, result.Err = client.Get(url, &result.Body, &opts) //nolint:bodyclose // already closed by gophercloud
 	err := result.ExtractInto(&data)
 	return &data, err
 }
@@ -190,7 +190,7 @@ func dnsSetQuota(client *gophercloud.ServiceClient, projectUUID string, quota *d
 		MoreHeaders: map[string]string{"X-Auth-All-Projects": "true"},
 	}
 
-	_, err := client.Patch(url, quota, nil, &opts)
+	_, err := client.Patch(url, quota, nil, &opts) //nolint:bodyclose // already closed by gophercloud
 	return err
 }
 
@@ -233,7 +233,7 @@ func dnsCountZoneRecordsets(client *gophercloud.ServiceClient, projectUUID, zone
 			Count uint64 `json:"total_count"`
 		} `json:"metadata"`
 	}
-	_, result.Err = client.Get(url, &result.Body, &opts)
+	_, result.Err = client.Get(url, &result.Body, &opts) //nolint:bodyclose // already closed by gophercloud
 	err := result.ExtractInto(&data)
 	return data.Metadata.Count, err
 }

@@ -172,7 +172,7 @@ func (p quotaConstraintTestPlugin) ServiceInfo() limes.ServiceInfo {
 func (p quotaConstraintTestPlugin) Rates() []limes.RateInfo {
 	return nil
 }
-func (p quotaConstraintTestPlugin) Scrape(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project KeystoneProject) (map[string]ResourceData, string, error) {
+func (p quotaConstraintTestPlugin) Scrape(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project KeystoneProject) (result map[string]ResourceData, serializedMetrics string, err error) {
 	return nil, "", nil
 }
 func (p quotaConstraintTestPlugin) IsQuotaAcceptableForProject(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project KeystoneProject, quotas map[string]uint64) error {

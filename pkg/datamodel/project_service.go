@@ -55,7 +55,7 @@ func ValidateProjectServices(tx *gorp.Transaction, cluster *core.Cluster, domain
 		seen[srv.Type] = true
 		if !cluster.HasService(srv.Type) {
 			logg.Info("cleaning up %s service entry for project %s/%s", srv.Type, domain.Name, project.Name)
-			_, err := tx.Delete(&srv)
+			_, err := tx.Delete(&srv) //nolint:gosec // Delete is not holding onto the pointer after it returns
 			if err != nil {
 				return nil, err
 			}
@@ -76,7 +76,7 @@ func ValidateProjectServices(tx *gorp.Transaction, cluster *core.Cluster, domain
 			onlyStale := func(c *gorp.ColumnMap) bool {
 				return c.ColumnName == "stale"
 			}
-			_, err = tx.UpdateColumns(onlyStale, &srv)
+			_, err = tx.UpdateColumns(onlyStale, &srv) //nolint:gosec // UpdateColumns is not holding onto the pointer after it returns
 			if err != nil {
 				return nil, err
 			}

@@ -53,7 +53,7 @@ func ValidateDomainServices(tx *gorp.Transaction, cluster *core.Cluster, domain 
 		seen[srv.Type] = true
 		if !cluster.HasService(srv.Type) {
 			logg.Info("cleaning up %s service entry for domain %s", srv.Type, domain.Name)
-			_, err := tx.Delete(&srv)
+			_, err := tx.Delete(&srv) //nolint:gosec // Delete is not holding onto the pointer after it returns
 			if err != nil {
 				return nil, err
 			}
