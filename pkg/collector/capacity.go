@@ -165,7 +165,6 @@ func (c *Collector) writeCapacitorInfo(tx *gorp.Transaction, capacitorInfo map[s
 		_, exists := c.Cluster.CapacityPlugins[dbCapacitor.CapacitorID]
 		if !exists {
 			_, err := tx.Delete(&dbCapacitor) //nolint:gosec // Delete is not holding onto the pointer after it returns
-
 			if err != nil {
 				return err
 			}
