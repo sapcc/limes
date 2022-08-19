@@ -38,7 +38,7 @@ func keystoneTestCluster(t *testing.T) *core.Cluster {
 
 	return &core.Cluster{
 		ID:              "west",
-		Config:          core.ClusterConfiguration{Auth: &core.AuthParameters{}},
+		Config:          core.ClusterConfiguration{},
 		ServiceTypes:    []string{"unshared", "shared"},
 		DiscoveryPlugin: test.NewDiscoveryPlugin(),
 		QuotaPlugins: map[string]core.QuotaPlugin{
@@ -202,7 +202,6 @@ func Test_listDomainsFiltered(t *testing.T) {
 			},
 		},
 		Config: core.ClusterConfiguration{
-			Auth: &core.AuthParameters{},
 			Discovery: core.DiscoveryConfiguration{
 				IncludeDomainRx: regexp.MustCompile(`foo`),
 				ExcludeDomainRx: regexp.MustCompile(`2$`),

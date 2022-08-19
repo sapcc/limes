@@ -31,40 +31,34 @@ import (
 	"github.com/sapcc/go-bits/osext"
 )
 
-// AuthParameters contains the gophercloud authentication things
-type AuthParameters struct {
-	//The following fields are only valid after calling Connect().
+// AuthSession contains the gophercloud authentication things.
+type AuthSession struct {
 	ProviderClient *gophercloud.ProviderClient
 	EndpointOpts   gophercloud.EndpointOpts
 	TokenValidator gopherpolicy.Validator
 }
 
 // Connect creates the gophercloud.ProviderClient instance for these credentials.
-func (auth *AuthParameters) Connect() error {
-	if auth.ProviderClient != nil {
-		//already done
-		return nil
-	}
-
+func AuthToOpenstack() (*AuthSession, error) {
 	//initialize OpenStack connection
 	ao, err := clientconfig.AuthOptions(nil)
 	if err != nil {
 		logg.Fatal("cannot find OpenStack credentials: " + err.Error())
 	}
 	ao.AllowReauth = true
-	auth.ProviderClient, err = openstack.AuthenticatedClient(*ao)
+	provider, err := openstack.AuthenticatedClient(*ao)
 	if err != nil {
-		return fmt.Errorf("cannot initialize OpenStack client: %w", err)
+		return nil, fmt.Errorf("cannot initialize OpenStack client: %w", err)
 	}
 
-	auth.EndpointOpts = gophercloud.EndpointOpts{
+	eo := gophercloud.EndpointOpts{
 		Availability: gophercloud.Availability(os.Getenv("OS_INTERFACE")),
 		Region:       os.Getenv("OS_REGION_NAME"),
 	}
 
-	identityV3, err := openstack.NewIdentityV3(auth.ProviderClient, auth.EndpointOpts)
+	identityV3, err := openstack.NewIdentityV3(provider, eo)
 	if err != nil {
-		return fmt.Errorf("cannot initialize Keystone v3 client: %w", err)
+		return nil, fmt.Errorf("cannot initialize Keystone v3 client: %w", err)
 	}
 	tv := gopherpolicy.TokenValidator{
 		IdentityV3: identityV3,
@@ -72,9 +66,12 @@ func (auth *AuthParameters) Connect() error {
 	}
 	err = tv.LoadPolicyFile(osext.GetenvOrDefault("LIMES_API_POLICY_PATH", "/etc/limes/policy.yaml"))
 	if err != nil {
-		return err
+		return nil, err
 	}
-	auth.TokenValidator = &tv
 
-	return nil
+	return &AuthSession{
+		ProviderClient: provider,
+		EndpointOpts:   eo,
+		TokenValidator: &tv,
+	}, nil
 }

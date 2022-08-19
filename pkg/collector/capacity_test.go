@@ -62,7 +62,6 @@ func Test_ScanCapacity(t *testing.T) {
 			),
 		},
 		Config: core.ClusterConfiguration{
-			Auth: &core.AuthParameters{},
 			//overcommit should be reflected in capacity metrics
 			ResourceBehaviors: []*core.ResourceBehaviorConfiguration{{
 				Compiled: core.ResourceBehavior{

@@ -42,6 +42,7 @@ import (
 // the list of enabled services, and access to the quota and capacity plugins.
 type Cluster struct {
 	ID                string
+	Auth              *AuthSession
 	Config            ClusterConfiguration
 	ServiceTypes      []string
 	DiscoveryPlugin   DiscoveryPlugin
@@ -167,13 +168,13 @@ func (cluster *ClusterConfiguration) SetupOPA(domainQuotaPolicyPath, projectQuot
 //
 // We cannot do any of this earlier because we only know all resources after
 // calling Init() on all quota plugins.
-func (c *Cluster) Connect() error {
-	err := c.Config.Auth.Connect()
+func (c *Cluster) Connect() (err error) {
+	c.Auth, err = AuthToOpenstack()
 	if err != nil {
 		return fmt.Errorf("failed to authenticate: %s", err.Error())
 	}
-	provider := c.Config.Auth.ProviderClient
-	eo := c.Config.Auth.EndpointOpts
+	provider := c.Auth.ProviderClient
+	eo := c.Auth.EndpointOpts
 
 	for _, srv := range c.Config.Services {
 		err := c.QuotaPlugins[srv.Type].Init(provider, eo)
@@ -293,7 +294,10 @@ func (c Cluster) parseLowPrivilegeRaiseLimits(inputs map[string]map[string]strin
 // returns nil unless Connect() is called first. (This usually happens at
 // program startup time for the current cluster.)
 func (c *Cluster) ProviderClient() (*gophercloud.ProviderClient, gophercloud.EndpointOpts) {
-	return c.Config.Auth.ProviderClient, c.Config.Auth.EndpointOpts
+	if c.Auth == nil {
+		return nil, gophercloud.EndpointOpts{}
+	}
+	return c.Auth.ProviderClient, c.Auth.EndpointOpts
 }
 
 // HasService checks whether the given service is enabled in this cluster.

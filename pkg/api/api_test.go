@@ -109,9 +109,7 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 
 	quotaPlugins["shared"].(*test.Plugin).WithExternallyManagedResource = true
 
-	clusterConfig := core.ClusterConfiguration{
-		Auth: &core.AuthParameters{},
-	}
+	var clusterConfig core.ClusterConfiguration
 	if clusterName == "west" {
 		clusterConfig.Services = []core.ServiceConfiguration{
 			{
@@ -183,6 +181,7 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 
 	cluster := &core.Cluster{
 		ID:              clusterName,
+		Auth:            &core.AuthSession{},
 		ServiceTypes:    serviceTypes,
 		DiscoveryPlugin: test.NewDiscoveryPlugin(),
 		QuotaPlugins:    quotaPlugins,
@@ -199,7 +198,7 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 		AllowRaiseLP: true,
 		AllowLower:   true,
 	}
-	cluster.Config.Auth.TokenValidator = TestTokenValidator{enforcer}
+	cluster.Auth.TokenValidator = TestTokenValidator{enforcer}
 
 	if clusterName == "west" {
 		cluster.Config.ResourceBehaviors = []*core.ResourceBehaviorConfiguration{

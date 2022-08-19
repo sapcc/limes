@@ -29,7 +29,6 @@ import (
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/logg"
-	"github.com/sapcc/go-bits/secrets"
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -43,7 +42,6 @@ type OPAConfiguration struct {
 // list of enabled services.
 type ClusterConfiguration struct {
 	ClusterID  string                   `yaml:"cluster_id"`
-	Auth       *AuthParameters          `yaml:"-"`
 	CatalogURL string                   `yaml:"catalog_url"`
 	Discovery  DiscoveryConfiguration   `yaml:"discovery"`
 	Services   []ServiceConfiguration   `yaml:"services"`
@@ -272,18 +270,6 @@ func (b ResourceBehavior) ToScalingBehavior() *limes.ScalingBehavior {
 type BurstingConfiguration struct {
 	//If MaxMultiplier is zero, bursting is disabled.
 	MaxMultiplier limes.BurstingMultiplier `yaml:"max_multiplier"`
-}
-
-// CADFConfiguration contains configuration parameters for audit trail.
-type CADFConfiguration struct {
-	Enabled  bool `yaml:"enabled"`
-	RabbitMQ struct {
-		QueueName string               `yaml:"queue_name"`
-		Username  string               `yaml:"username"`
-		Password  secrets.AuthPassword `yaml:"password"`
-		Hostname  string               `yaml:"hostname"`
-		Port      int                  `yaml:"port"`
-	} `yaml:"rabbitmq"`
 }
 
 // PrometheusAPIConfiguration contains configuration parameters for a Prometheus API.
