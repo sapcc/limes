@@ -235,7 +235,7 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 
 	// OPA policy handling
 	// skip if no OPA policy was loaded before
-	if u.Cluster.Config.OPA != nil {
+	if u.Cluster.OPA.ProjectQuotaQuery != nil || u.Cluster.OPA.DomainQuotaQuery != nil {
 		desiredDomainReport := deepcopy.Copy(domainReport).(*limes.DomainReport)    //nolint:errcheck
 		desiredProjectReport := deepcopy.Copy(projectReport).(*limes.ProjectReport) //nolint:errcheck
 
@@ -518,9 +518,15 @@ func (u QuotaUpdater) checkPolicy(input checkPolicyInput) ([]map[string]string, 
 		logg.Debug("evaluating OPA query with input = %s", inputJSON)
 	}
 	if input.TargetProjectReport == nil {
-		results, err = u.Cluster.Config.OPA.DomainQuotaQuery.Eval(context.Background(), rego.EvalInput(input))
+		if u.Cluster.OPA.DomainQuotaQuery == nil {
+			return nil, nil
+		}
+		results, err = u.Cluster.OPA.DomainQuotaQuery.Eval(context.Background(), rego.EvalInput(input))
 	} else {
-		results, err = u.Cluster.Config.OPA.ProjectQuotaQuery.Eval(context.Background(), rego.EvalInput(input))
+		if u.Cluster.OPA.ProjectQuotaQuery == nil {
+			return nil, nil
+		}
+		results, err = u.Cluster.OPA.ProjectQuotaQuery.Eval(context.Background(), rego.EvalInput(input))
 	}
 	if err != nil {
 		return nil, &core.QuotaValidationError{

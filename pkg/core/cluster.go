@@ -32,6 +32,7 @@ import (
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/osext"
 
 	"github.com/sapcc/limes/pkg/util"
@@ -53,6 +54,10 @@ type Cluster struct {
 	LowPrivilegeRaise struct {
 		LimitsForDomains  map[string]map[string]LowPrivilegeRaiseLimit
 		LimitsForProjects map[string]map[string]LowPrivilegeRaiseLimit
+	}
+	OPA struct {
+		ProjectQuotaQuery *rego.PreparedEvalQuery
+		DomainQuotaQuery  *rego.PreparedEvalQuery
 	}
 }
 
@@ -121,41 +126,39 @@ func NewCluster(config ClusterConfiguration) *Cluster {
 
 	sort.Strings(c.ServiceTypes) //determinism is useful for unit tests
 
-	c.Config.SetupOPA(os.Getenv("LIMES_OPA_DOMAIN_QUOTA_POLICY_PATH"), os.Getenv("LIMES_OPA_PROJECT_QUOTA_POLICY_PATH"))
+	c.SetupOPA(os.Getenv("LIMES_OPA_DOMAIN_QUOTA_POLICY_PATH"), os.Getenv("LIMES_OPA_PROJECT_QUOTA_POLICY_PATH"))
 
 	return c
 }
 
-func (cluster *ClusterConfiguration) SetupOPA(domainQuotaPolicyPath, projectQuotaPolicyPath string) {
-	if cluster.OPA == nil {
-		return
+func (c *Cluster) SetupOPA(domainQuotaPolicyPath, projectQuotaPolicyPath string) {
+	if domainQuotaPolicyPath == "" {
+		c.OPA.DomainQuotaQuery = nil
+	} else {
+		domainModule := must.Return(os.ReadFile(domainQuotaPolicyPath))
+		query, err := rego.New(
+			rego.Query("violations = data.limes.violations"),
+			rego.Module("limes.rego", string(domainModule)),
+		).PrepareForEval(context.Background())
+		if err != nil {
+			logg.Fatal("preparing OPA domain query failed: %s", err)
+		}
+		c.OPA.DomainQuotaQuery = &query
 	}
 
-	domainModule, err := os.ReadFile(domainQuotaPolicyPath)
-	if err != nil {
-		logg.Fatal("loading OPA configuration failed: %s", err)
+	if projectQuotaPolicyPath == "" {
+		c.OPA.ProjectQuotaQuery = nil
+	} else {
+		projectModule := must.Return(os.ReadFile(projectQuotaPolicyPath))
+		projectQuery, err := rego.New(
+			rego.Query("violations = data.limes.violations"),
+			rego.Module("limes.rego", string(projectModule)),
+		).PrepareForEval(context.Background())
+		if err != nil {
+			logg.Fatal("preparing OPA project query failed: %s", err)
+		}
+		c.OPA.ProjectQuotaQuery = &projectQuery
 	}
-	domainQuery, err := rego.New(
-		rego.Query("violations = data.limes.violations"),
-		rego.Module("limes.rego", string(domainModule)),
-	).PrepareForEval(context.Background())
-	if err != nil {
-		logg.Fatal("preparing OPA domain query failed: %s", err)
-	}
-	cluster.OPA.DomainQuotaQuery = domainQuery
-
-	projectModule, err := os.ReadFile(projectQuotaPolicyPath)
-	if err != nil {
-		logg.Fatal("loading OPA configuration failed: %s", err)
-	}
-	projectQuery, err := rego.New(
-		rego.Query("violations = data.limes.violations"),
-		rego.Module("limes.rego", string(projectModule)),
-	).PrepareForEval(context.Background())
-	if err != nil {
-		logg.Fatal("preparing OPA domain query failed: %s", err)
-	}
-	cluster.OPA.ProjectQuotaQuery = projectQuery
 }
 
 // Connect calls Connect() on all AuthParameters for this Cluster, thus ensuring

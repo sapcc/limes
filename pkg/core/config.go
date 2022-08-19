@@ -26,16 +26,10 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/open-policy-agent/opa/rego"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/logg"
 	yaml "gopkg.in/yaml.v2"
 )
-
-type OPAConfiguration struct {
-	ProjectQuotaQuery rego.PreparedEvalQuery
-	DomainQuotaQuery  rego.PreparedEvalQuery
-}
 
 // ClusterConfiguration contains all the configuration data for a single cluster.
 // It is passed around in a lot of Limes code, mostly for the cluster ID and the
@@ -49,7 +43,6 @@ type ClusterConfiguration struct {
 	//^ Sorry for the stupid pun. Not.
 	Subresources      map[string][]string              `yaml:"subresources"`
 	Subcapacities     map[string][]string              `yaml:"subcapacities"`
-	OPA               *OPAConfiguration                `yaml:"-"`
 	LowPrivilegeRaise LowPrivilegeRaiseConfiguration   `yaml:"lowpriv_raise"`
 	ResourceBehaviors []*ResourceBehaviorConfiguration `yaml:"resource_behavior"`
 	Bursting          BurstingConfiguration            `yaml:"bursting"`
