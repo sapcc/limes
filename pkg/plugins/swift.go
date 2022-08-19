@@ -109,9 +109,7 @@ func (p *swiftPlugin) Account(provider *gophercloud.ProviderClient, eo gopherclo
 	if err != nil {
 		return nil, err
 	}
-	resellerAccount, err := gopherschwift.Wrap(client, &gopherschwift.Options{
-		UserAgent: provider.UserAgent.Join(),
-	})
+	resellerAccount, err := gopherschwift.Wrap(client, nil)
 	if err != nil {
 		return nil, err
 	}

@@ -24,7 +24,6 @@ import (
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
-	"github.com/sapcc/go-api-declarations/bininfo"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/osext"
 	"github.com/sapcc/go-bits/secrets"
@@ -55,15 +54,7 @@ func (auth *AuthParameters) Connect() error {
 	}
 
 	var err error
-	auth.ProviderClient, err = openstack.NewClient(auth.AuthURL)
-	if err != nil {
-		return fmt.Errorf("cannot initialize OpenStack client: %w", err)
-	}
-
-	userAgent := fmt.Sprintf("%s@%s", bininfo.Component(), bininfo.VersionOr("rolling"))
-	auth.ProviderClient.UserAgent.Prepend(userAgent)
-
-	err = openstack.Authenticate(auth.ProviderClient, gophercloud.AuthOptions{
+	auth.ProviderClient, err = openstack.AuthenticatedClient(gophercloud.AuthOptions{
 		IdentityEndpoint: auth.AuthURL,
 		AllowReauth:      true,
 		Username:         auth.UserName,
@@ -75,7 +66,7 @@ func (auth *AuthParameters) Connect() error {
 		},
 	})
 	if err != nil {
-		return fmt.Errorf("cannot fetch initial Keystone token: %w", err)
+		return fmt.Errorf("cannot initialize OpenStack client: %w", err)
 	}
 
 	auth.EndpointOpts = gophercloud.EndpointOpts{

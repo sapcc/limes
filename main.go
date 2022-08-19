@@ -64,6 +64,12 @@ func main() {
 	taskName, configPath, remainingArgs := os.Args[1], os.Args[2], os.Args[3:]
 	bininfo.SetTaskName(taskName)
 
+	//setup http.DefaultTransport overrides
+	wrap := httpext.WrapTransport(&http.DefaultTransport)
+	wrap.SetInsecureSkipVerify(osext.GetenvBool("LIMES_INSECURE")) //for debugging with mitmproxy etc. (DO NOT SET IN PRODUCTION)
+	wrap.SetOverrideUserAgent(bininfo.Component(), bininfo.VersionOr("rolling"))
+	wrap.Attach(util.AddLoggingRoundTripper)
+
 	//load configuration and connect to cluster
 	cluster := core.NewConfiguration(configPath)
 	must.Succeed(cluster.Connect())
@@ -151,9 +157,10 @@ func taskCollect(cluster *core.Cluster, args []string) {
 		})
 	}
 	http.Handle("/metrics", promhttp.Handler())
+
 	metricsListenAddr := osext.GetenvOrDefault("LIMES_COLLECTOR_METRICS_LISTEN_ADDRESS", ":8080")
-	logg.Info("listening on " + metricsListenAddr)
-	must.Succeed(httpext.ListenAndServeContext(httpext.ContextWithSIGINT(context.Background(), 10*time.Second), metricsListenAddr, nil))
+	ctx := httpext.ContextWithSIGINT(context.Background(), 10*time.Second)
+	must.Succeed(httpext.ListenAndServeContext(ctx, metricsListenAddr, nil))
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -186,8 +193,8 @@ func taskServe(cluster *core.Cluster, args []string) {
 
 	//start HTTP server
 	apiListenAddr := osext.GetenvOrDefault("LIMES_API_LISTEN_ADDRESS", ":80")
-	logg.Info("listening on " + apiListenAddr)
-	must.Succeed(httpext.ListenAndServeContext(httpext.ContextWithSIGINT(context.Background(), 10*time.Second), apiListenAddr, nil))
+	ctx := httpext.ContextWithSIGINT(context.Background(), 10*time.Second)
+	must.Succeed(httpext.ListenAndServeContext(ctx, apiListenAddr, nil))
 }
 
 ////////////////////////////////////////////////////////////////////////////////

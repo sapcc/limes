@@ -20,32 +20,18 @@
 package util
 
 import (
-	"crypto/tls"
 	"net/http"
 	"time"
 
 	"github.com/sapcc/go-bits/logg"
-	"github.com/sapcc/go-bits/osext"
 )
 
-func init() {
-	//I have some trouble getting Limes to connect to our staging OpenStack
-	//through mitmproxy (which is very useful for development and debugging) when
-	//TLS certificate verification is enabled. Therefore, allow to turn it off
-	//with an env variable. (It's very important that this is not the standard
-	//"DEBUG" variable. "DEBUG" is meant to be useful for production systems,
-	//where you definitely don't want to turn off certificate verification.)
-	if osext.GetenvBool("LIMES_INSECURE") {
-		http.DefaultTransport.(*http.Transport).TLSClientConfig = &tls.Config{
-			InsecureSkipVerify: true, //nolint:gosec // only used in development environments
-		}
-	}
-
-	http.DefaultTransport = loggingRoundTripper{http.DefaultTransport}
+// AddLoggingRoundTripper adds logging for long round trips to http.RoundTripper.
+// This is used to provide visibility into slow backend API calls.
+func AddLoggingRoundTripper(inner http.RoundTripper) http.RoundTripper {
+	return loggingRoundTripper{inner}
 }
 
-// loggingRoundTripper adds logging for long round trips to http.RoundTripper.
-// This is used to provide visibility into slow backend API calls.
 type loggingRoundTripper struct {
 	Inner http.RoundTripper
 }
