@@ -32,6 +32,8 @@ import (
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/go-bits/must"
+	"github.com/sapcc/go-bits/osext"
 
 	"github.com/sapcc/limes/pkg/util"
 )
@@ -41,6 +43,7 @@ import (
 // the list of enabled services, and access to the quota and capacity plugins.
 type Cluster struct {
 	ID                string
+	Auth              *AuthSession
 	Config            ClusterConfiguration
 	ServiceTypes      []string
 	DiscoveryPlugin   DiscoveryPlugin
@@ -51,6 +54,10 @@ type Cluster struct {
 	LowPrivilegeRaise struct {
 		LimitsForDomains  map[string]map[string]LowPrivilegeRaiseLimit
 		LimitsForProjects map[string]map[string]LowPrivilegeRaiseLimit
+	}
+	OPA struct {
+		ProjectQuotaQuery *rego.PreparedEvalQuery
+		DomainQuotaQuery  *rego.PreparedEvalQuery
 	}
 }
 
@@ -69,7 +76,7 @@ func NewCluster(config ClusterConfiguration) *Cluster {
 		DiscoveryPlugin: factory(config.Discovery),
 		QuotaPlugins:    make(map[string]QuotaPlugin),
 		CapacityPlugins: make(map[string]CapacityPlugin),
-		Authoritative:   config.Authoritative,
+		Authoritative:   osext.GetenvBool("LIMES_AUTHORITATIVE"),
 	}
 
 	for _, srv := range config.Services {
@@ -119,41 +126,39 @@ func NewCluster(config ClusterConfiguration) *Cluster {
 
 	sort.Strings(c.ServiceTypes) //determinism is useful for unit tests
 
-	c.Config.SetupOPA()
+	c.SetupOPA(os.Getenv("LIMES_OPA_DOMAIN_QUOTA_POLICY_PATH"), os.Getenv("LIMES_OPA_PROJECT_QUOTA_POLICY_PATH"))
 
 	return c
 }
 
-func (cluster *ClusterConfiguration) SetupOPA() {
-	if cluster.OPA == nil {
-		return
+func (c *Cluster) SetupOPA(domainQuotaPolicyPath, projectQuotaPolicyPath string) {
+	if domainQuotaPolicyPath == "" {
+		c.OPA.DomainQuotaQuery = nil
+	} else {
+		domainModule := must.Return(os.ReadFile(domainQuotaPolicyPath))
+		query, err := rego.New(
+			rego.Query("violations = data.limes.violations"),
+			rego.Module("limes.rego", string(domainModule)),
+		).PrepareForEval(context.Background())
+		if err != nil {
+			logg.Fatal("preparing OPA domain query failed: %s", err)
+		}
+		c.OPA.DomainQuotaQuery = &query
 	}
 
-	domainModule, err := os.ReadFile(cluster.OPA.DomainQuotaPolicyPath)
-	if err != nil {
-		logg.Fatal("loading OPA configuration failed: %s", err)
+	if projectQuotaPolicyPath == "" {
+		c.OPA.ProjectQuotaQuery = nil
+	} else {
+		projectModule := must.Return(os.ReadFile(projectQuotaPolicyPath))
+		projectQuery, err := rego.New(
+			rego.Query("violations = data.limes.violations"),
+			rego.Module("limes.rego", string(projectModule)),
+		).PrepareForEval(context.Background())
+		if err != nil {
+			logg.Fatal("preparing OPA project query failed: %s", err)
+		}
+		c.OPA.ProjectQuotaQuery = &projectQuery
 	}
-	domainQuery, err := rego.New(
-		rego.Query("violations = data.limes.violations"),
-		rego.Module("limes.rego", string(domainModule)),
-	).PrepareForEval(context.Background())
-	if err != nil {
-		logg.Fatal("preparing OPA domain query failed: %s", err)
-	}
-	cluster.OPA.DomainQuotaQuery = domainQuery
-
-	projectModule, err := os.ReadFile(cluster.OPA.ProjectQuotaPolicyPath)
-	if err != nil {
-		logg.Fatal("loading OPA configuration failed: %s", err)
-	}
-	projectQuery, err := rego.New(
-		rego.Query("violations = data.limes.violations"),
-		rego.Module("limes.rego", string(projectModule)),
-	).PrepareForEval(context.Background())
-	if err != nil {
-		logg.Fatal("preparing OPA domain query failed: %s", err)
-	}
-	cluster.OPA.ProjectQuotaQuery = projectQuery
 }
 
 // Connect calls Connect() on all AuthParameters for this Cluster, thus ensuring
@@ -166,13 +171,13 @@ func (cluster *ClusterConfiguration) SetupOPA() {
 //
 // We cannot do any of this earlier because we only know all resources after
 // calling Init() on all quota plugins.
-func (c *Cluster) Connect() error {
-	err := c.Config.Auth.Connect()
+func (c *Cluster) Connect() (err error) {
+	c.Auth, err = AuthToOpenstack()
 	if err != nil {
 		return fmt.Errorf("failed to authenticate: %s", err.Error())
 	}
-	provider := c.Config.Auth.ProviderClient
-	eo := c.Config.Auth.EndpointOpts
+	provider := c.Auth.ProviderClient
+	eo := c.Auth.EndpointOpts
 
 	for _, srv := range c.Config.Services {
 		err := c.QuotaPlugins[srv.Type].Init(provider, eo)
@@ -189,9 +194,10 @@ func (c *Cluster) Connect() error {
 	}
 
 	//load quota constraints
-	if c.Config.ConstraintConfigPath != "" && c.QuotaConstraints == nil {
+	constraintPath := os.Getenv("LIMES_CONSTRAINTS_PATH")
+	if constraintPath != "" && c.QuotaConstraints == nil {
 		var errs []error
-		c.QuotaConstraints, errs = NewQuotaConstraints(c, c.Config.ConstraintConfigPath)
+		c.QuotaConstraints, errs = NewQuotaConstraints(c, constraintPath)
 		if len(errs) > 0 {
 			for _, err := range errs {
 				logg.Error(err.Error())
@@ -291,7 +297,10 @@ func (c Cluster) parseLowPrivilegeRaiseLimits(inputs map[string]map[string]strin
 // returns nil unless Connect() is called first. (This usually happens at
 // program startup time for the current cluster.)
 func (c *Cluster) ProviderClient() (*gophercloud.ProviderClient, gophercloud.EndpointOpts) {
-	return c.Config.Auth.ProviderClient, c.Config.Auth.EndpointOpts
+	if c.Auth == nil {
+		return nil, gophercloud.EndpointOpts{}
+	}
+	return c.Auth.ProviderClient, c.Auth.EndpointOpts
 }
 
 // HasService checks whether the given service is enabled in this cluster.

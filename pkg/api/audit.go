@@ -25,7 +25,6 @@ import (
 	"net"
 	"net/http"
 	"net/url"
-	"strconv"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -35,8 +34,6 @@ import (
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/osext"
-
-	"github.com/sapcc/limes/pkg/core"
 )
 
 var showAuditOnStdout = !osext.GetenvBool("LIMES_SILENT")
@@ -46,8 +43,8 @@ var eventSink chan<- cadf.Event
 
 // StartAuditTrail starts the audit trail by initializing the event sink and
 // starting a Commit() goroutine.
-func StartAuditTrail(clusterID string, config core.CADFConfiguration) {
-	if config.Enabled {
+func StartAuditTrail(clusterID string) {
+	if osext.GetenvBool("LIMES_AUDIT_ENABLE") {
 		labels := prometheus.Labels{
 			"os_cluster": clusterID,
 		}
@@ -63,22 +60,10 @@ func StartAuditTrail(clusterID string, config core.CADFConfiguration) {
 		s := make(chan cadf.Event, 20)
 		eventSink = s
 
-		if config.RabbitMQ.Username == "" {
-			config.RabbitMQ.Username = "guest"
-		}
-		if config.RabbitMQ.Password == "" {
-			config.RabbitMQ.Password = "guest"
-		}
-		if config.RabbitMQ.Hostname == "" {
-			config.RabbitMQ.Hostname = "localhost"
-		}
-		if config.RabbitMQ.Port == 0 {
-			config.RabbitMQ.Port = 5672
-		}
 		rabbitURI := url.URL{
 			Scheme: "amqp",
-			Host:   net.JoinHostPort(config.RabbitMQ.Hostname, strconv.Itoa(config.RabbitMQ.Port)),
-			User:   url.UserPassword(config.RabbitMQ.Username, string(config.RabbitMQ.Password)),
+			Host:   net.JoinHostPort(osext.GetenvOrDefault("LIMES_AUDIT_RABBITMQ_HOSTNAME", "localhost"), osext.GetenvOrDefault("LIMES_AUDIT_RABBITMQ_PORT", "5672")),
+			User:   url.UserPassword(osext.GetenvOrDefault("LIMES_AUDIT_RABBITMQ_USERNAME", "guest"), osext.GetenvOrDefault("LIMES_AUDIT_RABBITMQ_PASSWORD", "guest")),
 			Path:   "/",
 		}
 
@@ -86,7 +71,7 @@ func StartAuditTrail(clusterID string, config core.CADFConfiguration) {
 			EventSink:           s,
 			OnSuccessfulPublish: onSuccessFunc,
 			OnFailedPublish:     onFailFunc,
-		}.Commit(rabbitURI, config.RabbitMQ.QueueName)
+		}.Commit(rabbitURI, osext.MustGetenv("LIMES_AUDIT_QUEUE_NAME"))
 	}
 }
 

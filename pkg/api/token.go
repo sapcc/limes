@@ -24,17 +24,13 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/sapcc/go-bits/gopherpolicy"
-	"github.com/sapcc/go-bits/logg"
 )
 
 // CheckToken checks the validity of the request's X-Auth-Token in Keystone, and
 // returns a Token instance for checking authorization. Any errors that occur
 // during this function are deferred until Require() is called.
 func (p *v1Provider) CheckToken(r *http.Request) *gopherpolicy.Token {
-	//special case for unit tests
-	t := p.Cluster.Config.Auth.TokenValidator.CheckToken(r)
-	t.Context.Logger = logg.Debug
+	t := p.Cluster.Auth.TokenValidator.CheckToken(r)
 	t.Context.Request = mux.Vars(r)
-
 	return t
 }

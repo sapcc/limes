@@ -1,61 +1,62 @@
-# Configuration guide
+# Configuration options
 
 Limes accepts configuration options via environment variables for some components and
-requires a config file ([see below](#configuration-file)) for cluster options in the [YAML format][yaml].
+requires a configuration file ([see below](#configuration-file)) for cluster options in the [YAML format][yaml].
 
 Use the table of contents icon
 <img src="https://github.com/github/docs/raw/main/assets/images/table-of-contents.png" width="25" height="25" />
 on the top left corner of this document to get to a specific section of this guide quickly.
 
-# Configuration options
-
-## Database
-
-Configuration options relating to the database connection of all services.
+## Common environment variables
 
 | Variable | Default | Description |
 | --- | --- | --- |
+| `LIMES_CONSTRAINTS_PATH` | no | Path to a YAML file containing the quota constraints for this cluster. See [*quota constraints*](constraints.md) for details. |
 | `LIMES_DB_NAME` | `limes` | The name of the database. |
 | `LIMES_DB_USERNAME` | `postgres` | Username of the user that Limes should use to connect to the database. |
 | `LIMES_DB_PASSWORD` | *(optional)* | Password for the specified user. |
 | `LIMES_DB_HOSTNAME` | `localhost` | Hostname of the database server. |
 | `LIMES_DB_PORT` | `5432` | Port on which the PostgreSQL service is running on. |
 | `LIMES_DB_CONNECTION_OPTIONS` | *(optional)* | Database connection options. |
+| `OS_...` | *(required)* | A full set of OpenStack auth environment variables for Limes's service user. See [documentation for openstackclient](https://docs.openstack.org/python-openstackclient/latest/cli/man/openstack.html) for details. |
 
-## API
-
-Configuration options relating to the behavior of the API service.
+## Environment variables for `limes serve` only
 
 | Variable | Default | Description |
 | --- | --- | --- |
 | `LIMES_API_LISTEN_ADDRESS` | `:80` | Bind address for the HTTP API exposed by this service, e.g. `127.0.0.1:80` to bind only on one IP, or `:80` to bind on all interfaces and addresses. |
 | `LIMES_API_POLICY_PATH` | `/etc/limes/policy.yaml` | Path to the oslo.policy file that describes authorization behavior for this service. Please refer to the [OpenStack documentation on policies][policy] for syntax reference. This repository includes an [example policy][ex-pol] that can be used for development setups, or as a basis for writing your own policy. For `:raise`, `:raise_lowpriv`, `:lower` and `:set_rate_limit` policies, the object attribute `%(service_type)s` is available to restrict editing to certain service types. |
+| `LIMES_OPA_DOMAIN_QUOTA_POLICY_PATH` | yes, when `opa` section is given | Path to a Rego file. This policy will be evaluated whenever a user tries to change a domain quota. If the policy reports any violations, the PUT will fail and the generated error messages will be reported to the user. See [../example-quota-policy.rego](../example-quota-policy.rego) for an example illustrating the expected structure of the policy. |
+| `LIMES_OPA_PROJECT_QUOTA_POLICY_PATH` | yes, when `opa` section is given | Like `LIMES_OPA_DOMAIN_QUOTA_POLICY_PATH`, but this policy is used for validating project quota changes instead. |
 
-## Collector
+### Audit trail
 
-Configuration options relating to the behavior of the collector service.
+Limes logs all quota changes at the domain and project level in an Open Standards [CADF format](https://www.dmtf.org/standards/cadf). These audit events can be sent to a RabbitMQ server which can then forward them to any cloud audit API, datastore, etc.
 
 | Variable | Default | Description |
 | --- | --- | --- |
+| `LIMES_AUDIT_ENABLE` | `false` | Set this to true if you want to send the audit events to a RabbitMQ server. |
+| `LIMES_AUDIT_QUEUE_NAME` | *(required if auditing is enabled)* | Name for the queue that will hold the audit events. The events are published to the default exchange. |
+| `LIMES_AUDIT_RABBITMQ_USERNAME` | `guest` | RabbitMQ Username. |
+| `LIMES_AUDIT_RABBITMQ_PASSWORD` | `guest` | Password for the specified user. |
+| `LIMES_AUDIT_RABBITMQ_HOSTNAME` | `localhost` | Hostname of the RabbitMQ server. |
+| `LIMES_AUDIT_RABBITMQ_PORT` | `5672` | Port number to which the underlying connection is made. |
+
+## Environment variables for `limes collect` only
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `LIMES_AUTHORITATIVE` | *(required)* | If set to `true`, the collector will write the quota from its own database into the backend service whenever scraping encounters a backend quota that differs from the expectation. This flag is strongly recommended in production systems to avoid divergence of Limes quotas from backend quotas, but should be used with care during development. |
 | `LIMES_COLLECTOR_METRICS_LISTEN_ADDRESS` | `:8080` | Bind address for the Prometheus metrics endpoint provided by this service. See `LIMES_API_LISTEN_ADDRESS` for acceptable values. |
 | `LIMES_COLLECTOR_DATA_METRICS_EXPOSE` | `false` | If set to `true`, expose all quota/usage/capacity data as Prometheus gauges. This is disabled by default because this can be a lot of data for OpenStack clusters containing many projects, domains and services. |
 | `LIMES_COLLECTOR_DATA_METRICS_SKIP_ZERO` | `false` | If set to `true`, data metrics will only be emitted for non-zero values. In large deployments, this can substantially reduce the amount of timeseries emitted. |
 
 ## Configuration file
 
-The configuration file configuration options relating to the targeted OpenStack cluster. A minimal config file could look like this:
+A configuration file in YAML format must be provided that describes things like the set of available backend services and the quota/capacity scraping behavior. A minimal config file could look like this:
 
 ```yaml
 cluster_id: staging
-auth:
-  auth_url:            https://keystone.staging.example.com/v3
-  user_name:           limes
-  user_domain_name:    Default
-  project_name:        service
-  project_domain_name: Default
-  password:            swordfish
-cadf:
-  enabled: false
 services:
   - type: compute
   - type: network
@@ -69,7 +70,6 @@ subcapacities:
   compute:
     - cores
     - ram
-constraints: /etc/limes/constraints-for-staging.yaml
 bursting:
   max_multiplier: 0.2
 ```
@@ -79,14 +79,6 @@ The following fields and sections are supported:
 | Field | Required | Description |
 | --- | --- | --- |
 | `cluster_id` | yes | Must be given for historical reasons. May be chosen freely, but should not be changed afterwards. (It *can* be changed, but that requires a shutdown of all Limes components and manual editing of the database.) |
-| `auth.auth_url` | yes | URL for Keystone v3 API in this cluster. Should end in `/v3`. Other Keystone API versions are not supported (`OS_AUTH_URL`). |
-| `auth.user_name` | yes | Limes service user (`OS_USERNAME`). |
-| `auth.user_domain_name` | yes | Domain containing Limes service user (`OS_USER_DOMAIN_NAME`). |
-| `auth.project_name` | yes | Project where Limes service user has access (`OS_PROJECT_NAME`). |
-| `auth.project_domain_name` | yes | Domain containing that project (`OS_PROJECT_DOMAIN_NAME`). |
-| `auth.password` | yes | Password for Limes service user (`OS_PASSWORD`). |
-| `auth.region_name` | no | In multi-region OpenStack clusters, this selects the region to work on (`OS_REGION_NAME`). |
-| `auth.interface` | no | The endpoint type Limes should use for the OpenStack services (`OS_INTERFACE`). |
 | `catalog_url` | no | URL of Limes API service as it appears in the Keystone service catalog for this cluster. This is only used for version advertisements, and can be omitted if no client relies on the URLs in these version advertisements. |
 | `discovery.method` | no | Defines which method to use to discover Keystone domains and projects in this cluster. If not given, the default value is `list`. |
 | `discovery.except_domains` | no | May contain a regex. Domains whose names match the regex will not be considered by Limes. |
@@ -95,35 +87,9 @@ The following fields and sections are supported:
 | `subresources` | no | List of resources where subresource scraping is requested. This is an object with service types as keys, and a list of resource names as values. |
 | `subcapacities` | no | List of resources where subcapacity scraping is requested. This is an object with service types as keys, and a list of resource names as values. |
 | `capacitors` | no | List of capacity plugins to use for scraping capacity data. See below for supported capacity plugins. |
-| `authoritative` | no | If set to `true`, the collector will write the quota from its own database into the backend service whenever scraping encounters a backend quota that differs from the expectation. This flag is strongly recommended in production systems to avoid divergence of Limes quotas from backend quotas, but should be used with care during development. |
-| `constraints` | no | Path to a YAML file containing the quota constraints for this cluster. See [*quota constraints*](constraints.md) for details. |
-| `cadf` | no | Audit trail configuration options. See [*audit trail*](#audit-trail) for details. |
 | `lowpriv_raise` | no | Configuration options for low-privilege quota raising. See [*low-privilege quota raising*](#low-privilege-quota-raising) for details. |
 | `resource_behavior` | no | Configuration options for special resource behaviors. See [*resource behavior*](#resource-behavior) for details. |
 | `bursting.max_multiplier` | no | If given, permits quota bursting in this cluster. When projects enable quota bursting, the backend quota is set to `quota * (1 + max_multiplier)`. In the future, Limes may autonomously adjust the multiplier between 0 and the configured maximum based on cluster-wide resource utilization. |
-| `opa` | no | If given, enables custom validations using the [Open Policy Agent](https://www.openpolicyagent.org/) library. |
-| `opa.project_quota_policy_path` | yes, when `opa` section is given | Path to a Rego file. This policy will be evaluated whenever a user tries to change a project quota. If the policy reports any violations, the PUT will fail and the generated error messages will be reported to the user. See [../example-quota-policy.rego](../example-quota-policy.rego) for an example illustrating the expected structure of the policy. |
-| `opa.domain_quota_policy_path` | yes, when `opa` section is given | Like `opa.project_quota_policy_path`, but this policy is used for validating domain quota changes instead. |
-
-Instead of providing `auth.password` as plain text in the config file, you can use a special syntax to read the
-respective password from an exported environment variable:
-
-```yaml
-password: { fromEnv: ENVIRONMENT_VARIABLE }
-```
-
-### Audit trail
-
-Limes logs all quota changes at the domain and project level in an Open Standards [CADF format](https://www.dmtf.org/standards/cadf). These audit events can be sent to a RabbitMQ server which can then forward them to any cloud audit API, datastore, etc.
-
-| Field | Default | Description |
-| --- | --- | --- |
-| `cadf.enabled` | `false` | Set this to true if you want to send the audit events to a RabbitMQ server. |
-| `cadf.rabbitmq.queue_name` | *(required, if `enabled` is true)* | Name for the queue that will hold the audit events. The events are published to the default exchange. |
-| `cadf.rabbitmq.username` | `guest` | RabbitMQ Username. |
-| `cadf.rabbitmq.password` | `guest` | Password for the specified user. |
-| `cadf.rabbitmq.hostname` | `localhost` | Hostname of the RabbitMQ server. |
-| `cadf.rabbitmq.port` | `5672` | Port number to which the underlying connection is made. |
 
 ### Low-privilege quota raising
 

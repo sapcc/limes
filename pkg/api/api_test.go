@@ -109,9 +109,7 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 
 	quotaPlugins["shared"].(*test.Plugin).WithExternallyManagedResource = true
 
-	clusterConfig := core.ClusterConfiguration{
-		Auth: &core.AuthParameters{},
-	}
+	var clusterConfig core.ClusterConfiguration
 	if clusterName == "west" {
 		clusterConfig.Services = []core.ServiceConfiguration{
 			{
@@ -183,6 +181,7 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 
 	cluster := &core.Cluster{
 		ID:              clusterName,
+		Auth:            &core.AuthSession{},
 		ServiceTypes:    serviceTypes,
 		DiscoveryPlugin: test.NewDiscoveryPlugin(),
 		QuotaPlugins:    quotaPlugins,
@@ -199,7 +198,7 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 		AllowRaiseLP: true,
 		AllowLower:   true,
 	}
-	cluster.Config.Auth.TokenValidator = TestTokenValidator{enforcer}
+	cluster.Auth.TokenValidator = TestTokenValidator{enforcer}
 
 	if clusterName == "west" {
 		cluster.Config.ResourceBehaviors = []*core.ResourceBehaviorConfiguration{
@@ -247,7 +246,7 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 	}
 
 	//validate that this is a no-op when no OPAConfiguration is provided
-	cluster.Config.SetupOPA()
+	cluster.SetupOPA("", "")
 
 	handler := httpapi.Compose(
 		NewV1API(cluster),
@@ -943,11 +942,7 @@ func Test_DomainOperations(t *testing.T) {
 func Test_DomainOPA(t *testing.T) {
 	clusterName, pathtoData := "west", "fixtures/start-data-opa.sql"
 	cluster, router, _ := setupTest(t, clusterName, pathtoData)
-	cluster.Config.OPA = &core.OPAConfiguration{
-		DomainQuotaPolicyPath:  "fixtures/limes.rego",
-		ProjectQuotaPolicyPath: "fixtures/limes.rego",
-	}
-	cluster.Config.SetupOPA()
+	cluster.SetupOPA("fixtures/limes.rego", "fixtures/limes.rego")
 
 	// try if valid operations still work
 	assert.HTTPRequest{
