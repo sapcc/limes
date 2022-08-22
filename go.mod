@@ -7,7 +7,7 @@ require (
 	github.com/dlmiddlecote/sqlstats v1.0.2
 	github.com/gofrs/uuid v4.2.0+incompatible
 	github.com/gophercloud/gophercloud v0.25.0
-	github.com/gophercloud/utils v0.0.0-20210323225332-7b186010c04f
+	github.com/gophercloud/utils v0.0.0-20220704184730-55bdbbaec4ba
 	github.com/gorilla/mux v1.8.0
 	github.com/majewsky/schwift v1.1.0
 	github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826

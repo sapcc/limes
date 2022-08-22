@@ -538,8 +538,9 @@ github.com/googleapis/gax-go/v2 v2.0.5/go.mod h1:DWXyrwAJ9X0FpwwEdw+IPEYBICEFu5m
 github.com/googleapis/gnostic v0.4.1/go.mod h1:LRhVm6pbyptWbWbuZ38d1eyptfvIytN3ir6b65WBswg=
 github.com/googleapis/gnostic v0.5.1/go.mod h1:6U4PtQXGIEt/Z3h5MAT7FNofLnw9vXk2cUuW7uA/OeU=
 github.com/googleapis/gnostic v0.5.5/go.mod h1:7+EbHbldMins07ALC74bsA81Ovc97DwqyJO1AENw9kA=
-github.com/gophercloud/utils v0.0.0-20210323225332-7b186010c04f h1:+SO5iEqu9QjNWL9TfAmOE5u0Uizv1T3jpBuMJfMOVJ0=
 github.com/gophercloud/utils v0.0.0-20210323225332-7b186010c04f/go.mod h1:wx8HMD8oQD0Ryhz6+6ykq75PJ79iPyEqYHfwZ4l7OsA=
+github.com/gophercloud/utils v0.0.0-20220704184730-55bdbbaec4ba h1:PTa/ilBNI0ZE2WjSnu4drZi7W81wkYjnHPk5AEEgOGk=
+github.com/gophercloud/utils v0.0.0-20220704184730-55bdbbaec4ba/go.mod h1:qOGlfG6OIJ193/c3Xt/XjOfHataNZdQcVgiu93LxBUM=
 github.com/gopherjs/gopherjs v0.0.0-20181017120253-0766667cb4d1/go.mod h1:wJfORRmW1u3UXTncJ5qlYoELFm8eSnnEO6hX4iZ3EWY=
 github.com/gorilla/handlers v0.0.0-20150720190736-60c7bfde3e33/go.mod h1:Qkdc/uu4tH4g6mTK6auzZ766c4CA0Ng8+o/OAirnOIQ=
 github.com/gorilla/handlers v1.5.1/go.mod h1:t8XrUpc4KVXb7HGyJ4/cEnwQiaxrX/hz1Zv/4g96P1Q=
