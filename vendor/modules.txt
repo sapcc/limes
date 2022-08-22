@@ -76,7 +76,7 @@ github.com/gophercloud/gophercloud/openstack/sharedfilesystems/v2/schedulerstats
 github.com/gophercloud/gophercloud/openstack/sharedfilesystems/v2/services
 github.com/gophercloud/gophercloud/openstack/utils
 github.com/gophercloud/gophercloud/pagination
-# github.com/gophercloud/utils v0.0.0-20210323225332-7b186010c04f
+# github.com/gophercloud/utils v0.0.0-20220704184730-55bdbbaec4ba
 ## explicit; go 1.15
 github.com/gophercloud/utils/env
 github.com/gophercloud/utils/gnocchi
@@ -248,7 +248,6 @@ github.com/sapcc/go-bits/logg
 github.com/sapcc/go-bits/must
 github.com/sapcc/go-bits/osext
 github.com/sapcc/go-bits/respondwith
-github.com/sapcc/go-bits/secrets
 github.com/sapcc/go-bits/sqlext
 # github.com/sergi/go-diff v1.2.0
 ## explicit; go 1.12
