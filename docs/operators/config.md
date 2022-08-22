@@ -26,8 +26,8 @@ on the top left corner of this document to get to a specific section of this gui
 | --- | --- | --- |
 | `LIMES_API_LISTEN_ADDRESS` | `:80` | Bind address for the HTTP API exposed by this service, e.g. `127.0.0.1:80` to bind only on one IP, or `:80` to bind on all interfaces and addresses. |
 | `LIMES_API_POLICY_PATH` | `/etc/limes/policy.yaml` | Path to the oslo.policy file that describes authorization behavior for this service. Please refer to the [OpenStack documentation on policies][policy] for syntax reference. This repository includes an [example policy][ex-pol] that can be used for development setups, or as a basis for writing your own policy. For `:raise`, `:raise_lowpriv`, `:lower` and `:set_rate_limit` policies, the object attribute `%(service_type)s` is available to restrict editing to certain service types. |
-| `LIMES_OPA_DOMAIN_QUOTA_POLICY_PATH` | yes, when `opa` section is given | Like `LIMES_OPA_PROJECT_QUOTA_POLICY_PATH`, but this policy is used for validating domain quota changes instead. |
-| `LIMES_OPA_PROJECT_QUOTA_POLICY_PATH` | yes, when `opa` section is given | Path to a Rego file. This policy will be evaluated whenever a user tries to change a project quota. If the policy reports any violations, the PUT will fail and the generated error messages will be reported to the user. See [../example-quota-policy.rego](../example-quota-policy.rego) for an example illustrating the expected structure of the policy. |
+| `LIMES_OPA_DOMAIN_QUOTA_POLICY_PATH` | yes, when `opa` section is given | Path to a Rego file. This policy will be evaluated whenever a user tries to change a domain quota. If the policy reports any violations, the PUT will fail and the generated error messages will be reported to the user. See [../example-quota-policy.rego](../example-quota-policy.rego) for an example illustrating the expected structure of the policy. |
+| `LIMES_OPA_PROJECT_QUOTA_POLICY_PATH` | yes, when `opa` section is given | Like `LIMES_OPA_DOMAIN_QUOTA_POLICY_PATH`, but this policy is used for validating project quota changes instead. |
 
 ### Audit trail
 
