@@ -24,7 +24,7 @@ import (
 	"sort"
 )
 
-//ProjectReport contains all data about resource usage in a project.
+// ProjectReport contains all data about resource usage in a project.
 type ProjectReport struct {
 	UUID       string                `json:"id"`
 	Name       string                `json:"name"`
@@ -33,16 +33,16 @@ type ProjectReport struct {
 	Services   ProjectServiceReports `json:"services"`
 }
 
-//ProjectBurstingInfo is a substructure of ProjectReport containing information about
-//quota bursting. (It is omitted if bursting is not supported for the project's
-//cluster.)
+// ProjectBurstingInfo is a substructure of ProjectReport containing information about
+// quota bursting. (It is omitted if bursting is not supported for the project's
+// cluster.)
 type ProjectBurstingInfo struct {
 	Enabled    bool               `json:"enabled"`
 	Multiplier BurstingMultiplier `json:"multiplier"`
 }
 
-//ProjectServiceReport is a substructure of ProjectReport containing data for
-//a single backend service.
+// ProjectServiceReport is a substructure of ProjectReport containing data for
+// a single backend service.
 type ProjectServiceReport struct {
 	ServiceInfo
 	Resources      ProjectResourceReports  `json:"resources"`
@@ -51,8 +51,8 @@ type ProjectServiceReport struct {
 	RatesScrapedAt *int64                  `json:"rates_scraped_at,omitempty"`
 }
 
-//ProjectResourceReport is a substructure of ProjectReport containing data for
-//a single resource.
+// ProjectResourceReport is a substructure of ProjectReport containing data for
+// a single resource.
 type ProjectResourceReport struct {
 	//Several fields are pointers to values to enable precise control over which fields are rendered in output.
 	ResourceInfo
@@ -81,11 +81,11 @@ type ProjectRateLimitReport struct {
 	UsageAsBigint string  `json:"usage_as_bigint,omitempty"`
 }
 
-//ProjectServiceReports provides fast lookup of services using a map, but serializes
-//to JSON as a list.
+// ProjectServiceReports provides fast lookup of services using a map, but serializes
+// to JSON as a list.
 type ProjectServiceReports map[string]*ProjectServiceReport
 
-//MarshalJSON implements the json.Marshaler interface.
+// MarshalJSON implements the json.Marshaler interface.
 func (s ProjectServiceReports) MarshalJSON() ([]byte, error) {
 	//serialize with ordered keys to ensure testcase stability
 	types := make([]string, 0, len(s))
@@ -100,7 +100,7 @@ func (s ProjectServiceReports) MarshalJSON() ([]byte, error) {
 	return json.Marshal(list)
 }
 
-//UnmarshalJSON implements the json.Unmarshaler interface
+// UnmarshalJSON implements the json.Unmarshaler interface
 func (s *ProjectServiceReports) UnmarshalJSON(b []byte) error {
 	tmp := make([]*ProjectServiceReport, 0)
 	err := json.Unmarshal(b, &tmp)
@@ -115,11 +115,11 @@ func (s *ProjectServiceReports) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-//ProjectResourceReports provides fast lookup of resources using a map, but serializes
-//to JSON as a list.
+// ProjectResourceReports provides fast lookup of resources using a map, but serializes
+// to JSON as a list.
 type ProjectResourceReports map[string]*ProjectResourceReport
 
-//MarshalJSON implements the json.Marshaler interface.
+// MarshalJSON implements the json.Marshaler interface.
 func (r ProjectResourceReports) MarshalJSON() ([]byte, error) {
 	//serialize with ordered keys to ensure testcase stability
 	names := make([]string, 0, len(r))
@@ -134,7 +134,7 @@ func (r ProjectResourceReports) MarshalJSON() ([]byte, error) {
 	return json.Marshal(list)
 }
 
-//UnmarshalJSON implements the json.Unmarshaler interface
+// UnmarshalJSON implements the json.Unmarshaler interface
 func (r *ProjectResourceReports) UnmarshalJSON(b []byte) error {
 	tmp := make([]*ProjectResourceReport, 0)
 	err := json.Unmarshal(b, &tmp)
@@ -149,11 +149,11 @@ func (r *ProjectResourceReports) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-//ProjectRateLimitReports provides fast lookup of resources using a map, but serializes
-//to JSON as a list.
+// ProjectRateLimitReports provides fast lookup of resources using a map, but serializes
+// to JSON as a list.
 type ProjectRateLimitReports map[string]*ProjectRateLimitReport
 
-//MarshalJSON implements the json.Marshaler interface.
+// MarshalJSON implements the json.Marshaler interface.
 func (r ProjectRateLimitReports) MarshalJSON() ([]byte, error) {
 	names := make([]string, 0, len(r))
 	for name := range r {
@@ -167,7 +167,7 @@ func (r ProjectRateLimitReports) MarshalJSON() ([]byte, error) {
 	return json.Marshal(list)
 }
 
-//UnmarshalJSON implements the json.Unmarshaler interface.
+// UnmarshalJSON implements the json.Unmarshaler interface.
 func (r *ProjectRateLimitReports) UnmarshalJSON(b []byte) error {
 	tmp := make([]*ProjectRateLimitReport, 0)
 	err := json.Unmarshal(b, &tmp)

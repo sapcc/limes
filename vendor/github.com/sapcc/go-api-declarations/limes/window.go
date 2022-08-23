@@ -26,13 +26,13 @@ import (
 	"strconv"
 )
 
-//Window is the size (in nanoseconds) of the time window that is considered
-//when enforcing a rate limit. For example, a rate limit of "10 per second" has
-//a limit of 10 and a window of 1 second.
+// Window is the size (in nanoseconds) of the time window that is considered
+// when enforcing a rate limit. For example, a rate limit of "10 per second" has
+// a limit of 10 and a window of 1 second.
 //
-//This type is very similar to time.Duration, but does not allow negative
-//values and uses a different parsing logic that does not allow phrases with
-//multiple units like time.Duration does (e.g. "2h30m").
+// This type is very similar to time.Duration, but does not allow negative
+// values and uses a different parsing logic that does not allow phrases with
+// multiple units like time.Duration does (e.g. "2h30m").
 type Window uint64
 
 const (
@@ -55,7 +55,7 @@ var windowUnits = map[string]Window{
 
 var windowFormatRx = regexp.MustCompile(`^\s*([0-9]+)\s*([A-Za-z]+)$`)
 
-//MustParseWindow is like ParseWindow, but panics on error. This should only be used for compile-time constants.
+// MustParseWindow is like ParseWindow, but panics on error. This should only be used for compile-time constants.
 func MustParseWindow(input string) Window {
 	w, err := ParseWindow(input)
 	if err != nil {
@@ -64,7 +64,7 @@ func MustParseWindow(input string) Window {
 	return w
 }
 
-//ParseWindow parses a string representation like "1s" or "5m".
+// ParseWindow parses a string representation like "1s" or "5m".
 func ParseWindow(input string) (Window, error) {
 	if input == "" {
 		return Window(0), nil
@@ -85,7 +85,7 @@ func ParseWindow(input string) (Window, error) {
 	return Window(number) * multiplier, nil
 }
 
-//String returns the optimal string representation for this window.
+// String returns the optimal string representation for this window.
 func (w Window) String() string {
 	if w == 0 {
 		return ""
@@ -104,7 +104,7 @@ func (w Window) String() string {
 	return shortest
 }
 
-//MarshalJSON implements the json.Marshaler interface.
+// MarshalJSON implements the json.Marshaler interface.
 func (w Window) MarshalJSON() ([]byte, error) {
 	repr := w.String()
 	if repr == "" {
@@ -113,7 +113,7 @@ func (w Window) MarshalJSON() ([]byte, error) {
 	return []byte(fmt.Sprintf("%q", repr)), nil
 }
 
-//UnmarshalJSON implements the json.Unmarshaler interface.
+// UnmarshalJSON implements the json.Unmarshaler interface.
 func (w *Window) UnmarshalJSON(buf []byte) error {
 	var s string
 	err := json.Unmarshal(buf, &s)
@@ -127,8 +127,8 @@ func (w *Window) UnmarshalJSON(buf []byte) error {
 	return err
 }
 
-//UnmarshalYAML implements the yaml.Unmarshaler interface. This method validates
-//that windows in the config file are valid.
+// UnmarshalYAML implements the yaml.Unmarshaler interface. This method validates
+// that windows in the config file are valid.
 func (w *Window) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	var s string
 	err := unmarshal(&s)

@@ -24,8 +24,8 @@ import (
 	"sort"
 )
 
-//ClusterReport contains aggregated data about resource usage in a cluster.
-//It is returned by GET endpoints for clusters.
+// ClusterReport contains aggregated data about resource usage in a cluster.
+// It is returned by GET endpoints for clusters.
 type ClusterReport struct {
 	ID           string                `json:"id"`
 	Services     ClusterServiceReports `json:"services"`
@@ -33,8 +33,8 @@ type ClusterReport struct {
 	MinScrapedAt *int64                `json:"min_scraped_at,omitempty"`
 }
 
-//ClusterServiceReport is a substructure of ClusterReport containing data for
-//a single backend service.
+// ClusterServiceReport is a substructure of ClusterReport containing data for
+// a single backend service.
 type ClusterServiceReport struct {
 	ServiceInfo
 	Resources         ClusterResourceReports  `json:"resources"`
@@ -45,8 +45,8 @@ type ClusterServiceReport struct {
 	MinRatesScrapedAt *int64                  `json:"min_rates_scraped_at,omitempty"`
 }
 
-//ClusterResourceReport is a substructure of ClusterReport containing data for
-//a single resource.
+// ClusterResourceReport is a substructure of ClusterReport containing data for
+// a single resource.
 type ClusterResourceReport struct {
 	//Several fields are pointers to values to enable precise control over which fields are rendered in output.
 	ResourceInfo
@@ -60,8 +60,8 @@ type ClusterResourceReport struct {
 	Subcapacities json.RawMessage                `json:"subcapacities,omitempty"`
 }
 
-//ClusterAvailabilityZoneReport is a substructure of ClusterResourceReport containing
-//capacity and usage data for a single resource in an availability zone.
+// ClusterAvailabilityZoneReport is a substructure of ClusterResourceReport containing
+// capacity and usage data for a single resource in an availability zone.
 type ClusterAvailabilityZoneReport struct {
 	Name        string `json:"name"`
 	Capacity    uint64 `json:"capacity"`
@@ -76,11 +76,11 @@ type ClusterRateLimitReport struct {
 	Window Window `json:"window,omitempty"`
 }
 
-//ClusterServiceReports provides fast lookup of services by service type, but
-//serializes to JSON as a list.
+// ClusterServiceReports provides fast lookup of services by service type, but
+// serializes to JSON as a list.
 type ClusterServiceReports map[string]*ClusterServiceReport
 
-//MarshalJSON implements the json.Marshaler interface.
+// MarshalJSON implements the json.Marshaler interface.
 func (s ClusterServiceReports) MarshalJSON() ([]byte, error) {
 	//serialize with ordered keys to ensure testcase stability
 	types := make([]string, 0, len(s))
@@ -95,7 +95,7 @@ func (s ClusterServiceReports) MarshalJSON() ([]byte, error) {
 	return json.Marshal(list)
 }
 
-//UnmarshalJSON implements the json.Unmarshaler interface
+// UnmarshalJSON implements the json.Unmarshaler interface
 func (s *ClusterServiceReports) UnmarshalJSON(b []byte) error {
 	tmp := make([]*ClusterServiceReport, 0)
 	err := json.Unmarshal(b, &tmp)
@@ -110,11 +110,11 @@ func (s *ClusterServiceReports) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-//ClusterResourceReports provides fast lookup of resources by resource name,
-//but serializes to JSON as a list.
+// ClusterResourceReports provides fast lookup of resources by resource name,
+// but serializes to JSON as a list.
 type ClusterResourceReports map[string]*ClusterResourceReport
 
-//MarshalJSON implements the json.Marshaler interface.
+// MarshalJSON implements the json.Marshaler interface.
 func (r ClusterResourceReports) MarshalJSON() ([]byte, error) {
 	//serialize with ordered keys to ensure testcase stability
 	names := make([]string, 0, len(r))
@@ -129,7 +129,7 @@ func (r ClusterResourceReports) MarshalJSON() ([]byte, error) {
 	return json.Marshal(list)
 }
 
-//UnmarshalJSON implements the json.Unmarshaler interface
+// UnmarshalJSON implements the json.Unmarshaler interface
 func (r *ClusterResourceReports) UnmarshalJSON(b []byte) error {
 	tmp := make([]*ClusterResourceReport, 0)
 	err := json.Unmarshal(b, &tmp)
@@ -144,11 +144,11 @@ func (r *ClusterResourceReports) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-//ClusterAvailabilityZoneReports provides fast lookup of availability zones
-//using a map, but serializes to JSON as a list.
+// ClusterAvailabilityZoneReports provides fast lookup of availability zones
+// using a map, but serializes to JSON as a list.
 type ClusterAvailabilityZoneReports map[string]*ClusterAvailabilityZoneReport
 
-//MarshalJSON implements the json.Marshaler interface.
+// MarshalJSON implements the json.Marshaler interface.
 func (r ClusterAvailabilityZoneReports) MarshalJSON() ([]byte, error) {
 	//serialize with ordered keys to ensure testcase stability
 	names := make([]string, 0, len(r))
@@ -163,7 +163,7 @@ func (r ClusterAvailabilityZoneReports) MarshalJSON() ([]byte, error) {
 	return json.Marshal(list)
 }
 
-//UnmarshalJSON implements the json.Unmarshaler interface
+// UnmarshalJSON implements the json.Unmarshaler interface
 func (r *ClusterAvailabilityZoneReports) UnmarshalJSON(b []byte) error {
 	tmp := make([]*ClusterAvailabilityZoneReport, 0)
 	err := json.Unmarshal(b, &tmp)
@@ -178,11 +178,11 @@ func (r *ClusterAvailabilityZoneReports) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-//ClusterRateLimitReports provides fast lookup of global rate limits using a map, but serializes
-//to JSON as a list.
+// ClusterRateLimitReports provides fast lookup of global rate limits using a map, but serializes
+// to JSON as a list.
 type ClusterRateLimitReports map[string]*ClusterRateLimitReport
 
-//MarshalJSON implements the json.Marshaler interface.
+// MarshalJSON implements the json.Marshaler interface.
 func (r ClusterRateLimitReports) MarshalJSON() ([]byte, error) {
 	names := make([]string, 0, len(r))
 	for name := range r {
@@ -196,7 +196,7 @@ func (r ClusterRateLimitReports) MarshalJSON() ([]byte, error) {
 	return json.Marshal(list)
 }
 
-//UnmarshalJSON implements the json.Unmarshaler interface.
+// UnmarshalJSON implements the json.Unmarshaler interface.
 func (r *ClusterRateLimitReports) UnmarshalJSON(b []byte) error {
 	tmp := make([]*ClusterRateLimitReport, 0)
 	err := json.Unmarshal(b, &tmp)

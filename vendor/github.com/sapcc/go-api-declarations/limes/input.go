@@ -24,30 +24,30 @@ import (
 	"sort"
 )
 
-//QuotaRequest contains new quota values for resources in multiple services.
-//The map key is the service type. This type is used to serialize JSON
-//request bodies in PUT requests on domains and projects.
+// QuotaRequest contains new quota values for resources in multiple services.
+// The map key is the service type. This type is used to serialize JSON
+// request bodies in PUT requests on domains and projects.
 type QuotaRequest map[string]ServiceQuotaRequest
 
-//ServiceQuotaRequest contains new quota values for the resources or rate limits in a single
-//service. This type appears in type QuotaRequest.
+// ServiceQuotaRequest contains new quota values for the resources or rate limits in a single
+// service. This type appears in type QuotaRequest.
 type ServiceQuotaRequest struct {
 	Resources ResourceQuotaRequest
 	Rates     map[string]RateLimitRequest // key = rate name
 }
 
-//ResourceQuotaRequest contains new quota values for resources.
-//The map key is the resource name.
+// ResourceQuotaRequest contains new quota values for resources.
+// The map key is the resource name.
 type ResourceQuotaRequest map[string]ValueWithUnit
 
-//RateLimitRequest contains new values for a single rate limit.
-//It appears in type RateLimitRequests.
+// RateLimitRequest contains new values for a single rate limit.
+// It appears in type RateLimitRequests.
 type RateLimitRequest struct {
 	Limit  uint64
 	Window Window
 }
 
-//MarshalJSON implements the json.Marshaler interface.
+// MarshalJSON implements the json.Marshaler interface.
 func (r QuotaRequest) MarshalJSON() ([]byte, error) {
 	type (
 		resourceQuota struct {
@@ -111,7 +111,7 @@ func (r QuotaRequest) MarshalJSON() ([]byte, error) {
 	return json.Marshal(list)
 }
 
-//UnmarshalJSON implements the json.Unmarshaler interface.
+// UnmarshalJSON implements the json.Unmarshaler interface.
 func (r *QuotaRequest) UnmarshalJSON(input []byte) error {
 	var data []struct {
 		Type      string `json:"type"`

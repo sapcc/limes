@@ -21,8 +21,8 @@ package limes
 
 import "math"
 
-//ResourceInfo contains the metadata for a resource (i.e. some thing for which
-//quota and usage values can be retrieved from a backend service).
+// ResourceInfo contains the metadata for a resource (i.e. some thing for which
+// quota and usage values can be retrieved from a backend service).
 type ResourceInfo struct {
 	Name string `json:"name"`
 	Unit Unit   `json:"unit,omitempty"`
@@ -47,15 +47,15 @@ type ResourceInfo struct {
 	ContainedIn string `json:"contained_in,omitempty"`
 }
 
-//RateInfo contains the metadata for a rate (i.e. some type of event that can
-//be rate-limited and for which there may a way to retrieve a count of past
-//events from a backend service).
+// RateInfo contains the metadata for a rate (i.e. some type of event that can
+// be rate-limited and for which there may a way to retrieve a count of past
+// events from a backend service).
 type RateInfo struct {
 	Name string `json:"name"`
 	Unit Unit   `json:"unit,omitempty"`
 }
 
-//ServiceInfo contains the metadata for a backend service.
+// ServiceInfo contains the metadata for a backend service.
 type ServiceInfo struct {
 	//Type returns the service type that the backend service for this
 	//plugin implements. This string must be identical to the type string from
@@ -69,17 +69,17 @@ type ServiceInfo struct {
 	Area string `json:"area"`
 }
 
-//BurstingMultiplier is a multiplier for quota bursting.
+// BurstingMultiplier is a multiplier for quota bursting.
 type BurstingMultiplier float64
 
-//ApplyTo returns the bursted backend quota for the given approved quota.
+// ApplyTo returns the bursted backend quota for the given approved quota.
 func (m BurstingMultiplier) ApplyTo(quota uint64) uint64 {
 	return uint64(math.Floor((1 + float64(m)) * float64(quota)))
 }
 
-//ScalingBehavior appears in type DomainResourceReport and type
-//ProjectResourceReport and describes the scaling behavior of a single
-//resource.
+// ScalingBehavior appears in type DomainResourceReport and type
+// ProjectResourceReport and describes the scaling behavior of a single
+// resource.
 type ScalingBehavior struct {
 	ScalesWithResourceName string  `json:"resource_name"`
 	ScalesWithServiceType  string  `json:"service_type"`

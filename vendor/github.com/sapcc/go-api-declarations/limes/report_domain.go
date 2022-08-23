@@ -24,16 +24,16 @@ import (
 	"sort"
 )
 
-//DomainReport contains aggregated data about resource usage in a domain.
-//It is returned by GET requests on domains.
+// DomainReport contains aggregated data about resource usage in a domain.
+// It is returned by GET requests on domains.
 type DomainReport struct {
 	UUID     string               `json:"id"`
 	Name     string               `json:"name"`
 	Services DomainServiceReports `json:"services"`
 }
 
-//DomainServiceReport is a substructure of DomainReport containing data for
-//a single backend service.
+// DomainServiceReport is a substructure of DomainReport containing data for
+// a single backend service.
 type DomainServiceReport struct {
 	ServiceInfo
 	Resources         DomainResourceReports `json:"resources"`
@@ -43,8 +43,8 @@ type DomainServiceReport struct {
 	MinRatesScrapedAt *int64                `json:"min_rates_scraped_at,omitempty"`
 }
 
-//DomainResourceReport is a substructure of DomainReport containing data for
-//a single resource.
+// DomainResourceReport is a substructure of DomainReport containing data for
+// a single resource.
 type DomainResourceReport struct {
 	//Several fields are pointers to values to enable precise control over which fields are rendered in output.
 	ResourceInfo
@@ -61,11 +61,11 @@ type DomainResourceReport struct {
 	Annotations map[string]interface{} `json:"annotations,omitempty"`
 }
 
-//DomainServiceReports provides fast lookup of services using a map, but serializes
-//to JSON as a list.
+// DomainServiceReports provides fast lookup of services using a map, but serializes
+// to JSON as a list.
 type DomainServiceReports map[string]*DomainServiceReport
 
-//MarshalJSON implements the json.Marshaler interface.
+// MarshalJSON implements the json.Marshaler interface.
 func (s DomainServiceReports) MarshalJSON() ([]byte, error) {
 	//serialize with ordered keys to ensure testcase stability
 	types := make([]string, 0, len(s))
@@ -80,7 +80,7 @@ func (s DomainServiceReports) MarshalJSON() ([]byte, error) {
 	return json.Marshal(list)
 }
 
-//UnmarshalJSON implements the json.Unmarshaler interface
+// UnmarshalJSON implements the json.Unmarshaler interface
 func (s *DomainServiceReports) UnmarshalJSON(b []byte) error {
 	tmp := make([]*DomainServiceReport, 0)
 	err := json.Unmarshal(b, &tmp)
@@ -95,11 +95,11 @@ func (s *DomainServiceReports) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
-//DomainResourceReports provides fast lookup of resources using a map, but serializes
-//to JSON as a list.
+// DomainResourceReports provides fast lookup of resources using a map, but serializes
+// to JSON as a list.
 type DomainResourceReports map[string]*DomainResourceReport
 
-//MarshalJSON implements the json.Marshaler interface.
+// MarshalJSON implements the json.Marshaler interface.
 func (r DomainResourceReports) MarshalJSON() ([]byte, error) {
 	//serialize with ordered keys to ensure testcase stability
 	names := make([]string, 0, len(r))
@@ -114,7 +114,7 @@ func (r DomainResourceReports) MarshalJSON() ([]byte, error) {
 	return json.Marshal(list)
 }
 
-//UnmarshalJSON implements the json.Unmarshaler interface
+// UnmarshalJSON implements the json.Unmarshaler interface
 func (r *DomainResourceReports) UnmarshalJSON(b []byte) error {
 	tmp := make([]*DomainResourceReport, 0)
 	err := json.Unmarshal(b, &tmp)

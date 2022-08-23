@@ -25,8 +25,8 @@ import (
 	"strings"
 )
 
-//Unit enumerates allowed values for the unit a resource's quota/usage is
-//measured in.
+// Unit enumerates allowed values for the unit a resource's quota/usage is
+// measured in.
 type Unit string
 
 const (
@@ -61,8 +61,8 @@ var allValidUnits = []Unit{
 	UnitExbibytes,
 }
 
-//UnmarshalYAML implements the yaml.Unmarshaler interface. This method validates
-//that units in the config file actually exist.
+// UnmarshalYAML implements the yaml.Unmarshaler interface. This method validates
+// that units in the config file actually exist.
 func (u *Unit) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	var s string
 	err := unmarshal(&s)
@@ -78,10 +78,10 @@ func (u *Unit) UnmarshalYAML(unmarshal func(interface{}) error) error {
 	return fmt.Errorf("unknown unit: %q", s)
 }
 
-//Base returns the base unit of this unit. For units defined as a multiple of
-//another unit, that unit is the base unit. Otherwise, the same unit and a
-//multiple of 1 is returned.
-func (u Unit) Base() (Unit, uint64) {
+// Base returns the base unit of this unit. For units defined as a multiple of
+// another unit, that unit is the base unit. Otherwise, the same unit and a
+// multiple of 1 is returned.
+func (u Unit) Base() (Unit, uint64) { //nolint:gocritic // not necessary to name the results
 	switch u {
 	case UnitKibibytes:
 		return UnitBytes, 1 << 10
@@ -100,8 +100,8 @@ func (u Unit) Base() (Unit, uint64) {
 	}
 }
 
-//Parse parses the string representation of a value with this unit (or any unit
-//that can be converted to it).
+// Parse parses the string representation of a value with this unit (or any unit
+// that can be converted to it).
 //
 //	UnitMebibytes.Parse("10 MiB") -> 10
 //	UnitMebibytes.Parse("10 GiB") -> 10240
@@ -109,7 +109,6 @@ func (u Unit) Base() (Unit, uint64) {
 //	UnitMebibytes.Parse("10")     -> returns syntax error (missing unit)
 //	UnitNone.Parse("42")          -> 42
 //	UnitNone.Parse("42 MiB")      -> returns syntax error (unexpected unit)
-//
 func (u Unit) Parse(str string) (uint64, error) {
 	//for countable resources, expect a number only
 	if u == UnitNone {
@@ -135,16 +134,16 @@ func (u Unit) Parse(str string) (uint64, error) {
 	return converted.Value, err
 }
 
-//ValueWithUnit is used to represent values with units in subresources.
+// ValueWithUnit is used to represent values with units in subresources.
 type ValueWithUnit struct {
 	Value uint64 `json:"value" yaml:"value"`
 	Unit  Unit   `json:"unit"  yaml:"unit"`
 }
 
-//String appends the unit (if any) to the given value. This should only be used
-//for error messages; actual UIs should be more clever about formatting values
-//(e.g. ValueWithUnit{1048576,UnitMebibytes}.String() returns "1048576 MiB"
-//where "1 TiB" would be more appropriate).
+// String appends the unit (if any) to the given value. This should only be used
+// for error messages; actual UIs should be more clever about formatting values
+// (e.g. ValueWithUnit{1048576,UnitMebibytes}.String() returns "1048576 MiB"
+// where "1 TiB" would be more appropriate).
 func (v ValueWithUnit) String() string {
 	str := strconv.FormatUint(v.Value, 10)
 	if v.Unit == UnitNone {
@@ -153,10 +152,10 @@ func (v ValueWithUnit) String() string {
 	return str + " " + string(v.Unit)
 }
 
-//ConvertTo returns an equal value in the given Unit. IncompatibleUnitsError is
-//returned if the source unit cannot be converted into the target unit.
-//FractionalValueError is returned if the conversion does not yield an integer
-//value in the new unit.
+// ConvertTo returns an equal value in the given Unit. IncompatibleUnitsError is
+// returned if the source unit cannot be converted into the target unit.
+// FractionalValueError is returned if the conversion does not yield an integer
+// value in the new unit.
 func (v ValueWithUnit) ConvertTo(u Unit) (ValueWithUnit, error) {
 	if v.Unit == u {
 		return v, nil
@@ -179,29 +178,29 @@ func (v ValueWithUnit) ConvertTo(u Unit) (ValueWithUnit, error) {
 	}, nil
 }
 
-//IncompatibleUnitsError is returned by ValueWithUnit.ConvertTo() when the
-//original and target unit are incompatible and cannot be converted into each
-//other.
+// IncompatibleUnitsError is returned by ValueWithUnit.ConvertTo() when the
+// original and target unit are incompatible and cannot be converted into each
+// other.
 type IncompatibleUnitsError struct {
 	Source Unit
 	Target Unit
 }
 
-//Error implements the error interface.
+// Error implements the error interface.
 func (e IncompatibleUnitsError) Error() string {
 	return "cannot convert value from " + e.Source.toStringForError() +
 		" to " + e.Target.toStringForError() +
 		" because units are incompatible"
 }
 
-//FractionalValueError is returned by ValueWithUnit.ConvertTo() when the
-//conversion would yield a fractional value in the target unit.
+// FractionalValueError is returned by ValueWithUnit.ConvertTo() when the
+// conversion would yield a fractional value in the target unit.
 type FractionalValueError struct {
 	Source ValueWithUnit
 	Target Unit
 }
 
-//Error implements the error interface.
+// Error implements the error interface.
 func (e FractionalValueError) Error() string {
 	return fmt.Sprintf("value of %s cannot be represented as integer number of %s",
 		e.Source.String(), e.Target,
