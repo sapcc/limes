@@ -16,7 +16,7 @@ require (
 	github.com/prometheus/common v0.37.0
 	github.com/rs/cors v1.8.2
 	github.com/sapcc/go-api-declarations v1.3.0
-	github.com/sapcc/go-bits v0.0.0-20220824084231-2569681aaf89
+	github.com/sapcc/go-bits v0.0.0-20220824125308-0be4a179e36c
 	golang.org/x/net v0.0.0-20220822230855-b0a4917ee28c
 	gopkg.in/gorp.v2 v2.2.0
 	gopkg.in/yaml.v2 v2.4.0
