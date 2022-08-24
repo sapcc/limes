@@ -226,7 +226,7 @@ func (p *v1Provider) SyncProject(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if !found {
-			http.Error(w, "no such project", 404)
+			http.Error(w, "no such project", http.StatusNotFound)
 			return
 		}
 

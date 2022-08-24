@@ -140,7 +140,7 @@ func ForbidClusterIDHeader(inner http.Handler) http.Handler {
 func RequireJSON(w http.ResponseWriter, r *http.Request, data interface{}) bool {
 	err := json.NewDecoder(r.Body).Decode(data)
 	if err != nil {
-		http.Error(w, "request body is not valid JSON: "+err.Error(), 400)
+		http.Error(w, "request body is not valid JSON: "+err.Error(), http.StatusBadRequest)
 		return false
 	}
 	return true
@@ -162,7 +162,7 @@ func (p *v1Provider) Path(elements ...string) string {
 func (p *v1Provider) FindDomainFromRequest(w http.ResponseWriter, r *http.Request) *db.Domain {
 	domainUUID := mux.Vars(r)["domain_id"]
 	if domainUUID == "" {
-		http.Error(w, "domain ID missing", 400)
+		http.Error(w, "domain ID missing", http.StatusBadRequest)
 		return nil
 	}
 
@@ -172,7 +172,7 @@ func (p *v1Provider) FindDomainFromRequest(w http.ResponseWriter, r *http.Reques
 	)
 	switch {
 	case err == sql.ErrNoRows:
-		http.Error(w, "no such domain (if it was just created, try to POST /domains/discover)", 404)
+		http.Error(w, "no such domain (if it was just created, try to POST /domains/discover)", http.StatusNotFound)
 		return nil
 	case respondwith.ErrorText(w, err):
 		return nil
@@ -190,7 +190,7 @@ func (p *v1Provider) FindProjectFromRequest(w http.ResponseWriter, r *http.Reque
 			"no such project (if it was just created, try to POST /domains/%s/projects/discover)",
 			html.EscapeString(mux.Vars(r)["domain_id"]),
 		)
-		http.Error(w, msg, 404)
+		http.Error(w, msg, http.StatusNotFound)
 		return nil
 	}
 	return project
@@ -202,7 +202,7 @@ func (p *v1Provider) FindProjectFromRequest(w http.ResponseWriter, r *http.Reque
 func (p *v1Provider) FindProjectFromRequestIfExists(w http.ResponseWriter, r *http.Request, domain *db.Domain) (project *db.Project, ok bool) {
 	projectUUID := mux.Vars(r)["project_id"]
 	if projectUUID == "" {
-		http.Error(w, "project ID missing", 400)
+		http.Error(w, "project ID missing", http.StatusBadRequest)
 		return nil, false
 	}
 
@@ -212,7 +212,7 @@ func (p *v1Provider) FindProjectFromRequestIfExists(w http.ResponseWriter, r *ht
 	case err == sql.ErrNoRows:
 		return nil, true
 	case err == nil && domain.ID != project.DomainID:
-		http.Error(w, "no such project", 404)
+		http.Error(w, "no such project", http.StatusNotFound)
 		return nil, false
 	case respondwith.ErrorText(w, err):
 		return nil, false
