@@ -60,4 +60,4 @@ require (
 	google.golang.org/protobuf v1.28.1 // indirect
 )
 
-replace github.com/gophercloud/gophercloud => github.com/sapcc/gophercloud v0.0.0-20220801091325-3b718810fdb6
+replace github.com/gophercloud/gophercloud => github.com/sapcc/gophercloud v0.0.0-20220805090654-924effc2c6de
