@@ -6,7 +6,7 @@ require (
 	github.com/databus23/goslo.policy v0.0.0-20210929125152-81bf2876dbdb
 	github.com/dlmiddlecote/sqlstats v1.0.2
 	github.com/gofrs/uuid v4.2.0+incompatible
-	github.com/gophercloud/gophercloud v0.25.0
+	github.com/gophercloud/gophercloud v1.0.0
 	github.com/gophercloud/utils v0.0.0-20220704184730-55bdbbaec4ba
 	github.com/gorilla/mux v1.8.0
 	github.com/majewsky/schwift v1.1.0
@@ -16,7 +16,7 @@ require (
 	github.com/prometheus/common v0.37.0
 	github.com/rs/cors v1.8.2
 	github.com/sapcc/go-api-declarations v1.3.0
-	github.com/sapcc/go-bits v0.0.0-20220824125308-0be4a179e36c
+	github.com/sapcc/go-bits v0.0.0-20220829144248-42b88f9c5789
 	golang.org/x/net v0.0.0-20220826154423-83b083e8dc8b
 	gopkg.in/gorp.v2 v2.2.0
 	gopkg.in/yaml.v2 v2.4.0
