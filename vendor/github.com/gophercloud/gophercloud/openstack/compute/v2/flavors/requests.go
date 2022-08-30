@@ -12,12 +12,12 @@ type ListOptsBuilder interface {
 }
 
 /*
-	AccessType maps to OpenStack's Flavor.is_public field. Although the is_public
-	field is boolean, the request options are ternary, which is why AccessType is
-	a string. The following values are allowed:
+AccessType maps to OpenStack's Flavor.is_public field. Although the is_public
+field is boolean, the request options are ternary, which is why AccessType is
+a string. The following values are allowed:
 
-	The AccessType arguement is optional, and if it is not supplied, OpenStack
-	returns the PublicAccess flavors.
+The AccessType arguement is optional, and if it is not supplied, OpenStack
+returns the PublicAccess flavors.
 */
 type AccessType string
 
@@ -35,12 +35,12 @@ const (
 )
 
 /*
-	ListOpts filters the results returned by the List() function.
-	For example, a flavor with a minDisk field of 10 will not be returned if you
-	specify MinDisk set to 20.
+ListOpts filters the results returned by the List() function.
+For example, a flavor with a minDisk field of 10 will not be returned if you
+specify MinDisk set to 20.
 
-	Typically, software will use the last ID of the previous call to List to set
-	the Marker for the current call.
+Typically, software will use the last ID of the previous call to List to set
+the Marker for the current call.
 */
 type ListOpts struct {
 	// ChangesSince, if provided, instructs List to return only those things which
@@ -128,6 +128,11 @@ type CreateOpts struct {
 
 	// Ephemeral is the amount of ephemeral disk space, measured in GB.
 	Ephemeral *int `json:"OS-FLV-EXT-DATA:ephemeral,omitempty"`
+
+	// Description is a free form description of the flavor. Limited to
+	// 65535 characters in length. Only printable characters are allowed.
+	// New in version 2.55
+	Description string `json:"description,omitempty"`
 }
 
 // ToFlavorCreateMap constructs a request body from CreateOpts.
