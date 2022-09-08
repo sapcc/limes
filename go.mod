@@ -16,7 +16,7 @@ require (
 	github.com/prometheus/common v0.37.0
 	github.com/rs/cors v1.8.2
 	github.com/sapcc/go-api-declarations v1.3.0
-	github.com/sapcc/go-bits v0.0.0-20220829144248-42b88f9c5789
+	github.com/sapcc/go-bits v0.0.0-20220908182641-3f500a62345d
 	golang.org/x/net v0.0.0-20220906165146-f3363e06e74c
 	gopkg.in/gorp.v2 v2.2.0
 	gopkg.in/yaml.v2 v2.4.0
@@ -46,7 +46,7 @@ require (
 	github.com/poy/onpar v1.1.2 // indirect
 	github.com/prometheus/client_model v0.2.0 // indirect
 	github.com/prometheus/procfs v0.8.0 // indirect
-	github.com/rabbitmq/amqp091-go v1.4.0 // indirect
+	github.com/rabbitmq/amqp091-go v1.5.0 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20200313005456-10cdbea86bc0 // indirect
 	github.com/sergi/go-diff v1.2.0 // indirect
 	github.com/tchap/go-patricia/v2 v2.3.1 // indirect
