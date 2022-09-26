@@ -23,13 +23,6 @@
               "usage": 1
             },
             {
-              "name": "external_things",
-              "externally_managed": true,
-              "quota": 1,
-              "usable_quota": 1,
-              "usage": 0
-            },
-            {
               "name": "things",
               "quota": 10,
               "usable_quota": 10,
@@ -95,24 +88,13 @@
               "usage": 1
             },
             {
-              "name": "external_things",
-              "externally_managed": true,
-              "quota": 1,
-              "usable_quota": 1,
-              "usage": 0,
-              "annotations": {
-                "annotated": true,
-                "text": "this annotation appears on shared/external_things of project dresden only"
-              }
-            },
-            {
               "name": "things",
               "quota": 10,
               "usable_quota": 10,
               "usage": 2,
               "annotations": {
                 "annotated": true,
-                "text": "this annotation appears on shared things of domain germany and project dresden"
+                "text": "this annotation appears on shared/things of project dresden only"
               }
             }
           ],

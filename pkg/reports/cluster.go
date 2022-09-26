@@ -132,9 +132,6 @@ func GetCluster(cluster *core.Cluster, dbi db.Interface, filter Filter) (*limes.
 			}
 
 			if resource != nil {
-				if projectsQuota != nil && resource.ExternallyManaged && !resource.NoQuota {
-					resource.DomainsQuota = projectsQuota
-				}
 				if usage != nil {
 					resource.Usage = *usage
 				}
@@ -166,7 +163,7 @@ func GetCluster(cluster *core.Cluster, dbi db.Interface, filter Filter) (*limes.
 			}
 
 			_, resource := findInClusterReport(cluster, report, serviceType, resourceName)
-			if resource != nil && quota != nil && !resource.ExternallyManaged && !resource.NoQuota {
+			if resource != nil && quota != nil && !resource.NoQuota {
 				resource.DomainsQuota = quota
 			}
 

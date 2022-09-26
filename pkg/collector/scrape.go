@@ -23,7 +23,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"math"
 	"time"
 
 	"github.com/gophercloud/gophercloud"
@@ -230,16 +229,6 @@ func (c *Collector) writeScrapeResult(project core.KeystoneProject, projectID in
 			res.DesiredBackendQuota = nil
 		} else {
 			res.BackendQuota = &data.Quota
-			if resInfo.ExternallyManaged {
-				if data.Quota >= 0 {
-					quota := uint64(data.Quota)
-					res.Quota = &quota
-				} else {
-					infQuota := uint64(math.MaxUint64)
-					res.Quota = &infQuota
-				}
-				res.DesiredBackendQuota = res.Quota
-			}
 		}
 
 		if len(data.Subresources) == 0 {
@@ -293,15 +282,6 @@ func (c *Collector) writeScrapeResult(project core.KeystoneProject, projectID in
 		if resMetadata.NoQuota {
 			res.Quota = nil
 			res.BackendQuota = nil
-		} else if resMetadata.ExternallyManaged {
-			if data.Quota >= 0 {
-				quota := uint64(data.Quota)
-				res.Quota = &quota
-			} else {
-				infQuota := uint64(math.MaxUint64)
-				res.Quota = &infQuota
-			}
-			res.DesiredBackendQuota = res.Quota
 		} else {
 			if *res.Quota == 0 && data.Quota > 0 && uint64(data.Quota) == resMetadata.AutoApproveInitialQuota {
 				res.Quota = &resMetadata.AutoApproveInitialQuota

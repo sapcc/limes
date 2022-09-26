@@ -36,7 +36,7 @@
               "usage": 2,
               "annotations": {
                 "annotated": true,
-                "text": "this annotation appears on shared things of domain germany and project dresden"
+                "text": "this annotation appears on shared/things of project dresden only"
               }
             }
           ],

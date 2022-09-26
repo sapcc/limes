@@ -187,18 +187,6 @@ func GetDomains(cluster *core.Cluster, domainID *int64, dbi db.Interface, filter
 		return nil, err
 	}
 
-	//for externally managed resources, set domain quota = sum(project quotas)
-	//statically to display consistent data
-	for _, domain := range domains {
-		for _, srv := range domain.Services {
-			for _, res := range srv.Resources {
-				if res.ExternallyManaged && !res.NoQuota {
-					res.DomainQuota = res.ProjectsQuota
-				}
-			}
-		}
-	}
-
 	//flatten result (with stable order to keep the tests happy)
 	uuids := make([]string, 0, len(domains))
 	for uuid := range domains {

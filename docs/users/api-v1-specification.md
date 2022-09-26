@@ -504,8 +504,6 @@ Besides `unit`, resources may bear the following informational fields:
 * `category`: If present, UIs can use the string value in this field to divide resources from the same service into
   logical groups for presentational purposes. For example, the service type `network` advertises resources with the
   category strings `networking` and `loadbalancing`, since these topics are cleanly separable from each other.
-* `externally_managed`: If `true`, quota for this resource is managed by some other system than Limes. Attempts to
-  set project/domain quota via the Limes API will be rejected.
 * `scales_with`: An object containing the fields `service_type`, `resource_name` and `factor`. If given, this resource
   *scales with* another resource which is identified by the `scales_with.service_type` and `scales_with.resource_name`
   fields. Following relations are only provided as a suggestion to user agents; they are not evaluated by Limes. When

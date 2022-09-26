@@ -107,8 +107,6 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 		},
 	}
 
-	quotaPlugins["shared"].(*test.Plugin).WithExternallyManagedResource = true
-
 	var clusterConfig core.ClusterConfiguration
 	if clusterName == "west" {
 		clusterConfig.Services = []core.ServiceConfiguration{
@@ -235,10 +233,10 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 			{
 				Compiled: core.ResourceBehavior{
 					MaxBurstMultiplier: limes.BurstingMultiplier(math.Inf(+1)),
-					FullResourceNameRx: regexp.MustCompile("^shared/external_things$"),
+					FullResourceNameRx: regexp.MustCompile("^shared/things$"),
 					ScopeRx:            regexp.MustCompile("^germany/dresden$"),
 					Annotations: map[string]interface{}{
-						"text": "this annotation appears on shared/external_things of project dresden only",
+						"text": "this annotation appears on shared/things of project dresden only",
 					},
 				},
 			},
@@ -572,43 +570,6 @@ func Test_DomainOperations(t *testing.T) {
 						"resources": []assert.JSONObject{
 							//should fail because project quota sum exceeds new quota
 							{"name": "capacity", "quota": 1},
-						},
-					},
-				},
-			},
-		},
-	}.Check(t, router)
-	assert.HTTPRequest{
-		Method:       "PUT",
-		Path:         "/v1/domains/uuid-for-germany",
-		ExpectStatus: 422,
-		ExpectBody:   assert.StringData("cannot change shared/external_things quota: resource is managed externally\n"),
-		Body: assert.JSONObject{
-			"domain": assert.JSONObject{
-				"services": []assert.JSONObject{
-					{
-						"type": "shared",
-						"resources": []assert.JSONObject{
-							//should fail because resource is externally managed, so setting quota via API is forbidden
-							{"name": "external_things", "quota": 20},
-						},
-					},
-				},
-			},
-		},
-	}.Check(t, router)
-	assert.HTTPRequest{
-		Method:       "PUT",
-		Path:         "/v1/domains/uuid-for-germany",
-		ExpectStatus: 202,
-		Body: assert.JSONObject{
-			"domain": assert.JSONObject{
-				"services": []assert.JSONObject{
-					{
-						"type": "shared",
-						"resources": []assert.JSONObject{
-							//should succeed because quota does not change
-							{"name": "external_things", "quota": 2},
 						},
 					},
 				},

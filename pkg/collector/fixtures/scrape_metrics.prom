@@ -2,14 +2,13 @@
 # TYPE limes_cluster_capacity gauge
 limes_cluster_capacity{os_cluster="west",resource="capacity",service="unittest"} 0
 limes_cluster_capacity{os_cluster="west",resource="capacity_portion",service="unittest"} 0
-limes_cluster_capacity{os_cluster="west",resource="external_things",service="unittest"} 0
 limes_cluster_capacity{os_cluster="west",resource="things",service="unittest"} 0
 # HELP limes_newest_scraped_at Newest (i.e. largest) scraped_at timestamp for any project given a certain service in a certain OpenStack cluster.
 # TYPE limes_newest_scraped_at gauge
-limes_newest_scraped_at{os_cluster="west",service="unittest",service_name=""} 36
+limes_newest_scraped_at{os_cluster="west",service="unittest",service_name=""} 24
 # HELP limes_oldest_scraped_at Oldest (i.e. smallest) scraped_at timestamp for any project given a certain service in a certain OpenStack cluster.
 # TYPE limes_oldest_scraped_at gauge
-limes_oldest_scraped_at{os_cluster="west",service="unittest",service_name=""} 34
+limes_oldest_scraped_at{os_cluster="west",service="unittest",service_name=""} 22
 # HELP limes_plugin_metrics_ok Whether quota plugin metrics were rendered successfully for a particular project service. Only present when the project service emits metrics.
 # TYPE limes_plugin_metrics_ok gauge
 limes_plugin_metrics_ok{domain="germany",domain_id="uuid-for-germany",os_cluster="west",project="berlin",project_id="uuid-for-berlin",service="unittest"} 1
@@ -17,10 +16,8 @@ limes_plugin_metrics_ok{domain="germany",domain_id="uuid-for-germany",os_cluster
 # HELP limes_project_backendquota Actual quota of a Limes resource for an OpenStack project.
 # TYPE limes_project_backendquota gauge
 limes_project_backendquota{domain="germany",domain_id="uuid-for-germany",os_cluster="west",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="unittest"} 40
-limes_project_backendquota{domain="germany",domain_id="uuid-for-germany",os_cluster="west",project="berlin",project_id="uuid-for-berlin",resource="external_things",service="unittest"} 10
 limes_project_backendquota{domain="germany",domain_id="uuid-for-germany",os_cluster="west",project="berlin",project_id="uuid-for-berlin",resource="things",service="unittest"} 13
 limes_project_backendquota{domain="germany",domain_id="uuid-for-germany",os_cluster="west",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="unittest"} 48
-limes_project_backendquota{domain="germany",domain_id="uuid-for-germany",os_cluster="west",project="dresden",project_id="uuid-for-dresden",resource="external_things",service="unittest"} 10
 limes_project_backendquota{domain="germany",domain_id="uuid-for-germany",os_cluster="west",project="dresden",project_id="uuid-for-dresden",resource="things",service="unittest"} 15
 # HELP limes_project_physical_usage Actual (physical) usage of a Limes resource for an OpenStack project.
 # TYPE limes_project_physical_usage gauge
@@ -29,26 +26,21 @@ limes_project_physical_usage{domain="germany",domain_id="uuid-for-germany",os_cl
 # HELP limes_project_quota Assigned quota of a Limes resource for an OpenStack project.
 # TYPE limes_project_quota gauge
 limes_project_quota{domain="germany",domain_id="uuid-for-germany",os_cluster="west",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="unittest"} 40
-limes_project_quota{domain="germany",domain_id="uuid-for-germany",os_cluster="west",project="berlin",project_id="uuid-for-berlin",resource="external_things",service="unittest"} 10
 limes_project_quota{domain="germany",domain_id="uuid-for-germany",os_cluster="west",project="berlin",project_id="uuid-for-berlin",resource="things",service="unittest"} 13
 limes_project_quota{domain="germany",domain_id="uuid-for-germany",os_cluster="west",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="unittest"} 40
-limes_project_quota{domain="germany",domain_id="uuid-for-germany",os_cluster="west",project="dresden",project_id="uuid-for-dresden",resource="external_things",service="unittest"} 10
 limes_project_quota{domain="germany",domain_id="uuid-for-germany",os_cluster="west",project="dresden",project_id="uuid-for-dresden",resource="things",service="unittest"} 13
 # HELP limes_project_usage Actual (logical) usage of a Limes resource for an OpenStack project.
 # TYPE limes_project_usage gauge
 limes_project_usage{domain="germany",domain_id="uuid-for-germany",os_cluster="west",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="unittest"} 20
 limes_project_usage{domain="germany",domain_id="uuid-for-germany",os_cluster="west",project="berlin",project_id="uuid-for-berlin",resource="capacity_portion",service="unittest"} 5
-limes_project_usage{domain="germany",domain_id="uuid-for-germany",os_cluster="west",project="berlin",project_id="uuid-for-berlin",resource="external_things",service="unittest"} 0
 limes_project_usage{domain="germany",domain_id="uuid-for-germany",os_cluster="west",project="berlin",project_id="uuid-for-berlin",resource="things",service="unittest"} 5
 limes_project_usage{domain="germany",domain_id="uuid-for-germany",os_cluster="west",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="unittest"} 20
 limes_project_usage{domain="germany",domain_id="uuid-for-germany",os_cluster="west",project="dresden",project_id="uuid-for-dresden",resource="capacity_portion",service="unittest"} 5
-limes_project_usage{domain="germany",domain_id="uuid-for-germany",os_cluster="west",project="dresden",project_id="uuid-for-dresden",resource="external_things",service="unittest"} 0
 limes_project_usage{domain="germany",domain_id="uuid-for-germany",os_cluster="west",project="dresden",project_id="uuid-for-dresden",resource="things",service="unittest"} 5
 # HELP limes_unit_multiplier Conversion factor that a value of this resource must be multiplied with to obtain the base unit (e.g. bytes). For use with Grafana when only the base unit can be configured because of templating.
 # TYPE limes_unit_multiplier gauge
 limes_unit_multiplier{resource="capacity",service="unittest"} 1
 limes_unit_multiplier{resource="capacity_portion",service="unittest"} 1
-limes_unit_multiplier{resource="external_things",service="unittest"} 1
 limes_unit_multiplier{resource="things",service="unittest"} 1
 # HELP limes_unittest_capacity_usage 
 # TYPE limes_unittest_capacity_usage gauge

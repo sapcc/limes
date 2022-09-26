@@ -40,7 +40,7 @@ func ApplyBackendQuota(dbi db.Interface, cluster *core.Cluster, domain core.Keys
 
 	isRelevantResource := make(map[string]bool)
 	for _, res := range plugin.Resources() {
-		if !res.ExternallyManaged && !res.NoQuota {
+		if !res.NoQuota {
 			isRelevantResource[res.Name] = true
 		}
 	}

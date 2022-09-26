@@ -376,7 +376,7 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 			quotaValues := make(map[string]uint64)
 			if projectService, exists := projectReport.Services[srvType]; exists {
 				for resName, res := range projectService.Resources {
-					if !res.ExternallyManaged && !res.NoQuota && res.Quota != nil {
+					if !res.NoQuota && res.Quota != nil {
 						quotaValues[resName] = *res.Quota
 					}
 				}
@@ -409,14 +409,6 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 }
 
 func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limes.ResourceInfo, behavior core.ResourceBehavior, clusterRes limes.ClusterResourceReport, domRes limes.DomainResourceReport, projRes *limes.ProjectResourceReport, oldQuota, newQuota uint64) *core.QuotaValidationError {
-	//can we change this quota at all?
-	if res.ExternallyManaged {
-		return &core.QuotaValidationError{
-			Status:  http.StatusUnprocessableEntity,
-			Message: "resource is managed externally",
-		}
-	}
-
 	//check quota constraints
 	constraint := u.QuotaConstraints()[srv.Type][res.Name]
 	verr := constraint.Validate(newQuota)

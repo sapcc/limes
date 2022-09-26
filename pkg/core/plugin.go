@@ -114,9 +114,6 @@ type QuotaPlugin interface {
 	//SetQuota updates the backend service's quotas for the given project in the
 	//given domain to the values specified here. The map is guaranteed to contain
 	//values for all resources defined by Resources().
-	//
-	//An error shall be returned if a value is given in `quotas` for any resource
-	//that is ExternallyManaged.
 	SetQuota(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project KeystoneProject, quotas map[string]uint64) error
 	//Rates returns metadata for all the rates that this plugin scrapes
 	//from the backend service.

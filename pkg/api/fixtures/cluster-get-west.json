@@ -21,12 +21,6 @@
             "usage": 3
           },
           {
-            "name": "external_things",
-            "externally_managed": true,
-            "domains_quota": 3,
-            "usage": 0
-          },
-          {
             "name": "things",
             "capacity": 246,
             "domains_quota": 30,
