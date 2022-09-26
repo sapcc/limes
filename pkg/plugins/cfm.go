@@ -20,9 +20,7 @@
 package plugins
 
 import (
-	"errors"
 	"math/big"
-	"time"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/prometheus/client_golang/prometheus"
@@ -35,13 +33,13 @@ import (
 type cfmPlugin struct {
 	cfg       core.ServiceConfiguration
 	projectID string
-
-	shareserversCache        []cfmShareserver
-	shareserversCacheExpires time.Time
 }
 
 func init() {
 	core.RegisterQuotaPlugin(func(c core.ServiceConfiguration, scrapeSubresources map[string]bool) core.QuotaPlugin {
+		if !c.CFM.Authoritative {
+			logg.Fatal(`quota plugin "database" (for CFM service) does not support "authoritative = false" mode anymore`)
+		}
 		return &cfmPlugin{cfg: c}
 	})
 }
@@ -66,8 +64,6 @@ func (p *cfmPlugin) Resources() []limes.ResourceInfo {
 	return []limes.ResourceInfo{{
 		Name: "cfm_share_capacity",
 		Unit: limes.UnitBytes,
-		//need explicit permission to set quota for this service
-		ExternallyManaged: !p.cfg.CFM.Authoritative,
 	}}
 }
 
@@ -119,46 +115,10 @@ func (p *cfmPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.
 		}, "", nil
 	}
 
-	//never use the old API when we're instructed to only read quotas
-	if p.cfg.CFM.Authoritative {
-		if _, ok := err.(cfmNotFoundError); ok {
-			return map[string]core.ResourceData{"cfm_share_capacity": {Quota: 0, Usage: 0}}, "", nil
-		}
-		return nil, "", err
+	if _, ok := err.(cfmNotFoundError); ok {
+		return map[string]core.ResourceData{"cfm_share_capacity": {Quota: 0, Usage: 0}}, "", nil
 	}
-
-	return p.scrapeOld(client, project.UUID)
-}
-
-func (p *cfmPlugin) scrapeOld(client *cfmClient, projectUUID string) (result map[string]core.ResourceData, _ string, err error) {
-	//cache the result of cfmListShareservers(), it's mildly expensive
-	now := time.Now()
-	if p.shareserversCache == nil || p.shareserversCacheExpires.Before(now) {
-		shareservers, err := client.ListShareservers()
-		if err != nil {
-			return nil, "", err
-		}
-		p.shareserversCache = shareservers
-		p.shareserversCacheExpires = now.Add(5 * time.Minute)
-	}
-	shareservers := p.shareserversCache
-
-	resultCfmShareCapacity := core.ResourceData{Quota: 0, Usage: 0}
-	for _, shareserver := range shareservers {
-		if shareserver.ProjectUUID != projectUUID {
-			continue
-		}
-
-		shareserverDetailed, err := client.GetShareserver(shareserver.DetailsURL)
-		if err != nil {
-			return nil, "", err
-		}
-
-		resultCfmShareCapacity.Quota += int64(shareserverDetailed.BytesUsed)
-		resultCfmShareCapacity.Usage += shareserverDetailed.BytesUsed
-	}
-
-	return map[string]core.ResourceData{"cfm_share_capacity": resultCfmShareCapacity}, "", nil
+	return nil, "", err
 }
 
 // IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
@@ -169,10 +129,6 @@ func (p *cfmPlugin) IsQuotaAcceptableForProject(client *gophercloud.ProviderClie
 
 // SetQuota implements the core.QuotaPlugin interface.
 func (p *cfmPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
-	if !p.cfg.CFM.Authoritative {
-		return errors.New("the database/cfm_share_capacity resource is externally managed")
-	}
-
 	client, err := newCFMClient(provider, eo, p.projectID)
 	if err != nil {
 		return err
