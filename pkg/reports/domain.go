@@ -56,7 +56,6 @@ var domainReportQuery2 = sqlext.SimplifyWhitespace(`
 
 // GetDomains returns reports for all domains in the given cluster or, if
 // domainID is non-nil, for that domain only.
-// TODO: should db be replaced with dbi?
 func GetDomains(cluster *core.Cluster, domainID *int64, dbi db.Interface, filter Filter) ([]*limes.DomainReport, error) {
 	clusterCanBurst := cluster.Config.Bursting.MaxMultiplier > 0
 
@@ -69,7 +68,7 @@ func GetDomains(cluster *core.Cluster, domainID *int64, dbi db.Interface, filter
 	domains := make(domains)
 	queryStr, joinArgs := filter.PrepareQuery(domainReportQuery1)
 	whereStr, whereArgs := db.BuildSimpleWhereClause(fields, len(joinArgs))
-	err := sqlext.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
+	err := sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		var (
 			domainUUID           string
 			domainName           string
@@ -160,7 +159,7 @@ func GetDomains(cluster *core.Cluster, domainID *int64, dbi db.Interface, filter
 	//second query: add domain quotas
 	queryStr, joinArgs = filter.PrepareQuery(domainReportQuery2)
 	whereStr, whereArgs = db.BuildSimpleWhereClause(fields, len(joinArgs))
-	err = sqlext.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
+	err = sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		var (
 			domainUUID   string
 			domainName   string

@@ -64,7 +64,6 @@ var clusterReportQuery3 = sqlext.SimplifyWhitespace(`
 `)
 
 // GetCluster returns the report for the whole cluster.
-// TODO: should db be replaced with dbi?
 func GetCluster(cluster *core.Cluster, dbi db.Interface, filter Filter) (*limes.ClusterReport, error) {
 	report := &limes.ClusterReport{
 		ID:       "current", //the actual cluster ID is now an implementation detail and not shown on the API
@@ -75,7 +74,7 @@ func GetCluster(cluster *core.Cluster, dbi db.Interface, filter Filter) (*limes.
 		//first query: collect project usage data in these clusters
 		queryStr, joinArgs := filter.PrepareQuery(clusterReportQuery1)
 		whereStr, whereArgs := db.BuildSimpleWhereClause(makeClusterFilter("d", cluster.ID), len(joinArgs))
-		err := sqlext.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
+		err := sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 			var (
 				serviceType       string
 				resourceName      *string
@@ -151,7 +150,7 @@ func GetCluster(cluster *core.Cluster, dbi db.Interface, filter Filter) (*limes.
 		//second query: collect domain quota data in these clusters
 		queryStr, joinArgs = filter.PrepareQuery(clusterReportQuery2)
 		whereStr, whereArgs = db.BuildSimpleWhereClause(makeClusterFilter("d", cluster.ID), len(joinArgs))
-		err = sqlext.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
+		err = sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 			var (
 				serviceType  string
 				resourceName *string
@@ -179,7 +178,7 @@ func GetCluster(cluster *core.Cluster, dbi db.Interface, filter Filter) (*limes.
 			queryStr = strings.Replace(queryStr, "cr.subcapacities", "''", 1)
 		}
 		whereStr, whereArgs = db.BuildSimpleWhereClause(makeClusterFilter("cs", cluster.ID), len(joinArgs))
-		err = sqlext.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
+		err = sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 			var (
 				serviceType   string
 				resourceName  *string
