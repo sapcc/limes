@@ -23,8 +23,6 @@ import (
 	"net/http"
 	"regexp"
 
-	"github.com/sapcc/limes/pkg/util"
-
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
 )
@@ -35,8 +33,6 @@ type Filter struct {
 	ServiceTypes  []string
 	ResourceNames []string
 
-	WithRates         bool
-	OnlyRates         bool
 	WithSubresources  bool
 	WithSubcapacities bool
 
@@ -55,10 +51,6 @@ func ReadFilter(r *http.Request) Filter {
 	}
 	if f.ResourceNames, ok = queryValues["resource"]; !ok {
 		f.ResourceNames = nil
-	}
-	if val, ok := queryValues["rates"]; ok {
-		f.WithRates = ok
-		f.OnlyRates = util.StringSliceContains(val, "only")
 	}
 	if _, ok := r.URL.Query()["detail"]; ok {
 		f.WithSubresources = ok

@@ -43,11 +43,7 @@ func (p *v1Provider) GetClusterRates(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	filter := reports.ReadFilter(r)
-	filter.WithRates = true
-	filter.OnlyRates = true
-
-	cluster, err := reports.GetCluster(p.Cluster, db.DB, filter)
+	cluster, err := reports.GetClusterRates(p.Cluster, db.DB, reports.ReadFilter(r))
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -72,9 +68,6 @@ func (p *v1Provider) ListProjectRates(w http.ResponseWriter, r *http.Request) {
 	}
 
 	filter := reports.ReadFilter(r)
-	filter.WithRates = true
-	filter.OnlyRates = true
-
 	stream := NewJSONListStream[*limes.ProjectReport](w, r, "projects")
 	stream.FinalizeDocument(reports.GetProjectRates(p.Cluster, *dbDomain, nil, db.DB, filter, stream.WriteItem))
 }
@@ -100,11 +93,7 @@ func (p *v1Provider) GetProjectRates(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	filter := reports.ReadFilter(r)
-	filter.WithRates = true
-	filter.OnlyRates = true
-
-	project, err := GetProjectRateReport(p.Cluster, *dbDomain, *dbProject, db.DB, filter)
+	project, err := GetProjectRateReport(p.Cluster, *dbDomain, *dbProject, db.DB, reports.ReadFilter(r))
 	if respondwith.ErrorText(w, err) {
 		return
 	}

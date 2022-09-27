@@ -39,10 +39,6 @@ func (p *v1Provider) GetCluster(w http.ResponseWriter, r *http.Request) {
 	showBasic := !token.Check("cluster:show")
 
 	filter := reports.ReadFilter(r)
-	if filter.WithRates {
-		http.Error(w, `query parameter "rates" is not supported anymore`, http.StatusBadRequest)
-		return
-	}
 	if showBasic {
 		filter.IsSubcapacityAllowed = func(serviceType, resourceName string) bool {
 			token.Context.Request["service"] = serviceType
@@ -51,7 +47,7 @@ func (p *v1Provider) GetCluster(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	cluster, err := reports.GetCluster(p.Cluster, db.DB, filter)
+	cluster, err := reports.GetClusterResources(p.Cluster, db.DB, filter)
 	if respondwith.ErrorText(w, err) {
 		return
 	}

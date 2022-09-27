@@ -44,13 +44,7 @@ func (p *v1Provider) ListDomains(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	filter := reports.ReadFilter(r)
-	if filter.WithRates {
-		http.Error(w, `query parameter "rates" is not supported anymore`, http.StatusBadRequest)
-		return
-	}
-
-	domains, err := reports.GetDomains(p.Cluster, nil, db.DB, filter)
+	domains, err := reports.GetDomains(p.Cluster, nil, db.DB, reports.ReadFilter(r))
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -70,13 +64,7 @@ func (p *v1Provider) GetDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	filter := reports.ReadFilter(r)
-	if filter.WithRates {
-		http.Error(w, `query parameter "rates" is not supported anymore`, http.StatusBadRequest)
-		return
-	}
-
-	domain, err := GetDomainReport(p.Cluster, *dbDomain, db.DB, filter)
+	domain, err := GetDomainReport(p.Cluster, *dbDomain, db.DB, reports.ReadFilter(r))
 	if respondwith.ErrorText(w, err) {
 		return
 	}

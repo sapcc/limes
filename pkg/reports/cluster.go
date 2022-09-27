@@ -38,8 +38,7 @@ var clusterReportQuery1 = sqlext.SimplifyWhitespace(`
 	       SUM(pr.quota), SUM(pr.usage),
 	       SUM(GREATEST(pr.usage - pr.quota, 0)),
 	       SUM(COALESCE(pr.physical_usage, pr.usage)), COUNT(pr.physical_usage) > 0,
-	       MIN(ps.scraped_at), MAX(ps.scraped_at),
-	       MIN(ps.rates_scraped_at), MAX(ps.rates_scraped_at)
+	       MIN(ps.scraped_at), MAX(ps.scraped_at)
 	  FROM domains d
 	  JOIN projects p ON p.domain_id = d.id
 	  JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
@@ -63,189 +62,230 @@ var clusterReportQuery3 = sqlext.SimplifyWhitespace(`
 	 WHERE %s {{AND cs.type = $service_type}}
 `)
 
-// GetCluster returns the report for the whole cluster.
-func GetCluster(cluster *core.Cluster, dbi db.Interface, filter Filter) (*limes.ClusterReport, error) {
+var clusterRateReportQuery1 = sqlext.SimplifyWhitespace(`
+	SELECT ps.type, MIN(ps.rates_scraped_at), MAX(ps.rates_scraped_at)
+	  FROM domains d
+	  JOIN projects p ON p.domain_id = d.id
+	  JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
+	 WHERE %s GROUP BY d.cluster_id, ps.type
+`)
+
+// GetClusterResources returns the resource data report for the whole cluster.
+func GetClusterResources(cluster *core.Cluster, dbi db.Interface, filter Filter) (*limes.ClusterReport, error) {
 	report := &limes.ClusterReport{
 		ID:       "current", //the actual cluster ID is now an implementation detail and not shown on the API
 		Services: make(limes.ClusterServiceReports),
 	}
 
-	if !filter.OnlyRates {
-		//first query: collect project usage data in these clusters
-		queryStr, joinArgs := filter.PrepareQuery(clusterReportQuery1)
-		whereStr, whereArgs := db.BuildSimpleWhereClause(makeClusterFilter("d", cluster.ID), len(joinArgs))
-		err := sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
-			var (
-				serviceType       string
-				resourceName      *string
-				projectsQuota     *uint64
-				usage             *uint64
-				burstUsage        *uint64
-				physicalUsage     *uint64
-				showPhysicalUsage *bool
-				minScrapedAt      *time.Time
-				maxScrapedAt      *time.Time
-				minRatesScrapedAt *time.Time
-				maxRatesScrapedAt *time.Time
-			)
-			err := rows.Scan(&serviceType, &resourceName,
-				&projectsQuota, &usage, &burstUsage,
-				&physicalUsage, &showPhysicalUsage,
-				&minScrapedAt, &maxScrapedAt,
-				&minRatesScrapedAt, &maxRatesScrapedAt)
-			if err != nil {
-				return err
-			}
-
-			service, resource := findInClusterReport(cluster, report, serviceType, resourceName)
-
-			clusterCanBurst := cluster.Config.Bursting.MaxMultiplier > 0
-
-			if service != nil {
-				if maxScrapedAt != nil {
-					val := maxScrapedAt.Unix()
-					if service.MaxScrapedAt == nil || *service.MaxScrapedAt < val {
-						service.MaxScrapedAt = &val
-					}
-				}
-				if minScrapedAt != nil {
-					val := minScrapedAt.Unix()
-					if service.MinScrapedAt == nil || *service.MinScrapedAt > val {
-						service.MinScrapedAt = &val
-					}
-				}
-				if filter.WithRates {
-					if maxRatesScrapedAt != nil {
-						val := maxRatesScrapedAt.Unix()
-						if service.MaxRatesScrapedAt == nil || *service.MaxRatesScrapedAt < val {
-							service.MaxRatesScrapedAt = &val
-						}
-					}
-					if minRatesScrapedAt != nil {
-						val := minRatesScrapedAt.Unix()
-						if service.MinRatesScrapedAt == nil || *service.MinRatesScrapedAt > val {
-							service.MinRatesScrapedAt = &val
-						}
-					}
-				}
-			}
-
-			if resource != nil {
-				if usage != nil {
-					resource.Usage = *usage
-				}
-				if clusterCanBurst && burstUsage != nil {
-					resource.BurstUsage = *burstUsage
-				}
-				if showPhysicalUsage != nil && *showPhysicalUsage {
-					resource.PhysicalUsage = physicalUsage
-				}
-			}
-			return nil
-		})
+	//first query: collect project usage data in these clusters
+	queryStr, joinArgs := filter.PrepareQuery(clusterReportQuery1)
+	whereStr, whereArgs := db.BuildSimpleWhereClause(makeClusterFilter("d", cluster.ID), len(joinArgs))
+	err := sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
+		var (
+			serviceType       string
+			resourceName      *string
+			projectsQuota     *uint64
+			usage             *uint64
+			burstUsage        *uint64
+			physicalUsage     *uint64
+			showPhysicalUsage *bool
+			minScrapedAt      *time.Time
+			maxScrapedAt      *time.Time
+		)
+		err := rows.Scan(&serviceType, &resourceName,
+			&projectsQuota, &usage, &burstUsage,
+			&physicalUsage, &showPhysicalUsage,
+			&minScrapedAt, &maxScrapedAt)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
-		//second query: collect domain quota data in these clusters
-		queryStr, joinArgs = filter.PrepareQuery(clusterReportQuery2)
-		whereStr, whereArgs = db.BuildSimpleWhereClause(makeClusterFilter("d", cluster.ID), len(joinArgs))
-		err = sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
-			var (
-				serviceType  string
-				resourceName *string
-				quota        *uint64
-			)
-			err := rows.Scan(&serviceType, &resourceName, &quota)
-			if err != nil {
-				return err
-			}
+		service, resource := findInClusterReport(cluster, report, serviceType, resourceName)
 
-			_, resource := findInClusterReport(cluster, report, serviceType, resourceName)
-			if resource != nil && quota != nil && !resource.NoQuota {
-				resource.DomainsQuota = quota
-			}
+		clusterCanBurst := cluster.Config.Bursting.MaxMultiplier > 0
 
-			return nil
-		})
+		if service != nil {
+			if maxScrapedAt != nil {
+				val := maxScrapedAt.Unix()
+				if service.MaxScrapedAt == nil || *service.MaxScrapedAt < val {
+					service.MaxScrapedAt = &val
+				}
+			}
+			if minScrapedAt != nil {
+				val := minScrapedAt.Unix()
+				if service.MinScrapedAt == nil || *service.MinScrapedAt > val {
+					service.MinScrapedAt = &val
+				}
+			}
+		}
+
+		if resource != nil {
+			if usage != nil {
+				resource.Usage = *usage
+			}
+			if clusterCanBurst && burstUsage != nil {
+				resource.BurstUsage = *burstUsage
+			}
+			if showPhysicalUsage != nil && *showPhysicalUsage {
+				resource.PhysicalUsage = physicalUsage
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	//second query: collect domain quota data in these clusters
+	queryStr, joinArgs = filter.PrepareQuery(clusterReportQuery2)
+	whereStr, whereArgs = db.BuildSimpleWhereClause(makeClusterFilter("d", cluster.ID), len(joinArgs))
+	err = sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
+		var (
+			serviceType  string
+			resourceName *string
+			quota        *uint64
+		)
+		err := rows.Scan(&serviceType, &resourceName, &quota)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
-		//third query: collect capacity data for these clusters
-		queryStr, joinArgs = filter.PrepareQuery(clusterReportQuery3)
-		if !filter.WithSubcapacities {
-			queryStr = strings.Replace(queryStr, "cr.subcapacities", "''", 1)
+		_, resource := findInClusterReport(cluster, report, serviceType, resourceName)
+		if resource != nil && quota != nil && !resource.NoQuota {
+			resource.DomainsQuota = quota
 		}
-		whereStr, whereArgs = db.BuildSimpleWhereClause(makeClusterFilter("cs", cluster.ID), len(joinArgs))
-		err = sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
-			var (
-				serviceType   string
-				resourceName  *string
-				rawCapacity   *uint64
-				capacityPerAZ *string
-				subcapacities *string
-				scrapedAt     time.Time
-			)
-			err := rows.Scan(&serviceType, &resourceName, &rawCapacity,
-				&capacityPerAZ, &subcapacities, &scrapedAt)
-			if err != nil {
-				return err
-			}
 
-			_, resource := findInClusterReport(cluster, report, serviceType, resourceName)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
 
-			if resource != nil {
-				overcommitFactor := cluster.BehaviorForResource(serviceType, *resourceName, "").OvercommitFactor
-				if overcommitFactor == 0 {
-					resource.Capacity = rawCapacity
-				} else {
-					resource.RawCapacity = rawCapacity
-					capacity := uint64(float64(*rawCapacity) * overcommitFactor)
-					resource.Capacity = &capacity
-				}
-				if subcapacities != nil && *subcapacities != "" && filter.IsSubcapacityAllowed(serviceType, *resourceName) {
-					resource.Subcapacities = json.RawMessage(*subcapacities)
-				}
-				if capacityPerAZ != nil && *capacityPerAZ != "" {
-					azReports, err := getClusterAZReports(*capacityPerAZ, overcommitFactor)
-					if err != nil {
-						return err
-					}
-					resource.CapacityPerAZ = azReports
-				}
-			}
-
-			scrapedAtUnix := scrapedAt.Unix()
-			if report.MaxScrapedAt == nil || *report.MaxScrapedAt < scrapedAtUnix {
-				report.MaxScrapedAt = &scrapedAtUnix
-			}
-			if report.MinScrapedAt == nil || *report.MinScrapedAt > scrapedAtUnix {
-				report.MinScrapedAt = &scrapedAtUnix
-			}
-
-			return nil
-		})
+	//third query: collect capacity data for these clusters
+	queryStr, joinArgs = filter.PrepareQuery(clusterReportQuery3)
+	if !filter.WithSubcapacities {
+		queryStr = strings.Replace(queryStr, "cr.subcapacities", "''", 1)
+	}
+	whereStr, whereArgs = db.BuildSimpleWhereClause(makeClusterFilter("cs", cluster.ID), len(joinArgs))
+	err = sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
+		var (
+			serviceType   string
+			resourceName  *string
+			rawCapacity   *uint64
+			capacityPerAZ *string
+			subcapacities *string
+			scrapedAt     time.Time
+		)
+		err := rows.Scan(&serviceType, &resourceName, &rawCapacity,
+			&capacityPerAZ, &subcapacities, &scrapedAt)
 		if err != nil {
-			return nil, err
+			return err
 		}
+
+		_, resource := findInClusterReport(cluster, report, serviceType, resourceName)
+
+		if resource != nil {
+			overcommitFactor := cluster.BehaviorForResource(serviceType, *resourceName, "").OvercommitFactor
+			if overcommitFactor == 0 {
+				resource.Capacity = rawCapacity
+			} else {
+				resource.RawCapacity = rawCapacity
+				capacity := uint64(float64(*rawCapacity) * overcommitFactor)
+				resource.Capacity = &capacity
+			}
+			if subcapacities != nil && *subcapacities != "" && filter.IsSubcapacityAllowed(serviceType, *resourceName) {
+				resource.Subcapacities = json.RawMessage(*subcapacities)
+			}
+			if capacityPerAZ != nil && *capacityPerAZ != "" {
+				azReports, err := getClusterAZReports(*capacityPerAZ, overcommitFactor)
+				if err != nil {
+					return err
+				}
+				resource.CapacityPerAZ = azReports
+			}
+		}
+
+		scrapedAtUnix := scrapedAt.Unix()
+		if report.MaxScrapedAt == nil || *report.MaxScrapedAt < scrapedAtUnix {
+			report.MaxScrapedAt = &scrapedAtUnix
+		}
+		if report.MinScrapedAt == nil || *report.MinScrapedAt > scrapedAtUnix {
+			report.MinScrapedAt = &scrapedAtUnix
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return report, nil
+}
+
+// GetClusterResources returns the rate data report for the whole cluster.
+func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter) (*limes.ClusterReport, error) {
+	report := &limes.ClusterReport{
+		ID:       "current", //the actual cluster ID is now an implementation detail and not shown on the API
+		Services: make(limes.ClusterServiceReports),
+	}
+
+	//collect scraping timestamp summaries
+	queryStr, joinArgs := filter.PrepareQuery(clusterRateReportQuery1)
+	whereStr, whereArgs := db.BuildSimpleWhereClause(makeClusterFilter("d", cluster.ID), len(joinArgs))
+	err := sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
+		var (
+			serviceType       string
+			minRatesScrapedAt *time.Time
+			maxRatesScrapedAt *time.Time
+		)
+		err := rows.Scan(&serviceType, &minRatesScrapedAt, &maxRatesScrapedAt)
+		if err != nil {
+			return err
+		}
+
+		if !cluster.HasService(serviceType) {
+			return nil
+		}
+		srvReport, exists := report.Services[serviceType]
+		if !exists {
+			srvReport = &limes.ClusterServiceReport{
+				ServiceInfo: cluster.InfoForService(serviceType),
+				Rates:       make(limes.ClusterRateLimitReports),
+			}
+			report.Services[serviceType] = srvReport
+		}
+
+		if maxRatesScrapedAt != nil {
+			val := maxRatesScrapedAt.Unix()
+			if srvReport.MaxRatesScrapedAt == nil || *srvReport.MaxRatesScrapedAt < val {
+				srvReport.MaxRatesScrapedAt = &val
+			}
+		}
+		if minRatesScrapedAt != nil {
+			val := minRatesScrapedAt.Unix()
+			if srvReport.MinRatesScrapedAt == nil || *srvReport.MinRatesScrapedAt > val {
+				srvReport.MinRatesScrapedAt = &val
+			}
+		}
+
+		return nil
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	//include global rate limits from configuration
-	if filter.WithRates {
-		for _, serviceConfig := range cluster.Config.Services {
-			if serviceReport, _ := findInClusterReport(cluster, report, serviceConfig.Type, nil); serviceReport != nil {
-				serviceReport.Rates = limes.ClusterRateLimitReports{}
-
-				for _, rateCfg := range serviceConfig.RateLimits.Global {
-					serviceReport.Rates[rateCfg.Name] = &limes.ClusterRateLimitReport{
-						RateInfo: limes.RateInfo{
-							Name: rateCfg.Name,
-							Unit: rateCfg.Unit,
-						},
-						Limit:  rateCfg.Limit,
-						Window: rateCfg.Window,
-					}
+	for _, serviceConfig := range cluster.Config.Services {
+		srvReport := report.Services[serviceConfig.Type]
+		if srvReport != nil {
+			for _, rateCfg := range serviceConfig.RateLimits.Global {
+				srvReport.Rates[rateCfg.Name] = &limes.ClusterRateLimitReport{
+					RateInfo: limes.RateInfo{
+						Name: rateCfg.Name,
+						Unit: rateCfg.Unit,
+					},
+					Limit:  rateCfg.Limit,
+					Window: rateCfg.Window,
 				}
 			}
 		}
@@ -269,7 +309,6 @@ func findInClusterReport(cluster *core.Cluster, report *limes.ClusterReport, ser
 		service = &limes.ClusterServiceReport{
 			ServiceInfo: cluster.InfoForService(serviceType),
 			Resources:   make(limes.ClusterResourceReports),
-			Rates:       make(limes.ClusterRateLimitReports),
 		}
 		report.Services[serviceType] = service
 	}

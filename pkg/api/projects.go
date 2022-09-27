@@ -54,12 +54,6 @@ func (p *v1Provider) ListProjects(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	filter := reports.ReadFilter(r)
-	if filter.WithRates {
-		http.Error(w, `query parameter "rates" is not supported anymore`, http.StatusBadRequest)
-		return
-	}
-
 	//This endpoint can generate reports so large, we shouldn't be rendering
 	//more than one at the same time in order to keep our memory usage in check.
 	//(For example, a full project list with all resources for a domain with 2000
@@ -67,6 +61,7 @@ func (p *v1Provider) ListProjects(w http.ResponseWriter, r *http.Request) {
 	p.listProjectsMutex.Lock()
 	defer p.listProjectsMutex.Unlock()
 
+	filter := reports.ReadFilter(r)
 	stream := NewJSONListStream[*limes.ProjectReport](w, r, "projects")
 	stream.FinalizeDocument(reports.GetProjectResources(p.Cluster, *dbDomain, nil, db.DB, filter, stream.WriteItem))
 }
@@ -87,13 +82,7 @@ func (p *v1Provider) GetProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	filter := reports.ReadFilter(r)
-	if filter.WithRates {
-		http.Error(w, `query parameter "rates" is not supported anymore`, http.StatusBadRequest)
-		return
-	}
-
-	project, err := GetProjectResourceReport(p.Cluster, *dbDomain, *dbProject, db.DB, filter)
+	project, err := GetProjectResourceReport(p.Cluster, *dbDomain, *dbProject, db.DB, reports.ReadFilter(r))
 	if respondwith.ErrorText(w, err) {
 		return
 	}
