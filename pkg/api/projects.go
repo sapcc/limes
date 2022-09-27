@@ -20,9 +20,7 @@
 package api
 
 import (
-	"bufio"
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -73,73 +71,8 @@ func (p *v1Provider) doListProjects(w http.ResponseWriter, r *http.Request, dbDo
 	p.listProjectsMutex.Lock()
 	defer p.listProjectsMutex.Unlock()
 
-	//We do not wait for the entire response body JSON to be compiled before
-	//sending it out because the JSON can grow to several 100 MiB for large
-	//domains and high detail settings, which would lead to OOM on the API
-	//process in a cgroup-controlled deployment if we try to hold it all in
-	//memory.
-	//
-	//The basic output structure looks like this:
-	//
-	//	{"projects":[ <REPORT> , <...> , <REPORT> ]}
-	//
-	//We delay the opening `{"projects":[` until we receive the first report, so
-	//that errors can be logged as a 5xx response if necessary. Upon getting the
-	//first report, we commit to the response being 200 and print reports as they
-	//come in. If we get to the end, we just need to write the trailing `]}` to
-	//complete the response.
-
-	outputStarted := false
-	bufWriter := bufio.NewWriter(w)
-	err := reports.GetProjects(p.Cluster, *dbDomain, nil, db.DB, filter, func(report *limes.ProjectReport) error {
-		if outputStarted {
-			//write commas between reports
-			_, err := bufWriter.Write([]byte(`,`))
-			if err != nil {
-				return err
-			}
-		} else {
-			//write opener before first report
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			outputStarted = true
-			_, err := bufWriter.Write([]byte(`{"projects":[`))
-			if err != nil {
-				return err
-			}
-		}
-		//write report
-		return json.NewEncoder(bufWriter).Encode(report)
-	})
-
-	if err == nil {
-		if outputStarted {
-			//write closer after last report
-			_, err = bufWriter.Write([]byte(`]}`))
-			if err == nil {
-				err = bufWriter.Flush()
-			}
-		} else {
-			//this branch is reached when there are no projects to list and therefore
-			//the callback function above was never called
-			respondwith.JSON(w, http.StatusOK, map[string]interface{}{"projects": []*limes.ProjectReport{}})
-			return
-		}
-	}
-	if err != nil {
-		if outputStarted {
-			//deliberately destroy the ongoing JSON document to make it clear to the
-			//client that an error occurred
-			fmt.Fprintf(w, "\naborting because of error: %s\n", err.Error())
-			//usually we don't need to log errors in handlers because the
-			//logg.Middleware does it for us, but since this is a 200 response, we
-			//need to do it ourselves
-			logg.Error("late error during GET %s: %s", r.URL.String(), err.Error())
-		} else {
-			//the callback was never called, so we can properly report the error to the client
-			respondwith.ErrorText(w, err)
-		}
-	}
+	stream := NewJSONListStream[*limes.ProjectReport](w, r, "projects")
+	stream.FinalizeDocument(reports.GetProjects(p.Cluster, *dbDomain, nil, db.DB, filter, stream.WriteItem))
 }
 
 // GetProject handles GET /v1/domains/:domain_id/projects/:project_id.
