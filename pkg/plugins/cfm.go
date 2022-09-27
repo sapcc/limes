@@ -20,6 +20,7 @@
 package plugins
 
 import (
+	"fmt"
 	"math/big"
 
 	"github.com/gophercloud/gophercloud"
@@ -37,15 +38,15 @@ type cfmPlugin struct {
 
 func init() {
 	core.RegisterQuotaPlugin(func(c core.ServiceConfiguration, scrapeSubresources map[string]bool) core.QuotaPlugin {
-		if !c.CFM.Authoritative {
-			logg.Fatal(`quota plugin "database" (for CFM service) does not support "authoritative = false" mode anymore`)
-		}
 		return &cfmPlugin{cfg: c}
 	})
 }
 
 // Init implements the core.QuotaPlugin interface.
 func (p *cfmPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
+	if !p.cfg.CFM.Authoritative {
+		return fmt.Errorf(`quota plugin "database" (for CFM service) does not support "authoritative = false" mode anymore`)
+	}
 	p.projectID, err = getProjectIDForToken(provider, eo)
 	return err
 }
