@@ -60,11 +60,7 @@ func (p *v1Provider) ListProjects(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	p.doListProjects(w, r, dbDomain, filter)
-}
-
-func (p *v1Provider) doListProjects(w http.ResponseWriter, r *http.Request, dbDomain *db.Domain, filter reports.Filter) {
-	//This endpoints can generate reports so large, we shouldn't be rendering
+	//This endpoint can generate reports so large, we shouldn't be rendering
 	//more than one at the same time in order to keep our memory usage in check.
 	//(For example, a full project list with all resources for a domain with 2000
 	//projects runs as large as 160 MiB for the pure JSON.)
@@ -72,7 +68,7 @@ func (p *v1Provider) doListProjects(w http.ResponseWriter, r *http.Request, dbDo
 	defer p.listProjectsMutex.Unlock()
 
 	stream := NewJSONListStream[*limes.ProjectReport](w, r, "projects")
-	stream.FinalizeDocument(reports.GetProjects(p.Cluster, *dbDomain, nil, db.DB, filter, stream.WriteItem))
+	stream.FinalizeDocument(reports.GetProjectResources(p.Cluster, *dbDomain, nil, db.DB, filter, stream.WriteItem))
 }
 
 // GetProject handles GET /v1/domains/:domain_id/projects/:project_id.
@@ -97,7 +93,7 @@ func (p *v1Provider) GetProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	project, err := GetProjectReport(p.Cluster, *dbDomain, *dbProject, db.DB, filter)
+	project, err := GetProjectResourceReport(p.Cluster, *dbDomain, *dbProject, db.DB, filter)
 	if respondwith.ErrorText(w, err) {
 		return
 	}

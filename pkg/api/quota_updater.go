@@ -139,9 +139,16 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 		return err
 	}
 	//for project scope, we also need a project report for validation
-	var projectReport *limes.ProjectReport
+	var (
+		projectResourceReport *limes.ProjectReport
+		projectRateReport     *limes.ProjectReport
+	)
 	if u.Project != nil {
-		projectReport, err = GetProjectReport(u.Cluster, *u.Domain, *u.Project, dbi, reports.Filter{WithRates: true})
+		projectResourceReport, err = GetProjectResourceReport(u.Cluster, *u.Domain, *u.Project, dbi, reports.Filter{})
+		if err != nil {
+			return err
+		}
+		projectRateReport, err = GetProjectRateReport(u.Cluster, *u.Domain, *u.Project, dbi, reports.Filter{})
 		if err != nil {
 			return err
 		}
@@ -175,7 +182,7 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 			}
 			if u.Project == nil {
 			} else {
-				if projectService, exists := projectReport.Services[srv.Type]; exists {
+				if projectService, exists := projectResourceReport.Services[srv.Type]; exists {
 					projRes = projectService.Resources[res.Name]
 				}
 				if projRes == nil {
@@ -236,8 +243,8 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 	// OPA policy handling
 	// skip if no OPA policy was loaded before
 	if u.Cluster.OPA.ProjectQuotaQuery != nil || u.Cluster.OPA.DomainQuotaQuery != nil {
-		desiredDomainReport := deepcopy.Copy(domainReport).(*limes.DomainReport)    //nolint:errcheck
-		desiredProjectReport := deepcopy.Copy(projectReport).(*limes.ProjectReport) //nolint:errcheck
+		desiredDomainReport := deepcopy.Copy(domainReport).(*limes.DomainReport)            //nolint:errcheck
+		desiredProjectReport := deepcopy.Copy(projectResourceReport).(*limes.ProjectReport) //nolint:errcheck
 
 		for serviceType, requestsForService := range u.ResourceRequests {
 			for resourceName, requestForResource := range requestsForService {
@@ -311,7 +318,7 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 					continue
 				}
 
-				if projectService, exists := projectReport.Services[svcType]; exists {
+				if projectService, exists := projectRateReport.Services[svcType]; exists {
 					projectRate, exists := projectService.Rates[rateName]
 					if exists && projectRate.Limit != 0 && projectRate.Window != nil {
 						req.OldLimit = projectRate.Limit
@@ -374,7 +381,7 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 
 			//collect the full set of quotas for this service as requested by the user
 			quotaValues := make(map[string]uint64)
-			if projectService, exists := projectReport.Services[srvType]; exists {
+			if projectService, exists := projectResourceReport.Services[srvType]; exists {
 				for resName, res := range projectService.Resources {
 					if !res.NoQuota && res.Quota != nil {
 						quotaValues[resName] = *res.Quota

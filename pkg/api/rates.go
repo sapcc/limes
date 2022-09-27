@@ -22,6 +22,7 @@ package api
 import (
 	"net/http"
 
+	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/respondwith"
 
@@ -74,7 +75,8 @@ func (p *v1Provider) ListProjectRates(w http.ResponseWriter, r *http.Request) {
 	filter.WithRates = true
 	filter.OnlyRates = true
 
-	p.doListProjects(w, r, dbDomain, filter)
+	stream := NewJSONListStream[*limes.ProjectReport](w, r, "projects")
+	stream.FinalizeDocument(reports.GetProjectRates(p.Cluster, *dbDomain, nil, db.DB, filter, stream.WriteItem))
 }
 
 // GetProjectRates handles GET /rates/v1/domains/:domain_id/projects/:project_id.
@@ -102,7 +104,7 @@ func (p *v1Provider) GetProjectRates(w http.ResponseWriter, r *http.Request) {
 	filter.WithRates = true
 	filter.OnlyRates = true
 
-	project, err := GetProjectReport(p.Cluster, *dbDomain, *dbProject, db.DB, filter)
+	project, err := GetProjectRateReport(p.Cluster, *dbDomain, *dbProject, db.DB, filter)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
