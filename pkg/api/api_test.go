@@ -1163,14 +1163,16 @@ func Test_ProjectOperations(t *testing.T) {
 	}.Check(t, router)
 
 	//check SyncProject
-	expectStaleProjectServices(t /*, nothing */)
+	expectStaleProjectServices(t, "stale" /*, nothing */)
+	expectStaleProjectServices(t, "rates_stale" /*, nothing */)
 	assert.HTTPRequest{
 		Method:       "POST",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/sync",
 		ExpectStatus: 202,
 		ExpectBody:   assert.StringData(""),
 	}.Check(t, router)
-	expectStaleProjectServices(t, "dresden:shared", "dresden:unshared")
+	expectStaleProjectServices(t, "stale", "dresden:shared", "dresden:unshared")
+	expectStaleProjectServices(t, "rates_stale" /*, nothing */)
 
 	//SyncProject should discover the given project if not yet done
 	discovery.StaticProjects["uuid-for-germany"] = append(discovery.StaticProjects["uuid-for-germany"],
@@ -1182,7 +1184,19 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectStatus: 202,
 		ExpectBody:   assert.StringData(""),
 	}.Check(t, router)
-	expectStaleProjectServices(t, "dresden:shared", "dresden:unshared", "walldorf:shared", "walldorf:unshared")
+	expectStaleProjectServices(t, "stale", "dresden:shared", "dresden:unshared", "walldorf:shared", "walldorf:unshared")
+
+	//check SyncProjectRates (we don't need to check discovery again since SyncProjectRates shares this part of the
+	//implementation with SyncProject)
+	_, _ = db.DB.Exec(`UPDATE project_services SET stale = 'f'`) //nolint:errcheck
+	assert.HTTPRequest{
+		Method:       "POST",
+		Path:         "/rates/v1/domains/uuid-for-germany/projects/uuid-for-dresden/sync",
+		ExpectStatus: 202,
+		ExpectBody:   assert.StringData(""),
+	}.Check(t, router)
+	expectStaleProjectServices(t, "stale" /*, nothing */)
+	expectStaleProjectServices(t, "rates_stale", "dresden:shared", "dresden:unshared")
 
 	//check GetProject for a project that has been discovered, but not yet synced
 	assert.HTTPRequest{
@@ -2030,15 +2044,15 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 	}.Check(t, router)
 }
 
-func expectStaleProjectServices(t *testing.T, pairs ...string) {
+func expectStaleProjectServices(t *testing.T, staleField string, pairs ...string) {
 	t.Helper()
 
-	queryStr := `
+	queryStr := fmt.Sprintf(`
 		SELECT p.name, ps.type
 		  FROM projects p JOIN project_services ps ON ps.project_id = p.id
-		 WHERE ps.stale AND ps.rates_stale
+		 WHERE ps.%s
 		 ORDER BY p.name, ps.type
-	`
+	`, staleField)
 	var actualPairs []string
 
 	err := sqlext.ForeachRow(db.DB, queryStr, nil, func(rows *sql.Rows) error {
