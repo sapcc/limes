@@ -32,7 +32,6 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/hypervisors"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/openstack/placement/v1/resourceproviders"
-	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/logg"
 
@@ -203,43 +202,8 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 		return nil, "", err
 	}
 
-	//list all flavors and get max(flavor_size)
-	pages, maxFlavorSize := 0, 0.0
-	err = flavors.ListDetail(novaClient, nil).EachPage(func(page pagination.Page) (bool, error) {
-		pages++
-		f, err := flavors.ExtractFlavors(page)
-		if err != nil {
-			return false, err
-		}
-		for _, element := range f {
-			extras, err := flavors.ListExtraSpecs(novaClient, element.ID).Extract()
-			if err != nil {
-				logg.Debug("Failed to get extra specs for flavor: %s.", element.ID)
-				return false, err
-			}
-
-			//necessary to be able to ignore huge baremetal flavors
-			//consider only flavors as defined in extra specs
-			var extraSpecs map[string]string
-			if p.cfg.Nova.ExtraSpecs != nil {
-				extraSpecs = p.cfg.Nova.ExtraSpecs
-			}
-
-			matches := true
-			for key, value := range extraSpecs {
-				if value != extras[key] {
-					matches = false
-					break
-				}
-			}
-			if matches {
-				logg.Debug("FlavorName: %s, FlavorID: %s, FlavorSize: %d GiB", element.Name, element.ID, element.Disk)
-				maxFlavorSize = math.Max(maxFlavorSize, float64(element.Disk))
-			}
-		}
-
-		return true, nil
-	})
+	//for the instances capacity, we need to know the max root disk size on public flavors
+	maxRootDiskSize, err := getMaxRootDiskSize(novaClient, p.cfg.Nova.ExtraSpecs)
 	if err != nil {
 		return nil, "", err
 	}
@@ -275,11 +239,11 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 				),
 			},
 			"instances": core.CapacityData{
-				Capacity:      total.GetInstanceCapacity(len(azs), maxFlavorSize).Capacity,
+				Capacity:      total.GetInstanceCapacity(len(azs), maxRootDiskSize).Capacity,
 				CapacityPerAZ: make(map[string]*core.CapacityDataForAZ, len(azs)),
 				Subcapacities: collectSubcapacitiesIf(p.reportSubcapaForInstances,
 					func(aggr *novaHypervisorGroup) *core.CapacityDataForAZ {
-						return aggr.Capacity.GetInstanceCapacity(1, maxFlavorSize)
+						return aggr.Capacity.GetInstanceCapacity(1, maxRootDiskSize)
 					},
 				),
 			},
@@ -298,11 +262,11 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 	for azName, az := range azs {
 		azCapa := az.Capacity
 		capacity["compute"]["cores"].CapacityPerAZ[azName] = &azCapa.VCPUs
-		capacity["compute"]["instances"].CapacityPerAZ[azName] = azCapa.GetInstanceCapacity(1, maxFlavorSize)
+		capacity["compute"]["instances"].CapacityPerAZ[azName] = azCapa.GetInstanceCapacity(1, maxRootDiskSize)
 		capacity["compute"]["ram"].CapacityPerAZ[azName] = &azCapa.MemoryMB
 	}
 
-	if maxFlavorSize == 0 {
+	if maxRootDiskSize == 0 {
 		logg.Error("Nova Capacity: Maximal flavor size is 0. Not reporting instances.")
 		delete(capacity["compute"], "instances")
 	}
@@ -377,10 +341,10 @@ func (c *partialNovaCapacity) Add(hvCapacity partialNovaCapacity) {
 	c.RunningVMs += hvCapacity.RunningVMs
 }
 
-func (c *partialNovaCapacity) GetInstanceCapacity(azCount int, maxFlavorSize float64) *core.CapacityDataForAZ {
+func (c *partialNovaCapacity) GetInstanceCapacity(azCount int, maxRootDiskSize float64) *core.CapacityDataForAZ {
 	amount := 10000 * uint64(azCount)
-	if maxFlavorSize != 0 {
-		maxAmount := uint64(float64(c.LocalGB) / maxFlavorSize)
+	if maxRootDiskSize != 0 {
+		maxAmount := uint64(float64(c.LocalGB) / maxRootDiskSize)
 		if amount > maxAmount {
 			amount = maxAmount
 		}
@@ -514,4 +478,40 @@ func getAggregates(client *gophercloud.ServiceClient) (availabilityZones, collec
 	}
 
 	return
+}
+
+func getMaxRootDiskSize(novaClient *gophercloud.ServiceClient, expectedExtraSpecs map[string]string) (float64, error) {
+	maxRootDiskSize := 0.0
+	page, err := flavors.ListDetail(novaClient, nil).AllPages()
+	if err != nil {
+		return 0, err
+	}
+	flavorList, err := flavors.ExtractFlavors(page)
+	if err != nil {
+		return 0, err
+	}
+
+	for _, flavor := range flavorList {
+		extras, err := flavors.ListExtraSpecs(novaClient, flavor.ID).Extract()
+		if err != nil {
+			logg.Debug("Failed to get extra specs for flavor: %s.", flavor.ID)
+			return 0, err
+		}
+
+		//necessary to be able to ignore huge baremetal flavors
+		//consider only flavors as defined in extra specs
+		matches := true
+		for key, value := range expectedExtraSpecs {
+			if value != extras[key] {
+				matches = false
+				break
+			}
+		}
+		if matches {
+			logg.Debug("FlavorName: %s, FlavorID: %s, FlavorSize: %d GiB", flavor.Name, flavor.ID, flavor.Disk)
+			maxRootDiskSize = math.Max(maxRootDiskSize, float64(flavor.Disk))
+		}
+	}
+
+	return maxRootDiskSize, nil
 }
