@@ -26,6 +26,7 @@ import (
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/aggregates"
 	flavorsmodule "github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/prometheus/client_golang/prometheus"
@@ -173,23 +174,33 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 		return nil, "", err
 	}
 
-	//Ironic bPods are expected to be listed as compute hosts assigned to
-	//host aggregates in the format: "nova-compute-ironic-xxxx".
-	azs, _, err := getAggregates(novaClient)
+	//enumerate aggregates for establishing the hypervisor <-> AZ mapping
+	page, err := aggregates.List(novaClient).AllPages()
 	if err != nil {
 		return nil, "", err
 	}
+	allAggregates, err := aggregates.ExtractAggregates(page)
+	if err != nil {
+		return nil, "", err
+	}
+
+	//Ironic bPods are expected to be listed as compute hosts assigned to
+	//host aggregates in the format: "nova-compute-ironic-xxxx".
 	azForHostStub := make(map[string]string)
-	for azName, az := range azs {
-		for host := range az.ContainsComputeHost {
+	for _, aggr := range allAggregates {
+		az := aggr.AvailabilityZone
+		if az == "" {
+			continue
+		}
+		for _, host := range aggr.Hosts {
 			if host == "nova-compute-ironic" {
-				azForHostStub["bpod001"] = azName //hardcoded for the few nodes using legacy naming convention
+				azForHostStub["bpod001"] = az //hardcoded for the few nodes using legacy naming convention
 			} else {
 				match := computeHostStubRx.FindStringSubmatch(host)
 				if match == nil {
 					logg.Error(`compute host %q does not match the "nova-compute-(ironic-)xxxx" naming convention`, host)
 				} else {
-					azForHostStub[match[1]] = azName
+					azForHostStub[match[1]] = az
 				}
 			}
 		}

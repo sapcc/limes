@@ -155,9 +155,10 @@ type CapacitorConfiguration struct {
 	//name and put the config data in there (use a struct to be able to give
 	//config options meaningful names)
 	Nova struct {
-		ExtraSpecs            map[string]string `yaml:"extra_specs"`
-		HypervisorTypePattern string            `yaml:"hypervisor_type_pattern"`
-		UsePlacementAPI       bool              `yaml:"use_placement_api"`
+		AggregateNamePattern     string            `yaml:"aggregate_name_pattern"`
+		MaxInstancesPerAggregate uint64            `yaml:"max_instances_per_aggregate"`
+		ExtraSpecs               map[string]string `yaml:"extra_specs"`
+		HypervisorTypePattern    string            `yaml:"hypervisor_type_pattern"`
 	} `yaml:"nova"`
 	Prometheus struct {
 		APIConfig PrometheusAPIConfiguration   `yaml:"api"`

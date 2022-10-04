@@ -657,11 +657,12 @@ capacitors:
   - id: nova
     type: nova
     nova:
+      aggregate_name_pattern: '^(?:vc-|qemu-)'
+      max_instances_per_aggregate: 10000
       hypervisor_type_pattern: '^(?:VMware|QEMU)'
       extra_specs:
         first: 'foo'
         second: 'bar'
-      use_placement_api: true
 subcapacities:
   - compute/cores
   - compute/instances
@@ -670,9 +671,15 @@ subcapacities:
 
 | Resource | Method |
 | --- | --- |
-| `compute/cores` | The sum of the reported CPUs for all hypervisors. Note that the hypervisor statistics reported by Nova do not take overcommit into account, so you may have to configure the overcommitment again in Limes for accurate capacity reporting. |
-| `compute/instances` | Estimated as `10000 * count(availabilityZones)`, but never more than `sumLocalDisk / maxDisk`, where `sumLocalDisk` is the sum of the local disk size for all hypervisors, and `maxDisk` is the largest disk requirement of all flavors. |
+| `compute/cores` | The sum of the reported CPUs for all hypervisors in matching aggregates. Note that the hypervisor statistics reported by Nova do not take overcommit into account, so you may have to configure the overcommitment again in Limes for accurate capacity reporting. |
+| `compute/instances` | Estimated as `maxInstancesPerAggregate * count(matchingAggregates)`, but never more than `sumLocalDisk / maxDisk`, where `sumLocalDisk` is the sum of the local disk size for all hypervisors, and `maxDisk` is the largest disk requirement of all flavors. |
 | `compute/ram` | The sum of the reported RAM for all hypervisors. |
+
+Only those hypervisors are considered that belong to an aggregate whose name matches the regex in the
+`nova.aggregate_name_pattern` parameter. There must be a 1:1 relation between matching aggregates and hypervisors: If a
+hypervisor belongs to more than one matching aggregate, an error is raised. The aggregate level is used mostly to
+compute the hard limit of the instance capacity (`maxInstancesPerAggregate * count(matchingAggregates)`); if you do not
+have a level between AZs that imposes such a hard limit, you can use AZ-wide aggregates as a fallback here.
 
 If the `nova.hypervisor_type_pattern` parameter is set, only those hypervisors are considered whose `hypervisor_type`
 matches this regex. Note that this is distinct from the `hypervisor_type_rules` used by the `compute` quota plugin, and
@@ -681,10 +688,6 @@ uses the `hypervisor_type` reported by Nova instead.
 The `nova.extra_specs` parameter can be used to control how flavors are enumerated. Only those flavors will be
 considered which have all the extra specs noted in this map, with the same values as defined in the configuration file.
 This is particularly useful to filter Ironic flavors, which usually have much larger root disk sizes.
-
-If the `nova.use_placement_api` parameter is set, capacity and usage data is gathered from the Placement API instead of
-from Nova's hypervisor list. The data from the Placement API is usually more reliable, but the Placement API may not be
-available in all OpenStack installations, so it remains opt-in for now.
 
 When subcapacity scraping is enabled (as shown above), subcapacities will be scraped for the respective resources. Each
 subcapacity corresponds to one Nova aggregate. If the `nova.hypervisor_type_pattern` parameter is set, only the capacity
