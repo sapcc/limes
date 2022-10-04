@@ -217,10 +217,12 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 			if aggr.HypervisorCount > 0 {
 				capa := getCapa(aggr)
 				result = append(result, novaAggregateSubcapacity{
-					Name:     aggr.Name,
-					Metadata: aggr.Metadata,
-					Capacity: capa.Capacity,
-					Usage:    capa.Usage,
+					Name:             aggr.Name,
+					Metadata:         aggr.Metadata,
+					Capacity:         capa.Capacity,
+					Usage:            capa.Usage,
+					AggregateName:    aggr.Name,
+					AvailabilityZone: aggr.Metadata["availability_zone"],
 				})
 			}
 		}
@@ -428,6 +430,13 @@ type novaAggregateSubcapacity struct {
 	Metadata map[string]string `json:"metadata"`
 	Capacity uint64            `json:"capacity"`
 	Usage    uint64            `json:"usage"`
+
+	//The following entries are redundant with .Name and
+	//.Metadata["availability_zone"], and are provided for forwards-compatibility
+	//with the upcoming new subcapacity structure, to enable a smooth transition
+	//without breaking existing consumers.
+	AvailabilityZone string `json:"az"`
+	AggregateName    string `json:"aggregate"`
 }
 
 func getAggregates(client *gophercloud.ServiceClient) (availabilityZones, collectedAggregates map[string]*novaHypervisorGroup, err error) {
