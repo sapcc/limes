@@ -325,7 +325,7 @@ Returns 200 on success. Result is a JSON document like:
       "resource_name": "ram",
       "status": 409,
       "message": "domain quota may not be smaller than sum of project quotas in that domain",
-      "min_acceptable_quota": 200,
+      "min_acceptable_quota": 200
     }
     {
       "service_type": "object-store",
@@ -333,7 +333,7 @@ Returns 200 on success. Result is a JSON document like:
       "status": 403,
       "message": "requested quota exceeds self-approval threshold",
       "max_acceptable_quota": 5368709120,
-      "unit": "B",
+      "unit": "B"
     }
   ]
 }
@@ -432,7 +432,7 @@ Returns 200 (OK) on success. Result is a JSON document like:
               "physical_usage": 1058
             }
           ],
-          "scraped_at": 1486738599,
+          "scraped_at": 1486738599
         },
         {
           "type": "object-store",
