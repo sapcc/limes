@@ -432,26 +432,7 @@ Returns 200 (OK) on success. Result is a JSON document like:
               "physical_usage": 1058
             }
           ],
-          "rates": [
-            {
-              "name": "service/compute/servers:create",
-              "limit": 5,
-              "window": "2m",
-              "usage_as_bigint": "1069298"
-            },
-            {
-              "name": "service/compute/servers/action:update/addFloatingIp",
-              "limit": 2,
-              "window": "1m"
-            },
-            {
-              "name": "service/compute/servers/action:update/removeFloatingIp",
-              "limit": 2,
-              "window": "1m"
-            }
-          ],
           "scraped_at": 1486738599,
-          "rates_scraped_at": 1486738206
         },
         {
           "type": "object-store",
