@@ -633,9 +633,8 @@ decision about how to adjust her quotas.
 
 Query global rate limits for the cluster level. These rate limits apply to all users in aggregate. Arguments:
 
-* `service`: Limit query to resources in this service. May be given multiple times.
-* `area`: Limit query to resources in services in this area. May be given multiple times.
-* `resource`: When combined, with `?service=`, limit query to that resource.
+* `service`: Limit query to rates in this service (e.g. `?service=compute`). May be given multiple times.
+* `area`: Limit query to rates in services in this area. May be given multiple times.
 
 Returns 200 (OK) on success. Result is a JSON document like:
 
@@ -678,11 +677,8 @@ Returns 200 (OK) on success. Result is a JSON document like:
 Query rate data for projects in a domain. `:project_id` is optional for domain admins. With domain admin token,
 shows projects in that token's domain. With project member permission, shows that token's project only. Arguments:
 
-* `service`: Limit query to resources in this service (e.g. `?service=compute`). May be given multiple times.
-* `area`: Limit query to resources in services in this area. May be given multiple times.
-* `resource`: When combined, with `?service=`, limit query to that resource
-  (e.g. `?service=compute&resource=instances`). May be given multiple times.
-* `detail`: If given, list subresources for resources that support it. (See subheading below for details.)
+* `service`: Limit query to rates in this service (e.g. `?service=compute`). May be given multiple times.
+* `area`: Limit query to rates in services in this area. May be given multiple times.
 
 Returns 200 (OK) on success. Result is a JSON document like:
 
