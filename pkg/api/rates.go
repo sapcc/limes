@@ -20,11 +20,16 @@
 package api
 
 import (
+	"database/sql"
+	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/respondwith"
+	"github.com/sapcc/go-bits/sqlext"
+	gorp "gopkg.in/gorp.v2"
 
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/reports"
@@ -104,4 +109,154 @@ func (p *v1Provider) GetProjectRates(w http.ResponseWriter, r *http.Request) {
 func (p *v1Provider) SyncProjectRates(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/rates/v1/domains/:id/projects/:id/sync")
 	p.doSyncProject(w, r, "rates_stale")
+}
+
+// PutProjectRates handles PUT /rates/v1/domains/:domain_id/projects/:project_id.
+func (p *v1Provider) PutProjectRates(w http.ResponseWriter, r *http.Request) {
+	httpapi.IdentifyEndpoint(r, "/rates/v1/domains/:id/projects/:id")
+	p.putOrSimulatePutProjectRates(w, r, false)
+}
+
+// SimulatePutProjectRates handles POST /rates/v1/domains/:domain_id/projects/:project_id/simulate-put.
+func (p *v1Provider) SimulatePutProjectRates(w http.ResponseWriter, r *http.Request) {
+	httpapi.IdentifyEndpoint(r, "/rates/v1/domains/:id/projects/:id/simulate-put")
+	p.putOrSimulatePutProjectRates(w, r, true)
+}
+
+func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http.Request, simulate bool) {
+	//parse request body
+	var parseTarget struct {
+		Project struct {
+			Services limes.QuotaRequest `json:"services"`
+		} `json:"project"`
+	}
+	parseTarget.Project.Services = make(limes.QuotaRequest)
+	if !RequireJSON(w, r, &parseTarget) {
+		return
+	}
+
+	requestTime := time.Now()
+	token := p.CheckToken(r)
+	if !token.Require(w, "project:show") {
+		return
+	}
+
+	updater := RateLimitUpdater{
+		Cluster: p.Cluster,
+		CanSetRateLimit: func(serviceType string) bool {
+			token.Context.Request["service_type"] = serviceType
+			return token.Check("project:set_rate_limit")
+		},
+	}
+	updater.Domain = p.FindDomainFromRequest(w, r)
+	if updater.Domain == nil {
+		return
+	}
+	updater.Project = p.FindProjectFromRequest(w, r, updater.Domain)
+	if updater.Project == nil {
+		return
+	}
+
+	//start a transaction for the rate limit updates
+	var tx *gorp.Transaction
+	var dbi db.Interface
+	if simulate {
+		dbi = db.DB
+	} else {
+		var err error
+		tx, err = db.DB.Begin()
+		if respondwith.ErrorText(w, err) {
+			return
+		}
+		defer sqlext.RollbackUnlessCommitted(tx)
+		dbi = tx
+	}
+
+	//validate inputs (within the DB transaction, to ensure that we do not apply
+	//inconsistent values later)
+	err := updater.ValidateInput(parseTarget.Project.Services, dbi)
+	if _, ok := err.(MissingProjectReportError); ok {
+		//MissingProjectReportError indicates that the project is new and initial
+		//scraping is not yet done -> ask the user to wait until that's done, with
+		//a 4xx status code instead of a 5xx one so that this does not trigger
+		//alerts on the operator side
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusLocked)
+		fmt.Fprintf(w, "%s (please retry in a few seconds after initial scraping is done)", err.Error())
+		return
+	}
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	//stop now if we're only simulating
+	if simulate {
+		updater.WriteSimulationReport(w)
+		return
+	}
+
+	if !updater.IsValid() {
+		updater.CommitAuditTrail(token, r, requestTime)
+		updater.WritePutErrorResponse(w)
+		return
+	}
+
+	//check all services for resources to update
+	var services []db.ProjectService
+	_, err = tx.Select(&services,
+		`SELECT * FROM project_services WHERE project_id = $1 ORDER BY type`, updater.Project.ID)
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	var ratesToUpdate []db.ProjectRate
+	for _, srv := range services {
+		if rateLimitRequests, exists := updater.Requests[srv.Type]; exists {
+			//Check all rate limits.
+			var rates []db.ProjectRate
+			_, err = tx.Select(&rates, `SELECT * FROM project_rates WHERE service_id = $1 ORDER BY name`, srv.ID)
+			if respondwith.ErrorText(w, err) {
+				return
+			}
+			ratesByName := make(map[string]db.ProjectRate)
+			for _, rate := range rates {
+				ratesByName[rate.Name] = rate
+			}
+
+			for rateName, req := range rateLimitRequests {
+				rate, exists := ratesByName[rateName]
+				if !exists {
+					rate = db.ProjectRate{
+						ServiceID: srv.ID,
+						Name:      rateName,
+					}
+				}
+
+				rate.Limit = &req.NewLimit
+				rate.Window = &req.NewWindow
+				ratesToUpdate = append(ratesToUpdate, rate)
+			}
+		}
+	}
+	//update the DB with the new rate limits
+	queryStr := `INSERT INTO project_rates (service_id, name, rate_limit, window_ns) VALUES ($1,$2,$3,$4) ON CONFLICT (service_id, name) DO UPDATE SET rate_limit = EXCLUDED.rate_limit, window_ns = EXCLUDED.window_ns`
+	err = sqlext.WithPreparedStatement(tx, queryStr, func(stmt *sql.Stmt) error {
+		for _, rate := range ratesToUpdate {
+			_, err := stmt.Exec(rate.ServiceID, rate.Name, rate.Limit, rate.Window)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+	err = tx.Commit()
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	updater.CommitAuditTrail(token, r, requestTime)
+	w.WriteHeader(http.StatusAccepted)
 }

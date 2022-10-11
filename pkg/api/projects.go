@@ -221,11 +221,10 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 	}
 
 	updater := QuotaUpdater{
-		Cluster:         p.Cluster,
-		CanRaise:        checkToken("project:raise"),
-		CanRaiseLP:      checkToken("project:raise_lowpriv"),
-		CanLower:        checkToken("project:lower"),
-		CanSetRateLimit: checkToken("project:set_rate_limit"),
+		Cluster:    p.Cluster,
+		CanRaise:   checkToken("project:raise"),
+		CanRaiseLP: checkToken("project:raise_lowpriv"),
+		CanLower:   checkToken("project:lower"),
 	}
 	updater.Domain = p.FindDomainFromRequest(w, r)
 	if updater.Domain == nil {
@@ -288,14 +287,11 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 		return
 	}
 
-	var (
-		resourcesToUpdate []interface{}
-		ratesToUpdate     []db.ProjectRate
-	)
+	var resourcesToUpdate []interface{}
 	servicesToUpdate := make(map[string]bool)
 
 	for _, srv := range services {
-		if serviceRequests, exists := updater.ResourceRequests[srv.Type]; exists {
+		if serviceRequests, exists := updater.Requests[srv.Type]; exists {
 			//Check all resources.
 			var resources []db.ProjectResource
 			_, err = tx.Select(&resources,
@@ -323,33 +319,6 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 				servicesToUpdate[srv.Type] = true
 			}
 		}
-
-		if rateLimitRequests, exists := updater.RateLimitRequests[srv.Type]; exists {
-			//Check all rate limits.
-			var rates []db.ProjectRate
-			_, err = tx.Select(&rates, `SELECT * FROM project_rates WHERE service_id = $1 ORDER BY name`, srv.ID)
-			if respondwith.ErrorText(w, err) {
-				return
-			}
-			ratesByName := make(map[string]db.ProjectRate)
-			for _, rate := range rates {
-				ratesByName[rate.Name] = rate
-			}
-
-			for rateName, req := range rateLimitRequests {
-				rate, exists := ratesByName[rateName]
-				if !exists {
-					rate = db.ProjectRate{
-						ServiceID: srv.ID,
-						Name:      rateName,
-					}
-				}
-
-				rate.Limit = &req.NewLimit
-				rate.Window = &req.NewWindow
-				ratesToUpdate = append(ratesToUpdate, rate)
-			}
-		}
 	}
 	//update the DB with the new quotas
 	onlyQuota := func(c *gorp.ColumnMap) bool {
@@ -359,19 +328,6 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-
-	//Update the DB with the new rate limits.
-	stmt, err := dbi.Prepare(`INSERT INTO project_rates (service_id, name, rate_limit, window_ns) VALUES ($1,$2,$3,$4) ON CONFLICT (service_id, name) DO UPDATE SET rate_limit = EXCLUDED.rate_limit, window_ns = EXCLUDED.window_ns`)
-	if respondwith.ErrorText(w, err) {
-		return
-	}
-	for _, rate := range ratesToUpdate {
-		_, err := stmt.Exec(rate.ServiceID, rate.Name, rate.Limit, rate.Window)
-		if respondwith.ErrorText(w, err) {
-			return
-		}
-	}
-
 	err = tx.Commit()
 	if respondwith.ErrorText(w, err) {
 		return

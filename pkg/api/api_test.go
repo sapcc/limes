@@ -1432,7 +1432,7 @@ func Test_ProjectOperations(t *testing.T) {
 	//Attempt setting a rate limit for which no default exists should fail.
 	assert.HTTPRequest{
 		Method:       "PUT",
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		Path:         "/rates/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 403,
 		ExpectBody: assert.StringData(
 			"cannot change shared/service/shared/notexistent:bogus rate limits: user is not allowed to create new rate limits\n",
@@ -1476,7 +1476,7 @@ func Test_ProjectOperations(t *testing.T) {
 
 	assert.HTTPRequest{
 		Method:       "PUT",
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		Path:         "/rates/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 202,
 		Body: assert.JSONObject{
 			"project": assert.JSONObject{

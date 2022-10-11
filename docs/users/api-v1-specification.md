@@ -314,7 +314,7 @@ Returns 202 (Accepted) on success, with an empty response body.
 Requires a similar token and request body like `PUT /v1/domains/:domain_id`, but does not attempt to actually change any
 quotas.
 
-Returns 200 on success. Result is a JSON document like:
+Returns 200 on success, or a 4xx result code otherwise (see below). Result is a JSON document like:
 
 ```json
 {
@@ -588,25 +588,6 @@ project-admin token for the specified project. Other than that, the call works i
   Note that it is currently not allowed to set quotas and `bursting.enabled` in the same request. This restriction may
   be lifted in the future.
 
-- The `rates` field can be provided to set rate limits for this project - given the user has sufficient privileges to raise or lower these.
-  Example:
-  ```json
-    {
-      "services": [
-        {
-          "type": "compute",
-          "rates": [
-            {
-              "name": "service/compute/servers:create",
-              "limit": 5,
-              "unit": "r/m"
-            }
-          ]
-        }
-      ]
-    }
-  ```
-
 ## POST /v1/domains/:domain\_id/projects/discover
 
 Requires a domain-admin token for the specified domain. Queries Keystone in order to discover newly-created projects in
@@ -796,6 +777,62 @@ Default rate limits on a project level can be defined via the
 ## POST /rates/v1/domains/:domain\_id/projects/:project\_id/sync
 
 Like `POST /v1/domains/:domain_id/projects/:project_id/sync`, but requests a sync of rate data instead of resource data.
+
+## PUT /rates/v1/domains/:domain\_id/projects/:project\_id
+
+Set (or simulate setting) rate limits for the given project. Requires a cloud-admin token, and a request body that is a JSON
+document like:
+
+```json
+{
+  "project": {
+    "services": [
+      {
+        "type": "compute",
+        "rates": [
+          {
+            "name": "service/compute/servers:create",
+            "limit": 5,
+            "unit": "r/m"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+## POST /rates/v1/domains/:domain\_id/projects/:project\_id/simulate-put
+
+Requires a similar token and request body like `PUT /rates/v1/domains/:domain\_id/projects/:project\_id`, but does not
+attempt to actually change any rate limits.
+
+Returns 200 on success, or a 4xx result code otherwise (see below). Result is a JSON document like:
+
+```json
+{
+  "success": false,
+  "unacceptable_rates": [
+    {
+      "service_type": "compute",
+      "name": "service/compute/servers:create",
+      "status": 403,
+      "message": "user is not allowed to set compute rate limits"
+    }
+  ]
+}
+```
+
+If `success` is true, the corresponding PUT request would have been accepted (i.e., produced a 202 response).
+Otherwise, `unacceptable_rates` contains one entry for each rate whose requested limit value was not accepted.
+
+For each such entry, the `service_type`, `name`, `status` and `message` fields are always given. The `message` field
+contains a human-readable explanation for the error. The `status` field is a machine-readable classification of the
+error as the most closely corresponding HTTP status code. Possible values include:
+
+- 403 (Forbidden) indicates that a higher permission level (e.g. a cloud-admin token instead of a domain-admin token) is
+  needed to set the requested rate limit value, or that this rate limit is not configurable at all.
+- More status codes may be added in the future.
 
 ## GET /v1/inconsistencies
 
