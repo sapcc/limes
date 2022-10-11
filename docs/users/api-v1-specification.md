@@ -959,7 +959,7 @@ Returns 200 (OK) on success. Result is a JSON document like:
 }
 ```
 
-## GET /v1/admin/rate-scrape-errors
+## GET /rates/v1/admin/scrape-errors
 
 Requires a cloud-admin token. Shows information about project rate data scrape errors.
 This is intended to give operators a view of rate data scrape errors for all services

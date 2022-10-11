@@ -388,7 +388,7 @@ func Test_RateScrapeErrorOperations(t *testing.T) {
 	//check ListRateScrapeErrors
 	assert.HTTPRequest{
 		Method:       "GET",
-		Path:         "/v1/admin/rate-scrape-errors",
+		Path:         "/rates/v1/admin/scrape-errors",
 		ExpectStatus: http.StatusOK,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/rate-scrape-error-list.json"),
 	}.Check(t, router)
@@ -400,7 +400,7 @@ func Test_EmptyRateScrapeErrorReport(t *testing.T) {
 	//check ListRateScrapeErrors
 	assert.HTTPRequest{
 		Method:       "GET",
-		Path:         "/v1/admin/rate-scrape-errors",
+		Path:         "/rates/v1/admin/scrape-errors",
 		ExpectStatus: http.StatusOK,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/rate-scrape-error-empty.json"),
 	}.Check(t, router)
