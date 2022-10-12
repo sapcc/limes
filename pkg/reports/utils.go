@@ -1,6 +1,6 @@
 /*******************************************************************************
 *
-* Copyright 2018 SAP SE
+* Copyright 2022 SAP SE
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -17,8 +17,32 @@
 *
 *******************************************************************************/
 
-// Package limes contains data structures that appear on the Limes API.
-// This package only has basic types that are shared between the resource API
-// and the rate API. The concrete types for each of these sub-APIs are in the
-// packages in the two subdirectories.
-package limes
+package reports
+
+import (
+	"time"
+
+	"github.com/sapcc/go-api-declarations/limes"
+)
+
+func mergeMinTime(lhs *limes.UnixEncodedTime, rhs *time.Time) *limes.UnixEncodedTime {
+	if rhs == nil {
+		return lhs
+	}
+	if lhs == nil || lhs.After(*rhs) {
+		val := limes.UnixEncodedTime{Time: *rhs}
+		return &val
+	}
+	return lhs
+}
+
+func mergeMaxTime(lhs *limes.UnixEncodedTime, rhs *time.Time) *limes.UnixEncodedTime {
+	if rhs == nil {
+		return lhs
+	}
+	if lhs == nil || lhs.Before(*rhs) {
+		val := limes.UnixEncodedTime{Time: *rhs}
+		return &val
+	}
+	return lhs
+}

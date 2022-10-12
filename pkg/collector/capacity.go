@@ -26,7 +26,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/sapcc/go-api-declarations/limes"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
 	"gopkg.in/gorp.v2"
@@ -326,14 +326,14 @@ func (c *Collector) writeCapacity(tx *gorp.Transaction, values map[string]map[st
 	return nil
 }
 
-func convertAZReport(capacityPerAZ map[string]*core.CapacityDataForAZ) limes.ClusterAvailabilityZoneReports {
-	//The initial implementation wrote limes.ClusterAvailabilityZoneReports into
+func convertAZReport(capacityPerAZ map[string]*core.CapacityDataForAZ) limesresources.ClusterAvailabilityZoneReports {
+	//The initial implementation wrote limesresources.ClusterAvailabilityZoneReports into
 	//the CapacityPerAZJSON database field, even though
 	//map[string]*core.CapacityDataForAZ would have been more appropriate. Now we
 	//stick with it for compatibility's sake.
-	report := make(limes.ClusterAvailabilityZoneReports, len(capacityPerAZ))
+	report := make(limesresources.ClusterAvailabilityZoneReports, len(capacityPerAZ))
 	for azName, azData := range capacityPerAZ {
-		report[azName] = &limes.ClusterAvailabilityZoneReport{
+		report[azName] = &limesresources.ClusterAvailabilityZoneReport{
 			Name:     azName,
 			Capacity: azData.Capacity,
 			Usage:    azData.Usage,

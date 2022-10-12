@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/sapcc/go-api-declarations/limes"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/pkg/core"
@@ -37,8 +38,7 @@ var domainReportQuery1 = sqlext.SimplifyWhitespace(`
 	       SUM(GREATEST(pr.usage - pr.quota, 0)),
 	       SUM(GREATEST(pr.backend_quota, 0)), MIN(pr.backend_quota) < 0,
 	       SUM(COALESCE(pr.physical_usage, pr.usage)), COUNT(pr.physical_usage) > 0,
-	       MIN(ps.scraped_at), MAX(ps.scraped_at),
-	       MIN(ps.rates_scraped_at), MAX(ps.rates_scraped_at)
+	       MIN(ps.scraped_at), MAX(ps.scraped_at)
 	  FROM domains d
 	  JOIN projects p ON p.domain_id = d.id
 	  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
@@ -56,7 +56,7 @@ var domainReportQuery2 = sqlext.SimplifyWhitespace(`
 
 // GetDomains returns reports for all domains in the given cluster or, if
 // domainID is non-nil, for that domain only.
-func GetDomains(cluster *core.Cluster, domainID *int64, dbi db.Interface, filter Filter) ([]*limes.DomainReport, error) {
+func GetDomains(cluster *core.Cluster, domainID *int64, dbi db.Interface, filter Filter) ([]*limesresources.DomainReport, error) {
 	clusterCanBurst := cluster.Config.Bursting.MaxMultiplier > 0
 
 	fields := map[string]interface{}{"d.cluster_id": cluster.ID}
@@ -83,8 +83,6 @@ func GetDomains(cluster *core.Cluster, domainID *int64, dbi db.Interface, filter
 			showPhysicalUsage    *bool
 			minScrapedAt         *time.Time
 			maxScrapedAt         *time.Time
-			minRatesScrapedAt    *time.Time
-			maxRatesScrapedAt    *time.Time
 		)
 		err := rows.Scan(
 			&domainUUID, &domainName, &serviceType, &resourceName,
@@ -92,7 +90,6 @@ func GetDomains(cluster *core.Cluster, domainID *int64, dbi db.Interface, filter
 			&backendQuota, &infiniteBackendQuota,
 			&physicalUsage, &showPhysicalUsage,
 			&minScrapedAt, &maxScrapedAt,
-			&minRatesScrapedAt, &maxRatesScrapedAt,
 		)
 		if err != nil {
 			return err
@@ -101,30 +98,8 @@ func GetDomains(cluster *core.Cluster, domainID *int64, dbi db.Interface, filter
 		_, service, resource := domains.Find(cluster, domainUUID, domainName, serviceType, resourceName)
 
 		if service != nil {
-			if maxScrapedAt != nil {
-				val := maxScrapedAt.Unix()
-				if service.MaxScrapedAt == nil || *service.MaxScrapedAt < val {
-					service.MaxScrapedAt = &val
-				}
-			}
-			if minScrapedAt != nil {
-				val := minScrapedAt.Unix()
-				if service.MinScrapedAt == nil || *service.MinScrapedAt > val {
-					service.MinScrapedAt = &val
-				}
-			}
-			if maxRatesScrapedAt != nil {
-				val := maxRatesScrapedAt.Unix()
-				if service.MaxRatesScrapedAt == nil || *service.MaxRatesScrapedAt < val {
-					service.MaxRatesScrapedAt = &val
-				}
-			}
-			if minRatesScrapedAt != nil {
-				val := minRatesScrapedAt.Unix()
-				if service.MinRatesScrapedAt == nil || *service.MinRatesScrapedAt > val {
-					service.MinRatesScrapedAt = &val
-				}
-			}
+			service.MaxScrapedAt = mergeMaxTime(service.MaxScrapedAt, maxScrapedAt)
+			service.MinScrapedAt = mergeMinTime(service.MinScrapedAt, minScrapedAt)
 		}
 
 		if resource != nil {
@@ -192,7 +167,7 @@ func GetDomains(cluster *core.Cluster, domainID *int64, dbi db.Interface, filter
 		uuids = append(uuids, uuid)
 	}
 	sort.Strings(uuids)
-	result := make([]*limes.DomainReport, len(domains))
+	result := make([]*limesresources.DomainReport, len(domains))
 	for idx, uuid := range uuids {
 		result[idx] = domains[uuid]
 	}
@@ -200,15 +175,17 @@ func GetDomains(cluster *core.Cluster, domainID *int64, dbi db.Interface, filter
 	return result, nil
 }
 
-type domains map[string]*limes.DomainReport
+type domains map[string]*limesresources.DomainReport
 
-func (d domains) Find(cluster *core.Cluster, domainUUID, domainName string, serviceType, resourceName *string) (*limes.DomainReport, *limes.DomainServiceReport, *limes.DomainResourceReport) {
+func (d domains) Find(cluster *core.Cluster, domainUUID, domainName string, serviceType, resourceName *string) (*limesresources.DomainReport, *limesresources.DomainServiceReport, *limesresources.DomainResourceReport) {
 	domain, exists := d[domainUUID]
 	if !exists {
-		domain = &limes.DomainReport{
-			UUID:     domainUUID,
-			Name:     domainName,
-			Services: make(limes.DomainServiceReports),
+		domain = &limesresources.DomainReport{
+			DomainInfo: limes.DomainInfo{
+				UUID: domainUUID,
+				Name: domainName,
+			},
+			Services: make(limesresources.DomainServiceReports),
 		}
 		d[domainUUID] = domain
 	}
@@ -222,9 +199,9 @@ func (d domains) Find(cluster *core.Cluster, domainUUID, domainName string, serv
 		if !cluster.HasService(*serviceType) {
 			return domain, nil, nil
 		}
-		service = &limes.DomainServiceReport{
+		service = &limesresources.DomainServiceReport{
 			ServiceInfo: cluster.InfoForService(*serviceType),
-			Resources:   make(limes.DomainResourceReports),
+			Resources:   make(limesresources.DomainResourceReports),
 		}
 		domain.Services[*serviceType] = service
 	}
@@ -239,7 +216,7 @@ func (d domains) Find(cluster *core.Cluster, domainUUID, domainName string, serv
 			return domain, service, resource
 		}
 		behavior := cluster.BehaviorForResource(*serviceType, *resourceName, domainName)
-		resource = &limes.DomainResourceReport{
+		resource = &limesresources.DomainResourceReport{
 			ResourceInfo: cluster.InfoForResource(*serviceType, *resourceName),
 			Scaling:      behavior.ToScalingBehavior(),
 			Annotations:  behavior.Annotations,

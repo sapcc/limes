@@ -17,30 +17,24 @@
 *
 *******************************************************************************/
 
-package limes
+package limesresources
 
-import (
-	"encoding/json"
-	"sort"
-)
+import "github.com/sapcc/go-api-declarations/limes"
 
 // DomainReport contains aggregated data about resource usage in a domain.
 // It is returned by GET requests on domains.
 type DomainReport struct {
-	UUID     string               `json:"id"`
-	Name     string               `json:"name"`
+	limes.DomainInfo
 	Services DomainServiceReports `json:"services"`
 }
 
 // DomainServiceReport is a substructure of DomainReport containing data for
 // a single backend service.
 type DomainServiceReport struct {
-	ServiceInfo
-	Resources         DomainResourceReports `json:"resources"`
-	MaxScrapedAt      *int64                `json:"max_scraped_at,omitempty"`
-	MinScrapedAt      *int64                `json:"min_scraped_at,omitempty"`
-	MaxRatesScrapedAt *int64                `json:"max_rates_scraped_at,omitempty"`
-	MinRatesScrapedAt *int64                `json:"min_rates_scraped_at,omitempty"`
+	limes.ServiceInfo
+	Resources    DomainResourceReports  `json:"resources"`
+	MaxScrapedAt *limes.UnixEncodedTime `json:"max_scraped_at,omitempty"`
+	MinScrapedAt *limes.UnixEncodedTime `json:"min_scraped_at,omitempty"`
 }
 
 // DomainResourceReport is a substructure of DomainReport containing data for
@@ -65,66 +59,6 @@ type DomainResourceReport struct {
 // to JSON as a list.
 type DomainServiceReports map[string]*DomainServiceReport
 
-// MarshalJSON implements the json.Marshaler interface.
-func (s DomainServiceReports) MarshalJSON() ([]byte, error) {
-	//serialize with ordered keys to ensure testcase stability
-	types := make([]string, 0, len(s))
-	for typeStr := range s {
-		types = append(types, typeStr)
-	}
-	sort.Strings(types)
-	list := make([]*DomainServiceReport, len(s))
-	for idx, typeStr := range types {
-		list[idx] = s[typeStr]
-	}
-	return json.Marshal(list)
-}
-
-// UnmarshalJSON implements the json.Unmarshaler interface
-func (s *DomainServiceReports) UnmarshalJSON(b []byte) error {
-	tmp := make([]*DomainServiceReport, 0)
-	err := json.Unmarshal(b, &tmp)
-	if err != nil {
-		return err
-	}
-	t := make(DomainServiceReports)
-	for _, ds := range tmp {
-		t[ds.Type] = ds
-	}
-	*s = t
-	return nil
-}
-
 // DomainResourceReports provides fast lookup of resources using a map, but serializes
 // to JSON as a list.
 type DomainResourceReports map[string]*DomainResourceReport
-
-// MarshalJSON implements the json.Marshaler interface.
-func (r DomainResourceReports) MarshalJSON() ([]byte, error) {
-	//serialize with ordered keys to ensure testcase stability
-	names := make([]string, 0, len(r))
-	for name := range r {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	list := make([]*DomainResourceReport, len(r))
-	for idx, name := range names {
-		list[idx] = r[name]
-	}
-	return json.Marshal(list)
-}
-
-// UnmarshalJSON implements the json.Unmarshaler interface
-func (r *DomainResourceReports) UnmarshalJSON(b []byte) error {
-	tmp := make([]*DomainResourceReport, 0)
-	err := json.Unmarshal(b, &tmp)
-	if err != nil {
-		return err
-	}
-	t := make(DomainResourceReports)
-	for _, dr := range tmp {
-		t[dr.Name] = dr
-	}
-	*r = t
-	return nil
-}

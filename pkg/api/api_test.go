@@ -34,6 +34,8 @@ import (
 	policy "github.com/databus23/goslo.policy"
 	"github.com/gofrs/uuid"
 	"github.com/sapcc/go-api-declarations/limes"
+	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpapi"
@@ -56,14 +58,14 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 	test.InitDatabase(t, &startData)
 
 	//prepare test configuration
-	sharedRatesThatReportUsage := []limes.RateInfo{
+	sharedRatesThatReportUsage := []limesrates.RateInfo{
 		//NOTE: MiB makes no sense for for this rate, but I want to test as many
 		//combinations of "has unit or not", "has limit or not" and "has usage or
 		//not" as possible
 		{Name: "service/shared/objects:delete", Unit: limes.UnitMebibytes},
 		{Name: "service/shared/objects:unlimited", Unit: limes.UnitKibibytes},
 	}
-	unsharedRatesThatReportUsage := []limes.RateInfo{
+	unsharedRatesThatReportUsage := []limesrates.RateInfo{
 		{Name: "service/unshared/instances:delete", Unit: limes.UnitNone},
 	}
 
@@ -118,7 +120,7 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 							Name:   "service/shared/objects:create",
 							Unit:   limes.UnitNone,
 							Limit:  5000,
-							Window: 1 * limes.WindowSeconds,
+							Window: 1 * limesrates.WindowSeconds,
 						},
 					},
 					ProjectDefault: []core.RateLimitConfiguration{
@@ -126,25 +128,25 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 							Name:   "service/shared/objects:create",
 							Unit:   limes.UnitNone,
 							Limit:  5,
-							Window: 1 * limes.WindowMinutes,
+							Window: 1 * limesrates.WindowMinutes,
 						},
 						{
 							Name:   "service/shared/objects:delete",
 							Unit:   limes.UnitNone,
 							Limit:  1,
-							Window: 1 * limes.WindowMinutes,
+							Window: 1 * limesrates.WindowMinutes,
 						},
 						{
 							Name:   "service/shared/objects:update",
 							Unit:   limes.UnitNone,
 							Limit:  2,
-							Window: 1 * limes.WindowSeconds,
+							Window: 1 * limesrates.WindowSeconds,
 						},
 						{
 							Name:   "service/shared/objects:read/list",
 							Unit:   limes.UnitNone,
 							Limit:  3,
-							Window: 1 * limes.WindowSeconds,
+							Window: 1 * limesrates.WindowSeconds,
 						},
 					},
 				},
@@ -157,19 +159,19 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 							Name:   "service/unshared/instances:create",
 							Unit:   limes.UnitNone,
 							Limit:  5,
-							Window: 1 * limes.WindowMinutes,
+							Window: 1 * limesrates.WindowMinutes,
 						},
 						{
 							Name:   "service/unshared/instances:delete",
 							Unit:   limes.UnitNone,
 							Limit:  1,
-							Window: 1 * limes.WindowMinutes,
+							Window: 1 * limesrates.WindowMinutes,
 						},
 						{
 							Name:   "service/unshared/instances:update",
 							Unit:   limes.UnitNone,
 							Limit:  2,
-							Window: 1 * limes.WindowSeconds,
+							Window: 1 * limesrates.WindowSeconds,
 						},
 					},
 				},
@@ -203,7 +205,7 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 			//check minimum non-zero project quota constraint
 			{
 				Compiled: core.ResourceBehavior{
-					MaxBurstMultiplier:     limes.BurstingMultiplier(math.Inf(+1)),
+					MaxBurstMultiplier:     limesresources.BurstingMultiplier(math.Inf(+1)),
 					FullResourceNameRx:     regexp.MustCompile("^unshared/things$"),
 					MinNonZeroProjectQuota: 10,
 				},
@@ -211,7 +213,7 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 			//check how scaling relations are reported
 			{
 				Compiled: core.ResourceBehavior{
-					MaxBurstMultiplier:     limes.BurstingMultiplier(math.Inf(+1)),
+					MaxBurstMultiplier:     limesresources.BurstingMultiplier(math.Inf(+1)),
 					FullResourceNameRx:     regexp.MustCompile("^unshared/things$"),
 					ScalesWithResourceName: "things",
 					ScalesWithServiceType:  "shared",
@@ -221,7 +223,7 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 			//check how annotations are reported
 			{
 				Compiled: core.ResourceBehavior{
-					MaxBurstMultiplier: limes.BurstingMultiplier(math.Inf(+1)),
+					MaxBurstMultiplier: limesresources.BurstingMultiplier(math.Inf(+1)),
 					FullResourceNameRx: regexp.MustCompile("^shared/.*things$"),
 					ScopeRx:            regexp.MustCompile("^germany(?:/dresden)?$"),
 					Annotations: map[string]interface{}{
@@ -232,7 +234,7 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, http
 			},
 			{
 				Compiled: core.ResourceBehavior{
-					MaxBurstMultiplier: limes.BurstingMultiplier(math.Inf(+1)),
+					MaxBurstMultiplier: limesresources.BurstingMultiplier(math.Inf(+1)),
 					FullResourceNameRx: regexp.MustCompile("^shared/things$"),
 					ScopeRx:            regexp.MustCompile("^germany/dresden$"),
 					Annotations: map[string]interface{}{
@@ -462,14 +464,14 @@ func Test_ClusterOperations(t *testing.T) {
 		{
 			Compiled: core.ResourceBehavior{
 				FullResourceNameRx: regexp.MustCompile("^shared/things$"),
-				MaxBurstMultiplier: limes.BurstingMultiplier(math.Inf(+1)),
+				MaxBurstMultiplier: limesresources.BurstingMultiplier(math.Inf(+1)),
 				OvercommitFactor:   2.5,
 			},
 		},
 		{
 			Compiled: core.ResourceBehavior{
 				FullResourceNameRx: regexp.MustCompile("^unshared/things$"),
-				MaxBurstMultiplier: limes.BurstingMultiplier(math.Inf(+1)),
+				MaxBurstMultiplier: limesresources.BurstingMultiplier(math.Inf(+1)),
 				OvercommitFactor:   1.5,
 			},
 		},
@@ -1456,7 +1458,7 @@ func Test_ProjectOperations(t *testing.T) {
 	}.Check(t, router)
 	var (
 		actualLimit  uint64
-		actualWindow limes.Window
+		actualWindow limesrates.Window
 	)
 	err = db.DB.QueryRow(`
 		SELECT pra.rate_limit, pra.window_ns FROM project_rates pra
@@ -1472,7 +1474,7 @@ func Test_ProjectOperations(t *testing.T) {
 	//Attempt setting a rate limit for which a default exists should be successful.
 	rateName := "service/shared/objects:read/list"
 	expectedLimit := uint64(100)
-	expectedWindow := 1 * limes.WindowSeconds
+	expectedWindow := 1 * limesrates.WindowSeconds
 
 	assert.HTTPRequest{
 		Method:       "PUT",

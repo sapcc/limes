@@ -27,6 +27,8 @@ import (
 	"time"
 
 	"github.com/sapcc/go-api-declarations/limes"
+	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/pkg/core"
@@ -42,7 +44,7 @@ import (
 // appear in a cluster, so that the implementation can publish completed
 // project reports (and then reclaim their memory usage) as soon as possible.
 var (
-	projectRateLimitReportQuery = sqlext.SimplifyWhitespace(`
+	projectRateReportQuery = sqlext.SimplifyWhitespace(`
 	SELECT p.uuid, p.name, COALESCE(p.parent_uuid, ''), ps.type, ps.rates_scraped_at, pra.name, pra.rate_limit, pra.window_ns, pra.usage_as_bigint
 	  FROM projects p
 	  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
@@ -68,7 +70,7 @@ var (
 // reports with the highest detail levels can be several MB large, we don't just
 // return them all in a big list. Instead, the `submit` callback gets called
 // once for each project report once that report is complete.
-func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Project, dbi db.Interface, filter Filter, submit func(*limes.ProjectReport) error) error {
+func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Project, dbi db.Interface, filter Filter, submit func(*limesresources.ProjectReport) error) error {
 	clusterCanBurst := cluster.Config.Bursting.MaxMultiplier > 0
 
 	fields := map[string]interface{}{"p.domain_id": domain.ID}
@@ -84,7 +86,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 	queryStr, joinArgs := filter.PrepareQuery(queryStr)
 	whereStr, whereArgs := db.BuildSimpleWhereClause(fields, len(joinArgs))
 
-	var projectReport *limes.ProjectReport
+	var projectReport *limesresources.ProjectReport
 	err := sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		var (
 			projectUUID        string
@@ -121,15 +123,17 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 
 		//start new project report when necessary
 		if projectReport == nil {
-			projectReport = &limes.ProjectReport{
-				Name:       projectName,
-				UUID:       projectUUID,
-				ParentUUID: projectParentUUID,
-				Services:   make(limes.ProjectServiceReports),
+			projectReport = &limesresources.ProjectReport{
+				ProjectInfo: limes.ProjectInfo{
+					Name:       projectName,
+					UUID:       projectUUID,
+					ParentUUID: projectParentUUID,
+				},
+				Services: make(limesresources.ProjectServiceReports),
 			}
 
 			if clusterCanBurst {
-				projectReport.Bursting = &limes.ProjectBurstingInfo{
+				projectReport.Bursting = &limesresources.ProjectBurstingInfo{
 					Enabled:    projectHasBursting,
 					Multiplier: cluster.Config.Bursting.MaxMultiplier,
 				}
@@ -144,14 +148,15 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 		//start new service report when necessary
 		srvReport := projectReport.Services[*serviceType]
 		if srvReport == nil {
-			srvReport = &limes.ProjectServiceReport{
+			srvReport = &limesresources.ProjectServiceReport{
 				ServiceInfo: cluster.InfoForService(*serviceType),
-				Resources:   make(limes.ProjectResourceReports),
+				Resources:   make(limesresources.ProjectResourceReports),
 			}
 			projectReport.Services[*serviceType] = srvReport
 
 			if scrapedAt != nil {
-				srvReport.ScrapedAt = pointerTo(scrapedAt.Unix())
+				t := limes.UnixEncodedTime{Time: *scrapedAt}
+				srvReport.ScrapedAt = &t
 			}
 		}
 
@@ -162,7 +167,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 
 		//build resource report
 		behavior := cluster.BehaviorForResource(*serviceType, *resourceName, domain.Name+"/"+projectName)
-		resReport := &limes.ProjectResourceReport{
+		resReport := &limesresources.ProjectResourceReport{
 			ResourceInfo:  cluster.InfoForResource(*serviceType, *resourceName),
 			Usage:         unwrapOrDefault(usage, 0),
 			PhysicalUsage: physicalUsage,
@@ -203,17 +208,17 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 }
 
 // GetProjectRates works just like GetProjects, except that rate data is returned instead of resource data.
-func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Project, dbi db.Interface, filter Filter, submit func(*limes.ProjectReport) error) error {
+func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Project, dbi db.Interface, filter Filter, submit func(*limesrates.ProjectReport) error) error {
 	fields := map[string]interface{}{"p.domain_id": domain.ID}
 	if project != nil {
 		fields["p.id"] = project.ID
 	}
 
 	//query for rate data
-	queryStr, joinArgs := filter.PrepareQuery(projectRateLimitReportQuery)
+	queryStr, joinArgs := filter.PrepareQuery(projectRateReportQuery)
 	whereStr, whereArgs := db.BuildSimpleWhereClause(fields, len(joinArgs))
 
-	var projectReport *limes.ProjectReport
+	var projectReport *limesrates.ProjectReport
 	err := sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		var (
 			projectUUID       string
@@ -223,7 +228,7 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 			ratesScrapedAt    *time.Time
 			rateName          *string
 			limit             *uint64
-			window            *limes.Window
+			window            *limesrates.Window
 			usageAsBigint     *string
 		)
 		err := rows.Scan(
@@ -247,11 +252,13 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 
 		//start new project report when necessary
 		if projectReport == nil {
-			projectReport = &limes.ProjectReport{
-				Name:       projectName,
-				UUID:       projectUUID,
-				ParentUUID: projectParentUUID,
-				Services:   make(limes.ProjectServiceReports),
+			projectReport = &limesrates.ProjectReport{
+				ProjectInfo: limes.ProjectInfo{
+					Name:       projectName,
+					UUID:       projectUUID,
+					ParentUUID: projectParentUUID,
+				},
+				Services: make(limesrates.ProjectServiceReports),
 			}
 		}
 
@@ -263,22 +270,23 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 		//start new service report when necessary
 		srvReport := projectReport.Services[*serviceType]
 		if srvReport == nil {
-			srvReport = &limes.ProjectServiceReport{
+			srvReport = &limesrates.ProjectServiceReport{
 				ServiceInfo: cluster.InfoForService(*serviceType),
-				Rates:       make(limes.ProjectRateLimitReports),
+				Rates:       make(limesrates.ProjectRateReports),
 			}
 			projectReport.Services[*serviceType] = srvReport
 
 			if ratesScrapedAt != nil {
-				srvReport.RatesScrapedAt = pointerTo(ratesScrapedAt.Unix())
+				t := limes.UnixEncodedTime{Time: *ratesScrapedAt}
+				srvReport.ScrapedAt = &t
 			}
 
 			//fill new service report with default rate limits
 			if svcConfig, err := cluster.Config.GetServiceConfigurationForType(*serviceType); err == nil {
 				if len(svcConfig.RateLimits.ProjectDefault) > 0 {
-					srvReport.Rates = make(limes.ProjectRateLimitReports, len(svcConfig.RateLimits.ProjectDefault))
+					srvReport.Rates = make(limesrates.ProjectRateReports, len(svcConfig.RateLimits.ProjectDefault))
 					for _, rateLimit := range svcConfig.RateLimits.ProjectDefault {
-						srvReport.Rates[rateLimit.Name] = &limes.ProjectRateLimitReport{
+						srvReport.Rates[rateLimit.Name] = &limesrates.ProjectRateReport{
 							RateInfo: cluster.InfoForRate(srvReport.Type, rateLimit.Name),
 							Limit:    rateLimit.Limit,
 							Window:   pointerTo(rateLimit.Window),
@@ -298,7 +306,7 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 		//only relevant for rates that only have a usage)
 		rateReport := srvReport.Rates[*rateName]
 		if rateReport == nil && usageAsBigint != nil && *usageAsBigint != "" && cluster.HasUsageForRate(*serviceType, *rateName) {
-			rateReport = &limes.ProjectRateLimitReport{
+			rateReport = &limesrates.ProjectRateReport{
 				RateInfo: cluster.InfoForRate(*serviceType, *rateName),
 			}
 			srvReport.Rates[*rateName] = rateReport

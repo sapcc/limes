@@ -42,6 +42,8 @@ import (
 	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
+	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/logg"
 
 	"github.com/sapcc/limes/pkg/core"
@@ -65,7 +67,7 @@ type novaPlugin struct {
 	//computed state
 	flavorNameRx        *regexp.Regexp
 	hypervisorTypeRules []novaHypervisorTypeRule
-	resources           []limes.ResourceInfo
+	resources           []limesresources.ResourceInfo
 	ftt                 novaFlavorTranslationTable
 	//caches
 	osTypeForImage    map[string]string
@@ -80,7 +82,7 @@ type novaSerializedMetrics struct {
 	InstanceCountsByHypervisor map[string]uint64 `json:"instances_by_hypervisor,omitempty"`
 }
 
-var novaDefaultResources = []limes.ResourceInfo{
+var novaDefaultResources = []limesresources.ResourceInfo{
 	{
 		Name: "cores",
 		Unit: limes.UnitNone,
@@ -140,7 +142,7 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.E
 	}
 	for _, flavorName := range flavorNames {
 		if p.flavorNameRx == nil || p.flavorNameRx.MatchString(flavorName) {
-			p.resources = append(p.resources, limes.ResourceInfo{
+			p.resources = append(p.resources, limesresources.ResourceInfo{
 				Name:     p.ftt.LimesResourceNameForFlavor(flavorName),
 				Category: "per_flavor",
 				Unit:     limes.UnitNone,
@@ -151,37 +153,37 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.E
 	//add price class resources if requested
 	if p.scrapeInstances && p.cfg.Compute.BigVMMinMemoryMiB != 0 {
 		p.resources = append(p.resources,
-			limes.ResourceInfo{
+			limesresources.ResourceInfo{
 				Name:        "cores_regular",
 				Unit:        limes.UnitNone,
 				NoQuota:     true,
 				ContainedIn: "cores",
 			},
-			limes.ResourceInfo{
+			limesresources.ResourceInfo{
 				Name:        "cores_bigvm",
 				Unit:        limes.UnitNone,
 				NoQuota:     true,
 				ContainedIn: "cores",
 			},
-			limes.ResourceInfo{
+			limesresources.ResourceInfo{
 				Name:        "instances_regular",
 				Unit:        limes.UnitNone,
 				NoQuota:     true,
 				ContainedIn: "instances",
 			},
-			limes.ResourceInfo{
+			limesresources.ResourceInfo{
 				Name:        "instances_bigvm",
 				Unit:        limes.UnitNone,
 				NoQuota:     true,
 				ContainedIn: "instances",
 			},
-			limes.ResourceInfo{
+			limesresources.ResourceInfo{
 				Name:        "ram_regular",
 				Unit:        limes.UnitMebibytes,
 				NoQuota:     true,
 				ContainedIn: "ram",
 			},
-			limes.ResourceInfo{
+			limesresources.ResourceInfo{
 				Name:        "ram_bigvm",
 				Unit:        limes.UnitMebibytes,
 				NoQuota:     true,
@@ -237,12 +239,12 @@ func (p *novaPlugin) ServiceInfo() limes.ServiceInfo {
 }
 
 // Resources implements the core.QuotaPlugin interface.
-func (p *novaPlugin) Resources() []limes.ResourceInfo {
+func (p *novaPlugin) Resources() []limesresources.ResourceInfo {
 	return p.resources
 }
 
 // Rates implements the core.QuotaPlugin interface.
-func (p *novaPlugin) Rates() []limes.RateInfo {
+func (p *novaPlugin) Rates() []limesrates.RateInfo {
 	return nil
 }
 

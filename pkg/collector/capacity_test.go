@@ -26,7 +26,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/sapcc/go-api-declarations/limes"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
 
@@ -67,7 +67,7 @@ func Test_ScanCapacity(t *testing.T) {
 				Compiled: core.ResourceBehavior{
 					FullResourceNameRx: regexp.MustCompile("^unshared2/capacity$"),
 					OvercommitFactor:   2.5,
-					MaxBurstMultiplier: limes.BurstingMultiplier(math.Inf(+1)),
+					MaxBurstMultiplier: limesresources.BurstingMultiplier(math.Inf(+1)),
 				},
 			}},
 		},

@@ -27,6 +27,8 @@ import (
 	"strings"
 
 	"github.com/sapcc/go-api-declarations/limes"
+	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/logg"
 	yaml "gopkg.in/yaml.v2"
 )
@@ -139,10 +141,10 @@ func (svcRlConfig *ServiceRateLimitConfiguration) GetProjectDefaultRateLimit(nam
 
 // RateLimitConfiguration describes a rate limit configuration.
 type RateLimitConfiguration struct {
-	Name   string       `yaml:"name"`
-	Unit   limes.Unit   `yaml:"unit"`
-	Limit  uint64       `yaml:"limit"`
-	Window limes.Window `yaml:"window"`
+	Name   string            `yaml:"name"`
+	Unit   limes.Unit        `yaml:"unit"`
+	Limit  uint64            `yaml:"limit"`
+	Window limesrates.Window `yaml:"window"`
 }
 
 // CapacitorConfiguration describes a capacity plugin that is enabled for a
@@ -222,22 +224,22 @@ func (l LowPrivilegeRaiseConfiguration) IsAllowedForProjectsIn(domainName string
 // specialized behaviors of a single resource (or a set of resources) in a
 // certain cluster.
 type ResourceBehaviorConfiguration struct {
-	FullResourceName       string                    `yaml:"resource"`
-	Scope                  string                    `yaml:"scope"`
-	MaxBurstMultiplier     *limes.BurstingMultiplier `yaml:"max_burst_multiplier"`
-	OvercommitFactor       float64                   `yaml:"overcommit_factor"`
-	ScalesWith             string                    `yaml:"scales_with"`
-	ScalingFactor          float64                   `yaml:"scaling_factor"`
-	MinNonZeroProjectQuota uint64                    `yaml:"min_nonzero_project_quota"`
-	Annotations            map[string]interface{}    `yaml:"annotations"`
-	Compiled               ResourceBehavior          `yaml:"-"`
+	FullResourceName       string                             `yaml:"resource"`
+	Scope                  string                             `yaml:"scope"`
+	MaxBurstMultiplier     *limesresources.BurstingMultiplier `yaml:"max_burst_multiplier"`
+	OvercommitFactor       float64                            `yaml:"overcommit_factor"`
+	ScalesWith             string                             `yaml:"scales_with"`
+	ScalingFactor          float64                            `yaml:"scaling_factor"`
+	MinNonZeroProjectQuota uint64                             `yaml:"min_nonzero_project_quota"`
+	Annotations            map[string]interface{}             `yaml:"annotations"`
+	Compiled               ResourceBehavior                   `yaml:"-"`
 }
 
 // ResourceBehavior is the compiled version of ResourceBehaviorConfiguration.
 type ResourceBehavior struct {
 	FullResourceNameRx     *regexp.Regexp
 	ScopeRx                *regexp.Regexp
-	MaxBurstMultiplier     limes.BurstingMultiplier
+	MaxBurstMultiplier     limesresources.BurstingMultiplier
 	OvercommitFactor       float64
 	ScalesWithResourceName string
 	ScalesWithServiceType  string
@@ -248,11 +250,11 @@ type ResourceBehavior struct {
 
 // ToScalingBehavior returns the limes.ScalingBehavior for this resource, or nil
 // if no scaling has been configured.
-func (b ResourceBehavior) ToScalingBehavior() *limes.ScalingBehavior {
+func (b ResourceBehavior) ToScalingBehavior() *limesresources.ScalingBehavior {
 	if b.ScalesWithResourceName == "" {
 		return nil
 	}
-	return &limes.ScalingBehavior{
+	return &limesresources.ScalingBehavior{
 		ScalesWithServiceType:  b.ScalesWithServiceType,
 		ScalesWithResourceName: b.ScalesWithResourceName,
 		ScalingFactor:          b.ScalingFactor,
@@ -262,7 +264,7 @@ func (b ResourceBehavior) ToScalingBehavior() *limes.ScalingBehavior {
 // BurstingConfiguration contains the configuration options for quota bursting.
 type BurstingConfiguration struct {
 	//If MaxMultiplier is zero, bursting is disabled.
-	MaxMultiplier limes.BurstingMultiplier `yaml:"max_multiplier"`
+	MaxMultiplier limesresources.BurstingMultiplier `yaml:"max_multiplier"`
 }
 
 // PrometheusAPIConfiguration contains configuration parameters for a Prometheus API.
@@ -395,7 +397,7 @@ func (cluster ClusterConfiguration) validateConfig() (success bool) {
 				success = false
 			}
 		} else {
-			behavior.Compiled.MaxBurstMultiplier = limes.BurstingMultiplier(math.Inf(+1))
+			behavior.Compiled.MaxBurstMultiplier = limesresources.BurstingMultiplier(math.Inf(+1))
 		}
 
 		if behavior.ScalesWith != "" {

@@ -103,9 +103,7 @@
             }
           ],
           "max_scraped_at": 44,
-          "min_scraped_at": 22,
-          "max_rates_scraped_at": 45,
-          "min_rates_scraped_at": 23
+          "min_scraped_at": 22
         },
         {
           "type": "unshared",
@@ -137,9 +135,7 @@
             }
           ],
           "max_scraped_at": 33,
-          "min_scraped_at": 11,
-          "max_rates_scraped_at": 34,
-          "min_rates_scraped_at": 12
+          "min_scraped_at": 11
         }
       ]
     }

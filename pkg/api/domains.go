@@ -25,7 +25,7 @@ import (
 
 	gorp "gopkg.in/gorp.v2"
 
-	"github.com/sapcc/go-api-declarations/limes"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sqlext"
@@ -130,10 +130,10 @@ func (p *v1Provider) putOrSimulatePutDomain(w http.ResponseWriter, r *http.Reque
 	//parse request body
 	var parseTarget struct {
 		Domain struct {
-			Services limes.QuotaRequest `json:"services"`
+			Services limesresources.QuotaRequest `json:"services"`
 		} `json:"domain"`
 	}
-	parseTarget.Domain.Services = make(limes.QuotaRequest)
+	parseTarget.Domain.Services = make(limesresources.QuotaRequest)
 	if !RequireJSON(w, r, &parseTarget) {
 		return
 	}

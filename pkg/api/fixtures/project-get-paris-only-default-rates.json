@@ -7,7 +7,6 @@
       {
         "type": "shared",
         "area": "shared",
-        "resources": [],
         "rates": [
           {
             "name": "service/shared/objects:create",
@@ -35,7 +34,6 @@
       {
         "type": "unshared",
         "area": "unshared",
-        "resources": [],
         "rates": [
           {
             "name": "service/unshared/instances:create",

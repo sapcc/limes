@@ -17,7 +17,7 @@
 *
 *******************************************************************************/
 
-package limes
+package limesrates
 
 import (
 	"encoding/json"

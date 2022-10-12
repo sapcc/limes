@@ -26,6 +26,8 @@ import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
+	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/logg"
 
 	"github.com/sapcc/limes/pkg/core"
@@ -61,15 +63,15 @@ func (p *cfmPlugin) ServiceInfo() limes.ServiceInfo {
 }
 
 // Resources implements the core.QuotaPlugin interface.
-func (p *cfmPlugin) Resources() []limes.ResourceInfo {
-	return []limes.ResourceInfo{{
+func (p *cfmPlugin) Resources() []limesresources.ResourceInfo {
+	return []limesresources.ResourceInfo{{
 		Name: "cfm_share_capacity",
 		Unit: limes.UnitBytes,
 	}}
 }
 
 // Rates implements the core.QuotaPlugin interface.
-func (p *cfmPlugin) Rates() []limes.RateInfo {
+func (p *cfmPlugin) Rates() []limesrates.RateInfo {
 	return nil
 }
 

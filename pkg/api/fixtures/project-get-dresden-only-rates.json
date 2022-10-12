@@ -7,7 +7,6 @@
       {
         "type": "shared",
         "area": "shared",
-        "resources": [],
         "rates": [
           {
             "name": "service/shared/objects:create",
@@ -37,12 +36,11 @@
             "window": "1s"
           }
         ],
-        "rates_scraped_at": 45
+        "scraped_at": 45
       },
       {
         "type": "unshared",
         "area": "unshared",
-        "resources": [],
         "rates": [
           {
             "name": "service/unshared/instances:create",
@@ -61,7 +59,7 @@
             "window": "1s"
           }
         ],
-        "rates_scraped_at": 34
+        "scraped_at": 34
       }
     ]
   }

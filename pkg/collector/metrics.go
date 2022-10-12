@@ -26,7 +26,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/sapcc/go-api-declarations/limes"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
 
@@ -656,7 +656,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		}
 
 		if capacityPerAZ != "" {
-			azReports := make(limes.ClusterAvailabilityZoneReports)
+			azReports := make(limesresources.ClusterAvailabilityZoneReports)
 			err := json.Unmarshal([]byte(capacityPerAZ), &azReports)
 			if err != nil {
 				return err

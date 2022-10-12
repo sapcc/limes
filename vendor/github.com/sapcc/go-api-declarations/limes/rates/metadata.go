@@ -1,6 +1,6 @@
 /*******************************************************************************
 *
-* Copyright 2018 SAP SE
+* Copyright 2022 SAP SE
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -17,8 +17,14 @@
 *
 *******************************************************************************/
 
-// Package limes contains data structures that appear on the Limes API.
-// This package only has basic types that are shared between the resource API
-// and the rate API. The concrete types for each of these sub-APIs are in the
-// packages in the two subdirectories.
-package limes
+package limesrates
+
+import "github.com/sapcc/go-api-declarations/limes"
+
+// RateInfo contains the metadata for a rate (i.e. some type of event that can
+// be rate-limited and for which there may a way to retrieve a count of past
+// events from a backend service).
+type RateInfo struct {
+	Name string     `json:"name"`
+	Unit limes.Unit `json:"unit,omitempty"`
+}

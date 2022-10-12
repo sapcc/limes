@@ -22,7 +22,7 @@ package db
 import (
 	"time"
 
-	"github.com/sapcc/go-api-declarations/limes"
+	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 )
 
 // ClusterCapacitor contains a record from the `cluster_capacitors` table.
@@ -117,11 +117,11 @@ type ProjectResource struct {
 
 // ProjectRate contains a record from the `project_rates` table.
 type ProjectRate struct {
-	ServiceID     int64         `db:"service_id"`
-	Name          string        `db:"name"`
-	Limit         *uint64       `db:"rate_limit"`      // nil for rates that don't have a limit (just a usage)
-	Window        *limes.Window `db:"window_ns"`       // nil for rates that don't have a limit (just a usage)
-	UsageAsBigint string        `db:"usage_as_bigint"` // empty for rates that don't have a usage (just a limit)
+	ServiceID     int64              `db:"service_id"`
+	Name          string             `db:"name"`
+	Limit         *uint64            `db:"rate_limit"`      // nil for rates that don't have a limit (just a usage)
+	Window        *limesrates.Window `db:"window_ns"`       // nil for rates that don't have a limit (just a usage)
+	UsageAsBigint string             `db:"usage_as_bigint"` // empty for rates that don't have a usage (just a limit)
 	//^ NOTE: Postgres has a NUMERIC type that would be large enough to hold an
 	//  uint128, but Go does not have a uint128 builtin, so it's easier to just
 	//  use strings throughout and cast into bigints in the scraper only.

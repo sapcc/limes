@@ -30,6 +30,8 @@ import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
+	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 
 	"github.com/sapcc/limes/pkg/core"
 )
@@ -37,7 +39,7 @@ import (
 // Plugin is a core.QuotaPlugin implementation for unit tests.
 type Plugin struct {
 	StaticServiceType  string
-	StaticRateInfos    []limes.RateInfo
+	StaticRateInfos    []limesrates.RateInfo
 	StaticResourceData map[string]*core.ResourceData
 	StaticCapacity     map[string]uint64
 	OverrideQuota      map[string]map[string]uint64
@@ -47,7 +49,7 @@ type Plugin struct {
 	SetQuotaFails        bool
 }
 
-var resources = []limes.ResourceInfo{
+var resources = []limesresources.ResourceInfo{
 	{
 		Name: "capacity",
 		Unit: limes.UnitBytes,
@@ -65,7 +67,7 @@ var resources = []limes.ResourceInfo{
 }
 
 // NewPlugin creates a new Plugin for the given service type.
-func NewPlugin(serviceType string, rates ...limes.RateInfo) *Plugin {
+func NewPlugin(serviceType string, rates ...limesrates.RateInfo) *Plugin {
 	return &Plugin{
 		StaticServiceType: serviceType,
 		StaticRateInfos:   rates,
@@ -99,12 +101,12 @@ func (p *Plugin) ServiceInfo() limes.ServiceInfo {
 }
 
 // Resources implements the core.QuotaPlugin interface.
-func (p *Plugin) Resources() []limes.ResourceInfo {
+func (p *Plugin) Resources() []limesresources.ResourceInfo {
 	return resources
 }
 
 // Rates implements the core.QuotaPlugin interface.
-func (p *Plugin) Rates() []limes.RateInfo {
+func (p *Plugin) Rates() []limesrates.RateInfo {
 	return p.StaticRateInfos
 }
 

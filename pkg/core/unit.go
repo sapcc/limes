@@ -19,7 +19,10 @@
 
 package core
 
-import "github.com/sapcc/go-api-declarations/limes"
+import (
+	"github.com/sapcc/go-api-declarations/limes"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+)
 
 // ConvertUnitFor works like ConvertTo, but instead of taking a unit as an
 // argument, it uses the native unit of the specified resource. In contrast to
@@ -44,7 +47,7 @@ type LowPrivilegeRaiseLimit struct {
 }
 
 // Evaluate converts this limit into an absolute value.
-func (l LowPrivilegeRaiseLimit) Evaluate(clusterReport limes.ClusterResourceReport, oldQuota uint64) uint64 {
+func (l LowPrivilegeRaiseLimit) Evaluate(clusterReport limesresources.ClusterResourceReport, oldQuota uint64) uint64 {
 	switch {
 	case clusterReport.DomainsQuota == nil:
 		//defense in depth - we shouldn't be considering LPR limits at all for resources that don't track quota

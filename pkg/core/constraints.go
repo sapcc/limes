@@ -27,6 +27,7 @@ import (
 	"strings"
 
 	"github.com/sapcc/go-api-declarations/limes"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -274,7 +275,7 @@ var (
 
 // When parsing a constraint for a project, `projectMinimumsSum` will be nil.
 // When parsing a constraint for a domain, `projectMinimumsSum` will be non-nil.
-func parseQuotaConstraint(resource limes.ResourceInfo, str string, projectMinimumsSum *uint64) (*QuotaConstraint, error) {
+func parseQuotaConstraint(resource limesresources.ResourceInfo, str string, projectMinimumsSum *uint64) (*QuotaConstraint, error) {
 	var lowerBounds []uint64
 	var upperBounds []uint64
 

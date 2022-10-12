@@ -28,6 +28,8 @@ import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
+	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/logg"
 
 	"github.com/sapcc/limes/pkg/core"
@@ -37,7 +39,7 @@ type cronusPlugin struct {
 	cfg core.ServiceConfiguration
 }
 
-var cronusRates = []limes.RateInfo{
+var cronusRates = []limesrates.RateInfo{
 	{
 		Name: "attachment_size",
 		Unit: limes.UnitBytes,
@@ -77,12 +79,12 @@ func (p *cronusPlugin) ServiceInfo() limes.ServiceInfo {
 }
 
 // Resources implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) Resources() []limes.ResourceInfo {
+func (p *cronusPlugin) Resources() []limesresources.ResourceInfo {
 	return nil
 }
 
 // Rates implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) Rates() []limes.RateInfo {
+func (p *cronusPlugin) Rates() []limesrates.RateInfo {
 	return cronusRates
 }
 

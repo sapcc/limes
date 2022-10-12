@@ -5,7 +5,6 @@
       {
         "type": "shared",
         "area": "shared",
-        "resources": [],
         "rates": [
           {
             "name": "service/shared/objects:create",
@@ -13,15 +12,14 @@
             "window": "1s"
           }
         ],
-        "max_rates_scraped_at": 45,
-        "min_rates_scraped_at": 23
+        "max_scraped_at": 45,
+        "min_scraped_at": 23
       },
       {
         "type": "unshared",
         "area": "unshared",
-        "resources": [],
-        "max_rates_scraped_at": 34,
-        "min_rates_scraped_at": 12
+        "max_scraped_at": 34,
+        "min_scraped_at": 12
       }
     ]
   }

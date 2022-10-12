@@ -27,6 +27,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sapcc/go-api-declarations/limes"
+	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/logg"
@@ -36,7 +37,7 @@ import (
 )
 
 func Test_RateScrapeSuccess(t *testing.T) {
-	rates := []limes.RateInfo{
+	rates := []limesrates.RateInfo{
 		{Name: "firstrate"},
 		{Name: "secondrate", Unit: limes.UnitKibibytes},
 	}
@@ -56,7 +57,7 @@ func Test_RateScrapeSuccess(t *testing.T) {
 		ServiceID: 1,
 		Name:      "secondrate",
 		Limit:     p2u64(10),
-		Window:    p2window(1 * limes.WindowSeconds),
+		Window:    p2window(1 * limesrates.WindowSeconds),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -65,7 +66,7 @@ func Test_RateScrapeSuccess(t *testing.T) {
 		ServiceID: 1,
 		Name:      "otherrate",
 		Limit:     p2u64(42),
-		Window:    p2window(2 * limes.WindowMinutes),
+		Window:    p2window(2 * limesrates.WindowMinutes),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -154,7 +155,7 @@ func Test_RateScrapeSuccess(t *testing.T) {
 }
 
 func Test_RateScrapeFailure(t *testing.T) {
-	rates := []limes.RateInfo{
+	rates := []limesrates.RateInfo{
 		{Name: "firstrate"},
 		{Name: "secondrate", Unit: limes.UnitKibibytes},
 	}
@@ -200,7 +201,7 @@ func setProjectServicesRatesStale(t *testing.T) {
 	}
 }
 
-func p2window(val limes.Window) *limes.Window {
+func p2window(val limesrates.Window) *limesrates.Window {
 	return &val
 }
 

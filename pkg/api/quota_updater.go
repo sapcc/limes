@@ -32,6 +32,7 @@ import (
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/respondwith"
@@ -114,7 +115,7 @@ func (e MissingProjectReportError) Error() string {
 // ValidateInput reads the given input and validates the quotas contained therein.
 // Results are collected into u.Requests. The return value is only set for unexpected
 // errors, not for validation errors.
-func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface) error {
+func (u *QuotaUpdater) ValidateInput(input limesresources.QuotaRequest, dbi db.Interface) error {
 	//gather reports on the cluster's capacity and domain's quotas to decide whether a quota update is legal
 	clusterReport, err := reports.GetClusterResources(u.Cluster, dbi, reports.Filter{})
 	if err != nil {
@@ -125,7 +126,7 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 		return err
 	}
 	//for project scope, we also need a project report for validation
-	var projectReport *limes.ProjectReport
+	var projectReport *limesresources.ProjectReport
 	if u.Project != nil {
 		projectReport, err = GetProjectResourceReport(u.Cluster, *u.Domain, *u.Project, dbi, reports.Filter{})
 		if err != nil {
@@ -143,9 +144,9 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 		for _, res := range quotaPlugin.Resources() {
 			//find the report data for this resource
 			var (
-				clusterRes *limes.ClusterResourceReport
-				domRes     *limes.DomainResourceReport
-				projRes    *limes.ProjectResourceReport
+				clusterRes *limesresources.ClusterResourceReport
+				domRes     *limesresources.DomainResourceReport
+				projRes    *limesresources.ProjectResourceReport
 			)
 			if clusterService, exists := clusterReport.Services[srv.Type]; exists {
 				clusterRes = clusterService.Resources[res.Name]
@@ -173,7 +174,7 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 			}
 
 			//skip resources where no new quota was requested
-			newQuota, exists := input[srv.Type].Resources[res.Name]
+			newQuota, exists := input[srv.Type][res.Name]
 			if !exists {
 				continue
 			}
@@ -198,7 +199,7 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 
 			//convert given value to correct unit
 			if req.ValidationError == nil {
-				req.NewValue, err = core.ConvertUnitFor(u.Cluster, srv.Type, res.Name, newQuota)
+				req.NewValue, err = core.ConvertUnitFor(u.Cluster, srv.Type, res.Name, limes.ValueWithUnit(newQuota))
 				if err != nil {
 					req.ValidationError = &core.QuotaValidationError{
 						Status:  http.StatusUnprocessableEntity,
@@ -222,8 +223,8 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 	// OPA policy handling
 	// skip if no OPA policy was loaded before
 	if u.Cluster.OPA.ProjectQuotaQuery != nil || u.Cluster.OPA.DomainQuotaQuery != nil {
-		desiredDomainReport := deepcopy.Copy(domainReport).(*limes.DomainReport)    //nolint:errcheck
-		desiredProjectReport := deepcopy.Copy(projectReport).(*limes.ProjectReport) //nolint:errcheck
+		desiredDomainReport := deepcopy.Copy(domainReport).(*limesresources.DomainReport)    //nolint:errcheck
+		desiredProjectReport := deepcopy.Copy(projectReport).(*limesresources.ProjectReport) //nolint:errcheck
 
 		for serviceType, requestsForService := range u.Requests {
 			for resourceName, requestForResource := range requestsForService {
@@ -269,7 +270,7 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 		if isUnknownService {
 			u.Requests[srvType] = make(map[string]QuotaRequest)
 		}
-		for resName := range srvInput.Resources {
+		for resName := range srvInput {
 			if !u.Cluster.HasResource(srvType, resName) {
 				msg := "no such resource"
 				if isUnknownService {
@@ -291,7 +292,7 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 		for srvType, srvInput := range input {
 			//only check if there were no other validation errors
 			hasAnyPreviousErrors := false
-			for resName := range srvInput.Resources {
+			for resName := range srvInput {
 				if u.Requests[srvType][resName].ValidationError != nil {
 					hasAnyPreviousErrors = true
 					break
@@ -310,7 +311,7 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 					}
 				}
 			}
-			for resName := range srvInput.Resources {
+			for resName := range srvInput {
 				quotaValues[resName] = u.Requests[srvType][resName].NewValue
 			}
 
@@ -321,7 +322,7 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 				project := core.KeystoneProjectFromDB(*u.Project, domain)
 				err := plugin.IsQuotaAcceptableForProject(provider, eo, project, quotaValues)
 				if err != nil {
-					for resName := range srvInput.Resources {
+					for resName := range srvInput {
 						u.Requests[srvType][resName] = QuotaRequest{
 							ValidationError: &core.QuotaValidationError{
 								Status:  http.StatusUnprocessableEntity,
@@ -337,7 +338,7 @@ func (u *QuotaUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface)
 	return nil
 }
 
-func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limes.ResourceInfo, behavior core.ResourceBehavior, clusterRes limes.ClusterResourceReport, domRes limes.DomainResourceReport, projRes *limes.ProjectResourceReport, oldQuota, newQuota uint64) *core.QuotaValidationError {
+func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limesresources.ResourceInfo, behavior core.ResourceBehavior, clusterRes limesresources.ClusterResourceReport, domRes limesresources.DomainResourceReport, projRes *limesresources.ProjectResourceReport, oldQuota, newQuota uint64) *core.QuotaValidationError {
 	//check quota constraints
 	constraint := u.QuotaConstraints()[srv.Type][res.Name]
 	verr := constraint.Validate(newQuota)
@@ -414,8 +415,8 @@ func (u QuotaUpdater) validateAuthorization(srv limes.ServiceInfo, oldQuota, new
 }
 
 type checkPolicyInput struct {
-	TargetDomainReport  *limes.DomainReport  `json:"targetdomainreport"`
-	TargetProjectReport *limes.ProjectReport `json:"targetprojectreport"`
+	TargetDomainReport  *limesresources.DomainReport  `json:"targetdomainreport"`
+	TargetProjectReport *limesresources.ProjectReport `json:"targetprojectreport"`
 }
 
 // checkPolicy checks the input data against all OPA policies.
@@ -487,7 +488,7 @@ func (u QuotaUpdater) checkPolicy(input checkPolicyInput) ([]map[string]string, 
 	}
 }
 
-func (u QuotaUpdater) validateDomainQuota(report limes.DomainResourceReport, newQuota uint64) *core.QuotaValidationError {
+func (u QuotaUpdater) validateDomainQuota(report limesresources.DomainResourceReport, newQuota uint64) *core.QuotaValidationError {
 	if report.DomainQuota == nil || report.ProjectsQuota == nil {
 		//defense in depth: we should have detected NoQuota resources a long time ago
 		return &core.QuotaValidationError{
@@ -510,7 +511,7 @@ func (u QuotaUpdater) validateDomainQuota(report limes.DomainResourceReport, new
 	return nil
 }
 
-func (u QuotaUpdater) validateProjectQuota(domRes limes.DomainResourceReport, projRes limes.ProjectResourceReport, newQuota uint64) *core.QuotaValidationError {
+func (u QuotaUpdater) validateProjectQuota(domRes limesresources.DomainResourceReport, projRes limesresources.ProjectResourceReport, newQuota uint64) *core.QuotaValidationError {
 	if projRes.Quota == nil || domRes.ProjectsQuota == nil || domRes.DomainQuota == nil {
 		//defense in depth: we should have detected NoQuota resources a long time ago
 		return &core.QuotaValidationError{

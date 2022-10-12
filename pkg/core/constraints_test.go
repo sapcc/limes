@@ -28,6 +28,8 @@ import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
+	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 )
 
 func TestQuotaConstraintParsingSuccess(t *testing.T) {
@@ -169,7 +171,7 @@ func (p quotaConstraintTestPlugin) Init(client *gophercloud.ProviderClient, eo g
 func (p quotaConstraintTestPlugin) ServiceInfo() limes.ServiceInfo {
 	return limes.ServiceInfo{Type: p.ServiceType}
 }
-func (p quotaConstraintTestPlugin) Rates() []limes.RateInfo {
+func (p quotaConstraintTestPlugin) Rates() []limesrates.RateInfo {
 	return nil
 }
 func (p quotaConstraintTestPlugin) Scrape(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project KeystoneProject) (result map[string]ResourceData, serializedMetrics string, err error) {
@@ -190,8 +192,8 @@ func (p quotaConstraintTestPlugin) CollectMetrics(ch chan<- prometheus.Metric, c
 	return nil
 }
 
-func (p quotaConstraintTestPlugin) Resources() []limes.ResourceInfo {
-	return []limes.ResourceInfo{
+func (p quotaConstraintTestPlugin) Resources() []limesresources.ResourceInfo {
+	return []limesresources.ResourceInfo{
 		{Name: "things", Unit: limes.UnitNone},
 		{Name: "capacity_MiB", Unit: limes.UnitMebibytes},
 	}

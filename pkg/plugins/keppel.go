@@ -25,6 +25,8 @@ import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
+	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 
 	"github.com/sapcc/limes/pkg/core"
 )
@@ -33,7 +35,7 @@ type keppelPlugin struct {
 	cfg core.ServiceConfiguration
 }
 
-var keppelResources = []limes.ResourceInfo{
+var keppelResources = []limesresources.ResourceInfo{
 	{
 		Name: "images",
 		Unit: limes.UnitNone,
@@ -61,12 +63,12 @@ func (p *keppelPlugin) ServiceInfo() limes.ServiceInfo {
 }
 
 // Resources implements the core.QuotaPlugin interface.
-func (p *keppelPlugin) Resources() []limes.ResourceInfo {
+func (p *keppelPlugin) Resources() []limesresources.ResourceInfo {
 	return keppelResources
 }
 
 // Rates implements the core.QuotaPlugin interface.
-func (p *keppelPlugin) Rates() []limes.RateInfo {
+func (p *keppelPlugin) Rates() []limesrates.RateInfo {
 	return nil
 }
 

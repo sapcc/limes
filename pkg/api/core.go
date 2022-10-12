@@ -30,7 +30,8 @@ import (
 	"sync"
 
 	"github.com/gorilla/mux"
-	"github.com/sapcc/go-api-declarations/limes"
+	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/respondwith"
 
@@ -226,7 +227,7 @@ func (p *v1Provider) FindProjectFromRequestIfExists(w http.ResponseWriter, r *ht
 }
 
 // GetDomainReport is a convenience wrapper around reports.GetDomains() for getting a single domain report.
-func GetDomainReport(cluster *core.Cluster, dbDomain db.Domain, dbi db.Interface, filter reports.Filter) (*limes.DomainReport, error) {
+func GetDomainReport(cluster *core.Cluster, dbDomain db.Domain, dbi db.Interface, filter reports.Filter) (*limesresources.DomainReport, error) {
 	domainReports, err := reports.GetDomains(cluster, &dbDomain.ID, dbi, filter)
 	if err != nil {
 		return nil, err
@@ -240,9 +241,9 @@ func GetDomainReport(cluster *core.Cluster, dbDomain db.Domain, dbi db.Interface
 // GetProjectResourceReport is a convenience wrapper around reports.GetProjectResources() for getting a single project resource report.
 //
 //nolint:dupl
-func GetProjectResourceReport(cluster *core.Cluster, dbDomain db.Domain, dbProject db.Project, dbi db.Interface, filter reports.Filter) (*limes.ProjectReport, error) {
-	var result *limes.ProjectReport
-	err := reports.GetProjectResources(cluster, dbDomain, &dbProject, dbi, filter, func(r *limes.ProjectReport) error {
+func GetProjectResourceReport(cluster *core.Cluster, dbDomain db.Domain, dbProject db.Project, dbi db.Interface, filter reports.Filter) (*limesresources.ProjectReport, error) {
+	var result *limesresources.ProjectReport
+	err := reports.GetProjectResources(cluster, dbDomain, &dbProject, dbi, filter, func(r *limesresources.ProjectReport) error {
 		result = r
 		return nil
 	})
@@ -258,9 +259,9 @@ func GetProjectResourceReport(cluster *core.Cluster, dbDomain db.Domain, dbProje
 // GetProjectRateReport is a convenience wrapper around reports.GetProjectRates() for getting a single project rate report.
 //
 //nolint:dupl
-func GetProjectRateReport(cluster *core.Cluster, dbDomain db.Domain, dbProject db.Project, dbi db.Interface, filter reports.Filter) (*limes.ProjectReport, error) {
-	var result *limes.ProjectReport
-	err := reports.GetProjectRates(cluster, dbDomain, &dbProject, dbi, filter, func(r *limes.ProjectReport) error {
+func GetProjectRateReport(cluster *core.Cluster, dbDomain db.Domain, dbProject db.Project, dbi db.Interface, filter reports.Filter) (*limesrates.ProjectReport, error) {
+	var result *limesrates.ProjectReport
+	err := reports.GetProjectRates(cluster, dbDomain, &dbProject, dbi, filter, func(r *limesrates.ProjectReport) error {
 		result = r
 		return nil
 	})

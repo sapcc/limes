@@ -25,7 +25,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/sapcc/go-api-declarations/limes"
+	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sqlext"
@@ -73,7 +73,7 @@ func (p *v1Provider) ListProjectRates(w http.ResponseWriter, r *http.Request) {
 	}
 
 	filter := reports.ReadFilter(r)
-	stream := NewJSONListStream[*limes.ProjectReport](w, r, "projects")
+	stream := NewJSONListStream[*limesrates.ProjectReport](w, r, "projects")
 	stream.FinalizeDocument(reports.GetProjectRates(p.Cluster, *dbDomain, nil, db.DB, filter, stream.WriteItem))
 }
 
@@ -127,10 +127,10 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 	//parse request body
 	var parseTarget struct {
 		Project struct {
-			Services limes.QuotaRequest `json:"services"`
+			Services limesrates.RateRequest `json:"services"`
 		} `json:"project"`
 	}
-	parseTarget.Project.Services = make(limes.QuotaRequest)
+	parseTarget.Project.Services = make(limesrates.RateRequest)
 	if !RequireJSON(w, r, &parseTarget) {
 		return
 	}

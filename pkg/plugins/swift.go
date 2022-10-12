@@ -31,6 +31,8 @@ import (
 	"github.com/majewsky/schwift/gopherschwift"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
+	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/logg"
 
 	"github.com/sapcc/limes/pkg/core"
@@ -40,7 +42,7 @@ type swiftPlugin struct {
 	cfg core.ServiceConfiguration
 }
 
-var swiftResources = []limes.ResourceInfo{
+var swiftResources = []limesresources.ResourceInfo{
 	{
 		Name: "capacity",
 		Unit: limes.UnitBytes,
@@ -95,12 +97,12 @@ func (p *swiftPlugin) ServiceInfo() limes.ServiceInfo {
 }
 
 // Resources implements the core.QuotaPlugin interface.
-func (p *swiftPlugin) Resources() []limes.ResourceInfo {
+func (p *swiftPlugin) Resources() []limesresources.ResourceInfo {
 	return swiftResources
 }
 
 // Rates implements the core.QuotaPlugin interface.
-func (p *swiftPlugin) Rates() []limes.RateInfo {
+func (p *swiftPlugin) Rates() []limesrates.RateInfo {
 	return nil
 }
 

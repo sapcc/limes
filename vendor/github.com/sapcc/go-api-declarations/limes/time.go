@@ -1,6 +1,6 @@
 /*******************************************************************************
 *
-* Copyright 2018 SAP SE
+* Copyright 2022 SAP SE
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -17,8 +17,33 @@
 *
 *******************************************************************************/
 
-// Package limes contains data structures that appear on the Limes API.
-// This package only has basic types that are shared between the resource API
-// and the rate API. The concrete types for each of these sub-APIs are in the
-// packages in the two subdirectories.
 package limes
+
+import (
+	"encoding/json"
+	"time"
+)
+
+// UnixEncodedTime is a time.Time that marshals into JSON as a UNIX timestamp.
+//
+// This is a single-member struct instead of a newtype because the former
+// enables directly calling time.Time methods on this type, e.g. t.String()
+// instead of time.Time(t).String().
+type UnixEncodedTime struct {
+	time.Time
+}
+
+// MarshalJSON implements the json.Marshaler interface.
+func (t UnixEncodedTime) MarshalJSON() ([]byte, error) {
+	return json.Marshal(t.Unix())
+}
+
+// UnmarshalJSON implements the json.Unmarshaler interface.
+func (t *UnixEncodedTime) UnmarshalJSON(buf []byte) error {
+	var tst int64
+	err := json.Unmarshal(buf, &tst)
+	if err == nil {
+		t.Time = time.Unix(tst, 0).UTC()
+	}
+	return err
+}

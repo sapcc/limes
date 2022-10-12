@@ -33,6 +33,8 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/sharedfilesystems/apiversions"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
+	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/logg"
 
 	"github.com/sapcc/limes/pkg/core"
@@ -108,9 +110,9 @@ func (p *manilaPlugin) ServiceInfo() limes.ServiceInfo {
 }
 
 // Resources implements the core.QuotaPlugin interface.
-func (p *manilaPlugin) Resources() []limes.ResourceInfo {
-	result := make([]limes.ResourceInfo, 0, 1+4*len(p.cfg.ShareV2.ShareTypes))
-	result = append(result, limes.ResourceInfo{
+func (p *manilaPlugin) Resources() []limesresources.ResourceInfo {
+	result := make([]limesresources.ResourceInfo, 0, 1+4*len(p.cfg.ShareV2.ShareTypes))
+	result = append(result, limesresources.ResourceInfo{
 		Name:     "share_networks",
 		Unit:     limes.UnitNone,
 		Category: "sharev2",
@@ -118,22 +120,22 @@ func (p *manilaPlugin) Resources() []limes.ResourceInfo {
 	for _, shareType := range p.cfg.ShareV2.ShareTypes {
 		category := p.makeResourceName("sharev2", shareType)
 		result = append(result,
-			limes.ResourceInfo{
+			limesresources.ResourceInfo{
 				Name:     p.makeResourceName("share_capacity", shareType),
 				Unit:     limes.UnitGibibytes,
 				Category: category,
 			},
-			limes.ResourceInfo{
+			limesresources.ResourceInfo{
 				Name:     p.makeResourceName("shares", shareType),
 				Unit:     limes.UnitNone,
 				Category: category,
 			},
-			limes.ResourceInfo{
+			limesresources.ResourceInfo{
 				Name:     p.makeResourceName("snapshot_capacity", shareType),
 				Unit:     limes.UnitGibibytes,
 				Category: category,
 			},
-			limes.ResourceInfo{
+			limesresources.ResourceInfo{
 				Name:     p.makeResourceName("share_snapshots", shareType),
 				Unit:     limes.UnitNone,
 				Category: category,
@@ -144,7 +146,7 @@ func (p *manilaPlugin) Resources() []limes.ResourceInfo {
 }
 
 // Rates implements the core.QuotaPlugin interface.
-func (p *manilaPlugin) Rates() []limes.RateInfo {
+func (p *manilaPlugin) Rates() []limesrates.RateInfo {
 	return nil
 }
 

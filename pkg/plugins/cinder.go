@@ -31,6 +31,8 @@ import (
 	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
+	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 
 	"github.com/sapcc/limes/pkg/core"
 )
@@ -67,22 +69,22 @@ func (p *cinderPlugin) ServiceInfo() limes.ServiceInfo {
 }
 
 // Resources implements the core.QuotaPlugin interface.
-func (p *cinderPlugin) Resources() []limes.ResourceInfo {
-	result := make([]limes.ResourceInfo, 0, 3*len(p.cfg.VolumeV2.VolumeTypes))
+func (p *cinderPlugin) Resources() []limesresources.ResourceInfo {
+	result := make([]limesresources.ResourceInfo, 0, 3*len(p.cfg.VolumeV2.VolumeTypes))
 	for _, volumeType := range p.cfg.VolumeV2.VolumeTypes {
 		category := p.makeResourceName("volumev2", volumeType)
 		result = append(result,
-			limes.ResourceInfo{
+			limesresources.ResourceInfo{
 				Name:     p.makeResourceName("capacity", volumeType),
 				Unit:     limes.UnitGibibytes,
 				Category: category,
 			},
-			limes.ResourceInfo{
+			limesresources.ResourceInfo{
 				Name:     p.makeResourceName("snapshots", volumeType),
 				Unit:     limes.UnitNone,
 				Category: category,
 			},
-			limes.ResourceInfo{
+			limesresources.ResourceInfo{
 				Name:     p.makeResourceName("volumes", volumeType),
 				Unit:     limes.UnitNone,
 				Category: category,
@@ -93,7 +95,7 @@ func (p *cinderPlugin) Resources() []limes.ResourceInfo {
 }
 
 // Rates implements the core.QuotaPlugin interface.
-func (p *cinderPlugin) Rates() []limes.RateInfo {
+func (p *cinderPlugin) Rates() []limesrates.RateInfo {
 	return nil
 }
 

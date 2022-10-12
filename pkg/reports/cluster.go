@@ -27,6 +27,8 @@ import (
 	"time"
 
 	"github.com/sapcc/go-api-declarations/limes"
+	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/pkg/core"
@@ -71,10 +73,12 @@ var clusterRateReportQuery1 = sqlext.SimplifyWhitespace(`
 `)
 
 // GetClusterResources returns the resource data report for the whole cluster.
-func GetClusterResources(cluster *core.Cluster, dbi db.Interface, filter Filter) (*limes.ClusterReport, error) {
-	report := &limes.ClusterReport{
-		ID:       "current", //the actual cluster ID is now an implementation detail and not shown on the API
-		Services: make(limes.ClusterServiceReports),
+func GetClusterResources(cluster *core.Cluster, dbi db.Interface, filter Filter) (*limesresources.ClusterReport, error) {
+	report := &limesresources.ClusterReport{
+		ClusterInfo: limes.ClusterInfo{
+			ID: "current", //the actual cluster ID is now an implementation detail and not shown on the API
+		},
+		Services: make(limesresources.ClusterServiceReports),
 	}
 
 	//first query: collect project usage data in these clusters
@@ -105,18 +109,8 @@ func GetClusterResources(cluster *core.Cluster, dbi db.Interface, filter Filter)
 		clusterCanBurst := cluster.Config.Bursting.MaxMultiplier > 0
 
 		if service != nil {
-			if maxScrapedAt != nil {
-				val := maxScrapedAt.Unix()
-				if service.MaxScrapedAt == nil || *service.MaxScrapedAt < val {
-					service.MaxScrapedAt = &val
-				}
-			}
-			if minScrapedAt != nil {
-				val := minScrapedAt.Unix()
-				if service.MinScrapedAt == nil || *service.MinScrapedAt > val {
-					service.MinScrapedAt = &val
-				}
-			}
+			service.MaxScrapedAt = mergeMaxTime(service.MaxScrapedAt, maxScrapedAt)
+			service.MinScrapedAt = mergeMinTime(service.MinScrapedAt, minScrapedAt)
 		}
 
 		if resource != nil {
@@ -205,13 +199,8 @@ func GetClusterResources(cluster *core.Cluster, dbi db.Interface, filter Filter)
 			}
 		}
 
-		scrapedAtUnix := scrapedAt.Unix()
-		if report.MaxScrapedAt == nil || *report.MaxScrapedAt < scrapedAtUnix {
-			report.MaxScrapedAt = &scrapedAtUnix
-		}
-		if report.MinScrapedAt == nil || *report.MinScrapedAt > scrapedAtUnix {
-			report.MinScrapedAt = &scrapedAtUnix
-		}
+		report.MaxScrapedAt = mergeMaxTime(report.MaxScrapedAt, &scrapedAt)
+		report.MinScrapedAt = mergeMinTime(report.MinScrapedAt, &scrapedAt)
 
 		return nil
 	})
@@ -223,10 +212,12 @@ func GetClusterResources(cluster *core.Cluster, dbi db.Interface, filter Filter)
 }
 
 // GetClusterResources returns the rate data report for the whole cluster.
-func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter) (*limes.ClusterReport, error) {
-	report := &limes.ClusterReport{
-		ID:       "current", //the actual cluster ID is now an implementation detail and not shown on the API
-		Services: make(limes.ClusterServiceReports),
+func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter) (*limesrates.ClusterReport, error) {
+	report := &limesrates.ClusterReport{
+		ClusterInfo: limes.ClusterInfo{
+			ID: "current", //the actual cluster ID is now an implementation detail and not shown on the API
+		},
+		Services: make(limesrates.ClusterServiceReports),
 	}
 
 	//collect scraping timestamp summaries
@@ -248,25 +239,15 @@ func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter) (*l
 		}
 		srvReport, exists := report.Services[serviceType]
 		if !exists {
-			srvReport = &limes.ClusterServiceReport{
+			srvReport = &limesrates.ClusterServiceReport{
 				ServiceInfo: cluster.InfoForService(serviceType),
-				Rates:       make(limes.ClusterRateLimitReports),
+				Rates:       make(limesrates.ClusterRateReports),
 			}
 			report.Services[serviceType] = srvReport
 		}
 
-		if maxRatesScrapedAt != nil {
-			val := maxRatesScrapedAt.Unix()
-			if srvReport.MaxRatesScrapedAt == nil || *srvReport.MaxRatesScrapedAt < val {
-				srvReport.MaxRatesScrapedAt = &val
-			}
-		}
-		if minRatesScrapedAt != nil {
-			val := minRatesScrapedAt.Unix()
-			if srvReport.MinRatesScrapedAt == nil || *srvReport.MinRatesScrapedAt > val {
-				srvReport.MinRatesScrapedAt = &val
-			}
-		}
+		srvReport.MaxScrapedAt = mergeMaxTime(srvReport.MaxScrapedAt, maxRatesScrapedAt)
+		srvReport.MinScrapedAt = mergeMinTime(srvReport.MinScrapedAt, minRatesScrapedAt)
 
 		return nil
 	})
@@ -279,8 +260,8 @@ func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter) (*l
 		srvReport := report.Services[serviceConfig.Type]
 		if srvReport != nil {
 			for _, rateCfg := range serviceConfig.RateLimits.Global {
-				srvReport.Rates[rateCfg.Name] = &limes.ClusterRateLimitReport{
-					RateInfo: limes.RateInfo{
+				srvReport.Rates[rateCfg.Name] = &limesrates.ClusterRateReport{
+					RateInfo: limesrates.RateInfo{
 						Name: rateCfg.Name,
 						Unit: rateCfg.Unit,
 					},
@@ -300,15 +281,15 @@ func makeClusterFilter(tableWithClusterID, clusterID string) map[string]interfac
 	}
 }
 
-func findInClusterReport(cluster *core.Cluster, report *limes.ClusterReport, serviceType string, resourceName *string) (*limes.ClusterServiceReport, *limes.ClusterResourceReport) {
+func findInClusterReport(cluster *core.Cluster, report *limesresources.ClusterReport, serviceType string, resourceName *string) (*limesresources.ClusterServiceReport, *limesresources.ClusterResourceReport) {
 	service, exists := report.Services[serviceType]
 	if !exists {
 		if !cluster.HasService(serviceType) {
 			return nil, nil
 		}
-		service = &limes.ClusterServiceReport{
+		service = &limesresources.ClusterServiceReport{
 			ServiceInfo: cluster.InfoForService(serviceType),
-			Resources:   make(limes.ClusterResourceReports),
+			Resources:   make(limesresources.ClusterResourceReports),
 		}
 		report.Services[serviceType] = service
 	}
@@ -322,7 +303,7 @@ func findInClusterReport(cluster *core.Cluster, report *limes.ClusterReport, ser
 		if !cluster.HasResource(serviceType, *resourceName) {
 			return service, nil
 		}
-		resource = &limes.ClusterResourceReport{
+		resource = &limesresources.ClusterResourceReport{
 			ResourceInfo: cluster.InfoForResource(serviceType, *resourceName),
 		}
 		if !resource.ResourceInfo.NoQuota {
@@ -338,8 +319,8 @@ func findInClusterReport(cluster *core.Cluster, report *limes.ClusterReport, ser
 	return service, resource
 }
 
-func getClusterAZReports(capacityPerAZ string, overcommitFactor float64) (limes.ClusterAvailabilityZoneReports, error) {
-	azReports := make(limes.ClusterAvailabilityZoneReports)
+func getClusterAZReports(capacityPerAZ string, overcommitFactor float64) (limesresources.ClusterAvailabilityZoneReports, error) {
+	azReports := make(limesresources.ClusterAvailabilityZoneReports)
 	err := json.Unmarshal([]byte(capacityPerAZ), &azReports)
 	if err != nil {
 		return nil, err

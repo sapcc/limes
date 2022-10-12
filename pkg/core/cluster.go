@@ -31,6 +31,8 @@ import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/sapcc/go-api-declarations/limes"
+	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/osext"
@@ -327,17 +329,17 @@ func (c *Cluster) HasResource(serviceType, resourceName string) bool {
 // plugin the ResourceInfo for the given resourceName. If the service or
 // resource does not exist, an empty ResourceInfo (with .Unit == UnitNone and
 // .Category == "") is returned.
-func (c *Cluster) InfoForResource(serviceType, resourceName string) limes.ResourceInfo {
+func (c *Cluster) InfoForResource(serviceType, resourceName string) limesresources.ResourceInfo {
 	plugin := c.QuotaPlugins[serviceType]
 	if plugin == nil {
-		return limes.ResourceInfo{Name: resourceName, Unit: limes.UnitNone}
+		return limesresources.ResourceInfo{Name: resourceName, Unit: limes.UnitNone}
 	}
 	for _, res := range plugin.Resources() {
 		if res.Name == resourceName {
 			return res
 		}
 	}
-	return limes.ResourceInfo{Name: resourceName, Unit: limes.UnitNone}
+	return limesresources.ResourceInfo{Name: resourceName, Unit: limes.UnitNone}
 }
 
 // InfoForService finds the plugin for the given serviceType and returns its
@@ -420,15 +422,15 @@ func (c *Cluster) HasUsageForRate(serviceType, rateName string) bool {
 // exist, an empty RateInfo (with .Unit == UnitNone) is returned. Note that this
 // only returns non-empty RateInfos for rates where a usage is reported. There
 // may be rates that only have a limit, as defined in the ClusterConfiguration.
-func (c *Cluster) InfoForRate(serviceType, rateName string) limes.RateInfo {
+func (c *Cluster) InfoForRate(serviceType, rateName string) limesrates.RateInfo {
 	plugin := c.QuotaPlugins[serviceType]
 	if plugin == nil {
-		return limes.RateInfo{Name: rateName, Unit: limes.UnitNone}
+		return limesrates.RateInfo{Name: rateName, Unit: limes.UnitNone}
 	}
 	for _, rate := range plugin.Rates() {
 		if rate.Name == rateName {
 			return rate
 		}
 	}
-	return limes.RateInfo{Name: rateName, Unit: limes.UnitNone}
+	return limesrates.RateInfo{Name: rateName, Unit: limes.UnitNone}
 }

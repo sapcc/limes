@@ -25,6 +25,8 @@ import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
+	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 
 	"github.com/sapcc/limes/pkg/db"
 )
@@ -97,7 +99,7 @@ type QuotaPlugin interface {
 	ServiceInfo() limes.ServiceInfo
 	//Resources returns metadata for all the resources that this plugin scrapes
 	//from the backend service.
-	Resources() []limes.ResourceInfo
+	Resources() []limesresources.ResourceInfo
 	//Scrape queries the backend service for the quota and usage data of all
 	//known resources for the given project in the given domain. The string keys
 	//in the result map must be identical to the resource names
@@ -117,7 +119,7 @@ type QuotaPlugin interface {
 	SetQuota(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project KeystoneProject, quotas map[string]uint64) error
 	//Rates returns metadata for all the rates that this plugin scrapes
 	//from the backend service.
-	Rates() []limes.RateInfo
+	Rates() []limesrates.RateInfo
 	//ScrapeRates queries the backend service for the usage data of all the rates
 	//enumerated by Rates() for the given project in the given domain. The string
 	//keys in the result map must be identical to the rate names from Rates().

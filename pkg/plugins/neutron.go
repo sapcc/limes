@@ -30,6 +30,8 @@ import (
 	neutron_quotas "github.com/gophercloud/gophercloud/openstack/networking/v2/extensions/quotas"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
+	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/logg"
 
 	"github.com/sapcc/limes/pkg/core"
@@ -37,12 +39,12 @@ import (
 
 type neutronPlugin struct {
 	cfg          core.ServiceConfiguration
-	resources    []limes.ResourceInfo
+	resources    []limesresources.ResourceInfo
 	hasExtension map[string]bool
 	hasOctavia   bool
 }
 
-var neutronResources = []limes.ResourceInfo{
+var neutronResources = []limesresources.ResourceInfo{
 	////////// SDN resources
 	{
 		Name:     "floating_ips",
@@ -210,12 +212,12 @@ func (p *neutronPlugin) ServiceInfo() limes.ServiceInfo {
 }
 
 // Resources implements the core.QuotaPlugin interface.
-func (p *neutronPlugin) Resources() []limes.ResourceInfo {
+func (p *neutronPlugin) Resources() []limesresources.ResourceInfo {
 	return p.resources
 }
 
 // Rates implements the core.QuotaPlugin interface.
-func (p *neutronPlugin) Rates() []limes.RateInfo {
+func (p *neutronPlugin) Rates() []limesrates.RateInfo {
 	return nil
 }
 

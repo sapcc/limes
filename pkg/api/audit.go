@@ -30,6 +30,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/cadf"
 	"github.com/sapcc/go-api-declarations/limes"
+	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	"github.com/sapcc/go-bits/audittools"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/logg"
@@ -197,8 +198,8 @@ type rateLimitEventTarget struct {
 	Unit         limes.Unit
 	OldLimit     uint64
 	NewLimit     uint64
-	OldWindow    limes.Window
-	NewWindow    limes.Window
+	OldWindow    limesrates.Window
+	NewWindow    limesrates.Window
 	RejectReason string
 }
 
@@ -241,23 +242,23 @@ type targetAttachmentContent struct {
 	// for rate limit changes
 	OldLimit  uint64
 	NewLimit  uint64
-	OldWindow limes.Window
-	NewWindow limes.Window
+	OldWindow limesrates.Window
+	NewWindow limesrates.Window
 }
 
 // MarshalJSON implements the json.Marshaler interface.
 func (a targetAttachmentContent) MarshalJSON() ([]byte, error) {
 	//copy data into a struct that does not have a custom MarshalJSON
 	data := struct {
-		OldQuota     uint64       `json:"oldQuota,omitempty"`
-		NewQuota     uint64       `json:"newQuota,omitempty"`
-		Unit         limes.Unit   `json:"unit,omitempty"`
-		NewStatus    bool         `json:"newStatus,omitempty"`
-		RejectReason string       `json:"rejectReason,omitempty"`
-		OldLimit     uint64       `json:"oldLimit,omitempty"`
-		NewLimit     uint64       `json:"newLimit,omitempty"`
-		OldWindow    limes.Window `json:"oldWindow,omitempty"`
-		NewWindow    limes.Window `json:"newWindow,omitempty"`
+		OldQuota     uint64            `json:"oldQuota,omitempty"`
+		NewQuota     uint64            `json:"newQuota,omitempty"`
+		Unit         limes.Unit        `json:"unit,omitempty"`
+		NewStatus    bool              `json:"newStatus,omitempty"`
+		RejectReason string            `json:"rejectReason,omitempty"`
+		OldLimit     uint64            `json:"oldLimit,omitempty"`
+		NewLimit     uint64            `json:"newLimit,omitempty"`
+		OldWindow    limesrates.Window `json:"oldWindow,omitempty"`
+		NewWindow    limesrates.Window `json:"newWindow,omitempty"`
 	}{
 		OldQuota:     a.OldQuota,
 		NewQuota:     a.NewQuota,

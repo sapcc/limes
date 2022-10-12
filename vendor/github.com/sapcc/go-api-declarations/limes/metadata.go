@@ -19,43 +19,29 @@
 
 package limes
 
-import "math"
-
-// ResourceInfo contains the metadata for a resource (i.e. some thing for which
-// quota and usage values can be retrieved from a backend service).
-type ResourceInfo struct {
-	Name string `json:"name"`
-	Unit Unit   `json:"unit,omitempty"`
-	//Category is an optional hint that UIs can use to group resources of one
-	//service into subgroups. If it is used, it should be set on all
-	//ResourceInfos reported by the same QuotaPlugin.
-	Category string `json:"category,omitempty"`
-	//If AutoApproveInitialQuota is non-zero, when a new project is scraped for
-	//the first time, a backend quota equal to this value will be approved
-	//automatically (i.e. Quota will be set equal to BackendQuota).
-	AutoApproveInitialQuota uint64 `json:"-"`
-	//If ExternallyManaged is true, quota cannot be set via the API. The quota
-	//value reported by the QuotaPlugin is always authoritative.
-	ExternallyManaged bool `json:"externally_managed,omitempty"`
-	//If NoQuota is true, quota is not tracked at all for this resource. The
-	//resource will only report usage. This field is not shown in API responses.
-	//Check `res.Quota == nil` instead.
-	NoQuota bool `json:"-"`
-	//ContainedIn is an optional hint that UIs can use to group resources. If non-empty,
-	//this resource is semantically contained within the resource with that name
-	//in the same service.
-	ContainedIn string `json:"contained_in,omitempty"`
+// ClusterInfo contains the metadata for a cluster that appears in both
+// resource data and rate data reports.
+type ClusterInfo struct {
+	ID string `json:"id"`
 }
 
-// RateInfo contains the metadata for a rate (i.e. some type of event that can
-// be rate-limited and for which there may a way to retrieve a count of past
-// events from a backend service).
-type RateInfo struct {
+// DomainInfo contains the metadata for a domain that appears in both resource
+// data and rate data reports.
+type DomainInfo struct {
+	UUID string `json:"id"`
 	Name string `json:"name"`
-	Unit Unit   `json:"unit,omitempty"`
 }
 
-// ServiceInfo contains the metadata for a backend service.
+// ProjectInfo contains the metadata for a project that appears in both
+// resource data and rate data reports.
+type ProjectInfo struct {
+	UUID       string `json:"id"`
+	Name       string `json:"name"`
+	ParentUUID string `json:"parent_id"`
+}
+
+// ServiceInfo contains the metadata for a backend service that appears in both
+// resource data and rate data reports.
 type ServiceInfo struct {
 	//Type returns the service type that the backend service for this
 	//plugin implements. This string must be identical to the type string from
@@ -67,21 +53,4 @@ type ServiceInfo struct {
 	ProductName string `json:"-"`
 	//Area is a hint that UIs can use to group similar services.
 	Area string `json:"area"`
-}
-
-// BurstingMultiplier is a multiplier for quota bursting.
-type BurstingMultiplier float64
-
-// ApplyTo returns the bursted backend quota for the given approved quota.
-func (m BurstingMultiplier) ApplyTo(quota uint64) uint64 {
-	return uint64(math.Floor((1 + float64(m)) * float64(quota)))
-}
-
-// ScalingBehavior appears in type DomainResourceReport and type
-// ProjectResourceReport and describes the scaling behavior of a single
-// resource.
-type ScalingBehavior struct {
-	ScalesWithResourceName string  `json:"resource_name"`
-	ScalesWithServiceType  string  `json:"service_type"`
-	ScalingFactor          float64 `json:"factor"`
 }

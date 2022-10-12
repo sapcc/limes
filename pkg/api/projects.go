@@ -27,7 +27,7 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
-	"github.com/sapcc/go-api-declarations/limes"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/respondwith"
@@ -62,7 +62,7 @@ func (p *v1Provider) ListProjects(w http.ResponseWriter, r *http.Request) {
 	defer p.listProjectsMutex.Unlock()
 
 	filter := reports.ReadFilter(r)
-	stream := NewJSONListStream[*limes.ProjectReport](w, r, "projects")
+	stream := NewJSONListStream[*limesresources.ProjectReport](w, r, "projects")
 	stream.FinalizeDocument(reports.GetProjectResources(p.Cluster, *dbDomain, nil, db.DB, filter, stream.WriteItem))
 }
 
@@ -187,10 +187,10 @@ func (p *v1Provider) putOrSimulatePutProject(w http.ResponseWriter, r *http.Requ
 			Bursting struct {
 				Enabled *bool `json:"enabled"`
 			} `json:"bursting"`
-			Services limes.QuotaRequest `json:"services"`
+			Services limesresources.QuotaRequest `json:"services"`
 		} `json:"project"`
 	}
-	parseTarget.Project.Services = make(limes.QuotaRequest)
+	parseTarget.Project.Services = make(limesresources.QuotaRequest)
 	if !RequireJSON(w, r, &parseTarget) {
 		return
 	}
@@ -207,7 +207,7 @@ func (p *v1Provider) putOrSimulatePutProject(w http.ResponseWriter, r *http.Requ
 	}
 }
 
-func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *http.Request, simulate bool, serviceQuotas limes.QuotaRequest) {
+func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *http.Request, simulate bool, serviceQuotas limesresources.QuotaRequest) {
 	requestTime := time.Now()
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:show") {

@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/sapcc/go-api-declarations/limes"
+	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/respondwith"
 
@@ -56,15 +57,15 @@ type RateLimitRequest struct {
 	Unit            limes.Unit
 	OldLimit        uint64
 	NewLimit        uint64
-	OldWindow       limes.Window
-	NewWindow       limes.Window
+	OldWindow       limesrates.Window
+	NewWindow       limesrates.Window
 	ValidationError *core.QuotaValidationError
 }
 
 // ValidateInput reads the given input and validates the quotas contained therein.
 // Results are collected into u.Requests. The return value is only set for unexpected
 // errors, not for validation errors.
-func (u *RateLimitUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interface) error {
+func (u *RateLimitUpdater) ValidateInput(input limesrates.RateRequest, dbi db.Interface) error {
 	projectReport, err := GetProjectRateReport(u.Cluster, *u.Domain, *u.Project, dbi, reports.Filter{})
 	if err != nil {
 		return err
@@ -83,7 +84,7 @@ func (u *RateLimitUpdater) ValidateInput(input limes.QuotaRequest, dbi db.Interf
 			u.Requests[svcType] = make(map[string]RateLimitRequest)
 		}
 
-		for rateName, newRateLimit := range in.Rates {
+		for rateName, newRateLimit := range in {
 			req := RateLimitRequest{
 				NewLimit:  newRateLimit.Limit,
 				NewWindow: newRateLimit.Window,
