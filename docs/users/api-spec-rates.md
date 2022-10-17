@@ -216,7 +216,7 @@ Notes:
 
 - Fields marked with **(L)** are only shown for rates that have limits, and omitted for rates that only track usage.
 - Fields marked with **(D)** are only shown for rates where the current project-scoped rate limit differs from the default.
-- Fields marked with **(U)** are only shown for rates that track usage, and ommitted for rates that only have limits.
+- Fields marked with **(U)** are only shown for rates that track usage, and omitted for rates that only have limits.
 
 The field `usage_as_bigint` is an ever-increasing counter, guaranteed to never reset. Most JSON parser libraries parse
 integers into 64-bit-wide types, a size which can be reasonably expected to overflow esp. for rates relating to data
