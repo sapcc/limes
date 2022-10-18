@@ -64,3 +64,20 @@ type ScalingBehavior struct {
 	ScalesWithServiceType  string  `json:"service_type"`
 	ScalingFactor          float64 `json:"factor"`
 }
+
+// QuotaDistributionModel is an enum.
+type QuotaDistributionModel string
+
+const (
+	// HierarchicalQuotaDistribution is the default QuotaDistributionModel,
+	// wherein quota is distributed to domains by the cloud admins, and then the
+	// projects by the domain admins. Domains and projects start out at zero
+	// quota.
+	HierarchicalQuotaDistribution QuotaDistributionModel = "hierarchical"
+	// CentralizedQuotaDistribution is an alternative QuotaDistributionModel,
+	// wherein quota is directly given to projects by the cloud admins. Projects
+	// start out at a generous default quota as configured by the Limes operator.
+	// The domain quota cannot be edited and is always reported equal to the
+	// projects quota.
+	CentralizedQuotaDistribution QuotaDistributionModel = "centralized"
+)

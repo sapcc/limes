@@ -43,11 +43,12 @@ type ClusterConfiguration struct {
 	Services   []ServiceConfiguration   `yaml:"services"`
 	Capacitors []CapacitorConfiguration `yaml:"capacitors"`
 	//^ Sorry for the stupid pun. Not.
-	Subresources      map[string][]string              `yaml:"subresources"`
-	Subcapacities     map[string][]string              `yaml:"subcapacities"`
-	LowPrivilegeRaise LowPrivilegeRaiseConfiguration   `yaml:"lowpriv_raise"`
-	ResourceBehaviors []*ResourceBehaviorConfiguration `yaml:"resource_behavior"`
-	Bursting          BurstingConfiguration            `yaml:"bursting"`
+	Subresources             map[string][]string               `yaml:"subresources"`
+	Subcapacities            map[string][]string               `yaml:"subcapacities"`
+	LowPrivilegeRaise        LowPrivilegeRaiseConfiguration    `yaml:"lowpriv_raise"`
+	ResourceBehaviors        []*ResourceBehaviorConfiguration  `yaml:"resource_behavior"`
+	Bursting                 BurstingConfiguration             `yaml:"bursting"`
+	QuotaDistributionConfigs []*QuotaDistributionConfiguration `yaml:"quota_distribution_configs"`
 }
 
 // GetServiceConfigurationForType returns the ServiceConfiguration or an error.
@@ -276,6 +277,15 @@ type PrometheusAPIConfiguration struct {
 	ServerCACertificatePath  string `yaml:"ca_cert"`
 }
 
+// QuotaDistributionConfiguration contains configuration options for specifying
+// the QuotaDistributionModel of specific resources.
+type QuotaDistributionConfiguration struct {
+	FullResourceName    string                                `yaml:"resource"`
+	FullResourceNameRx  *regexp.Regexp                        `yaml:"-"`
+	Model               limesresources.QuotaDistributionModel `yaml:"model"`
+	DefaultProjectQuota uint64                                `yaml:"default_project_quota"` //required for CentralizedDistribution
+}
+
 // NewConfiguration reads and validates the given configuration file.
 // Errors are logged and will result in
 // program termination, causing the function to not return.
@@ -417,6 +427,29 @@ func (cluster ClusterConfiguration) validateConfig() (success bool) {
 					success = false
 				}
 			}
+		}
+	}
+
+	for idx, qdCfg := range cluster.QuotaDistributionConfigs {
+		if qdCfg.FullResourceName == "" {
+			missing(fmt.Sprintf(`distribution_model_configs[%d].resource`, idx))
+		} else {
+			pattern := `^(?:` + qdCfg.FullResourceName + `)$`
+			qdCfg.FullResourceNameRx = compileOptionalRx(pattern)
+		}
+
+		switch qdCfg.Model {
+		case limesresources.HierarchicalQuotaDistribution:
+			if qdCfg.DefaultProjectQuota != 0 {
+				logg.Error("distribution_model_configs[%d].default_project_quota is invalid: not allowed for hierarchical distribution", idx)
+			}
+		case limesresources.CentralizedQuotaDistribution:
+			if qdCfg.DefaultProjectQuota == 0 {
+				missing(fmt.Sprintf(`distribution_model_configs[%d].default_project_quota`, idx))
+			}
+		default:
+			logg.Error("invalid value for distribution_model_configs[%d].model: %q", idx, qdCfg.Model)
+			success = false
 		}
 	}
 

@@ -402,6 +402,21 @@ func (c *Cluster) BehaviorForResource(serviceType, resourceName, scopeName strin
 	return result
 }
 
+// QuotaDistributionConfigForResource returns the QuotaDistributionConfiguration
+// for the given resource.
+func (c *Cluster) QuotaDistributionConfigForResource(serviceType, resourceName string) QuotaDistributionConfiguration {
+	//check for specific behavior
+	fullName := serviceType + "/" + resourceName
+	for _, dmCfg := range c.Config.QuotaDistributionConfigs {
+		if dmCfg.FullResourceNameRx.MatchString(fullName) {
+			return *dmCfg
+		}
+	}
+
+	//default behavior
+	return QuotaDistributionConfiguration{Model: limesresources.HierarchicalQuotaDistribution}
+}
+
 // HasUsageForRate checks whether the given service is enabled in this cluster and
 // whether it scrapes usage for the given rate.
 func (c *Cluster) HasUsageForRate(serviceType, rateName string) bool {

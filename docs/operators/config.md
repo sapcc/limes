@@ -25,7 +25,7 @@ on the top left corner of this document to get to a specific section of this gui
 | Variable | Default | Description |
 | --- | --- | --- |
 | `LIMES_API_LISTEN_ADDRESS` | `:80` | Bind address for the HTTP API exposed by this service, e.g. `127.0.0.1:80` to bind only on one IP, or `:80` to bind on all interfaces and addresses. |
-| `LIMES_API_POLICY_PATH` | `/etc/limes/policy.yaml` | Path to the oslo.policy file that describes authorization behavior for this service. Please refer to the [OpenStack documentation on policies][policy] for syntax reference. This repository includes an [example policy][ex-pol] that can be used for development setups, or as a basis for writing your own policy. For `:raise`, `:raise_lowpriv`, `:lower` and `:set_rate_limit` policies, the object attribute `%(service_type)s` is available to restrict editing to certain service types. |
+| `LIMES_API_POLICY_PATH` | `/etc/limes/policy.yaml` | Path to the oslo.policy file that describes authorization behavior for this service. Please refer to the [OpenStack documentation on policies][policy] for syntax reference. This repository includes an [example policy][ex-pol] that can be used for development setups, or as a basis for writing your own policy. For `:raise`, `:raise_lowpriv`, `:raise_centralized`, `:lower`, `:lower_centralized` and `:set_rate_limit` policies, the object attribute `%(service_type)s` is available to restrict editing to certain service types. |
 | `LIMES_OPA_DOMAIN_QUOTA_POLICY_PATH` | yes, when `opa` section is given | Path to a Rego file. This policy will be evaluated whenever a user tries to change a domain quota. If the policy reports any violations, the PUT will fail and the generated error messages will be reported to the user. See [../example-quota-policy.rego](../example-quota-policy.rego) for an example illustrating the expected structure of the policy. |
 | `LIMES_OPA_PROJECT_QUOTA_POLICY_PATH` | yes, when `opa` section is given | Like `LIMES_OPA_DOMAIN_QUOTA_POLICY_PATH`, but this policy is used for validating project quota changes instead. |
 
@@ -90,6 +90,7 @@ The following fields and sections are supported:
 | `lowpriv_raise` | no | Configuration options for low-privilege quota raising. See [*low-privilege quota raising*](#low-privilege-quota-raising) for details. |
 | `resource_behavior` | no | Configuration options for special resource behaviors. See [*resource behavior*](#resource-behavior) for details. |
 | `bursting.max_multiplier` | no | If given, permits quota bursting in this cluster. When projects enable quota bursting, the backend quota is set to `quota * (1 + max_multiplier)`. In the future, Limes may autonomously adjust the multiplier between 0 and the configured maximum based on cluster-wide resource utilization. |
+| `quota_distribution_configs` | no | Configuration options for selecting resource-specific quota distribution models. See [*quota distribution models*](#quota-distribution-models) for details. |
 
 ### Low-privilege quota raising
 
@@ -159,6 +160,29 @@ resource_behavior:
   # require each project to take at least 100 GB of object storage if they use it at all
   - { resource: object-store/capacity, min_nonzero_project_quota: 107374182400 }
 ```
+
+### Quota distribution models
+
+Each resource uses one of the following quota distribution models:
+
+* `hierarchical`: This is the default distribution model, wherein quota is distributed to domains by the cloud admins
+  (according to the `domain:{raise,raise_lowpriv,lower}` policies), and then the projects by the domain admins
+  (according to the `project:{raise,raise_lowpriv,lower}` policies). Domains and projects start out at zero quota.
+* `centralized`: In this model, quota is directly given to projects by the cloud admins (according to the
+  `project:{raise_centralized,lower_centralized}` policies). Projects start out at a generous default quota as
+  configured by the Limes operator. The domain quota cannot be edited and is always reported equal to the projects
+  quota.
+
+Resource-specific distribution models can be configured per resource in the `quota_distribution_configs[]` section. Each
+entry in this section can match multiple resources. Because the semantics of distribution models cross the boundaries of
+individual scopes, a distribution model config cannot be limited to certain scopes (like a resource behavior can). It
+always applies to the entire resource across all scopes.
+
+| Field | Required | Description |
+| --- | --- | --- |
+| `quota_distribution_configs[].resource` | yes | Must contain a regex. The config entry applies to all resources where this regex matches against a slash-concatenated pair of service type and resource name. The anchors `^` and `$` are implied at both ends, so the regex must match the entire phrase. |
+| `quota_distribution_configs[].model` | yes | Either "hierarchical" or "centralized". |
+| `quota_distribution_configs[].default_project_quota` | only for centralized distribution | The default quota value that will be given to new project resources. Only applicable for centralized quota distribution: Hierarchical quota distribution does not have nonzero default quotas. |
 
 ## Supported discovery methods
 
