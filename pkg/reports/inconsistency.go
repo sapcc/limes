@@ -95,24 +95,22 @@ var ocdqReportQuery = sqlext.SimplifyWhitespace(`
 `)
 
 var ospqReportQuery = sqlext.SimplifyWhitespace(`
-	SELECT d.uuid, d.name, p.uuid, p.name, ps.type, pr.name, SUM(pr.desired_backend_quota), SUM(pr.usage)
+	SELECT d.uuid, d.name, p.uuid, p.name, ps.type, pr.name, pr.desired_backend_quota, pr.usage
 	  FROM projects p
-	  LEFT OUTER JOIN domains d ON d.id=p.domain_id
-	  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
-	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
-	WHERE %s GROUP BY d.uuid, d.name, p.uuid, p.name, ps.type, pr.name
-	HAVING SUM(pr.usage) > SUM(pr.desired_backend_quota)
+	  JOIN domains d ON d.id = p.domain_id
+	  JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
+	  JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
+	WHERE %s AND pr.usage > pr.desired_backend_quota
 	ORDER BY d.name, p.name, ps.type, pr.name
 `)
 
 var mmpqReportQuery = sqlext.SimplifyWhitespace(`
-	SELECT d.uuid, d.name, p.uuid, p.name, ps.type, pr.name, SUM(pr.desired_backend_quota), SUM(pr.backend_quota)
+	SELECT d.uuid, d.name, p.uuid, p.name, ps.type, pr.name, pr.desired_backend_quota, pr.backend_quota
 	  FROM projects p
-	  LEFT OUTER JOIN domains d ON d.id=p.domain_id
-	  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
-	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
-	WHERE %s GROUP BY d.uuid, d.name, p.uuid, p.name, ps.type, pr.name
-	HAVING SUM(pr.backend_quota) != SUM(pr.desired_backend_quota)
+	  JOIN domains d ON d.id = p.domain_id
+	  JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
+	  JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
+	WHERE %s AND pr.backend_quota != pr.desired_backend_quota
 	ORDER BY d.name, p.name, ps.type, pr.name
 `)
 
