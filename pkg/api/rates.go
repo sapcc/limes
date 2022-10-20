@@ -48,7 +48,7 @@ func (p *v1Provider) GetClusterRates(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cluster, err := reports.GetClusterRates(p.Cluster, db.DB, reports.ReadFilter(r))
+	cluster, err := reports.GetClusterRates(p.Cluster, p.DB, reports.ReadFilter(r))
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -74,7 +74,7 @@ func (p *v1Provider) ListProjectRates(w http.ResponseWriter, r *http.Request) {
 
 	filter := reports.ReadFilter(r)
 	stream := NewJSONListStream[*limesrates.ProjectReport](w, r, "projects")
-	stream.FinalizeDocument(reports.GetProjectRates(p.Cluster, *dbDomain, nil, db.DB, filter, stream.WriteItem))
+	stream.FinalizeDocument(reports.GetProjectRates(p.Cluster, *dbDomain, nil, p.DB, filter, stream.WriteItem))
 }
 
 // GetProjectRates handles GET /rates/v1/domains/:domain_id/projects/:project_id.
@@ -98,7 +98,7 @@ func (p *v1Provider) GetProjectRates(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	project, err := GetProjectRateReport(p.Cluster, *dbDomain, *dbProject, db.DB, reports.ReadFilter(r))
+	project, err := GetProjectRateReport(p.Cluster, *dbDomain, *dbProject, p.DB, reports.ReadFilter(r))
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -161,10 +161,10 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 	var tx *gorp.Transaction
 	var dbi db.Interface
 	if simulate {
-		dbi = db.DB
+		dbi = p.DB
 	} else {
 		var err error
-		tx, err = db.DB.Begin()
+		tx, err = p.DB.Begin()
 		if respondwith.ErrorText(w, err) {
 			return
 		}

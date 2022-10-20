@@ -63,7 +63,7 @@ func (p *v1Provider) ListProjects(w http.ResponseWriter, r *http.Request) {
 
 	filter := reports.ReadFilter(r)
 	stream := NewJSONListStream[*limesresources.ProjectReport](w, r, "projects")
-	stream.FinalizeDocument(reports.GetProjectResources(p.Cluster, *dbDomain, nil, db.DB, filter, stream.WriteItem))
+	stream.FinalizeDocument(reports.GetProjectResources(p.Cluster, *dbDomain, nil, p.DB, filter, stream.WriteItem))
 }
 
 // GetProject handles GET /v1/domains/:domain_id/projects/:project_id.
@@ -82,7 +82,7 @@ func (p *v1Provider) GetProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	project, err := GetProjectResourceReport(p.Cluster, *dbDomain, *dbProject, db.DB, reports.ReadFilter(r))
+	project, err := GetProjectResourceReport(p.Cluster, *dbDomain, *dbProject, p.DB, reports.ReadFilter(r))
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -101,7 +101,8 @@ func (p *v1Provider) DiscoverProjects(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newProjectUUIDs, err := collector.ScanProjects(p.Cluster, dbDomain)
+	c := collector.NewCollector(p.Cluster, p.DB, nil)
+	newProjectUUIDs, err := c.ScanProjects(dbDomain)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -135,7 +136,8 @@ func (p *v1Provider) doSyncProject(w http.ResponseWriter, r *http.Request, stale
 
 	//check if project needs to be discovered
 	if dbProject == nil {
-		newProjectUUIDs, err := collector.ScanProjects(p.Cluster, dbDomain)
+		c := collector.NewCollector(p.Cluster, p.DB, nil)
+		newProjectUUIDs, err := c.ScanProjects(dbDomain)
 		if respondwith.ErrorText(w, err) {
 			return
 		}
@@ -160,7 +162,7 @@ func (p *v1Provider) doSyncProject(w http.ResponseWriter, r *http.Request, stale
 	}
 
 	//mark all project services as stale to force limes-collect to sync ASAP
-	_, err := db.DB.Exec(`UPDATE project_services SET `+staleField+` = '1' WHERE project_id = $1`, dbProject.ID)
+	_, err := p.DB.Exec(`UPDATE project_services SET `+staleField+` = '1' WHERE project_id = $1`, dbProject.ID)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -239,10 +241,10 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 	var tx *gorp.Transaction
 	var dbi db.Interface
 	if simulate {
-		dbi = db.DB
+		dbi = p.DB
 	} else {
 		var err error
-		tx, err = db.DB.Begin()
+		tx, err = p.DB.Begin()
 		if respondwith.ErrorText(w, err) {
 			return
 		}
@@ -351,7 +353,7 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 			UUID: updater.Domain.UUID,
 		}
 		err := datamodel.ApplyBackendQuota(
-			db.DB,
+			p.DB,
 			updater.Cluster, targetDomain, *updater.Project,
 			srv.ID, srv.Type,
 		)
@@ -404,10 +406,10 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 	var tx *gorp.Transaction
 	var dbi db.Interface
 	if simulate {
-		dbi = db.DB
+		dbi = p.DB
 	} else {
 		var err error
-		tx, err = db.DB.Begin()
+		tx, err = p.DB.Begin()
 		if respondwith.ErrorText(w, err) {
 			return
 		}
@@ -483,7 +485,7 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 
 	//update backend quotas to match new bursting mode
 	var services []db.ProjectService
-	_, err = db.DB.Select(&services, `SELECT * FROM project_services WHERE project_id = $1`, project.ID)
+	_, err = p.DB.Select(&services, `SELECT * FROM project_services WHERE project_id = $1`, project.ID)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -499,7 +501,7 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 			UUID: domain.UUID,
 		}
 		err := datamodel.ApplyBackendQuota(
-			db.DB,
+			p.DB,
 			p.Cluster, targetDomain, *project,
 			srv.ID, srv.Type,
 		)

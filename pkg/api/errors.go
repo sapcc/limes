@@ -25,7 +25,6 @@ import (
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/respondwith"
 
-	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/reports"
 )
 
@@ -37,7 +36,7 @@ func (p *v1Provider) ListScrapeErrors(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	scrapeErrors, err := reports.GetScrapeErrors(p.Cluster, db.DB, reports.ReadFilter(r))
+	scrapeErrors, err := reports.GetScrapeErrors(p.Cluster, p.DB, reports.ReadFilter(r))
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -53,7 +52,7 @@ func (p *v1Provider) ListRateScrapeErrors(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	scrapeErrors, err := reports.GetRateScrapeErrors(p.Cluster, db.DB, reports.ReadFilter(r))
+	scrapeErrors, err := reports.GetRateScrapeErrors(p.Cluster, p.DB, reports.ReadFilter(r))
 	if respondwith.ErrorText(w, err) {
 		return
 	}

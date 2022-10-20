@@ -31,36 +31,23 @@ import (
 )
 
 // InitDatabase initializes DB in pkg/db for testing.
-func InitDatabase(t *testing.T, fixtureFile *string) {
+func InitDatabase(t *testing.T, fixtureFile *string) *gorp.DbMap {
 	t.Helper()
 	//nolint:errcheck
 	postgresURL, _ := url.Parse("postgres://postgres:postgres@localhost:54321/limes?sslmode=disable")
-	postgresDB, err := easypg.Connect(easypg.Configuration{
-		PostgresURL: postgresURL,
-		Migrations:  db.SQLMigrations,
-	})
+	dbm, err := db.InitFromURL(postgresURL)
 	if err != nil {
 		t.Error(err)
 		t.Log("Try prepending ./testing/with-postgres-db.sh to your command.")
 		t.FailNow()
 	}
 
-	db.DB = &gorp.DbMap{Db: postgresDB, Dialect: gorp.PostgresDialect{}}
-
 	//reset the DB contents and populate with initial resources if requested
-	easypg.ClearTables(t, db.DB.Db, "cluster_capacitors", "cluster_services", "domains") //all other tables via "ON DELETE CASCADE"
+	easypg.ClearTables(t, dbm.Db, "cluster_capacitors", "cluster_services", "domains") //all other tables via "ON DELETE CASCADE"
 	if fixtureFile != nil {
-		easypg.ExecSQLFile(t, db.DB.Db, *fixtureFile)
+		easypg.ExecSQLFile(t, dbm.Db, *fixtureFile)
 	}
-	easypg.ResetPrimaryKeys(t, db.DB.Db, "cluster_services", "domains", "domain_services", "projects", "project_services")
+	easypg.ResetPrimaryKeys(t, dbm.Db, "cluster_services", "domains", "domain_services", "projects", "project_services")
 
-	db.InitGorp()
-}
-
-// AssertDBContent makes a dump of the database contents (as a sequence of
-// INSERT statements) and runs diff(1) against the given file, producing a test
-// error if these two are different from each other.
-func AssertDBContent(t *testing.T, fixtureFile string) {
-	t.Helper()
-	easypg.AssertDBContent(t, db.DB.Db, fixtureFile)
+	return dbm
 }

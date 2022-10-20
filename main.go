@@ -117,8 +117,8 @@ func taskCollect(cluster *core.Cluster, args []string) {
 	}
 
 	//connect to database
-	must.Succeed(db.Init())
-	prometheus.MustRegister(sqlstats.NewStatsCollector("limes", db.DB.Db))
+	dbm := must.Return(db.Init())
+	prometheus.MustRegister(sqlstats.NewStatsCollector("limes", dbm.Db))
 
 	//start scraping threads (NOTE: Many people use a pair of sync.WaitGroup and
 	//stop channel to shutdown threads in a controlled manner. I decided against
@@ -126,18 +126,18 @@ func taskCollect(cluster *core.Cluster, args []string) {
 	//can be terminated at any time without leaving the system in an inconsistent
 	//state, mostly through usage of DB transactions.)
 	for _, plugin := range cluster.QuotaPlugins {
-		c := collector.NewCollector(cluster, plugin)
+		c := collector.NewCollector(cluster, dbm, plugin)
 		go c.Scrape()
 		go c.ScrapeRates()
 	}
 
 	//start those collector threads which operate over all services simultaneously
-	c := collector.NewCollector(cluster, nil)
+	c := collector.NewCollector(cluster, dbm, nil)
 	go c.CheckConsistency()
 	go c.ScanCapacity()
 	go func() {
 		for {
-			_, err := collector.ScanDomains(cluster, collector.ScanDomainsOpts{ScanAllProjects: true})
+			_, err := c.ScanDomains(collector.ScanDomainsOpts{ScanAllProjects: true})
 			if err != nil {
 				logg.Error(util.UnpackError(err).Error())
 			}
@@ -146,13 +146,14 @@ func taskCollect(cluster *core.Cluster, args []string) {
 	}()
 
 	//use main thread to emit Prometheus metrics
-	prometheus.MustRegister(&collector.AggregateMetricsCollector{Cluster: cluster})
-	prometheus.MustRegister(&collector.CapacityPluginMetricsCollector{Cluster: cluster})
-	prometheus.MustRegister(&collector.QuotaPluginMetricsCollector{Cluster: cluster})
+	prometheus.MustRegister(&collector.AggregateMetricsCollector{Cluster: cluster, DB: dbm})
+	prometheus.MustRegister(&collector.CapacityPluginMetricsCollector{Cluster: cluster, DB: dbm})
+	prometheus.MustRegister(&collector.QuotaPluginMetricsCollector{Cluster: cluster, DB: dbm})
 	if osext.GetenvBool("LIMES_COLLECTOR_DATA_METRICS_EXPOSE") {
 		skipZero := osext.GetenvBool("LIMES_COLLECTOR_DATA_METRICS_SKIP_ZERO")
 		prometheus.MustRegister(&collector.DataMetricsCollector{
 			Cluster:      cluster,
+			DB:           dbm,
 			ReportZeroes: !skipZero,
 		})
 	}
@@ -172,11 +173,8 @@ func taskServe(cluster *core.Cluster, args []string) {
 	}
 
 	//connect to database
-	err := db.Init()
-	if err != nil {
-		logg.Fatal(err.Error())
-	}
-	prometheus.MustRegister(sqlstats.NewStatsCollector("limes", db.DB.Db))
+	dbm := must.Return(db.Init())
+	prometheus.MustRegister(sqlstats.NewStatsCollector("limes", dbm.Db))
 
 	//collect all API endpoints and middlewares
 	corsMiddleware := cors.New(cors.Options{
@@ -185,7 +183,7 @@ func taskServe(cluster *core.Cluster, args []string) {
 		AllowedHeaders: []string{"Content-Type", "User-Agent", "X-Auth-Token", "X-Limes-Cluster-Id"},
 	})
 	http.Handle("/", httpapi.Compose(
-		api.NewV1API(cluster),
+		api.NewV1API(cluster, dbm),
 		httpapi.WithGlobalMiddleware(api.ForbidClusterIDHeader),
 		httpapi.WithGlobalMiddleware(corsMiddleware.Handler),
 	))

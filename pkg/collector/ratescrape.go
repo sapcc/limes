@@ -78,7 +78,7 @@ func (c *Collector) ScrapeRates() {
 			project                 core.KeystoneProject
 		)
 		scrapeStartedAt := c.TimeNow()
-		err := db.DB.QueryRow(findProjectForRateScrapeQuery, c.Cluster.ID, serviceType, scrapeStartedAt.Add(-scrapeInterval), scrapeStartedAt.Add(-recheckInterval)).
+		err := c.DB.QueryRow(findProjectForRateScrapeQuery, c.Cluster.ID, serviceType, scrapeStartedAt.Add(-scrapeInterval), scrapeStartedAt.Add(-recheckInterval)).
 			Scan(&serviceID, &serviceRatesScrapedAt, &serviceRatesScrapeState, &project.Name, &project.UUID, &project.ParentUUID, &project.Domain.Name, &project.Domain.UUID)
 		if err != nil {
 			//ErrNoRows is okay; it just means that nothing needs scraping right now
@@ -140,7 +140,7 @@ func (c *Collector) ScrapeRates() {
 }
 
 func (c *Collector) writeRateScrapeResult(serviceType string, serviceID int64, rateData map[string]*big.Int, serviceRatesScrapeState string, scrapedAt time.Time, scrapeDuration time.Duration) error {
-	tx, err := db.DB.Begin()
+	tx, err := c.DB.Begin()
 	if err != nil {
 		return err
 	}
@@ -218,7 +218,7 @@ func (c *Collector) writeRateScrapeResult(serviceType string, serviceID int64, r
 }
 
 func (c *Collector) writeRateScrapeError(project core.KeystoneProject, serviceType string, serviceID int64, scrapeErr error, checkedAt time.Time, checkDuration time.Duration) {
-	_, err := db.DB.Exec(
+	_, err := c.DB.Exec(
 		`UPDATE project_services SET rates_checked_at = $1, rates_scrape_duration_secs = $2, rates_scrape_error_message = $3, rates_stale = $4 WHERE id = $5`,
 		checkedAt, checkDuration.Seconds(), util.UnpackError(scrapeErr).Error(), false, serviceID,
 	)

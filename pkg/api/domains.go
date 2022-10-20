@@ -44,7 +44,7 @@ func (p *v1Provider) ListDomains(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	domains, err := reports.GetDomains(p.Cluster, nil, db.DB, reports.ReadFilter(r))
+	domains, err := reports.GetDomains(p.Cluster, nil, p.DB, reports.ReadFilter(r))
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -64,7 +64,7 @@ func (p *v1Provider) GetDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	domain, err := GetDomainReport(p.Cluster, *dbDomain, db.DB, reports.ReadFilter(r))
+	domain, err := GetDomainReport(p.Cluster, *dbDomain, p.DB, reports.ReadFilter(r))
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -79,7 +79,8 @@ func (p *v1Provider) DiscoverDomains(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	newDomainUUIDs, err := collector.ScanDomains(p.Cluster, collector.ScanDomainsOpts{})
+	c := collector.NewCollector(p.Cluster, p.DB, nil)
+	newDomainUUIDs, err := c.ScanDomains(collector.ScanDomainsOpts{})
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -142,10 +143,10 @@ func (p *v1Provider) putOrSimulatePutDomain(w http.ResponseWriter, r *http.Reque
 	var tx *gorp.Transaction
 	var dbi db.Interface
 	if simulate {
-		dbi = db.DB
+		dbi = p.DB
 	} else {
 		var err error
-		tx, err = db.DB.Begin()
+		tx, err = p.DB.Begin()
 		if respondwith.ErrorText(w, err) {
 			return
 		}
