@@ -283,7 +283,7 @@ type QuotaDistributionConfiguration struct {
 	FullResourceName    string                                `yaml:"resource"`
 	FullResourceNameRx  *regexp.Regexp                        `yaml:"-"`
 	Model               limesresources.QuotaDistributionModel `yaml:"model"`
-	DefaultProjectQuota uint64                                `yaml:"default_project_quota"` //required for CentralizedDistribution
+	DefaultProjectQuota uint64                                `yaml:"default_project_quota"` //required for CentralizedQuotaDistribution
 }
 
 // NewConfiguration reads and validates the given configuration file.

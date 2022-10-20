@@ -51,6 +51,7 @@ func init() {
 	//This is required for core.GetServiceTypesForArea() to work.
 	core.RegisterQuotaPlugin(test.NewPluginFactory("shared"))
 	core.RegisterQuotaPlugin(test.NewPluginFactory("unshared"))
+	core.RegisterQuotaPlugin(test.NewPluginFactory("centralized"))
 }
 
 func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, *gorp.DbMap, http.Handler, *TestPolicyEnforcer) {
@@ -75,6 +76,12 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, *gor
 		"shared":   test.NewPlugin("shared", sharedRatesThatReportUsage...),
 		"unshared": test.NewPlugin("unshared", unsharedRatesThatReportUsage...),
 	}
+	hasCentralizedService := startData == "fixtures/start-data.sql"
+	if hasCentralizedService {
+		serviceTypes = append(serviceTypes, "centralized")
+		quotaPlugins["centralized"] = test.NewPlugin("centralized")
+	}
+
 	westConstraintSet := core.QuotaConstraintSet{
 		Domains: map[string]core.QuotaConstraints{
 			"france": {
@@ -178,6 +185,9 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, *gor
 				},
 			},
 		}
+		if hasCentralizedService {
+			clusterConfig.Services = append(clusterConfig.Services, core.ServiceConfiguration{Type: "centralized"})
+		}
 	}
 
 	cluster := &core.Cluster{
@@ -242,6 +252,19 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, *gor
 						"text": "this annotation appears on shared/things of project dresden only",
 					},
 				},
+			},
+		}
+		cluster.Config.QuotaDistributionConfigs = []*core.QuotaDistributionConfiguration{
+			//check behavior for centralized quota distribution (all other resources default to hierarchical quota distribution)
+			{
+				FullResourceNameRx:  regexp.MustCompile("^centralized/capacity$"),
+				Model:               limesresources.CentralizedQuotaDistribution,
+				DefaultProjectQuota: 15,
+			},
+			{
+				FullResourceNameRx:  regexp.MustCompile("^centralized/things$"),
+				Model:               limesresources.CentralizedQuotaDistribution,
+				DefaultProjectQuota: 10,
 			},
 		}
 	}
@@ -1174,7 +1197,7 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectStatus: 202,
 		ExpectBody:   assert.StringData(""),
 	}.Check(t, router)
-	expectStaleProjectServices(t, dbm, "stale", "dresden:shared", "dresden:unshared")
+	expectStaleProjectServices(t, dbm, "stale", "dresden:centralized", "dresden:shared", "dresden:unshared")
 	expectStaleProjectServices(t, dbm, "rates_stale" /*, nothing */)
 
 	//SyncProject should discover the given project if not yet done
@@ -1187,7 +1210,7 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectStatus: 202,
 		ExpectBody:   assert.StringData(""),
 	}.Check(t, router)
-	expectStaleProjectServices(t, dbm, "stale", "dresden:shared", "dresden:unshared", "walldorf:shared", "walldorf:unshared")
+	expectStaleProjectServices(t, dbm, "stale", "dresden:centralized", "dresden:shared", "dresden:unshared", "walldorf:centralized", "walldorf:shared", "walldorf:unshared")
 
 	//check SyncProjectRates (we don't need to check discovery again since SyncProjectRates shares this part of the
 	//implementation with SyncProject)
@@ -1199,7 +1222,7 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectBody:   assert.StringData(""),
 	}.Check(t, router)
 	expectStaleProjectServices(t, dbm, "stale" /*, nothing */)
-	expectStaleProjectServices(t, dbm, "rates_stale", "dresden:shared", "dresden:unshared")
+	expectStaleProjectServices(t, dbm, "rates_stale", "dresden:centralized", "dresden:shared", "dresden:unshared")
 
 	//check GetProject for a project that has been discovered, but not yet synced
 	assert.HTTPRequest{
@@ -2350,17 +2373,19 @@ func Test_LargeProjectList(t *testing.T) {
 					"scraped_at": idx,
 					"resources": []assert.JSONObject{
 						{
-							"name":         "capacity",
-							"unit":         "B",
-							"quota":        0,
-							"usable_quota": 0,
-							"usage":        0,
+							"name":                     "capacity",
+							"unit":                     "B",
+							"quota_distribution_model": "hierarchical",
+							"quota":                    0,
+							"usable_quota":             0,
+							"usage":                    0,
 						},
 						{
-							"name":         "things",
-							"quota":        0,
-							"usable_quota": 0,
-							"usage":        0,
+							"name":                     "things",
+							"quota_distribution_model": "hierarchical",
+							"quota":                    0,
+							"usable_quota":             0,
+							"usage":                    0,
 						},
 					},
 				},
@@ -2370,17 +2395,19 @@ func Test_LargeProjectList(t *testing.T) {
 					"scraped_at": idx,
 					"resources": []assert.JSONObject{
 						{
-							"name":         "capacity",
-							"unit":         "B",
-							"quota":        0,
-							"usable_quota": 0,
-							"usage":        0,
+							"name":                     "capacity",
+							"unit":                     "B",
+							"quota_distribution_model": "hierarchical",
+							"quota":                    0,
+							"usable_quota":             0,
+							"usage":                    0,
 						},
 						{
-							"name":         "things",
-							"quota":        idx,
-							"usable_quota": idx,
-							"usage":        idx / 2,
+							"name":                     "things",
+							"quota_distribution_model": "hierarchical",
+							"quota":                    idx,
+							"usable_quota":             idx,
+							"usage":                    idx / 2,
 						},
 					},
 				},

@@ -59,6 +59,21 @@ PiB   - pebibytes = 2^50 bytes
 EiB   - exbibytes = 2^60 bytes
 ```
 
+### Quota distribution models
+
+The above explanation of quota and usage describes **hierarchical quota distribution**, which is the default quota
+distribution model in Limes. Limes operators can also choose to have certain resources governed by the **centralized
+quota distribution** model instead. Under the centralized quota distribution model:
+
+- Project quotas start out at a resource-specific default value, and changes are only allowed to a very restricted set
+  of users (usually cloud admins).
+- Domain quota is not managed explicitly and, instead, always reported equal to the projects quota.
+
+The default project quota values are chosen by the Limes operator so that most projects never need to go above them. The
+centralized quota distribution model is suited for resources of secondary importance, where global usage is unlikely to
+be exceed the available capacity and the precise control afforded by hierarchical quota distribution is not needed. It
+trades a little loss of control for a potentially big gain in ease of process.
+
 ### Physical usage
 
 In addition to usage, some resources also report **physical usage**. In this case, "usage" refers to fixed resource
@@ -220,6 +235,7 @@ The objects at `cluster.services[].resources[]` may contain the following fields
 | `unit` | string | The unit of this resource (only shown for measured resources). |
 | `category` | string | The category of this resource (only shown when there is one). |
 | `contained_in` | string | The name of another resource (if any) within the same service that this resource is [contained in](#contained-resources). |
+| `quota_distribution_model` | string | The resource's [quota distribution model](#quota-distribution-model). Possible values are "hierarchical" and "centralized". |
 | `capacity` | unsigned integer | The available capacity for this resource. |
 | `raw_capacity` | unsigned integer | The available raw capacity for this resource (only shown for [overcommitted resources](#overcommit)). |
 | `per_availability_zone` | list of objects | A breakdown of this resource's capacity by availability zone (only shown for resources supporting a breakdown by AZ). |
@@ -310,6 +326,7 @@ The objects at `domains[].services[].resources[]` may contain the following fiel
 | `unit` | string | The unit of this resource (only shown for measured resources). |
 | `category` | string | The category of this resource (only shown when there is one). |
 | `contained_in` | string | The name of another resource (if any) within the same service that this resource is [contained in](#contained-resources). |
+| `quota_distribution_model` | string | The resource's [quota distribution model](#quota-distribution-model). Possible values are "hierarchical" and "centralized". |
 | `scales_with` | object | Only present when this resource is [scaling with](#scaling-relations) another resource. |
 | `scales_with.resource_name` | string | The name of the resource that this resource is scaling with. |
 | `scales_with.service_type` | string | The type name of the service containing the resource that this resource is scaling with. |
@@ -530,12 +547,14 @@ The objects at `projects[].services[].resources[]` may contain the following fie
 | `unit` | string | The unit of this resource (only shown for measured resources). |
 | `category` | string | The category of this resource (only shown when there is one). |
 | `contained_in` | string | The name of another resource (if any) within the same service that this resource is [contained in](#contained-resources). |
+| `quota_distribution_model` | string | The resource's [quota distribution model](#quota-distribution-model). Possible values are "hierarchical" and "centralized". |
 | `scales_with` | object | Only present when this resource is [scaling with](#scaling-relations) another resource. |
 | `scales_with.resource_name` | string | The name of the resource that this resource is scaling with. |
 | `scales_with.service_type` | string | The type name of the service containing the resource that this resource is scaling with. |
 | `scales_with.factor` | unsigned float | The factor with which this resource is scaling with the other resource. |
 | `annotations` | object | An object with string keys and string values containing arbitrary metadata that was configured for this resource in this project by Limes's operator. |
 | `quota` | unsigned integer | The granted quota for this resource in this project. |
+| `default_quota` | unsigned integer | The default quota for this resource in new projects (only shown when `quota_distribution_model` is `centralized`, and when the granted quota differs from the default quota). |
 | `usable_quota` | unsigned integer | The usable quota for this resource in this project (see [quota bursting](#quota-bursting) for details; only shown if different from the granted quota). |
 | `usage` | unsigned integer | The usage of this resource in this project. |
 | `burst_usage` | unsigned integer | The value of `usage - quota` in this project (only shown for [burstable resources](#quota-bursting) and if greater than zero). |

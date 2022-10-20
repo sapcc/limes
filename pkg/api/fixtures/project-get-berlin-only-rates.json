@@ -5,6 +5,11 @@
     "parent_id": "uuid-for-germany",
     "services": [
       {
+        "type": "centralized",
+        "area": "centralized",
+        "scraped_at": 73
+      },
+      {
         "type": "shared",
         "area": "shared",
         "rates": [

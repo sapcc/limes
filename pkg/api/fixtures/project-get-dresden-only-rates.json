@@ -5,6 +5,11 @@
     "parent_id": "uuid-for-berlin",
     "services": [
       {
+        "type": "centralized",
+        "area": "centralized",
+        "scraped_at": 83
+      },
+      {
         "type": "shared",
         "area": "shared",
         "rates": [

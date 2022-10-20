@@ -10,6 +10,7 @@
           "resources": [
             {
               "name": "things",
+              "quota_distribution_model": "hierarchical",
               "quota": 0,
               "projects_quota": 10,
               "usage": 2
@@ -30,6 +31,7 @@
           "resources": [
             {
               "name": "things",
+              "quota_distribution_model": "hierarchical",
               "quota": 30,
               "projects_quota": 20,
               "usage": 4,

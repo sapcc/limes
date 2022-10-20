@@ -53,14 +53,16 @@ type ProjectServiceReport struct {
 type ProjectResourceReport struct {
 	//Several fields are pointers to values to enable precise control over which fields are rendered in output.
 	ResourceInfo
-	Quota         *uint64          `json:"quota,omitempty"`
-	UsableQuota   *uint64          `json:"usable_quota,omitempty"`
-	Usage         uint64           `json:"usage"`
-	BurstUsage    uint64           `json:"burst_usage,omitempty"`
-	PhysicalUsage *uint64          `json:"physical_usage,omitempty"`
-	BackendQuota  *int64           `json:"backend_quota,omitempty"`
-	Subresources  json.RawMessage  `json:"subresources,omitempty"`
-	Scaling       *ScalingBehavior `json:"scales_with,omitempty"`
+	QuotaDistributionModel QuotaDistributionModel `json:"quota_distribution_model,omitempty"`
+	Quota                  *uint64                `json:"quota,omitempty"`
+	DefaultQuota           *uint64                `json:"default_quota,omitempty"`
+	UsableQuota            *uint64                `json:"usable_quota,omitempty"`
+	Usage                  uint64                 `json:"usage"`
+	BurstUsage             uint64                 `json:"burst_usage,omitempty"`
+	PhysicalUsage          *uint64                `json:"physical_usage,omitempty"`
+	BackendQuota           *int64                 `json:"backend_quota,omitempty"`
+	Subresources           json.RawMessage        `json:"subresources,omitempty"`
+	Scaling                *ScalingBehavior       `json:"scales_with,omitempty"`
 	//Annotations may contain arbitrary metadata that was configured for this
 	//resource in this scope by Limes' operator.
 	Annotations map[string]interface{} `json:"annotations,omitempty"`

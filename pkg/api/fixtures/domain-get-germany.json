@@ -4,12 +4,42 @@
     "name": "germany",
     "services": [
       {
+        "type": "centralized",
+        "area": "centralized",
+        "resources": [
+          {
+            "name": "capacity",
+            "unit": "B",
+            "quota_distribution_model": "centralized",
+            "quota": 35,
+            "projects_quota": 35,
+            "usage": 4
+          },
+          {
+            "name": "capacity_portion",
+            "unit": "B",
+            "contained_in": "capacity",
+            "usage": 2
+          },
+          {
+            "name": "things",
+            "quota_distribution_model": "centralized",
+            "quota": 25,
+            "projects_quota": 25,
+            "usage": 4
+          }
+        ],
+        "max_scraped_at": 82,
+        "min_scraped_at": 72
+      },
+      {
         "type": "shared",
         "area": "shared",
         "resources": [
           {
             "name": "capacity",
             "unit": "B",
+            "quota_distribution_model": "hierarchical",
             "quota": 25,
             "projects_quota": 20,
             "usage": 4,
@@ -23,6 +53,7 @@
           },
           {
             "name": "things",
+            "quota_distribution_model": "hierarchical",
             "quota": 30,
             "projects_quota": 20,
             "usage": 4,
@@ -42,6 +73,7 @@
           {
             "name": "capacity",
             "unit": "B",
+            "quota_distribution_model": "hierarchical",
             "quota": 45,
             "projects_quota": 20,
             "usage": 4
@@ -54,6 +86,7 @@
           },
           {
             "name": "things",
+            "quota_distribution_model": "hierarchical",
             "quota": 50,
             "projects_quota": 20,
             "usage": 4,
