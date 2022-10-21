@@ -17,7 +17,7 @@ require (
 	github.com/rs/cors v1.8.2
 	github.com/sapcc/go-api-declarations v1.4.0
 	github.com/sapcc/go-bits v0.0.0-20221014034219-692408a2c3e8
-	golang.org/x/net v0.0.0-20221014081412-f15817d10f9b
+	golang.org/x/net v0.1.0
 	gopkg.in/gorp.v2 v2.2.0
 	gopkg.in/yaml.v2 v2.4.0
 )
@@ -55,8 +55,8 @@ require (
 	github.com/yashtewari/glob-intersection v0.1.0 // indirect
 	github.com/ziutek/mymysql v1.5.4 // indirect
 	go.uber.org/atomic v1.10.0 // indirect
-	golang.org/x/sys v0.0.0-20220728004956-3c1f35247d10 // indirect
-	golang.org/x/text v0.3.7 // indirect
+	golang.org/x/sys v0.1.0 // indirect
+	golang.org/x/text v0.4.0 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
 )
 
