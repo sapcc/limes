@@ -25,7 +25,6 @@ import (
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/respondwith"
 
-	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/reports"
 )
 
@@ -37,7 +36,7 @@ func (p *v1Provider) ListInconsistencies(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	inconsistencies, err := reports.GetInconsistencies(p.Cluster, db.DB, reports.ReadFilter(r))
+	inconsistencies, err := reports.GetInconsistencies(p.Cluster, p.DB, reports.ReadFilter(r))
 	if respondwith.ErrorText(w, err) {
 		return
 	}

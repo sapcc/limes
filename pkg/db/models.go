@@ -23,6 +23,7 @@ import (
 	"time"
 
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
+	gorp "gopkg.in/gorp.v2"
 )
 
 // ClusterCapacitor contains a record from the `cluster_capacitors` table.
@@ -127,18 +128,16 @@ type ProjectRate struct {
 	//  use strings throughout and cast into bigints in the scraper only.
 }
 
-// InitGorp is used by Init() to setup the ORM part of the database connection.
-// It's available as an exported function because the unit tests need to call
-// this while bypassing the normal Init() logic.
-func InitGorp() {
-	DB.AddTableWithName(ClusterCapacitor{}, "cluster_capacitors").SetKeys(false, "cluster_id", "capacitor_id")
-	DB.AddTableWithName(ClusterService{}, "cluster_services").SetKeys(true, "id")
-	DB.AddTableWithName(ClusterResource{}, "cluster_resources").SetKeys(false, "service_id", "name")
-	DB.AddTableWithName(Domain{}, "domains").SetKeys(true, "id")
-	DB.AddTableWithName(DomainService{}, "domain_services").SetKeys(true, "id")
-	DB.AddTableWithName(DomainResource{}, "domain_resources").SetKeys(false, "service_id", "name")
-	DB.AddTableWithName(Project{}, "projects").SetKeys(true, "id")
-	DB.AddTableWithName(ProjectService{}, "project_services").SetKeys(true, "id")
-	DB.AddTableWithName(ProjectResource{}, "project_resources").SetKeys(false, "service_id", "name")
-	DB.AddTableWithName(ProjectRate{}, "project_rates").SetKeys(false, "service_id", "name")
+// initGorp is used by Init() to setup the ORM part of the database connection.
+func initGorp(db *gorp.DbMap) {
+	db.AddTableWithName(ClusterCapacitor{}, "cluster_capacitors").SetKeys(false, "cluster_id", "capacitor_id")
+	db.AddTableWithName(ClusterService{}, "cluster_services").SetKeys(true, "id")
+	db.AddTableWithName(ClusterResource{}, "cluster_resources").SetKeys(false, "service_id", "name")
+	db.AddTableWithName(Domain{}, "domains").SetKeys(true, "id")
+	db.AddTableWithName(DomainService{}, "domain_services").SetKeys(true, "id")
+	db.AddTableWithName(DomainResource{}, "domain_resources").SetKeys(false, "service_id", "name")
+	db.AddTableWithName(Project{}, "projects").SetKeys(true, "id")
+	db.AddTableWithName(ProjectService{}, "project_services").SetKeys(true, "id")
+	db.AddTableWithName(ProjectResource{}, "project_resources").SetKeys(false, "service_id", "name")
+	db.AddTableWithName(ProjectRate{}, "project_rates").SetKeys(false, "service_id", "name")
 }

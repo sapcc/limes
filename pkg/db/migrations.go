@@ -19,8 +19,7 @@
 
 package db
 
-// SQLMigrations must be public because it's also used by pkg/test.
-var SQLMigrations = map[string]string{
+var sqlMigrations = map[string]string{
 	"001_initial.down.sql": `
 		DROP TABLE cluster_services;
 		DROP TABLE cluster_resources;

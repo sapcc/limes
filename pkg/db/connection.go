@@ -20,6 +20,7 @@
 package db
 
 import (
+	"net/url"
 	"os"
 
 	gorp "gopkg.in/gorp.v2"
@@ -29,12 +30,8 @@ import (
 	"github.com/sapcc/go-bits/sqlext"
 )
 
-// DB holds the main database connection. It will be `nil` until either Init() or
-// test.InitDatabase() is called.
-var DB *gorp.DbMap
-
 // Init initializes the connection to the database.
-func Init() error {
+func Init() (*gorp.DbMap, error) {
 	dbURL, err := easypg.URLFrom(easypg.URLParts{
 		HostName:          osext.GetenvOrDefault("LIMES_DB_HOSTNAME", "localhost"),
 		Port:              osext.GetenvOrDefault("LIMES_DB_PORT", "5432"),
@@ -44,23 +41,28 @@ func Init() error {
 		DatabaseName:      osext.GetenvOrDefault("LIMES_DB_NAME", "limes"),
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
+	return InitFromURL(dbURL)
+}
 
+// InitFromURL is like Init, but takes an explicit URL. This is used to
+// override the default database URL configuration in tests.
+func InitFromURL(dbURL *url.URL) (*gorp.DbMap, error) {
 	db, err := easypg.Connect(easypg.Configuration{
 		PostgresURL: dbURL,
-		Migrations:  SQLMigrations,
+		Migrations:  sqlMigrations,
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	//ensure that this process does not starve other Limes processes for DB connections
 	db.SetMaxOpenConns(16)
 
-	DB = &gorp.DbMap{Db: db, Dialect: gorp.PostgresDialect{}}
-	InitGorp()
-	return nil
+	dbMap := &gorp.DbMap{Db: db, Dialect: gorp.PostgresDialect{}}
+	initGorp(dbMap)
+	return dbMap, nil
 }
 
 // Interface provides the common methods that both SQL connections and

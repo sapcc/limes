@@ -29,9 +29,9 @@ import (
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
+	"gopkg.in/gorp.v2"
 
 	"github.com/sapcc/limes/pkg/core"
-	"github.com/sapcc/limes/pkg/db"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -187,6 +187,7 @@ var maxRatesScrapedAtGauge = prometheus.NewGaugeVec(
 // dynamically-calculated aggregate metrics about scraping progress.
 type AggregateMetricsCollector struct {
 	Cluster *core.Cluster
+	DB      *gorp.DbMap
 }
 
 // Describe implements the prometheus.Collector interface.
@@ -222,7 +223,7 @@ func (c *AggregateMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	maxRatesScrapedAtDesc := <-descCh
 
 	queryArgs := []interface{}{c.Cluster.ID}
-	err := sqlext.ForeachRow(db.DB, scrapedAtAggregateQuery, queryArgs, func(rows *sql.Rows) error {
+	err := sqlext.ForeachRow(c.DB, scrapedAtAggregateQuery, queryArgs, func(rows *sql.Rows) error {
 		var (
 			serviceType       string
 			minScrapedAt      *time.Time
@@ -294,6 +295,7 @@ var capacityPluginMetricsOkGauge = prometheus.NewGaugeVec(
 // which are specific to the selected capacity plugins.
 type CapacityPluginMetricsCollector struct {
 	Cluster *core.Cluster
+	DB      *gorp.DbMap
 	//When .Override is set, the DB is bypassed and only the given
 	//CapacityPluginMetricsInstances are considered. This is used for testing only.
 	Override []CapacityPluginMetricsInstance
@@ -334,7 +336,7 @@ func (c *CapacityPluginMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	queryArgs := []interface{}{c.Cluster.ID}
-	err := sqlext.ForeachRow(db.DB, capacitySerializedMetricsGetQuery, queryArgs, func(rows *sql.Rows) error {
+	err := sqlext.ForeachRow(c.DB, capacitySerializedMetricsGetQuery, queryArgs, func(rows *sql.Rows) error {
 		var i CapacityPluginMetricsInstance
 		err := rows.Scan(&i.CapacitorID, &i.SerializedMetrics)
 		if err == nil {
@@ -383,6 +385,7 @@ var quotaPluginMetricsOkGauge = prometheus.NewGaugeVec(
 // which are specific to the selected quota plugins.
 type QuotaPluginMetricsCollector struct {
 	Cluster *core.Cluster
+	DB      *gorp.DbMap
 	//When .Override is set, the DB is bypassed and only the given
 	//QuotaPluginMetricsInstances are considered. This is used for testing only.
 	Override []QuotaPluginMetricsInstance
@@ -426,7 +429,7 @@ func (c *QuotaPluginMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	queryArgs := []interface{}{c.Cluster.ID}
-	err := sqlext.ForeachRow(db.DB, quotaSerializedMetricsGetQuery, queryArgs, func(rows *sql.Rows) error {
+	err := sqlext.ForeachRow(c.DB, quotaSerializedMetricsGetQuery, queryArgs, func(rows *sql.Rows) error {
 		var i QuotaPluginMetricsInstance
 		err := rows.Scan(
 			&i.Project.Domain.Name, &i.Project.Domain.UUID,
@@ -552,6 +555,7 @@ var unitConversionGauge = prometheus.NewGaugeVec(
 // quota/usage/backend quota from an OpenStack cluster as Prometheus metrics.
 type DataMetricsCollector struct {
 	Cluster      *core.Cluster
+	DB           *gorp.DbMap
 	ReportZeroes bool
 }
 
@@ -637,7 +641,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	//fetch values for cluster level
 	capacityReported := make(map[string]map[string]bool)
 	queryArgs := []interface{}{c.Cluster.ID}
-	err := sqlext.ForeachRow(db.DB, clusterMetricsQuery, queryArgs, func(rows *sql.Rows) error {
+	err := sqlext.ForeachRow(c.DB, clusterMetricsQuery, queryArgs, func(rows *sql.Rows) error {
 		var (
 			serviceType   string
 			resourceName  string
@@ -713,7 +717,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	//fetch values for domain level
-	err = sqlext.ForeachRow(db.DB, domainMetricsQuery, queryArgs, func(rows *sql.Rows) error {
+	err = sqlext.ForeachRow(c.DB, domainMetricsQuery, queryArgs, func(rows *sql.Rows) error {
 		var (
 			domainName   string
 			domainUUID   string
@@ -737,7 +741,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	//fetch values for project level (quota/usage)
-	err = sqlext.ForeachRow(db.DB, projectMetricsQuery, queryArgs, func(rows *sql.Rows) error {
+	err = sqlext.ForeachRow(c.DB, projectMetricsQuery, queryArgs, func(rows *sql.Rows) error {
 		var (
 			domainName    string
 			domainUUID    string
@@ -808,7 +812,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	//fetch values for project level (rate usage)
-	err = sqlext.ForeachRow(db.DB, projectRateMetricsQuery, queryArgs, func(rows *sql.Rows) error {
+	err = sqlext.ForeachRow(c.DB, projectRateMetricsQuery, queryArgs, func(rows *sql.Rows) error {
 		var (
 			domainName    string
 			domainUUID    string

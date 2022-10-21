@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/sapcc/go-bits/logg"
+	"gopkg.in/gorp.v2"
 
 	"github.com/sapcc/limes/pkg/core"
 )
@@ -34,6 +35,7 @@ import (
 // the collector's unit tests.
 type Collector struct {
 	Cluster *core.Cluster
+	DB      *gorp.DbMap
 	Plugin  core.QuotaPlugin
 	//Usually logg.Error, but can be changed inside unit tests.
 	LogError func(msg string, args ...interface{})
@@ -45,9 +47,10 @@ type Collector struct {
 }
 
 // NewCollector creates a Collector instance.
-func NewCollector(cluster *core.Cluster, plugin core.QuotaPlugin) *Collector {
+func NewCollector(cluster *core.Cluster, dbm *gorp.DbMap, plugin core.QuotaPlugin) *Collector {
 	return &Collector{
 		Cluster:  cluster,
+		DB:       dbm,
 		Plugin:   plugin,
 		LogError: logg.Error,
 		TimeNow:  time.Now,

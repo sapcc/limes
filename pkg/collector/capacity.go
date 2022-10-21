@@ -132,7 +132,7 @@ func (c *Collector) scanCapacity() {
 	}
 
 	//do the following in a transaction to avoid inconsistent DB state
-	tx, err := db.DB.Begin()
+	tx, err := c.DB.Begin()
 	if err != nil {
 		c.LogError("write capacity failed: %s", err.Error())
 	}

@@ -131,7 +131,7 @@ func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter) 
 	//ocdqReportQuery: data for overcommitted domain quota inconsistencies
 	queryStr, joinArgs := filter.PrepareQuery(ocdqReportQuery)
 	whereStr, whereArgs := db.BuildSimpleWhereClause(fields, len(joinArgs))
-	err := sqlext.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
+	err := sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		ocdq := OvercommittedDomainQuota{}
 		err := rows.Scan(
 			&ocdq.Domain.UUID, &ocdq.Domain.Name, &ocdq.Service,
@@ -154,7 +154,7 @@ func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter) 
 	queryStr, joinArgs = filter.PrepareQuery(ospqReportQuery)
 	whereStr, whereArgs = db.BuildSimpleWhereClause(fields, len(joinArgs))
 	//nolint:dupl
-	err = sqlext.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
+	err = sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		ospq := OverspentProjectQuota{}
 		err := rows.Scan(
 			&ospq.Project.Domain.UUID, &ospq.Project.Domain.Name,
@@ -178,7 +178,7 @@ func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter) 
 	queryStr, joinArgs = filter.PrepareQuery(mmpqReportQuery)
 	whereStr, whereArgs = db.BuildSimpleWhereClause(fields, len(joinArgs))
 	//nolint:dupl
-	err = sqlext.ForeachRow(db.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
+	err = sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		mmpq := MismatchProjectQuota{}
 		err := rows.Scan(
 			&mmpq.Project.Domain.UUID, &mmpq.Project.Domain.Name,

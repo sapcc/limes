@@ -25,7 +25,6 @@ import (
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/respondwith"
 
-	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/reports"
 )
 
@@ -47,7 +46,7 @@ func (p *v1Provider) GetCluster(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	cluster, err := reports.GetClusterResources(p.Cluster, db.DB, filter)
+	cluster, err := reports.GetClusterResources(p.Cluster, p.DB, filter)
 	if respondwith.ErrorText(w, err) {
 		return
 	}

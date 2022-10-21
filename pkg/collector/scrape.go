@@ -93,7 +93,7 @@ func (c *Collector) Scrape() {
 			projectHasBursting bool
 		)
 		scrapeStartedAt := c.TimeNow()
-		err := db.DB.QueryRow(findProjectForResourceScrapeQuery, c.Cluster.ID, serviceType, scrapeStartedAt.Add(-scrapeInterval), scrapeStartedAt.Add(-recheckInterval)).
+		err := c.DB.QueryRow(findProjectForResourceScrapeQuery, c.Cluster.ID, serviceType, scrapeStartedAt.Add(-scrapeInterval), scrapeStartedAt.Add(-recheckInterval)).
 			Scan(&serviceID, &serviceScrapedAt, &project.Name, &project.UUID, &project.ParentUUID, &projectID, &projectHasBursting, &project.Domain.Name, &project.Domain.UUID)
 		if err != nil {
 			//ErrNoRows is okay; it just means that nothing needs scraping right now
@@ -163,7 +163,7 @@ func (c *Collector) Scrape() {
 }
 
 func (c *Collector) writeScrapeResult(project core.KeystoneProject, projectID int64, projectHasBursting bool, serviceType string, serviceID int64, resourceData map[string]core.ResourceData, serializedMetrics string, scrapedAt time.Time, scrapeDuration time.Duration) error {
-	tx, err := db.DB.Begin()
+	tx, err := c.DB.Begin()
 	if err != nil {
 		return fmt.Errorf("while beginning transaction: %w", err)
 	}
@@ -351,10 +351,10 @@ func (c *Collector) writeScrapeResult(project core.KeystoneProject, projectID in
 	if c.Cluster.Authoritative {
 		var dbProject db.Project
 		logg.Debug("collecting project information for ApplyBackendQuota in service %d", serviceID)
-		err := db.DB.SelectOne(&dbProject, `SELECT * FROM projects WHERE id = $1`, projectID)
+		err := c.DB.SelectOne(&dbProject, `SELECT * FROM projects WHERE id = $1`, projectID)
 		if err == nil {
 			logg.Debug("calling into ApplyBackendQuota for service %d", serviceID)
-			err = datamodel.ApplyBackendQuota(db.DB, c.Cluster, project.Domain, dbProject, serviceID, serviceType)
+			err = datamodel.ApplyBackendQuota(c.DB, c.Cluster, project.Domain, dbProject, serviceID, serviceType)
 		}
 		if err != nil {
 			logg.Error("could not rectify frontend/backend quota mismatch for service %s in project %s: %s",
@@ -367,7 +367,7 @@ func (c *Collector) writeScrapeResult(project core.KeystoneProject, projectID in
 }
 
 func (c *Collector) writeScrapeError(project core.KeystoneProject, serviceType string, serviceID int64, scrapeErr error, checkedAt time.Time, checkDuration time.Duration) {
-	_, err := db.DB.Exec(
+	_, err := c.DB.Exec(
 		`UPDATE project_services SET checked_at = $1, scrape_duration_secs = $2, scrape_error_message = $3, stale = $4 WHERE id = $5`,
 		checkedAt, checkDuration.Seconds(), util.UnpackError(scrapeErr).Error(), false, serviceID,
 	)
@@ -391,7 +391,7 @@ func (c *Collector) writeDummyResources(project core.KeystoneProject, projectHas
 	//unscrapable project_service. Also, scraped_at is set to 0 (i.e. 1970-01-01
 	//00:00:00 UTC) to make the scraper come back to it after dealing with all
 	//new and stale project_services.
-	tx, err := db.DB.Begin()
+	tx, err := c.DB.Begin()
 	if err != nil {
 		return err
 	}

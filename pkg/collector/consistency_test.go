@@ -23,6 +23,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sapcc/go-bits/easypg"
+
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/test"
@@ -30,9 +32,10 @@ import (
 
 func Test_Consistency(t *testing.T) {
 	test.ResetTime()
-	cluster := keystoneTestCluster(t)
+	cluster, dbm := keystoneTestCluster(t)
 	c := Collector{
 		Cluster:  cluster,
+		DB:       dbm,
 		Plugin:   nil,
 		LogError: t.Errorf,
 		TimeNow:  test.TimeNow,
@@ -40,17 +43,17 @@ func Test_Consistency(t *testing.T) {
 	}
 
 	//run ScanDomains once to establish a baseline
-	_, err := ScanDomains(cluster, ScanDomainsOpts{})
+	_, err := c.ScanDomains(ScanDomainsOpts{})
 	if err != nil {
 		t.Errorf("ScanDomains failed: %v", err)
 	}
-	test.AssertDBContent(t, "fixtures/checkconsistency-pre.sql")
+	easypg.AssertDBContent(t, dbm.Db, "fixtures/checkconsistency-pre.sql")
 
 	//check that CheckConsistency() is satisfied with the
 	//{domain,project}_services created by ScanDomains(), but adds
 	//cluster_services entries
 	c.CheckConsistency()
-	test.AssertDBContent(t, "fixtures/checkconsistency0.sql")
+	easypg.AssertDBContent(t, dbm.Db, "fixtures/checkconsistency0.sql")
 
 	//add some quota constraints
 	cluster.QuotaConstraints = &core.QuotaConstraintSet{
@@ -81,21 +84,21 @@ func Test_Consistency(t *testing.T) {
 	}
 
 	//remove some *_services entries
-	_, err = db.DB.Exec(`DELETE FROM cluster_services WHERE type = $1`, "shared")
+	_, err = dbm.Exec(`DELETE FROM cluster_services WHERE type = $1`, "shared")
 	if err != nil {
 		t.Error(err)
 	}
-	_, err = db.DB.Exec(`DELETE FROM domain_services WHERE type = $1`, "unshared")
+	_, err = dbm.Exec(`DELETE FROM domain_services WHERE type = $1`, "unshared")
 	if err != nil {
 		t.Error(err)
 	}
-	_, err = db.DB.Exec(`DELETE FROM project_services WHERE type = $1`, "shared")
+	_, err = dbm.Exec(`DELETE FROM project_services WHERE type = $1`, "shared")
 	if err != nil {
 		t.Error(err)
 	}
 	//add some useless *_services entries
 	epoch := time.Unix(0, 0).UTC()
-	err = db.DB.Insert(&db.ClusterService{
+	err = dbm.Insert(&db.ClusterService{
 		ClusterID: "west",
 		Type:      "whatever",
 		ScrapedAt: &epoch,
@@ -103,14 +106,14 @@ func Test_Consistency(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	err = db.DB.Insert(&db.DomainService{
+	err = dbm.Insert(&db.DomainService{
 		DomainID: 1,
 		Type:     "whatever",
 	})
 	if err != nil {
 		t.Error(err)
 	}
-	err = db.DB.Insert(&db.ProjectService{
+	err = dbm.Insert(&db.ProjectService{
 		ProjectID: 1,
 		Type:      "whatever",
 	})
@@ -120,7 +123,7 @@ func Test_Consistency(t *testing.T) {
 
 	//add a domain_resource that contradicts the cluster.QuotaConstraints; this
 	//should be fixed by CheckConsistency()
-	err = db.DB.Insert(&db.DomainResource{
+	err = dbm.Insert(&db.DomainResource{
 		ServiceID: 2,
 		Name:      "capacity",
 		Quota:     200,
@@ -131,7 +134,7 @@ func Test_Consistency(t *testing.T) {
 	//add a project_resource that contradicts the cluster.QuotaConstraints; this
 	//should cause CheckConsistency() to mark the corresponding project_service
 	//as stale (to prompt the scraper to take care of the problem)
-	err = db.DB.Insert(&db.ProjectResource{
+	err = dbm.Insert(&db.ProjectResource{
 		ServiceID:           1,
 		Name:                "capacity",
 		Quota:               p2u64(20),
@@ -141,12 +144,12 @@ func Test_Consistency(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	test.AssertDBContent(t, "fixtures/checkconsistency1.sql")
+	easypg.AssertDBContent(t, dbm.Db, "fixtures/checkconsistency1.sql")
 
 	//check that CheckConsistency() brings everything back into a nice state
 	//
 	//Also, for all services that are created here, resources are added where the
 	//quota constraint contains some Minimum values.
 	c.CheckConsistency()
-	test.AssertDBContent(t, "fixtures/checkconsistency2.sql")
+	easypg.AssertDBContent(t, dbm.Db, "fixtures/checkconsistency2.sql")
 }

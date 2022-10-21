@@ -38,14 +38,14 @@ type ScanDomainsOpts struct {
 
 // This extends ListDomains() by handling of the {Include,Exclude}DomainRx. It's
 // a separate function for unit test accessibility.
-func listDomainsFiltered(cluster *core.Cluster) ([]core.KeystoneDomain, error) {
-	domains, err := cluster.DiscoveryPlugin.ListDomains(cluster.ProviderClient())
+func (c *Collector) listDomainsFiltered() ([]core.KeystoneDomain, error) {
+	domains, err := c.Cluster.DiscoveryPlugin.ListDomains(c.Cluster.ProviderClient())
 	if err != nil {
 		return nil, err
 	}
 
 	result := make([]core.KeystoneDomain, 0, len(domains))
-	discovery := cluster.Config.Discovery
+	discovery := c.Cluster.Config.Discovery
 
 	for _, domain := range domains {
 		if discovery.ExcludeDomainRx != nil {
@@ -66,10 +66,10 @@ func listDomainsFiltered(cluster *core.Cluster) ([]core.KeystoneDomain, error) {
 
 // ScanDomains queries Keystone to discover new domains, and returns a
 // list of UUIDs for the newly discovered domains.
-func ScanDomains(cluster *core.Cluster, opts ScanDomainsOpts) (result []string, resultErr error) {
+func (c *Collector) ScanDomains(opts ScanDomainsOpts) (result []string, resultErr error) {
 	//make sure that the counters are reported
 	labels := prometheus.Labels{
-		"os_cluster": cluster.ID,
+		"os_cluster": c.Cluster.ID,
 	}
 	domainDiscoverySuccessCounter.With(labels).Add(0)
 	domainDiscoveryFailedCounter.With(labels).Add(0)
@@ -83,7 +83,7 @@ func ScanDomains(cluster *core.Cluster, opts ScanDomainsOpts) (result []string, 
 	}()
 
 	//list domains in Keystone
-	domains, err := listDomainsFiltered(cluster)
+	domains, err := c.listDomainsFiltered()
 	if err != nil {
 		return nil, err
 	}
@@ -97,14 +97,14 @@ func ScanDomains(cluster *core.Cluster, opts ScanDomainsOpts) (result []string, 
 	//domain and to all related resource records through `ON DELETE CASCADE`)
 	existingDomainsByUUID := make(map[string]*db.Domain)
 	var dbDomains []*db.Domain
-	_, err = db.DB.Select(&dbDomains, `SELECT * FROM domains WHERE cluster_id = $1`, cluster.ID)
+	_, err = c.DB.Select(&dbDomains, `SELECT * FROM domains WHERE cluster_id = $1`, c.Cluster.ID)
 	if err != nil {
 		return nil, err
 	}
 	for _, dbDomain := range dbDomains {
 		if !isDomainUUID[dbDomain.UUID] {
 			logg.Info("removing deleted Keystone domain from our database: %s", dbDomain.Name)
-			_, err := db.DB.Delete(dbDomain)
+			_, err := c.DB.Delete(dbDomain)
 			if err != nil {
 				return nil, err
 			}
@@ -122,7 +122,7 @@ func ScanDomains(cluster *core.Cluster, opts ScanDomainsOpts) (result []string, 
 			if dbDomain.Name != domain.Name {
 				logg.Info("discovered Keystone domain name change: %s -> %s", dbDomain.Name, domain.Name)
 				dbDomain.Name = domain.Name
-				_, err := db.DB.Update(dbDomain)
+				_, err := c.DB.Update(dbDomain)
 				if err != nil {
 					return result, err
 				}
@@ -131,7 +131,7 @@ func ScanDomains(cluster *core.Cluster, opts ScanDomainsOpts) (result []string, 
 		}
 
 		logg.Info("discovered new Keystone domain: %s", domain.Name)
-		dbDomain, err := initDomain(cluster, domain)
+		dbDomain, err := c.initDomain(domain)
 		if err != nil {
 			return result, err
 		}
@@ -141,7 +141,7 @@ func ScanDomains(cluster *core.Cluster, opts ScanDomainsOpts) (result []string, 
 		if opts.ScanAllProjects {
 			dbDomains = append(dbDomains, dbDomain)
 		} else {
-			_, err = ScanProjects(cluster, dbDomain)
+			_, err = c.ScanProjects(dbDomain)
 			if err != nil {
 				return result, err
 			}
@@ -151,7 +151,7 @@ func ScanDomains(cluster *core.Cluster, opts ScanDomainsOpts) (result []string, 
 	//recurse into ScanProjects if requested
 	if opts.ScanAllProjects {
 		for _, dbDomain := range dbDomains {
-			_, err = ScanProjects(cluster, dbDomain)
+			_, err = c.ScanProjects(dbDomain)
 			if err != nil {
 				return result, err
 			}
@@ -161,9 +161,9 @@ func ScanDomains(cluster *core.Cluster, opts ScanDomainsOpts) (result []string, 
 	return result, nil
 }
 
-func initDomain(cluster *core.Cluster, domain core.KeystoneDomain) (*db.Domain, error) {
+func (c *Collector) initDomain(domain core.KeystoneDomain) (*db.Domain, error) {
 	//do this in a transaction to avoid half-initialized domains
-	tx, err := db.DB.Begin()
+	tx, err := c.DB.Begin()
 	if err != nil {
 		return nil, err
 	}
@@ -171,16 +171,16 @@ func initDomain(cluster *core.Cluster, domain core.KeystoneDomain) (*db.Domain, 
 
 	//add record to `domains` table
 	dbDomain := &db.Domain{
-		ClusterID: cluster.ID,
+		ClusterID: c.Cluster.ID,
 		Name:      domain.Name,
 		UUID:      domain.UUID,
 	}
-	err = db.DB.Insert(dbDomain)
+	err = tx.Insert(dbDomain)
 	if err != nil {
 		return nil, err
 	}
 
-	_, err = datamodel.ValidateDomainServices(tx, cluster, *dbDomain)
+	_, err = datamodel.ValidateDomainServices(tx, c.Cluster, *dbDomain)
 	if err != nil {
 		return nil, err
 	}
@@ -189,10 +189,10 @@ func initDomain(cluster *core.Cluster, domain core.KeystoneDomain) (*db.Domain, 
 }
 
 // ScanProjects queries Keystone to discover new projects in the given domain.
-func ScanProjects(cluster *core.Cluster, domain *db.Domain) (result []string, resultErr error) {
+func (c *Collector) ScanProjects(domain *db.Domain) (result []string, resultErr error) {
 	//make sure that the counters are reported
 	labels := prometheus.Labels{
-		"os_cluster": cluster.ID,
+		"os_cluster": c.Cluster.ID,
 		"domain":     domain.Name,
 		"domain_id":  domain.UUID,
 	}
@@ -208,8 +208,8 @@ func ScanProjects(cluster *core.Cluster, domain *db.Domain) (result []string, re
 	}()
 
 	//list projects in Keystone
-	provider, eo := cluster.ProviderClient()
-	projects, err := cluster.DiscoveryPlugin.ListProjects(provider, eo, core.KeystoneDomainFromDB(*domain))
+	provider, eo := c.Cluster.ProviderClient()
+	projects, err := c.Cluster.DiscoveryPlugin.ListProjects(provider, eo, core.KeystoneDomainFromDB(*domain))
 	if err != nil {
 		return nil, err
 	}
@@ -223,14 +223,14 @@ func ScanProjects(cluster *core.Cluster, domain *db.Domain) (result []string, re
 	//records through `ON DELETE CASCADE`)
 	existingProjectsByUUID := make(map[string]*db.Project)
 	var dbProjects []*db.Project
-	_, err = db.DB.Select(&dbProjects, `SELECT * FROM projects WHERE domain_id = $1`, domain.ID)
+	_, err = c.DB.Select(&dbProjects, `SELECT * FROM projects WHERE domain_id = $1`, domain.ID)
 	if err != nil {
 		return nil, err
 	}
 	for _, dbProject := range dbProjects {
 		if !isProjectUUID[dbProject.UUID] {
 			logg.Info("removing deleted Keystone project from our database: %s/%s", domain.Name, dbProject.Name)
-			_, err := db.DB.Delete(dbProject)
+			_, err := c.DB.Delete(dbProject)
 			if err != nil {
 				return nil, err
 			}
@@ -259,7 +259,7 @@ func ScanProjects(cluster *core.Cluster, domain *db.Domain) (result []string, re
 				needToSave = true
 			}
 			if needToSave {
-				_, err := db.DB.Update(dbProject)
+				_, err := c.DB.Update(dbProject)
 				if err != nil {
 					return result, err
 				}
@@ -268,7 +268,7 @@ func ScanProjects(cluster *core.Cluster, domain *db.Domain) (result []string, re
 		}
 
 		logg.Info("discovered new Keystone project: %s/%s", domain.Name, project.Name)
-		err := initProject(cluster, domain, project)
+		err := c.initProject(domain, project)
 		if err != nil {
 			return result, err
 		}
@@ -280,9 +280,9 @@ func ScanProjects(cluster *core.Cluster, domain *db.Domain) (result []string, re
 
 // Initialize all the database records for a project (in both `projects` and
 // `project_services`).
-func initProject(cluster *core.Cluster, domain *db.Domain, project core.KeystoneProject) error {
+func (c *Collector) initProject(domain *db.Domain, project core.KeystoneProject) error {
 	//do this in a transaction to avoid half-initialized projects
-	tx, err := db.DB.Begin()
+	tx, err := c.DB.Begin()
 	if err != nil {
 		return err
 	}
@@ -295,13 +295,13 @@ func initProject(cluster *core.Cluster, domain *db.Domain, project core.Keystone
 		UUID:       project.UUID,
 		ParentUUID: project.ParentUUID,
 	}
-	err = db.DB.Insert(dbProject)
+	err = tx.Insert(dbProject)
 	if err != nil {
 		return err
 	}
 
 	//add records to `project_services` table
-	_, err = datamodel.ValidateProjectServices(tx, cluster, *domain, *dbProject)
+	_, err = datamodel.ValidateProjectServices(tx, c.Cluster, *domain, *dbProject)
 	if err != nil {
 		return err
 	}

@@ -34,6 +34,7 @@ import (
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/respondwith"
+	gorp "gopkg.in/gorp.v2"
 
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
@@ -57,6 +58,7 @@ type VersionLinkData struct {
 
 type v1Provider struct {
 	Cluster     *core.Cluster
+	DB          *gorp.DbMap
 	VersionData VersionData
 	//see comment in ListProjects() for details
 	listProjectsMutex sync.Mutex
@@ -65,8 +67,8 @@ type v1Provider struct {
 // NewV1API creates an httpapi.API that serves the Limes v1 API.
 // It also returns the VersionData for this API version which is needed for the
 // version advertisement on "GET /".
-func NewV1API(cluster *core.Cluster) httpapi.API {
-	p := &v1Provider{Cluster: cluster}
+func NewV1API(cluster *core.Cluster, dbm *gorp.DbMap) httpapi.API {
+	p := &v1Provider{Cluster: cluster, DB: dbm}
 	p.VersionData = VersionData{
 		Status: "CURRENT",
 		ID:     "v1",
@@ -172,7 +174,7 @@ func (p *v1Provider) FindDomainFromRequest(w http.ResponseWriter, r *http.Reques
 	}
 
 	var domain db.Domain
-	err := db.DB.SelectOne(&domain, `SELECT * FROM domains WHERE uuid = $1 AND cluster_id = $2`,
+	err := p.DB.SelectOne(&domain, `SELECT * FROM domains WHERE uuid = $1 AND cluster_id = $2`,
 		domainUUID, p.Cluster.ID,
 	)
 	switch {
@@ -212,7 +214,7 @@ func (p *v1Provider) FindProjectFromRequestIfExists(w http.ResponseWriter, r *ht
 	}
 
 	project = &db.Project{}
-	err := db.DB.SelectOne(project, `SELECT * FROM projects WHERE uuid = $1`, projectUUID)
+	err := p.DB.SelectOne(project, `SELECT * FROM projects WHERE uuid = $1`, projectUUID)
 	switch {
 	case err == sql.ErrNoRows:
 		return nil, true

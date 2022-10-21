@@ -27,14 +27,14 @@ import (
 
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
+	"gopkg.in/gorp.v2"
 
 	"github.com/sapcc/limes/pkg/core"
-	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/test"
 )
 
-func keystoneTestCluster(t *testing.T) *core.Cluster {
-	test.InitDatabase(t, nil)
+func keystoneTestCluster(t *testing.T) (*core.Cluster, *gorp.DbMap) {
+	dbm := test.InitDatabase(t, nil)
 
 	return &core.Cluster{
 		ID:              "west",
@@ -46,11 +46,11 @@ func keystoneTestCluster(t *testing.T) *core.Cluster {
 			"unshared": test.NewPlugin("unshared"),
 		},
 		CapacityPlugins: map[string]core.CapacityPlugin{},
-	}
+	}, dbm
 }
 
 func Test_ScanDomains(t *testing.T) {
-	cluster := keystoneTestCluster(t)
+	cluster, dbm := keystoneTestCluster(t)
 	discovery := cluster.DiscoveryPlugin.(*test.DiscoveryPlugin) //nolint:errcheck
 
 	//construct expectation for return value
@@ -84,24 +84,32 @@ func Test_ScanDomains(t *testing.T) {
 		},
 	}
 
+	c := Collector{
+		Cluster:  cluster,
+		DB:       dbm,
+		LogError: t.Errorf,
+		TimeNow:  test.TimeNow,
+		Once:     true,
+	}
+
 	//first ScanDomains should discover the StaticDomains in the cluster,
 	//and initialize domains, projects and project_services (project_resources
 	//are then constructed by the scraper, and domain_services/domain_resources
 	//are created when a cloud admin approves quota for the domain)
 	//
 	//This also tests that the quota constraint is applied correctly.
-	actualNewDomains, err := ScanDomains(cluster, ScanDomainsOpts{})
+	actualNewDomains, err := c.ScanDomains(ScanDomainsOpts{})
 	if err != nil {
 		t.Errorf("ScanDomains #1 failed: %v", err)
 	}
 	sort.Strings(expectedNewDomains) //order does not matter
 	sort.Strings(actualNewDomains)
 	assert.DeepEqual(t, "new domains after ScanDomains #1", actualNewDomains, expectedNewDomains)
-	tr, tr0 := easypg.NewTracker(t, db.DB.Db)
+	tr, tr0 := easypg.NewTracker(t, dbm.Db)
 	tr0.AssertEqualToFile("fixtures/scandomains1.sql")
 
 	//first ScanDomains should not discover anything new
-	actualNewDomains, err = ScanDomains(cluster, ScanDomainsOpts{})
+	actualNewDomains, err = c.ScanDomains(ScanDomainsOpts{})
 	if err != nil {
 		t.Errorf("ScanDomains #2 failed: %v", err)
 	}
@@ -115,7 +123,7 @@ func Test_ScanDomains(t *testing.T) {
 	)
 
 	//ScanDomains without ScanAllProjects should not see this new project
-	actualNewDomains, err = ScanDomains(cluster, ScanDomainsOpts{})
+	actualNewDomains, err = c.ScanDomains(ScanDomainsOpts{})
 	if err != nil {
 		t.Errorf("ScanDomains #3 failed: %v", err)
 	}
@@ -123,7 +131,7 @@ func Test_ScanDomains(t *testing.T) {
 	tr.DBChanges().AssertEmpty()
 
 	//ScanDomains with ScanAllProjects should discover the new project
-	actualNewDomains, err = ScanDomains(cluster, ScanDomainsOpts{ScanAllProjects: true})
+	actualNewDomains, err = c.ScanDomains(ScanDomainsOpts{ScanAllProjects: true})
 	if err != nil {
 		t.Errorf("ScanDomains #4 failed: %v", err)
 	}
@@ -138,7 +146,7 @@ func Test_ScanDomains(t *testing.T) {
 	discovery.StaticProjects[domainUUID] = discovery.StaticProjects[domainUUID][0:1]
 
 	//ScanDomains without ScanAllProjects should not notice anything
-	actualNewDomains, err = ScanDomains(cluster, ScanDomainsOpts{})
+	actualNewDomains, err = c.ScanDomains(ScanDomainsOpts{})
 	if err != nil {
 		t.Errorf("ScanDomains #5 failed: %v", err)
 	}
@@ -146,7 +154,7 @@ func Test_ScanDomains(t *testing.T) {
 	tr.DBChanges().AssertEmpty()
 
 	//ScanDomains with ScanAllProjects should notice the deleted project and cleanup its records
-	actualNewDomains, err = ScanDomains(cluster, ScanDomainsOpts{ScanAllProjects: true})
+	actualNewDomains, err = c.ScanDomains(ScanDomainsOpts{ScanAllProjects: true})
 	if err != nil {
 		t.Errorf("ScanDomains #6 failed: %v", err)
 	}
@@ -161,7 +169,7 @@ func Test_ScanDomains(t *testing.T) {
 	discovery.StaticDomains = discovery.StaticDomains[0:1]
 
 	//ScanDomains should notice the deleted domain and cleanup its records and also its projects
-	actualNewDomains, err = ScanDomains(cluster, ScanDomainsOpts{})
+	actualNewDomains, err = c.ScanDomains(ScanDomainsOpts{})
 	if err != nil {
 		t.Errorf("ScanDomains #7 failed: %v", err)
 	}
@@ -180,7 +188,7 @@ func Test_ScanDomains(t *testing.T) {
 	discovery.StaticProjects["uuid-for-germany"][0].Name = "berlin-changed"
 
 	//ScanDomains should notice the changed names and update the domain/project records accordingly
-	actualNewDomains, err = ScanDomains(cluster, ScanDomainsOpts{ScanAllProjects: true})
+	actualNewDomains, err = c.ScanDomains(ScanDomainsOpts{ScanAllProjects: true})
 	if err != nil {
 		t.Errorf("ScanDomains #8 failed: %v", err)
 	}
@@ -209,7 +217,7 @@ func Test_listDomainsFiltered(t *testing.T) {
 		},
 	}
 
-	domains, err := listDomainsFiltered(cluster)
+	domains, err := (&Collector{Cluster: cluster}).listDomainsFiltered()
 	if err != nil {
 		t.Fatal("listDomainsFiltered failed with unexpected error:", err.Error())
 	}
