@@ -205,9 +205,11 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, *gor
 
 	//load mock policy (where everything is allowed)
 	enforcer := &TestPolicyEnforcer{
-		AllowRaise:   true,
-		AllowRaiseLP: true,
-		AllowLower:   true,
+		AllowRaise:            true,
+		AllowRaiseLP:          true,
+		AllowLower:            true,
+		AllowRaiseCentralized: true,
+		AllowLowerCentralized: true,
 	}
 	cluster.Auth.TokenValidator = TestTokenValidator{enforcer}
 
@@ -281,10 +283,12 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, *gor
 }
 
 type TestPolicyEnforcer struct {
-	AllowRaise        bool
-	AllowRaiseLP      bool
-	AllowLower        bool
-	RejectServiceType string
+	AllowRaise            bool
+	AllowRaiseLP          bool
+	AllowLower            bool
+	AllowRaiseCentralized bool
+	AllowLowerCentralized bool
+	RejectServiceType     string
 }
 
 // Enforce implements the gopherpolicy.Enforcer interface.
@@ -298,8 +302,12 @@ func (e TestPolicyEnforcer) Enforce(rule string, ctx policy.Context) bool {
 		return e.AllowRaise
 	case "raise_lowpriv":
 		return e.AllowRaiseLP
+	case "raise_centralized":
+		return e.AllowRaiseCentralized
 	case "lower":
 		return e.AllowLower
+	case "lower_centralized":
+		return e.AllowLowerCentralized
 	default:
 		return true
 	}
@@ -1716,6 +1724,8 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 	enforcer.AllowRaise = false
 	enforcer.AllowRaiseLP = true
 	enforcer.AllowLower = true
+	enforcer.AllowRaiseCentralized = false
+	enforcer.AllowLowerCentralized = false
 
 	assert.HTTPRequest{
 		Method:       "PUT",
@@ -1763,6 +1773,8 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 	enforcer.AllowRaise = true
 	enforcer.AllowRaiseLP = true
 	enforcer.AllowLower = false
+	enforcer.AllowRaiseCentralized = false
+	enforcer.AllowLowerCentralized = false
 
 	assert.HTTPRequest{
 		Method:       "PUT",
@@ -1866,6 +1878,8 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 	enforcer.AllowRaise = false
 	enforcer.AllowRaiseLP = true
 	enforcer.AllowLower = true
+	enforcer.AllowRaiseCentralized = false
+	enforcer.AllowLowerCentralized = false
 	enforcer.RejectServiceType = ""
 
 	cluster.LowPrivilegeRaise.LimitsForDomains = map[string]map[string]core.LowPrivilegeRaiseLimit{
@@ -2062,6 +2076,101 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 							//attempt to raise should fail because low-privilege exception
 							//is not applicable because of other domain's quotas
 							{"name": "things", "quota": 35},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+
+	//check that domain quota cannot be raised or lowered by anyone, even if the
+	//policy says so, if the centralized quota distribution model is used
+	enforcer.AllowRaise = true
+	enforcer.AllowRaiseLP = true
+	enforcer.AllowLower = true
+	enforcer.AllowRaiseCentralized = true
+	enforcer.AllowLowerCentralized = true
+
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany",
+		ExpectStatus: 403,
+		ExpectBody:   assert.StringData("cannot change centralized/things quota: user is not allowed to raise \"centralized\" quotas in this domain\n"),
+		Body: assert.JSONObject{
+			"domain": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "centralized",
+						"resources": []assert.JSONObject{
+							{"name": "things", "quota": 100},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany",
+		ExpectStatus: 403,
+		ExpectBody:   assert.StringData("cannot change centralized/things quota: user is not allowed to lower \"centralized\" quotas in this domain\n"),
+		Body: assert.JSONObject{
+			"domain": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "centralized",
+						"resources": []assert.JSONObject{
+							{"name": "things", "quota": 0},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+
+	//check that, under centralized quota distribution, project quota cannot be
+	//raised or lowered if the respective specialized policies are not granted
+	enforcer.AllowRaise = true
+	enforcer.AllowRaiseLP = true
+	enforcer.AllowLower = true
+	enforcer.AllowRaiseCentralized = false
+	enforcer.AllowLowerCentralized = true
+
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 403,
+		ExpectBody:   assert.StringData("cannot change centralized/things quota: user is not allowed to raise \"centralized\" quotas in this project\n"),
+		Body: assert.JSONObject{
+			"project": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "centralized",
+						"resources": []assert.JSONObject{
+							{"name": "things", "quota": 100},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+
+	enforcer.AllowRaiseCentralized = true
+	enforcer.AllowLowerCentralized = false
+
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 403,
+		ExpectBody:   assert.StringData("cannot change centralized/things quota: user is not allowed to lower \"centralized\" quotas in this project\n"),
+		Body: assert.JSONObject{
+			"project": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "centralized",
+						"resources": []assert.JSONObject{
+							{"name": "things", "quota": 5},
 						},
 					},
 				},

@@ -223,10 +223,12 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 	}
 
 	updater := QuotaUpdater{
-		Cluster:    p.Cluster,
-		CanRaise:   checkToken("project:raise"),
-		CanRaiseLP: checkToken("project:raise_lowpriv"),
-		CanLower:   checkToken("project:lower"),
+		Cluster:             p.Cluster,
+		CanRaise:            checkToken("project:raise"),
+		CanRaiseLP:          checkToken("project:raise_lowpriv"),
+		CanRaiseCentralized: checkToken("project:raise_centralized"),
+		CanLower:            checkToken("project:lower"),
+		CanLowerCentralized: checkToken("project:lower_centralized"),
 	}
 	updater.Domain = p.FindDomainFromRequest(w, r)
 	if updater.Domain == nil {

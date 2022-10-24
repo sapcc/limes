@@ -51,9 +51,11 @@ type QuotaUpdater struct {
 	Project *db.Project //nil for domain quota updates
 
 	//AuthZ info
-	CanRaise   func(serviceType string) bool
-	CanRaiseLP func(serviceType string) bool //low-privilege raise
-	CanLower   func(serviceType string) bool
+	CanRaise            func(serviceType string) bool
+	CanRaiseLP          func(serviceType string) bool //low-privilege raise
+	CanRaiseCentralized func(serviceType string) bool
+	CanLower            func(serviceType string) bool
+	CanLowerCentralized func(serviceType string) bool
 
 	//Filled by ValidateInput() with the keys being the service type and the resource name.
 	Requests map[string]map[string]QuotaRequest
@@ -370,7 +372,7 @@ func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limesresources.Re
 			lprLimit = 0
 		}
 	}
-	verr = u.validateAuthorization(srv, oldQuota, newQuota, lprLimit, res.Unit)
+	verr = u.validateAuthorization(srv, res, oldQuota, newQuota, lprLimit, res.Unit)
 	if verr != nil {
 		verr.Message += fmt.Sprintf(" in this %s", u.ScopeType())
 		return verr
@@ -383,10 +385,19 @@ func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limesresources.Re
 	return u.validateProjectQuota(domRes, *projRes, newQuota)
 }
 
-func (u QuotaUpdater) validateAuthorization(srv limes.ServiceInfo, oldQuota, newQuota, lprLimit uint64, unit limes.Unit) *core.QuotaValidationError {
+func (u QuotaUpdater) validateAuthorization(srv limes.ServiceInfo, res limesresources.ResourceInfo, oldQuota, newQuota, lprLimit uint64, unit limes.Unit) *core.QuotaValidationError {
+	qdConfig := u.Cluster.QuotaDistributionConfigForResource(srv.Type, res.Name)
+
 	if oldQuota >= newQuota {
-		if u.CanLower(srv.Type) {
-			return nil
+		switch qdConfig.Model {
+		case limesresources.HierarchicalQuotaDistribution:
+			if u.CanLower(srv.Type) {
+				return nil
+			}
+		case limesresources.CentralizedQuotaDistribution:
+			if u.CanLowerCentralized(srv.Type) {
+				return nil
+			}
 		}
 		return &core.QuotaValidationError{
 			Status:  http.StatusForbidden,
@@ -394,18 +405,25 @@ func (u QuotaUpdater) validateAuthorization(srv limes.ServiceInfo, oldQuota, new
 		}
 	}
 
-	if u.CanRaise(srv.Type) {
-		return nil
-	}
-	if u.CanRaiseLP(srv.Type) && lprLimit > 0 {
-		if newQuota <= lprLimit {
+	switch qdConfig.Model {
+	case limesresources.HierarchicalQuotaDistribution:
+		if u.CanRaise(srv.Type) {
 			return nil
 		}
-		return &core.QuotaValidationError{
-			Status:       http.StatusForbidden,
-			Message:      fmt.Sprintf("user is not allowed to raise %q quotas that high", srv.Type),
-			MaximumValue: &lprLimit,
-			Unit:         unit,
+		if u.CanRaiseLP(srv.Type) && lprLimit > 0 {
+			if newQuota <= lprLimit {
+				return nil
+			}
+			return &core.QuotaValidationError{
+				Status:       http.StatusForbidden,
+				Message:      fmt.Sprintf("user is not allowed to raise %q quotas that high", srv.Type),
+				MaximumValue: &lprLimit,
+				Unit:         unit,
+			}
+		}
+	case limesresources.CentralizedQuotaDistribution:
+		if u.CanRaiseCentralized(srv.Type) {
+			return nil
 		}
 	}
 	return &core.QuotaValidationError{
@@ -680,8 +698,9 @@ func (u QuotaUpdater) CommitAuditTrail(token *gopherpolicy.Token, r *http.Reques
 
 	for srvType, reqs := range u.Requests {
 		for resName, req := range reqs {
+			qdConfig := u.Cluster.QuotaDistributionConfigForResource(srvType, resName)
 			// low-privilege-raise metrics
-			if u.CanRaiseLP(srvType) && !u.CanRaise(srvType) {
+			if qdConfig.Model != limesresources.CentralizedQuotaDistribution && u.CanRaiseLP(srvType) && !u.CanRaise(srvType) {
 				labels := prometheus.Labels{
 					"os_cluster": u.Cluster.ID,
 					"service":    srvType,
