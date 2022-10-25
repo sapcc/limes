@@ -37,6 +37,7 @@ import (
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/assert"
+	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/sqlext"
@@ -1710,6 +1711,56 @@ func Test_ProjectOperations(t *testing.T) {
 			},
 		},
 	}.Check(t, router)
+
+	tr, tr0 := easypg.NewTracker(t, dbm.Db)
+	tr0.Ignore()
+
+	//test adjusting a quota of a resource using the centralized quota distribution model
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 202,
+		Body: assert.JSONObject{
+			"project": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "centralized",
+						"resources": []assert.JSONObject{
+							//project quota rises from 15->30, and thus domain quota rises from 25->40
+							{"name": "things", "quota": 30},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+	tr.DBChanges().AssertEqual(`
+		UPDATE domain_resources SET quota = 40 WHERE service_id = 5 AND name = 'things';
+		UPDATE project_resources SET quota = 30, backend_quota = 30, desired_backend_quota = 30 WHERE service_id = 7 AND name = 'things';
+	`)
+
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 202,
+		Body: assert.JSONObject{
+			"project": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "centralized",
+						"resources": []assert.JSONObject{
+							//project quota falls again from 30->15, and thus domain quota falls back from 40->25
+							{"name": "things", "quota": 15},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+	tr.DBChanges().AssertEqual(`
+		UPDATE domain_resources SET quota = 25 WHERE service_id = 5 AND name = 'things';
+		UPDATE project_resources SET quota = 15, backend_quota = 15, desired_backend_quota = 15 WHERE service_id = 7 AND name = 'things';
+	`)
 }
 
 func Test_RaiseLowerPermissions(t *testing.T) {

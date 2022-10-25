@@ -538,7 +538,7 @@ func (u QuotaUpdater) validateProjectQuota(domRes limesresources.DomainResourceR
 		}
 	}
 
-	//when reducing project quota, existing usage must fit into new quotaj
+	//when reducing project quota, existing usage must fit into new quota
 	oldQuota := *projRes.Quota
 	if newQuota < oldQuota && newQuota < projRes.Usage {
 		min := projRes.Usage
@@ -552,23 +552,27 @@ func (u QuotaUpdater) validateProjectQuota(domRes limesresources.DomainResourceR
 
 	//check that domain quota is not exceeded
 	//
-	//NOTE: It looks like an arithmetic overflow (or rather, underflow) is
-	//possible here, but it isn't. projectsQuota is the sum over all current
-	//project quotas, including res.Quota, and thus is always bigger (since these
-	//quotas are all unsigned). Also, we're doing everything in a transaction, so
-	//an overflow because of concurrent quota changes is also out of the
-	//question.
-	newProjectsQuota := *domRes.ProjectsQuota - *projRes.Quota + newQuota
-	if newProjectsQuota > *domRes.DomainQuota {
-		maxQuota := *domRes.DomainQuota - (*domRes.ProjectsQuota - *projRes.Quota)
-		if *domRes.DomainQuota < *domRes.ProjectsQuota-*projRes.Quota {
-			maxQuota = 0
-		}
-		return &core.QuotaValidationError{
-			Status:       http.StatusConflict,
-			Message:      "domain quota exceeded",
-			MaximumValue: &maxQuota,
-			Unit:         domRes.Unit,
+	//NOTE: This check is skipped on centralized quota distribution since domain
+	//quota is always set equal to the sum of project quotas afterwards there.
+	if projRes.QuotaDistributionModel != limesresources.CentralizedQuotaDistribution {
+		//NOTE: It looks like an arithmetic overflow (or rather, underflow) is
+		//possible here, but it isn't. projectsQuota is the sum over all current
+		//project quotas, including res.Quota, and thus is always bigger (since these
+		//quotas are all unsigned). Also, we're doing everything in a transaction, so
+		//an overflow because of concurrent quota changes is also out of the
+		//question.
+		newProjectsQuota := *domRes.ProjectsQuota - *projRes.Quota + newQuota
+		if newProjectsQuota > *domRes.DomainQuota {
+			maxQuota := *domRes.DomainQuota - (*domRes.ProjectsQuota - *projRes.Quota)
+			if *domRes.DomainQuota < *domRes.ProjectsQuota-*projRes.Quota {
+				maxQuota = 0
+			}
+			return &core.QuotaValidationError{
+				Status:       http.StatusConflict,
+				Message:      "domain quota exceeded",
+				MaximumValue: &maxQuota,
+				Unit:         domRes.Unit,
+			}
 		}
 	}
 

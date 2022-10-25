@@ -332,6 +332,14 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 	if respondwith.ErrorText(w, err) {
 		return
 	}
+	for _, srv := range services {
+		if _, exists := updater.Requests[srv.Type]; exists {
+			err = datamodel.ApplyComputedDomainQuota(tx, updater.Cluster, updater.Domain.ID, srv.Type)
+			if respondwith.ErrorText(w, err) {
+				return
+			}
+		}
+	}
 	err = tx.Commit()
 	if respondwith.ErrorText(w, err) {
 		return
