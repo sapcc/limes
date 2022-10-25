@@ -20,6 +20,7 @@
 package limesresources
 
 import (
+	"fmt"
 	"math"
 
 	"github.com/sapcc/go-api-declarations/limes"
@@ -52,8 +53,15 @@ type ResourceInfo struct {
 type BurstingMultiplier float64
 
 // ApplyTo returns the bursted backend quota for the given approved quota.
-func (m BurstingMultiplier) ApplyTo(quota uint64) uint64 {
-	return uint64(math.Floor((1 + float64(m)) * float64(quota)))
+func (m BurstingMultiplier) ApplyTo(quota uint64, qdModel QuotaDistributionModel) uint64 {
+	switch qdModel {
+	case CentralizedQuotaDistribution:
+		return quota
+	case HierarchicalQuotaDistribution:
+		return uint64(math.Floor((1 + float64(m)) * float64(quota)))
+	default:
+		panic(fmt.Sprintf("unknown quota distribution model: %q", string(qdModel)))
+	}
 }
 
 // ScalingBehavior appears in type DomainResourceReport and type

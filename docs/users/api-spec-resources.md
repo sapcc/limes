@@ -85,9 +85,10 @@ more 5 GiB share can be created, even though the physical usage is only 6 GiB.
 
 ### Quota bursting
 
-Limes supports **burstable** resources. If quota bursting is enabled on a project resource, the project may exceed its
-granted quota by a certain multiplier. This is implemented by setting the backend quota higher than the granted quota,
-to a value known as **usable quota**. Usable quota is calculated according to this formula:
+Limes supports **burstable** resources. If quota bursting is enabled on a project resource with hierarchical quota
+distribution, the project may exceed its granted quota by a certain multiplier. This is implemented by setting the
+backend quota higher than the granted quota, to a value known as **usable quota**. Usable quota is calculated according
+to this formula:
 
 ```
 usable_quota = (1 + bursting_multiplier) * quota
@@ -99,6 +100,10 @@ exceeds the granted quota is referred to as **burst usage**.
 Bursting allows users in a project to quickly respond to heightened resource needs. If the higher usage level turns out
 to be permanent, users should request a quota extension from their domain admin or cloud admin, since burst usage is
 usually billed at a higher price than regular usage.
+
+Bursting is not supported for resources with centralized quota distribution, since the default quota is assumed to be
+enough for most usecases in this distribution model, and any higher quota usage should be approved by cloud admins to
+avoid putting too much load on the resource.
 
 ### Scaling relations
 

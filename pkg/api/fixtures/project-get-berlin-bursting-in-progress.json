@@ -18,7 +18,7 @@
             "quota_distribution_model": "centralized",
             "quota": 20,
             "default_quota": 15,
-            "usable_quota": 22,
+            "usable_quota": 20,
             "usage": 2
           },
           {
@@ -32,7 +32,7 @@
             "quota_distribution_model": "centralized",
             "quota": 15,
             "default_quota": 10,
-            "usable_quota": 16,
+            "usable_quota": 15,
             "usage": 2
           }
         ],

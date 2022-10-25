@@ -183,7 +183,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 				resReport.Quota = quota
 				resReport.UsableQuota = quota
 				if projectHasBursting && clusterCanBurst {
-					usableQuota := behavior.MaxBurstMultiplier.ApplyTo(*quota)
+					usableQuota := behavior.MaxBurstMultiplier.ApplyTo(*quota, qdConfig.Model)
 					resReport.UsableQuota = &usableQuota
 				}
 				if backendQuota != nil && (*backendQuota < 0 || uint64(*backendQuota) != *resReport.UsableQuota) {

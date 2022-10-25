@@ -2396,6 +2396,56 @@ func Test_QuotaBursting(t *testing.T) {
 		t.Errorf("expected backend quota %#v, but got %#v", expectBackendQuota, backendQuota)
 	}
 
+	//check that resources with centralized quota distribution do not get burst quota applied
+	tr, tr0 := easypg.NewTracker(t, dbm.Db)
+	tr0.Ignore()
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 202,
+		Body: assert.JSONObject{
+			"project": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "centralized",
+						"resources": []assert.JSONObject{
+							//project quota rises from 15->30, and thus domain quota rises from 25->40, but desired_backend_quota is also 30
+							{"name": "things", "quota": 30},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+	tr.DBChanges().AssertEqual(`
+		UPDATE domain_resources SET quota = 40 WHERE service_id = 5 AND name = 'things';
+		UPDATE project_resources SET quota = 30, backend_quota = 30, desired_backend_quota = 30 WHERE service_id = 7 AND name = 'things';
+	`)
+
+	//revert the previous change, otherwise I would have to adjust every test fixture mentioned below
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 202,
+		Body: assert.JSONObject{
+			"project": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "centralized",
+						"resources": []assert.JSONObject{
+							//project quota falls again from 30->15, and thus domain quota falls back from 40->25
+							{"name": "things", "quota": 15},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+	tr.DBChanges().AssertEqual(`
+		UPDATE domain_resources SET quota = 25 WHERE service_id = 5 AND name = 'things';
+		UPDATE project_resources SET quota = 15, backend_quota = 15, desired_backend_quota = 15 WHERE service_id = 7 AND name = 'things';
+	`)
+
 	//increase usage beyond frontend quota -> should show up as burst usage
 	_, err := dbm.Exec(`UPDATE project_resources SET usage = 42 WHERE service_id = 1 AND name = 'things'`)
 	if err != nil {

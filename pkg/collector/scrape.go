@@ -292,8 +292,9 @@ func (c *Collector) writeScrapeResult(project core.KeystoneProject, projectID in
 			}
 
 			if projectHasBursting {
+				qdConfig := c.Cluster.QuotaDistributionConfigForResource(serviceType, resMetadata.Name)
 				behavior := c.Cluster.BehaviorForResource(serviceType, resMetadata.Name, project.Domain.Name+"/"+project.Name)
-				desiredBackendQuota := behavior.MaxBurstMultiplier.ApplyTo(*res.Quota)
+				desiredBackendQuota := behavior.MaxBurstMultiplier.ApplyTo(*res.Quota, qdConfig.Model)
 				res.DesiredBackendQuota = &desiredBackendQuota
 			} else {
 				res.DesiredBackendQuota = res.Quota
@@ -441,8 +442,9 @@ func (c *Collector) writeDummyResources(project core.KeystoneProject, projectHas
 			res.BackendQuota = nil
 		} else {
 			if projectHasBursting {
+				qdConfig := c.Cluster.QuotaDistributionConfigForResource(serviceType, resMetadata.Name)
 				behavior := c.Cluster.BehaviorForResource(serviceType, resMetadata.Name, project.Domain.Name+"/"+project.Name)
-				desiredBackendQuota := behavior.MaxBurstMultiplier.ApplyTo(*res.Quota)
+				desiredBackendQuota := behavior.MaxBurstMultiplier.ApplyTo(*res.Quota, qdConfig.Model)
 				res.DesiredBackendQuota = &desiredBackendQuota
 			} else {
 				res.DesiredBackendQuota = res.Quota
