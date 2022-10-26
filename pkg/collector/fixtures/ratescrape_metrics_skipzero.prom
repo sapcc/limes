@@ -3,6 +3,11 @@
 limes_cluster_capacity{os_cluster="west",resource="capacity",service="unittest"} 0
 limes_cluster_capacity{os_cluster="west",resource="capacity_portion",service="unittest"} 0
 limes_cluster_capacity{os_cluster="west",resource="things",service="unittest"} 0
+# HELP limes_domain_quota Assigned quota of a Limes resource for an OpenStack domain.
+# TYPE limes_domain_quota gauge
+limes_domain_quota{domain="germany",domain_id="uuid-for-germany",os_cluster="west",resource="capacity",service="unittest"} 0
+limes_domain_quota{domain="germany",domain_id="uuid-for-germany",os_cluster="west",resource="capacity_portion",service="unittest"} 0
+limes_domain_quota{domain="germany",domain_id="uuid-for-germany",os_cluster="west",resource="things",service="unittest"} 0
 # HELP limes_project_rate_usage Usage of a Limes rate for an OpenStack project. These are counters that never reset.
 # TYPE limes_project_rate_usage gauge
 limes_project_rate_usage{domain="germany",domain_id="uuid-for-germany",os_cluster="west",project="berlin",project_id="uuid-for-berlin",rate="firstrate",service="unittest"} 5129

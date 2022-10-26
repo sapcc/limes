@@ -175,6 +175,12 @@ func Test_ScanDomains(t *testing.T) {
 	}
 	assert.DeepEqual(t, "new domains after ScanDomains #7", actualNewDomains, []string(nil))
 	tr.DBChanges().AssertEqualf(`
+		DELETE FROM domain_resources WHERE service_id = 3 AND name = 'capacity';
+		DELETE FROM domain_resources WHERE service_id = 3 AND name = 'capacity_portion';
+		DELETE FROM domain_resources WHERE service_id = 3 AND name = 'things';
+		DELETE FROM domain_resources WHERE service_id = 4 AND name = 'capacity';
+		DELETE FROM domain_resources WHERE service_id = 4 AND name = 'capacity_portion';
+		DELETE FROM domain_resources WHERE service_id = 4 AND name = 'things';
 		DELETE FROM domain_services WHERE id = 3 AND domain_id = 2 AND type = 'unshared';
 		DELETE FROM domain_services WHERE id = 4 AND domain_id = 2 AND type = 'shared';
 		DELETE FROM domains WHERE id = 2 AND cluster_id = 'west' AND uuid = 'uuid-for-france';

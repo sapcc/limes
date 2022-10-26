@@ -2,6 +2,11 @@ INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (1, 'west
 INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (3, 'west', 'whatever', 0);
 
 INSERT INTO domain_resources (service_id, name, quota) VALUES (2, 'capacity', 200);
+INSERT INTO domain_resources (service_id, name, quota) VALUES (2, 'capacity_portion', 0);
+INSERT INTO domain_resources (service_id, name, quota) VALUES (2, 'things', 0);
+INSERT INTO domain_resources (service_id, name, quota) VALUES (4, 'capacity', 0);
+INSERT INTO domain_resources (service_id, name, quota) VALUES (4, 'capacity_portion', 0);
+INSERT INTO domain_resources (service_id, name, quota) VALUES (4, 'things', 0);
 
 INSERT INTO domain_services (id, domain_id, type) VALUES (2, 1, 'shared');
 INSERT INTO domain_services (id, domain_id, type) VALUES (4, 2, 'shared');

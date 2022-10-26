@@ -20,6 +20,7 @@
 package datamodel
 
 import (
+	"fmt"
 	"sort"
 
 	"github.com/sapcc/go-api-declarations/limes"
@@ -140,39 +141,45 @@ func checkDomainServiceConstraints(tx *gorp.Transaction, cluster *core.Cluster, 
 		}
 	}
 
-	//create any missing domain resources where there are "at least/exactly/should be" constraints
-	return createMissingDomainResources(tx, cluster, domain, srv, serviceConstraints, seen)
+	//create missing domain resources and ensure that computed quota values are up-to-date
+	err = createMissingDomainResources(tx, cluster, domain, srv, serviceConstraints, seen)
+	if err != nil {
+		return err
+	}
+	return ApplyComputedDomainQuota(tx, cluster, domain.ID, srv.Type)
 }
 
 func createMissingDomainResources(tx *gorp.Transaction, cluster *core.Cluster, domain db.Domain, srv db.DomainService, serviceConstraints map[string]core.QuotaConstraint, resourceExists map[string]bool) error {
-	//do not hit the database if there are no constraints to check
-	if len(serviceConstraints) == 0 {
-		return nil
+	plugin := cluster.QuotaPlugins[srv.Type]
+	if plugin == nil {
+		return fmt.Errorf("no quota plugin registered for service type %s", srv.Type)
 	}
 
 	//ensure deterministic ordering of resources (useful for tests)
-	resourceNames := make([]string, 0, len(serviceConstraints))
-	for resourceName, constraint := range serviceConstraints {
-		//initialize domain quotas where constraints require a non-zero quota value
-		if constraint.Minimum != nil && !resourceExists[resourceName] {
-			resourceNames = append(resourceNames, resourceName)
-		}
-	}
-	sort.Strings(resourceNames)
+	resources := plugin.Resources()
+	sort.Slice(resources, func(i, j int) bool {
+		return resources[i].Name < resources[j].Name
+	})
 
-	for _, resourceName := range resourceNames {
-		resInfo := cluster.InfoForResource(srv.Type, resourceName)
-		constraint := serviceConstraints[resourceName]
-		newQuota := *constraint.Minimum
-		logg.Info("initializing %s/%s quota for domain %s to %s to satisfy constraint %q",
-			srv.Type, resourceName, domain.Name,
-			limes.ValueWithUnit{Value: newQuota, Unit: resInfo.Unit},
-			constraint.String(),
-		)
+	for _, resInfo := range resources {
+		if resourceExists[resInfo.Name] {
+			continue
+		}
+
+		constraint := serviceConstraints[resInfo.Name]
+		newQuota := uint64(0)
+		if constraint.Minimum != nil {
+			newQuota = *constraint.Minimum
+			logg.Info("initializing %s/%s quota for domain %s to %s to satisfy constraint %q",
+				srv.Type, resInfo.Name, domain.Name,
+				limes.ValueWithUnit{Value: newQuota, Unit: resInfo.Unit},
+				constraint.String(),
+			)
+		}
 
 		err := tx.Insert(&db.DomainResource{
 			ServiceID: srv.ID,
-			Name:      resourceName,
+			Name:      resInfo.Name,
 			Quota:     newQuota,
 		})
 		if err != nil {

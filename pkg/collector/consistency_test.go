@@ -123,7 +123,7 @@ func Test_Consistency(t *testing.T) {
 
 	//add a domain_resource that contradicts the cluster.QuotaConstraints; this
 	//should be fixed by CheckConsistency()
-	err = dbm.Insert(&db.DomainResource{
+	_, err = dbm.Update(&db.DomainResource{
 		ServiceID: 2,
 		Name:      "capacity",
 		Quota:     200,
