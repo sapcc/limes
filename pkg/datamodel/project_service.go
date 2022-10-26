@@ -20,8 +20,10 @@
 package datamodel
 
 import (
+	"fmt"
 	"sort"
 
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/logg"
 	gorp "gopkg.in/gorp.v2"
 
@@ -63,7 +65,7 @@ func ValidateProjectServices(tx *gorp.Transaction, cluster *core.Cluster, domain
 		}
 
 		//valid service -> check whether the existing quota values violate any constraints
-		compliant, err := checkProjectResourcesAgainstConstraint(tx, srv, constraints[srv.Type])
+		compliant, err := checkProjectResourcesAgainstConstraint(tx, cluster, srv, constraints[srv.Type])
 		if err != nil {
 			return nil, err
 		}
@@ -88,6 +90,13 @@ func ValidateProjectServices(tx *gorp.Transaction, cluster *core.Cluster, domain
 		if seen[serviceType] {
 			continue
 		}
+
+		plugin := cluster.QuotaPlugins[serviceType]
+		if plugin == nil {
+			//defense in depth: cluster.ServiceTypes should be consistent with cluster.QuotaPlugins
+			return nil, fmt.Errorf("no quota plugin registered for service type %s", serviceType)
+		}
+
 		logg.Info("creating %s service entry for project %s/%s", serviceType, domain.Name, project.Name)
 		srv := db.ProjectService{
 			ProjectID: project.ID,
@@ -99,44 +108,50 @@ func ValidateProjectServices(tx *gorp.Transaction, cluster *core.Cluster, domain
 		}
 		services = append(services, srv)
 
-		//initialize project quotas from constraints, if there is one
-		if serviceConstraints, exists := constraints[serviceType]; exists {
-			//ensure deterministic ordering of resources (useful for tests)
-			resourceNames := make([]string, 0, len(serviceConstraints))
-			for resourceName, constraint := range serviceConstraints {
-				if constraint.Minimum != nil {
-					resourceNames = append(resourceNames, resourceName)
-				}
+		//ensure deterministic ordering of resources (useful for tests)
+		resources := plugin.Resources()
+		sort.Slice(resources, func(i, j int) bool {
+			return resources[i].Name < resources[j].Name
+		})
+
+		//initialize project quotas from constraints or quota distribution config if necessary
+		for _, resInfo := range resources {
+			if resInfo.NoQuota {
+				continue
 			}
-			sort.Strings(resourceNames)
 
-			for _, resourceName := range resourceNames {
-				res := db.ProjectResource{
-					ServiceID: srv.ID,
-					Name:      resourceName,
-					Quota:     serviceConstraints[resourceName].Minimum,
-					//Scrape() will fill in the remaining backend attributes, and it will
-					//also write the quotas into the backend.
-				}
-				zeroBackendQuota := int64(0)
-				res.BackendQuota = &zeroBackendQuota
-				if res.Quota == nil {
-					zeroQuota := uint64(0)
-					res.Quota = &zeroQuota
-				}
-				if project.HasBursting {
-					qdConfig := cluster.QuotaDistributionConfigForResource(serviceType, resourceName)
-					behavior := cluster.BehaviorForResource(serviceType, resourceName, domain.Name+"/"+project.Name)
-					desiredBackendQuota := behavior.MaxBurstMultiplier.ApplyTo(*res.Quota, qdConfig.Model)
-					res.DesiredBackendQuota = &desiredBackendQuota
-				} else {
-					res.DesiredBackendQuota = res.Quota
-				}
+			initialQuota := uint64(0)
+			qdConfig := cluster.QuotaDistributionConfigForResource(serviceType, resInfo.Name)
+			minimumQuota := constraints[serviceType][resInfo.Name].Minimum
+			if qdConfig.Model == limesresources.CentralizedQuotaDistribution {
+				initialQuota = qdConfig.DefaultProjectQuota
+			} else if minimumQuota != nil {
+				initialQuota = *minimumQuota
+			}
+			if initialQuota == 0 {
+				continue
+			}
 
-				err := tx.Insert(&res)
-				if err != nil {
-					return nil, err
-				}
+			res := db.ProjectResource{
+				ServiceID: srv.ID,
+				Name:      resInfo.Name,
+				Quota:     &initialQuota,
+				//Scrape() will fill in the remaining backend attributes, and it will
+				//also write the quotas into the backend.
+			}
+			zeroBackendQuota := int64(0)
+			res.BackendQuota = &zeroBackendQuota
+			if project.HasBursting {
+				behavior := cluster.BehaviorForResource(serviceType, resInfo.Name, domain.Name+"/"+project.Name)
+				desiredBackendQuota := behavior.MaxBurstMultiplier.ApplyTo(*res.Quota, qdConfig.Model)
+				res.DesiredBackendQuota = &desiredBackendQuota
+			} else {
+				res.DesiredBackendQuota = res.Quota
+			}
+
+			err := tx.Insert(&res)
+			if err != nil {
+				return nil, err
 			}
 		}
 	}
@@ -144,11 +159,21 @@ func ValidateProjectServices(tx *gorp.Transaction, cluster *core.Cluster, domain
 	return services, nil
 }
 
-func checkProjectResourcesAgainstConstraint(tx *gorp.Transaction, srv db.ProjectService, serviceConstraints map[string]core.QuotaConstraint) (ok bool, err error) {
+func checkProjectResourcesAgainstConstraint(tx *gorp.Transaction, cluster *core.Cluster, srv db.ProjectService, serviceConstraints map[string]core.QuotaConstraint) (ok bool, err error) {
 	//do not hit the database if there are no constraints to check
-	if len(serviceConstraints) == 0 {
+	if len(serviceConstraints) == 0 && len(cluster.Config.QuotaDistributionConfigs) == 0 {
 		return true, nil
 	}
+
+	//ensure deterministic ordering of resources (useful for tests)
+	plugin := cluster.QuotaPlugins[srv.Type]
+	if plugin == nil {
+		return false, fmt.Errorf("no quota plugin registered for service type %s", srv.Type)
+	}
+	resInfos := plugin.Resources()
+	sort.Slice(resInfos, func(i, j int) bool {
+		return resInfos[i].Name < resInfos[j].Name
+	})
 
 	var resources []db.ProjectResource
 	_, err = tx.Select(&resources,
@@ -156,10 +181,28 @@ func checkProjectResourcesAgainstConstraint(tx *gorp.Transaction, srv db.Project
 	if err != nil {
 		return false, err
 	}
-
+	quotaForResource := make(map[string]*uint64)
 	for _, res := range resources {
-		constraint := serviceConstraints[res.Name]
-		if res.Quota != nil && constraint.Validate(*res.Quota) != nil {
+		quotaForResource[res.Name] = res.Quota
+	}
+
+	for _, resInfo := range resInfos {
+		if resInfo.NoQuota {
+			continue
+		}
+		currentQuota := uint64(0)
+		if quota := quotaForResource[resInfo.Name]; quota != nil {
+			currentQuota = *quota
+		}
+
+		constraint := serviceConstraints[resInfo.Name]
+		if constraint.Validate(currentQuota) != nil {
+			return false, nil
+		}
+
+		qdConfig := cluster.QuotaDistributionConfigForResource(srv.Type, resInfo.Name)
+		if qdConfig.Model == limesresources.CentralizedQuotaDistribution && currentQuota == 0 {
+			//we did not get the initial default quota allocation
 			return false, nil
 		}
 	}

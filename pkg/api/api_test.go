@@ -1715,7 +1715,6 @@ func Test_ProjectOperations(t *testing.T) {
 	tr, tr0 := easypg.NewTracker(t, dbm.Db)
 	tr0.Ignore()
 
-	//test adjusting a quota of a resource using the centralized quota distribution model
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
@@ -1726,7 +1725,7 @@ func Test_ProjectOperations(t *testing.T) {
 					{
 						"type": "centralized",
 						"resources": []assert.JSONObject{
-							//project quota rises from 15->30, and thus domain quota rises from 25->40
+							//project quota rises from 15->30, and thus domain quota rises from 45->60
 							{"name": "things", "quota": 30},
 						},
 					},
@@ -1735,7 +1734,7 @@ func Test_ProjectOperations(t *testing.T) {
 		},
 	}.Check(t, router)
 	tr.DBChanges().AssertEqual(`
-		UPDATE domain_resources SET quota = 40 WHERE service_id = 5 AND name = 'things';
+		UPDATE domain_resources SET quota = 60 WHERE service_id = 5 AND name = 'things';
 		UPDATE project_resources SET quota = 30, backend_quota = 30, desired_backend_quota = 30 WHERE service_id = 7 AND name = 'things';
 	`)
 
@@ -1749,7 +1748,7 @@ func Test_ProjectOperations(t *testing.T) {
 					{
 						"type": "centralized",
 						"resources": []assert.JSONObject{
-							//project quota falls again from 30->15, and thus domain quota falls back from 40->25
+							//project quota falls again from 30->15, and thus domain quota falls back from 60->45
 							{"name": "things", "quota": 15},
 						},
 					},
@@ -1758,7 +1757,7 @@ func Test_ProjectOperations(t *testing.T) {
 		},
 	}.Check(t, router)
 	tr.DBChanges().AssertEqual(`
-		UPDATE domain_resources SET quota = 25 WHERE service_id = 5 AND name = 'things';
+		UPDATE domain_resources SET quota = 45 WHERE service_id = 5 AND name = 'things';
 		UPDATE project_resources SET quota = 15, backend_quota = 15, desired_backend_quota = 15 WHERE service_id = 7 AND name = 'things';
 	`)
 }
