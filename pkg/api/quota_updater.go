@@ -374,7 +374,9 @@ func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limesresources.Re
 	}
 	verr = u.validateAuthorization(srv, res, oldQuota, newQuota, lprLimit, res.Unit)
 	if verr != nil {
-		verr.Message += fmt.Sprintf(" in this %s", u.ScopeType())
+		if verr.Status == http.StatusForbidden {
+			verr.Message += fmt.Sprintf(" in this %s", u.ScopeType())
+		}
 		return verr
 	}
 
@@ -396,6 +398,14 @@ func (u QuotaUpdater) validateAuthorization(srv limes.ServiceInfo, res limesreso
 			}
 		case limesresources.CentralizedQuotaDistribution:
 			if u.CanLowerCentralized(srv.Type) {
+				if newQuota == 0 {
+					minimumValue := uint64(1)
+					return &core.QuotaValidationError{
+						Status:       http.StatusUnprocessableEntity,
+						Message:      "quota may not be lowered to zero for resources with non-zero default quota", //because "zero" means "default quota was not applied yet"
+						MinimumValue: &minimumValue,
+					}
+				}
 				return nil
 			}
 		}

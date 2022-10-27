@@ -2227,6 +2227,36 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 			},
 		},
 	}.Check(t, router)
+
+	//even if lower_centralized is allowed, lowering to 0 is never allowed (to
+	//test this, we have to first set usage to 0 to avoid getting an error for
+	//quota < usage instead)
+	enforcer.AllowRaiseCentralized = true
+	enforcer.AllowLowerCentralized = true
+
+	_, err = dbm.Exec(`UPDATE project_resources SET usage = 0 WHERE service_id = 7 AND name = 'things'`)
+	if err != nil {
+		t.Error(err.Error())
+	}
+
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 422,
+		ExpectBody:   assert.StringData("cannot change centralized/things quota: quota may not be lowered to zero for resources with non-zero default quota (minimum acceptable project quota is 1)\n"),
+		Body: assert.JSONObject{
+			"project": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "centralized",
+						"resources": []assert.JSONObject{
+							{"name": "things", "quota": 0},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
 }
 
 func expectStaleProjectServices(t *testing.T, dbm *gorp.DbMap, staleField string, pairs ...string) {
