@@ -136,6 +136,14 @@ func (c *Collector) checkConsistencyDomain(domain db.Domain) {
 			c.LogError(err.Error())
 		}
 	}
+
+	//recompute domain quota values that depend on project quotas
+	for _, serviceType := range c.Cluster.ServiceTypes {
+		err = datamodel.ApplyComputedDomainQuota(c.DB, c.Cluster, domain.ID, serviceType)
+		if err != nil {
+			c.LogError(err.Error())
+		}
+	}
 }
 
 func (c *Collector) checkConsistencyProject(project db.Project, domain db.Domain) error {

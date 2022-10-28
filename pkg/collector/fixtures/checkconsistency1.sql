@@ -5,15 +5,15 @@ INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (4, 'west
 INSERT INTO domain_resources (service_id, name, quota) VALUES (2, 'capacity', 200);
 INSERT INTO domain_resources (service_id, name, quota) VALUES (2, 'capacity_portion', 0);
 INSERT INTO domain_resources (service_id, name, quota) VALUES (2, 'things', 0);
-INSERT INTO domain_resources (service_id, name, quota) VALUES (3, 'capacity', 0);
+INSERT INTO domain_resources (service_id, name, quota) VALUES (3, 'capacity', 20);
 INSERT INTO domain_resources (service_id, name, quota) VALUES (3, 'capacity_portion', 0);
-INSERT INTO domain_resources (service_id, name, quota) VALUES (3, 'things', 0);
+INSERT INTO domain_resources (service_id, name, quota) VALUES (3, 'things', 30);
 INSERT INTO domain_resources (service_id, name, quota) VALUES (5, 'capacity', 0);
 INSERT INTO domain_resources (service_id, name, quota) VALUES (5, 'capacity_portion', 0);
 INSERT INTO domain_resources (service_id, name, quota) VALUES (5, 'things', 0);
-INSERT INTO domain_resources (service_id, name, quota) VALUES (6, 'capacity', 0);
+INSERT INTO domain_resources (service_id, name, quota) VALUES (6, 'capacity', 10);
 INSERT INTO domain_resources (service_id, name, quota) VALUES (6, 'capacity_portion', 0);
-INSERT INTO domain_resources (service_id, name, quota) VALUES (6, 'things', 0);
+INSERT INTO domain_resources (service_id, name, quota) VALUES (6, 'things', 15);
 
 INSERT INTO domain_services (id, domain_id, type) VALUES (2, 1, 'shared');
 INSERT INTO domain_services (id, domain_id, type) VALUES (3, 1, 'centralized');

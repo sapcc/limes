@@ -5,13 +5,13 @@ INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (5, 'west
 INSERT INTO domain_resources (service_id, name, quota) VALUES (2, 'capacity', 100);
 INSERT INTO domain_resources (service_id, name, quota) VALUES (2, 'capacity_portion', 0);
 INSERT INTO domain_resources (service_id, name, quota) VALUES (2, 'things', 0);
-INSERT INTO domain_resources (service_id, name, quota) VALUES (3, 'capacity', 0);
+INSERT INTO domain_resources (service_id, name, quota) VALUES (3, 'capacity', 20);
 INSERT INTO domain_resources (service_id, name, quota) VALUES (3, 'capacity_portion', 0);
 INSERT INTO domain_resources (service_id, name, quota) VALUES (3, 'things', 0);
 INSERT INTO domain_resources (service_id, name, quota) VALUES (5, 'capacity', 0);
 INSERT INTO domain_resources (service_id, name, quota) VALUES (5, 'capacity_portion', 0);
 INSERT INTO domain_resources (service_id, name, quota) VALUES (5, 'things', 0);
-INSERT INTO domain_resources (service_id, name, quota) VALUES (6, 'capacity', 0);
+INSERT INTO domain_resources (service_id, name, quota) VALUES (6, 'capacity', 10);
 INSERT INTO domain_resources (service_id, name, quota) VALUES (6, 'capacity_portion', 0);
 INSERT INTO domain_resources (service_id, name, quota) VALUES (6, 'things', 0);
 INSERT INTO domain_resources (service_id, name, quota) VALUES (8, 'capacity', 10);

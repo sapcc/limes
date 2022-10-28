@@ -31,13 +31,13 @@ import (
 )
 
 var recomputeDomainQuotaQueryStr = `
-	UPDATE domain_resources dr SET quota = (
+	UPDATE domain_resources dr SET quota = COALESCE((
 		SELECT SUM(pr.quota)
 		  FROM projects p
 		  JOIN project_services ps ON ps.project_id = p.id
 		  JOIN project_resources pr ON pr.service_id = ps.id
 		 WHERE p.domain_id = $1 AND ps.type = $2 AND pr.name = $3
-	)
+	), 0)
 	WHERE dr.name = $3 AND dr.service_id = (
 		SELECT id
 		  FROM domain_services ds
