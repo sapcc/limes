@@ -239,6 +239,11 @@ func compileQuotaConstraints(cluster *Cluster, data map[string]map[string]string
 				errors = append(errors, fmt.Errorf("resource %s/%s does not track quota", serviceType, resourceName))
 				continue
 			}
+			qdConfig := cluster.QuotaDistributionConfigForResource(serviceType, resourceName)
+			if projectsConstraints != nil && qdConfig.Model == limesresources.CentralizedQuotaDistribution {
+				errors = append(errors, fmt.Errorf("resource %s/%s does not accept domain quota constraints because domain quota is computed automatically according to the centralized quota distribution model", serviceType, resourceName))
+				continue
+			}
 
 			var projectMinimumsSum *uint64
 			if projectsConstraints != nil {
@@ -379,9 +384,16 @@ func validateQuotaConstraints(cluster *Cluster, domainConstraints QuotaConstrain
 		}
 	}
 
-	//check that sumConstraints fits within the domain constraints
+	//check that sumConstraints fits within the domain constraints (this is only
+	//relevant for hierarchical quota distribution; for centralized quota
+	//distribution, domain quota is auto-computed and constraints are forbidden)
 	for serviceType, serviceSums := range sumConstraints {
 		for resourceName, sumConstraint := range serviceSums {
+			qdConfig := cluster.QuotaDistributionConfigForResource(serviceType, resourceName)
+			if qdConfig.Model == limesresources.CentralizedQuotaDistribution {
+				continue
+			}
+
 			domainConstraint := domainConstraints[serviceType][resourceName]
 
 			minProjectQuota := uint64(0)
