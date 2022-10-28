@@ -94,6 +94,15 @@ func Test_ScanDomains(t *testing.T) {
 					"shared": {
 						"capacity": {Minimum: pointerTo(10)},
 					},
+					"centralized": {
+						"capacity": {Minimum: pointerTo(5)},  //below the DefaultProjectQuota, so the DefaultProjectQuota should take precedence
+						"things":   {Minimum: pointerTo(20)}, //above the DefaultProjectQuota, so the constraint.Minimum should take precedence
+					},
+				},
+				"dresden": {
+					"centralized": {
+						"capacity": {Maximum: pointerTo(5)}, //below the DefaultProjectQuota, so the constraint.Maximum should take precedence
+					},
 				},
 			},
 		},
@@ -152,6 +161,8 @@ func Test_ScanDomains(t *testing.T) {
 	}
 	assert.DeepEqual(t, "new domains after ScanDomains #4", actualNewDomains, []string(nil))
 	tr.DBChanges().AssertEqualf(`
+		UPDATE domain_resources SET quota = 20 WHERE service_id = 6 AND name = 'capacity';
+		UPDATE domain_resources SET quota = 30 WHERE service_id = 6 AND name = 'things';
 		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (12, 'capacity', 10, 0, 0, '', 10, NULL);
 		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (12, 'things', 15, 0, 0, '', 15, NULL);
 		INSERT INTO project_services (id, project_id, type, scraped_at, stale, scrape_duration_secs, rates_scraped_at, rates_stale, rates_scrape_duration_secs, rates_scrape_state, serialized_metrics, checked_at, scrape_error_message, rates_checked_at, rates_scrape_error_message) VALUES (10, 4, 'unshared', NULL, FALSE, 0, NULL, FALSE, 0, '', '', NULL, '', NULL, '');
@@ -178,6 +189,8 @@ func Test_ScanDomains(t *testing.T) {
 	}
 	assert.DeepEqual(t, "new domains after ScanDomains #6", actualNewDomains, []string(nil))
 	tr.DBChanges().AssertEqualf(`
+		UPDATE domain_resources SET quota = 10 WHERE service_id = 6 AND name = 'capacity';
+		UPDATE domain_resources SET quota = 15 WHERE service_id = 6 AND name = 'things';
 		DELETE FROM project_resources WHERE service_id = 12 AND name = 'capacity';
 		DELETE FROM project_resources WHERE service_id = 12 AND name = 'things';
 		DELETE FROM project_services WHERE id = 10 AND project_id = 4 AND type = 'unshared';

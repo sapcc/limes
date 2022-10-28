@@ -275,6 +275,14 @@ func (c *Collector) ScanProjects(domain *db.Domain) (result []string, resultErr 
 		result = append(result, project.UUID)
 	}
 
+	//recompute domain quota values that depend on project quotas if necessary
+	for _, serviceType := range c.Cluster.ServiceTypes {
+		err := datamodel.ApplyComputedDomainQuota(c.DB, c.Cluster, domain.ID, serviceType)
+		if err != nil {
+			return result, err
+		}
+	}
+
 	return result, nil
 }
 

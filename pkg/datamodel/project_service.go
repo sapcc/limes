@@ -120,14 +120,9 @@ func ValidateProjectServices(tx *gorp.Transaction, cluster *core.Cluster, domain
 				continue
 			}
 
-			initialQuota := uint64(0)
 			qdConfig := cluster.QuotaDistributionConfigForResource(serviceType, resInfo.Name)
-			minimumQuota := constraints[serviceType][resInfo.Name].Minimum
-			if qdConfig.Model == limesresources.CentralizedQuotaDistribution {
-				initialQuota = qdConfig.DefaultProjectQuota
-			} else if minimumQuota != nil {
-				initialQuota = *minimumQuota
-			}
+			constraint := constraints[serviceType][resInfo.Name]
+			initialQuota := constraint.ApplyTo(qdConfig.InitialProjectQuota())
 			if initialQuota == 0 {
 				continue
 			}

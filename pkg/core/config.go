@@ -286,6 +286,19 @@ type QuotaDistributionConfiguration struct {
 	DefaultProjectQuota uint64                                `yaml:"default_project_quota"` //required for CentralizedQuotaDistribution
 }
 
+// InitialProjectQuota returns the quota value that will be assigned to new
+// project resources governed by this QuotaDistributionConfiguration.
+func (c QuotaDistributionConfiguration) InitialProjectQuota() uint64 {
+	switch c.Model {
+	case limesresources.HierarchicalQuotaDistribution:
+		return 0
+	case limesresources.CentralizedQuotaDistribution:
+		return c.DefaultProjectQuota
+	default:
+		panic(fmt.Sprintf("invalid quota distribution model: %q", c.Model))
+	}
+}
+
 // NewConfiguration reads and validates the given configuration file.
 // Errors are logged and will result in
 // program termination, causing the function to not return.
