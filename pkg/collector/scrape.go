@@ -205,10 +205,17 @@ func (c *Collector) writeScrapeResult(project core.KeystoneProject, projectID in
 			continue
 		}
 
+		//check if we need to apply a missing default quota
+		qdConfig := c.Cluster.QuotaDistributionConfigForResource(serviceType, res.Name)
+		resInfo := c.Cluster.InfoForResource(serviceType, res.Name)
+		if !resInfo.NoQuota && (res.Quota == nil || *res.Quota == 0) {
+			initialQuota := qdConfig.InitialProjectQuota()
+			res.Quota = &initialQuota
+		}
+
 		//check if we need to enforce a constraint
 		constraint := serviceConstraints[res.Name]
 		if res.Quota != nil && constraint.Validate(*res.Quota) != nil {
-			resInfo := c.Cluster.InfoForResource(serviceType, res.Name)
 			newQuota := constraint.ApplyTo(*res.Quota)
 			logg.Info("changing %s/%s quota for project %s/%s from %s to %s to satisfy constraint %q",
 				serviceType, res.Name, project.Domain.Name, project.Name,
@@ -220,7 +227,6 @@ func (c *Collector) writeScrapeResult(project core.KeystoneProject, projectID in
 		}
 
 		//update existing resource record
-		resInfo := c.Cluster.InfoForResource(serviceType, res.Name)
 		res.Usage = data.Usage
 		res.PhysicalUsage = data.PhysicalUsage
 		if resInfo.NoQuota {
@@ -264,10 +270,9 @@ func (c *Collector) writeScrapeResult(project core.KeystoneProject, projectID in
 		}
 		data := resourceData[resMetadata.Name]
 
-		initialQuota := uint64(0)
-		if constraint := serviceConstraints[resMetadata.Name]; constraint.Minimum != nil {
-			initialQuota = *constraint.Minimum
-		}
+		qdConfig := c.Cluster.QuotaDistributionConfigForResource(serviceType, resMetadata.Name)
+		constraint := serviceConstraints[resMetadata.Name]
+		initialQuota := constraint.ApplyTo(qdConfig.InitialProjectQuota())
 
 		res := &db.ProjectResource{
 			ServiceID:        serviceID,
