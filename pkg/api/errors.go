@@ -44,9 +44,9 @@ func (p *v1Provider) ListScrapeErrors(w http.ResponseWriter, r *http.Request) {
 	respondwith.JSON(w, http.StatusOK, map[string]interface{}{"scrape_errors": scrapeErrors})
 }
 
-// ListRateScrapeErrors handles GET /v1/admin/rate-scrape-errors.
+// ListRateScrapeErrors handles GET /rates/v1/admin/scrape-errors.
 func (p *v1Provider) ListRateScrapeErrors(w http.ResponseWriter, r *http.Request) {
-	httpapi.IdentifyEndpoint(r, "/v1/admin/rate-scrape-errors")
+	httpapi.IdentifyEndpoint(r, "/rates/v1/admin/scrape-errors")
 	token := p.CheckToken(r)
 	if !token.Require(w, "cluster:show_errors") {
 		return
