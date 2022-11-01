@@ -597,38 +597,16 @@ func Test_DomainOperations(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany",
 		ExpectStatus: 409,
 		ExpectBody:   assert.StringData("cannot change shared/capacity quota: domain quota may not be smaller than sum of project quotas in that domain (minimum acceptable domain quota is 20 B)\n"),
-		Body: assert.JSONObject{
-			"domain": assert.JSONObject{
-				"services": []assert.JSONObject{
-					{
-						"type": "shared",
-						"resources": []assert.JSONObject{
-							//should fail because project quota sum exceeds new quota
-							{"name": "capacity", "quota": 1},
-						},
-					},
-				},
-			},
-		},
+		//should fail because project quota sum exceeds new quota
+		Body: requestOneQuotaChange("domain", "shared", "capacity", 1, limes.UnitNone),
 	}.Check(t, router)
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany",
 		ExpectStatus: 422,
 		ExpectBody:   assert.StringData("cannot change shared/things quota: cannot convert value from MiB to <count> because units are incompatible\n"),
-		Body: assert.JSONObject{
-			"domain": assert.JSONObject{
-				"services": []assert.JSONObject{
-					{
-						"type": "shared",
-						"resources": []assert.JSONObject{
-							//should fail because unit is incompatible with resource
-							{"name": "things", "quota": 1, "unit": "MiB"},
-						},
-					},
-				},
-			},
-		},
+		//should fail because unit is incompatible with resource
+		Body: requestOneQuotaChange("domain", "shared", "things", 1, "MiB"),
 	}.Check(t, router)
 
 	//check PutDomain error cases because of constraints
@@ -667,36 +645,14 @@ func Test_DomainOperations(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany",
 		ExpectStatus: 422,
 		ExpectBody:   assert.StringData("cannot change unknown/things quota: no such service\n"),
-		Body: assert.JSONObject{
-			"domain": assert.JSONObject{
-				"services": []assert.JSONObject{
-					{
-						"type": "unknown",
-						"resources": []assert.JSONObject{
-							{"name": "things", "quota": 100},
-						},
-					},
-				},
-			},
-		},
+		Body:         requestOneQuotaChange("domain", "unknown", "things", 100, limes.UnitNone),
 	}.Check(t, router)
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany",
 		ExpectStatus: 422,
 		ExpectBody:   assert.StringData("cannot change shared/unknown quota: no such resource\n"),
-		Body: assert.JSONObject{
-			"domain": assert.JSONObject{
-				"services": []assert.JSONObject{
-					{
-						"type": "shared",
-						"resources": []assert.JSONObject{
-							{"name": "unknown", "quota": 100},
-						},
-					},
-				},
-			},
-		},
+		Body:         requestOneQuotaChange("domain", "shared", "unknown", 100, limes.UnitNone),
 	}.Check(t, router)
 
 	//check PutDomain with resource that does not track quota
@@ -705,18 +661,7 @@ func Test_DomainOperations(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany",
 		ExpectStatus: 403,
 		ExpectBody:   assert.StringData("cannot change shared/capacity_portion quota: resource does not track quota\n"),
-		Body: assert.JSONObject{
-			"domain": assert.JSONObject{
-				"services": []assert.JSONObject{
-					{
-						"type": "shared",
-						"resources": []assert.JSONObject{
-							{"name": "capacity_portion", "quota": 1},
-						},
-					},
-				},
-			},
-		},
+		Body:         requestOneQuotaChange("domain", "shared", "capacity_portion", 1, limes.UnitNone),
 	}.Check(t, router)
 
 	//check PutDomain happy path
@@ -724,36 +669,14 @@ func Test_DomainOperations(t *testing.T) {
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany",
 		ExpectStatus: 202,
-		Body: assert.JSONObject{
-			"domain": assert.JSONObject{
-				"services": []assert.JSONObject{
-					{
-						"type": "shared",
-						"resources": []assert.JSONObject{
-							{"name": "capacity", "quota": 1234},
-						},
-					},
-				},
-			},
-		},
+		Body:         requestOneQuotaChange("domain", "shared", "capacity", 1234, limes.UnitNone),
 	}.Check(t, router)
 	expectDomainQuota(t, dbm, "germany", "shared", "capacity", 1234)
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany",
 		ExpectStatus: 202,
-		Body: assert.JSONObject{
-			"domain": assert.JSONObject{
-				"services": []assert.JSONObject{
-					{
-						"type": "shared",
-						"resources": []assert.JSONObject{
-							{"name": "capacity", "quota": 1, "unit": limes.UnitMebibytes},
-						},
-					},
-				},
-			},
-		},
+		Body:         requestOneQuotaChange("domain", "shared", "capacity", 1, limes.UnitMebibytes),
 	}.Check(t, router)
 	expectDomainQuota(t, dbm, "germany", "shared", "capacity", 1<<20)
 
@@ -765,18 +688,7 @@ func Test_DomainOperations(t *testing.T) {
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany",
 		ExpectStatus: 202,
-		Body: assert.JSONObject{
-			"domain": assert.JSONObject{
-				"services": []assert.JSONObject{
-					{
-						"type": "shared",
-						"resources": []assert.JSONObject{
-							{"name": "capacity", "quota": 1 << 20, "unit": limes.UnitKibibytes},
-						},
-					},
-				},
-			},
-		},
+		Body:         requestOneQuotaChange("domain", "shared", "capacity", 1<<20, limes.UnitKibibytes),
 	}.Check(t, router)
 	expectDomainQuota(t, dbm, "germany", "shared", "capacity", 1<<30)
 
@@ -785,18 +697,7 @@ func Test_DomainOperations(t *testing.T) {
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-france",
 		ExpectStatus: 202,
-		Body: assert.JSONObject{
-			"domain": assert.JSONObject{
-				"services": []assert.JSONObject{
-					{
-						"type": "shared",
-						"resources": []assert.JSONObject{
-							{"name": "capacity", "quota": 123},
-						},
-					},
-				},
-			},
-		},
+		Body:         requestOneQuotaChange("domain", "shared", "capacity", 123, limes.UnitNone),
 	}.Check(t, router)
 	expectDomainQuota(t, dbm, "france", "shared", "capacity", 123)
 
@@ -805,18 +706,7 @@ func Test_DomainOperations(t *testing.T) {
 		Method:       "POST",
 		Path:         "/v1/domains/uuid-for-germany/simulate-put",
 		ExpectStatus: 200,
-		Body: assert.JSONObject{
-			"domain": assert.JSONObject{
-				"services": []assert.JSONObject{
-					{
-						"type": "shared",
-						"resources": []assert.JSONObject{
-							{"name": "capacity", "quota": 1 << 20, "unit": limes.UnitKibibytes},
-						},
-					},
-				},
-			},
-		},
+		Body:         requestOneQuotaChange("domain", "shared", "capacity", 1<<20, limes.UnitKibibytes),
 		ExpectBody: assert.JSONObject{
 			"success": true,
 		},
@@ -827,18 +717,7 @@ func Test_DomainOperations(t *testing.T) {
 		Method:       "POST",
 		Path:         "/v1/domains/uuid-for-germany/simulate-put",
 		ExpectStatus: 200,
-		Body: assert.JSONObject{
-			"domain": assert.JSONObject{
-				"services": []assert.JSONObject{
-					{
-						"type": "shared",
-						"resources": []assert.JSONObject{
-							{"name": "capacity", "quota": 1, "unit": limes.UnitMebibytes},
-						},
-					},
-				},
-			},
-		},
+		Body:         requestOneQuotaChange("domain", "shared", "capacity", 1, limes.UnitMebibytes),
 		ExpectBody: assert.JSONObject{
 			"success": true,
 		},
@@ -919,19 +798,8 @@ func Test_DomainOperations(t *testing.T) {
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany",
 		ExpectStatus: 202,
-		Body: assert.JSONObject{
-			"domain": assert.JSONObject{
-				"services": []assert.JSONObject{
-					{
-						"type": "unshared",
-						"resources": []assert.JSONObject{
-							//less than sum(projectQuota), but more than before, so it's okay
-							{"name": "capacity", "quota": 15},
-						},
-					},
-				},
-			},
-		},
+		//less than sum(projectQuota), but more than before, so it's okay
+		Body: requestOneQuotaChange("domain", "unshared", "capacity", 15, limes.UnitNone),
 	}.Check(t, router)
 }
 
@@ -969,18 +837,7 @@ func Test_DomainOPA(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany",
 		ExpectStatus: 202,
 		ExpectBody:   assert.StringData(""),
-		Body: assert.JSONObject{
-			"domain": assert.JSONObject{
-				"services": []assert.JSONObject{
-					{
-						"type": "shared",
-						"resources": []assert.JSONObject{
-							{"name": "capacity", "quota": 30},
-						},
-					},
-				},
-			},
-		},
+		Body:         requestOneQuotaChange("domain", "shared", "capacity", 30, limes.UnitNone),
 	}.Check(t, router)
 
 	// try invalid operations which should trigger a violation
@@ -1300,18 +1157,7 @@ func Test_ProjectOperations(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 422,
 		ExpectBody:   assert.StringData("cannot change shared/capacity quota: not acceptable for this project: IsQuotaAcceptableForProject failed as requested for quota set capacity=5, things=10\n"),
-		Body: assert.JSONObject{
-			"project": assert.JSONObject{
-				"services": []assert.JSONObject{
-					{
-						"type": "shared",
-						"resources": []assert.JSONObject{
-							{"name": "capacity", "quota": 5},
-						},
-					},
-				},
-			},
-		},
+		Body:         requestOneQuotaChange("project", "shared", "capacity", 5, limes.UnitNone),
 	}.Check(t, router)
 	plugin.QuotaIsNotAcceptable = false
 
@@ -1323,18 +1169,7 @@ func Test_ProjectOperations(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 202,
 		ExpectBody:   assert.StringData("quotas have been accepted, but some error(s) occurred while trying to write the quotas into the backend services:\nSetQuota failed as requested\n"),
-		Body: assert.JSONObject{
-			"project": assert.JSONObject{
-				"services": []assert.JSONObject{
-					{
-						"type": "shared",
-						"resources": []assert.JSONObject{
-							{"name": "capacity", "quota": 5},
-						},
-					},
-				},
-			},
-		},
+		Body:         requestOneQuotaChange("project", "shared", "capacity", 5, limes.UnitNone),
 	}.Check(t, router)
 	var (
 		actualQuota        uint64
@@ -1362,36 +1197,14 @@ func Test_ProjectOperations(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 422,
 		ExpectBody:   assert.StringData("cannot change unknown/things quota: no such service\n"),
-		Body: assert.JSONObject{
-			"project": assert.JSONObject{
-				"services": []assert.JSONObject{
-					{
-						"type": "unknown",
-						"resources": []assert.JSONObject{
-							{"name": "things", "quota": 100},
-						},
-					},
-				},
-			},
-		},
+		Body:         requestOneQuotaChange("project", "unknown", "things", 100, limes.UnitNone),
 	}.Check(t, router)
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 422,
 		ExpectBody:   assert.StringData("cannot change shared/unknown quota: no such resource\n"),
-		Body: assert.JSONObject{
-			"project": assert.JSONObject{
-				"services": []assert.JSONObject{
-					{
-						"type": "shared",
-						"resources": []assert.JSONObject{
-							{"name": "unknown", "quota": 100},
-						},
-					},
-				},
-			},
-		},
+		Body:         requestOneQuotaChange("project", "shared", "unknown", 100, limes.UnitNone),
 	}.Check(t, router)
 
 	//check PutProject with resource that does not track quota
@@ -1400,18 +1213,7 @@ func Test_ProjectOperations(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 403,
 		ExpectBody:   assert.StringData("cannot change shared/capacity_portion quota: resource does not track quota\n"),
-		Body: assert.JSONObject{
-			"project": assert.JSONObject{
-				"services": []assert.JSONObject{
-					{
-						"type": "shared",
-						"resources": []assert.JSONObject{
-							{"name": "capacity_portion", "quota": 1},
-						},
-					},
-				},
-			},
-		},
+		Body:         requestOneQuotaChange("project", "shared", "capacity_portion", 1, limes.UnitNone),
 	}.Check(t, router)
 
 	//check PutProject happy path
@@ -1420,18 +1222,7 @@ func Test_ProjectOperations(t *testing.T) {
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 202,
-		Body: assert.JSONObject{
-			"project": assert.JSONObject{
-				"services": []assert.JSONObject{
-					{
-						"type": "shared",
-						"resources": []assert.JSONObject{
-							{"name": "capacity", "quota": 6},
-						},
-					},
-				},
-			},
-		},
+		Body:         requestOneQuotaChange("project", "shared", "capacity", 6, limes.UnitNone),
 	}.Check(t, router)
 	err = dbm.QueryRow(`
 		SELECT pr.quota, pr.backend_quota FROM project_resources pr
@@ -1558,18 +1349,7 @@ func Test_ProjectOperations(t *testing.T) {
 		Method:       "POST",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/simulate-put",
 		ExpectStatus: 200,
-		Body: assert.JSONObject{
-			"project": assert.JSONObject{
-				"services": []assert.JSONObject{
-					{
-						"type": "shared",
-						"resources": []assert.JSONObject{
-							{"name": "capacity", "quota": 6},
-						},
-					},
-				},
-			},
-		},
+		Body:         requestOneQuotaChange("project", "shared", "capacity", 6, limes.UnitNone),
 		ExpectBody: assert.JSONObject{
 			"success": true,
 		},
@@ -1697,19 +1477,8 @@ func Test_ProjectOperations(t *testing.T) {
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 202,
-		Body: assert.JSONObject{
-			"project": assert.JSONObject{
-				"services": []assert.JSONObject{
-					{
-						"type": "unshared",
-						"resources": []assert.JSONObject{
-							//less than usage, but more than before, so it's okay
-							{"name": "capacity", "quota": 1},
-						},
-					},
-				},
-			},
-		},
+		//less than usage, but more than before, so it's okay
+		Body: requestOneQuotaChange("project", "unshared", "capacity", 1, limes.UnitNone),
 	}.Check(t, router)
 
 	tr, tr0 := easypg.NewTracker(t, dbm.Db)
@@ -1719,19 +1488,8 @@ func Test_ProjectOperations(t *testing.T) {
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 202,
-		Body: assert.JSONObject{
-			"project": assert.JSONObject{
-				"services": []assert.JSONObject{
-					{
-						"type": "centralized",
-						"resources": []assert.JSONObject{
-							//project quota rises from 15->30, and thus domain quota rises from 45->60
-							{"name": "things", "quota": 30},
-						},
-					},
-				},
-			},
-		},
+		//project quota rises from 15->30, and thus domain quota rises from 45->60
+		Body: requestOneQuotaChange("project", "centralized", "things", 30, limes.UnitNone),
 	}.Check(t, router)
 	tr.DBChanges().AssertEqual(`
 		UPDATE domain_resources SET quota = 60 WHERE service_id = 5 AND name = 'things';
@@ -1742,19 +1500,8 @@ func Test_ProjectOperations(t *testing.T) {
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 202,
-		Body: assert.JSONObject{
-			"project": assert.JSONObject{
-				"services": []assert.JSONObject{
-					{
-						"type": "centralized",
-						"resources": []assert.JSONObject{
-							//project quota falls again from 30->15, and thus domain quota falls back from 60->45
-							{"name": "things", "quota": 15},
-						},
-					},
-				},
-			},
-		},
+		//project quota falls again from 30->15, and thus domain quota falls back from 60->45
+		Body: requestOneQuotaChange("project", "centralized", "things", 15, limes.UnitNone),
 	}.Check(t, router)
 	tr.DBChanges().AssertEqual(`
 		UPDATE domain_resources SET quota = 45 WHERE service_id = 5 AND name = 'things';
@@ -2023,40 +1770,16 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany",
 		ExpectStatus: 403,
 		ExpectBody:   assert.StringData("cannot change shared/things quota: user is not allowed to raise \"shared\" quotas that high in this domain (maximum acceptable domain quota is 31)\n"),
-		Body: assert.JSONObject{
-			"domain": assert.JSONObject{
-				"services": []assert.JSONObject{
-					{
-						"type": "shared",
-						"resources": []assert.JSONObject{
-							//attempt to raise should fail because low-privilege exception
-							//only applies up to 31
-							{"name": "things", "quota": 35},
-						},
-					},
-				},
-			},
-		},
+		//attempt to raise should fail because low-privilege exception only applies up to 31
+		Body: requestOneQuotaChange("domain", "shared", "things", 35, limes.UnitNone),
 	}.Check(t, router)
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 403,
 		ExpectBody:   assert.StringData("cannot change shared/things quota: user is not allowed to raise \"shared\" quotas that high in this project (maximum acceptable project quota is 12)\n"),
-		Body: assert.JSONObject{
-			"project": assert.JSONObject{
-				"services": []assert.JSONObject{
-					{
-						"type": "shared",
-						"resources": []assert.JSONObject{
-							//attempt to raise should fail because low-privilege exception
-							//only applies up to 12
-							{"name": "things", "quota": 15},
-						},
-					},
-				},
-			},
-		},
+		//attempt to raise should fail because low-privilege exception only applies up to 12
+		Body: requestOneQuotaChange("project", "shared", "things", 15, limes.UnitNone),
 	}.Check(t, router)
 
 	//test low-privilege raise limits that are specified as percentage of assigned cluster capacity over all domains
@@ -2072,20 +1795,8 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany",
 		ExpectStatus: 403,
 		ExpectBody:   assert.StringData("cannot change shared/things quota: user is not allowed to raise \"shared\" quotas that high in this domain (maximum acceptable domain quota is 110)\n"),
-		Body: assert.JSONObject{
-			"domain": assert.JSONObject{
-				"services": []assert.JSONObject{
-					{
-						"type": "shared",
-						"resources": []assert.JSONObject{
-							//attempt to raise should fail because low-privilege exception
-							//only applies up to 110 (see comment above)
-							{"name": "things", "quota": 115},
-						},
-					},
-				},
-			},
-		},
+		//attempt to raise should fail because low-privilege exception only applies up to 110 (see comment above)
+		Body: requestOneQuotaChange("domain", "shared", "things", 115, limes.UnitNone),
 	}.Check(t, router)
 
 	//raise another domain quota such that the auto-approval limit would be
@@ -2117,20 +1828,8 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany",
 		ExpectStatus: 403,
 		ExpectBody:   assert.StringData("cannot change shared/things quota: user is not allowed to raise \"shared\" quotas in this domain\n"),
-		Body: assert.JSONObject{
-			"domain": assert.JSONObject{
-				"services": []assert.JSONObject{
-					{
-						"type": "shared",
-						"resources": []assert.JSONObject{
-							//attempt to raise should fail because low-privilege exception
-							//is not applicable because of other domain's quotas
-							{"name": "things", "quota": 35},
-						},
-					},
-				},
-			},
-		},
+		//attempt to raise should fail because low-privilege exception is not applicable because of other domain's quotas
+		Body: requestOneQuotaChange("domain", "shared", "things", 35, limes.UnitNone),
 	}.Check(t, router)
 
 	//check that domain quota cannot be raised or lowered by anyone, even if the
@@ -2146,18 +1845,7 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany",
 		ExpectStatus: 403,
 		ExpectBody:   assert.StringData("cannot change centralized/things quota: user is not allowed to raise \"centralized\" quotas in this domain\n"),
-		Body: assert.JSONObject{
-			"domain": assert.JSONObject{
-				"services": []assert.JSONObject{
-					{
-						"type": "centralized",
-						"resources": []assert.JSONObject{
-							{"name": "things", "quota": 100},
-						},
-					},
-				},
-			},
-		},
+		Body:         requestOneQuotaChange("domain", "centralized", "things", 100, limes.UnitNone),
 	}.Check(t, router)
 
 	assert.HTTPRequest{
@@ -2165,18 +1853,7 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany",
 		ExpectStatus: 403,
 		ExpectBody:   assert.StringData("cannot change centralized/things quota: user is not allowed to lower \"centralized\" quotas in this domain\n"),
-		Body: assert.JSONObject{
-			"domain": assert.JSONObject{
-				"services": []assert.JSONObject{
-					{
-						"type": "centralized",
-						"resources": []assert.JSONObject{
-							{"name": "things", "quota": 0},
-						},
-					},
-				},
-			},
-		},
+		Body:         requestOneQuotaChange("domain", "centralized", "things", 0, limes.UnitNone),
 	}.Check(t, router)
 
 	//check that, under centralized quota distribution, project quota cannot be
@@ -2192,18 +1869,7 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 403,
 		ExpectBody:   assert.StringData("cannot change centralized/things quota: user is not allowed to raise \"centralized\" quotas in this project\n"),
-		Body: assert.JSONObject{
-			"project": assert.JSONObject{
-				"services": []assert.JSONObject{
-					{
-						"type": "centralized",
-						"resources": []assert.JSONObject{
-							{"name": "things", "quota": 100},
-						},
-					},
-				},
-			},
-		},
+		Body:         requestOneQuotaChange("project", "centralized", "things", 100, limes.UnitNone),
 	}.Check(t, router)
 
 	enforcer.AllowRaiseCentralized = true
@@ -2214,18 +1880,7 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 403,
 		ExpectBody:   assert.StringData("cannot change centralized/things quota: user is not allowed to lower \"centralized\" quotas in this project\n"),
-		Body: assert.JSONObject{
-			"project": assert.JSONObject{
-				"services": []assert.JSONObject{
-					{
-						"type": "centralized",
-						"resources": []assert.JSONObject{
-							{"name": "things", "quota": 5},
-						},
-					},
-				},
-			},
-		},
+		Body:         requestOneQuotaChange("project", "centralized", "things", 5, limes.UnitNone),
 	}.Check(t, router)
 
 	//even if lower_centralized is allowed, lowering to 0 is never allowed (to
@@ -2244,18 +1899,7 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 422,
 		ExpectBody:   assert.StringData("cannot change centralized/things quota: quota may not be lowered to zero for resources with non-zero default quota (minimum acceptable project quota is 1)\n"),
-		Body: assert.JSONObject{
-			"project": assert.JSONObject{
-				"services": []assert.JSONObject{
-					{
-						"type": "centralized",
-						"resources": []assert.JSONObject{
-							{"name": "things", "quota": 0},
-						},
-					},
-				},
-			},
-		},
+		Body:         requestOneQuotaChange("project", "centralized", "things", 0, limes.UnitNone),
 	}.Check(t, router)
 }
 
@@ -2377,17 +2021,7 @@ func Test_QuotaBursting(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 202,
 		ExpectBody:   assert.StringData(""),
-		Body: assert.JSONObject{
-			"project": assert.JSONObject{
-				"services": []assert.JSONObject{{
-					"type": "unshared",
-					"resources": []assert.JSONObject{{
-						"name":  "things",
-						"quota": 40,
-					}},
-				}},
-			},
-		},
+		Body:         requestOneQuotaChange("project", "unshared", "things", 40, limes.UnitNone),
 	}.Check(t, router)
 
 	//check that quota has been updated in DB
@@ -2432,19 +2066,8 @@ func Test_QuotaBursting(t *testing.T) {
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 202,
-		Body: assert.JSONObject{
-			"project": assert.JSONObject{
-				"services": []assert.JSONObject{
-					{
-						"type": "centralized",
-						"resources": []assert.JSONObject{
-							//project quota rises from 15->30, and thus domain quota rises from 25->40, but desired_backend_quota is also 30
-							{"name": "things", "quota": 30},
-						},
-					},
-				},
-			},
-		},
+		//project quota rises from 15->30, and thus domain quota rises from 25->40, but desired_backend_quota is also 30
+		Body: requestOneQuotaChange("project", "centralized", "things", 30, limes.UnitNone),
 	}.Check(t, router)
 	tr.DBChanges().AssertEqual(`
 		UPDATE domain_resources SET quota = 40 WHERE service_id = 5 AND name = 'things';
@@ -2456,19 +2079,8 @@ func Test_QuotaBursting(t *testing.T) {
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 202,
-		Body: assert.JSONObject{
-			"project": assert.JSONObject{
-				"services": []assert.JSONObject{
-					{
-						"type": "centralized",
-						"resources": []assert.JSONObject{
-							//project quota falls again from 30->15, and thus domain quota falls back from 40->25
-							{"name": "things", "quota": 15},
-						},
-					},
-				},
-			},
-		},
+		//project quota falls again from 30->15, and thus domain quota falls back from 40->25
+		Body: requestOneQuotaChange("project", "centralized", "things", 15, limes.UnitNone),
 	}.Check(t, router)
 	tr.DBChanges().AssertEqual(`
 		UPDATE domain_resources SET quota = 25 WHERE service_id = 5 AND name = 'things';
@@ -2537,17 +2149,7 @@ func Test_QuotaBursting(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 202,
 		ExpectBody:   assert.StringData(""),
-		Body: assert.JSONObject{
-			"project": assert.JSONObject{
-				"services": []assert.JSONObject{{
-					"type": "unshared",
-					"resources": []assert.JSONObject{{
-						"name":  "things",
-						"quota": 10,
-					}},
-				}},
-			},
-		},
+		Body:         requestOneQuotaChange("project", "unshared", "things", 10, limes.UnitNone),
 	}.Check(t, router)
 	assert.HTTPRequest{
 		Method:       "GET",
@@ -2723,4 +2325,21 @@ func Test_LargeProjectList(t *testing.T) {
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONObject{"projects": expectedProjectsJSON},
 	}.Check(t, router)
+}
+
+func requestOneQuotaChange(structureLevel, serviceType, resourceName string, quota uint64, unit limes.Unit) assert.JSONObject {
+	resource := assert.JSONObject{"name": resourceName, "quota": quota}
+	if unit != limes.UnitNone {
+		resource["unit"] = string(unit)
+	}
+	return assert.JSONObject{
+		structureLevel: assert.JSONObject{
+			"services": []assert.JSONObject{
+				{
+					"type":      serviceType,
+					"resources": []assert.JSONObject{resource},
+				},
+			},
+		},
+	}
 }
