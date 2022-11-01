@@ -79,6 +79,21 @@ func prepareScrapeTest(t *testing.T, numProjects int, quotaPlugins ...core.Quota
 		domain1.UUID: discovery.StaticProjects[domain1.UUID][0:numProjects],
 	}
 
+	//if there is "centralized" service type, operate it under centralized quota
+	//distribution (only used by Test_ScrapeCentralized())
+	cluster.Config.QuotaDistributionConfigs = []*core.QuotaDistributionConfiguration{
+		{
+			FullResourceNameRx:  regexp.MustCompile("^centralized/capacity$"),
+			Model:               limesresources.CentralizedQuotaDistribution,
+			DefaultProjectQuota: 10,
+		},
+		{
+			FullResourceNameRx:  regexp.MustCompile("^centralized/things$"),
+			Model:               limesresources.CentralizedQuotaDistribution,
+			DefaultProjectQuota: 15,
+		},
+	}
+
 	//ScanDomains is required to create the entries in `domains`,
 	//`domain_services`, `projects` and `project_services`
 	_, err := (&Collector{Cluster: cluster, DB: dbm}).ScanDomains(ScanDomainsOpts{})
@@ -96,7 +111,7 @@ func prepareScrapeTest(t *testing.T, numProjects int, quotaPlugins ...core.Quota
 		cluster.Config.Bursting.MaxMultiplier = 0.2
 	}
 
-	//setup a quota constraint for the project that we're scraping (this is only used by Test_ScrapeSuccess())
+	//setup a quota constraint for the project that we're scraping (this is ignored by Test_ScrapeFailure())
 	//
 	//NOTE: This is set only *after* ScanDomains has run, in order to exercise
 	//the code path in Scrape() that applies constraints when first creating
@@ -105,6 +120,11 @@ func prepareScrapeTest(t *testing.T, numProjects int, quotaPlugins ...core.Quota
 	projectConstraints := core.QuotaConstraints{
 		"unittest": {
 			"capacity": {Minimum: p2u64(10), Maximum: p2u64(40)},
+		},
+		// only used by Test_ScrapeCentralized()
+		"centralized": {
+			"capacity": {Minimum: p2u64(5)},  //below the DefaultProjectQuota, so the DefaultProjectQuota should take precedence
+			"things":   {Minimum: p2u64(20)}, //above the DefaultProjectQuota, so the constraint.Minimum should take precedence
 		},
 	}
 	cluster.QuotaConstraints = &core.QuotaConstraintSet{
@@ -356,6 +376,87 @@ func Test_ScrapeFailure(t *testing.T) {
 		UPDATE project_services SET checked_at = 11, scrape_error_message = 'Scrape failed as requested' WHERE id = 1 AND project_id = 1 AND type = 'unittest';
 		UPDATE project_services SET checked_at = 13, scrape_error_message = 'Scrape failed as requested' WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`)
+}
+
+func Test_ScrapeCentralized(t *testing.T) {
+	//since all resources in this test operate under centralized quota
+	//distribution, bursting makes absolutely no difference
+	for _, hasBursting := range []bool{false, true} {
+		logg.Info("===== hasBursting = %t =====", hasBursting)
+
+		plugin := test.NewPlugin("centralized")
+		cluster, dbm := prepareScrapeTest(t, 1, plugin)
+		cluster.Authoritative = true
+		c := Collector{
+			Cluster:  cluster,
+			DB:       dbm,
+			Plugin:   plugin,
+			LogError: t.Errorf,
+			TimeNow:  test.TimeNow,
+			Once:     true,
+		}
+
+		//check that ScanDomains created the domain, project and their services and
+		//applied the DefaultProjectQuota from the QuotaDistributionConfiguration
+		tr, tr0 := easypg.NewTracker(t, dbm.Db)
+		tr0.AssertEqualToFile("fixtures/scrape-centralized0.sql")
+
+		if hasBursting {
+			_, err := dbm.Exec(`UPDATE projects SET has_bursting = TRUE WHERE id = 2`)
+			if err != nil {
+				t.Fatal(err)
+			}
+			tr.DBChanges().Ignore()
+			cluster.Config.Bursting.MaxMultiplier = 0.2
+		}
+
+		//first Scrape creates the remaining project_resources, fills usage and
+		//enforces quota constraints (note that both projects behave identically
+		//since bursting is ineffective under centralized quota distribution)
+		c.Scrape()
+		tr.DBChanges().AssertEqualf(`
+			UPDATE project_resources SET backend_quota = 10, physical_usage = 0 WHERE service_id = 1 AND name = 'capacity';
+			INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (1, 'capacity_portion', NULL, 0, NULL, '', NULL, NULL);
+			UPDATE project_resources SET quota = 20, usage = 2, backend_quota = 20, subresources = '[{"index":0},{"index":1}]', desired_backend_quota = 20 WHERE service_id = 1 AND name = 'things';
+			UPDATE project_services SET scraped_at = 1, scrape_duration_secs = 1, serialized_metrics = '{"capacity_usage":0,"things_usage":2}', checked_at = 1 WHERE id = 1 AND project_id = 1 AND type = 'centralized';
+		`)
+
+		//check that Scrape performs the same initialization for missing
+		//project_resources as ScanDomains (i.e. DefaultProjectQuota gets applied
+		//and constraints get enforced)
+		//
+		//Since we did not change any project quotas before this step, the
+		//project_resources will mostly come out exactly the same and the only
+		//change is in the scrape timestamp.
+		//
+		//This check looks artificial, but this behavior is important e.g. when
+		//moving resources when adding new resources that run under centralized
+		//quota distribution. The consistency check will detect missing
+		//project_resources (just like it detects violated constraints), but it
+		//will let Scrape() do the fixing by marking the project service as stale.
+		_, err := dbm.Exec(`DELETE FROM project_resources WHERE service_id = 1`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		setProjectServicesStale(t, dbm)
+		c.Scrape()
+		tr.DBChanges().AssertEqualf(`
+			UPDATE project_services SET scraped_at = 3, checked_at = 3 WHERE id = 1 AND project_id = 1 AND type = 'centralized';
+		`)
+
+		//check that DefaultProjectQuota gets reapplied when the quota is 0 (zero
+		//quota on CQD resources is defined to mean "DefaultProjectQuota not
+		//applied yet")
+		_, err = dbm.Exec(`UPDATE project_resources SET quota = 0 WHERE service_id = 1`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		setProjectServicesStale(t, dbm)
+		c.Scrape()
+		tr.DBChanges().AssertEqualf(`
+			UPDATE project_services SET scraped_at = 5, checked_at = 5 WHERE id = 1 AND project_id = 1 AND type = 'centralized';
+		`)
+	}
 }
 
 ////////////////////////////////////////////////////////////////////////////////

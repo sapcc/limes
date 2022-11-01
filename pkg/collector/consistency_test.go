@@ -123,7 +123,7 @@ func Test_Consistency(t *testing.T) {
 
 	//add a domain_resource that contradicts the cluster.QuotaConstraints; this
 	//should be fixed by CheckConsistency()
-	err = dbm.Insert(&db.DomainResource{
+	_, err = dbm.Update(&db.DomainResource{
 		ServiceID: 2,
 		Name:      "capacity",
 		Quota:     200,
@@ -144,12 +144,22 @@ func Test_Consistency(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
+	//remove some project_resources under centralized quota distribution; this
+	//should cause CheckConsistency() to notice that default quota is missing and
+	//mark the corresponding project_service as stale (to prompt the scraper to
+	//take care of the problem)
+	_, err = dbm.Exec(`DELETE FROM project_resources WHERE name = $1 AND quota = $2`, "things", 15)
+	if err != nil {
+		t.Error(err)
+	}
 	easypg.AssertDBContent(t, dbm.Db, "fixtures/checkconsistency1.sql")
 
 	//check that CheckConsistency() brings everything back into a nice state
 	//
-	//Also, for all services that are created here, resources are added where the
-	//quota constraint contains some Minimum values.
+	//Also, for all domain services that are created here, all domain resources
+	//are added; for all project services that are created here, project
+	//resources are added where the quota constraint contains a Minimum value or
+	//the quota distribution configuration contains a DefaultQuota value..
 	c.CheckConsistency()
 	easypg.AssertDBContent(t, dbm.Db, "fixtures/checkconsistency2.sql")
 }

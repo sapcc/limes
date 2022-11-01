@@ -3,6 +3,12 @@
     "id": "current",
     "services": [
       {
+        "type": "centralized",
+        "area": "centralized",
+        "max_scraped_at": 93,
+        "min_scraped_at": 73
+      },
+      {
         "type": "shared",
         "area": "shared",
         "rates": [

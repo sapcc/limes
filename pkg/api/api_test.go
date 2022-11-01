@@ -37,6 +37,7 @@ import (
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/assert"
+	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/sqlext"
@@ -51,6 +52,7 @@ func init() {
 	//This is required for core.GetServiceTypesForArea() to work.
 	core.RegisterQuotaPlugin(test.NewPluginFactory("shared"))
 	core.RegisterQuotaPlugin(test.NewPluginFactory("unshared"))
+	core.RegisterQuotaPlugin(test.NewPluginFactory("centralized"))
 }
 
 func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, *gorp.DbMap, http.Handler, *TestPolicyEnforcer) {
@@ -75,6 +77,12 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, *gor
 		"shared":   test.NewPlugin("shared", sharedRatesThatReportUsage...),
 		"unshared": test.NewPlugin("unshared", unsharedRatesThatReportUsage...),
 	}
+	hasCentralizedService := startData == "fixtures/start-data.sql"
+	if hasCentralizedService {
+		serviceTypes = append(serviceTypes, "centralized")
+		quotaPlugins["centralized"] = test.NewPlugin("centralized")
+	}
+
 	westConstraintSet := core.QuotaConstraintSet{
 		Domains: map[string]core.QuotaConstraints{
 			"france": {
@@ -178,6 +186,9 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, *gor
 				},
 			},
 		}
+		if hasCentralizedService {
+			clusterConfig.Services = append(clusterConfig.Services, core.ServiceConfiguration{Type: "centralized"})
+		}
 	}
 
 	cluster := &core.Cluster{
@@ -195,9 +206,11 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, *gor
 
 	//load mock policy (where everything is allowed)
 	enforcer := &TestPolicyEnforcer{
-		AllowRaise:   true,
-		AllowRaiseLP: true,
-		AllowLower:   true,
+		AllowRaise:            true,
+		AllowRaiseLP:          true,
+		AllowLower:            true,
+		AllowRaiseCentralized: true,
+		AllowLowerCentralized: true,
 	}
 	cluster.Auth.TokenValidator = TestTokenValidator{enforcer}
 
@@ -244,6 +257,19 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, *gor
 				},
 			},
 		}
+		cluster.Config.QuotaDistributionConfigs = []*core.QuotaDistributionConfiguration{
+			//check behavior for centralized quota distribution (all other resources default to hierarchical quota distribution)
+			{
+				FullResourceNameRx:  regexp.MustCompile("^centralized/capacity$"),
+				Model:               limesresources.CentralizedQuotaDistribution,
+				DefaultProjectQuota: 15,
+			},
+			{
+				FullResourceNameRx:  regexp.MustCompile("^centralized/things$"),
+				Model:               limesresources.CentralizedQuotaDistribution,
+				DefaultProjectQuota: 10,
+			},
+		}
 	}
 
 	//validate that this is a no-op when no OPAConfiguration is provided
@@ -258,10 +284,12 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, *gor
 }
 
 type TestPolicyEnforcer struct {
-	AllowRaise        bool
-	AllowRaiseLP      bool
-	AllowLower        bool
-	RejectServiceType string
+	AllowRaise            bool
+	AllowRaiseLP          bool
+	AllowLower            bool
+	AllowRaiseCentralized bool
+	AllowLowerCentralized bool
+	RejectServiceType     string
 }
 
 // Enforce implements the gopherpolicy.Enforcer interface.
@@ -275,8 +303,12 @@ func (e TestPolicyEnforcer) Enforce(rule string, ctx policy.Context) bool {
 		return e.AllowRaise
 	case "raise_lowpriv":
 		return e.AllowRaiseLP
+	case "raise_centralized":
+		return e.AllowRaiseCentralized
 	case "lower":
 		return e.AllowLower
+	case "lower_centralized":
+		return e.AllowLowerCentralized
 	default:
 		return true
 	}
@@ -1174,7 +1206,7 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectStatus: 202,
 		ExpectBody:   assert.StringData(""),
 	}.Check(t, router)
-	expectStaleProjectServices(t, dbm, "stale", "dresden:shared", "dresden:unshared")
+	expectStaleProjectServices(t, dbm, "stale", "dresden:centralized", "dresden:shared", "dresden:unshared")
 	expectStaleProjectServices(t, dbm, "rates_stale" /*, nothing */)
 
 	//SyncProject should discover the given project if not yet done
@@ -1187,7 +1219,7 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectStatus: 202,
 		ExpectBody:   assert.StringData(""),
 	}.Check(t, router)
-	expectStaleProjectServices(t, dbm, "stale", "dresden:shared", "dresden:unshared", "walldorf:shared", "walldorf:unshared")
+	expectStaleProjectServices(t, dbm, "stale", "dresden:centralized", "dresden:shared", "dresden:unshared", "walldorf:centralized", "walldorf:shared", "walldorf:unshared")
 
 	//check SyncProjectRates (we don't need to check discovery again since SyncProjectRates shares this part of the
 	//implementation with SyncProject)
@@ -1199,7 +1231,7 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectBody:   assert.StringData(""),
 	}.Check(t, router)
 	expectStaleProjectServices(t, dbm, "stale" /*, nothing */)
-	expectStaleProjectServices(t, dbm, "rates_stale", "dresden:shared", "dresden:unshared")
+	expectStaleProjectServices(t, dbm, "rates_stale", "dresden:centralized", "dresden:shared", "dresden:unshared")
 
 	//check GetProject for a project that has been discovered, but not yet synced
 	assert.HTTPRequest{
@@ -1679,6 +1711,55 @@ func Test_ProjectOperations(t *testing.T) {
 			},
 		},
 	}.Check(t, router)
+
+	tr, tr0 := easypg.NewTracker(t, dbm.Db)
+	tr0.Ignore()
+
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 202,
+		Body: assert.JSONObject{
+			"project": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "centralized",
+						"resources": []assert.JSONObject{
+							//project quota rises from 15->30, and thus domain quota rises from 45->60
+							{"name": "things", "quota": 30},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+	tr.DBChanges().AssertEqual(`
+		UPDATE domain_resources SET quota = 60 WHERE service_id = 5 AND name = 'things';
+		UPDATE project_resources SET quota = 30, backend_quota = 30, desired_backend_quota = 30 WHERE service_id = 7 AND name = 'things';
+	`)
+
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 202,
+		Body: assert.JSONObject{
+			"project": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "centralized",
+						"resources": []assert.JSONObject{
+							//project quota falls again from 30->15, and thus domain quota falls back from 60->45
+							{"name": "things", "quota": 15},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+	tr.DBChanges().AssertEqual(`
+		UPDATE domain_resources SET quota = 45 WHERE service_id = 5 AND name = 'things';
+		UPDATE project_resources SET quota = 15, backend_quota = 15, desired_backend_quota = 15 WHERE service_id = 7 AND name = 'things';
+	`)
 }
 
 func Test_RaiseLowerPermissions(t *testing.T) {
@@ -1693,6 +1774,8 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 	enforcer.AllowRaise = false
 	enforcer.AllowRaiseLP = true
 	enforcer.AllowLower = true
+	enforcer.AllowRaiseCentralized = false
+	enforcer.AllowLowerCentralized = false
 
 	assert.HTTPRequest{
 		Method:       "PUT",
@@ -1740,6 +1823,8 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 	enforcer.AllowRaise = true
 	enforcer.AllowRaiseLP = true
 	enforcer.AllowLower = false
+	enforcer.AllowRaiseCentralized = false
+	enforcer.AllowLowerCentralized = false
 
 	assert.HTTPRequest{
 		Method:       "PUT",
@@ -1843,6 +1928,8 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 	enforcer.AllowRaise = false
 	enforcer.AllowRaiseLP = true
 	enforcer.AllowLower = true
+	enforcer.AllowRaiseCentralized = false
+	enforcer.AllowLowerCentralized = false
 	enforcer.RejectServiceType = ""
 
 	cluster.LowPrivilegeRaise.LimitsForDomains = map[string]map[string]core.LowPrivilegeRaiseLimit{
@@ -2045,6 +2132,131 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 			},
 		},
 	}.Check(t, router)
+
+	//check that domain quota cannot be raised or lowered by anyone, even if the
+	//policy says so, if the centralized quota distribution model is used
+	enforcer.AllowRaise = true
+	enforcer.AllowRaiseLP = true
+	enforcer.AllowLower = true
+	enforcer.AllowRaiseCentralized = true
+	enforcer.AllowLowerCentralized = true
+
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany",
+		ExpectStatus: 403,
+		ExpectBody:   assert.StringData("cannot change centralized/things quota: user is not allowed to raise \"centralized\" quotas in this domain\n"),
+		Body: assert.JSONObject{
+			"domain": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "centralized",
+						"resources": []assert.JSONObject{
+							{"name": "things", "quota": 100},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany",
+		ExpectStatus: 403,
+		ExpectBody:   assert.StringData("cannot change centralized/things quota: user is not allowed to lower \"centralized\" quotas in this domain\n"),
+		Body: assert.JSONObject{
+			"domain": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "centralized",
+						"resources": []assert.JSONObject{
+							{"name": "things", "quota": 0},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+
+	//check that, under centralized quota distribution, project quota cannot be
+	//raised or lowered if the respective specialized policies are not granted
+	enforcer.AllowRaise = true
+	enforcer.AllowRaiseLP = true
+	enforcer.AllowLower = true
+	enforcer.AllowRaiseCentralized = false
+	enforcer.AllowLowerCentralized = true
+
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 403,
+		ExpectBody:   assert.StringData("cannot change centralized/things quota: user is not allowed to raise \"centralized\" quotas in this project\n"),
+		Body: assert.JSONObject{
+			"project": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "centralized",
+						"resources": []assert.JSONObject{
+							{"name": "things", "quota": 100},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+
+	enforcer.AllowRaiseCentralized = true
+	enforcer.AllowLowerCentralized = false
+
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 403,
+		ExpectBody:   assert.StringData("cannot change centralized/things quota: user is not allowed to lower \"centralized\" quotas in this project\n"),
+		Body: assert.JSONObject{
+			"project": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "centralized",
+						"resources": []assert.JSONObject{
+							{"name": "things", "quota": 5},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+
+	//even if lower_centralized is allowed, lowering to 0 is never allowed (to
+	//test this, we have to first set usage to 0 to avoid getting an error for
+	//quota < usage instead)
+	enforcer.AllowRaiseCentralized = true
+	enforcer.AllowLowerCentralized = true
+
+	_, err = dbm.Exec(`UPDATE project_resources SET usage = 0 WHERE service_id = 7 AND name = 'things'`)
+	if err != nil {
+		t.Error(err.Error())
+	}
+
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 422,
+		ExpectBody:   assert.StringData("cannot change centralized/things quota: quota may not be lowered to zero for resources with non-zero default quota (minimum acceptable project quota is 1)\n"),
+		Body: assert.JSONObject{
+			"project": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "centralized",
+						"resources": []assert.JSONObject{
+							{"name": "things", "quota": 0},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
 }
 
 func expectStaleProjectServices(t *testing.T, dbm *gorp.DbMap, staleField string, pairs ...string) {
@@ -2213,6 +2425,56 @@ func Test_QuotaBursting(t *testing.T) {
 		t.Errorf("expected backend quota %#v, but got %#v", expectBackendQuota, backendQuota)
 	}
 
+	//check that resources with centralized quota distribution do not get burst quota applied
+	tr, tr0 := easypg.NewTracker(t, dbm.Db)
+	tr0.Ignore()
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 202,
+		Body: assert.JSONObject{
+			"project": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "centralized",
+						"resources": []assert.JSONObject{
+							//project quota rises from 15->30, and thus domain quota rises from 25->40, but desired_backend_quota is also 30
+							{"name": "things", "quota": 30},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+	tr.DBChanges().AssertEqual(`
+		UPDATE domain_resources SET quota = 40 WHERE service_id = 5 AND name = 'things';
+		UPDATE project_resources SET quota = 30, backend_quota = 30, desired_backend_quota = 30 WHERE service_id = 7 AND name = 'things';
+	`)
+
+	//revert the previous change, otherwise I would have to adjust every test fixture mentioned below
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 202,
+		Body: assert.JSONObject{
+			"project": assert.JSONObject{
+				"services": []assert.JSONObject{
+					{
+						"type": "centralized",
+						"resources": []assert.JSONObject{
+							//project quota falls again from 30->15, and thus domain quota falls back from 40->25
+							{"name": "things", "quota": 15},
+						},
+					},
+				},
+			},
+		},
+	}.Check(t, router)
+	tr.DBChanges().AssertEqual(`
+		UPDATE domain_resources SET quota = 25 WHERE service_id = 5 AND name = 'things';
+		UPDATE project_resources SET quota = 15, backend_quota = 15, desired_backend_quota = 15 WHERE service_id = 7 AND name = 'things';
+	`)
+
 	//increase usage beyond frontend quota -> should show up as burst usage
 	_, err := dbm.Exec(`UPDATE project_resources SET usage = 42 WHERE service_id = 1 AND name = 'things'`)
 	if err != nil {
@@ -2350,17 +2612,19 @@ func Test_LargeProjectList(t *testing.T) {
 					"scraped_at": idx,
 					"resources": []assert.JSONObject{
 						{
-							"name":         "capacity",
-							"unit":         "B",
-							"quota":        0,
-							"usable_quota": 0,
-							"usage":        0,
+							"name":                     "capacity",
+							"unit":                     "B",
+							"quota_distribution_model": "hierarchical",
+							"quota":                    0,
+							"usable_quota":             0,
+							"usage":                    0,
 						},
 						{
-							"name":         "things",
-							"quota":        0,
-							"usable_quota": 0,
-							"usage":        0,
+							"name":                     "things",
+							"quota_distribution_model": "hierarchical",
+							"quota":                    0,
+							"usable_quota":             0,
+							"usage":                    0,
 						},
 					},
 				},
@@ -2370,17 +2634,19 @@ func Test_LargeProjectList(t *testing.T) {
 					"scraped_at": idx,
 					"resources": []assert.JSONObject{
 						{
-							"name":         "capacity",
-							"unit":         "B",
-							"quota":        0,
-							"usable_quota": 0,
-							"usage":        0,
+							"name":                     "capacity",
+							"unit":                     "B",
+							"quota_distribution_model": "hierarchical",
+							"quota":                    0,
+							"usable_quota":             0,
+							"usage":                    0,
 						},
 						{
-							"name":         "things",
-							"quota":        idx,
-							"usable_quota": idx,
-							"usage":        idx / 2,
+							"name":                     "things",
+							"quota_distribution_model": "hierarchical",
+							"quota":                    idx,
+							"usable_quota":             idx,
+							"usage":                    idx / 2,
 						},
 					},
 				},

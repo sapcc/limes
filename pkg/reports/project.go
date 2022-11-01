@@ -174,17 +174,25 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 			Subresources:  json.RawMessage(unwrapOrDefault(subresources, "")),
 			Scaling:       behavior.ToScalingBehavior(),
 			Annotations:   behavior.Annotations,
-			//Quota, UsableQuota, BackendQuota, BurstUsage are set below
+			//QuotaDistributionModel, Quota, UsableQuota, BackendQuota, BurstUsage are set below
 		}
-		if quota != nil && !resReport.NoQuota {
-			resReport.Quota = quota
-			resReport.UsableQuota = quota
-			if projectHasBursting && clusterCanBurst {
-				usableQuota := behavior.MaxBurstMultiplier.ApplyTo(*quota)
-				resReport.UsableQuota = &usableQuota
-			}
-			if backendQuota != nil && (*backendQuota < 0 || uint64(*backendQuota) != *resReport.UsableQuota) {
-				resReport.BackendQuota = backendQuota
+		if !resReport.NoQuota {
+			qdConfig := cluster.QuotaDistributionConfigForResource(*serviceType, *resourceName)
+			resReport.QuotaDistributionModel = qdConfig.Model
+			if quota != nil {
+				resReport.Quota = quota
+				resReport.UsableQuota = quota
+				if projectHasBursting && clusterCanBurst {
+					usableQuota := behavior.MaxBurstMultiplier.ApplyTo(*quota, qdConfig.Model)
+					resReport.UsableQuota = &usableQuota
+				}
+				if backendQuota != nil && (*backendQuota < 0 || uint64(*backendQuota) != *resReport.UsableQuota) {
+					resReport.BackendQuota = backendQuota
+				}
+				if qdConfig.Model == limesresources.CentralizedQuotaDistribution && qdConfig.DefaultProjectQuota != *quota {
+					defaultQuota := qdConfig.DefaultProjectQuota
+					resReport.DefaultQuota = &defaultQuota
+				}
 			}
 		}
 		if projectHasBursting && clusterCanBurst && quota != nil && usage != nil {

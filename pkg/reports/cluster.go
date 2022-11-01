@@ -307,6 +307,8 @@ func findInClusterReport(cluster *core.Cluster, report *limesresources.ClusterRe
 			ResourceInfo: cluster.InfoForResource(serviceType, *resourceName),
 		}
 		if !resource.ResourceInfo.NoQuota {
+			qdConfig := cluster.QuotaDistributionConfigForResource(serviceType, *resourceName)
+			resource.QuotaDistributionModel = qdConfig.Model
 			//We need to set a default value here. Otherwise zero values will never
 			//be reported when there are no `domain_resources` entries to aggregate
 			//over.

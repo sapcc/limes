@@ -9,12 +9,43 @@
     },
     "services": [
       {
+        "type": "centralized",
+        "area": "centralized",
+        "resources": [
+          {
+            "name": "capacity",
+            "unit": "B",
+            "quota_distribution_model": "centralized",
+            "quota": 20,
+            "default_quota": 15,
+            "usable_quota": 20,
+            "usage": 2
+          },
+          {
+            "name": "capacity_portion",
+            "unit": "B",
+            "contained_in": "capacity",
+            "usage": 1
+          },
+          {
+            "name": "things",
+            "quota_distribution_model": "centralized",
+            "quota": 15,
+            "default_quota": 10,
+            "usable_quota": 15,
+            "usage": 2
+          }
+        ],
+        "scraped_at": 72
+      },
+      {
         "type": "shared",
         "area": "shared",
         "resources": [
           {
             "name": "capacity",
             "unit": "B",
+            "quota_distribution_model": "hierarchical",
             "quota": 10,
             "usable_quota": 10,
             "usage": 2
@@ -27,6 +58,7 @@
           },
           {
             "name": "things",
+            "quota_distribution_model": "hierarchical",
             "quota": 10,
             "usable_quota": 10,
             "usage": 2
@@ -41,6 +73,7 @@
           {
             "name": "capacity",
             "unit": "B",
+            "quota_distribution_model": "hierarchical",
             "quota": 10,
             "usable_quota": 10,
             "usage": 2
@@ -53,6 +86,7 @@
           },
           {
             "name": "things",
+            "quota_distribution_model": "hierarchical",
             "quota": 10,
             "usable_quota": 10,
             "usage": 2,

@@ -25,6 +25,7 @@ import (
 	"strings"
 	"testing"
 
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
 	"gopkg.in/gorp.v2"
@@ -37,13 +38,27 @@ func keystoneTestCluster(t *testing.T) (*core.Cluster, *gorp.DbMap) {
 	dbm := test.InitDatabase(t, nil)
 
 	return &core.Cluster{
-		ID:              "west",
-		Config:          core.ClusterConfiguration{},
-		ServiceTypes:    []string{"unshared", "shared"},
+		ID: "west",
+		Config: core.ClusterConfiguration{
+			QuotaDistributionConfigs: []*core.QuotaDistributionConfiguration{
+				{
+					FullResourceNameRx:  regexp.MustCompile("^centralized/capacity$"),
+					Model:               limesresources.CentralizedQuotaDistribution,
+					DefaultProjectQuota: 10,
+				},
+				{
+					FullResourceNameRx:  regexp.MustCompile("^centralized/things$"),
+					Model:               limesresources.CentralizedQuotaDistribution,
+					DefaultProjectQuota: 15,
+				},
+			},
+		},
+		ServiceTypes:    []string{"unshared", "shared", "centralized"},
 		DiscoveryPlugin: test.NewDiscoveryPlugin(),
 		QuotaPlugins: map[string]core.QuotaPlugin{
-			"shared":   test.NewPlugin("shared"),
-			"unshared": test.NewPlugin("unshared"),
+			"shared":      test.NewPlugin("shared"),
+			"unshared":    test.NewPlugin("unshared"),
+			"centralized": test.NewPlugin("centralized"),
 		},
 		CapacityPlugins: map[string]core.CapacityPlugin{},
 	}, dbm
@@ -78,6 +93,15 @@ func Test_ScanDomains(t *testing.T) {
 					},
 					"shared": {
 						"capacity": {Minimum: pointerTo(10)},
+					},
+					"centralized": {
+						"capacity": {Minimum: pointerTo(5)},  //below the DefaultProjectQuota, so the DefaultProjectQuota should take precedence
+						"things":   {Minimum: pointerTo(20)}, //above the DefaultProjectQuota, so the constraint.Minimum should take precedence
+					},
+				},
+				"dresden": {
+					"centralized": {
+						"capacity": {Maximum: pointerTo(5)}, //below the DefaultProjectQuota, so the constraint.Maximum should take precedence
 					},
 				},
 			},
@@ -137,8 +161,13 @@ func Test_ScanDomains(t *testing.T) {
 	}
 	assert.DeepEqual(t, "new domains after ScanDomains #4", actualNewDomains, []string(nil))
 	tr.DBChanges().AssertEqualf(`
-		INSERT INTO project_services (id, project_id, type, scraped_at, stale, scrape_duration_secs, rates_scraped_at, rates_stale, rates_scrape_duration_secs, rates_scrape_state, serialized_metrics, checked_at, scrape_error_message, rates_checked_at, rates_scrape_error_message) VALUES (7, 4, 'unshared', NULL, FALSE, 0, NULL, FALSE, 0, '', '', NULL, '', NULL, '');
-		INSERT INTO project_services (id, project_id, type, scraped_at, stale, scrape_duration_secs, rates_scraped_at, rates_stale, rates_scrape_duration_secs, rates_scrape_state, serialized_metrics, checked_at, scrape_error_message, rates_checked_at, rates_scrape_error_message) VALUES (8, 4, 'shared', NULL, FALSE, 0, NULL, FALSE, 0, '', '', NULL, '', NULL, '');
+		UPDATE domain_resources SET quota = 20 WHERE service_id = 6 AND name = 'capacity';
+		UPDATE domain_resources SET quota = 30 WHERE service_id = 6 AND name = 'things';
+		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (12, 'capacity', 10, 0, 0, '', 10, NULL);
+		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (12, 'things', 15, 0, 0, '', 15, NULL);
+		INSERT INTO project_services (id, project_id, type, scraped_at, stale, scrape_duration_secs, rates_scraped_at, rates_stale, rates_scrape_duration_secs, rates_scrape_state, serialized_metrics, checked_at, scrape_error_message, rates_checked_at, rates_scrape_error_message) VALUES (10, 4, 'unshared', NULL, FALSE, 0, NULL, FALSE, 0, '', '', NULL, '', NULL, '');
+		INSERT INTO project_services (id, project_id, type, scraped_at, stale, scrape_duration_secs, rates_scraped_at, rates_stale, rates_scrape_duration_secs, rates_scrape_state, serialized_metrics, checked_at, scrape_error_message, rates_checked_at, rates_scrape_error_message) VALUES (11, 4, 'shared', NULL, FALSE, 0, NULL, FALSE, 0, '', '', NULL, '', NULL, '');
+		INSERT INTO project_services (id, project_id, type, scraped_at, stale, scrape_duration_secs, rates_scraped_at, rates_stale, rates_scrape_duration_secs, rates_scrape_state, serialized_metrics, checked_at, scrape_error_message, rates_checked_at, rates_scrape_error_message) VALUES (12, 4, 'centralized', NULL, FALSE, 0, NULL, FALSE, 0, '', '', NULL, '', NULL, '');
 		INSERT INTO projects (id, domain_id, name, uuid, parent_uuid, has_bursting) VALUES (4, 2, 'bordeaux', 'uuid-for-bordeaux', 'uuid-for-france', FALSE);
 	`)
 
@@ -160,8 +189,13 @@ func Test_ScanDomains(t *testing.T) {
 	}
 	assert.DeepEqual(t, "new domains after ScanDomains #6", actualNewDomains, []string(nil))
 	tr.DBChanges().AssertEqualf(`
-		DELETE FROM project_services WHERE id = 7 AND project_id = 4 AND type = 'unshared';
-		DELETE FROM project_services WHERE id = 8 AND project_id = 4 AND type = 'shared';
+		UPDATE domain_resources SET quota = 10 WHERE service_id = 6 AND name = 'capacity';
+		UPDATE domain_resources SET quota = 15 WHERE service_id = 6 AND name = 'things';
+		DELETE FROM project_resources WHERE service_id = 12 AND name = 'capacity';
+		DELETE FROM project_resources WHERE service_id = 12 AND name = 'things';
+		DELETE FROM project_services WHERE id = 10 AND project_id = 4 AND type = 'unshared';
+		DELETE FROM project_services WHERE id = 11 AND project_id = 4 AND type = 'shared';
+		DELETE FROM project_services WHERE id = 12 AND project_id = 4 AND type = 'centralized';
 		DELETE FROM projects WHERE id = 4 AND uuid = 'uuid-for-bordeaux';
 	`)
 
@@ -175,11 +209,24 @@ func Test_ScanDomains(t *testing.T) {
 	}
 	assert.DeepEqual(t, "new domains after ScanDomains #7", actualNewDomains, []string(nil))
 	tr.DBChanges().AssertEqualf(`
-		DELETE FROM domain_services WHERE id = 3 AND domain_id = 2 AND type = 'unshared';
-		DELETE FROM domain_services WHERE id = 4 AND domain_id = 2 AND type = 'shared';
+		DELETE FROM domain_resources WHERE service_id = 4 AND name = 'capacity';
+		DELETE FROM domain_resources WHERE service_id = 4 AND name = 'capacity_portion';
+		DELETE FROM domain_resources WHERE service_id = 4 AND name = 'things';
+		DELETE FROM domain_resources WHERE service_id = 5 AND name = 'capacity';
+		DELETE FROM domain_resources WHERE service_id = 5 AND name = 'capacity_portion';
+		DELETE FROM domain_resources WHERE service_id = 5 AND name = 'things';
+		DELETE FROM domain_resources WHERE service_id = 6 AND name = 'capacity';
+		DELETE FROM domain_resources WHERE service_id = 6 AND name = 'capacity_portion';
+		DELETE FROM domain_resources WHERE service_id = 6 AND name = 'things';
+		DELETE FROM domain_services WHERE id = 4 AND domain_id = 2 AND type = 'unshared';
+		DELETE FROM domain_services WHERE id = 5 AND domain_id = 2 AND type = 'shared';
+		DELETE FROM domain_services WHERE id = 6 AND domain_id = 2 AND type = 'centralized';
 		DELETE FROM domains WHERE id = 2 AND cluster_id = 'west' AND uuid = 'uuid-for-france';
-		DELETE FROM project_services WHERE id = 5 AND project_id = 3 AND type = 'unshared';
-		DELETE FROM project_services WHERE id = 6 AND project_id = 3 AND type = 'shared';
+		DELETE FROM project_resources WHERE service_id = 9 AND name = 'capacity';
+		DELETE FROM project_resources WHERE service_id = 9 AND name = 'things';
+		DELETE FROM project_services WHERE id = 7 AND project_id = 3 AND type = 'unshared';
+		DELETE FROM project_services WHERE id = 8 AND project_id = 3 AND type = 'shared';
+		DELETE FROM project_services WHERE id = 9 AND project_id = 3 AND type = 'centralized';
 		DELETE FROM projects WHERE id = 3 AND uuid = 'uuid-for-paris';
 	`)
 

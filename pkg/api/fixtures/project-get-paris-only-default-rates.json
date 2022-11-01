@@ -5,6 +5,11 @@
     "parent_id": "uuid-for-france",
     "services": [
       {
+        "type": "centralized",
+        "area": "centralized",
+        "scraped_at": 93
+      },
+      {
         "type": "shared",
         "area": "shared",
         "rates": [

@@ -20,6 +20,7 @@
 package limesresources
 
 import (
+	"fmt"
 	"math"
 
 	"github.com/sapcc/go-api-declarations/limes"
@@ -52,8 +53,15 @@ type ResourceInfo struct {
 type BurstingMultiplier float64
 
 // ApplyTo returns the bursted backend quota for the given approved quota.
-func (m BurstingMultiplier) ApplyTo(quota uint64) uint64 {
-	return uint64(math.Floor((1 + float64(m)) * float64(quota)))
+func (m BurstingMultiplier) ApplyTo(quota uint64, qdModel QuotaDistributionModel) uint64 {
+	switch qdModel {
+	case CentralizedQuotaDistribution:
+		return quota
+	case HierarchicalQuotaDistribution:
+		return uint64(math.Floor((1 + float64(m)) * float64(quota)))
+	default:
+		panic(fmt.Sprintf("unknown quota distribution model: %q", string(qdModel)))
+	}
 }
 
 // ScalingBehavior appears in type DomainResourceReport and type
@@ -64,3 +72,20 @@ type ScalingBehavior struct {
 	ScalesWithServiceType  string  `json:"service_type"`
 	ScalingFactor          float64 `json:"factor"`
 }
+
+// QuotaDistributionModel is an enum.
+type QuotaDistributionModel string
+
+const (
+	// HierarchicalQuotaDistribution is the default QuotaDistributionModel,
+	// wherein quota is distributed to domains by the cloud admins, and then the
+	// projects by the domain admins. Domains and projects start out at zero
+	// quota.
+	HierarchicalQuotaDistribution QuotaDistributionModel = "hierarchical"
+	// CentralizedQuotaDistribution is an alternative QuotaDistributionModel,
+	// wherein quota is directly given to projects by the cloud admins. Projects
+	// start out at a generous default quota as configured by the Limes operator.
+	// The domain quota cannot be edited and is always reported equal to the
+	// projects quota.
+	CentralizedQuotaDistribution QuotaDistributionModel = "centralized"
+)

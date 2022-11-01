@@ -48,14 +48,15 @@ type ClusterServiceReport struct {
 type ClusterResourceReport struct {
 	//Several fields are pointers to values to enable precise control over which fields are rendered in output.
 	ResourceInfo
-	Capacity      *uint64                        `json:"capacity,omitempty"`
-	RawCapacity   *uint64                        `json:"raw_capacity,omitempty"`
-	CapacityPerAZ ClusterAvailabilityZoneReports `json:"per_availability_zone,omitempty"`
-	DomainsQuota  *uint64                        `json:"domains_quota,omitempty"`
-	Usage         uint64                         `json:"usage"`
-	BurstUsage    uint64                         `json:"burst_usage,omitempty"`
-	PhysicalUsage *uint64                        `json:"physical_usage,omitempty"`
-	Subcapacities json.RawMessage                `json:"subcapacities,omitempty"`
+	QuotaDistributionModel QuotaDistributionModel         `json:"quota_distribution_model,omitempty"`
+	Capacity               *uint64                        `json:"capacity,omitempty"`
+	RawCapacity            *uint64                        `json:"raw_capacity,omitempty"`
+	CapacityPerAZ          ClusterAvailabilityZoneReports `json:"per_availability_zone,omitempty"`
+	DomainsQuota           *uint64                        `json:"domains_quota,omitempty"`
+	Usage                  uint64                         `json:"usage"`
+	BurstUsage             uint64                         `json:"burst_usage,omitempty"`
+	PhysicalUsage          *uint64                        `json:"physical_usage,omitempty"`
+	Subcapacities          json.RawMessage                `json:"subcapacities,omitempty"`
 }
 
 // ClusterAvailabilityZoneReport is a substructure of ClusterResourceReport containing

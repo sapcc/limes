@@ -64,11 +64,13 @@ func ApplyBackendQuota(dbi db.Interface, cluster *core.Cluster, domain core.Keys
 		//validations in here to orderly log an error, but then the problem could
 		//go unnoticed for quite some time. Crashing ensures that we notice the
 		//problem sooner.
-
 		desiredQuota := *res.Quota
+
+		//apply burst if the quota distribution model allows bursting
 		if project.HasBursting {
+			qdConfig := cluster.QuotaDistributionConfigForResource(serviceType, res.Name)
 			behavior := cluster.BehaviorForResource(serviceType, res.Name, domain.Name+"/"+project.Name)
-			desiredQuota = behavior.MaxBurstMultiplier.ApplyTo(*res.Quota)
+			desiredQuota = behavior.MaxBurstMultiplier.ApplyTo(*res.Quota, qdConfig.Model)
 		}
 		quotaValues[res.Name] = desiredQuota
 

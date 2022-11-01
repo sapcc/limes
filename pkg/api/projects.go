@@ -223,10 +223,12 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 	}
 
 	updater := QuotaUpdater{
-		Cluster:    p.Cluster,
-		CanRaise:   checkToken("project:raise"),
-		CanRaiseLP: checkToken("project:raise_lowpriv"),
-		CanLower:   checkToken("project:lower"),
+		Cluster:             p.Cluster,
+		CanRaise:            checkToken("project:raise"),
+		CanRaiseLP:          checkToken("project:raise_lowpriv"),
+		CanRaiseCentralized: checkToken("project:raise_centralized"),
+		CanLower:            checkToken("project:lower"),
+		CanLowerCentralized: checkToken("project:lower_centralized"),
 	}
 	updater.Domain = p.FindDomainFromRequest(w, r)
 	if updater.Domain == nil {
@@ -329,6 +331,14 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 	_, err = tx.UpdateColumns(onlyQuota, resourcesToUpdate...)
 	if respondwith.ErrorText(w, err) {
 		return
+	}
+	for _, srv := range services {
+		if _, exists := updater.Requests[srv.Type]; exists {
+			err = datamodel.ApplyComputedDomainQuota(tx, updater.Cluster, updater.Domain.ID, srv.Type)
+			if respondwith.ErrorText(w, err) {
+				return
+			}
+		}
 	}
 	err = tx.Commit()
 	if respondwith.ErrorText(w, err) {
