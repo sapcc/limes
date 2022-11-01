@@ -20,10 +20,13 @@
 package plugins
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
 	"regexp"
+	"sort"
+	"strings"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
@@ -42,6 +45,17 @@ type capacityNovaPlugin struct {
 	reportSubcapacities map[string]bool
 	aggregateNameRx     *regexp.Regexp
 	hypervisorTypeRx    *regexp.Regexp
+}
+
+type capacityNovaSerializedMetrics struct {
+	Hypervisors []novaHypervisorMetrics `json:"hv"`
+}
+
+type novaHypervisorMetrics struct {
+	Name              string   `json:"n"`
+	Hostname          string   `json:"hn"`
+	Aggregates        []string `json:"ag"`
+	AvailabilityZones []string `json:"az"`
 }
 
 func init() {
@@ -140,6 +154,7 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 	)
 
 	//foreach hypervisor...
+	var metrics capacityNovaSerializedMetrics
 	for _, hypervisor := range hypervisorData.Hypervisors {
 		//ignore hypervisor if excluded by HypervisorTypePattern
 		if !p.hypervisorTypeRx.MatchString(hypervisor.HypervisorType) {
@@ -182,12 +197,24 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 			}
 		}
 
+		//report wellformed-ness of this HV via metrics
+		metrics.Hypervisors = append(metrics.Hypervisors, novaHypervisorMetrics{
+			Name:              hypervisor.Service.Host,
+			Hostname:          hypervisor.HypervisorHostname,
+			Aggregates:        boolMapToList(matchingAggregates),
+			AvailabilityZones: boolMapToList(matchingAZs),
+		})
+
 		//the mapping from hypervisor to aggregate/AZ must be unique (otherwise the
 		//capacity will be counted either not at all or multiple times)
 		if len(matchingAggregates) == 0 {
-			return nil, "", fmt.Errorf(
+			//This is not a fatal error: During buildup, new hypervisors may not be
+			//mapped to an aggregate to prevent scheduling of instances onto them -
+			//we just log an error and ignore this hypervisor's capacity.
+			logg.Error(
 				"hypervisor %s with .service.host %q does not belong to any matching aggregates",
 				hypervisor.HypervisorHostname, hypervisor.Service.Host)
+			continue
 		}
 		if len(matchingAggregates) > 1 {
 			return nil, "", fmt.Errorf(
@@ -198,7 +225,8 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 			//This is not a fatal error: During buildup, new aggregates will not be
 			//mapped to an AZ to prevent scheduling of instances onto them - we just
 			//log an error and ignore this aggregate's capacity.
-			logg.Error("hypervisor %s with .service.host %q could not be matched to any AZ (matching aggregates = %v)",
+			logg.Error(
+				"hypervisor %s with .service.host %q could not be matched to any AZ (matching aggregates = %v)",
 				hypervisor.HypervisorHostname, hypervisor.Service.Host, matchingAggregates)
 			continue
 		}
@@ -263,18 +291,66 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 		logg.Error("Nova Capacity: Maximal flavor size is 0. Not reporting instances.")
 		delete(capacities, "instances")
 	}
-	return map[string]map[string]core.CapacityData{"compute": capacities}, "", nil
+
+	serializedMetricsBytes, err := json.Marshal(metrics)
+	return map[string]map[string]core.CapacityData{"compute": capacities}, string(serializedMetricsBytes), err
 }
+
+var novaHypervisorWellformedGauge = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "limes_nova_hypervisor_is_wellformed",
+		Help: "One metric per Nova hypervisor that was discovered by Limes's capacity scanner. Value is 1 for wellformed hypervisors that could be uniquely matched to an aggregate and an AZ, 0 otherwise.",
+	},
+	[]string{"os_cluster", "hypervisor", "hostname", "aggregate", "az"},
+)
 
 // DescribeMetrics implements the core.CapacityPlugin interface.
 func (p *capacityNovaPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
-	//not used by this plugin
+	novaHypervisorWellformedGauge.Describe(ch)
 }
 
 // CollectMetrics implements the core.CapacityPlugin interface.
 func (p *capacityNovaPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, serializedMetrics string) error {
-	//not used by this plugin
+	var metrics capacityNovaSerializedMetrics
+	err := json.Unmarshal([]byte(serializedMetrics), &metrics)
+	if err != nil {
+		return err
+	}
+
+	descCh := make(chan *prometheus.Desc, 1)
+	novaHypervisorWellformedGauge.Describe(descCh)
+	novaHypervisorWellformedDesc := <-descCh
+
+	for _, hv := range metrics.Hypervisors {
+		aggrList := nameListToLabelValue(hv.Aggregates)
+		azList := nameListToLabelValue(hv.AvailabilityZones)
+		isWellformed := float64(0)
+		if len(hv.Aggregates) == 1 && len(hv.AvailabilityZones) == 1 {
+			isWellformed = 1
+		}
+
+		ch <- prometheus.MustNewConstMetric(
+			novaHypervisorWellformedDesc,
+			prometheus.GaugeValue, isWellformed,
+			clusterID, hv.Name, hv.Hostname, aggrList, azList,
+		)
+	}
 	return nil
+}
+
+func boolMapToList(m map[string]bool) (result []string) {
+	for k := range m {
+		result = append(result, k)
+	}
+	sort.Strings(result)
+	return
+}
+
+func nameListToLabelValue(names []string) string {
+	if len(names) == 0 {
+		return "unknown"
+	}
+	return strings.Join(names, ",")
 }
 
 // The capacity of any level of the Nova superstructure (hypervisor, aggregate, AZ, cluster).
