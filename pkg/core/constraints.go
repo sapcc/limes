@@ -227,6 +227,10 @@ func compileQuotaConstraints(cluster *Cluster, data map[string]map[string]string
 		values[serviceType] = make(map[string]QuotaConstraint)
 
 		for resourceName, constraintStr := range serviceData {
+			if constraintStr == "" {
+				continue
+			}
+
 			if !cluster.HasResource(serviceType, resourceName) {
 				//this is not an error: our global constraint sets have domain quota
 				//constraints "at least 0 more than project constraints" for all
