@@ -426,11 +426,7 @@ func (c *Collector) writeDummyResources(project core.KeystoneProject, projectHas
 			continue
 		}
 
-		initialQuota := uint64(0)
-		if constraint := serviceConstraints[resMetadata.Name]; constraint.Minimum != nil {
-			initialQuota = *constraint.Minimum
-		}
-
+		initialQuota := serviceConstraints[resMetadata.Name].ApplyTo(0)
 		dummyBackendQuota := int64(-1)
 		res := &db.ProjectResource{
 			ServiceID:        serviceID,

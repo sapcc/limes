@@ -179,12 +179,11 @@ func createMissingDomainResources(tx *gorp.Transaction, cluster *core.Cluster, d
 		}
 
 		constraint := serviceConstraints[resInfo.Name]
-		newQuota := uint64(0)
-		if constraint.Minimum != nil {
-			newQuota = *constraint.Minimum
+		initialQuota := constraint.ApplyTo(0)
+		if initialQuota != 0 {
 			logg.Info("initializing %s/%s quota for domain %s to %s to satisfy constraint %q",
 				srv.Type, resInfo.Name, domain.Name,
-				limes.ValueWithUnit{Value: newQuota, Unit: resInfo.Unit},
+				limes.ValueWithUnit{Value: initialQuota, Unit: resInfo.Unit},
 				constraint.String(),
 			)
 		}
@@ -192,7 +191,7 @@ func createMissingDomainResources(tx *gorp.Transaction, cluster *core.Cluster, d
 		err := tx.Insert(&db.DomainResource{
 			ServiceID: srv.ID,
 			Name:      resInfo.Name,
-			Quota:     newQuota,
+			Quota:     initialQuota,
 		})
 		if err != nil {
 			return err
