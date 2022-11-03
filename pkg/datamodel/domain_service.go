@@ -61,8 +61,18 @@ func ValidateDomainServices(tx *gorp.Transaction, cluster *core.Cluster, domain 
 			continue
 		}
 
-		//valid service -> check whether the existing quota values violate any constraints
-		err := checkDomainServiceConstraints(tx, cluster, domain, srv, constraints[srv.Type])
+		//valid service -> check that all domain_resources entries exist, and that
+		//their quota is consistent with configured constraints and computation
+		//constraints
+		err := createMissingDomainResources(tx, cluster, domain, srv, constraints[srv.Type])
+		if err != nil {
+			return nil, err
+		}
+		err = checkDomainServiceConstraints(tx, cluster, domain, srv, constraints[srv.Type])
+		if err != nil {
+			return nil, err
+		}
+		err = ApplyComputedDomainQuota(tx, cluster, domain.ID, srv.Type)
 		if err != nil {
 			return nil, err
 		}
@@ -84,7 +94,7 @@ func ValidateDomainServices(tx *gorp.Transaction, cluster *core.Cluster, domain 
 		}
 		services = append(services, srv)
 
-		err = createMissingDomainResources(tx, cluster, domain, srv, constraints[serviceType], nil)
+		err = createMissingDomainResources(tx, cluster, domain, srv, constraints[serviceType])
 		if err != nil {
 			return nil, err
 		}
@@ -95,7 +105,7 @@ func ValidateDomainServices(tx *gorp.Transaction, cluster *core.Cluster, domain 
 
 func checkDomainServiceConstraints(tx *gorp.Transaction, cluster *core.Cluster, domain db.Domain, srv db.DomainService, serviceConstraints map[string]core.QuotaConstraint) error {
 	//do not hit the database if there are no constraints to check
-	if len(serviceConstraints) == 0 {
+	if len(serviceConstraints) == 0 && len(cluster.Config.QuotaDistributionConfigs) == 0 {
 		return nil
 	}
 
@@ -107,11 +117,8 @@ func checkDomainServiceConstraints(tx *gorp.Transaction, cluster *core.Cluster, 
 	}
 
 	//check existing domain_resources for any quota values that violate constraints
-	seen := make(map[string]bool)
 	var resourcesToUpdate []interface{}
 	for _, res := range resources {
-		seen[res.Name] = true
-
 		constraint := serviceConstraints[res.Name]
 		if newQuota := constraint.ApplyTo(res.Quota); newQuota != res.Quota {
 			resInfo := cluster.InfoForResource(srv.Type, res.Name)
@@ -140,16 +147,21 @@ func checkDomainServiceConstraints(tx *gorp.Transaction, cluster *core.Cluster, 
 			return err
 		}
 	}
+	return nil
+}
 
-	//create missing domain resources and ensure that computed quota values are up-to-date
-	err = createMissingDomainResources(tx, cluster, domain, srv, serviceConstraints, seen)
+func createMissingDomainResources(tx *gorp.Transaction, cluster *core.Cluster, domain db.Domain, srv db.DomainService, serviceConstraints map[string]core.QuotaConstraint) error {
+	var dbResources []db.DomainResource
+	_, err := tx.Select(&dbResources,
+		`SELECT * FROM domain_resources WHERE service_id = $1 ORDER BY name`, srv.ID)
 	if err != nil {
 		return err
 	}
-	return ApplyComputedDomainQuota(tx, cluster, domain.ID, srv.Type)
-}
+	resourceExists := make(map[string]bool)
+	for _, res := range dbResources {
+		resourceExists[res.Name] = true
+	}
 
-func createMissingDomainResources(tx *gorp.Transaction, cluster *core.Cluster, domain db.Domain, srv db.DomainService, serviceConstraints map[string]core.QuotaConstraint, resourceExists map[string]bool) error {
 	plugin := cluster.QuotaPlugins[srv.Type]
 	if plugin == nil {
 		return fmt.Errorf("no quota plugin registered for service type %s", srv.Type)
