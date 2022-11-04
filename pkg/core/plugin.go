@@ -92,10 +92,12 @@ type ResourceData struct {
 // backend services must implement. There can only be one QuotaPlugin for each
 // backend service.
 type QuotaPlugin interface {
+	pluggable.Plugin
 	//Init is guaranteed to be called before all other methods exposed by the
 	//interface. Implementations can use it f.i. to discover the available
-	//Resources().
-	Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error
+	//Resources(). For plugins that support subresource scraping, the final
+	//argument indicates which resources to scrape (the keys are resource names).
+	Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, cfg ServiceConfiguration, scrapeSubresources map[string]bool) error
 	//ServiceInfo returns metadata for this service.
 	ServiceInfo() limes.ServiceInfo
 	//Resources returns metadata for all the resources that this plugin scrapes
@@ -219,40 +221,11 @@ type CapacityPlugin interface {
 	CollectMetrics(ch chan<- prometheus.Metric, clusterID, serializedMetrics string) error
 }
 
-// QuotaPluginFactory is a function that produces quota plugins for a certain
-// ServiceInfo.Type. The quota plugin instance will use the service
-// configuration given to it if it wants to. For plugins that support
-// subresource scraping, the second argument indicates which resources to scrape
-// (the keys are resource names).
-type QuotaPluginFactory func(cfg ServiceConfiguration, scrapeSubresources map[string]bool) QuotaPlugin
-
 var (
 	// DiscoveryPluginRegistry is a pluggable.Registry for DiscoveryPlugin implementations.
 	DiscoveryPluginRegistry pluggable.Registry[DiscoveryPlugin]
-	quotaPluginFactories    = map[string]QuotaPluginFactory{}
+	// QuotaPluginRegistry is a pluggable.Registry for QuotaPlugin implementations.
+	QuotaPluginRegistry pluggable.Registry[QuotaPlugin]
 	// CapacityPluginRegistry is a pluggable.Registry for CapacityPlugin implementations.
 	CapacityPluginRegistry pluggable.Registry[CapacityPlugin]
 )
-
-// RegisterQuotaPlugin registers a QuotaPlugin with this package. It may only be
-// called once, typically in a func init() for the package that offers the
-// QuotaPlugin.
-//
-// When called, this function will use the factory with a zero
-// ServiceConfiguration to determine the service type of the quota plugin.
-func RegisterQuotaPlugin(factory QuotaPluginFactory) {
-	if factory == nil {
-		panic("collector.RegisterQuotaPlugin() called with nil QuotaPluginFactory instance")
-	}
-	info := factory(ServiceConfiguration{}, map[string]bool{}).ServiceInfo()
-	if info.Type == "" {
-		panic("QuotaPlugin instance with empty service type!")
-	}
-	if info.Area == "" {
-		panic("QuotaPlugin instance with empty area!")
-	}
-	if quotaPluginFactories[info.Type] != nil {
-		panic("collector.RegisterQuotaPlugin() called multiple times for service type: " + info.Type)
-	}
-	quotaPluginFactories[info.Type] = factory
-}

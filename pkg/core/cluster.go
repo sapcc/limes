@@ -67,41 +67,29 @@ type Cluster struct {
 // configuration, and also initializes all quota and capacity plugins. Errors
 // will be logged when some of the requested plugins cannot be found.
 func NewCluster(config ClusterConfiguration) *Cluster {
-	discoveryPlugin := DiscoveryPluginRegistry.Instantiate(config.Discovery.Method)
-	if discoveryPlugin == nil {
-		logg.Fatal("setup for cluster %s failed: no suitable discovery plugin found", config.ClusterID)
-	}
-
 	c := &Cluster{
 		ID:              config.ClusterID,
 		Config:          config,
-		DiscoveryPlugin: discoveryPlugin,
 		QuotaPlugins:    make(map[string]QuotaPlugin),
 		CapacityPlugins: make(map[string]CapacityPlugin),
 		Authoritative:   osext.GetenvBool("LIMES_AUTHORITATIVE"),
 	}
 
+	c.DiscoveryPlugin = DiscoveryPluginRegistry.Instantiate(config.Discovery.Method)
+	if c.DiscoveryPlugin == nil {
+		logg.Fatal("setup for cluster %s failed: no suitable discovery plugin found", config.ClusterID)
+	}
+
 	for _, srv := range config.Services {
-		factory, exists := quotaPluginFactories[srv.Type]
-		if !exists {
+		plugin := QuotaPluginRegistry.Instantiate(srv.Type)
+		if plugin == nil {
 			logg.Error("skipping service %s: no suitable collector plugin found", srv.Type)
 			continue
 		}
-
-		scrapeSubresources := map[string]bool{}
-		for _, resName := range config.Subresources[srv.Type] {
-			scrapeSubresources[resName] = true
-		}
-
-		plugin := factory(srv, scrapeSubresources)
-		if plugin == nil || plugin.ServiceInfo().Type != srv.Type {
-			logg.Error("skipping service %s: failed to initialize collector plugin", srv.Type)
-			continue
-		}
-
 		c.ServiceTypes = append(c.ServiceTypes, srv.Type)
 		c.QuotaPlugins[srv.Type] = plugin
 	}
+	sort.Strings(c.ServiceTypes) //determinism is useful for unit tests
 
 	for _, capa := range config.Capacitors {
 		plugin := CapacityPluginRegistry.Instantiate(capa.Type)
@@ -111,8 +99,6 @@ func NewCluster(config ClusterConfiguration) *Cluster {
 		}
 		c.CapacityPlugins[capa.ID] = plugin
 	}
-
-	sort.Strings(c.ServiceTypes) //determinism is useful for unit tests
 
 	c.SetupOPA(os.Getenv("LIMES_OPA_DOMAIN_QUOTA_POLICY_PATH"), os.Getenv("LIMES_OPA_PROJECT_QUOTA_POLICY_PATH"))
 
@@ -167,13 +153,20 @@ func (c *Cluster) Connect() (err error) {
 	provider := c.Auth.ProviderClient
 	eo := c.Auth.EndpointOpts
 
+	//initialize discovery plugin
 	err = c.DiscoveryPlugin.Init(provider, eo, c.Config.Discovery)
 	if err != nil {
 		return fmt.Errorf("failed to initialize discovery method: %w", util.UnpackError(err))
 	}
 
+	//initialize quota plugins
 	for _, srv := range c.Config.Services {
-		err := c.QuotaPlugins[srv.Type].Init(provider, eo)
+		scrapeSubresources := map[string]bool{}
+		for _, resName := range c.Config.Subresources[srv.Type] {
+			scrapeSubresources[resName] = true
+		}
+
+		err := c.QuotaPlugins[srv.Type].Init(provider, eo, srv, scrapeSubresources)
 		if err != nil {
 			return fmt.Errorf("failed to initialize service %s: %w", srv.Type, util.UnpackError(err))
 		}

@@ -59,14 +59,18 @@ var cronusRates = []limesrates.RateInfo{
 }
 
 func init() {
-	core.RegisterQuotaPlugin(func(c core.ServiceConfiguration, scrapeSubresources map[string]bool) core.QuotaPlugin {
-		return &cronusPlugin{c}
-	})
+	core.QuotaPluginRegistry.Add(func() core.QuotaPlugin { return &cronusPlugin{} })
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
+func (p *cronusPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, c core.ServiceConfiguration, scrapeSubresources map[string]bool) error {
+	p.cfg = c
 	return nil
+}
+
+// PluginTypeID implements the core.QuotaPlugin interface.
+func (p *cronusPlugin) PluginTypeID() string {
+	return "email-aws"
 }
 
 // ServiceInfo implements the core.QuotaPlugin interface.

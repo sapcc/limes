@@ -88,8 +88,13 @@ func NewPluginFactory(serviceType string) func(core.ServiceConfiguration, map[st
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *Plugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
+func (p *Plugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, cfg core.ServiceConfiguration, scrapeSubresources map[string]bool) error {
 	return nil
+}
+
+// PluginTypeID implements the core.QuotaPlugin interface.
+func (p *Plugin) PluginTypeID() string {
+	return p.StaticServiceType
 }
 
 // ServiceInfo implements the core.QuotaPlugin interface.
