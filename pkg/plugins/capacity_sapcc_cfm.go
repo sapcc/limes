@@ -36,19 +36,18 @@ type capacityCFMPlugin struct {
 }
 
 func init() {
-	core.RegisterCapacityPlugin(func(c core.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) core.CapacityPlugin {
-		return &capacityCFMPlugin{cfg: c}
-	})
+	core.CapacityPluginRegistry.Add(func() core.CapacityPlugin { return &capacityCFMPlugin{} })
 }
 
 // Init implements the core.CapacityPlugin interface.
-func (p *capacityCFMPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
+func (p *capacityCFMPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, c core.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) (err error) {
+	p.cfg = c
 	p.projectID, err = getProjectIDForToken(provider, eo)
 	return err
 }
 
-// Type implements the core.CapacityPlugin interface.
-func (p *capacityCFMPlugin) Type() string {
+// PluginTypeID implements the core.CapacityPlugin interface.
+func (p *capacityCFMPlugin) PluginTypeID() string {
 	return "cfm"
 }
 

@@ -284,12 +284,12 @@ func NewCapacityPlugin(pluginType string, resources ...string) *CapacityPlugin {
 }
 
 // Init implements the core.CapacityPlugin interface.
-func (p *CapacityPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
+func (p *CapacityPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, cfg core.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) error {
 	return nil
 }
 
-// Type implements the core.CapacityPlugin interface.
-func (p *CapacityPlugin) Type() string {
+// PluginTypeID implements the core.CapacityPlugin interface.
+func (p *CapacityPlugin) PluginTypeID() string {
 	return p.PluginType
 }
 

@@ -184,12 +184,10 @@ type CapacityDataForAZ struct {
 // for each type of hypervisor (KVM, VMware, etc.) which use the concrete APIs
 // of these hypervisors instead of the OpenStack Compute API.
 type CapacityPlugin interface {
+	pluggable.Plugin
 	//Init is guaranteed to be called before all other methods exposed by the
 	//interface.
-	Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error
-	//Type returns a unique identifier for this CapacityPlugin which is used to
-	//identify it in the configuration.
-	Type() string
+	Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, cfg CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) error
 	//Scrape queries the backend service(s) for the capacities of the resources
 	//that this plugin is concerned with. The result is a two-dimensional map,
 	//with the first key being the service type, and the second key being the
@@ -228,19 +226,13 @@ type CapacityPlugin interface {
 // (the keys are resource names).
 type QuotaPluginFactory func(cfg ServiceConfiguration, scrapeSubresources map[string]bool) QuotaPlugin
 
-// CapacityPluginFactory is a function that produces capacity plugins with a
-// certain ID. The capacity plugin instance will use the capacitor configuration
-// given to it if it wants to. For plugins that support subcapacity scraping,
-// the second argument indicates which resources to scrape (the first key is the
-// service type, the second key is the resource name).
-type CapacityPluginFactory func(cfg CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) CapacityPlugin
-
 var (
-	// DiscoveryPlugin is a pluggable.Registry for DiscoveryPlugin implementations.
+	// DiscoveryPluginRegistry is a pluggable.Registry for DiscoveryPlugin implementations.
 	DiscoveryPluginRegistry pluggable.Registry[DiscoveryPlugin]
 	quotaPluginFactories    = map[string]QuotaPluginFactory{}
-	capacityPluginFactories = map[string]CapacityPluginFactory{}
-	serviceTypesByArea      = map[string][]string{}
+	// CapacityPluginRegistry is a pluggable.Registry for CapacityPlugin implementations.
+	CapacityPluginRegistry pluggable.Registry[CapacityPlugin]
+	serviceTypesByArea     = map[string][]string{}
 )
 
 // RegisterQuotaPlugin registers a QuotaPlugin with this package. It may only be
@@ -271,24 +263,4 @@ func RegisterQuotaPlugin(factory QuotaPluginFactory) {
 // report the given area.
 func GetServiceTypesForArea(area string) []string {
 	return serviceTypesByArea[area]
-}
-
-// RegisterCapacityPlugin registers a CapacityPlugin with this package. It may
-// only be called once, typically in a func init() for the package that offers
-// the CapacityPlugin.
-//
-// When called, this function will use the factory with a zero
-// CapacitorConfiguration to determine the type of the capacity plugin.
-func RegisterCapacityPlugin(factory CapacityPluginFactory) {
-	if factory == nil {
-		panic("collector.RegisterCapacityPlugin() called with nil CapacityPluginFactory instance")
-	}
-	typeStr := factory(CapacitorConfiguration{}, nil).Type()
-	if typeStr == "" {
-		panic("CapacityPlugin instance with empty type!")
-	}
-	if capacityPluginFactories[typeStr] != nil {
-		panic("collector.RegisterCapacityPlugin() called multiple times for type: " + typeStr)
-	}
-	capacityPluginFactories[typeStr] = factory
 }

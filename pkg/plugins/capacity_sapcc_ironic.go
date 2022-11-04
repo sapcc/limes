@@ -37,7 +37,6 @@ import (
 )
 
 type capacitySapccIronicPlugin struct {
-	cfg                 core.CapacitorConfiguration
 	ftt                 novaFlavorTranslationTable
 	reportSubcapacities bool
 }
@@ -47,19 +46,18 @@ type capacitySapccIronicSerializedMetrics struct {
 }
 
 func init() {
-	core.RegisterCapacityPlugin(func(c core.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) core.CapacityPlugin {
-		ftt := newNovaFlavorTranslationTable(c.SAPCCIronic.FlavorAliases)
-		return &capacitySapccIronicPlugin{c, ftt, scrapeSubcapacities["compute"]["instances-baremetal"]}
-	})
+	core.CapacityPluginRegistry.Add(func() core.CapacityPlugin { return &capacitySapccIronicPlugin{} })
 }
 
 // Init implements the core.CapacityPlugin interface.
-func (p *capacitySapccIronicPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
+func (p *capacitySapccIronicPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, c core.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) error {
+	p.ftt = newNovaFlavorTranslationTable(c.SAPCCIronic.FlavorAliases)
+	p.reportSubcapacities = scrapeSubcapacities["compute"]["instances-baremetal"]
 	return nil
 }
 
-// Type implements the core.CapacityPlugin interface.
-func (p *capacitySapccIronicPlugin) Type() string {
+// PluginTypeID implements the core.CapacityPlugin interface.
+func (p *capacitySapccIronicPlugin) PluginTypeID() string {
 	return "sapcc-ironic"
 }
 

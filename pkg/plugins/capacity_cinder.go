@@ -38,13 +38,12 @@ type capacityCinderPlugin struct {
 }
 
 func init() {
-	core.RegisterCapacityPlugin(func(c core.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) core.CapacityPlugin {
-		return &capacityCinderPlugin{c}
-	})
+	core.CapacityPluginRegistry.Add(func() core.CapacityPlugin { return &capacityCinderPlugin{} })
 }
 
 // Init implements the core.CapacityPlugin interface.
-func (p *capacityCinderPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
+func (p *capacityCinderPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, c core.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) error {
+	p.cfg = c
 	if len(p.cfg.Cinder.VolumeTypes) == 0 {
 		//nolint:stylecheck //Cinder is a proper name
 		return errors.New("Cinder capacity plugin: missing required configuration field cinder.volume_types")
@@ -52,8 +51,8 @@ func (p *capacityCinderPlugin) Init(provider *gophercloud.ProviderClient, eo gop
 	return nil
 }
 
-// Type implements the core.CapacityPlugin interface.
-func (p *capacityCinderPlugin) Type() string {
+// PluginTypeID implements the core.CapacityPlugin interface.
+func (p *capacityCinderPlugin) PluginTypeID() string {
 	return "cinder"
 }
 

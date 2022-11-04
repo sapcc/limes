@@ -103,24 +103,10 @@ func NewCluster(config ClusterConfiguration) *Cluster {
 		c.QuotaPlugins[srv.Type] = plugin
 	}
 
-	scrapeSubcapacities := make(map[string]map[string]bool)
-	for serviceType, resourceNames := range config.Subcapacities {
-		m := make(map[string]bool)
-		for _, resourceName := range resourceNames {
-			m[resourceName] = true
-		}
-		scrapeSubcapacities[serviceType] = m
-	}
-
 	for _, capa := range config.Capacitors {
-		factory, exists := capacityPluginFactories[capa.Type]
-		if !exists {
-			logg.Error("skipping capacitor %s: no suitable collector plugin found", capa.ID)
-			continue
-		}
-		plugin := factory(capa, scrapeSubcapacities)
-		if plugin == nil || plugin.Type() != capa.Type {
-			logg.Error("skipping capacitor %s: failed to initialize collector plugin", capa.ID)
+		plugin := CapacityPluginRegistry.Instantiate(capa.Type)
+		if plugin == nil {
+			logg.Error("skipping capacitor %s: no suitable capacity plugin found", capa.ID)
 			continue
 		}
 		c.CapacityPlugins[capa.ID] = plugin
@@ -193,8 +179,17 @@ func (c *Cluster) Connect() (err error) {
 		}
 	}
 
+	//initialize capacity plugins
+	scrapeSubcapacities := make(map[string]map[string]bool)
+	for serviceType, resourceNames := range c.Config.Subcapacities {
+		m := make(map[string]bool)
+		for _, resourceName := range resourceNames {
+			m[resourceName] = true
+		}
+		scrapeSubcapacities[serviceType] = m
+	}
 	for _, capa := range c.Config.Capacitors {
-		err := c.CapacityPlugins[capa.ID].Init(provider, eo)
+		err := c.CapacityPlugins[capa.ID].Init(provider, eo, capa, scrapeSubcapacities)
 		if err != nil {
 			return fmt.Errorf("failed to initialize capacitor %s: %w", capa.ID, util.UnpackError(err))
 		}

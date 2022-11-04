@@ -33,18 +33,17 @@ type capacityManualPlugin struct {
 }
 
 func init() {
-	core.RegisterCapacityPlugin(func(c core.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) core.CapacityPlugin {
-		return &capacityManualPlugin{c}
-	})
+	core.CapacityPluginRegistry.Add(func() core.CapacityPlugin { return &capacityManualPlugin{} })
 }
 
 // Init implements the core.CapacityPlugin interface.
-func (p *capacityManualPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
+func (p *capacityManualPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, c core.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) error {
+	p.cfg = c
 	return nil
 }
 
-// Type implements the core.CapacityPlugin interface.
-func (p *capacityManualPlugin) Type() string {
+// PluginTypeID implements the core.CapacityPlugin interface.
+func (p *capacityManualPlugin) PluginTypeID() string {
 	return "manual"
 }
 

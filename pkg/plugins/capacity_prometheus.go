@@ -44,9 +44,7 @@ type capacityPrometheusPlugin struct {
 }
 
 func init() {
-	core.RegisterCapacityPlugin(func(c core.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) core.CapacityPlugin {
-		return &capacityPrometheusPlugin{c}
-	})
+	core.CapacityPluginRegistry.Add(func() core.CapacityPlugin { return &capacityPrometheusPlugin{} })
 }
 
 func prometheusClient(cfg core.PrometheusAPIConfiguration) (prom_v1.API, error) {
@@ -127,12 +125,13 @@ func prometheusGetSingleValue(client prom_v1.API, queryStr string, defaultValue 
 }
 
 // Init implements the core.CapacityPlugin interface.
-func (p *capacityPrometheusPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
+func (p *capacityPrometheusPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, c core.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) error {
+	p.cfg = c
 	return nil
 }
 
-// Type implements the core.CapacityPlugin interface.
-func (p *capacityPrometheusPlugin) Type() string {
+// PluginTypeID implements the core.CapacityPlugin interface.
+func (p *capacityPrometheusPlugin) PluginTypeID() string {
 	return "prometheus"
 }
 

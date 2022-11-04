@@ -59,16 +59,14 @@ type novaHypervisorMetrics struct {
 }
 
 func init() {
-	core.RegisterCapacityPlugin(func(c core.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) core.CapacityPlugin {
-		return &capacityNovaPlugin{
-			cfg:                 c,
-			reportSubcapacities: scrapeSubcapacities["compute"],
-		}
-	})
+	core.CapacityPluginRegistry.Add(func() core.CapacityPlugin { return &capacityNovaPlugin{} })
 }
 
 // Init implements the core.CapacityPlugin interface.
-func (p *capacityNovaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
+func (p *capacityNovaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, c core.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) (err error) {
+	p.cfg = c
+	p.reportSubcapacities = scrapeSubcapacities["compute"]
+
 	if p.cfg.Nova.AggregateNamePattern == "" {
 		return errors.New("missing value for nova.aggregate_name_pattern")
 	}
@@ -89,7 +87,8 @@ func (p *capacityNovaPlugin) Init(provider *gophercloud.ProviderClient, eo gophe
 	return nil
 }
 
-func (p *capacityNovaPlugin) Type() string {
+// PluginTypeID implements the core.CapacityPlugin interface.
+func (p *capacityNovaPlugin) PluginTypeID() string {
 	return "nova"
 }
 
