@@ -23,7 +23,6 @@ import (
 	"net/http"
 	"regexp"
 
-	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
 )
 
@@ -40,7 +39,7 @@ type Filter struct {
 }
 
 // ReadFilter extracts a Filter from the given Request.
-func ReadFilter(r *http.Request) Filter {
+func ReadFilter(r *http.Request, getServiceTypesForArea func(string) []string) Filter {
 	var (
 		f  Filter
 		ok bool
@@ -60,7 +59,7 @@ func ReadFilter(r *http.Request) Filter {
 	if areas, ok := queryValues["area"]; ok {
 		var areaServices []string
 		for _, area := range areas {
-			areaServices = append(areaServices, core.GetServiceTypesForArea(area)...)
+			areaServices = append(areaServices, getServiceTypesForArea(area)...)
 		}
 
 		if len(f.ServiceTypes) == 0 {

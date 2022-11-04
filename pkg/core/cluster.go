@@ -353,6 +353,16 @@ func (c *Cluster) InfoForService(serviceType string) limes.ServiceInfo {
 	return plugin.ServiceInfo()
 }
 
+// GetServiceTypesForArea returns all service types that belong to the given area.
+func (c *Cluster) GetServiceTypesForArea(area string) (serviceTypes []string) {
+	for serviceType, plugin := range c.QuotaPlugins {
+		if plugin.ServiceInfo().Area == area {
+			serviceTypes = append(serviceTypes, serviceType)
+		}
+	}
+	return
+}
+
 // BehaviorForResource returns the ResourceBehavior for the given resource in
 // the given scope.
 //

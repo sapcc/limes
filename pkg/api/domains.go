@@ -44,7 +44,7 @@ func (p *v1Provider) ListDomains(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	domains, err := reports.GetDomains(p.Cluster, nil, p.DB, reports.ReadFilter(r))
+	domains, err := reports.GetDomains(p.Cluster, nil, p.DB, reports.ReadFilter(r, p.Cluster.GetServiceTypesForArea))
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -64,7 +64,7 @@ func (p *v1Provider) GetDomain(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	domain, err := GetDomainReport(p.Cluster, *dbDomain, p.DB, reports.ReadFilter(r))
+	domain, err := GetDomainReport(p.Cluster, *dbDomain, p.DB, reports.ReadFilter(r, p.Cluster.GetServiceTypesForArea))
 	if respondwith.ErrorText(w, err) {
 		return
 	}

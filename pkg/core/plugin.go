@@ -232,7 +232,6 @@ var (
 	quotaPluginFactories    = map[string]QuotaPluginFactory{}
 	// CapacityPluginRegistry is a pluggable.Registry for CapacityPlugin implementations.
 	CapacityPluginRegistry pluggable.Registry[CapacityPlugin]
-	serviceTypesByArea     = map[string][]string{}
 )
 
 // RegisterQuotaPlugin registers a QuotaPlugin with this package. It may only be
@@ -256,11 +255,4 @@ func RegisterQuotaPlugin(factory QuotaPluginFactory) {
 		panic("collector.RegisterQuotaPlugin() called multiple times for service type: " + info.Type)
 	}
 	quotaPluginFactories[info.Type] = factory
-	serviceTypesByArea[info.Area] = append(serviceTypesByArea[info.Area], info.Type)
-}
-
-// GetServiceTypesForArea returns a list of all service types whose QuotaPlugins
-// report the given area.
-func GetServiceTypesForArea(area string) []string {
-	return serviceTypesByArea[area]
 }

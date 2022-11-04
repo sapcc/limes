@@ -48,13 +48,6 @@ import (
 	"github.com/sapcc/limes/pkg/test"
 )
 
-func init() {
-	//This is required for core.GetServiceTypesForArea() to work.
-	core.RegisterQuotaPlugin(test.NewPluginFactory("shared"))
-	core.RegisterQuotaPlugin(test.NewPluginFactory("unshared"))
-	core.RegisterQuotaPlugin(test.NewPluginFactory("centralized"))
-}
-
 func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, *gorp.DbMap, http.Handler, *TestPolicyEnforcer) {
 	//load test database
 	t.Helper()
