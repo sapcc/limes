@@ -28,19 +28,20 @@ import (
 	"github.com/sapcc/limes/pkg/core"
 )
 
-type listDiscoveryPlugin struct {
-	cfg core.DiscoveryConfiguration
-}
+type listDiscoveryPlugin struct{}
 
 func init() {
-	core.RegisterDiscoveryPlugin(func(c core.DiscoveryConfiguration) core.DiscoveryPlugin {
-		return &listDiscoveryPlugin{c}
-	})
+	core.DiscoveryPluginRegistry.Add(func() core.DiscoveryPlugin { return &listDiscoveryPlugin{} })
 }
 
-// Method implements the core.DiscoveryPlugin interface.
-func (p *listDiscoveryPlugin) Method() string {
+// PluginTypeID implements the core.DiscoveryPlugin interface.
+func (p *listDiscoveryPlugin) PluginTypeID() string {
 	return "list"
+}
+
+// Init implements the core.DiscoveryPlugin interface.
+func (p *listDiscoveryPlugin) Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, cfg core.DiscoveryConfiguration) error {
+	return nil //not used
 }
 
 // ListDomains implements the core.DiscoveryPlugin interface.

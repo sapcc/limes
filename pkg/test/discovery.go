@@ -51,9 +51,14 @@ func NewDiscoveryPlugin() *DiscoveryPlugin {
 	}
 }
 
-// Method implements the core.DiscoveryPlugin interface.
-func (p *DiscoveryPlugin) Method() string {
+// PluginTypeID implements the core.DiscoveryPlugin interface.
+func (p *DiscoveryPlugin) PluginTypeID() string {
 	return "unittest"
+}
+
+// Init implements the core.DiscoveryPlugin interface.
+func (p *DiscoveryPlugin) Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, cfg core.DiscoveryConfiguration) error {
+	return nil //not used
 }
 
 // ListDomains implements the core.DiscoveryPlugin interface.

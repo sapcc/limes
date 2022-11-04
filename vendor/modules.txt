@@ -239,7 +239,7 @@ github.com/sapcc/go-api-declarations/internal/marshal
 github.com/sapcc/go-api-declarations/limes
 github.com/sapcc/go-api-declarations/limes/rates
 github.com/sapcc/go-api-declarations/limes/resources
-# github.com/sapcc/go-bits v0.0.0-20221101210225-82a3f52a69ee
+# github.com/sapcc/go-bits v0.0.0-20221104151042-8e590b61fda5
 ## explicit; go 1.19
 github.com/sapcc/go-bits/assert
 github.com/sapcc/go-bits/audittools
@@ -257,6 +257,7 @@ github.com/sapcc/go-bits/httpext
 github.com/sapcc/go-bits/logg
 github.com/sapcc/go-bits/must
 github.com/sapcc/go-bits/osext
+github.com/sapcc/go-bits/pluggable
 github.com/sapcc/go-bits/respondwith
 github.com/sapcc/go-bits/sqlext
 # github.com/sergi/go-diff v1.2.0

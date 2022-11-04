@@ -67,15 +67,15 @@ type Cluster struct {
 // configuration, and also initializes all quota and capacity plugins. Errors
 // will be logged when some of the requested plugins cannot be found.
 func NewCluster(config ClusterConfiguration) *Cluster {
-	factory, exists := discoveryPluginFactories[config.Discovery.Method]
-	if !exists {
+	discoveryPlugin := DiscoveryPluginRegistry.Instantiate(config.Discovery.Method)
+	if discoveryPlugin == nil {
 		logg.Fatal("setup for cluster %s failed: no suitable discovery plugin found", config.ClusterID)
 	}
 
 	c := &Cluster{
 		ID:              config.ClusterID,
 		Config:          config,
-		DiscoveryPlugin: factory(config.Discovery),
+		DiscoveryPlugin: discoveryPlugin,
 		QuotaPlugins:    make(map[string]QuotaPlugin),
 		CapacityPlugins: make(map[string]CapacityPlugin),
 		Authoritative:   osext.GetenvBool("LIMES_AUTHORITATIVE"),
@@ -180,6 +180,11 @@ func (c *Cluster) Connect() (err error) {
 	}
 	provider := c.Auth.ProviderClient
 	eo := c.Auth.EndpointOpts
+
+	err = c.DiscoveryPlugin.Init(provider, eo, c.Config.Discovery)
+	if err != nil {
+		return fmt.Errorf("failed to initialize discovery method: %w", util.UnpackError(err))
+	}
 
 	for _, srv := range c.Config.Services {
 		err := c.QuotaPlugins[srv.Type].Init(provider, eo)

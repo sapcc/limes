@@ -27,6 +27,7 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-bits/pluggable"
 
 	"github.com/sapcc/limes/pkg/db"
 )
@@ -66,9 +67,9 @@ func KeystoneProjectFromDB(dbProject db.Project, domain KeystoneDomain) Keystone
 // DiscoveryPlugin is the interface that the collector uses to discover Keystone
 // projects and domains in a cluster.
 type DiscoveryPlugin interface {
-	//Method returns a unique identifier for this DiscoveryPlugin which is used to
-	//identify it in the configuration.
-	Method() string
+	pluggable.Plugin
+	//Init is called before any other interface methods, and allows the plugin to perform first-time initialization.
+	Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, cfg DiscoveryConfiguration) error
 	//ListDomains returns all Keystone domains in the cluster.
 	ListDomains(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) ([]KeystoneDomain, error)
 	//ListProjects returns all Keystone projects in the given domain.
@@ -220,11 +221,6 @@ type CapacityPlugin interface {
 	CollectMetrics(ch chan<- prometheus.Metric, clusterID, serializedMetrics string) error
 }
 
-// DiscoveryPluginFactory is a function that produces discovery plugins with a
-// certain ID. The discovery plugin instance will use the discovery configuration
-// given to it if it wants to.
-type DiscoveryPluginFactory func(DiscoveryConfiguration) DiscoveryPlugin
-
 // QuotaPluginFactory is a function that produces quota plugins for a certain
 // ServiceInfo.Type. The quota plugin instance will use the service
 // configuration given to it if it wants to. For plugins that support
@@ -240,31 +236,12 @@ type QuotaPluginFactory func(cfg ServiceConfiguration, scrapeSubresources map[st
 type CapacityPluginFactory func(cfg CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) CapacityPlugin
 
 var (
-	discoveryPluginFactories = map[string]DiscoveryPluginFactory{}
-	quotaPluginFactories     = map[string]QuotaPluginFactory{}
-	capacityPluginFactories  = map[string]CapacityPluginFactory{}
-	serviceTypesByArea       = map[string][]string{}
+	// DiscoveryPlugin is a pluggable.Registry for DiscoveryPlugin implementations.
+	DiscoveryPluginRegistry pluggable.Registry[DiscoveryPlugin]
+	quotaPluginFactories    = map[string]QuotaPluginFactory{}
+	capacityPluginFactories = map[string]CapacityPluginFactory{}
+	serviceTypesByArea      = map[string][]string{}
 )
-
-// RegisterDiscoveryPlugin registers a DiscoveryPlugin with this package. It may
-// only be called once, typically in a func init() for the package that offers
-// the DiscoveryPlugin.
-//
-// When called, this function will use the factory with a zero
-// ServiceConfiguration to determine the ServiceType of the quota plugin.
-func RegisterDiscoveryPlugin(factory DiscoveryPluginFactory) {
-	if factory == nil {
-		panic("collector.RegisterDiscoveryPlugin() called with nil DiscoveryPluginFactory instance")
-	}
-	method := factory(DiscoveryConfiguration{}).Method()
-	if method == "" {
-		panic("DiscoveryPlugin instance with empty Method!")
-	}
-	if discoveryPluginFactories[method] != nil {
-		panic("collector.RegisterDiscoveryPlugin() called multiple times for method: " + method)
-	}
-	discoveryPluginFactories[method] = factory
-}
 
 // RegisterQuotaPlugin registers a QuotaPlugin with this package. It may only be
 // called once, typically in a func init() for the package that offers the
