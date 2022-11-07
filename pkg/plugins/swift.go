@@ -77,14 +77,18 @@ type swiftSerializedContainerMetrics struct {
 }
 
 func init() {
-	core.RegisterQuotaPlugin(func(c core.ServiceConfiguration, scrapeSubresources map[string]bool) core.QuotaPlugin {
-		return &swiftPlugin{c}
-	})
+	core.QuotaPluginRegistry.Add(func() core.QuotaPlugin { return &swiftPlugin{} })
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *swiftPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
+func (p *swiftPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, c core.ServiceConfiguration, scrapeSubresources map[string]bool) error {
+	p.cfg = c
 	return nil
+}
+
+// PluginTypeID implements the core.QuotaPlugin interface.
+func (p *swiftPlugin) PluginTypeID() string {
+	return "object-store"
 }
 
 // ServiceInfo implements the core.QuotaPlugin interface.

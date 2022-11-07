@@ -27,6 +27,7 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-bits/pluggable"
 
 	"github.com/sapcc/limes/pkg/db"
 )
@@ -66,9 +67,9 @@ func KeystoneProjectFromDB(dbProject db.Project, domain KeystoneDomain) Keystone
 // DiscoveryPlugin is the interface that the collector uses to discover Keystone
 // projects and domains in a cluster.
 type DiscoveryPlugin interface {
-	//Method returns a unique identifier for this DiscoveryPlugin which is used to
-	//identify it in the configuration.
-	Method() string
+	pluggable.Plugin
+	//Init is called before any other interface methods, and allows the plugin to perform first-time initialization.
+	Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, cfg DiscoveryConfiguration) error
 	//ListDomains returns all Keystone domains in the cluster.
 	ListDomains(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) ([]KeystoneDomain, error)
 	//ListProjects returns all Keystone projects in the given domain.
@@ -91,10 +92,12 @@ type ResourceData struct {
 // backend services must implement. There can only be one QuotaPlugin for each
 // backend service.
 type QuotaPlugin interface {
+	pluggable.Plugin
 	//Init is guaranteed to be called before all other methods exposed by the
 	//interface. Implementations can use it f.i. to discover the available
-	//Resources().
-	Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error
+	//Resources(). For plugins that support subresource scraping, the final
+	//argument indicates which resources to scrape (the keys are resource names).
+	Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, cfg ServiceConfiguration, scrapeSubresources map[string]bool) error
 	//ServiceInfo returns metadata for this service.
 	ServiceInfo() limes.ServiceInfo
 	//Resources returns metadata for all the resources that this plugin scrapes
@@ -183,12 +186,10 @@ type CapacityDataForAZ struct {
 // for each type of hypervisor (KVM, VMware, etc.) which use the concrete APIs
 // of these hypervisors instead of the OpenStack Compute API.
 type CapacityPlugin interface {
+	pluggable.Plugin
 	//Init is guaranteed to be called before all other methods exposed by the
 	//interface.
-	Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error
-	//Type returns a unique identifier for this CapacityPlugin which is used to
-	//identify it in the configuration.
-	Type() string
+	Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, cfg CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) error
 	//Scrape queries the backend service(s) for the capacities of the resources
 	//that this plugin is concerned with. The result is a two-dimensional map,
 	//with the first key being the service type, and the second key being the
@@ -220,98 +221,11 @@ type CapacityPlugin interface {
 	CollectMetrics(ch chan<- prometheus.Metric, clusterID, serializedMetrics string) error
 }
 
-// DiscoveryPluginFactory is a function that produces discovery plugins with a
-// certain ID. The discovery plugin instance will use the discovery configuration
-// given to it if it wants to.
-type DiscoveryPluginFactory func(DiscoveryConfiguration) DiscoveryPlugin
-
-// QuotaPluginFactory is a function that produces quota plugins for a certain
-// ServiceInfo.Type. The quota plugin instance will use the service
-// configuration given to it if it wants to. For plugins that support
-// subresource scraping, the second argument indicates which resources to scrape
-// (the keys are resource names).
-type QuotaPluginFactory func(cfg ServiceConfiguration, scrapeSubresources map[string]bool) QuotaPlugin
-
-// CapacityPluginFactory is a function that produces capacity plugins with a
-// certain ID. The capacity plugin instance will use the capacitor configuration
-// given to it if it wants to. For plugins that support subcapacity scraping,
-// the second argument indicates which resources to scrape (the first key is the
-// service type, the second key is the resource name).
-type CapacityPluginFactory func(cfg CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) CapacityPlugin
-
 var (
-	discoveryPluginFactories = map[string]DiscoveryPluginFactory{}
-	quotaPluginFactories     = map[string]QuotaPluginFactory{}
-	capacityPluginFactories  = map[string]CapacityPluginFactory{}
-	serviceTypesByArea       = map[string][]string{}
+	// DiscoveryPluginRegistry is a pluggable.Registry for DiscoveryPlugin implementations.
+	DiscoveryPluginRegistry pluggable.Registry[DiscoveryPlugin]
+	// QuotaPluginRegistry is a pluggable.Registry for QuotaPlugin implementations.
+	QuotaPluginRegistry pluggable.Registry[QuotaPlugin]
+	// CapacityPluginRegistry is a pluggable.Registry for CapacityPlugin implementations.
+	CapacityPluginRegistry pluggable.Registry[CapacityPlugin]
 )
-
-// RegisterDiscoveryPlugin registers a DiscoveryPlugin with this package. It may
-// only be called once, typically in a func init() for the package that offers
-// the DiscoveryPlugin.
-//
-// When called, this function will use the factory with a zero
-// ServiceConfiguration to determine the ServiceType of the quota plugin.
-func RegisterDiscoveryPlugin(factory DiscoveryPluginFactory) {
-	if factory == nil {
-		panic("collector.RegisterDiscoveryPlugin() called with nil DiscoveryPluginFactory instance")
-	}
-	method := factory(DiscoveryConfiguration{}).Method()
-	if method == "" {
-		panic("DiscoveryPlugin instance with empty Method!")
-	}
-	if discoveryPluginFactories[method] != nil {
-		panic("collector.RegisterDiscoveryPlugin() called multiple times for method: " + method)
-	}
-	discoveryPluginFactories[method] = factory
-}
-
-// RegisterQuotaPlugin registers a QuotaPlugin with this package. It may only be
-// called once, typically in a func init() for the package that offers the
-// QuotaPlugin.
-//
-// When called, this function will use the factory with a zero
-// ServiceConfiguration to determine the service type of the quota plugin.
-func RegisterQuotaPlugin(factory QuotaPluginFactory) {
-	if factory == nil {
-		panic("collector.RegisterQuotaPlugin() called with nil QuotaPluginFactory instance")
-	}
-	info := factory(ServiceConfiguration{}, map[string]bool{}).ServiceInfo()
-	if info.Type == "" {
-		panic("QuotaPlugin instance with empty service type!")
-	}
-	if info.Area == "" {
-		panic("QuotaPlugin instance with empty area!")
-	}
-	if quotaPluginFactories[info.Type] != nil {
-		panic("collector.RegisterQuotaPlugin() called multiple times for service type: " + info.Type)
-	}
-	quotaPluginFactories[info.Type] = factory
-	serviceTypesByArea[info.Area] = append(serviceTypesByArea[info.Area], info.Type)
-}
-
-// GetServiceTypesForArea returns a list of all service types whose QuotaPlugins
-// report the given area.
-func GetServiceTypesForArea(area string) []string {
-	return serviceTypesByArea[area]
-}
-
-// RegisterCapacityPlugin registers a CapacityPlugin with this package. It may
-// only be called once, typically in a func init() for the package that offers
-// the CapacityPlugin.
-//
-// When called, this function will use the factory with a zero
-// CapacitorConfiguration to determine the type of the capacity plugin.
-func RegisterCapacityPlugin(factory CapacityPluginFactory) {
-	if factory == nil {
-		panic("collector.RegisterCapacityPlugin() called with nil CapacityPluginFactory instance")
-	}
-	typeStr := factory(CapacitorConfiguration{}, nil).Type()
-	if typeStr == "" {
-		panic("CapacityPlugin instance with empty type!")
-	}
-	if capacityPluginFactories[typeStr] != nil {
-		panic("collector.RegisterCapacityPlugin() called multiple times for type: " + typeStr)
-	}
-	capacityPluginFactories[typeStr] = factory
-}

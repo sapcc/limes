@@ -46,13 +46,12 @@ type manilaPlugin struct {
 }
 
 func init() {
-	core.RegisterQuotaPlugin(func(c core.ServiceConfiguration, scrapeSubresources map[string]bool) core.QuotaPlugin {
-		return &manilaPlugin{c, false}
-	})
+	core.QuotaPluginRegistry.Add(func() core.QuotaPlugin { return &manilaPlugin{} })
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *manilaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
+func (p *manilaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, c core.ServiceConfiguration, scrapeSubresources map[string]bool) error {
+	p.cfg = c
 	if len(p.cfg.ShareV2.ShareTypes) == 0 {
 		return errors.New("quota plugin sharev2: missing required configuration field sharev2.share_types")
 	}
@@ -98,6 +97,11 @@ func (p *manilaPlugin) findMicroversion(client *gophercloud.ServiceClient) (int,
 
 	//no 2.x version found at all
 	return 0, nil
+}
+
+// PluginTypeID implements the core.QuotaPlugin interface.
+func (p *manilaPlugin) PluginTypeID() string {
+	return "sharev2"
 }
 
 // ServiceInfo implements the core.QuotaPlugin interface.

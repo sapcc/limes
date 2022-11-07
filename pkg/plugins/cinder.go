@@ -43,20 +43,22 @@ type cinderPlugin struct {
 }
 
 func init() {
-	core.RegisterQuotaPlugin(func(c core.ServiceConfiguration, scrapeSubresources map[string]bool) core.QuotaPlugin {
-		return &cinderPlugin{
-			cfg:           c,
-			scrapeVolumes: scrapeSubresources["volumes"],
-		}
-	})
+	core.QuotaPluginRegistry.Add(func() core.QuotaPlugin { return &cinderPlugin{} })
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *cinderPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
+func (p *cinderPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, c core.ServiceConfiguration, scrapeSubresources map[string]bool) error {
+	p.cfg = c
+	p.scrapeVolumes = scrapeSubresources["volumes"]
 	if len(p.cfg.VolumeV2.VolumeTypes) == 0 {
 		return errors.New("quota plugin volumev2: missing required configuration field volumev2.volume_types")
 	}
 	return nil
+}
+
+// PluginTypeID implements the core.QuotaPlugin interface.
+func (p *cinderPlugin) PluginTypeID() string {
+	return "volumev2"
 }
 
 // ServiceInfo implements the core.QuotaPlugin interface.

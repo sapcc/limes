@@ -37,7 +37,7 @@ func (p *v1Provider) GetCluster(w http.ResponseWriter, r *http.Request) {
 	}
 	showBasic := !token.Check("cluster:show")
 
-	filter := reports.ReadFilter(r)
+	filter := reports.ReadFilter(r, p.Cluster.GetServiceTypesForArea)
 	if showBasic {
 		filter.IsSubcapacityAllowed = func(serviceType, resourceName string) bool {
 			token.Context.Request["service"] = serviceType

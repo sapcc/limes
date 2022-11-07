@@ -36,7 +36,7 @@ func (p *v1Provider) ListInconsistencies(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	inconsistencies, err := reports.GetInconsistencies(p.Cluster, p.DB, reports.ReadFilter(r))
+	inconsistencies, err := reports.GetInconsistencies(p.Cluster, p.DB, reports.ReadFilter(r, p.Cluster.GetServiceTypesForArea))
 	if respondwith.ErrorText(w, err) {
 		return
 	}

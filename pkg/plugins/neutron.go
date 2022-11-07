@@ -140,13 +140,13 @@ var neutronResources = []limesresources.ResourceInfo{
 }
 
 func init() {
-	core.RegisterQuotaPlugin(func(c core.ServiceConfiguration, scrapeSubresources map[string]bool) core.QuotaPlugin {
-		return &neutronPlugin{cfg: c}
-	})
+	core.QuotaPluginRegistry.Add(func() core.QuotaPlugin { return &neutronPlugin{} })
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *neutronPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
+func (p *neutronPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, c core.ServiceConfiguration, scrapeSubresources map[string]bool) error {
+	p.cfg = c
+
 	client, err := openstack.NewNetworkV2(provider, eo)
 	if err != nil {
 		return err
@@ -200,6 +200,11 @@ func (p *neutronPlugin) Init(provider *gophercloud.ProviderClient, eo gopherclou
 	}
 
 	return nil
+}
+
+// PluginTypeID implements the core.QuotaPlugin interface.
+func (p *neutronPlugin) PluginTypeID() string {
+	return "network"
 }
 
 // ServiceInfo implements the core.QuotaPlugin interface.

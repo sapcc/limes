@@ -106,12 +106,9 @@ var novaDefaultResources = []limesresources.ResourceInfo{
 }
 
 func init() {
-	core.RegisterQuotaPlugin(func(c core.ServiceConfiguration, scrapeSubresources map[string]bool) core.QuotaPlugin {
+	core.QuotaPluginRegistry.Add(func() core.QuotaPlugin {
 		return &novaPlugin{
-			cfg:               c,
-			scrapeInstances:   scrapeSubresources["instances"],
 			resources:         novaDefaultResources,
-			ftt:               newNovaFlavorTranslationTable(c.Compute.SeparateInstanceQuotas.FlavorAliases),
 			osTypeForImage:    make(map[string]string),
 			osTypeForInstance: make(map[string]string),
 		}
@@ -119,7 +116,11 @@ func init() {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
+func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, c core.ServiceConfiguration, scrapeSubresources map[string]bool) error {
+	p.cfg = c
+	p.scrapeInstances = scrapeSubresources["instances"]
+	p.ftt = newNovaFlavorTranslationTable(c.Compute.SeparateInstanceQuotas.FlavorAliases)
+
 	//if a non-empty `flavorNamePattern` is given, only flavors matching
 	//it are considered
 	if pattern := p.cfg.Compute.SeparateInstanceQuotas.FlavorNamePattern; pattern != "" {
@@ -227,6 +228,11 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.E
 	}
 
 	return nil
+}
+
+// PluginTypeID implements the core.QuotaPlugin interface.
+func (p *novaPlugin) PluginTypeID() string {
+	return "compute"
 }
 
 // ServiceInfo implements the core.QuotaPlugin interface.

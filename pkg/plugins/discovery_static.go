@@ -33,14 +33,18 @@ type staticDiscoveryPlugin struct {
 }
 
 func init() {
-	core.RegisterDiscoveryPlugin(func(c core.DiscoveryConfiguration) core.DiscoveryPlugin {
-		return &staticDiscoveryPlugin{c}
-	})
+	core.DiscoveryPluginRegistry.Add(func() core.DiscoveryPlugin { return &staticDiscoveryPlugin{} })
 }
 
-// Method implements the core.DiscoveryPlugin interface.
-func (p *staticDiscoveryPlugin) Method() string {
+// PluginTypeID implements the core.DiscoveryPlugin interface.
+func (p *staticDiscoveryPlugin) PluginTypeID() string {
 	return "static"
+}
+
+// Init implements the core.DiscoveryPlugin interface.
+func (p *staticDiscoveryPlugin) Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, cfg core.DiscoveryConfiguration) error {
+	p.cfg = cfg
+	return nil
 }
 
 // ListDomains implements the core.DiscoveryPlugin interface.

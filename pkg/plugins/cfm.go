@@ -39,18 +39,22 @@ type cfmPlugin struct {
 }
 
 func init() {
-	core.RegisterQuotaPlugin(func(c core.ServiceConfiguration, scrapeSubresources map[string]bool) core.QuotaPlugin {
-		return &cfmPlugin{cfg: c}
-	})
+	core.QuotaPluginRegistry.Add(func() core.QuotaPlugin { return &cfmPlugin{} })
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *cfmPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
+func (p *cfmPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, c core.ServiceConfiguration, scrapeSubresources map[string]bool) (err error) {
+	p.cfg = c
 	if !p.cfg.CFM.Authoritative {
 		return fmt.Errorf(`quota plugin "database" (for CFM service) does not support "authoritative = false" mode anymore`)
 	}
 	p.projectID, err = getProjectIDForToken(provider, eo)
 	return err
+}
+
+// PluginTypeID implements the core.QuotaPlugin interface.
+func (p *cfmPlugin) PluginTypeID() string {
+	return "database"
 }
 
 // ServiceInfo implements the core.QuotaPlugin interface.

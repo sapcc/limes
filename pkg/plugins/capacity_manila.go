@@ -38,13 +38,12 @@ type capacityManilaPlugin struct {
 }
 
 func init() {
-	core.RegisterCapacityPlugin(func(c core.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) core.CapacityPlugin {
-		return &capacityManilaPlugin{c}
-	})
+	core.CapacityPluginRegistry.Add(func() core.CapacityPlugin { return &capacityManilaPlugin{} })
 }
 
 // Init implements the core.CapacityPlugin interface.
-func (p *capacityManilaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
+func (p *capacityManilaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, c core.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) error {
+	p.cfg = c
 	cfg := p.cfg.Manila
 	if len(cfg.ShareTypes) == 0 {
 		return errors.New("capacity plugin manila: missing required configuration field manila.share_types")
@@ -65,8 +64,8 @@ func (p *capacityManilaPlugin) Init(provider *gophercloud.ProviderClient, eo gop
 	return nil
 }
 
-// Type implements the core.CapacityPlugin interface.
-func (p *capacityManilaPlugin) Type() string {
+// PluginTypeID implements the core.CapacityPlugin interface.
+func (p *capacityManilaPlugin) PluginTypeID() string {
 	return "manila"
 }
 
