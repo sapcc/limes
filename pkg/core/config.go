@@ -281,10 +281,11 @@ type PrometheusAPIConfiguration struct {
 // QuotaDistributionConfiguration contains configuration options for specifying
 // the QuotaDistributionModel of specific resources.
 type QuotaDistributionConfiguration struct {
-	FullResourceName    string                                `yaml:"resource"`
-	FullResourceNameRx  *regexp.Regexp                        `yaml:"-"`
-	Model               limesresources.QuotaDistributionModel `yaml:"model"`
-	DefaultProjectQuota uint64                                `yaml:"default_project_quota"` //required for CentralizedQuotaDistribution
+	FullResourceName       string                                `yaml:"resource"`
+	FullResourceNameRx     *regexp.Regexp                        `yaml:"-"`
+	Model                  limesresources.QuotaDistributionModel `yaml:"model"`
+	DefaultProjectQuota    uint64                                `yaml:"default_project_quota"` //required for CentralizedQuotaDistribution
+	StrictDomainQuotaLimit bool                                  `yaml:"strict_domain_quota_limit"`
 }
 
 // InitialProjectQuota returns the quota value that will be assigned to new
@@ -460,6 +461,9 @@ func (cluster ClusterConfiguration) validateConfig() (success bool) {
 		case limesresources.CentralizedQuotaDistribution:
 			if qdCfg.DefaultProjectQuota == 0 {
 				missing(fmt.Sprintf(`distribution_model_configs[%d].default_project_quota`, idx))
+			}
+			if qdCfg.StrictDomainQuotaLimit {
+				logg.Error("invalid value for distribution_model_configs[%d].strict_domain_quota_limit: not allowed for centralized distribution", idx)
 			}
 		default:
 			logg.Error("invalid value for distribution_model_configs[%d].model: %q", idx, qdCfg.Model)

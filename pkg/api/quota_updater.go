@@ -382,7 +382,7 @@ func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limesresources.Re
 
 	//specific rules for domain quotas vs. project quotas
 	if u.Project == nil {
-		return u.validateDomainQuota(domRes, newQuota)
+		return u.validateDomainQuota(srv, res, clusterRes, domRes, newQuota)
 	}
 	return u.validateProjectQuota(domRes, *projRes, newQuota)
 }
@@ -516,8 +516,8 @@ func (u QuotaUpdater) checkPolicy(input checkPolicyInput) ([]map[string]string, 
 	}
 }
 
-func (u QuotaUpdater) validateDomainQuota(report limesresources.DomainResourceReport, newQuota uint64) *core.QuotaValidationError {
-	if report.DomainQuota == nil || report.ProjectsQuota == nil {
+func (u QuotaUpdater) validateDomainQuota(srv limes.ServiceInfo, res limesresources.ResourceInfo, clusterRes limesresources.ClusterResourceReport, domRes limesresources.DomainResourceReport, newQuota uint64) *core.QuotaValidationError {
+	if domRes.DomainQuota == nil || domRes.ProjectsQuota == nil {
 		//defense in depth: we should have detected NoQuota resources a long time ago
 		return &core.QuotaValidationError{
 			Status:  http.StatusInternalServerError,
@@ -526,16 +526,35 @@ func (u QuotaUpdater) validateDomainQuota(report limesresources.DomainResourceRe
 	}
 
 	//when reducing domain quota, existing project quotas must fit into new domain quota
-	oldQuota := *report.DomainQuota
-	if newQuota < oldQuota && newQuota < *report.ProjectsQuota {
+	oldQuota := *domRes.DomainQuota
+	if newQuota < oldQuota && newQuota < *domRes.ProjectsQuota {
 		return &core.QuotaValidationError{
 			Status:       http.StatusConflict,
 			Message:      "domain quota may not be smaller than sum of project quotas in that domain",
-			MinimumValue: report.ProjectsQuota,
-			Unit:         report.Unit,
+			MinimumValue: domRes.ProjectsQuota,
+			Unit:         domRes.Unit,
 		}
 	}
 
+	//when increasing domain quota, check that cluster capacity is not exceeded (if this constraint has been enabled in the config)
+	qdConfig := u.Cluster.QuotaDistributionConfigForResource(srv.Type, res.Name)
+	if newQuota > oldQuota && qdConfig.StrictDomainQuotaLimit {
+		//NOTE: No arithmetic overflow/underflow is possible here, for the same
+		//reasons as explained below in validateProjectQuota().
+		newDomainsQuota := *clusterRes.DomainsQuota - oldQuota + newQuota
+		if newDomainsQuota > *clusterRes.Capacity {
+			maxQuota := *clusterRes.Capacity - (*clusterRes.DomainsQuota - oldQuota)
+			if *clusterRes.Capacity < *clusterRes.DomainsQuota-oldQuota {
+				maxQuota = 0
+			}
+			return &core.QuotaValidationError{
+				Status:       http.StatusConflict,
+				Message:      "cluster capacity may not be exceeded for this resource",
+				MaximumValue: &maxQuota,
+				Unit:         domRes.Unit,
+			}
+		}
+	}
 	return nil
 }
 

@@ -183,6 +183,7 @@ always applies to the entire resource across all scopes.
 | `quota_distribution_configs[].resource` | yes | Must contain a regex. The config entry applies to all resources where this regex matches against a slash-concatenated pair of service type and resource name. The anchors `^` and `$` are implied at both ends, so the regex must match the entire phrase. |
 | `quota_distribution_configs[].model` | yes | Either "hierarchical" or "centralized". |
 | `quota_distribution_configs[].default_project_quota` | only for centralized distribution | The default quota value that will be given to new project resources. Only applicable for centralized quota distribution: Hierarchical quota distribution does not have nonzero default quotas. |
+| `quota_distribution_configs[].strict_domain_quota_limit` | no | Reject attempts to increase domain quotas when the sum of all domain quotas would exceed the cluster capacity. Only applicable for hierarchical quota distribution: Centralized quota distribution does not allow setting domain quotas via API. |
 
 ## Supported discovery methods
 
