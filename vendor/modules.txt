@@ -202,14 +202,14 @@ github.com/open-policy-agent/opa/version
 github.com/pkg/errors
 # github.com/poy/onpar v1.1.2
 ## explicit; go 1.14
-# github.com/prometheus/client_golang v1.13.1
+# github.com/prometheus/client_golang v1.14.0
 ## explicit; go 1.17
 github.com/prometheus/client_golang/api
 github.com/prometheus/client_golang/api/prometheus/v1
 github.com/prometheus/client_golang/prometheus
 github.com/prometheus/client_golang/prometheus/internal
 github.com/prometheus/client_golang/prometheus/promhttp
-# github.com/prometheus/client_model v0.2.0
+# github.com/prometheus/client_model v0.3.0
 ## explicit; go 1.9
 github.com/prometheus/client_model/go
 # github.com/prometheus/common v0.37.0
@@ -280,10 +280,10 @@ github.com/yashtewari/glob-intersection
 # go.uber.org/atomic v1.10.0
 ## explicit; go 1.18
 go.uber.org/atomic
-# golang.org/x/net v0.1.0
+# golang.org/x/net v0.2.0
 ## explicit; go 1.17
 golang.org/x/net/context
-# golang.org/x/sys v0.1.0
+# golang.org/x/sys v0.2.0
 ## explicit; go 1.17
 golang.org/x/sys/internal/unsafeheader
 golang.org/x/sys/unix

@@ -12,12 +12,12 @@ require (
 	github.com/majewsky/schwift v1.2.0
 	github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826
 	github.com/open-policy-agent/opa v0.46.1
-	github.com/prometheus/client_golang v1.13.1
+	github.com/prometheus/client_golang v1.14.0
 	github.com/prometheus/common v0.37.0
 	github.com/rs/cors v1.8.2
 	github.com/sapcc/go-api-declarations v1.4.2
 	github.com/sapcc/go-bits v0.0.0-20221104151042-8e590b61fda5
-	golang.org/x/net v0.1.0
+	golang.org/x/net v0.2.0
 	gopkg.in/gorp.v2 v2.2.0
 	gopkg.in/yaml.v2 v2.4.0
 )
@@ -44,7 +44,7 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/poy/onpar v1.1.2 // indirect
-	github.com/prometheus/client_model v0.2.0 // indirect
+	github.com/prometheus/client_model v0.3.0 // indirect
 	github.com/prometheus/procfs v0.8.0 // indirect
 	github.com/rabbitmq/amqp091-go v1.5.0 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20200313005456-10cdbea86bc0 // indirect
@@ -55,7 +55,7 @@ require (
 	github.com/yashtewari/glob-intersection v0.1.0 // indirect
 	github.com/ziutek/mymysql v1.5.4 // indirect
 	go.uber.org/atomic v1.10.0 // indirect
-	golang.org/x/sys v0.1.0 // indirect
+	golang.org/x/sys v0.2.0 // indirect
 	golang.org/x/text v0.4.0 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
 )
