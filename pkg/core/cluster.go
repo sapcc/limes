@@ -36,6 +36,7 @@ import (
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/osext"
+	yaml "gopkg.in/yaml.v2"
 
 	"github.com/sapcc/limes/pkg/util"
 )
@@ -154,7 +155,11 @@ func (c *Cluster) Connect() (err error) {
 	eo := c.Auth.EndpointOpts
 
 	//initialize discovery plugin
-	err = c.DiscoveryPlugin.Init(provider, eo, c.Config.Discovery)
+	err = yaml.Unmarshal([]byte(c.Config.Discovery.Parameters), c.DiscoveryPlugin)
+	if err != nil {
+		return fmt.Errorf("failed to supply params to discovery method: %w", err)
+	}
+	err = c.DiscoveryPlugin.Init(provider, eo)
 	if err != nil {
 		return fmt.Errorf("failed to initialize discovery method: %w", util.UnpackError(err))
 	}
