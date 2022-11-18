@@ -155,7 +155,7 @@ func (c *Cluster) Connect() (err error) {
 	eo := c.Auth.EndpointOpts
 
 	//initialize discovery plugin
-	err = yaml.Unmarshal([]byte(c.Config.Discovery.Parameters), c.DiscoveryPlugin)
+	err = yaml.UnmarshalStrict([]byte(c.Config.Discovery.Parameters), c.DiscoveryPlugin)
 	if err != nil {
 		return fmt.Errorf("failed to supply params to discovery method: %w", err)
 	}

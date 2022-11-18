@@ -297,7 +297,7 @@ func NewConfiguration(path string) (cluster *Cluster) {
 		logg.Fatal("read configuration file: %s", err.Error())
 	}
 	var config ClusterConfiguration
-	err = yaml.Unmarshal(configBytes, &config)
+	err = yaml.UnmarshalStrict(configBytes, &config)
 	if err != nil {
 		logg.Fatal("parse configuration: %s", err.Error())
 	}

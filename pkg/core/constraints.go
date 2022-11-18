@@ -133,7 +133,7 @@ func NewQuotaConstraints(cluster *Cluster, constraintConfigPath string) (*QuotaC
 		Domains  map[string]map[string]map[string]string `yaml:"domains"`
 		Projects map[string]map[string]map[string]string `yaml:"projects"`
 	}
-	err = yaml.Unmarshal(buf, &data)
+	err = yaml.UnmarshalStrict(buf, &data)
 	if err != nil {
 		return nil, []error{err}
 	}
