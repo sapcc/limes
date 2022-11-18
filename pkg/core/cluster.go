@@ -187,7 +187,12 @@ func (c *Cluster) Connect() (err error) {
 		scrapeSubcapacities[serviceType] = m
 	}
 	for _, capa := range c.Config.Capacitors {
-		err := c.CapacityPlugins[capa.ID].Init(provider, eo, capa, scrapeSubcapacities)
+		plugin := c.CapacityPlugins[capa.ID]
+		err = yaml.UnmarshalStrict([]byte(capa.Parameters), plugin)
+		if err != nil {
+			return fmt.Errorf("failed to supply params to capacitor %s: %w", capa.ID, err)
+		}
+		err := plugin.Init(provider, eo, scrapeSubcapacities)
 		if err != nil {
 			return fmt.Errorf("failed to initialize capacitor %s: %w", capa.ID, util.UnpackError(err))
 		}

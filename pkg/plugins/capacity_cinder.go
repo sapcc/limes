@@ -34,7 +34,10 @@ import (
 )
 
 type capacityCinderPlugin struct {
-	cfg core.CapacitorConfiguration
+	VolumeTypes map[string]struct {
+		VolumeBackendName string `yaml:"volume_backend_name"`
+		IsDefault         bool   `yaml:"default"`
+	} `yaml:"volume_types"`
 }
 
 func init() {
@@ -42,9 +45,8 @@ func init() {
 }
 
 // Init implements the core.CapacityPlugin interface.
-func (p *capacityCinderPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, c core.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) error {
-	p.cfg = c
-	if len(p.cfg.Cinder.VolumeTypes) == 0 {
+func (p *capacityCinderPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubcapacities map[string]map[string]bool) error {
+	if len(p.VolumeTypes) == 0 {
 		//nolint:stylecheck //Cinder is a proper name
 		return errors.New("Cinder capacity plugin: missing required configuration field cinder.volume_types")
 	}
@@ -59,7 +61,7 @@ func (p *capacityCinderPlugin) PluginTypeID() string {
 func (p *capacityCinderPlugin) makeResourceName(volumeType string) string {
 	//the resources for the volume type marked as default don't get the volume
 	//type suffix for backwards compatibility reasons
-	if p.cfg.Cinder.VolumeTypes[volumeType].IsDefault {
+	if p.VolumeTypes[volumeType].IsDefault {
 		return "capacity"
 	}
 	return "capacity_" + volumeType
@@ -104,7 +106,7 @@ func (p *capacityCinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo g
 
 	capaData := make(map[string]*core.CapacityData)
 	volumeTypesByBackendName := make(map[string]string)
-	for volumeType, cfg := range p.cfg.Cinder.VolumeTypes {
+	for volumeType, cfg := range p.VolumeTypes {
 		volumeTypesByBackendName[cfg.VolumeBackendName] = volumeType
 		capaData[p.makeResourceName(volumeType)] = &core.CapacityData{
 			Capacity:      0,

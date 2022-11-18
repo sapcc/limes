@@ -41,10 +41,13 @@ import (
 )
 
 type capacityNovaPlugin struct {
-	cfg                 core.CapacitorConfiguration
-	reportSubcapacities map[string]bool
-	aggregateNameRx     *regexp.Regexp
-	hypervisorTypeRx    *regexp.Regexp
+	reportSubcapacities      map[string]bool   `yaml:"-"`
+	AggregateNamePattern     string            `yaml:"aggregate_name_pattern"`
+	aggregateNameRx          *regexp.Regexp    `yaml:"-"`
+	MaxInstancesPerAggregate uint64            `yaml:"max_instances_per_aggregate"`
+	ExtraSpecs               map[string]string `yaml:"extra_specs"`
+	HypervisorTypePattern    string            `yaml:"hypervisor_type_pattern"`
+	hypervisorTypeRx         *regexp.Regexp    `yaml:"-"`
 }
 
 type capacityNovaSerializedMetrics struct {
@@ -63,23 +66,22 @@ func init() {
 }
 
 // Init implements the core.CapacityPlugin interface.
-func (p *capacityNovaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, c core.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) (err error) {
-	p.cfg = c
+func (p *capacityNovaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubcapacities map[string]map[string]bool) (err error) {
 	p.reportSubcapacities = scrapeSubcapacities["compute"]
 
-	if p.cfg.Nova.AggregateNamePattern == "" {
+	if p.AggregateNamePattern == "" {
 		return errors.New("missing value for nova.aggregate_name_pattern")
 	}
-	p.aggregateNameRx, err = regexp.Compile(p.cfg.Nova.AggregateNamePattern)
+	p.aggregateNameRx, err = regexp.Compile(p.AggregateNamePattern)
 	if err != nil {
 		return fmt.Errorf("invalid value for nova.aggregate_name_pattern: %w", err)
 	}
 
-	if p.cfg.Nova.MaxInstancesPerAggregate == 0 {
+	if p.MaxInstancesPerAggregate == 0 {
 		return errors.New("missing value for nova.max_instances_per_aggregate")
 	}
 
-	p.hypervisorTypeRx, err = regexp.Compile(p.cfg.Nova.HypervisorTypePattern)
+	p.hypervisorTypeRx, err = regexp.Compile(p.HypervisorTypePattern)
 	if err != nil {
 		return fmt.Errorf("invalid value for nova.hypervisor_type_pattern: %w", err)
 	}
@@ -139,7 +141,7 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 	}
 
 	//for the instances capacity, we need to know the max root disk size on public flavors
-	maxRootDiskSize, err := getMaxRootDiskSize(novaClient, p.cfg.Nova.ExtraSpecs)
+	maxRootDiskSize, err := getMaxRootDiskSize(novaClient, p.ExtraSpecs)
 	if err != nil {
 		return nil, "", err
 	}

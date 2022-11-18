@@ -137,42 +137,14 @@ type RateLimitConfiguration struct {
 // CapacitorConfiguration describes a capacity plugin that is enabled for a
 // certain cluster.
 type CapacitorConfiguration struct {
-	ID   string                 `yaml:"id"`
-	Type string                 `yaml:"type"`
-	Auth map[string]interface{} `yaml:"auth"`
-	//for capacitors that need configuration, add a field with the plugin's ID as
-	//name and put the config data in there (use a struct to be able to give
-	//config options meaningful names)
-	Nova struct {
-		AggregateNamePattern     string            `yaml:"aggregate_name_pattern"`
-		MaxInstancesPerAggregate uint64            `yaml:"max_instances_per_aggregate"`
-		ExtraSpecs               map[string]string `yaml:"extra_specs"`
-		HypervisorTypePattern    string            `yaml:"hypervisor_type_pattern"`
-	} `yaml:"nova"`
-	Prometheus struct {
-		APIConfig PrometheusAPIConfiguration   `yaml:"api"`
-		Queries   map[string]map[string]string `yaml:"queries"`
-	} `yaml:"prometheus"`
-	Cinder struct {
-		VolumeTypes map[string]struct {
-			VolumeBackendName string `yaml:"volume_backend_name"`
-			IsDefault         bool   `yaml:"default"`
-		} `yaml:"volume_types"`
-	} `yaml:"cinder"`
-	Manila struct {
-		ShareTypes        []ManilaShareTypeSpec `yaml:"share_types"`
-		ShareNetworks     uint64                `yaml:"share_networks"`
-		SharesPerPool     uint64                `yaml:"shares_per_pool"`
-		SnapshotsPerShare uint64                `yaml:"snapshots_per_share"`
-		CapacityBalance   float64               `yaml:"capacity_balance"`
-	} `yaml:"manila"`
-	Manual      map[string]map[string]uint64 `yaml:"manual"`
-	SAPCCIronic struct {
-		FlavorAliases map[string][]string `yaml:"flavor_aliases"`
-	} `yaml:"sapcc_ironic"`
+	ID         string                 `yaml:"id"`
+	Type       string                 `yaml:"type"`
+	Auth       map[string]interface{} `yaml:"auth"`
+	Parameters util.YamlRawMessage    `yaml:"params"`
 }
 
 // ManilaMappingRule appears in both ServiceConfiguration and CapacitorConfiguration.
+// TODO move into pkg/plugins when ServiceConfiguration is converted to the Parameters pattern
 type ManilaShareTypeSpec struct {
 	Name               string `yaml:"name"`
 	ReplicationEnabled bool   `yaml:"replication_enabled"` //only used by QuotaPlugin
@@ -257,6 +229,7 @@ type BurstingConfiguration struct {
 
 // PrometheusAPIConfiguration contains configuration parameters for a Prometheus API.
 // Only the URL field is required in the format: "http<s>://localhost<:9090>" (port is optional).
+// TODO move into pkg/plugins when ServiceConfiguration is converted to the Parameters pattern
 type PrometheusAPIConfiguration struct {
 	URL                      string `yaml:"url"`
 	ClientCertificatePath    string `yaml:"cert"`

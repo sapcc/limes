@@ -34,7 +34,11 @@ import (
 )
 
 type capacityManilaPlugin struct {
-	cfg core.CapacitorConfiguration
+	ShareTypes        []core.ManilaShareTypeSpec `yaml:"share_types"`
+	ShareNetworks     uint64                     `yaml:"share_networks"`
+	SharesPerPool     uint64                     `yaml:"shares_per_pool"`
+	SnapshotsPerShare uint64                     `yaml:"snapshots_per_share"`
+	CapacityBalance   float64                    `yaml:"capacity_balance"`
 }
 
 func init() {
@@ -42,23 +46,21 @@ func init() {
 }
 
 // Init implements the core.CapacityPlugin interface.
-func (p *capacityManilaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, c core.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) error {
-	p.cfg = c
-	cfg := p.cfg.Manila
-	if len(cfg.ShareTypes) == 0 {
+func (p *capacityManilaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubcapacities map[string]map[string]bool) error {
+	if len(p.ShareTypes) == 0 {
 		return errors.New("capacity plugin manila: missing required configuration field manila.share_types")
 	}
-	err := compileManilaShareTypeSpecs(cfg.ShareTypes)
+	err := compileManilaShareTypeSpecs(p.ShareTypes)
 	if err != nil {
 		return err
 	}
-	if cfg.ShareNetworks == 0 {
+	if p.ShareNetworks == 0 {
 		return errors.New("capacity plugin manila: missing required configuration field manila.share_networks")
 	}
-	if cfg.SharesPerPool == 0 {
+	if p.SharesPerPool == 0 {
 		return errors.New("capacity plugin manila: missing required configuration field manila.shares_per_pool")
 	}
-	if cfg.SnapshotsPerShare == 0 {
+	if p.SnapshotsPerShare == 0 {
 		return errors.New("capacity plugin manila: missing required configuration field manila.snapshots_per_share")
 	}
 	return nil
@@ -70,7 +72,7 @@ func (p *capacityManilaPlugin) PluginTypeID() string {
 }
 
 func (p *capacityManilaPlugin) makeResourceName(kind string, shareType core.ManilaShareTypeSpec) string {
-	if p.cfg.Manila.ShareTypes[0].Name == shareType.Name {
+	if p.ShareTypes[0].Name == shareType.Name {
 		//the resources for the first share type don't get the share type suffix
 		//for backwards compatibility reasons
 		return kind
@@ -80,7 +82,6 @@ func (p *capacityManilaPlugin) makeResourceName(kind string, shareType core.Mani
 
 // Scrape implements the core.CapacityPlugin interface.
 func (p *capacityManilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (result map[string]map[string]core.CapacityData, _ string, err error) {
-	cfg := p.cfg.Manila
 	client, err := openstack.NewSharedFileSystemV2(provider, eo)
 	if err != nil {
 		return nil, "", err
@@ -110,9 +111,9 @@ func (p *capacityManilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo g
 	}
 
 	caps := map[string]core.CapacityData{
-		"share_networks": {Capacity: cfg.ShareNetworks},
+		"share_networks": {Capacity: p.ShareNetworks},
 	}
-	for _, shareType := range p.cfg.Manila.ShareTypes {
+	for _, shareType := range p.ShareTypes {
 		capForType, err := p.scrapeForShareType(shareType, client, azForServiceHost)
 		if err != nil {
 			return nil, "", err
@@ -144,8 +145,6 @@ type capacityForShareType struct {
 }
 
 func (p *capacityManilaPlugin) scrapeForShareType(shareType core.ManilaShareTypeSpec, client *gophercloud.ServiceClient, azForServiceHost map[string]string) (capacityForShareType, error) {
-	cfg := p.cfg.Manila
-
 	//list all pools for the Manila share types corresponding to this virtual share type
 	var allPools []schedulerstats.Pool
 	for _, stName := range getAllManilaShareTypes(shareType) {
@@ -184,11 +183,11 @@ func (p *capacityManilaPlugin) scrapeForShareType(shareType core.ManilaShareType
 		allocatedCapacityGbPerAZ[poolAZ] += pool.Capabilities.AllocatedCapacityGB
 	}
 
-	//NOTE: The value of `cfg.CapacityBalance` is how many capacity we give out
+	//NOTE: The value of `p.CapacityBalance` is how many capacity we give out
 	//to snapshots as a fraction of the capacity given out to shares. For
 	//example, with CapacityBalance = 2, we allocate 2/3 of the total capacity to
 	//snapshots, and 1/3 to shares.
-	capBalance := cfg.CapacityBalance
+	capBalance := p.CapacityBalance
 
 	//derive availability zone usage and capacities
 	var (
@@ -199,10 +198,10 @@ func (p *capacityManilaPlugin) scrapeForShareType(shareType core.ManilaShareType
 	)
 	for az := range availabilityZones {
 		shareCountPerAZ[az] = &core.CapacityDataForAZ{
-			Capacity: getShareCount(poolCountPerAZ[az], cfg.SharesPerPool, (cfg.ShareNetworks / uint64(len(availabilityZones)))),
+			Capacity: getShareCount(poolCountPerAZ[az], p.SharesPerPool, (p.ShareNetworks / uint64(len(availabilityZones)))),
 		}
 		shareSnapshotsPerAZ[az] = &core.CapacityDataForAZ{
-			Capacity: getShareSnapshots(shareCountPerAZ[az].Capacity, cfg.SnapshotsPerShare),
+			Capacity: getShareSnapshots(shareCountPerAZ[az].Capacity, p.SnapshotsPerShare),
 		}
 		shareCapacityPerAZ[az] = &core.CapacityDataForAZ{
 			Capacity: getShareCapacity(totalCapacityGbPerAZ[az], capBalance),
@@ -216,8 +215,8 @@ func (p *capacityManilaPlugin) scrapeForShareType(shareType core.ManilaShareType
 
 	//derive cluster level capacities
 	var (
-		totalShareCount       = getShareCount(totalPoolCount, cfg.SharesPerPool, cfg.ShareNetworks)
-		totalShareSnapshots   = getShareSnapshots(totalShareCount, cfg.SnapshotsPerShare)
+		totalShareCount       = getShareCount(totalPoolCount, p.SharesPerPool, p.ShareNetworks)
+		totalShareSnapshots   = getShareSnapshots(totalShareCount, p.SnapshotsPerShare)
 		totalShareCapacity    = getShareCapacity(totalCapacityGb, capBalance)
 		totalSnapshotCapacity = getSnapshotCapacity(totalCapacityGb, capBalance)
 	)

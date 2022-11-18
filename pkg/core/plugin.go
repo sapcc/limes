@@ -193,7 +193,10 @@ type CapacityPlugin interface {
 	pluggable.Plugin
 	//Init is guaranteed to be called before all other methods exposed by the
 	//interface.
-	Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, cfg CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) error
+	//
+	//Before Init is called, the `capacitors[].params` provided in the config
+	//file will be yaml.Unmarshal()ed into the plugin object itself.
+	Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubcapacities map[string]map[string]bool) error
 	//Scrape queries the backend service(s) for the capacities of the resources
 	//that this plugin is concerned with. The result is a two-dimensional map,
 	//with the first key being the service type, and the second key being the
