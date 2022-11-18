@@ -68,8 +68,12 @@ func KeystoneProjectFromDB(dbProject db.Project, domain KeystoneDomain) Keystone
 // projects and domains in a cluster.
 type DiscoveryPlugin interface {
 	pluggable.Plugin
-	//Init is called before any other interface methods, and allows the plugin to perform first-time initialization.
-	Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, cfg DiscoveryConfiguration) error
+	//Init is called before any other interface methods, and allows the plugin to
+	//perform first-time initialization.
+	//
+	//Before Init is called, the `discovery.params` provided in the configuration
+	//file will be yaml.Unmarshal()ed into the plugin object itself.
+	Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error
 	//ListDomains returns all Keystone domains in the cluster.
 	ListDomains(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) ([]KeystoneDomain, error)
 	//ListProjects returns all Keystone projects in the given domain.

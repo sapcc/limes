@@ -29,7 +29,15 @@ import (
 )
 
 type staticDiscoveryPlugin struct {
-	cfg core.DiscoveryConfiguration
+	Domains []struct {
+		UUID     string `yaml:"id"`
+		Name     string `yaml:"name"`
+		Projects []struct {
+			UUID       string `yaml:"id"`
+			Name       string `yaml:"name"`
+			ParentUUID string `yaml:"parent_id"`
+		} `yaml:"projects"`
+	} `yaml:"domains"`
 }
 
 func init() {
@@ -42,18 +50,17 @@ func (p *staticDiscoveryPlugin) PluginTypeID() string {
 }
 
 // Init implements the core.DiscoveryPlugin interface.
-func (p *staticDiscoveryPlugin) Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, cfg core.DiscoveryConfiguration) error {
-	p.cfg = cfg
+func (p *staticDiscoveryPlugin) Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
 	return nil
 }
 
 // ListDomains implements the core.DiscoveryPlugin interface.
 func (p *staticDiscoveryPlugin) ListDomains(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) ([]core.KeystoneDomain, error) {
 	var result []core.KeystoneDomain
-	if len(p.cfg.Static.Domains) == 0 {
+	if len(p.Domains) == 0 {
 		return nil, errors.New("no domains configured")
 	}
-	for _, domain := range p.cfg.Static.Domains {
+	for _, domain := range p.Domains {
 		if domain.UUID == "" {
 			return nil, fmt.Errorf("missing ID for preconfigured domain %q", domain.Name)
 		}
@@ -71,10 +78,10 @@ func (p *staticDiscoveryPlugin) ListDomains(provider *gophercloud.ProviderClient
 // ListProjects implements the core.DiscoveryPlugin interface.
 func (p *staticDiscoveryPlugin) ListProjects(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, queryDomain core.KeystoneDomain) ([]core.KeystoneProject, error) {
 	var result []core.KeystoneProject
-	if len(p.cfg.Static.Domains) == 0 {
+	if len(p.Domains) == 0 {
 		return nil, errors.New("no domains configured")
 	}
-	for _, domain := range p.cfg.Static.Domains {
+	for _, domain := range p.Domains {
 		if domain.UUID == queryDomain.UUID {
 			if len(domain.Projects) == 0 {
 				return nil, fmt.Errorf("no projects configured for domain %s", queryDomain.UUID)

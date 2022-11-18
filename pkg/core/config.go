@@ -31,6 +31,8 @@ import (
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/logg"
 	yaml "gopkg.in/yaml.v2"
+
+	"github.com/sapcc/limes/pkg/util"
 )
 
 // ClusterConfiguration contains all the configuration data for a single cluster.
@@ -64,28 +66,12 @@ func (cluster *ClusterConfiguration) GetServiceConfigurationForType(serviceType 
 // DiscoveryConfiguration describes the method of discovering Keystone domains
 // and projects.
 type DiscoveryConfiguration struct {
-	Method               string         `yaml:"method"`
-	ExcludeDomainPattern string         `yaml:"except_domains"`
-	IncludeDomainPattern string         `yaml:"only_domains"`
-	ExcludeDomainRx      *regexp.Regexp `yaml:"-"`
-	IncludeDomainRx      *regexp.Regexp `yaml:"-"`
-	//for discovery methods that need configuration, add a field with the method
-	//as name and put the config data in there (use a struct to be able to give
-	//config options meaningful names)
-	RoleAssignment struct {
-		RoleName string `yaml:"role"`
-	} `yaml:"role-assignment"`
-	Static struct {
-		Domains []struct {
-			UUID     string `yaml:"id"`
-			Name     string `yaml:"name"`
-			Projects []struct {
-				UUID       string `yaml:"id"`
-				Name       string `yaml:"name"`
-				ParentUUID string `yaml:"parent_id"`
-			} `yaml:"projects"`
-		} `yaml:"domains"`
-	} `yaml:"static"`
+	Method               string              `yaml:"method"`
+	ExcludeDomainPattern string              `yaml:"except_domains"`
+	IncludeDomainPattern string              `yaml:"only_domains"`
+	ExcludeDomainRx      *regexp.Regexp      `yaml:"-"`
+	IncludeDomainRx      *regexp.Regexp      `yaml:"-"`
+	Parameters           util.YamlRawMessage `yaml:"params"`
 }
 
 // ServiceConfiguration describes a service that is enabled for a certain cluster.
