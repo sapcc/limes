@@ -37,8 +37,9 @@ import (
 )
 
 type capacitySapccIronicPlugin struct {
-	ftt                 novaFlavorTranslationTable
-	reportSubcapacities bool
+	FlavorAliases       map[string][]string        `yaml:"flavor_aliases"`
+	ftt                 novaFlavorTranslationTable `yaml:"-"`
+	reportSubcapacities bool                       `yaml:"-"`
 }
 
 type capacitySapccIronicSerializedMetrics struct {
@@ -50,8 +51,8 @@ func init() {
 }
 
 // Init implements the core.CapacityPlugin interface.
-func (p *capacitySapccIronicPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, c core.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) error {
-	p.ftt = newNovaFlavorTranslationTable(c.SAPCCIronic.FlavorAliases)
+func (p *capacitySapccIronicPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubcapacities map[string]map[string]bool) error {
+	p.ftt = newNovaFlavorTranslationTable(p.FlavorAliases)
 	p.reportSubcapacities = scrapeSubcapacities["compute"]["instances-baremetal"]
 	return nil
 }

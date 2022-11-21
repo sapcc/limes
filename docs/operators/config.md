@@ -601,7 +601,7 @@ capacitors:
 capacitors:
   - id: cinder
     type: cinder
-    cinder:
+    params:
       volume_types:
         vmware:     { volume_backend_name: vmware_ssd, default: true }
         vmware_hdd: { volume_backend_name: vmware_hdd, default: false }
@@ -621,7 +621,7 @@ the concrete Cinder backend.
 capacitors:
 - id: manila
   type: manila
-  manila:
+  params:
     share_types:
       - name: default
       - name: hypervisor_storage
@@ -643,8 +643,8 @@ capacitors:
 | `sharev2/share_capacity`<br>`sharev2/snapshot_capacity` | Calculated as `sum(pool.capabilities.totalCapacityGB)`, then divided among those two resources according to the `capacity_balance` (see below). |
 
 The last four of these five resources consider only pools with the share type
-that appears first in `manila.share_types` (to match the behavior of the quota
-plugin). For any other share type listed in `manila.share_types`, capacities
+that appears first in `params.share_types` (to match the behavior of the quota
+plugin). For any other share type listed in `params.share_types`, capacities
 will be reported analogously for `sharev2/shares_${share_type}` etc. by
 considering pools with that share type.
 
@@ -667,14 +667,15 @@ that is, there is `capacity_balance` as much snapshot capacity as there is share
 capacitors:
   - id: manual
     type: manual-network
-    manual:
-      network:
-        floating_ips: 8192
-        networks: 4096
+    params:
+      values:
+        network:
+          floating_ips: 8192
+          networks: 4096
 ```
 
 The `manual` capacity plugin does not query any backend service for capacity data. It just reports the capacity data
-that is provided in the configuration file in the `manual` key. Values are grouped by service, then by resource.
+that is provided in the configuration file in the `params.values` key. Values are grouped by service, then by resource.
 
 This is useful for capacities that cannot be queried automatically, but can be inferred from domain knowledge. Limes
 also allows to configure such capacities via the API, but operators might prefer the `manual` capacity plugin because it
@@ -686,7 +687,7 @@ allows to track capacity values along with other configuration in a Git reposito
 capacitors:
   - id: nova
     type: nova
-    nova:
+    params:
       aggregate_name_pattern: '^(?:vc-|qemu-)'
       max_instances_per_aggregate: 10000
       hypervisor_type_pattern: '^(?:VMware|QEMU)'
@@ -706,21 +707,21 @@ subcapacities:
 | `compute/ram` | The sum of the reported RAM for all hypervisors. |
 
 Only those hypervisors are considered that belong to an aggregate whose name matches the regex in the
-`nova.aggregate_name_pattern` parameter. There must be a 1:1 relation between matching aggregates and hypervisors: If a
+`params.aggregate_name_pattern` parameter. There must be a 1:1 relation between matching aggregates and hypervisors: If a
 hypervisor belongs to more than one matching aggregate, an error is raised. The aggregate level is used mostly to
 compute the hard limit of the instance capacity (`maxInstancesPerAggregate * count(matchingAggregates)`); if you do not
 have a level between AZs that imposes such a hard limit, you can use AZ-wide aggregates as a fallback here.
 
-If the `nova.hypervisor_type_pattern` parameter is set, only those hypervisors are considered whose `hypervisor_type`
+If the `params.hypervisor_type_pattern` parameter is set, only those hypervisors are considered whose `hypervisor_type`
 matches this regex. Note that this is distinct from the `hypervisor_type_rules` used by the `compute` quota plugin, and
 uses the `hypervisor_type` reported by Nova instead.
 
-The `nova.extra_specs` parameter can be used to control how flavors are enumerated. Only those flavors will be
+The `params.extra_specs` parameter can be used to control how flavors are enumerated. Only those flavors will be
 considered which have all the extra specs noted in this map, with the same values as defined in the configuration file.
 This is particularly useful to filter Ironic flavors, which usually have much larger root disk sizes.
 
 When subcapacity scraping is enabled (as shown above), subcapacities will be scraped for the respective resources. Each
-subcapacity corresponds to one Nova aggregate. If the `nova.hypervisor_type_pattern` parameter is set, only the capacity
+subcapacity corresponds to one Nova aggregate. If the `params.hypervisor_type_pattern` parameter is set, only the capacity
 of matching hypervisors will be considered for each aggregate. Aggregates with no matching hypervisor will not be
 considered. Note that summing all subcapacities may yield a greater value than the actual capacity since one hypervisor
 may belong to multiple aggregates. Subcapacities bear the following attributes:
@@ -737,7 +738,7 @@ may belong to multiple aggregates. Subcapacities bear the following attributes:
 capacitors:
   - id: prometheus
     type: prometheus-compute
-    prometheus:
+    params:
       api:
         url: https://prometheus.example.com
         cert:    /path/to/client.pem
@@ -750,13 +751,13 @@ capacitors:
 ```
 
 Like the `manual` capacity plugin, this plugin can provide capacity values for arbitrary resources. A [Prometheus][prom]
-instance must be running at the URL given in `prometheus.api.url`. Each of the queries in `prometheus.queries` is
+instance must be running at the URL given in `params.api.url`. Each of the queries in `params.queries` is
 executed on this Prometheus instance, and the resulting value is reported as capacity for the resource named by the key
 of this query. Queries are grouped by service, then by resource.
 
-In `prometheus.api`, only the `url` field is required. You can pin the server's CA
-certificate (`prometheus.api.ca_cert`) and/or specify a TLS client certificate
-(`prometheus.api.cert`) and private key (`prometheus.api.key`) combination that
+In `params.api`, only the `url` field is required. You can pin the server's CA
+certificate (`params.api.ca_cert`) and/or specify a TLS client certificate
+(`params.api.cert`) and private key (`params.api.key`) combination that
 will be used by the HTTP client to make requests to the Prometheus API.
 
 For example, the following configuration can be used with [swift-health-statsd][shs] to find the net capacity of a Swift cluster with 3 replicas:
@@ -765,7 +766,7 @@ For example, the following configuration can be used with [swift-health-statsd][
 capacitors:
   - id: prometheus
     type: prometheus-swift
-    prometheus:
+    params:
       api_url: https://prometheus.example.com
       queries:
         object-store:
@@ -778,7 +779,7 @@ capacitors:
 capacitors:
   - id: sapcc-ironic
     type: sapcc-ironic
-    sapcc_ironic:
+    params:
       flavor_aliases:
         newflavor1: [ oldflavor1 ]
         newflavor2: [ oldflavor2, oldflavor3 ]
@@ -788,7 +789,7 @@ This capacity plugin reports capacity for the special `compute/instances_<flavor
 Converged Cloud ([see above](#compute-nova-v2)). For each such flavor, it uses the Ironic node's resource class to
 match it to a flavor with the **same name**.
 
-The `sapcc_ironic.flavor_aliases` parameter has the same semantics as the respective parameter on the `compute` service type,
+The `params.flavor_aliases` parameter has the same semantics as the respective parameter on the `compute` service type,
 and should have the same contents as well (unless you like unnecessary confusion).
 
 ```yaml

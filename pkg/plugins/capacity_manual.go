@@ -29,7 +29,7 @@ import (
 )
 
 type capacityManualPlugin struct {
-	cfg core.CapacitorConfiguration
+	Values map[string]map[string]uint64 `yaml:"values"`
 }
 
 func init() {
@@ -37,8 +37,7 @@ func init() {
 }
 
 // Init implements the core.CapacityPlugin interface.
-func (p *capacityManualPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, c core.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) error {
-	p.cfg = c
+func (p *capacityManualPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubcapacities map[string]map[string]bool) error {
 	return nil
 }
 
@@ -51,12 +50,12 @@ var errNoManualData = errors.New(`missing values for capacitor plugin "manual"`)
 
 // Scrape implements the core.CapacityPlugin interface.
 func (p *capacityManualPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (result map[string]map[string]core.CapacityData, _ string, err error) {
-	if p.cfg.Manual == nil {
+	if p.Values == nil {
 		return nil, "", errNoManualData
 	}
 
 	result = make(map[string]map[string]core.CapacityData)
-	for serviceType, serviceData := range p.cfg.Manual {
+	for serviceType, serviceData := range p.Values {
 		serviceResult := make(map[string]core.CapacityData)
 		for resourceName, capacity := range serviceData {
 			serviceResult[resourceName] = core.CapacityData{Capacity: capacity}

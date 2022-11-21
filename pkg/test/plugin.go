@@ -276,11 +276,11 @@ func (p *Plugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID string, p
 
 // CapacityPlugin is a core.CapacityPlugin implementation for unit tests.
 type CapacityPlugin struct {
-	PluginType        string
-	Resources         []string //each formatted as "servicetype/resourcename"
-	Capacity          uint64
-	WithAZCapData     bool
-	WithSubcapacities bool
+	PluginType        string   `yaml:"-"`
+	Resources         []string `yaml:"-"` //each formatted as "servicetype/resourcename"
+	Capacity          uint64   `yaml:"-"`
+	WithAZCapData     bool     `yaml:"-"`
+	WithSubcapacities bool     `yaml:"-"`
 }
 
 // NewCapacityPlugin creates a new CapacityPlugin.
@@ -289,7 +289,7 @@ func NewCapacityPlugin(pluginType string, resources ...string) *CapacityPlugin {
 }
 
 // Init implements the core.CapacityPlugin interface.
-func (p *CapacityPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, cfg core.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) error {
+func (p *CapacityPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubcapacities map[string]map[string]bool) error {
 	return nil
 }
 

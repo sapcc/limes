@@ -31,8 +31,7 @@ import (
 )
 
 type capacityCFMPlugin struct {
-	cfg       core.CapacitorConfiguration
-	projectID string
+	projectID string `yaml:"-"`
 }
 
 func init() {
@@ -40,8 +39,7 @@ func init() {
 }
 
 // Init implements the core.CapacityPlugin interface.
-func (p *capacityCFMPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, c core.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) (err error) {
-	p.cfg = c
+func (p *capacityCFMPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubcapacities map[string]map[string]bool) (err error) {
 	p.projectID, err = getProjectIDForToken(provider, eo)
 	return err
 }

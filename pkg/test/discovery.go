@@ -28,8 +28,8 @@ import (
 // DiscoveryPlugin is a core.DiscoveryPlugin implementation for unit tests that
 // reports a static set of domains and projects.
 type DiscoveryPlugin struct {
-	StaticDomains  []core.KeystoneDomain
-	StaticProjects map[string][]core.KeystoneProject
+	StaticDomains  []core.KeystoneDomain             `yaml:"-"`
+	StaticProjects map[string][]core.KeystoneProject `yaml:"-"`
 }
 
 // NewDiscoveryPlugin creates a DiscoveryPlugin instance.

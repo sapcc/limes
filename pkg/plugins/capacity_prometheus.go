@@ -40,7 +40,8 @@ import (
 )
 
 type capacityPrometheusPlugin struct {
-	cfg core.CapacitorConfiguration
+	APIConfig core.PrometheusAPIConfiguration `yaml:"api"`
+	Queries   map[string]map[string]string    `yaml:"queries"`
 }
 
 func init() {
@@ -125,8 +126,7 @@ func prometheusGetSingleValue(client prom_v1.API, queryStr string, defaultValue 
 }
 
 // Init implements the core.CapacityPlugin interface.
-func (p *capacityPrometheusPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, c core.CapacitorConfiguration, scrapeSubcapacities map[string]map[string]bool) error {
-	p.cfg = c
+func (p *capacityPrometheusPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubcapacities map[string]map[string]bool) error {
 	return nil
 }
 
@@ -137,13 +137,13 @@ func (p *capacityPrometheusPlugin) PluginTypeID() string {
 
 // Scrape implements the core.CapacityPlugin interface.
 func (p *capacityPrometheusPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (result map[string]map[string]core.CapacityData, _ string, err error) {
-	client, err := prometheusClient(p.cfg.Prometheus.APIConfig)
+	client, err := prometheusClient(p.APIConfig)
 	if err != nil {
 		return nil, "", err
 	}
 
 	result = make(map[string]map[string]core.CapacityData)
-	for serviceType, queries := range p.cfg.Prometheus.Queries {
+	for serviceType, queries := range p.Queries {
 		serviceResult := make(map[string]core.CapacityData)
 		for resourceName, query := range queries {
 			value, err := prometheusGetSingleValue(client, query, nil)
