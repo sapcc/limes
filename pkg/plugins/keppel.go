@@ -31,9 +31,7 @@ import (
 	"github.com/sapcc/limes/pkg/core"
 )
 
-type keppelPlugin struct {
-	cfg core.ServiceConfiguration
-}
+type keppelPlugin struct{}
 
 var keppelResources = []limesresources.ResourceInfo{
 	{
@@ -47,8 +45,7 @@ func init() {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *keppelPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, c core.ServiceConfiguration, scrapeSubresources map[string]bool) error {
-	p.cfg = c
+func (p *keppelPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubresources map[string]bool) error {
 	return nil
 }
 

@@ -171,7 +171,12 @@ func (c *Cluster) Connect() (err error) {
 			scrapeSubresources[resName] = true
 		}
 
-		err := c.QuotaPlugins[srv.Type].Init(provider, eo, srv, scrapeSubresources)
+		plugin := c.QuotaPlugins[srv.Type]
+		err = yaml.UnmarshalStrict([]byte(srv.Parameters), plugin)
+		if err != nil {
+			return fmt.Errorf("failed to supply params to service %s: %w", srv.Type, err)
+		}
+		err := plugin.Init(provider, eo, scrapeSubresources)
 		if err != nil {
 			return fmt.Errorf("failed to initialize service %s: %w", srv.Type, util.UnpackError(err))
 		}

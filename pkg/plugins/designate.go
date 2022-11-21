@@ -34,9 +34,7 @@ import (
 	"github.com/sapcc/limes/pkg/core"
 )
 
-type designatePlugin struct {
-	cfg core.ServiceConfiguration
-}
+type designatePlugin struct{}
 
 var designateResources = []limesresources.ResourceInfo{
 	{
@@ -55,8 +53,7 @@ func init() {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *designatePlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, c core.ServiceConfiguration, scrapeSubresources map[string]bool) error {
-	p.cfg = c
+func (p *designatePlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubresources map[string]bool) error {
 	return nil
 }
 

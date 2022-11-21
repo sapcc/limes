@@ -79,16 +79,8 @@ func NewPlugin(serviceType string, rates ...limesrates.RateInfo) *Plugin {
 	}
 }
 
-// NewPluginFactory creates a new PluginFactory for core.RegisterQuotaPlugin.
-func NewPluginFactory(serviceType string) func(core.ServiceConfiguration, map[string]bool) core.QuotaPlugin {
-	return func(cfg core.ServiceConfiguration, scrapeSubresources map[string]bool) core.QuotaPlugin {
-		//cfg and scrapeSubresources is ignored
-		return NewPlugin(serviceType)
-	}
-}
-
 // Init implements the core.QuotaPlugin interface.
-func (p *Plugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, cfg core.ServiceConfiguration, scrapeSubresources map[string]bool) error {
+func (p *Plugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubresources map[string]bool) error {
 	return nil
 }
 

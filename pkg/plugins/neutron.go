@@ -38,10 +38,9 @@ import (
 )
 
 type neutronPlugin struct {
-	cfg          core.ServiceConfiguration
-	resources    []limesresources.ResourceInfo
-	hasExtension map[string]bool
-	hasOctavia   bool
+	resources    []limesresources.ResourceInfo `yaml:"-"`
+	hasExtension map[string]bool               `yaml:"-"`
+	hasOctavia   bool                          `yaml:"-"`
 }
 
 var neutronResources = []limesresources.ResourceInfo{
@@ -144,9 +143,7 @@ func init() {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *neutronPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, c core.ServiceConfiguration, scrapeSubresources map[string]bool) error {
-	p.cfg = c
-
+func (p *neutronPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubresources map[string]bool) error {
 	client, err := openstack.NewNetworkV2(provider, eo)
 	if err != nil {
 		return err

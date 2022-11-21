@@ -101,7 +101,10 @@ type QuotaPlugin interface {
 	//interface. Implementations can use it f.i. to discover the available
 	//Resources(). For plugins that support subresource scraping, the final
 	//argument indicates which resources to scrape (the keys are resource names).
-	Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, cfg ServiceConfiguration, scrapeSubresources map[string]bool) error
+	//
+	//Before Init is called, the `services[].params` provided in the config
+	//file will be yaml.Unmarshal()ed into the plugin object itself.
+	Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubresources map[string]bool) error
 	//ServiceInfo returns metadata for this service.
 	ServiceInfo() limes.ServiceInfo
 	//Resources returns metadata for all the resources that this plugin scrapes

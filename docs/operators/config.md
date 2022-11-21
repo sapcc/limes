@@ -242,11 +242,11 @@ The area for this service is `compute`.
 ```yaml
 services:
   - type: compute
-    compute:
+    params:
       bigvm_min_memory: 1048576
 ```
 
-Instances can be split into two price groups (regular and big VMs) by setting the `compute.bigvm_min_memory` key as
+Instances can be split into two price groups (regular and big VMs) by setting the `params.bigvm_min_memory` key as
 shown above. When enabled, the following extra resources become available:
 
 | Resource | Unit |
@@ -293,7 +293,7 @@ rules supplied in the configuration like this:
 ```yaml
 services:
   - type: compute
-    compute:
+    params:
       hypervisor_type_rules:
         - match: extra-spec:vmware:hv_enabled # match on extra spec with name "vmware:hv_enabled"
           pattern: '^True$'                   # regular expression
@@ -321,7 +321,7 @@ category.
 ```yaml
 services:
   - type: compute
-    compute:
+    params:
       separate_instance_quotas:
         flavor_name_pattern: ^bm_
         flavor_aliases:
@@ -331,11 +331,11 @@ services:
 
 Sometimes Tempest creates resource classes or flavors that Limes recognizes as requiring a separate instance quota,
 which may not be desired. To control which flavors get a separate instance quota, give the
-`compute.separate_instance_quotas.flavor_name_pattern` option as shown above. Only flavors with a name matching that
+`params.separate_instance_quotas.flavor_name_pattern` option as shown above. Only flavors with a name matching that
 regex will be considered.
 
 On some Nova installations, some flavors can have multiple names, either as permanent aliases or temporarily while
-moving to a new flavor naming scheme. The `compute.separate_instance_quotas.flavor_aliases` option configures Limes to
+moving to a new flavor naming scheme. The `params.separate_instance_quotas.flavor_aliases` option configures Limes to
 recognize flavor names that are aliased to each other, and decides which flavor name Limes prefers. For instance, in the
 config example above, the names `bm_newflavor2`, `bm_oldflavor2` and `bm_oldflavor3` are all aliases referring to the
 same flavor, and Limes prefers the name `bm_newflavor2`. The preferred name will be used when deriving a resource name
@@ -451,7 +451,7 @@ The area for this service is `storage`.
 ```yaml
 services:
   - type: sharev2
-    sharev2:
+    params:
       share_types:
         - name: default
           replication_enabled: true
@@ -479,7 +479,7 @@ The area for this service is `storage`. The following resources are always expos
 
 #### Multiple share types
 
-If the `sharev2.share_types` field lists more than one share type, the first
+If the `params.share_types` field lists more than one share type, the first
 four of the aforementioned five resources will refer to the quota for the first
 of these share types. (This peculiar rule exists for backwards-compatibility
 reasons.) For each other share type, the following resources are exposed:
@@ -521,7 +521,7 @@ following way: For each resource belonging to this share type,
 
 #### Physical usage
 
-Optionally, when the `sharev2.prometheus_api` configuration option is set,
+Optionally, when the `params.prometheus_api` configuration option is set,
 physical usage data will be scraped using the Prometheus metrics exported by
 the [netapp-api-exporter](https://github.com/sapcc/netapp-api-exporter).
 
@@ -535,7 +535,7 @@ will be used by the HTTP client to make requests to the Prometheus API.
 ```yaml
 services:
   - type: volumev2
-    volumev2:
+    params:
       volume_types: [ vmware, vmware_hdd ]
 ```
 
@@ -547,7 +547,7 @@ The area for this service is `storage`. The following resources are always expos
 | `snapshots` | countable |
 | `volumes` | countable |
 
-If the `volumev2.volume_types` field lists more than one volume type, the
+If the `params.volume_types` field lists more than one volume type, the
 aforementioned resources will refer to the quota for the first of these volume
 types. (This peculiar rule exists for backwards-compatibility reasons.) For
 each other volume type, the following resources are exposed:

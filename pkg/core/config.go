@@ -81,33 +81,7 @@ type ServiceConfiguration struct {
 	Auth   map[string]interface{} `yaml:"auth"`
 	// RateLimits describes the global rate limits (all requests for to a backend) and default project level rate limits.
 	RateLimits ServiceRateLimitConfiguration `yaml:"rate_limits"`
-	//for quota plugins that need configuration, add a field with the service type as
-	//name and put the config data in there (use a struct to be able to give
-	//config options meaningful names)
-	Compute struct {
-		BigVMMinMemoryMiB   uint64 `yaml:"bigvm_min_memory"`
-		HypervisorTypeRules []struct {
-			Key     string `yaml:"match"`
-			Pattern string `yaml:"pattern"`
-			Type    string `yaml:"type"`
-		} `yaml:"hypervisor_type_rules"`
-		SeparateInstanceQuotas struct {
-			FlavorNamePattern string              `yaml:"flavor_name_pattern"`
-			FlavorAliases     map[string][]string `yaml:"flavor_aliases"`
-		} `yaml:"separate_instance_quotas"`
-	} `yaml:"compute"`
-	CFM struct {
-		Authoritative bool `yaml:"authoritative"`
-		//TODO: remove this hidden feature flag when we have migrated to the new reporting style everywhere
-		ReportPhysicalUsage bool `yaml:"report_physical_usage"`
-	} `yaml:"database"`
-	ShareV2 struct {
-		ShareTypes          []ManilaShareTypeSpec       `yaml:"share_types"`
-		PrometheusAPIConfig *PrometheusAPIConfiguration `yaml:"prometheus_api"`
-	} `yaml:"sharev2"`
-	VolumeV2 struct {
-		VolumeTypes []string `yaml:"volume_types"`
-	} `yaml:"volumev2"`
+	Parameters util.YamlRawMessage           `yaml:"params"`
 }
 
 // ServiceRateLimitConfiguration describes the global and project-level default rate limit configurations for a service.

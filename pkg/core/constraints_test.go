@@ -180,7 +180,7 @@ type quotaConstraintTestPlugin struct {
 	ServiceType string
 }
 
-func (p quotaConstraintTestPlugin) Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, cfg ServiceConfiguration, scrapeSubresources map[string]bool) error {
+func (p quotaConstraintTestPlugin) Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubresources map[string]bool) error {
 	return nil
 }
 func (p quotaConstraintTestPlugin) PluginTypeID() string {
