@@ -76,9 +76,7 @@ type DiscoveryConfiguration struct {
 
 // ServiceConfiguration describes a service that is enabled for a certain cluster.
 type ServiceConfiguration struct {
-	Type   string                 `yaml:"type"`
-	Shared bool                   `yaml:"shared"`
-	Auth   map[string]interface{} `yaml:"auth"`
+	Type string `yaml:"type"`
 	// RateLimits describes the global rate limits (all requests for to a backend) and default project level rate limits.
 	RateLimits ServiceRateLimitConfiguration `yaml:"rate_limits"`
 	Parameters util.YamlRawMessage           `yaml:"params"`
@@ -111,22 +109,9 @@ type RateLimitConfiguration struct {
 // CapacitorConfiguration describes a capacity plugin that is enabled for a
 // certain cluster.
 type CapacitorConfiguration struct {
-	ID         string                 `yaml:"id"`
-	Type       string                 `yaml:"type"`
-	Auth       map[string]interface{} `yaml:"auth"`
-	Parameters util.YamlRawMessage    `yaml:"params"`
-}
-
-// ManilaMappingRule appears in both ServiceConfiguration and CapacitorConfiguration.
-// TODO move into pkg/plugins when ServiceConfiguration is converted to the Parameters pattern
-type ManilaShareTypeSpec struct {
-	Name               string `yaml:"name"`
-	ReplicationEnabled bool   `yaml:"replication_enabled"` //only used by QuotaPlugin
-	MappingRules       []*struct {
-		NamePattern string         `yaml:"name_pattern"`
-		NameRx      *regexp.Regexp `yaml:"-"`
-		ShareType   string         `yaml:"share_type"`
-	} `yaml:"mapping_rules"`
+	ID         string              `yaml:"id"`
+	Type       string              `yaml:"type"`
+	Parameters util.YamlRawMessage `yaml:"params"`
 }
 
 // LowPrivilegeRaiseConfiguration contains the configuration options for
@@ -199,16 +184,6 @@ func (b ResourceBehavior) ToScalingBehavior() *limesresources.ScalingBehavior {
 type BurstingConfiguration struct {
 	//If MaxMultiplier is zero, bursting is disabled.
 	MaxMultiplier limesresources.BurstingMultiplier `yaml:"max_multiplier"`
-}
-
-// PrometheusAPIConfiguration contains configuration parameters for a Prometheus API.
-// Only the URL field is required in the format: "http<s>://localhost<:9090>" (port is optional).
-// TODO move into pkg/plugins when ServiceConfiguration is converted to the Parameters pattern
-type PrometheusAPIConfiguration struct {
-	URL                      string `yaml:"url"`
-	ClientCertificatePath    string `yaml:"cert"`
-	ClientCertificateKeyPath string `yaml:"key"`
-	ServerCACertificatePath  string `yaml:"ca_cert"`
 }
 
 // QuotaDistributionConfiguration contains configuration options for specifying
@@ -296,16 +271,6 @@ func (cluster ClusterConfiguration) validateConfig() (success bool) {
 		if srv.Type == "" {
 			missing(fmt.Sprintf("services[%d].type", idx))
 		}
-		if srv.Shared {
-			//TODO remove this deprecation warning once the change was rolled out everywhere
-			logg.Error("services[%d].shared is true, which is not supported anymore", idx)
-			success = false
-		}
-		if len(srv.Auth) > 0 {
-			//TODO remove this deprecation warning once the change was rolled out everywhere
-			logg.Error("services[%d].auth was provided, but is not supported anymore", idx)
-			success = false
-		}
 	}
 	for idx, capa := range cluster.Capacitors {
 		if capa.ID == "" {
@@ -313,11 +278,6 @@ func (cluster ClusterConfiguration) validateConfig() (success bool) {
 		}
 		if capa.Type == "" {
 			missing(fmt.Sprintf("capacitors[%d].type", idx))
-		}
-		if len(capa.Auth) > 0 {
-			//TODO remove this deprecation warning once the change was rolled out everywhere
-			logg.Error("capacitors[%d].auth was provided, but is not supported anymore", idx)
-			success = false
 		}
 	}
 

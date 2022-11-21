@@ -41,9 +41,9 @@ import (
 )
 
 type manilaPlugin struct {
-	ShareTypes          []core.ManilaShareTypeSpec       `yaml:"share_types"`
-	PrometheusAPIConfig *core.PrometheusAPIConfiguration `yaml:"prometheus_api"`
-	hasReplicaQuotas    bool                             `yaml:"-"`
+	ShareTypes          []ManilaShareTypeSpec       `yaml:"share_types"`
+	PrometheusAPIConfig *PrometheusAPIConfiguration `yaml:"prometheus_api"`
+	hasReplicaQuotas    bool                        `yaml:"-"`
 }
 
 func init() {
@@ -154,7 +154,7 @@ func (p *manilaPlugin) Rates() []limesrates.RateInfo {
 	return nil
 }
 
-func (p *manilaPlugin) makeResourceName(kind string, shareType core.ManilaShareTypeSpec) string {
+func (p *manilaPlugin) makeResourceName(kind string, shareType ManilaShareTypeSpec) string {
 	if p.ShareTypes[0].Name == shareType.Name {
 		//the resources for the first share type don't get the share type suffix
 		//for backwards compatibility reasons

@@ -33,11 +33,18 @@ import (
 	prom_v1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/prometheus/common/model"
 	"github.com/sapcc/go-bits/logg"
-
-	"github.com/sapcc/limes/pkg/core"
 )
 
-func prometheusClient(cfg core.PrometheusAPIConfiguration) (prom_v1.API, error) {
+// PrometheusAPIConfiguration contains configuration parameters for a Prometheus API.
+// Only the URL field is required in the format: "http<s>://localhost<:9090>" (port is optional).
+type PrometheusAPIConfiguration struct {
+	URL                      string `yaml:"url"`
+	ClientCertificatePath    string `yaml:"cert"`
+	ClientCertificateKeyPath string `yaml:"key"`
+	ServerCACertificatePath  string `yaml:"ca_cert"`
+}
+
+func prometheusClient(cfg PrometheusAPIConfiguration) (prom_v1.API, error) {
 	if cfg.URL == "" {
 		return nil, errors.New("missing configuration parameter: url")
 	}
