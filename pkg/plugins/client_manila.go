@@ -27,7 +27,18 @@ import (
 	"github.com/sapcc/limes/pkg/core"
 )
 
-func compileManilaShareTypeSpecs(specs []core.ManilaShareTypeSpec) (err error) {
+// ManilaMappingRule appears in both ServiceConfiguration and CapacitorConfiguration.
+type ManilaShareTypeSpec struct {
+	Name               string `yaml:"name"`
+	ReplicationEnabled bool   `yaml:"replication_enabled"` //only used by QuotaPlugin
+	MappingRules       []*struct {
+		NamePattern string         `yaml:"name_pattern"`
+		NameRx      *regexp.Regexp `yaml:"-"`
+		ShareType   string         `yaml:"share_type"`
+	} `yaml:"mapping_rules"`
+}
+
+func compileManilaShareTypeSpecs(specs []ManilaShareTypeSpec) (err error) {
 	for _, spec := range specs {
 		for _, rule := range spec.MappingRules {
 			namePatternFull := fmt.Sprintf(`^%s$`, rule.NamePattern)
@@ -43,7 +54,7 @@ func compileManilaShareTypeSpecs(specs []core.ManilaShareTypeSpec) (err error) {
 // Given a virtual share type, returns the actual share type name that we have
 // to use on the Manila API for this particular project, or "" if this share
 // type shall be skipped for this project.
-func resolveManilaShareType(spec core.ManilaShareTypeSpec, project core.KeystoneProject) string {
+func resolveManilaShareType(spec ManilaShareTypeSpec, project core.KeystoneProject) string {
 	fullName := fmt.Sprintf(`%s@%s`, project.Name, project.Domain.Name)
 	for _, rule := range spec.MappingRules {
 		if rule.NameRx.MatchString(fullName) {
@@ -55,7 +66,7 @@ func resolveManilaShareType(spec core.ManilaShareTypeSpec, project core.Keystone
 
 // Given a virtual share type, list all share type names that can be used on the
 // Manila API to set quota or read usage for it.
-func getAllManilaShareTypes(spec core.ManilaShareTypeSpec) []string {
+func getAllManilaShareTypes(spec ManilaShareTypeSpec) []string {
 	var result []string
 	for _, rule := range spec.MappingRules {
 		result = append(result, rule.ShareType)

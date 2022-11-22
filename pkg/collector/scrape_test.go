@@ -466,7 +466,7 @@ type autoApprovalTestPlugin struct {
 	StaticBackendQuota uint64
 }
 
-func (p *autoApprovalTestPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, cfg core.ServiceConfiguration, scrapeSubresources map[string]bool) error {
+func (p *autoApprovalTestPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubresources map[string]bool) error {
 	return nil
 }
 
@@ -562,7 +562,7 @@ func Test_AutoApproveInitialQuota(t *testing.T) {
 // A quota plugin with absolutely no resources and rates.
 type noopQuotaPlugin struct{}
 
-func (noopQuotaPlugin) Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, cfg core.ServiceConfiguration, scrapeSubresources map[string]bool) error {
+func (noopQuotaPlugin) Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubresources map[string]bool) error {
 	return nil
 }
 func (noopQuotaPlugin) PluginTypeID() string {

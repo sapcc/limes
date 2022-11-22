@@ -38,8 +38,8 @@ import (
 )
 
 type cinderPlugin struct {
-	cfg           core.ServiceConfiguration
-	scrapeVolumes bool
+	VolumeTypes   []string `yaml:"volume_types"`
+	scrapeVolumes bool     `yaml:"-"`
 }
 
 func init() {
@@ -47,10 +47,9 @@ func init() {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *cinderPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, c core.ServiceConfiguration, scrapeSubresources map[string]bool) error {
-	p.cfg = c
+func (p *cinderPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubresources map[string]bool) error {
 	p.scrapeVolumes = scrapeSubresources["volumes"]
-	if len(p.cfg.VolumeV2.VolumeTypes) == 0 {
+	if len(p.VolumeTypes) == 0 {
 		return errors.New("quota plugin volumev2: missing required configuration field volumev2.volume_types")
 	}
 	return nil
@@ -72,8 +71,8 @@ func (p *cinderPlugin) ServiceInfo() limes.ServiceInfo {
 
 // Resources implements the core.QuotaPlugin interface.
 func (p *cinderPlugin) Resources() []limesresources.ResourceInfo {
-	result := make([]limesresources.ResourceInfo, 0, 3*len(p.cfg.VolumeV2.VolumeTypes))
-	for _, volumeType := range p.cfg.VolumeV2.VolumeTypes {
+	result := make([]limesresources.ResourceInfo, 0, 3*len(p.VolumeTypes))
+	for _, volumeType := range p.VolumeTypes {
 		category := p.makeResourceName("volumev2", volumeType)
 		result = append(result,
 			limesresources.ResourceInfo{
@@ -102,7 +101,7 @@ func (p *cinderPlugin) Rates() []limesrates.RateInfo {
 }
 
 func (p *cinderPlugin) makeResourceName(kind, volumeType string) string {
-	if p.cfg.VolumeV2.VolumeTypes[0] == volumeType {
+	if p.VolumeTypes[0] == volumeType {
 		//the resources for the first volume type don't get the volume type suffix
 		//for backwards compatibility reasons
 		return kind
@@ -162,7 +161,7 @@ func (p *cinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 	volumeData := make(map[string][]interface{})
 	if p.scrapeVolumes {
 		isVolumeType := make(map[string]bool)
-		for _, volumeType := range p.cfg.VolumeV2.VolumeTypes {
+		for _, volumeType := range p.VolumeTypes {
 			isVolumeType[volumeType] = true
 		}
 
@@ -181,7 +180,7 @@ func (p *cinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 				volumeType := volume.VolumeType
 				//group subresources with unknown volume types under the default volume type
 				if !isVolumeType[volumeType] {
-					volumeType = p.cfg.VolumeV2.VolumeTypes[0]
+					volumeType = p.VolumeTypes[0]
 				}
 
 				volumeData[volumeType] = append(volumeData[volumeType], map[string]interface{}{
@@ -203,7 +202,7 @@ func (p *cinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 	}
 
 	rd := make(map[string]core.ResourceData)
-	for _, volumeType := range p.cfg.VolumeV2.VolumeTypes {
+	for _, volumeType := range p.VolumeTypes {
 		rd[p.makeResourceName("capacity", volumeType)] = data.QuotaSet["gigabytes_"+volumeType].ToResourceData(nil)
 		rd[p.makeResourceName("snapshots", volumeType)] = data.QuotaSet["snapshots_"+volumeType].ToResourceData(nil)
 		rd[p.makeResourceName("volumes", volumeType)] = data.QuotaSet["volumes_"+volumeType].ToResourceData(
@@ -226,7 +225,7 @@ func (p *cinderPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherc
 	}
 	requestData.QuotaSet = make(map[string]uint64)
 
-	for _, volumeType := range p.cfg.VolumeV2.VolumeTypes {
+	for _, volumeType := range p.VolumeTypes {
 		quotaCapacity := quotas[p.makeResourceName("capacity", volumeType)]
 		requestData.QuotaSet["gigabytes_"+volumeType] = quotaCapacity
 		requestData.QuotaSet["gigabytes"] += quotaCapacity

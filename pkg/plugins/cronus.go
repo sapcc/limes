@@ -35,9 +35,7 @@ import (
 	"github.com/sapcc/limes/pkg/core"
 )
 
-type cronusPlugin struct {
-	cfg core.ServiceConfiguration
-}
+type cronusPlugin struct{}
 
 var cronusRates = []limesrates.RateInfo{
 	{
@@ -63,8 +61,7 @@ func init() {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, c core.ServiceConfiguration, scrapeSubresources map[string]bool) error {
-	p.cfg = c
+func (p *cronusPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubresources map[string]bool) error {
 	return nil
 }
 

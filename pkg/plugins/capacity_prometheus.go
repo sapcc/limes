@@ -27,8 +27,8 @@ import (
 )
 
 type capacityPrometheusPlugin struct {
-	APIConfig core.PrometheusAPIConfiguration `yaml:"api"`
-	Queries   map[string]map[string]string    `yaml:"queries"`
+	APIConfig PrometheusAPIConfiguration   `yaml:"api"`
+	Queries   map[string]map[string]string `yaml:"queries"`
 }
 
 func init() {

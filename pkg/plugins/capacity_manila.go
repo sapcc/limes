@@ -34,11 +34,11 @@ import (
 )
 
 type capacityManilaPlugin struct {
-	ShareTypes        []core.ManilaShareTypeSpec `yaml:"share_types"`
-	ShareNetworks     uint64                     `yaml:"share_networks"`
-	SharesPerPool     uint64                     `yaml:"shares_per_pool"`
-	SnapshotsPerShare uint64                     `yaml:"snapshots_per_share"`
-	CapacityBalance   float64                    `yaml:"capacity_balance"`
+	ShareTypes        []ManilaShareTypeSpec `yaml:"share_types"`
+	ShareNetworks     uint64                `yaml:"share_networks"`
+	SharesPerPool     uint64                `yaml:"shares_per_pool"`
+	SnapshotsPerShare uint64                `yaml:"snapshots_per_share"`
+	CapacityBalance   float64               `yaml:"capacity_balance"`
 }
 
 func init() {
@@ -71,7 +71,7 @@ func (p *capacityManilaPlugin) PluginTypeID() string {
 	return "manila"
 }
 
-func (p *capacityManilaPlugin) makeResourceName(kind string, shareType core.ManilaShareTypeSpec) string {
+func (p *capacityManilaPlugin) makeResourceName(kind string, shareType ManilaShareTypeSpec) string {
 	if p.ShareTypes[0].Name == shareType.Name {
 		//the resources for the first share type don't get the share type suffix
 		//for backwards compatibility reasons
@@ -144,7 +144,7 @@ type capacityForShareType struct {
 	SnapshotGigabytes core.CapacityData
 }
 
-func (p *capacityManilaPlugin) scrapeForShareType(shareType core.ManilaShareTypeSpec, client *gophercloud.ServiceClient, azForServiceHost map[string]string) (capacityForShareType, error) {
+func (p *capacityManilaPlugin) scrapeForShareType(shareType ManilaShareTypeSpec, client *gophercloud.ServiceClient, azForServiceHost map[string]string) (capacityForShareType, error) {
 	//list all pools for the Manila share types corresponding to this virtual share type
 	var allPools []schedulerstats.Pool
 	for _, stName := range getAllManilaShareTypes(shareType) {

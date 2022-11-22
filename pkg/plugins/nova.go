@@ -62,20 +62,30 @@ type novaHypervisorTypeRule struct {
 }
 
 type novaPlugin struct {
-	cfg             core.ServiceConfiguration
-	scrapeInstances bool
+	//configuration
+	BigVMMinMemoryMiB   uint64 `yaml:"bigvm_min_memory"`
+	HypervisorTypeRules []struct {
+		Key     string `yaml:"match"`
+		Pattern string `yaml:"pattern"`
+		Type    string `yaml:"type"`
+	} `yaml:"hypervisor_type_rules"`
+	SeparateInstanceQuotas struct {
+		FlavorNamePattern string              `yaml:"flavor_name_pattern"`
+		FlavorAliases     map[string][]string `yaml:"flavor_aliases"`
+	} `yaml:"separate_instance_quotas"`
+	scrapeInstances bool `yaml:"-"`
 	//computed state
-	flavorNameRx        *regexp.Regexp
-	hypervisorTypeRules []novaHypervisorTypeRule
-	resources           []limesresources.ResourceInfo
-	ftt                 novaFlavorTranslationTable
+	flavorNameRx        *regexp.Regexp                `yaml:"-"`
+	hypervisorTypeRules []novaHypervisorTypeRule      `yaml:"-"`
+	resources           []limesresources.ResourceInfo `yaml:"-"`
+	ftt                 novaFlavorTranslationTable    `yaml:"-"`
 	//caches
-	osTypeForImage    map[string]string
-	osTypeForInstance map[string]string
+	osTypeForImage    map[string]string `yaml:"-"`
+	osTypeForInstance map[string]string `yaml:"-"`
 	serverGroups      struct {
 		lastScrapeTime *time.Time
 		members        map[string]uint64 // per project
-	}
+	} `yaml:"-"`
 }
 
 type novaSerializedMetrics struct {
@@ -106,24 +116,20 @@ var novaDefaultResources = []limesresources.ResourceInfo{
 }
 
 func init() {
-	core.QuotaPluginRegistry.Add(func() core.QuotaPlugin {
-		return &novaPlugin{
-			resources:         novaDefaultResources,
-			osTypeForImage:    make(map[string]string),
-			osTypeForInstance: make(map[string]string),
-		}
-	})
+	core.QuotaPluginRegistry.Add(func() core.QuotaPlugin { return &novaPlugin{} })
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, c core.ServiceConfiguration, scrapeSubresources map[string]bool) error {
-	p.cfg = c
+func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubresources map[string]bool) error {
+	p.resources = novaDefaultResources
+	p.osTypeForImage = make(map[string]string)
+	p.osTypeForInstance = make(map[string]string)
 	p.scrapeInstances = scrapeSubresources["instances"]
-	p.ftt = newNovaFlavorTranslationTable(c.Compute.SeparateInstanceQuotas.FlavorAliases)
+	p.ftt = newNovaFlavorTranslationTable(p.SeparateInstanceQuotas.FlavorAliases)
 
 	//if a non-empty `flavorNamePattern` is given, only flavors matching
 	//it are considered
-	if pattern := p.cfg.Compute.SeparateInstanceQuotas.FlavorNamePattern; pattern != "" {
+	if pattern := p.SeparateInstanceQuotas.FlavorNamePattern; pattern != "" {
 		var err error
 		p.flavorNameRx, err = regexp.Compile(pattern)
 		if err != nil {
@@ -152,7 +158,7 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.E
 	}
 
 	//add price class resources if requested
-	if p.scrapeInstances && p.cfg.Compute.BigVMMinMemoryMiB != 0 {
+	if p.scrapeInstances && p.BigVMMinMemoryMiB != 0 {
 		p.resources = append(p.resources,
 			limesresources.ResourceInfo{
 				Name:        "cores_regular",
@@ -199,7 +205,7 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.E
 
 	//compile hypervisor type rules
 	p.hypervisorTypeRules = nil
-	for _, rule := range p.cfg.Compute.HypervisorTypeRules {
+	for _, rule := range p.HypervisorTypeRules {
 		rx, err := regexp.Compile(rule.Pattern)
 		if err != nil {
 			return err
@@ -472,9 +478,9 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 						sm.InstanceCountsByHypervisor[hypervisorType]++
 					}
 
-					if p.cfg.Compute.BigVMMinMemoryMiB > 0 {
+					if p.BigVMMinMemoryMiB > 0 {
 						class := "regular"
-						if flavor.MemoryMiB >= p.cfg.Compute.BigVMMinMemoryMiB {
+						if flavor.MemoryMiB >= p.BigVMMinMemoryMiB {
 							class = "bigvm"
 						}
 						subResource["class"] = class

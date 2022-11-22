@@ -20,7 +20,6 @@
 package plugins
 
 import (
-	"fmt"
 	"math/big"
 
 	"github.com/gophercloud/gophercloud"
@@ -34,8 +33,9 @@ import (
 )
 
 type cfmPlugin struct {
-	cfg       core.ServiceConfiguration
-	projectID string
+	projectID string `yaml:"-"`
+	//TODO: remove this hidden feature flag when we have migrated to the new reporting style everywhere
+	ReportPhysicalUsage bool `yaml:"report_physical_usage"`
 }
 
 func init() {
@@ -43,11 +43,7 @@ func init() {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *cfmPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, c core.ServiceConfiguration, scrapeSubresources map[string]bool) (err error) {
-	p.cfg = c
-	if !p.cfg.CFM.Authoritative {
-		return fmt.Errorf(`quota plugin "database" (for CFM service) does not support "authoritative = false" mode anymore`)
-	}
+func (p *cfmPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubresources map[string]bool) (err error) {
 	p.projectID, err = getProjectIDForToken(provider, eo)
 	return err
 }
@@ -104,7 +100,7 @@ func (p *cfmPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.
 	err = client.GetQuotaSet(project.UUID).ExtractInto(&data)
 	if err == nil {
 		logg.Info("using CFM quota set for project %s", project.UUID)
-		if !p.cfg.CFM.ReportPhysicalUsage {
+		if !p.ReportPhysicalUsage {
 			return map[string]core.ResourceData{
 				"cfm_share_capacity": {
 					Quota: data.StorageQuota.SizeLimitBytes,
