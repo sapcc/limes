@@ -27,8 +27,6 @@ import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/aggregates"
-	flavorsmodule "github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
-	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/logg"
@@ -143,15 +141,15 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 	if err != nil {
 		return nil, "", err
 	}
-	flavors, err := p.getIronicFlavorNames(novaClient)
+	flavorNames, err := p.ftt.ListFlavorsWithSeparateInstanceQuota(novaClient)
 	if err != nil {
 		return nil, "", err
 	}
 
 	//we are going to report capacity for all per-flavor instance quotas
 	resultCompute := make(map[string]*core.CapacityData)
-	for _, flavor := range flavors {
-		resultCompute[p.ftt.LimesResourceNameForFlavor(flavor)] = &core.CapacityData{
+	for _, flavorName := range flavorNames {
+		resultCompute[p.ftt.LimesResourceNameForFlavor(flavorName)] = &core.CapacityData{
 			Capacity:      0,
 			CapacityPerAZ: map[string]*core.CapacityDataForAZ{},
 		}
@@ -213,11 +211,11 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 		}
 
 		matched := false
-		for _, flavor := range flavors {
-			if node.Matches(flavor) {
-				logg.Debug("Ironic node %q (%s) matches flavor %s", node.Name, node.ID, flavor)
+		for _, flavorName := range flavorNames {
+			if node.Matches(flavorName) {
+				logg.Debug("Ironic node %q (%s) matches flavor %s", node.Name, node.ID, flavorName)
 
-				data := resultCompute[p.ftt.LimesResourceNameForFlavor(flavor)]
+				data := resultCompute[p.ftt.LimesResourceNameForFlavor(flavorName)]
 				data.Capacity++
 
 				var nodeAZ string
@@ -332,39 +330,6 @@ func (p *capacitySapccIronicPlugin) CollectMetrics(ch chan<- prometheus.Metric, 
 		clusterID,
 	)
 	return nil
-}
-
-func (p *capacitySapccIronicPlugin) getIronicFlavorNames(novaClient *gophercloud.ServiceClient) ([]string, error) {
-	//which flavors have separate instance quota?
-	flavorNames, err := p.ftt.ListFlavorsWithSeparateInstanceQuota(novaClient)
-	if err != nil {
-		return nil, err
-	}
-	isRelevantFlavorName := make(map[string]bool, len(flavorNames))
-	for _, flavorName := range flavorNames {
-		isRelevantFlavorName[flavorName] = true
-	}
-
-	//check flavor relevancy
-	var result []string
-	err = flavorsmodule.ListDetail(novaClient, nil).EachPage(func(page pagination.Page) (bool, error) {
-		flavors, err := flavorsmodule.ExtractFlavors(page)
-		if err != nil {
-			return false, err
-		}
-
-		for _, flavor := range flavors {
-			if isRelevantFlavorName[flavor.Name] {
-				result = append(result, flavor.Name)
-			}
-		}
-		return true, nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return result, nil
 }
 
 func (n ironicNode) Matches(flavorName string) bool {
