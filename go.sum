@@ -175,8 +175,8 @@ github.com/google/renameio v0.1.0/go.mod h1:KWCgfxg9yswjAJkECMjeO8J8rahYeXnNhOm4
 github.com/googleapis/gax-go/v2 v2.0.4/go.mod h1:0Wqv26UfaUD9n4G6kQubkQ+KchISgw+vpHVxEJEs9eg=
 github.com/googleapis/gax-go/v2 v2.0.5/go.mod h1:DWXyrwAJ9X0FpwwEdw+IPEYBICEFu5mhpdKc/us6bOk=
 github.com/gophercloud/utils v0.0.0-20220927104426-4113af8d2663/go.mod h1:qOGlfG6OIJ193/c3Xt/XjOfHataNZdQcVgiu93LxBUM=
-github.com/gophercloud/utils v0.0.0-20221124081324-7bac6f5cdf99 h1:fCv3q8eZ06quhZ5xXHET10R/wOyK8OSsH+tM/wnk63w=
-github.com/gophercloud/utils v0.0.0-20221124081324-7bac6f5cdf99/go.mod h1:RZub3bZJK1VLM2aMjSZxNYb1HvXtWoo9l1Yd3l2VFiA=
+github.com/gophercloud/utils v0.0.0-20221128194715-5caf33c866da h1:50QooRtRu+HVucCMrBO6RzmoxFClnQvFDTijBkIivwQ=
+github.com/gophercloud/utils v0.0.0-20221128194715-5caf33c866da/go.mod h1:gY7sdkpsI1IjTD9krr+XXywtsfhcrPx1Nu2DFLGZWWg=
 github.com/gorilla/mux v1.8.0 h1:i40aqfkR1h2SlN9hojwV5ZA91wcXFOvkdNIeFDP5koI=
 github.com/gorilla/mux v1.8.0/go.mod h1:DVbg23sWSpFRCP0SfiEN6jmj59UnW/n46BH5rLB71So=
 github.com/gorilla/websocket v1.4.0/go.mod h1:E7qHFY5m1UJ88s3WnNqhKjPHQ0heANvMoAMk2YaljkQ=
