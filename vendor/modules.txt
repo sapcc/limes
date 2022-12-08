@@ -21,8 +21,8 @@ github.com/dlmiddlecote/sqlstats
 github.com/ghodss/yaml
 # github.com/go-gorp/gorp v2.2.0+incompatible
 ## explicit
-# github.com/go-sql-driver/mysql v1.6.0
-## explicit; go 1.10
+# github.com/go-sql-driver/mysql v1.7.0
+## explicit; go 1.13
 # github.com/gobwas/glob v0.2.3
 ## explicit
 github.com/gobwas/glob
@@ -40,7 +40,7 @@ github.com/gofrs/uuid
 ## explicit; go 1.9
 github.com/golang/protobuf/proto
 github.com/golang/protobuf/ptypes/timestamp
-# github.com/gophercloud/gophercloud v1.1.0 => github.com/sapcc/gophercloud v0.0.0-20220830101946-e4928fd1f0f0
+# github.com/gophercloud/gophercloud v1.1.1
 ## explicit; go 1.14
 github.com/gophercloud/gophercloud
 github.com/gophercloud/gophercloud/openstack
@@ -76,7 +76,7 @@ github.com/gophercloud/gophercloud/openstack/sharedfilesystems/v2/schedulerstats
 github.com/gophercloud/gophercloud/openstack/sharedfilesystems/v2/services
 github.com/gophercloud/gophercloud/openstack/utils
 github.com/gophercloud/gophercloud/pagination
-# github.com/gophercloud/utils v0.0.0-20221128194715-5caf33c866da
+# github.com/gophercloud/utils v0.0.0-20221207145018-e8fba78967ca
 ## explicit; go 1.15
 github.com/gophercloud/utils/env
 github.com/gophercloud/utils/gnocchi
@@ -85,7 +85,7 @@ github.com/gophercloud/utils/openstack/clientconfig
 # github.com/gorilla/mux v1.8.0
 ## explicit; go 1.12
 github.com/gorilla/mux
-# github.com/hashicorp/errwrap v1.1.0
+# github.com/hashicorp/errwrap v1.0.0
 ## explicit
 github.com/hashicorp/errwrap
 # github.com/hashicorp/go-multierror v1.1.1
@@ -126,7 +126,7 @@ github.com/modern-go/reflect2
 # github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826
 ## explicit
 github.com/mohae/deepcopy
-# github.com/open-policy-agent/opa v0.46.1
+# github.com/open-policy-agent/opa v0.47.1
 ## explicit; go 1.17
 github.com/open-policy-agent/opa/ast
 github.com/open-policy-agent/opa/ast/internal/scanner
@@ -162,6 +162,7 @@ github.com/open-policy-agent/opa/internal/lcss
 github.com/open-policy-agent/opa/internal/leb128
 github.com/open-policy-agent/opa/internal/merge
 github.com/open-policy-agent/opa/internal/planner
+github.com/open-policy-agent/opa/internal/providers
 github.com/open-policy-agent/opa/internal/ref
 github.com/open-policy-agent/opa/internal/rego/opa
 github.com/open-policy-agent/opa/internal/semver
@@ -280,8 +281,6 @@ github.com/yashtewari/glob-intersection
 # go.uber.org/atomic v1.10.0
 ## explicit; go 1.18
 go.uber.org/atomic
-# golang.org/x/net v0.2.0
-## explicit; go 1.17
 # golang.org/x/sys v0.2.0
 ## explicit; go 1.17
 golang.org/x/sys/internal/unsafeheader
@@ -330,4 +329,3 @@ gopkg.in/gorp.v2
 # gopkg.in/yaml.v2 v2.4.0
 ## explicit; go 1.15
 gopkg.in/yaml.v2
-# github.com/gophercloud/gophercloud => github.com/sapcc/gophercloud v0.0.0-20220830101946-e4928fd1f0f0
