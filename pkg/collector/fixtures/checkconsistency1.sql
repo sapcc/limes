@@ -25,6 +25,7 @@ INSERT INTO domains (id, cluster_id, name, uuid) VALUES (1, 'west', 'germany', '
 INSERT INTO domains (id, cluster_id, name, uuid) VALUES (2, 'west', 'france', 'uuid-for-france');
 
 INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (1, 'capacity', 10, 0, 0, '', 10, NULL);
+INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (3, 'capacity', 20, 0, 0, '', 0, NULL);
 INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (4, 'capacity', 10, 0, 0, '', 10, NULL);
 INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (7, 'capacity', 10, 0, 0, '', 10, NULL);
 

@@ -135,7 +135,7 @@ func Test_Consistency(t *testing.T) {
 	//should cause CheckConsistency() to mark the corresponding project_service
 	//as stale (to prompt the scraper to take care of the problem)
 	err = dbm.Insert(&db.ProjectResource{
-		ServiceID:           1,
+		ServiceID:           3,
 		Name:                "capacity",
 		Quota:               p2u64(20),
 		BackendQuota:        p2i64(0),

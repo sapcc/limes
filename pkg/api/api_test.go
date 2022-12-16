@@ -92,7 +92,7 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, *gor
 				"berlin": {
 					//This constraint is used for the happy-path tests, where PUT
 					//succeeds because the requested value fits within the constraint.
-					"shared": {"capacity": {Minimum: p2u64(1), Maximum: p2u64(6), Unit: limes.UnitBytes}},
+					"shared": {"capacity": {Minimum: p2u64(1), Maximum: p2u64(12), Unit: limes.UnitBytes}},
 				},
 				"dresden": {
 					//These constraints are used for the failure tests, where PUT fails

@@ -140,7 +140,7 @@ func (c *Collector) Scrape() {
 			continue
 		}
 
-		err = c.writeScrapeResult(project, projectID, projectHasBursting, serviceType, serviceID, resourceData, serializedMetrics, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
+		err = c.writeScrapeResult(project, projectID, serviceType, serviceID, resourceData, serializedMetrics, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
 		if err != nil {
 			c.writeScrapeError(project, serviceType, serviceID, err, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
 			c.LogError("write %s backend data for %s/%s failed: %s", serviceType, project.Domain.Name, project.Name, err.Error())
@@ -162,7 +162,7 @@ func (c *Collector) Scrape() {
 	}
 }
 
-func (c *Collector) writeScrapeResult(project core.KeystoneProject, projectID int64, projectHasBursting bool, serviceType string, serviceID int64, resourceData map[string]core.ResourceData, serializedMetrics string, scrapedAt time.Time, scrapeDuration time.Duration) error {
+func (c *Collector) writeScrapeResult(project core.KeystoneProject, projectID int64, serviceType string, serviceID int64, resourceData map[string]core.ResourceData, serializedMetrics string, scrapedAt time.Time, scrapeDuration time.Duration) error {
 	tx, err := c.DB.Begin()
 	if err != nil {
 		return fmt.Errorf("while beginning transaction: %w", err)
@@ -179,61 +179,38 @@ func (c *Collector) writeScrapeResult(project core.KeystoneProject, projectID in
 		return fmt.Errorf("while applying idle_in_transaction_session_timeout: %w", err)
 	}
 
-	var serviceConstraints map[string]core.QuotaConstraint
-	if c.Cluster.QuotaConstraints != nil {
-		serviceConstraints = c.Cluster.QuotaConstraints.Projects[project.Domain.Name][project.Name][serviceType]
-	}
-
-	//update existing project_resources entries
-	resourceExists := make(map[string]bool)
-	var resources []db.ProjectResource
-	_, err = tx.Select(&resources, `SELECT * FROM project_resources WHERE service_id = $1`, serviceID)
+	//collect DB records
+	var (
+		dbDomain  db.Domain
+		dbProject db.Project
+	)
+	err = tx.SelectOne(&dbProject, `SELECT * FROM projects WHERE id = $1`, projectID)
 	if err != nil {
-		return fmt.Errorf("while loading existing project resources: %w", err)
+		return fmt.Errorf("while reading the DB record for this project: %w", err)
 	}
-	for _, resOriginal := range resources {
-		res := resOriginal
+	err = c.DB.SelectOne(&dbDomain, `SELECT * FROM domains WHERE id = $1`, dbProject.DomainID)
+	if err != nil {
+		return fmt.Errorf("while reading the DB record for this project's domain: %w", err)
+	}
 
-		resourceExists[res.Name] = true
-
-		data, exists := resourceData[res.Name]
-		if !exists {
-			c.LogError(
-				"could not scrape new data for resource %s in project service %d (was this resource type removed from the scraper plugin?)",
-				res.Name, serviceID,
-			)
-			continue
-		}
-
-		//check if we need to apply a missing default quota
-		qdConfig := c.Cluster.QuotaDistributionConfigForResource(serviceType, res.Name)
-		resInfo := c.Cluster.InfoForResource(serviceType, res.Name)
-		if !resInfo.NoQuota && (res.Quota == nil || *res.Quota == 0) {
-			initialQuota := qdConfig.InitialProjectQuota()
-			res.Quota = &initialQuota
-		}
-
-		//check if we need to enforce a constraint
-		constraint := serviceConstraints[res.Name]
-		if res.Quota != nil && constraint.Validate(*res.Quota) != nil {
-			newQuota := constraint.ApplyTo(*res.Quota)
-			logg.Info("changing %s/%s quota for project %s/%s from %s to %s to satisfy constraint %q",
-				serviceType, res.Name, project.Domain.Name, project.Name,
-				limes.ValueWithUnit{Value: *res.Quota, Unit: resInfo.Unit},
-				limes.ValueWithUnit{Value: newQuota, Unit: resInfo.Unit},
-				constraint.String(),
-			)
-			res.Quota = &newQuota
-		}
-
-		//update existing resource record
+	//this is the callback that ProjectResourceUpdate will use to write the scraped data into the project_resources
+	updateResource := func(res *db.ProjectResource) error {
+		data := resourceData[res.Name]
 		res.Usage = data.Usage
 		res.PhysicalUsage = data.PhysicalUsage
-		if resInfo.NoQuota {
-			res.Quota = nil
-			res.BackendQuota = nil
-			res.DesiredBackendQuota = nil
-		} else {
+
+		resInfo := c.Cluster.InfoForResource(serviceType, res.Name)
+		if !resInfo.NoQuota {
+			//check if we can auto-approve an initial quota
+			if res.BackendQuota == nil && (res.Quota == nil || *res.Quota == 0) && data.Quota > 0 && uint64(data.Quota) == resInfo.AutoApproveInitialQuota {
+				res.Quota = &resInfo.AutoApproveInitialQuota
+				logg.Other("AUDIT", "changing %s/%s quota for project %s/%s from %s to %s through auto-approval",
+					serviceType, res.Name, dbDomain.Name, dbProject.Name,
+					limes.ValueWithUnit{Value: 0, Unit: resInfo.Unit},
+					limes.ValueWithUnit{Value: resInfo.AutoApproveInitialQuota, Unit: resInfo.Unit},
+				)
+			}
+
 			res.BackendQuota = &data.Quota
 		}
 
@@ -254,78 +231,16 @@ func (c *Collector) writeScrapeResult(project core.KeystoneProject, projectID in
 			res.SubresourcesJSON = string(bytes)
 		}
 
-		if res != resOriginal {
-			logg.Debug("writing scrape result in service %d: %#v", serviceID, res)
-			_, err := tx.Update(&res)
-			if err != nil {
-				return fmt.Errorf("while writing %q project resource: %w", res.Name, err)
-			}
-		}
+		return nil
 	}
 
-	//insert missing project_resources entries
-	for _, resMetadata := range c.Plugin.Resources() {
-		if _, exists := resourceExists[resMetadata.Name]; exists {
-			continue
-		}
-		data := resourceData[resMetadata.Name]
-
-		qdConfig := c.Cluster.QuotaDistributionConfigForResource(serviceType, resMetadata.Name)
-		constraint := serviceConstraints[resMetadata.Name]
-		initialQuota := constraint.ApplyTo(qdConfig.InitialProjectQuota())
-
-		res := &db.ProjectResource{
-			ServiceID:        serviceID,
-			Name:             resMetadata.Name,
-			Quota:            &initialQuota,
-			Usage:            data.Usage,
-			PhysicalUsage:    data.PhysicalUsage,
-			BackendQuota:     &data.Quota,
-			SubresourcesJSON: "", //but see below
-		}
-
-		if resMetadata.NoQuota {
-			res.Quota = nil
-			res.BackendQuota = nil
-		} else {
-			if *res.Quota == 0 && data.Quota > 0 && uint64(data.Quota) == resMetadata.AutoApproveInitialQuota {
-				res.Quota = &resMetadata.AutoApproveInitialQuota
-
-				logg.Other("AUDIT", fmt.Sprintf("set quota %s/%s = 0 -> %d for project %s through auto-approval",
-					serviceType, resMetadata.Name, *res.Quota, project.UUID),
-				)
-			}
-
-			if projectHasBursting {
-				qdConfig := c.Cluster.QuotaDistributionConfigForResource(serviceType, resMetadata.Name)
-				behavior := c.Cluster.BehaviorForResource(serviceType, resMetadata.Name, project.Domain.Name+"/"+project.Name)
-				desiredBackendQuota := behavior.MaxBurstMultiplier.ApplyTo(*res.Quota, qdConfig.Model)
-				res.DesiredBackendQuota = &desiredBackendQuota
-			} else {
-				res.DesiredBackendQuota = res.Quota
-			}
-		}
-
-		if len(data.Subresources) != 0 {
-			//warn when the backend is inconsistent with itself
-			if uint64(len(data.Subresources)) != data.Usage {
-				logg.Info("resource quantity mismatch in project %s, resource %s/%s: usage = %d, but found %d subresources",
-					project.UUID, serviceType, res.Name,
-					data.Usage, len(data.Subresources),
-				)
-			}
-			bytes, err := json.Marshal(data.Subresources)
-			if err != nil {
-				return fmt.Errorf("failed to convert subresources to JSON: %s", err.Error())
-			}
-			res.SubresourcesJSON = string(bytes)
-		}
-
-		logg.Debug("writing scrape result in service %d: %#v", serviceID, res)
-		err = tx.Insert(res)
-		if err != nil {
-			return fmt.Errorf("while creating %q project resource: %w", res.Name, err)
-		}
+	//update project_resources using the action callback from above
+	updateResult, err := datamodel.ProjectResourceUpdate{
+		UpdateResource: updateResource,
+		LogError:       c.LogError,
+	}.Run(tx, c.Cluster, dbDomain, dbProject, serviceID, serviceType)
+	if err != nil {
+		return err
 	}
 
 	//update scraped_at timestamp and reset the stale flag on this service so
@@ -354,14 +269,8 @@ func (c *Collector) writeScrapeResult(project core.KeystoneProject, projectID in
 	//rectify it (but an error at this point is non-fatal: we don't want scraping
 	//to get stuck because some project has backend_quota > usage > quota, for
 	//example)
-	if c.Cluster.Authoritative {
-		var dbProject db.Project
-		logg.Debug("collecting project information for ApplyBackendQuota in service %d", serviceID)
-		err := c.DB.SelectOne(&dbProject, `SELECT * FROM projects WHERE id = $1`, projectID)
-		if err == nil {
-			logg.Debug("calling into ApplyBackendQuota for service %d", serviceID)
-			err = datamodel.ApplyBackendQuota(c.DB, c.Cluster, project.Domain, dbProject, serviceID, serviceType)
-		}
+	if c.Cluster.Authoritative && updateResult.HasBackendQuotaDrift {
+		err := datamodel.ApplyBackendQuota(c.DB, c.Cluster, project.Domain, dbProject, serviceID, serviceType)
 		if err != nil {
 			logg.Error("could not rectify frontend/backend quota mismatch for service %s in project %s: %s",
 				serviceType, project.UUID, err.Error(),

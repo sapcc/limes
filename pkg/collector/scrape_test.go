@@ -412,6 +412,7 @@ func Test_ScrapeCentralized(t *testing.T) {
 		//since bursting is ineffective under centralized quota distribution)
 		c.Scrape()
 		tr.DBChanges().AssertEqualf(`
+			UPDATE domain_resources SET quota = 20 WHERE service_id = 1 AND name = 'things';
 			UPDATE project_resources SET backend_quota = 10, physical_usage = 0 WHERE service_id = 1 AND name = 'capacity';
 			INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (1, 'capacity_portion', NULL, 0, NULL, '', NULL, NULL);
 			UPDATE project_resources SET quota = 20, usage = 2, backend_quota = 20, subresources = '[{"index":0},{"index":1}]', desired_backend_quota = 20 WHERE service_id = 1 AND name = 'things';
