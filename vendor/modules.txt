@@ -112,7 +112,7 @@ github.com/lib/pq/scram
 github.com/majewsky/schwift
 github.com/majewsky/schwift/capabilities
 github.com/majewsky/schwift/gopherschwift
-# github.com/matttproud/golang_protobuf_extensions v1.0.2
+# github.com/matttproud/golang_protobuf_extensions v1.0.4
 ## explicit; go 1.9
 github.com/matttproud/golang_protobuf_extensions/pbutil
 # github.com/mitchellh/go-homedir v1.1.0
@@ -127,7 +127,7 @@ github.com/modern-go/reflect2
 # github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826
 ## explicit
 github.com/mohae/deepcopy
-# github.com/open-policy-agent/opa v0.47.2
+# github.com/open-policy-agent/opa v0.47.4
 ## explicit; go 1.17
 github.com/open-policy-agent/opa/ast
 github.com/open-policy-agent/opa/ast/internal/scanner
@@ -212,7 +212,7 @@ github.com/prometheus/client_golang/prometheus/promhttp
 # github.com/prometheus/client_model v0.3.0
 ## explicit; go 1.9
 github.com/prometheus/client_model/go
-# github.com/prometheus/common v0.38.0
+# github.com/prometheus/common v0.39.0
 ## explicit; go 1.17
 github.com/prometheus/common/expfmt
 github.com/prometheus/common/internal/bitbucket.org/ww/goautoneg
@@ -230,7 +230,7 @@ github.com/rabbitmq/amqp091-go
 github.com/rcrowley/go-metrics
 # github.com/rogpeppe/go-internal v1.9.0
 ## explicit; go 1.17
-# github.com/rs/cors v1.8.2
+# github.com/rs/cors v1.8.3
 ## explicit; go 1.13
 github.com/rs/cors
 # github.com/sapcc/go-api-declarations v1.4.2
