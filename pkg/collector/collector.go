@@ -22,8 +22,8 @@ package collector
 import (
 	"time"
 
+	"github.com/go-gorp/gorp/v3"
 	"github.com/sapcc/go-bits/logg"
-	"gopkg.in/gorp.v2"
 
 	"github.com/sapcc/limes/pkg/core"
 )

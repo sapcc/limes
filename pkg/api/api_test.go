@@ -32,6 +32,7 @@ import (
 	"time"
 
 	policy "github.com/databus23/goslo.policy"
+	"github.com/go-gorp/gorp/v3"
 	"github.com/gofrs/uuid"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
@@ -41,7 +42,6 @@ import (
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/sqlext"
-	gorp "gopkg.in/gorp.v2"
 
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"

@@ -23,9 +23,9 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/go-gorp/gorp/v3"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/logg"
-	gorp "gopkg.in/gorp.v2"
 
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"

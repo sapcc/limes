@@ -25,11 +25,11 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/go-gorp/gorp/v3"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sqlext"
-	gorp "gopkg.in/gorp.v2"
 
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/reports"

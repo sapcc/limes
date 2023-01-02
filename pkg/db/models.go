@@ -22,8 +22,8 @@ package db
 import (
 	"time"
 
+	"github.com/go-gorp/gorp/v3"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
-	gorp "gopkg.in/gorp.v2"
 )
 
 // ClusterCapacitor contains a record from the `cluster_capacitors` table.

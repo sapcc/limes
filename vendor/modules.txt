@@ -19,8 +19,9 @@ github.com/dlmiddlecote/sqlstats
 # github.com/ghodss/yaml v1.0.0
 ## explicit
 github.com/ghodss/yaml
-# github.com/go-gorp/gorp v2.2.0+incompatible
-## explicit
+# github.com/go-gorp/gorp/v3 v3.1.0
+## explicit; go 1.18
+github.com/go-gorp/gorp/v3
 # github.com/go-sql-driver/mysql v1.7.0
 ## explicit; go 1.13
 # github.com/gobwas/glob v0.2.3
@@ -201,8 +202,6 @@ github.com/open-policy-agent/opa/version
 # github.com/pkg/errors v0.9.1
 ## explicit
 github.com/pkg/errors
-# github.com/poy/onpar v1.1.2
-## explicit; go 1.14
 # github.com/prometheus/client_golang v1.14.0
 ## explicit; go 1.17
 github.com/prometheus/client_golang/api
@@ -229,6 +228,8 @@ github.com/rabbitmq/amqp091-go
 # github.com/rcrowley/go-metrics v0.0.0-20200313005456-10cdbea86bc0
 ## explicit
 github.com/rcrowley/go-metrics
+# github.com/rogpeppe/go-internal v1.9.0
+## explicit; go 1.17
 # github.com/rs/cors v1.8.2
 ## explicit; go 1.13
 github.com/rs/cors
@@ -276,8 +277,6 @@ github.com/xeipuuv/gojsonreference
 # github.com/yashtewari/glob-intersection v0.1.0
 ## explicit; go 1.17
 github.com/yashtewari/glob-intersection
-# github.com/ziutek/mymysql v1.5.4
-## explicit
 # go.uber.org/atomic v1.10.0
 ## explicit; go 1.18
 go.uber.org/atomic
@@ -323,9 +322,6 @@ google.golang.org/protobuf/runtime/protoiface
 google.golang.org/protobuf/runtime/protoimpl
 google.golang.org/protobuf/types/descriptorpb
 google.golang.org/protobuf/types/known/timestamppb
-# gopkg.in/gorp.v2 v2.2.0
-## explicit
-gopkg.in/gorp.v2
 # gopkg.in/yaml.v2 v2.4.0
 ## explicit; go 1.15
 gopkg.in/yaml.v2

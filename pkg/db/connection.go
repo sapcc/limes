@@ -23,7 +23,7 @@ import (
 	"net/url"
 	"os"
 
-	gorp "gopkg.in/gorp.v2"
+	gorp "github.com/go-gorp/gorp/v3"
 
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/osext"
@@ -71,7 +71,7 @@ type Interface interface {
 	//from database/sql
 	sqlext.Executor
 
-	//from gorp.v2
+	//from github.com/go-gorp/gorp
 	Insert(args ...interface{}) error
 	Select(i interface{}, query string, args ...interface{}) ([]interface{}, error)
 }

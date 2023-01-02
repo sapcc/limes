@@ -24,6 +24,7 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/go-gorp/gorp/v3"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sapcc/go-api-declarations/limes"
@@ -31,7 +32,6 @@ import (
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/logg"
-	"gopkg.in/gorp.v2"
 
 	"github.com/sapcc/limes/pkg/db"
 	"github.com/sapcc/limes/pkg/test"

@@ -27,6 +27,7 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/go-gorp/gorp/v3"
 	"github.com/gophercloud/gophercloud"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -36,7 +37,6 @@ import (
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/logg"
-	"gopkg.in/gorp.v2"
 
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/test"

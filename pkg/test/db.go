@@ -23,8 +23,7 @@ import (
 	"net/url"
 	"testing"
 
-	gorp "gopkg.in/gorp.v2"
-
+	"github.com/go-gorp/gorp/v3"
 	"github.com/sapcc/go-bits/easypg"
 
 	"github.com/sapcc/limes/pkg/db"

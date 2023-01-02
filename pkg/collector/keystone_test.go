@@ -25,10 +25,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/go-gorp/gorp/v3"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
-	"gopkg.in/gorp.v2"
 
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/test"

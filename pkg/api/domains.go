@@ -23,8 +23,7 @@ import (
 	"net/http"
 	"time"
 
-	gorp "gopkg.in/gorp.v2"
-
+	"github.com/go-gorp/gorp/v3"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/respondwith"

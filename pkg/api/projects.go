@@ -26,13 +26,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/go-gorp/gorp/v3"
 	"github.com/gorilla/mux"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sqlext"
-	gorp "gopkg.in/gorp.v2"
 
 	"github.com/sapcc/limes/pkg/collector"
 	"github.com/sapcc/limes/pkg/core"
