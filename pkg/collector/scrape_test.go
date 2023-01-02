@@ -24,7 +24,6 @@ import (
 	"fmt"
 	"math/big"
 	"regexp"
-	"sort"
 	"testing"
 
 	"github.com/go-gorp/gorp/v3"
@@ -63,10 +62,8 @@ func prepareScrapeTest(t *testing.T, numProjects int, quotaPlugins ...core.Quota
 	}
 	for _, plugin := range quotaPlugins {
 		info := plugin.ServiceInfo()
-		cluster.ServiceTypes = append(cluster.ServiceTypes, info.Type)
 		cluster.QuotaPlugins[info.Type] = plugin
 	}
-	sort.Strings(cluster.ServiceTypes)
 
 	//one domain is enough; one or two projects is enough
 	discovery := cluster.DiscoveryPlugin.(*test.DiscoveryPlugin) //nolint:errcheck

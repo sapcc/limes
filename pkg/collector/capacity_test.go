@@ -40,8 +40,7 @@ func Test_ScanCapacity(t *testing.T) {
 	dbm := test.InitDatabase(t, nil)
 
 	cluster := &core.Cluster{
-		ID:           "west",
-		ServiceTypes: []string{"shared", "unshared", "unshared2"},
+		ID: "west",
 		QuotaPlugins: map[string]core.QuotaPlugin{
 			"shared":    test.NewPlugin("shared"),
 			"unshared":  test.NewPlugin("unshared"),

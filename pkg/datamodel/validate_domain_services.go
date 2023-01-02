@@ -79,7 +79,7 @@ func ValidateDomainServices(tx *gorp.Transaction, cluster *core.Cluster, domain 
 	}
 
 	//create missing service entries
-	for _, serviceType := range cluster.ServiceTypes {
+	for _, serviceType := range cluster.ServiceTypesInAlphabeticalOrder() {
 		if seen[serviceType] {
 			continue
 		}

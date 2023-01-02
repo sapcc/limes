@@ -73,7 +73,7 @@ func (c *Collector) checkConsistencyCluster() {
 	}
 
 	//create missing service entries
-	for _, serviceType := range c.Cluster.ServiceTypes {
+	for _, serviceType := range c.Cluster.ServiceTypesInAlphabeticalOrder() {
 		if seen[serviceType] {
 			continue
 		}
@@ -138,7 +138,7 @@ func (c *Collector) checkConsistencyDomain(domain db.Domain) {
 	}
 
 	//recompute domain quota values that depend on project quotas
-	for _, serviceType := range c.Cluster.ServiceTypes {
+	for serviceType := range c.Cluster.QuotaPlugins {
 		err = datamodel.ApplyComputedDomainQuota(c.DB, c.Cluster, domain.ID, serviceType)
 		if err != nil {
 			c.LogError(err.Error())

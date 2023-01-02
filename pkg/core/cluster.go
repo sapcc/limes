@@ -48,7 +48,6 @@ type Cluster struct {
 	ID                string
 	Auth              *AuthSession
 	Config            ClusterConfiguration
-	ServiceTypes      []string
 	DiscoveryPlugin   DiscoveryPlugin
 	QuotaPlugins      map[string]QuotaPlugin
 	CapacityPlugins   map[string]CapacityPlugin
@@ -87,10 +86,8 @@ func NewCluster(config ClusterConfiguration) *Cluster {
 			logg.Error("skipping service %s: no suitable collector plugin found", srv.Type)
 			continue
 		}
-		c.ServiceTypes = append(c.ServiceTypes, srv.Type)
 		c.QuotaPlugins[srv.Type] = plugin
 	}
-	sort.Strings(c.ServiceTypes) //determinism is useful for unit tests
 
 	for _, capa := range config.Capacitors {
 		plugin := CapacityPluginRegistry.Instantiate(capa.Type)
@@ -311,6 +308,19 @@ func (c *Cluster) ProviderClient() (*gophercloud.ProviderClient, gophercloud.End
 		return nil, gophercloud.EndpointOpts{}
 	}
 	return c.Auth.ProviderClient, c.Auth.EndpointOpts
+}
+
+// ServiceTypesInAlphabeticalOrder can be used when service types need to be
+// iterated over in a stable order (mostly to ensure deterministic behavior in unit tests).
+func (c *Cluster) ServiceTypesInAlphabeticalOrder() []string {
+	result := make([]string, 0, len(c.QuotaPlugins))
+	for serviceType, quotaPlugin := range c.QuotaPlugins {
+		if quotaPlugin != nil { //defense in depth (nil values should never be stored in the map anyway)
+			result = append(result, serviceType)
+		}
+	}
+	sort.Strings(result)
+	return result
 }
 
 // HasService checks whether the given service is enabled in this cluster.

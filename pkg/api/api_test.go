@@ -65,14 +65,12 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, *gor
 		{Name: "service/unshared/instances:delete", Unit: limes.UnitNone},
 	}
 
-	serviceTypes := []string{"shared", "unshared"}
 	quotaPlugins := map[string]core.QuotaPlugin{
 		"shared":   test.NewPlugin("shared", sharedRatesThatReportUsage...),
 		"unshared": test.NewPlugin("unshared", unsharedRatesThatReportUsage...),
 	}
 	hasCentralizedService := startData == "fixtures/start-data.sql"
 	if hasCentralizedService {
-		serviceTypes = append(serviceTypes, "centralized")
 		quotaPlugins["centralized"] = test.NewPlugin("centralized")
 	}
 
@@ -187,7 +185,6 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, *gor
 	cluster := &core.Cluster{
 		ID:              clusterName,
 		Auth:            &core.AuthSession{},
-		ServiceTypes:    serviceTypes,
 		DiscoveryPlugin: test.NewDiscoveryPlugin(),
 		QuotaPlugins:    quotaPlugins,
 		CapacityPlugins: map[string]core.CapacityPlugin{},
