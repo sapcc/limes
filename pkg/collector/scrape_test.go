@@ -45,10 +45,6 @@ func p2u64(x uint64) *uint64 {
 	return &x
 }
 
-func p2i64(x int64) *int64 {
-	return &x
-}
-
 func prepareScrapeTest(t *testing.T, numProjects int, quotaPlugins ...core.QuotaPlugin) (*core.Cluster, *gorp.DbMap) {
 	test.ResetTime()
 	dbm := test.InitDatabase(t, nil)
@@ -412,47 +408,26 @@ func Test_ScrapeCentralized(t *testing.T) {
 		//since bursting is ineffective under centralized quota distribution)
 		c.Scrape()
 		tr.DBChanges().AssertEqualf(`
+			UPDATE domain_resources SET quota = 10 WHERE service_id = 1 AND name = 'capacity';
 			UPDATE domain_resources SET quota = 20 WHERE service_id = 1 AND name = 'things';
-			UPDATE project_resources SET backend_quota = 10, physical_usage = 0 WHERE service_id = 1 AND name = 'capacity';
+			INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (1, 'capacity', 10, 0, 10, '', 10, 0);
 			INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (1, 'capacity_portion', NULL, 0, NULL, '', NULL, NULL);
-			UPDATE project_resources SET quota = 20, usage = 2, backend_quota = 20, subresources = '[{"index":0},{"index":1}]', desired_backend_quota = 20 WHERE service_id = 1 AND name = 'things';
+			INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (1, 'things', 20, 2, 20, '[{"index":0},{"index":1}]', 20, NULL);
 			UPDATE project_services SET scraped_at = 1, scrape_duration_secs = 1, serialized_metrics = '{"capacity_usage":0,"things_usage":2}', checked_at = 1 WHERE id = 1 AND project_id = 1 AND type = 'centralized';
-		`)
-
-		//check that Scrape performs the same initialization for missing
-		//project_resources as ScanDomains (i.e. DefaultProjectQuota gets applied
-		//and constraints get enforced)
-		//
-		//Since we did not change any project quotas before this step, the
-		//project_resources will mostly come out exactly the same and the only
-		//change is in the scrape timestamp.
-		//
-		//This check looks artificial, but this behavior is important e.g. when
-		//moving resources when adding new resources that run under centralized
-		//quota distribution. The consistency check will detect missing
-		//project_resources (just like it detects violated constraints), but it
-		//will let Scrape() do the fixing by marking the project service as stale.
-		_, err := dbm.Exec(`DELETE FROM project_resources WHERE service_id = 1`)
-		if err != nil {
-			t.Fatal(err)
-		}
-		setProjectServicesStale(t, dbm)
-		c.Scrape()
-		tr.DBChanges().AssertEqualf(`
-			UPDATE project_services SET scraped_at = 3, checked_at = 3 WHERE id = 1 AND project_id = 1 AND type = 'centralized';
 		`)
 
 		//check that DefaultProjectQuota gets reapplied when the quota is 0 (zero
 		//quota on CQD resources is defined to mean "DefaultProjectQuota not
-		//applied yet")
-		_, err = dbm.Exec(`UPDATE project_resources SET quota = 0 WHERE service_id = 1`)
+		//applied yet"; this check is also relevant for resources moving from HQD to CQD)
+		_, err := dbm.Exec(`UPDATE project_resources SET quota = 0 WHERE service_id = 1`)
 		if err != nil {
 			t.Fatal(err)
 		}
 		setProjectServicesStale(t, dbm)
 		c.Scrape()
+		//because Scrape converges back into the same state, the only change is in the timestamp fields
 		tr.DBChanges().AssertEqualf(`
-			UPDATE project_services SET scraped_at = 5, checked_at = 5 WHERE id = 1 AND project_id = 1 AND type = 'centralized';
+			UPDATE project_services SET scraped_at = 3, checked_at = 3 WHERE id = 1 AND project_id = 1 AND type = 'centralized';
 		`)
 	}
 }

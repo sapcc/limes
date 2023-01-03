@@ -7,25 +7,7 @@
       {
         "type": "centralized",
         "area": "centralized",
-        "resources": [
-          {
-            "name": "capacity",
-            "unit": "B",
-            "quota_distribution_model": "centralized",
-            "quota": 15,
-            "usable_quota": 15,
-            "usage": 0,
-            "backend_quota": 0
-          },
-          {
-            "name": "things",
-            "quota_distribution_model": "centralized",
-            "quota": 10,
-            "usable_quota": 10,
-            "usage": 0,
-            "backend_quota": 0
-          }
-        ]
+        "resources": []
       },
       {
         "type": "shared",

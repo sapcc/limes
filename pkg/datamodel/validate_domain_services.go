@@ -31,16 +31,16 @@ import (
 	"github.com/sapcc/limes/pkg/db"
 )
 
-// ValidateDomainServices ensures that all required DomainService records for
-// this domain exist (and none other). It returns the full set of domain services.
-func ValidateDomainServices(tx *gorp.Transaction, cluster *core.Cluster, domain db.Domain) ([]db.DomainService, error) {
+// ValidateDomainServices ensures that all required DomainService and
+// DomainResource records for this domain exist (and none other).
+func ValidateDomainServices(tx *gorp.Transaction, cluster *core.Cluster, domain db.Domain) error {
 	//list existing records
 	seen := make(map[string]bool)
 	var services []db.DomainService
 	_, err := tx.Select(&services,
 		`SELECT * FROM domain_services WHERE domain_id = $1 ORDER BY type`, domain.ID)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	logg.Info("checking consistency for %d domain services in domain %s...", len(services), domain.UUID)
 
@@ -56,7 +56,7 @@ func ValidateDomainServices(tx *gorp.Transaction, cluster *core.Cluster, domain 
 			logg.Info("cleaning up %s service entry for domain %s", srv.Type, domain.Name)
 			_, err := tx.Delete(&srv) //nolint:gosec // Delete is not holding onto the pointer after it returns
 			if err != nil {
-				return nil, err
+				return err
 			}
 			continue
 		}
@@ -66,15 +66,15 @@ func ValidateDomainServices(tx *gorp.Transaction, cluster *core.Cluster, domain 
 		//constraints
 		err := createMissingDomainResources(tx, cluster, domain, srv, constraints[srv.Type])
 		if err != nil {
-			return nil, err
+			return err
 		}
 		err = checkDomainServiceConstraints(tx, cluster, domain, srv, constraints[srv.Type])
 		if err != nil {
-			return nil, err
+			return err
 		}
 		err = ApplyComputedDomainQuota(tx, cluster, domain.ID, srv.Type)
 		if err != nil {
-			return nil, err
+			return err
 		}
 	}
 
@@ -90,17 +90,20 @@ func ValidateDomainServices(tx *gorp.Transaction, cluster *core.Cluster, domain 
 		}
 		err := tx.Insert(&srv)
 		if err != nil {
-			return nil, err
+			return err
 		}
-		services = append(services, srv)
 
 		err = createMissingDomainResources(tx, cluster, domain, srv, constraints[serviceType])
 		if err != nil {
-			return nil, err
+			return err
+		}
+		err = ApplyComputedDomainQuota(tx, cluster, domain.ID, srv.Type)
+		if err != nil {
+			return err
 		}
 	}
 
-	return services, nil
+	return nil
 }
 
 func checkDomainServiceConstraints(tx *gorp.Transaction, cluster *core.Cluster, domain db.Domain, srv db.DomainService, serviceConstraints map[string]core.QuotaConstraint) error {

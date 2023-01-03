@@ -180,7 +180,7 @@ func (c *Collector) initDomain(domain core.KeystoneDomain) (*db.Domain, error) {
 		return nil, err
 	}
 
-	_, err = datamodel.ValidateDomainServices(tx, c.Cluster, *dbDomain)
+	err = datamodel.ValidateDomainServices(tx, c.Cluster, *dbDomain)
 	if err != nil {
 		return nil, err
 	}
@@ -309,7 +309,7 @@ func (c *Collector) initProject(domain *db.Domain, project core.KeystoneProject)
 	}
 
 	//add records to `project_services` table
-	_, err = datamodel.ValidateProjectServices(tx, c.Cluster, *domain, *dbProject)
+	err = datamodel.ValidateProjectServices(tx, c.Cluster, *domain, *dbProject)
 	if err != nil {
 		return err
 	}

@@ -74,5 +74,6 @@ type Interface interface {
 	//from github.com/go-gorp/gorp
 	Insert(args ...interface{}) error
 	Update(args ...interface{}) (int64, error)
+	Delete(args ...interface{}) (int64, error)
 	Select(i interface{}, query string, args ...interface{}) ([]interface{}, error)
 }
