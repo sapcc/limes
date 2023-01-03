@@ -97,32 +97,28 @@ func (c *Collector) ScrapeRates() {
 		provider, eo := c.Cluster.ProviderClient()
 		rateData, serviceRatesScrapeState, err := c.Plugin.ScrapeRates(provider, eo, project, serviceRatesScrapeState)
 		scrapeEndedAt := c.TimeNow()
-		if err != nil {
-			c.writeRateScrapeError(project, srv, err, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
-			ratesScrapeFailedCounter.With(labels).Inc()
-			//special case: stop scraping for a while when the backend service is not
-			//yet registered in the catalog (this prevents log spamming during buildup)
-			sleepInterval := idleInterval
-			if _, ok := err.(*gophercloud.ErrEndpointNotFound); ok {
-				sleepInterval = serviceNotDeployedIdleInterval
-				c.LogError("suspending %s rate scraping for %d minutes: %s", serviceType, sleepInterval/time.Minute, err.Error())
-				ratesScrapeSuspendedCounter.With(labels).Inc()
-			} else {
-				c.LogError("scrape %s rate data for %s/%s failed: %s", serviceType, project.Domain.Name, project.Name, util.UnpackError(err).Error())
-			}
 
+		//special case: stop scraping for a while when the backend service is not
+		//yet registered in the catalog (this prevents log spamming during buildup)
+		if _, ok := err.(*gophercloud.ErrEndpointNotFound); ok {
+			c.LogError("suspending %s rate scraping for %d minutes: %s", serviceType, serviceNotDeployedIdleInterval/time.Minute, err.Error())
+			ratesScrapeSuspendedCounter.With(labels).Inc()
 			if c.Once {
 				return
 			}
-			time.Sleep(sleepInterval)
+			time.Sleep(serviceNotDeployedIdleInterval)
 			continue
 		}
 
-		err = c.writeRateScrapeResult(srv, rateData, serviceRatesScrapeState, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
+		//write result on success; if anything fails, try to record the error in the DB
+		if err == nil {
+			err = c.writeRateScrapeResult(srv, rateData, serviceRatesScrapeState, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
+		}
 		if err != nil {
 			c.writeRateScrapeError(project, srv, err, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
-			c.LogError("write %s rate data for %s/%s failed: %s", serviceType, project.Domain.Name, project.Name, err.Error())
 			ratesScrapeFailedCounter.With(labels).Inc()
+			c.LogError("scrape %s rate data for %s/%s failed: %s", serviceType, project.Domain.Name, project.Name, util.UnpackError(err).Error())
+
 			if c.Once {
 				return
 			}

@@ -112,40 +112,36 @@ func (c *Collector) Scrape() {
 		provider, eo := c.Cluster.ProviderClient()
 		resourceData, serializedMetrics, err := c.Plugin.Scrape(provider, eo, project)
 		scrapeEndedAt := c.TimeNow()
-		if err != nil {
-			c.writeScrapeError(project, srv, err, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
-			scrapeFailedCounter.With(labels).Inc()
-			//special case: stop scraping for a while when the backend service is not
-			//yet registered in the catalog (this prevents log spamming during buildup)
-			sleepInterval := idleInterval
-			if _, ok := err.(*gophercloud.ErrEndpointNotFound); ok {
-				sleepInterval = serviceNotDeployedIdleInterval
-				c.LogError("suspending %s resource scraping for %d minutes: %s", serviceType, sleepInterval/time.Minute, err.Error())
-				scrapeSuspendedCounter.With(labels).Inc()
-			} else {
-				c.LogError("scrape %s resources for %s/%s failed: %s", serviceType, project.Domain.Name, project.Name, util.UnpackError(err).Error())
 
-				if serviceScrapedAt == nil {
-					//see explanation inside the called function's body
-					err := c.writeDummyResources(project, projectHasBursting, srv)
-					if err != nil {
-						c.LogError("write dummy resource data for service %s for %s/%s failed: %s", serviceType, project.Domain.Name, project.Name, err.Error())
-					}
-				}
-			}
-
+		//special case: stop scraping for a while when the backend service is not
+		//yet registered in the catalog (this prevents log spamming during buildup)
+		if _, ok := err.(*gophercloud.ErrEndpointNotFound); ok {
+			c.LogError("suspending %s resource scraping for %d minutes: %s", serviceType, serviceNotDeployedIdleInterval/time.Minute, err.Error())
+			scrapeSuspendedCounter.With(labels).Inc()
 			if c.Once {
 				return
 			}
-			time.Sleep(sleepInterval)
+			time.Sleep(serviceNotDeployedIdleInterval)
 			continue
 		}
 
-		err = c.writeScrapeResult(project, projectID, srv, resourceData, serializedMetrics, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
+		//write result on success; if anything fails, try to record the error in the DB
+		if err == nil {
+			err = c.writeScrapeResult(project, projectID, srv, resourceData, serializedMetrics, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
+		}
 		if err != nil {
 			c.writeScrapeError(project, srv, err, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
-			c.LogError("write %s backend data for %s/%s failed: %s", serviceType, project.Domain.Name, project.Name, err.Error())
 			scrapeFailedCounter.With(labels).Inc()
+			c.LogError("scrape %s resources for %s/%s failed: %s", serviceType, project.Domain.Name, project.Name, util.UnpackError(err).Error())
+
+			if serviceScrapedAt == nil {
+				//see explanation inside the called function's body
+				err := c.writeDummyResources(project, projectHasBursting, srv)
+				if err != nil {
+					c.LogError("write dummy resource data for service %s for %s/%s failed: %s", serviceType, project.Domain.Name, project.Name, err.Error())
+				}
+			}
+
 			if c.Once {
 				return
 			}
