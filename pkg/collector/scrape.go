@@ -108,11 +108,12 @@ func (c *Collector) Scrape() {
 		}
 
 		logg.Debug("scraping %s resources for %s/%s", serviceType, project.Domain.Name, project.Name)
+		srv := db.ProjectServiceRef{Type: serviceType, ID: serviceID}
 		provider, eo := c.Cluster.ProviderClient()
 		resourceData, serializedMetrics, err := c.Plugin.Scrape(provider, eo, project)
 		scrapeEndedAt := c.TimeNow()
 		if err != nil {
-			c.writeScrapeError(project, serviceType, serviceID, err, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
+			c.writeScrapeError(project, srv, err, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
 			scrapeFailedCounter.With(labels).Inc()
 			//special case: stop scraping for a while when the backend service is not
 			//yet registered in the catalog (this prevents log spamming during buildup)
@@ -126,7 +127,7 @@ func (c *Collector) Scrape() {
 
 				if serviceScrapedAt == nil {
 					//see explanation inside the called function's body
-					err := c.writeDummyResources(project, projectHasBursting, serviceType, serviceID)
+					err := c.writeDummyResources(project, projectHasBursting, srv)
 					if err != nil {
 						c.LogError("write dummy resource data for service %s for %s/%s failed: %s", serviceType, project.Domain.Name, project.Name, err.Error())
 					}
@@ -140,9 +141,9 @@ func (c *Collector) Scrape() {
 			continue
 		}
 
-		err = c.writeScrapeResult(project, projectID, serviceType, serviceID, resourceData, serializedMetrics, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
+		err = c.writeScrapeResult(project, projectID, srv, resourceData, serializedMetrics, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
 		if err != nil {
-			c.writeScrapeError(project, serviceType, serviceID, err, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
+			c.writeScrapeError(project, srv, err, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
 			c.LogError("write %s backend data for %s/%s failed: %s", serviceType, project.Domain.Name, project.Name, err.Error())
 			scrapeFailedCounter.With(labels).Inc()
 			if c.Once {
@@ -162,7 +163,7 @@ func (c *Collector) Scrape() {
 	}
 }
 
-func (c *Collector) writeScrapeResult(project core.KeystoneProject, projectID int64, serviceType string, serviceID int64, resourceData map[string]core.ResourceData, serializedMetrics string, scrapedAt time.Time, scrapeDuration time.Duration) error {
+func (c *Collector) writeScrapeResult(project core.KeystoneProject, projectID int64, srv db.ProjectServiceRef, resourceData map[string]core.ResourceData, serializedMetrics string, scrapedAt time.Time, scrapeDuration time.Duration) error {
 	tx, err := c.DB.Begin()
 	if err != nil {
 		return fmt.Errorf("while beginning transaction: %w", err)
@@ -199,13 +200,13 @@ func (c *Collector) writeScrapeResult(project core.KeystoneProject, projectID in
 		res.Usage = data.Usage
 		res.PhysicalUsage = data.PhysicalUsage
 
-		resInfo := c.Cluster.InfoForResource(serviceType, res.Name)
+		resInfo := c.Cluster.InfoForResource(srv.Type, res.Name)
 		if !resInfo.NoQuota {
 			//check if we can auto-approve an initial quota
 			if res.BackendQuota == nil && (res.Quota == nil || *res.Quota == 0) && data.Quota > 0 && uint64(data.Quota) == resInfo.AutoApproveInitialQuota {
 				res.Quota = &resInfo.AutoApproveInitialQuota
 				logg.Other("AUDIT", "changing %s/%s quota for project %s/%s from %s to %s through auto-approval",
-					serviceType, res.Name, dbDomain.Name, dbProject.Name,
+					srv.Type, res.Name, dbDomain.Name, dbProject.Name,
 					limes.ValueWithUnit{Value: 0, Unit: resInfo.Unit},
 					limes.ValueWithUnit{Value: resInfo.AutoApproveInitialQuota, Unit: resInfo.Unit},
 				)
@@ -220,7 +221,7 @@ func (c *Collector) writeScrapeResult(project core.KeystoneProject, projectID in
 			//warn when the backend is inconsistent with itself
 			if uint64(len(data.Subresources)) != res.Usage {
 				logg.Info("resource quantity mismatch in project %s, resource %s/%s: usage = %d, but found %d subresources",
-					project.UUID, serviceType, res.Name,
+					project.UUID, srv.Type, res.Name,
 					res.Usage, len(data.Subresources),
 				)
 			}
@@ -238,7 +239,7 @@ func (c *Collector) writeScrapeResult(project core.KeystoneProject, projectID in
 	updateResult, err := datamodel.ProjectResourceUpdate{
 		UpdateResource: updateResource,
 		LogError:       c.LogError,
-	}.Run(tx, c.Cluster, dbDomain, dbProject, serviceID, serviceType)
+	}.Run(tx, c.Cluster, dbDomain, dbProject, srv)
 	if err != nil {
 		return err
 	}
@@ -246,23 +247,23 @@ func (c *Collector) writeScrapeResult(project core.KeystoneProject, projectID in
 	//update scraped_at timestamp and reset the stale flag on this service so
 	//that we don't scrape it again immediately afterwards; also persist all other
 	//attributes that we have not written yet
-	logg.Debug("writing scrape result into service %d", serviceID)
+	logg.Debug("writing scrape result into service %d", srv.ID)
 	_, err = tx.Exec(
 		`UPDATE project_services SET checked_at = $1, scraped_at = $1, scrape_duration_secs = $2, stale = $3, serialized_metrics = $4, scrape_error_message = '' WHERE id = $5`,
-		scrapedAt, scrapeDuration.Seconds(), false, serializedMetrics, serviceID,
+		scrapedAt, scrapeDuration.Seconds(), false, serializedMetrics, srv.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("while updating metadata on project service: %w", err)
 	}
 
-	logg.Debug("committing scrape result in service %d", serviceID)
+	logg.Debug("committing scrape result in service %d", srv.ID)
 	err = tx.Commit()
 	if err != nil {
 		return fmt.Errorf("while committing transaction: %w", err)
 	}
 
 	if scrapeDuration > 5*time.Minute {
-		logg.Info("scrape of %s in project %s has taken excessively long (%s)", serviceType, project.UUID, scrapeDuration.String())
+		logg.Info("scrape of %s in project %s has taken excessively long (%s)", srv.Type, project.UUID, scrapeDuration.String())
 	}
 
 	//if a mismatch between frontend and backend quota was detected, try to
@@ -270,10 +271,10 @@ func (c *Collector) writeScrapeResult(project core.KeystoneProject, projectID in
 	//to get stuck because some project has backend_quota > usage > quota, for
 	//example)
 	if c.Cluster.Authoritative && updateResult.HasBackendQuotaDrift {
-		err := datamodel.ApplyBackendQuota(c.DB, c.Cluster, project.Domain, dbProject, serviceID, serviceType)
+		err := datamodel.ApplyBackendQuota(c.DB, c.Cluster, project.Domain, dbProject, srv)
 		if err != nil {
 			logg.Error("could not rectify frontend/backend quota mismatch for service %s in project %s: %s",
-				serviceType, project.UUID, err.Error(),
+				srv.Type, project.UUID, err.Error(),
 			)
 		}
 	}
@@ -281,19 +282,19 @@ func (c *Collector) writeScrapeResult(project core.KeystoneProject, projectID in
 	return nil
 }
 
-func (c *Collector) writeScrapeError(project core.KeystoneProject, serviceType string, serviceID int64, scrapeErr error, checkedAt time.Time, checkDuration time.Duration) {
+func (c *Collector) writeScrapeError(project core.KeystoneProject, srv db.ProjectServiceRef, scrapeErr error, checkedAt time.Time, checkDuration time.Duration) {
 	_, err := c.DB.Exec(
 		`UPDATE project_services SET checked_at = $1, scrape_duration_secs = $2, scrape_error_message = $3, stale = $4 WHERE id = $5`,
-		checkedAt, checkDuration.Seconds(), util.UnpackError(scrapeErr).Error(), false, serviceID,
+		checkedAt, checkDuration.Seconds(), util.UnpackError(scrapeErr).Error(), false, srv.ID,
 	)
 	if err != nil {
 		logg.Error("additional DB error while trying to write scraping error for service %s in project %s: %s",
-			serviceType, project.UUID, err.Error(),
+			srv.Type, project.UUID, err.Error(),
 		)
 	}
 }
 
-func (c *Collector) writeDummyResources(project core.KeystoneProject, projectHasBursting bool, serviceType string, serviceID int64) error {
+func (c *Collector) writeDummyResources(project core.KeystoneProject, projectHasBursting bool, srv db.ProjectServiceRef) error {
 	//Rationale: This is called when we first try to scrape a project service,
 	//and the scraping fails (most likely due to some internal error in the
 	//backend service). We used to just not touch the database at this point,
@@ -314,13 +315,13 @@ func (c *Collector) writeDummyResources(project core.KeystoneProject, projectHas
 
 	var serviceConstraints map[string]core.QuotaConstraint
 	if c.Cluster.QuotaConstraints != nil {
-		serviceConstraints = c.Cluster.QuotaConstraints.Projects[project.Domain.Name][project.Name][serviceType]
+		serviceConstraints = c.Cluster.QuotaConstraints.Projects[project.Domain.Name][project.Name][srv.Type]
 	}
 
 	//find existing project_resources entries (we don't want to touch those)
 	var existingResources []db.ProjectResource
 	_, err = tx.Select(&existingResources,
-		`SELECT * FROM project_resources WHERE service_id = $1`, serviceID)
+		`SELECT * FROM project_resources WHERE service_id = $1`, srv.ID)
 	if err != nil {
 		return err
 	}
@@ -338,7 +339,7 @@ func (c *Collector) writeDummyResources(project core.KeystoneProject, projectHas
 		initialQuota := serviceConstraints[resMetadata.Name].ApplyTo(0)
 		dummyBackendQuota := int64(-1)
 		res := &db.ProjectResource{
-			ServiceID:        serviceID,
+			ServiceID:        srv.ID,
 			Name:             resMetadata.Name,
 			Quota:            &initialQuota,
 			Usage:            0,
@@ -352,8 +353,8 @@ func (c *Collector) writeDummyResources(project core.KeystoneProject, projectHas
 			res.BackendQuota = nil
 		} else {
 			if projectHasBursting {
-				qdConfig := c.Cluster.QuotaDistributionConfigForResource(serviceType, resMetadata.Name)
-				behavior := c.Cluster.BehaviorForResource(serviceType, resMetadata.Name, project.Domain.Name+"/"+project.Name)
+				qdConfig := c.Cluster.QuotaDistributionConfigForResource(srv.Type, resMetadata.Name)
+				behavior := c.Cluster.BehaviorForResource(srv.Type, resMetadata.Name, project.Domain.Name+"/"+project.Name)
 				desiredBackendQuota := behavior.MaxBurstMultiplier.ApplyTo(*res.Quota, qdConfig.Model)
 				res.DesiredBackendQuota = &desiredBackendQuota
 			} else {
@@ -373,7 +374,7 @@ func (c *Collector) writeDummyResources(project core.KeystoneProject, projectHas
 	dummyScrapedAt := time.Unix(0, 0).UTC()
 	_, err = tx.Exec(
 		`UPDATE project_services SET scraped_at = $1, scrape_duration_secs = $2, stale = $3 WHERE id = $4`,
-		dummyScrapedAt, 0.0, false, serviceID,
+		dummyScrapedAt, 0.0, false, srv.ID,
 	)
 	if err != nil {
 		return err

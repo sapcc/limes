@@ -103,6 +103,19 @@ type ProjectService struct {
 	SerializedMetrics       string     `db:"serialized_metrics"`
 }
 
+// ProjectServiceRef contains only the `ID` and `Type` fields of
+// ProjectService. It appears in APIs when not the entire ProjectService entry
+// is needed.
+type ProjectServiceRef struct {
+	ID   int64
+	Type string
+}
+
+// Ref converts a ProjectService into its ProjectServiceRef.
+func (s ProjectService) Ref() ProjectServiceRef {
+	return ProjectServiceRef{ID: s.ID, Type: s.Type}
+}
+
 // ProjectResource contains a record from the `project_resources` table. Quota
 // values are NULL for resources that do not track quota.
 type ProjectResource struct {

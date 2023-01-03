@@ -93,11 +93,12 @@ func (c *Collector) ScrapeRates() {
 		}
 
 		logg.Debug("scraping %s rates for %s/%s", serviceType, project.Domain.Name, project.Name)
+		srv := db.ProjectServiceRef{Type: serviceType, ID: serviceID}
 		provider, eo := c.Cluster.ProviderClient()
 		rateData, serviceRatesScrapeState, err := c.Plugin.ScrapeRates(provider, eo, project, serviceRatesScrapeState)
 		scrapeEndedAt := c.TimeNow()
 		if err != nil {
-			c.writeRateScrapeError(project, serviceType, serviceID, err, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
+			c.writeRateScrapeError(project, srv, err, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
 			ratesScrapeFailedCounter.With(labels).Inc()
 			//special case: stop scraping for a while when the backend service is not
 			//yet registered in the catalog (this prevents log spamming during buildup)
@@ -117,9 +118,9 @@ func (c *Collector) ScrapeRates() {
 			continue
 		}
 
-		err = c.writeRateScrapeResult(serviceType, serviceID, rateData, serviceRatesScrapeState, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
+		err = c.writeRateScrapeResult(srv, rateData, serviceRatesScrapeState, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
 		if err != nil {
-			c.writeRateScrapeError(project, serviceType, serviceID, err, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
+			c.writeRateScrapeError(project, srv, err, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
 			c.LogError("write %s rate data for %s/%s failed: %s", serviceType, project.Domain.Name, project.Name, err.Error())
 			ratesScrapeFailedCounter.With(labels).Inc()
 			if c.Once {
@@ -139,7 +140,7 @@ func (c *Collector) ScrapeRates() {
 	}
 }
 
-func (c *Collector) writeRateScrapeResult(serviceType string, serviceID int64, rateData map[string]*big.Int, serviceRatesScrapeState string, scrapedAt time.Time, scrapeDuration time.Duration) error {
+func (c *Collector) writeRateScrapeResult(srv db.ProjectServiceRef, rateData map[string]*big.Int, serviceRatesScrapeState string, scrapedAt time.Time, scrapeDuration time.Duration) error {
 	tx, err := c.DB.Begin()
 	if err != nil {
 		return err
@@ -149,7 +150,7 @@ func (c *Collector) writeRateScrapeResult(serviceType string, serviceID int64, r
 	//update existing project_rates entries
 	rateExists := make(map[string]bool)
 	var rates []db.ProjectRate
-	_, err = tx.Select(&rates, `SELECT * FROM project_rates WHERE service_id = $1`, serviceID)
+	_, err = tx.Select(&rates, `SELECT * FROM project_rates WHERE service_id = $1`, srv.ID)
 	if err != nil {
 		return err
 	}
@@ -168,14 +169,14 @@ func (c *Collector) writeRateScrapeResult(serviceType string, serviceID int64, r
 				if rate.UsageAsBigint != "" {
 					c.LogError(
 						"could not scrape new data for rate %s in project service %d (was this rate type removed from the scraper plugin for %s?)",
-						rate.Name, serviceID, serviceType,
+						rate.Name, srv.ID, srv.Type,
 					)
 				}
 				continue
 			}
 			usageAsBigint := usageData.String()
 			if usageAsBigint != rate.UsageAsBigint {
-				_, err := stmt.Exec(usageAsBigint, serviceID, rate.Name)
+				_, err := stmt.Exec(usageAsBigint, srv.ID, rate.Name)
 				if err != nil {
 					return err
 				}
@@ -191,7 +192,7 @@ func (c *Collector) writeRateScrapeResult(serviceType string, serviceID int64, r
 		usageData := rateData[rateMetadata.Name]
 
 		rate := &db.ProjectRate{
-			ServiceID: serviceID,
+			ServiceID: srv.ID,
 			Name:      rateMetadata.Name,
 		}
 		if usageData != nil {
@@ -208,7 +209,7 @@ func (c *Collector) writeRateScrapeResult(serviceType string, serviceID int64, r
 	//service so that we don't scrape it again immediately afterwards
 	_, err = tx.Exec(
 		`UPDATE project_services SET rates_checked_at = $1, rates_scraped_at = $1, rates_scrape_duration_secs = $2, rates_scrape_state = $3, rates_stale = $4, rates_scrape_error_message = '' WHERE id = $5`,
-		scrapedAt, scrapeDuration.Seconds(), serviceRatesScrapeState, false, serviceID,
+		scrapedAt, scrapeDuration.Seconds(), serviceRatesScrapeState, false, srv.ID,
 	)
 	if err != nil {
 		return err
@@ -217,14 +218,14 @@ func (c *Collector) writeRateScrapeResult(serviceType string, serviceID int64, r
 	return tx.Commit()
 }
 
-func (c *Collector) writeRateScrapeError(project core.KeystoneProject, serviceType string, serviceID int64, scrapeErr error, checkedAt time.Time, checkDuration time.Duration) {
+func (c *Collector) writeRateScrapeError(project core.KeystoneProject, srv db.ProjectServiceRef, scrapeErr error, checkedAt time.Time, checkDuration time.Duration) {
 	_, err := c.DB.Exec(
 		`UPDATE project_services SET rates_checked_at = $1, rates_scrape_duration_secs = $2, rates_scrape_error_message = $3, rates_stale = $4 WHERE id = $5`,
-		checkedAt, checkDuration.Seconds(), util.UnpackError(scrapeErr).Error(), false, serviceID,
+		checkedAt, checkDuration.Seconds(), util.UnpackError(scrapeErr).Error(), false, srv.ID,
 	)
 	if err != nil {
 		logg.Error("additional DB error while trying to write rate scraping error for service %s in project %s: %s",
-			serviceType, project.UUID, err.Error(),
+			srv.Type, project.UUID, err.Error(),
 		)
 	}
 }

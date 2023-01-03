@@ -305,7 +305,7 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 				}
 				return nil
 			},
-		}.Run(tx, updater.Cluster, *updater.Domain, *updater.Project, srv.ID, srv.Type)
+		}.Run(tx, updater.Cluster, *updater.Domain, *updater.Project, srv.Ref())
 		if respondwith.ErrorText(w, err) {
 			return
 		}
@@ -330,11 +330,7 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 	var errors []string
 	for _, srv := range servicesToUpdate {
 		targetDomain := core.KeystoneDomainFromDB(*updater.Domain)
-		err := datamodel.ApplyBackendQuota(
-			p.DB,
-			updater.Cluster, targetDomain, *updater.Project,
-			srv.ID, srv.Type,
-		)
+		err := datamodel.ApplyBackendQuota(p.DB, updater.Cluster, targetDomain, *updater.Project, srv.Ref())
 		if err != nil {
 			logg.Info("while applying new %s quota for project %s: %s", srv.Type, updater.Project.UUID, err.Error())
 			errors = append(errors, err.Error())
@@ -468,7 +464,7 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 		if !p.Cluster.HasService(srv.Type) {
 			continue
 		}
-		updateResult, err := datamodel.ProjectResourceUpdate{}.Run(tx, p.Cluster, *domain, *project, srv.ID, srv.Type)
+		updateResult, err := datamodel.ProjectResourceUpdate{}.Run(tx, p.Cluster, *domain, *project, srv.Ref())
 		if respondwith.ErrorText(w, err) {
 			return
 		}
@@ -489,11 +485,7 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 			continue
 		}
 		targetDomain := core.KeystoneDomainFromDB(*domain)
-		err := datamodel.ApplyBackendQuota(
-			p.DB,
-			p.Cluster, targetDomain, *project,
-			srv.ID, srv.Type,
-		)
+		err := datamodel.ApplyBackendQuota(p.DB, p.Cluster, targetDomain, *project, srv.Ref())
 		if err != nil {
 			errors = append(errors, err.Error())
 			continue

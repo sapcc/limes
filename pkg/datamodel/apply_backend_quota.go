@@ -52,16 +52,16 @@ var (
 // This function must be called after each ProjectResourceUpdate.Run(). It is
 // not called by Run() because the caller will usually want to commit the DB
 // transaction before calling out into the backend.
-func ApplyBackendQuota(dbi db.Interface, cluster *core.Cluster, domain core.KeystoneDomain, project db.Project, serviceID int64, serviceType string) error {
-	plugin := cluster.QuotaPlugins[serviceType]
+func ApplyBackendQuota(dbi db.Interface, cluster *core.Cluster, domain core.KeystoneDomain, project db.Project, srv db.ProjectServiceRef) error {
+	plugin := cluster.QuotaPlugins[srv.Type]
 	if plugin == nil {
-		return fmt.Errorf("no quota plugin registered for service type %s", serviceType)
+		return fmt.Errorf("no quota plugin registered for service type %s", srv.Type)
 	}
 
 	//collect backend quota values that we want to apply
 	targetQuotasInDB := make(map[string]uint64)
 	needsApply := false
-	err := sqlext.ForeachRow(dbi, backendQuotaSelectQuery, []any{serviceID}, func(rows *sql.Rows) error {
+	err := sqlext.ForeachRow(dbi, backendQuotaSelectQuery, []any{srv.ID}, func(rows *sql.Rows) error {
 		var (
 			resourceName string
 			currentQuota *int64
@@ -78,7 +78,7 @@ func ApplyBackendQuota(dbi db.Interface, cluster *core.Cluster, domain core.Keys
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("while collecting target quota values for %s backend: %w", serviceType, err)
+		return fmt.Errorf("while collecting target quota values for %s backend: %w", srv.Type, err)
 	}
 
 	//if everything is looking good already, we're done here
@@ -102,6 +102,6 @@ func ApplyBackendQuota(dbi db.Interface, cluster *core.Cluster, domain core.Keys
 	if err != nil {
 		return err
 	}
-	_, err = dbi.Exec(backendQuotaMarkAsAppliedQuery, serviceID)
+	_, err = dbi.Exec(backendQuotaMarkAsAppliedQuery, srv.ID)
 	return err
 }

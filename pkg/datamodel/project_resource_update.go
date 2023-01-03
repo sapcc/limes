@@ -57,13 +57,13 @@ type ProjectResourceUpdateResult struct {
 //     caller to update resource data as necessary.
 //   - Constraints are enforced and other derived fields are recomputed on all
 //     ProjectResource entries.
-func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, domain db.Domain, project db.Project, serviceID int64, serviceType string) (*ProjectResourceUpdateResult, error) {
+func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, domain db.Domain, project db.Project, srv db.ProjectServiceRef) (*ProjectResourceUpdateResult, error) {
 	if u.LogError == nil {
 		u.LogError = logg.Error
 	}
 	var constraints map[string]core.QuotaConstraint
 	if cluster.QuotaConstraints != nil {
-		constraints = cluster.QuotaConstraints.Projects[domain.Name][project.Name][serviceType]
+		constraints = cluster.QuotaConstraints.Projects[domain.Name][project.Name][srv.Type]
 	}
 
 	//We will first collect all existing data into one of these structs for each
@@ -76,7 +76,7 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, doma
 
 	//collect ResourceInfo instances for this service
 	allResources := make(map[string]resourceState)
-	for _, resInfo := range cluster.QuotaPlugins[serviceType].Resources() {
+	for _, resInfo := range cluster.QuotaPlugins[srv.Type].Resources() {
 		resInfo := resInfo
 		allResources[resInfo.Name] = resourceState{
 			Original: nil, //might be filled in the next loop below
@@ -86,9 +86,9 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, doma
 
 	//collect existing resources for this service
 	var dbResources []db.ProjectResource
-	_, err := dbi.Select(&dbResources, `SELECT * FROM project_resources WHERE service_id = $1`, serviceID)
+	_, err := dbi.Select(&dbResources, `SELECT * FROM project_resources WHERE service_id = $1`, srv.ID)
 	if err != nil {
-		return nil, fmt.Errorf("while loading %s project resources: %w", serviceType, err)
+		return nil, fmt.Errorf("while loading %s project resources: %w", srv.Type, err)
 	}
 	for _, res := range dbResources {
 		res := res
@@ -110,7 +110,7 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, doma
 		if state.Info == nil {
 			u.LogError(
 				"project service %d (%s of %s/%s) has unknown resource %q (was this resource type removed from the quota plugin?)",
-				serviceID, serviceType, domain.Name, project.Name, resName,
+				srv.ID, srv.Type, domain.Name, project.Name, resName,
 			)
 			continue
 		}
@@ -118,7 +118,7 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, doma
 
 		//setup a copy of `state.Original` (or a new resource) that we can write into
 		res := db.ProjectResource{
-			ServiceID: serviceID,
+			ServiceID: srv.ID,
 			Name:      resName,
 		}
 		if state.Original != nil {
@@ -126,20 +126,20 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, doma
 		}
 
 		//update in place while enforcing validation rules and constraints
-		qdConfig := cluster.QuotaDistributionConfigForResource(serviceType, res.Name)
-		validateResourceConstraints(domain, project, serviceType, &res, resInfo, constraints[res.Name], qdConfig)
+		qdConfig := cluster.QuotaDistributionConfigForResource(srv.Type, res.Name)
+		validateResourceConstraints(domain, project, srv, &res, resInfo, constraints[res.Name], qdConfig)
 		if u.UpdateResource != nil {
 			err := u.UpdateResource(&res)
 			if err != nil {
 				return nil, err
 			}
-			validateResourceConstraints(domain, project, serviceType, &res, resInfo, constraints[res.Name], qdConfig)
+			validateResourceConstraints(domain, project, srv, &res, resInfo, constraints[res.Name], qdConfig)
 		}
 
 		//(re-)compute derived values
 		if !resInfo.NoQuota {
 			if project.HasBursting {
-				behavior := cluster.BehaviorForResource(serviceType, res.Name, domain.Name+"/"+project.Name)
+				behavior := cluster.BehaviorForResource(srv.Type, res.Name, domain.Name+"/"+project.Name)
 				desiredBackendQuota := behavior.MaxBurstMultiplier.ApplyTo(*res.Quota, qdConfig.Model)
 				res.DesiredBackendQuota = &desiredBackendQuota
 			} else {
@@ -151,13 +151,13 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, doma
 		if state.Original == nil {
 			err := dbi.Insert(&res)
 			if err != nil {
-				return nil, fmt.Errorf("while inserting %s/%s resource in the DB: %w", serviceType, res.Name, err)
+				return nil, fmt.Errorf("while inserting %s/%s resource in the DB: %w", srv.Type, res.Name, err)
 			}
 			hasChanges = true
 		} else if !reflect.DeepEqual(*state.Original, res) {
 			_, err := dbi.Update(&res)
 			if err != nil {
-				return nil, fmt.Errorf("while updating %s/%s resource in the DB: %w", serviceType, res.Name, err)
+				return nil, fmt.Errorf("while updating %s/%s resource in the DB: %w", srv.Type, res.Name, err)
 			}
 			hasChanges = true
 		}
@@ -173,9 +173,9 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, doma
 	}
 
 	if hasChanges {
-		err = ApplyComputedDomainQuota(dbi, cluster, domain.ID, serviceType)
+		err = ApplyComputedDomainQuota(dbi, cluster, domain.ID, srv.Type)
 		if err != nil {
-			return nil, fmt.Errorf("while recomputing %s domain quotas: %w", serviceType, err)
+			return nil, fmt.Errorf("while recomputing %s domain quotas: %w", srv.Type, err)
 		}
 	}
 
@@ -190,7 +190,7 @@ func unwrapOrDefault[T any](value *T, defaultValue T) T {
 }
 
 // Ensures that `res` conforms to various constraints and validation rules.
-func validateResourceConstraints(domain db.Domain, project db.Project, serviceType string, res *db.ProjectResource, resInfo limesresources.ResourceInfo, constraint core.QuotaConstraint, qdConfig core.QuotaDistributionConfiguration) {
+func validateResourceConstraints(domain db.Domain, project db.Project, srv db.ProjectServiceRef, res *db.ProjectResource, resInfo limesresources.ResourceInfo, constraint core.QuotaConstraint, qdConfig core.QuotaDistributionConfiguration) {
 	if resInfo.NoQuota {
 		//ensure that NoQuota resources do not contain any quota values
 		res.Quota = nil
@@ -207,7 +207,7 @@ func validateResourceConstraints(domain db.Domain, project db.Project, serviceTy
 		constrainedQuota := constraint.ApplyTo(*res.Quota)
 		if constrainedQuota != *res.Quota {
 			logg.Other("AUDIT", "changing %s/%s quota for project %s/%s from %s to %s to satisfy constraint %q",
-				serviceType, res.Name, domain.Name, project.Name,
+				srv.Type, res.Name, domain.Name, project.Name,
 				limes.ValueWithUnit{Value: *res.Quota, Unit: resInfo.Unit},
 				limes.ValueWithUnit{Value: constrainedQuota, Unit: resInfo.Unit},
 				constraint.String(),
