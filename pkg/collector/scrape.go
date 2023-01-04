@@ -308,60 +308,25 @@ func (c *Collector) writeDummyResources(dbDomain db.Domain, dbProject db.Project
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 
-	var serviceConstraints map[string]core.QuotaConstraint
-	if c.Cluster.QuotaConstraints != nil {
-		serviceConstraints = c.Cluster.QuotaConstraints.Projects[dbDomain.Name][dbProject.Name][srv.Type]
-	}
-
-	//find existing project_resources entries (we don't want to touch those)
-	var existingResources []db.ProjectResource
-	_, err = tx.Select(&existingResources,
-		`SELECT * FROM project_resources WHERE service_id = $1`, srv.ID)
+	//create all project_resources, but do not set any particular values (except
+	//that quota constraints and default quotas are enforced)
+	updateResult, err := datamodel.ProjectResourceUpdate{
+		UpdateResource: func(res *db.ProjectResource) error {
+			resInfo := c.Cluster.InfoForResource(srv.Type, res.Name)
+			if !resInfo.NoQuota && res.BackendQuota == nil {
+				dummyBackendQuota := int64(-1)
+				res.BackendQuota = &dummyBackendQuota
+			}
+			return nil
+		},
+		LogError: c.LogError,
+	}.Run(tx, c.Cluster, dbDomain, dbProject, srv)
 	if err != nil {
 		return err
 	}
-	isExistingResource := make(map[string]bool)
-	for _, res := range existingResources {
-		isExistingResource[res.Name] = true
-	}
-
-	//create dummy resources
-	for _, resMetadata := range c.Plugin.Resources() {
-		if isExistingResource[resMetadata.Name] {
-			continue
-		}
-
-		initialQuota := serviceConstraints[resMetadata.Name].ApplyTo(0)
-		dummyBackendQuota := int64(-1)
-		res := &db.ProjectResource{
-			ServiceID:        srv.ID,
-			Name:             resMetadata.Name,
-			Quota:            &initialQuota,
-			Usage:            0,
-			PhysicalUsage:    nil,
-			BackendQuota:     &dummyBackendQuota,
-			SubresourcesJSON: "",
-		}
-
-		if resMetadata.NoQuota {
-			res.Quota = nil
-			res.BackendQuota = nil
-		} else {
-			if dbProject.HasBursting {
-				qdConfig := c.Cluster.QuotaDistributionConfigForResource(srv.Type, resMetadata.Name)
-				behavior := c.Cluster.BehaviorForResource(srv.Type, resMetadata.Name, dbDomain.Name+"/"+dbProject.Name)
-				desiredBackendQuota := behavior.MaxBurstMultiplier.ApplyTo(*res.Quota, qdConfig.Model)
-				res.DesiredBackendQuota = &desiredBackendQuota
-			} else {
-				res.DesiredBackendQuota = res.Quota
-			}
-		}
-
-		err = tx.Insert(res)
-		if err != nil {
-			return err
-		}
-	}
+	//ignore result (we do not do ApplyBackendQuota here: this function is only
+	//called after scraping errors, so ApplyBackendQuota will likely fail, too)
+	_ = updateResult
 
 	//update scraped_at timestamp and reset stale flag to make sure that we do
 	//not scrape this service again immediately afterwards if there are other
