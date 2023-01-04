@@ -21,6 +21,7 @@ package collector
 
 import (
 	"database/sql"
+	"fmt"
 	"math/big"
 	"time"
 
@@ -113,6 +114,9 @@ func (c *Collector) ScrapeRates() {
 		//write result on success; if anything fails, try to record the error in the DB
 		if err == nil {
 			err = c.writeRateScrapeResult(srv, rateData, serviceRatesScrapeState, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
+			if err != nil {
+				err = fmt.Errorf("while writing results into DB: %w", err)
+			}
 		}
 		if err != nil {
 			c.writeRateScrapeError(project, srv, err, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
