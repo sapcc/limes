@@ -173,9 +173,7 @@ func (p *v1Provider) FindDomainFromRequest(w http.ResponseWriter, r *http.Reques
 	}
 
 	var domain db.Domain
-	err := p.DB.SelectOne(&domain, `SELECT * FROM domains WHERE uuid = $1 AND cluster_id = $2`,
-		domainUUID, p.Cluster.ID,
-	)
+	err := p.DB.SelectOne(&domain, `SELECT * FROM domains WHERE uuid = $1`, domainUUID)
 	switch {
 	case err == sql.ErrNoRows:
 		http.Error(w, "no such domain (if it was just created, try to POST /domains/discover)", http.StatusNotFound)

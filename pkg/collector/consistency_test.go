@@ -99,7 +99,6 @@ func Test_Consistency(t *testing.T) {
 	//add some useless *_services entries
 	epoch := time.Unix(0, 0).UTC()
 	err = dbm.Insert(&db.ClusterService{
-		ClusterID: "west",
 		Type:      "whatever",
 		ScrapedAt: &epoch,
 	})

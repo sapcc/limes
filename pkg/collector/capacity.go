@@ -67,8 +67,7 @@ func (c *Collector) scanCapacity() {
 
 	for capacitorID, plugin := range c.Cluster.CapacityPlugins {
 		labels := prometheus.Labels{
-			"os_cluster": c.Cluster.ID,
-			"capacitor":  capacitorID,
+			"capacitor": capacitorID,
 		}
 		//always report the counter
 		clusterCapacitorSuccessCounter.With(labels).Add(0)
@@ -96,7 +95,6 @@ func (c *Collector) scanCapacity() {
 
 		clusterCapacitorSuccessCounter.With(labels).Inc()
 		capacitorInfo[capacitorID] = db.ClusterCapacitor{
-			ClusterID:          c.Cluster.ID,
 			CapacitorID:        capacitorID,
 			ScrapedAt:          &scrapedAt,
 			ScrapeDurationSecs: scrapeDuration.Seconds(),
@@ -155,7 +153,7 @@ func (c *Collector) scanCapacity() {
 func (c *Collector) writeCapacitorInfo(tx *gorp.Transaction, capacitorInfo map[string]db.ClusterCapacitor) error {
 	//remove superfluous cluster_capacitors
 	var dbCapacitors []db.ClusterCapacitor
-	_, err := tx.Select(&dbCapacitors, `SELECT * FROM cluster_capacitors WHERE cluster_id = $1`, c.Cluster.ID)
+	_, err := tx.Select(&dbCapacitors, `SELECT * FROM cluster_capacitors`)
 	if err != nil {
 		return err
 	}
@@ -194,7 +192,7 @@ func (c *Collector) writeCapacity(tx *gorp.Transaction, values map[string]map[st
 	//up by the CheckConsistency())
 	serviceIDForType := make(map[string]int64)
 	var dbServices []*db.ClusterService
-	_, err := tx.Select(&dbServices, `SELECT * FROM cluster_services WHERE cluster_id = $1`, c.Cluster.ID)
+	_, err := tx.Select(&dbServices, `SELECT * FROM cluster_services`)
 	if err != nil {
 		return err
 	}
@@ -215,7 +213,6 @@ func (c *Collector) writeCapacity(tx *gorp.Transaction, values map[string]map[st
 		}
 
 		dbService := &db.ClusterService{
-			ClusterID: c.Cluster.ID,
 			Type:      serviceType,
 			ScrapedAt: &scrapedAt,
 		}
@@ -227,7 +224,7 @@ func (c *Collector) writeCapacity(tx *gorp.Transaction, values map[string]map[st
 	}
 
 	//update scraped_at timestamp on all cluster services in one step
-	_, err = tx.Exec(`UPDATE cluster_services SET scraped_at = $1 WHERE cluster_id = $2`, scrapedAt, c.Cluster.ID)
+	_, err = tx.Exec(`UPDATE cluster_services SET scraped_at = $1`, scrapedAt)
 	if err != nil {
 		return err
 	}

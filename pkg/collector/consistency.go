@@ -51,7 +51,7 @@ func (c *Collector) checkConsistencyCluster() {
 
 	//check cluster_services entries
 	var services []db.ClusterService
-	_, err := c.DB.Select(&services, `SELECT * FROM cluster_services WHERE cluster_id = $1`, c.Cluster.ID)
+	_, err := c.DB.Select(&services, `SELECT * FROM cluster_services`)
 	if err != nil {
 		c.LogError(err.Error())
 		return
@@ -64,7 +64,7 @@ func (c *Collector) checkConsistencyCluster() {
 		seen[service.Type] = true
 
 		if !c.Cluster.HasService(service.Type) {
-			logg.Info("cleaning up %s service entry for domain %s", service.Type, c.Cluster.ID)
+			logg.Info("cleaning up %s cluster service entry", service.Type)
 			_, err := c.DB.Delete(&service) //nolint:gosec // Delete is not holding onto the pointer after it returns
 			if err != nil {
 				c.LogError(err.Error())
@@ -78,9 +78,8 @@ func (c *Collector) checkConsistencyCluster() {
 			continue
 		}
 
-		logg.Info("creating missing %s service entry for cluster %s", serviceType, c.Cluster.ID)
+		logg.Info("creating missing %s cluster service entry", serviceType)
 		err := c.DB.Insert(&db.ClusterService{
-			ClusterID: c.Cluster.ID,
 			Type:      serviceType,
 			ScrapedAt: &now,
 		})
@@ -92,7 +91,7 @@ func (c *Collector) checkConsistencyCluster() {
 	//recurse into domains (with deterministic ordering for the unit test's sake;
 	//the DESC ordering is because I was too lazy to change the fixtures)
 	var domains []db.Domain
-	_, err = c.DB.Select(&domains, `SELECT * FROM domains WHERE cluster_id = $1 ORDER BY name DESC`, c.Cluster.ID)
+	_, err = c.DB.Select(&domains, `SELECT * FROM domains ORDER BY name DESC`)
 	if err != nil {
 		c.LogError(err.Error())
 		return

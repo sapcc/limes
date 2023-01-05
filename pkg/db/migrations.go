@@ -259,4 +259,49 @@ var sqlMigrations = map[string]string{
 			ADD COLUMN rates_scrape_error_message TEXT NOT NULL DEFAULT '';
 		UPDATE project_services SET checked_at = scraped_at, rates_checked_at = rates_scraped_at;
 	`,
+	// NOTE 1: The down-migration fills in the cluster ID "ccloud" to be compatible with the original deployment in CCloud.
+	// NOTE 2: I could not find a way to change the primary key of `cluster_capacitors` within a migration (i.e. within a
+	// transaction), so we just recreate the entire table. Since all data in the table can be recovered by ScanCapacity(),
+	// this is not that bad.
+	"020_remove_cluster_id.down.sql": `
+		ALTER TABLE cluster_services
+			ADD COLUMN cluster_id TEXT NOT NULL DEFAULT 'ccloud';
+		ALTER TABLE cluster_services
+			ADD UNIQUE (cluster_id, type),
+			DROP CONSTRAINT cluster_services_type_key;
+		ALTER TABLE domains
+			ADD COLUMN cluster_id TEXT NOT NULL DEFAULT 'ccloud';
+		ALTER TABLE domains
+			ADD UNIQUE (uuid, cluster_id),
+			DROP CONSTRAINT domains_uuid_key;
+		DROP TABLE cluster_capacitors;
+		CREATE TABLE cluster_capacitors (
+		  cluster_id           TEXT      NOT NULL,
+		  capacitor_id         TEXT      NOT NULL,
+		  scraped_at           TIMESTAMP NOT NULL,
+		  scrape_duration_secs REAL      NOT NULL DEFAULT 0,
+		  serialized_metrics   TEXT      NOT NULL DEFAULT '',
+		  PRIMARY KEY (cluster_id, capacitor_id)
+		);
+	`,
+	"020_remove_cluster_id.up.sql": `
+		ALTER TABLE cluster_services
+			ADD UNIQUE (type),
+			DROP CONSTRAINT cluster_services_cluster_id_type_key;
+		ALTER TABLE cluster_services
+			DROP COLUMN cluster_id;
+		ALTER TABLE domains
+			ADD UNIQUE (uuid),
+			DROP CONSTRAINT domains_uuid_cluster_id_key;
+		ALTER TABLE domains
+			DROP COLUMN cluster_id;
+		DROP TABLE cluster_capacitors;
+		CREATE TABLE cluster_capacitors (
+		  capacitor_id         TEXT      NOT NULL,
+		  scraped_at           TIMESTAMP NOT NULL,
+		  scrape_duration_secs REAL      NOT NULL DEFAULT 0,
+		  serialized_metrics   TEXT      NOT NULL DEFAULT '',
+		  PRIMARY KEY (capacitor_id)
+		);
+	`,
 }

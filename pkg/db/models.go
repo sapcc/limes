@@ -28,7 +28,6 @@ import (
 
 // ClusterCapacitor contains a record from the `cluster_capacitors` table.
 type ClusterCapacitor struct {
-	ClusterID          string     `db:"cluster_id"`
 	CapacitorID        string     `db:"capacitor_id"`
 	ScrapedAt          *time.Time `db:"scraped_at"` //pointer type to allow for NULL value
 	ScrapeDurationSecs float64    `db:"scrape_duration_secs"`
@@ -38,7 +37,6 @@ type ClusterCapacitor struct {
 // ClusterService contains a record from the `cluster_services` table.
 type ClusterService struct {
 	ID        int64      `db:"id"`
-	ClusterID string     `db:"cluster_id"`
 	Type      string     `db:"type"`
 	ScrapedAt *time.Time `db:"scraped_at"` //pointer type to allow for NULL value
 }
@@ -54,10 +52,9 @@ type ClusterResource struct {
 
 // Domain contains a record from the `domains` table.
 type Domain struct {
-	ID        int64  `db:"id"`
-	ClusterID string `db:"cluster_id"`
-	Name      string `db:"name"`
-	UUID      string `db:"uuid"`
+	ID   int64  `db:"id"`
+	Name string `db:"name"`
+	UUID string `db:"uuid"`
 }
 
 // DomainService contains a record from the `domain_services` table.
@@ -143,7 +140,7 @@ type ProjectRate struct {
 
 // initGorp is used by Init() to setup the ORM part of the database connection.
 func initGorp(db *gorp.DbMap) {
-	db.AddTableWithName(ClusterCapacitor{}, "cluster_capacitors").SetKeys(false, "cluster_id", "capacitor_id")
+	db.AddTableWithName(ClusterCapacitor{}, "cluster_capacitors").SetKeys(false, "capacitor_id")
 	db.AddTableWithName(ClusterService{}, "cluster_services").SetKeys(true, "id")
 	db.AddTableWithName(ClusterResource{}, "cluster_resources").SetKeys(false, "service_id", "name")
 	db.AddTableWithName(Domain{}, "domains").SetKeys(true, "id")

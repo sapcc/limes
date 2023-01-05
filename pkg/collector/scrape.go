@@ -51,7 +51,7 @@ const (
 // query that finds the next project that needs to have resources scraped
 var findProjectForResourceScrapeQuery = sqlext.SimplifyWhitespace(`
 	SELECT * FROM project_services
-	-- filter by service type (NOTE: no filtering by cluster ID necessary anymore since there is only one, TODO: remove cluster ID from the DB entirely)
+	-- filter by service type
 	WHERE type = $1
 	-- filter by need to be updated (because of user request, because of missing data, or because of outdated data)
 	AND (stale OR scraped_at IS NULL OR scraped_at < $2 OR (scraped_at != checked_at AND checked_at < $3))
@@ -73,7 +73,6 @@ func (c *Collector) Scrape() {
 
 	//make sure that the counters are reported
 	labels := prometheus.Labels{
-		"os_cluster":   c.Cluster.ID,
 		"service":      serviceType,
 		"service_name": serviceInfo.ProductName,
 	}

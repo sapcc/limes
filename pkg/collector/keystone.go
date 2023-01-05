@@ -68,17 +68,14 @@ func (c *Collector) listDomainsFiltered() ([]core.KeystoneDomain, error) {
 // list of UUIDs for the newly discovered domains.
 func (c *Collector) ScanDomains(opts ScanDomainsOpts) (result []string, resultErr error) {
 	//make sure that the counters are reported
-	labels := prometheus.Labels{
-		"os_cluster": c.Cluster.ID,
-	}
-	domainDiscoverySuccessCounter.With(labels).Add(0)
-	domainDiscoveryFailedCounter.With(labels).Add(0)
+	domainDiscoverySuccessCounter.Add(0)
+	domainDiscoveryFailedCounter.Add(0)
 	//report either success or failure when the method exists
 	defer func() {
 		if resultErr == nil {
-			domainDiscoverySuccessCounter.With(labels).Inc()
+			domainDiscoverySuccessCounter.Inc()
 		} else {
-			domainDiscoveryFailedCounter.With(labels).Inc()
+			domainDiscoveryFailedCounter.Inc()
 		}
 	}()
 
@@ -97,7 +94,7 @@ func (c *Collector) ScanDomains(opts ScanDomainsOpts) (result []string, resultEr
 	//domain and to all related resource records through `ON DELETE CASCADE`)
 	existingDomainsByUUID := make(map[string]*db.Domain)
 	var dbDomains []*db.Domain
-	_, err = c.DB.Select(&dbDomains, `SELECT * FROM domains WHERE cluster_id = $1`, c.Cluster.ID)
+	_, err = c.DB.Select(&dbDomains, `SELECT * FROM domains`)
 	if err != nil {
 		return nil, err
 	}
@@ -171,9 +168,8 @@ func (c *Collector) initDomain(domain core.KeystoneDomain) (*db.Domain, error) {
 
 	//add record to `domains` table
 	dbDomain := &db.Domain{
-		ClusterID: c.Cluster.ID,
-		Name:      domain.Name,
-		UUID:      domain.UUID,
+		Name: domain.Name,
+		UUID: domain.UUID,
 	}
 	err = tx.Insert(dbDomain)
 	if err != nil {
@@ -192,9 +188,8 @@ func (c *Collector) initDomain(domain core.KeystoneDomain) (*db.Domain, error) {
 func (c *Collector) ScanProjects(domain *db.Domain) (result []string, resultErr error) {
 	//make sure that the counters are reported
 	labels := prometheus.Labels{
-		"os_cluster": c.Cluster.ID,
-		"domain":     domain.Name,
-		"domain_id":  domain.UUID,
+		"domain":    domain.Name,
+		"domain_id": domain.UUID,
 	}
 	projectDiscoverySuccessCounter.With(labels).Add(0)
 	projectDiscoveryFailedCounter.With(labels).Add(0)

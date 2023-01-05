@@ -24,8 +24,8 @@ INSERT INTO domain_services (id, domain_id, type) VALUES (4, 2, 'centralized');
 INSERT INTO domain_services (id, domain_id, type) VALUES (5, 2, 'shared');
 INSERT INTO domain_services (id, domain_id, type) VALUES (6, 2, 'unshared');
 
-INSERT INTO domains (id, cluster_id, name, uuid) VALUES (1, 'west', 'germany', 'uuid-for-germany');
-INSERT INTO domains (id, cluster_id, name, uuid) VALUES (2, 'west', 'france', 'uuid-for-france');
+INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
+INSERT INTO domains (id, name, uuid) VALUES (2, 'france', 'uuid-for-france');
 
 INSERT INTO project_services (id, project_id, type, scraped_at, stale, scrape_duration_secs, rates_scraped_at, rates_stale, rates_scrape_duration_secs, rates_scrape_state, serialized_metrics, checked_at, scrape_error_message, rates_checked_at, rates_scrape_error_message) VALUES (1, 1, 'centralized', NULL, FALSE, 0, NULL, FALSE, 0, '', '', NULL, '', NULL, '');
 INSERT INTO project_services (id, project_id, type, scraped_at, stale, scrape_duration_secs, rates_scraped_at, rates_stale, rates_scrape_duration_secs, rates_scrape_state, serialized_metrics, checked_at, scrape_error_message, rates_checked_at, rates_scrape_error_message) VALUES (2, 1, 'shared', NULL, FALSE, 0, NULL, FALSE, 0, '', '', NULL, '', NULL, '');

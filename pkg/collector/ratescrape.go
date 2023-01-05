@@ -41,10 +41,10 @@ var findProjectForRateScrapeQuery = sqlext.SimplifyWhitespace(`
 	FROM project_services ps
 	JOIN projects p ON p.id = ps.project_id
 	JOIN domains d ON d.id = p.domain_id
-	-- filter by cluster ID and service type
-	WHERE d.cluster_id = $1 AND ps.type = $2
+	-- filter by service type
+	WHERE ps.type = $1
 	-- filter by need to be updated (because of user request, because of missing data, or because of outdated data)
-	AND (ps.rates_stale OR ps.rates_scraped_at IS NULL OR ps.rates_scraped_at < $3 OR (ps.rates_scraped_at != ps.rates_checked_at AND ps.rates_checked_at < $4))
+	AND (ps.rates_stale OR ps.rates_scraped_at IS NULL OR ps.rates_scraped_at < $2 OR (ps.rates_scraped_at != ps.rates_checked_at AND ps.rates_checked_at < $3))
 	-- order by update priority (in the same way: first user-requested, then new projects, then outdated projects, then failed projects, then ID for deterministic test behavior)
 	ORDER BY ps.rates_stale DESC, COALESCE(ps.rates_checked_at, to_timestamp(-1)) ASC, ps.id ASC
 	-- find only one project to scrape per iteration
@@ -63,7 +63,6 @@ func (c *Collector) ScrapeRates() {
 
 	//make sure that the counters are reported
 	labels := prometheus.Labels{
-		"os_cluster":   c.Cluster.ID,
 		"service":      serviceType,
 		"service_name": serviceInfo.ProductName,
 	}
@@ -79,7 +78,7 @@ func (c *Collector) ScrapeRates() {
 			project                 core.KeystoneProject
 		)
 		scrapeStartedAt := c.TimeNow()
-		err := c.DB.QueryRow(findProjectForRateScrapeQuery, c.Cluster.ID, serviceType, scrapeStartedAt.Add(-scrapeInterval), scrapeStartedAt.Add(-recheckInterval)).
+		err := c.DB.QueryRow(findProjectForRateScrapeQuery, serviceType, scrapeStartedAt.Add(-scrapeInterval), scrapeStartedAt.Add(-recheckInterval)).
 			Scan(&serviceID, &serviceRatesScrapedAt, &serviceRatesScrapeState, &project.Name, &project.UUID, &project.ParentUUID, &project.Domain.Name, &project.Domain.UUID)
 		if err != nil {
 			//ErrNoRows is okay; it just means that nothing needs scraping right now

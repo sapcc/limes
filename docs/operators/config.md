@@ -56,7 +56,6 @@ Limes logs all quota changes at the domain and project level in an Open Standard
 A configuration file in YAML format must be provided that describes things like the set of available backend services and the quota/capacity scraping behavior. A minimal config file could look like this:
 
 ```yaml
-cluster_id: staging
 services:
   - type: compute
   - type: network
@@ -78,7 +77,6 @@ The following fields and sections are supported:
 
 | Field | Required | Description |
 | --- | --- | --- |
-| `cluster_id` | yes | Must be given for historical reasons. May be chosen freely, but should not be changed afterwards. (It *can* be changed, but that requires a shutdown of all Limes components and manual editing of the database.) |
 | `catalog_url` | no | URL of Limes API service as it appears in the Keystone service catalog for this cluster. This is only used for version advertisements, and can be omitted if no client relies on the URLs in these version advertisements. |
 | `discovery.method` | no | Defines which method to use to discover Keystone domains and projects in this cluster. If not given, the default value is `list`. |
 | `discovery.except_domains` | no | May contain a regex. Domains whose names match the regex will not be considered by Limes. |
@@ -115,7 +113,6 @@ Both `limits.projects` and `limits.domains` contain two-level maps, first by ser
 For example:
 
 ```yaml
-cluster_id: example
 lowpriv_raise:
   limits:
     projects:
@@ -148,7 +145,6 @@ Some special behaviors for resources can be configured in the `resource_behavior
 For example:
 
 ```yaml
-cluster_id: example
 resource_behavior:
   - { resource: network/healthmonitors, scales_with: network/loadbalancers, scaling_factor: 1 }
   - { resource: network/listeners,      scales_with: network/loadbalancers, scaling_factor: 2 }
@@ -837,7 +833,6 @@ For further details see the [rate limits API specification](../users/api-v1-spec
 Example configuration:
 
 ```yaml
-cluster_id: staging
 services:
   - type: object-store
     rates:

@@ -21,14 +21,12 @@ package reports
 
 import (
 	"database/sql"
-	"fmt"
 	"sort"
 	"strings"
 	"time"
 
 	"github.com/sapcc/go-bits/sqlext"
 
-	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
 )
 
@@ -37,7 +35,7 @@ var scrapeErrorsQuery = sqlext.SimplifyWhitespace(`
 	  FROM projects p
 	  JOIN domains d ON d.id = p.domain_id
 	  JOIN project_services ps ON ps.project_id = p.id
-	WHERE %s AND ps.scrape_error_message != ''
+	WHERE ps.scrape_error_message != ''
 	ORDER BY d.name, p.name, ps.type, ps.scrape_error_message
 `)
 
@@ -56,23 +54,20 @@ type ScrapeError struct {
 	Message          string `json:"message"`
 }
 
-func GetScrapeErrors(cluster *core.Cluster, dbi db.Interface, filter Filter) ([]ScrapeError, error) {
-	return getScrapeErrors(cluster, dbi, filter, scrapeErrorsQuery)
+func GetScrapeErrors(dbi db.Interface, filter Filter) ([]ScrapeError, error) {
+	return getScrapeErrors(dbi, filter, scrapeErrorsQuery)
 }
 
-func GetRateScrapeErrors(cluster *core.Cluster, dbi db.Interface, filter Filter) ([]ScrapeError, error) {
+func GetRateScrapeErrors(dbi db.Interface, filter Filter) ([]ScrapeError, error) {
 	dbQuery := strings.ReplaceAll(scrapeErrorsQuery, "scrape_error_message", "rates_scrape_error_message")
 	dbQuery = strings.ReplaceAll(dbQuery, "checked_at", "rates_checked_at")
-	return getScrapeErrors(cluster, dbi, filter, dbQuery)
+	return getScrapeErrors(dbi, filter, dbQuery)
 }
 
-func getScrapeErrors(cluster *core.Cluster, dbi db.Interface, filter Filter, dbQuery string) ([]ScrapeError, error) {
-	fields := map[string]interface{}{"d.cluster_id": cluster.ID}
-
+func getScrapeErrors(dbi db.Interface, filter Filter, dbQuery string) ([]ScrapeError, error) {
 	var result []ScrapeError
 	queryStr, joinArgs := filter.PrepareQuery(dbQuery)
-	whereStr, whereArgs := db.BuildSimpleWhereClause(fields, len(joinArgs))
-	err := sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
+	err := sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
 		var sErr ScrapeError
 		var checkedAtAsTime *time.Time
 		err := rows.Scan(

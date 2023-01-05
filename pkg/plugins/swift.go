@@ -53,14 +53,14 @@ var (
 			Name: "limes_swift_objects_per_container",
 			Help: "Number of objects for each Swift container.",
 		},
-		[]string{"os_cluster", "domain_id", "project_id", "container_name"},
+		[]string{"domain_id", "project_id", "container_name"},
 	)
 	swiftBytesUsedGauge = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Name: "limes_swift_size_bytes_per_container",
 			Help: "Total object size in bytes for each Swift container.",
 		},
-		[]string{"os_cluster", "domain_id", "project_id", "container_name"},
+		[]string{"domain_id", "project_id", "container_name"},
 	)
 )
 
@@ -213,7 +213,7 @@ func (p *swiftPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 }
 
 // CollectMetrics implements the core.QuotaPlugin interface.
-func (p *swiftPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID string, project core.KeystoneProject, serializedMetrics string) error {
+func (p *swiftPlugin) CollectMetrics(ch chan<- prometheus.Metric, project core.KeystoneProject, serializedMetrics string) error {
 	if serializedMetrics == "" {
 		return nil
 	}
@@ -233,12 +233,12 @@ func (p *swiftPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID stri
 		ch <- prometheus.MustNewConstMetric(
 			swiftObjectsCountDesc,
 			prometheus.GaugeValue, float64(containerMetrics.ObjectCount),
-			clusterID, project.Domain.UUID, project.UUID, containerName,
+			project.Domain.UUID, project.UUID, containerName,
 		)
 		ch <- prometheus.MustNewConstMetric(
 			swiftBytesUsedDesc,
 			prometheus.GaugeValue, float64(containerMetrics.BytesUsed),
-			clusterID, project.Domain.UUID, project.UUID, containerName,
+			project.Domain.UUID, project.UUID, containerName,
 		)
 	}
 
