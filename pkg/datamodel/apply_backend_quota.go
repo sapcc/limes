@@ -20,10 +20,26 @@
 package datamodel
 
 import (
+	"database/sql"
 	"fmt"
+
+	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/pkg/core"
 	"github.com/sapcc/limes/pkg/db"
+)
+
+var (
+	backendQuotaSelectQuery = sqlext.SimplifyWhitespace(`
+		SELECT name, backend_quota, desired_backend_quota
+		  FROM project_resources
+		 WHERE service_id = $1 AND desired_backend_quota IS NOT NULL
+	`)
+	backendQuotaMarkAsAppliedQuery = sqlext.SimplifyWhitespace(`
+		UPDATE project_resources
+		   SET backend_quota = desired_backend_quota
+		 WHERE service_id = $1
+	`)
 )
 
 // ApplyBackendQuota applies the backend quota for the given project service.
@@ -32,93 +48,60 @@ import (
 //
 // If the backend quotas recorded in the project service's resources already
 // match the expected values, nothing is done.
-func ApplyBackendQuota(dbi db.Interface, cluster *core.Cluster, domain core.KeystoneDomain, project db.Project, serviceID int64, serviceType string) error {
-	plugin := cluster.QuotaPlugins[serviceType]
+//
+// This function must be called after each ProjectResourceUpdate.Run(). It is
+// not called by Run() because the caller will usually want to commit the DB
+// transaction before calling out into the backend.
+func ApplyBackendQuota(dbi db.Interface, cluster *core.Cluster, domain core.KeystoneDomain, project db.Project, srv db.ProjectServiceRef) error {
+	plugin := cluster.QuotaPlugins[srv.Type]
 	if plugin == nil {
-		return fmt.Errorf("no quota plugin registered for service type %s", serviceType)
+		return fmt.Errorf("no quota plugin registered for service type %s", srv.Type)
 	}
 
-	isRelevantResource := make(map[string]bool)
-	for _, res := range plugin.Resources() {
-		if !res.NoQuota {
-			isRelevantResource[res.Name] = true
-		}
-	}
-
-	var resources []db.ProjectResource
-	_, err := dbi.Select(&resources, `SELECT * FROM project_resources WHERE service_id = $1`, serviceID)
-	if err != nil {
-		return err
-	}
-
-	//collect desired backend quotas
-	var resourcesToUpdate []db.ProjectResource
-	quotaValues := make(map[string]uint64)
-	for _, res := range resources {
-		if !isRelevantResource[res.Name] {
-			continue
-		}
-
-		//NOTE: This may panic if a resource is not NoQuota, but its
-		//ProjectResource contains any NULL quota values. I considered putting
-		//validations in here to orderly log an error, but then the problem could
-		//go unnoticed for quite some time. Crashing ensures that we notice the
-		//problem sooner.
-		desiredQuota := *res.Quota
-
-		//apply burst if the quota distribution model allows bursting
-		if project.HasBursting {
-			qdConfig := cluster.QuotaDistributionConfigForResource(serviceType, res.Name)
-			behavior := cluster.BehaviorForResource(serviceType, res.Name, domain.Name+"/"+project.Name)
-			desiredQuota = behavior.MaxBurstMultiplier.ApplyTo(*res.Quota, qdConfig.Model)
-		}
-		quotaValues[res.Name] = desiredQuota
-
-		if *res.BackendQuota < 0 || desiredQuota != uint64(*res.BackendQuota) || desiredQuota != *res.DesiredBackendQuota {
-			res.DesiredBackendQuota = &desiredQuota
-			desiredQuotaInt64 := int64(desiredQuota)
-			res.BackendQuota = &desiredQuotaInt64
-			resourcesToUpdate = append(resourcesToUpdate, res)
-		}
-	}
-	if len(resourcesToUpdate) == 0 {
-		return nil
-	}
-
-	//save desired backend quotas in DB (we do this before SetQuota so that it is
-	//durable even if SetQuota fails)
-	//
-	//NOTE: cannot use UpdateColumns() because of https://github.com/go-gorp/gorp/issues/325
-	stmt, err := dbi.Prepare(`UPDATE project_resources SET desired_backend_quota = $1 WHERE service_id = $2 AND name = $3`)
-	if err != nil {
-		return err
-	}
-	for _, res := range resourcesToUpdate {
-		_, err := stmt.Exec(res.DesiredBackendQuota, serviceID, res.Name)
+	//collect backend quota values that we want to apply
+	targetQuotasInDB := make(map[string]uint64)
+	needsApply := false
+	err := sqlext.ForeachRow(dbi, backendQuotaSelectQuery, []any{srv.ID}, func(rows *sql.Rows) error {
+		var (
+			resourceName string
+			currentQuota *int64
+			targetQuota  uint64
+		)
+		err := rows.Scan(&resourceName, &currentQuota, &targetQuota)
 		if err != nil {
 			return err
 		}
+		targetQuotasInDB[resourceName] = targetQuota
+		if currentQuota == nil || *currentQuota < 0 || uint64(*currentQuota) != targetQuota {
+			needsApply = true
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("while collecting target quota values for %s backend: %w", srv.Type, err)
+	}
+
+	//if everything is looking good already, we're done here
+	if !needsApply {
+		return nil
+	}
+
+	//double-check that we only include quota values for resources that the backend currently knows about
+	targetQuotasForBackend := make(map[string]uint64)
+	for _, res := range plugin.Resources() {
+		if res.NoQuota {
+			continue
+		}
+		//NOTE: If `targetQuotasInDB` does not have an entry for this resource, we will write 0 into the backend.
+		targetQuotasForBackend[res.Name] = targetQuotasInDB[res.Name]
 	}
 
 	//apply quotas in backend
 	provider, eo := cluster.ProviderClient()
-	err = plugin.SetQuota(provider, eo, core.KeystoneProjectFromDB(project, domain), quotaValues)
+	err = plugin.SetQuota(provider, eo, core.KeystoneProjectFromDB(project, domain), targetQuotasForBackend)
 	if err != nil {
 		return err
 	}
-
-	//save applied backend quotas in DB
-	//
-	//NOTE: cannot use UpdateColumns() because of https://github.com/go-gorp/gorp/issues/325
-	stmt, err = dbi.Prepare(`UPDATE project_resources SET backend_quota = $1 WHERE service_id = $2 AND name = $3`)
-	if err != nil {
-		return err
-	}
-	for _, res := range resourcesToUpdate {
-		_, err := stmt.Exec(res.BackendQuota, serviceID, res.Name)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
+	_, err = dbi.Exec(backendQuotaMarkAsAppliedQuery, srv.ID)
+	return err
 }

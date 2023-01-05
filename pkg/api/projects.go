@@ -291,55 +291,29 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 		return
 	}
 
-	var resourcesToUpdate []interface{}
-	servicesToUpdate := make(map[string]bool)
-
+	var servicesToUpdate []db.ProjectService
 	for _, srv := range services {
-		if serviceRequests, exists := updater.Requests[srv.Type]; exists {
-			//Check all resources.
-			var resources []db.ProjectResource
-			_, err = tx.Select(&resources,
-				`SELECT * FROM project_resources WHERE service_id = $1 ORDER BY name`, srv.ID)
-			if respondwith.ErrorText(w, err) {
-				return
-			}
+		srvReq, exists := updater.Requests[srv.Type]
+		if !exists {
+			continue
+		}
 
-			for _, res := range resources {
-				req, exists := serviceRequests[res.Name]
-				if !exists {
-					continue
+		updateResult, err := datamodel.ProjectResourceUpdate{
+			UpdateResource: func(res *db.ProjectResource) error {
+				if resReq, exists := srvReq[res.Name]; exists {
+					res.Quota = &resReq.NewValue
 				}
-				if res.Quota != nil && *res.Quota == req.NewValue {
-					continue //nothing to do
-				}
-
-				//take a copy of the loop variable (it will be updated by the loop, so if
-				//we didn't take a copy manually, the resourcesToUpdate list would
-				//contain only identical pointers)
-				res := res
-
-				res.Quota = &req.NewValue
-				resourcesToUpdate = append(resourcesToUpdate, &res)
-				servicesToUpdate[srv.Type] = true
-			}
+				return nil
+			},
+		}.Run(tx, updater.Cluster, *updater.Domain, *updater.Project, srv.Ref())
+		if respondwith.ErrorText(w, err) {
+			return
+		}
+		if updateResult.HasBackendQuotaDrift {
+			servicesToUpdate = append(servicesToUpdate, srv)
 		}
 	}
-	//update the DB with the new quotas
-	onlyQuota := func(c *gorp.ColumnMap) bool {
-		return c.ColumnName == "quota"
-	}
-	_, err = tx.UpdateColumns(onlyQuota, resourcesToUpdate...)
-	if respondwith.ErrorText(w, err) {
-		return
-	}
-	for _, srv := range services {
-		if _, exists := updater.Requests[srv.Type]; exists {
-			err = datamodel.ApplyComputedDomainQuota(tx, updater.Cluster, updater.Domain.ID, srv.Type)
-			if respondwith.ErrorText(w, err) {
-				return
-			}
-		}
-	}
+
 	err = tx.Commit()
 	if respondwith.ErrorText(w, err) {
 		return
@@ -354,19 +328,9 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 	//until the operation succeeds. What's important is that the approved quota
 	//budget inside Limes is redistributed.
 	var errors []string
-	for _, srv := range services {
-		if !servicesToUpdate[srv.Type] {
-			continue
-		}
-		targetDomain := core.KeystoneDomain{
-			Name: updater.Domain.Name,
-			UUID: updater.Domain.UUID,
-		}
-		err := datamodel.ApplyBackendQuota(
-			p.DB,
-			updater.Cluster, targetDomain, *updater.Project,
-			srv.ID, srv.Type,
-		)
+	for _, srv := range servicesToUpdate {
+		targetDomain := core.KeystoneDomainFromDB(*updater.Domain)
+		err := datamodel.ApplyBackendQuota(p.DB, updater.Cluster, targetDomain, *updater.Project, srv.Ref())
 		if err != nil {
 			logg.Info("while applying new %s quota for project %s: %s", srv.Type, updater.Project.UUID, err.Error())
 			errors = append(errors, err.Error())
@@ -488,33 +452,40 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-	err = tx.Commit()
-	if respondwith.ErrorText(w, err) {
-		return
-	}
 
-	//update backend quotas to match new bursting mode
+	//recompute backend quotas in all services to match new bursting mode
 	var services []db.ProjectService
 	_, err = p.DB.Select(&services, `SELECT * FROM project_services WHERE project_id = $1`, project.ID)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-
-	var errors []string
+	var servicesToUpdate []db.ProjectService
 	for _, srv := range services {
-		_, exists := p.Cluster.QuotaPlugins[srv.Type]
-		if !exists {
+		if !p.Cluster.HasService(srv.Type) {
 			continue
 		}
-		targetDomain := core.KeystoneDomain{
-			Name: domain.Name,
-			UUID: domain.UUID,
+		updateResult, err := datamodel.ProjectResourceUpdate{}.Run(tx, p.Cluster, *domain, *project, srv.Ref())
+		if respondwith.ErrorText(w, err) {
+			return
 		}
-		err := datamodel.ApplyBackendQuota(
-			p.DB,
-			p.Cluster, targetDomain, *project,
-			srv.ID, srv.Type,
-		)
+		if updateResult.HasBackendQuotaDrift {
+			servicesToUpdate = append(servicesToUpdate, srv)
+		}
+	}
+
+	err = tx.Commit()
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	//apply backend quotas into the backend services
+	var errors []string
+	for _, srv := range servicesToUpdate {
+		if !p.Cluster.HasService(srv.Type) {
+			continue
+		}
+		targetDomain := core.KeystoneDomainFromDB(*domain)
+		err := datamodel.ApplyBackendQuota(p.DB, p.Cluster, targetDomain, *project, srv.Ref())
 		if err != nil {
 			errors = append(errors, err.Error())
 			continue

@@ -112,7 +112,7 @@ func (c *Collector) checkConsistencyDomain(domain db.Domain) {
 	defer sqlext.RollbackUnlessCommitted(tx)
 
 	//validate domain_services entries
-	_, err = datamodel.ValidateDomainServices(tx, c.Cluster, domain)
+	err = datamodel.ValidateDomainServices(tx, c.Cluster, domain)
 	if err == nil {
 		err = tx.Commit()
 	}
@@ -131,32 +131,11 @@ func (c *Collector) checkConsistencyDomain(domain db.Domain) {
 	logg.Info("checking consistency for %d projects in domain %q...", len(projects), domain.Name)
 
 	for _, project := range projects {
-		err := c.checkConsistencyProject(project, domain)
+		//ValidateProjectServices usually does nothing or does maybe one DELETE or
+		//INSERT, so it does not need to be in a transaction
+		err := datamodel.ValidateProjectServices(c.DB, c.Cluster, domain, project)
 		if err != nil {
 			c.LogError(err.Error())
 		}
 	}
-
-	//recompute domain quota values that depend on project quotas
-	for serviceType := range c.Cluster.QuotaPlugins {
-		err = datamodel.ApplyComputedDomainQuota(c.DB, c.Cluster, domain.ID, serviceType)
-		if err != nil {
-			c.LogError(err.Error())
-		}
-	}
-}
-
-func (c *Collector) checkConsistencyProject(project db.Project, domain db.Domain) error {
-	tx, err := c.DB.Begin()
-	if err != nil {
-		return err
-	}
-	defer sqlext.RollbackUnlessCommitted(tx)
-
-	//validate project_services entries
-	_, err = datamodel.ValidateProjectServices(tx, c.Cluster, domain, project)
-	if err == nil {
-		err = tx.Commit()
-	}
-	return err
 }
