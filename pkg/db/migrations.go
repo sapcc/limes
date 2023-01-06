@@ -304,4 +304,12 @@ var sqlMigrations = map[string]string{
 		  PRIMARY KEY (capacitor_id)
 		);
 	`,
+	"021_remove_default_quotas.down.sql": `
+		ALTER TABLE project_resources ALTER COLUMN desired_backend_quota SET DEFAULT 0;
+		ALTER TABLE project_rates     ALTER COLUMN usage_as_bigint       SET DEFAULT '';
+	`,
+	"021_remove_default_quotas.up.sql": `
+		ALTER TABLE project_resources ALTER COLUMN desired_backend_quota DROP DEFAULT;
+		ALTER TABLE project_rates     ALTER COLUMN usage_as_bigint       DROP DEFAULT;
+	`,
 }
