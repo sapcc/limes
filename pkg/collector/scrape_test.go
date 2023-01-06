@@ -155,12 +155,12 @@ func Test_ScrapeSuccess(t *testing.T) {
 	c.Scrape()
 	c.Scrape() //twice because there are two projects
 	tr.DBChanges().AssertEqualf(`
-		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (1, 'capacity', 10, 0, 100, '', 10, 0);
-		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (1, 'capacity_portion', NULL, 0, NULL, '', NULL, NULL);
-		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (1, 'things', 0, 2, 42, '[{"index":0},{"index":1}]', 0, NULL);
-		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (2, 'capacity', 10, 0, 100, '', 12, 0);
-		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (2, 'capacity_portion', NULL, 0, NULL, '', NULL, NULL);
-		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (2, 'things', 0, 2, 42, '[{"index":0},{"index":1}]', 0, NULL);
+		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, desired_backend_quota, physical_usage) VALUES (1, 'capacity', 10, 0, 100, 10, 0);
+		INSERT INTO project_resources (service_id, name, usage) VALUES (1, 'capacity_portion', 0);
+		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota) VALUES (1, 'things', 0, 2, 42, '[{"index":0},{"index":1}]', 0);
+		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, desired_backend_quota, physical_usage) VALUES (2, 'capacity', 10, 0, 100, 12, 0);
+		INSERT INTO project_resources (service_id, name, usage) VALUES (2, 'capacity_portion', 0);
+		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota) VALUES (2, 'things', 0, 2, 42, '[{"index":0},{"index":1}]', 0);
 		UPDATE project_services SET scraped_at = 1, scrape_duration_secs = 1, serialized_metrics = '{"capacity_usage":0,"things_usage":2}', checked_at = 1 WHERE id = 1 AND project_id = 1 AND type = 'unittest';
 		UPDATE project_services SET scraped_at = 3, scrape_duration_secs = 1, serialized_metrics = '{"capacity_usage":0,"things_usage":2}', checked_at = 3 WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`)
@@ -328,12 +328,12 @@ func Test_ScrapeFailure(t *testing.T) {
 	c.Scrape()
 	c.Scrape() //twice because there are two projects
 	tr.DBChanges().AssertEqualf(`
-		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (1, 'capacity', 10, 0, -1, '', 10, NULL);
-		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (1, 'capacity_portion', NULL, 0, NULL, '', NULL, NULL);
-		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (1, 'things', 0, 0, -1, '', 0, NULL);
-		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (2, 'capacity', 10, 0, -1, '', 12, NULL);
-		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (2, 'capacity_portion', NULL, 0, NULL, '', NULL, NULL);
-		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (2, 'things', 0, 0, -1, '', 0, NULL);
+		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (1, 'capacity', 10, 0, -1, 10);
+		INSERT INTO project_resources (service_id, name, usage) VALUES (1, 'capacity_portion', 0);
+		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (1, 'things', 0, 0, -1, 0);
+		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (2, 'capacity', 10, 0, -1, 12);
+		INSERT INTO project_resources (service_id, name, usage) VALUES (2, 'capacity_portion', 0);
+		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (2, 'things', 0, 0, -1, 0);
 		UPDATE project_services SET scraped_at = 0, checked_at = 1, scrape_error_message = 'Scrape failed as requested' WHERE id = 1 AND project_id = 1 AND type = 'unittest';
 		UPDATE project_services SET scraped_at = 0, checked_at = 3, scrape_error_message = 'Scrape failed as requested' WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`)
@@ -409,9 +409,9 @@ func Test_ScrapeCentralized(t *testing.T) {
 		tr.DBChanges().AssertEqualf(`
 			UPDATE domain_resources SET quota = 10 WHERE service_id = 1 AND name = 'capacity';
 			UPDATE domain_resources SET quota = 20 WHERE service_id = 1 AND name = 'things';
-			INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (1, 'capacity', 10, 0, 10, '', 10, 0);
-			INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (1, 'capacity_portion', NULL, 0, NULL, '', NULL, NULL);
-			INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (1, 'things', 20, 2, 20, '[{"index":0},{"index":1}]', 20, NULL);
+			INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, desired_backend_quota, physical_usage) VALUES (1, 'capacity', 10, 0, 10, 10, 0);
+			INSERT INTO project_resources (service_id, name, usage) VALUES (1, 'capacity_portion', 0);
+			INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota) VALUES (1, 'things', 20, 2, 20, '[{"index":0},{"index":1}]', 20);
 			UPDATE project_services SET scraped_at = 1, scrape_duration_secs = 1, serialized_metrics = '{"capacity_usage":0,"things_usage":2}', checked_at = 1 WHERE id = 1 AND project_id = 1 AND type = 'centralized';
 		`)
 
@@ -505,16 +505,16 @@ func Test_AutoApproveInitialQuota(t *testing.T) {
 		Once:     true,
 	}
 
-	//check that ScanDomains created the domain, project and their services
+	//ScanDomains created the domain, project and their services
 	tr, tr0 := easypg.NewTracker(t, dbm.Db)
-	_ = tr0
+	tr0.Ignore()
 
 	//when first scraping, the initial backend quota of the "approve" resource
 	//shall be approved automatically
 	c.Scrape()
 	tr.DBChanges().AssertEqualf(`
-		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (1, 'approve', 10, 0, 10, '', 10, NULL);
-		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (1, 'noapprove', 0, 0, 20, '', 0, NULL);
+		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (1, 'approve', 10, 0, 10, 10);
+		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (1, 'noapprove', 0, 0, 20, 0);
 		UPDATE project_services SET scraped_at = 1, scrape_duration_secs = 1, checked_at = 1 WHERE id = 1 AND project_id = 1 AND type = 'autoapprovaltest';
 	`)
 
@@ -587,7 +587,7 @@ func Test_ScrapeButNoResources(t *testing.T) {
 	tr0.AssertEqualf(`
 		INSERT INTO domain_services (id, domain_id, type) VALUES (1, 1, 'noop');
 		INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
-		INSERT INTO project_services (id, project_id, type, scraped_at, stale, scrape_duration_secs, rates_scraped_at, rates_stale, rates_scrape_duration_secs, rates_scrape_state, serialized_metrics, checked_at, scrape_error_message, rates_checked_at, rates_scrape_error_message) VALUES (1, 1, 'noop', 1, FALSE, 1, NULL, FALSE, 0, '', '', 1, '', NULL, '');
+		INSERT INTO project_services (id, project_id, type, scraped_at, scrape_duration_secs, checked_at) VALUES (1, 1, 'noop', 1, 1, 1);
 		INSERT INTO projects (id, domain_id, name, uuid, parent_uuid, has_bursting) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany', FALSE);
 	`)
 }

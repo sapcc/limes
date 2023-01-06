@@ -239,7 +239,7 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 		}
 	}
 	//update the DB with the new rate limits
-	queryStr := `INSERT INTO project_rates (service_id, name, rate_limit, window_ns) VALUES ($1,$2,$3,$4) ON CONFLICT (service_id, name) DO UPDATE SET rate_limit = EXCLUDED.rate_limit, window_ns = EXCLUDED.window_ns`
+	queryStr := `INSERT INTO project_rates (service_id, name, rate_limit, window_ns, usage_as_bigint) VALUES ($1,$2,$3,$4,'') ON CONFLICT (service_id, name) DO UPDATE SET rate_limit = EXCLUDED.rate_limit, window_ns = EXCLUDED.window_ns`
 	err = sqlext.WithPreparedStatement(tx, queryStr, func(stmt *sql.Stmt) error {
 		for _, rate := range ratesToUpdate {
 			_, err := stmt.Exec(rate.ServiceID, rate.Name, rate.Limit, rate.Window)
