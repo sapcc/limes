@@ -35,11 +35,10 @@ import (
 	"github.com/sapcc/limes/pkg/util"
 )
 
-// ClusterConfiguration contains all the configuration data for a single cluster.
-// It is passed around in a lot of Limes code, mostly for the cluster ID and the
-// list of enabled services.
+// ClusterConfiguration contains all the configuration data for a single
+// cluster. It is instantiated from YAML and then transformed into type
+// Cluster during the startup phase.
 type ClusterConfiguration struct {
-	ClusterID  string                   `yaml:"cluster_id"`
 	CatalogURL string                   `yaml:"catalog_url"`
 	Discovery  DiscoveryConfiguration   `yaml:"discovery"`
 	Services   []ServiceConfiguration   `yaml:"services"`
@@ -244,9 +243,6 @@ func (cluster ClusterConfiguration) validateConfig() (success bool) {
 	missing := func(key string) {
 		logg.Error("missing %s configuration value", key)
 		success = false
-	}
-	if cluster.ClusterID == "" {
-		missing("cluster_id")
 	}
 
 	compileOptionalRx := func(pattern string) *regexp.Regexp {

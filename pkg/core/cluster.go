@@ -41,11 +41,9 @@ import (
 	"github.com/sapcc/limes/pkg/util"
 )
 
-// Cluster contains all configuration and runtime information about a single
-// cluster. It is passed around a lot in Limes code, mostly for the cluster ID,
-// the list of enabled services, and access to the quota and capacity plugins.
+// Cluster contains all configuration and runtime information for the target
+// cluster.
 type Cluster struct {
-	ID                string
 	Auth              *AuthSession
 	Config            ClusterConfiguration
 	DiscoveryPlugin   DiscoveryPlugin
@@ -68,7 +66,6 @@ type Cluster struct {
 // will be logged when some of the requested plugins cannot be found.
 func NewCluster(config ClusterConfiguration) *Cluster {
 	c := &Cluster{
-		ID:              config.ClusterID,
 		Config:          config,
 		QuotaPlugins:    make(map[string]QuotaPlugin),
 		CapacityPlugins: make(map[string]CapacityPlugin),
@@ -77,7 +74,7 @@ func NewCluster(config ClusterConfiguration) *Cluster {
 
 	c.DiscoveryPlugin = DiscoveryPluginRegistry.Instantiate(config.Discovery.Method)
 	if c.DiscoveryPlugin == nil {
-		logg.Fatal("setup for cluster %s failed: no suitable discovery plugin found", config.ClusterID)
+		logg.Fatal("setup for discovery method %s failed: no suitable discovery plugin found", config.Discovery.Method)
 	}
 
 	for _, srv := range config.Services {

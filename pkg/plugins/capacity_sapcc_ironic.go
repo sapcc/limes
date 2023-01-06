@@ -296,12 +296,11 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 	return map[string]map[string]core.CapacityData{"compute": result2}, string(serializedMetricsBytes), nil
 }
 
-var ironicUnmatchedNodesGauge = prometheus.NewGaugeVec(
+var ironicUnmatchedNodesGauge = prometheus.NewGauge(
 	prometheus.GaugeOpts{
 		Name: "limes_unmatched_ironic_nodes",
 		Help: "Number of available/active Ironic nodes without matching flavor.",
 	},
-	[]string{"os_cluster"},
 )
 
 // DescribeMetrics implements the core.CapacityPlugin interface.
@@ -310,7 +309,7 @@ func (p *capacitySapccIronicPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) 
 }
 
 // CollectMetrics implements the core.CapacityPlugin interface.
-func (p *capacitySapccIronicPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, serializedMetrics string) error {
+func (p *capacitySapccIronicPlugin) CollectMetrics(ch chan<- prometheus.Metric, serializedMetrics string) error {
 	if serializedMetrics == "" {
 		return nil
 	}
@@ -327,7 +326,6 @@ func (p *capacitySapccIronicPlugin) CollectMetrics(ch chan<- prometheus.Metric, 
 	ch <- prometheus.MustNewConstMetric(
 		ironicUnmatchedNodesDesc,
 		prometheus.GaugeValue, float64(metrics.UnmatchedNodeCount),
-		clusterID,
 	)
 	return nil
 }

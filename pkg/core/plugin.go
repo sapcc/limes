@@ -154,12 +154,10 @@ type QuotaPlugin interface {
 	//metrics. The serializedMetrics argument contains the respective value
 	//returned from the last Scrape call on the same project.
 	//
-	//The clusterID should be given as a label to all emitted metrics.
-	//
 	//Some plugins also emit metrics directly within Scrape. This newer interface
 	//should be preferred since metrics emitted here won't be lost between
 	//restarts of limes-collect.
-	CollectMetrics(ch chan<- prometheus.Metric, clusterID string, project KeystoneProject, serializedMetrics string) error
+	CollectMetrics(ch chan<- prometheus.Metric, project KeystoneProject, serializedMetrics string) error
 }
 
 // CapacityData contains the total and per-availability-zone capacity data for a
@@ -223,12 +221,10 @@ type CapacityPlugin interface {
 	//metrics. The serializedMetrics argument contains the respective value
 	//returned from the last Scrape call on the same project.
 	//
-	//The clusterID should be given as a label to all emitted metrics.
-	//
 	//Some plugins also emit metrics directly within Scrape. This newer interface
 	//should be preferred since metrics emitted here won't be lost between
 	//restarts of limes-collect.
-	CollectMetrics(ch chan<- prometheus.Metric, clusterID, serializedMetrics string) error
+	CollectMetrics(ch chan<- prometheus.Metric, serializedMetrics string) error
 }
 
 var (

@@ -38,7 +38,6 @@ func keystoneTestCluster(t *testing.T) (*core.Cluster, *gorp.DbMap) {
 	dbm := test.InitDatabase(t, nil)
 
 	return &core.Cluster{
-		ID: "west",
 		Config: core.ClusterConfiguration{
 			QuotaDistributionConfigs: []*core.QuotaDistributionConfiguration{
 				{
@@ -192,7 +191,7 @@ func Test_ScanDomains(t *testing.T) {
 		DELETE FROM domain_services WHERE id = 4 AND domain_id = 2 AND type = 'centralized';
 		DELETE FROM domain_services WHERE id = 5 AND domain_id = 2 AND type = 'shared';
 		DELETE FROM domain_services WHERE id = 6 AND domain_id = 2 AND type = 'unshared';
-		DELETE FROM domains WHERE id = 2 AND cluster_id = 'west' AND uuid = 'uuid-for-france';
+		DELETE FROM domains WHERE id = 2 AND uuid = 'uuid-for-france';
 		DELETE FROM project_services WHERE id = 7 AND project_id = 3 AND type = 'centralized';
 		DELETE FROM project_services WHERE id = 8 AND project_id = 3 AND type = 'shared';
 		DELETE FROM project_services WHERE id = 9 AND project_id = 3 AND type = 'unshared';
@@ -210,7 +209,7 @@ func Test_ScanDomains(t *testing.T) {
 	}
 	assert.DeepEqual(t, "new domains after ScanDomains #8", actualNewDomains, []string(nil))
 	tr.DBChanges().AssertEqualf(`
-		UPDATE domains SET name = 'germany-changed' WHERE id = 1 AND cluster_id = 'west' AND uuid = 'uuid-for-germany';
+		UPDATE domains SET name = 'germany-changed' WHERE id = 1 AND uuid = 'uuid-for-germany';
 		UPDATE projects SET name = 'berlin-changed' WHERE id = 1 AND uuid = 'uuid-for-berlin';
 	`)
 }

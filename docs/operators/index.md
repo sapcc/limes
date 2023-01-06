@@ -31,22 +31,6 @@ Limes consists of two basic services:
 - Both services emit Prometheus metrics. See [List of metrics](./metrics.md) for details.
 - Persistence is provided by a PostgreSQL database which is accessible to both services.
 
-## Support for shared services
-
-Limes includes support for services that are shared across *OpenStack clusters* (i.e. separate OpenStack installations
-with separate service catalogs). In this case, multiple instances of the API service and the collector service (one each
-per cluster) will share the same Postgres database, but use different *cluster IDs* to identify their cluster's data
-within the database.
-
-A *shared service* is a backend service which is available in multiple clusters. For example, a Swift object storage
-setup can have multiple proxy deployments which each authenticate against a different cluster's Keystone. In this case,
-the total capacity which is reported by the shared service needs to be distributed among all clusters using the shared
-service.
-
-When one of the clusters uses Limes only for the shared service, not for its local resources, Limes can be configured to
-only collect and manage the resources provided by shared services. Please refer to the [configuration
-guide](./config.md) for details.
-
 # Building
 
 This repository contains a `Makefile` with an `install` target that understands the conventional `DESTDIR` and `PREFIX`
@@ -87,7 +71,7 @@ If you're using Kubernetes, you can use our team's [Helm chart for Limes][chart]
    ```
 
    There should be only one instance of the collector service. The API service can be scaled out by simply starting
-   additional instances with the same configuration and cluster ID.
+   additional instances with the same configuration.
 
 6. Register the public URL of the API service in the Keystone service catalog: A service with type `resources` shall
    point to the base path of the public URL, e.g. `https://limes.example.com/`. A service with type `limes-rates` shall

@@ -27,7 +27,6 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/cadf"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
@@ -44,19 +43,16 @@ var eventSink chan<- cadf.Event
 
 // StartAuditTrail starts the audit trail by initializing the event sink and
 // starting a Commit() goroutine.
-func StartAuditTrail(clusterID string) {
+func StartAuditTrail() {
 	if osext.GetenvBool("LIMES_AUDIT_ENABLE") {
-		labels := prometheus.Labels{
-			"os_cluster": clusterID,
-		}
-		auditEventPublishSuccessCounter.With(labels).Add(0)
-		auditEventPublishFailedCounter.With(labels).Add(0)
+		auditEventPublishSuccessCounter.Add(0)
+		auditEventPublishFailedCounter.Add(0)
 
 		onSuccessFunc := func() {
-			auditEventPublishSuccessCounter.With(labels).Inc()
+			auditEventPublishSuccessCounter.Inc()
 		}
 		onFailFunc := func() {
-			auditEventPublishFailedCounter.With(labels).Inc()
+			auditEventPublishFailedCounter.Inc()
 		}
 		s := make(chan cadf.Event, 20)
 		eventSink = s

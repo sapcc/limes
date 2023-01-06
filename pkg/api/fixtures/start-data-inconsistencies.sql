@@ -1,7 +1,7 @@
 -- start data for inconsistencies test
 -- "cloud" cluster has two domains
-INSERT INTO domains (id, cluster_id, name, uuid) VALUES (1, 'cloud', 'germany',  'uuid-for-germany');
-INSERT INTO domains (id, cluster_id, name, uuid) VALUES (2, 'cloud', 'pakistan', 'uuid-for-pakistan');
+INSERT INTO domains (id, name, uuid) VALUES (1, 'germany',  'uuid-for-germany');
+INSERT INTO domains (id, name, uuid) VALUES (2, 'pakistan', 'uuid-for-pakistan');
 
 -- domain_services is fully populated (as ensured by the collector's consistency check)
 INSERT INTO domain_services (id, domain_id, type) VALUES (1, 1, 'compute');

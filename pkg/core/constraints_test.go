@@ -206,7 +206,7 @@ func (p quotaConstraintTestPlugin) ScrapeRates(client *gophercloud.ProviderClien
 }
 func (p quotaConstraintTestPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 }
-func (p quotaConstraintTestPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID string, project KeystoneProject, serializedMetrics string) error {
+func (p quotaConstraintTestPlugin) CollectMetrics(ch chan<- prometheus.Metric, project KeystoneProject, serializedMetrics string) error {
 	return nil
 }
 

@@ -220,11 +220,11 @@ func (p *Plugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.E
 var (
 	unittestCapacityUsageMetric = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{Name: "limes_unittest_capacity_usage"},
-		[]string{"os_cluster", "domain_id", "project_id"},
+		[]string{"domain_id", "project_id"},
 	)
 	unittestThingsUsageMetric = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{Name: "limes_unittest_things_usage"},
-		[]string{"os_cluster", "domain_id", "project_id"},
+		[]string{"domain_id", "project_id"},
 	)
 )
 
@@ -235,7 +235,7 @@ func (p *Plugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 }
 
 // CollectMetrics implements the core.QuotaPlugin interface.
-func (p *Plugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID string, project core.KeystoneProject, serializedMetrics string) error {
+func (p *Plugin) CollectMetrics(ch chan<- prometheus.Metric, project core.KeystoneProject, serializedMetrics string) error {
 	if serializedMetrics == "" {
 		return nil
 	}
@@ -257,11 +257,11 @@ func (p *Plugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID string, p
 
 	ch <- prometheus.MustNewConstMetric(
 		unittestCapacityUsageDesc, prometheus.GaugeValue, float64(data.CapacityUsage),
-		clusterID, project.Domain.UUID, project.UUID,
+		project.Domain.UUID, project.UUID,
 	)
 	ch <- prometheus.MustNewConstMetric(
 		unittestThingsUsageDesc, prometheus.GaugeValue, float64(data.ThingsUsage),
-		clusterID, project.Domain.UUID, project.UUID,
+		project.Domain.UUID, project.UUID,
 	)
 	return nil
 }
@@ -331,13 +331,11 @@ func (p *CapacityPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherc
 }
 
 var (
-	unittestCapacitySmallerHalfMetric = prometheus.NewGaugeVec(
+	unittestCapacitySmallerHalfMetric = prometheus.NewGauge(
 		prometheus.GaugeOpts{Name: "limes_unittest_capacity_smaller_half"},
-		[]string{"os_cluster"},
 	)
-	unittestCapacityLargerHalfMetric = prometheus.NewGaugeVec(
+	unittestCapacityLargerHalfMetric = prometheus.NewGauge(
 		prometheus.GaugeOpts{Name: "limes_unittest_capacity_larger_half"},
-		[]string{"os_cluster"},
 	)
 )
 
@@ -350,7 +348,7 @@ func (p *CapacityPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 }
 
 // CollectMetrics implements the core.CapacityPlugin interface.
-func (p *CapacityPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, serializedMetrics string) error {
+func (p *CapacityPlugin) CollectMetrics(ch chan<- prometheus.Metric, serializedMetrics string) error {
 	if !p.WithSubcapacities {
 		return nil
 	}
@@ -372,11 +370,9 @@ func (p *CapacityPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, 
 
 	ch <- prometheus.MustNewConstMetric(
 		unittestCapacitySmallerHalfDesc, prometheus.GaugeValue, float64(data.SmallerHalf),
-		clusterID,
 	)
 	ch <- prometheus.MustNewConstMetric(
 		unittestCapacityLargerHalfDesc, prometheus.GaugeValue, float64(data.LargerHalf),
-		clusterID,
 	)
 	return nil
 }

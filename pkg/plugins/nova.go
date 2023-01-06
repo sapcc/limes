@@ -585,7 +585,7 @@ var novaInstanceCountGauge = prometheus.NewGaugeVec(
 		Name: "limes_instance_counts",
 		Help: "Number of Nova instances per project and hypervisor type.",
 	},
-	[]string{"os_cluster", "domain_id", "project_id", "hypervisor"},
+	[]string{"domain_id", "project_id", "hypervisor"},
 )
 
 // DescribeMetrics implements the core.QuotaPlugin interface.
@@ -594,7 +594,7 @@ func (p *novaPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 }
 
 // CollectMetrics implements the core.QuotaPlugin interface.
-func (p *novaPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID string, project core.KeystoneProject, serializedMetrics string) error {
+func (p *novaPlugin) CollectMetrics(ch chan<- prometheus.Metric, project core.KeystoneProject, serializedMetrics string) error {
 	if serializedMetrics == "" {
 		return nil
 	}
@@ -612,7 +612,7 @@ func (p *novaPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID strin
 		ch <- prometheus.MustNewConstMetric(
 			novaInstanceCountDesc,
 			prometheus.GaugeValue, float64(instanceCount),
-			clusterID, project.Domain.UUID, project.UUID, hypervisorName,
+			project.Domain.UUID, project.UUID, hypervisorName,
 		)
 	}
 	return nil

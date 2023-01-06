@@ -35,7 +35,7 @@ import (
 	"github.com/sapcc/limes/pkg/reports"
 )
 
-// GetClusterRates handles GET /v1/clusters/:cluster_id.
+// GetClusterRates handles GET /rates/v1/clusters/current.
 func (p *v1Provider) GetClusterRates(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/rates/v1/clusters/current")
 	token := p.CheckToken(r)

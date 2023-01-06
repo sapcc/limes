@@ -59,9 +59,9 @@ var domainReportQuery2 = sqlext.SimplifyWhitespace(`
 func GetDomains(cluster *core.Cluster, domainID *int64, dbi db.Interface, filter Filter) ([]*limesresources.DomainReport, error) {
 	clusterCanBurst := cluster.Config.Bursting.MaxMultiplier > 0
 
-	fields := map[string]interface{}{"d.cluster_id": cluster.ID}
+	var fields map[string]any
 	if domainID != nil {
-		fields["d.id"] = *domainID
+		fields = map[string]any{"d.id": *domainID}
 	}
 
 	//first query: data for projects in this domain

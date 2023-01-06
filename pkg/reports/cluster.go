@@ -22,7 +22,6 @@ package reports
 import (
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"strings"
 	"time"
 
@@ -41,19 +40,18 @@ var clusterReportQuery1 = sqlext.SimplifyWhitespace(`
 	       SUM(GREATEST(pr.usage - pr.quota, 0)),
 	       SUM(COALESCE(pr.physical_usage, pr.usage)), COUNT(pr.physical_usage) > 0,
 	       MIN(ps.scraped_at), MAX(ps.scraped_at)
-	  FROM domains d
-	  JOIN projects p ON p.domain_id = d.id
-	  JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
+	  FROM project_services ps
 	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
-	 WHERE %s GROUP BY d.cluster_id, ps.type, pr.name
+	 WHERE TRUE {{AND ps.type = $service_type}}
+	 GROUP BY ps.type, pr.name
 `)
 
 var clusterReportQuery2 = sqlext.SimplifyWhitespace(`
 	SELECT ds.type, dr.name, SUM(dr.quota)
-	  FROM domains d
-	  JOIN domain_services ds ON ds.domain_id = d.id {{AND ds.type = $service_type}}
+	  FROM domain_services ds
 	  LEFT OUTER JOIN domain_resources dr ON dr.service_id = ds.id {{AND dr.name = $resource_name}}
-	 WHERE %s GROUP BY d.cluster_id, ds.type, dr.name
+	 WHERE TRUE {{AND ds.type = $service_type}}
+	 GROUP BY ds.type, dr.name
 `)
 
 var clusterReportQuery3 = sqlext.SimplifyWhitespace(`
@@ -61,30 +59,28 @@ var clusterReportQuery3 = sqlext.SimplifyWhitespace(`
 	       cr.capacity_per_az, cr.subcapacities, cs.scraped_at
 	  FROM cluster_services cs
 	  LEFT OUTER JOIN cluster_resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
-	 WHERE %s {{AND cs.type = $service_type}}
+	 WHERE TRUE {{AND cs.type = $service_type}}
 `)
 
 var clusterRateReportQuery1 = sqlext.SimplifyWhitespace(`
-	SELECT ps.type, MIN(ps.rates_scraped_at), MAX(ps.rates_scraped_at)
-	  FROM domains d
-	  JOIN projects p ON p.domain_id = d.id
-	  JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
-	 WHERE %s GROUP BY d.cluster_id, ps.type
+	SELECT type, MIN(rates_scraped_at), MAX(rates_scraped_at)
+	  FROM project_services
+	 WHERE TRUE {{AND type = $service_type}}
+	 GROUP BY type
 `)
 
 // GetClusterResources returns the resource data report for the whole cluster.
 func GetClusterResources(cluster *core.Cluster, dbi db.Interface, filter Filter) (*limesresources.ClusterReport, error) {
 	report := &limesresources.ClusterReport{
 		ClusterInfo: limes.ClusterInfo{
-			ID: "current", //the actual cluster ID is now an implementation detail and not shown on the API
+			ID: "current", //multi-cluster support has been removed; this value is only included for backwards-compatibility
 		},
 		Services: make(limesresources.ClusterServiceReports),
 	}
 
 	//first query: collect project usage data in these clusters
 	queryStr, joinArgs := filter.PrepareQuery(clusterReportQuery1)
-	whereStr, whereArgs := db.BuildSimpleWhereClause(makeClusterFilter("d", cluster.ID), len(joinArgs))
-	err := sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
+	err := sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
 		var (
 			serviceType       string
 			resourceName      *string
@@ -132,8 +128,7 @@ func GetClusterResources(cluster *core.Cluster, dbi db.Interface, filter Filter)
 
 	//second query: collect domain quota data in these clusters
 	queryStr, joinArgs = filter.PrepareQuery(clusterReportQuery2)
-	whereStr, whereArgs = db.BuildSimpleWhereClause(makeClusterFilter("d", cluster.ID), len(joinArgs))
-	err = sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
+	err = sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
 		var (
 			serviceType  string
 			resourceName *string
@@ -160,8 +155,7 @@ func GetClusterResources(cluster *core.Cluster, dbi db.Interface, filter Filter)
 	if !filter.WithSubcapacities {
 		queryStr = strings.Replace(queryStr, "cr.subcapacities", "''", 1)
 	}
-	whereStr, whereArgs = db.BuildSimpleWhereClause(makeClusterFilter("cs", cluster.ID), len(joinArgs))
-	err = sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
+	err = sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
 		var (
 			serviceType   string
 			resourceName  *string
@@ -215,15 +209,14 @@ func GetClusterResources(cluster *core.Cluster, dbi db.Interface, filter Filter)
 func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter) (*limesrates.ClusterReport, error) {
 	report := &limesrates.ClusterReport{
 		ClusterInfo: limes.ClusterInfo{
-			ID: "current", //the actual cluster ID is now an implementation detail and not shown on the API
+			ID: "current", //multi-cluster support has been removed; this value is only included for backwards-compatibility
 		},
 		Services: make(limesrates.ClusterServiceReports),
 	}
 
 	//collect scraping timestamp summaries
 	queryStr, joinArgs := filter.PrepareQuery(clusterRateReportQuery1)
-	whereStr, whereArgs := db.BuildSimpleWhereClause(makeClusterFilter("d", cluster.ID), len(joinArgs))
-	err := sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
+	err := sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
 		var (
 			serviceType       string
 			minRatesScrapedAt *time.Time
@@ -273,12 +266,6 @@ func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter) (*l
 	}
 
 	return report, nil
-}
-
-func makeClusterFilter(tableWithClusterID, clusterID string) map[string]interface{} {
-	return map[string]interface{}{
-		tableWithClusterID + ".cluster_id": clusterID,
-	}
 }
 
 func findInClusterReport(cluster *core.Cluster, report *limesresources.ClusterReport, serviceType string, resourceName *string) (*limesresources.ClusterServiceReport, *limesresources.ClusterResourceReport) {

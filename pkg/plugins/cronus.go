@@ -200,7 +200,7 @@ func (p *cronusPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 }
 
 // CollectMetrics implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID string, project core.KeystoneProject, serializedMetrics string) error {
+func (p *cronusPlugin) CollectMetrics(ch chan<- prometheus.Metric, project core.KeystoneProject, serializedMetrics string) error {
 	//not used by this plugin
 	return nil
 }

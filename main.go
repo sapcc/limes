@@ -73,7 +73,7 @@ func main() {
 	//load configuration and connect to cluster
 	cluster := core.NewConfiguration(configPath)
 	must.Succeed(cluster.Connect())
-	api.StartAuditTrail(cluster.ID)
+	api.StartAuditTrail()
 
 	//select task
 	switch taskName {

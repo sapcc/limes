@@ -48,7 +48,7 @@ import (
 	"github.com/sapcc/limes/pkg/test"
 )
 
-func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, *gorp.DbMap, http.Handler, *TestPolicyEnforcer) {
+func setupTest(t *testing.T, startData string) (*core.Cluster, *gorp.DbMap, http.Handler, *TestPolicyEnforcer) {
 	//load test database
 	t.Helper()
 	dbm := test.InitDatabase(t, &startData)
@@ -110,7 +110,7 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, *gor
 	}
 
 	var clusterConfig core.ClusterConfiguration
-	if clusterName == "west" {
+	if startData != "fixtures/start-data-inconsistencies.sql" {
 		clusterConfig.Services = []core.ServiceConfiguration{
 			{
 				Type: "shared",
@@ -183,14 +183,13 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, *gor
 	}
 
 	cluster := &core.Cluster{
-		ID:              clusterName,
 		Auth:            &core.AuthSession{},
 		DiscoveryPlugin: test.NewDiscoveryPlugin(),
 		QuotaPlugins:    quotaPlugins,
 		CapacityPlugins: map[string]core.CapacityPlugin{},
 		Config:          clusterConfig,
 	}
-	if clusterName == "west" {
+	if startData != "fixtures/start-data-inconsistencies.sql" {
 		cluster.QuotaConstraints = &westConstraintSet
 	}
 
@@ -204,7 +203,7 @@ func setupTest(t *testing.T, clusterName, startData string) (*core.Cluster, *gor
 	}
 	cluster.Auth.TokenValidator = TestTokenValidator{enforcer}
 
-	if clusterName == "west" {
+	if startData != "fixtures/start-data-inconsistencies.sql" {
 		cluster.Config.ResourceBehaviors = []*core.ResourceBehaviorConfiguration{
 			//check minimum non-zero project quota constraint
 			{
@@ -319,8 +318,7 @@ func (v TestTokenValidator) CheckToken(r *http.Request) *gopherpolicy.Token {
 }
 
 func Test_InconsistencyOperations(t *testing.T) {
-	clusterName, pathtoData := "cloud", "fixtures/start-data-inconsistencies.sql"
-	_, _, router, _ := setupTest(t, clusterName, pathtoData)
+	_, _, router, _ := setupTest(t, "fixtures/start-data-inconsistencies.sql")
 
 	//check ListInconsistencies
 	assert.HTTPRequest{
@@ -332,7 +330,7 @@ func Test_InconsistencyOperations(t *testing.T) {
 }
 
 func Test_EmptyInconsistencyReport(t *testing.T) {
-	_, _, router, _ := setupTest(t, "cloud", "/dev/null")
+	_, _, router, _ := setupTest(t, "/dev/null")
 
 	//check ListInconsistencies
 	assert.HTTPRequest{
@@ -344,8 +342,7 @@ func Test_EmptyInconsistencyReport(t *testing.T) {
 }
 
 func Test_ScrapeErrorOperations(t *testing.T) {
-	clusterName, pathtoData := "west", "fixtures/start-data.sql"
-	_, dbm, router, _ := setupTest(t, clusterName, pathtoData)
+	_, dbm, router, _ := setupTest(t, "fixtures/start-data.sql")
 
 	//Add a scrape error to one specific service with type 'unshared'.
 	_, err := dbm.Exec(`UPDATE project_services SET scrape_error_message = $1 WHERE id = $2 AND type = $3`,
@@ -376,7 +373,7 @@ func Test_ScrapeErrorOperations(t *testing.T) {
 }
 
 func Test_EmptyScrapeErrorReport(t *testing.T) {
-	_, _, router, _ := setupTest(t, "cloud", "/dev/null")
+	_, _, router, _ := setupTest(t, "/dev/null")
 
 	//check ListScrapeErrors
 	assert.HTTPRequest{
@@ -388,8 +385,7 @@ func Test_EmptyScrapeErrorReport(t *testing.T) {
 }
 
 func Test_RateScrapeErrorOperations(t *testing.T) {
-	clusterName, pathtoData := "west", "fixtures/start-data.sql"
-	_, dbm, router, _ := setupTest(t, clusterName, pathtoData)
+	_, dbm, router, _ := setupTest(t, "fixtures/start-data.sql")
 
 	//Add a scrape error to one specific service with type 'unshared' that has rate data.
 	_, err := dbm.Exec(`UPDATE project_services SET rates_scrape_error_message = $1 WHERE id = $2 AND type = $3`,
@@ -420,7 +416,7 @@ func Test_RateScrapeErrorOperations(t *testing.T) {
 }
 
 func Test_EmptyRateScrapeErrorReport(t *testing.T) {
-	_, _, router, _ := setupTest(t, "cloud", "/dev/null")
+	_, _, router, _ := setupTest(t, "/dev/null")
 
 	//check ListRateScrapeErrors
 	assert.HTTPRequest{
@@ -432,8 +428,7 @@ func Test_EmptyRateScrapeErrorReport(t *testing.T) {
 }
 
 func Test_ClusterOperations(t *testing.T) {
-	clusterName, pathtoData := "west", "fixtures/start-data.sql"
-	cluster, _, router, _ := setupTest(t, clusterName, pathtoData)
+	cluster, _, router, _ := setupTest(t, "fixtures/start-data.sql")
 
 	//check GetCluster
 	assert.HTTPRequest{
@@ -508,8 +503,7 @@ func Test_ClusterOperations(t *testing.T) {
 }
 
 func Test_DomainOperations(t *testing.T) {
-	clusterName, pathtoData := "west", "fixtures/start-data.sql"
-	cluster, dbm, router, _ := setupTest(t, clusterName, pathtoData)
+	cluster, dbm, router, _ := setupTest(t, "fixtures/start-data.sql")
 	discovery := cluster.DiscoveryPlugin.(*test.DiscoveryPlugin) //nolint:errcheck
 
 	//check GetDomain
@@ -794,8 +788,7 @@ func Test_DomainOperations(t *testing.T) {
 }
 
 func Test_DomainOPA(t *testing.T) {
-	clusterName, pathtoData := "west", "fixtures/start-data-opa.sql"
-	cluster, _, router, _ := setupTest(t, clusterName, pathtoData)
+	cluster, _, router, _ := setupTest(t, "fixtures/start-data-opa.sql")
 	cluster.SetupOPA("fixtures/limes.rego", "fixtures/limes.rego")
 
 	// try if valid operations still work
@@ -903,8 +896,7 @@ func expectDomainQuota(t *testing.T, dbm *gorp.DbMap, domainName, serviceType, r
 }
 
 func Test_ProjectOperations(t *testing.T) {
-	clusterName, pathtoData := "west", "fixtures/start-data.sql"
-	cluster, dbm, router, _ := setupTest(t, clusterName, pathtoData)
+	cluster, dbm, router, _ := setupTest(t, "fixtures/start-data.sql")
 	discovery := cluster.DiscoveryPlugin.(*test.DiscoveryPlugin) //nolint:errcheck
 
 	//check GetProject
@@ -1500,8 +1492,7 @@ func Test_ProjectOperations(t *testing.T) {
 }
 
 func Test_RaiseLowerPermissions(t *testing.T) {
-	clusterName, pathtoData := "west", "fixtures/start-data.sql"
-	cluster, dbm, router, enforcer := setupTest(t, clusterName, pathtoData)
+	cluster, dbm, router, enforcer := setupTest(t, "fixtures/start-data.sql")
 
 	//we're not testing this right now
 	cluster.QuotaConstraints = nil
@@ -1936,8 +1927,7 @@ func p2i64(val int64) *int64 {
 }
 
 func Test_QuotaBursting(t *testing.T) {
-	clusterName, pathtoData := "west", "fixtures/start-data.sql"
-	cluster, dbm, router, _ := setupTest(t, clusterName, pathtoData)
+	cluster, dbm, router, _ := setupTest(t, "fixtures/start-data.sql")
 	cluster.Config.Bursting.MaxMultiplier = 0.1
 
 	//check initial GetProject with bursting disabled, but supported
@@ -2166,8 +2156,7 @@ func Test_QuotaBursting(t *testing.T) {
 }
 
 func Test_EmptyProjectList(t *testing.T) {
-	clusterName, pathtoData := "west", "fixtures/start-data.sql"
-	_, dbm, router, _ := setupTest(t, clusterName, pathtoData)
+	_, dbm, router, _ := setupTest(t, "fixtures/start-data.sql")
 
 	_, err := dbm.Exec(`DELETE FROM projects`)
 	if err != nil {
@@ -2186,8 +2175,7 @@ func Test_EmptyProjectList(t *testing.T) {
 
 func Test_LargeProjectList(t *testing.T) {
 	//start without any projects pre-defined in the start data
-	clusterName, pathtoData := "west", "fixtures/start-data-minimal.sql"
-	cluster, dbm, router, _ := setupTest(t, clusterName, pathtoData)
+	cluster, dbm, router, _ := setupTest(t, "fixtures/start-data-minimal.sql")
 	//we don't care about the various ResourceBehaviors in this test
 	cluster.Config.ResourceBehaviors = nil
 
@@ -2335,8 +2323,7 @@ func requestOneQuotaChange(structureLevel, serviceType, resourceName string, quo
 }
 
 func Test_StrictDomainQuotaLimit(t *testing.T) {
-	clusterName, pathtoData := "west", "fixtures/start-data.sql"
-	cluster, _, router, _ := setupTest(t, clusterName, pathtoData)
+	cluster, _, router, _ := setupTest(t, "fixtures/start-data.sql")
 
 	//set up a QD config for shared/things with the default behavior
 	qdConfig := &core.QuotaDistributionConfiguration{

@@ -735,9 +735,8 @@ func (u QuotaUpdater) CommitAuditTrail(token *gopherpolicy.Token, r *http.Reques
 			// low-privilege-raise metrics
 			if qdConfig.Model != limesresources.CentralizedQuotaDistribution && u.CanRaiseLP(srvType) && !u.CanRaise(srvType) {
 				labels := prometheus.Labels{
-					"os_cluster": u.Cluster.ID,
-					"service":    srvType,
-					"resource":   resName,
+					"service":  srvType,
+					"resource": resName,
 				}
 				if u.ScopeType() == "domain" {
 					if invalid {

@@ -132,7 +132,7 @@ func (p *capacityManilaPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 }
 
 // CollectMetrics implements the core.CapacityPlugin interface.
-func (p *capacityManilaPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, serializedMetrics string) error {
+func (p *capacityManilaPlugin) CollectMetrics(ch chan<- prometheus.Metric, serializedMetrics string) error {
 	//not used by this plugin
 	return nil
 }

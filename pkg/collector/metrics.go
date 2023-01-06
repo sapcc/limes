@@ -42,7 +42,7 @@ var scrapeSuccessCounter = prometheus.NewCounterVec(
 		Name: "limes_successful_scrapes",
 		Help: "Counter for successful quota scrape operations per Keystone project.",
 	},
-	[]string{"os_cluster", "service", "service_name"},
+	[]string{"service", "service_name"},
 )
 
 var scrapeFailedCounter = prometheus.NewCounterVec(
@@ -50,7 +50,7 @@ var scrapeFailedCounter = prometheus.NewCounterVec(
 		Name: "limes_failed_scrapes",
 		Help: "Counter for failed quota scrape operations per Keystone project.",
 	},
-	[]string{"os_cluster", "service", "service_name"},
+	[]string{"service", "service_name"},
 )
 
 var scrapeSuspendedCounter = prometheus.NewCounterVec(
@@ -58,7 +58,7 @@ var scrapeSuspendedCounter = prometheus.NewCounterVec(
 		Name: "limes_suspended_scrapes",
 		Help: "Counter for suspended quota scrape operations per Keystone project.",
 	},
-	[]string{"os_cluster", "service", "service_name"},
+	[]string{"service", "service_name"},
 )
 
 var projectDiscoverySuccessCounter = prometheus.NewCounterVec(
@@ -66,7 +66,7 @@ var projectDiscoverySuccessCounter = prometheus.NewCounterVec(
 		Name: "limes_successful_project_discoveries",
 		Help: "Counter for successful project discovery operations per Keystone domain.",
 	},
-	[]string{"os_cluster", "domain", "domain_id"},
+	[]string{"domain", "domain_id"},
 )
 
 var projectDiscoveryFailedCounter = prometheus.NewCounterVec(
@@ -74,23 +74,21 @@ var projectDiscoveryFailedCounter = prometheus.NewCounterVec(
 		Name: "limes_failed_project_discoveries",
 		Help: "Counter for failed project discovery operations per Keystone domain.",
 	},
-	[]string{"os_cluster", "domain", "domain_id"},
+	[]string{"domain", "domain_id"},
 )
 
-var domainDiscoverySuccessCounter = prometheus.NewCounterVec(
+var domainDiscoverySuccessCounter = prometheus.NewCounter(
 	prometheus.CounterOpts{
 		Name: "limes_successful_domain_discoveries",
 		Help: "Counter for successful domain discovery operations.",
 	},
-	[]string{"os_cluster"},
 )
 
-var domainDiscoveryFailedCounter = prometheus.NewCounterVec(
+var domainDiscoveryFailedCounter = prometheus.NewCounter(
 	prometheus.CounterOpts{
 		Name: "limes_failed_domain_discoveries",
 		Help: "Counter for failed domain discovery operations.",
 	},
-	[]string{"os_cluster"},
 )
 
 var clusterCapacitorSuccessCounter = prometheus.NewCounterVec(
@@ -98,7 +96,7 @@ var clusterCapacitorSuccessCounter = prometheus.NewCounterVec(
 		Name: "limes_successful_capacity_scrapes",
 		Help: "Counter for successful cluster capacity scrapes.",
 	},
-	[]string{"os_cluster", "capacitor"},
+	[]string{"capacitor"},
 )
 
 var clusterCapacitorFailedCounter = prometheus.NewCounterVec(
@@ -106,7 +104,7 @@ var clusterCapacitorFailedCounter = prometheus.NewCounterVec(
 		Name: "limes_failed_capacity_scrapes",
 		Help: "Counter for failed cluster capacity scrapes.",
 	},
-	[]string{"os_cluster", "capacitor"},
+	[]string{"capacitor"},
 )
 
 var ratesScrapeSuccessCounter = prometheus.NewCounterVec(
@@ -114,7 +112,7 @@ var ratesScrapeSuccessCounter = prometheus.NewCounterVec(
 		Name: "limes_successful_rate_scrapes",
 		Help: "Counter for successful rate scrape operations per Keystone project.",
 	},
-	[]string{"os_cluster", "service", "service_name"},
+	[]string{"service", "service_name"},
 )
 
 var ratesScrapeFailedCounter = prometheus.NewCounterVec(
@@ -122,7 +120,7 @@ var ratesScrapeFailedCounter = prometheus.NewCounterVec(
 		Name: "limes_failed_rate_scrapes",
 		Help: "Counter for failed rate scrape operations per Keystone project.",
 	},
-	[]string{"os_cluster", "service", "service_name"},
+	[]string{"service", "service_name"},
 )
 
 var ratesScrapeSuspendedCounter = prometheus.NewCounterVec(
@@ -130,7 +128,7 @@ var ratesScrapeSuspendedCounter = prometheus.NewCounterVec(
 		Name: "limes_suspended_rate_scrapes",
 		Help: "Counter for suspended rate scrape operations per Keystone project.",
 	},
-	[]string{"os_cluster", "service", "service_name"},
+	[]string{"service", "service_name"},
 )
 
 func init() {
@@ -156,7 +154,7 @@ var minScrapedAtGauge = prometheus.NewGaugeVec(
 		Name: "limes_oldest_scraped_at",
 		Help: "Oldest (i.e. smallest) scraped_at timestamp for any project given a certain service in a certain OpenStack cluster.",
 	},
-	[]string{"os_cluster", "service", "service_name"},
+	[]string{"service", "service_name"},
 )
 
 var maxScrapedAtGauge = prometheus.NewGaugeVec(
@@ -164,7 +162,7 @@ var maxScrapedAtGauge = prometheus.NewGaugeVec(
 		Name: "limes_newest_scraped_at",
 		Help: "Newest (i.e. largest) scraped_at timestamp for any project given a certain service in a certain OpenStack cluster.",
 	},
-	[]string{"os_cluster", "service", "service_name"},
+	[]string{"service", "service_name"},
 )
 
 var minRatesScrapedAtGauge = prometheus.NewGaugeVec(
@@ -172,7 +170,7 @@ var minRatesScrapedAtGauge = prometheus.NewGaugeVec(
 		Name: "limes_oldest_rates_scraped_at",
 		Help: "Oldest (i.e. smallest) rates_scraped_at timestamp for any project given a certain service in a certain OpenStack cluster.",
 	},
-	[]string{"os_cluster", "service", "service_name"},
+	[]string{"service", "service_name"},
 )
 
 var maxRatesScrapedAtGauge = prometheus.NewGaugeVec(
@@ -180,7 +178,7 @@ var maxRatesScrapedAtGauge = prometheus.NewGaugeVec(
 		Name: "limes_newest_rates_scraped_at",
 		Help: "Newest (i.e. largest) rates_scraped_at timestamp for any project given a certain service in a certain OpenStack cluster.",
 	},
-	[]string{"os_cluster", "service", "service_name"},
+	[]string{"service", "service_name"},
 )
 
 // AggregateMetricsCollector is a prometheus.Collector that submits
@@ -199,12 +197,10 @@ func (c *AggregateMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 }
 
 var scrapedAtAggregateQuery = sqlext.SimplifyWhitespace(`
-	SELECT ps.type, MIN(ps.scraped_at), MAX(ps.scraped_at), MIN(ps.rates_scraped_at), MAX(ps.rates_scraped_at)
-	  FROM domains d
-	  JOIN projects p ON p.domain_id = d.id
-	  JOIN project_services ps ON ps.project_id = p.id
-	 WHERE d.cluster_id = $1 AND ps.scraped_at IS NOT NULL
-	 GROUP BY ps.type
+	SELECT type, MIN(scraped_at), MAX(scraped_at), MIN(rates_scraped_at), MAX(rates_scraped_at)
+	  FROM project_services
+	 WHERE scraped_at IS NOT NULL
+	 GROUP BY type
 `)
 
 // Collect implements the prometheus.Collector interface.
@@ -222,8 +218,7 @@ func (c *AggregateMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	maxRatesScrapedAtGauge.Describe(descCh)
 	maxRatesScrapedAtDesc := <-descCh
 
-	queryArgs := []interface{}{c.Cluster.ID}
-	err := sqlext.ForeachRow(c.DB, scrapedAtAggregateQuery, queryArgs, func(rows *sql.Rows) error {
+	err := sqlext.ForeachRow(c.DB, scrapedAtAggregateQuery, nil, func(rows *sql.Rows) error {
 		var (
 			serviceType       string
 			minScrapedAt      *time.Time
@@ -246,24 +241,24 @@ func (c *AggregateMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			ch <- prometheus.MustNewConstMetric(
 				minScrapedAtDesc,
 				prometheus.GaugeValue, timeAsUnixOrZero(minScrapedAt),
-				c.Cluster.ID, serviceType, serviceName,
+				serviceType, serviceName,
 			)
 			ch <- prometheus.MustNewConstMetric(
 				maxScrapedAtDesc,
 				prometheus.GaugeValue, timeAsUnixOrZero(maxScrapedAt),
-				c.Cluster.ID, serviceType, serviceName,
+				serviceType, serviceName,
 			)
 		}
 		if len(plugin.Rates()) > 0 {
 			ch <- prometheus.MustNewConstMetric(
 				minRatesScrapedAtDesc,
 				prometheus.GaugeValue, timeAsUnixOrZero(minRatesScrapedAt),
-				c.Cluster.ID, serviceType, serviceName,
+				serviceType, serviceName,
 			)
 			ch <- prometheus.MustNewConstMetric(
 				maxRatesScrapedAtDesc,
 				prometheus.GaugeValue, timeAsUnixOrZero(maxRatesScrapedAt),
-				c.Cluster.ID, serviceType, serviceName,
+				serviceType, serviceName,
 			)
 		}
 		return nil
@@ -288,7 +283,7 @@ var capacityPluginMetricsOkGauge = prometheus.NewGaugeVec(
 		Name: "limes_capacity_plugin_metrics_ok",
 		Help: "Whether capacity plugin metrics were rendered successfully for a particular capacitor. Only present when the capacitor emits metrics.",
 	},
-	[]string{"os_cluster", "capacitor"},
+	[]string{"capacitor"},
 )
 
 // CapacityPluginMetricsCollector is a prometheus.Collector that submits metrics
@@ -319,7 +314,7 @@ func (c *CapacityPluginMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 var capacitySerializedMetricsGetQuery = sqlext.SimplifyWhitespace(`
 	SELECT capacitor_id, serialized_metrics
 	  FROM cluster_capacitors
-	 WHERE cluster_id = $1 AND serialized_metrics != ''
+	 WHERE serialized_metrics != ''
 `)
 
 // Collect implements the prometheus.Collector interface.
@@ -335,8 +330,7 @@ func (c *CapacityPluginMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		return
 	}
 
-	queryArgs := []interface{}{c.Cluster.ID}
-	err := sqlext.ForeachRow(c.DB, capacitySerializedMetricsGetQuery, queryArgs, func(rows *sql.Rows) error {
+	err := sqlext.ForeachRow(c.DB, capacitySerializedMetricsGetQuery, nil, func(rows *sql.Rows) error {
 		var i CapacityPluginMetricsInstance
 		err := rows.Scan(&i.CapacitorID, &i.SerializedMetrics)
 		if err == nil {
@@ -354,7 +348,7 @@ func (c *CapacityPluginMetricsCollector) collectOneCapacitor(ch chan<- prometheu
 	if plugin == nil {
 		return
 	}
-	err := plugin.CollectMetrics(ch, c.Cluster.ID, instance.SerializedMetrics)
+	err := plugin.CollectMetrics(ch, instance.SerializedMetrics)
 	successAsFloat := 1.0
 	if err != nil {
 		successAsFloat = 0.0
@@ -366,7 +360,7 @@ func (c *CapacityPluginMetricsCollector) collectOneCapacitor(ch chan<- prometheu
 	ch <- prometheus.MustNewConstMetric(
 		pluginMetricsOkDesc,
 		prometheus.GaugeValue, successAsFloat,
-		c.Cluster.ID, instance.CapacitorID,
+		instance.CapacitorID,
 	)
 }
 
@@ -378,7 +372,7 @@ var quotaPluginMetricsOkGauge = prometheus.NewGaugeVec(
 		Name: "limes_plugin_metrics_ok",
 		Help: "Whether quota plugin metrics were rendered successfully for a particular project service. Only present when the project service emits metrics.",
 	},
-	[]string{"os_cluster", "domain", "domain_id", "project", "project_id", "service"},
+	[]string{"domain", "domain_id", "project", "project_id", "service"},
 )
 
 // QuotaPluginMetricsCollector is a prometheus.Collector that submits metrics
@@ -412,7 +406,7 @@ var quotaSerializedMetricsGetQuery = sqlext.SimplifyWhitespace(`
 	  FROM domains d
 	  JOIN projects p ON p.domain_id = d.id
 	  JOIN project_services ps ON ps.project_id = p.id
-	 WHERE d.cluster_id = $1 AND ps.serialized_metrics != ''
+	 WHERE ps.serialized_metrics != ''
 `)
 
 // Collect implements the prometheus.Collector interface.
@@ -428,8 +422,7 @@ func (c *QuotaPluginMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		return
 	}
 
-	queryArgs := []interface{}{c.Cluster.ID}
-	err := sqlext.ForeachRow(c.DB, quotaSerializedMetricsGetQuery, queryArgs, func(rows *sql.Rows) error {
+	err := sqlext.ForeachRow(c.DB, quotaSerializedMetricsGetQuery, nil, func(rows *sql.Rows) error {
 		var i QuotaPluginMetricsInstance
 		err := rows.Scan(
 			&i.Project.Domain.Name, &i.Project.Domain.UUID,
@@ -450,7 +443,7 @@ func (c *QuotaPluginMetricsCollector) collectOneProjectService(ch chan<- prometh
 	if plugin == nil {
 		return
 	}
-	err := plugin.CollectMetrics(ch, c.Cluster.ID, instance.Project, instance.SerializedMetrics)
+	err := plugin.CollectMetrics(ch, instance.Project, instance.SerializedMetrics)
 	successAsFloat := 1.0
 	if err != nil {
 		successAsFloat = 0.0
@@ -462,7 +455,7 @@ func (c *QuotaPluginMetricsCollector) collectOneProjectService(ch chan<- prometh
 	ch <- prometheus.MustNewConstMetric(
 		pluginMetricsOkDesc,
 		prometheus.GaugeValue, successAsFloat,
-		c.Cluster.ID, instance.Project.Domain.Name, instance.Project.Domain.UUID, instance.Project.Name, instance.Project.UUID, instance.ServiceType,
+		instance.Project.Domain.Name, instance.Project.Domain.UUID, instance.Project.Name, instance.Project.UUID, instance.ServiceType,
 	)
 }
 
@@ -474,7 +467,7 @@ var clusterCapacityGauge = prometheus.NewGaugeVec(
 		Name: "limes_cluster_capacity",
 		Help: "Reported capacity of a Limes resource for an OpenStack cluster.",
 	},
-	[]string{"os_cluster", "service", "resource"},
+	[]string{"service", "resource"},
 )
 
 var clusterCapacityPerAZGauge = prometheus.NewGaugeVec(
@@ -482,7 +475,7 @@ var clusterCapacityPerAZGauge = prometheus.NewGaugeVec(
 		Name: "limes_cluster_capacity_per_az",
 		Help: "Reported capacity of a Limes resource for an OpenStack cluster in a specific availability zone.",
 	},
-	[]string{"os_cluster", "availability_zone", "service", "resource"},
+	[]string{"availability_zone", "service", "resource"},
 )
 
 var clusterUsagePerAZGauge = prometheus.NewGaugeVec(
@@ -490,7 +483,7 @@ var clusterUsagePerAZGauge = prometheus.NewGaugeVec(
 		Name: "limes_cluster_usage_per_az",
 		Help: "Actual usage of a Limes resource for an OpenStack cluster in a specific availability zone.",
 	},
-	[]string{"os_cluster", "availability_zone", "service", "resource"},
+	[]string{"availability_zone", "service", "resource"},
 )
 
 var domainQuotaGauge = prometheus.NewGaugeVec(
@@ -498,7 +491,7 @@ var domainQuotaGauge = prometheus.NewGaugeVec(
 		Name: "limes_domain_quota",
 		Help: "Assigned quota of a Limes resource for an OpenStack domain.",
 	},
-	[]string{"os_cluster", "domain", "domain_id", "service", "resource"},
+	[]string{"domain", "domain_id", "service", "resource"},
 )
 
 var projectQuotaGauge = prometheus.NewGaugeVec(
@@ -506,7 +499,7 @@ var projectQuotaGauge = prometheus.NewGaugeVec(
 		Name: "limes_project_quota",
 		Help: "Assigned quota of a Limes resource for an OpenStack project.",
 	},
-	[]string{"os_cluster", "domain", "domain_id", "project", "project_id", "service", "resource"},
+	[]string{"domain", "domain_id", "project", "project_id", "service", "resource"},
 )
 
 var projectBackendQuotaGauge = prometheus.NewGaugeVec(
@@ -514,7 +507,7 @@ var projectBackendQuotaGauge = prometheus.NewGaugeVec(
 		Name: "limes_project_backendquota",
 		Help: "Actual quota of a Limes resource for an OpenStack project.",
 	},
-	[]string{"os_cluster", "domain", "domain_id", "project", "project_id", "service", "resource"},
+	[]string{"domain", "domain_id", "project", "project_id", "service", "resource"},
 )
 
 var projectUsageGauge = prometheus.NewGaugeVec(
@@ -522,7 +515,7 @@ var projectUsageGauge = prometheus.NewGaugeVec(
 		Name: "limes_project_usage",
 		Help: "Actual (logical) usage of a Limes resource for an OpenStack project.",
 	},
-	[]string{"os_cluster", "domain", "domain_id", "project", "project_id", "service", "resource"},
+	[]string{"domain", "domain_id", "project", "project_id", "service", "resource"},
 )
 
 var projectPhysicalUsageGauge = prometheus.NewGaugeVec(
@@ -530,7 +523,7 @@ var projectPhysicalUsageGauge = prometheus.NewGaugeVec(
 		Name: "limes_project_physical_usage",
 		Help: "Actual (physical) usage of a Limes resource for an OpenStack project.",
 	},
-	[]string{"os_cluster", "domain", "domain_id", "project", "project_id", "service", "resource"},
+	[]string{"domain", "domain_id", "project", "project_id", "service", "resource"},
 )
 
 var projectRateUsageGauge = prometheus.NewGaugeVec(
@@ -538,7 +531,7 @@ var projectRateUsageGauge = prometheus.NewGaugeVec(
 		Name: "limes_project_rate_usage",
 		Help: "Usage of a Limes rate for an OpenStack project. These are counters that never reset.",
 	},
-	[]string{"os_cluster", "domain", "domain_id", "project", "project_id", "service", "rate"},
+	[]string{"domain", "domain_id", "project", "project_id", "service", "rate"},
 )
 
 var unitConversionGauge = prometheus.NewGaugeVec(
@@ -577,7 +570,6 @@ var clusterMetricsQuery = sqlext.SimplifyWhitespace(`
 	SELECT cs.type, cr.name, cr.capacity, cr.capacity_per_az
 	  FROM cluster_services cs
 	  JOIN cluster_resources cr ON cr.service_id = cs.id
-	 WHERE cs.cluster_id = $1
 `)
 
 var domainMetricsQuery = sqlext.SimplifyWhitespace(`
@@ -585,7 +577,6 @@ var domainMetricsQuery = sqlext.SimplifyWhitespace(`
 	  FROM domains d
 	  JOIN domain_services ds ON ds.domain_id = d.id
 	  JOIN domain_resources dr ON dr.service_id = ds.id
-	 WHERE d.cluster_id = $1
 `)
 
 var projectMetricsQuery = sqlext.SimplifyWhitespace(`
@@ -594,7 +585,6 @@ var projectMetricsQuery = sqlext.SimplifyWhitespace(`
 	  JOIN projects p ON p.domain_id = d.id
 	  JOIN project_services ps ON ps.project_id = p.id
 	  JOIN project_resources pr ON pr.service_id = ps.id
-	 WHERE d.cluster_id = $1
 `)
 
 var projectRateMetricsQuery = sqlext.SimplifyWhitespace(`
@@ -603,7 +593,7 @@ var projectRateMetricsQuery = sqlext.SimplifyWhitespace(`
 	  JOIN projects p ON p.domain_id = d.id
 	  JOIN project_services ps ON ps.project_id = p.id
 	  JOIN project_rates pra ON pra.service_id = ps.id
-	 WHERE d.cluster_id = $1 AND pra.usage_as_bigint != ''
+	 WHERE pra.usage_as_bigint != ''
 `)
 
 // Collect implements the prometheus.Collector interface.
@@ -640,8 +630,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 
 	//fetch values for cluster level
 	capacityReported := make(map[string]map[string]bool)
-	queryArgs := []interface{}{c.Cluster.ID}
-	err := sqlext.ForeachRow(c.DB, clusterMetricsQuery, queryArgs, func(rows *sql.Rows) error {
+	err := sqlext.ForeachRow(c.DB, clusterMetricsQuery, nil, func(rows *sql.Rows) error {
 		var (
 			serviceType   string
 			resourceName  string
@@ -669,13 +658,13 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 				ch <- prometheus.MustNewConstMetric(
 					clusterCapacityPerAZDesc,
 					prometheus.GaugeValue, float64(report.Capacity)*overcommitFactor,
-					c.Cluster.ID, report.Name, serviceType, resourceName,
+					report.Name, serviceType, resourceName,
 				)
 				if report.Usage != 0 {
 					ch <- prometheus.MustNewConstMetric(
 						clusterUsagePerAZDesc,
 						prometheus.GaugeValue, float64(report.Usage),
-						c.Cluster.ID, report.Name, serviceType, resourceName,
+						report.Name, serviceType, resourceName,
 					)
 				}
 			}
@@ -684,7 +673,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(
 			clusterCapacityDesc,
 			prometheus.GaugeValue, float64(capacity)*overcommitFactor,
-			c.Cluster.ID, serviceType, resourceName,
+			serviceType, resourceName,
 		)
 
 		_, exists := capacityReported[serviceType]
@@ -711,13 +700,13 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			ch <- prometheus.MustNewConstMetric(
 				clusterCapacityDesc,
 				prometheus.GaugeValue, 0,
-				c.Cluster.ID, serviceType, res.Name,
+				serviceType, res.Name,
 			)
 		}
 	}
 
 	//fetch values for domain level
-	err = sqlext.ForeachRow(c.DB, domainMetricsQuery, queryArgs, func(rows *sql.Rows) error {
+	err = sqlext.ForeachRow(c.DB, domainMetricsQuery, nil, func(rows *sql.Rows) error {
 		var (
 			domainName   string
 			domainUUID   string
@@ -732,7 +721,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(
 			domainQuotaDesc,
 			prometheus.GaugeValue, float64(quota),
-			c.Cluster.ID, domainName, domainUUID, serviceType, resourceName,
+			domainName, domainUUID, serviceType, resourceName,
 		)
 		return nil
 	})
@@ -741,7 +730,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	//fetch values for project level (quota/usage)
-	err = sqlext.ForeachRow(c.DB, projectMetricsQuery, queryArgs, func(rows *sql.Rows) error {
+	err = sqlext.ForeachRow(c.DB, projectMetricsQuery, nil, func(rows *sql.Rows) error {
 		var (
 			domainName    string
 			domainUUID    string
@@ -764,7 +753,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 				ch <- prometheus.MustNewConstMetric(
 					projectQuotaDesc,
 					prometheus.GaugeValue, float64(*quota),
-					c.Cluster.ID, domainName, domainUUID, projectName, projectUUID, serviceType, resourceName,
+					domainName, domainUUID, projectName, projectUUID, serviceType, resourceName,
 				)
 			}
 		}
@@ -773,7 +762,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 				ch <- prometheus.MustNewConstMetric(
 					projectBackendQuotaDesc,
 					prometheus.GaugeValue, float64(*backendQuota),
-					c.Cluster.ID, domainName, domainUUID, projectName, projectUUID, serviceType, resourceName,
+					domainName, domainUUID, projectName, projectUUID, serviceType, resourceName,
 				)
 			}
 		}
@@ -781,7 +770,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			ch <- prometheus.MustNewConstMetric(
 				projectUsageDesc,
 				prometheus.GaugeValue, float64(usage),
-				c.Cluster.ID, domainName, domainUUID, projectName, projectUUID, serviceType, resourceName,
+				domainName, domainUUID, projectName, projectUUID, serviceType, resourceName,
 			)
 		}
 		if physicalUsage != nil {
@@ -789,7 +778,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 				ch <- prometheus.MustNewConstMetric(
 					projectPhysicalUsageDesc,
 					prometheus.GaugeValue, float64(*physicalUsage),
-					c.Cluster.ID, domainName, domainUUID, projectName, projectUUID, serviceType, resourceName,
+					domainName, domainUUID, projectName, projectUUID, serviceType, resourceName,
 				)
 			}
 		}
@@ -812,7 +801,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 
 	//fetch values for project level (rate usage)
-	err = sqlext.ForeachRow(c.DB, projectRateMetricsQuery, queryArgs, func(rows *sql.Rows) error {
+	err = sqlext.ForeachRow(c.DB, projectRateMetricsQuery, nil, func(rows *sql.Rows) error {
 		var (
 			domainName    string
 			domainUUID    string
@@ -836,7 +825,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			ch <- prometheus.MustNewConstMetric(
 				projectRateUsageDesc,
 				prometheus.GaugeValue, usageAsFloat,
-				c.Cluster.ID, domainName, domainUUID, projectName, projectUUID, serviceType, rateName,
+				domainName, domainUUID, projectName, projectUUID, serviceType, rateName,
 			)
 		}
 		return nil

@@ -20,22 +20,20 @@ The collector service exposes the following metrics by default:
 
 | Type | Metric | Labels |
 | --- | --- | --- |
-| Counter | `limes_successful_scrapes` | `os_cluster`, `service`, `service_name` (counts projects) |
-| Counter | `limes_failed_scrapes` | `os_cluster`, `service`, `service_name` (counts projects) |
-| Counter | `limes_successful_domain_discoveries` | `os_cluster` |
-| Counter | `limes_failed_domain_discoveries` | `os_cluster` |
-| Counter | `limes_successful_project_discoveries` | `os_cluster`, `domain`, `domain_id` |
-| Counter | `limes_failed_project_discoveries` | `os_cluster`, `domain`, `domain_id` |
-| Counter | `limes_successful_capacity_scrapes` | `os_cluster`, `capacitor` |
-| Counter | `limes_failed_capacity_scrapes` | `os_cluster`, `capacitor` |
-| Counter | `limes_successful_auditevent_publish` | `os_cluster` |
-| Counter | `limes_failed_auditevent_publish` | `os_cluster` |
+| Counter | `limes_successful_scrapes` | `service`, `service_name` (counts projects) |
+| Counter | `limes_failed_scrapes` | `service`, `service_name` (counts projects) |
+| Counter | `limes_successful_domain_discoveries` | none |
+| Counter | `limes_failed_domain_discoveries` | none |
+| Counter | `limes_successful_project_discoveries` | `domain`, `domain_id` |
+| Counter | `limes_failed_project_discoveries` | `domain`, `domain_id` |
+| Counter | `limes_successful_capacity_scrapes` | `capacitor` |
+| Counter | `limes_failed_capacity_scrapes` | `capacitor` |
+| Counter | `limes_successful_auditevent_publish` | none |
+| Counter | `limes_failed_auditevent_publish` | none |
 
 The `limes_failed_scrapes` metric is particularly useful for assessing the continued operation of backend services
 (specifically their API parts). If you can do only one alert on Limes metrics, alert on `limes_failed_scrapes`.
 Alerts on `limes_failed_{domain,project}_discoveries` are very useful, too, but less important.
-
-`os_cluster` represents the OpenStack cluster configured in the [clusters configuration section](config.md#section-clusters)
 
 For the scraping metrics, the `service` label contains the type of the backend service in question (as stated in the Keystone
 service catalog), and the `service_name` label contains the product name (in lower case) of the reference implementation
@@ -48,13 +46,11 @@ additional metrics:
 
 | Type | Metric | Labels |
 | --- | --- | --- |
-| Gauge | `limes_cluster_capacity` | `os_cluster`, `service`, `resource` |
-| Gauge | `limes_domain_quota` | `os_cluster`, `service`, `resource`, `domain`, `domain_id` |
-| Gauge | `limes_project_backendquota` | `os_cluster`, `service`, `resource`, `domain`, `domain_id`, `project`, `project_id` |
-| Gauge | `limes_project_quota` | `os_cluster`, `service`, `resource`, `domain`, `domain_id`, `project`, `project_id` |
-| Gauge | `limes_project_usage` | `os_cluster`, `service`, `resource`, `domain`, `domain_id`, `project`, `project_id` |
-
-`os_cluster` represents the OpenStack cluster configured in the [clusters configuration section](config.md#section-clusters)
+| Gauge | `limes_cluster_capacity` | `service`, `resource` |
+| Gauge | `limes_domain_quota` | `service`, `resource`, `domain`, `domain_id` |
+| Gauge | `limes_project_backendquota` | `service`, `resource`, `domain`, `domain_id`, `project`, `project_id` |
+| Gauge | `limes_project_quota` | `service`, `resource`, `domain`, `domain_id`, `project`, `project_id` |
+| Gauge | `limes_project_usage` | `service`, `resource`, `domain`, `domain_id`, `project`, `project_id` |
 
 ### Quota/capacity plugins
 

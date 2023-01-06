@@ -50,7 +50,6 @@ func prepareScrapeTest(t *testing.T, numProjects int, quotaPlugins ...core.Quota
 	dbm := test.InitDatabase(t, nil)
 
 	cluster := &core.Cluster{
-		ID:              "west",
 		DiscoveryPlugin: test.NewDiscoveryPlugin(),
 		QuotaPlugins:    map[string]core.QuotaPlugin{},
 		CapacityPlugins: map[string]core.CapacityPlugin{},
@@ -475,7 +474,7 @@ func (p *autoApprovalTestPlugin) ScrapeRates(provider *gophercloud.ProviderClien
 }
 func (p *autoApprovalTestPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 }
-func (p *autoApprovalTestPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID string, project core.KeystoneProject, serializedMetrics string) error {
+func (p *autoApprovalTestPlugin) CollectMetrics(ch chan<- prometheus.Metric, project core.KeystoneProject, serializedMetrics string) error {
 	return nil
 }
 
@@ -564,7 +563,7 @@ func (noopQuotaPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gopher
 }
 func (noopQuotaPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 }
-func (noopQuotaPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID string, project core.KeystoneProject, serializedMetrics string) error {
+func (noopQuotaPlugin) CollectMetrics(ch chan<- prometheus.Metric, project core.KeystoneProject, serializedMetrics string) error {
 	return nil
 }
 
@@ -587,7 +586,7 @@ func Test_ScrapeButNoResources(t *testing.T) {
 	_, tr0 := easypg.NewTracker(t, dbm.Db)
 	tr0.AssertEqualf(`
 		INSERT INTO domain_services (id, domain_id, type) VALUES (1, 1, 'noop');
-		INSERT INTO domains (id, cluster_id, name, uuid) VALUES (1, 'west', 'germany', 'uuid-for-germany');
+		INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
 		INSERT INTO project_services (id, project_id, type, scraped_at, stale, scrape_duration_secs, rates_scraped_at, rates_stale, rates_scrape_duration_secs, rates_scrape_state, serialized_metrics, checked_at, scrape_error_message, rates_checked_at, rates_scrape_error_message) VALUES (1, 1, 'noop', 1, FALSE, 1, NULL, FALSE, 0, '', '', 1, '', NULL, '');
 		INSERT INTO projects (id, domain_id, name, uuid, parent_uuid, has_bursting) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany', FALSE);
 	`)

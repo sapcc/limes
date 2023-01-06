@@ -23,7 +23,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-var lowPrivilegeRaiseMetricLabels = []string{"os_cluster", "service", "resource"}
+var lowPrivilegeRaiseMetricLabels = []string{"service", "resource"}
 
 var lowPrivilegeRaiseDomainSuccessCounter = prometheus.NewCounterVec(
 	prometheus.CounterOpts{
@@ -49,19 +49,17 @@ var lowPrivilegeRaiseProjectFailureCounter = prometheus.NewCounterVec(
 		Help: "Counter for failed quota auto approval for some service/resource per project.",
 	}, lowPrivilegeRaiseMetricLabels)
 
-var auditEventPublishSuccessCounter = prometheus.NewCounterVec(
+var auditEventPublishSuccessCounter = prometheus.NewCounter(
 	prometheus.CounterOpts{
 		Name: "limes_successful_auditevent_publish",
 		Help: "Counter for successful audit event publish to RabbitMQ server.",
-	},
-	[]string{"os_cluster"})
+	})
 
-var auditEventPublishFailedCounter = prometheus.NewCounterVec(
+var auditEventPublishFailedCounter = prometheus.NewCounter(
 	prometheus.CounterOpts{
 		Name: "limes_failed_auditevent_publish",
 		Help: "Counter for failed audit event publish to RabbitMQ server.",
-	},
-	[]string{"os_cluster"})
+	})
 
 func init() {
 	prometheus.MustRegister(lowPrivilegeRaiseDomainSuccessCounter)

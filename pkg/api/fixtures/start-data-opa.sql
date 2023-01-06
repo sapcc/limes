@@ -1,17 +1,17 @@
 CREATE OR REPLACE FUNCTION unix(i integer) RETURNS timestamp AS $$ SELECT TO_TIMESTAMP(i) AT TIME ZONE 'Etc/UTC' $$ LANGUAGE SQL;
 
 -- two services, one shared, one unshared
-INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (1, 'west', 'unshared', UNIX(1000));
-INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (2, 'west', 'shared',   UNIX(1100));
+INSERT INTO cluster_services (id, type, scraped_at) VALUES (1, 'unshared', UNIX(1000));
+INSERT INTO cluster_services (id, type, scraped_at) VALUES (2, 'shared',   UNIX(1100));
 
 -- both services have the resources "things" and "capacity"
 INSERT INTO cluster_resources (service_id, name, capacity, subcapacities, capacity_per_az) VALUES (1, 'things', 139, '[{"smaller_half":46},{"larger_half":93}]', '[{"name":"az-one","capacity":69,"usage":13},{"name":"az-two","capacity":69,"usage":13}]');
 INSERT INTO cluster_resources (service_id, name, capacity, subcapacities, capacity_per_az) VALUES (2, 'things', 246, '[{"smaller_half":82},{"larger_half":164}]', '');
 INSERT INTO cluster_resources (service_id, name, capacity, subcapacities, capacity_per_az) VALUES (2, 'capacity', 185, '', '');
 
--- cluster "west" has two domains
-INSERT INTO domains (id, cluster_id, name, uuid) VALUES (1, 'west', 'germany', 'uuid-for-germany');
-INSERT INTO domains (id, cluster_id, name, uuid) VALUES (2, 'west', 'france',  'uuid-for-france');
+-- two domains
+INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
+INSERT INTO domains (id, name, uuid) VALUES (2, 'france',  'uuid-for-france');
 
 -- domain_services is fully populated (as ensured by the collector's consistency check)
 INSERT INTO domain_services (id, domain_id, type) VALUES (1, 1, 'unshared');
@@ -80,12 +80,9 @@ INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, su
 -- -- not pictures: paris has no records at all, so the API will only display the default rate limits
 
 -- -- insert some bullshit data that should be filtered out by the pkg/reports/ logic
--- -- (cluster "north", service "weird", resource "items" and rate "frobnicate" are not configured)
--- INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (101, 'north', 'unshared', UNIX(1000));
--- INSERT INTO cluster_services (id, cluster_id, type, scraped_at) VALUES (102, 'north', 'shared',   UNIX(1100));
+-- -- (service "weird", resource "items" and rate "frobnicate" are not configured)
+-- INSERT INTO cluster_services (id, type, scraped_at) VALUES (101, 'weird', UNIX(1100));
 -- INSERT INTO cluster_resources (service_id, name, capacity) VALUES (101, 'things', 1);
--- INSERT INTO cluster_resources (service_id, name, capacity) VALUES (102, 'things', 1);
-
 -- INSERT INTO domain_services (id, domain_id, type) VALUES (101, 1, 'weird');
 -- INSERT INTO domain_resources (service_id, name, quota) VALUES (101, 'things', 1);
 -- INSERT INTO project_services (id, project_id, type) VALUES (101, 1, 'weird');

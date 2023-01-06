@@ -302,7 +302,7 @@ var novaHypervisorWellformedGauge = prometheus.NewGaugeVec(
 		Name: "limes_nova_hypervisor_is_wellformed",
 		Help: "One metric per Nova hypervisor that was discovered by Limes's capacity scanner. Value is 1 for wellformed hypervisors that could be uniquely matched to an aggregate and an AZ, 0 otherwise.",
 	},
-	[]string{"os_cluster", "hypervisor", "hostname", "aggregate", "az"},
+	[]string{"hypervisor", "hostname", "aggregate", "az"},
 )
 
 // DescribeMetrics implements the core.CapacityPlugin interface.
@@ -311,7 +311,7 @@ func (p *capacityNovaPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 }
 
 // CollectMetrics implements the core.CapacityPlugin interface.
-func (p *capacityNovaPlugin) CollectMetrics(ch chan<- prometheus.Metric, clusterID, serializedMetrics string) error {
+func (p *capacityNovaPlugin) CollectMetrics(ch chan<- prometheus.Metric, serializedMetrics string) error {
 	var metrics capacityNovaSerializedMetrics
 	err := json.Unmarshal([]byte(serializedMetrics), &metrics)
 	if err != nil {
@@ -333,7 +333,7 @@ func (p *capacityNovaPlugin) CollectMetrics(ch chan<- prometheus.Metric, cluster
 		ch <- prometheus.MustNewConstMetric(
 			novaHypervisorWellformedDesc,
 			prometheus.GaugeValue, isWellformed,
-			clusterID, hv.Name, hv.Hostname, aggrList, azList,
+			hv.Name, hv.Hostname, aggrList, azList,
 		)
 	}
 	return nil
