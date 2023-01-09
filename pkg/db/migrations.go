@@ -20,7 +20,10 @@
 package db
 
 var sqlMigrations = map[string]string{
-	"001_initial.down.sql": `
+	//NOTE: Migrations 1 through 21 have been rolled up into one at 2023-01-09
+	//to better represent the current baseline of the DB schema.
+	"021_rollup.down.sql": `
+		DROP TABLE cluster_capacitors;
 		DROP TABLE cluster_services;
 		DROP TABLE cluster_resources;
 		DROP TABLE domains;
@@ -30,286 +33,106 @@ var sqlMigrations = map[string]string{
 		DROP INDEX project_services_stale_idx;
 		DROP TABLE project_services;
 		DROP TABLE project_resources;
+		DROP TABLE project_rates;
 	`,
-	"001_initial.up.sql": `
+	"021_rollup.up.sql": `
 		---------- cluster level
 
+		CREATE TABLE cluster_capacitors (
+			capacitor_id          TEXT       NOT NULL,
+			scraped_at            TIMESTAMP  NOT NULL,
+			scrape_duration_secs  REAL       NOT NULL DEFAULT 0,
+			serialized_metrics    TEXT       NOT NULL DEFAULT '',
+			PRIMARY KEY (capacitor_id)
+		);
+
 		CREATE TABLE cluster_services (
-		  id         BIGSERIAL NOT NULL PRIMARY KEY,
-		  cluster_id TEXT      NOT NULL,
-		  type       TEXT      NOT NULL,
-		  scraped_at TIMESTAMP NOT NULL,
-		  UNIQUE (cluster_id, type)
+			id          BIGSERIAL  NOT NULL PRIMARY KEY,
+			type        TEXT       NOT NULL UNIQUE,
+			scraped_at  TIMESTAMP  NOT NULL
 		);
 
 		CREATE TABLE cluster_resources (
-		  service_id BIGINT NOT NULL REFERENCES cluster_services ON DELETE CASCADE,
-		  name       TEXT   NOT NULL,
-		  capacity   BIGINT NOT NULL,
-		  PRIMARY KEY (service_id, name)
+			service_id      BIGINT  NOT NULL REFERENCES cluster_services ON DELETE CASCADE,
+			name            TEXT    NOT NULL,
+			capacity        BIGINT  NOT NULL,
+			subcapacities   TEXT    NOT NULL DEFAULT '',
+			capacity_per_az TEXT    NOT NULL DEFAULT '',
+			PRIMARY KEY (service_id, name)
 		);
 
 		---------- domain level
 
 		CREATE TABLE domains (
-		  id         BIGSERIAL NOT NULL PRIMARY KEY,
-		  cluster_id TEXT      NOT NULL,
-		  name       TEXT      NOT NULL,
-		  uuid       TEXT      NOT NULL UNIQUE
+			id    BIGSERIAL  NOT NULL PRIMARY KEY,
+			name  TEXT       NOT NULL,
+			uuid  TEXT       NOT NULL UNIQUE
 		);
 
 		CREATE TABLE domain_services (
-		  id         BIGSERIAL NOT NULL PRIMARY KEY,
-		  domain_id  BIGINT    NOT NULL REFERENCES domains ON DELETE CASCADE,
-		  type       TEXT      NOT NULL,
-		  UNIQUE (domain_id, type)
+			id         BIGSERIAL  NOT NULL PRIMARY KEY,
+			domain_id  BIGINT     NOT NULL REFERENCES domains ON DELETE CASCADE,
+			type       TEXT       NOT NULL,
+			UNIQUE (domain_id, type)
 		);
 
 		CREATE TABLE domain_resources (
-		  service_id BIGINT NOT NULL REFERENCES domain_services ON DELETE CASCADE,
-		  name       TEXT   NOT NULL,
-		  quota      BIGINT NOT NULL,
-		  PRIMARY KEY (service_id, name)
+			service_id  BIGINT  NOT NULL REFERENCES domain_services ON DELETE CASCADE,
+			name        TEXT    NOT NULL,
+			quota       BIGINT  NOT NULL,
+			PRIMARY KEY (service_id, name)
 		);
 
 		---------- project level
 
 		CREATE TABLE projects (
-		  id        BIGSERIAL NOT NULL PRIMARY KEY,
-		  domain_id BIGINT    NOT NULL REFERENCES domains ON DELETE CASCADE,
-		  name      TEXT      NOT NULL,
-		  uuid      TEXT      NOT NULL UNIQUE
+			id            BIGSERIAL  NOT NULL PRIMARY KEY,
+			domain_id     BIGINT     NOT NULL REFERENCES domains ON DELETE CASCADE,
+			name          TEXT       NOT NULL,
+			uuid          TEXT       NOT NULL UNIQUE,
+			parent_uuid   TEXT       NOT NULL DEFAULT '',
+			has_bursting  BOOLEAN    NOT NULL DEFAULT TRUE
 		);
 
 		CREATE TABLE project_services (
-		  id          BIGSERIAL NOT NULL PRIMARY KEY,
-		  project_id  BIGINT    NOT NULL REFERENCES projects ON DELETE CASCADE,
-		  type        TEXT      NOT NULL,
-		  scraped_at  TIMESTAMP, -- defaults to NULL to indicate that scraping did not happen yet
-		  stale       BOOLEAN   NOT NULL DEFAULT FALSE,
-		  UNIQUE (project_id, type)
+			id                          BIGSERIAL  NOT NULL PRIMARY KEY,
+			project_id                  BIGINT     NOT NULL REFERENCES projects ON DELETE CASCADE,
+			type                        TEXT       NOT NULL,
+			scraped_at                  TIMESTAMP  DEFAULT NULL, -- null if scraping did not happen yet
+			stale                       BOOLEAN    NOT NULL DEFAULT FALSE,
+			scrape_duration_secs        REAL       NOT NULL DEFAULT 0,
+			rates_scraped_at            TIMESTAMP  DEFAULT NULL, -- null if scraping did not happen yet
+			rates_stale                 BOOLEAN    NOT NULL DEFAULT FALSE,
+			rates_scrape_duration_secs  REAL       NOT NULL DEFAULT 0,
+			rates_scrape_state          TEXT       NOT NULL DEFAULT '',
+			serialized_metrics          TEXT       NOT NULL DEFAULT '',
+			checked_at                  TIMESTAMP  DEFAULT NULL,
+			scrape_error_message        TEXT       NOT NULL DEFAULT '',
+			rates_checked_at            TIMESTAMP  DEFAULT NULL,
+			rates_scrape_error_message  TEXT       NOT NULL DEFAULT '',
+			UNIQUE (project_id, type)
 		);
 		CREATE INDEX project_services_stale_idx ON project_services (stale);
 
 		CREATE TABLE project_resources (
-		  service_id    BIGINT NOT NULL REFERENCES project_services ON DELETE CASCADE,
-		  name          TEXT   NOT NULL,
-		  quota         BIGINT NOT NULL,
-		  usage         BIGINT NOT NULL,
-		  backend_quota BIGINT NOT NULL,
-		  PRIMARY KEY (service_id, name)
-		);
-	`,
-	"002_add_cluster_resource_comment.down.sql": `
-		ALTER TABLE cluster_resources DROP COLUMN comment;
-	`,
-	"002_add_cluster_resource_comment.up.sql": `
-		ALTER TABLE cluster_resources ADD COLUMN comment TEXT NOT NULL DEFAULT '';
-	`,
-	"003_add_project_parent_id.down.sql": `
-		ALTER TABLE projects DROP COLUMN parent_uuid;
-	`,
-	"003_add_project_parent_id.up.sql": `
-		ALTER TABLE projects ADD COLUMN parent_uuid TEXT NOT NULL DEFAULT '';
-	`,
-	"004_fix_domain_uuid_uniqueness.down.sql": `
-		ALTER TABLE domains DROP CONSTRAINT domains_uuid_cluster_id_key;
-		ALTER TABLE domains ADD UNIQUE (uuid);
-	`,
-	"004_fix_domain_uuid_uniqueness.up.sql": `
-		ALTER TABLE domains DROP CONSTRAINT domains_uuid_key;
-		ALTER TABLE domains ADD UNIQUE (uuid, cluster_id);
-	`,
-	"005_add_project_resource_subresources.down.sql": `
-		ALTER TABLE project_resources DROP COLUMN subresources;
-	`,
-	"005_add_project_resource_subresources.up.sql": `
-		ALTER TABLE project_resources ADD COLUMN subresources TEXT NOT NULL DEFAULT '';
-	`,
-	"006_add_cluster_resources_subcapacities.down.sql": `
-		ALTER TABLE cluster_resources DROP COLUMN subcapacities;
-	`,
-	"006_add_cluster_resources_subcapacities.up.sql": `
-		ALTER TABLE cluster_resources ADD COLUMN subcapacities TEXT NOT NULL DEFAULT '';
-	`,
-	"007_add_projects_has_bursting.down.sql": `
-		ALTER TABLE projects DROP COLUMN has_bursting;
-	`,
-	"007_add_projects_has_bursting.up.sql": `
-		ALTER TABLE projects ADD COLUMN has_bursting BOOLEAN NOT NULL DEFAULT TRUE;
-	`,
-	"008_add_project_resources_desired_backend_quota.down.sql": `
-		ALTER TABLE project_resources DROP COLUMN desired_backend_quota;
-	`,
-	"008_add_project_resources_desired_backend_quota.up.sql": `
-		ALTER TABLE project_resources ADD COLUMN desired_backend_quota BIGINT NOT NULL DEFAULT 0;
-	`,
-	"009_add_project_resources_physical_usage.down.sql": `
-		ALTER TABLE project_resources DROP COLUMN physical_usage;
-	`,
-	"009_add_project_resources_physical_usage.up.sql": `
-		ALTER TABLE project_resources ADD COLUMN physical_usage BIGINT DEFAULT NULL;
-	`,
-	"010_add_project_rate_limits.down.sql": `
-		DROP TABLE project_rate_limits;
-	`,
-	"010_add_project_rate_limits.up.sql": `
-		CREATE TABLE project_rate_limits (
-			service_id      BIGINT NOT NULL REFERENCES project_services ON DELETE CASCADE,
-			target_type_uri TEXT   NOT NULL,
-			action          TEXT   NOT NULL,
-			rate_limit      BIGINT NOT NULL,
-			unit            TEXT   NOT NULL,
-			PRIMARY KEY (service_id, target_type_uri, action)
-		);
-	`,
-	"011_add_cluster_resources_capacity_per_az.down.sql": `
-		ALTER TABLE cluster_resources DROP COLUMN capacity_per_az;
-	`,
-	"011_add_cluster_resources_capacity_per_az.up.sql": `
-		ALTER TABLE cluster_resources ADD COLUMN capacity_per_az TEXT NOT NULL DEFAULT '';
-	`,
-	"012_add_project_services_scrape_duration_secs.down.sql": `
-		ALTER TABLE project_services DROP COLUMN scrape_duration_secs;
-	`,
-	"012_add_project_services_scrape_duration_secs.up.sql": `
-		ALTER TABLE project_services ADD COLUMN scrape_duration_secs REAL NOT NULL DEFAULT 0;
-	`,
-	"013_remove_cluster_resource_comment.down.sql": `
-		ALTER TABLE cluster_resources ADD COLUMN comment TEXT NOT NULL DEFAULT '';
-	`,
-	"013_remove_cluster_resource_comment.up.sql": `
-		ALTER TABLE cluster_resources DROP COLUMN comment;
-	`,
-	"014_restructure_project_rate_limits.down.sql": `
-		DROP TABLE project_rates;
-		CREATE TABLE project_rate_limits (
-			service_id      BIGINT NOT NULL REFERENCES project_services ON DELETE CASCADE,
-			target_type_uri TEXT   NOT NULL,
-			action          TEXT   NOT NULL,
-			rate_limit      BIGINT NOT NULL,
-			unit            TEXT   NOT NULL,
-			PRIMARY KEY (service_id, target_type_uri, action)
-		);
-	`,
-	"014_restructure_project_rate_limits.up.sql": `
-		DROP TABLE project_rate_limits;
-		CREATE TABLE project_rates (
-			service_id      BIGINT NOT NULL REFERENCES project_services ON DELETE CASCADE,
-			name            TEXT   NOT NULL,
-			rate_limit      BIGINT DEFAULT NULL,        -- null = not rate-limited
-			window_ns       BIGINT DEFAULT NULL,        -- null = not rate-limited, unit = nanoseconds
-			usage_as_bigint TEXT   NOT NULL DEFAULT '', -- empty = not scraped
+			service_id             BIGINT  NOT NULL REFERENCES project_services ON DELETE CASCADE,
+			name                   TEXT    NOT NULL,
+			quota                  BIGINT  DEFAULT NULL, -- null if resInfo.NoQuota == true
+			usage                  BIGINT  NOT NULL,
+			backend_quota          BIGINT  DEFAULT NULL,
+			subresources           TEXT    NOT NULL DEFAULT '',
+			desired_backend_quota  BIGINT  DEFAULT NULL,
+			physical_usage         BIGINT  DEFAULT NULL,
 			PRIMARY KEY (service_id, name)
 		);
-	`,
-	"015_rate_scraping.down.sql": `
-		ALTER TABLE project_services DROP COLUMN rates_scraped_at;
-		ALTER TABLE project_services DROP COLUMN rates_stale;
-		ALTER TABLE project_services DROP COLUMN rates_scrape_duration_secs;
-		ALTER TABLE project_services DROP COLUMN rates_scrape_state;
-	`,
-	"015_rate_scraping.up.sql": `
-		ALTER TABLE project_services ADD COLUMN rates_scraped_at TIMESTAMP; -- defaults to NULL to indicate that scraping did not happen yet
-		ALTER TABLE project_services ADD COLUMN rates_stale BOOLEAN NOT NULL DEFAULT FALSE;
-		ALTER TABLE project_services ADD COLUMN rates_scrape_duration_secs REAL NOT NULL DEFAULT 0;
-		ALTER TABLE project_services ADD COLUMN rates_scrape_state TEXT NOT NULL DEFAULT '';
-	`,
-	"016_resources_without_quota.down.sql": `
-		ALTER TABLE project_resources ALTER COLUMN quota                 SET NOT NULL;
-		ALTER TABLE project_resources ALTER COLUMN backend_quota         SET NOT NULL;
-		ALTER TABLE project_resources ALTER COLUMN desired_backend_quota SET NOT NULL;
-	`,
-	"016_resources_without_quota.up.sql": `
-		ALTER TABLE project_resources ALTER COLUMN quota                 DROP NOT NULL;
-		ALTER TABLE project_resources ALTER COLUMN backend_quota         DROP NOT NULL;
-		ALTER TABLE project_resources ALTER COLUMN desired_backend_quota DROP NOT NULL;
-	`,
-	"017_add_project_services_serialized_metrics.down.sql": `
-		ALTER TABLE project_services DROP COLUMN serialized_metrics;
-	`,
-	"017_add_project_services_serialized_metrics.up.sql": `
-		ALTER TABLE project_services ADD COLUMN serialized_metrics TEXT NOT NULL DEFAULT '';
-	`,
-	"018_add_cluster_capacitors.down.sql": `
-		DROP TABLE cluster_capacitors;
-	`,
-	"018_add_cluster_capacitors.up.sql": `
-		CREATE TABLE cluster_capacitors (
-		  cluster_id           TEXT      NOT NULL,
-		  capacitor_id         TEXT      NOT NULL,
-		  scraped_at           TIMESTAMP NOT NULL,
-		  scrape_duration_secs REAL      NOT NULL DEFAULT 0,
-		  serialized_metrics   TEXT      NOT NULL DEFAULT '',
-		  PRIMARY KEY (cluster_id, capacitor_id)
+
+		CREATE TABLE project_rates (
+			service_id       BIGINT  NOT NULL REFERENCES project_services ON DELETE CASCADE,
+			name             TEXT    NOT NULL,
+			rate_limit       BIGINT  DEFAULT NULL, -- null = not rate-limited
+			window_ns        BIGINT  DEFAULT NULL, -- null = not rate-limited, unit = nanoseconds
+			usage_as_bigint  TEXT    NOT NULL,     -- empty = not scraped
+			PRIMARY KEY (service_id, name)
 		);
-	`,
-	"019_scrape_errors.down.sql": `
-		ALTER TABLE project_services
-			DROP COLUMN checked_at,
-			DROP COLUMN scrape_error_message,
-			DROP COLUMN rates_checked_at,
-			DROP COLUMN rates_scrape_error_message;
-	`,
-	"019_scrape_errors.up.sql": `
-		ALTER TABLE project_services
-			ADD COLUMN checked_at TIMESTAMP DEFAULT NULL,
-			ADD COLUMN scrape_error_message TEXT NOT NULL DEFAULT '',
-			ADD COLUMN rates_checked_at TIMESTAMP DEFAULT NULL,
-			ADD COLUMN rates_scrape_error_message TEXT NOT NULL DEFAULT '';
-		UPDATE project_services SET checked_at = scraped_at, rates_checked_at = rates_scraped_at;
-	`,
-	// NOTE 1: The down-migration fills in the cluster ID "ccloud" to be compatible with the original deployment in CCloud.
-	// NOTE 2: I could not find a way to change the primary key of `cluster_capacitors` within a migration (i.e. within a
-	// transaction), so we just recreate the entire table. Since all data in the table can be recovered by ScanCapacity(),
-	// this is not that bad.
-	"020_remove_cluster_id.down.sql": `
-		ALTER TABLE cluster_services
-			ADD COLUMN cluster_id TEXT NOT NULL DEFAULT 'ccloud';
-		ALTER TABLE cluster_services
-			ADD UNIQUE (cluster_id, type),
-			DROP CONSTRAINT cluster_services_type_key;
-		ALTER TABLE domains
-			ADD COLUMN cluster_id TEXT NOT NULL DEFAULT 'ccloud';
-		ALTER TABLE domains
-			ADD UNIQUE (uuid, cluster_id),
-			DROP CONSTRAINT domains_uuid_key;
-		DROP TABLE cluster_capacitors;
-		CREATE TABLE cluster_capacitors (
-		  cluster_id           TEXT      NOT NULL,
-		  capacitor_id         TEXT      NOT NULL,
-		  scraped_at           TIMESTAMP NOT NULL,
-		  scrape_duration_secs REAL      NOT NULL DEFAULT 0,
-		  serialized_metrics   TEXT      NOT NULL DEFAULT '',
-		  PRIMARY KEY (cluster_id, capacitor_id)
-		);
-	`,
-	"020_remove_cluster_id.up.sql": `
-		ALTER TABLE cluster_services
-			ADD UNIQUE (type),
-			DROP CONSTRAINT cluster_services_cluster_id_type_key;
-		ALTER TABLE cluster_services
-			DROP COLUMN cluster_id;
-		ALTER TABLE domains
-			ADD UNIQUE (uuid),
-			DROP CONSTRAINT domains_uuid_cluster_id_key;
-		ALTER TABLE domains
-			DROP COLUMN cluster_id;
-		DROP TABLE cluster_capacitors;
-		CREATE TABLE cluster_capacitors (
-		  capacitor_id         TEXT      NOT NULL,
-		  scraped_at           TIMESTAMP NOT NULL,
-		  scrape_duration_secs REAL      NOT NULL DEFAULT 0,
-		  serialized_metrics   TEXT      NOT NULL DEFAULT '',
-		  PRIMARY KEY (capacitor_id)
-		);
-	`,
-	"021_remove_default_quotas.down.sql": `
-		ALTER TABLE project_resources ALTER COLUMN desired_backend_quota SET DEFAULT 0;
-		ALTER TABLE project_rates     ALTER COLUMN usage_as_bigint       SET DEFAULT '';
-	`,
-	"021_remove_default_quotas.up.sql": `
-		ALTER TABLE project_resources ALTER COLUMN desired_backend_quota DROP DEFAULT;
-		ALTER TABLE project_rates     ALTER COLUMN usage_as_bigint       DROP DEFAULT;
 	`,
 }
