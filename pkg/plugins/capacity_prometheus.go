@@ -22,12 +22,13 @@ package plugins
 import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sapcc/go-bits/promquery"
 
 	"github.com/sapcc/limes/pkg/core"
 )
 
 type capacityPrometheusPlugin struct {
-	APIConfig PrometheusAPIConfiguration   `yaml:"api"`
+	APIConfig promquery.Config             `yaml:"api"`
 	Queries   map[string]map[string]string `yaml:"queries"`
 }
 
@@ -47,7 +48,7 @@ func (p *capacityPrometheusPlugin) PluginTypeID() string {
 
 // Scrape implements the core.CapacityPlugin interface.
 func (p *capacityPrometheusPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (result map[string]map[string]core.CapacityData, _ string, err error) {
-	client, err := prometheusClient(p.APIConfig)
+	client, err := p.APIConfig.Connect()
 	if err != nil {
 		return nil, "", err
 	}
@@ -56,7 +57,7 @@ func (p *capacityPrometheusPlugin) Scrape(provider *gophercloud.ProviderClient, 
 	for serviceType, queries := range p.Queries {
 		serviceResult := make(map[string]core.CapacityData)
 		for resourceName, query := range queries {
-			value, err := prometheusGetSingleValue(client, query, nil)
+			value, err := client.GetSingleValue(query, nil)
 			if err != nil {
 				return nil, "", err
 			}

@@ -36,14 +36,15 @@ import (
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/go-bits/promquery"
 
 	"github.com/sapcc/limes/pkg/core"
 )
 
 type manilaPlugin struct {
-	ShareTypes          []ManilaShareTypeSpec       `yaml:"share_types"`
-	PrometheusAPIConfig *PrometheusAPIConfiguration `yaml:"prometheus_api"`
-	hasReplicaQuotas    bool                        `yaml:"-"`
+	ShareTypes          []ManilaShareTypeSpec `yaml:"share_types"`
+	PrometheusAPIConfig *promquery.Config     `yaml:"prometheus_api"`
+	hasReplicaQuotas    bool                  `yaml:"-"`
 }
 
 func init() {
@@ -447,7 +448,7 @@ func (p *manilaPlugin) collectPhysicalUsage(project core.KeystoneProject) (manil
 		SnapshotGigabytes: make(map[string]uint64),
 	}
 
-	client, err := prometheusClient(*p.PrometheusAPIConfig)
+	client, err := p.PrometheusAPIConfig.Connect()
 	if err != nil {
 		return manilaPhysicalUsage{}, err
 	}
@@ -469,7 +470,7 @@ func (p *manilaPlugin) collectPhysicalUsage(project core.KeystoneProject) (manil
 			`sum(max by (share_id) (netapp_volume_used_bytes{project_id=%q,share_type=%q}))`,
 			project.UUID, stName,
 		)
-		bytesPhysical, err := prometheusGetSingleValue(client, queryStr, &defaultValue)
+		bytesPhysical, err := client.GetSingleValue(queryStr, &defaultValue)
 		if err != nil {
 			return manilaPhysicalUsage{}, err
 		}
@@ -479,7 +480,7 @@ func (p *manilaPlugin) collectPhysicalUsage(project core.KeystoneProject) (manil
 			`sum(max by (share_id) (netapp_volume_snapshot_used_bytes{project_id=%q,share_type=%q}))`,
 			project.UUID, stName,
 		)
-		snapshotBytesPhysical, err := prometheusGetSingleValue(client, queryStr, &defaultValue)
+		snapshotBytesPhysical, err := client.GetSingleValue(queryStr, &defaultValue)
 		if err != nil {
 			return manilaPhysicalUsage{}, err
 		}
