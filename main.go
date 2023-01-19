@@ -43,13 +43,13 @@ import (
 	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/osext"
 
-	"github.com/sapcc/limes/pkg/api"
-	"github.com/sapcc/limes/pkg/collector"
-	"github.com/sapcc/limes/pkg/core"
-	"github.com/sapcc/limes/pkg/db"
-	"github.com/sapcc/limes/pkg/util"
+	"github.com/sapcc/limes/internal/api"
+	"github.com/sapcc/limes/internal/collector"
+	"github.com/sapcc/limes/internal/core"
+	"github.com/sapcc/limes/internal/db"
+	"github.com/sapcc/limes/internal/util"
 
-	_ "github.com/sapcc/limes/pkg/plugins"
+	_ "github.com/sapcc/limes/internal/plugins"
 )
 
 var discoverInterval = 3 * time.Minute

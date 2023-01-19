@@ -95,25 +95,25 @@ Once compiled, Limes is only a single binary containing subcommands for the vari
 collect`). This reduces the size of the compiled application dramatically since a lot of code is shared. The main
 entrypoint is in `cmd/limes/main.go`, from which everything else follows.
 
-The `main.go` is fairly compact. The main source code is below `pkg/`, organized into packages as follows: (listed
+The `main.go` is fairly compact. The main source code is below `internal/`, organized into packages as follows: (listed
 from the bottom up)
 
 | Package | `go test` | Contents |
 | --- | :---: | --- |
 | _(toplevel)_ | yes | types for data structures that appear in the Limes API |
-| `pkg/util` | no | various small utility functions (esp. for type conversion) |
-| `pkg/db` | no | database configuration, connection handling, ORM model classes, utility functions |
-| `pkg/core` | yes | core interfaces (DiscoveryPlugin, QuotaPlugin, CapacityPlugin) and data structures (Configuration, Cluster), config parsing and validation |
-| `pkg/test` | no | testing helpers: mock implementations of core interfaces, test runners, etc. |
-| `pkg/plugins` | no | implementations of QuotaPlugin and CapacityPlugin |
-| `pkg/datamodel` | no | higher-level functions that operate on the ORM model classes (not in `pkg/db` because of dependency on stuff from `pkg/limes` |
-| `pkg/collector` | yes | functionality of `limes collect` |
-| `pkg/reports` | no | helper for `pkg/api`: rendering of reports for GET requests |
-| `pkg/api` | yes | functionality of `limes serve` |
+| `internal/util` | no | various small utility functions (esp. for type conversion) |
+| `internal/db` | no | database configuration, connection handling, ORM model classes, utility functions |
+| `internal/core` | yes | core interfaces (DiscoveryPlugin, QuotaPlugin, CapacityPlugin) and data structures (Configuration, Cluster), config parsing and validation |
+| `internal/test` | no | testing helpers: mock implementations of core interfaces, test runners, etc. |
+| `internal/plugins` | no | implementations of QuotaPlugin and CapacityPlugin |
+| `internal/datamodel` | no | higher-level functions that operate on the ORM model classes (not in `internal/db` because of dependency on stuff from `internal/limes` |
+| `internal/collector` | yes | functionality of `limes collect` |
+| `internal/reports` | no | helper for `internal/api`: rendering of reports for GET requests |
+| `internal/api` | yes | functionality of `limes serve` |
 
-Only the top-level package is considered public API. Third-party programs should not import anything from `pkg/` and its subdirectories..
+Only the top-level package is considered public API. Third-party programs should not import anything from `internal/` and its subdirectories..
 
-The database is defined by SQL files in `pkg/db/migrations.go`. The contents follow the PostgreSQL dialect of SQL, the
+The database is defined by SQL files in `internal/db/migrations.go`. The contents follow the PostgreSQL dialect of SQL, the
 filenames follow the requirements of [the library that Limes uses for handling the DB schema][migrate].
 
 [yaml]: http://yaml.org/
