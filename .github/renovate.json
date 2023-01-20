@@ -40,7 +40,7 @@
     },
     {
       "matchPackageNames": [
-        "^postgres$"
+        "postgres"
       ],
       "allowedVersions": "12"
     }

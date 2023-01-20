@@ -46,7 +46,7 @@ renovate:
   enabled: true
   packageRules:
     # do not try to update to Postgres > 12 (the tests should match what we use in production)
-    - matchPackageNames: [ '^postgres$' ]
+    - matchPackageNames: [ postgres ]
       allowedVersions: '12'
 
 verbatim: |
