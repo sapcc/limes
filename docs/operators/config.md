@@ -776,6 +776,7 @@ capacitors:
   - id: sapcc-ironic
     type: sapcc-ironic
     params:
+      flavor_name_pattern: ^bm_
       flavor_aliases:
         newflavor1: [ oldflavor1 ]
         newflavor2: [ oldflavor2, oldflavor3 ]
@@ -785,8 +786,9 @@ This capacity plugin reports capacity for the special `compute/instances_<flavor
 Converged Cloud ([see above](#compute-nova-v2)). For each such flavor, it uses the Ironic node's resource class to
 match it to a flavor with the **same name**.
 
-The `params.flavor_aliases` parameter has the same semantics as the respective parameter on the `compute` service type,
-and should have the same contents as well (unless you like unnecessary confusion).
+The `params.flavor_name_pattern` and `params.flavor_aliases` parameters have the same semantics as the respective
+parameters on the `compute` service type, and should have the same contents as well (unless you like unnecessary
+confusion).
 
 ```yaml
 capacitors:
