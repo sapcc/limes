@@ -6,7 +6,7 @@ require (
 	github.com/databus23/goslo.policy v0.0.0-20210929125152-81bf2876dbdb
 	github.com/dlmiddlecote/sqlstats v1.0.2
 	github.com/go-gorp/gorp/v3 v3.1.0
-	github.com/gofrs/uuid v4.3.1+incompatible
+	github.com/gofrs/uuid v4.4.0+incompatible
 	github.com/gophercloud/gophercloud v1.1.1
 	github.com/gophercloud/utils v0.0.0-20221207145018-e8fba78967ca
 	github.com/gorilla/mux v1.8.0
@@ -15,8 +15,8 @@ require (
 	github.com/open-policy-agent/opa v0.48.0
 	github.com/prometheus/client_golang v1.14.0
 	github.com/rs/cors v1.8.3
-	github.com/sapcc/go-api-declarations v1.4.2
-	github.com/sapcc/go-bits v0.0.0-20230118133144-113f64a2d7cb
+	github.com/sapcc/go-api-declarations v1.4.3
+	github.com/sapcc/go-bits v0.0.0-20230126153021-8e21336fc7f8
 	gopkg.in/yaml.v2 v2.4.0
 )
 
@@ -43,10 +43,10 @@ require (
 	github.com/prometheus/client_model v0.3.0 // indirect
 	github.com/prometheus/common v0.39.0 // indirect
 	github.com/prometheus/procfs v0.8.0 // indirect
-	github.com/rabbitmq/amqp091-go v1.5.0 // indirect
+	github.com/rabbitmq/amqp091-go v1.6.0 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20200313005456-10cdbea86bc0 // indirect
 	github.com/rogpeppe/go-internal v1.9.0 // indirect
-	github.com/sergi/go-diff v1.2.0 // indirect
+	github.com/sergi/go-diff v1.3.1 // indirect
 	github.com/tchap/go-patricia/v2 v2.3.1 // indirect
 	github.com/xeipuuv/gojsonpointer v0.0.0-20190905194746-02993c407bfb // indirect
 	github.com/xeipuuv/gojsonreference v0.0.0-20180127040603-bd5ef7bd5415 // indirect
