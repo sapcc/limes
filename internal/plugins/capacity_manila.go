@@ -50,10 +50,6 @@ func (p *capacityManilaPlugin) Init(provider *gophercloud.ProviderClient, eo gop
 	if len(p.ShareTypes) == 0 {
 		return errors.New("capacity plugin manila: missing required configuration field manila.share_types")
 	}
-	err := compileManilaShareTypeSpecs(p.ShareTypes)
-	if err != nil {
-		return err
-	}
 	if p.ShareNetworks == 0 {
 		return errors.New("capacity plugin manila: missing required configuration field manila.share_networks")
 	}

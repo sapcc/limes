@@ -48,12 +48,12 @@ func (c *Collector) listDomainsFiltered() ([]core.KeystoneDomain, error) {
 	discovery := c.Cluster.Config.Discovery
 
 	for _, domain := range domains {
-		if discovery.ExcludeDomainRx != nil {
+		if discovery.ExcludeDomainRx != "" {
 			if discovery.ExcludeDomainRx.MatchString(domain.Name) {
 				continue
 			}
 		}
-		if discovery.IncludeDomainRx != nil {
+		if discovery.IncludeDomainRx != "" {
 			if !discovery.IncludeDomainRx.MatchString(domain.Name) {
 				continue
 			}

@@ -24,7 +24,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"regexp"
 	"sort"
 	"strings"
 
@@ -36,18 +35,17 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/placement/v1/resourceproviders"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/go-bits/regexpext"
 
 	"github.com/sapcc/limes/internal/core"
 )
 
 type capacityNovaPlugin struct {
-	reportSubcapacities      map[string]bool   `yaml:"-"`
-	AggregateNamePattern     string            `yaml:"aggregate_name_pattern"`
-	aggregateNameRx          *regexp.Regexp    `yaml:"-"`
-	MaxInstancesPerAggregate uint64            `yaml:"max_instances_per_aggregate"`
-	ExtraSpecs               map[string]string `yaml:"extra_specs"`
-	HypervisorTypePattern    string            `yaml:"hypervisor_type_pattern"`
-	hypervisorTypeRx         *regexp.Regexp    `yaml:"-"`
+	reportSubcapacities      map[string]bool       `yaml:"-"`
+	AggregateNameRx          regexpext.PlainRegexp `yaml:"aggregate_name_pattern"`
+	MaxInstancesPerAggregate uint64                `yaml:"max_instances_per_aggregate"`
+	ExtraSpecs               map[string]string     `yaml:"extra_specs"`
+	HypervisorTypeRx         regexpext.PlainRegexp `yaml:"hypervisor_type_pattern"`
 }
 
 type capacityNovaSerializedMetrics struct {
@@ -69,21 +67,11 @@ func init() {
 func (p *capacityNovaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubcapacities map[string]map[string]bool) (err error) {
 	p.reportSubcapacities = scrapeSubcapacities["compute"]
 
-	if p.AggregateNamePattern == "" {
+	if p.AggregateNameRx == "" {
 		return errors.New("missing value for nova.aggregate_name_pattern")
 	}
-	p.aggregateNameRx, err = regexp.Compile(p.AggregateNamePattern)
-	if err != nil {
-		return fmt.Errorf("invalid value for nova.aggregate_name_pattern: %w", err)
-	}
-
 	if p.MaxInstancesPerAggregate == 0 {
 		return errors.New("missing value for nova.max_instances_per_aggregate")
-	}
-
-	p.hypervisorTypeRx, err = regexp.Compile(p.HypervisorTypePattern)
-	if err != nil {
-		return fmt.Errorf("invalid value for nova.hypervisor_type_pattern: %w", err)
 	}
 
 	return nil
@@ -158,7 +146,7 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 	var metrics capacityNovaSerializedMetrics
 	for _, hypervisor := range hypervisorData.Hypervisors {
 		//ignore hypervisor if excluded by HypervisorTypePattern
-		if !p.hypervisorTypeRx.MatchString(hypervisor.HypervisorType) {
+		if !p.HypervisorTypeRx.MatchString(hypervisor.HypervisorType) {
 			//NOTE: If no pattern was given, the regex will be empty and thus always match.
 			continue
 		}
@@ -187,7 +175,7 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 			if !hypervisor.IsInAggregate(aggr) {
 				continue
 			}
-			if p.aggregateNameRx.MatchString(aggr.Name) {
+			if p.AggregateNameRx.MatchString(aggr.Name) {
 				matchingAggregates[aggr.Name] = true
 			}
 			if az := aggr.AvailabilityZone; az != "" {

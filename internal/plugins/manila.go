@@ -56,10 +56,6 @@ func (p *manilaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud
 	if len(p.ShareTypes) == 0 {
 		return errors.New("quota plugin sharev2: missing required configuration field sharev2.share_types")
 	}
-	err := compileManilaShareTypeSpecs(p.ShareTypes)
-	if err != nil {
-		return err
-	}
 
 	client, err := openstack.NewSharedFileSystemV2(provider, eo)
 	if err != nil {

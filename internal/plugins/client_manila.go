@@ -21,9 +21,8 @@ package plugins
 
 import (
 	"fmt"
-	"regexp"
-	"strings"
 
+	"github.com/sapcc/go-bits/regexpext"
 	"github.com/sapcc/limes/internal/core"
 )
 
@@ -32,23 +31,9 @@ type ManilaShareTypeSpec struct {
 	Name               string `yaml:"name"`
 	ReplicationEnabled bool   `yaml:"replication_enabled"` //only used by QuotaPlugin
 	MappingRules       []*struct {
-		NamePattern string         `yaml:"name_pattern"`
-		NameRx      *regexp.Regexp `yaml:"-"`
-		ShareType   string         `yaml:"share_type"`
+		NameRx    regexpext.BoundedRegexp `yaml:"name_pattern"`
+		ShareType string                  `yaml:"share_type"`
 	} `yaml:"mapping_rules"`
-}
-
-func compileManilaShareTypeSpecs(specs []ManilaShareTypeSpec) (err error) {
-	for _, spec := range specs {
-		for _, rule := range spec.MappingRules {
-			namePatternFull := fmt.Sprintf(`^%s$`, rule.NamePattern)
-			rule.NameRx, err = regexp.Compile(namePatternFull)
-			if err != nil {
-				return fmt.Errorf("while compiling regex %q: %w", namePatternFull, err)
-			}
-		}
-	}
-	return nil
 }
 
 // Given a virtual share type, returns the actual share type name that we have
@@ -72,9 +57,7 @@ func getAllManilaShareTypes(spec ManilaShareTypeSpec) []string {
 		result = append(result, rule.ShareType)
 
 		//if there is a catch-all rule, no rules afterwards will have any effect
-		namePattern := strings.TrimPrefix(rule.NamePattern, `^`)
-		namePattern = strings.TrimSuffix(namePattern, `$`)
-		if namePattern == `.*` || namePattern == `.+` {
+		if rule.NameRx == `.*` || rule.NameRx == `.+` {
 			return result
 		}
 	}
