@@ -23,13 +23,13 @@ import (
 	"fmt"
 	"math"
 	"os"
-	"regexp"
 	"strings"
 
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/go-bits/regexpext"
 	yaml "gopkg.in/yaml.v2"
 
 	"github.com/sapcc/limes/internal/util"
@@ -65,12 +65,10 @@ func (cluster *ClusterConfiguration) GetServiceConfigurationForType(serviceType 
 // DiscoveryConfiguration describes the method of discovering Keystone domains
 // and projects.
 type DiscoveryConfiguration struct {
-	Method               string              `yaml:"method"`
-	ExcludeDomainPattern string              `yaml:"except_domains"`
-	IncludeDomainPattern string              `yaml:"only_domains"`
-	ExcludeDomainRx      *regexp.Regexp      `yaml:"-"`
-	IncludeDomainRx      *regexp.Regexp      `yaml:"-"`
-	Parameters           util.YamlRawMessage `yaml:"params"`
+	Method          string                `yaml:"method"`
+	ExcludeDomainRx regexpext.PlainRegexp `yaml:"except_domains"`
+	IncludeDomainRx regexpext.PlainRegexp `yaml:"only_domains"`
+	Parameters      util.YamlRawMessage   `yaml:"params"`
 }
 
 // ServiceConfiguration describes a service that is enabled for a certain cluster.
@@ -120,19 +118,17 @@ type LowPrivilegeRaiseConfiguration struct {
 		ForDomains  map[string]map[string]string `yaml:"domains"`
 		ForProjects map[string]map[string]string `yaml:"projects"`
 	} `yaml:"limits"`
-	ExcludeProjectDomainPattern string         `yaml:"except_projects_in_domains"`
-	IncludeProjectDomainPattern string         `yaml:"only_projects_in_domains"`
-	IncludeProjectDomainRx      *regexp.Regexp `yaml:"-"`
-	ExcludeProjectDomainRx      *regexp.Regexp `yaml:"-"`
+	ExcludeProjectDomainRx regexpext.PlainRegexp `yaml:"except_projects_in_domains"`
+	IncludeProjectDomainRx regexpext.PlainRegexp `yaml:"only_projects_in_domains"`
 }
 
 // IsAllowedForProjectsIn checks if low-privilege quota raising is enabled by this config
 // for the domain with the given name.
 func (l LowPrivilegeRaiseConfiguration) IsAllowedForProjectsIn(domainName string) bool {
-	if l.ExcludeProjectDomainRx != nil && l.ExcludeProjectDomainRx.MatchString(domainName) {
+	if l.ExcludeProjectDomainRx != "" && l.ExcludeProjectDomainRx.MatchString(domainName) {
 		return false
 	}
-	if l.IncludeProjectDomainRx == nil {
+	if l.IncludeProjectDomainRx == "" {
 		return true
 	}
 	return l.IncludeProjectDomainRx.MatchString(domainName)
@@ -142,8 +138,8 @@ func (l LowPrivilegeRaiseConfiguration) IsAllowedForProjectsIn(domainName string
 // specialized behaviors of a single resource (or a set of resources) in a
 // certain cluster.
 type ResourceBehaviorConfiguration struct {
-	FullResourceName       string                             `yaml:"resource"`
-	Scope                  string                             `yaml:"scope"`
+	FullResourceNameRx     regexpext.BoundedRegexp            `yaml:"resource"`
+	ScopeRx                regexpext.BoundedRegexp            `yaml:"scope"`
 	MaxBurstMultiplier     *limesresources.BurstingMultiplier `yaml:"max_burst_multiplier"`
 	OvercommitFactor       float64                            `yaml:"overcommit_factor"`
 	ScalesWith             string                             `yaml:"scales_with"`
@@ -155,8 +151,8 @@ type ResourceBehaviorConfiguration struct {
 
 // ResourceBehavior is the compiled version of ResourceBehaviorConfiguration.
 type ResourceBehavior struct {
-	FullResourceNameRx     *regexp.Regexp
-	ScopeRx                *regexp.Regexp
+	FullResourceNameRx     regexpext.BoundedRegexp
+	ScopeRx                regexpext.BoundedRegexp
 	MaxBurstMultiplier     limesresources.BurstingMultiplier
 	OvercommitFactor       float64
 	ScalesWithResourceName string
@@ -188,8 +184,7 @@ type BurstingConfiguration struct {
 // QuotaDistributionConfiguration contains configuration options for specifying
 // the QuotaDistributionModel of specific resources.
 type QuotaDistributionConfiguration struct {
-	FullResourceName       string                                `yaml:"resource"`
-	FullResourceNameRx     *regexp.Regexp                        `yaml:"-"`
+	FullResourceNameRx     regexpext.BoundedRegexp               `yaml:"resource"`
 	Model                  limesresources.QuotaDistributionModel `yaml:"model"`
 	DefaultProjectQuota    uint64                                `yaml:"default_project_quota"` //required for CentralizedQuotaDistribution
 	StrictDomainQuotaLimit bool                                  `yaml:"strict_domain_quota_limit"`
@@ -245,18 +240,6 @@ func (cluster ClusterConfiguration) validateConfig() (success bool) {
 		success = false
 	}
 
-	compileOptionalRx := func(pattern string) *regexp.Regexp {
-		if pattern == "" {
-			return nil
-		}
-		rx, err := regexp.Compile(pattern)
-		if err != nil {
-			logg.Error("failed to compile regex %#v: %s", pattern, err.Error())
-			success = false
-		}
-		return rx
-	}
-
 	//NOTE: cluster.RegionName is optional
 	if len(cluster.Services) == 0 {
 		missing("services[]")
@@ -277,31 +260,17 @@ func (cluster ClusterConfiguration) validateConfig() (success bool) {
 		}
 	}
 
-	cluster.Discovery.IncludeDomainRx = compileOptionalRx(cluster.Discovery.IncludeDomainPattern)
-	cluster.Discovery.ExcludeDomainRx = compileOptionalRx(cluster.Discovery.ExcludeDomainPattern)
-
-	cluster.LowPrivilegeRaise.IncludeProjectDomainRx = compileOptionalRx(cluster.LowPrivilegeRaise.IncludeProjectDomainPattern)
-	cluster.LowPrivilegeRaise.ExcludeProjectDomainRx = compileOptionalRx(cluster.LowPrivilegeRaise.ExcludeProjectDomainPattern)
-
 	for idx, behavior := range cluster.ResourceBehaviors {
 		behavior.Compiled = ResourceBehavior{
+			FullResourceNameRx:     behavior.FullResourceNameRx,
+			ScopeRx:                behavior.ScopeRx,
 			OvercommitFactor:       behavior.OvercommitFactor,
 			MinNonZeroProjectQuota: behavior.MinNonZeroProjectQuota,
 			Annotations:            behavior.Annotations,
 		}
 
-		if behavior.FullResourceName == "" {
+		if behavior.FullResourceNameRx == "" {
 			missing(fmt.Sprintf(`resource_behavior[%d].resource`, idx))
-		} else {
-			pattern := `^(?:` + behavior.FullResourceName + `)$`
-			behavior.Compiled.FullResourceNameRx = compileOptionalRx(pattern)
-		}
-
-		if behavior.Scope == "" {
-			behavior.Compiled.ScopeRx = nil
-		} else {
-			pattern := `^(?:` + behavior.Scope + `)$`
-			behavior.Compiled.ScopeRx = compileOptionalRx(pattern)
 		}
 
 		if behavior.MaxBurstMultiplier != nil {
@@ -335,11 +304,8 @@ func (cluster ClusterConfiguration) validateConfig() (success bool) {
 	}
 
 	for idx, qdCfg := range cluster.QuotaDistributionConfigs {
-		if qdCfg.FullResourceName == "" {
+		if qdCfg.FullResourceNameRx == "" {
 			missing(fmt.Sprintf(`distribution_model_configs[%d].resource`, idx))
-		} else {
-			pattern := `^(?:` + qdCfg.FullResourceName + `)$`
-			qdCfg.FullResourceNameRx = compileOptionalRx(pattern)
 		}
 
 		switch qdCfg.Model {

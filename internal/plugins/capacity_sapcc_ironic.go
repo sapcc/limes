@@ -21,7 +21,6 @@ package plugins
 
 import (
 	"encoding/json"
-	"fmt"
 	"regexp"
 	"strconv"
 
@@ -31,16 +30,16 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/go-bits/regexpext"
 
 	"github.com/sapcc/limes/internal/core"
 )
 
 type capacitySapccIronicPlugin struct {
 	//configuration
-	FlavorNamePattern string              `yaml:"flavor_name_pattern"`
-	FlavorAliases     map[string][]string `yaml:"flavor_aliases"`
+	FlavorNameRx  regexpext.PlainRegexp `yaml:"flavor_name_pattern"`
+	FlavorAliases map[string][]string   `yaml:"flavor_aliases"`
 	//computed state
-	flavorNameRx        *regexp.Regexp             `yaml:"-"`
 	ftt                 novaFlavorTranslationTable `yaml:"-"`
 	reportSubcapacities bool                       `yaml:"-"`
 }
@@ -55,16 +54,6 @@ func init() {
 
 // Init implements the core.CapacityPlugin interface.
 func (p *capacitySapccIronicPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubcapacities map[string]map[string]bool) error {
-	//if a non-empty `flavorNamePattern` is given, only flavors matching
-	//it are considered
-	if pattern := p.FlavorNamePattern; pattern != "" {
-		var err error
-		p.flavorNameRx, err = regexp.Compile(pattern)
-		if err != nil {
-			return fmt.Errorf("%q is not a valid regex: %v", pattern, err)
-		}
-	}
-
 	p.ftt = newNovaFlavorTranslationTable(p.FlavorAliases)
 	p.reportSubcapacities = scrapeSubcapacities["compute"]["instances-baremetal"]
 	return nil
@@ -164,7 +153,8 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 	//we are going to report capacity for all per-flavor instance quotas
 	resultCompute := make(map[string]*core.CapacityData)
 	for _, flavorName := range flavorNames {
-		if p.flavorNameRx == nil || p.flavorNameRx.MatchString(flavorName) {
+		//NOTE: If `flavor_name_pattern` is empty, then FlavorNameRx will match any input.
+		if p.FlavorNameRx.MatchString(flavorName) {
 			resultCompute[p.ftt.LimesResourceNameForFlavor(flavorName)] = &core.CapacityData{
 				Capacity:      0,
 				CapacityPerAZ: map[string]*core.CapacityDataForAZ{},

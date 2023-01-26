@@ -45,6 +45,7 @@ import (
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/go-bits/regexpext"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/util"
@@ -70,12 +71,11 @@ type novaPlugin struct {
 		Type    string `yaml:"type"`
 	} `yaml:"hypervisor_type_rules"`
 	SeparateInstanceQuotas struct {
-		FlavorNamePattern string              `yaml:"flavor_name_pattern"`
-		FlavorAliases     map[string][]string `yaml:"flavor_aliases"`
+		FlavorNameRx  regexpext.PlainRegexp `yaml:"flavor_name_pattern"`
+		FlavorAliases map[string][]string   `yaml:"flavor_aliases"`
 	} `yaml:"separate_instance_quotas"`
 	scrapeInstances bool `yaml:"-"`
 	//computed state
-	flavorNameRx        *regexp.Regexp                `yaml:"-"`
 	hypervisorTypeRules []novaHypervisorTypeRule      `yaml:"-"`
 	resources           []limesresources.ResourceInfo `yaml:"-"`
 	ftt                 novaFlavorTranslationTable    `yaml:"-"`
@@ -127,16 +127,6 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.E
 	p.scrapeInstances = scrapeSubresources["instances"]
 	p.ftt = newNovaFlavorTranslationTable(p.SeparateInstanceQuotas.FlavorAliases)
 
-	//if a non-empty `flavorNamePattern` is given, only flavors matching
-	//it are considered
-	if pattern := p.SeparateInstanceQuotas.FlavorNamePattern; pattern != "" {
-		var err error
-		p.flavorNameRx, err = regexp.Compile(pattern)
-		if err != nil {
-			return fmt.Errorf("%q is not a valid regex: %v", pattern, err)
-		}
-	}
-
 	client, err := openstack.NewComputeV2(provider, eo)
 	if err != nil {
 		return err
@@ -148,7 +138,8 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.E
 		return err
 	}
 	for _, flavorName := range flavorNames {
-		if p.flavorNameRx == nil || p.flavorNameRx.MatchString(flavorName) {
+		//NOTE: If `flavor_name_pattern` is empty, then FlavorNameRx will match any input.
+		if p.SeparateInstanceQuotas.FlavorNameRx.MatchString(flavorName) {
 			p.resources = append(p.resources, limesresources.ResourceInfo{
 				Name:     p.ftt.LimesResourceNameForFlavor(flavorName),
 				Category: "per_flavor",
@@ -337,7 +328,8 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 
 	if limitsData.Limits.AbsolutePerFlavor != nil {
 		for flavorName, flavorLimits := range limitsData.Limits.AbsolutePerFlavor {
-			if p.flavorNameRx == nil || p.flavorNameRx.MatchString(flavorName) {
+			//NOTE: If `flavor_name_pattern` is empty, then FlavorNameRx will match any input.
+			if p.SeparateInstanceQuotas.FlavorNameRx.MatchString(flavorName) {
 				resultPtr[p.ftt.LimesResourceNameForFlavor(flavorName)] = &core.ResourceData{
 					Quota: flavorLimits.MaxTotalInstances,
 					Usage: flavorLimits.TotalInstancesUsed,

@@ -230,7 +230,7 @@ func (c *Cluster) Connect() (err error) {
 		}
 		if !c.HasResource(b.ScalesWithServiceType, b.ScalesWithResourceName) {
 			return fmt.Errorf(`resources matching "%s" scale with unknown resource "%s/%s"`,
-				behavior.FullResourceName, b.ScalesWithServiceType, b.ScalesWithResourceName)
+				string(behavior.FullResourceNameRx), b.ScalesWithServiceType, b.ScalesWithResourceName)
 		}
 	}
 
@@ -397,7 +397,7 @@ func (c *Cluster) BehaviorForResource(serviceType, resourceName, scopeName strin
 		if !behavior.FullResourceNameRx.MatchString(fullName) {
 			continue
 		}
-		if scopeName != "" && behavior.ScopeRx != nil && !behavior.ScopeRx.MatchString(scopeName) {
+		if scopeName != "" && behavior.ScopeRx != "" && !behavior.ScopeRx.MatchString(scopeName) {
 			continue
 		}
 
