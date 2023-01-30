@@ -75,12 +75,12 @@ func prepareScrapeTest(t *testing.T, numProjects int, quotaPlugins ...core.Quota
 	//distribution (only used by Test_ScrapeCentralized())
 	cluster.Config.QuotaDistributionConfigs = []*core.QuotaDistributionConfiguration{
 		{
-			FullResourceNameRx:  regexp.MustCompile("^centralized/capacity$"),
+			FullResourceNameRx:  "centralized/capacity",
 			Model:               limesresources.CentralizedQuotaDistribution,
 			DefaultProjectQuota: 10,
 		},
 		{
-			FullResourceNameRx:  regexp.MustCompile("^centralized/things$"),
+			FullResourceNameRx:  "centralized/things",
 			Model:               limesresources.CentralizedQuotaDistribution,
 			DefaultProjectQuota: 15,
 		},

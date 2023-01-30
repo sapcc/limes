@@ -25,7 +25,6 @@ import (
 	"math"
 	"net/http"
 	"reflect"
-	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -209,7 +208,7 @@ func setupTest(t *testing.T, startData string) (*core.Cluster, *gorp.DbMap, http
 			{
 				Compiled: core.ResourceBehavior{
 					MaxBurstMultiplier:     limesresources.BurstingMultiplier(math.Inf(+1)),
-					FullResourceNameRx:     regexp.MustCompile("^unshared/things$"),
+					FullResourceNameRx:     "unshared/things",
 					MinNonZeroProjectQuota: 10,
 				},
 			},
@@ -217,7 +216,7 @@ func setupTest(t *testing.T, startData string) (*core.Cluster, *gorp.DbMap, http
 			{
 				Compiled: core.ResourceBehavior{
 					MaxBurstMultiplier:     limesresources.BurstingMultiplier(math.Inf(+1)),
-					FullResourceNameRx:     regexp.MustCompile("^unshared/things$"),
+					FullResourceNameRx:     "unshared/things",
 					ScalesWithResourceName: "things",
 					ScalesWithServiceType:  "shared",
 					ScalingFactor:          2,
@@ -227,8 +226,8 @@ func setupTest(t *testing.T, startData string) (*core.Cluster, *gorp.DbMap, http
 			{
 				Compiled: core.ResourceBehavior{
 					MaxBurstMultiplier: limesresources.BurstingMultiplier(math.Inf(+1)),
-					FullResourceNameRx: regexp.MustCompile("^shared/.*things$"),
-					ScopeRx:            regexp.MustCompile("^germany(?:/dresden)?$"),
+					FullResourceNameRx: "shared/.*things",
+					ScopeRx:            "germany(?:/dresden)?",
 					Annotations: map[string]interface{}{
 						"annotated": true,
 						"text":      "this annotation appears on shared things of domain germany and project dresden",
@@ -238,8 +237,8 @@ func setupTest(t *testing.T, startData string) (*core.Cluster, *gorp.DbMap, http
 			{
 				Compiled: core.ResourceBehavior{
 					MaxBurstMultiplier: limesresources.BurstingMultiplier(math.Inf(+1)),
-					FullResourceNameRx: regexp.MustCompile("^shared/things$"),
-					ScopeRx:            regexp.MustCompile("^germany/dresden$"),
+					FullResourceNameRx: "shared/things",
+					ScopeRx:            "germany/dresden",
 					Annotations: map[string]interface{}{
 						"text": "this annotation appears on shared/things of project dresden only",
 					},
@@ -249,12 +248,12 @@ func setupTest(t *testing.T, startData string) (*core.Cluster, *gorp.DbMap, http
 		cluster.Config.QuotaDistributionConfigs = []*core.QuotaDistributionConfiguration{
 			//check behavior for centralized quota distribution (all other resources default to hierarchical quota distribution)
 			{
-				FullResourceNameRx:  regexp.MustCompile("^centralized/capacity$"),
+				FullResourceNameRx:  "centralized/capacity",
 				Model:               limesresources.CentralizedQuotaDistribution,
 				DefaultProjectQuota: 15,
 			},
 			{
-				FullResourceNameRx:  regexp.MustCompile("^centralized/things$"),
+				FullResourceNameRx:  "centralized/things",
 				Model:               limesresources.CentralizedQuotaDistribution,
 				DefaultProjectQuota: 10,
 			},
@@ -481,14 +480,14 @@ func Test_ClusterOperations(t *testing.T) {
 	cluster.Config.ResourceBehaviors = []*core.ResourceBehaviorConfiguration{
 		{
 			Compiled: core.ResourceBehavior{
-				FullResourceNameRx: regexp.MustCompile("^shared/things$"),
+				FullResourceNameRx: "shared/things",
 				MaxBurstMultiplier: limesresources.BurstingMultiplier(math.Inf(+1)),
 				OvercommitFactor:   2.5,
 			},
 		},
 		{
 			Compiled: core.ResourceBehavior{
-				FullResourceNameRx: regexp.MustCompile("^unshared/things$"),
+				FullResourceNameRx: "unshared/things",
 				MaxBurstMultiplier: limesresources.BurstingMultiplier(math.Inf(+1)),
 				OvercommitFactor:   1.5,
 			},
@@ -1710,7 +1709,7 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 		},
 	}.Check(t, router)
 
-	cluster.Config.LowPrivilegeRaise.ExcludeProjectDomainRx = regexp.MustCompile(`germany`)
+	cluster.Config.LowPrivilegeRaise.ExcludeProjectDomainRx = "germany"
 
 	assert.HTTPRequest{
 		Method:       "PUT",
@@ -1736,7 +1735,7 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 	}.Check(t, router)
 
 	//test low-privilege raise limits that are specified as percent of cluster capacity
-	cluster.Config.LowPrivilegeRaise.ExcludeProjectDomainRx = nil
+	cluster.Config.LowPrivilegeRaise.ExcludeProjectDomainRx = ""
 	cluster.LowPrivilegeRaise.LimitsForDomains = map[string]map[string]core.LowPrivilegeRaiseLimit{
 		// shared/things capacity is 246, so 13% is 31.98 which rounds down to 31
 		"shared": {"things": {PercentOfClusterCapacity: 13}},
@@ -2327,7 +2326,7 @@ func Test_StrictDomainQuotaLimit(t *testing.T) {
 
 	//set up a QD config for shared/things with the default behavior
 	qdConfig := &core.QuotaDistributionConfiguration{
-		FullResourceNameRx:     regexp.MustCompile(`^shared/things$`),
+		FullResourceNameRx:     "shared/things",
 		Model:                  limesresources.HierarchicalQuotaDistribution,
 		StrictDomainQuotaLimit: false,
 	}

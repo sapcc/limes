@@ -21,7 +21,6 @@ package collector
 
 import (
 	"math"
-	"regexp"
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -63,7 +62,7 @@ func Test_ScanCapacity(t *testing.T) {
 			//overcommit should be reflected in capacity metrics
 			ResourceBehaviors: []*core.ResourceBehaviorConfiguration{{
 				Compiled: core.ResourceBehavior{
-					FullResourceNameRx: regexp.MustCompile("^unshared2/capacity$"),
+					FullResourceNameRx: "unshared2/capacity",
 					OvercommitFactor:   2.5,
 					MaxBurstMultiplier: limesresources.BurstingMultiplier(math.Inf(+1)),
 				},

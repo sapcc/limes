@@ -23,7 +23,6 @@ import (
 	"encoding/json"
 	"math/big"
 	"reflect"
-	"regexp"
 	"testing"
 
 	"github.com/gophercloud/gophercloud"
@@ -126,7 +125,7 @@ func clusterForQuotaConstraintTest() *Cluster {
 		},
 		Config: ClusterConfiguration{
 			QuotaDistributionConfigs: []*QuotaDistributionConfiguration{{
-				FullResourceNameRx:  regexp.MustCompile("^centralized/.*$"),
+				FullResourceNameRx:  "centralized/.*",
 				Model:               limesresources.CentralizedQuotaDistribution,
 				DefaultProjectQuota: 5,
 			}},

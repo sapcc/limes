@@ -20,7 +20,6 @@
 package collector
 
 import (
-	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -41,12 +40,12 @@ func keystoneTestCluster(t *testing.T) (*core.Cluster, *gorp.DbMap) {
 		Config: core.ClusterConfiguration{
 			QuotaDistributionConfigs: []*core.QuotaDistributionConfiguration{
 				{
-					FullResourceNameRx:  regexp.MustCompile("^centralized/capacity$"),
+					FullResourceNameRx:  "centralized/capacity",
 					Model:               limesresources.CentralizedQuotaDistribution,
 					DefaultProjectQuota: 10,
 				},
 				{
-					FullResourceNameRx:  regexp.MustCompile("^centralized/things$"),
+					FullResourceNameRx:  "centralized/things",
 					Model:               limesresources.CentralizedQuotaDistribution,
 					DefaultProjectQuota: 15,
 				},
@@ -226,8 +225,8 @@ func Test_listDomainsFiltered(t *testing.T) {
 		},
 		Config: core.ClusterConfiguration{
 			Discovery: core.DiscoveryConfiguration{
-				IncludeDomainRx: regexp.MustCompile(`foo`),
-				ExcludeDomainRx: regexp.MustCompile(`2$`),
+				IncludeDomainRx: "foo",
+				ExcludeDomainRx: "2$",
 			},
 		},
 	}
