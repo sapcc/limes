@@ -338,19 +338,6 @@ same flavor, and Limes prefers the name `bm_newflavor2`. The preferred name will
 for the respective separate instance quota. In the previous example, the resource will be called
 `instances_bm_newflavor2` since `bm_newflavor2` is the flavor alias that Limes prefers.
 
-### `database`: SAP Cloud Frame Manager
-
-```yaml
-services:
-  - type: database
-```
-
-The area for this service is `storage`.
-
-| Resource | Unit |
-| --- | --- |
-| `cfm_share_capacity` | bytes |
-
 ### `dns`: Designate v2
 
 ```yaml
@@ -578,18 +565,6 @@ plugins, having more than one does not make sense because they refer to other se
 cluster anyway). In these cases, `id` is conventionally set to the same as `type`. For capacity plugins like
 `prometheus` or `manual`, it's possible to have multiple plugins of the same type at once. In that case, the `id` must
 be unique for each plugin.
-
-### `cfm`
-
-```yaml
-capacitors:
-  - id: cfm
-    type: cfm
-```
-
-| Resource | Method |
-| --- | --- |
-| `database/cfm_share_capacity` | Calculated as `sum(pool.capabilities.total_capacity)` over all pools. |
 
 ### `cinder`
 
