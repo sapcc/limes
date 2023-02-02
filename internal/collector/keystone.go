@@ -304,7 +304,7 @@ func (c *Collector) initProject(domain *db.Domain, project core.KeystoneProject)
 	}
 
 	//add records to `project_services` table
-	err = datamodel.ValidateProjectServices(tx, c.Cluster, *domain, *dbProject)
+	err = datamodel.ValidateProjectServices(tx, c.Cluster, *domain, *dbProject, c.TimeNow())
 	if err != nil {
 		return err
 	}

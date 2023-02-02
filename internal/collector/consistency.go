@@ -129,10 +129,11 @@ func (c *Collector) checkConsistencyDomain(domain db.Domain) {
 	}
 	logg.Info("checking consistency for %d projects in domain %q...", len(projects), domain.Name)
 
+	now := c.TimeNow()
 	for _, project := range projects {
 		//ValidateProjectServices usually does nothing or does maybe one DELETE or
 		//INSERT, so it does not need to be in a transaction
-		err := datamodel.ValidateProjectServices(c.DB, c.Cluster, domain, project)
+		err := datamodel.ValidateProjectServices(c.DB, c.Cluster, domain, project, now)
 		if err != nil {
 			c.LogError(err.Error())
 		}

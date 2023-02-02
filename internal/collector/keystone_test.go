@@ -34,6 +34,7 @@ import (
 )
 
 func keystoneTestCluster(t *testing.T) (*core.Cluster, *gorp.DbMap) {
+	test.ResetTime()
 	dbm := test.InitDatabase(t, nil)
 
 	return &core.Cluster{
@@ -138,9 +139,9 @@ func Test_ScanDomains(t *testing.T) {
 	}
 	assert.DeepEqual(t, "new domains after ScanDomains #4", actualNewDomains, []string(nil))
 	tr.DBChanges().AssertEqualf(`
-		INSERT INTO project_services (id, project_id, type) VALUES (10, 4, 'centralized');
-		INSERT INTO project_services (id, project_id, type) VALUES (11, 4, 'shared');
-		INSERT INTO project_services (id, project_id, type) VALUES (12, 4, 'unshared');
+		INSERT INTO project_services (id, project_id, type, next_scrape_at, rates_next_scrape_at) VALUES (10, 4, 'centralized', 3, 3);
+		INSERT INTO project_services (id, project_id, type, next_scrape_at, rates_next_scrape_at) VALUES (11, 4, 'shared', 3, 3);
+		INSERT INTO project_services (id, project_id, type, next_scrape_at, rates_next_scrape_at) VALUES (12, 4, 'unshared', 3, 3);
 		INSERT INTO projects (id, domain_id, name, uuid, parent_uuid, has_bursting) VALUES (4, 2, 'bordeaux', 'uuid-for-bordeaux', 'uuid-for-france', FALSE);
 	`)
 

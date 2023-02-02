@@ -20,6 +20,8 @@
 package datamodel
 
 import (
+	"time"
+
 	"github.com/sapcc/go-bits/logg"
 
 	"github.com/sapcc/limes/internal/core"
@@ -28,7 +30,7 @@ import (
 
 // ValidateProjectServices ensures that all required ProjectService records for
 // this project exist (and none other).
-func ValidateProjectServices(dbi db.Interface, cluster *core.Cluster, domain db.Domain, project db.Project) error {
+func ValidateProjectServices(dbi db.Interface, cluster *core.Cluster, domain db.Domain, project db.Project, now time.Time) error {
 	//list existing records
 	seen := make(map[string]bool)
 	var services []db.ProjectService
@@ -60,8 +62,10 @@ func ValidateProjectServices(dbi db.Interface, cluster *core.Cluster, domain db.
 
 		logg.Info("creating %s service entry for project %s/%s", serviceType, domain.Name, project.Name)
 		err := dbi.Insert(&db.ProjectService{
-			ProjectID: project.ID,
-			Type:      serviceType,
+			ProjectID:         project.ID,
+			Type:              serviceType,
+			NextScrapeAt:      now,
+			RatesNextScrapeAt: now,
 		})
 		if err != nil {
 			return err

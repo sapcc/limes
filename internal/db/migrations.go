@@ -135,4 +135,17 @@ var sqlMigrations = map[string]string{
 			PRIMARY KEY (service_id, name)
 		);
 	`,
+	"022_add_next_scrape_at.up.sql": `
+		ALTER TABLE project_services
+			ADD COLUMN next_scrape_at TIMESTAMP NOT NULL DEFAULT NOW(),
+			ADD COLUMN rates_next_scrape_at TIMESTAMP NOT NULL DEFAULT NOW();
+		UPDATE project_services SET
+			next_scrape_at = COALESCE(checked_at, NOW()) + interval '30 minutes',
+			rates_next_scrape_at = COALESCE(rates_checked_at, NOW()) + interval '30 minutes';
+	`,
+	"022_add_next_scrape_at.down.sql": `
+		ALTER TABLE project_services
+			DROP COLUMN next_scrape_at,
+			DROP COLUMN rates_next_scrape_at;
+	`,
 }

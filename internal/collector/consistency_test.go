@@ -113,8 +113,10 @@ func Test_Consistency(t *testing.T) {
 		t.Error(err)
 	}
 	err = dbm.Insert(&db.ProjectService{
-		ProjectID: 1,
-		Type:      "whatever",
+		ProjectID:         1,
+		Type:              "whatever",
+		NextScrapeAt:      time.Unix(0, 0).UTC(),
+		RatesNextScrapeAt: time.Unix(0, 0).UTC(),
 	})
 	if err != nil {
 		t.Error(err)
