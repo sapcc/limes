@@ -215,9 +215,10 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 	if !token.Require(w, "project:show") {
 		return
 	}
-	checkToken := func(policy string) func(string) bool {
-		return func(serviceType string) bool {
+	checkToken := func(policy string) func(string, string) bool {
+		return func(serviceType, resourceName string) bool {
 			token.Context.Request["service_type"] = serviceType
+			token.Context.Request["resource_name"] = resourceName
 			return token.Check(policy)
 		}
 	}

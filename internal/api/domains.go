@@ -109,13 +109,14 @@ func (p *v1Provider) putOrSimulatePutDomain(w http.ResponseWriter, r *http.Reque
 	if !token.Require(w, "domain:show") {
 		return
 	}
-	checkToken := func(policy string) func(string) bool {
-		return func(serviceType string) bool {
+	checkToken := func(policy string) func(string, string) bool {
+		return func(serviceType, resourceName string) bool {
 			token.Context.Request["service_type"] = serviceType
+			token.Context.Request["resource_name"] = resourceName
 			return token.Check(policy)
 		}
 	}
-	forbidden := func(string) bool {
+	forbidden := func(string, string) bool {
 		return false
 	}
 

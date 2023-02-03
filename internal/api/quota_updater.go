@@ -51,11 +51,11 @@ type QuotaUpdater struct {
 	Project *db.Project //nil for domain quota updates
 
 	//AuthZ info
-	CanRaise            func(serviceType string) bool
-	CanRaiseLP          func(serviceType string) bool //low-privilege raise
-	CanRaiseCentralized func(serviceType string) bool
-	CanLower            func(serviceType string) bool
-	CanLowerCentralized func(serviceType string) bool
+	CanRaise            func(serviceType, resourceName string) bool
+	CanRaiseLP          func(serviceType, resourceName string) bool //low-privilege raise
+	CanRaiseCentralized func(serviceType, resourceName string) bool
+	CanLower            func(serviceType, resourceName string) bool
+	CanLowerCentralized func(serviceType, resourceName string) bool
 
 	//Filled by ValidateInput() with the keys being the service type and the resource name.
 	Requests map[string]map[string]QuotaRequest
@@ -393,11 +393,11 @@ func (u QuotaUpdater) validateAuthorization(srv limes.ServiceInfo, res limesreso
 	if oldQuota >= newQuota {
 		switch qdConfig.Model {
 		case limesresources.HierarchicalQuotaDistribution:
-			if u.CanLower(srv.Type) {
+			if u.CanLower(srv.Type, res.Name) {
 				return nil
 			}
 		case limesresources.CentralizedQuotaDistribution:
-			if u.CanLowerCentralized(srv.Type) {
+			if u.CanLowerCentralized(srv.Type, res.Name) {
 				if newQuota == 0 {
 					minimumValue := uint64(1)
 					return &core.QuotaValidationError{
@@ -417,10 +417,10 @@ func (u QuotaUpdater) validateAuthorization(srv limes.ServiceInfo, res limesreso
 
 	switch qdConfig.Model {
 	case limesresources.HierarchicalQuotaDistribution:
-		if u.CanRaise(srv.Type) {
+		if u.CanRaise(srv.Type, res.Name) {
 			return nil
 		}
-		if u.CanRaiseLP(srv.Type) && lprLimit > 0 {
+		if u.CanRaiseLP(srv.Type, res.Name) && lprLimit > 0 {
 			if newQuota <= lprLimit {
 				return nil
 			}
@@ -432,7 +432,7 @@ func (u QuotaUpdater) validateAuthorization(srv limes.ServiceInfo, res limesreso
 			}
 		}
 	case limesresources.CentralizedQuotaDistribution:
-		if u.CanRaiseCentralized(srv.Type) {
+		if u.CanRaiseCentralized(srv.Type, res.Name) {
 			return nil
 		}
 	}
@@ -733,7 +733,7 @@ func (u QuotaUpdater) CommitAuditTrail(token *gopherpolicy.Token, r *http.Reques
 		for resName, req := range reqs {
 			qdConfig := u.Cluster.QuotaDistributionConfigForResource(srvType, resName)
 			// low-privilege-raise metrics
-			if qdConfig.Model != limesresources.CentralizedQuotaDistribution && u.CanRaiseLP(srvType) && !u.CanRaise(srvType) {
+			if qdConfig.Model != limesresources.CentralizedQuotaDistribution && u.CanRaiseLP(srvType, resName) && !u.CanRaise(srvType, resName) {
 				labels := prometheus.Labels{
 					"service":  srvType,
 					"resource": resName,
