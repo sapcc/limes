@@ -23,7 +23,6 @@ import (
 	"fmt"
 	"os"
 
-	policy "github.com/databus23/goslo.policy"
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/utils/openstack/clientconfig"
@@ -70,16 +69,9 @@ func AuthToOpenstack() (*AuthSession, error) {
 		return nil, err
 	}
 
-	//as a custom oslo.policy extension, "notrule:foo" evaluates to the negation of "rule:foo"
-	tv.Enforcer.(*policy.Enforcer).AddCheck("notrule", negativeRuleCheck)
-
 	return &AuthSession{
 		ProviderClient: provider,
 		EndpointOpts:   eo,
 		TokenValidator: &tv,
 	}, nil
-}
-
-func negativeRuleCheck(c policy.Context, key, match string) bool {
-	return !policy.RuleCheck(c, key, match)
 }
