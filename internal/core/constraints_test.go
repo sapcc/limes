@@ -142,7 +142,6 @@ func TestQuotaConstraintParsingFailure(t *testing.T) {
 		`invalid constraints for domain poland: resource centralized/things does not accept domain quota constraints because domain quota is computed automatically according to the centralized quota distribution model`,
 		`invalid constraints for domain poland: resource centralized/capacity_MiB does not accept domain quota constraints because domain quota is computed automatically according to the centralized quota distribution model`,
 		`missing domain name for project atlantis`,
-		`invalid constraints for project germany/berlin: no such service: unknown`,
 		`invalid constraints for project germany/dresden: invalid constraint "at least NaN" for service-one/things: strconv.ParseUint: parsing "NaN": invalid syntax`,
 		`invalid constraints for project germany/dresden: invalid constraint "at least 4, at most 2" for service-two/things: constraint clauses cannot simultaneously be satisfied (at least 4, but at most 2)`,
 	)

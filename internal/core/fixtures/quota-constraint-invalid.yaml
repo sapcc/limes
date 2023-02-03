@@ -20,7 +20,7 @@ projects:
     service-one:
       things: at most 10
       capacity_MiB: exactly 5 GiB
-    unknown: # no such service
+    service-four: # no such service (this is ignored, it's okay if service-four is just not deployed in this cluster)
       things: at least 1
   germany/dresden:
     service-one:
