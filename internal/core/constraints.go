@@ -221,7 +221,8 @@ func compileQuotaConstraints(cluster *Cluster, data map[string]map[string]string
 
 	for serviceType, serviceData := range data {
 		if !cluster.HasService(serviceType) {
-			errors = append(errors, fmt.Errorf("no such service: %s", serviceType))
+			//this is not an error: our global constraint sets set quota constraints
+			//for all services, but some lab regions do not have all those services
 			continue
 		}
 		values[serviceType] = make(map[string]QuotaConstraint)
