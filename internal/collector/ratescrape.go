@@ -159,6 +159,7 @@ func (c *Collector) writeRateScrapeResult(srv db.ProjectServiceRef, rateData map
 		if err != nil {
 			return err
 		}
+		defer stmt.Close()
 
 		for _, rate := range rates {
 			rateExists[rate.Name] = true
