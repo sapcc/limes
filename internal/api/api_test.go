@@ -54,7 +54,7 @@ func setupTest(t *testing.T, startData string) (*core.Cluster, *gorp.DbMap, http
 
 	//prepare test configuration
 	sharedRatesThatReportUsage := []limesrates.RateInfo{
-		//NOTE: MiB makes no sense for for this rate, but I want to test as many
+		//NOTE: MiB makes no sense for this rate, but I want to test as many
 		//combinations of "has unit or not", "has limit or not" and "has usage or
 		//not" as possible
 		{Name: "service/shared/objects:delete", Unit: limes.UnitMebibytes},
