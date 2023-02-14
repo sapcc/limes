@@ -142,6 +142,14 @@ func (p *manilaPlugin) Resources() []limesresources.ResourceInfo {
 				Category: category,
 			},
 		)
+		if p.PrometheusAPIConfig != nil {
+			result = append(result, limesresources.ResourceInfo{
+				Name:     p.makeResourceName("snapmirror_capacity", shareType),
+				Unit:     limes.UnitGibibytes,
+				Category: category,
+				NoQuota:  true,
+			})
+		}
 	}
 	return result
 }
@@ -226,6 +234,9 @@ func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 			result[p.makeResourceName("share_capacity", shareType)] = core.ResourceData{Quota: 0, Usage: 0}
 			result[p.makeResourceName("share_snapshots", shareType)] = core.ResourceData{Quota: 0, Usage: 0}
 			result[p.makeResourceName("snapshot_capacity", shareType)] = core.ResourceData{Quota: 0, Usage: 0}
+			if p.PrometheusAPIConfig != nil {
+				result[p.makeResourceName("snapmirror_capacity", shareType)] = core.ResourceData{Quota: 0, Usage: 0}
+			}
 			continue
 		}
 
@@ -262,6 +273,13 @@ func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 		result[p.makeResourceName("share_capacity", shareType)] = shareCapacityData
 		result[p.makeResourceName("share_snapshots", shareType)] = quotaSets[stName].Snapshots.ToResourceData(nil)
 		result[p.makeResourceName("snapshot_capacity", shareType)] = quotaSets[stName].SnapshotGigabytes.ToResourceData(snapshotGigabytesPhysical)
+
+		if p.PrometheusAPIConfig != nil {
+			result[p.makeResourceName("snapmirror_capacity", shareType)], err = p.collectSnapmirrorUsage(project, stName)
+			if err != nil {
+				return nil, "", err
+			}
+		}
 	}
 	return result, "", nil
 }
@@ -449,9 +467,6 @@ func (p *manilaPlugin) collectPhysicalUsage(project core.KeystoneProject) (manil
 		return manilaPhysicalUsage{}, err
 	}
 
-	roundUp := func(bytes float64) uint64 {
-		return uint64(math.Ceil(bytes / (1 << 30)))
-	}
 	defaultValue := float64(0)
 
 	for _, shareType := range p.ShareTypes {
@@ -463,25 +478,64 @@ func (p *manilaPlugin) collectPhysicalUsage(project core.KeystoneProject) (manil
 		//NOTE: The `max by (share_id)` is necessary for when a share is being
 		//migrated to another shareserver and thus appears in the metrics twice.
 		queryStr := fmt.Sprintf(
-			`sum(max by (share_id) (netapp_volume_used_bytes{project_id=%q,share_type=%q}))`,
+			`sum(max by (share_id) (netapp_volume_used_bytes{project_id=%q,volume_type!="dp",share_type=%q}))`,
 			project.UUID, stName,
 		)
 		bytesPhysical, err := client.GetSingleValue(queryStr, &defaultValue)
 		if err != nil {
 			return manilaPhysicalUsage{}, err
 		}
-		usage.Gigabytes[stName] = roundUp(bytesPhysical)
+		usage.Gigabytes[stName] = roundUpIntoGigabytes(bytesPhysical)
 
 		queryStr = fmt.Sprintf(
-			`sum(max by (share_id) (netapp_volume_snapshot_used_bytes{project_id=%q,share_type=%q}))`,
+			`sum(max by (share_id) (netapp_volume_snapshot_used_bytes{project_id=%q,volume_type!="dp",share_type=%q}))`,
 			project.UUID, stName,
 		)
 		snapshotBytesPhysical, err := client.GetSingleValue(queryStr, &defaultValue)
 		if err != nil {
 			return manilaPhysicalUsage{}, err
 		}
-		usage.SnapshotGigabytes[stName] = roundUp(snapshotBytesPhysical)
+		usage.SnapshotGigabytes[stName] = roundUpIntoGigabytes(snapshotBytesPhysical)
 	}
 
 	return usage, nil
+}
+
+func (p *manilaPlugin) collectSnapmirrorUsage(project core.KeystoneProject, shareTypeName string) (core.ResourceData, error) {
+	client, err := p.PrometheusAPIConfig.Connect()
+	if err != nil {
+		return core.ResourceData{}, err
+	}
+
+	//snapmirror backups are only known to the underlying NetApp filer, not to
+	//Manila itself, so we have to collect usage from NetApp metrics instead
+	defaultValue := float64(0)
+	queryStr := fmt.Sprintf(
+		`sum(max by (volume) (netapp_volume_total_bytes{project_id="%s",share_type="%s",volume_type="dp",volume=~".*EC2BKP"}))`,
+		project.UUID, shareTypeName,
+	)
+	bytesTotal, err := client.GetSingleValue(queryStr, &defaultValue)
+	if err != nil {
+		return core.ResourceData{}, err
+	}
+
+	queryStr = fmt.Sprintf(
+		`sum(max by (volume) (netapp_volume_used_bytes{project_id="%s",share_type="%s",volume_type="dp",volume=~".*EC2BKP"}))`,
+		project.UUID, shareTypeName,
+	)
+	bytesUsed, err := client.GetSingleValue(queryStr, &defaultValue)
+	if err != nil {
+		return core.ResourceData{}, err
+	}
+	bytesUsedAsUint64 := roundUpIntoGigabytes(bytesUsed)
+
+	return core.ResourceData{
+		Quota:         0, //NoQuota = true
+		Usage:         roundUpIntoGigabytes(bytesTotal),
+		PhysicalUsage: &bytesUsedAsUint64,
+	}, nil
+}
+
+func roundUpIntoGigabytes(bytes float64) uint64 {
+	return uint64(math.Ceil(bytes / (1 << 30)))
 }
