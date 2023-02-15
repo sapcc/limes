@@ -513,7 +513,9 @@ certificate (`prometheus_api.ca_cert`) and/or specify a TLS client certificate
 (`prometheus_api.cert`) and private key (`prometheus_api.key`) combination that
 will be used by the HTTP client to make requests to the Prometheus API.
 
-### `volumev2`: Cinder v2
+### `volumev2`: Cinder v3
+
+The service type name refers to the v2 API for backwards compatibility reasons.
 
 ```yaml
 services:
@@ -554,6 +556,18 @@ scraping. Subresources bear the following attributes:
 | `name` | string | volume name |
 | `status` | string | volume status [as reported by OpenStack Cinder](https://developer.openstack.org/api-ref/block-storage/v2/index.html#volumes-volumes) |
 | `size` | integer value with unit | volume size |
+| `availability_zone` | string | availability zone where volume is located |
+
+The `snapshots` and `snapshots_${volume_type}` resources supports subresource
+scraping. Subresources bear the following attributes:
+
+| Attribute | Type | Comment |
+| --- | --- | --- |
+| `id` | string | snapshot UUID |
+| `name` | string | snapshot name |
+| `status` | string | snapshot status [as reported by OpenStack Cinder](https://developer.openstack.org/api-ref/block-storage/v2/index.html#volumes-volumes) |
+| `size` | integer value with unit | snapshot size |
+| `volume_id` | string | UUID of volume from which snapshot was created (if any) |
 
 ## Available capacity plugins
 

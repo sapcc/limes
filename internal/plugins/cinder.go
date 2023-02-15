@@ -27,6 +27,7 @@ import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/extensions/quotasets"
+	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/snapshots"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
 	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/prometheus/client_golang/prometheus"
@@ -38,8 +39,9 @@ import (
 )
 
 type cinderPlugin struct {
-	VolumeTypes   []string `yaml:"volume_types"`
-	scrapeVolumes bool     `yaml:"-"`
+	VolumeTypes     []string `yaml:"volume_types"`
+	scrapeVolumes   bool     `yaml:"-"`
+	scrapeSnapshots bool     `yaml:"-"`
 }
 
 func init() {
@@ -49,6 +51,7 @@ func init() {
 // Init implements the core.QuotaPlugin interface.
 func (p *cinderPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubresources map[string]bool) error {
 	p.scrapeVolumes = scrapeSubresources["volumes"]
+	p.scrapeSnapshots = scrapeSubresources["snapshots"]
 	if len(p.VolumeTypes) == 0 {
 		return errors.New("quota plugin volumev2: missing required configuration field volumev2.volume_types")
 	}
@@ -163,9 +166,25 @@ func (p *cinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 		return nil, "", err
 	}
 
-	var volumeData map[string][]any
-	if p.scrapeVolumes {
-		volumeData, err = p.collectVolumeSubresources(client, project, isVolumeType)
+	var (
+		volumeData              map[string][]any
+		volumeTypeForVolumeUUID map[string]string
+		snapshotData            map[string][]any
+	)
+	if p.scrapeVolumes || p.scrapeSnapshots {
+		//NOTE: Even if we only want snapshot subresources, we have to collect
+		//volume subresources because the link between snapshots and volume types
+		//requires volume-level metadata.
+		volumeData, volumeTypeForVolumeUUID, err = p.collectVolumeSubresources(client, project, isVolumeType)
+		if err != nil {
+			return nil, "", err
+		}
+		if !p.scrapeVolumes {
+			volumeData = nil
+		}
+	}
+	if p.scrapeSnapshots {
+		snapshotData, err = p.collectSnapshotSubresources(client, project, isVolumeType, volumeTypeForVolumeUUID)
 		if err != nil {
 			return nil, "", err
 		}
@@ -174,7 +193,7 @@ func (p *cinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 	rd := make(map[string]core.ResourceData)
 	for _, volumeType := range p.VolumeTypes {
 		rd[p.makeResourceName("capacity", volumeType)] = data.QuotaSet["gigabytes_"+volumeType].ToResourceData(nil)
-		rd[p.makeResourceName("snapshots", volumeType)] = data.QuotaSet["snapshots_"+volumeType].ToResourceData(nil)
+		rd[p.makeResourceName("snapshots", volumeType)] = data.QuotaSet["snapshots_"+volumeType].ToResourceData(snapshotData[volumeType])
 		rd[p.makeResourceName("volumes", volumeType)] = data.QuotaSet["volumes_"+volumeType].ToResourceData(volumeData[volumeType])
 	}
 	return rd, "", nil
@@ -188,14 +207,23 @@ type cinderVolumeSubresource struct {
 	AvailabilityZone string              `json:"availability_zone"`
 }
 
-func (p *cinderPlugin) collectVolumeSubresources(client *gophercloud.ServiceClient, project core.KeystoneProject, isVolumeType map[string]bool) (map[string][]any, error) {
-	volumeData := make(map[string][]any)
+type cinderSnapshotSubresource struct {
+	UUID       string              `json:"id"`
+	Name       string              `json:"name"`
+	Status     string              `json:"status"`
+	Size       limes.ValueWithUnit `json:"size"`
+	VolumeUUID string              `json:"volume_id"`
+}
+
+func (p *cinderPlugin) collectVolumeSubresources(client *gophercloud.ServiceClient, project core.KeystoneProject, isVolumeType map[string]bool) (volumeData map[string][]any, volumeTypeForVolumeUUID map[string]string, err error) {
+	volumeData = make(map[string][]any)
+	volumeTypeForVolumeUUID = make(map[string]string)
 	listOpts := volumes.ListOpts{
 		AllTenants: true,
 		TenantID:   project.UUID,
 	}
 
-	err := volumes.List(client, listOpts).EachPage(func(page pagination.Page) (bool, error) {
+	err = volumes.List(client, listOpts).EachPage(func(page pagination.Page) (bool, error) {
 		vols, err := volumes.ExtractVolumes(page)
 		if err != nil {
 			return false, err
@@ -208,6 +236,7 @@ func (p *cinderPlugin) collectVolumeSubresources(client *gophercloud.ServiceClie
 				volumeType = p.VolumeTypes[0]
 			}
 
+			volumeTypeForVolumeUUID[volume.ID] = volumeType
 			volumeData[volumeType] = append(volumeData[volumeType], cinderVolumeSubresource{
 				UUID:   volume.ID,
 				Name:   volume.Name,
@@ -221,7 +250,43 @@ func (p *cinderPlugin) collectVolumeSubresources(client *gophercloud.ServiceClie
 		}
 		return true, nil
 	})
-	return volumeData, err
+	return volumeData, volumeTypeForVolumeUUID, err
+}
+
+func (p *cinderPlugin) collectSnapshotSubresources(client *gophercloud.ServiceClient, project core.KeystoneProject, isVolumeType map[string]bool, volumeTypeForVolumeUUID map[string]string) (snapshotData map[string][]any, err error) {
+	snapshotData = make(map[string][]any)
+	listOpts := snapshots.ListOpts{
+		AllTenants: true,
+		TenantID:   project.UUID,
+	}
+
+	err = snapshots.List(client, listOpts).EachPage(func(page pagination.Page) (bool, error) {
+		snaps, err := snapshots.ExtractSnapshots(page)
+		if err != nil {
+			return false, err
+		}
+
+		for _, snapshot := range snaps {
+			volumeType := volumeTypeForVolumeUUID[snapshot.VolumeID]
+			//group subresources with unknown volume types under the default volume type
+			if !isVolumeType[volumeType] {
+				volumeType = p.VolumeTypes[0]
+			}
+
+			snapshotData[volumeType] = append(snapshotData[volumeType], cinderSnapshotSubresource{
+				UUID:   snapshot.ID,
+				Name:   snapshot.Name,
+				Status: snapshot.Status,
+				Size: limes.ValueWithUnit{
+					Value: uint64(snapshot.Size),
+					Unit:  limes.UnitGibibytes,
+				},
+				VolumeUUID: snapshot.VolumeID,
+			})
+		}
+		return true, nil
+	})
+	return snapshotData, err
 }
 
 // IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
