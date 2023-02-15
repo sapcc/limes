@@ -53,10 +53,10 @@ var findProjectForResourceScrapeQuery = sqlext.SimplifyWhitespace(`
 	SELECT * FROM project_services
 	-- filter by service type
 	WHERE type = $1
-	-- filter by need to be updated (because of user request, because of missing data, or because of outdated data)
-	AND (stale OR scraped_at IS NULL OR scraped_at < $2 OR (scraped_at != checked_at AND checked_at < $3))
-	-- order by update priority (in the same way: first user-requested, then new projects, then outdated projects, then failed projects, then ID for deterministic test behavior)
-	ORDER BY stale DESC, COALESCE(checked_at, to_timestamp(-1)) ASC, id ASC
+	-- filter by need to be updated (because of user request, or because of scheduled scrape)
+	AND (stale OR next_scrape_at <= $2)
+	-- order by update priority (first user-requested scrapes, then scheduled scrapes, then ID for deterministic test behavior)
+	ORDER BY stale DESC, next_scrape_at ASC, id ASC
 	-- find only one project to scrape per iteration
 	LIMIT 1
 `)
@@ -153,7 +153,7 @@ func (c *Collector) Scrape() {
 }
 
 func (c *Collector) selectProjectForResourceScrape(serviceType string, scrapeStartedAt time.Time) (domain db.Domain, project db.Project, srv db.ProjectService, err error) {
-	err = c.DB.SelectOne(&srv, findProjectForResourceScrapeQuery, serviceType, scrapeStartedAt.Add(-scrapeInterval), scrapeStartedAt.Add(-recheckInterval))
+	err = c.DB.SelectOne(&srv, findProjectForResourceScrapeQuery, serviceType, scrapeStartedAt)
 	if err != nil {
 		return
 	}
