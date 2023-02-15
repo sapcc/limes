@@ -150,6 +150,11 @@ func (p *cinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 	if err != nil {
 		return nil, "", err
 	}
+	isVolumeType := make(map[string]bool)
+	for _, volumeType := range p.VolumeTypes {
+		isVolumeType[volumeType] = true
+	}
+
 	var data struct {
 		QuotaSet map[string]quotaSetField `json:"quota_set"`
 	}
@@ -158,44 +163,9 @@ func (p *cinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 		return nil, "", err
 	}
 
-	volumeData := make(map[string][]interface{})
+	var volumeData map[string][]any
 	if p.scrapeVolumes {
-		isVolumeType := make(map[string]bool)
-		for _, volumeType := range p.VolumeTypes {
-			isVolumeType[volumeType] = true
-		}
-
-		listOpts := volumes.ListOpts{
-			AllTenants: true,
-			TenantID:   project.UUID,
-		}
-
-		err := volumes.List(client, listOpts).EachPage(func(page pagination.Page) (bool, error) {
-			vols, err := volumes.ExtractVolumes(page)
-			if err != nil {
-				return false, err
-			}
-
-			for _, volume := range vols {
-				volumeType := volume.VolumeType
-				//group subresources with unknown volume types under the default volume type
-				if !isVolumeType[volumeType] {
-					volumeType = p.VolumeTypes[0]
-				}
-
-				volumeData[volumeType] = append(volumeData[volumeType], map[string]interface{}{
-					"id":     volume.ID,
-					"name":   volume.Name,
-					"status": volume.Status,
-					"size": limes.ValueWithUnit{
-						Value: uint64(volume.Size),
-						Unit:  limes.UnitGibibytes,
-					},
-					"availability_zone": volume.AvailabilityZone,
-				})
-			}
-			return true, nil
-		})
+		volumeData, err = p.collectVolumeSubresources(client, project, isVolumeType)
 		if err != nil {
 			return nil, "", err
 		}
@@ -205,11 +175,53 @@ func (p *cinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 	for _, volumeType := range p.VolumeTypes {
 		rd[p.makeResourceName("capacity", volumeType)] = data.QuotaSet["gigabytes_"+volumeType].ToResourceData(nil)
 		rd[p.makeResourceName("snapshots", volumeType)] = data.QuotaSet["snapshots_"+volumeType].ToResourceData(nil)
-		rd[p.makeResourceName("volumes", volumeType)] = data.QuotaSet["volumes_"+volumeType].ToResourceData(
-			volumeData[volumeType],
-		)
+		rd[p.makeResourceName("volumes", volumeType)] = data.QuotaSet["volumes_"+volumeType].ToResourceData(volumeData[volumeType])
 	}
 	return rd, "", nil
+}
+
+type cinderVolumeSubresource struct {
+	UUID             string              `json:"id"`
+	Name             string              `json:"name"`
+	Status           string              `json:"status"`
+	Size             limes.ValueWithUnit `json:"size"`
+	AvailabilityZone string              `json:"availability_zone"`
+}
+
+func (p *cinderPlugin) collectVolumeSubresources(client *gophercloud.ServiceClient, project core.KeystoneProject, isVolumeType map[string]bool) (map[string][]any, error) {
+	volumeData := make(map[string][]any)
+	listOpts := volumes.ListOpts{
+		AllTenants: true,
+		TenantID:   project.UUID,
+	}
+
+	err := volumes.List(client, listOpts).EachPage(func(page pagination.Page) (bool, error) {
+		vols, err := volumes.ExtractVolumes(page)
+		if err != nil {
+			return false, err
+		}
+
+		for _, volume := range vols {
+			volumeType := volume.VolumeType
+			//group subresources with unknown volume types under the default volume type
+			if !isVolumeType[volumeType] {
+				volumeType = p.VolumeTypes[0]
+			}
+
+			volumeData[volumeType] = append(volumeData[volumeType], cinderVolumeSubresource{
+				UUID:   volume.ID,
+				Name:   volume.Name,
+				Status: volume.Status,
+				Size: limes.ValueWithUnit{
+					Value: uint64(volume.Size),
+					Unit:  limes.UnitGibibytes,
+				},
+				AvailabilityZone: volume.AvailabilityZone,
+			})
+		}
+		return true, nil
+	})
+	return volumeData, err
 }
 
 // IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
