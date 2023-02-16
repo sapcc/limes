@@ -15,6 +15,7 @@ project:raise: rule:domain_editor
 project:raise_lowpriv: rule:project_editor
 project:raise_centralized: rule:cluster_admin
 project:lower: rule:project_editor
+domain:lower_lowpriv: rule:project_editor
 project:lower_centralized: rule:cluster_admin
 project:set_rate_limit: rule:domain_editor
 project:discover: rule:domain_editor
@@ -24,6 +25,7 @@ domain:show: rule:domain_viewer
 domain:raise: rule:cluster_admin
 domain:raise_lowpriv: rule:domain_editor
 domain:lower: rule:domain_editor
+domain:lower_lowpriv: rule:domain_editor
 domain:discover: rule:cluster_admin
 
 cluster:list: rule:cluster_admin

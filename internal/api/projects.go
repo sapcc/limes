@@ -230,6 +230,7 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 		CanRaiseCentralized: checkToken("project:raise_centralized"),
 		CanLower:            checkToken("project:lower"),
 		CanLowerCentralized: checkToken("project:lower_centralized"),
+		CanLowerLP:          checkToken("project:lower_lowpriv"),
 	}
 	updater.Domain = p.FindDomainFromRequest(w, r)
 	if updater.Domain == nil {

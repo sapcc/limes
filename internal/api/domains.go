@@ -125,6 +125,7 @@ func (p *v1Provider) putOrSimulatePutDomain(w http.ResponseWriter, r *http.Reque
 		CanRaise:   checkToken("domain:raise"),
 		CanRaiseLP: checkToken("domain:raise_lowpriv"),
 		CanLower:   checkToken("domain:lower"),
+		CanLowerLP: checkToken("domain:lower_lowpriv"),
 		//domain quotas may not be edited by any user on resources with CentralizedQuotaDistribution
 		CanRaiseCentralized: forbidden,
 		CanLowerCentralized: forbidden,

@@ -55,6 +55,7 @@ type QuotaUpdater struct {
 	CanRaiseLP          func(serviceType, resourceName string) bool //low-privilege raise
 	CanRaiseCentralized func(serviceType, resourceName string) bool
 	CanLower            func(serviceType, resourceName string) bool
+	CanLowerLP          func(serviceType, resourceName string) bool
 	CanLowerCentralized func(serviceType, resourceName string) bool
 
 	//Filled by ValidateInput() with the keys being the service type and the resource name.
@@ -360,19 +361,25 @@ func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limesresources.Re
 	}
 
 	//check authorization for quota change
-	var lprLimit uint64
+	var (
+		lprLimit        uint64
+		lprIsReversible bool
+	)
 	if u.Project == nil {
 		limitSpec := u.Cluster.LowPrivilegeRaise.LimitsForDomains[srv.Type][res.Name]
 		lprLimit = limitSpec.Evaluate(clusterRes, oldQuota)
+		lprIsReversible = limitSpec.IsReversible()
 	} else {
 		if u.Cluster.Config.LowPrivilegeRaise.IsAllowedForProjectsIn(u.Domain.Name) {
 			limitSpec := u.Cluster.LowPrivilegeRaise.LimitsForProjects[srv.Type][res.Name]
 			lprLimit = limitSpec.Evaluate(clusterRes, oldQuota)
+			lprIsReversible = limitSpec.IsReversible()
 		} else {
 			lprLimit = 0
+			lprIsReversible = false
 		}
 	}
-	verr = u.validateAuthorization(srv, res, oldQuota, newQuota, lprLimit, res.Unit)
+	verr = u.validateAuthorization(srv, res, oldQuota, newQuota, lprLimit, lprIsReversible, res.Unit)
 	if verr != nil {
 		if verr.Status == http.StatusForbidden {
 			verr.Message += fmt.Sprintf(" in this %s", u.ScopeType())
@@ -387,7 +394,7 @@ func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limesresources.Re
 	return u.validateProjectQuota(domRes, *projRes, newQuota)
 }
 
-func (u QuotaUpdater) validateAuthorization(srv limes.ServiceInfo, res limesresources.ResourceInfo, oldQuota, newQuota, lprLimit uint64, unit limes.Unit) *core.QuotaValidationError {
+func (u QuotaUpdater) validateAuthorization(srv limes.ServiceInfo, res limesresources.ResourceInfo, oldQuota, newQuota, lprLimit uint64, lprIsReversible bool, unit limes.Unit) *core.QuotaValidationError {
 	qdConfig := u.Cluster.QuotaDistributionConfigForResource(srv.Type, res.Name)
 
 	if oldQuota >= newQuota {
@@ -395,6 +402,18 @@ func (u QuotaUpdater) validateAuthorization(srv limes.ServiceInfo, res limesreso
 		case limesresources.HierarchicalQuotaDistribution:
 			if u.CanLower(srv.Type, res.Name) {
 				return nil
+			}
+			//If the low-privilege raise (LPR) limit is specified in a reversible
+			//way, it also applies in reverse. If a raise is allowed by the LPR
+			//limit, the reverse lower is also allowed by it.
+			if u.CanLowerLP(srv.Type, res.Name) && lprLimit > 0 && lprIsReversible {
+				if oldQuota <= lprLimit {
+					return nil
+				}
+				return &core.QuotaValidationError{
+					Status:  http.StatusForbidden,
+					Message: fmt.Sprintf("user is not allowed to lower %q quotas that high", srv.Type),
+				}
 			}
 		case limesresources.CentralizedQuotaDistribution:
 			if u.CanLowerCentralized(srv.Type, res.Name) {

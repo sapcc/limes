@@ -275,6 +275,7 @@ type TestPolicyEnforcer struct {
 	AllowRaise            bool
 	AllowRaiseLP          bool
 	AllowLower            bool
+	AllowLowerLP          bool
 	AllowRaiseCentralized bool
 	AllowLowerCentralized bool
 	RejectServiceType     string
@@ -295,6 +296,8 @@ func (e TestPolicyEnforcer) Enforce(rule string, ctx policy.Context) bool {
 		return e.AllowRaiseCentralized
 	case "lower":
 		return e.AllowLower
+	case "lower_lowpriv":
+		return e.AllowLowerLP
 	case "lower_centralized":
 		return e.AllowLowerCentralized
 	default:
@@ -1501,6 +1504,7 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 	enforcer.AllowRaise = false
 	enforcer.AllowRaiseLP = true
 	enforcer.AllowLower = true
+	enforcer.AllowLowerLP = false
 	enforcer.AllowRaiseCentralized = false
 	enforcer.AllowLowerCentralized = false
 
@@ -1550,6 +1554,7 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 	enforcer.AllowRaise = true
 	enforcer.AllowRaiseLP = true
 	enforcer.AllowLower = false
+	enforcer.AllowLowerLP = false
 	enforcer.AllowRaiseCentralized = false
 	enforcer.AllowLowerCentralized = false
 
@@ -1654,23 +1659,26 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 
 	enforcer.AllowRaise = false
 	enforcer.AllowRaiseLP = true
-	enforcer.AllowLower = true
+	enforcer.AllowLower = false
+	enforcer.AllowLowerLP = true
 	enforcer.AllowRaiseCentralized = false
 	enforcer.AllowLowerCentralized = false
 	enforcer.RejectServiceType = ""
 
 	cluster.LowPrivilegeRaise.LimitsForDomains = map[string]map[string]core.LowPrivilegeRaiseLimit{
-		"shared": {"capacity": {AbsoluteValue: 29}, "things": {AbsoluteValue: 35}},
+		"shared":   {"capacity": {AbsoluteValue: 29}, "things": {AbsoluteValue: 35}},
+		"unshared": {"capacity": {AbsoluteValue: 10}, "things": {AbsoluteValue: 60}},
 	}
 	cluster.LowPrivilegeRaise.LimitsForProjects = map[string]map[string]core.LowPrivilegeRaiseLimit{
-		"shared": {"capacity": {AbsoluteValue: 10}, "things": {AbsoluteValue: 25}},
+		"shared":   {"capacity": {AbsoluteValue: 10}, "things": {AbsoluteValue: 25}},
+		"unshared": {"capacity": {AbsoluteValue: 7}, "things": {AbsoluteValue: 20}},
 	}
 
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany",
 		ExpectStatus: 403,
-		ExpectBody:   assert.StringData("cannot change shared/capacity quota: user is not allowed to raise \"shared\" quotas that high in this domain (maximum acceptable domain quota is 29 B)\n"),
+		ExpectBody:   assert.StringData("cannot change shared/capacity quota: user is not allowed to raise \"shared\" quotas that high in this domain (maximum acceptable domain quota is 29 B)\ncannot change unshared/capacity quota: user is not allowed to lower \"unshared\" quotas that high in this domain\n"),
 		Body: assert.JSONObject{
 			"domain": assert.JSONObject{
 				"services": []assert.JSONObject{
@@ -1683,6 +1691,15 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 							{"name": "things", "quota": 35},
 						},
 					},
+					{
+						"type": "unshared",
+						"resources": []assert.JSONObject{
+							//attempt to lower should fail because of lack of permissions
+							{"name": "capacity", "quota": 30},
+							//attempt to lower should be permitted by low-privilege exception (previous quota is below LPR limit)
+							{"name": "things", "quota": 35},
+						},
+					},
 				},
 			},
 		},
@@ -1690,8 +1707,8 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
-		ExpectStatus: 403,
-		ExpectBody:   assert.StringData("cannot change shared/capacity quota: user is not allowed to raise \"shared\" quotas that high in this project (maximum acceptable project quota is 10 B)\n"),
+		ExpectStatus: 422, //TODO: should be 403, but is 422 because of the stray constraint error
+		ExpectBody:   assert.StringData("cannot change shared/capacity quota: user is not allowed to raise \"shared\" quotas that high in this project (maximum acceptable project quota is 10 B)\ncannot change unshared/capacity quota: user is not allowed to lower \"unshared\" quotas that high in this project\ncannot change unshared/things quota: must allocate at least 10 quota (minimum acceptable project quota is 10)\n"),
 		Body: assert.JSONObject{
 			"project": assert.JSONObject{
 				"services": []assert.JSONObject{
@@ -1704,6 +1721,16 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 							{"name": "things", "quota": 11},
 						},
 					},
+					{
+						"type": "unshared",
+						"resources": []assert.JSONObject{
+							//attempt to lower should fail because of lack of permissions
+							{"name": "capacity", "quota": 5},
+							//attempt to lower should be permitted by low-privilege exception (previous quota is below LPR limit)
+							//TODO: this triggers an error later in constraint validation that is not important; the important part is that we don't get an AuthZ error
+							{"name": "things", "quota": 5},
+						},
+					},
 				},
 			},
 		},
@@ -1714,8 +1741,8 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
-		ExpectStatus: 403,
-		ExpectBody:   assert.StringData("cannot change shared/capacity quota: user is not allowed to raise \"shared\" quotas in this project\ncannot change shared/things quota: user is not allowed to raise \"shared\" quotas in this project\n"),
+		ExpectStatus: 422, //TODO: should be 403, but is 422 because of the stray constraint error
+		ExpectBody:   assert.StringData("cannot change shared/capacity quota: user is not allowed to raise \"shared\" quotas in this project\ncannot change shared/things quota: user is not allowed to raise \"shared\" quotas in this project\ncannot change unshared/capacity quota: user is not allowed to lower \"unshared\" quotas in this project\ncannot change unshared/things quota: must allocate at least 10 quota (minimum acceptable project quota is 10)\n"),
 		Body: assert.JSONObject{
 			"project": assert.JSONObject{
 				"services": []assert.JSONObject{
@@ -1724,9 +1751,18 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 						"resources": []assert.JSONObject{
 							//attempt to raise should fail because of lack of permissions
 							{"name": "capacity", "quota": 11},
-							//attempt to raise should fail because low-privilege q.r. is
-							//disabled in this domain
+							//attempt to raise should fail because low-privilege quota raising is disabled in this domain
 							{"name": "things", "quota": 11},
+						},
+					},
+					{
+						"type": "unshared",
+						"resources": []assert.JSONObject{
+							//attempt to lower should fail because of lack of permissions
+							{"name": "capacity", "quota": 5},
+							//attempt to lower should fail because low-privilege quota lowering is disabled in this domain
+							//TODO: this triggers an error later in constraint validation that is not important; the important part is that we don't get an AuthZ error
+							{"name": "things", "quota": 5},
 						},
 					},
 				},
@@ -1734,7 +1770,7 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 		},
 	}.Check(t, router)
 
-	//test low-privilege raise limits that are specified as percent of cluster capacity
+	//test low-privilege raise limits that are specified as percent of cluster capacity (TODO: test lowering, too)
 	cluster.Config.LowPrivilegeRaise.ExcludeProjectDomainRx = ""
 	cluster.LowPrivilegeRaise.LimitsForDomains = map[string]map[string]core.LowPrivilegeRaiseLimit{
 		// shared/things capacity is 246, so 13% is 31.98 which rounds down to 31
@@ -1762,7 +1798,7 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 		Body: requestOneQuotaChange("project", "shared", "things", 15, limes.UnitNone),
 	}.Check(t, router)
 
-	//test low-privilege raise limits that are specified as percentage of assigned cluster capacity over all domains
+	//test low-privilege raise limits that are specified as percentage of assigned cluster capacity over all domains (TODO: test lowering as well)
 	cluster.LowPrivilegeRaise.LimitsForDomains = map[string]map[string]core.LowPrivilegeRaiseLimit{
 		// - shared/things capacity is 246, 45% thereof is 110.7 which rounds down to 110
 		// - current shared/things domain quotas: france = 0, germany = 30
@@ -1817,6 +1853,7 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 	enforcer.AllowRaise = true
 	enforcer.AllowRaiseLP = true
 	enforcer.AllowLower = true
+	enforcer.AllowLowerLP = true
 	enforcer.AllowRaiseCentralized = true
 	enforcer.AllowLowerCentralized = true
 
@@ -1841,6 +1878,7 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 	enforcer.AllowRaise = true
 	enforcer.AllowRaiseLP = true
 	enforcer.AllowLower = true
+	enforcer.AllowLowerLP = true
 	enforcer.AllowRaiseCentralized = false
 	enforcer.AllowLowerCentralized = true
 

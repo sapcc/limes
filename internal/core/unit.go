@@ -75,3 +75,9 @@ func (l LowPrivilegeRaiseLimit) Evaluate(clusterReport limesresources.ClusterRes
 		return 0
 	}
 }
+
+// IsReversible is true for limits that do not depend on the quotas of other
+// domains and projects.
+func (l LowPrivilegeRaiseLimit) IsReversible() bool {
+	return l.AbsoluteValue != 0 || l.PercentOfClusterCapacity != 0
+}
