@@ -45,12 +45,13 @@ func Test_RateScrapeSuccess(t *testing.T) {
 	plugin := test.NewPlugin("unittest", rates...)
 	cluster, dbm := prepareScrapeTest(t, 2, plugin)
 	c := Collector{
-		Cluster:  cluster,
-		DB:       dbm,
-		Plugin:   plugin,
-		LogError: t.Errorf,
-		TimeNow:  test.TimeNow,
-		Once:     true,
+		Cluster:   cluster,
+		DB:        dbm,
+		Plugin:    plugin,
+		LogError:  t.Errorf,
+		TimeNow:   test.TimeNow,
+		AddJitter: test.NoJitter,
+		Once:      true,
 	}
 
 	//for one of the projects, put some records in for rate limits, to check that
@@ -167,12 +168,13 @@ func Test_RateScrapeFailure(t *testing.T) {
 	plugin := test.NewPlugin("unittest", rates...)
 	cluster, dbm := prepareScrapeTest(t, 2, plugin)
 	c := Collector{
-		Cluster:  cluster,
-		DB:       dbm,
-		Plugin:   plugin,
-		LogError: t.Errorf,
-		TimeNow:  test.TimeNow,
-		Once:     true,
+		Cluster:   cluster,
+		DB:        dbm,
+		Plugin:    plugin,
+		LogError:  t.Errorf,
+		TimeNow:   test.TimeNow,
+		AddJitter: test.NoJitter,
+		Once:      true,
 	}
 
 	//we will see an expected ERROR during testing, do not make the test fail because of this
@@ -215,12 +217,13 @@ func Test_ScrapeRatesButNoRates(t *testing.T) {
 	plugin := noopQuotaPlugin{}
 	cluster, dbm := prepareScrapeTest(t, 1, plugin)
 	c := Collector{
-		Cluster:  cluster,
-		DB:       dbm,
-		Plugin:   plugin,
-		LogError: t.Errorf,
-		TimeNow:  test.TimeNow,
-		Once:     true,
+		Cluster:   cluster,
+		DB:        dbm,
+		Plugin:    plugin,
+		LogError:  t.Errorf,
+		TimeNow:   test.TimeNow,
+		AddJitter: test.NoJitter,
+		Once:      true,
 	}
 
 	//check that ScrapeRates() behaves properly when encountering a quota plugin

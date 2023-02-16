@@ -87,11 +87,12 @@ func Test_ScanDomains(t *testing.T) {
 	}
 
 	c := Collector{
-		Cluster:  cluster,
-		DB:       dbm,
-		LogError: t.Errorf,
-		TimeNow:  test.TimeNow,
-		Once:     true,
+		Cluster:   cluster,
+		DB:        dbm,
+		LogError:  t.Errorf,
+		TimeNow:   test.TimeNow,
+		AddJitter: test.NoJitter,
+		Once:      true,
 	}
 
 	//first ScanDomains should discover the StaticDomains in the cluster,

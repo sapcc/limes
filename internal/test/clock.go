@@ -36,3 +36,9 @@ func TimeNow() time.Time {
 func ResetTime() {
 	clockSeconds = -1
 }
+
+// NoJitter replaces test.AddJitter in unit tests, to provide deterministic
+// behavior.
+func NoJitter(d time.Duration) time.Duration {
+	return d
+}

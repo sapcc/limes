@@ -34,12 +34,13 @@ func Test_Consistency(t *testing.T) {
 	test.ResetTime()
 	cluster, dbm := keystoneTestCluster(t)
 	c := Collector{
-		Cluster:  cluster,
-		DB:       dbm,
-		Plugin:   nil,
-		LogError: t.Errorf,
-		TimeNow:  test.TimeNow,
-		Once:     true,
+		Cluster:   cluster,
+		DB:        dbm,
+		Plugin:    nil,
+		LogError:  t.Errorf,
+		TimeNow:   test.TimeNow,
+		AddJitter: test.NoJitter,
+		Once:      true,
 	}
 
 	//run ScanDomains once to establish a baseline

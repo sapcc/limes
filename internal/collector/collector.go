@@ -20,6 +20,7 @@
 package collector
 
 import (
+	"math/rand"
 	"time"
 
 	"github.com/go-gorp/gorp/v3"
@@ -41,6 +42,8 @@ type Collector struct {
 	LogError func(msg string, args ...interface{})
 	//Usually time.Now, but can be changed inside unit tests.
 	TimeNow func() time.Time
+	//Usually addJitter, but can be changed inside unit tests.
+	AddJitter func(time.Duration) time.Duration
 	//When set to true, suppresses the usual non-returning behavior of
 	//collector jobs.
 	Once bool
@@ -49,11 +52,22 @@ type Collector struct {
 // NewCollector creates a Collector instance.
 func NewCollector(cluster *core.Cluster, dbm *gorp.DbMap, plugin core.QuotaPlugin) *Collector {
 	return &Collector{
-		Cluster:  cluster,
-		DB:       dbm,
-		Plugin:   plugin,
-		LogError: logg.Error,
-		TimeNow:  time.Now,
-		Once:     false,
+		Cluster:   cluster,
+		DB:        dbm,
+		Plugin:    plugin,
+		LogError:  logg.Error,
+		TimeNow:   time.Now,
+		AddJitter: addJitter,
+		Once:      false,
 	}
+}
+
+// addJitter returns a random duration within +/- 10% of the requested value.
+// This can be used to even out the load on a scheduled job over time, by
+// spreading jobs that would normally be scheduled right next to each other out
+// over time without corrupting the individual schedules too much.
+func addJitter(duration time.Duration) time.Duration {
+	//nolint:gosec // This is not crypto-relevant, so math/rand is okay.
+	r := rand.Float64() //NOTE: 0 <= r < 1
+	return time.Duration(float64(duration) * (0.9 + 0.2*r))
 }

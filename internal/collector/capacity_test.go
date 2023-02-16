@@ -71,11 +71,12 @@ func Test_ScanCapacity(t *testing.T) {
 	}
 
 	c := Collector{
-		Cluster:  cluster,
-		DB:       dbm,
-		Plugin:   nil,
-		LogError: t.Errorf,
-		TimeNow:  test.TimeNow,
+		Cluster:   cluster,
+		DB:        dbm,
+		Plugin:    nil,
+		LogError:  t.Errorf,
+		TimeNow:   test.TimeNow,
+		AddJitter: test.NoJitter,
 	}
 
 	//check baseline

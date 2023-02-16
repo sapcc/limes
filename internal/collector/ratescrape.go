@@ -209,7 +209,7 @@ func (c *Collector) writeRateScrapeResult(srv db.ProjectServiceRef, rateData map
 	//service so that we don't scrape it again immediately afterwards
 	_, err = tx.Exec(
 		`UPDATE project_services SET rates_checked_at = $1, rates_scraped_at = $1, rates_next_scrape_at = $2, rates_scrape_duration_secs = $3, rates_scrape_state = $4, rates_stale = $5, rates_scrape_error_message = '' WHERE id = $6`,
-		scrapedAt, scrapedAt.Add(scrapeInterval), scrapeDuration.Seconds(), serviceRatesScrapeState, false, srv.ID,
+		scrapedAt, scrapedAt.Add(c.AddJitter(scrapeInterval)), scrapeDuration.Seconds(), serviceRatesScrapeState, false, srv.ID,
 	)
 	if err != nil {
 		return err
@@ -221,7 +221,7 @@ func (c *Collector) writeRateScrapeResult(srv db.ProjectServiceRef, rateData map
 func (c *Collector) writeRateScrapeError(project core.KeystoneProject, srv db.ProjectServiceRef, scrapeErr error, checkedAt time.Time, checkDuration time.Duration) {
 	_, err := c.DB.Exec(
 		`UPDATE project_services SET rates_checked_at = $1, rates_next_scrape_at = $2, rates_scrape_duration_secs = $3, rates_scrape_error_message = $4, rates_stale = $5 WHERE id = $6`,
-		checkedAt, checkedAt.Add(recheckInterval), checkDuration.Seconds(), util.UnpackError(scrapeErr).Error(), false, srv.ID,
+		checkedAt, checkedAt.Add(c.AddJitter(recheckInterval)), checkDuration.Seconds(), util.UnpackError(scrapeErr).Error(), false, srv.ID,
 	)
 	if err != nil {
 		logg.Error("additional DB error while trying to write rate scraping error for service %s in project %s: %s",

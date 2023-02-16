@@ -243,7 +243,7 @@ func (c *Collector) writeScrapeResult(dbDomain db.Domain, dbProject db.Project, 
 	logg.Debug("writing scrape result into service %d", srv.ID)
 	_, err = tx.Exec(
 		`UPDATE project_services SET checked_at = $1, scraped_at = $1, next_scrape_at = $2, scrape_duration_secs = $3, stale = $4, serialized_metrics = $5, scrape_error_message = '' WHERE id = $6`,
-		scrapedAt, scrapedAt.Add(scrapeInterval), scrapeDuration.Seconds(), false, serializedMetrics, srv.ID,
+		scrapedAt, scrapedAt.Add(c.AddJitter(scrapeInterval)), scrapeDuration.Seconds(), false, serializedMetrics, srv.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("while updating metadata on project service: %w", err)
@@ -279,7 +279,7 @@ func (c *Collector) writeScrapeResult(dbDomain db.Domain, dbProject db.Project, 
 func (c *Collector) writeScrapeError(srv db.ProjectService, scrapeErr error, checkedAt time.Time, checkDuration time.Duration) {
 	_, err := c.DB.Exec(
 		`UPDATE project_services SET checked_at = $1, next_scrape_at = $2, scrape_duration_secs = $3, scrape_error_message = $4, stale = $5 WHERE id = $6`,
-		checkedAt, checkedAt.Add(recheckInterval), checkDuration.Seconds(), util.UnpackError(scrapeErr).Error(), false, srv.ID,
+		checkedAt, checkedAt.Add(c.AddJitter(recheckInterval)), checkDuration.Seconds(), util.UnpackError(scrapeErr).Error(), false, srv.ID,
 	)
 	if err != nil {
 		logg.Error("additional DB error while trying to write scraping error for project service %d: %s",

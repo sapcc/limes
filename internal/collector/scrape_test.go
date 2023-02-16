@@ -90,7 +90,7 @@ func prepareScrapeTest(t *testing.T, numProjects int, quotaPlugins ...core.Quota
 	//ScanDomains is required to create the entries in `domains`,
 	//`domain_services`, `projects` and `project_services`
 	timeZero := func() time.Time { return time.Unix(0, 0).UTC() }
-	_, err := (&Collector{Cluster: cluster, DB: dbm, TimeNow: timeZero}).ScanDomains(ScanDomainsOpts{})
+	_, err := (&Collector{Cluster: cluster, DB: dbm, TimeNow: timeZero, AddJitter: test.NoJitter}).ScanDomains(ScanDomainsOpts{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -138,12 +138,13 @@ func Test_ScrapeSuccess(t *testing.T) {
 	cluster, dbm := prepareScrapeTest(t, 2, plugin)
 	cluster.Authoritative = true
 	c := Collector{
-		Cluster:  cluster,
-		DB:       dbm,
-		Plugin:   plugin,
-		LogError: t.Errorf,
-		TimeNow:  test.TimeNow,
-		Once:     true,
+		Cluster:   cluster,
+		DB:        dbm,
+		Plugin:    plugin,
+		LogError:  t.Errorf,
+		TimeNow:   test.TimeNow,
+		AddJitter: test.NoJitter,
+		Once:      true,
 	}
 
 	//check that ScanDomains created the domain, project and their services
@@ -303,11 +304,12 @@ func Test_ScrapeFailure(t *testing.T) {
 	plugin := test.NewPlugin("unittest")
 	cluster, dbm := prepareScrapeTest(t, 2, plugin)
 	c := Collector{
-		Cluster: cluster,
-		DB:      dbm,
-		Plugin:  plugin,
-		TimeNow: test.TimeNow,
-		Once:    true,
+		Cluster:   cluster,
+		DB:        dbm,
+		Plugin:    plugin,
+		TimeNow:   test.TimeNow,
+		AddJitter: test.NoJitter,
+		Once:      true,
 	}
 	//we will see an expected ERROR during testing, do not make the test fail because of this
 	expectedErrorRx := regexp.MustCompile(`^scrape unittest resources for germany/(berlin|dresden) failed: Scrape failed as requested$`)
@@ -382,12 +384,13 @@ func Test_ScrapeCentralized(t *testing.T) {
 		cluster, dbm := prepareScrapeTest(t, 1, plugin)
 		cluster.Authoritative = true
 		c := Collector{
-			Cluster:  cluster,
-			DB:       dbm,
-			Plugin:   plugin,
-			LogError: t.Errorf,
-			TimeNow:  test.TimeNow,
-			Once:     true,
+			Cluster:   cluster,
+			DB:        dbm,
+			Plugin:    plugin,
+			LogError:  t.Errorf,
+			TimeNow:   test.TimeNow,
+			AddJitter: test.NoJitter,
+			Once:      true,
 		}
 
 		//check that ScanDomains created the domain, project and their services and
@@ -499,12 +502,13 @@ func Test_AutoApproveInitialQuota(t *testing.T) {
 	plugin := &autoApprovalTestPlugin{StaticBackendQuota: 10}
 	cluster, dbm := prepareScrapeTest(t, 1, plugin)
 	c := Collector{
-		Cluster:  cluster,
-		DB:       dbm,
-		Plugin:   plugin,
-		LogError: t.Errorf,
-		TimeNow:  test.TimeNow,
-		Once:     true,
+		Cluster:   cluster,
+		DB:        dbm,
+		Plugin:    plugin,
+		LogError:  t.Errorf,
+		TimeNow:   test.TimeNow,
+		AddJitter: test.NoJitter,
+		Once:      true,
 	}
 
 	//ScanDomains created the domain, project and their services
@@ -573,12 +577,13 @@ func Test_ScrapeButNoResources(t *testing.T) {
 	plugin := noopQuotaPlugin{}
 	cluster, dbm := prepareScrapeTest(t, 1, plugin)
 	c := Collector{
-		Cluster:  cluster,
-		DB:       dbm,
-		Plugin:   plugin,
-		LogError: t.Errorf,
-		TimeNow:  test.TimeNow,
-		Once:     true,
+		Cluster:   cluster,
+		DB:        dbm,
+		Plugin:    plugin,
+		LogError:  t.Errorf,
+		TimeNow:   test.TimeNow,
+		AddJitter: test.NoJitter,
+		Once:      true,
 	}
 
 	//check that Scrape() behaves properly when encountering a quota plugin with
