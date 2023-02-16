@@ -478,7 +478,7 @@ func (p *manilaPlugin) collectPhysicalUsage(project core.KeystoneProject) (manil
 		//NOTE: The `max by (share_id)` is necessary for when a share is being
 		//migrated to another shareserver and thus appears in the metrics twice.
 		queryStr := fmt.Sprintf(
-			`sum(max by (share_id) (netapp_volume_used_bytes{project_id=%q,volume_type!="dp",share_type=%q}))`,
+			`sum(max by (share_id) (netapp_volume_used_bytes{project_id=%q,volume_type!="dp",share_type=%q,volume_state="online"}))`,
 			project.UUID, stName,
 		)
 		bytesPhysical, err := client.GetSingleValue(queryStr, &defaultValue)
@@ -488,7 +488,7 @@ func (p *manilaPlugin) collectPhysicalUsage(project core.KeystoneProject) (manil
 		usage.Gigabytes[stName] = roundUpIntoGigabytes(bytesPhysical)
 
 		queryStr = fmt.Sprintf(
-			`sum(max by (share_id) (netapp_volume_snapshot_used_bytes{project_id=%q,volume_type!="dp",share_type=%q}))`,
+			`sum(max by (share_id) (netapp_volume_snapshot_used_bytes{project_id=%q,volume_type!="dp",share_type=%q,volume_state="online"}))`,
 			project.UUID, stName,
 		)
 		snapshotBytesPhysical, err := client.GetSingleValue(queryStr, &defaultValue)
@@ -511,7 +511,7 @@ func (p *manilaPlugin) collectSnapmirrorUsage(project core.KeystoneProject, shar
 	//Manila itself, so we have to collect usage from NetApp metrics instead
 	defaultValue := float64(0)
 	queryStr := fmt.Sprintf(
-		`sum(max by (volume) (netapp_volume_total_bytes{project_id=%q,share_type=%q,volume_type="dp",volume=~".*EC2BKP"}))`,
+		`sum(max by (volume) (netapp_volume_total_bytes{project_id=%q,share_type=%q,volume_type="dp",volume_state="online",volume=~".*EC2BKP"}))`,
 		project.UUID, shareTypeName,
 	)
 	bytesTotal, err := client.GetSingleValue(queryStr, &defaultValue)
@@ -520,7 +520,7 @@ func (p *manilaPlugin) collectSnapmirrorUsage(project core.KeystoneProject, shar
 	}
 
 	queryStr = fmt.Sprintf(
-		`sum(max by (volume) (netapp_volume_used_bytes{project_id=%q,share_type=%q,volume_type="dp",volume=~".*EC2BKP"}))`,
+		`sum(max by (volume) (netapp_volume_used_bytes{project_id=%q,share_type=%q,volume_type="dp",volume_state="online",volume=~".*EC2BKP"}))`,
 		project.UUID, shareTypeName,
 	)
 	bytesUsed, err := client.GetSingleValue(queryStr, &defaultValue)
