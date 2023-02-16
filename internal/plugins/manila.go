@@ -511,7 +511,7 @@ func (p *manilaPlugin) collectSnapmirrorUsage(project core.KeystoneProject, shar
 	//Manila itself, so we have to collect usage from NetApp metrics instead
 	defaultValue := float64(0)
 	queryStr := fmt.Sprintf(
-		`sum(max by (volume) (netapp_volume_total_bytes{project_id=%q,share_type=%q,volume_type="dp",volume_state="online",volume=~".*EC2BKP"}))`,
+		`sum(max by (share_id) (netapp_volume_total_bytes{project_id=%q,volume_type!="dp",share_type=%q,volume_state="online",snapshot_policy="EC2_Backups"}))`,
 		project.UUID, shareTypeName,
 	)
 	bytesTotal, err := client.GetSingleValue(queryStr, &defaultValue)
@@ -520,7 +520,7 @@ func (p *manilaPlugin) collectSnapmirrorUsage(project core.KeystoneProject, shar
 	}
 
 	queryStr = fmt.Sprintf(
-		`sum(max by (volume) (netapp_volume_used_bytes{project_id=%q,share_type=%q,volume_type="dp",volume_state="online",volume=~".*EC2BKP"}))`,
+		`sum(max by (share_id) (netapp_volume_used_bytes{project_id=%q,volume_type!="dp",share_type=%q,volume_state="online",snapshot_policy="EC2_Backups"}))`,
 		project.UUID, shareTypeName,
 	)
 	bytesUsed, err := client.GetSingleValue(queryStr, &defaultValue)
