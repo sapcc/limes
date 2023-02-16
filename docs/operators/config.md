@@ -459,6 +459,7 @@ The area for this service is `storage`. The following resources are always expos
 | `share_snapshots` | countable | |
 | `snapshot_capacity` | GiB | |
 | `share_networks` | countable | |
+| `snapmirror_capacity` | GiB | Only if `prometheus_api` is given. A SAP-specific extension that reports disk space consumed by Snapmirror backups. |
 
 #### Multiple share types
 
