@@ -144,10 +144,11 @@ func (p *manilaPlugin) Resources() []limesresources.ResourceInfo {
 		)
 		if p.PrometheusAPIConfig != nil {
 			result = append(result, limesresources.ResourceInfo{
-				Name:     p.makeResourceName("snapmirror_capacity", shareType),
-				Unit:     limes.UnitGibibytes,
-				Category: category,
-				NoQuota:  true,
+				Name:        p.makeResourceName("snapmirror_capacity", shareType),
+				Unit:        limes.UnitGibibytes,
+				Category:    category,
+				NoQuota:     true,
+				ContainedIn: p.makeResourceName("share_capacity", shareType),
 			})
 		}
 	}
