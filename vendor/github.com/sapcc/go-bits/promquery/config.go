@@ -46,6 +46,9 @@ type Config struct {
 	ClientCertificatePath string `yaml:"cert"`
 	// Required if ClientCertificatePath is given: Private key for TLS client certificate.
 	ClientCertificateKeyPath string `yaml:"key"`
+
+	// Cache for repeated calls to Connect().
+	cachedConnection prom_v1.API `yaml:"-"`
 }
 
 // ConfigFromEnv fills a Config object from the following environment variables:
@@ -70,6 +73,10 @@ func ConfigFromEnv(envPrefix string) Config {
 
 // Connect sets up a Prometheus client from the given Config.
 func (cfg Config) Connect() (Client, error) {
+	if cfg.cachedConnection != nil {
+		return Client{cfg.cachedConnection}, nil
+	}
+
 	if cfg.ServerURL == "" {
 		return Client{}, errors.New("cannot connect to Prometheus: missing server URL")
 	}
@@ -120,5 +127,6 @@ func (cfg Config) Connect() (Client, error) {
 		return Client{}, fmt.Errorf("cannot connect to Prometheus at %s: %w", cfg.ServerURL, err)
 	}
 
-	return Client{prom_v1.NewAPI(client)}, nil
+	cfg.cachedConnection = prom_v1.NewAPI(client) //speed up future calls to Connect()
+	return Client{cfg.cachedConnection}, nil
 }
