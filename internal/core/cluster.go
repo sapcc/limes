@@ -222,13 +222,10 @@ func (c *Cluster) Connect() (err error) {
 
 	//validate scaling relations
 	for _, behavior := range c.Config.ResourceBehaviors {
-		b := behavior.Compiled
-		if b.ScalesWithResourceName == "" {
-			continue
-		}
-		if !c.HasResource(b.ScalesWithServiceType, b.ScalesWithResourceName) {
+		s := behavior.ScalesWith
+		if s.ResourceName != "" && !c.HasResource(s.ServiceType, s.ResourceName) {
 			return fmt.Errorf(`resources matching "%s" scale with unknown resource "%s/%s"`,
-				string(behavior.FullResourceNameRx), b.ScalesWithServiceType, b.ScalesWithResourceName)
+				string(behavior.FullResourceNameRx), s.ServiceType, s.ResourceName)
 		}
 	}
 
@@ -384,41 +381,16 @@ func (c *Cluster) GetServiceTypesForArea(area string) (serviceTypes []string) {
 // resources.
 func (c *Cluster) BehaviorForResource(serviceType, resourceName, scopeName string) ResourceBehavior {
 	//default behavior
+	maxBurstMultiplier := c.Config.Bursting.MaxMultiplier
 	result := ResourceBehavior{
-		MaxBurstMultiplier: c.Config.Bursting.MaxMultiplier,
+		MaxBurstMultiplier: &maxBurstMultiplier,
 	}
 
 	//check for specific behavior
 	fullName := serviceType + "/" + resourceName
-	for _, behaviorConfig := range c.Config.ResourceBehaviors {
-		behavior := behaviorConfig.Compiled
-		if !behavior.FullResourceNameRx.MatchString(fullName) {
-			continue
-		}
-		if scopeName != "" && behavior.ScopeRx != "" && !behavior.ScopeRx.MatchString(scopeName) {
-			continue
-		}
-
-		// merge `behavior` into `result`
-		if result.MaxBurstMultiplier > behavior.MaxBurstMultiplier {
-			result.MaxBurstMultiplier = behavior.MaxBurstMultiplier
-		}
-		if behavior.OvercommitFactor != 0 {
-			result.OvercommitFactor = behavior.OvercommitFactor
-		}
-		if behavior.ScalingFactor != 0 {
-			result.ScalesWithServiceType = behavior.ScalesWithServiceType
-			result.ScalesWithResourceName = behavior.ScalesWithResourceName
-			result.ScalingFactor = behavior.ScalingFactor
-		}
-		if result.MinNonZeroProjectQuota < behavior.MinNonZeroProjectQuota {
-			result.MinNonZeroProjectQuota = behavior.MinNonZeroProjectQuota
-		}
-		if len(behavior.Annotations) > 0 && result.Annotations == nil {
-			result.Annotations = make(map[string]interface{})
-		}
-		for k, v := range behavior.Annotations {
-			result.Annotations[k] = v
+	for _, behavior := range c.Config.ResourceBehaviors {
+		if behavior.Matches(fullName, scopeName) {
+			result.Merge(behavior)
 		}
 	}
 

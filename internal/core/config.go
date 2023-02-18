@@ -21,9 +21,7 @@ package core
 
 import (
 	"fmt"
-	"math"
 	"os"
-	"strings"
 
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
@@ -47,7 +45,7 @@ type ClusterConfiguration struct {
 	Subresources             map[string][]string               `yaml:"subresources"`
 	Subcapacities            map[string][]string               `yaml:"subcapacities"`
 	LowPrivilegeRaise        LowPrivilegeRaiseConfiguration    `yaml:"lowpriv_raise"`
-	ResourceBehaviors        []*ResourceBehaviorConfiguration  `yaml:"resource_behavior"`
+	ResourceBehaviors        []ResourceBehavior                `yaml:"resource_behavior"`
 	Bursting                 BurstingConfiguration             `yaml:"bursting"`
 	QuotaDistributionConfigs []*QuotaDistributionConfiguration `yaml:"quota_distribution_configs"`
 }
@@ -135,47 +133,6 @@ func (l LowPrivilegeRaiseConfiguration) IsAllowedForProjectsIn(domainName string
 	return l.IncludeProjectDomainRx.MatchString(domainName)
 }
 
-// ResourceBehaviorConfiguration contains the configuration options for
-// specialized behaviors of a single resource (or a set of resources) in a
-// certain cluster.
-type ResourceBehaviorConfiguration struct {
-	FullResourceNameRx     regexpext.BoundedRegexp            `yaml:"resource"`
-	ScopeRx                regexpext.BoundedRegexp            `yaml:"scope"`
-	MaxBurstMultiplier     *limesresources.BurstingMultiplier `yaml:"max_burst_multiplier"`
-	OvercommitFactor       float64                            `yaml:"overcommit_factor"`
-	ScalesWith             string                             `yaml:"scales_with"`
-	ScalingFactor          float64                            `yaml:"scaling_factor"`
-	MinNonZeroProjectQuota uint64                             `yaml:"min_nonzero_project_quota"`
-	Annotations            map[string]interface{}             `yaml:"annotations"`
-	Compiled               ResourceBehavior                   `yaml:"-"`
-}
-
-// ResourceBehavior is the compiled version of ResourceBehaviorConfiguration.
-type ResourceBehavior struct {
-	FullResourceNameRx     regexpext.BoundedRegexp
-	ScopeRx                regexpext.BoundedRegexp
-	MaxBurstMultiplier     limesresources.BurstingMultiplier
-	OvercommitFactor       float64
-	ScalesWithResourceName string
-	ScalesWithServiceType  string
-	ScalingFactor          float64
-	MinNonZeroProjectQuota uint64
-	Annotations            map[string]interface{}
-}
-
-// ToScalingBehavior returns the limes.ScalingBehavior for this resource, or nil
-// if no scaling has been configured.
-func (b ResourceBehavior) ToScalingBehavior() *limesresources.ScalingBehavior {
-	if b.ScalesWithResourceName == "" {
-		return nil
-	}
-	return &limesresources.ScalingBehavior{
-		ScalesWithServiceType:  b.ScalesWithServiceType,
-		ScalesWithResourceName: b.ScalesWithResourceName,
-		ScalingFactor:          b.ScalingFactor,
-	}
-}
-
 // BurstingConfiguration contains the configuration options for quota bursting.
 type BurstingConfiguration struct {
 	//If MaxMultiplier is zero, bursting is disabled.
@@ -237,7 +194,7 @@ func (cluster ClusterConfiguration) validateConfig() (success bool) {
 	success = true //until proven otherwise
 
 	missing := func(key string) {
-		logg.Error("missing %s configuration value", key)
+		logg.Error("missing configuration value: %s", key)
 		success = false
 	}
 
@@ -265,45 +222,9 @@ func (cluster ClusterConfiguration) validateConfig() (success bool) {
 	}
 
 	for idx, behavior := range cluster.ResourceBehaviors {
-		behavior.Compiled = ResourceBehavior{
-			FullResourceNameRx:     behavior.FullResourceNameRx,
-			ScopeRx:                behavior.ScopeRx,
-			OvercommitFactor:       behavior.OvercommitFactor,
-			MinNonZeroProjectQuota: behavior.MinNonZeroProjectQuota,
-			Annotations:            behavior.Annotations,
-		}
-
-		if behavior.FullResourceNameRx == "" {
-			missing(fmt.Sprintf(`resource_behavior[%d].resource`, idx))
-		}
-
-		if behavior.MaxBurstMultiplier != nil {
-			behavior.Compiled.MaxBurstMultiplier = *behavior.MaxBurstMultiplier
-			if *behavior.MaxBurstMultiplier < 0 {
-				logg.Error(`resource_behavior[%d].max_burst_multiplier may not be negative`, idx)
-				success = false
-			}
-		} else {
-			behavior.Compiled.MaxBurstMultiplier = limesresources.BurstingMultiplier(math.Inf(+1))
-		}
-
-		if behavior.ScalesWith != "" {
-			if behavior.ScalingFactor == 0 {
-				missing(fmt.Sprintf(
-					`resource_behavior[%d].scaling_factor (must be given since "scales_with" is given)`,
-					idx,
-				))
-			} else {
-				if strings.Contains(behavior.ScalesWith, "/") {
-					fields := strings.SplitN(behavior.ScalesWith, "/", 2)
-					behavior.Compiled.ScalesWithServiceType = fields[0]
-					behavior.Compiled.ScalesWithResourceName = fields[1]
-					behavior.Compiled.ScalingFactor = behavior.ScalingFactor
-				} else {
-					logg.Error(`resource_behavior[%d].scales_with must have the format "service_type/resource_name"`, idx)
-					success = false
-				}
-			}
+		for _, err := range behavior.Validate(fmt.Sprintf("resource_behavior[%d]", idx)) {
+			logg.Error(err.Error())
+			success = false
 		}
 	}
 
