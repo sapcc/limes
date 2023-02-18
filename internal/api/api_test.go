@@ -112,7 +112,8 @@ func setupTest(t *testing.T, startData string) (*core.Cluster, *gorp.DbMap, http
 	if startData != "fixtures/start-data-inconsistencies.sql" {
 		clusterConfig.Services = []core.ServiceConfiguration{
 			{
-				Type: "shared",
+				ServiceType: "shared",
+				PluginType:  "shared", //TODO: dummy value
 				RateLimits: core.ServiceRateLimitConfiguration{
 					Global: []core.RateLimitConfiguration{
 						{
@@ -151,7 +152,8 @@ func setupTest(t *testing.T, startData string) (*core.Cluster, *gorp.DbMap, http
 				},
 			},
 			{
-				Type: "unshared",
+				ServiceType: "unshared",
+				PluginType:  "unshared", //TODO: dummy value
 				RateLimits: core.ServiceRateLimitConfiguration{
 					ProjectDefault: []core.RateLimitConfiguration{
 						{
@@ -177,7 +179,10 @@ func setupTest(t *testing.T, startData string) (*core.Cluster, *gorp.DbMap, http
 			},
 		}
 		if hasCentralizedService {
-			clusterConfig.Services = append(clusterConfig.Services, core.ServiceConfiguration{Type: "centralized"})
+			clusterConfig.Services = append(clusterConfig.Services, core.ServiceConfiguration{
+				ServiceType: "centralized",
+				PluginType:  "centralized", //TODO: dummy value
+			})
 		}
 	}
 

@@ -78,16 +78,16 @@ func NewCluster(config ClusterConfiguration) *Cluster {
 	}
 
 	for _, srv := range config.Services {
-		plugin := QuotaPluginRegistry.Instantiate(srv.Type)
+		plugin := QuotaPluginRegistry.Instantiate(srv.PluginType)
 		if plugin == nil {
-			logg.Error("skipping service %s: no suitable collector plugin found", srv.Type)
+			logg.Error("skipping service %s: no suitable collector plugin found", srv.ServiceType)
 			continue
 		}
-		c.QuotaPlugins[srv.Type] = plugin
+		c.QuotaPlugins[srv.PluginType] = plugin
 	}
 
 	for _, capa := range config.Capacitors {
-		plugin := CapacityPluginRegistry.Instantiate(capa.Type)
+		plugin := CapacityPluginRegistry.Instantiate(capa.PluginType)
 		if plugin == nil {
 			logg.Error("skipping capacitor %s: no suitable capacity plugin found", capa.ID)
 			continue
@@ -161,18 +161,18 @@ func (c *Cluster) Connect() (err error) {
 	//initialize quota plugins
 	for _, srv := range c.Config.Services {
 		scrapeSubresources := map[string]bool{}
-		for _, resName := range c.Config.Subresources[srv.Type] {
+		for _, resName := range c.Config.Subresources[srv.ServiceType] {
 			scrapeSubresources[resName] = true
 		}
 
-		plugin := c.QuotaPlugins[srv.Type]
+		plugin := c.QuotaPlugins[srv.ServiceType]
 		err = yaml.UnmarshalStrict([]byte(srv.Parameters), plugin)
 		if err != nil {
-			return fmt.Errorf("failed to supply params to service %s: %w", srv.Type, err)
+			return fmt.Errorf("failed to supply params to service %s: %w", srv.ServiceType, err)
 		}
 		err := plugin.Init(provider, eo, scrapeSubresources)
 		if err != nil {
-			return fmt.Errorf("failed to initialize service %s: %w", srv.Type, util.UnpackError(err))
+			return fmt.Errorf("failed to initialize service %s: %w", srv.ServiceType, util.UnpackError(err))
 		}
 	}
 

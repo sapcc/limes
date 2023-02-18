@@ -55,7 +55,7 @@ type ClusterConfiguration struct {
 // GetServiceConfigurationForType returns the ServiceConfiguration or an error.
 func (cluster *ClusterConfiguration) GetServiceConfigurationForType(serviceType string) (ServiceConfiguration, error) {
 	for _, svc := range cluster.Services {
-		if serviceType == svc.Type {
+		if serviceType == svc.ServiceType {
 			return svc, nil
 		}
 	}
@@ -73,7 +73,8 @@ type DiscoveryConfiguration struct {
 
 // ServiceConfiguration describes a service that is enabled for a certain cluster.
 type ServiceConfiguration struct {
-	Type string `yaml:"type"`
+	ServiceType string `yaml:"service_type"`
+	PluginType  string `yaml:"type"`
 	// RateLimits describes the global rate limits (all requests for to a backend) and default project level rate limits.
 	RateLimits ServiceRateLimitConfiguration `yaml:"rate_limits"`
 	Parameters util.YamlRawMessage           `yaml:"params"`
@@ -107,7 +108,7 @@ type RateLimitConfiguration struct {
 // certain cluster.
 type CapacitorConfiguration struct {
 	ID         string              `yaml:"id"`
-	Type       string              `yaml:"type"`
+	PluginType string              `yaml:"type"`
 	Parameters util.YamlRawMessage `yaml:"params"`
 }
 
@@ -247,7 +248,10 @@ func (cluster ClusterConfiguration) validateConfig() (success bool) {
 	//NOTE: cluster.Capacitors is optional
 
 	for idx, srv := range cluster.Services {
-		if srv.Type == "" {
+		if srv.ServiceType == "" {
+			missing(fmt.Sprintf("services[%d].id", idx))
+		}
+		if srv.PluginType == "" {
 			missing(fmt.Sprintf("services[%d].type", idx))
 		}
 	}
@@ -255,7 +259,7 @@ func (cluster ClusterConfiguration) validateConfig() (success bool) {
 		if capa.ID == "" {
 			missing(fmt.Sprintf("capacitors[%d].id", idx))
 		}
-		if capa.Type == "" {
+		if capa.PluginType == "" {
 			missing(fmt.Sprintf("capacitors[%d].type", idx))
 		}
 	}
