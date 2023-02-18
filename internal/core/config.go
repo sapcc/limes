@@ -316,6 +316,7 @@ func (cluster ClusterConfiguration) validateConfig() (success bool) {
 		case limesresources.HierarchicalQuotaDistribution:
 			if qdCfg.DefaultProjectQuota != 0 {
 				logg.Error("distribution_model_configs[%d].default_project_quota is invalid: not allowed for hierarchical distribution", idx)
+				success = false
 			}
 		case limesresources.CentralizedQuotaDistribution:
 			if qdCfg.DefaultProjectQuota == 0 {
@@ -323,6 +324,7 @@ func (cluster ClusterConfiguration) validateConfig() (success bool) {
 			}
 			if qdCfg.StrictDomainQuotaLimit {
 				logg.Error("invalid value for distribution_model_configs[%d].strict_domain_quota_limit: not allowed for centralized distribution", idx)
+				success = false
 			}
 		default:
 			logg.Error("invalid value for distribution_model_configs[%d].model: %q", idx, qdCfg.Model)

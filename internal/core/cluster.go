@@ -80,8 +80,7 @@ func NewCluster(config ClusterConfiguration) *Cluster {
 	for _, srv := range config.Services {
 		plugin := QuotaPluginRegistry.Instantiate(srv.PluginType)
 		if plugin == nil {
-			logg.Error("skipping service %s: no suitable collector plugin found", srv.ServiceType)
-			continue
+			logg.Fatal("setup for service %s failed: no suitable quota plugin found", srv.ServiceType)
 		}
 		c.QuotaPlugins[srv.PluginType] = plugin
 	}
@@ -89,8 +88,7 @@ func NewCluster(config ClusterConfiguration) *Cluster {
 	for _, capa := range config.Capacitors {
 		plugin := CapacityPluginRegistry.Instantiate(capa.PluginType)
 		if plugin == nil {
-			logg.Error("skipping capacitor %s: no suitable capacity plugin found", capa.ID)
-			continue
+			logg.Fatal("setup for capacitor %s failed: no suitable capacity plugin found", capa.ID)
 		}
 		c.CapacityPlugins[capa.ID] = plugin
 	}
