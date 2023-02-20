@@ -68,9 +68,12 @@ func (p *DiscoveryPlugin) ListDomains(provider *gophercloud.ProviderClient, eo g
 
 // ListProjects implements the core.DiscoveryPlugin interface.
 func (p *DiscoveryPlugin) ListProjects(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domain core.KeystoneDomain) ([]core.KeystoneProject, error) {
-	result := p.StaticProjects[domain.UUID]
-	for _, project := range result {
-		project.Domain = domain
+	//the domain is not duplicated in each StaticProjects entry, so it must be
+	//added now
+	result := make([]core.KeystoneProject, len(p.StaticProjects[domain.UUID]))
+	for idx, project := range p.StaticProjects[domain.UUID] {
+		result[idx] = project
+		result[idx].Domain = domain
 	}
 	return result, nil
 }
