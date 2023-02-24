@@ -26,6 +26,7 @@ import (
 	"sort"
 	"strconv"
 
+	"github.com/gophercloud/gophercloud"
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
@@ -40,7 +41,6 @@ import (
 // Cluster contains all configuration and runtime information for the target
 // cluster.
 type Cluster struct {
-	Auth              *AuthSession
 	Config            ClusterConfiguration
 	DiscoveryPlugin   DiscoveryPlugin
 	QuotaPlugins      map[string]QuotaPlugin
@@ -139,18 +139,9 @@ func (c *Cluster) SetupOPA(domainQuotaPolicyPath, projectQuotaPolicyPath string)
 //
 // We cannot do any of this earlier because we only know all resources after
 // calling Init() on all quota plugins.
-func (c *Cluster) Connect() (errs ErrorSet) {
-	var err error
-	c.Auth, err = AuthToOpenstack()
-	if err != nil {
-		errs.Addf("failed to authenticate: %w", err)
-		return errs
-	}
-	provider := c.Auth.ProviderClient
-	eo := c.Auth.EndpointOpts
-
+func (c *Cluster) Connect(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (errs ErrorSet) {
 	//initialize discovery plugin
-	err = yaml.UnmarshalStrict([]byte(c.Config.Discovery.Parameters), c.DiscoveryPlugin)
+	err := yaml.UnmarshalStrict([]byte(c.Config.Discovery.Parameters), c.DiscoveryPlugin)
 	if err != nil {
 		errs.Addf("failed to supply params to discovery method: %w", err)
 	} else {

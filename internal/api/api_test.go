@@ -186,7 +186,6 @@ func setupTest(t *testing.T, startData string) (*core.Cluster, *gorp.DbMap, http
 	}
 
 	cluster := &core.Cluster{
-		Auth:            &core.AuthSession{},
 		DiscoveryPlugin: test.NewDiscoveryPlugin(),
 		QuotaPlugins:    quotaPlugins,
 		CapacityPlugins: map[string]core.CapacityPlugin{},
