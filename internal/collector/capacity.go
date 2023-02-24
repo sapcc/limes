@@ -73,9 +73,8 @@ func (c *Collector) scanCapacity() {
 		clusterCapacitorSuccessCounter.With(labels).Add(0)
 		clusterCapacitorFailedCounter.With(labels).Add(0)
 
-		provider, eo := c.Cluster.ProviderClient()
 		scrapeStart := c.TimeNow()
-		capacities, serializedMetrics, err := plugin.Scrape(provider, eo)
+		capacities, serializedMetrics, err := plugin.Scrape()
 		scrapeDuration := c.TimeNow().Sub(scrapeStart)
 		if err != nil {
 			c.LogError("scan capacity with capacitor %s failed: %s", capacitorID, util.UnpackError(err).Error())

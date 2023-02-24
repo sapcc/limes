@@ -97,8 +97,7 @@ func ApplyBackendQuota(dbi db.Interface, cluster *core.Cluster, domain core.Keys
 	}
 
 	//apply quotas in backend
-	provider, eo := cluster.ProviderClient()
-	err = plugin.SetQuota(provider, eo, core.KeystoneProjectFromDB(project, domain), targetQuotasForBackend)
+	err = plugin.SetQuota(core.KeystoneProjectFromDB(project, domain), targetQuotasForBackend)
 	if err != nil {
 		return err
 	}

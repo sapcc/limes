@@ -31,7 +31,10 @@ import (
 	"github.com/sapcc/limes/internal/core"
 )
 
-type keppelPlugin struct{}
+type keppelPlugin struct {
+	//connections
+	KeppelV1 *keppelClient `yaml:"-"`
+}
 
 var keppelResources = []limesresources.ResourceInfo{
 	{
@@ -45,8 +48,9 @@ func init() {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *keppelPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubresources map[string]bool) error {
-	return nil
+func (p *keppelPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubresources map[string]bool) (err error) {
+	p.KeppelV1, err = newKeppelClient(provider, eo)
+	return err
 }
 
 // PluginTypeID implements the core.QuotaPlugin interface.
@@ -74,17 +78,13 @@ func (p *keppelPlugin) Rates() []limesrates.RateInfo {
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *keppelPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+func (p *keppelPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *keppelPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics string, err error) {
-	client, err := newKeppelClient(provider, eo)
-	if err != nil {
-		return nil, "", err
-	}
-	quotas, err := client.GetQuota(project.UUID)
+func (p *keppelPlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics string, err error) {
+	quotas, err := p.KeppelV1.GetQuota(project.UUID)
 	if err != nil {
 		return nil, "", err
 	}
@@ -97,21 +97,16 @@ func (p *keppelPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 }
 
 // IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
-func (p *keppelPlugin) IsQuotaAcceptableForProject(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
+func (p *keppelPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, quotas map[string]uint64) error {
 	//not required for this plugin
 	return nil
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *keppelPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
-	client, err := newKeppelClient(provider, eo)
-	if err != nil {
-		return err
-	}
-
+func (p *keppelPlugin) SetQuota(project core.KeystoneProject, quotas map[string]uint64) error {
 	var qs keppelQuotaSet
 	qs.Manifests.Quota = int64(quotas["images"])
-	return client.SetQuota(project.UUID, qs)
+	return p.KeppelV1.SetQuota(project.UUID, qs)
 }
 
 // DescribeMetrics implements the core.QuotaPlugin interface.

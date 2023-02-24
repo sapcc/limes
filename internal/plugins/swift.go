@@ -38,7 +38,10 @@ import (
 	"github.com/sapcc/limes/internal/core"
 )
 
-type swiftPlugin struct{}
+type swiftPlugin struct {
+	//connections
+	ResellerAccount *schwift.Account `yaml:"-"`
+}
 
 var swiftResources = []limesresources.ResourceInfo{
 	{
@@ -80,7 +83,12 @@ func init() {
 
 // Init implements the core.QuotaPlugin interface.
 func (p *swiftPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubresources map[string]bool) error {
-	return nil
+	client, err := openstack.NewObjectStorageV1(provider, eo)
+	if err != nil {
+		return err
+	}
+	p.ResellerAccount, err = gopherschwift.Wrap(client, nil)
+	return err
 }
 
 // PluginTypeID implements the core.QuotaPlugin interface.
@@ -107,30 +115,18 @@ func (p *swiftPlugin) Rates() []limesrates.RateInfo {
 	return nil
 }
 
-func (p *swiftPlugin) Account(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, projectUUID string) (*schwift.Account, error) {
-	client, err := openstack.NewObjectStorageV1(provider, eo)
-	if err != nil {
-		return nil, err
-	}
-	resellerAccount, err := gopherschwift.Wrap(client, nil)
-	if err != nil {
-		return nil, err
-	}
-	return resellerAccount.SwitchAccount("AUTH_" + projectUUID), nil
+func (p *swiftPlugin) Account(projectUUID string) *schwift.Account {
+	return p.ResellerAccount.SwitchAccount("AUTH_" + projectUUID)
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *swiftPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+func (p *swiftPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *swiftPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics string, err error) {
-	account, err := p.Account(provider, eo, project.UUID)
-	if err != nil {
-		return nil, "", err
-	}
-
+func (p *swiftPlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics string, err error) {
+	account := p.Account(project.UUID)
 	headers, err := account.Headers()
 	if schwift.Is(err, http.StatusNotFound) || schwift.Is(err, http.StatusGone) {
 		//Swift account does not exist or was deleted and not yet reaped, but the keystone project exist
@@ -178,24 +174,20 @@ func (p *swiftPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclou
 }
 
 // IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
-func (p *swiftPlugin) IsQuotaAcceptableForProject(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
+func (p *swiftPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, quotas map[string]uint64) error {
 	//not required for this plugin
 	return nil
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *swiftPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
-	account, err := p.Account(provider, eo, project.UUID)
-	if err != nil {
-		return err
-	}
-
+func (p *swiftPlugin) SetQuota(project core.KeystoneProject, quotas map[string]uint64) error {
 	headers := schwift.NewAccountHeaders()
 	headers.BytesUsedQuota().Set(quotas["capacity"])
 	//this header brought to you by https://github.com/sapcc/swift-addons
 	headers.Set("X-Account-Project-Domain-Id-Override", project.Domain.UUID)
 
-	err = account.Update(headers, nil)
+	account := p.Account(project.UUID)
+	err := account.Update(headers, nil)
 	if schwift.Is(err, http.StatusNotFound) && quotas["capacity"] > 0 {
 		//account does not exist yet - if there is a non-zero quota, enable it now
 		err = account.Create(headers.ToOpts())

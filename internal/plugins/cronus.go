@@ -35,7 +35,10 @@ import (
 	"github.com/sapcc/limes/internal/core"
 )
 
-type cronusPlugin struct{}
+type cronusPlugin struct {
+	//connections
+	CronusV1 *cronusClient `yaml:"-"`
+}
 
 var cronusRates = []limesrates.RateInfo{
 	{
@@ -61,8 +64,9 @@ func init() {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubresources map[string]bool) error {
-	return nil
+func (p *cronusPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubresources map[string]bool) (err error) {
+	p.CronusV1, err = newCronusClient(provider, eo)
+	return err
 }
 
 // PluginTypeID implements the core.QuotaPlugin interface.
@@ -90,18 +94,18 @@ func (p *cronusPlugin) Rates() []limesrates.RateInfo {
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics string, err error) {
+func (p *cronusPlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics string, err error) {
 	return nil, "", nil
 }
 
 // IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) IsQuotaAcceptableForProject(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
+func (p *cronusPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, quotas map[string]uint64) error {
 	//not required for this plugin
 	return nil
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
+func (p *cronusPlugin) SetQuota(project core.KeystoneProject, quotas map[string]uint64) error {
 	return nil
 }
 
@@ -118,7 +122,7 @@ type cronusState struct {
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) ScrapeRates(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+func (p *cronusPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
 	//decode `prevSerializedState`
 	var state cronusState
 	if prevSerializedState == "" {
@@ -136,11 +140,7 @@ func (p *cronusPlugin) ScrapeRates(provider *gophercloud.ProviderClient, eo goph
 	}
 
 	//get usage for the current billing period
-	client, err := newCronusClient(provider, eo)
-	if err != nil {
-		return nil, "", err
-	}
-	currentUsage, err := client.GetUsage(project.UUID, false)
+	currentUsage, err := p.CronusV1.GetUsage(project.UUID, false)
 	if err != nil {
 		return nil, "", err
 	}
@@ -152,7 +152,7 @@ func (p *cronusPlugin) ScrapeRates(provider *gophercloud.ProviderClient, eo goph
 	if state.CurrentPeriod.StartDate == currentUsage.StartDate {
 		newSerializedState = prevSerializedState
 	} else {
-		prevUsage, err := client.GetUsage(project.UUID, true)
+		prevUsage, err := p.CronusV1.GetUsage(project.UUID, true)
 		if err != nil {
 			return nil, "", err
 		}

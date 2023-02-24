@@ -34,7 +34,10 @@ import (
 	"github.com/sapcc/limes/internal/core"
 )
 
-type designatePlugin struct{}
+type designatePlugin struct {
+	//connections
+	DesignateV2 *gophercloud.ServiceClient `yaml:"-"`
+}
 
 var designateResources = []limesresources.ResourceInfo{
 	{
@@ -53,8 +56,9 @@ func init() {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *designatePlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubresources map[string]bool) error {
-	return nil
+func (p *designatePlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubresources map[string]bool) (err error) {
+	p.DesignateV2, err = openstack.NewDNSV2(provider, eo)
+	return err
 }
 
 // PluginTypeID implements the core.QuotaPlugin interface.
@@ -82,25 +86,20 @@ func (p *designatePlugin) Rates() []limesrates.RateInfo {
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *designatePlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+func (p *designatePlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *designatePlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics string, err error) {
-	client, err := openstack.NewDNSV2(provider, eo)
-	if err != nil {
-		return nil, "", err
-	}
-
+func (p *designatePlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics string, err error) {
 	//query quotas
-	quotas, err := dnsGetQuota(client, project.UUID)
+	quotas, err := dnsGetQuota(p.DesignateV2, project.UUID)
 	if err != nil {
 		return nil, "", err
 	}
 
 	//to query usage, start by listing all zones
-	zoneIDs, err := dnsListZoneIDs(client, project.UUID)
+	zoneIDs, err := dnsListZoneIDs(p.DesignateV2, project.UUID)
 	if err != nil {
 		return nil, "", err
 	}
@@ -110,7 +109,7 @@ func (p *designatePlugin) Scrape(provider *gophercloud.ProviderClient, eo gopher
 	//but that won't help since the quota applies per individual zone)
 	maxRecordsetsPerZone := uint64(0)
 	for _, zoneID := range zoneIDs {
-		count, err := dnsCountZoneRecordsets(client, project.UUID, zoneID)
+		count, err := dnsCountZoneRecordsets(p.DesignateV2, project.UUID, zoneID)
 		if err != nil {
 			return nil, "", err
 		}
@@ -132,19 +131,14 @@ func (p *designatePlugin) Scrape(provider *gophercloud.ProviderClient, eo gopher
 }
 
 // IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
-func (p *designatePlugin) IsQuotaAcceptableForProject(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
+func (p *designatePlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, quotas map[string]uint64) error {
 	//not required for this plugin
 	return nil
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *designatePlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
-	client, err := openstack.NewDNSV2(provider, eo)
-	if err != nil {
-		return err
-	}
-
-	return dnsSetQuota(client, project.UUID, &dnsQuota{
+func (p *designatePlugin) SetQuota(project core.KeystoneProject, quotas map[string]uint64) error {
+	return dnsSetQuota(p.DesignateV2, project.UUID, &dnsQuota{
 		Zones:          int64(quotas["zones"]),
 		ZoneRecordsets: int64(quotas["recordsets"]),
 		//set ZoneRecords quota to match ZoneRecordsets

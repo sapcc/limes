@@ -28,7 +28,10 @@ import (
 	"github.com/sapcc/limes/internal/core"
 )
 
-type listDiscoveryPlugin struct{}
+type listDiscoveryPlugin struct {
+	//connections
+	KeystoneV3 *gophercloud.ServiceClient `yaml:"-"`
+}
 
 func init() {
 	core.DiscoveryPluginRegistry.Add(func() core.DiscoveryPlugin { return &listDiscoveryPlugin{} })
@@ -40,18 +43,14 @@ func (p *listDiscoveryPlugin) PluginTypeID() string {
 }
 
 // Init implements the core.DiscoveryPlugin interface.
-func (p *listDiscoveryPlugin) Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
-	return nil //not used
+func (p *listDiscoveryPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
+	p.KeystoneV3, err = openstack.NewIdentityV3(provider, eo)
+	return err
 }
 
 // ListDomains implements the core.DiscoveryPlugin interface.
-func (p *listDiscoveryPlugin) ListDomains(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) ([]core.KeystoneDomain, error) {
-	client, err := openstack.NewIdentityV3(provider, eo)
-	if err != nil {
-		return nil, err
-	}
-
-	allPages, err := domains.List(client, nil).AllPages()
+func (p *listDiscoveryPlugin) ListDomains() ([]core.KeystoneDomain, error) {
+	allPages, err := domains.List(p.KeystoneV3, nil).AllPages()
 	if err != nil {
 		return nil, err
 	}
@@ -71,13 +70,8 @@ func (p *listDiscoveryPlugin) ListDomains(provider *gophercloud.ProviderClient, 
 }
 
 // ListProjects implements the core.DiscoveryPlugin interface.
-func (p *listDiscoveryPlugin) ListProjects(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domain core.KeystoneDomain) ([]core.KeystoneProject, error) {
-	client, err := openstack.NewIdentityV3(provider, eo)
-	if err != nil {
-		return nil, err
-	}
-
-	allPages, err := projects.List(client, projects.ListOpts{DomainID: domain.UUID}).AllPages()
+func (p *listDiscoveryPlugin) ListProjects(domain core.KeystoneDomain) ([]core.KeystoneProject, error) {
+	allPages, err := projects.List(p.KeystoneV3, projects.ListOpts{DomainID: domain.UUID}).AllPages()
 	if err != nil {
 		return nil, err
 	}

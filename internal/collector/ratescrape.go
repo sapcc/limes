@@ -25,7 +25,6 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/gophercloud/gophercloud"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
@@ -68,7 +67,6 @@ func (c *Collector) ScrapeRates() {
 	}
 	ratesScrapeSuccessCounter.With(labels).Add(0)
 	ratesScrapeFailedCounter.With(labels).Add(0)
-	ratesScrapeSuspendedCounter.With(labels).Add(0)
 
 	for {
 		var (
@@ -94,21 +92,8 @@ func (c *Collector) ScrapeRates() {
 
 		logg.Debug("scraping %s rates for %s/%s", serviceType, project.Domain.Name, project.Name)
 		srv := db.ProjectServiceRef{Type: serviceType, ID: serviceID}
-		provider, eo := c.Cluster.ProviderClient()
-		rateData, serviceRatesScrapeState, err := c.Plugin.ScrapeRates(provider, eo, project, serviceRatesScrapeState)
+		rateData, serviceRatesScrapeState, err := c.Plugin.ScrapeRates(project, serviceRatesScrapeState)
 		scrapeEndedAt := c.TimeNow()
-
-		//special case: stop scraping for a while when the backend service is not
-		//yet registered in the catalog (this prevents log spamming during buildup)
-		if _, ok := err.(*gophercloud.ErrEndpointNotFound); ok {
-			c.LogError("suspending %s rate scraping for %d minutes: %s", serviceType, serviceNotDeployedIdleInterval/time.Minute, err.Error())
-			ratesScrapeSuspendedCounter.With(labels).Inc()
-			if c.Once {
-				return
-			}
-			time.Sleep(serviceNotDeployedIdleInterval)
-			continue
-		}
 
 		//write result on success; if anything fails, try to record the error in the DB
 		if err == nil {

@@ -25,7 +25,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/gophercloud/gophercloud"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/logg"
@@ -40,8 +39,6 @@ import (
 const (
 	//how long to sleep after a scraping error, or when nothing needed scraping
 	idleInterval = 5 * time.Second
-	//how long to sleep when scraping fails because the backend service is not in the catalog
-	serviceNotDeployedIdleInterval = 5 * time.Minute
 	//how long to wait before scraping the same project and service again
 	scrapeInterval = 30 * time.Minute
 	//how long to wait before re-checking a project service that failed scraping
@@ -78,7 +75,6 @@ func (c *Collector) Scrape() {
 	}
 	scrapeSuccessCounter.With(labels).Add(0)
 	scrapeFailedCounter.With(labels).Add(0)
-	scrapeSuspendedCounter.With(labels).Add(0)
 
 	for {
 		//find service to scrape
@@ -99,21 +95,8 @@ func (c *Collector) Scrape() {
 		project := core.KeystoneProjectFromDB(dbProject, domain)
 
 		logg.Debug("scraping %s resources for %s/%s", serviceType, dbDomain.Name, dbProject.Name)
-		provider, eo := c.Cluster.ProviderClient()
-		resourceData, serializedMetrics, err := c.Plugin.Scrape(provider, eo, project)
+		resourceData, serializedMetrics, err := c.Plugin.Scrape(project)
 		scrapeEndedAt := c.TimeNow()
-
-		//special case: stop scraping for a while when the backend service is not
-		//yet registered in the catalog (this prevents log spamming during buildup)
-		if _, ok := err.(*gophercloud.ErrEndpointNotFound); ok {
-			c.LogError("suspending %s resource scraping for %d minutes: %s", serviceType, serviceNotDeployedIdleInterval/time.Minute, err.Error())
-			scrapeSuspendedCounter.With(labels).Inc()
-			if c.Once {
-				return
-			}
-			time.Sleep(serviceNotDeployedIdleInterval)
-			continue
-		}
 
 		//write result on success; if anything fails, try to record the error in the DB
 		if err == nil {

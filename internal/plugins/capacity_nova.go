@@ -41,11 +41,16 @@ import (
 )
 
 type capacityNovaPlugin struct {
-	reportSubcapacities      map[string]bool       `yaml:"-"`
+	//configuration
 	AggregateNameRx          regexpext.PlainRegexp `yaml:"aggregate_name_pattern"`
 	MaxInstancesPerAggregate uint64                `yaml:"max_instances_per_aggregate"`
 	ExtraSpecs               map[string]string     `yaml:"extra_specs"`
 	HypervisorTypeRx         regexpext.PlainRegexp `yaml:"hypervisor_type_pattern"`
+	//computed state
+	reportSubcapacities map[string]bool `yaml:"-"`
+	//connections
+	NovaV2      *gophercloud.ServiceClient `yaml:"-"`
+	PlacementV1 *gophercloud.ServiceClient `yaml:"-"`
 }
 
 type capacityNovaSerializedMetrics struct {
@@ -74,6 +79,15 @@ func (p *capacityNovaPlugin) Init(provider *gophercloud.ProviderClient, eo gophe
 		return errors.New("missing value for nova.max_instances_per_aggregate")
 	}
 
+	p.NovaV2, err = openstack.NewComputeV2(provider, eo)
+	if err != nil {
+		return err
+	}
+	p.PlacementV1, err = openstack.NewPlacementV1(provider, eo)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -83,18 +97,9 @@ func (p *capacityNovaPlugin) PluginTypeID() string {
 }
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (result map[string]map[string]core.CapacityData, serializedMetrics string, err error) {
-	novaClient, err := openstack.NewComputeV2(provider, eo)
-	if err != nil {
-		return nil, "", err
-	}
-	placementClient, err := openstack.NewPlacementV1(provider, eo)
-	if err != nil {
-		return nil, "", err
-	}
-
+func (p *capacityNovaPlugin) Scrape() (result map[string]map[string]core.CapacityData, serializedMetrics string, err error) {
 	//enumerate aggregates which establish the hypervisor <-> AZ mapping
-	page, err := aggregates.List(novaClient).AllPages()
+	page, err := aggregates.List(p.NovaV2).AllPages()
 	if err != nil {
 		return nil, "", err
 	}
@@ -106,7 +111,7 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 	//enumerate hypervisors (cannot use type Hypervisor provided by Gophercloud;
 	//in our clusters, it breaks because some hypervisor report unexpected NULL
 	//values on fields that we are not even interested in)
-	page, err = hypervisors.List(novaClient, nil).AllPages()
+	page, err = hypervisors.List(p.NovaV2, nil).AllPages()
 	if err != nil {
 		return nil, "", err
 	}
@@ -119,7 +124,7 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 	}
 
 	//enumerate resource providers (we need to match these to the hypervisors later)
-	page, err = resourceproviders.List(placementClient, nil).AllPages()
+	page, err = resourceproviders.List(p.PlacementV1, nil).AllPages()
 	if err != nil {
 		return nil, "", err
 	}
@@ -129,7 +134,7 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 	}
 
 	//for the instances capacity, we need to know the max root disk size on public flavors
-	maxRootDiskSize, err := getMaxRootDiskSize(novaClient, p.ExtraSpecs)
+	maxRootDiskSize, err := getMaxRootDiskSize(p.NovaV2, p.ExtraSpecs)
 	if err != nil {
 		return nil, "", err
 	}
@@ -152,7 +157,7 @@ func (p *capacityNovaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gop
 		}
 
 		//query Placement API for hypervisor capacity
-		hvCapacity, err := hypervisor.getCapacity(placementClient, allResourceProviders)
+		hvCapacity, err := hypervisor.getCapacity(p.PlacementV1, allResourceProviders)
 		if err != nil {
 			return nil, "", fmt.Errorf(
 				"cannot get capacity for hypervisor %s with .service.host %q from Placement API (falling back to Nova Hypervisor API): %s",

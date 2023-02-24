@@ -47,7 +47,7 @@ func (p *capacityPrometheusPlugin) PluginTypeID() string {
 }
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *capacityPrometheusPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (result map[string]map[string]core.CapacityData, _ string, err error) {
+func (p *capacityPrometheusPlugin) Scrape() (result map[string]map[string]core.CapacityData, _ string, err error) {
 	client, err := p.APIConfig.Connect()
 	if err != nil {
 		return nil, "", err

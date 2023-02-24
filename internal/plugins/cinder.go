@@ -39,9 +39,13 @@ import (
 )
 
 type cinderPlugin struct {
-	VolumeTypes     []string `yaml:"volume_types"`
-	scrapeVolumes   bool     `yaml:"-"`
-	scrapeSnapshots bool     `yaml:"-"`
+	//configuration
+	VolumeTypes []string `yaml:"volume_types"`
+	//computed state
+	scrapeVolumes   bool `yaml:"-"`
+	scrapeSnapshots bool `yaml:"-"`
+	//connections
+	CinderV3 *gophercloud.ServiceClient `yaml:"-"`
 }
 
 func init() {
@@ -49,13 +53,15 @@ func init() {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *cinderPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubresources map[string]bool) error {
+func (p *cinderPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubresources map[string]bool) (err error) {
 	p.scrapeVolumes = scrapeSubresources["volumes"]
 	p.scrapeSnapshots = scrapeSubresources["snapshots"]
 	if len(p.VolumeTypes) == 0 {
 		return errors.New("quota plugin volumev2: missing required configuration field volumev2.volume_types")
 	}
-	return nil
+
+	p.CinderV3, err = openstack.NewBlockStorageV3(provider, eo)
+	return err
 }
 
 // PluginTypeID implements the core.QuotaPlugin interface.
@@ -143,16 +149,12 @@ func (f quotaSetField) ToResourceData(subresources []interface{}) core.ResourceD
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *cinderPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+func (p *cinderPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *cinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (result map[string]core.ResourceData, _ string, err error) {
-	client, err := openstack.NewBlockStorageV3(provider, eo)
-	if err != nil {
-		return nil, "", err
-	}
+func (p *cinderPlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, _ string, err error) {
 	isVolumeType := make(map[string]bool)
 	for _, volumeType := range p.VolumeTypes {
 		isVolumeType[volumeType] = true
@@ -161,7 +163,7 @@ func (p *cinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 	var data struct {
 		QuotaSet map[string]quotaSetField `json:"quota_set"`
 	}
-	err = quotasets.GetUsage(client, project.UUID).ExtractInto(&data)
+	err = quotasets.GetUsage(p.CinderV3, project.UUID).ExtractInto(&data)
 	if err != nil {
 		return nil, "", err
 	}
@@ -175,7 +177,7 @@ func (p *cinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 		//NOTE: Even if we only want snapshot subresources, we have to collect
 		//volume subresources because the link between snapshots and volume types
 		//requires volume-level metadata.
-		volumeData, volumeTypeForVolumeUUID, err = p.collectVolumeSubresources(client, project, isVolumeType)
+		volumeData, volumeTypeForVolumeUUID, err = p.collectVolumeSubresources(project, isVolumeType)
 		if err != nil {
 			return nil, "", err
 		}
@@ -184,7 +186,7 @@ func (p *cinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 		}
 	}
 	if p.scrapeSnapshots {
-		snapshotData, err = p.collectSnapshotSubresources(client, project, isVolumeType, volumeTypeForVolumeUUID)
+		snapshotData, err = p.collectSnapshotSubresources(project, isVolumeType, volumeTypeForVolumeUUID)
 		if err != nil {
 			return nil, "", err
 		}
@@ -215,7 +217,7 @@ type cinderSnapshotSubresource struct {
 	VolumeUUID string              `json:"volume_id"`
 }
 
-func (p *cinderPlugin) collectVolumeSubresources(client *gophercloud.ServiceClient, project core.KeystoneProject, isVolumeType map[string]bool) (volumeData map[string][]any, volumeTypeForVolumeUUID map[string]string, err error) {
+func (p *cinderPlugin) collectVolumeSubresources(project core.KeystoneProject, isVolumeType map[string]bool) (volumeData map[string][]any, volumeTypeForVolumeUUID map[string]string, err error) {
 	volumeData = make(map[string][]any)
 	volumeTypeForVolumeUUID = make(map[string]string)
 	listOpts := volumes.ListOpts{
@@ -223,7 +225,7 @@ func (p *cinderPlugin) collectVolumeSubresources(client *gophercloud.ServiceClie
 		TenantID:   project.UUID,
 	}
 
-	err = volumes.List(client, listOpts).EachPage(func(page pagination.Page) (bool, error) {
+	err = volumes.List(p.CinderV3, listOpts).EachPage(func(page pagination.Page) (bool, error) {
 		vols, err := volumes.ExtractVolumes(page)
 		if err != nil {
 			return false, err
@@ -253,14 +255,14 @@ func (p *cinderPlugin) collectVolumeSubresources(client *gophercloud.ServiceClie
 	return volumeData, volumeTypeForVolumeUUID, err
 }
 
-func (p *cinderPlugin) collectSnapshotSubresources(client *gophercloud.ServiceClient, project core.KeystoneProject, isVolumeType map[string]bool, volumeTypeForVolumeUUID map[string]string) (snapshotData map[string][]any, err error) {
+func (p *cinderPlugin) collectSnapshotSubresources(project core.KeystoneProject, isVolumeType map[string]bool, volumeTypeForVolumeUUID map[string]string) (snapshotData map[string][]any, err error) {
 	snapshotData = make(map[string][]any)
 	listOpts := snapshots.ListOpts{
 		AllTenants: true,
 		TenantID:   project.UUID,
 	}
 
-	err = snapshots.List(client, listOpts).EachPage(func(page pagination.Page) (bool, error) {
+	err = snapshots.List(p.CinderV3, listOpts).EachPage(func(page pagination.Page) (bool, error) {
 		snaps, err := snapshots.ExtractSnapshots(page)
 		if err != nil {
 			return false, err
@@ -290,13 +292,13 @@ func (p *cinderPlugin) collectSnapshotSubresources(client *gophercloud.ServiceCl
 }
 
 // IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
-func (p *cinderPlugin) IsQuotaAcceptableForProject(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
+func (p *cinderPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, quotas map[string]uint64) error {
 	//not required for this plugin
 	return nil
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *cinderPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
+func (p *cinderPlugin) SetQuota(project core.KeystoneProject, quotas map[string]uint64) error {
 	var requestData struct {
 		QuotaSet map[string]uint64 `json:"quota_set"`
 	}
@@ -316,13 +318,8 @@ func (p *cinderPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherc
 		requestData.QuotaSet["volumes"] += quotaVolumes
 	}
 
-	client, err := openstack.NewBlockStorageV3(provider, eo)
-	if err != nil {
-		return err
-	}
-
-	url := client.ServiceURL("os-quota-sets", project.UUID)
-	_, err = client.Put(url, requestData, nil, &gophercloud.RequestOpts{OkCodes: []int{200}}) //nolint:bodyclose // already closed by gophercloud
+	url := p.CinderV3.ServiceURL("os-quota-sets", project.UUID)
+	_, err := p.CinderV3.Put(url, requestData, nil, &gophercloud.RequestOpts{OkCodes: []int{200}}) //nolint:bodyclose // already closed by gophercloud
 	return err
 }
 

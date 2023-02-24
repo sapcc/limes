@@ -34,11 +34,14 @@ import (
 )
 
 type capacityManilaPlugin struct {
+	//configuration
 	ShareTypes        []ManilaShareTypeSpec `yaml:"share_types"`
 	ShareNetworks     uint64                `yaml:"share_networks"`
 	SharesPerPool     uint64                `yaml:"shares_per_pool"`
 	SnapshotsPerShare uint64                `yaml:"snapshots_per_share"`
 	CapacityBalance   float64               `yaml:"capacity_balance"`
+	//connections
+	ManilaV2 *gophercloud.ServiceClient `yaml:"-"`
 }
 
 func init() {
@@ -46,7 +49,7 @@ func init() {
 }
 
 // Init implements the core.CapacityPlugin interface.
-func (p *capacityManilaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubcapacities map[string]map[string]bool) error {
+func (p *capacityManilaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubcapacities map[string]map[string]bool) (err error) {
 	if len(p.ShareTypes) == 0 {
 		return errors.New("capacity plugin manila: missing required configuration field manila.share_types")
 	}
@@ -59,6 +62,12 @@ func (p *capacityManilaPlugin) Init(provider *gophercloud.ProviderClient, eo gop
 	if p.SnapshotsPerShare == 0 {
 		return errors.New("capacity plugin manila: missing required configuration field manila.snapshots_per_share")
 	}
+
+	p.ManilaV2, err = openstack.NewSharedFileSystemV2(provider, eo)
+	if err != nil {
+		return err
+	}
+	p.ManilaV2.Microversion = "2.23" //required for filtering pools by share_type
 	return nil
 }
 
@@ -77,14 +86,8 @@ func (p *capacityManilaPlugin) makeResourceName(kind string, shareType ManilaSha
 }
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *capacityManilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (result map[string]map[string]core.CapacityData, _ string, err error) {
-	client, err := openstack.NewSharedFileSystemV2(provider, eo)
-	if err != nil {
-		return nil, "", err
-	}
-	client.Microversion = "2.23" //required for filtering pools by share_type
-
-	allPages, err := services.List(client, nil).AllPages()
+func (p *capacityManilaPlugin) Scrape() (result map[string]map[string]core.CapacityData, _ string, err error) {
+	allPages, err := services.List(p.ManilaV2, nil).AllPages()
 	if err != nil {
 		return nil, "", err
 	}
@@ -110,7 +113,7 @@ func (p *capacityManilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo g
 		"share_networks": {Capacity: p.ShareNetworks},
 	}
 	for _, shareType := range p.ShareTypes {
-		capForType, err := p.scrapeForShareType(shareType, client, azForServiceHost)
+		capForType, err := p.scrapeForShareType(shareType, azForServiceHost)
 		if err != nil {
 			return nil, "", err
 		}
@@ -140,11 +143,11 @@ type capacityForShareType struct {
 	SnapshotGigabytes core.CapacityData
 }
 
-func (p *capacityManilaPlugin) scrapeForShareType(shareType ManilaShareTypeSpec, client *gophercloud.ServiceClient, azForServiceHost map[string]string) (capacityForShareType, error) {
+func (p *capacityManilaPlugin) scrapeForShareType(shareType ManilaShareTypeSpec, azForServiceHost map[string]string) (capacityForShareType, error) {
 	//list all pools for the Manila share types corresponding to this virtual share type
 	var allPools []schedulerstats.Pool
 	for _, stName := range getAllManilaShareTypes(shareType) {
-		allPages, err := schedulerstats.ListDetail(client, schedulerstats.ListDetailOpts{ShareType: stName}).AllPages()
+		allPages, err := schedulerstats.ListDetail(p.ManilaV2, schedulerstats.ListDetailOpts{ShareType: stName}).AllPages()
 		if err != nil {
 			return capacityForShareType{}, err
 		}

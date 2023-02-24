@@ -42,6 +42,9 @@ type capacitySapccIronicPlugin struct {
 	//computed state
 	ftt                 novaFlavorTranslationTable `yaml:"-"`
 	reportSubcapacities bool                       `yaml:"-"`
+	//connections
+	NovaV2   *gophercloud.ServiceClient `yaml:"-"`
+	IronicV1 *gophercloud.ServiceClient `yaml:"-"`
 }
 
 type capacitySapccIronicSerializedMetrics struct {
@@ -53,9 +56,19 @@ func init() {
 }
 
 // Init implements the core.CapacityPlugin interface.
-func (p *capacitySapccIronicPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubcapacities map[string]map[string]bool) error {
+func (p *capacitySapccIronicPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubcapacities map[string]map[string]bool) (err error) {
 	p.ftt = newNovaFlavorTranslationTable(p.FlavorAliases)
 	p.reportSubcapacities = scrapeSubcapacities["compute"]["instances-baremetal"]
+
+	p.NovaV2, err = openstack.NewComputeV2(provider, eo)
+	if err != nil {
+		return err
+	}
+	p.IronicV1, err = openstack.NewBareMetalV1(provider, eo)
+	if err != nil {
+		return err
+	}
+	p.IronicV1.Microversion = "1.22"
 	return nil
 }
 
@@ -139,13 +152,9 @@ var nodeNameRx = regexp.MustCompile(`^node(?:swift)?\d+-((?:b[bm]|ap|md|st|swf)\
 var cpNodeNameRx = regexp.MustCompile(`^node(?:swift)?\d+-(cp\d+)$`)
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (result map[string]map[string]core.CapacityData, serializedMetrics string, err error) {
+func (p *capacitySapccIronicPlugin) Scrape() (result map[string]map[string]core.CapacityData, serializedMetrics string, err error) {
 	//collect info about flavors with separate instance quota
-	novaClient, err := openstack.NewComputeV2(provider, eo)
-	if err != nil {
-		return nil, "", err
-	}
-	flavorNames, err := p.ftt.ListFlavorsWithSeparateInstanceQuota(novaClient)
+	flavorNames, err := p.ftt.ListFlavorsWithSeparateInstanceQuota(p.NovaV2)
 	if err != nil {
 		return nil, "", err
 	}
@@ -163,12 +172,7 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 	}
 
 	//count Ironic nodes
-	ironicClient, err := openstack.NewBareMetalV1(provider, eo)
-	if err != nil {
-		return nil, "", err
-	}
-	ironicClient.Microversion = "1.22"
-	allPages, err := ironicNodesListDetail(ironicClient).AllPages()
+	allPages, err := ironicNodesListDetail(p.IronicV1).AllPages()
 	if err != nil {
 		return nil, "", err
 	}
@@ -179,7 +183,7 @@ func (p *capacitySapccIronicPlugin) Scrape(provider *gophercloud.ProviderClient,
 	}
 
 	//enumerate aggregates for establishing the hypervisor <-> AZ mapping
-	page, err := aggregates.List(novaClient).AllPages()
+	page, err := aggregates.List(p.NovaV2).AllPages()
 	if err != nil {
 		return nil, "", err
 	}

@@ -39,7 +39,7 @@ type ScanDomainsOpts struct {
 // This extends ListDomains() by handling of the {Include,Exclude}DomainRx. It's
 // a separate function for unit test accessibility.
 func (c *Collector) listDomainsFiltered() ([]core.KeystoneDomain, error) {
-	domains, err := c.Cluster.DiscoveryPlugin.ListDomains(c.Cluster.ProviderClient())
+	domains, err := c.Cluster.DiscoveryPlugin.ListDomains()
 	if err != nil {
 		return nil, err
 	}
@@ -203,8 +203,7 @@ func (c *Collector) ScanProjects(domain *db.Domain) (result []string, resultErr 
 	}()
 
 	//list projects in Keystone
-	provider, eo := c.Cluster.ProviderClient()
-	projects, err := c.Cluster.DiscoveryPlugin.ListProjects(provider, eo, core.KeystoneDomainFromDB(*domain))
+	projects, err := c.Cluster.DiscoveryPlugin.ListProjects(core.KeystoneDomainFromDB(*domain))
 	if err != nil {
 		return nil, err
 	}

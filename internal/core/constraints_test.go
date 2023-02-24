@@ -190,16 +190,16 @@ func (p quotaConstraintTestPlugin) ServiceInfo() limes.ServiceInfo {
 func (p quotaConstraintTestPlugin) Rates() []limesrates.RateInfo {
 	return nil
 }
-func (p quotaConstraintTestPlugin) Scrape(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project KeystoneProject) (result map[string]ResourceData, serializedMetrics string, err error) {
+func (p quotaConstraintTestPlugin) Scrape(project KeystoneProject) (result map[string]ResourceData, serializedMetrics string, err error) {
 	return nil, "", nil
 }
-func (p quotaConstraintTestPlugin) IsQuotaAcceptableForProject(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project KeystoneProject, quotas map[string]uint64) error {
+func (p quotaConstraintTestPlugin) IsQuotaAcceptableForProject(project KeystoneProject, quotas map[string]uint64) error {
 	return nil
 }
-func (p quotaConstraintTestPlugin) SetQuota(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project KeystoneProject, quotas map[string]uint64) error {
+func (p quotaConstraintTestPlugin) SetQuota(project KeystoneProject, quotas map[string]uint64) error {
 	return nil
 }
-func (p quotaConstraintTestPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+func (p quotaConstraintTestPlugin) ScrapeRates(project KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 func (p quotaConstraintTestPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {

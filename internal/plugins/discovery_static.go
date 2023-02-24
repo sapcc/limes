@@ -55,7 +55,7 @@ func (p *staticDiscoveryPlugin) Init(client *gophercloud.ProviderClient, eo goph
 }
 
 // ListDomains implements the core.DiscoveryPlugin interface.
-func (p *staticDiscoveryPlugin) ListDomains(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) ([]core.KeystoneDomain, error) {
+func (p *staticDiscoveryPlugin) ListDomains() ([]core.KeystoneDomain, error) {
 	var result []core.KeystoneDomain
 	if len(p.Domains) == 0 {
 		return nil, errors.New("no domains configured")
@@ -76,7 +76,7 @@ func (p *staticDiscoveryPlugin) ListDomains(provider *gophercloud.ProviderClient
 }
 
 // ListProjects implements the core.DiscoveryPlugin interface.
-func (p *staticDiscoveryPlugin) ListProjects(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, queryDomain core.KeystoneDomain) ([]core.KeystoneProject, error) {
+func (p *staticDiscoveryPlugin) ListProjects(queryDomain core.KeystoneDomain) ([]core.KeystoneProject, error) {
 	var result []core.KeystoneProject
 	if len(p.Domains) == 0 {
 		return nil, errors.New("no domains configured")
