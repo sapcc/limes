@@ -26,19 +26,16 @@ import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/utils/openstack/clientconfig"
-	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/logg"
-	"github.com/sapcc/go-bits/osext"
 )
 
 // AuthSession contains the gophercloud authentication things.
 type AuthSession struct {
 	ProviderClient *gophercloud.ProviderClient
 	EndpointOpts   gophercloud.EndpointOpts
-	TokenValidator gopherpolicy.Validator
 }
 
-// Connect creates the gophercloud.ProviderClient instance for these credentials.
+// AuthToOpenstack creates the gophercloud.ProviderClient instance for these credentials.
 func AuthToOpenstack() (*AuthSession, error) {
 	//initialize OpenStack connection
 	ao, err := clientconfig.AuthOptions(nil)
@@ -56,22 +53,8 @@ func AuthToOpenstack() (*AuthSession, error) {
 		Region:       os.Getenv("OS_REGION_NAME"),
 	}
 
-	identityV3, err := openstack.NewIdentityV3(provider, eo)
-	if err != nil {
-		return nil, fmt.Errorf("cannot initialize Keystone v3 client: %w", err)
-	}
-	tv := gopherpolicy.TokenValidator{
-		IdentityV3: identityV3,
-		Cacher:     gopherpolicy.InMemoryCacher(),
-	}
-	err = tv.LoadPolicyFile(osext.GetenvOrDefault("LIMES_API_POLICY_PATH", "/etc/limes/policy.yaml"))
-	if err != nil {
-		return nil, err
-	}
-
 	return &AuthSession{
 		ProviderClient: provider,
 		EndpointOpts:   eo,
-		TokenValidator: &tv,
 	}, nil
 }

@@ -178,13 +178,14 @@ func taskServe(cluster *core.Cluster, args []string) {
 	prometheus.MustRegister(sqlstats.NewStatsCollector("limes", dbm.Db))
 
 	//collect all API endpoints and middlewares
+	tokenValidator := must.Return(api.NewTokenValidator(cluster.Auth.ProviderClient, cluster.Auth.EndpointOpts))
 	corsMiddleware := cors.New(cors.Options{
 		AllowedOrigins: []string{"*"},
 		AllowedMethods: []string{"HEAD", "GET", "POST", "PUT"},
 		AllowedHeaders: []string{"Content-Type", "User-Agent", "X-Auth-Token", "X-Limes-Cluster-Id"},
 	})
 	http.Handle("/", httpapi.Compose(
-		api.NewV1API(cluster, dbm),
+		api.NewV1API(cluster, dbm, tokenValidator),
 		httpapi.WithGlobalMiddleware(api.ForbidClusterIDHeader),
 		httpapi.WithGlobalMiddleware(corsMiddleware.Handler),
 	))

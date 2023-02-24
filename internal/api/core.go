@@ -30,10 +30,14 @@ import (
 	"sync"
 
 	"github.com/go-gorp/gorp/v3"
+	"github.com/gophercloud/gophercloud"
+	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gorilla/mux"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpapi"
+	"github.com/sapcc/go-bits/osext"
 	"github.com/sapcc/go-bits/respondwith"
 
 	"github.com/sapcc/limes/internal/core"
@@ -57,9 +61,10 @@ type VersionLinkData struct {
 }
 
 type v1Provider struct {
-	Cluster     *core.Cluster
-	DB          *gorp.DbMap
-	VersionData VersionData
+	Cluster        *core.Cluster
+	DB             *gorp.DbMap
+	VersionData    VersionData
+	tokenValidator gopherpolicy.Validator
 	//see comment in ListProjects() for details
 	listProjectsMutex sync.Mutex
 }
@@ -67,8 +72,8 @@ type v1Provider struct {
 // NewV1API creates an httpapi.API that serves the Limes v1 API.
 // It also returns the VersionData for this API version which is needed for the
 // version advertisement on "GET /".
-func NewV1API(cluster *core.Cluster, dbm *gorp.DbMap) httpapi.API {
-	p := &v1Provider{Cluster: cluster, DB: dbm}
+func NewV1API(cluster *core.Cluster, dbm *gorp.DbMap, tokenValidator gopherpolicy.Validator) httpapi.API {
+	p := &v1Provider{Cluster: cluster, DB: dbm, tokenValidator: tokenValidator}
 	p.VersionData = VersionData{
 		Status: "CURRENT",
 		ID:     "v1",
@@ -86,6 +91,20 @@ func NewV1API(cluster *core.Cluster, dbm *gorp.DbMap) httpapi.API {
 	}
 
 	return p
+}
+
+// NewTokenValidator constructs a gopherpolicy.TokenValidator instance.
+func NewTokenValidator(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (gopherpolicy.Validator, error) {
+	identityV3, err := openstack.NewIdentityV3(provider, eo)
+	if err != nil {
+		return nil, fmt.Errorf("cannot initialize Keystone v3 client: %w", err)
+	}
+	tv := gopherpolicy.TokenValidator{
+		IdentityV3: identityV3,
+		Cacher:     gopherpolicy.InMemoryCacher(),
+	}
+	err = tv.LoadPolicyFile(osext.GetenvOrDefault("LIMES_API_POLICY_PATH", "/etc/limes/policy.yaml"))
+	return &tv, err
 }
 
 // AddTo implements the httpapi.API interface.
@@ -160,6 +179,15 @@ func (p *v1Provider) Path(elements ...string) string {
 	}
 	parts = append(parts, elements...)
 	return strings.Join(parts, "/")
+}
+
+// CheckToken checks the validity of the request's X-Auth-Token in Keystone, and
+// returns a Token instance for checking authorization. Any errors that occur
+// during this function are deferred until Require() is called.
+func (p *v1Provider) CheckToken(r *http.Request) *gopherpolicy.Token {
+	t := p.tokenValidator.CheckToken(r)
+	t.Context.Request = mux.Vars(r)
+	return t
 }
 
 // FindDomainFromRequest loads the db.Domain referenced by the :domain_id path

@@ -201,10 +201,11 @@ func setupTest(t *testing.T, startData string) (*core.Cluster, *gorp.DbMap, http
 		AllowRaise:            true,
 		AllowRaiseLP:          true,
 		AllowLower:            true,
+		AllowLowerLP:          true,
 		AllowRaiseCentralized: true,
 		AllowLowerCentralized: true,
 	}
-	cluster.Auth.TokenValidator = TestTokenValidator{enforcer}
+	tokenValidator := TestTokenValidator{enforcer}
 
 	if startData != "fixtures/start-data-inconsistencies.sql" {
 		cluster.Config.ResourceBehaviors = []core.ResourceBehavior{
@@ -261,7 +262,7 @@ func setupTest(t *testing.T, startData string) (*core.Cluster, *gorp.DbMap, http
 	}
 
 	handler := httpapi.Compose(
-		NewV1API(cluster, dbm),
+		NewV1API(cluster, dbm, tokenValidator),
 		httpapi.WithGlobalMiddleware(ForbidClusterIDHeader),
 		httpapi.WithoutLogging(),
 	)
