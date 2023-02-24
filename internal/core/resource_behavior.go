@@ -44,17 +44,17 @@ type ResourceBehavior struct {
 // also applies default values. The `path` argument denotes the location of
 // this behavior in the configuration file, and will be used when generating
 // error messages.
-func (b *ResourceBehavior) Validate(path string) (errs []error) {
+func (b *ResourceBehavior) Validate(path string) (errs ErrorSet) {
 	if b.FullResourceNameRx == "" {
-		errs = append(errs, fmt.Errorf("missing configuration value: %s.resource", path))
+		errs.Addf("missing configuration value: %s.resource", path)
 	}
 
 	if b.MaxBurstMultiplier != nil && *b.MaxBurstMultiplier < 0 {
-		errs = append(errs, fmt.Errorf("%s.max_burst_multiplier may not be negative", path))
+		errs.Addf("%s.max_burst_multiplier may not be negative", path)
 	}
 
 	if (b.ScalesWith.ResourceName == "") != (b.ScalingFactor == 0) {
-		errs = append(errs, fmt.Errorf("%[1]s.scaling_factor and %[1]s.scales_with are invalid: if one is given, the other must be given too", path))
+		errs.Addf("%[1]s.scaling_factor and %[1]s.scales_with are invalid: if one is given, the other must be given too", path)
 	}
 
 	return errs

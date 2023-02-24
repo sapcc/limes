@@ -71,8 +71,16 @@ func main() {
 	wrap.Attach(util.AddLoggingRoundTripper)
 
 	//load configuration and connect to cluster
-	cluster := core.NewConfiguration(configPath)
-	must.Succeed(cluster.Connect())
+	cluster, errs := core.NewConfiguration(configPath)
+	if errs.IsEmpty() {
+		errs = cluster.Connect()
+	}
+	for _, err := range errs {
+		logg.Error(err.Error())
+	}
+	if !errs.IsEmpty() {
+		logg.Fatal("aborting because of the errors listed above")
+	}
 	api.StartAuditTrail()
 
 	//select task

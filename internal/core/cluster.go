@@ -21,8 +21,6 @@ package core
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"os"
 	"regexp"
 	"sort"
@@ -33,7 +31,6 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
-	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/osext"
 	yaml "gopkg.in/yaml.v2"
@@ -64,41 +61,44 @@ type Cluster struct {
 // NewCluster creates a new Cluster instance with the given ID and
 // configuration, and also initializes all quota and capacity plugins. Errors
 // will be logged when some of the requested plugins cannot be found.
-func NewCluster(config ClusterConfiguration) *Cluster {
-	c := &Cluster{
+func NewCluster(config ClusterConfiguration) (c *Cluster, errs ErrorSet) {
+	c = &Cluster{
 		Config:          config,
 		QuotaPlugins:    make(map[string]QuotaPlugin),
 		CapacityPlugins: make(map[string]CapacityPlugin),
 		Authoritative:   osext.GetenvBool("LIMES_AUTHORITATIVE"),
 	}
 
+	//instantiate discovery plugin
 	c.DiscoveryPlugin = DiscoveryPluginRegistry.Instantiate(config.Discovery.Method)
 	if c.DiscoveryPlugin == nil {
-		logg.Fatal("setup for discovery method %s failed: no suitable discovery plugin found", config.Discovery.Method)
+		errs.Addf("setup for discovery method %s failed: no suitable discovery plugin found", config.Discovery.Method)
 	}
 
+	//instantiate quota plugins
 	for _, srv := range config.Services {
 		plugin := QuotaPluginRegistry.Instantiate(srv.PluginType)
 		if plugin == nil {
-			logg.Fatal("setup for service %s failed: no suitable quota plugin found", srv.ServiceType)
+			errs.Addf("setup for service %s failed: no suitable quota plugin found", srv.ServiceType)
 		}
 		c.QuotaPlugins[srv.PluginType] = plugin
 	}
 
+	//instantiate capacity plugins
 	for _, capa := range config.Capacitors {
 		plugin := CapacityPluginRegistry.Instantiate(capa.PluginType)
 		if plugin == nil {
-			logg.Fatal("setup for capacitor %s failed: no suitable capacity plugin found", capa.ID)
+			errs.Addf("setup for capacitor %s failed: no suitable capacity plugin found", capa.ID)
 		}
 		c.CapacityPlugins[capa.ID] = plugin
 	}
 
-	c.SetupOPA(os.Getenv("LIMES_OPA_DOMAIN_QUOTA_POLICY_PATH"), os.Getenv("LIMES_OPA_PROJECT_QUOTA_POLICY_PATH"))
+	errs.Append(c.SetupOPA(os.Getenv("LIMES_OPA_DOMAIN_QUOTA_POLICY_PATH"), os.Getenv("LIMES_OPA_PROJECT_QUOTA_POLICY_PATH")))
 
-	return c
+	return c, errs
 }
 
-func (c *Cluster) SetupOPA(domainQuotaPolicyPath, projectQuotaPolicyPath string) {
+func (c *Cluster) SetupOPA(domainQuotaPolicyPath, projectQuotaPolicyPath string) (errs ErrorSet) {
 	if domainQuotaPolicyPath == "" {
 		c.OPA.DomainQuotaQuery = nil
 	} else {
@@ -108,7 +108,7 @@ func (c *Cluster) SetupOPA(domainQuotaPolicyPath, projectQuotaPolicyPath string)
 			rego.Module("limes.rego", string(domainModule)),
 		).PrepareForEval(context.Background())
 		if err != nil {
-			logg.Fatal("preparing OPA domain query failed: %s", err)
+			errs.Addf("preparing OPA domain query failed: %w", err)
 		}
 		c.OPA.DomainQuotaQuery = &query
 	}
@@ -122,10 +122,12 @@ func (c *Cluster) SetupOPA(domainQuotaPolicyPath, projectQuotaPolicyPath string)
 			rego.Module("limes.rego", string(projectModule)),
 		).PrepareForEval(context.Background())
 		if err != nil {
-			logg.Fatal("preparing OPA project query failed: %s", err)
+			errs.Addf("preparing OPA project query failed: %w", err)
 		}
 		c.OPA.ProjectQuotaQuery = &projectQuery
 	}
+
+	return errs
 }
 
 // Connect calls Connect() on all AuthParameters for this Cluster, thus ensuring
@@ -138,10 +140,12 @@ func (c *Cluster) SetupOPA(domainQuotaPolicyPath, projectQuotaPolicyPath string)
 //
 // We cannot do any of this earlier because we only know all resources after
 // calling Init() on all quota plugins.
-func (c *Cluster) Connect() (err error) {
+func (c *Cluster) Connect() (errs ErrorSet) {
+	var err error
 	c.Auth, err = AuthToOpenstack()
 	if err != nil {
-		return fmt.Errorf("failed to authenticate: %s", err.Error())
+		errs.Addf("failed to authenticate: %w", err)
+		return errs
 	}
 	provider := c.Auth.ProviderClient
 	eo := c.Auth.EndpointOpts
@@ -149,11 +153,12 @@ func (c *Cluster) Connect() (err error) {
 	//initialize discovery plugin
 	err = yaml.UnmarshalStrict([]byte(c.Config.Discovery.Parameters), c.DiscoveryPlugin)
 	if err != nil {
-		return fmt.Errorf("failed to supply params to discovery method: %w", err)
-	}
-	err = c.DiscoveryPlugin.Init(provider, eo)
-	if err != nil {
-		return fmt.Errorf("failed to initialize discovery method: %w", util.UnpackError(err))
+		errs.Addf("failed to supply params to discovery method: %w", err)
+	} else {
+		err = c.DiscoveryPlugin.Init(provider, eo)
+		if err != nil {
+			errs.Addf("failed to initialize discovery method: %w", util.UnpackError(err))
+		}
 	}
 
 	//initialize quota plugins
@@ -166,11 +171,12 @@ func (c *Cluster) Connect() (err error) {
 		plugin := c.QuotaPlugins[srv.ServiceType]
 		err = yaml.UnmarshalStrict([]byte(srv.Parameters), plugin)
 		if err != nil {
-			return fmt.Errorf("failed to supply params to service %s: %w", srv.ServiceType, err)
+			errs.Addf("failed to supply params to service %s: %w", srv.ServiceType, err)
+			continue
 		}
 		err := plugin.Init(provider, eo, scrapeSubresources)
 		if err != nil {
-			return fmt.Errorf("failed to initialize service %s: %w", srv.ServiceType, util.UnpackError(err))
+			errs.Addf("failed to initialize service %s: %w", srv.ServiceType, util.UnpackError(err))
 		}
 	}
 
@@ -187,44 +193,46 @@ func (c *Cluster) Connect() (err error) {
 		plugin := c.CapacityPlugins[capa.ID]
 		err = yaml.UnmarshalStrict([]byte(capa.Parameters), plugin)
 		if err != nil {
-			return fmt.Errorf("failed to supply params to capacitor %s: %w", capa.ID, err)
+			errs.Addf("failed to supply params to capacitor %s: %w", capa.ID, err)
+			continue
 		}
 		err := plugin.Init(provider, eo, scrapeSubcapacities)
 		if err != nil {
-			return fmt.Errorf("failed to initialize capacitor %s: %w", capa.ID, util.UnpackError(err))
+			errs.Addf("failed to initialize capacitor %s: %w", capa.ID, util.UnpackError(err))
 		}
+	}
+
+	//if we could not load all plugins, we cannot be sure that we know the
+	//correct set of resources, so the following steps will likely report wrong errors
+	if !errs.IsEmpty() {
+		return errs
 	}
 
 	//load quota constraints
+	var suberrs ErrorSet
 	constraintPath := os.Getenv("LIMES_CONSTRAINTS_PATH")
 	if constraintPath != "" && c.QuotaConstraints == nil {
-		var errs []error
-		c.QuotaConstraints, errs = NewQuotaConstraints(c, constraintPath)
-		if len(errs) > 0 {
-			for _, err := range errs {
-				logg.Error(err.Error())
-			}
-			return errors.New("cannot load quota constraints (see errors above)")
-		}
+		c.QuotaConstraints, suberrs = NewQuotaConstraints(c, constraintPath)
+		errs.Append(suberrs)
 	}
 
 	//parse low-privilege raise limits
-	c.LowPrivilegeRaise.LimitsForDomains, err = c.parseLowPrivilegeRaiseLimits(
+	c.LowPrivilegeRaise.LimitsForDomains, suberrs = c.parseLowPrivilegeRaiseLimits(
 		c.Config.LowPrivilegeRaise.Limits.ForDomains, "domain")
-	if err != nil {
-		return fmt.Errorf("could not parse low-privilege raise limit: %s", err.Error())
+	for _, err := range suberrs {
+		errs.Addf("while parsing low-privilege raise limit for domains: %w", err)
 	}
-	c.LowPrivilegeRaise.LimitsForProjects, err = c.parseLowPrivilegeRaiseLimits(
+	c.LowPrivilegeRaise.LimitsForProjects, suberrs = c.parseLowPrivilegeRaiseLimits(
 		c.Config.LowPrivilegeRaise.Limits.ForProjects, "project")
-	if err != nil {
-		return fmt.Errorf("could not parse low-privilege raise limit: %s", err.Error())
+	for _, err := range suberrs {
+		errs.Addf("while parsing low-privilege raise limit for projects: %w", err)
 	}
 
 	//validate scaling relations
 	for _, behavior := range c.Config.ResourceBehaviors {
 		s := behavior.ScalesWith
 		if s.ResourceName != "" && !c.HasResource(s.ServiceType, s.ResourceName) {
-			return fmt.Errorf(`resources matching "%s" scale with unknown resource "%s/%s"`,
+			errs.Addf(`resources matching "%s" scale with unknown resource "%s/%s"`,
 				string(behavior.FullResourceNameRx), s.ServiceType, s.ResourceName)
 		}
 	}
@@ -237,8 +245,8 @@ var (
 	untilPercentOfClusterAssignedRx = regexp.MustCompile(`^until ([0-9.]+)\s*% of cluster capacity is assigned$`)
 )
 
-func (c Cluster) parseLowPrivilegeRaiseLimits(inputs map[string]map[string]string, scopeType string) (map[string]map[string]LowPrivilegeRaiseLimit, error) {
-	result := make(map[string]map[string]LowPrivilegeRaiseLimit)
+func (c Cluster) parseLowPrivilegeRaiseLimits(inputs map[string]map[string]string, scopeType string) (result map[string]map[string]LowPrivilegeRaiseLimit, errs ErrorSet) {
+	result = make(map[string]map[string]LowPrivilegeRaiseLimit)
 	for srvType, quotaPlugin := range c.QuotaPlugins {
 		result[srvType] = make(map[string]LowPrivilegeRaiseLimit)
 		for _, res := range quotaPlugin.Resources() {
@@ -251,10 +259,12 @@ func (c Cluster) parseLowPrivilegeRaiseLimits(inputs map[string]map[string]strin
 			if match != nil {
 				percent, err := strconv.ParseFloat(match[1], 64)
 				if err != nil {
-					return nil, err
+					errs.Add(err)
+					continue
 				}
 				if percent < 0 || percent > 100 {
-					return nil, fmt.Errorf("value out of range: %s%%", match[1])
+					errs.Addf("value out of range: %s%%", match[1])
+					continue
 				}
 				result[srvType][res.Name] = LowPrivilegeRaiseLimit{
 					PercentOfClusterCapacity: percent,
@@ -268,10 +278,12 @@ func (c Cluster) parseLowPrivilegeRaiseLimits(inputs map[string]map[string]strin
 				if match != nil {
 					percent, err := strconv.ParseFloat(match[1], 64)
 					if err != nil {
-						return nil, err
+						errs.Add(err)
+						continue
 					}
 					if percent < 0 || percent > 100 {
-						return nil, fmt.Errorf("value out of range: %s%%", match[1])
+						errs.Addf("value out of range: %s%%", match[1])
+						continue
 					}
 					result[srvType][res.Name] = LowPrivilegeRaiseLimit{
 						UntilPercentOfClusterCapacityAssigned: percent,
@@ -282,7 +294,8 @@ func (c Cluster) parseLowPrivilegeRaiseLimits(inputs map[string]map[string]strin
 
 			rawValue, err := res.Unit.Parse(limit)
 			if err != nil {
-				return nil, err
+				errs.Add(err)
+				continue
 			}
 			result[srvType][res.Name] = LowPrivilegeRaiseLimit{
 				AbsoluteValue: rawValue,

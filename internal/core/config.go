@@ -26,7 +26,6 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
-	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/regexpext"
 	yaml "gopkg.in/yaml.v2"
 
@@ -164,19 +163,24 @@ func (c QuotaDistributionConfiguration) InitialProjectQuota() uint64 {
 // NewConfiguration reads and validates the given configuration file.
 // Errors are logged and will result in
 // program termination, causing the function to not return.
-func NewConfiguration(path string) (cluster *Cluster) {
+func NewConfiguration(path string) (cluster *Cluster, errs ErrorSet) {
 	//read config file
 	configBytes, err := os.ReadFile(path)
 	if err != nil {
-		logg.Fatal("read configuration file: %s", err.Error())
+		errs.Addf("read configuration file: %s", err.Error())
+		return nil, errs
 	}
 	var config ClusterConfiguration
 	err = yaml.UnmarshalStrict(configBytes, &config)
 	if err != nil {
-		logg.Fatal("parse configuration: %s", err.Error())
+		errs.Addf("parse configuration: %s", err.Error())
+		return nil, errs
 	}
-	if !config.validateConfig() {
-		os.Exit(1)
+
+	//cannot proceed if the config is not valid
+	errs.Append(config.validateConfig())
+	if !errs.IsEmpty() {
+		return nil, errs
 	}
 
 	//inflate the ClusterConfiguration instances into Cluster, thereby validating
@@ -189,16 +193,11 @@ func NewConfiguration(path string) (cluster *Cluster) {
 	return NewCluster(config)
 }
 
-func (cluster ClusterConfiguration) validateConfig() (success bool) {
-	//do not fail on first error; keep going and report all errors at once
-	success = true //until proven otherwise
-
+func (cluster ClusterConfiguration) validateConfig() (errs ErrorSet) {
 	missing := func(key string) {
-		logg.Error("missing configuration value: %s", key)
-		success = false
+		errs.Addf("missing configuration value: %s", key)
 	}
 
-	//NOTE: cluster.RegionName is optional
 	if len(cluster.Services) == 0 {
 		missing("services[]")
 	}
@@ -222,10 +221,7 @@ func (cluster ClusterConfiguration) validateConfig() (success bool) {
 	}
 
 	for idx, behavior := range cluster.ResourceBehaviors {
-		for _, err := range behavior.Validate(fmt.Sprintf("resource_behavior[%d]", idx)) {
-			logg.Error(err.Error())
-			success = false
-		}
+		errs.Append(behavior.Validate(fmt.Sprintf("resource_behavior[%d]", idx)))
 	}
 
 	for idx, qdCfg := range cluster.QuotaDistributionConfigs {
@@ -236,27 +232,23 @@ func (cluster ClusterConfiguration) validateConfig() (success bool) {
 		switch qdCfg.Model {
 		case limesresources.HierarchicalQuotaDistribution:
 			if qdCfg.DefaultProjectQuota != 0 {
-				logg.Error("distribution_model_configs[%d].default_project_quota is invalid: not allowed for hierarchical distribution", idx)
-				success = false
+				errs.Addf("distribution_model_configs[%d].default_project_quota is invalid: not allowed for hierarchical distribution", idx)
 			}
 		case limesresources.CentralizedQuotaDistribution:
 			if qdCfg.DefaultProjectQuota == 0 {
 				missing(fmt.Sprintf(`distribution_model_configs[%d].default_project_quota`, idx))
 			}
 			if qdCfg.StrictDomainQuotaLimit {
-				logg.Error("invalid value for distribution_model_configs[%d].strict_domain_quota_limit: not allowed for centralized distribution", idx)
-				success = false
+				errs.Addf("invalid value for distribution_model_configs[%d].strict_domain_quota_limit: not allowed for centralized distribution", idx)
 			}
 		default:
-			logg.Error("invalid value for distribution_model_configs[%d].model: %q", idx, qdCfg.Model)
-			success = false
+			errs.Addf("invalid value for distribution_model_configs[%d].model: %q", idx, qdCfg.Model)
 		}
 	}
 
 	if cluster.Bursting.MaxMultiplier < 0 {
-		logg.Error("bursting.max_multiplier may not be negative")
-		success = false
+		errs.Addf("bursting.max_multiplier may not be negative")
 	}
 
-	return
+	return errs
 }

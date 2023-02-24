@@ -141,7 +141,7 @@ func TestQuotaConstraintParsingFailure(t *testing.T) {
 		`invalid constraints for domain germany: invalid constraint "at most 1 ounce" for service-two/capacity_MiB: cannot convert value from ounce to MiB because units are incompatible`,
 		`invalid constraints for domain poland: resource centralized/things does not accept domain quota constraints because domain quota is computed automatically according to the centralized quota distribution model`,
 		`invalid constraints for domain poland: resource centralized/capacity_MiB does not accept domain quota constraints because domain quota is computed automatically according to the centralized quota distribution model`,
-		`missing domain name for project atlantis`,
+		`invalid constraints: missing domain name for project atlantis`,
 		`invalid constraints for project germany/dresden: invalid constraint "at least NaN" for service-one/things: strconv.ParseUint: parsing "NaN": invalid syntax`,
 		`invalid constraints for project germany/dresden: invalid constraint "at least 4, at most 2" for service-two/things: constraint clauses cannot simultaneously be satisfied (at least 4, but at most 2)`,
 	)

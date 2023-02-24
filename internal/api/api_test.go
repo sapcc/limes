@@ -255,7 +255,10 @@ func setupTest(t *testing.T, startData string) (*core.Cluster, *gorp.DbMap, http
 	}
 
 	//validate that this is a no-op when no OPAConfiguration is provided
-	cluster.SetupOPA("", "")
+	errs := cluster.SetupOPA("", "")
+	for _, err := range errs {
+		t.Error(err.Error())
+	}
 
 	handler := httpapi.Compose(
 		NewV1API(cluster, dbm),
@@ -779,7 +782,10 @@ func Test_DomainOperations(t *testing.T) {
 
 func Test_DomainOPA(t *testing.T) {
 	cluster, _, router, _ := setupTest(t, "fixtures/start-data-opa.sql")
-	cluster.SetupOPA("fixtures/limes.rego", "fixtures/limes.rego")
+	errs := cluster.SetupOPA("fixtures/limes.rego", "fixtures/limes.rego")
+	for _, err := range errs {
+		t.Error(err.Error())
+	}
 
 	// try if valid operations still work
 	assert.HTTPRequest{
