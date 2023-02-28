@@ -72,15 +72,9 @@ func main() {
 
 	//load configuration and connect to cluster
 	cluster, errs := core.NewConfiguration(configPath)
-	if errs.IsEmpty() {
-		errs = cluster.Connect()
-	}
-	for _, err := range errs {
-		logg.Error(err.Error())
-	}
-	if !errs.IsEmpty() {
-		logg.Fatal("aborting because of the errors listed above")
-	}
+	errs.LogFatalIfError()
+	errs = cluster.Connect()
+	errs.LogFatalIfError()
 	api.StartAuditTrail()
 
 	//select task
