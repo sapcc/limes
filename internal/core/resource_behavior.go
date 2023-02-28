@@ -61,6 +61,11 @@ func (b *ResourceBehavior) Validate(path string) (errs ErrorSet) {
 }
 
 // Matches returns whether this ResourceBehavior matches the given resource and scope.
+//
+// Possible values for `scopeName` include:
+// - `"$DOMAIN/$PROJECT"` for project level
+// - `"$DOMAIN"` for domain level
+// - `""` (empty string) for cluster level
 func (b ResourceBehavior) Matches(fullResourceName, scopeName string) bool {
 	if !b.FullResourceNameRx.MatchString(fullResourceName) {
 		return false
