@@ -68,7 +68,7 @@ func (p *capacitySapccIronicPlugin) Init(provider *gophercloud.ProviderClient, e
 	if err != nil {
 		return err
 	}
-	p.IronicV1.Microversion = "1.22"
+	p.IronicV1.Microversion = "1.22" //for node attributes "provision_state" and "target_provision_state"
 	return nil
 }
 
