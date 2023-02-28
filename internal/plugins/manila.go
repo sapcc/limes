@@ -42,9 +42,13 @@ import (
 )
 
 type manilaPlugin struct {
+	//configuration
 	ShareTypes          []ManilaShareTypeSpec `yaml:"share_types"`
 	PrometheusAPIConfig *promquery.Config     `yaml:"prometheus_api"`
-	hasReplicaQuotas    bool                  `yaml:"-"`
+	//computed state
+	hasReplicaQuotas bool `yaml:"-"`
+	//connections
+	ManilaV2 *gophercloud.ServiceClient `yaml:"-"`
 }
 
 func init() {
@@ -52,16 +56,16 @@ func init() {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *manilaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubresources map[string]bool) error {
+func (p *manilaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubresources map[string]bool) (err error) {
 	if len(p.ShareTypes) == 0 {
 		return errors.New("quota plugin sharev2: missing required configuration field sharev2.share_types")
 	}
 
-	client, err := openstack.NewSharedFileSystemV2(provider, eo)
+	p.ManilaV2, err = openstack.NewSharedFileSystemV2(provider, eo)
 	if err != nil {
 		return err
 	}
-	microversion, err := p.findMicroversion(client)
+	microversion, err := p.findMicroversion(p.ManilaV2)
 	if err != nil {
 		return err
 	}
@@ -69,7 +73,14 @@ func (p *manilaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud
 		return errors.New(`cannot find API microversion: no version of the form "2.x" found in advertisement`)
 	}
 	logg.Info("Manila microversion = 2.%d", microversion)
+
+	//share-type-specific quotas need 2.39, replica quotas need 2.53
 	p.hasReplicaQuotas = microversion >= 53
+	if p.hasReplicaQuotas {
+		p.ManilaV2.Microversion = "2.53"
+	} else {
+		p.ManilaV2.Microversion = "2.39"
+	}
 
 	return nil
 }
@@ -182,37 +193,26 @@ type manilaQuotaSet struct {
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *manilaPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+func (p *manilaPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics string, err error) {
-	client, err := openstack.NewSharedFileSystemV2(provider, eo)
-	if err != nil {
-		return nil, "", err
-	}
-	//share-type-specific quotas need 2.39, replica quotas need 2.53
-	if p.hasReplicaQuotas {
-		client.Microversion = "2.53"
-	} else {
-		client.Microversion = "2.39"
-	}
-
+func (p *manilaPlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics string, err error) {
 	quotaSets := make(map[string]manilaQuotaSetDetail)
 	for _, shareType := range p.ShareTypes {
 		stName := resolveManilaShareType(shareType, project)
 		if stName == "" {
 			continue
 		}
-		quotaSets[stName], err = manilaCollectQuota(client, project.UUID, stName)
+		quotaSets[stName], err = manilaCollectQuota(p.ManilaV2, project.UUID, stName)
 		if err != nil {
 			return nil, "", err
 		}
 	}
 
 	//the share_networks quota is only shown when querying for no share_type in particular
-	quotaSets[""], err = manilaCollectQuota(client, project.UUID, "")
+	quotaSets[""], err = manilaCollectQuota(p.ManilaV2, project.UUID, "")
 	if err != nil {
 		return nil, "", err
 	}
@@ -286,7 +286,7 @@ func (p *manilaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gopherclo
 }
 
 // IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
-func (p *manilaPlugin) IsQuotaAcceptableForProject(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
+func (p *manilaPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, quotas map[string]uint64) error {
 	//check if an inaccessible share type is used
 	for _, shareType := range p.ShareTypes {
 		stName := resolveManilaShareType(shareType, project)
@@ -303,17 +303,12 @@ func (p *manilaPlugin) IsQuotaAcceptableForProject(client *gophercloud.ProviderC
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *manilaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
-	err := p.IsQuotaAcceptableForProject(provider, eo, project, quotas)
+func (p *manilaPlugin) SetQuota(project core.KeystoneProject, quotas map[string]uint64) error {
+	err := p.IsQuotaAcceptableForProject(project, quotas)
 	if err != nil {
 		return err
 	}
 
-	client, err := openstack.NewSharedFileSystemV2(provider, eo)
-	if err != nil {
-		return err
-	}
-	client.Microversion = "2.39" //for share-type-specific quota
 	expect200 := &gophercloud.RequestOpts{OkCodes: []int{200}}
 
 	//General note: Even though it complicates the code, we need to set overall
@@ -367,17 +362,17 @@ func (p *manilaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherc
 		overallQuotas.ReplicaGigabytesPtr = &overallQuotas.ReplicaGigabytes
 	}
 
-	url := client.ServiceURL("quota-sets", project.UUID)
+	url := p.ManilaV2.ServiceURL("quota-sets", project.UUID)
 	logDebugSetQuota(project.UUID, "overall", overallQuotas)
-	_, err = client.Put(url, map[string]interface{}{"quota_set": overallQuotas}, nil, expect200) //nolint:bodyclose // already closed by gophercloud
+	_, err = p.ManilaV2.Put(url, map[string]interface{}{"quota_set": overallQuotas}, nil, expect200) //nolint:bodyclose // already closed by gophercloud
 	if err != nil {
 		return fmt.Errorf("could not set overall share quotas: %s", err.Error())
 	}
 
 	for shareTypeName, quotasForType := range shareTypeQuotas {
 		logDebugSetQuota(project.UUID, shareTypeName, quotasForType)
-		url := client.ServiceURL("quota-sets", project.UUID) + "?share_type=" + shareTypeName
-		_, err = client.Put(url, map[string]interface{}{"quota_set": quotasForType}, nil, expect200) //nolint:bodyclose // already closed by gophercloud
+		url := p.ManilaV2.ServiceURL("quota-sets", project.UUID) + "?share_type=" + shareTypeName
+		_, err = p.ManilaV2.Put(url, map[string]interface{}{"quota_set": quotasForType}, nil, expect200) //nolint:bodyclose // already closed by gophercloud
 		if err != nil {
 			return fmt.Errorf("could not set quotas for share type %q: %s", shareTypeName, err.Error())
 		}

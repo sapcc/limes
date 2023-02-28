@@ -26,7 +26,6 @@ import (
 	"sort"
 	"strconv"
 
-	"github.com/gophercloud/gophercloud"
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
@@ -303,16 +302,6 @@ func (c Cluster) parseLowPrivilegeRaiseLimits(inputs map[string]map[string]strin
 		}
 	}
 	return result, nil
-}
-
-// ProviderClient returns the gophercloud.ProviderClient for this cluster. This
-// returns nil unless Connect() is called first. (This usually happens at
-// program startup time for the current cluster.)
-func (c *Cluster) ProviderClient() (*gophercloud.ProviderClient, gophercloud.EndpointOpts) {
-	if c.Auth == nil {
-		return nil, gophercloud.EndpointOpts{}
-	}
-	return c.Auth.ProviderClient, c.Auth.EndpointOpts
 }
 
 // ServiceTypesInAlphabeticalOrder can be used when service types need to be

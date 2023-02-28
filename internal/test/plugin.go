@@ -108,7 +108,7 @@ func (p *Plugin) Rates() []limesrates.RateInfo {
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *Plugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+func (p *Plugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
 	if p.ScrapeFails {
 		return nil, "", errors.New("ScrapeRates failed as requested")
 	}
@@ -138,7 +138,7 @@ func (p *Plugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *Plugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics string, err error) {
+func (p *Plugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics string, err error) {
 	if p.ScrapeFails {
 		return nil, "", errors.New("Scrape failed as requested")
 	}
@@ -196,7 +196,7 @@ func (p *Plugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.End
 }
 
 // IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
-func (p *Plugin) IsQuotaAcceptableForProject(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
+func (p *Plugin) IsQuotaAcceptableForProject(project core.KeystoneProject, quotas map[string]uint64) error {
 	if p.QuotaIsNotAcceptable {
 		var quotasStr []string
 		for resName, quota := range quotas {
@@ -209,7 +209,7 @@ func (p *Plugin) IsQuotaAcceptableForProject(client *gophercloud.ProviderClient,
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *Plugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
+func (p *Plugin) SetQuota(project core.KeystoneProject, quotas map[string]uint64) error {
 	if p.SetQuotaFails {
 		return errors.New("SetQuota failed as requested")
 	}
@@ -291,7 +291,7 @@ func (p *CapacityPlugin) PluginTypeID() string {
 }
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *CapacityPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (result map[string]map[string]core.CapacityData, serializedMetrics string, err error) {
+func (p *CapacityPlugin) Scrape() (result map[string]map[string]core.CapacityData, serializedMetrics string, err error) {
 	var capacityPerAZ map[string]*core.CapacityDataForAZ
 	if p.WithAZCapData {
 		capacityPerAZ = map[string]*core.CapacityDataForAZ{

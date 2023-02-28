@@ -38,9 +38,13 @@ import (
 )
 
 type neutronPlugin struct {
+	//computed state
 	resources    []limesresources.ResourceInfo `yaml:"-"`
 	hasExtension map[string]bool               `yaml:"-"`
 	hasOctavia   bool                          `yaml:"-"`
+	//connections
+	NeutronV2 *gophercloud.ServiceClient `yaml:"-"`
+	OctaviaV2 *gophercloud.ServiceClient `yaml:"-"`
 }
 
 var neutronResources = []limesresources.ResourceInfo{
@@ -143,8 +147,8 @@ func init() {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *neutronPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubresources map[string]bool) error {
-	client, err := openstack.NewNetworkV2(provider, eo)
+func (p *neutronPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubresources map[string]bool) (err error) {
+	p.NeutronV2, err = openstack.NewNetworkV2(provider, eo)
 	if err != nil {
 		return err
 	}
@@ -155,7 +159,7 @@ func (p *neutronPlugin) Init(provider *gophercloud.ProviderClient, eo gopherclou
 		if resource.Extension == "" {
 			continue
 		}
-		_, err := extensions.Get(client, resource.Extension).Extract()
+		_, err := extensions.Get(p.NeutronV2, resource.Extension).Extract()
 		switch err.(type) {
 		case gophercloud.ErrDefault404:
 			p.hasExtension[resource.Extension] = false
@@ -168,7 +172,7 @@ func (p *neutronPlugin) Init(provider *gophercloud.ProviderClient, eo gopherclou
 	}
 
 	// Octavia supported?
-	_, err = openstack.NewLoadBalancerV2(provider, eo)
+	p.OctaviaV2, err = openstack.NewLoadBalancerV2(provider, eo)
 	switch err.(type) {
 	case *gophercloud.ErrEndpointNotFound:
 		p.hasOctavia = false
@@ -316,21 +320,21 @@ var octaviaResourceMeta = []octaviaResourceMetadata{
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *neutronPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+func (p *neutronPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *neutronPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics string, err error) {
+func (p *neutronPlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics string, err error) {
 	data := make(map[string]core.ResourceData)
 
-	err = p.scrapeNeutronInto(data, provider, eo, project.UUID)
+	err = p.scrapeNeutronInto(data, project.UUID)
 	if err != nil {
 		return nil, "", err
 	}
 
 	if p.hasOctavia {
-		err = p.scrapeOctaviaInto(data, provider, eo, project.UUID)
+		err = p.scrapeOctaviaInto(data, project.UUID)
 		if err != nil {
 			return nil, "", err
 		}
@@ -339,12 +343,7 @@ func (p *neutronPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercl
 	return data, "", nil
 }
 
-func (p *neutronPlugin) scrapeNeutronInto(result map[string]core.ResourceData, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, projectUUID string) error {
-	networkV2, err := openstack.NewNetworkV2(provider, eo)
-	if err != nil {
-		return err
-	}
-
+func (p *neutronPlugin) scrapeNeutronInto(result map[string]core.ResourceData, projectUUID string) error {
 	//read Neutron quota/usage
 	type neutronQuotaStruct struct {
 		Quota int64  `json:"limit"`
@@ -354,7 +353,7 @@ func (p *neutronPlugin) scrapeNeutronInto(result map[string]core.ResourceData, p
 		Values map[string]neutronQuotaStruct `json:"quota"`
 	}
 	quotas.Values = make(map[string]neutronQuotaStruct)
-	err = neutron_quotas.GetDetail(networkV2, projectUUID).ExtractInto(&quotas)
+	err := neutron_quotas.GetDetail(p.NeutronV2, projectUUID).ExtractInto(&quotas)
 	if err != nil {
 		return err
 	}
@@ -373,23 +372,18 @@ func (p *neutronPlugin) scrapeNeutronInto(result map[string]core.ResourceData, p
 	return nil
 }
 
-func (p *neutronPlugin) scrapeOctaviaInto(result map[string]core.ResourceData, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, projectUUID string) error {
-	octaviaV2, err := openstack.NewLoadBalancerV2(provider, eo)
-	if err != nil {
-		return err
-	}
-
+func (p *neutronPlugin) scrapeOctaviaInto(result map[string]core.ResourceData, projectUUID string) error {
 	//read Octavia quota
 	var quotas struct {
 		Values map[string]int64 `json:"quota"`
 	}
-	err = octavia_quotas.Get(octaviaV2, projectUUID).ExtractInto(&quotas)
+	err := octavia_quotas.Get(p.OctaviaV2, projectUUID).ExtractInto(&quotas)
 	if err != nil {
 		return err
 	}
 
 	//read Octavia usage
-	usage, err := p.scrapeOctaviaUsage(octaviaV2, projectUUID)
+	usage, err := p.scrapeOctaviaUsage(projectUUID)
 	if err != nil {
 		return err
 	}
@@ -408,7 +402,7 @@ func (p *neutronPlugin) scrapeOctaviaInto(result map[string]core.ResourceData, p
 }
 
 // scrapeOctaviaUsage returns Octavia quota usage for a project.
-func (p *neutronPlugin) scrapeOctaviaUsage(client *gophercloud.ServiceClient, projectID string) (map[string]uint64, error) {
+func (p *neutronPlugin) scrapeOctaviaUsage(projectID string) (map[string]uint64, error) {
 	var (
 		usage struct {
 			Values map[string]uint64 `json:"quota_usage"`
@@ -416,7 +410,7 @@ func (p *neutronPlugin) scrapeOctaviaUsage(client *gophercloud.ServiceClient, pr
 		r gophercloud.Result
 	)
 	usage.Values = make(map[string]uint64)
-	resp, err := client.Get(client.ServiceURL("quota_usage", projectID), &r.Body, nil) //nolint:bodyclose // already closed by gophercloud
+	resp, err := p.OctaviaV2.Get(p.OctaviaV2.ServiceURL("quota_usage", projectID), &r.Body, nil) //nolint:bodyclose // already closed by gophercloud
 	if err != nil {
 		return usage.Values, err
 	}
@@ -440,13 +434,13 @@ func (q neutronOrOctaviaQuotaSet) ToQuotaUpdateMap() (map[string]interface{}, er
 }
 
 // IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
-func (p *neutronPlugin) IsQuotaAcceptableForProject(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
+func (p *neutronPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, quotas map[string]uint64) error {
 	//not required for this plugin
 	return nil
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *neutronPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
+func (p *neutronPlugin) SetQuota(project core.KeystoneProject, quotas map[string]uint64) error {
 	//collect Neutron quotas
 	neutronQuotas := make(neutronOrOctaviaQuotaSet)
 	for _, res := range neutronResourceMeta {
@@ -461,11 +455,7 @@ func (p *neutronPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopher
 	}
 
 	//set Neutron quotas
-	networkV2, err := openstack.NewNetworkV2(provider, eo)
-	if err != nil {
-		return err
-	}
-	_, err = neutron_quotas.Update(networkV2, project.UUID, neutronQuotas).Extract()
+	_, err := neutron_quotas.Update(p.NeutronV2, project.UUID, neutronQuotas).Extract()
 	if err != nil {
 		return err
 	}
@@ -481,11 +471,7 @@ func (p *neutronPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopher
 		}
 
 		//set Octavia quotas
-		octaviaV2, err := openstack.NewLoadBalancerV2(provider, eo)
-		if err != nil {
-			return err
-		}
-		_, err = octavia_quotas.Update(octaviaV2, project.UUID, octaviaQuotas).Extract()
+		_, err = octavia_quotas.Update(p.OctaviaV2, project.UUID, octaviaQuotas).Extract()
 		if err != nil {
 			return err
 		}

@@ -86,6 +86,10 @@ type novaPlugin struct {
 		lastScrapeTime *time.Time
 		members        map[string]uint64 // per project
 	} `yaml:"-"`
+	//connections
+	NovaV2   *gophercloud.ServiceClient `yaml:"-"`
+	CinderV3 *gophercloud.ServiceClient `yaml:"-"`
+	GlanceV2 *gophercloud.ServiceClient `yaml:"-"`
 }
 
 type novaSerializedMetrics struct {
@@ -120,20 +124,29 @@ func init() {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubresources map[string]bool) error {
+func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubresources map[string]bool) (err error) {
 	p.resources = novaDefaultResources
 	p.osTypeForImage = make(map[string]string)
 	p.osTypeForInstance = make(map[string]string)
 	p.scrapeInstances = scrapeSubresources["instances"]
 	p.ftt = newNovaFlavorTranslationTable(p.SeparateInstanceQuotas.FlavorAliases)
 
-	client, err := openstack.NewComputeV2(provider, eo)
+	p.NovaV2, err = openstack.NewComputeV2(provider, eo)
+	if err != nil {
+		return err
+	}
+	p.NovaV2.Microversion = "2.60" //to list server groups across projects and get all required server attributes
+	p.CinderV3, err = openstack.NewBlockStorageV3(provider, eo)
+	if err != nil {
+		return err
+	}
+	p.GlanceV2, err = openstack.NewImageServiceV2(provider, eo)
 	if err != nil {
 		return err
 	}
 
 	//find per-flavor instance resources
-	flavorNames, err := p.ftt.ListFlavorsWithSeparateInstanceQuota(client)
+	flavorNames, err := p.ftt.ListFlavorsWithSeparateInstanceQuota(p.NovaV2)
 	if err != nil {
 		return err
 	}
@@ -252,21 +265,12 @@ func (p *novaPlugin) Rates() []limesrates.RateInfo {
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *novaPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+func (p *novaPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics string, err error) {
-	client, err := openstack.NewComputeV2(provider, eo)
-	if err != nil {
-		return nil, "", err
-	}
-	blockStorageV2, err := openstack.NewBlockStorageV3(provider, eo)
-	if err != nil {
-		return nil, "", err
-	}
-
+func (p *novaPlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics string, err error) {
 	var limitsData struct {
 		Limits struct {
 			Absolute struct {
@@ -286,14 +290,14 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 			} `json:"absolutePerFlavor"`
 		} `json:"limits"`
 	}
-	err = limits.Get(client, limits.GetOpts{TenantID: project.UUID}).ExtractInto(&limitsData)
+	err = limits.Get(p.NovaV2, limits.GetOpts{TenantID: project.UUID}).ExtractInto(&limitsData)
 	if err != nil {
 		return nil, "", err
 	}
 
 	var totalServerGroupMembersUsed uint64
 	if limitsData.Limits.Absolute.TotalServerGroupsUsed > 0 {
-		err := p.getServerGroups(client)
+		err := p.getServerGroups()
 		if err != nil {
 			return nil, "", err
 		}
@@ -365,8 +369,7 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 			"unknown": 0,
 		}
 
-		client.Microversion = "2.60"
-		err := servers.List(client, listOpts).EachPage(func(page pagination.Page) (bool, error) {
+		err := servers.List(p.NovaV2, listOpts).EachPage(func(page pagination.Page) (bool, error) {
 			var instances []struct {
 				servers.Server
 				availabilityzones.ServerAvailabilityZoneExt
@@ -488,7 +491,7 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 
 				if instance.Image == nil {
 					//instance built from bootable volume -> look at bootable volume to find OS type
-					osType, err := p.getOSTypeFromBootVolume(client, blockStorageV2, instance.ID)
+					osType, err := p.getOSTypeFromBootVolume(instance.ID)
 					if err == nil {
 						subResource["os_type"] = osType
 					} else {
@@ -499,7 +502,7 @@ func (p *novaPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud
 					//instance built from image -> look at image to find OS type
 					imageID, ok := instance.Image["id"].(string)
 					if ok {
-						osType, err := p.getOSTypeForImage(provider, eo, imageID)
+						osType, err := p.getOSTypeForImage(imageID)
 						if err == nil {
 							subResource["os_type"] = osType
 						} else {
@@ -545,18 +548,13 @@ func derefSlicePtrOrEmpty(val *[]string) []string {
 }
 
 // IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
-func (p *novaPlugin) IsQuotaAcceptableForProject(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
+func (p *novaPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, quotas map[string]uint64) error {
 	//not required for this plugin
 	return nil
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *novaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
-	client, err := openstack.NewComputeV2(provider, eo)
-	if err != nil {
-		return err
-	}
-
+func (p *novaPlugin) SetQuota(project core.KeystoneProject, quotas map[string]uint64) error {
 	//translate Limes resource names for separate instance quotas into Nova quota names
 	novaQuotas := make(novaQuotaUpdateOpts, len(quotas))
 	for resourceName, quota := range quotas {
@@ -569,7 +567,7 @@ func (p *novaPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gopherclo
 		}
 	}
 
-	return quotasets.Update(client, project.UUID, novaQuotas).Err
+	return quotasets.Update(p.NovaV2, project.UUID, novaQuotas).Err
 }
 
 var novaInstanceCountGauge = prometheus.NewGaugeVec(
@@ -648,14 +646,14 @@ func (p *novaPlugin) getHypervisorType(flavor novaFlavorInfo) string {
 	return "unknown"
 }
 
-func (p *novaPlugin) getOSTypeFromBootVolume(computeV2, blockStorageV2 *gophercloud.ServiceClient, instanceID string) (string, error) {
+func (p *novaPlugin) getOSTypeFromBootVolume(instanceID string) (string, error) {
 	cachedResult, ok := p.osTypeForInstance[instanceID]
 	if ok {
 		return cachedResult, nil
 	}
 
 	//list volume attachments
-	page, err := volumeattach.List(computeV2, instanceID).AllPages()
+	page, err := volumeattach.List(p.NovaV2, instanceID).AllPages()
 	if err != nil {
 		return "", err
 	}
@@ -682,7 +680,7 @@ func (p *novaPlugin) getOSTypeFromBootVolume(computeV2, blockStorageV2 *gophercl
 			VMwareOSType string `json:"vmware_ostype"`
 		} `json:"volume_image_metadata"`
 	}
-	err = volumes.Get(blockStorageV2, rootVolumeID).ExtractInto(&volume)
+	err = volumes.Get(p.CinderV3, rootVolumeID).ExtractInto(&volume)
 	if err != nil {
 		return "", err
 	}
@@ -694,12 +692,12 @@ func (p *novaPlugin) getOSTypeFromBootVolume(computeV2, blockStorageV2 *gophercl
 	return "unknown", nil
 }
 
-func (p *novaPlugin) getOSTypeForImage(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, imageID string) (string, error) {
+func (p *novaPlugin) getOSTypeForImage(imageID string) (string, error) {
 	if osType, ok := p.osTypeForImage[imageID]; ok {
 		return osType, nil
 	}
 
-	osType, err := p.findOSTypeForImage(provider, eo, imageID)
+	osType, err := p.findOSTypeForImage(imageID)
 	if err == nil {
 		p.osTypeForImage[imageID] = osType
 	} else {
@@ -708,16 +706,12 @@ func (p *novaPlugin) getOSTypeForImage(provider *gophercloud.ProviderClient, eo 
 	return osType, err
 }
 
-func (p *novaPlugin) findOSTypeForImage(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, imageID string) (string, error) {
-	client, err := openstack.NewImageServiceV2(provider, eo)
-	if err != nil {
-		return "", err
-	}
+func (p *novaPlugin) findOSTypeForImage(imageID string) (string, error) {
 	var result struct {
 		Tags         []string `json:"tags"`
 		VMwareOSType string   `json:"vmware_ostype"`
 	}
-	err = images.Get(client, imageID).ExtractInto(&result)
+	err := images.Get(p.GlanceV2, imageID).ExtractInto(&result)
 	if err != nil {
 		//report a dummy value if image has been deleted...
 		if _, ok := err.(gophercloud.ErrDefault404); ok {
@@ -774,7 +768,7 @@ type novaServerIPData struct {
 	Target  string `json:"target,omitempty"`
 }
 
-func (p *novaPlugin) getServerGroups(client *gophercloud.ServiceClient) error {
+func (p *novaPlugin) getServerGroups() error {
 	if p.serverGroups.lastScrapeTime != nil {
 		if time.Since(*p.serverGroups.lastScrapeTime) < 10*time.Minute {
 			return nil // no need to refresh cache
@@ -791,7 +785,7 @@ func (p *novaPlugin) getServerGroups(client *gophercloud.ServiceClient) error {
 	serverGroupSeen := make(map[string]bool)
 	membersPerProject := make(map[string]uint64)
 	for {
-		groups, err := p.getServerGroupsPage(client, pageSize, currentOffset)
+		groups, err := p.getServerGroupsPage(pageSize, currentOffset)
 		if err != nil {
 			return err
 		}
@@ -816,13 +810,11 @@ func (p *novaPlugin) getServerGroups(client *gophercloud.ServiceClient) error {
 	return nil
 }
 
-func (p *novaPlugin) getServerGroupsPage(client *gophercloud.ServiceClient, limit, offset int) ([]servergroups.ServerGroup, error) {
-	client.Microversion = "2.60"
-	allPages, err := servergroups.List(client, servergroups.ListOpts{AllProjects: true, Limit: limit, Offset: offset}).AllPages()
+func (p *novaPlugin) getServerGroupsPage(limit, offset int) ([]servergroups.ServerGroup, error) {
+	allPages, err := servergroups.List(p.NovaV2, servergroups.ListOpts{AllProjects: true, Limit: limit, Offset: offset}).AllPages()
 	if err != nil {
 		return nil, err
 	}
-	client.Microversion = ""
 	allServerGroups, err := servergroups.ExtractServerGroups(allPages)
 	if err != nil {
 		return nil, err

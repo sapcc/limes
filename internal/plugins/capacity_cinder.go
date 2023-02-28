@@ -34,10 +34,13 @@ import (
 )
 
 type capacityCinderPlugin struct {
+	//configuration
 	VolumeTypes map[string]struct {
 		VolumeBackendName string `yaml:"volume_backend_name"`
 		IsDefault         bool   `yaml:"default"`
 	} `yaml:"volume_types"`
+	//connections
+	CinderV3 *gophercloud.ServiceClient `yaml:"-"`
 }
 
 func init() {
@@ -45,12 +48,14 @@ func init() {
 }
 
 // Init implements the core.CapacityPlugin interface.
-func (p *capacityCinderPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubcapacities map[string]map[string]bool) error {
+func (p *capacityCinderPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubcapacities map[string]map[string]bool) (err error) {
 	if len(p.VolumeTypes) == 0 {
 		//nolint:stylecheck //Cinder is a proper name
 		return errors.New("Cinder capacity plugin: missing required configuration field cinder.volume_types")
 	}
-	return nil
+
+	p.CinderV3, err = openstack.NewBlockStorageV3(provider, eo)
+	return err
 }
 
 // PluginTypeID implements the core.CapacityPlugin interface.
@@ -71,14 +76,9 @@ func (p *capacityCinderPlugin) makeResourceName(volumeType string) string {
 }
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *capacityCinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (result map[string]map[string]core.CapacityData, serializedMetrics string, err error) {
-	client, err := openstack.NewBlockStorageV3(provider, eo)
-	if err != nil {
-		return nil, "", err
-	}
-
+func (p *capacityCinderPlugin) Scrape() (result map[string]map[string]core.CapacityData, serializedMetrics string, err error) {
 	//Get absolute limits for a tenant
-	allPages, err := schedulerstats.List(client, schedulerstats.ListOpts{Detail: true}).AllPages()
+	allPages, err := schedulerstats.List(p.CinderV3, schedulerstats.ListOpts{Detail: true}).AllPages()
 	if err != nil {
 		return nil, "", err
 	}
@@ -87,7 +87,7 @@ func (p *capacityCinderPlugin) Scrape(provider *gophercloud.ProviderClient, eo g
 		return nil, "", err
 	}
 
-	allPages, err = services.List(client, nil).AllPages()
+	allPages, err = services.List(p.CinderV3, nil).AllPages()
 	if err != nil {
 		return nil, "", err
 	}

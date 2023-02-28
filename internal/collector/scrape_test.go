@@ -474,7 +474,7 @@ func (p *autoApprovalTestPlugin) Resources() []limesresources.ResourceInfo {
 func (p *autoApprovalTestPlugin) Rates() []limesrates.RateInfo {
 	return nil
 }
-func (p *autoApprovalTestPlugin) ScrapeRates(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+func (p *autoApprovalTestPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 func (p *autoApprovalTestPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
@@ -483,18 +483,18 @@ func (p *autoApprovalTestPlugin) CollectMetrics(ch chan<- prometheus.Metric, pro
 	return nil
 }
 
-func (p *autoApprovalTestPlugin) Scrape(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics string, err error) {
+func (p *autoApprovalTestPlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics string, err error) {
 	return map[string]core.ResourceData{
 		"approve":   {Usage: 0, Quota: int64(p.StaticBackendQuota)},
 		"noapprove": {Usage: 0, Quota: int64(p.StaticBackendQuota) + 10},
 	}, "", nil
 }
 
-func (p *autoApprovalTestPlugin) IsQuotaAcceptableForProject(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
+func (p *autoApprovalTestPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, quotas map[string]uint64) error {
 	return errors.New("unimplemented")
 }
 
-func (p *autoApprovalTestPlugin) SetQuota(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
+func (p *autoApprovalTestPlugin) SetQuota(project core.KeystoneProject, quotas map[string]uint64) error {
 	return errors.New("unimplemented")
 }
 
@@ -552,19 +552,19 @@ func (noopQuotaPlugin) ServiceInfo() limes.ServiceInfo {
 func (noopQuotaPlugin) Resources() []limesresources.ResourceInfo {
 	return nil
 }
-func (noopQuotaPlugin) Scrape(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics string, err error) {
+func (noopQuotaPlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics string, err error) {
 	return nil, "", nil
 }
-func (noopQuotaPlugin) IsQuotaAcceptableForProject(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
+func (noopQuotaPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, quotas map[string]uint64) error {
 	return nil
 }
-func (noopQuotaPlugin) SetQuota(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, quotas map[string]uint64) error {
+func (noopQuotaPlugin) SetQuota(project core.KeystoneProject, quotas map[string]uint64) error {
 	return nil
 }
 func (noopQuotaPlugin) Rates() []limesrates.RateInfo {
 	return nil
 }
-func (noopQuotaPlugin) ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+func (noopQuotaPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 func (noopQuotaPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {

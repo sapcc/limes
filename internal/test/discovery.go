@@ -62,12 +62,12 @@ func (p *DiscoveryPlugin) Init(client *gophercloud.ProviderClient, eo gopherclou
 }
 
 // ListDomains implements the core.DiscoveryPlugin interface.
-func (p *DiscoveryPlugin) ListDomains(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) ([]core.KeystoneDomain, error) {
+func (p *DiscoveryPlugin) ListDomains() ([]core.KeystoneDomain, error) {
 	return p.StaticDomains, nil
 }
 
 // ListProjects implements the core.DiscoveryPlugin interface.
-func (p *DiscoveryPlugin) ListProjects(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domain core.KeystoneDomain) ([]core.KeystoneProject, error) {
+func (p *DiscoveryPlugin) ListProjects(domain core.KeystoneDomain) ([]core.KeystoneProject, error) {
 	//the domain is not duplicated in each StaticProjects entry, so it must be
 	//added now
 	result := make([]core.KeystoneProject, len(p.StaticProjects[domain.UUID]))

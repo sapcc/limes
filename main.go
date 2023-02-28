@@ -32,7 +32,6 @@ import (
 	"time"
 
 	"github.com/dlmiddlecote/sqlstats"
-	"github.com/gophercloud/gophercloud"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/cors"
@@ -206,14 +205,13 @@ func taskTestGetQuota(cluster *core.Cluster, args []string) {
 	}
 
 	serviceType := args[1]
-	provider, eo := cluster.ProviderClient()
-	project := must.Return(findProjectForTesting(cluster, provider, eo, args[0]))
+	project := must.Return(findProjectForTesting(cluster, args[0]))
 
 	if _, ok := cluster.QuotaPlugins[serviceType]; !ok {
 		logg.Fatal("unknown service type: %s", serviceType)
 	}
 
-	result, serializedMetrics, err := cluster.QuotaPlugins[serviceType].Scrape(provider, eo, project)
+	result, serializedMetrics, err := cluster.QuotaPlugins[serviceType].Scrape(project)
 	must.Succeed(err)
 
 	for resourceName := range result {
@@ -249,10 +247,9 @@ func taskTestGetRates(cluster *core.Cluster, args []string) {
 	}
 
 	serviceType := args[1]
-	provider, eo := cluster.ProviderClient()
-	project := must.Return(findProjectForTesting(cluster, provider, eo, args[0]))
+	project := must.Return(findProjectForTesting(cluster, args[0]))
 
-	result, serializedState, err := cluster.QuotaPlugins[serviceType].ScrapeRates(provider, eo, project, prevSerializedState)
+	result, serializedState, err := cluster.QuotaPlugins[serviceType].ScrapeRates(project, prevSerializedState)
 	must.Succeed(err)
 	if serializedState != "" {
 		logg.Info("scrape returned new serialized state: %s", serializedState)
@@ -271,13 +268,13 @@ func taskTestGetRates(cluster *core.Cluster, args []string) {
 	must.Succeed(enc.Encode(result))
 }
 
-func findProjectForTesting(cluster *core.Cluster, client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, projectUUID string) (core.KeystoneProject, error) {
-	domains, err := cluster.DiscoveryPlugin.ListDomains(client, eo)
+func findProjectForTesting(cluster *core.Cluster, projectUUID string) (core.KeystoneProject, error) {
+	domains, err := cluster.DiscoveryPlugin.ListDomains()
 	if err != nil {
 		return core.KeystoneProject{}, util.UnpackError(err)
 	}
 	for _, d := range domains {
-		projects, err := cluster.DiscoveryPlugin.ListProjects(client, eo, d)
+		projects, err := cluster.DiscoveryPlugin.ListProjects(d)
 		if err != nil {
 			return core.KeystoneProject{}, util.UnpackError(err)
 		}
@@ -331,8 +328,7 @@ func taskTestSetQuota(cluster *core.Cluster, args []string) {
 	}
 
 	serviceType := args[1]
-	provider, eo := cluster.ProviderClient()
-	project := must.Return(findProjectForTesting(cluster, provider, eo, args[0]))
+	project := must.Return(findProjectForTesting(cluster, args[0]))
 
 	quotaValueRx := regexp.MustCompile(`^([^=]+)=(\d+)$`)
 	quotaValues := make(map[string]uint64)
@@ -348,7 +344,7 @@ func taskTestSetQuota(cluster *core.Cluster, args []string) {
 		quotaValues[match[1]] = val
 	}
 
-	must.Succeed(cluster.QuotaPlugins[serviceType].SetQuota(provider, eo, project, quotaValues))
+	must.Succeed(cluster.QuotaPlugins[serviceType].SetQuota(project, quotaValues))
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -365,8 +361,7 @@ func taskTestScanCapacity(cluster *core.Cluster, args []string) {
 		logg.Fatal("unknown capacitor: %s", capacitorID)
 	}
 
-	provider, eo := cluster.ProviderClient()
-	capacities, serializedMetrics, err := plugin.Scrape(provider, eo)
+	capacities, serializedMetrics, err := plugin.Scrape()
 	if err != nil {
 		logg.Error("Scrape failed: %s", util.UnpackError(err).Error())
 		capacities = nil

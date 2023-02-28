@@ -69,15 +69,17 @@ func KeystoneProjectFromDB(dbProject db.Project, domain KeystoneDomain) Keystone
 type DiscoveryPlugin interface {
 	pluggable.Plugin
 	//Init is called before any other interface methods, and allows the plugin to
-	//perform first-time initialization.
+	//perform first-time initialization. If the plugin needs to access OpenStack
+	//APIs, it needs to spawn the respective ServiceClients in this method and
+	//retain them.
 	//
 	//Before Init is called, the `discovery.params` provided in the configuration
 	//file will be yaml.Unmarshal()ed into the plugin object itself.
 	Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error
 	//ListDomains returns all Keystone domains in the cluster.
-	ListDomains(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) ([]KeystoneDomain, error)
+	ListDomains() ([]KeystoneDomain, error)
 	//ListProjects returns all Keystone projects in the given domain.
-	ListProjects(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, domain KeystoneDomain) ([]KeystoneProject, error)
+	ListProjects(domain KeystoneDomain) ([]KeystoneProject, error)
 }
 
 // ResourceData contains quota and usage data for a single resource.
@@ -97,16 +99,22 @@ type ResourceData struct {
 // backend service.
 type QuotaPlugin interface {
 	pluggable.Plugin
-	//Init is guaranteed to be called before all other methods exposed by the
-	//interface. Implementations can use it f.i. to discover the available
-	//Resources(). For plugins that support subresource scraping, the final
-	//argument indicates which resources to scrape (the keys are resource names).
+	//Init is called before any other interface methods, and allows the plugin to
+	//perform first-time initialization. If the plugin needs to access OpenStack
+	//APIs, it needs to spawn the respective ServiceClients in this method and
+	//retain them.
+	//
+	//Implementations can use it f.i. to discover the available Resources(). For
+	//plugins that support subresource scraping, the final argument indicates
+	//which resources to scrape (the keys are resource names).
 	//
 	//Before Init is called, the `services[].params` provided in the config
 	//file will be yaml.Unmarshal()ed into the plugin object itself.
 	Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubresources map[string]bool) error
+
 	//ServiceInfo returns metadata for this service.
 	ServiceInfo() limes.ServiceInfo
+
 	//Resources returns metadata for all the resources that this plugin scrapes
 	//from the backend service.
 	Resources() []limesresources.ResourceInfo
@@ -117,16 +125,17 @@ type QuotaPlugin interface {
 	//
 	//The serializedMetrics return value is persisted in the Limes DB and
 	//supplied to all subsequent RenderMetrics calls.
-	Scrape(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project KeystoneProject) (result map[string]ResourceData, serializedMetrics string, error error)
+	Scrape(project KeystoneProject) (result map[string]ResourceData, serializedMetrics string, error error)
 	//IsQuotaAcceptableForProject checks if the given quota value is acceptable
 	//for the given project, and returns nil if the quota is acceptable, or a
 	//human-readable error otherwise. This should only be used when the
 	//acceptability of a specific quota value is tied to the project identity.
-	IsQuotaAcceptableForProject(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project KeystoneProject, quotas map[string]uint64) error
+	IsQuotaAcceptableForProject(project KeystoneProject, quotas map[string]uint64) error
 	//SetQuota updates the backend service's quotas for the given project in the
 	//given domain to the values specified here. The map is guaranteed to contain
 	//values for all resources defined by Resources().
-	SetQuota(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project KeystoneProject, quotas map[string]uint64) error
+	SetQuota(project KeystoneProject, quotas map[string]uint64) error
+
 	//Rates returns metadata for all the rates that this plugin scrapes
 	//from the backend service.
 	Rates() []limesrates.RateInfo
@@ -140,7 +149,7 @@ type QuotaPlugin interface {
 	//by the core application in any way. The plugin implementation can use this
 	//field to carry state between ScrapeRates() calls, esp. to detect and handle
 	//counter resets in the backend.
-	ScrapeRates(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, project KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error)
+	ScrapeRates(project KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error)
 
 	//DescribeMetrics is called when Prometheus is scraping metrics from
 	//limes-collect, to provide an opportunity to the plugin to emit its own
@@ -192,8 +201,10 @@ type CapacityDataForAZ struct {
 // of these hypervisors instead of the OpenStack Compute API.
 type CapacityPlugin interface {
 	pluggable.Plugin
-	//Init is guaranteed to be called before all other methods exposed by the
-	//interface.
+	//Init is called before any other interface methods, and allows the plugin to
+	//perform first-time initialization. If the plugin needs to access OpenStack
+	//APIs, it needs to spawn the respective ServiceClients in this method and
+	//retain them.
 	//
 	//Before Init is called, the `capacitors[].params` provided in the config
 	//file will be yaml.Unmarshal()ed into the plugin object itself.
@@ -207,7 +218,7 @@ type CapacityPlugin interface {
 	//
 	//The serializedMetrics return value is persisted in the Limes DB and
 	//supplied to all subsequent RenderMetrics calls.
-	Scrape(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (result map[string]map[string]CapacityData, serializedMetrics string, err error)
+	Scrape() (result map[string]map[string]CapacityData, serializedMetrics string, err error)
 
 	//DescribeMetrics is called when Prometheus is scraping metrics from
 	//limes-collect, to provide an opportunity to the plugin to emit its own
