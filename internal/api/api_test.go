@@ -22,7 +22,6 @@ package api
 import (
 	"database/sql"
 	"fmt"
-	"math"
 	"net/http"
 	"reflect"
 	"sort"
@@ -112,7 +111,8 @@ func setupTest(t *testing.T, startData string) (*core.Cluster, *gorp.DbMap, http
 	if startData != "fixtures/start-data-inconsistencies.sql" {
 		clusterConfig.Services = []core.ServiceConfiguration{
 			{
-				Type: "shared",
+				ServiceType: "shared",
+				PluginType:  "shared", //TODO: dummy value
 				RateLimits: core.ServiceRateLimitConfiguration{
 					Global: []core.RateLimitConfiguration{
 						{
@@ -151,7 +151,8 @@ func setupTest(t *testing.T, startData string) (*core.Cluster, *gorp.DbMap, http
 				},
 			},
 			{
-				Type: "unshared",
+				ServiceType: "unshared",
+				PluginType:  "unshared", //TODO: dummy value
 				RateLimits: core.ServiceRateLimitConfiguration{
 					ProjectDefault: []core.RateLimitConfiguration{
 						{
@@ -177,7 +178,10 @@ func setupTest(t *testing.T, startData string) (*core.Cluster, *gorp.DbMap, http
 			},
 		}
 		if hasCentralizedService {
-			clusterConfig.Services = append(clusterConfig.Services, core.ServiceConfiguration{Type: "centralized"})
+			clusterConfig.Services = append(clusterConfig.Services, core.ServiceConfiguration{
+				ServiceType: "centralized",
+				PluginType:  "centralized", //TODO: dummy value
+			})
 		}
 	}
 
@@ -203,45 +207,35 @@ func setupTest(t *testing.T, startData string) (*core.Cluster, *gorp.DbMap, http
 	cluster.Auth.TokenValidator = TestTokenValidator{enforcer}
 
 	if startData != "fixtures/start-data-inconsistencies.sql" {
-		cluster.Config.ResourceBehaviors = []*core.ResourceBehaviorConfiguration{
+		cluster.Config.ResourceBehaviors = []core.ResourceBehavior{
 			//check minimum non-zero project quota constraint
 			{
-				Compiled: core.ResourceBehavior{
-					MaxBurstMultiplier:     limesresources.BurstingMultiplier(math.Inf(+1)),
-					FullResourceNameRx:     "unshared/things",
-					MinNonZeroProjectQuota: 10,
-				},
+				FullResourceNameRx:     "unshared/things",
+				MinNonZeroProjectQuota: 10,
 			},
 			//check how scaling relations are reported
 			{
-				Compiled: core.ResourceBehavior{
-					MaxBurstMultiplier:     limesresources.BurstingMultiplier(math.Inf(+1)),
-					FullResourceNameRx:     "unshared/things",
-					ScalesWithResourceName: "things",
-					ScalesWithServiceType:  "shared",
-					ScalingFactor:          2,
+				FullResourceNameRx: "unshared/things",
+				ScalesWith: core.ResourceRef{
+					ResourceName: "things",
+					ServiceType:  "shared",
 				},
+				ScalingFactor: 2,
 			},
 			//check how annotations are reported
 			{
-				Compiled: core.ResourceBehavior{
-					MaxBurstMultiplier: limesresources.BurstingMultiplier(math.Inf(+1)),
-					FullResourceNameRx: "shared/.*things",
-					ScopeRx:            "germany(?:/dresden)?",
-					Annotations: map[string]interface{}{
-						"annotated": true,
-						"text":      "this annotation appears on shared things of domain germany and project dresden",
-					},
+				FullResourceNameRx: "shared/.*things",
+				ScopeRx:            "germany(?:/dresden)?",
+				Annotations: map[string]interface{}{
+					"annotated": true,
+					"text":      "this annotation appears on shared things of domain germany and project dresden",
 				},
 			},
 			{
-				Compiled: core.ResourceBehavior{
-					MaxBurstMultiplier: limesresources.BurstingMultiplier(math.Inf(+1)),
-					FullResourceNameRx: "shared/things",
-					ScopeRx:            "germany/dresden",
-					Annotations: map[string]interface{}{
-						"text": "this annotation appears on shared/things of project dresden only",
-					},
+				FullResourceNameRx: "shared/things",
+				ScopeRx:            "germany/dresden",
+				Annotations: map[string]interface{}{
+					"text": "this annotation appears on shared/things of project dresden only",
 				},
 			},
 		}
@@ -261,7 +255,10 @@ func setupTest(t *testing.T, startData string) (*core.Cluster, *gorp.DbMap, http
 	}
 
 	//validate that this is a no-op when no OPAConfiguration is provided
-	cluster.SetupOPA("", "")
+	errs := cluster.SetupOPA("", "")
+	for _, err := range errs {
+		t.Error(err.Error())
+	}
 
 	handler := httpapi.Compose(
 		NewV1API(cluster, dbm),
@@ -480,20 +477,14 @@ func Test_ClusterOperations(t *testing.T) {
 	}.Check(t, router)
 
 	//check rendering of overcommit factors
-	cluster.Config.ResourceBehaviors = []*core.ResourceBehaviorConfiguration{
+	cluster.Config.ResourceBehaviors = []core.ResourceBehavior{
 		{
-			Compiled: core.ResourceBehavior{
-				FullResourceNameRx: "shared/things",
-				MaxBurstMultiplier: limesresources.BurstingMultiplier(math.Inf(+1)),
-				OvercommitFactor:   2.5,
-			},
+			FullResourceNameRx: "shared/things",
+			OvercommitFactor:   2.5,
 		},
 		{
-			Compiled: core.ResourceBehavior{
-				FullResourceNameRx: "unshared/things",
-				MaxBurstMultiplier: limesresources.BurstingMultiplier(math.Inf(+1)),
-				OvercommitFactor:   1.5,
-			},
+			FullResourceNameRx: "unshared/things",
+			OvercommitFactor:   1.5,
 		},
 	}
 	assert.HTTPRequest{
@@ -791,7 +782,10 @@ func Test_DomainOperations(t *testing.T) {
 
 func Test_DomainOPA(t *testing.T) {
 	cluster, _, router, _ := setupTest(t, "fixtures/start-data-opa.sql")
-	cluster.SetupOPA("fixtures/limes.rego", "fixtures/limes.rego")
+	errs := cluster.SetupOPA("fixtures/limes.rego", "fixtures/limes.rego")
+	for _, err := range errs {
+		t.Error(err.Error())
+	}
 
 	// try if valid operations still work
 	assert.HTTPRequest{

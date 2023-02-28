@@ -20,12 +20,10 @@
 package collector
 
 import (
-	"math"
 	"testing"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
 
@@ -60,12 +58,9 @@ func Test_ScanCapacity(t *testing.T) {
 		},
 		Config: core.ClusterConfiguration{
 			//overcommit should be reflected in capacity metrics
-			ResourceBehaviors: []*core.ResourceBehaviorConfiguration{{
-				Compiled: core.ResourceBehavior{
-					FullResourceNameRx: "unshared2/capacity",
-					OvercommitFactor:   2.5,
-					MaxBurstMultiplier: limesresources.BurstingMultiplier(math.Inf(+1)),
-				},
+			ResourceBehaviors: []core.ResourceBehavior{{
+				FullResourceNameRx: "unshared2/capacity",
+				OvercommitFactor:   2.5,
 			}},
 		},
 	}

@@ -250,7 +250,7 @@ func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter) (*l
 
 	//include global rate limits from configuration
 	for _, serviceConfig := range cluster.Config.Services {
-		srvReport := report.Services[serviceConfig.Type]
+		srvReport := report.Services[serviceConfig.ServiceType]
 		if srvReport != nil {
 			for _, rateCfg := range serviceConfig.RateLimits.Global {
 				srvReport.Rates[rateCfg.Name] = &limesrates.ClusterRateReport{

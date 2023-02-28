@@ -71,8 +71,10 @@ func main() {
 	wrap.Attach(util.AddLoggingRoundTripper)
 
 	//load configuration and connect to cluster
-	cluster := core.NewConfiguration(configPath)
-	must.Succeed(cluster.Connect())
+	cluster, errs := core.NewConfiguration(configPath)
+	errs.LogFatalIfError()
+	errs = cluster.Connect()
+	errs.LogFatalIfError()
 	api.StartAuditTrail()
 
 	//select task

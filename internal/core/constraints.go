@@ -122,10 +122,11 @@ func (c QuotaConstraint) String() string {
 // into the base unit of their resource, for which we need to access the
 // QuotaPlugin.Resources(). Hence, `cluster.Init()` needs to have been called
 // before this function is called.
-func NewQuotaConstraints(cluster *Cluster, constraintConfigPath string) (*QuotaConstraintSet, []error) {
+func NewQuotaConstraints(cluster *Cluster, constraintConfigPath string) (result *QuotaConstraintSet, errs ErrorSet) {
 	buf, err := os.ReadFile(constraintConfigPath)
 	if err != nil {
-		return nil, []error{err}
+		errs.Addf("could not read quota constraints: %w", err)
+		return nil, errs
 	}
 
 	var data struct {
@@ -135,32 +136,28 @@ func NewQuotaConstraints(cluster *Cluster, constraintConfigPath string) (*QuotaC
 	}
 	err = yaml.UnmarshalStrict(buf, &data)
 	if err != nil {
-		return nil, []error{err}
+		errs.Addf("could not parse quota constraints: %w", err)
+		return nil, errs
 	}
 
-	result := &QuotaConstraintSet{
+	result = &QuotaConstraintSet{
 		Domains:  make(map[string]QuotaConstraints),
 		Projects: make(map[string]map[string]QuotaConstraints),
 	}
-	var errors []error
 
 	//parse quota constraints for projects
 	for projectAndDomainName, projectData := range data.Projects {
 		fields := strings.SplitN(projectAndDomainName, "/", 2)
 		if len(fields) < 2 {
-			errors = append(errors,
-				fmt.Errorf("missing domain name for project %s", projectAndDomainName),
-			)
+			errs.Addf("invalid constraints: missing domain name for project %s", projectAndDomainName)
 			continue
 		}
 		domainName := fields[0]
 		projectName := fields[1]
 
-		values, errs := compileQuotaConstraints(cluster, projectData, nil)
-		for _, err := range errs {
-			errors = append(errors,
-				fmt.Errorf("invalid constraints for project %s: %s", projectAndDomainName, err.Error()),
-			)
+		values, suberrs := compileQuotaConstraints(cluster, projectData, nil)
+		for _, err := range suberrs {
+			errs.Addf("invalid constraints for project %s: %w", projectAndDomainName, err)
 		}
 
 		if _, exists := result.Projects[domainName]; !exists {
@@ -178,11 +175,9 @@ func NewQuotaConstraints(cluster *Cluster, constraintConfigPath string) (*QuotaC
 			projectsConstraints = make(map[string]QuotaConstraints)
 		}
 
-		values, errs := compileQuotaConstraints(cluster, domainData, projectsConstraints)
-		for _, err := range errs {
-			errors = append(errors,
-				fmt.Errorf("invalid constraints for domain %s: %s", domainName, err.Error()),
-			)
+		values, suberrs := compileQuotaConstraints(cluster, domainData, projectsConstraints)
+		for _, err := range suberrs {
+			errs.Addf("invalid constraints for domain %s: %w", domainName, err)
 		}
 		result.Domains[domainName] = values
 	}
@@ -190,8 +185,8 @@ func NewQuotaConstraints(cluster *Cluster, constraintConfigPath string) (*QuotaC
 	//do not attempt to validate if the parsing already caused errors (a
 	//consistent, but invalid constraint set might look inconsistent because
 	//values that don't parse were not initialized in `result`)
-	if len(errors) > 0 {
-		return result, errors
+	if !errs.IsEmpty() {
+		return result, errs
 	}
 
 	//validate that project quotas fit into domain quotas
@@ -203,20 +198,18 @@ func NewQuotaConstraints(cluster *Cluster, constraintConfigPath string) (*QuotaC
 		allDomainNames[domainName] = true
 	}
 	for domainName := range allDomainNames {
-		errs := validateQuotaConstraints(cluster, result.Domains[domainName], result.Projects[domainName])
-		for _, err := range errs {
-			errors = append(errors,
-				fmt.Errorf("inconsistent constraints for domain %s: %s", domainName, err.Error()),
-			)
+		suberrs := validateQuotaConstraints(cluster, result.Domains[domainName], result.Projects[domainName])
+		for _, err := range suberrs {
+			errs.Addf("inconsistent constraints for domain %s: %w", domainName, err)
 		}
 	}
 
-	return result, errors
+	return result, errs
 }
 
 // When `data` contains the constraints for a project, `projectsConstraints` will be nil.
 // When `data` contains the constraints for a domain, `projectsConstraints` will be non-nil.
-func compileQuotaConstraints(cluster *Cluster, data map[string]map[string]string, projectsConstraints map[string]QuotaConstraints) (values QuotaConstraints, errors []error) {
+func compileQuotaConstraints(cluster *Cluster, data map[string]map[string]string, projectsConstraints map[string]QuotaConstraints) (values QuotaConstraints, errs ErrorSet) {
 	values = make(QuotaConstraints)
 
 	for serviceType, serviceData := range data {
@@ -241,12 +234,12 @@ func compileQuotaConstraints(cluster *Cluster, data map[string]map[string]string
 			}
 			resource := cluster.InfoForResource(serviceType, resourceName)
 			if resource.NoQuota {
-				errors = append(errors, fmt.Errorf("resource %s/%s does not track quota", serviceType, resourceName))
+				errs.Addf("resource %s/%s does not track quota", serviceType, resourceName)
 				continue
 			}
 			qdConfig := cluster.QuotaDistributionConfigForResource(serviceType, resourceName)
 			if projectsConstraints != nil && qdConfig.Model == limesresources.CentralizedQuotaDistribution {
-				errors = append(errors, fmt.Errorf("resource %s/%s does not accept domain quota constraints because domain quota is computed automatically according to the centralized quota distribution model", serviceType, resourceName))
+				errs.Addf("resource %s/%s does not accept domain quota constraints because domain quota is computed automatically according to the centralized quota distribution model", serviceType, resourceName)
 				continue
 			}
 
@@ -264,7 +257,7 @@ func compileQuotaConstraints(cluster *Cluster, data map[string]map[string]string
 
 			constraint, err := parseQuotaConstraint(resource, constraintStr, projectMinimumsSum)
 			if err != nil {
-				errors = append(errors, fmt.Errorf("invalid constraint %q for %s/%s: %s", constraintStr, serviceType, resourceName, err.Error()))
+				errs.Addf("invalid constraint %q for %s/%s: %w", constraintStr, serviceType, resourceName, err)
 				continue
 			}
 			if constraint != nil {
@@ -273,7 +266,7 @@ func compileQuotaConstraints(cluster *Cluster, data map[string]map[string]string
 		}
 	}
 
-	return values, errors
+	return values, errs
 }
 
 var (
@@ -362,7 +355,7 @@ func parseQuotaConstraint(resource limesresources.ResourceInfo, str string, proj
 	return &result, nil
 }
 
-func validateQuotaConstraints(cluster *Cluster, domainConstraints QuotaConstraints, projectsConstraints map[string]QuotaConstraints) (errors []error) {
+func validateQuotaConstraints(cluster *Cluster, domainConstraints QuotaConstraints, projectsConstraints map[string]QuotaConstraints) (errs ErrorSet) {
 	//sum up the constraints of all projects into total min/max quotas
 	sumConstraints := make(QuotaConstraints)
 	for _, projectConstraints := range projectsConstraints {
@@ -412,12 +405,12 @@ func validateQuotaConstraints(cluster *Cluster, domainConstraints QuotaConstrain
 
 			if minProjectQuota > minDomainQuota {
 				unit := cluster.InfoForResource(serviceType, resourceName).Unit
-				errors = append(errors, fmt.Errorf(
+				errs.Addf(
 					`sum of "at least/exactly" project quotas (%s) for %s/%s exceeds "at least/exactly" domain quota (%s)`,
 					limes.ValueWithUnit{Value: minProjectQuota, Unit: unit},
 					serviceType, resourceName,
 					limes.ValueWithUnit{Value: minDomainQuota, Unit: unit},
-				))
+				)
 			}
 		}
 	}
