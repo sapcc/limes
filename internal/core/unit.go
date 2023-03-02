@@ -21,7 +21,6 @@ package core
 
 import (
 	"github.com/sapcc/go-api-declarations/limes"
-	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 )
 
 // ConvertUnitFor works like ConvertTo, but instead of taking a unit as an
@@ -35,49 +34,4 @@ func ConvertUnitFor(cluster *Cluster, serviceType, resourceName string, v limes.
 	targetUnit := cluster.InfoForResource(serviceType, resourceName).Unit
 	result, err := v.ConvertTo(targetUnit)
 	return result.Value, err
-}
-
-// LowPrivilegeRaiseLimit is a union type for the different ways in which a
-// low-privilege raise limit can be specified.
-type LowPrivilegeRaiseLimit struct {
-	//At most one of these will be non-zero.
-	AbsoluteValue                         uint64
-	PercentOfClusterCapacity              float64
-	UntilPercentOfClusterCapacityAssigned float64
-}
-
-// Evaluate converts this limit into an absolute value.
-func (l LowPrivilegeRaiseLimit) Evaluate(clusterReport limesresources.ClusterResourceReport, oldQuota uint64) uint64 {
-	switch {
-	case clusterReport.DomainsQuota == nil:
-		//defense in depth - we shouldn't be considering LPR limits at all for resources that don't track quota
-		return 0
-	case l.AbsoluteValue != 0:
-		return l.AbsoluteValue
-	case l.PercentOfClusterCapacity != 0:
-		if clusterReport.Capacity == nil {
-			return 0
-		}
-		percent := l.PercentOfClusterCapacity / 100
-		return uint64(percent * float64(*clusterReport.Capacity))
-	case l.UntilPercentOfClusterCapacityAssigned != 0:
-		if clusterReport.Capacity == nil {
-			return 0
-		}
-		percent := l.UntilPercentOfClusterCapacityAssigned / 100
-		otherDomainsQuota := float64(*clusterReport.DomainsQuota - oldQuota)
-		maxQuota := percent*float64(*clusterReport.Capacity) - otherDomainsQuota
-		if maxQuota < 0 {
-			return 0
-		}
-		return uint64(maxQuota)
-	default:
-		return 0
-	}
-}
-
-// IsReversible is true for limits that do not depend on the quotas of other
-// domains and projects.
-func (l LowPrivilegeRaiseLimit) IsReversible() bool {
-	return l.AbsoluteValue != 0 || l.PercentOfClusterCapacity != 0
 }
