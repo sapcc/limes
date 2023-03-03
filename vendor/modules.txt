@@ -76,7 +76,7 @@ github.com/gophercloud/gophercloud/openstack/sharedfilesystems/v2/schedulerstats
 github.com/gophercloud/gophercloud/openstack/sharedfilesystems/v2/services
 github.com/gophercloud/gophercloud/openstack/utils
 github.com/gophercloud/gophercloud/pagination
-# github.com/gophercloud/utils v0.0.0-20221207145018-e8fba78967ca
+# github.com/gophercloud/utils v0.0.0-20230301065655-769528992f29
 ## explicit; go 1.15
 github.com/gophercloud/utils/env
 github.com/gophercloud/utils/gnocchi
@@ -126,7 +126,7 @@ github.com/modern-go/reflect2
 # github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826
 ## explicit
 github.com/mohae/deepcopy
-# github.com/open-policy-agent/opa v0.49.1
+# github.com/open-policy-agent/opa v0.49.2
 ## explicit; go 1.18
 github.com/open-policy-agent/opa/ast
 github.com/open-policy-agent/opa/ast/internal/scanner
