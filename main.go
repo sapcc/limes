@@ -32,6 +32,9 @@ import (
 	"time"
 
 	"github.com/dlmiddlecote/sqlstats"
+	"github.com/gophercloud/gophercloud"
+	"github.com/gophercloud/gophercloud/openstack"
+	"github.com/gophercloud/utils/openstack/clientconfig"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/cors"
@@ -69,10 +72,25 @@ func main() {
 	wrap.SetOverrideUserAgent(bininfo.Component(), bininfo.VersionOr("rolling"))
 	wrap.Attach(util.AddLoggingRoundTripper)
 
+	//connect to OpenStack
+	ao, err := clientconfig.AuthOptions(nil)
+	if err != nil {
+		logg.Fatal("cannot find OpenStack credentials: " + err.Error())
+	}
+	ao.AllowReauth = true
+	provider, err := openstack.AuthenticatedClient(*ao)
+	if err != nil {
+		logg.Fatal("cannot initialize OpenStack client: " + err.Error())
+	}
+	eo := gophercloud.EndpointOpts{
+		Availability: gophercloud.Availability(os.Getenv("OS_INTERFACE")),
+		Region:       os.Getenv("OS_REGION_NAME"),
+	}
+
 	//load configuration and connect to cluster
 	cluster, errs := core.NewConfiguration(configPath)
 	errs.LogFatalIfError()
-	errs = cluster.Connect()
+	errs = cluster.Connect(provider, eo)
 	errs.LogFatalIfError()
 	api.StartAuditTrail()
 
@@ -81,7 +99,7 @@ func main() {
 	case "collect":
 		taskCollect(cluster, remainingArgs)
 	case "serve":
-		taskServe(cluster, remainingArgs)
+		taskServe(cluster, remainingArgs, provider, eo)
 	case "test-get-quota":
 		taskTestGetQuota(cluster, remainingArgs)
 	case "test-get-rates":
@@ -168,7 +186,7 @@ func taskCollect(cluster *core.Cluster, args []string) {
 ////////////////////////////////////////////////////////////////////////////////
 // task: serve
 
-func taskServe(cluster *core.Cluster, args []string) {
+func taskServe(cluster *core.Cluster, args []string, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) {
 	if len(args) != 0 {
 		printUsageAndExit()
 	}
@@ -178,13 +196,14 @@ func taskServe(cluster *core.Cluster, args []string) {
 	prometheus.MustRegister(sqlstats.NewStatsCollector("limes", dbm.Db))
 
 	//collect all API endpoints and middlewares
+	tokenValidator := must.Return(api.NewTokenValidator(provider, eo))
 	corsMiddleware := cors.New(cors.Options{
 		AllowedOrigins: []string{"*"},
 		AllowedMethods: []string{"HEAD", "GET", "POST", "PUT"},
 		AllowedHeaders: []string{"Content-Type", "User-Agent", "X-Auth-Token", "X-Limes-Cluster-Id"},
 	})
 	http.Handle("/", httpapi.Compose(
-		api.NewV1API(cluster, dbm),
+		api.NewV1API(cluster, dbm, tokenValidator),
 		httpapi.WithGlobalMiddleware(api.ForbidClusterIDHeader),
 		httpapi.WithGlobalMiddleware(corsMiddleware.Handler),
 	))

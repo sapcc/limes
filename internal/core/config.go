@@ -109,29 +109,6 @@ type CapacitorConfiguration struct {
 	Parameters util.YamlRawMessage `yaml:"params"`
 }
 
-// LowPrivilegeRaiseConfiguration contains the configuration options for
-// low-privilege quota raising in a certain cluster.
-type LowPrivilegeRaiseConfiguration struct {
-	Limits struct {
-		ForDomains  map[string]map[string]string `yaml:"domains"`
-		ForProjects map[string]map[string]string `yaml:"projects"`
-	} `yaml:"limits"`
-	ExcludeProjectDomainRx regexpext.PlainRegexp `yaml:"except_projects_in_domains"`
-	IncludeProjectDomainRx regexpext.PlainRegexp `yaml:"only_projects_in_domains"`
-}
-
-// IsAllowedForProjectsIn checks if low-privilege quota raising is enabled by this config
-// for the domain with the given name.
-func (l LowPrivilegeRaiseConfiguration) IsAllowedForProjectsIn(domainName string) bool {
-	if l.ExcludeProjectDomainRx != "" && l.ExcludeProjectDomainRx.MatchString(domainName) {
-		return false
-	}
-	if l.IncludeProjectDomainRx == "" {
-		return true
-	}
-	return l.IncludeProjectDomainRx.MatchString(domainName)
-}
-
 // BurstingConfiguration contains the configuration options for quota bursting.
 type BurstingConfiguration struct {
 	//If MaxMultiplier is zero, bursting is disabled.

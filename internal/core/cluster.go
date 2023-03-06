@@ -22,10 +22,9 @@ package core
 import (
 	"context"
 	"os"
-	"regexp"
 	"sort"
-	"strconv"
 
+	"github.com/gophercloud/gophercloud"
 	"github.com/open-policy-agent/opa/rego"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
@@ -40,18 +39,14 @@ import (
 // Cluster contains all configuration and runtime information for the target
 // cluster.
 type Cluster struct {
-	Auth              *AuthSession
 	Config            ClusterConfiguration
 	DiscoveryPlugin   DiscoveryPlugin
 	QuotaPlugins      map[string]QuotaPlugin
 	CapacityPlugins   map[string]CapacityPlugin
 	Authoritative     bool
 	QuotaConstraints  *QuotaConstraintSet
-	LowPrivilegeRaise struct {
-		LimitsForDomains  map[string]map[string]LowPrivilegeRaiseLimit
-		LimitsForProjects map[string]map[string]LowPrivilegeRaiseLimit
-	}
-	OPA struct {
+	LowPrivilegeRaise LowPrivilegeRaiseLimitSet
+	OPA               struct {
 		ProjectQuotaQuery *rego.PreparedEvalQuery
 		DomainQuotaQuery  *rego.PreparedEvalQuery
 	}
@@ -139,18 +134,9 @@ func (c *Cluster) SetupOPA(domainQuotaPolicyPath, projectQuotaPolicyPath string)
 //
 // We cannot do any of this earlier because we only know all resources after
 // calling Init() on all quota plugins.
-func (c *Cluster) Connect() (errs ErrorSet) {
-	var err error
-	c.Auth, err = AuthToOpenstack()
-	if err != nil {
-		errs.Addf("failed to authenticate: %w", err)
-		return errs
-	}
-	provider := c.Auth.ProviderClient
-	eo := c.Auth.EndpointOpts
-
+func (c *Cluster) Connect(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (errs ErrorSet) {
 	//initialize discovery plugin
-	err = yaml.UnmarshalStrict([]byte(c.Config.Discovery.Parameters), c.DiscoveryPlugin)
+	err := yaml.UnmarshalStrict([]byte(c.Config.Discovery.Parameters), c.DiscoveryPlugin)
 	if err != nil {
 		errs.Addf("failed to supply params to discovery method: %w", err)
 	} else {
@@ -216,16 +202,8 @@ func (c *Cluster) Connect() (errs ErrorSet) {
 	}
 
 	//parse low-privilege raise limits
-	c.LowPrivilegeRaise.LimitsForDomains, suberrs = c.parseLowPrivilegeRaiseLimits(
-		c.Config.LowPrivilegeRaise.Limits.ForDomains, "domain")
-	for _, err := range suberrs {
-		errs.Addf("while parsing low-privilege raise limit for domains: %w", err)
-	}
-	c.LowPrivilegeRaise.LimitsForProjects, suberrs = c.parseLowPrivilegeRaiseLimits(
-		c.Config.LowPrivilegeRaise.Limits.ForProjects, "project")
-	for _, err := range suberrs {
-		errs.Addf("while parsing low-privilege raise limit for projects: %w", err)
-	}
+	c.LowPrivilegeRaise, suberrs = c.Config.LowPrivilegeRaise.parse(c.QuotaPlugins)
+	errs.Append(suberrs)
 
 	//validate scaling relations
 	for _, behavior := range c.Config.ResourceBehaviors {
@@ -237,71 +215,6 @@ func (c *Cluster) Connect() (errs ErrorSet) {
 	}
 
 	return nil
-}
-
-var (
-	percentOfClusterRx              = regexp.MustCompile(`^([0-9.]+)\s*% of cluster capacity$`)
-	untilPercentOfClusterAssignedRx = regexp.MustCompile(`^until ([0-9.]+)\s*% of cluster capacity is assigned$`)
-)
-
-func (c Cluster) parseLowPrivilegeRaiseLimits(inputs map[string]map[string]string, scopeType string) (result map[string]map[string]LowPrivilegeRaiseLimit, errs ErrorSet) {
-	result = make(map[string]map[string]LowPrivilegeRaiseLimit)
-	for srvType, quotaPlugin := range c.QuotaPlugins {
-		result[srvType] = make(map[string]LowPrivilegeRaiseLimit)
-		for _, res := range quotaPlugin.Resources() {
-			limit, exists := inputs[srvType][res.Name]
-			if !exists {
-				continue
-			}
-
-			match := percentOfClusterRx.FindStringSubmatch(limit)
-			if match != nil {
-				percent, err := strconv.ParseFloat(match[1], 64)
-				if err != nil {
-					errs.Add(err)
-					continue
-				}
-				if percent < 0 || percent > 100 {
-					errs.Addf("value out of range: %s%%", match[1])
-					continue
-				}
-				result[srvType][res.Name] = LowPrivilegeRaiseLimit{
-					PercentOfClusterCapacity: percent,
-				}
-				continue
-			}
-
-			//the "until X% of cluster capacity is assigned" syntax is only allowed for domains
-			if scopeType == "domain" {
-				match := untilPercentOfClusterAssignedRx.FindStringSubmatch(limit)
-				if match != nil {
-					percent, err := strconv.ParseFloat(match[1], 64)
-					if err != nil {
-						errs.Add(err)
-						continue
-					}
-					if percent < 0 || percent > 100 {
-						errs.Addf("value out of range: %s%%", match[1])
-						continue
-					}
-					result[srvType][res.Name] = LowPrivilegeRaiseLimit{
-						UntilPercentOfClusterCapacityAssigned: percent,
-					}
-					continue
-				}
-			}
-
-			rawValue, err := res.Unit.Parse(limit)
-			if err != nil {
-				errs.Add(err)
-				continue
-			}
-			result[srvType][res.Name] = LowPrivilegeRaiseLimit{
-				AbsoluteValue: rawValue,
-			}
-		}
-	}
-	return result, nil
 }
 
 // ServiceTypesInAlphabeticalOrder can be used when service types need to be
