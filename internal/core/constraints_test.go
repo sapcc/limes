@@ -193,7 +193,7 @@ func (p quotaConstraintTestPlugin) Rates() []limesrates.RateInfo {
 func (p quotaConstraintTestPlugin) Scrape(project KeystoneProject) (result map[string]ResourceData, serializedMetrics string, err error) {
 	return nil, "", nil
 }
-func (p quotaConstraintTestPlugin) IsQuotaAcceptableForProject(project KeystoneProject, quotas map[string]uint64) error {
+func (p quotaConstraintTestPlugin) IsQuotaAcceptableForProject(project KeystoneProject, fullQuotas map[string]map[string]uint64) error {
 	return nil
 }
 func (p quotaConstraintTestPlugin) SetQuota(project KeystoneProject, quotas map[string]uint64) error {

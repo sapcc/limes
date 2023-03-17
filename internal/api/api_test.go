@@ -1134,7 +1134,7 @@ func Test_ProjectOperations(t *testing.T) {
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 422,
-		ExpectBody:   assert.StringData("cannot change shared/capacity quota: not acceptable for this project: IsQuotaAcceptableForProject failed as requested for quota set capacity=5, things=10\n"),
+		ExpectBody:   assert.StringData("cannot change shared/capacity quota: not acceptable for this project: IsQuotaAcceptableForProject failed as requested for quota set centralized/capacity=20, centralized/things=15, shared/capacity=5, shared/things=10, unshared/capacity=10, unshared/things=10\n"),
 		Body:         requestOneQuotaChange("project", "shared", "capacity", 5, limes.UnitNone),
 	}.Check(t, router)
 	plugin.QuotaIsNotAcceptable = false

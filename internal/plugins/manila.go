@@ -285,8 +285,7 @@ func (p *manilaPlugin) Scrape(project core.KeystoneProject) (result map[string]c
 	return result, "", nil
 }
 
-// IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
-func (p *manilaPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, quotas map[string]uint64) error {
+func (p *manilaPlugin) rejectInaccessibleShareType(project core.KeystoneProject, quotas map[string]uint64) error {
 	//check if an inaccessible share type is used
 	for _, shareType := range p.ShareTypes {
 		stName := resolveManilaShareType(shareType, project)
@@ -302,9 +301,14 @@ func (p *manilaPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject,
 	return nil
 }
 
+// IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
+func (p *manilaPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, fullQuotas map[string]map[string]uint64) error {
+	return p.rejectInaccessibleShareType(project, fullQuotas[p.ServiceInfo().Type])
+}
+
 // SetQuota implements the core.QuotaPlugin interface.
 func (p *manilaPlugin) SetQuota(project core.KeystoneProject, quotas map[string]uint64) error {
-	err := p.IsQuotaAcceptableForProject(project, quotas)
+	err := p.rejectInaccessibleShareType(project, quotas)
 	if err != nil {
 		return err
 	}

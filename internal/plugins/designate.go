@@ -131,7 +131,7 @@ func (p *designatePlugin) Scrape(project core.KeystoneProject) (result map[strin
 }
 
 // IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
-func (p *designatePlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, quotas map[string]uint64) error {
+func (p *designatePlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, fullQuotas map[string]map[string]uint64) error {
 	//not required for this plugin
 	return nil
 }

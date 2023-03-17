@@ -290,8 +290,25 @@ func (u *QuotaUpdater) ValidateInput(input limesresources.QuotaRequest, dbi db.I
 		}
 	}
 
-	//perform project-specific checks via QuotaPlugin.IsQuotaAcceptableForProject
 	if u.Project != nil {
+		//collect the full set of quotas as requested by the user
+		quotaValues := make(map[string]map[string]uint64)
+		for srvType := range u.Cluster.QuotaPlugins {
+			quotaValues[srvType] = make(map[string]uint64)
+
+			if projectService, exists := projectReport.Services[srvType]; exists {
+				for resName, res := range projectService.Resources {
+					if !res.NoQuota && res.Quota != nil {
+						quotaValues[srvType][resName] = *res.Quota
+					}
+				}
+			}
+			for resName, resReq := range u.Requests[srvType] {
+				quotaValues[srvType][resName] = resReq.NewValue
+			}
+		}
+
+		//perform project-specific checks via QuotaPlugin.IsQuotaAcceptableForProject()
 		for srvType, srvInput := range input {
 			//only check if there were no other validation errors
 			hasAnyPreviousErrors := false
@@ -303,19 +320,6 @@ func (u *QuotaUpdater) ValidateInput(input limesresources.QuotaRequest, dbi db.I
 			}
 			if hasAnyPreviousErrors {
 				continue
-			}
-
-			//collect the full set of quotas for this service as requested by the user
-			quotaValues := make(map[string]uint64)
-			if projectService, exists := projectReport.Services[srvType]; exists {
-				for resName, res := range projectService.Resources {
-					if !res.NoQuota && res.Quota != nil {
-						quotaValues[resName] = *res.Quota
-					}
-				}
-			}
-			for resName := range srvInput {
-				quotaValues[resName] = u.Requests[srvType][resName].NewValue
 			}
 
 			//perform validation
