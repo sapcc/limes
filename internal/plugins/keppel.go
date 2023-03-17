@@ -19,6 +19,7 @@
 package plugins
 
 import (
+	"fmt"
 	"math/big"
 	"net/http"
 
@@ -98,7 +99,10 @@ func (p *keppelPlugin) Scrape(project core.KeystoneProject) (result map[string]c
 
 // IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
 func (p *keppelPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, fullQuotas map[string]map[string]uint64) error {
-	//not required for this plugin
+	ourQuotas := fullQuotas[p.ServiceInfo().Type]
+	if fullQuotas["object-store"]["capacity"] == 0 && ourQuotas["images"] > 0 {
+		return fmt.Errorf("Keppel can only be used when nonzero Swift quota is configured")
+	}
 	return nil
 }
 
