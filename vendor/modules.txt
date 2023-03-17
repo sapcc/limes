@@ -91,7 +91,7 @@ github.com/hashicorp/errwrap
 # github.com/hashicorp/go-multierror v1.1.1
 ## explicit; go 1.13
 github.com/hashicorp/go-multierror
-# github.com/hashicorp/golang-lru/v2 v2.0.1
+# github.com/hashicorp/golang-lru/v2 v2.0.2
 ## explicit; go 1.18
 github.com/hashicorp/golang-lru/v2
 github.com/hashicorp/golang-lru/v2/simplelru
@@ -239,7 +239,7 @@ github.com/sapcc/go-api-declarations/internal/marshal
 github.com/sapcc/go-api-declarations/limes
 github.com/sapcc/go-api-declarations/limes/rates
 github.com/sapcc/go-api-declarations/limes/resources
-# github.com/sapcc/go-bits v0.0.0-20230309085702-cdeffa7432aa
+# github.com/sapcc/go-bits v0.0.0-20230316103846-e4db5274bdc9
 ## explicit; go 1.19
 github.com/sapcc/go-bits/assert
 github.com/sapcc/go-bits/audittools
