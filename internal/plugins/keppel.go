@@ -102,7 +102,7 @@ func (p *keppelPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject,
 	ourQuotas := fullQuotas[p.ServiceInfo().Type]
 	if fullQuotas["object-store"]["capacity"] == 0 && ourQuotas["images"] > 0 {
 		//nolint:stylecheck // "Keppel" is a product name and thus must be capitalized
-		return fmt.Errorf("Keppel can only be used when nonzero Swift quota is configured")
+		return fmt.Errorf("Keppel can only be used when a nonzero Swift quota is configured")
 	}
 	return nil
 }
