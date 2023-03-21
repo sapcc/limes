@@ -20,16 +20,13 @@
 package core
 
 import (
-	"context"
 	"os"
 	"sort"
 
 	"github.com/gophercloud/gophercloud"
-	"github.com/open-policy-agent/opa/rego"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
-	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/osext"
 	yaml "gopkg.in/yaml.v2"
 
@@ -46,10 +43,6 @@ type Cluster struct {
 	Authoritative     bool
 	QuotaConstraints  *QuotaConstraintSet
 	LowPrivilegeRaise LowPrivilegeRaiseLimitSet
-	OPA               struct {
-		ProjectQuotaQuery *rego.PreparedEvalQuery
-		DomainQuotaQuery  *rego.PreparedEvalQuery
-	}
 }
 
 // NewCluster creates a new Cluster instance with the given ID and
@@ -87,41 +80,7 @@ func NewCluster(config ClusterConfiguration) (c *Cluster, errs ErrorSet) {
 		c.CapacityPlugins[capa.ID] = plugin
 	}
 
-	errs.Append(c.SetupOPA(os.Getenv("LIMES_OPA_DOMAIN_QUOTA_POLICY_PATH"), os.Getenv("LIMES_OPA_PROJECT_QUOTA_POLICY_PATH")))
-
 	return c, errs
-}
-
-func (c *Cluster) SetupOPA(domainQuotaPolicyPath, projectQuotaPolicyPath string) (errs ErrorSet) {
-	if domainQuotaPolicyPath == "" {
-		c.OPA.DomainQuotaQuery = nil
-	} else {
-		domainModule := must.Return(os.ReadFile(domainQuotaPolicyPath))
-		query, err := rego.New(
-			rego.Query("violations = data.limes.violations"),
-			rego.Module("limes.rego", string(domainModule)),
-		).PrepareForEval(context.Background())
-		if err != nil {
-			errs.Addf("preparing OPA domain query failed: %w", err)
-		}
-		c.OPA.DomainQuotaQuery = &query
-	}
-
-	if projectQuotaPolicyPath == "" {
-		c.OPA.ProjectQuotaQuery = nil
-	} else {
-		projectModule := must.Return(os.ReadFile(projectQuotaPolicyPath))
-		projectQuery, err := rego.New(
-			rego.Query("violations = data.limes.violations"),
-			rego.Module("limes.rego", string(projectModule)),
-		).PrepareForEval(context.Background())
-		if err != nil {
-			errs.Addf("preparing OPA project query failed: %w", err)
-		}
-		c.OPA.ProjectQuotaQuery = &projectQuery
-	}
-
-	return errs
 }
 
 // Connect calls Connect() on all AuthParameters for this Cluster, thus ensuring

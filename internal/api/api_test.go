@@ -254,12 +254,6 @@ func setupTest(t *testing.T, startData string) (*core.Cluster, *gorp.DbMap, http
 		}
 	}
 
-	//validate that this is a no-op when no OPAConfiguration is provided
-	errs := cluster.SetupOPA("", "")
-	for _, err := range errs {
-		t.Error(err.Error())
-	}
-
 	handler := httpapi.Compose(
 		NewV1API(cluster, dbm, tokenValidator),
 		httpapi.WithGlobalMiddleware(ForbidClusterIDHeader),
@@ -780,91 +774,6 @@ func Test_DomainOperations(t *testing.T) {
 	}.Check(t, router)
 }
 
-func Test_DomainOPA(t *testing.T) {
-	cluster, _, router, _ := setupTest(t, "fixtures/start-data-opa.sql")
-	errs := cluster.SetupOPA("fixtures/limes.rego", "fixtures/limes.rego")
-	for _, err := range errs {
-		t.Error(err.Error())
-	}
-
-	// try if valid operations still work
-	assert.HTTPRequest{
-		Method:       "PUT",
-		Path:         "/v1/domains/uuid-for-germany",
-		ExpectStatus: 202,
-		ExpectBody:   assert.StringData(""),
-		Body: assert.JSONObject{
-			"domain": assert.JSONObject{
-				"services": []assert.JSONObject{
-					{
-						"type": "shared",
-						"resources": []assert.JSONObject{
-							{"name": "capacity", "quota": 30},
-							{"name": "things", "quota": 20},
-						},
-					},
-				},
-			},
-		},
-	}.Check(t, router)
-
-	//same as above, but we don't include the "shared/things" quota value in the
-	//request (this is to prove fixing of a bug where all quotas not supplied in
-	//the request were set to 0 in the policy input data)
-	assert.HTTPRequest{
-		Method:       "PUT",
-		Path:         "/v1/domains/uuid-for-germany",
-		ExpectStatus: 202,
-		ExpectBody:   assert.StringData(""),
-		Body:         requestOneQuotaChange("domain", "shared", "capacity", 30, limes.UnitNone),
-	}.Check(t, router)
-
-	// try invalid operations which should trigger a violation
-	assert.HTTPRequest{
-		Method:       "PUT",
-		Path:         "/v1/domains/uuid-for-germany",
-		ExpectStatus: 422,
-		ExpectBody:   assert.StringData("cannot change shared/capacity quota: must allocate shared/things quota before\n"),
-		Body: assert.JSONObject{
-			"domain": assert.JSONObject{
-				"services": []assert.JSONObject{
-					{
-						"type": "shared",
-						"resources": []assert.JSONObject{
-							{"name": "things", "quota": 0},
-							{"name": "capacity", "quota": 30},
-						},
-					},
-				},
-			},
-		},
-	}.Check(t, router)
-	assert.HTTPRequest{
-		Method:       "PUT",
-		Path:         "/v1/domains/uuid-for-germany",
-		ExpectStatus: 422,
-		ExpectBody:   assert.StringData("cannot change shared/capacity quota: must not allocate shared/capacity and unshared/capacity at the same time\n"),
-		Body: assert.JSONObject{
-			"domain": assert.JSONObject{
-				"services": []assert.JSONObject{
-					{
-						"type": "shared",
-						"resources": []assert.JSONObject{
-							{"name": "capacity", "quota": 35},
-						},
-					},
-					{
-						"type": "unshared",
-						"resources": []assert.JSONObject{
-							{"name": "capacity", "quota": 35},
-						},
-					},
-				},
-			},
-		},
-	}.Check(t, router)
-}
-
 // Even though serviceType parameter always receives "shared" but this is
 // intentional as it improves code readability. Additionally, this behavior could change
 // with future unit tests.
@@ -1134,7 +1043,7 @@ func Test_ProjectOperations(t *testing.T) {
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 422,
-		ExpectBody:   assert.StringData("cannot change shared/capacity quota: not acceptable for this project: IsQuotaAcceptableForProject failed as requested for quota set capacity=5, things=10\n"),
+		ExpectBody:   assert.StringData("cannot change shared/capacity quota: not acceptable for this project: IsQuotaAcceptableForProject failed as requested for quota set centralized/capacity=20, centralized/things=15, shared/capacity=5, shared/things=10, unshared/capacity=10, unshared/things=10\n"),
 		Body:         requestOneQuotaChange("project", "shared", "capacity", 5, limes.UnitNone),
 	}.Check(t, router)
 	plugin.QuotaIsNotAcceptable = false

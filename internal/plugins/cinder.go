@@ -292,7 +292,7 @@ func (p *cinderPlugin) collectSnapshotSubresources(project core.KeystoneProject,
 }
 
 // IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
-func (p *cinderPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, quotas map[string]uint64) error {
+func (p *cinderPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, fullQuotas map[string]map[string]uint64) error {
 	//not required for this plugin
 	return nil
 }

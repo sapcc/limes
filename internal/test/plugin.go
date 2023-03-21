@@ -196,11 +196,13 @@ func (p *Plugin) Scrape(project core.KeystoneProject) (result map[string]core.Re
 }
 
 // IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
-func (p *Plugin) IsQuotaAcceptableForProject(project core.KeystoneProject, quotas map[string]uint64) error {
+func (p *Plugin) IsQuotaAcceptableForProject(project core.KeystoneProject, fullQuotas map[string]map[string]uint64) error {
 	if p.QuotaIsNotAcceptable {
 		var quotasStr []string
-		for resName, quota := range quotas {
-			quotasStr = append(quotasStr, fmt.Sprintf("%s=%d", resName, quota))
+		for srvType, srvQuotas := range fullQuotas {
+			for resName, quota := range srvQuotas {
+				quotasStr = append(quotasStr, fmt.Sprintf("%s/%s=%d", srvType, resName, quota))
+			}
 		}
 		sort.Strings(quotasStr)
 		return fmt.Errorf("IsQuotaAcceptableForProject failed as requested for quota set %s", strings.Join(quotasStr, ", "))

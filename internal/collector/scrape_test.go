@@ -490,7 +490,7 @@ func (p *autoApprovalTestPlugin) Scrape(project core.KeystoneProject) (result ma
 	}, "", nil
 }
 
-func (p *autoApprovalTestPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, quotas map[string]uint64) error {
+func (p *autoApprovalTestPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, fullQuotas map[string]map[string]uint64) error {
 	return errors.New("unimplemented")
 }
 
@@ -555,7 +555,7 @@ func (noopQuotaPlugin) Resources() []limesresources.ResourceInfo {
 func (noopQuotaPlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics string, err error) {
 	return nil, "", nil
 }
-func (noopQuotaPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, quotas map[string]uint64) error {
+func (noopQuotaPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, fullQuotas map[string]map[string]uint64) error {
 	return nil
 }
 func (noopQuotaPlugin) SetQuota(project core.KeystoneProject, quotas map[string]uint64) error {
