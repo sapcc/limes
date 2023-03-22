@@ -24,9 +24,6 @@ golangciLint:
 
 githubWorkflow:
   global:
-    assignees:
-      - majewsky
-      - SuperSandro2000
     ignorePaths:
       - "**.md" # all Markdown files
   ci:
@@ -44,6 +41,9 @@ githubWorkflow:
 
 renovate:
   enabled: true
+  assignees:
+    - majewsky
+    - SuperSandro2000
   packageRules:
     # do not try to update to Postgres > 12 (the tests should match what we use in production)
     - matchPackageNames: [ postgres ]
