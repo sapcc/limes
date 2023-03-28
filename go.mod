@@ -7,7 +7,7 @@ require (
 	github.com/dlmiddlecote/sqlstats v1.0.2
 	github.com/go-gorp/gorp/v3 v3.1.0
 	github.com/gofrs/uuid v4.4.0+incompatible
-	github.com/gophercloud/gophercloud v1.2.0
+	github.com/gophercloud/gophercloud v1.3.0
 	github.com/gophercloud/utils v0.0.0-20230316075016-e15d7ee3ba3b
 	github.com/gorilla/mux v1.8.0
 	github.com/majewsky/schwift v1.2.0
@@ -47,4 +47,4 @@ require (
 	google.golang.org/protobuf v1.28.1 // indirect
 )
 
-replace github.com/gophercloud/gophercloud v1.2.0 => github.com/sapcc/gophercloud v0.0.0-20230206153050-660763de902c
+replace github.com/gophercloud/gophercloud v1.3.0 => github.com/sapcc/gophercloud v0.0.0-20230328135653-12762dfde162
