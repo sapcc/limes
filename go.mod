@@ -13,8 +13,8 @@ require (
 	github.com/majewsky/schwift v1.2.0
 	github.com/prometheus/client_golang v1.14.0
 	github.com/rs/cors v1.8.3
-	github.com/sapcc/go-api-declarations v1.4.3
-	github.com/sapcc/go-bits v0.0.0-20230323091343-206e6dcb3e83
+	github.com/sapcc/go-api-declarations v1.5.0
+	github.com/sapcc/go-bits v0.0.0-20230330081034-6c004b82649f
 	gopkg.in/yaml.v2 v2.4.0
 )
 
