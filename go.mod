@@ -8,7 +8,7 @@ require (
 	github.com/go-gorp/gorp/v3 v3.1.0
 	github.com/gofrs/uuid v4.4.0+incompatible
 	github.com/gophercloud/gophercloud v1.3.0
-	github.com/gophercloud/utils v0.0.0-20230316075016-e15d7ee3ba3b
+	github.com/gophercloud/utils v0.0.0-20230330070308-5bd5e1d608f8
 	github.com/gorilla/mux v1.8.0
 	github.com/majewsky/schwift v1.2.0
 	github.com/prometheus/client_golang v1.14.0
