@@ -286,7 +286,6 @@ type octaviaResourceMetadata struct {
 	LimesName         string
 	OctaviaName       string
 	LegacyOctaviaName string
-	DoNotSetQuota     bool
 }
 
 var octaviaResourceMeta = []octaviaResourceMetadata{
@@ -309,9 +308,8 @@ var octaviaResourceMeta = []octaviaResourceMetadata{
 		LegacyOctaviaName: "health_monitor",
 	},
 	{
-		LimesName:     "l7policies",
-		OctaviaName:   "l7policy",
-		DoNotSetQuota: true, //this quota is supported from Victoria onwards, but we have an older Octavia at the moment
+		LimesName:   "l7policies",
+		OctaviaName: "l7policy",
 	},
 	{
 		LimesName:   "pool_members",
@@ -465,7 +463,7 @@ func (p *neutronPlugin) SetQuota(project core.KeystoneProject, quotas map[string
 		octaviaQuotas := make(neutronOrOctaviaQuotaSet)
 		for _, res := range octaviaResourceMeta {
 			quota, exists := quotas[res.LimesName]
-			if exists && !res.DoNotSetQuota {
+			if exists {
 				octaviaQuotas[res.OctaviaName] = quota
 			}
 		}
