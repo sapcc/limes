@@ -26,6 +26,7 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-bits/errext"
 	"github.com/sapcc/go-bits/regexpext"
 	yaml "gopkg.in/yaml.v2"
 
@@ -140,7 +141,7 @@ func (c QuotaDistributionConfiguration) InitialProjectQuota() uint64 {
 // NewConfiguration reads and validates the given configuration file.
 // Errors are logged and will result in
 // program termination, causing the function to not return.
-func NewConfiguration(path string) (cluster *Cluster, errs ErrorSet) {
+func NewConfiguration(path string) (cluster *Cluster, errs errext.ErrorSet) {
 	//read config file
 	configBytes, err := os.ReadFile(path)
 	if err != nil {
@@ -170,7 +171,7 @@ func NewConfiguration(path string) (cluster *Cluster, errs ErrorSet) {
 	return NewCluster(config)
 }
 
-func (cluster ClusterConfiguration) validateConfig() (errs ErrorSet) {
+func (cluster ClusterConfiguration) validateConfig() (errs errext.ErrorSet) {
 	missing := func(key string) {
 		errs.Addf("missing configuration value: %s", key)
 	}

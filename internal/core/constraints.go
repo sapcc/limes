@@ -28,6 +28,7 @@ import (
 
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-bits/errext"
 	yaml "gopkg.in/yaml.v2"
 )
 
@@ -122,7 +123,7 @@ func (c QuotaConstraint) String() string {
 // into the base unit of their resource, for which we need to access the
 // QuotaPlugin.Resources(). Hence, `cluster.Init()` needs to have been called
 // before this function is called.
-func NewQuotaConstraints(cluster *Cluster, constraintConfigPath string) (result *QuotaConstraintSet, errs ErrorSet) {
+func NewQuotaConstraints(cluster *Cluster, constraintConfigPath string) (result *QuotaConstraintSet, errs errext.ErrorSet) {
 	buf, err := os.ReadFile(constraintConfigPath)
 	if err != nil {
 		errs.Addf("could not read quota constraints: %w", err)
@@ -209,7 +210,7 @@ func NewQuotaConstraints(cluster *Cluster, constraintConfigPath string) (result 
 
 // When `data` contains the constraints for a project, `projectsConstraints` will be nil.
 // When `data` contains the constraints for a domain, `projectsConstraints` will be non-nil.
-func compileQuotaConstraints(cluster *Cluster, data map[string]map[string]string, projectsConstraints map[string]QuotaConstraints) (values QuotaConstraints, errs ErrorSet) {
+func compileQuotaConstraints(cluster *Cluster, data map[string]map[string]string, projectsConstraints map[string]QuotaConstraints) (values QuotaConstraints, errs errext.ErrorSet) {
 	values = make(QuotaConstraints)
 
 	for serviceType, serviceData := range data {
@@ -355,7 +356,7 @@ func parseQuotaConstraint(resource limesresources.ResourceInfo, str string, proj
 	return &result, nil
 }
 
-func validateQuotaConstraints(cluster *Cluster, domainConstraints QuotaConstraints, projectsConstraints map[string]QuotaConstraints) (errs ErrorSet) {
+func validateQuotaConstraints(cluster *Cluster, domainConstraints QuotaConstraints, projectsConstraints map[string]QuotaConstraints) (errs errext.ErrorSet) {
 	//sum up the constraints of all projects into total min/max quotas
 	sumConstraints := make(QuotaConstraints)
 	for _, projectConstraints := range projectsConstraints {

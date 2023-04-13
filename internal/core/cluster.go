@@ -27,6 +27,7 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-bits/errext"
 	"github.com/sapcc/go-bits/osext"
 	yaml "gopkg.in/yaml.v2"
 
@@ -48,7 +49,7 @@ type Cluster struct {
 // NewCluster creates a new Cluster instance with the given ID and
 // configuration, and also initializes all quota and capacity plugins. Errors
 // will be logged when some of the requested plugins cannot be found.
-func NewCluster(config ClusterConfiguration) (c *Cluster, errs ErrorSet) {
+func NewCluster(config ClusterConfiguration) (c *Cluster, errs errext.ErrorSet) {
 	c = &Cluster{
 		Config:          config,
 		QuotaPlugins:    make(map[string]QuotaPlugin),
@@ -93,7 +94,7 @@ func NewCluster(config ClusterConfiguration) (c *Cluster, errs ErrorSet) {
 //
 // We cannot do any of this earlier because we only know all resources after
 // calling Init() on all quota plugins.
-func (c *Cluster) Connect(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (errs ErrorSet) {
+func (c *Cluster) Connect(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (errs errext.ErrorSet) {
 	//initialize discovery plugin
 	err := yaml.UnmarshalStrict([]byte(c.Config.Discovery.Parameters), c.DiscoveryPlugin)
 	if err != nil {
@@ -153,7 +154,7 @@ func (c *Cluster) Connect(provider *gophercloud.ProviderClient, eo gophercloud.E
 	}
 
 	//load quota constraints
-	var suberrs ErrorSet
+	var suberrs errext.ErrorSet
 	constraintPath := os.Getenv("LIMES_CONSTRAINTS_PATH")
 	if constraintPath != "" && c.QuotaConstraints == nil {
 		c.QuotaConstraints, suberrs = NewQuotaConstraints(c, constraintPath)

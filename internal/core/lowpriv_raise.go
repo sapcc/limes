@@ -26,6 +26,7 @@ import (
 
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-bits/errext"
 	"github.com/sapcc/go-bits/regexpext"
 )
 
@@ -68,8 +69,8 @@ type LowPrivilegeRaiseLimit struct {
 	UntilPercentOfClusterCapacityAssigned float64
 }
 
-func (cfg LowPrivilegeRaiseConfiguration) parse(quotaPlugins map[string]QuotaPlugin) (result LowPrivilegeRaiseLimitSet, errs ErrorSet) {
-	var suberrs ErrorSet
+func (cfg LowPrivilegeRaiseConfiguration) parse(quotaPlugins map[string]QuotaPlugin) (result LowPrivilegeRaiseLimitSet, errs errext.ErrorSet) {
+	var suberrs errext.ErrorSet
 	result.LimitsForDomains, suberrs = parseLPRLimits(cfg.Limits.ForDomains, quotaPlugins, "domain")
 	errs.Append(suberrs)
 	result.LimitsForProjects, suberrs = parseLPRLimits(cfg.Limits.ForProjects, quotaPlugins, "projects")
@@ -77,7 +78,7 @@ func (cfg LowPrivilegeRaiseConfiguration) parse(quotaPlugins map[string]QuotaPlu
 	return
 }
 
-func parseLPRLimits(inputs map[string]map[string]string, quotaPlugins map[string]QuotaPlugin, scopeType string) (result map[string]map[string]LowPrivilegeRaiseLimit, errs ErrorSet) {
+func parseLPRLimits(inputs map[string]map[string]string, quotaPlugins map[string]QuotaPlugin, scopeType string) (result map[string]map[string]LowPrivilegeRaiseLimit, errs errext.ErrorSet) {
 	result = make(map[string]map[string]LowPrivilegeRaiseLimit)
 
 	for srvType, quotaPlugin := range quotaPlugins {

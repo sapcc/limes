@@ -24,6 +24,7 @@ import (
 	"strings"
 
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-bits/errext"
 	"github.com/sapcc/go-bits/regexpext"
 )
 
@@ -44,7 +45,7 @@ type ResourceBehavior struct {
 // also applies default values. The `path` argument denotes the location of
 // this behavior in the configuration file, and will be used when generating
 // error messages.
-func (b *ResourceBehavior) Validate(path string) (errs ErrorSet) {
+func (b *ResourceBehavior) Validate(path string) (errs errext.ErrorSet) {
 	if b.FullResourceNameRx == "" {
 		errs.Addf("missing configuration value: %s.resource", path)
 	}
