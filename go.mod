@@ -14,7 +14,7 @@ require (
 	github.com/prometheus/client_golang v1.14.0
 	github.com/rs/cors v1.8.3
 	github.com/sapcc/go-api-declarations v1.5.0
-	github.com/sapcc/go-bits v0.0.0-20230404144215-11076993c8aa
+	github.com/sapcc/go-bits v0.0.0-20230413114037-7dc72a736b5f
 	gopkg.in/yaml.v2 v2.4.0
 )
 
@@ -27,9 +27,11 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.2 // indirect
 	github.com/jpillora/longestcommon v0.0.0-20161227235612-adb9d91ee629 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
+	github.com/klauspost/cpuid/v2 v2.0.4 // indirect
 	github.com/kr/text v0.2.0 // indirect
 	github.com/lib/pq v1.10.7 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.4 // indirect
+	github.com/minio/sha256-simd v1.0.0 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
