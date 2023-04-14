@@ -15,7 +15,7 @@ require (
 	github.com/rs/cors v1.8.3
 	github.com/sapcc/go-api-declarations v1.5.0
 	github.com/sapcc/go-bits v0.0.0-20230413144132-bee3aa4c8293
-	gopkg.in/yaml.v2 v2.4.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
