@@ -22,6 +22,7 @@ package errext
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/sapcc/go-bits/logg"
 )
@@ -51,6 +52,16 @@ func (errs *ErrorSet) Append(other ErrorSet) {
 // IsEmpty returns true if no errors are in the set.
 func (errs ErrorSet) IsEmpty() bool {
 	return len(errs) == 0
+}
+
+// Join joins the messages of all errors in this set using the provided separator.
+// If the set is empty, an empty string is returned.
+func (errs ErrorSet) Join(sep string) string {
+	msgs := make([]string, len(errs))
+	for idx, err := range errs {
+		msgs[idx] = err.Error()
+	}
+	return strings.Join(msgs, sep)
 }
 
 // LogFatalIfError reports all errors in this set on level FATAL, thus dying if
