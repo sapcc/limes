@@ -26,6 +26,7 @@ import (
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
+	"github.com/gophercloud/gophercloud/openstack/baremetal/v1/nodes"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/aggregates"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
@@ -49,6 +50,7 @@ type capacitySapccIronicPlugin struct {
 
 type capacitySapccIronicSerializedMetrics struct {
 	UnmatchedNodeCount uint64 `json:"unmatched_nodes"`
+	RetiredNodeCount   uint64 `json:"retired_nodes"`
 }
 
 func init() {
@@ -68,7 +70,7 @@ func (p *capacitySapccIronicPlugin) Init(provider *gophercloud.ProviderClient, e
 	if err != nil {
 		return err
 	}
-	p.IronicV1.Microversion = "1.22" //for node attributes "provision_state" and "target_provision_state"
+	p.IronicV1.Microversion = "1.33" //for node attribute "retired"
 	return nil
 }
 
@@ -215,9 +217,25 @@ func (p *capacitySapccIronicPlugin) Scrape() (result map[string]map[string]core.
 	}
 
 	unmatchedCounter := uint64(0)
+	retiredCounter := uint64(0)
 	for _, node := range allNodes {
 		//do not consider nodes that have not been made available for provisioning yet
 		if !isAvailableProvisionState[node.StableProvisionState()] {
+			continue
+		}
+
+		//do not consider nodes that are slated for decommissioning
+		//(no domain quota should be given out for that capacity anymore)
+		var nodeInfo struct {
+			Retired bool `json:"retired"`
+		}
+		err := nodes.Get(p.IronicV1, node.ID).ExtractInto(&nodeInfo)
+		if err != nil {
+			return nil, "", err
+		}
+		if nodeInfo.Retired {
+			logg.Debug("ignoring Ironic node %q (%s) because it is marked for retirement", node.Name, node.ID)
+			retiredCounter++
 			continue
 		}
 
@@ -299,6 +317,7 @@ func (p *capacitySapccIronicPlugin) Scrape() (result map[string]map[string]core.
 
 	serializedMetricsBytes, err := json.Marshal(capacitySapccIronicSerializedMetrics{
 		UnmatchedNodeCount: unmatchedCounter,
+		RetiredNodeCount:   retiredCounter,
 	})
 	if err != nil {
 		return nil, "", err
@@ -307,11 +326,15 @@ func (p *capacitySapccIronicPlugin) Scrape() (result map[string]map[string]core.
 	return map[string]map[string]core.CapacityData{"compute": result2}, string(serializedMetricsBytes), nil
 }
 
-var ironicUnmatchedNodesGauge = prometheus.NewGauge(
-	prometheus.GaugeOpts{
+var (
+	ironicUnmatchedNodesGauge = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "limes_unmatched_ironic_nodes",
 		Help: "Number of available/active Ironic nodes without matching flavor.",
-	},
+	})
+	ironicRetiredNodesGauge = prometheus.NewGauge(prometheus.GaugeOpts{
+		Name: "limes_retired_ironic_nodes",
+		Help: "Number of Ironic nodes that are marked for retirement.",
+	})
 )
 
 // DescribeMetrics implements the core.CapacityPlugin interface.
@@ -333,10 +356,16 @@ func (p *capacitySapccIronicPlugin) CollectMetrics(ch chan<- prometheus.Metric, 
 	descCh := make(chan *prometheus.Desc, 1)
 	ironicUnmatchedNodesGauge.Describe(descCh)
 	ironicUnmatchedNodesDesc := <-descCh
+	ironicRetiredNodesGauge.Describe(descCh)
+	ironicRetiredNodesDesc := <-descCh
 
 	ch <- prometheus.MustNewConstMetric(
 		ironicUnmatchedNodesDesc,
 		prometheus.GaugeValue, float64(metrics.UnmatchedNodeCount),
+	)
+	ch <- prometheus.MustNewConstMetric(
+		ironicRetiredNodesDesc,
+		prometheus.GaugeValue, float64(metrics.RetiredNodeCount),
 	)
 	return nil
 }
