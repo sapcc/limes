@@ -49,8 +49,11 @@ type capacitySapccIronicPlugin struct {
 }
 
 type capacitySapccIronicSerializedMetrics struct {
-	UnmatchedNodeCount uint64 `json:"unmatched_nodes"`
-	RetiredNodeCount   uint64 `json:"retired_nodes"`
+	//NOTE: We only report the node counts to Prometheus. The node names are only
+	//serialized into the DB, so that operators can pull reports or double-check
+	//manually when necessary.
+	UnmatchedNodeNames []string `json:"unmatched_node_names"`
+	RetiredNodeNames   []string `json:"retired_node_names"`
 }
 
 func init() {
@@ -216,8 +219,7 @@ func (p *capacitySapccIronicPlugin) Scrape() (result map[string]map[string]core.
 		}
 	}
 
-	unmatchedCounter := uint64(0)
-	retiredCounter := uint64(0)
+	var metrics capacitySapccIronicSerializedMetrics
 	for _, node := range allNodes {
 		//do not consider nodes that have not been made available for provisioning yet
 		if !isAvailableProvisionState[node.StableProvisionState()] {
@@ -235,7 +237,7 @@ func (p *capacitySapccIronicPlugin) Scrape() (result map[string]map[string]core.
 		}
 		if nodeInfo.Retired {
 			logg.Debug("ignoring Ironic node %q (%s) because it is marked for retirement", node.Name, node.ID)
-			retiredCounter++
+			metrics.RetiredNodeNames = append(metrics.RetiredNodeNames, node.Name)
 			continue
 		}
 
@@ -305,7 +307,7 @@ func (p *capacitySapccIronicPlugin) Scrape() (result map[string]map[string]core.
 		}
 		if !matched {
 			logg.Error("Ironic node %q (%s) does not match any baremetal flavor", node.Name, node.ID)
-			unmatchedCounter++
+			metrics.UnmatchedNodeNames = append(metrics.UnmatchedNodeNames, node.Name)
 		}
 	}
 
@@ -315,10 +317,7 @@ func (p *capacitySapccIronicPlugin) Scrape() (result map[string]map[string]core.
 		result2[resourceName] = *data
 	}
 
-	serializedMetricsBytes, err := json.Marshal(capacitySapccIronicSerializedMetrics{
-		UnmatchedNodeCount: unmatchedCounter,
-		RetiredNodeCount:   retiredCounter,
-	})
+	serializedMetricsBytes, err := json.Marshal(metrics)
 	if err != nil {
 		return nil, "", err
 	}
@@ -361,11 +360,11 @@ func (p *capacitySapccIronicPlugin) CollectMetrics(ch chan<- prometheus.Metric, 
 
 	ch <- prometheus.MustNewConstMetric(
 		ironicUnmatchedNodesDesc,
-		prometheus.GaugeValue, float64(metrics.UnmatchedNodeCount),
+		prometheus.GaugeValue, float64(len(metrics.UnmatchedNodeNames)),
 	)
 	ch <- prometheus.MustNewConstMetric(
 		ironicRetiredNodesDesc,
-		prometheus.GaugeValue, float64(metrics.RetiredNodeCount),
+		prometheus.GaugeValue, float64(len(metrics.RetiredNodeNames)),
 	)
 	return nil
 }

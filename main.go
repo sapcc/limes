@@ -386,6 +386,9 @@ func taskTestScanCapacity(cluster *core.Cluster, args []string) {
 		capacities = nil
 	}
 
+	if serializedMetrics != "" {
+		logg.Info("serializedMetrics: %s", serializedMetrics)
+	}
 	prometheus.MustRegister(&collector.CapacityPluginMetricsCollector{
 		Cluster: cluster,
 		Override: []collector.CapacityPluginMetricsInstance{{
