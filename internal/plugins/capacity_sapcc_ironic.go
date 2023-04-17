@@ -70,7 +70,7 @@ func (p *capacitySapccIronicPlugin) Init(provider *gophercloud.ProviderClient, e
 	if err != nil {
 		return err
 	}
-	p.IronicV1.Microversion = "1.33" //for node attribute "retired"
+	p.IronicV1.Microversion = "1.61" //for node attribute "retired"
 	return nil
 }
 
