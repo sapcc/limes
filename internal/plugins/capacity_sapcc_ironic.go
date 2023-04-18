@@ -238,7 +238,8 @@ func (p *capacitySapccIronicPlugin) Scrape() (result map[string]map[string]core.
 		if nodeInfo.Retired {
 			logg.Debug("ignoring Ironic node %q (%s) because it is marked for retirement", node.Name, node.ID)
 			metrics.RetiredNodeNames = append(metrics.RetiredNodeNames, node.Name)
-			continue
+			//NOTE: Ignoring of retired capacity is currently disabled pending clarification with billing/controlling on how to proceed.
+			//continue
 		}
 
 		matched := false
