@@ -36,6 +36,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/regexpext"
+	"golang.org/x/exp/slices"
 
 	"github.com/sapcc/limes/internal/core"
 )
@@ -87,6 +88,7 @@ func (p *capacityNovaPlugin) Init(provider *gophercloud.ProviderClient, eo gophe
 	if err != nil {
 		return err
 	}
+	p.PlacementV1.Microversion = "1.6" //for traits endpoint
 
 	return nil
 }
@@ -157,7 +159,7 @@ func (p *capacityNovaPlugin) Scrape() (result map[string]map[string]core.Capacit
 		}
 
 		//query Placement API for hypervisor capacity
-		hvCapacity, err := hypervisor.getCapacity(p.PlacementV1, allResourceProviders)
+		hvCapacity, traits, err := hypervisor.getCapacity(p.PlacementV1, allResourceProviders)
 		if err != nil {
 			return nil, "", fmt.Errorf(
 				"cannot get capacity for hypervisor %s with .service.host %q from Placement API (falling back to Nova Hypervisor API): %s",
@@ -167,6 +169,14 @@ func (p *capacityNovaPlugin) Scrape() (result map[string]map[string]core.Capacit
 			hypervisor.HypervisorHostname, hypervisor.Service.Host,
 			hvCapacity.VCPUs.Capacity, hvCapacity.MemoryMB.Capacity, hvCapacity.LocalGB,
 		)
+
+		//ignore hypervisor that is about to be decommissioned
+		//(no domain quota should be given out for its capacity anymore)
+		if slices.Contains(traits, "CUSTOM_DECOMMISSIONING") {
+			logg.Info("ignoring Nova hypervisor %s with .service.host %q because of CUSTOM_DECOMMISSIONING trait",
+				hypervisor.HypervisorHostname, hypervisor.Service.Host,
+			)
+		}
 
 		//ignore hypervisor without installed capacity (this often happens during buildup before the hypervisor is set live)
 		if hvCapacity.IsEmpty() {
@@ -261,6 +271,7 @@ func (p *capacityNovaPlugin) Scrape() (result map[string]map[string]core.Capacit
 					AvailabilityZone: matchingAvailabilityZone,
 					Capacity:         resCapa.Capacity,
 					Usage:            resCapa.Usage,
+					Traits:           traits,
 				})
 			}
 		}
@@ -423,7 +434,7 @@ func (h novaHypervisor) IsInAggregate(aggr aggregates.Aggregate) bool {
 	return false
 }
 
-func (h novaHypervisor) getCapacity(placementClient *gophercloud.ServiceClient, resourceProviders []resourceproviders.ResourceProvider) (partialNovaCapacity, error) {
+func (h novaHypervisor) getCapacity(placementClient *gophercloud.ServiceClient, resourceProviders []resourceproviders.ResourceProvider) (partialNovaCapacity, []string, error) {
 	//find the resource provider that corresponds to this hypervisor
 	var providerID string
 	for _, rp := range resourceProviders {
@@ -433,18 +444,22 @@ func (h novaHypervisor) getCapacity(placementClient *gophercloud.ServiceClient, 
 		}
 	}
 	if providerID == "" {
-		return partialNovaCapacity{}, fmt.Errorf(
+		return partialNovaCapacity{}, nil, fmt.Errorf(
 			"cannot find resource provider with name %q", h.HypervisorHostname)
 	}
 
 	//collect data about that resource provider from the Placement API
 	inventory, err := resourceproviders.GetInventories(placementClient, providerID).Extract()
 	if err != nil {
-		return partialNovaCapacity{}, err
+		return partialNovaCapacity{}, nil, err
 	}
 	usages, err := resourceproviders.GetUsages(placementClient, providerID).Extract()
 	if err != nil {
-		return partialNovaCapacity{}, err
+		return partialNovaCapacity{}, nil, err
+	}
+	traits, err := resourceproviders.GetTraits(placementClient, providerID).Extract()
+	if err != nil {
+		return partialNovaCapacity{}, nil, err
 	}
 
 	return partialNovaCapacity{
@@ -458,15 +473,16 @@ func (h novaHypervisor) getCapacity(placementClient *gophercloud.ServiceClient, 
 		},
 		LocalGB:    uint64(inventory.Inventories["DISK_GB"].Total - inventory.Inventories["DISK_GB"].Reserved),
 		RunningVMs: h.RunningVMs,
-	}, nil
+	}, traits.Traits, nil
 }
 
 type novaHypervisorSubcapacity struct {
-	ServiceHost      string `json:"service_host"` //TODO service.host
-	AvailabilityZone string `json:"az"`
-	AggregateName    string `json:"aggregate"`
-	Capacity         uint64 `json:"capacity"`
-	Usage            uint64 `json:"usage"`
+	ServiceHost      string   `json:"service_host"` //TODO service.host
+	AvailabilityZone string   `json:"az"`
+	AggregateName    string   `json:"aggregate"`
+	Capacity         uint64   `json:"capacity"`
+	Usage            uint64   `json:"usage"`
+	Traits           []string `json:"traits"`
 }
 
 func getMaxRootDiskSize(novaClient *gophercloud.ServiceClient, expectedExtraSpecs map[string]string) (float64, error) {

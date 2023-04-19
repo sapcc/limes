@@ -180,6 +180,10 @@ github.com/sergi/go-diff/diffmatchpatch
 # go.uber.org/atomic v1.10.0
 ## explicit; go 1.18
 go.uber.org/atomic
+# golang.org/x/exp v0.0.0-20230418202329-0354be287a23
+## explicit; go 1.18
+golang.org/x/exp/constraints
+golang.org/x/exp/slices
 # golang.org/x/net v0.8.0
 ## explicit; go 1.17
 # golang.org/x/sys v0.6.0

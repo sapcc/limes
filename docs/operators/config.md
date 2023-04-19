@@ -705,16 +705,18 @@ considered which have all the extra specs noted in this map, with the same value
 This is particularly useful to filter Ironic flavors, which usually have much larger root disk sizes.
 
 When subcapacity scraping is enabled (as shown above), subcapacities will be scraped for the respective resources. Each
-subcapacity corresponds to one Nova aggregate. If the `params.hypervisor_type_pattern` parameter is set, only the capacity
-of matching hypervisors will be considered for each aggregate. Aggregates with no matching hypervisor will not be
-considered. Note that summing all subcapacities may yield a greater value than the actual capacity since one hypervisor
-may belong to multiple aggregates. Subcapacities bear the following attributes:
+subcapacity corresponds to one Nova hypervisor. If the `params.hypervisor_type_pattern` parameter is set, only matching
+hypervisors will be shown. Aggregates with no matching hypervisor will not be considered. Subcapacities bear the
+following attributes:
 
 | Attribute | Type | Comment |
 | --- | --- | --- |
-| `name` | string | aggregate name as reported by Nova |
-| `metadata` | object of strings | aggregate metadata as reported by Nova |
-| `capacity` | integer | sum of capacity of all matching hypervisors in this aggregate |
+| `service_host` | string | `service.host` attribute of hypervisor as reported by Nova |
+| `az` | string | availability zone |
+| `aggregate` | string | name of aggregate matching `params.aggregate_name_pattern` that contains this hypervisor |
+| `capacity` | integer | capacity of the resource in question in this hypervisor |
+| `usage` | integer | usage of the resource in question in this hypervisor |
+| `traits` | array of strings | traits reported by Placement on this hypervisor's resource provider |
 
 ### `prometheus`
 
