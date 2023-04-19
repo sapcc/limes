@@ -77,16 +77,30 @@ func (p *capacityCinderPlugin) makeResourceName(volumeType string) string {
 
 // Scrape implements the core.CapacityPlugin interface.
 func (p *capacityCinderPlugin) Scrape() (result map[string]map[string]core.CapacityData, serializedMetrics string, err error) {
-	//Get absolute limits for a tenant
+	//list storage pools
+	var poolData struct {
+		StoragePools []struct {
+			Name         string `json:"name"`
+			Capabilities struct {
+				schedulerstats.Capabilities
+				//we need a custom type because `schedulerstats.Capabilities` does not expose this custom_attributes field
+				CustomAttributes struct {
+					CinderState string `json:"cinder_state"`
+				} `json:"custom_attributes"`
+			} `json:"capabilities"`
+		} `json:"pools"`
+	}
+
 	allPages, err := schedulerstats.List(p.CinderV3, schedulerstats.ListOpts{Detail: true}).AllPages()
 	if err != nil {
 		return nil, "", err
 	}
-	allStoragePools, err := schedulerstats.ExtractStoragePools(allPages)
+	err = allPages.(schedulerstats.StoragePoolPage).ExtractInto(&poolData)
 	if err != nil {
 		return nil, "", err
 	}
 
+	//list service hosts
 	allPages, err = services.List(p.CinderV3, nil).AllPages()
 	if err != nil {
 		return nil, "", err
@@ -115,7 +129,17 @@ func (p *capacityCinderPlugin) Scrape() (result map[string]map[string]core.Capac
 	}
 
 	//add results from scheduler-stats
-	for _, element := range allStoragePools {
+	for _, element := range poolData.StoragePools {
+		//do not consider pools that are slated for decommissioning (state "drain")
+		//or reserved for absorbing payloads from draining pools (state "reserved")
+		//(no quota should be given out for such capacity)
+		state := element.Capabilities.CustomAttributes.CinderState
+		if state == "drain" || state == "reserved" {
+			logg.Info("Cinder capacity plugin: skipping pool %q with %g GiB capacity because of cinder_state %q",
+				element.Name, element.Capabilities.TotalCapacityGB, state)
+			continue
+		}
+
 		volumeType, ok := volumeTypesByBackendName[element.Capabilities.VolumeBackendName]
 		if !ok {
 			logg.Info("Cinder capacity plugin: skipping pool %q with unknown volume_backend_name %q", element.Name, element.Capabilities.VolumeBackendName)
