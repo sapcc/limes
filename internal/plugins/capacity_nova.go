@@ -176,6 +176,7 @@ func (p *capacityNovaPlugin) Scrape() (result map[string]map[string]core.Capacit
 			logg.Info("ignoring Nova hypervisor %s with .service.host %q because of CUSTOM_DECOMMISSIONING trait",
 				hypervisor.HypervisorHostname, hypervisor.Service.Host,
 			)
+			continue
 		}
 
 		//ignore hypervisor without installed capacity (this often happens during buildup before the hypervisor is set live)
