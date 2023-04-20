@@ -20,7 +20,9 @@
 package plugins
 
 import (
+	"encoding/json"
 	"errors"
+	"math"
 	"strings"
 
 	"github.com/gophercloud/gophercloud"
@@ -82,7 +84,9 @@ func (p *capacityCinderPlugin) Scrape() (result map[string]map[string]core.Capac
 		StoragePools []struct {
 			Name         string `json:"name"`
 			Capabilities struct {
-				schedulerstats.Capabilities
+				VolumeBackendName   string          `json:"volume_backend_name"`
+				TotalCapacityGB     float64OrString `json:"total_capacity_gb"`
+				AllocatedCapacityGB float64OrString `json:"allocated_capacity_gb"`
 				//we need a custom type because `schedulerstats.Capabilities` does not expose this custom_attributes field
 				CustomAttributes struct {
 					CinderState string `json:"cinder_state"`
@@ -190,4 +194,35 @@ func (p *capacityCinderPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 func (p *capacityCinderPlugin) CollectMetrics(ch chan<- prometheus.Metric, serializedMetrics string) error {
 	//not used by this plugin
 	return nil
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// OpenStack is being a mess once again
+
+// Used for the "total_capacity_gb" field in Cinder pools, which may be a string like "infinite" or "" (unknown).
+type float64OrString float64
+
+// UnmarshalJSON implements the json.Unmarshaler interface.
+func (f *float64OrString) UnmarshalJSON(buf []byte) error {
+	//ref: <https://github.com/gophercloud/gophercloud/blob/7137f0845e8cf2210601f867e7ddd9f54bb72859/openstack/blockstorage/extensions/schedulerstats/results.go#L60-L74>
+
+	if buf[0] == '"' {
+		var str string
+		err := json.Unmarshal(buf, &str)
+		if err != nil {
+			return err
+		}
+
+		if str == "infinite" {
+			*f = float64OrString(math.Inf(+1))
+		} else {
+			*f = 0
+		}
+		return nil
+	}
+
+	var val float64
+	err := json.Unmarshal(buf, &val)
+	*f = float64OrString(val)
+	return err
 }
