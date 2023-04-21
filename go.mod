@@ -8,14 +8,14 @@ require (
 	github.com/go-gorp/gorp/v3 v3.1.0
 	github.com/gofrs/uuid v4.4.0+incompatible
 	github.com/gophercloud/gophercloud v1.3.0
-	github.com/gophercloud/utils v0.0.0-20230330070308-5bd5e1d608f8
+	github.com/gophercloud/utils v0.0.0-20230418172808-6eab72e966e1
 	github.com/gorilla/mux v1.8.0
 	github.com/majewsky/schwift v1.2.0
 	github.com/prometheus/client_golang v1.15.0
 	github.com/rs/cors v1.9.0
 	github.com/sapcc/go-api-declarations v1.5.1
 	github.com/sapcc/go-bits v0.0.0-20230420083834-e3870701a14b
-	golang.org/x/exp v0.0.0-20230418202329-0354be287a23
+	golang.org/x/exp v0.0.0-20230420155640-133eef4313cb
 	gopkg.in/yaml.v2 v2.4.0
 )
 
@@ -25,6 +25,7 @@ require (
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/hashicorp/errwrap v1.0.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1 // indirect
+	github.com/hashicorp/go-uuid v1.0.3 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.2 // indirect
 	github.com/jpillora/longestcommon v0.0.0-20161227235612-adb9d91ee629 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
