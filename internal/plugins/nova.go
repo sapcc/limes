@@ -246,9 +246,9 @@ func (p *novaPlugin) PluginTypeID() string {
 }
 
 // ServiceInfo implements the core.QuotaPlugin interface.
-func (p *novaPlugin) ServiceInfo() limes.ServiceInfo {
+func (p *novaPlugin) ServiceInfo(serviceType string) limes.ServiceInfo {
 	return limes.ServiceInfo{
-		Type:        "compute",
+		Type:        serviceType,
 		ProductName: "nova",
 		Area:        "compute",
 	}
@@ -548,7 +548,7 @@ func derefSlicePtrOrEmpty(val *[]string) []string {
 }
 
 // IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
-func (p *novaPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, fullQuotas map[string]map[string]uint64) error {
+func (p *novaPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, fullQuotas map[string]map[string]uint64, allServiceInfos []limes.ServiceInfo) error {
 	//not required for this plugin
 	return nil
 }

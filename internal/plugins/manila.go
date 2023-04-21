@@ -113,9 +113,9 @@ func (p *manilaPlugin) PluginTypeID() string {
 }
 
 // ServiceInfo implements the core.QuotaPlugin interface.
-func (p *manilaPlugin) ServiceInfo() limes.ServiceInfo {
+func (p *manilaPlugin) ServiceInfo(serviceType string) limes.ServiceInfo {
 	return limes.ServiceInfo{
-		Type:        "sharev2",
+		Type:        serviceType,
 		ProductName: "manila",
 		Area:        "storage",
 	}
@@ -302,8 +302,14 @@ func (p *manilaPlugin) rejectInaccessibleShareType(project core.KeystoneProject,
 }
 
 // IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
-func (p *manilaPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, fullQuotas map[string]map[string]uint64) error {
-	return p.rejectInaccessibleShareType(project, fullQuotas[p.ServiceInfo().Type])
+func (p *manilaPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, fullQuotas map[string]map[string]uint64, allServiceInfos []limes.ServiceInfo) error {
+	var ourQuotas map[string]uint64
+	for _, srv := range allServiceInfos {
+		if srv.ProductName == "manila" {
+			ourQuotas = fullQuotas[srv.Type]
+		}
+	}
+	return p.rejectInaccessibleShareType(project, ourQuotas)
 }
 
 // SetQuota implements the core.QuotaPlugin interface.

@@ -64,9 +64,12 @@ var findProjectForResourceScrapeQuery = sqlext.SimplifyWhitespace(`
 //
 // Errors are logged instead of returned. The function will not return unless
 // startup fails.
-func (c *Collector) Scrape() {
-	serviceInfo := c.Plugin.ServiceInfo()
-	serviceType := serviceInfo.Type
+func (c *Collector) Scrape(serviceType string) {
+	plugin := c.Cluster.QuotaPlugins[serviceType]
+	if plugin == nil {
+		c.LogError("no such service type: %q", serviceType)
+	}
+	serviceInfo := plugin.ServiceInfo(serviceType)
 
 	//make sure that the counters are reported
 	labels := prometheus.Labels{
@@ -95,7 +98,7 @@ func (c *Collector) Scrape() {
 		project := core.KeystoneProjectFromDB(dbProject, domain)
 
 		logg.Debug("scraping %s resources for %s/%s", serviceType, dbDomain.Name, dbProject.Name)
-		resourceData, serializedMetrics, err := c.Plugin.Scrape(project)
+		resourceData, serializedMetrics, err := plugin.Scrape(project)
 		scrapeEndedAt := c.TimeNow()
 
 		//write result on success; if anything fails, try to record the error in the DB

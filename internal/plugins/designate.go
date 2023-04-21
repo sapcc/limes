@@ -67,9 +67,9 @@ func (p *designatePlugin) PluginTypeID() string {
 }
 
 // ServiceInfo implements the core.QuotaPlugin interface.
-func (p *designatePlugin) ServiceInfo() limes.ServiceInfo {
+func (p *designatePlugin) ServiceInfo(serviceType string) limes.ServiceInfo {
 	return limes.ServiceInfo{
-		Type:        "dns",
+		Type:        serviceType,
 		ProductName: "designate",
 		Area:        "dns",
 	}
@@ -131,7 +131,7 @@ func (p *designatePlugin) Scrape(project core.KeystoneProject) (result map[strin
 }
 
 // IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
-func (p *designatePlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, fullQuotas map[string]map[string]uint64) error {
+func (p *designatePlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, fullQuotas map[string]map[string]uint64, allServiceInfos []limes.ServiceInfo) error {
 	//not required for this plugin
 	return nil
 }

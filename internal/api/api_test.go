@@ -64,12 +64,12 @@ func setupTest(t *testing.T, startData string) (*core.Cluster, *gorp.DbMap, http
 	}
 
 	quotaPlugins := map[string]core.QuotaPlugin{
-		"shared":   test.NewPlugin("shared", sharedRatesThatReportUsage...),
-		"unshared": test.NewPlugin("unshared", unsharedRatesThatReportUsage...),
+		"shared":   test.NewPlugin(sharedRatesThatReportUsage...),
+		"unshared": test.NewPlugin(unsharedRatesThatReportUsage...),
 	}
 	hasCentralizedService := startData == "fixtures/start-data.sql"
 	if hasCentralizedService {
-		quotaPlugins["centralized"] = test.NewPlugin("centralized")
+		quotaPlugins["centralized"] = test.NewPlugin()
 	}
 
 	westConstraintSet := core.QuotaConstraintSet{

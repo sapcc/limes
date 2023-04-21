@@ -38,9 +38,9 @@ func Test_ScanCapacity(t *testing.T) {
 
 	cluster := &core.Cluster{
 		QuotaPlugins: map[string]core.QuotaPlugin{
-			"shared":    test.NewPlugin("shared"),
-			"unshared":  test.NewPlugin("unshared"),
-			"unshared2": test.NewPlugin("unshared2"),
+			"shared":    test.NewPlugin(),
+			"unshared":  test.NewPlugin(),
+			"unshared2": test.NewPlugin(),
 		},
 		CapacityPlugins: map[string]core.CapacityPlugin{
 			"unittest": test.NewCapacityPlugin("unittest",
@@ -68,7 +68,6 @@ func Test_ScanCapacity(t *testing.T) {
 	c := Collector{
 		Cluster:   cluster,
 		DB:        dbm,
-		Plugin:    nil,
 		LogError:  t.Errorf,
 		TimeNow:   test.TimeNow,
 		AddJitter: test.NoJitter,

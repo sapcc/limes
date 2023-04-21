@@ -53,7 +53,7 @@ func NewDiscoveryPlugin() *DiscoveryPlugin {
 
 // PluginTypeID implements the core.DiscoveryPlugin interface.
 func (p *DiscoveryPlugin) PluginTypeID() string {
-	return "unittest"
+	return "--test-static"
 }
 
 // Init implements the core.DiscoveryPlugin interface.

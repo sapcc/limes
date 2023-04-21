@@ -75,9 +75,9 @@ func (p *cronusPlugin) PluginTypeID() string {
 }
 
 // ServiceInfo implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) ServiceInfo() limes.ServiceInfo {
+func (p *cronusPlugin) ServiceInfo(serviceType string) limes.ServiceInfo {
 	return limes.ServiceInfo{
-		Type:        "email-aws",
+		Type:        serviceType,
 		ProductName: "cronus",
 		Area:        "email",
 	}
@@ -99,7 +99,7 @@ func (p *cronusPlugin) Scrape(project core.KeystoneProject) (result map[string]c
 }
 
 // IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, fullQuotas map[string]map[string]uint64) error {
+func (p *cronusPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, fullQuotas map[string]map[string]uint64, allServiceInfos []limes.ServiceInfo) error {
 	//not required for this plugin
 	return nil
 }

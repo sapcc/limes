@@ -69,7 +69,7 @@ func NewCluster(config ClusterConfiguration) (c *Cluster, errs errext.ErrorSet) 
 		if plugin == nil {
 			errs.Addf("setup for service %s failed: no suitable quota plugin found", srv.ServiceType)
 		}
-		c.QuotaPlugins[srv.PluginType] = plugin
+		c.QuotaPlugins[srv.ServiceType] = plugin
 	}
 
 	//instantiate capacity plugins
@@ -190,6 +190,15 @@ func (c *Cluster) ServiceTypesInAlphabeticalOrder() []string {
 	return result
 }
 
+// AllServiceInfos returns the ServiceInfo for all known services.
+func (c *Cluster) AllServiceInfos() []limes.ServiceInfo {
+	result := make([]limes.ServiceInfo, 0, len(c.QuotaPlugins))
+	for serviceType, quotaPlugin := range c.QuotaPlugins {
+		result = append(result, quotaPlugin.ServiceInfo(serviceType))
+	}
+	return result
+}
+
 // HasService checks whether the given service is enabled in this cluster.
 func (c *Cluster) HasService(serviceType string) bool {
 	return c.QuotaPlugins[serviceType] != nil
@@ -235,13 +244,13 @@ func (c *Cluster) InfoForService(serviceType string) limes.ServiceInfo {
 	if plugin == nil {
 		return limes.ServiceInfo{Type: serviceType}
 	}
-	return plugin.ServiceInfo()
+	return plugin.ServiceInfo(serviceType)
 }
 
 // GetServiceTypesForArea returns all service types that belong to the given area.
 func (c *Cluster) GetServiceTypesForArea(area string) (serviceTypes []string) {
 	for serviceType, plugin := range c.QuotaPlugins {
-		if plugin.ServiceInfo().Area == area {
+		if plugin.ServiceInfo(serviceType).Area == area {
 			serviceTypes = append(serviceTypes, serviceType)
 		}
 	}

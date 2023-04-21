@@ -209,9 +209,9 @@ func (p *neutronPlugin) PluginTypeID() string {
 }
 
 // ServiceInfo implements the core.QuotaPlugin interface.
-func (p *neutronPlugin) ServiceInfo() limes.ServiceInfo {
+func (p *neutronPlugin) ServiceInfo(serviceType string) limes.ServiceInfo {
 	return limes.ServiceInfo{
-		Type:        "network",
+		Type:        serviceType,
 		ProductName: "neutron",
 		Area:        "network",
 	}
@@ -432,7 +432,7 @@ func (q neutronOrOctaviaQuotaSet) ToQuotaUpdateMap() (map[string]interface{}, er
 }
 
 // IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
-func (p *neutronPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, fullQuotas map[string]map[string]uint64) error {
+func (p *neutronPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, fullQuotas map[string]map[string]uint64, allServiceInfos []limes.ServiceInfo) error {
 	//not required for this plugin
 	return nil
 }

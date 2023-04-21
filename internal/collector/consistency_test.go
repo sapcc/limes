@@ -36,7 +36,6 @@ func Test_Consistency(t *testing.T) {
 	c := Collector{
 		Cluster:   cluster,
 		DB:        dbm,
-		Plugin:    nil,
 		LogError:  t.Errorf,
 		TimeNow:   test.TimeNow,
 		AddJitter: test.NoJitter,
