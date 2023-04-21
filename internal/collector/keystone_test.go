@@ -24,7 +24,6 @@ import (
 	"strings"
 	"testing"
 
-	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
 
@@ -33,33 +32,29 @@ import (
 	"github.com/sapcc/limes/internal/test/plugins"
 )
 
+const (
+	testKeystoneConfigYAML = `
+		discovery:
+			method: --test-static
+		services:
+			- service_type: shared
+				type: --test-generic
+			- service_type: unshared
+				type: --test-generic
+			- service_type: centralized
+				type: --test-generic
+		quota_distribution_configs:
+			- { resource: centralized/capacity, model: centralized, default_project_quota: 10 }
+			- { resource: centralized/things,   model: centralized, default_project_quota: 15 }
+	`
+)
+
 func keystoneTestCluster(t *testing.T) (test.Setup, *core.Cluster) {
 	test.ResetTime()
-	s := test.NewSetup(t)
-
-	return s, &core.Cluster{
-		Config: core.ClusterConfiguration{
-			QuotaDistributionConfigs: []*core.QuotaDistributionConfiguration{
-				{
-					FullResourceNameRx:  "centralized/capacity",
-					Model:               limesresources.CentralizedQuotaDistribution,
-					DefaultProjectQuota: 10,
-				},
-				{
-					FullResourceNameRx:  "centralized/things",
-					Model:               limesresources.CentralizedQuotaDistribution,
-					DefaultProjectQuota: 15,
-				},
-			},
-		},
-		DiscoveryPlugin: test.NewDiscoveryPlugin(),
-		QuotaPlugins: map[string]core.QuotaPlugin{
-			"shared":      test.NewPlugin(),
-			"unshared":    test.NewPlugin(),
-			"centralized": test.NewPlugin(),
-		},
-		CapacityPlugins: map[string]core.CapacityPlugin{},
-	}
+	s := test.NewSetup(t,
+		test.WithConfig(testKeystoneConfigYAML),
+	)
+	return s, s.Cluster
 }
 
 func Test_ScanDomains(t *testing.T) {

@@ -20,20 +20,14 @@
 package collector
 
 import (
-	"errors"
 	"fmt"
-	"math/big"
 	"regexp"
 	"testing"
 	"time"
 
 	"github.com/go-gorp/gorp/v3"
-	"github.com/gophercloud/gophercloud"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/sapcc/go-api-declarations/limes"
-	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
-	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/logg"
@@ -47,63 +41,54 @@ func p2u64(x uint64) *uint64 {
 	return &x
 }
 
-func prepareScrapeTest(t *testing.T, numProjects int, serviceType string, quotaPlugin core.QuotaPlugin) (test.Setup, *core.Cluster) {
-	test.ResetTime()
-	s := test.NewSetup(t)
-
-	cluster := &core.Cluster{
-		DiscoveryPlugin: test.NewDiscoveryPlugin(),
-		QuotaPlugins:    map[string]core.QuotaPlugin{serviceType: quotaPlugin},
-		CapacityPlugins: map[string]core.CapacityPlugin{},
-		Config:          core.ClusterConfiguration{},
-	}
-
-	//one domain is enough; one or two projects is enough
-	discovery := cluster.DiscoveryPlugin.(*plugins.StaticDiscoveryPlugin) //nolint:errcheck
-	domain1 := discovery.Domains[0]
-	project1 := discovery.Projects[domain1.UUID][0]
-	project2 := discovery.Projects[domain1.UUID][1]
-
-	discovery.Domains = discovery.Domains[0:1]
-	discovery.Projects = map[string][]core.KeystoneProject{
-		domain1.UUID: discovery.Projects[domain1.UUID][0:numProjects],
-	}
-
-	//if there is "centralized" service type, operate it under centralized quota
-	//distribution (only used by Test_ScrapeCentralized())
-	cluster.Config.QuotaDistributionConfigs = []*core.QuotaDistributionConfiguration{
-		{
-			FullResourceNameRx:  "centralized/capacity",
-			Model:               limesresources.CentralizedQuotaDistribution,
-			DefaultProjectQuota: 10,
-		},
-		{
-			FullResourceNameRx:  "centralized/things",
-			Model:               limesresources.CentralizedQuotaDistribution,
-			DefaultProjectQuota: 15,
-		},
-	}
-
+func prepareDomainsAndProjectsForScrape(t *testing.T, s test.Setup) {
 	//ScanDomains is required to create the entries in `domains`,
 	//`domain_services`, `projects` and `project_services`
 	timeZero := func() time.Time { return time.Unix(0, 0).UTC() }
-	_, err := (&Collector{Cluster: cluster, DB: s.DB, TimeNow: timeZero, AddJitter: test.NoJitter}).ScanDomains(ScanDomainsOpts{})
+	_, err := (&Collector{Cluster: s.Cluster, DB: s.DB, TimeNow: timeZero, AddJitter: test.NoJitter}).ScanDomains(ScanDomainsOpts{})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	//if we have two projects, we are going to test with and without bursting, so
-	//set up bursting for one of both projects
-	if numProjects == 2 {
-		_, err := s.DB.Exec(`UPDATE projects SET has_bursting = TRUE WHERE id = 2`)
+	//if we have two projects and bursting is enabled, we are going to test with
+	//and without bursting on the two projects
+	if s.Cluster.Config.Bursting.MaxMultiplier > 0 {
+		_, err := s.DB.Exec(`UPDATE projects SET has_bursting = (name = $1)`, "dresden")
 		if err != nil {
 			t.Fatal(err)
 		}
-		cluster.Config.Bursting.MaxMultiplier = 0.2
 	}
+}
 
-	//setup a quota constraint for the project that we're scraping (this is ignored by Test_ScrapeFailure())
+const (
+	testScrapeBasicConfigYAML = `
+		discovery:
+			method: --test-static
+			params:
+				domains:
+					- { name: germany, id: uuid-for-germany }
+				projects:
+					uuid-for-germany:
+						- { name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }
+						- { name: dresden, id: uuid-for-dresden, parent_id: uuid-for-berlin }
+		services:
+			- service_type: unittest
+				type: --test-generic
+		bursting:
+			max_multiplier: 0.2
+	`
+)
+
+func Test_ScrapeSuccess(t *testing.T) {
+	test.ResetTime()
+	s := test.NewSetup(t,
+		test.WithConfig(testScrapeBasicConfigYAML),
+	)
+	prepareDomainsAndProjectsForScrape(t, s)
+
+	//setup a quota constraint for the projects that we're scraping
 	//
+	//TODO: duplicated with Test_ScrapeFailure
 	//NOTE: This is set only *after* ScanDomains has run, in order to exercise
 	//the code path in Scrape() that applies constraints when first creating
 	//project_resources entries. If we had set this before ScanDomains, then
@@ -112,30 +97,19 @@ func prepareScrapeTest(t *testing.T, numProjects int, serviceType string, quotaP
 		"unittest": {
 			"capacity": {Minimum: p2u64(10), Maximum: p2u64(40)},
 		},
-		// only used by Test_ScrapeCentralized()
-		"centralized": {
-			"capacity": {Minimum: p2u64(5)},  //below the DefaultProjectQuota, so the DefaultProjectQuota should take precedence
-			"things":   {Minimum: p2u64(20)}, //above the DefaultProjectQuota, so the constraint.Minimum should take precedence
-		},
 	}
-	cluster.QuotaConstraints = &core.QuotaConstraintSet{
+	s.Cluster.QuotaConstraints = &core.QuotaConstraintSet{
 		Projects: map[string]map[string]core.QuotaConstraints{
-			domain1.Name: {
-				project1.Name: projectConstraints,
-				project2.Name: projectConstraints,
+			"germany": {
+				"berlin":  projectConstraints,
+				"dresden": projectConstraints,
 			},
 		},
 	}
 
-	return s, cluster
-}
-
-func Test_ScrapeSuccess(t *testing.T) {
-	plugin := test.NewPlugin()
-	s, cluster := prepareScrapeTest(t, 2, "unittest", plugin)
-	cluster.Authoritative = true
+	s.Cluster.Authoritative = true
 	c := Collector{
-		Cluster:   cluster,
+		Cluster:   s.Cluster,
 		DB:        s.DB,
 		LogError:  t.Errorf,
 		TimeNow:   test.TimeNow,
@@ -150,6 +124,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	//first Scrape should create the entries in `project_resources` with the
 	//correct usage and backend quota values (and quota = 0 because nothing was approved yet)
 	//and set `project_services.scraped_at` to the current time
+	plugin := s.Cluster.QuotaPlugins["unittest"].(*plugins.GenericQuotaPlugin) //nolint:errcheck
 	plugin.SetQuotaFails = true
 	c.Scrape("unittest")
 	c.Scrape("unittest") //twice because there are two projects
@@ -258,11 +233,11 @@ func Test_ScrapeSuccess(t *testing.T) {
 
 	//check data metrics generated by this scraping pass
 	registry := prometheus.NewPedanticRegistry()
-	amc := &AggregateMetricsCollector{Cluster: cluster, DB: s.DB}
+	amc := &AggregateMetricsCollector{Cluster: s.Cluster, DB: s.DB}
 	registry.MustRegister(amc)
-	pmc := &QuotaPluginMetricsCollector{Cluster: cluster, DB: s.DB}
+	pmc := &QuotaPluginMetricsCollector{Cluster: s.Cluster, DB: s.DB}
 	registry.MustRegister(pmc)
-	dmc := &DataMetricsCollector{Cluster: cluster, DB: s.DB, ReportZeroes: true}
+	dmc := &DataMetricsCollector{Cluster: s.Cluster, DB: s.DB, ReportZeroes: true}
 	registry.MustRegister(dmc)
 	assert.HTTPRequest{
 		Method:       "GET",
@@ -273,11 +248,11 @@ func Test_ScrapeSuccess(t *testing.T) {
 
 	//check data metrics with the skip_zero flag set
 	registry = prometheus.NewPedanticRegistry()
-	amc = &AggregateMetricsCollector{Cluster: cluster, DB: s.DB}
+	amc = &AggregateMetricsCollector{Cluster: s.Cluster, DB: s.DB}
 	registry.MustRegister(amc)
-	pmc = &QuotaPluginMetricsCollector{Cluster: cluster, DB: s.DB}
+	pmc = &QuotaPluginMetricsCollector{Cluster: s.Cluster, DB: s.DB}
 	registry.MustRegister(pmc)
-	dmc = &DataMetricsCollector{Cluster: cluster, DB: s.DB, ReportZeroes: false}
+	dmc = &DataMetricsCollector{Cluster: s.Cluster, DB: s.DB, ReportZeroes: false}
 	registry.MustRegister(dmc)
 	assert.HTTPRequest{
 		Method:       "GET",
@@ -297,10 +272,35 @@ func setProjectServicesStale(t *testing.T, dbm *gorp.DbMap) {
 }
 
 func Test_ScrapeFailure(t *testing.T) {
-	plugin := test.NewPlugin()
-	s, cluster := prepareScrapeTest(t, 2, "unittest", plugin)
+	test.ResetTime()
+	s := test.NewSetup(t,
+		test.WithConfig(testScrapeBasicConfigYAML),
+	)
+	prepareDomainsAndProjectsForScrape(t, s)
+
+	//setup a quota constraint for the projects that we're scraping
+	//
+	//TODO: duplicated with Test_ScrapeFailure
+	//NOTE: This is set only *after* ScanDomains has run, in order to exercise
+	//the code path in Scrape() that applies constraints when first creating
+	//project_resources entries. If we had set this before ScanDomains, then
+	//ScanDomains would already have created the project_resources entries.
+	projectConstraints := core.QuotaConstraints{
+		"unittest": {
+			"capacity": {Minimum: p2u64(10), Maximum: p2u64(40)},
+		},
+	}
+	s.Cluster.QuotaConstraints = &core.QuotaConstraintSet{
+		Projects: map[string]map[string]core.QuotaConstraints{
+			"germany": {
+				"berlin":  projectConstraints,
+				"dresden": projectConstraints,
+			},
+		},
+	}
+
 	c := Collector{
-		Cluster:   cluster,
+		Cluster:   s.Cluster,
 		DB:        s.DB,
 		TimeNow:   test.TimeNow,
 		AddJitter: test.NoJitter,
@@ -323,6 +323,7 @@ func Test_ScrapeFailure(t *testing.T) {
 
 	//failing Scrape should create dummy records to ensure that the API finds
 	//plausibly-structured data
+	plugin := s.Cluster.QuotaPlugins["unittest"].(*plugins.GenericQuotaPlugin) //nolint:errcheck
 	plugin.ScrapeFails = true
 	c.Scrape("unittest")
 	c.Scrape("unittest") //twice because there are two projects
@@ -369,17 +370,61 @@ func Test_ScrapeFailure(t *testing.T) {
 	`)
 }
 
+const (
+	testScrapeCentralizedConfigYAML = `
+		discovery:
+			method: --test-static
+			params:
+				domains:
+					- { name: germany, id: uuid-for-germany }
+				projects:
+					uuid-for-germany:
+						- { name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }
+		services:
+			- service_type: centralized
+				type: --test-generic
+		quota_distribution_configs:
+			- { resource: centralized/capacity, model: centralized, default_project_quota: 10 }
+			- { resource: centralized/things,   model: centralized, default_project_quota: 15 }
+		bursting:
+			# should not make a difference because CQD ignores bursting
+			max_multiplier: 0.2
+	`
+)
+
 func Test_ScrapeCentralized(t *testing.T) {
 	//since all resources in this test operate under centralized quota
 	//distribution, bursting makes absolutely no difference
 	for _, hasBursting := range []bool{false, true} {
 		logg.Info("===== hasBursting = %t =====", hasBursting)
 
-		plugin := test.NewPlugin()
-		s, cluster := prepareScrapeTest(t, 1, "centralized", plugin)
-		cluster.Authoritative = true
+		test.ResetTime()
+		s := test.NewSetup(t,
+			test.WithConfig(testScrapeCentralizedConfigYAML),
+		)
+		prepareDomainsAndProjectsForScrape(t, s)
+
+		//setup a quota constraint for the project that we're scraping (this is ignored by Test_ScrapeFailure())
+		//
+		//NOTE: This is set only *after* ScanDomains has run, in order to exercise
+		//the code path in Scrape() that applies constraints when first creating
+		//project_resources entries. If we had set this before ScanDomains, then
+		//ScanDomains would already have created the project_resources entries.
+		projectConstraints := core.QuotaConstraints{
+			"centralized": {
+				"capacity": {Minimum: p2u64(5)},  //below the DefaultProjectQuota, so the DefaultProjectQuota should take precedence
+				"things":   {Minimum: p2u64(20)}, //above the DefaultProjectQuota, so the constraint.Minimum should take precedence
+			},
+		}
+		s.Cluster.QuotaConstraints = &core.QuotaConstraintSet{
+			Projects: map[string]map[string]core.QuotaConstraints{
+				"germany": {"berlin": projectConstraints},
+			},
+		}
+
+		s.Cluster.Authoritative = true
 		c := Collector{
-			Cluster:   cluster,
+			Cluster:   s.Cluster,
 			DB:        s.DB,
 			LogError:  t.Errorf,
 			TimeNow:   test.TimeNow,
@@ -393,12 +438,12 @@ func Test_ScrapeCentralized(t *testing.T) {
 		tr0.AssertEqualToFile("fixtures/scrape-centralized0.sql")
 
 		if hasBursting {
-			_, err := s.DB.Exec(`UPDATE projects SET has_bursting = TRUE WHERE id = 2`)
+			_, err := s.DB.Exec(`UPDATE projects SET has_bursting = TRUE WHERE id = 1`)
 			if err != nil {
 				t.Fatal(err)
 			}
 			tr.DBChanges().Ignore()
-			cluster.Config.Bursting.MaxMultiplier = 0.2
+			s.Cluster.Config.Bursting.MaxMultiplier = 0.2
 		}
 
 		//first Scrape creates the remaining project_resources, fills usage and
@@ -433,70 +478,33 @@ func Test_ScrapeCentralized(t *testing.T) {
 ////////////////////////////////////////////////////////////////////////////////
 // test for auto-approval
 
-type autoApprovalTestPlugin struct {
-	StaticBackendQuota uint64
-}
-
-func (p *autoApprovalTestPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubresources map[string]bool) error {
-	return nil
-}
-
-func (p *autoApprovalTestPlugin) PluginTypeID() string {
-	return "--test-auto-approval"
-}
-
-func (p *autoApprovalTestPlugin) ServiceInfo(serviceType string) limes.ServiceInfo {
-	return limes.ServiceInfo{
-		Type: serviceType,
-	}
-}
-
-func (p *autoApprovalTestPlugin) Resources() []limesresources.ResourceInfo {
-	//one resource can auto-approve, one cannot because BackendQuota != AutoApproveInitialQuota
-	return []limesresources.ResourceInfo{
-		{
-			Name:                    "approve",
-			AutoApproveInitialQuota: p.StaticBackendQuota,
-		},
-		{
-			Name:                    "noapprove",
-			AutoApproveInitialQuota: p.StaticBackendQuota,
-		},
-	}
-}
-
-func (p *autoApprovalTestPlugin) Rates() []limesrates.RateInfo {
-	return nil
-}
-func (p *autoApprovalTestPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
-	return nil, "", nil
-}
-func (p *autoApprovalTestPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
-}
-func (p *autoApprovalTestPlugin) CollectMetrics(ch chan<- prometheus.Metric, project core.KeystoneProject, serializedMetrics string) error {
-	return nil
-}
-
-func (p *autoApprovalTestPlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics string, err error) {
-	return map[string]core.ResourceData{
-		"approve":   {Usage: 0, Quota: int64(p.StaticBackendQuota)},
-		"noapprove": {Usage: 0, Quota: int64(p.StaticBackendQuota) + 10},
-	}, "", nil
-}
-
-func (p *autoApprovalTestPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, fullQuotas map[string]map[string]uint64, allServiceInfos []limes.ServiceInfo) error {
-	return errors.New("unimplemented")
-}
-
-func (p *autoApprovalTestPlugin) SetQuota(project core.KeystoneProject, quotas map[string]uint64) error {
-	return errors.New("unimplemented")
-}
+const (
+	testAutoApprovalConfigYAML = `
+		discovery:
+			method: --test-static
+			params:
+				domains:
+					- { name: germany, id: uuid-for-germany }
+				projects:
+					uuid-for-germany:
+						- { name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }
+		services:
+			- service_type: autoapprovaltest
+				type: --test-auto-approval
+				params:
+					static_backend_quota: 10
+	`
+)
 
 func Test_AutoApproveInitialQuota(t *testing.T) {
-	plugin := &autoApprovalTestPlugin{StaticBackendQuota: 10}
-	s, cluster := prepareScrapeTest(t, 1, "autoapprovaltest", plugin)
+	test.ResetTime()
+	s := test.NewSetup(t,
+		test.WithConfig(testAutoApprovalConfigYAML),
+	)
+	prepareDomainsAndProjectsForScrape(t, s)
+
 	c := Collector{
-		Cluster:   cluster,
+		Cluster:   s.Cluster,
 		DB:        s.DB,
 		LogError:  t.Errorf,
 		TimeNow:   test.TimeNow,
@@ -520,6 +528,7 @@ func Test_AutoApproveInitialQuota(t *testing.T) {
 	//modify the backend quota; verify that the second scrape does not
 	//auto-approve the changed value again (auto-approval is limited to the
 	//initial scrape)
+	plugin := s.Cluster.QuotaPlugins["autoapprovaltest"].(*plugins.AutoApprovalQuotaPlugin) //nolint:errcheck
 	plugin.StaticBackendQuota += 10
 	setProjectServicesStale(t, s.DB)
 	c.Scrape("autoapprovaltest")
@@ -530,47 +539,31 @@ func Test_AutoApproveInitialQuota(t *testing.T) {
 	`)
 }
 
-// A quota plugin with absolutely no resources and rates.
-type noopQuotaPlugin struct{}
-
-func (noopQuotaPlugin) Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubresources map[string]bool) error {
-	return nil
-}
-func (noopQuotaPlugin) PluginTypeID() string {
-	return "noop"
-}
-func (noopQuotaPlugin) ServiceInfo(serviceType string) limes.ServiceInfo {
-	return limes.ServiceInfo{Type: serviceType}
-}
-func (noopQuotaPlugin) Resources() []limesresources.ResourceInfo {
-	return nil
-}
-func (noopQuotaPlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics string, err error) {
-	return nil, "", nil
-}
-func (noopQuotaPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, fullQuotas map[string]map[string]uint64, allServiceInfos []limes.ServiceInfo) error {
-	return nil
-}
-func (noopQuotaPlugin) SetQuota(project core.KeystoneProject, quotas map[string]uint64) error {
-	return nil
-}
-func (noopQuotaPlugin) Rates() []limesrates.RateInfo {
-	return nil
-}
-func (noopQuotaPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
-	return nil, "", nil
-}
-func (noopQuotaPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
-}
-func (noopQuotaPlugin) CollectMetrics(ch chan<- prometheus.Metric, project core.KeystoneProject, serializedMetrics string) error {
-	return nil
-}
+const (
+	testNoopConfigYAML = `
+		discovery:
+			method: --test-static
+			params:
+				domains:
+					- { name: germany, id: uuid-for-germany }
+				projects:
+					uuid-for-germany:
+						- { name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }
+		services:
+			- service_type: noop
+				type: --test-noop
+	`
+)
 
 func Test_ScrapeButNoResources(t *testing.T) {
-	plugin := noopQuotaPlugin{}
-	s, cluster := prepareScrapeTest(t, 1, "noop", plugin)
+	test.ResetTime()
+	s := test.NewSetup(t,
+		test.WithConfig(testNoopConfigYAML),
+	)
+	prepareDomainsAndProjectsForScrape(t, s)
+
 	c := Collector{
-		Cluster:   cluster,
+		Cluster:   s.Cluster,
 		DB:        s.DB,
 		LogError:  t.Errorf,
 		TimeNow:   test.TimeNow,

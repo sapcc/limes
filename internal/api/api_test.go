@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -47,34 +48,83 @@ import (
 	"github.com/sapcc/limes/internal/test/plugins"
 )
 
+// NOTE: MiB makes no sense for a deletion rate, but I want to test as many
+// combinations of "has unit or not", "has limit or not" and "has usage or not"
+// as possible
+const (
+	testConfigYAML = `
+		discovery:
+			method: --test-static
+		services:
+			- service_type: shared
+				type: --test-generic
+				params:
+					rate_infos:
+						- name:   service/shared/objects:delete
+							unit:   MiB
+						- name:   service/shared/objects:unlimited
+							unit:   KiB
+				rate_limits:
+					global:
+						- name:   service/shared/objects:create
+							limit:  5000
+							window: 1s
+					project_default:
+						- name:   service/shared/objects:create
+							limit:  5
+							window: 1m
+						- name:   service/shared/objects:delete
+							limit:  1
+							window: 1m
+						- name:   service/shared/objects:update
+							limit:  2
+							window: 1s
+						- name:   service/shared/objects:read/list
+							limit:  3
+							window: 1s
+
+			- service_type: unshared
+				type: --test-generic
+				params:
+					rate_infos:
+						- name:   service/unshared/instances:delete
+				rate_limits:
+					project_default:
+						- name:   service/unshared/instances:create
+							limit:  5
+							window: 1m
+						- name:   service/unshared/instances:delete
+							limit:  1
+							window: 1m
+						- name:   service/unshared/instances:update
+							limit:  2
+							window: 1s
+
+			## BEGIN CENTRALIZED
+			- service_type: centralized
+				type: --test-generic
+				params:
+					rate_infos:
+						- name: service/unshared/instances:delete
+			## END CENTRALIZED
+	`
+)
+
 func setupTest(t *testing.T, startData string) (test.Setup, *core.Cluster, http.Handler, *TestPolicyEnforcer) {
-	//load test database
+	hasCentralizedService := startData == "fixtures/start-data.sql"
+	configYAML := testConfigYAML
+	if !hasCentralizedService {
+		//TODO: ugly (resolve this by splitting tests into smaller pieces and having them be less dependent on a common setup phase)
+		configYAML = regexp.MustCompile(`(?ms)^\s*## BEGIN CENTRALIZED.*^\s*## END CENTRALIZED\s*$`).ReplaceAllString(configYAML, "")
+	}
+
 	t.Helper()
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile(startData),
+		test.WithConfig(configYAML),
 	)
 
 	//prepare test configuration
-	sharedRatesThatReportUsage := []limesrates.RateInfo{
-		//NOTE: MiB makes no sense for this rate, but I want to test as many
-		//combinations of "has unit or not", "has limit or not" and "has usage or
-		//not" as possible
-		{Name: "service/shared/objects:delete", Unit: limes.UnitMebibytes},
-		{Name: "service/shared/objects:unlimited", Unit: limes.UnitKibibytes},
-	}
-	unsharedRatesThatReportUsage := []limesrates.RateInfo{
-		{Name: "service/unshared/instances:delete", Unit: limes.UnitNone},
-	}
-
-	quotaPlugins := map[string]core.QuotaPlugin{
-		"shared":   test.NewPlugin(sharedRatesThatReportUsage...),
-		"unshared": test.NewPlugin(unsharedRatesThatReportUsage...),
-	}
-	hasCentralizedService := startData == "fixtures/start-data.sql"
-	if hasCentralizedService {
-		quotaPlugins["centralized"] = test.NewPlugin()
-	}
-
 	westConstraintSet := core.QuotaConstraintSet{
 		Domains: map[string]core.QuotaConstraints{
 			"france": {
@@ -109,93 +159,8 @@ func setupTest(t *testing.T, startData string) (test.Setup, *core.Cluster, http.
 			},
 		},
 	}
-
-	var clusterConfig core.ClusterConfiguration
 	if startData != "fixtures/start-data-inconsistencies.sql" {
-		clusterConfig.Services = []core.ServiceConfiguration{
-			{
-				ServiceType: "shared",
-				PluginType:  "shared", //TODO: dummy value
-				RateLimits: core.ServiceRateLimitConfiguration{
-					Global: []core.RateLimitConfiguration{
-						{
-							Name:   "service/shared/objects:create",
-							Unit:   limes.UnitNone,
-							Limit:  5000,
-							Window: 1 * limesrates.WindowSeconds,
-						},
-					},
-					ProjectDefault: []core.RateLimitConfiguration{
-						{
-							Name:   "service/shared/objects:create",
-							Unit:   limes.UnitNone,
-							Limit:  5,
-							Window: 1 * limesrates.WindowMinutes,
-						},
-						{
-							Name:   "service/shared/objects:delete",
-							Unit:   limes.UnitNone,
-							Limit:  1,
-							Window: 1 * limesrates.WindowMinutes,
-						},
-						{
-							Name:   "service/shared/objects:update",
-							Unit:   limes.UnitNone,
-							Limit:  2,
-							Window: 1 * limesrates.WindowSeconds,
-						},
-						{
-							Name:   "service/shared/objects:read/list",
-							Unit:   limes.UnitNone,
-							Limit:  3,
-							Window: 1 * limesrates.WindowSeconds,
-						},
-					},
-				},
-			},
-			{
-				ServiceType: "unshared",
-				PluginType:  "unshared", //TODO: dummy value
-				RateLimits: core.ServiceRateLimitConfiguration{
-					ProjectDefault: []core.RateLimitConfiguration{
-						{
-							Name:   "service/unshared/instances:create",
-							Unit:   limes.UnitNone,
-							Limit:  5,
-							Window: 1 * limesrates.WindowMinutes,
-						},
-						{
-							Name:   "service/unshared/instances:delete",
-							Unit:   limes.UnitNone,
-							Limit:  1,
-							Window: 1 * limesrates.WindowMinutes,
-						},
-						{
-							Name:   "service/unshared/instances:update",
-							Unit:   limes.UnitNone,
-							Limit:  2,
-							Window: 1 * limesrates.WindowSeconds,
-						},
-					},
-				},
-			},
-		}
-		if hasCentralizedService {
-			clusterConfig.Services = append(clusterConfig.Services, core.ServiceConfiguration{
-				ServiceType: "centralized",
-				PluginType:  "centralized", //TODO: dummy value
-			})
-		}
-	}
-
-	cluster := &core.Cluster{
-		DiscoveryPlugin: test.NewDiscoveryPlugin(),
-		QuotaPlugins:    quotaPlugins,
-		CapacityPlugins: map[string]core.CapacityPlugin{},
-		Config:          clusterConfig,
-	}
-	if startData != "fixtures/start-data-inconsistencies.sql" {
-		cluster.QuotaConstraints = &westConstraintSet
+		s.Cluster.QuotaConstraints = &westConstraintSet
 	}
 
 	//load mock policy (where everything is allowed)
@@ -210,7 +175,8 @@ func setupTest(t *testing.T, startData string) (test.Setup, *core.Cluster, http.
 	tokenValidator := TestTokenValidator{enforcer}
 
 	if startData != "fixtures/start-data-inconsistencies.sql" {
-		cluster.Config.ResourceBehaviors = []core.ResourceBehavior{
+		//TODO: move into cluster config YAML
+		s.Cluster.Config.ResourceBehaviors = []core.ResourceBehavior{
 			//check minimum non-zero project quota constraint
 			{
 				FullResourceNameRx:     "unshared/things",
@@ -242,7 +208,9 @@ func setupTest(t *testing.T, startData string) (test.Setup, *core.Cluster, http.
 				},
 			},
 		}
-		cluster.Config.QuotaDistributionConfigs = []*core.QuotaDistributionConfiguration{
+
+		//TODO: move into cluster config YAML
+		s.Cluster.Config.QuotaDistributionConfigs = []*core.QuotaDistributionConfiguration{
 			//check behavior for centralized quota distribution (all other resources default to hierarchical quota distribution)
 			{
 				FullResourceNameRx:  "centralized/capacity",
@@ -258,11 +226,11 @@ func setupTest(t *testing.T, startData string) (test.Setup, *core.Cluster, http.
 	}
 
 	handler := httpapi.Compose(
-		NewV1API(cluster, s.DB, tokenValidator),
+		NewV1API(s.Cluster, s.DB, tokenValidator),
 		httpapi.WithGlobalMiddleware(ForbidClusterIDHeader),
 		httpapi.WithoutLogging(),
 	)
-	return s, cluster, handler, enforcer
+	return s, s.Cluster, handler, enforcer
 }
 
 type TestPolicyEnforcer struct {

@@ -38,6 +38,10 @@ type StaticCapacityPlugin struct {
 	WithSubcapacities bool     `yaml:"with_subcapacities"`
 }
 
+func init() {
+	core.CapacityPluginRegistry.Add(func() core.CapacityPlugin { return &StaticCapacityPlugin{} })
+}
+
 // Init implements the core.CapacityPlugin interface.
 func (p *StaticCapacityPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubcapacities map[string]map[string]bool) error {
 	return nil

@@ -27,47 +27,56 @@ import (
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
 
-	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
 	"github.com/sapcc/limes/internal/test/plugins"
 )
 
+const (
+	testScanCapacityConfigYAML = `
+		discovery:
+			method: --test-static
+		services:
+			- service_type: shared
+				type: --test-generic
+			- service_type: unshared
+				type: --test-generic
+			- service_type: unshared2
+				type: --test-generic
+		capacitors:
+		- id: unittest
+			type: --test-static
+			params:
+				capacity: 42
+				resources:
+					# publish capacity for some known resources...
+					- shared/things
+					# ...and some nonexistent ones (these should be ignored by the scraper)
+					- whatever/things
+					- shared/items
+		- id: unittest2
+			type: --test-static
+			params:
+				capacity: 42
+				resources:
+					# same as above: some known...
+					- unshared/capacity
+					# ...and some unknown resources
+					- someother/capacity
+		resource_behavior:
+			# overcommit should be reflected in capacity metrics
+			- { resource: unshared2/capacity, overcommit_factor: 2.5 }
+	`
+)
+
 func Test_ScanCapacity(t *testing.T) {
-	s := test.NewSetup(t)
+	s := test.NewSetup(t,
+		test.WithConfig(testScanCapacityConfigYAML),
+	)
 	test.ResetTime()
 
-	cluster := &core.Cluster{
-		QuotaPlugins: map[string]core.QuotaPlugin{
-			"shared":    test.NewPlugin(),
-			"unshared":  test.NewPlugin(),
-			"unshared2": test.NewPlugin(),
-		},
-		CapacityPlugins: map[string]core.CapacityPlugin{
-			"unittest": test.NewCapacityPlugin(
-				//publish capacity for some known resources...
-				"shared/things",
-				//...and some nonexistent ones (these should be ignored by the scraper)
-				"whatever/things", "shared/items",
-			),
-			"unittest2": test.NewCapacityPlugin(
-				//same as above: some known...
-				"unshared/capacity",
-				//...and some unknown resources
-				"someother/capacity",
-			),
-		},
-		Config: core.ClusterConfiguration{
-			//overcommit should be reflected in capacity metrics
-			ResourceBehaviors: []core.ResourceBehavior{{
-				FullResourceNameRx: "unshared2/capacity",
-				OvercommitFactor:   2.5,
-			}},
-		},
-	}
-
 	c := Collector{
-		Cluster:   cluster,
+		Cluster:   s.Cluster,
 		DB:        s.DB,
 		LogError:  t.Errorf,
 		TimeNow:   test.TimeNow,
@@ -109,7 +118,7 @@ func Test_ScanCapacity(t *testing.T) {
 
 	//next scan should throw out the crap records and recreate the deleted ones;
 	//also change the reported Capacity to see if updates are getting through
-	cluster.CapacityPlugins["unittest"].(*plugins.StaticCapacityPlugin).Capacity = 23
+	s.Cluster.CapacityPlugins["unittest"].(*plugins.StaticCapacityPlugin).Capacity = 23
 	c.scanCapacity()
 	tr.DBChanges().AssertEqualf(`
 		UPDATE cluster_capacitors SET scraped_at = 5 WHERE capacitor_id = 'unittest';
@@ -121,9 +130,15 @@ func Test_ScanCapacity(t *testing.T) {
 
 	//add a capacity plugin that reports subcapacities; check that subcapacities
 	//are correctly written when creating a cluster_resources record
-	subcapacityPlugin := test.NewCapacityPlugin("unshared/things")
-	subcapacityPlugin.WithSubcapacities = true
-	cluster.CapacityPlugins["unittest4"] = subcapacityPlugin
+	pluginConfig := `
+		id: unittest4
+		type: --test-static
+		params:
+			capacity: 42
+			resources: [ unshared/things ]
+			with_subcapacities: true
+	`
+	subcapacityPlugin := s.AddCapacityPlugin(t, pluginConfig).(*plugins.StaticCapacityPlugin) //nolint:errcheck
 	c.scanCapacity()
 	tr.DBChanges().AssertEqualf(`
 		UPDATE cluster_capacitors SET scraped_at = 10 WHERE capacitor_id = 'unittest';
@@ -148,9 +163,15 @@ func Test_ScanCapacity(t *testing.T) {
 
 	//add a capacity plugin that also reports capacity per availability zone; check that
 	//these capacities are correctly written when creating a cluster_resources record
-	azCapacityPlugin := test.NewCapacityPlugin("unshared2/things")
-	azCapacityPlugin.WithAZCapData = true
-	cluster.CapacityPlugins["unittest5"] = azCapacityPlugin
+	pluginConfig = `
+		id: unittest5
+		type: --test-static
+		params:
+			capacity: 42
+			resources: [ unshared2/things ]
+			with_capacity_per_az: true
+	`
+	azCapacityPlugin := s.AddCapacityPlugin(t, pluginConfig).(*plugins.StaticCapacityPlugin) //nolint:errcheck
 	c.scanCapacity()
 	tr.DBChanges().AssertEqualf(`
 		UPDATE cluster_capacitors SET scraped_at = 24 WHERE capacitor_id = 'unittest';
@@ -179,9 +200,9 @@ func Test_ScanCapacity(t *testing.T) {
 
 	//check data metrics generated for these capacity data
 	registry := prometheus.NewPedanticRegistry()
-	dmc := &DataMetricsCollector{Cluster: cluster, DB: s.DB}
+	dmc := &DataMetricsCollector{Cluster: s.Cluster, DB: s.DB}
 	registry.MustRegister(dmc)
-	pmc := &CapacityPluginMetricsCollector{Cluster: cluster, DB: s.DB}
+	pmc := &CapacityPluginMetricsCollector{Cluster: s.Cluster, DB: s.DB}
 	registry.MustRegister(pmc)
 	assert.HTTPRequest{
 		Method:       "GET",
