@@ -44,6 +44,7 @@ import (
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/osext"
+	"go.uber.org/automaxprocs/maxprocs"
 
 	"github.com/sapcc/limes/internal/api"
 	"github.com/sapcc/limes/internal/collector"
@@ -58,6 +59,8 @@ var discoverInterval = 3 * time.Minute
 
 func main() {
 	logg.ShowDebug = osext.GetenvBool("LIMES_DEBUG")
+	undoMaxprocs := must.Return(maxprocs.Set(maxprocs.Logger(logg.Debug)))
+	defer undoMaxprocs()
 
 	//first two arguments must be task name and configuration file
 	if len(os.Args) < 3 {

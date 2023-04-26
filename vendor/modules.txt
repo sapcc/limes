@@ -181,6 +181,11 @@ github.com/sergi/go-diff/diffmatchpatch
 # go.uber.org/atomic v1.10.0
 ## explicit; go 1.18
 go.uber.org/atomic
+# go.uber.org/automaxprocs v1.5.2
+## explicit; go 1.18
+go.uber.org/automaxprocs/internal/cgroups
+go.uber.org/automaxprocs/internal/runtime
+go.uber.org/automaxprocs/maxprocs
 # golang.org/x/exp v0.0.0-20230420155640-133eef4313cb
 ## explicit; go 1.20
 golang.org/x/exp/constraints
