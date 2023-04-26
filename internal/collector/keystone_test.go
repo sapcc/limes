@@ -54,9 +54,9 @@ func keystoneTestCluster(t *testing.T) (*core.Cluster, *gorp.DbMap) {
 		},
 		DiscoveryPlugin: test.NewDiscoveryPlugin(),
 		QuotaPlugins: map[string]core.QuotaPlugin{
-			"shared":      test.NewPlugin("shared"),
-			"unshared":    test.NewPlugin("unshared"),
-			"centralized": test.NewPlugin("centralized"),
+			"shared":      test.NewPlugin(),
+			"unshared":    test.NewPlugin(),
+			"centralized": test.NewPlugin(),
 		},
 		CapacityPlugins: map[string]core.CapacityPlugin{},
 	}, dbm

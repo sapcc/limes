@@ -38,7 +38,6 @@ import (
 
 // Plugin is a core.QuotaPlugin implementation for unit tests.
 type Plugin struct {
-	StaticServiceType  string
 	StaticRateInfos    []limesrates.RateInfo
 	StaticResourceData map[string]*core.ResourceData
 	StaticCapacity     map[string]uint64
@@ -67,10 +66,9 @@ var resources = []limesresources.ResourceInfo{
 }
 
 // NewPlugin creates a new Plugin for the given service type.
-func NewPlugin(serviceType string, rates ...limesrates.RateInfo) *Plugin {
+func NewPlugin(rates ...limesrates.RateInfo) *Plugin {
 	return &Plugin{
-		StaticServiceType: serviceType,
-		StaticRateInfos:   rates,
+		StaticRateInfos: rates,
 		StaticResourceData: map[string]*core.ResourceData{
 			"things":   {Quota: 42, Usage: 2},
 			"capacity": {Quota: 100, Usage: 0},
@@ -86,14 +84,14 @@ func (p *Plugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.Endpo
 
 // PluginTypeID implements the core.QuotaPlugin interface.
 func (p *Plugin) PluginTypeID() string {
-	return p.StaticServiceType
+	return "--test-generic"
 }
 
 // ServiceInfo implements the core.QuotaPlugin interface.
-func (p *Plugin) ServiceInfo() limes.ServiceInfo {
+func (p *Plugin) ServiceInfo(serviceType string) limes.ServiceInfo {
 	return limes.ServiceInfo{
-		Type: p.StaticServiceType,
-		Area: p.StaticServiceType,
+		Type: serviceType,
+		Area: serviceType,
 	}
 }
 
@@ -196,7 +194,7 @@ func (p *Plugin) Scrape(project core.KeystoneProject) (result map[string]core.Re
 }
 
 // IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
-func (p *Plugin) IsQuotaAcceptableForProject(project core.KeystoneProject, fullQuotas map[string]map[string]uint64) error {
+func (p *Plugin) IsQuotaAcceptableForProject(project core.KeystoneProject, fullQuotas map[string]map[string]uint64, allServiceInfos []limes.ServiceInfo) error {
 	if p.QuotaIsNotAcceptable {
 		var quotasStr []string
 		for srvType, srvQuotas := range fullQuotas {

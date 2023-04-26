@@ -60,9 +60,9 @@ func (p *keppelPlugin) PluginTypeID() string {
 }
 
 // ServiceInfo implements the core.QuotaPlugin interface.
-func (p *keppelPlugin) ServiceInfo() limes.ServiceInfo {
+func (p *keppelPlugin) ServiceInfo(serviceType string) limes.ServiceInfo {
 	return limes.ServiceInfo{
-		Type:        "keppel",
+		Type:        serviceType,
 		ProductName: "keppel",
 		Area:        "storage",
 	}
@@ -98,9 +98,17 @@ func (p *keppelPlugin) Scrape(project core.KeystoneProject) (result map[string]c
 }
 
 // IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
-func (p *keppelPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, fullQuotas map[string]map[string]uint64) error {
-	ourQuotas := fullQuotas[p.ServiceInfo().Type]
-	if fullQuotas["object-store"]["capacity"] == 0 && ourQuotas["images"] > 0 {
+func (p *keppelPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, fullQuotas map[string]map[string]uint64, allServiceInfos []limes.ServiceInfo) error {
+	var ourQuotas, swiftQuotas map[string]uint64
+	for _, srv := range allServiceInfos {
+		switch srv.ProductName {
+		case "keppel":
+			ourQuotas = fullQuotas[srv.Type]
+		case "swift":
+			swiftQuotas = fullQuotas[srv.Type]
+		}
+	}
+	if swiftQuotas["capacity"] == 0 && ourQuotas["images"] > 0 {
 		//nolint:stylecheck // "Keppel" is a product name and thus must be capitalized
 		return fmt.Errorf("Keppel can only be used when a nonzero Swift quota is configured")
 	}

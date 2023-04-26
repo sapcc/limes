@@ -37,7 +37,6 @@ import (
 type Collector struct {
 	Cluster *core.Cluster
 	DB      *gorp.DbMap
-	Plugin  core.QuotaPlugin
 	//Usually logg.Error, but can be changed inside unit tests.
 	LogError func(msg string, args ...interface{})
 	//Usually time.Now, but can be changed inside unit tests.
@@ -54,7 +53,6 @@ func NewCollector(cluster *core.Cluster, dbm *gorp.DbMap, plugin core.QuotaPlugi
 	return &Collector{
 		Cluster:   cluster,
 		DB:        dbm,
-		Plugin:    plugin,
 		LogError:  logg.Error,
 		TimeNow:   time.Now,
 		AddJitter: addJitter,

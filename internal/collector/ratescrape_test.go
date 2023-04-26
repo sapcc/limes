@@ -42,12 +42,11 @@ func Test_RateScrapeSuccess(t *testing.T) {
 		{Name: "firstrate"},
 		{Name: "secondrate", Unit: limes.UnitKibibytes},
 	}
-	plugin := test.NewPlugin("unittest", rates...)
-	cluster, dbm := prepareScrapeTest(t, 2, plugin)
+	plugin := test.NewPlugin(rates...)
+	cluster, dbm := prepareScrapeTest(t, 2, "unittest", plugin)
 	c := Collector{
 		Cluster:   cluster,
 		DB:        dbm,
-		Plugin:    plugin,
 		LogError:  t.Errorf,
 		TimeNow:   test.TimeNow,
 		AddJitter: test.NoJitter,
@@ -93,8 +92,8 @@ func Test_RateScrapeSuccess(t *testing.T) {
 	`)
 
 	//first Scrape should create the entries
-	c.ScrapeRates()
-	c.ScrapeRates() //twice because there are two projects
+	c.ScrapeRates("unittest")
+	c.ScrapeRates("unittest") //twice because there are two projects
 	tr.DBChanges().AssertEqualf(`
 		INSERT INTO project_rates (service_id, name, usage_as_bigint) VALUES (1, 'firstrate', '9');
 		UPDATE project_rates SET usage_as_bigint = '10' WHERE service_id = 1 AND name = 'secondrate';
@@ -106,7 +105,7 @@ func Test_RateScrapeSuccess(t *testing.T) {
 
 	//second Scrape should not change anything (not even the timestamps) since
 	//less than 30 minutes have passed since the last Scrape()
-	c.ScrapeRates()
+	c.ScrapeRates("unittest")
 	tr.DBChanges().AssertEmpty()
 
 	//manually mess with one of the ratesScrapeState
@@ -115,15 +114,15 @@ func Test_RateScrapeSuccess(t *testing.T) {
 		t.Fatal(err)
 	}
 	//this alone should not cause a new scrape
-	c.ScrapeRates()
+	c.ScrapeRates("unittest")
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_services SET rates_scrape_state = '{"firstrate":4096,"secondrate":0}' WHERE id = 1 AND project_id = 1 AND type = 'unittest';
 	`)
 
 	//but the changed state will be taken into account when the next scrape is in order
 	setProjectServicesRatesStale(t, dbm)
-	c.ScrapeRates()
-	c.ScrapeRates()
+	c.ScrapeRates("unittest")
+	c.ScrapeRates("unittest")
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_rates SET usage_as_bigint = '5129' WHERE service_id = 1 AND name = 'firstrate';
 		UPDATE project_rates SET usage_as_bigint = '1034' WHERE service_id = 1 AND name = 'secondrate';
@@ -165,12 +164,11 @@ func Test_RateScrapeFailure(t *testing.T) {
 		{Name: "firstrate"},
 		{Name: "secondrate", Unit: limes.UnitKibibytes},
 	}
-	plugin := test.NewPlugin("unittest", rates...)
-	cluster, dbm := prepareScrapeTest(t, 2, plugin)
+	plugin := test.NewPlugin(rates...)
+	cluster, dbm := prepareScrapeTest(t, 2, "unittest", plugin)
 	c := Collector{
 		Cluster:   cluster,
 		DB:        dbm,
-		Plugin:    plugin,
 		LogError:  t.Errorf,
 		TimeNow:   test.TimeNow,
 		AddJitter: test.NoJitter,
@@ -194,7 +192,7 @@ func Test_RateScrapeFailure(t *testing.T) {
 
 	//ScrapeRates should not touch the DB when scraping fails
 	plugin.ScrapeFails = true
-	c.ScrapeRates()
+	c.ScrapeRates("unittest")
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_services SET rates_scrape_duration_secs = 1, rates_checked_at = 1, rates_scrape_error_message = 'ScrapeRates failed as requested', rates_next_scrape_at = 301 WHERE id = 1 AND project_id = 1 AND type = 'unittest';
 	`)
@@ -215,11 +213,10 @@ func p2window(val limesrates.Window) *limesrates.Window {
 
 func Test_ScrapeRatesButNoRates(t *testing.T) {
 	plugin := noopQuotaPlugin{}
-	cluster, dbm := prepareScrapeTest(t, 1, plugin)
+	cluster, dbm := prepareScrapeTest(t, 1, "noop", plugin)
 	c := Collector{
 		Cluster:   cluster,
 		DB:        dbm,
-		Plugin:    plugin,
 		LogError:  t.Errorf,
 		TimeNow:   test.TimeNow,
 		AddJitter: test.NoJitter,
@@ -229,7 +226,7 @@ func Test_ScrapeRatesButNoRates(t *testing.T) {
 	//check that ScrapeRates() behaves properly when encountering a quota plugin
 	//with no Rates() (in the wild, this can happen because some quota plugins
 	//only have Resources())
-	c.ScrapeRates()
+	c.ScrapeRates("noop")
 	_, tr0 := easypg.NewTracker(t, dbm.Db)
 	tr0.AssertEqualf(`
 		INSERT INTO domain_services (id, domain_id, type) VALUES (1, 1, 'noop');

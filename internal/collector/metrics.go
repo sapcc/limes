@@ -217,7 +217,7 @@ func (c *AggregateMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		if plugin == nil {
 			return nil
 		}
-		serviceName := plugin.ServiceInfo().ProductName
+		serviceName := plugin.ServiceInfo(serviceType).ProductName
 
 		if len(plugin.Resources()) > 0 {
 			ch <- prometheus.MustNewConstMetric(

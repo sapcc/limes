@@ -56,9 +56,12 @@ var findProjectForRateScrapeQuery = sqlext.SimplifyWhitespace(`
 //
 // Errors are logged instead of returned. The function will not return unless
 // startup fails.
-func (c *Collector) ScrapeRates() {
-	serviceInfo := c.Plugin.ServiceInfo()
-	serviceType := serviceInfo.Type
+func (c *Collector) ScrapeRates(serviceType string) {
+	plugin := c.Cluster.QuotaPlugins[serviceType]
+	if plugin == nil {
+		c.LogError("no such service type: %q", serviceType)
+	}
+	serviceInfo := plugin.ServiceInfo(serviceType)
 
 	//make sure that the counters are reported
 	labels := prometheus.Labels{
@@ -92,12 +95,12 @@ func (c *Collector) ScrapeRates() {
 
 		logg.Debug("scraping %s rates for %s/%s", serviceType, project.Domain.Name, project.Name)
 		srv := db.ProjectServiceRef{Type: serviceType, ID: serviceID}
-		rateData, serviceRatesScrapeState, err := c.Plugin.ScrapeRates(project, serviceRatesScrapeState)
+		rateData, serviceRatesScrapeState, err := plugin.ScrapeRates(project, serviceRatesScrapeState)
 		scrapeEndedAt := c.TimeNow()
 
 		//write result on success; if anything fails, try to record the error in the DB
 		if err == nil {
-			err = c.writeRateScrapeResult(srv, rateData, serviceRatesScrapeState, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
+			err = c.writeRateScrapeResult(srv, plugin, rateData, serviceRatesScrapeState, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
 			if err != nil {
 				err = fmt.Errorf("while writing results into DB: %w", err)
 			}
@@ -124,7 +127,7 @@ func (c *Collector) ScrapeRates() {
 	}
 }
 
-func (c *Collector) writeRateScrapeResult(srv db.ProjectServiceRef, rateData map[string]*big.Int, serviceRatesScrapeState string, scrapedAt time.Time, scrapeDuration time.Duration) error {
+func (c *Collector) writeRateScrapeResult(srv db.ProjectServiceRef, plugin core.QuotaPlugin, rateData map[string]*big.Int, serviceRatesScrapeState string, scrapedAt time.Time, scrapeDuration time.Duration) error {
 	tx, err := c.DB.Begin()
 	if err != nil {
 		return err
@@ -170,7 +173,7 @@ func (c *Collector) writeRateScrapeResult(srv db.ProjectServiceRef, rateData map
 	}
 
 	//insert missing project_rates entries
-	for _, rateMetadata := range c.Plugin.Rates() {
+	for _, rateMetadata := range plugin.Rates() {
 		if _, exists := rateExists[rateMetadata.Name]; exists {
 			continue
 		}

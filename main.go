@@ -144,10 +144,10 @@ func taskCollect(cluster *core.Cluster, args []string) {
 	//that for now, and instead construct worker threads in such a way that they
 	//can be terminated at any time without leaving the system in an inconsistent
 	//state, mostly through usage of DB transactions.)
-	for _, plugin := range cluster.QuotaPlugins {
+	for serviceType, plugin := range cluster.QuotaPlugins {
 		c := collector.NewCollector(cluster, dbm, plugin)
-		go c.Scrape()
-		go c.ScrapeRates()
+		go c.Scrape(serviceType)
+		go c.ScrapeRates(serviceType)
 	}
 
 	//start those collector threads which operate over all services simultaneously

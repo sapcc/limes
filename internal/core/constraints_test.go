@@ -119,9 +119,9 @@ func TestQuotaConstraintParsingSuccess(t *testing.T) {
 func clusterForQuotaConstraintTest() *Cluster {
 	return &Cluster{
 		QuotaPlugins: map[string]QuotaPlugin{
-			"service-one": quotaConstraintTestPlugin{"service-one"},
-			"service-two": quotaConstraintTestPlugin{"service-two"},
-			"centralized": quotaConstraintTestPlugin{"centralized"},
+			"service-one": quotaConstraintTestPlugin{},
+			"service-two": quotaConstraintTestPlugin{},
+			"centralized": quotaConstraintTestPlugin{},
 		},
 		Config: ClusterConfiguration{
 			QuotaDistributionConfigs: []*QuotaDistributionConfiguration{{
@@ -174,18 +174,16 @@ func expectQuotaConstraintInvalid(t *testing.T, path string, expectedErrors ...s
 	}
 }
 
-type quotaConstraintTestPlugin struct {
-	ServiceType string
-}
+type quotaConstraintTestPlugin struct{}
 
 func (p quotaConstraintTestPlugin) Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubresources map[string]bool) error {
 	return nil
 }
 func (p quotaConstraintTestPlugin) PluginTypeID() string {
-	return p.ServiceType
+	return "--test-quota-constraints"
 }
-func (p quotaConstraintTestPlugin) ServiceInfo() limes.ServiceInfo {
-	return limes.ServiceInfo{Type: p.ServiceType}
+func (p quotaConstraintTestPlugin) ServiceInfo(serviceType string) limes.ServiceInfo {
+	return limes.ServiceInfo{Type: serviceType}
 }
 func (p quotaConstraintTestPlugin) Rates() []limesrates.RateInfo {
 	return nil
@@ -193,7 +191,7 @@ func (p quotaConstraintTestPlugin) Rates() []limesrates.RateInfo {
 func (p quotaConstraintTestPlugin) Scrape(project KeystoneProject) (result map[string]ResourceData, serializedMetrics string, err error) {
 	return nil, "", nil
 }
-func (p quotaConstraintTestPlugin) IsQuotaAcceptableForProject(project KeystoneProject, fullQuotas map[string]map[string]uint64) error {
+func (p quotaConstraintTestPlugin) IsQuotaAcceptableForProject(project KeystoneProject, fullQuotas map[string]map[string]uint64, allServiceInfos []limes.ServiceInfo) error {
 	return nil
 }
 func (p quotaConstraintTestPlugin) SetQuota(project KeystoneProject, quotas map[string]uint64) error {

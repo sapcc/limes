@@ -113,7 +113,12 @@ type QuotaPlugin interface {
 	Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubresources map[string]bool) error
 
 	//ServiceInfo returns metadata for this service.
-	ServiceInfo() limes.ServiceInfo
+	//
+	//This receives the `serviceType` as an argument because it needs to appear
+	//in the ServiceInfo struct. But in general, a plugin cannot know which
+	//serviceType it was instantiated for (esp. in unit tests, where the generic
+	//test plugin is instantiated multiple times for different service types).
+	ServiceInfo(serviceType string) limes.ServiceInfo
 
 	//Resources returns metadata for all the resources that this plugin scrapes
 	//from the backend service.
@@ -133,7 +138,12 @@ type QuotaPlugin interface {
 	//to the quotas of other services. (For example, Keppel uses Swift as a
 	//storage backend, so nonzero Keppel quota requires nonzero Swift quota in
 	//Limes, to catch a common misconfiguration that confuses users.)
-	IsQuotaAcceptableForProject(project KeystoneProject, fullQuotas map[string]map[string]uint64) error
+	//
+	//The `fullQuotas` map uses service type strings as the first key. Since
+	//quota plugins can be instantiated under arbitrary service types,
+	//implementations should inspect `allServiceInfos` to locate the service type
+	//names that they are interested in.
+	IsQuotaAcceptableForProject(project KeystoneProject, fullQuotas map[string]map[string]uint64, allServiceInfos []limes.ServiceInfo) error
 	//SetQuota updates the backend service's quotas for the given project in the
 	//given domain to the values specified here. The map is guaranteed to contain
 	//values for all resources defined by Resources().

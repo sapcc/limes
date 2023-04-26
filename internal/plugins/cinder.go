@@ -70,9 +70,9 @@ func (p *cinderPlugin) PluginTypeID() string {
 }
 
 // ServiceInfo implements the core.QuotaPlugin interface.
-func (p *cinderPlugin) ServiceInfo() limes.ServiceInfo {
+func (p *cinderPlugin) ServiceInfo(serviceType string) limes.ServiceInfo {
 	return limes.ServiceInfo{
-		Type:        "volumev2",
+		Type:        serviceType,
 		ProductName: "cinder",
 		Area:        "storage",
 	}
@@ -292,7 +292,7 @@ func (p *cinderPlugin) collectSnapshotSubresources(project core.KeystoneProject,
 }
 
 // IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
-func (p *cinderPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, fullQuotas map[string]map[string]uint64) error {
+func (p *cinderPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, fullQuotas map[string]map[string]uint64, allServiceInfos []limes.ServiceInfo) error {
 	//not required for this plugin
 	return nil
 }

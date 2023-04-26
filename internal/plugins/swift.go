@@ -97,9 +97,9 @@ func (p *swiftPlugin) PluginTypeID() string {
 }
 
 // ServiceInfo implements the core.QuotaPlugin interface.
-func (p *swiftPlugin) ServiceInfo() limes.ServiceInfo {
+func (p *swiftPlugin) ServiceInfo(serviceType string) limes.ServiceInfo {
 	return limes.ServiceInfo{
-		Type:        "object-store",
+		Type:        serviceType,
 		ProductName: "swift",
 		Area:        "storage",
 	}
@@ -174,7 +174,7 @@ func (p *swiftPlugin) Scrape(project core.KeystoneProject) (result map[string]co
 }
 
 // IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
-func (p *swiftPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, fullQuotas map[string]map[string]uint64) error {
+func (p *swiftPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, fullQuotas map[string]map[string]uint64, allServiceInfos []limes.ServiceInfo) error {
 	//not required for this plugin
 	return nil
 }

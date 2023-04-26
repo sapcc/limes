@@ -134,8 +134,8 @@ func (u *QuotaUpdater) ValidateInput(input limesresources.QuotaRequest, dbi db.I
 
 	//go through all services and resources and validate the requested quotas
 	u.Requests = make(map[string]map[string]QuotaRequest)
-	for _, quotaPlugin := range u.Cluster.QuotaPlugins {
-		srv := quotaPlugin.ServiceInfo()
+	for serviceType, quotaPlugin := range u.Cluster.QuotaPlugins {
+		srv := quotaPlugin.ServiceInfo(serviceType)
 		u.Requests[srv.Type] = map[string]QuotaRequest{}
 
 		for _, res := range quotaPlugin.Resources() {
@@ -276,7 +276,7 @@ func (u *QuotaUpdater) ValidateInput(input limesresources.QuotaRequest, dbi db.I
 			if plugin, exists := u.Cluster.QuotaPlugins[srvType]; exists {
 				domain := core.KeystoneDomainFromDB(*u.Domain)
 				project := core.KeystoneProjectFromDB(*u.Project, domain)
-				err := plugin.IsQuotaAcceptableForProject(project, quotaValues)
+				err := plugin.IsQuotaAcceptableForProject(project, quotaValues, u.Cluster.AllServiceInfos())
 				if err != nil {
 					for resName := range srvInput {
 						u.Requests[srvType][resName] = QuotaRequest{
