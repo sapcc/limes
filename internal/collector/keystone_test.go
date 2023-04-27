@@ -24,7 +24,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/go-gorp/gorp/v3"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
@@ -34,11 +33,11 @@ import (
 	"github.com/sapcc/limes/internal/test/plugins"
 )
 
-func keystoneTestCluster(t *testing.T) (*core.Cluster, *gorp.DbMap) {
+func keystoneTestCluster(t *testing.T) (test.Setup, *core.Cluster) {
 	test.ResetTime()
-	dbm := test.InitDatabase(t, nil)
+	s := test.NewSetup(t)
 
-	return &core.Cluster{
+	return s, &core.Cluster{
 		Config: core.ClusterConfiguration{
 			QuotaDistributionConfigs: []*core.QuotaDistributionConfiguration{
 				{
@@ -60,11 +59,11 @@ func keystoneTestCluster(t *testing.T) (*core.Cluster, *gorp.DbMap) {
 			"centralized": test.NewPlugin(),
 		},
 		CapacityPlugins: map[string]core.CapacityPlugin{},
-	}, dbm
+	}
 }
 
 func Test_ScanDomains(t *testing.T) {
-	cluster, dbm := keystoneTestCluster(t)
+	s, cluster := keystoneTestCluster(t)
 	discovery := cluster.DiscoveryPlugin.(*plugins.StaticDiscoveryPlugin) //nolint:errcheck
 
 	//construct expectation for return value
@@ -89,7 +88,7 @@ func Test_ScanDomains(t *testing.T) {
 
 	c := Collector{
 		Cluster:   cluster,
-		DB:        dbm,
+		DB:        s.DB,
 		LogError:  t.Errorf,
 		TimeNow:   test.TimeNow,
 		AddJitter: test.NoJitter,
@@ -109,7 +108,7 @@ func Test_ScanDomains(t *testing.T) {
 	sort.Strings(expectedNewDomains) //order does not matter
 	sort.Strings(actualNewDomains)
 	assert.DeepEqual(t, "new domains after ScanDomains #1", actualNewDomains, expectedNewDomains)
-	tr, tr0 := easypg.NewTracker(t, dbm.Db)
+	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualToFile("fixtures/scandomains1.sql")
 
 	//first ScanDomains should not discover anything new

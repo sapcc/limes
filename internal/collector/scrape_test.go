@@ -47,9 +47,9 @@ func p2u64(x uint64) *uint64 {
 	return &x
 }
 
-func prepareScrapeTest(t *testing.T, numProjects int, serviceType string, quotaPlugin core.QuotaPlugin) (*core.Cluster, *gorp.DbMap) {
+func prepareScrapeTest(t *testing.T, numProjects int, serviceType string, quotaPlugin core.QuotaPlugin) (test.Setup, *core.Cluster) {
 	test.ResetTime()
-	dbm := test.InitDatabase(t, nil)
+	s := test.NewSetup(t)
 
 	cluster := &core.Cluster{
 		DiscoveryPlugin: test.NewDiscoveryPlugin(),
@@ -87,7 +87,7 @@ func prepareScrapeTest(t *testing.T, numProjects int, serviceType string, quotaP
 	//ScanDomains is required to create the entries in `domains`,
 	//`domain_services`, `projects` and `project_services`
 	timeZero := func() time.Time { return time.Unix(0, 0).UTC() }
-	_, err := (&Collector{Cluster: cluster, DB: dbm, TimeNow: timeZero, AddJitter: test.NoJitter}).ScanDomains(ScanDomainsOpts{})
+	_, err := (&Collector{Cluster: cluster, DB: s.DB, TimeNow: timeZero, AddJitter: test.NoJitter}).ScanDomains(ScanDomainsOpts{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +95,7 @@ func prepareScrapeTest(t *testing.T, numProjects int, serviceType string, quotaP
 	//if we have two projects, we are going to test with and without bursting, so
 	//set up bursting for one of both projects
 	if numProjects == 2 {
-		_, err := dbm.Exec(`UPDATE projects SET has_bursting = TRUE WHERE id = 2`)
+		_, err := s.DB.Exec(`UPDATE projects SET has_bursting = TRUE WHERE id = 2`)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -127,16 +127,16 @@ func prepareScrapeTest(t *testing.T, numProjects int, serviceType string, quotaP
 		},
 	}
 
-	return cluster, dbm
+	return s, cluster
 }
 
 func Test_ScrapeSuccess(t *testing.T) {
 	plugin := test.NewPlugin()
-	cluster, dbm := prepareScrapeTest(t, 2, "unittest", plugin)
+	s, cluster := prepareScrapeTest(t, 2, "unittest", plugin)
 	cluster.Authoritative = true
 	c := Collector{
 		Cluster:   cluster,
-		DB:        dbm,
+		DB:        s.DB,
 		LogError:  t.Errorf,
 		TimeNow:   test.TimeNow,
 		AddJitter: test.NoJitter,
@@ -144,7 +144,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	}
 
 	//check that ScanDomains created the domain, project and their services
-	tr, tr0 := easypg.NewTracker(t, dbm.Db)
+	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualToFile("fixtures/scrape0.sql")
 
 	//first Scrape should create the entries in `project_resources` with the
@@ -172,7 +172,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	//change the data that is reported by the plugin
 	plugin.StaticResourceData["capacity"].Quota = 110
 	plugin.StaticResourceData["things"].Usage = 5
-	setProjectServicesStale(t, dbm)
+	setProjectServicesStale(t, s.DB)
 	//Scrape should pick up the changed resource data
 	c.Scrape("unittest")
 	c.Scrape("unittest") //twice because there are two projects
@@ -187,11 +187,11 @@ func Test_ScrapeSuccess(t *testing.T) {
 
 	//set some new quota values (note that "capacity" already had a non-zero
 	//quota because of the cluster.QuotaConstraints)
-	_, err := dbm.Exec(`UPDATE project_resources SET quota = $1 WHERE name = $2`, 20, "capacity")
+	_, err := s.DB.Exec(`UPDATE project_resources SET quota = $1 WHERE name = $2`, 20, "capacity")
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = dbm.Exec(`UPDATE project_resources SET quota = $1 WHERE name = $2`, 13, "things")
+	_, err = s.DB.Exec(`UPDATE project_resources SET quota = $1 WHERE name = $2`, 13, "things")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -199,7 +199,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	//Scrape should try to enforce quota values in the backend (this did not work
 	//until now because the test.Plugin was instructed to have SetQuota fail)
 	plugin.SetQuotaFails = false
-	setProjectServicesStale(t, dbm)
+	setProjectServicesStale(t, s.DB)
 	c.Scrape("unittest")
 	c.Scrape("unittest") //twice because there are two projects
 	tr.DBChanges().AssertEqualf(`
@@ -214,7 +214,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	//another Scrape (with SetQuota disabled again) should show that the quota
 	//update was durable
 	plugin.SetQuotaFails = true
-	setProjectServicesStale(t, dbm)
+	setProjectServicesStale(t, s.DB)
 	c.Scrape("unittest") //twice because there are two projects
 	c.Scrape("unittest")
 	tr.DBChanges().AssertEqualf(`
@@ -223,14 +223,14 @@ func Test_ScrapeSuccess(t *testing.T) {
 	`)
 
 	//set a quota that contradicts the cluster.QuotaConstraints
-	_, err = dbm.Exec(`UPDATE project_resources SET quota = $1 WHERE name = $2`, 50, "capacity")
+	_, err = s.DB.Exec(`UPDATE project_resources SET quota = $1 WHERE name = $2`, 50, "capacity")
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	//Scrape should apply the constraint, then enforce quota values in the backend
 	plugin.SetQuotaFails = false
-	setProjectServicesStale(t, dbm)
+	setProjectServicesStale(t, s.DB)
 	c.Scrape("unittest")
 	c.Scrape("unittest") //twice because there are two projects
 	tr.DBChanges().AssertEqualf(`
@@ -244,7 +244,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	//"capacity_portion" (otherwise this resource has been all zeroes this entire
 	//time)
 	plugin.StaticResourceData["capacity"].Usage = 20
-	setProjectServicesStale(t, dbm)
+	setProjectServicesStale(t, s.DB)
 	c.Scrape("unittest")
 	c.Scrape("unittest") //twice because there are two projects
 	tr.DBChanges().AssertEqualf(`
@@ -258,11 +258,11 @@ func Test_ScrapeSuccess(t *testing.T) {
 
 	//check data metrics generated by this scraping pass
 	registry := prometheus.NewPedanticRegistry()
-	amc := &AggregateMetricsCollector{Cluster: cluster, DB: dbm}
+	amc := &AggregateMetricsCollector{Cluster: cluster, DB: s.DB}
 	registry.MustRegister(amc)
-	pmc := &QuotaPluginMetricsCollector{Cluster: cluster, DB: dbm}
+	pmc := &QuotaPluginMetricsCollector{Cluster: cluster, DB: s.DB}
 	registry.MustRegister(pmc)
-	dmc := &DataMetricsCollector{Cluster: cluster, DB: dbm, ReportZeroes: true}
+	dmc := &DataMetricsCollector{Cluster: cluster, DB: s.DB, ReportZeroes: true}
 	registry.MustRegister(dmc)
 	assert.HTTPRequest{
 		Method:       "GET",
@@ -273,11 +273,11 @@ func Test_ScrapeSuccess(t *testing.T) {
 
 	//check data metrics with the skip_zero flag set
 	registry = prometheus.NewPedanticRegistry()
-	amc = &AggregateMetricsCollector{Cluster: cluster, DB: dbm}
+	amc = &AggregateMetricsCollector{Cluster: cluster, DB: s.DB}
 	registry.MustRegister(amc)
-	pmc = &QuotaPluginMetricsCollector{Cluster: cluster, DB: dbm}
+	pmc = &QuotaPluginMetricsCollector{Cluster: cluster, DB: s.DB}
 	registry.MustRegister(pmc)
-	dmc = &DataMetricsCollector{Cluster: cluster, DB: dbm, ReportZeroes: false}
+	dmc = &DataMetricsCollector{Cluster: cluster, DB: s.DB, ReportZeroes: false}
 	registry.MustRegister(dmc)
 	assert.HTTPRequest{
 		Method:       "GET",
@@ -298,10 +298,10 @@ func setProjectServicesStale(t *testing.T, dbm *gorp.DbMap) {
 
 func Test_ScrapeFailure(t *testing.T) {
 	plugin := test.NewPlugin()
-	cluster, dbm := prepareScrapeTest(t, 2, "unittest", plugin)
+	s, cluster := prepareScrapeTest(t, 2, "unittest", plugin)
 	c := Collector{
 		Cluster:   cluster,
-		DB:        dbm,
+		DB:        s.DB,
 		TimeNow:   test.TimeNow,
 		AddJitter: test.NoJitter,
 		Once:      true,
@@ -318,7 +318,7 @@ func Test_ScrapeFailure(t *testing.T) {
 	}
 
 	//check that ScanDomains created the domain, project and their services
-	tr, tr0 := easypg.NewTracker(t, dbm.Db)
+	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualToFile("fixtures/scrape0.sql")
 
 	//failing Scrape should create dummy records to ensure that the API finds
@@ -344,7 +344,7 @@ func Test_ScrapeFailure(t *testing.T) {
 
 	//once the backend starts working, we start to see plausible data again
 	plugin.ScrapeFails = false
-	setProjectServicesStale(t, dbm)
+	setProjectServicesStale(t, s.DB)
 	c.Scrape("unittest")
 	c.Scrape("unittest") //twice because there are two projects
 	tr.DBChanges().AssertEqualf(`
@@ -360,7 +360,7 @@ func Test_ScrapeFailure(t *testing.T) {
 	//touch neither scraped_at nor the existing resources (this also tests that a
 	//failed check causes Scrape("unittest") to continue with the next resource afterwards)
 	plugin.ScrapeFails = true
-	setProjectServicesStale(t, dbm)
+	setProjectServicesStale(t, s.DB)
 	c.Scrape("unittest")
 	c.Scrape("unittest") //twice because there are two projects
 	tr.DBChanges().AssertEqualf(`
@@ -376,11 +376,11 @@ func Test_ScrapeCentralized(t *testing.T) {
 		logg.Info("===== hasBursting = %t =====", hasBursting)
 
 		plugin := test.NewPlugin()
-		cluster, dbm := prepareScrapeTest(t, 1, "centralized", plugin)
+		s, cluster := prepareScrapeTest(t, 1, "centralized", plugin)
 		cluster.Authoritative = true
 		c := Collector{
 			Cluster:   cluster,
-			DB:        dbm,
+			DB:        s.DB,
 			LogError:  t.Errorf,
 			TimeNow:   test.TimeNow,
 			AddJitter: test.NoJitter,
@@ -389,11 +389,11 @@ func Test_ScrapeCentralized(t *testing.T) {
 
 		//check that ScanDomains created the domain, project and their services and
 		//applied the DefaultProjectQuota from the QuotaDistributionConfiguration
-		tr, tr0 := easypg.NewTracker(t, dbm.Db)
+		tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 		tr0.AssertEqualToFile("fixtures/scrape-centralized0.sql")
 
 		if hasBursting {
-			_, err := dbm.Exec(`UPDATE projects SET has_bursting = TRUE WHERE id = 2`)
+			_, err := s.DB.Exec(`UPDATE projects SET has_bursting = TRUE WHERE id = 2`)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -417,11 +417,11 @@ func Test_ScrapeCentralized(t *testing.T) {
 		//check that DefaultProjectQuota gets reapplied when the quota is 0 (zero
 		//quota on CQD resources is defined to mean "DefaultProjectQuota not
 		//applied yet"; this check is also relevant for resources moving from HQD to CQD)
-		_, err := dbm.Exec(`UPDATE project_resources SET quota = 0 WHERE service_id = 1`)
+		_, err := s.DB.Exec(`UPDATE project_resources SET quota = 0 WHERE service_id = 1`)
 		if err != nil {
 			t.Fatal(err)
 		}
-		setProjectServicesStale(t, dbm)
+		setProjectServicesStale(t, s.DB)
 		c.Scrape("centralized")
 		//because Scrape converges back into the same state, the only change is in the timestamp fields
 		tr.DBChanges().AssertEqualf(`
@@ -494,10 +494,10 @@ func (p *autoApprovalTestPlugin) SetQuota(project core.KeystoneProject, quotas m
 
 func Test_AutoApproveInitialQuota(t *testing.T) {
 	plugin := &autoApprovalTestPlugin{StaticBackendQuota: 10}
-	cluster, dbm := prepareScrapeTest(t, 1, "autoapprovaltest", plugin)
+	s, cluster := prepareScrapeTest(t, 1, "autoapprovaltest", plugin)
 	c := Collector{
 		Cluster:   cluster,
-		DB:        dbm,
+		DB:        s.DB,
 		LogError:  t.Errorf,
 		TimeNow:   test.TimeNow,
 		AddJitter: test.NoJitter,
@@ -505,7 +505,7 @@ func Test_AutoApproveInitialQuota(t *testing.T) {
 	}
 
 	//ScanDomains created the domain, project and their services
-	tr, tr0 := easypg.NewTracker(t, dbm.Db)
+	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.Ignore()
 
 	//when first scraping, the initial backend quota of the "approve" resource
@@ -521,7 +521,7 @@ func Test_AutoApproveInitialQuota(t *testing.T) {
 	//auto-approve the changed value again (auto-approval is limited to the
 	//initial scrape)
 	plugin.StaticBackendQuota += 10
-	setProjectServicesStale(t, dbm)
+	setProjectServicesStale(t, s.DB)
 	c.Scrape("autoapprovaltest")
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_resources SET backend_quota = 20 WHERE service_id = 1 AND name = 'approve';
@@ -568,10 +568,10 @@ func (noopQuotaPlugin) CollectMetrics(ch chan<- prometheus.Metric, project core.
 
 func Test_ScrapeButNoResources(t *testing.T) {
 	plugin := noopQuotaPlugin{}
-	cluster, dbm := prepareScrapeTest(t, 1, "noop", plugin)
+	s, cluster := prepareScrapeTest(t, 1, "noop", plugin)
 	c := Collector{
 		Cluster:   cluster,
-		DB:        dbm,
+		DB:        s.DB,
 		LogError:  t.Errorf,
 		TimeNow:   test.TimeNow,
 		AddJitter: test.NoJitter,
@@ -582,7 +582,7 @@ func Test_ScrapeButNoResources(t *testing.T) {
 	//no Resources() (in the wild, this can happen because some quota plugins
 	//only have Rates())
 	c.Scrape("noop")
-	_, tr0 := easypg.NewTracker(t, dbm.Db)
+	_, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualf(`
 		INSERT INTO domain_services (id, domain_id, type) VALUES (1, 1, 'noop');
 		INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');

@@ -34,8 +34,8 @@ import (
 )
 
 func Test_ScanCapacity(t *testing.T) {
+	s := test.NewSetup(t)
 	test.ResetTime()
-	dbm := test.InitDatabase(t, nil)
 
 	cluster := &core.Cluster{
 		QuotaPlugins: map[string]core.QuotaPlugin{
@@ -68,14 +68,14 @@ func Test_ScanCapacity(t *testing.T) {
 
 	c := Collector{
 		Cluster:   cluster,
-		DB:        dbm,
+		DB:        s.DB,
 		LogError:  t.Errorf,
 		TimeNow:   test.TimeNow,
 		AddJitter: test.NoJitter,
 	}
 
 	//check baseline
-	tr, tr0 := easypg.NewTracker(t, dbm.Db)
+	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEmpty()
 
 	//check that capacity records are created correctly (and that nonexistent
@@ -91,7 +91,7 @@ func Test_ScanCapacity(t *testing.T) {
 	`)
 
 	//insert some crap records
-	err := dbm.Insert(&db.ClusterResource{
+	err := s.DB.Insert(&db.ClusterResource{
 		ServiceID:   2,
 		Name:        "unknown",
 		RawCapacity: 100,
@@ -99,7 +99,7 @@ func Test_ScanCapacity(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	_, err = dbm.Exec(
+	_, err = s.DB.Exec(
 		`DELETE FROM cluster_resources WHERE service_id = $1 AND name = $2`,
 		1, "things",
 	)
@@ -179,9 +179,9 @@ func Test_ScanCapacity(t *testing.T) {
 
 	//check data metrics generated for these capacity data
 	registry := prometheus.NewPedanticRegistry()
-	dmc := &DataMetricsCollector{Cluster: cluster, DB: dbm}
+	dmc := &DataMetricsCollector{Cluster: cluster, DB: s.DB}
 	registry.MustRegister(dmc)
-	pmc := &CapacityPluginMetricsCollector{Cluster: cluster, DB: dbm}
+	pmc := &CapacityPluginMetricsCollector{Cluster: cluster, DB: s.DB}
 	registry.MustRegister(pmc)
 	assert.HTTPRequest{
 		Method:       "GET",

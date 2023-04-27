@@ -47,10 +47,12 @@ import (
 	"github.com/sapcc/limes/internal/test/plugins"
 )
 
-func setupTest(t *testing.T, startData string) (*core.Cluster, *gorp.DbMap, http.Handler, *TestPolicyEnforcer) {
+func setupTest(t *testing.T, startData string) (test.Setup, *core.Cluster, http.Handler, *TestPolicyEnforcer) {
 	//load test database
 	t.Helper()
-	dbm := test.InitDatabase(t, &startData)
+	s := test.NewSetup(t,
+		test.WithDBFixtureFile(startData),
+	)
 
 	//prepare test configuration
 	sharedRatesThatReportUsage := []limesrates.RateInfo{
@@ -256,11 +258,11 @@ func setupTest(t *testing.T, startData string) (*core.Cluster, *gorp.DbMap, http
 	}
 
 	handler := httpapi.Compose(
-		NewV1API(cluster, dbm, tokenValidator),
+		NewV1API(cluster, s.DB, tokenValidator),
 		httpapi.WithGlobalMiddleware(ForbidClusterIDHeader),
 		httpapi.WithoutLogging(),
 	)
-	return cluster, dbm, handler, enforcer
+	return s, cluster, handler, enforcer
 }
 
 type TestPolicyEnforcer struct {
@@ -336,10 +338,10 @@ func Test_EmptyInconsistencyReport(t *testing.T) {
 }
 
 func Test_ScrapeErrorOperations(t *testing.T) {
-	_, dbm, router, _ := setupTest(t, "fixtures/start-data.sql")
+	s, _, router, _ := setupTest(t, "fixtures/start-data.sql")
 
 	//Add a scrape error to one specific service with type 'unshared'.
-	_, err := dbm.Exec(`UPDATE project_services SET scrape_error_message = $1 WHERE id = $2 AND type = $3`,
+	_, err := s.DB.Exec(`UPDATE project_services SET scrape_error_message = $1 WHERE id = $2 AND type = $3`,
 		"could not scrape this specific unshared service",
 		1, "unshared",
 	)
@@ -349,7 +351,7 @@ func Test_ScrapeErrorOperations(t *testing.T) {
 
 	//Add the same scrape error to all services with type 'shared'. This will ensure that
 	//they get grouped under a dummy project.
-	_, err = dbm.Exec(`UPDATE project_services SET scrape_error_message = $1 WHERE type = $2`,
+	_, err = s.DB.Exec(`UPDATE project_services SET scrape_error_message = $1 WHERE type = $2`,
 		"could not scrape shared service",
 		"shared",
 	)
@@ -379,10 +381,10 @@ func Test_EmptyScrapeErrorReport(t *testing.T) {
 }
 
 func Test_RateScrapeErrorOperations(t *testing.T) {
-	_, dbm, router, _ := setupTest(t, "fixtures/start-data.sql")
+	s, _, router, _ := setupTest(t, "fixtures/start-data.sql")
 
 	//Add a scrape error to one specific service with type 'unshared' that has rate data.
-	_, err := dbm.Exec(`UPDATE project_services SET rates_scrape_error_message = $1 WHERE id = $2 AND type = $3`,
+	_, err := s.DB.Exec(`UPDATE project_services SET rates_scrape_error_message = $1 WHERE id = $2 AND type = $3`,
 		"could not scrape rate data for this specific unshared service",
 		1, "unshared",
 	)
@@ -392,7 +394,7 @@ func Test_RateScrapeErrorOperations(t *testing.T) {
 
 	//Add the same scrape error to both services with type 'shared' that have rate data.
 	//This will ensure that they get grouped under a dummy project.
-	_, err = dbm.Exec(`UPDATE project_services SET rates_scrape_error_message = $1 WHERE (id = $2 OR id = $3) AND type = $4`,
+	_, err = s.DB.Exec(`UPDATE project_services SET rates_scrape_error_message = $1 WHERE (id = $2 OR id = $3) AND type = $4`,
 		"could not scrape rate data for shared service",
 		2, 4, "shared",
 	)
@@ -422,7 +424,7 @@ func Test_EmptyRateScrapeErrorReport(t *testing.T) {
 }
 
 func Test_ClusterOperations(t *testing.T) {
-	cluster, _, router, _ := setupTest(t, "fixtures/start-data.sql")
+	_, cluster, router, _ := setupTest(t, "fixtures/start-data.sql")
 
 	//check GetCluster
 	assert.HTTPRequest{
@@ -491,7 +493,7 @@ func Test_ClusterOperations(t *testing.T) {
 }
 
 func Test_DomainOperations(t *testing.T) {
-	cluster, dbm, router, _ := setupTest(t, "fixtures/start-data.sql")
+	s, cluster, router, _ := setupTest(t, "fixtures/start-data.sql")
 	discovery := cluster.DiscoveryPlugin.(*plugins.StaticDiscoveryPlugin) //nolint:errcheck
 
 	//check GetDomain
@@ -643,14 +645,14 @@ func Test_DomainOperations(t *testing.T) {
 		ExpectStatus: 202,
 		Body:         requestOneQuotaChange("domain", "shared", "capacity", 1234, limes.UnitNone),
 	}.Check(t, router)
-	expectDomainQuota(t, dbm, "germany", "shared", "capacity", 1234)
+	expectDomainQuota(t, s.DB, "germany", "shared", "capacity", 1234)
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany",
 		ExpectStatus: 202,
 		Body:         requestOneQuotaChange("domain", "shared", "capacity", 1, limes.UnitMebibytes),
 	}.Check(t, router)
-	expectDomainQuota(t, dbm, "germany", "shared", "capacity", 1<<20)
+	expectDomainQuota(t, s.DB, "germany", "shared", "capacity", 1<<20)
 
 	//check a bizarre edge case that was going wrong at some point: when
 	//setting the quota to `<value> <unit>` where the current quota was `<value>
@@ -662,7 +664,7 @@ func Test_DomainOperations(t *testing.T) {
 		ExpectStatus: 202,
 		Body:         requestOneQuotaChange("domain", "shared", "capacity", 1<<20, limes.UnitKibibytes),
 	}.Check(t, router)
-	expectDomainQuota(t, dbm, "germany", "shared", "capacity", 1<<30)
+	expectDomainQuota(t, s.DB, "germany", "shared", "capacity", 1<<30)
 
 	//check PutDomain on a missing domain quota (see issue #36)
 	assert.HTTPRequest{
@@ -671,7 +673,7 @@ func Test_DomainOperations(t *testing.T) {
 		ExpectStatus: 202,
 		Body:         requestOneQuotaChange("domain", "shared", "capacity", 123, limes.UnitNone),
 	}.Check(t, router)
-	expectDomainQuota(t, dbm, "france", "shared", "capacity", 123)
+	expectDomainQuota(t, s.DB, "france", "shared", "capacity", 123)
 
 	//check SimulatePutDomain for no actual changes (all quotas requested already are set like that)
 	assert.HTTPRequest{
@@ -749,17 +751,17 @@ func Test_DomainOperations(t *testing.T) {
 	//*decreasing* quota, not when increasing it. In other words, it should be
 	//allowed to decrease burst usage even if it is not possible to completely
 	//eliminate it.
-	domainGermanyID, err := dbm.SelectInt(`SELECT id FROM domains WHERE name = $1`,
+	domainGermanyID, err := s.DB.SelectInt(`SELECT id FROM domains WHERE name = $1`,
 		"germany")
 	if err != nil {
 		t.Fatal(err)
 	}
-	serviceGermanyUnsharedID, err := dbm.SelectInt(`SELECT ID from domain_services WHERE domain_id = $1 AND type = $2`,
+	serviceGermanyUnsharedID, err := s.DB.SelectInt(`SELECT ID from domain_services WHERE domain_id = $1 AND type = $2`,
 		domainGermanyID, "unshared")
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = dbm.Exec(`UPDATE domain_resources SET quota = $1 WHERE service_id = $2 AND name = $3`,
+	_, err = s.DB.Exec(`UPDATE domain_resources SET quota = $1 WHERE service_id = $2 AND name = $3`,
 		10, //but sum(projectQuota) = 20!
 		serviceGermanyUnsharedID, "capacity",
 	)
@@ -802,7 +804,7 @@ func expectDomainQuota(t *testing.T, dbm *gorp.DbMap, domainName, serviceType, r
 }
 
 func Test_ProjectOperations(t *testing.T) {
-	cluster, dbm, router, _ := setupTest(t, "fixtures/start-data.sql")
+	s, cluster, router, _ := setupTest(t, "fixtures/start-data.sql")
 	discovery := cluster.DiscoveryPlugin.(*plugins.StaticDiscoveryPlugin) //nolint:errcheck
 
 	//check GetProject
@@ -943,16 +945,16 @@ func Test_ProjectOperations(t *testing.T) {
 	}.Check(t, router)
 
 	//check SyncProject
-	expectStaleProjectServices(t, dbm, "stale" /*, nothing */)
-	expectStaleProjectServices(t, dbm, "rates_stale" /*, nothing */)
+	expectStaleProjectServices(t, s.DB, "stale" /*, nothing */)
+	expectStaleProjectServices(t, s.DB, "rates_stale" /*, nothing */)
 	assert.HTTPRequest{
 		Method:       "POST",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/sync",
 		ExpectStatus: 202,
 		ExpectBody:   assert.StringData(""),
 	}.Check(t, router)
-	expectStaleProjectServices(t, dbm, "stale", "dresden:centralized", "dresden:shared", "dresden:unshared")
-	expectStaleProjectServices(t, dbm, "rates_stale" /*, nothing */)
+	expectStaleProjectServices(t, s.DB, "stale", "dresden:centralized", "dresden:shared", "dresden:unshared")
+	expectStaleProjectServices(t, s.DB, "rates_stale" /*, nothing */)
 
 	//SyncProject should discover the given project if not yet done
 	discovery.Projects["uuid-for-germany"] = append(discovery.Projects["uuid-for-germany"],
@@ -964,19 +966,19 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectStatus: 202,
 		ExpectBody:   assert.StringData(""),
 	}.Check(t, router)
-	expectStaleProjectServices(t, dbm, "stale", "dresden:centralized", "dresden:shared", "dresden:unshared", "walldorf:centralized", "walldorf:shared", "walldorf:unshared")
+	expectStaleProjectServices(t, s.DB, "stale", "dresden:centralized", "dresden:shared", "dresden:unshared", "walldorf:centralized", "walldorf:shared", "walldorf:unshared")
 
 	//check SyncProjectRates (we don't need to check discovery again since SyncProjectRates shares this part of the
 	//implementation with SyncProject)
-	_, _ = dbm.Exec(`UPDATE project_services SET stale = 'f'`) //nolint:errcheck
+	_, _ = s.DB.Exec(`UPDATE project_services SET stale = 'f'`) //nolint:errcheck
 	assert.HTTPRequest{
 		Method:       "POST",
 		Path:         "/rates/v1/domains/uuid-for-germany/projects/uuid-for-dresden/sync",
 		ExpectStatus: 202,
 		ExpectBody:   assert.StringData(""),
 	}.Check(t, router)
-	expectStaleProjectServices(t, dbm, "stale" /*, nothing */)
-	expectStaleProjectServices(t, dbm, "rates_stale", "dresden:centralized", "dresden:shared", "dresden:unshared")
+	expectStaleProjectServices(t, s.DB, "stale" /*, nothing */)
+	expectStaleProjectServices(t, s.DB, "rates_stale", "dresden:centralized", "dresden:shared", "dresden:unshared")
 
 	//check GetProject for a project that has been discovered, but not yet synced
 	assert.HTTPRequest{
@@ -1063,7 +1065,7 @@ func Test_ProjectOperations(t *testing.T) {
 		actualQuota        uint64
 		actualBackendQuota uint64
 	)
-	err := dbm.QueryRow(`
+	err := s.DB.QueryRow(`
 		SELECT pr.quota, pr.backend_quota FROM project_resources pr
 		JOIN project_services ps ON ps.id = pr.service_id
 		JOIN projects p ON p.id = ps.project_id
@@ -1112,7 +1114,7 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectStatus: 202,
 		Body:         requestOneQuotaChange("project", "shared", "capacity", 6, limes.UnitNone),
 	}.Check(t, router)
-	err = dbm.QueryRow(`
+	err = s.DB.QueryRow(`
 		SELECT pr.quota, pr.backend_quota FROM project_resources pr
 		JOIN project_services ps ON ps.id = pr.service_id
 		JOIN projects p ON p.id = ps.project_id
@@ -1172,7 +1174,7 @@ func Test_ProjectOperations(t *testing.T) {
 		actualLimit  uint64
 		actualWindow limesrates.Window
 	)
-	err = dbm.QueryRow(`
+	err = s.DB.QueryRow(`
 		SELECT pra.rate_limit, pra.window_ns FROM project_rates pra
 		JOIN project_services ps ON ps.id = pra.service_id
 		JOIN projects p ON p.id = ps.project_id
@@ -1210,7 +1212,7 @@ func Test_ProjectOperations(t *testing.T) {
 		},
 	}.Check(t, router)
 
-	err = dbm.QueryRow(`
+	err = s.DB.QueryRow(`
 		SELECT pra.rate_limit, pra.window_ns FROM project_rates pra
 		JOIN project_services ps ON ps.id = pra.service_id
 		JOIN projects p ON p.id = ps.project_id
@@ -1245,23 +1247,23 @@ func Test_ProjectOperations(t *testing.T) {
 
 	//check SimulatePutProject for acceptable changes (we have to set usage = 0
 	//on the unshared/things resource to check setting quota to 0 successfully)
-	domainGermanyID, err := dbm.SelectInt(`SELECT id FROM domains WHERE name = $1`,
+	domainGermanyID, err := s.DB.SelectInt(`SELECT id FROM domains WHERE name = $1`,
 		"germany")
 	if err != nil {
 		t.Fatal(err)
 	}
-	projectBerlinID, err := dbm.SelectInt(`SELECT id FROM projects WHERE domain_id = $1 AND name = $2`,
+	projectBerlinID, err := s.DB.SelectInt(`SELECT id FROM projects WHERE domain_id = $1 AND name = $2`,
 		domainGermanyID, "berlin")
 	if err != nil {
 		t.Fatal(err)
 	}
-	serviceBerlinUnsharedID, err := dbm.SelectInt(`SELECT ID from project_services WHERE project_id = $1 AND type = $2`,
+	serviceBerlinUnsharedID, err := s.DB.SelectInt(`SELECT ID from project_services WHERE project_id = $1 AND type = $2`,
 		projectBerlinID, "unshared")
 	if err != nil {
 		t.Fatal(err)
 	}
 	//nolint:errcheck
-	_, _ = dbm.Exec(`UPDATE project_resources SET usage = $1 WHERE service_id = $2 AND name = $3`,
+	_, _ = s.DB.Exec(`UPDATE project_resources SET usage = $1 WHERE service_id = $2 AND name = $3`,
 		0,
 		serviceBerlinUnsharedID, "things",
 	)
@@ -1354,7 +1356,7 @@ func Test_ProjectOperations(t *testing.T) {
 	//should only produce an error when *decreasing* quota, not when increasing
 	//it. In other words, it should be allowed to decrease burst usage even if it
 	//is not possible to completely eliminate it.
-	_, err = dbm.Exec(`UPDATE project_resources SET quota = $1 WHERE service_id = $2 AND name = $3`,
+	_, err = s.DB.Exec(`UPDATE project_resources SET quota = $1 WHERE service_id = $2 AND name = $3`,
 		0, //but usage = 2!
 		serviceBerlinUnsharedID, "capacity",
 	)
@@ -1369,7 +1371,7 @@ func Test_ProjectOperations(t *testing.T) {
 		Body: requestOneQuotaChange("project", "unshared", "capacity", 1, limes.UnitNone),
 	}.Check(t, router)
 
-	tr, tr0 := easypg.NewTracker(t, dbm.Db)
+	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.Ignore()
 
 	assert.HTTPRequest{
@@ -1398,7 +1400,7 @@ func Test_ProjectOperations(t *testing.T) {
 }
 
 func Test_RaiseLowerPermissions(t *testing.T) {
-	cluster, dbm, router, enforcer := setupTest(t, "fixtures/start-data.sql")
+	s, cluster, router, enforcer := setupTest(t, "fixtures/start-data.sql")
 
 	//we're not testing this right now
 	cluster.QuotaConstraints = nil
@@ -1721,17 +1723,17 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 
 	//raise another domain quota such that the auto-approval limit would be
 	//exceeded even if the "germany" domain had zero quota
-	domainFranceID, err := dbm.SelectInt(`SELECT id FROM domains WHERE name = $1`,
+	domainFranceID, err := s.DB.SelectInt(`SELECT id FROM domains WHERE name = $1`,
 		"france")
 	if err != nil {
 		t.Fatal(err)
 	}
-	serviceFranceSharedID, err := dbm.SelectInt(`SELECT id FROM domain_services WHERE domain_id = $1 AND type = $2`,
+	serviceFranceSharedID, err := s.DB.SelectInt(`SELECT id FROM domain_services WHERE domain_id = $1 AND type = $2`,
 		domainFranceID, "shared")
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = dbm.Exec(`INSERT INTO domain_resources (service_id, name, quota) VALUES ($1, $2, $3)`,
+	_, err = s.DB.Exec(`INSERT INTO domain_resources (service_id, name, quota) VALUES ($1, $2, $3)`,
 		serviceFranceSharedID, "things",
 		130, //more than the auto-approval limit of 110
 	)
@@ -1811,7 +1813,7 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 	enforcer.AllowRaiseCentralized = true
 	enforcer.AllowLowerCentralized = true
 
-	_, err = dbm.Exec(`UPDATE project_resources SET usage = 0 WHERE service_id = 7 AND name = 'things'`)
+	_, err = s.DB.Exec(`UPDATE project_resources SET usage = 0 WHERE service_id = 7 AND name = 'things'`)
 	if err != nil {
 		t.Error(err.Error())
 	}
@@ -1868,7 +1870,7 @@ func p2i64(val int64) *int64 {
 }
 
 func Test_QuotaBursting(t *testing.T) {
-	cluster, dbm, router, _ := setupTest(t, "fixtures/start-data.sql")
+	s, cluster, router, _ := setupTest(t, "fixtures/start-data.sql")
 	cluster.Config.Bursting.MaxMultiplier = 0.1
 
 	//check initial GetProject with bursting disabled, but supported
@@ -1981,7 +1983,7 @@ func Test_QuotaBursting(t *testing.T) {
 	}
 
 	//check that resources with centralized quota distribution do not get burst quota applied
-	tr, tr0 := easypg.NewTracker(t, dbm.Db)
+	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.Ignore()
 	assert.HTTPRequest{
 		Method:       "PUT",
@@ -2009,7 +2011,7 @@ func Test_QuotaBursting(t *testing.T) {
 	`)
 
 	//increase usage beyond frontend quota -> should show up as burst usage
-	_, err := dbm.Exec(`UPDATE project_resources SET usage = 42 WHERE service_id = 1 AND name = 'things'`)
+	_, err := s.DB.Exec(`UPDATE project_resources SET usage = 42 WHERE service_id = 1 AND name = 'things'`)
 	if err != nil {
 		t.Error(err.Error())
 	}
@@ -2044,7 +2046,7 @@ func Test_QuotaBursting(t *testing.T) {
 	}.Check(t, router)
 
 	//decrease usage, then disable bursting successfully
-	_, err = dbm.Exec(`UPDATE project_resources SET usage = 2 WHERE service_id = 1 AND name = 'things'`)
+	_, err = s.DB.Exec(`UPDATE project_resources SET usage = 2 WHERE service_id = 1 AND name = 'things'`)
 	if err != nil {
 		t.Error(err.Error())
 	}
@@ -2097,9 +2099,9 @@ func Test_QuotaBursting(t *testing.T) {
 }
 
 func Test_EmptyProjectList(t *testing.T) {
-	_, dbm, router, _ := setupTest(t, "fixtures/start-data.sql")
+	s, _, router, _ := setupTest(t, "fixtures/start-data.sql")
 
-	_, err := dbm.Exec(`DELETE FROM projects`)
+	_, err := s.DB.Exec(`DELETE FROM projects`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -2116,7 +2118,7 @@ func Test_EmptyProjectList(t *testing.T) {
 
 func Test_LargeProjectList(t *testing.T) {
 	//start without any projects pre-defined in the start data
-	cluster, dbm, router, _ := setupTest(t, "fixtures/start-data-minimal.sql")
+	s, cluster, router, _ := setupTest(t, "fixtures/start-data-minimal.sql")
 	//we don't care about the various ResourceBehaviors in this test
 	cluster.Config.ResourceBehaviors = nil
 
@@ -2194,7 +2196,7 @@ func Test_LargeProjectList(t *testing.T) {
 			Name:       projectName,
 			UUID:       projectUUID,
 		}
-		err = dbm.Insert(&project)
+		err = s.DB.Insert(&project)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -2207,7 +2209,7 @@ func Test_LargeProjectList(t *testing.T) {
 				RatesScrapedAt: &scrapedAt,
 				RatesCheckedAt: &scrapedAt,
 			}
-			err = dbm.Insert(&service)
+			err = s.DB.Insert(&service)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -2225,7 +2227,7 @@ func Test_LargeProjectList(t *testing.T) {
 					resource.BackendQuota = p2i64(int64(idx))
 					resource.DesiredBackendQuota = p2u64(uint64(idx))
 				}
-				err = dbm.Insert(&resource)
+				err = s.DB.Insert(&resource)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -2264,7 +2266,7 @@ func requestOneQuotaChange(structureLevel, serviceType, resourceName string, quo
 }
 
 func Test_StrictDomainQuotaLimit(t *testing.T) {
-	cluster, _, router, _ := setupTest(t, "fixtures/start-data.sql")
+	_, cluster, router, _ := setupTest(t, "fixtures/start-data.sql")
 
 	//set up a QD config for shared/things with the default behavior
 	qdConfig := &core.QuotaDistributionConfiguration{
