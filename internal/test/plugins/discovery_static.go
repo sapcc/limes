@@ -1,6 +1,6 @@
 /*******************************************************************************
 *
-* Copyright 2017 SAP SE
+* Copyright 2017-2023 SAP SE
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 *
 *******************************************************************************/
 
-package test
+package plugins
 
 import (
 	"github.com/gophercloud/gophercloud"
@@ -25,21 +25,31 @@ import (
 	"github.com/sapcc/limes/internal/core"
 )
 
-// DiscoveryPlugin is a core.DiscoveryPlugin implementation for unit tests that
-// reports a static set of domains and projects.
-type DiscoveryPlugin struct {
-	StaticDomains  []core.KeystoneDomain             `yaml:"-"`
-	StaticProjects map[string][]core.KeystoneProject `yaml:"-"`
+func init() {
+	core.DiscoveryPluginRegistry.Add(func() core.DiscoveryPlugin { return &StaticDiscoveryPlugin{} })
 }
 
-// NewDiscoveryPlugin creates a DiscoveryPlugin instance.
-func NewDiscoveryPlugin() *DiscoveryPlugin {
-	return &DiscoveryPlugin{
-		StaticDomains: []core.KeystoneDomain{
+// StaticDiscoveryPlugin is a core.DiscoveryPlugin implementation for unit tests.
+// It reports a static set of domains and projects.
+type StaticDiscoveryPlugin struct {
+	Domains  []core.KeystoneDomain             `yaml:"domains"`
+	Projects map[string][]core.KeystoneProject `yaml:"projects"`
+}
+
+// PluginTypeID implements the core.DiscoveryPlugin interface.
+func (p *StaticDiscoveryPlugin) PluginTypeID() string {
+	return "--test-static"
+}
+
+// Init implements the core.DiscoveryPlugin interface.
+func (p *StaticDiscoveryPlugin) Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
+	//apply default set of domains and projects
+	if len(p.Domains) == 0 && len(p.Projects) == 0 {
+		p.Domains = []core.KeystoneDomain{
 			{Name: "germany", UUID: "uuid-for-germany"},
 			{Name: "france", UUID: "uuid-for-france"},
-		},
-		StaticProjects: map[string][]core.KeystoneProject{
+		}
+		p.Projects = map[string][]core.KeystoneProject{
 			"uuid-for-germany": {
 				{Name: "berlin", UUID: "uuid-for-berlin", ParentUUID: "uuid-for-germany"},
 				{Name: "dresden", UUID: "uuid-for-dresden", ParentUUID: "uuid-for-berlin"},
@@ -47,31 +57,21 @@ func NewDiscoveryPlugin() *DiscoveryPlugin {
 			"uuid-for-france": {
 				{Name: "paris", UUID: "uuid-for-paris", ParentUUID: "uuid-for-france"},
 			},
-		},
+		}
 	}
-}
-
-// PluginTypeID implements the core.DiscoveryPlugin interface.
-func (p *DiscoveryPlugin) PluginTypeID() string {
-	return "--test-static"
-}
-
-// Init implements the core.DiscoveryPlugin interface.
-func (p *DiscoveryPlugin) Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
-	return nil //not used
+	return nil
 }
 
 // ListDomains implements the core.DiscoveryPlugin interface.
-func (p *DiscoveryPlugin) ListDomains() ([]core.KeystoneDomain, error) {
-	return p.StaticDomains, nil
+func (p *StaticDiscoveryPlugin) ListDomains() ([]core.KeystoneDomain, error) {
+	return p.Domains, nil
 }
 
 // ListProjects implements the core.DiscoveryPlugin interface.
-func (p *DiscoveryPlugin) ListProjects(domain core.KeystoneDomain) ([]core.KeystoneProject, error) {
-	//the domain is not duplicated in each StaticProjects entry, so it must be
-	//added now
-	result := make([]core.KeystoneProject, len(p.StaticProjects[domain.UUID]))
-	for idx, project := range p.StaticProjects[domain.UUID] {
+func (p *StaticDiscoveryPlugin) ListProjects(domain core.KeystoneDomain) ([]core.KeystoneProject, error) {
+	//the domain is not duplicated in each Projects entry, so it must be added now
+	result := make([]core.KeystoneProject, len(p.Projects[domain.UUID]))
+	for idx, project := range p.Projects[domain.UUID] {
 		result[idx] = project
 		result[idx].Domain = domain
 	}

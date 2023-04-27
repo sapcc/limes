@@ -31,6 +31,7 @@ import (
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/test"
+	"github.com/sapcc/limes/internal/test/plugins"
 )
 
 func keystoneTestCluster(t *testing.T) (*core.Cluster, *gorp.DbMap) {
@@ -64,11 +65,11 @@ func keystoneTestCluster(t *testing.T) (*core.Cluster, *gorp.DbMap) {
 
 func Test_ScanDomains(t *testing.T) {
 	cluster, dbm := keystoneTestCluster(t)
-	discovery := cluster.DiscoveryPlugin.(*test.DiscoveryPlugin) //nolint:errcheck
+	discovery := cluster.DiscoveryPlugin.(*plugins.StaticDiscoveryPlugin) //nolint:errcheck
 
 	//construct expectation for return value
 	var expectedNewDomains []string
-	for _, domain := range discovery.StaticDomains {
+	for _, domain := range discovery.Domains {
 		expectedNewDomains = append(expectedNewDomains, domain.UUID)
 	}
 
@@ -121,7 +122,7 @@ func Test_ScanDomains(t *testing.T) {
 
 	//add another project
 	domainUUID := "uuid-for-france"
-	discovery.StaticProjects[domainUUID] = append(discovery.StaticProjects[domainUUID],
+	discovery.Projects[domainUUID] = append(discovery.Projects[domainUUID],
 		core.KeystoneProject{Name: "bordeaux", UUID: "uuid-for-bordeaux", ParentUUID: "uuid-for-france"},
 	)
 
@@ -147,7 +148,7 @@ func Test_ScanDomains(t *testing.T) {
 	`)
 
 	//remove the project again
-	discovery.StaticProjects[domainUUID] = discovery.StaticProjects[domainUUID][0:1]
+	discovery.Projects[domainUUID] = discovery.Projects[domainUUID][0:1]
 
 	//ScanDomains without ScanAllProjects should not notice anything
 	actualNewDomains, err = c.ScanDomains(ScanDomainsOpts{})
@@ -171,7 +172,7 @@ func Test_ScanDomains(t *testing.T) {
 	`)
 
 	//remove a whole domain
-	discovery.StaticDomains = discovery.StaticDomains[0:1]
+	discovery.Domains = discovery.Domains[0:1]
 
 	//ScanDomains should notice the deleted domain and cleanup its records and also its projects
 	actualNewDomains, err = c.ScanDomains(ScanDomainsOpts{})
@@ -200,8 +201,8 @@ func Test_ScanDomains(t *testing.T) {
 	`)
 
 	//rename a domain and a project
-	discovery.StaticDomains[0].Name = "germany-changed"
-	discovery.StaticProjects["uuid-for-germany"][0].Name = "berlin-changed"
+	discovery.Domains[0].Name = "germany-changed"
+	discovery.Projects["uuid-for-germany"][0].Name = "berlin-changed"
 
 	//ScanDomains should notice the changed names and update the domain/project records accordingly
 	actualNewDomains, err = c.ScanDomains(ScanDomainsOpts{ScanAllProjects: true})
@@ -217,8 +218,8 @@ func Test_ScanDomains(t *testing.T) {
 
 func Test_listDomainsFiltered(t *testing.T) {
 	cluster := &core.Cluster{
-		DiscoveryPlugin: &test.DiscoveryPlugin{
-			StaticDomains: []core.KeystoneDomain{
+		DiscoveryPlugin: &plugins.StaticDiscoveryPlugin{
+			Domains: []core.KeystoneDomain{
 				{Name: "bar1"},
 				{Name: "bar2"},
 				{Name: "foo1"},

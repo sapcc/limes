@@ -40,6 +40,7 @@ import (
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/test"
+	"github.com/sapcc/limes/internal/test/plugins"
 )
 
 func p2u64(x uint64) *uint64 {
@@ -58,14 +59,14 @@ func prepareScrapeTest(t *testing.T, numProjects int, serviceType string, quotaP
 	}
 
 	//one domain is enough; one or two projects is enough
-	discovery := cluster.DiscoveryPlugin.(*test.DiscoveryPlugin) //nolint:errcheck
-	domain1 := discovery.StaticDomains[0]
-	project1 := discovery.StaticProjects[domain1.UUID][0]
-	project2 := discovery.StaticProjects[domain1.UUID][1]
+	discovery := cluster.DiscoveryPlugin.(*plugins.StaticDiscoveryPlugin) //nolint:errcheck
+	domain1 := discovery.Domains[0]
+	project1 := discovery.Projects[domain1.UUID][0]
+	project2 := discovery.Projects[domain1.UUID][1]
 
-	discovery.StaticDomains = discovery.StaticDomains[0:1]
-	discovery.StaticProjects = map[string][]core.KeystoneProject{
-		domain1.UUID: discovery.StaticProjects[domain1.UUID][0:numProjects],
+	discovery.Domains = discovery.Domains[0:1]
+	discovery.Projects = map[string][]core.KeystoneProject{
+		domain1.UUID: discovery.Projects[domain1.UUID][0:numProjects],
 	}
 
 	//if there is "centralized" service type, operate it under centralized quota

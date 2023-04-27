@@ -44,6 +44,7 @@ import (
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
+	"github.com/sapcc/limes/internal/test/plugins"
 )
 
 func setupTest(t *testing.T, startData string) (*core.Cluster, *gorp.DbMap, http.Handler, *TestPolicyEnforcer) {
@@ -491,7 +492,7 @@ func Test_ClusterOperations(t *testing.T) {
 
 func Test_DomainOperations(t *testing.T) {
 	cluster, dbm, router, _ := setupTest(t, "fixtures/start-data.sql")
-	discovery := cluster.DiscoveryPlugin.(*test.DiscoveryPlugin) //nolint:errcheck
+	discovery := cluster.DiscoveryPlugin.(*plugins.StaticDiscoveryPlugin) //nolint:errcheck
 
 	//check GetDomain
 	assert.HTTPRequest{
@@ -545,7 +546,7 @@ func Test_DomainOperations(t *testing.T) {
 	}.Check(t, router)
 
 	//check DiscoverDomains
-	discovery.StaticDomains = append(discovery.StaticDomains,
+	discovery.Domains = append(discovery.Domains,
 		core.KeystoneDomain{Name: "spain", UUID: "uuid-for-spain"},
 	)
 	assert.HTTPRequest{
@@ -802,7 +803,7 @@ func expectDomainQuota(t *testing.T, dbm *gorp.DbMap, domainName, serviceType, r
 
 func Test_ProjectOperations(t *testing.T) {
 	cluster, dbm, router, _ := setupTest(t, "fixtures/start-data.sql")
-	discovery := cluster.DiscoveryPlugin.(*test.DiscoveryPlugin) //nolint:errcheck
+	discovery := cluster.DiscoveryPlugin.(*plugins.StaticDiscoveryPlugin) //nolint:errcheck
 
 	//check GetProject
 	assert.HTTPRequest{
@@ -924,7 +925,7 @@ func Test_ProjectOperations(t *testing.T) {
 	}.Check(t, router)
 
 	//check DiscoverProjects
-	discovery.StaticProjects["uuid-for-germany"] = append(discovery.StaticProjects["uuid-for-germany"],
+	discovery.Projects["uuid-for-germany"] = append(discovery.Projects["uuid-for-germany"],
 		core.KeystoneProject{Name: "frankfurt", UUID: "uuid-for-frankfurt"},
 	)
 	assert.HTTPRequest{
@@ -954,7 +955,7 @@ func Test_ProjectOperations(t *testing.T) {
 	expectStaleProjectServices(t, dbm, "rates_stale" /*, nothing */)
 
 	//SyncProject should discover the given project if not yet done
-	discovery.StaticProjects["uuid-for-germany"] = append(discovery.StaticProjects["uuid-for-germany"],
+	discovery.Projects["uuid-for-germany"] = append(discovery.Projects["uuid-for-germany"],
 		core.KeystoneProject{Name: "walldorf", UUID: "uuid-for-walldorf", ParentUUID: "uuid-for-germany"},
 	)
 	assert.HTTPRequest{
@@ -1037,7 +1038,7 @@ func Test_ProjectOperations(t *testing.T) {
 		},
 	}.Check(t, router)
 
-	plugin := cluster.QuotaPlugins["shared"].(*test.Plugin) //nolint:errcheck
+	plugin := cluster.QuotaPlugins["shared"].(*plugins.GenericQuotaPlugin) //nolint:errcheck
 	plugin.QuotaIsNotAcceptable = true
 	assert.HTTPRequest{
 		Method:       "PUT",
@@ -1953,7 +1954,7 @@ func Test_QuotaBursting(t *testing.T) {
 	}.Check(t, router)
 
 	//check that backend_quota has been updated in backend
-	plugin := cluster.QuotaPlugins["shared"].(*test.Plugin) //nolint:errcheck
+	plugin := cluster.QuotaPlugins["shared"].(*plugins.GenericQuotaPlugin) //nolint:errcheck
 	expectBackendQuota := map[string]uint64{
 		"capacity": 11, //original value (10) * multiplier (110%)
 		"things":   11, //original value (10) * multiplier (110%)
@@ -1966,7 +1967,7 @@ func Test_QuotaBursting(t *testing.T) {
 		t.Errorf("expected backend quota %#v, but got %#v", expectBackendQuota, backendQuota)
 	}
 
-	plugin = cluster.QuotaPlugins["unshared"].(*test.Plugin) //nolint:errcheck
+	plugin = cluster.QuotaPlugins["unshared"].(*plugins.GenericQuotaPlugin) //nolint:errcheck
 	expectBackendQuota = map[string]uint64{
 		"capacity": 11, //original value (10) * multiplier (110%)
 		"things":   44, //as set above (40) * multiplier (110%)

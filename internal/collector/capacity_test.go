@@ -30,6 +30,7 @@ import (
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
+	"github.com/sapcc/limes/internal/test/plugins"
 )
 
 func Test_ScanCapacity(t *testing.T) {
@@ -43,13 +44,13 @@ func Test_ScanCapacity(t *testing.T) {
 			"unshared2": test.NewPlugin(),
 		},
 		CapacityPlugins: map[string]core.CapacityPlugin{
-			"unittest": test.NewCapacityPlugin("unittest",
+			"unittest": test.NewCapacityPlugin(
 				//publish capacity for some known resources...
 				"shared/things",
 				//...and some nonexistent ones (these should be ignored by the scraper)
 				"whatever/things", "shared/items",
 			),
-			"unittest2": test.NewCapacityPlugin("unittest2",
+			"unittest2": test.NewCapacityPlugin(
 				//same as above: some known...
 				"unshared/capacity",
 				//...and some unknown resources
@@ -108,7 +109,7 @@ func Test_ScanCapacity(t *testing.T) {
 
 	//next scan should throw out the crap records and recreate the deleted ones;
 	//also change the reported Capacity to see if updates are getting through
-	cluster.CapacityPlugins["unittest"].(*test.CapacityPlugin).Capacity = 23
+	cluster.CapacityPlugins["unittest"].(*plugins.StaticCapacityPlugin).Capacity = 23
 	c.scanCapacity()
 	tr.DBChanges().AssertEqualf(`
 		UPDATE cluster_capacitors SET scraped_at = 5 WHERE capacitor_id = 'unittest';
@@ -120,7 +121,7 @@ func Test_ScanCapacity(t *testing.T) {
 
 	//add a capacity plugin that reports subcapacities; check that subcapacities
 	//are correctly written when creating a cluster_resources record
-	subcapacityPlugin := test.NewCapacityPlugin("unittest4", "unshared/things")
+	subcapacityPlugin := test.NewCapacityPlugin("unshared/things")
 	subcapacityPlugin.WithSubcapacities = true
 	cluster.CapacityPlugins["unittest4"] = subcapacityPlugin
 	c.scanCapacity()
@@ -147,7 +148,7 @@ func Test_ScanCapacity(t *testing.T) {
 
 	//add a capacity plugin that also reports capacity per availability zone; check that
 	//these capacities are correctly written when creating a cluster_resources record
-	azCapacityPlugin := test.NewCapacityPlugin("unittest5", "unshared2/things")
+	azCapacityPlugin := test.NewCapacityPlugin("unshared2/things")
 	azCapacityPlugin.WithAZCapData = true
 	cluster.CapacityPlugins["unittest5"] = azCapacityPlugin
 	c.scanCapacity()
