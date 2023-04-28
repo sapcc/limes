@@ -19,6 +19,7 @@
 package test
 
 import (
+	"net/http"
 	"net/url"
 	"strings"
 	"testing"
@@ -26,6 +27,8 @@ import (
 	"github.com/go-gorp/gorp/v3"
 	"github.com/gophercloud/gophercloud"
 	"github.com/sapcc/go-bits/easypg"
+	"github.com/sapcc/go-bits/gopherpolicy"
+	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/osext"
 	"gopkg.in/yaml.v2"
@@ -36,8 +39,10 @@ import (
 )
 
 type setupParams struct {
-	DBFixtureFile string
-	ConfigYAML    string
+	DBFixtureFile  string
+	ConfigYAML     string
+	APIBuilder     func(*core.Cluster, *gorp.DbMap, gopherpolicy.Validator) httpapi.API
+	APIMiddlewares []httpapi.API
 }
 
 // SetupOption is an option that can be given to NewSetup().
@@ -60,6 +65,17 @@ func WithConfig(yamlStr string) SetupOption {
 	}
 }
 
+// WithAPIHandler is a SetupOption that initializes a http.Handler with the
+// Limes API. The `apiBuilder` function signature matches NewV1API(). We cannot
+// directly call this function because that would create an import cycle, so it
+// must be given by the caller here.
+func WithAPIHandler(apiBuilder func(*core.Cluster, *gorp.DbMap, gopherpolicy.Validator) httpapi.API, middlewares ...httpapi.API) SetupOption {
+	return func(params *setupParams) {
+		params.APIBuilder = apiBuilder
+		params.APIMiddlewares = middlewares
+	}
+}
+
 func normalizeInlineYAML(yamlStr string) string {
 	//In the source code, we usually use tabs for YAML indentation because the
 	//code is indented with tabs, and mixed indentation confuses some editors.
@@ -70,8 +86,12 @@ func normalizeInlineYAML(yamlStr string) string {
 // Setup contains all the pieces that are needed for most tests.
 type Setup struct {
 	//fields that are always set
-	DB      *gorp.DbMap
-	Cluster *core.Cluster
+	DB             *gorp.DbMap
+	Cluster        *core.Cluster
+	PolicyEnforcer *PolicyEnforcer
+	TokenValidator TokenValidator
+	//fields that are only set if their respective SetupOptions are given
+	Handler http.Handler
 }
 
 // NewSetup prepares most or all pieces of Keppel for a test.
@@ -85,6 +105,27 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	var s Setup
 	s.DB = initDatabase(t, params.DBFixtureFile)
 	s.Cluster = initCluster(t, params.ConfigYAML)
+
+	//load mock policy (where everything is allowed)
+	s.PolicyEnforcer = &PolicyEnforcer{
+		AllowRaise:            true,
+		AllowRaiseLP:          true,
+		AllowLower:            true,
+		AllowLowerLP:          true,
+		AllowRaiseCentralized: true,
+		AllowLowerCentralized: true,
+	}
+	s.TokenValidator = TokenValidator{s.PolicyEnforcer}
+
+	if params.APIBuilder != nil {
+		s.Handler = httpapi.Compose(
+			append([]httpapi.API{
+				params.APIBuilder(s.Cluster, s.DB, s.TokenValidator),
+				httpapi.WithoutLogging(),
+			}, params.APIMiddlewares...)...,
+		)
+	}
+
 	return s
 }
 

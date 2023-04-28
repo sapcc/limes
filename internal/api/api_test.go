@@ -26,11 +26,9 @@ import (
 	"reflect"
 	"regexp"
 	"sort"
-	"strings"
 	"testing"
 	"time"
 
-	policy "github.com/databus23/goslo.policy"
 	"github.com/go-gorp/gorp/v3"
 	"github.com/gofrs/uuid"
 	"github.com/sapcc/go-api-declarations/limes"
@@ -38,7 +36,6 @@ import (
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
-	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/sqlext"
 
@@ -110,7 +107,7 @@ const (
 	`
 )
 
-func setupTest(t *testing.T, startData string) (test.Setup, *core.Cluster, http.Handler, *TestPolicyEnforcer) {
+func setupTest(t *testing.T, startData string) test.Setup {
 	hasCentralizedService := startData == "fixtures/start-data.sql"
 	configYAML := testConfigYAML
 	if !hasCentralizedService {
@@ -122,6 +119,9 @@ func setupTest(t *testing.T, startData string) (test.Setup, *core.Cluster, http.
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile(startData),
 		test.WithConfig(configYAML),
+		test.WithAPIHandler(NewV1API,
+			httpapi.WithGlobalMiddleware(ForbidClusterIDHeader),
+		),
 	)
 
 	//prepare test configuration
@@ -162,17 +162,6 @@ func setupTest(t *testing.T, startData string) (test.Setup, *core.Cluster, http.
 	if startData != "fixtures/start-data-inconsistencies.sql" {
 		s.Cluster.QuotaConstraints = &westConstraintSet
 	}
-
-	//load mock policy (where everything is allowed)
-	enforcer := &TestPolicyEnforcer{
-		AllowRaise:            true,
-		AllowRaiseLP:          true,
-		AllowLower:            true,
-		AllowLowerLP:          true,
-		AllowRaiseCentralized: true,
-		AllowLowerCentralized: true,
-	}
-	tokenValidator := TestTokenValidator{enforcer}
 
 	if startData != "fixtures/start-data-inconsistencies.sql" {
 		//TODO: move into cluster config YAML
@@ -225,64 +214,11 @@ func setupTest(t *testing.T, startData string) (test.Setup, *core.Cluster, http.
 		}
 	}
 
-	handler := httpapi.Compose(
-		NewV1API(s.Cluster, s.DB, tokenValidator),
-		httpapi.WithGlobalMiddleware(ForbidClusterIDHeader),
-		httpapi.WithoutLogging(),
-	)
-	return s, s.Cluster, handler, enforcer
-}
-
-type TestPolicyEnforcer struct {
-	AllowRaise            bool
-	AllowRaiseLP          bool
-	AllowLower            bool
-	AllowLowerLP          bool
-	AllowRaiseCentralized bool
-	AllowLowerCentralized bool
-	RejectServiceType     string
-}
-
-// Enforce implements the gopherpolicy.Enforcer interface.
-func (e TestPolicyEnforcer) Enforce(rule string, ctx policy.Context) bool {
-	if e.RejectServiceType != "" && ctx.Request["service_type"] == e.RejectServiceType {
-		return false
-	}
-	fields := strings.Split(rule, ":")
-	switch fields[len(fields)-1] {
-	case "raise":
-		return e.AllowRaise
-	case "raise_lowpriv":
-		return e.AllowRaiseLP
-	case "raise_centralized":
-		return e.AllowRaiseCentralized
-	case "lower":
-		return e.AllowLower
-	case "lower_lowpriv":
-		return e.AllowLowerLP
-	case "lower_centralized":
-		return e.AllowLowerCentralized
-	default:
-		return true
-	}
-}
-
-type TestTokenValidator struct {
-	Enforcer gopherpolicy.Enforcer
-}
-
-// CheckToken implements the gopherpolicy.Validator interface.
-func (v TestTokenValidator) CheckToken(r *http.Request) *gopherpolicy.Token {
-	return &gopherpolicy.Token{
-		Enforcer: v.Enforcer,
-		Context: policy.Context{
-			Request: map[string]string{}, //needs to be non-nil because fields are set later
-		},
-	}
+	return s
 }
 
 func Test_InconsistencyOperations(t *testing.T) {
-	_, _, router, _ := setupTest(t, "fixtures/start-data-inconsistencies.sql")
+	s := setupTest(t, "fixtures/start-data-inconsistencies.sql")
 
 	//check ListInconsistencies
 	assert.HTTPRequest{
@@ -290,11 +226,11 @@ func Test_InconsistencyOperations(t *testing.T) {
 		Path:         "/v1/inconsistencies",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/inconsistency-list.json"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 }
 
 func Test_EmptyInconsistencyReport(t *testing.T) {
-	_, _, router, _ := setupTest(t, "/dev/null")
+	s := setupTest(t, "/dev/null")
 
 	//check ListInconsistencies
 	assert.HTTPRequest{
@@ -302,11 +238,11 @@ func Test_EmptyInconsistencyReport(t *testing.T) {
 		Path:         "/v1/inconsistencies",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/inconsistency-empty.json"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 }
 
 func Test_ScrapeErrorOperations(t *testing.T) {
-	s, _, router, _ := setupTest(t, "fixtures/start-data.sql")
+	s := setupTest(t, "fixtures/start-data.sql")
 
 	//Add a scrape error to one specific service with type 'unshared'.
 	_, err := s.DB.Exec(`UPDATE project_services SET scrape_error_message = $1 WHERE id = $2 AND type = $3`,
@@ -333,11 +269,11 @@ func Test_ScrapeErrorOperations(t *testing.T) {
 		Path:         "/v1/admin/scrape-errors",
 		ExpectStatus: http.StatusOK,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/scrape-error-list.json"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 }
 
 func Test_EmptyScrapeErrorReport(t *testing.T) {
-	_, _, router, _ := setupTest(t, "/dev/null")
+	s := setupTest(t, "/dev/null")
 
 	//check ListScrapeErrors
 	assert.HTTPRequest{
@@ -345,11 +281,11 @@ func Test_EmptyScrapeErrorReport(t *testing.T) {
 		Path:         "/v1/admin/scrape-errors",
 		ExpectStatus: http.StatusOK,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/scrape-error-empty.json"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 }
 
 func Test_RateScrapeErrorOperations(t *testing.T) {
-	s, _, router, _ := setupTest(t, "fixtures/start-data.sql")
+	s := setupTest(t, "fixtures/start-data.sql")
 
 	//Add a scrape error to one specific service with type 'unshared' that has rate data.
 	_, err := s.DB.Exec(`UPDATE project_services SET rates_scrape_error_message = $1 WHERE id = $2 AND type = $3`,
@@ -376,11 +312,11 @@ func Test_RateScrapeErrorOperations(t *testing.T) {
 		Path:         "/rates/v1/admin/scrape-errors",
 		ExpectStatus: http.StatusOK,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/rate-scrape-error-list.json"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 }
 
 func Test_EmptyRateScrapeErrorReport(t *testing.T) {
-	_, _, router, _ := setupTest(t, "/dev/null")
+	s := setupTest(t, "/dev/null")
 
 	//check ListRateScrapeErrors
 	assert.HTTPRequest{
@@ -388,11 +324,11 @@ func Test_EmptyRateScrapeErrorReport(t *testing.T) {
 		Path:         "/rates/v1/admin/scrape-errors",
 		ExpectStatus: http.StatusOK,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/rate-scrape-error-empty.json"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 }
 
 func Test_ClusterOperations(t *testing.T) {
-	_, cluster, router, _ := setupTest(t, "fixtures/start-data.sql")
+	s := setupTest(t, "fixtures/start-data.sql")
 
 	//check GetCluster
 	assert.HTTPRequest{
@@ -400,32 +336,32 @@ func Test_ClusterOperations(t *testing.T) {
 		Path:         "/v1/clusters/current",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west.json"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/clusters/current",
 		Header:       map[string]string{"X-Limes-Cluster-Id": "current"}, //still allowed for backwards compatibility
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west.json"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/clusters/current?service=unknown",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-no-services.json"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/clusters/current?service=shared&resource=unknown",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-no-resources.json"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/clusters/current?service=shared&resource=things",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-filtered.json"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//check GetClusterRates
 	assert.HTTPRequest{
@@ -433,16 +369,16 @@ func Test_ClusterOperations(t *testing.T) {
 		Path:         "/rates/v1/clusters/current",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-only-rates.json"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/rates/v1/clusters/current?rates",
 		ExpectStatus: 400,
 		ExpectBody:   assert.StringData("the `rates` query parameter is not allowed here\n"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//check rendering of overcommit factors
-	cluster.Config.ResourceBehaviors = []core.ResourceBehavior{
+	s.Cluster.Config.ResourceBehaviors = []core.ResourceBehavior{
 		{
 			FullResourceNameRx: "shared/things",
 			OvercommitFactor:   2.5,
@@ -457,12 +393,12 @@ func Test_ClusterOperations(t *testing.T) {
 		Path:         "/v1/clusters/current",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-with-overcommit.json"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 }
 
 func Test_DomainOperations(t *testing.T) {
-	s, cluster, router, _ := setupTest(t, "fixtures/start-data.sql")
-	discovery := cluster.DiscoveryPlugin.(*plugins.StaticDiscoveryPlugin) //nolint:errcheck
+	s := setupTest(t, "fixtures/start-data.sql")
+	discovery := s.Cluster.DiscoveryPlugin.(*plugins.StaticDiscoveryPlugin) //nolint:errcheck
 
 	//check GetDomain
 	assert.HTTPRequest{
@@ -470,7 +406,7 @@ func Test_DomainOperations(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/domain-get-germany.json"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	//domain "france" covers some special cases: an infinite backend quota and
 	//missing domain quota entries for one service
 	assert.HTTPRequest{
@@ -478,7 +414,7 @@ func Test_DomainOperations(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-france",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/domain-get-france.json"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//check ListDomains
 	assert.HTTPRequest{
@@ -486,25 +422,25 @@ func Test_DomainOperations(t *testing.T) {
 		Path:         "/v1/domains",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/domain-list.json"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains?service=unknown",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/domain-list-no-services.json"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains?service=shared&resource=unknown",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/domain-list-no-resources.json"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains?service=shared&resource=things",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/domain-list-filtered.json"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//check cross-cluster ListDomains
 	assert.HTTPRequest{
@@ -513,7 +449,7 @@ func Test_DomainOperations(t *testing.T) {
 		Header:       map[string]string{"X-Limes-Cluster-Id": "unknown"},
 		ExpectStatus: 400,
 		ExpectBody:   assert.StringData("multi-cluster support is removed: the X-Limes-Cluster-Id header is not allowed anymore\n"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//check DiscoverDomains
 	discovery.Domains = append(discovery.Domains,
@@ -524,14 +460,14 @@ func Test_DomainOperations(t *testing.T) {
 		Path:         "/v1/domains/discover",
 		ExpectStatus: 202,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/domain-discover.json"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	assert.HTTPRequest{
 		Method:       "POST",
 		Path:         "/v1/domains/discover",
 		ExpectStatus: 204, //no content because no new domains discovered
 		ExpectBody:   assert.StringData(""),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//check PutDomain error cases
 	assert.HTTPRequest{
@@ -541,7 +477,7 @@ func Test_DomainOperations(t *testing.T) {
 		ExpectBody:   assert.StringData("cannot change shared/capacity quota: domain quota may not be smaller than sum of project quotas in that domain (minimum acceptable domain quota is 20 B)\n"),
 		//should fail because project quota sum exceeds new quota
 		Body: requestOneQuotaChange("domain", "shared", "capacity", 1, limes.UnitNone),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany",
@@ -549,7 +485,7 @@ func Test_DomainOperations(t *testing.T) {
 		ExpectBody:   assert.StringData("cannot change shared/things quota: cannot convert value from MiB to <count> because units are incompatible\n"),
 		//should fail because unit is incompatible with resource
 		Body: requestOneQuotaChange("domain", "shared", "things", 1, "MiB"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//check PutDomain error cases because of constraints
 	assert.HTTPRequest{
@@ -579,7 +515,7 @@ func Test_DomainOperations(t *testing.T) {
 				},
 			},
 		},
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//check PutDomain with bogus service types and resource names
 	assert.HTTPRequest{
@@ -588,14 +524,14 @@ func Test_DomainOperations(t *testing.T) {
 		ExpectStatus: 422,
 		ExpectBody:   assert.StringData("cannot change unknown/things quota: no such service\n"),
 		Body:         requestOneQuotaChange("domain", "unknown", "things", 100, limes.UnitNone),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany",
 		ExpectStatus: 422,
 		ExpectBody:   assert.StringData("cannot change shared/unknown quota: no such resource\n"),
 		Body:         requestOneQuotaChange("domain", "shared", "unknown", 100, limes.UnitNone),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//check PutDomain with resource that does not track quota
 	assert.HTTPRequest{
@@ -604,7 +540,7 @@ func Test_DomainOperations(t *testing.T) {
 		ExpectStatus: 403,
 		ExpectBody:   assert.StringData("cannot change shared/capacity_portion quota: resource does not track quota\n"),
 		Body:         requestOneQuotaChange("domain", "shared", "capacity_portion", 1, limes.UnitNone),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//check PutDomain happy path
 	assert.HTTPRequest{
@@ -612,14 +548,14 @@ func Test_DomainOperations(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany",
 		ExpectStatus: 202,
 		Body:         requestOneQuotaChange("domain", "shared", "capacity", 1234, limes.UnitNone),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	expectDomainQuota(t, s.DB, "germany", "shared", "capacity", 1234)
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany",
 		ExpectStatus: 202,
 		Body:         requestOneQuotaChange("domain", "shared", "capacity", 1, limes.UnitMebibytes),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	expectDomainQuota(t, s.DB, "germany", "shared", "capacity", 1<<20)
 
 	//check a bizarre edge case that was going wrong at some point: when
@@ -631,7 +567,7 @@ func Test_DomainOperations(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany",
 		ExpectStatus: 202,
 		Body:         requestOneQuotaChange("domain", "shared", "capacity", 1<<20, limes.UnitKibibytes),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	expectDomainQuota(t, s.DB, "germany", "shared", "capacity", 1<<30)
 
 	//check PutDomain on a missing domain quota (see issue #36)
@@ -640,7 +576,7 @@ func Test_DomainOperations(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-france",
 		ExpectStatus: 202,
 		Body:         requestOneQuotaChange("domain", "shared", "capacity", 123, limes.UnitNone),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	expectDomainQuota(t, s.DB, "france", "shared", "capacity", 123)
 
 	//check SimulatePutDomain for no actual changes (all quotas requested already are set like that)
@@ -652,7 +588,7 @@ func Test_DomainOperations(t *testing.T) {
 		ExpectBody: assert.JSONObject{
 			"success": true,
 		},
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//check SimulatePutDomain for acceptable changes
 	assert.HTTPRequest{
@@ -663,7 +599,7 @@ func Test_DomainOperations(t *testing.T) {
 		ExpectBody: assert.JSONObject{
 			"success": true,
 		},
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//check SimulatePutDomain for partially unacceptable changes
 	assert.HTTPRequest{
@@ -711,7 +647,7 @@ func Test_DomainOperations(t *testing.T) {
 				},
 			},
 		},
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//When burst is in use, the sum of all project quotas may legitimately be
 	//higher than the domain quota.  In this case, the validation that
@@ -742,7 +678,7 @@ func Test_DomainOperations(t *testing.T) {
 		ExpectStatus: 202,
 		//less than sum(projectQuota), but more than before, so it's okay
 		Body: requestOneQuotaChange("domain", "unshared", "capacity", 15, limes.UnitNone),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 }
 
 // Even though serviceType parameter always receives "shared" but this is
@@ -772,8 +708,8 @@ func expectDomainQuota(t *testing.T, dbm *gorp.DbMap, domainName, serviceType, r
 }
 
 func Test_ProjectOperations(t *testing.T) {
-	s, cluster, router, _ := setupTest(t, "fixtures/start-data.sql")
-	discovery := cluster.DiscoveryPlugin.(*plugins.StaticDiscoveryPlugin) //nolint:errcheck
+	s := setupTest(t, "fixtures/start-data.sql")
+	discovery := s.Cluster.DiscoveryPlugin.(*plugins.StaticDiscoveryPlugin) //nolint:errcheck
 
 	//check GetProject
 	assert.HTTPRequest{
@@ -781,28 +717,28 @@ func Test_ProjectOperations(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-berlin.json"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	//check rendering of subresources
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin?detail",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-details-berlin.json"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	//dresden has a case of backend quota != quota
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-dresden.json"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	//paris has a case of infinite backend quota
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains/uuid-for-france/projects/uuid-for-paris",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-paris.json"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//check GetProjectRates
 	assert.HTTPRequest{
@@ -810,21 +746,21 @@ func Test_ProjectOperations(t *testing.T) {
 		Path:         "/rates/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-berlin-only-rates.json"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	//dresden has some rates that only report usage
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/rates/v1/domains/uuid-for-germany/projects/uuid-for-dresden",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-dresden-only-rates.json"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	//paris has no rates in the DB whatsoever, so we can check the rendering of the default rates
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/rates/v1/domains/uuid-for-france/projects/uuid-for-paris",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-paris-only-default-rates.json"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//check non-existent domains/projects
 	assert.HTTPRequest{
@@ -832,13 +768,13 @@ func Test_ProjectOperations(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-switzerland/projects/uuid-for-bern",
 		ExpectStatus: 404,
 		ExpectBody:   assert.StringData("no such domain (if it was just created, try to POST /domains/discover)\n"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-hamburg",
 		ExpectStatus: 404,
 		ExpectBody:   assert.StringData("no such project (if it was just created, try to POST /domains/uuid-for-germany/projects/discover)\n"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//check ListProjects
 	assert.HTTPRequest{
@@ -846,25 +782,25 @@ func Test_ProjectOperations(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-list.json"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains/uuid-for-germany/projects?service=unknown",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-list-no-services.json"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains/uuid-for-germany/projects?service=shared&resource=unknown",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-list-no-resources.json"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains/uuid-for-germany/projects?service=shared&resource=things",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-list-filtered.json"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//check ListProjectRates
 	assert.HTTPRequest{
@@ -872,7 +808,7 @@ func Test_ProjectOperations(t *testing.T) {
 		Path:         "/rates/v1/domains/uuid-for-germany/projects",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-list-only-rates.json"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//check ?area= filter (esp. interaction with ?service= filter)
 	assert.HTTPRequest{
@@ -880,19 +816,19 @@ func Test_ProjectOperations(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects?area=unknown",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-list-no-services.json"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains/uuid-for-germany/projects?area=shared&service=unshared",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-list-no-services.json"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains/uuid-for-germany/projects?area=shared&resource=things",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-list-filtered.json"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//check DiscoverProjects
 	discovery.Projects["uuid-for-germany"] = append(discovery.Projects["uuid-for-germany"],
@@ -903,14 +839,14 @@ func Test_ProjectOperations(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects/discover",
 		ExpectStatus: 202,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-discover.json"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	assert.HTTPRequest{
 		Method:       "POST",
 		Path:         "/v1/domains/uuid-for-germany/projects/discover",
 		ExpectStatus: 204, //no content because no new projects discovered
 		ExpectBody:   assert.StringData(""),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//check SyncProject
 	expectStaleProjectServices(t, s.DB, "stale" /*, nothing */)
@@ -920,7 +856,7 @@ func Test_ProjectOperations(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/sync",
 		ExpectStatus: 202,
 		ExpectBody:   assert.StringData(""),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	expectStaleProjectServices(t, s.DB, "stale", "dresden:centralized", "dresden:shared", "dresden:unshared")
 	expectStaleProjectServices(t, s.DB, "rates_stale" /*, nothing */)
 
@@ -933,7 +869,7 @@ func Test_ProjectOperations(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-walldorf/sync",
 		ExpectStatus: 202,
 		ExpectBody:   assert.StringData(""),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	expectStaleProjectServices(t, s.DB, "stale", "dresden:centralized", "dresden:shared", "dresden:unshared", "walldorf:centralized", "walldorf:shared", "walldorf:unshared")
 
 	//check SyncProjectRates (we don't need to check discovery again since SyncProjectRates shares this part of the
@@ -944,7 +880,7 @@ func Test_ProjectOperations(t *testing.T) {
 		Path:         "/rates/v1/domains/uuid-for-germany/projects/uuid-for-dresden/sync",
 		ExpectStatus: 202,
 		ExpectBody:   assert.StringData(""),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	expectStaleProjectServices(t, s.DB, "stale" /*, nothing */)
 	expectStaleProjectServices(t, s.DB, "rates_stale", "dresden:centralized", "dresden:shared", "dresden:unshared")
 
@@ -954,7 +890,7 @@ func Test_ProjectOperations(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-walldorf",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-walldorf-not-scraped-yet.json"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//check PutProject: pre-flight checks
 	assert.HTTPRequest{
@@ -977,7 +913,7 @@ func Test_ProjectOperations(t *testing.T) {
 				},
 			},
 		},
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	assert.HTTPRequest{
 		Method:       "PUT",
@@ -1006,9 +942,9 @@ func Test_ProjectOperations(t *testing.T) {
 				},
 			},
 		},
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
-	plugin := cluster.QuotaPlugins["shared"].(*plugins.GenericQuotaPlugin) //nolint:errcheck
+	plugin := s.Cluster.QuotaPlugins["shared"].(*plugins.GenericQuotaPlugin) //nolint:errcheck
 	plugin.QuotaIsNotAcceptable = true
 	assert.HTTPRequest{
 		Method:       "PUT",
@@ -1016,7 +952,7 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectStatus: 422,
 		ExpectBody:   assert.StringData("cannot change shared/capacity quota: not acceptable for this project: IsQuotaAcceptableForProject failed as requested for quota set centralized/capacity=20, centralized/things=15, shared/capacity=5, shared/things=10, unshared/capacity=10, unshared/things=10\n"),
 		Body:         requestOneQuotaChange("project", "shared", "capacity", 5, limes.UnitNone),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	plugin.QuotaIsNotAcceptable = false
 
 	//check PutProject: quota admissible (i.e. will be persisted in DB), but
@@ -1028,7 +964,7 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectStatus: 202,
 		ExpectBody:   assert.StringData("quotas have been accepted, but some error(s) occurred while trying to write the quotas into the backend services:\nSetQuota failed as requested\n"),
 		Body:         requestOneQuotaChange("project", "shared", "capacity", 5, limes.UnitNone),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	var (
 		actualQuota        uint64
 		actualBackendQuota uint64
@@ -1056,14 +992,14 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectStatus: 422,
 		ExpectBody:   assert.StringData("cannot change unknown/things quota: no such service\n"),
 		Body:         requestOneQuotaChange("project", "unknown", "things", 100, limes.UnitNone),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 422,
 		ExpectBody:   assert.StringData("cannot change shared/unknown quota: no such resource\n"),
 		Body:         requestOneQuotaChange("project", "shared", "unknown", 100, limes.UnitNone),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//check PutProject with resource that does not track quota
 	assert.HTTPRequest{
@@ -1072,7 +1008,7 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectStatus: 403,
 		ExpectBody:   assert.StringData("cannot change shared/capacity_portion quota: resource does not track quota\n"),
 		Body:         requestOneQuotaChange("project", "shared", "capacity_portion", 1, limes.UnitNone),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//check PutProject happy path
 	plugin.SetQuotaFails = false
@@ -1081,7 +1017,7 @@ func Test_ProjectOperations(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 202,
 		Body:         requestOneQuotaChange("project", "shared", "capacity", 6, limes.UnitNone),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	err = s.DB.QueryRow(`
 		SELECT pr.quota, pr.backend_quota FROM project_resources pr
 		JOIN project_services ps ON ps.id = pr.service_id
@@ -1137,7 +1073,7 @@ func Test_ProjectOperations(t *testing.T) {
 				},
 			},
 		},
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	var (
 		actualLimit  uint64
 		actualWindow limesrates.Window
@@ -1178,7 +1114,7 @@ func Test_ProjectOperations(t *testing.T) {
 				},
 			},
 		},
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	err = s.DB.QueryRow(`
 		SELECT pra.rate_limit, pra.window_ns FROM project_rates pra
@@ -1211,7 +1147,7 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectBody: assert.JSONObject{
 			"success": true,
 		},
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//check SimulatePutProject for acceptable changes (we have to set usage = 0
 	//on the unshared/things resource to check setting quota to 0 successfully)
@@ -1261,7 +1197,7 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectBody: assert.JSONObject{
 			"success": true,
 		},
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//check SimulatePutProject for partially unacceptable changes
 	assert.HTTPRequest{
@@ -1317,7 +1253,7 @@ func Test_ProjectOperations(t *testing.T) {
 				},
 			},
 		},
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//When burst is in use, the project usage is legitimately higher than its
 	//quota.  In this case, the validation that projectQuota >= projectUsage
@@ -1337,7 +1273,7 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectStatus: 202,
 		//less than usage, but more than before, so it's okay
 		Body: requestOneQuotaChange("project", "unshared", "capacity", 1, limes.UnitNone),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.Ignore()
@@ -1348,7 +1284,7 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectStatus: 202,
 		//project quota rises from 15->30, and thus domain quota rises from 25->40
 		Body: requestOneQuotaChange("project", "centralized", "things", 30, limes.UnitNone),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	tr.DBChanges().AssertEqual(`
 		UPDATE domain_resources SET quota = 40 WHERE service_id = 5 AND name = 'things';
 		UPDATE project_resources SET quota = 30, backend_quota = 30, desired_backend_quota = 30 WHERE service_id = 7 AND name = 'things';
@@ -1360,7 +1296,7 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectStatus: 202,
 		//project quota falls again from 30->15, and thus domain quota falls back from 40->25
 		Body: requestOneQuotaChange("project", "centralized", "things", 15, limes.UnitNone),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	tr.DBChanges().AssertEqual(`
 		UPDATE domain_resources SET quota = 25 WHERE service_id = 5 AND name = 'things';
 		UPDATE project_resources SET quota = 15, backend_quota = 15, desired_backend_quota = 15 WHERE service_id = 7 AND name = 'things';
@@ -1368,19 +1304,19 @@ func Test_ProjectOperations(t *testing.T) {
 }
 
 func Test_RaiseLowerPermissions(t *testing.T) {
-	s, cluster, router, enforcer := setupTest(t, "fixtures/start-data.sql")
+	s := setupTest(t, "fixtures/start-data.sql")
 
 	//we're not testing this right now
-	cluster.QuotaConstraints = nil
+	s.Cluster.QuotaConstraints = nil
 
 	//test that the correct 403 errors are generated for missing permissions
 	//(the other testcases cover the happy paths for raising and lowering)
-	enforcer.AllowRaise = false
-	enforcer.AllowRaiseLP = true
-	enforcer.AllowLower = true
-	enforcer.AllowLowerLP = false
-	enforcer.AllowRaiseCentralized = false
-	enforcer.AllowLowerCentralized = false
+	s.PolicyEnforcer.AllowRaise = false
+	s.PolicyEnforcer.AllowRaiseLP = true
+	s.PolicyEnforcer.AllowLower = true
+	s.PolicyEnforcer.AllowLowerLP = false
+	s.PolicyEnforcer.AllowRaiseCentralized = false
+	s.PolicyEnforcer.AllowLowerCentralized = false
 
 	assert.HTTPRequest{
 		Method:       "PUT",
@@ -1402,7 +1338,7 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 				},
 			},
 		},
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
@@ -1423,14 +1359,14 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 				},
 			},
 		},
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
-	enforcer.AllowRaise = true
-	enforcer.AllowRaiseLP = true
-	enforcer.AllowLower = false
-	enforcer.AllowLowerLP = false
-	enforcer.AllowRaiseCentralized = false
-	enforcer.AllowLowerCentralized = false
+	s.PolicyEnforcer.AllowRaise = true
+	s.PolicyEnforcer.AllowRaiseLP = true
+	s.PolicyEnforcer.AllowLower = false
+	s.PolicyEnforcer.AllowLowerLP = false
+	s.PolicyEnforcer.AllowRaiseCentralized = false
+	s.PolicyEnforcer.AllowLowerCentralized = false
 
 	assert.HTTPRequest{
 		Method:       "PUT",
@@ -1452,7 +1388,7 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 				},
 			},
 		},
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
@@ -1473,10 +1409,10 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 				},
 			},
 		},
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
-	enforcer.AllowLower = true
-	enforcer.RejectServiceType = "shared"
+	s.PolicyEnforcer.AllowLower = true
+	s.PolicyEnforcer.RejectServiceType = "shared"
 
 	assert.HTTPRequest{
 		Method:       "PUT",
@@ -1503,7 +1439,7 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 				},
 			},
 		},
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
@@ -1529,21 +1465,21 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 				},
 			},
 		},
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
-	enforcer.AllowRaise = false
-	enforcer.AllowRaiseLP = true
-	enforcer.AllowLower = false
-	enforcer.AllowLowerLP = true
-	enforcer.AllowRaiseCentralized = false
-	enforcer.AllowLowerCentralized = false
-	enforcer.RejectServiceType = ""
+	s.PolicyEnforcer.AllowRaise = false
+	s.PolicyEnforcer.AllowRaiseLP = true
+	s.PolicyEnforcer.AllowLower = false
+	s.PolicyEnforcer.AllowLowerLP = true
+	s.PolicyEnforcer.AllowRaiseCentralized = false
+	s.PolicyEnforcer.AllowLowerCentralized = false
+	s.PolicyEnforcer.RejectServiceType = ""
 
-	cluster.LowPrivilegeRaise.LimitsForDomains = map[string]map[string]core.LowPrivilegeRaiseLimit{
+	s.Cluster.LowPrivilegeRaise.LimitsForDomains = map[string]map[string]core.LowPrivilegeRaiseLimit{
 		"shared":   {"capacity": {AbsoluteValue: 29}, "things": {AbsoluteValue: 35}},
 		"unshared": {"capacity": {AbsoluteValue: 10}, "things": {AbsoluteValue: 60}},
 	}
-	cluster.LowPrivilegeRaise.LimitsForProjects = map[string]map[string]core.LowPrivilegeRaiseLimit{
+	s.Cluster.LowPrivilegeRaise.LimitsForProjects = map[string]map[string]core.LowPrivilegeRaiseLimit{
 		"shared":   {"capacity": {AbsoluteValue: 10}, "things": {AbsoluteValue: 25}},
 		"unshared": {"capacity": {AbsoluteValue: 7}, "things": {AbsoluteValue: 20}},
 	}
@@ -1577,7 +1513,7 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 				},
 			},
 		},
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
@@ -1608,9 +1544,9 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 				},
 			},
 		},
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
-	cluster.Config.LowPrivilegeRaise.ExcludeProjectDomainRx = "germany"
+	s.Cluster.Config.LowPrivilegeRaise.ExcludeProjectDomainRx = "germany"
 
 	assert.HTTPRequest{
 		Method:       "PUT",
@@ -1642,15 +1578,15 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 				},
 			},
 		},
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//test low-privilege raise limits that are specified as percent of cluster capacity (TODO: test lowering, too)
-	cluster.Config.LowPrivilegeRaise.ExcludeProjectDomainRx = ""
-	cluster.LowPrivilegeRaise.LimitsForDomains = map[string]map[string]core.LowPrivilegeRaiseLimit{
+	s.Cluster.Config.LowPrivilegeRaise.ExcludeProjectDomainRx = ""
+	s.Cluster.LowPrivilegeRaise.LimitsForDomains = map[string]map[string]core.LowPrivilegeRaiseLimit{
 		// shared/things capacity is 246, so 13% is 31.98 which rounds down to 31
 		"shared": {"things": {PercentOfClusterCapacity: 13}},
 	}
-	cluster.LowPrivilegeRaise.LimitsForProjects = map[string]map[string]core.LowPrivilegeRaiseLimit{
+	s.Cluster.LowPrivilegeRaise.LimitsForProjects = map[string]map[string]core.LowPrivilegeRaiseLimit{
 		// shared/things capacity is 246, so 5% is 12.3 which rounds down to 12
 		"shared": {"things": {PercentOfClusterCapacity: 5}},
 	}
@@ -1662,7 +1598,7 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 		ExpectBody:   assert.StringData("cannot change shared/things quota: user is not allowed to raise \"shared\" quotas that high in this domain (maximum acceptable domain quota is 31)\n"),
 		//attempt to raise should fail because low-privilege exception only applies up to 31
 		Body: requestOneQuotaChange("domain", "shared", "things", 35, limes.UnitNone),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
@@ -1670,10 +1606,10 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 		ExpectBody:   assert.StringData("cannot change shared/things quota: user is not allowed to raise \"shared\" quotas that high in this project (maximum acceptable project quota is 12)\n"),
 		//attempt to raise should fail because low-privilege exception only applies up to 12
 		Body: requestOneQuotaChange("project", "shared", "things", 15, limes.UnitNone),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//test low-privilege raise limits that are specified as percentage of assigned cluster capacity over all domains (TODO: test lowering as well)
-	cluster.LowPrivilegeRaise.LimitsForDomains = map[string]map[string]core.LowPrivilegeRaiseLimit{
+	s.Cluster.LowPrivilegeRaise.LimitsForDomains = map[string]map[string]core.LowPrivilegeRaiseLimit{
 		// - shared/things capacity is 246, 45% thereof is 110.7 which rounds down to 110
 		// - current shared/things domain quotas: france = 0, germany = 30
 		// -> germany should be able to go up to 80 before sum(domain quotas) exceeds 110
@@ -1687,7 +1623,7 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 		ExpectBody:   assert.StringData("cannot change shared/things quota: user is not allowed to raise \"shared\" quotas that high in this domain (maximum acceptable domain quota is 110)\n"),
 		//attempt to raise should fail because low-privilege exception only applies up to 110 (see comment above)
 		Body: requestOneQuotaChange("domain", "shared", "things", 115, limes.UnitNone),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//raise another domain quota such that the auto-approval limit would be
 	//exceeded even if the "germany" domain had zero quota
@@ -1720,16 +1656,16 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 		ExpectBody:   assert.StringData("cannot change shared/things quota: user is not allowed to raise \"shared\" quotas in this domain\n"),
 		//attempt to raise should fail because low-privilege exception is not applicable because of other domain's quotas
 		Body: requestOneQuotaChange("domain", "shared", "things", 35, limes.UnitNone),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//check that domain quota cannot be raised or lowered by anyone, even if the
 	//policy says so, if the centralized quota distribution model is used
-	enforcer.AllowRaise = true
-	enforcer.AllowRaiseLP = true
-	enforcer.AllowLower = true
-	enforcer.AllowLowerLP = true
-	enforcer.AllowRaiseCentralized = true
-	enforcer.AllowLowerCentralized = true
+	s.PolicyEnforcer.AllowRaise = true
+	s.PolicyEnforcer.AllowRaiseLP = true
+	s.PolicyEnforcer.AllowLower = true
+	s.PolicyEnforcer.AllowLowerLP = true
+	s.PolicyEnforcer.AllowRaiseCentralized = true
+	s.PolicyEnforcer.AllowLowerCentralized = true
 
 	assert.HTTPRequest{
 		Method:       "PUT",
@@ -1737,7 +1673,7 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 		ExpectStatus: 403,
 		ExpectBody:   assert.StringData("cannot change centralized/things quota: user is not allowed to raise \"centralized\" quotas in this domain\n"),
 		Body:         requestOneQuotaChange("domain", "centralized", "things", 100, limes.UnitNone),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	assert.HTTPRequest{
 		Method:       "PUT",
@@ -1745,16 +1681,16 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 		ExpectStatus: 403,
 		ExpectBody:   assert.StringData("cannot change centralized/things quota: user is not allowed to lower \"centralized\" quotas in this domain\n"),
 		Body:         requestOneQuotaChange("domain", "centralized", "things", 0, limes.UnitNone),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//check that, under centralized quota distribution, project quota cannot be
 	//raised or lowered if the respective specialized policies are not granted
-	enforcer.AllowRaise = true
-	enforcer.AllowRaiseLP = true
-	enforcer.AllowLower = true
-	enforcer.AllowLowerLP = true
-	enforcer.AllowRaiseCentralized = false
-	enforcer.AllowLowerCentralized = true
+	s.PolicyEnforcer.AllowRaise = true
+	s.PolicyEnforcer.AllowRaiseLP = true
+	s.PolicyEnforcer.AllowLower = true
+	s.PolicyEnforcer.AllowLowerLP = true
+	s.PolicyEnforcer.AllowRaiseCentralized = false
+	s.PolicyEnforcer.AllowLowerCentralized = true
 
 	assert.HTTPRequest{
 		Method:       "PUT",
@@ -1762,10 +1698,10 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 		ExpectStatus: 403,
 		ExpectBody:   assert.StringData("cannot change centralized/things quota: user is not allowed to raise \"centralized\" quotas in this project\n"),
 		Body:         requestOneQuotaChange("project", "centralized", "things", 100, limes.UnitNone),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
-	enforcer.AllowRaiseCentralized = true
-	enforcer.AllowLowerCentralized = false
+	s.PolicyEnforcer.AllowRaiseCentralized = true
+	s.PolicyEnforcer.AllowLowerCentralized = false
 
 	assert.HTTPRequest{
 		Method:       "PUT",
@@ -1773,13 +1709,13 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 		ExpectStatus: 403,
 		ExpectBody:   assert.StringData("cannot change centralized/things quota: user is not allowed to lower \"centralized\" quotas in this project\n"),
 		Body:         requestOneQuotaChange("project", "centralized", "things", 5, limes.UnitNone),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//even if lower_centralized is allowed, lowering to 0 is never allowed (to
 	//test this, we have to first set usage to 0 to avoid getting an error for
 	//quota < usage instead)
-	enforcer.AllowRaiseCentralized = true
-	enforcer.AllowLowerCentralized = true
+	s.PolicyEnforcer.AllowRaiseCentralized = true
+	s.PolicyEnforcer.AllowLowerCentralized = true
 
 	_, err = s.DB.Exec(`UPDATE project_resources SET usage = 0 WHERE service_id = 7 AND name = 'things'`)
 	if err != nil {
@@ -1792,7 +1728,7 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 		ExpectStatus: 422,
 		ExpectBody:   assert.StringData("cannot change centralized/things quota: quota may not be lowered to zero for resources with non-zero default quota (minimum acceptable project quota is 1)\n"),
 		Body:         requestOneQuotaChange("project", "centralized", "things", 0, limes.UnitNone),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 }
 
 func expectStaleProjectServices(t *testing.T, dbm *gorp.DbMap, staleField string, pairs ...string) {
@@ -1838,8 +1774,8 @@ func p2i64(val int64) *int64 {
 }
 
 func Test_QuotaBursting(t *testing.T) {
-	s, cluster, router, _ := setupTest(t, "fixtures/start-data.sql")
-	cluster.Config.Bursting.MaxMultiplier = 0.1
+	s := setupTest(t, "fixtures/start-data.sql")
+	s.Cluster.Config.Bursting.MaxMultiplier = 0.1
 
 	//check initial GetProject with bursting disabled, but supported
 	assert.HTTPRequest{
@@ -1847,10 +1783,10 @@ func Test_QuotaBursting(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-berlin-bursting-disabled.json"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//bursting can only enabled when the cluster supports it
-	cluster.Config.Bursting.MaxMultiplier = 0
+	s.Cluster.Config.Bursting.MaxMultiplier = 0
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
@@ -1863,10 +1799,10 @@ func Test_QuotaBursting(t *testing.T) {
 				},
 			},
 		},
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//enable bursting
-	cluster.Config.Bursting.MaxMultiplier = 0.1
+	s.Cluster.Config.Bursting.MaxMultiplier = 0.1
 	body := assert.JSONObject{
 		"project": assert.JSONObject{
 			"bursting": assert.JSONObject{
@@ -1880,14 +1816,14 @@ func Test_QuotaBursting(t *testing.T) {
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONObject{"success": true},
 		Body:         body,
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 202,
 		ExpectBody:   assert.StringData(""),
 		Body:         body,
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//enabling bursting again should be a no-op
 	assert.HTTPRequest{
@@ -1896,14 +1832,14 @@ func Test_QuotaBursting(t *testing.T) {
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONObject{"success": true},
 		Body:         body,
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 202,
 		ExpectBody:   assert.StringData(""),
 		Body:         body,
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//update a quota; this should also scale up the backend_quota according to
 	//the bursting multiplier (we will check this in the next step)
@@ -1913,7 +1849,7 @@ func Test_QuotaBursting(t *testing.T) {
 		ExpectStatus: 202,
 		ExpectBody:   assert.StringData(""),
 		Body:         requestOneQuotaChange("project", "unshared", "things", 40, limes.UnitNone),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//check that quota has been updated in DB
 	assert.HTTPRequest{
@@ -1921,10 +1857,10 @@ func Test_QuotaBursting(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-berlin-bursting-enabled.json"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//check that backend_quota has been updated in backend
-	plugin := cluster.QuotaPlugins["shared"].(*plugins.GenericQuotaPlugin) //nolint:errcheck
+	plugin := s.Cluster.QuotaPlugins["shared"].(*plugins.GenericQuotaPlugin) //nolint:errcheck
 	expectBackendQuota := map[string]uint64{
 		"capacity": 11, //original value (10) * multiplier (110%)
 		"things":   11, //original value (10) * multiplier (110%)
@@ -1937,7 +1873,7 @@ func Test_QuotaBursting(t *testing.T) {
 		t.Errorf("expected backend quota %#v, but got %#v", expectBackendQuota, backendQuota)
 	}
 
-	plugin = cluster.QuotaPlugins["unshared"].(*plugins.GenericQuotaPlugin) //nolint:errcheck
+	plugin = s.Cluster.QuotaPlugins["unshared"].(*plugins.GenericQuotaPlugin) //nolint:errcheck
 	expectBackendQuota = map[string]uint64{
 		"capacity": 11, //original value (10) * multiplier (110%)
 		"things":   44, //as set above (40) * multiplier (110%)
@@ -1959,7 +1895,7 @@ func Test_QuotaBursting(t *testing.T) {
 		ExpectStatus: 202,
 		//project quota rises from 15->30, and thus domain quota rises from 25->40, but desired_backend_quota is also 30
 		Body: requestOneQuotaChange("project", "centralized", "things", 30, limes.UnitNone),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	tr.DBChanges().AssertEqual(`
 		UPDATE domain_resources SET quota = 40 WHERE service_id = 5 AND name = 'things';
 		UPDATE project_resources SET quota = 30, backend_quota = 30, desired_backend_quota = 30 WHERE service_id = 7 AND name = 'things';
@@ -1972,7 +1908,7 @@ func Test_QuotaBursting(t *testing.T) {
 		ExpectStatus: 202,
 		//project quota falls again from 30->15, and thus domain quota falls back from 40->25
 		Body: requestOneQuotaChange("project", "centralized", "things", 15, limes.UnitNone),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	tr.DBChanges().AssertEqual(`
 		UPDATE domain_resources SET quota = 25 WHERE service_id = 5 AND name = 'things';
 		UPDATE project_resources SET quota = 15, backend_quota = 15, desired_backend_quota = 15 WHERE service_id = 7 AND name = 'things';
@@ -1988,7 +1924,7 @@ func Test_QuotaBursting(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-berlin-bursting-in-progress.json"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//check that we cannot disable bursting now
 	body = assert.JSONObject{
@@ -2004,14 +1940,14 @@ func Test_QuotaBursting(t *testing.T) {
 		ExpectStatus: 409,
 		ExpectBody:   assert.StringData("cannot disable bursting because 1 resource is currently bursted: unshared/things\n"),
 		Body:         body,
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 409,
 		ExpectBody:   assert.StringData("cannot disable bursting because 1 resource is currently bursted: unshared/things\n"),
 		Body:         body,
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//decrease usage, then disable bursting successfully
 	_, err = s.DB.Exec(`UPDATE project_resources SET usage = 2 WHERE service_id = 1 AND name = 'things'`)
@@ -2024,14 +1960,14 @@ func Test_QuotaBursting(t *testing.T) {
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONObject{"success": true},
 		Body:         body,
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 202,
 		ExpectBody:   assert.StringData(""),
 		Body:         body,
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//also resetting the quota that we changed above should bring us back into
 	//the initial state
@@ -2041,13 +1977,13 @@ func Test_QuotaBursting(t *testing.T) {
 		ExpectStatus: 202,
 		ExpectBody:   assert.StringData(""),
 		Body:         requestOneQuotaChange("project", "unshared", "things", 10, limes.UnitNone),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-berlin-bursting-disabled.json"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//disabling bursting again should be a no-op
 	assert.HTTPRequest{
@@ -2056,18 +1992,18 @@ func Test_QuotaBursting(t *testing.T) {
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONObject{"success": true},
 		Body:         body,
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 202,
 		ExpectBody:   assert.StringData(""),
 		Body:         body,
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 }
 
 func Test_EmptyProjectList(t *testing.T) {
-	s, _, router, _ := setupTest(t, "fixtures/start-data.sql")
+	s := setupTest(t, "fixtures/start-data.sql")
 
 	_, err := s.DB.Exec(`DELETE FROM projects`)
 	if err != nil {
@@ -2081,14 +2017,14 @@ func Test_EmptyProjectList(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONObject{"projects": []assert.JSONObject{}},
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 }
 
 func Test_LargeProjectList(t *testing.T) {
 	//start without any projects pre-defined in the start data
-	s, cluster, router, _ := setupTest(t, "fixtures/start-data-minimal.sql")
+	s := setupTest(t, "fixtures/start-data-minimal.sql")
 	//we don't care about the various ResourceBehaviors in this test
-	cluster.Config.ResourceBehaviors = nil
+	s.Cluster.Config.ResourceBehaviors = nil
 
 	//template for how a single project will look in the output JSON
 	makeProjectJSON := func(idx int, projectName, projectUUID string) assert.JSONObject {
@@ -2213,7 +2149,7 @@ func Test_LargeProjectList(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONObject{"projects": expectedProjectsJSON},
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 }
 
 func requestOneQuotaChange(structureLevel, serviceType, resourceName string, quota uint64, unit limes.Unit) assert.JSONObject {
@@ -2234,7 +2170,7 @@ func requestOneQuotaChange(structureLevel, serviceType, resourceName string, quo
 }
 
 func Test_StrictDomainQuotaLimit(t *testing.T) {
-	_, cluster, router, _ := setupTest(t, "fixtures/start-data.sql")
+	s := setupTest(t, "fixtures/start-data.sql")
 
 	//set up a QD config for shared/things with the default behavior
 	qdConfig := &core.QuotaDistributionConfiguration{
@@ -2242,7 +2178,7 @@ func Test_StrictDomainQuotaLimit(t *testing.T) {
 		Model:                  limesresources.HierarchicalQuotaDistribution,
 		StrictDomainQuotaLimit: false,
 	}
-	cluster.Config.QuotaDistributionConfigs = append(cluster.Config.QuotaDistributionConfigs, qdConfig)
+	s.Cluster.Config.QuotaDistributionConfigs = append(s.Cluster.Config.QuotaDistributionConfigs, qdConfig)
 
 	//NOTE: The relevant parts of start-data.sql look as follows for "shared/things":
 	// cluster_capacity      = 246
@@ -2256,7 +2192,7 @@ func Test_StrictDomainQuotaLimit(t *testing.T) {
 		//this single domain quota is below capacity, but the sum of domain quotas is not
 		Body:         requestOneQuotaChange("domain", "shared", "things", 240, limes.UnitNone),
 		ExpectStatus: 202,
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//with StrictDomainQuotaLimit = true, we can always go down (even if we are not getting back into the green area)...
 	qdConfig.StrictDomainQuotaLimit = true
@@ -2266,7 +2202,7 @@ func Test_StrictDomainQuotaLimit(t *testing.T) {
 		//this single domain quota is below capacity, but the sum of domain quotas is not
 		Body:         requestOneQuotaChange("domain", "shared", "things", 220, limes.UnitNone),
 		ExpectStatus: 202,
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//...and we can also just stay at the same level...
 	assert.HTTPRequest{
@@ -2274,7 +2210,7 @@ func Test_StrictDomainQuotaLimit(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-france",
 		Body:         requestOneQuotaChange("domain", "shared", "things", 220, limes.UnitNone),
 		ExpectStatus: 202,
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//...but we cannot go higher into the red
 	assert.HTTPRequest{
@@ -2283,7 +2219,7 @@ func Test_StrictDomainQuotaLimit(t *testing.T) {
 		Body:         requestOneQuotaChange("domain", "shared", "things", 240, limes.UnitNone),
 		ExpectStatus: 409,
 		ExpectBody:   assert.StringData("cannot change shared/things quota: cluster capacity may not be exceeded for this resource (maximum acceptable domain quota is 216)\n"),
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 
 	//we can get exactly to the limit though (where all capacity is given out as domain quota)
 	assert.HTTPRequest{
@@ -2291,5 +2227,5 @@ func Test_StrictDomainQuotaLimit(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-france",
 		Body:         requestOneQuotaChange("domain", "shared", "things", 216, limes.UnitNone),
 		ExpectStatus: 202,
-	}.Check(t, router)
+	}.Check(t, s.Handler)
 }
