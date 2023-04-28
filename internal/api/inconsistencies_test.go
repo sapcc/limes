@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/sapcc/go-bits/assert"
+
 	"github.com/sapcc/limes/internal/test"
 )
 
