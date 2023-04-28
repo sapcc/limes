@@ -104,6 +104,28 @@ const (
 					rate_infos:
 						- name: service/unshared/instances:delete
 			## END CENTRALIZED
+
+		quota_distribution_configs:
+		- { resource: centralized/capacity, model: centralized, default_project_quota: 15 }
+		- { resource: centralized/things,   model: centralized, default_project_quota: 10 }
+
+		resource_behaviors:
+			# check minimum non-zero project quota constraint
+			- { resource: unshared/things, min_nonzero_project_quota: 10 }
+
+			# check how scaling relations are reported
+			- { resource: unshared/things, scales_with: shared/things, scaling_factor: 2 }
+
+			# check how annotations are reported
+			- resource: 'shared/.*things'
+				scope:    'germany(?:/dresden)?'
+				annotations:
+					annotated: true
+					text:      'this annotation appears on shared things of domain germany and project dresden'
+			- resource: shared/things
+				scope:    germany/dresden
+				annotations:
+					text: 'this annotation appears on shared/things of project dresden only'
 	`
 )
 
@@ -159,86 +181,9 @@ func setupTest(t *testing.T, startData string) test.Setup {
 			},
 		},
 	}
-	if startData != "fixtures/start-data-inconsistencies.sql" {
-		s.Cluster.QuotaConstraints = &westConstraintSet
-	}
-
-	if startData != "fixtures/start-data-inconsistencies.sql" {
-		//TODO: move into cluster config YAML
-		s.Cluster.Config.ResourceBehaviors = []core.ResourceBehavior{
-			//check minimum non-zero project quota constraint
-			{
-				FullResourceNameRx:     "unshared/things",
-				MinNonZeroProjectQuota: 10,
-			},
-			//check how scaling relations are reported
-			{
-				FullResourceNameRx: "unshared/things",
-				ScalesWith: core.ResourceRef{
-					ResourceName: "things",
-					ServiceType:  "shared",
-				},
-				ScalingFactor: 2,
-			},
-			//check how annotations are reported
-			{
-				FullResourceNameRx: "shared/.*things",
-				ScopeRx:            "germany(?:/dresden)?",
-				Annotations: map[string]interface{}{
-					"annotated": true,
-					"text":      "this annotation appears on shared things of domain germany and project dresden",
-				},
-			},
-			{
-				FullResourceNameRx: "shared/things",
-				ScopeRx:            "germany/dresden",
-				Annotations: map[string]interface{}{
-					"text": "this annotation appears on shared/things of project dresden only",
-				},
-			},
-		}
-
-		//TODO: move into cluster config YAML
-		s.Cluster.Config.QuotaDistributionConfigs = []*core.QuotaDistributionConfiguration{
-			//check behavior for centralized quota distribution (all other resources default to hierarchical quota distribution)
-			{
-				FullResourceNameRx:  "centralized/capacity",
-				Model:               limesresources.CentralizedQuotaDistribution,
-				DefaultProjectQuota: 15,
-			},
-			{
-				FullResourceNameRx:  "centralized/things",
-				Model:               limesresources.CentralizedQuotaDistribution,
-				DefaultProjectQuota: 10,
-			},
-		}
-	}
+	s.Cluster.QuotaConstraints = &westConstraintSet
 
 	return s
-}
-
-func Test_InconsistencyOperations(t *testing.T) {
-	s := setupTest(t, "fixtures/start-data-inconsistencies.sql")
-
-	//check ListInconsistencies
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/v1/inconsistencies",
-		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/inconsistency-list.json"),
-	}.Check(t, s.Handler)
-}
-
-func Test_EmptyInconsistencyReport(t *testing.T) {
-	s := setupTest(t, "/dev/null")
-
-	//check ListInconsistencies
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/v1/inconsistencies",
-		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/inconsistency-empty.json"),
-	}.Check(t, s.Handler)
 }
 
 func Test_ScrapeErrorOperations(t *testing.T) {
