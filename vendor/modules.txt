@@ -90,7 +90,7 @@ github.com/json-iterator/go
 github.com/klauspost/cpuid/v2
 # github.com/kr/text v0.2.0
 ## explicit
-# github.com/lib/pq v1.10.8
+# github.com/lib/pq v1.10.9
 ## explicit; go 1.13
 github.com/lib/pq
 github.com/lib/pq/oid
@@ -149,7 +149,7 @@ github.com/sapcc/go-api-declarations/internal/marshal
 github.com/sapcc/go-api-declarations/limes
 github.com/sapcc/go-api-declarations/limes/rates
 github.com/sapcc/go-api-declarations/limes/resources
-# github.com/sapcc/go-bits v0.0.0-20230420083834-e3870701a14b
+# github.com/sapcc/go-bits v0.0.0-20230427112005-83ae3f63bf8b
 ## explicit; go 1.20
 github.com/sapcc/go-bits/assert
 github.com/sapcc/go-bits/audittools
