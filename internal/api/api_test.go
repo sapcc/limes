@@ -109,7 +109,7 @@ const (
 		- { resource: centralized/capacity, model: centralized, default_project_quota: 15 }
 		- { resource: centralized/things,   model: centralized, default_project_quota: 10 }
 
-		resource_behaviors:
+		resource_behavior:
 			# check minimum non-zero project quota constraint
 			- { resource: unshared/things, min_nonzero_project_quota: 10 }
 
