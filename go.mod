@@ -16,7 +16,7 @@ require (
 	github.com/sapcc/go-api-declarations v1.5.1
 	github.com/sapcc/go-bits v0.0.0-20230504084121-e1394d9f1b00
 	go.uber.org/automaxprocs v1.5.2
-	golang.org/x/exp v0.0.0-20230425010034-47ecfdc1ba53
+	golang.org/x/exp v0.0.0-20230510235704-dd950f8aeaea
 	gopkg.in/yaml.v2 v2.4.0
 )
 
