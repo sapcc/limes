@@ -8,7 +8,7 @@ require (
 	github.com/go-gorp/gorp/v3 v3.1.0
 	github.com/gofrs/uuid v4.4.0+incompatible
 	github.com/gophercloud/gophercloud v1.4.0
-	github.com/gophercloud/utils v0.0.0-20230418172808-6eab72e966e1
+	github.com/gophercloud/utils v0.0.0-20230523080330-de873b9cf00d
 	github.com/gorilla/mux v1.8.0
 	github.com/majewsky/schwift v1.2.0
 	github.com/prometheus/client_golang v1.15.1
@@ -16,7 +16,7 @@ require (
 	github.com/sapcc/go-api-declarations v1.5.1
 	github.com/sapcc/go-bits v0.0.0-20230511083554-fcf45d69f407
 	go.uber.org/automaxprocs v1.5.2
-	golang.org/x/exp v0.0.0-20230515195305-f3d0a9c9a5cc
+	golang.org/x/exp v0.0.0-20230522175609-2e198f4a06a1
 	gopkg.in/yaml.v2 v2.4.0
 )
 
