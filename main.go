@@ -138,6 +138,8 @@ func taskCollect(cluster *core.Cluster, args []string) {
 		printUsageAndExit()
 	}
 
+	ctx := httpext.ContextWithSIGINT(context.Background(), 10*time.Second)
+
 	//connect to database
 	dbm := must.Return(db.Init())
 	prometheus.MustRegister(sqlstats.NewStatsCollector("limes", dbm.Db))
@@ -155,7 +157,7 @@ func taskCollect(cluster *core.Cluster, args []string) {
 
 	//start those collector threads which operate over all services simultaneously
 	c := collector.NewCollector(cluster, dbm, nil)
-	go c.CheckConsistency()
+	go c.CheckConsistencyJob(nil).Run(ctx)
 	go c.ScanCapacity()
 	go func() {
 		for {
@@ -182,7 +184,6 @@ func taskCollect(cluster *core.Cluster, args []string) {
 	http.Handle("/metrics", promhttp.Handler())
 
 	metricsListenAddr := osext.GetenvOrDefault("LIMES_COLLECTOR_METRICS_LISTEN_ADDRESS", ":8080")
-	ctx := httpext.ContextWithSIGINT(context.Background(), 10*time.Second)
 	must.Succeed(httpext.ListenAndServeContext(ctx, metricsListenAddr, nil))
 }
 

@@ -42,6 +42,8 @@ func Test_Consistency(t *testing.T) {
 		Once:      true,
 	}
 
+	consistencyJob := c.CheckConsistencyJob(s.Registry)
+
 	//run ScanDomains once to establish a baseline
 	_, err := c.ScanDomains(ScanDomainsOpts{})
 	if err != nil {
@@ -52,7 +54,10 @@ func Test_Consistency(t *testing.T) {
 	//check that CheckConsistency() is satisfied with the
 	//{domain,project}_services created by ScanDomains(), but adds
 	//cluster_services entries
-	c.CheckConsistency()
+	err = consistencyJob.ProcessOne(s.Ctx)
+	if err != nil {
+		t.Error(err)
+	}
 	easypg.AssertDBContent(t, s.DB.Db, "fixtures/checkconsistency0.sql")
 
 	//add some quota constraints
@@ -140,6 +145,9 @@ func Test_Consistency(t *testing.T) {
 	//are added; for all project services that are created here, project
 	//resources are added where the quota constraint contains a Minimum value or
 	//the quota distribution configuration contains a DefaultQuota value..
-	c.CheckConsistency()
+	err = consistencyJob.ProcessOne(s.Ctx)
+	if err != nil {
+		t.Error(err)
+	}
 	easypg.AssertDBContent(t, s.DB.Db, "fixtures/checkconsistency2.sql")
 }
