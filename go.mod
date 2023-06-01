@@ -50,5 +50,3 @@ require (
 	golang.org/x/text v0.9.0 // indirect
 	google.golang.org/protobuf v1.30.0 // indirect
 )
-
-replace github.com/gophercloud/gophercloud v1.4.0 => github.com/sapcc/gophercloud v0.0.0-20230525104810-f3053bcf30d8

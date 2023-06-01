@@ -27,6 +27,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/sharedfilesystems/v2/schedulerstats"
 	"github.com/gophercloud/gophercloud/openstack/sharedfilesystems/v2/services"
+	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/logg"
 
@@ -145,13 +146,13 @@ type capacityForShareType struct {
 
 func (p *capacityManilaPlugin) scrapeForShareType(shareType ManilaShareTypeSpec, azForServiceHost map[string]string) (capacityForShareType, error) {
 	//list all pools for the Manila share types corresponding to this virtual share type
-	var allPools []schedulerstats.Pool
+	var allPools []manilaPool
 	for _, stName := range getAllManilaShareTypes(shareType) {
 		allPages, err := schedulerstats.ListDetail(p.ManilaV2, schedulerstats.ListDetailOpts{ShareType: stName}).AllPages()
 		if err != nil {
 			return capacityForShareType{}, err
 		}
-		pools, err := schedulerstats.ExtractPools(allPages)
+		pools, err := manilaExtractPools(allPages)
 		if err != nil {
 			return capacityForShareType{}, err
 		}
@@ -247,4 +248,29 @@ func getShareCapacity(capGB, capBalance float64) uint64 {
 
 func getSnapshotCapacity(capGB, capBalance float64) uint64 {
 	return uint64(capBalance / (capBalance + 1) * capGB)
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// We need a custom type for Pool.Capabilities to support CCloud-specific fields.
+
+// manilaPool is a custom extension of the type `schedulerstats.Pool`.
+type manilaPool struct {
+	Name         string `json:"name"`
+	Host         string `json:"host"`
+	Capabilities struct {
+		//standard fields
+		TotalCapacityGB     float64 `json:"total_capacity_gb"`
+		AllocatedCapacityGB float64 `json:"allocated_capacity_gb"`
+		//CCloud extension fields
+		//TODO: hardware_state (coming soon)
+	} `json:"capabilities,omitempty"`
+}
+
+// manilaExtractPools is `schedulerstats.ExtractPools()`, but using our custom pool type.
+func manilaExtractPools(p pagination.Page) ([]manilaPool, error) {
+	var s struct {
+		Pools []manilaPool `json:"pools"`
+	}
+	err := (p.(schedulerstats.PoolPage)).ExtractInto(&s)
+	return s.Pools, err
 }
