@@ -20,8 +20,11 @@
 package collector
 
 import (
+	"context"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
 
@@ -29,32 +32,26 @@ import (
 	"github.com/sapcc/limes/internal/db"
 )
 
-var consistencyCheckInterval = 1 * time.Hour
-
-// CheckConsistency ensures that all active domains and projects in this cluster
-// have a service entry for this plugin's service type.
-func (c *Collector) CheckConsistency() {
-	for {
-		c.checkConsistencyCluster()
-
-		if c.Once {
-			return
-		}
-		time.Sleep(consistencyCheckInterval)
-	}
+func (c *Collector) CheckConsistencyJob(registerer prometheus.Registerer) jobloop.Job {
+	return (&jobloop.CronJob{
+		Metadata: jobloop.JobMetadata{
+			ReadableName: "ensure that all active domains and projects in this cluster have a service entry for this plugin's service type",
+			CounterOpts: prometheus.CounterOpts{
+				Name: "limes_cron_consistency_runs",
+				Help: "Counter for consistency checks runs",
+			},
+		},
+		Interval: 1 * time.Hour,
+		Task:     c.checkConsistencyCluster,
+	}).Setup(registerer)
 }
 
-//TODO: code duplication
-
-func (c *Collector) checkConsistencyCluster() {
-	now := c.TimeNow()
-
+func (c *Collector) checkConsistencyCluster(_ context.Context, _ prometheus.Labels) error {
 	//check cluster_services entries
 	var services []db.ClusterService
 	_, err := c.DB.Select(&services, `SELECT * FROM cluster_services`)
 	if err != nil {
-		c.LogError(err.Error())
-		return
+		return err
 	}
 	logg.Info("checking consistency for %d cluster services...", len(services))
 
@@ -72,6 +69,7 @@ func (c *Collector) checkConsistencyCluster() {
 		}
 	}
 
+	now := c.TimeNow()
 	//create missing service entries
 	for _, serviceType := range c.Cluster.ServiceTypesInAlphabeticalOrder() {
 		if seen[serviceType] {
@@ -93,20 +91,23 @@ func (c *Collector) checkConsistencyCluster() {
 	var domains []db.Domain
 	_, err = c.DB.Select(&domains, `SELECT * FROM domains ORDER BY name DESC`)
 	if err != nil {
-		c.LogError(err.Error())
-		return
+		return err
 	}
 
 	for _, domain := range domains {
-		c.checkConsistencyDomain(domain)
+		err := c.checkConsistencyDomain(domain)
+		if err != nil {
+			c.LogError(err.Error())
+		}
 	}
+
+	return nil
 }
 
-func (c *Collector) checkConsistencyDomain(domain db.Domain) {
+func (c *Collector) checkConsistencyDomain(domain db.Domain) error {
 	tx, err := c.DB.Begin()
 	if err != nil {
-		c.LogError(err.Error())
-		return
+		return err
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 
@@ -116,16 +117,14 @@ func (c *Collector) checkConsistencyDomain(domain db.Domain) {
 		err = tx.Commit()
 	}
 	if err != nil {
-		c.LogError(err.Error())
-		return
+		return err
 	}
 
 	//recurse into projects (with deterministic ordering for the unit test's sake)
 	var projects []db.Project
 	_, err = c.DB.Select(&projects, `SELECT * FROM projects WHERE domain_id = $1 ORDER BY NAME`, domain.ID)
 	if err != nil {
-		c.LogError(err.Error())
-		return
+		return err
 	}
 	logg.Info("checking consistency for %d projects in domain %q...", len(projects), domain.Name)
 
@@ -138,4 +137,6 @@ func (c *Collector) checkConsistencyDomain(domain db.Domain) {
 			c.LogError(err.Error())
 		}
 	}
+
+	return nil
 }

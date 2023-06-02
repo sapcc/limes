@@ -19,6 +19,7 @@
 package test
 
 import (
+	"context"
 	"net/http"
 	"net/url"
 	"strings"
@@ -26,6 +27,7 @@ import (
 
 	"github.com/go-gorp/gorp/v3"
 	"github.com/gophercloud/gophercloud"
+	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpapi"
@@ -86,9 +88,11 @@ func normalizeInlineYAML(yamlStr string) string {
 // Setup contains all the pieces that are needed for most tests.
 type Setup struct {
 	//fields that are always set
+	Ctx            context.Context //nolint:containedctx // only used in tests
 	DB             *gorp.DbMap
 	Cluster        *core.Cluster
 	PolicyEnforcer *PolicyEnforcer
+	Registry       *prometheus.Registry
 	TokenValidator TokenValidator
 	//fields that are only set if their respective SetupOptions are given
 	Handler http.Handler
@@ -103,8 +107,10 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	}
 
 	var s Setup
+	s.Ctx = context.Background()
 	s.DB = initDatabase(t, params.DBFixtureFile)
 	s.Cluster = initCluster(t, params.ConfigYAML)
+	s.Registry = prometheus.NewPedanticRegistry()
 
 	//load mock policy (where everything is allowed)
 	s.PolicyEnforcer = &PolicyEnforcer{

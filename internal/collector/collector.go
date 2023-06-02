@@ -49,7 +49,7 @@ type Collector struct {
 }
 
 // NewCollector creates a Collector instance.
-func NewCollector(cluster *core.Cluster, dbm *gorp.DbMap, plugin core.QuotaPlugin) *Collector {
+func NewCollector(cluster *core.Cluster, dbm *gorp.DbMap) *Collector {
 	return &Collector{
 		Cluster:   cluster,
 		DB:        dbm,

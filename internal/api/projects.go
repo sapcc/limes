@@ -101,7 +101,7 @@ func (p *v1Provider) DiscoverProjects(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	c := collector.NewCollector(p.Cluster, p.DB, nil)
+	c := collector.NewCollector(p.Cluster, p.DB)
 	newProjectUUIDs, err := c.ScanProjects(dbDomain)
 	if respondwith.ErrorText(w, err) {
 		return
@@ -136,7 +136,7 @@ func (p *v1Provider) doSyncProject(w http.ResponseWriter, r *http.Request, stale
 
 	//check if project needs to be discovered
 	if dbProject == nil {
-		c := collector.NewCollector(p.Cluster, p.DB, nil)
+		c := collector.NewCollector(p.Cluster, p.DB)
 		newProjectUUIDs, err := c.ScanProjects(dbDomain)
 		if respondwith.ErrorText(w, err) {
 			return
