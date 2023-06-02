@@ -659,6 +659,10 @@ subcapacity corresponds to one Manila pool, and bears the following attributes:
 | `az` | string | The pool's availability zone. The AZ is determined by matching the pool's hostname against the list of services configured in Manila. |
 | `capacity_gib` | integer | Total capacity for shares/snapshots in GiB. This is based on the pool's `total_capacity_gb` attribute in Manila. |
 | `usage_gib` | integer | Usage level for shares/snapshots in GiB. This is based on the pool's `allocated_capacity_gb` attribute in Manila. |
+| `exclusion_reason` | string | If filled (see below), the pool's capacity and usage is not counted towards the global and AZ-wide totals. |
+
+As a SAP-specific extension, the pool capability field `hardware_state` is recognized to ignore capacity that is not
+marked as live. Ignored pools will still show up in the subcapacities, but their `exclusion_reason` field will be filled.
 
 #### Capacity balance
 
