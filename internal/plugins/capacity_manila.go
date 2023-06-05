@@ -47,7 +47,8 @@ type capacityManilaPlugin struct {
 	ManilaV2 *gophercloud.ServiceClient `yaml:"-"`
 }
 
-type manilaSubcapacity struct {
+// This type is shared with the Cinder capacitor.
+type storagePoolSubcapacity struct {
 	PoolName         string `json:"pool_name"`
 	AvailabilityZone string `json:"az"`
 	CapacityGiB      uint64 `json:"capacity_gib"`
@@ -202,7 +203,7 @@ func (p *capacityManilaPlugin) scrapeForShareType(shareType ManilaShareTypeSpec,
 		allocatedCapacityGbPerAZ[poolAZ] += pool.Capabilities.AllocatedCapacityGB
 
 		if p.reportSubcapacities["share_capacity"] {
-			shareSubcapacities = append(shareSubcapacities, manilaSubcapacity{
+			shareSubcapacities = append(shareSubcapacities, storagePoolSubcapacity{
 				PoolName:         pool.Name,
 				AvailabilityZone: poolAZ,
 				CapacityGiB:      getShareCapacity(pool.Capabilities.TotalCapacityGB, capBalance),
@@ -210,7 +211,7 @@ func (p *capacityManilaPlugin) scrapeForShareType(shareType ManilaShareTypeSpec,
 			})
 		}
 		if p.reportSubcapacities["snapshot_capacity"] {
-			snapshotSubcapacities = append(snapshotSubcapacities, manilaSubcapacity{
+			snapshotSubcapacities = append(snapshotSubcapacities, storagePoolSubcapacity{
 				PoolName:         pool.Name,
 				AvailabilityZone: poolAZ,
 				CapacityGiB:      getSnapshotCapacity(pool.Capabilities.TotalCapacityGB, capBalance),

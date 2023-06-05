@@ -41,6 +41,8 @@ type capacityCinderPlugin struct {
 		VolumeBackendName string `yaml:"volume_backend_name"`
 		IsDefault         bool   `yaml:"default"`
 	} `yaml:"volume_types"`
+	//computed state
+	reportSubcapacities map[string]bool `yaml:"-"`
 	//connections
 	CinderV3 *gophercloud.ServiceClient `yaml:"-"`
 }
@@ -51,6 +53,8 @@ func init() {
 
 // Init implements the core.CapacityPlugin interface.
 func (p *capacityCinderPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubcapacities map[string]map[string]bool) (err error) {
+	p.reportSubcapacities = scrapeSubcapacities["volumev2"]
+
 	if len(p.VolumeTypes) == 0 {
 		//nolint:stylecheck //Cinder is a proper name
 		return errors.New("Cinder capacity plugin: missing required configuration field cinder.volume_types")
@@ -133,40 +137,40 @@ func (p *capacityCinderPlugin) Scrape() (result map[string]map[string]core.Capac
 	}
 
 	//add results from scheduler-stats
-	for _, element := range poolData.StoragePools {
+	for _, pool := range poolData.StoragePools {
 		//do not consider pools that are slated for decommissioning (state "drain")
 		//or reserved for absorbing payloads from draining pools (state "reserved")
 		//(no quota should be given out for such capacity)
-		state := element.Capabilities.CustomAttributes.CinderState
+		state := pool.Capabilities.CustomAttributes.CinderState
 		if state == "drain" || state == "reserved" {
 			logg.Info("Cinder capacity plugin: skipping pool %q with %g GiB capacity because of cinder_state %q",
-				element.Name, element.Capabilities.TotalCapacityGB, state)
+				pool.Name, pool.Capabilities.TotalCapacityGB, state)
 			continue
 		}
 
-		volumeType, ok := volumeTypesByBackendName[element.Capabilities.VolumeBackendName]
+		volumeType, ok := volumeTypesByBackendName[pool.Capabilities.VolumeBackendName]
 		if !ok {
-			logg.Info("Cinder capacity plugin: skipping pool %q with unknown volume_backend_name %q", element.Name, element.Capabilities.VolumeBackendName)
+			logg.Info("Cinder capacity plugin: skipping pool %q with unknown volume_backend_name %q", pool.Name, pool.Capabilities.VolumeBackendName)
 			continue
 		}
 
-		logg.Debug("Cinder capacity plugin: considering pool %q with volume_backend_name %q for volume type %q", element.Name, element.Capabilities.VolumeBackendName, volumeType)
+		logg.Debug("Cinder capacity plugin: considering pool %q with volume_backend_name %q for volume type %q", pool.Name, pool.Capabilities.VolumeBackendName, volumeType)
 
 		resourceName := p.makeResourceName(volumeType)
-		capaData[resourceName].Capacity += uint64(element.Capabilities.TotalCapacityGB)
+		capaData[resourceName].Capacity += uint64(pool.Capabilities.TotalCapacityGB)
 
 		var poolAZ string
 		for az, hosts := range serviceHostsPerAZ {
 			for _, v := range hosts {
-				//element.Name has the format backendHostname@backendName#backendPoolName
-				if strings.Contains(element.Name, v) {
+				//pool.Name has the format backendHostname@backendName#backendPoolName
+				if strings.Contains(pool.Name, v) {
 					poolAZ = az
 					break
 				}
 			}
 		}
 		if poolAZ == "" {
-			logg.Info("Cinder storage pool %q does not match any service host", element.Name)
+			logg.Info("Cinder storage pool %q does not match any service host", pool.Name)
 			poolAZ = "unknown"
 		}
 		if _, ok := capaData[resourceName].CapacityPerAZ[poolAZ]; !ok {
@@ -174,8 +178,17 @@ func (p *capacityCinderPlugin) Scrape() (result map[string]map[string]core.Capac
 		}
 
 		azCapaData := capaData[resourceName].CapacityPerAZ[poolAZ]
-		azCapaData.Capacity += uint64(element.Capabilities.TotalCapacityGB)
-		azCapaData.Usage += uint64(element.Capabilities.AllocatedCapacityGB)
+		azCapaData.Capacity += uint64(pool.Capabilities.TotalCapacityGB)
+		azCapaData.Usage += uint64(pool.Capabilities.AllocatedCapacityGB)
+
+		if p.reportSubcapacities["capacity"] {
+			capaData[resourceName].Subcapacities = append(capaData[resourceName].Subcapacities, storagePoolSubcapacity{
+				PoolName:         pool.Name,
+				AvailabilityZone: poolAZ,
+				CapacityGiB:      uint64(pool.Capabilities.TotalCapacityGB),
+				UsageGiB:         uint64(pool.Capabilities.AllocatedCapacityGB),
+			})
+		}
 	}
 
 	capaDataFinal := make(map[string]core.CapacityData)
