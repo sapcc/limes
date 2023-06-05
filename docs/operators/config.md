@@ -589,6 +589,8 @@ capacitors:
       volume_types:
         vmware:     { volume_backend_name: vmware_ssd, default: true }
         vmware_hdd: { volume_backend_name: vmware_hdd, default: false }
+subcapacities:
+  - volumev2/capacity
 ```
 
 | Resource | Method |
@@ -598,6 +600,16 @@ capacitors:
 
 No estimates are made for the `snapshots` and `volumes` resources since capacity highly depends on
 the concrete Cinder backend.
+
+When subcapacity scraping is enabled (as shown above), subcapacities will be scraped for the respective resources. Each
+subcapacity corresponds to one Cinder pool, and bears the following attributes:
+
+| Name | Type | Comment |
+| --- | --- | --- |
+| `pool_name` | string | The pool name as reported by Cinder. |
+| `az` | string | The pool's availability zone. The AZ is determined by matching the pool's hostname against the list of services configured in Cinder. |
+| `capacity_gib` | integer | Total capacity of this pool in GiB. This corresponds to the pool's `total_capacity_gb` attribute in Cinder. |
+| `usage_gib` | integer | Usage level of this pool in GiB. This corresponds to the pool's `allocated_capacity_gb` attribute in Cinder. |
 
 ### `manila`
 
