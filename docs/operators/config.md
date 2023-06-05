@@ -617,6 +617,9 @@ capacitors:
     shares_per_pool: 1000
     snapshots_per_share: 5
     capacity_balance: 0.5
+subcapacities:
+  - sharev2/share_capacity
+  - sharev2/snapshot_capacity
 ```
 
 | Resource | Method |
@@ -634,6 +637,16 @@ considering pools with that share type.
 
 The `mapping_rules` inside a share type have the same semantics as for the `sharev2` quota plugin, and must be set
 identically to ensure that the capacity values make sense in context.
+
+When subcapacity scraping is enabled (as shown above), subcapacities will be scraped for the respective resources. Each
+subcapacity corresponds to one Manila pool, and bears the following attributes:
+
+| Name | Type | Comment |
+| --- | --- | --- |
+| `pool_name` | string | The pool name as reported by Manila. |
+| `az` | string | The pool's availability zone. The AZ is determined by matching the pool's hostname against the list of services configured in Manila. |
+| `capacity_gib` | integer | Total capacity for shares/snapshots in GiB. This is based on the pool's `total_capacity_gb` attribute in Manila. |
+| `usage_gib` | integer | Usage level for shares/snapshots in GiB. This is based on the pool's `allocated_capacity_gb` attribute in Manila. |
 
 #### Capacity balance
 

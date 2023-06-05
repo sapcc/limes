@@ -41,8 +41,17 @@ type capacityManilaPlugin struct {
 	SharesPerPool     uint64                `yaml:"shares_per_pool"`
 	SnapshotsPerShare uint64                `yaml:"snapshots_per_share"`
 	CapacityBalance   float64               `yaml:"capacity_balance"`
+	//computed state
+	reportSubcapacities map[string]bool `yaml:"-"`
 	//connections
 	ManilaV2 *gophercloud.ServiceClient `yaml:"-"`
+}
+
+type manilaSubcapacity struct {
+	PoolName         string `json:"pool_name"`
+	AvailabilityZone string `json:"az"`
+	CapacityGiB      uint64 `json:"capacity_gib"`
+	UsageGiB         uint64 `json:"usage_gib"`
 }
 
 func init() {
@@ -51,6 +60,8 @@ func init() {
 
 // Init implements the core.CapacityPlugin interface.
 func (p *capacityManilaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubcapacities map[string]map[string]bool) (err error) {
+	p.reportSubcapacities = scrapeSubcapacities["sharev2"]
+
 	if len(p.ShareTypes) == 0 {
 		return errors.New("capacity plugin manila: missing required configuration field manila.share_types")
 	}
@@ -159,10 +170,18 @@ func (p *capacityManilaPlugin) scrapeForShareType(shareType ManilaShareTypeSpec,
 		allPools = append(allPools, pools...)
 	}
 
+	//NOTE: The value of `p.CapacityBalance` is how many capacity we give out
+	//to snapshots as a fraction of the capacity given out to shares. For
+	//example, with CapacityBalance = 2, we allocate 2/3 of the total capacity to
+	//snapshots, and 1/3 to shares.
+	capBalance := p.CapacityBalance
+
 	//count pools and their capacities
 	var (
-		totalPoolCount  = uint64(len(allPools))
-		totalCapacityGb = float64(0)
+		totalPoolCount        = uint64(len(allPools))
+		totalCapacityGb       = float64(0)
+		shareSubcapacities    []any
+		snapshotSubcapacities []any
 
 		availabilityZones        = make(map[string]bool)
 		poolCountPerAZ           = make(map[string]uint64)
@@ -181,13 +200,24 @@ func (p *capacityManilaPlugin) scrapeForShareType(shareType ManilaShareTypeSpec,
 		poolCountPerAZ[poolAZ]++
 		totalCapacityGbPerAZ[poolAZ] += pool.Capabilities.TotalCapacityGB
 		allocatedCapacityGbPerAZ[poolAZ] += pool.Capabilities.AllocatedCapacityGB
-	}
 
-	//NOTE: The value of `p.CapacityBalance` is how many capacity we give out
-	//to snapshots as a fraction of the capacity given out to shares. For
-	//example, with CapacityBalance = 2, we allocate 2/3 of the total capacity to
-	//snapshots, and 1/3 to shares.
-	capBalance := p.CapacityBalance
+		if p.reportSubcapacities["share_capacity"] {
+			shareSubcapacities = append(shareSubcapacities, manilaSubcapacity{
+				PoolName:         pool.Name,
+				AvailabilityZone: poolAZ,
+				CapacityGiB:      getShareCapacity(pool.Capabilities.TotalCapacityGB, capBalance),
+				UsageGiB:         getShareCapacity(pool.Capabilities.AllocatedCapacityGB, capBalance),
+			})
+		}
+		if p.reportSubcapacities["snapshot_capacity"] {
+			snapshotSubcapacities = append(snapshotSubcapacities, manilaSubcapacity{
+				PoolName:         pool.Name,
+				AvailabilityZone: poolAZ,
+				CapacityGiB:      getSnapshotCapacity(pool.Capabilities.TotalCapacityGB, capBalance),
+				UsageGiB:         getSnapshotCapacity(pool.Capabilities.AllocatedCapacityGB, capBalance),
+			})
+		}
+	}
 
 	//derive availability zone usage and capacities
 	var (
@@ -224,8 +254,8 @@ func (p *capacityManilaPlugin) scrapeForShareType(shareType ManilaShareTypeSpec,
 	return capacityForShareType{
 		Shares:            core.CapacityData{Capacity: totalShareCount, CapacityPerAZ: shareCountPerAZ},
 		Snapshots:         core.CapacityData{Capacity: totalShareSnapshots, CapacityPerAZ: shareSnapshotsPerAZ},
-		ShareGigabytes:    core.CapacityData{Capacity: totalShareCapacity, CapacityPerAZ: shareCapacityPerAZ},
-		SnapshotGigabytes: core.CapacityData{Capacity: totalSnapshotCapacity, CapacityPerAZ: snapshotCapacityPerAZ},
+		ShareGigabytes:    core.CapacityData{Capacity: totalShareCapacity, CapacityPerAZ: shareCapacityPerAZ, Subcapacities: shareSubcapacities},
+		SnapshotGigabytes: core.CapacityData{Capacity: totalSnapshotCapacity, CapacityPerAZ: snapshotCapacityPerAZ, Subcapacities: snapshotSubcapacities},
 	}, nil
 }
 
