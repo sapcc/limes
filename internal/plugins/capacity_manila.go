@@ -53,6 +53,8 @@ type storagePoolSubcapacity struct {
 	AvailabilityZone string `json:"az"`
 	CapacityGiB      uint64 `json:"capacity_gib"`
 	UsageGiB         uint64 `json:"usage_gib"`
+	//Manila only (SAP-specific extension)
+	ExclusionReason string `json:"exclusion_reason"`
 }
 
 func init() {
@@ -190,33 +192,59 @@ func (p *capacityManilaPlugin) scrapeForShareType(shareType ManilaShareTypeSpec,
 		allocatedCapacityGbPerAZ = make(map[string]float64)
 	)
 	for _, pool := range allPools {
-		totalCapacityGb += pool.Capabilities.TotalCapacityGB
+		isIncluded := true
+		if pool.Capabilities.HardwareState != "" {
+			var ok bool
+			isIncluded, ok = manilaIncludeByHardwareState[pool.Capabilities.HardwareState]
+			if !ok {
+				logg.Error("Manila storage pool %q (share type %q) has unknown hardware_state value: %q",
+					pool.Name, shareType.Name, pool.Capabilities.HardwareState)
+				continue
+			}
+			if !isIncluded {
+				logg.Info("ignoring Manila storage pool %q (share type %q) because of hardware_state value: %q",
+					pool.Name, shareType.Name, pool.Capabilities.HardwareState)
+			}
+		}
 
 		poolAZ := azForServiceHost[pool.Host]
 		if poolAZ == "" {
 			logg.Info("Manila storage pool %q (share type %q) does not match any service host", pool.Name, shareType.Name)
 			poolAZ = "unknown"
 		}
-		availabilityZones[poolAZ] = true
-		poolCountPerAZ[poolAZ]++
-		totalCapacityGbPerAZ[poolAZ] += pool.Capabilities.TotalCapacityGB
-		allocatedCapacityGbPerAZ[poolAZ] += pool.Capabilities.AllocatedCapacityGB
+
+		if isIncluded {
+			totalCapacityGb += pool.Capabilities.TotalCapacityGB
+
+			availabilityZones[poolAZ] = true
+			poolCountPerAZ[poolAZ]++
+			totalCapacityGbPerAZ[poolAZ] += pool.Capabilities.TotalCapacityGB
+			allocatedCapacityGbPerAZ[poolAZ] += pool.Capabilities.AllocatedCapacityGB
+		}
 
 		if p.reportSubcapacities["share_capacity"] {
-			shareSubcapacities = append(shareSubcapacities, storagePoolSubcapacity{
+			subcapa := storagePoolSubcapacity{
 				PoolName:         pool.Name,
 				AvailabilityZone: poolAZ,
 				CapacityGiB:      getShareCapacity(pool.Capabilities.TotalCapacityGB, capBalance),
 				UsageGiB:         getShareCapacity(pool.Capabilities.AllocatedCapacityGB, capBalance),
-			})
+			}
+			if !isIncluded {
+				subcapa.ExclusionReason = "hardware_state = " + pool.Capabilities.HardwareState
+			}
+			shareSubcapacities = append(shareSubcapacities, subcapa)
 		}
 		if p.reportSubcapacities["snapshot_capacity"] {
-			snapshotSubcapacities = append(snapshotSubcapacities, storagePoolSubcapacity{
+			subcapa := storagePoolSubcapacity{
 				PoolName:         pool.Name,
 				AvailabilityZone: poolAZ,
 				CapacityGiB:      getSnapshotCapacity(pool.Capabilities.TotalCapacityGB, capBalance),
 				UsageGiB:         getSnapshotCapacity(pool.Capabilities.AllocatedCapacityGB, capBalance),
-			})
+			}
+			if !isIncluded {
+				subcapa.ExclusionReason = "hardware_state = " + pool.Capabilities.HardwareState
+			}
+			snapshotSubcapacities = append(snapshotSubcapacities, subcapa)
 		}
 	}
 
@@ -284,6 +312,25 @@ func getSnapshotCapacity(capGB, capBalance float64) uint64 {
 ////////////////////////////////////////////////////////////////////////////////
 // We need a custom type for Pool.Capabilities to support CCloud-specific fields.
 
+// key = value for hardware_state capability
+// value = whether pools with this state count towards the reported capacity
+var manilaIncludeByHardwareState = map[string]bool{
+	// Default value.
+	"live": true,
+	// Pool is in buildup. At that phase, Manila already knows this storage
+	// backend, but it is not handed out to customers. Shares are only deployable
+	// with custom share type `integration` for integration testing. Capacity
+	// should not yet be handed out.
+	"in_build": false,
+	// Pool will be decommissioned soon. Still serving customer shares, but drain
+	// is ongoing. Capacity should no longer be handed out.
+	"in_decom": false,
+	// Pool is meant as replacement for another pool in_decom. Capacity should
+	// not be handed out. Will only be used in tight situations to ensure there
+	// is enough capacity to drain backend in decommissioning.
+	"replacing_decom": false,
+}
+
 // manilaPool is a custom extension of the type `schedulerstats.Pool`.
 type manilaPool struct {
 	Name         string `json:"name"`
@@ -293,7 +340,7 @@ type manilaPool struct {
 		TotalCapacityGB     float64 `json:"total_capacity_gb"`
 		AllocatedCapacityGB float64 `json:"allocated_capacity_gb"`
 		//CCloud extension fields
-		//TODO: hardware_state (coming soon)
+		HardwareState string `json:"hardware_state"`
 	} `json:"capabilities,omitempty"`
 }
 
