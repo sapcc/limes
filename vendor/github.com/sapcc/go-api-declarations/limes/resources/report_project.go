@@ -65,7 +65,7 @@ type ProjectResourceReport struct {
 	Scaling                *ScalingBehavior       `json:"scales_with,omitempty"`
 	//Annotations may contain arbitrary metadata that was configured for this
 	//resource in this scope by Limes' operator.
-	Annotations map[string]interface{} `json:"annotations,omitempty"`
+	Annotations map[string]any `json:"annotations,omitempty"`
 }
 
 // ProjectServiceReports provides fast lookup of services using a map, but serializes

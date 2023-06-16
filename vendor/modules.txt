@@ -149,7 +149,7 @@ github.com/rabbitmq/amqp091-go
 # github.com/rs/cors v1.9.0
 ## explicit; go 1.13
 github.com/rs/cors
-# github.com/sapcc/go-api-declarations v1.5.1
+# github.com/sapcc/go-api-declarations v1.6.0
 ## explicit; go 1.20
 github.com/sapcc/go-api-declarations/bininfo
 github.com/sapcc/go-api-declarations/cadf
