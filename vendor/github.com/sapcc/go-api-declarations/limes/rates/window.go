@@ -129,7 +129,7 @@ func (w *Window) UnmarshalJSON(buf []byte) error {
 
 // UnmarshalYAML implements the yaml.Unmarshaler interface. This method validates
 // that windows in the config file are valid.
-func (w *Window) UnmarshalYAML(unmarshal func(interface{}) error) error {
+func (w *Window) UnmarshalYAML(unmarshal func(any) error) error {
 	var s string
 	err := unmarshal(&s)
 	if err != nil {

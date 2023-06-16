@@ -63,7 +63,7 @@ var allValidUnits = []Unit{
 
 // UnmarshalYAML implements the yaml.Unmarshaler interface. This method validates
 // that units in the config file actually exist.
-func (u *Unit) UnmarshalYAML(unmarshal func(interface{}) error) error {
+func (u *Unit) UnmarshalYAML(unmarshal func(any) error) error {
 	var s string
 	err := unmarshal(&s)
 	if err != nil {
