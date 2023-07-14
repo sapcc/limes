@@ -23,12 +23,11 @@ golangciLint:
   createConfig: true
 
 githubWorkflow:
-  global:
-    ignorePaths:
-      - "**.md" # all Markdown files
   ci:
     enabled: true
     coveralls: true
+    ignorePaths:
+      - "**.md" # all Markdown files
     postgres:
       enabled: true
   license:
@@ -37,7 +36,6 @@ githubWorkflow:
     enabled: true
   spellCheck:
     enabled: true
-    ignorePaths: [] # override global setting so that nothing is ignored
 
 renovate:
   enabled: true
