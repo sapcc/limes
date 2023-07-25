@@ -368,6 +368,20 @@ The area for this service is `email`. This service has no resources, only rates.
 | `data_transfer_out` | bytes | Total size of outgoing emails. |
 | `recipients` | countable | Number of recipients on outgoing emails. |
 
+### `endpoint-services`: [Archer](https://github.com/sapcc/archer) v1
+
+```yaml
+services:
+  - type: endpoint-services
+```
+
+The area for this service is `network`.
+
+| Resource | Unit |
+| --- | --- |
+| `endpoints` | countable |
+| `services` | countable |
+
 ### `keppel`: Keppel v1
 
 ```
