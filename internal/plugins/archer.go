@@ -39,14 +39,12 @@ type archerPlugin struct {
 
 var archerResources = []limesresources.ResourceInfo{
 	{
-		Name:     "endpoints",
-		Unit:     limes.UnitNone,
-		Category: "networking",
+		Name: "endpoints",
+		Unit: limes.UnitNone,
 	},
 	{
-		Name:     "services",
-		Unit:     limes.UnitNone,
-		Category: "networking",
+		Name: "services",
+		Unit: limes.UnitNone,
 	},
 }
 
