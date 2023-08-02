@@ -313,6 +313,7 @@ func findProjectForTesting(cluster *core.Cluster, projectUUID string) (core.Keys
 func dumpGeneratedPrometheusMetrics() {
 	metricFamilies, err := prometheus.DefaultGatherer.Gather()
 	if err != nil {
+		//nolint:errorlint // not applicable
 		if merr, ok := err.(prometheus.MultiError); ok {
 			for _, err := range merr {
 				logg.Error("error while gathering Prometheus metrics: " + err.Error())

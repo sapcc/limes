@@ -714,6 +714,7 @@ func (p *novaPlugin) findOSTypeForImage(imageID string) (string, error) {
 	err := images.Get(p.GlanceV2, imageID).ExtractInto(&result)
 	if err != nil {
 		//report a dummy value if image has been deleted...
+		//nolint:errorlint // not applicable
 		if _, ok := err.(gophercloud.ErrDefault404); ok {
 			return "image-deleted", nil
 		}

@@ -259,6 +259,7 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 	//validate inputs (within the DB transaction, to ensure that we do not apply
 	//inconsistent values later)
 	err := updater.ValidateInput(serviceQuotas, dbi)
+	//nolint:errorlint // not applicable
 	if _, ok := err.(MissingProjectReportError); ok {
 		//MissingProjectReportError indicates that the project is new and initial
 		//scraping is not yet done -> ask the user to wait until that's done, with
