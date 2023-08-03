@@ -19,7 +19,11 @@
 
 package promquery
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/sapcc/go-bits/errext"
+)
 
 // NoRowsError is returned by PrometheusClient.GetSingleValue()
 // if there were no result values at all.
@@ -34,9 +38,5 @@ func (e NoRowsError) Error() string {
 
 // IsErrNoRows checks whether the given error is a NoRowsError.
 func IsErrNoRows(err error) bool {
-	if err == nil {
-		return false
-	}
-	_, ok := err.(NoRowsError)
-	return ok
+	return errext.IsOfType[NoRowsError](err)
 }

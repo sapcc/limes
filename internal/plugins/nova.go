@@ -44,6 +44,7 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-bits/errext"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/regexpext"
 
@@ -714,8 +715,7 @@ func (p *novaPlugin) findOSTypeForImage(imageID string) (string, error) {
 	err := images.Get(p.GlanceV2, imageID).ExtractInto(&result)
 	if err != nil {
 		//report a dummy value if image has been deleted...
-		//nolint:errorlint // a type cast is clearer than errors.As()
-		if _, ok := err.(gophercloud.ErrDefault404); ok {
+		if errext.IsOfType[gophercloud.ErrDefault404](err) {
 			return "image-deleted", nil
 		}
 		//otherwise, try to GET image again during next scrape

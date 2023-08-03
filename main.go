@@ -39,6 +39,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/cors"
 	"github.com/sapcc/go-api-declarations/bininfo"
+	"github.com/sapcc/go-bits/errext"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/httpext"
 	"github.com/sapcc/go-bits/logg"
@@ -313,8 +314,7 @@ func findProjectForTesting(cluster *core.Cluster, projectUUID string) (core.Keys
 func dumpGeneratedPrometheusMetrics() {
 	metricFamilies, err := prometheus.DefaultGatherer.Gather()
 	if err != nil {
-		//nolint:errorlint // a type cast is clearer than errors.As()
-		if merr, ok := err.(prometheus.MultiError); ok {
+		if merr, ok := errext.As[prometheus.MultiError](err); ok {
 			for _, err := range merr {
 				logg.Error("error while gathering Prometheus metrics: " + err.Error())
 			}

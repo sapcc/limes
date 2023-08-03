@@ -32,6 +32,7 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-bits/errext"
 	"github.com/sapcc/go-bits/logg"
 
 	"github.com/sapcc/limes/internal/core"
@@ -160,12 +161,11 @@ func (p *neutronPlugin) Init(provider *gophercloud.ProviderClient, eo gopherclou
 			continue
 		}
 		_, err := extensions.Get(p.NeutronV2, resource.Extension).Extract()
-		//nolint:errorlint // a type cast is clearer than errors.As()
-		switch err.(type) {
-		case gophercloud.ErrDefault404:
-			p.hasExtension[resource.Extension] = false
-		case nil:
+		switch {
+		case err == nil:
 			p.hasExtension[resource.Extension] = true
+		case errext.IsOfType[gophercloud.ErrDefault404](err):
+			p.hasExtension[resource.Extension] = false
 		default:
 			return fmt.Errorf("cannot check for %q support in Neutron: %w", resource.Extension, err)
 		}
@@ -174,12 +174,11 @@ func (p *neutronPlugin) Init(provider *gophercloud.ProviderClient, eo gopherclou
 
 	// Octavia supported?
 	p.OctaviaV2, err = openstack.NewLoadBalancerV2(provider, eo)
-	//nolint:errorlint // a type cast is clearer than errors.As()
-	switch err.(type) {
-	case *gophercloud.ErrEndpointNotFound:
-		p.hasOctavia = false
-	case nil:
+	switch {
+	case err == nil:
 		p.hasOctavia = true
+	case errext.IsOfType[*gophercloud.ErrEndpointNotFound](err):
+		p.hasOctavia = false
 	default:
 		return err
 	}
