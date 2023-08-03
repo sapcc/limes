@@ -203,7 +203,7 @@ func (p *v1Provider) FindDomainFromRequest(w http.ResponseWriter, r *http.Reques
 	var domain db.Domain
 	err := p.DB.SelectOne(&domain, `SELECT * FROM domains WHERE uuid = $1`, domainUUID)
 	switch {
-	case err == sql.ErrNoRows:
+	case errors.Is(err, sql.ErrNoRows):
 		http.Error(w, "no such domain (if it was just created, try to POST /domains/discover)", http.StatusNotFound)
 		return nil
 	case respondwith.ErrorText(w, err):
@@ -241,7 +241,7 @@ func (p *v1Provider) FindProjectFromRequestIfExists(w http.ResponseWriter, r *ht
 	project = &db.Project{}
 	err := p.DB.SelectOne(project, `SELECT * FROM projects WHERE uuid = $1`, projectUUID)
 	switch {
-	case err == sql.ErrNoRows:
+	case errors.Is(err, sql.ErrNoRows):
 		return nil, true
 	case err == nil && domain.ID != project.DomainID:
 		http.Error(w, "no such project", http.StatusNotFound)

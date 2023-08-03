@@ -22,6 +22,7 @@ package collector
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -85,7 +86,7 @@ func (c *Collector) Scrape(serviceType string) {
 		dbDomain, dbProject, srv, err := c.selectProjectForResourceScrape(serviceType, scrapeStartedAt)
 		if err != nil {
 			//ErrNoRows is okay; it just means that nothing needs scraping right now
-			if err != sql.ErrNoRows {
+			if !errors.Is(err, sql.ErrNoRows) {
 				c.LogError("cannot select next project for which to scrape %s resource data: %s", serviceType, err.Error())
 			}
 			if c.Once {

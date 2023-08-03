@@ -160,6 +160,7 @@ func (p *neutronPlugin) Init(provider *gophercloud.ProviderClient, eo gopherclou
 			continue
 		}
 		_, err := extensions.Get(p.NeutronV2, resource.Extension).Extract()
+		//nolint:errorlint // a type cast is clearer than errors.As()
 		switch err.(type) {
 		case gophercloud.ErrDefault404:
 			p.hasExtension[resource.Extension] = false
@@ -173,6 +174,7 @@ func (p *neutronPlugin) Init(provider *gophercloud.ProviderClient, eo gopherclou
 
 	// Octavia supported?
 	p.OctaviaV2, err = openstack.NewLoadBalancerV2(provider, eo)
+	//nolint:errorlint // a type cast is clearer than errors.As()
 	switch err.(type) {
 	case *gophercloud.ErrEndpointNotFound:
 		p.hasOctavia = false

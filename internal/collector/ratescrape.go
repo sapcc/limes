@@ -21,6 +21,7 @@ package collector
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"math/big"
 	"time"
@@ -83,7 +84,7 @@ func (c *Collector) ScrapeRates(serviceType string) {
 			Scan(&serviceID, &serviceRatesScrapedAt, &serviceRatesScrapeState, &project.Name, &project.UUID, &project.ParentUUID, &project.Domain.Name, &project.Domain.UUID)
 		if err != nil {
 			//ErrNoRows is okay; it just means that nothing needs scraping right now
-			if err != sql.ErrNoRows {
+			if !errors.Is(err, sql.ErrNoRows) {
 				c.LogError("cannot select next project for which to scrape %s rate data: %s", serviceType, err.Error())
 			}
 			if c.Once {
