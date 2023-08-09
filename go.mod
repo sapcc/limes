@@ -1,6 +1,6 @@
 module github.com/sapcc/limes
 
-go 1.20
+go 1.21
 
 require (
 	github.com/databus23/goslo.policy v0.0.0-20210929125152-81bf2876dbdb
@@ -16,7 +16,6 @@ require (
 	github.com/sapcc/go-api-declarations v1.7.0
 	github.com/sapcc/go-bits v0.0.0-20230803125152-91a869119633
 	go.uber.org/automaxprocs v1.5.3
-	golang.org/x/exp v0.0.0-20230807204917-050eac23e9de
 	gopkg.in/yaml.v2 v2.4.0
 )
 
