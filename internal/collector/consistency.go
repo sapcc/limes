@@ -44,11 +44,13 @@ func (c *Collector) CheckConsistencyJob(registerer prometheus.Registerer) jobloo
 		Interval: 1 * time.Hour,
 		// When new services or resources are added, we need this job to create the respective DB entries immediately upon deployment.
 		InitialDelay: 10 * time.Second,
-		Task:         c.checkConsistencyCluster,
+		Task: func(ctx context.Context, _ prometheus.Labels) error {
+			return c.CheckConsistencyCluster(ctx)
+		},
 	}).Setup(registerer)
 }
 
-func (c *Collector) checkConsistencyCluster(_ context.Context, _ prometheus.Labels) error {
+func (c *Collector) CheckConsistencyCluster(_ context.Context) error {
 	//check cluster_services entries
 	var services []db.ClusterService
 	_, err := c.DB.Select(&services, `SELECT * FROM cluster_services`)
