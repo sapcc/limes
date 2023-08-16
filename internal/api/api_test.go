@@ -36,7 +36,6 @@ import (
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
-	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/internal/core"
@@ -141,9 +140,7 @@ func setupTest(t *testing.T, startData string) test.Setup {
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile(startData),
 		test.WithConfig(configYAML),
-		test.WithAPIHandler(NewV1API,
-			httpapi.WithGlobalMiddleware(ForbidClusterIDHeader),
-		),
+		test.WithAPIHandler(NewV1API),
 	)
 
 	//prepare test configuration
@@ -284,13 +281,6 @@ func Test_ClusterOperations(t *testing.T) {
 	}.Check(t, s.Handler)
 	assert.HTTPRequest{
 		Method:       "GET",
-		Path:         "/v1/clusters/current",
-		Header:       map[string]string{"X-Limes-Cluster-Id": "current"}, //still allowed for backwards compatibility
-		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west.json"),
-	}.Check(t, s.Handler)
-	assert.HTTPRequest{
-		Method:       "GET",
 		Path:         "/v1/clusters/current?service=unknown",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-no-services.json"),
@@ -385,15 +375,6 @@ func Test_DomainOperations(t *testing.T) {
 		Path:         "/v1/domains?service=shared&resource=things",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/domain-list-filtered.json"),
-	}.Check(t, s.Handler)
-
-	//check cross-cluster ListDomains
-	assert.HTTPRequest{
-		Method:       "GET",
-		Path:         "/v1/domains",
-		Header:       map[string]string{"X-Limes-Cluster-Id": "unknown"},
-		ExpectStatus: 400,
-		ExpectBody:   assert.StringData("multi-cluster support is removed: the X-Limes-Cluster-Id header is not allowed anymore\n"),
 	}.Check(t, s.Handler)
 
 	//check DiscoverDomains

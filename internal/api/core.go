@@ -147,19 +147,6 @@ func (p *v1Provider) AddTo(r *mux.Router) {
 	r.Methods("PUT").Path("/rates/v1/domains/{domain_id}/projects/{project_id}").HandlerFunc(p.PutProjectRates)
 }
 
-// ForbidClusterIDHeader is a global middleware that rejects the
-// X-Limes-Cluster-Id header (which was removed from the API spec).
-func ForbidClusterIDHeader(inner http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		clusterID := r.Header.Get("X-Limes-Cluster-Id")
-		if clusterID != "" && clusterID != "current" {
-			http.Error(w, "multi-cluster support is removed: the X-Limes-Cluster-Id header is not allowed anymore", http.StatusBadRequest)
-		} else {
-			inner.ServeHTTP(w, r)
-		}
-	})
-}
-
 // RequireJSON will parse the request body into the given data structure, or
 // write an error response if that fails.
 func RequireJSON(w http.ResponseWriter, r *http.Request, data interface{}) bool {
