@@ -429,7 +429,7 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject) (result map[string]cor
 					}
 				}
 
-				subResource := map[string]interface{}{
+				subResource := map[string]any{
 					"id":                instance.ID,
 					"name":              instance.Name,
 					"status":            instance.Status,
@@ -621,7 +621,7 @@ type novaFlavorInfo struct {
 	VCPUs        uint64            `json:"vcpus"`
 }
 
-func unpackFlavorData(input map[string]interface{}) (novaFlavorInfo, error) {
+func unpackFlavorData(input map[string]any) (novaFlavorInfo, error) {
 	buf, err := json.Marshal(input)
 	if err != nil {
 		return novaFlavorInfo{}, err
@@ -759,8 +759,8 @@ func (opts novaServerListOpts) ToServerListQuery() (string, error) {
 
 type novaQuotaUpdateOpts map[string]uint64
 
-func (opts novaQuotaUpdateOpts) ToComputeQuotaUpdateMap() (map[string]interface{}, error) {
-	return map[string]interface{}{"quota_set": opts}, nil
+func (opts novaQuotaUpdateOpts) ToComputeQuotaUpdateMap() (map[string]any, error) {
+	return map[string]any{"quota_set": opts}, nil
 }
 
 type novaServerIPData struct {

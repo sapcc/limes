@@ -134,7 +134,7 @@ func (p *archerPlugin) SetQuota(project core.KeystoneProject, quotas map[string]
 	url := p.Archer.ServiceURL("quotas", project.UUID)
 	expect200 := &gophercloud.RequestOpts{OkCodes: []int{200}}
 
-	body := map[string]interface{}{
+	body := map[string]any{
 		"endpoint": quotas["endpoints"],
 		"service":  quotas["services"],
 	}

@@ -374,7 +374,7 @@ func (p *manilaPlugin) SetQuota(project core.KeystoneProject, quotas map[string]
 
 	url := p.ManilaV2.ServiceURL("quota-sets", project.UUID)
 	logDebugSetQuota(project.UUID, "overall", overallQuotas)
-	_, err = p.ManilaV2.Put(url, map[string]interface{}{"quota_set": overallQuotas}, nil, expect200) //nolint:bodyclose // already closed by gophercloud
+	_, err = p.ManilaV2.Put(url, map[string]any{"quota_set": overallQuotas}, nil, expect200) //nolint:bodyclose // already closed by gophercloud
 	if err != nil {
 		return fmt.Errorf("could not set overall share quotas: %s", err.Error())
 	}
@@ -382,7 +382,7 @@ func (p *manilaPlugin) SetQuota(project core.KeystoneProject, quotas map[string]
 	for shareTypeName, quotasForType := range shareTypeQuotas {
 		logDebugSetQuota(project.UUID, shareTypeName, quotasForType)
 		url := p.ManilaV2.ServiceURL("quota-sets", project.UUID) + "?share_type=" + shareTypeName
-		_, err = p.ManilaV2.Put(url, map[string]interface{}{"quota_set": quotasForType}, nil, expect200) //nolint:bodyclose // already closed by gophercloud
+		_, err = p.ManilaV2.Put(url, map[string]any{"quota_set": quotasForType}, nil, expect200) //nolint:bodyclose // already closed by gophercloud
 		if err != nil {
 			return fmt.Errorf("could not set quotas for share type %q: %s", shareTypeName, err.Error())
 		}

@@ -38,7 +38,7 @@ type Collector struct {
 	Cluster *core.Cluster
 	DB      *gorp.DbMap
 	//Usually logg.Error, but can be changed inside unit tests.
-	LogError func(msg string, args ...interface{})
+	LogError func(msg string, args ...any)
 	//Usually time.Now, but can be changed inside unit tests.
 	TimeNow func() time.Time
 	//Usually addJitter, but can be changed inside unit tests.

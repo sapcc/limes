@@ -73,7 +73,7 @@ var (
 func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Project, dbi db.Interface, filter Filter, submit func(*limesresources.ProjectReport) error) error {
 	clusterCanBurst := cluster.Config.Bursting.MaxMultiplier > 0
 
-	fields := map[string]interface{}{"p.domain_id": domain.ID}
+	fields := map[string]any{"p.domain_id": domain.ID}
 	if project != nil {
 		fields["p.id"] = project.ID
 	}
@@ -217,7 +217,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 
 // GetProjectRates works just like GetProjects, except that rate data is returned instead of resource data.
 func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Project, dbi db.Interface, filter Filter, submit func(*limesrates.ProjectReport) error) error {
-	fields := map[string]interface{}{"p.domain_id": domain.ID}
+	fields := map[string]any{"p.domain_id": domain.ID}
 	if project != nil {
 		fields["p.id"] = project.ID
 	}

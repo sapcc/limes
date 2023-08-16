@@ -48,7 +48,7 @@ func (p *v1Provider) ListDomains(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondwith.JSON(w, 200, map[string]interface{}{"domains": domains})
+	respondwith.JSON(w, 200, map[string]any{"domains": domains})
 }
 
 // GetDomain handles GET /v1/domains/:domain_id.
@@ -67,7 +67,7 @@ func (p *v1Provider) GetDomain(w http.ResponseWriter, r *http.Request) {
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-	respondwith.JSON(w, 200, map[string]interface{}{"domain": domain})
+	respondwith.JSON(w, 200, map[string]any{"domain": domain})
 }
 
 // DiscoverDomains handles POST /v1/domains/discover.
@@ -88,7 +88,7 @@ func (p *v1Provider) DiscoverDomains(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	respondwith.JSON(w, 202, map[string]interface{}{"new_domains": util.IDsToJSON(newDomainUUIDs)})
+	respondwith.JSON(w, 202, map[string]any{"new_domains": util.IDsToJSON(newDomainUUIDs)})
 }
 
 // PutDomain handles PUT /v1/domains/:domain_id.
@@ -187,7 +187,7 @@ func (p *v1Provider) putOrSimulatePutDomain(w http.ResponseWriter, r *http.Reque
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-	var resourcesToUpdate []interface{}
+	var resourcesToUpdate []any
 
 	for _, srv := range services {
 		serviceRequests, exists := updater.Requests[srv.Type]

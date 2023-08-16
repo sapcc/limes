@@ -170,9 +170,9 @@ func (p *GenericQuotaPlugin) Scrape(project core.KeystoneProject) (result map[st
 
 	//make up some subresources for "things"
 	thingsUsage := int(result["things"].Usage)
-	subres := make([]interface{}, thingsUsage)
+	subres := make([]any, thingsUsage)
 	for idx := 0; idx < thingsUsage; idx++ {
-		subres[idx] = map[string]interface{}{
+		subres[idx] = map[string]any{
 			"index": idx,
 		}
 	}

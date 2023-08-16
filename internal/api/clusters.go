@@ -50,5 +50,5 @@ func (p *v1Provider) GetCluster(w http.ResponseWriter, r *http.Request) {
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-	respondwith.JSON(w, 200, map[string]interface{}{"cluster": cluster})
+	respondwith.JSON(w, 200, map[string]any{"cluster": cluster})
 }

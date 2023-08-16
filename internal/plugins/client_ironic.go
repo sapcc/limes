@@ -34,7 +34,7 @@ func ironicNodesListDetail(client *gophercloud.ServiceClient) pagination.Pager {
 }
 
 // Like `nodes.ExtractNodesInto()`, but casts into the correct pagination.Page type.
-func ironicExtractNodesInto(r pagination.Page, v interface{}) error {
+func ironicExtractNodesInto(r pagination.Page, v any) error {
 	return r.(ironicNodePage).Result.ExtractIntoSlicePtr(v, "nodes")
 }
 

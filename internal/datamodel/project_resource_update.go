@@ -37,7 +37,7 @@ type ProjectResourceUpdate struct {
 	//A custom callback that will be called once for each resource in the given service.
 	UpdateResource func(*db.ProjectResource) error
 	//If nil, logg.Error is used. Unit tests should give t.Errorf here.
-	LogError func(msg string, args ...interface{})
+	LogError func(msg string, args ...any)
 }
 
 // ProjectResourceUpdateResult is the return value for ProjectUpdate.Run().

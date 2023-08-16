@@ -140,7 +140,7 @@ func (f *quotaSetField) UnmarshalJSON(buf []byte) error {
 	return err
 }
 
-func (f quotaSetField) ToResourceData(subresources []interface{}) core.ResourceData {
+func (f quotaSetField) ToResourceData(subresources []any) core.ResourceData {
 	return core.ResourceData{
 		Quota:        f.Quota,
 		Usage:        f.Usage,

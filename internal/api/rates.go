@@ -53,7 +53,7 @@ func (p *v1Provider) GetClusterRates(w http.ResponseWriter, r *http.Request) {
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-	respondwith.JSON(w, 200, map[string]interface{}{"cluster": cluster})
+	respondwith.JSON(w, 200, map[string]any{"cluster": cluster})
 }
 
 // ListProjectRates handles GET /rates/v1/domains/:domain_id/projects.
@@ -103,7 +103,7 @@ func (p *v1Provider) GetProjectRates(w http.ResponseWriter, r *http.Request) {
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-	respondwith.JSON(w, 200, map[string]interface{}{"project": project})
+	respondwith.JSON(w, 200, map[string]any{"project": project})
 }
 
 // SyncProjectRates handles POST /v1/domains/:domain_id/projects/:project_id/sync.

@@ -87,7 +87,7 @@ func (p *v1Provider) GetProject(w http.ResponseWriter, r *http.Request) {
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-	respondwith.JSON(w, 200, map[string]interface{}{"project": project})
+	respondwith.JSON(w, 200, map[string]any{"project": project})
 }
 
 // DiscoverProjects handles POST /v1/domains/:domain_id/projects/discover.
@@ -112,7 +112,7 @@ func (p *v1Provider) DiscoverProjects(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 		return
 	}
-	respondwith.JSON(w, 202, map[string]interface{}{"new_projects": util.IDsToJSON(newProjectUUIDs)})
+	respondwith.JSON(w, 202, map[string]any{"new_projects": util.IDsToJSON(newProjectUUIDs)})
 }
 
 // SyncProject handles POST /v1/domains/:domain_id/projects/:project_id/sync.
@@ -397,7 +397,7 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 	//anything to do?
 	if project.HasBursting == hasBursting {
 		if simulate {
-			respondwith.JSON(w, http.StatusOK, map[string]interface{}{"success": true})
+			respondwith.JSON(w, http.StatusOK, map[string]any{"success": true})
 		} else {
 			w.WriteHeader(http.StatusAccepted)
 		}
@@ -413,7 +413,7 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 				FROM project_services ps
 				JOIN project_resources pr ON ps.id = pr.service_id
 			 WHERE ps.project_id = $1 AND pr.usage > pr.quota`
-		err := sqlext.ForeachRow(dbi, query, []interface{}{project.ID}, func(rows *sql.Rows) error {
+		err := sqlext.ForeachRow(dbi, query, []any{project.ID}, func(rows *sql.Rows) error {
 			var serviceType, resourceName string
 			err := rows.Scan(&serviceType, &resourceName)
 			overbookedResources = append(overbookedResources, serviceType+"/"+resourceName)
@@ -445,7 +445,7 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 
 	//we're about to change stuff
 	if simulate {
-		respondwith.JSON(w, http.StatusOK, map[string]interface{}{"success": true})
+		respondwith.JSON(w, http.StatusOK, map[string]any{"success": true})
 		return
 	}
 

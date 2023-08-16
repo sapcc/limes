@@ -29,10 +29,10 @@ import (
 //
 // If parameterOffset is not 0, start counting placeholders ("$1", "$2", etc.)
 // after that offset.
-func BuildSimpleWhereClause(fields map[string]interface{}, parameterOffset int) (queryFragment string, queryArgs []interface{}) {
+func BuildSimpleWhereClause(fields map[string]any, parameterOffset int) (queryFragment string, queryArgs []any) {
 	var (
 		conditions []string
-		args       []interface{}
+		args       []any
 	)
 	for field, val := range fields {
 		switch value := val.(type) {
@@ -41,7 +41,7 @@ func BuildSimpleWhereClause(fields map[string]interface{}, parameterOffset int) 
 			for _, v := range value {
 				args = append(args, v)
 			}
-		case []interface{}:
+		case []any:
 			conditions = append(conditions, fmt.Sprintf("%s IN (%s)", field, makePlaceholderList(len(value), len(args)+1+parameterOffset)))
 			args = append(args, value...)
 		default:

@@ -41,7 +41,7 @@ func (p *v1Provider) ListScrapeErrors(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondwith.JSON(w, http.StatusOK, map[string]interface{}{"scrape_errors": scrapeErrors})
+	respondwith.JSON(w, http.StatusOK, map[string]any{"scrape_errors": scrapeErrors})
 }
 
 // ListRateScrapeErrors handles GET /rates/v1/admin/scrape-errors.
@@ -57,5 +57,5 @@ func (p *v1Provider) ListRateScrapeErrors(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	respondwith.JSON(w, http.StatusOK, map[string]interface{}{"rate_scrape_errors": scrapeErrors})
+	respondwith.JSON(w, http.StatusOK, map[string]any{"rate_scrape_errors": scrapeErrors})
 }

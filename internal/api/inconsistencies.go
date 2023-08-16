@@ -41,5 +41,5 @@ func (p *v1Provider) ListInconsistencies(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	respondwith.JSON(w, 200, map[string]interface{}{"inconsistencies": inconsistencies})
+	respondwith.JSON(w, 200, map[string]any{"inconsistencies": inconsistencies})
 }

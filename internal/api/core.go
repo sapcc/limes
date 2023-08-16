@@ -112,13 +112,13 @@ func (p *v1Provider) AddTo(r *mux.Router) {
 	r.Methods("HEAD", "GET").Path("/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		httpapi.IdentifyEndpoint(r, "/")
 		httpapi.SkipRequestLog(r)
-		respondwith.JSON(w, 300, map[string]interface{}{"versions": []VersionData{p.VersionData}})
+		respondwith.JSON(w, 300, map[string]any{"versions": []VersionData{p.VersionData}})
 	})
 
 	r.Methods("GET").Path("/v1/").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		httpapi.IdentifyEndpoint(r, "/v1/")
 		httpapi.SkipRequestLog(r)
-		respondwith.JSON(w, 200, map[string]interface{}{"version": p.VersionData})
+		respondwith.JSON(w, 200, map[string]any{"version": p.VersionData})
 	})
 
 	r.Methods("GET").Path("/v1/clusters/current").HandlerFunc(p.GetCluster)
@@ -149,7 +149,7 @@ func (p *v1Provider) AddTo(r *mux.Router) {
 
 // RequireJSON will parse the request body into the given data structure, or
 // write an error response if that fails.
-func RequireJSON(w http.ResponseWriter, r *http.Request, data interface{}) bool {
+func RequireJSON(w http.ResponseWriter, r *http.Request, data any) bool {
 	err := json.NewDecoder(r.Body).Decode(data)
 	if err != nil {
 		http.Error(w, "request body is not valid JSON: "+err.Error(), http.StatusBadRequest)

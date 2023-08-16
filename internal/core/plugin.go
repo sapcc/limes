@@ -91,7 +91,7 @@ type ResourceData struct {
 	Quota         int64 //negative values indicate infinite quota
 	Usage         uint64
 	PhysicalUsage *uint64 //only supported by some plugins
-	Subresources  []interface{}
+	Subresources  []any
 }
 
 // QuotaPlugin is the interface that the quota/usage collector plugins for all
@@ -191,7 +191,7 @@ type QuotaPlugin interface {
 type CapacityData struct {
 	Capacity      uint64
 	CapacityPerAZ map[string]*CapacityDataForAZ
-	Subcapacities []interface{}
+	Subcapacities []any
 }
 
 // CapacityDataForAZ is the capacity data for a single resource in a single AZ.

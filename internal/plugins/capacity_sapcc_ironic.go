@@ -273,7 +273,7 @@ func (p *capacitySapccIronicPlugin) Scrape() (result map[string]map[string]core.
 				}
 
 				if p.reportSubcapacities {
-					sub := map[string]interface{}{
+					sub := map[string]any{
 						"id":              node.ID,
 						"name":            node.Name,
 						"provision_state": node.ProvisionState,

@@ -99,7 +99,7 @@ func (s *JSONListStream[T]) FinalizeDocument(err error) {
 		} else {
 			//this branch is reached when there are no items in the list and therefore
 			//Write() was never called, so we need to write the entire document now
-			respondwith.JSON(s.ResponseWriter, http.StatusOK, map[string]interface{}{s.OuterFieldName: []any{}})
+			respondwith.JSON(s.ResponseWriter, http.StatusOK, map[string]any{s.OuterFieldName: []any{}})
 			return
 		}
 	}

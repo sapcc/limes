@@ -72,8 +72,8 @@ type Interface interface {
 	sqlext.Executor
 
 	//from github.com/go-gorp/gorp
-	Insert(args ...interface{}) error
-	Update(args ...interface{}) (int64, error)
-	Delete(args ...interface{}) (int64, error)
-	Select(i interface{}, query string, args ...interface{}) ([]interface{}, error)
+	Insert(args ...any) error
+	Update(args ...any) (int64, error)
+	Delete(args ...any) (int64, error)
+	Select(i any, query string, args ...any) ([]any, error)
 }

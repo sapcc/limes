@@ -428,8 +428,8 @@ func (p *neutronPlugin) scrapeOctaviaUsage(projectID string) (map[string]uint64,
 type neutronOrOctaviaQuotaSet map[string]uint64
 
 // ToQuotaUpdateMap implements the neutron_quotas.UpdateOpts and octavia_quotas.UpdateOpts interfaces.
-func (q neutronOrOctaviaQuotaSet) ToQuotaUpdateMap() (map[string]interface{}, error) {
-	return map[string]interface{}{"quota": map[string]uint64(q)}, nil
+func (q neutronOrOctaviaQuotaSet) ToQuotaUpdateMap() (map[string]any, error) {
+	return map[string]any{"quota": map[string]uint64(q)}, nil
 }
 
 // IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.

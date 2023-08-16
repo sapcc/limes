@@ -146,7 +146,7 @@ func (p *capacityNovaPlugin) Scrape() (result map[string]map[string]core.Capacit
 		resourceNames   = []string{"cores", "instances", "ram"}
 		totalCapacity   partialNovaCapacity
 		azCapacities    = make(map[string]*partialNovaCapacity)
-		hvSubcapacities = make(map[string][]interface{})
+		hvSubcapacities = make(map[string][]any)
 	)
 
 	//foreach hypervisor...

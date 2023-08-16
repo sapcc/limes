@@ -68,11 +68,11 @@ func (p *StaticCapacityPlugin) Scrape() (result map[string]map[string]core.Capac
 		}
 	}
 
-	var subcapacities []interface{}
+	var subcapacities []any
 	if p.WithSubcapacities {
 		smallerHalf := p.Capacity / 3
 		largerHalf := p.Capacity - smallerHalf
-		subcapacities = []interface{}{
+		subcapacities = []any{
 			map[string]uint64{"smaller_half": smallerHalf},
 			map[string]uint64{"larger_half": largerHalf},
 		}

@@ -201,7 +201,7 @@ func Test_RateScrapeFailure(t *testing.T) {
 	}
 	//we will see an expected ERROR during testing, do not make the test fail because of this
 	expectedErrorRx := regexp.MustCompile(`^scrape unittest rate data for germany/(berlin|dresden) failed: ScrapeRates failed as requested$`)
-	c.LogError = func(msg string, args ...interface{}) {
+	c.LogError = func(msg string, args ...any) {
 		msg = fmt.Sprintf(msg, args...)
 		if expectedErrorRx.MatchString(msg) {
 			logg.Info(msg)

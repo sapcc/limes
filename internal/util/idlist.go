@@ -21,7 +21,7 @@ package util
 
 // IDsToJSON embeds a list of string IDs in a data structure that serializes to
 // JSON like [{"id":"first"},{"id":"second"}].
-func IDsToJSON(ids []string) interface{} {
+func IDsToJSON(ids []string) any {
 	type id struct {
 		ID string `json:"id"`
 	}

@@ -127,7 +127,7 @@ func (t novaFlavorTranslationTable) ListFlavorsWithSeparateInstanceQuota(compute
 	var body struct {
 		//NOTE: cannot use map[string]int64 here because this object contains the
 		//field "id": "default" (curse you, untyped JSON)
-		QuotaClassSet map[string]interface{} `json:"quota_class_set"`
+		QuotaClassSet map[string]any `json:"quota_class_set"`
 	}
 	err = result.ExtractInto(&body)
 	if err != nil {

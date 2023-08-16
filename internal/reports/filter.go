@@ -100,7 +100,7 @@ var filterPrepareRx = regexp.MustCompile(`{{AND ([a-z.]+) = \$(service_type|reso
 //
 //	{{AND some_table.some_field = $service_type}}
 //	{{AND some_table.some_field = $resource_name}}
-func (f Filter) PrepareQuery(query string) (preparedQuery string, args []interface{}) {
+func (f Filter) PrepareQuery(query string) (preparedQuery string, args []any) {
 	preparedQuery = filterPrepareRx.ReplaceAllStringFunc(query, func(matchStr string) string {
 		match := filterPrepareRx.FindStringSubmatch(matchStr)
 		values := f.ServiceTypes
@@ -112,7 +112,7 @@ func (f Filter) PrepareQuery(query string) (preparedQuery string, args []interfa
 			return ""
 		}
 
-		whereStr, queryArgs := db.BuildSimpleWhereClause(map[string]interface{}{match[1]: values}, len(args))
+		whereStr, queryArgs := db.BuildSimpleWhereClause(map[string]any{match[1]: values}, len(args))
 		args = append(args, queryArgs...)
 		return "AND " + whereStr
 	})
