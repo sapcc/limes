@@ -21,7 +21,6 @@ package collector
 
 import (
 	"sort"
-	"strings"
 	"testing"
 
 	"github.com/sapcc/go-bits/assert"
@@ -208,36 +207,4 @@ func Test_ScanDomains(t *testing.T) {
 		UPDATE domains SET name = 'germany-changed' WHERE id = 1 AND uuid = 'uuid-for-germany';
 		UPDATE projects SET name = 'berlin-changed' WHERE id = 1 AND uuid = 'uuid-for-berlin';
 	`)
-}
-
-func Test_listDomainsFiltered(t *testing.T) {
-	cluster := &core.Cluster{
-		DiscoveryPlugin: &plugins.StaticDiscoveryPlugin{
-			Domains: []core.KeystoneDomain{
-				{Name: "bar1"},
-				{Name: "bar2"},
-				{Name: "foo1"},
-				{Name: "foo2"},
-			},
-		},
-		Config: core.ClusterConfiguration{
-			Discovery: core.DiscoveryConfiguration{
-				IncludeDomainRx: "foo",
-				ExcludeDomainRx: "2$",
-			},
-		},
-	}
-
-	domains, err := (&Collector{Cluster: cluster}).listDomainsFiltered()
-	if err != nil {
-		t.Fatal("listDomainsFiltered failed with unexpected error:", err.Error())
-	}
-	names := make([]string, len(domains))
-	for idx, d := range domains {
-		names[idx] = d.Name
-	}
-	namesStr := strings.Join(names, " ")
-	if namesStr != "foo1" {
-		t.Errorf("expected only domain \"foo1\", but got \"%s\" instead", namesStr)
-	}
 }

@@ -69,6 +69,26 @@ type DiscoveryConfiguration struct {
 	Parameters      util.YamlRawMessage   `yaml:"params"`
 }
 
+// FilterDomains applies the configured ExcludeDomainRx and IncludeDomainRx to
+// the given list of domains.
+func (c DiscoveryConfiguration) FilterDomains(domains []KeystoneDomain) []KeystoneDomain {
+	result := make([]KeystoneDomain, 0, len(domains))
+	for _, domain := range domains {
+		if c.ExcludeDomainRx != "" {
+			if c.ExcludeDomainRx.MatchString(domain.Name) {
+				continue
+			}
+		}
+		if c.IncludeDomainRx != "" {
+			if !c.IncludeDomainRx.MatchString(domain.Name) {
+				continue
+			}
+		}
+		result = append(result, domain)
+	}
+	return result
+}
+
 // ServiceConfiguration describes a service that is enabled for a certain cluster.
 type ServiceConfiguration struct {
 	ServiceType string `yaml:"service_type"`

@@ -36,34 +36,6 @@ type ScanDomainsOpts struct {
 	ScanAllProjects bool
 }
 
-// This extends ListDomains() by handling of the {Include,Exclude}DomainRx. It's
-// a separate function for unit test accessibility.
-func (c *Collector) listDomainsFiltered() ([]core.KeystoneDomain, error) {
-	domains, err := c.Cluster.DiscoveryPlugin.ListDomains()
-	if err != nil {
-		return nil, err
-	}
-
-	result := make([]core.KeystoneDomain, 0, len(domains))
-	discovery := c.Cluster.Config.Discovery
-
-	for _, domain := range domains {
-		if discovery.ExcludeDomainRx != "" {
-			if discovery.ExcludeDomainRx.MatchString(domain.Name) {
-				continue
-			}
-		}
-		if discovery.IncludeDomainRx != "" {
-			if !discovery.IncludeDomainRx.MatchString(domain.Name) {
-				continue
-			}
-		}
-		result = append(result, domain)
-	}
-
-	return result, nil
-}
-
 // ScanDomains queries Keystone to discover new domains, and returns a
 // list of UUIDs for the newly discovered domains.
 func (c *Collector) ScanDomains(opts ScanDomainsOpts) (result []string, resultErr error) {
@@ -80,10 +52,11 @@ func (c *Collector) ScanDomains(opts ScanDomainsOpts) (result []string, resultEr
 	}()
 
 	//list domains in Keystone
-	domains, err := c.listDomainsFiltered()
+	allDomains, err := c.Cluster.DiscoveryPlugin.ListDomains()
 	if err != nil {
 		return nil, err
 	}
+	domains := c.Cluster.Config.Discovery.FilterDomains(allDomains)
 	isDomainUUID := make(map[string]bool)
 	for _, domain := range domains {
 		isDomainUUID[domain.UUID] = true
