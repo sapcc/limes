@@ -144,15 +144,15 @@ github.com/rabbitmq/amqp091-go
 # github.com/rs/cors v1.9.0
 ## explicit; go 1.13
 github.com/rs/cors
-# github.com/sapcc/go-api-declarations v1.7.0
-## explicit; go 1.20
+# github.com/sapcc/go-api-declarations v1.8.0
+## explicit; go 1.21
 github.com/sapcc/go-api-declarations/bininfo
 github.com/sapcc/go-api-declarations/cadf
 github.com/sapcc/go-api-declarations/internal/marshal
 github.com/sapcc/go-api-declarations/limes
 github.com/sapcc/go-api-declarations/limes/rates
 github.com/sapcc/go-api-declarations/limes/resources
-# github.com/sapcc/go-bits v0.0.0-20230809145704-87e8e6f6b6ff
+# github.com/sapcc/go-bits v0.0.0-20230816124253-7ed3dcbc093f
 ## explicit; go 1.21
 github.com/sapcc/go-bits/assert
 github.com/sapcc/go-bits/audittools
