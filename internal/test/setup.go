@@ -32,6 +32,7 @@ import (
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/go-bits/mock"
 	"github.com/sapcc/go-bits/osext"
 	"gopkg.in/yaml.v2"
 
@@ -91,9 +92,9 @@ type Setup struct {
 	Ctx            context.Context //nolint:containedctx // only used in tests
 	DB             *gorp.DbMap
 	Cluster        *core.Cluster
-	PolicyEnforcer *PolicyEnforcer
+	Clock          *mock.Clock
 	Registry       *prometheus.Registry
-	TokenValidator TokenValidator
+	TokenValidator *mock.Validator[*PolicyEnforcer]
 	//fields that are only set if their respective SetupOptions are given
 	Handler http.Handler
 }
@@ -110,10 +111,11 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	s.Ctx = context.Background()
 	s.DB = initDatabase(t, params.DBFixtureFile)
 	s.Cluster = initCluster(t, params.ConfigYAML)
+	s.Clock = mock.NewClock()
 	s.Registry = prometheus.NewPedanticRegistry()
 
 	//load mock policy (where everything is allowed)
-	s.PolicyEnforcer = &PolicyEnforcer{
+	enforcer := &PolicyEnforcer{
 		AllowRaise:            true,
 		AllowRaiseLP:          true,
 		AllowLower:            true,
@@ -121,7 +123,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 		AllowRaiseCentralized: true,
 		AllowLowerCentralized: true,
 	}
-	s.TokenValidator = TokenValidator{s.PolicyEnforcer}
+	s.TokenValidator = mock.NewValidator(enforcer, nil)
 
 	if params.APIBuilder != nil {
 		s.Handler = httpapi.Compose(

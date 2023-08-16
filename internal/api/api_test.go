@@ -1237,12 +1237,12 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 
 	//test that the correct 403 errors are generated for missing permissions
 	//(the other testcases cover the happy paths for raising and lowering)
-	s.PolicyEnforcer.AllowRaise = false
-	s.PolicyEnforcer.AllowRaiseLP = true
-	s.PolicyEnforcer.AllowLower = true
-	s.PolicyEnforcer.AllowLowerLP = false
-	s.PolicyEnforcer.AllowRaiseCentralized = false
-	s.PolicyEnforcer.AllowLowerCentralized = false
+	s.TokenValidator.Enforcer.AllowRaise = false
+	s.TokenValidator.Enforcer.AllowRaiseLP = true
+	s.TokenValidator.Enforcer.AllowLower = true
+	s.TokenValidator.Enforcer.AllowLowerLP = false
+	s.TokenValidator.Enforcer.AllowRaiseCentralized = false
+	s.TokenValidator.Enforcer.AllowLowerCentralized = false
 
 	assert.HTTPRequest{
 		Method:       "PUT",
@@ -1287,12 +1287,12 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 		},
 	}.Check(t, s.Handler)
 
-	s.PolicyEnforcer.AllowRaise = true
-	s.PolicyEnforcer.AllowRaiseLP = true
-	s.PolicyEnforcer.AllowLower = false
-	s.PolicyEnforcer.AllowLowerLP = false
-	s.PolicyEnforcer.AllowRaiseCentralized = false
-	s.PolicyEnforcer.AllowLowerCentralized = false
+	s.TokenValidator.Enforcer.AllowRaise = true
+	s.TokenValidator.Enforcer.AllowRaiseLP = true
+	s.TokenValidator.Enforcer.AllowLower = false
+	s.TokenValidator.Enforcer.AllowLowerLP = false
+	s.TokenValidator.Enforcer.AllowRaiseCentralized = false
+	s.TokenValidator.Enforcer.AllowLowerCentralized = false
 
 	assert.HTTPRequest{
 		Method:       "PUT",
@@ -1337,8 +1337,8 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 		},
 	}.Check(t, s.Handler)
 
-	s.PolicyEnforcer.AllowLower = true
-	s.PolicyEnforcer.RejectServiceType = "shared"
+	s.TokenValidator.Enforcer.AllowLower = true
+	s.TokenValidator.Enforcer.RejectServiceType = "shared"
 
 	assert.HTTPRequest{
 		Method:       "PUT",
@@ -1393,13 +1393,13 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 		},
 	}.Check(t, s.Handler)
 
-	s.PolicyEnforcer.AllowRaise = false
-	s.PolicyEnforcer.AllowRaiseLP = true
-	s.PolicyEnforcer.AllowLower = false
-	s.PolicyEnforcer.AllowLowerLP = true
-	s.PolicyEnforcer.AllowRaiseCentralized = false
-	s.PolicyEnforcer.AllowLowerCentralized = false
-	s.PolicyEnforcer.RejectServiceType = ""
+	s.TokenValidator.Enforcer.AllowRaise = false
+	s.TokenValidator.Enforcer.AllowRaiseLP = true
+	s.TokenValidator.Enforcer.AllowLower = false
+	s.TokenValidator.Enforcer.AllowLowerLP = true
+	s.TokenValidator.Enforcer.AllowRaiseCentralized = false
+	s.TokenValidator.Enforcer.AllowLowerCentralized = false
+	s.TokenValidator.Enforcer.RejectServiceType = ""
 
 	s.Cluster.LowPrivilegeRaise.LimitsForDomains = map[string]map[string]core.LowPrivilegeRaiseLimit{
 		"shared":   {"capacity": {AbsoluteValue: 29}, "things": {AbsoluteValue: 35}},
@@ -1586,12 +1586,12 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 
 	//check that domain quota cannot be raised or lowered by anyone, even if the
 	//policy says so, if the centralized quota distribution model is used
-	s.PolicyEnforcer.AllowRaise = true
-	s.PolicyEnforcer.AllowRaiseLP = true
-	s.PolicyEnforcer.AllowLower = true
-	s.PolicyEnforcer.AllowLowerLP = true
-	s.PolicyEnforcer.AllowRaiseCentralized = true
-	s.PolicyEnforcer.AllowLowerCentralized = true
+	s.TokenValidator.Enforcer.AllowRaise = true
+	s.TokenValidator.Enforcer.AllowRaiseLP = true
+	s.TokenValidator.Enforcer.AllowLower = true
+	s.TokenValidator.Enforcer.AllowLowerLP = true
+	s.TokenValidator.Enforcer.AllowRaiseCentralized = true
+	s.TokenValidator.Enforcer.AllowLowerCentralized = true
 
 	assert.HTTPRequest{
 		Method:       "PUT",
@@ -1611,12 +1611,12 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 
 	//check that, under centralized quota distribution, project quota cannot be
 	//raised or lowered if the respective specialized policies are not granted
-	s.PolicyEnforcer.AllowRaise = true
-	s.PolicyEnforcer.AllowRaiseLP = true
-	s.PolicyEnforcer.AllowLower = true
-	s.PolicyEnforcer.AllowLowerLP = true
-	s.PolicyEnforcer.AllowRaiseCentralized = false
-	s.PolicyEnforcer.AllowLowerCentralized = true
+	s.TokenValidator.Enforcer.AllowRaise = true
+	s.TokenValidator.Enforcer.AllowRaiseLP = true
+	s.TokenValidator.Enforcer.AllowLower = true
+	s.TokenValidator.Enforcer.AllowLowerLP = true
+	s.TokenValidator.Enforcer.AllowRaiseCentralized = false
+	s.TokenValidator.Enforcer.AllowLowerCentralized = true
 
 	assert.HTTPRequest{
 		Method:       "PUT",
@@ -1626,8 +1626,8 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 		Body:         requestOneQuotaChange("project", "centralized", "things", 100, limes.UnitNone),
 	}.Check(t, s.Handler)
 
-	s.PolicyEnforcer.AllowRaiseCentralized = true
-	s.PolicyEnforcer.AllowLowerCentralized = false
+	s.TokenValidator.Enforcer.AllowRaiseCentralized = true
+	s.TokenValidator.Enforcer.AllowLowerCentralized = false
 
 	assert.HTTPRequest{
 		Method:       "PUT",
@@ -1640,8 +1640,8 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 	//even if lower_centralized is allowed, lowering to 0 is never allowed (to
 	//test this, we have to first set usage to 0 to avoid getting an error for
 	//quota < usage instead)
-	s.PolicyEnforcer.AllowRaiseCentralized = true
-	s.PolicyEnforcer.AllowLowerCentralized = true
+	s.TokenValidator.Enforcer.AllowRaiseCentralized = true
+	s.TokenValidator.Enforcer.AllowLowerCentralized = true
 
 	_, err = s.DB.Exec(`UPDATE project_resources SET usage = 0 WHERE service_id = 7 AND name = 'things'`)
 	if err != nil {

@@ -20,11 +20,9 @@
 package test
 
 import (
-	"net/http"
 	"strings"
 
 	policy "github.com/databus23/goslo.policy"
-	"github.com/sapcc/go-bits/gopherpolicy"
 )
 
 // PolicyEnforcer is a gopherpolicy.Enforcer implementation for API tests.
@@ -59,21 +57,5 @@ func (e *PolicyEnforcer) Enforce(rule string, ctx policy.Context) bool {
 		return e.AllowLowerCentralized
 	default:
 		return true
-	}
-}
-
-// TokenValidator is a gopherpolicy.Validator implementation for API tests.
-type TokenValidator struct {
-	Enforcer gopherpolicy.Enforcer
-}
-
-// CheckToken implements the gopherpolicy.Validator interface.
-func (v TokenValidator) CheckToken(r *http.Request) *gopherpolicy.Token {
-	return &gopherpolicy.Token{
-		Enforcer: v.Enforcer,
-		Context: policy.Context{
-			Auth:    nil,
-			Request: map[string]string{}, //needs to be non-nil because fields are set later by the API's request handler
-		},
 	}
 }

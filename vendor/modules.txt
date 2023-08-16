@@ -163,6 +163,7 @@ github.com/sapcc/go-bits/httpapi
 github.com/sapcc/go-bits/httpext
 github.com/sapcc/go-bits/jobloop
 github.com/sapcc/go-bits/logg
+github.com/sapcc/go-bits/mock
 github.com/sapcc/go-bits/must
 github.com/sapcc/go-bits/osext
 github.com/sapcc/go-bits/pluggable
