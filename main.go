@@ -153,10 +153,11 @@ func taskCollect(cluster *core.Cluster, args []string) {
 	//state, mostly through usage of DB transactions.)
 	c := collector.NewCollector(cluster, dbm)
 	resourceScrapeJob := c.ResourceScrapeJob(nil)
+	rateScrapeJob := c.RateScrapeJob(nil)
 	for serviceType := range cluster.QuotaPlugins {
 		opt := jobloop.WithLabel("service_type", serviceType)
 		go resourceScrapeJob.Run(ctx, opt)
-		go c.ScrapeRates(serviceType)
+		go rateScrapeJob.Run(ctx, opt)
 	}
 
 	//start those collector threads which operate over all services simultaneously

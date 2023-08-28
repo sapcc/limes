@@ -583,6 +583,7 @@ const (
 	`
 )
 
+//nolint:dupl
 func Test_ScrapeButNoResources(t *testing.T) {
 	test.ResetTime()
 	s := test.NewSetup(t,

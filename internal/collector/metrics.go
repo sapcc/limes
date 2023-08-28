@@ -83,22 +83,6 @@ var clusterCapacitorFailedCounter = prometheus.NewCounterVec(
 	[]string{"capacitor"},
 )
 
-var ratesScrapeSuccessCounter = prometheus.NewCounterVec(
-	prometheus.CounterOpts{
-		Name: "limes_successful_rate_scrapes",
-		Help: "Counter for successful rate scrape operations per Keystone project.",
-	},
-	[]string{"service", "service_name"},
-)
-
-var ratesScrapeFailedCounter = prometheus.NewCounterVec(
-	prometheus.CounterOpts{
-		Name: "limes_failed_rate_scrapes",
-		Help: "Counter for failed rate scrape operations per Keystone project.",
-	},
-	[]string{"service", "service_name"},
-)
-
 func init() {
 	prometheus.MustRegister(projectDiscoverySuccessCounter)
 	prometheus.MustRegister(projectDiscoveryFailedCounter)
@@ -106,8 +90,6 @@ func init() {
 	prometheus.MustRegister(domainDiscoveryFailedCounter)
 	prometheus.MustRegister(clusterCapacitorSuccessCounter)
 	prometheus.MustRegister(clusterCapacitorFailedCounter)
-	prometheus.MustRegister(ratesScrapeSuccessCounter)
-	prometheus.MustRegister(ratesScrapeFailedCounter)
 }
 
 ////////////////////////////////////////////////////////////////////////////////

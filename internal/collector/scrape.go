@@ -38,8 +38,6 @@ import (
 )
 
 const (
-	//how long to sleep after a scraping error, or when nothing needed scraping
-	idleInterval = 5 * time.Second
 	//how long to wait before scraping the same project and service again
 	scrapeInterval = 30 * time.Minute
 	//how long to wait before re-checking a project service that failed scraping
@@ -191,7 +189,7 @@ func (c *Collector) processResourceScrapeTask(_ context.Context, task scrapeTask
 			task.Err.Error(), srv.ID,
 		)
 		if err != nil {
-			c.LogError("additional DB error while writing scrape error for service %s in project %s: %s",
+			c.LogError("additional DB error while writing resource scrape error for service %s in project %s: %s",
 				srv.Type, project.UUID, err.Error(),
 			)
 		}
