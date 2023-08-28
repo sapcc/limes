@@ -1,6 +1,6 @@
 /*******************************************************************************
 *
-* Copyright 2017-2020 SAP SE
+* Copyright 2017-2023 SAP SE
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -20,14 +20,14 @@
 package collector
 
 import (
-	"database/sql"
+	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
+	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
 
@@ -46,118 +46,173 @@ const (
 	recheckInterval = 5 * time.Minute
 )
 
-// query that finds the next project that needs to have resources scraped
-var findProjectForResourceScrapeQuery = sqlext.SimplifyWhitespace(`
-	SELECT * FROM project_services
-	-- filter by service type
-	WHERE type = $1
-	-- filter by need to be updated (because of user request, or because of scheduled scrape)
-	AND (stale OR next_scrape_at <= $2)
-	-- order by update priority (first user-requested scrapes, then scheduled scrapes, then ID for deterministic test behavior)
-	ORDER BY stale DESC, next_scrape_at ASC, id ASC
-	-- find only one project to scrape per iteration
-	LIMIT 1
-`)
+var (
+	// find the next project that needs to have resources scraped
+	findProjectForResourceScrapeQuery = sqlext.SimplifyWhitespace(`
+		SELECT * FROM project_services
+		-- filter by service type
+		WHERE type = $1
+		-- filter by need to be updated (because of user request, or because of scheduled scrape)
+		AND (stale OR next_scrape_at <= $2)
+		-- order by update priority (first user-requested scrapes, then scheduled scrapes, then ID for deterministic test behavior)
+		ORDER BY stale DESC, next_scrape_at ASC, id ASC
+		-- find only one project to scrape per iteration
+		LIMIT 1
+	`)
 
-// Scrape checks the database periodically for outdated or missing resource
-// records for the given cluster and the given service type, and updates them by
-// querying the backend service.
+	writeResourceScrapeSuccessQuery = sqlext.SimplifyWhitespace(`
+		UPDATE project_services SET
+			-- timing information
+			checked_at = $1, scraped_at = $1, next_scrape_at = $2, scrape_duration_secs = $3,
+			-- serialized state returned by QuotaPlugin
+			serialized_metrics = $4,
+			-- other
+			stale = FALSE, scrape_error_message = ''
+		WHERE id = $5
+	`)
+
+	writeResourceScrapeErrorQuery = sqlext.SimplifyWhitespace(`
+		UPDATE project_services SET
+			-- timing information
+			checked_at = $1, next_scrape_at = $2,
+			-- other
+			stale = FALSE, scrape_error_message = $3
+		WHERE id = $4
+	`)
+)
+
+// ResourceScrapeJob looks at one specific project service per task, collects
+// quota and usage information from the backend service, and adjusts the
+// backend quota if it differs from the desired values.
 //
-// Errors are logged instead of returned. The function will not return unless
-// startup fails.
-func (c *Collector) Scrape(serviceType string) {
-	plugin := c.Cluster.QuotaPlugins[serviceType]
-	if plugin == nil {
-		c.LogError("no such service type: %q", serviceType)
-	}
-	serviceInfo := plugin.ServiceInfo(serviceType)
+// This job is not ConcurrencySafe, but multiple instances can safely be run in
+// parallel if they act on separate service types. The job can only be run if
+// a target service type is specified using the
+// `jobloop.WithLabel("service_type", serviceType)` option.
+func (c *Collector) ResourceScrapeJob(registerer prometheus.Registerer) jobloop.Job {
+	return (&jobloop.ProducerConsumerJob[scrapeTask]{
+		Metadata: jobloop.JobMetadata{
+			ReadableName: "scrape project quota and usage",
+			CounterOpts: prometheus.CounterOpts{
+				Name: "limes_resource_scrapes",
+				Help: "Counter for resource scrape operations per Keystone project.",
+			},
+			CounterLabels: []string{"service_type", "service_name"},
+		},
+		DiscoverTask: func(_ context.Context, labels prometheus.Labels) (scrapeTask, error) {
+			return c.discoverScrapeTask(labels, findProjectForResourceScrapeQuery)
+		},
+		ProcessTask: c.processResourceScrapeTask,
+	}).Setup(registerer)
+}
 
-	//make sure that the counters are reported
-	labels := prometheus.Labels{
-		"service":      serviceType,
-		"service_name": serviceInfo.ProductName,
-	}
-	scrapeSuccessCounter.With(labels).Add(0)
-	scrapeFailedCounter.With(labels).Add(0)
+// This is the task type for ResourceScrapeJob and RateScrapeJob. The natural
+// task type for these jobs is just db.ProjectService, but this more elaborate
+// task type allows us to reuse timing information from the discover step, and
+// have some helper methods for error formatting and time calculations.
+type scrapeTask struct {
+	//service that needs to be scraped
+	Service db.ProjectService
+	//timing information (StartedAt is during discover, FinishedAt is during process)
+	StartedAt  time.Time
+	FinishedAt time.Time
+	//error reporting (these are two separate fields because we
+	//want "${FailedStep}: ${Err}" in the application log, but only Err in the
+	//database error field to avoid redundant information there)
+	FailedStep string
+	Err        error
+}
 
-	for {
-		//find service to scrape
-		scrapeStartedAt := c.TimeNow()
-		dbDomain, dbProject, srv, err := c.selectProjectForResourceScrape(serviceType, scrapeStartedAt)
+func (t scrapeTask) Duration() time.Duration {
+	return t.FinishedAt.Sub(t.StartedAt)
+}
+
+func (t scrapeTask) FullError() error {
+	if t.Err == nil {
+		return nil
+	} else {
+		return fmt.Errorf("%s: %w", t.FailedStep, t.Err)
+	}
+}
+
+func (c *Collector) discoverScrapeTask(labels prometheus.Labels, query string) (task scrapeTask, err error) {
+	serviceType := labels["service_type"]
+	if !c.Cluster.HasService(serviceType) {
+		return scrapeTask{}, fmt.Errorf("no such service type: %q", serviceType)
+	}
+	labels["service_name"] = c.Cluster.InfoForService(serviceType).ProductName
+
+	task.StartedAt = c.TimeNow()
+	err = c.DB.SelectOne(&task.Service, query, serviceType, task.StartedAt)
+	return task, err
+}
+
+func (c *Collector) processResourceScrapeTask(_ context.Context, task scrapeTask, labels prometheus.Labels) error {
+	srv := task.Service
+	plugin := c.Cluster.QuotaPlugins[srv.Type] //NOTE: discoverScrapeTask already verified that this exists
+
+	//collect additional DB records
+	var (
+		dbProject db.Project
+		dbDomain  db.Domain
+	)
+	err := c.DB.SelectOne(&dbProject, `SELECT * FROM projects WHERE id = $1`, srv.ProjectID)
+	if err != nil {
+		return fmt.Errorf("while reading the DB record for project %d: %w", srv.ProjectID, err)
+	}
+	err = c.DB.SelectOne(&dbDomain, `SELECT * FROM domains WHERE id = $1`, dbProject.DomainID)
+	if err != nil {
+		return fmt.Errorf("while reading the DB record for domain %d: %w", dbProject.DomainID, err)
+	}
+	domain := core.KeystoneDomainFromDB(dbDomain)
+	project := core.KeystoneProjectFromDB(dbProject, domain)
+	logg.Debug("scraping %s resources for %s/%s", srv.Type, dbDomain.Name, dbProject.Name)
+
+	//perform resource scrape
+	resourceData, serializedMetrics, err := plugin.Scrape(project)
+	if err != nil {
+		task.FailedStep = fmt.Sprintf("during resource scrape of project %s/%s", dbDomain.Name, dbProject.Name)
+		task.Err = util.UnpackError(err)
+	}
+	task.FinishedAt = c.TimeNow()
+
+	//write result on success; if anything fails, try to record the error in the DB
+	if task.Err == nil {
+		err := c.writeResourceScrapeResult(dbDomain, dbProject, task, resourceData, serializedMetrics)
 		if err != nil {
-			//ErrNoRows is okay; it just means that nothing needs scraping right now
-			if !errors.Is(err, sql.ErrNoRows) {
-				c.LogError("cannot select next project for which to scrape %s resource data: %s", serviceType, err.Error())
-			}
-			if c.Once {
-				return
-			}
-			time.Sleep(idleInterval)
-			continue
+			task.FailedStep = "while writing results into DB"
+			task.Err = err
 		}
-		domain := core.KeystoneDomainFromDB(dbDomain)
-		project := core.KeystoneProjectFromDB(dbProject, domain)
+	}
+	if task.Err != nil {
+		_, err := c.DB.Exec(
+			writeResourceScrapeErrorQuery,
+			task.FinishedAt, task.FinishedAt.Add(c.AddJitter(recheckInterval)),
+			task.Err.Error(), srv.ID,
+		)
+		if err != nil {
+			c.LogError("additional DB error while writing scrape error for service %s in project %s: %s",
+				srv.Type, project.UUID, err.Error(),
+			)
+		}
 
-		logg.Debug("scraping %s resources for %s/%s", serviceType, dbDomain.Name, dbProject.Name)
-		resourceData, serializedMetrics, err := plugin.Scrape(project)
-		scrapeEndedAt := c.TimeNow()
-
-		//write result on success; if anything fails, try to record the error in the DB
-		if err == nil {
-			err = c.writeScrapeResult(dbDomain, dbProject, srv, resourceData, serializedMetrics, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
+		if srv.ScrapedAt == nil {
+			//see explanation inside the called function's body
+			err := c.writeDummyResources(dbDomain, dbProject, srv.Ref())
 			if err != nil {
-				err = fmt.Errorf("while writing results into DB: %w", err)
+				c.LogError("additional DB error while writing dummy resources for service %s in project %s: %s",
+					srv.Type, project.UUID, err.Error(),
+				)
 			}
 		}
-		if err != nil {
-			c.writeScrapeError(srv, err, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
-			scrapeFailedCounter.With(labels).Inc()
-			c.LogError("scrape %s resources for %s/%s failed: %s", serviceType, project.Domain.Name, project.Name, util.UnpackError(err).Error())
-
-			if srv.ScrapedAt == nil {
-				//see explanation inside the called function's body
-				err := c.writeDummyResources(dbDomain, dbProject, srv.Ref())
-				if err != nil {
-					c.LogError("write dummy resource data for service %s for %s/%s failed: %s", serviceType, project.Domain.Name, project.Name, err.Error())
-				}
-			}
-
-			if c.Once {
-				return
-			}
-			time.Sleep(idleInterval)
-			continue
-		}
-
-		scrapeSuccessCounter.With(labels).Inc()
-		if c.Once {
-			break
-		}
-		//If no error occurred, continue with the next project immediately, so as
-		//to finish scraping as fast as possible when there are multiple projects
-		//to scrape at once.
 	}
+
+	return task.FullError()
 }
 
-func (c *Collector) selectProjectForResourceScrape(serviceType string, scrapeStartedAt time.Time) (domain db.Domain, project db.Project, srv db.ProjectService, err error) {
-	err = c.DB.SelectOne(&srv, findProjectForResourceScrapeQuery, serviceType, scrapeStartedAt)
-	if err != nil {
-		return
-	}
-	err = c.DB.SelectOne(&project, `SELECT * FROM projects WHERE id = $1`, srv.ProjectID)
-	if err != nil {
-		err = fmt.Errorf("while reading the DB record for project %d: %w", srv.ProjectID, err)
-		return
-	}
-	err = c.DB.SelectOne(&domain, `SELECT * FROM domains WHERE id = $1`, project.DomainID)
-	if err != nil {
-		err = fmt.Errorf("while reading the DB record for domain %d: %w", project.DomainID, err)
-		return
-	}
-	return
-}
+func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.Project, task scrapeTask, resourceData map[string]core.ResourceData, serializedMetrics string) error {
+	srv := task.Service
 
-func (c *Collector) writeScrapeResult(dbDomain db.Domain, dbProject db.Project, srv db.ProjectService, resourceData map[string]core.ResourceData, serializedMetrics string, scrapedAt time.Time, scrapeDuration time.Duration) error {
 	tx, err := c.DB.Begin()
 	if err != nil {
 		return fmt.Errorf("while beginning transaction: %w", err)
@@ -216,7 +271,7 @@ func (c *Collector) writeScrapeResult(dbDomain db.Domain, dbProject db.Project, 
 	}
 
 	//update project_resources using the action callback from above
-	updateResult, err := datamodel.ProjectResourceUpdate{
+	resourceUpdateResult, err := datamodel.ProjectResourceUpdate{
 		UpdateResource: updateResource,
 		LogError:       c.LogError,
 	}.Run(tx, c.Cluster, dbDomain, dbProject, srv.Ref())
@@ -227,30 +282,28 @@ func (c *Collector) writeScrapeResult(dbDomain db.Domain, dbProject db.Project, 
 	//update scraped_at timestamp and reset the stale flag on this service so
 	//that we don't scrape it again immediately afterwards; also persist all other
 	//attributes that we have not written yet
-	logg.Debug("writing scrape result into service %d", srv.ID)
-	_, err = tx.Exec(
-		`UPDATE project_services SET checked_at = $1, scraped_at = $1, next_scrape_at = $2, scrape_duration_secs = $3, stale = $4, serialized_metrics = $5, scrape_error_message = '' WHERE id = $6`,
-		scrapedAt, scrapedAt.Add(c.AddJitter(scrapeInterval)), scrapeDuration.Seconds(), false, serializedMetrics, srv.ID,
+	_, err = tx.Exec(writeResourceScrapeSuccessQuery,
+		task.FinishedAt, task.FinishedAt.Add(c.AddJitter(scrapeInterval)), task.Duration().Seconds(),
+		serializedMetrics, srv.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("while updating metadata on project service: %w", err)
 	}
 
-	logg.Debug("committing scrape result in service %d", srv.ID)
 	err = tx.Commit()
 	if err != nil {
 		return fmt.Errorf("while committing transaction: %w", err)
 	}
 
-	if scrapeDuration > 5*time.Minute {
-		logg.Info("scrape of %s in project %s has taken excessively long (%s)", srv.Type, dbProject.UUID, scrapeDuration.String())
+	if task.Duration() > 5*time.Minute {
+		logg.Info("scrape of %s in project %s has taken excessively long (%s)", srv.Type, dbProject.UUID, task.Duration().String())
 	}
 
 	//if a mismatch between frontend and backend quota was detected, try to
 	//rectify it (but an error at this point is non-fatal: we don't want scraping
 	//to get stuck because some project has backend_quota > usage > quota, for
 	//example)
-	if c.Cluster.Authoritative && updateResult.HasBackendQuotaDrift {
+	if c.Cluster.Authoritative && resourceUpdateResult.HasBackendQuotaDrift {
 		domain := core.KeystoneDomainFromDB(dbDomain)
 		err := datamodel.ApplyBackendQuota(c.DB, c.Cluster, domain, dbProject, srv.Ref())
 		if err != nil {
@@ -261,18 +314,6 @@ func (c *Collector) writeScrapeResult(dbDomain db.Domain, dbProject db.Project, 
 	}
 
 	return nil
-}
-
-func (c *Collector) writeScrapeError(srv db.ProjectService, scrapeErr error, checkedAt time.Time, checkDuration time.Duration) {
-	_, err := c.DB.Exec(
-		`UPDATE project_services SET checked_at = $1, next_scrape_at = $2, scrape_duration_secs = $3, scrape_error_message = $4, stale = $5 WHERE id = $6`,
-		checkedAt, checkedAt.Add(c.AddJitter(recheckInterval)), checkDuration.Seconds(), util.UnpackError(scrapeErr).Error(), false, srv.ID,
-	)
-	if err != nil {
-		logg.Error("additional DB error while trying to write scraping error for project service %d: %s",
-			srv.ID, err.Error(),
-		)
-	}
 }
 
 func (c *Collector) writeDummyResources(dbDomain db.Domain, dbProject db.Project, srv db.ProjectServiceRef) error {

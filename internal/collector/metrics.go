@@ -37,22 +37,6 @@ import (
 ////////////////////////////////////////////////////////////////////////////////
 // collector metrics
 
-var scrapeSuccessCounter = prometheus.NewCounterVec(
-	prometheus.CounterOpts{
-		Name: "limes_successful_scrapes",
-		Help: "Counter for successful quota scrape operations per Keystone project.",
-	},
-	[]string{"service", "service_name"},
-)
-
-var scrapeFailedCounter = prometheus.NewCounterVec(
-	prometheus.CounterOpts{
-		Name: "limes_failed_scrapes",
-		Help: "Counter for failed quota scrape operations per Keystone project.",
-	},
-	[]string{"service", "service_name"},
-)
-
 var projectDiscoverySuccessCounter = prometheus.NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "limes_successful_project_discoveries",
@@ -116,8 +100,6 @@ var ratesScrapeFailedCounter = prometheus.NewCounterVec(
 )
 
 func init() {
-	prometheus.MustRegister(scrapeSuccessCounter)
-	prometheus.MustRegister(scrapeFailedCounter)
 	prometheus.MustRegister(projectDiscoverySuccessCounter)
 	prometheus.MustRegister(projectDiscoveryFailedCounter)
 	prometheus.MustRegister(domainDiscoverySuccessCounter)
