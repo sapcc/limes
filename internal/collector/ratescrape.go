@@ -29,7 +29,6 @@ import (
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
 
-	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/util"
 )
@@ -99,26 +98,15 @@ func (c *Collector) processRateScrapeTask(_ context.Context, task scrapeTask, la
 	plugin := c.Cluster.QuotaPlugins[srv.Type] //NOTE: discoverScrapeTask already verified that this exists
 
 	//collect additional DB records
-	var (
-		dbProject db.Project
-		dbDomain  db.Domain
-	)
-	err := c.DB.SelectOne(&dbProject, `SELECT * FROM projects WHERE id = $1`, srv.ProjectID)
+	_, _, project, err := c.identifyProjectBeingScraped(srv)
 	if err != nil {
-		return fmt.Errorf("while reading the DB record for project %d: %w", srv.ProjectID, err)
+		return err
 	}
-	err = c.DB.SelectOne(&dbDomain, `SELECT * FROM domains WHERE id = $1`, dbProject.DomainID)
-	if err != nil {
-		return fmt.Errorf("while reading the DB record for domain %d: %w", dbProject.DomainID, err)
-	}
-	domain := core.KeystoneDomainFromDB(dbDomain)
-	project := core.KeystoneProjectFromDB(dbProject, domain)
-	logg.Debug("scraping %s rates for %s/%s", srv.Type, dbDomain.Name, dbProject.Name)
+	logg.Debug("scraping %s rates for %s/%s", srv.Type, project.Domain.Name, project.Name)
 
 	//perform rate scrape
 	rateData, ratesScrapeState, err := plugin.ScrapeRates(project, srv.RatesScrapeState)
 	if err != nil {
-		task.FailedStep = fmt.Sprintf("during rate scrape of project %s/%s", dbDomain.Name, dbProject.Name)
 		task.Err = util.UnpackError(err)
 	}
 	task.FinishedAt = c.TimeNow()
@@ -127,8 +115,7 @@ func (c *Collector) processRateScrapeTask(_ context.Context, task scrapeTask, la
 	if task.Err == nil {
 		err := c.writeRateScrapeResult(task, rateData, ratesScrapeState)
 		if err != nil {
-			task.FailedStep = "while writing results into DB"
-			task.Err = err
+			task.Err = fmt.Errorf("while writing results into DB: %w", err)
 		}
 	}
 	if task.Err != nil {
@@ -144,7 +131,10 @@ func (c *Collector) processRateScrapeTask(_ context.Context, task scrapeTask, la
 		}
 	}
 
-	return task.FullError()
+	if task.Err == nil {
+		return nil
+	}
+	return fmt.Errorf("during rate scrape of project %s/%s: %w", project.Domain.Name, project.Name, task.Err)
 }
 
 func (c *Collector) writeRateScrapeResult(task scrapeTask, rateData map[string]*big.Int, ratesScrapeState string) error {

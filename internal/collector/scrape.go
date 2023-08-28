@@ -109,28 +109,17 @@ func (c *Collector) ResourceScrapeJob(registerer prometheus.Registerer) jobloop.
 // task type allows us to reuse timing information from the discover step, and
 // have some helper methods for error formatting and time calculations.
 type scrapeTask struct {
-	//service that needs to be scraped
+	//data loaded during discoverScrapeTask
 	Service db.ProjectService
 	//timing information (StartedAt is during discover, FinishedAt is during process)
 	StartedAt  time.Time
 	FinishedAt time.Time
-	//error reporting (these are two separate fields because we
-	//want "${FailedStep}: ${Err}" in the application log, but only Err in the
-	//database error field to avoid redundant information there)
-	FailedStep string
-	Err        error
+	//error reporting
+	Err error
 }
 
 func (t scrapeTask) Duration() time.Duration {
 	return t.FinishedAt.Sub(t.StartedAt)
-}
-
-func (t scrapeTask) FullError() error {
-	if t.Err == nil {
-		return nil
-	} else {
-		return fmt.Errorf("%s: %w", t.FailedStep, t.Err)
-	}
 }
 
 func (c *Collector) discoverScrapeTask(labels prometheus.Labels, query string) (task scrapeTask, err error) {
@@ -145,31 +134,36 @@ func (c *Collector) discoverScrapeTask(labels prometheus.Labels, query string) (
 	return task, err
 }
 
+func (c *Collector) identifyProjectBeingScraped(srv db.ProjectService) (dbProject db.Project, dbDomain db.Domain, project core.KeystoneProject, err error) {
+	err = c.DB.SelectOne(&dbProject, `SELECT * FROM projects WHERE id = $1`, srv.ProjectID)
+	if err != nil {
+		err = fmt.Errorf("while reading the DB record for project %d: %w", srv.ProjectID, err)
+		return
+	}
+	err = c.DB.SelectOne(&dbDomain, `SELECT * FROM domains WHERE id = $1`, dbProject.DomainID)
+	if err != nil {
+		err = fmt.Errorf("while reading the DB record for domain %d: %w", dbProject.DomainID, err)
+		return
+	}
+	domain := core.KeystoneDomainFromDB(dbDomain)
+	project = core.KeystoneProjectFromDB(dbProject, domain)
+	return
+}
+
 func (c *Collector) processResourceScrapeTask(_ context.Context, task scrapeTask, labels prometheus.Labels) error {
 	srv := task.Service
 	plugin := c.Cluster.QuotaPlugins[srv.Type] //NOTE: discoverScrapeTask already verified that this exists
 
 	//collect additional DB records
-	var (
-		dbProject db.Project
-		dbDomain  db.Domain
-	)
-	err := c.DB.SelectOne(&dbProject, `SELECT * FROM projects WHERE id = $1`, srv.ProjectID)
+	dbProject, dbDomain, project, err := c.identifyProjectBeingScraped(srv)
 	if err != nil {
-		return fmt.Errorf("while reading the DB record for project %d: %w", srv.ProjectID, err)
+		return err
 	}
-	err = c.DB.SelectOne(&dbDomain, `SELECT * FROM domains WHERE id = $1`, dbProject.DomainID)
-	if err != nil {
-		return fmt.Errorf("while reading the DB record for domain %d: %w", dbProject.DomainID, err)
-	}
-	domain := core.KeystoneDomainFromDB(dbDomain)
-	project := core.KeystoneProjectFromDB(dbProject, domain)
 	logg.Debug("scraping %s resources for %s/%s", srv.Type, dbDomain.Name, dbProject.Name)
 
 	//perform resource scrape
 	resourceData, serializedMetrics, err := plugin.Scrape(project)
 	if err != nil {
-		task.FailedStep = fmt.Sprintf("during resource scrape of project %s/%s", dbDomain.Name, dbProject.Name)
 		task.Err = util.UnpackError(err)
 	}
 	task.FinishedAt = c.TimeNow()
@@ -178,8 +172,7 @@ func (c *Collector) processResourceScrapeTask(_ context.Context, task scrapeTask
 	if task.Err == nil {
 		err := c.writeResourceScrapeResult(dbDomain, dbProject, task, resourceData, serializedMetrics)
 		if err != nil {
-			task.FailedStep = "while writing results into DB"
-			task.Err = err
+			task.Err = fmt.Errorf("while writing results into DB: %w", err)
 		}
 	}
 	if task.Err != nil {
@@ -205,7 +198,10 @@ func (c *Collector) processResourceScrapeTask(_ context.Context, task scrapeTask
 		}
 	}
 
-	return task.FullError()
+	if task.Err == nil {
+		return nil
+	}
+	return fmt.Errorf("during resource scrape of project %s/%s: %w", dbDomain.Name, dbProject.Name, task.Err)
 }
 
 func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.Project, task scrapeTask, resourceData map[string]core.ResourceData, serializedMetrics string) error {
