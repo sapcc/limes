@@ -233,6 +233,7 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 					}
 				}
 
+				req := req //clone req to avoid implicit aliasing in for loop
 				rate.Limit = &req.NewLimit
 				rate.Window = &req.NewWindow
 				ratesToUpdate = append(ratesToUpdate, rate)
