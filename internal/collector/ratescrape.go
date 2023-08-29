@@ -20,115 +20,127 @@
 package collector
 
 import (
-	"database/sql"
-	"errors"
+	"context"
 	"fmt"
 	"math/big"
-	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
 
-	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/util"
 )
 
-// query that finds the next project that needs to have rates scraped
-var findProjectForRateScrapeQuery = sqlext.SimplifyWhitespace(`
-	SELECT ps.id, ps.rates_scraped_at, ps.rates_scrape_state, p.name, p.uuid, p.parent_uuid, d.name, d.uuid
-	FROM project_services ps
-	JOIN projects p ON p.id = ps.project_id
-	JOIN domains d ON d.id = p.domain_id
-	-- filter by service type
-	WHERE ps.type = $1
-	-- filter by need to be updated (because of user request, or because of scheduled scrape)
-	AND (ps.rates_stale OR ps.rates_next_scrape_at <= $2)
-	-- order by update priority (first user-requested scrapes, then scheduled scrapes, then ID for deterministic test behavior)
-	ORDER BY ps.rates_stale DESC, ps.rates_next_scrape_at ASC, ps.id ASC
-	-- find only one project to scrape per iteration
-	LIMIT 1
-`)
+var (
+	// find the next project that needs to have rates scraped
+	findProjectForRateScrapeQuery = sqlext.SimplifyWhitespace(`
+		SELECT * FROM project_services
+		-- filter by service type
+		WHERE type = $1
+		-- filter by need to be updated (because of user request, or because of scheduled scrape)
+		AND (rates_stale OR rates_next_scrape_at <= $2)
+		-- order by update priority (first user-requested scrapes, then scheduled scrapes, then ID for deterministic test behavior)
+		ORDER BY rates_stale DESC, rates_next_scrape_at ASC, id ASC
+		-- find only one project to scrape per iteration
+		LIMIT 1
+	`)
 
-// ScrapeRates checks the database periodically for outdated or missing rate
-// records for the given cluster and the given service type, and updates them by
-// querying the backend service.
+	writeRateScrapeSuccessQuery = sqlext.SimplifyWhitespace(`
+		UPDATE project_services SET
+			-- timing information
+			rates_checked_at = $1, rates_scraped_at = $1, rates_next_scrape_at = $2, rates_scrape_duration_secs = $3,
+			-- serialized state returned by QuotaPlugin
+			rates_scrape_state = $4,
+			-- other
+			rates_stale = FALSE, rates_scrape_error_message = ''
+		WHERE id = $5
+	`)
+
+	writeRateScrapeErrorQuery = sqlext.SimplifyWhitespace(`
+		UPDATE project_services SET
+			-- timing information
+			rates_checked_at = $1, rates_next_scrape_at = $2,
+			-- other
+			rates_stale = FALSE, rates_scrape_error_message = $3
+		WHERE id = $4
+	`)
+)
+
+// RateScrapeJob looks at one specific project service per task, checks the
+// database for outdated or missing rate records for the given service, and
+// updates them by querying the backend service.
 //
-// Errors are logged instead of returned. The function will not return unless
-// startup fails.
-func (c *Collector) ScrapeRates(serviceType string) {
-	plugin := c.Cluster.QuotaPlugins[serviceType]
-	if plugin == nil {
-		c.LogError("no such service type: %q", serviceType)
-	}
-	serviceInfo := plugin.ServiceInfo(serviceType)
-
-	//make sure that the counters are reported
-	labels := prometheus.Labels{
-		"service":      serviceType,
-		"service_name": serviceInfo.ProductName,
-	}
-	ratesScrapeSuccessCounter.With(labels).Add(0)
-	ratesScrapeFailedCounter.With(labels).Add(0)
-
-	for {
-		var (
-			serviceID               int64
-			serviceRatesScrapedAt   *time.Time
-			serviceRatesScrapeState string
-			project                 core.KeystoneProject
-		)
-		scrapeStartedAt := c.TimeNow()
-		err := c.DB.QueryRow(findProjectForRateScrapeQuery, serviceType, scrapeStartedAt).
-			Scan(&serviceID, &serviceRatesScrapedAt, &serviceRatesScrapeState, &project.Name, &project.UUID, &project.ParentUUID, &project.Domain.Name, &project.Domain.UUID)
-		if err != nil {
-			//ErrNoRows is okay; it just means that nothing needs scraping right now
-			if !errors.Is(err, sql.ErrNoRows) {
-				c.LogError("cannot select next project for which to scrape %s rate data: %s", serviceType, err.Error())
-			}
-			if c.Once {
-				return
-			}
-			time.Sleep(idleInterval)
-			continue
-		}
-
-		logg.Debug("scraping %s rates for %s/%s", serviceType, project.Domain.Name, project.Name)
-		srv := db.ProjectServiceRef{Type: serviceType, ID: serviceID}
-		rateData, serviceRatesScrapeState, err := plugin.ScrapeRates(project, serviceRatesScrapeState)
-		scrapeEndedAt := c.TimeNow()
-
-		//write result on success; if anything fails, try to record the error in the DB
-		if err == nil {
-			err = c.writeRateScrapeResult(srv, plugin, rateData, serviceRatesScrapeState, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
-			if err != nil {
-				err = fmt.Errorf("while writing results into DB: %w", err)
-			}
-		}
-		if err != nil {
-			c.writeRateScrapeError(project, srv, err, scrapeEndedAt, scrapeEndedAt.Sub(scrapeStartedAt))
-			ratesScrapeFailedCounter.With(labels).Inc()
-			c.LogError("scrape %s rate data for %s/%s failed: %s", serviceType, project.Domain.Name, project.Name, util.UnpackError(err).Error())
-
-			if c.Once {
-				return
-			}
-			time.Sleep(idleInterval)
-			continue
-		}
-
-		ratesScrapeSuccessCounter.With(labels).Inc()
-		if c.Once {
-			break
-		}
-		//If no error occurred, continue with the next project immediately, so as
-		//to finish scraping as fast as possible when there are multiple projects
-		//to scrape at once.
-	}
+// This job is not ConcurrencySafe, but multiple instances can safely be run in
+// parallel if they act on separate service types. The job can only be run if
+// a target service type is specified using the
+// `jobloop.WithLabel("service_type", serviceType)` option.
+func (c *Collector) RateScrapeJob(registerer prometheus.Registerer) jobloop.Job {
+	return (&jobloop.ProducerConsumerJob[scrapeTask]{
+		Metadata: jobloop.JobMetadata{
+			ReadableName: "scrape project rate usage",
+			CounterOpts: prometheus.CounterOpts{
+				Name: "limes_rate_scrapes",
+				Help: "Counter for rate scrape operations per Keystone project.",
+			},
+			CounterLabels: []string{"service_type", "service_name"},
+		},
+		DiscoverTask: func(_ context.Context, labels prometheus.Labels) (scrapeTask, error) {
+			return c.discoverScrapeTask(labels, findProjectForRateScrapeQuery)
+		},
+		ProcessTask: c.processRateScrapeTask,
+	}).Setup(registerer)
 }
 
-func (c *Collector) writeRateScrapeResult(srv db.ProjectServiceRef, plugin core.QuotaPlugin, rateData map[string]*big.Int, serviceRatesScrapeState string, scrapedAt time.Time, scrapeDuration time.Duration) error {
+func (c *Collector) processRateScrapeTask(_ context.Context, task scrapeTask, labels prometheus.Labels) error {
+	srv := task.Service
+	plugin := c.Cluster.QuotaPlugins[srv.Type] //NOTE: discoverScrapeTask already verified that this exists
+
+	//collect additional DB records
+	_, _, project, err := c.identifyProjectBeingScraped(srv)
+	if err != nil {
+		return err
+	}
+	logg.Debug("scraping %s rates for %s/%s", srv.Type, project.Domain.Name, project.Name)
+
+	//perform rate scrape
+	rateData, ratesScrapeState, err := plugin.ScrapeRates(project, srv.RatesScrapeState)
+	if err != nil {
+		task.Err = util.UnpackError(err)
+	}
+	task.FinishedAt = c.TimeNow()
+
+	//write result on success; if anything fails, try to record the error in the DB
+	if task.Err == nil {
+		err := c.writeRateScrapeResult(task, rateData, ratesScrapeState)
+		if err != nil {
+			task.Err = fmt.Errorf("while writing results into DB: %w", err)
+		}
+	}
+	if task.Err != nil {
+		_, err := c.DB.Exec(
+			writeRateScrapeErrorQuery,
+			task.FinishedAt, task.FinishedAt.Add(c.AddJitter(recheckInterval)),
+			task.Err.Error(), srv.ID,
+		)
+		if err != nil {
+			c.LogError("additional DB error while writing rate scrape error for service %s in project %s: %s",
+				srv.Type, project.UUID, err.Error(),
+			)
+		}
+	}
+
+	if task.Err == nil {
+		return nil
+	}
+	return fmt.Errorf("during rate scrape of project %s/%s: %w", project.Domain.Name, project.Name, task.Err)
+}
+
+func (c *Collector) writeRateScrapeResult(task scrapeTask, rateData map[string]*big.Int, ratesScrapeState string) error {
+	srv := task.Service
+	plugin := c.Cluster.QuotaPlugins[srv.Type] //NOTE: discoverScrapeTask already verified that this exists
+
 	tx, err := c.DB.Begin()
 	if err != nil {
 		return err
@@ -196,25 +208,13 @@ func (c *Collector) writeRateScrapeResult(srv db.ProjectServiceRef, plugin core.
 
 	//update rate scraping metadata and also reset the rates_stale flag on this
 	//service so that we don't scrape it again immediately afterwards
-	_, err = tx.Exec(
-		`UPDATE project_services SET rates_checked_at = $1, rates_scraped_at = $1, rates_next_scrape_at = $2, rates_scrape_duration_secs = $3, rates_scrape_state = $4, rates_stale = $5, rates_scrape_error_message = '' WHERE id = $6`,
-		scrapedAt, scrapedAt.Add(c.AddJitter(scrapeInterval)), scrapeDuration.Seconds(), serviceRatesScrapeState, false, srv.ID,
+	_, err = tx.Exec(writeRateScrapeSuccessQuery,
+		task.FinishedAt, task.FinishedAt.Add(c.AddJitter(scrapeInterval)), task.Duration().Seconds(),
+		ratesScrapeState, srv.ID,
 	)
 	if err != nil {
 		return err
 	}
 
 	return tx.Commit()
-}
-
-func (c *Collector) writeRateScrapeError(project core.KeystoneProject, srv db.ProjectServiceRef, scrapeErr error, checkedAt time.Time, checkDuration time.Duration) {
-	_, err := c.DB.Exec(
-		`UPDATE project_services SET rates_checked_at = $1, rates_next_scrape_at = $2, rates_scrape_duration_secs = $3, rates_scrape_error_message = $4, rates_stale = $5 WHERE id = $6`,
-		checkedAt, checkedAt.Add(c.AddJitter(recheckInterval)), checkDuration.Seconds(), util.UnpackError(scrapeErr).Error(), false, srv.ID,
-	)
-	if err != nil {
-		logg.Error("additional DB error while trying to write rate scraping error for service %s in project %s: %s",
-			srv.Type, project.UUID, err.Error(),
-		)
-	}
 }

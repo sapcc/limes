@@ -20,7 +20,7 @@
 package collector
 
 import (
-	"fmt"
+	"database/sql"
 	"regexp"
 	"testing"
 	"time"
@@ -30,12 +30,38 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
+	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/logg"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/test"
 	"github.com/sapcc/limes/internal/test/plugins"
 )
+
+func mustT(t *testing.T, err error) {
+	t.Helper()
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func mustFailT(t *testing.T, err, expected error) {
+	t.Helper()
+	if err == nil {
+		t.Errorf("expected to fail with %q, but got no error", expected.Error())
+	} else if err.Error() != expected.Error() {
+		t.Errorf("expected to fail with %q, but failed with %q", expected.Error(), err.Error())
+	}
+}
+
+func mustFailLikeT(t *testing.T, err error, rx *regexp.Regexp) {
+	t.Helper()
+	if err == nil {
+		t.Errorf("expected to fail with %q, but got no error", rx.String())
+	} else if !rx.MatchString(err.Error()) {
+		t.Errorf("expected to fail with %q, but failed with %q", rx.String(), err.Error())
+	}
+}
 
 func p2u64(x uint64) *uint64 {
 	return &x
@@ -114,8 +140,9 @@ func Test_ScrapeSuccess(t *testing.T) {
 		LogError:  t.Errorf,
 		TimeNow:   test.TimeNow,
 		AddJitter: test.NoJitter,
-		Once:      true,
 	}
+	job := c.ResourceScrapeJob(s.Registry)
+	withLabel := jobloop.WithLabel("service_type", "unittest")
 
 	//check that ScanDomains created the domain, project and their services
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
@@ -126,8 +153,8 @@ func Test_ScrapeSuccess(t *testing.T) {
 	//and set `project_services.scraped_at` to the current time
 	plugin := s.Cluster.QuotaPlugins["unittest"].(*plugins.GenericQuotaPlugin) //nolint:errcheck
 	plugin.SetQuotaFails = true
-	c.Scrape("unittest")
-	c.Scrape("unittest") //twice because there are two projects
+	mustT(t, job.ProcessOne(s.Ctx, withLabel))
+	mustT(t, job.ProcessOne(s.Ctx, withLabel)) //twice because there are two projects
 	tr.DBChanges().AssertEqualf(`
 		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, desired_backend_quota, physical_usage) VALUES (1, 'capacity', 10, 0, 100, 10, 0);
 		INSERT INTO project_resources (service_id, name, usage) VALUES (1, 'capacity_portion', 0);
@@ -141,7 +168,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 
 	//second Scrape should not change anything (not even the timestamps) since
 	//less than 30 minutes have passed since the last Scrape("unittest")
-	c.Scrape("unittest")
+	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), sql.ErrNoRows)
 	tr.DBChanges().AssertEmpty()
 
 	//change the data that is reported by the plugin
@@ -149,8 +176,8 @@ func Test_ScrapeSuccess(t *testing.T) {
 	plugin.StaticResourceData["things"].Usage = 5
 	setProjectServicesStale(t, s.DB)
 	//Scrape should pick up the changed resource data
-	c.Scrape("unittest")
-	c.Scrape("unittest") //twice because there are two projects
+	mustT(t, job.ProcessOne(s.Ctx, withLabel))
+	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_resources SET backend_quota = 110 WHERE service_id = 1 AND name = 'capacity';
 		UPDATE project_resources SET usage = 5, subresources = '[{"index":0},{"index":1},{"index":2},{"index":3},{"index":4}]' WHERE service_id = 1 AND name = 'things';
@@ -175,8 +202,8 @@ func Test_ScrapeSuccess(t *testing.T) {
 	//until now because the test.Plugin was instructed to have SetQuota fail)
 	plugin.SetQuotaFails = false
 	setProjectServicesStale(t, s.DB)
-	c.Scrape("unittest")
-	c.Scrape("unittest") //twice because there are two projects
+	mustT(t, job.ProcessOne(s.Ctx, withLabel))
+	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_resources SET quota = 20, backend_quota = 20, desired_backend_quota = 20 WHERE service_id = 1 AND name = 'capacity';
 		UPDATE project_resources SET quota = 13, backend_quota = 13, desired_backend_quota = 13 WHERE service_id = 1 AND name = 'things';
@@ -190,8 +217,8 @@ func Test_ScrapeSuccess(t *testing.T) {
 	//update was durable
 	plugin.SetQuotaFails = true
 	setProjectServicesStale(t, s.DB)
-	c.Scrape("unittest") //twice because there are two projects
-	c.Scrape("unittest")
+	mustT(t, job.ProcessOne(s.Ctx, withLabel))
+	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_services SET scraped_at = 14, checked_at = 14, next_scrape_at = 1814 WHERE id = 1 AND project_id = 1 AND type = 'unittest';
 		UPDATE project_services SET scraped_at = 16, checked_at = 16, next_scrape_at = 1816 WHERE id = 2 AND project_id = 2 AND type = 'unittest';
@@ -206,8 +233,8 @@ func Test_ScrapeSuccess(t *testing.T) {
 	//Scrape should apply the constraint, then enforce quota values in the backend
 	plugin.SetQuotaFails = false
 	setProjectServicesStale(t, s.DB)
-	c.Scrape("unittest")
-	c.Scrape("unittest") //twice because there are two projects
+	mustT(t, job.ProcessOne(s.Ctx, withLabel))
+	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_resources SET quota = 40, backend_quota = 40, desired_backend_quota = 40 WHERE service_id = 1 AND name = 'capacity';
 		UPDATE project_resources SET quota = 40, backend_quota = 48, desired_backend_quota = 48 WHERE service_id = 2 AND name = 'capacity';
@@ -220,8 +247,8 @@ func Test_ScrapeSuccess(t *testing.T) {
 	//time)
 	plugin.StaticResourceData["capacity"].Usage = 20
 	setProjectServicesStale(t, s.DB)
-	c.Scrape("unittest")
-	c.Scrape("unittest") //twice because there are two projects
+	mustT(t, job.ProcessOne(s.Ctx, withLabel))
+	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_resources SET usage = 20, physical_usage = 10 WHERE service_id = 1 AND name = 'capacity';
 		UPDATE project_resources SET usage = 5 WHERE service_id = 1 AND name = 'capacity_portion';
@@ -303,19 +330,14 @@ func Test_ScrapeFailure(t *testing.T) {
 		Cluster:   s.Cluster,
 		DB:        s.DB,
 		TimeNow:   test.TimeNow,
+		LogError:  t.Errorf,
 		AddJitter: test.NoJitter,
-		Once:      true,
 	}
+	job := c.ResourceScrapeJob(s.Registry)
+	withLabel := jobloop.WithLabel("service_type", "unittest")
+
 	//we will see an expected ERROR during testing, do not make the test fail because of this
-	expectedErrorRx := regexp.MustCompile(`^scrape unittest resources for germany/(berlin|dresden) failed: Scrape failed as requested$`)
-	c.LogError = func(msg string, args ...any) {
-		msg = fmt.Sprintf(msg, args...)
-		if expectedErrorRx.MatchString(msg) {
-			logg.Info(msg)
-		} else {
-			t.Error(msg)
-		}
-	}
+	expectedErrorRx := regexp.MustCompile(`^during resource scrape of project germany/(berlin|dresden): Scrape failed as requested$`)
 
 	//check that ScanDomains created the domain, project and their services
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
@@ -325,8 +347,8 @@ func Test_ScrapeFailure(t *testing.T) {
 	//plausibly-structured data
 	plugin := s.Cluster.QuotaPlugins["unittest"].(*plugins.GenericQuotaPlugin) //nolint:errcheck
 	plugin.ScrapeFails = true
-	c.Scrape("unittest")
-	c.Scrape("unittest") //twice because there are two projects
+	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx)
+	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx) //twice because there are two projects
 	tr.DBChanges().AssertEqualf(`
 		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (1, 'capacity', 10, 0, -1, 10);
 		INSERT INTO project_resources (service_id, name, usage) VALUES (1, 'capacity_portion', 0);
@@ -339,22 +361,26 @@ func Test_ScrapeFailure(t *testing.T) {
 	`)
 
 	//next Scrape should yield the same result
-	c.Scrape("unittest")
-	c.Scrape("unittest") //twice because there are two projects
-	tr.DBChanges().AssertEmpty()
+	setProjectServicesStale(t, s.DB)
+	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx)
+	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx)
+	tr.DBChanges().AssertEqualf(`
+		UPDATE project_services SET checked_at = 5, next_scrape_at = 305 WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET checked_at = 7, next_scrape_at = 307 WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+	`) //TODO advance clock
 
 	//once the backend starts working, we start to see plausible data again
 	plugin.ScrapeFails = false
 	setProjectServicesStale(t, s.DB)
-	c.Scrape("unittest")
-	c.Scrape("unittest") //twice because there are two projects
+	mustT(t, job.ProcessOne(s.Ctx, withLabel))
+	mustT(t, job.ProcessOne(s.Ctx, withLabel)) //twice because there are two projects
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_resources SET backend_quota = 100, physical_usage = 0 WHERE service_id = 1 AND name = 'capacity';
 		UPDATE project_resources SET usage = 2, backend_quota = 42, subresources = '[{"index":0},{"index":1}]' WHERE service_id = 1 AND name = 'things';
 		UPDATE project_resources SET backend_quota = 100, physical_usage = 0 WHERE service_id = 2 AND name = 'capacity';
 		UPDATE project_resources SET usage = 2, backend_quota = 42, subresources = '[{"index":0},{"index":1}]' WHERE service_id = 2 AND name = 'things';
-		UPDATE project_services SET scraped_at = 7, scrape_duration_secs = 1, serialized_metrics = '{"capacity_usage":0,"things_usage":2}', checked_at = 7, scrape_error_message = '', next_scrape_at = 1807 WHERE id = 1 AND project_id = 1 AND type = 'unittest';
-		UPDATE project_services SET scraped_at = 9, scrape_duration_secs = 1, serialized_metrics = '{"capacity_usage":0,"things_usage":2}', checked_at = 9, scrape_error_message = '', next_scrape_at = 1809 WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = 9, scrape_duration_secs = 1, serialized_metrics = '{"capacity_usage":0,"things_usage":2}', checked_at = 9, scrape_error_message = '', next_scrape_at = 1809 WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = 11, scrape_duration_secs = 1, serialized_metrics = '{"capacity_usage":0,"things_usage":2}', checked_at = 11, scrape_error_message = '', next_scrape_at = 1811 WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`)
 
 	//backend fails again and we need to scrape because of the stale flag ->
@@ -362,11 +388,11 @@ func Test_ScrapeFailure(t *testing.T) {
 	//failed check causes Scrape("unittest") to continue with the next resource afterwards)
 	plugin.ScrapeFails = true
 	setProjectServicesStale(t, s.DB)
-	c.Scrape("unittest")
-	c.Scrape("unittest") //twice because there are two projects
+	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx)
+	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx) //twice because there are two projects
 	tr.DBChanges().AssertEqualf(`
-		UPDATE project_services SET checked_at = 11, scrape_error_message = 'Scrape failed as requested', next_scrape_at = 311 WHERE id = 1 AND project_id = 1 AND type = 'unittest';
-		UPDATE project_services SET checked_at = 13, scrape_error_message = 'Scrape failed as requested', next_scrape_at = 313 WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+		UPDATE project_services SET checked_at = 13, scrape_error_message = 'Scrape failed as requested', next_scrape_at = 313 WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET checked_at = 15, scrape_error_message = 'Scrape failed as requested', next_scrape_at = 315 WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`)
 }
 
@@ -429,8 +455,9 @@ func Test_ScrapeCentralized(t *testing.T) {
 			LogError:  t.Errorf,
 			TimeNow:   test.TimeNow,
 			AddJitter: test.NoJitter,
-			Once:      true,
 		}
+		job := c.ResourceScrapeJob(s.Registry)
+		withLabel := jobloop.WithLabel("service_type", "centralized")
 
 		//check that ScanDomains created the domain, project and their services and
 		//applied the DefaultProjectQuota from the QuotaDistributionConfiguration
@@ -449,7 +476,7 @@ func Test_ScrapeCentralized(t *testing.T) {
 		//first Scrape creates the remaining project_resources, fills usage and
 		//enforces quota constraints (note that both projects behave identically
 		//since bursting is ineffective under centralized quota distribution)
-		c.Scrape("centralized")
+		mustT(t, job.ProcessOne(s.Ctx, withLabel))
 		tr.DBChanges().AssertEqualf(`
 			UPDATE domain_resources SET quota = 10 WHERE service_id = 1 AND name = 'capacity';
 			UPDATE domain_resources SET quota = 20 WHERE service_id = 1 AND name = 'things';
@@ -467,7 +494,7 @@ func Test_ScrapeCentralized(t *testing.T) {
 			t.Fatal(err)
 		}
 		setProjectServicesStale(t, s.DB)
-		c.Scrape("centralized")
+		mustT(t, job.ProcessOne(s.Ctx, withLabel))
 		//because Scrape converges back into the same state, the only change is in the timestamp fields
 		tr.DBChanges().AssertEqualf(`
 			UPDATE project_services SET scraped_at = 3, checked_at = 3, next_scrape_at = 1803 WHERE id = 1 AND project_id = 1 AND type = 'centralized';
@@ -509,8 +536,9 @@ func Test_AutoApproveInitialQuota(t *testing.T) {
 		LogError:  t.Errorf,
 		TimeNow:   test.TimeNow,
 		AddJitter: test.NoJitter,
-		Once:      true,
 	}
+	job := c.ResourceScrapeJob(s.Registry)
+	withLabel := jobloop.WithLabel("service_type", "autoapprovaltest")
 
 	//ScanDomains created the domain, project and their services
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
@@ -518,7 +546,7 @@ func Test_AutoApproveInitialQuota(t *testing.T) {
 
 	//when first scraping, the initial backend quota of the "approve" resource
 	//shall be approved automatically
-	c.Scrape("autoapprovaltest")
+	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 	tr.DBChanges().AssertEqualf(`
 		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (1, 'approve', 10, 0, 10, 10);
 		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (1, 'noapprove', 0, 0, 20, 0);
@@ -531,7 +559,7 @@ func Test_AutoApproveInitialQuota(t *testing.T) {
 	plugin := s.Cluster.QuotaPlugins["autoapprovaltest"].(*plugins.AutoApprovalQuotaPlugin) //nolint:errcheck
 	plugin.StaticBackendQuota += 10
 	setProjectServicesStale(t, s.DB)
-	c.Scrape("autoapprovaltest")
+	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_resources SET backend_quota = 20 WHERE service_id = 1 AND name = 'approve';
 		UPDATE project_resources SET backend_quota = 30 WHERE service_id = 1 AND name = 'noapprove';
@@ -555,6 +583,7 @@ const (
 	`
 )
 
+//nolint:dupl
 func Test_ScrapeButNoResources(t *testing.T) {
 	test.ResetTime()
 	s := test.NewSetup(t,
@@ -568,13 +597,14 @@ func Test_ScrapeButNoResources(t *testing.T) {
 		LogError:  t.Errorf,
 		TimeNow:   test.TimeNow,
 		AddJitter: test.NoJitter,
-		Once:      true,
 	}
+	job := c.ResourceScrapeJob(s.Registry)
+	withLabel := jobloop.WithLabel("service_type", "noop")
 
 	//check that Scrape() behaves properly when encountering a quota plugin with
 	//no Resources() (in the wild, this can happen because some quota plugins
 	//only have Rates())
-	c.Scrape("noop")
+	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 	_, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualf(`
 		INSERT INTO domain_services (id, domain_id, type) VALUES (1, 1, 'noop');

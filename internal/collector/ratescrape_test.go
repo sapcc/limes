@@ -20,7 +20,7 @@
 package collector
 
 import (
-	"fmt"
+	"database/sql"
 	"regexp"
 	"testing"
 
@@ -30,7 +30,7 @@ import (
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
-	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/go-bits/jobloop"
 
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
@@ -75,8 +75,9 @@ func Test_RateScrapeSuccess(t *testing.T) {
 		LogError:  t.Errorf,
 		TimeNow:   test.TimeNow,
 		AddJitter: test.NoJitter,
-		Once:      true,
 	}
+	job := c.RateScrapeJob(s.Registry)
+	withLabel := jobloop.WithLabel("service_type", "unittest")
 
 	//for one of the projects, put some records in for rate limits, to check that
 	//the scraper does not mess with those values
@@ -117,8 +118,8 @@ func Test_RateScrapeSuccess(t *testing.T) {
 	`)
 
 	//first Scrape should create the entries
-	c.ScrapeRates("unittest")
-	c.ScrapeRates("unittest") //twice because there are two projects
+	mustT(t, job.ProcessOne(s.Ctx, withLabel))
+	mustT(t, job.ProcessOne(s.Ctx, withLabel)) //twice because there are two projects
 	tr.DBChanges().AssertEqualf(`
 		INSERT INTO project_rates (service_id, name, usage_as_bigint) VALUES (1, 'firstrate', '9');
 		UPDATE project_rates SET usage_as_bigint = '10' WHERE service_id = 1 AND name = 'secondrate';
@@ -130,7 +131,7 @@ func Test_RateScrapeSuccess(t *testing.T) {
 
 	//second Scrape should not change anything (not even the timestamps) since
 	//less than 30 minutes have passed since the last Scrape()
-	c.ScrapeRates("unittest")
+	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), sql.ErrNoRows)
 	tr.DBChanges().AssertEmpty()
 
 	//manually mess with one of the ratesScrapeState
@@ -139,15 +140,15 @@ func Test_RateScrapeSuccess(t *testing.T) {
 		t.Fatal(err)
 	}
 	//this alone should not cause a new scrape
-	c.ScrapeRates("unittest")
+	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), sql.ErrNoRows)
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_services SET rates_scrape_state = '{"firstrate":4096,"secondrate":0}' WHERE id = 1 AND project_id = 1 AND type = 'unittest';
 	`)
 
 	//but the changed state will be taken into account when the next scrape is in order
 	setProjectServicesRatesStale(t, s.DB)
-	c.ScrapeRates("unittest")
-	c.ScrapeRates("unittest")
+	mustT(t, job.ProcessOne(s.Ctx, withLabel))
+	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_rates SET usage_as_bigint = '5129' WHERE service_id = 1 AND name = 'firstrate';
 		UPDATE project_rates SET usage_as_bigint = '1034' WHERE service_id = 1 AND name = 'secondrate';
@@ -197,18 +198,12 @@ func Test_RateScrapeFailure(t *testing.T) {
 		LogError:  t.Errorf,
 		TimeNow:   test.TimeNow,
 		AddJitter: test.NoJitter,
-		Once:      true,
 	}
-	//we will see an expected ERROR during testing, do not make the test fail because of this
-	expectedErrorRx := regexp.MustCompile(`^scrape unittest rate data for germany/(berlin|dresden) failed: ScrapeRates failed as requested$`)
-	c.LogError = func(msg string, args ...any) {
-		msg = fmt.Sprintf(msg, args...)
-		if expectedErrorRx.MatchString(msg) {
-			logg.Info(msg)
-		} else {
-			t.Error(msg)
-		}
-	}
+	job := c.RateScrapeJob(s.Registry)
+	withLabel := jobloop.WithLabel("service_type", "unittest")
+
+	//this is the error that we expect to appear when ScrapeFails is set
+	expectedErrorRx := regexp.MustCompile(`^during rate scrape of project germany/(berlin|dresden): ScrapeRates failed as requested$`)
 
 	//check that ScanDomains created the domain, project and their services
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
@@ -217,9 +212,9 @@ func Test_RateScrapeFailure(t *testing.T) {
 	//ScrapeRates should not touch the DB when scraping fails
 	plugin := s.Cluster.QuotaPlugins["unittest"].(*plugins.GenericQuotaPlugin) //nolint:errcheck
 	plugin.ScrapeFails = true
-	c.ScrapeRates("unittest")
+	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx)
 	tr.DBChanges().AssertEqualf(`
-		UPDATE project_services SET rates_scrape_duration_secs = 1, rates_checked_at = 1, rates_scrape_error_message = 'ScrapeRates failed as requested', rates_next_scrape_at = 301 WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET rates_checked_at = 1, rates_scrape_error_message = 'ScrapeRates failed as requested', rates_next_scrape_at = 301 WHERE id = 1 AND project_id = 1 AND type = 'unittest';
 	`)
 }
 
@@ -236,6 +231,7 @@ func p2window(val limesrates.Window) *limesrates.Window {
 	return &val
 }
 
+//nolint:dupl
 func Test_ScrapeRatesButNoRates(t *testing.T) {
 	test.ResetTime()
 	s := test.NewSetup(t,
@@ -249,13 +245,14 @@ func Test_ScrapeRatesButNoRates(t *testing.T) {
 		LogError:  t.Errorf,
 		TimeNow:   test.TimeNow,
 		AddJitter: test.NoJitter,
-		Once:      true,
 	}
+	job := c.RateScrapeJob(s.Registry)
+	withLabel := jobloop.WithLabel("service_type", "noop")
 
 	//check that ScrapeRates() behaves properly when encountering a quota plugin
 	//with no Rates() (in the wild, this can happen because some quota plugins
 	//only have Resources())
-	c.ScrapeRates("noop")
+	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 	_, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualf(`
 		INSERT INTO domain_services (id, domain_id, type) VALUES (1, 1, 'noop');

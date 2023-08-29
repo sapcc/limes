@@ -42,6 +42,7 @@ import (
 	"github.com/sapcc/go-bits/errext"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/httpext"
+	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/osext"
@@ -150,14 +151,16 @@ func taskCollect(cluster *core.Cluster, args []string) {
 	//that for now, and instead construct worker threads in such a way that they
 	//can be terminated at any time without leaving the system in an inconsistent
 	//state, mostly through usage of DB transactions.)
+	c := collector.NewCollector(cluster, dbm)
+	resourceScrapeJob := c.ResourceScrapeJob(nil)
+	rateScrapeJob := c.RateScrapeJob(nil)
 	for serviceType := range cluster.QuotaPlugins {
-		c := collector.NewCollector(cluster, dbm)
-		go c.Scrape(serviceType)
-		go c.ScrapeRates(serviceType)
+		opt := jobloop.WithLabel("service_type", serviceType)
+		go resourceScrapeJob.Run(ctx, opt)
+		go rateScrapeJob.Run(ctx, opt)
 	}
 
 	//start those collector threads which operate over all services simultaneously
-	c := collector.NewCollector(cluster, dbm)
 	go c.CheckConsistencyJob(nil).Run(ctx)
 	go c.ScanCapacity()
 	go func() {

@@ -37,22 +37,6 @@ import (
 ////////////////////////////////////////////////////////////////////////////////
 // collector metrics
 
-var scrapeSuccessCounter = prometheus.NewCounterVec(
-	prometheus.CounterOpts{
-		Name: "limes_successful_scrapes",
-		Help: "Counter for successful quota scrape operations per Keystone project.",
-	},
-	[]string{"service", "service_name"},
-)
-
-var scrapeFailedCounter = prometheus.NewCounterVec(
-	prometheus.CounterOpts{
-		Name: "limes_failed_scrapes",
-		Help: "Counter for failed quota scrape operations per Keystone project.",
-	},
-	[]string{"service", "service_name"},
-)
-
 var projectDiscoverySuccessCounter = prometheus.NewCounterVec(
 	prometheus.CounterOpts{
 		Name: "limes_successful_project_discoveries",
@@ -99,33 +83,13 @@ var clusterCapacitorFailedCounter = prometheus.NewCounterVec(
 	[]string{"capacitor"},
 )
 
-var ratesScrapeSuccessCounter = prometheus.NewCounterVec(
-	prometheus.CounterOpts{
-		Name: "limes_successful_rate_scrapes",
-		Help: "Counter for successful rate scrape operations per Keystone project.",
-	},
-	[]string{"service", "service_name"},
-)
-
-var ratesScrapeFailedCounter = prometheus.NewCounterVec(
-	prometheus.CounterOpts{
-		Name: "limes_failed_rate_scrapes",
-		Help: "Counter for failed rate scrape operations per Keystone project.",
-	},
-	[]string{"service", "service_name"},
-)
-
 func init() {
-	prometheus.MustRegister(scrapeSuccessCounter)
-	prometheus.MustRegister(scrapeFailedCounter)
 	prometheus.MustRegister(projectDiscoverySuccessCounter)
 	prometheus.MustRegister(projectDiscoveryFailedCounter)
 	prometheus.MustRegister(domainDiscoverySuccessCounter)
 	prometheus.MustRegister(domainDiscoveryFailedCounter)
 	prometheus.MustRegister(clusterCapacitorSuccessCounter)
 	prometheus.MustRegister(clusterCapacitorFailedCounter)
-	prometheus.MustRegister(ratesScrapeSuccessCounter)
-	prometheus.MustRegister(ratesScrapeFailedCounter)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
