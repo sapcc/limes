@@ -95,7 +95,7 @@ func dumpOwnExecutable(w http.ResponseWriter) {
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Length", strconv.Itoa(len(buf)))
 	w.WriteHeader(http.StatusOK)
-	w.Write(buf)
+	w.Write(buf) //nolint:errcheck
 }
 
 // IsRequestFromLocalhost checks whether the given request originates from
