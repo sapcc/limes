@@ -52,6 +52,7 @@ import (
 	"github.com/sapcc/limes/internal/collector"
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
+	"github.com/sapcc/limes/internal/pprofapi"
 	"github.com/sapcc/limes/internal/util"
 
 	_ "github.com/sapcc/limes/internal/plugins"
@@ -186,6 +187,9 @@ func taskCollect(cluster *core.Cluster, args []string) {
 		})
 	}
 	mux := http.NewServeMux()
+	mux.Handle("/", httpapi.Compose(
+		pprofapi.API{IsAuthorized: pprofapi.IsRequestFromLocalhost},
+	))
 	mux.Handle("/metrics", promhttp.Handler())
 
 	metricsListenAddr := osext.GetenvOrDefault("LIMES_COLLECTOR_METRICS_LISTEN_ADDRESS", ":8080")
@@ -214,6 +218,7 @@ func taskServe(cluster *core.Cluster, args []string, provider *gophercloud.Provi
 	mux := http.NewServeMux()
 	mux.Handle("/", httpapi.Compose(
 		api.NewV1API(cluster, dbm, tokenValidator),
+		pprofapi.API{IsAuthorized: pprofapi.IsRequestFromLocalhost},
 		httpapi.WithGlobalMiddleware(api.ForbidClusterIDHeader),
 		httpapi.WithGlobalMiddleware(corsMiddleware.Handler),
 	))
