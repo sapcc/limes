@@ -185,10 +185,11 @@ func taskCollect(cluster *core.Cluster, args []string) {
 			ReportZeroes: !skipZero,
 		})
 	}
-	http.Handle("/metrics", promhttp.Handler())
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.Handler())
 
 	metricsListenAddr := osext.GetenvOrDefault("LIMES_COLLECTOR_METRICS_LISTEN_ADDRESS", ":8080")
-	must.Succeed(httpext.ListenAndServeContext(ctx, metricsListenAddr, nil))
+	must.Succeed(httpext.ListenAndServeContext(ctx, metricsListenAddr, mux))
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -210,17 +211,18 @@ func taskServe(cluster *core.Cluster, args []string, provider *gophercloud.Provi
 		AllowedMethods: []string{"HEAD", "GET", "POST", "PUT"},
 		AllowedHeaders: []string{"Content-Type", "User-Agent", "X-Auth-Token", "X-Limes-Cluster-Id"},
 	})
-	http.Handle("/", httpapi.Compose(
+	mux := http.NewServeMux()
+	mux.Handle("/", httpapi.Compose(
 		api.NewV1API(cluster, dbm, tokenValidator),
 		httpapi.WithGlobalMiddleware(api.ForbidClusterIDHeader),
 		httpapi.WithGlobalMiddleware(corsMiddleware.Handler),
 	))
-	http.Handle("/metrics", promhttp.Handler())
+	mux.Handle("/metrics", promhttp.Handler())
 
 	//start HTTP server
 	apiListenAddr := osext.GetenvOrDefault("LIMES_API_LISTEN_ADDRESS", ":80")
 	ctx := httpext.ContextWithSIGINT(context.Background(), 10*time.Second)
-	must.Succeed(httpext.ListenAndServeContext(ctx, apiListenAddr, nil))
+	must.Succeed(httpext.ListenAndServeContext(ctx, apiListenAddr, mux))
 }
 
 ////////////////////////////////////////////////////////////////////////////////
