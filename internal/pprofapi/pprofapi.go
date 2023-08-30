@@ -29,6 +29,8 @@ package pprofapi
 import (
 	"net/http"
 	"net/http/pprof"
+	"os"
+	"strconv"
 
 	"github.com/gorilla/mux"
 	"github.com/sapcc/go-bits/httpapi"
@@ -47,23 +49,53 @@ func (a API) AddTo(r *mux.Router) {
 		panic("API.AddTo() called with IsAuthorized == nil!")
 	}
 
-	a.attach(r, "/debug/pprof/", pprof.Index)
-	a.attach(r, "/debug/pprof/cmdline", pprof.Cmdline)
-	a.attach(r, "/debug/pprof/profile", pprof.Profile)
-	a.attach(r, "/debug/pprof/symbol", pprof.Symbol)
-	a.attach(r, "/debug/pprof/trace", pprof.Trace)
+	r.Methods("GET").Path("/debug/pprof/{operation}").HandlerFunc(a.handler)
 }
 
-func (a API) attach(r *mux.Router, path string, inner http.HandlerFunc) {
-	r.Methods("GET").Path(path).HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		httpapi.IdentifyEndpoint(r, path)
-		httpapi.SkipRequestLog(r)
-		if a.IsAuthorized(r) {
-			inner(w, r)
-		} else {
-			http.Error(w, "forbidden", http.StatusForbidden)
-		}
-	})
+func (a API) handler(w http.ResponseWriter, r *http.Request) {
+	httpapi.IdentifyEndpoint(r, "/debug/pprof/:operation")
+	httpapi.SkipRequestLog(r)
+	if !a.IsAuthorized(r) {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+
+	switch mux.Vars(r)["operation"] {
+	default:
+		pprof.Index(w, r)
+	case "cmdline":
+		pprof.Cmdline(w, r)
+	case "profile":
+		pprof.Profile(w, r)
+	case "symbol":
+		pprof.Symbol(w, r)
+	case "trace":
+		pprof.Trace(w, r)
+	case "exe":
+		//Custom addition: To run `go tool pprof`, we need the executable that
+		//produced the pprof output. It is possible to exec into the container to
+		//copy the binary file out, or to unpack the image, but since we already
+		//obtain the pprof file via HTTP, it's more convenient to obtain the binary
+		//over the same mechanism.
+		dumpOwnExecutable(w)
+	}
+}
+
+func dumpOwnExecutable(w http.ResponseWriter) {
+	path, err := os.Executable()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	buf, err := os.ReadFile(path)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Length", strconv.Itoa(len(buf)))
+	w.WriteHeader(http.StatusOK)
+	w.Write(buf)
 }
 
 // IsRequestFromLocalhost checks whether the given request originates from
