@@ -152,7 +152,7 @@ var sqlMigrations = map[string]string{
 		ALTER TABLE cluster_capacitors
 			ADD COLUMN next_scrape_at TIMESTAMP NOT NULL DEFAULT NOW();
 		ALTER TABLE cluster_resources
-			ADD COLUMN capacitor_id TEXT NOT NULL REFERENCES cluster_capacitors ON DELETE CASCADE;
+			ADD COLUMN capacitor_id TEXT DEFAULT NULL REFERENCES cluster_capacitors ON DELETE CASCADE;
 	`,
 	"023_capacity_scan_rework.down.sql": `
 		ALTER TABLE cluster_capacitors
