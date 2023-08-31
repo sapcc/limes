@@ -11,13 +11,14 @@ binaries:
 coverageTest:
   except: '/plugins'
 
-vendoring:
-  enabled: true
-
 dockerfile:
   enabled: true
   extraIgnores:
     - /*.yaml
+
+golang:
+  enableVendoring: true
+  setGoModVersion: true
 
 golangciLint:
   createConfig: true
