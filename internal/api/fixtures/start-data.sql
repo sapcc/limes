@@ -1,14 +1,17 @@
 CREATE OR REPLACE FUNCTION unix(i integer) RETURNS timestamp AS $$ SELECT TO_TIMESTAMP(i) AT TIME ZONE 'Etc/UTC' $$ LANGUAGE SQL;
 
+-- one bogus capacitor
+INSERT INTO cluster_capacitors (capacitor_id, scraped_at, next_scrape_at) VALUES ('dummy-capacitor', UNIX(900), UNIX(1800));
+
 -- three services
 INSERT INTO cluster_services (id, type, scraped_at) VALUES (1, 'unshared',    UNIX(1000));
 INSERT INTO cluster_services (id, type, scraped_at) VALUES (2, 'shared',      UNIX(1100));
 INSERT INTO cluster_services (id, type, scraped_at) VALUES (3, 'centralized', UNIX(1200));
 
 -- all services have the resources "things" and "capacity"
-INSERT INTO cluster_resources (service_id, name, capacity, subcapacities, capacity_per_az) VALUES (1, 'things', 139, '[{"smaller_half":46},{"larger_half":93}]', '[{"name":"az-one","capacity":69,"usage":13},{"name":"az-two","capacity":69,"usage":13}]');
-INSERT INTO cluster_resources (service_id, name, capacity, subcapacities, capacity_per_az) VALUES (2, 'things', 246, '[{"smaller_half":82},{"larger_half":164}]', '');
-INSERT INTO cluster_resources (service_id, name, capacity, subcapacities, capacity_per_az) VALUES (2, 'capacity', 185, '', '');
+INSERT INTO cluster_resources (service_id, name, capacity, subcapacities, capacity_per_az, capacitor_id) VALUES (1, 'things', 139, '[{"smaller_half":46},{"larger_half":93}]', '[{"name":"az-one","capacity":69,"usage":13},{"name":"az-two","capacity":69,"usage":13}]', 'dummy-capacitor');
+INSERT INTO cluster_resources (service_id, name, capacity, subcapacities, capacity_per_az, capacitor_id) VALUES (2, 'things', 246, '[{"smaller_half":82},{"larger_half":164}]', '', 'dummy-capacitor');
+INSERT INTO cluster_resources (service_id, name, capacity, subcapacities, capacity_per_az, capacitor_id) VALUES (2, 'capacity', 185, '', '', 'dummy-capacitor');
 
 -- two domains
 INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
@@ -102,7 +105,7 @@ INSERT INTO project_rates (service_id, name, rate_limit, window_ns, usage_as_big
 -- insert some bullshit data that should be filtered out by the internal/reports/ logic
 -- (cluster "north", service "weird", resource "items" and rate "frobnicate" are not configured)
 INSERT INTO cluster_services (id, type, scraped_at) VALUES (101, 'weird', UNIX(1100));
-INSERT INTO cluster_resources (service_id, name, capacity) VALUES (101, 'things', 1);
+INSERT INTO cluster_resources (service_id, name, capacity, capacitor_id) VALUES (101, 'things', 1, 'dummy-capacitor');
 INSERT INTO domain_services (id, domain_id, type) VALUES (101, 1, 'weird');
 INSERT INTO domain_resources (service_id, name, quota) VALUES (101, 'things', 1);
 INSERT INTO project_services (id, project_id, type) VALUES (101, 1, 'weird');

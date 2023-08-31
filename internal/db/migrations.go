@@ -148,4 +148,16 @@ var sqlMigrations = map[string]string{
 			DROP COLUMN next_scrape_at,
 			DROP COLUMN rates_next_scrape_at;
 	`,
+	"023_capacity_scan_rework.up.sql": `
+		ALTER TABLE cluster_capacitors
+			ADD COLUMN next_scrape_at TIMESTAMP NOT NULL DEFAULT NOW();
+		ALTER TABLE cluster_resources
+			ADD COLUMN capacitor_id TEXT NOT NULL REFERENCES cluster_capacitors ON DELETE CASCADE;
+	`,
+	"023_capacity_scan_rework.down.sql": `
+		ALTER TABLE cluster_capacitors
+			DROP COLUMN next_scrape_at;
+		ALTER TABLE cluster_resources
+			DROP COLUMN capacitor_id;
+	`,
 }

@@ -32,6 +32,7 @@ type ClusterCapacitor struct {
 	ScrapedAt          *time.Time `db:"scraped_at"` //pointer type to allow for NULL value
 	ScrapeDurationSecs float64    `db:"scrape_duration_secs"`
 	SerializedMetrics  string     `db:"serialized_metrics"`
+	NextScrapeAt       time.Time  `db:"next_scrape_at"`
 }
 
 // ClusterService contains a record from the `cluster_services` table.
@@ -48,6 +49,7 @@ type ClusterResource struct {
 	RawCapacity       uint64 `db:"capacity"`
 	CapacityPerAZJSON string `db:"capacity_per_az"`
 	SubcapacitiesJSON string `db:"subcapacities"`
+	CapacitorID       string `db:"capacitor_id"`
 }
 
 // Domain contains a record from the `domains` table.

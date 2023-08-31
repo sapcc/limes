@@ -59,8 +59,13 @@ func (c *Collector) ScanCapacity() {
 	}
 }
 
+type capacityDataWithCapacitorID struct {
+	CapacityData core.CapacityData
+	CapacitorID  string
+}
+
 func (c *Collector) scanCapacity() {
-	values := make(map[string]map[string]core.CapacityData)
+	values := make(map[string]map[string]capacityDataWithCapacitorID)
 	scrapedAt := c.TimeNow()
 
 	capacitorInfo := make(map[string]db.ClusterCapacitor)
@@ -85,10 +90,10 @@ func (c *Collector) scanCapacity() {
 		//merge capacities from this plugin into the overall capacity values map
 		for serviceType, resources := range capacities {
 			if _, ok := values[serviceType]; !ok {
-				values[serviceType] = make(map[string]core.CapacityData)
+				values[serviceType] = make(map[string]capacityDataWithCapacitorID)
 			}
 			for resourceName, value := range resources {
-				values[serviceType][resourceName] = value
+				values[serviceType][resourceName] = capacityDataWithCapacitorID{value, capacitorID}
 			}
 		}
 
@@ -98,6 +103,7 @@ func (c *Collector) scanCapacity() {
 			ScrapedAt:          &scrapedAt,
 			ScrapeDurationSecs: scrapeDuration.Seconds(),
 			SerializedMetrics:  serializedMetrics,
+			NextScrapeAt:       scrapedAt.Add(c.AddJitter(scanInterval)),
 		}
 	}
 
@@ -186,7 +192,7 @@ func (c *Collector) writeCapacitorInfo(tx *gorp.Transaction, capacitorInfo map[s
 	return nil
 }
 
-func (c *Collector) writeCapacity(tx *gorp.Transaction, values map[string]map[string]core.CapacityData, scrapedAt time.Time) error {
+func (c *Collector) writeCapacity(tx *gorp.Transaction, values map[string]map[string]capacityDataWithCapacitorID, scrapedAt time.Time) error {
 	//create missing cluster_services entries (superfluous ones will be cleaned
 	//up by the CheckConsistency())
 	serviceIDForType := make(map[string]int64)
@@ -244,22 +250,23 @@ func (c *Collector) writeCapacity(tx *gorp.Transaction, values map[string]map[st
 
 			data, exists := serviceValues[dbResource.Name]
 			if exists {
-				dbResource.RawCapacity = data.Capacity
+				dbResource.RawCapacity = data.CapacityData.Capacity
+				dbResource.CapacitorID = data.CapacitorID
 
-				if len(data.Subcapacities) == 0 {
+				if len(data.CapacityData.Subcapacities) == 0 {
 					dbResource.SubcapacitiesJSON = ""
 				} else {
-					bytes, err := json.Marshal(data.Subcapacities)
+					bytes, err := json.Marshal(data.CapacityData.Subcapacities)
 					if err != nil {
 						return fmt.Errorf("failed to convert subcapacities to JSON: %s", err.Error())
 					}
 					dbResource.SubcapacitiesJSON = string(bytes)
 				}
 
-				if len(data.CapacityPerAZ) == 0 {
+				if len(data.CapacityData.CapacityPerAZ) == 0 {
 					dbResource.CapacityPerAZJSON = ""
 				} else {
-					bytes, err := json.Marshal(convertAZReport(data.CapacityPerAZ))
+					bytes, err := json.Marshal(convertAZReport(data.CapacityData.CapacityPerAZ))
 					if err != nil {
 						return fmt.Errorf("failed to convert capacities per availability zone to JSON: %s", err.Error())
 					}
@@ -291,21 +298,22 @@ func (c *Collector) writeCapacity(tx *gorp.Transaction, values map[string]map[st
 			res := &db.ClusterResource{
 				ServiceID:         serviceID,
 				Name:              name,
-				RawCapacity:       data.Capacity,
+				RawCapacity:       data.CapacityData.Capacity,
 				CapacityPerAZJSON: "", //but see below
 				SubcapacitiesJSON: "",
+				CapacitorID:       data.CapacitorID,
 			}
 
-			if len(data.Subcapacities) != 0 {
-				bytes, err := json.Marshal(data.Subcapacities)
+			if len(data.CapacityData.Subcapacities) != 0 {
+				bytes, err := json.Marshal(data.CapacityData.Subcapacities)
 				if err != nil {
 					return fmt.Errorf("failed to convert subcapacities to JSON: %s", err.Error())
 				}
 				res.SubcapacitiesJSON = string(bytes)
 			}
 
-			if len(data.CapacityPerAZ) != 0 {
-				bytes, err := json.Marshal(convertAZReport(data.CapacityPerAZ))
+			if len(data.CapacityData.CapacityPerAZ) != 0 {
+				bytes, err := json.Marshal(convertAZReport(data.CapacityData.CapacityPerAZ))
 				if err != nil {
 					return fmt.Errorf("failed to convert capacities per availability zone to JSON: %s", err.Error())
 				}
