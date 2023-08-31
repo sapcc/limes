@@ -251,7 +251,7 @@ func (c *Collector) writeCapacity(tx *gorp.Transaction, values map[string]map[st
 			data, exists := serviceValues[dbResource.Name]
 			if exists {
 				dbResource.RawCapacity = data.CapacityData.Capacity
-				dbResource.CapacitorID = data.CapacitorID
+				dbResource.CapacitorID = &data.CapacitorID
 
 				if len(data.CapacityData.Subcapacities) == 0 {
 					dbResource.SubcapacitiesJSON = ""
@@ -301,7 +301,7 @@ func (c *Collector) writeCapacity(tx *gorp.Transaction, values map[string]map[st
 				RawCapacity:       data.CapacityData.Capacity,
 				CapacityPerAZJSON: "", //but see below
 				SubcapacitiesJSON: "",
-				CapacitorID:       data.CapacitorID,
+				CapacitorID:       &data.CapacitorID,
 			}
 
 			if len(data.CapacityData.Subcapacities) != 0 {

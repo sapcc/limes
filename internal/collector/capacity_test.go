@@ -100,11 +100,12 @@ func Test_ScanCapacity(t *testing.T) {
 	`)
 
 	//insert some crap records
+	capacitorID := "unittest2"
 	err := s.DB.Insert(&db.ClusterResource{
 		ServiceID:   2,
 		Name:        "unknown",
 		RawCapacity: 100,
-		CapacitorID: "unittest2",
+		CapacitorID: &capacitorID,
 	})
 	if err != nil {
 		t.Error(err)

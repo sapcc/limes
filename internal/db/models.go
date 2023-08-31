@@ -44,12 +44,12 @@ type ClusterService struct {
 
 // ClusterResource contains a record from the `cluster_resources` table.
 type ClusterResource struct {
-	ServiceID         int64  `db:"service_id"`
-	Name              string `db:"name"`
-	RawCapacity       uint64 `db:"capacity"`
-	CapacityPerAZJSON string `db:"capacity_per_az"`
-	SubcapacitiesJSON string `db:"subcapacities"`
-	CapacitorID       string `db:"capacitor_id"`
+	ServiceID         int64   `db:"service_id"`
+	Name              string  `db:"name"`
+	RawCapacity       uint64  `db:"capacity"`
+	CapacityPerAZJSON string  `db:"capacity_per_az"`
+	SubcapacitiesJSON string  `db:"subcapacities"`
+	CapacitorID       *string `db:"capacitor_id"` //can be NULL during transition period (TODO: remove after migration 24)
 }
 
 // Domain contains a record from the `domains` table.

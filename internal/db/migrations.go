@@ -148,6 +148,7 @@ var sqlMigrations = map[string]string{
 			DROP COLUMN next_scrape_at,
 			DROP COLUMN rates_next_scrape_at;
 	`,
+	// NOTE: cluster_resources.capacitor_id must start out as DEFAULT NULL because existing rows have no values here
 	"023_capacity_scan_rework.up.sql": `
 		ALTER TABLE cluster_capacitors
 			ADD COLUMN next_scrape_at TIMESTAMP NOT NULL DEFAULT NOW();
