@@ -86,7 +86,6 @@ func Test_ScanDomains(t *testing.T) {
 		LogError:  t.Errorf,
 		TimeNow:   test.TimeNow,
 		AddJitter: test.NoJitter,
-		Once:      true,
 	}
 
 	//first ScanDomains should discover the StaticDomains in the cluster,

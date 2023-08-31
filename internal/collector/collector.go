@@ -43,9 +43,6 @@ type Collector struct {
 	TimeNow func() time.Time
 	//Usually addJitter, but can be changed inside unit tests.
 	AddJitter func(time.Duration) time.Duration
-	//When set to true, suppresses the usual non-returning behavior of
-	//collector jobs.
-	Once bool
 }
 
 // NewCollector creates a Collector instance.
@@ -56,7 +53,6 @@ func NewCollector(cluster *core.Cluster, dbm *gorp.DbMap) *Collector {
 		LogError:  logg.Error,
 		TimeNow:   time.Now,
 		AddJitter: addJitter,
-		Once:      false,
 	}
 }
 

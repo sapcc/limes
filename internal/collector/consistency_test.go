@@ -39,7 +39,6 @@ func Test_Consistency(t *testing.T) {
 		LogError:  t.Errorf,
 		TimeNow:   test.TimeNow,
 		AddJitter: test.NoJitter,
-		Once:      true,
 	}
 
 	consistencyJob := c.CheckConsistencyJob(s.Registry)
