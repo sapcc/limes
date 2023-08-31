@@ -41,6 +41,7 @@ import (
 	"github.com/sapcc/go-api-declarations/bininfo"
 	"github.com/sapcc/go-bits/errext"
 	"github.com/sapcc/go-bits/httpapi"
+	"github.com/sapcc/go-bits/httpapi/pprofapi"
 	"github.com/sapcc/go-bits/httpext"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/logg"
@@ -52,7 +53,6 @@ import (
 	"github.com/sapcc/limes/internal/collector"
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
-	"github.com/sapcc/limes/internal/pprofapi"
 	"github.com/sapcc/limes/internal/util"
 
 	_ "github.com/sapcc/limes/internal/plugins"

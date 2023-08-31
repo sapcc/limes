@@ -28,7 +28,7 @@ github.com/golang-migrate/migrate/v4/source/go_bindata
 # github.com/golang/protobuf v1.5.3
 ## explicit; go 1.9
 github.com/golang/protobuf/proto
-# github.com/gophercloud/gophercloud v1.5.0
+# github.com/gophercloud/gophercloud v1.6.0
 ## explicit; go 1.14
 github.com/gophercloud/gophercloud
 github.com/gophercloud/gophercloud/openstack
@@ -83,7 +83,7 @@ github.com/hashicorp/go-multierror
 # github.com/hashicorp/go-uuid v1.0.3
 ## explicit
 github.com/hashicorp/go-uuid
-# github.com/hashicorp/golang-lru/v2 v2.0.5
+# github.com/hashicorp/golang-lru/v2 v2.0.6
 ## explicit; go 1.18
 github.com/hashicorp/golang-lru/v2
 github.com/hashicorp/golang-lru/v2/internal
@@ -144,7 +144,7 @@ github.com/rabbitmq/amqp091-go
 # github.com/rs/cors v1.9.0
 ## explicit; go 1.13
 github.com/rs/cors
-# github.com/sapcc/go-api-declarations v1.8.0
+# github.com/sapcc/go-api-declarations v1.8.1
 ## explicit; go 1.21
 github.com/sapcc/go-api-declarations/bininfo
 github.com/sapcc/go-api-declarations/cadf
@@ -152,7 +152,7 @@ github.com/sapcc/go-api-declarations/internal/marshal
 github.com/sapcc/go-api-declarations/limes
 github.com/sapcc/go-api-declarations/limes/rates
 github.com/sapcc/go-api-declarations/limes/resources
-# github.com/sapcc/go-bits v0.0.0-20230817142210-d6d2e72f3d0a
+# github.com/sapcc/go-bits v0.0.0-20230831095729-1bcecc1483c4
 ## explicit; go 1.21
 github.com/sapcc/go-bits/assert
 github.com/sapcc/go-bits/audittools
@@ -160,6 +160,7 @@ github.com/sapcc/go-bits/easypg
 github.com/sapcc/go-bits/errext
 github.com/sapcc/go-bits/gopherpolicy
 github.com/sapcc/go-bits/httpapi
+github.com/sapcc/go-bits/httpapi/pprofapi
 github.com/sapcc/go-bits/httpext
 github.com/sapcc/go-bits/jobloop
 github.com/sapcc/go-bits/logg

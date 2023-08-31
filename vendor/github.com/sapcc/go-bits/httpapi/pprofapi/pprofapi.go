@@ -17,8 +17,6 @@
 *
 *******************************************************************************/
 
-//TODO: move this to go-bits/httpapi/pprofapi, as implied by the package comment
-
 // Package pprofapi provides a httpapi.API wrapper for the net/http/pprof
 // package. This is in a separate package and not the main httpapi package
 // because importing net/http/pprof tampers with http.DefaultServeMux, so
@@ -33,12 +31,19 @@ import (
 	"strconv"
 
 	"github.com/gorilla/mux"
+
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/httpext"
+	"github.com/sapcc/go-bits/logg"
 )
 
 // API is a httpapi.API wrapping net/http/pprof. Unlike the default facility in
 // net/http/pprof, the respective endpoints are only accessible to admin users.
+//
+// As an extension of the interface provided by net/http/pprof, the additional
+// endpoint `GET /debug/pprof/exe` responds with the process's own executable.
+// This can be given to `go tool pprof` when processing any of the pprof
+// reports obtained through the other endpoints.
 type API struct {
 	IsAuthorized func(r *http.Request) bool
 }
@@ -92,10 +97,14 @@ func dumpOwnExecutable(w http.ResponseWriter) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Length", strconv.Itoa(len(buf)))
 	w.WriteHeader(http.StatusOK)
-	w.Write(buf) //nolint:errcheck
+	_, err = w.Write(buf)
+	if err != nil {
+		logg.Error("while writing response body during GET /debug/pprof/exe: %s", err.Error())
+	}
 }
 
 // IsRequestFromLocalhost checks whether the given request originates from
