@@ -77,7 +77,7 @@ var (
 // a target service type is specified using the
 // `jobloop.WithLabel("service_type", serviceType)` option.
 func (c *Collector) RateScrapeJob(registerer prometheus.Registerer) jobloop.Job {
-	return (&jobloop.ProducerConsumerJob[scrapeTask]{
+	return (&jobloop.ProducerConsumerJob[projectScrapeTask]{
 		Metadata: jobloop.JobMetadata{
 			ReadableName: "scrape project rate usage",
 			CounterOpts: prometheus.CounterOpts{
@@ -86,14 +86,14 @@ func (c *Collector) RateScrapeJob(registerer prometheus.Registerer) jobloop.Job 
 			},
 			CounterLabels: []string{"service_type", "service_name"},
 		},
-		DiscoverTask: func(_ context.Context, labels prometheus.Labels) (scrapeTask, error) {
+		DiscoverTask: func(_ context.Context, labels prometheus.Labels) (projectScrapeTask, error) {
 			return c.discoverScrapeTask(labels, findProjectForRateScrapeQuery)
 		},
 		ProcessTask: c.processRateScrapeTask,
 	}).Setup(registerer)
 }
 
-func (c *Collector) processRateScrapeTask(_ context.Context, task scrapeTask, labels prometheus.Labels) error {
+func (c *Collector) processRateScrapeTask(_ context.Context, task projectScrapeTask, labels prometheus.Labels) error {
 	srv := task.Service
 	plugin := c.Cluster.QuotaPlugins[srv.Type] //NOTE: discoverScrapeTask already verified that this exists
 
@@ -109,7 +109,7 @@ func (c *Collector) processRateScrapeTask(_ context.Context, task scrapeTask, la
 	if err != nil {
 		task.Err = util.UnpackError(err)
 	}
-	task.FinishedAt = c.TimeNow()
+	task.Timing.FinishedAt = c.TimeNow()
 
 	//write result on success; if anything fails, try to record the error in the DB
 	if task.Err == nil {
@@ -121,7 +121,7 @@ func (c *Collector) processRateScrapeTask(_ context.Context, task scrapeTask, la
 	if task.Err != nil {
 		_, err := c.DB.Exec(
 			writeRateScrapeErrorQuery,
-			task.FinishedAt, task.FinishedAt.Add(c.AddJitter(recheckInterval)),
+			task.Timing.FinishedAt, task.Timing.FinishedAt.Add(c.AddJitter(recheckInterval)),
 			task.Err.Error(), srv.ID,
 		)
 		if err != nil {
@@ -137,7 +137,7 @@ func (c *Collector) processRateScrapeTask(_ context.Context, task scrapeTask, la
 	return fmt.Errorf("during rate scrape of project %s/%s: %w", project.Domain.Name, project.Name, task.Err)
 }
 
-func (c *Collector) writeRateScrapeResult(task scrapeTask, rateData map[string]*big.Int, ratesScrapeState string) error {
+func (c *Collector) writeRateScrapeResult(task projectScrapeTask, rateData map[string]*big.Int, ratesScrapeState string) error {
 	srv := task.Service
 	plugin := c.Cluster.QuotaPlugins[srv.Type] //NOTE: discoverScrapeTask already verified that this exists
 
@@ -209,7 +209,7 @@ func (c *Collector) writeRateScrapeResult(task scrapeTask, rateData map[string]*
 	//update rate scraping metadata and also reset the rates_stale flag on this
 	//service so that we don't scrape it again immediately afterwards
 	_, err = tx.Exec(writeRateScrapeSuccessQuery,
-		task.FinishedAt, task.FinishedAt.Add(c.AddJitter(scrapeInterval)), task.Duration().Seconds(),
+		task.Timing.FinishedAt, task.Timing.FinishedAt.Add(c.AddJitter(scrapeInterval)), task.Timing.Duration().Seconds(),
 		ratesScrapeState, srv.ID,
 	)
 	if err != nil {
