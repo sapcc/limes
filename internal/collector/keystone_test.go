@@ -49,7 +49,6 @@ const (
 )
 
 func keystoneTestCluster(t *testing.T) (test.Setup, *core.Cluster) {
-	test.ResetTime()
 	s := test.NewSetup(t,
 		test.WithConfig(testKeystoneConfigYAML),
 	)
@@ -58,6 +57,7 @@ func keystoneTestCluster(t *testing.T) (test.Setup, *core.Cluster) {
 
 func Test_ScanDomains(t *testing.T) {
 	s, cluster := keystoneTestCluster(t)
+	c := getCollector(t, s)
 	discovery := cluster.DiscoveryPlugin.(*plugins.StaticDiscoveryPlugin) //nolint:errcheck
 
 	//construct expectation for return value
@@ -78,14 +78,6 @@ func Test_ScanDomains(t *testing.T) {
 			},
 		},
 		Projects: nil, //not relevant since ScanDomains will never create project_resources
-	}
-
-	c := Collector{
-		Cluster:   cluster,
-		DB:        s.DB,
-		LogError:  t.Errorf,
-		TimeNow:   test.TimeNow,
-		AddJitter: test.NoJitter,
 	}
 
 	//first ScanDomains should discover the StaticDomains in the cluster,

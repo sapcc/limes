@@ -123,7 +123,7 @@ func (c *Collector) discoverScrapeTask(labels prometheus.Labels, query string) (
 	}
 	labels["service_name"] = c.Cluster.InfoForService(serviceType).ProductName
 
-	task.Timing.StartedAt = c.TimeNow()
+	task.Timing.StartedAt = c.MeasureTime()
 	err = c.DB.SelectOne(&task.Service, query, serviceType, task.Timing.StartedAt)
 	return task, err
 }
@@ -160,7 +160,7 @@ func (c *Collector) processResourceScrapeTask(_ context.Context, task projectScr
 	if err != nil {
 		task.Err = util.UnpackError(err)
 	}
-	task.Timing.FinishedAt = c.TimeNow()
+	task.Timing.FinishedAt = c.MeasureTimeAtEnd()
 
 	//write result on success; if anything fails, try to record the error in the DB
 	if task.Err == nil {

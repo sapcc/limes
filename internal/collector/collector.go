@@ -40,7 +40,10 @@ type Collector struct {
 	//Usually logg.Error, but can be changed inside unit tests.
 	LogError func(msg string, args ...any)
 	//Usually time.Now, but can be changed inside unit tests.
-	TimeNow func() time.Time
+	//MeasureTimeAtEnd behaves slightly differently in unit tests: It will advance
+	//the mock.Clock before reading it to simulate time passing during the previous task.
+	MeasureTime      func() time.Time
+	MeasureTimeAtEnd func() time.Time
 	//Usually addJitter, but can be changed inside unit tests.
 	AddJitter func(time.Duration) time.Duration
 }
@@ -48,11 +51,12 @@ type Collector struct {
 // NewCollector creates a Collector instance.
 func NewCollector(cluster *core.Cluster, dbm *gorp.DbMap) *Collector {
 	return &Collector{
-		Cluster:   cluster,
-		DB:        dbm,
-		LogError:  logg.Error,
-		TimeNow:   time.Now,
-		AddJitter: addJitter,
+		Cluster:          cluster,
+		DB:               dbm,
+		LogError:         logg.Error,
+		MeasureTime:      time.Now,
+		MeasureTimeAtEnd: time.Now,
+		AddJitter:        addJitter,
 	}
 }
 

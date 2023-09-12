@@ -63,19 +63,12 @@ const (
 )
 
 func Test_RateScrapeSuccess(t *testing.T) {
-	test.ResetTime()
 	s := test.NewSetup(t,
 		test.WithConfig(testRateScrapeBasicConfigYAML),
 	)
 	prepareDomainsAndProjectsForScrape(t, s)
 
-	c := Collector{
-		Cluster:   s.Cluster,
-		DB:        s.DB,
-		LogError:  t.Errorf,
-		TimeNow:   test.TimeNow,
-		AddJitter: test.NoJitter,
-	}
+	c := getCollector(t, s)
 	job := c.RateScrapeJob(s.Registry)
 	withLabel := jobloop.WithLabel("service_type", "unittest")
 
@@ -186,19 +179,12 @@ func Test_RateScrapeSuccess(t *testing.T) {
 }
 
 func Test_RateScrapeFailure(t *testing.T) {
-	test.ResetTime()
 	s := test.NewSetup(t,
 		test.WithConfig(testRateScrapeBasicConfigYAML),
 	)
 	prepareDomainsAndProjectsForScrape(t, s)
 
-	c := Collector{
-		Cluster:   s.Cluster,
-		DB:        s.DB,
-		LogError:  t.Errorf,
-		TimeNow:   test.TimeNow,
-		AddJitter: test.NoJitter,
-	}
+	c := getCollector(t, s)
 	job := c.RateScrapeJob(s.Registry)
 	withLabel := jobloop.WithLabel("service_type", "unittest")
 
@@ -231,21 +217,13 @@ func p2window(val limesrates.Window) *limesrates.Window {
 	return &val
 }
 
-//nolint:dupl
 func Test_ScrapeRatesButNoRates(t *testing.T) {
-	test.ResetTime()
 	s := test.NewSetup(t,
 		test.WithConfig(testNoopConfigYAML),
 	)
 	prepareDomainsAndProjectsForScrape(t, s)
 
-	c := Collector{
-		Cluster:   s.Cluster,
-		DB:        s.DB,
-		LogError:  t.Errorf,
-		TimeNow:   test.TimeNow,
-		AddJitter: test.NoJitter,
-	}
+	c := getCollector(t, s)
 	job := c.RateScrapeJob(s.Registry)
 	withLabel := jobloop.WithLabel("service_type", "noop")
 

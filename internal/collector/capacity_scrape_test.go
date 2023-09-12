@@ -21,6 +21,7 @@ package collector
 
 import (
 	"testing"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -74,15 +75,8 @@ func Test_ScanCapacity(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithConfig(testScanCapacityConfigYAML),
 	)
-	test.ResetTime()
 
-	c := Collector{
-		Cluster:   s.Cluster,
-		DB:        s.DB,
-		LogError:  t.Errorf,
-		TimeNow:   test.TimeNow,
-		AddJitter: test.NoJitter,
-	}
+	c := getCollector(t, s)
 	job := c.CapacityScrapeJob(s.Registry)
 
 	//cluster_services must be created as a baseline (this is usually done by the CheckConsistencyJob)
@@ -139,12 +133,6 @@ func Test_ScanCapacity(t *testing.T) {
 		UPDATE cluster_resources SET capacity = 23 WHERE service_id = 1 AND name = 'things';
 	`)
 
-	//move the clock forward by 300 seconds (the capacitor add step only triggers every five minutes)
-	//TODO: I hate this clock
-	for step := 1; step <= 300; step++ {
-		_ = test.TimeNow()
-	}
-
 	//add a capacity plugin that reports subcapacities; check that subcapacities
 	//are correctly written when creating a cluster_resources record
 	pluginConfig := `
@@ -157,6 +145,7 @@ func Test_ScanCapacity(t *testing.T) {
 	`
 	subcapacityPlugin := s.AddCapacityPlugin(t, pluginConfig).(*plugins.StaticCapacityPlugin) //nolint:errcheck
 	setClusterCapacitorsStale(t, s)
+	s.Clock.StepBy(5 * time.Minute) //to force a capacitor consistency check to run
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
 	tr.DBChanges().AssertEqualf(`
 		UPDATE cluster_capacitors SET scraped_at = 309, next_scrape_at = 1209 WHERE capacitor_id = 'unittest';
@@ -176,12 +165,6 @@ func Test_ScanCapacity(t *testing.T) {
 		UPDATE cluster_resources SET capacity = 10, subcapacities = '[{"smaller_half":3},{"larger_half":7}]' WHERE service_id = 2 AND name = 'things';
 	`)
 
-	//move the clock forward by 300 seconds (the capacitor add step only triggers every five minutes)
-	//TODO: I hate this clock
-	for step := 1; step <= 300; step++ {
-		_ = test.TimeNow()
-	}
-
 	//add a capacity plugin that also reports capacity per availability zone; check that
 	//these capacities are correctly written when creating a cluster_resources record
 	pluginConfig = `
@@ -194,6 +177,7 @@ func Test_ScanCapacity(t *testing.T) {
 	`
 	azCapacityPlugin := s.AddCapacityPlugin(t, pluginConfig).(*plugins.StaticCapacityPlugin) //nolint:errcheck
 	setClusterCapacitorsStale(t, s)
+	s.Clock.StepBy(5 * time.Minute) //to force a capacitor consistency check to run
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
 	tr.DBChanges().AssertEqualf(`
 		UPDATE cluster_capacitors SET scraped_at = 621, next_scrape_at = 1521 WHERE capacitor_id = 'unittest';

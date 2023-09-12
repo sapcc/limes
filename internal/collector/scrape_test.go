@@ -71,7 +71,7 @@ func prepareDomainsAndProjectsForScrape(t *testing.T, s test.Setup) {
 	//ScanDomains is required to create the entries in `domains`,
 	//`domain_services`, `projects` and `project_services`
 	timeZero := func() time.Time { return time.Unix(0, 0).UTC() }
-	_, err := (&Collector{Cluster: s.Cluster, DB: s.DB, TimeNow: timeZero, AddJitter: test.NoJitter}).ScanDomains(ScanDomainsOpts{})
+	_, err := (&Collector{Cluster: s.Cluster, DB: s.DB, MeasureTime: timeZero, AddJitter: test.NoJitter}).ScanDomains(ScanDomainsOpts{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +106,6 @@ const (
 )
 
 func Test_ScrapeSuccess(t *testing.T) {
-	test.ResetTime()
 	s := test.NewSetup(t,
 		test.WithConfig(testScrapeBasicConfigYAML),
 	)
@@ -134,13 +133,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	}
 
 	s.Cluster.Authoritative = true
-	c := Collector{
-		Cluster:   s.Cluster,
-		DB:        s.DB,
-		LogError:  t.Errorf,
-		TimeNow:   test.TimeNow,
-		AddJitter: test.NoJitter,
-	}
+	c := getCollector(t, s)
 	job := c.ResourceScrapeJob(s.Registry)
 	withLabel := jobloop.WithLabel("service_type", "unittest")
 
@@ -299,7 +292,6 @@ func setProjectServicesStale(t *testing.T, dbm *gorp.DbMap) {
 }
 
 func Test_ScrapeFailure(t *testing.T) {
-	test.ResetTime()
 	s := test.NewSetup(t,
 		test.WithConfig(testScrapeBasicConfigYAML),
 	)
@@ -326,13 +318,7 @@ func Test_ScrapeFailure(t *testing.T) {
 		},
 	}
 
-	c := Collector{
-		Cluster:   s.Cluster,
-		DB:        s.DB,
-		TimeNow:   test.TimeNow,
-		LogError:  t.Errorf,
-		AddJitter: test.NoJitter,
-	}
+	c := getCollector(t, s)
 	job := c.ResourceScrapeJob(s.Registry)
 	withLabel := jobloop.WithLabel("service_type", "unittest")
 
@@ -424,7 +410,6 @@ func Test_ScrapeCentralized(t *testing.T) {
 	for _, hasBursting := range []bool{false, true} {
 		logg.Info("===== hasBursting = %t =====", hasBursting)
 
-		test.ResetTime()
 		s := test.NewSetup(t,
 			test.WithConfig(testScrapeCentralizedConfigYAML),
 		)
@@ -449,13 +434,7 @@ func Test_ScrapeCentralized(t *testing.T) {
 		}
 
 		s.Cluster.Authoritative = true
-		c := Collector{
-			Cluster:   s.Cluster,
-			DB:        s.DB,
-			LogError:  t.Errorf,
-			TimeNow:   test.TimeNow,
-			AddJitter: test.NoJitter,
-		}
+		c := getCollector(t, s)
 		job := c.ResourceScrapeJob(s.Registry)
 		withLabel := jobloop.WithLabel("service_type", "centralized")
 
@@ -524,19 +503,12 @@ const (
 )
 
 func Test_AutoApproveInitialQuota(t *testing.T) {
-	test.ResetTime()
 	s := test.NewSetup(t,
 		test.WithConfig(testAutoApprovalConfigYAML),
 	)
 	prepareDomainsAndProjectsForScrape(t, s)
 
-	c := Collector{
-		Cluster:   s.Cluster,
-		DB:        s.DB,
-		LogError:  t.Errorf,
-		TimeNow:   test.TimeNow,
-		AddJitter: test.NoJitter,
-	}
+	c := getCollector(t, s)
 	job := c.ResourceScrapeJob(s.Registry)
 	withLabel := jobloop.WithLabel("service_type", "autoapprovaltest")
 
@@ -583,21 +555,13 @@ const (
 	`
 )
 
-//nolint:dupl
 func Test_ScrapeButNoResources(t *testing.T) {
-	test.ResetTime()
 	s := test.NewSetup(t,
 		test.WithConfig(testNoopConfigYAML),
 	)
 	prepareDomainsAndProjectsForScrape(t, s)
 
-	c := Collector{
-		Cluster:   s.Cluster,
-		DB:        s.DB,
-		LogError:  t.Errorf,
-		TimeNow:   test.TimeNow,
-		AddJitter: test.NoJitter,
-	}
+	c := getCollector(t, s)
 	job := c.ResourceScrapeJob(s.Registry)
 	withLabel := jobloop.WithLabel("service_type", "noop")
 

@@ -27,20 +27,11 @@ import (
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
-	"github.com/sapcc/limes/internal/test"
 )
 
 func Test_Consistency(t *testing.T) {
-	test.ResetTime()
 	s, cluster := keystoneTestCluster(t)
-	c := Collector{
-		Cluster:   cluster,
-		DB:        s.DB,
-		LogError:  t.Errorf,
-		TimeNow:   test.TimeNow,
-		AddJitter: test.NoJitter,
-	}
-
+	c := getCollector(t, s)
 	consistencyJob := c.CheckConsistencyJob(s.Registry)
 
 	//run ScanDomains once to establish a baseline

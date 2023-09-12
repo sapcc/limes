@@ -126,7 +126,7 @@ func (c *Collector) checkConsistencyDomain(domain db.Domain) error {
 	}
 	logg.Info("checking consistency for %d projects in domain %q...", len(projects), domain.Name)
 
-	now := c.TimeNow()
+	now := c.MeasureTime()
 	for _, project := range projects {
 		//ValidateProjectServices usually does nothing or does maybe one DELETE or
 		//INSERT, so it does not need to be in a transaction
