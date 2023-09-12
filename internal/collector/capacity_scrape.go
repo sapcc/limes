@@ -91,6 +91,14 @@ var (
 		-- find only one capacitor to scrape per iteration
 		LIMIT 1
 	`)
+
+	// queries to collect context data within processCapacityScrapeTask()
+	getClusterServicesQuery = sqlext.SimplifyWhitespace(`
+		SELECT id, type FROM cluster_services
+	`)
+	getClusterResourceOwnershipQuery = sqlext.SimplifyWhitespace(`
+		SELECT cs.type, cr.name, cr.capacitor_id FROM cluster_resources cr JOIN cluster_services cs ON cr.service_id = cs.id
+	`)
 )
 
 func (c *Collector) discoverCapacityScrapeTask(_ context.Context, _ prometheus.Labels, lastConsistencyCheckAt *time.Time) (task capacityScrapeTask, err error) {
@@ -138,9 +146,8 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 
 	//collect mapping of cluster_services type names to IDs
 	//(these DB entries are maintained for us by checkConsistencyCluster)
-	query := `SELECT id, type FROM cluster_services`
 	serviceIDForType := make(map[string]int64)
-	err := sqlext.ForeachRow(c.DB, query, nil, func(rows *sql.Rows) error {
+	err := sqlext.ForeachRow(c.DB, getClusterServicesQuery, nil, func(rows *sql.Rows) error {
 		var (
 			serviceID   int64
 			serviceType string
@@ -156,9 +163,8 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 	}
 
 	//collect ownership information for existing cluster_resources
-	query = `SELECT cs.type, cr.name, cr.capacitor_id FROM cluster_resources cr JOIN cluster_services cs ON cr.service_id = cs.id`
 	capacitorIDForResource := make(map[string]map[string]string)
-	err = sqlext.ForeachRow(c.DB, query, nil, func(rows *sql.Rows) error {
+	err = sqlext.ForeachRow(c.DB, getClusterResourceOwnershipQuery, nil, func(rows *sql.Rows) error {
 		var (
 			serviceType  string
 			resourceName string
@@ -292,10 +298,9 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 }
 
 func convertAZReport(capacityPerAZ map[string]*core.CapacityDataForAZ) limesresources.ClusterAvailabilityZoneReports {
-	//The initial implementation wrote limesresources.ClusterAvailabilityZoneReports into
-	//the CapacityPerAZJSON database field, even though
-	//map[string]*core.CapacityDataForAZ would have been more appropriate. Now we
-	//stick with it for compatibility's sake.
+	//The initial implementation wrote limesresources.ClusterAvailabilityZoneReports into the CapacityPerAZJSON database field,
+	//even though map[string]*core.CapacityDataForAZ would have been more appropriate.
+	//Now we stick with it for compatibility's sake.
 	report := make(limesresources.ClusterAvailabilityZoneReports, len(capacityPerAZ))
 	for azName, azData := range capacityPerAZ {
 		report[azName] = &limesresources.ClusterAvailabilityZoneReport{
