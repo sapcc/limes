@@ -1,6 +1,6 @@
 /*******************************************************************************
 *
-* Copyright 2017 SAP SE
+* Copyright 2023 SAP SE
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -17,12 +17,25 @@
 *
 *******************************************************************************/
 
-package test
+package collector
 
-import "time"
+import (
+	"testing"
+	"time"
 
-// NoJitter replaces test.AddJitter in unit tests, to provide deterministic
-// behavior.
-func NoJitter(d time.Duration) time.Duration {
-	return d
+	"github.com/sapcc/limes/internal/test"
+)
+
+func getCollector(t *testing.T, s test.Setup) Collector {
+	return Collector{
+		Cluster:     s.Cluster,
+		DB:          s.DB,
+		LogError:    t.Errorf,
+		MeasureTime: s.Clock.Now,
+		MeasureTimeAtEnd: func() time.Time {
+			s.Clock.StepBy(5 * time.Second)
+			return s.Clock.Now()
+		},
+		AddJitter: test.NoJitter,
+	}
 }

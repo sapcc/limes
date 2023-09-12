@@ -109,7 +109,7 @@ func (c *Collector) processRateScrapeTask(_ context.Context, task projectScrapeT
 	if err != nil {
 		task.Err = util.UnpackError(err)
 	}
-	task.Timing.FinishedAt = c.TimeNow()
+	task.Timing.FinishedAt = c.MeasureTimeAtEnd()
 
 	//write result on success; if anything fails, try to record the error in the DB
 	if task.Err == nil {

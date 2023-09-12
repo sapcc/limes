@@ -102,7 +102,7 @@ var (
 )
 
 func (c *Collector) discoverCapacityScrapeTask(_ context.Context, _ prometheus.Labels, lastConsistencyCheckAt *time.Time) (task capacityScrapeTask, err error) {
-	task.Timing.StartedAt = c.TimeNow()
+	task.Timing.StartedAt = c.MeasureTime()
 
 	//consistency check: every once in a while (and also immediately on startup),
 	//check that all required `cluster_capacitors` entries exist
@@ -185,7 +185,7 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 
 	//scrape capacity data
 	capacityData, serializedMetrics, err := plugin.Scrape()
-	task.Timing.FinishedAt = c.TimeNow()
+	task.Timing.FinishedAt = c.MeasureTimeAtEnd()
 	if err == nil {
 		capacitor.ScrapedAt = &task.Timing.FinishedAt
 		capacitor.ScrapeDurationSecs = task.Timing.Duration().Seconds()
