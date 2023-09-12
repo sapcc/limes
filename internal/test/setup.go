@@ -24,7 +24,6 @@ import (
 	"net/url"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/go-gorp/gorp/v3"
 	"github.com/gophercloud/gophercloud"
@@ -114,8 +113,6 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	s.Cluster = initCluster(t, params.ConfigYAML)
 	s.Clock = mock.NewClock()
 	s.Registry = prometheus.NewPedanticRegistry()
-
-	s.Clock.StepBy(-time.Second) //for temporary backwards-compatibility with previous mock clock
 
 	//load mock policy (where everything is allowed)
 	enforcer := &PolicyEnforcer{

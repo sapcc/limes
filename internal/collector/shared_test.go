@@ -28,15 +28,12 @@ import (
 
 func getCollector(t *testing.T, s test.Setup) Collector {
 	return Collector{
-		Cluster:  s.Cluster,
-		DB:       s.DB,
-		LogError: t.Errorf,
-		MeasureTime: func() time.Time {
-			s.Clock.StepBy(time.Second)
-			return s.Clock.Now()
-		},
+		Cluster:     s.Cluster,
+		DB:          s.DB,
+		LogError:    t.Errorf,
+		MeasureTime: s.Clock.Now,
 		MeasureTimeAtEnd: func() time.Time {
-			s.Clock.StepBy(time.Second)
+			s.Clock.StepBy(5 * time.Second)
 			return s.Clock.Now()
 		},
 		AddJitter: test.NoJitter,

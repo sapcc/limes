@@ -44,6 +44,7 @@ func Test_Consistency(t *testing.T) {
 	//check that CheckConsistency() is satisfied with the
 	//{domain,project}_services created by ScanDomains(), but adds
 	//cluster_services entries
+	s.Clock.StepBy(time.Hour)
 	err = consistencyJob.ProcessOne(s.Ctx)
 	if err != nil {
 		t.Error(err)
@@ -131,6 +132,7 @@ func Test_Consistency(t *testing.T) {
 	//are added; for all project services that are created here, project
 	//resources are added where the quota constraint contains a Minimum value or
 	//the quota distribution configuration contains a DefaultQuota value..
+	s.Clock.StepBy(time.Hour)
 	err = consistencyJob.ProcessOne(s.Ctx)
 	if err != nil {
 		t.Error(err)

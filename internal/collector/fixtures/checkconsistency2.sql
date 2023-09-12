@@ -32,14 +32,14 @@ INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
 INSERT INTO domains (id, name, uuid) VALUES (2, 'france', 'uuid-for-france');
 
 INSERT INTO project_services (id, project_id, type, next_scrape_at, rates_next_scrape_at) VALUES (1, 1, 'centralized', 0, 0);
-INSERT INTO project_services (id, project_id, type, next_scrape_at, rates_next_scrape_at) VALUES (11, 1, 'shared', 5, 5);
-INSERT INTO project_services (id, project_id, type, next_scrape_at, rates_next_scrape_at) VALUES (12, 2, 'shared', 5, 5);
-INSERT INTO project_services (id, project_id, type, next_scrape_at, rates_next_scrape_at) VALUES (13, 3, 'shared', 6, 6);
+INSERT INTO project_services (id, project_id, type, next_scrape_at, rates_next_scrape_at) VALUES (11, 1, 'shared', 7200, 7200);
+INSERT INTO project_services (id, project_id, type, next_scrape_at, rates_next_scrape_at) VALUES (12, 2, 'shared', 7200, 7200);
+INSERT INTO project_services (id, project_id, type, next_scrape_at, rates_next_scrape_at) VALUES (13, 3, 'shared', 7200, 7200);
 INSERT INTO project_services (id, project_id, type, next_scrape_at, rates_next_scrape_at) VALUES (3, 1, 'unshared', 0, 0);
-INSERT INTO project_services (id, project_id, type, next_scrape_at, rates_next_scrape_at) VALUES (4, 2, 'centralized', 1, 1);
-INSERT INTO project_services (id, project_id, type, next_scrape_at, rates_next_scrape_at) VALUES (6, 2, 'unshared', 1, 1);
-INSERT INTO project_services (id, project_id, type, next_scrape_at, rates_next_scrape_at) VALUES (7, 3, 'centralized', 2, 2);
-INSERT INTO project_services (id, project_id, type, next_scrape_at, rates_next_scrape_at) VALUES (9, 3, 'unshared', 2, 2);
+INSERT INTO project_services (id, project_id, type, next_scrape_at, rates_next_scrape_at) VALUES (4, 2, 'centralized', 0, 0);
+INSERT INTO project_services (id, project_id, type, next_scrape_at, rates_next_scrape_at) VALUES (6, 2, 'unshared', 0, 0);
+INSERT INTO project_services (id, project_id, type, next_scrape_at, rates_next_scrape_at) VALUES (7, 3, 'centralized', 0, 0);
+INSERT INTO project_services (id, project_id, type, next_scrape_at, rates_next_scrape_at) VALUES (9, 3, 'unshared', 0, 0);
 
 INSERT INTO projects (id, domain_id, name, uuid, parent_uuid, has_bursting) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany', FALSE);
 INSERT INTO projects (id, domain_id, name, uuid, parent_uuid, has_bursting) VALUES (2, 1, 'dresden', 'uuid-for-dresden', 'uuid-for-berlin', FALSE);

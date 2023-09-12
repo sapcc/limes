@@ -22,6 +22,7 @@ package collector
 import (
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
@@ -96,7 +97,8 @@ func Test_ScanDomains(t *testing.T) {
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualToFile("fixtures/scandomains1.sql")
 
-	//first ScanDomains should not discover anything new
+	//second ScanDomains should not discover anything new
+	s.Clock.StepBy(10 * time.Minute)
 	actualNewDomains, err = c.ScanDomains(ScanDomainsOpts{})
 	if err != nil {
 		t.Errorf("ScanDomains #2 failed: %v", err)
@@ -111,6 +113,7 @@ func Test_ScanDomains(t *testing.T) {
 	)
 
 	//ScanDomains without ScanAllProjects should not see this new project
+	s.Clock.StepBy(10 * time.Minute)
 	actualNewDomains, err = c.ScanDomains(ScanDomainsOpts{})
 	if err != nil {
 		t.Errorf("ScanDomains #3 failed: %v", err)
@@ -119,22 +122,26 @@ func Test_ScanDomains(t *testing.T) {
 	tr.DBChanges().AssertEmpty()
 
 	//ScanDomains with ScanAllProjects should discover the new project
+	s.Clock.StepBy(10 * time.Minute)
 	actualNewDomains, err = c.ScanDomains(ScanDomainsOpts{ScanAllProjects: true})
 	if err != nil {
 		t.Errorf("ScanDomains #4 failed: %v", err)
 	}
 	assert.DeepEqual(t, "new domains after ScanDomains #4", actualNewDomains, []string(nil))
 	tr.DBChanges().AssertEqualf(`
-		INSERT INTO project_services (id, project_id, type, next_scrape_at, rates_next_scrape_at) VALUES (10, 4, 'centralized', 3, 3);
-		INSERT INTO project_services (id, project_id, type, next_scrape_at, rates_next_scrape_at) VALUES (11, 4, 'shared', 3, 3);
-		INSERT INTO project_services (id, project_id, type, next_scrape_at, rates_next_scrape_at) VALUES (12, 4, 'unshared', 3, 3);
+		INSERT INTO project_services (id, project_id, type, next_scrape_at, rates_next_scrape_at) VALUES (10, 4, 'centralized', %[1]d, %[1]d);
+		INSERT INTO project_services (id, project_id, type, next_scrape_at, rates_next_scrape_at) VALUES (11, 4, 'shared', %[1]d, %[1]d);
+		INSERT INTO project_services (id, project_id, type, next_scrape_at, rates_next_scrape_at) VALUES (12, 4, 'unshared', %[1]d, %[1]d);
 		INSERT INTO projects (id, domain_id, name, uuid, parent_uuid, has_bursting) VALUES (4, 2, 'bordeaux', 'uuid-for-bordeaux', 'uuid-for-france', FALSE);
-	`)
+	`,
+		s.Clock.Now().Unix(),
+	)
 
 	//remove the project again
 	discovery.Projects[domainUUID] = discovery.Projects[domainUUID][0:1]
 
 	//ScanDomains without ScanAllProjects should not notice anything
+	s.Clock.StepBy(10 * time.Minute)
 	actualNewDomains, err = c.ScanDomains(ScanDomainsOpts{})
 	if err != nil {
 		t.Errorf("ScanDomains #5 failed: %v", err)
@@ -143,6 +150,7 @@ func Test_ScanDomains(t *testing.T) {
 	tr.DBChanges().AssertEmpty()
 
 	//ScanDomains with ScanAllProjects should notice the deleted project and cleanup its records
+	s.Clock.StepBy(10 * time.Minute)
 	actualNewDomains, err = c.ScanDomains(ScanDomainsOpts{ScanAllProjects: true})
 	if err != nil {
 		t.Errorf("ScanDomains #6 failed: %v", err)
@@ -159,6 +167,7 @@ func Test_ScanDomains(t *testing.T) {
 	discovery.Domains = discovery.Domains[0:1]
 
 	//ScanDomains should notice the deleted domain and cleanup its records and also its projects
+	s.Clock.StepBy(10 * time.Minute)
 	actualNewDomains, err = c.ScanDomains(ScanDomainsOpts{})
 	if err != nil {
 		t.Errorf("ScanDomains #7 failed: %v", err)
@@ -189,6 +198,7 @@ func Test_ScanDomains(t *testing.T) {
 	discovery.Projects["uuid-for-germany"][0].Name = "berlin-changed"
 
 	//ScanDomains should notice the changed names and update the domain/project records accordingly
+	s.Clock.StepBy(10 * time.Minute)
 	actualNewDomains, err = c.ScanDomains(ScanDomainsOpts{ScanAllProjects: true})
 	if err != nil {
 		t.Errorf("ScanDomains #8 failed: %v", err)
