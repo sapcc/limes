@@ -177,4 +177,12 @@ var sqlMigrations = map[string]string{
 		ALTER TABLE cluster_resources
 			ALTER COLUMN capacitor_id SET DEFAULT NULL;
 	`,
+	"025_capacity_scan_rework.up.sql": `
+		ALTER TABLE cluster_capacitors
+			ADD COLUMN scrape_error_message TEXT NOT NULL DEFAULT '';
+	`,
+	"025_capacity_scan_rework.down.sql": `
+		ALTER TABLE cluster_capacitors
+			DROP COLUMN scrape_error_message;
+	`,
 }

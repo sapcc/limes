@@ -33,6 +33,7 @@ type ClusterCapacitor struct {
 	ScrapeDurationSecs float64    `db:"scrape_duration_secs"`
 	SerializedMetrics  string     `db:"serialized_metrics"`
 	NextScrapeAt       time.Time  `db:"next_scrape_at"`
+	ScrapeErrorMessage string     `db:"scrape_error_message"`
 }
 
 // ClusterService contains a record from the `cluster_services` table.

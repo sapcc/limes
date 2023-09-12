@@ -162,8 +162,8 @@ func taskCollect(cluster *core.Cluster, args []string) {
 	}
 
 	//start those collector threads which operate over all services simultaneously
+	go c.CapacityScrapeJob(nil).Run(ctx)
 	go c.CheckConsistencyJob(nil).Run(ctx)
-	go c.ScanCapacity()
 	go func() {
 		for {
 			_, err := c.ScanDomains(collector.ScanDomainsOpts{ScanAllProjects: true})
