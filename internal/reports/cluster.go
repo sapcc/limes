@@ -56,9 +56,10 @@ var clusterReportQuery2 = sqlext.SimplifyWhitespace(`
 
 var clusterReportQuery3 = sqlext.SimplifyWhitespace(`
 	SELECT cs.type, cr.name, cr.capacity,
-	       cr.capacity_per_az, cr.subcapacities, cs.scraped_at
+	       cr.capacity_per_az, cr.subcapacities, cc.scraped_at
 	  FROM cluster_services cs
 	  LEFT OUTER JOIN cluster_resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
+	  LEFT OUTER JOIN cluster_capacitors cc ON cc.capacitor_id = cr.capacitor_id
 	 WHERE TRUE {{AND cs.type = $service_type}}
 `)
 
@@ -162,7 +163,7 @@ func GetClusterResources(cluster *core.Cluster, dbi db.Interface, filter Filter)
 			rawCapacity   *uint64
 			capacityPerAZ *string
 			subcapacities *string
-			scrapedAt     time.Time
+			scrapedAt     *time.Time
 		)
 		err := rows.Scan(&serviceType, &resourceName, &rawCapacity,
 			&capacityPerAZ, &subcapacities, &scrapedAt)
@@ -193,8 +194,8 @@ func GetClusterResources(cluster *core.Cluster, dbi db.Interface, filter Filter)
 			}
 		}
 
-		report.MaxScrapedAt = mergeMaxTime(report.MaxScrapedAt, &scrapedAt)
-		report.MinScrapedAt = mergeMinTime(report.MinScrapedAt, &scrapedAt)
+		report.MaxScrapedAt = mergeMaxTime(report.MaxScrapedAt, scrapedAt)
+		report.MinScrapedAt = mergeMinTime(report.MinScrapedAt, scrapedAt)
 
 		return nil
 	})

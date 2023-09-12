@@ -1,6 +1,6 @@
-INSERT INTO cluster_services (id, type, scraped_at) VALUES (1, 'centralized', 3);
-INSERT INTO cluster_services (id, type, scraped_at) VALUES (3, 'unshared', 3);
-INSERT INTO cluster_services (id, type, scraped_at) VALUES (5, 'shared', 6);
+INSERT INTO cluster_services (id, type) VALUES (1, 'centralized');
+INSERT INTO cluster_services (id, type) VALUES (3, 'unshared');
+INSERT INTO cluster_services (id, type) VALUES (5, 'shared');
 
 INSERT INTO domain_resources (service_id, name, quota) VALUES (1, 'capacity', 0);
 INSERT INTO domain_resources (service_id, name, quota) VALUES (1, 'capacity_portion', 0);
@@ -32,9 +32,9 @@ INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
 INSERT INTO domains (id, name, uuid) VALUES (2, 'france', 'uuid-for-france');
 
 INSERT INTO project_services (id, project_id, type, next_scrape_at, rates_next_scrape_at) VALUES (1, 1, 'centralized', 0, 0);
-INSERT INTO project_services (id, project_id, type, next_scrape_at, rates_next_scrape_at) VALUES (11, 1, 'shared', 7, 7);
-INSERT INTO project_services (id, project_id, type, next_scrape_at, rates_next_scrape_at) VALUES (12, 2, 'shared', 7, 7);
-INSERT INTO project_services (id, project_id, type, next_scrape_at, rates_next_scrape_at) VALUES (13, 3, 'shared', 8, 8);
+INSERT INTO project_services (id, project_id, type, next_scrape_at, rates_next_scrape_at) VALUES (11, 1, 'shared', 5, 5);
+INSERT INTO project_services (id, project_id, type, next_scrape_at, rates_next_scrape_at) VALUES (12, 2, 'shared', 5, 5);
+INSERT INTO project_services (id, project_id, type, next_scrape_at, rates_next_scrape_at) VALUES (13, 3, 'shared', 6, 6);
 INSERT INTO project_services (id, project_id, type, next_scrape_at, rates_next_scrape_at) VALUES (3, 1, 'unshared', 0, 0);
 INSERT INTO project_services (id, project_id, type, next_scrape_at, rates_next_scrape_at) VALUES (4, 2, 'centralized', 1, 1);
 INSERT INTO project_services (id, project_id, type, next_scrape_at, rates_next_scrape_at) VALUES (6, 2, 'unshared', 1, 1);

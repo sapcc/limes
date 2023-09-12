@@ -71,7 +71,6 @@ func (c *Collector) checkConsistencyCluster(_ context.Context, _ prometheus.Labe
 		}
 	}
 
-	now := c.TimeNow()
 	//create missing service entries
 	for _, serviceType := range c.Cluster.ServiceTypesInAlphabeticalOrder() {
 		if seen[serviceType] {
@@ -79,10 +78,7 @@ func (c *Collector) checkConsistencyCluster(_ context.Context, _ prometheus.Labe
 		}
 
 		logg.Info("creating missing %s cluster service entry", serviceType)
-		err := c.DB.Insert(&db.ClusterService{
-			Type:      serviceType,
-			ScrapedAt: &now,
-		})
+		err := c.DB.Insert(&db.ClusterService{Type: serviceType})
 		if err != nil {
 			c.LogError(err.Error())
 		}

@@ -145,7 +145,7 @@ func (c *Collector) scanCapacity() {
 	if err != nil {
 		c.LogError("write capacity failed: %s", err.Error())
 	}
-	err = c.writeCapacity(tx, values, scrapedAt)
+	err = c.writeCapacity(tx, values)
 	if err != nil {
 		c.LogError("write capacity failed: %s", err.Error())
 	}
@@ -192,7 +192,7 @@ func (c *Collector) writeCapacitorInfo(tx *gorp.Transaction, capacitorInfo map[s
 	return nil
 }
 
-func (c *Collector) writeCapacity(tx *gorp.Transaction, values map[string]map[string]capacityDataWithCapacitorID, scrapedAt time.Time) error {
+func (c *Collector) writeCapacity(tx *gorp.Transaction, values map[string]map[string]capacityDataWithCapacitorID) error {
 	//create missing cluster_services entries (superfluous ones will be cleaned
 	//up by the CheckConsistency())
 	serviceIDForType := make(map[string]int64)
@@ -217,21 +217,12 @@ func (c *Collector) writeCapacity(tx *gorp.Transaction, values map[string]map[st
 			continue
 		}
 
-		dbService := &db.ClusterService{
-			Type:      serviceType,
-			ScrapedAt: &scrapedAt,
-		}
+		dbService := &db.ClusterService{Type: serviceType}
 		err := tx.Insert(dbService)
 		if err != nil {
 			return err
 		}
 		serviceIDForType[dbService.Type] = dbService.ID
-	}
-
-	//update scraped_at timestamp on all cluster services in one step
-	_, err = tx.Exec(`UPDATE cluster_services SET scraped_at = $1`, scrapedAt)
-	if err != nil {
-		return err
 	}
 
 	//enumerate cluster_resources: create missing ones, update existing ones, delete superfluous ones
@@ -251,7 +242,7 @@ func (c *Collector) writeCapacity(tx *gorp.Transaction, values map[string]map[st
 			data, exists := serviceValues[dbResource.Name]
 			if exists {
 				dbResource.RawCapacity = data.CapacityData.Capacity
-				dbResource.CapacitorID = &data.CapacitorID
+				dbResource.CapacitorID = data.CapacitorID
 
 				if len(data.CapacityData.Subcapacities) == 0 {
 					dbResource.SubcapacitiesJSON = ""
@@ -301,7 +292,7 @@ func (c *Collector) writeCapacity(tx *gorp.Transaction, values map[string]map[st
 				RawCapacity:       data.CapacityData.Capacity,
 				CapacityPerAZJSON: "", //but see below
 				SubcapacitiesJSON: "",
-				CapacitorID:       &data.CapacitorID,
+				CapacitorID:       data.CapacitorID,
 			}
 
 			if len(data.CapacityData.Subcapacities) != 0 {
