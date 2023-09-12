@@ -37,19 +37,18 @@ type ClusterCapacitor struct {
 
 // ClusterService contains a record from the `cluster_services` table.
 type ClusterService struct {
-	ID        int64      `db:"id"`
-	Type      string     `db:"type"`
-	ScrapedAt *time.Time `db:"scraped_at"` //pointer type to allow for NULL value
+	ID   int64  `db:"id"`
+	Type string `db:"type"`
 }
 
 // ClusterResource contains a record from the `cluster_resources` table.
 type ClusterResource struct {
-	ServiceID         int64   `db:"service_id"`
-	Name              string  `db:"name"`
-	RawCapacity       uint64  `db:"capacity"`
-	CapacityPerAZJSON string  `db:"capacity_per_az"`
-	SubcapacitiesJSON string  `db:"subcapacities"`
-	CapacitorID       *string `db:"capacitor_id"` //can be NULL during transition period (TODO: remove after migration 24)
+	ServiceID         int64  `db:"service_id"`
+	Name              string `db:"name"`
+	RawCapacity       uint64 `db:"capacity"`
+	CapacityPerAZJSON string `db:"capacity_per_az"`
+	SubcapacitiesJSON string `db:"subcapacities"`
+	CapacitorID       string `db:"capacitor_id"`
 }
 
 // Domain contains a record from the `domains` table.

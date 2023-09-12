@@ -161,4 +161,20 @@ var sqlMigrations = map[string]string{
 		ALTER TABLE cluster_resources
 			DROP COLUMN capacitor_id;
 	`,
+	"024_move_capacity_scrape_timestamps.up.sql": `
+		ALTER TABLE cluster_capacitors
+			ALTER COLUMN scraped_at SET DEFAULT NULL; -- null if scraping did not happen yet
+		ALTER TABLE cluster_services
+			DROP COLUMN scraped_at;
+		ALTER TABLE cluster_resources
+			ALTER COLUMN capacitor_id DROP DEFAULT;
+	`,
+	"024_move_capacity_scrape_timestamps.down.sql": `
+		ALTER TABLE cluster_capacitors
+			ALTER COLUMN scraped_at DROP DEFAULT;
+		ALTER TABLE cluster_services
+			ADD COLUMN scraped_at TIMESTAMP NOT NULL DEFAULT NOW();
+		ALTER TABLE cluster_resources
+			ALTER COLUMN capacitor_id SET DEFAULT NULL;
+	`,
 }
