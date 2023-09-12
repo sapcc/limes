@@ -65,3 +65,14 @@ func addJitter(duration time.Duration) time.Duration {
 	r := rand.Float64() //NOTE: 0 <= r < 1
 	return time.Duration(float64(duration) * (0.9 + 0.2*r))
 }
+
+// TaskTiming appears in the task types of our ProducerConsumerJobs.
+type TaskTiming struct {
+	StartedAt  time.Time //filled during DiscoverTask
+	FinishedAt time.Time //filled during ProcessTask
+}
+
+// Duration measures the duration of the main portion of a task.
+func (t TaskTiming) Duration() time.Duration {
+	return t.FinishedAt.Sub(t.StartedAt)
+}
