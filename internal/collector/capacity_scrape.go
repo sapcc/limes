@@ -76,8 +76,8 @@ type capacityScrapeTask struct {
 var (
 	// upsert a cluster_capacitors entry
 	initCapacitorQuery = sqlext.SimplifyWhitespace(`
-		INSERT INTO cluster_capacitors (capacitor_id, scraped_at, next_scrape_at)
-		VALUES ($1, $2, $2)
+		INSERT INTO cluster_capacitors (capacitor_id, next_scrape_at)
+		VALUES ($1, $2)
 		ON CONFLICT DO NOTHING
 	`)
 
@@ -98,6 +98,7 @@ func (c *Collector) discoverCapacityScrapeTask(_ context.Context, _ prometheus.L
 
 	//consistency check: every once in a while (and also immediately on startup),
 	//check that all required `cluster_capacitors` entries exist
+	//(this is important because the query below will only find capacitors that have such an entry)
 	if lastConsistencyCheckAt.Before(task.Timing.StartedAt.Add(-5 * time.Minute)) {
 		err = sqlext.WithPreparedStatement(c.DB, initCapacitorQuery, func(stmt *sql.Stmt) error {
 			for capacitorID := range c.Cluster.CapacityPlugins {
