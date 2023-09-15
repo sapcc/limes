@@ -53,41 +53,47 @@ func (p *StaticCapacityPlugin) PluginTypeID() string {
 }
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *StaticCapacityPlugin) Scrape() (result map[string]map[string]core.CapacityData, serializedMetrics string, err error) {
-	var capacityPerAZ map[string]*core.CapacityDataForAZ
-	if p.WithAZCapData {
-		capacityPerAZ = map[string]*core.CapacityDataForAZ{
-			"az-one": {
-				Capacity: p.Capacity / 2,
-				Usage:    uint64(float64(p.Capacity) * 0.1),
-			},
-			"az-two": {
-				Capacity: p.Capacity / 2,
-				Usage:    uint64(float64(p.Capacity) * 0.1),
-			},
+func (p *StaticCapacityPlugin) Scrape() (result map[string]map[string]core.Topological[core.CapacityData], serializedMetrics string, err error) {
+	makeAZCapa := func(az string, capacity, usage uint64) *core.CapacityData {
+		var subcapacities []any
+		if p.WithSubcapacities {
+			smallerHalf := capacity / 3
+			largerHalf := capacity - smallerHalf
+			subcapacities = []any{
+				map[string]any{"az": az, "smaller_half": smallerHalf},
+				map[string]any{"az": az, "larger_half": largerHalf},
+			}
+		}
+		return &core.CapacityData{
+			Capacity:      capacity,
+			Usage:         usage,
+			Subcapacities: subcapacities,
 		}
 	}
 
-	var subcapacities []any
+	fullCapa := core.PerAZ(map[string]*core.CapacityData{
+		"az-one": makeAZCapa("az-one", p.Capacity/2, p.Capacity/10),
+		"az-two": makeAZCapa("az-two", p.Capacity-p.Capacity/2, p.Capacity/10),
+	})
+	if !p.WithAZCapData {
+		fullCapa = core.Regional(fullCapa.Sum())
+	}
+
 	if p.WithSubcapacities {
+		//for historical reasons, serialized metrics are tested at the same time as subcapacities
 		smallerHalf := p.Capacity / 3
 		largerHalf := p.Capacity - smallerHalf
-		subcapacities = []any{
-			map[string]uint64{"smaller_half": smallerHalf},
-			map[string]uint64{"larger_half": largerHalf},
-		}
-		//this is also an opportunity to test serialized metrics
 		serializedMetrics = fmt.Sprintf(`{"smaller_half":%d,"larger_half":%d}`, smallerHalf, largerHalf)
 	}
 
-	result = make(map[string]map[string]core.CapacityData)
+	result = make(map[string]map[string]core.Topological[core.CapacityData])
 	for _, str := range p.Resources {
 		parts := strings.SplitN(str, "/", 2)
 		_, exists := result[parts[0]]
 		if !exists {
-			result[parts[0]] = make(map[string]core.CapacityData)
+			result[parts[0]] = make(map[string]core.Topological[core.CapacityData])
 		}
-		result[parts[0]][parts[1]] = core.CapacityData{Capacity: p.Capacity, CapacityPerAZ: capacityPerAZ, Subcapacities: subcapacities}
+		result[parts[0]][parts[1]] = fullCapa
 	}
 	return result, serializedMetrics, nil
 }

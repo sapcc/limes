@@ -157,7 +157,7 @@ var nodeNameRx = regexp.MustCompile(`^node(?:swift)?\d+-((?:b[bm]|ap|md|st|swf)\
 var cpNodeNameRx = regexp.MustCompile(`^node(?:swift)?\d+-(cp\d+)$`)
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *capacitySapccIronicPlugin) Scrape() (result map[string]map[string]core.CapacityData, serializedMetrics string, err error) {
+func (p *capacitySapccIronicPlugin) Scrape() (result map[string]map[string]core.Topological[core.CapacityData], serializedMetrics string, err error) {
 	//collect info about flavors with separate instance quota
 	flavorNames, err := p.ftt.ListFlavorsWithSeparateInstanceQuota(p.NovaV2)
 	if err != nil {
@@ -165,14 +165,12 @@ func (p *capacitySapccIronicPlugin) Scrape() (result map[string]map[string]core.
 	}
 
 	//we are going to report capacity for all per-flavor instance quotas
-	resultCompute := make(map[string]*core.CapacityData)
+	resultCompute := make(map[string]core.Topological[core.CapacityData])
 	for _, flavorName := range flavorNames {
 		//NOTE: If `flavor_name_pattern` is empty, then FlavorNameRx will match any input.
 		if p.FlavorNameRx.MatchString(flavorName) {
-			resultCompute[p.ftt.LimesResourceNameForFlavor(flavorName)] = &core.CapacityData{
-				Capacity:      0,
-				CapacityPerAZ: map[string]*core.CapacityDataForAZ{},
-			}
+			resName := p.ftt.LimesResourceNameForFlavor(flavorName)
+			resultCompute[resName] = core.PerAZ(make(map[string]*core.CapacityData))
 		}
 	}
 
@@ -247,9 +245,6 @@ func (p *capacitySapccIronicPlugin) Scrape() (result map[string]map[string]core.
 			if node.Matches(flavorName) {
 				logg.Debug("Ironic node %q (%s) matches flavor %s", node.Name, node.ID, flavorName)
 
-				data := resultCompute[p.ftt.LimesResourceNameForFlavor(flavorName)]
-				data.Capacity++
-
 				var nodeAZ string
 				if match := cpNodeNameRx.FindStringSubmatch(node.Name); match != nil {
 					//special case as explained above (near definition of `cpNodeNameRx`)
@@ -264,12 +259,16 @@ func (p *capacitySapccIronicPlugin) Scrape() (result map[string]map[string]core.
 					logg.Error(`Ironic node %q (%s) does not match the "nodeXXX-{bm,bb,ap,md,st,swf}YYY" naming convention`, node.Name, node.ID)
 				}
 
-				if _, ok := data.CapacityPerAZ[nodeAZ]; !ok {
-					data.CapacityPerAZ[nodeAZ] = &core.CapacityDataForAZ{}
+				resName := p.ftt.LimesResourceNameForFlavor(flavorName)
+				data := resultCompute[resName].PerAZ[nodeAZ]
+				if data == nil {
+					data = &core.CapacityData{}
+					resultCompute[resName].PerAZ[nodeAZ] = data
 				}
-				data.CapacityPerAZ[nodeAZ].Capacity++
+
+				data.Capacity++
 				if node.StableProvisionState() == "active" {
-					data.CapacityPerAZ[nodeAZ].Usage++
+					data.Usage++
 				}
 
 				if p.reportSubcapacities {
@@ -312,18 +311,8 @@ func (p *capacitySapccIronicPlugin) Scrape() (result map[string]map[string]core.
 		}
 	}
 
-	//remove pointers from `result`
-	result2 := make(map[string]core.CapacityData, len(resultCompute))
-	for resourceName, data := range resultCompute {
-		result2[resourceName] = *data
-	}
-
 	serializedMetricsBytes, err := json.Marshal(metrics)
-	if err != nil {
-		return nil, "", err
-	}
-
-	return map[string]map[string]core.CapacityData{"compute": result2}, string(serializedMetricsBytes), nil
+	return map[string]map[string]core.Topological[core.CapacityData]{"compute": resultCompute}, string(serializedMetricsBytes), err
 }
 
 var (

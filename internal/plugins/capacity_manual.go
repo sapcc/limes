@@ -49,16 +49,16 @@ func (p *capacityManualPlugin) PluginTypeID() string {
 var errNoManualData = errors.New(`missing values for capacitor plugin "manual"`)
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *capacityManualPlugin) Scrape() (result map[string]map[string]core.CapacityData, _ string, err error) {
+func (p *capacityManualPlugin) Scrape() (result map[string]map[string]core.Topological[core.CapacityData], _ string, err error) {
 	if p.Values == nil {
 		return nil, "", errNoManualData
 	}
 
-	result = make(map[string]map[string]core.CapacityData)
+	result = make(map[string]map[string]core.Topological[core.CapacityData])
 	for serviceType, serviceData := range p.Values {
-		serviceResult := make(map[string]core.CapacityData)
+		serviceResult := make(map[string]core.Topological[core.CapacityData])
 		for resourceName, capacity := range serviceData {
-			serviceResult[resourceName] = core.CapacityData{Capacity: capacity}
+			serviceResult[resourceName] = core.Regional(core.CapacityData{Capacity: capacity})
 		}
 		result[serviceType] = serviceResult
 	}
