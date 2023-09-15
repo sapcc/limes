@@ -181,7 +181,7 @@ func (p *capacityManilaPlugin) scrapeForShareType(shareType ManilaShareTypeSpec,
 
 	//count pools and their capacities
 	var (
-		totalPoolCount        = uint64(len(allPools))
+		totalPoolCount        uint64
 		totalCapacityGb       = float64(0)
 		shareSubcapacities    []any
 		snapshotSubcapacities []any
@@ -215,6 +215,7 @@ func (p *capacityManilaPlugin) scrapeForShareType(shareType ManilaShareTypeSpec,
 
 		if isIncluded {
 			totalCapacityGb += pool.Capabilities.TotalCapacityGB
+			totalPoolCount++
 
 			availabilityZones[poolAZ] = true
 			poolCountPerAZ[poolAZ]++
