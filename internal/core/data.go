@@ -68,11 +68,43 @@ func (t Topological[D]) Sum() D {
 type TopologicalData[Self any] interface {
 	// List of permitted types. This is required for type inference, as explained here:
 	// <https://stackoverflow.com/a/73851453>
-	CapacityData
+	UsageData | CapacityData
 
 	// Computes the sum of this structure and `other`.
 	// This is used to implement Topological.Sum().
 	add(other Self) Self
+}
+
+// ResourceData contains quota and usage data for a single project resource.
+type ResourceData struct {
+	Quota     int64 //negative values indicate infinite quota
+	UsageData Topological[UsageData]
+}
+
+// UsageData contains usage data for a single project resource.
+// It appears in type ResourceData.
+type UsageData struct {
+	Usage         uint64
+	PhysicalUsage *uint64 //only supported by some plugins
+	Subresources  []any   //only if supported by plugin and enabled in config
+}
+
+// add implements the TopologicalData interface.
+//
+//nolint:unused // looks like a linter bug
+func (d UsageData) add(other UsageData) UsageData {
+	result := UsageData{
+		Usage:        d.Usage + other.Usage,
+		Subresources: append(slices.Clone(d.Subresources), other.Subresources...),
+	}
+
+	//the sum can only have a PhysicalUsage value if both sides have it
+	if d.PhysicalUsage != nil && other.PhysicalUsage != nil {
+		physUsage := *d.PhysicalUsage + *other.PhysicalUsage
+		result.PhysicalUsage = &physUsage
+	}
+
+	return result
 }
 
 // CapacityData contains capacity data for a single project resource.

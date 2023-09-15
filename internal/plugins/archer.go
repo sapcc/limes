@@ -113,11 +113,15 @@ func (p *archerPlugin) Scrape(project core.KeystoneProject) (result map[string]c
 	result = map[string]core.ResourceData{
 		"endpoints": {
 			Quota: archerQuota.Endpoint,
-			Usage: archerQuota.InUseEndpoint,
+			UsageData: core.Regional(core.UsageData{
+				Usage: archerQuota.InUseEndpoint,
+			}),
 		},
 		"services": {
 			Quota: archerQuota.Service,
-			Usage: archerQuota.InUseService,
+			UsageData: core.Regional(core.UsageData{
+				Usage: archerQuota.InUseService,
+			}),
 		},
 	}
 	return result, "", nil

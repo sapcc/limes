@@ -97,8 +97,8 @@ func (p *AutoApprovalQuotaPlugin) CollectMetrics(ch chan<- prometheus.Metric, pr
 // Scrape implements the core.QuotaPlugin interface.
 func (p *AutoApprovalQuotaPlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics string, err error) {
 	return map[string]core.ResourceData{
-		"approve":   {Usage: 0, Quota: int64(p.StaticBackendQuota)},
-		"noapprove": {Usage: 0, Quota: int64(p.StaticBackendQuota) + 10},
+		"approve":   {UsageData: core.Regional(core.UsageData{Usage: 0}), Quota: int64(p.StaticBackendQuota)},
+		"noapprove": {UsageData: core.Regional(core.UsageData{Usage: 0}), Quota: int64(p.StaticBackendQuota) + 10},
 	}, "", nil
 }
 

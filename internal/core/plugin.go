@@ -82,18 +82,6 @@ type DiscoveryPlugin interface {
 	ListProjects(domain KeystoneDomain) ([]KeystoneProject, error)
 }
 
-// ResourceData contains quota and usage data for a single resource.
-//
-// The Subresources field may optionally be populated with subresources, if the
-// quota plugin providing this ResourceData instance has been instructed to (and
-// is able to) scrape subresources for this resource.
-type ResourceData struct {
-	Quota         int64 //negative values indicate infinite quota
-	Usage         uint64
-	PhysicalUsage *uint64 //only supported by some plugins
-	Subresources  []any
-}
-
 // QuotaPlugin is the interface that the quota/usage collector plugins for all
 // backend services must implement. There can only be one QuotaPlugin for each
 // backend service.

@@ -92,7 +92,9 @@ func (p *keppelPlugin) Scrape(project core.KeystoneProject) (result map[string]c
 	return map[string]core.ResourceData{
 		"images": {
 			Quota: quotas.Manifests.Quota,
-			Usage: quotas.Manifests.Usage,
+			UsageData: core.Regional(core.UsageData{
+				Usage: quotas.Manifests.Usage,
+			}),
 		},
 	}, "", nil
 }

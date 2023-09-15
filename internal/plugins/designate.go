@@ -121,11 +121,15 @@ func (p *designatePlugin) Scrape(project core.KeystoneProject) (result map[strin
 	return map[string]core.ResourceData{
 		"zones": {
 			Quota: quotas.Zones,
-			Usage: uint64(len(zoneIDs)),
+			UsageData: core.Regional(core.UsageData{
+				Usage: uint64(len(zoneIDs)),
+			}),
 		},
 		"recordsets": {
 			Quota: quotas.ZoneRecordsets,
-			Usage: maxRecordsetsPerZone,
+			UsageData: core.Regional(core.UsageData{
+				Usage: maxRecordsetsPerZone,
+			}),
 		},
 	}, "", nil
 }
