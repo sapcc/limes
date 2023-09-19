@@ -82,18 +82,6 @@ type DiscoveryPlugin interface {
 	ListProjects(domain KeystoneDomain) ([]KeystoneProject, error)
 }
 
-// ResourceData contains quota and usage data for a single resource.
-//
-// The Subresources field may optionally be populated with subresources, if the
-// quota plugin providing this ResourceData instance has been instructed to (and
-// is able to) scrape subresources for this resource.
-type ResourceData struct {
-	Quota         int64 //negative values indicate infinite quota
-	Usage         uint64
-	PhysicalUsage *uint64 //only supported by some plugins
-	Subresources  []any
-}
-
 // QuotaPlugin is the interface that the quota/usage collector plugins for all
 // backend services must implement. There can only be one QuotaPlugin for each
 // backend service.
@@ -182,24 +170,6 @@ type QuotaPlugin interface {
 	CollectMetrics(ch chan<- prometheus.Metric, project KeystoneProject, serializedMetrics string) error
 }
 
-// CapacityData contains the total and per-availability-zone capacity data for a
-// single resource.
-//
-// The Subcapacities field may optionally be populated with subcapacities, if the
-// capacity plugin providing this CapacityData instance has been instructed to (and
-// is able to) scrape subcapacities for this resource.
-type CapacityData struct {
-	Capacity      uint64
-	CapacityPerAZ map[string]*CapacityDataForAZ
-	Subcapacities []any
-}
-
-// CapacityDataForAZ is the capacity data for a single resource in a single AZ.
-type CapacityDataForAZ struct {
-	Capacity uint64
-	Usage    uint64
-}
-
 // CapacityPlugin is the interface that all capacity collector plugins must
 // implement.
 //
@@ -231,7 +201,7 @@ type CapacityPlugin interface {
 	//
 	//The serializedMetrics return value is persisted in the Limes DB and
 	//supplied to all subsequent RenderMetrics calls.
-	Scrape() (result map[string]map[string]CapacityData, serializedMetrics string, err error)
+	Scrape() (result map[string]map[string]Topological[CapacityData], serializedMetrics string, err error)
 
 	//DescribeMetrics is called when Prometheus is scraping metrics from
 	//limes-collect, to provide an opportunity to the plugin to emit its own

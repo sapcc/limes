@@ -129,11 +129,11 @@ func (p *swiftPlugin) Scrape(project core.KeystoneProject) (result map[string]co
 	account := p.Account(project.UUID)
 	headers, err := account.Headers()
 	if schwift.Is(err, http.StatusNotFound) || schwift.Is(err, http.StatusGone) {
-		//Swift account does not exist or was deleted and not yet reaped, but the keystone project exist
+		//Swift account does not exist or was deleted and not yet reaped, but the keystone project exists
 		return map[string]core.ResourceData{
 			"capacity": {
-				Quota: 0,
-				Usage: 0,
+				Quota:     0,
+				UsageData: core.Regional(core.UsageData{Usage: 0}),
 			},
 		}, "", nil
 	} else if err != nil {
@@ -164,8 +164,10 @@ func (p *swiftPlugin) Scrape(project core.KeystoneProject) (result map[string]co
 	}
 
 	data := core.ResourceData{
-		Usage: headers.BytesUsed().Get(),
 		Quota: int64(headers.BytesUsedQuota().Get()),
+		UsageData: core.Regional(core.UsageData{
+			Usage: headers.BytesUsed().Get(),
+		}),
 	}
 	if !headers.BytesUsedQuota().Exists() {
 		data.Quota = -1

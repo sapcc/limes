@@ -99,7 +99,7 @@ func (p *capacityNovaPlugin) PluginTypeID() string {
 }
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *capacityNovaPlugin) Scrape() (result map[string]map[string]core.CapacityData, serializedMetrics string, err error) {
+func (p *capacityNovaPlugin) Scrape() (result map[string]map[string]core.Topological[core.CapacityData], serializedMetrics string, err error) {
 	//enumerate aggregates which establish the hypervisor <-> AZ mapping
 	page, err := aggregates.List(p.NovaV2).AllPages()
 	if err != nil {
@@ -143,10 +143,8 @@ func (p *capacityNovaPlugin) Scrape() (result map[string]map[string]core.Capacit
 
 	//we need to prepare several aggregations in the big loop below
 	var (
-		resourceNames   = []string{"cores", "instances", "ram"}
-		totalCapacity   partialNovaCapacity
-		azCapacities    = make(map[string]*partialNovaCapacity)
-		hvSubcapacities = make(map[string][]any)
+		resourceNames = []string{"cores", "instances", "ram"}
+		azCapacities  = make(map[string]*partialNovaCapacity)
 	)
 
 	//foreach hypervisor...
@@ -252,9 +250,7 @@ func (p *capacityNovaPlugin) Scrape() (result map[string]map[string]core.Capacit
 		}
 		hvCapacity.MatchingAggregates = map[string]bool{matchingAggregateName: true}
 
-		//count this hypervisor's capacity towards the totals for the whole cloud...
-		totalCapacity.Add(hvCapacity)
-		//...and the AZ level
+		//count this hypervisor's capacity towards the totals for the AZ level
 		azCapacity := azCapacities[matchingAvailabilityZone]
 		if azCapacity == nil {
 			azCapacity = &partialNovaCapacity{}
@@ -266,7 +262,7 @@ func (p *capacityNovaPlugin) Scrape() (result map[string]map[string]core.Capacit
 		for _, resName := range resourceNames {
 			if p.reportSubcapacities[resName] {
 				resCapa := hvCapacity.GetCapacity(resName, maxRootDiskSize)
-				hvSubcapacities[resName] = append(hvSubcapacities[resName], novaHypervisorSubcapacity{
+				azCapacity.Subcapacities = append(azCapacity.Subcapacities, novaHypervisorSubcapacity{
 					ServiceHost:      hypervisor.Service.Host,
 					AggregateName:    matchingAggregateName,
 					AvailabilityZone: matchingAvailabilityZone,
@@ -279,18 +275,14 @@ func (p *capacityNovaPlugin) Scrape() (result map[string]map[string]core.Capacit
 	}
 
 	//build final report
-	capacities := make(map[string]core.CapacityData, len(resourceNames))
+	capacities := make(map[string]core.Topological[core.CapacityData], len(resourceNames))
 	for _, resName := range resourceNames {
-		resCapa := totalCapacity.GetCapacity(resName, maxRootDiskSize)
-		capacities[resName] = core.CapacityData{
-			Capacity:      resCapa.Capacity,
-			CapacityPerAZ: make(map[string]*core.CapacityDataForAZ, len(azCapacities)),
-			Subcapacities: hvSubcapacities[resName],
-		}
+		resCapaPerAZ := make(map[string]*core.CapacityData, len(azCapacities))
 		for az, azCapacity := range azCapacities {
 			resCapa := azCapacity.GetCapacity(resName, maxRootDiskSize)
-			capacities[resName].CapacityPerAZ[az] = &resCapa
+			resCapaPerAZ[az] = &resCapa
 		}
+		capacities[resName] = core.PerAZ(resCapaPerAZ)
 	}
 
 	if maxRootDiskSize == 0 {
@@ -299,7 +291,7 @@ func (p *capacityNovaPlugin) Scrape() (result map[string]map[string]core.Capacit
 	}
 
 	serializedMetricsBytes, err := json.Marshal(metrics)
-	return map[string]map[string]core.CapacityData{"compute": capacities}, string(serializedMetricsBytes), err
+	return map[string]map[string]core.Topological[core.CapacityData]{"compute": capacities}, string(serializedMetricsBytes), err
 }
 
 var novaHypervisorWellformedGauge = prometheus.NewGaugeVec(
@@ -359,13 +351,14 @@ func nameListToLabelValue(names []string) string {
 	return strings.Join(names, ",")
 }
 
-// The capacity of any level of the Nova superstructure (hypervisor, aggregate, AZ, cluster).
+// The capacity of any level of the Nova superstructure (hypervisor, aggregate, AZ).
 type partialNovaCapacity struct {
-	VCPUs              core.CapacityDataForAZ
-	MemoryMB           core.CapacityDataForAZ
+	VCPUs              core.CapacityData
+	MemoryMB           core.CapacityData
 	LocalGB            uint64
 	RunningVMs         uint64
 	MatchingAggregates map[string]bool
+	Subcapacities      []any // only filled on AZ level
 }
 
 func (c partialNovaCapacity) IsEmpty() bool {
@@ -390,7 +383,7 @@ func (c *partialNovaCapacity) Add(other partialNovaCapacity) {
 	}
 }
 
-func (c partialNovaCapacity) GetCapacity(resourceName string, maxRootDiskSize float64) core.CapacityDataForAZ {
+func (c partialNovaCapacity) GetCapacity(resourceName string, maxRootDiskSize float64) core.CapacityData {
 	switch resourceName {
 	case "cores":
 		return c.VCPUs
@@ -404,7 +397,7 @@ func (c partialNovaCapacity) GetCapacity(resourceName string, maxRootDiskSize fl
 				amount = maxAmount
 			}
 		}
-		return core.CapacityDataForAZ{
+		return core.CapacityData{
 			Capacity: amount,
 			Usage:    c.RunningVMs,
 		}
@@ -464,11 +457,11 @@ func (h novaHypervisor) getCapacity(placementClient *gophercloud.ServiceClient, 
 	}
 
 	return partialNovaCapacity{
-		VCPUs: core.CapacityDataForAZ{
+		VCPUs: core.CapacityData{
 			Capacity: uint64(inventory.Inventories["VCPU"].Total - inventory.Inventories["VCPU"].Reserved),
 			Usage:    uint64(usages.Usages["VCPU"]),
 		},
-		MemoryMB: core.CapacityDataForAZ{
+		MemoryMB: core.CapacityData{
 			Capacity: uint64(inventory.Inventories["MEMORY_MB"].Total - inventory.Inventories["MEMORY_MB"].Reserved),
 			Usage:    uint64(usages.Usages["MEMORY_MB"]),
 		},

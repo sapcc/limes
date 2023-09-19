@@ -220,8 +220,9 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 	//this is the callback that ProjectResourceUpdate will use to write the scraped data into the project_resources
 	updateResource := func(res *db.ProjectResource) error {
 		data := resourceData[res.Name]
-		res.Usage = data.Usage
-		res.PhysicalUsage = data.PhysicalUsage
+		usageData := data.UsageData.Sum()
+		res.Usage = usageData.Usage
+		res.PhysicalUsage = usageData.PhysicalUsage
 
 		resInfo := c.Cluster.InfoForResource(srv.Type, res.Name)
 		if !resInfo.NoQuota {
@@ -238,17 +239,17 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 			res.BackendQuota = &data.Quota
 		}
 
-		if len(data.Subresources) == 0 {
+		if len(usageData.Subresources) == 0 {
 			res.SubresourcesJSON = ""
 		} else {
 			//warn when the backend is inconsistent with itself
-			if uint64(len(data.Subresources)) != res.Usage {
+			if uint64(len(usageData.Subresources)) != res.Usage {
 				logg.Info("resource quantity mismatch in project %s, resource %s/%s: usage = %d, but found %d subresources",
 					dbProject.UUID, srv.Type, res.Name,
-					res.Usage, len(data.Subresources),
+					res.Usage, len(usageData.Subresources),
 				)
 			}
-			bytes, err := json.Marshal(data.Subresources)
+			bytes, err := json.Marshal(usageData.Subresources)
 			if err != nil {
 				return fmt.Errorf("failed to convert subresources to JSON: %s", err.Error())
 			}

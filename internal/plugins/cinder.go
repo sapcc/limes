@@ -118,7 +118,10 @@ func (p *cinderPlugin) makeResourceName(kind, volumeType string) string {
 	return kind + "_" + volumeType
 }
 
-type quotaSetField core.ResourceData
+type quotaSetField struct {
+	Quota int64
+	Usage uint64
+}
 
 func (f *quotaSetField) UnmarshalJSON(buf []byte) error {
 	//The `quota_set` field in the os-quota-sets response is mostly
@@ -142,9 +145,11 @@ func (f *quotaSetField) UnmarshalJSON(buf []byte) error {
 
 func (f quotaSetField) ToResourceData(subresources []any) core.ResourceData {
 	return core.ResourceData{
-		Quota:        f.Quota,
-		Usage:        f.Usage,
-		Subresources: subresources,
+		Quota: f.Quota,
+		UsageData: core.Regional(core.UsageData{
+			Usage:        f.Usage,
+			Subresources: subresources,
+		}),
 	}
 }
 
