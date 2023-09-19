@@ -58,8 +58,6 @@ import (
 	_ "github.com/sapcc/limes/internal/plugins"
 )
 
-var discoverInterval = 3 * time.Minute
-
 func main() {
 	logg.ShowDebug = osext.GetenvBool("LIMES_DEBUG")
 	undoMaxprocs := must.Return(maxprocs.Set(maxprocs.Logger(logg.Debug)))
@@ -164,15 +162,7 @@ func taskCollect(cluster *core.Cluster, args []string) {
 	//start those collector threads which operate over all services simultaneously
 	go c.CapacityScrapeJob(nil).Run(ctx)
 	go c.CheckConsistencyJob(nil).Run(ctx)
-	go func() {
-		for {
-			_, err := c.ScanDomains(collector.ScanDomainsOpts{ScanAllProjects: true})
-			if err != nil {
-				logg.Error(util.UnpackError(err).Error())
-			}
-			time.Sleep(discoverInterval)
-		}
-	}()
+	go c.ScanDomainsAndProjectsJob(nil).Run(ctx)
 
 	//use main thread to emit Prometheus metrics
 	prometheus.MustRegister(&collector.AggregateMetricsCollector{Cluster: cluster, DB: dbm})

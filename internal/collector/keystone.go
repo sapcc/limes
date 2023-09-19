@@ -20,14 +20,39 @@
 package collector
 
 import (
+	"context"
+	"fmt"
+	"time"
+
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
+	"github.com/sapcc/limes/internal/util"
 )
+
+// ScanDomainsAndProjectsJob is a jobloop.CronJob.
+// It syncs domains and projects from Keystone into the Limes database.
+func (c *Collector) ScanDomainsAndProjectsJob(registerer prometheus.Registerer) jobloop.Job {
+	return (&jobloop.CronJob{
+		Metadata: jobloop.JobMetadata{
+			ReadableName: "sync domains and projects from Keystone",
+			CounterOpts: prometheus.CounterOpts{
+				Name: "limes_keystone_syncs",
+				Help: "Counts syncs of domains and projects from Keystone",
+			},
+		},
+		Interval: 3 * time.Minute,
+		Task: func(_ context.Context, _ prometheus.Labels) error {
+			_, err := c.ScanDomains(ScanDomainsOpts{ScanAllProjects: true})
+			return err
+		},
+	}).Setup(registerer)
+}
 
 // ScanDomainsOpts contains additional options for ScanDomains().
 type ScanDomainsOpts struct {
@@ -39,22 +64,10 @@ type ScanDomainsOpts struct {
 // ScanDomains queries Keystone to discover new domains, and returns a
 // list of UUIDs for the newly discovered domains.
 func (c *Collector) ScanDomains(opts ScanDomainsOpts) (result []string, resultErr error) {
-	//make sure that the counters are reported
-	domainDiscoverySuccessCounter.Add(0)
-	domainDiscoveryFailedCounter.Add(0)
-	//report either success or failure when the method exists
-	defer func() {
-		if resultErr == nil {
-			domainDiscoverySuccessCounter.Inc()
-		} else {
-			domainDiscoveryFailedCounter.Inc()
-		}
-	}()
-
 	//list domains in Keystone
 	allDomains, err := c.Cluster.DiscoveryPlugin.ListDomains()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("while listing domains: %w", util.UnpackError(err))
 	}
 	domains := c.Cluster.Config.Discovery.FilterDomains(allDomains)
 	isDomainUUID := make(map[string]bool)
@@ -159,26 +172,10 @@ func (c *Collector) initDomain(domain core.KeystoneDomain) (*db.Domain, error) {
 
 // ScanProjects queries Keystone to discover new projects in the given domain.
 func (c *Collector) ScanProjects(domain *db.Domain) (result []string, resultErr error) {
-	//make sure that the counters are reported
-	labels := prometheus.Labels{
-		"domain":    domain.Name,
-		"domain_id": domain.UUID,
-	}
-	projectDiscoverySuccessCounter.With(labels).Add(0)
-	projectDiscoveryFailedCounter.With(labels).Add(0)
-	//report either success or failure when the method exists
-	defer func() {
-		if resultErr == nil {
-			projectDiscoverySuccessCounter.With(labels).Inc()
-		} else {
-			projectDiscoveryFailedCounter.With(labels).Inc()
-		}
-	}()
-
 	//list projects in Keystone
 	projects, err := c.Cluster.DiscoveryPlugin.ListProjects(core.KeystoneDomainFromDB(*domain))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("while listing projects in domain %q: %w", domain.Name, util.UnpackError(err))
 	}
 	isProjectUUID := make(map[string]bool)
 	for _, project := range projects {

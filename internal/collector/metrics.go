@@ -35,64 +35,6 @@ import (
 )
 
 ////////////////////////////////////////////////////////////////////////////////
-// collector metrics
-
-var projectDiscoverySuccessCounter = prometheus.NewCounterVec(
-	prometheus.CounterOpts{
-		Name: "limes_successful_project_discoveries",
-		Help: "Counter for successful project discovery operations per Keystone domain.",
-	},
-	[]string{"domain", "domain_id"},
-)
-
-var projectDiscoveryFailedCounter = prometheus.NewCounterVec(
-	prometheus.CounterOpts{
-		Name: "limes_failed_project_discoveries",
-		Help: "Counter for failed project discovery operations per Keystone domain.",
-	},
-	[]string{"domain", "domain_id"},
-)
-
-var domainDiscoverySuccessCounter = prometheus.NewCounter(
-	prometheus.CounterOpts{
-		Name: "limes_successful_domain_discoveries",
-		Help: "Counter for successful domain discovery operations.",
-	},
-)
-
-var domainDiscoveryFailedCounter = prometheus.NewCounter(
-	prometheus.CounterOpts{
-		Name: "limes_failed_domain_discoveries",
-		Help: "Counter for failed domain discovery operations.",
-	},
-)
-
-var clusterCapacitorSuccessCounter = prometheus.NewCounterVec(
-	prometheus.CounterOpts{
-		Name: "limes_successful_capacity_scrapes",
-		Help: "Counter for successful cluster capacity scrapes.",
-	},
-	[]string{"capacitor"},
-)
-
-var clusterCapacitorFailedCounter = prometheus.NewCounterVec(
-	prometheus.CounterOpts{
-		Name: "limes_failed_capacity_scrapes",
-		Help: "Counter for failed cluster capacity scrapes.",
-	},
-	[]string{"capacitor"},
-)
-
-func init() {
-	prometheus.MustRegister(projectDiscoverySuccessCounter)
-	prometheus.MustRegister(projectDiscoveryFailedCounter)
-	prometheus.MustRegister(domainDiscoverySuccessCounter)
-	prometheus.MustRegister(domainDiscoveryFailedCounter)
-	prometheus.MustRegister(clusterCapacitorSuccessCounter)
-	prometheus.MustRegister(clusterCapacitorFailedCounter)
-}
-
-////////////////////////////////////////////////////////////////////////////////
 // scraped_at aggregate metrics
 
 var minScrapedAtGauge = prometheus.NewGaugeVec(
