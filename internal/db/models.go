@@ -23,7 +23,9 @@ import (
 	"time"
 
 	"github.com/go-gorp/gorp/v3"
+	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 )
 
 // ClusterCapacitor contains a record from the `cluster_capacitors` table.
@@ -142,6 +144,35 @@ type ProjectRate struct {
 	//  use strings throughout and cast into bigints in the scraper only.
 }
 
+// ProjectCommitment contains a record from the `project_commitments` table.
+type ProjectCommitment struct {
+	ID               int64                             `db:"id"`
+	ServiceID        int64                             `db:"service_id"`
+	ResourceName     string                            `db:"resource_name"`
+	AvailabilityZone limes.AvailabilityZone            `db:"availability_zone"`
+	Amount           uint64                            `db:"amount"`
+	Duration         limesresources.CommitmentDuration `db:"duration"`
+	RequestedAt      time.Time                         `db:"requested_at"`
+	ConfirmAfter     time.Time                         `db:"confirm_after"`
+	ConfirmedAt      *time.Time                        `db:"confirmed_at"`
+	ExpiresAt        *time.Time                        `db:"expires_at"`
+
+	//A commitment can be superseded e.g. by splitting it into smaller parts.
+	//When that happens, the new commitments will point to the one that they
+	//superseded through the PredecessorID field.
+	SupersededAt  *time.Time `db:"superseded_at"`
+	PredecessorID *int64     `db:"predecessor_id"`
+
+	//For a commitment to be transferred between projects, it must first be
+	//marked for transfer in the source project. Then a new commitment can be
+	//created in the target project to supersede the transferable commitment.
+	//
+	//While a commitment is marked for transfer, it does not count towards quota
+	//calculation, but it still blocks capacity and still counts towards billing.
+	TransferStatus limesresources.CommitmentTransferStatus `db:"transfer_status"`
+	TransferToken  string                                  `db:"transfer_token"`
+}
+
 // initGorp is used by Init() to setup the ORM part of the database connection.
 func initGorp(db *gorp.DbMap) {
 	db.AddTableWithName(ClusterCapacitor{}, "cluster_capacitors").SetKeys(false, "capacitor_id")
@@ -154,4 +185,5 @@ func initGorp(db *gorp.DbMap) {
 	db.AddTableWithName(ProjectService{}, "project_services").SetKeys(true, "id")
 	db.AddTableWithName(ProjectResource{}, "project_resources").SetKeys(false, "service_id", "name")
 	db.AddTableWithName(ProjectRate{}, "project_rates").SetKeys(false, "service_id", "name")
+	db.AddTableWithName(ProjectCommitment{}, "project_commitments").SetKeys(true, "id")
 }
