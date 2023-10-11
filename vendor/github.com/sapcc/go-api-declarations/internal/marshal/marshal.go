@@ -21,17 +21,17 @@ package marshal
 
 import (
 	"encoding/json"
-	"sort"
+	"slices"
 )
 
 // MapAsList marshals a map type into a flat JSON list, thereby discarding the keys.
-func MapAsList[T any](vals map[string]T) ([]byte, error) {
+func MapAsList[S ~string, T any](vals map[S]T) ([]byte, error) {
 	//serialize with ordered keys to ensure testcase stability
-	names := make([]string, 0, len(vals))
+	names := make([]S, 0, len(vals))
 	for name := range vals {
 		names = append(names, name)
 	}
-	sort.Strings(names)
+	slices.Sort(names)
 	list := make([]T, len(vals))
 	for idx, name := range names {
 		list[idx] = vals[name]
@@ -41,13 +41,13 @@ func MapAsList[T any](vals map[string]T) ([]byte, error) {
 
 // MapFromList unmarshals a flat JSON list into a map, using the provided
 // predicate to obtain the keys for each item.
-func MapFromList[T any](buf []byte, getKey func(T) string) (map[string]T, error) {
+func MapFromList[S ~string, T any](buf []byte, getKey func(T) S) (map[S]T, error) {
 	var list []T
 	err := json.Unmarshal(buf, &list)
 	if err != nil {
 		return nil, err
 	}
-	result := make(map[string]T, len(list))
+	result := make(map[S]T, len(list))
 	for _, item := range list {
 		result[getKey(item)] = item
 	}

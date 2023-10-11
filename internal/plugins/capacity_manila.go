@@ -29,6 +29,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/sharedfilesystems/v2/services"
 	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/logg"
 
 	"github.com/sapcc/limes/internal/core"
@@ -49,10 +50,10 @@ type capacityManilaPlugin struct {
 
 // This type is shared with the Cinder capacitor.
 type storagePoolSubcapacity struct {
-	PoolName         string `json:"pool_name"`
-	AvailabilityZone string `json:"az"`
-	CapacityGiB      uint64 `json:"capacity_gib"`
-	UsageGiB         uint64 `json:"usage_gib"`
+	PoolName         string                 `json:"pool_name"`
+	AvailabilityZone limes.AvailabilityZone `json:"az"`
+	CapacityGiB      uint64                 `json:"capacity_gib"`
+	UsageGiB         uint64                 `json:"usage_gib"`
 	//Manila only (SAP-specific extension)
 	ExclusionReason string `json:"exclusion_reason"`
 }
@@ -111,7 +112,7 @@ func (p *capacityManilaPlugin) Scrape() (result map[string]map[string]core.Topol
 		return nil, "", err
 	}
 
-	azForServiceHost := make(map[string]string)
+	azForServiceHost := make(map[string]limes.AvailabilityZone)
 	for _, element := range allServices {
 		if element.Binary == "manila-share" {
 			//element.Host has the format backendHostname@backendName
@@ -119,7 +120,7 @@ func (p *capacityManilaPlugin) Scrape() (result map[string]map[string]core.Topol
 			if len(fields) != 2 {
 				logg.Error("Expected a Manila service host in the format \"backendHostname@backendName\", got %q with ID %d", element.Host, element.ID)
 			} else {
-				azForServiceHost[fields[0]] = element.Zone
+				azForServiceHost[fields[0]] = limes.AvailabilityZone(element.Zone)
 			}
 		}
 	}
@@ -158,7 +159,7 @@ type capacityForShareType struct {
 	SnapshotGigabytes core.Topological[core.CapacityData]
 }
 
-func (p *capacityManilaPlugin) scrapeForShareType(shareType ManilaShareTypeSpec, azForServiceHost map[string]string) (capacityForShareType, error) {
+func (p *capacityManilaPlugin) scrapeForShareType(shareType ManilaShareTypeSpec, azForServiceHost map[string]limes.AvailabilityZone) (capacityForShareType, error) {
 	//list all pools for the Manila share types corresponding to this virtual share type
 	var allPools []manilaPool
 	for _, stName := range getAllManilaShareTypes(shareType) {
@@ -181,12 +182,12 @@ func (p *capacityManilaPlugin) scrapeForShareType(shareType ManilaShareTypeSpec,
 
 	//count pools and their capacities
 	var (
-		availabilityZones          = make(map[string]bool)
-		poolCountPerAZ             = make(map[string]uint64)
-		totalCapacityGbPerAZ       = make(map[string]float64)
-		allocatedCapacityGbPerAZ   = make(map[string]float64)
-		shareSubcapacitiesPerAZ    = make(map[string][]any)
-		snapshotSubcapacitiesPerAZ = make(map[string][]any)
+		availabilityZones          = make(map[limes.AvailabilityZone]bool)
+		poolCountPerAZ             = make(map[limes.AvailabilityZone]uint64)
+		totalCapacityGbPerAZ       = make(map[limes.AvailabilityZone]float64)
+		allocatedCapacityGbPerAZ   = make(map[limes.AvailabilityZone]float64)
+		shareSubcapacitiesPerAZ    = make(map[limes.AvailabilityZone][]any)
+		snapshotSubcapacitiesPerAZ = make(map[limes.AvailabilityZone][]any)
 	)
 	for _, pool := range allPools {
 		isIncluded := true
@@ -207,7 +208,7 @@ func (p *capacityManilaPlugin) scrapeForShareType(shareType ManilaShareTypeSpec,
 		poolAZ := azForServiceHost[pool.Host]
 		if poolAZ == "" {
 			logg.Info("Manila storage pool %q (share type %q) does not match any service host", pool.Name, shareType.Name)
-			poolAZ = "unknown"
+			poolAZ = limes.AvailabilityZoneUnknown
 		}
 
 		if isIncluded {
@@ -245,10 +246,10 @@ func (p *capacityManilaPlugin) scrapeForShareType(shareType ManilaShareTypeSpec,
 
 	//derive availability zone usage and capacities
 	result := capacityForShareType{
-		Shares:            core.PerAZ(map[string]*core.CapacityData{}),
-		Snapshots:         core.PerAZ(map[string]*core.CapacityData{}),
-		ShareGigabytes:    core.PerAZ(map[string]*core.CapacityData{}),
-		SnapshotGigabytes: core.PerAZ(map[string]*core.CapacityData{}),
+		Shares:            core.PerAZ(map[limes.AvailabilityZone]*core.CapacityData{}),
+		Snapshots:         core.PerAZ(map[limes.AvailabilityZone]*core.CapacityData{}),
+		ShareGigabytes:    core.PerAZ(map[limes.AvailabilityZone]*core.CapacityData{}),
+		SnapshotGigabytes: core.PerAZ(map[limes.AvailabilityZone]*core.CapacityData{}),
 	}
 	for az := range availabilityZones {
 		result.Shares.PerAZ[az] = &core.CapacityData{

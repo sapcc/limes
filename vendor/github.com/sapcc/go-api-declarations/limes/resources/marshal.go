@@ -21,6 +21,7 @@ package limesresources
 
 import (
 	"github.com/sapcc/go-api-declarations/internal/marshal"
+	"github.com/sapcc/go-api-declarations/limes"
 )
 
 func (r ClusterAvailabilityZoneReports) MarshalJSON() ([]byte, error) { return marshal.MapAsList(r) }
@@ -32,7 +33,7 @@ func (r ProjectResourceReports) MarshalJSON() ([]byte, error)         { return m
 func (s ProjectServiceReports) MarshalJSON() ([]byte, error)          { return marshal.MapAsList(s) }
 
 func (r *ClusterAvailabilityZoneReports) UnmarshalJSON(buf []byte) error {
-	m, err := marshal.MapFromList(buf, func(r *ClusterAvailabilityZoneReport) string { return r.Name })
+	m, err := marshal.MapFromList(buf, func(r *ClusterAvailabilityZoneReport) limes.AvailabilityZone { return r.Name })
 	*r = ClusterAvailabilityZoneReports(m)
 	return err
 }

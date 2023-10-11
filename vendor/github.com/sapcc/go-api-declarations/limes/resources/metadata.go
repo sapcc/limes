@@ -89,3 +89,11 @@ const (
 	// projects quota.
 	CentralizedQuotaDistribution QuotaDistributionModel = "centralized"
 )
+
+// CommitmentConfiguration describes how commitments are configured for a given resource.
+//
+// This appears as a field on resource reports, if the respective resource allows commitments.
+type CommitmentConfiguration struct {
+	// Allowed durations for commitments on this resource.
+	Durations []CommitmentDuration `json:"durations"`
+}

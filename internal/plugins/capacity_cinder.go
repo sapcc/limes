@@ -30,6 +30,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/extensions/schedulerstats"
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/extensions/services"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/logg"
 
 	"github.com/sapcc/limes/internal/core"
@@ -130,7 +131,7 @@ func (p *capacityCinderPlugin) Scrape() (result map[string]map[string]core.Topol
 	volumeTypesByBackendName := make(map[string]string)
 	for volumeType, cfg := range p.VolumeTypes {
 		volumeTypesByBackendName[cfg.VolumeBackendName] = volumeType
-		capaData[p.makeResourceName(volumeType)] = core.PerAZ(make(map[string]*core.CapacityData))
+		capaData[p.makeResourceName(volumeType)] = core.PerAZ(make(map[limes.AvailabilityZone]*core.CapacityData))
 	}
 
 	//add results from scheduler-stats
@@ -152,19 +153,19 @@ func (p *capacityCinderPlugin) Scrape() (result map[string]map[string]core.Topol
 		}
 		logg.Debug("Cinder capacity plugin: considering pool %q with volume_backend_name %q for volume type %q", pool.Name, pool.Capabilities.VolumeBackendName, volumeType)
 
-		var poolAZ string
+		var poolAZ limes.AvailabilityZone
 		for az, hosts := range serviceHostsPerAZ {
 			for _, v := range hosts {
 				//pool.Name has the format backendHostname@backendName#backendPoolName
 				if strings.Contains(pool.Name, v) {
-					poolAZ = az
+					poolAZ = limes.AvailabilityZone(az)
 					break
 				}
 			}
 		}
 		if poolAZ == "" {
 			logg.Info("Cinder storage pool %q does not match any service host", pool.Name)
-			poolAZ = "unknown"
+			poolAZ = limes.AvailabilityZoneUnknown
 		}
 
 		resourceName := p.makeResourceName(volumeType)

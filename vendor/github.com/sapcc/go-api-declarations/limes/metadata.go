@@ -54,3 +54,14 @@ type ServiceInfo struct {
 	//Area is a hint that UIs can use to group similar services.
 	Area string `json:"area"`
 }
+
+// AvailabilityZone is the name of an availability zone.
+// Some special values are enumerated below.
+type AvailabilityZone string
+
+const (
+	// AvailabilityZoneAny marks values that are not bound to a specific AZ.
+	AvailabilityZoneAny AvailabilityZone = "any"
+	// AvailabilityZoneUnknown marks values that are bound to an unknown AZ.
+	AvailabilityZoneUnknown AvailabilityZone = "unknown"
+)

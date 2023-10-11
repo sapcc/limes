@@ -26,6 +26,7 @@ import (
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sapcc/go-api-declarations/limes"
 
 	"github.com/sapcc/limes/internal/core"
 )
@@ -71,7 +72,7 @@ func (p *StaticCapacityPlugin) Scrape() (result map[string]map[string]core.Topol
 		}
 	}
 
-	fullCapa := core.PerAZ(map[string]*core.CapacityData{
+	fullCapa := core.PerAZ(map[limes.AvailabilityZone]*core.CapacityData{
 		"az-one": makeAZCapa("az-one", p.Capacity/2, p.Capacity/10),
 		"az-two": makeAZCapa("az-two", p.Capacity-p.Capacity/2, p.Capacity/10),
 	})

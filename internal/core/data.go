@@ -21,7 +21,8 @@ package core
 
 import (
 	"slices"
-	"sort"
+
+	"github.com/sapcc/go-api-declarations/limes"
 )
 
 // Topological is a container for data that can either be reported for
@@ -29,7 +30,7 @@ import (
 // Exactly one field shall be non-nil.
 type Topological[D TopologicalData[D]] struct {
 	Regional *D
-	PerAZ    map[string]*D
+	PerAZ    map[limes.AvailabilityZone]*D
 }
 
 // Regional is a shorthand to construct a Topological instance with the Regional member filled.
@@ -38,7 +39,7 @@ func Regional[D TopologicalData[D]](data D) Topological[D] {
 }
 
 // PerAZ is a shorthand to construct a Topological instance with the PerAZ member filled.
-func PerAZ[D TopologicalData[D]](data map[string]*D) Topological[D] {
+func PerAZ[D TopologicalData[D]](data map[limes.AvailabilityZone]*D) Topological[D] {
 	return Topological[D]{PerAZ: data}
 }
 
@@ -51,11 +52,11 @@ func (t Topological[D]) Sum() D {
 	}
 
 	//fold AZ data in a well-defined order for deterministic test result
-	azNames := make([]string, 0, len(t.PerAZ))
+	azNames := make([]limes.AvailabilityZone, 0, len(t.PerAZ))
 	for az := range t.PerAZ {
 		azNames = append(azNames, az)
 	}
-	sort.Strings(azNames)
+	slices.Sort(azNames)
 
 	var result D
 	for _, az := range azNames {

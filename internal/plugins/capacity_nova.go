@@ -25,7 +25,6 @@ import (
 	"fmt"
 	"math"
 	"slices"
-	"sort"
 	"strings"
 
 	"github.com/gophercloud/gophercloud"
@@ -35,6 +34,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/openstack/placement/v1/resourceproviders"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/regexpext"
 
@@ -59,10 +59,10 @@ type capacityNovaSerializedMetrics struct {
 }
 
 type novaHypervisorMetrics struct {
-	Name              string   `json:"n"`
-	Hostname          string   `json:"hn"`
-	Aggregates        []string `json:"ag"`
-	AvailabilityZones []string `json:"az"`
+	Name              string                   `json:"n"`
+	Hostname          string                   `json:"hn"`
+	Aggregates        []string                 `json:"ag"`
+	AvailabilityZones []limes.AvailabilityZone `json:"az"`
 }
 
 func init() {
@@ -144,7 +144,7 @@ func (p *capacityNovaPlugin) Scrape() (result map[string]map[string]core.Topolog
 	//we need to prepare several aggregations in the big loop below
 	var (
 		resourceNames = []string{"cores", "instances", "ram"}
-		azCapacities  = make(map[string]*partialNovaCapacity)
+		azCapacities  = make(map[limes.AvailabilityZone]*partialNovaCapacity)
 	)
 
 	//foreach hypervisor...
@@ -183,7 +183,7 @@ func (p *capacityNovaPlugin) Scrape() (result map[string]map[string]core.Topolog
 		}
 
 		//match hypervisor with AZ and relevant aggregate
-		matchingAZs := make(map[string]bool)
+		matchingAZs := make(map[limes.AvailabilityZone]bool)
 		matchingAggregates := make(map[string]bool)
 		for _, aggr := range allAggregates {
 			if !hypervisor.IsInAggregate(aggr) {
@@ -192,7 +192,7 @@ func (p *capacityNovaPlugin) Scrape() (result map[string]map[string]core.Topolog
 			if p.AggregateNameRx.MatchString(aggr.Name) {
 				matchingAggregates[aggr.Name] = true
 			}
-			if az := aggr.AvailabilityZone; az != "" {
+			if az := limes.AvailabilityZone(aggr.AvailabilityZone); az != "" {
 				//We also use aggregates not matching our naming pattern to establish a
 				//hypervisor <-> AZ relationship. We have observed in the wild that
 				//matching aggregates do not always have their AZ field maintained.
@@ -240,7 +240,7 @@ func (p *capacityNovaPlugin) Scrape() (result map[string]map[string]core.Topolog
 		}
 		var (
 			matchingAggregateName    string
-			matchingAvailabilityZone string
+			matchingAvailabilityZone limes.AvailabilityZone
 		)
 		for aggr := range matchingAggregates {
 			matchingAggregateName = aggr
@@ -277,7 +277,7 @@ func (p *capacityNovaPlugin) Scrape() (result map[string]map[string]core.Topolog
 	//build final report
 	capacities := make(map[string]core.Topological[core.CapacityData], len(resourceNames))
 	for _, resName := range resourceNames {
-		resCapaPerAZ := make(map[string]*core.CapacityData, len(azCapacities))
+		resCapaPerAZ := make(map[limes.AvailabilityZone]*core.CapacityData, len(azCapacities))
 		for az, azCapacity := range azCapacities {
 			resCapa := azCapacity.GetCapacity(resName, maxRootDiskSize)
 			resCapaPerAZ[az] = &resCapa
@@ -336,19 +336,23 @@ func (p *capacityNovaPlugin) CollectMetrics(ch chan<- prometheus.Metric, seriali
 	return nil
 }
 
-func boolMapToList(m map[string]bool) (result []string) {
+func boolMapToList[S ~string](m map[S]bool) (result []S) {
 	for k := range m {
 		result = append(result, k)
 	}
-	sort.Strings(result)
+	slices.Sort(result)
 	return
 }
 
-func nameListToLabelValue(names []string) string {
+func nameListToLabelValue[S ~string](names []S) string {
 	if len(names) == 0 {
 		return "unknown"
 	}
-	return strings.Join(names, ",")
+	values := make([]string, len(names))
+	for idx, name := range names {
+		values[idx] = string(name)
+	}
+	return strings.Join(values, ",")
 }
 
 // The capacity of any level of the Nova superstructure (hypervisor, aggregate, AZ).
@@ -471,12 +475,12 @@ func (h novaHypervisor) getCapacity(placementClient *gophercloud.ServiceClient, 
 }
 
 type novaHypervisorSubcapacity struct {
-	ServiceHost      string   `json:"service_host"` //TODO service.host
-	AvailabilityZone string   `json:"az"`
-	AggregateName    string   `json:"aggregate"`
-	Capacity         uint64   `json:"capacity"`
-	Usage            uint64   `json:"usage"`
-	Traits           []string `json:"traits"`
+	ServiceHost      string                 `json:"service_host"` //TODO service.host
+	AvailabilityZone limes.AvailabilityZone `json:"az"`
+	AggregateName    string                 `json:"aggregate"`
+	Capacity         uint64                 `json:"capacity"`
+	Usage            uint64                 `json:"usage"`
+	Traits           []string               `json:"traits"`
 }
 
 func getMaxRootDiskSize(novaClient *gophercloud.ServiceClient, expectedExtraSpecs map[string]string) (float64, error) {

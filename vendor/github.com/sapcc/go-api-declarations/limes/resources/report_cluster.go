@@ -62,10 +62,10 @@ type ClusterResourceReport struct {
 // ClusterAvailabilityZoneReport is a substructure of ClusterResourceReport containing
 // capacity and usage data for a single resource in an availability zone.
 type ClusterAvailabilityZoneReport struct {
-	Name        string `json:"name"`
-	Capacity    uint64 `json:"capacity"`
-	RawCapacity uint64 `json:"raw_capacity,omitempty"`
-	Usage       uint64 `json:"usage,omitempty"`
+	Name        limes.AvailabilityZone `json:"name"`
+	Capacity    uint64                 `json:"capacity"`
+	RawCapacity uint64                 `json:"raw_capacity,omitempty"`
+	Usage       uint64                 `json:"usage,omitempty"`
 }
 
 // ClusterServiceReports provides fast lookup of services by service type, but
@@ -78,4 +78,4 @@ type ClusterResourceReports map[string]*ClusterResourceReport
 
 // ClusterAvailabilityZoneReports provides fast lookup of availability zones
 // using a map, but serializes to JSON as a list.
-type ClusterAvailabilityZoneReports map[string]*ClusterAvailabilityZoneReport
+type ClusterAvailabilityZoneReports map[limes.AvailabilityZone]*ClusterAvailabilityZoneReport

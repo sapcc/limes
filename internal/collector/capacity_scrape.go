@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/logg"
@@ -298,7 +299,7 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 	return tx.Commit()
 }
 
-func convertAZReport(capacityPerAZ map[string]*core.CapacityData) limesresources.ClusterAvailabilityZoneReports {
+func convertAZReport(capacityPerAZ map[limes.AvailabilityZone]*core.CapacityData) limesresources.ClusterAvailabilityZoneReports {
 	report := make(limesresources.ClusterAvailabilityZoneReports, len(capacityPerAZ))
 	for azName, azData := range capacityPerAZ {
 		report[azName] = &limesresources.ClusterAvailabilityZoneReport{

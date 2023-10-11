@@ -170,7 +170,7 @@ func (p *capacitySapccIronicPlugin) Scrape() (result map[string]map[string]core.
 		//NOTE: If `flavor_name_pattern` is empty, then FlavorNameRx will match any input.
 		if p.FlavorNameRx.MatchString(flavorName) {
 			resName := p.ftt.LimesResourceNameForFlavor(flavorName)
-			resultCompute[resName] = core.PerAZ(make(map[string]*core.CapacityData))
+			resultCompute[resName] = core.PerAZ(make(map[limes.AvailabilityZone]*core.CapacityData))
 		}
 	}
 
@@ -197,9 +197,9 @@ func (p *capacitySapccIronicPlugin) Scrape() (result map[string]map[string]core.
 
 	//Ironic bPods are expected to be listed as compute hosts assigned to
 	//host aggregates in the format: "nova-compute-ironic-xxxx".
-	azForHostStub := make(map[string]string)
+	azForHostStub := make(map[string]limes.AvailabilityZone)
 	for _, aggr := range allAggregates {
-		az := aggr.AvailabilityZone
+		az := limes.AvailabilityZone(aggr.AvailabilityZone)
 		if az == "" {
 			continue
 		}
@@ -245,15 +245,15 @@ func (p *capacitySapccIronicPlugin) Scrape() (result map[string]map[string]core.
 			if node.Matches(flavorName) {
 				logg.Debug("Ironic node %q (%s) matches flavor %s", node.Name, node.ID, flavorName)
 
-				var nodeAZ string
+				var nodeAZ limes.AvailabilityZone
 				if match := cpNodeNameRx.FindStringSubmatch(node.Name); match != nil {
 					//special case as explained above (near definition of `cpNodeNameRx`)
-					nodeAZ = match[1]
+					nodeAZ = limes.AvailabilityZone(match[1])
 				} else if match := nodeNameRx.FindStringSubmatch(node.Name); match != nil {
 					nodeAZ = azForHostStub[match[1]]
 					if nodeAZ == "" {
 						logg.Info("Ironic node %q (%s) does not match any compute host from host aggregates", node.Name, node.ID)
-						nodeAZ = "unknown"
+						nodeAZ = limes.AvailabilityZoneUnknown
 					}
 				} else {
 					logg.Error(`Ironic node %q (%s) does not match the "nodeXXX-{bm,bb,ap,md,st,swf}YYY" naming convention`, node.Name, node.ID)
