@@ -22,6 +22,7 @@ package core
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/errext"
@@ -31,14 +32,16 @@ import (
 // ResourceBehavior contains the configuration options for specialized
 // behaviors of a single resource (or a set thereof).
 type ResourceBehavior struct {
-	FullResourceNameRx     regexpext.BoundedRegexp            `yaml:"resource"`
-	ScopeRx                regexpext.BoundedRegexp            `yaml:"scope"`
-	MaxBurstMultiplier     *limesresources.BurstingMultiplier `yaml:"max_burst_multiplier"`
-	OvercommitFactor       float64                            `yaml:"overcommit_factor"`
-	ScalesWith             ResourceRef                        `yaml:"scales_with"`
-	ScalingFactor          float64                            `yaml:"scaling_factor"`
-	MinNonZeroProjectQuota uint64                             `yaml:"min_nonzero_project_quota"`
-	Annotations            map[string]any                     `yaml:"annotations"`
+	FullResourceNameRx       regexpext.BoundedRegexp             `yaml:"resource"`
+	ScopeRx                  regexpext.BoundedRegexp             `yaml:"scope"`
+	MaxBurstMultiplier       *limesresources.BurstingMultiplier  `yaml:"max_burst_multiplier"`
+	OvercommitFactor         float64                             `yaml:"overcommit_factor"`
+	ScalesWith               ResourceRef                         `yaml:"scales_with"`
+	ScalingFactor            float64                             `yaml:"scaling_factor"`
+	MinNonZeroProjectQuota   uint64                              `yaml:"min_nonzero_project_quota"`
+	CommitmentDurations      []limesresources.CommitmentDuration `yaml:"commitment_durations"`
+	CommitmentMinConfirmDate *time.Time                          `yaml:"commitment_min_confirm_date"`
+	Annotations              map[string]any                      `yaml:"annotations"`
 }
 
 // Validate returns a list of all errors in this behavior configuration. It
@@ -87,6 +90,17 @@ func (b ResourceBehavior) ToScalingBehavior() *limesresources.ScalingBehavior {
 	}
 }
 
+// ToCommitmentConfig returns the CommitmentConfiguration for this resource,
+// or nil if commitments are not allowed on this resource.
+func (b ResourceBehavior) ToCommitmentConfig() *limesresources.CommitmentConfiguration {
+	if len(b.CommitmentDurations) == 0 {
+		return nil
+	}
+	return &limesresources.CommitmentConfiguration{
+		Durations: b.CommitmentDurations,
+	}
+}
+
 // Merge computes the union of both given resource behaviors.
 func (b *ResourceBehavior) Merge(other ResourceBehavior) {
 	if b.MaxBurstMultiplier == nil || (other.MaxBurstMultiplier != nil && *b.MaxBurstMultiplier > *other.MaxBurstMultiplier) {
@@ -101,6 +115,12 @@ func (b *ResourceBehavior) Merge(other ResourceBehavior) {
 	}
 	if b.MinNonZeroProjectQuota < other.MinNonZeroProjectQuota {
 		b.MinNonZeroProjectQuota = other.MinNonZeroProjectQuota
+	}
+	b.CommitmentDurations = append(b.CommitmentDurations, other.CommitmentDurations...)
+	if other.CommitmentMinConfirmDate != nil {
+		if b.CommitmentMinConfirmDate == nil || b.CommitmentMinConfirmDate.Before(*other.CommitmentMinConfirmDate) {
+			b.CommitmentMinConfirmDate = other.CommitmentMinConfirmDate
+		}
 	}
 	if len(other.Annotations) > 0 && b.Annotations == nil {
 		b.Annotations = make(map[string]any)

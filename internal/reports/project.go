@@ -179,6 +179,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 		if !resReport.NoQuota {
 			qdConfig := cluster.QuotaDistributionConfigForResource(*serviceType, *resourceName)
 			resReport.QuotaDistributionModel = qdConfig.Model
+			resReport.CommitmentConfig = behavior.ToCommitmentConfig()
 			if quota != nil {
 				resReport.Quota = quota
 				resReport.UsableQuota = quota

@@ -553,6 +553,8 @@ The objects at `projects[].services[].resources[]` may contain the following fie
 | `category` | string | The category of this resource (only shown when there is one). |
 | `contained_in` | string | The name of another resource (if any) within the same service that this resource is [contained in](#contained-resources). |
 | `quota_distribution_model` | string | The resource's [quota distribution model](#quota-distribution-model). Possible values are "hierarchical" and "centralized". |
+| `commitment_config` | object | Only present if commitments can be created for this resource. |
+| `commitment_config.durations` | list of strings | Acceptable durations for commitments on this resource, each expressed as a comma-separated sequence of positive integer multiples of time units like "1 year, 3 months". Acceptable time units include "second", "minute", "hour", "day", "month" and "year". |
 | `scales_with` | object | Only present when this resource is [scaling with](#scaling-relations) another resource. |
 | `scales_with.resource_name` | string | The name of the resource that this resource is scaling with. |
 | `scales_with.service_type` | string | The type name of the service containing the resource that this resource is scaling with. |
