@@ -49,6 +49,7 @@ import (
 // as possible
 const (
 	testConfigYAML = `
+		availability_zones: [ az-one, az-two ]
 		discovery:
 			method: --test-static
 		services:

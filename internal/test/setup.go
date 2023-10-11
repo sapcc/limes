@@ -158,13 +158,7 @@ func initDatabase(t *testing.T, fixtureFile string) *gorp.DbMap {
 }
 
 func initCluster(t *testing.T, configYAML string) *core.Cluster {
-	var cfg core.ClusterConfiguration
-	err := yaml.UnmarshalStrict([]byte(configYAML), &cfg)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	cluster, errs := core.NewCluster(cfg)
+	cluster, errs := core.NewClusterFromYAML([]byte(configYAML))
 	if errs.IsEmpty() {
 		errs = cluster.Connect(nil, gophercloud.EndpointOpts{})
 	}

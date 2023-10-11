@@ -34,6 +34,7 @@ import (
 
 const (
 	testKeystoneConfigYAML = `
+		availability_zones: [ az-one, az-two ]
 		discovery:
 			method: --test-static
 		services:

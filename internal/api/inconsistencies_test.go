@@ -29,6 +29,7 @@ import (
 
 const (
 	inconsistenciesTestConfigYAML = `
+		availability_zones: [ az-one, az-two ]
 		discovery:
 			method: --test-static
 		services:

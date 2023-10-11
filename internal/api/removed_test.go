@@ -31,6 +31,7 @@ import (
 func TestForbidClusterIDHeader(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithConfig(`
+			availability_zones: [ az-one, az-two ]
 			discovery:
 				method: --test-static
 			services:

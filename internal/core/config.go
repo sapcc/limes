@@ -21,7 +21,6 @@ package core
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
@@ -37,10 +36,11 @@ import (
 // cluster. It is instantiated from YAML and then transformed into type
 // Cluster during the startup phase.
 type ClusterConfiguration struct {
-	CatalogURL string                   `yaml:"catalog_url"`
-	Discovery  DiscoveryConfiguration   `yaml:"discovery"`
-	Services   []ServiceConfiguration   `yaml:"services"`
-	Capacitors []CapacitorConfiguration `yaml:"capacitors"`
+	AvailabilityZones []string                 `yaml:"availability_zones"`
+	CatalogURL        string                   `yaml:"catalog_url"`
+	Discovery         DiscoveryConfiguration   `yaml:"discovery"`
+	Services          []ServiceConfiguration   `yaml:"services"`
+	Capacitors        []CapacitorConfiguration `yaml:"capacitors"`
 	//^ Sorry for the stupid pun. Not.
 	Subresources             map[string][]string               `yaml:"subresources"`
 	Subcapacities            map[string][]string               `yaml:"subcapacities"`
@@ -158,20 +158,13 @@ func (c QuotaDistributionConfiguration) InitialProjectQuota() uint64 {
 	}
 }
 
-// NewConfiguration reads and validates the given configuration file.
-// Errors are logged and will result in
-// program termination, causing the function to not return.
-func NewConfiguration(path string) (cluster *Cluster, errs errext.ErrorSet) {
-	//read config file
-	configBytes, err := os.ReadFile(path)
-	if err != nil {
-		errs.Addf("read configuration file: %s", err.Error())
-		return nil, errs
-	}
+// NewClusterFromYAML reads and validates the configuration in the given YAML document.
+// Errors are logged and will result in program termination, causing the function to not return.
+func NewClusterFromYAML(configBytes []byte) (cluster *Cluster, errs errext.ErrorSet) {
 	var config ClusterConfiguration
-	err = yaml.UnmarshalStrict(configBytes, &config)
+	err := yaml.UnmarshalStrict(configBytes, &config)
 	if err != nil {
-		errs.Addf("parse configuration: %s", err.Error())
+		errs.Addf("parse configuration: %w", err)
 		return nil, errs
 	}
 
@@ -196,6 +189,9 @@ func (cluster ClusterConfiguration) validateConfig() (errs errext.ErrorSet) {
 		errs.Addf("missing configuration value: %s", key)
 	}
 
+	if len(cluster.AvailabilityZones) == 0 {
+		missing("availability_zones[]")
+	}
 	if len(cluster.Services) == 0 {
 		missing("services[]")
 	}

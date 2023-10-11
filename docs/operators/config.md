@@ -54,6 +54,10 @@ Limes logs all quota changes at the domain and project level in an Open Standard
 A configuration file in YAML format must be provided that describes things like the set of available backend services and the quota/capacity scraping behavior. A minimal config file could look like this:
 
 ```yaml
+availability_zones:
+  - east-1
+  - west-1
+  - west-2
 services:
   - type: compute
   - type: network
@@ -75,6 +79,7 @@ The following fields and sections are supported:
 
 | Field | Required | Description |
 | --- | --- | --- |
+| `availability_zones` | yes | List of availability zones in this cluster. |
 | `catalog_url` | no | URL of Limes API service as it appears in the Keystone service catalog for this cluster. This is only used for version advertisements, and can be omitted if no client relies on the URLs in these version advertisements. |
 | `discovery.method` | no | Defines which method to use to discover Keystone domains and projects in this cluster. If not given, the default value is `list`. |
 | `discovery.except_domains` | no | May contain a regex. Domains whose names match the regex will not be considered by Limes. |

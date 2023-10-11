@@ -87,6 +87,7 @@ func prepareDomainsAndProjectsForScrape(t *testing.T, s test.Setup) {
 
 const (
 	testScrapeBasicConfigYAML = `
+		availability_zones: [ az-one, az-two ]
 		discovery:
 			method: --test-static
 			params:
@@ -436,6 +437,7 @@ func Test_ScrapeFailure(t *testing.T) {
 
 const (
 	testScrapeCentralizedConfigYAML = `
+		availability_zones: [ az-one, az-two ]
 		discovery:
 			method: --test-static
 			params:
@@ -547,6 +549,7 @@ func Test_ScrapeCentralized(t *testing.T) {
 
 const (
 	testAutoApprovalConfigYAML = `
+		availability_zones: [ az-one, az-two ]
 		discovery:
 			method: --test-static
 			params:
@@ -611,6 +614,7 @@ func Test_AutoApproveInitialQuota(t *testing.T) {
 
 const (
 	testNoopConfigYAML = `
+		availability_zones: [ az-one, az-two ]
 		discovery:
 			method: --test-static
 			params:

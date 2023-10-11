@@ -92,7 +92,7 @@ func main() {
 	}
 
 	//load configuration and connect to cluster
-	cluster, errs := core.NewConfiguration(configPath)
+	cluster, errs := core.NewClusterFromYAML(must.Return(os.ReadFile(configPath)))
 	errs.LogFatalIfError()
 	errs = cluster.Connect(provider, eo)
 	errs.LogFatalIfError()
