@@ -143,6 +143,8 @@ Some special behaviors for resources can be configured in the `resource_behavior
 | `resource_behavior[].scales_with` | no | If a resource is given, matching resources scales with this resource. The other resource may be specified by its name (for resources within the same service type), or by a slash-concatenated pair of service type and resource name, e.g. `compute/cores`. |
 | `resource_behavior[].scaling_factor` | yes, if `scales_with` is given | The scaling factor that will be reported for these resources' scaling relation. |
 | `resource_behavior[].min_nonzero_project_quota` | no | A lower boundary for project quota values that are not zero. |
+| `resource_behavior[].commitment_durations` | no | If given, commitments for this resource can be created with any of the given durations. The duration format is the same as in the `commitments[].duration` attribute that appears on the resource API. |
+| `resource_behavior[].commitment_min_confirm_date` | no | If given, commitments for this resource will always be created with `confirm_after` no earlier than this timestamp. This can be used to plan the introduction of commitments on a specific date. |
 | `resource_behavior[].annotations` | no | A map of extra key-value pairs that will be inserted into matching resources as-is in responses to GET requests, e.g. at `project.services[].resources[].annotations`. |
 
 For example:
@@ -159,6 +161,8 @@ resource_behavior:
   - { resource: .*, scope: foo/.*, max_burst_multiplier: 0 }
   # require each project to take at least 100 GB of object storage if they use it at all
   - { resource: object-store/capacity, min_nonzero_project_quota: 107374182400 }
+  # starting in 2024, offer commitments for Cinder storage
+  - { resource: volumev2/capacity, commitment_durations: [ 1 year, 2 years, 3 years ], commitment_min_confirm_date: 2024-01-01T00:00:00Z }
 ```
 
 ### Quota distribution models
