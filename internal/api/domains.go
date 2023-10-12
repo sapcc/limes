@@ -116,9 +116,6 @@ func (p *v1Provider) putOrSimulatePutDomain(w http.ResponseWriter, r *http.Reque
 			return token.Check(policy)
 		}
 	}
-	forbidden := func(string, string) bool {
-		return false
-	}
 
 	updater := QuotaUpdater{
 		Cluster:    p.Cluster,
@@ -126,9 +123,6 @@ func (p *v1Provider) putOrSimulatePutDomain(w http.ResponseWriter, r *http.Reque
 		CanRaiseLP: checkToken("domain:raise_lowpriv"),
 		CanLower:   checkToken("domain:lower"),
 		CanLowerLP: checkToken("domain:lower_lowpriv"),
-		//domain quotas may not be edited by any user on resources with CentralizedQuotaDistribution
-		CanRaiseCentralized: forbidden,
-		CanLowerCentralized: forbidden,
 	}
 	updater.Domain = p.FindDomainFromRequest(w, r)
 	if updater.Domain == nil {

@@ -4,35 +4,6 @@
     "name": "france",
     "services": [
       {
-        "type": "centralized",
-        "area": "centralized",
-        "resources": [
-          {
-            "name": "capacity",
-            "unit": "B",
-            "quota_distribution_model": "centralized",
-            "quota": 15,
-            "projects_quota": 15,
-            "usage": 2
-          },
-          {
-            "name": "capacity_portion",
-            "unit": "B",
-            "contained_in": "capacity",
-            "usage": 1
-          },
-          {
-            "name": "things",
-            "quota_distribution_model": "centralized",
-            "quota": 10,
-            "projects_quota": 10,
-            "usage": 2
-          }
-        ],
-        "max_scraped_at": 92,
-        "min_scraped_at": 92
-      },
-      {
         "type": "shared",
         "area": "shared",
         "resources": [

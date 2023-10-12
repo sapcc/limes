@@ -25,7 +25,7 @@ on the top left corner of this document to get to a specific section of this gui
 | Variable | Default | Description |
 | --- | --- | --- |
 | `LIMES_API_LISTEN_ADDRESS` | `:80` | Bind address for the HTTP API exposed by this service, e.g. `127.0.0.1:80` to bind only on one IP, or `:80` to bind on all interfaces and addresses. |
-| `LIMES_API_POLICY_PATH` | `/etc/limes/policy.yaml` | Path to the oslo.policy file that describes authorization behavior for this service. Please refer to the [OpenStack documentation on policies][policy] for syntax reference. This repository includes an [example policy][ex-pol] that can be used for development setups, or as a basis for writing your own policy. For `:raise`, `:raise_lowpriv`, `:raise_centralized`, `:lower`, `:lower_centralized` and `:set_rate_limit` policies, the object attribute `%(service_type)s` is available to restrict editing to certain service types. |
+| `LIMES_API_POLICY_PATH` | `/etc/limes/policy.yaml` | Path to the oslo.policy file that describes authorization behavior for this service. Please refer to the [OpenStack documentation on policies][policy] for syntax reference. This repository includes an [example policy][ex-pol] that can be used for development setups, or as a basis for writing your own policy. For `:raise`, `:raise_lowpriv`, `:lower` and `:set_rate_limit` policies, the object attribute `%(service_type)s` is available to restrict editing to certain service types. |
 
 ### Audit trail
 
@@ -172,10 +172,6 @@ Each resource uses one of the following quota distribution models:
 * `hierarchical`: This is the default distribution model, wherein quota is distributed to domains by the cloud admins
   (according to the `domain:{raise,raise_lowpriv,lower}` policies), and then the projects by the domain admins
   (according to the `project:{raise,raise_lowpriv,lower}` policies). Domains and projects start out at zero quota.
-* `centralized`: In this model, quota is directly given to projects by the cloud admins (according to the
-  `project:{raise_centralized,lower_centralized}` policies). Projects start out at a generous default quota as
-  configured by the Limes operator. The domain quota cannot be edited and is always reported equal to the projects
-  quota.
 
 Resource-specific distribution models can be configured per resource in the `quota_distribution_configs[]` section. Each
 entry in this section can match multiple resources. Because the semantics of distribution models cross the boundaries of
@@ -185,9 +181,8 @@ always applies to the entire resource across all scopes.
 | Field | Required | Description |
 | --- | --- | --- |
 | `quota_distribution_configs[].resource` | yes | Must contain a regex. The config entry applies to all resources where this regex matches against a slash-concatenated pair of service type and resource name. The anchors `^` and `$` are implied at both ends, so the regex must match the entire phrase. |
-| `quota_distribution_configs[].model` | yes | Either "hierarchical" or "centralized". |
-| `quota_distribution_configs[].default_project_quota` | only for centralized distribution | The default quota value that will be given to new project resources. Only applicable for centralized quota distribution: Hierarchical quota distribution does not have nonzero default quotas. |
-| `quota_distribution_configs[].strict_domain_quota_limit` | no | Reject attempts to increase domain quotas when the sum of all domain quotas would exceed the cluster capacity. Only applicable for hierarchical quota distribution: Centralized quota distribution does not allow setting domain quotas via API. |
+| `quota_distribution_configs[].model` | yes | The string "hierarchical". |
+| `quota_distribution_configs[].strict_domain_quota_limit` | no | Reject attempts to increase domain quotas when the sum of all domain quotas would exceed the cluster capacity. Only applicable for hierarchical quota distribution. |
 
 ## Supported discovery methods
 

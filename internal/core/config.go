@@ -141,7 +141,6 @@ type BurstingConfiguration struct {
 type QuotaDistributionConfiguration struct {
 	FullResourceNameRx     regexpext.BoundedRegexp               `yaml:"resource"`
 	Model                  limesresources.QuotaDistributionModel `yaml:"model"`
-	DefaultProjectQuota    uint64                                `yaml:"default_project_quota"` //required for CentralizedQuotaDistribution
 	StrictDomainQuotaLimit bool                                  `yaml:"strict_domain_quota_limit"`
 }
 
@@ -151,8 +150,6 @@ func (c QuotaDistributionConfiguration) InitialProjectQuota() uint64 {
 	switch c.Model {
 	case limesresources.HierarchicalQuotaDistribution:
 		return 0
-	case limesresources.CentralizedQuotaDistribution:
-		return c.DefaultProjectQuota
 	default:
 		panic(fmt.Sprintf("invalid quota distribution model: %q", c.Model))
 	}
@@ -225,16 +222,7 @@ func (cluster ClusterConfiguration) validateConfig() (errs errext.ErrorSet) {
 
 		switch qdCfg.Model {
 		case limesresources.HierarchicalQuotaDistribution:
-			if qdCfg.DefaultProjectQuota != 0 {
-				errs.Addf("distribution_model_configs[%d].default_project_quota is invalid: not allowed for hierarchical distribution", idx)
-			}
-		case limesresources.CentralizedQuotaDistribution:
-			if qdCfg.DefaultProjectQuota == 0 {
-				missing(fmt.Sprintf(`distribution_model_configs[%d].default_project_quota`, idx))
-			}
-			if qdCfg.StrictDomainQuotaLimit {
-				errs.Addf("invalid value for distribution_model_configs[%d].strict_domain_quota_limit: not allowed for centralized distribution", idx)
-			}
+			// ok
 		default:
 			errs.Addf("invalid value for distribution_model_configs[%d].model: %q", idx, qdCfg.Model)
 		}

@@ -30,7 +30,6 @@ import (
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/jobloop"
-	"github.com/sapcc/go-bits/logg"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/test"
@@ -433,115 +432,6 @@ func Test_ScrapeFailure(t *testing.T) {
 		checkedAt1.Unix(), checkedAt1.Add(recheckInterval).Unix(),
 		checkedAt2.Unix(), checkedAt2.Add(recheckInterval).Unix(),
 	)
-}
-
-const (
-	testScrapeCentralizedConfigYAML = `
-		availability_zones: [ az-one, az-two ]
-		discovery:
-			method: --test-static
-			params:
-				domains:
-					- { name: germany, id: uuid-for-germany }
-				projects:
-					uuid-for-germany:
-						- { name: berlin, id: uuid-for-berlin, parent_id: uuid-for-germany }
-		services:
-			- service_type: centralized
-				type: --test-generic
-		quota_distribution_configs:
-			- { resource: centralized/capacity, model: centralized, default_project_quota: 10 }
-			- { resource: centralized/things,   model: centralized, default_project_quota: 15 }
-		bursting:
-			# should not make a difference because CQD ignores bursting
-			max_multiplier: 0.2
-	`
-)
-
-func Test_ScrapeCentralized(t *testing.T) {
-	//since all resources in this test operate under centralized quota
-	//distribution, bursting makes absolutely no difference
-	for _, hasBursting := range []bool{false, true} {
-		logg.Info("===== hasBursting = %t =====", hasBursting)
-
-		s := test.NewSetup(t,
-			test.WithConfig(testScrapeCentralizedConfigYAML),
-		)
-		prepareDomainsAndProjectsForScrape(t, s)
-
-		//setup a quota constraint for the project that we're scraping (this is ignored by Test_ScrapeFailure())
-		//
-		//NOTE: This is set only *after* ScanDomains has run, in order to exercise
-		//the code path in Scrape() that applies constraints when first creating
-		//project_resources entries. If we had set this before ScanDomains, then
-		//ScanDomains would already have created the project_resources entries.
-		projectConstraints := core.QuotaConstraints{
-			"centralized": {
-				"capacity": {Minimum: p2u64(5)},  //below the DefaultProjectQuota, so the DefaultProjectQuota should take precedence
-				"things":   {Minimum: p2u64(20)}, //above the DefaultProjectQuota, so the constraint.Minimum should take precedence
-			},
-		}
-		s.Cluster.QuotaConstraints = &core.QuotaConstraintSet{
-			Projects: map[string]map[string]core.QuotaConstraints{
-				"germany": {"berlin": projectConstraints},
-			},
-		}
-
-		s.Cluster.Authoritative = true
-		c := getCollector(t, s)
-		job := c.ResourceScrapeJob(s.Registry)
-		withLabel := jobloop.WithLabel("service_type", "centralized")
-
-		//check that ScanDomains created the domain, project and their services and
-		//applied the DefaultProjectQuota from the QuotaDistributionConfiguration
-		tr, tr0 := easypg.NewTracker(t, s.DB.Db)
-		tr0.AssertEqualToFile("fixtures/scrape-centralized0.sql")
-
-		if hasBursting {
-			_, err := s.DB.Exec(`UPDATE projects SET has_bursting = TRUE WHERE id = 1`)
-			if err != nil {
-				t.Fatal(err)
-			}
-			tr.DBChanges().Ignore()
-			s.Cluster.Config.Bursting.MaxMultiplier = 0.2
-		}
-
-		//first Scrape creates the remaining project_resources, fills usage and
-		//enforces quota constraints (note that both projects behave identically
-		//since bursting is ineffective under centralized quota distribution)
-		s.Clock.StepBy(scrapeInterval)
-		mustT(t, job.ProcessOne(s.Ctx, withLabel))
-
-		scrapedAt := s.Clock.Now()
-		tr.DBChanges().AssertEqualf(`
-			UPDATE domain_resources SET quota = 10 WHERE service_id = 1 AND name = 'capacity';
-			UPDATE domain_resources SET quota = 20 WHERE service_id = 1 AND name = 'things';
-			INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, desired_backend_quota, physical_usage) VALUES (1, 'capacity', 10, 0, 10, 10, 0);
-			INSERT INTO project_resources (service_id, name, usage) VALUES (1, 'capacity_portion', 0);
-			INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota) VALUES (1, 'things', 20, 2, 20, '[{"index":0},{"index":1}]', 20);
-			UPDATE project_services SET scraped_at = %[1]d, scrape_duration_secs = 5, serialized_metrics = '{"capacity_usage":0,"things_usage":2}', checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'centralized';
-		`,
-			scrapedAt.Unix(), scrapedAt.Add(scrapeInterval).Unix(),
-		)
-
-		//check that DefaultProjectQuota gets reapplied when the quota is 0 (zero
-		//quota on CQD resources is defined to mean "DefaultProjectQuota not
-		//applied yet"; this check is also relevant for resources moving from HQD to CQD)
-		s.Clock.StepBy(scrapeInterval)
-		_, err := s.DB.Exec(`UPDATE project_resources SET quota = 0 WHERE service_id = 1`)
-		if err != nil {
-			t.Fatal(err)
-		}
-		mustT(t, job.ProcessOne(s.Ctx, withLabel))
-
-		//because Scrape converges back into the same state, the only change is in the timestamp fields
-		scrapedAt = s.Clock.Now()
-		tr.DBChanges().AssertEqualf(`
-			UPDATE project_services SET scraped_at = %[1]d, checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'centralized';
-		`,
-			scrapedAt.Unix(), scrapedAt.Add(scrapeInterval).Unix(),
-		)
-	}
 }
 
 ////////////////////////////////////////////////////////////////////////////////

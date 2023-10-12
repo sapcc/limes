@@ -27,13 +27,11 @@ import (
 
 // PolicyEnforcer is a gopherpolicy.Enforcer implementation for API tests.
 type PolicyEnforcer struct {
-	AllowRaise            bool
-	AllowRaiseLP          bool
-	AllowLower            bool
-	AllowLowerLP          bool
-	AllowRaiseCentralized bool
-	AllowLowerCentralized bool
-	RejectServiceType     string
+	AllowRaise        bool
+	AllowRaiseLP      bool
+	AllowLower        bool
+	AllowLowerLP      bool
+	RejectServiceType string
 }
 
 // Enforce implements the gopherpolicy.Enforcer interface.
@@ -47,14 +45,10 @@ func (e *PolicyEnforcer) Enforce(rule string, ctx policy.Context) bool {
 		return e.AllowRaise
 	case "raise_lowpriv":
 		return e.AllowRaiseLP
-	case "raise_centralized":
-		return e.AllowRaiseCentralized
 	case "lower":
 		return e.AllowLower
 	case "lower_lowpriv":
 		return e.AllowLowerLP
-	case "lower_centralized":
-		return e.AllowLowerCentralized
 	default:
 		return true
 	}

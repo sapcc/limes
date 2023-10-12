@@ -8,9 +8,6 @@ domains:
   poland:
     service-two:
       things: exactly 5
-    centralized: # domain quota constraint not allowed for resources with centralized quota distribution
-      things: exactly 10
-      capacity_MiB: exactly 5 GiB
 
 projects:
   atlantis: # missing domain name

@@ -190,10 +190,6 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 				if backendQuota != nil && (*backendQuota < 0 || uint64(*backendQuota) != *resReport.UsableQuota) {
 					resReport.BackendQuota = backendQuota
 				}
-				if qdConfig.Model == limesresources.CentralizedQuotaDistribution && qdConfig.DefaultProjectQuota != *quota {
-					defaultQuota := qdConfig.DefaultProjectQuota
-					resReport.DefaultQuota = &defaultQuota
-				}
 			}
 		}
 		if projectHasBursting && clusterCanBurst && quota != nil && usage != nil {

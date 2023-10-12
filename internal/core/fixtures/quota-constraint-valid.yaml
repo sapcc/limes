@@ -11,9 +11,6 @@ domains:
     # test "at least X more than project constraints" where project constraints DO exist
     service-one:
       capacity_MiB: at least 10 MiB more than project constraints
-    # NOTE: There are project-level constraints for centralized resources in
-    # this domain, but since domain quota is autocomputed for centralized
-    # resources, it is correct that there are no domain-level constraints here.
   france:
     service-two:
       # test "at least X more than project constraints" where NO project constraints exist
@@ -37,6 +34,3 @@ projects:
   poland/krakow:
     service-one:
       capacity_MiB: at least 4 MiB
-    centralized:
-      things: exactly 10
-      capacity_MiB: exactly 5 GiB

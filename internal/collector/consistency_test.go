@@ -117,7 +117,7 @@ func Test_Consistency(t *testing.T) {
 	//add a domain_resource that contradicts the cluster.QuotaConstraints; this
 	//should be fixed by CheckConsistency()
 	_, err = s.DB.Update(&db.DomainResource{
-		ServiceID: 2,
+		ServiceID: 1,
 		Name:      "capacity",
 		Quota:     200,
 	})
@@ -129,9 +129,8 @@ func Test_Consistency(t *testing.T) {
 	//check that CheckConsistency() brings everything back into a nice state
 	//
 	//Also, for all domain services that are created here, all domain resources
-	//are added; for all project services that are created here, project
-	//resources are added where the quota constraint contains a Minimum value or
-	//the quota distribution configuration contains a DefaultQuota value..
+	//are added; and for all project resources where the quota constraint is not
+	//fulfilled, next_scrape_at will be set to force scraping to fix the constraints.
 	s.Clock.StepBy(time.Hour)
 	err = consistencyJob.ProcessOne(s.Ctx)
 	if err != nil {

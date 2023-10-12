@@ -116,12 +116,10 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 
 	//load mock policy (where everything is allowed)
 	enforcer := &PolicyEnforcer{
-		AllowRaise:            true,
-		AllowRaiseLP:          true,
-		AllowLower:            true,
-		AllowLowerLP:          true,
-		AllowRaiseCentralized: true,
-		AllowLowerCentralized: true,
+		AllowRaise:   true,
+		AllowRaiseLP: true,
+		AllowLower:   true,
+		AllowLowerLP: true,
 	}
 	s.TokenValidator = mock.NewValidator(enforcer, nil)
 

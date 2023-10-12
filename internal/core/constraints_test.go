@@ -99,10 +99,6 @@ func TestQuotaConstraintParsingSuccess(t *testing.T) {
 					"service-one": {
 						"capacity_MiB": {Minimum: pointerTo(4), Unit: limes.UnitMebibytes},
 					},
-					"centralized": {
-						"things":       {Minimum: pointerTo(10), Maximum: pointerTo(10)},
-						"capacity_MiB": {Minimum: pointerTo(5120), Maximum: pointerTo(5120), Unit: limes.UnitMebibytes},
-					},
 				},
 			},
 		},
@@ -121,14 +117,6 @@ func clusterForQuotaConstraintTest() *Cluster {
 		QuotaPlugins: map[string]QuotaPlugin{
 			"service-one": quotaConstraintTestPlugin{},
 			"service-two": quotaConstraintTestPlugin{},
-			"centralized": quotaConstraintTestPlugin{},
-		},
-		Config: ClusterConfiguration{
-			QuotaDistributionConfigs: []*QuotaDistributionConfiguration{{
-				FullResourceNameRx:  "centralized/.*",
-				Model:               limesresources.CentralizedQuotaDistribution,
-				DefaultProjectQuota: 5,
-			}},
 		},
 	}
 }
@@ -139,8 +127,6 @@ func TestQuotaConstraintParsingFailure(t *testing.T) {
 		`invalid constraints for domain germany: invalid constraint "not more than 20" for service-one/things: clause "not more than 20" should start with "at least", "at most" or "exactly"`,
 		`invalid constraints for domain germany: invalid constraint "at least 10 GiB or something" for service-one/capacity_MiB: value "10 GiB or something" does not match expected format "<number> <unit>"`,
 		`invalid constraints for domain germany: invalid constraint "at most 1 ounce" for service-two/capacity_MiB: cannot convert value from ounce to MiB because units are incompatible`,
-		`invalid constraints for domain poland: resource centralized/things does not accept domain quota constraints because domain quota is computed automatically according to the centralized quota distribution model`,
-		`invalid constraints for domain poland: resource centralized/capacity_MiB does not accept domain quota constraints because domain quota is computed automatically according to the centralized quota distribution model`,
 		`invalid constraints: missing domain name for project atlantis`,
 		`invalid constraints for project germany/dresden: invalid constraint "at least NaN" for service-one/things: strconv.ParseUint: parsing "NaN": invalid syntax`,
 		`invalid constraints for project germany/dresden: invalid constraint "at least 4, at most 2" for service-two/things: constraint clauses cannot simultaneously be satisfied (at least 4, but at most 2)`,

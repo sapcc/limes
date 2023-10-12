@@ -24,7 +24,6 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
-	"regexp"
 	"sort"
 	"testing"
 	"time"
@@ -35,7 +34,6 @@ import (
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/assert"
-	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/internal/core"
@@ -97,18 +95,6 @@ const (
 							limit:  2
 							window: 1s
 
-			## BEGIN CENTRALIZED
-			- service_type: centralized
-				type: --test-generic
-				params:
-					rate_infos:
-						- name: service/unshared/instances:delete
-			## END CENTRALIZED
-
-		quota_distribution_configs:
-		- { resource: centralized/capacity, model: centralized, default_project_quota: 15 }
-		- { resource: centralized/things,   model: centralized, default_project_quota: 10 }
-
 		resource_behavior:
 			# check minimum non-zero project quota constraint
 			- { resource: unshared/things, min_nonzero_project_quota: 10 }
@@ -130,17 +116,10 @@ const (
 )
 
 func setupTest(t *testing.T, startData string) test.Setup {
-	hasCentralizedService := startData == "fixtures/start-data.sql"
-	configYAML := testConfigYAML
-	if !hasCentralizedService {
-		//TODO: ugly (resolve this by splitting tests into smaller pieces and having them be less dependent on a common setup phase)
-		configYAML = regexp.MustCompile(`(?ms)^\s*## BEGIN CENTRALIZED.*^\s*## END CENTRALIZED\s*$`).ReplaceAllString(configYAML, "")
-	}
-
 	t.Helper()
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile(startData),
-		test.WithConfig(configYAML),
+		test.WithConfig(testConfigYAML),
 		test.WithAPIHandler(NewV1API),
 	)
 
@@ -784,7 +763,7 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectStatus: 202,
 		ExpectBody:   assert.StringData(""),
 	}.Check(t, s.Handler)
-	expectStaleProjectServices(t, s.DB, "stale", "dresden:centralized", "dresden:shared", "dresden:unshared")
+	expectStaleProjectServices(t, s.DB, "stale", "dresden:shared", "dresden:unshared")
 	expectStaleProjectServices(t, s.DB, "rates_stale" /*, nothing */)
 
 	//SyncProject should discover the given project if not yet done
@@ -797,7 +776,7 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectStatus: 202,
 		ExpectBody:   assert.StringData(""),
 	}.Check(t, s.Handler)
-	expectStaleProjectServices(t, s.DB, "stale", "dresden:centralized", "dresden:shared", "dresden:unshared", "walldorf:centralized", "walldorf:shared", "walldorf:unshared")
+	expectStaleProjectServices(t, s.DB, "stale", "dresden:shared", "dresden:unshared", "walldorf:shared", "walldorf:unshared")
 
 	//check SyncProjectRates (we don't need to check discovery again since SyncProjectRates shares this part of the
 	//implementation with SyncProject)
@@ -809,7 +788,7 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectBody:   assert.StringData(""),
 	}.Check(t, s.Handler)
 	expectStaleProjectServices(t, s.DB, "stale" /*, nothing */)
-	expectStaleProjectServices(t, s.DB, "rates_stale", "dresden:centralized", "dresden:shared", "dresden:unshared")
+	expectStaleProjectServices(t, s.DB, "rates_stale", "dresden:shared", "dresden:unshared")
 
 	//check GetProject for a project that has been discovered, but not yet synced
 	assert.HTTPRequest{
@@ -877,7 +856,7 @@ func Test_ProjectOperations(t *testing.T) {
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
 		ExpectStatus: 422,
-		ExpectBody:   assert.StringData("cannot change shared/capacity quota: not acceptable for this project: IsQuotaAcceptableForProject failed as requested for quota set centralized/capacity=20, centralized/things=15, shared/capacity=5, shared/things=10, unshared/capacity=10, unshared/things=10\n"),
+		ExpectBody:   assert.StringData("cannot change shared/capacity quota: not acceptable for this project: IsQuotaAcceptableForProject failed as requested for quota set shared/capacity=5, shared/things=10, unshared/capacity=10, unshared/things=10\n"),
 		Body:         requestOneQuotaChange("project", "shared", "capacity", 5, limes.UnitNone),
 	}.Check(t, s.Handler)
 	plugin.QuotaIsNotAcceptable = false
@@ -1201,33 +1180,6 @@ func Test_ProjectOperations(t *testing.T) {
 		//less than usage, but more than before, so it's okay
 		Body: requestOneQuotaChange("project", "unshared", "capacity", 1, limes.UnitNone),
 	}.Check(t, s.Handler)
-
-	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
-	tr0.Ignore()
-
-	assert.HTTPRequest{
-		Method:       "PUT",
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
-		ExpectStatus: 202,
-		//project quota rises from 15->30, and thus domain quota rises from 25->40
-		Body: requestOneQuotaChange("project", "centralized", "things", 30, limes.UnitNone),
-	}.Check(t, s.Handler)
-	tr.DBChanges().AssertEqual(`
-		UPDATE domain_resources SET quota = 40 WHERE service_id = 5 AND name = 'things';
-		UPDATE project_resources SET quota = 30, backend_quota = 30, desired_backend_quota = 30 WHERE service_id = 7 AND name = 'things';
-	`)
-
-	assert.HTTPRequest{
-		Method:       "PUT",
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
-		ExpectStatus: 202,
-		//project quota falls again from 30->15, and thus domain quota falls back from 40->25
-		Body: requestOneQuotaChange("project", "centralized", "things", 15, limes.UnitNone),
-	}.Check(t, s.Handler)
-	tr.DBChanges().AssertEqual(`
-		UPDATE domain_resources SET quota = 25 WHERE service_id = 5 AND name = 'things';
-		UPDATE project_resources SET quota = 15, backend_quota = 15, desired_backend_quota = 15 WHERE service_id = 7 AND name = 'things';
-	`)
 }
 
 func Test_RaiseLowerPermissions(t *testing.T) {
@@ -1242,8 +1194,6 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 	s.TokenValidator.Enforcer.AllowRaiseLP = true
 	s.TokenValidator.Enforcer.AllowLower = true
 	s.TokenValidator.Enforcer.AllowLowerLP = false
-	s.TokenValidator.Enforcer.AllowRaiseCentralized = false
-	s.TokenValidator.Enforcer.AllowLowerCentralized = false
 
 	assert.HTTPRequest{
 		Method:       "PUT",
@@ -1292,8 +1242,6 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 	s.TokenValidator.Enforcer.AllowRaiseLP = true
 	s.TokenValidator.Enforcer.AllowLower = false
 	s.TokenValidator.Enforcer.AllowLowerLP = false
-	s.TokenValidator.Enforcer.AllowRaiseCentralized = false
-	s.TokenValidator.Enforcer.AllowLowerCentralized = false
 
 	assert.HTTPRequest{
 		Method:       "PUT",
@@ -1398,8 +1346,6 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 	s.TokenValidator.Enforcer.AllowRaiseLP = true
 	s.TokenValidator.Enforcer.AllowLower = false
 	s.TokenValidator.Enforcer.AllowLowerLP = true
-	s.TokenValidator.Enforcer.AllowRaiseCentralized = false
-	s.TokenValidator.Enforcer.AllowLowerCentralized = false
 	s.TokenValidator.Enforcer.RejectServiceType = ""
 
 	s.Cluster.LowPrivilegeRaise.LimitsForDomains = map[string]map[string]core.LowPrivilegeRaiseLimit{
@@ -1584,78 +1530,6 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 		//attempt to raise should fail because low-privilege exception is not applicable because of other domain's quotas
 		Body: requestOneQuotaChange("domain", "shared", "things", 35, limes.UnitNone),
 	}.Check(t, s.Handler)
-
-	//check that domain quota cannot be raised or lowered by anyone, even if the
-	//policy says so, if the centralized quota distribution model is used
-	s.TokenValidator.Enforcer.AllowRaise = true
-	s.TokenValidator.Enforcer.AllowRaiseLP = true
-	s.TokenValidator.Enforcer.AllowLower = true
-	s.TokenValidator.Enforcer.AllowLowerLP = true
-	s.TokenValidator.Enforcer.AllowRaiseCentralized = true
-	s.TokenValidator.Enforcer.AllowLowerCentralized = true
-
-	assert.HTTPRequest{
-		Method:       "PUT",
-		Path:         "/v1/domains/uuid-for-germany",
-		ExpectStatus: 403,
-		ExpectBody:   assert.StringData("cannot change centralized/things quota: user is not allowed to raise \"centralized\" quotas in this domain\n"),
-		Body:         requestOneQuotaChange("domain", "centralized", "things", 100, limes.UnitNone),
-	}.Check(t, s.Handler)
-
-	assert.HTTPRequest{
-		Method:       "PUT",
-		Path:         "/v1/domains/uuid-for-germany",
-		ExpectStatus: 403,
-		ExpectBody:   assert.StringData("cannot change centralized/things quota: user is not allowed to lower \"centralized\" quotas in this domain\n"),
-		Body:         requestOneQuotaChange("domain", "centralized", "things", 0, limes.UnitNone),
-	}.Check(t, s.Handler)
-
-	//check that, under centralized quota distribution, project quota cannot be
-	//raised or lowered if the respective specialized policies are not granted
-	s.TokenValidator.Enforcer.AllowRaise = true
-	s.TokenValidator.Enforcer.AllowRaiseLP = true
-	s.TokenValidator.Enforcer.AllowLower = true
-	s.TokenValidator.Enforcer.AllowLowerLP = true
-	s.TokenValidator.Enforcer.AllowRaiseCentralized = false
-	s.TokenValidator.Enforcer.AllowLowerCentralized = true
-
-	assert.HTTPRequest{
-		Method:       "PUT",
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
-		ExpectStatus: 403,
-		ExpectBody:   assert.StringData("cannot change centralized/things quota: user is not allowed to raise \"centralized\" quotas in this project\n"),
-		Body:         requestOneQuotaChange("project", "centralized", "things", 100, limes.UnitNone),
-	}.Check(t, s.Handler)
-
-	s.TokenValidator.Enforcer.AllowRaiseCentralized = true
-	s.TokenValidator.Enforcer.AllowLowerCentralized = false
-
-	assert.HTTPRequest{
-		Method:       "PUT",
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
-		ExpectStatus: 403,
-		ExpectBody:   assert.StringData("cannot change centralized/things quota: user is not allowed to lower \"centralized\" quotas in this project\n"),
-		Body:         requestOneQuotaChange("project", "centralized", "things", 5, limes.UnitNone),
-	}.Check(t, s.Handler)
-
-	//even if lower_centralized is allowed, lowering to 0 is never allowed (to
-	//test this, we have to first set usage to 0 to avoid getting an error for
-	//quota < usage instead)
-	s.TokenValidator.Enforcer.AllowRaiseCentralized = true
-	s.TokenValidator.Enforcer.AllowLowerCentralized = true
-
-	_, err = s.DB.Exec(`UPDATE project_resources SET usage = 0 WHERE service_id = 7 AND name = 'things'`)
-	if err != nil {
-		t.Error(err.Error())
-	}
-
-	assert.HTTPRequest{
-		Method:       "PUT",
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
-		ExpectStatus: 422,
-		ExpectBody:   assert.StringData("cannot change centralized/things quota: quota may not be lowered to zero for resources with non-zero default quota (minimum acceptable project quota is 1)\n"),
-		Body:         requestOneQuotaChange("project", "centralized", "things", 0, limes.UnitNone),
-	}.Check(t, s.Handler)
 }
 
 func expectStaleProjectServices(t *testing.T, dbm *gorp.DbMap, staleField string, pairs ...string) {
@@ -1812,34 +1686,6 @@ func Test_QuotaBursting(t *testing.T) {
 	if !reflect.DeepEqual(expectBackendQuota, backendQuota) {
 		t.Errorf("expected backend quota %#v, but got %#v", expectBackendQuota, backendQuota)
 	}
-
-	//check that resources with centralized quota distribution do not get burst quota applied
-	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
-	tr0.Ignore()
-	assert.HTTPRequest{
-		Method:       "PUT",
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
-		ExpectStatus: 202,
-		//project quota rises from 15->30, and thus domain quota rises from 25->40, but desired_backend_quota is also 30
-		Body: requestOneQuotaChange("project", "centralized", "things", 30, limes.UnitNone),
-	}.Check(t, s.Handler)
-	tr.DBChanges().AssertEqual(`
-		UPDATE domain_resources SET quota = 40 WHERE service_id = 5 AND name = 'things';
-		UPDATE project_resources SET quota = 30, backend_quota = 30, desired_backend_quota = 30 WHERE service_id = 7 AND name = 'things';
-	`)
-
-	//revert the previous change, otherwise I would have to adjust every test fixture mentioned below
-	assert.HTTPRequest{
-		Method:       "PUT",
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
-		ExpectStatus: 202,
-		//project quota falls again from 30->15, and thus domain quota falls back from 40->25
-		Body: requestOneQuotaChange("project", "centralized", "things", 15, limes.UnitNone),
-	}.Check(t, s.Handler)
-	tr.DBChanges().AssertEqual(`
-		UPDATE domain_resources SET quota = 25 WHERE service_id = 5 AND name = 'things';
-		UPDATE project_resources SET quota = 15, backend_quota = 15, desired_backend_quota = 15 WHERE service_id = 7 AND name = 'things';
-	`)
 
 	//increase usage beyond frontend quota -> should show up as burst usage
 	_, err := s.DB.Exec(`UPDATE project_resources SET usage = 42 WHERE service_id = 1 AND name = 'things'`)

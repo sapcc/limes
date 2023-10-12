@@ -42,11 +42,6 @@ const (
 				type: --test-generic
 			- service_type: unshared
 				type: --test-generic
-			- service_type: centralized
-				type: --test-generic
-		quota_distribution_configs:
-			- { resource: centralized/capacity, model: centralized, default_project_quota: 10 }
-			- { resource: centralized/things,   model: centralized, default_project_quota: 15 }
 	`
 )
 
@@ -130,9 +125,8 @@ func Test_ScanDomains(t *testing.T) {
 	}
 	assert.DeepEqual(t, "new domains after ScanDomains #4", actualNewDomains, []string(nil))
 	tr.DBChanges().AssertEqualf(`
-		INSERT INTO project_services (id, project_id, type, next_scrape_at, rates_next_scrape_at) VALUES (10, 4, 'centralized', %[1]d, %[1]d);
-		INSERT INTO project_services (id, project_id, type, next_scrape_at, rates_next_scrape_at) VALUES (11, 4, 'shared', %[1]d, %[1]d);
-		INSERT INTO project_services (id, project_id, type, next_scrape_at, rates_next_scrape_at) VALUES (12, 4, 'unshared', %[1]d, %[1]d);
+		INSERT INTO project_services (id, project_id, type, next_scrape_at, rates_next_scrape_at) VALUES (7, 4, 'shared', %[1]d, %[1]d);
+		INSERT INTO project_services (id, project_id, type, next_scrape_at, rates_next_scrape_at) VALUES (8, 4, 'unshared', %[1]d, %[1]d);
 		INSERT INTO projects (id, domain_id, name, uuid, parent_uuid, has_bursting) VALUES (4, 2, 'bordeaux', 'uuid-for-bordeaux', 'uuid-for-france', FALSE);
 	`,
 		s.Clock.Now().Unix(),
@@ -158,9 +152,8 @@ func Test_ScanDomains(t *testing.T) {
 	}
 	assert.DeepEqual(t, "new domains after ScanDomains #6", actualNewDomains, []string(nil))
 	tr.DBChanges().AssertEqualf(`
-		DELETE FROM project_services WHERE id = 10 AND project_id = 4 AND type = 'centralized';
-		DELETE FROM project_services WHERE id = 11 AND project_id = 4 AND type = 'shared';
-		DELETE FROM project_services WHERE id = 12 AND project_id = 4 AND type = 'unshared';
+		DELETE FROM project_services WHERE id = 7 AND project_id = 4 AND type = 'shared';
+		DELETE FROM project_services WHERE id = 8 AND project_id = 4 AND type = 'unshared';
 		DELETE FROM projects WHERE id = 4 AND uuid = 'uuid-for-bordeaux';
 	`)
 
@@ -175,22 +168,17 @@ func Test_ScanDomains(t *testing.T) {
 	}
 	assert.DeepEqual(t, "new domains after ScanDomains #7", actualNewDomains, []string(nil))
 	tr.DBChanges().AssertEqualf(`
+		DELETE FROM domain_resources WHERE service_id = 3 AND name = 'capacity';
+		DELETE FROM domain_resources WHERE service_id = 3 AND name = 'capacity_portion';
+		DELETE FROM domain_resources WHERE service_id = 3 AND name = 'things';
 		DELETE FROM domain_resources WHERE service_id = 4 AND name = 'capacity';
 		DELETE FROM domain_resources WHERE service_id = 4 AND name = 'capacity_portion';
 		DELETE FROM domain_resources WHERE service_id = 4 AND name = 'things';
-		DELETE FROM domain_resources WHERE service_id = 5 AND name = 'capacity';
-		DELETE FROM domain_resources WHERE service_id = 5 AND name = 'capacity_portion';
-		DELETE FROM domain_resources WHERE service_id = 5 AND name = 'things';
-		DELETE FROM domain_resources WHERE service_id = 6 AND name = 'capacity';
-		DELETE FROM domain_resources WHERE service_id = 6 AND name = 'capacity_portion';
-		DELETE FROM domain_resources WHERE service_id = 6 AND name = 'things';
-		DELETE FROM domain_services WHERE id = 4 AND domain_id = 2 AND type = 'centralized';
-		DELETE FROM domain_services WHERE id = 5 AND domain_id = 2 AND type = 'shared';
-		DELETE FROM domain_services WHERE id = 6 AND domain_id = 2 AND type = 'unshared';
+		DELETE FROM domain_services WHERE id = 3 AND domain_id = 2 AND type = 'shared';
+		DELETE FROM domain_services WHERE id = 4 AND domain_id = 2 AND type = 'unshared';
 		DELETE FROM domains WHERE id = 2 AND uuid = 'uuid-for-france';
-		DELETE FROM project_services WHERE id = 7 AND project_id = 3 AND type = 'centralized';
-		DELETE FROM project_services WHERE id = 8 AND project_id = 3 AND type = 'shared';
-		DELETE FROM project_services WHERE id = 9 AND project_id = 3 AND type = 'unshared';
+		DELETE FROM project_services WHERE id = 5 AND project_id = 3 AND type = 'shared';
+		DELETE FROM project_services WHERE id = 6 AND project_id = 3 AND type = 'unshared';
 		DELETE FROM projects WHERE id = 3 AND uuid = 'uuid-for-paris';
 	`)
 

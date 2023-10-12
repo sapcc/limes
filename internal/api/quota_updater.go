@@ -46,12 +46,10 @@ type QuotaUpdater struct {
 	Project *db.Project //nil for domain quota updates
 
 	//AuthZ info
-	CanRaise            func(serviceType, resourceName string) bool
-	CanRaiseLP          func(serviceType, resourceName string) bool //low-privilege raise
-	CanRaiseCentralized func(serviceType, resourceName string) bool
-	CanLower            func(serviceType, resourceName string) bool
-	CanLowerLP          func(serviceType, resourceName string) bool
-	CanLowerCentralized func(serviceType, resourceName string) bool
+	CanRaise   func(serviceType, resourceName string) bool
+	CanRaiseLP func(serviceType, resourceName string) bool //low-privilege raise
+	CanLower   func(serviceType, resourceName string) bool
+	CanLowerLP func(serviceType, resourceName string) bool
 
 	//Filled by ValidateInput() with the keys being the service type and the resource name.
 	Requests map[string]map[string]QuotaRequest
@@ -368,18 +366,6 @@ func (u QuotaUpdater) validateAuthorization(srv limes.ServiceInfo, res limesreso
 					Message: fmt.Sprintf("user is not allowed to lower %q quotas that high", srv.Type),
 				}
 			}
-		case limesresources.CentralizedQuotaDistribution:
-			if u.CanLowerCentralized(srv.Type, res.Name) {
-				if newQuota == 0 {
-					minimumValue := uint64(1)
-					return &core.QuotaValidationError{
-						Status:       http.StatusUnprocessableEntity,
-						Message:      "quota may not be lowered to zero for resources with non-zero default quota", //because "zero" means "default quota was not applied yet"
-						MinimumValue: &minimumValue,
-					}
-				}
-				return nil
-			}
 		}
 		return &core.QuotaValidationError{
 			Status:  http.StatusForbidden,
@@ -402,10 +388,6 @@ func (u QuotaUpdater) validateAuthorization(srv limes.ServiceInfo, res limesreso
 				MaximumValue: &lprLimit,
 				Unit:         unit,
 			}
-		}
-	case limesresources.CentralizedQuotaDistribution:
-		if u.CanRaiseCentralized(srv.Type, res.Name) {
-			return nil
 		}
 	}
 	return &core.QuotaValidationError{
@@ -479,9 +461,9 @@ func (u QuotaUpdater) validateProjectQuota(domRes limesresources.DomainResourceR
 
 	//check that domain quota is not exceeded
 	//
-	//NOTE: This check is skipped on centralized quota distribution since domain
+	//NOTE: This check is skipped on non-hierarchical quota distribution since domain
 	//quota is always set equal to the sum of project quotas afterwards there.
-	if projRes.QuotaDistributionModel != limesresources.CentralizedQuotaDistribution {
+	if projRes.QuotaDistributionModel == limesresources.HierarchicalQuotaDistribution {
 		//NOTE: It looks like an arithmetic overflow (or rather, underflow) is
 		//possible here, but it isn't. projectsQuota is the sum over all current
 		//project quotas, including res.Quota, and thus is always bigger (since these
@@ -631,7 +613,7 @@ func (u QuotaUpdater) CommitAuditTrail(token *gopherpolicy.Token, r *http.Reques
 		for resName, req := range reqs {
 			qdConfig := u.Cluster.QuotaDistributionConfigForResource(srvType, resName)
 			// low-privilege-raise metrics
-			if qdConfig.Model != limesresources.CentralizedQuotaDistribution && u.CanRaiseLP(srvType, resName) && !u.CanRaise(srvType, resName) {
+			if qdConfig.Model == limesresources.HierarchicalQuotaDistribution && u.CanRaiseLP(srvType, resName) && !u.CanRaise(srvType, resName) {
 				labels := prometheus.Labels{
 					"service":  srvType,
 					"resource": resName,

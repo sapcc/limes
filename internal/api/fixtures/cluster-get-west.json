@@ -3,33 +3,6 @@
     "id": "current",
     "services": [
       {
-        "type": "centralized",
-        "area": "centralized",
-        "resources": [
-          {
-            "name": "capacity",
-            "unit": "B",
-            "quota_distribution_model": "centralized",
-            "domains_quota": 50,
-            "usage": 6
-          },
-          {
-            "name": "capacity_portion",
-            "unit": "B",
-            "contained_in": "capacity",
-            "usage": 3
-          },
-          {
-            "name": "things",
-            "quota_distribution_model": "centralized",
-            "domains_quota": 35,
-            "usage": 6
-          }
-        ],
-        "max_scraped_at": 92,
-        "min_scraped_at": 72
-      },
-      {
         "type": "shared",
         "area": "shared",
         "resources": [
