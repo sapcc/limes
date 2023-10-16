@@ -28,6 +28,7 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/go-gorp/gorp/v3"
 	"github.com/gophercloud/gophercloud"
@@ -67,13 +68,15 @@ type v1Provider struct {
 	tokenValidator gopherpolicy.Validator
 	//see comment in ListProjects() for details
 	listProjectsMutex sync.Mutex
+	//slots for test doubles
+	timeNow func() time.Time
 }
 
 // NewV1API creates an httpapi.API that serves the Limes v1 API.
 // It also returns the VersionData for this API version which is needed for the
 // version advertisement on "GET /".
-func NewV1API(cluster *core.Cluster, dbm *gorp.DbMap, tokenValidator gopherpolicy.Validator) httpapi.API {
-	p := &v1Provider{Cluster: cluster, DB: dbm, tokenValidator: tokenValidator}
+func NewV1API(cluster *core.Cluster, dbm *gorp.DbMap, tokenValidator gopherpolicy.Validator, timeNow func() time.Time) httpapi.API {
+	p := &v1Provider{Cluster: cluster, DB: dbm, tokenValidator: tokenValidator, timeNow: timeNow}
 	p.VersionData = VersionData{
 		Status: "CURRENT",
 		ID:     "v1",

@@ -24,7 +24,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/go-gorp/gorp/v3"
 	"github.com/gorilla/mux"
@@ -211,7 +210,7 @@ func (p *v1Provider) putOrSimulatePutProject(w http.ResponseWriter, r *http.Requ
 }
 
 func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *http.Request, simulate bool, serviceQuotas limesresources.QuotaRequest) {
-	requestTime := time.Now()
+	requestTime := p.timeNow()
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:show") {
 		return
@@ -350,7 +349,7 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 }
 
 func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *http.Request, simulate, hasBursting bool) {
-	requestTime := time.Now()
+	requestTime := p.timeNow()
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:edit") {
 		return

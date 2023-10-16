@@ -21,7 +21,6 @@ package api
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/go-gorp/gorp/v3"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
@@ -104,7 +103,7 @@ func (p *v1Provider) SimulatePutDomain(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *v1Provider) putOrSimulatePutDomain(w http.ResponseWriter, r *http.Request, simulate bool) {
-	requestTime := time.Now()
+	requestTime := p.timeNow()
 	token := p.CheckToken(r)
 	if !token.Require(w, "domain:show") {
 		return

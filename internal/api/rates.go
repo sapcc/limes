@@ -23,7 +23,6 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/go-gorp/gorp/v3"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
@@ -136,7 +135,7 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 		return
 	}
 
-	requestTime := time.Now()
+	requestTime := p.timeNow()
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:show") {
 		return
