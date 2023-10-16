@@ -25,11 +25,13 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 
 	"github.com/sapcc/go-api-declarations/cadf"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/audittools"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/logg"
@@ -223,6 +225,48 @@ func (t rateLimitEventTarget) Render() cadf.Resource {
 			},
 		},
 	}
+}
+
+// commitmentEventTarget contains the structure for rendering a cadf.Event.Target for
+// changes regarding commitments.
+type commitmentEventTarget struct {
+	DomainID    string
+	DomainName  string
+	ProjectID   string
+	ProjectName string
+	Commitment  limesresources.Commitment
+}
+
+// Render implements the audittools.TargetRenderer interface type.
+func (t commitmentEventTarget) Render() cadf.Resource {
+	return cadf.Resource{
+		TypeURI:     "service/resources/commitment",
+		ID:          strconv.FormatInt(t.Commitment.ID, 10),
+		DomainID:    t.DomainID,
+		DomainName:  t.DomainName,
+		ProjectID:   t.ProjectID,
+		ProjectName: t.ProjectName,
+		Attachments: []cadf.Attachment{{
+			Name:    "payload",
+			TypeURI: "mime:application/json",
+			Content: wrappedAttachment[limesresources.Commitment]{t.Commitment},
+		}},
+	}
+}
+
+// This type marshals to JSON like a string containing the JSON representation of its inner type.
+// This is the type of structure that cadf.Attachment.Content expects.
+type wrappedAttachment[T any] struct {
+	Inner T
+}
+
+// MarshalJSON implements the json.Marshaler interface.
+func (a wrappedAttachment[T]) MarshalJSON() ([]byte, error) {
+	buf, err := json.Marshal(a.Inner)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(string(buf))
 }
 
 // This type is needed for the custom MarshalJSON behavior.
