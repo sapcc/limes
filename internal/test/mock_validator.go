@@ -27,6 +27,8 @@ import (
 
 // PolicyEnforcer is a gopherpolicy.Enforcer implementation for API tests.
 type PolicyEnforcer struct {
+	AllowView         bool
+	AllowEdit         bool
 	AllowRaise        bool
 	AllowRaiseLP      bool
 	AllowLower        bool
@@ -41,6 +43,10 @@ func (e *PolicyEnforcer) Enforce(rule string, ctx policy.Context) bool {
 	}
 	fields := strings.Split(rule, ":")
 	switch fields[len(fields)-1] {
+	case "list", "show":
+		return e.AllowView
+	case "edit":
+		return e.AllowEdit
 	case "raise":
 		return e.AllowRaise
 	case "raise_lowpriv":
