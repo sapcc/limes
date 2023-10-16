@@ -37,19 +37,23 @@ import (
 
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
+	"github.com/sapcc/limes/internal/reports"
 )
 
 var (
 	getProjectCommitmentsQuery = sqlext.SimplifyWhitespace(`
 		SELECT pc.*
-			FROM project_commitments pc
-			JOIN project_services ps ON pc.service_id = ps.id
-		 WHERE ps.project_id = $1 AND pc.superseded_at IS NULL AND (pc.expires_at IS NULL OR pc.expires_at < $2)
+		  FROM project_commitments pc
+		  JOIN project_services ps ON pc.service_id = ps.id {{AND ps.type = $service_type}}
+		 WHERE %s {{AND pc.resource_name = $resource_name}}
+		 ORDER BY pc.id
 	`)
+	getProjectCommitmentsWhereClause = "ps.project_id = $%d AND pc.superseded_at IS NULL AND (pc.expires_at IS NULL OR pc.expires_at < $%d)"
+
 	findProjectCommitmentByIDQuery = sqlext.SimplifyWhitespace(`
 		SELECT pc.*
-			FROM project_commitments pc
-			JOIN project_services ps ON pc.service_id = ps.id
+		  FROM project_commitments pc
+		  JOIN project_services ps ON pc.service_id = ps.id
 		 WHERE pc.id = $1 AND ps.project_id = $2
 	`)
 )
@@ -87,8 +91,12 @@ func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Reques
 	}
 
 	//enumerate relevant project commitments
+	filter := reports.ReadFilter(r, p.Cluster.GetServiceTypesForArea)
+	queryStr, joinArgs := filter.PrepareQuery(getProjectCommitmentsQuery)
+	whereStr := fmt.Sprintf(getProjectCommitmentsWhereClause, len(joinArgs)+1, len(joinArgs)+2)
+	queryStr = fmt.Sprintf(queryStr, whereStr)
 	var dbCommitments []db.ProjectCommitment
-	_, err = p.DB.Select(&dbCommitments, getProjectCommitmentsQuery, dbProject.ID, p.timeNow())
+	_, err = p.DB.Select(&dbCommitments, queryStr, append(joinArgs, dbProject.ID, p.timeNow())...)
 	if respondwith.ErrorText(w, err) {
 		return
 	}

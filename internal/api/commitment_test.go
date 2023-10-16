@@ -114,12 +114,39 @@ func TestCommitmentLifecycleBeforeConfirmation(t *testing.T) {
 		ExpectBody:   assert.JSONObject{"commitment": resp2},
 	}.Check(t, s.Handler)
 
-	//GET now returns something (TODO: implement and check filtering)
+	//GET now returns something
 	assert.HTTPRequest{
 		Method:       http.MethodGet,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments",
 		ExpectStatus: http.StatusOK,
 		ExpectBody:   assert.JSONObject{"commitments": []assert.JSONObject{resp1, resp2}},
+	}.Check(t, s.Handler)
+
+	//check filters on GET
+	assert.HTTPRequest{
+		Method:       http.MethodGet,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments?service=first",
+		ExpectStatus: http.StatusOK,
+		ExpectBody:   assert.JSONObject{"commitments": []assert.JSONObject{resp1}},
+	}.Check(t, s.Handler)
+	assert.HTTPRequest{
+		Method:       http.MethodGet,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments?service=third",
+		ExpectStatus: http.StatusOK,
+		ExpectBody:   assert.JSONObject{"commitments": []assert.JSONObject{}},
+	}.Check(t, s.Handler)
+
+	assert.HTTPRequest{
+		Method:       http.MethodGet,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments?resource=capacity",
+		ExpectStatus: http.StatusOK,
+		ExpectBody:   assert.JSONObject{"commitments": []assert.JSONObject{resp1, resp2}},
+	}.Check(t, s.Handler)
+	assert.HTTPRequest{
+		Method:       http.MethodGet,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments?resource=things",
+		ExpectStatus: http.StatusOK,
+		ExpectBody:   assert.JSONObject{"commitments": []assert.JSONObject{}},
 	}.Check(t, s.Handler)
 
 	//while commitments are not confirmed yet, they can still be deleted

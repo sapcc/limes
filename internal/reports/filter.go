@@ -93,7 +93,7 @@ func ReadFilter(r *http.Request, getServiceTypesForArea func(string) []string) F
 	return f
 }
 
-var filterPrepareRx = regexp.MustCompile(`{{AND ([a-z.]+) = \$(service_type|resource_name)}}`)
+var filterPrepareRx = regexp.MustCompile(`{{AND ([a-z._]+) = \$(service_type|resource_name)}}`)
 
 // PrepareQuery takes a SQL query string, and replaces the following
 // placeholders with the values in this Filter:
