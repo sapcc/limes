@@ -189,4 +189,25 @@ var sqlMigrations = map[string]string{
 		ALTER TABLE cluster_capacitors
 			DROP COLUMN scrape_error_message;
 	`,
+	"026_commitments.up.sql": `
+		CREATE TABLE project_commitments (
+			id                 BIGSERIAL  NOT NULL PRIMARY KEY,
+			service_id         BIGINT     NOT NULL REFERENCES project_services ON DELETE RESTRICT,
+			resource_name      TEXT       NOT NULL,
+			availability_zone  TEXT       NOT NULL,
+			amount             BIGINT     NOT NULL,
+			duration           TEXT       NOT NULL,
+			requested_at       TIMESTAMP  NOT NULL,
+			confirm_after      TIMESTAMP  NOT NULL,
+			confirmed_at       TIMESTAMP  DEFAULT NULL,
+			expires_at         TIMESTAMP  DEFAULT NULL,
+			superseded_at      TIMESTAMP  DEFAULT NULL,
+			predecessor_id     BIGINT     DEFAULT NULL REFERENCES project_commitments ON DELETE RESTRICT,
+			transfer_status    TEXT       NOT NULL DEFAULT '',
+			transfer_token     TEXT       NOT NULL DEFAULT ''
+		);
+	`,
+	"026_commitments.down.sql": `
+		DROP TABLE project_commitments;
+	`,
 }

@@ -104,6 +104,23 @@ it means that usage for resource Y is considered a part of the usage for resourc
 usage for resource X as a whole. Contained resources usually do not have any quota of their own; they are only reported
 to further break down the usage of the containing resource.
 
+### Commitments
+
+Resources can be configured to allow **commitments**. A commitment expresses that the project owner promises to use a
+certain amount of a resource for a fixed time frame. Commitments usually provide a price discount, with the caveat that
+the committed usage will be billed even if the real usage is lower. Commitments also provide a stronger guarantee that
+the respective amount of resource will be available to the project throughout the commitment's time frame.
+
+Commitments are always tied to an availability zone to aid in demand planning on the availability zone level.
+
+Commitments follow a simple state machine:
+
+* `-> requested`: Commitments are created by a project administrator. They are not active until confirmed.
+* `requested -> confirmed`: Once the underlying capacity has been reserved for the project, the commitment is confirmed.
+  Price discounts and capacity guarantees apply only once the commitment is confirmed.
+* `confirmed -> expired`: Once the commitment's duration elapses, the price discount and capacity guarantee elapse.
+  The duration until expiry counts starting from the state transition into `confirmed`.
+
 ### Subresources
 
 For some resources, Limes can report **subresources**. Subresources are a way to break down the project-level usage of
@@ -634,6 +651,96 @@ create the project in Limes's database before returning 202 (Accepted).
 *Rationale:* When a project administrator wants to adjust her project's quotas, they might discover that the usage data
 shown by Limes is out-of-date. They can then use this call to refresh the usage data in order to make a more informed
 decision about how to adjust her quotas.
+
+### GET /v1/domains/:domain\_id/projects/:project\_id/commitments
+
+List commitments for a single project. Requires at least a project-scoped token.
+
+Returns 200 (OK) on success. Result is a JSON document like:
+
+```json
+{
+  "commitments": [
+    {
+      "id": 42023,
+      "service_type": "compute",
+      "resource_name": "cores",
+      "availability_zone": "west-1",
+      "amount": 100,
+      "duration": "2 years",
+      "requested_at": 1696604400,
+      "confirmed_at": 1696636800,
+      "expires_at": 1759795200
+    }
+  ]
+}
+```
+
+The following fields can appear in the response body:
+
+| Field | Type | Description |
+| ----- | ---- | ----------- |
+| `commitments` | list of objects | List of commitments in the given project. |
+| `commitments[].id` | integer | A unique identifier for this commitment. |
+| `commitments[].service_type`<br>`commitments[].resource_name` | string | The resource for which usage is committed. |
+| `commitments[].availability_zone` | string | The availability zone in which usage is committed. |
+| `commitments[].amount` | integer | The amount of usage that was committed to. |
+| `commitments[].unit` | string | For measured resources, the unit for this resource. The value from the `amount` field is measured in this unit. |
+| `commitments[].duration` | string | The requested duration of this commitment, expressed as a comma-separated sequence of positive integer multiples of time units like "1 year, 3 months". Acceptable time units include "second", "minute", "hour", "day", "month" and "year". |
+| `commitments[].requested_at` | integer | UNIX timestamp when this commitment was requested. |
+| `commitments[].confirmed_at` | integer | UNIX timestamp when this commitment was confirmed. Only shown after confirmation. |
+| `commitments[].expires_at` | integer | UNIX timestamp when this commitment is set to expire. Only shown after confirmation. |
+| `commitments[].transferable` | boolean | Whether the commitment is marked for transfer to a different project. Transferable commitments do not count towards quota calculation in their project, but still block capacity and still count towards billing. Not shown if false. |
+
+### POST /v1/domains/:domain\_id/projects/:project\_id/commitments/new
+
+Creates a new commitment within the given project. Requires a project-admin token, and a request body that is a JSON document like:
+
+```json
+{
+  "commitment": {
+    "service_type": "compute",
+    "resource_name": "cores",
+    "availability_zone": "west-1",
+    "amount": 100,
+    "duration": "2 years"
+  }
+}
+```
+
+The following fields can appear in the request body:
+
+| Field | Type | Description |
+| ----- | ---- | ----------- |
+| `commitment.id` | integer | A unique identifier for this commitment. |
+| `commitment.service_type`<br>`commitments[].resource_name` | string | The resource for which usage is committed. |
+| `commitment.availability_zone` | string | The availability zone in which usage is committed. |
+| `commitment.amount` | integer | The amount of usage that was committed to. For measured resources, this is measured in the resource's unit as reported on the project resource. |
+| `commitment.duration` | string | The requested duration of this commitment. This must be one of the options reported on the project resource. |
+
+Returns 201 (Created) on success. Result is a JSON document like:
+
+```json
+{
+  "commitment": {
+    "id": 42023,
+    "service_type": "compute",
+    "resource_name": "cores",
+    "availability_zone": "west-1",
+    "amount": 100,
+    "duration": "2 years",
+    "requested_at": 1696604400
+  }
+}
+```
+
+The `commitment` object has the same structure as the `commitments[]` objects in `GET /v1/domains/:domain_id/projects/:project_id/commitments`.
+
+### DELETE /v1/domains/:domain\_id/projects/:project\_id/commitments/:id
+
+Deletes a commitment within the given project. Requires a project-admin token. On success, returns 204 (No Content).
+
+Only unconfirmed commitments may be deleted. If the commitment has already been confirmed, returns 403 (Forbidden).
 
 ### GET /v1/inconsistencies
 

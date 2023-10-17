@@ -35,6 +35,7 @@ import (
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/mock"
 	"github.com/sapcc/go-bits/osext"
+	"github.com/sapcc/go-bits/sqlext"
 	"gopkg.in/yaml.v2"
 
 	"github.com/sapcc/limes/internal/core"
@@ -117,6 +118,11 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 
 	//load mock policy (where everything is allowed)
 	enforcer := &PolicyEnforcer{
+		AllowCluster: true,
+		AllowDomain:  true,
+		AllowProject: true,
+		AllowView:    true,
+		AllowEdit:    true,
 		AllowRaise:   true,
 		AllowRaiseLP: true,
 		AllowLower:   true,
@@ -136,6 +142,12 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	return s
 }
 
+var cleanupProjectCommitmentsQuery = sqlext.SimplifyWhitespace(`
+	DELETE FROM project_commitments WHERE id NOT IN (
+		SELECT predecessor_id FROM project_commitments WHERE predecessor_id IS NOT NULL
+	)
+`)
+
 func initDatabase(t *testing.T, fixtureFile string) *gorp.DbMap {
 	//nolint:errcheck
 	postgresURL, _ := url.Parse("postgres://postgres:postgres@localhost:54321/limes?sslmode=disable")
@@ -146,12 +158,28 @@ func initDatabase(t *testing.T, fixtureFile string) *gorp.DbMap {
 		t.FailNow()
 	}
 
+	//reset the DB contents, starting with project_commitments because the "ON DELETE RESTRICT" constraint
+	//demands a specific deletion strategy
+	for {
+		result, err := dbm.Exec(cleanupProjectCommitmentsQuery)
+		if err != nil {
+			t.Fatal(err)
+		}
+		rowCount, err := result.RowsAffected()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if rowCount == 0 {
+			break
+		}
+	}
+
 	//reset the DB contents and populate with initial resources if requested
 	easypg.ClearTables(t, dbm.Db, "cluster_capacitors", "cluster_services", "domains") //all other tables via "ON DELETE CASCADE"
 	if fixtureFile != "" {
 		easypg.ExecSQLFile(t, dbm.Db, fixtureFile)
 	}
-	easypg.ResetPrimaryKeys(t, dbm.Db, "cluster_services", "domains", "domain_services", "projects", "project_services")
+	easypg.ResetPrimaryKeys(t, dbm.Db, "cluster_services", "domains", "domain_services", "projects", "project_commitments", "project_services")
 
 	return dbm
 }
