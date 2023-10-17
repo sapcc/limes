@@ -201,7 +201,7 @@ type CapacityPlugin interface {
 	//
 	//The serializedMetrics return value is persisted in the Limes DB and
 	//supplied to all subsequent RenderMetrics calls.
-	Scrape() (result map[string]map[string]Topological[CapacityData], serializedMetrics string, err error)
+	Scrape() (result map[string]map[string]PerAZ[CapacityData], serializedMetrics string, err error)
 
 	//DescribeMetrics is called when Prometheus is scraping metrics from
 	//limes-collect, to provide an opportunity to the plugin to emit its own

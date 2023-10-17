@@ -99,7 +99,7 @@ func (p *capacityNovaPlugin) PluginTypeID() string {
 }
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *capacityNovaPlugin) Scrape() (result map[string]map[string]core.Topological[core.CapacityData], serializedMetrics string, err error) {
+func (p *capacityNovaPlugin) Scrape() (result map[string]map[string]core.PerAZ[core.CapacityData], serializedMetrics string, err error) {
 	//enumerate aggregates which establish the hypervisor <-> AZ mapping
 	page, err := aggregates.List(p.NovaV2).AllPages()
 	if err != nil {
@@ -275,14 +275,13 @@ func (p *capacityNovaPlugin) Scrape() (result map[string]map[string]core.Topolog
 	}
 
 	//build final report
-	capacities := make(map[string]core.Topological[core.CapacityData], len(resourceNames))
+	capacities := make(map[string]core.PerAZ[core.CapacityData], len(resourceNames))
 	for _, resName := range resourceNames {
-		resCapaPerAZ := make(map[limes.AvailabilityZone]*core.CapacityData, len(azCapacities))
+		capacities[resName] = make(core.PerAZ[core.CapacityData], len(azCapacities))
 		for az, azCapacity := range azCapacities {
 			resCapa := azCapacity.GetCapacity(resName, maxRootDiskSize)
-			resCapaPerAZ[az] = &resCapa
+			capacities[resName][az] = &resCapa
 		}
-		capacities[resName] = core.PerAZ(resCapaPerAZ)
 	}
 
 	if maxRootDiskSize == 0 {
@@ -291,7 +290,7 @@ func (p *capacityNovaPlugin) Scrape() (result map[string]map[string]core.Topolog
 	}
 
 	serializedMetricsBytes, err := json.Marshal(metrics)
-	return map[string]map[string]core.Topological[core.CapacityData]{"compute": capacities}, string(serializedMetricsBytes), err
+	return map[string]map[string]core.PerAZ[core.CapacityData]{"compute": capacities}, string(serializedMetricsBytes), err
 }
 
 var novaHypervisorWellformedGauge = prometheus.NewGaugeVec(

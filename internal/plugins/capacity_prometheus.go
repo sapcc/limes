@@ -47,21 +47,21 @@ func (p *capacityPrometheusPlugin) PluginTypeID() string {
 }
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *capacityPrometheusPlugin) Scrape() (result map[string]map[string]core.Topological[core.CapacityData], _ string, err error) {
+func (p *capacityPrometheusPlugin) Scrape() (result map[string]map[string]core.PerAZ[core.CapacityData], _ string, err error) {
 	client, err := p.APIConfig.Connect()
 	if err != nil {
 		return nil, "", err
 	}
 
-	result = make(map[string]map[string]core.Topological[core.CapacityData])
+	result = make(map[string]map[string]core.PerAZ[core.CapacityData])
 	for serviceType, queries := range p.Queries {
-		serviceResult := make(map[string]core.Topological[core.CapacityData])
+		serviceResult := make(map[string]core.PerAZ[core.CapacityData])
 		for resourceName, query := range queries {
 			value, err := client.GetSingleValue(query, nil)
 			if err != nil {
 				return nil, "", err
 			}
-			serviceResult[resourceName] = core.Regional(core.CapacityData{Capacity: uint64(value)})
+			serviceResult[resourceName] = core.InAnyAZ(core.CapacityData{Capacity: uint64(value)})
 		}
 		result[serviceType] = serviceResult
 	}

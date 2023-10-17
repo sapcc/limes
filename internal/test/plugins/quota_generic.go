@@ -75,13 +75,13 @@ func (p *GenericQuotaPlugin) Init(provider *gophercloud.ProviderClient, eo gophe
 	p.StaticResourceData = map[string]*core.ResourceData{
 		"things": {
 			Quota: 42,
-			UsageData: core.Regional(core.UsageData{
+			UsageData: core.InAnyAZ(core.UsageData{
 				Usage: 2,
 			}),
 		},
 		"capacity": {
 			Quota: 100,
-			UsageData: core.Regional(core.UsageData{
+			UsageData: core.InAnyAZ(core.UsageData{
 				Usage: 0,
 			}),
 		},
@@ -151,22 +151,23 @@ func (p *GenericQuotaPlugin) Scrape(project core.KeystoneProject) (result map[st
 
 	result = make(map[string]core.ResourceData)
 	for key, val := range p.StaticResourceData {
+		usageData := val.UsageData[limes.AvailabilityZoneAny]
 		copyOfVal := core.ResourceData{
 			Quota: val.Quota,
-			UsageData: core.Regional(core.UsageData{
-				Usage: val.UsageData.Regional.Usage,
+			UsageData: core.InAnyAZ(core.UsageData{
+				Usage: usageData.Usage,
 			}),
 		}
 
 		//test coverage for PhysicalUsage != Usage
 		if key == "capacity" {
-			physUsage := val.UsageData.Regional.Usage / 2
-			copyOfVal.UsageData.Regional.PhysicalUsage = &physUsage
+			physUsage := usageData.Usage / 2
+			copyOfVal.UsageData[limes.AvailabilityZoneAny].PhysicalUsage = &physUsage
 
 			//derive a resource that does not track quota
 			result["capacity_portion"] = core.ResourceData{
-				UsageData: core.Regional(core.UsageData{
-					Usage: val.UsageData.Regional.Usage / 4,
+				UsageData: core.InAnyAZ(core.UsageData{
+					Usage: usageData.Usage / 4,
 				}),
 			}
 		}
@@ -185,20 +186,21 @@ func (p *GenericQuotaPlugin) Scrape(project core.KeystoneProject) (result map[st
 	}
 
 	//make up some subresources for "things"
-	thingsUsage := int(result["things"].UsageData.Regional.Usage)
+	thingsUsage := int(result["things"].UsageData[limes.AvailabilityZoneAny].Usage)
 	subres := make([]any, thingsUsage)
 	for idx := 0; idx < thingsUsage; idx++ {
 		subres[idx] = map[string]any{
 			"index": idx,
 		}
 	}
-	result["things"].UsageData.Regional.Subresources = subres
+	result["things"].UsageData[limes.AvailabilityZoneAny].Subresources = subres
 
 	//make up some serialized metrics (reporting usage as a metric is usually
 	//nonsensical since limes-collect already reports all usages as metrics, but
 	//this is only a testcase anyway)
 	serializedMetrics = fmt.Sprintf(`{"capacity_usage":%d,"things_usage":%d}`,
-		result["capacity"].UsageData.Regional.Usage, result["things"].UsageData.Regional.Usage)
+		result["capacity"].UsageData[limes.AvailabilityZoneAny].Usage,
+		result["things"].UsageData[limes.AvailabilityZoneAny].Usage)
 
 	return result, serializedMetrics, nil
 }

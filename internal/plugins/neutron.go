@@ -365,7 +365,7 @@ func (p *neutronPlugin) scrapeNeutronInto(result map[string]core.ResourceData, p
 		values := quotas.Values[res.NeutronName]
 		result[res.LimesName] = core.ResourceData{
 			Quota: values.Quota,
-			UsageData: core.Regional(core.UsageData{
+			UsageData: core.InAnyAZ(core.UsageData{
 				Usage: values.Usage,
 			}),
 		}
@@ -396,7 +396,7 @@ func (p *neutronPlugin) scrapeOctaviaInto(result map[string]core.ResourceData, p
 		}
 		result[res.LimesName] = core.ResourceData{
 			Quota: quota,
-			UsageData: core.Regional(core.UsageData{
+			UsageData: core.InAnyAZ(core.UsageData{
 				Usage: usage[res.OctaviaName],
 			}),
 		}

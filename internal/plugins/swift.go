@@ -133,7 +133,7 @@ func (p *swiftPlugin) Scrape(project core.KeystoneProject) (result map[string]co
 		return map[string]core.ResourceData{
 			"capacity": {
 				Quota:     0,
-				UsageData: core.Regional(core.UsageData{Usage: 0}),
+				UsageData: core.InAnyAZ(core.UsageData{Usage: 0}),
 			},
 		}, "", nil
 	} else if err != nil {
@@ -165,7 +165,7 @@ func (p *swiftPlugin) Scrape(project core.KeystoneProject) (result map[string]co
 
 	data := core.ResourceData{
 		Quota: int64(headers.BytesUsedQuota().Get()),
-		UsageData: core.Regional(core.UsageData{
+		UsageData: core.InAnyAZ(core.UsageData{
 			Usage: headers.BytesUsed().Get(),
 		}),
 	}

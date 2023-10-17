@@ -26,7 +26,6 @@ import (
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/sapcc/go-api-declarations/limes"
 
 	"github.com/sapcc/limes/internal/core"
 )
@@ -54,7 +53,7 @@ func (p *StaticCapacityPlugin) PluginTypeID() string {
 }
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *StaticCapacityPlugin) Scrape() (result map[string]map[string]core.Topological[core.CapacityData], serializedMetrics string, err error) {
+func (p *StaticCapacityPlugin) Scrape() (result map[string]map[string]core.PerAZ[core.CapacityData], serializedMetrics string, err error) {
 	makeAZCapa := func(az string, capacity, usage uint64) *core.CapacityData {
 		var subcapacities []any
 		if p.WithSubcapacities {
@@ -72,12 +71,12 @@ func (p *StaticCapacityPlugin) Scrape() (result map[string]map[string]core.Topol
 		}
 	}
 
-	fullCapa := core.PerAZ(map[limes.AvailabilityZone]*core.CapacityData{
+	fullCapa := core.PerAZ[core.CapacityData]{
 		"az-one": makeAZCapa("az-one", p.Capacity/2, p.Capacity/10),
 		"az-two": makeAZCapa("az-two", p.Capacity-p.Capacity/2, p.Capacity/10),
-	})
+	}
 	if !p.WithAZCapData {
-		fullCapa = core.Regional(fullCapa.Sum())
+		fullCapa = core.InAnyAZ(fullCapa.Sum())
 	}
 
 	if p.WithSubcapacities {
@@ -87,12 +86,12 @@ func (p *StaticCapacityPlugin) Scrape() (result map[string]map[string]core.Topol
 		serializedMetrics = fmt.Sprintf(`{"smaller_half":%d,"larger_half":%d}`, smallerHalf, largerHalf)
 	}
 
-	result = make(map[string]map[string]core.Topological[core.CapacityData])
+	result = make(map[string]map[string]core.PerAZ[core.CapacityData])
 	for _, str := range p.Resources {
 		parts := strings.SplitN(str, "/", 2)
 		_, exists := result[parts[0]]
 		if !exists {
-			result[parts[0]] = make(map[string]core.Topological[core.CapacityData])
+			result[parts[0]] = make(map[string]core.PerAZ[core.CapacityData])
 		}
 		result[parts[0]][parts[1]] = fullCapa
 	}

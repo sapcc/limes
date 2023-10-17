@@ -221,7 +221,7 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 			continue
 		}
 
-		for resourceName, topologicalResourceData := range serviceData {
+		for resourceName, resourceDataPerAZ := range serviceData {
 			if !c.Cluster.HasResource(serviceType, resourceName) {
 				logg.Info("discarding capacity reported by %s for unknown resource name: %s/%s", capacitor.CapacitorID, serviceType, resourceName)
 				continue
@@ -231,7 +231,7 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 				return fmt.Errorf("no cluster_services entry for service type %s (check if CheckConsistencyJob runs correctly)", serviceType)
 			}
 
-			summedResourceData := topologicalResourceData.Sum()
+			summedResourceData := resourceDataPerAZ.Sum()
 			res := db.ClusterResource{
 				ServiceID:         serviceID,
 				Name:              resourceName,
@@ -241,8 +241,8 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 				CapacitorID:       capacitor.CapacitorID,
 			}
 
-			if topologicalResourceData.PerAZ != nil {
-				buf, err := json.Marshal(convertAZReport(topologicalResourceData.PerAZ))
+			if shouldStoreAZReport(resourceDataPerAZ) {
+				buf, err := json.Marshal(convertAZReport(resourceDataPerAZ))
 				if err != nil {
 					return fmt.Errorf("could not convert capacities per AZ to JSON: %w", err)
 				}
@@ -299,7 +299,16 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 	return tx.Commit()
 }
 
-func convertAZReport(capacityPerAZ map[limes.AvailabilityZone]*core.CapacityData) limesresources.ClusterAvailabilityZoneReports {
+func shouldStoreAZReport(capacityPerAZ core.PerAZ[core.CapacityData]) bool {
+	for az := range capacityPerAZ {
+		if az != limes.AvailabilityZoneAny {
+			return true
+		}
+	}
+	return false
+}
+
+func convertAZReport(capacityPerAZ core.PerAZ[core.CapacityData]) limesresources.ClusterAvailabilityZoneReports {
 	report := make(limesresources.ClusterAvailabilityZoneReports, len(capacityPerAZ))
 	for azName, azData := range capacityPerAZ {
 		report[azName] = &limesresources.ClusterAvailabilityZoneReport{

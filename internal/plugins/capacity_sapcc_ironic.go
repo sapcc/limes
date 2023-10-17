@@ -157,7 +157,7 @@ var nodeNameRx = regexp.MustCompile(`^node(?:swift)?\d+-((?:b[bm]|ap|md|st|swf)\
 var cpNodeNameRx = regexp.MustCompile(`^node(?:swift)?\d+-(cp\d+)$`)
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *capacitySapccIronicPlugin) Scrape() (result map[string]map[string]core.Topological[core.CapacityData], serializedMetrics string, err error) {
+func (p *capacitySapccIronicPlugin) Scrape() (result map[string]map[string]core.PerAZ[core.CapacityData], serializedMetrics string, err error) {
 	//collect info about flavors with separate instance quota
 	flavorNames, err := p.ftt.ListFlavorsWithSeparateInstanceQuota(p.NovaV2)
 	if err != nil {
@@ -165,12 +165,12 @@ func (p *capacitySapccIronicPlugin) Scrape() (result map[string]map[string]core.
 	}
 
 	//we are going to report capacity for all per-flavor instance quotas
-	resultCompute := make(map[string]core.Topological[core.CapacityData])
+	resultCompute := make(map[string]core.PerAZ[core.CapacityData])
 	for _, flavorName := range flavorNames {
 		//NOTE: If `flavor_name_pattern` is empty, then FlavorNameRx will match any input.
 		if p.FlavorNameRx.MatchString(flavorName) {
 			resName := p.ftt.LimesResourceNameForFlavor(flavorName)
-			resultCompute[resName] = core.PerAZ(make(map[limes.AvailabilityZone]*core.CapacityData))
+			resultCompute[resName] = make(core.PerAZ[core.CapacityData])
 		}
 	}
 
@@ -260,10 +260,10 @@ func (p *capacitySapccIronicPlugin) Scrape() (result map[string]map[string]core.
 				}
 
 				resName := p.ftt.LimesResourceNameForFlavor(flavorName)
-				data := resultCompute[resName].PerAZ[nodeAZ]
+				data := resultCompute[resName][nodeAZ]
 				if data == nil {
 					data = &core.CapacityData{}
-					resultCompute[resName].PerAZ[nodeAZ] = data
+					resultCompute[resName][nodeAZ] = data
 				}
 
 				data.Capacity++
@@ -312,7 +312,7 @@ func (p *capacitySapccIronicPlugin) Scrape() (result map[string]map[string]core.
 	}
 
 	serializedMetricsBytes, err := json.Marshal(metrics)
-	return map[string]map[string]core.Topological[core.CapacityData]{"compute": resultCompute}, string(serializedMetricsBytes), err
+	return map[string]map[string]core.PerAZ[core.CapacityData]{"compute": resultCompute}, string(serializedMetricsBytes), err
 }
 
 var (

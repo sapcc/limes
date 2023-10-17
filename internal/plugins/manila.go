@@ -231,12 +231,12 @@ func (p *manilaPlugin) Scrape(project core.KeystoneProject) (result map[string]c
 	for idx, shareType := range p.ShareTypes {
 		stName := resolveManilaShareType(shareType, project)
 		if stName == "" {
-			result[p.makeResourceName("shares", shareType)] = core.ResourceData{Quota: 0, UsageData: core.Regional(core.UsageData{})}
-			result[p.makeResourceName("share_capacity", shareType)] = core.ResourceData{Quota: 0, UsageData: core.Regional(core.UsageData{})}
-			result[p.makeResourceName("share_snapshots", shareType)] = core.ResourceData{Quota: 0, UsageData: core.Regional(core.UsageData{})}
-			result[p.makeResourceName("snapshot_capacity", shareType)] = core.ResourceData{Quota: 0, UsageData: core.Regional(core.UsageData{})}
+			result[p.makeResourceName("shares", shareType)] = core.ResourceData{Quota: 0, UsageData: core.InAnyAZ(core.UsageData{})}
+			result[p.makeResourceName("share_capacity", shareType)] = core.ResourceData{Quota: 0, UsageData: core.InAnyAZ(core.UsageData{})}
+			result[p.makeResourceName("share_snapshots", shareType)] = core.ResourceData{Quota: 0, UsageData: core.InAnyAZ(core.UsageData{})}
+			result[p.makeResourceName("snapshot_capacity", shareType)] = core.ResourceData{Quota: 0, UsageData: core.InAnyAZ(core.UsageData{})}
 			if p.PrometheusAPIConfig != nil {
-				result[p.makeResourceName("snapmirror_capacity", shareType)] = core.ResourceData{Quota: 0, UsageData: core.Regional(core.UsageData{})}
+				result[p.makeResourceName("snapmirror_capacity", shareType)] = core.ResourceData{Quota: 0, UsageData: core.InAnyAZ(core.UsageData{})}
 			}
 			continue
 		}
@@ -255,8 +255,8 @@ func (p *manilaPlugin) Scrape(project core.KeystoneProject) (result map[string]c
 		sharesData := quotaSets[stName].Shares.ToResourceData(nil)
 		shareCapacityData := quotaSets[stName].Gigabytes.ToResourceData(gigabytesPhysical)
 		if p.hasReplicaQuotas && shareType.ReplicationEnabled {
-			sharesData.UsageData.Regional.Usage = quotaSets[stName].Replicas.Usage
-			shareCapacityData.UsageData.Regional.Usage = quotaSets[stName].ReplicaGigabytes.Usage
+			sharesData.UsageData[limes.AvailabilityZoneAny].Usage = quotaSets[stName].Replicas.Usage
+			shareCapacityData.UsageData[limes.AvailabilityZoneAny].Usage = quotaSets[stName].ReplicaGigabytes.Usage
 			//if share quotas and replica quotas disagree, report quota = -1 to force Limes to reapply the replica quota
 			if quotaSets[stName].Replicas.Quota != sharesData.Quota {
 				logg.Info("found mismatch between share quota (%d) and replica quota (%d) for share type %q in project %s",
@@ -432,7 +432,7 @@ type manilaQuotaDetail struct {
 func (q manilaQuotaDetail) ToResourceData(physicalUsage *uint64) core.ResourceData {
 	return core.ResourceData{
 		Quota: q.Quota,
-		UsageData: core.Regional(core.UsageData{
+		UsageData: core.InAnyAZ(core.UsageData{
 			Usage:         q.Usage,
 			PhysicalUsage: physicalUsage,
 		}),
@@ -539,7 +539,7 @@ func (p *manilaPlugin) collectSnapmirrorUsage(project core.KeystoneProject, shar
 
 	return core.ResourceData{
 		Quota: 0, //NoQuota = true
-		UsageData: core.Regional(core.UsageData{
+		UsageData: core.InAnyAZ(core.UsageData{
 			Usage:         roundUpIntoGigabytes(bytesTotal),
 			PhysicalUsage: &bytesUsedAsUint64,
 		}),

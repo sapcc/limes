@@ -311,31 +311,31 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject) (result map[string]cor
 	resultPtr := map[string]*core.ResourceData{
 		"cores": {
 			Quota: limitsData.Limits.Absolute.MaxTotalCores,
-			UsageData: core.Regional(core.UsageData{
+			UsageData: core.InAnyAZ(core.UsageData{
 				Usage: limitsData.Limits.Absolute.TotalCoresUsed,
 			}),
 		},
 		"instances": {
 			Quota: limitsData.Limits.Absolute.MaxTotalInstances,
-			UsageData: core.Regional(core.UsageData{
+			UsageData: core.InAnyAZ(core.UsageData{
 				Usage: limitsData.Limits.Absolute.TotalInstancesUsed,
 			}),
 		},
 		"ram": {
 			Quota: limitsData.Limits.Absolute.MaxTotalRAMSize,
-			UsageData: core.Regional(core.UsageData{
+			UsageData: core.InAnyAZ(core.UsageData{
 				Usage: limitsData.Limits.Absolute.TotalRAMUsed,
 			}),
 		},
 		"server_groups": {
 			Quota: limitsData.Limits.Absolute.MaxServerGroups,
-			UsageData: core.Regional(core.UsageData{
+			UsageData: core.InAnyAZ(core.UsageData{
 				Usage: limitsData.Limits.Absolute.TotalServerGroupsUsed,
 			}),
 		},
 		"server_group_members": {
 			Quota: limitsData.Limits.Absolute.MaxServerGroupMembers,
-			UsageData: core.Regional(core.UsageData{
+			UsageData: core.InAnyAZ(core.UsageData{
 				Usage: totalServerGroupMembersUsed,
 			}),
 		},
@@ -347,7 +347,7 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject) (result map[string]cor
 			if p.SeparateInstanceQuotas.FlavorNameRx.MatchString(flavorName) {
 				resultPtr[p.ftt.LimesResourceNameForFlavor(flavorName)] = &core.ResourceData{
 					Quota: flavorLimits.MaxTotalInstances,
-					UsageData: core.Regional(core.UsageData{
+					UsageData: core.InAnyAZ(core.UsageData{
 						Usage: flavorLimits.TotalInstancesUsed,
 					}),
 				}
@@ -363,7 +363,7 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject) (result map[string]cor
 		if _, exists := resultPtr[res.Name]; !exists {
 			resultPtr[res.Name] = &core.ResourceData{
 				Quota:     0,
-				UsageData: core.Regional(core.UsageData{}),
+				UsageData: core.InAnyAZ(core.UsageData{}),
 			}
 		}
 	}
@@ -444,9 +444,9 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject) (result map[string]cor
 
 						//do not count baremetal instances into `{cores,instances,ram}_{bigvm,regular}`
 						if _, exists := resultPtr[p.ftt.LimesResourceNameForFlavor(flavorName)]; !exists {
-							resultPtr["cores_"+class].UsageData.Regional.Usage += flavor.VCPUs
-							resultPtr["instances_"+class].UsageData.Regional.Usage++
-							resultPtr["ram_"+class].UsageData.Regional.Usage += flavor.MemoryMiB
+							resultPtr["cores_"+class].UsageData[limes.AvailabilityZoneAny].Usage += flavor.VCPUs
+							resultPtr["instances_"+class].UsageData[limes.AvailabilityZoneAny].Usage++
+							resultPtr["ram_"+class].UsageData[limes.AvailabilityZoneAny].Usage += flavor.MemoryMiB
 						}
 					}
 				}
@@ -480,7 +480,7 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject) (result map[string]cor
 				if !exists {
 					resource = resultPtr["instances"]
 				}
-				resource.UsageData.Regional.Subresources = append(resource.UsageData.Regional.Subresources, subResource)
+				resource.UsageData[limes.AvailabilityZoneAny].Subresources = append(resource.UsageData[limes.AvailabilityZoneAny].Subresources, subResource)
 			}
 			return true, nil
 		})

@@ -27,6 +27,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/jobloop"
@@ -173,7 +174,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	//change the data that is reported by the plugin
 	s.Clock.StepBy(scrapeInterval)
 	plugin.StaticResourceData["capacity"].Quota = 110
-	plugin.StaticResourceData["things"].UsageData.Regional.Usage = 5
+	plugin.StaticResourceData["things"].UsageData[limes.AvailabilityZoneAny].Usage = 5
 	//Scrape should pick up the changed resource data
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
@@ -269,7 +270,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	//"capacity_portion" (otherwise this resource has been all zeroes this entire
 	//time)
 	s.Clock.StepBy(scrapeInterval)
-	plugin.StaticResourceData["capacity"].UsageData.Regional.Usage = 20
+	plugin.StaticResourceData["capacity"].UsageData[limes.AvailabilityZoneAny].Usage = 20
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 

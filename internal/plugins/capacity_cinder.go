@@ -83,7 +83,7 @@ func (p *capacityCinderPlugin) makeResourceName(volumeType string) string {
 }
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *capacityCinderPlugin) Scrape() (result map[string]map[string]core.Topological[core.CapacityData], serializedMetrics string, err error) {
+func (p *capacityCinderPlugin) Scrape() (result map[string]map[string]core.PerAZ[core.CapacityData], serializedMetrics string, err error) {
 	//list storage pools
 	var poolData struct {
 		StoragePools []struct {
@@ -127,11 +127,11 @@ func (p *capacityCinderPlugin) Scrape() (result map[string]map[string]core.Topol
 		}
 	}
 
-	capaData := make(map[string]core.Topological[core.CapacityData])
+	capaData := make(map[string]core.PerAZ[core.CapacityData])
 	volumeTypesByBackendName := make(map[string]string)
 	for volumeType, cfg := range p.VolumeTypes {
 		volumeTypesByBackendName[cfg.VolumeBackendName] = volumeType
-		capaData[p.makeResourceName(volumeType)] = core.PerAZ(make(map[limes.AvailabilityZone]*core.CapacityData))
+		capaData[p.makeResourceName(volumeType)] = make(core.PerAZ[core.CapacityData])
 	}
 
 	//add results from scheduler-stats
@@ -169,10 +169,10 @@ func (p *capacityCinderPlugin) Scrape() (result map[string]map[string]core.Topol
 		}
 
 		resourceName := p.makeResourceName(volumeType)
-		capa := capaData[resourceName].PerAZ[poolAZ]
+		capa := capaData[resourceName][poolAZ]
 		if capa == nil {
 			capa = &core.CapacityData{}
-			capaData[resourceName].PerAZ[poolAZ] = capa
+			capaData[resourceName][poolAZ] = capa
 		}
 
 		capa.Capacity += uint64(pool.Capabilities.TotalCapacityGB)
@@ -188,7 +188,7 @@ func (p *capacityCinderPlugin) Scrape() (result map[string]map[string]core.Topol
 		}
 	}
 
-	return map[string]map[string]core.Topological[core.CapacityData]{"volumev2": capaData}, "", nil
+	return map[string]map[string]core.PerAZ[core.CapacityData]{"volumev2": capaData}, "", nil
 }
 
 // DescribeMetrics implements the core.CapacityPlugin interface.

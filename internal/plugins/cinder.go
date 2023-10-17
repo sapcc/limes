@@ -146,7 +146,7 @@ func (f *quotaSetField) UnmarshalJSON(buf []byte) error {
 func (f quotaSetField) ToResourceData(subresources []any) core.ResourceData {
 	return core.ResourceData{
 		Quota: f.Quota,
-		UsageData: core.Regional(core.UsageData{
+		UsageData: core.InAnyAZ(core.UsageData{
 			Usage:        f.Usage,
 			Subresources: subresources,
 		}),

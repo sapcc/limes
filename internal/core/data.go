@@ -25,61 +25,65 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 )
 
-// Topological is a container for data that can either be reported for
-// the entire region at once, or separately by AZ.
-// Exactly one field shall be non-nil.
-type Topological[D TopologicalData[D]] struct {
-	Regional *D
-	PerAZ    map[limes.AvailabilityZone]*D
+// PerAZ is a container for data that can be reported for each AZ.
+type PerAZ[D AZAwareData[D]] map[limes.AvailabilityZone]*D
+
+// InAnyAZ is a convenience constructor for PerAZ that puts all data in the "any" AZ.
+// Use this for data relating to resources that are not AZ-aware.
+func InAnyAZ[D AZAwareData[D]](data D) PerAZ[D] {
+	return PerAZ[D]{limes.AvailabilityZoneAny: &data}
 }
 
-// Regional is a shorthand to construct a Topological instance with the Regional member filled.
-func Regional[D TopologicalData[D]](data D) Topological[D] {
-	return Topological[D]{Regional: &data}
-}
-
-// PerAZ is a shorthand to construct a Topological instance with the PerAZ member filled.
-func PerAZ[D TopologicalData[D]](data map[limes.AvailabilityZone]*D) Topological[D] {
-	return Topological[D]{PerAZ: data}
+// InUnknownAZ is a convenience constructor for PerAZ that puts all data in the "any" AZ.
+// Use this for data relating to AZ-aware resources where the AZ association is unknown.
+func InUnknownAZ[D AZAwareData[D]](data D) PerAZ[D] {
+	return PerAZ[D]{limes.AvailabilityZoneUnknown: &data}
 }
 
 // Sum returns a sum of all data in this container.
-// If the Regional field is filled, that data is returned directly.
-// Otherwise, all entries in the PerAZ field are summed together.
-func (t Topological[D]) Sum() D {
-	if t.PerAZ == nil {
-		return *t.Regional
-	}
-
+// This can be used if data can only be stored as a whole, not broken down by AZ.
+func (p PerAZ[D]) Sum() D {
 	//fold AZ data in a well-defined order for deterministic test result
-	azNames := make([]limes.AvailabilityZone, 0, len(t.PerAZ))
-	for az := range t.PerAZ {
+	azNames := make([]limes.AvailabilityZone, 0, len(p))
+	for az := range p {
 		azNames = append(azNames, az)
 	}
 	slices.Sort(azNames)
 
-	var result D
+	var (
+		result  D
+		isFirst = true
+	)
 	for _, az := range azNames {
-		result = result.add(*t.PerAZ[az])
+		if isFirst {
+			result = (*p[az]).clone()
+		} else {
+			result = result.add(*p[az])
+		}
+		isFirst = false
 	}
 	return result
 }
 
-// TopologicalData is an interfaces for types that can be put into the Topological container.
-type TopologicalData[Self any] interface {
+// AZAwareData is an interface for types that can be put into the PerAZ container.
+type AZAwareData[Self any] interface {
 	// List of permitted types. This is required for type inference, as explained here:
 	// <https://stackoverflow.com/a/73851453>
 	UsageData | CapacityData
 
+	// Makes a deep copy of itself.
+	// This is used to implement PerAZ.Sum().
+	clone() Self
+
 	// Computes the sum of this structure and `other`.
-	// This is used to implement Topological.Sum().
+	// This is used to implement PerAZ.Sum().
 	add(other Self) Self
 }
 
 // ResourceData contains quota and usage data for a single project resource.
 type ResourceData struct {
 	Quota     int64 //negative values indicate infinite quota
-	UsageData Topological[UsageData]
+	UsageData PerAZ[UsageData]
 }
 
 // UsageData contains usage data for a single project resource.
@@ -90,7 +94,22 @@ type UsageData struct {
 	Subresources  []any   //only if supported by plugin and enabled in config
 }
 
-// add implements the TopologicalData interface.
+// clone implements the AZAwareData interface.
+//
+//nolint:unused // looks like a linter bug
+func (d UsageData) clone() UsageData {
+	result := UsageData{
+		Usage:        d.Usage,
+		Subresources: slices.Clone(d.Subresources),
+	}
+	if d.PhysicalUsage != nil {
+		val := *d.PhysicalUsage
+		result.PhysicalUsage = &val
+	}
+	return result
+}
+
+// add implements the AZAwareData interface.
 //
 //nolint:unused // looks like a linter bug
 func (d UsageData) add(other UsageData) UsageData {
@@ -115,7 +134,18 @@ type CapacityData struct {
 	Subcapacities []any  //only if supported by plugin and enabled in config
 }
 
-// add implements the TopologicalData interface.
+// clone implements the AZAwareData interface.
+//
+//nolint:unused // looks like a linter bug
+func (d CapacityData) clone() CapacityData {
+	return CapacityData{
+		Capacity:      d.Capacity,
+		Usage:         d.Usage,
+		Subcapacities: slices.Clone(d.Subcapacities),
+	}
+}
+
+// add implements the AZAwareData interface.
 //
 //nolint:unused // looks like a linter bug
 func (d CapacityData) add(other CapacityData) CapacityData {

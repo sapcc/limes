@@ -36,7 +36,7 @@ import (
 // cluster. It is instantiated from YAML and then transformed into type
 // Cluster during the startup phase.
 type ClusterConfiguration struct {
-	AvailabilityZones []string                 `yaml:"availability_zones"`
+	AvailabilityZones []limes.AvailabilityZone `yaml:"availability_zones"`
 	CatalogURL        string                   `yaml:"catalog_url"`
 	Discovery         DiscoveryConfiguration   `yaml:"discovery"`
 	Services          []ServiceConfiguration   `yaml:"services"`

@@ -102,7 +102,7 @@ func (p *capacityManilaPlugin) makeResourceName(kind string, shareType ManilaSha
 }
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *capacityManilaPlugin) Scrape() (result map[string]map[string]core.Topological[core.CapacityData], _ string, err error) {
+func (p *capacityManilaPlugin) Scrape() (result map[string]map[string]core.PerAZ[core.CapacityData], _ string, err error) {
 	allPages, err := services.List(p.ManilaV2, nil).AllPages()
 	if err != nil {
 		return nil, "", err
@@ -125,8 +125,8 @@ func (p *capacityManilaPlugin) Scrape() (result map[string]map[string]core.Topol
 		}
 	}
 
-	caps := map[string]core.Topological[core.CapacityData]{
-		"share_networks": core.Regional(core.CapacityData{Capacity: p.ShareNetworks}),
+	caps := map[string]core.PerAZ[core.CapacityData]{
+		"share_networks": core.InAnyAZ(core.CapacityData{Capacity: p.ShareNetworks}),
 	}
 	for _, shareType := range p.ShareTypes {
 		capForType, err := p.scrapeForShareType(shareType, azForServiceHost)
@@ -138,7 +138,7 @@ func (p *capacityManilaPlugin) Scrape() (result map[string]map[string]core.Topol
 		caps[p.makeResourceName("share_capacity", shareType)] = capForType.ShareGigabytes
 		caps[p.makeResourceName("snapshot_capacity", shareType)] = capForType.SnapshotGigabytes
 	}
-	return map[string]map[string]core.Topological[core.CapacityData]{"sharev2": caps}, "", nil
+	return map[string]map[string]core.PerAZ[core.CapacityData]{"sharev2": caps}, "", nil
 }
 
 // DescribeMetrics implements the core.CapacityPlugin interface.
@@ -153,10 +153,10 @@ func (p *capacityManilaPlugin) CollectMetrics(ch chan<- prometheus.Metric, seria
 }
 
 type capacityForShareType struct {
-	Shares            core.Topological[core.CapacityData]
-	Snapshots         core.Topological[core.CapacityData]
-	ShareGigabytes    core.Topological[core.CapacityData]
-	SnapshotGigabytes core.Topological[core.CapacityData]
+	Shares            core.PerAZ[core.CapacityData]
+	Snapshots         core.PerAZ[core.CapacityData]
+	ShareGigabytes    core.PerAZ[core.CapacityData]
+	SnapshotGigabytes core.PerAZ[core.CapacityData]
 }
 
 func (p *capacityManilaPlugin) scrapeForShareType(shareType ManilaShareTypeSpec, azForServiceHost map[string]limes.AvailabilityZone) (capacityForShareType, error) {
@@ -246,24 +246,24 @@ func (p *capacityManilaPlugin) scrapeForShareType(shareType ManilaShareTypeSpec,
 
 	//derive availability zone usage and capacities
 	result := capacityForShareType{
-		Shares:            core.PerAZ(map[limes.AvailabilityZone]*core.CapacityData{}),
-		Snapshots:         core.PerAZ(map[limes.AvailabilityZone]*core.CapacityData{}),
-		ShareGigabytes:    core.PerAZ(map[limes.AvailabilityZone]*core.CapacityData{}),
-		SnapshotGigabytes: core.PerAZ(map[limes.AvailabilityZone]*core.CapacityData{}),
+		Shares:            make(core.PerAZ[core.CapacityData]),
+		Snapshots:         make(core.PerAZ[core.CapacityData]),
+		ShareGigabytes:    make(core.PerAZ[core.CapacityData]),
+		SnapshotGigabytes: make(core.PerAZ[core.CapacityData]),
 	}
 	for az := range availabilityZones {
-		result.Shares.PerAZ[az] = &core.CapacityData{
+		result.Shares[az] = &core.CapacityData{
 			Capacity: getShareCount(poolCountPerAZ[az], p.SharesPerPool, (p.ShareNetworks / uint64(len(availabilityZones)))),
 		}
-		result.Snapshots.PerAZ[az] = &core.CapacityData{
-			Capacity: getShareSnapshots(result.Shares.PerAZ[az].Capacity, p.SnapshotsPerShare),
+		result.Snapshots[az] = &core.CapacityData{
+			Capacity: getShareSnapshots(result.Shares[az].Capacity, p.SnapshotsPerShare),
 		}
-		result.ShareGigabytes.PerAZ[az] = &core.CapacityData{
+		result.ShareGigabytes[az] = &core.CapacityData{
 			Capacity:      getShareCapacity(totalCapacityGbPerAZ[az], capBalance),
 			Usage:         getShareCapacity(allocatedCapacityGbPerAZ[az], capBalance),
 			Subcapacities: shareSubcapacitiesPerAZ[az],
 		}
-		result.SnapshotGigabytes.PerAZ[az] = &core.CapacityData{
+		result.SnapshotGigabytes[az] = &core.CapacityData{
 			Capacity:      getSnapshotCapacity(totalCapacityGbPerAZ[az], capBalance),
 			Usage:         getSnapshotCapacity(allocatedCapacityGbPerAZ[az], capBalance),
 			Subcapacities: snapshotSubcapacitiesPerAZ[az],
