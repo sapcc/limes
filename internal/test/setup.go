@@ -118,6 +118,9 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 
 	//load mock policy (where everything is allowed)
 	enforcer := &PolicyEnforcer{
+		AllowCluster: true,
+		AllowDomain:  true,
+		AllowProject: true,
 		AllowView:    true,
 		AllowEdit:    true,
 		AllowRaise:   true,

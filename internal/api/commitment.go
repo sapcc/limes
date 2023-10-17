@@ -48,7 +48,7 @@ var (
 		 WHERE %s {{AND pc.resource_name = $resource_name}}
 		 ORDER BY pc.id
 	`)
-	getProjectCommitmentsWhereClause = "ps.project_id = $%d AND pc.superseded_at IS NULL AND (pc.expires_at IS NULL OR pc.expires_at < $%d)"
+	getProjectCommitmentsWhereClause = "ps.project_id = $%d AND pc.superseded_at IS NULL AND (pc.expires_at IS NULL OR pc.expires_at > $%d)"
 
 	findProjectCommitmentByIDQuery = sqlext.SimplifyWhitespace(`
 		SELECT pc.*
@@ -286,8 +286,10 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 
 	//commitments cannot be deleted once they have been confirmed
 	if dbCommitment.ConfirmedAt != nil {
-		http.Error(w, "cannot delete a confirmed commitment", http.StatusForbidden)
-		return
+		if !token.Check("cluster:edit") {
+			http.Error(w, "cannot delete a confirmed commitment", http.StatusForbidden)
+			return
+		}
 	}
 
 	//perform deletion

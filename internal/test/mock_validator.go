@@ -27,12 +27,18 @@ import (
 
 // PolicyEnforcer is a gopherpolicy.Enforcer implementation for API tests.
 type PolicyEnforcer struct {
-	AllowView         bool
-	AllowEdit         bool
-	AllowRaise        bool
-	AllowRaiseLP      bool
-	AllowLower        bool
-	AllowLowerLP      bool
+	//flags by scope
+	AllowCluster bool
+	AllowDomain  bool
+	AllowProject bool
+	//flags by action
+	AllowView    bool
+	AllowEdit    bool
+	AllowRaise   bool
+	AllowRaiseLP bool
+	AllowLower   bool
+	AllowLowerLP bool
+	//match by request attribute
 	RejectServiceType string
 }
 
@@ -42,7 +48,27 @@ func (e *PolicyEnforcer) Enforce(rule string, ctx policy.Context) bool {
 		return false
 	}
 	fields := strings.Split(rule, ":")
-	switch fields[len(fields)-1] {
+	if len(fields) != 2 {
+		return false
+	}
+	return e.allowScope(fields[0]) && e.allowAction(fields[1])
+}
+
+func (e *PolicyEnforcer) allowScope(scope string) bool {
+	switch scope {
+	case "project":
+		return e.AllowProject
+	case "domain":
+		return e.AllowDomain
+	case "cluster":
+		return e.AllowCluster
+	default:
+		return false
+	}
+}
+
+func (e *PolicyEnforcer) allowAction(action string) bool {
+	switch action {
 	case "list", "show":
 		return e.AllowView
 	case "edit":

@@ -45,7 +45,7 @@ const testCommitmentsYAML = `
 			commitment_min_confirm_date: '1970-01-08T00:00:00Z' # one week after start of mock.Clock
 `
 
-func TestCommitmentLifecycleBeforeConfirmation(t *testing.T) {
+func TestCommitmentLifecycle(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
 		test.WithConfig(testCommitmentsYAML),
@@ -160,6 +160,39 @@ func TestCommitmentLifecycleBeforeConfirmation(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments",
 		ExpectStatus: http.StatusOK,
 		ExpectBody:   assert.JSONObject{"commitments": []assert.JSONObject{resp1}},
+	}.Check(t, s.Handler)
+
+	//confirm the other commitment
+	s.Clock.StepBy(1 * time.Hour)
+	_, err := s.DB.Exec("UPDATE project_commitments SET confirmed_at = $1, expires_at = $2",
+		s.Clock.Now(), s.Clock.Now().Add(2*time.Hour),
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	//check that the confirmation shows up on GET
+	resp1["confirmed_at"] = s.Clock.Now().Unix()
+	resp1["expires_at"] = s.Clock.Now().Add(2 * time.Hour).Unix()
+	assert.HTTPRequest{
+		Method:       http.MethodGet,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments",
+		ExpectStatus: http.StatusOK,
+		ExpectBody:   assert.JSONObject{"commitments": []assert.JSONObject{resp1}},
+	}.Check(t, s.Handler)
+
+	//confirmed deletions can be deleted by cluster admins
+	s.TokenValidator.Enforcer.AllowCluster = true
+	assert.HTTPRequest{
+		Method:       http.MethodDelete,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1",
+		ExpectStatus: http.StatusNoContent,
+	}.Check(t, s.Handler)
+	assert.HTTPRequest{
+		Method:       http.MethodGet,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments",
+		ExpectStatus: http.StatusOK,
+		ExpectBody:   assert.JSONObject{"commitments": []assert.JSONObject{}},
 	}.Check(t, s.Handler)
 }
 
@@ -366,7 +399,9 @@ func TestDeleteCommitmentErrorCases(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	//confirmed commitments cannot be deleted
+	//confirmed commitments cannot be deleted if the requester is only a project admin and not a cluster admin
+	s.TokenValidator.Enforcer.AllowEdit = true
+	s.TokenValidator.Enforcer.AllowCluster = false
 	assert.HTTPRequest{
 		Method:       http.MethodDelete,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1",
