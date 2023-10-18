@@ -20,6 +20,7 @@
 package db
 
 import (
+	"strings"
 	"time"
 
 	"github.com/go-gorp/gorp/v3"
@@ -27,6 +28,20 @@ import (
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 )
+
+// ResourceRef identifies an individual ProjectResource, DomainResource or ClusterResource.
+type ResourceRef struct {
+	ServiceID int64  `db:"service_id"`
+	Name      string `db:"name"`
+}
+
+// CompareResourceRefs is a compare function for ResourceRef (for use with slices.SortFunc etc.)
+func CompareResourceRefs(lhs, rhs ResourceRef) int {
+	if lhs.ServiceID != rhs.ServiceID {
+		return int(rhs.ServiceID - lhs.ServiceID)
+	}
+	return strings.Compare(lhs.Name, rhs.Name)
+}
 
 // ClusterCapacitor contains a record from the `cluster_capacitors` table.
 type ClusterCapacitor struct {
@@ -53,6 +68,11 @@ type ClusterResource struct {
 	RawCapacity       uint64 `db:"capacity"`
 	CapacityPerAZJSON string `db:"capacity_per_az"`
 	SubcapacitiesJSON string `db:"subcapacities"`
+}
+
+// Ref returns the ResourceRef for this resource.
+func (r ClusterResource) Ref() ResourceRef {
+	return ResourceRef{r.ServiceID, r.Name}
 }
 
 // Domain contains a record from the `domains` table.
