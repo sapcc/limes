@@ -153,12 +153,12 @@ func Test_ScrapeSuccess(t *testing.T) {
 	scrapedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt2 := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
-		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, desired_backend_quota, physical_usage) VALUES (1, 'capacity', 10, 0, 100, 10, 0);
-		INSERT INTO project_resources (service_id, name, usage) VALUES (1, 'capacity_portion', 0);
-		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota) VALUES (1, 'things', 0, 2, 42, '[{"index":0},{"index":1}]', 0);
-		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, desired_backend_quota, physical_usage) VALUES (2, 'capacity', 10, 0, 100, 12, 0);
-		INSERT INTO project_resources (service_id, name, usage) VALUES (2, 'capacity_portion', 0);
-		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota) VALUES (2, 'things', 0, 2, 42, '[{"index":0},{"index":1}]', 0);
+		INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota, physical_usage) VALUES (1, 1, 'capacity', 10, 0, 100, 10, 0);
+		INSERT INTO project_resources (id, service_id, name, usage) VALUES (2, 1, 'capacity_portion', 0);
+		INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota) VALUES (3, 1, 'things', 0, 2, 42, '[{"index":0},{"index":1}]', 0);
+		INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota, physical_usage) VALUES (4, 2, 'capacity', 10, 0, 100, 12, 0);
+		INSERT INTO project_resources (id, service_id, name, usage) VALUES (5, 2, 'capacity_portion', 0);
+		INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota) VALUES (6, 2, 'things', 0, 2, 42, '[{"index":0},{"index":1}]', 0);
 		UPDATE project_services SET scraped_at = %[1]d, scrape_duration_secs = 5, serialized_metrics = '{"capacity_usage":0,"things_usage":2}', checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
 		UPDATE project_services SET scraped_at = %[3]d, scrape_duration_secs = 5, serialized_metrics = '{"capacity_usage":0,"things_usage":2}', checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`,
@@ -182,10 +182,10 @@ func Test_ScrapeSuccess(t *testing.T) {
 	scrapedAt1 = s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt2 = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
-		UPDATE project_resources SET backend_quota = 110 WHERE service_id = 1 AND name = 'capacity';
-		UPDATE project_resources SET usage = 5, subresources = '[{"index":0},{"index":1},{"index":2},{"index":3},{"index":4}]' WHERE service_id = 1 AND name = 'things';
-		UPDATE project_resources SET backend_quota = 110 WHERE service_id = 2 AND name = 'capacity';
-		UPDATE project_resources SET usage = 5, subresources = '[{"index":0},{"index":1},{"index":2},{"index":3},{"index":4}]' WHERE service_id = 2 AND name = 'things';
+		UPDATE project_resources SET backend_quota = 110 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
+		UPDATE project_resources SET usage = 5, subresources = '[{"index":0},{"index":1},{"index":2},{"index":3},{"index":4}]' WHERE id = 3 AND service_id = 1 AND name = 'things';
+		UPDATE project_resources SET backend_quota = 110 WHERE id = 4 AND service_id = 2 AND name = 'capacity';
+		UPDATE project_resources SET usage = 5, subresources = '[{"index":0},{"index":1},{"index":2},{"index":3},{"index":4}]' WHERE id = 6 AND service_id = 2 AND name = 'things';
 		UPDATE project_services SET scraped_at = %[1]d, serialized_metrics = '{"capacity_usage":0,"things_usage":5}', checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
 		UPDATE project_services SET scraped_at = %[3]d, serialized_metrics = '{"capacity_usage":0,"things_usage":5}', checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`,
@@ -214,10 +214,10 @@ func Test_ScrapeSuccess(t *testing.T) {
 	scrapedAt1 = s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt2 = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
-		UPDATE project_resources SET quota = 20, backend_quota = 20, desired_backend_quota = 20 WHERE service_id = 1 AND name = 'capacity';
-		UPDATE project_resources SET quota = 13, backend_quota = 13, desired_backend_quota = 13 WHERE service_id = 1 AND name = 'things';
-		UPDATE project_resources SET quota = 20, backend_quota = 24, desired_backend_quota = 24 WHERE service_id = 2 AND name = 'capacity';
-		UPDATE project_resources SET quota = 13, backend_quota = 15, desired_backend_quota = 15 WHERE service_id = 2 AND name = 'things';
+		UPDATE project_resources SET quota = 20, backend_quota = 20, desired_backend_quota = 20 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
+		UPDATE project_resources SET quota = 13, backend_quota = 13, desired_backend_quota = 13 WHERE id = 3 AND service_id = 1 AND name = 'things';
+		UPDATE project_resources SET quota = 20, backend_quota = 24, desired_backend_quota = 24 WHERE id = 4 AND service_id = 2 AND name = 'capacity';
+		UPDATE project_resources SET quota = 13, backend_quota = 15, desired_backend_quota = 15 WHERE id = 6 AND service_id = 2 AND name = 'things';
 		UPDATE project_services SET scraped_at = %[1]d, checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
 		UPDATE project_services SET scraped_at = %[3]d, checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`,
@@ -257,8 +257,8 @@ func Test_ScrapeSuccess(t *testing.T) {
 	scrapedAt1 = s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt2 = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
-		UPDATE project_resources SET quota = 40, backend_quota = 40, desired_backend_quota = 40 WHERE service_id = 1 AND name = 'capacity';
-		UPDATE project_resources SET quota = 40, backend_quota = 48, desired_backend_quota = 48 WHERE service_id = 2 AND name = 'capacity';
+		UPDATE project_resources SET quota = 40, backend_quota = 40, desired_backend_quota = 40 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
+		UPDATE project_resources SET quota = 40, backend_quota = 48, desired_backend_quota = 48 WHERE id = 4 AND service_id = 2 AND name = 'capacity';
 		UPDATE project_services SET scraped_at = %[1]d, checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
 		UPDATE project_services SET scraped_at = %[3]d, checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`,
@@ -277,10 +277,10 @@ func Test_ScrapeSuccess(t *testing.T) {
 	scrapedAt1 = s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt2 = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
-		UPDATE project_resources SET usage = 20, physical_usage = 10 WHERE service_id = 1 AND name = 'capacity';
-		UPDATE project_resources SET usage = 5 WHERE service_id = 1 AND name = 'capacity_portion';
-		UPDATE project_resources SET usage = 20, physical_usage = 10 WHERE service_id = 2 AND name = 'capacity';
-		UPDATE project_resources SET usage = 5 WHERE service_id = 2 AND name = 'capacity_portion';
+		UPDATE project_resources SET usage = 20, physical_usage = 10 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
+		UPDATE project_resources SET usage = 5 WHERE id = 2 AND service_id = 1 AND name = 'capacity_portion';
+		UPDATE project_resources SET usage = 20, physical_usage = 10 WHERE id = 4 AND service_id = 2 AND name = 'capacity';
+		UPDATE project_resources SET usage = 5 WHERE id = 5 AND service_id = 2 AND name = 'capacity_portion';
 		UPDATE project_services SET scraped_at = %[1]d, serialized_metrics = '{"capacity_usage":20,"things_usage":5}', checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
 		UPDATE project_services SET scraped_at = %[3]d, serialized_metrics = '{"capacity_usage":20,"things_usage":5}', checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`,
@@ -368,12 +368,12 @@ func Test_ScrapeFailure(t *testing.T) {
 	checkedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	checkedAt2 := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
-		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (1, 'capacity', 10, 0, -1, 10);
-		INSERT INTO project_resources (service_id, name, usage) VALUES (1, 'capacity_portion', 0);
-		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (1, 'things', 0, 0, -1, 0);
-		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (2, 'capacity', 10, 0, -1, 12);
-		INSERT INTO project_resources (service_id, name, usage) VALUES (2, 'capacity_portion', 0);
-		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (2, 'things', 0, 0, -1, 0);
+		INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (1, 1, 'capacity', 10, 0, -1, 10);
+		INSERT INTO project_resources (id, service_id, name, usage) VALUES (2, 1, 'capacity_portion', 0);
+		INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (3, 1, 'things', 0, 0, -1, 0);
+		INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (4, 2, 'capacity', 10, 0, -1, 12);
+		INSERT INTO project_resources (id, service_id, name, usage) VALUES (5, 2, 'capacity_portion', 0);
+		INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (6, 2, 'things', 0, 0, -1, 0);
 		UPDATE project_services SET scraped_at = 0, checked_at = %[1]d, scrape_error_message = 'Scrape failed as requested', next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
 		UPDATE project_services SET scraped_at = 0, checked_at = %[3]d, scrape_error_message = 'Scrape failed as requested', next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`,
@@ -405,10 +405,10 @@ func Test_ScrapeFailure(t *testing.T) {
 	scrapedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt2 := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
-		UPDATE project_resources SET backend_quota = 100, physical_usage = 0 WHERE service_id = 1 AND name = 'capacity';
-		UPDATE project_resources SET usage = 2, backend_quota = 42, subresources = '[{"index":0},{"index":1}]' WHERE service_id = 1 AND name = 'things';
-		UPDATE project_resources SET backend_quota = 100, physical_usage = 0 WHERE service_id = 2 AND name = 'capacity';
-		UPDATE project_resources SET usage = 2, backend_quota = 42, subresources = '[{"index":0},{"index":1}]' WHERE service_id = 2 AND name = 'things';
+		UPDATE project_resources SET backend_quota = 100, physical_usage = 0 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
+		UPDATE project_resources SET usage = 2, backend_quota = 42, subresources = '[{"index":0},{"index":1}]' WHERE id = 3 AND service_id = 1 AND name = 'things';
+		UPDATE project_resources SET backend_quota = 100, physical_usage = 0 WHERE id = 4 AND service_id = 2 AND name = 'capacity';
+		UPDATE project_resources SET usage = 2, backend_quota = 42, subresources = '[{"index":0},{"index":1}]' WHERE id = 6 AND service_id = 2 AND name = 'things';
 		UPDATE project_services SET scraped_at = %[1]d, scrape_duration_secs = 5, serialized_metrics = '{"capacity_usage":0,"things_usage":2}', checked_at = %[1]d, scrape_error_message = '', next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
 		UPDATE project_services SET scraped_at = %[3]d, scrape_duration_secs = 5, serialized_metrics = '{"capacity_usage":0,"things_usage":2}', checked_at = %[3]d, scrape_error_message = '', next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`,
@@ -478,8 +478,8 @@ func Test_AutoApproveInitialQuota(t *testing.T) {
 
 	scrapedAt := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
-		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (1, 'approve', 10, 0, 10, 10);
-		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (1, 'noapprove', 0, 0, 20, 0);
+		INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (1, 1, 'approve', 10, 0, 10, 10);
+		INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (2, 1, 'noapprove', 0, 0, 20, 0);
 		UPDATE project_services SET scraped_at = %[1]d, scrape_duration_secs = 5, checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'autoapprovaltest';
 	`,
 		scrapedAt.Unix(), scrapedAt.Add(scrapeInterval).Unix(),
@@ -495,8 +495,8 @@ func Test_AutoApproveInitialQuota(t *testing.T) {
 
 	scrapedAt = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
-		UPDATE project_resources SET backend_quota = 20 WHERE service_id = 1 AND name = 'approve';
-		UPDATE project_resources SET backend_quota = 30 WHERE service_id = 1 AND name = 'noapprove';
+		UPDATE project_resources SET backend_quota = 20 WHERE id = 1 AND service_id = 1 AND name = 'approve';
+		UPDATE project_resources SET backend_quota = 30 WHERE id = 2 AND service_id = 1 AND name = 'noapprove';
 		UPDATE project_services SET scraped_at = %[1]d, checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'autoapprovaltest';
 	`,
 		scrapedAt.Unix(), scrapedAt.Add(scrapeInterval).Unix(),

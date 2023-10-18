@@ -1,18 +1,18 @@
 INSERT INTO cluster_services (id, type) VALUES (1, 'shared');
 INSERT INTO cluster_services (id, type) VALUES (2, 'unshared');
 
-INSERT INTO domain_resources (service_id, name, quota) VALUES (1, 'capacity', 0);
-INSERT INTO domain_resources (service_id, name, quota) VALUES (1, 'capacity_portion', 0);
-INSERT INTO domain_resources (service_id, name, quota) VALUES (1, 'things', 0);
-INSERT INTO domain_resources (service_id, name, quota) VALUES (2, 'capacity', 0);
-INSERT INTO domain_resources (service_id, name, quota) VALUES (2, 'capacity_portion', 0);
-INSERT INTO domain_resources (service_id, name, quota) VALUES (2, 'things', 0);
-INSERT INTO domain_resources (service_id, name, quota) VALUES (3, 'capacity', 0);
-INSERT INTO domain_resources (service_id, name, quota) VALUES (3, 'capacity_portion', 0);
-INSERT INTO domain_resources (service_id, name, quota) VALUES (3, 'things', 0);
-INSERT INTO domain_resources (service_id, name, quota) VALUES (4, 'capacity', 0);
-INSERT INTO domain_resources (service_id, name, quota) VALUES (4, 'capacity_portion', 0);
-INSERT INTO domain_resources (service_id, name, quota) VALUES (4, 'things', 0);
+INSERT INTO domain_resources (id, service_id, name, quota) VALUES (1, 1, 'capacity', 0);
+INSERT INTO domain_resources (id, service_id, name, quota) VALUES (10, 4, 'capacity', 0);
+INSERT INTO domain_resources (id, service_id, name, quota) VALUES (11, 4, 'capacity_portion', 0);
+INSERT INTO domain_resources (id, service_id, name, quota) VALUES (12, 4, 'things', 0);
+INSERT INTO domain_resources (id, service_id, name, quota) VALUES (2, 1, 'capacity_portion', 0);
+INSERT INTO domain_resources (id, service_id, name, quota) VALUES (3, 1, 'things', 0);
+INSERT INTO domain_resources (id, service_id, name, quota) VALUES (4, 2, 'capacity', 0);
+INSERT INTO domain_resources (id, service_id, name, quota) VALUES (5, 2, 'capacity_portion', 0);
+INSERT INTO domain_resources (id, service_id, name, quota) VALUES (6, 2, 'things', 0);
+INSERT INTO domain_resources (id, service_id, name, quota) VALUES (7, 3, 'capacity', 0);
+INSERT INTO domain_resources (id, service_id, name, quota) VALUES (8, 3, 'capacity_portion', 0);
+INSERT INTO domain_resources (id, service_id, name, quota) VALUES (9, 3, 'things', 0);
 
 INSERT INTO domain_services (id, domain_id, type) VALUES (1, 1, 'shared');
 INSERT INTO domain_services (id, domain_id, type) VALUES (2, 1, 'unshared');

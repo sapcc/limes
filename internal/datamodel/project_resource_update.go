@@ -22,6 +22,7 @@ package datamodel
 import (
 	"fmt"
 	"reflect"
+	"sort"
 
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
@@ -98,10 +99,18 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, doma
 		}
 	}
 
+	//go through resources in a defined order (to ensure deterministic test behavior)
+	allResourceNames := make([]string, 0, len(allResources))
+	for resName := range allResources {
+		allResourceNames = append(allResourceNames, resName)
+	}
+	sort.Strings(allResourceNames)
+
 	//for each resource...
 	hasChanges := false
 	var result ProjectResourceUpdateResult
-	for resName, state := range allResources {
+	for _, resName := range allResourceNames {
+		state := allResources[resName]
 		//skip project_resources that we do not know about (we do not delete them
 		//here because the ResourceInfo might only be missing temporarily because
 		//of an error in resource discovery; in that case, deleting the project

@@ -98,9 +98,9 @@ func Test_RateScrapeSuccess(t *testing.T) {
 	//we set up our initial rates correctly
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualf(`
-		INSERT INTO domain_resources (service_id, name, quota) VALUES (1, 'capacity', 0);
-		INSERT INTO domain_resources (service_id, name, quota) VALUES (1, 'capacity_portion', 0);
-		INSERT INTO domain_resources (service_id, name, quota) VALUES (1, 'things', 0);
+		INSERT INTO domain_resources (id, service_id, name, quota) VALUES (1, 1, 'capacity', 0);
+		INSERT INTO domain_resources (id, service_id, name, quota) VALUES (2, 1, 'capacity_portion', 0);
+		INSERT INTO domain_resources (id, service_id, name, quota) VALUES (3, 1, 'things', 0);
 		INSERT INTO domain_services (id, domain_id, type) VALUES (1, 1, 'unittest');
 		INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
 		INSERT INTO project_rates (service_id, name, rate_limit, window_ns, usage_as_bigint) VALUES (1, 'otherrate', 42, 120000000000, '');
