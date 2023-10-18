@@ -30,6 +30,8 @@ import (
 // and a set of records that we want to have, as identified by some key (type K).
 // Records that we want to keep are updated, missing records are created,
 // and existing records that we do not want to have are deleted.
+//
+// TODO This is not yet used in most of the places that could benefit from it.
 type SetUpdate[R any, K comparable] struct {
 	// All relevant records that currently exist in the DB.
 	ExistingRecords []R

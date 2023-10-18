@@ -65,6 +65,24 @@ func (p PerAZ[D]) Sum() D {
 	return result
 }
 
+// Normalize sums all data for unknown AZs into the pseudo-AZ "unknown".
+func (p PerAZ[D]) Normalize(knownAZs []limes.AvailabilityZone) PerAZ[D] {
+	unknowns := make(PerAZ[D])
+	result := make(PerAZ[D])
+	for az, data := range p {
+		if az == limes.AvailabilityZoneAny || slices.Contains(knownAZs, az) {
+			result[az] = data
+		} else {
+			unknowns[az] = data
+		}
+	}
+	if len(unknowns) > 0 {
+		unknownsSum := unknowns.Sum()
+		result[limes.AvailabilityZoneUnknown] = &unknownsSum
+	}
+	return result
+}
+
 // AZAwareData is an interface for types that can be put into the PerAZ container.
 type AZAwareData[Self any] interface {
 	// List of permitted types. This is required for type inference, as explained here:

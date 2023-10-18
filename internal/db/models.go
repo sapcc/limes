@@ -75,6 +75,15 @@ func (r ClusterResource) Ref() ResourceRef {
 	return ResourceRef{r.ServiceID, r.Name}
 }
 
+// ClusterAZResource contains a record from the `cluster_az_resources` table.
+type ClusterAZResource struct {
+	ResourceID        int64                  `db:"resource_id"`
+	AvailabilityZone  limes.AvailabilityZone `db:"az"`
+	RawCapacity       uint64                 `db:"raw_capacity"`
+	Usage             uint64                 `db:"usage"`
+	SubcapacitiesJSON string                 `db:"subcapacities"`
+}
+
 // Domain contains a record from the `domains` table.
 type Domain struct {
 	ID   int64  `db:"id"`
@@ -201,6 +210,7 @@ func initGorp(db *gorp.DbMap) {
 	db.AddTableWithName(ClusterCapacitor{}, "cluster_capacitors").SetKeys(false, "capacitor_id")
 	db.AddTableWithName(ClusterService{}, "cluster_services").SetKeys(true, "id")
 	db.AddTableWithName(ClusterResource{}, "cluster_resources").SetKeys(true, "id")
+	db.AddTableWithName(ClusterAZResource{}, "cluster_az_resources").SetKeys(false, "resource_id", "az")
 	db.AddTableWithName(Domain{}, "domains").SetKeys(true, "id")
 	db.AddTableWithName(DomainService{}, "domain_services").SetKeys(true, "id")
 	db.AddTableWithName(DomainResource{}, "domain_resources").SetKeys(true, "id")

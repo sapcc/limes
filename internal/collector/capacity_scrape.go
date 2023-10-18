@@ -244,9 +244,9 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 				CapacitorID: capacitor.CapacitorID,
 			}, nil
 		},
-		Update: func(res *db.ClusterResource) error {
+		Update: func(res *db.ClusterResource) (err error) {
 			serviceType := serviceTypeForID[res.ServiceID]
-			resourceDataPerAZ := capacityData[serviceType][res.Name]
+			resourceDataPerAZ := capacityData[serviceType][res.Name].Normalize(c.Cluster.Config.AvailabilityZones)
 
 			summedResourceData := resourceDataPerAZ.Sum()
 			res.RawCapacity = summedResourceData.Capacity
@@ -261,21 +261,65 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 				res.CapacityPerAZJSON = ""
 			}
 
-			if len(summedResourceData.Subcapacities) > 0 {
-				buf, err := json.Marshal(summedResourceData.Subcapacities)
-				if err != nil {
-					return fmt.Errorf("could not convert subcapacities to JSON: %w", err)
-				}
-				res.SubcapacitiesJSON = string(buf)
-			} else {
-				res.SubcapacitiesJSON = ""
-			}
-			return nil
+			res.SubcapacitiesJSON, err = renderSubcapacitiesToJSON(summedResourceData.Subcapacities)
+			return err
 		},
 	}
-	_, err = setUpdate.Execute(tx)
+	dbOwnedResources, err = setUpdate.Execute(tx)
 	if err != nil {
 		return err
+	}
+
+	//collect cluster_az_resources for the cluster_resources owned by this capacitor
+	dbOwnedResourceIDs := make([]any, len(dbOwnedResources))
+	for idx, res := range dbOwnedResources {
+		dbOwnedResourceIDs[idx] = res.ID
+	}
+	var dbAZResources []db.ClusterAZResource
+	whereClause, queryArgs := db.BuildSimpleWhereClause(map[string]any{"resource_id": dbOwnedResourceIDs}, 0)
+	_, err = tx.Select(&dbAZResources, `SELECT * FROM cluster_az_resources WHERE `+whereClause, queryArgs...)
+	if err != nil {
+		return fmt.Errorf("cannot inspect existing cluster AZ resources: %w", err)
+	}
+	dbAZResourcesByResourceID := make(map[int64][]db.ClusterAZResource)
+	for _, azRes := range dbAZResources {
+		dbAZResourcesByResourceID[azRes.ResourceID] = append(dbAZResourcesByResourceID[azRes.ResourceID], azRes)
+	}
+
+	//for each cluster_resources entry owned by this capacitor, maintain cluster_az_resources
+	for _, res := range dbOwnedResources {
+		serviceType := serviceTypeForID[res.ServiceID]
+		resourceDataPerAZ := capacityData[serviceType][res.Name].Normalize(c.Cluster.Config.AvailabilityZones)
+
+		var wantedAZs []limes.AvailabilityZone
+		for az := range resourceDataPerAZ {
+			wantedAZs = append(wantedAZs, az)
+		}
+
+		setUpdate := db.SetUpdate[db.ClusterAZResource, limes.AvailabilityZone]{
+			ExistingRecords: dbAZResourcesByResourceID[res.ID],
+			WantedKeys:      wantedAZs,
+			KeyForRecord: func(azRes db.ClusterAZResource) limes.AvailabilityZone {
+				return azRes.AvailabilityZone
+			},
+			Create: func(az limes.AvailabilityZone) (db.ClusterAZResource, error) {
+				return db.ClusterAZResource{
+					ResourceID:       res.ID,
+					AvailabilityZone: az,
+				}, nil
+			},
+			Update: func(azRes *db.ClusterAZResource) (err error) {
+				data := resourceDataPerAZ[azRes.AvailabilityZone]
+				azRes.RawCapacity = data.Capacity
+				azRes.Usage = data.Usage
+				azRes.SubcapacitiesJSON, err = renderSubcapacitiesToJSON(data.Subcapacities)
+				return err
+			},
+		}
+		_, err = setUpdate.Execute(tx)
+		if err != nil {
+			return err
+		}
 	}
 
 	_, err = tx.Update(&capacitor)
@@ -283,6 +327,17 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 		return err
 	}
 	return tx.Commit()
+}
+
+func renderSubcapacitiesToJSON(subcapacities []any) (string, error) {
+	if len(subcapacities) == 0 {
+		return "", nil
+	}
+	buf, err := json.Marshal(subcapacities)
+	if err != nil {
+		return "", fmt.Errorf("could not convert subcapacities to JSON: %w", err)
+	}
+	return string(buf), nil
 }
 
 func shouldStoreAZReport(capacityPerAZ core.PerAZ[core.CapacityData]) bool {
