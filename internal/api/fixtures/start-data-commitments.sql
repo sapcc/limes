@@ -32,25 +32,25 @@ INSERT INTO project_services (id, project_id, type, scraped_at, checked_at) VALU
 
 -- project_resources contains only boring placeholder values
 -- berlin
-INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (1, 'things',   10, 2, 10, 10);
-INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (1, 'capacity', 10, 2, 10, 10);
-INSERT INTO project_resources (service_id, name, usage) VALUES (1, 'capacity_portion', 1);
-INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (2, 'things',   10, 2, 10, 10);
-INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (2, 'capacity', 10, 2, 10, 10);
-INSERT INTO project_resources (service_id, name, usage) VALUES (2, 'capacity_portion', 1);
+INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (1,  1, 'things',   10, 2, 10, 10);
+INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (2,  1, 'capacity', 10, 2, 10, 10);
+INSERT INTO project_resources (id, service_id, name, usage) VALUES (3,  1, 'capacity_portion', 1);
+INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (4,  2, 'things',   10, 2, 10, 10);
+INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (5,  2, 'capacity', 10, 2, 10, 10);
+INSERT INTO project_resources (id, service_id, name, usage) VALUES (6,  2, 'capacity_portion', 1);
 -- dresden
-INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (3, 'things',   10, 2, 10, 10);
-INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (3, 'capacity', 10, 2, 10, 10);
-INSERT INTO project_resources (service_id, name, usage) VALUES (3, 'capacity_portion', 1);
-INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (4, 'things',   10, 2, 10, 10);
-INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (4, 'capacity', 10, 2, 10, 10);
-INSERT INTO project_resources (service_id, name, usage) VALUES (4, 'capacity_portion', 1);
+INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (7,  3, 'things',   10, 2, 10, 10);
+INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (8,  3, 'capacity', 10, 2, 10, 10);
+INSERT INTO project_resources (id, service_id, name, usage) VALUES (9,  3, 'capacity_portion', 1);
+INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (10, 4, 'things',   10, 2, 10, 10);
+INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (11, 4, 'capacity', 10, 2, 10, 10);
+INSERT INTO project_resources (id, service_id, name, usage) VALUES (12, 4, 'capacity_portion', 1);
 -- paris
-INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (5, 'things',   10, 2, 10, 10);
-INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (5, 'capacity', 10, 2, 10, 10);
-INSERT INTO project_resources (service_id, name, usage) VALUES (5, 'capacity_portion', 1);
-INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (6, 'things',   10, 2, 10, 10);
-INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (6, 'capacity', 10, 2, 10, 10);
-INSERT INTO project_resources (service_id, name, usage) VALUES (6, 'capacity_portion', 1);
+INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (13, 5, 'things',   10, 2, 10, 10);
+INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (14, 5, 'capacity', 10, 2, 10, 10);
+INSERT INTO project_resources (id, service_id, name, usage) VALUES (15, 5, 'capacity_portion', 1);
+INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (16, 6, 'things',   10, 2, 10, 10);
+INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (17, 6, 'capacity', 10, 2, 10, 10);
+INSERT INTO project_resources (id, service_id, name, usage) VALUES (18, 6, 'capacity_portion', 1);
 
 -- project_rates is empty: no rates configured

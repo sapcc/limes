@@ -116,11 +116,7 @@ func Test_Consistency(t *testing.T) {
 
 	//add a domain_resource that contradicts the cluster.QuotaConstraints; this
 	//should be fixed by CheckConsistency()
-	_, err = s.DB.Update(&db.DomainResource{
-		ServiceID: 1,
-		Name:      "capacity",
-		Quota:     200,
-	})
+	_, err = s.DB.Exec(`UPDATE domain_resources SET quota = 200 WHERE service_id = $1 AND name = $2`, 1, "capacity")
 	if err != nil {
 		t.Error(err)
 	}

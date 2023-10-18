@@ -179,7 +179,11 @@ func initDatabase(t *testing.T, fixtureFile string) *gorp.DbMap {
 	if fixtureFile != "" {
 		easypg.ExecSQLFile(t, dbm.Db, fixtureFile)
 	}
-	easypg.ResetPrimaryKeys(t, dbm.Db, "cluster_services", "domains", "domain_services", "projects", "project_commitments", "project_services")
+	easypg.ResetPrimaryKeys(t, dbm.Db,
+		"cluster_services", "cluster_resources",
+		"domains", "domain_services", "domain_resources",
+		"projects", "project_commitments", "project_services", "project_resources",
+	)
 
 	return dbm
 }

@@ -97,9 +97,6 @@ var (
 	getClusterServicesQuery = sqlext.SimplifyWhitespace(`
 		SELECT id, type FROM cluster_services
 	`)
-	getClusterResourceOwnershipQuery = sqlext.SimplifyWhitespace(`
-		SELECT cs.type, cr.name, cr.capacitor_id FROM cluster_resources cr JOIN cluster_services cs ON cr.service_id = cs.id
-	`)
 )
 
 func (c *Collector) discoverCapacityScrapeTask(_ context.Context, _ prometheus.Labels, lastConsistencyCheckAt *time.Time) (task capacityScrapeTask, err error) {
@@ -148,6 +145,7 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 	//collect mapping of cluster_services type names to IDs
 	//(these DB entries are maintained for us by checkConsistencyCluster)
 	serviceIDForType := make(map[string]int64)
+	serviceTypeForID := make(map[int64]string)
 	err := sqlext.ForeachRow(c.DB, getClusterServicesQuery, nil, func(rows *sql.Rows) error {
 		var (
 			serviceID   int64
@@ -155,6 +153,7 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 		)
 		err := rows.Scan(&serviceID, &serviceType)
 		if err == nil {
+			serviceTypeForID[serviceID] = serviceType
 			serviceIDForType[serviceType] = serviceID
 		}
 		return err
@@ -164,24 +163,18 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 	}
 
 	//collect ownership information for existing cluster_resources
-	capacitorIDForResource := make(map[string]map[string]string)
-	err = sqlext.ForeachRow(c.DB, getClusterResourceOwnershipQuery, nil, func(rows *sql.Rows) error {
-		var (
-			serviceType  string
-			resourceName string
-			capacitorID  string
-		)
-		err := rows.Scan(&serviceType, &resourceName, &capacitorID)
-		if err == nil {
-			if capacitorIDForResource[serviceType] == nil {
-				capacitorIDForResource[serviceType] = make(map[string]string)
-			}
-			capacitorIDForResource[serviceType][resourceName] = capacitorID
-		}
-		return err
-	})
+	var dbResources []db.ClusterResource
+	_, err = c.DB.Select(&dbResources, `SELECT * FROM cluster_resources`)
 	if err != nil {
-		return fmt.Errorf("cannot collect resource ownership mapping: %w", err)
+		return fmt.Errorf("cannot inspect existing cluster resources: %w", err)
+	}
+	dbResourceLookup := make(map[string]map[string]db.ClusterResource)
+	for _, res := range dbResources {
+		serviceType := serviceTypeForID[res.ServiceID]
+		if dbResourceLookup[serviceType] == nil {
+			dbResourceLookup[serviceType] = make(map[string]db.ClusterResource)
+		}
+		dbResourceLookup[serviceType][res.Name] = res
 	}
 
 	//scrape capacity data
@@ -257,10 +250,11 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 				res.SubcapacitiesJSON = string(buf)
 			}
 
-			if capacitorIDForResource[serviceType][resourceName] == "" {
-				err = tx.Insert(&res)
-			} else {
+			if _, exists := dbResourceLookup[serviceType][resourceName]; exists {
+				res.ID = dbResourceLookup[serviceType][resourceName].ID
 				_, err = tx.Update(&res)
+			} else {
+				err = tx.Insert(&res)
 			}
 			if err != nil {
 				return fmt.Errorf("could not write cluster resource %s/%s: %w", serviceType, resourceName, err)
@@ -269,10 +263,10 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 	}
 
 	//delete cluster_resources owned by this capacitor for which we do not have capacityData anymore
-	for serviceType, serviceMapping := range capacitorIDForResource {
-		for resourceName, owningCapacitorID := range serviceMapping {
+	for serviceType, serviceMapping := range dbResourceLookup {
+		for resourceName, res := range serviceMapping {
 			//do not delete if owned by a different capacitor
-			if owningCapacitorID != capacitor.CapacitorID {
+			if res.CapacitorID != capacitor.CapacitorID {
 				continue
 			}
 
@@ -282,10 +276,9 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 				continue
 			}
 
-			_, err = tx.Delete(&db.ClusterResource{
-				ServiceID: serviceIDForType[serviceType],
-				Name:      resourceName,
-			})
+			_, err = tx.Exec(`DELETE FROM cluster_resources WHERE service_id = $1 AND name = $2`,
+				serviceIDForType[serviceType], resourceName,
+			)
 			if err != nil {
 				return fmt.Errorf("could not cleanup cluster resource %s/%s: %w", serviceType, resourceName, err)
 			}

@@ -46,12 +46,13 @@ type ClusterService struct {
 
 // ClusterResource contains a record from the `cluster_resources` table.
 type ClusterResource struct {
+	ID                int64  `db:"id"`
+	CapacitorID       string `db:"capacitor_id"`
 	ServiceID         int64  `db:"service_id"`
 	Name              string `db:"name"`
 	RawCapacity       uint64 `db:"capacity"`
 	CapacityPerAZJSON string `db:"capacity_per_az"`
 	SubcapacitiesJSON string `db:"subcapacities"`
-	CapacitorID       string `db:"capacitor_id"`
 }
 
 // Domain contains a record from the `domains` table.
@@ -70,6 +71,7 @@ type DomainService struct {
 
 // DomainResource contains a record from the `domain_resources` table.
 type DomainResource struct {
+	ID        int64  `db:"id"`
 	ServiceID int64  `db:"service_id"`
 	Name      string `db:"name"`
 	Quota     uint64 `db:"quota"`
@@ -122,6 +124,7 @@ func (s ProjectService) Ref() ProjectServiceRef {
 // ProjectResource contains a record from the `project_resources` table. Quota
 // values are NULL for resources that do not track quota.
 type ProjectResource struct {
+	ID                  int64   `db:"id"`
 	ServiceID           int64   `db:"service_id"`
 	Name                string  `db:"name"`
 	Quota               *uint64 `db:"quota"`
@@ -177,13 +180,13 @@ type ProjectCommitment struct {
 func initGorp(db *gorp.DbMap) {
 	db.AddTableWithName(ClusterCapacitor{}, "cluster_capacitors").SetKeys(false, "capacitor_id")
 	db.AddTableWithName(ClusterService{}, "cluster_services").SetKeys(true, "id")
-	db.AddTableWithName(ClusterResource{}, "cluster_resources").SetKeys(false, "service_id", "name")
+	db.AddTableWithName(ClusterResource{}, "cluster_resources").SetKeys(true, "id")
 	db.AddTableWithName(Domain{}, "domains").SetKeys(true, "id")
 	db.AddTableWithName(DomainService{}, "domain_services").SetKeys(true, "id")
-	db.AddTableWithName(DomainResource{}, "domain_resources").SetKeys(false, "service_id", "name")
+	db.AddTableWithName(DomainResource{}, "domain_resources").SetKeys(true, "id")
 	db.AddTableWithName(Project{}, "projects").SetKeys(true, "id")
 	db.AddTableWithName(ProjectService{}, "project_services").SetKeys(true, "id")
-	db.AddTableWithName(ProjectResource{}, "project_resources").SetKeys(false, "service_id", "name")
+	db.AddTableWithName(ProjectResource{}, "project_resources").SetKeys(true, "id")
 	db.AddTableWithName(ProjectRate{}, "project_rates").SetKeys(false, "service_id", "name")
 	db.AddTableWithName(ProjectCommitment{}, "project_commitments").SetKeys(true, "id")
 }

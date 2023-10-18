@@ -210,4 +210,134 @@ var sqlMigrations = map[string]string{
 	"026_commitments.down.sql": `
 		DROP TABLE project_commitments;
 	`,
+
+	// NOTE: 027 could be done much easier by converting the old primary key into
+	// a UNIQUE constraint and creating a new BIGSERIAL column with primary key.
+	// However, this would cause `id` to be the last column, which I find very confusing.
+	//
+	// NOTE 2: The constraint renames are necessary to ensure that the schema will remain the same
+	// after the next rollup, when the table swaps in this migration will not happen anymore in new setups.
+	//
+	// Since we have the chance here, this also moves the `cluster_resources.capacitor_id` column further to the front.
+	"027_add_id_columns.up.sql": `
+		ALTER TABLE cluster_resources RENAME TO cluster_resources_old;
+		CREATE TABLE cluster_resources (
+			id               BIGSERIAL  NOT NULL PRIMARY KEY,
+			capacitor_id     TEXT       NOT NULL REFERENCES cluster_capacitors ON DELETE CASCADE,
+			service_id       BIGINT     NOT NULL REFERENCES cluster_services ON DELETE CASCADE,
+			name             TEXT       NOT NULL,
+			capacity         BIGINT     NOT NULL,
+			subcapacities    TEXT       NOT NULL DEFAULT '',
+			capacity_per_az  TEXT       NOT NULL DEFAULT '',
+			UNIQUE (service_id, name)
+		);
+		INSERT INTO cluster_resources (service_id, name, capacity, subcapacities, capacity_per_az, capacitor_id)
+			SELECT service_id, name, capacity, subcapacities, capacity_per_az, capacitor_id FROM cluster_resources_old
+			ORDER BY service_id, name;
+		DROP TABLE cluster_resources_old;
+		ALTER TABLE cluster_resources
+			RENAME CONSTRAINT cluster_resources_pkey1 TO cluster_resources_pkey;
+		ALTER TABLE cluster_resources
+			RENAME CONSTRAINT cluster_resources_capacitor_id_fkey1 TO cluster_resources_capacitor_id_fkey;
+		ALTER TABLE cluster_resources
+			RENAME CONSTRAINT cluster_resources_service_id_fkey1 TO cluster_resources_service_id_fkey;
+
+		ALTER TABLE domain_resources RENAME TO domain_resources_old;
+		CREATE TABLE domain_resources (
+			id          BIGSERIAL  NOT NULL PRIMARY KEY,
+			service_id  BIGINT     NOT NULL REFERENCES domain_services ON DELETE CASCADE,
+			name        TEXT       NOT NULL,
+			quota       BIGINT     NOT NULL,
+			UNIQUE (service_id, name)
+		);
+		INSERT INTO domain_resources (service_id, name, quota)
+			SELECT service_id, name, quota FROM domain_resources_old
+			ORDER BY service_id, name;
+		DROP TABLE domain_resources_old;
+		ALTER TABLE domain_resources
+			RENAME CONSTRAINT domain_resources_pkey1 TO domain_resources_pkey;
+		ALTER TABLE domain_resources
+			RENAME CONSTRAINT domain_resources_service_id_fkey1 TO domain_resources_service_id_fkey;
+
+		ALTER TABLE project_resources RENAME TO project_resources_old;
+		CREATE TABLE project_resources (
+			id                     BIGSERIAL  NOT NULL PRIMARY KEY,
+			service_id             BIGINT     NOT NULL REFERENCES project_services ON DELETE CASCADE,
+			name                   TEXT       NOT NULL,
+			quota                  BIGINT     DEFAULT NULL, -- null if resInfo.NoQuota == true
+			usage                  BIGINT     NOT NULL,
+			backend_quota          BIGINT     DEFAULT NULL,
+			subresources           TEXT       NOT NULL DEFAULT '',
+			desired_backend_quota  BIGINT     DEFAULT NULL,
+			physical_usage         BIGINT     DEFAULT NULL,
+			UNIQUE (service_id, name)
+		);
+		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage)
+			SELECT service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage FROM project_resources_old
+			ORDER BY service_id, name;
+		DROP TABLE project_resources_old;
+		ALTER TABLE project_resources
+			RENAME CONSTRAINT project_resources_pkey1 TO project_resources_pkey;
+		ALTER TABLE project_resources
+			RENAME CONSTRAINT project_resources_service_id_fkey1 TO project_resources_service_id_fkey;
+	`,
+	"027_add_id_columns.down.sql": `
+		ALTER TABLE cluster_resources RENAME TO cluster_resources_old;
+		CREATE TABLE cluster_resources (
+			service_id       BIGINT  NOT NULL REFERENCES cluster_services ON DELETE CASCADE,
+			name             TEXT    NOT NULL,
+			capacity         BIGINT  NOT NULL,
+			subcapacities    TEXT    NOT NULL DEFAULT '',
+			capacity_per_az  TEXT    NOT NULL DEFAULT '',
+			capacitor_id     TEXT    NOT NULL REFERENCES cluster_capacitors ON DELETE CASCADE,
+			PRIMARY KEY (service_id, name)
+		);
+		INSERT INTO cluster_resources (service_id, name, capacity, subcapacities, capacity_per_az, capacitor_id)
+			SELECT service_id, name, capacity, subcapacities, capacity_per_az, capacitor_id FROM cluster_resources_old
+			ORDER BY service_id, name;
+		DROP TABLE cluster_resources_old;
+		ALTER TABLE cluster_resources
+			RENAME CONSTRAINT cluster_resources_pkey1 TO cluster_resources_pkey;
+		ALTER TABLE cluster_resources
+			RENAME CONSTRAINT cluster_resources_capacitor_id_fkey1 TO cluster_resources_capacitor_id_fkey;
+		ALTER TABLE cluster_resources
+			RENAME CONSTRAINT cluster_resources_service_id_fkey1 TO cluster_resources_service_id_fkey;
+
+		ALTER TABLE domain_resources RENAME TO domain_resources_old;
+		CREATE TABLE domain_resources (
+			service_id  BIGINT  NOT NULL REFERENCES domain_services ON DELETE CASCADE,
+			name        TEXT    NOT NULL,
+			quota       BIGINT  NOT NULL,
+			PRIMARY KEY (service_id, name)
+		);
+		INSERT INTO domain_resources (service_id, name, quota)
+			SELECT service_id, name, quota FROM domain_resources_old
+			ORDER BY service_id, name;
+		DROP TABLE domain_resources_old;
+		ALTER TABLE domain_resources
+			RENAME CONSTRAINT domain_resources_pkey1 TO domain_resources_pkey;
+		ALTER TABLE domain_resources
+			RENAME CONSTRAINT domain_resources_service_id_fkey1 TO domain_resources_service_id_fkey;
+
+		ALTER TABLE project_resources RENAME TO project_resources_old;
+		CREATE TABLE project_resources (
+			service_id             BIGINT  NOT NULL REFERENCES project_services ON DELETE CASCADE,
+			name                   TEXT    NOT NULL,
+			quota                  BIGINT  DEFAULT NULL, -- null if resInfo.NoQuota == true
+			usage                  BIGINT  NOT NULL,
+			backend_quota          BIGINT  DEFAULT NULL,
+			subresources           TEXT    NOT NULL DEFAULT '',
+			desired_backend_quota  BIGINT  DEFAULT NULL,
+			physical_usage         BIGINT  DEFAULT NULL,
+			PRIMARY KEY (service_id, name)
+		);
+		INSERT INTO project_resources (service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage)
+			SELECT service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage FROM project_resources_old
+			ORDER BY service_id, name;
+		DROP TABLE project_resources_old;
+		ALTER TABLE project_resources
+			RENAME CONSTRAINT project_resources_pkey1 TO project_resources_pkey;
+		ALTER TABLE project_resources
+			RENAME CONSTRAINT project_resources_service_id_fkey1 TO project_resources_service_id_fkey;
+	`,
 }
