@@ -354,4 +354,18 @@ var sqlMigrations = map[string]string{
 	"028_add_cluster_az_resources.down.sql": `
 		DROP TABLE cluster_az_resources;
 	`,
+	"029_add_project_az_resources.up.sql": `
+		CREATE TABLE project_az_resources (
+			resource_id     BIGINT  NOT NULL REFERENCES project_resources ON DELETE CASCADE,
+			az              TEXT    NOT NULL,
+			quota           BIGINT  DEFAULT NULL, -- null if resInfo.NoQuota == true
+			usage           BIGINT  NOT NULL,
+			physical_usage  BIGINT  DEFAULT NULL,
+			subresources    TEXT    NOT NULL DEFAULT '',
+			UNIQUE (resource_id, az)
+		);
+	`,
+	"029_add_project_az_resources.down.sql": `
+		DROP TABLE project_az_resources;
+	`,
 }

@@ -23,6 +23,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -56,6 +57,12 @@ var (
 		ORDER BY stale DESC, next_scrape_at ASC, id ASC
 		-- find only one project to scrape per iteration
 		LIMIT 1
+	`)
+
+	findProjectAZResourcesForServiceQuery = sqlext.SimplifyWhitespace(`
+		SELECT par.* FROM project_az_resources par
+		JOIN project_resources pr ON par.resource_id = pr.id
+		WHERE pr.service_id = $1
 	`)
 
 	writeResourceScrapeSuccessQuery = sqlext.SimplifyWhitespace(`
@@ -268,6 +275,56 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 		return err
 	}
 
+	//list existing project_az_resources
+	var dbAZResources []db.ProjectAZResource
+	_, err = tx.Select(&dbAZResources, findProjectAZResourcesForServiceQuery, srv.ID)
+	if err != nil {
+		return fmt.Errorf("while reading existing project AZ resources: %w", err)
+	}
+	dbAZResourcesByResourceID := make(map[int64][]db.ProjectAZResource, len(resourceUpdateResult.DBResources))
+	for _, azRes := range dbAZResources {
+		dbAZResourcesByResourceID[azRes.ResourceID] = append(dbAZResourcesByResourceID[azRes.ResourceID], azRes)
+	}
+	allResourceNames := make([]string, len(resourceUpdateResult.DBResources))
+	dbResourcesByName := make(map[string]db.ProjectResource, len(resourceUpdateResult.DBResources))
+	for idx, res := range resourceUpdateResult.DBResources {
+		allResourceNames[idx] = res.Name
+		dbResourcesByName[res.Name] = res
+	}
+	sort.Strings(allResourceNames) //for deterministic test behavior
+
+	//update project_az_resources for each resource
+	for _, resourceName := range allResourceNames {
+		res := dbResourcesByName[resourceName]
+		usageData := resourceData[resourceName].UsageData.Normalize(c.Cluster.Config.AvailabilityZones)
+
+		setUpdate := db.SetUpdate[db.ProjectAZResource, limes.AvailabilityZone]{
+			ExistingRecords: dbAZResourcesByResourceID[res.ID],
+			WantedKeys:      usageData.Keys(),
+			KeyForRecord: func(azRes db.ProjectAZResource) limes.AvailabilityZone {
+				return azRes.AvailabilityZone
+			},
+			Create: func(az limes.AvailabilityZone) (db.ProjectAZResource, error) {
+				return db.ProjectAZResource{
+					ResourceID:       res.ID,
+					AvailabilityZone: az,
+				}, nil
+			},
+			Update: func(azRes *db.ProjectAZResource) (err error) {
+				data := usageData[azRes.AvailabilityZone]
+				azRes.Quota = nil // TODO: add the new quota distribution model that assigns quota per AZ
+				azRes.Usage = data.Usage
+				azRes.PhysicalUsage = data.PhysicalUsage
+				azRes.SubresourcesJSON, err = renderListToJSON("subresources", data.Subresources)
+				return err
+			},
+		}
+		_, err := setUpdate.Execute(tx)
+		if err != nil {
+			return err
+		}
+	}
+
 	//update scraped_at timestamp and reset the stale flag on this service so
 	//that we don't scrape it again immediately afterwards; also persist all other
 	//attributes that we have not written yet
@@ -340,9 +397,20 @@ func (c *Collector) writeDummyResources(dbDomain db.Domain, dbProject db.Project
 	if err != nil {
 		return err
 	}
-	//ignore result (we do not do ApplyBackendQuota here: this function is only
-	//called after scraping errors, so ApplyBackendQuota will likely fail, too)
-	_ = updateResult
+	//NOTE: We do not do ApplyBackendQuota here: This function is only
+	//called after scraping errors, so ApplyBackendQuota will likely fail, too.
+
+	//create dummy project_az_resources
+	for _, res := range updateResult.DBResources {
+		err := tx.Insert(&db.ProjectAZResource{
+			ResourceID:       res.ID,
+			AvailabilityZone: limes.AvailabilityZoneAny,
+			Usage:            0,
+		})
+		if err != nil {
+			return err
+		}
+	}
 
 	//update scraped_at timestamp and reset stale flag to make sure that we do
 	//not scrape this service again immediately afterwards if there are other

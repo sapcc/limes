@@ -261,7 +261,7 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 				res.CapacityPerAZJSON = ""
 			}
 
-			res.SubcapacitiesJSON, err = renderSubcapacitiesToJSON(summedResourceData.Subcapacities)
+			res.SubcapacitiesJSON, err = renderListToJSON("subcapacities", summedResourceData.Subcapacities)
 			return err
 		},
 	}
@@ -291,14 +291,9 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 		serviceType := serviceTypeForID[res.ServiceID]
 		resourceDataPerAZ := capacityData[serviceType][res.Name].Normalize(c.Cluster.Config.AvailabilityZones)
 
-		var wantedAZs []limes.AvailabilityZone
-		for az := range resourceDataPerAZ {
-			wantedAZs = append(wantedAZs, az)
-		}
-
 		setUpdate := db.SetUpdate[db.ClusterAZResource, limes.AvailabilityZone]{
 			ExistingRecords: dbAZResourcesByResourceID[res.ID],
-			WantedKeys:      wantedAZs,
+			WantedKeys:      resourceDataPerAZ.Keys(),
 			KeyForRecord: func(azRes db.ClusterAZResource) limes.AvailabilityZone {
 				return azRes.AvailabilityZone
 			},
@@ -312,7 +307,7 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 				data := resourceDataPerAZ[azRes.AvailabilityZone]
 				azRes.RawCapacity = data.Capacity
 				azRes.Usage = data.Usage
-				azRes.SubcapacitiesJSON, err = renderSubcapacitiesToJSON(data.Subcapacities)
+				azRes.SubcapacitiesJSON, err = renderListToJSON("subcapacities", data.Subcapacities)
 				return err
 			},
 		}
@@ -329,13 +324,13 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 	return tx.Commit()
 }
 
-func renderSubcapacitiesToJSON(subcapacities []any) (string, error) {
-	if len(subcapacities) == 0 {
+func renderListToJSON(attribute string, entries []any) (string, error) {
+	if len(entries) == 0 {
 		return "", nil
 	}
-	buf, err := json.Marshal(subcapacities)
+	buf, err := json.Marshal(entries)
 	if err != nil {
-		return "", fmt.Errorf("could not convert subcapacities to JSON: %w", err)
+		return "", fmt.Errorf("could not convert %s to JSON: %w", attribute, err)
 	}
 	return string(buf), nil
 }

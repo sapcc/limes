@@ -27,7 +27,6 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/jobloop"
@@ -153,6 +152,18 @@ func Test_ScrapeSuccess(t *testing.T) {
 	scrapedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt2 := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
+		INSERT INTO project_az_resources (resource_id, az, usage, physical_usage) VALUES (1, 'az-one', 0, 0);
+		INSERT INTO project_az_resources (resource_id, az, usage, physical_usage) VALUES (1, 'az-two', 0, 0);
+		INSERT INTO project_az_resources (resource_id, az, usage) VALUES (2, 'az-one', 0);
+		INSERT INTO project_az_resources (resource_id, az, usage) VALUES (2, 'az-two', 0);
+		INSERT INTO project_az_resources (resource_id, az, usage, subresources) VALUES (3, 'az-one', 2, '[{"index":0},{"index":1}]');
+		INSERT INTO project_az_resources (resource_id, az, usage, subresources) VALUES (3, 'az-two', 2, '[{"index":2},{"index":3}]');
+		INSERT INTO project_az_resources (resource_id, az, usage, physical_usage) VALUES (4, 'az-one', 0, 0);
+		INSERT INTO project_az_resources (resource_id, az, usage, physical_usage) VALUES (4, 'az-two', 0, 0);
+		INSERT INTO project_az_resources (resource_id, az, usage) VALUES (5, 'az-one', 0);
+		INSERT INTO project_az_resources (resource_id, az, usage) VALUES (5, 'az-two', 0);
+		INSERT INTO project_az_resources (resource_id, az, usage, subresources) VALUES (6, 'az-one', 2, '[{"index":0},{"index":1}]');
+		INSERT INTO project_az_resources (resource_id, az, usage, subresources) VALUES (6, 'az-two', 2, '[{"index":2},{"index":3}]');
 		INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota, physical_usage) VALUES (1, 1, 'capacity', 10, 0, 100, 10, 0);
 		INSERT INTO project_resources (id, service_id, name, usage) VALUES (2, 1, 'capacity_portion', 0);
 		INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota) VALUES (3, 1, 'things', 0, 4, 42, '[{"index":0},{"index":1},{"index":2},{"index":3}]', 0);
@@ -174,7 +185,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	//change the data that is reported by the plugin
 	s.Clock.StepBy(scrapeInterval)
 	plugin.StaticResourceData["capacity"].Quota = 110
-	plugin.StaticResourceData["things"].UsageData[limes.AvailabilityZoneAny].Usage = 5
+	plugin.StaticResourceData["things"].UsageData["az-two"].Usage = 3
 	//Scrape should pick up the changed resource data
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
@@ -182,6 +193,8 @@ func Test_ScrapeSuccess(t *testing.T) {
 	scrapedAt1 = s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt2 = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
+		UPDATE project_az_resources SET usage = 3, subresources = '[{"index":2},{"index":3},{"index":4}]' WHERE resource_id = 3 AND az = 'az-two';
+		UPDATE project_az_resources SET usage = 3, subresources = '[{"index":2},{"index":3},{"index":4}]' WHERE resource_id = 6 AND az = 'az-two';
 		UPDATE project_resources SET backend_quota = 110 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
 		UPDATE project_resources SET usage = 5, subresources = '[{"index":0},{"index":1},{"index":2},{"index":3},{"index":4}]' WHERE id = 3 AND service_id = 1 AND name = 'things';
 		UPDATE project_resources SET backend_quota = 110 WHERE id = 4 AND service_id = 2 AND name = 'capacity';
@@ -270,13 +283,17 @@ func Test_ScrapeSuccess(t *testing.T) {
 	//"capacity_portion" (otherwise this resource has been all zeroes this entire
 	//time)
 	s.Clock.StepBy(scrapeInterval)
-	plugin.StaticResourceData["capacity"].UsageData[limes.AvailabilityZoneAny].Usage = 20
+	plugin.StaticResourceData["capacity"].UsageData["az-one"].Usage = 20
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 
 	scrapedAt1 = s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt2 = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
+		UPDATE project_az_resources SET usage = 20, physical_usage = 10 WHERE resource_id = 1 AND az = 'az-one';
+		UPDATE project_az_resources SET usage = 5 WHERE resource_id = 2 AND az = 'az-one';
+		UPDATE project_az_resources SET usage = 20, physical_usage = 10 WHERE resource_id = 4 AND az = 'az-one';
+		UPDATE project_az_resources SET usage = 5 WHERE resource_id = 5 AND az = 'az-one';
 		UPDATE project_resources SET usage = 20, physical_usage = 10 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
 		UPDATE project_resources SET usage = 5 WHERE id = 2 AND service_id = 1 AND name = 'capacity_portion';
 		UPDATE project_resources SET usage = 20, physical_usage = 10 WHERE id = 4 AND service_id = 2 AND name = 'capacity';
@@ -368,6 +385,12 @@ func Test_ScrapeFailure(t *testing.T) {
 	checkedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	checkedAt2 := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
+		INSERT INTO project_az_resources (resource_id, az, usage) VALUES (1, 'any', 0);
+		INSERT INTO project_az_resources (resource_id, az, usage) VALUES (2, 'any', 0);
+		INSERT INTO project_az_resources (resource_id, az, usage) VALUES (3, 'any', 0);
+		INSERT INTO project_az_resources (resource_id, az, usage) VALUES (4, 'any', 0);
+		INSERT INTO project_az_resources (resource_id, az, usage) VALUES (5, 'any', 0);
+		INSERT INTO project_az_resources (resource_id, az, usage) VALUES (6, 'any', 0);
 		INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (1, 1, 'capacity', 10, 0, -1, 10);
 		INSERT INTO project_resources (id, service_id, name, usage) VALUES (2, 1, 'capacity_portion', 0);
 		INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (3, 1, 'things', 0, 0, -1, 0);
@@ -405,6 +428,24 @@ func Test_ScrapeFailure(t *testing.T) {
 	scrapedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt2 := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
+		DELETE FROM project_az_resources WHERE resource_id = 1 AND az = 'any';
+		INSERT INTO project_az_resources (resource_id, az, usage, physical_usage) VALUES (1, 'az-one', 0, 0);
+		INSERT INTO project_az_resources (resource_id, az, usage, physical_usage) VALUES (1, 'az-two', 0, 0);
+		DELETE FROM project_az_resources WHERE resource_id = 2 AND az = 'any';
+		INSERT INTO project_az_resources (resource_id, az, usage) VALUES (2, 'az-one', 0);
+		INSERT INTO project_az_resources (resource_id, az, usage) VALUES (2, 'az-two', 0);
+		DELETE FROM project_az_resources WHERE resource_id = 3 AND az = 'any';
+		INSERT INTO project_az_resources (resource_id, az, usage, subresources) VALUES (3, 'az-one', 2, '[{"index":0},{"index":1}]');
+		INSERT INTO project_az_resources (resource_id, az, usage, subresources) VALUES (3, 'az-two', 2, '[{"index":2},{"index":3}]');
+		DELETE FROM project_az_resources WHERE resource_id = 4 AND az = 'any';
+		INSERT INTO project_az_resources (resource_id, az, usage, physical_usage) VALUES (4, 'az-one', 0, 0);
+		INSERT INTO project_az_resources (resource_id, az, usage, physical_usage) VALUES (4, 'az-two', 0, 0);
+		DELETE FROM project_az_resources WHERE resource_id = 5 AND az = 'any';
+		INSERT INTO project_az_resources (resource_id, az, usage) VALUES (5, 'az-one', 0);
+		INSERT INTO project_az_resources (resource_id, az, usage) VALUES (5, 'az-two', 0);
+		DELETE FROM project_az_resources WHERE resource_id = 6 AND az = 'any';
+		INSERT INTO project_az_resources (resource_id, az, usage, subresources) VALUES (6, 'az-one', 2, '[{"index":0},{"index":1}]');
+		INSERT INTO project_az_resources (resource_id, az, usage, subresources) VALUES (6, 'az-two', 2, '[{"index":2},{"index":3}]');
 		UPDATE project_resources SET backend_quota = 100, physical_usage = 0 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
 		UPDATE project_resources SET usage = 4, backend_quota = 42, subresources = '[{"index":0},{"index":1},{"index":2},{"index":3}]' WHERE id = 3 AND service_id = 1 AND name = 'things';
 		UPDATE project_resources SET backend_quota = 100, physical_usage = 0 WHERE id = 4 AND service_id = 2 AND name = 'capacity';
@@ -478,6 +519,8 @@ func Test_AutoApproveInitialQuota(t *testing.T) {
 
 	scrapedAt := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
+		INSERT INTO project_az_resources (resource_id, az, usage) VALUES (1, 'any', 0);
+		INSERT INTO project_az_resources (resource_id, az, usage) VALUES (2, 'any', 0);
 		INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (1, 1, 'approve', 10, 0, 10, 10);
 		INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (2, 1, 'noapprove', 0, 0, 20, 0);
 		UPDATE project_services SET scraped_at = %[1]d, scrape_duration_secs = 5, checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'autoapprovaltest';

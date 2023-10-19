@@ -47,6 +47,8 @@ type ProjectResourceUpdateResult struct {
 	//DesiredBackendQuota. The caller should call ApplyBackendQuota() for these
 	//services once the DB transaction has been committed.
 	HasBackendQuotaDrift bool
+	//The set of resources that exists in the DB after the update.
+	DBResources []db.ProjectResource
 }
 
 // Run executes the given ProjectResourceUpdate operation:
@@ -170,6 +172,7 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, doma
 			}
 			hasChanges = true
 		}
+		result.DBResources = append(result.DBResources, res)
 
 		//check if we need to tell the caller to call ApplyBackendQuota after the tx
 		if !resInfo.NoQuota {
