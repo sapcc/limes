@@ -11,6 +11,18 @@
             "unit": "B",
             "quota_distribution_model": "hierarchical",
             "capacity": 185,
+            "per_availability_zone": [
+              {
+                "name": "az-one",
+                "capacity": 90,
+                "usage": 12
+              },
+              {
+                "name": "az-two",
+                "capacity": 95,
+                "usage": 15
+              }
+            ],
             "domains_quota": 25,
             "usage": 6,
             "physical_usage": 5
@@ -56,20 +68,6 @@
             "quota_distribution_model": "hierarchical",
             "capacity": 208,
             "raw_capacity": 139,
-            "per_availability_zone": [
-              {
-                "name": "az-one",
-                "capacity": 103,
-                "raw_capacity": 69,
-                "usage": 13
-              },
-              {
-                "name": "az-two",
-                "capacity": 103,
-                "raw_capacity": 69,
-                "usage": 13
-              }
-            ],
             "domains_quota": 70,
             "usage": 6
           }

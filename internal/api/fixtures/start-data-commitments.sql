@@ -32,25 +32,57 @@ INSERT INTO project_services (id, project_id, type, scraped_at, checked_at) VALU
 
 -- project_resources contains only boring placeholder values
 -- berlin
-INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (1,  1, 'things',   10, 2, 10, 10);
-INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (2,  1, 'capacity', 10, 2, 10, 10);
-INSERT INTO project_resources (id, service_id, name, usage) VALUES (3,  1, 'capacity_portion', 1);
-INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (4,  2, 'things',   10, 2, 10, 10);
-INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (5,  2, 'capacity', 10, 2, 10, 10);
-INSERT INTO project_resources (id, service_id, name, usage) VALUES (6,  2, 'capacity_portion', 1);
+INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (1,  1, 'things',   10, 4, 10, 10);
+INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (2,  1, 'capacity', 10, 4, 10, 10);
+INSERT INTO project_resources (id, service_id, name, usage) VALUES (3,  1, 'capacity_portion', 2);
+INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (4,  2, 'things',   10, 4, 10, 10);
+INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (5,  2, 'capacity', 10, 4, 10, 10);
+INSERT INTO project_resources (id, service_id, name, usage) VALUES (6,  2, 'capacity_portion', 2);
 -- dresden
-INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (7,  3, 'things',   10, 2, 10, 10);
-INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (8,  3, 'capacity', 10, 2, 10, 10);
-INSERT INTO project_resources (id, service_id, name, usage) VALUES (9,  3, 'capacity_portion', 1);
-INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (10, 4, 'things',   10, 2, 10, 10);
-INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (11, 4, 'capacity', 10, 2, 10, 10);
-INSERT INTO project_resources (id, service_id, name, usage) VALUES (12, 4, 'capacity_portion', 1);
+INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (7,  3, 'things',   10, 4, 10, 10);
+INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (8,  3, 'capacity', 10, 4, 10, 10);
+INSERT INTO project_resources (id, service_id, name, usage) VALUES (9,  3, 'capacity_portion', 2);
+INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (10, 4, 'things',   10, 4, 10, 10);
+INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (11, 4, 'capacity', 10, 4, 10, 10);
+INSERT INTO project_resources (id, service_id, name, usage) VALUES (12, 4, 'capacity_portion', 2);
 -- paris
-INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (13, 5, 'things',   10, 2, 10, 10);
-INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (14, 5, 'capacity', 10, 2, 10, 10);
-INSERT INTO project_resources (id, service_id, name, usage) VALUES (15, 5, 'capacity_portion', 1);
-INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (16, 6, 'things',   10, 2, 10, 10);
-INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (17, 6, 'capacity', 10, 2, 10, 10);
-INSERT INTO project_resources (id, service_id, name, usage) VALUES (18, 6, 'capacity_portion', 1);
+INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (13, 5, 'things',   10, 4, 10, 10);
+INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (14, 5, 'capacity', 10, 4, 10, 10);
+INSERT INTO project_resources (id, service_id, name, usage) VALUES (15, 5, 'capacity_portion', 2);
+INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (16, 6, 'things',   10, 4, 10, 10);
+INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (17, 6, 'capacity', 10, 4, 10, 10);
+INSERT INTO project_resources (id, service_id, name, usage) VALUES (18, 6, 'capacity_portion', 2);
+
+-- project_az_resources has "things" as non-AZ-aware and "capacity" as AZ-aware with an even split
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (1, 'any', 4);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (2, 'az-one', 2);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (2, 'az-two', 2);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (3, 'az-one', 1);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (3, 'az-two', 1);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (4, 'any', 4);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (5, 'az-one', 2);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (5, 'az-two', 2);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (6, 'az-one', 1);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (6, 'az-two', 1);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (7, 'any', 4);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (8, 'az-one', 2);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (8, 'az-two', 2);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (9, 'az-one', 1);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (9, 'az-two', 1);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (10, 'any', 4);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (11, 'az-one', 2);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (11, 'az-two', 2);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (12, 'az-one', 1);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (12, 'az-two', 1);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (13, 'any', 4);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (14, 'az-one', 2);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (14, 'az-two', 2);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (15, 'az-one', 1);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (15, 'az-two', 1);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (16, 'any', 4);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (17, 'az-one', 2);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (17, 'az-two', 2);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (18, 'az-one', 1);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (18, 'az-two', 1);
 
 -- project_rates is empty: no rates configured
