@@ -76,7 +76,7 @@ func (p *GenericQuotaPlugin) Init(provider *gophercloud.ProviderClient, eo gophe
 		"things": {
 			Quota: 42,
 			UsageData: core.InAnyAZ(core.UsageData{
-				Usage: 2,
+				Usage: 4,
 			}),
 		},
 		"capacity": {

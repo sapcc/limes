@@ -155,12 +155,12 @@ func Test_ScrapeSuccess(t *testing.T) {
 	tr.DBChanges().AssertEqualf(`
 		INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota, physical_usage) VALUES (1, 1, 'capacity', 10, 0, 100, 10, 0);
 		INSERT INTO project_resources (id, service_id, name, usage) VALUES (2, 1, 'capacity_portion', 0);
-		INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota) VALUES (3, 1, 'things', 0, 2, 42, '[{"index":0},{"index":1}]', 0);
+		INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota) VALUES (3, 1, 'things', 0, 4, 42, '[{"index":0},{"index":1},{"index":2},{"index":3}]', 0);
 		INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota, physical_usage) VALUES (4, 2, 'capacity', 10, 0, 100, 12, 0);
 		INSERT INTO project_resources (id, service_id, name, usage) VALUES (5, 2, 'capacity_portion', 0);
-		INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota) VALUES (6, 2, 'things', 0, 2, 42, '[{"index":0},{"index":1}]', 0);
-		UPDATE project_services SET scraped_at = %[1]d, scrape_duration_secs = 5, serialized_metrics = '{"capacity_usage":0,"things_usage":2}', checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
-		UPDATE project_services SET scraped_at = %[3]d, scrape_duration_secs = 5, serialized_metrics = '{"capacity_usage":0,"things_usage":2}', checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+		INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota) VALUES (6, 2, 'things', 0, 4, 42, '[{"index":0},{"index":1},{"index":2},{"index":3}]', 0);
+		UPDATE project_services SET scraped_at = %[1]d, scrape_duration_secs = 5, serialized_metrics = '{"capacity_usage":0,"things_usage":4}', checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = %[3]d, scrape_duration_secs = 5, serialized_metrics = '{"capacity_usage":0,"things_usage":4}', checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`,
 		scrapedAt1.Unix(), scrapedAt1.Add(scrapeInterval).Unix(),
 		scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),
@@ -406,11 +406,11 @@ func Test_ScrapeFailure(t *testing.T) {
 	scrapedAt2 := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_resources SET backend_quota = 100, physical_usage = 0 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
-		UPDATE project_resources SET usage = 2, backend_quota = 42, subresources = '[{"index":0},{"index":1}]' WHERE id = 3 AND service_id = 1 AND name = 'things';
+		UPDATE project_resources SET usage = 4, backend_quota = 42, subresources = '[{"index":0},{"index":1},{"index":2},{"index":3}]' WHERE id = 3 AND service_id = 1 AND name = 'things';
 		UPDATE project_resources SET backend_quota = 100, physical_usage = 0 WHERE id = 4 AND service_id = 2 AND name = 'capacity';
-		UPDATE project_resources SET usage = 2, backend_quota = 42, subresources = '[{"index":0},{"index":1}]' WHERE id = 6 AND service_id = 2 AND name = 'things';
-		UPDATE project_services SET scraped_at = %[1]d, scrape_duration_secs = 5, serialized_metrics = '{"capacity_usage":0,"things_usage":2}', checked_at = %[1]d, scrape_error_message = '', next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
-		UPDATE project_services SET scraped_at = %[3]d, scrape_duration_secs = 5, serialized_metrics = '{"capacity_usage":0,"things_usage":2}', checked_at = %[3]d, scrape_error_message = '', next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+		UPDATE project_resources SET usage = 4, backend_quota = 42, subresources = '[{"index":0},{"index":1},{"index":2},{"index":3}]' WHERE id = 6 AND service_id = 2 AND name = 'things';
+		UPDATE project_services SET scraped_at = %[1]d, scrape_duration_secs = 5, serialized_metrics = '{"capacity_usage":0,"things_usage":4}', checked_at = %[1]d, scrape_error_message = '', next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = %[3]d, scrape_duration_secs = 5, serialized_metrics = '{"capacity_usage":0,"things_usage":4}', checked_at = %[3]d, scrape_error_message = '', next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`,
 		scrapedAt1.Unix(), scrapedAt1.Add(scrapeInterval).Unix(),
 		scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),
