@@ -35,7 +35,7 @@ type ResourceBehavior struct {
 	FullResourceNameRx       regexpext.BoundedRegexp             `yaml:"resource"`
 	ScopeRx                  regexpext.BoundedRegexp             `yaml:"scope"`
 	MaxBurstMultiplier       *limesresources.BurstingMultiplier  `yaml:"max_burst_multiplier"`
-	OvercommitFactor         float64                             `yaml:"overcommit_factor"`
+	OvercommitFactor         OvercommitFactor                    `yaml:"overcommit_factor"`
 	ScalesWith               ResourceRef                         `yaml:"scales_with"`
 	ScalingFactor            float64                             `yaml:"scaling_factor"`
 	MinNonZeroProjectQuota   uint64                              `yaml:"min_nonzero_project_quota"`
@@ -153,4 +153,12 @@ func (r *ResourceRef) UnmarshalYAML(unmarshal func(any) error) error {
 
 	*r = ResourceRef{fields[0], fields[1]}
 	return nil
+}
+
+// OvercommitFactor is a float64 with a convenience method.
+type OvercommitFactor float64
+
+// ApplyTo converts a raw capacity into an effective capacity.
+func (f OvercommitFactor) ApplyTo(rawCapacity uint64) uint64 {
+	return uint64(float64(rawCapacity) * float64(f))
 }

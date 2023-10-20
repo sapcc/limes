@@ -179,7 +179,7 @@ func GetClusterResources(cluster *core.Cluster, dbi db.Interface, filter Filter)
 				resource.Capacity = rawCapacity
 			} else {
 				resource.RawCapacity = rawCapacity
-				capacity := uint64(float64(*rawCapacity) * overcommitFactor)
+				capacity := overcommitFactor.ApplyTo(*rawCapacity)
 				resource.Capacity = &capacity
 			}
 			if subcapacities != nil && *subcapacities != "" && filter.IsSubcapacityAllowed(serviceType, *resourceName) {
@@ -309,7 +309,7 @@ func findInClusterReport(cluster *core.Cluster, report *limesresources.ClusterRe
 	return service, resource
 }
 
-func getClusterAZReports(capacityPerAZ string, overcommitFactor float64) (limesresources.ClusterAvailabilityZoneReports, error) {
+func getClusterAZReports(capacityPerAZ string, overcommitFactor core.OvercommitFactor) (limesresources.ClusterAvailabilityZoneReports, error) {
 	azReports := make(limesresources.ClusterAvailabilityZoneReports)
 	err := json.Unmarshal([]byte(capacityPerAZ), &azReports)
 	if err != nil {
@@ -319,7 +319,7 @@ func getClusterAZReports(capacityPerAZ string, overcommitFactor float64) (limesr
 	if overcommitFactor != 0 {
 		for _, report := range azReports {
 			report.RawCapacity = report.Capacity
-			report.Capacity = uint64(float64(report.Capacity) * overcommitFactor)
+			report.Capacity = overcommitFactor.ApplyTo(report.Capacity)
 		}
 	}
 

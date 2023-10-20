@@ -545,7 +545,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			for _, report := range azReports {
 				ch <- prometheus.MustNewConstMetric(
 					clusterCapacityPerAZDesc,
-					prometheus.GaugeValue, float64(report.Capacity)*overcommitFactor,
+					prometheus.GaugeValue, float64(overcommitFactor.ApplyTo(report.Capacity)),
 					string(report.Name), serviceType, resourceName,
 				)
 				if report.Usage != 0 {
@@ -560,7 +560,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 
 		ch <- prometheus.MustNewConstMetric(
 			clusterCapacityDesc,
-			prometheus.GaugeValue, float64(capacity)*overcommitFactor,
+			prometheus.GaugeValue, float64(overcommitFactor.ApplyTo(capacity)),
 			serviceType, resourceName,
 		)
 
