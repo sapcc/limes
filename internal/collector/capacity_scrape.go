@@ -29,12 +29,10 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
-	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
 
-	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/util"
 )
@@ -232,7 +230,7 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 	}
 	slices.SortFunc(wantedResources, db.CompareResourceRefs) //for deterministic test behavior
 
-	//create, update and delete cluster_resources for this capacitor as needed
+	//create and delete cluster_resources for this capacitor as needed
 	setUpdate := db.SetUpdate[db.ClusterResource, db.ResourceRef]{
 		ExistingRecords: dbOwnedResources,
 		WantedKeys:      wantedResources,
@@ -244,26 +242,7 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 				CapacitorID: capacitor.CapacitorID,
 			}, nil
 		},
-		Update: func(res *db.ClusterResource) (err error) {
-			serviceType := serviceTypeForID[res.ServiceID]
-			resourceDataPerAZ := capacityData[serviceType][res.Name].Normalize(c.Cluster.Config.AvailabilityZones)
-
-			summedResourceData := resourceDataPerAZ.Sum()
-			res.RawCapacity = summedResourceData.Capacity
-
-			if shouldStoreAZReport(resourceDataPerAZ) {
-				buf, err := json.Marshal(convertAZReport(resourceDataPerAZ))
-				if err != nil {
-					return fmt.Errorf("could not convert capacities per AZ to JSON: %w", err)
-				}
-				res.CapacityPerAZJSON = string(buf)
-			} else {
-				res.CapacityPerAZJSON = ""
-			}
-
-			res.SubcapacitiesJSON, err = renderListToJSON("subcapacities", summedResourceData.Subcapacities)
-			return err
-		},
+		Update: func(res *db.ClusterResource) (err error) { return nil },
 	}
 	dbOwnedResources, err = setUpdate.Execute(tx)
 	if err != nil {
@@ -333,25 +312,4 @@ func renderListToJSON(attribute string, entries []any) (string, error) {
 		return "", fmt.Errorf("could not convert %s to JSON: %w", attribute, err)
 	}
 	return string(buf), nil
-}
-
-func shouldStoreAZReport(capacityPerAZ core.PerAZ[core.CapacityData]) bool {
-	for az := range capacityPerAZ {
-		if az != limes.AvailabilityZoneAny {
-			return true
-		}
-	}
-	return false
-}
-
-func convertAZReport(capacityPerAZ core.PerAZ[core.CapacityData]) limesresources.ClusterAvailabilityZoneReports {
-	report := make(limesresources.ClusterAvailabilityZoneReports, len(capacityPerAZ))
-	for azName, azData := range capacityPerAZ {
-		report[azName] = &limesresources.ClusterAvailabilityZoneReport{
-			Name:     azName,
-			Capacity: azData.Capacity,
-			Usage:    azData.Usage,
-		}
-	}
-	return report
 }

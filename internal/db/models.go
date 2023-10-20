@@ -61,13 +61,10 @@ type ClusterService struct {
 
 // ClusterResource contains a record from the `cluster_resources` table.
 type ClusterResource struct {
-	ID                int64  `db:"id"`
-	CapacitorID       string `db:"capacitor_id"`
-	ServiceID         int64  `db:"service_id"`
-	Name              string `db:"name"`
-	RawCapacity       uint64 `db:"capacity"`
-	CapacityPerAZJSON string `db:"capacity_per_az"`
-	SubcapacitiesJSON string `db:"subcapacities"`
+	ID          int64  `db:"id"`
+	CapacitorID string `db:"capacitor_id"`
+	ServiceID   int64  `db:"service_id"`
+	Name        string `db:"name"`
 }
 
 // Ref returns the ResourceRef for this resource.
@@ -157,11 +154,8 @@ type ProjectResource struct {
 	ServiceID           int64   `db:"service_id"`
 	Name                string  `db:"name"`
 	Quota               *uint64 `db:"quota"`
-	Usage               uint64  `db:"usage"`
-	PhysicalUsage       *uint64 `db:"physical_usage"`
 	BackendQuota        *int64  `db:"backend_quota"`
 	DesiredBackendQuota *uint64 `db:"desired_backend_quota"`
-	SubresourcesJSON    string  `db:"subresources"`
 }
 
 // Ref returns the ResourceRef for this resource.

@@ -164,12 +164,12 @@ func Test_ScrapeSuccess(t *testing.T) {
 		INSERT INTO project_az_resources (resource_id, az, usage) VALUES (5, 'az-two', 0);
 		INSERT INTO project_az_resources (resource_id, az, usage, subresources) VALUES (6, 'az-one', 2, '[{"index":0},{"index":1}]');
 		INSERT INTO project_az_resources (resource_id, az, usage, subresources) VALUES (6, 'az-two', 2, '[{"index":2},{"index":3}]');
-		INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota, physical_usage) VALUES (1, 1, 'capacity', 10, 0, 100, 10, 0);
-		INSERT INTO project_resources (id, service_id, name, usage) VALUES (2, 1, 'capacity_portion', 0);
-		INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota) VALUES (3, 1, 'things', 0, 4, 42, '[{"index":0},{"index":1},{"index":2},{"index":3}]', 0);
-		INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota, physical_usage) VALUES (4, 2, 'capacity', 10, 0, 100, 12, 0);
-		INSERT INTO project_resources (id, service_id, name, usage) VALUES (5, 2, 'capacity_portion', 0);
-		INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota) VALUES (6, 2, 'things', 0, 4, 42, '[{"index":0},{"index":1},{"index":2},{"index":3}]', 0);
+		INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desired_backend_quota) VALUES (1, 1, 'capacity', 10, 100, 10);
+		INSERT INTO project_resources (id, service_id, name) VALUES (2, 1, 'capacity_portion');
+		INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desired_backend_quota) VALUES (3, 1, 'things', 0, 42, 0);
+		INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desired_backend_quota) VALUES (4, 2, 'capacity', 10, 100, 12);
+		INSERT INTO project_resources (id, service_id, name) VALUES (5, 2, 'capacity_portion');
+		INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desired_backend_quota) VALUES (6, 2, 'things', 0, 42, 0);
 		UPDATE project_services SET scraped_at = %[1]d, scrape_duration_secs = 5, serialized_metrics = '{"capacity_usage":0,"things_usage":4}', checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
 		UPDATE project_services SET scraped_at = %[3]d, scrape_duration_secs = 5, serialized_metrics = '{"capacity_usage":0,"things_usage":4}', checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`,
@@ -196,9 +196,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 		UPDATE project_az_resources SET usage = 3, subresources = '[{"index":2},{"index":3},{"index":4}]' WHERE resource_id = 3 AND az = 'az-two';
 		UPDATE project_az_resources SET usage = 3, subresources = '[{"index":2},{"index":3},{"index":4}]' WHERE resource_id = 6 AND az = 'az-two';
 		UPDATE project_resources SET backend_quota = 110 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
-		UPDATE project_resources SET usage = 5, subresources = '[{"index":0},{"index":1},{"index":2},{"index":3},{"index":4}]' WHERE id = 3 AND service_id = 1 AND name = 'things';
 		UPDATE project_resources SET backend_quota = 110 WHERE id = 4 AND service_id = 2 AND name = 'capacity';
-		UPDATE project_resources SET usage = 5, subresources = '[{"index":0},{"index":1},{"index":2},{"index":3},{"index":4}]' WHERE id = 6 AND service_id = 2 AND name = 'things';
 		UPDATE project_services SET scraped_at = %[1]d, serialized_metrics = '{"capacity_usage":0,"things_usage":5}', checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
 		UPDATE project_services SET scraped_at = %[3]d, serialized_metrics = '{"capacity_usage":0,"things_usage":5}', checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`,
@@ -294,10 +292,6 @@ func Test_ScrapeSuccess(t *testing.T) {
 		UPDATE project_az_resources SET usage = 5 WHERE resource_id = 2 AND az = 'az-one';
 		UPDATE project_az_resources SET usage = 20, physical_usage = 10 WHERE resource_id = 4 AND az = 'az-one';
 		UPDATE project_az_resources SET usage = 5 WHERE resource_id = 5 AND az = 'az-one';
-		UPDATE project_resources SET usage = 20, physical_usage = 10 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
-		UPDATE project_resources SET usage = 5 WHERE id = 2 AND service_id = 1 AND name = 'capacity_portion';
-		UPDATE project_resources SET usage = 20, physical_usage = 10 WHERE id = 4 AND service_id = 2 AND name = 'capacity';
-		UPDATE project_resources SET usage = 5 WHERE id = 5 AND service_id = 2 AND name = 'capacity_portion';
 		UPDATE project_services SET scraped_at = %[1]d, serialized_metrics = '{"capacity_usage":20,"things_usage":5}', checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
 		UPDATE project_services SET scraped_at = %[3]d, serialized_metrics = '{"capacity_usage":20,"things_usage":5}', checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`,
@@ -391,12 +385,12 @@ func Test_ScrapeFailure(t *testing.T) {
 		INSERT INTO project_az_resources (resource_id, az, usage) VALUES (4, 'any', 0);
 		INSERT INTO project_az_resources (resource_id, az, usage) VALUES (5, 'any', 0);
 		INSERT INTO project_az_resources (resource_id, az, usage) VALUES (6, 'any', 0);
-		INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (1, 1, 'capacity', 10, 0, -1, 10);
-		INSERT INTO project_resources (id, service_id, name, usage) VALUES (2, 1, 'capacity_portion', 0);
-		INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (3, 1, 'things', 0, 0, -1, 0);
-		INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (4, 2, 'capacity', 10, 0, -1, 12);
-		INSERT INTO project_resources (id, service_id, name, usage) VALUES (5, 2, 'capacity_portion', 0);
-		INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (6, 2, 'things', 0, 0, -1, 0);
+		INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desired_backend_quota) VALUES (1, 1, 'capacity', 10, -1, 10);
+		INSERT INTO project_resources (id, service_id, name) VALUES (2, 1, 'capacity_portion');
+		INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desired_backend_quota) VALUES (3, 1, 'things', 0, -1, 0);
+		INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desired_backend_quota) VALUES (4, 2, 'capacity', 10, -1, 12);
+		INSERT INTO project_resources (id, service_id, name) VALUES (5, 2, 'capacity_portion');
+		INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desired_backend_quota) VALUES (6, 2, 'things', 0, -1, 0);
 		UPDATE project_services SET scraped_at = 0, checked_at = %[1]d, scrape_error_message = 'Scrape failed as requested', next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
 		UPDATE project_services SET scraped_at = 0, checked_at = %[3]d, scrape_error_message = 'Scrape failed as requested', next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`,
@@ -446,10 +440,10 @@ func Test_ScrapeFailure(t *testing.T) {
 		DELETE FROM project_az_resources WHERE resource_id = 6 AND az = 'any';
 		INSERT INTO project_az_resources (resource_id, az, usage, subresources) VALUES (6, 'az-one', 2, '[{"index":0},{"index":1}]');
 		INSERT INTO project_az_resources (resource_id, az, usage, subresources) VALUES (6, 'az-two', 2, '[{"index":2},{"index":3}]');
-		UPDATE project_resources SET backend_quota = 100, physical_usage = 0 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
-		UPDATE project_resources SET usage = 4, backend_quota = 42, subresources = '[{"index":0},{"index":1},{"index":2},{"index":3}]' WHERE id = 3 AND service_id = 1 AND name = 'things';
-		UPDATE project_resources SET backend_quota = 100, physical_usage = 0 WHERE id = 4 AND service_id = 2 AND name = 'capacity';
-		UPDATE project_resources SET usage = 4, backend_quota = 42, subresources = '[{"index":0},{"index":1},{"index":2},{"index":3}]' WHERE id = 6 AND service_id = 2 AND name = 'things';
+		UPDATE project_resources SET backend_quota = 100 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
+		UPDATE project_resources SET backend_quota = 42 WHERE id = 3 AND service_id = 1 AND name = 'things';
+		UPDATE project_resources SET backend_quota = 100 WHERE id = 4 AND service_id = 2 AND name = 'capacity';
+		UPDATE project_resources SET backend_quota = 42 WHERE id = 6 AND service_id = 2 AND name = 'things';
 		UPDATE project_services SET scraped_at = %[1]d, scrape_duration_secs = 5, serialized_metrics = '{"capacity_usage":0,"things_usage":4}', checked_at = %[1]d, scrape_error_message = '', next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
 		UPDATE project_services SET scraped_at = %[3]d, scrape_duration_secs = 5, serialized_metrics = '{"capacity_usage":0,"things_usage":4}', checked_at = %[3]d, scrape_error_message = '', next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`,
@@ -521,8 +515,8 @@ func Test_AutoApproveInitialQuota(t *testing.T) {
 	tr.DBChanges().AssertEqualf(`
 		INSERT INTO project_az_resources (resource_id, az, usage) VALUES (1, 'any', 0);
 		INSERT INTO project_az_resources (resource_id, az, usage) VALUES (2, 'any', 0);
-		INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (1, 1, 'approve', 10, 0, 10, 10);
-		INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, desired_backend_quota) VALUES (2, 1, 'noapprove', 0, 0, 20, 0);
+		INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desired_backend_quota) VALUES (1, 1, 'approve', 10, 10, 10);
+		INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desired_backend_quota) VALUES (2, 1, 'noapprove', 0, 20, 0);
 		UPDATE project_services SET scraped_at = %[1]d, scrape_duration_secs = 5, checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'autoapprovaltest';
 	`,
 		scrapedAt.Unix(), scrapedAt.Add(scrapeInterval).Unix(),

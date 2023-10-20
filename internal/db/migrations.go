@@ -368,4 +368,24 @@ var sqlMigrations = map[string]string{
 	"029_add_project_az_resources.down.sql": `
 		DROP TABLE project_az_resources;
 	`,
+	"030_drop_redundant_resources_columns.up.sql": `
+		ALTER TABLE cluster_resources
+			DROP COLUMN capacity,
+			DROP COLUMN subcapacities,
+			DROP COLUMN capacity_per_az;
+		ALTER TABLE project_resources
+			DROP COLUMN usage,
+			DROP COLUMN subresources,
+			DROP COLUMN physical_usage;
+	`,
+	"030_drop_redundant_resources_columns.down.sql": `
+		ALTER TABLE cluster_resources
+			ADD COLUMN capacity BIGINT NOT NULL,
+			ADD COLUMN subcapacities TEXT NOT NULL DEFAULT '',
+			ADD COLUMN capacity_per_az TEXT NOT NULL DEFAULT '';
+		ALTER TABLE project_resources
+			ADD COLUMN usage BIGINT NOT NULL,
+			ADD COLUMN subresources TEXT NOT NULL DEFAULT '',
+			ADD COLUMN physical_usage BIGINT DEFAULT NULL;
+	`,
 }

@@ -31,15 +31,15 @@ INSERT INTO project_services (id, project_id, type, scraped_at, checked_at) VALU
 INSERT INTO project_services (id, project_id, type, scraped_at, checked_at) VALUES (6, 3, 'network', '2018-06-13 15:06:37', '2018-06-13 15:06:37');
 
 -- project_resources contains some pathological cases
-INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (1, 1, 'cores',         30,  14, 10,  '', 30, NULL);
-INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (2, 1, 'ram',           100, 88, 100, '', 100, 92);
-INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (3, 2, 'loadbalancers', 10,  5,  10,  '', 10, NULL);
-INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (4, 3, 'cores',         14,  18, 14,  '', 14, NULL);
-INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (5, 3, 'ram',           60,  45, 60,  '', 60, 40);
-INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (6, 4, 'loadbalancers', 5,   2,  5,   '', 5, NULL);
-INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (7, 5, 'cores',         30,  20,  30,  '', 30, NULL);
-INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (8, 5, 'ram',           62,  48, 62,  '', 62, 43);
-INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (9, 6, 'loadbalancers', 10,  4,  10,  '', 10, NULL);
+INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desired_backend_quota) VALUES (1, 1, 'cores',         30,  10,  30);
+INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desired_backend_quota) VALUES (2, 1, 'ram',           100, 100, 100);
+INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desired_backend_quota) VALUES (3, 2, 'loadbalancers', 10,  10,  10);
+INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desired_backend_quota) VALUES (4, 3, 'cores',         14,  14,  14);
+INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desired_backend_quota) VALUES (5, 3, 'ram',           60,  60,  60);
+INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desired_backend_quota) VALUES (6, 4, 'loadbalancers', 5,   5,   5);
+INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desired_backend_quota) VALUES (7, 5, 'cores',         30,  30,  30);
+INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desired_backend_quota) VALUES (8, 5, 'ram',           62,  62,  62);
+INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desired_backend_quota) VALUES (9, 6, 'loadbalancers', 10,  10,  10);
 
 -- project_az_resources has everything as non-AZ-aware (the consistency checks do not really care about AZs)
 INSERT INTO project_az_resources (resource_id, az, usage, physical_usage) VALUES (1, 'any', 14, NULL);
