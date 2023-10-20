@@ -27,7 +27,7 @@ import (
 
 	"github.com/go-gorp/gorp/v3"
 	"github.com/prometheus/client_golang/prometheus"
-	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
 
@@ -455,9 +455,11 @@ func (c *DataMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 }
 
 var clusterMetricsQuery = sqlext.SimplifyWhitespace(`
-	SELECT cs.type, cr.name, cr.capacity, cr.capacity_per_az
+	SELECT cs.type, cr.name, JSON_OBJECT_AGG(car.az, car.raw_capacity), JSON_OBJECT_AGG(car.az, car.usage)
 	  FROM cluster_services cs
 	  JOIN cluster_resources cr ON cr.service_id = cs.id
+	  JOIN cluster_az_resources car ON car.resource_id = cr.id
+	 GROUP BY cs.type, cr.name
 `)
 
 var domainMetricsQuery = sqlext.SimplifyWhitespace(`
@@ -468,11 +470,20 @@ var domainMetricsQuery = sqlext.SimplifyWhitespace(`
 `)
 
 var projectMetricsQuery = sqlext.SimplifyWhitespace(`
-	SELECT d.name, d.uuid, p.name, p.uuid, ps.type, pr.name, pr.quota, pr.backend_quota, pr.usage, pr.physical_usage
+	WITH project_az_sums AS (
+	  SELECT resource_id,
+	         SUM(usage) AS usage,
+	         SUM(COALESCE(physical_usage, usage)) AS physical_usage,
+	         COUNT(physical_usage) > 0 AS has_physical_usage
+	    FROM project_az_resources
+	   GROUP BY resource_id
+	)
+	SELECT d.name, d.uuid, p.name, p.uuid, ps.type, pr.name, pr.quota, pr.backend_quota, pas.usage, pas.physical_usage, pas.has_physical_usage
 	  FROM domains d
 	  JOIN projects p ON p.domain_id = d.id
 	  JOIN project_services ps ON ps.project_id = p.id
 	  JOIN project_resources pr ON pr.service_id = ps.id
+	  JOIN project_az_sums pas ON pas.resource_id = pr.id
 `)
 
 var projectRateMetricsQuery = sqlext.SimplifyWhitespace(`
@@ -520,12 +531,12 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	capacityReported := make(map[string]map[string]bool)
 	err := sqlext.ForeachRow(c.DB, clusterMetricsQuery, nil, func(rows *sql.Rows) error {
 		var (
-			serviceType   string
-			resourceName  string
-			capacity      uint64
-			capacityPerAZ string
+			serviceType       string
+			resourceName      string
+			capacityPerAZJSON string
+			usagePerAZJSON    string
 		)
-		err := rows.Scan(&serviceType, &resourceName, &capacity, &capacityPerAZ)
+		err := rows.Scan(&serviceType, &resourceName, &capacityPerAZJSON, &usagePerAZJSON)
 		if err != nil {
 			return err
 		}
@@ -536,23 +547,41 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			overcommitFactor = 1
 		}
 
-		if capacityPerAZ != "" {
-			azReports := make(limesresources.ClusterAvailabilityZoneReports)
-			err := json.Unmarshal([]byte(capacityPerAZ), &azReports)
-			if err != nil {
-				return err
+		var (
+			capacityPerAZ map[limes.AvailabilityZone]uint64
+			usagePerAZ    map[limes.AvailabilityZone]uint64
+		)
+		err = json.Unmarshal([]byte(capacityPerAZJSON), &capacityPerAZ)
+		if err != nil {
+			return err
+		}
+		err = json.Unmarshal([]byte(usagePerAZJSON), &usagePerAZ)
+		if err != nil {
+			return err
+		}
+		reportAZBreakdown := false
+		totalCapacity := uint64(0)
+		for az, azCapacity := range capacityPerAZ {
+			totalCapacity += azCapacity
+			if az != limes.AvailabilityZoneAny {
+				reportAZBreakdown = true
 			}
-			for _, report := range azReports {
+		}
+
+		if reportAZBreakdown {
+			for az, azCapacity := range capacityPerAZ {
 				ch <- prometheus.MustNewConstMetric(
 					clusterCapacityPerAZDesc,
-					prometheus.GaugeValue, float64(overcommitFactor.ApplyTo(report.Capacity)),
-					string(report.Name), serviceType, resourceName,
+					prometheus.GaugeValue, float64(overcommitFactor.ApplyTo(azCapacity)),
+					string(az), serviceType, resourceName,
 				)
-				if report.Usage != 0 {
+
+				azUsage := usagePerAZ[az]
+				if azUsage != 0 {
 					ch <- prometheus.MustNewConstMetric(
 						clusterUsagePerAZDesc,
-						prometheus.GaugeValue, float64(report.Usage),
-						string(report.Name), serviceType, resourceName,
+						prometheus.GaugeValue, float64(azUsage),
+						string(az), serviceType, resourceName,
 					)
 				}
 			}
@@ -560,7 +589,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 
 		ch <- prometheus.MustNewConstMetric(
 			clusterCapacityDesc,
-			prometheus.GaugeValue, float64(overcommitFactor.ApplyTo(capacity)),
+			prometheus.GaugeValue, float64(overcommitFactor.ApplyTo(totalCapacity)),
 			serviceType, resourceName,
 		)
 
@@ -620,18 +649,20 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	//fetch values for project level (quota/usage)
 	err = sqlext.ForeachRow(c.DB, projectMetricsQuery, nil, func(rows *sql.Rows) error {
 		var (
-			domainName    string
-			domainUUID    string
-			projectName   string
-			projectUUID   string
-			serviceType   string
-			resourceName  string
-			quota         *uint64
-			backendQuota  *int64
-			usage         uint64
-			physicalUsage *uint64
+			domainName       string
+			domainUUID       string
+			projectName      string
+			projectUUID      string
+			serviceType      string
+			resourceName     string
+			quota            *uint64
+			backendQuota     *int64
+			usage            uint64
+			physicalUsage    uint64
+			hasPhysicalUsage bool
 		)
-		err := rows.Scan(&domainName, &domainUUID, &projectName, &projectUUID, &serviceType, &resourceName, &quota, &backendQuota, &usage, &physicalUsage)
+		err := rows.Scan(&domainName, &domainUUID, &projectName, &projectUUID, &serviceType, &resourceName,
+			&quota, &backendQuota, &usage, &physicalUsage, &hasPhysicalUsage)
 		if err != nil {
 			return err
 		}
@@ -661,11 +692,11 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 				domainName, domainUUID, projectName, projectUUID, serviceType, resourceName,
 			)
 		}
-		if physicalUsage != nil {
-			if c.ReportZeroes || *physicalUsage != 0 {
+		if hasPhysicalUsage {
+			if c.ReportZeroes || physicalUsage != 0 {
 				ch <- prometheus.MustNewConstMetric(
 					projectPhysicalUsageDesc,
-					prometheus.GaugeValue, float64(*physicalUsage),
+					prometheus.GaugeValue, float64(physicalUsage),
 					domainName, domainUUID, projectName, projectUUID, serviceType, resourceName,
 				)
 			}
