@@ -1067,16 +1067,21 @@ func Test_ProjectOperations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	serviceBerlinUnsharedID, err := s.DB.SelectInt(`SELECT ID from project_services WHERE project_id = $1 AND type = $2`,
+	serviceBerlinUnsharedID, err := s.DB.SelectInt(`SELECT id FROM project_services WHERE project_id = $1 AND type = $2`,
 		projectBerlinID, "unshared")
 	if err != nil {
 		t.Fatal(err)
 	}
-	//nolint:errcheck
-	_, _ = s.DB.Exec(`UPDATE project_resources SET usage = $1 WHERE service_id = $2 AND name = $3`,
-		0,
-		serviceBerlinUnsharedID, "things",
-	)
+	resourceBerlinUnsharedThingsID, err := s.DB.SelectInt(`SELECT id FROM project_resources WHERE service_id = $1 AND name = $2`,
+		serviceBerlinUnsharedID, "things")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.DB.Exec(`UPDATE project_az_resources SET usage = $1 WHERE resource_id = $2 AND az = $3`,
+		0, resourceBerlinUnsharedThingsID, limes.AvailabilityZoneAny)
+	if err != nil {
+		t.Fatal(err)
+	}
 	assert.HTTPRequest{
 		Method:       "POST",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/simulate-put",
@@ -1687,8 +1692,8 @@ func Test_QuotaBursting(t *testing.T) {
 		t.Errorf("expected backend quota %#v, but got %#v", expectBackendQuota, backendQuota)
 	}
 
-	//increase usage beyond frontend quota -> should show up as burst usage
-	_, err := s.DB.Exec(`UPDATE project_resources SET usage = 42 WHERE service_id = 1 AND name = 'things'`)
+	//increase usage of berlin's unshared/things resource beyond frontend quota -> should show up as burst usage
+	_, err := s.DB.Exec(`UPDATE project_az_resources SET usage = 42 WHERE resource_id = 1 AND az = 'any'`)
 	if err != nil {
 		t.Error(err.Error())
 	}
@@ -1723,7 +1728,7 @@ func Test_QuotaBursting(t *testing.T) {
 	}.Check(t, s.Handler)
 
 	//decrease usage, then disable bursting successfully
-	_, err = s.DB.Exec(`UPDATE project_resources SET usage = 2 WHERE service_id = 1 AND name = 'things'`)
+	_, err = s.DB.Exec(`UPDATE project_az_resources SET usage = 2 WHERE resource_id = 1 AND az = 'any'`)
 	if err != nil {
 		t.Error(err.Error())
 	}
@@ -1898,13 +1903,23 @@ func Test_LargeProjectList(t *testing.T) {
 					BackendQuota:        p2i64(0),
 					DesiredBackendQuota: p2u64(0),
 				}
+				azResource := db.ProjectAZResource{
+					//ResourceID is filled in below once we have it
+					AvailabilityZone: limes.AvailabilityZoneAny,
+					Usage:            0,
+				}
 				if serviceType == "unshared" && resourceName == "things" {
 					resource.Quota = p2u64(uint64(idx))
-					resource.Usage = uint64(idx / 2)
+					azResource.Usage = uint64(idx / 2)
 					resource.BackendQuota = p2i64(int64(idx))
 					resource.DesiredBackendQuota = p2u64(uint64(idx))
 				}
 				err = s.DB.Insert(&resource)
+				if err != nil {
+					t.Fatal(err)
+				}
+				azResource.ResourceID = resource.ID
+				err = s.DB.Insert(&azResource)
 				if err != nil {
 					t.Fatal(err)
 				}

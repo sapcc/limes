@@ -21,7 +21,6 @@ package reports
 
 import (
 	"database/sql"
-	"encoding/json"
 	"strings"
 	"time"
 
@@ -34,14 +33,24 @@ import (
 	"github.com/sapcc/limes/internal/db"
 )
 
+// NOTE: The subquery emulates the behavior of the old `usage` and `physical_usage` columns on `project_resources`.
 var clusterReportQuery1 = sqlext.SimplifyWhitespace(`
+	WITH project_az_sums AS (
+	  SELECT resource_id,
+	         SUM(usage) AS usage,
+	         SUM(COALESCE(physical_usage, usage)) AS physical_usage,
+	         COUNT(physical_usage) > 0 AS has_physical_usage
+	    FROM project_az_resources
+	   GROUP BY resource_id
+	)
 	SELECT ps.type, pr.name,
-	       SUM(pr.quota), SUM(pr.usage),
-	       SUM(GREATEST(pr.usage - pr.quota, 0)),
-	       SUM(COALESCE(pr.physical_usage, pr.usage)), COUNT(pr.physical_usage) > 0,
+	       SUM(pr.quota), SUM(pas.usage),
+	       SUM(GREATEST(pas.usage - pr.quota, 0)),
+	       SUM(pas.physical_usage), BOOL_OR(pas.has_physical_usage),
 	       MIN(ps.scraped_at), MAX(ps.scraped_at)
 	  FROM project_services ps
 	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
+	  LEFT OUTER JOIN project_az_sums pas ON pas.resource_id = pr.id
 	 WHERE TRUE {{AND ps.type = $service_type}}
 	 GROUP BY ps.type, pr.name
 `)
@@ -55,12 +64,13 @@ var clusterReportQuery2 = sqlext.SimplifyWhitespace(`
 `)
 
 var clusterReportQuery3 = sqlext.SimplifyWhitespace(`
-	SELECT cs.type, cr.name, cr.capacity,
-	       cr.capacity_per_az, cr.subcapacities, cc.scraped_at
+	SELECT cs.type, cr.name, car.az, car.raw_capacity, car.usage, car.subcapacities, cc.scraped_at
 	  FROM cluster_services cs
 	  LEFT OUTER JOIN cluster_resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
+	  LEFT OUTER JOIN cluster_az_resources car ON car.resource_id = cr.id
 	  LEFT OUTER JOIN cluster_capacitors cc ON cc.capacitor_id = cr.capacitor_id
 	 WHERE TRUE {{AND cs.type = $service_type}}
+	 ORDER BY car.az
 `)
 
 var clusterRateReportQuery1 = sqlext.SimplifyWhitespace(`
@@ -154,19 +164,20 @@ func GetClusterResources(cluster *core.Cluster, dbi db.Interface, filter Filter)
 	//third query: collect capacity data for these clusters
 	queryStr, joinArgs = filter.PrepareQuery(clusterReportQuery3)
 	if !filter.WithSubcapacities {
-		queryStr = strings.Replace(queryStr, "cr.subcapacities", "''", 1)
+		queryStr = strings.Replace(queryStr, "car.subcapacities", "''", 1)
 	}
 	err = sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
 		var (
-			serviceType   string
-			resourceName  *string
-			rawCapacity   *uint64
-			capacityPerAZ *string
-			subcapacities *string
-			scrapedAt     *time.Time
+			serviceType       string
+			resourceName      *string
+			availabilityZone  *limes.AvailabilityZone
+			rawCapacityInAZ   *uint64
+			usageInAZ         *uint64
+			subcapacitiesInAZ *string
+			scrapedAt         *time.Time
 		)
-		err := rows.Scan(&serviceType, &resourceName, &rawCapacity,
-			&capacityPerAZ, &subcapacities, &scrapedAt)
+		err := rows.Scan(&serviceType, &resourceName, &availabilityZone,
+			&rawCapacityInAZ, &usageInAZ, &subcapacitiesInAZ, &scrapedAt)
 		if err != nil {
 			return err
 		}
@@ -174,23 +185,33 @@ func GetClusterResources(cluster *core.Cluster, dbi db.Interface, filter Filter)
 		_, resource := findInClusterReport(cluster, report, serviceType, resourceName)
 
 		if resource != nil {
-			overcommitFactor := cluster.BehaviorForResource(serviceType, *resourceName, "").OvercommitFactor
-			if overcommitFactor == 0 {
-				resource.Capacity = rawCapacity
-			} else {
-				resource.RawCapacity = rawCapacity
-				capacity := overcommitFactor.ApplyTo(*rawCapacity)
-				resource.Capacity = &capacity
+			//NOTE: resource.Capacity is computed from this below once data for all AZs was ingested
+			if resource.RawCapacity == nil {
+				resource.RawCapacity = rawCapacityInAZ
+			} else if rawCapacityInAZ != nil {
+				resource.RawCapacity = pointerTo(*resource.RawCapacity + *rawCapacityInAZ)
 			}
-			if subcapacities != nil && *subcapacities != "" && filter.IsSubcapacityAllowed(serviceType, *resourceName) {
-				resource.Subcapacities = json.RawMessage(*subcapacities)
+			if subcapacitiesInAZ != nil && *subcapacitiesInAZ != "" && filter.IsSubcapacityAllowed(serviceType, *resourceName) {
+				mergeJSONListInto(&resource.Subcapacities, *subcapacitiesInAZ)
 			}
-			if capacityPerAZ != nil && *capacityPerAZ != "" {
-				azReports, err := getClusterAZReports(*capacityPerAZ, overcommitFactor)
-				if err != nil {
-					return err
+
+			if availabilityZone != nil && rawCapacityInAZ != nil && usageInAZ != nil {
+				azReport := limesresources.ClusterAvailabilityZoneReport{
+					Name:  *availabilityZone,
+					Usage: *usageInAZ,
 				}
-				resource.CapacityPerAZ = azReports
+				overcommitFactor := cluster.BehaviorForResource(serviceType, *resourceName, "").OvercommitFactor
+				if overcommitFactor == 0 {
+					azReport.Capacity = *rawCapacityInAZ
+				} else {
+					azReport.RawCapacity = *rawCapacityInAZ
+					azReport.Capacity = overcommitFactor.ApplyTo(*rawCapacityInAZ)
+				}
+
+				if resource.CapacityPerAZ == nil {
+					resource.CapacityPerAZ = make(limesresources.ClusterAvailabilityZoneReports)
+				}
+				resource.CapacityPerAZ[*availabilityZone] = &azReport
 			}
 		}
 
@@ -203,10 +224,27 @@ func GetClusterResources(cluster *core.Cluster, dbi db.Interface, filter Filter)
 		return nil, err
 	}
 
+	//third query, epilogue: perform some calculations that require the full sum over all AZs to be done
+	for serviceType, service := range report.Services {
+		for resourceName, resource := range service.Resources {
+			overcommitFactor := cluster.BehaviorForResource(serviceType, resourceName, "").OvercommitFactor
+			if overcommitFactor == 0 {
+				resource.Capacity = resource.RawCapacity
+				resource.RawCapacity = nil
+			} else if resource.RawCapacity != nil {
+				resource.Capacity = pointerTo(overcommitFactor.ApplyTo(*resource.RawCapacity))
+			}
+
+			if skipAZBreakdown(resource.CapacityPerAZ) {
+				resource.CapacityPerAZ = nil
+			}
+		}
+	}
+
 	return report, nil
 }
 
-// GetClusterResources returns the rate data report for the whole cluster.
+// GetClusterRates returns the rate data report for the whole cluster.
 func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter) (*limesrates.ClusterReport, error) {
 	report := &limesrates.ClusterReport{
 		ClusterInfo: limes.ClusterInfo{
@@ -309,19 +347,11 @@ func findInClusterReport(cluster *core.Cluster, report *limesresources.ClusterRe
 	return service, resource
 }
 
-func getClusterAZReports(capacityPerAZ string, overcommitFactor core.OvercommitFactor) (limesresources.ClusterAvailabilityZoneReports, error) {
-	azReports := make(limesresources.ClusterAvailabilityZoneReports)
-	err := json.Unmarshal([]byte(capacityPerAZ), &azReports)
-	if err != nil {
-		return nil, err
-	}
-
-	if overcommitFactor != 0 {
-		for _, report := range azReports {
-			report.RawCapacity = report.Capacity
-			report.Capacity = overcommitFactor.ApplyTo(report.Capacity)
+func skipAZBreakdown(azReports limesresources.ClusterAvailabilityZoneReports) bool {
+	for az := range azReports {
+		if az != limes.AvailabilityZoneAny {
+			return false
 		}
 	}
-
-	return azReports, nil
+	return true
 }

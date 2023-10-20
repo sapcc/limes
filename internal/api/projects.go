@@ -409,7 +409,10 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 			SELECT ps.type, pr.name
 				FROM project_services ps
 				JOIN project_resources pr ON ps.id = pr.service_id
-			 WHERE ps.project_id = $1 AND pr.usage > pr.quota`
+				JOIN project_az_resources par ON pr.id = par.resource_id
+			 WHERE ps.project_id = $1
+			 GROUP BY ps.type, pr.name, pr.quota
+			HAVING SUM(par.usage) > pr.quota`
 		err := sqlext.ForeachRow(dbi, query, []any{project.ID}, func(rows *sql.Rows) error {
 			var serviceType, resourceName string
 			err := rows.Scan(&serviceType, &resourceName)

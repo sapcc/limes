@@ -33,16 +33,26 @@ import (
 	"github.com/sapcc/limes/internal/db"
 )
 
+// NOTE: The subquery emulates the behavior of the old `usage` and `physical_usage` columns on `project_resources`.
 var domainReportQuery1 = sqlext.SimplifyWhitespace(`
-	SELECT d.uuid, d.name, ps.type, pr.name, SUM(pr.quota), SUM(pr.usage),
-	       SUM(GREATEST(pr.usage - pr.quota, 0)),
+	WITH project_az_sums AS (
+	  SELECT resource_id,
+	         SUM(usage) AS usage,
+	         SUM(COALESCE(physical_usage, usage)) AS physical_usage,
+	         COUNT(physical_usage) > 0 AS has_physical_usage
+	    FROM project_az_resources
+	   GROUP BY resource_id
+	)
+	SELECT d.uuid, d.name, ps.type, pr.name, SUM(pr.quota), SUM(pas.usage),
+	       SUM(GREATEST(pas.usage - pr.quota, 0)),
 	       SUM(GREATEST(pr.backend_quota, 0)), MIN(pr.backend_quota) < 0,
-	       SUM(COALESCE(pr.physical_usage, pr.usage)), COUNT(pr.physical_usage) > 0,
+	       SUM(pas.physical_usage), BOOL_OR(pas.has_physical_usage),
 	       MIN(ps.scraped_at), MAX(ps.scraped_at)
 	  FROM domains d
 	  JOIN projects p ON p.domain_id = d.id
 	  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
 	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
+	  LEFT OUTER JOIN project_az_sums pas ON pas.resource_id = pr.id
 	 WHERE %s GROUP BY d.uuid, d.name, ps.type, pr.name
 `)
 
