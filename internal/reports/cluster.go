@@ -195,10 +195,10 @@ func GetClusterResources(cluster *core.Cluster, dbi db.Interface, filter Filter)
 				mergeJSONListInto(&resource.Subcapacities, *subcapacitiesInAZ)
 			}
 
-			if availabilityZone != nil && rawCapacityInAZ != nil && usageInAZ != nil {
+			if availabilityZone != nil && rawCapacityInAZ != nil {
 				azReport := limesresources.ClusterAvailabilityZoneReport{
 					Name:  *availabilityZone,
-					Usage: *usageInAZ,
+					Usage: unwrapOrDefault(usageInAZ, 0),
 				}
 				overcommitFactor := cluster.BehaviorForResource(serviceType, *resourceName, "").OvercommitFactor
 				if overcommitFactor == 0 {

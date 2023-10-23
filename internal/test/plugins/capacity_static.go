@@ -36,6 +36,7 @@ type StaticCapacityPlugin struct {
 	Capacity          uint64   `yaml:"capacity"`
 	WithAZCapData     bool     `yaml:"with_capacity_per_az"`
 	WithSubcapacities bool     `yaml:"with_subcapacities"`
+	WithoutUsage      bool     `yaml:"without_usage"`
 }
 
 func init() {
@@ -64,11 +65,15 @@ func (p *StaticCapacityPlugin) Scrape() (result map[string]map[string]core.PerAZ
 				map[string]any{"az": az, "larger_half": largerHalf},
 			}
 		}
-		return &core.CapacityData{
+		result := core.CapacityData{
 			Capacity:      capacity,
-			Usage:         usage,
+			Usage:         &usage,
 			Subcapacities: subcapacities,
 		}
+		if p.WithoutUsage {
+			result.Usage = nil
+		}
+		return &result
 	}
 
 	fullCapa := core.PerAZ[core.CapacityData]{

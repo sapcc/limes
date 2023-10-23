@@ -260,12 +260,12 @@ func (p *capacityManilaPlugin) scrapeForShareType(shareType ManilaShareTypeSpec,
 		}
 		result.ShareGigabytes[az] = &core.CapacityData{
 			Capacity:      getShareCapacity(totalCapacityGbPerAZ[az], capBalance),
-			Usage:         getShareCapacity(allocatedCapacityGbPerAZ[az], capBalance),
+			Usage:         p2u64(getShareCapacity(allocatedCapacityGbPerAZ[az], capBalance)),
 			Subcapacities: shareSubcapacitiesPerAZ[az],
 		}
 		result.SnapshotGigabytes[az] = &core.CapacityData{
 			Capacity:      getSnapshotCapacity(totalCapacityGbPerAZ[az], capBalance),
-			Usage:         getSnapshotCapacity(allocatedCapacityGbPerAZ[az], capBalance),
+			Usage:         p2u64(getSnapshotCapacity(allocatedCapacityGbPerAZ[az], capBalance)),
 			Subcapacities: snapshotSubcapacitiesPerAZ[az],
 		}
 	}

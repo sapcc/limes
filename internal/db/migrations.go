@@ -388,4 +388,12 @@ var sqlMigrations = map[string]string{
 			ADD COLUMN subresources TEXT NOT NULL DEFAULT '',
 			ADD COLUMN physical_usage BIGINT DEFAULT NULL;
 	`,
+	"031_fix_cluster_usage_typing.up.sql": `
+		ALTER TABLE cluster_az_resources
+			ALTER COLUMN usage DROP NOT NULL;
+	`,
+	"031_fix_cluster_usage_typing.down.sql": `
+		ALTER TABLE cluster_az_resources
+			ALTER COLUMN usage SET NOT NULL;
+	`,
 }

@@ -77,7 +77,7 @@ type ClusterAZResource struct {
 	ResourceID        int64                  `db:"resource_id"`
 	AvailabilityZone  limes.AvailabilityZone `db:"az"`
 	RawCapacity       uint64                 `db:"raw_capacity"`
-	Usage             uint64                 `db:"usage"`
+	Usage             *uint64                `db:"usage"`
 	SubcapacitiesJSON string                 `db:"subcapacities"`
 }
 

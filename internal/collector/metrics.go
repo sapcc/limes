@@ -549,7 +549,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 
 		var (
 			capacityPerAZ map[limes.AvailabilityZone]uint64
-			usagePerAZ    map[limes.AvailabilityZone]uint64
+			usagePerAZ    map[limes.AvailabilityZone]*uint64
 		)
 		err = json.Unmarshal([]byte(capacityPerAZJSON), &capacityPerAZ)
 		if err != nil {
@@ -577,10 +577,10 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 				)
 
 				azUsage := usagePerAZ[az]
-				if azUsage != 0 {
+				if azUsage != nil && *azUsage != 0 {
 					ch <- prometheus.MustNewConstMetric(
 						clusterUsagePerAZDesc,
-						prometheus.GaugeValue, float64(azUsage),
+						prometheus.GaugeValue, float64(*azUsage),
 						string(az), serviceType, resourceName,
 					)
 				}
