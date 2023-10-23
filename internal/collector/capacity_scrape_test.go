@@ -71,6 +71,21 @@ const (
 			# overcommit should be reflected in capacity metrics
 			- { resource: unshared2/capacity, overcommit_factor: 2.5 }
 	`
+
+	testScanCapacityNoopConfigYAML = `
+		availability_zones: [ az-one, az-two ]
+		discovery:
+			method: --test-static
+		services:
+			- service_type: shared
+				type: --test-generic
+		capacitors:
+		- id: noop
+			type: --test-static
+			params:
+				capacity: 0
+				resources: []
+	`
 )
 
 func Test_ScanCapacity(t *testing.T) {
@@ -305,4 +320,47 @@ func setClusterCapacitorsStale(t *testing.T, s test.Setup) {
 	t.Helper()
 	_, err := s.DB.Exec(`UPDATE cluster_capacitors SET next_scrape_at = $1`, s.Clock.Now())
 	mustT(t, err)
+}
+
+func Test_ScanCapacityButNoResources(t *testing.T) {
+	s := test.NewSetup(t,
+		test.WithConfig(testScanCapacityNoopConfigYAML),
+	)
+
+	c := getCollector(t, s)
+	job := c.CapacityScrapeJob(s.Registry)
+
+	//cluster_services must be created as a baseline (this is usually done by the CheckConsistencyJob)
+	for _, serviceType := range s.Cluster.ServiceTypesInAlphabeticalOrder() {
+		err := s.DB.Insert(&db.ClusterService{Type: serviceType})
+		mustT(t, err)
+	}
+
+	//check baseline
+	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
+	tr0.AssertEqualf(`
+		INSERT INTO cluster_services (id, type) VALUES (1, 'shared');
+	`)
+
+	//check that the capacitor runs, but does not touch cluster_resources and cluster_az_resources
+	//since it does not report for anything (this used to fail because we generated a syntactically
+	//invalid WHERE clause when matching zero resources)
+	setClusterCapacitorsStale(t, s)
+	mustT(t, job.ProcessOne(s.Ctx))
+
+	tr.DBChanges().AssertEqualf(`
+		INSERT INTO cluster_capacitors (capacitor_id, scraped_at, scrape_duration_secs, next_scrape_at) VALUES ('noop', %[1]d, 5, %[2]d);
+	`,
+		s.Clock.Now().Unix(), s.Clock.Now().Add(15*time.Minute).Unix(),
+	)
+
+	//rerun also works
+	setClusterCapacitorsStale(t, s)
+	mustT(t, job.ProcessOne(s.Ctx))
+
+	tr.DBChanges().AssertEqualf(`
+		UPDATE cluster_capacitors SET scraped_at = %[1]d, next_scrape_at = %[2]d WHERE capacitor_id = 'noop';
+	`,
+		s.Clock.Now().Unix(), s.Clock.Now().Add(15*time.Minute).Unix(),
+	)
 }
