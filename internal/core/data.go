@@ -40,6 +40,26 @@ func InUnknownAZ[D AZAwareData[D]](data D) PerAZ[D] {
 	return PerAZ[D]{limes.AvailabilityZoneUnknown: &data}
 }
 
+// Clone returns a deep copy of this map.
+func (p PerAZ[D]) Clone() PerAZ[D] {
+	result := make(PerAZ[D], len(p))
+	for az, data := range p {
+		cloned := (*data).clone()
+		result[az] = &cloned
+	}
+	return result
+}
+
+// Keys returns all availability zones that have entries in this map.
+func (p PerAZ[D]) Keys() []limes.AvailabilityZone {
+	result := make([]limes.AvailabilityZone, 0, len(p))
+	for az := range p {
+		result = append(result, az)
+	}
+	slices.Sort(result)
+	return result
+}
+
 // Sum returns a sum of all data in this container.
 // This can be used if data can only be stored as a whole, not broken down by AZ.
 func (p PerAZ[D]) Sum() D {
@@ -61,6 +81,24 @@ func (p PerAZ[D]) Sum() D {
 			result = result.add(*p[az])
 		}
 		isFirst = false
+	}
+	return result
+}
+
+// Normalize sums all data for unknown AZs into the pseudo-AZ "unknown".
+func (p PerAZ[D]) Normalize(knownAZs []limes.AvailabilityZone) PerAZ[D] {
+	unknowns := make(PerAZ[D])
+	result := make(PerAZ[D])
+	for az, data := range p {
+		if az == limes.AvailabilityZoneAny || slices.Contains(knownAZs, az) {
+			result[az] = data
+		} else {
+			unknowns[az] = data
+		}
+	}
+	if len(unknowns) > 0 {
+		unknownsSum := unknowns.Sum()
+		result[limes.AvailabilityZoneUnknown] = &unknownsSum
 	}
 	return result
 }

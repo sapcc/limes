@@ -40,3 +40,14 @@ INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota
 INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (7, 5, 'cores',         30,  20,  30,  '', 30, NULL);
 INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (8, 5, 'ram',           62,  48, 62,  '', 62, 43);
 INSERT INTO project_resources (id, service_id, name, quota, usage, backend_quota, subresources, desired_backend_quota, physical_usage) VALUES (9, 6, 'loadbalancers', 10,  4,  10,  '', 10, NULL);
+
+-- project_az_resources has everything as non-AZ-aware (the consistency checks do not really care about AZs)
+INSERT INTO project_az_resources (resource_id, az, usage, physical_usage) VALUES (1, 'any', 14, NULL);
+INSERT INTO project_az_resources (resource_id, az, usage, physical_usage) VALUES (2, 'any', 88, 92);
+INSERT INTO project_az_resources (resource_id, az, usage, physical_usage) VALUES (3, 'any', 5,  NULL);
+INSERT INTO project_az_resources (resource_id, az, usage, physical_usage) VALUES (4, 'any', 18, NULL);
+INSERT INTO project_az_resources (resource_id, az, usage, physical_usage) VALUES (5, 'any', 45, 40);
+INSERT INTO project_az_resources (resource_id, az, usage, physical_usage) VALUES (6, 'any', 2,  NULL);
+INSERT INTO project_az_resources (resource_id, az, usage, physical_usage) VALUES (7, 'any', 20, NULL);
+INSERT INTO project_az_resources (resource_id, az, usage, physical_usage) VALUES (8, 'any', 48, 43);
+INSERT INTO project_az_resources (resource_id, az, usage, physical_usage) VALUES (9, 'any', 4,  NULL);

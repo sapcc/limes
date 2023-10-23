@@ -25,6 +25,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/jobloop"
@@ -99,6 +100,8 @@ func Test_ScanCapacity(t *testing.T) {
 	setClusterCapacitorsStale(t, s)
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
 	tr.DBChanges().AssertEqualf(`
+		INSERT INTO cluster_az_resources (resource_id, az, raw_capacity, usage) VALUES (1, 'any', 42, 8);
+		INSERT INTO cluster_az_resources (resource_id, az, raw_capacity, usage) VALUES (2, 'any', 42, 8);
 		INSERT INTO cluster_capacitors (capacitor_id, scraped_at, scrape_duration_secs, next_scrape_at) VALUES ('unittest', 5, 5, 905);
 		INSERT INTO cluster_capacitors (capacitor_id, scraped_at, scrape_duration_secs, next_scrape_at) VALUES ('unittest2', 10, 5, 910);
 		INSERT INTO cluster_resources (id, capacitor_id, service_id, name, capacity) VALUES (1, 'unittest', 1, 'things', 42);
@@ -106,11 +109,21 @@ func Test_ScanCapacity(t *testing.T) {
 	`)
 
 	//insert some crap records
-	err := s.DB.Insert(&db.ClusterResource{
+	unknownRes := &db.ClusterResource{
 		ServiceID:   2,
 		Name:        "unknown",
 		RawCapacity: 100,
 		CapacitorID: "unittest2",
+	}
+	err := s.DB.Insert(unknownRes)
+	if err != nil {
+		t.Error(err)
+	}
+	err = s.DB.Insert(&db.ClusterAZResource{
+		ResourceID:       unknownRes.ID,
+		AvailabilityZone: limes.AvailabilityZoneAny,
+		RawCapacity:      100,
+		Usage:            50,
 	})
 	if err != nil {
 		t.Error(err)
@@ -132,6 +145,8 @@ func Test_ScanCapacity(t *testing.T) {
 	scrapedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt2 := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
+		DELETE FROM cluster_az_resources WHERE resource_id = 1 AND az = 'any';
+		INSERT INTO cluster_az_resources (resource_id, az, raw_capacity, usage) VALUES (4, 'any', 23, 4);
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest';
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest2';
 		DELETE FROM cluster_resources WHERE id = 1 AND service_id = 1 AND name = 'things';
@@ -160,6 +175,7 @@ func Test_ScanCapacity(t *testing.T) {
 	scrapedAt2 = s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt4 := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
+		INSERT INTO cluster_az_resources (resource_id, az, raw_capacity, usage, subcapacities) VALUES (5, 'any', 42, 8, '[{"az":"az-one","smaller_half":7},{"az":"az-one","larger_half":14},{"az":"az-two","smaller_half":7},{"az":"az-two","larger_half":14}]');
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest';
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest2';
 		INSERT INTO cluster_capacitors (capacitor_id, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at) VALUES ('unittest4', %d, 5, '{"smaller_half":14,"larger_half":28}', %d);
@@ -179,6 +195,7 @@ func Test_ScanCapacity(t *testing.T) {
 	scrapedAt2 = s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt4 = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
+		UPDATE cluster_az_resources SET raw_capacity = 10, usage = 2, subcapacities = '[{"az":"az-one","smaller_half":1},{"az":"az-one","larger_half":4},{"az":"az-two","smaller_half":1},{"az":"az-two","larger_half":4}]' WHERE resource_id = 5 AND az = 'any';
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest';
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest2';
 		UPDATE cluster_capacitors SET scraped_at = %d, serialized_metrics = '{"smaller_half":3,"larger_half":7}', next_scrape_at = %d WHERE capacitor_id = 'unittest4';
@@ -209,6 +226,8 @@ func Test_ScanCapacity(t *testing.T) {
 	scrapedAt4 = s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt5 := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
+		INSERT INTO cluster_az_resources (resource_id, az, raw_capacity, usage) VALUES (6, 'az-one', 21, 4);
+		INSERT INTO cluster_az_resources (resource_id, az, raw_capacity, usage) VALUES (6, 'az-two', 21, 4);
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest';
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest2';
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest4';
@@ -231,6 +250,8 @@ func Test_ScanCapacity(t *testing.T) {
 	scrapedAt4 = s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt5 = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
+		UPDATE cluster_az_resources SET raw_capacity = 15, usage = 3 WHERE resource_id = 6 AND az = 'az-one';
+		UPDATE cluster_az_resources SET raw_capacity = 15, usage = 3 WHERE resource_id = 6 AND az = 'az-two';
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest';
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest2';
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest4';
@@ -265,6 +286,8 @@ func Test_ScanCapacity(t *testing.T) {
 	scrapedAt2 = s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt4 = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
+		DELETE FROM cluster_az_resources WHERE resource_id = 6 AND az = 'az-one';
+		DELETE FROM cluster_az_resources WHERE resource_id = 6 AND az = 'az-two';
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest';
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest2';
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest4';

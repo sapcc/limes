@@ -24,6 +24,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -162,21 +163,6 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 		return fmt.Errorf("cannot collect cluster service mapping: %w", err)
 	}
 
-	//collect ownership information for existing cluster_resources
-	var dbResources []db.ClusterResource
-	_, err = c.DB.Select(&dbResources, `SELECT * FROM cluster_resources`)
-	if err != nil {
-		return fmt.Errorf("cannot inspect existing cluster resources: %w", err)
-	}
-	dbResourceLookup := make(map[string]map[string]db.ClusterResource)
-	for _, res := range dbResources {
-		serviceType := serviceTypeForID[res.ServiceID]
-		if dbResourceLookup[serviceType] == nil {
-			dbResourceLookup[serviceType] = make(map[string]db.ClusterResource)
-		}
-		dbResourceLookup[serviceType][res.Name] = res
-	}
-
 	//scrape capacity data
 	capacityData, serializedMetrics, err := plugin.Scrape()
 	task.Timing.FinishedAt = c.MeasureTimeAtEnd()
@@ -207,32 +193,63 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 
-	//create or update cluster_resources for this capacitor
+	//collect existing cluster_resources
+	var dbResources []db.ClusterResource
+	_, err = tx.Select(&dbResources, `SELECT * FROM cluster_resources`)
+	if err != nil {
+		return fmt.Errorf("cannot inspect existing cluster resources: %w", err)
+	}
+
+	//define the scope of the update
+	var dbOwnedResources []db.ClusterResource
+	for _, res := range dbResources {
+		if res.CapacitorID == capacitor.CapacitorID {
+			dbOwnedResources = append(dbOwnedResources, res)
+		}
+	}
+
+	var wantedResources []db.ResourceRef
 	for serviceType, serviceData := range capacityData {
 		if !c.Cluster.HasService(serviceType) {
 			logg.Info("discarding capacities reported by %s for unknown service type: %s", capacitor.CapacitorID, serviceType)
 			continue
 		}
+		serviceID, ok := serviceIDForType[serviceType]
+		if !ok {
+			return fmt.Errorf("no cluster_services entry for service type %s (check if CheckConsistencyJob runs correctly)", serviceType)
+		}
 
-		for resourceName, resourceDataPerAZ := range serviceData {
+		for resourceName := range serviceData {
 			if !c.Cluster.HasResource(serviceType, resourceName) {
 				logg.Info("discarding capacity reported by %s for unknown resource name: %s/%s", capacitor.CapacitorID, serviceType, resourceName)
 				continue
 			}
-			serviceID, ok := serviceIDForType[serviceType]
-			if !ok {
-				return fmt.Errorf("no cluster_services entry for service type %s (check if CheckConsistencyJob runs correctly)", serviceType)
-			}
+			wantedResources = append(wantedResources, db.ResourceRef{
+				ServiceID: serviceID,
+				Name:      resourceName,
+			})
+		}
+	}
+	slices.SortFunc(wantedResources, db.CompareResourceRefs) //for deterministic test behavior
+
+	//create, update and delete cluster_resources for this capacitor as needed
+	setUpdate := db.SetUpdate[db.ClusterResource, db.ResourceRef]{
+		ExistingRecords: dbOwnedResources,
+		WantedKeys:      wantedResources,
+		KeyForRecord:    db.ClusterResource.Ref,
+		Create: func(ref db.ResourceRef) (db.ClusterResource, error) {
+			return db.ClusterResource{
+				ServiceID:   ref.ServiceID,
+				Name:        ref.Name,
+				CapacitorID: capacitor.CapacitorID,
+			}, nil
+		},
+		Update: func(res *db.ClusterResource) (err error) {
+			serviceType := serviceTypeForID[res.ServiceID]
+			resourceDataPerAZ := capacityData[serviceType][res.Name].Normalize(c.Cluster.Config.AvailabilityZones)
 
 			summedResourceData := resourceDataPerAZ.Sum()
-			res := db.ClusterResource{
-				ServiceID:         serviceID,
-				Name:              resourceName,
-				RawCapacity:       summedResourceData.Capacity,
-				CapacityPerAZJSON: "", //see below
-				SubcapacitiesJSON: "", //see below
-				CapacitorID:       capacitor.CapacitorID,
-			}
+			res.RawCapacity = summedResourceData.Capacity
 
 			if shouldStoreAZReport(resourceDataPerAZ) {
 				buf, err := json.Marshal(convertAZReport(resourceDataPerAZ))
@@ -240,48 +257,63 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 					return fmt.Errorf("could not convert capacities per AZ to JSON: %w", err)
 				}
 				res.CapacityPerAZJSON = string(buf)
-			}
-
-			if len(summedResourceData.Subcapacities) > 0 {
-				buf, err := json.Marshal(summedResourceData.Subcapacities)
-				if err != nil {
-					return fmt.Errorf("could not convert subcapacities to JSON: %w", err)
-				}
-				res.SubcapacitiesJSON = string(buf)
-			}
-
-			if _, exists := dbResourceLookup[serviceType][resourceName]; exists {
-				res.ID = dbResourceLookup[serviceType][resourceName].ID
-				_, err = tx.Update(&res)
 			} else {
-				err = tx.Insert(&res)
+				res.CapacityPerAZJSON = ""
 			}
-			if err != nil {
-				return fmt.Errorf("could not write cluster resource %s/%s: %w", serviceType, resourceName, err)
-			}
-		}
+
+			res.SubcapacitiesJSON, err = renderListToJSON("subcapacities", summedResourceData.Subcapacities)
+			return err
+		},
+	}
+	dbOwnedResources, err = setUpdate.Execute(tx)
+	if err != nil {
+		return err
 	}
 
-	//delete cluster_resources owned by this capacitor for which we do not have capacityData anymore
-	for serviceType, serviceMapping := range dbResourceLookup {
-		for resourceName, res := range serviceMapping {
-			//do not delete if owned by a different capacitor
-			if res.CapacitorID != capacitor.CapacitorID {
-				continue
-			}
+	//collect cluster_az_resources for the cluster_resources owned by this capacitor
+	dbOwnedResourceIDs := make([]any, len(dbOwnedResources))
+	for idx, res := range dbOwnedResources {
+		dbOwnedResourceIDs[idx] = res.ID
+	}
+	var dbAZResources []db.ClusterAZResource
+	whereClause, queryArgs := db.BuildSimpleWhereClause(map[string]any{"resource_id": dbOwnedResourceIDs}, 0)
+	_, err = tx.Select(&dbAZResources, `SELECT * FROM cluster_az_resources WHERE `+whereClause, queryArgs...)
+	if err != nil {
+		return fmt.Errorf("cannot inspect existing cluster AZ resources: %w", err)
+	}
+	dbAZResourcesByResourceID := make(map[int64][]db.ClusterAZResource)
+	for _, azRes := range dbAZResources {
+		dbAZResourcesByResourceID[azRes.ResourceID] = append(dbAZResourcesByResourceID[azRes.ResourceID], azRes)
+	}
 
-			//do not delete if we still have capacity data
-			_, ok := capacityData[serviceType][resourceName]
-			if ok {
-				continue
-			}
+	//for each cluster_resources entry owned by this capacitor, maintain cluster_az_resources
+	for _, res := range dbOwnedResources {
+		serviceType := serviceTypeForID[res.ServiceID]
+		resourceDataPerAZ := capacityData[serviceType][res.Name].Normalize(c.Cluster.Config.AvailabilityZones)
 
-			_, err = tx.Exec(`DELETE FROM cluster_resources WHERE service_id = $1 AND name = $2`,
-				serviceIDForType[serviceType], resourceName,
-			)
-			if err != nil {
-				return fmt.Errorf("could not cleanup cluster resource %s/%s: %w", serviceType, resourceName, err)
-			}
+		setUpdate := db.SetUpdate[db.ClusterAZResource, limes.AvailabilityZone]{
+			ExistingRecords: dbAZResourcesByResourceID[res.ID],
+			WantedKeys:      resourceDataPerAZ.Keys(),
+			KeyForRecord: func(azRes db.ClusterAZResource) limes.AvailabilityZone {
+				return azRes.AvailabilityZone
+			},
+			Create: func(az limes.AvailabilityZone) (db.ClusterAZResource, error) {
+				return db.ClusterAZResource{
+					ResourceID:       res.ID,
+					AvailabilityZone: az,
+				}, nil
+			},
+			Update: func(azRes *db.ClusterAZResource) (err error) {
+				data := resourceDataPerAZ[azRes.AvailabilityZone]
+				azRes.RawCapacity = data.Capacity
+				azRes.Usage = data.Usage
+				azRes.SubcapacitiesJSON, err = renderListToJSON("subcapacities", data.Subcapacities)
+				return err
+			},
+		}
+		_, err = setUpdate.Execute(tx)
+		if err != nil {
+			return err
 		}
 	}
 
@@ -290,6 +322,17 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 		return err
 	}
 	return tx.Commit()
+}
+
+func renderListToJSON(attribute string, entries []any) (string, error) {
+	if len(entries) == 0 {
+		return "", nil
+	}
+	buf, err := json.Marshal(entries)
+	if err != nil {
+		return "", fmt.Errorf("could not convert %s to JSON: %w", attribute, err)
+	}
+	return string(buf), nil
 }
 
 func shouldStoreAZReport(capacityPerAZ core.PerAZ[core.CapacityData]) bool {

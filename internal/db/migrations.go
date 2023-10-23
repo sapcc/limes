@@ -340,4 +340,32 @@ var sqlMigrations = map[string]string{
 		ALTER TABLE project_resources
 			RENAME CONSTRAINT project_resources_service_id_fkey1 TO project_resources_service_id_fkey;
 	`,
+
+	"028_add_cluster_az_resources.up.sql": `
+		CREATE TABLE cluster_az_resources (
+			resource_id    BIGINT  NOT NULL REFERENCES cluster_resources ON DELETE CASCADE,
+			az             TEXT    NOT NULL,
+			raw_capacity   BIGINT  NOT NULL,
+			usage          BIGINT  NOT NULL,
+			subcapacities  TEXT    NOT NULL DEFAULT '',
+			UNIQUE (resource_id, az)
+		);
+	`,
+	"028_add_cluster_az_resources.down.sql": `
+		DROP TABLE cluster_az_resources;
+	`,
+	"029_add_project_az_resources.up.sql": `
+		CREATE TABLE project_az_resources (
+			resource_id     BIGINT  NOT NULL REFERENCES project_resources ON DELETE CASCADE,
+			az              TEXT    NOT NULL,
+			quota           BIGINT  DEFAULT NULL, -- null if resInfo.NoQuota == true
+			usage           BIGINT  NOT NULL,
+			physical_usage  BIGINT  DEFAULT NULL,
+			subresources    TEXT    NOT NULL DEFAULT '',
+			UNIQUE (resource_id, az)
+		);
+	`,
+	"029_add_project_az_resources.down.sql": `
+		DROP TABLE project_az_resources;
+	`,
 }

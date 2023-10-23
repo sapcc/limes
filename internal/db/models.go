@@ -20,6 +20,7 @@
 package db
 
 import (
+	"strings"
 	"time"
 
 	"github.com/go-gorp/gorp/v3"
@@ -27,6 +28,20 @@ import (
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 )
+
+// ResourceRef identifies an individual ProjectResource, DomainResource or ClusterResource.
+type ResourceRef struct {
+	ServiceID int64  `db:"service_id"`
+	Name      string `db:"name"`
+}
+
+// CompareResourceRefs is a compare function for ResourceRef (for use with slices.SortFunc etc.)
+func CompareResourceRefs(lhs, rhs ResourceRef) int {
+	if lhs.ServiceID != rhs.ServiceID {
+		return int(rhs.ServiceID - lhs.ServiceID)
+	}
+	return strings.Compare(lhs.Name, rhs.Name)
+}
 
 // ClusterCapacitor contains a record from the `cluster_capacitors` table.
 type ClusterCapacitor struct {
@@ -53,6 +68,20 @@ type ClusterResource struct {
 	RawCapacity       uint64 `db:"capacity"`
 	CapacityPerAZJSON string `db:"capacity_per_az"`
 	SubcapacitiesJSON string `db:"subcapacities"`
+}
+
+// Ref returns the ResourceRef for this resource.
+func (r ClusterResource) Ref() ResourceRef {
+	return ResourceRef{r.ServiceID, r.Name}
+}
+
+// ClusterAZResource contains a record from the `cluster_az_resources` table.
+type ClusterAZResource struct {
+	ResourceID        int64                  `db:"resource_id"`
+	AvailabilityZone  limes.AvailabilityZone `db:"az"`
+	RawCapacity       uint64                 `db:"raw_capacity"`
+	Usage             uint64                 `db:"usage"`
+	SubcapacitiesJSON string                 `db:"subcapacities"`
 }
 
 // Domain contains a record from the `domains` table.
@@ -135,6 +164,21 @@ type ProjectResource struct {
 	SubresourcesJSON    string  `db:"subresources"`
 }
 
+// Ref returns the ResourceRef for this resource.
+func (r ProjectResource) Ref() ResourceRef {
+	return ResourceRef{r.ServiceID, r.Name}
+}
+
+// ProjectAZResource contains a record from the `project_az_resources` table.
+type ProjectAZResource struct {
+	ResourceID       int64                  `db:"resource_id"`
+	AvailabilityZone limes.AvailabilityZone `db:"az"`
+	Quota            *uint64                `db:"quota"`
+	Usage            uint64                 `db:"usage"`
+	PhysicalUsage    *uint64                `db:"physical_usage"`
+	SubresourcesJSON string                 `db:"subresources"`
+}
+
 // ProjectRate contains a record from the `project_rates` table.
 type ProjectRate struct {
 	ServiceID     int64              `db:"service_id"`
@@ -181,12 +225,14 @@ func initGorp(db *gorp.DbMap) {
 	db.AddTableWithName(ClusterCapacitor{}, "cluster_capacitors").SetKeys(false, "capacitor_id")
 	db.AddTableWithName(ClusterService{}, "cluster_services").SetKeys(true, "id")
 	db.AddTableWithName(ClusterResource{}, "cluster_resources").SetKeys(true, "id")
+	db.AddTableWithName(ClusterAZResource{}, "cluster_az_resources").SetKeys(false, "resource_id", "az")
 	db.AddTableWithName(Domain{}, "domains").SetKeys(true, "id")
 	db.AddTableWithName(DomainService{}, "domain_services").SetKeys(true, "id")
 	db.AddTableWithName(DomainResource{}, "domain_resources").SetKeys(true, "id")
 	db.AddTableWithName(Project{}, "projects").SetKeys(true, "id")
 	db.AddTableWithName(ProjectService{}, "project_services").SetKeys(true, "id")
 	db.AddTableWithName(ProjectResource{}, "project_resources").SetKeys(true, "id")
+	db.AddTableWithName(ProjectAZResource{}, "project_az_resources").SetKeys(false, "resource_id", "az")
 	db.AddTableWithName(ProjectRate{}, "project_rates").SetKeys(false, "service_id", "name")
 	db.AddTableWithName(ProjectCommitment{}, "project_commitments").SetKeys(true, "id")
 }
