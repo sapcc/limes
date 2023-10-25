@@ -21,7 +21,6 @@ package reports
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -54,20 +53,11 @@ var (
 `)
 	// NOTE: The subquery emulates the behavior of the old `usage` and `physical_usage` columns on `project_resources`.
 	projectReportQuery = sqlext.SimplifyWhitespace(`
-	WITH project_az_sums AS (
-	  SELECT resource_id,
-	         SUM(usage) AS usage,
-	         SUM(COALESCE(physical_usage, usage)) AS physical_usage,
-	         COUNT(physical_usage) > 0 AS has_physical_usage,
-	         JSON_AGG(subresources ORDER BY az) AS subresources
-	    FROM project_az_resources
-	   GROUP BY resource_id
-	)
-	SELECT p.uuid, p.name, COALESCE(p.parent_uuid, ''), p.has_bursting, ps.type, ps.scraped_at, pr.name, pr.quota, pas.usage, pas.physical_usage, pas.has_physical_usage, pr.backend_quota, pas.subresources
+	SELECT p.uuid, p.name, COALESCE(p.parent_uuid, ''), p.has_bursting, ps.type, ps.scraped_at, pr.name, pr.quota, par.usage, par.physical_usage, pr.backend_quota, par.subresources
 	  FROM projects p
 	  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
 	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
-	  LEFT OUTER JOIN project_az_sums pas ON pas.resource_id = pr.id
+	  LEFT OUTER JOIN project_az_resources par ON par.resource_id = pr.id
 	 WHERE %s
 	 ORDER BY p.uuid
 `)
@@ -92,7 +82,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 	//avoid collecting the potentially large subresources strings when possible
 	queryStr := projectReportQuery
 	if !filter.WithSubresources {
-		queryStr = strings.Replace(queryStr, "pas.subresources", "''", 1)
+		queryStr = strings.Replace(queryStr, "par.subresources", "''", 1)
 	}
 	queryStr, joinArgs := filter.PrepareQuery(queryStr)
 	whereStr, whereArgs := db.BuildSimpleWhereClause(fields, len(joinArgs))
@@ -108,16 +98,15 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 			scrapedAt          *time.Time
 			resourceName       *string
 			quota              *uint64
-			usage              *uint64
-			physicalUsage      *uint64
-			hasPhysicalUsage   *bool
+			azUsage            *uint64
+			azPhysicalUsage    *uint64
 			backendQuota       *int64
-			subresourcesArray  *string
+			azSubresources     *string
 		)
 		err := rows.Scan(
 			&projectUUID, &projectName, &projectParentUUID, &projectHasBursting,
 			&serviceType, &scrapedAt, &resourceName,
-			&quota, &usage, &physicalUsage, &hasPhysicalUsage, &backendQuota, &subresourcesArray,
+			&quota, &azUsage, &azPhysicalUsage, &backendQuota, &azSubresources,
 		)
 		if err != nil {
 			return err
@@ -126,6 +115,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 		//if we're moving to a different project, publish the finished report
 		//first (and then allow for it to be GCd)
 		if projectReport != nil && projectReport.UUID != projectUUID {
+			finalizeProjectReport(projectReport)
 			err := submit(projectReport)
 			if err != nil {
 				return err
@@ -177,52 +167,54 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 			return nil
 		}
 
-		//build resource report
+		//start new resource report when necessary
 		behavior := cluster.BehaviorForResource(*serviceType, *resourceName, domain.Name+"/"+projectName)
-		resReport := &limesresources.ProjectResourceReport{
-			ResourceInfo: cluster.InfoForResource(*serviceType, *resourceName),
-			Usage:        unwrapOrDefault(usage, 0),
-			Scaling:      behavior.ToScalingBehavior(),
-			Annotations:  behavior.Annotations,
-			//all other fields are set below
-		}
-		if hasPhysicalUsage != nil && *hasPhysicalUsage {
-			resReport.PhysicalUsage = physicalUsage
-		}
-		if subresourcesArray != nil && *subresourcesArray != "" {
-			// `subresourcesArray` comes out of a JSON_AGG().
-			// It is a JSON-encoded list of JSON documents each containing the subresources of one AZ
-			var jsonLists []string
-			err := json.Unmarshal([]byte(*subresourcesArray), &jsonLists)
-			if err != nil {
-				return fmt.Errorf("cannot decode json_agg(subresources): %w", err)
+		resReport := srvReport.Resources[*resourceName]
+		resWasJustCreated := false
+		if resReport == nil {
+			resReport = &limesresources.ProjectResourceReport{
+				ResourceInfo: cluster.InfoForResource(*serviceType, *resourceName),
+				Usage:        0,
+				Scaling:      behavior.ToScalingBehavior(),
+				Annotations:  behavior.Annotations,
+				//all other fields are set below
 			}
-			for _, jsonList := range jsonLists {
-				mergeJSONListInto(&resReport.Subresources, jsonList)
-			}
-		}
-		if !resReport.NoQuota {
-			qdConfig := cluster.QuotaDistributionConfigForResource(*serviceType, *resourceName)
-			resReport.QuotaDistributionModel = qdConfig.Model
-			resReport.CommitmentConfig = behavior.ToCommitmentConfig()
-			if quota != nil {
-				resReport.Quota = quota
-				resReport.UsableQuota = quota
-				if projectHasBursting && clusterCanBurst {
-					usableQuota := behavior.MaxBurstMultiplier.ApplyTo(*quota, qdConfig.Model)
-					resReport.UsableQuota = &usableQuota
-				}
-				if backendQuota != nil && (*backendQuota < 0 || uint64(*backendQuota) != *resReport.UsableQuota) {
-					resReport.BackendQuota = backendQuota
+
+			if !resReport.NoQuota {
+				qdConfig := cluster.QuotaDistributionConfigForResource(*serviceType, *resourceName)
+				resReport.QuotaDistributionModel = qdConfig.Model
+				resReport.CommitmentConfig = behavior.ToCommitmentConfig()
+				if quota != nil {
+					resReport.Quota = quota
+					resReport.UsableQuota = quota
+					if projectHasBursting && clusterCanBurst {
+						usableQuota := behavior.MaxBurstMultiplier.ApplyTo(*quota, qdConfig.Model)
+						resReport.UsableQuota = &usableQuota
+					}
+					if backendQuota != nil && (*backendQuota < 0 || uint64(*backendQuota) != *resReport.UsableQuota) {
+						resReport.BackendQuota = backendQuota
+					}
 				}
 			}
+
+			srvReport.Resources[*resourceName] = resReport
+			resWasJustCreated = true
 		}
-		if projectHasBursting && clusterCanBurst && quota != nil && usage != nil {
-			if *usage > *quota {
-				resReport.BurstUsage = *usage - *quota
-			}
+
+		//fill data from project_az_resources into resource report
+		if azUsage == nil {
+			return nil //no project_az_resources available
 		}
-		srvReport.Resources[*resourceName] = resReport
+		resReport.Usage += *azUsage
+		if azPhysicalUsage == nil {
+			resReport.PhysicalUsage = nil
+		} else if resReport.PhysicalUsage != nil || resWasJustCreated {
+			sum := unwrapOrDefault(resReport.PhysicalUsage, 0) + *azPhysicalUsage
+			resReport.PhysicalUsage = &sum
+		}
+		if azSubresources != nil {
+			mergeJSONListInto(&resReport.Subresources, *azSubresources)
+		}
 
 		return nil
 	})
@@ -232,9 +224,22 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 
 	//submit final project report
 	if projectReport != nil {
+		finalizeProjectReport(projectReport)
 		return submit(projectReport)
 	}
 	return nil
+}
+
+func finalizeProjectReport(projectReport *limesresources.ProjectReport) {
+	if projectReport.Bursting != nil && projectReport.Bursting.Enabled {
+		for _, srvReport := range projectReport.Services {
+			for _, resReport := range srvReport.Resources {
+				if resReport.Quota != nil && resReport.Usage > *resReport.Quota {
+					resReport.BurstUsage = resReport.Usage - *resReport.Quota
+				}
+			}
+		}
+	}
 }
 
 // GetProjectRates works just like GetProjects, except that rate data is returned instead of resource data.
