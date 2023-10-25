@@ -296,7 +296,7 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 				azRes.PhysicalUsage = data.PhysicalUsage
 
 				//warn when the backend is inconsistent with itself
-				if uint64(len(data.Subresources)) != data.Usage {
+				if data.Subresources != nil && uint64(len(data.Subresources)) != data.Usage {
 					logg.Info("resource quantity mismatch in project %s, resource %s/%s, AZ %s: usage = %d, but found %d subresources",
 						dbProject.UUID, srv.Type, res.Name, azRes.AvailabilityZone,
 						data.Usage, len(data.Subresources),
