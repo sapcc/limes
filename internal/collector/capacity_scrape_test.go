@@ -119,15 +119,14 @@ func Test_ScanCapacity(t *testing.T) {
 		INSERT INTO cluster_az_resources (resource_id, az, raw_capacity, usage) VALUES (2, 'any', 42, 8);
 		INSERT INTO cluster_capacitors (capacitor_id, scraped_at, scrape_duration_secs, next_scrape_at) VALUES ('unittest', 5, 5, 905);
 		INSERT INTO cluster_capacitors (capacitor_id, scraped_at, scrape_duration_secs, next_scrape_at) VALUES ('unittest2', 10, 5, 910);
-		INSERT INTO cluster_resources (id, capacitor_id, service_id, name, capacity) VALUES (1, 'unittest', 1, 'things', 42);
-		INSERT INTO cluster_resources (id, capacitor_id, service_id, name, capacity) VALUES (2, 'unittest2', 2, 'capacity', 42);
+		INSERT INTO cluster_resources (id, capacitor_id, service_id, name) VALUES (1, 'unittest', 1, 'things');
+		INSERT INTO cluster_resources (id, capacitor_id, service_id, name) VALUES (2, 'unittest2', 2, 'capacity');
 	`)
 
 	//insert some crap records
 	unknownRes := &db.ClusterResource{
 		ServiceID:   2,
 		Name:        "unknown",
-		RawCapacity: 100,
 		CapacitorID: "unittest2",
 	}
 	err := s.DB.Insert(unknownRes)
@@ -138,7 +137,7 @@ func Test_ScanCapacity(t *testing.T) {
 		ResourceID:       unknownRes.ID,
 		AvailabilityZone: limes.AvailabilityZoneAny,
 		RawCapacity:      100,
-		Usage:            50,
+		Usage:            p2u64(50),
 	})
 	if err != nil {
 		t.Error(err)
@@ -165,14 +164,14 @@ func Test_ScanCapacity(t *testing.T) {
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest';
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest2';
 		DELETE FROM cluster_resources WHERE id = 1 AND service_id = 1 AND name = 'things';
-		INSERT INTO cluster_resources (id, capacitor_id, service_id, name, capacity) VALUES (4, 'unittest', 1, 'things', 23);
+		INSERT INTO cluster_resources (id, capacitor_id, service_id, name) VALUES (4, 'unittest', 1, 'things');
 	`,
 		scrapedAt1.Unix(), scrapedAt1.Add(15*time.Minute).Unix(),
 		scrapedAt2.Unix(), scrapedAt2.Add(15*time.Minute).Unix(),
 	)
 
-	//add a capacity plugin that reports subcapacities; check that subcapacities
-	//are correctly written when creating a cluster_resources record
+	//add a capacity plugin that reports subcapacities, but not usage; check that subcapacities
+	//and NULL usage are correctly written when creating a cluster_resources record
 	pluginConfig := `
 		id: unittest4
 		type: --test-static
@@ -180,6 +179,7 @@ func Test_ScanCapacity(t *testing.T) {
 			capacity: 42
 			resources: [ unshared/things ]
 			with_subcapacities: true
+			without_usage: true
 	`
 	subcapacityPlugin := s.AddCapacityPlugin(t, pluginConfig).(*plugins.StaticCapacityPlugin) //nolint:errcheck
 	setClusterCapacitorsStale(t, s)
@@ -190,11 +190,11 @@ func Test_ScanCapacity(t *testing.T) {
 	scrapedAt2 = s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt4 := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
-		INSERT INTO cluster_az_resources (resource_id, az, raw_capacity, usage, subcapacities) VALUES (5, 'any', 42, 8, '[{"az":"az-one","smaller_half":7},{"az":"az-one","larger_half":14},{"az":"az-two","smaller_half":7},{"az":"az-two","larger_half":14}]');
+		INSERT INTO cluster_az_resources (resource_id, az, raw_capacity, subcapacities) VALUES (5, 'any', 42, '[{"az":"az-one","smaller_half":7},{"az":"az-one","larger_half":14},{"az":"az-two","smaller_half":7},{"az":"az-two","larger_half":14}]');
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest';
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest2';
 		INSERT INTO cluster_capacitors (capacitor_id, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at) VALUES ('unittest4', %d, 5, '{"smaller_half":14,"larger_half":28}', %d);
-		INSERT INTO cluster_resources (id, capacitor_id, service_id, name, capacity, subcapacities) VALUES (5, 'unittest4', 2, 'things', 42, '[{"az":"az-one","smaller_half":7},{"az":"az-one","larger_half":14},{"az":"az-two","smaller_half":7},{"az":"az-two","larger_half":14}]');
+		INSERT INTO cluster_resources (id, capacitor_id, service_id, name) VALUES (5, 'unittest4', 2, 'things');
 	`,
 		scrapedAt1.Unix(), scrapedAt1.Add(15*time.Minute).Unix(),
 		scrapedAt2.Unix(), scrapedAt2.Add(15*time.Minute).Unix(),
@@ -210,11 +210,10 @@ func Test_ScanCapacity(t *testing.T) {
 	scrapedAt2 = s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt4 = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
-		UPDATE cluster_az_resources SET raw_capacity = 10, usage = 2, subcapacities = '[{"az":"az-one","smaller_half":1},{"az":"az-one","larger_half":4},{"az":"az-two","smaller_half":1},{"az":"az-two","larger_half":4}]' WHERE resource_id = 5 AND az = 'any';
+		UPDATE cluster_az_resources SET raw_capacity = 10, subcapacities = '[{"az":"az-one","smaller_half":1},{"az":"az-one","larger_half":4},{"az":"az-two","smaller_half":1},{"az":"az-two","larger_half":4}]' WHERE resource_id = 5 AND az = 'any';
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest';
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest2';
 		UPDATE cluster_capacitors SET scraped_at = %d, serialized_metrics = '{"smaller_half":3,"larger_half":7}', next_scrape_at = %d WHERE capacitor_id = 'unittest4';
-		UPDATE cluster_resources SET capacity = 10, subcapacities = '[{"az":"az-one","smaller_half":1},{"az":"az-one","larger_half":4},{"az":"az-two","smaller_half":1},{"az":"az-two","larger_half":4}]' WHERE id = 5 AND service_id = 2 AND name = 'things';
 	`,
 		scrapedAt1.Unix(), scrapedAt1.Add(15*time.Minute).Unix(),
 		scrapedAt2.Unix(), scrapedAt2.Add(15*time.Minute).Unix(),
@@ -247,7 +246,7 @@ func Test_ScanCapacity(t *testing.T) {
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest2';
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest4';
 		INSERT INTO cluster_capacitors (capacitor_id, scraped_at, scrape_duration_secs, next_scrape_at) VALUES ('unittest5', %d, 5, %d);
-		INSERT INTO cluster_resources (id, capacitor_id, service_id, name, capacity, capacity_per_az) VALUES (6, 'unittest5', 3, 'things', 42, '[{"name":"az-one","capacity":21,"usage":4},{"name":"az-two","capacity":21,"usage":4}]');
+		INSERT INTO cluster_resources (id, capacitor_id, service_id, name) VALUES (6, 'unittest5', 3, 'things');
 	`,
 		scrapedAt1.Unix(), scrapedAt1.Add(15*time.Minute).Unix(),
 		scrapedAt2.Unix(), scrapedAt2.Add(15*time.Minute).Unix(),
@@ -271,7 +270,6 @@ func Test_ScanCapacity(t *testing.T) {
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest2';
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest4';
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest5';
-		UPDATE cluster_resources SET capacity = 30, capacity_per_az = '[{"name":"az-one","capacity":15,"usage":3},{"name":"az-two","capacity":15,"usage":3}]' WHERE id = 6 AND service_id = 3 AND name = 'things';
 	`,
 		scrapedAt1.Unix(), scrapedAt1.Add(15*time.Minute).Unix(),
 		scrapedAt2.Unix(), scrapedAt2.Add(15*time.Minute).Unix(),

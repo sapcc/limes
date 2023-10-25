@@ -176,7 +176,10 @@ func (p *capacityCinderPlugin) Scrape() (result map[string]map[string]core.PerAZ
 		}
 
 		capa.Capacity += uint64(pool.Capabilities.TotalCapacityGB)
-		capa.Usage += uint64(pool.Capabilities.AllocatedCapacityGB)
+		if capa.Usage == nil {
+			capa.Usage = p2u64(0)
+		}
+		*capa.Usage += uint64(pool.Capabilities.AllocatedCapacityGB)
 
 		if p.reportSubcapacities["capacity"] {
 			capa.Subcapacities = append(capa.Subcapacities, storagePoolSubcapacity{

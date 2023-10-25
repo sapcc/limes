@@ -21,7 +21,6 @@ package collector
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sort"
 	"time"
@@ -226,15 +225,12 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 
 	//this is the callback that ProjectResourceUpdate will use to write the scraped data into the project_resources
 	updateResource := func(res *db.ProjectResource) error {
-		data := resourceData[res.Name]
-		usageData := data.UsageData.Sum()
-		res.Usage = usageData.Usage
-		res.PhysicalUsage = usageData.PhysicalUsage
+		backendQuota := resourceData[res.Name].Quota
 
 		resInfo := c.Cluster.InfoForResource(srv.Type, res.Name)
 		if !resInfo.NoQuota {
 			//check if we can auto-approve an initial quota
-			if res.BackendQuota == nil && (res.Quota == nil || *res.Quota == 0) && data.Quota > 0 && uint64(data.Quota) == resInfo.AutoApproveInitialQuota {
+			if res.BackendQuota == nil && (res.Quota == nil || *res.Quota == 0) && backendQuota > 0 && uint64(backendQuota) == resInfo.AutoApproveInitialQuota {
 				res.Quota = &resInfo.AutoApproveInitialQuota
 				logg.Other("AUDIT", "changing %s/%s quota for project %s/%s from %s to %s through auto-approval",
 					srv.Type, res.Name, dbDomain.Name, dbProject.Name,
@@ -243,24 +239,7 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 				)
 			}
 
-			res.BackendQuota = &data.Quota
-		}
-
-		if len(usageData.Subresources) == 0 {
-			res.SubresourcesJSON = ""
-		} else {
-			//warn when the backend is inconsistent with itself
-			if uint64(len(usageData.Subresources)) != res.Usage {
-				logg.Info("resource quantity mismatch in project %s, resource %s/%s: usage = %d, but found %d subresources",
-					dbProject.UUID, srv.Type, res.Name,
-					res.Usage, len(usageData.Subresources),
-				)
-			}
-			bytes, err := json.Marshal(usageData.Subresources)
-			if err != nil {
-				return fmt.Errorf("failed to convert subresources to JSON: %s", err.Error())
-			}
-			res.SubresourcesJSON = string(bytes)
+			res.BackendQuota = &backendQuota
 		}
 
 		return nil
@@ -315,6 +294,15 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 				azRes.Quota = nil // TODO: add the new quota distribution model that assigns quota per AZ
 				azRes.Usage = data.Usage
 				azRes.PhysicalUsage = data.PhysicalUsage
+
+				//warn when the backend is inconsistent with itself
+				if uint64(len(data.Subresources)) != data.Usage {
+					logg.Info("resource quantity mismatch in project %s, resource %s/%s, AZ %s: usage = %d, but found %d subresources",
+						dbProject.UUID, srv.Type, res.Name, azRes.AvailabilityZone,
+						data.Usage, len(data.Subresources),
+					)
+				}
+
 				azRes.SubresourcesJSON, err = renderListToJSON("subresources", data.Subresources)
 				return err
 			},

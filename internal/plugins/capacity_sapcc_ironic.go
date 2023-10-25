@@ -268,7 +268,10 @@ func (p *capacitySapccIronicPlugin) Scrape() (result map[string]map[string]core.
 
 				data.Capacity++
 				if node.StableProvisionState() == "active" {
-					data.Usage++
+					if data.Usage == nil {
+						data.Usage = p2u64(0)
+					}
+					*data.Usage++
 				}
 
 				if p.reportSubcapacities {

@@ -168,8 +168,8 @@ func (d UsageData) add(other UsageData) UsageData {
 // CapacityData contains capacity data for a single project resource.
 type CapacityData struct {
 	Capacity      uint64
-	Usage         uint64 //NOTE: currently only relevant on AZ level, regional level uses the aggregation of project usages
-	Subcapacities []any  //only if supported by plugin and enabled in config
+	Usage         *uint64 //NOTE: currently only relevant on AZ level, regional level uses the aggregation of project usages
+	Subcapacities []any   //only if supported by plugin and enabled in config
 }
 
 // clone implements the AZAwareData interface.
@@ -187,9 +187,16 @@ func (d CapacityData) clone() CapacityData {
 //
 //nolint:unused // looks like a linter bug
 func (d CapacityData) add(other CapacityData) CapacityData {
-	return CapacityData{
+	result := CapacityData{
 		Capacity:      d.Capacity + other.Capacity,
-		Usage:         d.Usage + other.Usage,
 		Subcapacities: append(slices.Clone(d.Subcapacities), other.Subcapacities...),
 	}
+
+	//the sum can only have a PhysicalUsage value if both sides have it
+	if d.Usage != nil && other.Usage != nil {
+		usage := *d.Usage + *other.Usage
+		result.Usage = &usage
+	}
+
+	return result
 }

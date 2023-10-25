@@ -267,7 +267,7 @@ func (p *capacityNovaPlugin) Scrape() (result map[string]map[string]core.PerAZ[c
 					AggregateName:    matchingAggregateName,
 					AvailabilityZone: matchingAvailabilityZone,
 					Capacity:         resCapa.Capacity,
-					Usage:            resCapa.Usage,
+					Usage:            *resCapa.Usage,
 					Traits:           traits,
 				})
 			}
@@ -356,12 +356,17 @@ func nameListToLabelValue[S ~string](names []S) string {
 
 // The capacity of any level of the Nova superstructure (hypervisor, aggregate, AZ).
 type partialNovaCapacity struct {
-	VCPUs              core.CapacityData
-	MemoryMB           core.CapacityData
+	VCPUs              partialNovaCapacityMetric
+	MemoryMB           partialNovaCapacityMetric
 	LocalGB            uint64
 	RunningVMs         uint64
 	MatchingAggregates map[string]bool
 	Subcapacities      []any // only filled on AZ level
+}
+
+type partialNovaCapacityMetric struct {
+	Capacity uint64
+	Usage    uint64
 }
 
 func (c partialNovaCapacity) IsEmpty() bool {
@@ -389,9 +394,15 @@ func (c *partialNovaCapacity) Add(other partialNovaCapacity) {
 func (c partialNovaCapacity) GetCapacity(resourceName string, maxRootDiskSize float64) core.CapacityData {
 	switch resourceName {
 	case "cores":
-		return c.VCPUs
+		return core.CapacityData{
+			Capacity: c.VCPUs.Capacity,
+			Usage:    &c.VCPUs.Usage,
+		}
 	case "ram":
-		return c.MemoryMB
+		return core.CapacityData{
+			Capacity: c.MemoryMB.Capacity,
+			Usage:    &c.MemoryMB.Usage,
+		}
 	case "instances":
 		amount := 10000 * uint64(len(c.MatchingAggregates))
 		if maxRootDiskSize != 0 {
@@ -402,7 +413,7 @@ func (c partialNovaCapacity) GetCapacity(resourceName string, maxRootDiskSize fl
 		}
 		return core.CapacityData{
 			Capacity: amount,
-			Usage:    c.RunningVMs,
+			Usage:    &c.RunningVMs,
 		}
 	default:
 		panic(fmt.Sprintf("called with unknown resourceName %q", resourceName))
@@ -460,11 +471,11 @@ func (h novaHypervisor) getCapacity(placementClient *gophercloud.ServiceClient, 
 	}
 
 	return partialNovaCapacity{
-		VCPUs: core.CapacityData{
+		VCPUs: partialNovaCapacityMetric{
 			Capacity: uint64(inventory.Inventories["VCPU"].Total - inventory.Inventories["VCPU"].Reserved),
 			Usage:    uint64(usages.Usages["VCPU"]),
 		},
-		MemoryMB: core.CapacityData{
+		MemoryMB: partialNovaCapacityMetric{
 			Capacity: uint64(inventory.Inventories["MEMORY_MB"].Total - inventory.Inventories["MEMORY_MB"].Reserved),
 			Usage:    uint64(usages.Usages["MEMORY_MB"]),
 		},

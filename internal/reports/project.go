@@ -52,11 +52,22 @@ var (
 	 WHERE %s
 	 ORDER BY p.uuid
 `)
+	// NOTE: The subquery emulates the behavior of the old `usage` and `physical_usage` columns on `project_resources`.
 	projectReportQuery = sqlext.SimplifyWhitespace(`
-	SELECT p.uuid, p.name, COALESCE(p.parent_uuid, ''), p.has_bursting, ps.type, ps.scraped_at, pr.name, pr.quota, pr.usage, pr.physical_usage, pr.backend_quota, pr.subresources
+	WITH project_az_sums AS (
+	  SELECT resource_id,
+	         SUM(usage) AS usage,
+	         SUM(COALESCE(physical_usage, usage)) AS physical_usage,
+	         COUNT(physical_usage) > 0 AS has_physical_usage,
+	         JSON_AGG(subresources ORDER BY az) AS subresources
+	    FROM project_az_resources
+	   GROUP BY resource_id
+	)
+	SELECT p.uuid, p.name, COALESCE(p.parent_uuid, ''), p.has_bursting, ps.type, ps.scraped_at, pr.name, pr.quota, pas.usage, pas.physical_usage, pas.has_physical_usage, pr.backend_quota, pas.subresources
 	  FROM projects p
 	  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
 	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
+	  LEFT OUTER JOIN project_az_sums pas ON pas.resource_id = pr.id
 	 WHERE %s
 	 ORDER BY p.uuid
 `)
@@ -81,7 +92,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 	//avoid collecting the potentially large subresources strings when possible
 	queryStr := projectReportQuery
 	if !filter.WithSubresources {
-		queryStr = strings.Replace(queryStr, "pr.subresources", "''", 1)
+		queryStr = strings.Replace(queryStr, "pas.subresources", "''", 1)
 	}
 	queryStr, joinArgs := filter.PrepareQuery(queryStr)
 	whereStr, whereArgs := db.BuildSimpleWhereClause(fields, len(joinArgs))
@@ -99,13 +110,14 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 			quota              *uint64
 			usage              *uint64
 			physicalUsage      *uint64
+			hasPhysicalUsage   *bool
 			backendQuota       *int64
-			subresources       *string
+			subresourcesArray  *string
 		)
 		err := rows.Scan(
 			&projectUUID, &projectName, &projectParentUUID, &projectHasBursting,
 			&serviceType, &scrapedAt, &resourceName,
-			&quota, &usage, &physicalUsage, &backendQuota, &subresources,
+			&quota, &usage, &physicalUsage, &hasPhysicalUsage, &backendQuota, &subresourcesArray,
 		)
 		if err != nil {
 			return err
@@ -168,13 +180,26 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 		//build resource report
 		behavior := cluster.BehaviorForResource(*serviceType, *resourceName, domain.Name+"/"+projectName)
 		resReport := &limesresources.ProjectResourceReport{
-			ResourceInfo:  cluster.InfoForResource(*serviceType, *resourceName),
-			Usage:         unwrapOrDefault(usage, 0),
-			PhysicalUsage: physicalUsage,
-			Subresources:  json.RawMessage(unwrapOrDefault(subresources, "")),
-			Scaling:       behavior.ToScalingBehavior(),
-			Annotations:   behavior.Annotations,
-			//QuotaDistributionModel, Quota, UsableQuota, BackendQuota, BurstUsage are set below
+			ResourceInfo: cluster.InfoForResource(*serviceType, *resourceName),
+			Usage:        unwrapOrDefault(usage, 0),
+			Scaling:      behavior.ToScalingBehavior(),
+			Annotations:  behavior.Annotations,
+			//all other fields are set below
+		}
+		if hasPhysicalUsage != nil && *hasPhysicalUsage {
+			resReport.PhysicalUsage = physicalUsage
+		}
+		if subresourcesArray != nil && *subresourcesArray != "" {
+			// `subresourcesArray` comes out of a JSON_AGG().
+			// It is a JSON-encoded list of JSON documents each containing the subresources of one AZ
+			var jsonLists []string
+			err := json.Unmarshal([]byte(*subresourcesArray), &jsonLists)
+			if err != nil {
+				return fmt.Errorf("cannot decode json_agg(subresources): %w", err)
+			}
+			for _, jsonList := range jsonLists {
+				mergeJSONListInto(&resReport.Subresources, jsonList)
+			}
 		}
 		if !resReport.NoQuota {
 			qdConfig := cluster.QuotaDistributionConfigForResource(*serviceType, *resourceName)
@@ -347,15 +372,4 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 		return submit(projectReport)
 	}
 	return nil
-}
-
-func pointerTo[T any](value T) *T {
-	return &value
-}
-
-func unwrapOrDefault[T any](value *T, defaultValue T) T {
-	if value == nil {
-		return defaultValue
-	}
-	return *value
 }

@@ -94,13 +94,15 @@ var ocdqReportQuery = sqlext.SimplifyWhitespace(`
 `)
 
 var ospqReportQuery = sqlext.SimplifyWhitespace(`
-	SELECT d.uuid, d.name, p.uuid, p.name, ps.type, pr.name, pr.desired_backend_quota, pr.usage
+	SELECT d.uuid, d.name, p.uuid, p.name, ps.type, pr.name, pr.desired_backend_quota, SUM(par.usage)
 	  FROM projects p
 	  JOIN domains d ON d.id = p.domain_id
 	  JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
 	  JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
-	WHERE pr.usage > pr.desired_backend_quota
-	ORDER BY d.name, p.name, ps.type, pr.name
+	  JOIN project_az_resources par ON pr.id = par.resource_id
+	 GROUP BY d.uuid, d.name, p.uuid, p.name, ps.type, pr.name, pr.desired_backend_quota
+	HAVING SUM(par.usage) > pr.desired_backend_quota
+	 ORDER BY d.name, p.name, ps.type, pr.name
 `)
 
 var mmpqReportQuery = sqlext.SimplifyWhitespace(`
