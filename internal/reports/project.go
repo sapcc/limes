@@ -59,7 +59,7 @@ var (
 	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
 	  LEFT OUTER JOIN project_az_resources par ON par.resource_id = pr.id
 	 WHERE %s
-	 ORDER BY p.uuid
+	 ORDER BY p.uuid, par.az
 `)
 )
 
