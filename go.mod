@@ -10,7 +10,7 @@ require (
 	github.com/gophercloud/gophercloud v1.7.0
 	github.com/gophercloud/utils v0.0.0-20231010081019-80377eca5d56
 	github.com/gorilla/mux v1.8.0
-	github.com/majewsky/schwift v1.2.0
+	github.com/majewsky/schwift v1.3.0
 	github.com/prometheus/client_golang v1.17.0
 	github.com/rs/cors v1.10.1
 	github.com/sapcc/go-api-declarations v1.9.0
