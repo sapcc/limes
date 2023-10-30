@@ -21,6 +21,7 @@ package reports
 
 import (
 	"database/sql"
+	"encoding/json"
 	"strings"
 	"time"
 
@@ -33,21 +34,25 @@ import (
 	"github.com/sapcc/limes/internal/db"
 )
 
-// NOTE: The subquery emulates the behavior of the old `usage` and `physical_usage` columns on `project_resources`.
 var clusterReportQuery1 = sqlext.SimplifyWhitespace(`
+	SELECT ps.type, pr.name, par.az,
+	       SUM(par.usage), SUM(COALESCE(par.physical_usage, par.usage)), COUNT(par.physical_usage) > 0,
+	       MIN(ps.scraped_at), MAX(ps.scraped_at)
+	  FROM project_services ps
+	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
+	  LEFT OUTER JOIN project_az_resources par ON par.resource_id = pr.id
+	 WHERE TRUE {{AND ps.type = $service_type}}
+	 GROUP BY ps.type, pr.name, par.az
+`)
+
+// This was split from clusterReportQuery1 because the quota collection and burst usage calculation requires a different `GROUP BY`.
+var clusterReportQuery1B = sqlext.SimplifyWhitespace(`
 	WITH project_az_sums AS (
-	  SELECT resource_id,
-	         SUM(usage) AS usage,
-	         SUM(COALESCE(physical_usage, usage)) AS physical_usage,
-	         COUNT(physical_usage) > 0 AS has_physical_usage
+	  SELECT resource_id, SUM(usage) AS usage
 	    FROM project_az_resources
 	   GROUP BY resource_id
 	)
-	SELECT ps.type, pr.name,
-	       SUM(pr.quota), SUM(pas.usage),
-	       SUM(GREATEST(pas.usage - pr.quota, 0)),
-	       SUM(pas.physical_usage), BOOL_OR(pas.has_physical_usage),
-	       MIN(ps.scraped_at), MAX(ps.scraped_at)
+	SELECT ps.type, pr.name, SUM(GREATEST(pas.usage - pr.quota, 0))
 	  FROM project_services ps
 	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
 	  LEFT OUTER JOIN project_az_sums pas ON pas.resource_id = pr.id
@@ -95,17 +100,15 @@ func GetClusterResources(cluster *core.Cluster, dbi db.Interface, filter Filter)
 		var (
 			serviceType       string
 			resourceName      *string
-			projectsQuota     *uint64
+			availabilityZone  *limes.AvailabilityZone
 			usage             *uint64
-			burstUsage        *uint64
 			physicalUsage     *uint64
 			showPhysicalUsage *bool
 			minScrapedAt      *time.Time
 			maxScrapedAt      *time.Time
 		)
-		err := rows.Scan(&serviceType, &resourceName,
-			&projectsQuota, &usage, &burstUsage,
-			&physicalUsage, &showPhysicalUsage,
+		err := rows.Scan(&serviceType, &resourceName, &availabilityZone,
+			&usage, &physicalUsage, &showPhysicalUsage,
 			&minScrapedAt, &maxScrapedAt)
 		if err != nil {
 			return err
@@ -113,28 +116,68 @@ func GetClusterResources(cluster *core.Cluster, dbi db.Interface, filter Filter)
 
 		service, resource := findInClusterReport(cluster, report, serviceType, resourceName)
 
-		clusterCanBurst := cluster.Config.Bursting.MaxMultiplier > 0
-
 		if service != nil {
 			service.MaxScrapedAt = mergeMaxTime(service.MaxScrapedAt, maxScrapedAt)
 			service.MinScrapedAt = mergeMinTime(service.MinScrapedAt, minScrapedAt)
 		}
-
-		if resource != nil {
-			if usage != nil {
-				resource.Usage = *usage
-			}
-			if clusterCanBurst && burstUsage != nil {
-				resource.BurstUsage = *burstUsage
-			}
-			if showPhysicalUsage != nil && *showPhysicalUsage {
-				resource.PhysicalUsage = physicalUsage
-			}
+		if resource == nil || availabilityZone == nil {
+			return nil
 		}
+
+		resource.Usage += *usage
+		if *showPhysicalUsage {
+			sumPhysicalUsage := *physicalUsage
+			if resource.PhysicalUsage != nil {
+				sumPhysicalUsage += *resource.PhysicalUsage
+			}
+			resource.PhysicalUsage = &sumPhysicalUsage
+		}
+
+		if filter.WithAZBreakdown {
+			if resource.PerAZ == nil {
+				resource.PerAZ = make(limesresources.ClusterAZResourceReports)
+			}
+			azReport := limesresources.ClusterAZResourceReport{
+				ProjectsUsage: *usage,
+			}
+			if *showPhysicalUsage {
+				azReport.PhysicalUsage = physicalUsage
+			}
+			resource.PerAZ[*availabilityZone] = &azReport
+		}
+
 		return nil
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	//first query, addendum: collect burst usage data
+	clusterCanBurst := cluster.Config.Bursting.MaxMultiplier > 0
+	if clusterCanBurst {
+		queryStr, joinArgs = filter.PrepareQuery(clusterReportQuery1B)
+		err := sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
+			var (
+				serviceType  string
+				resourceName *string
+				burstUsage   *uint64
+			)
+			err := rows.Scan(&serviceType, &resourceName, &burstUsage)
+			if err != nil {
+				return err
+			}
+
+			if burstUsage != nil {
+				_, resource := findInClusterReport(cluster, report, serviceType, resourceName)
+				if resource != nil {
+					resource.BurstUsage = *burstUsage
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	//second query: collect domain quota data in these clusters
@@ -212,6 +255,21 @@ func GetClusterResources(cluster *core.Cluster, dbi db.Interface, filter Filter)
 					resource.CapacityPerAZ = make(limesresources.ClusterAvailabilityZoneReports)
 				}
 				resource.CapacityPerAZ[*availabilityZone] = &azReport
+
+				if filter.WithAZBreakdown {
+					if resource.PerAZ == nil {
+						resource.PerAZ = make(limesresources.ClusterAZResourceReports)
+					}
+					azReportV2 := resource.PerAZ[*availabilityZone]
+					if azReportV2 == nil {
+						azReportV2 = &limesresources.ClusterAZResourceReport{}
+						resource.PerAZ[*availabilityZone] = azReportV2
+					}
+					azReportV2.Capacity = azReport.Capacity
+					azReportV2.RawCapacity = azReport.RawCapacity
+					azReportV2.Usage = usageInAZ
+					azReportV2.Subcapacities = json.RawMessage(unwrapOrDefault(subcapacitiesInAZ, ""))
+				}
 			}
 		}
 
