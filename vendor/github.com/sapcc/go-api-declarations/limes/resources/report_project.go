@@ -96,4 +96,4 @@ type ProjectResourceReports map[string]*ProjectResourceReport
 
 // ProjectAZResourceReport is a substructure of ProjectResourceReport that breaks
 // down quota and usage data for a single resource by availability zone.
-type ProjectAZResourceReports map[limes.AvailabilityZone]ProjectAZResourceReport
+type ProjectAZResourceReports map[limes.AvailabilityZone]*ProjectAZResourceReport

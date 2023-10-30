@@ -22,6 +22,7 @@ package reports
 import (
 	"net/http"
 	"regexp"
+	"strings"
 
 	"github.com/sapcc/limes/internal/db"
 )
@@ -34,6 +35,7 @@ type Filter struct {
 
 	WithSubresources  bool
 	WithSubcapacities bool
+	WithAZBreakdown   bool
 
 	IsSubcapacityAllowed func(serviceType, resourceName string) bool
 }
@@ -55,6 +57,7 @@ func ReadFilter(r *http.Request, getServiceTypesForArea func(string) []string) F
 		f.WithSubresources = ok
 		f.WithSubcapacities = ok
 	}
+	f.WithAZBreakdown = strings.Contains(r.Header.Get("X-Limes-V2-API-Preview"), "per-az")
 
 	if areas, ok := queryValues["area"]; ok {
 		var areaServices []string
