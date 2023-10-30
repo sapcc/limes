@@ -45,6 +45,9 @@ type QuotaUpdater struct {
 	Domain  *db.Domain  //always set (for project quota updates, contains the project's domain)
 	Project *db.Project //nil for domain quota updates
 
+	//context
+	Now time.Time
+
 	//AuthZ info
 	CanRaise   func(serviceType, resourceName string) bool
 	CanRaiseLP func(serviceType, resourceName string) bool //low-privilege raise
@@ -124,7 +127,7 @@ func (u *QuotaUpdater) ValidateInput(input limesresources.QuotaRequest, dbi db.I
 	//for project scope, we also need a project report for validation
 	var projectReport *limesresources.ProjectReport
 	if u.Project != nil {
-		projectReport, err = GetProjectResourceReport(u.Cluster, *u.Domain, *u.Project, dbi, reports.Filter{})
+		projectReport, err = GetProjectResourceReport(u.Cluster, *u.Domain, *u.Project, u.Now, dbi, reports.Filter{})
 		if err != nil {
 			return err
 		}

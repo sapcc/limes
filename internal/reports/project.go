@@ -71,7 +71,7 @@ var (
 // reports with the highest detail levels can be several MB large, we don't just
 // return them all in a big list. Instead, the `submit` callback gets called
 // once for each project report once that report is complete.
-func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Project, dbi db.Interface, filter Filter, submit func(*limesresources.ProjectReport) error) error {
+func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Project, now time.Time, dbi db.Interface, filter Filter, submit func(*limesresources.ProjectReport) error) error {
 	clusterCanBurst := cluster.Config.Bursting.MaxMultiplier > 0
 
 	fields := map[string]any{"p.domain_id": domain.ID}
