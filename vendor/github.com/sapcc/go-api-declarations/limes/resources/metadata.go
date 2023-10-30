@@ -88,6 +88,7 @@ const (
 	// The domain quota cannot be edited and is always reported equal to the
 	// projects quota.
 	CentralizedQuotaDistribution QuotaDistributionModel = "centralized"
+	// ^ NOTE: When removing this, also consider removing DefaultQuota from ProjectResourceReport.
 )
 
 // CommitmentConfiguration describes how commitments are configured for a given resource.

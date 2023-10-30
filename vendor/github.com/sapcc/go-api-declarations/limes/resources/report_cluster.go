@@ -48,15 +48,18 @@ type ClusterServiceReport struct {
 type ClusterResourceReport struct {
 	//Several fields are pointers to values to enable precise control over which fields are rendered in output.
 	ResourceInfo
-	QuotaDistributionModel QuotaDistributionModel         `json:"quota_distribution_model,omitempty"`
-	Capacity               *uint64                        `json:"capacity,omitempty"`
-	RawCapacity            *uint64                        `json:"raw_capacity,omitempty"`
-	CapacityPerAZ          ClusterAvailabilityZoneReports `json:"per_availability_zone,omitempty"`
-	DomainsQuota           *uint64                        `json:"domains_quota,omitempty"`
-	Usage                  uint64                         `json:"usage"`
-	BurstUsage             uint64                         `json:"burst_usage,omitempty"`
-	PhysicalUsage          *uint64                        `json:"physical_usage,omitempty"`
-	Subcapacities          json.RawMessage                `json:"subcapacities,omitempty"`
+	QuotaDistributionModel QuotaDistributionModel `json:"quota_distribution_model,omitempty"`
+	Capacity               *uint64                `json:"capacity,omitempty"`
+	RawCapacity            *uint64                `json:"raw_capacity,omitempty"`
+	//PerAZ is only rendered by Limes when the v2 API feature preview is enabled.
+	//In this case, CapacityPerAZ will be omitted.
+	PerAZ         ClusterAZResourceReports       `json:"per_az,omitempty"`
+	CapacityPerAZ ClusterAvailabilityZoneReports `json:"per_availability_zone,omitempty"`
+	DomainsQuota  *uint64                        `json:"domains_quota,omitempty"`
+	Usage         uint64                         `json:"usage"`
+	BurstUsage    uint64                         `json:"burst_usage,omitempty"`
+	PhysicalUsage *uint64                        `json:"physical_usage,omitempty"`
+	Subcapacities json.RawMessage                `json:"subcapacities,omitempty"`
 }
 
 // ClusterAvailabilityZoneReport is a substructure of ClusterResourceReport containing
@@ -66,6 +69,16 @@ type ClusterAvailabilityZoneReport struct {
 	Capacity    uint64                 `json:"capacity"`
 	RawCapacity uint64                 `json:"raw_capacity,omitempty"`
 	Usage       uint64                 `json:"usage,omitempty"`
+}
+
+// ClusterAZResourceReport is a substructure of ClusterResourceReport containing
+// capacity and usage data for a single resource in an availability zone.
+//
+// This type is part of the v2 API feature preview.
+type ClusterAZResourceReport struct {
+	Capacity    uint64  `json:"capacity"`
+	RawCapacity uint64  `json:"raw_capacity,omitempty"`
+	Usage       *uint64 `json:"usage,omitempty"`
 }
 
 // ClusterServiceReports provides fast lookup of services by service type, but
@@ -79,3 +92,7 @@ type ClusterResourceReports map[string]*ClusterResourceReport
 // ClusterAvailabilityZoneReports provides fast lookup of availability zones
 // using a map, but serializes to JSON as a list.
 type ClusterAvailabilityZoneReports map[limes.AvailabilityZone]*ClusterAvailabilityZoneReport
+
+// ClusterAZResourceReport is a substructure of ClusterResourceReport that breaks
+// down capacity and usage data for a single resource by availability zone.
+type ClusterAZResourceReports map[limes.AvailabilityZone]ClusterAZResourceReport
