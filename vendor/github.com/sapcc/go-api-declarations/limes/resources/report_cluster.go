@@ -95,4 +95,4 @@ type ClusterAvailabilityZoneReports map[limes.AvailabilityZone]*ClusterAvailabil
 
 // ClusterAZResourceReport is a substructure of ClusterResourceReport that breaks
 // down capacity and usage data for a single resource by availability zone.
-type ClusterAZResourceReports map[limes.AvailabilityZone]ClusterAZResourceReport
+type ClusterAZResourceReports map[limes.AvailabilityZone]*ClusterAZResourceReport

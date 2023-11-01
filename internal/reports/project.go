@@ -21,6 +21,7 @@ package reports
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -51,9 +52,9 @@ var (
 	 WHERE %s
 	 ORDER BY p.uuid
 `)
-	// NOTE: The subquery emulates the behavior of the old `usage` and `physical_usage` columns on `project_resources`.
+
 	projectReportQuery = sqlext.SimplifyWhitespace(`
-	SELECT p.uuid, p.name, COALESCE(p.parent_uuid, ''), p.has_bursting, ps.type, ps.scraped_at, pr.name, pr.quota, par.usage, par.physical_usage, pr.backend_quota, par.subresources
+	SELECT p.id, p.uuid, p.name, COALESCE(p.parent_uuid, ''), p.has_bursting, ps.type, ps.scraped_at, pr.name, pr.quota, par.az, par.usage, par.physical_usage, pr.backend_quota, par.subresources
 	  FROM projects p
 	  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
 	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
@@ -61,6 +62,14 @@ var (
 	 WHERE %s
 	 ORDER BY p.uuid, par.az
 `)
+
+	projectReportCommitmentsQuery = sqlext.SimplifyWhitespace(`
+	SELECT ps.type, pc.resource_name, pc.availability_zone, pc.duration, SUM(pc.amount)
+	  FROM project_services ps
+	  JOIN project_commitments pc ON pc.service_id = ps.id
+	 WHERE ps.project_id = $1 AND pc.confirmed_at IS NOT NULL AND pc.superseded_at IS NULL AND pc.expires_at > $2
+	 GROUP BY ps.type, pc.resource_name, pc.availability_zone, pc.duration
+	`)
 )
 
 // GetProjectResources returns limes.ProjectReport reports for all projects in
@@ -71,7 +80,7 @@ var (
 // reports with the highest detail levels can be several MB large, we don't just
 // return them all in a big list. Instead, the `submit` callback gets called
 // once for each project report once that report is complete.
-func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Project, dbi db.Interface, filter Filter, submit func(*limesresources.ProjectReport) error) error {
+func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Project, now time.Time, dbi db.Interface, filter Filter, submit func(*limesresources.ProjectReport) error) error {
 	clusterCanBurst := cluster.Config.Bursting.MaxMultiplier > 0
 
 	fields := map[string]any{"p.domain_id": domain.ID}
@@ -87,9 +96,13 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 	queryStr, joinArgs := filter.PrepareQuery(queryStr)
 	whereStr, whereArgs := db.BuildSimpleWhereClause(fields, len(joinArgs))
 
-	var projectReport *limesresources.ProjectReport
+	var (
+		currentProjectID int64
+		projectReport    *limesresources.ProjectReport
+	)
 	err := sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		var (
+			projectID          int64
 			projectUUID        string
 			projectName        string
 			projectParentUUID  string
@@ -98,15 +111,16 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 			scrapedAt          *time.Time
 			resourceName       *string
 			quota              *uint64
+			az                 *limes.AvailabilityZone
 			azUsage            *uint64
 			azPhysicalUsage    *uint64
 			backendQuota       *int64
 			azSubresources     *string
 		)
 		err := rows.Scan(
-			&projectUUID, &projectName, &projectParentUUID, &projectHasBursting,
+			&projectID, &projectUUID, &projectName, &projectParentUUID, &projectHasBursting,
 			&serviceType, &scrapedAt, &resourceName,
-			&quota, &azUsage, &azPhysicalUsage, &backendQuota, &azSubresources,
+			&quota, &az, &azUsage, &azPhysicalUsage, &backendQuota, &azSubresources,
 		)
 		if err != nil {
 			return err
@@ -115,16 +129,21 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 		//if we're moving to a different project, publish the finished report
 		//first (and then allow for it to be GCd)
 		if projectReport != nil && projectReport.UUID != projectUUID {
-			finalizeProjectReport(projectReport)
-			err := submit(projectReport)
+			err := finalizeProjectResourceReport(projectReport, currentProjectID, now, dbi, filter)
+			if err != nil {
+				return err
+			}
+			err = submit(projectReport)
 			if err != nil {
 				return err
 			}
 			projectReport = nil
+			currentProjectID = 0
 		}
 
 		//start new project report when necessary
 		if projectReport == nil {
+			currentProjectID = projectID
 			projectReport = &limesresources.ProjectReport{
 				ProjectInfo: limes.ProjectInfo{
 					Name:       projectName,
@@ -180,6 +199,10 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 				//all other fields are set below
 			}
 
+			if filter.WithAZBreakdown {
+				resReport.PerAZ = make(limesresources.ProjectAZResourceReports)
+			}
+
 			if !resReport.NoQuota {
 				qdConfig := cluster.QuotaDistributionConfigForResource(*serviceType, *resourceName)
 				resReport.QuotaDistributionModel = qdConfig.Model
@@ -202,7 +225,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 		}
 
 		//fill data from project_az_resources into resource report
-		if azUsage == nil {
+		if az == nil {
 			return nil //no project_az_resources available
 		}
 		resReport.Usage += *azUsage
@@ -216,6 +239,16 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 			mergeJSONListInto(&resReport.Subresources, *azSubresources)
 		}
 
+		if filter.WithAZBreakdown {
+			resReport.PerAZ[*az] = &limesresources.ProjectAZResourceReport{
+				Quota:         nil, //TODO: report this once we have a distribution model that fills quota per AZ
+				Committed:     nil, //will be filled by finalizeProjectResourceReport()
+				Usage:         *azUsage,
+				PhysicalUsage: azPhysicalUsage,
+				Subresources:  json.RawMessage(*azSubresources),
+			}
+		}
+
 		return nil
 	})
 	if err != nil {
@@ -224,13 +257,16 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 
 	//submit final project report
 	if projectReport != nil {
-		finalizeProjectReport(projectReport)
+		err := finalizeProjectResourceReport(projectReport, currentProjectID, now, dbi, filter)
+		if err != nil {
+			return err
+		}
 		return submit(projectReport)
 	}
 	return nil
 }
 
-func finalizeProjectReport(projectReport *limesresources.ProjectReport) {
+func finalizeProjectResourceReport(projectReport *limesresources.ProjectReport, projectID int64, now time.Time, dbi db.Interface, filter Filter) error {
 	if projectReport.Bursting != nil && projectReport.Bursting.Enabled {
 		for _, srvReport := range projectReport.Services {
 			for _, resReport := range srvReport.Resources {
@@ -240,6 +276,48 @@ func finalizeProjectReport(projectReport *limesresources.ProjectReport) {
 			}
 		}
 	}
+
+	if filter.WithAZBreakdown {
+		// if `per_az` is shown, we need to compute the sum of all active commitments using a different query
+		err := sqlext.ForeachRow(dbi, projectReportCommitmentsQuery, []any{projectID, now}, func(rows *sql.Rows) error {
+			var (
+				serviceType  string
+				resourceName string
+				az           limes.AvailabilityZone
+				duration     limesresources.CommitmentDuration
+				amount       uint64
+			)
+			err := rows.Scan(&serviceType, &resourceName, &az, &duration, &amount)
+			if err != nil {
+				return err
+			}
+
+			srvReport := projectReport.Services[serviceType]
+			if srvReport == nil {
+				return nil
+			}
+			resReport := srvReport.Resources[resourceName]
+			if resReport == nil {
+				return nil
+			}
+			azReport := resReport.PerAZ[az]
+			if azReport == nil {
+				return nil
+			}
+
+			if azReport.Committed == nil {
+				azReport.Committed = make(map[string]uint64)
+			}
+			azReport.Committed[duration.String()] = amount
+
+			return nil
+		})
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 // GetProjectRates works just like GetProjects, except that rate data is returned instead of resource data.

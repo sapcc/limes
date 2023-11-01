@@ -63,7 +63,7 @@ func (p *v1Provider) ListProjects(w http.ResponseWriter, r *http.Request) {
 
 	filter := reports.ReadFilter(r, p.Cluster.GetServiceTypesForArea)
 	stream := NewJSONListStream[*limesresources.ProjectReport](w, r, "projects")
-	stream.FinalizeDocument(reports.GetProjectResources(p.Cluster, *dbDomain, nil, p.DB, filter, stream.WriteItem))
+	stream.FinalizeDocument(reports.GetProjectResources(p.Cluster, *dbDomain, nil, p.timeNow(), p.DB, filter, stream.WriteItem))
 }
 
 // GetProject handles GET /v1/domains/:domain_id/projects/:project_id.
@@ -82,7 +82,7 @@ func (p *v1Provider) GetProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	project, err := GetProjectResourceReport(p.Cluster, *dbDomain, *dbProject, p.DB, reports.ReadFilter(r, p.Cluster.GetServiceTypesForArea))
+	project, err := GetProjectResourceReport(p.Cluster, *dbDomain, *dbProject, p.timeNow(), p.DB, reports.ReadFilter(r, p.Cluster.GetServiceTypesForArea))
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -225,6 +225,7 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 
 	updater := QuotaUpdater{
 		Cluster:    p.Cluster,
+		Now:        p.timeNow(),
 		CanRaise:   checkToken("project:raise"),
 		CanRaiseLP: checkToken("project:raise_lowpriv"),
 		CanLower:   checkToken("project:lower"),

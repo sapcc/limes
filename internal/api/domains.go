@@ -118,6 +118,7 @@ func (p *v1Provider) putOrSimulatePutDomain(w http.ResponseWriter, r *http.Reque
 
 	updater := QuotaUpdater{
 		Cluster:    p.Cluster,
+		Now:        p.timeNow(),
 		CanRaise:   checkToken("domain:raise"),
 		CanRaiseLP: checkToken("domain:raise_lowpriv"),
 		CanLower:   checkToken("domain:lower"),

@@ -617,6 +617,10 @@ func Test_ProjectOperations(t *testing.T) {
 	s := setupTest(t, "fixtures/start-data.sql")
 	discovery := s.Cluster.DiscoveryPlugin.(*plugins.StaticDiscoveryPlugin) //nolint:errcheck
 
+	//all reports are pulled at the same simulated time, `s.Clock().Now().Unix() == 3600`,
+	//to match the setup of active vs. expired commitments in `fixtures/start-data.sql`
+	s.Clock.StepBy(1 * time.Hour)
+
 	//check GetProject
 	assert.HTTPRequest{
 		Method:       "GET",
@@ -706,6 +710,17 @@ func Test_ProjectOperations(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects?service=shared&resource=things",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-list-filtered.json"),
+	}.Check(t, s.Handler)
+
+	//check ListProjects with new API features enabled
+	assert.HTTPRequest{
+		Method: "GET",
+		Path:   "/v1/domains/uuid-for-germany/projects",
+		Header: map[string]string{
+			"X-Limes-V2-API-Preview": "per-az",
+		},
+		ExpectStatus: 200,
+		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-list-with-v2-api.json"),
 	}.Check(t, s.Handler)
 
 	//check ListProjectRates
@@ -1783,7 +1798,11 @@ func Test_QuotaBursting(t *testing.T) {
 func Test_EmptyProjectList(t *testing.T) {
 	s := setupTest(t, "fixtures/start-data.sql")
 
-	_, err := s.DB.Exec(`DELETE FROM projects`)
+	_, err := s.DB.Exec(`DELETE FROM project_commitments`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.DB.Exec(`DELETE FROM projects`)
 	if err != nil {
 		t.Fatal(err)
 	}
