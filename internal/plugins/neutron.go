@@ -324,22 +324,22 @@ func (p *neutronPlugin) ScrapeRates(project core.KeystoneProject, prevSerialized
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *neutronPlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics string, err error) {
+func (p *neutronPlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics []byte, err error) {
 	data := make(map[string]core.ResourceData)
 
 	err = p.scrapeNeutronInto(data, project.UUID)
 	if err != nil {
-		return nil, "", err
+		return nil, nil, err
 	}
 
 	if p.hasOctavia {
 		err = p.scrapeOctaviaInto(data, project.UUID)
 		if err != nil {
-			return nil, "", err
+			return nil, nil, err
 		}
 	}
 
-	return data, "", nil
+	return data, nil, nil
 }
 
 func (p *neutronPlugin) scrapeNeutronInto(result map[string]core.ResourceData, projectUUID string) error {
@@ -489,7 +489,7 @@ func (p *neutronPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 }
 
 // CollectMetrics implements the core.QuotaPlugin interface.
-func (p *neutronPlugin) CollectMetrics(ch chan<- prometheus.Metric, project core.KeystoneProject, serializedMetrics string) error {
+func (p *neutronPlugin) CollectMetrics(ch chan<- prometheus.Metric, project core.KeystoneProject, serializedMetrics []byte) error {
 	//not used by this plugin
 	return nil
 }

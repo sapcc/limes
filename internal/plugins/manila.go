@@ -198,7 +198,7 @@ func (p *manilaPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedS
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *manilaPlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics string, err error) {
+func (p *manilaPlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics []byte, err error) {
 	quotaSets := make(map[string]manilaQuotaSetDetail)
 	for _, shareType := range p.ShareTypes {
 		stName := resolveManilaShareType(shareType, project)
@@ -207,21 +207,21 @@ func (p *manilaPlugin) Scrape(project core.KeystoneProject) (result map[string]c
 		}
 		quotaSets[stName], err = manilaCollectQuota(p.ManilaV2, project.UUID, stName)
 		if err != nil {
-			return nil, "", err
+			return nil, nil, err
 		}
 	}
 
 	//the share_networks quota is only shown when querying for no share_type in particular
 	quotaSets[""], err = manilaCollectQuota(p.ManilaV2, project.UUID, "")
 	if err != nil {
-		return nil, "", err
+		return nil, nil, err
 	}
 
 	var physUsage manilaPhysicalUsage
 	if p.PrometheusAPIConfig != nil {
 		physUsage, err = p.collectPhysicalUsage(project)
 		if err != nil {
-			return nil, "", err
+			return nil, nil, err
 		}
 	}
 
@@ -278,11 +278,11 @@ func (p *manilaPlugin) Scrape(project core.KeystoneProject) (result map[string]c
 		if p.PrometheusAPIConfig != nil {
 			result[p.makeResourceName("snapmirror_capacity", shareType)], err = p.collectSnapmirrorUsage(project, stName)
 			if err != nil {
-				return nil, "", err
+				return nil, nil, err
 			}
 		}
 	}
-	return result, "", nil
+	return result, nil, nil
 }
 
 func (p *manilaPlugin) rejectInaccessibleShareType(project core.KeystoneProject, quotas map[string]uint64) error {
@@ -407,7 +407,7 @@ func (p *manilaPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 }
 
 // CollectMetrics implements the core.QuotaPlugin interface.
-func (p *manilaPlugin) CollectMetrics(ch chan<- prometheus.Metric, project core.KeystoneProject, serializedMetrics string) error {
+func (p *manilaPlugin) CollectMetrics(ch chan<- prometheus.Metric, project core.KeystoneProject, serializedMetrics []byte) error {
 	//not used by this plugin
 	return nil
 }

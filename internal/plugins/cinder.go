@@ -159,7 +159,7 @@ func (p *cinderPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedS
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *cinderPlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, _ string, err error) {
+func (p *cinderPlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, _ []byte, err error) {
 	isVolumeType := make(map[string]bool)
 	for _, volumeType := range p.VolumeTypes {
 		isVolumeType[volumeType] = true
@@ -170,7 +170,7 @@ func (p *cinderPlugin) Scrape(project core.KeystoneProject) (result map[string]c
 	}
 	err = quotasets.GetUsage(p.CinderV3, project.UUID).ExtractInto(&data)
 	if err != nil {
-		return nil, "", err
+		return nil, nil, err
 	}
 
 	var (
@@ -184,7 +184,7 @@ func (p *cinderPlugin) Scrape(project core.KeystoneProject) (result map[string]c
 		//requires volume-level metadata.
 		volumeData, volumeTypeForVolumeUUID, err = p.collectVolumeSubresources(project, isVolumeType)
 		if err != nil {
-			return nil, "", err
+			return nil, nil, err
 		}
 		if !p.scrapeVolumes {
 			volumeData = nil
@@ -193,7 +193,7 @@ func (p *cinderPlugin) Scrape(project core.KeystoneProject) (result map[string]c
 	if p.scrapeSnapshots {
 		snapshotData, err = p.collectSnapshotSubresources(project, isVolumeType, volumeTypeForVolumeUUID)
 		if err != nil {
-			return nil, "", err
+			return nil, nil, err
 		}
 	}
 
@@ -203,7 +203,7 @@ func (p *cinderPlugin) Scrape(project core.KeystoneProject) (result map[string]c
 		rd[p.makeResourceName("snapshots", volumeType)] = data.QuotaSet["snapshots_"+volumeType].ToResourceData(snapshotData[volumeType])
 		rd[p.makeResourceName("volumes", volumeType)] = data.QuotaSet["volumes_"+volumeType].ToResourceData(volumeData[volumeType])
 	}
-	return rd, "", nil
+	return rd, nil, nil
 }
 
 type cinderVolumeSubresource struct {
@@ -334,7 +334,7 @@ func (p *cinderPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 }
 
 // CollectMetrics implements the core.QuotaPlugin interface.
-func (p *cinderPlugin) CollectMetrics(ch chan<- prometheus.Metric, project core.KeystoneProject, serializedMetrics string) error {
+func (p *cinderPlugin) CollectMetrics(ch chan<- prometheus.Metric, project core.KeystoneProject, serializedMetrics []byte) error {
 	//not used by this plugin
 	return nil
 }

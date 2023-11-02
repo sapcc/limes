@@ -94,8 +94,8 @@ func (p *cronusPlugin) Rates() []limesrates.RateInfo {
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics string, err error) {
-	return nil, "", nil
+func (p *cronusPlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics []byte, err error) {
+	return nil, nil, nil
 }
 
 // IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
@@ -200,7 +200,7 @@ func (p *cronusPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 }
 
 // CollectMetrics implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) CollectMetrics(ch chan<- prometheus.Metric, project core.KeystoneProject, serializedMetrics string) error {
+func (p *cronusPlugin) CollectMetrics(ch chan<- prometheus.Metric, project core.KeystoneProject, serializedMetrics []byte) error {
 	//not used by this plugin
 	return nil
 }

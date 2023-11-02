@@ -90,16 +90,16 @@ func (p *AutoApprovalQuotaPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 }
 
 // CollectMetrics implements the core.QuotaPlugin interface.
-func (p *AutoApprovalQuotaPlugin) CollectMetrics(ch chan<- prometheus.Metric, project core.KeystoneProject, serializedMetrics string) error {
+func (p *AutoApprovalQuotaPlugin) CollectMetrics(ch chan<- prometheus.Metric, project core.KeystoneProject, serializedMetrics []byte) error {
 	return nil
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *AutoApprovalQuotaPlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics string, err error) {
+func (p *AutoApprovalQuotaPlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics []byte, err error) {
 	return map[string]core.ResourceData{
 		"approve":   {UsageData: core.InAnyAZ(core.UsageData{Usage: 0}), Quota: int64(p.StaticBackendQuota)},
 		"noapprove": {UsageData: core.InAnyAZ(core.UsageData{Usage: 0}), Quota: int64(p.StaticBackendQuota) + 10},
-	}, "", nil
+	}, nil, nil
 }
 
 // IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.

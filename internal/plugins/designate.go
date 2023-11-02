@@ -91,17 +91,17 @@ func (p *designatePlugin) ScrapeRates(project core.KeystoneProject, prevSerializ
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *designatePlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics string, err error) {
+func (p *designatePlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics []byte, err error) {
 	//query quotas
 	quotas, err := dnsGetQuota(p.DesignateV2, project.UUID)
 	if err != nil {
-		return nil, "", err
+		return nil, nil, err
 	}
 
 	//to query usage, start by listing all zones
 	zoneIDs, err := dnsListZoneIDs(p.DesignateV2, project.UUID)
 	if err != nil {
-		return nil, "", err
+		return nil, nil, err
 	}
 
 	//query "recordsets per zone" usage by counting recordsets in each zone
@@ -111,7 +111,7 @@ func (p *designatePlugin) Scrape(project core.KeystoneProject) (result map[strin
 	for _, zoneID := range zoneIDs {
 		count, err := dnsCountZoneRecordsets(p.DesignateV2, project.UUID, zoneID)
 		if err != nil {
-			return nil, "", err
+			return nil, nil, err
 		}
 		if maxRecordsetsPerZone < count {
 			maxRecordsetsPerZone = count
@@ -131,7 +131,7 @@ func (p *designatePlugin) Scrape(project core.KeystoneProject) (result map[strin
 				Usage: maxRecordsetsPerZone,
 			}),
 		},
-	}, "", nil
+	}, nil, nil
 }
 
 // IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
@@ -158,7 +158,7 @@ func (p *designatePlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 }
 
 // CollectMetrics implements the core.QuotaPlugin interface.
-func (p *designatePlugin) CollectMetrics(ch chan<- prometheus.Metric, project core.KeystoneProject, serializedMetrics string) error {
+func (p *designatePlugin) CollectMetrics(ch chan<- prometheus.Metric, project core.KeystoneProject, serializedMetrics []byte) error {
 	//not used by this plugin
 	return nil
 }

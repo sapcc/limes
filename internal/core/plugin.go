@@ -118,7 +118,7 @@ type QuotaPlugin interface {
 	//
 	//The serializedMetrics return value is persisted in the Limes DB and
 	//supplied to all subsequent RenderMetrics calls.
-	Scrape(project KeystoneProject) (result map[string]ResourceData, serializedMetrics string, error error)
+	Scrape(project KeystoneProject) (result map[string]ResourceData, serializedMetrics []byte, err error)
 	//IsQuotaAcceptableForProject checks if the given quota set is acceptable
 	//for the given project, and returns nil if the quota is acceptable, or a
 	//human-readable error otherwise. This should only be used when the
@@ -167,7 +167,7 @@ type QuotaPlugin interface {
 	//Some plugins also emit metrics directly within Scrape. This newer interface
 	//should be preferred since metrics emitted here won't be lost between
 	//restarts of limes-collect.
-	CollectMetrics(ch chan<- prometheus.Metric, project KeystoneProject, serializedMetrics string) error
+	CollectMetrics(ch chan<- prometheus.Metric, project KeystoneProject, serializedMetrics []byte) error
 }
 
 // CapacityPlugin is the interface that all capacity collector plugins must
@@ -201,7 +201,7 @@ type CapacityPlugin interface {
 	//
 	//The serializedMetrics return value is persisted in the Limes DB and
 	//supplied to all subsequent RenderMetrics calls.
-	Scrape() (result map[string]map[string]PerAZ[CapacityData], serializedMetrics string, err error)
+	Scrape() (result map[string]map[string]PerAZ[CapacityData], serializedMetrics []byte, err error)
 
 	//DescribeMetrics is called when Prometheus is scraping metrics from
 	//limes-collect, to provide an opportunity to the plugin to emit its own
@@ -218,7 +218,7 @@ type CapacityPlugin interface {
 	//Some plugins also emit metrics directly within Scrape. This newer interface
 	//should be preferred since metrics emitted here won't be lost between
 	//restarts of limes-collect.
-	CollectMetrics(ch chan<- prometheus.Metric, serializedMetrics string) error
+	CollectMetrics(ch chan<- prometheus.Metric, serializedMetrics []byte) error
 }
 
 var (

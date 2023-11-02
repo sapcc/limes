@@ -84,10 +84,10 @@ func (p *keppelPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedS
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *keppelPlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics string, err error) {
+func (p *keppelPlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics []byte, err error) {
 	quotas, err := p.KeppelV1.GetQuota(project.UUID)
 	if err != nil {
-		return nil, "", err
+		return nil, nil, err
 	}
 	return map[string]core.ResourceData{
 		"images": {
@@ -96,7 +96,7 @@ func (p *keppelPlugin) Scrape(project core.KeystoneProject) (result map[string]c
 				Usage: quotas.Manifests.Usage,
 			}),
 		},
-	}, "", nil
+	}, nil, nil
 }
 
 // IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
@@ -130,7 +130,7 @@ func (p *keppelPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 }
 
 // CollectMetrics implements the core.QuotaPlugin interface.
-func (p *keppelPlugin) CollectMetrics(ch chan<- prometheus.Metric, project core.KeystoneProject, serializedMetrics string) error {
+func (p *keppelPlugin) CollectMetrics(ch chan<- prometheus.Metric, project core.KeystoneProject, serializedMetrics []byte) error {
 	//not used by this plugin
 	return nil
 }

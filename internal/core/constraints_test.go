@@ -174,8 +174,8 @@ func (p quotaConstraintTestPlugin) ServiceInfo(serviceType string) limes.Service
 func (p quotaConstraintTestPlugin) Rates() []limesrates.RateInfo {
 	return nil
 }
-func (p quotaConstraintTestPlugin) Scrape(project KeystoneProject) (result map[string]ResourceData, serializedMetrics string, err error) {
-	return nil, "", nil
+func (p quotaConstraintTestPlugin) Scrape(project KeystoneProject) (result map[string]ResourceData, serializedMetrics []byte, err error) {
+	return nil, nil, nil
 }
 func (p quotaConstraintTestPlugin) IsQuotaAcceptableForProject(project KeystoneProject, fullQuotas map[string]map[string]uint64, allServiceInfos []limes.ServiceInfo) error {
 	return nil
@@ -188,7 +188,7 @@ func (p quotaConstraintTestPlugin) ScrapeRates(project KeystoneProject, prevSeri
 }
 func (p quotaConstraintTestPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 }
-func (p quotaConstraintTestPlugin) CollectMetrics(ch chan<- prometheus.Metric, project KeystoneProject, serializedMetrics string) error {
+func (p quotaConstraintTestPlugin) CollectMetrics(ch chan<- prometheus.Metric, project KeystoneProject, serializedMetrics []byte) error {
 	return nil
 }
 

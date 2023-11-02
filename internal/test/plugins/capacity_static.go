@@ -54,7 +54,7 @@ func (p *StaticCapacityPlugin) PluginTypeID() string {
 }
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *StaticCapacityPlugin) Scrape() (result map[string]map[string]core.PerAZ[core.CapacityData], serializedMetrics string, err error) {
+func (p *StaticCapacityPlugin) Scrape() (result map[string]map[string]core.PerAZ[core.CapacityData], serializedMetrics []byte, err error) {
 	makeAZCapa := func(az string, capacity, usage uint64) *core.CapacityData {
 		var subcapacities []any
 		if p.WithSubcapacities {
@@ -88,7 +88,7 @@ func (p *StaticCapacityPlugin) Scrape() (result map[string]map[string]core.PerAZ
 		//for historical reasons, serialized metrics are tested at the same time as subcapacities
 		smallerHalf := p.Capacity / 3
 		largerHalf := p.Capacity - smallerHalf
-		serializedMetrics = fmt.Sprintf(`{"smaller_half":%d,"larger_half":%d}`, smallerHalf, largerHalf)
+		serializedMetrics = []byte(fmt.Sprintf(`{"smaller_half":%d,"larger_half":%d}`, smallerHalf, largerHalf))
 	}
 
 	result = make(map[string]map[string]core.PerAZ[core.CapacityData])
@@ -121,7 +121,7 @@ func (p *StaticCapacityPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 }
 
 // CollectMetrics implements the core.CapacityPlugin interface.
-func (p *StaticCapacityPlugin) CollectMetrics(ch chan<- prometheus.Metric, serializedMetrics string) error {
+func (p *StaticCapacityPlugin) CollectMetrics(ch chan<- prometheus.Metric, serializedMetrics []byte) error {
 	if !p.WithSubcapacities {
 		return nil
 	}
@@ -130,7 +130,7 @@ func (p *StaticCapacityPlugin) CollectMetrics(ch chan<- prometheus.Metric, seria
 		SmallerHalf uint64 `json:"smaller_half"`
 		LargerHalf  uint64 `json:"larger_half"`
 	}
-	err := json.Unmarshal([]byte(serializedMetrics), &data)
+	err := json.Unmarshal(serializedMetrics, &data)
 	if err != nil {
 		return err
 	}

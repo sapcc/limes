@@ -99,15 +99,15 @@ func (p *capacityNovaPlugin) PluginTypeID() string {
 }
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *capacityNovaPlugin) Scrape() (result map[string]map[string]core.PerAZ[core.CapacityData], serializedMetrics string, err error) {
+func (p *capacityNovaPlugin) Scrape() (result map[string]map[string]core.PerAZ[core.CapacityData], serializedMetrics []byte, err error) {
 	//enumerate aggregates which establish the hypervisor <-> AZ mapping
 	page, err := aggregates.List(p.NovaV2).AllPages()
 	if err != nil {
-		return nil, "", err
+		return nil, nil, err
 	}
 	allAggregates, err := aggregates.ExtractAggregates(page)
 	if err != nil {
-		return nil, "", err
+		return nil, nil, err
 	}
 
 	//enumerate hypervisors (cannot use type Hypervisor provided by Gophercloud;
@@ -115,30 +115,30 @@ func (p *capacityNovaPlugin) Scrape() (result map[string]map[string]core.PerAZ[c
 	//values on fields that we are not even interested in)
 	page, err = hypervisors.List(p.NovaV2, nil).AllPages()
 	if err != nil {
-		return nil, "", err
+		return nil, nil, err
 	}
 	var hypervisorData struct {
 		Hypervisors []novaHypervisor `json:"hypervisors"`
 	}
 	err = page.(hypervisors.HypervisorPage).ExtractInto(&hypervisorData)
 	if err != nil {
-		return nil, "", err
+		return nil, nil, err
 	}
 
 	//enumerate resource providers (we need to match these to the hypervisors later)
 	page, err = resourceproviders.List(p.PlacementV1, nil).AllPages()
 	if err != nil {
-		return nil, "", err
+		return nil, nil, err
 	}
 	allResourceProviders, err := resourceproviders.ExtractResourceProviders(page)
 	if err != nil {
-		return nil, "", err
+		return nil, nil, err
 	}
 
 	//for the instances capacity, we need to know the max root disk size on public flavors
 	maxRootDiskSize, err := getMaxRootDiskSize(p.NovaV2, p.ExtraSpecs)
 	if err != nil {
-		return nil, "", err
+		return nil, nil, err
 	}
 
 	//we need to prepare several aggregations in the big loop below
@@ -159,7 +159,7 @@ func (p *capacityNovaPlugin) Scrape() (result map[string]map[string]core.PerAZ[c
 		//query Placement API for hypervisor capacity
 		hvCapacity, traits, err := hypervisor.getCapacity(p.PlacementV1, allResourceProviders)
 		if err != nil {
-			return nil, "", fmt.Errorf(
+			return nil, nil, fmt.Errorf(
 				"cannot get capacity for hypervisor %s with .service.host %q from Placement API (falling back to Nova Hypervisor API): %s",
 				hypervisor.HypervisorHostname, hypervisor.Service.Host, err.Error())
 		}
@@ -220,7 +220,7 @@ func (p *capacityNovaPlugin) Scrape() (result map[string]map[string]core.PerAZ[c
 			continue
 		}
 		if len(matchingAggregates) > 1 {
-			return nil, "", fmt.Errorf(
+			return nil, nil, fmt.Errorf(
 				"hypervisor %s with .service.host %q could not be uniquely matched to an aggregate (matching aggregates = %v)",
 				hypervisor.HypervisorHostname, hypervisor.Service.Host, matchingAggregates)
 		}
@@ -234,7 +234,7 @@ func (p *capacityNovaPlugin) Scrape() (result map[string]map[string]core.PerAZ[c
 			continue
 		}
 		if len(matchingAZs) > 1 {
-			return nil, "", fmt.Errorf(
+			return nil, nil, fmt.Errorf(
 				"hypervisor %s with .service.host %q could not be uniquely matched to an AZ (matching AZs = %v)",
 				hypervisor.HypervisorHostname, hypervisor.Service.Host, matchingAZs)
 		}
@@ -289,8 +289,8 @@ func (p *capacityNovaPlugin) Scrape() (result map[string]map[string]core.PerAZ[c
 		delete(capacities, "instances")
 	}
 
-	serializedMetricsBytes, err := json.Marshal(metrics)
-	return map[string]map[string]core.PerAZ[core.CapacityData]{"compute": capacities}, string(serializedMetricsBytes), err
+	serializedMetrics, err = json.Marshal(metrics)
+	return map[string]map[string]core.PerAZ[core.CapacityData]{"compute": capacities}, serializedMetrics, err
 }
 
 var novaHypervisorWellformedGauge = prometheus.NewGaugeVec(
@@ -307,9 +307,9 @@ func (p *capacityNovaPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 }
 
 // CollectMetrics implements the core.CapacityPlugin interface.
-func (p *capacityNovaPlugin) CollectMetrics(ch chan<- prometheus.Metric, serializedMetrics string) error {
+func (p *capacityNovaPlugin) CollectMetrics(ch chan<- prometheus.Metric, serializedMetrics []byte) error {
 	var metrics capacityNovaSerializedMetrics
-	err := json.Unmarshal([]byte(serializedMetrics), &metrics)
+	err := json.Unmarshal(serializedMetrics, &metrics)
 	if err != nil {
 		return err
 	}

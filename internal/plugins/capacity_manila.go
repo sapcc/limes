@@ -102,14 +102,14 @@ func (p *capacityManilaPlugin) makeResourceName(kind string, shareType ManilaSha
 }
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *capacityManilaPlugin) Scrape() (result map[string]map[string]core.PerAZ[core.CapacityData], _ string, err error) {
+func (p *capacityManilaPlugin) Scrape() (result map[string]map[string]core.PerAZ[core.CapacityData], _ []byte, err error) {
 	allPages, err := services.List(p.ManilaV2, nil).AllPages()
 	if err != nil {
-		return nil, "", err
+		return nil, nil, err
 	}
 	allServices, err := services.ExtractServices(allPages)
 	if err != nil {
-		return nil, "", err
+		return nil, nil, err
 	}
 
 	azForServiceHost := make(map[string]limes.AvailabilityZone)
@@ -131,14 +131,14 @@ func (p *capacityManilaPlugin) Scrape() (result map[string]map[string]core.PerAZ
 	for _, shareType := range p.ShareTypes {
 		capForType, err := p.scrapeForShareType(shareType, azForServiceHost)
 		if err != nil {
-			return nil, "", err
+			return nil, nil, err
 		}
 		caps[p.makeResourceName("shares", shareType)] = capForType.Shares
 		caps[p.makeResourceName("share_snapshots", shareType)] = capForType.Snapshots
 		caps[p.makeResourceName("share_capacity", shareType)] = capForType.ShareGigabytes
 		caps[p.makeResourceName("snapshot_capacity", shareType)] = capForType.SnapshotGigabytes
 	}
-	return map[string]map[string]core.PerAZ[core.CapacityData]{"sharev2": caps}, "", nil
+	return map[string]map[string]core.PerAZ[core.CapacityData]{"sharev2": caps}, nil, nil
 }
 
 // DescribeMetrics implements the core.CapacityPlugin interface.
@@ -147,7 +147,7 @@ func (p *capacityManilaPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 }
 
 // CollectMetrics implements the core.CapacityPlugin interface.
-func (p *capacityManilaPlugin) CollectMetrics(ch chan<- prometheus.Metric, serializedMetrics string) error {
+func (p *capacityManilaPlugin) CollectMetrics(ch chan<- prometheus.Metric, serializedMetrics []byte) error {
 	//not used by this plugin
 	return nil
 }

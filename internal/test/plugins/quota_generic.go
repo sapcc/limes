@@ -146,9 +146,9 @@ func (p *GenericQuotaPlugin) ScrapeRates(project core.KeystoneProject, prevSeria
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *GenericQuotaPlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics string, err error) {
+func (p *GenericQuotaPlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics []byte, err error) {
 	if p.ScrapeFails {
-		return nil, "", errors.New("Scrape failed as requested")
+		return nil, nil, errors.New("Scrape failed as requested")
 	}
 
 	result = make(map[string]core.ResourceData)
@@ -203,9 +203,9 @@ func (p *GenericQuotaPlugin) Scrape(project core.KeystoneProject) (result map[st
 	//make up some serialized metrics (reporting usage as a metric is usually
 	//nonsensical since limes-collect already reports all usages as metrics, but
 	//this is only a testcase anyway)
-	serializedMetrics = fmt.Sprintf(`{"capacity_usage":%d,"things_usage":%d}`,
+	serializedMetrics = []byte(fmt.Sprintf(`{"capacity_usage":%d,"things_usage":%d}`,
 		result["capacity"].UsageData.Sum().Usage,
-		result["things"].UsageData.Sum().Usage)
+		result["things"].UsageData.Sum().Usage))
 
 	return result, serializedMetrics, nil
 }
@@ -252,8 +252,8 @@ func (p *GenericQuotaPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 }
 
 // CollectMetrics implements the core.QuotaPlugin interface.
-func (p *GenericQuotaPlugin) CollectMetrics(ch chan<- prometheus.Metric, project core.KeystoneProject, serializedMetrics string) error {
-	if serializedMetrics == "" {
+func (p *GenericQuotaPlugin) CollectMetrics(ch chan<- prometheus.Metric, project core.KeystoneProject, serializedMetrics []byte) error {
+	if len(serializedMetrics) == 0 {
 		return nil
 	}
 
@@ -261,7 +261,7 @@ func (p *GenericQuotaPlugin) CollectMetrics(ch chan<- prometheus.Metric, project
 		CapacityUsage uint64 `json:"capacity_usage"`
 		ThingsUsage   uint64 `json:"things_usage"`
 	}
-	err := json.Unmarshal([]byte(serializedMetrics), &data)
+	err := json.Unmarshal(serializedMetrics, &data)
 	if err != nil {
 		return err
 	}

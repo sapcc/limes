@@ -47,10 +47,10 @@ func (p *capacityPrometheusPlugin) PluginTypeID() string {
 }
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *capacityPrometheusPlugin) Scrape() (result map[string]map[string]core.PerAZ[core.CapacityData], _ string, err error) {
+func (p *capacityPrometheusPlugin) Scrape() (result map[string]map[string]core.PerAZ[core.CapacityData], _ []byte, err error) {
 	client, err := p.APIConfig.Connect()
 	if err != nil {
-		return nil, "", err
+		return nil, nil, err
 	}
 
 	result = make(map[string]map[string]core.PerAZ[core.CapacityData])
@@ -59,13 +59,13 @@ func (p *capacityPrometheusPlugin) Scrape() (result map[string]map[string]core.P
 		for resourceName, query := range queries {
 			value, err := client.GetSingleValue(query, nil)
 			if err != nil {
-				return nil, "", err
+				return nil, nil, err
 			}
 			serviceResult[resourceName] = core.InAnyAZ(core.CapacityData{Capacity: uint64(value)})
 		}
 		result[serviceType] = serviceResult
 	}
-	return result, "", nil
+	return result, nil, nil
 }
 
 // DescribeMetrics implements the core.CapacityPlugin interface.
@@ -74,7 +74,7 @@ func (p *capacityPrometheusPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 }
 
 // CollectMetrics implements the core.CapacityPlugin interface.
-func (p *capacityPrometheusPlugin) CollectMetrics(ch chan<- prometheus.Metric, serializedMetrics string) error {
+func (p *capacityPrometheusPlugin) CollectMetrics(ch chan<- prometheus.Metric, serializedMetrics []byte) error {
 	//not used by this plugin
 	return nil
 }

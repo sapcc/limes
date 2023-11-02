@@ -249,7 +249,7 @@ func taskTestGetQuota(cluster *core.Cluster, args []string) {
 		Override: []collector.QuotaPluginMetricsInstance{{
 			Project:           project,
 			ServiceType:       serviceType,
-			SerializedMetrics: serializedMetrics,
+			SerializedMetrics: string(serializedMetrics),
 		}},
 	})
 	dumpGeneratedPrometheusMetrics()
@@ -391,14 +391,14 @@ func taskTestScanCapacity(cluster *core.Cluster, args []string) {
 		capacities = nil
 	}
 
-	if serializedMetrics != "" {
-		logg.Info("serializedMetrics: %s", serializedMetrics)
+	if serializedMetrics != nil {
+		logg.Info("serializedMetrics: %s", string(serializedMetrics))
 	}
 	prometheus.MustRegister(&collector.CapacityPluginMetricsCollector{
 		Cluster: cluster,
 		Override: []collector.CapacityPluginMetricsInstance{{
 			CapacitorID:       capacitorID,
-			SerializedMetrics: serializedMetrics,
+			SerializedMetrics: string(serializedMetrics),
 		}},
 	})
 	dumpGeneratedPrometheusMetrics()

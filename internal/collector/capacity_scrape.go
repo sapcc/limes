@@ -167,7 +167,7 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 	if err == nil {
 		capacitor.ScrapedAt = &task.Timing.FinishedAt
 		capacitor.ScrapeDurationSecs = task.Timing.Duration().Seconds()
-		capacitor.SerializedMetrics = serializedMetrics
+		capacitor.SerializedMetrics = string(serializedMetrics)
 		capacitor.NextScrapeAt = task.Timing.FinishedAt.Add(c.AddJitter(capacityScrapeInterval))
 		capacitor.ScrapeErrorMessage = ""
 		//NOTE: in this case, we continue below, with the cluster_resources update

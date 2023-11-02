@@ -94,7 +94,7 @@ func (p *archerPlugin) Rates() []limesrates.RateInfo {
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *archerPlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics string, err error) {
+func (p *archerPlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics []byte, err error) {
 	url := p.Archer.ServiceURL("quotas", project.UUID)
 	var res gophercloud.Result
 	//nolint:bodyclose // already closed by gophercloud
@@ -107,7 +107,7 @@ func (p *archerPlugin) Scrape(project core.KeystoneProject) (result map[string]c
 		InUseService  uint64 `json:"in_use_service"`
 	}
 	if err = res.ExtractInto(&archerQuota); err != nil {
-		return nil, "", err
+		return nil, nil, err
 	}
 
 	result = map[string]core.ResourceData{
@@ -124,7 +124,7 @@ func (p *archerPlugin) Scrape(project core.KeystoneProject) (result map[string]c
 			}),
 		},
 	}
-	return result, "", nil
+	return result, nil, nil
 }
 
 // IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
@@ -158,7 +158,7 @@ func (p *archerPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 }
 
 // CollectMetrics implements the core.QuotaPlugin interface.
-func (p *archerPlugin) CollectMetrics(ch chan<- prometheus.Metric, project core.KeystoneProject, serializedMetrics string) error {
+func (p *archerPlugin) CollectMetrics(ch chan<- prometheus.Metric, project core.KeystoneProject, serializedMetrics []byte) error {
 	//not used by this plugin
 	return nil
 }

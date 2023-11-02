@@ -125,7 +125,7 @@ func (p *swiftPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedSt
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *swiftPlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics string, err error) {
+func (p *swiftPlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics []byte, err error) {
 	account := p.Account(project.UUID)
 	headers, err := account.Headers()
 	if schwift.Is(err, http.StatusNotFound) || schwift.Is(err, http.StatusGone) {
@@ -135,15 +135,15 @@ func (p *swiftPlugin) Scrape(project core.KeystoneProject) (result map[string]co
 				Quota:     0,
 				UsageData: core.InAnyAZ(core.UsageData{Usage: 0}),
 			},
-		}, "", nil
+		}, nil, nil
 	} else if err != nil {
-		return nil, "", err
+		return nil, nil, err
 	}
 
 	// collect object count metrics per container
 	containerInfos, err := account.Containers().CollectDetailed()
 	if err != nil {
-		return nil, "", fmt.Errorf("cannot list containers: %w", err)
+		return nil, nil, fmt.Errorf("cannot list containers: %w", err)
 	}
 	var metrics swiftSerializedMetrics
 	metrics.Containers = make(map[string]swiftSerializedContainerMetrics, len(containerInfos))
@@ -153,14 +153,14 @@ func (p *swiftPlugin) Scrape(project core.KeystoneProject) (result map[string]co
 			BytesUsed:   info.BytesUsed,
 		}
 	}
-	serializedMetricsBytes, err := json.Marshal(metrics)
+	serializedMetrics, err = json.Marshal(metrics)
 	if err != nil {
-		return nil, "", err
+		return nil, nil, err
 	}
 
 	//optimization: skip submitting metrics entirely if there are no metrics to submit
 	if len(containerInfos) == 0 {
-		serializedMetricsBytes = nil
+		serializedMetrics = nil
 	}
 
 	data := core.ResourceData{
@@ -172,7 +172,7 @@ func (p *swiftPlugin) Scrape(project core.KeystoneProject) (result map[string]co
 	if !headers.BytesUsedQuota().Exists() {
 		data.Quota = -1
 	}
-	return map[string]core.ResourceData{"capacity": data}, string(serializedMetricsBytes), nil
+	return map[string]core.ResourceData{"capacity": data}, serializedMetrics, nil
 }
 
 // IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
@@ -207,12 +207,12 @@ func (p *swiftPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 }
 
 // CollectMetrics implements the core.QuotaPlugin interface.
-func (p *swiftPlugin) CollectMetrics(ch chan<- prometheus.Metric, project core.KeystoneProject, serializedMetrics string) error {
-	if serializedMetrics == "" {
+func (p *swiftPlugin) CollectMetrics(ch chan<- prometheus.Metric, project core.KeystoneProject, serializedMetrics []byte) error {
+	if len(serializedMetrics) == 0 {
 		return nil
 	}
 	var metrics swiftSerializedMetrics
-	err := json.Unmarshal([]byte(serializedMetrics), &metrics)
+	err := json.Unmarshal(serializedMetrics, &metrics)
 	if err != nil {
 		return err
 	}

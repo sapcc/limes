@@ -83,7 +83,7 @@ func (p *capacityCinderPlugin) makeResourceName(volumeType string) string {
 }
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *capacityCinderPlugin) Scrape() (result map[string]map[string]core.PerAZ[core.CapacityData], serializedMetrics string, err error) {
+func (p *capacityCinderPlugin) Scrape() (result map[string]map[string]core.PerAZ[core.CapacityData], serializedMetrics []byte, err error) {
 	//list storage pools
 	var poolData struct {
 		StoragePools []struct {
@@ -102,21 +102,21 @@ func (p *capacityCinderPlugin) Scrape() (result map[string]map[string]core.PerAZ
 
 	allPages, err := schedulerstats.List(p.CinderV3, schedulerstats.ListOpts{Detail: true}).AllPages()
 	if err != nil {
-		return nil, "", err
+		return nil, nil, err
 	}
 	err = allPages.(schedulerstats.StoragePoolPage).ExtractInto(&poolData)
 	if err != nil {
-		return nil, "", err
+		return nil, nil, err
 	}
 
 	//list service hosts
 	allPages, err = services.List(p.CinderV3, nil).AllPages()
 	if err != nil {
-		return nil, "", err
+		return nil, nil, err
 	}
 	allServices, err := services.ExtractServices(allPages)
 	if err != nil {
-		return nil, "", err
+		return nil, nil, err
 	}
 
 	serviceHostsPerAZ := make(map[string][]string)
@@ -191,7 +191,7 @@ func (p *capacityCinderPlugin) Scrape() (result map[string]map[string]core.PerAZ
 		}
 	}
 
-	return map[string]map[string]core.PerAZ[core.CapacityData]{"volumev2": capaData}, "", nil
+	return map[string]map[string]core.PerAZ[core.CapacityData]{"volumev2": capaData}, nil, nil
 }
 
 // DescribeMetrics implements the core.CapacityPlugin interface.
@@ -200,7 +200,7 @@ func (p *capacityCinderPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 }
 
 // CollectMetrics implements the core.CapacityPlugin interface.
-func (p *capacityCinderPlugin) CollectMetrics(ch chan<- prometheus.Metric, serializedMetrics string) error {
+func (p *capacityCinderPlugin) CollectMetrics(ch chan<- prometheus.Metric, serializedMetrics []byte) error {
 	//not used by this plugin
 	return nil
 }

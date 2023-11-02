@@ -271,7 +271,7 @@ func (p *novaPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedSta
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *novaPlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics string, err error) {
+func (p *novaPlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics []byte, err error) {
 	var limitsData struct {
 		Limits struct {
 			Absolute struct {
@@ -293,14 +293,14 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject) (result map[string]cor
 	}
 	err = limits.Get(p.NovaV2, limits.GetOpts{TenantID: project.UUID}).ExtractInto(&limitsData)
 	if err != nil {
-		return nil, "", err
+		return nil, nil, err
 	}
 
 	var totalServerGroupMembersUsed uint64
 	if limitsData.Limits.Absolute.TotalServerGroupsUsed > 0 {
 		err := p.getServerGroups()
 		if err != nil {
-			return nil, "", err
+			return nil, nil, err
 		}
 
 		if v, ok := p.serverGroups.members[project.UUID]; ok {
@@ -368,7 +368,7 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject) (result map[string]cor
 		}
 	}
 
-	var sm novaSerializedMetrics
+	var metrics novaSerializedMetrics
 
 	if p.scrapeInstances {
 		listOpts := novaServerListOpts{
@@ -376,7 +376,7 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject) (result map[string]cor
 			TenantID:   project.UUID,
 		}
 
-		sm.InstanceCountsByHypervisor = map[string]uint64{
+		metrics.InstanceCountsByHypervisor = map[string]uint64{
 			"vmware":  0,
 			"none":    0,
 			"unknown": 0,
@@ -432,7 +432,7 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject) (result map[string]cor
 					if len(p.hypervisorTypeRules) > 0 {
 						hypervisorType := p.getHypervisorType(flavor)
 						subResource["hypervisor"] = hypervisorType
-						sm.InstanceCountsByHypervisor[hypervisorType]++
+						metrics.InstanceCountsByHypervisor[hypervisorType]++
 					}
 
 					if p.BigVMMinMemoryMiB > 0 {
@@ -485,7 +485,7 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject) (result map[string]cor
 			return true, nil
 		})
 		if err != nil {
-			return nil, "", err
+			return nil, nil, err
 		}
 	}
 
@@ -494,12 +494,8 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject) (result map[string]cor
 	for name, data := range resultPtr {
 		result2[name] = *data
 	}
-	serializedMetricsBytes, err := json.Marshal(sm)
-	if err != nil {
-		return nil, "", err
-	}
-
-	return result2, string(serializedMetricsBytes), nil
+	serializedMetrics, err = json.Marshal(metrics)
+	return result2, serializedMetrics, err
 }
 
 func derefSlicePtrOrEmpty(val *[]string) []string {
@@ -546,12 +542,12 @@ func (p *novaPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 }
 
 // CollectMetrics implements the core.QuotaPlugin interface.
-func (p *novaPlugin) CollectMetrics(ch chan<- prometheus.Metric, project core.KeystoneProject, serializedMetrics string) error {
-	if serializedMetrics == "" {
+func (p *novaPlugin) CollectMetrics(ch chan<- prometheus.Metric, project core.KeystoneProject, serializedMetrics []byte) error {
+	if len(serializedMetrics) == 0 {
 		return nil
 	}
 	var metrics novaSerializedMetrics
-	err := json.Unmarshal([]byte(serializedMetrics), &metrics)
+	err := json.Unmarshal(serializedMetrics, &metrics)
 	if err != nil {
 		return err
 	}

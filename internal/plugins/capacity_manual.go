@@ -49,9 +49,9 @@ func (p *capacityManualPlugin) PluginTypeID() string {
 var errNoManualData = errors.New(`missing values for capacitor plugin "manual"`)
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *capacityManualPlugin) Scrape() (result map[string]map[string]core.PerAZ[core.CapacityData], _ string, err error) {
+func (p *capacityManualPlugin) Scrape() (result map[string]map[string]core.PerAZ[core.CapacityData], _ []byte, err error) {
 	if p.Values == nil {
-		return nil, "", errNoManualData
+		return nil, nil, errNoManualData
 	}
 
 	result = make(map[string]map[string]core.PerAZ[core.CapacityData])
@@ -63,7 +63,7 @@ func (p *capacityManualPlugin) Scrape() (result map[string]map[string]core.PerAZ
 		result[serviceType] = serviceResult
 	}
 
-	return result, "", nil
+	return result, nil, nil
 }
 
 // DescribeMetrics implements the core.CapacityPlugin interface.
@@ -72,7 +72,7 @@ func (p *capacityManualPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 }
 
 // CollectMetrics implements the core.CapacityPlugin interface.
-func (p *capacityManualPlugin) CollectMetrics(ch chan<- prometheus.Metric, serializedMetrics string) error {
+func (p *capacityManualPlugin) CollectMetrics(ch chan<- prometheus.Metric, serializedMetrics []byte) error {
 	//not used by this plugin
 	return nil
 }

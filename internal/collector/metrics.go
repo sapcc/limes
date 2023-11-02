@@ -236,7 +236,7 @@ func (c *CapacityPluginMetricsCollector) collectOneCapacitor(ch chan<- prometheu
 	if plugin == nil {
 		return
 	}
-	err := plugin.CollectMetrics(ch, instance.SerializedMetrics)
+	err := plugin.CollectMetrics(ch, []byte(instance.SerializedMetrics))
 	successAsFloat := 1.0
 	if err != nil {
 		successAsFloat = 0.0
@@ -331,7 +331,7 @@ func (c *QuotaPluginMetricsCollector) collectOneProjectService(ch chan<- prometh
 	if plugin == nil {
 		return
 	}
-	err := plugin.CollectMetrics(ch, instance.Project, instance.SerializedMetrics)
+	err := plugin.CollectMetrics(ch, instance.Project, []byte(instance.SerializedMetrics))
 	successAsFloat := 1.0
 	if err != nil {
 		successAsFloat = 0.0
