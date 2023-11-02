@@ -21,9 +21,7 @@ package plugins
 
 import (
 	"encoding/json"
-	"fmt"
 	"math/big"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -56,30 +54,18 @@ import (
 // to ensure that goimports does not mistakenly replace it by .../compute/v2/images
 var _ images.ImageVisibility
 
-type novaHypervisorTypeRule struct {
-	MatchFlavorName bool
-	MatchExtraSpec  string
-	ValuePattern    *regexp.Regexp
-	HypervisorType  string
-}
-
 type novaPlugin struct {
 	//configuration
-	BigVMMinMemoryMiB   uint64 `yaml:"bigvm_min_memory"`
-	HypervisorTypeRules []struct {
-		Key     string `yaml:"match"`
-		Pattern string `yaml:"pattern"`
-		Type    string `yaml:"type"`
-	} `yaml:"hypervisor_type_rules"`
+	BigVMMinMemoryMiB      uint64                  `yaml:"bigvm_min_memory"`
+	HypervisorTypeRules    novaHypervisorTypeRules `yaml:"hypervisor_type_rules"`
 	SeparateInstanceQuotas struct {
 		FlavorNameRx  regexpext.PlainRegexp `yaml:"flavor_name_pattern"`
 		FlavorAliases map[string][]string   `yaml:"flavor_aliases"`
 	} `yaml:"separate_instance_quotas"`
 	scrapeInstances bool `yaml:"-"`
 	//computed state
-	hypervisorTypeRules []novaHypervisorTypeRule      `yaml:"-"`
-	resources           []limesresources.ResourceInfo `yaml:"-"`
-	ftt                 novaFlavorTranslationTable    `yaml:"-"`
+	resources []limesresources.ResourceInfo `yaml:"-"`
+	ftt       novaFlavorTranslationTable    `yaml:"-"`
 	//caches
 	osTypeForImage    map[string]string `yaml:"-"`
 	osTypeForInstance map[string]string `yaml:"-"`
@@ -208,33 +194,11 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.E
 		return p.resources[i].Name < p.resources[j].Name
 	})
 
-	//compile hypervisor type rules
-	p.hypervisorTypeRules = nil
+	//validate hypervisor type rules
 	for _, rule := range p.HypervisorTypeRules {
-		rx, err := regexp.Compile(rule.Pattern)
+		err = rule.Validate()
 		if err != nil {
 			return err
-		}
-		//the format of rule.Key is built for future extensibility, e.g. if it
-		//later becomes required to match against image capabilities
-		switch {
-		case rule.Key == "flavor-name":
-			p.hypervisorTypeRules = append(p.hypervisorTypeRules, novaHypervisorTypeRule{
-				MatchFlavorName: true,
-				ValuePattern:    rx,
-				HypervisorType:  rule.Type,
-			})
-		case strings.HasPrefix(rule.Key, "extra-spec:"):
-			p.hypervisorTypeRules = append(p.hypervisorTypeRules, novaHypervisorTypeRule{
-				MatchExtraSpec: strings.TrimPrefix(rule.Key, "extra-spec:"),
-				ValuePattern:   rx,
-				HypervisorType: rule.Type,
-			})
-		default:
-			return fmt.Errorf(
-				"key %q for hypervisor type rule must be \"flavor-name\" or start with \"extra-spec:\"",
-				rule.Key,
-			)
 		}
 	}
 
@@ -429,8 +393,8 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject) (result map[string]cor
 						}
 					}
 
-					if len(p.hypervisorTypeRules) > 0 {
-						hypervisorType := p.getHypervisorType(flavor)
+					if len(p.HypervisorTypeRules) > 0 {
+						hypervisorType := p.HypervisorTypeRules.Evaluate(flavor)
 						subResource["hypervisor"] = hypervisorType
 						metrics.InstanceCountsByHypervisor[hypervisorType]++
 					}
@@ -586,22 +550,6 @@ func unpackFlavorData(input map[string]any) (novaFlavorInfo, error) {
 	var result novaFlavorInfo
 	err = json.Unmarshal(buf, &result)
 	return result, err
-}
-
-func (p *novaPlugin) getHypervisorType(flavor novaFlavorInfo) string {
-	for _, rule := range p.hypervisorTypeRules {
-		switch {
-		case rule.MatchFlavorName:
-			if rule.ValuePattern.MatchString(flavor.OriginalName) {
-				return rule.HypervisorType
-			}
-		case rule.MatchExtraSpec != "":
-			if rule.ValuePattern.MatchString(flavor.ExtraSpecs[rule.MatchExtraSpec]) {
-				return rule.HypervisorType
-			}
-		}
-	}
-	return "unknown"
 }
 
 func (p *novaPlugin) getOSTypeFromBootVolume(instanceID string) (string, error) {
