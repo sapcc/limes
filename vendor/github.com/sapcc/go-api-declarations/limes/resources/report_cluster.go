@@ -76,9 +76,15 @@ type ClusterAvailabilityZoneReport struct {
 //
 // This type is part of the v2 API feature preview.
 type ClusterAZResourceReport struct {
-	Capacity    uint64  `json:"capacity"`
-	RawCapacity uint64  `json:"raw_capacity,omitempty"`
-	Usage       *uint64 `json:"usage,omitempty"`
+	Capacity    uint64 `json:"capacity"`
+	RawCapacity uint64 `json:"raw_capacity,omitempty"`
+	//Usage is what the backend reports. This is only shown if the backend does indeed report a summarized cluster-wide usage level.
+	Usage *uint64 `json:"usage,omitempty"`
+	//ProjectsUsage is the aggregate of the usage across all projects, as reported by the backend on the project level.
+	ProjectsUsage uint64 `json:"projects_usage,omitempty"`
+	//PhysicalUsage is collected per project and then aggregated, same as ProjectsUsage.
+	PhysicalUsage *uint64         `json:"physical_usage,omitempty"`
+	Subcapacities json.RawMessage `json:"subcapacities,omitempty"`
 }
 
 // ClusterServiceReports provides fast lookup of services by service type, but

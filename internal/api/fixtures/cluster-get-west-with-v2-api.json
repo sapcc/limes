@@ -1,0 +1,138 @@
+{
+  "cluster": {
+    "id": "current",
+    "services": [
+      {
+        "type": "shared",
+        "area": "shared",
+        "resources": [
+          {
+            "name": "capacity",
+            "unit": "B",
+            "quota_distribution_model": "hierarchical",
+            "capacity": 185,
+            "per_az": {
+              "az-one": {
+                "capacity": 90,
+                "usage": 12,
+                "projects_usage": 3,
+                "physical_usage": 2
+              },
+              "az-two": {
+                "capacity": 95,
+                "usage": 15,
+                "projects_usage": 3,
+                "physical_usage": 3
+              }
+            },
+            "per_availability_zone": [
+              {
+                "name": "az-one",
+                "capacity": 90,
+                "usage": 12
+              },
+              {
+                "name": "az-two",
+                "capacity": 95,
+                "usage": 15
+              }
+            ],
+            "domains_quota": 25,
+            "usage": 6,
+            "physical_usage": 5
+          },
+          {
+            "name": "capacity_portion",
+            "unit": "B",
+            "contained_in": "capacity",
+            "per_az": {
+              "az-one": {
+                "capacity": 0,
+                "projects_usage": 3
+              },
+              "az-two": {
+                "capacity": 0
+              }
+            },
+            "usage": 3
+          },
+          {
+            "name": "things",
+            "quota_distribution_model": "hierarchical",
+            "capacity": 246,
+            "per_az": {
+              "any": {
+                "capacity": 246,
+                "usage": 158,
+                "projects_usage": 6
+              }
+            },
+            "domains_quota": 30,
+            "usage": 6
+          }
+        ],
+        "max_scraped_at": 66,
+        "min_scraped_at": 22
+      },
+      {
+        "type": "unshared",
+        "area": "unshared",
+        "resources": [
+          {
+            "name": "capacity",
+            "unit": "B",
+            "quota_distribution_model": "hierarchical",
+            "per_az": {
+              "az-one": {
+                "capacity": 0,
+                "projects_usage": 3,
+                "physical_usage": 2
+              },
+              "az-two": {
+                "capacity": 0,
+                "projects_usage": 3,
+                "physical_usage": 3
+              }
+            },
+            "domains_quota": 100,
+            "usage": 6,
+            "physical_usage": 5
+          },
+          {
+            "name": "capacity_portion",
+            "unit": "B",
+            "contained_in": "capacity",
+            "per_az": {
+              "az-one": {
+                "capacity": 0,
+                "projects_usage": 3
+              },
+              "az-two": {
+                "capacity": 0
+              }
+            },
+            "usage": 3
+          },
+          {
+            "name": "things",
+            "quota_distribution_model": "hierarchical",
+            "capacity": 139,
+            "per_az": {
+              "any": {
+                "capacity": 139,
+                "usage": 45,
+                "projects_usage": 6
+              }
+            },
+            "domains_quota": 70,
+            "usage": 6
+          }
+        ],
+        "max_scraped_at": 55,
+        "min_scraped_at": 11
+      }
+    ],
+    "max_scraped_at": 1100,
+    "min_scraped_at": 1000
+  }
+}

@@ -278,6 +278,17 @@ func Test_ClusterOperations(t *testing.T) {
 		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-filtered.json"),
 	}.Check(t, s.Handler)
 
+	//check GetCluster with new API features enabled
+	assert.HTTPRequest{
+		Method: "GET",
+		Path:   "/v1/clusters/current",
+		Header: map[string]string{
+			"X-Limes-V2-API-Preview": "per-az",
+		},
+		ExpectStatus: 200,
+		ExpectBody:   assert.JSONFixtureFile("./fixtures/cluster-get-west-with-v2-api.json"),
+	}.Check(t, s.Handler)
+
 	//check GetClusterRates
 	assert.HTTPRequest{
 		Method:       "GET",
@@ -308,6 +319,15 @@ func Test_ClusterOperations(t *testing.T) {
 		Path:         "/v1/clusters/current",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-with-overcommit.json"),
+	}.Check(t, s.Handler)
+	assert.HTTPRequest{
+		Method: "GET",
+		Path:   "/v1/clusters/current",
+		Header: map[string]string{
+			"X-Limes-V2-API-Preview": "per-az",
+		},
+		ExpectStatus: 200,
+		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-with-overcommit-and-v2-api.json"),
 	}.Check(t, s.Handler)
 }
 
