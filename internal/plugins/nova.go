@@ -24,17 +24,14 @@ import (
 	"math/big"
 	"sort"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
-	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/availabilityzones"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/limits"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/quotasets"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/servergroups"
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/volumeattach"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
 	"github.com/gophercloud/gophercloud/openstack/imageservice/v2/images"
 	"github.com/gophercloud/gophercloud/pagination"
@@ -42,12 +39,10 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
-	"github.com/sapcc/go-bits/errext"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/regexpext"
 
 	"github.com/sapcc/limes/internal/core"
-	"github.com/sapcc/limes/internal/util"
 )
 
 // use a name that's unique to github.com/gophercloud/gophercloud/openstack/imageservice/v2/images
@@ -67,16 +62,13 @@ type novaPlugin struct {
 	resources []limesresources.ResourceInfo `yaml:"-"`
 	ftt       novaFlavorTranslationTable    `yaml:"-"`
 	//caches
-	osTypeForImage    map[string]string `yaml:"-"`
-	osTypeForInstance map[string]string `yaml:"-"`
-	serverGroups      struct {
+	serverGroups struct {
 		lastScrapeTime *time.Time
 		members        map[string]uint64 // per project
 	} `yaml:"-"`
 	//connections
-	NovaV2   *gophercloud.ServiceClient `yaml:"-"`
-	CinderV3 *gophercloud.ServiceClient `yaml:"-"`
-	GlanceV2 *gophercloud.ServiceClient `yaml:"-"`
+	NovaV2       *gophercloud.ServiceClient `yaml:"-"`
+	OSTypeProber *novaOSTypeProber          `yaml:"-"`
 }
 
 type novaSerializedMetrics struct {
@@ -113,8 +105,6 @@ func init() {
 // Init implements the core.QuotaPlugin interface.
 func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubresources map[string]bool) (err error) {
 	p.resources = novaDefaultResources
-	p.osTypeForImage = make(map[string]string)
-	p.osTypeForInstance = make(map[string]string)
 	p.scrapeInstances = scrapeSubresources["instances"]
 	p.ftt = newNovaFlavorTranslationTable(p.SeparateInstanceQuotas.FlavorAliases)
 
@@ -123,14 +113,15 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.E
 		return err
 	}
 	p.NovaV2.Microversion = "2.60" //to list server groups across projects and get all required server attributes
-	p.CinderV3, err = openstack.NewBlockStorageV3(provider, eo)
+	cinderV3, err := openstack.NewBlockStorageV3(provider, eo)
 	if err != nil {
 		return err
 	}
-	p.GlanceV2, err = openstack.NewImageServiceV2(provider, eo)
+	glanceV2, err := openstack.NewImageServiceV2(provider, eo)
 	if err != nil {
 		return err
 	}
+	p.OSTypeProber = newNovaOSTypeProber(p.NovaV2, cinderV3, glanceV2)
 
 	//find per-flavor instance resources
 	flavorNames, err := p.ftt.ListFlavorsWithSeparateInstanceQuota(p.NovaV2)
@@ -416,28 +407,9 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject) (result map[string]cor
 				}
 
 				if instance.Image == nil {
-					//instance built from bootable volume -> look at bootable volume to find OS type
-					osType, err := p.getOSTypeFromBootVolume(instance.ID)
-					if err == nil {
-						subResource["os_type"] = osType
-					} else {
-						logg.Error("error while trying to find OS type for instance %s from boot volume: %s", instance.ID, util.UnpackError(err).Error())
-						subResource["os_type"] = "rootdisk-inspect-error"
-					}
+					subResource["os_type"] = p.OSTypeProber.GetFromBootVolume(instance.ID)
 				} else {
-					//instance built from image -> look at image to find OS type
-					imageID, ok := instance.Image["id"].(string)
-					if ok {
-						osType, err := p.getOSTypeForImage(imageID)
-						if err == nil {
-							subResource["os_type"] = osType
-						} else {
-							logg.Error("error while trying to find OS type for image %s: %s", imageID, util.UnpackError(err).Error())
-							subResource["os_type"] = "image-inspect-error"
-						}
-					} else {
-						subResource["os_type"] = "image-missing"
-					}
+					subResource["os_type"] = p.OSTypeProber.GetFromImage(instance.Image["id"])
 				}
 
 				resource, exists := resultPtr[p.ftt.LimesResourceNameForFlavor(flavorName)]
@@ -550,106 +522,6 @@ func unpackFlavorData(input map[string]any) (novaFlavorInfo, error) {
 	var result novaFlavorInfo
 	err = json.Unmarshal(buf, &result)
 	return result, err
-}
-
-func (p *novaPlugin) getOSTypeFromBootVolume(instanceID string) (string, error) {
-	cachedResult, ok := p.osTypeForInstance[instanceID]
-	if ok {
-		return cachedResult, nil
-	}
-
-	//list volume attachments
-	page, err := volumeattach.List(p.NovaV2, instanceID).AllPages()
-	if err != nil {
-		return "", err
-	}
-	attachments, err := volumeattach.ExtractVolumeAttachments(page)
-	if err != nil {
-		return "", err
-	}
-
-	//find root volume among attachments
-	var rootVolumeID string
-	for _, attachment := range attachments {
-		if attachment.Device == "/dev/sda" || attachment.Device == "/dev/vda" {
-			rootVolumeID = attachment.VolumeID
-			break
-		}
-	}
-	if rootVolumeID == "" {
-		return "rootdisk-missing", nil
-	}
-
-	//check volume metadata
-	var volume struct {
-		ImageMetadata struct {
-			VMwareOSType string `json:"vmware_ostype"`
-		} `json:"volume_image_metadata"`
-	}
-	err = volumes.Get(p.CinderV3, rootVolumeID).ExtractInto(&volume)
-	if err != nil {
-		return "", err
-	}
-
-	if isValidVMwareOSType[volume.ImageMetadata.VMwareOSType] {
-		p.osTypeForInstance[instanceID] = volume.ImageMetadata.VMwareOSType
-		return volume.ImageMetadata.VMwareOSType, nil
-	}
-	return "unknown", nil
-}
-
-func (p *novaPlugin) getOSTypeForImage(imageID string) (string, error) {
-	if osType, ok := p.osTypeForImage[imageID]; ok {
-		return osType, nil
-	}
-
-	osType, err := p.findOSTypeForImage(imageID)
-	if err == nil {
-		p.osTypeForImage[imageID] = osType
-	} else {
-		logg.Error("internal: %#v\n", err)
-	}
-	return osType, err
-}
-
-func (p *novaPlugin) findOSTypeForImage(imageID string) (string, error) {
-	var result struct {
-		Tags         []string `json:"tags"`
-		VMwareOSType string   `json:"vmware_ostype"`
-	}
-	err := images.Get(p.GlanceV2, imageID).ExtractInto(&result)
-	if err != nil {
-		//report a dummy value if image has been deleted...
-		if errext.IsOfType[gophercloud.ErrDefault404](err) {
-			return "image-deleted", nil
-		}
-		//otherwise, try to GET image again during next scrape
-		return "", err
-	}
-
-	//prefer vmware_ostype attribute since this is validated by Nova upon booting the VM
-	if isValidVMwareOSType[result.VMwareOSType] {
-		return result.VMwareOSType, nil
-	}
-	//look for a tag like "ostype:rhel7" or "ostype:windows8Server64"
-	osType := ""
-	for _, tag := range result.Tags {
-		if strings.HasPrefix(tag, "ostype:") {
-			if osType == "" {
-				osType = strings.TrimPrefix(tag, "ostype:")
-			} else {
-				//multiple such tags -> wtf
-				osType = ""
-				break
-			}
-		}
-	}
-
-	//report "unknown" as a last resort
-	if osType == "" {
-		osType = "unknown"
-	}
-	return osType, nil
 }
 
 type novaServerListOpts struct {
