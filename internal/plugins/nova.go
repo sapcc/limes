@@ -24,16 +24,13 @@ import (
 	"math/big"
 	"sort"
 	"strconv"
-	"time"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/availabilityzones"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/limits"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/quotasets"
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/servergroups"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
-	"github.com/gophercloud/gophercloud/openstack/imageservice/v2/images"
 	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
@@ -44,10 +41,6 @@ import (
 
 	"github.com/sapcc/limes/internal/core"
 )
-
-// use a name that's unique to github.com/gophercloud/gophercloud/openstack/imageservice/v2/images
-// to ensure that goimports does not mistakenly replace it by .../compute/v2/images
-var _ images.ImageVisibility
 
 type novaPlugin struct {
 	//configuration
@@ -61,14 +54,10 @@ type novaPlugin struct {
 	//computed state
 	resources []limesresources.ResourceInfo `yaml:"-"`
 	ftt       novaFlavorTranslationTable    `yaml:"-"`
-	//caches
-	serverGroups struct {
-		lastScrapeTime *time.Time
-		members        map[string]uint64 // per project
-	} `yaml:"-"`
 	//connections
-	NovaV2       *gophercloud.ServiceClient `yaml:"-"`
-	OSTypeProber *novaOSTypeProber          `yaml:"-"`
+	NovaV2            *gophercloud.ServiceClient `yaml:"-"`
+	OSTypeProber      *novaOSTypeProber          `yaml:"-"`
+	ServerGroupProber *novaServerGroupProber     `yaml:"-"`
 }
 
 type novaSerializedMetrics struct {
@@ -122,6 +111,7 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.E
 		return err
 	}
 	p.OSTypeProber = newNovaOSTypeProber(p.NovaV2, cinderV3, glanceV2)
+	p.ServerGroupProber = newNovaServerGroupProber(p.NovaV2)
 
 	//find per-flavor instance resources
 	flavorNames, err := p.ftt.ListFlavorsWithSeparateInstanceQuota(p.NovaV2)
@@ -253,13 +243,9 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject) (result map[string]cor
 
 	var totalServerGroupMembersUsed uint64
 	if limitsData.Limits.Absolute.TotalServerGroupsUsed > 0 {
-		err := p.getServerGroups()
+		totalServerGroupMembersUsed, err = p.ServerGroupProber.GetMemberUsageForProject(project.UUID)
 		if err != nil {
 			return nil, nil, err
-		}
-
-		if v, ok := p.serverGroups.members[project.UUID]; ok {
-			totalServerGroupMembersUsed = v
 		}
 	}
 
@@ -538,58 +524,4 @@ type novaQuotaUpdateOpts map[string]uint64
 
 func (opts novaQuotaUpdateOpts) ToComputeQuotaUpdateMap() (map[string]any, error) {
 	return map[string]any{"quota_set": opts}, nil
-}
-
-func (p *novaPlugin) getServerGroups() error {
-	if p.serverGroups.lastScrapeTime != nil {
-		if time.Since(*p.serverGroups.lastScrapeTime) < 10*time.Minute {
-			return nil // no need to refresh cache
-		}
-	}
-
-	//When paginating through the list of server groups, perform steps slightly
-	//smaller than the actual page size, in order to correctly detect insertions
-	//and deletions that may cause list entries to shift around while we iterate
-	//over them.
-	const pageSize int = 500
-	stepSize := pageSize * 9 / 10
-	var currentOffset int
-	serverGroupSeen := make(map[string]bool)
-	membersPerProject := make(map[string]uint64)
-	for {
-		groups, err := p.getServerGroupsPage(pageSize, currentOffset)
-		if err != nil {
-			return err
-		}
-		for _, sg := range groups {
-			if !serverGroupSeen[sg.ID] {
-				membersPerProject[sg.ProjectID] += uint64(len(sg.Members))
-				serverGroupSeen[sg.ID] = true
-			}
-		}
-
-		//abort after the last page
-		if len(groups) < pageSize {
-			break
-		}
-		currentOffset += stepSize
-	}
-
-	p.serverGroups.members = membersPerProject
-	t := time.Now()
-	p.serverGroups.lastScrapeTime = &t
-
-	return nil
-}
-
-func (p *novaPlugin) getServerGroupsPage(limit, offset int) ([]servergroups.ServerGroup, error) {
-	allPages, err := servergroups.List(p.NovaV2, servergroups.ListOpts{AllProjects: true, Limit: limit, Offset: offset}).AllPages()
-	if err != nil {
-		return nil, err
-	}
-	allServerGroups, err := servergroups.ExtractServerGroups(allPages)
-	if err != nil {
-		return nil, err
-	}
-	return allServerGroups, nil
 }

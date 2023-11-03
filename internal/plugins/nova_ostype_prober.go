@@ -32,6 +32,10 @@ import (
 	"github.com/sapcc/limes/internal/util"
 )
 
+// use a name that's unique to github.com/gophercloud/gophercloud/openstack/imageservice/v2/images
+// to ensure that goimports does not mistakenly replace it by .../compute/v2/images
+var _ images.ImageVisibility
+
 type novaOSTypeProber struct {
 	//caches
 	CacheByImage    map[string]string //for instances booted from images
