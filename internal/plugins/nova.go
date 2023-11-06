@@ -57,7 +57,9 @@ type novaPlugin struct {
 }
 
 type novaSerializedMetrics struct {
-	InstanceCountsByHypervisor map[string]uint64 `json:"instances_by_hypervisor,omitempty"`
+	//TODO: flip the generated metrics to use the new structure, then remove the old one
+	InstanceCountsByHypervisor      map[string]uint64                            `json:"instances_by_hypervisor,omitempty"`
+	InstanceCountsByHypervisorAndAZ map[string]map[limes.AvailabilityZone]uint64 `json:"ic_hv_az,omitempty"`
 }
 
 var novaDefaultResources = []limesresources.ResourceInfo{
@@ -126,7 +128,7 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.E
 	}
 
 	//add price class resources if requested
-	if p.scrapeInstances && p.BigVMMinMemoryMiB != 0 {
+	if p.BigVMMinMemoryMiB != 0 {
 		p.resources = append(p.resources,
 			limesresources.ResourceInfo{
 				Name:        "cores_regular",
@@ -213,6 +215,7 @@ func (p *novaPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedSta
 
 // Scrape implements the core.QuotaPlugin interface.
 func (p *novaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[string]core.ResourceData, serializedMetrics []byte, err error) {
+	//collect quota and usage from Nova
 	var limitsData struct {
 		Limits struct {
 			Absolute struct {
@@ -236,120 +239,126 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Availab
 	if err != nil {
 		return nil, nil, err
 	}
-
+	absoluteLimits := limitsData.Limits.Absolute
 	var totalServerGroupMembersUsed uint64
-	if limitsData.Limits.Absolute.TotalServerGroupsUsed > 0 {
+	if absoluteLimits.TotalServerGroupsUsed > 0 {
 		totalServerGroupMembersUsed, err = p.ServerGroupProber.GetMemberUsageForProject(project.UUID)
 		if err != nil {
 			return nil, nil, err
 		}
 	}
 
-	resultPtr := map[string]*core.ResourceData{
+	//fill quota into `result`
+	result = map[string]core.ResourceData{
 		"cores": {
-			Quota: limitsData.Limits.Absolute.MaxTotalCores,
-			UsageData: core.InAnyAZ(core.UsageData{
-				Usage: limitsData.Limits.Absolute.TotalCoresUsed,
-			}),
+			Quota:     absoluteLimits.MaxTotalCores,
+			UsageData: core.ZeroInTheseAZs[core.UsageData](allAZs),
 		},
 		"instances": {
-			Quota: limitsData.Limits.Absolute.MaxTotalInstances,
-			UsageData: core.InAnyAZ(core.UsageData{
-				Usage: limitsData.Limits.Absolute.TotalInstancesUsed,
-			}),
+			Quota:     absoluteLimits.MaxTotalInstances,
+			UsageData: core.ZeroInTheseAZs[core.UsageData](allAZs),
 		},
 		"ram": {
-			Quota: limitsData.Limits.Absolute.MaxTotalRAMSize,
-			UsageData: core.InAnyAZ(core.UsageData{
-				Usage: limitsData.Limits.Absolute.TotalRAMUsed,
-			}),
+			Quota:     absoluteLimits.MaxTotalRAMSize,
+			UsageData: core.ZeroInTheseAZs[core.UsageData](allAZs),
 		},
-		"server_groups": {
-			Quota: limitsData.Limits.Absolute.MaxServerGroups,
-			UsageData: core.InAnyAZ(core.UsageData{
-				Usage: limitsData.Limits.Absolute.TotalServerGroupsUsed,
-			}),
-		},
-		"server_group_members": {
-			Quota: limitsData.Limits.Absolute.MaxServerGroupMembers,
-			UsageData: core.InAnyAZ(core.UsageData{
-				Usage: totalServerGroupMembersUsed,
-			}),
-		},
+		"server_groups":        {Quota: absoluteLimits.MaxServerGroups},
+		"server_group_members": {Quota: absoluteLimits.MaxServerGroupMembers},
 	}
-
-	if limitsData.Limits.AbsolutePerFlavor != nil {
-		for flavorName, flavorLimits := range limitsData.Limits.AbsolutePerFlavor {
-			//NOTE: If `flavor_name_pattern` is empty, then FlavorNameRx will match any input.
-			if p.SeparateInstanceQuotas.FlavorNameRx.MatchString(flavorName) {
-				resultPtr[p.ftt.LimesResourceNameForFlavor(flavorName)] = &core.ResourceData{
-					Quota: flavorLimits.MaxTotalInstances,
-					UsageData: core.InAnyAZ(core.UsageData{
-						Usage: flavorLimits.TotalInstancesUsed,
-					}),
-				}
+	for flavorName, flavorLimits := range limitsData.Limits.AbsolutePerFlavor {
+		if p.SeparateInstanceQuotas.FlavorNameRx.MatchString(flavorName) {
+			result[p.ftt.LimesResourceNameForFlavor(flavorName)] = core.ResourceData{
+				Quota:     flavorLimits.MaxTotalInstances,
+				UsageData: core.ZeroInTheseAZs[core.UsageData](allAZs),
 			}
 		}
 	}
 
-	//the Queens branch of sapcc/nova sometimes does not report zero quotas,
-	//so make sure that all known resources are reflected
-	//
-	//(this also ensures that we have the {cores|ram}_{regular|bigvm} quotas for below)
-	for _, res := range p.resources {
-		if _, exists := resultPtr[res.Name]; !exists {
-			resultPtr[res.Name] = &core.ResourceData{
-				Quota:     0,
-				UsageData: core.InAnyAZ(core.UsageData{}),
-			}
+	//initialize remaining slots in `result`
+	for _, resInfo := range p.resources {
+		result[resInfo.Name] = core.ResourceData{
+			Quota:     result[resInfo.Name].Quota,
+			UsageData: core.ZeroInTheseAZs[core.UsageData](allAZs),
 		}
 	}
 
+	//Nova does not have a native API for AZ-aware usage reporting,
+	//so we will obtain AZ-aware usage stats by counting up all subresources,
+	//even if we don't end up showing them in the API
+	allSubresources, err := p.buildInstanceSubresources(project)
+	if err != nil {
+		return nil, nil, fmt.Errorf("while collecting instance data: %w", err)
+	}
+
+	for _, subres := range allSubresources {
+		az := subres.AZ
+
+		//use separate instance resource if we have a matching "instances_$FLAVOR" resource
+		instanceResourceName := p.ftt.LimesResourceNameForFlavor(subres.FlavorName)
+		if _, exists := result[instanceResourceName]; !exists {
+			instanceResourceName = "instances"
+		}
+
+		//count subresource towards "instances" (or separate instance resource)
+		azData := result[instanceResourceName].UsageInAZ(az)
+		azData.Usage++
+		if p.scrapeInstances {
+			azData.Subresources = append(azData.Subresources, subres)
+		}
+
+		//if counted towards separate instance resource, do not count towards "cores" and "ram"
+		if instanceResourceName != "instances" {
+			continue
+		}
+
+		//count towards "cores" and "ram"
+		result["cores"].UsageInAZ(az).Usage += subres.VCPUs
+		result["ram"].UsageInAZ(az).Usage += subres.MemoryMiB.Value
+
+		//count towards "bigvm" or "regular" class if requested
+		if p.BigVMMinMemoryMiB != 0 {
+			class := subres.Class
+			result["cores_"+class].UsageInAZ(az).Usage += subres.VCPUs
+			result["instances_"+class].UsageInAZ(az).Usage++
+			result["ram_"+class].UsageInAZ(az).Usage += subres.MemoryMiB.Value
+		}
+	}
+
+	//merge quota and usage reported by Nova with the calculated usage
+	result["cores"].EnsureTotalUsageNotBelow(absoluteLimits.TotalCoresUsed)
+	result["instances"].EnsureTotalUsageNotBelow(absoluteLimits.TotalInstancesUsed)
+	result["ram"].EnsureTotalUsageNotBelow(absoluteLimits.TotalRAMUsed)
+	result["server_groups"].EnsureTotalUsageNotBelow(absoluteLimits.TotalServerGroupsUsed)
+	result["server_group_members"].EnsureTotalUsageNotBelow(totalServerGroupMembersUsed)
+	for flavorName, flavorLimits := range limitsData.Limits.AbsolutePerFlavor {
+		if p.SeparateInstanceQuotas.FlavorNameRx.MatchString(flavorName) {
+			result[p.ftt.LimesResourceNameForFlavor(flavorName)].EnsureTotalUsageNotBelow(flavorLimits.TotalInstancesUsed)
+		}
+	}
+
+	//calculate metrics
 	var metrics novaSerializedMetrics
-
-	if p.scrapeInstances {
-		allSubresources, err := p.buildInstanceSubresources(project)
-		if err != nil {
-			return nil, nil, fmt.Errorf("while collecting instance info: %w", err)
+	if len(p.HypervisorTypeRules) > 0 {
+		metrics.InstanceCountsByHypervisor = map[string]uint64{"unknown": 0}
+		metrics.InstanceCountsByHypervisorAndAZ = map[string]map[limes.AvailabilityZone]uint64{
+			"unknown": {limes.AvailabilityZoneUnknown: 0},
 		}
 
-		metrics.InstanceCountsByHypervisor = map[string]uint64{
-			"vmware":  0,
-			"none":    0,
-			"unknown": 0,
-		}
-
-		for _, res := range allSubresources {
-			limesResourceName := p.ftt.LimesResourceNameForFlavor(res.FlavorName)
-			if res.HypervisorType != "" {
-				metrics.InstanceCountsByHypervisor[res.HypervisorType]++
+		for _, subres := range allSubresources {
+			hvType := subres.HypervisorType
+			if hvType == "" {
+				continue
 			}
-
-			if p.BigVMMinMemoryMiB > 0 {
-				//do not count baremetal instances into `{cores,instances,ram}_{bigvm,regular}`
-				if _, exists := resultPtr[limesResourceName]; !exists {
-					class := res.Class
-					resultPtr["cores_"+class].UsageData[limes.AvailabilityZoneAny].Usage += res.VCPUs
-					resultPtr["instances_"+class].UsageData[limes.AvailabilityZoneAny].Usage++
-					resultPtr["ram_"+class].UsageData[limes.AvailabilityZoneAny].Usage += res.MemoryMiB.Value
-				}
+			metrics.InstanceCountsByHypervisor[hvType]++
+			if metrics.InstanceCountsByHypervisorAndAZ[hvType] == nil {
+				metrics.InstanceCountsByHypervisorAndAZ[hvType] = make(map[limes.AvailabilityZone]uint64)
 			}
-
-			resource, exists := resultPtr[limesResourceName]
-			if !exists {
-				resource = resultPtr["instances"]
-			}
-			resource.UsageData[limes.AvailabilityZoneAny].Subresources = append(resource.UsageData[limes.AvailabilityZoneAny].Subresources, res)
+			metrics.InstanceCountsByHypervisorAndAZ[hvType][subres.AZ]++
 		}
 	}
 
-	//remove references (which we needed to apply the subresources correctly)
-	result2 := make(map[string]core.ResourceData, len(resultPtr))
-	for name, data := range resultPtr {
-		result2[name] = *data
-	}
 	serializedMetrics, err = json.Marshal(metrics)
-	return result2, serializedMetrics, err
+	return result, serializedMetrics, err
 }
 
 // IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.

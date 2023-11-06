@@ -40,6 +40,22 @@ func InUnknownAZ[D AZAwareData[D]](data D) PerAZ[D] {
 	return PerAZ[D]{limes.AvailabilityZoneUnknown: &data}
 }
 
+// ZeroInTheseAZs is a convenience constructor for PerAZ that creates a map with
+// zero-valued entries for each of the given AZs.
+//
+// This is used for AZ-aware usage reporting when the main API is not AZ-aware.
+// Plugins will calculate AZ-aware usage by iterating through AZ-localized objects.
+// Using this constructor for the PerAZ[UsageData] ensures that each AZ reports
+// a usage value, even if the project in question does not have usage in that AZ.
+func ZeroInTheseAZs[D AZAwareData[D]](availabilityZones []limes.AvailabilityZone) PerAZ[D] {
+	result := make(PerAZ[D], len(availabilityZones))
+	for _, az := range availabilityZones {
+		var empty D
+		result[az] = &empty
+	}
+	return result
+}
+
 // Clone returns a deep copy of this map.
 func (p PerAZ[D]) Clone() PerAZ[D] {
 	result := make(PerAZ[D], len(p))
@@ -122,6 +138,41 @@ type AZAwareData[Self any] interface {
 type ResourceData struct {
 	Quota     int64 //negative values indicate infinite quota
 	UsageData PerAZ[UsageData]
+}
+
+// UsageInAZ is like `r.UsageData[az]`, but inserts a new zero-valued UsageData on first access.
+// This is useful when calculating AZ-aware usage by iterating through a list of AZ-localized objects.
+func (r ResourceData) UsageInAZ(az limes.AvailabilityZone) *UsageData {
+	if r.UsageData == nil {
+		panic("ResourceData.GetOrCreateEntry cannot operate on a nil UsageData")
+	}
+	entry := r.UsageData[az]
+	if entry == nil {
+		entry = &UsageData{}
+		r.UsageData[az] = entry
+	}
+	return entry
+}
+
+// EnsureTotalUsageNotBelow adds usage to the `unknown` AZ such that the total
+// usage is at least as high as the given total.
+//
+// This is used for AZ-aware usage reporting when the main API is not AZ-aware.
+// Plugins will first calculate AZ-aware usage by iterating through AZ-localized objects,
+// then enter the non-AZ-aware usage data reported by the backend's quota API using this function.
+// Any previously unexplained usage will be added to the AZ `unknown`.
+
+// This does not do any corrections for `usage < totalUsage`,
+// because there is not really any way to correct downwards.
+func (r ResourceData) EnsureTotalUsageNotBelow(usage uint64) {
+	var totalUsage uint64
+	for _, u := range r.UsageData {
+		totalUsage += u.Usage
+	}
+
+	if usage > totalUsage {
+		r.UsageInAZ(limes.AvailabilityZoneUnknown).Usage += usage - totalUsage
+	}
 }
 
 // UsageData contains usage data for a single project resource.

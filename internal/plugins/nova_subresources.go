@@ -50,9 +50,9 @@ type novaInstanceSubresource struct {
 	Metadata map[string]string `json:"metadata"`
 	Tags     []string          `json:"tags"`
 	// placement information
-	AZ             string `json:"availability_zone"`
-	HypervisorType string `json:"hypervisor,omitempty"`
-	Class          string `json:"class,omitempty"` //either "bigvm" or "regular", see below
+	AZ             limes.AvailabilityZone `json:"availability_zone"`
+	HypervisorType string                 `json:"hypervisor,omitempty"`
+	Class          string                 `json:"class,omitempty"` //either "bigvm" or "regular", see below
 	// information from flavor
 	FlavorName     string               `json:"flavor"`
 	VCPUs          uint64               `json:"vcpu"`
@@ -80,7 +80,7 @@ func (p *novaPlugin) buildInstanceSubresource(instance novaInstance) (res novaIn
 	res.ID = instance.ID
 	res.Name = instance.Name
 	res.Status = instance.Status
-	res.AZ = instance.AvailabilityZone
+	res.AZ = limes.AvailabilityZone(instance.AvailabilityZone)
 	res.Metadata = instance.Metadata
 	if instance.Tags != nil {
 		res.Tags = *instance.Tags
