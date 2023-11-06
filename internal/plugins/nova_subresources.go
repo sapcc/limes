@@ -29,6 +29,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
 	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/sapcc/go-api-declarations/limes"
+
 	"github.com/sapcc/limes/internal/core"
 )
 
