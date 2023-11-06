@@ -21,22 +21,18 @@ package plugins
 
 import (
 	"encoding/json"
+	"fmt"
 	"math/big"
 	"sort"
-	"strconv"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/availabilityzones"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/limits"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/quotasets"
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
-	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
-	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/regexpext"
 
 	"github.com/sapcc/limes/internal/core"
@@ -312,9 +308,9 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject) (result map[string]cor
 	var metrics novaSerializedMetrics
 
 	if p.scrapeInstances {
-		listOpts := novaServerListOpts{
-			AllTenants: true,
-			TenantID:   project.UUID,
+		allSubresources, err := p.buildInstanceSubresources(project)
+		if err != nil {
+			return nil, nil, fmt.Errorf("while collecting instance info: %w", err)
 		}
 
 		metrics.InstanceCountsByHypervisor = map[string]uint64{
@@ -323,91 +319,27 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject) (result map[string]cor
 			"unknown": 0,
 		}
 
-		err := servers.List(p.NovaV2, listOpts).EachPage(func(page pagination.Page) (bool, error) {
-			var instances []struct {
-				servers.Server
-				availabilityzones.ServerAvailabilityZoneExt
-			}
-			err := servers.ExtractServersInto(page, &instances)
-			if err != nil {
-				return false, err
+		for _, res := range allSubresources {
+			limesResourceName := p.ftt.LimesResourceNameForFlavor(res.FlavorName)
+			if res.HypervisorType != "" {
+				metrics.InstanceCountsByHypervisor[res.HypervisorType]++
 			}
 
-			for _, instance := range instances {
-				subResource := map[string]any{
-					"id":                instance.ID,
-					"name":              instance.Name,
-					"status":            instance.Status,
-					"availability_zone": instance.AvailabilityZone,
-					"metadata":          instance.Metadata,
-					"tags":              derefSlicePtrOrEmpty(instance.Tags),
+			if p.BigVMMinMemoryMiB > 0 {
+				//do not count baremetal instances into `{cores,instances,ram}_{bigvm,regular}`
+				if _, exists := resultPtr[limesResourceName]; !exists {
+					class := res.Class
+					resultPtr["cores_"+class].UsageData[limes.AvailabilityZoneAny].Usage += res.VCPUs
+					resultPtr["instances_"+class].UsageData[limes.AvailabilityZoneAny].Usage++
+					resultPtr["ram_"+class].UsageData[limes.AvailabilityZoneAny].Usage += res.MemoryMiB.Value
 				}
-
-				var flavorName string
-				flavor, err := unpackFlavorData(instance.Flavor)
-				if err != nil {
-					logg.Error("error while trying to parse flavor data for instance %s: %s", instance.ID, err.Error())
-				} else {
-					flavorName = flavor.OriginalName
-					subResource["flavor"] = flavor.OriginalName
-					subResource["vcpu"] = flavor.VCPUs
-					subResource["ram"] = limes.ValueWithUnit{
-						Value: flavor.MemoryMiB,
-						Unit:  limes.UnitMebibytes,
-					}
-					subResource["disk"] = limes.ValueWithUnit{
-						Value: flavor.DiskGiB,
-						Unit:  limes.UnitGibibytes,
-					}
-
-					if videoRAMStr, exists := flavor.ExtraSpecs["hw_video:ram_max_mb"]; exists {
-						videoRAMVal, err := strconv.ParseUint(videoRAMStr, 10, 64)
-						if err == nil {
-							subResource["video_ram"] = limes.ValueWithUnit{
-								Value: videoRAMVal,
-								Unit:  limes.UnitMebibytes,
-							}
-						}
-					}
-
-					if len(p.HypervisorTypeRules) > 0 {
-						hypervisorType := p.HypervisorTypeRules.Evaluate(flavor)
-						subResource["hypervisor"] = hypervisorType
-						metrics.InstanceCountsByHypervisor[hypervisorType]++
-					}
-
-					if p.BigVMMinMemoryMiB > 0 {
-						class := "regular"
-						if flavor.MemoryMiB >= p.BigVMMinMemoryMiB {
-							class = "bigvm"
-						}
-						subResource["class"] = class
-
-						//do not count baremetal instances into `{cores,instances,ram}_{bigvm,regular}`
-						if _, exists := resultPtr[p.ftt.LimesResourceNameForFlavor(flavorName)]; !exists {
-							resultPtr["cores_"+class].UsageData[limes.AvailabilityZoneAny].Usage += flavor.VCPUs
-							resultPtr["instances_"+class].UsageData[limes.AvailabilityZoneAny].Usage++
-							resultPtr["ram_"+class].UsageData[limes.AvailabilityZoneAny].Usage += flavor.MemoryMiB
-						}
-					}
-				}
-
-				if instance.Image == nil {
-					subResource["os_type"] = p.OSTypeProber.GetFromBootVolume(instance.ID)
-				} else {
-					subResource["os_type"] = p.OSTypeProber.GetFromImage(instance.Image["id"])
-				}
-
-				resource, exists := resultPtr[p.ftt.LimesResourceNameForFlavor(flavorName)]
-				if !exists {
-					resource = resultPtr["instances"]
-				}
-				resource.UsageData[limes.AvailabilityZoneAny].Subresources = append(resource.UsageData[limes.AvailabilityZoneAny].Subresources, subResource)
 			}
-			return true, nil
-		})
-		if err != nil {
-			return nil, nil, err
+
+			resource, exists := resultPtr[limesResourceName]
+			if !exists {
+				resource = resultPtr["instances"]
+			}
+			resource.UsageData[limes.AvailabilityZoneAny].Subresources = append(resource.UsageData[limes.AvailabilityZoneAny].Subresources, res)
 		}
 	}
 
@@ -418,13 +350,6 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject) (result map[string]cor
 	}
 	serializedMetrics, err = json.Marshal(metrics)
 	return result2, serializedMetrics, err
-}
-
-func derefSlicePtrOrEmpty(val *[]string) []string {
-	if val == nil {
-		return nil
-	}
-	return *val
 }
 
 // IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
@@ -486,38 +411,6 @@ func (p *novaPlugin) CollectMetrics(ch chan<- prometheus.Metric, project core.Ke
 		)
 	}
 	return nil
-}
-
-// Information about a flavor, as it appears in GET /servers/:id in the "flavor"
-// key with newer Nova microversions.
-type novaFlavorInfo struct {
-	DiskGiB      uint64            `json:"disk"`
-	EphemeralGiB uint64            `json:"ephemeral"`
-	ExtraSpecs   map[string]string `json:"extra_specs"`
-	OriginalName string            `json:"original_name"`
-	MemoryMiB    uint64            `json:"ram"`
-	SwapMiB      uint64            `json:"swap"`
-	VCPUs        uint64            `json:"vcpus"`
-}
-
-func unpackFlavorData(input map[string]any) (novaFlavorInfo, error) {
-	buf, err := json.Marshal(input)
-	if err != nil {
-		return novaFlavorInfo{}, err
-	}
-	var result novaFlavorInfo
-	err = json.Unmarshal(buf, &result)
-	return result, err
-}
-
-type novaServerListOpts struct {
-	AllTenants bool   `q:"all_tenants"`
-	TenantID   string `q:"tenant_id"`
-}
-
-func (opts novaServerListOpts) ToServerListQuery() (string, error) {
-	q, err := gophercloud.BuildQueryString(opts)
-	return q.String(), err
 }
 
 type novaQuotaUpdateOpts map[string]uint64
