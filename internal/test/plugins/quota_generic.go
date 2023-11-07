@@ -146,7 +146,7 @@ func (p *GenericQuotaPlugin) ScrapeRates(project core.KeystoneProject, prevSeria
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *GenericQuotaPlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics []byte, err error) {
+func (p *GenericQuotaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[string]core.ResourceData, serializedMetrics []byte, err error) {
 	if p.ScrapeFails {
 		return nil, nil, errors.New("Scrape failed as requested")
 	}

@@ -84,7 +84,7 @@ func (p *keppelPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedS
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *keppelPlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics []byte, err error) {
+func (p *keppelPlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[string]core.ResourceData, serializedMetrics []byte, err error) {
 	quotas, err := p.KeppelV1.GetQuota(project.UUID)
 	if err != nil {
 		return nil, nil, err

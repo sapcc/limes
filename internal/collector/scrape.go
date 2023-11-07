@@ -162,7 +162,7 @@ func (c *Collector) processResourceScrapeTask(_ context.Context, task projectScr
 	logg.Debug("scraping %s resources for %s/%s", srv.Type, dbDomain.Name, dbProject.Name)
 
 	//perform resource scrape
-	resourceData, serializedMetrics, err := plugin.Scrape(project)
+	resourceData, serializedMetrics, err := plugin.Scrape(project, c.Cluster.Config.AvailabilityZones)
 	if err != nil {
 		task.Err = util.UnpackError(err)
 	}

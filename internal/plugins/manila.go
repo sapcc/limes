@@ -198,7 +198,7 @@ func (p *manilaPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedS
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *manilaPlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics []byte, err error) {
+func (p *manilaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[string]core.ResourceData, serializedMetrics []byte, err error) {
 	quotaSets := make(map[string]manilaQuotaSetDetail)
 	for _, shareType := range p.ShareTypes {
 		stName := resolveManilaShareType(shareType, project)

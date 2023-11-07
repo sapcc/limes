@@ -159,7 +159,7 @@ func (p *cinderPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedS
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *cinderPlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, _ []byte, err error) {
+func (p *cinderPlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[string]core.ResourceData, _ []byte, err error) {
 	isVolumeType := make(map[string]bool)
 	for _, volumeType := range p.VolumeTypes {
 		isVolumeType[volumeType] = true

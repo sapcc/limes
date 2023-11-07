@@ -212,7 +212,7 @@ func (p *novaPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedSta
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *novaPlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics []byte, err error) {
+func (p *novaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[string]core.ResourceData, serializedMetrics []byte, err error) {
 	var limitsData struct {
 		Limits struct {
 			Absolute struct {

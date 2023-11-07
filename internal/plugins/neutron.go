@@ -324,7 +324,7 @@ func (p *neutronPlugin) ScrapeRates(project core.KeystoneProject, prevSerialized
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *neutronPlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics []byte, err error) {
+func (p *neutronPlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[string]core.ResourceData, serializedMetrics []byte, err error) {
 	data := make(map[string]core.ResourceData)
 
 	err = p.scrapeNeutronInto(data, project.UUID)

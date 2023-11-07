@@ -91,7 +91,7 @@ func (p *designatePlugin) ScrapeRates(project core.KeystoneProject, prevSerializ
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *designatePlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics []byte, err error) {
+func (p *designatePlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[string]core.ResourceData, serializedMetrics []byte, err error) {
 	//query quotas
 	quotas, err := dnsGetQuota(p.DesignateV2, project.UUID)
 	if err != nil {

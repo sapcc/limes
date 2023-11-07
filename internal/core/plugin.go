@@ -116,9 +116,14 @@ type QuotaPlugin interface {
 	//in the result map must be identical to the resource names
 	//from Resources().
 	//
-	//The serializedMetrics return value is persisted in the Limes DB and
+	//The `allAZs` list comes from the Limes config and should be used when
+	//building AZ-aware usage data, to ensure that each AZ-aware resource reports
+	//usage in all available AZs, even when the project in question does not have
+	//usage in every AZ.
+	//
+	//The `serializedMetrics` return value is persisted in the Limes DB and
 	//supplied to all subsequent RenderMetrics calls.
-	Scrape(project KeystoneProject) (result map[string]ResourceData, serializedMetrics []byte, err error)
+	Scrape(project KeystoneProject, allAZs []limes.AvailabilityZone) (result map[string]ResourceData, serializedMetrics []byte, err error)
 	//IsQuotaAcceptableForProject checks if the given quota set is acceptable
 	//for the given project, and returns nil if the quota is acceptable, or a
 	//human-readable error otherwise. This should only be used when the

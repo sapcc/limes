@@ -235,7 +235,7 @@ func taskTestGetQuota(cluster *core.Cluster, args []string) {
 		logg.Fatal("unknown service type: %s", serviceType)
 	}
 
-	result, serializedMetrics, err := cluster.QuotaPlugins[serviceType].Scrape(project)
+	result, serializedMetrics, err := cluster.QuotaPlugins[serviceType].Scrape(project, cluster.Config.AvailabilityZones)
 	must.Succeed(err)
 
 	for resourceName := range result {

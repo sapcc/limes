@@ -174,7 +174,7 @@ func (p quotaConstraintTestPlugin) ServiceInfo(serviceType string) limes.Service
 func (p quotaConstraintTestPlugin) Rates() []limesrates.RateInfo {
 	return nil
 }
-func (p quotaConstraintTestPlugin) Scrape(project KeystoneProject) (result map[string]ResourceData, serializedMetrics []byte, err error) {
+func (p quotaConstraintTestPlugin) Scrape(project KeystoneProject, allAZs []limes.AvailabilityZone) (result map[string]ResourceData, serializedMetrics []byte, err error) {
 	return nil, nil, nil
 }
 func (p quotaConstraintTestPlugin) IsQuotaAcceptableForProject(project KeystoneProject, fullQuotas map[string]map[string]uint64, allServiceInfos []limes.ServiceInfo) error {

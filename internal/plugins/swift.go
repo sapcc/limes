@@ -125,7 +125,7 @@ func (p *swiftPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedSt
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *swiftPlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics []byte, err error) {
+func (p *swiftPlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[string]core.ResourceData, serializedMetrics []byte, err error) {
 	account := p.Account(project.UUID)
 	headers, err := account.Headers()
 	if schwift.Is(err, http.StatusNotFound) || schwift.Is(err, http.StatusGone) {

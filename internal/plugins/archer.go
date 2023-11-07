@@ -94,7 +94,7 @@ func (p *archerPlugin) Rates() []limesrates.RateInfo {
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *archerPlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics []byte, err error) {
+func (p *archerPlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[string]core.ResourceData, serializedMetrics []byte, err error) {
 	url := p.Archer.ServiceURL("quotas", project.UUID)
 	var res gophercloud.Result
 	//nolint:bodyclose // already closed by gophercloud
