@@ -207,6 +207,14 @@ func (c *Collector) processResourceScrapeTask(_ context.Context, task projectScr
 func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.Project, task projectScrapeTask, resourceData map[string]core.ResourceData, serializedMetrics []byte) error {
 	srv := task.Service
 
+	//ensure that there is at least one ProjectAZResource for each ProjectResource
+	for resName, resData := range resourceData {
+		if len(resData.UsageData) == 0 {
+			resData.UsageData = core.InAnyAZ(core.UsageData{Usage: 0})
+			resourceData[resName] = resData
+		}
+	}
+
 	tx, err := c.DB.Begin()
 	if err != nil {
 		return fmt.Errorf("while beginning transaction: %w", err)

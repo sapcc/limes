@@ -37,7 +37,12 @@ func init() {
 
 // NoopQuotaPlugin is a core.QuotaPlugin implementation for tests, with no
 // resources or rates at all.
+//
+// Alternatively, `with_empty_resource: true` can be set to report a resource
+// with no UsageData at all (not even zero, the UsageData map just does not
+// have any entries at all).
 type NoopQuotaPlugin struct {
+	WithEmptyResource bool `yaml:"with_empty_resource"`
 }
 
 // Init implements the core.QuotaPlugin interface.
@@ -60,7 +65,13 @@ func (p *NoopQuotaPlugin) ServiceInfo(serviceType string) limes.ServiceInfo {
 
 // Resources implements the core.QuotaPlugin interface.
 func (p *NoopQuotaPlugin) Resources() []limesresources.ResourceInfo {
-	return nil
+	if !p.WithEmptyResource {
+		return nil
+	}
+	return []limesresources.ResourceInfo{{
+		Name: "things",
+		Unit: limes.UnitNone,
+	}}
 }
 
 // Rates implements the core.QuotaPlugin interface.
@@ -84,7 +95,12 @@ func (p *NoopQuotaPlugin) CollectMetrics(ch chan<- prometheus.Metric, project co
 
 // Scrape implements the core.QuotaPlugin interface.
 func (p *NoopQuotaPlugin) Scrape(project core.KeystoneProject) (result map[string]core.ResourceData, serializedMetrics []byte, err error) {
-	return nil, nil, nil
+	if p.WithEmptyResource {
+		result = map[string]core.ResourceData{
+			"things": {}, //no usage at all (this is used to test that the scraper adds a zero entry for AZ "any")
+		}
+	}
+	return result, nil, nil
 }
 
 // IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
