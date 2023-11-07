@@ -607,6 +607,7 @@ const (
 	`
 )
 
+//nolint:dupl
 func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithConfig(testNoUsageDataConfigYAML),
