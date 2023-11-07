@@ -250,36 +250,33 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Availab
 
 	//fill quota into `result`
 	result = map[string]core.ResourceData{
-		"cores": {
-			Quota:     absoluteLimits.MaxTotalCores,
-			UsageData: core.ZeroInTheseAZs[core.UsageData](allAZs),
+		"cores":     {Quota: absoluteLimits.MaxTotalCores},
+		"instances": {Quota: absoluteLimits.MaxTotalInstances},
+		"ram":       {Quota: absoluteLimits.MaxTotalRAMSize},
+		"server_groups": {
+			Quota:     absoluteLimits.MaxServerGroups,
+			UsageData: core.InAnyAZ(core.UsageData{Usage: absoluteLimits.TotalServerGroupsUsed}),
 		},
-		"instances": {
-			Quota:     absoluteLimits.MaxTotalInstances,
-			UsageData: core.ZeroInTheseAZs[core.UsageData](allAZs),
+		"server_group_members": {
+			Quota:     absoluteLimits.MaxServerGroupMembers,
+			UsageData: core.InAnyAZ(core.UsageData{Usage: totalServerGroupMembersUsed}),
 		},
-		"ram": {
-			Quota:     absoluteLimits.MaxTotalRAMSize,
-			UsageData: core.ZeroInTheseAZs[core.UsageData](allAZs),
-		},
-		"server_groups":        {Quota: absoluteLimits.MaxServerGroups},
-		"server_group_members": {Quota: absoluteLimits.MaxServerGroupMembers},
 	}
 	for flavorName, flavorLimits := range limitsData.Limits.AbsolutePerFlavor {
 		if p.SeparateInstanceQuotas.FlavorNameRx.MatchString(flavorName) {
 			result[p.ftt.LimesResourceNameForFlavor(flavorName)] = core.ResourceData{
-				Quota:     flavorLimits.MaxTotalInstances,
-				UsageData: core.ZeroInTheseAZs[core.UsageData](allAZs),
+				Quota: flavorLimits.MaxTotalInstances,
 			}
 		}
 	}
 
 	//initialize remaining slots in `result`
 	for _, resInfo := range p.resources {
-		result[resInfo.Name] = core.ResourceData{
-			Quota:     result[resInfo.Name].Quota,
-			UsageData: core.ZeroInTheseAZs[core.UsageData](allAZs),
+		resData := result[resInfo.Name] //or zero-valued (Quota = 0, UsageData = nil)
+		if resData.UsageData == nil {
+			resData.UsageData = core.ZeroInTheseAZs[core.UsageData](allAZs)
 		}
+		result[resInfo.Name] = resData
 	}
 
 	//Nova does not have a native API for AZ-aware usage reporting,
@@ -328,8 +325,6 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Availab
 	result["cores"].EnsureTotalUsageNotBelow(absoluteLimits.TotalCoresUsed)
 	result["instances"].EnsureTotalUsageNotBelow(absoluteLimits.TotalInstancesUsed)
 	result["ram"].EnsureTotalUsageNotBelow(absoluteLimits.TotalRAMUsed)
-	result["server_groups"].EnsureTotalUsageNotBelow(absoluteLimits.TotalServerGroupsUsed)
-	result["server_group_members"].EnsureTotalUsageNotBelow(totalServerGroupMembersUsed)
 	for flavorName, flavorLimits := range limitsData.Limits.AbsolutePerFlavor {
 		if p.SeparateInstanceQuotas.FlavorNameRx.MatchString(flavorName) {
 			result[p.ftt.LimesResourceNameForFlavor(flavorName)].EnsureTotalUsageNotBelow(flavorLimits.TotalInstancesUsed)
