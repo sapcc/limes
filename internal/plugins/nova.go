@@ -248,11 +248,20 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Availab
 		}
 	}
 
-	//fill quota into `result`
+	//initialize `result`
 	result = map[string]core.ResourceData{
-		"cores":     {Quota: absoluteLimits.MaxTotalCores},
-		"instances": {Quota: absoluteLimits.MaxTotalInstances},
-		"ram":       {Quota: absoluteLimits.MaxTotalRAMSize},
+		"cores": {
+			Quota:     absoluteLimits.MaxTotalCores,
+			UsageData: core.InUnknownAZUnlessEmpty(core.UsageData{Usage: absoluteLimits.TotalCoresUsed}).AndZeroInTheseAZs(allAZs),
+		},
+		"instances": {
+			Quota:     absoluteLimits.MaxTotalInstances,
+			UsageData: core.InUnknownAZUnlessEmpty(core.UsageData{Usage: absoluteLimits.TotalInstancesUsed}).AndZeroInTheseAZs(allAZs),
+		},
+		"ram": {
+			Quota:     absoluteLimits.MaxTotalRAMSize,
+			UsageData: core.InUnknownAZUnlessEmpty(core.UsageData{Usage: absoluteLimits.TotalRAMUsed}).AndZeroInTheseAZs(allAZs),
+		},
 		"server_groups": {
 			Quota:     absoluteLimits.MaxServerGroups,
 			UsageData: core.InAnyAZ(core.UsageData{Usage: absoluteLimits.TotalServerGroupsUsed}),
@@ -265,18 +274,19 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Availab
 	for flavorName, flavorLimits := range limitsData.Limits.AbsolutePerFlavor {
 		if p.SeparateInstanceQuotas.FlavorNameRx.MatchString(flavorName) {
 			result[p.ftt.LimesResourceNameForFlavor(flavorName)] = core.ResourceData{
-				Quota: flavorLimits.MaxTotalInstances,
+				Quota:     flavorLimits.MaxTotalInstances,
+				UsageData: core.InUnknownAZUnlessEmpty(core.UsageData{Usage: flavorLimits.TotalInstancesUsed}).AndZeroInTheseAZs(allAZs),
 			}
 		}
 	}
-
-	//initialize remaining slots in `result`
-	for _, resInfo := range p.resources {
-		resData := result[resInfo.Name] //or zero-valued (Quota = 0, UsageData = nil)
-		if resData.UsageData == nil {
-			resData.UsageData = core.ZeroInTheseAZs[core.UsageData](allAZs)
+	if p.BigVMMinMemoryMiB != 0 {
+		for _, classSuffix := range []string{"_regular", "_bigvm"} {
+			for _, baseResName := range []string{"cores", "instances", "ram"} {
+				result[baseResName+classSuffix] = core.ResourceData{
+					UsageData: core.PerAZ[core.UsageData]{}.AndZeroInTheseAZs(allAZs),
+				}
+			}
 		}
-		result[resInfo.Name] = resData
 	}
 
 	//Nova does not have a native API for AZ-aware usage reporting,
@@ -297,9 +307,9 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Availab
 		}
 
 		//count subresource towards "instances" (or separate instance resource)
-		azData := result[instanceResourceName].UsageInAZ(az)
-		azData.Usage++
+		result[instanceResourceName].AddLocalizedUsage(az, 1)
 		if p.scrapeInstances {
+			azData := result[instanceResourceName].UsageInAZ(az)
 			azData.Subresources = append(azData.Subresources, subres)
 		}
 
@@ -309,8 +319,8 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Availab
 		}
 
 		//count towards "cores" and "ram"
-		result["cores"].UsageInAZ(az).Usage += subres.VCPUs
-		result["ram"].UsageInAZ(az).Usage += subres.MemoryMiB.Value
+		result["cores"].AddLocalizedUsage(az, subres.VCPUs)
+		result["ram"].AddLocalizedUsage(az, subres.MemoryMiB.Value)
 
 		//count towards "bigvm" or "regular" class if requested
 		if p.BigVMMinMemoryMiB != 0 {
@@ -318,16 +328,6 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Availab
 			result["cores_"+class].UsageInAZ(az).Usage += subres.VCPUs
 			result["instances_"+class].UsageInAZ(az).Usage++
 			result["ram_"+class].UsageInAZ(az).Usage += subres.MemoryMiB.Value
-		}
-	}
-
-	//merge quota and usage reported by Nova with the calculated usage
-	result["cores"].EnsureTotalUsageNotBelow(absoluteLimits.TotalCoresUsed)
-	result["instances"].EnsureTotalUsageNotBelow(absoluteLimits.TotalInstancesUsed)
-	result["ram"].EnsureTotalUsageNotBelow(absoluteLimits.TotalRAMUsed)
-	for flavorName, flavorLimits := range limitsData.Limits.AbsolutePerFlavor {
-		if p.SeparateInstanceQuotas.FlavorNameRx.MatchString(flavorName) {
-			result[p.ftt.LimesResourceNameForFlavor(flavorName)].EnsureTotalUsageNotBelow(flavorLimits.TotalInstancesUsed)
 		}
 	}
 

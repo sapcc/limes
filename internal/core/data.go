@@ -34,26 +34,31 @@ func InAnyAZ[D AZAwareData[D]](data D) PerAZ[D] {
 	return PerAZ[D]{limes.AvailabilityZoneAny: &data}
 }
 
-// InUnknownAZ is a convenience constructor for PerAZ that puts all data in the "any" AZ.
+// InUnknownAZUnlessEmpty is a convenience constructor for PerAZ that puts all data in the "unknown" AZ.
 // Use this for data relating to AZ-aware resources where the AZ association is unknown.
-func InUnknownAZ[D AZAwareData[D]](data D) PerAZ[D] {
-	return PerAZ[D]{limes.AvailabilityZoneUnknown: &data}
+//
+// If the provided data is empty, an empty map is returned instead.
+// (We usually only report "unknown" if there is actually something to report.)
+func InUnknownAZUnlessEmpty[D AZAwareData[D]](data D) PerAZ[D] {
+	if data.isEmpty() {
+		return PerAZ[D]{}
+	} else {
+		return PerAZ[D]{limes.AvailabilityZoneUnknown: &data}
+	}
 }
 
-// ZeroInTheseAZs is a convenience constructor for PerAZ that creates a map with
-// zero-valued entries for each of the given AZs.
+// AndZeroInTheseAZs adds zero-valued entries for each of the given AZs, then returns the same map.
 //
 // This is used for AZ-aware usage reporting when the main API is not AZ-aware.
-// Plugins will calculate AZ-aware usage by iterating through AZ-localized objects.
-// Using this constructor for the PerAZ[UsageData] ensures that each AZ reports
-// a usage value, even if the project in question does not have usage in that AZ.
-func ZeroInTheseAZs[D AZAwareData[D]](availabilityZones []limes.AvailabilityZone) PerAZ[D] {
-	result := make(PerAZ[D], len(availabilityZones))
+// The initial UsageData is constructed as `InUnknownAZ(totalUsage).AndZeroInTheseAZs(knownAZs)`.
+// Then as we iterate through AZ-localized objects, their respective usage is moved
+// from AZ `any` to their specific AZ using AddLocalizedUsage().
+func (p PerAZ[D]) AndZeroInTheseAZs(availabilityZones []limes.AvailabilityZone) PerAZ[D] {
 	for _, az := range availabilityZones {
 		var empty D
-		result[az] = &empty
+		p[az] = &empty
 	}
-	return result
+	return p
 }
 
 // Clone returns a deep copy of this map.
@@ -132,6 +137,10 @@ type AZAwareData[Self any] interface {
 	// Computes the sum of this structure and `other`.
 	// This is used to implement PerAZ.Sum().
 	add(other Self) Self
+
+	// Whether this object contains any non-zero data.
+	// This is used to implement InUnknownAZUnlessEmpty().
+	isEmpty() bool
 }
 
 // ResourceData contains quota and usage data for a single project resource.
@@ -152,6 +161,28 @@ func (r ResourceData) UsageInAZ(az limes.AvailabilityZone) *UsageData {
 		r.UsageData[az] = entry
 	}
 	return entry
+}
+
+// AddLocalizedUsage subtracts the given `usage from the `unknown` AZ (if any)
+// and adds it to the given AZ instead.
+//
+// This is used when breaking down a usage total reported by a non-AZ-aware API
+// by iterating over AZ-localized objects. If the sum of usage of the
+// AZ-localized objects matches the reported usage total, the entry for the
+// "unknown" AZ will be removed entirely once it reaches zero usage.
+func (r ResourceData) AddLocalizedUsage(az limes.AvailabilityZone, usage uint64) {
+	ud := r.UsageData
+	if u := ud[limes.AvailabilityZoneUnknown]; u == nil || u.Usage <= usage {
+		delete(ud, limes.AvailabilityZoneUnknown)
+	} else {
+		ud[limes.AvailabilityZoneUnknown].Usage -= usage
+	}
+
+	if _, exists := ud[az]; exists {
+		ud[az].Usage += usage
+	} else {
+		ud[az] = &UsageData{Usage: usage}
+	}
 }
 
 // EnsureTotalUsageNotBelow adds usage to the `unknown` AZ such that the total
@@ -216,6 +247,13 @@ func (d UsageData) add(other UsageData) UsageData {
 	return result
 }
 
+// isEmpty implements the AZAwareData interface.
+//
+//nolint:unused // looks like a linter bug
+func (d UsageData) isEmpty() bool {
+	return d.Usage == 0 && (d.PhysicalUsage == nil || *d.PhysicalUsage == 0) || len(d.Subresources) == 0
+}
+
 // CapacityData contains capacity data for a single project resource.
 type CapacityData struct {
 	Capacity      uint64
@@ -250,4 +288,11 @@ func (d CapacityData) add(other CapacityData) CapacityData {
 	}
 
 	return result
+}
+
+// isEmpty implements the AZAwareData interface.
+//
+//nolint:unused // looks like a linter bug
+func (d CapacityData) isEmpty() bool {
+	return d.Capacity == 0 && (d.Usage == nil || *d.Usage == 0) || len(d.Subcapacities) == 0
 }
