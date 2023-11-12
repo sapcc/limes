@@ -202,7 +202,7 @@ func taskServe(cluster *core.Cluster, args []string, provider *gophercloud.Provi
 	tokenValidator := must.Return(api.NewTokenValidator(provider, eo))
 	corsMiddleware := cors.New(cors.Options{
 		AllowedOrigins: []string{"*"},
-		AllowedMethods: []string{"HEAD", "GET", "POST", "PUT"},
+		AllowedMethods: []string{"HEAD", "GET", "POST", "PUT", "DELETE"},
 		AllowedHeaders: []string{"Content-Type", "User-Agent", "X-Auth-Token", "X-Limes-Cluster-Id", "X-Limes-V2-Api-Preview"},
 	})
 	mux := http.NewServeMux()
