@@ -23,14 +23,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"math/big"
 	"regexp"
 	"strconv"
+	"time"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/sharedfilesystems/apiversions"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/model"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
@@ -38,6 +41,7 @@ import (
 	"github.com/sapcc/go-bits/promquery"
 
 	"github.com/sapcc/limes/internal/core"
+	"github.com/sapcc/limes/internal/util"
 )
 
 type manilaPlugin struct {
@@ -47,8 +51,8 @@ type manilaPlugin struct {
 	//computed state
 	hasReplicaQuotas bool `yaml:"-"`
 	//connections
-	ManilaV2            *gophercloud.ServiceClient `yaml:"-"`
-	PhysicalUsageProber *manilaPhysicalUsageProber `yaml:"-"`
+	ManilaV2      *gophercloud.ServiceClient                                                  `yaml:"-"`
+	NetappMetrics *util.PrometheusBulkQueryCache[manilaNetappMetricsKey, manilaNetappMetrics] `yaml:"-"`
 }
 
 func init() {
@@ -83,7 +87,7 @@ func (p *manilaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud
 	}
 
 	if p.PrometheusAPIConfig != nil {
-		p.PhysicalUsageProber, err = newManilaPhysicalUsageProber(p.PrometheusAPIConfig)
+		p.NetappMetrics, err = util.NewPrometheusBulkQueryCache(manilaNetappMetricsQueries, 2*time.Minute, p.PrometheusAPIConfig)
 		if err != nil {
 			return err
 		}
@@ -160,7 +164,7 @@ func (p *manilaPlugin) Resources() []limesresources.ResourceInfo {
 				Category: category,
 			},
 		)
-		if p.PhysicalUsageProber != nil {
+		if p.NetappMetrics != nil {
 			result = append(result, limesresources.ResourceInfo{
 				Name:        p.makeResourceName("snapmirror_capacity", shareType),
 				Unit:        limes.UnitGibibytes,
@@ -234,21 +238,27 @@ func (p *manilaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Avail
 			result[p.makeResourceName("share_capacity", shareType)] = core.ResourceData{Quota: 0, UsageData: core.InAnyAZ(core.UsageData{})}
 			result[p.makeResourceName("share_snapshots", shareType)] = core.ResourceData{Quota: 0, UsageData: core.InAnyAZ(core.UsageData{})}
 			result[p.makeResourceName("snapshot_capacity", shareType)] = core.ResourceData{Quota: 0, UsageData: core.InAnyAZ(core.UsageData{})}
-			if p.PhysicalUsageProber != nil {
+			if p.NetappMetrics != nil {
 				result[p.makeResourceName("snapmirror_capacity", shareType)] = core.ResourceData{Quota: 0, UsageData: core.InAnyAZ(core.UsageData{})}
 			}
 			continue
+		}
+		netappMetricsKey := manilaNetappMetricsKey{
+			ProjectUUID:   project.UUID,
+			ShareTypeName: stName,
 		}
 
 		var (
 			gigabytesPhysical         *uint64
 			snapshotGigabytesPhysical *uint64
 		)
-		if p.PhysicalUsageProber != nil {
-			gigabytesPhysical, snapshotGigabytesPhysical, err = p.PhysicalUsageProber.GetPhysicalUsages(project, stName)
+		if p.NetappMetrics != nil {
+			entry, err := p.NetappMetrics.Get(netappMetricsKey)
 			if err != nil {
 				return nil, nil, err
 			}
+			gigabytesPhysical = &entry.SharePhysicalUsage
+			snapshotGigabytesPhysical = &entry.SnapshotPhysicalUsage
 		}
 
 		sharesData := quotaSets[stName].Shares.ToResourceData(nil)
@@ -275,10 +285,17 @@ func (p *manilaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Avail
 		result[p.makeResourceName("share_snapshots", shareType)] = quotaSets[stName].Snapshots.ToResourceData(nil)
 		result[p.makeResourceName("snapshot_capacity", shareType)] = quotaSets[stName].SnapshotGigabytes.ToResourceData(snapshotGigabytesPhysical)
 
-		if p.PhysicalUsageProber != nil {
-			result[p.makeResourceName("snapmirror_capacity", shareType)], err = p.PhysicalUsageProber.GetSnapmirrorUsage(project, stName)
+		if p.NetappMetrics != nil {
+			entry, err := p.NetappMetrics.Get(netappMetricsKey)
 			if err != nil {
 				return nil, nil, err
+			}
+			result[p.makeResourceName("snapmirror_capacity", shareType)] = core.ResourceData{
+				Quota: 0, //NoQuota = true
+				UsageData: core.InAnyAZ(core.UsageData{
+					Usage:         entry.SnapmirrorUsage,
+					PhysicalUsage: &entry.SnapmirrorPhysicalUsage,
+				}),
 			}
 		}
 	}
@@ -455,4 +472,74 @@ func manilaCollectQuota(client *gophercloud.ServiceClient, projectUUID, shareTyp
 	}
 	err = result.ExtractInto(&manilaQuotaData)
 	return manilaQuotaData.QuotaSet, err
+}
+
+//////////////////////////////////////////////////////////////////////////////////
+// Prometheus queries and related types
+
+const (
+	// queries for netapp-exporter metrics
+	manilaSharePhysicalUsageQuery      = `sum by (project_id, share_type) (max by (project_id, share_id, share_type) (netapp_volume_used_bytes         {project_id!="",share_type!="",volume_type!="dp",volume_state="online"}))`
+	manilaSnapshotPhysicalUsageQuery   = `sum by (project_id, share_type) (max by (project_id, share_id, share_type) (netapp_volume_snapshot_used_bytes{project_id!="",share_type!="",volume_type!="dp",volume_state="online"}))`
+	manilaSnapmirrorUsageQuery         = `sum by (project_id, share_type) (max by (project_id, share_id, share_type) (netapp_volume_total_bytes        {project_id!="",share_type!="",volume_type!="dp",volume_state="online",snapshot_policy="EC2_Backups"}))`
+	manilaSnapmirrorPhysicalUsageQuery = `sum by (project_id, share_type) (max by (project_id, share_id, share_type) (netapp_volume_used_bytes         {project_id!="",share_type!="",volume_type!="dp",volume_state="online",snapshot_policy="EC2_Backups"}))`
+)
+
+type manilaNetappMetricsKey struct {
+	ProjectUUID   string
+	ShareTypeName string
+}
+
+func manilaNetappMetricsKeyer(sample *model.Sample) manilaNetappMetricsKey {
+	return manilaNetappMetricsKey{
+		ProjectUUID:   string(sample.Metric["project_id"]),
+		ShareTypeName: string(sample.Metric["share_type"]),
+	}
+}
+
+type manilaNetappMetrics struct {
+	//all in GiB
+	SharePhysicalUsage      uint64
+	SnapshotPhysicalUsage   uint64
+	SnapmirrorUsage         uint64
+	SnapmirrorPhysicalUsage uint64
+}
+
+var manilaNetappMetricsQueries = []util.PrometheusBulkQuery[manilaNetappMetricsKey, manilaNetappMetrics]{
+	{
+		Query:       manilaSharePhysicalUsageQuery,
+		Description: "share_capacity physical usage data",
+		Keyer:       manilaNetappMetricsKeyer,
+		Filler: func(entry *manilaNetappMetrics, sample *model.Sample) {
+			entry.SharePhysicalUsage = roundUpIntoGigabytes(float64(sample.Value))
+		},
+	},
+	{
+		Query:       manilaSnapshotPhysicalUsageQuery,
+		Description: "snapshot_capacity physical usage data",
+		Keyer:       manilaNetappMetricsKeyer,
+		Filler: func(entry *manilaNetappMetrics, sample *model.Sample) {
+			entry.SnapshotPhysicalUsage = roundUpIntoGigabytes(float64(sample.Value))
+		},
+	},
+	{
+		Query:       manilaSnapmirrorUsageQuery,
+		Description: "snapmirror_capacity usage data",
+		Keyer:       manilaNetappMetricsKeyer,
+		Filler: func(entry *manilaNetappMetrics, sample *model.Sample) {
+			entry.SnapmirrorUsage = roundUpIntoGigabytes(float64(sample.Value))
+		},
+	},
+	{
+		Query:       manilaSnapmirrorPhysicalUsageQuery,
+		Description: "snapmirror_capacity physical usage data",
+		Keyer:       manilaNetappMetricsKeyer,
+		Filler: func(entry *manilaNetappMetrics, sample *model.Sample) {
+			entry.SnapmirrorPhysicalUsage = roundUpIntoGigabytes(float64(sample.Value))
+		},
+	},
+}
+
+func roundUpIntoGigabytes(bytes float64) uint64 {
+	return uint64(math.Ceil(bytes / (1 << 30)))
 }
