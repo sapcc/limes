@@ -23,7 +23,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"math/big"
 	"regexp"
 	"strconv"
@@ -48,7 +47,8 @@ type manilaPlugin struct {
 	//computed state
 	hasReplicaQuotas bool `yaml:"-"`
 	//connections
-	ManilaV2 *gophercloud.ServiceClient `yaml:"-"`
+	ManilaV2            *gophercloud.ServiceClient `yaml:"-"`
+	PhysicalUsageProber *manilaPhysicalUsageProber `yaml:"-"`
 }
 
 func init() {
@@ -80,6 +80,13 @@ func (p *manilaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud
 		p.ManilaV2.Microversion = "2.53"
 	} else {
 		p.ManilaV2.Microversion = "2.39"
+	}
+
+	if p.PrometheusAPIConfig != nil {
+		p.PhysicalUsageProber, err = newManilaPhysicalUsageProber(p.PrometheusAPIConfig)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -153,7 +160,7 @@ func (p *manilaPlugin) Resources() []limesresources.ResourceInfo {
 				Category: category,
 			},
 		)
-		if p.PrometheusAPIConfig != nil {
+		if p.PhysicalUsageProber != nil {
 			result = append(result, limesresources.ResourceInfo{
 				Name:        p.makeResourceName("snapmirror_capacity", shareType),
 				Unit:        limes.UnitGibibytes,
@@ -217,38 +224,30 @@ func (p *manilaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Avail
 		return nil, nil, err
 	}
 
-	var physUsage manilaPhysicalUsage
-	if p.PrometheusAPIConfig != nil {
-		physUsage, err = p.collectPhysicalUsage(project)
-		if err != nil {
-			return nil, nil, err
-		}
-	}
-
 	result = map[string]core.ResourceData{
 		"share_networks": quotaSets[""].ShareNetworks.ToResourceData(nil),
 	}
-	for idx, shareType := range p.ShareTypes {
+	for _, shareType := range p.ShareTypes {
 		stName := resolveManilaShareType(shareType, project)
 		if stName == "" {
 			result[p.makeResourceName("shares", shareType)] = core.ResourceData{Quota: 0, UsageData: core.InAnyAZ(core.UsageData{})}
 			result[p.makeResourceName("share_capacity", shareType)] = core.ResourceData{Quota: 0, UsageData: core.InAnyAZ(core.UsageData{})}
 			result[p.makeResourceName("share_snapshots", shareType)] = core.ResourceData{Quota: 0, UsageData: core.InAnyAZ(core.UsageData{})}
 			result[p.makeResourceName("snapshot_capacity", shareType)] = core.ResourceData{Quota: 0, UsageData: core.InAnyAZ(core.UsageData{})}
-			if p.PrometheusAPIConfig != nil {
+			if p.PhysicalUsageProber != nil {
 				result[p.makeResourceName("snapmirror_capacity", shareType)] = core.ResourceData{Quota: 0, UsageData: core.InAnyAZ(core.UsageData{})}
 			}
 			continue
 		}
 
-		gigabytesPhysical := (*uint64)(nil)
-		snapshotGigabytesPhysical := (*uint64)(nil)
-		if idx == 0 {
-			if val, exists := physUsage.Gigabytes[stName]; exists {
-				gigabytesPhysical = &val
-			}
-			if val, exists := physUsage.SnapshotGigabytes[stName]; exists {
-				snapshotGigabytesPhysical = &val
+		var (
+			gigabytesPhysical         *uint64
+			snapshotGigabytesPhysical *uint64
+		)
+		if p.PhysicalUsageProber != nil {
+			gigabytesPhysical, snapshotGigabytesPhysical, err = p.PhysicalUsageProber.GetPhysicalUsages(project, stName)
+			if err != nil {
+				return nil, nil, err
 			}
 		}
 
@@ -257,6 +256,7 @@ func (p *manilaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Avail
 		if p.hasReplicaQuotas && shareType.ReplicationEnabled {
 			sharesData.UsageData[limes.AvailabilityZoneAny].Usage = quotaSets[stName].Replicas.Usage
 			shareCapacityData.UsageData[limes.AvailabilityZoneAny].Usage = quotaSets[stName].ReplicaGigabytes.Usage
+
 			//if share quotas and replica quotas disagree, report quota = -1 to force Limes to reapply the replica quota
 			if quotaSets[stName].Replicas.Quota != sharesData.Quota {
 				logg.Info("found mismatch between share quota (%d) and replica quota (%d) for share type %q in project %s",
@@ -275,8 +275,8 @@ func (p *manilaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Avail
 		result[p.makeResourceName("share_snapshots", shareType)] = quotaSets[stName].Snapshots.ToResourceData(nil)
 		result[p.makeResourceName("snapshot_capacity", shareType)] = quotaSets[stName].SnapshotGigabytes.ToResourceData(snapshotGigabytesPhysical)
 
-		if p.PrometheusAPIConfig != nil {
-			result[p.makeResourceName("snapmirror_capacity", shareType)], err = p.collectSnapmirrorUsage(project, stName)
+		if p.PhysicalUsageProber != nil {
+			result[p.makeResourceName("snapmirror_capacity", shareType)], err = p.PhysicalUsageProber.GetSnapmirrorUsage(project, stName)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -455,97 +455,4 @@ func manilaCollectQuota(client *gophercloud.ServiceClient, projectUUID, shareTyp
 	}
 	err = result.ExtractInto(&manilaQuotaData)
 	return manilaQuotaData.QuotaSet, err
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-type manilaPhysicalUsage struct {
-	Gigabytes         map[string]uint64
-	SnapshotGigabytes map[string]uint64
-}
-
-func (p *manilaPlugin) collectPhysicalUsage(project core.KeystoneProject) (manilaPhysicalUsage, error) {
-	usage := manilaPhysicalUsage{
-		Gigabytes:         make(map[string]uint64),
-		SnapshotGigabytes: make(map[string]uint64),
-	}
-
-	client, err := p.PrometheusAPIConfig.Connect()
-	if err != nil {
-		return manilaPhysicalUsage{}, err
-	}
-
-	defaultValue := float64(0)
-
-	for _, shareType := range p.ShareTypes {
-		stName := resolveManilaShareType(shareType, project)
-		if stName == "" {
-			continue
-		}
-
-		//NOTE: The `max by (share_id)` is necessary for when a share is being
-		//migrated to another shareserver and thus appears in the metrics twice.
-		queryStr := fmt.Sprintf(
-			`sum(max by (share_id) (netapp_volume_used_bytes{project_id=%q,volume_type!="dp",share_type=%q,volume_state="online"}))`,
-			project.UUID, stName,
-		)
-		bytesPhysical, err := client.GetSingleValue(queryStr, &defaultValue)
-		if err != nil {
-			return manilaPhysicalUsage{}, err
-		}
-		usage.Gigabytes[stName] = roundUpIntoGigabytes(bytesPhysical)
-
-		queryStr = fmt.Sprintf(
-			`sum(max by (share_id) (netapp_volume_snapshot_used_bytes{project_id=%q,volume_type!="dp",share_type=%q,volume_state="online"}))`,
-			project.UUID, stName,
-		)
-		snapshotBytesPhysical, err := client.GetSingleValue(queryStr, &defaultValue)
-		if err != nil {
-			return manilaPhysicalUsage{}, err
-		}
-		usage.SnapshotGigabytes[stName] = roundUpIntoGigabytes(snapshotBytesPhysical)
-	}
-
-	return usage, nil
-}
-
-func (p *manilaPlugin) collectSnapmirrorUsage(project core.KeystoneProject, shareTypeName string) (core.ResourceData, error) {
-	client, err := p.PrometheusAPIConfig.Connect()
-	if err != nil {
-		return core.ResourceData{}, err
-	}
-
-	//snapmirror backups are only known to the underlying NetApp filer, not to
-	//Manila itself, so we have to collect usage from NetApp metrics instead
-	defaultValue := float64(0)
-	queryStr := fmt.Sprintf(
-		`sum(max by (share_id) (netapp_volume_total_bytes{project_id=%q,volume_type!="dp",share_type=%q,volume_state="online",snapshot_policy="EC2_Backups"}))`,
-		project.UUID, shareTypeName,
-	)
-	bytesTotal, err := client.GetSingleValue(queryStr, &defaultValue)
-	if err != nil {
-		return core.ResourceData{}, err
-	}
-
-	queryStr = fmt.Sprintf(
-		`sum(max by (share_id) (netapp_volume_used_bytes{project_id=%q,volume_type!="dp",share_type=%q,volume_state="online",snapshot_policy="EC2_Backups"}))`,
-		project.UUID, shareTypeName,
-	)
-	bytesUsed, err := client.GetSingleValue(queryStr, &defaultValue)
-	if err != nil {
-		return core.ResourceData{}, err
-	}
-	bytesUsedAsUint64 := roundUpIntoGigabytes(bytesUsed)
-
-	return core.ResourceData{
-		Quota: 0, //NoQuota = true
-		UsageData: core.InAnyAZ(core.UsageData{
-			Usage:         roundUpIntoGigabytes(bytesTotal),
-			PhysicalUsage: &bytesUsedAsUint64,
-		}),
-	}, nil
-}
-
-func roundUpIntoGigabytes(bytes float64) uint64 {
-	return uint64(math.Ceil(bytes / (1 << 30)))
 }
