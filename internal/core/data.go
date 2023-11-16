@@ -185,27 +185,6 @@ func (r ResourceData) AddLocalizedUsage(az limes.AvailabilityZone, usage uint64)
 	}
 }
 
-// EnsureTotalUsageNotBelow adds usage to the `unknown` AZ such that the total
-// usage is at least as high as the given total.
-//
-// This is used for AZ-aware usage reporting when the main API is not AZ-aware.
-// Plugins will first calculate AZ-aware usage by iterating through AZ-localized objects,
-// then enter the non-AZ-aware usage data reported by the backend's quota API using this function.
-// Any previously unexplained usage will be added to the AZ `unknown`.
-
-// This does not do any corrections for `usage < totalUsage`,
-// because there is not really any way to correct downwards.
-func (r ResourceData) EnsureTotalUsageNotBelow(usage uint64) {
-	var totalUsage uint64
-	for _, u := range r.UsageData {
-		totalUsage += u.Usage
-	}
-
-	if usage > totalUsage {
-		r.UsageInAZ(limes.AvailabilityZoneUnknown).Usage += usage - totalUsage
-	}
-}
-
 // UsageData contains usage data for a single project resource.
 // It appears in type ResourceData.
 type UsageData struct {
