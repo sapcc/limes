@@ -229,9 +229,9 @@ The area for this service is `compute`.
 
 | Resource | Unit |
 | --- | --- |
-| `cores` | countable |
-| `instances` | countable |
-| `ram` | MiB |
+| `cores` | countable, AZ-aware |
+| `instances` | countable, AZ-aware |
+| `ram` | MiB, AZ-aware |
 | `server_groups` | countable |
 | `server_group_members` | countable |
 
@@ -249,12 +249,12 @@ shown above. When enabled, the following extra resources become available:
 
 | Resource | Unit |
 | --- | --- |
-| `cores_regular` | countable |
-| `cores_bigvm` | countable |
-| `instances_regular` | countable |
-| `instances_bigvm` | countable |
-| `ram_regular` | MiB |
-| `ram_bigvm` | MiB |
+| `cores_regular` | countable, AZ-aware |
+| `cores_bigvm` | countable, AZ-aware |
+| `instances_regular` | countable, AZ-aware |
+| `instances_bigvm` | countable, AZ-aware |
+| `ram_regular` | MiB, AZ-aware |
+| `ram_bigvm` | MiB, AZ-aware |
 
 Those resources don't track quota; only usage will be reported. Each of these resources has a `contained_in` relation,
 e.g. `instances_regular` is `contained_in: "instances"`.
@@ -459,7 +459,7 @@ services:
             - { name_pattern: "fooproject-.*", share_type: hypervisor_storage_foo }
             - { name_pattern: ".*@bardomain",  share_type: hypervisor_storage_bar }
             - { name_pattern: ".*",            share_type: '' }
-      prometheus_api:
+      prometheus_api_for_netapp_metrics:
           url: https://prometheus.example.com
           cert:    /path/to/client.pem
           key:     /path/to/client-key.pem
@@ -475,7 +475,7 @@ The area for this service is `storage`. The following resources are always expos
 | `share_snapshots` | countable | |
 | `snapshot_capacity` | GiB | |
 | `share_networks` | countable | |
-| `snapmirror_capacity` | GiB | Only if `prometheus_api` is given. A SAP-specific extension that reports disk space consumed by Snapmirror backups. |
+| `snapmirror_capacity` | GiB | Only if `prometheus_api_for_netapp_metrics` is given. A SAP-specific extension that reports disk space consumed by Snapmirror backups. |
 
 #### Multiple share types
 

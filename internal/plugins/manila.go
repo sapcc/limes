@@ -46,8 +46,9 @@ import (
 
 type manilaPlugin struct {
 	//configuration
-	ShareTypes          []ManilaShareTypeSpec `yaml:"share_types"`
-	PrometheusAPIConfig *promquery.Config     `yaml:"prometheus_api"`
+	ShareTypes                          []ManilaShareTypeSpec `yaml:"share_types"`
+	PrometheusAPIConfigForAZAwareness   *promquery.Config     `yaml:"prometheus_api_for_az_awareness"` //TODO: use
+	PrometheusAPIConfigForNetappMetrics *promquery.Config     `yaml:"prometheus_api_for_netapp_metrics"`
 	//computed state
 	hasReplicaQuotas bool `yaml:"-"`
 	//connections
@@ -86,8 +87,8 @@ func (p *manilaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud
 		p.ManilaV2.Microversion = "2.39"
 	}
 
-	if p.PrometheusAPIConfig != nil {
-		p.NetappMetrics, err = util.NewPrometheusBulkQueryCache(manilaNetappMetricsQueries, 2*time.Minute, p.PrometheusAPIConfig)
+	if p.PrometheusAPIConfigForNetappMetrics != nil {
+		p.NetappMetrics, err = util.NewPrometheusBulkQueryCache(manilaNetappMetricsQueries, 2*time.Minute, p.PrometheusAPIConfigForNetappMetrics)
 		if err != nil {
 			return err
 		}
