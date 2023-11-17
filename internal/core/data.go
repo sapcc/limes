@@ -230,7 +230,7 @@ func (d UsageData) add(other UsageData) UsageData {
 //
 //nolint:unused // looks like a linter bug
 func (d UsageData) isEmpty() bool {
-	return d.Usage == 0 && (d.PhysicalUsage == nil || *d.PhysicalUsage == 0) || len(d.Subresources) == 0
+	return d.Usage == 0 && (d.PhysicalUsage == nil || *d.PhysicalUsage == 0) && len(d.Subresources) == 0
 }
 
 // CapacityData contains capacity data for a single project resource.
@@ -273,5 +273,5 @@ func (d CapacityData) add(other CapacityData) CapacityData {
 //
 //nolint:unused // looks like a linter bug
 func (d CapacityData) isEmpty() bool {
-	return d.Capacity == 0 && (d.Usage == nil || *d.Usage == 0) || len(d.Subcapacities) == 0
+	return d.Capacity == 0 && (d.Usage == nil || *d.Usage == 0) && len(d.Subcapacities) == 0
 }
