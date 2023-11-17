@@ -49,8 +49,6 @@ type manilaPlugin struct {
 	ShareTypes                          []ManilaShareTypeSpec `yaml:"share_types"`
 	PrometheusAPIConfigForAZAwareness   *promquery.Config     `yaml:"prometheus_api_for_az_awareness"` //TODO: use
 	PrometheusAPIConfigForNetappMetrics *promquery.Config     `yaml:"prometheus_api_for_netapp_metrics"`
-	//computed state
-	hasReplicaQuotas bool `yaml:"-"`
 	//connections
 	ManilaV2      *gophercloud.ServiceClient                                                  `yaml:"-"`
 	NetappMetrics *util.PrometheusBulkQueryCache[manilaNetappMetricsKey, manilaNetappMetrics] `yaml:"-"`
@@ -77,15 +75,10 @@ func (p *manilaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud
 	if microversion == 0 {
 		return errors.New(`cannot find API microversion: no version of the form "2.x" found in advertisement`)
 	}
-	logg.Info("Manila microversion = 2.%d", microversion)
-
-	//share-type-specific quotas need 2.39, replica quotas need 2.53
-	p.hasReplicaQuotas = microversion >= 53
-	if p.hasReplicaQuotas {
-		p.ManilaV2.Microversion = "2.53"
-	} else {
-		p.ManilaV2.Microversion = "2.39"
+	if microversion < 53 {
+		return fmt.Errorf("need at least Manila microversion 2.53 (for replica quotas), but got 2.%d", microversion)
 	}
+	p.ManilaV2.Microversion = "2.53"
 
 	if p.PrometheusAPIConfigForNetappMetrics != nil {
 		p.NetappMetrics, err = util.NewPrometheusBulkQueryCache(manilaNetappMetricsQueries, 2*time.Minute, p.PrometheusAPIConfigForNetappMetrics)
@@ -211,96 +204,104 @@ func (p *manilaPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedS
 
 // Scrape implements the core.QuotaPlugin interface.
 func (p *manilaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[string]core.ResourceData, serializedMetrics []byte, err error) {
-	quotaSets := make(map[string]manilaQuotaSetDetail)
-	for _, shareType := range p.ShareTypes {
-		stName := resolveManilaShareType(shareType, project)
-		if stName == "" {
-			continue
-		}
-		quotaSets[stName], err = manilaCollectQuota(p.ManilaV2, project.UUID, stName)
-		if err != nil {
-			return nil, nil, err
-		}
-	}
-
 	//the share_networks quota is only shown when querying for no share_type in particular
-	quotaSets[""], err = manilaCollectQuota(p.ManilaV2, project.UUID, "")
+	qs, err := manilaGetQuotaSet(p.ManilaV2, project.UUID, "")
 	if err != nil {
 		return nil, nil, err
 	}
-
 	result = map[string]core.ResourceData{
-		"share_networks": quotaSets[""].ShareNetworks.ToResourceData(nil),
+		"share_networks": qs.ShareNetworks.ToResourceData(nil),
 	}
+
+	//all other quotas and usages are grouped under their respective share type
 	for _, shareType := range p.ShareTypes {
-		stName := resolveManilaShareType(shareType, project)
-		if stName == "" {
-			result[p.makeResourceName("shares", shareType)] = core.ResourceData{Quota: 0, UsageData: core.InAnyAZ(core.UsageData{})}
-			result[p.makeResourceName("share_capacity", shareType)] = core.ResourceData{Quota: 0, UsageData: core.InAnyAZ(core.UsageData{})}
-			result[p.makeResourceName("share_snapshots", shareType)] = core.ResourceData{Quota: 0, UsageData: core.InAnyAZ(core.UsageData{})}
-			result[p.makeResourceName("snapshot_capacity", shareType)] = core.ResourceData{Quota: 0, UsageData: core.InAnyAZ(core.UsageData{})}
-			if p.NetappMetrics != nil {
-				result[p.makeResourceName("snapmirror_capacity", shareType)] = core.ResourceData{Quota: 0, UsageData: core.InAnyAZ(core.UsageData{})}
-			}
-			continue
+		subresult, err := p.scrapeShareType(project, shareType)
+		if err != nil {
+			return nil, nil, err
 		}
-		netappMetricsKey := manilaNetappMetricsKey{
-			ProjectUUID:   project.UUID,
-			ShareTypeName: stName,
-		}
-
-		var (
-			gigabytesPhysical         *uint64
-			snapshotGigabytesPhysical *uint64
-		)
+		result[p.makeResourceName("shares", shareType)] = subresult.Shares
+		result[p.makeResourceName("share_capacity", shareType)] = subresult.ShareCapacity
+		result[p.makeResourceName("share_snapshots", shareType)] = subresult.Snapshots
+		result[p.makeResourceName("snapshot_capacity", shareType)] = subresult.SnapshotCapacity
 		if p.NetappMetrics != nil {
-			entry, err := p.NetappMetrics.Get(netappMetricsKey)
-			if err != nil {
-				return nil, nil, err
-			}
-			gigabytesPhysical = &entry.SharePhysicalUsage
-			snapshotGigabytesPhysical = &entry.SnapshotPhysicalUsage
-		}
-
-		sharesData := quotaSets[stName].Shares.ToResourceData(nil)
-		shareCapacityData := quotaSets[stName].Gigabytes.ToResourceData(gigabytesPhysical)
-		if p.hasReplicaQuotas && shareType.ReplicationEnabled {
-			sharesData.UsageData[limes.AvailabilityZoneAny].Usage = quotaSets[stName].Replicas.Usage
-			shareCapacityData.UsageData[limes.AvailabilityZoneAny].Usage = quotaSets[stName].ReplicaGigabytes.Usage
-
-			//if share quotas and replica quotas disagree, report quota = -1 to force Limes to reapply the replica quota
-			if quotaSets[stName].Replicas.Quota != sharesData.Quota {
-				logg.Info("found mismatch between share quota (%d) and replica quota (%d) for share type %q in project %s",
-					sharesData.Quota, quotaSets[stName].Replicas.Quota, stName, project.UUID)
-				sharesData.Quota = -1
-			}
-			if quotaSets[stName].ReplicaGigabytes.Quota != shareCapacityData.Quota {
-				logg.Info("found mismatch between share capacity quota (%d) and replica capacity quota (%d) for share type %q in project %s",
-					shareCapacityData.Quota, quotaSets[stName].ReplicaGigabytes.Quota, stName, project.UUID)
-				shareCapacityData.Quota = -1
-			}
-		}
-
-		result[p.makeResourceName("shares", shareType)] = sharesData
-		result[p.makeResourceName("share_capacity", shareType)] = shareCapacityData
-		result[p.makeResourceName("share_snapshots", shareType)] = quotaSets[stName].Snapshots.ToResourceData(nil)
-		result[p.makeResourceName("snapshot_capacity", shareType)] = quotaSets[stName].SnapshotGigabytes.ToResourceData(snapshotGigabytesPhysical)
-
-		if p.NetappMetrics != nil {
-			entry, err := p.NetappMetrics.Get(netappMetricsKey)
-			if err != nil {
-				return nil, nil, err
-			}
-			result[p.makeResourceName("snapmirror_capacity", shareType)] = core.ResourceData{
-				Quota: 0, //NoQuota = true
-				UsageData: core.InAnyAZ(core.UsageData{
-					Usage:         entry.SnapmirrorUsage,
-					PhysicalUsage: &entry.SnapmirrorPhysicalUsage,
-				}),
-			}
+			result[p.makeResourceName("snapmirror_capacity", shareType)] = subresult.SnapmirrorCapacity
 		}
 	}
 	return result, nil, nil
+}
+
+// All ResourceData for a single share type.
+type manilaResourceData struct {
+	Shares             core.ResourceData
+	ShareCapacity      core.ResourceData
+	Snapshots          core.ResourceData
+	SnapshotCapacity   core.ResourceData
+	SnapmirrorCapacity core.ResourceData // only filled if p.NetappMetrics != nil
+}
+
+func (p *manilaPlugin) scrapeShareType(project core.KeystoneProject, shareType ManilaShareTypeSpec) (manilaResourceData, error) {
+	//return all-zero data if this share type is not enabled for this project
+	stName := resolveManilaShareType(shareType, project)
+	if stName == "" {
+		return manilaResourceData{
+			Shares:             core.ResourceData{Quota: 0, UsageData: core.InAnyAZ(core.UsageData{})},
+			ShareCapacity:      core.ResourceData{Quota: 0, UsageData: core.InAnyAZ(core.UsageData{})},
+			Snapshots:          core.ResourceData{Quota: 0, UsageData: core.InAnyAZ(core.UsageData{})},
+			SnapshotCapacity:   core.ResourceData{Quota: 0, UsageData: core.InAnyAZ(core.UsageData{})},
+			SnapmirrorCapacity: core.ResourceData{Quota: 0, UsageData: core.InAnyAZ(core.UsageData{})},
+		}, nil
+	}
+
+	//start with the quota data from Manila
+	qs, err := manilaGetQuotaSet(p.ManilaV2, project.UUID, stName)
+	if err != nil {
+		return manilaResourceData{}, err
+	}
+	result := manilaResourceData{
+		Shares:           qs.Shares.ToResourceData(nil),
+		ShareCapacity:    qs.Gigabytes.ToResourceData(nil),
+		Snapshots:        qs.Snapshots.ToResourceData(nil),
+		SnapshotCapacity: qs.SnapshotGigabytes.ToResourceData(nil),
+	}
+	if shareType.ReplicationEnabled {
+		result.Shares.UsageData[limes.AvailabilityZoneAny].Usage = qs.Replicas.Usage
+		result.ShareCapacity.UsageData[limes.AvailabilityZoneAny].Usage = qs.ReplicaGigabytes.Usage
+
+		//if share quotas and replica quotas disagree, report quota = -1 to force Limes to reapply the replica quota
+		if qs.Replicas.Quota != result.Shares.Quota {
+			logg.Info("found mismatch between share quota (%d) and replica quota (%d) for share type %q in project %s",
+				result.Shares.Quota, qs.Replicas.Quota, stName, project.UUID)
+			result.Shares.Quota = -1
+		}
+		if qs.ReplicaGigabytes.Quota != result.ShareCapacity.Quota {
+			logg.Info("found mismatch between share capacity quota (%d) and replica capacity quota (%d) for share type %q in project %s",
+				result.ShareCapacity.Quota, qs.ReplicaGigabytes.Quota, stName, project.UUID)
+			result.ShareCapacity.Quota = -1
+		}
+	}
+
+	//add data from Netapp metrics if available
+	if p.NetappMetrics != nil {
+		nm, err := p.NetappMetrics.Get(manilaNetappMetricsKey{
+			ProjectUUID:   project.UUID,
+			ShareTypeName: stName,
+		})
+		if err != nil {
+			return manilaResourceData{}, err
+		}
+
+		result.ShareCapacity.UsageData[limes.AvailabilityZoneAny].PhysicalUsage = &nm.SharePhysicalUsage
+		result.SnapshotCapacity.UsageData[limes.AvailabilityZoneAny].PhysicalUsage = &nm.SnapshotPhysicalUsage
+		result.SnapmirrorCapacity = core.ResourceData{
+			Quota: 0, //NoQuota = true
+			UsageData: core.InAnyAZ(core.UsageData{
+				Usage:         nm.SnapmirrorUsage,
+				PhysicalUsage: &nm.SnapmirrorPhysicalUsage,
+			}),
+		}
+	}
+
+	return result, nil
 }
 
 func (p *manilaPlugin) rejectInaccessibleShareType(project core.KeystoneProject, quotas map[string]uint64) error {
@@ -368,7 +369,7 @@ func (p *manilaPlugin) SetQuota(project core.KeystoneProject, quotas map[string]
 			ReplicaGigabytes:  0,
 			ShareNetworks:     nil,
 		}
-		if p.hasReplicaQuotas && shareType.ReplicationEnabled {
+		if shareType.ReplicationEnabled {
 			anyReplicationEnabled = true
 			quotasForType.Replicas = quotasForType.Shares
 			quotasForType.ReplicaGigabytes = quotasForType.Gigabytes
@@ -385,7 +386,7 @@ func (p *manilaPlugin) SetQuota(project core.KeystoneProject, quotas map[string]
 		overallQuotas.ReplicaGigabytes += quotasForType.ReplicaGigabytes
 	}
 
-	if p.hasReplicaQuotas && anyReplicationEnabled {
+	if anyReplicationEnabled {
 		overallQuotas.ReplicasPtr = &overallQuotas.Replicas
 		overallQuotas.ReplicaGigabytesPtr = &overallQuotas.ReplicaGigabytes
 	}
@@ -457,7 +458,7 @@ func (q manilaQuotaDetail) ToResourceData(physicalUsage *uint64) core.ResourceDa
 	}
 }
 
-func manilaCollectQuota(client *gophercloud.ServiceClient, projectUUID, shareTypeName string) (manilaQuotaSetDetail, error) {
+func manilaGetQuotaSet(client *gophercloud.ServiceClient, projectUUID, shareTypeName string) (manilaQuotaSetDetail, error) {
 	var result gophercloud.Result
 	url := client.ServiceURL("quota-sets", projectUUID, "detail")
 	if shareTypeName != "" {
