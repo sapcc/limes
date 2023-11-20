@@ -545,9 +545,9 @@ The area for this service is `storage`. The following resources are always expos
 
 | Resource | Unit |
 | --- | --- |
-| `capacity` | GiB |
-| `snapshots` | countable |
-| `volumes` | countable |
+| `capacity` | GiB, AZ-aware |
+| `snapshots` | countable, AZ-aware |
+| `volumes` | countable, AZ-aware |
 
 If the `params.volume_types` field lists more than one volume type, the
 aforementioned resources will refer to the quota for the first of these volume
@@ -556,9 +556,9 @@ each other volume type, the following resources are exposed:
 
 | Resource | Unit |
 | --- | --- |
-| `capacity_${volume_type}` | GiB |
-| `snapshots_${volume_type}` | countable |
-| `volumes_${volume_type}` | countable |
+| `capacity_${volume_type}` | GiB, AZ-aware |
+| `snapshots_${volume_type}` | countable, AZ-aware |
+| `volumes_${volume_type}` | countable, AZ-aware |
 
 In Cinder, besides the volume-type-specific quotas, the general quotas
 (`gigabytes`, `snapshots`, `volumes`) are set to the sum across all volume
