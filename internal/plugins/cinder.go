@@ -143,13 +143,10 @@ func (f *quotaSetField) UnmarshalJSON(buf []byte) error {
 	return err
 }
 
-func (f quotaSetField) ToResourceData(subresources []any) core.ResourceData {
+func (f quotaSetField) ToResourceData() core.ResourceData {
 	return core.ResourceData{
-		Quota: f.Quota,
-		UsageData: core.InAnyAZ(core.UsageData{
-			Usage:        f.Usage,
-			Subresources: subresources,
-		}),
+		Quota:     f.Quota,
+		UsageData: core.InAnyAZ(core.UsageData{Usage: f.Usage}),
 	}
 }
 
@@ -160,11 +157,6 @@ func (p *cinderPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedS
 
 // Scrape implements the core.QuotaPlugin interface.
 func (p *cinderPlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[string]core.ResourceData, _ []byte, err error) {
-	isVolumeType := make(map[string]bool)
-	for _, volumeType := range p.VolumeTypes {
-		isVolumeType[volumeType] = true
-	}
-
 	var data struct {
 		QuotaSet map[string]quotaSetField `json:"quota_set"`
 	}
@@ -173,45 +165,46 @@ func (p *cinderPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Avail
 		return nil, nil, err
 	}
 
-	var (
-		volumeData              map[string][]any
-		volumeTypeForVolumeUUID map[string]string
-		snapshotData            map[string][]any
-	)
+	result = make(map[string]core.ResourceData)
+	isVolumeType := make(map[string]bool)
+	for _, volumeType := range p.VolumeTypes {
+		isVolumeType[volumeType] = true
+		result[p.makeResourceName("capacity", volumeType)] = data.QuotaSet["gigabytes_"+volumeType].ToResourceData()
+		result[p.makeResourceName("snapshots", volumeType)] = data.QuotaSet["snapshots_"+volumeType].ToResourceData()
+		result[p.makeResourceName("volumes", volumeType)] = data.QuotaSet["volumes_"+volumeType].ToResourceData()
+	}
+
+	var placementForVolumeUUID map[string]cinderVolumePlacement
 	if p.scrapeVolumes || p.scrapeSnapshots {
 		//NOTE: Even if we only want snapshot subresources, we have to collect
 		//volume subresources because the link between snapshots and volume types
 		//requires volume-level metadata.
-		volumeData, volumeTypeForVolumeUUID, err = p.collectVolumeSubresources(project, isVolumeType)
+		placementForVolumeUUID, err = p.collectVolumeSubresources(project, isVolumeType, result)
 		if err != nil {
 			return nil, nil, err
-		}
-		if !p.scrapeVolumes {
-			volumeData = nil
 		}
 	}
 	if p.scrapeSnapshots {
-		snapshotData, err = p.collectSnapshotSubresources(project, isVolumeType, volumeTypeForVolumeUUID)
+		err = p.collectSnapshotSubresources(project, isVolumeType, placementForVolumeUUID, result)
 		if err != nil {
 			return nil, nil, err
 		}
 	}
 
-	rd := make(map[string]core.ResourceData)
-	for _, volumeType := range p.VolumeTypes {
-		rd[p.makeResourceName("capacity", volumeType)] = data.QuotaSet["gigabytes_"+volumeType].ToResourceData(nil)
-		rd[p.makeResourceName("snapshots", volumeType)] = data.QuotaSet["snapshots_"+volumeType].ToResourceData(snapshotData[volumeType])
-		rd[p.makeResourceName("volumes", volumeType)] = data.QuotaSet["volumes_"+volumeType].ToResourceData(volumeData[volumeType])
-	}
-	return rd, nil, nil
+	return result, nil, nil
+}
+
+type cinderVolumePlacement struct {
+	VolumeType string
+	//TODO: add AZ awareness
 }
 
 type cinderVolumeSubresource struct {
-	UUID             string              `json:"id"`
-	Name             string              `json:"name"`
-	Status           string              `json:"status"`
-	Size             limes.ValueWithUnit `json:"size"`
-	AvailabilityZone string              `json:"availability_zone"`
+	UUID             string                 `json:"id"`
+	Name             string                 `json:"name"`
+	Status           string                 `json:"status"`
+	Size             limes.ValueWithUnit    `json:"size"`
+	AvailabilityZone limes.AvailabilityZone `json:"availability_zone"`
 }
 
 type cinderSnapshotSubresource struct {
@@ -222,9 +215,8 @@ type cinderSnapshotSubresource struct {
 	VolumeUUID string              `json:"volume_id"`
 }
 
-func (p *cinderPlugin) collectVolumeSubresources(project core.KeystoneProject, isVolumeType map[string]bool) (volumeData map[string][]any, volumeTypeForVolumeUUID map[string]string, err error) {
-	volumeData = make(map[string][]any)
-	volumeTypeForVolumeUUID = make(map[string]string)
+func (p *cinderPlugin) collectVolumeSubresources(project core.KeystoneProject, isVolumeType map[string]bool, result map[string]core.ResourceData) (placementForVolumeUUID map[string]cinderVolumePlacement, err error) {
+	placementForVolumeUUID = make(map[string]cinderVolumePlacement)
 	listOpts := volumes.ListOpts{
 		AllTenants: true,
 		TenantID:   project.UUID,
@@ -237,14 +229,15 @@ func (p *cinderPlugin) collectVolumeSubresources(project core.KeystoneProject, i
 		}
 
 		for _, volume := range vols {
-			volumeType := volume.VolumeType
+			placement := cinderVolumePlacement{
+				VolumeType: volume.VolumeType,
+			}
 			//group subresources with unknown volume types under the default volume type
-			if !isVolumeType[volumeType] {
-				volumeType = p.VolumeTypes[0]
+			if !isVolumeType[placement.VolumeType] {
+				placement.VolumeType = p.VolumeTypes[0]
 			}
 
-			volumeTypeForVolumeUUID[volume.ID] = volumeType
-			volumeData[volumeType] = append(volumeData[volumeType], cinderVolumeSubresource{
+			res := cinderVolumeSubresource{
 				UUID:   volume.ID,
 				Name:   volume.Name,
 				Status: volume.Status,
@@ -252,35 +245,38 @@ func (p *cinderPlugin) collectVolumeSubresources(project core.KeystoneProject, i
 					Value: uint64(volume.Size),
 					Unit:  limes.UnitGibibytes,
 				},
-				AvailabilityZone: volume.AvailabilityZone,
-			})
+				AvailabilityZone: limes.AvailabilityZone(volume.AvailabilityZone),
+			}
+
+			usageData := result[p.makeResourceName("volumes", placement.VolumeType)].UsageData[limes.AvailabilityZoneAny]
+			usageData.Subresources = append(usageData.Subresources, res)
+			placementForVolumeUUID[volume.ID] = placement
 		}
 		return true, nil
 	})
-	return volumeData, volumeTypeForVolumeUUID, err
+	return placementForVolumeUUID, err
 }
 
-func (p *cinderPlugin) collectSnapshotSubresources(project core.KeystoneProject, isVolumeType map[string]bool, volumeTypeForVolumeUUID map[string]string) (snapshotData map[string][]any, err error) {
-	snapshotData = make(map[string][]any)
+func (p *cinderPlugin) collectSnapshotSubresources(project core.KeystoneProject, isVolumeType map[string]bool, placementForVolumeUUID map[string]cinderVolumePlacement, result map[string]core.ResourceData) error {
 	listOpts := snapshots.ListOpts{
 		AllTenants: true,
 		TenantID:   project.UUID,
 	}
 
-	err = snapshots.List(p.CinderV3, listOpts).EachPage(func(page pagination.Page) (bool, error) {
+	err := snapshots.List(p.CinderV3, listOpts).EachPage(func(page pagination.Page) (bool, error) {
 		snaps, err := snapshots.ExtractSnapshots(page)
 		if err != nil {
 			return false, err
 		}
 
 		for _, snapshot := range snaps {
-			volumeType := volumeTypeForVolumeUUID[snapshot.VolumeID]
+			placement := placementForVolumeUUID[snapshot.VolumeID]
 			//group subresources with unknown volume types under the default volume type
-			if !isVolumeType[volumeType] {
-				volumeType = p.VolumeTypes[0]
+			if !isVolumeType[placement.VolumeType] {
+				placement.VolumeType = p.VolumeTypes[0]
 			}
 
-			snapshotData[volumeType] = append(snapshotData[volumeType], cinderSnapshotSubresource{
+			res := cinderSnapshotSubresource{
 				UUID:   snapshot.ID,
 				Name:   snapshot.Name,
 				Status: snapshot.Status,
@@ -289,11 +285,14 @@ func (p *cinderPlugin) collectSnapshotSubresources(project core.KeystoneProject,
 					Unit:  limes.UnitGibibytes,
 				},
 				VolumeUUID: snapshot.VolumeID,
-			})
+			}
+
+			usageData := result[p.makeResourceName("snapshots", placement.VolumeType)].UsageData[limes.AvailabilityZoneAny]
+			usageData.Subresources = append(usageData.Subresources, res)
 		}
 		return true, nil
 	})
-	return snapshotData, err
+	return err
 }
 
 // IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
