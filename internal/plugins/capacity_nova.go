@@ -48,8 +48,6 @@ type capacityNovaPlugin struct {
 	ExtraSpecs               map[string]string     `yaml:"extra_specs"`
 	HypervisorTypeRx         regexpext.PlainRegexp `yaml:"hypervisor_type_pattern"`
 	WithSubcapacities        bool                  `yaml:"with_subcapacities"`
-	//computed state
-	reportSubcapacities map[string]bool `yaml:"-"`
 	//connections
 	NovaV2      *gophercloud.ServiceClient `yaml:"-"`
 	PlacementV1 *gophercloud.ServiceClient `yaml:"-"`
