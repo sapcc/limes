@@ -98,7 +98,7 @@ type QuotaPlugin interface {
 	//
 	//Before Init is called, the `services[].params` provided in the config
 	//file will be yaml.Unmarshal()ed into the plugin object itself.
-	Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubresources map[string]bool) error
+	Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error
 
 	//ServiceInfo returns metadata for this service.
 	//
@@ -196,7 +196,7 @@ type CapacityPlugin interface {
 	//
 	//Before Init is called, the `capacitors[].params` provided in the config
 	//file will be yaml.Unmarshal()ed into the plugin object itself.
-	Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubcapacities map[string]map[string]bool) error
+	Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error
 	//Scrape queries the backend service(s) for the capacities of the resources
 	//that this plugin is concerned with. The result is a two-dimensional map,
 	//with the first key being the service type, and the second key being the

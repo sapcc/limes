@@ -71,7 +71,7 @@ var resources = []limesresources.ResourceInfo{
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *GenericQuotaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubresources map[string]bool) error {
+func (p *GenericQuotaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
 	p.StaticResourceData = map[string]*core.ResourceData{
 		"things": {
 			Quota: 42,

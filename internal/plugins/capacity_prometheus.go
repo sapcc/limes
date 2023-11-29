@@ -37,7 +37,7 @@ func init() {
 }
 
 // Init implements the core.CapacityPlugin interface.
-func (p *capacityPrometheusPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubcapacities map[string]map[string]bool) error {
+func (p *capacityPrometheusPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
 	return nil
 }
 

@@ -47,6 +47,7 @@ type capacityNovaPlugin struct {
 	MaxInstancesPerAggregate uint64                `yaml:"max_instances_per_aggregate"`
 	ExtraSpecs               map[string]string     `yaml:"extra_specs"`
 	HypervisorTypeRx         regexpext.PlainRegexp `yaml:"hypervisor_type_pattern"`
+	WithSubcapacities        bool                  `yaml:"with_subcapacities"`
 	//computed state
 	reportSubcapacities map[string]bool `yaml:"-"`
 	//connections
@@ -70,9 +71,7 @@ func init() {
 }
 
 // Init implements the core.CapacityPlugin interface.
-func (p *capacityNovaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubcapacities map[string]map[string]bool) (err error) {
-	p.reportSubcapacities = scrapeSubcapacities["compute"]
-
+func (p *capacityNovaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
 	if p.AggregateNameRx == "" {
 		return errors.New("missing value for nova.aggregate_name_pattern")
 	}
@@ -259,8 +258,8 @@ func (p *capacityNovaPlugin) Scrape() (result map[string]map[string]core.PerAZ[c
 		azCapacity.Add(hvCapacity)
 
 		//report subcapacity for this hypervisor if requested
-		for _, resName := range resourceNames {
-			if p.reportSubcapacities[resName] {
+		if p.WithSubcapacities {
+			for _, resName := range resourceNames {
 				resCapa := hvCapacity.GetCapacity(resName, maxRootDiskSize)
 				azCapacity.Subcapacities = append(azCapacity.Subcapacities, novaHypervisorSubcapacity{
 					ServiceHost:      hypervisor.Service.Host,

@@ -64,13 +64,6 @@ services:
 capacitors:
   - id: nova
     type: nova
-subresources:
-  compute:
-    - instances
-subcapacities:
-  compute:
-    - cores
-    - ram
 bursting:
   max_multiplier: 0.2
 ```
@@ -86,8 +79,6 @@ The following fields and sections are supported:
 | `discovery.only_domains` | no | May contain a regex. If given, only domains whose names match the regex will be considered by Limes. If `except_domains` is also given, it takes precedence over `only_domains`. |
 | `discovery.params` | yes/no | A subsection containing additional parameters for the specific discovery method. Whether this is required depends on the discovery method; see [*Supported discovery methods*](#supported-discovery-methods) for details. |
 | `services` | yes | List of backend services for which to scrape quota/usage data. Service types for which Limes does not include a suitable *quota plugin* will be ignored. See below for supported service types. |
-| `subresources` | no | List of resources where subresource scraping is requested. This is an object with service types as keys, and a list of resource names as values. |
-| `subcapacities` | no | List of resources where subcapacity scraping is requested. This is an object with service types as keys, and a list of resource names as values. |
 | `capacitors` | no | List of capacity plugins to use for scraping capacity data. See below for supported capacity plugins. |
 | `lowpriv_raise` | no | Configuration options for low-privilege quota raising. See [*low-privilege quota raising*](#low-privilege-quota-raising) for details. |
 | `resource_behavior` | no | Configuration options for special resource behaviors. See [*resource behavior*](#resource-behavior) for details. |
@@ -264,7 +255,14 @@ become more generic once I have more than this singular usecase and a general pa
 
 #### Instance subresources
 
-The `instances` resource supports subresource scraping. Subresources bear the following attributes:
+```yaml
+services:
+  - type: compute
+    params:
+      with_subresources: true
+```
+
+The `instances` resource supports subresource scraping. If enabled, subresources bear the following attributes:
 
 | Attribute | Type | Comment |
 | --- | --- | --- |
@@ -539,6 +537,8 @@ services:
   - type: volumev2
     params:
       volume_types: [ vmware, vmware_hdd ]
+      with_volume_subresources: true
+      with_snapshot_subresources: true
 ```
 
 The area for this service is `storage`. The following resources are always exposed:
@@ -564,8 +564,8 @@ In Cinder, besides the volume-type-specific quotas, the general quotas
 (`gigabytes`, `snapshots`, `volumes`) are set to the sum across all volume
 types.
 
-The `volumes` and `volumes_${volume_type}` resources supports subresource
-scraping. Subresources bear the following attributes:
+When subresource scraping is enabled (as shown above) for the `volumes` and `volumes_${volume_type}` resources,
+volume subresources bear the following attributes:
 
 | Attribute | Type | Comment |
 | --- | --- | --- |
@@ -575,8 +575,8 @@ scraping. Subresources bear the following attributes:
 | `size` | integer value with unit | volume size |
 | `availability_zone` | string | availability zone where volume is located |
 
-The `snapshots` and `snapshots_${volume_type}` resources supports subresource
-scraping. Subresources bear the following attributes:
+When subresource scraping is enabled (as shown above) for the `snapshots` and `snapshots_${volume_type}` resources,
+snapshot subresources bear the following attributes:
 
 | Attribute | Type | Comment |
 | --- | --- | --- |
@@ -607,8 +607,7 @@ capacitors:
       volume_types:
         vmware:     { volume_backend_name: vmware_ssd, default: true }
         vmware_hdd: { volume_backend_name: vmware_hdd, default: false }
-subcapacities:
-  - volumev2/capacity
+      with_subcapacities: true
 ```
 
 | Resource | Method |
@@ -647,9 +646,7 @@ capacitors:
     shares_per_pool: 1000
     snapshots_per_share: 5
     capacity_balance: 0.5
-subcapacities:
-  - sharev2/share_capacity
-  - sharev2/snapshot_capacity
+    with_subcapacities: true
 ```
 
 | Resource | Method |
@@ -668,8 +665,8 @@ considering pools with that share type.
 The `mapping_rules` inside a share type have the same semantics as for the `sharev2` quota plugin, and must be set
 identically to ensure that the capacity values make sense in context.
 
-When subcapacity scraping is enabled (as shown above), subcapacities will be scraped for the respective resources. Each
-subcapacity corresponds to one Manila pool, and bears the following attributes:
+When subcapacity scraping is enabled (as shown above), subcapacities will be scraped for the `share_capacity` and
+`snapshot_capacity` resources. Each subcapacity corresponds to one Manila pool, and bears the following attributes:
 
 | Name | Type | Comment |
 | --- | --- | --- |
@@ -725,10 +722,7 @@ capacitors:
       extra_specs:
         first: 'foo'
         second: 'bar'
-subcapacities:
-  - compute/cores
-  - compute/instances
-  - compute/ram
+      with_subcapacities: true
 ```
 
 | Resource | Method |
@@ -751,7 +745,7 @@ The `params.extra_specs` parameter can be used to control how flavors are enumer
 considered which have all the extra specs noted in this map, with the same values as defined in the configuration file.
 This is particularly useful to filter Ironic flavors, which usually have much larger root disk sizes.
 
-When subcapacity scraping is enabled (as shown above), subcapacities will be scraped for the respective resources. Each
+When subcapacity scraping is enabled (as shown above), subcapacities will be scraped for all three resources. Each
 subcapacity corresponds to one Nova hypervisor. If the `params.hypervisor_type_pattern` parameter is set, only matching
 hypervisors will be shown. Aggregates with no matching hypervisor will not be considered. Subcapacities bear the
 following attributes:
@@ -793,7 +787,7 @@ certificate (`params.api.ca_cert`) and/or specify a TLS client certificate
 (`params.api.cert`) and private key (`params.api.key`) combination that
 will be used by the HTTP client to make requests to the Prometheus API.
 
-For example, the following configuration can be used with [swift-health-statsd][shs] to find the net capacity of a Swift cluster with 3 replicas:
+For example, the following configuration can be used with [swift-health-exporter][she] to find the net capacity of a Swift cluster with 3 replicas:
 
 ```yaml
 capacitors:
@@ -817,6 +811,7 @@ capacitors:
       flavor_aliases:
         newflavor1: [ oldflavor1 ]
         newflavor2: [ oldflavor2, oldflavor3 ]
+      with_subcapacities: true
 ```
 
 This capacity plugin reports capacity for the special `compute/instances_<flavorname>` resources that exist on SAP
@@ -835,9 +830,8 @@ subcapacities:
   - compute: [ instances-baremetal ]
 ```
 
-When the "compute/instances-baremetal" pseudo-resource is set up for subcapacity scraping (as shown above),
-subcapacities will be scraped for all resources reported by this plugin. Subcapacities correspond to Ironic nodes and
-bear the following attributes:
+When subcapacity scraping is enabled (as shown above), subcapacities will be scraped for all resources reported by
+this plugin. Subcapacities correspond to Ironic nodes and bear the following attributes:
 
 | Attribute | Type | Comment |
 | --- | --- | --- |
@@ -854,7 +848,7 @@ bear the following attributes:
 [policy]: https://docs.openstack.org/security-guide/identity/policies.html
 [ex-pol]: ../example-policy.yaml
 [prom]:   https://prometheus.io
-[shs]:    https://github.com/sapcc/swift-health-statsd
+[she]:    https://github.com/sapcc/swift-health-exporter
 
 ## Rate Limits
 

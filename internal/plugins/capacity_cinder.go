@@ -42,8 +42,7 @@ type capacityCinderPlugin struct {
 		VolumeBackendName string `yaml:"volume_backend_name"`
 		IsDefault         bool   `yaml:"default"`
 	} `yaml:"volume_types"`
-	//computed state
-	reportSubcapacities map[string]bool `yaml:"-"`
+	WithSubcapacities bool `yaml:"with_subcapacities"`
 	//connections
 	CinderV3 *gophercloud.ServiceClient `yaml:"-"`
 }
@@ -53,9 +52,7 @@ func init() {
 }
 
 // Init implements the core.CapacityPlugin interface.
-func (p *capacityCinderPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubcapacities map[string]map[string]bool) (err error) {
-	p.reportSubcapacities = scrapeSubcapacities["volumev2"]
-
+func (p *capacityCinderPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
 	if len(p.VolumeTypes) == 0 {
 		//nolint:stylecheck //Cinder is a proper name
 		return errors.New("Cinder capacity plugin: missing required configuration field cinder.volume_types")
@@ -181,7 +178,7 @@ func (p *capacityCinderPlugin) Scrape() (result map[string]map[string]core.PerAZ
 		}
 		*capa.Usage += uint64(pool.Capabilities.AllocatedCapacityGB)
 
-		if p.reportSubcapacities["capacity"] {
+		if p.WithSubcapacities {
 			capa.Subcapacities = append(capa.Subcapacities, storagePoolSubcapacity{
 				PoolName:         pool.Name,
 				AvailabilityZone: poolAZ,

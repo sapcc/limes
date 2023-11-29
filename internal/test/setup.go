@@ -226,7 +226,7 @@ func (s *Setup) AddCapacityPlugin(t *testing.T, configYAML string) core.Capacity
 	if err != nil {
 		t.Fatal("failed to supply params to capacitor: " + err.Error())
 	}
-	err = plugin.Init(nil, gophercloud.EndpointOpts{}, nil)
+	err = plugin.Init(nil, gophercloud.EndpointOpts{})
 	if err != nil {
 		t.Fatal(err)
 	}

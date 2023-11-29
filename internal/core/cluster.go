@@ -108,32 +108,19 @@ func (c *Cluster) Connect(provider *gophercloud.ProviderClient, eo gophercloud.E
 
 	//initialize quota plugins
 	for _, srv := range c.Config.Services {
-		scrapeSubresources := map[string]bool{}
-		for _, resName := range c.Config.Subresources[srv.ServiceType] {
-			scrapeSubresources[resName] = true
-		}
-
 		plugin := c.QuotaPlugins[srv.ServiceType]
 		err = yaml.UnmarshalStrict([]byte(srv.Parameters), plugin)
 		if err != nil {
 			errs.Addf("failed to supply params to service %s: %w", srv.ServiceType, err)
 			continue
 		}
-		err := plugin.Init(provider, eo, scrapeSubresources)
+		err := plugin.Init(provider, eo)
 		if err != nil {
 			errs.Addf("failed to initialize service %s: %w", srv.ServiceType, util.UnpackError(err))
 		}
 	}
 
 	//initialize capacity plugins
-	scrapeSubcapacities := make(map[string]map[string]bool)
-	for serviceType, resourceNames := range c.Config.Subcapacities {
-		m := make(map[string]bool)
-		for _, resourceName := range resourceNames {
-			m[resourceName] = true
-		}
-		scrapeSubcapacities[serviceType] = m
-	}
 	for _, capa := range c.Config.Capacitors {
 		plugin := c.CapacityPlugins[capa.ID]
 		err = yaml.UnmarshalStrict([]byte(capa.Parameters), plugin)
@@ -141,7 +128,7 @@ func (c *Cluster) Connect(provider *gophercloud.ProviderClient, eo gophercloud.E
 			errs.Addf("failed to supply params to capacitor %s: %w", capa.ID, err)
 			continue
 		}
-		err := plugin.Init(provider, eo, scrapeSubcapacities)
+		err := plugin.Init(provider, eo)
 		if err != nil {
 			errs.Addf("failed to initialize capacitor %s: %w", capa.ID, util.UnpackError(err))
 		}

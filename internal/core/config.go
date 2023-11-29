@@ -42,8 +42,6 @@ type ClusterConfiguration struct {
 	Services          []ServiceConfiguration   `yaml:"services"`
 	Capacitors        []CapacitorConfiguration `yaml:"capacitors"`
 	//^ Sorry for the stupid pun. Not.
-	Subresources             map[string][]string               `yaml:"subresources"`
-	Subcapacities            map[string][]string               `yaml:"subcapacities"`
 	LowPrivilegeRaise        LowPrivilegeRaiseConfiguration    `yaml:"lowpriv_raise"`
 	ResourceBehaviors        []ResourceBehavior                `yaml:"resource_behavior"`
 	Bursting                 BurstingConfiguration             `yaml:"bursting"`

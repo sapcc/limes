@@ -46,7 +46,7 @@ type novaPlugin struct {
 		FlavorNameRx  regexpext.PlainRegexp `yaml:"flavor_name_pattern"`
 		FlavorAliases map[string][]string   `yaml:"flavor_aliases"`
 	} `yaml:"separate_instance_quotas"`
-	scrapeInstances bool `yaml:"-"`
+	WithSubresources bool `yaml:"with_subresources"`
 	//computed state
 	resources []limesresources.ResourceInfo `yaml:"-"`
 	ftt       novaFlavorTranslationTable    `yaml:"-"`
@@ -90,9 +90,8 @@ func init() {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubresources map[string]bool) (err error) {
+func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
 	p.resources = novaDefaultResources
-	p.scrapeInstances = scrapeSubresources["instances"]
 	p.ftt = newNovaFlavorTranslationTable(p.SeparateInstanceQuotas.FlavorAliases)
 
 	p.NovaV2, err = openstack.NewComputeV2(provider, eo)
@@ -308,7 +307,7 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Availab
 
 		//count subresource towards "instances" (or separate instance resource)
 		result[instanceResourceName].AddLocalizedUsage(az, 1)
-		if p.scrapeInstances {
+		if p.WithSubresources {
 			azData := result[instanceResourceName].UsageInAZ(az)
 			azData.Subresources = append(azData.Subresources, subres)
 		}

@@ -53,7 +53,7 @@ func init() {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *archerPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubresources map[string]bool) error {
+func (p *archerPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
 	serviceType := "endpoint-services"
 	eo.ApplyDefaults(serviceType)
 

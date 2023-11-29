@@ -148,7 +148,7 @@ func init() {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *neutronPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubresources map[string]bool) (err error) {
+func (p *neutronPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
 	p.NeutronV2, err = openstack.NewNetworkV2(provider, eo)
 	if err != nil {
 		return err

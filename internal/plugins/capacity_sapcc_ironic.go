@@ -38,11 +38,11 @@ import (
 
 type capacitySapccIronicPlugin struct {
 	//configuration
-	FlavorNameRx  regexpext.PlainRegexp `yaml:"flavor_name_pattern"`
-	FlavorAliases map[string][]string   `yaml:"flavor_aliases"`
+	FlavorNameRx      regexpext.PlainRegexp `yaml:"flavor_name_pattern"`
+	FlavorAliases     map[string][]string   `yaml:"flavor_aliases"`
+	WithSubcapacities bool                  `yaml:"with_subcapacities"`
 	//computed state
-	ftt                 novaFlavorTranslationTable `yaml:"-"`
-	reportSubcapacities bool                       `yaml:"-"`
+	ftt novaFlavorTranslationTable `yaml:"-"`
 	//connections
 	NovaV2   *gophercloud.ServiceClient `yaml:"-"`
 	IronicV1 *gophercloud.ServiceClient `yaml:"-"`
@@ -61,9 +61,8 @@ func init() {
 }
 
 // Init implements the core.CapacityPlugin interface.
-func (p *capacitySapccIronicPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubcapacities map[string]map[string]bool) (err error) {
+func (p *capacitySapccIronicPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
 	p.ftt = newNovaFlavorTranslationTable(p.FlavorAliases)
-	p.reportSubcapacities = scrapeSubcapacities["compute"]["instances-baremetal"]
 
 	p.NovaV2, err = openstack.NewComputeV2(provider, eo)
 	if err != nil {
@@ -274,7 +273,7 @@ func (p *capacitySapccIronicPlugin) Scrape() (result map[string]map[string]core.
 					*data.Usage++
 				}
 
-				if p.reportSubcapacities {
+				if p.WithSubcapacities {
 					sub := map[string]any{
 						"id":              node.ID,
 						"name":            node.Name,

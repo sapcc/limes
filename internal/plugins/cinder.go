@@ -41,10 +41,9 @@ import (
 
 type cinderPlugin struct {
 	//configuration
-	VolumeTypes []string `yaml:"volume_types"`
-	//computed state
-	scrapeVolumes   bool `yaml:"-"`
-	scrapeSnapshots bool `yaml:"-"`
+	VolumeTypes              []string `yaml:"volume_types"`
+	WithVolumeSubresources   bool     `yaml:"with_volume_subresources"`
+	WithSnapshotSubresources bool     `yaml:"with_snapshot_subresources"`
 	//connections
 	CinderV3 *gophercloud.ServiceClient `yaml:"-"`
 }
@@ -54,9 +53,7 @@ func init() {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *cinderPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubresources map[string]bool) (err error) {
-	p.scrapeVolumes = scrapeSubresources["volumes"]
-	p.scrapeSnapshots = scrapeSubresources["snapshots"]
+func (p *cinderPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
 	if len(p.VolumeTypes) == 0 {
 		return errors.New("quota plugin volumev2: missing required configuration field volumev2.volume_types")
 	}
@@ -179,7 +176,7 @@ func (p *cinderPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Avail
 	if err != nil {
 		return nil, nil, err
 	}
-	if p.scrapeSnapshots {
+	if p.WithSnapshotSubresources {
 		err = p.collectSnapshotSubresources(project, allAZs, placementForVolumeUUID, result)
 		if err != nil {
 			return nil, nil, err
@@ -256,7 +253,7 @@ func (p *cinderPlugin) collectVolumeSubresources(project core.KeystoneProject, a
 				result[p.makeResourceName("capacity", placement.VolumeType)].AddLocalizedUsage(az, res.Size.Value)
 				result[p.makeResourceName("volumes", placement.VolumeType)].AddLocalizedUsage(az, 1)
 			}
-			if p.scrapeVolumes {
+			if p.WithVolumeSubresources {
 				usageData := result[p.makeResourceName("volumes", placement.VolumeType)].UsageData[az]
 				usageData.Subresources = append(usageData.Subresources, res)
 			}
@@ -299,7 +296,7 @@ func (p *cinderPlugin) collectSnapshotSubresources(project core.KeystoneProject,
 				result[p.makeResourceName("capacity", placement.VolumeType)].AddLocalizedUsage(az, res.Size.Value)
 				result[p.makeResourceName("snapshots", placement.VolumeType)].AddLocalizedUsage(az, 1)
 			}
-			if p.scrapeSnapshots {
+			if p.WithSnapshotSubresources {
 				usageData := result[p.makeResourceName("snapshots", placement.VolumeType)].UsageData[az]
 				usageData.Subresources = append(usageData.Subresources, res)
 			}

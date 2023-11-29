@@ -42,8 +42,7 @@ type capacityManilaPlugin struct {
 	SharesPerPool     uint64                `yaml:"shares_per_pool"`
 	SnapshotsPerShare uint64                `yaml:"snapshots_per_share"`
 	CapacityBalance   float64               `yaml:"capacity_balance"`
-	//computed state
-	reportSubcapacities map[string]bool `yaml:"-"`
+	WithSubcapacities bool                  `yaml:"with_subcapacities"`
 	//connections
 	ManilaV2 *gophercloud.ServiceClient `yaml:"-"`
 }
@@ -63,9 +62,7 @@ func init() {
 }
 
 // Init implements the core.CapacityPlugin interface.
-func (p *capacityManilaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubcapacities map[string]map[string]bool) (err error) {
-	p.reportSubcapacities = scrapeSubcapacities["sharev2"]
-
+func (p *capacityManilaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
 	if len(p.ShareTypes) == 0 {
 		return errors.New("capacity plugin manila: missing required configuration field manila.share_types")
 	}
@@ -218,29 +215,26 @@ func (p *capacityManilaPlugin) scrapeForShareType(shareType ManilaShareTypeSpec,
 			allocatedCapacityGbPerAZ[poolAZ] += pool.Capabilities.AllocatedCapacityGB
 		}
 
-		if p.reportSubcapacities["share_capacity"] {
-			subcapa := storagePoolSubcapacity{
+		if p.WithSubcapacities {
+			shareSubcapa := storagePoolSubcapacity{
 				PoolName:         pool.Name,
 				AvailabilityZone: poolAZ,
 				CapacityGiB:      getShareCapacity(pool.Capabilities.TotalCapacityGB, capBalance),
 				UsageGiB:         getShareCapacity(pool.Capabilities.AllocatedCapacityGB, capBalance),
 			}
-			if !isIncluded {
-				subcapa.ExclusionReason = "hardware_state = " + pool.Capabilities.HardwareState
-			}
-			shareSubcapacitiesPerAZ[poolAZ] = append(shareSubcapacitiesPerAZ[poolAZ], subcapa)
-		}
-		if p.reportSubcapacities["snapshot_capacity"] {
-			subcapa := storagePoolSubcapacity{
+			snapshotSubcapa := storagePoolSubcapacity{
 				PoolName:         pool.Name,
 				AvailabilityZone: poolAZ,
 				CapacityGiB:      getSnapshotCapacity(pool.Capabilities.TotalCapacityGB, capBalance),
 				UsageGiB:         getSnapshotCapacity(pool.Capabilities.AllocatedCapacityGB, capBalance),
 			}
+
 			if !isIncluded {
-				subcapa.ExclusionReason = "hardware_state = " + pool.Capabilities.HardwareState
+				shareSubcapa.ExclusionReason = "hardware_state = " + pool.Capabilities.HardwareState
+				snapshotSubcapa.ExclusionReason = "hardware_state = " + pool.Capabilities.HardwareState
 			}
-			snapshotSubcapacitiesPerAZ[poolAZ] = append(snapshotSubcapacitiesPerAZ[poolAZ], subcapa)
+			shareSubcapacitiesPerAZ[poolAZ] = append(shareSubcapacitiesPerAZ[poolAZ], shareSubcapa)
+			snapshotSubcapacitiesPerAZ[poolAZ] = append(snapshotSubcapacitiesPerAZ[poolAZ], snapshotSubcapa)
 		}
 	}
 

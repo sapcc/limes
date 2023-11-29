@@ -162,7 +162,7 @@ func expectQuotaConstraintInvalid(t *testing.T, path string, expectedErrors ...s
 
 type quotaConstraintTestPlugin struct{}
 
-func (p quotaConstraintTestPlugin) Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, scrapeSubresources map[string]bool) error {
+func (p quotaConstraintTestPlugin) Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
 	return nil
 }
 func (p quotaConstraintTestPlugin) PluginTypeID() string {
