@@ -738,7 +738,7 @@ The `commitment` object has the same structure as the `commitments[]` objects in
 
 ### DELETE /v1/domains/:domain\_id/projects/:project\_id/commitments/:id
 
-Deletes a commitment within the given project. Requires a project-admin token. On success, returns 204 (No Content).
+Deletes a commitment within the given project. Requires a cloud-admin token. On success, returns 204 (No Content).
 
 Only unconfirmed commitments may be deleted. If the commitment has already been confirmed, returns 403 (Forbidden).
 

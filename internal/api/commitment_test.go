@@ -369,13 +369,13 @@ func TestDeleteCommitmentErrorCases(t *testing.T) {
 	}.Check(t, s.Handler)
 
 	//no authentication
-	s.TokenValidator.Enforcer.AllowEdit = false
+	s.TokenValidator.Enforcer.AllowUncommit = false
 	assert.HTTPRequest{
 		Method:       http.MethodDelete,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1",
 		ExpectStatus: http.StatusForbidden,
 	}.Check(t, s.Handler)
-	s.TokenValidator.Enforcer.AllowEdit = true
+	s.TokenValidator.Enforcer.AllowUncommit = true
 
 	//unknown objects along the path
 	assert.HTTPRequest{
@@ -393,23 +393,5 @@ func TestDeleteCommitmentErrorCases(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2",
 		ExpectStatus: http.StatusNotFound,
 		ExpectBody:   assert.StringData("no such commitment\n"),
-	}.Check(t, s.Handler)
-
-	//set the commitment to confirmed for the next test
-	_, err := s.DB.Exec("UPDATE project_commitments SET confirmed_at = $1, expires_at = $2",
-		s.Clock.Now(), s.Clock.Now().Add(1*time.Hour),
-	)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	//confirmed commitments cannot be deleted if the requester is only a project admin and not a cluster admin
-	s.TokenValidator.Enforcer.AllowEdit = true
-	s.TokenValidator.Enforcer.AllowCluster = false
-	assert.HTTPRequest{
-		Method:       http.MethodDelete,
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1",
-		ExpectStatus: http.StatusForbidden,
-		ExpectBody:   assert.StringData("cannot delete a confirmed commitment\n"),
 	}.Check(t, s.Handler)
 }

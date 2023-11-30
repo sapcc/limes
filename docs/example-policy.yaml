@@ -17,6 +17,7 @@ project:lower: rule:project_editor
 domain:lower_lowpriv: rule:project_editor
 project:set_rate_limit: rule:domain_editor
 project:discover: rule:domain_editor
+project:uncommit: rule:cluster_admin
 
 domain:list: rule:cluster_admin
 domain:show: rule:domain_viewer

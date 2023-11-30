@@ -261,7 +261,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/commitments/:id")
 	token := p.CheckToken(r)
-	if !token.Require(w, "project:edit") {
+	if !token.Require(w, "project:uncommit") {
 		return
 	}
 	dbDomain := p.FindDomainFromRequest(w, r)
@@ -286,14 +286,6 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 	err = p.DB.SelectOne(&dbService, `SELECT * FROM project_services WHERE id = $1`, dbCommitment.ServiceID)
 	if respondwith.ErrorText(w, err) {
 		return
-	}
-
-	//commitments cannot be deleted once they have been confirmed
-	if dbCommitment.ConfirmedAt != nil {
-		if !token.Check("cluster:edit") {
-			http.Error(w, "cannot delete a confirmed commitment", http.StatusForbidden)
-			return
-		}
 	}
 
 	//perform deletion
