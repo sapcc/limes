@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/errext"
 	"github.com/sapcc/go-bits/regexpext"
@@ -92,13 +93,17 @@ func (b ResourceBehavior) ToScalingBehavior() *limesresources.ScalingBehavior {
 
 // ToCommitmentConfig returns the CommitmentConfiguration for this resource,
 // or nil if commitments are not allowed on this resource.
-func (b ResourceBehavior) ToCommitmentConfig() *limesresources.CommitmentConfiguration {
+func (b ResourceBehavior) ToCommitmentConfig(now time.Time) *limesresources.CommitmentConfiguration {
 	if len(b.CommitmentDurations) == 0 {
 		return nil
 	}
-	return &limesresources.CommitmentConfiguration{
+	result := limesresources.CommitmentConfiguration{
 		Durations: b.CommitmentDurations,
 	}
+	if b.CommitmentMinConfirmDate != nil && b.CommitmentMinConfirmDate.After(now) {
+		result.MinConfirmBy = &limes.UnixEncodedTime{Time: *b.CommitmentMinConfirmDate}
+	}
+	return &result
 }
 
 // Merge computes the union of both given resource behaviors.
