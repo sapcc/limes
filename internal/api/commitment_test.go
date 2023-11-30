@@ -77,7 +77,9 @@ func TestCommitmentLifecycle(t *testing.T) {
 		"amount":            10,
 		"unit":              "B",
 		"duration":          "1 hour",
-		"requested_at":      s.Clock.Now().Unix(),
+		"created_at":        s.Clock.Now().Unix(),
+		"creator_uuid":      "uuid-for-alice",
+		"creator_name":      "alice@Default",
 	}
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -104,7 +106,9 @@ func TestCommitmentLifecycle(t *testing.T) {
 		"amount":            20,
 		"unit":              "B",
 		"duration":          "2 hours",
-		"requested_at":      s.Clock.Now().Unix(),
+		"created_at":        s.Clock.Now().Unix(),
+		"creator_uuid":      "uuid-for-alice",
+		"creator_name":      "alice@Default",
 	}
 	assert.HTTPRequest{
 		Method:       http.MethodPost,

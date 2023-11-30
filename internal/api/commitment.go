@@ -129,7 +129,9 @@ func (p *v1Provider) convertCommitmentToDisplayForm(c db.ProjectCommitment, serv
 		Amount:           c.Amount,
 		Unit:             resInfo.Unit,
 		Duration:         c.Duration,
-		RequestedAt:      limes.UnixEncodedTime{Time: c.RequestedAt},
+		CreatedAt:        limes.UnixEncodedTime{Time: c.CreatedAt},
+		CreatorUUID:      c.CreatorUUID,
+		CreatorName:      c.CreatorName,
 		ConfirmedAt:      maybeUnixEncodedTime(c.ConfirmedAt),
 		ExpiresAt:        maybeUnixEncodedTime(c.ExpiresAt),
 		TransferStatus:   c.TransferStatus,
@@ -213,13 +215,15 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		AvailabilityZone: req.AvailabilityZone,
 		Amount:           req.Amount,
 		Duration:         req.Duration,
-		RequestedAt:      requestTime,
-		ConfirmAfter:     requestTime,
+		CreatedAt:        requestTime,
+		CreatorUUID:      token.UserUUID(),
+		CreatorName:      fmt.Sprintf("%s@%s", token.UserName(), token.UserDomainName()),
+		ConfirmBy:        &requestTime,
 		ConfirmedAt:      nil,
 		ExpiresAt:        nil,
 	}
 	if behavior.CommitmentMinConfirmDate != nil && behavior.CommitmentMinConfirmDate.After(requestTime) {
-		dbCommitment.ConfirmAfter = *behavior.CommitmentMinConfirmDate
+		dbCommitment.ConfirmBy = behavior.CommitmentMinConfirmDate
 	}
 	err = p.DB.Insert(&dbCommitment)
 	if respondwith.ErrorText(w, err) {

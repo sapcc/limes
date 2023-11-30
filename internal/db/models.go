@@ -193,8 +193,10 @@ type ProjectCommitment struct {
 	AvailabilityZone limes.AvailabilityZone            `db:"availability_zone"`
 	Amount           uint64                            `db:"amount"`
 	Duration         limesresources.CommitmentDuration `db:"duration"`
-	RequestedAt      time.Time                         `db:"requested_at"`
-	ConfirmAfter     time.Time                         `db:"confirm_after"`
+	CreatedAt        time.Time                         `db:"created_at"`
+	CreatorUUID      string                            `db:"creator_uuid"` // format: "username@userdomainname"
+	CreatorName      string                            `db:"creator_name"`
+	ConfirmBy        *time.Time                        `db:"confirm_by"`
 	ConfirmedAt      *time.Time                        `db:"confirmed_at"`
 	ExpiresAt        *time.Time                        `db:"expires_at"`
 

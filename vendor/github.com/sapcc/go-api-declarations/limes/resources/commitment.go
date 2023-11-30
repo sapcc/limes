@@ -39,7 +39,12 @@ type Commitment struct {
 	Amount           uint64                 `json:"amount"`
 	Unit             limes.Unit             `json:"unit"`
 	Duration         CommitmentDuration     `json:"duration"`
-	RequestedAt      limes.UnixEncodedTime  `json:"requested_at"`
+	CreatedAt        limes.UnixEncodedTime  `json:"created_at"`
+	// CreatorUUID and CreatorName identify the user who created this commitment.
+	// CreatorName is in the format `fmt.Sprintf("%s@%s", userName, userDomainName)`
+	// and intended for informational displays only. API access should always use the UUID.
+	CreatorUUID string `json:"creator_uuid,omitempty"`
+	CreatorName string `json:"creator_name,omitempty"`
 	// ConfirmedAt and ExpiresAt are only filled after the commitment was confirmed.
 	ConfirmedAt *limes.UnixEncodedTime `json:"confirmed_at,omitempty"`
 	ExpiresAt   *limes.UnixEncodedTime `json:"expires_at,omitempty"`

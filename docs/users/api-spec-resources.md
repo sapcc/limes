@@ -687,7 +687,7 @@ The following fields can appear in the response body:
 | `commitments[].amount` | integer | The amount of usage that was committed to. |
 | `commitments[].unit` | string | For measured resources, the unit for this resource. The value from the `amount` field is measured in this unit. |
 | `commitments[].duration` | string | The requested duration of this commitment, expressed as a comma-separated sequence of positive integer multiples of time units like "1 year, 3 months". Acceptable time units include "second", "minute", "hour", "day", "month" and "year". |
-| `commitments[].requested_at` | integer | UNIX timestamp when this commitment was requested. |
+| `commitments[].created_at` | integer | UNIX timestamp when this commitment was created. |
 | `commitments[].confirmed_at` | integer | UNIX timestamp when this commitment was confirmed. Only shown after confirmation. |
 | `commitments[].expires_at` | integer | UNIX timestamp when this commitment is set to expire. Only shown after confirmation. |
 | `commitments[].transferable` | boolean | Whether the commitment is marked for transfer to a different project. Transferable commitments do not count towards quota calculation in their project, but still block capacity and still count towards billing. Not shown if false. |

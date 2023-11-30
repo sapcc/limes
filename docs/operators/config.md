@@ -135,7 +135,7 @@ Some special behaviors for resources can be configured in the `resource_behavior
 | `resource_behavior[].scaling_factor` | yes, if `scales_with` is given | The scaling factor that will be reported for these resources' scaling relation. |
 | `resource_behavior[].min_nonzero_project_quota` | no | A lower boundary for project quota values that are not zero. |
 | `resource_behavior[].commitment_durations` | no | If given, commitments for this resource can be created with any of the given durations. The duration format is the same as in the `commitments[].duration` attribute that appears on the resource API. |
-| `resource_behavior[].commitment_min_confirm_date` | no | If given, commitments for this resource will always be created with `confirm_after` no earlier than this timestamp. This can be used to plan the introduction of commitments on a specific date. |
+| `resource_behavior[].commitment_min_confirm_date` | no | If given, commitments for this resource will always be created with `confirm_by` no earlier than this timestamp. This can be used to plan the introduction of commitments on a specific date. |
 | `resource_behavior[].annotations` | no | A map of extra key-value pairs that will be inserted into matching resources as-is in responses to GET requests, e.g. at `project.services[].resources[].annotations`. |
 
 For example:
