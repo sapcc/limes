@@ -60,6 +60,7 @@ type CommitmentRequest struct {
 	AvailabilityZone limes.AvailabilityZone `json:"availability_zone"`
 	Amount           uint64                 `json:"amount"`
 	Duration         CommitmentDuration     `json:"duration"`
+	ConfirmBy        *limes.UnixEncodedTime `json:"confirm_by,omitempty"`
 }
 
 // CommitmentTransferStatus is an enum.

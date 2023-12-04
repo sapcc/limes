@@ -35,6 +35,7 @@ import (
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sqlext"
 
+	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/reports"
@@ -146,6 +147,85 @@ func maybeUnixEncodedTime(t *time.Time) *limes.UnixEncodedTime {
 	return &limes.UnixEncodedTime{Time: *t}
 }
 
+func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r *http.Request, project db.Project, domain db.Domain) (*limesresources.CommitmentRequest, *core.ResourceBehavior) {
+	//parse request
+	var parseTarget struct {
+		Request limesresources.CommitmentRequest `json:"commitment"`
+	}
+	if !RequireJSON(w, r, &parseTarget) {
+		return nil, nil
+	}
+	req := parseTarget.Request
+
+	//validate request
+	if !slices.Contains(p.Cluster.Config.AvailabilityZones, req.AvailabilityZone) {
+		http.Error(w, "no such availability zone", http.StatusUnprocessableEntity)
+		return nil, nil
+	}
+	if !p.Cluster.HasService(req.ServiceType) {
+		http.Error(w, "no such service", http.StatusUnprocessableEntity)
+		return nil, nil
+	}
+	if !p.Cluster.HasResource(req.ServiceType, req.ResourceName) {
+		http.Error(w, "no such resource", http.StatusUnprocessableEntity)
+		return nil, nil
+	}
+	scopeName := fmt.Sprintf("%s/%s", domain.Name, project.Name)
+	behavior := p.Cluster.BehaviorForResource(req.ServiceType, req.ResourceName, scopeName)
+	if len(behavior.CommitmentDurations) == 0 {
+		http.Error(w, "commitments are not enabled for this resource", http.StatusUnprocessableEntity)
+		return nil, nil
+	}
+	if !slices.Contains(behavior.CommitmentDurations, req.Duration) {
+		buf := must.Return(json.Marshal(behavior.CommitmentDurations)) //panic on error is acceptable here, marshals should never fail
+		msg := "unacceptable commitment duration for this resource, acceptable values: " + string(buf)
+		http.Error(w, msg, http.StatusUnprocessableEntity)
+		return nil, nil
+	}
+	if req.Amount == 0 {
+		http.Error(w, "amount of committed resource must be greater than zero", http.StatusUnprocessableEntity)
+		return nil, nil
+	}
+
+	return &req, &behavior
+}
+
+// CanConfirmNewProjectCommitment handles POST /v1/domains/:domain_id/projects/:project_id/commitments/can-confirm.
+func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *http.Request) {
+	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/commitments/can-confirm")
+	token := p.CheckToken(r)
+	if !token.Require(w, "project:edit") {
+		return
+	}
+	dbDomain := p.FindDomainFromRequest(w, r)
+	if dbDomain == nil {
+		return
+	}
+	dbProject := p.FindProjectFromRequest(w, r, dbDomain)
+	if dbProject == nil {
+		return
+	}
+	req, behavior := p.parseAndValidateCommitmentRequest(w, r, *dbProject, *dbDomain)
+	if req == nil {
+		return
+	}
+
+	//commitments can never be confirmed immediately if we are before the min_confirm_date
+	//TODO move this into parseAndValidateCommitmentRequest
+	now := p.timeNow()
+	if behavior.CommitmentMinConfirmDate != nil && behavior.CommitmentMinConfirmDate.After(now) {
+		respondwith.JSON(w, http.StatusOK, map[string]bool{"result": false})
+		return
+	}
+
+	//check for committable capacity
+	result, err := datamodel.CanConfirmNewCommitment(*req, *dbProject, p.Cluster, p.DB, now)
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+	respondwith.JSON(w, http.StatusOK, map[string]bool{"result": result})
+}
+
 // CreateProjectCommitment handles POST /v1/domains/:domain_id/projects/:project_id/commitments/new.
 func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/commitments/new")
@@ -161,54 +241,20 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	if dbProject == nil {
 		return
 	}
-
-	//parse request
-	var parseTarget struct {
-		Request limesresources.CommitmentRequest `json:"commitment"`
-	}
-	if !RequireJSON(w, r, &parseTarget) {
-		return
-	}
-	req := parseTarget.Request
-	requestTime := p.timeNow()
-
-	//validate request
-	if !slices.Contains(p.Cluster.Config.AvailabilityZones, req.AvailabilityZone) {
-		http.Error(w, "no such availability zone", http.StatusUnprocessableEntity)
-		return
-	}
-	if !p.Cluster.HasService(req.ServiceType) {
-		http.Error(w, "no such service", http.StatusUnprocessableEntity)
-		return
-	}
-	if !p.Cluster.HasResource(req.ServiceType, req.ResourceName) {
-		http.Error(w, "no such resource", http.StatusUnprocessableEntity)
-		return
-	}
-	scopeName := fmt.Sprintf("%s/%s", dbDomain.Name, dbProject.Name)
-	behavior := p.Cluster.BehaviorForResource(req.ServiceType, req.ResourceName, scopeName)
-	if len(behavior.CommitmentDurations) == 0 {
-		http.Error(w, "commitments are not enabled for this resource", http.StatusUnprocessableEntity)
-		return
-	}
-	if !slices.Contains(behavior.CommitmentDurations, req.Duration) {
-		buf := must.Return(json.Marshal(behavior.CommitmentDurations)) //panic on error is acceptable here, marshals should never fail
-		msg := "unacceptable commitment duration for this resource, acceptable values: " + string(buf)
-		http.Error(w, msg, http.StatusUnprocessableEntity)
-		return
-	}
-	if req.Amount == 0 {
-		http.Error(w, "amount of committed resource must be greater than zero", http.StatusUnprocessableEntity)
+	req, behavior := p.parseAndValidateCommitmentRequest(w, r, *dbProject, *dbDomain)
+	if req == nil {
 		return
 	}
 
-	//create commitment
 	var dbService db.ProjectService
 	err := p.DB.SelectOne(&dbService, `SELECT * FROM project_services WHERE project_id = $1 AND type = $2`,
 		dbProject.ID, req.ServiceType)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
+
+	//create commitment
+	requestTime := p.timeNow()
 	dbCommitment := db.ProjectCommitment{
 		ServiceID:        dbService.ID,
 		ResourceName:     req.ResourceName,

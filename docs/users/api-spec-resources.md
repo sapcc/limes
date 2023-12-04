@@ -115,9 +115,13 @@ Commitments are always tied to an availability zone to aid in demand planning on
 
 Commitments follow a simple state machine:
 
-* `-> requested`: Commitments are created by a project administrator. They are not active until confirmed.
-* `requested -> confirmed`: Once the underlying capacity has been reserved for the project, the commitment is confirmed.
+* `-> unconfirmed`: Commitments are created by a project administrator.
   Price discounts and capacity guarantees apply only once the commitment is confirmed.
+  Creating an unconfirmed commitment is only possible if the commitment is created with a `confirm_by` timestamp.
+  Such commitments are intended for demand management and forecasting.
+* `unconfirmed -> confirmed`: Once the underlying capacity has been reserved for the project, the commitment is confirmed.
+* `-> confirmed`: Commiments can also be created by a project administrator in an immediately-confirmed state,
+  if the respective capacity can be reserved for the project immediately.
 * `confirmed -> expired`: Once the commitment's duration elapses, the price discount and capacity guarantee elapse.
   The duration until expiry counts starting from the state transition into `confirmed`.
 
@@ -735,6 +739,15 @@ Returns 201 (Created) on success. Result is a JSON document like:
 ```
 
 The `commitment` object has the same structure as the `commitments[]` objects in `GET /v1/domains/:domain_id/projects/:project_id/commitments`.
+
+### POST /v1/domains/:domain\_id/projects/:project\_id/commitments/can-confirm
+
+Checks if a new commitment within the given project could be confirmed immediately.
+Requires a project-admin token, and a request body that is a JSON document with the same contents as for `POST /v1/domains/:domain\_id/projects/:project\_id/commitments/new`, except that the `commitment.confirm_by` attribute must not be set.
+
+Returns 200 (OK) on success, and a JSON document like `{"result":true}` or `{"result":false}`.
+
+The `result` field indicates whether this commitment can be created without a `confirm_by` attribute, that is, confirmed immediately upon creation.
 
 ### DELETE /v1/domains/:domain\_id/projects/:project\_id/commitments/:id
 

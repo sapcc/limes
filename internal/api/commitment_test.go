@@ -45,7 +45,7 @@ const testCommitmentsYAML = `
 			commitment_min_confirm_date: '1970-01-08T00:00:00Z' # one week after start of mock.Clock
 `
 
-func TestCommitmentLifecycle(t *testing.T) {
+func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
 		test.WithConfig(testCommitmentsYAML),
@@ -198,6 +198,72 @@ func TestCommitmentLifecycle(t *testing.T) {
 		ExpectStatus: http.StatusOK,
 		ExpectBody:   assert.JSONObject{"commitments": []assert.JSONObject{}},
 	}.Check(t, s.Handler)
+}
+
+func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
+	s := test.NewSetup(t,
+		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
+		test.WithConfig(testCommitmentsYAML),
+		test.WithAPIHandler(NewV1API),
+	)
+
+	//We will try to create requests for resource "first/capacity" in "az-one" in project "berlin".
+	request := func(amount uint64) assert.JSONObject {
+		return assert.JSONObject{
+			"commitment": assert.JSONObject{
+				"service_type":      "first",
+				"resource_name":     "capacity",
+				"availability_zone": "az-one",
+				"amount":            amount,
+				"duration":          "1 hour",
+			},
+		}
+	}
+	//This AZ resource has 10 capacity, of which 2 are used in "berlin" and 4 are used in other projects.
+	//Therefore, "berlin" can commit up to 10-4 = 6 amount.
+	maxCommittableCapacity := uint64(6)
+
+	//the capacity resources have min_confirm_date in the future, which blocks immediate confirmation
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/can-confirm",
+		Body:         request(1),
+		ExpectStatus: http.StatusOK,
+		ExpectBody:   assert.JSONObject{"result": false},
+	}.Check(t, s.Handler)
+	//TODO: check /new returning error
+
+	//move clock forward past the min_confirm_date
+	day := 24 * time.Hour
+	s.Clock.StepBy(14 * day)
+
+	//immediate confirmation for this small commitment request is now possible
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/can-confirm",
+		Body:         request(1),
+		ExpectStatus: http.StatusOK,
+		ExpectBody:   assert.JSONObject{"result": true},
+	}.Check(t, s.Handler)
+
+	//check that we cannot immediately commit to more capacity than available
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/can-confirm",
+		Body:         request(maxCommittableCapacity),
+		ExpectStatus: http.StatusOK,
+		ExpectBody:   assert.JSONObject{"result": true},
+	}.Check(t, s.Handler)
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/can-confirm",
+		Body:         request(maxCommittableCapacity + 1),
+		ExpectStatus: http.StatusOK,
+		ExpectBody:   assert.JSONObject{"result": false},
+	}.Check(t, s.Handler)
+
+	//TODO: create commitment with less than maxCommittableCapacity, check how can-confirm behave afterwards when piling a second commitment on top
+	//TODO: expire first commitment, check that we can-confirm up to maxCommittableCapacity again
 }
 
 func TestGetCommitmentsErrorCases(t *testing.T) {

@@ -151,6 +151,7 @@ func (p *v1Provider) AddTo(r *mux.Router) {
 
 	r.Methods("GET").Path("/v1/domains/{domain_id}/projects/{project_id}/commitments").HandlerFunc(p.GetProjectCommitments)
 	r.Methods("POST").Path("/v1/domains/{domain_id}/projects/{project_id}/commitments/new").HandlerFunc(p.CreateProjectCommitment)
+	r.Methods("POST").Path("/v1/domains/{domain_id}/projects/{project_id}/commitments/can-confirm").HandlerFunc(p.CanConfirmNewProjectCommitment)
 	r.Methods("DELETE").Path("/v1/domains/{domain_id}/projects/{project_id}/commitments/{id}").HandlerFunc(p.DeleteProjectCommitment)
 }
 
