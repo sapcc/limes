@@ -692,8 +692,9 @@ The following fields can appear in the response body:
 | `commitments[].unit` | string | For measured resources, the unit for this resource. The value from the `amount` field is measured in this unit. |
 | `commitments[].duration` | string | The requested duration of this commitment, expressed as a comma-separated sequence of positive integer multiples of time units like "1 year, 3 months". Acceptable time units include "second", "minute", "hour", "day", "month" and "year". |
 | `commitments[].created_at` | integer | UNIX timestamp when this commitment was created. |
+| `commitments[].confirm_by` | integer | UNIX timestamp when this commitment should be confirmed. Only shown if this was given when creating the commitment, to delay confirmation into the future. |
 | `commitments[].confirmed_at` | integer | UNIX timestamp when this commitment was confirmed. Only shown after confirmation. |
-| `commitments[].expires_at` | integer | UNIX timestamp when this commitment is set to expire. Only shown after confirmation. |
+| `commitments[].expires_at` | integer | UNIX timestamp when this commitment is set to expire. Note that the duration counts from `confirm_by` (or from `created_at` for immediately-confirmed commitments) and is calculated at creation time, so this is also shown on unconfirmed commitments. |
 | `commitments[].transferable` | boolean | Whether the commitment is marked for transfer to a different project. Transferable commitments do not count towards quota calculation in their project, but still block capacity and still count towards billing. Not shown if false. |
 
 ### POST /v1/domains/:domain\_id/projects/:project\_id/commitments/new
@@ -721,6 +722,7 @@ The following fields can appear in the request body:
 | `commitment.availability_zone` | string | The availability zone in which usage is committed. |
 | `commitment.amount` | integer | The amount of usage that was committed to. For measured resources, this is measured in the resource's unit as reported on the project resource. |
 | `commitment.duration` | string | The requested duration of this commitment. This must be one of the options reported on the project resource. |
+| `commitment.confirm_by` | integer | UNIX timestamp of the time by which this commitment should be confirmed. If not given, Limes will immediately try to confirm this commitment, and return an error if there is not enough committable capacity. If given, Limes will confirm this commitment after `confirm_by` has passed, as soon as enough committable capacity is available. |
 
 Returns 201 (Created) on success. Result is a JSON document like:
 
@@ -739,6 +741,7 @@ Returns 201 (Created) on success. Result is a JSON document like:
 ```
 
 The `commitment` object has the same structure as the `commitments[]` objects in `GET /v1/domains/:domain_id/projects/:project_id/commitments`.
+If `confirm_by` was given, a successful response will include the `confirmed_at` timestamp.
 
 ### POST /v1/domains/:domain\_id/projects/:project\_id/commitments/can-confirm
 

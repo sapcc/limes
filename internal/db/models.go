@@ -198,7 +198,7 @@ type ProjectCommitment struct {
 	CreatorName      string                            `db:"creator_name"`
 	ConfirmBy        *time.Time                        `db:"confirm_by"`
 	ConfirmedAt      *time.Time                        `db:"confirmed_at"`
-	ExpiresAt        *time.Time                        `db:"expires_at"`
+	ExpiresAt        time.Time                         `db:"expires_at"`
 
 	//A commitment can be superseded e.g. by splitting it into smaller parts.
 	//When that happens, the new commitments will point to the one that they

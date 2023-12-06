@@ -29,6 +29,8 @@ import (
 	"github.com/sapcc/limes/internal/test"
 )
 
+const day = 24 * time.Hour
+
 const testCommitmentsYAML = `
 	availability_zones: [ az-one, az-two ]
 	discovery:
@@ -68,6 +70,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		"availability_zone": "az-one",
 		"amount":            10,
 		"duration":          "1 hour",
+		"confirm_by":        s.Clock.Now().Add(14 * day).Unix(),
 	}
 	resp1 := assert.JSONObject{
 		"id":                1,
@@ -80,6 +83,8 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		"created_at":        s.Clock.Now().Unix(),
 		"creator_uuid":      "uuid-for-alice",
 		"creator_name":      "alice@Default",
+		"confirm_by":        req1["confirm_by"],
+		"expires_at":        s.Clock.Now().Add(14*day + 1*time.Hour).Unix(),
 	}
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -97,6 +102,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		"availability_zone": "az-two",
 		"amount":            20,
 		"duration":          "2 hours",
+		"confirm_by":        s.Clock.Now().Add(14 * day).Unix(),
 	}
 	resp2 := assert.JSONObject{
 		"id":                2,
@@ -109,6 +115,8 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		"created_at":        s.Clock.Now().Unix(),
 		"creator_uuid":      "uuid-for-alice",
 		"creator_name":      "alice@Default",
+		"confirm_by":        req2["confirm_by"],
+		"expires_at":        s.Clock.Now().Add(14*day + 2*time.Hour).Unix(),
 	}
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -153,7 +161,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		ExpectBody:   assert.JSONObject{"commitments": []assert.JSONObject{}},
 	}.Check(t, s.Handler)
 
-	//while commitments are not confirmed yet, they can still be deleted
+	//commitments can be deleted with sufficient privilege
 	assert.HTTPRequest{
 		Method:       http.MethodDelete,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2",
@@ -222,6 +230,8 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	//This AZ resource has 10 capacity, of which 2 are used in "berlin" and 4 are used in other projects.
 	//Therefore, "berlin" can commit up to 10-4 = 6 amount.
 	maxCommittableCapacity := uint64(6)
+	//We will later test with this amount of capacity already committed.
+	committedCapacity := uint64(4)
 
 	//the capacity resources have min_confirm_date in the future, which blocks immediate confirmation
 	assert.HTTPRequest{
@@ -231,10 +241,15 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 		ExpectStatus: http.StatusOK,
 		ExpectBody:   assert.JSONObject{"result": false},
 	}.Check(t, s.Handler)
-	//TODO: check /new returning error
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
+		Body:         request(1),
+		ExpectStatus: http.StatusUnprocessableEntity,
+		ExpectBody:   assert.StringData("this commitment needs a `confirm_by` timestamp at or after 1970-01-08T00:00:00Z\n"),
+	}.Check(t, s.Handler)
 
 	//move clock forward past the min_confirm_date
-	day := 24 * time.Hour
 	s.Clock.StepBy(14 * day)
 
 	//immediate confirmation for this small commitment request is now possible
@@ -262,8 +277,43 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 		ExpectBody:   assert.JSONObject{"result": false},
 	}.Check(t, s.Handler)
 
-	//TODO: create commitment with less than maxCommittableCapacity, check how can-confirm behave afterwards when piling a second commitment on top
-	//TODO: expire first commitment, check that we can-confirm up to maxCommittableCapacity again
+	//create a commitment for some of that capacity
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
+		Body:         request(committedCapacity),
+		ExpectStatus: http.StatusCreated,
+	}.Check(t, s.Handler)
+
+	//check that can-confirm can only confirm the remainder of the available capacity, not more
+	remainingCommitableCapacity := maxCommittableCapacity - committedCapacity
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/can-confirm",
+		Body:         request(remainingCommitableCapacity),
+		ExpectStatus: http.StatusOK,
+		ExpectBody:   assert.JSONObject{"result": true},
+	}.Check(t, s.Handler)
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/can-confirm",
+		Body:         request(remainingCommitableCapacity + 1),
+		ExpectStatus: http.StatusOK,
+		ExpectBody:   assert.JSONObject{"result": false},
+	}.Check(t, s.Handler)
+
+	//check that can-confirm ignores expired commitments
+	_, err := s.DB.Exec(`UPDATE project_commitments SET expires_at = $1`, s.Clock.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/can-confirm",
+		Body:         request(maxCommittableCapacity),
+		ExpectStatus: http.StatusOK,
+		ExpectBody:   assert.JSONObject{"result": true},
+	}.Check(t, s.Handler)
 }
 
 func TestGetCommitmentsErrorCases(t *testing.T) {
@@ -308,6 +358,7 @@ func TestPutCommitmentErrorCases(t *testing.T) {
 		"availability_zone": "az-one",
 		"amount":            10,
 		"duration":          "1 hour",
+		"confirm_by":        s.Clock.Now().Add(14 * day).Unix(),
 	}
 
 	//no authentication
@@ -426,6 +477,7 @@ func TestDeleteCommitmentErrorCases(t *testing.T) {
 		"availability_zone": "az-one",
 		"amount":            10,
 		"duration":          "1 hour",
+		"confirm_by":        s.Clock.Now().Add(14 * day).Unix(),
 	}
 	assert.HTTPRequest{
 		Method:       http.MethodPost,

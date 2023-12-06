@@ -30,14 +30,6 @@ import (
 	"github.com/sapcc/limes/internal/db"
 )
 
-// ConfirmProjectCommitments will try to confirm as many additional commitments
-// as can be covered at the current capacity and usage values.
-func ConfirmProjectCommitments(serviceType, resourceName string) error {
-	//TODO implement (this stub allows UI development on the commitment API to proceed)
-	//TODO note to self: generate audit events upon confirmation
-	return nil
-}
-
 var (
 	// We need to ensure that `sum_over_projects(max(committed, usage)) <= capacity`.
 	// For the target project, `committed` includes both existing confirmed commitments

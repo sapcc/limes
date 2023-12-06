@@ -400,7 +400,8 @@ var sqlMigrations = map[string]string{
 		ALTER TABLE project_commitments
 			RENAME COLUMN confirm_after TO confirm_by;
 		ALTER TABLE project_commitments
-			ALTER COLUMN confirm_by DROP NOT NULL;
+			ALTER COLUMN confirm_by DROP NOT NULL,
+			ALTER COLUMN expires_at SET NOT NULL;
 		ALTER TABLE project_commitments
 			RENAME COLUMN requested_at TO created_at;
 		ALTER TABLE project_commitments
@@ -414,7 +415,8 @@ var sqlMigrations = map[string]string{
 		ALTER TABLE project_commitments
 			RENAME COLUMN confirm_by TO confirm_after;
 		ALTER TABLE project_commitments
-			ALTER COLUMN confirm_after SET NOT NULL;
+			ALTER COLUMN confirm_after SET NOT NULL,
+			ALTER COLUMN expires_at DROP NOT NULL;
 		ALTER TABLE project_commitments
 			RENAME COLUMN created_at TO requested_at;
 		ALTER TABLE project_commitments

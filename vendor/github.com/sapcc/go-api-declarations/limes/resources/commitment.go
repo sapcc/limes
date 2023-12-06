@@ -45,9 +45,11 @@ type Commitment struct {
 	// and intended for informational displays only. API access should always use the UUID.
 	CreatorUUID string `json:"creator_uuid,omitempty"`
 	CreatorName string `json:"creator_name,omitempty"`
+	// ConfirmBy is only filled if it was set in the CommitmentRequest.
+	ConfirmBy *limes.UnixEncodedTime `json:"confirm_by,omitempty"`
 	// ConfirmedAt and ExpiresAt are only filled after the commitment was confirmed.
 	ConfirmedAt *limes.UnixEncodedTime `json:"confirmed_at,omitempty"`
-	ExpiresAt   *limes.UnixEncodedTime `json:"expires_at,omitempty"`
+	ExpiresAt   limes.UnixEncodedTime  `json:"expires_at,omitempty"`
 	// TransferStatus and TransferToken are only filled while the commitment is marked for transfer.
 	TransferStatus CommitmentTransferStatus `json:"transfer_status,omitempty"`
 	TransferToken  string                   `json:"transfer_token,omitempty"`

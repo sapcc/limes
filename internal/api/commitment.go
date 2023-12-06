@@ -133,18 +133,12 @@ func (p *v1Provider) convertCommitmentToDisplayForm(c db.ProjectCommitment, serv
 		CreatedAt:        limes.UnixEncodedTime{Time: c.CreatedAt},
 		CreatorUUID:      c.CreatorUUID,
 		CreatorName:      c.CreatorName,
+		ConfirmBy:        maybeUnixEncodedTime(c.ConfirmBy),
 		ConfirmedAt:      maybeUnixEncodedTime(c.ConfirmedAt),
-		ExpiresAt:        maybeUnixEncodedTime(c.ExpiresAt),
+		ExpiresAt:        limes.UnixEncodedTime{Time: c.ExpiresAt},
 		TransferStatus:   c.TransferStatus,
 		TransferToken:    c.TransferToken,
 	}
-}
-
-func maybeUnixEncodedTime(t *time.Time) *limes.UnixEncodedTime {
-	if t == nil {
-		return nil
-	}
-	return &limes.UnixEncodedTime{Time: *t}
 }
 
 func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r *http.Request, project db.Project, domain db.Domain) (*limesresources.CommitmentRequest, *core.ResourceBehavior) {
@@ -211,7 +205,6 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 	}
 
 	//commitments can never be confirmed immediately if we are before the min_confirm_date
-	//TODO move this into parseAndValidateCommitmentRequest
 	now := p.timeNow()
 	if behavior.CommitmentMinConfirmDate != nil && behavior.CommitmentMinConfirmDate.After(now) {
 		respondwith.JSON(w, http.StatusOK, map[string]bool{"result": false})
@@ -253,45 +246,67 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	//create commitment
-	requestTime := p.timeNow()
+	//enforce min_confirm_date constraint if set
+	now := p.timeNow()
+	if minConfirmBy := behavior.CommitmentMinConfirmDate; minConfirmBy != nil && minConfirmBy.After(now) {
+		if req.ConfirmBy == nil || req.ConfirmBy.Before(*minConfirmBy) {
+			msg := fmt.Sprintf("this commitment needs a `confirm_by` timestamp at or after %s", behavior.CommitmentMinConfirmDate.Format(time.RFC3339))
+			http.Error(w, msg, http.StatusUnprocessableEntity)
+			return
+		}
+	}
+
+	//we want to validate committable capacity in the same transaction that creates the commitment
+	tx, err := p.DB.Begin()
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+	defer sqlext.RollbackUnlessCommitted(tx)
+
+	//prepare commitment
+	confirmBy := maybeUnpackUnixEncodedTime(req.ConfirmBy)
 	dbCommitment := db.ProjectCommitment{
 		ServiceID:        dbService.ID,
 		ResourceName:     req.ResourceName,
 		AvailabilityZone: req.AvailabilityZone,
 		Amount:           req.Amount,
 		Duration:         req.Duration,
-		CreatedAt:        requestTime,
+		CreatedAt:        now,
 		CreatorUUID:      token.UserUUID(),
 		CreatorName:      fmt.Sprintf("%s@%s", token.UserName(), token.UserDomainName()),
-		ConfirmBy:        &requestTime,
-		ConfirmedAt:      nil,
-		ExpiresAt:        nil,
+		ConfirmBy:        confirmBy,
+		ConfirmedAt:      nil, //may be set below
+		ExpiresAt:        req.Duration.AddTo(unwrapOrDefault(confirmBy, now)),
 	}
-	if behavior.CommitmentMinConfirmDate != nil && behavior.CommitmentMinConfirmDate.After(requestTime) {
-		dbCommitment.ConfirmBy = behavior.CommitmentMinConfirmDate
+	if req.ConfirmBy == nil {
+		//if not planned for confirmation in the future, confirm immediately (or fail)
+		ok, err := datamodel.CanConfirmNewCommitment(*req, *dbProject, p.Cluster, tx, now)
+		if respondwith.ErrorText(w, err) {
+			return
+		}
+		if !ok {
+			http.Error(w, "not enough capacity available for immediate confirmation", http.StatusConflict)
+			return
+		}
+		dbCommitment.ConfirmedAt = &now
 	}
-	err = p.DB.Insert(&dbCommitment)
+
+	//create commitment
+	err = tx.Insert(&dbCommitment)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-	logAndPublishEvent(requestTime, r, token, http.StatusCreated, commitmentEventTarget{
+	err = tx.Commit()
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+	logAndPublishEvent(now, r, token, http.StatusCreated, commitmentEventTarget{
 		DomainID:    dbDomain.UUID,
 		DomainName:  dbDomain.Name,
 		ProjectID:   dbProject.UUID,
 		ProjectName: dbProject.Name,
 		Commitment:  p.convertCommitmentToDisplayForm(dbCommitment, dbService.Type),
 	})
-
-	//try to confirm commitment
-	//
-	//NOTE: This is only done after the commitment object was committed to the database.
-	//Otherwise, creating multiple commitments in parallel could confirm them all based
-	//on the same capacity, since they don't see each other until after they're committed.
-	err = datamodel.ConfirmProjectCommitments(req.ServiceType, req.ResourceName)
-	if respondwith.ErrorText(w, err) {
-		return
-	}
 
 	//display the possibly confirmed commitment to the user
 	err = p.DB.SelectOne(&dbCommitment, `SELECT * FROM project_commitments WHERE id = $1`, dbCommitment.ID)
