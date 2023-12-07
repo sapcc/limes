@@ -115,9 +115,13 @@ Commitments are always tied to an availability zone to aid in demand planning on
 
 Commitments follow a simple state machine:
 
-* `-> requested`: Commitments are created by a project administrator. They are not active until confirmed.
-* `requested -> confirmed`: Once the underlying capacity has been reserved for the project, the commitment is confirmed.
+* `-> unconfirmed`: Commitments are created by a project administrator.
   Price discounts and capacity guarantees apply only once the commitment is confirmed.
+  Creating an unconfirmed commitment is only possible if the commitment is created with a `confirm_by` timestamp.
+  Such commitments are intended for demand management and forecasting.
+* `unconfirmed -> confirmed`: Once the underlying capacity has been reserved for the project, the commitment is confirmed.
+* `-> confirmed`: Commiments can also be created by a project administrator in an immediately-confirmed state,
+  if the respective capacity can be reserved for the project immediately.
 * `confirmed -> expired`: Once the commitment's duration elapses, the price discount and capacity guarantee elapse.
   The duration until expiry counts starting from the state transition into `confirmed`.
 
@@ -687,9 +691,10 @@ The following fields can appear in the response body:
 | `commitments[].amount` | integer | The amount of usage that was committed to. |
 | `commitments[].unit` | string | For measured resources, the unit for this resource. The value from the `amount` field is measured in this unit. |
 | `commitments[].duration` | string | The requested duration of this commitment, expressed as a comma-separated sequence of positive integer multiples of time units like "1 year, 3 months". Acceptable time units include "second", "minute", "hour", "day", "month" and "year". |
-| `commitments[].requested_at` | integer | UNIX timestamp when this commitment was requested. |
+| `commitments[].created_at` | integer | UNIX timestamp when this commitment was created. |
+| `commitments[].confirm_by` | integer | UNIX timestamp when this commitment should be confirmed. Only shown if this was given when creating the commitment, to delay confirmation into the future. |
 | `commitments[].confirmed_at` | integer | UNIX timestamp when this commitment was confirmed. Only shown after confirmation. |
-| `commitments[].expires_at` | integer | UNIX timestamp when this commitment is set to expire. Only shown after confirmation. |
+| `commitments[].expires_at` | integer | UNIX timestamp when this commitment is set to expire. Note that the duration counts from `confirm_by` (or from `created_at` for immediately-confirmed commitments) and is calculated at creation time, so this is also shown on unconfirmed commitments. |
 | `commitments[].transferable` | boolean | Whether the commitment is marked for transfer to a different project. Transferable commitments do not count towards quota calculation in their project, but still block capacity and still count towards billing. Not shown if false. |
 
 ### POST /v1/domains/:domain\_id/projects/:project\_id/commitments/new
@@ -717,6 +722,7 @@ The following fields can appear in the request body:
 | `commitment.availability_zone` | string | The availability zone in which usage is committed. |
 | `commitment.amount` | integer | The amount of usage that was committed to. For measured resources, this is measured in the resource's unit as reported on the project resource. |
 | `commitment.duration` | string | The requested duration of this commitment. This must be one of the options reported on the project resource. |
+| `commitment.confirm_by` | integer | UNIX timestamp of the time by which this commitment should be confirmed. If not given, Limes will immediately try to confirm this commitment, and return an error if there is not enough committable capacity. If given, Limes will confirm this commitment after `confirm_by` has passed, as soon as enough committable capacity is available. |
 
 Returns 201 (Created) on success. Result is a JSON document like:
 
@@ -735,10 +741,20 @@ Returns 201 (Created) on success. Result is a JSON document like:
 ```
 
 The `commitment` object has the same structure as the `commitments[]` objects in `GET /v1/domains/:domain_id/projects/:project_id/commitments`.
+If `confirm_by` was given, a successful response will include the `confirmed_at` timestamp.
+
+### POST /v1/domains/:domain\_id/projects/:project\_id/commitments/can-confirm
+
+Checks if a new commitment within the given project could be confirmed immediately.
+Requires a project-admin token, and a request body that is a JSON document with the same contents as for `POST /v1/domains/:domain\_id/projects/:project\_id/commitments/new`, except that the `commitment.confirm_by` attribute must not be set.
+
+Returns 200 (OK) on success, and a JSON document like `{"result":true}` or `{"result":false}`.
+
+The `result` field indicates whether this commitment can be created without a `confirm_by` attribute, that is, confirmed immediately upon creation.
 
 ### DELETE /v1/domains/:domain\_id/projects/:project\_id/commitments/:id
 
-Deletes a commitment within the given project. Requires a project-admin token. On success, returns 204 (No Content).
+Deletes a commitment within the given project. Requires a cloud-admin token. On success, returns 204 (No Content).
 
 Only unconfirmed commitments may be deleted. If the commitment has already been confirmed, returns 403 (Forbidden).
 

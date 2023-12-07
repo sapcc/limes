@@ -111,16 +111,16 @@ INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage,
 
 -- project_commitments has several entries for project dresden
 -- on "unshared/capacity": regular active commitments with different durations
-INSERT INTO project_commitments (id, service_id, resource_name, availability_zone, amount, duration, requested_at, confirm_after, confirmed_at, expires_at) VALUES (1, 3, 'capacity', 'az-one', 1,   '2 years',    UNIX(1), UNIX(1), UNIX(1), UNIX(100000001));
-INSERT INTO project_commitments (id, service_id, resource_name, availability_zone, amount, duration, requested_at, confirm_after, confirmed_at, expires_at) VALUES (2, 3, 'capacity', 'az-one', 1,   '1 year',     UNIX(2), UNIX(2), UNIX(2), UNIX(100000002));
-INSERT INTO project_commitments (id, service_id, resource_name, availability_zone, amount, duration, requested_at, confirm_after, confirmed_at, expires_at) VALUES (3, 3, 'capacity', 'az-one', 1,   '1 year',     UNIX(3), UNIX(3), UNIX(3), UNIX(100000003));
-INSERT INTO project_commitments (id, service_id, resource_name, availability_zone, amount, duration, requested_at, confirm_after, confirmed_at, expires_at) VALUES (4, 3, 'capacity', 'az-two', 2,   '1 year',     UNIX(4), UNIX(4), UNIX(4), UNIX(100000004));
+INSERT INTO project_commitments (id, service_id, resource_name, availability_zone, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at) VALUES (1, 3, 'capacity', 'az-one', 1,   '2 years',    UNIX(1), 'uuid-for-alice', 'alice@Default', UNIX(1), UNIX(1), UNIX(100000001));
+INSERT INTO project_commitments (id, service_id, resource_name, availability_zone, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at) VALUES (2, 3, 'capacity', 'az-one', 1,   '1 year',     UNIX(2), 'uuid-for-alice', 'alice@Default', UNIX(2), UNIX(2), UNIX(100000002));
+INSERT INTO project_commitments (id, service_id, resource_name, availability_zone, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at) VALUES (3, 3, 'capacity', 'az-one', 1,   '1 year',     UNIX(3), 'uuid-for-alice', 'alice@Default', UNIX(3), UNIX(3), UNIX(100000003));
+INSERT INTO project_commitments (id, service_id, resource_name, availability_zone, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at) VALUES (4, 3, 'capacity', 'az-two', 2,   '1 year',     UNIX(4), 'uuid-for-alice', 'alice@Default', UNIX(4), UNIX(4), UNIX(100000004));
 -- on "unshared/capacity": unconfirmed commitments should not be reported
-INSERT INTO project_commitments (id, service_id, resource_name, availability_zone, amount, duration, requested_at, confirm_after, confirmed_at, expires_at) VALUES (5, 3, 'capacity', 'az-two', 100, '2 years',    UNIX(5), UNIX(5), NULL,    NULL);
+INSERT INTO project_commitments (id, service_id, resource_name, availability_zone, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at) VALUES (5, 3, 'capacity', 'az-two', 100, '2 years',    UNIX(5), 'uuid-for-alice', 'alice@Default', UNIX(5), NULL,    UNIX(100000005));
 -- on "unshared/capacity": expired commitments should not be reported (NOTE: the test's clock stands at UNIX timestamp 3600)
-INSERT INTO project_commitments (id, service_id, resource_name, availability_zone, amount, duration, requested_at, confirm_after, confirmed_at, expires_at) VALUES (6, 3, 'capacity', 'az-one', 5,   '10 minutes', UNIX(6), UNIX(6), UNIX(6), UNIX(606));
--- on "shared/capacity": only an unconfirmed commitment that should not be reported, this tests that the entire "committed" structure is absent in the JSON
-INSERT INTO project_commitments (id, service_id, resource_name, availability_zone, amount, duration, requested_at, confirm_after, confirmed_at, expires_at) VALUES (7, 4, 'capacity', 'az-one', 100, '2 years',    UNIX(7), UNIX(7), NULL,    NULL);
+INSERT INTO project_commitments (id, service_id, resource_name, availability_zone, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at) VALUES (6, 3, 'capacity', 'az-one', 5,   '10 minutes', UNIX(6), 'uuid-for-alice', 'alice@Default', UNIX(6), UNIX(6), UNIX(606));
+-- on "shared/capacity": only an unconfirmed commitment that should not be reported, this tests that the entire "committed" structure is absent in the JSON for that resource
+INSERT INTO project_commitments (id, service_id, resource_name, availability_zone, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at) VALUES (7, 4, 'capacity', 'az-one', 100, '2 years',    UNIX(7), 'uuid-for-alice', 'alice@Default', UNIX(7), NULL,    UNIX(100000007));
 
 -- project_rates also has multiple different setups to test different cases
 -- berlin has custom rate limits

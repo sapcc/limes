@@ -396,4 +396,31 @@ var sqlMigrations = map[string]string{
 		ALTER TABLE cluster_az_resources
 			ALTER COLUMN usage SET NOT NULL;
 	`,
+	"032_commitment_rework.up.sql": `
+		ALTER TABLE project_commitments
+			RENAME COLUMN confirm_after TO confirm_by;
+		ALTER TABLE project_commitments
+			ALTER COLUMN confirm_by DROP NOT NULL,
+			ALTER COLUMN expires_at SET NOT NULL;
+		ALTER TABLE project_commitments
+			RENAME COLUMN requested_at TO created_at;
+		ALTER TABLE project_commitments
+			ADD COLUMN creator_uuid TEXT NOT NULL DEFAULT '',
+			ADD COLUMN creator_name TEXT NOT NULL DEFAULT '';
+		ALTER TABLE project_commitments
+			ALTER COLUMN creator_uuid DROP DEFAULT,
+			ALTER COLUMN creator_name DROP DEFAULT;
+	`,
+	"032_commitment_rework.down.sql": `
+		ALTER TABLE project_commitments
+			RENAME COLUMN confirm_by TO confirm_after;
+		ALTER TABLE project_commitments
+			ALTER COLUMN confirm_after SET NOT NULL,
+			ALTER COLUMN expires_at DROP NOT NULL;
+		ALTER TABLE project_commitments
+			RENAME COLUMN created_at TO requested_at;
+		ALTER TABLE project_commitments
+			DROP COLUMN creator_uuid,
+			DROP COLUMN creator_name;
+	`,
 }

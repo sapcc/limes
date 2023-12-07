@@ -118,17 +118,28 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 
 	//load mock policy (where everything is allowed)
 	enforcer := &PolicyEnforcer{
-		AllowCluster: true,
-		AllowDomain:  true,
-		AllowProject: true,
-		AllowView:    true,
-		AllowEdit:    true,
-		AllowRaise:   true,
-		AllowRaiseLP: true,
-		AllowLower:   true,
-		AllowLowerLP: true,
+		AllowCluster:  true,
+		AllowDomain:   true,
+		AllowProject:  true,
+		AllowView:     true,
+		AllowEdit:     true,
+		AllowRaise:    true,
+		AllowRaiseLP:  true,
+		AllowLower:    true,
+		AllowLowerLP:  true,
+		AllowUncommit: true,
 	}
-	s.TokenValidator = mock.NewValidator(enforcer, nil)
+	mockUserIdentity := map[string]string{
+		"user_id":             "uuid-for-alice",
+		"user_name":           "alice",
+		"user_domain_name":    "Default",
+		"user_domain_id":      "uuid-for-default",
+		"project_id":          "uuid-for-admin",
+		"project_name":        "admin",
+		"project_domain_name": "Default",
+		"project_domain_id":   "uuid-for-default",
+	}
+	s.TokenValidator = mock.NewValidator(enforcer, mockUserIdentity)
 
 	if params.APIBuilder != nil {
 		s.Handler = httpapi.Compose(

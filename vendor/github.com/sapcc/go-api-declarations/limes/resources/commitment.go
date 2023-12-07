@@ -39,10 +39,17 @@ type Commitment struct {
 	Amount           uint64                 `json:"amount"`
 	Unit             limes.Unit             `json:"unit"`
 	Duration         CommitmentDuration     `json:"duration"`
-	RequestedAt      limes.UnixEncodedTime  `json:"requested_at"`
-	// ConfirmedAt and ExpiresAt are only filled after the commitment was confirmed.
+	CreatedAt        limes.UnixEncodedTime  `json:"created_at"`
+	// CreatorUUID and CreatorName identify the user who created this commitment.
+	// CreatorName is in the format `fmt.Sprintf("%s@%s", userName, userDomainName)`
+	// and intended for informational displays only. API access should always use the UUID.
+	CreatorUUID string `json:"creator_uuid,omitempty"`
+	CreatorName string `json:"creator_name,omitempty"`
+	// ConfirmBy is only filled if it was set in the CommitmentRequest.
+	ConfirmBy *limes.UnixEncodedTime `json:"confirm_by,omitempty"`
+	// ConfirmedAt is only filled after the commitment was confirmed.
 	ConfirmedAt *limes.UnixEncodedTime `json:"confirmed_at,omitempty"`
-	ExpiresAt   *limes.UnixEncodedTime `json:"expires_at,omitempty"`
+	ExpiresAt   limes.UnixEncodedTime  `json:"expires_at,omitempty"`
 	// TransferStatus and TransferToken are only filled while the commitment is marked for transfer.
 	TransferStatus CommitmentTransferStatus `json:"transfer_status,omitempty"`
 	TransferToken  string                   `json:"transfer_token,omitempty"`
@@ -55,6 +62,7 @@ type CommitmentRequest struct {
 	AvailabilityZone limes.AvailabilityZone `json:"availability_zone"`
 	Amount           uint64                 `json:"amount"`
 	Duration         CommitmentDuration     `json:"duration"`
+	ConfirmBy        *limes.UnixEncodedTime `json:"confirm_by,omitempty"`
 }
 
 // CommitmentTransferStatus is an enum.

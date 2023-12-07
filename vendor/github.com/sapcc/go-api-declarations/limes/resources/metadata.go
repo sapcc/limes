@@ -97,4 +97,6 @@ const (
 type CommitmentConfiguration struct {
 	// Allowed durations for commitments on this resource.
 	Durations []CommitmentDuration `json:"durations"`
+	// If shown, commitments must be created with `confirm_by` at or after this timestamp.
+	MinConfirmBy *limes.UnixEncodedTime `json:"min_confirm_by,omitempty"`
 }

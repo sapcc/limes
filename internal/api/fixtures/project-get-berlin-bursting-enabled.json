@@ -16,6 +16,13 @@
             "name": "capacity",
             "unit": "B",
             "quota_distribution_model": "hierarchical",
+            "commitment_config": {
+              "durations": [
+                "1 hour",
+                "2 hours"
+              ],
+              "min_confirm_by": 604800
+            },
             "quota": 10,
             "usable_quota": 11,
             "usage": 2
