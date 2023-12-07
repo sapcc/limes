@@ -13,6 +13,13 @@
               "name": "capacity",
               "unit": "B",
               "quota_distribution_model": "hierarchical",
+              "commitment_config": {
+                "durations": [
+                  "1 hour",
+                  "2 hours"
+                ],
+                "min_confirm_by": 604800
+              },
               "per_az": {
                 "az-one": {
                   "usage": 1
@@ -123,6 +130,13 @@
               "name": "capacity",
               "unit": "B",
               "quota_distribution_model": "hierarchical",
+              "commitment_config": {
+                "durations": [
+                  "1 hour",
+                  "2 hours"
+                ],
+                "min_confirm_by": 604800
+              },
               "per_az": {
                 "az-one": {
                   "usage": 1

@@ -112,6 +112,11 @@ const (
 				scope:    germany/dresden
 				annotations:
 					text: 'this annotation appears on shared/things of project dresden only'
+
+			# check how commitment config is reported
+			- resource: shared/capacity
+				commitment_durations: ["1 hour", "2 hours"]
+				commitment_min_confirm_date: '1970-01-08T00:00:00Z' # one week after start of mock.Clock
 	`
 )
 
