@@ -156,11 +156,23 @@ type capacityForShareType struct {
 	SnapshotGigabytes core.PerAZ[core.CapacityData]
 }
 
+type poolsListDetailOpts struct {
+	//upstream type (schedulerstats.ListDetailOpts) does not work because of wrong field tags (`json:"..."` instead of `q:"..."`)
+	//TODO: fix upstream; I'm doing this quick fix now because I don't have the time to submit an upstream PR and figure out how to write testcases for them
+	ShareType string `q:"share_type,omitempty"`
+}
+
+// ToPoolsListQuery implements the schedulerstats.ListDetailOptsBuilder interface.
+func (opts poolsListDetailOpts) ToPoolsListQuery() (string, error) {
+	q, err := gophercloud.BuildQueryString(opts)
+	return q.String(), err
+}
+
 func (p *capacityManilaPlugin) scrapeForShareType(shareType ManilaShareTypeSpec, azForServiceHost map[string]limes.AvailabilityZone) (capacityForShareType, error) {
 	//list all pools for the Manila share types corresponding to this virtual share type
 	var allPools []manilaPool
 	for _, stName := range getAllManilaShareTypes(shareType) {
-		allPages, err := schedulerstats.ListDetail(p.ManilaV2, schedulerstats.ListDetailOpts{ShareType: stName}).AllPages()
+		allPages, err := schedulerstats.ListDetail(p.ManilaV2, poolsListDetailOpts{ShareType: stName}).AllPages()
 		if err != nil {
 			return capacityForShareType{}, err
 		}
