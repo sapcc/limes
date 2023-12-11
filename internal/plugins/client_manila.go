@@ -23,6 +23,7 @@ import (
 	"fmt"
 
 	"github.com/sapcc/go-bits/regexpext"
+	"golang.org/x/exp/maps"
 
 	"github.com/sapcc/limes/internal/core"
 )
@@ -53,18 +54,23 @@ func resolveManilaShareType(spec ManilaShareTypeSpec, project core.KeystoneProje
 // Given a virtual share type, list all share type names that can be used on the
 // Manila API to set quota or read usage for it.
 func getAllManilaShareTypes(spec ManilaShareTypeSpec) []string {
-	var result []string
+	resultSet := make(map[string]bool)
 	for _, rule := range spec.MappingRules {
-		result = append(result, rule.ShareType)
+		//rules that make the share type inaccessible should not be considered
+		if spec.Name == "" {
+			continue
+		}
+		resultSet[rule.ShareType] = true
 
 		//if there is a catch-all rule, no rules afterwards will have any effect
 		if rule.NameRx == `.*` || rule.NameRx == `.+` {
-			return result
+			return maps.Keys(resultSet)
 		}
 	}
 
 	//if there is no pattern like `.*`, projects that do not match any of the
 	//mapping rules will use the name of the virtual share type as the actual
 	//Manila-level share type
-	return append(result, spec.Name)
+	resultSet[spec.Name] = true
+	return maps.Keys(resultSet)
 }
