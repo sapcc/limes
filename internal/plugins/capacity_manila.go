@@ -220,8 +220,8 @@ func (p *capacityManilaPlugin) scrapeForShareType(shareType ManilaShareTypeSpec,
 			poolAZ = limes.AvailabilityZoneUnknown
 		}
 
+		availabilityZones[poolAZ] = true
 		if isIncluded {
-			availabilityZones[poolAZ] = true
 			poolCountPerAZ[poolAZ]++
 			totalCapacityGbPerAZ[poolAZ] += pool.Capabilities.TotalCapacityGB
 			allocatedCapacityGbPerAZ[poolAZ] += pool.Capabilities.AllocatedCapacityGB
