@@ -57,7 +57,7 @@ func getAllManilaShareTypes(spec ManilaShareTypeSpec) []string {
 	resultSet := make(map[string]bool)
 	for _, rule := range spec.MappingRules {
 		//rules that make the share type inaccessible should not be considered
-		if spec.Name == "" {
+		if rule.ShareType == "" {
 			continue
 		}
 		resultSet[rule.ShareType] = true
