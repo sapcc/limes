@@ -31,6 +31,23 @@ import (
 	"github.com/sapcc/limes/internal/db"
 )
 
+var (
+	//Commitments are confirmed in a chronological order, wherein `created_at`
+	//has a higher priority than `confirm_by` to ensure that commitments created
+	//at a later date cannot skip the queue when existing customers are already
+	//waiting for commitments.
+	//
+	//The final `BY id` ordering ensures deterministic behavior in tests.
+	getConfirmableCommitmentsQuery = sqlext.SimplifyWhitespace(`
+		SELECT ps.project_id, pc.id, pc.amount
+		  FROM project_services ps
+		  JOIN project_commitments pc ON pc.service_id = ps.id
+		 WHERE ps.type = $1 AND pc.resource_name = $2 AND pc.availability_zone = $3
+		   AND pc.confirmed_at IS NULL AND pc.confirm_by >= $4 AND pc.superseded_at IS NOT NULL
+		 ORDER BY created_at ASC, confirm_by ASC, id ASC
+	`)
+)
+
 // CanConfirmNewCommitment returns whether the given commitment request can be
 // confirmed immediately upon creation in the given project.
 func CanConfirmNewCommitment(req limesresources.CommitmentRequest, project db.Project, cluster *core.Cluster, dbi db.Interface, now time.Time) (bool, error) {
@@ -39,6 +56,54 @@ func CanConfirmNewCommitment(req limesresources.CommitmentRequest, project db.Pr
 		return false, err
 	}
 	return stats.FitsAdditionalCommitment(project.ID, req.Amount), nil
+}
+
+// ConfirmPendingCommitments goes through all unconfirmed commitments that
+// could be confirmed, in chronological creation order, and confirms as many of
+// them as possible given the currently available capacity.
+func ConfirmPendingCommitments(serviceType, resourceName string, az limes.AvailabilityZone, cluster *core.Cluster, dbi db.Interface, now time.Time) error {
+	stats, err := collectAllocationStats(serviceType, resourceName, az, cluster, dbi, now)
+	if err != nil {
+		return err
+	}
+
+	//foreach confirmable commitment...
+	queryArgs := []any{serviceType, resourceName, az, now}
+	err = sqlext.ForeachRow(dbi, getConfirmableCommitmentsQuery, queryArgs, func(rows *sql.Rows) error {
+		var (
+			projectID    int64
+			commitmentID int64
+			amount       uint64
+		)
+		err := rows.Scan(&projectID, &commitmentID, &amount)
+		if err != nil {
+			return err
+		}
+
+		//ignore commitments that do not fit
+		if !stats.FitsAdditionalCommitment(projectID, amount) {
+			return nil
+		}
+
+		//confirm the commitment
+		_, err = dbi.Exec(`UPDATE project_commitments SET confirmed_at = $1 WHERE id = $2`, now, commitmentID)
+		if err != nil {
+			return fmt.Errorf("while confirming commitment %d: %w", commitmentID, err)
+		}
+
+		//block its allocation from being committed again in this loop
+		oldStats := stats.StatsByProjectID[projectID]
+		stats.StatsByProjectID[projectID] = projectAllocationStats{
+			Committed: oldStats.Committed + amount,
+			Usage:     oldStats.Usage,
+		}
+
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("while iterating through confirmable commitments for %s/%s in %s: %w", serviceType, resourceName, az, err)
+	}
+	return nil
 }
 
 // Describes how much committable capacity for a certain AZ resource is
