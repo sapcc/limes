@@ -23,12 +23,52 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 )
+
+// CanConfirmNewCommitment returns whether the given commitment request can be
+// confirmed immediately upon creation in the given project.
+func CanConfirmNewCommitment(req limesresources.CommitmentRequest, project db.Project, cluster *core.Cluster, dbi db.Interface, now time.Time) (bool, error) {
+	stats, err := collectAllocationStats(req.ServiceType, req.ResourceName, req.AvailabilityZone, cluster, dbi, now)
+	if err != nil {
+		return false, err
+	}
+	return stats.FitsAdditionalCommitment(project.ID, req.Amount), nil
+}
+
+// Describes how much committable capacity for a certain AZ resource is
+// available, and how much is already allocated by projects.
+type clusterAllocationStats struct {
+	Capacity         uint64
+	StatsByProjectID map[int64]projectAllocationStats
+}
+
+// Describes how much committable capacity for a certain AZ resource is already
+// allocated by a single project.
+type projectAllocationStats struct {
+	Committed uint64
+	Usage     uint64
+}
+
+func (c clusterAllocationStats) FitsAdditionalCommitment(targetProjectID int64, amount uint64) bool {
+	// calculate `sum_over_projects(max(committed, usage))` including the requested commitment
+	usedCapacity := uint64(0)
+	for projectID, stats := range c.StatsByProjectID {
+		if projectID == targetProjectID {
+			usedCapacity += max(stats.Committed+amount, stats.Usage)
+		} else {
+			usedCapacity += max(stats.Committed, stats.Usage)
+		}
+	}
+
+	//commitment can be confirmed if it and all other commitments and usage fit in the total capacity
+	return usedCapacity <= c.Capacity
+}
 
 var (
 	// We need to ensure that `sum_over_projects(max(committed, usage)) <= capacity`.
@@ -41,7 +81,7 @@ var (
 			JOIN cluster_az_resources car ON car.resource_id = cr.id
 		 WHERE cs.type = $1 AND cr.name = $2 AND car.az = $3
 	`)
-	getCommitabilityStatsQuery = sqlext.SimplifyWhitespace(`
+	getAllocationStatsQuery = sqlext.SimplifyWhitespace(`
 		WITH committed AS (
 			SELECT ps.project_id AS project_id, SUM(pc.amount) AS amount
 			  FROM project_services ps
@@ -61,49 +101,42 @@ var (
 	`)
 )
 
-// CanConfirmNewCommitment returns whether the given commitment request can be
-// confirmed immediately upon creation in the given project.
-func CanConfirmNewCommitment(req limesresources.CommitmentRequest, project db.Project, cluster *core.Cluster, dbi db.Interface, now time.Time) (bool, error) {
-	clusterBehavior := cluster.BehaviorForResource(req.ServiceType, req.ResourceName, "")
+// Shared data collection phase for CanConfirmNewCommitment and ConfirmPendingCommitments.
+func collectAllocationStats(serviceType, resourceName string, az limes.AvailabilityZone, cluster *core.Cluster, dbi db.Interface, now time.Time) (clusterAllocationStats, error) {
+	result := clusterAllocationStats{
+		StatsByProjectID: make(map[int64]projectAllocationStats),
+	}
 
-	//query DB for capacity
+	//get raw capacity
 	var rawCapacity uint64
-	queryArgs := []any{req.ServiceType, req.ResourceName, req.AvailabilityZone}
+	queryArgs := []any{serviceType, resourceName, az}
 	err := dbi.QueryRow(getRawCapacityQuery, queryArgs...).Scan(&rawCapacity)
 	if err != nil {
-		return false, fmt.Errorf("while getting raw capacity for %s/%s: %w", req.ServiceType, req.ResourceName, err)
-	}
-	capacity := rawCapacity
-	if clusterBehavior.OvercommitFactor != 0 {
-		capacity = clusterBehavior.OvercommitFactor.ApplyTo(rawCapacity)
+		return clusterAllocationStats{}, fmt.Errorf("while getting raw capacity for %s/%s in %s: %w", serviceType, resourceName, az, err)
 	}
 
-	//query DB for commitment-relevant utilization
-	queryArgs = []any{req.ServiceType, req.ResourceName, req.AvailabilityZone, now}
-	usedCapacity := uint64(0)
-	err = sqlext.ForeachRow(dbi, getCommitabilityStatsQuery, queryArgs, func(rows *sql.Rows) error {
+	//get nominal capacity
+	clusterBehavior := cluster.BehaviorForResource(serviceType, resourceName, "")
+	if clusterBehavior.OvercommitFactor == 0 {
+		result.Capacity = rawCapacity
+	} else {
+		result.Capacity = clusterBehavior.OvercommitFactor.ApplyTo(rawCapacity)
+	}
+
+	//collect project allocation stats
+	queryArgs = []any{serviceType, resourceName, az, now}
+	err = sqlext.ForeachRow(dbi, getAllocationStatsQuery, queryArgs, func(rows *sql.Rows) error {
 		var (
 			projectID int64
-			committed uint64
-			usage     uint64
+			stats     projectAllocationStats
 		)
-		err := rows.Scan(&projectID, &committed, &usage)
-		if err != nil {
-			return err
-		}
-
-		// calculate `sum_over_projects(max(committed, usage))` including the requested commitment
-		if projectID == project.ID {
-			usedCapacity += max(committed+req.Amount, usage)
-		} else {
-			usedCapacity += max(committed, usage)
-		}
-		return nil
+		err := rows.Scan(&projectID, &stats.Committed, &stats.Usage)
+		result.StatsByProjectID[projectID] = stats
+		return err
 	})
 	if err != nil {
-		return false, fmt.Errorf("while getting allocation stats for %s/%s: %w", req.ServiceType, req.ResourceName, err)
+		return clusterAllocationStats{}, fmt.Errorf("while getting allocation stats for %s/%s in %s: %w", serviceType, resourceName, az, err)
 	}
 
-	//commitment can be confirmed if it and all other commitments and usage fit in the total capacity
-	return usedCapacity <= capacity, nil
+	return result, nil
 }
