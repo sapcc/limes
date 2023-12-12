@@ -60,6 +60,7 @@ github.com/gophercloud/gophercloud/openstack/placement/v1/resourceproviders
 github.com/gophercloud/gophercloud/openstack/sharedfilesystems/apiversions
 github.com/gophercloud/gophercloud/openstack/sharedfilesystems/v2/schedulerstats
 github.com/gophercloud/gophercloud/openstack/sharedfilesystems/v2/services
+github.com/gophercloud/gophercloud/openstack/sharedfilesystems/v2/sharetypes
 github.com/gophercloud/gophercloud/openstack/utils
 github.com/gophercloud/gophercloud/pagination
 # github.com/gophercloud/utils v0.0.0-20231010081019-80377eca5d56

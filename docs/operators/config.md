@@ -457,23 +457,35 @@ services:
             - { name_pattern: "fooproject-.*", share_type: hypervisor_storage_foo }
             - { name_pattern: ".*@bardomain",  share_type: hypervisor_storage_bar }
             - { name_pattern: ".*",            share_type: '' }
+      prometheus_api_for_az_awareness:
+        url: https://prometheus.example.com
+        cert:    /path/to/client.pem
+        key:     /path/to/client-key.pem
+        ca_cert: /path/to/server-ca.pem
       prometheus_api_for_netapp_metrics:
-          url: https://prometheus.example.com
-          cert:    /path/to/client.pem
-          key:     /path/to/client-key.pem
-          ca_cert: /path/to/server-ca.pem
+        url: https://prometheus.example.com
+        cert:    /path/to/client.pem
+        key:     /path/to/client-key.pem
+        ca_cert: /path/to/server-ca.pem
 ```
 
 The area for this service is `storage`. The following resources are always exposed:
 
 | Resource | Unit | Comment |
 | --- | --- | --- |
-| `shares` | countable | |
-| `share_capacity` | GiB | |
-| `share_snapshots` | countable | |
-| `snapshot_capacity` | GiB | |
+| `shares` | countable, AZ-aware | |
+| `share_capacity` | GiB, AZ-aware | |
+| `share_snapshots` | countable, AZ-aware | |
+| `snapshot_capacity` | GiB, AZ-aware | |
 | `share_networks` | countable | |
 | `snapmirror_capacity` | GiB | Only if `prometheus_api_for_netapp_metrics` is given. A SAP-specific extension that reports disk space consumed by Snapmirror backups. |
+
+AZ awareness for share and snapshot data requires that `prometheus_api_for_az_awareness` contains the following metrics, each with label dimensions `project_id`, `vailability_zone_name` and `share_type_id`:
+
+- `openstack_manila_replicas_count_gauge` (number of shares incl. replicas)
+- `openstack_manila_replicas_size_gauge` (size in GiB of shares incl. replicas)
+- `openstack_manila_snapshot_count_gauge` (number of snapshots)
+- `openstack_manila_snapshot_size_gauge` (size in GiB of snapshots)
 
 #### Multiple share types
 
