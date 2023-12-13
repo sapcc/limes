@@ -43,7 +43,7 @@ var (
 		  FROM project_services ps
 		  JOIN project_commitments pc ON pc.service_id = ps.id
 		 WHERE ps.type = $1 AND pc.resource_name = $2 AND pc.availability_zone = $3
-		   AND pc.confirmed_at IS NULL AND pc.confirm_by >= $4 AND pc.superseded_at IS NOT NULL
+		   AND pc.confirmed_at IS NULL AND pc.confirm_by <= $4 AND pc.superseded_at IS NULL
 		 ORDER BY created_at ASC, confirm_by ASC, id ASC
 	`)
 )
@@ -67,42 +67,46 @@ func ConfirmPendingCommitments(serviceType, resourceName string, az limes.Availa
 		return err
 	}
 
-	//foreach confirmable commitment...
+	//load confirmable commitments (we need to load them into a buffer first, since
+	//lib/pq cannot do UPDATE while a SELECT targeting the same rows is still going)
+	type confirmableCommitment struct {
+		ProjectID    int64
+		CommitmentID int64
+		Amount       uint64
+	}
+	var confirmableCommitments []confirmableCommitment
 	queryArgs := []any{serviceType, resourceName, az, now}
 	err = sqlext.ForeachRow(dbi, getConfirmableCommitmentsQuery, queryArgs, func(rows *sql.Rows) error {
-		var (
-			projectID    int64
-			commitmentID int64
-			amount       uint64
-		)
-		err := rows.Scan(&projectID, &commitmentID, &amount)
-		if err != nil {
-			return err
-		}
+		var c confirmableCommitment
+		err := rows.Scan(&c.ProjectID, &c.CommitmentID, &c.Amount)
+		confirmableCommitments = append(confirmableCommitments, c)
+		return err
+	})
+	if err != nil {
+		return fmt.Errorf("while enumerating confirmable commitments for %s/%s in %s: %w", serviceType, resourceName, az, err)
+	}
 
+	//foreach confirmable commitment...
+	for _, c := range confirmableCommitments {
 		//ignore commitments that do not fit
-		if !stats.FitsAdditionalCommitment(projectID, amount) {
-			return nil
+		if !stats.FitsAdditionalCommitment(c.ProjectID, c.Amount) {
+			continue
 		}
 
 		//confirm the commitment
-		_, err = dbi.Exec(`UPDATE project_commitments SET confirmed_at = $1 WHERE id = $2`, now, commitmentID)
+		_, err = dbi.Exec(`UPDATE project_commitments SET confirmed_at = $1 WHERE id = $2`, now, c.CommitmentID)
 		if err != nil {
-			return fmt.Errorf("while confirming commitment %d: %w", commitmentID, err)
+			return fmt.Errorf("while confirming commitment ID=%d for %s/%s in %s: %w", c.CommitmentID, serviceType, resourceName, az, err)
 		}
 
 		//block its allocation from being committed again in this loop
-		oldStats := stats.StatsByProjectID[projectID]
-		stats.StatsByProjectID[projectID] = projectAllocationStats{
-			Committed: oldStats.Committed + amount,
+		oldStats := stats.StatsByProjectID[c.ProjectID]
+		stats.StatsByProjectID[c.ProjectID] = projectAllocationStats{
+			Committed: oldStats.Committed + c.Amount,
 			Usage:     oldStats.Usage,
 		}
-
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("while iterating through confirmable commitments for %s/%s in %s: %w", serviceType, resourceName, az, err)
 	}
+
 	return nil
 }
 

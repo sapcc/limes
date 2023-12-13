@@ -20,6 +20,8 @@
 package collector
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -85,6 +87,46 @@ const (
 			params:
 				capacity: 0
 				resources: []
+	`
+
+	testScanCapacityWithCommitmentsConfigYAML = `
+		availability_zones: [ az-one, az-two ]
+		discovery:
+			method: --test-static
+			params:
+				domains:
+					- { id: uuid-for-germany, name: germany }
+				projects:
+					germany:
+						- { id: uuid-for-berlin,  name: berlin }
+						- { id: uuid-for-dresden, name: dresden }
+		services:
+			- service_type: first
+				type: --test-generic
+			- service_type: second
+				type: --test-generic
+		capacitors:
+		- id: scans-first
+			type: --test-static
+			params:
+				capacity: 84
+				with_capacity_per_az: true
+				resources:
+					- first/capacity
+					- first/things
+		- id: scans-second
+			type: --test-static
+			params:
+				capacity: 46
+				with_capacity_per_az: true
+				resources:
+					- second/capacity
+					- second/things
+		resource_behavior:
+			# enable commitments for the */capacity resources
+			- { resource: '.*/capacity', commitment_durations: [ '1 hour', '10 days' ] }
+			# test that overcommit factor is considered when confirming commitments
+			- { resource: first/capacity, overcommit_factor: 10.0 }
 	`
 )
 
@@ -314,7 +356,6 @@ func Test_ScanCapacity(t *testing.T) {
 }
 
 func setClusterCapacitorsStale(t *testing.T, s test.Setup) {
-	//NOTE: This is built to not use `test.TimeNow()`, because using this function shifts the time around.
 	t.Helper()
 	_, err := s.DB.Exec(`UPDATE cluster_capacitors SET next_scrape_at = $1`, s.Clock.Now())
 	mustT(t, err)
@@ -361,4 +402,107 @@ func Test_ScanCapacityButNoResources(t *testing.T) {
 	`,
 		s.Clock.Now().Unix(), s.Clock.Now().Add(15*time.Minute).Unix(),
 	)
+}
+
+func Test_ScanCapacityWithCommitments(t *testing.T) {
+	s := test.NewSetup(t,
+		test.WithConfig(testScanCapacityWithCommitmentsConfigYAML),
+		test.WithDBFixtureFile("fixtures/capacity_scrape_with_commitments.sql"),
+	)
+	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
+	tr0.Ignore()
+
+	c := getCollector(t, s)
+	job := c.CapacityScrapeJob(s.Registry)
+
+	//in each of the test steps below, the timestamp updates on cluster_capacitors will always be the same
+	timestampUpdates := func() string {
+		scrapedAt1 := s.Clock.Now().Add(-5 * time.Second)
+		scrapedAt2 := s.Clock.Now()
+		return strings.TrimSpace(fmt.Sprintf(`
+				UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'scans-first';
+				UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'scans-second';
+			`,
+			scrapedAt1.Unix(), scrapedAt1.Add(15*time.Minute).Unix(),
+			scrapedAt2.Unix(), scrapedAt2.Add(15*time.Minute).Unix(),
+		))
+	}
+
+	//first run should create the cluster_resources and cluster_az_resources, but
+	//not confirm any commitments because they all start with `confirm_by > now`
+	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
+
+	tr.DBChanges().AssertEqualf(timestampUpdates())
+
+	//day 1: test that confirmation works at all
+	//
+	//The confirmed commitment is for first/capacity in berlin az-one (amount = 10).
+	s.Clock.StepBy(24 * time.Hour)
+	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
+
+	scrapedAt1 := s.Clock.Now().Add(-5 * time.Second)
+	tr.DBChanges().AssertEqualf(`%s
+		UPDATE project_commitments SET confirmed_at = %d WHERE id = 1;
+	`, timestampUpdates(), scrapedAt1.Unix())
+
+	//day 2: test that confirmation considers the resource's capacity overcommit factor
+	//
+	//The confirmed commitment (ID=2) is for first/capacity in berlin az-one (amount = 100).
+	//A similar commitment (ID=3) for second/capacity is not confirmed because of missing capacity.
+	s.Clock.StepBy(24 * time.Hour)
+	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
+
+	scrapedAt1 = s.Clock.Now().Add(-5 * time.Second)
+	tr.DBChanges().AssertEqualf(`%s
+		UPDATE project_commitments SET confirmed_at = %d WHERE id = 2;
+	`, timestampUpdates(), scrapedAt1.Unix())
+
+	//day 3: test confirmation order with several commitments, on second/capacity in az-one
+	//
+	//The previously not confirmed commitment (ID=3) does not block confirmation of smaller confirmable commitments.
+	//Only two of three commitments are confirmed. The third commitment exhausts the available capacity.
+	//The two commitments that are confirmed (ID=4 and ID=5) have a lower created_at than the unconfirmed one (ID=6).
+	//This is because we want to ensure the "first come, first serve" rule.
+	s.Clock.StepBy(24 * time.Hour)
+	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
+
+	scrapedAt2 := s.Clock.Now()
+	tr.DBChanges().AssertEqualf(`%s
+		UPDATE project_commitments SET confirmed_at = %d WHERE id = 4;
+		UPDATE project_commitments SET confirmed_at = %d WHERE id = 5;
+	`, timestampUpdates(), scrapedAt2.Unix(), scrapedAt2.Unix())
+
+	//day 4: test how confirmation interacts with existing usage, on first/capacity in az-two
+	//
+	//Both dresden (ID=7) and berlin (ID=8) are asking for an amount of 300 to be committed, on a total capacity of 420.
+	//But because berlin has an existing usage of 250, dresden is denied (even though it asked first) and berlin is confirmed.
+	s.Clock.StepBy(24 * time.Hour)
+	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
+
+	scrapedAt1 = s.Clock.Now().Add(-5 * time.Second)
+	tr.DBChanges().AssertEqualf(`%s
+		UPDATE project_commitments SET confirmed_at = %d WHERE id = 8;
+	`, timestampUpdates(), scrapedAt1.Unix())
+
+	//day 5: test commitments that cannot be confirmed until the previous commitment expires, on second/capacity in az-one
+	//
+	//The first commitment (ID=9 in berlin) is confirmed because no other commitments are confirmed yet.
+	//The second commitment (ID=10 in dresden) is much smaller (only 1 larger than project usage),
+	//but cannot be confirmed because ID=9 grabbed any and all unused capacity.
+	s.Clock.StepBy(24 * time.Hour)
+	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
+
+	scrapedAt2 = s.Clock.Now()
+	tr.DBChanges().AssertEqualf(`%s
+		UPDATE project_commitments SET confirmed_at = %d WHERE id = 9;
+	`, timestampUpdates(), scrapedAt2.Unix())
+
+	//...Once ID=9 expires an hour later, ID=10 can be confirmed.
+	s.Clock.StepBy(1 * time.Hour)
+	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
+
+	scrapedAt2 = s.Clock.Now()
+	tr.DBChanges().AssertEqualf(`%s
+		UPDATE project_commitments SET confirmed_at = %d WHERE id = 10;
+	`, timestampUpdates(), scrapedAt2.Unix())
 }
