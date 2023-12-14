@@ -138,13 +138,13 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, doma
 
 		//update in place while enforcing validation rules and constraints
 		qdConfig := cluster.QuotaDistributionConfigForResource(srv.Type, res.Name)
-		validateResourceConstraints(domain, project, srv, &res, resInfo, constraints[res.Name], qdConfig)
+		validateResourceConstraints(domain, project, srv, &res, resInfo, constraints[res.Name])
 		if u.UpdateResource != nil {
 			err := u.UpdateResource(&res)
 			if err != nil {
 				return nil, err
 			}
-			validateResourceConstraints(domain, project, srv, &res, resInfo, constraints[res.Name], qdConfig)
+			validateResourceConstraints(domain, project, srv, &res, resInfo, constraints[res.Name])
 		}
 
 		//(re-)compute derived values
@@ -202,7 +202,7 @@ func unwrapOrDefault[T any](value *T, defaultValue T) T {
 }
 
 // Ensures that `res` conforms to various constraints and validation rules.
-func validateResourceConstraints(domain db.Domain, project db.Project, srv db.ProjectServiceRef, res *db.ProjectResource, resInfo limesresources.ResourceInfo, constraint core.QuotaConstraint, qdConfig core.QuotaDistributionConfiguration) {
+func validateResourceConstraints(domain db.Domain, project db.Project, srv db.ProjectServiceRef, res *db.ProjectResource, resInfo limesresources.ResourceInfo, constraint core.QuotaConstraint) {
 	if resInfo.NoQuota {
 		//ensure that NoQuota resources do not contain any quota values
 		res.Quota = nil
