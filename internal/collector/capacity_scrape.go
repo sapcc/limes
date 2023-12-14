@@ -33,6 +33,7 @@ import (
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
 
+	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/util"
 )
@@ -299,6 +300,45 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 	_, err = tx.Update(&capacitor)
 	if err != nil {
 		return err
+	}
+	err = tx.Commit()
+	if err != nil {
+		return err
+	}
+
+	//for all cluster resources thus updated, try to confirm pending commitments
+	for _, res := range dbOwnedResources {
+		err := c.confirmPendingCommitmentsIfNecessary(serviceTypeForID[res.ServiceID], res.Name)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *Collector) confirmPendingCommitmentsIfNecessary(serviceType, resourceName string) error {
+	behavior := c.Cluster.BehaviorForResource(serviceType, resourceName, "")
+	now := c.MeasureTime()
+
+	//do not run ConfirmPendingCommitments if commitments are not enabled (or not live yet) for this resource
+	if len(behavior.CommitmentDurations) == 0 {
+		return nil
+	}
+	if minConfirmBy := behavior.CommitmentMinConfirmDate; minConfirmBy != nil && minConfirmBy.After(now) {
+		return nil
+	}
+
+	tx, err := c.DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer sqlext.RollbackUnlessCommitted(tx)
+
+	for _, az := range c.Cluster.Config.AvailabilityZones {
+		err = datamodel.ConfirmPendingCommitments(serviceType, resourceName, az, c.Cluster, tx, now)
+		if err != nil {
+			return err
+		}
 	}
 	return tx.Commit()
 }

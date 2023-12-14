@@ -71,6 +71,8 @@ func (b *ResourceBehavior) Validate(path string) (errs errext.ErrorSet) {
 // - `"$DOMAIN/$PROJECT"` for project level
 // - `"$DOMAIN"` for domain level
 // - `""` (empty string) for cluster level
+//
+// TODO: This stringly-typed interface is not nice. We should have a structured Scope type similar to the one in the React UI.
 func (b ResourceBehavior) Matches(fullResourceName, scopeName string) bool {
 	if !b.FullResourceNameRx.MatchString(fullResourceName) {
 		return false
