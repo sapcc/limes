@@ -58,7 +58,6 @@ type ProjectResourceReport struct {
 	//PerAZ is only rendered by Limes when the v2 API feature preview is enabled.
 	PerAZ         ProjectAZResourceReports `json:"per_az,omitempty"`
 	Quota         *uint64                  `json:"quota,omitempty"`
-	DefaultQuota  *uint64                  `json:"default_quota,omitempty"`
 	UsableQuota   *uint64                  `json:"usable_quota,omitempty"`
 	Usage         uint64                   `json:"usage"`
 	BurstUsage    uint64                   `json:"burst_usage,omitempty"`

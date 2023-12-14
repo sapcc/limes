@@ -55,7 +55,7 @@ type BurstingMultiplier float64
 // ApplyTo returns the bursted backend quota for the given approved quota.
 func (m BurstingMultiplier) ApplyTo(quota uint64, qdModel QuotaDistributionModel) uint64 {
 	switch qdModel {
-	case CentralizedQuotaDistribution:
+	case AutogrowQuotaDistribution:
 		return quota
 	case HierarchicalQuotaDistribution:
 		return uint64(math.Floor((1 + float64(m)) * float64(quota)))
@@ -82,13 +82,14 @@ const (
 	// projects by the domain admins. Domains and projects start out at zero
 	// quota.
 	HierarchicalQuotaDistribution QuotaDistributionModel = "hierarchical"
-	// CentralizedQuotaDistribution is an alternative QuotaDistributionModel,
-	// wherein quota is directly given to projects by the cloud admins. Projects
-	// start out at a generous default quota as configured by the Limes operator.
-	// The domain quota cannot be edited and is always reported equal to the
-	// projects quota.
-	CentralizedQuotaDistribution QuotaDistributionModel = "centralized"
-	// ^ NOTE: When removing this, also consider removing DefaultQuota from ProjectResourceReport.
+	// AutogrowQuotaDistribution is an alternative QuotaDistributionModel,
+	// wherein project quota is automatically distributed ("auto") such that:
+	// 1. all active commitments and usage are represented in their respective project quota,
+	// 2. there is some space beyond the current commitment/usage ("grow").
+	//
+	// Domain quota is irrelevant under this model. Project quota never sinks
+	// below a certain value (the "base quota") unless capacity is exhausted.
+	AutogrowQuotaDistribution QuotaDistributionModel = "autogrow"
 )
 
 // CommitmentConfiguration describes how commitments are configured for a given resource.
