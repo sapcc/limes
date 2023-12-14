@@ -142,17 +142,6 @@ type QuotaDistributionConfiguration struct {
 	StrictDomainQuotaLimit bool                                  `yaml:"strict_domain_quota_limit"`
 }
 
-// InitialProjectQuota returns the quota value that will be assigned to new
-// project resources governed by this QuotaDistributionConfiguration.
-func (c QuotaDistributionConfiguration) InitialProjectQuota() uint64 {
-	switch c.Model {
-	case limesresources.HierarchicalQuotaDistribution:
-		return 0
-	default:
-		panic(fmt.Sprintf("invalid quota distribution model: %q", c.Model))
-	}
-}
-
 // NewClusterFromYAML reads and validates the configuration in the given YAML document.
 // Errors are logged and will result in program termination, causing the function to not return.
 func NewClusterFromYAML(configBytes []byte) (cluster *Cluster, errs errext.ErrorSet) {

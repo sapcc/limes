@@ -211,7 +211,7 @@ func validateResourceConstraints(domain db.Domain, project db.Project, srv db.Pr
 	} else {
 		//check if we need to apply a missing default quota
 		if res.Quota == nil || *res.Quota == 0 {
-			initialQuota := qdConfig.InitialProjectQuota()
+			initialQuota := uint64(0)
 			res.Quota = &initialQuota
 		}
 
