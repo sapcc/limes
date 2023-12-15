@@ -165,12 +165,13 @@ func (r ProjectResource) Ref() ResourceRef {
 
 // ProjectAZResource contains a record from the `project_az_resources` table.
 type ProjectAZResource struct {
-	ResourceID       int64                  `db:"resource_id"`
-	AvailabilityZone limes.AvailabilityZone `db:"az"`
-	Quota            *uint64                `db:"quota"`
-	Usage            uint64                 `db:"usage"`
-	PhysicalUsage    *uint64                `db:"physical_usage"`
-	SubresourcesJSON string                 `db:"subresources"`
+	ResourceID          int64                  `db:"resource_id"`
+	AvailabilityZone    limes.AvailabilityZone `db:"az"`
+	Quota               *uint64                `db:"quota"`
+	Usage               uint64                 `db:"usage"`
+	PhysicalUsage       *uint64                `db:"physical_usage"`
+	SubresourcesJSON    string                 `db:"subresources"`
+	HistoricalUsageJSON string                 `db:"historical_usage"`
 }
 
 // ProjectRate contains a record from the `project_rates` table.

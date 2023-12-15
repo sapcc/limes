@@ -423,4 +423,12 @@ var sqlMigrations = map[string]string{
 			DROP COLUMN creator_uuid,
 			DROP COLUMN creator_name;
 	`,
+	"033_historical_usage.up.sql": `
+		ALTER TABLE project_az_resources
+			ADD COLUMN historical_usage TEXT NOT NULL DEFAULT '';
+	`,
+	"033_historical_usage.down.sql": `
+		ALTER TABLE project_az_resources
+			DROP COLUMN historical_usage;
+	`,
 }
