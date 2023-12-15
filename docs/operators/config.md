@@ -158,11 +158,7 @@ resource_behavior:
 
 ### Quota distribution models
 
-Each resource uses one of the following quota distribution models:
-
-* `hierarchical`: This is the default distribution model, wherein quota is distributed to domains by the cloud admins
-  (according to the `domain:{raise,raise_lowpriv,lower}` policies), and then the projects by the domain admins
-  (according to the `project:{raise,raise_lowpriv,lower}` policies). Domains and projects start out at zero quota.
+Each resource uses one of several quota distribution models, with `hierarchical` being the default.
 
 Resource-specific distribution models can be configured per resource in the `quota_distribution_configs[]` section. Each
 entry in this section can match multiple resources. Because the semantics of distribution models cross the boundaries of
@@ -173,7 +169,56 @@ always applies to the entire resource across all scopes.
 | --- | --- | --- |
 | `quota_distribution_configs[].resource` | yes | Must contain a regex. The config entry applies to all resources where this regex matches against a slash-concatenated pair of service type and resource name. The anchors `^` and `$` are implied at both ends, so the regex must match the entire phrase. |
 | `quota_distribution_configs[].model` | yes | The string "hierarchical". |
-| `quota_distribution_configs[].strict_domain_quota_limit` | no | Reject attempts to increase domain quotas when the sum of all domain quotas would exceed the cluster capacity. Only applicable for hierarchical quota distribution. |
+
+A distribution model config can contain additional options based on which model is chosen (see below).
+
+#### Model: `hierarchical` (default)
+
+In this model, quota is distributed to domains by the cloud admins
+(according to the `domain:{raise,raise_lowpriv,lower}` policies), and then the projects by the domain admins
+(according to the `project:{raise,raise_lowpriv,lower}` policies). Domains and projects start out at zero quota.
+This model does not allow AZ-aware quotas.
+
+| Field | Required | Description |
+| --- | --- | --- |
+| `quota_distribution_configs[].strict_domain_quota_limit` | no | Reject attempts to increase domain quotas when the sum of all domain quotas would exceed the cluster capacity. |
+
+#### Model: `autogrow`
+
+In this model, quota is automatically distributed ("auto") such that:
+
+1. all active commitments and usage are represented in their respective project quota, and
+2. there is some space beyond the current commitment/usage ("grow"), defined through a growth multiplier.
+   For example, a growth multiplier of 1.2 represents 20% quota on top of the current commitment and/or usage.
+
+Domain quota is irrelevant under this model. Project quota is calculated for each AZ resource along the following guidelines:
+
+```
+hard_minimum_quota = max(confirmed_commitments.sum(), current_usage)
+soft_minimum_quota = max(hard_minimum_quota, historical_usage.max())
+desired_quota      = max(confirmed_commitments.sum(), historical_usage.min()) * growth_multiplier
+```
+
+All projects first get their hard minimum. Then, remaining capacity is distributed as quota, initially to satisfy the
+soft minimums, and then to try and reach the desired quota.
+
+As an additional constraint, if the resource defines a **base quota**, additional quota will be granted in the pseudo-AZ
+`any` to ensure that the total quota over all AZs is equal to the base quota. A nonzero base quota must be defined for
+all resources that new projects shall be able to use without having to create commitments.
+
+**Historical usage** refers to the project's usage over time, within the constraint of the configured retention period
+(see below). This is used to limit the speed of growth: If only current usage were considered, the assigned quota would
+rise pretty much instantly after usage increases. But then quota would not really pose any boundary at all. (If this is
+desired, a very short retention period like `1m` can be configured.) By considering historical usage over e.g. the last
+two days (retention period `48h`), quota will never grow by more than one growth multiplier per two days from usage
+alone. (Larger quota jumps are still possible if additional commitments are confirmed.)
+
+| Field | Default | Description |
+| --- | --- | --- |
+| `quota_distribution_configs[].autogrow.allow_quota_overcommit` | `false` | Always give out the desired quota and base quota to all projects, even if the sum of all project quotas ends up being greated than the resource's capacity. |
+| `quota_distribution_configs[].autogrow.project_base_quota` | `0` | The minimum amount of quota that will always be given to a project even if it does not have that much commitments or usage to warrant it under the regular formula. Can be set to zero to force projects to bootstrap their quota via commitments. |
+| `quota_distribution_configs[].autogrow.growth_multiplier` | *(required)* | As explained above. Cannot be set to less than 1 (100%). Can be set to exactly 1 to ensure that no additional quota will be granted above existing usage and/or confirmed commitments. |
+| `quota_distribution_configs[].usage_data_retention_period` | *(required)* | As explained above. Must be formatted as a string that [`time.ParseDuration`](https://pkg.go.dev/time#ParseDuration) understands. Cannot be set to zero. To only use current usage when calculating quota, set this to a very short interval like `1m`. |
 
 ## Supported discovery methods
 
