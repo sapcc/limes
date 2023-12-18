@@ -299,7 +299,8 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 				}, nil
 			},
 			Update: func(azRes *db.ProjectAZResource) (err error) {
-				data := usageData[azRes.AvailabilityZone]
+				az := azRes.AvailabilityZone
+				data := usageData[az]
 				azRes.Quota = nil // TODO: add the new quota distribution model that assigns quota per AZ
 				azRes.Usage = data.Usage
 				azRes.PhysicalUsage = data.PhysicalUsage
@@ -307,7 +308,7 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 				//warn when the backend is inconsistent with itself
 				if data.Subresources != nil && uint64(len(data.Subresources)) != data.Usage {
 					logg.Info("resource quantity mismatch in project %s, resource %s/%s, AZ %s: usage = %d, but found %d subresources",
-						dbProject.UUID, srv.Type, res.Name, azRes.AvailabilityZone,
+						dbProject.UUID, srv.Type, res.Name, az,
 						data.Usage, len(data.Subresources),
 					)
 				}
@@ -328,17 +329,17 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 					} else {
 						err := json.Unmarshal([]byte(azRes.HistoricalUsageJSON), &ts)
 						if err != nil {
-							return fmt.Errorf("while parsing historical_usage for AZ %s: %w", azRes.AvailabilityZone, err)
+							return fmt.Errorf("while parsing historical_usage for AZ %s: %w", az, err)
 						}
 					}
 					err := ts.AddMeasurement(task.Timing.FinishedAt, data.Usage)
 					if err != nil {
-						return fmt.Errorf("while tracking historical_usage for AZ %s: %w", azRes.AvailabilityZone, err)
+						return fmt.Errorf("while tracking historical_usage for AZ %s: %w", az, err)
 					}
 					ts.PruneOldValues(task.Timing.FinishedAt, qdCfg.Autogrow.UsageDataRetentionPeriod.Into())
 					buf, err := json.Marshal(ts)
 					if err != nil {
-						return fmt.Errorf("while serializing historical_usage for AZ %s: %w", azRes.AvailabilityZone, err)
+						return fmt.Errorf("while serializing historical_usage for AZ %s: %w", az, err)
 					}
 					azRes.HistoricalUsageJSON = string(buf)
 				}
