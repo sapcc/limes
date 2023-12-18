@@ -37,14 +37,14 @@ var (
 	//at a later date cannot skip the queue when existing customers are already
 	//waiting for commitments.
 	//
-	//The final `BY id` ordering ensures deterministic behavior in tests.
+	//The final `BY pc.id` ordering ensures deterministic behavior in tests.
 	getConfirmableCommitmentsQuery = sqlext.SimplifyWhitespace(`
-		SELECT ps.project_id, pc.id, pc.amount
+		SELECT ps.id, pc.id, pc.amount
 		  FROM project_services ps
 		  JOIN project_commitments pc ON pc.service_id = ps.id
 		 WHERE ps.type = $1 AND pc.resource_name = $2 AND pc.availability_zone = $3
 		   AND pc.confirmed_at IS NULL AND pc.confirm_by <= $4 AND pc.superseded_at IS NULL
-		 ORDER BY created_at ASC, confirm_by ASC, id ASC
+		 ORDER BY pc.created_at ASC, pc.confirm_by ASC, pc.id ASC
 	`)
 )
 
@@ -55,7 +55,12 @@ func CanConfirmNewCommitment(req limesresources.CommitmentRequest, project db.Pr
 	if err != nil {
 		return false, err
 	}
-	return stats.FitsAdditionalCommitment(project.ID, req.Amount), nil
+	var serviceID int64
+	err = dbi.QueryRow(`SELECT id FROM project_services WHERE project_id = $1 AND type = $2`, project.ID, req.ServiceType).Scan(&serviceID)
+	if err != nil {
+		return false, err
+	}
+	return stats.FitsAdditionalCommitment(serviceID, req.Amount), nil
 }
 
 // ConfirmPendingCommitments goes through all unconfirmed commitments that
@@ -70,15 +75,15 @@ func ConfirmPendingCommitments(serviceType, resourceName string, az limes.Availa
 	//load confirmable commitments (we need to load them into a buffer first, since
 	//lib/pq cannot do UPDATE while a SELECT targeting the same rows is still going)
 	type confirmableCommitment struct {
-		ProjectID    int64
-		CommitmentID int64
-		Amount       uint64
+		ProjectServiceID int64
+		CommitmentID     int64
+		Amount           uint64
 	}
 	var confirmableCommitments []confirmableCommitment
 	queryArgs := []any{serviceType, resourceName, az, now}
 	err = sqlext.ForeachRow(dbi, getConfirmableCommitmentsQuery, queryArgs, func(rows *sql.Rows) error {
 		var c confirmableCommitment
-		err := rows.Scan(&c.ProjectID, &c.CommitmentID, &c.Amount)
+		err := rows.Scan(&c.ProjectServiceID, &c.CommitmentID, &c.Amount)
 		confirmableCommitments = append(confirmableCommitments, c)
 		return err
 	})
@@ -89,7 +94,7 @@ func ConfirmPendingCommitments(serviceType, resourceName string, az limes.Availa
 	//foreach confirmable commitment...
 	for _, c := range confirmableCommitments {
 		//ignore commitments that do not fit
-		if !stats.FitsAdditionalCommitment(c.ProjectID, c.Amount) {
+		if !stats.FitsAdditionalCommitment(c.ProjectServiceID, c.Amount) {
 			continue
 		}
 
@@ -100,112 +105,12 @@ func ConfirmPendingCommitments(serviceType, resourceName string, az limes.Availa
 		}
 
 		//block its allocation from being committed again in this loop
-		oldStats := stats.StatsByProjectID[c.ProjectID]
-		stats.StatsByProjectID[c.ProjectID] = projectAZAllocationStats{
+		oldStats := stats.StatsByProjectServiceID[c.ProjectServiceID]
+		stats.StatsByProjectServiceID[c.ProjectServiceID] = projectAZAllocationStats{
 			Committed: oldStats.Committed + c.Amount,
 			Usage:     oldStats.Usage,
 		}
 	}
 
 	return nil
-}
-
-// Describes how much committable capacity for a certain AZ resource is
-// available, and how much is already allocated by projects.
-type clusterAZAllocationStats struct {
-	Capacity         uint64
-	StatsByProjectID map[int64]projectAZAllocationStats
-}
-
-// Describes how much committable capacity for a certain AZ resource is already
-// allocated by a single project.
-type projectAZAllocationStats struct {
-	Committed uint64
-	Usage     uint64
-}
-
-func (c clusterAZAllocationStats) FitsAdditionalCommitment(targetProjectID int64, amount uint64) bool {
-	// calculate `sum_over_projects(max(committed, usage))` including the requested commitment
-	usedCapacity := uint64(0)
-	for projectID, stats := range c.StatsByProjectID {
-		if projectID == targetProjectID {
-			usedCapacity += max(stats.Committed+amount, stats.Usage)
-		} else {
-			usedCapacity += max(stats.Committed, stats.Usage)
-		}
-	}
-
-	//commitment can be confirmed if it and all other commitments and usage fit in the total capacity
-	return usedCapacity <= c.Capacity
-}
-
-var (
-	// We need to ensure that `sum_over_projects(max(committed, usage)) <= capacity`.
-	// For the target project, `committed` includes both existing confirmed commitments
-	// as well as the given commitment.
-	getRawCapacityInAZResourceQuery = sqlext.SimplifyWhitespace(`
-		SELECT car.raw_capacity
-			FROM cluster_services cs
-			JOIN cluster_resources cr ON cr.service_id = cs.id
-			JOIN cluster_az_resources car ON car.resource_id = cr.id
-		 WHERE cs.type = $1 AND cr.name = $2 AND car.az = $3
-	`)
-	getAZAllocationStatsInAZResourceQuery = sqlext.SimplifyWhitespace(`
-		WITH committed AS (
-			SELECT ps.project_id AS project_id, SUM(pc.amount) AS amount
-			  FROM project_services ps
-			  JOIN project_commitments pc ON pc.service_id = ps.id
-			 WHERE ps.type = $1 AND pc.resource_name = $2 AND pc.availability_zone = $3
-			   AND pc.confirmed_at IS NOT NULL AND pc.superseded_at IS NULL AND pc.expires_at > $4
-			 GROUP BY ps.project_id
-		), used AS (
-			SELECT ps.project_id AS project_id, par.usage AS amount
-			  FROM project_services ps
-			  JOIN project_resources pr ON pr.service_id = ps.id
-			  JOIN project_az_resources par ON par.resource_id = pr.id
-			 WHERE ps.type = $1 AND pr.name = $2 AND par.az = $3
-		)
-		SELECT COALESCE(c.project_id, u.project_id), COALESCE(c.amount, 0), COALESCE(u.amount, 0)
-		  FROM committed c FULL OUTER JOIN used u ON u.project_id = c.project_id
-	`)
-)
-
-// Shared data collection phase for CanConfirmNewCommitment and ConfirmPendingCommitments.
-func collectAZAllocationStats(serviceType, resourceName string, az limes.AvailabilityZone, cluster *core.Cluster, dbi db.Interface, now time.Time) (clusterAZAllocationStats, error) {
-	result := clusterAZAllocationStats{
-		StatsByProjectID: make(map[int64]projectAZAllocationStats),
-	}
-
-	//get raw capacity
-	var rawCapacity uint64
-	queryArgs := []any{serviceType, resourceName, az}
-	err := dbi.QueryRow(getRawCapacityInAZResourceQuery, queryArgs...).Scan(&rawCapacity)
-	if err != nil {
-		return clusterAZAllocationStats{}, fmt.Errorf("while getting raw capacity for %s/%s in %s: %w", serviceType, resourceName, az, err)
-	}
-
-	//get nominal capacity
-	clusterBehavior := cluster.BehaviorForResource(serviceType, resourceName, "")
-	if clusterBehavior.OvercommitFactor == 0 {
-		result.Capacity = rawCapacity
-	} else {
-		result.Capacity = clusterBehavior.OvercommitFactor.ApplyTo(rawCapacity)
-	}
-
-	//collect project allocation stats
-	queryArgs = []any{serviceType, resourceName, az, now}
-	err = sqlext.ForeachRow(dbi, getAZAllocationStatsInAZResourceQuery, queryArgs, func(rows *sql.Rows) error {
-		var (
-			projectID int64
-			stats     projectAZAllocationStats
-		)
-		err := rows.Scan(&projectID, &stats.Committed, &stats.Usage)
-		result.StatsByProjectID[projectID] = stats
-		return err
-	})
-	if err != nil {
-		return clusterAZAllocationStats{}, fmt.Errorf("while getting allocation stats for %s/%s in %s: %w", serviceType, resourceName, az, err)
-	}
-
-	return result, nil
 }
