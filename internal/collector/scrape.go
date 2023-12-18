@@ -21,6 +21,7 @@ package collector
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"time"
@@ -312,7 +313,37 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 				}
 
 				azRes.SubresourcesJSON, err = renderListToJSON("subresources", data.Subresources)
-				return err
+				if err != nil {
+					return err
+				}
+
+				//track historical usage if required (only required for AutogrowQuotaDistribution)
+				qdCfg := c.Cluster.QuotaDistributionConfigForResource(srv.Type, res.Name)
+				if qdCfg.Autogrow == nil {
+					azRes.HistoricalUsageJSON = ""
+				} else {
+					var ts util.TimeSeries[uint64]
+					if azRes.HistoricalUsageJSON == "" {
+						ts = util.EmptyTimeSeries[uint64]()
+					} else {
+						err := json.Unmarshal([]byte(azRes.HistoricalUsageJSON), &ts)
+						if err != nil {
+							return fmt.Errorf("while parsing historical_usage for AZ %s: %w", azRes.AvailabilityZone, err)
+						}
+					}
+					err := ts.AddMeasurement(task.Timing.FinishedAt, data.Usage)
+					if err != nil {
+						return fmt.Errorf("while tracking historical_usage for AZ %s: %w", azRes.AvailabilityZone, err)
+					}
+					ts.PruneOldValues(task.Timing.FinishedAt, qdCfg.Autogrow.UsageDataRetentionPeriod.Into())
+					buf, err := json.Marshal(ts)
+					if err != nil {
+						return fmt.Errorf("while serializing historical_usage for AZ %s: %w", azRes.AvailabilityZone, err)
+					}
+					azRes.HistoricalUsageJSON = string(buf)
+				}
+
+				return nil
 			},
 		}
 		_, err := setUpdate.Execute(tx)

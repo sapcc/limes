@@ -137,9 +137,20 @@ type BurstingConfiguration struct {
 // QuotaDistributionConfiguration contains configuration options for specifying
 // the QuotaDistributionModel of specific resources.
 type QuotaDistributionConfiguration struct {
-	FullResourceNameRx     regexpext.BoundedRegexp               `yaml:"resource"`
-	Model                  limesresources.QuotaDistributionModel `yaml:"model"`
-	StrictDomainQuotaLimit bool                                  `yaml:"strict_domain_quota_limit"`
+	FullResourceNameRx regexpext.BoundedRegexp               `yaml:"resource"`
+	Model              limesresources.QuotaDistributionModel `yaml:"model"`
+	// options for HierarchicalQuotaDistribution
+	StrictDomainQuotaLimit bool `yaml:"strict_domain_quota_limit"`
+	// options for AutogrowQuotaDistribution
+	Autogrow *AutogrowQuotaDistributionConfiguration `yaml:"autogrow"`
+}
+
+// AutogrowQuotaDistributionConfiguration appears in type QuotaDistributionConfiguration.
+type AutogrowQuotaDistributionConfiguration struct {
+	AllowQuotaOvercommit     bool                         `yaml:"allow_quota_overcommit"`
+	ProjectBaseQuota         uint64                       `yaml:"project_base_quota"`
+	GrowthMultiplier         float64                      `yaml:"growth_multiplier"`
+	UsageDataRetentionPeriod util.MarshalableTimeDuration `yaml:"usage_data_retention_period"`
 }
 
 // NewClusterFromYAML reads and validates the configuration in the given YAML document.
@@ -210,8 +221,25 @@ func (cluster ClusterConfiguration) validateConfig() (errs errext.ErrorSet) {
 		switch qdCfg.Model {
 		case limesresources.HierarchicalQuotaDistribution:
 			// ok
+		case limesresources.AutogrowQuotaDistribution:
+			if qdCfg.Autogrow == nil {
+				missing(fmt.Sprintf(`distribution_model_configs[%d].autogrow`, idx))
+			}
+			if qdCfg.Autogrow.GrowthMultiplier < 0 {
+				errs.Addf("invalid value for distribution_model_configs[%d].growth_multiplier: %g (must be >= 0)", idx, qdCfg.Autogrow.GrowthMultiplier)
+			}
+			if qdCfg.Autogrow.UsageDataRetentionPeriod.Into() == 0 {
+				errs.Addf("invalid value for distribution_model_configs[%d].usage_data_retention_period: must not be 0", idx)
+			}
 		default:
 			errs.Addf("invalid value for distribution_model_configs[%d].model: %q", idx, qdCfg.Model)
+		}
+
+		if qdCfg.Model != limesresources.HierarchicalQuotaDistribution && qdCfg.StrictDomainQuotaLimit {
+			errs.Addf("invalid value for distribution_model_configs[%d].strict_domain_quota_limit: cannot be set for model %q", idx, qdCfg.Model)
+		}
+		if qdCfg.Model != limesresources.AutogrowQuotaDistribution && qdCfg.Autogrow != nil {
+			errs.Addf("invalid value for distribution_model_configs[%d].autogrow: cannot be set for model %q", idx, qdCfg.Model)
 		}
 	}
 

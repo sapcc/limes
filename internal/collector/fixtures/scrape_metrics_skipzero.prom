@@ -7,7 +7,7 @@ limes_cluster_capacity{resource="things",service="unittest"} 0
 # TYPE limes_domain_quota gauge
 limes_domain_quota{domain="germany",domain_id="uuid-for-germany",resource="capacity",service="unittest"} 0
 limes_domain_quota{domain="germany",domain_id="uuid-for-germany",resource="capacity_portion",service="unittest"} 0
-limes_domain_quota{domain="germany",domain_id="uuid-for-germany",resource="things",service="unittest"} 0
+limes_domain_quota{domain="germany",domain_id="uuid-for-germany",resource="things",service="unittest"} 26
 # HELP limes_newest_scraped_at Newest (i.e. largest) scraped_at timestamp for any project given a certain service in a certain OpenStack cluster.
 # TYPE limes_newest_scraped_at gauge
 limes_newest_scraped_at{service="unittest",service_name=""} 10860
@@ -23,7 +23,7 @@ limes_plugin_metrics_ok{domain="germany",domain_id="uuid-for-germany",project="d
 limes_project_backendquota{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="unittest"} 40
 limes_project_backendquota{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="things",service="unittest"} 13
 limes_project_backendquota{domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="unittest"} 48
-limes_project_backendquota{domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="things",service="unittest"} 15
+limes_project_backendquota{domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="things",service="unittest"} 13
 # HELP limes_project_physical_usage Actual (physical) usage of a Limes resource for an OpenStack project.
 # TYPE limes_project_physical_usage gauge
 limes_project_physical_usage{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="unittest"} 10

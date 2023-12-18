@@ -1,0 +1,170 @@
+/******************************************************************************
+*
+*  Copyright 2023 SAP SE
+*
+*  Licensed under the Apache License, Version 2.0 (the "License");
+*  you may not use this file except in compliance with the License.
+*  You may obtain a copy of the License at
+*
+*      http://www.apache.org/licenses/LICENSE-2.0
+*
+*  Unless required by applicable law or agreed to in writing, software
+*  distributed under the License is distributed on an "AS IS" BASIS,
+*  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+*  See the License for the specific language governing permissions and
+*  limitations under the License.
+*
+******************************************************************************/
+
+package util
+
+import (
+	"cmp"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"slices"
+	"time"
+)
+
+// TimeSeries is a minimalistic implementation of a time series
+// (a representation of a metric that assumes different values over time),
+// tailored towards the exact needs of the project_az_resources.historical_usage attribute.
+type TimeSeries[T cmp.Ordered] struct {
+	// NOTE: This does not use the obvious encoding,
+	// and instead reformats the data into a columnar pattern:
+	//
+	//   obvious: [{"t":123,"v":1.5},{"t":456,"v":2.5},{"t":789,"v":3.5}]
+	//   columnar: {"t":[123,456,789],"v":[1.5,2.5,3.5]}
+	//
+	// Like in this example, this removes a substantial amount of repetition and
+	// squeezes a good amount of bytes out of the representation.
+	// Postgres always stores strings uncompressed as long they are shorter than
+	// 2 KiB, which these time series might very well be, but the large number of
+	// records makes this still worthwhile in my opinion.
+	timestamps []int64
+	values     []T
+
+	// This type maintains three invariants:
+	// 1. Both lists are always of equal length.
+	// 2. Measurements are always ordered chronologically.
+	// 3. Each measurement has a unique timestamp.
+}
+
+// EmptyTimeSeries constructs a new empty TimeSeries.
+func EmptyTimeSeries[T cmp.Ordered]() TimeSeries[T] {
+	return TimeSeries[T]{timestamps: nil, values: nil}
+}
+
+// AddMeasurement adds a new point to this time series, unless the previous
+// point in time has the same value. An error is returned if the time series
+// already contains measurements from a time after `now`.
+func (s *TimeSeries[T]) AddMeasurement(now time.Time, value T) error {
+	timestamp := now.Unix()
+
+	if len(s.timestamps) > 0 {
+		lastIndex := len(s.timestamps) - 1
+		lastTimestamp := s.timestamps[lastIndex]
+		lastValue := s.values[lastIndex]
+
+		// check the ordering invariant
+		if lastTimestamp > timestamp {
+			return fmt.Errorf(
+				"cannot add value for timestamp %d: already recorded later timestamp %d",
+				timestamp, lastTimestamp)
+		}
+
+		// do not record redundant measurements
+		if lastValue == value {
+			return nil
+		}
+
+		// check the uniqueness invariant
+		if lastTimestamp == timestamp {
+			return fmt.Errorf(
+				"ambiguous value for timestamp %d: tried to record %v now, but already recorded %v",
+				lastTimestamp, value, lastValue)
+		}
+	}
+
+	//record the new measurement
+	s.timestamps = append(s.timestamps, timestamp)
+	s.values = append(s.values, value)
+	return nil
+}
+
+// PruneOldValues removes all measurements that fall before `now.Add(-retentionPeriod)`.
+func (s *TimeSeries[T]) PruneOldValues(now time.Time, retentionPeriod time.Duration) {
+	cutoff := s.findCutoffIndex(now, retentionPeriod)
+	if cutoff > 0 {
+		s.timestamps = slices.Clone(s.timestamps[cutoff:])
+		s.values = slices.Clone(s.values[cutoff:])
+	}
+}
+
+// Helper function for PruneOldValues: Returns the first index that must be retained.
+// If `idx` is returned, the range [0:idx] will be pruned.
+func (s *TimeSeries[T]) findCutoffIndex(now time.Time, retentionPeriod time.Duration) int {
+	cutoffTimestamp := now.Add(-retentionPeriod).Unix()
+
+	// Note that, unless a measurement falls exactly at the cutoff, the newest
+	// measurement from before that point will be retained.
+	// Each measurement is thought to apply not only to its own timestamp, but to
+	// the entire span of time until the next measurement.
+	// Values are retained if this span overlaps with the retention period.
+	for idx, timestamp := range s.timestamps {
+		if timestamp == cutoffTimestamp {
+			return idx
+		} else if timestamp > cutoffTimestamp {
+			return max(idx-1, 0)
+		}
+	}
+	return 0
+}
+
+// The JSON representation of type TimeSeries. This is a separate type because
+// json.Marshal/Unmarshal cannot access the private fields of the original type.
+type timeSeriesRepr[T cmp.Ordered] struct {
+	Timestamps []int64 `json:"t"`
+	Values     []T     `json:"v"`
+}
+
+// MarshalJSON implements the json.Marshaler interface.
+func (s TimeSeries[T]) MarshalJSON() ([]byte, error) {
+	if len(s.timestamps) == 0 {
+		return []byte("{}"), nil
+	}
+
+	return json.Marshal(timeSeriesRepr[T]{
+		Timestamps: s.timestamps,
+		Values:     s.values,
+	})
+}
+
+// UnmarshalJSON implements the json.Unmarshaler interface.
+func (s *TimeSeries[T]) UnmarshalJSON(buf []byte) error {
+	var repr timeSeriesRepr[T]
+	err := json.Unmarshal(buf, &repr)
+	if err != nil {
+		return err
+	}
+	s.timestamps = repr.Timestamps
+	s.values = repr.Values
+
+	if len(s.timestamps) != len(s.values) {
+		return fmt.Errorf(
+			"cannot unmarshal TimeSeries with inconsistent length: len(t) = %d != %d = len(v)",
+			len(s.timestamps), len(s.values))
+	}
+	if !slices.IsSorted(s.timestamps) {
+		return errors.New("cannot unmarshal TimeSeries with unsorted timestamps")
+	}
+	for idx := 1; idx < len(s.timestamps); idx++ {
+		if s.timestamps[idx-1] == s.timestamps[idx] {
+			return fmt.Errorf(
+				"cannot unmarshal TimeSeries with duplicate timestamps: %d appears more than once",
+				s.timestamps[idx])
+		}
+	}
+	return nil
+}
