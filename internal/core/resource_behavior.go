@@ -167,5 +167,9 @@ type OvercommitFactor float64
 
 // ApplyTo converts a raw capacity into an effective capacity.
 func (f OvercommitFactor) ApplyTo(rawCapacity uint64) uint64 {
+	if f == 0 {
+		//if no overcommit was configured, assume an overcommit factor of 1
+		return rawCapacity
+	}
 	return uint64(float64(rawCapacity) * float64(f))
 }

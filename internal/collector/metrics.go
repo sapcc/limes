@@ -541,12 +541,6 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			return err
 		}
 
-		behavior := c.Cluster.BehaviorForResource(serviceType, resourceName, "")
-		overcommitFactor := behavior.OvercommitFactor
-		if overcommitFactor == 0 {
-			overcommitFactor = 1
-		}
-
 		var (
 			capacityPerAZ map[limes.AvailabilityZone]uint64
 			usagePerAZ    map[limes.AvailabilityZone]*uint64
@@ -568,6 +562,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			}
 		}
 
+		overcommitFactor := c.Cluster.BehaviorForResource(serviceType, resourceName, "").OvercommitFactor
 		if reportAZBreakdown {
 			for az, azCapacity := range capacityPerAZ {
 				ch <- prometheus.MustNewConstMetric(

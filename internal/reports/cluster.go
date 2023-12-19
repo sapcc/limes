@@ -244,11 +244,9 @@ func GetClusterResources(cluster *core.Cluster, dbi db.Interface, filter Filter)
 					Usage: unwrapOrDefault(usageInAZ, 0),
 				}
 				overcommitFactor := cluster.BehaviorForResource(serviceType, *resourceName, "").OvercommitFactor
-				if overcommitFactor == 0 {
-					azReport.Capacity = *rawCapacityInAZ
-				} else {
+				azReport.Capacity = overcommitFactor.ApplyTo(*rawCapacityInAZ)
+				if azReport.Capacity != *rawCapacityInAZ {
 					azReport.RawCapacity = *rawCapacityInAZ
-					azReport.Capacity = overcommitFactor.ApplyTo(*rawCapacityInAZ)
 				}
 
 				if resource.CapacityPerAZ == nil {

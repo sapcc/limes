@@ -103,12 +103,8 @@ func collectAZAllocationStats(serviceType, resourceName string, az limes.Availab
 	}
 
 	//get nominal capacity
-	clusterBehavior := cluster.BehaviorForResource(serviceType, resourceName, "")
-	if clusterBehavior.OvercommitFactor == 0 {
-		result.Capacity = rawCapacity
-	} else {
-		result.Capacity = clusterBehavior.OvercommitFactor.ApplyTo(rawCapacity)
-	}
+	overcommitFactor := cluster.BehaviorForResource(serviceType, resourceName, "").OvercommitFactor
+	result.Capacity = overcommitFactor.ApplyTo(rawCapacity)
 
 	//get resource usage
 	err = sqlext.ForeachRow(dbi, getUsageInAZResourceQuery, queryArgs, func(rows *sql.Rows) error {
