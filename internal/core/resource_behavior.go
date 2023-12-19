@@ -41,6 +41,7 @@ type ResourceBehavior struct {
 	ScalingFactor            float64                             `yaml:"scaling_factor"`
 	MinNonZeroProjectQuota   uint64                              `yaml:"min_nonzero_project_quota"`
 	CommitmentDurations      []limesresources.CommitmentDuration `yaml:"commitment_durations"`
+	CommitmentIsAZAware      bool                                `yaml:"commitment_is_az_aware"`
 	CommitmentMinConfirmDate *time.Time                          `yaml:"commitment_min_confirm_date"`
 	Annotations              map[string]any                      `yaml:"annotations"`
 }
@@ -128,6 +129,9 @@ func (b *ResourceBehavior) Merge(other ResourceBehavior) {
 		if b.CommitmentMinConfirmDate == nil || b.CommitmentMinConfirmDate.Before(*other.CommitmentMinConfirmDate) {
 			b.CommitmentMinConfirmDate = other.CommitmentMinConfirmDate
 		}
+	}
+	if other.CommitmentIsAZAware {
+		b.CommitmentIsAZAware = true
 	}
 	if len(other.Annotations) > 0 && b.Annotations == nil {
 		b.Annotations = make(map[string]any)

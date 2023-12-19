@@ -152,10 +152,6 @@ func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r 
 	req := parseTarget.Request
 
 	//validate request
-	if !slices.Contains(p.Cluster.Config.AvailabilityZones, req.AvailabilityZone) {
-		http.Error(w, "no such availability zone", http.StatusUnprocessableEntity)
-		return nil, nil
-	}
 	if !p.Cluster.HasService(req.ServiceType) {
 		http.Error(w, "no such service", http.StatusUnprocessableEntity)
 		return nil, nil
@@ -169,6 +165,17 @@ func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r 
 	if len(behavior.CommitmentDurations) == 0 {
 		http.Error(w, "commitments are not enabled for this resource", http.StatusUnprocessableEntity)
 		return nil, nil
+	}
+	if behavior.CommitmentIsAZAware {
+		if !slices.Contains(p.Cluster.Config.AvailabilityZones, req.AvailabilityZone) {
+			http.Error(w, "no such availability zone", http.StatusUnprocessableEntity)
+			return nil, nil
+		}
+	} else {
+		if req.AvailabilityZone != limes.AvailabilityZoneAny {
+			http.Error(w, `resource does not accept AZ-aware commitments, so the AZ must be set to "any"`, http.StatusUnprocessableEntity)
+			return nil, nil
+		}
 	}
 	if !slices.Contains(behavior.CommitmentDurations, req.Duration) {
 		buf := must.Return(json.Marshal(behavior.CommitmentDurations)) //panic on error is acceptable here, marshals should never fail

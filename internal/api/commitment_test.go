@@ -41,10 +41,14 @@ const testCommitmentsYAML = `
 		- service_type: second
 			type: --test-generic
 	resource_behavior:
-		# for both service types, "capacity" has commitments, but "things" does not
-		- resource: .*/capacity
+		# the resources in "first" have commitments, the ones in "second" do not
+		- resource: first/.*
 			commitment_durations: ["1 hour", "2 hours"]
 			commitment_min_confirm_date: '1970-01-08T00:00:00Z' # one week after start of mock.Clock
+		- resource: first/things
+			commitment_is_az_aware: false
+		- resource: first/capacity
+			commitment_is_az_aware: true
 `
 
 func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
@@ -97,20 +101,19 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 	//create another commitment
 	s.Clock.StepBy(1 * time.Hour)
 	req2 := assert.JSONObject{
-		"service_type":      "second",
-		"resource_name":     "capacity",
-		"availability_zone": "az-two",
+		"service_type":      "first",
+		"resource_name":     "things",
+		"availability_zone": "any",
 		"amount":            20,
 		"duration":          "2 hours",
 		"confirm_by":        s.Clock.Now().Add(14 * day).Unix(),
 	}
 	resp2 := assert.JSONObject{
 		"id":                2,
-		"service_type":      "second",
-		"resource_name":     "capacity",
-		"availability_zone": "az-two",
+		"service_type":      "first",
+		"resource_name":     "things",
+		"availability_zone": "any",
 		"amount":            20,
-		"unit":              "B",
 		"duration":          "2 hours",
 		"created_at":        s.Clock.Now().Unix(),
 		"creator_uuid":      "uuid-for-alice",
@@ -139,7 +142,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		Method:       http.MethodGet,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments?service=first",
 		ExpectStatus: http.StatusOK,
-		ExpectBody:   assert.JSONObject{"commitments": []assert.JSONObject{resp1}},
+		ExpectBody:   assert.JSONObject{"commitments": []assert.JSONObject{resp1, resp2}},
 	}.Check(t, s.Handler)
 	assert.HTTPRequest{
 		Method:       http.MethodGet,
@@ -152,11 +155,11 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		Method:       http.MethodGet,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments?resource=capacity",
 		ExpectStatus: http.StatusOK,
-		ExpectBody:   assert.JSONObject{"commitments": []assert.JSONObject{resp1, resp2}},
+		ExpectBody:   assert.JSONObject{"commitments": []assert.JSONObject{resp1}},
 	}.Check(t, s.Handler)
 	assert.HTTPRequest{
 		Method:       http.MethodGet,
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments?resource=things",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments?resource=blobs",
 		ExpectStatus: http.StatusOK,
 		ExpectBody:   assert.JSONObject{"commitments": []assert.JSONObject{}},
 	}.Check(t, s.Handler)
@@ -387,17 +390,6 @@ func TestPutCommitmentErrorCases(t *testing.T) {
 
 	//invalid request field: service_type does not exist
 	cloned := maps.Clone(request)
-	cloned["availability_zone"] = "unknown"
-	assert.HTTPRequest{
-		Method:       http.MethodPost,
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body:         assert.JSONObject{"commitment": cloned},
-		ExpectStatus: http.StatusUnprocessableEntity,
-		ExpectBody:   assert.StringData("no such availability zone\n"),
-	}.Check(t, s.Handler)
-
-	//invalid request field: service_type does not exist
-	cloned = maps.Clone(request)
 	cloned["service_type"] = "unknown"
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -418,9 +410,9 @@ func TestPutCommitmentErrorCases(t *testing.T) {
 		ExpectBody:   assert.StringData("no such resource\n"),
 	}.Check(t, s.Handler)
 
-	//invalid request field: resource_name does not accept commitments
+	//invalid request field: service_type/resource_name does not accept commitments
 	cloned = maps.Clone(request)
-	cloned["resource_name"] = "things"
+	cloned["service_type"] = "second"
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
@@ -428,6 +420,30 @@ func TestPutCommitmentErrorCases(t *testing.T) {
 		ExpectStatus: http.StatusUnprocessableEntity,
 		ExpectBody:   assert.StringData("commitments are not enabled for this resource\n"),
 	}.Check(t, s.Handler)
+
+	//invalid request field: AZ given, but resource does not accept AZ-aware commitments
+	cloned = maps.Clone(request)
+	cloned["resource_name"] = "things"
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
+		Body:         assert.JSONObject{"commitment": cloned},
+		ExpectStatus: http.StatusUnprocessableEntity,
+		ExpectBody:   assert.StringData("resource does not accept AZ-aware commitments, so the AZ must be set to \"any\"\n"),
+	}.Check(t, s.Handler)
+
+	//invalid request field: resource wants an AZ-aware commitment, but a malformed AZ or pseudo-AZ is given
+	for _, az := range []string{"any", "unknown", "something-else", ""} {
+		cloned = maps.Clone(request)
+		cloned["availability_zone"] = az
+		assert.HTTPRequest{
+			Method:       http.MethodPost,
+			Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
+			Body:         assert.JSONObject{"commitment": cloned},
+			ExpectStatus: http.StatusUnprocessableEntity,
+			ExpectBody:   assert.StringData("no such availability zone\n"),
+		}.Check(t, s.Handler)
+	}
 
 	//invalid request field: duration is not one of the configured values
 	cloned = maps.Clone(request)

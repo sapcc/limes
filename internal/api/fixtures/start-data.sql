@@ -121,6 +121,8 @@ INSERT INTO project_commitments (id, service_id, resource_name, availability_zon
 INSERT INTO project_commitments (id, service_id, resource_name, availability_zone, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at) VALUES (6, 3, 'capacity', 'az-one', 5,   '10 minutes', UNIX(6), 'uuid-for-alice', 'alice@Default', UNIX(6), UNIX(6), UNIX(606));
 -- on "shared/capacity": only an unconfirmed commitment that should not be reported, this tests that the entire "committed" structure is absent in the JSON for that resource
 INSERT INTO project_commitments (id, service_id, resource_name, availability_zone, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at) VALUES (7, 4, 'capacity', 'az-one', 100, '2 years',    UNIX(7), 'uuid-for-alice', 'alice@Default', UNIX(7), NULL,    UNIX(100000007));
+-- on "unshared/things": an active commitment on AZ "any"
+INSERT INTO project_commitments (id, service_id, resource_name, availability_zone, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at) VALUES (8, 3, 'things',  'any',     1,   '2 years',    UNIX(8), 'uuid-for-alice', 'alice@Default', UNIX(8), UNIX(8), UNIX(100000008));
 
 -- project_rates also has multiple different setups to test different cases
 -- berlin has custom rate limits

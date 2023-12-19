@@ -37,7 +37,7 @@ type Commitment struct {
 	ResourceName     string                 `json:"resource_name"`
 	AvailabilityZone limes.AvailabilityZone `json:"availability_zone"`
 	Amount           uint64                 `json:"amount"`
-	Unit             limes.Unit             `json:"unit"`
+	Unit             limes.Unit             `json:"unit,omitempty"`
 	Duration         CommitmentDuration     `json:"duration"`
 	CreatedAt        limes.UnixEncodedTime  `json:"created_at"`
 	// CreatorUUID and CreatorName identify the user who created this commitment.

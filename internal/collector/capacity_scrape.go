@@ -334,7 +334,11 @@ func (c *Collector) confirmPendingCommitmentsIfNecessary(serviceType, resourceNa
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 
-	for _, az := range c.Cluster.Config.AvailabilityZones {
+	committableAZs := c.Cluster.Config.AvailabilityZones
+	if behavior.CommitmentIsAZAware {
+		committableAZs = []limes.AvailabilityZone{limes.AvailabilityZoneAny}
+	}
+	for _, az := range committableAZs {
 		err = datamodel.ConfirmPendingCommitments(serviceType, resourceName, az, c.Cluster, tx, now)
 		if err != nil {
 			return err
