@@ -129,42 +129,57 @@ type timeSeriesRepr[T cmp.Ordered] struct {
 	Values     []T     `json:"v"`
 }
 
-// MarshalJSON implements the json.Marshaler interface.
-func (s TimeSeries[T]) MarshalJSON() ([]byte, error) {
-	if len(s.timestamps) == 0 {
-		return []byte("{}"), nil
+// ParseTimeSeries parses the JSON representation of a time series,
+// or returns an empty time series if the input is the empty string.
+//
+// NOTE: We do not implement UnmarshalJSON since this function offers a more
+// convenient interface for our actual usecases.
+func ParseTimeSeries[T cmp.Ordered](input string) (TimeSeries[T], error) {
+	if input == "" {
+		return EmptyTimeSeries[T](), nil
 	}
 
-	return json.Marshal(timeSeriesRepr[T]{
+	var repr timeSeriesRepr[T]
+	err := json.Unmarshal([]byte(input), &repr)
+	if err != nil {
+		return EmptyTimeSeries[T](), err
+	}
+	ts := TimeSeries[T]{
+		timestamps: repr.Timestamps,
+		values:     repr.Values,
+	}
+
+	if len(ts.timestamps) != len(ts.values) {
+		return EmptyTimeSeries[T](), fmt.Errorf(
+			"cannot unmarshal TimeSeries with inconsistent length: len(t) = %d != %d = len(v)",
+			len(ts.timestamps), len(ts.values))
+	}
+	if !slices.IsSorted(ts.timestamps) {
+		return EmptyTimeSeries[T](), errors.New("cannot unmarshal TimeSeries with unsorted timestamps")
+	}
+	for idx := 1; idx < len(ts.timestamps); idx++ {
+		if ts.timestamps[idx-1] == ts.timestamps[idx] {
+			return EmptyTimeSeries[T](), fmt.Errorf(
+				"cannot unmarshal TimeSeries with duplicate timestamps: %d appears more than once",
+				ts.timestamps[idx])
+		}
+	}
+
+	return ts, nil
+}
+
+// Serialize returns the JSON representation of this timeseries.
+//
+// NOTE: We do not implement MarshalJSON since this function offers a more
+// convenient interface for our actual usecases.
+func (s TimeSeries[T]) Serialize() (string, error) {
+	if len(s.timestamps) == 0 {
+		return "{}", nil
+	}
+
+	buf, err := json.Marshal(timeSeriesRepr[T]{
 		Timestamps: s.timestamps,
 		Values:     s.values,
 	})
-}
-
-// UnmarshalJSON implements the json.Unmarshaler interface.
-func (s *TimeSeries[T]) UnmarshalJSON(buf []byte) error {
-	var repr timeSeriesRepr[T]
-	err := json.Unmarshal(buf, &repr)
-	if err != nil {
-		return err
-	}
-	s.timestamps = repr.Timestamps
-	s.values = repr.Values
-
-	if len(s.timestamps) != len(s.values) {
-		return fmt.Errorf(
-			"cannot unmarshal TimeSeries with inconsistent length: len(t) = %d != %d = len(v)",
-			len(s.timestamps), len(s.values))
-	}
-	if !slices.IsSorted(s.timestamps) {
-		return errors.New("cannot unmarshal TimeSeries with unsorted timestamps")
-	}
-	for idx := 1; idx < len(s.timestamps); idx++ {
-		if s.timestamps[idx-1] == s.timestamps[idx] {
-			return fmt.Errorf(
-				"cannot unmarshal TimeSeries with duplicate timestamps: %d appears more than once",
-				s.timestamps[idx])
-		}
-	}
-	return nil
+	return string(buf), err
 }

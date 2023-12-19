@@ -19,7 +19,7 @@
 package util
 
 import (
-	"encoding/json"
+	"cmp"
 	"testing"
 	"time"
 
@@ -97,8 +97,8 @@ func TestTimeSeriesUnmarshalErrors(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Logf("testing unmarshal of `%s`", tc.Representation)
-		var target TimeSeries[float64]
-		mustFailT(t, json.Unmarshal([]byte(tc.Representation), &target), tc.ExpectedError)
+		_, err := ParseTimeSeries[float64](tc.Representation)
+		mustFailT(t, err, tc.ExpectedError)
 	}
 }
 
@@ -118,20 +118,19 @@ func mustFailT(t *testing.T, err error, expected string) {
 	}
 }
 
-func expectJSON[V any](t *testing.T, value V, repr string) {
+func expectJSON[T cmp.Ordered](t *testing.T, value TimeSeries[T], repr string) {
 	t.Helper()
 
 	// test that the value marshals to the given JSON representation
-	buf, err := json.Marshal(value)
+	buf, err := value.Serialize()
 	if err != nil {
 		t.Error("while marshaling: " + err.Error())
 	} else {
-		assert.DeepEqual(t, "JSON representation", string(buf), repr)
+		assert.DeepEqual(t, "JSON representation", buf, repr)
 	}
 
 	// test that the JSON representation unmarshals into an identical value
-	var unmarshaled V
-	err = json.Unmarshal([]byte(repr), &unmarshaled)
+	unmarshaled, err := ParseTimeSeries[T](repr)
 	if err != nil {
 		t.Error("while unmarshaling: " + err.Error())
 	} else {

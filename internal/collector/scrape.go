@@ -21,7 +21,6 @@ package collector
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sort"
 	"time"
@@ -323,25 +322,19 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 				if qdCfg.Autogrow == nil {
 					azRes.HistoricalUsageJSON = ""
 				} else {
-					var ts util.TimeSeries[uint64]
-					if azRes.HistoricalUsageJSON == "" {
-						ts = util.EmptyTimeSeries[uint64]()
-					} else {
-						err := json.Unmarshal([]byte(azRes.HistoricalUsageJSON), &ts)
-						if err != nil {
-							return fmt.Errorf("while parsing historical_usage for AZ %s: %w", az, err)
-						}
+					ts, err := util.ParseTimeSeries[uint64](azRes.HistoricalUsageJSON)
+					if err != nil {
+						return fmt.Errorf("while parsing historical_usage for AZ %s: %w", az, err)
 					}
-					err := ts.AddMeasurement(task.Timing.FinishedAt, data.Usage)
+					err = ts.AddMeasurement(task.Timing.FinishedAt, data.Usage)
 					if err != nil {
 						return fmt.Errorf("while tracking historical_usage for AZ %s: %w", az, err)
 					}
 					ts.PruneOldValues(task.Timing.FinishedAt, qdCfg.Autogrow.UsageDataRetentionPeriod.Into())
-					buf, err := json.Marshal(ts)
+					azRes.HistoricalUsageJSON, err = ts.Serialize()
 					if err != nil {
 						return fmt.Errorf("while serializing historical_usage for AZ %s: %w", az, err)
 					}
-					azRes.HistoricalUsageJSON = string(buf)
 				}
 
 				return nil
