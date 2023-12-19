@@ -335,7 +335,7 @@ func (c *Collector) confirmPendingCommitmentsIfNecessary(serviceType, resourceNa
 	defer sqlext.RollbackUnlessCommitted(tx)
 
 	committableAZs := c.Cluster.Config.AvailabilityZones
-	if behavior.CommitmentIsAZAware {
+	if !behavior.CommitmentIsAZAware {
 		committableAZs = []limes.AvailabilityZone{limes.AvailabilityZoneAny}
 	}
 	for _, az := range committableAZs {
