@@ -42,7 +42,6 @@ import (
 	"github.com/sapcc/go-bits/promquery"
 
 	"github.com/sapcc/limes/internal/core"
-	"github.com/sapcc/limes/internal/util"
 )
 
 type manilaPlugin struct {
@@ -51,9 +50,9 @@ type manilaPlugin struct {
 	PrometheusAPIConfigForAZAwareness   *promquery.Config     `yaml:"prometheus_api_for_az_awareness"`
 	PrometheusAPIConfigForNetappMetrics *promquery.Config     `yaml:"prometheus_api_for_netapp_metrics"`
 	//connections
-	ManilaV2      *gophercloud.ServiceClient                                                  `yaml:"-"`
-	AZMetrics     *util.PrometheusBulkQueryCache[manilaAZMetricsKey, manilaAZMetrics]         `yaml:"-"`
-	NetappMetrics *util.PrometheusBulkQueryCache[manilaNetappMetricsKey, manilaNetappMetrics] `yaml:"-"`
+	ManilaV2      *gophercloud.ServiceClient                                             `yaml:"-"`
+	AZMetrics     *promquery.BulkQueryCache[manilaAZMetricsKey, manilaAZMetrics]         `yaml:"-"`
+	NetappMetrics *promquery.BulkQueryCache[manilaNetappMetricsKey, manilaNetappMetrics] `yaml:"-"`
 	//caches
 	ShareTypeIDByName map[string]string `yaml:"-"`
 }
@@ -104,13 +103,18 @@ func (p *manilaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud
 	}
 
 	//initialize connection to Prometheus
-	p.AZMetrics, err = util.NewPrometheusBulkQueryCache(manilaAZMetricsQueries, 2*time.Minute, p.PrometheusAPIConfigForAZAwareness)
+	promClientForAZAwareness, err := p.PrometheusAPIConfigForAZAwareness.Connect()
 	if err != nil {
 		return err
 	}
+	p.AZMetrics = promquery.NewBulkQueryCache(manilaAZMetricsQueries, 2*time.Minute, promClientForAZAwareness)
 
 	if p.PrometheusAPIConfigForNetappMetrics != nil {
-		p.NetappMetrics, err = util.NewPrometheusBulkQueryCache(manilaNetappMetricsQueries, 2*time.Minute, p.PrometheusAPIConfigForNetappMetrics)
+		promClientForNetappMetrics, err := p.PrometheusAPIConfigForNetappMetrics.Connect()
+		if err != nil {
+			return err
+		}
+		p.NetappMetrics = promquery.NewBulkQueryCache(manilaNetappMetricsQueries, 2*time.Minute, promClientForNetappMetrics)
 		if err != nil {
 			return err
 		}
@@ -595,7 +599,7 @@ type manilaNetappMetrics struct {
 
 var (
 	//nolint:dupl
-	manilaAZMetricsQueries = []util.PrometheusBulkQuery[manilaAZMetricsKey, manilaAZMetrics]{
+	manilaAZMetricsQueries = []promquery.BulkQuery[manilaAZMetricsKey, manilaAZMetrics]{
 		{
 			Query:       manilaShareCountQuery,
 			Description: "shares usage data",
@@ -630,7 +634,7 @@ var (
 		},
 	}
 	//nolint:dupl
-	manilaNetappMetricsQueries = []util.PrometheusBulkQuery[manilaNetappMetricsKey, manilaNetappMetrics]{
+	manilaNetappMetricsQueries = []promquery.BulkQuery[manilaNetappMetricsKey, manilaNetappMetrics]{
 		{
 			Query:       manilaSharePhysicalUsageQuery,
 			Description: "share_capacity physical usage data",
