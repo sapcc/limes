@@ -60,7 +60,7 @@ type ProjectResourceUpdateResult struct {
 //     caller to update resource data as necessary.
 //   - Constraints are enforced and other derived fields are recomputed on all
 //     ProjectResource entries.
-func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, domain db.Domain, project db.Project, srv db.ProjectServiceRef) (*ProjectResourceUpdateResult, error) {
+func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, domain db.Domain, project db.Project, srv db.ServiceRef[db.ProjectServiceID]) (*ProjectResourceUpdateResult, error) {
 	if u.LogError == nil {
 		u.LogError = logg.Error
 	}
@@ -202,7 +202,7 @@ func unwrapOrDefault[T any](value *T, defaultValue T) T {
 }
 
 // Ensures that `res` conforms to various constraints and validation rules.
-func validateResourceConstraints(domain db.Domain, project db.Project, srv db.ProjectServiceRef, res *db.ProjectResource, resInfo limesresources.ResourceInfo, constraint core.QuotaConstraint) {
+func validateResourceConstraints(domain db.Domain, project db.Project, srv db.ServiceRef[db.ProjectServiceID], res *db.ProjectResource, resInfo limesresources.ResourceInfo, constraint core.QuotaConstraint) {
 	if resInfo.NoQuota {
 		//ensure that NoQuota resources do not contain any quota values
 		res.Quota = nil

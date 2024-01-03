@@ -55,7 +55,7 @@ func CanConfirmNewCommitment(req limesresources.CommitmentRequest, project db.Pr
 	if err != nil {
 		return false, err
 	}
-	var serviceID int64
+	var serviceID db.ProjectServiceID
 	err = dbi.QueryRow(`SELECT id FROM project_services WHERE project_id = $1 AND type = $2`, project.ID, req.ServiceType).Scan(&serviceID)
 	if err != nil {
 		return false, err
@@ -75,8 +75,8 @@ func ConfirmPendingCommitments(serviceType, resourceName string, az limes.Availa
 	//load confirmable commitments (we need to load them into a buffer first, since
 	//lib/pq cannot do UPDATE while a SELECT targeting the same rows is still going)
 	type confirmableCommitment struct {
-		ProjectServiceID int64
-		CommitmentID     int64
+		ProjectServiceID db.ProjectServiceID
+		CommitmentID     db.ProjectCommitmentID
 		Amount           uint64
 	}
 	var confirmableCommitments []confirmableCommitment
@@ -105,8 +105,8 @@ func ConfirmPendingCommitments(serviceType, resourceName string, az limes.Availa
 		}
 
 		//block its allocation from being committed again in this loop
-		oldStats := stats.StatsByProjectServiceID[c.ProjectServiceID]
-		stats.StatsByProjectServiceID[c.ProjectServiceID] = projectAZAllocationStats{
+		oldStats := stats.ProjectStats[c.ProjectServiceID]
+		stats.ProjectStats[c.ProjectServiceID] = projectAZAllocationStats{
 			Committed: oldStats.Committed + c.Amount,
 			Usage:     oldStats.Usage,
 		}

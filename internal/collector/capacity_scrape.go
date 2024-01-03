@@ -144,11 +144,11 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 
 	//collect mapping of cluster_services type names to IDs
 	//(these DB entries are maintained for us by checkConsistencyCluster)
-	serviceIDForType := make(map[string]int64)
-	serviceTypeForID := make(map[int64]string)
+	serviceIDForType := make(map[string]db.ClusterServiceID)
+	serviceTypeForID := make(map[db.ClusterServiceID]string)
 	err := sqlext.ForeachRow(c.DB, getClusterServicesQuery, nil, func(rows *sql.Rows) error {
 		var (
-			serviceID   int64
+			serviceID   db.ClusterServiceID
 			serviceType string
 		)
 		err := rows.Scan(&serviceID, &serviceType)
@@ -207,7 +207,7 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 		}
 	}
 
-	var wantedResources []db.ResourceRef
+	var wantedResources []db.ResourceRef[db.ClusterServiceID]
 	for serviceType, serviceData := range capacityData {
 		if !c.Cluster.HasService(serviceType) {
 			logg.Info("discarding capacities reported by %s for unknown service type: %s", capacitor.CapacitorID, serviceType)
@@ -223,7 +223,7 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 				logg.Info("discarding capacity reported by %s for unknown resource name: %s/%s", capacitor.CapacitorID, serviceType, resourceName)
 				continue
 			}
-			wantedResources = append(wantedResources, db.ResourceRef{
+			wantedResources = append(wantedResources, db.ResourceRef[db.ClusterServiceID]{
 				ServiceID: serviceID,
 				Name:      resourceName,
 			})
@@ -232,11 +232,11 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 	slices.SortFunc(wantedResources, db.CompareResourceRefs) //for deterministic test behavior
 
 	//create and delete cluster_resources for this capacitor as needed
-	setUpdate := db.SetUpdate[db.ClusterResource, db.ResourceRef]{
+	setUpdate := db.SetUpdate[db.ClusterResource, db.ResourceRef[db.ClusterServiceID]]{
 		ExistingRecords: dbOwnedResources,
 		WantedKeys:      wantedResources,
 		KeyForRecord:    db.ClusterResource.Ref,
-		Create: func(ref db.ResourceRef) (db.ClusterResource, error) {
+		Create: func(ref db.ResourceRef[db.ClusterServiceID]) (db.ClusterResource, error) {
 			return db.ClusterResource{
 				ServiceID:   ref.ServiceID,
 				Name:        ref.Name,
@@ -261,7 +261,7 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 	if err != nil {
 		return fmt.Errorf("cannot inspect existing cluster AZ resources: %w", err)
 	}
-	dbAZResourcesByResourceID := make(map[int64][]db.ClusterAZResource)
+	dbAZResourcesByResourceID := make(map[db.ClusterResourceID][]db.ClusterAZResource)
 	for _, azRes := range dbAZResources {
 		dbAZResourcesByResourceID[azRes.ResourceID] = append(dbAZResourcesByResourceID[azRes.ResourceID], azRes)
 	}

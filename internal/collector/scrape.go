@@ -268,7 +268,7 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 	if err != nil {
 		return fmt.Errorf("while reading existing project AZ resources: %w", err)
 	}
-	dbAZResourcesByResourceID := make(map[int64][]db.ProjectAZResource, len(resourceUpdateResult.DBResources))
+	dbAZResourcesByResourceID := make(map[db.ProjectResourceID][]db.ProjectAZResource, len(resourceUpdateResult.DBResources))
 	for _, azRes := range dbAZResources {
 		dbAZResourcesByResourceID[azRes.ResourceID] = append(dbAZResourcesByResourceID[azRes.ResourceID], azRes)
 	}
@@ -383,7 +383,7 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 	return nil
 }
 
-func (c *Collector) writeDummyResources(dbDomain db.Domain, dbProject db.Project, srv db.ProjectServiceRef) error {
+func (c *Collector) writeDummyResources(dbDomain db.Domain, dbProject db.Project, srv db.ServiceRef[db.ProjectServiceID]) error {
 	//Rationale: This is called when we first try to scrape a project service,
 	//and the scraping fails (most likely due to some internal error in the
 	//backend service). We used to just not touch the database at this point,

@@ -36,15 +36,15 @@ import (
 // - CanConfirmNewCommitment
 // - ConfirmPendingCommitments
 type clusterAZAllocationStats struct {
-	Capacity                uint64
-	StatsByProjectServiceID map[int64]projectAZAllocationStats
+	Capacity     uint64
+	ProjectStats map[db.ProjectServiceID]projectAZAllocationStats
 }
 
-func (c clusterAZAllocationStats) FitsAdditionalCommitment(targetProjectServiceID int64, amount uint64) bool {
+func (c clusterAZAllocationStats) FitsAdditionalCommitment(serviceID db.ProjectServiceID, amount uint64) bool {
 	// calculate `sum_over_projects(max(committed, usage))` including the requested commitment
 	usedCapacity := uint64(0)
-	for projectServiceID, stats := range c.StatsByProjectServiceID {
-		if projectServiceID == targetProjectServiceID {
+	for projectServiceID, stats := range c.ProjectStats {
+		if projectServiceID == serviceID {
 			usedCapacity += max(stats.Committed+amount, stats.Usage)
 		} else {
 			usedCapacity += max(stats.Committed, stats.Usage)
@@ -91,7 +91,7 @@ var (
 // Shared data collection phase for CanConfirmNewCommitment and ConfirmPendingCommitments.
 func collectAZAllocationStats(serviceType, resourceName string, az limes.AvailabilityZone, cluster *core.Cluster, dbi db.Interface, now time.Time) (clusterAZAllocationStats, error) {
 	result := clusterAZAllocationStats{
-		StatsByProjectServiceID: make(map[int64]projectAZAllocationStats),
+		ProjectStats: make(map[db.ProjectServiceID]projectAZAllocationStats),
 	}
 
 	//get raw capacity
@@ -109,11 +109,11 @@ func collectAZAllocationStats(serviceType, resourceName string, az limes.Availab
 	//get resource usage
 	err = sqlext.ForeachRow(dbi, getUsageInAZResourceQuery, queryArgs, func(rows *sql.Rows) error {
 		var (
-			projectServiceID int64
-			stats            projectAZAllocationStats
+			serviceID db.ProjectServiceID
+			stats     projectAZAllocationStats
 		)
-		err := rows.Scan(&projectServiceID, &stats.Usage)
-		result.StatsByProjectServiceID[projectServiceID] = stats
+		err := rows.Scan(&serviceID, &stats.Usage)
+		result.ProjectStats[serviceID] = stats
 		return err
 	})
 	if err != nil {
@@ -124,13 +124,13 @@ func collectAZAllocationStats(serviceType, resourceName string, az limes.Availab
 	queryArgs = []any{serviceType, resourceName, az, now}
 	err = sqlext.ForeachRow(dbi, getCommittedInAZResourceQuery, queryArgs, func(rows *sql.Rows) error {
 		var (
-			projectServiceID int64
-			committed        uint64
+			serviceID db.ProjectServiceID
+			committed uint64
 		)
-		err := rows.Scan(&projectServiceID, &committed)
-		stats := result.StatsByProjectServiceID[projectServiceID]
+		err := rows.Scan(&serviceID, &committed)
+		stats := result.ProjectStats[serviceID]
 		stats.Committed = committed
-		result.StatsByProjectServiceID[projectServiceID] = stats
+		result.ProjectStats[serviceID] = stats
 		return err
 	})
 	if err != nil {

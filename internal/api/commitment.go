@@ -76,11 +76,11 @@ func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Reques
 	}
 
 	//enumerate project services
-	serviceTypeByID := make(map[int64]string)
+	serviceTypeByID := make(map[db.ProjectServiceID]string)
 	query := `SELECT id, type FROM project_services WHERE project_id = $1`
 	err := sqlext.ForeachRow(p.DB, query, []any{dbProject.ID}, func(rows *sql.Rows) error {
 		var (
-			serviceID   int64
+			serviceID   db.ProjectServiceID
 			serviceType string
 		)
 		err := rows.Scan(&serviceID, &serviceType)
@@ -123,7 +123,7 @@ func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Reques
 func (p *v1Provider) convertCommitmentToDisplayForm(c db.ProjectCommitment, serviceType string) limesresources.Commitment {
 	resInfo := p.Cluster.InfoForResource(serviceType, c.ResourceName)
 	return limesresources.Commitment{
-		ID:               c.ID,
+		ID:               int64(c.ID),
 		ServiceType:      serviceType,
 		ResourceName:     c.ResourceName,
 		AvailabilityZone: c.AvailabilityZone,

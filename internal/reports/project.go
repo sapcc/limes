@@ -97,12 +97,12 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 	whereStr, whereArgs := db.BuildSimpleWhereClause(fields, len(joinArgs))
 
 	var (
-		currentProjectID int64
+		currentProjectID db.ProjectID
 		projectReport    *limesresources.ProjectReport
 	)
 	err := sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		var (
-			projectID          int64
+			projectID          db.ProjectID
 			projectUUID        string
 			projectName        string
 			projectParentUUID  string
@@ -266,7 +266,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 	return nil
 }
 
-func finalizeProjectResourceReport(projectReport *limesresources.ProjectReport, projectID int64, now time.Time, dbi db.Interface, filter Filter) error {
+func finalizeProjectResourceReport(projectReport *limesresources.ProjectReport, projectID db.ProjectID, now time.Time, dbi db.Interface, filter Filter) error {
 	if projectReport.Bursting != nil && projectReport.Bursting.Enabled {
 		for _, srvReport := range projectReport.Services {
 			for _, resReport := range srvReport.Resources {

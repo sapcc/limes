@@ -48,7 +48,7 @@ var recomputeDomainQuotaQueryStr = `
 // ApplyComputedDomainQuota reevaluates auto-computed domain quotas in the given domain service.
 // This is only relevant for resources with non-hierarchical quota distribution, since those resources will have their domain
 // quota always set equal to the sum of all respective project quotas.
-func ApplyComputedDomainQuota(dbi db.Interface, cluster *core.Cluster, domainID int64, serviceType string) error {
+func ApplyComputedDomainQuota(dbi db.Interface, cluster *core.Cluster, domainID db.DomainID, serviceType string) error {
 	plugin := cluster.QuotaPlugins[serviceType]
 	if plugin == nil {
 		return fmt.Errorf("no quota plugin registered for service type %s", serviceType)

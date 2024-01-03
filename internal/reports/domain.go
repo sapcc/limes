@@ -66,7 +66,7 @@ var domainReportQuery2 = sqlext.SimplifyWhitespace(`
 
 // GetDomains returns reports for all domains in the given cluster or, if
 // domainID is non-nil, for that domain only.
-func GetDomains(cluster *core.Cluster, domainID *int64, dbi db.Interface, filter Filter) ([]*limesresources.DomainReport, error) {
+func GetDomains(cluster *core.Cluster, domainID *db.DomainID, dbi db.Interface, filter Filter) ([]*limesresources.DomainReport, error) {
 	clusterCanBurst := cluster.Config.Bursting.MaxMultiplier > 0
 
 	var fields map[string]any

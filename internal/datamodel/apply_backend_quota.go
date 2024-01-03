@@ -52,7 +52,7 @@ var (
 // This function must be called after each ProjectResourceUpdate.Run(). It is
 // not called by Run() because the caller will usually want to commit the DB
 // transaction before calling out into the backend.
-func ApplyBackendQuota(dbi db.Interface, cluster *core.Cluster, domain core.KeystoneDomain, project db.Project, srv db.ProjectServiceRef) error {
+func ApplyBackendQuota(dbi db.Interface, cluster *core.Cluster, domain core.KeystoneDomain, project db.Project, srv db.ServiceRef[db.ProjectServiceID]) error {
 	plugin := cluster.QuotaPlugins[srv.Type]
 	if plugin == nil {
 		return fmt.Errorf("no quota plugin registered for service type %s", srv.Type)
