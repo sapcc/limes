@@ -56,6 +56,22 @@ func EmptyTimeSeries[T cmp.Ordered]() TimeSeries[T] {
 	return TimeSeries[T]{timestamps: nil, values: nil}
 }
 
+// MinOr returns the minimum of this time series, or the provided fallback value if it is empty.
+func (s TimeSeries[T]) MinOr(fallback T) T {
+	if len(s.values) == 0 {
+		return fallback
+	}
+	return slices.Min(s.values)
+}
+
+// MaxOr returns the maximum of this time series, or the provided fallback value if it is empty.
+func (s TimeSeries[T]) MaxOr(fallback T) T {
+	if len(s.values) == 0 {
+		return fallback
+	}
+	return slices.Max(s.values)
+}
+
 // AddMeasurement adds a new point to this time series, unless the previous
 // point in time has the same value. An error is returned if the time series
 // already contains measurements from a time after `now`.

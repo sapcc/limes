@@ -51,10 +51,12 @@ var (
 // CanConfirmNewCommitment returns whether the given commitment request can be
 // confirmed immediately upon creation in the given project.
 func CanConfirmNewCommitment(req limesresources.CommitmentRequest, project db.Project, cluster *core.Cluster, dbi db.Interface, now time.Time) (bool, error) {
-	stats, err := collectAZAllocationStats(req.ServiceType, req.ResourceName, req.AvailabilityZone, cluster, dbi, now)
+	statsByAZ, err := collectAZAllocationStats(req.ServiceType, req.ResourceName, &req.AvailabilityZone, cluster, dbi, now)
 	if err != nil {
 		return false, err
 	}
+	stats := statsByAZ[req.AvailabilityZone]
+
 	var serviceID db.ProjectServiceID
 	err = dbi.QueryRow(`SELECT id FROM project_services WHERE project_id = $1 AND type = $2`, project.ID, req.ServiceType).Scan(&serviceID)
 	if err != nil {
@@ -67,10 +69,11 @@ func CanConfirmNewCommitment(req limesresources.CommitmentRequest, project db.Pr
 // could be confirmed, in chronological creation order, and confirms as many of
 // them as possible given the currently available capacity.
 func ConfirmPendingCommitments(serviceType, resourceName string, az limes.AvailabilityZone, cluster *core.Cluster, dbi db.Interface, now time.Time) error {
-	stats, err := collectAZAllocationStats(serviceType, resourceName, az, cluster, dbi, now)
+	statsByAZ, err := collectAZAllocationStats(serviceType, resourceName, &az, cluster, dbi, now)
 	if err != nil {
 		return err
 	}
+	stats := statsByAZ[az]
 
 	//load confirmable commitments (we need to load them into a buffer first, since
 	//lib/pq cannot do UPDATE while a SELECT targeting the same rows is still going)
