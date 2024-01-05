@@ -189,7 +189,6 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 		//start new resource report when necessary
 		behavior := cluster.BehaviorForResource(*serviceType, *resourceName, domain.Name+"/"+projectName)
 		resReport := srvReport.Resources[*resourceName]
-		resWasJustCreated := false
 		if resReport == nil {
 			resReport = &limesresources.ProjectResourceReport{
 				ResourceInfo: cluster.InfoForResource(*serviceType, *resourceName),
@@ -221,7 +220,6 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 			}
 
 			srvReport.Resources[*resourceName] = resReport
-			resWasJustCreated = true
 		}
 
 		//fill data from project_az_resources into resource report
@@ -229,9 +227,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 			return nil //no project_az_resources available
 		}
 		resReport.Usage += *azUsage
-		if azPhysicalUsage == nil {
-			resReport.PhysicalUsage = nil
-		} else if resReport.PhysicalUsage != nil || resWasJustCreated {
+		if azPhysicalUsage != nil {
 			sum := unwrapOrDefault(resReport.PhysicalUsage, 0) + *azPhysicalUsage
 			resReport.PhysicalUsage = &sum
 		}
@@ -314,6 +310,21 @@ func finalizeProjectResourceReport(projectReport *limesresources.ProjectReport, 
 		})
 		if err != nil {
 			return err
+		}
+
+		//project_az_resources always has entries for "any", even if the resource
+		//is AZ-aware, because ApplyComputedProjectQuota needs somewhere to write
+		//the base quotas; we ignore those entries here if the "any" usage is zero
+		//and there are other AZs
+		for _, srvReport := range projectReport.Services {
+			for _, resReport := range srvReport.Resources {
+				if len(resReport.PerAZ) >= 2 {
+					reportInAny := resReport.PerAZ[limes.AvailabilityZoneAny]
+					if reportInAny.Quota == nil && reportInAny.Usage == 0 {
+						delete(resReport.PerAZ, limes.AvailabilityZoneAny)
+					}
+				}
+			}
 		}
 	}
 

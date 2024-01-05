@@ -155,16 +155,22 @@ func Test_ScrapeSuccess(t *testing.T) {
 	scrapedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt2 := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
+		INSERT INTO project_az_resources (resource_id, az, usage) VALUES (1, 'any', 0);
 		INSERT INTO project_az_resources (resource_id, az, usage, physical_usage) VALUES (1, 'az-one', 0, 0);
 		INSERT INTO project_az_resources (resource_id, az, usage, physical_usage) VALUES (1, 'az-two', 0, 0);
+		INSERT INTO project_az_resources (resource_id, az, usage) VALUES (2, 'any', 0);
 		INSERT INTO project_az_resources (resource_id, az, usage) VALUES (2, 'az-one', 0);
 		INSERT INTO project_az_resources (resource_id, az, usage) VALUES (2, 'az-two', 0);
+		INSERT INTO project_az_resources (resource_id, az, usage, historical_usage) VALUES (3, 'any', 0, '{"t":[%[1]d],"v":[0]}');
 		INSERT INTO project_az_resources (resource_id, az, usage, subresources, historical_usage) VALUES (3, 'az-one', 2, '[{"index":0},{"index":1}]', '{"t":[%[1]d],"v":[2]}');
 		INSERT INTO project_az_resources (resource_id, az, usage, subresources, historical_usage) VALUES (3, 'az-two', 2, '[{"index":2},{"index":3}]', '{"t":[%[1]d],"v":[2]}');
+		INSERT INTO project_az_resources (resource_id, az, usage) VALUES (4, 'any', 0);
 		INSERT INTO project_az_resources (resource_id, az, usage, physical_usage) VALUES (4, 'az-one', 0, 0);
 		INSERT INTO project_az_resources (resource_id, az, usage, physical_usage) VALUES (4, 'az-two', 0, 0);
+		INSERT INTO project_az_resources (resource_id, az, usage) VALUES (5, 'any', 0);
 		INSERT INTO project_az_resources (resource_id, az, usage) VALUES (5, 'az-one', 0);
 		INSERT INTO project_az_resources (resource_id, az, usage) VALUES (5, 'az-two', 0);
+		INSERT INTO project_az_resources (resource_id, az, usage, historical_usage) VALUES (6, 'any', 0, '{"t":[%[3]d],"v":[0]}');
 		INSERT INTO project_az_resources (resource_id, az, usage, subresources, historical_usage) VALUES (6, 'az-one', 2, '[{"index":0},{"index":1}]', '{"t":[%[3]d],"v":[2]}');
 		INSERT INTO project_az_resources (resource_id, az, usage, subresources, historical_usage) VALUES (6, 'az-two', 2, '[{"index":2},{"index":3}]', '{"t":[%[3]d],"v":[2]}');
 		INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desired_backend_quota) VALUES (1, 1, 'capacity', 10, 100, 10);
@@ -430,22 +436,18 @@ func Test_ScrapeFailure(t *testing.T) {
 	scrapedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt2 := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
-		DELETE FROM project_az_resources WHERE resource_id = 1 AND az = 'any';
 		INSERT INTO project_az_resources (resource_id, az, usage, physical_usage) VALUES (1, 'az-one', 0, 0);
 		INSERT INTO project_az_resources (resource_id, az, usage, physical_usage) VALUES (1, 'az-two', 0, 0);
-		DELETE FROM project_az_resources WHERE resource_id = 2 AND az = 'any';
 		INSERT INTO project_az_resources (resource_id, az, usage) VALUES (2, 'az-one', 0);
 		INSERT INTO project_az_resources (resource_id, az, usage) VALUES (2, 'az-two', 0);
-		DELETE FROM project_az_resources WHERE resource_id = 3 AND az = 'any';
+		UPDATE project_az_resources SET historical_usage = '{"t":[%[1]d],"v":[0]}' WHERE resource_id = 3 AND az = 'any';
 		INSERT INTO project_az_resources (resource_id, az, usage, subresources, historical_usage) VALUES (3, 'az-one', 2, '[{"index":0},{"index":1}]', '{"t":[%[1]d],"v":[2]}');
 		INSERT INTO project_az_resources (resource_id, az, usage, subresources, historical_usage) VALUES (3, 'az-two', 2, '[{"index":2},{"index":3}]', '{"t":[%[1]d],"v":[2]}');
-		DELETE FROM project_az_resources WHERE resource_id = 4 AND az = 'any';
 		INSERT INTO project_az_resources (resource_id, az, usage, physical_usage) VALUES (4, 'az-one', 0, 0);
 		INSERT INTO project_az_resources (resource_id, az, usage, physical_usage) VALUES (4, 'az-two', 0, 0);
-		DELETE FROM project_az_resources WHERE resource_id = 5 AND az = 'any';
 		INSERT INTO project_az_resources (resource_id, az, usage) VALUES (5, 'az-one', 0);
 		INSERT INTO project_az_resources (resource_id, az, usage) VALUES (5, 'az-two', 0);
-		DELETE FROM project_az_resources WHERE resource_id = 6 AND az = 'any';
+		UPDATE project_az_resources SET historical_usage = '{"t":[%[3]d],"v":[0]}' WHERE resource_id = 6 AND az = 'any';
 		INSERT INTO project_az_resources (resource_id, az, usage, subresources, historical_usage) VALUES (6, 'az-one', 2, '[{"index":0},{"index":1}]', '{"t":[%[3]d],"v":[2]}');
 		INSERT INTO project_az_resources (resource_id, az, usage, subresources, historical_usage) VALUES (6, 'az-two', 2, '[{"index":2},{"index":3}]', '{"t":[%[3]d],"v":[2]}');
 		UPDATE project_resources SET backend_quota = 100 WHERE id = 1 AND service_id = 1 AND name = 'capacity';

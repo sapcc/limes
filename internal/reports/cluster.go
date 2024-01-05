@@ -294,6 +294,17 @@ func GetClusterResources(cluster *core.Cluster, dbi db.Interface, filter Filter)
 			if skipAZBreakdown(resource.CapacityPerAZ) {
 				resource.CapacityPerAZ = nil
 			}
+
+			//project_az_resources always has entries for "any", even if the resource
+			//is AZ-aware, because ApplyComputedProjectQuota needs somewhere to write
+			//the base quotas; we ignore those entries here if the "any" usage is
+			//zero and there are other AZs
+			if len(resource.PerAZ) >= 2 {
+				capaInAny := resource.PerAZ[limes.AvailabilityZoneAny]
+				if capaInAny.Capacity == 0 && capaInAny.Usage == nil && capaInAny.ProjectsUsage == 0 {
+					delete(resource.PerAZ, limes.AvailabilityZoneAny)
+				}
+			}
 		}
 	}
 

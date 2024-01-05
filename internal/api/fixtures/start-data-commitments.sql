@@ -63,34 +63,48 @@ INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desir
 INSERT INTO project_resources (id, service_id, name) VALUES (18, 6, 'capacity_portion');
 
 -- project_az_resources has "things" as non-AZ-aware and "capacity" as AZ-aware with an even split
+-- NOTE: AZ-aware resources also have an entry for AZ "any" with 0 usage
+--       (this is consistent with what Scrape does, and reporting should ignore those entries)
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (1, 'any', 4);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (2, 'any',    0);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (2, 'az-one', 2);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (2, 'az-two', 2);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (3, 'any',    0);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (3, 'az-one', 1);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (3, 'az-two', 1);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (4, 'any', 4);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (5, 'any',    0);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (5, 'az-one', 2);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (5, 'az-two', 2);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (6, 'any',    0);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (6, 'az-one', 1);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (6, 'az-two', 1);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (7, 'any', 4);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (8, 'any',    0);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (8, 'az-one', 2);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (8, 'az-two', 2);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (9, 'any',    0);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (9, 'az-one', 1);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (9, 'az-two', 1);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (10, 'any', 4);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (11, 'any',    0);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (11, 'az-one', 2);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (11, 'az-two', 2);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (12, 'any',    0);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (12, 'az-one', 1);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (12, 'az-two', 1);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (13, 'any', 4);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (14, 'any',    0);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (14, 'az-one', 2);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (14, 'az-two', 2);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (15, 'any',    0);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (15, 'az-one', 1);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (15, 'az-two', 1);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (16, 'any', 4);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (17, 'any',    0);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (17, 'az-one', 2);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (17, 'az-two', 2);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (18, 'any',    0);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (18, 'az-one', 1);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (18, 'az-two', 1);
 

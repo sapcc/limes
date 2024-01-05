@@ -207,11 +207,19 @@ func (c *Collector) processResourceScrapeTask(_ context.Context, task projectScr
 func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.Project, task projectScrapeTask, resourceData map[string]core.ResourceData, serializedMetrics []byte) error {
 	srv := task.Service
 
-	//ensure that there is at least one ProjectAZResource for each ProjectResource
 	for resName, resData := range resourceData {
 		if len(resData.UsageData) == 0 {
+			//ensure that there is at least one ProjectAZResource for each ProjectResource
 			resData.UsageData = core.InAnyAZ(core.UsageData{Usage: 0})
 			resourceData[resName] = resData
+		} else {
+			//for AZ-aware resources, ensure that we also have a ProjectAZResource in
+			//"any", because ApplyComputedProjectQuota needs somewhere to write base
+			//quotas into if enabled
+			_, exists := resData.UsageData[limes.AvailabilityZoneAny]
+			if !exists {
+				resData.UsageData[limes.AvailabilityZoneAny] = &core.UsageData{Usage: 0}
+			}
 		}
 	}
 
