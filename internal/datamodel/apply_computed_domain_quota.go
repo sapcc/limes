@@ -30,7 +30,7 @@ import (
 	"github.com/sapcc/limes/internal/db"
 )
 
-var recomputeDomainQuotaQueryStr = `
+var recomputeDomainQuotaQueryStr = sqlext.SimplifyWhitespace(`
 	UPDATE domain_resources dr SET quota = COALESCE((
 		SELECT SUM(pr.quota)
 		  FROM projects p
@@ -43,7 +43,7 @@ var recomputeDomainQuotaQueryStr = `
 		  FROM domain_services ds
 		 WHERE ds.domain_id = $1 AND ds.type = $2
 	)
-`
+`)
 
 // ApplyComputedDomainQuota reevaluates auto-computed domain quotas in the given domain service.
 // This is only relevant for resources with non-hierarchical quota distribution, since those resources will have their domain

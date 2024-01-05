@@ -41,7 +41,7 @@ var (
 	// This does not need to create any entries in project_az_resources, because
 	// Scrape() already created them for us.
 	acpqUpdateAZQuotaQuery = sqlext.SimplifyWhitespace(`
-		UPDATE project_az_resources SET quota = $1 WHERE quota != $1 AND az = $2 AND resource_id = (
+		UPDATE project_az_resources SET quota = $1 WHERE quota IS DISTINCT FROM $1 AND az = $2 AND resource_id = (
 			SELECT id FROM project_resources WHERE service_id = $3 AND name = $4
 		)
 	`)
@@ -57,13 +57,13 @@ var (
 	acpqListUpdatedProjectServicesQuery = sqlext.SimplifyWhitespace(`
 		SELECT DISTINCT ps.id
 		FROM project_services ps JOIN project_resources pr ON pr.service_id = ps.id
-		WHERE ps.type = $1 AND pr.desired_backend_quota != pr.backend_quota
+		WHERE ps.type = $1 AND pr.desired_backend_quota IS DISTINCT FROM pr.backend_quota
 	`)
 )
 
 // ApplyComputedProjectQuota reevaluates auto-computed project quotas for the
 // given resource, if supported by its quota distribution model.
-func ApplyComputedProjectQuota(serviceType, resourceName string, dbm *gorp.DbMap, cluster *core.Cluster, now time.Time) (err error) {
+func ApplyComputedProjectQuota(serviceType, resourceName string, dbm *gorp.DbMap, cluster *core.Cluster, now time.Time) error {
 	//only run for resources with autogrow QD model
 	qdCfg := cluster.QuotaDistributionConfigForResource(serviceType, resourceName)
 	if qdCfg.Autogrow == nil {

@@ -54,27 +54,35 @@ INSERT INTO project_resources (id, service_id, name) VALUES (12, 4, 'capacity_po
 
 -- */things and */capacity_portion resources do not have commitments, so they are boring and we don't need to care
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (1,  'any',    0);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (3,  'any',    0);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (3,  'az-one', 0);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (3,  'az-two', 0);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (4,  'any',    0);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (6,  'any',    0);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (6,  'az-one', 0);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (6,  'az-two', 0);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (7,  'any',    0);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (9,  'any',    0);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (9,  'az-one', 0);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (9,  'az-two', 0);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (10, 'any',    0);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (12, 'any',    0);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (12, 'az-one', 0);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (12, 'az-two', 0);
 
 -- part 2: */capacity resources can have commitments, so we have some large
 -- usage values here to see that these block commitments on other projects, but
 -- not on the project itself
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (2,  'any',    0);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (2,  'az-one', 1);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (2,  'az-two', 250);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (5,  'any',    0);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (5,  'az-one', 1);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (5,  'az-two', 1);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (8,  'any',    0);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (8,  'az-one', 1);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (8,  'az-two', 1);
+INSERT INTO project_az_resources (resource_id, az, usage) VALUES (11, 'any',    0);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (11, 'az-one', 1);
 INSERT INTO project_az_resources (resource_id, az, usage) VALUES (11, 'az-two', 1);
 

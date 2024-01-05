@@ -127,6 +127,10 @@ const (
 			- { resource: '.*/capacity', commitment_durations: [ '1 hour', '10 days' ], commitment_is_az_aware: true }
 			# test that overcommit factor is considered when confirming commitments
 			- { resource: first/capacity, overcommit_factor: 10.0 }
+		quota_distribution_configs:
+			# test automatic project quota calculation on */capacity resources
+			- { resource: '.*/capacity', model: autogrow, autogrow: { growth_multiplier: 1.0, project_base_quota: 10, usage_data_retention_period: 1m } }
+			- { resource: '.*/things',   model: hierarchical }
 	`
 )
 
@@ -430,9 +434,29 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 
 	//first run should create the cluster_resources and cluster_az_resources, but
 	//not confirm any commitments because they all start with `confirm_by > now`
+	//
+	//however, there will be a lot of quota changes because we run
+	//ApplyComputedProjectQuota() for the first time
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
 
-	tr.DBChanges().AssertEqualf(timestampUpdates())
+	tr.DBChanges().AssertEqualf(`%s
+		UPDATE project_az_resources SET quota = 8 WHERE resource_id = 11 AND az = 'any';
+		UPDATE project_az_resources SET quota = 1 WHERE resource_id = 11 AND az = 'az-one';
+		UPDATE project_az_resources SET quota = 1 WHERE resource_id = 11 AND az = 'az-two';
+		UPDATE project_az_resources SET quota = 0 WHERE resource_id = 2 AND az = 'any';
+		UPDATE project_az_resources SET quota = 1 WHERE resource_id = 2 AND az = 'az-one';
+		UPDATE project_az_resources SET quota = 250 WHERE resource_id = 2 AND az = 'az-two';
+		UPDATE project_az_resources SET quota = 8 WHERE resource_id = 5 AND az = 'any';
+		UPDATE project_az_resources SET quota = 1 WHERE resource_id = 5 AND az = 'az-one';
+		UPDATE project_az_resources SET quota = 1 WHERE resource_id = 5 AND az = 'az-two';
+		UPDATE project_az_resources SET quota = 8 WHERE resource_id = 8 AND az = 'any';
+		UPDATE project_az_resources SET quota = 1 WHERE resource_id = 8 AND az = 'az-one';
+		UPDATE project_az_resources SET quota = 1 WHERE resource_id = 8 AND az = 'az-two';
+		UPDATE project_resources SET quota = 10, backend_quota = 10, desired_backend_quota = 10 WHERE id = 11 AND service_id = 4 AND name = 'capacity';
+		UPDATE project_resources SET quota = 251, backend_quota = 251, desired_backend_quota = 251 WHERE id = 2 AND service_id = 1 AND name = 'capacity';
+		UPDATE project_resources SET quota = 10, backend_quota = 10, desired_backend_quota = 10 WHERE id = 5 AND service_id = 2 AND name = 'capacity';
+		UPDATE project_resources SET quota = 10, backend_quota = 10, desired_backend_quota = 10 WHERE id = 8 AND service_id = 3 AND name = 'capacity';	
+	`, timestampUpdates())
 
 	//day 1: test that confirmation works at all
 	//
@@ -442,7 +466,9 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 
 	scrapedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	tr.DBChanges().AssertEqualf(`%s
+		UPDATE project_az_resources SET quota = 10 WHERE resource_id = 2 AND az = 'az-one';
 		UPDATE project_commitments SET confirmed_at = %d WHERE id = 1;
+		UPDATE project_resources SET quota = 260, backend_quota = 260, desired_backend_quota = 260 WHERE id = 2 AND service_id = 1 AND name = 'capacity';
 	`, timestampUpdates(), scrapedAt1.Unix())
 
 	//day 2: test that confirmation considers the resource's capacity overcommit factor
@@ -454,7 +480,9 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 
 	scrapedAt1 = s.Clock.Now().Add(-5 * time.Second)
 	tr.DBChanges().AssertEqualf(`%s
+		UPDATE project_az_resources SET quota = 110 WHERE resource_id = 2 AND az = 'az-one';
 		UPDATE project_commitments SET confirmed_at = %d WHERE id = 2;
+		UPDATE project_resources SET quota = 360, backend_quota = 360, desired_backend_quota = 360 WHERE id = 2 AND service_id = 1 AND name = 'capacity';
 	`, timestampUpdates(), scrapedAt1.Unix())
 
 	//day 3: test confirmation order with several commitments, on second/capacity in az-one
@@ -468,8 +496,11 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 
 	scrapedAt2 := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`%s
+		UPDATE project_az_resources SET quota = 0 WHERE resource_id = 11 AND az = 'any';
+		UPDATE project_az_resources SET quota = 20 WHERE resource_id = 11 AND az = 'az-one';
 		UPDATE project_commitments SET confirmed_at = %d WHERE id = 4;
 		UPDATE project_commitments SET confirmed_at = %d WHERE id = 5;
+		UPDATE project_resources SET quota = 21, backend_quota = 21, desired_backend_quota = 21 WHERE id = 11 AND service_id = 4 AND name = 'capacity';
 	`, timestampUpdates(), scrapedAt2.Unix(), scrapedAt2.Unix())
 
 	//day 4: test how confirmation interacts with existing usage, on first/capacity in az-two
@@ -481,7 +512,9 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 
 	scrapedAt1 = s.Clock.Now().Add(-5 * time.Second)
 	tr.DBChanges().AssertEqualf(`%s
+		UPDATE project_az_resources SET quota = 300 WHERE resource_id = 2 AND az = 'az-two';
 		UPDATE project_commitments SET confirmed_at = %d WHERE id = 8;
+		UPDATE project_resources SET quota = 410, backend_quota = 410, desired_backend_quota = 410 WHERE id = 2 AND service_id = 1 AND name = 'capacity';
 	`, timestampUpdates(), scrapedAt1.Unix())
 
 	//day 5: test commitments that cannot be confirmed until the previous commitment expires, on second/capacity in az-one
@@ -494,7 +527,10 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 
 	scrapedAt2 = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`%s
+		UPDATE project_az_resources SET quota = 0 WHERE resource_id = 5 AND az = 'any';
+		UPDATE project_az_resources SET quota = 22 WHERE resource_id = 5 AND az = 'az-two';
 		UPDATE project_commitments SET confirmed_at = %d WHERE id = 9;
+		UPDATE project_resources SET quota = 23, backend_quota = 23, desired_backend_quota = 23 WHERE id = 5 AND service_id = 2 AND name = 'capacity';
 	`, timestampUpdates(), scrapedAt2.Unix())
 
 	//...Once ID=9 expires an hour later, ID=10 can be confirmed.
@@ -503,6 +539,11 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 
 	scrapedAt2 = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`%s
+		UPDATE project_az_resources SET quota = 2 WHERE resource_id = 11 AND az = 'az-two';
+		UPDATE project_az_resources SET quota = 8 WHERE resource_id = 5 AND az = 'any';
+		UPDATE project_az_resources SET quota = 1 WHERE resource_id = 5 AND az = 'az-two';
 		UPDATE project_commitments SET confirmed_at = %d WHERE id = 10;
+		UPDATE project_resources SET quota = 22, backend_quota = 22, desired_backend_quota = 22 WHERE id = 11 AND service_id = 4 AND name = 'capacity';
+		UPDATE project_resources SET quota = 10, backend_quota = 10, desired_backend_quota = 10 WHERE id = 5 AND service_id = 2 AND name = 'capacity';
 	`, timestampUpdates(), scrapedAt2.Unix())
 }
