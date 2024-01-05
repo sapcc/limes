@@ -34,6 +34,7 @@ import (
 // clusterAZAllocationStats bundles all data pertaining to a specific AZ
 // resource that we need for various high-level algorithms in this package:
 //
+// - ApplyComputedProjectQuota
 // - CanConfirmNewCommitment
 // - ConfirmPendingCommitments
 type clusterAZAllocationStats struct {
@@ -59,7 +60,6 @@ func (c clusterAZAllocationStats) FitsAdditionalCommitment(serviceID db.ProjectS
 // projectAZAllocationStats describes the resource allocation in a certain AZ
 // resource by a single project.
 type projectAZAllocationStats struct {
-	Quota              *uint64
 	Committed          uint64 //sum of confirmed commitments
 	Usage              uint64
 	MinHistoricalUsage uint64
@@ -75,7 +75,7 @@ var (
 		  WHERE cs.type = $1 AND cr.name = $2 AND ($3::text IS NULL OR car.az = $3)
 	`)
 	getUsageInResourceQuery = sqlext.SimplifyWhitespace(`
-		SELECT ps.id, par.az, par.quota, par.usage, par.historical_usage
+		SELECT ps.id, par.az, par.usage, par.historical_usage
 		  FROM project_services ps
 		  JOIN project_resources pr ON pr.service_id = ps.id
 		  JOIN project_az_resources par ON par.resource_id = pr.id
@@ -91,7 +91,8 @@ var (
 	`)
 )
 
-// Shared data collection phase for CanConfirmNewCommitment and ConfirmPendingCommitments.
+// Shared data collection phase for ApplyComputedProjectQuota,
+// CanConfirmNewCommitment and ConfirmPendingCommitments.
 func collectAZAllocationStats(serviceType, resourceName string, azFilter *limes.AvailabilityZone, cluster *core.Cluster, dbi db.Interface, now time.Time) (map[limes.AvailabilityZone]clusterAZAllocationStats, error) {
 	scopeDesc := fmt.Sprintf("%s/%s", serviceType, resourceName)
 	if azFilter != nil {
@@ -125,7 +126,7 @@ func collectAZAllocationStats(serviceType, resourceName string, azFilter *limes.
 			stats               projectAZAllocationStats
 			historicalUsageJSON string
 		)
-		err := rows.Scan(&serviceID, &az, &stats.Quota, &stats.Usage, &historicalUsageJSON)
+		err := rows.Scan(&serviceID, &az, &stats.Usage, &historicalUsageJSON)
 		if err != nil {
 			return err
 		}
