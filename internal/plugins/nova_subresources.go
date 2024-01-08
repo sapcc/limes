@@ -25,7 +25,6 @@ import (
 	"strconv"
 
 	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/availabilityzones"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
 	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/sapcc/go-api-declarations/limes"
@@ -33,13 +32,6 @@ import (
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/plugins/nova"
 )
-
-// A compute instance as shown on the Nova API.
-// This includes some API extensions that we need.
-type novaInstance struct {
-	servers.Server
-	availabilityzones.ServerAvailabilityZoneExt
-}
 
 // A compute instance as shown in our compute/instances subresources.
 type novaInstanceSubresource struct {
@@ -64,7 +56,7 @@ type novaInstanceSubresource struct {
 	OSType string `json:"os_type"`
 }
 
-func (p *novaPlugin) buildInstanceSubresource(instance novaInstance) (res novaInstanceSubresource, err error) {
+func (p *novaPlugin) buildInstanceSubresource(instance nova.Instance) (res novaInstanceSubresource, err error) {
 	//copy base attributes
 	res.ID = instance.ID
 	res.Name = instance.Name
@@ -120,12 +112,7 @@ func (p *novaPlugin) buildInstanceSubresource(instance novaInstance) (res novaIn
 	}
 
 	//calculate classifications based on image data
-	if instance.Image == nil {
-		res.OSType = p.OSTypeProber.GetFromBootVolume(instance.ID)
-	} else {
-		res.OSType = p.OSTypeProber.GetFromImage(instance.Image["id"])
-	}
-
+	res.OSType = p.OSTypeProber.Get(instance)
 	return res, nil
 }
 
@@ -137,7 +124,7 @@ func (p *novaPlugin) buildInstanceSubresources(project core.KeystoneProject) ([]
 
 	var result []novaInstanceSubresource
 	err := servers.List(p.NovaV2, opts).EachPage(func(page pagination.Page) (bool, error) {
-		var instances []novaInstance
+		var instances []nova.Instance
 		err := servers.ExtractServersInto(page, &instances)
 		if err != nil {
 			return false, err

@@ -26,18 +26,6 @@ import (
 	"github.com/sapcc/go-bits/regexpext"
 )
 
-// FlavorInfo contains information about a flavor, in the format that appears
-// in Nova's GET /servers/:id in the "flavor" key with newer Nova microversions.
-type FlavorInfo struct {
-	DiskGiB      uint64            `json:"disk"`
-	EphemeralGiB uint64            `json:"ephemeral"`
-	ExtraSpecs   map[string]string `json:"extra_specs"`
-	OriginalName string            `json:"original_name"`
-	MemoryMiB    uint64            `json:"ram"`
-	SwapMiB      uint64            `json:"swap"`
-	VCPUs        uint64            `json:"vcpus"`
-}
-
 // HypervisorTypeRules is a set of rules that allows to compute the
 // HypervisorType attribute of a Nova instance subresource from its FlavorInfo.
 type HypervisorTypeRules []HypervisorTypeRule

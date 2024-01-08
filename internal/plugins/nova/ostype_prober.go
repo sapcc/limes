@@ -17,7 +17,7 @@
 *
 *******************************************************************************/
 
-package plugins
+package nova
 
 import (
 	"strings"
@@ -36,7 +36,8 @@ import (
 // to ensure that goimports does not mistakenly replace it by .../compute/v2/images
 var _ images.ImageVisibility
 
-type novaOSTypeProber struct {
+// OSTypeProber contains the logic for filling the OSType attribute of a Nova instance subresource.
+type OSTypeProber struct {
 	//caches
 	CacheByImage    map[string]string //for instances booted from images
 	CacheByInstance map[string]string //for instances booted from volumes
@@ -46,8 +47,9 @@ type novaOSTypeProber struct {
 	GlanceV2 *gophercloud.ServiceClient
 }
 
-func newNovaOSTypeProber(novaV2, cinderV3, glanceV2 *gophercloud.ServiceClient) *novaOSTypeProber {
-	return &novaOSTypeProber{
+// NewOSTypeProber builds an OSTypeProber.
+func NewOSTypeProber(novaV2, cinderV3, glanceV2 *gophercloud.ServiceClient) *OSTypeProber {
+	return &OSTypeProber{
 		CacheByImage:    make(map[string]string),
 		CacheByInstance: make(map[string]string),
 		NovaV2:          novaV2,
@@ -56,7 +58,15 @@ func newNovaOSTypeProber(novaV2, cinderV3, glanceV2 *gophercloud.ServiceClient) 
 	}
 }
 
-func (p *novaOSTypeProber) GetFromBootVolume(instanceID string) string {
+func (p *OSTypeProber) Get(instance Instance) string {
+	if instance.Image == nil {
+		return p.getFromBootVolume(instance.ID)
+	} else {
+		return p.getFromImage(instance.Image["id"])
+	}
+}
+
+func (p *OSTypeProber) getFromBootVolume(instanceID string) string {
 	result, ok := p.CacheByInstance[instanceID]
 	if ok {
 		return result
@@ -72,7 +82,7 @@ func (p *novaOSTypeProber) GetFromBootVolume(instanceID string) string {
 	}
 }
 
-func (p *novaOSTypeProber) GetFromImage(imageIDAttribute any) string {
+func (p *OSTypeProber) getFromImage(imageIDAttribute any) string {
 	imageID, ok := imageIDAttribute.(string)
 	if !ok {
 		//malformed "image" section in the instance JSON returned by Nova
@@ -94,7 +104,7 @@ func (p *novaOSTypeProber) GetFromImage(imageIDAttribute any) string {
 	}
 }
 
-func (p *novaOSTypeProber) findFromBootVolume(instanceID string) (string, error) {
+func (p *OSTypeProber) findFromBootVolume(instanceID string) (string, error) {
 	//list volume attachments
 	page, err := volumeattach.List(p.NovaV2, instanceID).AllPages()
 	if err != nil {
@@ -134,7 +144,7 @@ func (p *novaOSTypeProber) findFromBootVolume(instanceID string) (string, error)
 	return "unknown", nil
 }
 
-func (p *novaOSTypeProber) findFromImage(imageID string) (string, error) {
+func (p *OSTypeProber) findFromImage(imageID string) (string, error) {
 	var result struct {
 		Tags         []string `json:"tags"`
 		VMwareOSType string   `json:"vmware_ostype"`

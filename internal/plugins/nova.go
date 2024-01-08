@@ -52,7 +52,7 @@ type novaPlugin struct {
 	resources []limesresources.ResourceInfo `yaml:"-"`
 	//connections
 	NovaV2            *gophercloud.ServiceClient `yaml:"-"`
-	OSTypeProber      *novaOSTypeProber          `yaml:"-"`
+	OSTypeProber      *nova.OSTypeProber         `yaml:"-"`
 	ServerGroupProber *novaServerGroupProber     `yaml:"-"`
 }
 
@@ -106,7 +106,7 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.E
 	if err != nil {
 		return err
 	}
-	p.OSTypeProber = newNovaOSTypeProber(p.NovaV2, cinderV3, glanceV2)
+	p.OSTypeProber = nova.NewOSTypeProber(p.NovaV2, cinderV3, glanceV2)
 	p.ServerGroupProber = newNovaServerGroupProber(p.NovaV2)
 
 	//find per-flavor instance resources
