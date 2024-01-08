@@ -36,6 +36,7 @@ import (
 	"github.com/sapcc/go-bits/regexpext"
 
 	"github.com/sapcc/limes/internal/core"
+	"github.com/sapcc/limes/internal/plugins/nova"
 )
 
 type novaPlugin struct {
@@ -43,13 +44,12 @@ type novaPlugin struct {
 	BigVMMinMemoryMiB      uint64                  `yaml:"bigvm_min_memory"`
 	HypervisorTypeRules    novaHypervisorTypeRules `yaml:"hypervisor_type_rules"`
 	SeparateInstanceQuotas struct {
-		FlavorNameRx  regexpext.PlainRegexp `yaml:"flavor_name_pattern"`
-		FlavorAliases map[string][]string   `yaml:"flavor_aliases"`
+		FlavorNameRx  regexpext.PlainRegexp       `yaml:"flavor_name_pattern"`
+		FlavorAliases nova.FlavorTranslationTable `yaml:"flavor_aliases"`
 	} `yaml:"separate_instance_quotas"`
 	WithSubresources bool `yaml:"with_subresources"`
 	//computed state
 	resources []limesresources.ResourceInfo `yaml:"-"`
-	ftt       novaFlavorTranslationTable    `yaml:"-"`
 	//connections
 	NovaV2            *gophercloud.ServiceClient `yaml:"-"`
 	OSTypeProber      *novaOSTypeProber          `yaml:"-"`
@@ -92,7 +92,6 @@ func init() {
 // Init implements the core.QuotaPlugin interface.
 func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
 	p.resources = novaDefaultResources
-	p.ftt = newNovaFlavorTranslationTable(p.SeparateInstanceQuotas.FlavorAliases)
 
 	p.NovaV2, err = openstack.NewComputeV2(provider, eo)
 	if err != nil {
@@ -111,7 +110,7 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.E
 	p.ServerGroupProber = newNovaServerGroupProber(p.NovaV2)
 
 	//find per-flavor instance resources
-	flavorNames, err := p.ftt.ListFlavorsWithSeparateInstanceQuota(p.NovaV2)
+	flavorNames, err := p.SeparateInstanceQuotas.FlavorAliases.ListFlavorsWithSeparateInstanceQuota(p.NovaV2)
 	if err != nil {
 		return err
 	}
@@ -119,7 +118,7 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.E
 		//NOTE: If `flavor_name_pattern` is empty, then FlavorNameRx will match any input.
 		if p.SeparateInstanceQuotas.FlavorNameRx.MatchString(flavorName) {
 			p.resources = append(p.resources, limesresources.ResourceInfo{
-				Name:     p.ftt.LimesResourceNameForFlavor(flavorName),
+				Name:     p.SeparateInstanceQuotas.FlavorAliases.LimesResourceNameForFlavor(flavorName),
 				Category: "per_flavor",
 				Unit:     limes.UnitNone,
 			})
@@ -272,7 +271,7 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Availab
 	}
 	for flavorName, flavorLimits := range limitsData.Limits.AbsolutePerFlavor {
 		if p.SeparateInstanceQuotas.FlavorNameRx.MatchString(flavorName) {
-			result[p.ftt.LimesResourceNameForFlavor(flavorName)] = core.ResourceData{
+			result[p.SeparateInstanceQuotas.FlavorAliases.LimesResourceNameForFlavor(flavorName)] = core.ResourceData{
 				Quota:     flavorLimits.MaxTotalInstances,
 				UsageData: core.InUnknownAZUnlessEmpty(core.UsageData{Usage: flavorLimits.TotalInstancesUsed}).AndZeroInTheseAZs(allAZs),
 			}
@@ -300,7 +299,7 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Availab
 		az := subres.AZ
 
 		//use separate instance resource if we have a matching "instances_$FLAVOR" resource
-		instanceResourceName := p.ftt.LimesResourceNameForFlavor(subres.FlavorName)
+		instanceResourceName := p.SeparateInstanceQuotas.FlavorAliases.LimesResourceNameForFlavor(subres.FlavorName)
 		if _, exists := result[instanceResourceName]; !exists {
 			instanceResourceName = "instances"
 		}
@@ -366,7 +365,7 @@ func (p *novaPlugin) SetQuota(project core.KeystoneProject, quotas map[string]ui
 	//translate Limes resource names for separate instance quotas into Nova quota names
 	novaQuotas := make(novaQuotaUpdateOpts, len(quotas))
 	for resourceName, quota := range quotas {
-		novaQuotaName := p.ftt.NovaQuotaNameForLimesResourceName(resourceName)
+		novaQuotaName := p.SeparateInstanceQuotas.FlavorAliases.NovaQuotaNameForLimesResourceName(resourceName)
 		if novaQuotaName == "" {
 			//not a separate instance quota - leave as-is
 			novaQuotas[resourceName] = quota

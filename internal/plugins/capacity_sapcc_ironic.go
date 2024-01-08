@@ -34,15 +34,14 @@ import (
 	"github.com/sapcc/go-bits/regexpext"
 
 	"github.com/sapcc/limes/internal/core"
+	"github.com/sapcc/limes/internal/plugins/nova"
 )
 
 type capacitySapccIronicPlugin struct {
 	//configuration
-	FlavorNameRx      regexpext.PlainRegexp `yaml:"flavor_name_pattern"`
-	FlavorAliases     map[string][]string   `yaml:"flavor_aliases"`
-	WithSubcapacities bool                  `yaml:"with_subcapacities"`
-	//computed state
-	ftt novaFlavorTranslationTable `yaml:"-"`
+	FlavorNameRx      regexpext.PlainRegexp       `yaml:"flavor_name_pattern"`
+	FlavorAliases     nova.FlavorTranslationTable `yaml:"flavor_aliases"`
+	WithSubcapacities bool                        `yaml:"with_subcapacities"`
 	//connections
 	NovaV2   *gophercloud.ServiceClient `yaml:"-"`
 	IronicV1 *gophercloud.ServiceClient `yaml:"-"`
@@ -62,8 +61,6 @@ func init() {
 
 // Init implements the core.CapacityPlugin interface.
 func (p *capacitySapccIronicPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
-	p.ftt = newNovaFlavorTranslationTable(p.FlavorAliases)
-
 	p.NovaV2, err = openstack.NewComputeV2(provider, eo)
 	if err != nil {
 		return err
@@ -158,7 +155,7 @@ var cpNodeNameRx = regexp.MustCompile(`^node(?:swift)?\d+-(cp\d+)$`)
 // Scrape implements the core.CapacityPlugin interface.
 func (p *capacitySapccIronicPlugin) Scrape() (result map[string]map[string]core.PerAZ[core.CapacityData], serializedMetrics []byte, err error) {
 	//collect info about flavors with separate instance quota
-	flavorNames, err := p.ftt.ListFlavorsWithSeparateInstanceQuota(p.NovaV2)
+	flavorNames, err := p.FlavorAliases.ListFlavorsWithSeparateInstanceQuota(p.NovaV2)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -168,7 +165,7 @@ func (p *capacitySapccIronicPlugin) Scrape() (result map[string]map[string]core.
 	for _, flavorName := range flavorNames {
 		//NOTE: If `flavor_name_pattern` is empty, then FlavorNameRx will match any input.
 		if p.FlavorNameRx.MatchString(flavorName) {
-			resName := p.ftt.LimesResourceNameForFlavor(flavorName)
+			resName := p.FlavorAliases.LimesResourceNameForFlavor(flavorName)
 			resultCompute[resName] = make(core.PerAZ[core.CapacityData])
 		}
 	}
@@ -258,7 +255,7 @@ func (p *capacitySapccIronicPlugin) Scrape() (result map[string]map[string]core.
 					logg.Error(`Ironic node %q (%s) does not match the "nodeXXX-{bm,bb,ap,md,st,swf}YYY" naming convention`, node.Name, node.ID)
 				}
 
-				resName := p.ftt.LimesResourceNameForFlavor(flavorName)
+				resName := p.FlavorAliases.LimesResourceNameForFlavor(flavorName)
 				data := resultCompute[resName][nodeAZ]
 				if data == nil {
 					data = &core.CapacityData{}

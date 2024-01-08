@@ -17,24 +17,25 @@
 *
 *******************************************************************************/
 
-package plugins
+package nova
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/gophercloud/gophercloud"
 )
 
-// novaFlavorTranslationTable is used in situations where certain flavors can
+// FlavorTranslationTable is used in situations where certain flavors can
 // have more than one name in Nova, to translate between the names preferred by
 // Nova and those preferred by Limes.
-type novaFlavorTranslationTable struct {
-	Entries []*novaFlavorTranslationEntry
+type FlavorTranslationTable struct {
+	Entries []*FlavorTranslationEntry
 }
 
-// novaFlavorTranslationEntry is an entry for one particular flavor in type
-// novaFlavorTranslationTable.
-type novaFlavorTranslationEntry struct {
+// FlavorTranslationEntry is an entry for one particular flavor in type
+// FlavorTranslationTable.
+type FlavorTranslationEntry struct {
 	//All possible names for this flavor, including the preferred names that have
 	//their separate fields below.
 	Aliases []string
@@ -48,24 +49,46 @@ type novaFlavorTranslationEntry struct {
 	NovaPreferredName string
 }
 
-func newNovaFlavorTranslationTable(flavorAliases map[string][]string) novaFlavorTranslationTable {
-	var entries []*novaFlavorTranslationEntry
-	for preferred, aliases := range flavorAliases {
-		entries = append(entries, &novaFlavorTranslationEntry{
+// UnmarshalYAML implements the yaml.Unmarshaler interface.
+func (t *FlavorTranslationTable) UnmarshalYAML(unmarshal func(any) error) error {
+	// in plugin configuration, an FTT is encoded as map[string][]string where
+	// each key is the LimesPreferredName and the list of values contains the
+	// other aliases of the same flavor
+	var data map[string][]string
+	err := unmarshal(&data)
+	if err != nil {
+		return err
+	}
+
+	t.Entries = make([]*FlavorTranslationEntry, 0, len(data))
+	for preferred, aliases := range data {
+		t.Entries = append(t.Entries, &FlavorTranslationEntry{
 			Aliases:            append([]string{preferred}, aliases...),
 			LimesPreferredName: preferred,
 			NovaPreferredName:  "", //will be filled in first call to SeparateInstanceQuotaToLimesName
 		})
 	}
-	return novaFlavorTranslationTable{entries}
+	return nil
 }
 
-func (t novaFlavorTranslationTable) findEntry(flavorName string) *novaFlavorTranslationEntry {
+// NewFlavorTranslationTable builds a FlavorTranslationEntry from the format
+// found within plugin configuration.
+func NewFlavorTranslationTable(flavorAliases map[string][]string) FlavorTranslationTable {
+	var entries []*FlavorTranslationEntry
+	for preferred, aliases := range flavorAliases {
+		entries = append(entries, &FlavorTranslationEntry{
+			Aliases:            append([]string{preferred}, aliases...),
+			LimesPreferredName: preferred,
+			NovaPreferredName:  "", //will be filled in first call to SeparateInstanceQuotaToLimesName
+		})
+	}
+	return FlavorTranslationTable{entries}
+}
+
+func (t FlavorTranslationTable) findEntry(flavorName string) *FlavorTranslationEntry {
 	for _, e := range t.Entries {
-		for _, a := range e.Aliases {
-			if a == flavorName {
-				return e
-			}
+		if slices.Contains(e.Aliases, flavorName) {
+			return e
 		}
 	}
 	return nil
@@ -73,15 +96,16 @@ func (t novaFlavorTranslationTable) findEntry(flavorName string) *novaFlavorTran
 
 // Used by ListFlavorsWithSeparateInstanceQuota() to record the fact that the
 // given `flavorName` is used by Nova for a separate instance quota.
-func (t novaFlavorTranslationTable) recordNovaPreferredName(flavorName string) {
+func (t FlavorTranslationTable) recordNovaPreferredName(flavorName string) {
 	entry := t.findEntry(flavorName)
 	if entry != nil {
 		entry.NovaPreferredName = flavorName
 	}
 }
 
-// Returns the Limes resource name for a flavor with a separate instance quota.
-func (t novaFlavorTranslationTable) LimesResourceNameForFlavor(flavorName string) string {
+// LimesResourceNameForFlavor returns the Limes resource name for a flavor with
+// a separate instance quota.
+func (t FlavorTranslationTable) LimesResourceNameForFlavor(flavorName string) string {
 	entry := t.findEntry(flavorName)
 	if entry == nil {
 		return "instances_" + flavorName
@@ -89,9 +113,10 @@ func (t novaFlavorTranslationTable) LimesResourceNameForFlavor(flavorName string
 	return "instances_" + entry.LimesPreferredName
 }
 
-// Returns the Nova quota name for the given Limes resource name, or "" if the
-// given resource name does not refer to a separate instance quota.
-func (t novaFlavorTranslationTable) NovaQuotaNameForLimesResourceName(resourceName string) string {
+// NovaQuotaNameForLimesResourceName returns the Nova quota name for the given
+// Limes resource name, or "" if the given resource name does not refer to a
+// separate instance quota.
+func (t FlavorTranslationTable) NovaQuotaNameForLimesResourceName(resourceName string) string {
 	//NOTE: Know the difference!
 	//  novaQuotaName = "instances_${novaPreferredName}"
 	//  resourceName = "instances_${limesPreferredName}"
@@ -109,9 +134,9 @@ func (t novaFlavorTranslationTable) NovaQuotaNameForLimesResourceName(resourceNa
 	return "instances_" + entry.NovaPreferredName
 }
 
-// Queries Nova for all separate instance quotas, and returns the flavor names
-// that Nova prefers for each.
-func (t novaFlavorTranslationTable) ListFlavorsWithSeparateInstanceQuota(computeV2 *gophercloud.ServiceClient) ([]string, error) {
+// ListFlavorsWithSeparateInstanceQuota queries Nova for all separate instance
+// quotas, and returns the flavor names that Nova prefers for each.
+func (t FlavorTranslationTable) ListFlavorsWithSeparateInstanceQuota(computeV2 *gophercloud.ServiceClient) ([]string, error) {
 	//look at the magical quota class "flavors" to determine which quotas exist
 	url := computeV2.ServiceURL("os-quota-class-sets", "flavors")
 	var result gophercloud.Result
