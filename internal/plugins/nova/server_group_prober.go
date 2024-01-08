@@ -17,7 +17,7 @@
 *
 *******************************************************************************/
 
-package plugins
+package nova
 
 import (
 	"time"
@@ -26,33 +26,37 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/servergroups"
 )
 
+// ServerGroupProber measures server_group_members usage within a project.
+//
 // The reason why this type exists at all is that:
 // a) Nova does not report the usage for server_group_members directly, and
 // b) we cannot ask for server groups in a specific foreign project.
 //
 // We can only list *all* server groups globally at once. Since this is very
 // expensive, we only do it once every few minutes.
-type novaServerGroupProber struct {
-	NovaV2           *gophercloud.ServiceClient
-	UsageByProjectID map[string]uint64
-	LastScrapeTime   time.Time // only initialized if .usageByProjectID != nil
+type ServerGroupProber struct {
+	novaV2           *gophercloud.ServiceClient
+	usageByProjectID map[string]uint64
+	lastScrapeTime   time.Time // only initialized if .usageByProjectID != nil
 }
 
-func newNovaServerGroupProber(novaV2 *gophercloud.ServiceClient) *novaServerGroupProber {
-	return &novaServerGroupProber{NovaV2: novaV2}
+// NewServerGroupProber builds a ServerGroupProber instance.
+func NewServerGroupProber(novaV2 *gophercloud.ServiceClient) *ServerGroupProber {
+	return &ServerGroupProber{novaV2: novaV2}
 }
 
-func (p *novaServerGroupProber) GetMemberUsageForProject(projectID string) (uint64, error) {
+// GetMemberUsageForProject returns server_group_members usage in the given project.
+func (p *ServerGroupProber) GetMemberUsageForProject(projectID string) (uint64, error) {
 	//refresh cache if not initialized or outdated
 	var err error
-	if p.UsageByProjectID == nil || time.Since(p.LastScrapeTime) > 10*time.Minute {
+	if p.usageByProjectID == nil || time.Since(p.lastScrapeTime) > 10*time.Minute {
 		err = p.fillCache()
 	}
 
-	return p.UsageByProjectID[projectID], err
+	return p.usageByProjectID[projectID], err
 }
 
-func (p *novaServerGroupProber) fillCache() error {
+func (p *ServerGroupProber) fillCache() error {
 	//When paginating through the list of server groups, perform steps slightly
 	//smaller than the actual page size, in order to correctly detect insertions
 	//and deletions that may cause list entries to shift around while we iterate
@@ -81,13 +85,13 @@ func (p *novaServerGroupProber) fillCache() error {
 		currentOffset += stepSize
 	}
 
-	p.UsageByProjectID = usageByProjectID
-	p.LastScrapeTime = time.Now()
+	p.usageByProjectID = usageByProjectID
+	p.lastScrapeTime = time.Now()
 	return nil
 }
 
-func (p *novaServerGroupProber) getServerGroupsPage(limit, offset int) ([]servergroups.ServerGroup, error) {
-	allPages, err := servergroups.List(p.NovaV2, servergroups.ListOpts{AllProjects: true, Limit: limit, Offset: offset}).AllPages()
+func (p *ServerGroupProber) getServerGroupsPage(limit, offset int) ([]servergroups.ServerGroup, error) {
+	allPages, err := servergroups.List(p.novaV2, servergroups.ListOpts{AllProjects: true, Limit: limit, Offset: offset}).AllPages()
 	if err != nil {
 		return nil, err
 	}

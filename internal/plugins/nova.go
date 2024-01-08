@@ -53,7 +53,7 @@ type novaPlugin struct {
 	//connections
 	NovaV2            *gophercloud.ServiceClient `yaml:"-"`
 	OSTypeProber      *nova.OSTypeProber         `yaml:"-"`
-	ServerGroupProber *novaServerGroupProber     `yaml:"-"`
+	ServerGroupProber *nova.ServerGroupProber    `yaml:"-"`
 }
 
 type novaSerializedMetrics struct {
@@ -107,7 +107,7 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.E
 		return err
 	}
 	p.OSTypeProber = nova.NewOSTypeProber(p.NovaV2, cinderV3, glanceV2)
-	p.ServerGroupProber = newNovaServerGroupProber(p.NovaV2)
+	p.ServerGroupProber = nova.NewServerGroupProber(p.NovaV2)
 
 	//find per-flavor instance resources
 	flavorNames, err := p.SeparateInstanceQuotas.FlavorAliases.ListFlavorsWithSeparateInstanceQuota(p.NovaV2)
