@@ -161,7 +161,7 @@ func (c *Cluster) Connect(provider *gophercloud.ProviderClient, eo gophercloud.E
 		}
 	}
 
-	return nil
+	return errs
 }
 
 // ServiceTypesInAlphabeticalOrder can be used when service types need to be
