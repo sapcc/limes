@@ -31,6 +31,7 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 
 	"github.com/sapcc/limes/internal/core"
+	"github.com/sapcc/limes/internal/plugins/nova"
 )
 
 // A compute instance as shown on the Nova API.
@@ -63,18 +64,6 @@ type novaInstanceSubresource struct {
 	OSType string `json:"os_type"`
 }
 
-// Information about a flavor, as it appears in Nova's GET /servers/:id
-// in the "flavor" key with newer Nova microversions.
-type novaFlavorInfo struct {
-	DiskGiB      uint64            `json:"disk"`
-	EphemeralGiB uint64            `json:"ephemeral"`
-	ExtraSpecs   map[string]string `json:"extra_specs"`
-	OriginalName string            `json:"original_name"`
-	MemoryMiB    uint64            `json:"ram"`
-	SwapMiB      uint64            `json:"swap"`
-	VCPUs        uint64            `json:"vcpus"`
-}
-
 func (p *novaPlugin) buildInstanceSubresource(instance novaInstance) (res novaInstanceSubresource, err error) {
 	//copy base attributes
 	res.ID = instance.ID
@@ -91,7 +80,7 @@ func (p *novaPlugin) buildInstanceSubresource(instance novaInstance) (res novaIn
 	if err != nil {
 		return res, fmt.Errorf("could not reserialize flavor data for instance %s: %w", instance.ID, err)
 	}
-	var flavorInfo novaFlavorInfo
+	var flavorInfo nova.FlavorInfo
 	err = json.Unmarshal(buf, &flavorInfo)
 	if err != nil {
 		return res, fmt.Errorf("could not parse flavor data for instance %s: %w", instance.ID, err)

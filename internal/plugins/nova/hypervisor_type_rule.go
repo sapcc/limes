@@ -17,7 +17,7 @@
 *
 *******************************************************************************/
 
-package plugins
+package nova
 
 import (
 	"fmt"
@@ -26,16 +26,51 @@ import (
 	"github.com/sapcc/go-bits/regexpext"
 )
 
-////////////////////////////////////////////////////////////////////////////////
-// hypervisor type rules
+// FlavorInfo contains information about a flavor, in the format that appears
+// in Nova's GET /servers/:id in the "flavor" key with newer Nova microversions.
+type FlavorInfo struct {
+	DiskGiB      uint64            `json:"disk"`
+	EphemeralGiB uint64            `json:"ephemeral"`
+	ExtraSpecs   map[string]string `json:"extra_specs"`
+	OriginalName string            `json:"original_name"`
+	MemoryMiB    uint64            `json:"ram"`
+	SwapMiB      uint64            `json:"swap"`
+	VCPUs        uint64            `json:"vcpus"`
+}
 
-type novaHypervisorTypeRule struct {
+// HypervisorTypeRules is a set of rules that allows to compute the
+// HypervisorType attribute of a Nova instance subresource from its FlavorInfo.
+type HypervisorTypeRules []HypervisorTypeRule
+
+// Validate returns an error if this rule is not valid.
+func (rules HypervisorTypeRules) Validate() error {
+	for _, r := range rules {
+		err := r.validate()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Evaluate returns the HypervisorType string for the given instance flavor.
+func (rules HypervisorTypeRules) Evaluate(flavor FlavorInfo) string {
+	for _, r := range rules {
+		if r.appliesTo(flavor) {
+			return r.HypervisorType
+		}
+	}
+	return "unknown"
+}
+
+// HypervisorTypeRule is a single entry in type HypervisorTypeRules.
+type HypervisorTypeRule struct {
 	Key            string                `yaml:"match"`
 	Pattern        regexpext.PlainRegexp `yaml:"pattern"`
 	HypervisorType string                `yaml:"type"`
 }
 
-func (r novaHypervisorTypeRule) Validate() error {
+func (r HypervisorTypeRule) validate() error {
 	//the format of rule.Key is built for future extensibility, e.g. if it
 	//later becomes required to match against image capabilities
 	switch {
@@ -51,7 +86,7 @@ func (r novaHypervisorTypeRule) Validate() error {
 	}
 }
 
-func (r novaHypervisorTypeRule) AppliesTo(flavor novaFlavorInfo) bool {
+func (r HypervisorTypeRule) appliesTo(flavor FlavorInfo) bool {
 	switch {
 	case r.Key == "flavor-name":
 		return r.Pattern.MatchString(flavor.OriginalName)
@@ -61,15 +96,4 @@ func (r novaHypervisorTypeRule) AppliesTo(flavor novaFlavorInfo) bool {
 	default:
 		return false
 	}
-}
-
-type novaHypervisorTypeRules []novaHypervisorTypeRule
-
-func (rules novaHypervisorTypeRules) Evaluate(flavor novaFlavorInfo) string {
-	for _, r := range rules {
-		if r.AppliesTo(flavor) {
-			return r.HypervisorType
-		}
-	}
-	return "unknown"
 }

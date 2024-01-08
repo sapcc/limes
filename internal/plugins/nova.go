@@ -41,8 +41,8 @@ import (
 
 type novaPlugin struct {
 	//configuration
-	BigVMMinMemoryMiB      uint64                  `yaml:"bigvm_min_memory"`
-	HypervisorTypeRules    novaHypervisorTypeRules `yaml:"hypervisor_type_rules"`
+	BigVMMinMemoryMiB      uint64                   `yaml:"bigvm_min_memory"`
+	HypervisorTypeRules    nova.HypervisorTypeRules `yaml:"hypervisor_type_rules"`
 	SeparateInstanceQuotas struct {
 		FlavorNameRx  regexpext.PlainRegexp       `yaml:"flavor_name_pattern"`
 		FlavorAliases nova.FlavorTranslationTable `yaml:"flavor_aliases"`
@@ -171,15 +171,7 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.E
 		return p.resources[i].Name < p.resources[j].Name
 	})
 
-	//validate hypervisor type rules
-	for _, rule := range p.HypervisorTypeRules {
-		err = rule.Validate()
-		if err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return p.HypervisorTypeRules.Validate()
 }
 
 // PluginTypeID implements the core.QuotaPlugin interface.
