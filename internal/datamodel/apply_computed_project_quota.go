@@ -123,13 +123,13 @@ func ApplyComputedProjectQuota(serviceType, resourceName string, dbm *gorp.DbMap
 		}
 
 		var dbProject db.Project
-		_, err = dbm.Select(&dbProject, `SELECT * FROM projects WHERE id IN (SELECT project_id FROM project_services WHERE id = $1)`, srv.ID)
+		err = dbm.SelectOne(&dbProject, `SELECT * FROM projects WHERE id IN (SELECT project_id FROM project_services WHERE id = $1)`, srv.ID)
 		if err != nil {
 			return fmt.Errorf("while loading project for project service %d: %w", srv.ID, err)
 		}
 
 		var dbDomain db.Domain
-		_, err = dbm.Select(&dbDomain, `SELECT * FROM domains WHERE id = $1`, dbProject.DomainID)
+		err = dbm.SelectOne(&dbDomain, `SELECT * FROM domains WHERE id = $1`, dbProject.DomainID)
 		if err != nil {
 			return fmt.Errorf("while loading domain %d: %w", dbProject.DomainID, err)
 		}
