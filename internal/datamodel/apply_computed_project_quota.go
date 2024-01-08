@@ -246,10 +246,11 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 			projectAZStats := stats[az].ProjectStats[serviceID]
 			growthBaseline := max(projectAZStats.Committed, projectAZStats.MinHistoricalUsage)
 			desiredQuota := uint64(float64(growthBaseline) * cfg.GrowthMultiplier)
-			if cfg.GrowthMultiplier > 1.0 && desiredQuota == growthBaseline && growthBaseline > 0 {
+			if cfg.GrowthMultiplier > 1.0 && growthBaseline > 0 {
 				// fix nonzero growth factor rounding to zero
 				// e.g. growthBaseline = 5 and GrowthMultiplier = 1.1 -> desiredQuota = uint64(5.0 * 1.1) = 5
-				desiredQuota = growthBaseline + 1
+				growthMinimum := max(cfg.GrowthMinimum, 1)
+				desiredQuota = max(desiredQuota, growthBaseline+growthMinimum)
 			}
 			target[az][serviceID].Desired = desiredQuota
 		}
