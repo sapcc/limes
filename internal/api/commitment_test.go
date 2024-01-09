@@ -477,6 +477,17 @@ func TestPutCommitmentErrorCases(t *testing.T) {
 		ExpectStatus: http.StatusUnprocessableEntity,
 		ExpectBody:   assert.StringData("amount of committed resource must be greater than zero\n"),
 	}.Check(t, s.Handler)
+
+	//invalid request field: confirm_by may not be in the past
+	cloned = maps.Clone(request)
+	cloned["confirm_by"] = s.Clock.Now().Add(-1 * time.Hour).Unix()
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
+		Body:         assert.JSONObject{"commitment": cloned},
+		ExpectStatus: http.StatusUnprocessableEntity,
+		ExpectBody:   assert.StringData("confirm_by must not be set in the past\n"),
+	}.Check(t, s.Handler)
 }
 
 func TestDeleteCommitmentErrorCases(t *testing.T) {

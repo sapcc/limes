@@ -260,8 +260,12 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	//enforce min_confirm_date constraint if set
+	//if given, confirm_by must definitely after time.Now(), and also after the MinConfirmDate if configured
 	now := p.timeNow()
+	if req.ConfirmBy != nil && req.ConfirmBy.Before(now) {
+		http.Error(w, "confirm_by must not be set in the past", http.StatusUnprocessableEntity)
+		return
+	}
 	if minConfirmBy := behavior.CommitmentMinConfirmDate; minConfirmBy != nil && minConfirmBy.After(now) {
 		if req.ConfirmBy == nil || req.ConfirmBy.Before(*minConfirmBy) {
 			msg := fmt.Sprintf("this commitment needs a `confirm_by` timestamp at or after %s", behavior.CommitmentMinConfirmDate.Format(time.RFC3339))
