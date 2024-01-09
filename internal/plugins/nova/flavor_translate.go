@@ -140,7 +140,7 @@ func (t FlavorTranslationTable) ListFlavorsWithSeparateInstanceQuota(computeV2 *
 	//look at the magical quota class "flavors" to determine which quotas exist
 	url := computeV2.ServiceURL("os-quota-class-sets", "flavors")
 	var result gophercloud.Result
-	_, err := computeV2.Get(url, &result.Body, nil) //nolint:bodyclose // already closed by gophercloud
+	_, err := computeV2.Get(url, &result.Body, nil)
 	if err != nil {
 		return nil, err
 	}
