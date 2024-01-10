@@ -407,7 +407,7 @@ func taskTestScanCapacity(cluster *core.Cluster, args []string) {
 	for srvType, srvCapacities := range capacities {
 		for resName := range srvCapacities {
 			if !cluster.HasResource(srvType, resName) {
-				logg.Fatal("Scrape reported capacity for unknown resource: %s/%s", srvType, resName)
+				logg.Error("Scrape reported capacity for unknown resource: %s/%s", srvType, resName)
 			}
 		}
 	}
