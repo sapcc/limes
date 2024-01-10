@@ -32,6 +32,8 @@ import (
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/jobloop"
 
+	"github.com/sapcc/limes/internal/core"
+	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
 	"github.com/sapcc/limes/internal/test/plugins"
@@ -546,4 +548,38 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 		UPDATE project_resources SET quota = 22, backend_quota = 22, desired_backend_quota = 22 WHERE id = 11 AND service_id = 4 AND name = 'capacity';
 		UPDATE project_resources SET quota = 10, backend_quota = 10, desired_backend_quota = 10 WHERE id = 5 AND service_id = 2 AND name = 'capacity';
 	`, timestampUpdates(), scrapedAt2.Unix())
+
+	//test GetGlobalResourceDemand (this is not used by any of our test plugins,
+	//but we can just call it directly to see that it works)
+	bc := datamodel.NewCapacityPluginBackchannel(s.DB, s.Clock.Now())
+	expectedDemandsByService := map[string]map[string]map[limes.AvailabilityZone]core.ResourceDemand{
+		"first": {
+			"capacity": {
+				"az-one":                  {Usage: 2, UnusedCommitments: 109, PendingCommitments: 0},
+				"az-two":                  {Usage: 251, UnusedCommitments: 50, PendingCommitments: 300},
+				limes.AvailabilityZoneAny: {Usage: 0, UnusedCommitments: 0, PendingCommitments: 0},
+			},
+			"things": {
+				limes.AvailabilityZoneAny: {Usage: 0, UnusedCommitments: 0, PendingCommitments: 0},
+			},
+		},
+		"second": {
+			"capacity": {
+				"az-one":                  {Usage: 2, UnusedCommitments: 19, PendingCommitments: 110},
+				"az-two":                  {Usage: 2, UnusedCommitments: 1, PendingCommitments: 0},
+				limes.AvailabilityZoneAny: {Usage: 0, UnusedCommitments: 0, PendingCommitments: 0},
+			},
+			"things": {
+				limes.AvailabilityZoneAny: {Usage: 0, UnusedCommitments: 0, PendingCommitments: 0},
+			},
+		},
+	}
+	for serviceType, expectedDemandsByResource := range expectedDemandsByService {
+		for resourceName, expectedDemands := range expectedDemandsByResource {
+			actualDemands, err := bc.GetGlobalResourceDemand(serviceType, resourceName)
+			mustT(t, err)
+			desc := fmt.Sprintf("GetGlobalResourceDemand for %s/%s", serviceType, resourceName)
+			assert.DeepEqual(t, desc, actualDemands, expectedDemands)
+		}
+	}
 }

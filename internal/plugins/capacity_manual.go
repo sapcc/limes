@@ -49,7 +49,7 @@ func (p *capacityManualPlugin) PluginTypeID() string {
 var errNoManualData = errors.New(`missing values for capacitor plugin "manual"`)
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *capacityManualPlugin) Scrape() (result map[string]map[string]core.PerAZ[core.CapacityData], _ []byte, err error) {
+func (p *capacityManualPlugin) Scrape(_ core.CapacityPluginBackchannel) (result map[string]map[string]core.PerAZ[core.CapacityData], _ []byte, err error) {
 	if p.Values == nil {
 		return nil, nil, errNoManualData
 	}

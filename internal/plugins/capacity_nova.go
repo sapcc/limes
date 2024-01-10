@@ -96,7 +96,7 @@ func (p *capacityNovaPlugin) PluginTypeID() string {
 }
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *capacityNovaPlugin) Scrape() (result map[string]map[string]core.PerAZ[core.CapacityData], serializedMetrics []byte, err error) {
+func (p *capacityNovaPlugin) Scrape(_ core.CapacityPluginBackchannel) (result map[string]map[string]core.PerAZ[core.CapacityData], serializedMetrics []byte, err error) {
 	//enumerate aggregates which establish the hypervisor <-> AZ mapping
 	page, err := aggregates.List(p.NovaV2).AllPages()
 	if err != nil {

@@ -206,7 +206,7 @@ type CapacityPlugin interface {
 	//
 	//The serializedMetrics return value is persisted in the Limes DB and
 	//supplied to all subsequent RenderMetrics calls.
-	Scrape() (result map[string]map[string]PerAZ[CapacityData], serializedMetrics []byte, err error)
+	Scrape(backchannel CapacityPluginBackchannel) (result map[string]map[string]PerAZ[CapacityData], serializedMetrics []byte, err error)
 
 	//DescribeMetrics is called when Prometheus is scraping metrics from
 	//limes-collect, to provide an opportunity to the plugin to emit its own
@@ -224,6 +224,26 @@ type CapacityPlugin interface {
 	//should be preferred since metrics emitted here won't be lost between
 	//restarts of limes-collect.
 	CollectMetrics(ch chan<- prometheus.Metric, serializedMetrics []byte) error
+}
+
+// CapacityPluginBackchannel is a callback interface that is provided to
+// CapacityPlugin.Scrape(). Most capacity scrape implementations will not need
+// this, but some esoteric usecases use this information to distribute
+// available capacity among resources in accordance with customer demand.
+type CapacityPluginBackchannel interface {
+	GetGlobalResourceDemand(serviceType, resourceName string) (map[limes.AvailabilityZone]ResourceDemand, error)
+}
+
+// ResourceDemand describes cluster-wide demand for a certain resource within a
+// specific AZ. It appears in type CapacityPluginBackchannel.
+type ResourceDemand struct {
+	Usage uint64 `yaml:"usage"`
+	// UnusedCommitments counts all commitments that are confirmed but not covered by existing usage.
+	UnusedCommitments uint64 `yaml:"unused_commitments"`
+	// PendingCommitments counts all commitments that should be confirmed by now, but are not.
+	PendingCommitments uint64 `yaml:"pending_commitments"`
+
+	//NOTE: The yaml tags are used by test-scan-capacity to deserialize ResourceDemand fixtures from a file.
 }
 
 var (

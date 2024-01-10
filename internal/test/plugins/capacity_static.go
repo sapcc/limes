@@ -54,7 +54,7 @@ func (p *StaticCapacityPlugin) PluginTypeID() string {
 }
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *StaticCapacityPlugin) Scrape() (result map[string]map[string]core.PerAZ[core.CapacityData], serializedMetrics []byte, err error) {
+func (p *StaticCapacityPlugin) Scrape(_ core.CapacityPluginBackchannel) (result map[string]map[string]core.PerAZ[core.CapacityData], serializedMetrics []byte, err error) {
 	makeAZCapa := func(az string, capacity, usage uint64) *core.CapacityData {
 		var subcapacities []any
 		if p.WithSubcapacities {

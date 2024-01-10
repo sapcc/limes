@@ -39,6 +39,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/cors"
 	"github.com/sapcc/go-api-declarations/bininfo"
+	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/errext"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/httpapi/pprofapi"
@@ -385,7 +386,7 @@ func taskTestScanCapacity(cluster *core.Cluster, args []string) {
 		logg.Fatal("unknown capacitor: %s", capacitorID)
 	}
 
-	capacities, serializedMetrics, err := plugin.Scrape()
+	capacities, serializedMetrics, err := plugin.Scrape(mockCapacityPluginBackchannel{})
 	if err != nil {
 		logg.Error("Scrape failed: %s", util.UnpackError(err).Error())
 		capacities = nil
@@ -414,4 +415,27 @@ func taskTestScanCapacity(cluster *core.Cluster, args []string) {
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	must.Succeed(enc.Encode(capacities))
+}
+
+type mockCapacityPluginBackchannel struct{}
+
+// GetGlobalResourceDemand implements the core.CapacityPluginBackchannel interface.
+func (mockCapacityPluginBackchannel) GetGlobalResourceDemand(serviceType, resourceName string) (result map[limes.AvailabilityZone]core.ResourceDemand, err error) {
+	filePath := fmt.Sprintf("mock-global-resource-demand-%s-%s.yaml", serviceType, resourceName)
+	buf, err := os.ReadFile(filePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			logg.Info("capacity plugin asked for GetGlobalResourceDemand(%q, %q), but no mock data found at %s, so an empty result will be returned",
+				serviceType, resourceName, filePath)
+			return nil, nil
+		} else {
+			return nil, err
+		}
+	}
+
+	err = json.Unmarshal(buf, &result)
+	if err != nil {
+		return nil, fmt.Errorf("while parsing %s: %w", filePath, err)
+	}
+	return result, nil
 }
