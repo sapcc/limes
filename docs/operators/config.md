@@ -778,9 +778,11 @@ capacitors:
       aggregate_name_pattern: '^(?:vc-|qemu-)'
       max_instances_per_aggregate: 10000
       hypervisor_type_pattern: '^(?:VMware|QEMU)'
-      extra_specs:
-        first: 'foo'
-        second: 'bar'
+      flavor_selection:
+        required_extra_specs:
+          first: 'foo'
+        excluded_extra_specs:
+          second: 'bar'
       with_subcapacities: true
 ```
 
@@ -800,8 +802,10 @@ If the `params.hypervisor_type_pattern` parameter is set, only those hypervisors
 matches this regex. Note that this is distinct from the `hypervisor_type_rules` used by the `compute` quota plugin, and
 uses the `hypervisor_type` reported by Nova instead.
 
-The `params.extra_specs` parameter can be used to control how flavors are enumerated. Only those flavors will be
-considered which have all the extra specs noted in this map, with the same values as defined in the configuration file.
+The `params.flavor_selection` parameter can be used to control how flavors are enumerated. Only those flavors will be
+considered which have all the extra specs noted in `required_extra_specs`, and none of those noted in
+`excluded_extra_specs`. In the example, only flavors will be considered that have the extra spec "first" with the value
+"foo", and which do not have the value "bar" in the extra spec "second".
 This is particularly useful to filter Ironic flavors, which usually have much larger root disk sizes.
 
 When subcapacity scraping is enabled (as shown above), subcapacities will be scraped for all three resources. Each

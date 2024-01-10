@@ -23,7 +23,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"slices"
 	"strings"
 
@@ -31,7 +30,6 @@ import (
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/aggregates"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/hypervisors"
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/openstack/placement/v1/resourceproviders"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
@@ -39,15 +37,18 @@ import (
 	"github.com/sapcc/go-bits/regexpext"
 
 	"github.com/sapcc/limes/internal/core"
+	"github.com/sapcc/limes/internal/plugins/nova"
 )
 
 type capacityNovaPlugin struct {
 	//configuration
-	AggregateNameRx          regexpext.PlainRegexp `yaml:"aggregate_name_pattern"`
-	MaxInstancesPerAggregate uint64                `yaml:"max_instances_per_aggregate"`
-	ExtraSpecs               map[string]string     `yaml:"extra_specs"`
-	HypervisorTypeRx         regexpext.PlainRegexp `yaml:"hypervisor_type_pattern"`
-	WithSubcapacities        bool                  `yaml:"with_subcapacities"`
+	HypervisorSelection struct {
+		AggregateNameRx  regexpext.PlainRegexp `yaml:"aggregate_name_pattern"`
+		HypervisorTypeRx regexpext.PlainRegexp `yaml:"hypervisor_type_pattern"`
+	} `yaml:"hypervisor_selection"`
+	MaxInstancesPerAggregate uint64               `yaml:"max_instances_per_aggregate"`
+	FlavorSelection          nova.FlavorSelection `yaml:"flavor_selection"`
+	WithSubcapacities        bool                 `yaml:"with_subcapacities"`
 	//connections
 	NovaV2      *gophercloud.ServiceClient `yaml:"-"`
 	PlacementV1 *gophercloud.ServiceClient `yaml:"-"`
@@ -70,7 +71,7 @@ func init() {
 
 // Init implements the core.CapacityPlugin interface.
 func (p *capacityNovaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
-	if p.AggregateNameRx == "" {
+	if p.HypervisorSelection.AggregateNameRx == "" {
 		return errors.New("missing value for nova.aggregate_name_pattern")
 	}
 	if p.MaxInstancesPerAggregate == 0 {
@@ -133,9 +134,13 @@ func (p *capacityNovaPlugin) Scrape(_ core.CapacityPluginBackchannel) (result ma
 	}
 
 	//for the instances capacity, we need to know the max root disk size on public flavors
-	maxRootDiskSize, err := getMaxRootDiskSize(p.NovaV2, p.ExtraSpecs)
+	allFlavors, err := p.FlavorSelection.ListFlavors(p.NovaV2)
 	if err != nil {
 		return nil, nil, err
+	}
+	maxRootDiskSize := 0.0
+	for _, flavor := range allFlavors {
+		maxRootDiskSize = max(maxRootDiskSize, float64(flavor.Disk))
 	}
 
 	//we need to prepare several aggregations in the big loop below
@@ -148,7 +153,7 @@ func (p *capacityNovaPlugin) Scrape(_ core.CapacityPluginBackchannel) (result ma
 	var metrics capacityNovaSerializedMetrics
 	for _, hypervisor := range hypervisorData.Hypervisors {
 		//ignore hypervisor if excluded by HypervisorTypePattern
-		if !p.HypervisorTypeRx.MatchString(hypervisor.HypervisorType) {
+		if !p.HypervisorSelection.HypervisorTypeRx.MatchString(hypervisor.HypervisorType) {
 			//NOTE: If no pattern was given, the regex will be empty and thus always match.
 			continue
 		}
@@ -186,7 +191,7 @@ func (p *capacityNovaPlugin) Scrape(_ core.CapacityPluginBackchannel) (result ma
 			if !hypervisor.IsInAggregate(aggr) {
 				continue
 			}
-			if p.AggregateNameRx.MatchString(aggr.Name) {
+			if p.HypervisorSelection.AggregateNameRx.MatchString(aggr.Name) {
 				matchingAggregates[aggr.Name] = true
 			}
 			if az := limes.AvailabilityZone(aggr.AvailabilityZone); az != "" {
@@ -488,40 +493,4 @@ type novaHypervisorSubcapacity struct {
 	Capacity         uint64                 `json:"capacity"`
 	Usage            uint64                 `json:"usage"`
 	Traits           []string               `json:"traits"`
-}
-
-func getMaxRootDiskSize(novaClient *gophercloud.ServiceClient, expectedExtraSpecs map[string]string) (float64, error) {
-	maxRootDiskSize := 0.0
-	page, err := flavors.ListDetail(novaClient, nil).AllPages()
-	if err != nil {
-		return 0, err
-	}
-	flavorList, err := flavors.ExtractFlavors(page)
-	if err != nil {
-		return 0, err
-	}
-
-	for _, flavor := range flavorList {
-		extras, err := flavors.ListExtraSpecs(novaClient, flavor.ID).Extract()
-		if err != nil {
-			logg.Debug("Failed to get extra specs for flavor: %s.", flavor.ID)
-			return 0, err
-		}
-
-		//necessary to be able to ignore huge baremetal flavors
-		//consider only flavors as defined in extra specs
-		matches := true
-		for key, value := range expectedExtraSpecs {
-			if value != extras[key] {
-				matches = false
-				break
-			}
-		}
-		if matches {
-			logg.Debug("FlavorName: %s, FlavorID: %s, FlavorSize: %d GiB", flavor.Name, flavor.ID, flavor.Disk)
-			maxRootDiskSize = math.Max(maxRootDiskSize, float64(flavor.Disk))
-		}
-	}
-
-	return maxRootDiskSize, nil
 }
