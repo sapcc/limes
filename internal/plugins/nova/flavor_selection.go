@@ -1,0 +1,76 @@
+/*******************************************************************************
+*
+* Copyright 2024 SAP SE
+*
+* Licensed under the Apache License, Version 2.0 (the "License");
+* you may not use this file except in compliance with the License.
+* You should have received a copy of the License along with this
+* program. If not, you may obtain a copy of the License at
+*
+*     http://www.apache.org/licenses/LICENSE-2.0
+*
+* Unless required by applicable law or agreed to in writing, software
+* distributed under the License is distributed on an "AS IS" BASIS,
+* WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+* See the License for the specific language governing permissions and
+* limitations under the License.
+*
+*******************************************************************************/
+
+package nova
+
+import (
+	"fmt"
+
+	"github.com/gophercloud/gophercloud"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
+)
+
+// FlavorSelection describes a set of public flavors.
+type FlavorSelection struct {
+	//Only match flavors that have all of these extra specs.
+	RequiredExtraSpecs map[string]string `yaml:"required_extra_specs"`
+	//Exclude flavors that have any of these extra specs.
+	ExcludedExtraSpecs map[string]string `yaml:"excluded_extra_specs"`
+}
+
+func (s FlavorSelection) matchesExtraSpecs(specs map[string]string) bool {
+	for key, value := range s.RequiredExtraSpecs {
+		if value != specs[key] {
+			return false
+		}
+	}
+	for key, value := range s.ExcludedExtraSpecs {
+		if value == specs[key] {
+			return false
+		}
+	}
+	return true
+}
+
+// ForeachFlavor lists all public flavors matching this FlavorSelection, and
+// calls the given callback once for each of them.
+func (s FlavorSelection) ForeachFlavor(novaV2 *gophercloud.ServiceClient, action func(flavor flavors.Flavor, extraSpecs map[string]string) error) error {
+	page, err := flavors.ListDetail(novaV2, nil).AllPages()
+	if err != nil {
+		return fmt.Errorf("while listing public flavors: %w", err)
+	}
+	allFlavors, err := flavors.ExtractFlavors(page)
+	if err != nil {
+		return fmt.Errorf("while listing public flavors: %w", err)
+	}
+
+	for _, flavor := range allFlavors {
+		specs, err := flavors.ListExtraSpecs(novaV2, flavor.ID).Extract()
+		if err != nil {
+			return fmt.Errorf("while listing extra specs of public flavor %q: %w", flavor.Name, err)
+		}
+		if s.matchesExtraSpecs(specs) {
+			err = action(flavor, specs)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
