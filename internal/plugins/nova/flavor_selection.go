@@ -48,26 +48,29 @@ func (s FlavorSelection) matchesExtraSpecs(specs map[string]string) bool {
 	return true
 }
 
-// ListFlavors returns all public flavors matching this FlavorSelection.
-func (s FlavorSelection) ListFlavors(novaV2 *gophercloud.ServiceClient) ([]flavors.Flavor, error) {
+// ForeachFlavor lists all public flavors matching this FlavorSelection, and
+// calls the given callback once for each of them.
+func (s FlavorSelection) ForeachFlavor(novaV2 *gophercloud.ServiceClient, action func(flavor flavors.Flavor, extraSpecs map[string]string) error) error {
 	page, err := flavors.ListDetail(novaV2, nil).AllPages()
 	if err != nil {
-		return nil, fmt.Errorf("while listing public flavors: %w", err)
+		return fmt.Errorf("while listing public flavors: %w", err)
 	}
 	allFlavors, err := flavors.ExtractFlavors(page)
 	if err != nil {
-		return nil, fmt.Errorf("while listing public flavors: %w", err)
+		return fmt.Errorf("while listing public flavors: %w", err)
 	}
 
-	var result []flavors.Flavor
 	for _, flavor := range allFlavors {
 		specs, err := flavors.ListExtraSpecs(novaV2, flavor.ID).Extract()
 		if err != nil {
-			return nil, fmt.Errorf("while listing extra specs of public flavor %q: %w", flavor.Name, err)
+			return fmt.Errorf("while listing extra specs of public flavor %q: %w", flavor.Name, err)
 		}
 		if s.matchesExtraSpecs(specs) {
-			result = append(result, flavor)
+			err = action(flavor, specs)
+			if err != nil {
+				return err
+			}
 		}
 	}
-	return result, nil
+	return nil
 }

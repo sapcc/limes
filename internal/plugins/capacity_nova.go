@@ -23,18 +23,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"slices"
-	"strings"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/aggregates"
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/hypervisors"
-	"github.com/gophercloud/gophercloud/openstack/placement/v1/resourceproviders"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/logg"
-	"github.com/sapcc/go-bits/regexpext"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/plugins/nova"
@@ -42,13 +37,10 @@ import (
 
 type capacityNovaPlugin struct {
 	//configuration
-	HypervisorSelection struct {
-		AggregateNameRx  regexpext.PlainRegexp `yaml:"aggregate_name_pattern"`
-		HypervisorTypeRx regexpext.PlainRegexp `yaml:"hypervisor_type_pattern"`
-	} `yaml:"hypervisor_selection"`
-	MaxInstancesPerAggregate uint64               `yaml:"max_instances_per_aggregate"`
-	FlavorSelection          nova.FlavorSelection `yaml:"flavor_selection"`
-	WithSubcapacities        bool                 `yaml:"with_subcapacities"`
+	HypervisorSelection      nova.HypervisorSelection `yaml:"hypervisor_selection"`
+	MaxInstancesPerAggregate uint64                   `yaml:"max_instances_per_aggregate"`
+	FlavorSelection          nova.FlavorSelection     `yaml:"flavor_selection"`
+	WithSubcapacities        bool                     `yaml:"with_subcapacities"`
 	//connections
 	NovaV2      *gophercloud.ServiceClient `yaml:"-"`
 	PlacementV1 *gophercloud.ServiceClient `yaml:"-"`
@@ -59,10 +51,10 @@ type capacityNovaSerializedMetrics struct {
 }
 
 type novaHypervisorMetrics struct {
-	Name              string                   `json:"n"`
-	Hostname          string                   `json:"hn"`
-	Aggregates        []string                 `json:"ag"`
-	AvailabilityZones []limes.AvailabilityZone `json:"az"`
+	Name             string                 `json:"n"`
+	Hostname         string                 `json:"hn"`
+	AggregateName    string                 `json:"ag"`
+	AvailabilityZone limes.AvailabilityZone `json:"az"`
 }
 
 func init() {
@@ -98,165 +90,70 @@ func (p *capacityNovaPlugin) PluginTypeID() string {
 
 // Scrape implements the core.CapacityPlugin interface.
 func (p *capacityNovaPlugin) Scrape(_ core.CapacityPluginBackchannel) (result map[string]map[string]core.PerAZ[core.CapacityData], serializedMetrics []byte, err error) {
-	//enumerate aggregates which establish the hypervisor <-> AZ mapping
-	page, err := aggregates.List(p.NovaV2).AllPages()
-	if err != nil {
-		return nil, nil, err
-	}
-	allAggregates, err := aggregates.ExtractAggregates(page)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	//enumerate hypervisors (cannot use type Hypervisor provided by Gophercloud;
-	//in our clusters, it breaks because some hypervisor report unexpected NULL
-	//values on fields that we are not even interested in)
-	page, err = hypervisors.List(p.NovaV2, nil).AllPages()
-	if err != nil {
-		return nil, nil, err
-	}
-	var hypervisorData struct {
-		Hypervisors []novaHypervisor `json:"hypervisors"`
-	}
-	err = page.(hypervisors.HypervisorPage).ExtractInto(&hypervisorData)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	//enumerate resource providers (we need to match these to the hypervisors later)
-	page, err = resourceproviders.List(p.PlacementV1, nil).AllPages()
-	if err != nil {
-		return nil, nil, err
-	}
-	allResourceProviders, err := resourceproviders.ExtractResourceProviders(page)
-	if err != nil {
-		return nil, nil, err
-	}
-
 	//for the instances capacity, we need to know the max root disk size on public flavors
-	allFlavors, err := p.FlavorSelection.ListFlavors(p.NovaV2)
+	maxRootDiskSize := 0.0
+	err = p.FlavorSelection.ForeachFlavor(p.NovaV2, func(f flavors.Flavor, _ map[string]string) error {
+		maxRootDiskSize = max(maxRootDiskSize, float64(f.Disk))
+		return nil
+	})
 	if err != nil {
 		return nil, nil, err
-	}
-	maxRootDiskSize := 0.0
-	for _, flavor := range allFlavors {
-		maxRootDiskSize = max(maxRootDiskSize, float64(flavor.Disk))
 	}
 
 	//we need to prepare several aggregations in the big loop below
 	var (
 		resourceNames = []string{"cores", "instances", "ram"}
 		azCapacities  = make(map[limes.AvailabilityZone]*partialNovaCapacity)
+		metrics       capacityNovaSerializedMetrics
 	)
 
 	//foreach hypervisor...
-	var metrics capacityNovaSerializedMetrics
-	for _, hypervisor := range hypervisorData.Hypervisors {
-		//ignore hypervisor if excluded by HypervisorTypePattern
-		if !p.HypervisorSelection.HypervisorTypeRx.MatchString(hypervisor.HypervisorType) {
-			//NOTE: If no pattern was given, the regex will be empty and thus always match.
-			continue
-		}
-
-		//query Placement API for hypervisor capacity
-		hvCapacity, traits, err := hypervisor.getCapacity(p.PlacementV1, allResourceProviders)
-		if err != nil {
-			return nil, nil, fmt.Errorf(
-				"cannot get capacity for hypervisor %s with .service.host %q from Placement API (falling back to Nova Hypervisor API): %s",
-				hypervisor.HypervisorHostname, hypervisor.Service.Host, err.Error())
-		}
-		logg.Debug("Nova hypervisor %s with .service.host %q reports capacity: %d CPUs, %d MiB RAM, %d GiB disk",
-			hypervisor.HypervisorHostname, hypervisor.Service.Host,
-			hvCapacity.VCPUs.Capacity, hvCapacity.MemoryMB.Capacity, hvCapacity.LocalGB,
-		)
-
-		//ignore hypervisor that is about to be decommissioned
-		//(no domain quota should be given out for its capacity anymore)
-		if slices.Contains(traits, "CUSTOM_DECOMMISSIONING") {
-			logg.Info("ignoring Nova hypervisor %s with .service.host %q because of CUSTOM_DECOMMISSIONING trait",
-				hypervisor.HypervisorHostname, hypervisor.Service.Host,
-			)
-			continue
-		}
-
-		//ignore hypervisor without installed capacity (this often happens during buildup before the hypervisor is set live)
-		if hvCapacity.IsEmpty() {
-			continue
-		}
-
-		//match hypervisor with AZ and relevant aggregate
-		matchingAZs := make(map[limes.AvailabilityZone]bool)
-		matchingAggregates := make(map[string]bool)
-		for _, aggr := range allAggregates {
-			if !hypervisor.IsInAggregate(aggr) {
-				continue
-			}
-			if p.HypervisorSelection.AggregateNameRx.MatchString(aggr.Name) {
-				matchingAggregates[aggr.Name] = true
-			}
-			if az := limes.AvailabilityZone(aggr.AvailabilityZone); az != "" {
-				//We also use aggregates not matching our naming pattern to establish a
-				//hypervisor <-> AZ relationship. We have observed in the wild that
-				//matching aggregates do not always have their AZ field maintained.
-				matchingAZs[az] = true
-			}
-		}
-
+	err = p.HypervisorSelection.ForeachHypervisor(p.NovaV2, p.PlacementV1, func(h nova.MatchingHypervisor) error {
 		//report wellformed-ness of this HV via metrics
 		metrics.Hypervisors = append(metrics.Hypervisors, novaHypervisorMetrics{
-			Name:              hypervisor.Service.Host,
-			Hostname:          hypervisor.HypervisorHostname,
-			Aggregates:        boolMapToList(matchingAggregates),
-			AvailabilityZones: boolMapToList(matchingAZs),
+			Name:             h.Hypervisor.Service.Host,
+			Hostname:         h.Hypervisor.HypervisorHostname,
+			AggregateName:    h.AggregateName,
+			AvailabilityZone: h.AvailabilityZone,
 		})
 
-		//the mapping from hypervisor to aggregate/AZ must be unique (otherwise the
-		//capacity will be counted either not at all or multiple times)
-		if len(matchingAggregates) == 0 {
-			//This is not a fatal error: During buildup, new hypervisors may not be
-			//mapped to an aggregate to prevent scheduling of instances onto them -
-			//we just log an error and ignore this hypervisor's capacity.
-			logg.Error(
-				"hypervisor %s with .service.host %q does not belong to any matching aggregates",
-				hypervisor.HypervisorHostname, hypervisor.Service.Host)
-			continue
+		//ignore HVs that are not associated with an aggregate and AZ
+		//
+		//This is not a fatal error: During buildup, new hypervisors may not be
+		//mapped to an aggregate to prevent scheduling of instances onto them -
+		//we just log an error and ignore this hypervisor's capacity.
+		if h.AggregateName == "" {
+			logg.Error("%s does not belong to any matching aggregates", h.Hypervisor.Description())
+			return nil
 		}
-		if len(matchingAggregates) > 1 {
-			return nil, nil, fmt.Errorf(
-				"hypervisor %s with .service.host %q could not be uniquely matched to an aggregate (matching aggregates = %v)",
-				hypervisor.HypervisorHostname, hypervisor.Service.Host, matchingAggregates)
+		if h.AvailabilityZone == "" {
+			logg.Error("%s could not be matched to any AZ (aggregate = %q)", h.Hypervisor.Description(), h.AggregateName)
+			return nil
 		}
-		if len(matchingAZs) == 0 {
-			//This is not a fatal error: During buildup, new aggregates will not be
-			//mapped to an AZ to prevent scheduling of instances onto them - we just
-			//log an error and ignore this aggregate's capacity.
-			logg.Error(
-				"hypervisor %s with .service.host %q could not be matched to any AZ (matching aggregates = %v)",
-				hypervisor.HypervisorHostname, hypervisor.Service.Host, matchingAggregates)
-			continue
+
+		//get capacity for this hypervisor
+		hvCapacity := partialNovaCapacity{
+			VCPUs: partialNovaCapacityMetric{
+				Capacity: uint64(h.Inventories["VCPU"].Total - h.Inventories["VCPU"].Reserved),
+				Usage:    uint64(h.Usages["VCPU"]),
+			},
+			MemoryMB: partialNovaCapacityMetric{
+				Capacity: uint64(h.Inventories["MEMORY_MB"].Total - h.Inventories["MEMORY_MB"].Reserved),
+				Usage:    uint64(h.Usages["MEMORY_MB"]),
+			},
+			LocalGB:            uint64(h.Inventories["DISK_GB"].Total - h.Inventories["DISK_GB"].Reserved),
+			RunningVMs:         h.Hypervisor.RunningVMs,
+			MatchingAggregates: map[string]bool{h.AggregateName: true},
 		}
-		if len(matchingAZs) > 1 {
-			return nil, nil, fmt.Errorf(
-				"hypervisor %s with .service.host %q could not be uniquely matched to an AZ (matching AZs = %v)",
-				hypervisor.HypervisorHostname, hypervisor.Service.Host, matchingAZs)
-		}
-		var (
-			matchingAggregateName    string
-			matchingAvailabilityZone limes.AvailabilityZone
+		logg.Debug("%s reports capacity: %d CPUs, %d MiB RAM, %d GiB disk",
+			h.Hypervisor.Description(), hvCapacity.VCPUs.Capacity, hvCapacity.MemoryMB.Capacity, hvCapacity.LocalGB,
 		)
-		for aggr := range matchingAggregates {
-			matchingAggregateName = aggr
-		}
-		for az := range matchingAZs {
-			matchingAvailabilityZone = az
-		}
-		hvCapacity.MatchingAggregates = map[string]bool{matchingAggregateName: true}
 
 		//count this hypervisor's capacity towards the totals for the AZ level
-		azCapacity := azCapacities[matchingAvailabilityZone]
+		azCapacity := azCapacities[h.AvailabilityZone]
 		if azCapacity == nil {
 			azCapacity = &partialNovaCapacity{}
-			azCapacities[matchingAvailabilityZone] = azCapacity
+			azCapacities[h.AvailabilityZone] = azCapacity
 		}
 		azCapacity.Add(hvCapacity)
 
@@ -265,15 +162,19 @@ func (p *capacityNovaPlugin) Scrape(_ core.CapacityPluginBackchannel) (result ma
 			for _, resName := range resourceNames {
 				resCapa := hvCapacity.GetCapacity(resName, maxRootDiskSize)
 				azCapacity.Subcapacities = append(azCapacity.Subcapacities, novaHypervisorSubcapacity{
-					ServiceHost:      hypervisor.Service.Host,
-					AggregateName:    matchingAggregateName,
-					AvailabilityZone: matchingAvailabilityZone,
+					ServiceHost:      h.Hypervisor.Service.Host,
+					AggregateName:    h.AggregateName,
+					AvailabilityZone: h.AvailabilityZone,
 					Capacity:         resCapa.Capacity,
 					Usage:            *resCapa.Usage,
-					Traits:           traits,
+					Traits:           h.Traits,
 				})
 			}
 		}
+		return nil
+	})
+	if err != nil {
+		return nil, nil, err
 	}
 
 	//build final report
@@ -321,39 +222,25 @@ func (p *capacityNovaPlugin) CollectMetrics(ch chan<- prometheus.Metric, seriali
 	novaHypervisorWellformedDesc := <-descCh
 
 	for _, hv := range metrics.Hypervisors {
-		aggrList := nameListToLabelValue(hv.Aggregates)
-		azList := nameListToLabelValue(hv.AvailabilityZones)
 		isWellformed := float64(0)
-		if len(hv.Aggregates) == 1 && len(hv.AvailabilityZones) == 1 {
+		if hv.AggregateName != "" && hv.AvailabilityZone != "" {
 			isWellformed = 1
 		}
 
 		ch <- prometheus.MustNewConstMetric(
 			novaHypervisorWellformedDesc,
 			prometheus.GaugeValue, isWellformed,
-			hv.Name, hv.Hostname, aggrList, azList,
+			hv.Name, hv.Hostname, stringOrUnknown(hv.AggregateName), stringOrUnknown(hv.AvailabilityZone),
 		)
 	}
 	return nil
 }
 
-func boolMapToList[S ~string](m map[S]bool) (result []S) {
-	for k := range m {
-		result = append(result, k)
-	}
-	slices.Sort(result)
-	return
-}
-
-func nameListToLabelValue[S ~string](names []S) string {
-	if len(names) == 0 {
+func stringOrUnknown[S ~string](value S) string {
+	if value == "" {
 		return "unknown"
 	}
-	values := make([]string, len(names))
-	for idx, name := range names {
-		values[idx] = string(name)
-	}
-	return strings.Join(values, ",")
+	return string(value)
 }
 
 // The capacity of any level of the Nova superstructure (hypervisor, aggregate, AZ).
@@ -369,10 +256,6 @@ type partialNovaCapacity struct {
 type partialNovaCapacityMetric struct {
 	Capacity uint64
 	Usage    uint64
-}
-
-func (c partialNovaCapacity) IsEmpty() bool {
-	return c.VCPUs.Capacity == 0 || c.MemoryMB.Capacity == 0 || c.LocalGB == 0
 }
 
 func (c *partialNovaCapacity) Add(other partialNovaCapacity) {
@@ -422,72 +305,8 @@ func (c partialNovaCapacity) GetCapacity(resourceName string, maxRootDiskSize fl
 	}
 }
 
-type novaHypervisor struct {
-	ID                 int                 `json:"id"`
-	HypervisorHostname string              `json:"hypervisor_hostname"`
-	HypervisorType     string              `json:"hypervisor_type"`
-	LocalGB            uint64              `json:"local_gb"`
-	MemoryMB           uint64              `json:"memory_mb"`
-	MemoryMBUsed       uint64              `json:"memory_mb_used"`
-	RunningVMs         uint64              `json:"running_vms"`
-	Service            hypervisors.Service `json:"service"`
-	VCPUs              uint64              `json:"vcpus"`
-	VCPUsUsed          uint64              `json:"vcpus_used"`
-}
-
-func (h novaHypervisor) IsInAggregate(aggr aggregates.Aggregate) bool {
-	for _, host := range aggr.Hosts {
-		if h.Service.Host == host {
-			return true
-		}
-	}
-	return false
-}
-
-func (h novaHypervisor) getCapacity(placementClient *gophercloud.ServiceClient, resourceProviders []resourceproviders.ResourceProvider) (partialNovaCapacity, []string, error) {
-	//find the resource provider that corresponds to this hypervisor
-	var providerID string
-	for _, rp := range resourceProviders {
-		if rp.Name == h.HypervisorHostname {
-			providerID = rp.UUID
-			break
-		}
-	}
-	if providerID == "" {
-		return partialNovaCapacity{}, nil, fmt.Errorf(
-			"cannot find resource provider with name %q", h.HypervisorHostname)
-	}
-
-	//collect data about that resource provider from the Placement API
-	inventory, err := resourceproviders.GetInventories(placementClient, providerID).Extract()
-	if err != nil {
-		return partialNovaCapacity{}, nil, err
-	}
-	usages, err := resourceproviders.GetUsages(placementClient, providerID).Extract()
-	if err != nil {
-		return partialNovaCapacity{}, nil, err
-	}
-	traits, err := resourceproviders.GetTraits(placementClient, providerID).Extract()
-	if err != nil {
-		return partialNovaCapacity{}, nil, err
-	}
-
-	return partialNovaCapacity{
-		VCPUs: partialNovaCapacityMetric{
-			Capacity: uint64(inventory.Inventories["VCPU"].Total - inventory.Inventories["VCPU"].Reserved),
-			Usage:    uint64(usages.Usages["VCPU"]),
-		},
-		MemoryMB: partialNovaCapacityMetric{
-			Capacity: uint64(inventory.Inventories["MEMORY_MB"].Total - inventory.Inventories["MEMORY_MB"].Reserved),
-			Usage:    uint64(usages.Usages["MEMORY_MB"]),
-		},
-		LocalGB:    uint64(inventory.Inventories["DISK_GB"].Total - inventory.Inventories["DISK_GB"].Reserved),
-		RunningVMs: h.RunningVMs,
-	}, traits.Traits, nil
-}
-
 type novaHypervisorSubcapacity struct {
-	ServiceHost      string                 `json:"service_host"` //TODO service.host
+	ServiceHost      string                 `json:"service_host"`
 	AvailabilityZone limes.AvailabilityZone `json:"az"`
 	AggregateName    string                 `json:"aggregate"`
 	Capacity         uint64                 `json:"capacity"`

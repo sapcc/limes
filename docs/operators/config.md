@@ -775,9 +775,10 @@ capacitors:
   - id: nova
     type: nova
     params:
-      aggregate_name_pattern: '^(?:vc-|qemu-)'
+      hypervisor_selection:
+        aggregate_name_pattern: '^(?:vc-|qemu-)'
+        hypervisor_type_pattern: '^(?:VMware|QEMU)'
       max_instances_per_aggregate: 10000
-      hypervisor_type_pattern: '^(?:VMware|QEMU)'
       flavor_selection:
         required_extra_specs:
           first: 'foo'
@@ -793,14 +794,19 @@ capacitors:
 | `compute/ram` | The sum of the reported RAM for all hypervisors. |
 
 Only those hypervisors are considered that belong to an aggregate whose name matches the regex in the
-`params.aggregate_name_pattern` parameter. There must be a 1:1 relation between matching aggregates and hypervisors: If a
+`params.hypervisor_selection.aggregate_name_pattern` parameter.
+There must be a 1:1 relation between matching aggregates and hypervisors: If a
 hypervisor belongs to more than one matching aggregate, an error is raised. The aggregate level is used mostly to
 compute the hard limit of the instance capacity (`maxInstancesPerAggregate * count(matchingAggregates)`); if you do not
 have a level between AZs that imposes such a hard limit, you can use AZ-wide aggregates as a fallback here.
 
-If the `params.hypervisor_type_pattern` parameter is set, only those hypervisors are considered whose `hypervisor_type`
+If the `params.hypervisor_selection.hypervisor_type_pattern` parameter is set, only those hypervisors are considered whose `hypervisor_type`
 matches this regex. Note that this is distinct from the `hypervisor_type_rules` used by the `compute` quota plugin, and
 uses the `hypervisor_type` reported by Nova instead.
+
+The `params.hypervisor_selection` can also contains lists of strings in the `required_traits` and `excluded_traits` keys.
+If given, only those hypervisors will be considered whose resource providers have all of the `required_traits` and none
+of the `excluded_traits`.
 
 The `params.flavor_selection` parameter can be used to control how flavors are enumerated. Only those flavors will be
 considered which have all the extra specs noted in `required_extra_specs`, and none of those noted in
