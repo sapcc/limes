@@ -103,13 +103,13 @@ OUTER:
 		for _, trait := range s.RequiredTraits {
 			if !slices.Contains(traits.Traits, trait) {
 				logg.Debug("ignoring %s because trait %q is missing", h.Description(), trait)
-				continue
+				continue OUTER
 			}
 		}
 		for _, trait := range s.ExcludedTraits {
 			if slices.Contains(traits.Traits, trait) {
 				logg.Debug("ignoring %s because trait %q is present", h.Description(), trait)
-				continue
+				continue OUTER
 			}
 		}
 
