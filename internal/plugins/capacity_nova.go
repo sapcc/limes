@@ -126,16 +126,7 @@ func (p *capacityNovaPlugin) Scrape(_ core.CapacityPluginBackchannel) (result ma
 		})
 
 		//ignore HVs that are not associated with an aggregate and AZ
-		//
-		//This is not a fatal error: During buildup, new hypervisors may not be
-		//mapped to an aggregate to prevent scheduling of instances onto them -
-		//we just log an error and ignore this hypervisor's capacity.
-		if h.AggregateName == "" {
-			logg.Error("%s does not belong to any matching aggregates", h.Hypervisor.Description())
-			return nil
-		}
-		if h.AvailabilityZone == "" {
-			logg.Error("%s could not be matched to any AZ (aggregate = %q)", h.Hypervisor.Description(), h.AggregateName)
+		if !h.CheckTopology() {
 			return nil
 		}
 

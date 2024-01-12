@@ -199,6 +199,24 @@ type MatchingHypervisor struct {
 	Usages      map[string]int
 }
 
+// CheckTopology logs an error and returns false if the hypervisor is not
+// associated with an aggregate and AZ.
+//
+// This is not a fatal error: During buildup, new hypervisors may not be mapped
+// to an aggregate to prevent scheduling of instances onto them - we just log
+// an error and ignore this hypervisor's capacity.
+func (h MatchingHypervisor) CheckTopology() bool {
+	if h.AggregateName == "" {
+		logg.Error("%s does not belong to any matching aggregates", h.Hypervisor.Description())
+		return false
+	}
+	if h.AvailabilityZone == "" {
+		logg.Error("%s could not be matched to any AZ (aggregate = %q)", h.Hypervisor.Description(), h.AggregateName)
+		return false
+	}
+	return true
+}
+
 // PartialCapacity formats this hypervisor's capacity.
 func (h MatchingHypervisor) PartialCapacity() PartialCapacity {
 	makeMetric := func(metric string) PartialCapacityMetric {
