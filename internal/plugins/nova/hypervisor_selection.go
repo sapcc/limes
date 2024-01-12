@@ -199,6 +199,23 @@ type MatchingHypervisor struct {
 	Usages      map[string]int
 }
 
+// PartialCapacity formats this hypervisor's capacity.
+func (h MatchingHypervisor) PartialCapacity() PartialCapacity {
+	makeMetric := func(metric string) PartialCapacityMetric {
+		return PartialCapacityMetric{
+			Capacity: uint64(h.Inventories[metric].Total - h.Inventories[metric].Reserved),
+			Usage:    uint64(h.Usages[metric]),
+		}
+	}
+	return PartialCapacity{
+		VCPUs:              makeMetric("VCPU"),
+		MemoryMB:           makeMetric("MEMORY_MB"),
+		LocalGB:            makeMetric("DISK_GB"),
+		RunningVMs:         h.Hypervisor.RunningVMs,
+		MatchingAggregates: map[string]bool{h.AggregateName: true},
+	}
+}
+
 // Hypervisor represents a Nova hypervisor as returned by the Nova API.
 //
 // We are not using the hypervisors.Hypervisor type provided by Gophercloud.
