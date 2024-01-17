@@ -828,6 +828,41 @@ following attributes:
 | `usage` | integer | usage of the resource in question in this hypervisor |
 | `traits` | array of strings | traits reported by Placement on this hypervisor's resource provider |
 
+### `nova-binpack-flavors`
+
+```yaml
+capacitors:
+  # As this example implies, there will often be multiple instances of this capacitor for different hypervisor types.
+  - id: nova-binpack-flavors-type42
+    type: nova-binpack-flavors
+    params:
+      flavor_selection:
+        required_extra_specs:
+          trait:CUSTOM_HYPERVISOR_TYPE_42: required
+      hypervisor_selection:
+        aggregate_name_pattern: '^(?:vc-|qemu-)'
+        hypervisor_type_pattern: '^(?:VMware|QEMU)'
+        required_traits: [ CUSTOM_HYPERVISOR_TYPE_42 ]
+```
+
+This capacity plugin reports capacity for the special `compute/instances_<flavorname>` resources that exist on SAP
+Converged Cloud ([see above](#compute-nova-v2)). Unlike `sapcc-ironic`, this capacitor is used for VM flavors, but under
+the special condition that the resource provider traits are used to limit the VM flavors to certain hypervisors where no
+other VMs can be deployed. The `flavor_selection` and `hypervisor_selection` parameters work the same as for the `nova`
+capacitor.
+
+Capacity calculation is not as straight-forward as for the `nova` capacitor: Nova and Placement only tell us about the
+size of the hypervisors in terms of CPU, RAM and local disk, but the capacitor wants to report a capacity in terms of
+number of instances that can be deployed per flavor. There is no single correct answer to this because different flavors
+use different amounts of resources.
+
+This capacitor takes existing usage and confirmed commitments, as well as commitments that are waiting to be confirmed,
+for its respective `compute/instances_<flavorname>` resources and simulates placing those existing and requested
+instances onto the matching hypervisors. Afterwards, any remaining space is filled up by following the existing
+distribution of flavors as closely as possible. The resulting capacity is equal to how many instances could be placed in
+this simulation. The placement simulation strives for an optimal result by using a binpacking algorithm, from which the
+capacitor gets its name.
+
 ### `prometheus`
 
 ```yaml

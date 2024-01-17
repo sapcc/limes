@@ -49,6 +49,7 @@ import (
 	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/osext"
 	"go.uber.org/automaxprocs/maxprocs"
+	"gopkg.in/yaml.v2"
 
 	"github.com/sapcc/limes/internal/api"
 	"github.com/sapcc/limes/internal/collector"
@@ -421,7 +422,7 @@ type mockCapacityPluginBackchannel struct{}
 
 // GetGlobalResourceDemand implements the core.CapacityPluginBackchannel interface.
 func (mockCapacityPluginBackchannel) GetGlobalResourceDemand(serviceType, resourceName string) (result map[limes.AvailabilityZone]core.ResourceDemand, err error) {
-	filePath := fmt.Sprintf("mock-global-resource-demand-%s-%s.yaml", serviceType, resourceName)
+	filePath := "mock-global-resource-demand.yaml"
 	buf, err := os.ReadFile(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -433,9 +434,18 @@ func (mockCapacityPluginBackchannel) GetGlobalResourceDemand(serviceType, resour
 		}
 	}
 
-	err = json.Unmarshal(buf, &result)
+	//keys: service type -> resource name -> AZ
+	var mockData map[string]map[string]map[limes.AvailabilityZone]core.ResourceDemand
+	err = yaml.Unmarshal(buf, &mockData)
 	if err != nil {
 		return nil, fmt.Errorf("while parsing %s: %w", filePath, err)
+	}
+
+	result = mockData[serviceType][resourceName]
+	if result == nil {
+		logg.Info("capacity plugin asked for GetGlobalResourceDemand(%q, %q), but no mock data found for this resource in %s, so an empty result will be returned",
+			serviceType, resourceName, filePath)
+		return nil, nil
 	}
 	return result, nil
 }

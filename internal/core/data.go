@@ -235,9 +235,10 @@ func (d UsageData) isEmpty() bool {
 
 // CapacityData contains capacity data for a single project resource.
 type CapacityData struct {
-	Capacity      uint64
-	Usage         *uint64 //NOTE: currently only relevant on AZ level, regional level uses the aggregation of project usages
-	Subcapacities []any   //only if supported by plugin and enabled in config
+	//NOTE: The json tags are only relevant for the output of `limes test-scan-capacity`.
+	Capacity      uint64  `json:"capacity"`
+	Usage         *uint64 `json:"usage,omitempty"`         //NOTE: currently only relevant on AZ level, regional level uses the aggregation of project usages
+	Subcapacities []any   `json:"subcapacities,omitempty"` //only if supported by plugin and enabled in config
 }
 
 // clone implements the AZAwareData interface.
