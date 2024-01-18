@@ -366,7 +366,9 @@ services:
   - type: compute
     params:
       separate_instance_quotas:
-        flavor_name_pattern: ^bm_
+        flavor_name_selection:
+          - name_pattern: ^bm_
+            category: baremetal-flavors
         flavor_aliases:
           bm_newflavor1: [ bm_oldflavor1 ]
           bm_newflavor2: [ bm_oldflavor2, bm_oldflavor3 ]
@@ -374,8 +376,9 @@ services:
 
 Sometimes Tempest creates resource classes or flavors that Limes recognizes as requiring a separate instance quota,
 which may not be desired. To control which flavors get a separate instance quota, give the
-`params.separate_instance_quotas.flavor_name_pattern` option as shown above. Only flavors with a name matching that
-regex will be considered.
+`params.separate_instance_quotas.flavor_name_selection` option as shown above. Only flavors with a name matching one of
+the `name_pattern` regexes will be considered. If all flavors shall be matched, give an empty `name_pattern`. The
+`category` setting controls which category the respective resources will be grouped into within the `compute` service.
 
 On some Nova installations, some flavors can have multiple names, either as permanent aliases or temporarily while
 moving to a new flavor naming scheme. The `params.separate_instance_quotas.flavor_aliases` option configures Limes to
@@ -911,7 +914,9 @@ capacitors:
   - id: sapcc-ironic
     type: sapcc-ironic
     params:
-      flavor_name_pattern: ^bm_
+      flavor_name_selection:
+        - name_pattern: ^bm_
+          category: baremetal-flavors
       flavor_aliases:
         newflavor1: [ oldflavor1 ]
         newflavor2: [ oldflavor2, oldflavor3 ]
@@ -922,17 +927,9 @@ This capacity plugin reports capacity for the special `compute/instances_<flavor
 Converged Cloud ([see above](#compute-nova-v2)). For each such flavor, it uses the Ironic node's resource class to
 match it to a flavor with the **same name**.
 
-The `params.flavor_name_pattern` and `params.flavor_aliases` parameters have the same semantics as the respective
-parameters on the `compute` service type, and should have the same contents as well (unless you like unnecessary
-confusion).
-
-```yaml
-capacitors:
-  - id: sapcc-ironic
-    type: sapcc-ironic
-subcapacities:
-  - compute: [ instances-baremetal ]
-```
+The `params.flavor_name_selection` and `params.flavor_aliases` parameters have the same semantics as the respective
+parameters on the `compute` service type, and should have the same contents as well (except where the name patterns and
+aliases refer to non-baremetal flavors).
 
 When subcapacity scraping is enabled (as shown above), subcapacities will be scraped for all resources reported by
 this plugin. Subcapacities correspond to Ironic nodes and bear the following attributes:

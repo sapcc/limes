@@ -31,7 +31,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/logg"
-	"github.com/sapcc/go-bits/regexpext"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/plugins/nova"
@@ -39,9 +38,9 @@ import (
 
 type capacitySapccIronicPlugin struct {
 	//configuration
-	FlavorNameRx      regexpext.PlainRegexp       `yaml:"flavor_name_pattern"`
-	FlavorAliases     nova.FlavorTranslationTable `yaml:"flavor_aliases"`
-	WithSubcapacities bool                        `yaml:"with_subcapacities"`
+	FlavorNameSelection nova.FlavorNameSelection    `yaml:"flavor_name_selection"`
+	FlavorAliases       nova.FlavorTranslationTable `yaml:"flavor_aliases"`
+	WithSubcapacities   bool                        `yaml:"with_subcapacities"`
 	//connections
 	NovaV2   *gophercloud.ServiceClient `yaml:"-"`
 	IronicV1 *gophercloud.ServiceClient `yaml:"-"`
@@ -163,8 +162,7 @@ func (p *capacitySapccIronicPlugin) Scrape(_ core.CapacityPluginBackchannel) (re
 	//we are going to report capacity for all per-flavor instance quotas
 	resultCompute := make(map[string]core.PerAZ[core.CapacityData])
 	for _, flavorName := range flavorNames {
-		//NOTE: If `flavor_name_pattern` is empty, then FlavorNameRx will match any input.
-		if p.FlavorNameRx.MatchString(flavorName) {
+		if p.FlavorNameSelection.MatchFlavorName(flavorName) != "" {
 			resName := p.FlavorAliases.LimesResourceNameForFlavor(flavorName)
 			resultCompute[resName] = make(core.PerAZ[core.CapacityData])
 		}

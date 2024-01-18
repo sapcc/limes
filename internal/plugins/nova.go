@@ -33,7 +33,6 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
-	"github.com/sapcc/go-bits/regexpext"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/plugins/nova"
@@ -44,8 +43,8 @@ type novaPlugin struct {
 	BigVMMinMemoryMiB      uint64                   `yaml:"bigvm_min_memory"`
 	HypervisorTypeRules    nova.HypervisorTypeRules `yaml:"hypervisor_type_rules"`
 	SeparateInstanceQuotas struct {
-		FlavorNameRx  regexpext.PlainRegexp       `yaml:"flavor_name_pattern"`
-		FlavorAliases nova.FlavorTranslationTable `yaml:"flavor_aliases"`
+		FlavorNameSelection nova.FlavorNameSelection    `yaml:"flavor_name_selection"`
+		FlavorAliases       nova.FlavorTranslationTable `yaml:"flavor_aliases"`
 	} `yaml:"separate_instance_quotas"`
 	WithSubresources bool `yaml:"with_subresources"`
 	//computed state
@@ -115,11 +114,11 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.E
 		return err
 	}
 	for _, flavorName := range flavorNames {
-		//NOTE: If `flavor_name_pattern` is empty, then FlavorNameRx will match any input.
-		if p.SeparateInstanceQuotas.FlavorNameRx.MatchString(flavorName) {
+		category := p.SeparateInstanceQuotas.FlavorNameSelection.MatchFlavorName(flavorName)
+		if category != "" {
 			p.resources = append(p.resources, limesresources.ResourceInfo{
 				Name:     p.SeparateInstanceQuotas.FlavorAliases.LimesResourceNameForFlavor(flavorName),
-				Category: "per_flavor",
+				Category: category,
 				Unit:     limes.UnitNone,
 			})
 		}
@@ -262,7 +261,7 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Availab
 		},
 	}
 	for flavorName, flavorLimits := range limitsData.Limits.AbsolutePerFlavor {
-		if p.SeparateInstanceQuotas.FlavorNameRx.MatchString(flavorName) {
+		if p.SeparateInstanceQuotas.FlavorNameSelection.MatchFlavorName(flavorName) != "" {
 			result[p.SeparateInstanceQuotas.FlavorAliases.LimesResourceNameForFlavor(flavorName)] = core.ResourceData{
 				Quota:     flavorLimits.MaxTotalInstances,
 				UsageData: core.InUnknownAZUnlessEmpty(core.UsageData{Usage: flavorLimits.TotalInstancesUsed}).AndZeroInTheseAZs(allAZs),

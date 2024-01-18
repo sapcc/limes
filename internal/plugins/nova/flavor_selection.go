@@ -27,6 +27,10 @@ import (
 )
 
 // FlavorSelection describes a set of public flavors.
+//
+// This is used for matching flavors that we enumerate via the flavor API
+// itself (so we know things like extra specs). For matching flavors just by
+// name, type FlavorNameSelection is used.
 type FlavorSelection struct {
 	//Only match flavors that have all of these extra specs.
 	RequiredExtraSpecs map[string]string `yaml:"required_extra_specs"`
