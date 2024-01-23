@@ -34,7 +34,7 @@ import (
 	"github.com/sapcc/limes/internal/plugins/nova"
 )
 
-type capacityNovaPlugin struct {
+type capacityNovaBasicPlugin struct {
 	//configuration
 	HypervisorSelection      nova.HypervisorSelection `yaml:"hypervisor_selection"`
 	MaxInstancesPerAggregate uint64                   `yaml:"max_instances_per_aggregate"`
@@ -66,11 +66,11 @@ type novaHypervisorSubcapacity struct {
 }
 
 func init() {
-	core.CapacityPluginRegistry.Add(func() core.CapacityPlugin { return &capacityNovaPlugin{} })
+	core.CapacityPluginRegistry.Add(func() core.CapacityPlugin { return &capacityNovaBasicPlugin{} })
 }
 
 // Init implements the core.CapacityPlugin interface.
-func (p *capacityNovaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
+func (p *capacityNovaBasicPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
 	if p.HypervisorSelection.AggregateNameRx == "" {
 		return errors.New("missing value for nova.aggregate_name_pattern")
 	}
@@ -92,12 +92,12 @@ func (p *capacityNovaPlugin) Init(provider *gophercloud.ProviderClient, eo gophe
 }
 
 // PluginTypeID implements the core.CapacityPlugin interface.
-func (p *capacityNovaPlugin) PluginTypeID() string {
-	return "nova"
+func (p *capacityNovaBasicPlugin) PluginTypeID() string {
+	return "nova-basic"
 }
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *capacityNovaPlugin) Scrape(_ core.CapacityPluginBackchannel) (result map[string]map[string]core.PerAZ[core.CapacityData], serializedMetrics []byte, err error) {
+func (p *capacityNovaBasicPlugin) Scrape(_ core.CapacityPluginBackchannel) (result map[string]map[string]core.PerAZ[core.CapacityData], serializedMetrics []byte, err error) {
 	//for the instances capacity, we need to know the max root disk size on public flavors
 	maxRootDiskSize := 0.0
 	err = p.FlavorSelection.ForeachFlavor(p.NovaV2, func(f flavors.Flavor, _ map[string]string) error {
@@ -190,12 +190,12 @@ var novaHypervisorWellformedGauge = prometheus.NewGaugeVec(
 )
 
 // DescribeMetrics implements the core.CapacityPlugin interface.
-func (p *capacityNovaPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
+func (p *capacityNovaBasicPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 	novaHypervisorWellformedGauge.Describe(ch)
 }
 
 // CollectMetrics implements the core.CapacityPlugin interface.
-func (p *capacityNovaPlugin) CollectMetrics(ch chan<- prometheus.Metric, serializedMetrics []byte) error {
+func (p *capacityNovaBasicPlugin) CollectMetrics(ch chan<- prometheus.Metric, serializedMetrics []byte) error {
 	var metrics capacityNovaSerializedMetrics
 	err := json.Unmarshal(serializedMetrics, &metrics)
 	if err != nil {
