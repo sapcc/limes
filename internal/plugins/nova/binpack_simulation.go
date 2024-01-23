@@ -120,14 +120,11 @@ func (h BinpackHypervisor) RenderDebugView(az limes.AvailabilityZone) {
 	logg.Debug("[%s][%s] %s", az, shortID, h.Match.Hypervisor.Description())
 	for idx, n := range h.Nodes {
 		var placements []string
-		if len(n.Instances) == 0 {
-			placements = []string{"<empty>"}
-		}
 		for _, i := range n.Instances {
 			placements = append(placements, fmt.Sprintf("%s:%s", i.Reason, i.FlavorName))
 		}
-		logg.Debug("[%s][%s][node%03d] %d VCPUs, %d MB memory, %d GB local disk: %s", az, shortID, idx+1,
-			n.Capacity.VCPUs, n.Capacity.MemoryMB, n.Capacity.LocalGB, strings.Join(placements, ", "))
+		placements = append(placements, fmt.Sprintf("%s free", n.free()))
+		logg.Debug("[%s][%s][node%03d] %s: %s", az, shortID, idx+1, n.Capacity, strings.Join(placements, ", "))
 	}
 }
 
@@ -172,15 +169,8 @@ func (hh BinpackHypervisors) PlaceOneInstance(flavor flavors.Flavor, reason stri
 	)
 	for _, hypervisor := range hh {
 		for _, node := range hypervisor.Nodes {
-			//sanity check: we should not commit more resources than we have, but just in case, let's
-			//ensure that we don't underflow
-			nodeUsage := node.usage()
-			if !nodeUsage.FitsIn(node.Capacity) {
-				continue
-			}
-
 			//skip nodes that cannot fit this instance at all
-			nodeFree := node.Capacity.Sub(nodeUsage)
+			nodeFree := node.free()
 			if !vmSize.FitsIn(nodeFree) {
 				continue
 			}
@@ -213,11 +203,14 @@ func (hh BinpackHypervisors) PlaceOneInstance(flavor flavors.Flavor, reason stri
 	}
 }
 
-func (n BinpackNode) usage() (result BinpackVector[uint64]) {
+func (n BinpackNode) free() (result BinpackVector[uint64]) {
+	result = n.Capacity
 	for _, i := range n.Instances {
-		result.VCPUs += i.Size.VCPUs
-		result.MemoryMB += i.Size.MemoryMB
-		result.LocalGB += i.Size.LocalGB
+		//We want to calculate `result = max(0, result - size)`,
+		//but we need to protect against `result - size` underflowing.
+		result.VCPUs = max(result.VCPUs, i.Size.VCPUs) - i.Size.VCPUs
+		result.MemoryMB = max(result.MemoryMB, i.Size.MemoryMB) - i.Size.MemoryMB
+		result.LocalGB = max(result.LocalGB, i.Size.LocalGB) - i.Size.LocalGB
 	}
 	return
 }
@@ -250,6 +243,11 @@ func (v BinpackVector[T]) Div(other BinpackVector[T]) BinpackVector[float64] {
 
 func (v BinpackVector[T]) Dot(other BinpackVector[T]) T {
 	return v.VCPUs*other.VCPUs + v.MemoryMB*other.MemoryMB + v.LocalGB*other.LocalGB
+}
+
+func (v BinpackVector[T]) String() string {
+	//only used for debug output where T = uint64, so these conversions will not hurt
+	return fmt.Sprintf("%dc/%dm/%dg", uint64(v.VCPUs), uint64(v.MemoryMB), uint64(v.LocalGB))
 }
 
 // PlacementCountForFlavor returns how many instances have been placed for the given flavor name.
