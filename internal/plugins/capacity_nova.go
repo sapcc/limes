@@ -177,6 +177,8 @@ func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel) 
 		}
 		demandByFlavorName[f.Name] = demand
 	}
+	logg.Debug("binpackable flavors: %#v", splitFlavors)
+	logg.Debug("demand for binpackable flavors: %#v", demandByFlavorName)
 
 	//enumerate matching hypervisors, prepare data structures for binpacking
 	var metrics capacityNovaSerializedMetrics
@@ -200,6 +202,14 @@ func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel) 
 			return err
 		}
 		hypervisorsByAZ[h.AvailabilityZone] = append(hypervisorsByAZ[h.AvailabilityZone], bh)
+
+		hc := h.PartialCapacity()
+		logg.Debug("%s in %s reports %s capacity, %s used, %d nodes, %s max unit", h.Hypervisor.Description(), h.AvailabilityZone,
+			nova.BinpackVector[uint64]{VCPUs: hc.VCPUs.Capacity, MemoryMB: hc.MemoryMB.Capacity, LocalGB: hc.LocalGB.Capacity},
+			nova.BinpackVector[uint64]{VCPUs: hc.VCPUs.Usage, MemoryMB: hc.MemoryMB.Usage, LocalGB: hc.LocalGB.Usage},
+			len(bh.Nodes), bh.Nodes[0].Capacity,
+		)
+
 		return nil
 	})
 	if err != nil {
@@ -242,7 +252,7 @@ func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel) 
 		//phase 2: block confirmed, but unused commitments
 		blockedCapacity.VCPUs += coresDemand[az].UnusedCommitments
 		blockedCapacity.MemoryMB += ramDemand[az].UnusedCommitments
-		blockedCapacity.LocalGB += instancesDemand[az].UnusedCommitments
+		blockedCapacity.LocalGB += instancesDemand[az].UnusedCommitments * maxRootDiskSize
 		logg.Debug("[%s] blockedCapacity in phase 2: %s", az, blockedCapacity.String())
 		for _, flavor := range splitFlavors {
 			if !hypervisors.PlaceSeveralInstances(flavor, "committed", blockedCapacity, demandByFlavorName[flavor.Name][az].UnusedCommitments) {
@@ -253,7 +263,7 @@ func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel) 
 		//phase 3: block pending commitments
 		blockedCapacity.VCPUs += coresDemand[az].PendingCommitments
 		blockedCapacity.MemoryMB += ramDemand[az].PendingCommitments
-		blockedCapacity.LocalGB += instancesDemand[az].PendingCommitments
+		blockedCapacity.LocalGB += instancesDemand[az].PendingCommitments * maxRootDiskSize
 		logg.Debug("[%s] blockedCapacity in phase 3: %s", az, blockedCapacity.String())
 		for _, flavor := range splitFlavors {
 			if !hypervisors.PlaceSeveralInstances(flavor, "pending", blockedCapacity, demandByFlavorName[flavor.Name][az].PendingCommitments) {
@@ -288,7 +298,8 @@ func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel) 
 		//
 		totalUsageUntilNow := blockedCapacity.Add(splitFlavorsUsage)
 		blockedCapacity = hypervisors.TotalCapacity().AsFloat().Mul(blockedCapacity.Div(totalUsageUntilNow)).AsUint()
-		logg.Debug("[%s] blockedCapacity in final fill: %s", az, blockedCapacity.String())
+		logg.Debug("[%s] usage by split flavors after phase 3: %s", az, splitFlavorsUsage.String())
+		logg.Debug("[%s] blockedCapacity in final fill: %s (totalCapacity = %s)", az, blockedCapacity.String(), hypervisors.TotalCapacity().String())
 
 		//fill up with padding in a fair way as long as there is space left,
 		//except if there is pooling and we don't have any demand at all on the split flavors
@@ -333,8 +344,6 @@ func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel) 
 
 	//debug visualization of the binpack placement result
 	if logg.ShowDebug {
-		logg.Debug("binpackable flavors: %#v", splitFlavors)
-		logg.Debug("demand for binpackable flavors: %#v", demandByFlavorName)
 		for az, hypervisors := range hypervisorsByAZ {
 			for _, hypervisor := range hypervisors {
 				hypervisor.RenderDebugView(az)

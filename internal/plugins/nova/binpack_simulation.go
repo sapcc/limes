@@ -94,13 +94,21 @@ func PrepareHypervisorForBinpacking(h MatchingHypervisor) (BinpackHypervisor, er
 		nodeCount = nodeCountCandidate
 		break
 	}
+	if nodeCount == 0 {
+		return BinpackHypervisor{}, fmt.Errorf("node count for %s is zero", h.Hypervisor.Description())
+	}
 
 	//break down capacity into equal-sized nodes
 	nodeTemplate := BinpackNode{
 		Capacity: BinpackVector[uint64]{
 			VCPUs:    uint64(h.Inventories["VCPU"].MaxUnit),
 			MemoryMB: uint64(h.Inventories["MEMORY_MB"].MaxUnit),
-			LocalGB:  uint64(h.Inventories["DISK_GB"].MaxUnit),
+			//We do not use `h.Inventories["DISK_GB"].MaxUnit` because it appears to describe the max root
+			//disk size for a single instance, rather than the actual available disk size. Maybe this is
+			//because the root disks are stored on nearby NFS filers, so MaxUnit is actually the max
+			//volume size instead of the total capacity per node. Since we have a good nodeCount number
+			//now, we can divide up the total disk space for all nodes.
+			LocalGB: uint64(h.Inventories["DISK_GB"].Total-h.Inventories["DISK_GB"].Reserved) / nodeCount,
 		},
 	}
 	result := BinpackHypervisor{
@@ -205,6 +213,7 @@ func (hh BinpackHypervisors) PlaceOneInstance(flavor flavors.Flavor, reason stri
 	}
 
 	if bestNode == nil {
+		logg.Debug("refusing to place %s with %s because no node has enough space", flavor.Name, vmSize.String())
 		return false
 	} else {
 		bestNode.Instances = append(bestNode.Instances, BinpackInstance{
