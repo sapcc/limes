@@ -135,17 +135,17 @@ func (p *capacityNovaBinpackFlavorsPlugin) Scrape(backchannel core.CapacityPlugi
 			canPlaceFlavor[flavor.Name] = true
 		}
 		for _, flavor := range allFlavors {
-			if !hypervisors.PlaceSeveralInstances(flavor, "used", nova.BinpackVector[uint64]{}, resourceDemandByFlavorName[flavor.Name][az].Usage) {
+			if !hypervisors.PlaceSeveralInstances(flavor, "used", 1, nova.BinpackVector[uint64]{}, resourceDemandByFlavorName[flavor.Name][az].Usage) {
 				canPlaceFlavor[flavor.Name] = false
 			}
 		}
 		for _, flavor := range allFlavors {
-			if !hypervisors.PlaceSeveralInstances(flavor, "committed", nova.BinpackVector[uint64]{}, resourceDemandByFlavorName[flavor.Name][az].UnusedCommitments) {
+			if !hypervisors.PlaceSeveralInstances(flavor, "committed", 1, nova.BinpackVector[uint64]{}, resourceDemandByFlavorName[flavor.Name][az].UnusedCommitments) {
 				canPlaceFlavor[flavor.Name] = false
 			}
 		}
 		for _, flavor := range allFlavors {
-			if !hypervisors.PlaceSeveralInstances(flavor, "pending", nova.BinpackVector[uint64]{}, resourceDemandByFlavorName[flavor.Name][az].PendingCommitments) {
+			if !hypervisors.PlaceSeveralInstances(flavor, "pending", 1, nova.BinpackVector[uint64]{}, resourceDemandByFlavorName[flavor.Name][az].PendingCommitments) {
 				canPlaceFlavor[flavor.Name] = false
 			}
 		}
@@ -190,7 +190,7 @@ func (p *capacityNovaBinpackFlavorsPlugin) Scrape(backchannel core.CapacityPlugi
 				//no flavor left that can be placed -> stop
 				break
 			} else {
-				if hypervisors.PlaceOneInstance(*bestFlavor, "padding", nova.BinpackVector[uint64]{}) {
+				if hypervisors.PlaceOneInstance(*bestFlavor, "padding", 1, nova.BinpackVector[uint64]{}) {
 					totalPlacedInstances[bestFlavor.Name]++
 				} else {
 					canPlaceFlavor[bestFlavor.Name] = false

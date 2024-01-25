@@ -230,8 +230,13 @@ type CapacityPlugin interface {
 // CapacityPlugin.Scrape(). Most capacity scrape implementations will not need
 // this, but some esoteric usecases use this information to distribute
 // available capacity among resources in accordance with customer demand.
+//
+// Note that ResourceDemand is measured against effective capacity, which
+// differs from the raw capacity seen by the CapacityPlugin by this
+// OvercommitFactor.
 type CapacityPluginBackchannel interface {
 	GetGlobalResourceDemand(serviceType, resourceName string) (map[limes.AvailabilityZone]ResourceDemand, error)
+	GetOvercommitFactor(serviceType, resourceName string) (OvercommitFactor, error)
 }
 
 // ResourceDemand describes cluster-wide demand for a certain resource within a

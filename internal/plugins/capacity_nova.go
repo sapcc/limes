@@ -146,11 +146,14 @@ func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel) 
 
 	//collect all relevant resource demands
 	var (
-		coresDemand     map[limes.AvailabilityZone]core.ResourceDemand
-		instancesDemand map[limes.AvailabilityZone]core.ResourceDemand
-		ramDemand       map[limes.AvailabilityZone]core.ResourceDemand
+		coresDemand           map[limes.AvailabilityZone]core.ResourceDemand
+		instancesDemand       map[limes.AvailabilityZone]core.ResourceDemand
+		ramDemand             map[limes.AvailabilityZone]core.ResourceDemand
+		coresOvercommitFactor core.OvercommitFactor
 	)
-	if p.PooledCoresResourceName != "" {
+	if p.PooledCoresResourceName == "" {
+		coresOvercommitFactor = 1
+	} else {
 		coresDemand, err = backchannel.GetGlobalResourceDemand("compute", p.PooledCoresResourceName)
 		if err != nil {
 			return nil, nil, fmt.Errorf("while collecting resource demand for compute/%s: %w", p.PooledCoresResourceName, err)
@@ -163,8 +166,12 @@ func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel) 
 		if err != nil {
 			return nil, nil, fmt.Errorf("while collecting resource demand for compute/%s: %w", p.PooledRAMResourceName, err)
 		}
+		coresOvercommitFactor, err = backchannel.GetOvercommitFactor("compute", p.PooledCoresResourceName)
+		if err != nil {
+			return nil, nil, fmt.Errorf("while getting overcommit factor for compute/%s: %w", p.PooledCoresResourceName, err)
+		}
 	}
-	logg.Debug("pooled cores demand: %#v", coresDemand)
+	logg.Debug("pooled cores demand: %#v (overcommit factor = %g)", coresDemand, coresOvercommitFactor)
 	logg.Debug("pooled instances demand: %#v", instancesDemand)
 	logg.Debug("pooled RAM demand: %#v", ramDemand)
 
@@ -238,35 +245,35 @@ func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel) 
 
 		//phase 1: block existing usage
 		blockedCapacity := nova.BinpackVector[uint64]{
-			VCPUs:    coresDemand[az].Usage,
+			VCPUs:    coresOvercommitFactor.ApplyInReverseTo(coresDemand[az].Usage),
 			MemoryMB: ramDemand[az].Usage,
 			LocalGB:  instancesDemand[az].Usage * maxRootDiskSize,
 		}
 		logg.Debug("[%s] blockedCapacity in phase 1: %s", az, blockedCapacity.String())
 		for _, flavor := range splitFlavors {
-			if !hypervisors.PlaceSeveralInstances(flavor, "used", blockedCapacity, demandByFlavorName[flavor.Name][az].Usage) {
+			if !hypervisors.PlaceSeveralInstances(flavor, "used", coresOvercommitFactor, blockedCapacity, demandByFlavorName[flavor.Name][az].Usage) {
 				canPlaceFlavor[flavor.Name] = false
 			}
 		}
 
 		//phase 2: block confirmed, but unused commitments
-		blockedCapacity.VCPUs += coresDemand[az].UnusedCommitments
+		blockedCapacity.VCPUs += coresOvercommitFactor.ApplyInReverseTo(coresDemand[az].UnusedCommitments)
 		blockedCapacity.MemoryMB += ramDemand[az].UnusedCommitments
 		blockedCapacity.LocalGB += instancesDemand[az].UnusedCommitments * maxRootDiskSize
 		logg.Debug("[%s] blockedCapacity in phase 2: %s", az, blockedCapacity.String())
 		for _, flavor := range splitFlavors {
-			if !hypervisors.PlaceSeveralInstances(flavor, "committed", blockedCapacity, demandByFlavorName[flavor.Name][az].UnusedCommitments) {
+			if !hypervisors.PlaceSeveralInstances(flavor, "committed", coresOvercommitFactor, blockedCapacity, demandByFlavorName[flavor.Name][az].UnusedCommitments) {
 				canPlaceFlavor[flavor.Name] = false
 			}
 		}
 
 		//phase 3: block pending commitments
-		blockedCapacity.VCPUs += coresDemand[az].PendingCommitments
+		blockedCapacity.VCPUs += coresOvercommitFactor.ApplyInReverseTo(coresDemand[az].PendingCommitments)
 		blockedCapacity.MemoryMB += ramDemand[az].PendingCommitments
 		blockedCapacity.LocalGB += instancesDemand[az].PendingCommitments * maxRootDiskSize
 		logg.Debug("[%s] blockedCapacity in phase 3: %s", az, blockedCapacity.String())
 		for _, flavor := range splitFlavors {
-			if !hypervisors.PlaceSeveralInstances(flavor, "pending", blockedCapacity, demandByFlavorName[flavor.Name][az].PendingCommitments) {
+			if !hypervisors.PlaceSeveralInstances(flavor, "pending", coresOvercommitFactor, blockedCapacity, demandByFlavorName[flavor.Name][az].PendingCommitments) {
 				canPlaceFlavor[flavor.Name] = false
 			}
 		}
@@ -283,7 +290,7 @@ func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel) 
 			totalPlacedInstances[flavor.Name] = float64(count)
 			//The max(..., 0.1) is explained below.
 
-			splitFlavorsUsage.VCPUs += count * uint64(flavor.VCPUs)
+			splitFlavorsUsage.VCPUs += coresOvercommitFactor.ApplyInReverseTo(count * uint64(flavor.VCPUs))
 			splitFlavorsUsage.MemoryMB += count * uint64(flavor.RAM)
 			splitFlavorsUsage.LocalGB += count * uint64(flavor.Disk)
 		}
@@ -333,7 +340,7 @@ func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel) 
 				//no flavor left that can be placed -> stop
 				break
 			} else {
-				if hypervisors.PlaceOneInstance(*bestFlavor, "padding", blockedCapacity) {
+				if hypervisors.PlaceOneInstance(*bestFlavor, "padding", coresOvercommitFactor, blockedCapacity) {
 					totalPlacedInstances[bestFlavor.Name]++
 				} else {
 					canPlaceFlavor[bestFlavor.Name] = false
@@ -405,9 +412,9 @@ func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel) 
 			capacities[p.PooledRAMResourceName][az] = pointerTo(azCapacity.IntoCapacityData("ram", float64(maxRootDiskSize), ramSubcapacities))
 			for _, flavor := range splitFlavors {
 				count := hypervisors.PlacementCountForFlavor(flavor.Name)
-				capacities[p.PooledCoresResourceName][az].Capacity -= count * uint64(flavor.VCPUs) //TODO: consider overcommit factor
-				capacities[p.PooledInstancesResourceName][az].Capacity--                           //TODO: not accurate when uint64(flavor.Disk) != maxRootDiskSize
-				capacities[p.PooledRAMResourceName][az].Capacity -= count * uint64(flavor.RAM)     //TODO: consider overcommit factor
+				capacities[p.PooledCoresResourceName][az].Capacity -= coresOvercommitFactor.ApplyInReverseTo(count * uint64(flavor.VCPUs))
+				capacities[p.PooledInstancesResourceName][az].Capacity-- //TODO: not accurate when uint64(flavor.Disk) != maxRootDiskSize
+				capacities[p.PooledRAMResourceName][az].Capacity -= count * uint64(flavor.RAM)
 			}
 		}
 	}

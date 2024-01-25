@@ -54,12 +54,13 @@ var (
 	`)
 )
 
+// GetOvercommitFactor implements the CapacityPluginBackchannel interface.
+func (i capacityPluginBackchannelImpl) GetOvercommitFactor(serviceType, resourceName string) (core.OvercommitFactor, error) {
+	return i.Cluster.BehaviorForResource(serviceType, resourceName, "").OvercommitFactor, nil
+}
+
 // GetGlobalResourceDemand implements the CapacityPluginBackchannel interface.
 func (i capacityPluginBackchannelImpl) GetGlobalResourceDemand(serviceType, resourceName string) (map[limes.AvailabilityZone]core.ResourceDemand, error) {
-	//capacity plugins will compare the resource demand to the raw capacity,
-	//not the effective capacity, so we need to scale demand accordingly
-	overcommitFactor := i.Cluster.BehaviorForResource(serviceType, resourceName, "").OvercommitFactor
-
 	type projectData struct {
 		Usage              uint64
 		Committed          uint64
@@ -91,7 +92,7 @@ func (i capacityPluginBackchannelImpl) GetGlobalResourceDemand(serviceType, reso
 		if err != nil {
 			return err
 		}
-		addData(serviceID, az, func(pdata *projectData) { pdata.Usage = overcommitFactor.ApplyInReverseTo(usage) })
+		addData(serviceID, az, func(pdata *projectData) { pdata.Usage = usage })
 		return nil
 	})
 	if err != nil {
@@ -109,7 +110,7 @@ func (i capacityPluginBackchannelImpl) GetGlobalResourceDemand(serviceType, reso
 		if err != nil {
 			return err
 		}
-		addData(serviceID, az, func(pdata *projectData) { pdata.Committed = overcommitFactor.ApplyInReverseTo(committed) })
+		addData(serviceID, az, func(pdata *projectData) { pdata.Committed = committed })
 		return nil
 	})
 	if err != nil {
@@ -127,7 +128,7 @@ func (i capacityPluginBackchannelImpl) GetGlobalResourceDemand(serviceType, reso
 		if err != nil {
 			return err
 		}
-		addData(serviceID, az, func(pdata *projectData) { pdata.PendingCommitments = overcommitFactor.ApplyInReverseTo(pending) })
+		addData(serviceID, az, func(pdata *projectData) { pdata.PendingCommitments = pending })
 		return nil
 	})
 	if err != nil {

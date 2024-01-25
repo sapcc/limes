@@ -27,6 +27,8 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/logg"
+
+	"github.com/sapcc/limes/internal/core"
 )
 
 // BinpackHypervisor models an entire Nova hypervisor for the purposes of the
@@ -137,9 +139,9 @@ func (h BinpackHypervisor) RenderDebugView(az limes.AvailabilityZone) {
 }
 
 // PlaceSeveralInstances calls PlaceOneInstance multiple times.
-func (hh BinpackHypervisors) PlaceSeveralInstances(flavor flavors.Flavor, reason string, blockedCapacity BinpackVector[uint64], count uint64) (ok bool) {
+func (hh BinpackHypervisors) PlaceSeveralInstances(flavor flavors.Flavor, reason string, coresOvercommitFactor core.OvercommitFactor, blockedCapacity BinpackVector[uint64], count uint64) (ok bool) {
 	for i := uint64(0); i < count; i++ {
-		ok = hh.PlaceOneInstance(flavor, reason, blockedCapacity)
+		ok = hh.PlaceOneInstance(flavor, reason, coresOvercommitFactor, blockedCapacity)
 		if !ok {
 			//if we don't have space for this instance, we won't have space for any following ones
 			return false
@@ -150,7 +152,7 @@ func (hh BinpackHypervisors) PlaceSeveralInstances(flavor flavors.Flavor, reason
 
 // PlaceOneInstance places a single instance of the given flavor using the vector-dot binpacking algorithm.
 // If the instance cannot be placed, false is returned.
-func (hh BinpackHypervisors) PlaceOneInstance(flavor flavors.Flavor, reason string, blockedCapacity BinpackVector[uint64]) (ok bool) {
+func (hh BinpackHypervisors) PlaceOneInstance(flavor flavors.Flavor, reason string, coresOvercommitFactor core.OvercommitFactor, blockedCapacity BinpackVector[uint64]) (ok bool) {
 	//This function implements the vector dot binpacking method described in [Mayank] (section III,
 	//subsection D, including the correction presented in the last paragraph of that subsection).
 	//
@@ -166,7 +168,7 @@ func (hh BinpackHypervisors) PlaceOneInstance(flavor flavors.Flavor, reason stri
 	//[Mayank]: https://www.it.iitb.ac.in/~sahoo/papers/cloud2011_mayank.pdf
 
 	vmSize := BinpackVector[uint64]{
-		VCPUs:    uint64(flavor.VCPUs),
+		VCPUs:    coresOvercommitFactor.ApplyInReverseTo(uint64(flavor.VCPUs)),
 		MemoryMB: uint64(flavor.RAM),
 		LocalGB:  uint64(flavor.Disk),
 	}
