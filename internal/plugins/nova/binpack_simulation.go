@@ -305,6 +305,10 @@ func (v BinpackVector[T]) Dot(other BinpackVector[T]) T {
 	return v.VCPUs*other.VCPUs + v.MemoryMB*other.MemoryMB + v.LocalGB*other.LocalGB
 }
 
+func (v BinpackVector[T]) IsAnyZero() bool {
+	return v.VCPUs == 0 || v.MemoryMB == 0 || v.LocalGB == 0
+}
+
 func (v BinpackVector[T]) String() string {
 	//only used for debug output where T = uint64, so these conversions will not hurt
 	return fmt.Sprintf("%dc/%dm/%dg", uint64(v.VCPUs), uint64(v.MemoryMB), uint64(v.LocalGB))

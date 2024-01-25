@@ -304,7 +304,10 @@ func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel) 
 		//		                                                        ^ this is in blockedCapacity
 		//
 		totalUsageUntilNow := blockedCapacity.Add(splitFlavorsUsage)
-		blockedCapacity = hypervisors.TotalCapacity().AsFloat().Mul(blockedCapacity.Div(totalUsageUntilNow)).AsUint()
+		if !totalUsageUntilNow.IsAnyZero() {
+			//we can only do this if .Div() does not cause a divide-by-zero, otherwise we continue with blockedCapacity = 0
+			blockedCapacity = hypervisors.TotalCapacity().AsFloat().Mul(blockedCapacity.Div(totalUsageUntilNow)).AsUint()
+		}
 		logg.Debug("[%s] usage by split flavors after phase 3: %s", az, splitFlavorsUsage.String())
 		logg.Debug("[%s] blockedCapacity in final fill: %s (totalCapacity = %s)", az, blockedCapacity.String(), hypervisors.TotalCapacity().String())
 
