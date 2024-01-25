@@ -177,3 +177,17 @@ func (f OvercommitFactor) ApplyTo(rawCapacity uint64) uint64 {
 	}
 	return uint64(float64(rawCapacity) * float64(f))
 }
+
+// ApplyInReverseTo turns the given effective capacity back into a raw capacity.
+func (f OvercommitFactor) ApplyInReverseTo(capacity uint64) uint64 {
+	if f == 0 {
+		//if no overcommit was configured, assume an overcommit factor of 1
+		return capacity
+	}
+	rawCapacity := uint64(float64(capacity) / float64(f))
+	for f.ApplyTo(rawCapacity) < capacity {
+		//fix errors from rounding down float64 -> uint64 above
+		rawCapacity = rawCapacity + 1
+	}
+	return rawCapacity
+}

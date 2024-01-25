@@ -551,7 +551,7 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 
 	//test GetGlobalResourceDemand (this is not used by any of our test plugins,
 	//but we can just call it directly to see that it works)
-	bc := datamodel.NewCapacityPluginBackchannel(s.DB, s.Clock.Now())
+	bc := datamodel.NewCapacityPluginBackchannel(s.Cluster, s.DB, s.Clock.Now())
 	expectedDemandsByService := map[string]map[string]map[limes.AvailabilityZone]core.ResourceDemand{
 		"first": {
 			"capacity": {
