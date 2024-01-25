@@ -45,26 +45,6 @@ type capacityNovaBasicPlugin struct {
 	PlacementV1 *gophercloud.ServiceClient `yaml:"-"`
 }
 
-type capacityNovaSerializedMetrics struct {
-	Hypervisors []novaHypervisorMetrics `json:"hv"`
-}
-
-type novaHypervisorMetrics struct {
-	Name             string                 `json:"n"`
-	Hostname         string                 `json:"hn"`
-	AggregateName    string                 `json:"ag"`
-	AvailabilityZone limes.AvailabilityZone `json:"az"`
-}
-
-type novaHypervisorSubcapacity struct {
-	ServiceHost      string                 `json:"service_host"`
-	AvailabilityZone limes.AvailabilityZone `json:"az"`
-	AggregateName    string                 `json:"aggregate"`
-	Capacity         uint64                 `json:"capacity"`
-	Usage            uint64                 `json:"usage"`
-	Traits           []string               `json:"traits"`
-}
-
 func init() {
 	core.CapacityPluginRegistry.Add(func() core.CapacityPlugin { return &capacityNovaBasicPlugin{} })
 }
@@ -145,13 +125,13 @@ func (p *capacityNovaBasicPlugin) Scrape(_ core.CapacityPluginBackchannel) (resu
 		//report subcapacity for this hypervisor if requested
 		if p.WithSubcapacities {
 			for _, resName := range resourceNames {
-				resCapa := hvCapacity.IntoCapacityData(resName, maxRootDiskSize)
+				resCapa := hvCapacity.IntoCapacityData(resName, maxRootDiskSize, nil)
 				azCapacity.Subcapacities = append(azCapacity.Subcapacities, novaHypervisorSubcapacity{
 					ServiceHost:      h.Hypervisor.Service.Host,
 					AggregateName:    h.AggregateName,
 					AvailabilityZone: h.AvailabilityZone,
-					Capacity:         resCapa.Capacity,
-					Usage:            *resCapa.Usage,
+					Capacity:         &resCapa.Capacity,
+					Usage:            resCapa.Usage,
 					Traits:           h.Traits,
 				})
 			}
@@ -167,7 +147,7 @@ func (p *capacityNovaBasicPlugin) Scrape(_ core.CapacityPluginBackchannel) (resu
 	for _, resName := range resourceNames {
 		capacities[resName] = make(core.PerAZ[core.CapacityData], len(azCapacities))
 		for az, azCapacity := range azCapacities {
-			resCapa := azCapacity.IntoCapacityData(resName, maxRootDiskSize)
+			resCapa := azCapacity.IntoCapacityData(resName, maxRootDiskSize, nil)
 			capacities[resName][az] = &resCapa
 		}
 	}
@@ -181,20 +161,14 @@ func (p *capacityNovaBasicPlugin) Scrape(_ core.CapacityPluginBackchannel) (resu
 	return map[string]map[string]core.PerAZ[core.CapacityData]{"compute": capacities}, serializedMetrics, err
 }
 
-var novaHypervisorWellformedGauge = prometheus.NewGaugeVec(
-	prometheus.GaugeOpts{
-		Name: "limes_nova_hypervisor_is_wellformed",
-		Help: "One metric per Nova hypervisor that was discovered by Limes's capacity scanner. Value is 1 for wellformed hypervisors that could be uniquely matched to an aggregate and an AZ, 0 otherwise.",
-	},
-	[]string{"hypervisor", "hostname", "aggregate", "az"},
-)
-
 // DescribeMetrics implements the core.CapacityPlugin interface.
 func (p *capacityNovaBasicPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 	novaHypervisorWellformedGauge.Describe(ch)
 }
 
 // CollectMetrics implements the core.CapacityPlugin interface.
+//
+//nolint:dupl
 func (p *capacityNovaBasicPlugin) CollectMetrics(ch chan<- prometheus.Metric, serializedMetrics []byte) error {
 	var metrics capacityNovaSerializedMetrics
 	err := json.Unmarshal(serializedMetrics, &metrics)
@@ -219,11 +193,4 @@ func (p *capacityNovaBasicPlugin) CollectMetrics(ch chan<- prometheus.Metric, se
 		)
 	}
 	return nil
-}
-
-func stringOrUnknown[S ~string](value S) string {
-	if value == "" {
-		return "unknown"
-	}
-	return string(value)
 }

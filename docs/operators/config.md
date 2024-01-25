@@ -781,7 +781,6 @@ capacitors:
       hypervisor_selection:
         aggregate_name_pattern: '^(?:vc-|qemu-)'
         hypervisor_type_pattern: '^(?:VMware|QEMU)'
-      max_instances_per_aggregate: 10000
       flavor_selection:
         required_extra_specs:
           first: 'foo'
