@@ -33,13 +33,14 @@ import (
 )
 
 // NewCapacityPluginBackchannel builds a CapacityPluginBackchannel.
-func NewCapacityPluginBackchannel(dbi db.Interface, now time.Time) core.CapacityPluginBackchannel {
-	return capacityPluginBackchannelImpl{dbi, now}
+func NewCapacityPluginBackchannel(cluster *core.Cluster, dbi db.Interface, now time.Time) core.CapacityPluginBackchannel {
+	return capacityPluginBackchannelImpl{cluster, dbi, now}
 }
 
 type capacityPluginBackchannelImpl struct {
-	DB  db.Interface
-	Now time.Time
+	Cluster *core.Cluster
+	DB      db.Interface
+	Now     time.Time
 }
 
 var (
@@ -52,6 +53,11 @@ var (
 		 GROUP BY ps.id, pc.availability_zone
 	`)
 )
+
+// GetOvercommitFactor implements the CapacityPluginBackchannel interface.
+func (i capacityPluginBackchannelImpl) GetOvercommitFactor(serviceType, resourceName string) (core.OvercommitFactor, error) {
+	return i.Cluster.BehaviorForResource(serviceType, resourceName, "").OvercommitFactor, nil
+}
 
 // GetGlobalResourceDemand implements the CapacityPluginBackchannel interface.
 func (i capacityPluginBackchannelImpl) GetGlobalResourceDemand(serviceType, resourceName string) (map[limes.AvailabilityZone]core.ResourceDemand, error) {

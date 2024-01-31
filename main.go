@@ -387,7 +387,7 @@ func taskTestScanCapacity(cluster *core.Cluster, args []string) {
 		logg.Fatal("unknown capacitor: %s", capacitorID)
 	}
 
-	capacities, serializedMetrics, err := plugin.Scrape(mockCapacityPluginBackchannel{})
+	capacities, serializedMetrics, err := plugin.Scrape(mockCapacityPluginBackchannel{cluster})
 	if err != nil {
 		logg.Error("Scrape failed: %s", util.UnpackError(err).Error())
 		capacities = nil
@@ -418,7 +418,14 @@ func taskTestScanCapacity(cluster *core.Cluster, args []string) {
 	must.Succeed(enc.Encode(capacities))
 }
 
-type mockCapacityPluginBackchannel struct{}
+type mockCapacityPluginBackchannel struct {
+	Cluster *core.Cluster
+}
+
+// GetOvercommitFactor implements the CapacityPluginBackchannel interface.
+func (b mockCapacityPluginBackchannel) GetOvercommitFactor(serviceType, resourceName string) (core.OvercommitFactor, error) {
+	return b.Cluster.BehaviorForResource(serviceType, resourceName, "").OvercommitFactor, nil
+}
 
 // GetGlobalResourceDemand implements the core.CapacityPluginBackchannel interface.
 func (mockCapacityPluginBackchannel) GetGlobalResourceDemand(serviceType, resourceName string) (result map[limes.AvailabilityZone]core.ResourceDemand, err error) {

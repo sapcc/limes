@@ -55,17 +55,19 @@ func (c *PartialCapacity) Add(other PartialCapacity) {
 	}
 }
 
-func (c PartialCapacity) IntoCapacityData(resourceName string, maxRootDiskSize float64) core.CapacityData {
+func (c PartialCapacity) IntoCapacityData(resourceName string, maxRootDiskSize float64, subcapacities []any) core.CapacityData {
 	switch resourceName {
 	case "cores":
 		return core.CapacityData{
-			Capacity: c.VCPUs.Capacity,
-			Usage:    &c.VCPUs.Usage,
+			Capacity:      c.VCPUs.Capacity,
+			Usage:         &c.VCPUs.Usage,
+			Subcapacities: subcapacities,
 		}
 	case "ram":
 		return core.CapacityData{
-			Capacity: c.MemoryMB.Capacity,
-			Usage:    &c.MemoryMB.Usage,
+			Capacity:      c.MemoryMB.Capacity,
+			Usage:         &c.MemoryMB.Usage,
+			Subcapacities: subcapacities,
 		}
 	case "instances":
 		amount := 10000 * uint64(len(c.MatchingAggregates))
@@ -76,8 +78,9 @@ func (c PartialCapacity) IntoCapacityData(resourceName string, maxRootDiskSize f
 			}
 		}
 		return core.CapacityData{
-			Capacity: amount,
-			Usage:    &c.RunningVMs,
+			Capacity:      amount,
+			Usage:         &c.RunningVMs,
+			Subcapacities: subcapacities,
 		}
 	default:
 		panic(fmt.Sprintf("called with unknown resourceName %q", resourceName))

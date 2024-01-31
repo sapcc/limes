@@ -163,7 +163,7 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 	}
 
 	//scrape capacity data
-	capacityData, serializedMetrics, err := plugin.Scrape(datamodel.NewCapacityPluginBackchannel(c.DB, c.MeasureTime()))
+	capacityData, serializedMetrics, err := plugin.Scrape(datamodel.NewCapacityPluginBackchannel(c.Cluster, c.DB, c.MeasureTime()))
 	task.Timing.FinishedAt = c.MeasureTimeAtEnd()
 	if err == nil {
 		capacitor.ScrapedAt = &task.Timing.FinishedAt
