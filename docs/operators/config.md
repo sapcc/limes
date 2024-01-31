@@ -773,11 +773,18 @@ allows to track capacity values along with other configuration in a Git reposito
 
 ### `nova`
 
+This capacitor enumerates matching Nova hypervisors and reports their total capacity. It has various modes of operation.
+
+#### Option 1: Pooled capacity
+
 ```yaml
 capacitors:
   - id: nova
     type: nova
     params:
+      pooled_cores_resource: cores
+      pooled_instances_resource: instances
+      pooled_ram_resource: ram
       hypervisor_selection:
         aggregate_name_pattern: '^(?:vc-|qemu-)'
         hypervisor_type_pattern: '^(?:VMware|QEMU)'
@@ -789,18 +796,18 @@ capacitors:
       with_subcapacities: true
 ```
 
+In this most common mode of operation, capacity is summed up into pooled resources:
+
 | Resource | Method |
 | --- | --- |
-| `compute/cores` | The sum of the reported CPUs for all hypervisors in matching aggregates. Note that the hypervisor statistics reported by Nova do not take overcommit into account, so you may have to configure the overcommitment again in Limes for accurate capacity reporting. |
-| `compute/instances` | Estimated as `maxInstancesPerAggregate * count(matchingAggregates)`, but never more than `sumLocalDisk / maxDisk`, where `sumLocalDisk` is the sum of the local disk size for all hypervisors, and `maxDisk` is the largest disk requirement of all flavors. |
-| `compute/ram` | The sum of the reported RAM for all hypervisors. |
+| `compute/${params.pooled_cores_resource}` | The sum of the reported CPUs for all hypervisors in matching aggregates. Note that the hypervisor statistics reported by Nova do not take overcommit into account, so you may have to configure the overcommitment again in Limes for accurate capacity reporting. |
+| `compute/${params.pooled_instances_resource}` | Estimated as `maxInstancesPerAggregate * count(matchingAggregates)`, but never more than `sumLocalDisk / maxDisk`, where `sumLocalDisk` is the sum of the local disk size for all hypervisors, and `maxDisk` is the largest disk requirement of all matching flavors. |
+| `compute/${params.pooled_ram_resource}` | The sum of the reported RAM for all hypervisors. |
 
 Only those hypervisors are considered that belong to an aggregate whose name matches the regex in the
-`params.hypervisor_selection.aggregate_name_pattern` parameter.
-There must be a 1:1 relation between matching aggregates and hypervisors: If a
-hypervisor belongs to more than one matching aggregate, an error is raised. The aggregate level is used mostly to
-compute the hard limit of the instance capacity (`maxInstancesPerAggregate * count(matchingAggregates)`); if you do not
-have a level between AZs that imposes such a hard limit, you can use AZ-wide aggregates as a fallback here.
+`params.hypervisor_selection.aggregate_name_pattern` parameter. There must be a 1:1 relation between matching aggregates
+and hypervisors: If a hypervisor belongs to more than one matching aggregate, an error is raised. The recommended
+configuration is to use AZ-wide aggregates here.
 
 If the `params.hypervisor_selection.hypervisor_type_pattern` parameter is set, only those hypervisors are considered whose `hypervisor_type`
 matches this regex. Note that this is distinct from the `hypervisor_type_rules` used by the `compute` quota plugin, and
@@ -830,13 +837,13 @@ following attributes:
 | `usage` | integer | usage of the resource in question in this hypervisor |
 | `traits` | array of strings | traits reported by Placement on this hypervisor's resource provider |
 
-### `nova-binpack-flavors`
+### Option 2: Split capacity for flavors with separate instance quota
 
 ```yaml
 capacitors:
   # As this example implies, there will often be multiple instances of this capacitor for different hypervisor types.
   - id: nova-binpack-flavors-type42
-    type: nova-binpack-flavors
+    type: nova
     params:
       flavor_selection:
         required_extra_specs:
@@ -847,11 +854,15 @@ capacitors:
         required_traits: [ CUSTOM_HYPERVISOR_TYPE_42 ]
 ```
 
-This capacity plugin reports capacity for the special `compute/instances_<flavorname>` resources that exist on SAP
-Converged Cloud ([see above](#compute-nova-v2)). Unlike `sapcc-ironic`, this capacitor is used for VM flavors, but under
-the special condition that the resource provider traits are used to limit the VM flavors to certain hypervisors where no
-other VMs can be deployed. The `flavor_selection` and `hypervisor_selection` parameters work the same as for the `nova`
-capacitor.
+This capacity plugin can also report capacity for the special `compute/instances_<flavorname>` resources that exist on
+SAP Converged Cloud ([see above](#compute-nova-v2)). Flavors with such a resource are called **split flavors** because
+they do not count towards the regular `cores`, `instances` and `ram` resources, but only towards their own separate
+instance quota.
+
+Unlike `sapcc-ironic`, this capacitor is used for VM flavors. Usually, the resource provider traits are used to limit
+the VM flavors to certain hypervisors where no other VMs can be deployed (see below at "Option 3" for what happens if
+there is no such limitation). The `flavor_selection` and `hypervisor_selection` parameters work the same as explained
+above for "Option 1".
 
 Capacity calculation is not as straight-forward as for the `nova` capacitor: Nova and Placement only tell us about the
 size of the hypervisors in terms of CPU, RAM and local disk, but the capacitor wants to report a capacity in terms of
@@ -862,8 +873,25 @@ This capacitor takes existing usage and confirmed commitments, as well as commit
 for its respective `compute/instances_<flavorname>` resources and simulates placing those existing and requested
 instances onto the matching hypervisors. Afterwards, any remaining space is filled up by following the existing
 distribution of flavors as closely as possible. The resulting capacity is equal to how many instances could be placed in
-this simulation. The placement simulation strives for an optimal result by using a binpacking algorithm, from which the
-capacitor gets its name.
+this simulation. The placement simulation strives for an optimal result by using a binpacking algorithm.
+
+#### Option 3: Hybrid mode
+
+If `pooled_cores_resource` etc. are set (like in option 1), but there are also matching flavors with separate instance
+quota (like in option 2), capacity will be calculated using the following hybrid algorithm:
+
+- For each type of demand (current usage, unused commitments and pending commitments) in that order, the requisite
+  amount of demanded instances is placed for each split flavor, while ensuring that enough free space remains to fulfil
+  the demand of pooled resources. For example, unused commitments in split flavors can only be placed if there is still
+  space left after placing the current usage in split flavors and while also blocking the current usage and unused
+  commitments in pooled resources.
+- When filling up the remaining space with extra split-flavor instances like at the end of Option 2, extra instances are
+  only placed into the "fair share" of split flavors when compared with pooled flavors. For example, if current demand
+  of CPU, RAM and disk is 10% in split flavors and 30% in pooled flavors, that's a ratio of 1:3. Therefore, split-flavor
+  instances will be filled up to 25% of the total space to leave 75% for pooled flavors, thus matching this ratio.
+- Finally, capacity for split flavors is calculated by counting the number of placements thus simulated, and capacity
+  for pooled flavors is reported as the total capacity minus the capacity taken up by the simulated split-flavor
+  instance placements.
 
 ### `prometheus`
 

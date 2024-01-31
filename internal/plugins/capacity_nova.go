@@ -482,8 +482,6 @@ func (p *capacityNovaPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 }
 
 // CollectMetrics implements the core.CapacityPlugin interface.
-//
-//nolint:dupl
 func (p *capacityNovaPlugin) CollectMetrics(ch chan<- prometheus.Metric, serializedMetrics []byte) error {
 	var metrics capacityNovaSerializedMetrics
 	err := json.Unmarshal(serializedMetrics, &metrics)
