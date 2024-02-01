@@ -64,10 +64,13 @@ var (
 `)
 
 	projectReportCommitmentsQuery = sqlext.SimplifyWhitespace(`
-	SELECT ps.type, pc.resource_name, pc.availability_zone, pc.duration, SUM(pc.amount)
+	SELECT ps.type, pc.resource_name, pc.availability_zone, pc.duration,
+	       COALESCE(SUM(pc.amount) FILTER (WHERE pc.confirmed_at IS NOT NULL), 0) AS active,
+	       COALESCE(SUM(pc.amount) FILTER (WHERE pc.confirmed_at IS NULL AND pc.confirm_by <= $2), 0) AS pending,
+	       COALESCE(SUM(pc.amount) FILTER (WHERE pc.confirmed_at IS NULL AND pc.confirm_by > $2), 0) AS planned
 	  FROM project_services ps
 	  JOIN project_commitments pc ON pc.service_id = ps.id
-	 WHERE ps.project_id = $1 AND pc.confirmed_at IS NOT NULL AND pc.superseded_at IS NULL AND pc.expires_at > $2
+	 WHERE ps.project_id = $1 AND pc.superseded_at IS NULL AND pc.expires_at > $2
 	 GROUP BY ps.type, pc.resource_name, pc.availability_zone, pc.duration
 	`)
 )
@@ -278,13 +281,15 @@ func finalizeProjectResourceReport(projectReport *limesresources.ProjectReport, 
 		// if `per_az` is shown, we need to compute the sum of all active commitments using a different query
 		err := sqlext.ForeachRow(dbi, projectReportCommitmentsQuery, []any{projectID, now}, func(rows *sql.Rows) error {
 			var (
-				serviceType  string
-				resourceName string
-				az           limes.AvailabilityZone
-				duration     limesresources.CommitmentDuration
-				amount       uint64
+				serviceType   string
+				resourceName  string
+				az            limes.AvailabilityZone
+				duration      limesresources.CommitmentDuration
+				activeAmount  uint64
+				pendingAmount uint64
+				plannedAmount uint64
 			)
-			err := rows.Scan(&serviceType, &resourceName, &az, &duration, &amount)
+			err := rows.Scan(&serviceType, &resourceName, &az, &duration, &activeAmount, &pendingAmount, &plannedAmount)
 			if err != nil {
 				return err
 			}
@@ -302,10 +307,24 @@ func finalizeProjectResourceReport(projectReport *limesresources.ProjectReport, 
 				return nil
 			}
 
-			if azReport.Committed == nil {
-				azReport.Committed = make(map[string]uint64)
+			if activeAmount > 0 {
+				if azReport.Committed == nil {
+					azReport.Committed = make(map[string]uint64)
+				}
+				azReport.Committed[duration.String()] = activeAmount
 			}
-			azReport.Committed[duration.String()] = amount
+			if pendingAmount > 0 {
+				if azReport.PendingCommitments == nil {
+					azReport.PendingCommitments = make(map[string]uint64)
+				}
+				azReport.PendingCommitments[duration.String()] = pendingAmount
+			}
+			if plannedAmount > 0 {
+				if azReport.PlannedCommitments == nil {
+					azReport.PlannedCommitments = make(map[string]uint64)
+				}
+				azReport.PlannedCommitments[duration.String()] = plannedAmount
+			}
 
 			return nil
 		})

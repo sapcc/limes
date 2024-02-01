@@ -146,6 +146,9 @@
               },
               "per_az": {
                 "az-one": {
+                  "planned_commitments": {
+                    "2 years": 100
+                  },
                   "usage": 1
                 },
                 "az-two": {
@@ -216,6 +219,9 @@
                 "az-two": {
                   "committed": {
                     "1 year": 2
+                  },
+                  "pending_commitments": {
+                    "2 years": 100
                   },
                   "usage": 1
                 }
