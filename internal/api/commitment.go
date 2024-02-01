@@ -148,7 +148,7 @@ func (p *v1Provider) convertCommitmentToDisplayForm(c db.ProjectCommitment, serv
 	}
 }
 
-func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r *http.Request, project db.Project, domain db.Domain) (*limesresources.CommitmentRequest, *core.ResourceBehavior) {
+func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r *http.Request) (*limesresources.CommitmentRequest, *core.ResourceBehavior) {
 	//parse request
 	var parseTarget struct {
 		Request limesresources.CommitmentRequest `json:"commitment"`
@@ -167,8 +167,7 @@ func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r 
 		http.Error(w, "no such resource", http.StatusUnprocessableEntity)
 		return nil, nil
 	}
-	scopeName := fmt.Sprintf("%s/%s", domain.Name, project.Name)
-	behavior := p.Cluster.BehaviorForResource(req.ServiceType, req.ResourceName, scopeName)
+	behavior := p.Cluster.BehaviorForResource(req.ServiceType, req.ResourceName, "")
 	if len(behavior.CommitmentDurations) == 0 {
 		http.Error(w, "commitments are not enabled for this resource", http.StatusUnprocessableEntity)
 		return nil, nil
@@ -213,7 +212,7 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 	if dbProject == nil {
 		return
 	}
-	req, behavior := p.parseAndValidateCommitmentRequest(w, r, *dbProject, *dbDomain)
+	req, behavior := p.parseAndValidateCommitmentRequest(w, r)
 	if req == nil {
 		return
 	}
@@ -248,7 +247,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	if dbProject == nil {
 		return
 	}
-	req, behavior := p.parseAndValidateCommitmentRequest(w, r, *dbProject, *dbDomain)
+	req, behavior := p.parseAndValidateCommitmentRequest(w, r)
 	if req == nil {
 		return
 	}

@@ -187,14 +187,15 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 		}
 
 		//start new resource report when necessary
-		behavior := cluster.BehaviorForResource(*serviceType, *resourceName, domain.Name+"/"+projectName)
+		localBehavior := cluster.BehaviorForResource(*serviceType, *resourceName, domain.Name+"/"+projectName)
+		globalBehavior := cluster.BehaviorForResource(*serviceType, *resourceName, "")
 		resReport := srvReport.Resources[*resourceName]
 		if resReport == nil {
 			resReport = &limesresources.ProjectResourceReport{
 				ResourceInfo: cluster.InfoForResource(*serviceType, *resourceName),
 				Usage:        0,
-				Scaling:      behavior.ToScalingBehavior(),
-				Annotations:  behavior.Annotations,
+				Scaling:      globalBehavior.ToScalingBehavior(),
+				Annotations:  localBehavior.Annotations,
 				//all other fields are set below
 			}
 
@@ -205,12 +206,12 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 			if !resReport.NoQuota {
 				qdConfig := cluster.QuotaDistributionConfigForResource(*serviceType, *resourceName)
 				resReport.QuotaDistributionModel = qdConfig.Model
-				resReport.CommitmentConfig = behavior.ToCommitmentConfig(now)
+				resReport.CommitmentConfig = globalBehavior.ToCommitmentConfig(now)
 				if quota != nil {
 					resReport.Quota = quota
 					resReport.UsableQuota = quota
 					if projectHasBursting && clusterCanBurst {
-						usableQuota := behavior.MaxBurstMultiplier.ApplyTo(*quota, qdConfig.Model)
+						usableQuota := localBehavior.MaxBurstMultiplier.ApplyTo(*quota, qdConfig.Model)
 						resReport.UsableQuota = &usableQuota
 					}
 					if backendQuota != nil && (*backendQuota < 0 || uint64(*backendQuota) != *resReport.UsableQuota) {
