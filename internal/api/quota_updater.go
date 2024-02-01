@@ -116,11 +116,11 @@ func (e MissingProjectReportError) Error() string {
 // errors, not for validation errors.
 func (u *QuotaUpdater) ValidateInput(input limesresources.QuotaRequest, dbi db.Interface) error {
 	//gather reports on the cluster's capacity and domain's quotas to decide whether a quota update is legal
-	clusterReport, err := reports.GetClusterResources(u.Cluster, dbi, reports.Filter{})
+	clusterReport, err := reports.GetClusterResources(u.Cluster, u.Now, dbi, reports.Filter{})
 	if err != nil {
 		return err
 	}
-	domainReport, err := GetDomainReport(u.Cluster, *u.Domain, dbi, reports.Filter{})
+	domainReport, err := GetDomainReport(u.Cluster, *u.Domain, u.Now, dbi, reports.Filter{})
 	if err != nil {
 		return err
 	}

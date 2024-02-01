@@ -11,6 +11,13 @@
             {
               "name": "things",
               "quota_distribution_model": "hierarchical",
+              "commitment_config": {
+                "durations": [
+                  "1 hour",
+                  "2 hours"
+                ],
+                "min_confirm_by": 604800
+              },
               "quota": 0,
               "projects_quota": 10,
               "usage": 2
@@ -32,6 +39,13 @@
             {
               "name": "things",
               "quota_distribution_model": "hierarchical",
+              "commitment_config": {
+                "durations": [
+                  "1 hour",
+                  "2 hours"
+                ],
+                "min_confirm_by": 604800
+              },
               "quota": 30,
               "projects_quota": 20,
               "usage": 4,

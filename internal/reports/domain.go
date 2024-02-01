@@ -66,7 +66,7 @@ var domainReportQuery2 = sqlext.SimplifyWhitespace(`
 
 // GetDomains returns reports for all domains in the given cluster or, if
 // domainID is non-nil, for that domain only.
-func GetDomains(cluster *core.Cluster, domainID *db.DomainID, dbi db.Interface, filter Filter) ([]*limesresources.DomainReport, error) {
+func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi db.Interface, filter Filter) ([]*limesresources.DomainReport, error) {
 	clusterCanBurst := cluster.Config.Bursting.MaxMultiplier > 0
 
 	var fields map[string]any
@@ -105,7 +105,7 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, dbi db.Interface, 
 			return err
 		}
 
-		_, service, resource := domains.Find(cluster, domainUUID, domainName, serviceType, resourceName)
+		_, service, resource := domains.Find(cluster, domainUUID, domainName, serviceType, resourceName, now)
 
 		if service != nil {
 			service.MaxScrapedAt = mergeMaxTime(service.MaxScrapedAt, maxScrapedAt)
@@ -159,7 +159,7 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, dbi db.Interface, 
 			return err
 		}
 
-		_, _, resource := domains.Find(cluster, domainUUID, domainName, serviceType, resourceName)
+		_, _, resource := domains.Find(cluster, domainUUID, domainName, serviceType, resourceName, now)
 
 		if resource != nil && quota != nil && !resource.NoQuota {
 			resource.DomainQuota = quota
@@ -187,7 +187,7 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, dbi db.Interface, 
 
 type domains map[string]*limesresources.DomainReport
 
-func (d domains) Find(cluster *core.Cluster, domainUUID, domainName string, serviceType, resourceName *string) (*limesresources.DomainReport, *limesresources.DomainServiceReport, *limesresources.DomainResourceReport) {
+func (d domains) Find(cluster *core.Cluster, domainUUID, domainName string, serviceType, resourceName *string, now time.Time) (*limesresources.DomainReport, *limesresources.DomainServiceReport, *limesresources.DomainResourceReport) {
 	domain, exists := d[domainUUID]
 	if !exists {
 		domain = &limesresources.DomainReport{
@@ -235,6 +235,7 @@ func (d domains) Find(cluster *core.Cluster, domainUUID, domainName string, serv
 		if !resource.NoQuota {
 			qdConfig := cluster.QuotaDistributionConfigForResource(*serviceType, *resourceName)
 			resource.QuotaDistributionModel = qdConfig.Model
+			resource.CommitmentConfig = globalBehavior.ToCommitmentConfig(now)
 			//this default is used when no `domain_resources` entry exists for this resource
 			defaultQuota := uint64(0)
 			resource.DomainQuota = &defaultQuota

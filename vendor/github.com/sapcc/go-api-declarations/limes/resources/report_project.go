@@ -76,13 +76,15 @@ type ProjectResourceReport struct {
 // This type is part of the v2 API feature preview.
 type ProjectAZResourceReport struct {
 	Quota *uint64 `json:"quota,omitempty"`
-	// The keys for the Committed map must be commitment durations as accepted
+	// The keys for these maps must be commitment durations as accepted
 	// by func ParseCommitmentDuration. We cannot use type CommitmentDuration
 	// directly here because Go does not allow struct types as map keys.
-	Committed     map[string]uint64 `json:"committed,omitempty"`
-	Usage         uint64            `json:"usage"`
-	PhysicalUsage *uint64           `json:"physical_usage,omitempty"`
-	Subresources  json.RawMessage   `json:"subresources,omitempty"`
+	Committed          map[string]uint64 `json:"committed,omitempty"`
+	PendingCommitments map[string]uint64 `json:"pending_commitments,omitempty"`
+	PlannedCommitments map[string]uint64 `json:"planned_commitments,omitempty"`
+	Usage              uint64            `json:"usage"`
+	PhysicalUsage      *uint64           `json:"physical_usage,omitempty"`
+	Subresources       json.RawMessage   `json:"subresources,omitempty"`
 }
 
 // ProjectServiceReports provides fast lookup of services using a map, but serializes

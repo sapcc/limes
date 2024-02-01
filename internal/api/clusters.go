@@ -46,7 +46,7 @@ func (p *v1Provider) GetCluster(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	cluster, err := reports.GetClusterResources(p.Cluster, p.DB, filter)
+	cluster, err := reports.GetClusterResources(p.Cluster, p.timeNow(), p.DB, filter)
 	if respondwith.ErrorText(w, err) {
 		return
 	}

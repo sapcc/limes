@@ -48,9 +48,10 @@ type ClusterServiceReport struct {
 type ClusterResourceReport struct {
 	//Several fields are pointers to values to enable precise control over which fields are rendered in output.
 	ResourceInfo
-	QuotaDistributionModel QuotaDistributionModel `json:"quota_distribution_model,omitempty"`
-	Capacity               *uint64                `json:"capacity,omitempty"`
-	RawCapacity            *uint64                `json:"raw_capacity,omitempty"`
+	QuotaDistributionModel QuotaDistributionModel   `json:"quota_distribution_model,omitempty"`
+	CommitmentConfig       *CommitmentConfiguration `json:"commitment_config,omitempty"`
+	Capacity               *uint64                  `json:"capacity,omitempty"`
+	RawCapacity            *uint64                  `json:"raw_capacity,omitempty"`
 	//PerAZ is only rendered by Limes when the v2 API feature preview is enabled.
 	//In this case, CapacityPerAZ will be omitted.
 	PerAZ         ClusterAZResourceReports       `json:"per_az,omitempty"`
@@ -79,9 +80,17 @@ type ClusterAZResourceReport struct {
 	Capacity    uint64 `json:"capacity"`
 	RawCapacity uint64 `json:"raw_capacity,omitempty"`
 	//Usage is what the backend reports. This is only shown if the backend does indeed report a summarized cluster-wide usage level.
+	//TODO: rename this to "backend_usage" in v2
 	Usage *uint64 `json:"usage,omitempty"`
 	//ProjectsUsage is the aggregate of the usage across all projects, as reported by the backend on the project level.
+	//TODO: rename this to "usage" in v2 (to be consistent with domain and project level)
 	ProjectsUsage uint64 `json:"projects_usage,omitempty"`
+	// The keys for these maps must be commitment durations as accepted
+	// by func ParseCommitmentDuration. We cannot use type CommitmentDuration
+	// directly here because Go does not allow struct types as map keys.
+	UnusedCommitments  map[string]uint64 `json:"unused_commitments,omitempty"`
+	PendingCommitments map[string]uint64 `json:"pending_commitments,omitempty"`
+	PlannedCommitments map[string]uint64 `json:"planned_commitments,omitempty"`
 	//PhysicalUsage is collected per project and then aggregated, same as ProjectsUsage.
 	PhysicalUsage *uint64         `json:"physical_usage,omitempty"`
 	Subcapacities json.RawMessage `json:"subcapacities,omitempty"`

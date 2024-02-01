@@ -86,7 +86,7 @@ var clusterRateReportQuery1 = sqlext.SimplifyWhitespace(`
 `)
 
 // GetClusterResources returns the resource data report for the whole cluster.
-func GetClusterResources(cluster *core.Cluster, dbi db.Interface, filter Filter) (*limesresources.ClusterReport, error) {
+func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface, filter Filter) (*limesresources.ClusterReport, error) {
 	report := &limesresources.ClusterReport{
 		ClusterInfo: limes.ClusterInfo{
 			ID: "current", //multi-cluster support has been removed; this value is only included for backwards-compatibility
@@ -114,7 +114,7 @@ func GetClusterResources(cluster *core.Cluster, dbi db.Interface, filter Filter)
 			return err
 		}
 
-		service, resource := findInClusterReport(cluster, report, serviceType, resourceName)
+		service, resource := findInClusterReport(cluster, report, serviceType, resourceName, now)
 
 		if service != nil {
 			service.MaxScrapedAt = mergeMaxTime(service.MaxScrapedAt, maxScrapedAt)
@@ -168,7 +168,7 @@ func GetClusterResources(cluster *core.Cluster, dbi db.Interface, filter Filter)
 			}
 
 			if burstUsage != nil {
-				_, resource := findInClusterReport(cluster, report, serviceType, resourceName)
+				_, resource := findInClusterReport(cluster, report, serviceType, resourceName, now)
 				if resource != nil {
 					resource.BurstUsage = *burstUsage
 				}
@@ -193,7 +193,7 @@ func GetClusterResources(cluster *core.Cluster, dbi db.Interface, filter Filter)
 			return err
 		}
 
-		_, resource := findInClusterReport(cluster, report, serviceType, resourceName)
+		_, resource := findInClusterReport(cluster, report, serviceType, resourceName, now)
 		if resource != nil && quota != nil && !resource.NoQuota {
 			resource.DomainsQuota = quota
 		}
@@ -225,7 +225,7 @@ func GetClusterResources(cluster *core.Cluster, dbi db.Interface, filter Filter)
 			return err
 		}
 
-		_, resource := findInClusterReport(cluster, report, serviceType, resourceName)
+		_, resource := findInClusterReport(cluster, report, serviceType, resourceName, now)
 
 		if resource != nil {
 			//NOTE: resource.Capacity is computed from this below once data for all AZs was ingested
@@ -374,7 +374,7 @@ func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter) (*l
 	return report, nil
 }
 
-func findInClusterReport(cluster *core.Cluster, report *limesresources.ClusterReport, serviceType string, resourceName *string) (*limesresources.ClusterServiceReport, *limesresources.ClusterResourceReport) {
+func findInClusterReport(cluster *core.Cluster, report *limesresources.ClusterReport, serviceType string, resourceName *string, now time.Time) (*limesresources.ClusterServiceReport, *limesresources.ClusterResourceReport) {
 	service, exists := report.Services[serviceType]
 	if !exists {
 		if !cluster.HasService(serviceType) {
@@ -402,6 +402,8 @@ func findInClusterReport(cluster *core.Cluster, report *limesresources.ClusterRe
 		if !resource.ResourceInfo.NoQuota {
 			qdConfig := cluster.QuotaDistributionConfigForResource(serviceType, *resourceName)
 			resource.QuotaDistributionModel = qdConfig.Model
+			globalBehavior := cluster.BehaviorForResource(serviceType, *resourceName, "")
+			resource.CommitmentConfig = globalBehavior.ToCommitmentConfig(now)
 			//We need to set a default value here. Otherwise zero values will never
 			//be reported when there are no `domain_resources` entries to aggregate
 			//over.
