@@ -75,11 +75,11 @@ func PrepareHypervisorForBinpacking(h MatchingHypervisor) (BinpackHypervisor, er
 		}
 		nodeCountFloat := float64(inv.Total-inv.Reserved) / float64(inv.MaxUnit)
 
-		//we prefer to round down (11.6 nodes should go to  11 instead of 12 to be
+		//we prefer to round down (11.6 nodes should go to 11 instead of 12 to be
 		//safe), but data sometimes has slight rounding errors that we want to
-		//correct (9.9995 nodes should be rounded up to 10 instead of down to 9)
+		//correct (9.98 nodes should be rounded up to 10 instead of down to 9)
 		nodeCount := uint64(math.Floor(nodeCountFloat))
-		if nodeCountFloat-float64(nodeCount) > 0.99 {
+		if nodeCountFloat-float64(nodeCount) > 0.98 {
 			nodeCount = uint64(math.Ceil(nodeCountFloat))
 		}
 		nodeCountCandidates[nodeCount] = append(nodeCountCandidates[nodeCount], metric)
