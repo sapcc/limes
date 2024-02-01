@@ -431,4 +431,86 @@ var sqlMigrations = map[string]string{
 		ALTER TABLE project_az_resources
 			DROP COLUMN historical_usage;
 	`,
+
+	// NOTE: Same methodology as in 027, see explanations over there.
+	"034_add_id_columns.up.sql": `
+		ALTER TABLE cluster_az_resources RENAME TO cluster_az_resources_old;
+		CREATE TABLE cluster_az_resources (
+			id             BIGSERIAL  NOT NULL PRIMARY KEY,
+			resource_id    BIGINT     NOT NULL REFERENCES cluster_resources ON DELETE CASCADE,
+			az             TEXT       NOT NULL,
+			raw_capacity   BIGINT     NOT NULL,
+			usage          BIGINT     DEFAULT NULL,
+			subcapacities  TEXT       NOT NULL DEFAULT '',
+			UNIQUE (resource_id, az)
+		);
+		INSERT INTO cluster_az_resources (resource_id, az, raw_capacity, usage, subcapacities)
+			SELECT resource_id, az, raw_capacity, usage, subcapacities FROM cluster_az_resources_old
+			ORDER BY resource_id, az;
+		DROP TABLE cluster_az_resources_old;
+		ALTER TABLE cluster_az_resources
+			RENAME CONSTRAINT cluster_az_resources_resource_id_az_key1 TO cluster_az_resources_resource_id_az_key;
+		ALTER TABLE cluster_az_resources
+			RENAME CONSTRAINT cluster_az_resources_resource_id_fkey1 TO cluster_az_resources_resource_id_fkey;
+
+		ALTER TABLE project_az_resources RENAME TO project_az_resources_old;
+		CREATE TABLE project_az_resources (
+			id                BIGSERIAL  NOT NULL PRIMARY KEY,
+			resource_id       BIGINT     NOT NULL REFERENCES project_resources ON DELETE CASCADE,
+			az                TEXT       NOT NULL,
+			quota             BIGINT     DEFAULT NULL, -- null if resInfo.NoQuota == true
+			usage             BIGINT     NOT NULL,
+			physical_usage    BIGINT     DEFAULT NULL,
+			subresources      TEXT       NOT NULL DEFAULT '',
+			historical_usage  TEXT       NOT NULL DEFAULT '',
+			UNIQUE (resource_id, az)
+		);
+		INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources, historical_usage)
+			SELECT resource_id, az, quota, usage, physical_usage, subresources, historical_usage FROM project_az_resources_old
+			ORDER BY resource_id, az;
+		DROP TABLE project_az_resources_old;
+		ALTER TABLE project_az_resources
+			RENAME CONSTRAINT project_az_resources_resource_id_az_key1 TO project_az_resources_resource_id_az_key;
+		ALTER TABLE project_az_resources
+			RENAME CONSTRAINT project_az_resources_resource_id_fkey1 TO project_az_resources_resource_id_fkey;
+	`,
+	"034_add_id_columns.down.sql": `
+		ALTER TABLE cluster_az_resources RENAME TO cluster_az_resources_old;
+		CREATE TABLE cluster_az_resources (
+			resource_id    BIGINT  NOT NULL REFERENCES cluster_resources ON DELETE CASCADE,
+			az             TEXT    NOT NULL,
+			raw_capacity   BIGINT  NOT NULL,
+			usage          BIGINT  DEFAULT NULL,
+			subcapacities  TEXT    NOT NULL DEFAULT '',
+			UNIQUE (resource_id, az)
+		);
+		INSERT INTO cluster_az_resources (resource_id, az, raw_capacity, usage, subcapacities)
+			SELECT resource_id, az, raw_capacity, usage, subcapacities FROM cluster_az_resources_old
+			ORDER BY resource_id, az;
+		DROP TABLE cluster_az_resources_old;
+		ALTER TABLE cluster_az_resources
+			RENAME CONSTRAINT cluster_az_resources_resource_id_az_key1 TO cluster_az_resources_resource_id_az_key;
+		ALTER TABLE cluster_az_resources
+			RENAME CONSTRAINT cluster_az_resources_resource_id_fkey1 TO cluster_az_resources_resource_id_fkey;
+
+		ALTER TABLE project_az_resources RENAME TO project_az_resources_old;
+		CREATE TABLE project_az_resources (
+			resource_id       BIGINT  NOT NULL REFERENCES project_resources ON DELETE CASCADE,
+			az                TEXT    NOT NULL,
+			quota             BIGINT  DEFAULT NULL, -- null if resInfo.NoQuota == true
+			usage             BIGINT  NOT NULL,
+			physical_usage    BIGINT  DEFAULT NULL,
+			subresources      TEXT    NOT NULL DEFAULT '',
+			historical_usage  TEXT    NOT NULL DEFAULT '',
+			UNIQUE (resource_id, az)
+		);
+		INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources, historical_usage)
+			SELECT resource_id, az, quota, usage, physical_usage, subresources, historical_usage FROM project_az_resources_old
+			ORDER BY resource_id, az;
+		DROP TABLE project_az_resources_old;
+		ALTER TABLE project_az_resources
+			RENAME CONSTRAINT project_az_resources_resource_id_az_key1 TO project_az_resources_resource_id_az_key;
+		ALTER TABLE project_az_resources
+			RENAME CONSTRAINT project_az_resources_resource_id_fkey1 TO project_az_resources_resource_id_fkey;
+	`,
 }

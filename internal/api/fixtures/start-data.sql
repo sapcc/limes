@@ -14,10 +14,10 @@ INSERT INTO cluster_resources (id, service_id, name, capacitor_id) VALUES (2, 2,
 INSERT INTO cluster_resources (id, service_id, name, capacitor_id) VALUES (3, 2, 'capacity', 'scans-shared');
 
 -- "capacity" is modeled as AZ-aware, "things" is not
-INSERT INTO cluster_az_resources (resource_id, az, raw_capacity, usage, subcapacities) VALUES (1, 'any', 139, 45, '[{"smaller_half":46},{"larger_half":93}]');
-INSERT INTO cluster_az_resources (resource_id, az, raw_capacity, usage, subcapacities) VALUES (2, 'any', 246, 158, '[{"smaller_half":82},{"larger_half":164}]');
-INSERT INTO cluster_az_resources (resource_id, az, raw_capacity, usage, subcapacities) VALUES (3, 'az-one', 90, 12, '');
-INSERT INTO cluster_az_resources (resource_id, az, raw_capacity, usage, subcapacities) VALUES (3, 'az-two', 95, 15, '');
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities) VALUES (1, 1, 'any', 139, 45, '[{"smaller_half":46},{"larger_half":93}]');
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities) VALUES (2, 2, 'any', 246, 158, '[{"smaller_half":82},{"larger_half":164}]');
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities) VALUES (3, 3, 'az-one', 90, 12, '');
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities) VALUES (4, 3, 'az-two', 95, 15, '');
 
 -- two domains
 INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
@@ -79,50 +79,50 @@ INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desir
 --       (this is consistent with what Scrape does, and reporting should ignore those entries)
 --
 -- berlin (also used for test cases concerning subresources)
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (1,  'any',    NULL, 2, NULL, '[{"id":"firstthing","value":23},{"id":"secondthing","value":42}]');
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (2,  'any',    NULL, 0, NULL, '');
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (2,  'az-one', NULL, 1, NULL, '');
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (2,  'az-two', NULL, 1, NULL, '');
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (3,  'any',    NULL, 0, NULL, '');
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (3,  'az-one', NULL, 1, NULL, '');
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (3,  'az-two', NULL, 0, NULL, '');
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (4,  'any',    NULL, 2, NULL, '[{"id":"thirdthing","value":5},{"id":"fourththing","value":123}]');
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (5,  'any',    NULL, 0, NULL, '');
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (5,  'az-one', NULL, 1, NULL, '');
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (5,  'az-two', NULL, 1, NULL, '');
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (6,  'any',    NULL, 0, NULL, '');
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (6,  'az-one', NULL, 1, NULL, '');
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (6,  'az-two', NULL, 0, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (1, 1,  'any',    NULL, 2, NULL, '[{"id":"firstthing","value":23},{"id":"secondthing","value":42}]');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (2, 2,  'any',    NULL, 0, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (3, 2,  'az-one', NULL, 1, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (4, 2,  'az-two', NULL, 1, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (5, 3,  'any',    NULL, 0, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (6, 3,  'az-one', NULL, 1, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (7, 3,  'az-two', NULL, 0, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (8, 4,  'any',    NULL, 2, NULL, '[{"id":"thirdthing","value":5},{"id":"fourththing","value":123}]');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (9, 5,  'any',    NULL, 0, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (10, 5,  'az-one', NULL, 1, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (11, 5,  'az-two', NULL, 1, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (12, 6,  'any',    NULL, 0, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (13, 6,  'az-one', NULL, 1, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (14, 6,  'az-two', NULL, 0, NULL, '');
 -- dresden
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (7,  'any',    NULL, 2, NULL, '');
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (8,  'any',    NULL, 0, NULL, '');
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (8,  'az-one', NULL, 1, NULL, '');
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (8,  'az-two', NULL, 1, NULL, '');
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (9,  'any',    NULL, 0, NULL, '');
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (9,  'az-one', NULL, 1, NULL, '');
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (9,  'az-two', NULL, 0, NULL, '');
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (10, 'any',    NULL, 2, NULL, '');
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (11, 'any',    NULL, 0, NULL, '');
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (11, 'az-one', NULL, 1, NULL, '');
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (11, 'az-two', NULL, 1, NULL, '');
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (12, 'any',    NULL, 0, NULL, '');
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (12, 'az-one', NULL, 1, NULL, '');
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (12, 'az-two', NULL, 0, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (15, 7,  'any',    NULL, 2, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (16, 8,  'any',    NULL, 0, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (17, 8,  'az-one', NULL, 1, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (18, 8,  'az-two', NULL, 1, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (19, 9,  'any',    NULL, 0, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (20, 9,  'az-one', NULL, 1, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (21, 9,  'az-two', NULL, 0, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (22, 10, 'any',    NULL, 2, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (23, 11, 'any',    NULL, 0, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (24, 11, 'az-one', NULL, 1, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (25, 11, 'az-two', NULL, 1, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (26, 12, 'any',    NULL, 0, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (27, 12, 'az-one', NULL, 1, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (28, 12, 'az-two', NULL, 0, NULL, '');
 -- paris (non-null physical_usage for */capacity, all other project resources should report physical_usage = usage in aggregations)
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (13, 'any',    NULL, 2, NULL, '');
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (14, 'any',    NULL, 0, NULL, '');
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (14, 'az-one', NULL, 1, 0, '');
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (14, 'az-two', NULL, 1, 1, '');
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (15, 'any',    NULL, 0, NULL, '');
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (15, 'az-one', NULL, 1, NULL, '');
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (15, 'az-two', NULL, 0, NULL, '');
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (16, 'any',    NULL, 2, NULL, '');
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (17, 'any',    NULL, 0, NULL, '');
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (17, 'az-one', NULL, 1, 0, '');
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (17, 'az-two', NULL, 1, 1, '');
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (18, 'any',    NULL, 0, NULL, '');
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (18, 'az-one', NULL, 1, NULL, '');
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (18, 'az-two', NULL, 0, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (29, 13, 'any',    NULL, 2, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (30, 14, 'any',    NULL, 0, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (31, 14, 'az-one', NULL, 1, 0, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (32, 14, 'az-two', NULL, 1, 1, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (33, 15, 'any',    NULL, 0, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (34, 15, 'az-one', NULL, 1, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (35, 15, 'az-two', NULL, 0, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (36, 16, 'any',    NULL, 2, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (37, 17, 'any',    NULL, 0, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (38, 17, 'az-one', NULL, 1, 0, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (39, 17, 'az-two', NULL, 1, 1, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (40, 18, 'any',    NULL, 0, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (41, 18, 'az-one', NULL, 1, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (42, 18, 'az-two', NULL, 0, NULL, '');
 
 -- project_commitments has several entries for project dresden
 -- on "unshared/capacity": regular active commitments with different durations
@@ -158,18 +158,18 @@ INSERT INTO project_rates (service_id, name, rate_limit, window_ns, usage_as_big
 -- (cluster "north", service "weird", resource "items" and rate "frobnicate" are not configured)
 INSERT INTO cluster_services (id, type) VALUES (101, 'weird');
 INSERT INTO cluster_resources (id, service_id, name, capacitor_id) VALUES (101, 101, 'things', 'scans-shared');
-INSERT INTO cluster_az_resources (resource_id, az, raw_capacity, usage, subcapacities) VALUES (101, 'any', 2, 1, '');
+INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities) VALUES (101, 101, 'any', 2, 1, '');
 INSERT INTO domain_services (id, domain_id, type) VALUES (101, 1, 'weird');
 INSERT INTO domain_resources (id, service_id, name, quota) VALUES (101, 101, 'things', 1);
 INSERT INTO project_services (id, project_id, type) VALUES (101, 1, 'weird');
 INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desired_backend_quota) VALUES (101, 101, 'things', 2, 2, 2);
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (101, 'any', NULL, 1, 1, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (101, 101, 'any', NULL, 1, 1, '');
 
 INSERT INTO domain_resources (id, service_id, name, quota) VALUES (102, 1, 'items', 1);
 INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desired_backend_quota) VALUES (102, 1, 'items', 2, 2, 2);
 INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desired_backend_quota) VALUES (103, 1, 'items_portion', NULL, NULL, NULL);
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (102, 'any', NULL, 1, 1, '');
-INSERT INTO project_az_resources (resource_id, az, quota, usage, physical_usage, subresources) VALUES (103, 'any', NULL, 1, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (102, 102, 'any', NULL, 1, 1, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (103, 103, 'any', NULL, 1, NULL, '');
 
 INSERT INTO project_rates (service_id, name, rate_limit, window_ns, usage_as_bigint) VALUES (1, 'service/unshared/instances:frobnicate', 5, 1000000000, '');
 INSERT INTO project_rates (service_id, name, rate_limit, window_ns, usage_as_bigint) VALUES (2, 'service/shared/objects:frobnicate', 5, 1000000000, '');
