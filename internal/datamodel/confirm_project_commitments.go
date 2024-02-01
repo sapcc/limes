@@ -41,8 +41,10 @@ var (
 	getConfirmableCommitmentsQuery = sqlext.SimplifyWhitespace(`
 		SELECT ps.id, pc.id, pc.amount
 		  FROM project_services ps
-		  JOIN project_commitments pc ON pc.service_id = ps.id
-		 WHERE ps.type = $1 AND pc.resource_name = $2 AND pc.availability_zone = $3
+		  JOIN project_resources pr ON pr.service_id = ps.id
+		  JOIN project_az_resources par ON par.resource_id = pr.id
+		  JOIN project_commitments pc ON pc.az_resource_id = par.id
+		 WHERE ps.type = $1 AND pr.name = $2 AND par.az = $3
 		   AND pc.confirmed_at IS NULL AND pc.confirm_by <= $4 AND pc.superseded_at IS NULL
 		 ORDER BY pc.created_at ASC, pc.confirm_by ASC, pc.id ASC
 	`)

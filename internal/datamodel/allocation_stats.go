@@ -76,19 +76,13 @@ var (
 	`)
 	//NOTE: These two queries below are also reused in GetGlobalResourceDemand.
 	getUsageInResourceQuery = sqlext.SimplifyWhitespace(`
-		SELECT ps.id, par.az, par.usage, par.historical_usage
+		SELECT ps.id, par.az, par.usage, par.historical_usage,
+		       (SELECT COALESCE(SUM(pc.amount), 0) FROM project_commitments pc
+		         WHERE pc.az_resource_id = par.id AND pc.confirmed_at IS NOT NULL AND pc.superseded_at IS NULL AND pc.expires_at > $4)
 		  FROM project_services ps
 		  JOIN project_resources pr ON pr.service_id = ps.id
 		  JOIN project_az_resources par ON par.resource_id = pr.id
 		 WHERE ps.type = $1 AND pr.name = $2 AND ($3::text IS NULL OR par.az = $3)
-	`)
-	getCommittedInResourceQuery = sqlext.SimplifyWhitespace(`
-		SELECT ps.id, pc.availability_zone, SUM(pc.amount)
-		  FROM project_services ps
-		  JOIN project_commitments pc ON pc.service_id = ps.id
-		 WHERE ps.type = $1 AND pc.resource_name = $2 AND ($3::text IS NULL OR pc.availability_zone = $3)
-		   AND pc.confirmed_at IS NOT NULL AND pc.superseded_at IS NULL AND pc.expires_at > $4
-		 GROUP BY ps.id, pc.availability_zone
 	`)
 )
 
@@ -120,6 +114,7 @@ func collectAZAllocationStats(serviceType, resourceName string, azFilter *limes.
 	}
 
 	//get resource usage
+	queryArgs = append(queryArgs, now)
 	err = sqlext.ForeachRow(dbi, getUsageInResourceQuery, queryArgs, func(rows *sql.Rows) error {
 		var (
 			serviceID           db.ProjectServiceID
@@ -127,7 +122,7 @@ func collectAZAllocationStats(serviceType, resourceName string, azFilter *limes.
 			stats               projectAZAllocationStats
 			historicalUsageJSON string
 		)
-		err := rows.Scan(&serviceID, &az, &stats.Usage, &historicalUsageJSON)
+		err := rows.Scan(&serviceID, &az, &stats.Usage, &historicalUsageJSON, &stats.Committed)
 		if err != nil {
 			return err
 		}
@@ -151,37 +146,6 @@ func collectAZAllocationStats(serviceType, resourceName string, azFilter *limes.
 	})
 	if err != nil {
 		return result, fmt.Errorf("while getting resource usage for %s: %w", scopeDesc, err)
-	}
-
-	//get commitment usage
-	queryArgs = []any{serviceType, resourceName, azFilter, now}
-	err = sqlext.ForeachRow(dbi, getCommittedInResourceQuery, queryArgs, func(rows *sql.Rows) error {
-		var (
-			serviceID db.ProjectServiceID
-			az        limes.AvailabilityZone
-			committed uint64
-		)
-		err := rows.Scan(&serviceID, &az, &committed)
-		if err != nil {
-			return err
-		}
-
-		azStats := result[az].ProjectStats
-		if azStats == nil {
-			azEntry := result[az]
-			azEntry.ProjectStats = map[db.ProjectServiceID]projectAZAllocationStats{
-				serviceID: {Committed: committed},
-			}
-			result[az] = azEntry
-		} else {
-			stats := azStats[serviceID]
-			stats.Committed = committed
-			azStats[serviceID] = stats
-		}
-		return nil
-	})
-	if err != nil {
-		return result, fmt.Errorf("while getting commitment usage for %s: %w", scopeDesc, err)
 	}
 
 	return result, nil

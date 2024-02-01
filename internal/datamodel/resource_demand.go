@@ -45,12 +45,14 @@ type capacityPluginBackchannelImpl struct {
 
 var (
 	getPendingCommitmentsInResourceQuery = sqlext.SimplifyWhitespace(`
-		SELECT ps.id, pc.availability_zone, SUM(pc.amount)
+		SELECT ps.id, par.az, SUM(pc.amount)
 		  FROM project_services ps
-		  JOIN project_commitments pc ON pc.service_id = ps.id
-		 WHERE ps.type = $1 AND pc.resource_name = $2
+		  JOIN project_resources pr ON pr.service_id = ps.id
+		  JOIN project_az_resources par ON par.resource_id = pr.id
+		  JOIN project_commitments pc ON pc.az_resource_id = par.id
+		 WHERE ps.type = $1 AND pr.name = $2
 		   AND pc.confirmed_at IS NULL AND pc.superseded_at IS NULL AND pc.confirm_by <= $3
-		 GROUP BY ps.id, pc.availability_zone
+		 GROUP BY ps.id, par.az
 	`)
 )
 
@@ -79,7 +81,7 @@ func (i capacityPluginBackchannelImpl) GetGlobalResourceDemand(serviceType, reso
 	}
 
 	var noFilter *string //== nil
-	queryArgs := []any{serviceType, resourceName, noFilter}
+	queryArgs := []any{serviceType, resourceName, noFilter, i.Now}
 	query := strings.Replace(getUsageInResourceQuery, "par.historical_usage", "''", 1)
 	err := sqlext.ForeachRow(i.DB, query, queryArgs, func(rows *sql.Rows) error {
 		var (
@@ -87,34 +89,20 @@ func (i capacityPluginBackchannelImpl) GetGlobalResourceDemand(serviceType, reso
 			az        limes.AvailabilityZone
 			usage     uint64
 			unused    string
+			committed uint64
 		)
-		err := rows.Scan(&serviceID, &az, &usage, &unused)
+		err := rows.Scan(&serviceID, &az, &usage, &unused, &committed)
 		if err != nil {
 			return err
 		}
-		addData(serviceID, az, func(pdata *projectData) { pdata.Usage = usage })
+		addData(serviceID, az, func(pdata *projectData) {
+			pdata.Usage = usage
+			pdata.Committed = committed
+		})
 		return nil
 	})
 	if err != nil {
 		return nil, fmt.Errorf("while getting resource usage for %s/%s through backchannel: %w", serviceType, resourceName, err)
-	}
-
-	queryArgs = append(queryArgs, i.Now)
-	err = sqlext.ForeachRow(i.DB, getCommittedInResourceQuery, queryArgs, func(rows *sql.Rows) error {
-		var (
-			serviceID db.ProjectServiceID
-			az        limes.AvailabilityZone
-			committed uint64
-		)
-		err := rows.Scan(&serviceID, &az, &committed)
-		if err != nil {
-			return err
-		}
-		addData(serviceID, az, func(pdata *projectData) { pdata.Committed = committed })
-		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("while getting active commitments for %s/%s through backchannel: %w", serviceType, resourceName, err)
 	}
 
 	queryArgs = []any{serviceType, resourceName, i.Now}

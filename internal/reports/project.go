@@ -64,14 +64,16 @@ var (
 `)
 
 	projectReportCommitmentsQuery = sqlext.SimplifyWhitespace(`
-	SELECT ps.type, pc.resource_name, pc.availability_zone, pc.duration,
+	SELECT ps.type, pr.name, par.az, pc.duration,
 	       COALESCE(SUM(pc.amount) FILTER (WHERE pc.confirmed_at IS NOT NULL), 0) AS active,
 	       COALESCE(SUM(pc.amount) FILTER (WHERE pc.confirmed_at IS NULL AND pc.confirm_by <= $2), 0) AS pending,
 	       COALESCE(SUM(pc.amount) FILTER (WHERE pc.confirmed_at IS NULL AND pc.confirm_by > $2), 0) AS planned
 	  FROM project_services ps
-	  JOIN project_commitments pc ON pc.service_id = ps.id
+	  JOIN project_resources pr ON pr.service_id = ps.id
+	  JOIN project_az_resources par ON par.resource_id = pr.id
+	  JOIN project_commitments pc ON pc.az_resource_id = par.id
 	 WHERE ps.project_id = $1 AND pc.superseded_at IS NULL AND pc.expires_at > $2
-	 GROUP BY ps.type, pc.resource_name, pc.availability_zone, pc.duration
+	 GROUP BY ps.type, pr.name, par.az, pc.duration
 	`)
 )
 

@@ -167,18 +167,16 @@ type ProjectRate struct {
 
 // ProjectCommitment contains a record from the `project_commitments` table.
 type ProjectCommitment struct {
-	ID               ProjectCommitmentID               `db:"id"`
-	ServiceID        ProjectServiceID                  `db:"service_id"`
-	ResourceName     string                            `db:"resource_name"`
-	AvailabilityZone limes.AvailabilityZone            `db:"availability_zone"`
-	Amount           uint64                            `db:"amount"`
-	Duration         limesresources.CommitmentDuration `db:"duration"`
-	CreatedAt        time.Time                         `db:"created_at"`
-	CreatorUUID      string                            `db:"creator_uuid"` // format: "username@userdomainname"
-	CreatorName      string                            `db:"creator_name"`
-	ConfirmBy        *time.Time                        `db:"confirm_by"`
-	ConfirmedAt      *time.Time                        `db:"confirmed_at"`
-	ExpiresAt        time.Time                         `db:"expires_at"`
+	ID           ProjectCommitmentID               `db:"id"`
+	AZResourceID ProjectAZResourceID               `db:"az_resource_id"`
+	Amount       uint64                            `db:"amount"`
+	Duration     limesresources.CommitmentDuration `db:"duration"`
+	CreatedAt    time.Time                         `db:"created_at"`
+	CreatorUUID  string                            `db:"creator_uuid"` // format: "username@userdomainname"
+	CreatorName  string                            `db:"creator_name"`
+	ConfirmBy    *time.Time                        `db:"confirm_by"`
+	ConfirmedAt  *time.Time                        `db:"confirmed_at"`
+	ExpiresAt    time.Time                         `db:"expires_at"`
 
 	//A commitment can be superseded e.g. by splitting it into smaller parts.
 	//When that happens, the new commitments will point to the one that they

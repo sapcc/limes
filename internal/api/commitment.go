@@ -45,17 +45,44 @@ var (
 	getProjectCommitmentsQuery = sqlext.SimplifyWhitespace(`
 		SELECT pc.*
 		  FROM project_commitments pc
-		  JOIN project_services ps ON pc.service_id = ps.id {{AND ps.type = $service_type}}
-		 WHERE %s {{AND pc.resource_name = $resource_name}}
+		  JOIN project_az_resources par ON pc.az_resource_id = par.id
+		  JOIN project_resources pr ON par.resource_id = pr.id {{AND pr.name = $resource_name}}
+		  JOIN project_services ps ON pr.service_id = ps.id {{AND ps.type = $service_type}}
+		 WHERE %s
 		 ORDER BY pc.id
 	`)
 	getProjectCommitmentsWhereClause = "ps.project_id = $%d AND pc.superseded_at IS NULL AND (pc.expires_at IS NULL OR pc.expires_at > $%d)"
 
+	getProjectAZResourceLocationsQuery = sqlext.SimplifyWhitespace(`
+		SELECT par.id, ps.type, pr.name, par.az
+		  FROM project_az_resources par
+		  JOIN project_resources pr ON par.resource_id = pr.id {{AND pr.name = $resource_name}}
+		  JOIN project_services ps ON pr.service_id = ps.id {{AND ps.type = $service_type}}
+	`)
+
 	findProjectCommitmentByIDQuery = sqlext.SimplifyWhitespace(`
 		SELECT pc.*
 		  FROM project_commitments pc
-		  JOIN project_services ps ON pc.service_id = ps.id
+		  JOIN project_az_resources par ON pc.az_resource_id = par.id
+		  JOIN project_resources pr ON par.resource_id = pr.id
+		  JOIN project_services ps ON pr.service_id = ps.id
 		 WHERE pc.id = $1 AND ps.project_id = $2
+	`)
+
+	findProjectAZResourceIDByLocationQuery = sqlext.SimplifyWhitespace(`
+		SELECT par.id
+		  FROM project_az_resources par
+		  JOIN project_resources pr ON par.resource_id = pr.id
+		  JOIN project_services ps ON pr.service_id = ps.id
+		 WHERE ps.type = $1 AND pr.name = $2 AND par.az = $3
+	`)
+
+	findProjectAZResourceLocationByIDQuery = sqlext.SimplifyWhitespace(`
+		SELECT ps.type, pr.name, par.az
+		  FROM project_az_resources par
+		  JOIN project_resources pr ON par.resource_id = pr.id
+		  JOIN project_services ps ON pr.service_id = ps.id
+		 WHERE par.id = $1
 	`)
 
 	forceImmediateCapacityScrapeQuery = sqlext.SimplifyWhitespace(`
@@ -82,25 +109,31 @@ func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	//enumerate project services
-	serviceTypeByID := make(map[db.ProjectServiceID]string)
-	query := `SELECT id, type FROM project_services WHERE project_id = $1`
-	err := sqlext.ForeachRow(p.DB, query, []any{dbProject.ID}, func(rows *sql.Rows) error {
+	//enumerate project AZ resources
+	filter := reports.ReadFilter(r, p.Cluster.GetServiceTypesForArea)
+	queryStr, joinArgs := filter.PrepareQuery(getProjectAZResourceLocationsQuery)
+	azResourceLocationsByID := make(map[db.ProjectAZResourceID]azResourceLocation)
+	err := sqlext.ForeachRow(p.DB, queryStr, joinArgs, func(rows *sql.Rows) error {
 		var (
-			serviceID   db.ProjectServiceID
-			serviceType string
+			id  db.ProjectAZResourceID
+			loc azResourceLocation
 		)
-		err := rows.Scan(&serviceID, &serviceType)
-		serviceTypeByID[serviceID] = serviceType
-		return err
+		err := rows.Scan(&id, &loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)
+		if err != nil {
+			return err
+		}
+		// this check is defense in depth (the DB should be consistent with our config)
+		if p.Cluster.HasResource(loc.ServiceType, loc.ResourceName) {
+			azResourceLocationsByID[id] = loc
+		}
+		return nil
 	})
 	if respondwith.ErrorText(w, err) {
 		return
 	}
 
 	//enumerate relevant project commitments
-	filter := reports.ReadFilter(r, p.Cluster.GetServiceTypesForArea)
-	queryStr, joinArgs := filter.PrepareQuery(getProjectCommitmentsQuery)
+	queryStr, joinArgs = filter.PrepareQuery(getProjectCommitmentsQuery)
 	whereStr := fmt.Sprintf(getProjectCommitmentsWhereClause, len(joinArgs)+1, len(joinArgs)+2)
 	queryStr = fmt.Sprintf(queryStr, whereStr)
 	var dbCommitments []db.ProjectCommitment
@@ -112,28 +145,30 @@ func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Reques
 	//render response
 	result := make([]limesresources.Commitment, 0, len(dbCommitments))
 	for _, c := range dbCommitments {
-		serviceType := serviceTypeByID[c.ServiceID]
-		if serviceType == "" {
+		loc, exists := azResourceLocationsByID[c.AZResourceID]
+		if !exists {
 			// defense in depth (the DB should not change that much between those two queries above)
 			continue
 		}
-		if !p.Cluster.HasResource(serviceType, c.ResourceName) {
-			//defense in depth
-			continue
-		}
-		result = append(result, p.convertCommitmentToDisplayForm(c, serviceType))
+		result = append(result, p.convertCommitmentToDisplayForm(c, loc))
 	}
 
 	respondwith.JSON(w, http.StatusOK, map[string]any{"commitments": result})
 }
 
-func (p *v1Provider) convertCommitmentToDisplayForm(c db.ProjectCommitment, serviceType string) limesresources.Commitment {
-	resInfo := p.Cluster.InfoForResource(serviceType, c.ResourceName)
+type azResourceLocation struct {
+	ServiceType      string
+	ResourceName     string
+	AvailabilityZone limes.AvailabilityZone
+}
+
+func (p *v1Provider) convertCommitmentToDisplayForm(c db.ProjectCommitment, loc azResourceLocation) limesresources.Commitment {
+	resInfo := p.Cluster.InfoForResource(loc.ServiceType, loc.ResourceName)
 	return limesresources.Commitment{
 		ID:               int64(c.ID),
-		ServiceType:      serviceType,
-		ResourceName:     c.ResourceName,
-		AvailabilityZone: c.AvailabilityZone,
+		ServiceType:      loc.ServiceType,
+		ResourceName:     loc.ResourceName,
+		AvailabilityZone: loc.AvailabilityZone,
 		Amount:           c.Amount,
 		Unit:             resInfo.Unit,
 		Duration:         c.Duration,
@@ -252,9 +287,14 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	var dbService db.ProjectService
-	err := p.DB.SelectOne(&dbService, `SELECT * FROM project_services WHERE project_id = $1 AND type = $2`,
-		dbProject.ID, req.ServiceType)
+	loc := azResourceLocation{
+		ServiceType:      req.ServiceType,
+		ResourceName:     req.ResourceName,
+		AvailabilityZone: req.AvailabilityZone,
+	}
+	var azResourceID db.ProjectAZResourceID
+	err := p.DB.QueryRow(findProjectAZResourceIDByLocationQuery, req.ServiceType, req.ResourceName, req.AvailabilityZone).
+		Scan(&azResourceID)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -283,17 +323,15 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	//prepare commitment
 	confirmBy := maybeUnpackUnixEncodedTime(req.ConfirmBy)
 	dbCommitment := db.ProjectCommitment{
-		ServiceID:        dbService.ID,
-		ResourceName:     req.ResourceName,
-		AvailabilityZone: req.AvailabilityZone,
-		Amount:           req.Amount,
-		Duration:         req.Duration,
-		CreatedAt:        now,
-		CreatorUUID:      token.UserUUID(),
-		CreatorName:      fmt.Sprintf("%s@%s", token.UserName(), token.UserDomainName()),
-		ConfirmBy:        confirmBy,
-		ConfirmedAt:      nil, //may be set below
-		ExpiresAt:        req.Duration.AddTo(unwrapOrDefault(confirmBy, now)),
+		AZResourceID: azResourceID,
+		Amount:       req.Amount,
+		Duration:     req.Duration,
+		CreatedAt:    now,
+		CreatorUUID:  token.UserUUID(),
+		CreatorName:  fmt.Sprintf("%s@%s", token.UserName(), token.UserDomainName()),
+		ConfirmBy:    confirmBy,
+		ConfirmedAt:  nil, //may be set below
+		ExpiresAt:    req.Duration.AddTo(unwrapOrDefault(confirmBy, now)),
 	}
 	if req.ConfirmBy == nil {
 		//if not planned for confirmation in the future, confirm immediately (or fail)
@@ -322,13 +360,13 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		DomainName:  dbDomain.Name,
 		ProjectID:   dbProject.UUID,
 		ProjectName: dbProject.Name,
-		Commitment:  p.convertCommitmentToDisplayForm(dbCommitment, dbService.Type),
+		Commitment:  p.convertCommitmentToDisplayForm(dbCommitment, loc),
 	})
 
 	//if the commitment is immediately confirmed, trigger a capacity scrape in
 	//order to ApplyComputedProjectQuotas based on the new commitment
 	if dbCommitment.ConfirmedAt != nil {
-		_, err := p.DB.Exec(forceImmediateCapacityScrapeQuery, now, dbService.Type, dbCommitment.ResourceName)
+		_, err := p.DB.Exec(forceImmediateCapacityScrapeQuery, now, loc.ServiceType, loc.ResourceName)
 		if respondwith.ErrorText(w, err) {
 			return
 		}
@@ -340,7 +378,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	c := p.convertCommitmentToDisplayForm(dbCommitment, dbService.Type)
+	c := p.convertCommitmentToDisplayForm(dbCommitment, loc)
 	respondwith.JSON(w, http.StatusCreated, map[string]any{"commitment": c})
 }
 
@@ -369,9 +407,14 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 	} else if respondwith.ErrorText(w, err) {
 		return
 	}
-	var dbService db.ProjectService
-	err = p.DB.SelectOne(&dbService, `SELECT * FROM project_services WHERE id = $1`, dbCommitment.ServiceID)
-	if respondwith.ErrorText(w, err) {
+	var loc azResourceLocation
+	err = p.DB.QueryRow(findProjectAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
+		Scan(&loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)
+	if errors.Is(err, sql.ErrNoRows) {
+		//defense in depth: this should not happen because all the relevant tables are connected by FK constraints
+		http.Error(w, "no route to this commitment", http.StatusNotFound)
+		return
+	} else if respondwith.ErrorText(w, err) {
 		return
 	}
 
@@ -386,7 +429,7 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 		DomainName:  dbDomain.Name,
 		ProjectID:   dbProject.UUID,
 		ProjectName: dbProject.Name,
-		Commitment:  p.convertCommitmentToDisplayForm(dbCommitment, dbService.Type),
+		Commitment:  p.convertCommitmentToDisplayForm(dbCommitment, loc),
 	})
 	w.WriteHeader(http.StatusNoContent)
 }

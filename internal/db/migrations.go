@@ -513,4 +513,50 @@ var sqlMigrations = map[string]string{
 		ALTER TABLE project_az_resources
 			RENAME CONSTRAINT project_az_resources_resource_id_fkey1 TO project_az_resources_resource_id_fkey;
 	`,
+
+	//NOTE: This exchanges (service_id, resource_name, availability_zone) for (az_resource_id)
+	//and uses the opportunity to move (creator_uuid, creator_name) next to created_at.
+	//
+	//Because we don't have commitments in productive systems as of the time of
+	//this migration, we keep it simple and do not migrate data here.
+	"035_commitment_rework_again.up.sql": `
+		DROP TABLE project_commitments;
+		CREATE TABLE project_commitments (
+			id                 BIGSERIAL  NOT NULL PRIMARY KEY,
+			az_resource_id     BIGINT     NOT NULL REFERENCES project_az_resources ON DELETE RESTRICT,
+			amount             BIGINT     NOT NULL,
+			duration           TEXT       NOT NULL,
+			created_at         TIMESTAMP  NOT NULL,
+			creator_uuid       TEXT       NOT NULL,
+			creator_name       TEXT       NOT NULL,
+			confirm_by         TIMESTAMP  DEFAULT NULL,
+			confirmed_at       TIMESTAMP  DEFAULT NULL,
+			expires_at         TIMESTAMP  NOT NULL,
+			superseded_at      TIMESTAMP  DEFAULT NULL,
+			predecessor_id     BIGINT     DEFAULT NULL REFERENCES project_commitments ON DELETE RESTRICT,
+			transfer_status    TEXT       NOT NULL DEFAULT '',
+			transfer_token     TEXT       NOT NULL DEFAULT ''
+		);
+	`,
+	"035_commitment_rework_again.down.sql": `
+		DROP TABLE project_commitments;
+		CREATE TABLE project_commitments (
+			id                 BIGSERIAL  NOT NULL PRIMARY KEY,
+			service_id         BIGINT     NOT NULL REFERENCES project_services ON DELETE RESTRICT,
+			resource_name      TEXT       NOT NULL,
+			availability_zone  TEXT       NOT NULL,
+			amount             BIGINT     NOT NULL,
+			duration           TEXT       NOT NULL,
+			created_at         TIMESTAMP  NOT NULL,
+			confirm_by         TIMESTAMP  DEFAULT NULL,
+			confirmed_at       TIMESTAMP  DEFAULT NULL,
+			expires_at         TIMESTAMP  NOT NULL,
+			superseded_at      TIMESTAMP  DEFAULT NULL,
+			predecessor_id     BIGINT     DEFAULT NULL REFERENCES project_commitments ON DELETE RESTRICT,
+			transfer_status    TEXT       NOT NULL DEFAULT '',
+			transfer_token     TEXT       NOT NULL DEFAULT '',
+			creator_uuid       TEXT       NOT NULL,
+			creator_name       TEXT       NOT NULL
+		);
+	`,
 }
