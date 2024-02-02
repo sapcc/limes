@@ -74,7 +74,7 @@ var (
 		  JOIN cluster_az_resources car ON car.resource_id = cr.id
 		  WHERE cs.type = $1 AND cr.name = $2 AND ($3::text IS NULL OR car.az = $3)
 	`)
-	//NOTE: These two queries below are also reused in GetGlobalResourceDemand.
+
 	getUsageInResourceQuery = sqlext.SimplifyWhitespace(`
 		SELECT ps.id, par.az, par.usage, par.historical_usage,
 		       (SELECT COALESCE(SUM(pc.amount), 0) FROM project_commitments pc

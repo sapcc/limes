@@ -22,7 +22,6 @@ package datamodel
 import (
 	"database/sql"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/sapcc/go-api-declarations/limes"
@@ -44,15 +43,20 @@ type capacityPluginBackchannelImpl struct {
 }
 
 var (
-	getPendingCommitmentsInResourceQuery = sqlext.SimplifyWhitespace(`
-		SELECT ps.id, par.az, SUM(pc.amount)
+	getResourceDemandQuery = sqlext.SimplifyWhitespace(`
+		SELECT par.az, par.usage, COALESCE(pc_view.active, 0), COALESCE(pc_view.pending, 0)
 		  FROM project_services ps
 		  JOIN project_resources pr ON pr.service_id = ps.id
 		  JOIN project_az_resources par ON par.resource_id = pr.id
-		  JOIN project_commitments pc ON pc.az_resource_id = par.id
+		  LEFT OUTER JOIN (
+		    SELECT az_resource_id AS az_resource_id,
+		           SUM(amount) FILTER (WHERE confirmed_at IS NOT NULL) AS active,
+		           SUM(amount) FILTER (WHERE confirmed_at IS NULL AND confirm_by <= $3) AS pending
+		      FROM project_commitments
+		     WHERE superseded_at IS NULL AND expires_at > $3
+		     GROUP BY az_resource_id
+		  ) pc_view ON pc_view.az_resource_id = par.id
 		 WHERE ps.type = $1 AND pr.name = $2
-		   AND pc.confirmed_at IS NULL AND pc.superseded_at IS NULL AND pc.confirm_by <= $3
-		 GROUP BY ps.id, par.az
 	`)
 )
 
@@ -63,77 +67,31 @@ func (i capacityPluginBackchannelImpl) GetOvercommitFactor(serviceType, resource
 
 // GetGlobalResourceDemand implements the CapacityPluginBackchannel interface.
 func (i capacityPluginBackchannelImpl) GetGlobalResourceDemand(serviceType, resourceName string) (map[limes.AvailabilityZone]core.ResourceDemand, error) {
-	type projectData struct {
-		Usage              uint64
-		Committed          uint64
-		PendingCommitments uint64
-	}
-	data := make(map[limes.AvailabilityZone]map[db.ProjectServiceID]projectData)
-	addData := func(serviceID db.ProjectServiceID, az limes.AvailabilityZone, fill func(*projectData)) {
-		azData := data[az]
-		if azData == nil {
-			azData = make(map[db.ProjectServiceID]projectData)
-			data[az] = azData
-		}
-		pdata := azData[serviceID] //or zero-initialized on first use
-		fill(&pdata)
-		azData[serviceID] = pdata
-	}
-
-	var noFilter *string //== nil
-	queryArgs := []any{serviceType, resourceName, noFilter, i.Now}
-	query := strings.Replace(getUsageInResourceQuery, "par.historical_usage", "''", 1)
-	err := sqlext.ForeachRow(i.DB, query, queryArgs, func(rows *sql.Rows) error {
+	result := make(map[limes.AvailabilityZone]core.ResourceDemand)
+	err := sqlext.ForeachRow(i.DB, getResourceDemandQuery, []any{serviceType, resourceName, i.Now}, func(rows *sql.Rows) error {
 		var (
-			serviceID db.ProjectServiceID
-			az        limes.AvailabilityZone
-			usage     uint64
-			unused    string
-			committed uint64
+			az                 limes.AvailabilityZone
+			usage              uint64
+			activeCommitments  uint64
+			pendingCommitments uint64
 		)
-		err := rows.Scan(&serviceID, &az, &usage, &unused, &committed)
+		err := rows.Scan(&az, &usage, &activeCommitments, &pendingCommitments)
 		if err != nil {
 			return err
 		}
-		addData(serviceID, az, func(pdata *projectData) {
-			pdata.Usage = usage
-			pdata.Committed = committed
-		})
-		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("while getting resource usage for %s/%s through backchannel: %w", serviceType, resourceName, err)
-	}
 
-	queryArgs = []any{serviceType, resourceName, i.Now}
-	err = sqlext.ForeachRow(i.DB, getPendingCommitmentsInResourceQuery, queryArgs, func(rows *sql.Rows) error {
-		var (
-			serviceID db.ProjectServiceID
-			az        limes.AvailabilityZone
-			pending   uint64
-		)
-		err := rows.Scan(&serviceID, &az, &pending)
-		if err != nil {
-			return err
+		demand := result[az]
+		demand.Usage += usage
+		if activeCommitments > usage {
+			demand.UnusedCommitments += activeCommitments - usage
 		}
-		addData(serviceID, az, func(pdata *projectData) { pdata.PendingCommitments = pending })
-		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("while getting pending commitments for %s/%s through backchannel: %w", serviceType, resourceName, err)
-	}
-
-	result := make(map[limes.AvailabilityZone]core.ResourceDemand, len(data))
-	for az, azData := range data {
-		var demand core.ResourceDemand
-		for _, projectData := range azData {
-			demand.Usage += projectData.Usage
-			if projectData.Committed > projectData.Usage {
-				demand.UnusedCommitments += projectData.Committed - projectData.Usage
-			}
-			demand.PendingCommitments += projectData.PendingCommitments
-		}
+		demand.PendingCommitments += pendingCommitments
 		result[az] = demand
+
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("while getting resource demand for %s/%s through backchannel: %w", serviceType, resourceName, err)
 	}
 	return result, nil
 }
