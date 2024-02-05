@@ -69,7 +69,8 @@ type DomainAZResourceReport struct {
 	// The keys for these maps must be commitment durations as accepted
 	// by func ParseCommitmentDuration. We cannot use type CommitmentDuration
 	// directly here because Go does not allow struct types as map keys.
-	UnusedCommitments  map[string]uint64 `json:"unused_commitments,omitempty"`
+	Committed          map[string]uint64 `json:"committed,omitempty"`
+	UnusedCommitments  uint64            `json:"unused_commitments,omitempty"`
 	PendingCommitments map[string]uint64 `json:"pending_commitments,omitempty"`
 	PlannedCommitments map[string]uint64 `json:"planned_commitments,omitempty"`
 }
