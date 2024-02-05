@@ -74,7 +74,7 @@ var (
 		  FROM project_az_resources par
 		  JOIN project_resources pr ON par.resource_id = pr.id
 		  JOIN project_services ps ON pr.service_id = ps.id
-		 WHERE ps.type = $1 AND pr.name = $2 AND par.az = $3
+		 WHERE ps.project_id = $1 AND ps.type = $2 AND pr.name = $3 AND par.az = $4
 	`)
 
 	findProjectAZResourceLocationByIDQuery = sqlext.SimplifyWhitespace(`
@@ -293,7 +293,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		AvailabilityZone: req.AvailabilityZone,
 	}
 	var azResourceID db.ProjectAZResourceID
-	err := p.DB.QueryRow(findProjectAZResourceIDByLocationQuery, req.ServiceType, req.ResourceName, req.AvailabilityZone).
+	err := p.DB.QueryRow(findProjectAZResourceIDByLocationQuery, dbProject.ID, req.ServiceType, req.ResourceName, req.AvailabilityZone).
 		Scan(&azResourceID)
 	if respondwith.ErrorText(w, err) {
 		return
