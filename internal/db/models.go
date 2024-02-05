@@ -59,6 +59,7 @@ func (r ClusterResource) Ref() ResourceRef[ClusterServiceID] {
 
 // ClusterAZResource contains a record from the `cluster_az_resources` table.
 type ClusterAZResource struct {
+	ID                ClusterAZResourceID    `db:"id"`
 	ResourceID        ClusterResourceID      `db:"resource_id"`
 	AvailabilityZone  limes.AvailabilityZone `db:"az"`
 	RawCapacity       uint64                 `db:"raw_capacity"`
@@ -142,6 +143,7 @@ func (r ProjectResource) Ref() ResourceRef[ProjectServiceID] {
 
 // ProjectAZResource contains a record from the `project_az_resources` table.
 type ProjectAZResource struct {
+	ID                  ProjectAZResourceID    `db:"id"`
 	ResourceID          ProjectResourceID      `db:"resource_id"`
 	AvailabilityZone    limes.AvailabilityZone `db:"az"`
 	Quota               *uint64                `db:"quota"`
@@ -199,14 +201,14 @@ func initGorp(db *gorp.DbMap) {
 	db.AddTableWithName(ClusterCapacitor{}, "cluster_capacitors").SetKeys(false, "capacitor_id")
 	db.AddTableWithName(ClusterService{}, "cluster_services").SetKeys(true, "id")
 	db.AddTableWithName(ClusterResource{}, "cluster_resources").SetKeys(true, "id")
-	db.AddTableWithName(ClusterAZResource{}, "cluster_az_resources").SetKeys(false, "resource_id", "az")
+	db.AddTableWithName(ClusterAZResource{}, "cluster_az_resources").SetKeys(true, "id")
 	db.AddTableWithName(Domain{}, "domains").SetKeys(true, "id")
 	db.AddTableWithName(DomainService{}, "domain_services").SetKeys(true, "id")
 	db.AddTableWithName(DomainResource{}, "domain_resources").SetKeys(true, "id")
 	db.AddTableWithName(Project{}, "projects").SetKeys(true, "id")
 	db.AddTableWithName(ProjectService{}, "project_services").SetKeys(true, "id")
 	db.AddTableWithName(ProjectResource{}, "project_resources").SetKeys(true, "id")
-	db.AddTableWithName(ProjectAZResource{}, "project_az_resources").SetKeys(false, "resource_id", "az")
+	db.AddTableWithName(ProjectAZResource{}, "project_az_resources").SetKeys(true, "id")
 	db.AddTableWithName(ProjectRate{}, "project_rates").SetKeys(false, "service_id", "name")
 	db.AddTableWithName(ProjectCommitment{}, "project_commitments").SetKeys(true, "id")
 }

@@ -42,12 +42,12 @@ INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desir
 INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desired_backend_quota) VALUES (9, 6, 'loadbalancers', 10,  10,  10);
 
 -- project_az_resources has everything as non-AZ-aware (the consistency checks do not really care about AZs)
-INSERT INTO project_az_resources (resource_id, az, usage, physical_usage) VALUES (1, 'any', 14, NULL);
-INSERT INTO project_az_resources (resource_id, az, usage, physical_usage) VALUES (2, 'any', 88, 92);
-INSERT INTO project_az_resources (resource_id, az, usage, physical_usage) VALUES (3, 'any', 5,  NULL);
-INSERT INTO project_az_resources (resource_id, az, usage, physical_usage) VALUES (4, 'any', 18, NULL);
-INSERT INTO project_az_resources (resource_id, az, usage, physical_usage) VALUES (5, 'any', 45, 40);
-INSERT INTO project_az_resources (resource_id, az, usage, physical_usage) VALUES (6, 'any', 2,  NULL);
-INSERT INTO project_az_resources (resource_id, az, usage, physical_usage) VALUES (7, 'any', 20, NULL);
-INSERT INTO project_az_resources (resource_id, az, usage, physical_usage) VALUES (8, 'any', 48, 43);
-INSERT INTO project_az_resources (resource_id, az, usage, physical_usage) VALUES (9, 'any', 4,  NULL);
+INSERT INTO project_az_resources (id, resource_id, az, usage, physical_usage) VALUES (1, 1, 'any', 14, NULL);
+INSERT INTO project_az_resources (id, resource_id, az, usage, physical_usage) VALUES (2, 2, 'any', 88, 92);
+INSERT INTO project_az_resources (id, resource_id, az, usage, physical_usage) VALUES (3, 3, 'any', 5,  NULL);
+INSERT INTO project_az_resources (id, resource_id, az, usage, physical_usage) VALUES (4, 4, 'any', 18, NULL);
+INSERT INTO project_az_resources (id, resource_id, az, usage, physical_usage) VALUES (5, 5, 'any', 45, 40);
+INSERT INTO project_az_resources (id, resource_id, az, usage, physical_usage) VALUES (6, 6, 'any', 2,  NULL);
+INSERT INTO project_az_resources (id, resource_id, az, usage, physical_usage) VALUES (7, 7, 'any', 20, NULL);
+INSERT INTO project_az_resources (id, resource_id, az, usage, physical_usage) VALUES (8, 8, 'any', 48, 43);
+INSERT INTO project_az_resources (id, resource_id, az, usage, physical_usage) VALUES (9, 9, 'any', 4,  NULL);

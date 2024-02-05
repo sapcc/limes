@@ -163,8 +163,8 @@ func Test_ScanCapacity(t *testing.T) {
 	setClusterCapacitorsStale(t, s)
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
 	tr.DBChanges().AssertEqualf(`
-		INSERT INTO cluster_az_resources (resource_id, az, raw_capacity, usage) VALUES (1, 'any', 42, 8);
-		INSERT INTO cluster_az_resources (resource_id, az, raw_capacity, usage) VALUES (2, 'any', 42, 8);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage) VALUES (1, 1, 'any', 42, 8);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage) VALUES (2, 2, 'any', 42, 8);
 		INSERT INTO cluster_capacitors (capacitor_id, scraped_at, scrape_duration_secs, next_scrape_at) VALUES ('unittest', 5, 5, 905);
 		INSERT INTO cluster_capacitors (capacitor_id, scraped_at, scrape_duration_secs, next_scrape_at) VALUES ('unittest2', 10, 5, 910);
 		INSERT INTO cluster_resources (id, capacitor_id, service_id, name) VALUES (1, 'unittest', 1, 'things');
@@ -207,8 +207,8 @@ func Test_ScanCapacity(t *testing.T) {
 	scrapedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt2 := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
-		DELETE FROM cluster_az_resources WHERE resource_id = 1 AND az = 'any';
-		INSERT INTO cluster_az_resources (resource_id, az, raw_capacity, usage) VALUES (4, 'any', 23, 4);
+		DELETE FROM cluster_az_resources WHERE id = 1 AND resource_id = 1 AND az = 'any';
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage) VALUES (4, 4, 'any', 23, 4);
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest';
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest2';
 		DELETE FROM cluster_resources WHERE id = 1 AND service_id = 1 AND name = 'things';
@@ -238,7 +238,7 @@ func Test_ScanCapacity(t *testing.T) {
 	scrapedAt2 = s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt4 := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
-		INSERT INTO cluster_az_resources (resource_id, az, raw_capacity, subcapacities) VALUES (5, 'any', 42, '[{"az":"az-one","smaller_half":7},{"az":"az-one","larger_half":14},{"az":"az-two","smaller_half":7},{"az":"az-two","larger_half":14}]');
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, subcapacities) VALUES (5, 5, 'any', 42, '[{"az":"az-one","smaller_half":7},{"az":"az-one","larger_half":14},{"az":"az-two","smaller_half":7},{"az":"az-two","larger_half":14}]');
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest';
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest2';
 		INSERT INTO cluster_capacitors (capacitor_id, scraped_at, scrape_duration_secs, serialized_metrics, next_scrape_at) VALUES ('unittest4', %d, 5, '{"smaller_half":14,"larger_half":28}', %d);
@@ -258,7 +258,7 @@ func Test_ScanCapacity(t *testing.T) {
 	scrapedAt2 = s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt4 = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
-		UPDATE cluster_az_resources SET raw_capacity = 10, subcapacities = '[{"az":"az-one","smaller_half":1},{"az":"az-one","larger_half":4},{"az":"az-two","smaller_half":1},{"az":"az-two","larger_half":4}]' WHERE resource_id = 5 AND az = 'any';
+		UPDATE cluster_az_resources SET raw_capacity = 10, subcapacities = '[{"az":"az-one","smaller_half":1},{"az":"az-one","larger_half":4},{"az":"az-two","smaller_half":1},{"az":"az-two","larger_half":4}]' WHERE id = 5 AND resource_id = 5 AND az = 'any';
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest';
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest2';
 		UPDATE cluster_capacitors SET scraped_at = %d, serialized_metrics = '{"smaller_half":3,"larger_half":7}', next_scrape_at = %d WHERE capacitor_id = 'unittest4';
@@ -288,8 +288,8 @@ func Test_ScanCapacity(t *testing.T) {
 	scrapedAt4 = s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt5 := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
-		INSERT INTO cluster_az_resources (resource_id, az, raw_capacity, usage) VALUES (6, 'az-one', 21, 4);
-		INSERT INTO cluster_az_resources (resource_id, az, raw_capacity, usage) VALUES (6, 'az-two', 21, 4);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage) VALUES (6, 6, 'az-one', 21, 4);
+		INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage) VALUES (7, 6, 'az-two', 21, 4);
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest';
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest2';
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest4';
@@ -312,8 +312,8 @@ func Test_ScanCapacity(t *testing.T) {
 	scrapedAt4 = s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt5 = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
-		UPDATE cluster_az_resources SET raw_capacity = 15, usage = 3 WHERE resource_id = 6 AND az = 'az-one';
-		UPDATE cluster_az_resources SET raw_capacity = 15, usage = 3 WHERE resource_id = 6 AND az = 'az-two';
+		UPDATE cluster_az_resources SET raw_capacity = 15, usage = 3 WHERE id = 6 AND resource_id = 6 AND az = 'az-one';
+		UPDATE cluster_az_resources SET raw_capacity = 15, usage = 3 WHERE id = 7 AND resource_id = 6 AND az = 'az-two';
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest';
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest2';
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest4';
@@ -347,8 +347,8 @@ func Test_ScanCapacity(t *testing.T) {
 	scrapedAt2 = s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt4 = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
-		DELETE FROM cluster_az_resources WHERE resource_id = 6 AND az = 'az-one';
-		DELETE FROM cluster_az_resources WHERE resource_id = 6 AND az = 'az-two';
+		DELETE FROM cluster_az_resources WHERE id = 6 AND resource_id = 6 AND az = 'az-one';
+		DELETE FROM cluster_az_resources WHERE id = 7 AND resource_id = 6 AND az = 'az-two';
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest';
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest2';
 		UPDATE cluster_capacitors SET scraped_at = %d, next_scrape_at = %d WHERE capacitor_id = 'unittest4';
@@ -442,18 +442,18 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
 
 	tr.DBChanges().AssertEqualf(`%s
-		UPDATE project_az_resources SET quota = 8 WHERE resource_id = 11 AND az = 'any';
-		UPDATE project_az_resources SET quota = 1 WHERE resource_id = 11 AND az = 'az-one';
-		UPDATE project_az_resources SET quota = 1 WHERE resource_id = 11 AND az = 'az-two';
-		UPDATE project_az_resources SET quota = 0 WHERE resource_id = 2 AND az = 'any';
-		UPDATE project_az_resources SET quota = 1 WHERE resource_id = 2 AND az = 'az-one';
-		UPDATE project_az_resources SET quota = 250 WHERE resource_id = 2 AND az = 'az-two';
-		UPDATE project_az_resources SET quota = 8 WHERE resource_id = 5 AND az = 'any';
-		UPDATE project_az_resources SET quota = 1 WHERE resource_id = 5 AND az = 'az-one';
-		UPDATE project_az_resources SET quota = 1 WHERE resource_id = 5 AND az = 'az-two';
-		UPDATE project_az_resources SET quota = 8 WHERE resource_id = 8 AND az = 'any';
-		UPDATE project_az_resources SET quota = 1 WHERE resource_id = 8 AND az = 'az-one';
-		UPDATE project_az_resources SET quota = 1 WHERE resource_id = 8 AND az = 'az-two';
+		UPDATE project_az_resources SET quota = 0 WHERE id = 17 AND resource_id = 2 AND az = 'any';
+		UPDATE project_az_resources SET quota = 1 WHERE id = 18 AND resource_id = 2 AND az = 'az-one';
+		UPDATE project_az_resources SET quota = 250 WHERE id = 19 AND resource_id = 2 AND az = 'az-two';
+		UPDATE project_az_resources SET quota = 8 WHERE id = 20 AND resource_id = 5 AND az = 'any';
+		UPDATE project_az_resources SET quota = 1 WHERE id = 21 AND resource_id = 5 AND az = 'az-one';
+		UPDATE project_az_resources SET quota = 1 WHERE id = 22 AND resource_id = 5 AND az = 'az-two';
+		UPDATE project_az_resources SET quota = 8 WHERE id = 23 AND resource_id = 8 AND az = 'any';
+		UPDATE project_az_resources SET quota = 1 WHERE id = 24 AND resource_id = 8 AND az = 'az-one';
+		UPDATE project_az_resources SET quota = 1 WHERE id = 25 AND resource_id = 8 AND az = 'az-two';
+		UPDATE project_az_resources SET quota = 8 WHERE id = 26 AND resource_id = 11 AND az = 'any';
+		UPDATE project_az_resources SET quota = 1 WHERE id = 27 AND resource_id = 11 AND az = 'az-one';
+		UPDATE project_az_resources SET quota = 1 WHERE id = 28 AND resource_id = 11 AND az = 'az-two';
 		UPDATE project_resources SET quota = 10, backend_quota = 10, desired_backend_quota = 10 WHERE id = 11 AND service_id = 4 AND name = 'capacity';
 		UPDATE project_resources SET quota = 251, backend_quota = 251, desired_backend_quota = 251 WHERE id = 2 AND service_id = 1 AND name = 'capacity';
 		UPDATE project_resources SET quota = 10, backend_quota = 10, desired_backend_quota = 10 WHERE id = 5 AND service_id = 2 AND name = 'capacity';
@@ -468,7 +468,7 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 
 	scrapedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	tr.DBChanges().AssertEqualf(`%s
-		UPDATE project_az_resources SET quota = 10 WHERE resource_id = 2 AND az = 'az-one';
+		UPDATE project_az_resources SET quota = 10 WHERE id = 18 AND resource_id = 2 AND az = 'az-one';
 		UPDATE project_commitments SET confirmed_at = %d WHERE id = 1;
 		UPDATE project_resources SET quota = 260, backend_quota = 260, desired_backend_quota = 260 WHERE id = 2 AND service_id = 1 AND name = 'capacity';
 	`, timestampUpdates(), scrapedAt1.Unix())
@@ -482,7 +482,7 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 
 	scrapedAt1 = s.Clock.Now().Add(-5 * time.Second)
 	tr.DBChanges().AssertEqualf(`%s
-		UPDATE project_az_resources SET quota = 110 WHERE resource_id = 2 AND az = 'az-one';
+		UPDATE project_az_resources SET quota = 110 WHERE id = 18 AND resource_id = 2 AND az = 'az-one';
 		UPDATE project_commitments SET confirmed_at = %d WHERE id = 2;
 		UPDATE project_resources SET quota = 360, backend_quota = 360, desired_backend_quota = 360 WHERE id = 2 AND service_id = 1 AND name = 'capacity';
 	`, timestampUpdates(), scrapedAt1.Unix())
@@ -498,8 +498,8 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 
 	scrapedAt2 := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`%s
-		UPDATE project_az_resources SET quota = 0 WHERE resource_id = 11 AND az = 'any';
-		UPDATE project_az_resources SET quota = 20 WHERE resource_id = 11 AND az = 'az-one';
+		UPDATE project_az_resources SET quota = 0 WHERE id = 26 AND resource_id = 11 AND az = 'any';
+		UPDATE project_az_resources SET quota = 20 WHERE id = 27 AND resource_id = 11 AND az = 'az-one';
 		UPDATE project_commitments SET confirmed_at = %d WHERE id = 4;
 		UPDATE project_commitments SET confirmed_at = %d WHERE id = 5;
 		UPDATE project_resources SET quota = 21, backend_quota = 21, desired_backend_quota = 21 WHERE id = 11 AND service_id = 4 AND name = 'capacity';
@@ -514,7 +514,7 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 
 	scrapedAt1 = s.Clock.Now().Add(-5 * time.Second)
 	tr.DBChanges().AssertEqualf(`%s
-		UPDATE project_az_resources SET quota = 300 WHERE resource_id = 2 AND az = 'az-two';
+		UPDATE project_az_resources SET quota = 300 WHERE id = 19 AND resource_id = 2 AND az = 'az-two';
 		UPDATE project_commitments SET confirmed_at = %d WHERE id = 8;
 		UPDATE project_resources SET quota = 410, backend_quota = 410, desired_backend_quota = 410 WHERE id = 2 AND service_id = 1 AND name = 'capacity';
 	`, timestampUpdates(), scrapedAt1.Unix())
@@ -529,8 +529,8 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 
 	scrapedAt2 = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`%s
-		UPDATE project_az_resources SET quota = 0 WHERE resource_id = 5 AND az = 'any';
-		UPDATE project_az_resources SET quota = 22 WHERE resource_id = 5 AND az = 'az-two';
+		UPDATE project_az_resources SET quota = 0 WHERE id = 20 AND resource_id = 5 AND az = 'any';
+		UPDATE project_az_resources SET quota = 22 WHERE id = 22 AND resource_id = 5 AND az = 'az-two';
 		UPDATE project_commitments SET confirmed_at = %d WHERE id = 9;
 		UPDATE project_resources SET quota = 23, backend_quota = 23, desired_backend_quota = 23 WHERE id = 5 AND service_id = 2 AND name = 'capacity';
 	`, timestampUpdates(), scrapedAt2.Unix())
@@ -541,9 +541,9 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 
 	scrapedAt2 = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`%s
-		UPDATE project_az_resources SET quota = 2 WHERE resource_id = 11 AND az = 'az-two';
-		UPDATE project_az_resources SET quota = 8 WHERE resource_id = 5 AND az = 'any';
-		UPDATE project_az_resources SET quota = 1 WHERE resource_id = 5 AND az = 'az-two';
+		UPDATE project_az_resources SET quota = 8 WHERE id = 20 AND resource_id = 5 AND az = 'any';
+		UPDATE project_az_resources SET quota = 1 WHERE id = 22 AND resource_id = 5 AND az = 'az-two';
+		UPDATE project_az_resources SET quota = 2 WHERE id = 28 AND resource_id = 11 AND az = 'az-two';
 		UPDATE project_commitments SET confirmed_at = %d WHERE id = 10;
 		UPDATE project_resources SET quota = 22, backend_quota = 22, desired_backend_quota = 22 WHERE id = 11 AND service_id = 4 AND name = 'capacity';
 		UPDATE project_resources SET quota = 10, backend_quota = 10, desired_backend_quota = 10 WHERE id = 5 AND service_id = 2 AND name = 'capacity';
