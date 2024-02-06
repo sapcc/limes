@@ -83,6 +83,28 @@ var domainReportQuery3 = sqlext.SimplifyWhitespace(`
 	 GROUP BY d.uuid, d.name, ps.type, pr.name, par.az
 `)
 
+var domainReportQuery4 = sqlext.SimplifyWhitespace(`
+	WITH project_commitment_sums AS (
+	  SELECT az_resource_id, duration,
+	         COALESCE(SUM(amount) FILTER (WHERE confirmed_at IS NOT NULL), 0) AS active,
+	         COALESCE(SUM(amount) FILTER (WHERE confirmed_at IS NULL AND confirm_by <= $%%[1]d), 0) AS pending,
+	         COALESCE(SUM(amount) FILTER (WHERE confirmed_at IS NULL AND confirm_by > $%%[1]d), 0) AS planned
+	    FROM project_commitments
+	   WHERE superseded_at IS NULL AND expires_at > $%%[1]d
+	   GROUP BY az_resource_id, duration
+	)
+	SELECT d.uuid, d.name, ps.type, pr.name, par.az,
+	       pcs.duration, SUM(pcs.active), SUM(pcs.pending), SUM(pcs.planned)
+	  FROM domains d
+	  JOIN projects p ON p.domain_id = d.id
+	  JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
+	  JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
+	  JOIN project_az_resources par ON par.resource_id = pr.id
+	  JOIN project_commitment_sums pcs ON pcs.az_resource_id = par.id
+	 WHERE %s
+	 GROUP BY d.uuid, d.name, ps.type, pr.name, par.az, pcs.duration
+`)
+
 // GetDomains returns reports for all domains in the given cluster or, if
 // domainID is non-nil, for that domain only.
 func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi db.Interface, filter Filter) ([]*limesresources.DomainReport, error) {
@@ -236,6 +258,62 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 		}
 
 		//TODO: fourth query: add AZ breakdown by commitment duration (Committed, PendingCommitments, PlannedCommitments)
+		queryStr, joinArgs = filter.PrepareQuery(domainReportQuery4)
+		whereStr, whereArgs = db.BuildSimpleWhereClause(fields, len(joinArgs))
+		queryStr = fmt.Sprintf(queryStr, whereStr)
+		queryArgs = append(joinArgs, whereArgs...)
+		queryStr = fmt.Sprintf(queryStr, len(queryArgs)+1)
+		queryArgs = append(queryArgs, now)
+		err = sqlext.ForeachRow(dbi, queryStr, queryArgs, func(rows *sql.Rows) error {
+			var (
+				domainUUID    string
+				domainName    string
+				serviceType   string
+				resourceName  string
+				az            limes.AvailabilityZone
+				duration      limesresources.CommitmentDuration
+				activeAmount  uint64
+				pendingAmount uint64
+				plannedAmount uint64
+			)
+			err := rows.Scan(
+				&domainUUID, &domainName, &serviceType, &resourceName, &az,
+				&duration, &activeAmount, &pendingAmount, &plannedAmount,
+			)
+			if err != nil {
+				return err
+			}
+
+			_, _, resource := domains.Find(cluster, domainUUID, domainName, &serviceType, &resourceName, now)
+			if resource == nil || resource.PerAZ[az] == nil {
+				return nil
+			}
+			azReport := resource.PerAZ[az]
+
+			if activeAmount > 0 {
+				if azReport.Committed == nil {
+					azReport.Committed = make(map[string]uint64)
+				}
+				azReport.Committed[duration.String()] = activeAmount
+			}
+			if pendingAmount > 0 {
+				if azReport.PendingCommitments == nil {
+					azReport.PendingCommitments = make(map[string]uint64)
+				}
+				azReport.PendingCommitments[duration.String()] = pendingAmount
+			}
+			if plannedAmount > 0 {
+				if azReport.PlannedCommitments == nil {
+					azReport.PlannedCommitments = make(map[string]uint64)
+				}
+				azReport.PlannedCommitments[duration.String()] = plannedAmount
+			}
+
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
 
 		//project_az_resources always has entries for "any", even if the resource
 		//is AZ-aware, because ApplyComputedProjectQuota needs somewhere to write

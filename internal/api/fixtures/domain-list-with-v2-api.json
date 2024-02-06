@@ -150,7 +150,10 @@
               },
               "per_az": {
                 "az-one": {
-                  "usage": 2
+                  "usage": 2,
+                  "planned_commitments": {
+                    "2 years": 100
+                  }
                 },
                 "az-two": {
                   "usage": 2
@@ -213,11 +216,21 @@
               "per_az": {
                 "az-one": {
                   "usage": 2,
+                  "committed": {
+                    "1 year": 2,
+                    "2 years": 1
+                  },
                   "unused_commitments": 2
                 },
                 "az-two": {
                   "usage": 2,
-                  "unused_commitments": 1
+                  "committed": {
+                    "1 year": 2
+                  },
+                  "unused_commitments": 1,
+                  "pending_commitments": {
+                    "2 years": 100
+                  }
                 }
               },
               "quota": 45,
@@ -243,7 +256,10 @@
               "quota_distribution_model": "hierarchical",
               "per_az": {
                 "any": {
-                  "usage": 4
+                  "usage": 4,
+                  "committed": {
+                    "2 years": 1
+                  }
                 }
               },
               "quota": 50,
