@@ -1,6 +1,6 @@
 /*******************************************************************************
 *
-* Copyright 2017-2020 SAP SE
+* Copyright 2017-2024 SAP SE
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -62,6 +62,25 @@ var domainReportQuery2 = sqlext.SimplifyWhitespace(`
 	  LEFT OUTER JOIN domain_services ds ON ds.domain_id = d.id {{AND ds.type = $service_type}}
 	  LEFT OUTER JOIN domain_resources dr ON dr.service_id = ds.id {{AND dr.name = $resource_name}}
 	 WHERE %s
+`)
+
+var domainReportQuery3 = sqlext.SimplifyWhitespace(`
+	WITH project_commitment_sums AS (
+	  SELECT az_resource_id, SUM(amount) AS amount
+	    FROM project_commitments
+	   WHERE confirmed_at IS NOT NULL AND superseded_at IS NULL AND expires_at > $%%d
+	   GROUP BY az_resource_id
+	)
+	SELECT d.uuid, d.name, ps.type, pr.name, par.az,
+	       SUM(par.quota), SUM(par.usage), SUM(GREATEST(0, COALESCE(pcs.amount, 0) - par.usage))
+	  FROM domains d
+	  JOIN projects p ON p.domain_id = d.id
+	  JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
+	  JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
+	  JOIN project_az_resources par ON par.resource_id = pr.id
+	  LEFT OUTER JOIN project_commitment_sums pcs ON pcs.az_resource_id = par.id
+	 WHERE %s
+	 GROUP BY d.uuid, d.name, ps.type, pr.name, par.az
 `)
 
 // GetDomains returns reports for all domains in the given cluster or, if
@@ -169,6 +188,71 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 	})
 	if err != nil {
 		return nil, err
+	}
+
+	if filter.WithAZBreakdown {
+		//third query: add basic AZ breakdown (quota, usage, unused commitments)
+		queryStr, joinArgs = filter.PrepareQuery(domainReportQuery3)
+		whereStr, whereArgs = db.BuildSimpleWhereClause(fields, len(joinArgs))
+		queryStr = fmt.Sprintf(queryStr, whereStr)
+		queryArgs := append(joinArgs, whereArgs...)
+		queryStr = fmt.Sprintf(queryStr, len(queryArgs)+1)
+		queryArgs = append(queryArgs, now)
+		err = sqlext.ForeachRow(dbi, queryStr, queryArgs, func(rows *sql.Rows) error {
+			var (
+				domainUUID        string
+				domainName        string
+				serviceType       string
+				resourceName      string
+				az                limes.AvailabilityZone
+				quota             *uint64
+				usage             uint64
+				unusedCommitments uint64
+			)
+			err := rows.Scan(
+				&domainUUID, &domainName, &serviceType, &resourceName, &az,
+				&quota, &usage, &unusedCommitments,
+			)
+			if err != nil {
+				return err
+			}
+
+			_, _, resource := domains.Find(cluster, domainUUID, domainName, &serviceType, &resourceName, now)
+			if resource == nil {
+				return nil
+			}
+			if resource.PerAZ == nil {
+				resource.PerAZ = make(limesresources.DomainAZResourceReports)
+			}
+			resource.PerAZ[az] = &limesresources.DomainAZResourceReport{
+				Quota:             quota,
+				Usage:             usage,
+				UnusedCommitments: unusedCommitments,
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+
+		//TODO: fourth query: add AZ breakdown by commitment duration (Committed, PendingCommitments, PlannedCommitments)
+
+		//project_az_resources always has entries for "any", even if the resource
+		//is AZ-aware, because ApplyComputedProjectQuota needs somewhere to write
+		//the base quotas; we ignore those entries here if the "any" usage is zero
+		//and there are other AZs
+		for _, domainReport := range domains {
+			for _, srvReport := range domainReport.Services {
+				for _, resReport := range srvReport.Resources {
+					if len(resReport.PerAZ) >= 2 {
+						reportInAny := resReport.PerAZ[limes.AvailabilityZoneAny]
+						if reportInAny.Quota == nil && reportInAny.Usage == 0 {
+							delete(resReport.PerAZ, limes.AvailabilityZoneAny)
+						}
+					}
+				}
+			}
+		}
 	}
 
 	//flatten result (with stable order to keep the tests happy)

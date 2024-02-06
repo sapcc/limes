@@ -289,11 +289,9 @@ func Test_ClusterOperations(t *testing.T) {
 
 	//check GetCluster with new API features enabled
 	assert.HTTPRequest{
-		Method: "GET",
-		Path:   "/v1/clusters/current",
-		Header: map[string]string{
-			"X-Limes-V2-API-Preview": "per-az",
-		},
+		Method:       "GET",
+		Path:         "/v1/clusters/current",
+		Header:       map[string]string{"X-Limes-V2-API-Preview": "per-az"},
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/cluster-get-west-with-v2-api.json"),
 	}.Check(t, s.Handler)
@@ -330,11 +328,9 @@ func Test_ClusterOperations(t *testing.T) {
 		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-with-overcommit.json"),
 	}.Check(t, s.Handler)
 	assert.HTTPRequest{
-		Method: "GET",
-		Path:   "/v1/clusters/current",
-		Header: map[string]string{
-			"X-Limes-V2-API-Preview": "per-az",
-		},
+		Method:       "GET",
+		Path:         "/v1/clusters/current",
+		Header:       map[string]string{"X-Limes-V2-API-Preview": "per-az"},
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-with-overcommit-and-v2-api.json"),
 	}.Check(t, s.Handler)
@@ -343,6 +339,10 @@ func Test_ClusterOperations(t *testing.T) {
 func Test_DomainOperations(t *testing.T) {
 	s := setupTest(t, "fixtures/start-data.sql")
 	discovery := s.Cluster.DiscoveryPlugin.(*plugins.StaticDiscoveryPlugin) //nolint:errcheck
+
+	//all reports are pulled at the same simulated time, `s.Clock().Now().Unix() == 3600`,
+	//to match the setup of active vs. expired commitments in `fixtures/start-data.sql`
+	s.Clock.StepBy(1 * time.Hour)
 
 	//check GetDomain
 	assert.HTTPRequest{
@@ -384,6 +384,15 @@ func Test_DomainOperations(t *testing.T) {
 		Path:         "/v1/domains?service=shared&resource=things",
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/domain-list-filtered.json"),
+	}.Check(t, s.Handler)
+
+	//check ListDomains with new API features enabled
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/v1/domains",
+		Header:       map[string]string{"X-Limes-V2-API-Preview": "per-az"},
+		ExpectStatus: 200,
+		ExpectBody:   assert.JSONFixtureFile("./fixtures/domain-list-with-v2-api.json"),
 	}.Check(t, s.Handler)
 
 	//check DiscoverDomains
@@ -743,11 +752,9 @@ func Test_ProjectOperations(t *testing.T) {
 
 	//check ListProjects with new API features enabled
 	assert.HTTPRequest{
-		Method: "GET",
-		Path:   "/v1/domains/uuid-for-germany/projects",
-		Header: map[string]string{
-			"X-Limes-V2-API-Preview": "per-az",
-		},
+		Method:       "GET",
+		Path:         "/v1/domains/uuid-for-germany/projects",
+		Header:       map[string]string{"X-Limes-V2-API-Preview": "per-az"},
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-list-with-v2-api.json"),
 	}.Check(t, s.Handler)

@@ -1,0 +1,265 @@
+{
+  "domains": [
+    {
+      "id": "uuid-for-france",
+      "name": "france",
+      "services": [
+        {
+          "type": "shared",
+          "area": "shared",
+          "resources": [
+            {
+              "name": "capacity",
+              "unit": "B",
+              "quota_distribution_model": "hierarchical",
+              "commitment_config": {
+                "durations": [
+                  "1 hour",
+                  "2 hours"
+                ],
+                "min_confirm_by": 604800
+              },
+              "per_az": {
+                "az-one": {
+                  "usage": 1
+                },
+                "az-two": {
+                  "usage": 1
+                }
+              },
+              "quota": 0,
+              "projects_quota": 10,
+              "usage": 2,
+              "physical_usage": 1
+            },
+            {
+              "name": "capacity_portion",
+              "unit": "B",
+              "contained_in": "capacity",
+              "per_az": {
+                "az-one": {
+                  "usage": 1
+                },
+                "az-two": {
+                  "usage": 0
+                }
+              },
+              "usage": 1
+            },
+            {
+              "name": "things",
+              "quota_distribution_model": "hierarchical",
+              "commitment_config": {
+                "durations": [
+                  "1 hour",
+                  "2 hours"
+                ],
+                "min_confirm_by": 604800
+              },
+              "per_az": {
+                "any": {
+                  "usage": 2
+                }
+              },
+              "quota": 0,
+              "projects_quota": 10,
+              "usage": 2
+            }
+          ],
+          "max_scraped_at": 66,
+          "min_scraped_at": 66
+        },
+        {
+          "type": "unshared",
+          "area": "unshared",
+          "resources": [
+            {
+              "name": "capacity",
+              "unit": "B",
+              "quota_distribution_model": "hierarchical",
+              "per_az": {
+                "az-one": {
+                  "usage": 1
+                },
+                "az-two": {
+                  "usage": 1
+                }
+              },
+              "quota": 55,
+              "projects_quota": 10,
+              "usage": 2,
+              "physical_usage": 1
+            },
+            {
+              "name": "capacity_portion",
+              "unit": "B",
+              "contained_in": "capacity",
+              "per_az": {
+                "az-one": {
+                  "usage": 1
+                },
+                "az-two": {
+                  "usage": 0
+                }
+              },
+              "usage": 1
+            },
+            {
+              "name": "things",
+              "quota_distribution_model": "hierarchical",
+              "per_az": {
+                "any": {
+                  "usage": 2
+                }
+              },
+              "quota": 20,
+              "projects_quota": 10,
+              "usage": 2,
+              "backend_quota": 0,
+              "infinite_backend_quota": true,
+              "scales_with": {
+                "resource_name": "things",
+                "service_type": "shared",
+                "factor": 2
+              }
+            }
+          ],
+          "max_scraped_at": 55,
+          "min_scraped_at": 55
+        }
+      ]
+    },
+    {
+      "id": "uuid-for-germany",
+      "name": "germany",
+      "services": [
+        {
+          "type": "shared",
+          "area": "shared",
+          "resources": [
+            {
+              "name": "capacity",
+              "unit": "B",
+              "quota_distribution_model": "hierarchical",
+              "commitment_config": {
+                "durations": [
+                  "1 hour",
+                  "2 hours"
+                ],
+                "min_confirm_by": 604800
+              },
+              "per_az": {
+                "az-one": {
+                  "usage": 2
+                },
+                "az-two": {
+                  "usage": 2
+                }
+              },
+              "quota": 25,
+              "projects_quota": 20,
+              "usage": 4,
+              "backend_quota": 110
+            },
+            {
+              "name": "capacity_portion",
+              "unit": "B",
+              "contained_in": "capacity",
+              "per_az": {
+                "az-one": {
+                  "usage": 2
+                },
+                "az-two": {
+                  "usage": 0
+                }
+              },
+              "usage": 2
+            },
+            {
+              "name": "things",
+              "quota_distribution_model": "hierarchical",
+              "commitment_config": {
+                "durations": [
+                  "1 hour",
+                  "2 hours"
+                ],
+                "min_confirm_by": 604800
+              },
+              "per_az": {
+                "any": {
+                  "usage": 4
+                }
+              },
+              "quota": 30,
+              "projects_quota": 20,
+              "usage": 4,
+              "annotations": {
+                "annotated": true,
+                "text": "this annotation appears on shared things of domain germany and project dresden"
+              }
+            }
+          ],
+          "max_scraped_at": 44,
+          "min_scraped_at": 22
+        },
+        {
+          "type": "unshared",
+          "area": "unshared",
+          "resources": [
+            {
+              "name": "capacity",
+              "unit": "B",
+              "quota_distribution_model": "hierarchical",
+              "per_az": {
+                "az-one": {
+                  "usage": 2,
+                  "unused_commitments": 2
+                },
+                "az-two": {
+                  "usage": 2,
+                  "unused_commitments": 1
+                }
+              },
+              "quota": 45,
+              "projects_quota": 20,
+              "usage": 4
+            },
+            {
+              "name": "capacity_portion",
+              "unit": "B",
+              "contained_in": "capacity",
+              "per_az": {
+                "az-one": {
+                  "usage": 2
+                },
+                "az-two": {
+                  "usage": 0
+                }
+              },
+              "usage": 2
+            },
+            {
+              "name": "things",
+              "quota_distribution_model": "hierarchical",
+              "per_az": {
+                "any": {
+                  "usage": 4
+                }
+              },
+              "quota": 50,
+              "projects_quota": 20,
+              "usage": 4,
+              "scales_with": {
+                "resource_name": "things",
+                "service_type": "shared",
+                "factor": 2
+              }
+            }
+          ],
+          "max_scraped_at": 33,
+          "min_scraped_at": 11
+        }
+      ]
+    }
+  ]
+}
