@@ -79,15 +79,15 @@ INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desir
 --       (this is consistent with what Scrape does, and reporting should ignore those entries)
 --
 -- berlin (also used for test cases concerning subresources)
-INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (1, 1,  'any',    NULL, 2, NULL, '[{"id":"firstthing","value":23},{"id":"secondthing","value":42}]');
-INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (2, 2,  'any',    NULL, 0, NULL, '');
-INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (3, 2,  'az-one', NULL, 1, NULL, '');
-INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (4, 2,  'az-two', NULL, 1, NULL, '');
-INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (5, 3,  'any',    NULL, 0, NULL, '');
-INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (6, 3,  'az-one', NULL, 1, NULL, '');
-INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (7, 3,  'az-two', NULL, 0, NULL, '');
-INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (8, 4,  'any',    NULL, 2, NULL, '[{"id":"thirdthing","value":5},{"id":"fourththing","value":123}]');
-INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (9, 5,  'any',    NULL, 0, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (1,  1,  'any',    NULL, 2, NULL, '[{"id":"firstthing","value":23},{"id":"secondthing","value":42}]');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (2,  2,  'any',    NULL, 0, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (3,  2,  'az-one', NULL, 1, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (4,  2,  'az-two', NULL, 1, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (5,  3,  'any',    NULL, 0, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (6,  3,  'az-one', NULL, 1, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (7,  3,  'az-two', NULL, 0, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (8,  4,  'any',    NULL, 2, NULL, '[{"id":"thirdthing","value":5},{"id":"fourththing","value":123}]');
+INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (9,  5,  'any',    NULL, 0, NULL, '');
 INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (10, 5,  'az-one', NULL, 1, NULL, '');
 INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (11, 5,  'az-two', NULL, 1, NULL, '');
 INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (12, 6,  'any',    NULL, 0, NULL, '');
@@ -126,18 +126,18 @@ INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_us
 
 -- project_commitments has several entries for project dresden
 -- on "unshared/capacity": regular active commitments with different durations
-INSERT INTO project_commitments (id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at) VALUES (1, 17, 1,   '2 years',    UNIX(1), 'uuid-for-alice', 'alice@Default', UNIX(1), UNIX(1), UNIX(100000001));
-INSERT INTO project_commitments (id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at) VALUES (2, 17, 1,   '1 year',     UNIX(2), 'uuid-for-alice', 'alice@Default', UNIX(2), UNIX(2), UNIX(100000002));
-INSERT INTO project_commitments (id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at) VALUES (3, 17, 1,   '1 year',     UNIX(3), 'uuid-for-alice', 'alice@Default', UNIX(3), UNIX(3), UNIX(100000003));
-INSERT INTO project_commitments (id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at) VALUES (4, 18, 2,   '1 year',     UNIX(4), 'uuid-for-alice', 'alice@Default', UNIX(4), UNIX(4), UNIX(100000004));
+INSERT INTO project_commitments (id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, state) VALUES (1, 17, 1,   '2 years',    UNIX(1), 'uuid-for-alice', 'alice@Default', UNIX(1),       UNIX(1), UNIX(100000001), 'active');
+INSERT INTO project_commitments (id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, state) VALUES (2, 17, 1,   '1 year',     UNIX(2), 'uuid-for-alice', 'alice@Default', UNIX(2),       UNIX(2), UNIX(100000002), 'active');
+INSERT INTO project_commitments (id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, state) VALUES (3, 17, 1,   '1 year',     UNIX(3), 'uuid-for-alice', 'alice@Default', UNIX(3),       UNIX(3), UNIX(100000003), 'active');
+INSERT INTO project_commitments (id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, state) VALUES (4, 18, 2,   '1 year',     UNIX(4), 'uuid-for-alice', 'alice@Default', UNIX(4),       UNIX(4), UNIX(100000004), 'active');
 -- on "unshared/capacity": unconfirmed commitments should be reported as "pending"
-INSERT INTO project_commitments (id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at) VALUES (5, 18, 100, '2 years',    UNIX(5), 'uuid-for-alice', 'alice@Default', UNIX(5), NULL,    UNIX(100000005));
+INSERT INTO project_commitments (id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, state) VALUES (5, 18, 100, '2 years',    UNIX(5), 'uuid-for-alice', 'alice@Default', UNIX(5),       NULL,    UNIX(100000005), 'pending');
 -- on "unshared/capacity": expired commitments should not be reported (NOTE: the test's clock stands at UNIX timestamp 3600)
-INSERT INTO project_commitments (id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at) VALUES (6, 17, 5,   '10 minutes', UNIX(6), 'uuid-for-alice', 'alice@Default', UNIX(6), UNIX(6), UNIX(606));
+INSERT INTO project_commitments (id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, state) VALUES (6, 17, 5,   '10 minutes', UNIX(6), 'uuid-for-alice', 'alice@Default', UNIX(6),       UNIX(6), UNIX(606),       'expired');
 -- on "shared/capacity": only an unconfirmed commitment that should be reported as "planned", this tests that the "committed" structure is absent in the JSON for that resource
-INSERT INTO project_commitments (id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at) VALUES (7, 24, 100, '2 years',    UNIX(7), 'uuid-for-alice', 'alice@Default', UNIX(1000007), NULL,    UNIX(100000007));
+INSERT INTO project_commitments (id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, state) VALUES (7, 24, 100, '2 years',    UNIX(7), 'uuid-for-alice', 'alice@Default', UNIX(1000007), NULL,    UNIX(100000007), 'planned');
 -- on "unshared/things": an active commitment on AZ "any"
-INSERT INTO project_commitments (id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at) VALUES (8, 15, 1,   '2 years',    UNIX(8), 'uuid-for-alice', 'alice@Default', UNIX(8), UNIX(8), UNIX(100000008));
+INSERT INTO project_commitments (id, az_resource_id, amount, duration, created_at, creator_uuid, creator_name, confirm_by, confirmed_at, expires_at, state) VALUES (8, 15, 1,   '2 years',    UNIX(8), 'uuid-for-alice', 'alice@Default', UNIX(8),       UNIX(8), UNIX(100000008), 'active');
 
 -- project_rates also has multiple different setups to test different cases
 -- berlin has custom rate limits

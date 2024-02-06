@@ -192,7 +192,28 @@ type ProjectCommitment struct {
 	//calculation, but it still blocks capacity and still counts towards billing.
 	TransferStatus limesresources.CommitmentTransferStatus `db:"transfer_status"`
 	TransferToken  string                                  `db:"transfer_token"`
+
+	//This column is technically redundant, since the state can be derived from
+	//the values of other fields. But having this field simplifies lots of
+	//queries significantly because we do not need to carry a NOW() argument into
+	//the query, and complex conditions like `WHERE superseded_at IS NULL AND
+	//expires_at > $now AND confirmed_at IS NULL AND confirm_by < $now` become
+	//simple readable conditions like `WHERE state = 'pending'`.
+	//
+	//This field is updated by the CapacityScrapeJob.
+	State CommitmentState `db:"state"`
 }
+
+// CommitmentState is an enum. The possible values below are sorted in roughly chronological order.
+type CommitmentState string
+
+const (
+	CommitmentStatePlanned    CommitmentState = "planned"
+	CommitmentStatePending    CommitmentState = "pending"
+	CommitmentStateActive     CommitmentState = "active"
+	CommitmentStateSuperseded CommitmentState = "superseded"
+	CommitmentStateExpired    CommitmentState = "expired"
+)
 
 // initGorp is used by Init() to setup the ORM part of the database connection.
 func initGorp(db *gorp.DbMap) {

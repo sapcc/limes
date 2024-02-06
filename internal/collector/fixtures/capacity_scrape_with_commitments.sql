@@ -90,24 +90,24 @@ INSERT INTO project_az_resources (id, resource_id, az, usage) VALUES (28, 11, 'a
 -- (the confirm_by and expires_at timestamps are all aligned on day boundaries, i.e. T = 86400 * N for some integer N)
 
 -- day 1: just a boring commitment that easily fits in the available capacity
-INSERT INTO project_commitments (id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at) VALUES (1, 18, 10, UNIX(0), 'dummy', 'dummy', UNIX(86400), '10 days', UNIX(950400));
+INSERT INTO project_commitments (id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at, state) VALUES (1, 18, 10, UNIX(0), 'dummy', 'dummy', UNIX(86400), '10 days', UNIX(950400), 'planned');
 
 -- day 2: very large commitments that exceed the raw capacity; only the one on "first" works because that service has a large overcommit factor
-INSERT INTO project_commitments (id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at) VALUES (2, 18, 100, UNIX(0), 'dummy', 'dummy', UNIX(172800), '10 days', UNIX(1036800));
-INSERT INTO project_commitments (id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at) VALUES (3, 21, 100, UNIX(0), 'dummy', 'dummy', UNIX(172800), '10 days', UNIX(1036800));
+INSERT INTO project_commitments (id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at, state) VALUES (2, 18, 100, UNIX(0), 'dummy', 'dummy', UNIX(172800), '10 days', UNIX(1036800), 'planned');
+INSERT INTO project_commitments (id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at, state) VALUES (3, 21, 100, UNIX(0), 'dummy', 'dummy', UNIX(172800), '10 days', UNIX(1036800), 'planned');
 
 -- day 3: a bunch of small commitments with different timestamps, to test confirmation order in two ways:
 --
 -- 1. ID=3 does not block these commitments even though it is on the same resource and AZ
 -- 2. we cannot confirm all of these; which ones are confirmed demonstrates the order of consideration
-INSERT INTO project_commitments (id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at) VALUES (4, 27, 10, UNIX(1), 'dummy', 'dummy', UNIX(259202), '10 days', UNIX(1123200));
-INSERT INTO project_commitments (id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at) VALUES (5, 27, 10, UNIX(2), 'dummy', 'dummy', UNIX(259201), '10 days', UNIX(1123200));
-INSERT INTO project_commitments (id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at) VALUES (6, 27, 10, UNIX(3), 'dummy', 'dummy', UNIX(259200), '10 days', UNIX(1123200));
+INSERT INTO project_commitments (id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at, state) VALUES (4, 27, 10, UNIX(1), 'dummy', 'dummy', UNIX(259202), '10 days', UNIX(1123200), 'planned');
+INSERT INTO project_commitments (id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at, state) VALUES (5, 27, 10, UNIX(2), 'dummy', 'dummy', UNIX(259201), '10 days', UNIX(1123200), 'planned');
+INSERT INTO project_commitments (id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at, state) VALUES (6, 27, 10, UNIX(3), 'dummy', 'dummy', UNIX(259200), '10 days', UNIX(1123200), 'planned');
 
 -- day 4: test confirmation that is (or is not) blocked by existing usage in other projects (on a capacity of 420, there is already 250 usage in berlin, so only berlin can confirm a commitment for amount = 300, even though dresden asked first)
-INSERT INTO project_commitments (id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at) VALUES (7, 25, 300, UNIX(1), 'dummy', 'dummy', UNIX(345600), '10 days', UNIX(1209600));
-INSERT INTO project_commitments (id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at) VALUES (8, 19, 300, UNIX(2), 'dummy', 'dummy', UNIX(345600), '10 days', UNIX(1209600));
+INSERT INTO project_commitments (id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at, state) VALUES (7, 25, 300, UNIX(1), 'dummy', 'dummy', UNIX(345600), '10 days', UNIX(1209600), 'planned');
+INSERT INTO project_commitments (id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at, state) VALUES (8, 19, 300, UNIX(2), 'dummy', 'dummy', UNIX(345600), '10 days', UNIX(1209600), 'planned');
 
 -- day 5: test commitments that cannot be confirmed until the previous commitment expires (ID=9 is confirmed, and then ID=10 cannot be confirmed until ID=9 expires because ID=9 blocks absolutely all available capacity in that resource and AZ)
-INSERT INTO project_commitments (id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at) VALUES (9,  22, 22, UNIX(1), 'dummy', 'dummy', UNIX(432000), '1 hour', UNIX(435600));
-INSERT INTO project_commitments (id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at) VALUES (10, 28, 2, UNIX(2), 'dummy', 'dummy', UNIX(432000), '10 days', UNIX(1296000));
+INSERT INTO project_commitments (id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at, state) VALUES (9,  22, 22, UNIX(1), 'dummy', 'dummy', UNIX(432000), '1 hour', UNIX(435600), 'planned');
+INSERT INTO project_commitments (id, az_resource_id, amount, created_at, creator_uuid, creator_name, confirm_by, duration, expires_at, state) VALUES (10, 28, 2, UNIX(2), 'dummy', 'dummy', UNIX(432000), '10 days', UNIX(1296000), 'planned');

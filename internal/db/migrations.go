@@ -559,4 +559,20 @@ var sqlMigrations = map[string]string{
 			creator_name       TEXT       NOT NULL
 		);
 	`,
+	"036_commitment_add_state_column.up.sql": `
+		ALTER TABLE project_commitments
+			ADD COLUMN state TEXT NOT NULL DEFAULT 'unknown';
+		UPDATE project_commitments SET state = CASE
+			WHEN superseded_at IS NOT NULL THEN 'superseded'
+			WHEN expires_at <= NOW()       THEN 'expired'
+			WHEN confirm_by > NOW()        THEN 'planned'
+			WHEN confirmed_at IS NULL      THEN 'pending' ELSE 'active'
+		END;
+		ALTER TABLE project_commitments
+			ALTER COLUMN state DROP DEFAULT;
+	`,
+	"036_commitment_add_state_column.down.sql": `
+		ALTER TABLE project_commitments
+			DROP COLUMN state;
+	`,
 }

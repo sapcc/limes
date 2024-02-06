@@ -344,6 +344,9 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		dbCommitment.ConfirmedAt = &now
+		dbCommitment.State = db.CommitmentStateActive
+	} else {
+		dbCommitment.State = db.CommitmentStatePlanned
 	}
 
 	//create commitment

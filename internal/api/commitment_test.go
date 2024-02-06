@@ -26,6 +26,7 @@ import (
 
 	"github.com/sapcc/go-bits/assert"
 
+	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
 )
 
@@ -179,8 +180,8 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 
 	//confirm the other commitment
 	s.Clock.StepBy(1 * time.Hour)
-	_, err := s.DB.Exec("UPDATE project_commitments SET confirmed_at = $1, expires_at = $2",
-		s.Clock.Now(), s.Clock.Now().Add(2*time.Hour),
+	_, err := s.DB.Exec("UPDATE project_commitments SET confirmed_at = $1, expires_at = $2, state = $3",
+		s.Clock.Now(), s.Clock.Now().Add(2*time.Hour), db.CommitmentStateActive,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -306,7 +307,8 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 	}.Check(t, s.Handler)
 
 	//check that can-confirm ignores expired commitments
-	_, err := s.DB.Exec(`UPDATE project_commitments SET expires_at = $1`, s.Clock.Now())
+	_, err := s.DB.Exec(`UPDATE project_commitments SET expires_at = $1, state = $2`,
+		s.Clock.Now(), db.CommitmentStateExpired)
 	if err != nil {
 		t.Fatal(err)
 	}

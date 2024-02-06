@@ -104,7 +104,8 @@ func ConfirmPendingCommitments(serviceType, resourceName string, az limes.Availa
 		}
 
 		//confirm the commitment
-		_, err = dbi.Exec(`UPDATE project_commitments SET confirmed_at = $1 WHERE id = $2`, now, c.CommitmentID)
+		_, err = dbi.Exec(`UPDATE project_commitments SET confirmed_at = $1, state = $2 WHERE id = $3`,
+			now, db.CommitmentStateActive, c.CommitmentID)
 		if err != nil {
 			return fmt.Errorf("while confirming commitment ID=%d for %s/%s in %s: %w", c.CommitmentID, serviceType, resourceName, az, err)
 		}
