@@ -44,16 +44,15 @@ var (
 		  JOIN project_resources pr ON pr.service_id = ps.id
 		  JOIN project_az_resources par ON par.resource_id = pr.id
 		  JOIN project_commitments pc ON pc.az_resource_id = par.id
-		 WHERE ps.type = $1 AND pr.name = $2 AND par.az = $3
-		   AND pc.confirmed_at IS NULL AND pc.confirm_by <= $4 AND pc.superseded_at IS NULL
+		 WHERE ps.type = $1 AND pr.name = $2 AND par.az = $3 AND pc.state = 'pending'
 		 ORDER BY pc.created_at ASC, pc.confirm_by ASC, pc.id ASC
 	`)
 )
 
 // CanConfirmNewCommitment returns whether the given commitment request can be
 // confirmed immediately upon creation in the given project.
-func CanConfirmNewCommitment(req limesresources.CommitmentRequest, project db.Project, cluster *core.Cluster, dbi db.Interface, now time.Time) (bool, error) {
-	statsByAZ, err := collectAZAllocationStats(req.ServiceType, req.ResourceName, &req.AvailabilityZone, cluster, dbi, now)
+func CanConfirmNewCommitment(req limesresources.CommitmentRequest, project db.Project, cluster *core.Cluster, dbi db.Interface) (bool, error) {
+	statsByAZ, err := collectAZAllocationStats(req.ServiceType, req.ResourceName, &req.AvailabilityZone, cluster, dbi)
 	if err != nil {
 		return false, err
 	}
@@ -71,7 +70,7 @@ func CanConfirmNewCommitment(req limesresources.CommitmentRequest, project db.Pr
 // could be confirmed, in chronological creation order, and confirms as many of
 // them as possible given the currently available capacity.
 func ConfirmPendingCommitments(serviceType, resourceName string, az limes.AvailabilityZone, cluster *core.Cluster, dbi db.Interface, now time.Time) error {
-	statsByAZ, err := collectAZAllocationStats(serviceType, resourceName, &az, cluster, dbi, now)
+	statsByAZ, err := collectAZAllocationStats(serviceType, resourceName, &az, cluster, dbi)
 	if err != nil {
 		return err
 	}
@@ -85,7 +84,7 @@ func ConfirmPendingCommitments(serviceType, resourceName string, az limes.Availa
 		Amount           uint64
 	}
 	var confirmableCommitments []confirmableCommitment
-	queryArgs := []any{serviceType, resourceName, az, now}
+	queryArgs := []any{serviceType, resourceName, az}
 	err = sqlext.ForeachRow(dbi, getConfirmableCommitmentsQuery, queryArgs, func(rows *sql.Rows) error {
 		var c confirmableCommitment
 		err := rows.Scan(&c.ProjectServiceID, &c.CommitmentID, &c.Amount)

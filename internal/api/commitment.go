@@ -48,10 +48,9 @@ var (
 		  JOIN project_az_resources par ON pc.az_resource_id = par.id
 		  JOIN project_resources pr ON par.resource_id = pr.id {{AND pr.name = $resource_name}}
 		  JOIN project_services ps ON pr.service_id = ps.id {{AND ps.type = $service_type}}
-		 WHERE %s
+		 WHERE %s AND pc.state NOT IN ('superseded', 'expired')
 		 ORDER BY pc.id
 	`)
-	getProjectCommitmentsWhereClause = "ps.project_id = $%d AND pc.superseded_at IS NULL AND (pc.expires_at IS NULL OR pc.expires_at > $%d)"
 
 	getProjectAZResourceLocationsQuery = sqlext.SimplifyWhitespace(`
 		SELECT par.id, ps.type, pr.name, par.az
@@ -134,10 +133,9 @@ func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Reques
 
 	//enumerate relevant project commitments
 	queryStr, joinArgs = filter.PrepareQuery(getProjectCommitmentsQuery)
-	whereStr := fmt.Sprintf(getProjectCommitmentsWhereClause, len(joinArgs)+1, len(joinArgs)+2)
-	queryStr = fmt.Sprintf(queryStr, whereStr)
+	whereStr, whereArgs := db.BuildSimpleWhereClause(map[string]any{"ps.project_id": dbProject.ID}, len(joinArgs))
 	var dbCommitments []db.ProjectCommitment
-	_, err = p.DB.Select(&dbCommitments, queryStr, append(joinArgs, dbProject.ID, p.timeNow())...)
+	_, err = p.DB.Select(&dbCommitments, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...)...)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -260,7 +258,7 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 	}
 
 	//check for committable capacity
-	result, err := datamodel.CanConfirmNewCommitment(*req, *dbProject, p.Cluster, p.DB, now)
+	result, err := datamodel.CanConfirmNewCommitment(*req, *dbProject, p.Cluster, p.DB)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -335,7 +333,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	}
 	if req.ConfirmBy == nil {
 		//if not planned for confirmation in the future, confirm immediately (or fail)
-		ok, err := datamodel.CanConfirmNewCommitment(*req, *dbProject, p.Cluster, tx, now)
+		ok, err := datamodel.CanConfirmNewCommitment(*req, *dbProject, p.Cluster, tx)
 		if respondwith.ErrorText(w, err) {
 			return
 		}

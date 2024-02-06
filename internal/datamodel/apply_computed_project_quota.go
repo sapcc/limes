@@ -24,7 +24,6 @@ import (
 	"fmt"
 	"math"
 	"slices"
-	"time"
 
 	"github.com/go-gorp/gorp/v3"
 	"github.com/sapcc/go-api-declarations/limes"
@@ -63,7 +62,7 @@ var (
 
 // ApplyComputedProjectQuota reevaluates auto-computed project quotas for the
 // given resource, if supported by its quota distribution model.
-func ApplyComputedProjectQuota(serviceType, resourceName string, dbm *gorp.DbMap, cluster *core.Cluster, now time.Time) error {
+func ApplyComputedProjectQuota(serviceType, resourceName string, dbm *gorp.DbMap, cluster *core.Cluster) error {
 	//only run for resources with autogrow QD model
 	qdCfg := cluster.QuotaDistributionConfigForResource(serviceType, resourceName)
 	if qdCfg.Autogrow == nil {
@@ -81,7 +80,7 @@ func ApplyComputedProjectQuota(serviceType, resourceName string, dbm *gorp.DbMap
 	defer sqlext.RollbackUnlessCommitted(tx)
 
 	//collect required data
-	stats, err := collectAZAllocationStats(serviceType, resourceName, nil, cluster, tx, now)
+	stats, err := collectAZAllocationStats(serviceType, resourceName, nil, cluster, tx)
 	if err != nil {
 		return err
 	}

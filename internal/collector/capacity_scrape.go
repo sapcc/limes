@@ -185,7 +185,7 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 	}
 
 	//scrape capacity data
-	capacityData, serializedMetrics, err := plugin.Scrape(datamodel.NewCapacityPluginBackchannel(c.Cluster, c.DB, c.MeasureTime()))
+	capacityData, serializedMetrics, err := plugin.Scrape(datamodel.NewCapacityPluginBackchannel(c.Cluster, c.DB))
 	task.Timing.FinishedAt = c.MeasureTimeAtEnd()
 	if err == nil {
 		capacitor.ScrapedAt = &task.Timing.FinishedAt
@@ -348,8 +348,7 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 
 	//for all cluster resources thus updated, recompute project quotas if necessary
 	for _, res := range dbOwnedResources {
-		now := c.MeasureTime()
-		err := datamodel.ApplyComputedProjectQuota(serviceTypeForID[res.ServiceID], res.Name, c.DB, c.Cluster, now)
+		err := datamodel.ApplyComputedProjectQuota(serviceTypeForID[res.ServiceID], res.Name, c.DB, c.Cluster)
 		if err != nil {
 			return err
 		}

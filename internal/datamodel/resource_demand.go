@@ -22,7 +22,6 @@ package datamodel
 import (
 	"database/sql"
 	"fmt"
-	"time"
 
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/sqlext"
@@ -32,14 +31,13 @@ import (
 )
 
 // NewCapacityPluginBackchannel builds a CapacityPluginBackchannel.
-func NewCapacityPluginBackchannel(cluster *core.Cluster, dbi db.Interface, now time.Time) core.CapacityPluginBackchannel {
-	return capacityPluginBackchannelImpl{cluster, dbi, now}
+func NewCapacityPluginBackchannel(cluster *core.Cluster, dbi db.Interface) core.CapacityPluginBackchannel {
+	return capacityPluginBackchannelImpl{cluster, dbi}
 }
 
 type capacityPluginBackchannelImpl struct {
 	Cluster *core.Cluster
 	DB      db.Interface
-	Now     time.Time
 }
 
 var (
@@ -50,10 +48,9 @@ var (
 		  JOIN project_az_resources par ON par.resource_id = pr.id
 		  LEFT OUTER JOIN (
 		    SELECT az_resource_id AS az_resource_id,
-		           SUM(amount) FILTER (WHERE confirmed_at IS NOT NULL) AS active,
-		           SUM(amount) FILTER (WHERE confirmed_at IS NULL AND confirm_by <= $3) AS pending
+		           SUM(amount) FILTER (WHERE state = 'active') AS active,
+		           SUM(amount) FILTER (WHERE state = 'pending') AS pending
 		      FROM project_commitments
-		     WHERE superseded_at IS NULL AND expires_at > $3
 		     GROUP BY az_resource_id
 		  ) pc_view ON pc_view.az_resource_id = par.id
 		 WHERE ps.type = $1 AND pr.name = $2
@@ -68,7 +65,7 @@ func (i capacityPluginBackchannelImpl) GetOvercommitFactor(serviceType, resource
 // GetGlobalResourceDemand implements the CapacityPluginBackchannel interface.
 func (i capacityPluginBackchannelImpl) GetGlobalResourceDemand(serviceType, resourceName string) (map[limes.AvailabilityZone]core.ResourceDemand, error) {
 	result := make(map[limes.AvailabilityZone]core.ResourceDemand)
-	err := sqlext.ForeachRow(i.DB, getResourceDemandQuery, []any{serviceType, resourceName, i.Now}, func(rows *sql.Rows) error {
+	err := sqlext.ForeachRow(i.DB, getResourceDemandQuery, []any{serviceType, resourceName}, func(rows *sql.Rows) error {
 		var (
 			az                 limes.AvailabilityZone
 			usage              uint64

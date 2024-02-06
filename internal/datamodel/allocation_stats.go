@@ -21,7 +21,6 @@ package datamodel
 import (
 	"database/sql"
 	"fmt"
-	"time"
 
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/sqlext"
@@ -78,7 +77,7 @@ var (
 	getUsageInResourceQuery = sqlext.SimplifyWhitespace(`
 		SELECT ps.id, par.az, par.usage, par.historical_usage,
 		       (SELECT COALESCE(SUM(pc.amount), 0) FROM project_commitments pc
-		         WHERE pc.az_resource_id = par.id AND pc.confirmed_at IS NOT NULL AND pc.superseded_at IS NULL AND pc.expires_at > $4)
+		         WHERE pc.az_resource_id = par.id AND pc.state = 'active')
 		  FROM project_services ps
 		  JOIN project_resources pr ON pr.service_id = ps.id
 		  JOIN project_az_resources par ON par.resource_id = pr.id
@@ -88,7 +87,7 @@ var (
 
 // Shared data collection phase for ApplyComputedProjectQuota,
 // CanConfirmNewCommitment and ConfirmPendingCommitments.
-func collectAZAllocationStats(serviceType, resourceName string, azFilter *limes.AvailabilityZone, cluster *core.Cluster, dbi db.Interface, now time.Time) (map[limes.AvailabilityZone]clusterAZAllocationStats, error) {
+func collectAZAllocationStats(serviceType, resourceName string, azFilter *limes.AvailabilityZone, cluster *core.Cluster, dbi db.Interface) (map[limes.AvailabilityZone]clusterAZAllocationStats, error) {
 	scopeDesc := fmt.Sprintf("%s/%s", serviceType, resourceName)
 	if azFilter != nil {
 		scopeDesc += fmt.Sprintf(" in %s", *azFilter)
@@ -114,7 +113,6 @@ func collectAZAllocationStats(serviceType, resourceName string, azFilter *limes.
 	}
 
 	//get resource usage
-	queryArgs = append(queryArgs, now)
 	err = sqlext.ForeachRow(dbi, getUsageInResourceQuery, queryArgs, func(rows *sql.Rows) error {
 		var (
 			serviceID           db.ProjectServiceID

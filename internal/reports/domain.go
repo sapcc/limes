@@ -68,7 +68,7 @@ var domainReportQuery3 = sqlext.SimplifyWhitespace(`
 	WITH project_commitment_sums AS (
 	  SELECT az_resource_id, SUM(amount) AS amount
 	    FROM project_commitments
-	   WHERE confirmed_at IS NOT NULL AND superseded_at IS NULL AND expires_at > $%%d
+	   WHERE state = 'active'
 	   GROUP BY az_resource_id
 	)
 	SELECT d.uuid, d.name, ps.type, pr.name, par.az,
@@ -86,11 +86,10 @@ var domainReportQuery3 = sqlext.SimplifyWhitespace(`
 var domainReportQuery4 = sqlext.SimplifyWhitespace(`
 	WITH project_commitment_sums AS (
 	  SELECT az_resource_id, duration,
-	         COALESCE(SUM(amount) FILTER (WHERE confirmed_at IS NOT NULL), 0) AS active,
-	         COALESCE(SUM(amount) FILTER (WHERE confirmed_at IS NULL AND confirm_by <= $%%[1]d), 0) AS pending,
-	         COALESCE(SUM(amount) FILTER (WHERE confirmed_at IS NULL AND confirm_by > $%%[1]d), 0) AS planned
+	         COALESCE(SUM(amount) FILTER (WHERE state = 'active'), 0) AS active,
+	         COALESCE(SUM(amount) FILTER (WHERE state = 'pending'), 0) AS pending,
+	         COALESCE(SUM(amount) FILTER (WHERE state = 'planned'), 0) AS planned
 	    FROM project_commitments
-	   WHERE superseded_at IS NULL AND expires_at > $%%[1]d
 	   GROUP BY az_resource_id, duration
 	)
 	SELECT d.uuid, d.name, ps.type, pr.name, par.az,
@@ -216,11 +215,7 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 		//third query: add basic AZ breakdown (quota, usage, unused commitments)
 		queryStr, joinArgs = filter.PrepareQuery(domainReportQuery3)
 		whereStr, whereArgs = db.BuildSimpleWhereClause(fields, len(joinArgs))
-		queryStr = fmt.Sprintf(queryStr, whereStr)
-		queryArgs := append(joinArgs, whereArgs...)
-		queryStr = fmt.Sprintf(queryStr, len(queryArgs)+1)
-		queryArgs = append(queryArgs, now)
-		err = sqlext.ForeachRow(dbi, queryStr, queryArgs, func(rows *sql.Rows) error {
+		err = sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 			var (
 				domainUUID        string
 				domainName        string
@@ -260,11 +255,7 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 		//TODO: fourth query: add AZ breakdown by commitment duration (Committed, PendingCommitments, PlannedCommitments)
 		queryStr, joinArgs = filter.PrepareQuery(domainReportQuery4)
 		whereStr, whereArgs = db.BuildSimpleWhereClause(fields, len(joinArgs))
-		queryStr = fmt.Sprintf(queryStr, whereStr)
-		queryArgs = append(joinArgs, whereArgs...)
-		queryStr = fmt.Sprintf(queryStr, len(queryArgs)+1)
-		queryArgs = append(queryArgs, now)
-		err = sqlext.ForeachRow(dbi, queryStr, queryArgs, func(rows *sql.Rows) error {
+		err = sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 			var (
 				domainUUID    string
 				domainName    string

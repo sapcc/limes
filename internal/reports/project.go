@@ -65,14 +65,14 @@ var (
 
 	projectReportCommitmentsQuery = sqlext.SimplifyWhitespace(`
 	SELECT ps.type, pr.name, par.az, pc.duration,
-	       COALESCE(SUM(pc.amount) FILTER (WHERE pc.confirmed_at IS NOT NULL), 0) AS active,
-	       COALESCE(SUM(pc.amount) FILTER (WHERE pc.confirmed_at IS NULL AND pc.confirm_by <= $2), 0) AS pending,
-	       COALESCE(SUM(pc.amount) FILTER (WHERE pc.confirmed_at IS NULL AND pc.confirm_by > $2), 0) AS planned
+	       COALESCE(SUM(pc.amount) FILTER (WHERE pc.state = 'active'),  0) AS active,
+	       COALESCE(SUM(pc.amount) FILTER (WHERE pc.state = 'pending'), 0) AS pending,
+	       COALESCE(SUM(pc.amount) FILTER (WHERE pc.state = 'planned'), 0) AS planned
 	  FROM project_services ps
 	  JOIN project_resources pr ON pr.service_id = ps.id
 	  JOIN project_az_resources par ON par.resource_id = pr.id
 	  JOIN project_commitments pc ON pc.az_resource_id = par.id
-	 WHERE ps.project_id = $1 AND pc.superseded_at IS NULL AND pc.expires_at > $2
+	 WHERE ps.project_id = $1
 	 GROUP BY ps.type, pr.name, par.az, pc.duration
 	`)
 )
@@ -134,7 +134,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 		//if we're moving to a different project, publish the finished report
 		//first (and then allow for it to be GCd)
 		if projectReport != nil && projectReport.UUID != projectUUID {
-			err := finalizeProjectResourceReport(projectReport, currentProjectID, now, dbi, filter)
+			err := finalizeProjectResourceReport(projectReport, currentProjectID, dbi, filter)
 			if err != nil {
 				return err
 			}
@@ -259,7 +259,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 
 	//submit final project report
 	if projectReport != nil {
-		err := finalizeProjectResourceReport(projectReport, currentProjectID, now, dbi, filter)
+		err := finalizeProjectResourceReport(projectReport, currentProjectID, dbi, filter)
 		if err != nil {
 			return err
 		}
@@ -268,7 +268,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 	return nil
 }
 
-func finalizeProjectResourceReport(projectReport *limesresources.ProjectReport, projectID db.ProjectID, now time.Time, dbi db.Interface, filter Filter) error {
+func finalizeProjectResourceReport(projectReport *limesresources.ProjectReport, projectID db.ProjectID, dbi db.Interface, filter Filter) error {
 	if projectReport.Bursting != nil && projectReport.Bursting.Enabled {
 		for _, srvReport := range projectReport.Services {
 			for _, resReport := range srvReport.Resources {
@@ -281,7 +281,7 @@ func finalizeProjectResourceReport(projectReport *limesresources.ProjectReport, 
 
 	if filter.WithAZBreakdown {
 		// if `per_az` is shown, we need to compute the sum of all active commitments using a different query
-		err := sqlext.ForeachRow(dbi, projectReportCommitmentsQuery, []any{projectID, now}, func(rows *sql.Rows) error {
+		err := sqlext.ForeachRow(dbi, projectReportCommitmentsQuery, []any{projectID}, func(rows *sql.Rows) error {
 			var (
 				serviceType   string
 				resourceName  string
