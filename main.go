@@ -62,6 +62,7 @@ import (
 )
 
 func main() {
+	bininfo.HandleVersionArgument()
 	logg.ShowDebug = osext.GetenvBool("LIMES_DEBUG")
 	undoMaxprocs := must.Return(maxprocs.Set(maxprocs.Logger(logg.Debug)))
 	defer undoMaxprocs()
