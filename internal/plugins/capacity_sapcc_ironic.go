@@ -142,7 +142,7 @@ var computeHostStubRx = regexp.MustCompile(`^nova-compute-(?:ironic-)?([a-zA-Z0-
 // Node names are expected to be in the form "nodeXXX-bmYYY" or "nodeXXX-bbYYY"
 // or "nodeXXX-apYYY" or "nodeXXX-mdYYY", where the second half is the host stub
 // (the match group from above).
-var nodeNameRx = regexp.MustCompile(`^node(?:swift)?\d+-((?:b[bm]|ap|md|st|swf)\d+)$`)
+var nodeNameRx = regexp.MustCompile(`^node(?:swift)?\d+-((?:b[bm]|ap|md|st|swf|gp)\d+)$`)
 
 // As a special case, nodes in the control plane do not belong to any
 // user-accessible Nova aggregates, so we cannot establish an AZ association.
