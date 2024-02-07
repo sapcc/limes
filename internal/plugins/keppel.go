@@ -19,7 +19,7 @@
 package plugins
 
 import (
-	"fmt"
+	"errors"
 	"math/big"
 	"net/http"
 
@@ -112,7 +112,7 @@ func (p *keppelPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject,
 	}
 	if swiftQuotas["capacity"] == 0 && ourQuotas["images"] > 0 {
 		//nolint:stylecheck // "Keppel" is a product name and thus must be capitalized
-		return fmt.Errorf("Keppel can only be used when a nonzero Swift quota is configured")
+		return errors.New("Keppel can only be used when a nonzero Swift quota is configured")
 	}
 	return nil
 }

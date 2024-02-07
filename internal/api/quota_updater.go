@@ -336,7 +336,7 @@ func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limesresources.Re
 	verr = u.validateAuthorization(srv, res, oldQuota, newQuota, lprLimit, lprIsReversible, res.Unit)
 	if verr != nil {
 		if verr.Status == http.StatusForbidden {
-			verr.Message += fmt.Sprintf(" in this %s", u.ScopeType())
+			verr.Message += " in this " + u.ScopeType()
 		}
 		return verr
 	}

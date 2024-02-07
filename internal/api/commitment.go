@@ -305,7 +305,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	}
 	if minConfirmBy := behavior.CommitmentMinConfirmDate; minConfirmBy != nil && minConfirmBy.After(now) {
 		if req.ConfirmBy == nil || req.ConfirmBy.Before(*minConfirmBy) {
-			msg := fmt.Sprintf("this commitment needs a `confirm_by` timestamp at or after %s", behavior.CommitmentMinConfirmDate.Format(time.RFC3339))
+			msg := "this commitment needs a `confirm_by` timestamp at or after " + behavior.CommitmentMinConfirmDate.Format(time.RFC3339)
 			http.Error(w, msg, http.StatusUnprocessableEntity)
 			return
 		}
