@@ -27,6 +27,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -66,8 +67,11 @@ func main() {
 	defer undoMaxprocs()
 
 	//first two arguments must be task name and configuration file
+	if slices.Contains(os.Args, "--help") {
+		printUsageAndExit(0)
+	}
 	if len(os.Args) < 3 {
-		printUsageAndExit()
+		printUsageAndExit(1)
 	}
 	taskName, configPath, remainingArgs := os.Args[1], os.Args[2], os.Args[3:]
 	bininfo.SetTaskName(taskName)
@@ -115,7 +119,7 @@ func main() {
 	case "test-scan-capacity":
 		taskTestScanCapacity(cluster, remainingArgs)
 	default:
-		printUsageAndExit()
+		printUsageAndExit(1)
 	}
 }
 
@@ -128,9 +132,9 @@ Usage:
 \t%s test-scan-capacity <config-file> <capacitor>
 `), `\t`, "\t", -1) + "\n"
 
-func printUsageAndExit() {
+func printUsageAndExit(exitCode int) {
 	fmt.Fprintln(os.Stderr, strings.Replace(usageMessage, "%s", os.Args[0], -1))
-	os.Exit(1)
+	os.Exit(exitCode)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -138,7 +142,7 @@ func printUsageAndExit() {
 
 func taskCollect(cluster *core.Cluster, args []string) {
 	if len(args) != 0 {
-		printUsageAndExit()
+		printUsageAndExit(1)
 	}
 
 	ctx := httpext.ContextWithSIGINT(context.Background(), 10*time.Second)
@@ -193,7 +197,7 @@ func taskCollect(cluster *core.Cluster, args []string) {
 
 func taskServe(cluster *core.Cluster, args []string, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) {
 	if len(args) != 0 {
-		printUsageAndExit()
+		printUsageAndExit(1)
 	}
 
 	//connect to database
@@ -227,7 +231,7 @@ func taskServe(cluster *core.Cluster, args []string, provider *gophercloud.Provi
 
 func taskTestGetQuota(cluster *core.Cluster, args []string) {
 	if len(args) != 2 {
-		printUsageAndExit()
+		printUsageAndExit(1)
 	}
 
 	serviceType := args[1]
@@ -269,7 +273,7 @@ func taskTestGetRates(cluster *core.Cluster, args []string) {
 	case 3:
 		prevSerializedState = args[2]
 	default:
-		printUsageAndExit()
+		printUsageAndExit(1)
 	}
 
 	serviceType := args[1]
@@ -350,7 +354,7 @@ func dumpGeneratedPrometheusMetrics() {
 
 func taskTestSetQuota(cluster *core.Cluster, args []string) {
 	if len(args) < 3 {
-		printUsageAndExit()
+		printUsageAndExit(1)
 	}
 
 	serviceType := args[1]
@@ -361,7 +365,7 @@ func taskTestSetQuota(cluster *core.Cluster, args []string) {
 	for _, arg := range args[2:] {
 		match := quotaValueRx.FindStringSubmatch(arg)
 		if match == nil {
-			printUsageAndExit()
+			printUsageAndExit(1)
 		}
 		val, err := strconv.ParseUint(match[2], 10, 64)
 		if err != nil {
@@ -378,7 +382,7 @@ func taskTestSetQuota(cluster *core.Cluster, args []string) {
 
 func taskTestScanCapacity(cluster *core.Cluster, args []string) {
 	if len(args) != 1 {
-		printUsageAndExit()
+		printUsageAndExit(1)
 	}
 
 	capacitorID := args[0]
