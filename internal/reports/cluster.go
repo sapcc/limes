@@ -35,12 +35,20 @@ import (
 )
 
 var clusterReportQuery1 = sqlext.SimplifyWhitespace(`
+	WITH project_commitment_sums AS (
+	  SELECT az_resource_id, SUM(amount) AS amount
+	    FROM project_commitments
+	   WHERE state = 'active'
+	   GROUP BY az_resource_id
+	)
 	SELECT ps.type, pr.name, par.az,
 	       SUM(par.usage), SUM(COALESCE(par.physical_usage, par.usage)), COUNT(par.physical_usage) > 0,
+	       SUM(GREATEST(0, COALESCE(pcs.amount, 0) - par.usage)),
 	       MIN(ps.scraped_at), MAX(ps.scraped_at)
 	  FROM project_services ps
 	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
 	  LEFT OUTER JOIN project_az_resources par ON par.resource_id = pr.id
+	  LEFT OUTER JOIN project_commitment_sums pcs ON pcs.az_resource_id = par.id
 	 WHERE TRUE {{AND ps.type = $service_type}}
 	 GROUP BY ps.type, pr.name, par.az
 `)
@@ -78,6 +86,25 @@ var clusterReportQuery3 = sqlext.SimplifyWhitespace(`
 	 ORDER BY car.az
 `)
 
+var clusterReportQuery4 = sqlext.SimplifyWhitespace(`
+	WITH project_commitment_sums AS (
+	  SELECT az_resource_id, duration,
+	         COALESCE(SUM(amount) FILTER (WHERE state = 'active'), 0) AS active,
+	         COALESCE(SUM(amount) FILTER (WHERE state = 'pending'), 0) AS pending,
+	         COALESCE(SUM(amount) FILTER (WHERE state = 'planned'), 0) AS planned
+	    FROM project_commitments
+	   GROUP BY az_resource_id, duration
+	)
+	SELECT ps.type, pr.name, par.az,
+	       pcs.duration, SUM(pcs.active), SUM(pcs.pending), SUM(pcs.planned)
+	  FROM project_services ps
+	  JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
+	  JOIN project_az_resources par ON par.resource_id = pr.id
+	  JOIN project_commitment_sums pcs ON pcs.az_resource_id = par.id
+	 WHERE TRUE {{AND ps.type = $service_type}}
+	 GROUP BY ps.type, pr.name, par.az, pcs.duration
+`)
+
 var clusterRateReportQuery1 = sqlext.SimplifyWhitespace(`
 	SELECT type, MIN(rates_scraped_at), MAX(rates_scraped_at)
 	  FROM project_services
@@ -104,11 +131,12 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 			usage             *uint64
 			physicalUsage     *uint64
 			showPhysicalUsage *bool
+			unusedCommitments *uint64
 			minScrapedAt      *time.Time
 			maxScrapedAt      *time.Time
 		)
 		err := rows.Scan(&serviceType, &resourceName, &availabilityZone,
-			&usage, &physicalUsage, &showPhysicalUsage,
+			&usage, &physicalUsage, &showPhysicalUsage, &unusedCommitments,
 			&minScrapedAt, &maxScrapedAt)
 		if err != nil {
 			return err
@@ -138,7 +166,8 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 				resource.PerAZ = make(limesresources.ClusterAZResourceReports)
 			}
 			azReport := limesresources.ClusterAZResourceReport{
-				ProjectsUsage: *usage,
+				ProjectsUsage:     *usage,
+				UnusedCommitments: *unusedCommitments,
 			}
 			if *showPhysicalUsage {
 				azReport.PhysicalUsage = physicalUsage
@@ -280,7 +309,60 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 		return nil, err
 	}
 
-	//third query, epilogue: perform some calculations that require the full sum over all AZs to be done
+	if filter.WithAZBreakdown {
+		//fourth query: collect commitment data that is broken down by commitment duration
+		queryStr, joinArgs = filter.PrepareQuery(clusterReportQuery4)
+		err = sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
+			var (
+				serviceType   string
+				resourceName  string
+				az            limes.AvailabilityZone
+				duration      limesresources.CommitmentDuration
+				activeAmount  uint64
+				pendingAmount uint64
+				plannedAmount uint64
+			)
+			err := rows.Scan(
+				&serviceType, &resourceName, &az,
+				&duration, &activeAmount, &pendingAmount, &plannedAmount,
+			)
+			if err != nil {
+				return err
+			}
+
+			_, resource := findInClusterReport(cluster, report, serviceType, &resourceName, now)
+			if resource == nil || resource.PerAZ[az] == nil {
+				return nil
+			}
+			azReport := resource.PerAZ[az]
+
+			if activeAmount > 0 {
+				if azReport.Committed == nil {
+					azReport.Committed = make(map[string]uint64)
+				}
+				azReport.Committed[duration.String()] = activeAmount
+			}
+			if pendingAmount > 0 {
+				if azReport.PendingCommitments == nil {
+					azReport.PendingCommitments = make(map[string]uint64)
+				}
+				azReport.PendingCommitments[duration.String()] = pendingAmount
+			}
+			if plannedAmount > 0 {
+				if azReport.PlannedCommitments == nil {
+					azReport.PlannedCommitments = make(map[string]uint64)
+				}
+				azReport.PlannedCommitments[duration.String()] = plannedAmount
+			}
+
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	//epilogue: perform some calculations that require the full sum over all AZs to be done
 	for serviceType, service := range report.Services {
 		for resourceName, resource := range service.Resources {
 			overcommitFactor := cluster.BehaviorForResource(serviceType, resourceName, "").OvercommitFactor

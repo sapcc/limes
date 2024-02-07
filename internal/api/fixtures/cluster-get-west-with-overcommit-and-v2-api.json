@@ -16,6 +16,9 @@
                 "capacity": 90,
                 "usage": 12,
                 "projects_usage": 3,
+                "planned_commitments": {
+                  "2 years": 100
+                },
                 "physical_usage": 2
               },
               "az-two": {
@@ -88,11 +91,23 @@
               "az-one": {
                 "capacity": 0,
                 "projects_usage": 3,
+                "committed": {
+                  "1 year": 2,
+                  "2 years": 1
+                },
+                "unused_commitments": 2,
                 "physical_usage": 2
               },
               "az-two": {
                 "capacity": 0,
                 "projects_usage": 3,
+                "committed": {
+                  "1 year": 2
+                },
+                "unused_commitments": 1,
+                "pending_commitments": {
+                  "2 years": 100
+                },
                 "physical_usage": 3
               }
             },
@@ -125,7 +140,10 @@
                 "capacity": 208,
                 "raw_capacity": 139,
                 "usage": 45,
-                "projects_usage": 6
+                "projects_usage": 6,
+                "committed": {
+                  "2 years": 1
+                }
               }
             },
             "domains_quota": 70,
