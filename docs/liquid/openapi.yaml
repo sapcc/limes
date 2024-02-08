@@ -1,0 +1,104 @@
+# Editing note: This document uses the "one sentence per line" style.
+# If your lines get too long, please consider breaking up long sentences into multiple shorter ones to improve clarity.
+
+openapi: 3.1.0
+
+info:
+  title: LIQUID - Limes Interface for Quota and Usage Interrogation and Discovery
+  version: 0.1.0
+  summary: |
+    Limes expects OpenStack services to expose this interface either natively or through an adapter.
+    The interface allows Limes to retrieve quota and usage data, and optionally capacity data, from the respective OpenStack service.
+    Limes will also use the interface to set quota within the service.
+  description: |
+    Throughout this document:
+    - "LIQUID" (upper case) refers to the REST interface defined by this document.
+    - "A liquid" (lower case) refers to a server implementing LIQUID.
+    - "The liquid's service" refers to the OpenStack service that that liquid is a part of or connected to.
+
+    Each liquid provides access to one or more **resources**.
+    A resource is any countable or measurable kind of entity managed by the liquid's service.
+
+    Limes discovers liquids through the Keystone service catalog.
+    Each liquid should be registered there with a service type that has the prefix "liquid-".
+    If a liquid uses vendor-specific APIs to interact with its service, its service type should include the vendor name.
+  license:
+    name: Apache 2.0
+    identifier: Apache-2.0
+
+paths:
+  /v1/info:
+    get:
+      description: Returns information about the OpenStack service and the resources available within it.
+      responses:
+        default:
+          $ref: "#/components/responses/textError"
+        200:
+          description: Contains the requested information.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ServiceInfo" # TODO
+              examples:
+                compute:
+                  summary: An example of a ServiceInfo for a compute service.
+                  value:
+                    resources:
+                      cores:
+                        has_capacity: true
+                        has_quota: true
+                      instances:
+                        has_capacity: false
+                        has_quota: true
+                      ram:
+                        unit: MiB
+                        has_capacity: true
+                        has_quota: true
+
+components:
+  responses:
+    textError:
+      description: |
+        If any request cannot be finished successfully, the liquid shall respond with a 4xx or 5xx status code and a human-readable error message.
+        The error message will be relayed by Limes to its operator(s).
+      content:
+        text/plain:
+          example: "Could not apply quota for resource 'foobars': Expected 200 from PUT /quota/foobars, but got 401: 'Token expired.'"
+
+  schemas:
+    ServiceInfo:
+      type: object
+      description: Declares basic metadata for the liquid's service.
+      required: [ resources ]
+      properties:
+        resources:
+          description: The keys of this object are the resource names.
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/ResourceInfo"
+
+    ResourceInfo:
+      type: object
+      description: Declares basic metadata for a resource.
+      required: [ has_quota ]
+      properties:
+        unit:
+          type: string
+          description: |
+            If omitted or empty, the resource is **countable** and any quota or usage values describe a number of objects.
+            If non-empty, the resource is **measured** and and quota or usage values are measured in the given unit.
+            For example, the compute resource "cores" is countable, but the compute resource "ram" is measured, usually in MiB.
+          enum: [ "", B, KiB, MiB, GiB, TiB, PiB, EiB ]
+        has_capacity:
+          type: boolean
+          description: |
+            Whether the resource reports capacity on the cluster level.
+        has_quota:
+          type: boolean
+          description: |
+            Whether the resoruce reports quota on the project level.
+            If false, the resource only reports usage on the project level.
+            Limes will abstain from maintaining quota on such resources.
+        # TODO: model IsQuotaAcceptableForProject
+        # TODO: model GlobalResourceDemand
+        # TODO: how do we model serialized_metrics?
