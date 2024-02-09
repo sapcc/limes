@@ -20,8 +20,6 @@
 package promquery
 
 import (
-	"fmt"
-
 	"github.com/sapcc/go-bits/errext"
 )
 
@@ -33,7 +31,7 @@ type NoRowsError struct {
 
 // Error implements the builtin/error interface.
 func (e NoRowsError) Error() string {
-	return fmt.Sprintf("Prometheus query returned empty result: %s", e.Query)
+	return "Prometheus query returned empty result: " + e.Query
 }
 
 // IsErrNoRows checks whether the given error is a NoRowsError.
