@@ -190,6 +190,11 @@ func (hh BinpackHypervisors) PlaceOneInstance(ff FullFlavor, reason string, core
 		bestScore = 0.0
 	)
 	for _, hypervisor := range hh {
+		//skip hypervisors that the flavor does not accept
+		if !ff.MatchesHypervisor(hypervisor.Match) {
+			continue
+		}
+
 		for _, node := range hypervisor.Nodes {
 			//skip nodes that cannot fit this instance at all
 			nodeFree := node.free()

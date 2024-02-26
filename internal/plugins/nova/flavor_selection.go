@@ -21,6 +21,8 @@ package nova
 
 import (
 	"fmt"
+	"slices"
+	"strings"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
@@ -83,4 +85,25 @@ func (s FlavorSelection) ForeachFlavor(novaV2 *gophercloud.ServiceClient, action
 type FullFlavor struct {
 	Flavor     flavors.Flavor
 	ExtraSpecs map[string]string
+}
+
+// MatchesHypervisor returns true if instances of this flavor can be placed on the given hypervisor.
+func (f FullFlavor) MatchesHypervisor(mh MatchingHypervisor) bool {
+	//extra specs like `"trait:FOO": "required"` or `"trait:BAR": "forbidden"`
+	//are used by the Nova scheduler to ignore hypervisors that do not (or do)
+	//have the respective traits
+	for key, value := range f.ExtraSpecs {
+		trait, matches := strings.CutPrefix(key, "trait:")
+		if !matches {
+			continue
+		}
+		hasTrait := slices.Contains(mh.Traits, trait)
+		if value == "required" && !hasTrait {
+			return false
+		}
+		if value == "forbidden" && hasTrait {
+			return false
+		}
+	}
+	return true
 }
