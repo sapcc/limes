@@ -54,7 +54,7 @@ func (s FlavorSelection) matchesExtraSpecs(specs map[string]string) bool {
 
 // ForeachFlavor lists all public flavors matching this FlavorSelection, and
 // calls the given callback once for each of them.
-func (s FlavorSelection) ForeachFlavor(novaV2 *gophercloud.ServiceClient, action func(flavor flavors.Flavor, extraSpecs map[string]string) error) error {
+func (s FlavorSelection) ForeachFlavor(novaV2 *gophercloud.ServiceClient, action func(FullFlavor) error) error {
 	page, err := flavors.ListDetail(novaV2, nil).AllPages()
 	if err != nil {
 		return fmt.Errorf("while listing public flavors: %w", err)
@@ -70,11 +70,17 @@ func (s FlavorSelection) ForeachFlavor(novaV2 *gophercloud.ServiceClient, action
 			return fmt.Errorf("while listing extra specs of public flavor %q: %w", flavor.Name, err)
 		}
 		if s.matchesExtraSpecs(specs) {
-			err = action(flavor, specs)
+			err = action(FullFlavor{flavor, specs})
 			if err != nil {
 				return err
 			}
 		}
 	}
 	return nil
+}
+
+// FullFlavor is a flavor plus its set of extra specs.
+type FullFlavor struct {
+	Flavor     flavors.Flavor
+	ExtraSpecs map[string]string
 }
