@@ -145,7 +145,9 @@ type AZAwareData[Self any] interface {
 
 // ResourceData contains quota and usage data for a single project resource.
 type ResourceData struct {
-	Quota     int64 //negative values indicate infinite quota
+	Quota     int64   //negative values indicate infinite quota
+	MinQuota  *uint64 //if set, indicates that SetQuota will reject values below this level
+	MaxQuota  *uint64 //if set, indicates that SetQuota will reject values above this level
 	UsageData PerAZ[UsageData]
 }
 

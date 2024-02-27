@@ -10,10 +10,10 @@ limes_domain_quota{domain="germany",domain_id="uuid-for-germany",resource="capac
 limes_domain_quota{domain="germany",domain_id="uuid-for-germany",resource="things",service="unittest"} 26
 # HELP limes_newest_scraped_at Newest (i.e. largest) scraped_at timestamp for any project given a certain service in a certain OpenStack cluster.
 # TYPE limes_newest_scraped_at gauge
-limes_newest_scraped_at{service="unittest",service_name=""} 10860
+limes_newest_scraped_at{service="unittest",service_name=""} 12670
 # HELP limes_oldest_scraped_at Oldest (i.e. smallest) scraped_at timestamp for any project given a certain service in a certain OpenStack cluster.
 # TYPE limes_oldest_scraped_at gauge
-limes_oldest_scraped_at{service="unittest",service_name=""} 10855
+limes_oldest_scraped_at{service="unittest",service_name=""} 12665
 # HELP limes_plugin_metrics_ok Whether quota plugin metrics were rendered successfully for a particular project service. Only present when the project service emits metrics.
 # TYPE limes_plugin_metrics_ok gauge
 limes_plugin_metrics_ok{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",service="unittest"} 1

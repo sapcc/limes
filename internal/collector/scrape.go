@@ -256,6 +256,8 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 			}
 
 			res.BackendQuota = &backendQuota
+			res.MinQuota = resourceData[res.Name].MinQuota
+			res.MaxQuota = resourceData[res.Name].MaxQuota
 		}
 
 		return nil

@@ -48,9 +48,11 @@ type GenericQuotaPlugin struct {
 	StaticResourceData map[string]*core.ResourceData `yaml:"-"`
 	OverrideQuota      map[string]map[string]uint64  `yaml:"-"`
 	//behavior flags that can be set by a unit test
-	ScrapeFails          bool `yaml:"-"`
-	QuotaIsNotAcceptable bool `yaml:"-"`
-	SetQuotaFails        bool `yaml:"-"`
+	ScrapeFails          bool              `yaml:"-"`
+	QuotaIsNotAcceptable bool              `yaml:"-"`
+	SetQuotaFails        bool              `yaml:"-"`
+	MinQuota             map[string]uint64 `yaml:"-"`
+	MaxQuota             map[string]uint64 `yaml:"-"`
 }
 
 var resources = []limesresources.ResourceInfo{
@@ -175,16 +177,25 @@ func (p *GenericQuotaPlugin) Scrape(project core.KeystoneProject, allAZs []limes
 			}
 		}
 
+		//test MinQuota/MaxQuota if requested
+		minQuota, exists := p.MinQuota[key]
+		if exists {
+			copyOfVal.MinQuota = &minQuota
+		}
+		maxQuota, exists := p.MaxQuota[key]
+		if exists {
+			copyOfVal.MaxQuota = &maxQuota
+		}
+
 		result[key] = copyOfVal
 	}
 
 	data, exists := p.OverrideQuota[project.UUID]
 	if exists {
 		for resourceName, quota := range data {
-			result[resourceName] = core.ResourceData{
-				Quota:     int64(quota),
-				UsageData: result[resourceName].UsageData,
-			}
+			resData := result[resourceName]
+			resData.Quota = int64(quota)
+			result[resourceName] = resData
 		}
 	}
 

@@ -216,6 +216,27 @@ func Test_ScrapeSuccess(t *testing.T) {
 		firstScrapedAt1.Unix(), firstScrapedAt2.Unix(),
 	)
 
+	//check reporting of MinQuota/MaxQuota
+	s.Clock.StepBy(scrapeInterval)
+	plugin.MinQuota = map[string]uint64{"capacity": 10}
+	plugin.MaxQuota = map[string]uint64{"things": 1000}
+	mustT(t, job.ProcessOne(s.Ctx, withLabel))
+	mustT(t, job.ProcessOne(s.Ctx, withLabel))
+
+	scrapedAt1 = s.Clock.Now().Add(-5 * time.Second)
+	scrapedAt2 = s.Clock.Now()
+	tr.DBChanges().AssertEqualf(`
+		UPDATE project_resources SET min_quota = 10 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
+		UPDATE project_resources SET max_quota = 1000 WHERE id = 3 AND service_id = 1 AND name = 'things';
+		UPDATE project_resources SET min_quota = 10 WHERE id = 4 AND service_id = 2 AND name = 'capacity';
+		UPDATE project_resources SET max_quota = 1000 WHERE id = 6 AND service_id = 2 AND name = 'things';
+		UPDATE project_services SET scraped_at = %[1]d, checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = %[3]d, checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+	`,
+		scrapedAt1.Unix(), scrapedAt1.Add(scrapeInterval).Unix(),
+		scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),
+	)
+
 	//set some new quota values (note that "capacity" already had a non-zero
 	//quota because of the cluster.QuotaConstraints)
 	_, err := s.DB.Exec(`UPDATE project_resources SET quota = $1 WHERE name = $2`, 20, "capacity")

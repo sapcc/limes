@@ -273,16 +273,21 @@ type manilaResourceData struct {
 }
 
 func (p *manilaPlugin) scrapeShareType(project core.KeystoneProject, allAZs []limes.AvailabilityZone, shareType ManilaShareTypeSpec) (manilaResourceData, error) {
-	//return all-zero data if this share type is not enabled for this project
+	//return all-zero data if this share type is not enabled for this project,
+	//and also set MaxQuota = 0 to keep Limes from auto-assigning quota
 	stName := resolveManilaShareType(shareType, project)
-	emptyQuota := manilaQuotaDetail{Quota: 0, Usage: 0}
 	if stName == "" {
+		noQuotaAllowed := core.ResourceData{
+			Quota:     0,
+			MaxQuota:  pointerTo(uint64(0)),
+			UsageData: core.PerAZ[core.UsageData]{}.AndZeroInTheseAZs(allAZs),
+		}
 		return manilaResourceData{
-			Shares:             emptyQuota.ToResourceDataFor(allAZs),
-			ShareCapacity:      emptyQuota.ToResourceDataFor(allAZs),
-			Snapshots:          emptyQuota.ToResourceDataFor(allAZs),
-			SnapshotCapacity:   emptyQuota.ToResourceDataFor(allAZs),
-			SnapmirrorCapacity: emptyQuota.ToResourceDataFor(allAZs),
+			Shares:             noQuotaAllowed,
+			ShareCapacity:      noQuotaAllowed,
+			Snapshots:          noQuotaAllowed,
+			SnapshotCapacity:   noQuotaAllowed,
+			SnapmirrorCapacity: noQuotaAllowed,
 		}, nil
 	}
 
@@ -337,6 +342,7 @@ func (p *manilaPlugin) scrapeShareType(project core.KeystoneProject, allAZs []li
 
 	//add data from Netapp metrics if available
 	if p.NetappMetrics != nil {
+		emptyQuota := manilaQuotaDetail{Quota: 0, Usage: 0}
 		result.SnapmirrorCapacity = emptyQuota.ToResourceDataFor(allAZs)
 
 		for _, az := range allAZs {
@@ -411,10 +417,11 @@ func (p *manilaPlugin) SetQuota(project core.KeystoneProject, quotas map[string]
 	for _, shareType := range p.ShareTypes {
 		stName := resolveManilaShareType(shareType, project)
 		if stName == "" {
-			//NOTE: In this case, we already know that all quotas for this share type
-			//are 0 since we called IsQuotaAcceptableForProject at the start of this
-			//function. So we are guaranteed to not ignore non-zero quotas here.
-			continue
+			for _, resName := range []string{"shares", "share_capacity", "share_snapshots", "snapshot_capacity"} {
+				if quotas[p.makeResourceName(resName, shareType)] > 0 {
+					return fmt.Errorf("share type %q may not be used in this project", shareType.Name)
+				}
+			}
 		}
 
 		quotasForType := manilaQuotaSet{

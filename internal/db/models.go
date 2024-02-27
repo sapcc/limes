@@ -134,6 +134,8 @@ type ProjectResource struct {
 	Quota               *uint64           `db:"quota"`
 	BackendQuota        *int64            `db:"backend_quota"`
 	DesiredBackendQuota *uint64           `db:"desired_backend_quota"`
+	MinQuota            *uint64           `db:"min_quota"`
+	MaxQuota            *uint64           `db:"max_quota"`
 }
 
 // Ref returns the ResourceRef for this resource.

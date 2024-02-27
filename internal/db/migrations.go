@@ -179,4 +179,14 @@ var sqlMigrations = map[string]string{
 			PRIMARY KEY (service_id, name)
 		);
 	`,
+	"037_service_specific_quota_constraints.down.sql": `
+		ALTER TABLE project_resources
+			DROP COLUMN min_quota,
+			DROP COLUMN max_quota;
+	`,
+	"037_service_specific_quota_constraints.up.sql": `
+		ALTER TABLE project_resources
+			ADD COLUMN min_quota BIGINT DEFAULT NULL,
+			ADD COLUMN max_quota BIGINT DEFAULT NULL;
+	`,
 }
