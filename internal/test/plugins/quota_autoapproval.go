@@ -102,11 +102,6 @@ func (p *AutoApprovalQuotaPlugin) Scrape(project core.KeystoneProject, allAZs []
 	}, nil, nil
 }
 
-// IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
-func (p *AutoApprovalQuotaPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, fullQuotas map[string]map[string]uint64, allServiceInfos []limes.ServiceInfo) error {
-	return errors.New("unimplemented")
-}
-
 // SetQuota implements the core.QuotaPlugin interface.
 func (p *AutoApprovalQuotaPlugin) SetQuota(project core.KeystoneProject, quotas map[string]uint64) error {
 	return errors.New("unimplemented")

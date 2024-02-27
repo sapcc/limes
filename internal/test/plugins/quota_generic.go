@@ -24,8 +24,6 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"sort"
-	"strings"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/prometheus/client_golang/prometheus"
@@ -48,11 +46,10 @@ type GenericQuotaPlugin struct {
 	StaticResourceData map[string]*core.ResourceData `yaml:"-"`
 	OverrideQuota      map[string]map[string]uint64  `yaml:"-"`
 	//behavior flags that can be set by a unit test
-	ScrapeFails          bool              `yaml:"-"`
-	QuotaIsNotAcceptable bool              `yaml:"-"`
-	SetQuotaFails        bool              `yaml:"-"`
-	MinQuota             map[string]uint64 `yaml:"-"`
-	MaxQuota             map[string]uint64 `yaml:"-"`
+	ScrapeFails   bool              `yaml:"-"`
+	SetQuotaFails bool              `yaml:"-"`
+	MinQuota      map[string]uint64 `yaml:"-"`
+	MaxQuota      map[string]uint64 `yaml:"-"`
 }
 
 var resources = []limesresources.ResourceInfo{
@@ -219,21 +216,6 @@ func (p *GenericQuotaPlugin) Scrape(project core.KeystoneProject, allAZs []limes
 		result["things"].UsageData.Sum().Usage))
 
 	return result, serializedMetrics, nil
-}
-
-// IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
-func (p *GenericQuotaPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, fullQuotas map[string]map[string]uint64, allServiceInfos []limes.ServiceInfo) error {
-	if p.QuotaIsNotAcceptable {
-		var quotasStr []string
-		for srvType, srvQuotas := range fullQuotas {
-			for resName, quota := range srvQuotas {
-				quotasStr = append(quotasStr, fmt.Sprintf("%s/%s=%d", srvType, resName, quota))
-			}
-		}
-		sort.Strings(quotasStr)
-		return fmt.Errorf("IsQuotaAcceptableForProject failed as requested for quota set %s", strings.Join(quotasStr, ", "))
-	}
-	return nil
 }
 
 // SetQuota implements the core.QuotaPlugin interface.

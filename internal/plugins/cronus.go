@@ -98,12 +98,6 @@ func (p *cronusPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Avail
 	return nil, nil, nil
 }
 
-// IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, fullQuotas map[string]map[string]uint64, allServiceInfos []limes.ServiceInfo) error {
-	//not required for this plugin
-	return nil
-}
-
 // SetQuota implements the core.QuotaPlugin interface.
 func (p *cronusPlugin) SetQuota(project core.KeystoneProject, quotas map[string]uint64) error {
 	return nil

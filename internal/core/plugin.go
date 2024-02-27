@@ -124,19 +124,6 @@ type QuotaPlugin interface {
 	//The `serializedMetrics` return value is persisted in the Limes DB and
 	//supplied to all subsequent RenderMetrics calls.
 	Scrape(project KeystoneProject, allAZs []limes.AvailabilityZone) (result map[string]ResourceData, serializedMetrics []byte, err error)
-	//IsQuotaAcceptableForProject checks if the given quota set is acceptable
-	//for the given project, and returns nil if the quota is acceptable, or a
-	//human-readable error otherwise. This should only be used when the
-	//acceptability of a specific quota value is tied to the project identity, or
-	//to the quotas of other services. (For example, Keppel uses Swift as a
-	//storage backend, so nonzero Keppel quota requires nonzero Swift quota in
-	//Limes, to catch a common misconfiguration that confuses users.)
-	//
-	//The `fullQuotas` map uses service type strings as the first key. Since
-	//quota plugins can be instantiated under arbitrary service types,
-	//implementations should inspect `allServiceInfos` to locate the service type
-	//names that they are interested in.
-	IsQuotaAcceptableForProject(project KeystoneProject, fullQuotas map[string]map[string]uint64, allServiceInfos []limes.ServiceInfo) error
 	//SetQuota updates the backend service's quotas for the given project in the
 	//given domain to the values specified here. The map is guaranteed to contain
 	//values for all resources defined by Resources().

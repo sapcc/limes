@@ -127,12 +127,6 @@ func (p *archerPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Avail
 	return result, nil, nil
 }
 
-// IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
-func (p *archerPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, fullQuotas map[string]map[string]uint64, allServiceInfos []limes.ServiceInfo) error {
-	//not required for this plugin
-	return nil
-}
-
 // SetQuota implements the core.QuotaPlugin interface.
 func (p *archerPlugin) SetQuota(project core.KeystoneProject, quotas map[string]uint64) error {
 	url := p.Archer.ServiceURL("quotas", project.UUID)

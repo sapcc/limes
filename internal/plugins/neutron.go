@@ -436,12 +436,6 @@ func (q neutronOrOctaviaQuotaSet) ToQuotaUpdateMap() (map[string]any, error) {
 	return map[string]any{"quota": map[string]uint64(q)}, nil
 }
 
-// IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
-func (p *neutronPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, fullQuotas map[string]map[string]uint64, allServiceInfos []limes.ServiceInfo) error {
-	//not required for this plugin
-	return nil
-}
-
 // SetQuota implements the core.QuotaPlugin interface.
 func (p *neutronPlugin) SetQuota(project core.KeystoneProject, quotas map[string]uint64) error {
 	//collect Neutron quotas

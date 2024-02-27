@@ -19,7 +19,6 @@
 package plugins
 
 import (
-	"errors"
 	"math/big"
 	"net/http"
 
@@ -97,24 +96,6 @@ func (p *keppelPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Avail
 			}),
 		},
 	}, nil, nil
-}
-
-// IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
-func (p *keppelPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, fullQuotas map[string]map[string]uint64, allServiceInfos []limes.ServiceInfo) error {
-	var ourQuotas, swiftQuotas map[string]uint64
-	for _, srv := range allServiceInfos {
-		switch srv.ProductName {
-		case "keppel":
-			ourQuotas = fullQuotas[srv.Type]
-		case "swift":
-			swiftQuotas = fullQuotas[srv.Type]
-		}
-	}
-	if swiftQuotas["capacity"] == 0 && ourQuotas["images"] > 0 {
-		//nolint:stylecheck // "Keppel" is a product name and thus must be capitalized
-		return errors.New("Keppel can only be used when a nonzero Swift quota is configured")
-	}
-	return nil
 }
 
 // SetQuota implements the core.QuotaPlugin interface.

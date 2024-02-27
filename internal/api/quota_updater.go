@@ -20,17 +20,20 @@
 package api
 
 import (
+	"database/sql"
 	"fmt"
 	"net/http"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/go-gorp/gorp/v3"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/respondwith"
+	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
@@ -46,6 +49,7 @@ type QuotaUpdater struct {
 	Project *db.Project //nil for domain quota updates
 
 	//context
+	DB  *gorp.DbMap
 	Now time.Time
 
 	//AuthZ info
@@ -64,7 +68,6 @@ type QuotaRequest struct {
 	OldValue        uint64
 	NewValue        uint64
 	Unit            limes.Unit
-	NewUnit         limes.Unit
 	ValidationError *core.QuotaValidationError
 }
 
@@ -110,6 +113,15 @@ type MissingProjectReportError struct {
 func (e MissingProjectReportError) Error() string {
 	return fmt.Sprintf("no project report for resource %s/%s", e.ServiceType, e.ResourceName)
 }
+
+var (
+	getMinMaxQuotaQuery = sqlext.SimplifyWhitespace(`
+		SELECT ps.type, pr.name, pr.min_quota, pr.max_quota
+		  FROM project_services ps
+		  JOIN project_resources pr ON pr.service_id = ps.id
+		  WHERE ps.project_id = $1 AND (pr.min_quota IS NOT NULL OR pr.max_quota IS NOT NULL)
+	`)
+)
 
 // ValidateInput reads the given input and validates the quotas contained therein.
 // Results are collected into u.Requests. The return value is only set for unexpected
@@ -241,54 +253,40 @@ func (u *QuotaUpdater) ValidateInput(input limesresources.QuotaRequest, dbi db.I
 		}
 	}
 
+	//check service-specific quota bounds
 	if u.Project != nil {
-		//collect the full set of quotas as requested by the user
-		quotaValues := make(map[string]map[string]uint64)
-		for srvType := range u.Cluster.QuotaPlugins {
-			quotaValues[srvType] = make(map[string]uint64)
-
-			if projectService, exists := projectReport.Services[srvType]; exists {
-				for resName, res := range projectService.Resources {
-					if !res.NoQuota && res.Quota != nil {
-						quotaValues[srvType][resName] = *res.Quota
-					}
-				}
-			}
-			for resName, resReq := range u.Requests[srvType] {
-				quotaValues[srvType][resName] = resReq.NewValue
-			}
-		}
-
-		//perform project-specific checks via QuotaPlugin.IsQuotaAcceptableForProject()
-		for srvType, srvInput := range input {
-			//only check if there were no other validation errors
-			hasAnyPreviousErrors := false
-			for resName := range srvInput {
-				if u.Requests[srvType][resName].ValidationError != nil {
-					hasAnyPreviousErrors = true
-					break
-				}
-			}
-			if hasAnyPreviousErrors {
-				continue
+		err := sqlext.ForeachRow(u.DB, getMinMaxQuotaQuery, []any{u.Project.ID}, func(rows *sql.Rows) error {
+			var (
+				serviceType  string
+				resourceName string
+				minQuota     *uint64
+				maxQuota     *uint64
+			)
+			err := rows.Scan(&serviceType, &resourceName, &minQuota, &maxQuota)
+			if err != nil {
+				return err
 			}
 
-			//perform validation
-			if plugin, exists := u.Cluster.QuotaPlugins[srvType]; exists {
-				domain := core.KeystoneDomainFromDB(*u.Domain)
-				project := core.KeystoneProjectFromDB(*u.Project, domain)
-				err := plugin.IsQuotaAcceptableForProject(project, quotaValues, u.Cluster.AllServiceInfos())
-				if err != nil {
-					for resName := range srvInput {
-						u.Requests[srvType][resName] = QuotaRequest{
-							ValidationError: &core.QuotaValidationError{
-								Status:  http.StatusUnprocessableEntity,
-								Message: "not acceptable for this project: " + err.Error(),
-							},
-						}
-					}
-				}
+			// if a quota is requested for this resource and it looks valid so far...
+			req, exists := u.Requests[serviceType][resourceName]
+			if !exists || req.ValidationError != nil {
+				return nil
 			}
+
+			//...check that it conforms to the MinQuota/MaxQuota boundaries of the service
+			if (minQuota != nil && req.NewValue < *minQuota) || (maxQuota != nil && req.NewValue > *maxQuota) {
+				req.ValidationError = &core.QuotaValidationError{
+					Status:       http.StatusUnprocessableEntity,
+					Message:      "not acceptable for this project",
+					MinimumValue: minQuota,
+					MaximumValue: maxQuota,
+				}
+				u.Requests[serviceType][resourceName] = req
+			}
+			return nil
+		})
+		if err != nil {
+			return fmt.Errorf("while checking min_quota/max_quota: %w", err)
 		}
 	}
 

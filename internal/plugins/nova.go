@@ -345,12 +345,6 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Availab
 	return result, serializedMetrics, err
 }
 
-// IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
-func (p *novaPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, fullQuotas map[string]map[string]uint64, allServiceInfos []limes.ServiceInfo) error {
-	//not required for this plugin
-	return nil
-}
-
 // SetQuota implements the core.QuotaPlugin interface.
 func (p *novaPlugin) SetQuota(project core.KeystoneProject, quotas map[string]uint64) error {
 	//translate Limes resource names for separate instance quotas into Nova quota names

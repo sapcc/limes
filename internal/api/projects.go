@@ -225,6 +225,7 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 
 	updater := QuotaUpdater{
 		Cluster:    p.Cluster,
+		DB:         p.DB,
 		Now:        p.timeNow(),
 		CanRaise:   checkToken("project:raise"),
 		CanRaiseLP: checkToken("project:raise_lowpriv"),

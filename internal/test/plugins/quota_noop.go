@@ -103,11 +103,6 @@ func (p *NoopQuotaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Av
 	return result, nil, nil
 }
 
-// IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
-func (p *NoopQuotaPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, fullQuotas map[string]map[string]uint64, allServiceInfos []limes.ServiceInfo) error {
-	return nil
-}
-
 // SetQuota implements the core.QuotaPlugin interface.
 func (p *NoopQuotaPlugin) SetQuota(project core.KeystoneProject, quotas map[string]uint64) error {
 	return nil

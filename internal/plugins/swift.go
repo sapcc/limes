@@ -175,12 +175,6 @@ func (p *swiftPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Availa
 	return map[string]core.ResourceData{"capacity": data}, serializedMetrics, nil
 }
 
-// IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
-func (p *swiftPlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, fullQuotas map[string]map[string]uint64, allServiceInfos []limes.ServiceInfo) error {
-	//not required for this plugin
-	return nil
-}
-
 // SetQuota implements the core.QuotaPlugin interface.
 func (p *swiftPlugin) SetQuota(project core.KeystoneProject, quotas map[string]uint64) error {
 	headers := schwift.NewAccountHeaders()

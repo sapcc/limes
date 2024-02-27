@@ -134,12 +134,6 @@ func (p *designatePlugin) Scrape(project core.KeystoneProject, allAZs []limes.Av
 	}, nil, nil
 }
 
-// IsQuotaAcceptableForProject implements the core.QuotaPlugin interface.
-func (p *designatePlugin) IsQuotaAcceptableForProject(project core.KeystoneProject, fullQuotas map[string]map[string]uint64, allServiceInfos []limes.ServiceInfo) error {
-	//not required for this plugin
-	return nil
-}
-
 // SetQuota implements the core.QuotaPlugin interface.
 func (p *designatePlugin) SetQuota(project core.KeystoneProject, quotas map[string]uint64) error {
 	return dnsSetQuota(p.DesignateV2, project.UUID, &dnsQuota{

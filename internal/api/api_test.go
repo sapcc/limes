@@ -901,19 +901,28 @@ func Test_ProjectOperations(t *testing.T) {
 		},
 	}.Check(t, s.Handler)
 
-	plugin := s.Cluster.QuotaPlugins["shared"].(*plugins.GenericQuotaPlugin) //nolint:errcheck
-	plugin.QuotaIsNotAcceptable = true
-	assert.HTTPRequest{
-		Method:       "PUT",
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
-		ExpectStatus: 422,
-		ExpectBody:   assert.StringData("cannot change shared/capacity quota: not acceptable for this project: IsQuotaAcceptableForProject failed as requested for quota set shared/capacity=5, shared/things=10, unshared/capacity=10, unshared/things=10\n"),
-		Body:         requestOneQuotaChange("project", "shared", "capacity", 5, limes.UnitNone),
-	}.Check(t, s.Handler)
-	plugin.QuotaIsNotAcceptable = false
+	//check PutProject: quota rejected by service-specific MinQuota/MaxQuota constraints
+	_, err := s.DB.Exec(`UPDATE project_resources SET min_quota = 9, max_quota = 11 WHERE service_id = $1 AND name = $2`, 2, "capacity")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, requestedValue := range []uint64{5, 12} {
+		assert.HTTPRequest{
+			Method:       "PUT",
+			Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+			ExpectStatus: 422,
+			ExpectBody:   assert.StringData("cannot change shared/capacity quota: not acceptable for this project (minimum acceptable project quota is 9, maximum acceptable project quota is 11)\n"),
+			Body:         requestOneQuotaChange("project", "shared", "capacity", requestedValue, limes.UnitNone),
+		}.Check(t, s.Handler)
+	}
+	_, err = s.DB.Exec(`UPDATE project_resources SET min_quota = NULL, max_quota = NULL WHERE service_id = $1 AND name = $2`, 2, "capacity")
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	//check PutProject: quota admissible (i.e. will be persisted in DB), but
 	//SetQuota fails for some reason (e.g. backend service down)
+	plugin := s.Cluster.QuotaPlugins["shared"].(*plugins.GenericQuotaPlugin) //nolint:errcheck
 	plugin.SetQuotaFails = true
 	assert.HTTPRequest{
 		Method:       "PUT",
@@ -926,7 +935,7 @@ func Test_ProjectOperations(t *testing.T) {
 		actualQuota        uint64
 		actualBackendQuota uint64
 	)
-	err := s.DB.QueryRow(`
+	err = s.DB.QueryRow(`
 		SELECT pr.quota, pr.backend_quota FROM project_resources pr
 		JOIN project_services ps ON ps.id = pr.service_id
 		JOIN projects p ON p.id = ps.project_id
