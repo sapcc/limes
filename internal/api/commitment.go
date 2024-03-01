@@ -434,3 +434,5 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 	})
 	w.WriteHeader(http.StatusNoContent)
 }
+
+func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) {}
