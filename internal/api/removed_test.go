@@ -19,6 +19,7 @@
 package api
 
 import (
+	"bytes"
 	"net/http"
 	"testing"
 
@@ -56,7 +57,7 @@ func TestForbidClusterIDHeader(t *testing.T) {
 		Path:         "/v1/clusters/current",
 		Header:       map[string]string{"X-Limes-Cluster-Id": "current"},
 		ExpectStatus: http.StatusOK,
-		ExpectBody:   assert.ByteData(respBody),
+		ExpectBody:   assert.ByteData(bytes.TrimSpace(respBody)),
 	}.Check(t, s.Handler)
 
 	// same request with X-Limes-Cluster-Id is rejected
