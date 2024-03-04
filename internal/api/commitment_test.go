@@ -542,3 +542,42 @@ func TestDeleteCommitmentErrorCases(t *testing.T) {
 		ExpectBody:   assert.StringData("no such commitment\n"),
 	}.Check(t, s.Handler)
 }
+
+func Test_TransferCommitment(t *testing.T) {
+	s := test.NewSetup(t,
+		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
+		test.WithConfig(testCommitmentsYAML),
+		test.WithAPIHandler(NewV1API),
+	)
+
+	// create the transfer data
+	request := func(amount uint64, transferStatus string) assert.JSONObject {
+		return assert.JSONObject{
+			"commitment": assert.JSONObject{
+				"id":                1,
+				"service_type":      "first",
+				"resource_name":     "capacity",
+				"availability_zone": "az-one",
+				"amount":            amount,
+				"duration":          "1 hour",
+				"transfer_status":   transferStatus,
+				"confirm_by":        time.Now().Unix(),
+			},
+		}
+	}
+
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
+		Body:         request(200, ""),
+		ExpectStatus: http.StatusCreated,
+	}.Check(t, s.Handler)
+
+	assert.HTTPRequest{
+		Method:       "POST",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/start-transfer",
+		ExpectStatus: 202,
+		ExpectBody:   assert.JSONObject{"success": true},
+		Body:         request(300, "unlisted"),
+	}.Check(t, s.Handler)
+}

@@ -90,6 +90,12 @@ var (
 			WHERE cs.type = $2 AND cr.name = $3
 		)
 	`)
+	updateCommitmentTransferState = sqlext.SimplifyWhitespace(`
+		UPDATE project_commitments SET  = $1 WHERE capacitor_id = (
+			SELECT capacitor_id FROM cluster_services cs JOIN cluster_resources cr ON cs.id = cr.service_id
+			WHERE cs.type = $2 AND cr.name = $3
+		)
+	`)
 )
 
 // GetProjectCommitments handles GET /v1/domains/:domain_id/projects/:project_id/commitments.
@@ -435,10 +441,49 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// TransferCommitment handles POST /v1/domains/:id/projects/:id/commitments/:id/start-transfer
 func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/commitments/:id/start-transfer")
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:edit") {
 		return
 	}
+	dbDomain := p.FindDomainFromRequest(w, r)
+	if dbDomain == nil {
+		return
+	}
+	dbProject := p.FindProjectFromRequest(w, r, dbDomain)
+	if dbProject == nil {
+		return
+	}
+	var parseTarget struct {
+		Request limesresources.Commitment `json:"commitment"`
+	}
+	if !RequireJSON(w, r, &parseTarget) {
+		return
+	}
+	//req := parseTarget.Request
+
+	//load commitment
+	var dbCommitment db.ProjectCommitment
+	err := p.DB.SelectOne(&dbCommitment, findProjectCommitmentByIDQuery, mux.Vars(r)["id"], dbProject.ID)
+	if errors.Is(err, sql.ErrNoRows) {
+		http.Error(w, "no such commitment", http.StatusNotFound)
+		return
+	} else if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	var loc azResourceLocation
+	err = p.DB.QueryRow(findProjectAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
+		Scan(&loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)
+	if errors.Is(err, sql.ErrNoRows) {
+		//defense in depth: this should not happen because all the relevant tables are connected by FK constraints
+		http.Error(w, "no route to this commitment", http.StatusNotFound)
+		return
+	} else if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	respondwith.JSON(w, http.StatusAccepted, map[string]any{"success": true})
 }
