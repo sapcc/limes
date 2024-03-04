@@ -550,34 +550,51 @@ func Test_TransferCommitment(t *testing.T) {
 		test.WithAPIHandler(NewV1API),
 	)
 
+	var confirmBy = time.Now().Unix()
 	// create the transfer data
-	request := func(amount uint64, transferStatus string) assert.JSONObject {
+	req1 := func(transfer_status string) assert.JSONObject {
 		return assert.JSONObject{
-			"commitment": assert.JSONObject{
-				"id":                1,
-				"service_type":      "first",
-				"resource_name":     "capacity",
-				"availability_zone": "az-one",
-				"amount":            amount,
-				"duration":          "1 hour",
-				"transfer_status":   transferStatus,
-				"confirm_by":        time.Now().Unix(),
-			},
+			"id":                1,
+			"service_type":      "first",
+			"resource_name":     "capacity",
+			"availability_zone": "az-one",
+			"amount":            10,
+			"duration":          "1 hour",
+			"transfer_status":   transfer_status,
+			"transfer_token":    "",
+			"confirm_by":        confirmBy,
 		}
+	}
+
+	resp1 := assert.JSONObject{
+		"id":                1,
+		"service_type":      "first",
+		"resource_name":     "capacity",
+		"availability_zone": "az-one",
+		"amount":            10,
+		"unit":              "B",
+		"duration":          "1 hour",
+		"created_at":        s.Clock.Now().Unix(),
+		"creator_uuid":      "uuid-for-alice",
+		"creator_name":      "alice@Default",
+		"confirm_by":        confirmBy,
+		"expires_at":        s.Clock.Now().Add(time.Duration(confirmBy)*time.Second + 1*time.Hour).Unix(),
+		"transfer_status":   "unlisted",
+		"transfer_token":    "hallo",
 	}
 
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body:         request(200, ""),
+		Body:         assert.JSONObject{"commitment": req1("")},
 		ExpectStatus: http.StatusCreated,
 	}.Check(t, s.Handler)
 
 	assert.HTTPRequest{
 		Method:       "POST",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/start-transfer",
-		ExpectStatus: 202,
-		ExpectBody:   assert.JSONObject{"success": true},
-		Body:         request(300, "unlisted"),
+		ExpectStatus: http.StatusAccepted,
+		ExpectBody:   assert.JSONObject{"commitment": resp1},
+		Body:         assert.JSONObject{"commitment": req1("unlisted")},
 	}.Check(t, s.Handler)
 }

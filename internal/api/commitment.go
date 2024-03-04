@@ -19,6 +19,7 @@
 package api
 
 import (
+	"crypto/rand"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -91,10 +92,7 @@ var (
 		)
 	`)
 	updateCommitmentTransferState = sqlext.SimplifyWhitespace(`
-		UPDATE project_commitments SET  = $1 WHERE capacitor_id = (
-			SELECT capacitor_id FROM cluster_services cs JOIN cluster_resources cr ON cs.id = cr.service_id
-			WHERE cs.type = $2 AND cr.name = $3
-		)
+		UPDATE project_commitments SET transfer_status = $1, transfer_token = $2 WHERE id = $3
 	`)
 )
 
@@ -462,18 +460,26 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	if !RequireJSON(w, r, &parseTarget) {
 		return
 	}
-	//req := parseTarget.Request
+	req := parseTarget.Request
+
+	// create a transfer token
+	// TODO: token generations has to be checked in test.
+
+	// execute update
+	row, err := p.DB.Exec(updateCommitmentTransferState, req.TransferStatus, "hallo", req.ID)
+	if respondwith.ErrorText(w, err) {
+		return
+	}
 
 	//load commitment
 	var dbCommitment db.ProjectCommitment
-	err := p.DB.SelectOne(&dbCommitment, findProjectCommitmentByIDQuery, mux.Vars(r)["id"], dbProject.ID)
+	err = p.DB.SelectOne(&dbCommitment, findProjectCommitmentByIDQuery, mux.Vars(r)["id"], dbProject.ID)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "no such commitment", http.StatusNotFound)
 		return
 	} else if respondwith.ErrorText(w, err) {
 		return
 	}
-
 	var loc azResourceLocation
 	err = p.DB.QueryRow(findProjectAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
 		Scan(&loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)
@@ -485,5 +491,16 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	respondwith.JSON(w, http.StatusAccepted, map[string]any{"success": true})
+	c := p.convertCommitmentToDisplayForm(dbCommitment, loc)
+	fmt.Println(row)
+	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
+}
+
+func (p *v1Provider) createToken() (string, error) {
+	tokenBytes := make([]byte, 12)
+	_, err := rand.Read(tokenBytes)
+	if err != nil {
+		return "", fmt.Errorf("could not generate token: %s", err.Error())
+	}
+	return string(tokenBytes), nil
 }
