@@ -466,7 +466,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	// TODO: token generations has to be checked in test.
 
 	// execute update
-	row, err := p.DB.Exec(updateCommitmentTransferState, req.TransferStatus, "hallo", req.ID)
+	_, err := p.DB.Exec(updateCommitmentTransferState, req.TransferStatus, "hallo", req.ID)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -492,7 +492,13 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	}
 
 	c := p.convertCommitmentToDisplayForm(dbCommitment, loc)
-	fmt.Println(row)
+	logAndPublishEvent(p.timeNow(), r, token, http.StatusAccepted, commitmentEventTarget{
+		DomainID:    dbDomain.UUID,
+		DomainName:  dbDomain.Name,
+		ProjectID:   dbProject.UUID,
+		ProjectName: dbProject.Name,
+		Commitment:  c,
+	})
 	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
 }
 
