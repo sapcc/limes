@@ -62,7 +62,7 @@ func TestACPQBasicWithoutAZAwareness(t *testing.T) {
 		ProjectBaseQuota: 10,
 	}
 	for _, cfg.AllowQuotaOvercommit = range []bool{false, true} {
-		expectACPQResult(t, input, cfg, acpqGlobalTarget{
+		expectACPQResult(t, input, cfg, nil, acpqGlobalTarget{
 			"any": {
 				401: {Allocated: 36}, // 30 * 1.2 = 36
 				402: {Allocated: 54}, // 45 * 1.2 = 54
@@ -114,7 +114,7 @@ func TestACPQBasicWithAZAwareness(t *testing.T) {
 		ProjectBaseQuota: 10,
 	}
 	for _, cfg.AllowQuotaOvercommit = range []bool{false, true} {
-		expectACPQResult(t, input, cfg, acpqGlobalTarget{
+		expectACPQResult(t, input, cfg, nil, acpqGlobalTarget{
 			"az-one": {
 				401: {Allocated: 24},
 				402: {Allocated: 24},
@@ -174,7 +174,7 @@ func TestACPQCapacityLimitsQuotaAllocation(t *testing.T) {
 		Capacity:     141,
 		ProjectStats: input["any"].ProjectStats,
 	}
-	expectACPQResult(t, input, cfg, acpqGlobalTarget{
+	expectACPQResult(t, input, cfg, nil, acpqGlobalTarget{
 		"any": {
 			//401 and 402 have existing usage and thus are allowed to grow first
 			401: {Allocated: 36}, // 20 * 1.8 = 36
@@ -193,7 +193,7 @@ func TestACPQCapacityLimitsQuotaAllocation(t *testing.T) {
 		Capacity:     100,
 		ProjectStats: input["any"].ProjectStats,
 	}
-	expectACPQResult(t, input, cfg, acpqGlobalTarget{
+	expectACPQResult(t, input, cfg, nil, acpqGlobalTarget{
 		"any": {
 			//401 and 402 have minimum quotas of 20 and 70, respectively;
 			//the rest is distributed fairly
@@ -212,7 +212,7 @@ func TestACPQCapacityLimitsQuotaAllocation(t *testing.T) {
 		Capacity:     80,
 		ProjectStats: input["any"].ProjectStats,
 	}
-	expectACPQResult(t, input, cfg, acpqGlobalTarget{
+	expectACPQResult(t, input, cfg, nil, acpqGlobalTarget{
 		"any": {
 			//401 and 402 have hard minimum quotas of 20 and 50, respectively;
 			//the rest is distributed fairly
@@ -230,7 +230,7 @@ func TestACPQCapacityLimitsQuotaAllocation(t *testing.T) {
 		Capacity:     20,
 		ProjectStats: input["any"].ProjectStats,
 	}
-	expectACPQResult(t, input, cfg, acpqGlobalTarget{
+	expectACPQResult(t, input, cfg, nil, acpqGlobalTarget{
 		"any": {
 			//401 and 402 have hard minimum quotas of 20 and 50, respectively;
 			//those are always granted, even if we overrun the capacity
@@ -244,6 +244,112 @@ func TestACPQCapacityLimitsQuotaAllocation(t *testing.T) {
 	})
 }
 
+func TestACPQWithProjectLocalQuotaConstraints(t *testing.T) {
+	// This scenario is shared by all subtests in this test.
+	input := map[limes.AvailabilityZone]clusterAZAllocationStats{
+		"az-one": {
+			Capacity: 10000, //capacity is not a limiting factor here
+			ProjectStats: map[db.ProjectServiceID]projectAZAllocationStats{
+				401: constantUsage(20),
+				402: constantUsage(20),
+			},
+		},
+		"az-two": {
+			Capacity: 200,
+			ProjectStats: map[db.ProjectServiceID]projectAZAllocationStats{
+				401: {Usage: 40, MinHistoricalUsage: 20, MaxHistoricalUsage: 40},
+				402: {Usage: 40, MinHistoricalUsage: 40, MaxHistoricalUsage: 60},
+			},
+		},
+	}
+	cfg := core.AutogrowQuotaDistributionConfiguration{
+		GrowthMultiplier: 1.2,
+		ProjectBaseQuota: 100,
+	}
+
+	//This baseline does not have project-local quota constraints (for comparison).
+	expectACPQResult(t, input, cfg, nil, acpqGlobalTarget{
+		"az-one": {
+			401: {Allocated: 24},
+			402: {Allocated: 24},
+		},
+		"az-two": {
+			401: {Allocated: 40},
+			402: {Allocated: 60},
+		},
+		"any": {
+			401: {Allocated: 36},
+			402: {Allocated: 16},
+		},
+	})
+
+	//test with MinQuota constraints
+	//
+	//NOTE: The balance between AZs is really bad here, but I don't see a good
+	//way to do better here. The fairest way (as in "fair balance between AZs")
+	//would require waiting for the final result and then adjusting that, but if
+	//we don't block minimum quota early on, we may not be able to fulfil it in
+	//the end if the capacity is tight and not overcommittable.
+	constraints := map[db.ProjectServiceID]projectLocalQuotaConstraints{
+		401: {MinQuota: p2u64(200)},
+		402: {MinQuota: p2u64(80)},
+	}
+	expectACPQResult(t, input, cfg, constraints, acpqGlobalTarget{
+		"az-one": {
+			401: {Allocated: 90}, // hard minimum 20, soft minimum 20 -> hard minimum adjusted to 90
+			402: {Allocated: 24}, // hard minimum 20, soft minimum 20 -> hard minimum adjusted to 21; then final desired quota 24
+		},
+		"az-two": {
+			401: {Allocated: 110}, // hard minimum 40, soft minimum 40 -> hard minimum adjusted to 110
+			402: {Allocated: 60},  // hard minimum 40, soft minimum 60 -> hard minimum adjusted to 59; then final desired quota 60
+		},
+		"any": {
+			401: {Allocated: 0},
+			402: {Allocated: 16},
+		},
+	})
+
+	//test with MaxQuota constraints that constrain the soft minimum (hard minimum is not constrainable)
+	constraints = map[db.ProjectServiceID]projectLocalQuotaConstraints{
+		401: {MaxQuota: p2u64(50)},
+		402: {MaxQuota: p2u64(70)},
+	}
+	expectACPQResult(t, input, cfg, constraints, acpqGlobalTarget{
+		"az-one": {
+			401: {Allocated: 20}, // hard minimum 20, soft minimum 20 -> unchanged (cannot go below hard minimum)
+			402: {Allocated: 20}, // hard minimum 20, soft minimum 20 -> unchanged
+		},
+		"az-two": {
+			401: {Allocated: 40}, // hard minimum 40, soft minimum 40 -> unchanged (cannot go below hard minimum)
+			402: {Allocated: 50}, // hard minimum 40, soft minimum 60 -> 50
+		},
+		"any": {
+			401: {Allocated: 0},
+			402: {Allocated: 0},
+		},
+	})
+
+	//test with MaxQuota constraints that constrain the base quota
+	constraints = map[db.ProjectServiceID]projectLocalQuotaConstraints{
+		401: {MaxQuota: p2u64(90)},
+		402: {MaxQuota: p2u64(90)},
+	}
+	expectACPQResult(t, input, cfg, constraints, acpqGlobalTarget{
+		"az-one": {
+			401: {Allocated: 24},
+			402: {Allocated: 24},
+		},
+		"az-two": {
+			401: {Allocated: 40},
+			402: {Allocated: 60},
+		},
+		"any": {
+			401: {Allocated: 26},
+			402: {Allocated: 6},
+		},
+	})
+}
+
 // Shortcut to avoid repetition in projectAZAllocationStats literals.
 func constantUsage(usage uint64) projectAZAllocationStats {
 	return projectAZAllocationStats{
@@ -253,9 +359,9 @@ func constantUsage(usage uint64) projectAZAllocationStats {
 	}
 }
 
-func expectACPQResult(t *testing.T, input map[limes.AvailabilityZone]clusterAZAllocationStats, cfg core.AutogrowQuotaDistributionConfiguration, expected acpqGlobalTarget) {
+func expectACPQResult(t *testing.T, input map[limes.AvailabilityZone]clusterAZAllocationStats, cfg core.AutogrowQuotaDistributionConfiguration, constraints map[db.ProjectServiceID]projectLocalQuotaConstraints, expected acpqGlobalTarget) {
 	t.Helper()
-	actual := acpqComputeQuotas(input, cfg)
+	actual := acpqComputeQuotas(input, cfg, constraints)
 	// normalize away any left-over intermediate values
 	for _, azTarget := range actual {
 		for _, projectTarget := range azTarget {
@@ -287,4 +393,8 @@ func expectACPQResult(t *testing.T, input map[limes.AvailabilityZone]clusterAZAl
 	t.Logf("     input = %s", inputJSON)
 	t.Logf("  expected = %s", expectedJSON)
 	t.Logf("    actual = %s", actualJSON)
+}
+
+func p2u64(x uint64) *uint64 {
+	return &x
 }
