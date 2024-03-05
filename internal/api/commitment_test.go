@@ -614,6 +614,8 @@ func Test_TransferCommitment(t *testing.T) {
 		"creator_name":      "alice@Default",
 		"confirm_by":        confirmBy,
 		"expires_at":        s.Clock.Now().Add(time.Duration(confirmBy)*time.Second + 1*time.Hour).Unix(),
+		"transfer_status":   "unlisted",
+		"transfer_token":    transferToken,
 	}
 
 	assert.HTTPRequest{

@@ -481,15 +481,13 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 	if respondwith.ErrorText(w, err) {
 		return
 	}
+	transferToken := p.generateTransferToken()
 	defer sqlext.RollbackUnlessCommitted(tx)
 	if req.Amount >= dbCommitment.Amount {
-		transferToken := p.generateTransferToken()
 		_, err = tx.Exec(updateCommitmentTransferState, req.TransferStatus, transferToken, dbCommitment.ID)
 		if respondwith.ErrorText(w, err) {
 			return
 		}
-		dbCommitment.TransferStatus = req.TransferStatus
-		dbCommitment.TransferToken = transferToken
 	} else {
 		now := p.timeNow()
 		transferAmount := req.Amount
@@ -510,6 +508,8 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		}
 		dbCommitment = transferCommitment
 	}
+	dbCommitment.TransferStatus = req.TransferStatus
+	dbCommitment.TransferToken = transferToken
 	err = tx.Commit()
 	if respondwith.ErrorText(w, err) {
 		return
