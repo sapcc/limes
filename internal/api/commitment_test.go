@@ -553,7 +553,7 @@ func Test_TransferCommitment(t *testing.T) {
 	var transferToken = test.GenerateDummyToken()
 
 	var confirmBy = time.Now().Unix()
-	// create the transfer data
+	// 1. TransferAmount >= CommitmentAmount
 	req1 := func(transfer_status string) assert.JSONObject {
 		return assert.JSONObject{
 			"id":                1,
@@ -597,6 +597,30 @@ func Test_TransferCommitment(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/start-transfer",
 		ExpectStatus: http.StatusAccepted,
 		ExpectBody:   assert.JSONObject{"commitment": resp1},
-		Body:         assert.JSONObject{"commitment": req1("unlisted")},
+		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 10, "transfer_status": "unlisted"}},
+	}.Check(t, s.Handler)
+
+	// 2. TransferAmount < CommitmentAmount
+	resp2 := assert.JSONObject{
+		"id":                2,
+		"service_type":      "first",
+		"resource_name":     "capacity",
+		"availability_zone": "az-one",
+		"amount":            9,
+		"unit":              "B",
+		"duration":          "1 hour",
+		"created_at":        s.Clock.Now().Unix(),
+		"creator_uuid":      "uuid-for-alice",
+		"creator_name":      "alice@Default",
+		"confirm_by":        confirmBy,
+		"expires_at":        s.Clock.Now().Add(time.Duration(confirmBy)*time.Second + 1*time.Hour).Unix(),
+	}
+
+	assert.HTTPRequest{
+		Method:       "POST",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/start-transfer",
+		ExpectStatus: http.StatusAccepted,
+		ExpectBody:   assert.JSONObject{"commitment": resp2},
+		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 9, "transfer_status": "unlisted"}},
 	}.Check(t, s.Handler)
 }

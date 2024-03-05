@@ -93,6 +93,9 @@ var (
 	updateCommitmentTransferState = sqlext.SimplifyWhitespace(`
 		UPDATE project_commitments SET transfer_status = $1, transfer_token = $2 WHERE id = $3
 	`)
+	setCommitmentSuperseded = sqlext.SimplifyWhitespace(`
+		UPDATE project_commitments SET superseded_at = $1 WHERE id = $2
+	`)
 )
 
 // GetProjectCommitments handles GET /v1/domains/:domain_id/projects/:project_id/commitments.
@@ -439,7 +442,7 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 }
 
 // TransferCommitment handles POST /v1/domains/:id/projects/:id/commitments/:id/start-transfer
-func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) {
+func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/commitments/:id/start-transfer")
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:edit") {
@@ -461,24 +464,57 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	}
 	req := parseTarget.Request
 
-	// create a transfer token
-	transferToken := p.generateTransferToken()
-
-	// execute update
-	_, err := p.DB.Exec(updateCommitmentTransferState, req.TransferStatus, transferToken, req.ID)
-	if respondwith.ErrorText(w, err) {
-		return
-	}
+	// TODO: Check if Transferstatus in enum of commitment struct
 
 	//load commitment
 	var dbCommitment db.ProjectCommitment
-	err = p.DB.SelectOne(&dbCommitment, findProjectCommitmentByIDQuery, mux.Vars(r)["id"], dbProject.ID)
+	err := p.DB.SelectOne(&dbCommitment, findProjectCommitmentByIDQuery, mux.Vars(r)["id"], dbProject.ID)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "no such commitment", http.StatusNotFound)
 		return
 	} else if respondwith.ErrorText(w, err) {
 		return
 	}
+
+	// Transfer whole commitment or a newly created, splitted one.
+	tx, err := p.DB.Begin()
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+	defer sqlext.RollbackUnlessCommitted(tx)
+	if req.Amount >= dbCommitment.Amount {
+		transferToken := p.generateTransferToken()
+		_, err = tx.Exec(updateCommitmentTransferState, req.TransferStatus, transferToken, dbCommitment.ID)
+		if respondwith.ErrorText(w, err) {
+			return
+		}
+		dbCommitment.TransferStatus = req.TransferStatus
+		dbCommitment.TransferToken = transferToken
+	} else {
+		now := p.timeNow()
+		transferAmount := req.Amount
+		remainingAmount := dbCommitment.Amount - req.Amount
+		transferCommitment := p.splitCommitment(dbCommitment, transferAmount)
+		remainingCommitment := p.splitCommitment(dbCommitment, remainingAmount)
+		err = tx.Insert(&transferCommitment)
+		if respondwith.ErrorText(w, err) {
+			return
+		}
+		err = tx.Insert(&remainingCommitment)
+		if respondwith.ErrorText(w, err) {
+			return
+		}
+		_, err = tx.Exec(setCommitmentSuperseded, now, dbCommitment.ID)
+		if respondwith.ErrorText(w, err) {
+			return
+		}
+		dbCommitment = transferCommitment
+	}
+	err = tx.Commit()
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+
 	var loc azResourceLocation
 	err = p.DB.QueryRow(findProjectAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
 		Scan(&loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)
@@ -499,4 +535,20 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 		Commitment:  c,
 	})
 	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
+}
+
+func (p *v1Provider) splitCommitment(dbCommitment db.ProjectCommitment, amount uint64) db.ProjectCommitment {
+	now := p.timeNow()
+	return db.ProjectCommitment{
+		AZResourceID:  dbCommitment.AZResourceID,
+		Amount:        amount,
+		Duration:      dbCommitment.Duration,
+		CreatedAt:     now,
+		CreatorUUID:   dbCommitment.CreatorUUID,
+		CreatorName:   dbCommitment.CreatorName,
+		ConfirmBy:     dbCommitment.ConfirmBy,
+		ConfirmedAt:   dbCommitment.ConfirmedAt,
+		ExpiresAt:     dbCommitment.ExpiresAt,
+		PredecessorID: &dbCommitment.ID,
+	}
 }
