@@ -411,6 +411,7 @@ func (p *manilaPlugin) SetQuota(project core.KeystoneProject, quotas map[string]
 					return fmt.Errorf("share type %q may not be used in this project", shareType.Name)
 				}
 			}
+			continue
 		}
 
 		quotasForType := manilaQuotaSet{
