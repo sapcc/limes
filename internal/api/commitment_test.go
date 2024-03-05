@@ -614,7 +614,7 @@ func Test_TransferCommitment(t *testing.T) {
 		"creator_name":      "alice@Default",
 		"confirm_by":        confirmBy,
 		"expires_at":        s.Clock.Now().Add(time.Duration(confirmBy)*time.Second + 1*time.Hour).Unix(),
-		"transfer_status":   "unlisted",
+		"transfer_status":   "public",
 		"transfer_token":    transferToken,
 	}
 
@@ -623,6 +623,14 @@ func Test_TransferCommitment(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/start-transfer",
 		ExpectStatus: http.StatusAccepted,
 		ExpectBody:   assert.JSONObject{"commitment": resp2},
-		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 9, "transfer_status": "unlisted"}},
+		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 9, "transfer_status": "public"}},
+	}.Check(t, s.Handler)
+
+	// 3. Negative Test
+	assert.HTTPRequest{
+		Method:       "POST",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/start-transfer",
+		ExpectStatus: http.StatusBadRequest,
+		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 0, "transfer_status": "public"}},
 	}.Check(t, s.Handler)
 }

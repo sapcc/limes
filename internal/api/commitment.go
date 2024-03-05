@@ -464,7 +464,15 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 	}
 	req := parseTarget.Request
 
-	// TODO: Check if Transferstatus in enum of commitment struct
+	if req.TransferStatus != limesresources.CommitmentTransferStatusUnlisted && req.TransferStatus != limesresources.CommitmentTransferStatusPublic {
+		respondwith.JSON(w, http.StatusBadRequest, fmt.Sprintf("Invalid transfer_status code. Must be %s or %s.", limesresources.CommitmentTransferStatusUnlisted, limesresources.CommitmentTransferStatusPublic))
+		return
+	}
+
+	if req.Amount <= 0 {
+		respondwith.JSON(w, http.StatusBadRequest, "Delivered amount needs to be a positive value.")
+		return
+	}
 
 	//load commitment
 	var dbCommitment db.ProjectCommitment
@@ -481,8 +489,8 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-	transferToken := p.generateTransferToken()
 	defer sqlext.RollbackUnlessCommitted(tx)
+	transferToken := p.generateTransferToken()
 	if req.Amount >= dbCommitment.Amount {
 		_, err = tx.Exec(updateCommitmentTransferState, req.TransferStatus, transferToken, dbCommitment.ID)
 		if respondwith.ErrorText(w, err) {
