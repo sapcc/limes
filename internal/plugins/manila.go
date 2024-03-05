@@ -307,12 +307,12 @@ func (p *manilaPlugin) scrapeShareType(project core.KeystoneProject, allAZs []li
 		result.ShareCapacity = qs.ReplicaGigabytes.ToResourceDataFor(allAZs)
 
 		//if share quotas and replica quotas disagree, report quota = -1 to force Limes to reapply the replica quota
-		if qs.Replicas.Quota != result.Shares.Quota {
+		if qs.Shares.Quota != result.Shares.Quota {
 			logg.Info("found mismatch between share quota (%d) and replica quota (%d) for share type %q in project %s",
 				result.Shares.Quota, qs.Replicas.Quota, stName, project.UUID)
 			result.Shares.Quota = -1
 		}
-		if qs.ReplicaGigabytes.Quota != result.ShareCapacity.Quota {
+		if qs.Gigabytes.Quota != result.ShareCapacity.Quota {
 			logg.Info("found mismatch between share capacity quota (%d) and replica capacity quota (%d) for share type %q in project %s",
 				result.ShareCapacity.Quota, qs.ReplicaGigabytes.Quota, stName, project.UUID)
 			result.ShareCapacity.Quota = -1
