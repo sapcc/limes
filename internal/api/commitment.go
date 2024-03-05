@@ -19,7 +19,6 @@
 package api
 
 import (
-	"crypto/rand"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -463,10 +462,10 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	req := parseTarget.Request
 
 	// create a transfer token
-	// TODO: token generations has to be checked in test.
+	transferToken := p.generateTransferToken()
 
 	// execute update
-	_, err := p.DB.Exec(updateCommitmentTransferState, req.TransferStatus, "hallo", req.ID)
+	_, err := p.DB.Exec(updateCommitmentTransferState, req.TransferStatus, transferToken, req.ID)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -500,13 +499,4 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 		Commitment:  c,
 	})
 	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
-}
-
-func (p *v1Provider) createToken() (string, error) {
-	tokenBytes := make([]byte, 12)
-	_, err := rand.Read(tokenBytes)
-	if err != nil {
-		return "", fmt.Errorf("could not generate token: %s", err.Error())
-	}
-	return string(tokenBytes), nil
 }

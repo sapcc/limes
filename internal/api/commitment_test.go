@@ -550,6 +550,8 @@ func Test_TransferCommitment(t *testing.T) {
 		test.WithAPIHandler(NewV1API),
 	)
 
+	var transferToken = test.GenerateDummyToken()
+
 	var confirmBy = time.Now().Unix()
 	// create the transfer data
 	req1 := func(transfer_status string) assert.JSONObject {
@@ -580,7 +582,7 @@ func Test_TransferCommitment(t *testing.T) {
 		"confirm_by":        confirmBy,
 		"expires_at":        s.Clock.Now().Add(time.Duration(confirmBy)*time.Second + 1*time.Hour).Unix(),
 		"transfer_status":   "unlisted",
-		"transfer_token":    "hallo",
+		"transfer_token":    transferToken,
 	}
 
 	assert.HTTPRequest{

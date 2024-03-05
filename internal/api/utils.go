@@ -19,6 +19,8 @@
 package api
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"time"
 
 	"github.com/sapcc/go-api-declarations/limes"
@@ -43,4 +45,13 @@ func unwrapOrDefault[T any](value *T, defaultValue T) T {
 		return defaultValue
 	}
 	return *value
+}
+
+func GenerateToken() string {
+	tokenBytes := make([]byte, 12)
+	_, err := rand.Read(tokenBytes)
+	if err != nil {
+		panic(err.Error())
+	}
+	return hex.EncodeToString(tokenBytes)
 }
