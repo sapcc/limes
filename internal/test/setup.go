@@ -46,7 +46,7 @@ import (
 type setupParams struct {
 	DBFixtureFile  string
 	ConfigYAML     string
-	APIBuilder     func(*core.Cluster, *gorp.DbMap, gopherpolicy.Validator, func() time.Time) httpapi.API
+	APIBuilder     func(*core.Cluster, *gorp.DbMap, gopherpolicy.Validator, func() time.Time, func() string) httpapi.API
 	APIMiddlewares []httpapi.API
 }
 
@@ -74,7 +74,7 @@ func WithConfig(yamlStr string) SetupOption {
 // Limes API. The `apiBuilder` function signature matches NewV1API(). We cannot
 // directly call this function because that would create an import cycle, so it
 // must be given by the caller here.
-func WithAPIHandler(apiBuilder func(*core.Cluster, *gorp.DbMap, gopherpolicy.Validator, func() time.Time) httpapi.API, middlewares ...httpapi.API) SetupOption {
+func WithAPIHandler(apiBuilder func(*core.Cluster, *gorp.DbMap, gopherpolicy.Validator, func() time.Time, func() string) httpapi.API, middlewares ...httpapi.API) SetupOption {
 	return func(params *setupParams) {
 		params.APIBuilder = apiBuilder
 		params.APIMiddlewares = middlewares
@@ -99,6 +99,10 @@ type Setup struct {
 	TokenValidator *mock.Validator[*PolicyEnforcer]
 	//fields that are only set if their respective SetupOptions are given
 	Handler http.Handler
+}
+
+func GenerateDummyToken() string {
+	return "dummyToken"
 }
 
 // NewSetup prepares most or all pieces of Keppel for a test.
@@ -144,7 +148,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	if params.APIBuilder != nil {
 		s.Handler = httpapi.Compose(
 			append([]httpapi.API{
-				params.APIBuilder(s.Cluster, s.DB, s.TokenValidator, s.Clock.Now),
+				params.APIBuilder(s.Cluster, s.DB, s.TokenValidator, s.Clock.Now, GenerateDummyToken),
 				httpapi.WithoutLogging(),
 			}, params.APIMiddlewares...)...,
 		)

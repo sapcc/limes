@@ -214,7 +214,7 @@ func taskServe(cluster *core.Cluster, args []string, provider *gophercloud.Provi
 	})
 	mux := http.NewServeMux()
 	mux.Handle("/", httpapi.Compose(
-		api.NewV1API(cluster, dbm, tokenValidator, time.Now),
+		api.NewV1API(cluster, dbm, tokenValidator, time.Now, api.GenerateToken),
 		pprofapi.API{IsAuthorized: pprofapi.IsRequestFromLocalhost},
 		httpapi.WithGlobalMiddleware(api.ForbidClusterIDHeader),
 		httpapi.WithGlobalMiddleware(corsMiddleware.Handler),
