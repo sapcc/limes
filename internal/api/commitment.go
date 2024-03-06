@@ -441,7 +441,7 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// TransferCommitment handles POST /v1/domains/:id/projects/:id/commitments/:id/start-transfer
+// StartCommitmentTransfer handles POST /v1/domains/:id/projects/:id/commitments/:id/start-transfer
 func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/commitments/:id/start-transfer")
 	token := p.CheckToken(r)
@@ -559,4 +559,19 @@ func (p *v1Provider) splitCommitment(dbCommitment db.ProjectCommitment, amount u
 		ExpiresAt:     dbCommitment.ExpiresAt,
 		PredecessorID: &dbCommitment.ID,
 	}
+}
+
+// TransferCommitment handles POST /v1/domains/{domain_id}/projects/{project_id}/transfer-commitment/{id}?token={token}
+func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) {
+	httpapi.IdentifyEndpoint(r, "/v1/domains/{domain_id}/projects/{project_id}/transfer-commitment/{id}")
+	token := p.CheckToken(r)
+	if !token.Require(w, "project:edit") {
+		return
+	}
+	transferToken := r.URL.Query().Get("token")
+	if transferToken == "" {
+		respondwith.ErrorText(w, errors.New("No transfer token provided"))
+	}
+
+	respondwith.JSON(w, http.StatusAccepted, "")
 }

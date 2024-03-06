@@ -543,7 +543,7 @@ func TestDeleteCommitmentErrorCases(t *testing.T) {
 	}.Check(t, s.Handler)
 }
 
-func Test_TransferCommitment(t *testing.T) {
+func Test_StartCommitmentTransfer(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
 		test.WithConfig(testCommitmentsYAML),
@@ -553,7 +553,7 @@ func Test_TransferCommitment(t *testing.T) {
 	var transferToken = test.GenerateDummyToken()
 
 	var confirmBy = time.Now().Unix()
-	// 1. TransferAmount >= CommitmentAmount
+	// TransferAmount >= CommitmentAmount
 	req1 := func(transfer_status string) assert.JSONObject {
 		return assert.JSONObject{
 			"id":                1,
@@ -600,7 +600,7 @@ func Test_TransferCommitment(t *testing.T) {
 		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 10, "transfer_status": "unlisted"}},
 	}.Check(t, s.Handler)
 
-	// 2. TransferAmount < CommitmentAmount
+	// TransferAmount < CommitmentAmount
 	resp2 := assert.JSONObject{
 		"id":                2,
 		"service_type":      "first",
@@ -626,11 +626,27 @@ func Test_TransferCommitment(t *testing.T) {
 		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 9, "transfer_status": "public"}},
 	}.Check(t, s.Handler)
 
-	// 3. Negative Test
+	// Negative Test, Amount = 0.
 	assert.HTTPRequest{
 		Method:       "POST",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/start-transfer",
 		ExpectStatus: http.StatusBadRequest,
+		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 0, "transfer_status": "public"}},
+	}.Check(t, s.Handler)
+}
+
+func Test_TransferCommitment(t *testing.T) {
+	s := test.NewSetup(t,
+		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
+		test.WithConfig(testCommitmentsYAML),
+		test.WithAPIHandler(NewV1API),
+	)
+
+	// No token provided
+	assert.HTTPRequest{
+		Method:       "POST",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/transfer-commitment/1",
+		ExpectStatus: http.StatusInternalServerError,
 		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 0, "transfer_status": "public"}},
 	}.Check(t, s.Handler)
 }
