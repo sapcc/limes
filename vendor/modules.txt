@@ -25,10 +25,9 @@ github.com/golang-migrate/migrate/v4/database/postgres
 github.com/golang-migrate/migrate/v4/internal/url
 github.com/golang-migrate/migrate/v4/source
 github.com/golang-migrate/migrate/v4/source/go_bindata
-# github.com/gophercloud/gophercloud v1.10.0
+# github.com/gophercloud/gophercloud v1.11.0
 ## explicit; go 1.14
 github.com/gophercloud/gophercloud
-github.com/gophercloud/gophercloud/internal/ctxt
 github.com/gophercloud/gophercloud/openstack
 github.com/gophercloud/gophercloud/openstack/baremetal/v1/nodes
 github.com/gophercloud/gophercloud/openstack/blockstorage/extensions/quotasets
@@ -147,7 +146,7 @@ github.com/sapcc/go-api-declarations/internal/marshal
 github.com/sapcc/go-api-declarations/limes
 github.com/sapcc/go-api-declarations/limes/rates
 github.com/sapcc/go-api-declarations/limes/resources
-# github.com/sapcc/go-bits v0.0.0-20240301161952-fc33553cc30d
+# github.com/sapcc/go-bits v0.0.0-20240307080654-364c083fcdf1
 ## explicit; go 1.21
 github.com/sapcc/go-bits/assert
 github.com/sapcc/go-bits/audittools
@@ -192,7 +191,7 @@ golang.org/x/text/encoding/charmap
 golang.org/x/text/encoding/internal
 golang.org/x/text/encoding/internal/identifier
 golang.org/x/text/transform
-# google.golang.org/protobuf v1.32.0
+# google.golang.org/protobuf v1.33.0
 ## explicit; go 1.17
 google.golang.org/protobuf/encoding/protodelim
 google.golang.org/protobuf/encoding/prototext
@@ -200,6 +199,7 @@ google.golang.org/protobuf/encoding/protowire
 google.golang.org/protobuf/internal/descfmt
 google.golang.org/protobuf/internal/descopts
 google.golang.org/protobuf/internal/detrand
+google.golang.org/protobuf/internal/editiondefaults
 google.golang.org/protobuf/internal/encoding/defval
 google.golang.org/protobuf/internal/encoding/messageset
 google.golang.org/protobuf/internal/encoding/tag
