@@ -7,7 +7,7 @@ require (
 	github.com/dlmiddlecote/sqlstats v1.0.2
 	github.com/go-gorp/gorp/v3 v3.1.0
 	github.com/gofrs/uuid/v5 v5.0.0
-	github.com/gophercloud/gophercloud v1.10.0
+	github.com/gophercloud/gophercloud v1.11.0
 	github.com/gophercloud/utils v0.0.0-20231010081019-80377eca5d56
 	github.com/gorilla/mux v1.8.1
 	github.com/majewsky/schwift v1.3.0
@@ -15,7 +15,7 @@ require (
 	github.com/prometheus/common v0.49.0
 	github.com/rs/cors v1.10.1
 	github.com/sapcc/go-api-declarations v1.10.9
-	github.com/sapcc/go-bits v0.0.0-20240301161952-fc33553cc30d
+	github.com/sapcc/go-bits v0.0.0-20240307080654-364c083fcdf1
 	go.uber.org/automaxprocs v1.5.3
 	golang.org/x/exp v0.0.0-20240222234643-814bf88cf225
 	gopkg.in/yaml.v2 v2.4.0
@@ -42,5 +42,5 @@ require (
 	go.uber.org/atomic v1.11.0 // indirect
 	golang.org/x/sys v0.17.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
-	google.golang.org/protobuf v1.32.0 // indirect
+	google.golang.org/protobuf v1.33.0 // indirect
 )
