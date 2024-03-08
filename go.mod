@@ -8,11 +8,11 @@ require (
 	github.com/go-gorp/gorp/v3 v3.1.0
 	github.com/gofrs/uuid/v5 v5.0.0
 	github.com/gophercloud/gophercloud v1.11.0
-	github.com/gophercloud/utils v0.0.0-20231010081019-80377eca5d56
+	github.com/gophercloud/utils b57aefba4cdb
 	github.com/gorilla/mux v1.8.1
 	github.com/majewsky/schwift v1.3.0
 	github.com/prometheus/client_golang v1.19.0
-	github.com/prometheus/common v0.49.0
+	github.com/prometheus/common v0.50.0
 	github.com/rs/cors v1.10.1
 	github.com/sapcc/go-api-declarations v1.10.9
 	github.com/sapcc/go-bits v0.0.0-20240307080654-364c083fcdf1
