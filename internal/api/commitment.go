@@ -471,6 +471,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 	}
 	dbProject := p.FindProjectFromRequest(w, r, dbDomain)
 	if dbProject == nil {
+		http.Error(w, "project not found.", http.StatusNotFound)
 		return
 	}
 	var parseTarget struct {
