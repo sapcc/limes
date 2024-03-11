@@ -51,6 +51,24 @@ const testCommitmentsYAML = `
 		- resource: first/capacity
 			commitment_is_az_aware: true
 `
+const testCommitmentsYAMLWithoutMinConfirmDate = `
+     availability_zones: [ az-one, az-two ]
+     discovery:
+     	method: --test-static
+     services:
+     	- service_type: first
+     		type: --test-generic
+     	- service_type: second
+     		type: --test-generic
+     resource_behavior:
+     	# the resources in "first" have commitments, the ones in "second" do not
+     	- resource: first/.*
+     		commitment_durations: ["1 hour", "2 hours"]
+     	- resource: first/things
+     		commitment_is_az_aware: false
+     	- resource: first/capacity
+     		commitment_is_az_aware: true
+`
 
 func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 	s := test.NewSetup(t,
@@ -546,25 +564,24 @@ func TestDeleteCommitmentErrorCases(t *testing.T) {
 func Test_StartCommitmentTransfer(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(testCommitmentsYAML),
+		test.WithConfig(testCommitmentsYAMLWithoutMinConfirmDate),
 		test.WithAPIHandler(NewV1API),
 	)
 
 	var transferToken = test.GenerateDummyToken()
 
-	var confirmBy = time.Now().Unix()
+	// Test on confirmed commitment should succeed.
 	// TransferAmount >= CommitmentAmount
 	req1 := func(transfer_status string) assert.JSONObject {
 		return assert.JSONObject{
 			"id":                1,
 			"service_type":      "first",
 			"resource_name":     "capacity",
-			"availability_zone": "az-one",
+			"availability_zone": "az-two",
 			"amount":            10,
 			"duration":          "1 hour",
 			"transfer_status":   transfer_status,
 			"transfer_token":    "",
-			"confirm_by":        confirmBy,
 		}
 	}
 
@@ -572,15 +589,15 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 		"id":                1,
 		"service_type":      "first",
 		"resource_name":     "capacity",
-		"availability_zone": "az-one",
+		"availability_zone": "az-two",
 		"amount":            10,
 		"unit":              "B",
 		"duration":          "1 hour",
 		"created_at":        s.Clock.Now().Unix(),
 		"creator_uuid":      "uuid-for-alice",
 		"creator_name":      "alice@Default",
-		"confirm_by":        confirmBy,
-		"expires_at":        s.Clock.Now().Add(time.Duration(confirmBy)*time.Second + 1*time.Hour).Unix(),
+		"confirmed_at":      0,
+		"expires_at":        3600,
 		"transfer_status":   "unlisted",
 		"transfer_token":    transferToken,
 	}
@@ -605,15 +622,15 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 		"id":                2,
 		"service_type":      "first",
 		"resource_name":     "capacity",
-		"availability_zone": "az-one",
+		"availability_zone": "az-two",
 		"amount":            9,
 		"unit":              "B",
 		"duration":          "1 hour",
 		"created_at":        s.Clock.Now().Unix(),
 		"creator_uuid":      "uuid-for-alice",
 		"creator_name":      "alice@Default",
-		"confirm_by":        confirmBy,
-		"expires_at":        s.Clock.Now().Add(time.Duration(confirmBy)*time.Second + 1*time.Hour).Unix(),
+		"confirmed_at":      0,
+		"expires_at":        3600,
 		"transfer_status":   "public",
 		"transfer_token":    transferToken,
 	}
@@ -624,6 +641,35 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 		ExpectStatus: http.StatusAccepted,
 		ExpectBody:   assert.JSONObject{"commitment": resp2},
 		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 9, "transfer_status": "public"}},
+	}.Check(t, s.Handler)
+
+	// Test on unconfirmed commitment should fail.
+	// ID is 4, because 2 additional commitments were created previously.
+	var confirmBy = time.Now().Unix()
+	req2 := assert.JSONObject{
+		"id":                4,
+		"service_type":      "first",
+		"resource_name":     "capacity",
+		"availability_zone": "az-two",
+		"amount":            10,
+		"duration":          "1 hour",
+		"transfer_status":   "",
+		"transfer_token":    "",
+		"confirm_by":        confirmBy,
+	}
+
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
+		Body:         assert.JSONObject{"commitment": req2},
+		ExpectStatus: http.StatusCreated,
+	}.Check(t, s.Handler)
+
+	assert.HTTPRequest{
+		Method:       "POST",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/4/start-transfer",
+		ExpectStatus: http.StatusUnprocessableEntity,
+		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 10, "transfer_status": "unlisted"}},
 	}.Check(t, s.Handler)
 
 	// Negative Test, Amount = 0.
@@ -638,36 +684,34 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 func Test_TransferCommitment(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(testCommitmentsYAML),
+		test.WithConfig(testCommitmentsYAMLWithoutMinConfirmDate),
 		test.WithAPIHandler(NewV1API),
 	)
 
-	var confirmBy = time.Now().Unix()
 	var transferToken = test.GenerateDummyToken()
 	req1 := assert.JSONObject{
 		"id":                1,
 		"service_type":      "first",
 		"resource_name":     "capacity",
-		"availability_zone": "az-one",
+		"availability_zone": "az-two",
 		"amount":            10,
 		"duration":          "1 hour",
 		"transfer_status":   "",
-		"confirm_by":        confirmBy,
 	}
 
 	resp1 := assert.JSONObject{
 		"id":                1,
 		"service_type":      "first",
 		"resource_name":     "capacity",
-		"availability_zone": "az-one",
+		"availability_zone": "az-two",
 		"amount":            10,
 		"unit":              "B",
 		"duration":          "1 hour",
 		"created_at":        s.Clock.Now().Unix(),
 		"creator_uuid":      "uuid-for-alice",
 		"creator_name":      "alice@Default",
-		"confirm_by":        confirmBy,
-		"expires_at":        s.Clock.Now().Add(time.Duration(confirmBy)*time.Second + 1*time.Hour).Unix(),
+		"confirmed_at":      0,
+		"expires_at":        3600,
 		"transfer_status":   "unlisted",
 		"transfer_token":    transferToken,
 	}
@@ -676,15 +720,15 @@ func Test_TransferCommitment(t *testing.T) {
 		"id":                1,
 		"service_type":      "first",
 		"resource_name":     "capacity",
-		"availability_zone": "az-one",
+		"availability_zone": "az-two",
 		"amount":            10,
 		"unit":              "B",
 		"duration":          "1 hour",
 		"created_at":        s.Clock.Now().Unix(),
 		"creator_uuid":      "uuid-for-alice",
 		"creator_name":      "alice@Default",
-		"confirm_by":        confirmBy,
-		"expires_at":        s.Clock.Now().Add(time.Duration(confirmBy)*time.Second + 1*time.Hour).Unix(),
+		"confirmed_at":      0,
+		"expires_at":        3600,
 	}
 
 	// Transfer Commitment to target AZ_RESOURCE_ID (SOURCE_ID=3 TARGET_ID=17)
@@ -705,9 +749,16 @@ func Test_TransferCommitment(t *testing.T) {
 
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/transfer-commitment/1?token=dummyToken",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/transfer-commitment/1?token=" + transferToken,
 		ExpectBody:   assert.JSONObject{"commitment": resp2},
 		ExpectStatus: http.StatusAccepted,
+	}.Check(t, s.Handler)
+
+	// wrong token
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/transfer-commitment/1?token=wrongToken",
+		ExpectStatus: http.StatusNotFound,
 	}.Check(t, s.Handler)
 
 	// No token provided
@@ -716,5 +767,4 @@ func Test_TransferCommitment(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/transfer-commitment/1",
 		ExpectStatus: http.StatusInternalServerError,
 	}.Check(t, s.Handler)
-
 }
