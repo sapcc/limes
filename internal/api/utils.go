@@ -48,7 +48,7 @@ func unwrapOrDefault[T any](value *T, defaultValue T) T {
 }
 
 func GenerateToken() string {
-	tokenBytes := make([]byte, 12)
+	tokenBytes := make([]byte, 24)
 	_, err := rand.Read(tokenBytes)
 	if err != nil {
 		panic(err.Error())
