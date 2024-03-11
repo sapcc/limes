@@ -758,7 +758,7 @@ Prepares a commitment to be transferred from a source project to a target projec
 {
   "commitment": {
     "amount": 100,
-    "transfer_status": "unlisted",
+    "transfer_status": "unlisted"
   }
 }
 ```
