@@ -645,7 +645,7 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 
 	// Test on unconfirmed commitment should fail.
 	// ID is 4, because 2 additional commitments were created previously.
-	var confirmBy = time.Now().Unix()
+	var confirmBy = s.Clock.Now().Unix()
 	req2 := assert.JSONObject{
 		"id":                4,
 		"service_type":      "first",
