@@ -463,10 +463,12 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/commitments/:id/start-transfer")
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:edit") {
+		http.Error(w, "insufficient access rights.", http.StatusForbidden)
 		return
 	}
 	dbDomain := p.FindDomainFromRequest(w, r)
 	if dbDomain == nil {
+		http.Error(w, "domain not found.", http.StatusNotFound)
 		return
 	}
 	dbProject := p.FindProjectFromRequest(w, r, dbDomain)
@@ -478,6 +480,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		Request limesresources.Commitment `json:"commitment"`
 	}
 	if !RequireJSON(w, r, &parseTarget) {
+		http.Error(w, "json not parsable.", http.StatusBadRequest)
 		return
 	}
 	req := parseTarget.Request
@@ -590,6 +593,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/transfer-commitment/:id?token=:token")
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:edit") {
+		http.Error(w, "insufficient access rights.", http.StatusForbidden)
 		return
 	}
 	transferToken := r.URL.Query().Get("token")
@@ -598,10 +602,12 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	}
 	dbDomain := p.FindDomainFromRequest(w, r)
 	if dbDomain == nil {
+		http.Error(w, "domain not found.", http.StatusNotFound)
 		return
 	}
 	targetProject := p.FindProjectFromRequest(w, r, dbDomain)
 	if targetProject == nil {
+		http.Error(w, "project not found.", http.StatusNotFound)
 		return
 	}
 

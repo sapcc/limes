@@ -775,6 +775,7 @@ The response is a JSON of the commitment including the following fields that ide
 ```
 ### POST /v1/domains/:id/projects/:id/transfer-commitment/:id?token=:token
 Transfers the commitment from a source project to a target project.
+Requires a project-admin token.
 This endpoint receives the target project ID, but the commitment ID from the source project.
 Requires a generated token from the API: `/v1/domains/:id/projects/:id/commitments/:id/start-transfer`.
 On success the API clears the `transfer_token` and `transfer_status` from the commitment.
