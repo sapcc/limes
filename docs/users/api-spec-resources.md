@@ -769,7 +769,7 @@ The response is a JSON of the commitment including the following fields that ide
 {
   "commitment": {
     "transfer_token": "token",
-    "transfer_status": "unlisted",
+    "transfer_status": "unlisted"
   }
 }
 ```
