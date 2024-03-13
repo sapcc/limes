@@ -347,10 +347,36 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 	}
 
 	//for all cluster resources thus updated, recompute project quotas if necessary
+	needsACDQ := make(map[string]bool)
 	for _, res := range dbOwnedResources {
-		err := datamodel.ApplyComputedProjectQuota(serviceTypeForID[res.ServiceID], res.Name, c.DB, c.Cluster)
+		serviceType := serviceTypeForID[res.ServiceID]
+		err := datamodel.ApplyComputedProjectQuota(serviceType, res.Name, c.DB, c.Cluster)
 		if err != nil {
 			return err
+		}
+		needsACDQ[serviceType] = true
+	}
+
+	// for all domain services that had project quotas touched, recompute domain quotas if necessary
+	if len(needsACDQ) > 0 {
+		var domainIDs []db.DomainID
+		err := sqlext.ForeachRow(c.DB, `SELECT id FROM domains`, nil, func(rows *sql.Rows) error {
+			var domainID db.DomainID
+			err := rows.Scan(&domainID)
+			domainIDs = append(domainIDs, domainID)
+			return err
+		})
+		if err != nil {
+			return err
+		}
+
+		for serviceType := range needsACDQ {
+			for _, domainID := range domainIDs {
+				err := datamodel.ApplyComputedDomainQuota(c.DB, c.Cluster, domainID, serviceType)
+				if err != nil {
+					return err
+				}
+			}
 		}
 	}
 
