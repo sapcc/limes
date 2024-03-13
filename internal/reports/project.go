@@ -197,10 +197,11 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 		resReport := srvReport.Resources[*resourceName]
 		if resReport == nil {
 			resReport = &limesresources.ProjectResourceReport{
-				ResourceInfo: cluster.InfoForResource(*serviceType, *resourceName),
-				Usage:        0,
-				Scaling:      globalBehavior.ToScalingBehavior(),
-				Annotations:  localBehavior.Annotations,
+				ResourceInfo:     cluster.InfoForResource(*serviceType, *resourceName),
+				Usage:            0,
+				Scaling:          globalBehavior.ToScalingBehavior(),
+				Annotations:      localBehavior.Annotations,
+				CommitmentConfig: globalBehavior.ToCommitmentConfig(now),
 				//all other fields are set below
 			}
 
@@ -211,7 +212,6 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 			if !resReport.NoQuota {
 				qdConfig := cluster.QuotaDistributionConfigForResource(*serviceType, *resourceName)
 				resReport.QuotaDistributionModel = qdConfig.Model
-				resReport.CommitmentConfig = globalBehavior.ToCommitmentConfig(now)
 				if quota != nil {
 					resReport.Quota = quota
 					resReport.UsableQuota = quota
