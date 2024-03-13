@@ -381,14 +381,14 @@ func (d domains) Find(cluster *core.Cluster, domainUUID, domainName string, serv
 		localBehavior := cluster.BehaviorForResource(*serviceType, *resourceName, domainName)
 		globalBehavior := cluster.BehaviorForResource(*serviceType, *resourceName, "")
 		resource = &limesresources.DomainResourceReport{
-			ResourceInfo: cluster.InfoForResource(*serviceType, *resourceName),
-			Scaling:      globalBehavior.ToScalingBehavior(),
-			Annotations:  localBehavior.Annotations,
+			ResourceInfo:     cluster.InfoForResource(*serviceType, *resourceName),
+			Scaling:          globalBehavior.ToScalingBehavior(),
+			Annotations:      localBehavior.Annotations,
+			CommitmentConfig: globalBehavior.ToCommitmentConfig(now),
 		}
 		if !resource.NoQuota {
 			qdConfig := cluster.QuotaDistributionConfigForResource(*serviceType, *resourceName)
 			resource.QuotaDistributionModel = qdConfig.Model
-			resource.CommitmentConfig = globalBehavior.ToCommitmentConfig(now)
 			//this default is used when no `domain_resources` entry exists for this resource
 			defaultQuota := uint64(0)
 			resource.DomainQuota = &defaultQuota
