@@ -47,7 +47,11 @@ func unwrapOrDefault[T any](value *T, defaultValue T) T {
 	return *value
 }
 
-func GenerateToken() string {
+/*
+Generates a token that is used to transfer a commitment from a source to a target project.
+The token will be attached to the commitment that will be transferred and stored in the database until the transfer is concluded.
+*/
+func GenerateTransferToken() string {
 	tokenBytes := make([]byte, 24)
 	_, err := rand.Read(tokenBytes)
 	if err != nil {
