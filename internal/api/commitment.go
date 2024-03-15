@@ -526,8 +526,8 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		now := p.timeNow()
 		transferAmount := req.Amount
 		remainingAmount := dbCommitment.Amount - req.Amount
-		transferCommitment := p.splitCommitment(dbCommitment, transferAmount)
-		remainingCommitment := p.splitCommitment(dbCommitment, remainingAmount)
+		transferCommitment := p.buildSplitCommitment(dbCommitment, transferAmount)
+		remainingCommitment := p.buildSplitCommitment(dbCommitment, remainingAmount)
 		err = tx.Insert(&transferCommitment)
 		if respondwith.ErrorText(w, err) {
 			return
@@ -612,7 +612,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 
 	// find commitment by transfer_token
 	var dbCommitment db.ProjectCommitment
-	err := p.DB.SelectOne(&dbCommitment, getCommitmentWithMatchingTransferToken, transferToken)
+	err := p.DB.SelectOne(&dbCommitment, getCommitmentWithMatchingTransferTokenQuery, transferToken)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "no matching commitment found", http.StatusNotFound)
 		return
@@ -622,7 +622,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 
 	// get target AZ_RESOURCE_ID
 	var targetResourceID db.ProjectAZResourceID
-	err = p.DB.QueryRow(findTargetAZResourceIDBySourceID, targetProject.ID, dbCommitment.AZResourceID).Scan(&targetResourceID)
+	err = p.DB.QueryRow(findTargetAZResourceIDBySourceIDQuery, targetProject.ID, dbCommitment.AZResourceID).Scan(&targetResourceID)
 	if respondwith.ErrorText(w, err) {
 		return
 	}

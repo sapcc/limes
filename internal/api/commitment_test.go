@@ -580,7 +580,7 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 			"availability_zone": "az-two",
 			"amount":            10,
 			"duration":          "1 hour",
-			"transfer_status":   transfer_status,
+			"transfer_status":   transferStatus,
 			"transfer_token":    "",
 		}
 	}
