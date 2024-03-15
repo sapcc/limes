@@ -741,6 +741,38 @@ func Test_TransferCommitment(t *testing.T) {
 		"expires_at":        3600,
 	}
 
+	// Split commitment
+	resp3 := assert.JSONObject{
+		"id":                2,
+		"service_type":      "first",
+		"resource_name":     "capacity",
+		"availability_zone": "az-two",
+		"amount":            9,
+		"unit":              "B",
+		"duration":          "1 hour",
+		"created_at":        s.Clock.Now().Unix(),
+		"creator_uuid":      "uuid-for-alice",
+		"creator_name":      "alice@Default",
+		"confirmed_at":      0,
+		"expires_at":        3600,
+		"transfer_status":   "unlisted",
+		"transfer_token":    transferToken,
+	}
+	resp4 := assert.JSONObject{
+		"id":                2,
+		"service_type":      "first",
+		"resource_name":     "capacity",
+		"availability_zone": "az-two",
+		"amount":            9,
+		"unit":              "B",
+		"duration":          "1 hour",
+		"created_at":        s.Clock.Now().Unix(),
+		"creator_uuid":      "uuid-for-alice",
+		"creator_name":      "alice@Default",
+		"confirmed_at":      0,
+		"expires_at":        3600,
+	}
+
 	// Transfer Commitment to target AZ_RESOURCE_ID (SOURCE_ID=3 TARGET_ID=17)
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -749,6 +781,7 @@ func Test_TransferCommitment(t *testing.T) {
 		ExpectStatus: http.StatusCreated,
 	}.Check(t, s.Handler)
 
+	// Transfer full amount
 	assert.HTTPRequest{
 		Method:       "POST",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/start-transfer",
@@ -761,6 +794,22 @@ func Test_TransferCommitment(t *testing.T) {
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/transfer-commitment/1?token=" + transferToken,
 		ExpectBody:   assert.JSONObject{"commitment": resp2},
+		ExpectStatus: http.StatusAccepted,
+	}.Check(t, s.Handler)
+
+	// Split and transfer commitment.
+	assert.HTTPRequest{
+		Method:       "POST",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/commitments/1/start-transfer",
+		ExpectStatus: http.StatusAccepted,
+		ExpectBody:   assert.JSONObject{"commitment": resp3},
+		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 9, "transfer_status": "unlisted"}},
+	}.Check(t, s.Handler)
+
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/transfer-commitment/1?token=" + transferToken,
+		ExpectBody:   assert.JSONObject{"commitment": resp4},
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
 

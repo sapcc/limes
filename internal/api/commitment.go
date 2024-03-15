@@ -104,12 +104,6 @@ var (
 			WHERE cs.type = $2 AND cr.name = $3
 		)
 	`)
-	updateCommitmentTransferState = sqlext.SimplifyWhitespace(`
-		UPDATE project_commitments SET transfer_status = $1, transfer_token = $2 WHERE id = $3
-	`)
-	updateCommitmentSuperseded = sqlext.SimplifyWhitespace(`
-		UPDATE project_commitments SET superseded_at = $1 WHERE id = $2
-	`)
 )
 
 // GetProjectCommitments handles GET /v1/domains/:domain_id/projects/:project_id/commitments.
@@ -526,7 +520,9 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 	}
 
 	if req.Amount == dbCommitment.Amount {
-		_, err = tx.Exec(updateCommitmentTransferState, req.TransferStatus, transferToken, dbCommitment.ID)
+		dbCommitment.TransferStatus = req.TransferStatus
+		dbCommitment.TransferToken = transferToken
+		_, err = tx.Update(&dbCommitment)
 		if respondwith.ErrorText(w, err) {
 			return
 		}
@@ -535,6 +531,8 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		transferAmount := req.Amount
 		remainingAmount := dbCommitment.Amount - req.Amount
 		transferCommitment := p.buildSplitCommitment(dbCommitment, transferAmount)
+		transferCommitment.TransferStatus = req.TransferStatus
+		transferCommitment.TransferToken = transferToken
 		remainingCommitment := p.buildSplitCommitment(dbCommitment, remainingAmount)
 		err = tx.Insert(&transferCommitment)
 		if respondwith.ErrorText(w, err) {
@@ -544,14 +542,13 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		if respondwith.ErrorText(w, err) {
 			return
 		}
-		_, err = tx.Exec(updateCommitmentSuperseded, now, dbCommitment.ID)
+		dbCommitment.SupersededAt = &now
+		_, err = tx.Update(&dbCommitment)
 		if respondwith.ErrorText(w, err) {
 			return
 		}
 		dbCommitment = transferCommitment
 	}
-	dbCommitment.TransferStatus = req.TransferStatus
-	dbCommitment.TransferToken = transferToken
 	err = tx.Commit()
 	if respondwith.ErrorText(w, err) {
 		return
