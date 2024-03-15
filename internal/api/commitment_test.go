@@ -572,7 +572,7 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 
 	// Test on confirmed commitment should succeed.
 	// TransferAmount >= CommitmentAmount
-	req1 := func(transfer_status string) assert.JSONObject {
+	req1 := func(transferStatus string) assert.JSONObject {
 		return assert.JSONObject{
 			"id":                1,
 			"service_type":      "first",
