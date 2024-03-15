@@ -110,9 +110,6 @@ var (
 	updateCommitmentSuperseded = sqlext.SimplifyWhitespace(`
 		UPDATE project_commitments SET superseded_at = $1 WHERE id = $2
 	`)
-	updateCommitmentAZResourceID = sqlext.SimplifyWhitespace(`
-		UPDATE project_commitments SET az_resource_id = $1 WHERE id = $2
-	`)
 )
 
 // GetProjectCommitments handles GET /v1/domains/:domain_id/projects/:project_id/commitments.
