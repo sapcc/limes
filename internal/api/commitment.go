@@ -475,8 +475,12 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		http.Error(w, "project not found.", http.StatusNotFound)
 		return
 	}
+	// TODO: eventually migrate this struct into go-api-declarations
 	var parseTarget struct {
-		Request limesresources.Commitment `json:"commitment"`
+		Request struct {
+			Amount         uint64                                  `json:"amount"`
+			TransferStatus limesresources.CommitmentTransferStatus `json:"transfer_status,omitempty"`
+		} `json:"commitment"`
 	}
 	if !RequireJSON(w, r, &parseTarget) {
 		http.Error(w, "json not parsable.", http.StatusBadRequest)
