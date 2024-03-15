@@ -463,7 +463,6 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/commitments/:id/start-transfer")
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:edit") {
-		http.Error(w, "insufficient access rights.", http.StatusForbidden)
 		return
 	}
 	dbDomain := p.FindDomainFromRequest(w, r)
