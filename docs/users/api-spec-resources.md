@@ -764,7 +764,7 @@ Prepares a commitment to be transferred from a source project to a target projec
 ```
 If the amount to transfer is equal to the commitment, the whole commitment will be marked as transferrable. If the amount is less than the commitment, the commitment will be split in two and the requested amount will be marked as transferrable.
 The transfer status indicates if the commitment stays `unlisted` (private) or `public`.
-The response is a JSON of the commitment including the following fields that identify a commitment in it's transferrable state:
+The response is a JSON of the commitment including the following fields that identify a commitment in its transferrable state:
 ```json
 {
   "commitment": {
