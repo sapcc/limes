@@ -639,31 +639,13 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	tx, err := p.DB.Begin()
-	if respondwith.ErrorText(w, err) {
-		return
-	}
-	defer sqlext.RollbackUnlessCommitted(tx)
-
-	// update AZ_RESOURCE_ID of commitment
-	_, err = tx.Exec(updateCommitmentAZResourceID, targetResourceID, dbCommitment.ID)
-	if respondwith.ErrorText(w, err) {
-		return
-	}
-
-	// reset transfer_status and transfer_token
-	_, err = tx.Exec(updateCommitmentTransferState, "", "", dbCommitment.ID)
-	if respondwith.ErrorText(w, err) {
-		return
-	}
-
-	err = tx.Commit()
-	if respondwith.ErrorText(w, err) {
-		return
-	}
-
 	dbCommitment.TransferStatus = ""
 	dbCommitment.TransferToken = ""
+        dbCommitment.AZResourceID = targetResourceID
+	err := p.DB.Update(&dbCommitment)
+	if respondwith.ErrorText(w, err) {
+		return
+	}
 
 	var loc azResourceLocation
 	err = p.DB.QueryRow(findProjectAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
