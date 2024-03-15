@@ -83,10 +83,10 @@ var (
 		  JOIN project_services ps ON pr.service_id = ps.id
 		 WHERE par.id = $1
 	`)
-	getCommitmentWithMatchingTransferToken = sqlext.SimplifyWhitespace(`
+	getCommitmentWithMatchingTransferTokenQuery = sqlext.SimplifyWhitespace(`
 		SELECT * FROM project_commitments WHERE transfer_token = $1
 	`)
-	findTargetAZResourceIDBySourceID = sqlext.SimplifyWhitespace(`
+	findTargetAZResourceIDBySourceIDQuery = sqlext.SimplifyWhitespace(`
 	  SELECT par.id 
 	    FROM project_az_resources as par
 		JOIN project_resources pr ON par.resource_id = pr.id
