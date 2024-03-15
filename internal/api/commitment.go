@@ -641,8 +641,8 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 
 	dbCommitment.TransferStatus = ""
 	dbCommitment.TransferToken = ""
-        dbCommitment.AZResourceID = targetResourceID
-	err := p.DB.Update(&dbCommitment)
+	dbCommitment.AZResourceID = targetResourceID
+	_, err = p.DB.Update(&dbCommitment)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
