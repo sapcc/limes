@@ -571,7 +571,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
 }
 
-func (p *v1Provider) splitCommitment(dbCommitment db.ProjectCommitment, amount uint64) db.ProjectCommitment {
+func (p *v1Provider) buildSplitCommitment(dbCommitment db.ProjectCommitment, amount uint64) db.ProjectCommitment {
 	now := p.timeNow()
 	return db.ProjectCommitment{
 		AZResourceID:  dbCommitment.AZResourceID,
