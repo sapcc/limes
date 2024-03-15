@@ -677,6 +677,7 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 		Method:       "POST",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/start-transfer",
 		ExpectStatus: http.StatusBadRequest,
+		ExpectBody:   assert.StringData("Delivered amount needs to be a positive value.\n"),
 		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 0, "transfer_status": "public"}},
 	}.Check(t, s.Handler)
 }
@@ -759,12 +760,14 @@ func Test_TransferCommitment(t *testing.T) {
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/transfer-commitment/1?token=wrongToken",
 		ExpectStatus: http.StatusNotFound,
+		ExpectBody:   assert.StringData("no matching commitment found\n"),
 	}.Check(t, s.Handler)
 
 	// No token provided
 	assert.HTTPRequest{
 		Method:       "POST",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/transfer-commitment/1",
-		ExpectStatus: http.StatusInternalServerError,
+		ExpectStatus: http.StatusBadRequest,
+		ExpectBody:   assert.StringData("no transfer token provided\n"),
 	}.Check(t, s.Handler)
 }

@@ -489,12 +489,12 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 	req := parseTarget.Request
 
 	if req.TransferStatus != limesresources.CommitmentTransferStatusUnlisted && req.TransferStatus != limesresources.CommitmentTransferStatusPublic {
-		respondwith.JSON(w, http.StatusBadRequest, fmt.Sprintf("Invalid transfer_status code. Must be %s or %s.", limesresources.CommitmentTransferStatusUnlisted, limesresources.CommitmentTransferStatusPublic))
+		http.Error(w, fmt.Sprintf("Invalid transfer_status code. Must be %s or %s.", limesresources.CommitmentTransferStatusUnlisted, limesresources.CommitmentTransferStatusPublic), http.StatusBadRequest)
 		return
 	}
 
 	if req.Amount <= 0 {
-		respondwith.JSON(w, http.StatusBadRequest, "Delivered amount needs to be a positive value.")
+		http.Error(w, "Delivered amount needs to be a positive value.", http.StatusBadRequest)
 		return
 	}
 
@@ -601,7 +601,8 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	}
 	transferToken := r.URL.Query().Get("token")
 	if transferToken == "" {
-		respondwith.ErrorText(w, errors.New("no transfer token provided"))
+		http.Error(w, "no transfer token provided", http.StatusBadRequest)
+		return
 	}
 	dbDomain := p.FindDomainFromRequest(w, r)
 	if dbDomain == nil {
