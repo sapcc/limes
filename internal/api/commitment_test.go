@@ -672,13 +672,22 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 10, "transfer_status": "unlisted"}},
 	}.Check(t, s.Handler)
 
-	// Negative Test, Amount = 0.
+	// Negative Test, amount = 0.
 	assert.HTTPRequest{
 		Method:       "POST",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/start-transfer",
 		ExpectStatus: http.StatusBadRequest,
-		ExpectBody:   assert.StringData("Delivered amount needs to be a positive value.\n"),
+		ExpectBody:   assert.StringData("delivered amount needs to be a positive value.\n"),
 		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 0, "transfer_status": "public"}},
+	}.Check(t, s.Handler)
+
+	// Negative Test, delivered amount > commitment amount
+	assert.HTTPRequest{
+		Method:       "POST",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/start-transfer",
+		ExpectStatus: http.StatusBadRequest,
+		ExpectBody:   assert.StringData("delivered amount exceeds the commitment amount.\n"),
+		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 11, "transfer_status": "public"}},
 	}.Check(t, s.Handler)
 }
 

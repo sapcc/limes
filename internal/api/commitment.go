@@ -494,7 +494,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 	}
 
 	if req.Amount <= 0 {
-		http.Error(w, "Delivered amount needs to be a positive value.", http.StatusBadRequest)
+		http.Error(w, "delivered amount needs to be a positive value.", http.StatusBadRequest)
 		return
 	}
 
@@ -521,7 +521,14 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 	transferToken := p.generateTransferToken()
-	if req.Amount >= dbCommitment.Amount {
+
+	// Deny requests with a greater amount than the commitment.
+	if req.Amount > dbCommitment.Amount {
+		http.Error(w, "delivered amount exceeds the commitment amount.", http.StatusBadRequest)
+		return
+	}
+
+	if req.Amount == dbCommitment.Amount {
 		_, err = tx.Exec(updateCommitmentTransferState, req.TransferStatus, transferToken, dbCommitment.ID)
 		if respondwith.ErrorText(w, err) {
 			return
