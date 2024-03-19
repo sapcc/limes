@@ -61,11 +61,6 @@ var (
 			SELECT id FROM project_services WHERE type = $1
 		)
 	`)
-	acpqListUpdatedProjectServicesQuery = sqlext.SimplifyWhitespace(`
-		SELECT DISTINCT ps.id
-		FROM project_services ps JOIN project_resources pr ON pr.service_id = ps.id
-		WHERE ps.type = $1 AND pr.desired_backend_quota IS DISTINCT FROM pr.backend_quota
-	`)
 )
 
 type projectLocalQuotaConstraints struct {
@@ -144,42 +139,10 @@ func ApplyComputedProjectQuota(serviceType, resourceName string, dbm *gorp.DbMap
 	if err != nil {
 		return fmt.Errorf("while computing updated %s/%s backend quotas: %w", serviceType, resourceName, err)
 	}
+	return tx.Commit()
 
-	err = tx.Commit()
-	if err != nil {
-		return err
-	}
-
-	//apply updated quotas to backend as needed
-	err = sqlext.ForeachRow(dbm, acpqListUpdatedProjectServicesQuery, []any{serviceType}, func(rows *sql.Rows) error {
-		srv := db.ServiceRef[db.ProjectServiceID]{Type: serviceType}
-		err := rows.Scan(&srv.ID)
-		if err != nil {
-			return err
-		}
-
-		var dbProject db.Project
-		err = dbm.SelectOne(&dbProject, `SELECT * FROM projects WHERE id IN (SELECT project_id FROM project_services WHERE id = $1)`, srv.ID)
-		if err != nil {
-			return fmt.Errorf("while loading project for project service %d: %w", srv.ID, err)
-		}
-
-		var dbDomain db.Domain
-		err = dbm.SelectOne(&dbDomain, `SELECT * FROM domains WHERE id = $1`, dbProject.DomainID)
-		if err != nil {
-			return fmt.Errorf("while loading domain %d: %w", dbProject.DomainID, err)
-		}
-
-		err = ApplyBackendQuota(dbm, cluster, core.KeystoneDomainFromDB(dbDomain), dbProject, srv)
-		if err != nil {
-			logg.Error("while computing quotas for %s/%s: could not apply quotas for project %s: %s", serviceType, resourceName, dbProject.UUID, err.Error())
-		}
-		return nil
-	})
-	if err != nil {
-		return fmt.Errorf("while finding %s quotas to apply to the backend: %w", serviceType, err)
-	}
-	return nil
+	//NOTE: Quotas are not applied to the backend here because OpenStack is way too inefficient in practice.
+	//We wait for the next scrape cycle to come around and notice that `backend_quota != desired_backend_quota`.
 }
 
 // Calculation space for a single project AZ resource.
