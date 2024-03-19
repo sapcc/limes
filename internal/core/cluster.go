@@ -43,6 +43,7 @@ type Cluster struct {
 	CapacityPlugins   map[string]CapacityPlugin
 	Authoritative     bool
 	QuotaConstraints  *QuotaConstraintSet
+	QuotaOverrides    map[string]map[string]map[string]map[string]uint64
 	LowPrivilegeRaise LowPrivilegeRaiseLimitSet
 }
 
@@ -84,13 +85,11 @@ func NewCluster(config ClusterConfiguration) (c *Cluster, errs errext.ErrorSet) 
 	return c, errs
 }
 
-// Connect calls Connect() on all AuthParameters for this Cluster, thus ensuring
-// that all ProviderClient instances are available. It also calls Init() on all
-// quota plugins.
+// Connect calls Init() on all plugins.
 //
-// It also loads the QuotaConstraints for this cluster, if configured. The
-// LowPrivilegeRaise.Limits fields are also initialized here. We also validate
-// if Config.ResourceBehavior[].ScalesWith refers to existing resources.
+// It also loads the QuotaConstraints and QuotaOverrides for this cluster, if configured.
+// The LowPrivilegeRaise.Limits fields are also initialized here.
+// We also validate if Config.ResourceBehavior[].ScalesWith refers to existing resources.
 //
 // We cannot do any of this earlier because we only know all resources after
 // calling Init() on all quota plugins.
@@ -148,6 +147,19 @@ func (c *Cluster) Connect(provider *gophercloud.ProviderClient, eo gophercloud.E
 		errs.Append(suberrs)
 	}
 
+	//load quota overrides
+	overridesPath := os.Getenv("LIMES_QUOTA_OVERRIDES_PATH")
+	if overridesPath != "" && c.QuotaOverrides == nil {
+		buf, err := os.ReadFile(overridesPath)
+		if err == nil {
+			c.QuotaOverrides, suberrs = c.ParseQuotaOverrides(overridesPath, buf)
+			errs.Append(suberrs)
+		} else {
+			errs.Add(err)
+			return
+		}
+	}
+
 	//parse low-privilege raise limits
 	c.LowPrivilegeRaise, suberrs = c.Config.LowPrivilegeRaise.parse(c.QuotaPlugins)
 	errs.Append(suberrs)
@@ -162,6 +174,56 @@ func (c *Cluster) Connect(provider *gophercloud.ProviderClient, eo gophercloud.E
 	}
 
 	return errs
+}
+
+// ParseQuotaOverrides is used by Connect to parse the file at LIMES_QUOTA_OVERRIDES_PATH.
+// It is exported as a public function for test coverage.
+// The file contents are in `buf`. The `path` argument is only used for building error messages.
+func (c *Cluster) ParseQuotaOverrides(path string, buf []byte) (result map[string]map[string]map[string]map[string]uint64, errs errext.ErrorSet) {
+	var parsed map[string]map[string]map[string]map[string]any
+	err := yaml.UnmarshalStrict(buf, &parsed)
+	if err != nil {
+		errs.Addf("failed to parse %s: %w", path, err)
+	}
+
+	result = make(map[string]map[string]map[string]map[string]uint64)
+	for domainName, domainInputs := range parsed {
+		domainResult := make(map[string]map[string]map[string]uint64)
+		for projectName, projectInputs := range domainInputs {
+			projectResult := make(map[string]map[string]uint64)
+			for serviceType, serviceInputs := range projectInputs {
+				serviceResult := make(map[string]uint64)
+				for resourceName, input := range serviceInputs {
+					if !c.HasResource(serviceType, resourceName) {
+						errs.Addf("while parsing %s: %s/%s is not a valid resource", path, serviceType, resourceName)
+						continue
+					}
+					resInfo := c.InfoForResource(serviceType, resourceName)
+					if resInfo.NoQuota {
+						errs.Addf("while parsing %s: %s/%s does not track quota", path, serviceType, resourceName)
+						continue
+					}
+					switch input := input.(type) {
+					case string:
+						serviceResult[resourceName], err = resInfo.Unit.Parse(input)
+						if err != nil {
+							errs.Addf("while parsing %s: in value for %s/%s: %w", path, serviceType, resourceName, err)
+						}
+					case uint:
+						serviceResult[resourceName] = uint64(input)
+					case int:
+						serviceResult[resourceName] = uint64(input)
+					default:
+						errs.Addf("while parsing %s: in value for %s/%s: expected string or number, but got %#v", path, serviceType, resourceName, input)
+					}
+				}
+				projectResult[serviceType] = serviceResult
+			}
+			domainResult[projectName] = projectResult
+		}
+		result[domainName] = domainResult
+	}
+	return result, errs
 }
 
 // ServiceTypesInAlphabeticalOrder can be used when service types need to be

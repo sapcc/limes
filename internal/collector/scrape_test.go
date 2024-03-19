@@ -237,6 +237,43 @@ func Test_ScrapeSuccess(t *testing.T) {
 		scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),
 	)
 
+	//check quota overrides
+	s.Clock.StepBy(scrapeInterval)
+	s.Cluster.QuotaOverrides = map[string]map[string]map[string]map[string]uint64{
+		"germany": {
+			// these are ignored because the constraints reported by the plugin are stricter
+			"berlin": {
+				"unittest": {
+					"capacity": 5,
+					"things":   2000,
+				},
+			},
+			// these are applied on top of the plugin's constraints
+			"dresden": {
+				"unittest": {
+					"capacity": 20,
+					"things":   500,
+				},
+			},
+		},
+	}
+	mustT(t, job.ProcessOne(s.Ctx, withLabel))
+	mustT(t, job.ProcessOne(s.Ctx, withLabel))
+
+	scrapedAt1 = s.Clock.Now().Add(-5 * time.Second)
+	scrapedAt2 = s.Clock.Now()
+	tr.DBChanges().AssertEqualf(`
+		UPDATE project_resources SET max_quota = 10 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
+		UPDATE project_resources SET min_quota = 1000 WHERE id = 3 AND service_id = 1 AND name = 'things';
+		UPDATE project_resources SET min_quota = 20, max_quota = 20 WHERE id = 4 AND service_id = 2 AND name = 'capacity';
+		UPDATE project_resources SET min_quota = 500, max_quota = 500 WHERE id = 6 AND service_id = 2 AND name = 'things';
+		UPDATE project_services SET scraped_at = %[1]d, checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = %[3]d, checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+	`,
+		scrapedAt1.Unix(), scrapedAt1.Add(scrapeInterval).Unix(),
+		scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),
+	)
+
 	//set some new quota values (note that "capacity" already had a non-zero
 	//quota because of the cluster.QuotaConstraints)
 	_, err := s.DB.Exec(`UPDATE project_resources SET quota = $1 WHERE name = $2`, 20, "capacity")
