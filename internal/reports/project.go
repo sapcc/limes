@@ -54,7 +54,7 @@ var (
 `)
 
 	projectReportQuery = sqlext.SimplifyWhitespace(`
-	SELECT p.id, p.uuid, p.name, COALESCE(p.parent_uuid, ''), p.has_bursting, ps.type, ps.scraped_at, pr.name, pr.quota, par.az, par.usage, par.physical_usage, pr.backend_quota, par.subresources
+	SELECT p.id, p.uuid, p.name, COALESCE(p.parent_uuid, ''), p.has_bursting, ps.type, ps.scraped_at, pr.name, pr.quota, par.az, par.quota, par.usage, par.physical_usage, pr.backend_quota, par.subresources
 	  FROM projects p
 	  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
 	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
@@ -117,6 +117,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 			resourceName       *string
 			quota              *uint64
 			az                 *limes.AvailabilityZone
+			azQuota            *uint64
 			azUsage            *uint64
 			azPhysicalUsage    *uint64
 			backendQuota       *int64
@@ -125,7 +126,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 		err := rows.Scan(
 			&projectID, &projectUUID, &projectName, &projectParentUUID, &projectHasBursting,
 			&serviceType, &scrapedAt, &resourceName,
-			&quota, &az, &azUsage, &azPhysicalUsage, &backendQuota, &azSubresources,
+			&quota, &az, &azQuota, &azUsage, &azPhysicalUsage, &backendQuota, &azSubresources,
 		)
 		if err != nil {
 			return err
@@ -243,7 +244,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 
 		if filter.WithAZBreakdown {
 			resReport.PerAZ[*az] = &limesresources.ProjectAZResourceReport{
-				Quota:         nil, //TODO: report this once we have a distribution model that fills quota per AZ
+				Quota:         azQuota,
 				Committed:     nil, //will be filled by finalizeProjectResourceReport()
 				Usage:         *azUsage,
 				PhysicalUsage: azPhysicalUsage,
@@ -342,7 +343,7 @@ func finalizeProjectResourceReport(projectReport *limesresources.ProjectReport, 
 			for _, resReport := range srvReport.Resources {
 				if len(resReport.PerAZ) >= 2 {
 					reportInAny := resReport.PerAZ[limes.AvailabilityZoneAny]
-					if reportInAny.Quota == nil && reportInAny.Usage == 0 {
+					if (reportInAny.Quota == nil || *reportInAny.Quota == 0) && reportInAny.Usage == 0 {
 						delete(resReport.PerAZ, limes.AvailabilityZoneAny)
 					}
 				}

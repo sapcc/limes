@@ -149,13 +149,19 @@
                 "min_confirm_by": 604800
               },
               "per_az": {
+                "any": {
+                  "quota": 4,
+                  "usage": 0
+                },
                 "az-one": {
+                  "quota": 8,
                   "usage": 2,
                   "planned_commitments": {
                     "2 years": 100
                   }
                 },
                 "az-two": {
+                  "quota": 8,
                   "usage": 2
                 }
               },
@@ -190,6 +196,7 @@
               },
               "per_az": {
                 "any": {
+                  "quota": 20,
                   "usage": 4
                 }
               },
@@ -214,7 +221,12 @@
               "unit": "B",
               "quota_distribution_model": "hierarchical",
               "per_az": {
+                "any": {
+                  "quota": 4,
+                  "usage": 0
+                },
                 "az-one": {
+                  "quota": 8,
                   "usage": 2,
                   "committed": {
                     "1 year": 2,
@@ -223,6 +235,7 @@
                   "unused_commitments": 2
                 },
                 "az-two": {
+                  "quota": 8,
                   "usage": 2,
                   "committed": {
                     "1 year": 2
@@ -256,6 +269,7 @@
               "quota_distribution_model": "hierarchical",
               "per_az": {
                 "any": {
+                  "quota": 20,
                   "usage": 4,
                   "committed": {
                     "2 years": 1

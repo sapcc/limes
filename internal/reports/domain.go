@@ -315,7 +315,7 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 				for _, resReport := range srvReport.Resources {
 					if len(resReport.PerAZ) >= 2 {
 						reportInAny := resReport.PerAZ[limes.AvailabilityZoneAny]
-						if reportInAny.Quota == nil && reportInAny.Usage == 0 {
+						if (reportInAny.Quota == nil || *reportInAny.Quota == 0) && reportInAny.Usage == 0 {
 							delete(resReport.PerAZ, limes.AvailabilityZoneAny)
 						}
 					}
