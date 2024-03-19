@@ -59,7 +59,7 @@ var (
 			SELECT SUM(par.quota) FROM project_az_resources par WHERE par.resource_id = pr.id
 		) WHERE service_id IN (
 			SELECT id FROM project_services WHERE type = $1
-		)
+		) AND pr.name = $2
 	`)
 )
 
@@ -135,7 +135,7 @@ func ApplyComputedProjectQuota(serviceType, resourceName string, dbm *gorp.DbMap
 	if err != nil {
 		return fmt.Errorf("while writing updated %s/%s quotas to DB: %w", serviceType, resourceName, err)
 	}
-	_, err = tx.Exec(acpqComputeProjectQuotaQuery, serviceType)
+	_, err = tx.Exec(acpqComputeProjectQuotaQuery, serviceType, resourceName)
 	if err != nil {
 		return fmt.Errorf("while computing updated %s/%s backend quotas: %w", serviceType, resourceName, err)
 	}
