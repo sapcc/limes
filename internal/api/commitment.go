@@ -598,13 +598,13 @@ func (p *v1Provider) buildSplitCommitment(dbCommitment db.ProjectCommitment, amo
 
 // TransferCommitment handles POST /v1/domains/{domain_id}/projects/{project_id}/transfer-commitment/{id}?token={token}
 func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) {
-	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/transfer-commitment/:id?token=:token")
+	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/transfer-commitment/:id")
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:edit") {
 		http.Error(w, "insufficient access rights.", http.StatusForbidden)
 		return
 	}
-	transferToken := r.URL.Query().Get("token")
+	transferToken := r.Header.Get("Transfer-Token")
 	if transferToken == "" {
 		http.Error(w, "no transfer token provided", http.StatusBadRequest)
 		return

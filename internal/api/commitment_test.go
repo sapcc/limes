@@ -792,7 +792,8 @@ func Test_TransferCommitment(t *testing.T) {
 
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/transfer-commitment/1?token=" + transferToken,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/transfer-commitment/1",
+		Header:       map[string]string{"Transfer-Token": transferToken},
 		ExpectBody:   assert.JSONObject{"commitment": resp2},
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
@@ -808,7 +809,8 @@ func Test_TransferCommitment(t *testing.T) {
 
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/transfer-commitment/2?token=" + transferToken,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/transfer-commitment/2",
+		Header:       map[string]string{"Transfer-Token": transferToken},
 		ExpectBody:   assert.JSONObject{"commitment": resp4},
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
@@ -816,7 +818,8 @@ func Test_TransferCommitment(t *testing.T) {
 	// wrong token
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/transfer-commitment/1?token=wrongToken",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/transfer-commitment/1",
+		Header:       map[string]string{"Transfer-Token": "wrongToken"},
 		ExpectStatus: http.StatusNotFound,
 		ExpectBody:   assert.StringData("no matching commitment found\n"),
 	}.Check(t, s.Handler)
