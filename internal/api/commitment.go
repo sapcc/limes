@@ -84,7 +84,7 @@ var (
 		 WHERE par.id = $1
 	`)
 	getCommitmentWithMatchingTransferTokenQuery = sqlext.SimplifyWhitespace(`
-		SELECT * FROM project_commitments WHERE transfer_token = $1
+		SELECT * FROM project_commitments WHERE id = $1 AND transfer_token = $2
 	`)
 	findTargetAZResourceIDBySourceIDQuery = sqlext.SimplifyWhitespace(`
 	  WITH source as (
@@ -609,6 +609,11 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "no transfer token provided", http.StatusBadRequest)
 		return
 	}
+	commitmentID := mux.Vars(r)["id"]
+	if commitmentID == "" {
+		http.Error(w, "no transfer token provided", http.StatusBadRequest)
+		return
+	}
 	dbDomain := p.FindDomainFromRequest(w, r)
 	if dbDomain == nil {
 		http.Error(w, "domain not found.", http.StatusNotFound)
@@ -622,7 +627,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 
 	// find commitment by transfer_token
 	var dbCommitment db.ProjectCommitment
-	err := p.DB.SelectOne(&dbCommitment, getCommitmentWithMatchingTransferTokenQuery, transferToken)
+	err := p.DB.SelectOne(&dbCommitment, getCommitmentWithMatchingTransferTokenQuery, commitmentID, transferToken)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "no matching commitment found", http.StatusNotFound)
 		return

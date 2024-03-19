@@ -808,7 +808,7 @@ func Test_TransferCommitment(t *testing.T) {
 
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/transfer-commitment/1?token=" + transferToken,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/transfer-commitment/2?token=" + transferToken,
 		ExpectBody:   assert.JSONObject{"commitment": resp4},
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
