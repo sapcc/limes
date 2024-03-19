@@ -117,10 +117,13 @@ func ApplyComputedProjectQuota(serviceType, resourceName string, dbm *gorp.DbMap
 
 	//evaluate QD algorithm
 	target := acpqComputeQuotas(stats, cfg, constraints)
-	logg.Debug("ACPQ for %s/%s: stats = %#v", serviceType, resourceName, stats)
-	logg.Debug("ACPQ for %s/%s: cfg = %#v", serviceType, resourceName, cfg)
-	logg.Debug("ACPQ for %s/%s: constraints = %#v", serviceType, resourceName, constraints)
-	logg.Debug("ACPQ for %s/%s: target = %#v", serviceType, resourceName, target)
+	if logg.ShowDebug {
+		logg.Debug("ACPQ for %s/%s: stats = %#v", serviceType, resourceName, stats)
+		logg.Debug("ACPQ for %s/%s: cfg = %#v", serviceType, resourceName, cfg)
+		logg.Debug("ACPQ for %s/%s: constraints = %#v", serviceType, resourceName, constraints)
+		buf, _ := json.Marshal(target) //nolint:errcheck
+		logg.Debug("ACPQ for %s/%s: target = %s", serviceType, resourceName, string(buf))
+	}
 
 	//write new quotas to database
 	err = sqlext.WithPreparedStatement(tx, acpqUpdateAZQuotaQuery, func(stmt *sql.Stmt) error {
