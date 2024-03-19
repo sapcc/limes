@@ -172,7 +172,7 @@ func ApplyComputedProjectQuota(serviceType, resourceName string, dbm *gorp.DbMap
 
 		err = ApplyBackendQuota(dbm, cluster, core.KeystoneDomainFromDB(dbDomain), dbProject, srv)
 		if err != nil {
-			logg.Error("while computing quotas for %s/%s: could applying quotas for project %s: %w", serviceType, resourceName, dbProject.UUID, err)
+			logg.Error("while computing quotas for %s/%s: could not apply quotas for project %s: %s", serviceType, resourceName, dbProject.UUID, err.Error())
 		}
 		return nil
 	})
