@@ -87,15 +87,19 @@ var (
 		SELECT * FROM project_commitments WHERE transfer_token = $1
 	`)
 	findTargetAZResourceIDBySourceIDQuery = sqlext.SimplifyWhitespace(`
+	  WITH source as (
+		SELECT ps.type, pr.name, par.az
+	    FROM project_az_resources as par
+		JOIN project_resources pr ON par.resource_id = pr.id
+	    JOIN project_services ps ON pr.service_id = ps.id
+	  WHERE par.id = $1
+	  )
 	  SELECT par.id 
 	    FROM project_az_resources as par
 		JOIN project_resources pr ON par.resource_id = pr.id
 	    JOIN project_services ps ON pr.service_id = ps.id
-	  WHERE ps.project_id = $1 AND az = (
-		SELECT az 
-		  FROM project_az_resources
-		  WHERE id = $2
-	  ) 
+		JOIN source s ON ps.type = s.type AND pr.name = s.name AND par.az = s.az
+	  WHERE ps.project_id = $2
 	`)
 
 	forceImmediateCapacityScrapeQuery = sqlext.SimplifyWhitespace(`
@@ -628,7 +632,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 
 	// get target AZ_RESOURCE_ID
 	var targetResourceID db.ProjectAZResourceID
-	err = p.DB.QueryRow(findTargetAZResourceIDBySourceIDQuery, targetProject.ID, dbCommitment.AZResourceID).Scan(&targetResourceID)
+	err = p.DB.QueryRow(findTargetAZResourceIDBySourceIDQuery, dbCommitment.AZResourceID, targetProject.ID).Scan(&targetResourceID)
 	if respondwith.ErrorText(w, err) {
 		return
 	}

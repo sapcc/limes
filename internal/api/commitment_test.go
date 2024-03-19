@@ -62,11 +62,11 @@ const testCommitmentsYAMLWithoutMinConfirmDate = `
      		type: --test-generic
      resource_behavior:
      	# the resources in "first" have commitments, the ones in "second" do not
-     	- resource: first/.*
+     	- resource: second/.*
      		commitment_durations: ["1 hour", "2 hours"]
-     	- resource: first/things
+     	- resource: second/things
      		commitment_is_az_aware: false
-     	- resource: first/capacity
+     	- resource: second/capacity
      		commitment_is_az_aware: true
 `
 
@@ -575,7 +575,7 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 	req1 := func(transferStatus string) assert.JSONObject {
 		return assert.JSONObject{
 			"id":                1,
-			"service_type":      "first",
+			"service_type":      "second",
 			"resource_name":     "capacity",
 			"availability_zone": "az-two",
 			"amount":            10,
@@ -587,7 +587,7 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 
 	resp1 := assert.JSONObject{
 		"id":                1,
-		"service_type":      "first",
+		"service_type":      "second",
 		"resource_name":     "capacity",
 		"availability_zone": "az-two",
 		"amount":            10,
@@ -620,7 +620,7 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 	// TransferAmount < CommitmentAmount
 	resp2 := assert.JSONObject{
 		"id":                2,
-		"service_type":      "first",
+		"service_type":      "second",
 		"resource_name":     "capacity",
 		"availability_zone": "az-two",
 		"amount":            9,
@@ -648,7 +648,7 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 	var confirmBy = s.Clock.Now().Unix()
 	req2 := assert.JSONObject{
 		"id":                4,
-		"service_type":      "first",
+		"service_type":      "second",
 		"resource_name":     "capacity",
 		"availability_zone": "az-two",
 		"amount":            10,
@@ -701,7 +701,7 @@ func Test_TransferCommitment(t *testing.T) {
 	var transferToken = test.GenerateDummyToken()
 	req1 := assert.JSONObject{
 		"id":                1,
-		"service_type":      "first",
+		"service_type":      "second",
 		"resource_name":     "capacity",
 		"availability_zone": "az-two",
 		"amount":            10,
@@ -711,7 +711,7 @@ func Test_TransferCommitment(t *testing.T) {
 
 	resp1 := assert.JSONObject{
 		"id":                1,
-		"service_type":      "first",
+		"service_type":      "second",
 		"resource_name":     "capacity",
 		"availability_zone": "az-two",
 		"amount":            10,
@@ -728,7 +728,7 @@ func Test_TransferCommitment(t *testing.T) {
 
 	resp2 := assert.JSONObject{
 		"id":                1,
-		"service_type":      "first",
+		"service_type":      "second",
 		"resource_name":     "capacity",
 		"availability_zone": "az-two",
 		"amount":            10,
@@ -744,7 +744,7 @@ func Test_TransferCommitment(t *testing.T) {
 	// Split commitment
 	resp3 := assert.JSONObject{
 		"id":                2,
-		"service_type":      "first",
+		"service_type":      "second",
 		"resource_name":     "capacity",
 		"availability_zone": "az-two",
 		"amount":            9,
@@ -760,7 +760,7 @@ func Test_TransferCommitment(t *testing.T) {
 	}
 	resp4 := assert.JSONObject{
 		"id":                2,
-		"service_type":      "first",
+		"service_type":      "second",
 		"resource_name":     "capacity",
 		"availability_zone": "az-two",
 		"amount":            9,
