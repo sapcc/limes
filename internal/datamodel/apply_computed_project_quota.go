@@ -27,6 +27,7 @@ import (
 
 	"github.com/go-gorp/gorp/v3"
 	"github.com/sapcc/go-api-declarations/limes"
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/internal/core"
@@ -116,6 +117,9 @@ func ApplyComputedProjectQuota(serviceType, resourceName string, dbm *gorp.DbMap
 
 	//evaluate QD algorithm
 	target := acpqComputeQuotas(stats, cfg, constraints)
+	logg.Debug("ACPQ for %s/%s: stats = %#v", serviceType, resourceName, stats)
+	logg.Debug("ACPQ for %s/%s: cfg = %#v", serviceType, resourceName, cfg)
+	logg.Debug("ACPQ for %s/%s: constraints = %#v", serviceType, resourceName, constraints)
 
 	//write new quotas to database
 	err = sqlext.WithPreparedStatement(tx, acpqUpdateAZQuotaQuery, func(stmt *sql.Stmt) error {
