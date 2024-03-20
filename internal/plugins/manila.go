@@ -115,9 +115,6 @@ func (p *manilaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud
 			return err
 		}
 		p.NetappMetrics = promquery.NewBulkQueryCache(manilaNetappMetricsQueries, 2*time.Minute, promClientForNetappMetrics)
-		if err != nil {
-			return err
-		}
 	}
 
 	return nil
