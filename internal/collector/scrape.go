@@ -38,9 +38,9 @@ import (
 )
 
 const (
-	//how long to wait before scraping the same project and service again
+	// how long to wait before scraping the same project and service again
 	scrapeInterval = 30 * time.Minute
-	//how long to wait before re-checking a project service that failed scraping
+	// how long to wait before re-checking a project service that failed scraping
 	recheckInterval = 5 * time.Minute
 )
 
@@ -114,11 +114,11 @@ func (c *Collector) ResourceScrapeJob(registerer prometheus.Registerer) jobloop.
 // task type for these jobs is just db.ProjectService, but this more elaborate
 // task type allows us to reuse timing information from the discover step.
 type projectScrapeTask struct {
-	//data loaded during discoverScrapeTask
+	// data loaded during discoverScrapeTask
 	Service db.ProjectService
-	//timing information
+	// timing information
 	Timing TaskTiming
-	//error reporting
+	// error reporting
 	Err error
 }
 
@@ -154,21 +154,21 @@ func (c *Collector) processResourceScrapeTask(_ context.Context, task projectScr
 	srv := task.Service
 	plugin := c.Cluster.QuotaPlugins[srv.Type] //NOTE: discoverScrapeTask already verified that this exists
 
-	//collect additional DB records
+	// collect additional DB records
 	dbProject, dbDomain, project, err := c.identifyProjectBeingScraped(srv)
 	if err != nil {
 		return err
 	}
 	logg.Debug("scraping %s resources for %s/%s", srv.Type, dbDomain.Name, dbProject.Name)
 
-	//perform resource scrape
+	// perform resource scrape
 	resourceData, serializedMetrics, err := plugin.Scrape(project, c.Cluster.Config.AvailabilityZones)
 	if err != nil {
 		task.Err = util.UnpackError(err)
 	}
 	task.Timing.FinishedAt = c.MeasureTimeAtEnd()
 
-	//write result on success; if anything fails, try to record the error in the DB
+	// write result on success; if anything fails, try to record the error in the DB
 	if task.Err == nil {
 		err := c.writeResourceScrapeResult(dbDomain, dbProject, task, resourceData, serializedMetrics)
 		if err != nil {
@@ -188,7 +188,7 @@ func (c *Collector) processResourceScrapeTask(_ context.Context, task projectScr
 		}
 
 		if srv.ScrapedAt == nil {
-			//see explanation inside the called function's body
+			// see explanation inside the called function's body
 			err := c.writeDummyResources(dbDomain, dbProject, srv.Ref())
 			if err != nil {
 				c.LogError("additional DB error while writing dummy resources for service %s in project %s: %s",
@@ -209,13 +209,13 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 
 	for resName, resData := range resourceData {
 		if len(resData.UsageData) == 0 {
-			//ensure that there is at least one ProjectAZResource for each ProjectResource
+			// ensure that there is at least one ProjectAZResource for each ProjectResource
 			resData.UsageData = core.InAnyAZ(core.UsageData{Usage: 0})
 			resourceData[resName] = resData
 		} else {
-			//for AZ-aware resources, ensure that we also have a ProjectAZResource in
-			//"any", because ApplyComputedProjectQuota needs somewhere to write base
-			//quotas into if enabled
+			// for AZ-aware resources, ensure that we also have a ProjectAZResource in
+			// "any", because ApplyComputedProjectQuota needs somewhere to write base
+			// quotas into if enabled
 			_, exists := resData.UsageData[limes.AvailabilityZoneAny]
 			if !exists {
 				resData.UsageData[limes.AvailabilityZoneAny] = &core.UsageData{Usage: 0}
@@ -229,9 +229,9 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 
-	//we have seen UPDATEs in this transaction getting stuck in the past, this
-	//should hopefully prevent this (or at least cause loud complaints when it
-	//happens)
+	// we have seen UPDATEs in this transaction getting stuck in the past, this
+	// should hopefully prevent this (or at least cause loud complaints when it
+	// happens)
 	//
 	//TODO: consider setting this for the entire connection if it helps
 	_, err = tx.Exec(`SET LOCAL idle_in_transaction_session_timeout = 5000`) // 5000 ms = 5 seconds
@@ -239,14 +239,14 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 		return fmt.Errorf("while applying idle_in_transaction_session_timeout: %w", err)
 	}
 
-	//this is the callback that ProjectResourceUpdate will use to write the scraped data into the project_resources
+	// this is the callback that ProjectResourceUpdate will use to write the scraped data into the project_resources
 	overrideQuotas := c.Cluster.QuotaOverrides[dbDomain.Name][dbProject.Name][srv.Type]
 	updateResource := func(res *db.ProjectResource) error {
 		backendQuota := resourceData[res.Name].Quota
 
 		resInfo := c.Cluster.InfoForResource(srv.Type, res.Name)
 		if !resInfo.NoQuota {
-			//check if we can auto-approve an initial quota
+			// check if we can auto-approve an initial quota
 			if res.BackendQuota == nil && (res.Quota == nil || *res.Quota == 0) && backendQuota > 0 && uint64(backendQuota) == resInfo.AutoApproveInitialQuota {
 				res.Quota = &resInfo.AutoApproveInitialQuota
 				logg.Other("AUDIT", "changing %s/%s quota for project %s/%s from %s to %s through auto-approval",
@@ -260,8 +260,8 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 			res.MinQuota = resourceData[res.Name].MinQuota
 			res.MaxQuota = resourceData[res.Name].MaxQuota
 
-			//if an override is configured, we need to ensure that it does not
-			//conflict with the MinQuota/MaxQuota prescribed by the backend
+			// if an override is configured, we need to ensure that it does not
+			// conflict with the MinQuota/MaxQuota prescribed by the backend
 			overrideQuota, exists := overrideQuotas[res.Name]
 			if exists {
 				if res.MinQuota != nil {
@@ -278,7 +278,7 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 		return nil
 	}
 
-	//update project_resources using the action callback from above
+	// update project_resources using the action callback from above
 	resourceUpdateResult, err := datamodel.ProjectResourceUpdate{
 		UpdateResource: updateResource,
 		LogError:       c.LogError,
@@ -287,7 +287,7 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 		return err
 	}
 
-	//list existing project_az_resources
+	// list existing project_az_resources
 	var dbAZResources []db.ProjectAZResource
 	_, err = tx.Select(&dbAZResources, findProjectAZResourcesForServiceQuery, srv.ID)
 	if err != nil {
@@ -303,9 +303,9 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 		allResourceNames[idx] = res.Name
 		dbResourcesByName[res.Name] = res
 	}
-	sort.Strings(allResourceNames) //for deterministic test behavior
+	sort.Strings(allResourceNames) // for deterministic test behavior
 
-	//update project_az_resources for each resource
+	// update project_az_resources for each resource
 	for _, resourceName := range allResourceNames {
 		res := dbResourcesByName[resourceName]
 		usageData := resourceData[resourceName].UsageData.Normalize(c.Cluster.Config.AvailabilityZones)
@@ -329,7 +329,7 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 				azRes.Usage = data.Usage
 				azRes.PhysicalUsage = data.PhysicalUsage
 
-				//warn when the backend is inconsistent with itself
+				// warn when the backend is inconsistent with itself
 				if data.Subresources != nil && uint64(len(data.Subresources)) != data.Usage {
 					logg.Info("resource quantity mismatch in project %s, resource %s/%s, AZ %s: usage = %d, but found %d subresources",
 						dbProject.UUID, srv.Type, res.Name, az,
@@ -342,7 +342,7 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 					return err
 				}
 
-				//track historical usage if required (only required for AutogrowQuotaDistribution)
+				// track historical usage if required (only required for AutogrowQuotaDistribution)
 				qdCfg := c.Cluster.QuotaDistributionConfigForResource(srv.Type, res.Name)
 				if qdCfg.Autogrow == nil {
 					azRes.HistoricalUsageJSON = ""
@@ -371,9 +371,9 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 		}
 	}
 
-	//update scraped_at timestamp and reset the stale flag on this service so
-	//that we don't scrape it again immediately afterwards; also persist all other
-	//attributes that we have not written yet
+	// update scraped_at timestamp and reset the stale flag on this service so
+	// that we don't scrape it again immediately afterwards; also persist all other
+	// attributes that we have not written yet
 	_, err = tx.Exec(writeResourceScrapeSuccessQuery,
 		task.Timing.FinishedAt, task.Timing.FinishedAt.Add(c.AddJitter(scrapeInterval)), task.Timing.Duration().Seconds(),
 		string(serializedMetrics), srv.ID,
@@ -391,10 +391,10 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 		logg.Info("scrape of %s in project %s has taken excessively long (%s)", srv.Type, dbProject.UUID, task.Timing.Duration().String())
 	}
 
-	//if a mismatch between frontend and backend quota was detected, try to
-	//rectify it (but an error at this point is non-fatal: we don't want scraping
-	//to get stuck because some project has backend_quota > usage > quota, for
-	//example)
+	// if a mismatch between frontend and backend quota was detected, try to
+	// rectify it (but an error at this point is non-fatal: we don't want scraping
+	// to get stuck because some project has backend_quota > usage > quota, for
+	// example)
 	if c.Cluster.Authoritative && resourceUpdateResult.HasBackendQuotaDrift {
 		domain := core.KeystoneDomainFromDB(dbDomain)
 		err := datamodel.ApplyBackendQuota(c.DB, c.Cluster, domain, dbProject, srv.Ref())
@@ -410,25 +410,25 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 
 func (c *Collector) writeDummyResources(dbDomain db.Domain, dbProject db.Project, srv db.ServiceRef[db.ProjectServiceID]) error {
 	//Rationale: This is called when we first try to scrape a project service,
-	//and the scraping fails (most likely due to some internal error in the
-	//backend service). We used to just not touch the database at this point,
-	//thus resuming scraping of the same project service in the next loop
-	//iteration of c.Scrape(). However, when the backend service is down for some
-	//time, this means that project_services in new projects are stuck without
-	//project_resources, which is an unexpected state that confuses the API.
+	// and the scraping fails (most likely due to some internal error in the
+	// backend service). We used to just not touch the database at this point,
+	// thus resuming scraping of the same project service in the next loop
+	// iteration of c.Scrape(). However, when the backend service is down for some
+	// time, this means that project_services in new projects are stuck without
+	// project_resources, which is an unexpected state that confuses the API.
 	//
-	//To avoid this situation, this method creates dummy project_resources for an
-	//unscrapable project_service. Also, scraped_at is set to 0 (i.e. 1970-01-01
+	// To avoid this situation, this method creates dummy project_resources for an
+	// unscrapable project_service. Also, scraped_at is set to 0 (i.e. 1970-01-01
 	//00:00:00 UTC) to make the scraper come back to it after dealing with all
-	//new and stale project_services.
+	// new and stale project_services.
 	tx, err := c.DB.Begin()
 	if err != nil {
 		return err
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 
-	//create all project_resources, but do not set any particular values (except
-	//that quota constraints and default quotas are enforced)
+	// create all project_resources, but do not set any particular values (except
+	// that quota constraints and default quotas are enforced)
 	overrideQuotas := c.Cluster.QuotaOverrides[dbDomain.Name][dbProject.Name][srv.Type]
 	updateResult, err := datamodel.ProjectResourceUpdate{
 		UpdateResource: func(res *db.ProjectResource) error {
@@ -450,9 +450,9 @@ func (c *Collector) writeDummyResources(dbDomain db.Domain, dbProject db.Project
 		return err
 	}
 	//NOTE: We do not do ApplyBackendQuota here: This function is only
-	//called after scraping errors, so ApplyBackendQuota will likely fail, too.
+	// called after scraping errors, so ApplyBackendQuota will likely fail, too.
 
-	//create dummy project_az_resources
+	// create dummy project_az_resources
 	for _, res := range updateResult.DBResources {
 		err := tx.Insert(&db.ProjectAZResource{
 			ResourceID:       res.ID,
@@ -464,9 +464,9 @@ func (c *Collector) writeDummyResources(dbDomain db.Domain, dbProject db.Project
 		}
 	}
 
-	//update scraped_at timestamp and reset stale flag to make sure that we do
-	//not scrape this service again immediately afterwards if there are other
-	//stale services to cover first
+	// update scraped_at timestamp and reset stale flag to make sure that we do
+	// not scrape this service again immediately afterwards if there are other
+	// stale services to cover first
 	dummyScrapedAt := time.Unix(0, 0).UTC()
 	_, err = tx.Exec(
 		`UPDATE project_services SET scraped_at = $1, scrape_duration_secs = $2, stale = $3 WHERE id = $4`,

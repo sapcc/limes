@@ -45,15 +45,15 @@ import (
 )
 
 type manilaPlugin struct {
-	//configuration
+	// configuration
 	ShareTypes                          []ManilaShareTypeSpec `yaml:"share_types"`
 	PrometheusAPIConfigForAZAwareness   *promquery.Config     `yaml:"prometheus_api_for_az_awareness"`
 	PrometheusAPIConfigForNetappMetrics *promquery.Config     `yaml:"prometheus_api_for_netapp_metrics"`
-	//connections
+	// connections
 	ManilaV2      *gophercloud.ServiceClient                                             `yaml:"-"`
 	AZMetrics     *promquery.BulkQueryCache[manilaAZMetricsKey, manilaAZMetrics]         `yaml:"-"`
 	NetappMetrics *promquery.BulkQueryCache[manilaNetappMetricsKey, manilaNetappMetrics] `yaml:"-"`
-	//caches
+	// caches
 	ShareTypeIDByName map[string]string `yaml:"-"`
 }
 
@@ -70,7 +70,7 @@ func (p *manilaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud
 		return errors.New("quota plugin sharev2: missing required configuration field params.prometheus_api_for_az_awareness")
 	}
 
-	//initialize connection to Manila
+	// initialize connection to Manila
 	p.ManilaV2, err = openstack.NewSharedFileSystemV2(provider, eo)
 	if err != nil {
 		return err
@@ -87,8 +87,8 @@ func (p *manilaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud
 	}
 	p.ManilaV2.Microversion = "2.53"
 
-	//we need to enumerate all share types once to establish an ID-name mapping
-	//(the Manila quota API exclusively deals with share type names, but some Prometheus metrics need the share type ID)
+	// we need to enumerate all share types once to establish an ID-name mapping
+	// (the Manila quota API exclusively deals with share type names, but some Prometheus metrics need the share type ID)
 	pager, err := sharetypes.List(p.ManilaV2, &sharetypes.ListOpts{IsPublic: "all"}).AllPages()
 	if err != nil {
 		return fmt.Errorf("cannot enumerate Manila share types: %w", err)
@@ -102,7 +102,7 @@ func (p *manilaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud
 		p.ShareTypeIDByName[shareType.Name] = shareType.ID
 	}
 
-	//initialize connection to Prometheus
+	// initialize connection to Prometheus
 	promClientForAZAwareness, err := p.PrometheusAPIConfigForAZAwareness.Connect()
 	if err != nil {
 		return err
@@ -141,7 +141,7 @@ func (p *manilaPlugin) findMicroversion(client *gophercloud.ServiceClient) (int,
 		}
 	}
 
-	//no 2.x version found at all
+	// no 2.x version found at all
 	return 0, nil
 }
 
@@ -211,8 +211,8 @@ func (p *manilaPlugin) Rates() []limesrates.RateInfo {
 
 func (p *manilaPlugin) makeResourceName(kind string, shareType ManilaShareTypeSpec) string {
 	if p.ShareTypes[0].Name == shareType.Name {
-		//the resources for the first share type don't get the share type suffix
-		//for backwards compatibility reasons
+		// the resources for the first share type don't get the share type suffix
+		// for backwards compatibility reasons
 		return kind
 	}
 	return kind + "_" + shareType.Name
@@ -237,7 +237,7 @@ func (p *manilaPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedS
 
 // Scrape implements the core.QuotaPlugin interface.
 func (p *manilaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[string]core.ResourceData, serializedMetrics []byte, err error) {
-	//the share_networks quota is only shown when querying for no share_type in particular
+	// the share_networks quota is only shown when querying for no share_type in particular
 	qs, err := manilaGetQuotaSet(p.ManilaV2, project.UUID, "")
 	if err != nil {
 		return nil, nil, err
@@ -246,7 +246,7 @@ func (p *manilaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Avail
 		"share_networks": qs.ShareNetworks.ToResourceDataInAnyAZ(),
 	}
 
-	//all other quotas and usages are grouped under their respective share type
+	// all other quotas and usages are grouped under their respective share type
 	for _, shareType := range p.ShareTypes {
 		subresult, err := p.scrapeShareType(project, allAZs, shareType)
 		if err != nil {
@@ -273,8 +273,8 @@ type manilaResourceData struct {
 }
 
 func (p *manilaPlugin) scrapeShareType(project core.KeystoneProject, allAZs []limes.AvailabilityZone, shareType ManilaShareTypeSpec) (manilaResourceData, error) {
-	//return all-zero data if this share type is not enabled for this project,
-	//and also set MaxQuota = 0 to keep Limes from auto-assigning quota
+	// return all-zero data if this share type is not enabled for this project,
+	// and also set MaxQuota = 0 to keep Limes from auto-assigning quota
 	stName := resolveManilaShareType(shareType, project)
 	if stName == "" {
 		noQuotaAllowed := core.ResourceData{
@@ -291,7 +291,7 @@ func (p *manilaPlugin) scrapeShareType(project core.KeystoneProject, allAZs []li
 		}, nil
 	}
 
-	//start with the quota data from Manila
+	// start with the quota data from Manila
 	qs, err := manilaGetQuotaSet(p.ManilaV2, project.UUID, stName)
 	if err != nil {
 		return manilaResourceData{}, err
@@ -306,7 +306,7 @@ func (p *manilaPlugin) scrapeShareType(project core.KeystoneProject, allAZs []li
 		result.Shares = qs.Replicas.ToResourceDataFor(allAZs)
 		result.ShareCapacity = qs.ReplicaGigabytes.ToResourceDataFor(allAZs)
 
-		//if share quotas and replica quotas disagree, report quota = -1 to force Limes to reapply the replica quota
+		// if share quotas and replica quotas disagree, report quota = -1 to force Limes to reapply the replica quota
 		if qs.Shares.Quota != result.Shares.Quota {
 			logg.Info("found mismatch between share quota (%d) and replica quota (%d) for share type %q in project %s",
 				result.Shares.Quota, qs.Replicas.Quota, stName, project.UUID)
@@ -319,7 +319,7 @@ func (p *manilaPlugin) scrapeShareType(project core.KeystoneProject, allAZs []li
 		}
 	}
 
-	//add data from Prometheus metrics to break down usage by AZ
+	// add data from Prometheus metrics to break down usage by AZ
 	stID, exists := p.ShareTypeIDByName[stName]
 	if !exists {
 		return manilaResourceData{}, fmt.Errorf("cannot find ID for share type with name %q", stName)
@@ -340,7 +340,7 @@ func (p *manilaPlugin) scrapeShareType(project core.KeystoneProject, allAZs []li
 		result.SnapshotCapacity.AddLocalizedUsage(az, azm.SnapshotCapacityGiB)
 	}
 
-	//add data from Netapp metrics if available
+	// add data from Netapp metrics if available
 	if p.NetappMetrics != nil {
 		emptyQuota := manilaQuotaDetail{Quota: 0, Usage: 0}
 		result.SnapmirrorCapacity = emptyQuota.ToResourceDataFor(allAZs)
@@ -368,7 +368,7 @@ func (p *manilaPlugin) scrapeShareType(project core.KeystoneProject, allAZs []li
 }
 
 func (p *manilaPlugin) rejectInaccessibleShareType(project core.KeystoneProject, quotas map[string]uint64) error {
-	//check if an inaccessible share type is used
+	// check if an inaccessible share type is used
 	for _, shareType := range p.ShareTypes {
 		stName := resolveManilaShareType(shareType, project)
 		if stName == "" {
@@ -392,9 +392,9 @@ func (p *manilaPlugin) SetQuota(project core.KeystoneProject, quotas map[string]
 
 	expect200 := &gophercloud.RequestOpts{OkCodes: []int{200}}
 
-	//General note: Even though it complicates the code, we need to set overall
-	//quotas first, otherwise share-type-specific quotas may get rejected for not
-	//fitting in the overall quota.
+	// General note: Even though it complicates the code, we need to set overall
+	// quotas first, otherwise share-type-specific quotas may get rejected for not
+	// fitting in the overall quota.
 
 	shareNetworkQuota := quotas["share_networks"]
 	overallQuotas := manilaQuotaSet{
@@ -476,12 +476,12 @@ func logDebugSetQuota(projectUUID, shareTypeName string, quotas manilaQuotaSet) 
 
 // DescribeMetrics implements the core.QuotaPlugin interface.
 func (p *manilaPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
-	//not used by this plugin
+	// not used by this plugin
 }
 
 // CollectMetrics implements the core.QuotaPlugin interface.
 func (p *manilaPlugin) CollectMetrics(ch chan<- prometheus.Metric, project core.KeystoneProject, serializedMetrics []byte) error {
-	//not used by this plugin
+	// not used by this plugin
 	return nil
 }
 
@@ -587,7 +587,7 @@ type manilaAZMetrics struct {
 }
 
 type manilaNetappMetrics struct {
-	//all in GiB
+	// all in GiB
 	SharePhysicalUsage      uint64
 	SnapshotPhysicalUsage   uint64
 	SnapmirrorUsage         uint64

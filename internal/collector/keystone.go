@@ -56,15 +56,15 @@ func (c *Collector) ScanDomainsAndProjectsJob(registerer prometheus.Registerer) 
 
 // ScanDomainsOpts contains additional options for ScanDomains().
 type ScanDomainsOpts struct {
-	//Recurse into ScanProjects for all domains in the selected cluster,
-	//rather than just for new domains.
+	// Recurse into ScanProjects for all domains in the selected cluster,
+	// rather than just for new domains.
 	ScanAllProjects bool
 }
 
 // ScanDomains queries Keystone to discover new domains, and returns a
 // list of UUIDs for the newly discovered domains.
 func (c *Collector) ScanDomains(opts ScanDomainsOpts) (result []string, resultErr error) {
-	//list domains in Keystone
+	// list domains in Keystone
 	allDomains, err := c.Cluster.DiscoveryPlugin.ListDomains()
 	if err != nil {
 		return nil, fmt.Errorf("while listing domains: %w", util.UnpackError(err))
@@ -75,9 +75,9 @@ func (c *Collector) ScanDomains(opts ScanDomainsOpts) (result []string, resultEr
 		isDomainUUID[domain.UUID] = true
 	}
 
-	//when a domain has been deleted in Keystone, remove it from our database,
-	//too (the deletion from the `domains` table includes all projects in that
-	//domain and to all related resource records through `ON DELETE CASCADE`)
+	// when a domain has been deleted in Keystone, remove it from our database,
+	// too (the deletion from the `domains` table includes all projects in that
+	// domain and to all related resource records through `ON DELETE CASCADE`)
 	existingDomainsByUUID := make(map[string]*db.Domain)
 	var dbDomains []*db.Domain
 	_, err = c.DB.Select(&dbDomains, `SELECT * FROM domains`)
@@ -96,12 +96,12 @@ func (c *Collector) ScanDomains(opts ScanDomainsOpts) (result []string, resultEr
 		existingDomainsByUUID[dbDomain.UUID] = dbDomain
 	}
 
-	//when a domain has been created in Keystone, create the corresponding record
-	//in our DB and scan its projects immediately
+	// when a domain has been created in Keystone, create the corresponding record
+	// in our DB and scan its projects immediately
 	for _, domain := range domains {
 		dbDomain, exists := existingDomainsByUUID[domain.UUID]
 		if exists {
-			//check if the name was updated in Keystone
+			// check if the name was updated in Keystone
 			if dbDomain.Name != domain.Name {
 				logg.Info("discovered Keystone domain name change: %s -> %s", dbDomain.Name, domain.Name)
 				dbDomain.Name = domain.Name
@@ -120,7 +120,7 @@ func (c *Collector) ScanDomains(opts ScanDomainsOpts) (result []string, resultEr
 		}
 		result = append(result, domain.UUID)
 
-		//with ScanAllProjects = true, we will scan projects in the next step, so skip now
+		// with ScanAllProjects = true, we will scan projects in the next step, so skip now
 		if opts.ScanAllProjects {
 			dbDomains = append(dbDomains, dbDomain)
 		} else {
@@ -131,7 +131,7 @@ func (c *Collector) ScanDomains(opts ScanDomainsOpts) (result []string, resultEr
 		}
 	}
 
-	//recurse into ScanProjects if requested
+	// recurse into ScanProjects if requested
 	if opts.ScanAllProjects {
 		for _, dbDomain := range dbDomains {
 			_, err = c.ScanProjects(dbDomain)
@@ -145,14 +145,14 @@ func (c *Collector) ScanDomains(opts ScanDomainsOpts) (result []string, resultEr
 }
 
 func (c *Collector) initDomain(domain core.KeystoneDomain) (*db.Domain, error) {
-	//do this in a transaction to avoid half-initialized domains
+	// do this in a transaction to avoid half-initialized domains
 	tx, err := c.DB.Begin()
 	if err != nil {
 		return nil, err
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 
-	//add record to `domains` table
+	// add record to `domains` table
 	dbDomain := &db.Domain{
 		Name: domain.Name,
 		UUID: domain.UUID,
@@ -172,7 +172,7 @@ func (c *Collector) initDomain(domain core.KeystoneDomain) (*db.Domain, error) {
 
 // ScanProjects queries Keystone to discover new projects in the given domain.
 func (c *Collector) ScanProjects(domain *db.Domain) (result []string, resultErr error) {
-	//list projects in Keystone
+	// list projects in Keystone
 	projects, err := c.Cluster.DiscoveryPlugin.ListProjects(core.KeystoneDomainFromDB(*domain))
 	if err != nil {
 		return nil, fmt.Errorf("while listing projects in domain %q: %w", domain.Name, util.UnpackError(err))
@@ -182,9 +182,9 @@ func (c *Collector) ScanProjects(domain *db.Domain) (result []string, resultErr 
 		isProjectUUID[project.UUID] = true
 	}
 
-	//when a project has been deleted in Keystone, remove it from our database,
-	//too (the deletion from the `projects` table includes the projects' resource
-	//records through `ON DELETE CASCADE`)
+	// when a project has been deleted in Keystone, remove it from our database,
+	// too (the deletion from the `projects` table includes the projects' resource
+	// records through `ON DELETE CASCADE`)
 	existingProjectsByUUID := make(map[string]*db.Project)
 	var dbProjects []*db.Project
 	_, err = c.DB.Select(&dbProjects, `SELECT * FROM projects WHERE domain_id = $1`, domain.ID)
@@ -203,12 +203,12 @@ func (c *Collector) ScanProjects(domain *db.Domain) (result []string, resultErr 
 		existingProjectsByUUID[dbProject.UUID] = dbProject
 	}
 
-	//when a project has been created in Keystone, create the corresponding
-	//record in our DB
+	// when a project has been created in Keystone, create the corresponding
+	// record in our DB
 	for _, project := range projects {
 		dbProject, exists := existingProjectsByUUID[project.UUID]
 		if exists {
-			//check if the name was updated in Keystone
+			// check if the name was updated in Keystone
 			needToSave := false
 			if dbProject.Name != project.Name {
 				logg.Info("discovered Keystone project name change: %s/%s -> %s", domain.Name, dbProject.Name, project.Name)
@@ -239,7 +239,7 @@ func (c *Collector) ScanProjects(domain *db.Domain) (result []string, resultErr 
 		result = append(result, project.UUID)
 	}
 
-	//recompute domain quota values that depend on project quotas if necessary
+	// recompute domain quota values that depend on project quotas if necessary
 	for serviceType := range c.Cluster.QuotaPlugins {
 		err := datamodel.ApplyComputedDomainQuota(c.DB, c.Cluster, domain.ID, serviceType)
 		if err != nil {
@@ -253,14 +253,14 @@ func (c *Collector) ScanProjects(domain *db.Domain) (result []string, resultErr 
 // Initialize all the database records for a project (in both `projects` and
 // `project_services`).
 func (c *Collector) initProject(domain *db.Domain, project core.KeystoneProject) error {
-	//do this in a transaction to avoid half-initialized projects
+	// do this in a transaction to avoid half-initialized projects
 	tx, err := c.DB.Begin()
 	if err != nil {
 		return err
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 
-	//add record to `projects` table
+	// add record to `projects` table
 	dbProject := &db.Project{
 		DomainID:   domain.ID,
 		Name:       project.Name,
@@ -272,7 +272,7 @@ func (c *Collector) initProject(domain *db.Domain, project core.KeystoneProject)
 		return err
 	}
 
-	//add records to `project_services` table
+	// add records to `project_services` table
 	err = datamodel.ValidateProjectServices(tx, c.Cluster, *domain, *dbProject, c.MeasureTime())
 	if err != nil {
 		return err

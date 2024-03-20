@@ -38,10 +38,10 @@ var _ images.ImageVisibility
 
 // OSTypeProber contains the logic for filling the OSType attribute of a Nova instance subresource.
 type OSTypeProber struct {
-	//caches
-	CacheByImage    map[string]string //for instances booted from images
-	CacheByInstance map[string]string //for instances booted from volumes
-	//connections
+	// caches
+	CacheByImage    map[string]string // for instances booted from images
+	CacheByInstance map[string]string // for instances booted from volumes
+	// connections
 	NovaV2   *gophercloud.ServiceClient
 	CinderV3 *gophercloud.ServiceClient
 	GlanceV2 *gophercloud.ServiceClient
@@ -85,7 +85,7 @@ func (p *OSTypeProber) getFromBootVolume(instanceID string) string {
 func (p *OSTypeProber) getFromImage(imageIDAttribute any) string {
 	imageID, ok := imageIDAttribute.(string)
 	if !ok {
-		//malformed "image" section in the instance JSON returned by Nova
+		// malformed "image" section in the instance JSON returned by Nova
 		return "image-missing"
 	}
 
@@ -105,7 +105,7 @@ func (p *OSTypeProber) getFromImage(imageIDAttribute any) string {
 }
 
 func (p *OSTypeProber) findFromBootVolume(instanceID string) (string, error) {
-	//list volume attachments
+	// list volume attachments
 	page, err := volumeattach.List(p.NovaV2, instanceID).AllPages()
 	if err != nil {
 		return "", err
@@ -115,7 +115,7 @@ func (p *OSTypeProber) findFromBootVolume(instanceID string) (string, error) {
 		return "", err
 	}
 
-	//find root volume among attachments
+	// find root volume among attachments
 	var rootVolumeID string
 	for _, attachment := range attachments {
 		if attachment.Device == "/dev/sda" || attachment.Device == "/dev/vda" {
@@ -127,7 +127,7 @@ func (p *OSTypeProber) findFromBootVolume(instanceID string) (string, error) {
 		return "rootdisk-missing", nil
 	}
 
-	//check volume metadata
+	// check volume metadata
 	var volume struct {
 		ImageMetadata struct {
 			VMwareOSType string `json:"vmware_ostype"`
@@ -151,33 +151,33 @@ func (p *OSTypeProber) findFromImage(imageID string) (string, error) {
 	}
 	err := images.Get(p.GlanceV2, imageID).ExtractInto(&result)
 	if err != nil {
-		//report a dummy value if image has been deleted...
+		// report a dummy value if image has been deleted...
 		if errext.IsOfType[gophercloud.ErrDefault404](err) {
 			return "image-deleted", nil
 		}
-		//otherwise, try to GET image again during next scrape
+		// otherwise, try to GET image again during next scrape
 		return "", err
 	}
 
-	//prefer vmware_ostype attribute since this is validated by Nova upon booting the VM
+	// prefer vmware_ostype attribute since this is validated by Nova upon booting the VM
 	if isValidVMwareOSType[result.VMwareOSType] {
 		return result.VMwareOSType, nil
 	}
-	//look for a tag like "ostype:rhel7" or "ostype:windows8Server64"
+	// look for a tag like "ostype:rhel7" or "ostype:windows8Server64"
 	osType := ""
 	for _, tag := range result.Tags {
 		if strings.HasPrefix(tag, "ostype:") {
 			if osType == "" {
 				osType = strings.TrimPrefix(tag, "ostype:")
 			} else {
-				//multiple such tags -> wtf
+				// multiple such tags -> wtf
 				osType = ""
 				break
 			}
 		}
 	}
 
-	//report "unknown" as a last resort
+	// report "unknown" as a last resort
 	if osType == "" {
 		return "unknown", nil
 	}

@@ -31,7 +31,7 @@ import (
 // ValidateProjectServices ensures that all required ProjectService records for
 // this project exist (and none other).
 func ValidateProjectServices(dbi db.Interface, cluster *core.Cluster, domain db.Domain, project db.Project, now time.Time) error {
-	//list existing records
+	// list existing records
 	seen := make(map[string]bool)
 	var services []db.ProjectService
 	_, err := dbi.Select(&services,
@@ -41,7 +41,7 @@ func ValidateProjectServices(dbi db.Interface, cluster *core.Cluster, domain db.
 	}
 	logg.Debug("checking consistency for %d project services in project %s...", len(services), project.UUID)
 
-	//cleanup entries for services that have been removed from the configuration
+	// cleanup entries for services that have been removed from the configuration
 	for _, srv := range services {
 		seen[srv.Type] = true
 		if !cluster.HasService(srv.Type) {
@@ -54,7 +54,7 @@ func ValidateProjectServices(dbi db.Interface, cluster *core.Cluster, domain db.
 		}
 	}
 
-	//create missing service entries
+	// create missing service entries
 	for _, serviceType := range cluster.ServiceTypesInAlphabeticalOrder() {
 		if seen[serviceType] {
 			continue

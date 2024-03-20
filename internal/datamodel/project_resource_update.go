@@ -35,19 +35,19 @@ import (
 // ProjectResourceUpdate describes an operation that updates resource data
 // within a single project service.
 type ProjectResourceUpdate struct {
-	//A custom callback that will be called once for each resource in the given service.
+	// A custom callback that will be called once for each resource in the given service.
 	UpdateResource func(*db.ProjectResource) error
-	//If nil, logg.Error is used. Unit tests should give t.Errorf here.
+	// If nil, logg.Error is used. Unit tests should give t.Errorf here.
 	LogError func(msg string, args ...any)
 }
 
 // ProjectResourceUpdateResult is the return value for ProjectUpdate.Run().
 type ProjectResourceUpdateResult struct {
-	//If true, some resources have a BackendQuota that differs from the
-	//DesiredBackendQuota. The caller should call ApplyBackendQuota() for these
-	//services once the DB transaction has been committed.
+	// If true, some resources have a BackendQuota that differs from the
+	// DesiredBackendQuota. The caller should call ApplyBackendQuota() for these
+	// services once the DB transaction has been committed.
 	HasBackendQuotaDrift bool
-	//The set of resources that exists in the DB after the update.
+	// The set of resources that exists in the DB after the update.
 	DBResources []db.ProjectResource
 }
 
@@ -69,25 +69,25 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, doma
 		constraints = cluster.QuotaConstraints.Projects[domain.Name][project.Name][srv.Type]
 	}
 
-	//We will first collect all existing data into one of these structs for each
-	//resource. Then we will compute the target state of the DB record. We only
-	//need to write into the DB if `.Target` ends up different from `.Original`.
+	// We will first collect all existing data into one of these structs for each
+	// resource. Then we will compute the target state of the DB record. We only
+	// need to write into the DB if `.Target` ends up different from `.Original`.
 	type resourceState struct {
 		Info     *limesresources.ResourceInfo
 		Original *db.ProjectResource
 	}
 
-	//collect ResourceInfo instances for this service
+	// collect ResourceInfo instances for this service
 	allResources := make(map[string]resourceState)
 	for _, resInfo := range cluster.QuotaPlugins[srv.Type].Resources() {
 		resInfo := resInfo
 		allResources[resInfo.Name] = resourceState{
-			Original: nil, //might be filled in the next loop below
+			Original: nil, // might be filled in the next loop below
 			Info:     &resInfo,
 		}
 	}
 
-	//collect existing resources for this service
+	// collect existing resources for this service
 	var dbResources []db.ProjectResource
 	_, err := dbi.Select(&dbResources, `SELECT * FROM project_resources WHERE service_id = $1`, srv.ID)
 	if err != nil {
@@ -97,27 +97,27 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, doma
 		res := res
 		allResources[res.Name] = resourceState{
 			Original: &res,
-			Info:     allResources[res.Name].Info, //might be nil if not filled in the previous loop
+			Info:     allResources[res.Name].Info, // might be nil if not filled in the previous loop
 		}
 	}
 
-	//go through resources in a defined order (to ensure deterministic test behavior)
+	// go through resources in a defined order (to ensure deterministic test behavior)
 	allResourceNames := make([]string, 0, len(allResources))
 	for resName := range allResources {
 		allResourceNames = append(allResourceNames, resName)
 	}
 	sort.Strings(allResourceNames)
 
-	//for each resource...
+	// for each resource...
 	hasChanges := false
 	var result ProjectResourceUpdateResult
 	for _, resName := range allResourceNames {
 		state := allResources[resName]
-		//skip project_resources that we do not know about (we do not delete them
-		//here because the ResourceInfo might only be missing temporarily because
-		//of an error in resource discovery; in that case, deleting the project
-		//resource would get rid of the only authoritative source of truth for that
-		//resource's quota values)
+		// skip project_resources that we do not know about (we do not delete them
+		// here because the ResourceInfo might only be missing temporarily because
+		// of an error in resource discovery; in that case, deleting the project
+		// resource would get rid of the only authoritative source of truth for that
+		// resource's quota values)
 		if state.Info == nil {
 			u.LogError(
 				"project service %d (%s of %s/%s) has unknown resource %q (was this resource type removed from the quota plugin?)",
@@ -127,7 +127,7 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, doma
 		}
 		resInfo := *state.Info
 
-		//setup a copy of `state.Original` (or a new resource) that we can write into
+		// setup a copy of `state.Original` (or a new resource) that we can write into
 		res := db.ProjectResource{
 			ServiceID: srv.ID,
 			Name:      resName,
@@ -136,7 +136,7 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, doma
 			res = *state.Original
 		}
 
-		//update in place while enforcing validation rules and constraints
+		// update in place while enforcing validation rules and constraints
 		qdConfig := cluster.QuotaDistributionConfigForResource(srv.Type, res.Name)
 		validateResourceConstraints(domain, project, srv, &res, resInfo, constraints[res.Name])
 		if u.UpdateResource != nil {
@@ -147,7 +147,7 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, doma
 			validateResourceConstraints(domain, project, srv, &res, resInfo, constraints[res.Name])
 		}
 
-		//(re-)compute derived values
+		// (re-)compute derived values
 		if !resInfo.NoQuota {
 			if project.HasBursting {
 				behavior := cluster.BehaviorForResource(srv.Type, res.Name, domain.Name+"/"+project.Name)
@@ -158,7 +158,7 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, doma
 			}
 		}
 
-		//insert or update resource if changes have been made
+		// insert or update resource if changes have been made
 		if state.Original == nil {
 			err := dbi.Insert(&res)
 			if err != nil {
@@ -174,10 +174,10 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, doma
 		}
 		result.DBResources = append(result.DBResources, res)
 
-		//check if we need to tell the caller to call ApplyBackendQuota after the tx
+		// check if we need to tell the caller to call ApplyBackendQuota after the tx
 		if !resInfo.NoQuota {
 			backendQuota := unwrapOrDefault(res.BackendQuota, -1)
-			desiredBackendQuota := *res.DesiredBackendQuota //definitely not nil, it was set above
+			desiredBackendQuota := *res.DesiredBackendQuota // definitely not nil, it was set above
 			if backendQuota < 0 || uint64(backendQuota) != desiredBackendQuota {
 				result.HasBackendQuotaDrift = true
 			}
@@ -204,18 +204,18 @@ func unwrapOrDefault[T any](value *T, defaultValue T) T {
 // Ensures that `res` conforms to various constraints and validation rules.
 func validateResourceConstraints(domain db.Domain, project db.Project, srv db.ServiceRef[db.ProjectServiceID], res *db.ProjectResource, resInfo limesresources.ResourceInfo, constraint core.QuotaConstraint) {
 	if resInfo.NoQuota {
-		//ensure that NoQuota resources do not contain any quota values
+		// ensure that NoQuota resources do not contain any quota values
 		res.Quota = nil
 		res.BackendQuota = nil
 		res.DesiredBackendQuota = nil
 	} else {
-		//check if we need to apply a missing default quota
+		// check if we need to apply a missing default quota
 		if res.Quota == nil || *res.Quota == 0 {
 			initialQuota := uint64(0)
 			res.Quota = &initialQuota
 		}
 
-		//check if we need to enforce a constraint
+		// check if we need to enforce a constraint
 		constrainedQuota := constraint.ApplyTo(*res.Quota)
 		if constrainedQuota != *res.Quota {
 			logg.Other("AUDIT", "changing %s/%s quota for project %s/%s from %s to %s to satisfy constraint %q",

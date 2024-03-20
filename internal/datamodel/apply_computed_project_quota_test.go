@@ -147,14 +147,14 @@ func TestACPQBasicWithAZAwareness(t *testing.T) {
 }
 
 func TestACPQCapacityLimitsQuotaAllocation(t *testing.T) {
-	//This test case checks the priority of capacity allocation.
-	//All stages use the same basic scenario, except that capacity will be
-	//different in each stage.
+	// This test case checks the priority of capacity allocation.
+	// All stages use the same basic scenario, except that capacity will be
+	// different in each stage.
 	input := map[limes.AvailabilityZone]clusterAZAllocationStats{
 		"any": {
-			Capacity: 0, //set below
+			Capacity: 0, // set below
 			ProjectStats: map[db.ProjectServiceID]projectAZAllocationStats{
-				//explained below
+				// explained below
 				401: constantUsage(20),
 				402: {Usage: 50, MinHistoricalUsage: 50, MaxHistoricalUsage: 70},
 				403: constantUsage(0),
@@ -168,15 +168,15 @@ func TestACPQCapacityLimitsQuotaAllocation(t *testing.T) {
 		ProjectBaseQuota: 10,
 	}
 
-	//Stage 1: There is enough capacity for the minimum quotas and the desired
-	//quotas, but not for the base quotas.
+	// Stage 1: There is enough capacity for the minimum quotas and the desired
+	// quotas, but not for the base quotas.
 	input["any"] = clusterAZAllocationStats{
 		Capacity:     141,
 		ProjectStats: input["any"].ProjectStats,
 	}
 	expectACPQResult(t, input, cfg, nil, acpqGlobalTarget{
 		"any": {
-			//401 and 402 have existing usage and thus are allowed to grow first
+			// 401 and 402 have existing usage and thus are allowed to grow first
 			401: {Allocated: 36}, // 20 * 1.8 = 36
 			402: {Allocated: 90}, // 50 * 1.8 = 90
 			// 403 through 405 have their base quota deprioritized; only 15 capacity
@@ -187,16 +187,16 @@ func TestACPQCapacityLimitsQuotaAllocation(t *testing.T) {
 		},
 	})
 
-	//Stage 2: There is enough capacity for the minimum quotas, but not for the
-	//desired quotas.
+	// Stage 2: There is enough capacity for the minimum quotas, but not for the
+	// desired quotas.
 	input["any"] = clusterAZAllocationStats{
 		Capacity:     100,
 		ProjectStats: input["any"].ProjectStats,
 	}
 	expectACPQResult(t, input, cfg, nil, acpqGlobalTarget{
 		"any": {
-			//401 and 402 have minimum quotas of 20 and 70, respectively;
-			//the rest is distributed fairly
+			// 401 and 402 have minimum quotas of 20 and 70, respectively;
+			// the rest is distributed fairly
 			401: {Allocated: 24}, // 20 * 1.8 = 36 desired (16 more than minimum) -> +4 granted
 			402: {Allocated: 76}, // 50 * 1.8 = 90 desired (20 more than minimum) -> +6 granted
 			// we cannot even think about giving out base quotas
@@ -206,16 +206,16 @@ func TestACPQCapacityLimitsQuotaAllocation(t *testing.T) {
 		},
 	})
 
-	//Stage 3: There is enough capacity for the hard minimum quotas, but not for
-	//the soft minimum quotas.
+	// Stage 3: There is enough capacity for the hard minimum quotas, but not for
+	// the soft minimum quotas.
 	input["any"] = clusterAZAllocationStats{
 		Capacity:     80,
 		ProjectStats: input["any"].ProjectStats,
 	}
 	expectACPQResult(t, input, cfg, nil, acpqGlobalTarget{
 		"any": {
-			//401 and 402 have hard minimum quotas of 20 and 50, respectively;
-			//the rest is distributed fairly
+			// 401 and 402 have hard minimum quotas of 20 and 50, respectively;
+			// the rest is distributed fairly
 			401: {Allocated: 20}, // 20 soft minimum (0 more than hard minimum) -> +0 granted
 			402: {Allocated: 60}, // 70 soft minimum (20 more than hard minimum) -> +10 granted
 			// we cannot even think about giving out base quotas
@@ -225,15 +225,15 @@ func TestACPQCapacityLimitsQuotaAllocation(t *testing.T) {
 		},
 	})
 
-	//Stage 4: Capacity is SOMEHOW not even enough for the hard minimum quotas.
+	// Stage 4: Capacity is SOMEHOW not even enough for the hard minimum quotas.
 	input["any"] = clusterAZAllocationStats{
 		Capacity:     20,
 		ProjectStats: input["any"].ProjectStats,
 	}
 	expectACPQResult(t, input, cfg, nil, acpqGlobalTarget{
 		"any": {
-			//401 and 402 have hard minimum quotas of 20 and 50, respectively;
-			//those are always granted, even if we overrun the capacity
+			// 401 and 402 have hard minimum quotas of 20 and 50, respectively;
+			// those are always granted, even if we overrun the capacity
 			401: {Allocated: 20},
 			402: {Allocated: 50},
 			// we cannot even think about giving out base quotas
@@ -248,7 +248,7 @@ func TestACPQWithProjectLocalQuotaConstraints(t *testing.T) {
 	// This scenario is shared by all subtests in this test.
 	input := map[limes.AvailabilityZone]clusterAZAllocationStats{
 		"az-one": {
-			Capacity: 10000, //capacity is not a limiting factor here
+			Capacity: 10000, // capacity is not a limiting factor here
 			ProjectStats: map[db.ProjectServiceID]projectAZAllocationStats{
 				401: constantUsage(20),
 				402: constantUsage(20),
@@ -267,7 +267,7 @@ func TestACPQWithProjectLocalQuotaConstraints(t *testing.T) {
 		ProjectBaseQuota: 100,
 	}
 
-	//This baseline does not have project-local quota constraints (for comparison).
+	// This baseline does not have project-local quota constraints (for comparison).
 	expectACPQResult(t, input, cfg, nil, acpqGlobalTarget{
 		"az-one": {
 			401: {Allocated: 24},
@@ -283,13 +283,13 @@ func TestACPQWithProjectLocalQuotaConstraints(t *testing.T) {
 		},
 	})
 
-	//test with MinQuota constraints
+	// test with MinQuota constraints
 	//
 	//NOTE: The balance between AZs is really bad here, but I don't see a good
-	//way to do better here. The fairest way (as in "fair balance between AZs")
-	//would require waiting for the final result and then adjusting that, but if
-	//we don't block minimum quota early on, we may not be able to fulfil it in
-	//the end if the capacity is tight and not overcommittable.
+	// way to do better here. The fairest way (as in "fair balance between AZs")
+	// would require waiting for the final result and then adjusting that, but if
+	// we don't block minimum quota early on, we may not be able to fulfil it in
+	// the end if the capacity is tight and not overcommittable.
 	constraints := map[db.ProjectServiceID]projectLocalQuotaConstraints{
 		401: {MinQuota: p2u64(200)},
 		402: {MinQuota: p2u64(80)},
@@ -309,7 +309,7 @@ func TestACPQWithProjectLocalQuotaConstraints(t *testing.T) {
 		},
 	})
 
-	//test with MaxQuota constraints that constrain the soft minimum (hard minimum is not constrainable)
+	// test with MaxQuota constraints that constrain the soft minimum (hard minimum is not constrainable)
 	constraints = map[db.ProjectServiceID]projectLocalQuotaConstraints{
 		401: {MaxQuota: p2u64(50)},
 		402: {MaxQuota: p2u64(70)},
@@ -329,7 +329,7 @@ func TestACPQWithProjectLocalQuotaConstraints(t *testing.T) {
 		},
 	})
 
-	//test with MaxQuota constraints that constrain the base quota
+	// test with MaxQuota constraints that constrain the base quota
 	constraints = map[db.ProjectServiceID]projectLocalQuotaConstraints{
 		401: {MaxQuota: p2u64(90)},
 		402: {MaxQuota: p2u64(90)},

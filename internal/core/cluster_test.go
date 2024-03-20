@@ -71,7 +71,7 @@ func TestParseQuotaOverrides(t *testing.T) {
 		},
 	})
 
-	//test parsing errors
+	// test parsing errors
 	buf = []byte(`
 		domain-one:
 			project1:
@@ -90,7 +90,7 @@ func TestParseQuotaOverrides(t *testing.T) {
 	buf = bytes.Replace(buf, []byte("\t"), []byte("  "), -1)
 	_, errs = s.Cluster.ParseQuotaOverrides("overrides.yaml", buf)
 	errStrings = strings.Split(errs.Join("\n"), "\n")
-	sort.Strings(errStrings) //map iteration order is not deterministic
+	sort.Strings(errStrings) // map iteration order is not deterministic
 
 	assert.DeepEqual(t, "errors", errStrings, []string{
 		`while parsing overrides.yaml: in value for unittest/things: expected string or number, but got []interface {}{1, "GiB"}`,

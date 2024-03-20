@@ -114,7 +114,7 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 		fields = map[string]any{"d.id": *domainID}
 	}
 
-	//first query: data for projects in this domain
+	// first query: data for projects in this domain
 	domains := make(domains)
 	queryStr, joinArgs := filter.PrepareQuery(domainReportQuery1)
 	whereStr, whereArgs := db.BuildSimpleWhereClause(fields, len(joinArgs))
@@ -181,7 +181,7 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 		return nil, err
 	}
 
-	//second query: add domain quotas
+	// second query: add domain quotas
 	queryStr, joinArgs = filter.PrepareQuery(domainReportQuery2)
 	whereStr, whereArgs = db.BuildSimpleWhereClause(fields, len(joinArgs))
 	err = sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
@@ -212,7 +212,7 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 	}
 
 	if filter.WithAZBreakdown {
-		//third query: add basic AZ breakdown (quota, usage, unused commitments)
+		// third query: add basic AZ breakdown (quota, usage, unused commitments)
 		queryStr, joinArgs = filter.PrepareQuery(domainReportQuery3)
 		whereStr, whereArgs = db.BuildSimpleWhereClause(fields, len(joinArgs))
 		err = sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
@@ -306,10 +306,10 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 			return nil, err
 		}
 
-		//project_az_resources always has entries for "any", even if the resource
-		//is AZ-aware, because ApplyComputedProjectQuota needs somewhere to write
-		//the base quotas; we ignore those entries here if the "any" usage is zero
-		//and there are other AZs
+		// project_az_resources always has entries for "any", even if the resource
+		// is AZ-aware, because ApplyComputedProjectQuota needs somewhere to write
+		// the base quotas; we ignore those entries here if the "any" usage is zero
+		// and there are other AZs
 		for _, domainReport := range domains {
 			for _, srvReport := range domainReport.Services {
 				for _, resReport := range srvReport.Resources {
@@ -324,7 +324,7 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 		}
 	}
 
-	//flatten result (with stable order to keep the tests happy)
+	// flatten result (with stable order to keep the tests happy)
 	uuids := make([]string, 0, len(domains))
 	for uuid := range domains {
 		uuids = append(uuids, uuid)
@@ -389,7 +389,7 @@ func (d domains) Find(cluster *core.Cluster, domainUUID, domainName string, serv
 		if !resource.NoQuota {
 			qdConfig := cluster.QuotaDistributionConfigForResource(*serviceType, *resourceName)
 			resource.QuotaDistributionModel = qdConfig.Model
-			//this default is used when no `domain_resources` entry exists for this resource
+			// this default is used when no `domain_resources` entry exists for this resource
 			defaultQuota := uint64(0)
 			resource.DomainQuota = &defaultQuota
 		}

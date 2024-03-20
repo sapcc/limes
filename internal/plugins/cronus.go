@@ -36,7 +36,7 @@ import (
 )
 
 type cronusPlugin struct {
-	//connections
+	// connections
 	CronusV1 *cronusClient `yaml:"-"`
 }
 
@@ -117,10 +117,10 @@ type cronusState struct {
 
 // ScrapeRates implements the core.QuotaPlugin interface.
 func (p *cronusPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
-	//decode `prevSerializedState`
+	// decode `prevSerializedState`
 	var state cronusState
 	if prevSerializedState == "" {
-		//on first scrape, start with a default value that causes us to open a new billing period immediately down below
+		// on first scrape, start with a default value that causes us to open a new billing period immediately down below
 		state.PreviousTotals.AttachmentsSize = big.NewInt(0)
 		state.PreviousTotals.DataTransferIn = big.NewInt(0)
 		state.PreviousTotals.DataTransferOut = big.NewInt(0)
@@ -133,15 +133,15 @@ func (p *cronusPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedS
 		}
 	}
 
-	//get usage for the current billing period
+	// get usage for the current billing period
 	currentUsage, err := p.CronusV1.GetUsage(project.UUID, false)
 	if err != nil {
 		return nil, "", err
 	}
 	logg.Debug("currentUsage = %#v", currentUsage)
 
-	//if a new billing period has started, add the previous billing period's
-	//final tally into `state.PreviousTotals`
+	// if a new billing period has started, add the previous billing period's
+	// final tally into `state.PreviousTotals`
 	var newSerializedState string
 	if state.CurrentPeriod.StartDate == currentUsage.StartDate {
 		newSerializedState = prevSerializedState
@@ -171,8 +171,8 @@ func (p *cronusPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedS
 		newSerializedState = string(newSerializedStateBytes)
 	}
 
-	//obtain the current running totals by adding the current billing period's
-	//running tally to the previous totals
+	// obtain the current running totals by adding the current billing period's
+	// running tally to the previous totals
 	return map[string]*big.Int{
 		"attachment_size":   bigintPlusUint64(state.PreviousTotals.AttachmentsSize, currentUsage.AttachmentsSize),
 		"data_transfer_in":  bigintPlusUint64(state.PreviousTotals.DataTransferIn, currentUsage.DataTransferIn),
@@ -190,12 +190,12 @@ func bigintPlusUint64(a *big.Int, u uint64) *big.Int {
 
 // DescribeMetrics implements the core.QuotaPlugin interface.
 func (p *cronusPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
-	//not used by this plugin
+	// not used by this plugin
 }
 
 // CollectMetrics implements the core.QuotaPlugin interface.
 func (p *cronusPlugin) CollectMetrics(ch chan<- prometheus.Metric, project core.KeystoneProject, serializedMetrics []byte) error {
-	//not used by this plugin
+	// not used by this plugin
 	return nil
 }
 

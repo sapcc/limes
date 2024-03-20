@@ -36,14 +36,14 @@ import (
 )
 
 type capacityManilaPlugin struct {
-	//configuration
+	// configuration
 	ShareTypes        []ManilaShareTypeSpec `yaml:"share_types"`
 	ShareNetworks     uint64                `yaml:"share_networks"`
 	SharesPerPool     uint64                `yaml:"shares_per_pool"`
 	SnapshotsPerShare uint64                `yaml:"snapshots_per_share"`
 	CapacityBalance   float64               `yaml:"capacity_balance"`
 	WithSubcapacities bool                  `yaml:"with_subcapacities"`
-	//connections
+	// connections
 	ManilaV2 *gophercloud.ServiceClient `yaml:"-"`
 }
 
@@ -53,7 +53,7 @@ type storagePoolSubcapacity struct {
 	AvailabilityZone limes.AvailabilityZone `json:"az"`
 	CapacityGiB      uint64                 `json:"capacity_gib"`
 	UsageGiB         uint64                 `json:"usage_gib"`
-	//Manila only (SAP-specific extension)
+	// Manila only (SAP-specific extension)
 	ExclusionReason string `json:"exclusion_reason"`
 }
 
@@ -80,7 +80,7 @@ func (p *capacityManilaPlugin) Init(provider *gophercloud.ProviderClient, eo gop
 	if err != nil {
 		return err
 	}
-	p.ManilaV2.Microversion = "2.23" //required for filtering pools by share_type
+	p.ManilaV2.Microversion = "2.23" // required for filtering pools by share_type
 	return nil
 }
 
@@ -91,8 +91,8 @@ func (p *capacityManilaPlugin) PluginTypeID() string {
 
 func (p *capacityManilaPlugin) makeResourceName(kind string, shareType ManilaShareTypeSpec) string {
 	if p.ShareTypes[0].Name == shareType.Name {
-		//the resources for the first share type don't get the share type suffix
-		//for backwards compatibility reasons
+		// the resources for the first share type don't get the share type suffix
+		// for backwards compatibility reasons
 		return kind
 	}
 	return kind + "_" + shareType.Name
@@ -112,7 +112,7 @@ func (p *capacityManilaPlugin) Scrape(_ core.CapacityPluginBackchannel) (result 
 	azForServiceHost := make(map[string]limes.AvailabilityZone)
 	for _, element := range allServices {
 		if element.Binary == "manila-share" {
-			//element.Host has the format backendHostname@backendName
+			// element.Host has the format backendHostname@backendName
 			fields := strings.Split(element.Host, "@")
 			if len(fields) != 2 {
 				logg.Error("Expected a Manila service host in the format \"backendHostname@backendName\", got %q with ID %d", element.Host, element.ID)
@@ -140,12 +140,12 @@ func (p *capacityManilaPlugin) Scrape(_ core.CapacityPluginBackchannel) (result 
 
 // DescribeMetrics implements the core.CapacityPlugin interface.
 func (p *capacityManilaPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
-	//not used by this plugin
+	// not used by this plugin
 }
 
 // CollectMetrics implements the core.CapacityPlugin interface.
 func (p *capacityManilaPlugin) CollectMetrics(ch chan<- prometheus.Metric, serializedMetrics []byte) error {
-	//not used by this plugin
+	// not used by this plugin
 	return nil
 }
 
@@ -157,7 +157,7 @@ type capacityForShareType struct {
 }
 
 type poolsListDetailOpts struct {
-	//upstream type (schedulerstats.ListDetailOpts) does not work because of wrong field tags (`json:"..."` instead of `q:"..."`)
+	// upstream type (schedulerstats.ListDetailOpts) does not work because of wrong field tags (`json:"..."` instead of `q:"..."`)
 	//TODO: fix upstream; I'm doing this quick fix now because I don't have the time to submit an upstream PR and figure out how to write testcases for them
 	ShareType string `q:"share_type,omitempty"`
 }
@@ -169,7 +169,7 @@ func (opts poolsListDetailOpts) ToPoolsListQuery() (string, error) {
 }
 
 func (p *capacityManilaPlugin) scrapeForShareType(shareType ManilaShareTypeSpec, azForServiceHost map[string]limes.AvailabilityZone) (capacityForShareType, error) {
-	//list all pools for the Manila share types corresponding to this virtual share type
+	// list all pools for the Manila share types corresponding to this virtual share type
 	var allPools []manilaPool
 	for _, stName := range getAllManilaShareTypes(shareType) {
 		allPages, err := schedulerstats.ListDetail(p.ManilaV2, poolsListDetailOpts{ShareType: stName}).AllPages()
@@ -184,12 +184,12 @@ func (p *capacityManilaPlugin) scrapeForShareType(shareType ManilaShareTypeSpec,
 	}
 
 	//NOTE: The value of `p.CapacityBalance` is how many capacity we give out
-	//to snapshots as a fraction of the capacity given out to shares. For
-	//example, with CapacityBalance = 2, we allocate 2/3 of the total capacity to
-	//snapshots, and 1/3 to shares.
+	// to snapshots as a fraction of the capacity given out to shares. For
+	// example, with CapacityBalance = 2, we allocate 2/3 of the total capacity to
+	// snapshots, and 1/3 to shares.
 	capBalance := p.CapacityBalance
 
-	//count pools and their capacities
+	// count pools and their capacities
 	var (
 		availabilityZones          = make(map[limes.AvailabilityZone]bool)
 		poolCountPerAZ             = make(map[limes.AvailabilityZone]uint64)
@@ -250,7 +250,7 @@ func (p *capacityManilaPlugin) scrapeForShareType(shareType ManilaShareTypeSpec,
 		}
 	}
 
-	//derive availability zone usage and capacities
+	// derive availability zone usage and capacities
 	result := capacityForShareType{
 		Shares:            make(core.PerAZ[core.CapacityData]),
 		Snapshots:         make(core.PerAZ[core.CapacityData]),
@@ -282,7 +282,7 @@ func (p *capacityManilaPlugin) scrapeForShareType(shareType ManilaShareTypeSpec,
 func getShareCount(poolCount, sharesPerPool, shareNetworks uint64) uint64 {
 	shareCount := (sharesPerPool * poolCount) - shareNetworks
 	logg.Debug("sc = sp * pc - sn: %d * %d - %d = %d", sharesPerPool, poolCount, shareNetworks, shareCount)
-	if (sharesPerPool * poolCount) < shareNetworks { //detect unsigned int underflow
+	if (sharesPerPool * poolCount) < shareNetworks { // detect unsigned int underflow
 		shareCount = 0
 	}
 	return shareCount
@@ -327,10 +327,10 @@ type manilaPool struct {
 	Name         string `json:"name"`
 	Host         string `json:"host"`
 	Capabilities struct {
-		//standard fields
+		// standard fields
 		TotalCapacityGB     float64 `json:"total_capacity_gb"`
 		AllocatedCapacityGB float64 `json:"allocated_capacity_gb"`
-		//CCloud extension fields
+		// CCloud extension fields
 		HardwareState string `json:"hardware_state"`
 	} `json:"capabilities,omitempty"`
 }

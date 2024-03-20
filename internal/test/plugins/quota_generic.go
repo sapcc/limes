@@ -45,7 +45,7 @@ type GenericQuotaPlugin struct {
 	StaticRateInfos    []limesrates.RateInfo         `yaml:"rate_infos"`
 	StaticResourceData map[string]*core.ResourceData `yaml:"-"`
 	OverrideQuota      map[string]map[string]uint64  `yaml:"-"`
-	//behavior flags that can be set by a unit test
+	// behavior flags that can be set by a unit test
 	ScrapeFails   bool              `yaml:"-"`
 	SetQuotaFails bool              `yaml:"-"`
 	MinQuota      map[string]uint64 `yaml:"-"`
@@ -120,7 +120,7 @@ func (p *GenericQuotaPlugin) ScrapeRates(project core.KeystoneProject, prevSeria
 		return nil, "", errors.New("ScrapeRates failed as requested")
 	}
 
-	//this dummy implementation lets itself be influenced by the existing state, but also alters it a bit
+	// this dummy implementation lets itself be influenced by the existing state, but also alters it a bit
 	state := make(map[string]int64)
 	if prevSerializedState == "" {
 		for _, rate := range p.StaticRateInfos {
@@ -157,14 +157,14 @@ func (p *GenericQuotaPlugin) Scrape(project core.KeystoneProject, allAZs []limes
 			UsageData: val.UsageData.Clone(),
 		}
 
-		//test coverage for PhysicalUsage != Usage
+		// test coverage for PhysicalUsage != Usage
 		if key == "capacity" {
 			for _, data := range copyOfVal.UsageData {
 				physUsage := data.Usage / 2
 				data.PhysicalUsage = &physUsage
 			}
 
-			//derive a resource that does not track quota
+			// derive a resource that does not track quota
 			portionUsage := make(core.PerAZ[core.UsageData])
 			for az, data := range copyOfVal.UsageData {
 				portionUsage[az] = &core.UsageData{Usage: data.Usage / 4}
@@ -174,7 +174,7 @@ func (p *GenericQuotaPlugin) Scrape(project core.KeystoneProject, allAZs []limes
 			}
 		}
 
-		//test MinQuota/MaxQuota if requested
+		// test MinQuota/MaxQuota if requested
 		minQuota, exists := p.MinQuota[key]
 		if exists {
 			copyOfVal.MinQuota = &minQuota
@@ -196,7 +196,7 @@ func (p *GenericQuotaPlugin) Scrape(project core.KeystoneProject, allAZs []limes
 		}
 	}
 
-	//make up some subresources for "things"
+	// make up some subresources for "things"
 	counter := 0
 	for _, az := range result["things"].UsageData.Keys() {
 		thingsUsage := result["things"].UsageData[az].Usage
@@ -208,9 +208,9 @@ func (p *GenericQuotaPlugin) Scrape(project core.KeystoneProject, allAZs []limes
 		result["things"].UsageData[az].Subresources = subresources
 	}
 
-	//make up some serialized metrics (reporting usage as a metric is usually
-	//nonsensical since limes-collect already reports all usages as metrics, but
-	//this is only a testcase anyway)
+	// make up some serialized metrics (reporting usage as a metric is usually
+	// nonsensical since limes-collect already reports all usages as metrics, but
+	// this is only a testcase anyway)
 	serializedMetrics = []byte(fmt.Sprintf(`{"capacity_usage":%d,"things_usage":%d}`,
 		result["capacity"].UsageData.Sum().Usage,
 		result["things"].UsageData.Sum().Usage))

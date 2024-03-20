@@ -39,11 +39,11 @@ import (
 )
 
 type neutronPlugin struct {
-	//computed state
+	// computed state
 	resources    []limesresources.ResourceInfo `yaml:"-"`
 	hasExtension map[string]bool               `yaml:"-"`
 	hasOctavia   bool                          `yaml:"-"`
-	//connections
+	// connections
 	NeutronV2 *gophercloud.ServiceClient `yaml:"-"`
 	OctaviaV2 *gophercloud.ServiceClient `yaml:"-"`
 }
@@ -79,14 +79,14 @@ var neutronResources = []limesresources.ResourceInfo{
 		Name:     "security_group_rules",
 		Unit:     limes.UnitNone,
 		Category: "networking",
-		//for "default" security group
+		// for "default" security group
 		AutoApproveInitialQuota: 4,
 	},
 	{
 		Name:     "security_groups",
 		Unit:     limes.UnitNone,
 		Category: "networking",
-		//for "default" security group
+		// for "default" security group
 		AutoApproveInitialQuota: 1,
 	},
 	{
@@ -183,7 +183,7 @@ func (p *neutronPlugin) Init(provider *gophercloud.ProviderClient, eo gopherclou
 		return err
 	}
 
-	//filter resource list to reflect supported extensions and services
+	// filter resource list to reflect supported extensions and services
 	hasNeutronResource := make(map[string]bool)
 	for _, resource := range neutronResourceMeta {
 		hasNeutronResource[resource.LimesName] = resource.Extension == "" || p.hasExtension[resource.Extension]
@@ -343,7 +343,7 @@ func (p *neutronPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Avai
 }
 
 func (p *neutronPlugin) scrapeNeutronInto(result map[string]core.ResourceData, projectUUID string) error {
-	//read Neutron quota/usage
+	// read Neutron quota/usage
 	type neutronQuotaStruct struct {
 		Quota int64  `json:"limit"`
 		Usage uint64 `json:"used"`
@@ -357,7 +357,7 @@ func (p *neutronPlugin) scrapeNeutronInto(result map[string]core.ResourceData, p
 		return err
 	}
 
-	//convert data into Limes' internal format
+	// convert data into Limes' internal format
 	for _, res := range neutronResourceMeta {
 		if res.Extension != "" && !p.hasExtension[res.Extension] {
 			continue
@@ -374,7 +374,7 @@ func (p *neutronPlugin) scrapeNeutronInto(result map[string]core.ResourceData, p
 }
 
 func (p *neutronPlugin) scrapeOctaviaInto(result map[string]core.ResourceData, projectUUID string) error {
-	//read Octavia quota
+	// read Octavia quota
 	var quotas struct {
 		Values map[string]int64 `json:"quota"`
 	}
@@ -383,7 +383,7 @@ func (p *neutronPlugin) scrapeOctaviaInto(result map[string]core.ResourceData, p
 		return err
 	}
 
-	//read Octavia usage
+	// read Octavia usage
 	usage, err := p.scrapeOctaviaUsage(projectUUID)
 	if err != nil {
 		return err
@@ -438,7 +438,7 @@ func (q neutronOrOctaviaQuotaSet) ToQuotaUpdateMap() (map[string]any, error) {
 
 // SetQuota implements the core.QuotaPlugin interface.
 func (p *neutronPlugin) SetQuota(project core.KeystoneProject, quotas map[string]uint64) error {
-	//collect Neutron quotas
+	// collect Neutron quotas
 	neutronQuotas := make(neutronOrOctaviaQuotaSet)
 	for _, res := range neutronResourceMeta {
 		if res.Extension != "" && !p.hasExtension[res.Extension] {
@@ -451,14 +451,14 @@ func (p *neutronPlugin) SetQuota(project core.KeystoneProject, quotas map[string
 		}
 	}
 
-	//set Neutron quotas
+	// set Neutron quotas
 	_, err := neutron_quotas.Update(p.NeutronV2, project.UUID, neutronQuotas).Extract()
 	if err != nil {
 		return err
 	}
 
 	if p.hasOctavia {
-		//collect Octavia quotas
+		// collect Octavia quotas
 		octaviaQuotas := make(neutronOrOctaviaQuotaSet)
 		for _, res := range octaviaResourceMeta {
 			quota, exists := quotas[res.LimesName]
@@ -467,7 +467,7 @@ func (p *neutronPlugin) SetQuota(project core.KeystoneProject, quotas map[string
 			}
 		}
 
-		//set Octavia quotas
+		// set Octavia quotas
 		_, err = octavia_quotas.Update(p.OctaviaV2, project.UUID, octaviaQuotas).Extract()
 		if err != nil {
 			return err
@@ -479,11 +479,11 @@ func (p *neutronPlugin) SetQuota(project core.KeystoneProject, quotas map[string
 
 // DescribeMetrics implements the core.QuotaPlugin interface.
 func (p *neutronPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
-	//not used by this plugin
+	// not used by this plugin
 }
 
 // CollectMetrics implements the core.QuotaPlugin interface.
 func (p *neutronPlugin) CollectMetrics(ch chan<- prometheus.Metric, project core.KeystoneProject, serializedMetrics []byte) error {
-	//not used by this plugin
+	// not used by this plugin
 	return nil
 }

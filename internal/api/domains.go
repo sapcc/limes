@@ -130,7 +130,7 @@ func (p *v1Provider) putOrSimulatePutDomain(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	//parse request body
+	// parse request body
 	var parseTarget struct {
 		Domain struct {
 			Services limesresources.QuotaRequest `json:"services"`
@@ -141,7 +141,7 @@ func (p *v1Provider) putOrSimulatePutDomain(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	//start a transaction for the quota updates
+	// start a transaction for the quota updates
 	var tx *gorp.Transaction
 	var dbi db.Interface
 	if simulate {
@@ -156,14 +156,14 @@ func (p *v1Provider) putOrSimulatePutDomain(w http.ResponseWriter, r *http.Reque
 		dbi = tx
 	}
 
-	//validate inputs (within the DB transaction, to ensure that we do not apply
-	//inconsistent values later)
+	// validate inputs (within the DB transaction, to ensure that we do not apply
+	// inconsistent values later)
 	err := updater.ValidateInput(parseTarget.Domain.Services, dbi)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
 
-	//stop now if we're only simulating
+	// stop now if we're only simulating
 	if simulate {
 		updater.WriteSimulationReport(w)
 		return
@@ -175,7 +175,7 @@ func (p *v1Provider) putOrSimulatePutDomain(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	//check all services for resources to update
+	// check all services for resources to update
 	var services []db.DomainService
 	_, err = tx.Select(&services,
 		`SELECT * FROM domain_services WHERE domain_id = $1 ORDER BY type`, updater.Domain.ID)
@@ -191,7 +191,7 @@ func (p *v1Provider) putOrSimulatePutDomain(w http.ResponseWriter, r *http.Reque
 		}
 		isExistingResource := make(map[string]bool)
 
-		//check all existing resources
+		// check all existing resources
 		var resources []db.DomainResource
 		_, err = tx.Select(&resources,
 			`SELECT * FROM domain_resources WHERE service_id = $1 ORDER BY name`, srv.ID)
@@ -205,19 +205,19 @@ func (p *v1Provider) putOrSimulatePutDomain(w http.ResponseWriter, r *http.Reque
 				continue
 			}
 			if res.Quota == req.NewValue {
-				continue //nothing to do
+				continue // nothing to do
 			}
 
-			//take a copy of the loop variable (it will be updated by the loop, so if
-			//we didn't take a copy manually, the resourcesToUpdate list
-			//would contain only identical pointers)
+			// take a copy of the loop variable (it will be updated by the loop, so if
+			// we didn't take a copy manually, the resourcesToUpdate list
+			// would contain only identical pointers)
 			res := res
 
 			res.Quota = req.NewValue
 			resourcesToUpdate = append(resourcesToUpdate, &res)
 		}
 
-		//check resources that need to be created
+		// check resources that need to be created
 		for resourceName, req := range serviceRequests {
 			if isExistingResource[resourceName] {
 				continue
@@ -234,7 +234,7 @@ func (p *v1Provider) putOrSimulatePutDomain(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
-	//update the DB with the new quotas
+	// update the DB with the new quotas
 	onlyQuota := func(c *gorp.ColumnMap) bool {
 		return c.ColumnName == "quota"
 	}
@@ -248,6 +248,6 @@ func (p *v1Provider) putOrSimulatePutDomain(w http.ResponseWriter, r *http.Reque
 	}
 	updater.CommitAuditTrail(token, r, requestTime)
 
-	//report success
+	// report success
 	w.WriteHeader(http.StatusAccepted)
 }

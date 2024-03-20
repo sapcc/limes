@@ -31,7 +31,7 @@ import (
 // ManilaMappingRule appears in both ServiceConfiguration and CapacitorConfiguration.
 type ManilaShareTypeSpec struct {
 	Name               string `yaml:"name"`
-	ReplicationEnabled bool   `yaml:"replication_enabled"` //only used by QuotaPlugin
+	ReplicationEnabled bool   `yaml:"replication_enabled"` // only used by QuotaPlugin
 	MappingRules       []*struct {
 		NameRx    regexpext.BoundedRegexp `yaml:"name_pattern"`
 		ShareType string                  `yaml:"share_type"`
@@ -56,21 +56,21 @@ func resolveManilaShareType(spec ManilaShareTypeSpec, project core.KeystoneProje
 func getAllManilaShareTypes(spec ManilaShareTypeSpec) []string {
 	resultSet := make(map[string]bool)
 	for _, rule := range spec.MappingRules {
-		//rules that make the share type inaccessible should not be considered
+		// rules that make the share type inaccessible should not be considered
 		if rule.ShareType == "" {
 			continue
 		}
 		resultSet[rule.ShareType] = true
 
-		//if there is a catch-all rule, no rules afterwards will have any effect
+		// if there is a catch-all rule, no rules afterwards will have any effect
 		if rule.NameRx == `.*` || rule.NameRx == `.+` {
 			return maps.Keys(resultSet)
 		}
 	}
 
-	//if there is no pattern like `.*`, projects that do not match any of the
-	//mapping rules will use the name of the virtual share type as the actual
-	//Manila-level share type
+	// if there is no pattern like `.*`, projects that do not match any of the
+	// mapping rules will use the name of the virtual share type as the actual
+	// Manila-level share type
 	resultSet[spec.Name] = true
 	return maps.Keys(resultSet)
 }

@@ -43,22 +43,22 @@ import (
 // QuotaUpdater contains the shared code for domain and project PUT requests.
 // See func PutDomain and func PutProject for how it's used.
 type QuotaUpdater struct {
-	//scope
+	// scope
 	Cluster *core.Cluster
-	Domain  *db.Domain  //always set (for project quota updates, contains the project's domain)
-	Project *db.Project //nil for domain quota updates
+	Domain  *db.Domain  // always set (for project quota updates, contains the project's domain)
+	Project *db.Project // nil for domain quota updates
 
-	//context
+	// context
 	DB  *gorp.DbMap
 	Now time.Time
 
-	//AuthZ info
+	// AuthZ info
 	CanRaise   func(serviceType, resourceName string) bool
-	CanRaiseLP func(serviceType, resourceName string) bool //low-privilege raise
+	CanRaiseLP func(serviceType, resourceName string) bool // low-privilege raise
 	CanLower   func(serviceType, resourceName string) bool
 	CanLowerLP func(serviceType, resourceName string) bool
 
-	//Filled by ValidateInput() with the keys being the service type and the resource name.
+	// Filled by ValidateInput() with the keys being the service type and the resource name.
 	Requests map[string]map[string]QuotaRequest
 }
 
@@ -127,7 +127,7 @@ var (
 // Results are collected into u.Requests. The return value is only set for unexpected
 // errors, not for validation errors.
 func (u *QuotaUpdater) ValidateInput(input limesresources.QuotaRequest, dbi db.Interface) error {
-	//gather reports on the cluster's capacity and domain's quotas to decide whether a quota update is legal
+	// gather reports on the cluster's capacity and domain's quotas to decide whether a quota update is legal
 	clusterReport, err := reports.GetClusterResources(u.Cluster, u.Now, dbi, reports.Filter{})
 	if err != nil {
 		return err
@@ -136,7 +136,7 @@ func (u *QuotaUpdater) ValidateInput(input limesresources.QuotaRequest, dbi db.I
 	if err != nil {
 		return err
 	}
-	//for project scope, we also need a project report for validation
+	// for project scope, we also need a project report for validation
 	var projectReport *limesresources.ProjectReport
 	if u.Project != nil {
 		projectReport, err = GetProjectResourceReport(u.Cluster, *u.Domain, *u.Project, u.Now, dbi, reports.Filter{})
@@ -145,14 +145,14 @@ func (u *QuotaUpdater) ValidateInput(input limesresources.QuotaRequest, dbi db.I
 		}
 	}
 
-	//go through all services and resources and validate the requested quotas
+	// go through all services and resources and validate the requested quotas
 	u.Requests = make(map[string]map[string]QuotaRequest)
 	for serviceType, quotaPlugin := range u.Cluster.QuotaPlugins {
 		srv := quotaPlugin.ServiceInfo(serviceType)
 		u.Requests[srv.Type] = map[string]QuotaRequest{}
 
 		for _, res := range quotaPlugin.Resources() {
-			//find the report data for this resource
+			// find the report data for this resource
 			var (
 				clusterRes *limesresources.ClusterResourceReport
 				domRes     *limesresources.DomainResourceReport
@@ -183,7 +183,7 @@ func (u *QuotaUpdater) ValidateInput(input limesresources.QuotaRequest, dbi db.I
 				}
 			}
 
-			//skip resources where no new quota was requested
+			// skip resources where no new quota was requested
 			newQuota, exists := input[srv.Type][res.Name]
 			if !exists {
 				continue
@@ -207,7 +207,7 @@ func (u *QuotaUpdater) ValidateInput(input limesresources.QuotaRequest, dbi db.I
 				req.OldValue = *oldValueAsPtr
 			}
 
-			//convert given value to correct unit
+			// convert given value to correct unit
 			if req.ValidationError == nil {
 				req.NewValue, err = core.ConvertUnitFor(u.Cluster, srv.Type, res.Name, limes.ValueWithUnit(newQuota))
 				if err != nil {
@@ -216,11 +216,11 @@ func (u *QuotaUpdater) ValidateInput(input limesresources.QuotaRequest, dbi db.I
 						Message: err.Error(),
 					}
 				} else {
-					//skip this resource entirely if no change is requested
+					// skip this resource entirely if no change is requested
 					if req.OldValue == req.NewValue {
-						continue //with next resource
+						continue // with next resource
 					}
-					//value is valid and novel -> perform further validation
+					// value is valid and novel -> perform further validation
 					behavior := u.Cluster.BehaviorForResource(srv.Type, res.Name, u.ScopeName())
 					req.ValidationError = u.validateQuota(srv, res, behavior, *clusterRes, *domRes, projRes, req.OldValue, req.NewValue)
 				}
@@ -230,7 +230,7 @@ func (u *QuotaUpdater) ValidateInput(input limesresources.QuotaRequest, dbi db.I
 		}
 	}
 
-	//check if the request contains any services/resources that are not known to us
+	// check if the request contains any services/resources that are not known to us
 	for srvType, srvInput := range input {
 		isUnknownService := !u.Cluster.HasService(srvType)
 		if isUnknownService {
@@ -253,7 +253,7 @@ func (u *QuotaUpdater) ValidateInput(input limesresources.QuotaRequest, dbi db.I
 		}
 	}
 
-	//check service-specific quota bounds
+	// check service-specific quota bounds
 	if u.Project != nil {
 		err := sqlext.ForeachRow(u.DB, getMinMaxQuotaQuery, []any{u.Project.ID}, func(rows *sql.Rows) error {
 			var (
@@ -273,7 +273,7 @@ func (u *QuotaUpdater) ValidateInput(input limesresources.QuotaRequest, dbi db.I
 				return nil
 			}
 
-			//...check that it conforms to the MinQuota/MaxQuota boundaries of the service
+			// ...check that it conforms to the MinQuota/MaxQuota boundaries of the service
 			if (minQuota != nil && req.NewValue < *minQuota) || (maxQuota != nil && req.NewValue > *maxQuota) {
 				req.ValidationError = &core.QuotaValidationError{
 					Status:       http.StatusUnprocessableEntity,
@@ -294,7 +294,7 @@ func (u *QuotaUpdater) ValidateInput(input limesresources.QuotaRequest, dbi db.I
 }
 
 func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limesresources.ResourceInfo, behavior core.ResourceBehavior, clusterRes limesresources.ClusterResourceReport, domRes limesresources.DomainResourceReport, projRes *limesresources.ProjectResourceReport, oldQuota, newQuota uint64) *core.QuotaValidationError {
-	//check quota constraints
+	// check quota constraints
 	constraint := u.QuotaConstraints()[srv.Type][res.Name]
 	verr := constraint.Validate(newQuota)
 	if verr != nil {
@@ -312,7 +312,7 @@ func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limesresources.Re
 		}
 	}
 
-	//check authorization for quota change
+	// check authorization for quota change
 	var (
 		lprLimit        uint64
 		lprIsReversible bool
@@ -339,7 +339,7 @@ func (u QuotaUpdater) validateQuota(srv limes.ServiceInfo, res limesresources.Re
 		return verr
 	}
 
-	//specific rules for domain quotas vs. project quotas
+	// specific rules for domain quotas vs. project quotas
 	if u.Project == nil {
 		return u.validateDomainQuota(srv, res, clusterRes, domRes, newQuota)
 	}
@@ -355,9 +355,9 @@ func (u QuotaUpdater) validateAuthorization(srv limes.ServiceInfo, res limesreso
 			if u.CanLower(srv.Type, res.Name) {
 				return nil
 			}
-			//If the low-privilege raise (LPR) limit is specified in a reversible
-			//way, it also applies in reverse. If a raise is allowed by the LPR
-			//limit, the reverse lower is also allowed by it.
+			// If the low-privilege raise (LPR) limit is specified in a reversible
+			// way, it also applies in reverse. If a raise is allowed by the LPR
+			// limit, the reverse lower is also allowed by it.
 			if u.CanLowerLP(srv.Type, res.Name) && lprLimit > 0 && lprIsReversible {
 				if oldQuota <= lprLimit {
 					return nil
@@ -399,14 +399,14 @@ func (u QuotaUpdater) validateAuthorization(srv limes.ServiceInfo, res limesreso
 
 func (u QuotaUpdater) validateDomainQuota(srv limes.ServiceInfo, res limesresources.ResourceInfo, clusterRes limesresources.ClusterResourceReport, domRes limesresources.DomainResourceReport, newQuota uint64) *core.QuotaValidationError {
 	if domRes.DomainQuota == nil || domRes.ProjectsQuota == nil {
-		//defense in depth: we should have detected NoQuota resources a long time ago
+		// defense in depth: we should have detected NoQuota resources a long time ago
 		return &core.QuotaValidationError{
 			Status:  http.StatusInternalServerError,
 			Message: "missing input data for quota validation (please report this problem!)",
 		}
 	}
 
-	//when reducing domain quota, existing project quotas must fit into new domain quota
+	// when reducing domain quota, existing project quotas must fit into new domain quota
 	oldQuota := *domRes.DomainQuota
 	if newQuota < oldQuota && newQuota < *domRes.ProjectsQuota {
 		return &core.QuotaValidationError{
@@ -417,11 +417,11 @@ func (u QuotaUpdater) validateDomainQuota(srv limes.ServiceInfo, res limesresour
 		}
 	}
 
-	//when increasing domain quota, check that cluster capacity is not exceeded (if this constraint has been enabled in the config)
+	// when increasing domain quota, check that cluster capacity is not exceeded (if this constraint has been enabled in the config)
 	qdConfig := u.Cluster.QuotaDistributionConfigForResource(srv.Type, res.Name)
 	if newQuota > oldQuota && qdConfig.StrictDomainQuotaLimit {
 		//NOTE: No arithmetic overflow/underflow is possible here, for the same
-		//reasons as explained below in validateProjectQuota().
+		// reasons as explained below in validateProjectQuota().
 		newDomainsQuota := *clusterRes.DomainsQuota - oldQuota + newQuota
 		if newDomainsQuota > *clusterRes.Capacity {
 			maxQuota := *clusterRes.Capacity - (*clusterRes.DomainsQuota - oldQuota)
@@ -441,14 +441,14 @@ func (u QuotaUpdater) validateDomainQuota(srv limes.ServiceInfo, res limesresour
 
 func (u QuotaUpdater) validateProjectQuota(domRes limesresources.DomainResourceReport, projRes limesresources.ProjectResourceReport, newQuota uint64) *core.QuotaValidationError {
 	if projRes.Quota == nil || domRes.ProjectsQuota == nil || domRes.DomainQuota == nil {
-		//defense in depth: we should have detected NoQuota resources a long time ago
+		// defense in depth: we should have detected NoQuota resources a long time ago
 		return &core.QuotaValidationError{
 			Status:  http.StatusInternalServerError,
 			Message: "missing input data for quota validation (please report this problem!)",
 		}
 	}
 
-	//when reducing project quota, existing usage must fit into new quota
+	// when reducing project quota, existing usage must fit into new quota
 	oldQuota := *projRes.Quota
 	if newQuota < oldQuota && newQuota < projRes.Usage {
 		min := projRes.Usage
@@ -460,17 +460,17 @@ func (u QuotaUpdater) validateProjectQuota(domRes limesresources.DomainResourceR
 		}
 	}
 
-	//check that domain quota is not exceeded
+	// check that domain quota is not exceeded
 	//
 	//NOTE: This check is skipped on non-hierarchical quota distribution since domain
-	//quota is always set equal to the sum of project quotas afterwards there.
+	// quota is always set equal to the sum of project quotas afterwards there.
 	if projRes.QuotaDistributionModel == limesresources.HierarchicalQuotaDistribution {
 		//NOTE: It looks like an arithmetic overflow (or rather, underflow) is
-		//possible here, but it isn't. projectsQuota is the sum over all current
-		//project quotas, including res.Quota, and thus is always bigger (since these
-		//quotas are all unsigned). Also, we're doing everything in a transaction, so
-		//an overflow because of concurrent quota changes is also out of the
-		//question.
+		// possible here, but it isn't. projectsQuota is the sum over all current
+		// project quotas, including res.Quota, and thus is always bigger (since these
+		// quotas are all unsigned). Also, we're doing everything in a transaction, so
+		// an overflow because of concurrent quota changes is also out of the
+		// question.
 		newProjectsQuota := *domRes.ProjectsQuota - *projRes.Quota + newQuota
 		if newProjectsQuota > *domRes.DomainQuota {
 			maxQuota := *domRes.DomainQuota - (*domRes.ProjectsQuota - *projRes.Quota)
@@ -515,7 +515,7 @@ func (u QuotaUpdater) WriteSimulationReport(w http.ResponseWriter) {
 		IsValid               bool                   `json:"success"`
 		UnacceptableResources []unacceptableResource `json:"unacceptable_resources,omitempty"`
 	}
-	result.IsValid = true //until proven otherwise
+	result.IsValid = true // until proven otherwise
 
 	for srvType, reqs := range u.Requests {
 		for resName, req := range reqs {
@@ -532,7 +532,7 @@ func (u QuotaUpdater) WriteSimulationReport(w http.ResponseWriter) {
 		}
 	}
 
-	//deterministic ordering for unit tests
+	// deterministic ordering for unit tests
 	sort.Slice(result.UnacceptableResources, func(i, j int) bool {
 		srvType1 := result.UnacceptableResources[i].ServiceType
 		srvType2 := result.UnacceptableResources[j].ServiceType
@@ -553,7 +553,7 @@ func (u QuotaUpdater) WritePutErrorResponse(w http.ResponseWriter) {
 	var lines []string
 	hasSubstatus := make(map[int]bool)
 
-	//collect error messages
+	// collect error messages
 	for srvType, reqs := range u.Requests {
 		for resName, req := range reqs {
 			err := req.ValidationError
@@ -577,11 +577,11 @@ func (u QuotaUpdater) WritePutErrorResponse(w http.ResponseWriter) {
 			}
 		}
 	}
-	sort.Strings(lines) //for determinism in unit test
+	sort.Strings(lines) // for determinism in unit test
 	msg := strings.Join(lines, "\n")
 
-	//when all errors have the same status, report that; otherwise use 422
-	//(Unprocessable Entity) as a reasonable overall default
+	// when all errors have the same status, report that; otherwise use 422
+	// (Unprocessable Entity) as a reasonable overall default
 	status := http.StatusUnprocessableEntity
 	if len(hasSubstatus) == 1 {
 		for s := range hasSubstatus {
@@ -634,8 +634,8 @@ func (u QuotaUpdater) CommitAuditTrail(token *gopherpolicy.Token, r *http.Reques
 				}
 			}
 
-			//if !u.IsValid(), then all requested quotas in this PUT are considered
-			//invalid (and none are committed), so set the rejectReason to explain this
+			// if !u.IsValid(), then all requested quotas in this PUT are considered
+			// invalid (and none are committed), so set the rejectReason to explain this
 			rejectReason := ""
 			if invalid {
 				if req.ValidationError == nil {
@@ -649,7 +649,7 @@ func (u QuotaUpdater) CommitAuditTrail(token *gopherpolicy.Token, r *http.Reques
 				quotaEventTarget{
 					DomainID:     u.Domain.UUID,
 					DomainName:   u.Domain.Name,
-					ProjectID:    projectUUID, //is empty for domain quota updates, see above
+					ProjectID:    projectUUID, // is empty for domain quota updates, see above
 					ProjectName:  projectName,
 					ServiceType:  srvType,
 					ResourceName: resName,

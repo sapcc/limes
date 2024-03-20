@@ -39,7 +39,7 @@ import (
 )
 
 type swiftPlugin struct {
-	//connections
+	// connections
 	ResellerAccount *schwift.Account `yaml:"-"`
 }
 
@@ -129,7 +129,7 @@ func (p *swiftPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Availa
 	account := p.Account(project.UUID)
 	headers, err := account.Headers()
 	if schwift.Is(err, http.StatusNotFound) || schwift.Is(err, http.StatusGone) {
-		//Swift account does not exist or was deleted and not yet reaped, but the keystone project exists
+		// Swift account does not exist or was deleted and not yet reaped, but the keystone project exists
 		return map[string]core.ResourceData{
 			"capacity": {
 				Quota:     0,
@@ -179,13 +179,13 @@ func (p *swiftPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Availa
 func (p *swiftPlugin) SetQuota(project core.KeystoneProject, quotas map[string]uint64) error {
 	headers := schwift.NewAccountHeaders()
 	headers.BytesUsedQuota().Set(quotas["capacity"])
-	//this header brought to you by https://github.com/sapcc/swift-addons
+	// this header brought to you by https://github.com/sapcc/swift-addons
 	headers.Set("X-Account-Project-Domain-Id-Override", project.Domain.UUID)
 
 	account := p.Account(project.UUID)
 	err := account.Update(headers, nil)
 	if schwift.Is(err, http.StatusNotFound) && quotas["capacity"] > 0 {
-		//account does not exist yet - if there is a non-zero quota, enable it now
+		// account does not exist yet - if there is a non-zero quota, enable it now
 		err = account.Create(headers.ToOpts())
 		if err == nil {
 			logg.Info("Swift Account %s created", project.UUID)

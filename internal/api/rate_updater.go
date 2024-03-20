@@ -38,16 +38,16 @@ import (
 
 // RateLimitUpdater is the equivalent of QuotaUpdater for rate limit PUT requests.
 type RateLimitUpdater struct {
-	//scope (all fields are always set since rate limits can only be updated on
-	//the project level)
+	// scope (all fields are always set since rate limits can only be updated on
+	// the project level)
 	Cluster *core.Cluster
 	Domain  *db.Domain
 	Project *db.Project
 
-	//AuthZ info
+	// AuthZ info
 	CanSetRateLimit func(serviceType string) bool
 
-	//Filled by ValidateInput() with the keys being the service type and the rate name.
+	// Filled by ValidateInput() with the keys being the service type and the rate name.
 	Requests map[string]map[string]RateLimitRequest
 }
 
@@ -73,11 +73,11 @@ func (u *RateLimitUpdater) ValidateInput(input limesrates.RateRequest, dbi db.In
 
 	u.Requests = make(map[string]map[string]RateLimitRequest)
 
-	//Go through all services and validate the requested rate limits.
+	// Go through all services and validate the requested rate limits.
 	for svcType, in := range input {
 		svcConfig, err := u.Cluster.Config.GetServiceConfigurationForType(svcType)
 		if err != nil {
-			//Skip service if not configured.
+			// Skip service if not configured.
 			continue
 		}
 		if _, ok := u.Requests[svcType]; !ok {
@@ -90,7 +90,7 @@ func (u *RateLimitUpdater) ValidateInput(input limesrates.RateRequest, dbi db.In
 				NewWindow: newRateLimit.Window,
 			}
 
-			//only allow setting rate limits for which a default exists
+			// only allow setting rate limits for which a default exists
 			defaultRateLimit, exists := svcConfig.RateLimits.GetProjectDefaultRateLimit(rateName)
 			if exists {
 				req.Unit = defaultRateLimit.Unit
@@ -114,12 +114,12 @@ func (u *RateLimitUpdater) ValidateInput(input limesrates.RateRequest, dbi db.In
 				}
 			}
 
-			//skip if rate limit was not changed
+			// skip if rate limit was not changed
 			if req.OldLimit == req.NewLimit && req.OldWindow == req.NewWindow {
 				continue
 			}
 
-			//value is valid and novel -> perform further validation
+			// value is valid and novel -> perform further validation
 			req.ValidationError = u.validateRateLimit(u.Cluster.InfoForService(svcType))
 			u.Requests[svcType][rateName] = req
 		}
@@ -164,7 +164,7 @@ func (u RateLimitUpdater) WriteSimulationReport(w http.ResponseWriter) {
 		IsValid                bool                    `json:"success"`
 		UnacceptableRateLimits []unacceptableRateLimit `json:"unacceptable_rates,omitempty"`
 	}
-	result.IsValid = true //until proven otherwise
+	result.IsValid = true // until proven otherwise
 
 	for srvType, reqs := range u.Requests {
 		for rateName, req := range reqs {
@@ -181,7 +181,7 @@ func (u RateLimitUpdater) WriteSimulationReport(w http.ResponseWriter) {
 		}
 	}
 
-	//deterministic ordering for unit tests
+	// deterministic ordering for unit tests
 	sort.Slice(result.UnacceptableRateLimits, func(i, j int) bool {
 		srvType1 := result.UnacceptableRateLimits[i].ServiceType
 		srvType2 := result.UnacceptableRateLimits[j].ServiceType
@@ -202,7 +202,7 @@ func (u RateLimitUpdater) WritePutErrorResponse(w http.ResponseWriter) {
 	var lines []string
 	hasSubstatus := make(map[int]bool)
 
-	//collect error messages
+	// collect error messages
 	for srvType, reqs := range u.Requests {
 		for rateName, req := range reqs {
 			if err := req.ValidationError; err != nil {
@@ -214,11 +214,11 @@ func (u RateLimitUpdater) WritePutErrorResponse(w http.ResponseWriter) {
 			}
 		}
 	}
-	sort.Strings(lines) //for determinism in unit test
+	sort.Strings(lines) // for determinism in unit test
 	msg := strings.Join(lines, "\n")
 
-	//when all errors have the same status, report that; otherwise use 422
-	//(Unprocessable Entity) as a reasonable overall default
+	// when all errors have the same status, report that; otherwise use 422
+	// (Unprocessable Entity) as a reasonable overall default
 	status := http.StatusUnprocessableEntity
 	if len(hasSubstatus) == 1 {
 		for s := range hasSubstatus {
@@ -242,8 +242,8 @@ func (u RateLimitUpdater) CommitAuditTrail(token *gopherpolicy.Token, r *http.Re
 
 	for srvType, reqs := range u.Requests {
 		for rateName, req := range reqs {
-			//if !u.IsValid(), then all requested quotas in this PUT are considered
-			//invalid (and none are committed), so set the rejectReason to explain this
+			// if !u.IsValid(), then all requested quotas in this PUT are considered
+			// invalid (and none are committed), so set the rejectReason to explain this
 			rejectReason := ""
 			if invalid {
 				if req.ValidationError == nil {

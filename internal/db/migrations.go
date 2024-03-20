@@ -21,7 +21,7 @@ package db
 
 var sqlMigrations = map[string]string{
 	//NOTE: Migrations 1 through 36 have been rolled up into one at 2023-02-26
-	//to better represent the current baseline of the DB schema.
+	// to better represent the current baseline of the DB schema.
 	"036_rollup.down.sql": `
 		DROP TABLE cluster_capacitors;
 		DROP TABLE cluster_services;

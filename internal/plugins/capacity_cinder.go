@@ -37,13 +37,13 @@ import (
 )
 
 type capacityCinderPlugin struct {
-	//configuration
+	// configuration
 	VolumeTypes map[string]struct {
 		VolumeBackendName string `yaml:"volume_backend_name"`
 		IsDefault         bool   `yaml:"default"`
 	} `yaml:"volume_types"`
 	WithSubcapacities bool `yaml:"with_subcapacities"`
-	//connections
+	// connections
 	CinderV3 *gophercloud.ServiceClient `yaml:"-"`
 }
 
@@ -68,20 +68,20 @@ func (p *capacityCinderPlugin) PluginTypeID() string {
 }
 
 func (p *capacityCinderPlugin) makeResourceName(volumeType string) string {
-	//the resources for the volume type marked as default don't get the volume
-	//type suffix for backwards compatibility reasons
+	// the resources for the volume type marked as default don't get the volume
+	// type suffix for backwards compatibility reasons
 	if p.VolumeTypes[volumeType].IsDefault {
 		return "capacity"
 	}
 	return "capacity_" + volumeType
 	//NOTE: We don't make estimates for no. of snapshots/volumes in this
-	//capacitor. These values depend highly on the backend. (On SAP CC, we
-	//configure capacity for snapshots/volumes via the "manual" capacitor.)
+	// capacitor. These values depend highly on the backend. (On SAP CC, we
+	// configure capacity for snapshots/volumes via the "manual" capacitor.)
 }
 
 // Scrape implements the core.CapacityPlugin interface.
 func (p *capacityCinderPlugin) Scrape(_ core.CapacityPluginBackchannel) (result map[string]map[string]core.PerAZ[core.CapacityData], serializedMetrics []byte, err error) {
-	//list storage pools
+	// list storage pools
 	var poolData struct {
 		StoragePools []struct {
 			Name         string `json:"name"`
@@ -89,7 +89,7 @@ func (p *capacityCinderPlugin) Scrape(_ core.CapacityPluginBackchannel) (result 
 				VolumeBackendName   string          `json:"volume_backend_name"`
 				TotalCapacityGB     float64OrString `json:"total_capacity_gb"`
 				AllocatedCapacityGB float64OrString `json:"allocated_capacity_gb"`
-				//we need a custom type because `schedulerstats.Capabilities` does not expose this custom_attributes field
+				// we need a custom type because `schedulerstats.Capabilities` does not expose this custom_attributes field
 				CustomAttributes struct {
 					CinderState string `json:"cinder_state"`
 				} `json:"custom_attributes"`
@@ -106,7 +106,7 @@ func (p *capacityCinderPlugin) Scrape(_ core.CapacityPluginBackchannel) (result 
 		return nil, nil, err
 	}
 
-	//list service hosts
+	// list service hosts
 	allPages, err = services.List(p.CinderV3, nil).AllPages()
 	if err != nil {
 		return nil, nil, err
@@ -119,7 +119,7 @@ func (p *capacityCinderPlugin) Scrape(_ core.CapacityPluginBackchannel) (result 
 	serviceHostsPerAZ := make(map[string][]string)
 	for _, element := range allServices {
 		if element.Binary == "cinder-volume" {
-			//element.Host has the format backendHostname@backendName
+			// element.Host has the format backendHostname@backendName
 			serviceHostsPerAZ[element.Zone] = append(serviceHostsPerAZ[element.Zone], element.Host)
 		}
 	}
@@ -131,11 +131,11 @@ func (p *capacityCinderPlugin) Scrape(_ core.CapacityPluginBackchannel) (result 
 		capaData[p.makeResourceName(volumeType)] = make(core.PerAZ[core.CapacityData])
 	}
 
-	//add results from scheduler-stats
+	// add results from scheduler-stats
 	for _, pool := range poolData.StoragePools {
-		//do not consider pools that are slated for decommissioning (state "drain")
-		//or reserved for absorbing payloads from draining pools (state "reserved")
-		//(no quota should be given out for such capacity)
+		// do not consider pools that are slated for decommissioning (state "drain")
+		// or reserved for absorbing payloads from draining pools (state "reserved")
+		// (no quota should be given out for such capacity)
 		state := pool.Capabilities.CustomAttributes.CinderState
 		if state == "drain" || state == "reserved" {
 			logg.Info("Cinder capacity plugin: skipping pool %q with %g GiB capacity because of cinder_state %q",
@@ -153,7 +153,7 @@ func (p *capacityCinderPlugin) Scrape(_ core.CapacityPluginBackchannel) (result 
 		var poolAZ limes.AvailabilityZone
 		for az, hosts := range serviceHostsPerAZ {
 			for _, v := range hosts {
-				//pool.Name has the format backendHostname@backendName#backendPoolName
+				// pool.Name has the format backendHostname@backendName#backendPoolName
 				if strings.Contains(pool.Name, v) {
 					poolAZ = limes.AvailabilityZone(az)
 					break
@@ -193,12 +193,12 @@ func (p *capacityCinderPlugin) Scrape(_ core.CapacityPluginBackchannel) (result 
 
 // DescribeMetrics implements the core.CapacityPlugin interface.
 func (p *capacityCinderPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
-	//not used by this plugin
+	// not used by this plugin
 }
 
 // CollectMetrics implements the core.CapacityPlugin interface.
 func (p *capacityCinderPlugin) CollectMetrics(ch chan<- prometheus.Metric, serializedMetrics []byte) error {
-	//not used by this plugin
+	// not used by this plugin
 	return nil
 }
 

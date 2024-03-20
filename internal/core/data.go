@@ -84,7 +84,7 @@ func (p PerAZ[D]) Keys() []limes.AvailabilityZone {
 // Sum returns a sum of all data in this container.
 // This can be used if data can only be stored as a whole, not broken down by AZ.
 func (p PerAZ[D]) Sum() D {
-	//fold AZ data in a well-defined order for deterministic test result
+	// fold AZ data in a well-defined order for deterministic test result
 	azNames := make([]limes.AvailabilityZone, 0, len(p))
 	for az := range p {
 		azNames = append(azNames, az)
@@ -145,9 +145,9 @@ type AZAwareData[Self any] interface {
 
 // ResourceData contains quota and usage data for a single project resource.
 type ResourceData struct {
-	Quota     int64   //negative values indicate infinite quota
-	MinQuota  *uint64 //if set, indicates that SetQuota will reject values below this level
-	MaxQuota  *uint64 //if set, indicates that SetQuota will reject values above this level
+	Quota     int64   // negative values indicate infinite quota
+	MinQuota  *uint64 // if set, indicates that SetQuota will reject values below this level
+	MaxQuota  *uint64 // if set, indicates that SetQuota will reject values above this level
 	UsageData PerAZ[UsageData]
 }
 
@@ -191,8 +191,8 @@ func (r ResourceData) AddLocalizedUsage(az limes.AvailabilityZone, usage uint64)
 // It appears in type ResourceData.
 type UsageData struct {
 	Usage         uint64
-	PhysicalUsage *uint64 //only supported by some plugins
-	Subresources  []any   //only if supported by plugin and enabled in config
+	PhysicalUsage *uint64 // only supported by some plugins
+	Subresources  []any   // only if supported by plugin and enabled in config
 }
 
 // clone implements the AZAwareData interface.
@@ -219,7 +219,7 @@ func (d UsageData) add(other UsageData) UsageData {
 		Subresources: append(slices.Clone(d.Subresources), other.Subresources...),
 	}
 
-	//the sum can only have a PhysicalUsage value if both sides have it
+	// the sum can only have a PhysicalUsage value if both sides have it
 	if d.PhysicalUsage != nil && other.PhysicalUsage != nil {
 		physUsage := *d.PhysicalUsage + *other.PhysicalUsage
 		result.PhysicalUsage = &physUsage
@@ -240,7 +240,7 @@ type CapacityData struct {
 	//NOTE: The json tags are only relevant for the output of `limes test-scan-capacity`.
 	Capacity      uint64  `json:"capacity"`
 	Usage         *uint64 `json:"usage,omitempty"`         //NOTE: currently only relevant on AZ level, regional level uses the aggregation of project usages
-	Subcapacities []any   `json:"subcapacities,omitempty"` //only if supported by plugin and enabled in config
+	Subcapacities []any   `json:"subcapacities,omitempty"` // only if supported by plugin and enabled in config
 }
 
 // clone implements the AZAwareData interface.
@@ -263,7 +263,7 @@ func (d CapacityData) add(other CapacityData) CapacityData {
 		Subcapacities: append(slices.Clone(d.Subcapacities), other.Subcapacities...),
 	}
 
-	//the sum can only have a PhysicalUsage value if both sides have it
+	// the sum can only have a PhysicalUsage value if both sides have it
 	if d.Usage != nil && other.Usage != nil {
 		usage := *d.Usage + *other.Usage
 		result.Usage = &usage

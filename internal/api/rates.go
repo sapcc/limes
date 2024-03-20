@@ -124,7 +124,7 @@ func (p *v1Provider) SimulatePutProjectRates(w http.ResponseWriter, r *http.Requ
 }
 
 func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http.Request, simulate bool) {
-	//parse request body
+	// parse request body
 	var parseTarget struct {
 		Project struct {
 			Services limesrates.RateRequest `json:"services"`
@@ -157,7 +157,7 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 		return
 	}
 
-	//start a transaction for the rate limit updates
+	// start a transaction for the rate limit updates
 	var tx *gorp.Transaction
 	var dbi db.Interface
 	if simulate {
@@ -172,14 +172,14 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 		dbi = tx
 	}
 
-	//validate inputs (within the DB transaction, to ensure that we do not apply
-	//inconsistent values later)
+	// validate inputs (within the DB transaction, to ensure that we do not apply
+	// inconsistent values later)
 	err := updater.ValidateInput(parseTarget.Project.Services, dbi)
 	if errext.IsOfType[MissingProjectReportError](err) {
-		//MissingProjectReportError indicates that the project is new and initial
-		//scraping is not yet done -> ask the user to wait until that's done, with
-		//a 4xx status code instead of a 5xx one so that this does not trigger
-		//alerts on the operator side
+		// MissingProjectReportError indicates that the project is new and initial
+		// scraping is not yet done -> ask the user to wait until that's done, with
+		// a 4xx status code instead of a 5xx one so that this does not trigger
+		// alerts on the operator side
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusLocked)
 		fmt.Fprintf(w, "%s (please retry in a few seconds after initial scraping is done)", err.Error())
@@ -189,7 +189,7 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 		return
 	}
 
-	//stop now if we're only simulating
+	// stop now if we're only simulating
 	if simulate {
 		updater.WriteSimulationReport(w)
 		return
@@ -201,7 +201,7 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 		return
 	}
 
-	//check all services for resources to update
+	// check all services for resources to update
 	var services []db.ProjectService
 	_, err = tx.Select(&services,
 		`SELECT * FROM project_services WHERE project_id = $1 ORDER BY type`, updater.Project.ID)
@@ -212,7 +212,7 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 	var ratesToUpdate []db.ProjectRate
 	for _, srv := range services {
 		if rateLimitRequests, exists := updater.Requests[srv.Type]; exists {
-			//Check all rate limits.
+			// Check all rate limits.
 			var rates []db.ProjectRate
 			_, err = tx.Select(&rates, `SELECT * FROM project_rates WHERE service_id = $1 ORDER BY name`, srv.ID)
 			if respondwith.ErrorText(w, err) {
@@ -232,14 +232,14 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 					}
 				}
 
-				req := req //clone req to avoid implicit aliasing in for loop
+				req := req // clone req to avoid implicit aliasing in for loop
 				rate.Limit = &req.NewLimit
 				rate.Window = &req.NewWindow
 				ratesToUpdate = append(ratesToUpdate, rate)
 			}
 		}
 	}
-	//update the DB with the new rate limits
+	// update the DB with the new rate limits
 	queryStr := `INSERT INTO project_rates (service_id, name, rate_limit, window_ns, usage_as_bigint) VALUES ($1,$2,$3,$4,'') ON CONFLICT (service_id, name) DO UPDATE SET rate_limit = EXCLUDED.rate_limit, window_ns = EXCLUDED.window_ns`
 	err = sqlext.WithPreparedStatement(tx, queryStr, func(stmt *sql.Stmt) error {
 		for _, rate := range ratesToUpdate {

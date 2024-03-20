@@ -37,14 +37,14 @@ import (
 type Collector struct {
 	Cluster *core.Cluster
 	DB      *gorp.DbMap
-	//Usually logg.Error, but can be changed inside unit tests.
+	// Usually logg.Error, but can be changed inside unit tests.
 	LogError func(msg string, args ...any)
-	//Usually time.Now, but can be changed inside unit tests.
-	//MeasureTimeAtEnd behaves slightly differently in unit tests: It will advance
-	//the mock.Clock before reading it to simulate time passing during the previous task.
+	// Usually time.Now, but can be changed inside unit tests.
+	// MeasureTimeAtEnd behaves slightly differently in unit tests: It will advance
+	// the mock.Clock before reading it to simulate time passing during the previous task.
 	MeasureTime      func() time.Time
 	MeasureTimeAtEnd func() time.Time
-	//Usually addJitter, but can be changed inside unit tests.
+	// Usually addJitter, but can be changed inside unit tests.
 	AddJitter func(time.Duration) time.Duration
 }
 
@@ -72,8 +72,8 @@ func addJitter(duration time.Duration) time.Duration {
 
 // TaskTiming appears in the task types of our ProducerConsumerJobs.
 type TaskTiming struct {
-	StartedAt  time.Time //filled during DiscoverTask
-	FinishedAt time.Time //filled during ProcessTask
+	StartedAt  time.Time // filled during DiscoverTask
+	FinishedAt time.Time // filled during ProcessTask
 }
 
 // Duration measures the duration of the main portion of a task.

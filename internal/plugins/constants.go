@@ -28,6 +28,6 @@ var isAvailableProvisionState = map[string]bool{
 	"manageable": false,
 	"available":  true,
 	"active":     true,
-	"error":      true, //occurs during delete or rebuild, so node was active before
+	"error":      true, // occurs during delete or rebuild, so node was active before
 	"rescue":     true,
 }

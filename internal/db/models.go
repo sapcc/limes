@@ -31,7 +31,7 @@ import (
 // ClusterCapacitor contains a record from the `cluster_capacitors` table.
 type ClusterCapacitor struct {
 	CapacitorID        string     `db:"capacitor_id"`
-	ScrapedAt          *time.Time `db:"scraped_at"` //pointer type to allow for NULL value
+	ScrapedAt          *time.Time `db:"scraped_at"` // pointer type to allow for NULL value
 	ScrapeDurationSecs float64    `db:"scrape_duration_secs"`
 	SerializedMetrics  string     `db:"serialized_metrics"`
 	NextScrapeAt       time.Time  `db:"next_scrape_at"`
@@ -104,13 +104,13 @@ type ProjectService struct {
 	ID                      ProjectServiceID `db:"id"`
 	ProjectID               ProjectID        `db:"project_id"`
 	Type                    string           `db:"type"`
-	ScrapedAt               *time.Time       `db:"scraped_at"` //pointer type to allow for NULL value
+	ScrapedAt               *time.Time       `db:"scraped_at"` // pointer type to allow for NULL value
 	CheckedAt               *time.Time       `db:"checked_at"`
 	NextScrapeAt            time.Time        `db:"next_scrape_at"`
 	Stale                   bool             `db:"stale"`
 	ScrapeDurationSecs      float64          `db:"scrape_duration_secs"`
 	ScrapeErrorMessage      string           `db:"scrape_error_message"`
-	RatesScrapedAt          *time.Time       `db:"rates_scraped_at"` //same as above
+	RatesScrapedAt          *time.Time       `db:"rates_scraped_at"` // same as above
 	RatesCheckedAt          *time.Time       `db:"rates_checked_at"`
 	RatesNextScrapeAt       time.Time        `db:"rates_next_scrape_at"`
 	RatesStale              bool             `db:"rates_stale"`
@@ -162,7 +162,7 @@ type ProjectRate struct {
 	Limit         *uint64            `db:"rate_limit"`      // nil for rates that don't have a limit (just a usage)
 	Window        *limesrates.Window `db:"window_ns"`       // nil for rates that don't have a limit (just a usage)
 	UsageAsBigint string             `db:"usage_as_bigint"` // empty for rates that don't have a usage (just a limit)
-	//^ NOTE: Postgres has a NUMERIC type that would be large enough to hold an
+	// ^ NOTE: Postgres has a NUMERIC type that would be large enough to hold an
 	//  uint128, but Go does not have a uint128 builtin, so it's easier to just
 	//  use strings throughout and cast into bigints in the scraper only.
 }
@@ -180,29 +180,29 @@ type ProjectCommitment struct {
 	ConfirmedAt  *time.Time                        `db:"confirmed_at"`
 	ExpiresAt    time.Time                         `db:"expires_at"`
 
-	//A commitment can be superseded e.g. by splitting it into smaller parts.
-	//When that happens, the new commitments will point to the one that they
-	//superseded through the PredecessorID field.
+	// A commitment can be superseded e.g. by splitting it into smaller parts.
+	// When that happens, the new commitments will point to the one that they
+	// superseded through the PredecessorID field.
 	SupersededAt  *time.Time           `db:"superseded_at"`
 	PredecessorID *ProjectCommitmentID `db:"predecessor_id"`
 
-	//For a commitment to be transferred between projects, it must first be
-	//marked for transfer in the source project. Then a new commitment can be
-	//created in the target project to supersede the transferable commitment.
+	// For a commitment to be transferred between projects, it must first be
+	// marked for transfer in the source project. Then a new commitment can be
+	// created in the target project to supersede the transferable commitment.
 	//
-	//While a commitment is marked for transfer, it does not count towards quota
-	//calculation, but it still blocks capacity and still counts towards billing.
+	// While a commitment is marked for transfer, it does not count towards quota
+	// calculation, but it still blocks capacity and still counts towards billing.
 	TransferStatus limesresources.CommitmentTransferStatus `db:"transfer_status"`
 	TransferToken  string                                  `db:"transfer_token"`
 
-	//This column is technically redundant, since the state can be derived from
-	//the values of other fields. But having this field simplifies lots of
-	//queries significantly because we do not need to carry a NOW() argument into
-	//the query, and complex conditions like `WHERE superseded_at IS NULL AND
-	//expires_at > $now AND confirmed_at IS NULL AND confirm_by < $now` become
-	//simple readable conditions like `WHERE state = 'pending'`.
+	// This column is technically redundant, since the state can be derived from
+	// the values of other fields. But having this field simplifies lots of
+	// queries significantly because we do not need to carry a NOW() argument into
+	// the query, and complex conditions like `WHERE superseded_at IS NULL AND
+	// expires_at > $now AND confirmed_at IS NULL AND confirm_by < $now` become
+	// simple readable conditions like `WHERE state = 'pending'`.
 	//
-	//This field is updated by the CapacityScrapeJob.
+	// This field is updated by the CapacityScrapeJob.
 	State CommitmentState `db:"state"`
 }
 

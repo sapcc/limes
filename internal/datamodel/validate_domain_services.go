@@ -33,7 +33,7 @@ import (
 // ValidateDomainServices ensures that all required DomainService and
 // DomainResource records for this domain exist (and none other).
 func ValidateDomainServices(tx *gorp.Transaction, cluster *core.Cluster, domain db.Domain) error {
-	//list existing services
+	// list existing services
 	seen := make(map[string]bool)
 	var services []db.DomainService
 	_, err := tx.Select(&services,
@@ -44,7 +44,7 @@ func ValidateDomainServices(tx *gorp.Transaction, cluster *core.Cluster, domain 
 	logg.Info("checking consistency for %d domain services in domain %s...", len(services), domain.UUID)
 
 	for _, srv := range services {
-		//cleanup entries for services that have been removed from the configuration
+		// cleanup entries for services that have been removed from the configuration
 		seen[srv.Type] = true
 		if !cluster.HasService(srv.Type) {
 			logg.Info("cleaning up %s service entry for domain %s", srv.Type, domain.Name)
@@ -55,14 +55,14 @@ func ValidateDomainServices(tx *gorp.Transaction, cluster *core.Cluster, domain 
 			continue
 		}
 
-		//check domain_resources in this service
+		// check domain_resources in this service
 		err := convergeResourcesInDomainService(tx, cluster, domain, srv)
 		if err != nil {
 			return err
 		}
 	}
 
-	//create missing domain_services
+	// create missing domain_services
 	for _, serviceType := range cluster.ServiceTypesInAlphabeticalOrder() {
 		if seen[serviceType] {
 			continue
@@ -77,7 +77,7 @@ func ValidateDomainServices(tx *gorp.Transaction, cluster *core.Cluster, domain 
 			return err
 		}
 
-		//create domain_resources in this service
+		// create domain_resources in this service
 		err = convergeResourcesInDomainService(tx, cluster, domain, srv)
 		if err != nil {
 			return err
@@ -98,7 +98,7 @@ func convergeResourcesInDomainService(tx *gorp.Transaction, cluster *core.Cluste
 		serviceConstraints = cluster.QuotaConstraints.Domains[domain.Name][srv.Type]
 	}
 
-	//list existing resources
+	// list existing resources
 	seen := make(map[string]bool)
 	var resources []db.DomainResource
 	_, err := tx.Select(&resources,
@@ -107,13 +107,13 @@ func convergeResourcesInDomainService(tx *gorp.Transaction, cluster *core.Cluste
 		return err
 	}
 
-	//check existing resources
+	// check existing resources
 	hasChanges := false
 	for _, res := range resources {
 		resInfo := cluster.InfoForResource(srv.Type, res.Name)
 		seen[res.Name] = true
 
-		//enforce quota constraints
+		// enforce quota constraints
 		constraint := serviceConstraints[res.Name]
 		if newQuota := constraint.ApplyTo(res.Quota); newQuota != res.Quota {
 			logg.Other("AUDIT", "changing %s/%s quota for domain %s from %s to %s to satisfy constraint %q",
@@ -131,7 +131,7 @@ func convergeResourcesInDomainService(tx *gorp.Transaction, cluster *core.Cluste
 		}
 	}
 
-	//create missing resources
+	// create missing resources
 	for _, resInfo := range plugin.Resources() {
 		if seen[resInfo.Name] {
 			continue
@@ -158,7 +158,7 @@ func convergeResourcesInDomainService(tx *gorp.Transaction, cluster *core.Cluste
 		hasChanges = true
 	}
 
-	//if we created or updated any domain_resources, we need to ApplyComputedDomainQuota
+	// if we created or updated any domain_resources, we need to ApplyComputedDomainQuota
 	if !hasChanges {
 		return nil
 	}

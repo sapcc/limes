@@ -49,7 +49,7 @@ type JSONListStream[T any] struct {
 	Request        *http.Request
 	ResponseWriter http.ResponseWriter
 
-	//`w != nil` indicates that we have started writing a response
+	// `w != nil` indicates that we have started writing a response
 	w *bufio.Writer
 }
 
@@ -65,7 +65,7 @@ func NewJSONListStream[T any](w http.ResponseWriter, r *http.Request, outerField
 // JSON document.
 func (s *JSONListStream[T]) WriteItem(item T) error {
 	if s.w == nil {
-		//output has not started yet -> write opener before first item
+		// output has not started yet -> write opener before first item
 		s.ResponseWriter.Header().Set("Content-Type", "application/json")
 		s.ResponseWriter.WriteHeader(http.StatusOK)
 		s.w = bufio.NewWriter(s.ResponseWriter)
@@ -75,14 +75,14 @@ func (s *JSONListStream[T]) WriteItem(item T) error {
 			return err
 		}
 	} else {
-		//output has already started -> write commas between items
+		// output has already started -> write commas between items
 		_, err := s.w.Write([]byte(`,`))
 		if err != nil {
 			return err
 		}
 	}
 
-	//write the item
+	// write the item
 	return json.NewEncoder(s.w).Encode(item)
 }
 
@@ -91,29 +91,29 @@ func (s *JSONListStream[T]) WriteItem(item T) error {
 func (s *JSONListStream[T]) FinalizeDocument(err error) {
 	if err == nil {
 		if s.w != nil {
-			//write closer after last report
+			// write closer after last report
 			_, err = s.w.Write([]byte(`]}`))
 			if err == nil {
 				err = s.w.Flush()
 			}
 		} else {
-			//this branch is reached when there are no items in the list and therefore
-			//Write() was never called, so we need to write the entire document now
+			// this branch is reached when there are no items in the list and therefore
+			// Write() was never called, so we need to write the entire document now
 			respondwith.JSON(s.ResponseWriter, http.StatusOK, map[string]any{s.OuterFieldName: []any{}})
 			return
 		}
 	}
 	if err != nil {
 		if s.w != nil {
-			//deliberately destroy the ongoing JSON document to make it clear to the
-			//client that an error occurred
+			// deliberately destroy the ongoing JSON document to make it clear to the
+			// client that an error occurred
 			fmt.Fprintf(s.ResponseWriter, "\naborting because of error: %s\n", err.Error())
-			//usually we don't need to log errors in handlers because the
-			//logg.Middleware does it for us, but since this is a 200 response, we
-			//need to do it ourselves
+			// usually we don't need to log errors in handlers because the
+			// logg.Middleware does it for us, but since this is a 200 response, we
+			// need to do it ourselves
 			logg.Error("late error during GET %s: %s", s.Request.URL.String(), err.Error())
 		} else {
-			//the callback was never called, so we can properly report the error to the client
+			// the callback was never called, so we can properly report the error to the client
 			respondwith.ErrorText(s.ResponseWriter, err)
 		}
 	}

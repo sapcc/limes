@@ -34,9 +34,9 @@ import (
 // itself (so we know things like extra specs). For matching flavors just by
 // name, type FlavorNameSelection is used.
 type FlavorSelection struct {
-	//Only match flavors that have all of these extra specs.
+	// Only match flavors that have all of these extra specs.
 	RequiredExtraSpecs map[string]string `yaml:"required_extra_specs"`
-	//Exclude flavors that have any of these extra specs.
+	// Exclude flavors that have any of these extra specs.
 	ExcludedExtraSpecs map[string]string `yaml:"excluded_extra_specs"`
 }
 
@@ -89,9 +89,9 @@ type FullFlavor struct {
 
 // MatchesHypervisor returns true if instances of this flavor can be placed on the given hypervisor.
 func (f FullFlavor) MatchesHypervisor(mh MatchingHypervisor) bool {
-	//extra specs like `"trait:FOO": "required"` or `"trait:BAR": "forbidden"`
-	//are used by the Nova scheduler to ignore hypervisors that do not (or do)
-	//have the respective traits
+	// extra specs like `"trait:FOO": "required"` or `"trait:BAR": "forbidden"`
+	// are used by the Nova scheduler to ignore hypervisors that do not (or do)
+	// have the respective traits
 	for key, value := range f.ExtraSpecs {
 		trait, matches := strings.CutPrefix(key, "trait:")
 		if !matches {

@@ -38,7 +38,7 @@ func BuildSimpleWhereClause(fields map[string]any, parameterOffset int) (queryFr
 		switch value := val.(type) {
 		case []string:
 			if len(value) == 0 {
-				//no admissible values for this field, so the entire condition must fail
+				// no admissible values for this field, so the entire condition must fail
 				return "FALSE", nil
 			}
 			conditions = append(conditions, fmt.Sprintf("%s IN (%s)", field, makePlaceholderList(len(value), len(args)+1+parameterOffset)))
@@ -47,7 +47,7 @@ func BuildSimpleWhereClause(fields map[string]any, parameterOffset int) (queryFr
 			}
 		case []any:
 			if len(value) == 0 {
-				//no admissible values for this field, so the entire condition must fail
+				// no admissible values for this field, so the entire condition must fail
 				return "FALSE", nil
 			}
 			conditions = append(conditions, fmt.Sprintf("%s IN (%s)", field, makePlaceholderList(len(value), len(args)+1+parameterOffset)))

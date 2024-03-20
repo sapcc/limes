@@ -40,11 +40,11 @@ import (
 )
 
 type cinderPlugin struct {
-	//configuration
+	// configuration
 	VolumeTypes              []string `yaml:"volume_types"`
 	WithVolumeSubresources   bool     `yaml:"with_volume_subresources"`
 	WithSnapshotSubresources bool     `yaml:"with_snapshot_subresources"`
-	//connections
+	// connections
 	CinderV3 *gophercloud.ServiceClient `yaml:"-"`
 }
 
@@ -109,8 +109,8 @@ func (p *cinderPlugin) Rates() []limesrates.RateInfo {
 
 func (p *cinderPlugin) makeResourceName(kind, volumeType string) string {
 	if p.VolumeTypes[0] == volumeType {
-		//the resources for the first volume type don't get the volume type suffix
-		//for backwards compatibility reasons
+		// the resources for the first volume type don't get the volume type suffix
+		// for backwards compatibility reasons
 		return kind
 	}
 	return kind + "_" + volumeType
@@ -122,9 +122,9 @@ type quotaSetField struct {
 }
 
 func (f *quotaSetField) UnmarshalJSON(buf []byte) error {
-	//The `quota_set` field in the os-quota-sets response is mostly
-	//map[string]quotaSetField, but there is also an "id" key containing a
-	//string. Skip deserialization of that value.
+	// The `quota_set` field in the os-quota-sets response is mostly
+	// map[string]quotaSetField, but there is also an "id" key containing a
+	// string. Skip deserialization of that value.
 	if buf[0] == '"' {
 		return nil
 	}
@@ -171,7 +171,7 @@ func (p *cinderPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Avail
 	}
 
 	//NOTE: We always enumerate subresources, even if we don't end up reporting
-	//them, to calculate the AZ breakdown.
+	// them, to calculate the AZ breakdown.
 	placementForVolumeUUID, err := p.collectVolumeSubresources(project, allAZs, result)
 	if err != nil {
 		return nil, nil, err
@@ -192,7 +192,7 @@ type cinderVolumePlacement struct {
 }
 
 func (p *cinderPlugin) applyFallbacks(placement *cinderVolumePlacement, allAZs []limes.AvailabilityZone) {
-	//group subresources with unknown volume types under the default volume type
+	// group subresources with unknown volume types under the default volume type
 	if !slices.Contains(p.VolumeTypes, placement.VolumeType) {
 		placement.VolumeType = p.VolumeTypes[0]
 	}
@@ -278,7 +278,7 @@ func (p *cinderPlugin) collectSnapshotSubresources(project core.KeystoneProject,
 
 		for _, snapshot := range snaps {
 			placement := placementForVolumeUUID[snapshot.VolumeID]
-			p.applyFallbacks(&placement, allAZs) //only relevant if the volume ID is unknown and we got a zero-initialized struct
+			p.applyFallbacks(&placement, allAZs) // only relevant if the volume ID is unknown and we got a zero-initialized struct
 
 			res := cinderSnapshotSubresource{
 				UUID:   snapshot.ID,
@@ -334,11 +334,11 @@ func (p *cinderPlugin) SetQuota(project core.KeystoneProject, quotas map[string]
 
 // DescribeMetrics implements the core.QuotaPlugin interface.
 func (p *cinderPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
-	//not used by this plugin
+	// not used by this plugin
 }
 
 // CollectMetrics implements the core.QuotaPlugin interface.
 func (p *cinderPlugin) CollectMetrics(ch chan<- prometheus.Metric, project core.KeystoneProject, serializedMetrics []byte) error {
-	//not used by this plugin
+	// not used by this plugin
 	return nil
 }

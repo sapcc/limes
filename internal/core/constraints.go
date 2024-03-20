@@ -35,9 +35,9 @@ import (
 // QuotaConstraintSet contains the contents of the constraint configuration file
 // for a limes.Cluster.
 type QuotaConstraintSet struct {
-	//Indexed by domain name.
+	// Indexed by domain name.
 	Domains map[string]QuotaConstraints
-	//Indexed by domain name, then by project name.
+	// Indexed by domain name, then by project name.
 	Projects map[string]map[string]QuotaConstraints
 }
 
@@ -55,7 +55,7 @@ type QuotaConstraint struct {
 
 // QuotaValidationError appears in the Limes API in the POST .../simulate-put responses.
 type QuotaValidationError struct {
-	Status       int        `json:"status"` //an HTTP status code, e.g. http.StatusForbidden
+	Status       int        `json:"status"` // an HTTP status code, e.g. http.StatusForbidden
 	Message      string     `json:"message"`
 	MinimumValue *uint64    `json:"min_acceptable_quota,omitempty"`
 	MaximumValue *uint64    `json:"max_acceptable_quota,omitempty"`
@@ -63,9 +63,9 @@ type QuotaValidationError struct {
 }
 
 func (e *QuotaValidationError) Error() string {
-	//Type QuotaUpdater has a function that can return either `error` or
-	//`*QuotaValidationError`. That's easier to write down if
-	//`*QuotaValidationError` is also `error`, even if I never use it as such.
+	// Type QuotaUpdater has a function that can return either `error` or
+	// `*QuotaValidationError`. That's easier to write down if
+	// `*QuotaValidationError` is also `error`, even if I never use it as such.
 	panic("DO NOT USE ME")
 }
 
@@ -146,7 +146,7 @@ func NewQuotaConstraints(cluster *Cluster, constraintConfigPath string) (result 
 		Projects: make(map[string]map[string]QuotaConstraints),
 	}
 
-	//parse quota constraints for projects
+	// parse quota constraints for projects
 	for projectAndDomainName, projectData := range data.Projects {
 		fields := strings.SplitN(projectAndDomainName, "/", 2)
 		if len(fields) < 2 {
@@ -167,10 +167,10 @@ func NewQuotaConstraints(cluster *Cluster, constraintConfigPath string) (result 
 		result.Projects[domainName][projectName] = values
 	}
 
-	//parse quota constraints for domains
+	// parse quota constraints for domains
 	for domainName, domainData := range data.Domains {
-		//in order to compile "at least X more than project constraints" constraints, we need to give the
-		//project constraints for this domain into the compiler
+		// in order to compile "at least X more than project constraints" constraints, we need to give the
+		// project constraints for this domain into the compiler
 		projectsConstraints := result.Projects[domainName]
 		if projectsConstraints == nil {
 			projectsConstraints = make(map[string]QuotaConstraints)
@@ -183,14 +183,14 @@ func NewQuotaConstraints(cluster *Cluster, constraintConfigPath string) (result 
 		result.Domains[domainName] = values
 	}
 
-	//do not attempt to validate if the parsing already caused errors (a
-	//consistent, but invalid constraint set might look inconsistent because
-	//values that don't parse were not initialized in `result`)
+	// do not attempt to validate if the parsing already caused errors (a
+	// consistent, but invalid constraint set might look inconsistent because
+	// values that don't parse were not initialized in `result`)
 	if !errs.IsEmpty() {
 		return result, errs
 	}
 
-	//validate that project quotas fit into domain quotas
+	// validate that project quotas fit into domain quotas
 	allDomainNames := make(map[string]bool)
 	for domainName := range result.Domains {
 		allDomainNames[domainName] = true
@@ -215,8 +215,8 @@ func compileQuotaConstraints(cluster *Cluster, data map[string]map[string]string
 
 	for serviceType, serviceData := range data {
 		if !cluster.HasService(serviceType) {
-			//this is not an error: our global constraint sets set quota constraints
-			//for all services, but some lab regions do not have all those services
+			// this is not an error: our global constraint sets set quota constraints
+			// for all services, but some lab regions do not have all those services
 			continue
 		}
 		values[serviceType] = make(map[string]QuotaConstraint)
@@ -227,10 +227,10 @@ func compileQuotaConstraints(cluster *Cluster, data map[string]map[string]string
 			}
 
 			if !cluster.HasResource(serviceType, resourceName) {
-				//this is not an error: our global constraint sets have domain quota
-				//constraints "at least 0 more than project constraints" for all
-				//existing per_flavor instance resources, but we don't have all of
-				//these in any region (depending on the regional hardware stock)
+				// this is not an error: our global constraint sets have domain quota
+				// constraints "at least 0 more than project constraints" for all
+				// existing per_flavor instance resources, but we don't have all of
+				// these in any region (depending on the regional hardware stock)
 				continue
 			}
 			resource := cluster.InfoForResource(serviceType, resourceName)
@@ -342,10 +342,10 @@ func parseQuotaConstraint(resource limesresources.ResourceInfo, str string, proj
 		)
 	}
 
-	//ignore constraints that end up equivalent to "at least 0" (which can happen
-	//when a domain constraint is "at least 0 more than project constraints") and
-	//then it turns out there are no project constraints for that domain and
-	//resource
+	// ignore constraints that end up equivalent to "at least 0" (which can happen
+	// when a domain constraint is "at least 0 more than project constraints") and
+	// then it turns out there are no project constraints for that domain and
+	// resource
 	if result.Minimum != nil && *result.Minimum == 0 {
 		result.Minimum = nil
 	}
@@ -357,7 +357,7 @@ func parseQuotaConstraint(resource limesresources.ResourceInfo, str string, proj
 }
 
 func validateQuotaConstraints(cluster *Cluster, domainConstraints QuotaConstraints, projectsConstraints map[string]QuotaConstraints) (errs errext.ErrorSet) {
-	//sum up the constraints of all projects into total min/max quotas
+	// sum up the constraints of all projects into total min/max quotas
 	sumConstraints := make(QuotaConstraints)
 	for _, projectConstraints := range projectsConstraints {
 		for serviceType, serviceConstraints := range projectConstraints {
@@ -376,16 +376,16 @@ func validateQuotaConstraints(cluster *Cluster, domainConstraints QuotaConstrain
 					}
 				}
 				//NOTE: We're not interested in the Maximum constraints, see below in
-				//the checking phase.
+				// the checking phase.
 
 				sumConstraints[serviceType][resourceName] = sumConstraint
 			}
 		}
 	}
 
-	//check that sumConstraints fits within the domain constraints (this is only
-	//relevant for hierarchical quota distribution; for other quota
-	//distribution models, domain quota is auto-computed and constraints are forbidden)
+	// check that sumConstraints fits within the domain constraints (this is only
+	// relevant for hierarchical quota distribution; for other quota
+	// distribution models, domain quota is auto-computed and constraints are forbidden)
 	for serviceType, serviceSums := range sumConstraints {
 		for resourceName, sumConstraint := range serviceSums {
 			qdConfig := cluster.QuotaDistributionConfigForResource(serviceType, resourceName)

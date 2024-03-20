@@ -68,17 +68,17 @@ func KeystoneProjectFromDB(dbProject db.Project, domain KeystoneDomain) Keystone
 // projects and domains in a cluster.
 type DiscoveryPlugin interface {
 	pluggable.Plugin
-	//Init is called before any other interface methods, and allows the plugin to
-	//perform first-time initialization. If the plugin needs to access OpenStack
-	//APIs, it needs to spawn the respective ServiceClients in this method and
-	//retain them.
+	// Init is called before any other interface methods, and allows the plugin to
+	// perform first-time initialization. If the plugin needs to access OpenStack
+	// APIs, it needs to spawn the respective ServiceClients in this method and
+	// retain them.
 	//
-	//Before Init is called, the `discovery.params` provided in the configuration
-	//file will be yaml.Unmarshal()ed into the plugin object itself.
+	// Before Init is called, the `discovery.params` provided in the configuration
+	// file will be yaml.Unmarshal()ed into the plugin object itself.
 	Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error
-	//ListDomains returns all Keystone domains in the cluster.
+	// ListDomains returns all Keystone domains in the cluster.
 	ListDomains() ([]KeystoneDomain, error)
-	//ListProjects returns all Keystone projects in the given domain.
+	// ListProjects returns all Keystone projects in the given domain.
 	ListProjects(domain KeystoneDomain) ([]KeystoneProject, error)
 }
 
@@ -87,78 +87,78 @@ type DiscoveryPlugin interface {
 // backend service.
 type QuotaPlugin interface {
 	pluggable.Plugin
-	//Init is called before any other interface methods, and allows the plugin to
-	//perform first-time initialization. If the plugin needs to access OpenStack
-	//APIs, it needs to spawn the respective ServiceClients in this method and
-	//retain them.
+	// Init is called before any other interface methods, and allows the plugin to
+	// perform first-time initialization. If the plugin needs to access OpenStack
+	// APIs, it needs to spawn the respective ServiceClients in this method and
+	// retain them.
 	//
-	//Implementations can use it f.i. to discover the available Resources(). For
-	//plugins that support subresource scraping, the final argument indicates
-	//which resources to scrape (the keys are resource names).
+	// Implementations can use it f.i. to discover the available Resources(). For
+	// plugins that support subresource scraping, the final argument indicates
+	// which resources to scrape (the keys are resource names).
 	//
-	//Before Init is called, the `services[].params` provided in the config
-	//file will be yaml.Unmarshal()ed into the plugin object itself.
+	// Before Init is called, the `services[].params` provided in the config
+	// file will be yaml.Unmarshal()ed into the plugin object itself.
 	Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error
 
-	//ServiceInfo returns metadata for this service.
+	// ServiceInfo returns metadata for this service.
 	//
-	//This receives the `serviceType` as an argument because it needs to appear
-	//in the ServiceInfo struct. But in general, a plugin cannot know which
-	//serviceType it was instantiated for (esp. in unit tests, where the generic
-	//test plugin is instantiated multiple times for different service types).
+	// This receives the `serviceType` as an argument because it needs to appear
+	// in the ServiceInfo struct. But in general, a plugin cannot know which
+	// serviceType it was instantiated for (esp. in unit tests, where the generic
+	// test plugin is instantiated multiple times for different service types).
 	ServiceInfo(serviceType string) limes.ServiceInfo
 
-	//Resources returns metadata for all the resources that this plugin scrapes
-	//from the backend service.
+	// Resources returns metadata for all the resources that this plugin scrapes
+	// from the backend service.
 	Resources() []limesresources.ResourceInfo
-	//Scrape queries the backend service for the quota and usage data of all
-	//known resources for the given project in the given domain. The string keys
-	//in the result map must be identical to the resource names
-	//from Resources().
+	// Scrape queries the backend service for the quota and usage data of all
+	// known resources for the given project in the given domain. The string keys
+	// in the result map must be identical to the resource names
+	// from Resources().
 	//
-	//The `allAZs` list comes from the Limes config and should be used when
-	//building AZ-aware usage data, to ensure that each AZ-aware resource reports
-	//usage in all available AZs, even when the project in question does not have
-	//usage in every AZ.
+	// The `allAZs` list comes from the Limes config and should be used when
+	// building AZ-aware usage data, to ensure that each AZ-aware resource reports
+	// usage in all available AZs, even when the project in question does not have
+	// usage in every AZ.
 	//
-	//The `serializedMetrics` return value is persisted in the Limes DB and
-	//supplied to all subsequent RenderMetrics calls.
+	// The `serializedMetrics` return value is persisted in the Limes DB and
+	// supplied to all subsequent RenderMetrics calls.
 	Scrape(project KeystoneProject, allAZs []limes.AvailabilityZone) (result map[string]ResourceData, serializedMetrics []byte, err error)
-	//SetQuota updates the backend service's quotas for the given project in the
-	//given domain to the values specified here. The map is guaranteed to contain
-	//values for all resources defined by Resources().
+	// SetQuota updates the backend service's quotas for the given project in the
+	// given domain to the values specified here. The map is guaranteed to contain
+	// values for all resources defined by Resources().
 	SetQuota(project KeystoneProject, quotas map[string]uint64) error
 
-	//Rates returns metadata for all the rates that this plugin scrapes
-	//from the backend service.
+	// Rates returns metadata for all the rates that this plugin scrapes
+	// from the backend service.
 	Rates() []limesrates.RateInfo
-	//ScrapeRates queries the backend service for the usage data of all the rates
-	//enumerated by Rates() for the given project in the given domain. The string
-	//keys in the result map must be identical to the rate names from Rates().
+	// ScrapeRates queries the backend service for the usage data of all the rates
+	// enumerated by Rates() for the given project in the given domain. The string
+	// keys in the result map must be identical to the rate names from Rates().
 	//
-	//The serializedState return value is persisted in the Limes DB and returned
-	//back to the next ScrapeRates() call for the same project in the
-	//prevSerializedState argument. Besides that, this field is not interpreted
-	//by the core application in any way. The plugin implementation can use this
-	//field to carry state between ScrapeRates() calls, esp. to detect and handle
-	//counter resets in the backend.
+	// The serializedState return value is persisted in the Limes DB and returned
+	// back to the next ScrapeRates() call for the same project in the
+	// prevSerializedState argument. Besides that, this field is not interpreted
+	// by the core application in any way. The plugin implementation can use this
+	// field to carry state between ScrapeRates() calls, esp. to detect and handle
+	// counter resets in the backend.
 	ScrapeRates(project KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error)
 
-	//DescribeMetrics is called when Prometheus is scraping metrics from
-	//limes-collect, to provide an opportunity to the plugin to emit its own
-	//metrics.
+	// DescribeMetrics is called when Prometheus is scraping metrics from
+	// limes-collect, to provide an opportunity to the plugin to emit its own
+	// metrics.
 	//
-	//Together with CollectMetrics, this interface is roughly analogous to the
-	//prometheus.Collector interface; cf. documentation over there.
+	// Together with CollectMetrics, this interface is roughly analogous to the
+	// prometheus.Collector interface; cf. documentation over there.
 	DescribeMetrics(ch chan<- *prometheus.Desc)
-	//CollectMetrics is called when Prometheus is scraping metrics from
-	//limes-collect, to provide an opportunity to the plugin to emit its own
-	//metrics. The serializedMetrics argument contains the respective value
-	//returned from the last Scrape call on the same project.
+	// CollectMetrics is called when Prometheus is scraping metrics from
+	// limes-collect, to provide an opportunity to the plugin to emit its own
+	// metrics. The serializedMetrics argument contains the respective value
+	// returned from the last Scrape call on the same project.
 	//
-	//Some plugins also emit metrics directly within Scrape. This newer interface
-	//should be preferred since metrics emitted here won't be lost between
-	//restarts of limes-collect.
+	// Some plugins also emit metrics directly within Scrape. This newer interface
+	// should be preferred since metrics emitted here won't be lost between
+	// restarts of limes-collect.
 	CollectMetrics(ch chan<- prometheus.Metric, project KeystoneProject, serializedMetrics []byte) error
 }
 
@@ -176,40 +176,40 @@ type QuotaPlugin interface {
 // of these hypervisors instead of the OpenStack Compute API.
 type CapacityPlugin interface {
 	pluggable.Plugin
-	//Init is called before any other interface methods, and allows the plugin to
-	//perform first-time initialization. If the plugin needs to access OpenStack
-	//APIs, it needs to spawn the respective ServiceClients in this method and
-	//retain them.
+	// Init is called before any other interface methods, and allows the plugin to
+	// perform first-time initialization. If the plugin needs to access OpenStack
+	// APIs, it needs to spawn the respective ServiceClients in this method and
+	// retain them.
 	//
-	//Before Init is called, the `capacitors[].params` provided in the config
-	//file will be yaml.Unmarshal()ed into the plugin object itself.
+	// Before Init is called, the `capacitors[].params` provided in the config
+	// file will be yaml.Unmarshal()ed into the plugin object itself.
 	Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error
-	//Scrape queries the backend service(s) for the capacities of the resources
-	//that this plugin is concerned with. The result is a two-dimensional map,
-	//with the first key being the service type, and the second key being the
-	//resource name. The capacity collector will ignore service types for which
-	//there is no QuotaPlugin, and resources which are not advertised by that
-	//QuotaPlugin.
+	// Scrape queries the backend service(s) for the capacities of the resources
+	// that this plugin is concerned with. The result is a two-dimensional map,
+	// with the first key being the service type, and the second key being the
+	// resource name. The capacity collector will ignore service types for which
+	// there is no QuotaPlugin, and resources which are not advertised by that
+	// QuotaPlugin.
 	//
-	//The serializedMetrics return value is persisted in the Limes DB and
-	//supplied to all subsequent RenderMetrics calls.
+	// The serializedMetrics return value is persisted in the Limes DB and
+	// supplied to all subsequent RenderMetrics calls.
 	Scrape(backchannel CapacityPluginBackchannel) (result map[string]map[string]PerAZ[CapacityData], serializedMetrics []byte, err error)
 
-	//DescribeMetrics is called when Prometheus is scraping metrics from
-	//limes-collect, to provide an opportunity to the plugin to emit its own
-	//metrics.
+	// DescribeMetrics is called when Prometheus is scraping metrics from
+	// limes-collect, to provide an opportunity to the plugin to emit its own
+	// metrics.
 	//
-	//Together with CollectMetrics, this interface is roughly analogous to the
-	//prometheus.Collector interface; cf. documentation over there.
+	// Together with CollectMetrics, this interface is roughly analogous to the
+	// prometheus.Collector interface; cf. documentation over there.
 	DescribeMetrics(ch chan<- *prometheus.Desc)
-	//CollectMetrics is called when Prometheus is scraping metrics from
-	//limes-collect, to provide an opportunity to the plugin to emit its own
-	//metrics. The serializedMetrics argument contains the respective value
-	//returned from the last Scrape call on the same project.
+	// CollectMetrics is called when Prometheus is scraping metrics from
+	// limes-collect, to provide an opportunity to the plugin to emit its own
+	// metrics. The serializedMetrics argument contains the respective value
+	// returned from the last Scrape call on the same project.
 	//
-	//Some plugins also emit metrics directly within Scrape. This newer interface
-	//should be preferred since metrics emitted here won't be lost between
-	//restarts of limes-collect.
+	// Some plugins also emit metrics directly within Scrape. This newer interface
+	// should be preferred since metrics emitted here won't be lost between
+	// restarts of limes-collect.
 	CollectMetrics(ch chan<- prometheus.Metric, serializedMetrics []byte) error
 }
 

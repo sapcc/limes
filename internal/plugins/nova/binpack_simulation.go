@@ -56,7 +56,7 @@ type BinpackNode struct {
 type BinpackInstance struct {
 	FlavorName string
 	Size       BinpackVector[uint64]
-	Reason     string //one of "used", "committed", "pending", "padding" (in descending priority), only for debug logging
+	Reason     string // one of "used", "committed", "pending", "padding" (in descending priority), only for debug logging
 }
 
 // PrepareHypervisorForBinpacking converts a MatchingHypervisor into a BinpackHypervisor.
@@ -74,9 +74,9 @@ func PrepareHypervisorForBinpacking(h MatchingHypervisor) (BinpackHypervisor, er
 		}
 		nodeCountFloat := float64(inv.Total-inv.Reserved) / float64(inv.MaxUnit)
 
-		//we prefer to round down (11.6 nodes should go to 11 instead of 12 to be
-		//safe), but data sometimes has slight rounding errors that we want to
-		//correct (9.98 nodes should be rounded up to 10 instead of down to 9)
+		// we prefer to round down (11.6 nodes should go to 11 instead of 12 to be
+		// safe), but data sometimes has slight rounding errors that we want to
+		// correct (9.98 nodes should be rounded up to 10 instead of down to 9)
 		nodeCount := uint64(math.Floor(nodeCountFloat))
 		if nodeCountFloat-float64(nodeCount) > 0.98 {
 			nodeCount = uint64(math.Ceil(nodeCountFloat))
@@ -99,16 +99,16 @@ func PrepareHypervisorForBinpacking(h MatchingHypervisor) (BinpackHypervisor, er
 		return BinpackHypervisor{}, fmt.Errorf("node count for %s is zero", h.Hypervisor.Description())
 	}
 
-	//break down capacity into equal-sized nodes
+	// break down capacity into equal-sized nodes
 	nodeTemplate := BinpackNode{
 		Capacity: BinpackVector[uint64]{
 			VCPUs:    uint64(h.Inventories["VCPU"].MaxUnit),
 			MemoryMB: uint64(h.Inventories["MEMORY_MB"].MaxUnit),
-			//We do not use `h.Inventories["DISK_GB"].MaxUnit` because it appears to describe the max root
-			//disk size for a single instance, rather than the actual available disk size. Maybe this is
-			//because the root disks are stored on nearby NFS filers, so MaxUnit is actually the max
-			//volume size instead of the total capacity per node. Since we have a good nodeCount number
-			//now, we can divide up the total disk space for all nodes.
+			// We do not use `h.Inventories["DISK_GB"].MaxUnit` because it appears to describe the max root
+			// disk size for a single instance, rather than the actual available disk size. Maybe this is
+			// because the root disks are stored on nearby NFS filers, so MaxUnit is actually the max
+			// volume size instead of the total capacity per node. Since we have a good nodeCount number
+			// now, we can divide up the total disk space for all nodes.
 			LocalGB: uint64(h.Inventories["DISK_GB"].Total-h.Inventories["DISK_GB"].Reserved) / nodeCount,
 		},
 	}
@@ -142,7 +142,7 @@ func (hh BinpackHypervisors) PlaceSeveralInstances(ff FullFlavor, reason string,
 	for i := uint64(0); i < count; i++ {
 		ok = hh.PlaceOneInstance(ff, reason, coresOvercommitFactor, blockedCapacity)
 		if !ok {
-			//if we don't have space for this instance, we won't have space for any following ones
+			// if we don't have space for this instance, we won't have space for any following ones
 			return false
 		}
 	}
@@ -152,19 +152,19 @@ func (hh BinpackHypervisors) PlaceSeveralInstances(ff FullFlavor, reason string,
 // PlaceOneInstance places a single instance of the given flavor using the vector-dot binpacking algorithm.
 // If the instance cannot be placed, false is returned.
 func (hh BinpackHypervisors) PlaceOneInstance(ff FullFlavor, reason string, coresOvercommitFactor core.OvercommitFactor, blockedCapacity BinpackVector[uint64]) (ok bool) {
-	//This function implements the vector dot binpacking method described in [Mayank] (section III,
-	//subsection D, including the correction presented in the last paragraph of that subsection).
+	// This function implements the vector dot binpacking method described in [Mayank] (section III,
+	// subsection D, including the correction presented in the last paragraph of that subsection).
 	//
-	//Here's the quick summary: We describe capacity and usage as vectors with three dimensions (VCPU,
-	//RAM, Disk). When placing an instance, we have the vector corresponding to that instance's
-	//flavor, and also one vector per node describing the unused capacity on that node.
+	// Here's the quick summary: We describe capacity and usage as vectors with three dimensions (VCPU,
+	// RAM, Disk). When placing an instance, we have the vector corresponding to that instance's
+	// flavor, and also one vector per node describing the unused capacity on that node.
 	//
-	//For each node, we take the instance's size vector S and the node's free capacity vector F, and
-	//rescale them component-wise to the range [0..1] (with 0 meaning zero and 1 meaning the node's
-	//full capacity). Then we select the node that minimizes the angle between those two vectors.
-	//That's the same as maximizing cos(S, F) = |S * F| / |S| * |F|.
+	// For each node, we take the instance's size vector S and the node's free capacity vector F, and
+	// rescale them component-wise to the range [0..1] (with 0 meaning zero and 1 meaning the node's
+	// full capacity). Then we select the node that minimizes the angle between those two vectors.
+	// That's the same as maximizing cos(S, F) = |S * F| / |S| * |F|.
 	//
-	//[Mayank]: https://www.it.iitb.ac.in/~sahoo/papers/cloud2011_mayank.pdf
+	// [Mayank]: https://www.it.iitb.ac.in/~sahoo/papers/cloud2011_mayank.pdf
 
 	vmSize := BinpackVector[uint64]{
 		VCPUs:    coresOvercommitFactor.ApplyInReverseTo(uint64(ff.Flavor.VCPUs)),
@@ -172,7 +172,7 @@ func (hh BinpackHypervisors) PlaceOneInstance(ff FullFlavor, reason string, core
 		LocalGB:  uint64(ff.Flavor.Disk),
 	}
 
-	//ensure that placing this instance does not encroach on the overall blocked capacity
+	// ensure that placing this instance does not encroach on the overall blocked capacity
 	var totalFree BinpackVector[uint64]
 	for _, hypervisor := range hh {
 		for _, node := range hypervisor.Nodes {
@@ -190,27 +190,27 @@ func (hh BinpackHypervisors) PlaceOneInstance(ff FullFlavor, reason string, core
 		bestScore = 0.0
 	)
 	for _, hypervisor := range hh {
-		//skip hypervisors that the flavor does not accept
+		// skip hypervisors that the flavor does not accept
 		if !ff.MatchesHypervisor(hypervisor.Match) {
 			continue
 		}
 
 		for _, node := range hypervisor.Nodes {
-			//skip nodes that cannot fit this instance at all
+			// skip nodes that cannot fit this instance at all
 			nodeFree := node.free()
 			if !vmSize.FitsIn(nodeFree) {
 				continue
 			}
 
-			//calculate score as cos(S, F)^2 (maximizing the square of the cosine is the same as
-			//maximizing just the cosine, but replaces expensive sqrt() in the denominator with cheap
-			//squaring in the nominator)
+			// calculate score as cos(S, F)^2 (maximizing the square of the cosine is the same as
+			// maximizing just the cosine, but replaces expensive sqrt() in the denominator with cheap
+			// squaring in the nominator)
 			s := vmSize.Div(node.Capacity)
 			f := nodeFree.Div(node.Capacity)
 			dotProduct := s.Dot(f)
 			score := dotProduct * dotProduct / (s.Dot(s) * f.Dot(f))
 
-			//choose node with best score
+			// choose node with best score
 			if score > bestScore {
 				bestScore = score
 				bestNode = node
@@ -265,8 +265,8 @@ func (v BinpackVector[T]) Add(other BinpackVector[T]) BinpackVector[T] {
 // Like Sub, but never goes below zero.
 func (v BinpackVector[T]) SaturatingSub(other BinpackVector[T]) BinpackVector[T] {
 	return BinpackVector[T]{
-		//The expression `max(0, v - other)` is rewritten into `max(v, other) - other`
-		//here to protect against underflow for T == uint64.
+		// The expression `max(0, v - other)` is rewritten into `max(v, other) - other`
+		// here to protect against underflow for T == uint64.
 		VCPUs:    max(v.VCPUs, other.VCPUs) - other.VCPUs,
 		MemoryMB: max(v.MemoryMB, other.MemoryMB) - other.MemoryMB,
 		LocalGB:  max(v.LocalGB, other.LocalGB) - other.LocalGB,
@@ -314,7 +314,7 @@ func (v BinpackVector[T]) IsAnyZero() bool {
 }
 
 func (v BinpackVector[T]) String() string {
-	//only used for debug output where T = uint64, so these conversions will not hurt
+	// only used for debug output where T = uint64, so these conversions will not hurt
 	return fmt.Sprintf("%dc/%dm/%dg", uint64(v.VCPUs), uint64(v.MemoryMB), uint64(v.LocalGB))
 }
 

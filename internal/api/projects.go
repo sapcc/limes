@@ -54,10 +54,10 @@ func (p *v1Provider) ListProjects(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	//This endpoint can generate reports so large, we shouldn't be rendering
-	//more than one at the same time in order to keep our memory usage in check.
-	//(For example, a full project list with all resources for a domain with 2000
-	//projects runs as large as 160 MiB for the pure JSON.)
+	// This endpoint can generate reports so large, we shouldn't be rendering
+	// more than one at the same time in order to keep our memory usage in check.
+	// (For example, a full project list with all resources for a domain with 2000
+	// projects runs as large as 160 MiB for the pure JSON.)
 	p.listProjectsMutex.Lock()
 	defer p.listProjectsMutex.Unlock()
 
@@ -134,7 +134,7 @@ func (p *v1Provider) doSyncProject(w http.ResponseWriter, r *http.Request, stale
 		return
 	}
 
-	//check if project needs to be discovered
+	// check if project needs to be discovered
 	if dbProject == nil {
 		c := collector.NewCollector(p.Cluster, p.DB)
 		newProjectUUIDs, err := c.ScanProjects(dbDomain)
@@ -154,14 +154,14 @@ func (p *v1Provider) doSyncProject(w http.ResponseWriter, r *http.Request, stale
 			return
 		}
 
-		//now we should find it in the DB
+		// now we should find it in the DB
 		dbProject = p.FindProjectFromRequest(w, r, dbDomain)
 		if dbProject == nil {
-			return //wtf
+			return // wtf
 		}
 	}
 
-	//mark all project services as stale to force limes-collect to sync ASAP
+	// mark all project services as stale to force limes-collect to sync ASAP
 	_, err := p.DB.Exec(`UPDATE project_services SET `+staleField+` = '1' WHERE project_id = $1`, dbProject.ID)
 	if respondwith.ErrorText(w, err) {
 		return
@@ -183,7 +183,7 @@ func (p *v1Provider) SimulatePutProject(w http.ResponseWriter, r *http.Request) 
 }
 
 func (p *v1Provider) putOrSimulatePutProject(w http.ResponseWriter, r *http.Request, simulate bool) {
-	//parse request body
+	// parse request body
 	var parseTarget struct {
 		Project struct {
 			Bursting struct {
@@ -197,7 +197,7 @@ func (p *v1Provider) putOrSimulatePutProject(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	//branch out into the specialized subfunctions
+	// branch out into the specialized subfunctions
 	if parseTarget.Project.Bursting.Enabled == nil {
 		p.putOrSimulatePutProjectQuotas(w, r, simulate, parseTarget.Project.Services)
 	} else {
@@ -241,7 +241,7 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 		return
 	}
 
-	//start a transaction for the quota updates
+	// start a transaction for the quota updates
 	var tx *gorp.Transaction
 	var dbi db.Interface
 	if simulate {
@@ -256,14 +256,14 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 		dbi = tx
 	}
 
-	//validate inputs (within the DB transaction, to ensure that we do not apply
-	//inconsistent values later)
+	// validate inputs (within the DB transaction, to ensure that we do not apply
+	// inconsistent values later)
 	err := updater.ValidateInput(serviceQuotas, dbi)
 	if errext.IsOfType[MissingProjectReportError](err) {
-		//MissingProjectReportError indicates that the project is new and initial
-		//scraping is not yet done -> ask the user to wait until that's done, with
-		//a 4xx status code instead of a 5xx one so that this does not trigger
-		//alerts on the operator side
+		// MissingProjectReportError indicates that the project is new and initial
+		// scraping is not yet done -> ask the user to wait until that's done, with
+		// a 4xx status code instead of a 5xx one so that this does not trigger
+		// alerts on the operator side
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusLocked)
 		fmt.Fprintf(w, "%s (please retry in a few seconds after initial scraping is done)", err.Error())
@@ -273,7 +273,7 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 		return
 	}
 
-	//stop now if we're only simulating
+	// stop now if we're only simulating
 	if simulate {
 		updater.WriteSimulationReport(w)
 		return
@@ -285,7 +285,7 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 		return
 	}
 
-	//check all services for resources to update
+	// check all services for resources to update
 	var services []db.ProjectService
 	_, err = tx.Select(&services,
 		`SELECT * FROM project_services WHERE project_id = $1 ORDER BY type`, updater.Project.ID)
@@ -323,12 +323,12 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 
 	updater.CommitAuditTrail(token, r, requestTime)
 
-	//attempt to write the quotas into the backend
+	// attempt to write the quotas into the backend
 	//
-	//It is not a mistake that this happens after tx.Commit(). If this operation
-	//fails, then subsequent scraping tasks will try to apply the quota again
-	//until the operation succeeds. What's important is that the approved quota
-	//budget inside Limes is redistributed.
+	// It is not a mistake that this happens after tx.Commit(). If this operation
+	// fails, then subsequent scraping tasks will try to apply the quota again
+	// until the operation succeeds. What's important is that the approved quota
+	// budget inside Limes is redistributed.
 	var errors []string
 	for _, srv := range servicesToUpdate {
 		targetDomain := core.KeystoneDomainFromDB(*updater.Domain)
@@ -340,13 +340,13 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 		}
 	}
 
-	//report any backend errors to the user
+	// report any backend errors to the user
 	if len(errors) > 0 {
 		msg := "quotas have been accepted, but some error(s) occurred while trying to write the quotas into the backend services:"
 		http.Error(w, msg+"\n"+strings.Join(errors, "\n"), http.StatusAccepted)
 		return
 	}
-	//otherwise, report success
+	// otherwise, report success
 	w.WriteHeader(http.StatusAccepted)
 }
 
@@ -378,7 +378,7 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 		return
 	}
 
-	//start a transaction for the attribute updates
+	// start a transaction for the attribute updates
 	var tx *gorp.Transaction
 	var dbi db.Interface
 	if simulate {
@@ -393,7 +393,7 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 		dbi = tx
 	}
 
-	//anything to do?
+	// anything to do?
 	if project.HasBursting == hasBursting {
 		if simulate {
 			respondwith.JSON(w, http.StatusOK, map[string]any{"success": true})
@@ -403,8 +403,8 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 		return
 	}
 
-	//When enabling bursting, we do not need to validate anything else.
-	//When disabling bursting, we need to ensure `usage < quota`.
+	// When enabling bursting, we do not need to validate anything else.
+	// When disabling bursting, we need to ensure `usage < quota`.
 	if project.HasBursting {
 		var overbookedResources []string
 		query := `
@@ -445,20 +445,20 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 		}
 	}
 
-	//we're about to change stuff
+	// we're about to change stuff
 	if simulate {
 		respondwith.JSON(w, http.StatusOK, map[string]any{"success": true})
 		return
 	}
 
-	//update project
+	// update project
 	project.HasBursting = hasBursting
 	_, err := tx.Exec(`UPDATE projects SET has_bursting = $1 WHERE id = $2`, hasBursting, project.ID)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
 
-	//recompute backend quotas in all services to match new bursting mode
+	// recompute backend quotas in all services to match new bursting mode
 	var services []db.ProjectService
 	_, err = p.DB.Select(&services, `SELECT * FROM project_services WHERE project_id = $1`, project.ID)
 	if respondwith.ErrorText(w, err) {
@@ -483,7 +483,7 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 		return
 	}
 
-	//apply backend quotas into the backend services
+	// apply backend quotas into the backend services
 	var errors []string
 	for _, srv := range servicesToUpdate {
 		if !p.Cluster.HasService(srv.Type) {
@@ -506,12 +506,12 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 			NewStatus:   hasBursting,
 		})
 
-	//report any backend errors to the user
+	// report any backend errors to the user
 	if len(errors) > 0 {
 		msg := "bursting mode has been updated, but some error(s) occurred while trying to write quotas into the backend services:"
 		http.Error(w, msg+"\n"+strings.Join(errors, "\n"), http.StatusAccepted)
 		return
 	}
-	//otherwise, report success
+	// otherwise, report success
 	w.WriteHeader(http.StatusAccepted)
 }

@@ -63,7 +63,7 @@ type LowPrivilegeRaiseLimitSet struct {
 // LowPrivilegeRaiseLimit is a union type for the different ways in which a
 // low-privilege raise limit can be specified.
 type LowPrivilegeRaiseLimit struct {
-	//At most one of these will be non-zero.
+	// At most one of these will be non-zero.
 	AbsoluteValue                         uint64
 	PercentOfClusterCapacity              float64
 	UntilPercentOfClusterCapacityAssigned float64
@@ -112,7 +112,7 @@ func parseOneLPRLimit(input string, unit limes.Unit, scopeType string) (LowPrivi
 		}, err
 	}
 
-	//the "until X% of cluster capacity is assigned" syntax is only allowed for domains
+	// the "until X% of cluster capacity is assigned" syntax is only allowed for domains
 	if scopeType == "domain" {
 		match := untilPercentOfClusterAssignedRx.FindStringSubmatch(input)
 		if match != nil {
@@ -144,7 +144,7 @@ func parseFloatPercentage(input string) (float64, error) {
 func (l LowPrivilegeRaiseLimit) Evaluate(clusterReport limesresources.ClusterResourceReport, oldQuota uint64) uint64 {
 	switch {
 	case clusterReport.DomainsQuota == nil:
-		//defense in depth - we shouldn't be considering LPR limits at all for resources that don't track quota
+		// defense in depth - we shouldn't be considering LPR limits at all for resources that don't track quota
 		return 0
 	case l.AbsoluteValue != 0:
 		return l.AbsoluteValue

@@ -45,7 +45,7 @@ type novaInstanceSubresource struct {
 	// placement information
 	AZ             limes.AvailabilityZone `json:"availability_zone"`
 	HypervisorType string                 `json:"hypervisor,omitempty"`
-	Class          string                 `json:"class,omitempty"` //either "bigvm" or "regular", see below
+	Class          string                 `json:"class,omitempty"` // either "bigvm" or "regular", see below
 	// information from flavor
 	FlavorName     string               `json:"flavor"`
 	VCPUs          uint64               `json:"vcpu"`
@@ -57,7 +57,7 @@ type novaInstanceSubresource struct {
 }
 
 func (p *novaPlugin) buildInstanceSubresource(instance nova.Instance) (res novaInstanceSubresource, err error) {
-	//copy base attributes
+	// copy base attributes
 	res.ID = instance.ID
 	res.Name = instance.Name
 	res.Status = instance.Status
@@ -67,7 +67,7 @@ func (p *novaPlugin) buildInstanceSubresource(instance nova.Instance) (res novaI
 		res.Tags = *instance.Tags
 	}
 
-	//flavor data is given to us as a map[string]any, but we want something more structured
+	// flavor data is given to us as a map[string]any, but we want something more structured
 	buf, err := json.Marshal(instance.Flavor)
 	if err != nil {
 		return res, fmt.Errorf("could not reserialize flavor data for instance %s: %w", instance.ID, err)
@@ -78,7 +78,7 @@ func (p *novaPlugin) buildInstanceSubresource(instance nova.Instance) (res novaI
 		return res, fmt.Errorf("could not parse flavor data for instance %s: %w", instance.ID, err)
 	}
 
-	//copy attributes from flavor data
+	// copy attributes from flavor data
 	res.FlavorName = flavorInfo.OriginalName
 	res.VCPUs = flavorInfo.VCPUs
 	res.MemoryMiB = limes.ValueWithUnit{
@@ -99,7 +99,7 @@ func (p *novaPlugin) buildInstanceSubresource(instance nova.Instance) (res novaI
 		}
 	}
 
-	//calculate classifications based on flavor data
+	// calculate classifications based on flavor data
 	if len(p.HypervisorTypeRules) > 0 {
 		res.HypervisorType = p.HypervisorTypeRules.Evaluate(flavorInfo)
 	}
@@ -111,7 +111,7 @@ func (p *novaPlugin) buildInstanceSubresource(instance nova.Instance) (res novaI
 		}
 	}
 
-	//calculate classifications based on image data
+	// calculate classifications based on image data
 	res.OSType = p.OSTypeProber.Get(instance)
 	return res, nil
 }

@@ -49,7 +49,7 @@ func (c *Collector) CheckConsistencyJob(registerer prometheus.Registerer) jobloo
 }
 
 func (c *Collector) checkConsistencyCluster(_ context.Context, _ prometheus.Labels) error {
-	//check cluster_services entries
+	// check cluster_services entries
 	var services []db.ClusterService
 	_, err := c.DB.Select(&services, `SELECT * FROM cluster_services`)
 	if err != nil {
@@ -57,7 +57,7 @@ func (c *Collector) checkConsistencyCluster(_ context.Context, _ prometheus.Labe
 	}
 	logg.Info("checking consistency for %d cluster services...", len(services))
 
-	//cleanup entries for services that have been disabled
+	// cleanup entries for services that have been disabled
 	seen := make(map[string]bool)
 	for _, service := range services {
 		seen[service.Type] = true
@@ -71,7 +71,7 @@ func (c *Collector) checkConsistencyCluster(_ context.Context, _ prometheus.Labe
 		}
 	}
 
-	//create missing service entries
+	// create missing service entries
 	for _, serviceType := range c.Cluster.ServiceTypesInAlphabeticalOrder() {
 		if seen[serviceType] {
 			continue
@@ -84,8 +84,8 @@ func (c *Collector) checkConsistencyCluster(_ context.Context, _ prometheus.Labe
 		}
 	}
 
-	//recurse into domains (with deterministic ordering for the unit test's sake;
-	//the DESC ordering is because I was too lazy to change the fixtures)
+	// recurse into domains (with deterministic ordering for the unit test's sake;
+	// the DESC ordering is because I was too lazy to change the fixtures)
 	var domains []db.Domain
 	_, err = c.DB.Select(&domains, `SELECT * FROM domains ORDER BY name DESC`)
 	if err != nil {
@@ -109,7 +109,7 @@ func (c *Collector) checkConsistencyDomain(domain db.Domain) error {
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 
-	//validate domain_services entries
+	// validate domain_services entries
 	err = datamodel.ValidateDomainServices(tx, c.Cluster, domain)
 	if err == nil {
 		err = tx.Commit()
@@ -118,7 +118,7 @@ func (c *Collector) checkConsistencyDomain(domain db.Domain) error {
 		return err
 	}
 
-	//recurse into projects (with deterministic ordering for the unit test's sake)
+	// recurse into projects (with deterministic ordering for the unit test's sake)
 	var projects []db.Project
 	_, err = c.DB.Select(&projects, `SELECT * FROM projects WHERE domain_id = $1 ORDER BY NAME`, domain.ID)
 	if err != nil {
@@ -128,8 +128,8 @@ func (c *Collector) checkConsistencyDomain(domain db.Domain) error {
 
 	now := c.MeasureTime()
 	for _, project := range projects {
-		//ValidateProjectServices usually does nothing or does maybe one DELETE or
-		//INSERT, so it does not need to be in a transaction
+		// ValidateProjectServices usually does nothing or does maybe one DELETE or
+		// INSERT, so it does not need to be in a transaction
 		err := datamodel.ValidateProjectServices(c.DB, c.Cluster, domain, project, now)
 		if err != nil {
 			c.LogError(err.Error())

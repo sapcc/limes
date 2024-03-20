@@ -41,7 +41,7 @@ type ClusterConfiguration struct {
 	Discovery         DiscoveryConfiguration   `yaml:"discovery"`
 	Services          []ServiceConfiguration   `yaml:"services"`
 	Capacitors        []CapacitorConfiguration `yaml:"capacitors"`
-	//^ Sorry for the stupid pun. Not.
+	// ^ Sorry for the stupid pun. Not.
 	LowPrivilegeRaise        LowPrivilegeRaiseConfiguration    `yaml:"lowpriv_raise"`
 	ResourceBehaviors        []ResourceBehavior                `yaml:"resource_behavior"`
 	Bursting                 BurstingConfiguration             `yaml:"bursting"`
@@ -130,7 +130,7 @@ type CapacitorConfiguration struct {
 
 // BurstingConfiguration contains the configuration options for quota bursting.
 type BurstingConfiguration struct {
-	//If MaxMultiplier is zero, bursting is disabled.
+	// If MaxMultiplier is zero, bursting is disabled.
 	MaxMultiplier limesresources.BurstingMultiplier `yaml:"max_multiplier"`
 }
 
@@ -164,17 +164,17 @@ func NewClusterFromYAML(configBytes []byte) (cluster *Cluster, errs errext.Error
 		return nil, errs
 	}
 
-	//cannot proceed if the config is not valid
+	// cannot proceed if the config is not valid
 	errs.Append(config.validateConfig())
 	if !errs.IsEmpty() {
 		return nil, errs
 	}
 
-	//inflate the ClusterConfiguration instances into Cluster, thereby validating
-	//the existence of the requested quota and capacity plugins and initializing
-	//some handy lookup tables
+	// inflate the ClusterConfiguration instances into Cluster, thereby validating
+	// the existence of the requested quota and capacity plugins and initializing
+	// some handy lookup tables
 	if config.Discovery.Method == "" {
-		//choose default discovery method
+		// choose default discovery method
 		config.Discovery.Method = "list"
 	}
 	return NewCluster(config)

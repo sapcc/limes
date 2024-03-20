@@ -94,7 +94,7 @@ var scrapedAtAggregateQuery = sqlext.SimplifyWhitespace(`
 // Collect implements the prometheus.Collector interface.
 func (c *AggregateMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	//NOTE: I use NewConstMetric() instead of storing the values in the GaugeVec
-	//instances because it is faster.
+	// instances because it is faster.
 
 	descCh := make(chan *prometheus.Desc, 1)
 	minScrapedAtGauge.Describe(descCh)
@@ -179,8 +179,8 @@ var capacityPluginMetricsOkGauge = prometheus.NewGaugeVec(
 type CapacityPluginMetricsCollector struct {
 	Cluster *core.Cluster
 	DB      *gorp.DbMap
-	//When .Override is set, the DB is bypassed and only the given
-	//CapacityPluginMetricsInstances are considered. This is used for testing only.
+	// When .Override is set, the DB is bypassed and only the given
+	// CapacityPluginMetricsInstances are considered. This is used for testing only.
 	Override []CapacityPluginMetricsInstance
 }
 
@@ -240,8 +240,8 @@ func (c *CapacityPluginMetricsCollector) collectOneCapacitor(ch chan<- prometheu
 	successAsFloat := 1.0
 	if err != nil {
 		successAsFloat = 0.0
-		//errors in plugin.CollectMetrics() are not fatal: we record a failure in
-		//the metrics and keep going with the other project services
+		// errors in plugin.CollectMetrics() are not fatal: we record a failure in
+		// the metrics and keep going with the other project services
 		logg.Error("while collecting capacity metrics for capacitor %s: %s",
 			instance.CapacitorID, err.Error())
 	}
@@ -268,8 +268,8 @@ var quotaPluginMetricsOkGauge = prometheus.NewGaugeVec(
 type QuotaPluginMetricsCollector struct {
 	Cluster *core.Cluster
 	DB      *gorp.DbMap
-	//When .Override is set, the DB is bypassed and only the given
-	//QuotaPluginMetricsInstances are considered. This is used for testing only.
+	// When .Override is set, the DB is bypassed and only the given
+	// QuotaPluginMetricsInstances are considered. This is used for testing only.
 	Override []QuotaPluginMetricsInstance
 }
 
@@ -335,8 +335,8 @@ func (c *QuotaPluginMetricsCollector) collectOneProjectService(ch chan<- prometh
 	successAsFloat := 1.0
 	if err != nil {
 		successAsFloat = 0.0
-		//errors in plugin.CollectMetrics() are not fatal: we record a failure in
-		//the metrics and keep going with the other project services
+		// errors in plugin.CollectMetrics() are not fatal: we record a failure in
+		// the metrics and keep going with the other project services
 		logg.Error("while collecting plugin metrics for service %s in project %s: %s",
 			instance.ServiceType, instance.Project.UUID, err.Error())
 	}
@@ -498,13 +498,13 @@ var projectRateMetricsQuery = sqlext.SimplifyWhitespace(`
 // Collect implements the prometheus.Collector interface.
 func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	//NOTE: I use NewConstMetric() instead of storing the values in the GaugeVec
-	//instances,
+	// instances,
 	//
-	//1. because it is faster.
-	//2. because this automatically handles deleted projects/domains correctly.
+	// 1. because it is faster.
+	// 2. because this automatically handles deleted projects/domains correctly.
 	//   (Their metrics just disappear when Prometheus scrapes next time.)
 
-	//fetch Descs for all metrics
+	// fetch Descs for all metrics
 	descCh := make(chan *prometheus.Desc, 1)
 	clusterCapacityGauge.Describe(descCh)
 	clusterCapacityDesc := <-descCh
@@ -527,7 +527,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	unitConversionGauge.Describe(descCh)
 	unitConversionDesc := <-descCh
 
-	//fetch values for cluster level
+	// fetch values for cluster level
 	capacityReported := make(map[string]map[string]bool)
 	err := sqlext.ForeachRow(c.DB, clusterMetricsQuery, nil, func(rows *sql.Rows) error {
 		var (
@@ -600,9 +600,9 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		logg.Error("collect cluster data metrics failed: " + err.Error())
 	}
 
-	//make sure that a cluster capacity value is reported for each resource (the
-	//corresponding time series might otherwise be missing if capacity scraping
-	//fails)
+	// make sure that a cluster capacity value is reported for each resource (the
+	// corresponding time series might otherwise be missing if capacity scraping
+	// fails)
 	for serviceType, quotaPlugin := range c.Cluster.QuotaPlugins {
 		for _, res := range quotaPlugin.Resources() {
 			if capacityReported[serviceType][res.Name] {
@@ -617,7 +617,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		}
 	}
 
-	//fetch values for domain level
+	// fetch values for domain level
 	err = sqlext.ForeachRow(c.DB, domainMetricsQuery, nil, func(rows *sql.Rows) error {
 		var (
 			domainName   string
@@ -641,7 +641,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		logg.Error("collect domain metrics failed: " + err.Error())
 	}
 
-	//fetch values for project level (quota/usage)
+	// fetch values for project level (quota/usage)
 	err = sqlext.ForeachRow(c.DB, projectMetricsQuery, nil, func(rows *sql.Rows) error {
 		var (
 			domainName       string
@@ -702,7 +702,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		logg.Error("collect project metrics failed: " + err.Error())
 	}
 
-	//fetch metadata for services/resources
+	// fetch metadata for services/resources
 	for serviceType, quotaPlugin := range c.Cluster.QuotaPlugins {
 		for _, resource := range quotaPlugin.Resources() {
 			_, multiplier := resource.Unit.Base()
@@ -714,7 +714,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		}
 	}
 
-	//fetch values for project level (rate usage)
+	// fetch values for project level (rate usage)
 	err = sqlext.ForeachRow(c.DB, projectRateMetricsQuery, nil, func(rows *sql.Rows) error {
 		var (
 			domainName    string

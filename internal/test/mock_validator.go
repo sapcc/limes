@@ -27,11 +27,11 @@ import (
 
 // PolicyEnforcer is a gopherpolicy.Enforcer implementation for API tests.
 type PolicyEnforcer struct {
-	//flags by scope
+	// flags by scope
 	AllowCluster bool
 	AllowDomain  bool
 	AllowProject bool
-	//flags by action
+	// flags by action
 	AllowView     bool
 	AllowEdit     bool
 	AllowRaise    bool
@@ -39,7 +39,7 @@ type PolicyEnforcer struct {
 	AllowLower    bool
 	AllowLowerLP  bool
 	AllowUncommit bool
-	//match by request attribute
+	// match by request attribute
 	RejectServiceType string
 }
 

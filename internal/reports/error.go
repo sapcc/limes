@@ -91,16 +91,16 @@ func getScrapeErrors(dbi db.Interface, filter Filter, dbQuery string) ([]ScrapeE
 	}
 
 	if len(result) == 0 {
-		//Ensure that empty list gets serialized as `[]` rather than as `null`.
+		// Ensure that empty list gets serialized as `[]` rather than as `null`.
 		return []ScrapeError{}, nil
 	}
 
-	//To avoid excessively large responses, we group identical scrape errors for multiple
-	//project services of the same type into one item.
-	uniqueErrors := make(map[string]map[string]ScrapeError) //map[serviceType]map[Message]ScrapeError
+	// To avoid excessively large responses, we group identical scrape errors for multiple
+	// project services of the same type into one item.
+	uniqueErrors := make(map[string]map[string]ScrapeError) // map[serviceType]map[Message]ScrapeError
 	for _, v := range result {
 		if vFromMap, found := uniqueErrors[v.ServiceType][v.Message]; found {
-			//Use the value from map so we can preserve AffectedProject count.
+			// Use the value from map so we can preserve AffectedProject count.
 			v = vFromMap
 		}
 		if _, ok := uniqueErrors[v.ServiceType]; !ok {
@@ -114,15 +114,15 @@ func getScrapeErrors(dbi db.Interface, filter Filter, dbQuery string) ([]ScrapeE
 	for _, errMsgs := range uniqueErrors {
 		for _, sErr := range errMsgs {
 			if sErr.AffectedProjects == 1 {
-				//If only one project is affected then set to 0 so that this field can
-				//omitted in JSON response.
+				// If only one project is affected then set to 0 so that this field can
+				// omitted in JSON response.
 				sErr.AffectedProjects = 0
 			}
 			result = append(result, sErr)
 		}
 	}
 
-	//Deterministic ordering for unit tests
+	// Deterministic ordering for unit tests
 	sort.Slice(result, func(i, j int) bool {
 		srvType1 := result[i].ServiceType
 		srvType2 := result[j].ServiceType

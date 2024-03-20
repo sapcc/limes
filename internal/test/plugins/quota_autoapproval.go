@@ -62,7 +62,7 @@ func (p *AutoApprovalQuotaPlugin) ServiceInfo(serviceType string) limes.ServiceI
 
 // Resources implements the core.QuotaPlugin interface.
 func (p *AutoApprovalQuotaPlugin) Resources() []limesresources.ResourceInfo {
-	//one resource can auto-approve, one cannot because BackendQuota != AutoApproveInitialQuota
+	// one resource can auto-approve, one cannot because BackendQuota != AutoApproveInitialQuota
 	return []limesresources.ResourceInfo{
 		{
 			Name:                    "approve",

@@ -55,6 +55,6 @@ func (r ironicNodePage) NextPageURL() (string, error) {
 	if s.Next != "" {
 		return s.Next, nil
 	}
-	//fallback
+	// fallback
 	return r.NodePage.NextPageURL()
 }

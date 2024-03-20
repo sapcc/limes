@@ -118,10 +118,10 @@ var mmpqReportQuery = sqlext.SimplifyWhitespace(`
 // GetInconsistencies returns Inconsistency reports for all inconsistencies and their projects in the current cluster.
 // TODO: should db be replaced with dbi?
 func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter) (*Inconsistencies, error) {
-	//Initialize inconsistencies as Inconsistencies type.
-	//The inconsistency data will be assigned in the respective SQL queries.
+	// Initialize inconsistencies as Inconsistencies type.
+	// The inconsistency data will be assigned in the respective SQL queries.
 	inconsistencies := Inconsistencies{
-		//ensure that empty lists get serialized as `[]` rather than as `null`
+		// ensure that empty lists get serialized as `[]` rather than as `null`
 		OvercommittedQuotas: []OvercommittedDomainQuota{},
 		OverspentQuotas:     []OverspentProjectQuota{},
 		MismatchQuotas:      []MismatchProjectQuota{},

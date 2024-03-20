@@ -35,7 +35,7 @@ import (
 )
 
 type designatePlugin struct {
-	//connections
+	// connections
 	DesignateV2 *gophercloud.ServiceClient `yaml:"-"`
 }
 
@@ -45,7 +45,7 @@ var designateResources = []limesresources.ResourceInfo{
 		Unit: limes.UnitNone,
 	},
 	{
-		//this quota means "recordsets per zone", not "recordsets per project"!
+		// this quota means "recordsets per zone", not "recordsets per project"!
 		Name: "recordsets",
 		Unit: limes.UnitNone,
 	},
@@ -92,21 +92,21 @@ func (p *designatePlugin) ScrapeRates(project core.KeystoneProject, prevSerializ
 
 // Scrape implements the core.QuotaPlugin interface.
 func (p *designatePlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[string]core.ResourceData, serializedMetrics []byte, err error) {
-	//query quotas
+	// query quotas
 	quotas, err := dnsGetQuota(p.DesignateV2, project.UUID)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	//to query usage, start by listing all zones
+	// to query usage, start by listing all zones
 	zoneIDs, err := dnsListZoneIDs(p.DesignateV2, project.UUID)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	//query "recordsets per zone" usage by counting recordsets in each zone
-	//individually (we could count all recordsets over the all project at once,
-	//but that won't help since the quota applies per individual zone)
+	// query "recordsets per zone" usage by counting recordsets in each zone
+	// individually (we could count all recordsets over the all project at once,
+	// but that won't help since the quota applies per individual zone)
 	maxRecordsetsPerZone := uint64(0)
 	for _, zoneID := range zoneIDs {
 		count, err := dnsCountZoneRecordsets(p.DesignateV2, project.UUID, zoneID)
@@ -139,21 +139,21 @@ func (p *designatePlugin) SetQuota(project core.KeystoneProject, quotas map[stri
 	return dnsSetQuota(p.DesignateV2, project.UUID, &dnsQuota{
 		Zones:          int64(quotas["zones"]),
 		ZoneRecordsets: int64(quotas["recordsets"]),
-		//set ZoneRecords quota to match ZoneRecordsets
-		//(Designate has a records_per_recordset quota of default 20, so if we set
-		//ZoneRecords to 20 * ZoneRecordsets, this quota will not disturb us)
+		// set ZoneRecords quota to match ZoneRecordsets
+		// (Designate has a records_per_recordset quota of default 20, so if we set
+		// ZoneRecords to 20 * ZoneRecordsets, this quota will not disturb us)
 		ZoneRecords: int64(quotas["recordsets"] * 20),
 	})
 }
 
 // DescribeMetrics implements the core.QuotaPlugin interface.
 func (p *designatePlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
-	//not used by this plugin
+	// not used by this plugin
 }
 
 // CollectMetrics implements the core.QuotaPlugin interface.
 func (p *designatePlugin) CollectMetrics(ch chan<- prometheus.Metric, project core.KeystoneProject, serializedMetrics []byte) error {
-	//not used by this plugin
+	// not used by this plugin
 	return nil
 }
 
@@ -219,7 +219,7 @@ func dnsCountZoneRecordsets(client *gophercloud.ServiceClient, projectUUID, zone
 		},
 	}
 
-	//do not need all data about all recordsets, just the total count
+	// do not need all data about all recordsets, just the total count
 	url += "?limit=1"
 
 	var result gophercloud.Result

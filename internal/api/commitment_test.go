@@ -59,7 +59,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		test.WithAPIHandler(NewV1API),
 	)
 
-	//GET returns an empty list if there are no commitments
+	// GET returns an empty list if there are no commitments
 	assert.HTTPRequest{
 		Method:       http.MethodGet,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments",
@@ -67,7 +67,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		ExpectBody:   assert.JSONObject{"commitments": []assert.JSONObject{}},
 	}.Check(t, s.Handler)
 
-	//create a commitment
+	// create a commitment
 	s.Clock.StepBy(1 * time.Hour)
 	req1 := assert.JSONObject{
 		"service_type":      "first",
@@ -99,7 +99,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		ExpectBody:   assert.JSONObject{"commitment": resp1},
 	}.Check(t, s.Handler)
 
-	//create another commitment
+	// create another commitment
 	s.Clock.StepBy(1 * time.Hour)
 	req2 := assert.JSONObject{
 		"service_type":      "first",
@@ -130,7 +130,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		ExpectBody:   assert.JSONObject{"commitment": resp2},
 	}.Check(t, s.Handler)
 
-	//GET now returns something
+	// GET now returns something
 	assert.HTTPRequest{
 		Method:       http.MethodGet,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments",
@@ -138,7 +138,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		ExpectBody:   assert.JSONObject{"commitments": []assert.JSONObject{resp1, resp2}},
 	}.Check(t, s.Handler)
 
-	//check filters on GET
+	// check filters on GET
 	assert.HTTPRequest{
 		Method:       http.MethodGet,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments?service=first",
@@ -165,7 +165,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		ExpectBody:   assert.JSONObject{"commitments": []assert.JSONObject{}},
 	}.Check(t, s.Handler)
 
-	//commitments can be deleted with sufficient privilege
+	// commitments can be deleted with sufficient privilege
 	assert.HTTPRequest{
 		Method:       http.MethodDelete,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2",
@@ -178,7 +178,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		ExpectBody:   assert.JSONObject{"commitments": []assert.JSONObject{resp1}},
 	}.Check(t, s.Handler)
 
-	//confirm the other commitment
+	// confirm the other commitment
 	s.Clock.StepBy(1 * time.Hour)
 	_, err := s.DB.Exec("UPDATE project_commitments SET confirmed_at = $1, expires_at = $2, state = $3",
 		s.Clock.Now(), s.Clock.Now().Add(2*time.Hour), db.CommitmentStateActive,
@@ -187,7 +187,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	//check that the confirmation shows up on GET
+	// check that the confirmation shows up on GET
 	resp1["confirmed_at"] = s.Clock.Now().Unix()
 	resp1["expires_at"] = s.Clock.Now().Add(2 * time.Hour).Unix()
 	assert.HTTPRequest{
@@ -197,7 +197,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		ExpectBody:   assert.JSONObject{"commitments": []assert.JSONObject{resp1}},
 	}.Check(t, s.Handler)
 
-	//confirmed deletions can be deleted by cluster admins
+	// confirmed deletions can be deleted by cluster admins
 	s.TokenValidator.Enforcer.AllowCluster = true
 	assert.HTTPRequest{
 		Method:       http.MethodDelete,
@@ -219,7 +219,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 		test.WithAPIHandler(NewV1API),
 	)
 
-	//We will try to create requests for resource "first/capacity" in "az-one" in project "berlin".
+	// We will try to create requests for resource "first/capacity" in "az-one" in project "berlin".
 	request := func(amount uint64) assert.JSONObject {
 		return assert.JSONObject{
 			"commitment": assert.JSONObject{
@@ -231,13 +231,13 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 			},
 		}
 	}
-	//This AZ resource has 10 capacity, of which 2 are used in "berlin" and 4 are used in other projects.
-	//Therefore, "berlin" can commit up to 10-4 = 6 amount.
+	// This AZ resource has 10 capacity, of which 2 are used in "berlin" and 4 are used in other projects.
+	// Therefore, "berlin" can commit up to 10-4 = 6 amount.
 	maxCommittableCapacity := uint64(6)
-	//We will later test with this amount of capacity already committed.
+	// We will later test with this amount of capacity already committed.
 	committedCapacity := uint64(4)
 
-	//the capacity resources have min_confirm_date in the future, which blocks immediate confirmation
+	// the capacity resources have min_confirm_date in the future, which blocks immediate confirmation
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/can-confirm",
@@ -253,10 +253,10 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 		ExpectBody:   assert.StringData("this commitment needs a `confirm_by` timestamp at or after 1970-01-08T00:00:00Z\n"),
 	}.Check(t, s.Handler)
 
-	//move clock forward past the min_confirm_date
+	// move clock forward past the min_confirm_date
 	s.Clock.StepBy(14 * day)
 
-	//immediate confirmation for this small commitment request is now possible
+	// immediate confirmation for this small commitment request is now possible
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/can-confirm",
@@ -265,7 +265,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 		ExpectBody:   assert.JSONObject{"result": true},
 	}.Check(t, s.Handler)
 
-	//check that we cannot immediately commit to more capacity than available
+	// check that we cannot immediately commit to more capacity than available
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/can-confirm",
@@ -281,7 +281,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 		ExpectBody:   assert.JSONObject{"result": false},
 	}.Check(t, s.Handler)
 
-	//create a commitment for some of that capacity
+	// create a commitment for some of that capacity
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
@@ -289,7 +289,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 		ExpectStatus: http.StatusCreated,
 	}.Check(t, s.Handler)
 
-	//check that can-confirm can only confirm the remainder of the available capacity, not more
+	// check that can-confirm can only confirm the remainder of the available capacity, not more
 	remainingCommitableCapacity := maxCommittableCapacity - committedCapacity
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -306,7 +306,7 @@ func TestCommitmentLifecycleWithImmediateConfirmation(t *testing.T) {
 		ExpectBody:   assert.JSONObject{"result": false},
 	}.Check(t, s.Handler)
 
-	//check that can-confirm ignores expired commitments
+	// check that can-confirm ignores expired commitments
 	_, err := s.DB.Exec(`UPDATE project_commitments SET expires_at = $1, state = $2`,
 		s.Clock.Now(), db.CommitmentStateExpired)
 	if err != nil {
@@ -328,7 +328,7 @@ func TestGetCommitmentsErrorCases(t *testing.T) {
 		test.WithAPIHandler(NewV1API),
 	)
 
-	//no authentication
+	// no authentication
 	s.TokenValidator.Enforcer.AllowView = false
 	assert.HTTPRequest{
 		Method:       http.MethodGet,
@@ -337,7 +337,7 @@ func TestGetCommitmentsErrorCases(t *testing.T) {
 	}.Check(t, s.Handler)
 	s.TokenValidator.Enforcer.AllowView = true
 
-	//unknown objects along the path
+	// unknown objects along the path
 	assert.HTTPRequest{
 		Method:       http.MethodGet,
 		Path:         "/v1/domains/unknown/projects/uuid-for-berlin/commitments",
@@ -366,7 +366,7 @@ func TestPutCommitmentErrorCases(t *testing.T) {
 		"confirm_by":        s.Clock.Now().Add(14 * day).Unix(),
 	}
 
-	//no authentication
+	// no authentication
 	s.TokenValidator.Enforcer.AllowEdit = false
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
@@ -376,7 +376,7 @@ func TestPutCommitmentErrorCases(t *testing.T) {
 	}.Check(t, s.Handler)
 	s.TokenValidator.Enforcer.AllowEdit = true
 
-	//unknown objects along the path
+	// unknown objects along the path
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/unknown/projects/uuid-for-berlin/commitments/new",
@@ -390,7 +390,7 @@ func TestPutCommitmentErrorCases(t *testing.T) {
 		ExpectStatus: http.StatusNotFound,
 	}.Check(t, s.Handler)
 
-	//invalid request field: service_type does not exist
+	// invalid request field: service_type does not exist
 	cloned := maps.Clone(request)
 	cloned["service_type"] = "unknown"
 	assert.HTTPRequest{
@@ -401,7 +401,7 @@ func TestPutCommitmentErrorCases(t *testing.T) {
 		ExpectBody:   assert.StringData("no such service\n"),
 	}.Check(t, s.Handler)
 
-	//invalid request field: resource_name does not exist
+	// invalid request field: resource_name does not exist
 	cloned = maps.Clone(request)
 	cloned["resource_name"] = "unknown"
 	assert.HTTPRequest{
@@ -412,7 +412,7 @@ func TestPutCommitmentErrorCases(t *testing.T) {
 		ExpectBody:   assert.StringData("no such resource\n"),
 	}.Check(t, s.Handler)
 
-	//invalid request field: service_type/resource_name does not accept commitments
+	// invalid request field: service_type/resource_name does not accept commitments
 	cloned = maps.Clone(request)
 	cloned["service_type"] = "second"
 	assert.HTTPRequest{
@@ -423,7 +423,7 @@ func TestPutCommitmentErrorCases(t *testing.T) {
 		ExpectBody:   assert.StringData("commitments are not enabled for this resource\n"),
 	}.Check(t, s.Handler)
 
-	//invalid request field: AZ given, but resource does not accept AZ-aware commitments
+	// invalid request field: AZ given, but resource does not accept AZ-aware commitments
 	cloned = maps.Clone(request)
 	cloned["resource_name"] = "things"
 	assert.HTTPRequest{
@@ -434,7 +434,7 @@ func TestPutCommitmentErrorCases(t *testing.T) {
 		ExpectBody:   assert.StringData("resource does not accept AZ-aware commitments, so the AZ must be set to \"any\"\n"),
 	}.Check(t, s.Handler)
 
-	//invalid request field: resource wants an AZ-aware commitment, but a malformed AZ or pseudo-AZ is given
+	// invalid request field: resource wants an AZ-aware commitment, but a malformed AZ or pseudo-AZ is given
 	for _, az := range []string{"any", "unknown", "something-else", ""} {
 		cloned = maps.Clone(request)
 		cloned["availability_zone"] = az
@@ -447,7 +447,7 @@ func TestPutCommitmentErrorCases(t *testing.T) {
 		}.Check(t, s.Handler)
 	}
 
-	//invalid request field: duration is not one of the configured values
+	// invalid request field: duration is not one of the configured values
 	cloned = maps.Clone(request)
 	cloned["duration"] = "3 hours"
 	assert.HTTPRequest{
@@ -458,7 +458,7 @@ func TestPutCommitmentErrorCases(t *testing.T) {
 		ExpectBody:   assert.StringData("unacceptable commitment duration for this resource, acceptable values: [\"1 hour\",\"2 hours\"]\n"),
 	}.Check(t, s.Handler)
 
-	//invalid request field: amount may not be negative (this is caught by the JSON parser)
+	// invalid request field: amount may not be negative (this is caught by the JSON parser)
 	cloned = maps.Clone(request)
 	cloned["amount"] = -42
 	assert.HTTPRequest{
@@ -469,7 +469,7 @@ func TestPutCommitmentErrorCases(t *testing.T) {
 		ExpectBody:   assert.StringData("request body is not valid JSON: json: cannot unmarshal number -42 into Go struct field CommitmentRequest.commitment.amount of type uint64\n"),
 	}.Check(t, s.Handler)
 
-	//invalid request field: amount may not be zero (this is caught by our logic)
+	// invalid request field: amount may not be zero (this is caught by our logic)
 	cloned = maps.Clone(request)
 	cloned["amount"] = 0
 	assert.HTTPRequest{
@@ -480,7 +480,7 @@ func TestPutCommitmentErrorCases(t *testing.T) {
 		ExpectBody:   assert.StringData("amount of committed resource must be greater than zero\n"),
 	}.Check(t, s.Handler)
 
-	//invalid request field: confirm_by may not be in the past
+	// invalid request field: confirm_by may not be in the past
 	cloned = maps.Clone(request)
 	cloned["confirm_by"] = s.Clock.Now().Add(-1 * time.Hour).Unix()
 	assert.HTTPRequest{
@@ -499,7 +499,7 @@ func TestDeleteCommitmentErrorCases(t *testing.T) {
 		test.WithAPIHandler(NewV1API),
 	)
 
-	//we need a commitment in the DB to test deletion
+	// we need a commitment in the DB to test deletion
 	request := assert.JSONObject{
 		"service_type":      "first",
 		"resource_name":     "capacity",
@@ -515,7 +515,7 @@ func TestDeleteCommitmentErrorCases(t *testing.T) {
 		ExpectStatus: http.StatusCreated,
 	}.Check(t, s.Handler)
 
-	//no authentication
+	// no authentication
 	s.TokenValidator.Enforcer.AllowUncommit = false
 	assert.HTTPRequest{
 		Method:       http.MethodDelete,
@@ -524,7 +524,7 @@ func TestDeleteCommitmentErrorCases(t *testing.T) {
 	}.Check(t, s.Handler)
 	s.TokenValidator.Enforcer.AllowUncommit = true
 
-	//unknown objects along the path
+	// unknown objects along the path
 	assert.HTTPRequest{
 		Method:       http.MethodDelete,
 		Path:         "/v1/domains/unknown/projects/uuid-for-berlin/commitments/1",

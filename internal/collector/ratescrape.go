@@ -97,21 +97,21 @@ func (c *Collector) processRateScrapeTask(_ context.Context, task projectScrapeT
 	srv := task.Service
 	plugin := c.Cluster.QuotaPlugins[srv.Type] //NOTE: discoverScrapeTask already verified that this exists
 
-	//collect additional DB records
+	// collect additional DB records
 	_, _, project, err := c.identifyProjectBeingScraped(srv)
 	if err != nil {
 		return err
 	}
 	logg.Debug("scraping %s rates for %s/%s", srv.Type, project.Domain.Name, project.Name)
 
-	//perform rate scrape
+	// perform rate scrape
 	rateData, ratesScrapeState, err := plugin.ScrapeRates(project, srv.RatesScrapeState)
 	if err != nil {
 		task.Err = util.UnpackError(err)
 	}
 	task.Timing.FinishedAt = c.MeasureTimeAtEnd()
 
-	//write result on success; if anything fails, try to record the error in the DB
+	// write result on success; if anything fails, try to record the error in the DB
 	if task.Err == nil {
 		err := c.writeRateScrapeResult(task, rateData, ratesScrapeState)
 		if err != nil {
@@ -147,7 +147,7 @@ func (c *Collector) writeRateScrapeResult(task projectScrapeTask, rateData map[s
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 
-	//update existing project_rates entries
+	// update existing project_rates entries
 	rateExists := make(map[string]bool)
 	var rates []db.ProjectRate
 	_, err = tx.Select(&rates, `SELECT * FROM project_rates WHERE service_id = $1`, srv.ID)
@@ -185,7 +185,7 @@ func (c *Collector) writeRateScrapeResult(task projectScrapeTask, rateData map[s
 		}
 	}
 
-	//insert missing project_rates entries
+	// insert missing project_rates entries
 	for _, rateMetadata := range plugin.Rates() {
 		if _, exists := rateExists[rateMetadata.Name]; exists {
 			continue
@@ -206,8 +206,8 @@ func (c *Collector) writeRateScrapeResult(task projectScrapeTask, rateData map[s
 		}
 	}
 
-	//update rate scraping metadata and also reset the rates_stale flag on this
-	//service so that we don't scrape it again immediately afterwards
+	// update rate scraping metadata and also reset the rates_stale flag on this
+	// service so that we don't scrape it again immediately afterwards
 	_, err = tx.Exec(writeRateScrapeSuccessQuery,
 		task.Timing.FinishedAt, task.Timing.FinishedAt.Add(c.AddJitter(scrapeInterval)), task.Timing.Duration().Seconds(),
 		ratesScrapeState, srv.ID,

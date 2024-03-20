@@ -116,12 +116,12 @@ var clusterRateReportQuery1 = sqlext.SimplifyWhitespace(`
 func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface, filter Filter) (*limesresources.ClusterReport, error) {
 	report := &limesresources.ClusterReport{
 		ClusterInfo: limes.ClusterInfo{
-			ID: "current", //multi-cluster support has been removed; this value is only included for backwards-compatibility
+			ID: "current", // multi-cluster support has been removed; this value is only included for backwards-compatibility
 		},
 		Services: make(limesresources.ClusterServiceReports),
 	}
 
-	//first query: collect project usage data in these clusters
+	// first query: collect project usage data in these clusters
 	queryStr, joinArgs := filter.PrepareQuery(clusterReportQuery1)
 	err := sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
 		var (
@@ -181,7 +181,7 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 		return nil, err
 	}
 
-	//first query, addendum: collect burst usage data
+	// first query, addendum: collect burst usage data
 	clusterCanBurst := cluster.Config.Bursting.MaxMultiplier > 0
 	if clusterCanBurst {
 		queryStr, joinArgs = filter.PrepareQuery(clusterReportQuery1B)
@@ -209,7 +209,7 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 		}
 	}
 
-	//second query: collect domain quota data in these clusters
+	// second query: collect domain quota data in these clusters
 	queryStr, joinArgs = filter.PrepareQuery(clusterReportQuery2)
 	err = sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
 		var (
@@ -233,7 +233,7 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 		return nil, err
 	}
 
-	//third query: collect capacity data for these clusters
+	// third query: collect capacity data for these clusters
 	queryStr, joinArgs = filter.PrepareQuery(clusterReportQuery3)
 	if !filter.WithSubcapacities {
 		queryStr = strings.Replace(queryStr, "car.subcapacities", "''", 1)
@@ -310,7 +310,7 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 	}
 
 	if filter.WithAZBreakdown {
-		//fourth query: collect commitment data that is broken down by commitment duration
+		// fourth query: collect commitment data that is broken down by commitment duration
 		queryStr, joinArgs = filter.PrepareQuery(clusterReportQuery4)
 		err = sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
 			var (
@@ -377,10 +377,10 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 				resource.CapacityPerAZ = nil
 			}
 
-			//project_az_resources always has entries for "any", even if the resource
-			//is AZ-aware, because ApplyComputedProjectQuota needs somewhere to write
-			//the base quotas; we ignore those entries here if the "any" usage is
-			//zero and there are other AZs
+			// project_az_resources always has entries for "any", even if the resource
+			// is AZ-aware, because ApplyComputedProjectQuota needs somewhere to write
+			// the base quotas; we ignore those entries here if the "any" usage is
+			// zero and there are other AZs
 			if len(resource.PerAZ) >= 2 {
 				capaInAny := resource.PerAZ[limes.AvailabilityZoneAny]
 				if capaInAny.Capacity == 0 && capaInAny.Usage == nil && capaInAny.ProjectsUsage == 0 {
@@ -397,12 +397,12 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter) (*limesrates.ClusterReport, error) {
 	report := &limesrates.ClusterReport{
 		ClusterInfo: limes.ClusterInfo{
-			ID: "current", //multi-cluster support has been removed; this value is only included for backwards-compatibility
+			ID: "current", // multi-cluster support has been removed; this value is only included for backwards-compatibility
 		},
 		Services: make(limesrates.ClusterServiceReports),
 	}
 
-	//collect scraping timestamp summaries
+	// collect scraping timestamp summaries
 	queryStr, joinArgs := filter.PrepareQuery(clusterRateReportQuery1)
 	err := sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
 		var (
@@ -436,7 +436,7 @@ func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter) (*l
 		return nil, err
 	}
 
-	//include global rate limits from configuration
+	// include global rate limits from configuration
 	for _, serviceConfig := range cluster.Config.Services {
 		srvReport := report.Services[serviceConfig.ServiceType]
 		if srvReport != nil {
@@ -486,9 +486,9 @@ func findInClusterReport(cluster *core.Cluster, report *limesresources.ClusterRe
 		if !resource.ResourceInfo.NoQuota {
 			qdConfig := cluster.QuotaDistributionConfigForResource(serviceType, *resourceName)
 			resource.QuotaDistributionModel = qdConfig.Model
-			//We need to set a default value here. Otherwise zero values will never
-			//be reported when there are no `domain_resources` entries to aggregate
-			//over.
+			// We need to set a default value here. Otherwise zero values will never
+			// be reported when there are no `domain_resources` entries to aggregate
+			// over.
 			defaultDomainsQuota := uint64(0)
 			resource.DomainsQuota = &defaultDomainsQuota
 		}

@@ -36,16 +36,16 @@ type FlavorTranslationTable struct {
 // FlavorTranslationEntry is an entry for one particular flavor in type
 // FlavorTranslationTable.
 type FlavorTranslationEntry struct {
-	//All possible names for this flavor, including the preferred names that have
-	//their separate fields below.
+	// All possible names for this flavor, including the preferred names that have
+	// their separate fields below.
 	Aliases []string
-	//The name that Limes prefers for this flavor. The resource name for a
-	//separate instance quota is derived from this name, if needed. Also, this
-	//name is what we show on instance subresources.
+	// The name that Limes prefers for this flavor. The resource name for a
+	// separate instance quota is derived from this name, if needed. Also, this
+	// name is what we show on instance subresources.
 	LimesPreferredName string
-	//The name that Nova prefers for this flavor, or an empty string if we don't
-	//know yet which name Nova prefers. This is the name that gets used in API
-	//calls to get or set separate instance quotas.
+	// The name that Nova prefers for this flavor, or an empty string if we don't
+	// know yet which name Nova prefers. This is the name that gets used in API
+	// calls to get or set separate instance quotas.
 	NovaPreferredName string
 }
 
@@ -65,7 +65,7 @@ func (t *FlavorTranslationTable) UnmarshalYAML(unmarshal func(any) error) error 
 		t.Entries = append(t.Entries, &FlavorTranslationEntry{
 			Aliases:            append([]string{preferred}, aliases...),
 			LimesPreferredName: preferred,
-			NovaPreferredName:  "", //will be filled in first call to SeparateInstanceQuotaToLimesName
+			NovaPreferredName:  "", // will be filled in first call to SeparateInstanceQuotaToLimesName
 		})
 	}
 	return nil
@@ -79,7 +79,7 @@ func NewFlavorTranslationTable(flavorAliases map[string][]string) FlavorTranslat
 		entries = append(entries, &FlavorTranslationEntry{
 			Aliases:            append([]string{preferred}, aliases...),
 			LimesPreferredName: preferred,
-			NovaPreferredName:  "", //will be filled in first call to SeparateInstanceQuotaToLimesName
+			NovaPreferredName:  "", // will be filled in first call to SeparateInstanceQuotaToLimesName
 		})
 	}
 	return FlavorTranslationTable{entries}
@@ -137,7 +137,7 @@ func (t FlavorTranslationTable) NovaQuotaNameForLimesResourceName(resourceName s
 // ListFlavorsWithSeparateInstanceQuota queries Nova for all separate instance
 // quotas, and returns the flavor names that Nova prefers for each.
 func (t FlavorTranslationTable) ListFlavorsWithSeparateInstanceQuota(computeV2 *gophercloud.ServiceClient) ([]string, error) {
-	//look at the magical quota class "flavors" to determine which quotas exist
+	// look at the magical quota class "flavors" to determine which quotas exist
 	url := computeV2.ServiceURL("os-quota-class-sets", "flavors")
 	var result gophercloud.Result
 	_, err := computeV2.Get(url, &result.Body, nil)
@@ -145,13 +145,13 @@ func (t FlavorTranslationTable) ListFlavorsWithSeparateInstanceQuota(computeV2 *
 		return nil, err
 	}
 
-	//At SAP Converged Cloud, we use separate instance quotas for baremetal
-	//(Ironic) flavors, to control precisely how many baremetal machines can be
-	//used by each domain/project. Each such quota has the resource name
-	//"instances_${FLAVOR_NAME}".
+	// At SAP Converged Cloud, we use separate instance quotas for baremetal
+	// (Ironic) flavors, to control precisely how many baremetal machines can be
+	// used by each domain/project. Each such quota has the resource name
+	// "instances_${FLAVOR_NAME}".
 	var body struct {
 		//NOTE: cannot use map[string]int64 here because this object contains the
-		//field "id": "default" (curse you, untyped JSON)
+		// field "id": "default" (curse you, untyped JSON)
 		QuotaClassSet map[string]any `json:"quota_class_set"`
 	}
 	err = result.ExtractInto(&body)

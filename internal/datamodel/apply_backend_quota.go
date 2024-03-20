@@ -58,7 +58,7 @@ func ApplyBackendQuota(dbi db.Interface, cluster *core.Cluster, domain core.Keys
 		return fmt.Errorf("no quota plugin registered for service type %s", srv.Type)
 	}
 
-	//collect backend quota values that we want to apply
+	// collect backend quota values that we want to apply
 	targetQuotasInDB := make(map[string]uint64)
 	needsApply := false
 	err := sqlext.ForeachRow(dbi, backendQuotaSelectQuery, []any{srv.ID}, func(rows *sql.Rows) error {
@@ -81,12 +81,12 @@ func ApplyBackendQuota(dbi db.Interface, cluster *core.Cluster, domain core.Keys
 		return fmt.Errorf("while collecting target quota values for %s backend: %w", srv.Type, err)
 	}
 
-	//if everything is looking good already, we're done here
+	// if everything is looking good already, we're done here
 	if !needsApply {
 		return nil
 	}
 
-	//double-check that we only include quota values for resources that the backend currently knows about
+	// double-check that we only include quota values for resources that the backend currently knows about
 	targetQuotasForBackend := make(map[string]uint64)
 	for _, res := range plugin.Resources() {
 		if res.NoQuota {
@@ -96,7 +96,7 @@ func ApplyBackendQuota(dbi db.Interface, cluster *core.Cluster, domain core.Keys
 		targetQuotasForBackend[res.Name] = targetQuotasInDB[res.Name]
 	}
 
-	//apply quotas in backend
+	// apply quotas in backend
 	err = plugin.SetQuota(core.KeystoneProjectFromDB(project, domain), targetQuotasForBackend)
 	if err != nil {
 		return err

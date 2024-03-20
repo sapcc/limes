@@ -32,12 +32,12 @@ import (
 )
 
 var (
-	//Commitments are confirmed in a chronological order, wherein `created_at`
-	//has a higher priority than `confirm_by` to ensure that commitments created
-	//at a later date cannot skip the queue when existing customers are already
-	//waiting for commitments.
+	// Commitments are confirmed in a chronological order, wherein `created_at`
+	// has a higher priority than `confirm_by` to ensure that commitments created
+	// at a later date cannot skip the queue when existing customers are already
+	// waiting for commitments.
 	//
-	//The final `BY pc.id` ordering ensures deterministic behavior in tests.
+	// The final `BY pc.id` ordering ensures deterministic behavior in tests.
 	getConfirmableCommitmentsQuery = sqlext.SimplifyWhitespace(`
 		SELECT ps.id, pc.id, pc.amount
 		  FROM project_services ps
@@ -76,8 +76,8 @@ func ConfirmPendingCommitments(serviceType, resourceName string, az limes.Availa
 	}
 	stats := statsByAZ[az]
 
-	//load confirmable commitments (we need to load them into a buffer first, since
-	//lib/pq cannot do UPDATE while a SELECT targeting the same rows is still going)
+	// load confirmable commitments (we need to load them into a buffer first, since
+	// lib/pq cannot do UPDATE while a SELECT targeting the same rows is still going)
 	type confirmableCommitment struct {
 		ProjectServiceID db.ProjectServiceID
 		CommitmentID     db.ProjectCommitmentID
@@ -95,21 +95,21 @@ func ConfirmPendingCommitments(serviceType, resourceName string, az limes.Availa
 		return fmt.Errorf("while enumerating confirmable commitments for %s/%s in %s: %w", serviceType, resourceName, az, err)
 	}
 
-	//foreach confirmable commitment...
+	// foreach confirmable commitment...
 	for _, c := range confirmableCommitments {
-		//ignore commitments that do not fit
+		// ignore commitments that do not fit
 		if !stats.FitsAdditionalCommitment(c.ProjectServiceID, c.Amount) {
 			continue
 		}
 
-		//confirm the commitment
+		// confirm the commitment
 		_, err = dbi.Exec(`UPDATE project_commitments SET confirmed_at = $1, state = $2 WHERE id = $3`,
 			now, db.CommitmentStateActive, c.CommitmentID)
 		if err != nil {
 			return fmt.Errorf("while confirming commitment ID=%d for %s/%s in %s: %w", c.CommitmentID, serviceType, resourceName, az, err)
 		}
 
-		//block its allocation from being committed again in this loop
+		// block its allocation from being committed again in this loop
 		oldStats := stats.ProjectStats[c.ProjectServiceID]
 		stats.ProjectStats[c.ProjectServiceID] = projectAZAllocationStats{
 			Committed: oldStats.Committed + c.Amount,

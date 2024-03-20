@@ -66,9 +66,9 @@ type v1Provider struct {
 	DB             *gorp.DbMap
 	VersionData    VersionData
 	tokenValidator gopherpolicy.Validator
-	//see comment in ListProjects() for details
+	// see comment in ListProjects() for details
 	listProjectsMutex sync.Mutex
-	//slots for test doubles
+	// slots for test doubles
 	timeNow func() time.Time
 }
 

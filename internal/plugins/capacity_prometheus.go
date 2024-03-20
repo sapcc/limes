@@ -70,11 +70,11 @@ func (p *capacityPrometheusPlugin) Scrape(_ core.CapacityPluginBackchannel) (res
 
 // DescribeMetrics implements the core.CapacityPlugin interface.
 func (p *capacityPrometheusPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
-	//not used by this plugin
+	// not used by this plugin
 }
 
 // CollectMetrics implements the core.CapacityPlugin interface.
 func (p *capacityPrometheusPlugin) CollectMetrics(ch chan<- prometheus.Metric, serializedMetrics []byte) error {
-	//not used by this plugin
+	// not used by this plugin
 	return nil
 }

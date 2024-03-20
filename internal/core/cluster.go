@@ -58,13 +58,13 @@ func NewCluster(config ClusterConfiguration) (c *Cluster, errs errext.ErrorSet) 
 		Authoritative:   osext.GetenvBool("LIMES_AUTHORITATIVE"),
 	}
 
-	//instantiate discovery plugin
+	// instantiate discovery plugin
 	c.DiscoveryPlugin = DiscoveryPluginRegistry.Instantiate(config.Discovery.Method)
 	if c.DiscoveryPlugin == nil {
 		errs.Addf("setup for discovery method %s failed: no suitable discovery plugin found", config.Discovery.Method)
 	}
 
-	//instantiate quota plugins
+	// instantiate quota plugins
 	for _, srv := range config.Services {
 		plugin := QuotaPluginRegistry.Instantiate(srv.PluginType)
 		if plugin == nil {
@@ -73,7 +73,7 @@ func NewCluster(config ClusterConfiguration) (c *Cluster, errs errext.ErrorSet) 
 		c.QuotaPlugins[srv.ServiceType] = plugin
 	}
 
-	//instantiate capacity plugins
+	// instantiate capacity plugins
 	for _, capa := range config.Capacitors {
 		plugin := CapacityPluginRegistry.Instantiate(capa.PluginType)
 		if plugin == nil {
@@ -94,7 +94,7 @@ func NewCluster(config ClusterConfiguration) (c *Cluster, errs errext.ErrorSet) 
 // We cannot do any of this earlier because we only know all resources after
 // calling Init() on all quota plugins.
 func (c *Cluster) Connect(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (errs errext.ErrorSet) {
-	//initialize discovery plugin
+	// initialize discovery plugin
 	err := yaml.UnmarshalStrict([]byte(c.Config.Discovery.Parameters), c.DiscoveryPlugin)
 	if err != nil {
 		errs.Addf("failed to supply params to discovery method: %w", err)
@@ -105,7 +105,7 @@ func (c *Cluster) Connect(provider *gophercloud.ProviderClient, eo gophercloud.E
 		}
 	}
 
-	//initialize quota plugins
+	// initialize quota plugins
 	for _, srv := range c.Config.Services {
 		plugin := c.QuotaPlugins[srv.ServiceType]
 		err = yaml.UnmarshalStrict([]byte(srv.Parameters), plugin)
@@ -119,7 +119,7 @@ func (c *Cluster) Connect(provider *gophercloud.ProviderClient, eo gophercloud.E
 		}
 	}
 
-	//initialize capacity plugins
+	// initialize capacity plugins
 	for _, capa := range c.Config.Capacitors {
 		plugin := c.CapacityPlugins[capa.ID]
 		err = yaml.UnmarshalStrict([]byte(capa.Parameters), plugin)
@@ -133,13 +133,13 @@ func (c *Cluster) Connect(provider *gophercloud.ProviderClient, eo gophercloud.E
 		}
 	}
 
-	//if we could not load all plugins, we cannot be sure that we know the
-	//correct set of resources, so the following steps will likely report wrong errors
+	// if we could not load all plugins, we cannot be sure that we know the
+	// correct set of resources, so the following steps will likely report wrong errors
 	if !errs.IsEmpty() {
 		return errs
 	}
 
-	//load quota constraints
+	// load quota constraints
 	var suberrs errext.ErrorSet
 	constraintPath := os.Getenv("LIMES_CONSTRAINTS_PATH")
 	if constraintPath != "" && c.QuotaConstraints == nil {
@@ -147,7 +147,7 @@ func (c *Cluster) Connect(provider *gophercloud.ProviderClient, eo gophercloud.E
 		errs.Append(suberrs)
 	}
 
-	//load quota overrides
+	// load quota overrides
 	overridesPath := os.Getenv("LIMES_QUOTA_OVERRIDES_PATH")
 	if overridesPath != "" && c.QuotaOverrides == nil {
 		buf, err := os.ReadFile(overridesPath)
@@ -160,11 +160,11 @@ func (c *Cluster) Connect(provider *gophercloud.ProviderClient, eo gophercloud.E
 		}
 	}
 
-	//parse low-privilege raise limits
+	// parse low-privilege raise limits
 	c.LowPrivilegeRaise, suberrs = c.Config.LowPrivilegeRaise.parse(c.QuotaPlugins)
 	errs.Append(suberrs)
 
-	//validate scaling relations
+	// validate scaling relations
 	for _, behavior := range c.Config.ResourceBehaviors {
 		s := behavior.ScalesWith
 		if s.ResourceName != "" && !c.HasResource(s.ServiceType, s.ResourceName) {
@@ -231,7 +231,7 @@ func (c *Cluster) ParseQuotaOverrides(path string, buf []byte) (result map[strin
 func (c *Cluster) ServiceTypesInAlphabeticalOrder() []string {
 	result := make([]string, 0, len(c.QuotaPlugins))
 	for serviceType, quotaPlugin := range c.QuotaPlugins {
-		if quotaPlugin != nil { //defense in depth (nil values should never be stored in the map anyway)
+		if quotaPlugin != nil { // defense in depth (nil values should never be stored in the map anyway)
 			result = append(result, serviceType)
 		}
 	}
@@ -313,13 +313,13 @@ func (c *Cluster) GetServiceTypesForArea(area string) (serviceTypes []string) {
 // for domain resources, or equal to `$DOMAIN_NAME/$PROJECT_NAME` for project
 // resources.
 func (c *Cluster) BehaviorForResource(serviceType, resourceName, scopeName string) ResourceBehavior {
-	//default behavior
+	// default behavior
 	maxBurstMultiplier := c.Config.Bursting.MaxMultiplier
 	result := ResourceBehavior{
 		MaxBurstMultiplier: &maxBurstMultiplier,
 	}
 
-	//check for specific behavior
+	// check for specific behavior
 	fullName := serviceType + "/" + resourceName
 	for _, behavior := range c.Config.ResourceBehaviors {
 		if behavior.Matches(fullName, scopeName) {
@@ -333,7 +333,7 @@ func (c *Cluster) BehaviorForResource(serviceType, resourceName, scopeName strin
 // QuotaDistributionConfigForResource returns the QuotaDistributionConfiguration
 // for the given resource.
 func (c *Cluster) QuotaDistributionConfigForResource(serviceType, resourceName string) QuotaDistributionConfiguration {
-	//check for specific behavior
+	// check for specific behavior
 	fullName := serviceType + "/" + resourceName
 	for _, dmCfg := range c.Config.QuotaDistributionConfigs {
 		if dmCfg.FullResourceNameRx.MatchString(fullName) {
@@ -341,7 +341,7 @@ func (c *Cluster) QuotaDistributionConfigForResource(serviceType, resourceName s
 		}
 	}
 
-	//default behavior
+	// default behavior
 	return QuotaDistributionConfiguration{Model: limesresources.HierarchicalQuotaDistribution}
 }
 

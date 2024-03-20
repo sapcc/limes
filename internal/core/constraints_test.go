@@ -123,7 +123,7 @@ func clusterForQuotaConstraintTest() *Cluster {
 
 func TestQuotaConstraintParsingFailure(t *testing.T) {
 	expectQuotaConstraintInvalid(t, "fixtures/quota-constraint-invalid.yaml",
-		//ordered by appearance in fixture file
+		// ordered by appearance in fixture file
 		`invalid constraints for domain germany: invalid constraint "not more than 20" for service-one/things: clause "not more than 20" should start with "at least", "at most" or "exactly"`,
 		`invalid constraints for domain germany: invalid constraint "at least 10 GiB or something" for service-one/capacity_MiB: value "10 GiB or something" does not match expected format "<number> <unit>"`,
 		`invalid constraints for domain germany: invalid constraint "at most 1 ounce" for service-two/capacity_MiB: cannot convert value from ounce to MiB because units are incompatible`,
@@ -150,7 +150,7 @@ func expectQuotaConstraintInvalid(t *testing.T, path string, expectedErrors ...s
 	for _, err := range errs {
 		err := err.Error()
 		if expectedErrs[err] {
-			delete(expectedErrs, err) //check that one off the list
+			delete(expectedErrs, err) // check that one off the list
 		} else {
 			t.Errorf("got unexpected error: %s", err)
 		}

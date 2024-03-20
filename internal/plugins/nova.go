@@ -39,7 +39,7 @@ import (
 )
 
 type novaPlugin struct {
-	//configuration
+	// configuration
 	BigVMMinMemoryMiB      uint64                   `yaml:"bigvm_min_memory"`
 	HypervisorTypeRules    nova.HypervisorTypeRules `yaml:"hypervisor_type_rules"`
 	SeparateInstanceQuotas struct {
@@ -47,9 +47,9 @@ type novaPlugin struct {
 		FlavorAliases       nova.FlavorTranslationTable `yaml:"flavor_aliases"`
 	} `yaml:"separate_instance_quotas"`
 	WithSubresources bool `yaml:"with_subresources"`
-	//computed state
+	// computed state
 	resources []limesresources.ResourceInfo `yaml:"-"`
-	//connections
+	// connections
 	NovaV2            *gophercloud.ServiceClient `yaml:"-"`
 	OSTypeProber      *nova.OSTypeProber         `yaml:"-"`
 	ServerGroupProber *nova.ServerGroupProber    `yaml:"-"`
@@ -96,7 +96,7 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.E
 	if err != nil {
 		return err
 	}
-	p.NovaV2.Microversion = "2.60" //to list server groups across projects and get all required server attributes
+	p.NovaV2.Microversion = "2.60" // to list server groups across projects and get all required server attributes
 	cinderV3, err := openstack.NewBlockStorageV3(provider, eo)
 	if err != nil {
 		return err
@@ -108,7 +108,7 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.E
 	p.OSTypeProber = nova.NewOSTypeProber(p.NovaV2, cinderV3, glanceV2)
 	p.ServerGroupProber = nova.NewServerGroupProber(p.NovaV2)
 
-	//find per-flavor instance resources
+	// find per-flavor instance resources
 	flavorNames, err := p.SeparateInstanceQuotas.FlavorAliases.ListFlavorsWithSeparateInstanceQuota(p.NovaV2)
 	if err != nil {
 		return err
@@ -124,7 +124,7 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.E
 		}
 	}
 
-	//add price class resources if requested
+	// add price class resources if requested
 	if p.BigVMMinMemoryMiB != 0 {
 		p.resources = append(p.resources,
 			limesresources.ResourceInfo{
@@ -204,7 +204,7 @@ func (p *novaPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedSta
 
 // Scrape implements the core.QuotaPlugin interface.
 func (p *novaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[string]core.ResourceData, serializedMetrics []byte, err error) {
-	//collect quota and usage from Nova
+	// collect quota and usage from Nova
 	var limitsData struct {
 		Limits struct {
 			Absolute struct {
@@ -237,7 +237,7 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Availab
 		}
 	}
 
-	//initialize `result`
+	// initialize `result`
 	result = map[string]core.ResourceData{
 		"cores": {
 			Quota:     absoluteLimits.MaxTotalCores,
@@ -278,9 +278,9 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Availab
 		}
 	}
 
-	//Nova does not have a native API for AZ-aware usage reporting,
-	//so we will obtain AZ-aware usage stats by counting up all subresources,
-	//even if we don't end up showing them in the API
+	// Nova does not have a native API for AZ-aware usage reporting,
+	// so we will obtain AZ-aware usage stats by counting up all subresources,
+	// even if we don't end up showing them in the API
 	allSubresources, err := p.buildInstanceSubresources(project)
 	if err != nil {
 		return nil, nil, fmt.Errorf("while collecting instance data: %w", err)
@@ -289,29 +289,29 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Availab
 	for _, subres := range allSubresources {
 		az := subres.AZ
 
-		//use separate instance resource if we have a matching "instances_$FLAVOR" resource
+		// use separate instance resource if we have a matching "instances_$FLAVOR" resource
 		instanceResourceName := p.SeparateInstanceQuotas.FlavorAliases.LimesResourceNameForFlavor(subres.FlavorName)
 		if _, exists := result[instanceResourceName]; !exists {
 			instanceResourceName = "instances"
 		}
 
-		//count subresource towards "instances" (or separate instance resource)
+		// count subresource towards "instances" (or separate instance resource)
 		result[instanceResourceName].AddLocalizedUsage(az, 1)
 		if p.WithSubresources {
 			azData := result[instanceResourceName].UsageInAZ(az)
 			azData.Subresources = append(azData.Subresources, subres)
 		}
 
-		//if counted towards separate instance resource, do not count towards "cores" and "ram"
+		// if counted towards separate instance resource, do not count towards "cores" and "ram"
 		if instanceResourceName != "instances" {
 			continue
 		}
 
-		//count towards "cores" and "ram"
+		// count towards "cores" and "ram"
 		result["cores"].AddLocalizedUsage(az, subres.VCPUs)
 		result["ram"].AddLocalizedUsage(az, subres.MemoryMiB.Value)
 
-		//count towards "bigvm" or "regular" class if requested
+		// count towards "bigvm" or "regular" class if requested
 		if p.BigVMMinMemoryMiB != 0 {
 			class := subres.Class
 			result["cores_"+class].UsageInAZ(az).Usage += subres.VCPUs
@@ -320,7 +320,7 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Availab
 		}
 	}
 
-	//calculate metrics
+	// calculate metrics
 	var metrics novaSerializedMetrics
 	if len(p.HypervisorTypeRules) > 0 {
 		metrics.InstanceCountsByHypervisor = map[string]uint64{"unknown": 0}
@@ -347,12 +347,12 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Availab
 
 // SetQuota implements the core.QuotaPlugin interface.
 func (p *novaPlugin) SetQuota(project core.KeystoneProject, quotas map[string]uint64) error {
-	//translate Limes resource names for separate instance quotas into Nova quota names
+	// translate Limes resource names for separate instance quotas into Nova quota names
 	novaQuotas := make(novaQuotaUpdateOpts, len(quotas))
 	for resourceName, quota := range quotas {
 		novaQuotaName := p.SeparateInstanceQuotas.FlavorAliases.NovaQuotaNameForLimesResourceName(resourceName)
 		if novaQuotaName == "" {
-			//not a separate instance quota - leave as-is
+			// not a separate instance quota - leave as-is
 			novaQuotas[resourceName] = quota
 		} else {
 			novaQuotas[novaQuotaName] = quota

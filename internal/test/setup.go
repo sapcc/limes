@@ -82,22 +82,22 @@ func WithAPIHandler(apiBuilder func(*core.Cluster, *gorp.DbMap, gopherpolicy.Val
 }
 
 func normalizeInlineYAML(yamlStr string) string {
-	//In the source code, we usually use tabs for YAML indentation because the
-	//code is indented with tabs, and mixed indentation confuses some editors.
-	//But YAML insists on using spaces for indentation.
+	// In the source code, we usually use tabs for YAML indentation because the
+	// code is indented with tabs, and mixed indentation confuses some editors.
+	// But YAML insists on using spaces for indentation.
 	return strings.Replace(yamlStr, "\t", "  ", -1)
 }
 
 // Setup contains all the pieces that are needed for most tests.
 type Setup struct {
-	//fields that are always set
+	// fields that are always set
 	Ctx            context.Context //nolint:containedctx // only used in tests
 	DB             *gorp.DbMap
 	Cluster        *core.Cluster
 	Clock          *mock.Clock
 	Registry       *prometheus.Registry
 	TokenValidator *mock.Validator[*PolicyEnforcer]
-	//fields that are only set if their respective SetupOptions are given
+	// fields that are only set if their respective SetupOptions are given
 	Handler http.Handler
 }
 
@@ -116,7 +116,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	s.Clock = mock.NewClock()
 	s.Registry = prometheus.NewPedanticRegistry()
 
-	//load mock policy (where everything is allowed)
+	// load mock policy (where everything is allowed)
 	enforcer := &PolicyEnforcer{
 		AllowCluster:  true,
 		AllowDomain:   true,
@@ -169,8 +169,8 @@ func initDatabase(t *testing.T, fixtureFile string) *gorp.DbMap {
 		t.FailNow()
 	}
 
-	//reset the DB contents, starting with project_commitments because the "ON DELETE RESTRICT" constraint
-	//demands a specific deletion strategy
+	// reset the DB contents, starting with project_commitments because the "ON DELETE RESTRICT" constraint
+	// demands a specific deletion strategy
 	for {
 		result, err := dbm.Exec(cleanupProjectCommitmentsQuery)
 		if err != nil {
@@ -185,8 +185,8 @@ func initDatabase(t *testing.T, fixtureFile string) *gorp.DbMap {
 		}
 	}
 
-	//reset the DB contents and populate with initial resources if requested
-	easypg.ClearTables(t, dbm.Db, "cluster_capacitors", "cluster_services", "domains") //all other tables via "ON DELETE CASCADE"
+	// reset the DB contents and populate with initial resources if requested
+	easypg.ClearTables(t, dbm.Db, "cluster_capacitors", "cluster_services", "domains") // all other tables via "ON DELETE CASCADE"
 	if fixtureFile != "" {
 		easypg.ExecSQLFile(t, dbm.Db, fixtureFile)
 	}

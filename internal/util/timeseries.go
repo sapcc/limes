@@ -103,7 +103,7 @@ func (s *TimeSeries[T]) AddMeasurement(now time.Time, value T) error {
 		}
 	}
 
-	//record the new measurement
+	// record the new measurement
 	s.timestamps = append(s.timestamps, timestamp)
 	s.values = append(s.values, value)
 	return nil

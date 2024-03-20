@@ -57,7 +57,7 @@ func InitFromURL(dbURL *url.URL) (*gorp.DbMap, error) {
 		return nil, err
 	}
 
-	//ensure that this process does not starve other Limes processes for DB connections
+	// ensure that this process does not starve other Limes processes for DB connections
 	db.SetMaxOpenConns(16)
 
 	dbMap := &gorp.DbMap{Db: db, Dialect: gorp.PostgresDialect{}}
@@ -68,10 +68,10 @@ func InitFromURL(dbURL *url.URL) (*gorp.DbMap, error) {
 // Interface provides the common methods that both SQL connections and
 // transactions implement.
 type Interface interface {
-	//from database/sql
+	// from database/sql
 	sqlext.Executor
 
-	//from github.com/go-gorp/gorp
+	// from github.com/go-gorp/gorp
 	Insert(args ...any) error
 	Update(args ...any) (int64, error)
 	Delete(args ...any) (int64, error)

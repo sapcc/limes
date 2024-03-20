@@ -47,7 +47,7 @@ func NewServerGroupProber(novaV2 *gophercloud.ServiceClient) *ServerGroupProber 
 
 // GetMemberUsageForProject returns server_group_members usage in the given project.
 func (p *ServerGroupProber) GetMemberUsageForProject(projectID string) (uint64, error) {
-	//refresh cache if not initialized or outdated
+	// refresh cache if not initialized or outdated
 	var err error
 	if p.usageByProjectID == nil || time.Since(p.lastScrapeTime) > 10*time.Minute {
 		err = p.fillCache()
@@ -57,10 +57,10 @@ func (p *ServerGroupProber) GetMemberUsageForProject(projectID string) (uint64, 
 }
 
 func (p *ServerGroupProber) fillCache() error {
-	//When paginating through the list of server groups, perform steps slightly
-	//smaller than the actual page size, in order to correctly detect insertions
-	//and deletions that may cause list entries to shift around while we iterate
-	//over them.
+	// When paginating through the list of server groups, perform steps slightly
+	// smaller than the actual page size, in order to correctly detect insertions
+	// and deletions that may cause list entries to shift around while we iterate
+	// over them.
 	const pageSize int = 500
 	stepSize := pageSize * 9 / 10
 	var currentOffset int
@@ -78,7 +78,7 @@ func (p *ServerGroupProber) fillCache() error {
 			}
 		}
 
-		//abort after the last page
+		// abort after the last page
 		if len(groups) < pageSize {
 			break
 		}

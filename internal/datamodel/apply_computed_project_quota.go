@@ -71,23 +71,23 @@ type projectLocalQuotaConstraints struct {
 // ApplyComputedProjectQuota reevaluates auto-computed project quotas for the
 // given resource, if supported by its quota distribution model.
 func ApplyComputedProjectQuota(serviceType, resourceName string, dbm *gorp.DbMap, cluster *core.Cluster) error {
-	//only run for resources with autogrow QD model
+	// only run for resources with autogrow QD model
 	qdCfg := cluster.QuotaDistributionConfigForResource(serviceType, resourceName)
 	if qdCfg.Autogrow == nil {
 		return nil
 	}
 	cfg := *qdCfg.Autogrow
 
-	//run the quota computation in a transaction (this must be done inside this
-	//function because we want to commit this wide-reaching transaction before
-	//starting to talk to backend services for ApplyBackendQuota)
+	// run the quota computation in a transaction (this must be done inside this
+	// function because we want to commit this wide-reaching transaction before
+	// starting to talk to backend services for ApplyBackendQuota)
 	tx, err := dbm.Begin()
 	if err != nil {
 		return err
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 
-	//collect required data
+	// collect required data
 	stats, err := collectAZAllocationStats(serviceType, resourceName, nil, cluster, tx)
 	if err != nil {
 		return err
@@ -110,7 +110,7 @@ func ApplyComputedProjectQuota(serviceType, resourceName string, dbm *gorp.DbMap
 		return err
 	}
 
-	//evaluate QD algorithm
+	// evaluate QD algorithm
 	target := acpqComputeQuotas(stats, cfg, constraints)
 	if logg.ShowDebug {
 		logg.Debug("ACPQ for %s/%s: stats = %#v", serviceType, resourceName, stats)
@@ -120,7 +120,7 @@ func ApplyComputedProjectQuota(serviceType, resourceName string, dbm *gorp.DbMap
 		logg.Debug("ACPQ for %s/%s: target = %s", serviceType, resourceName, string(buf))
 	}
 
-	//write new quotas to database
+	// write new quotas to database
 	err = sqlext.WithPreparedStatement(tx, acpqUpdateAZQuotaQuery, func(stmt *sql.Stmt) error {
 		for az, azTarget := range target {
 			for serviceID, projectTarget := range azTarget {
@@ -142,7 +142,7 @@ func ApplyComputedProjectQuota(serviceType, resourceName string, dbm *gorp.DbMap
 	return tx.Commit()
 
 	//NOTE: Quotas are not applied to the backend here because OpenStack is way too inefficient in practice.
-	//We wait for the next scrape cycle to come around and notice that `backend_quota != desired_backend_quota`.
+	// We wait for the next scrape cycle to come around and notice that `backend_quota != desired_backend_quota`.
 }
 
 // Calculation space for a single project AZ resource.
@@ -222,20 +222,20 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 		isRelevantAZ[limes.AvailabilityZoneAny] = struct{}{}
 	}
 
-	//initialize data structure where new quota will be computed (this uses eager
-	//allocation of all required entries to simplify the following steps)
+	// initialize data structure where new quota will be computed (this uses eager
+	// allocation of all required entries to simplify the following steps)
 	//
-	//Because we're looping through everything anyway, we're also doing the first
-	//few steps of the algorithm itself that use the same looping pattern.
+	// Because we're looping through everything anyway, we're also doing the first
+	// few steps of the algorithm itself that use the same looping pattern.
 	target := make(acpqGlobalTarget, len(stats))
 	for az := range isRelevantAZ {
 		target[az] = make(acpqAZTarget, len(isProjectServiceID))
 		for serviceID := range isProjectServiceID {
 			projectAZStats := stats[az].ProjectStats[serviceID]
 			target[az][serviceID] = &acpqProjectAZTarget{
-				//phase 1: always grant hard minimum quota
+				// phase 1: always grant hard minimum quota
 				Allocated: max(projectAZStats.Committed, projectAZStats.Usage),
-				//phase 2: try granting soft minimum quota
+				// phase 2: try granting soft minimum quota
 				Desired: projectAZStats.MaxHistoricalUsage,
 			}
 		}
@@ -243,7 +243,7 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 	target.EnforceConstraints(constraints, allAZsInOrder, isProjectServiceID)
 	target.TryFulfillDesired(stats, cfg)
 
-	//phase 3: try granting desired_quota
+	// phase 3: try granting desired_quota
 	for az := range isRelevantAZ {
 		for serviceID := range isProjectServiceID {
 			projectAZStats := stats[az].ProjectStats[serviceID]
@@ -261,7 +261,7 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 	target.EnforceConstraints(constraints, allAZsInOrder, isProjectServiceID)
 	target.TryFulfillDesired(stats, cfg)
 
-	//phase 4: try granting additional "any" quota until sum of all quotas is ProjectBaseQuota
+	// phase 4: try granting additional "any" quota until sum of all quotas is ProjectBaseQuota
 	if cfg.ProjectBaseQuota > 0 {
 		for serviceID := range isProjectServiceID {
 			sumOfLocalizedQuotas := uint64(0)
@@ -288,7 +288,7 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 // Desired in order to fit into project-local quota constraints.
 func (target acpqGlobalTarget) EnforceConstraints(constraints map[db.ProjectServiceID]projectLocalQuotaConstraints, allAZs []limes.AvailabilityZone, isProjectServiceID map[db.ProjectServiceID]struct{}) {
 	for serviceID, c := range constraints {
-		//raise Allocated as necessary to fulfil minimum quota
+		// raise Allocated as necessary to fulfil minimum quota
 		if c.MinQuota != nil && *c.MinQuota > 0 {
 			totalAllocated := uint64(0)
 			desireScalePerAZ := make(map[limes.AvailabilityZone]uint64)
@@ -303,7 +303,7 @@ func (target acpqGlobalTarget) EnforceConstraints(constraints map[db.ProjectServ
 			}
 		}
 
-		//lower Desired as necessary to fulfil maximum quota
+		// lower Desired as necessary to fulfil maximum quota
 		if c.MaxQuota != nil {
 			totalAllocated := uint64(0)
 			totalDesired := uint64(0)
@@ -326,7 +326,7 @@ func (target acpqGlobalTarget) EnforceConstraints(constraints map[db.ProjectServ
 }
 
 func (target acpqGlobalTarget) TryFulfillDesired(stats map[limes.AvailabilityZone]clusterAZAllocationStats, cfg core.AutogrowQuotaDistributionConfiguration) {
-	//if quota overcommit is allowed, we do not have to be careful
+	// if quota overcommit is allowed, we do not have to be careful
 	if cfg.AllowQuotaOvercommit {
 		for _, azTarget := range target {
 			for _, projectTarget := range azTarget {
@@ -336,8 +336,8 @@ func (target acpqGlobalTarget) TryFulfillDesired(stats map[limes.AvailabilityZon
 		return
 	}
 
-	//real AZs (i.e. not "any") can only have their demand fulfilled locally,
-	//using capacity in that specific AZ
+	// real AZs (i.e. not "any") can only have their demand fulfilled locally,
+	// using capacity in that specific AZ
 	for az, azTarget := range target {
 		if az == limes.AvailabilityZoneAny {
 			continue
@@ -349,7 +349,7 @@ func (target acpqGlobalTarget) TryFulfillDesired(stats map[limes.AvailabilityZon
 		}
 	}
 
-	//the pseudo-AZ "any" can fulfil demand by absorbing all unused capacity
+	// the pseudo-AZ "any" can fulfil demand by absorbing all unused capacity
 	var totalAvailable uint64
 	for az, azTarget := range target {
 		totalAvailable += subtractOrZero(stats[az].Capacity, azTarget.SumAllocated())
@@ -365,7 +365,7 @@ func (target acpqGlobalTarget) TryFulfillDesired(stats map[limes.AvailabilityZon
 // smaller than the sum of all requests, distribute the total fairly according
 // to how much was requested.
 func acpqDistributeFairly[K comparable](total uint64, requested map[K]uint64) map[K]uint64 {
-	//easy case: all requests can be granted
+	// easy case: all requests can be granted
 	sumOfRequests := uint64(0)
 	for _, request := range requested {
 		sumOfRequests += request
@@ -374,13 +374,13 @@ func acpqDistributeFairly[K comparable](total uint64, requested map[K]uint64) ma
 		return requested
 	}
 
-	//a completely fair distribution would require using these floating-point values...
+	// a completely fair distribution would require using these floating-point values...
 	exact := make(map[K]float64, len(requested))
 	for key, request := range requested {
 		exact[key] = float64(total*request) / float64(sumOfRequests)
 	}
 
-	//...but we have to round to uint64
+	// ...but we have to round to uint64
 	fair := make(map[K]uint64, len(requested))
 	keys := make([]K, 0, len(requested))
 	totalOfFair := uint64(0)
@@ -391,8 +391,8 @@ func acpqDistributeFairly[K comparable](total uint64, requested map[K]uint64) ma
 		keys = append(keys, key)
 	}
 
-	//now we have `sum(fair) <= total` because the fractional parts were ignored;
-	//to fix this, we distribute one more to the highest fractional parts, e.g.
+	// now we have `sum(fair) <= total` because the fractional parts were ignored;
+	// to fix this, we distribute one more to the highest fractional parts, e.g.
 	//
 	//    total = 15
 	//    requested = [ 4, 6, 7 ]

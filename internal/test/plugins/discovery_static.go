@@ -43,7 +43,7 @@ func (p *StaticDiscoveryPlugin) PluginTypeID() string {
 
 // Init implements the core.DiscoveryPlugin interface.
 func (p *StaticDiscoveryPlugin) Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
-	//apply default set of domains and projects
+	// apply default set of domains and projects
 	if len(p.Domains) == 0 && len(p.Projects) == 0 {
 		p.Domains = []core.KeystoneDomain{
 			{Name: "germany", UUID: "uuid-for-germany"},
@@ -69,7 +69,7 @@ func (p *StaticDiscoveryPlugin) ListDomains() ([]core.KeystoneDomain, error) {
 
 // ListProjects implements the core.DiscoveryPlugin interface.
 func (p *StaticDiscoveryPlugin) ListProjects(domain core.KeystoneDomain) ([]core.KeystoneProject, error) {
-	//the domain is not duplicated in each Projects entry, so it must be added now
+	// the domain is not duplicated in each Projects entry, so it must be added now
 	result := make([]core.KeystoneProject, len(p.Projects[domain.UUID]))
 	for idx, project := range p.Projects[domain.UUID] {
 		result[idx] = project

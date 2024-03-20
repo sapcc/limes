@@ -33,7 +33,7 @@ import (
 )
 
 type archerPlugin struct {
-	//connections
+	// connections
 	Archer *gophercloud.ServiceClient `yaml:"-"`
 }
 
@@ -148,11 +148,11 @@ func (p *archerPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedS
 
 // DescribeMetrics implements the core.QuotaPlugin interface.
 func (p *archerPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
-	//not used by this plugin
+	// not used by this plugin
 }
 
 // CollectMetrics implements the core.QuotaPlugin interface.
 func (p *archerPlugin) CollectMetrics(ch chan<- prometheus.Metric, project core.KeystoneProject, serializedMetrics []byte) error {
-	//not used by this plugin
+	// not used by this plugin
 	return nil
 }

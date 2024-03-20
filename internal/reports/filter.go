@@ -66,10 +66,10 @@ func ReadFilter(r *http.Request, getServiceTypesForArea func(string) []string) F
 		}
 
 		if len(f.ServiceTypes) == 0 {
-			//convert area filter into service filter by finding all services in these areas
+			// convert area filter into service filter by finding all services in these areas
 			f.ServiceTypes = areaServices
 		} else {
-			//restrict services filter using the area filter
+			// restrict services filter using the area filter
 			isAreaService := make(map[string]bool, len(areaServices))
 			for _, serviceType := range areaServices {
 				isAreaService[serviceType] = true
@@ -83,14 +83,14 @@ func ReadFilter(r *http.Request, getServiceTypesForArea func(string) []string) F
 			f.ServiceTypes = filteredServiceTypes
 		}
 
-		//if the given areas do not exist, insert a bogus service type now because
-		//`f.serviceTypes == nil` will be misinterpreted as "no filter"
+		// if the given areas do not exist, insert a bogus service type now because
+		// `f.serviceTypes == nil` will be misinterpreted as "no filter"
 		if len(f.ServiceTypes) == 0 {
 			f.ServiceTypes = []string{""}
 		}
 	}
 
-	//by default, all subcapacities can be included, but the caller can restrict this based on AuthZ
+	// by default, all subcapacities can be included, but the caller can restrict this based on AuthZ
 	f.IsSubcapacityAllowed = func(string, string) bool { return true }
 
 	return f

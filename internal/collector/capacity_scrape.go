@@ -39,18 +39,18 @@ import (
 )
 
 const (
-	//how long to wait before scraping the same capacitor again
+	// how long to wait before scraping the same capacitor again
 	capacityScrapeInterval = 15 * time.Minute
-	//how long to wait after error before retrying the same capacitor
+	// how long to wait after error before retrying the same capacitor
 	capacityScrapeErrorInterval = 3 * time.Minute
 )
 
 // CapacityScrapeJob is a jobloop.Job. Each task scrapes one capacitor.
 // Cluster resources managed by this capacitor are added, updated and deleted as necessary.
 func (c *Collector) CapacityScrapeJob(registerer prometheus.Registerer) jobloop.Job {
-	//used by discoverCapacityScrapeTask() to trigger a consistency check every
-	//once in a while; starts out very far in the past to force a consistency
-	//check on first run
+	// used by discoverCapacityScrapeTask() to trigger a consistency check every
+	// once in a while; starts out very far in the past to force a consistency
+	// check on first run
 	lastConsistencyCheckAt := time.Unix(-1000000, 0).UTC()
 
 	return (&jobloop.ProducerConsumerJob[capacityScrapeTask]{
@@ -124,9 +124,9 @@ var (
 func (c *Collector) discoverCapacityScrapeTask(_ context.Context, _ prometheus.Labels, lastConsistencyCheckAt *time.Time) (task capacityScrapeTask, err error) {
 	task.Timing.StartedAt = c.MeasureTime()
 
-	//consistency check: every once in a while (and also immediately on startup),
-	//check that all required `cluster_capacitors` entries exist
-	//(this is important because the query below will only find capacitors that have such an entry)
+	// consistency check: every once in a while (and also immediately on startup),
+	// check that all required `cluster_capacitors` entries exist
+	// (this is important because the query below will only find capacitors that have such an entry)
 	if lastConsistencyCheckAt.Before(task.Timing.StartedAt.Add(-5 * time.Minute)) {
 		err = sqlext.WithPreparedStatement(c.DB, initCapacitorQuery, func(stmt *sql.Stmt) error {
 			for capacitorID := range c.Cluster.CapacityPlugins {
@@ -157,15 +157,15 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 		}
 	}()
 
-	//if capacitor was removed from the configuration, clean up its DB entry
+	// if capacitor was removed from the configuration, clean up its DB entry
 	plugin := c.Cluster.CapacityPlugins[capacitor.CapacitorID]
 	if plugin == nil {
 		_, err := c.DB.Delete(&capacitor)
 		return err
 	}
 
-	//collect mapping of cluster_services type names to IDs
-	//(these DB entries are maintained for us by checkConsistencyCluster)
+	// collect mapping of cluster_services type names to IDs
+	// (these DB entries are maintained for us by checkConsistencyCluster)
 	serviceIDForType := make(map[string]db.ClusterServiceID)
 	serviceTypeForID := make(map[db.ClusterServiceID]string)
 	err := sqlext.ForeachRow(c.DB, getClusterServicesQuery, nil, func(rows *sql.Rows) error {
@@ -184,7 +184,7 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 		return fmt.Errorf("cannot collect cluster service mapping: %w", err)
 	}
 
-	//scrape capacity data
+	// scrape capacity data
 	capacityData, serializedMetrics, err := plugin.Scrape(datamodel.NewCapacityPluginBackchannel(c.Cluster, c.DB))
 	task.Timing.FinishedAt = c.MeasureTimeAtEnd()
 	if err == nil {
@@ -194,7 +194,7 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 		capacitor.NextScrapeAt = task.Timing.FinishedAt.Add(c.AddJitter(capacityScrapeInterval))
 		capacitor.ScrapeErrorMessage = ""
 		//NOTE: in this case, we continue below, with the cluster_resources update
-		//the cluster_capacitors row will be updated at the end of the tx
+		// the cluster_capacitors row will be updated at the end of the tx
 	} else {
 		err = util.UnpackError(err)
 		capacitor.NextScrapeAt = task.Timing.FinishedAt.Add(c.AddJitter(capacityScrapeErrorInterval))
@@ -207,21 +207,21 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 		return err
 	}
 
-	//do the following in a transaction to avoid inconsistent DB state
+	// do the following in a transaction to avoid inconsistent DB state
 	tx, err := c.DB.Begin()
 	if err != nil {
 		return err
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 
-	//collect existing cluster_resources
+	// collect existing cluster_resources
 	var dbResources []db.ClusterResource
 	_, err = tx.Select(&dbResources, `SELECT * FROM cluster_resources`)
 	if err != nil {
 		return fmt.Errorf("cannot inspect existing cluster resources: %w", err)
 	}
 
-	//define the scope of the update
+	// define the scope of the update
 	var dbOwnedResources []db.ClusterResource
 	for _, res := range dbResources {
 		if res.CapacitorID == capacitor.CapacitorID {
@@ -251,9 +251,9 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 			})
 		}
 	}
-	slices.SortFunc(wantedResources, db.CompareResourceRefs) //for deterministic test behavior
+	slices.SortFunc(wantedResources, db.CompareResourceRefs) // for deterministic test behavior
 
-	//create and delete cluster_resources for this capacitor as needed
+	// create and delete cluster_resources for this capacitor as needed
 	setUpdate := db.SetUpdate[db.ClusterResource, db.ResourceRef[db.ClusterServiceID]]{
 		ExistingRecords: dbOwnedResources,
 		WantedKeys:      wantedResources,
@@ -272,7 +272,7 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 		return err
 	}
 
-	//collect cluster_az_resources for the cluster_resources owned by this capacitor
+	// collect cluster_az_resources for the cluster_resources owned by this capacitor
 	dbOwnedResourceIDs := make([]any, len(dbOwnedResources))
 	for idx, res := range dbOwnedResources {
 		dbOwnedResourceIDs[idx] = res.ID
@@ -288,7 +288,7 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 		dbAZResourcesByResourceID[azRes.ResourceID] = append(dbAZResourcesByResourceID[azRes.ResourceID], azRes)
 	}
 
-	//for each cluster_resources entry owned by this capacitor, maintain cluster_az_resources
+	// for each cluster_resources entry owned by this capacitor, maintain cluster_az_resources
 	for _, res := range dbOwnedResources {
 		serviceType := serviceTypeForID[res.ServiceID]
 		resourceDataPerAZ := capacityData[serviceType][res.Name].Normalize(c.Cluster.Config.AvailabilityZones)
@@ -328,7 +328,7 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 		return err
 	}
 
-	//for all cluster resources thus updated, sync commitment states with reality
+	// for all cluster resources thus updated, sync commitment states with reality
 	for _, res := range dbOwnedResources {
 		serviceType := serviceTypeForID[res.ServiceID]
 		now := c.MeasureTime()
@@ -338,7 +338,7 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 		}
 	}
 
-	//for all cluster resources thus updated, try to confirm pending commitments
+	// for all cluster resources thus updated, try to confirm pending commitments
 	for _, res := range dbOwnedResources {
 		err := c.confirmPendingCommitmentsIfNecessary(serviceTypeForID[res.ServiceID], res.Name)
 		if err != nil {
@@ -346,7 +346,7 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 		}
 	}
 
-	//for all cluster resources thus updated, recompute project quotas if necessary
+	// for all cluster resources thus updated, recompute project quotas if necessary
 	needsACDQ := make(map[string]bool)
 	for _, res := range dbOwnedResources {
 		serviceType := serviceTypeForID[res.ServiceID]
@@ -387,7 +387,7 @@ func (c *Collector) confirmPendingCommitmentsIfNecessary(serviceType, resourceNa
 	behavior := c.Cluster.BehaviorForResource(serviceType, resourceName, "")
 	now := c.MeasureTime()
 
-	//do not run ConfirmPendingCommitments if commitments are not enabled (or not live yet) for this resource
+	// do not run ConfirmPendingCommitments if commitments are not enabled (or not live yet) for this resource
 	if len(behavior.CommitmentDurations) == 0 {
 		return nil
 	}

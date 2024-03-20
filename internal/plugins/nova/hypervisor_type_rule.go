@@ -59,8 +59,8 @@ type HypervisorTypeRule struct {
 }
 
 func (r HypervisorTypeRule) validate() error {
-	//the format of rule.Key is built for future extensibility, e.g. if it
-	//later becomes required to match against image capabilities
+	// the format of rule.Key is built for future extensibility, e.g. if it
+	// later becomes required to match against image capabilities
 	switch {
 	case r.Key == "flavor-name":
 		return nil

@@ -93,7 +93,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 		fields["p.id"] = project.ID
 	}
 
-	//avoid collecting the potentially large subresources strings when possible
+	// avoid collecting the potentially large subresources strings when possible
 	queryStr := projectReportQuery
 	if !filter.WithSubresources {
 		queryStr = strings.Replace(queryStr, "par.subresources", "''", 1)
@@ -132,8 +132,8 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 			return err
 		}
 
-		//if we're moving to a different project, publish the finished report
-		//first (and then allow for it to be GCd)
+		// if we're moving to a different project, publish the finished report
+		// first (and then allow for it to be GCd)
 		if projectReport != nil && projectReport.UUID != projectUUID {
 			err := finalizeProjectResourceReport(projectReport, currentProjectID, dbi, filter)
 			if err != nil {
@@ -147,7 +147,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 			currentProjectID = 0
 		}
 
-		//start new project report when necessary
+		// start new project report when necessary
 		if projectReport == nil {
 			currentProjectID = projectID
 			projectReport = &limesresources.ProjectReport{
@@ -167,12 +167,12 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 			}
 		}
 
-		//if we don't have a valid service type, we're done with this result row
+		// if we don't have a valid service type, we're done with this result row
 		if serviceType == nil || !cluster.HasService(*serviceType) {
 			return nil
 		}
 
-		//start new service report when necessary
+		// start new service report when necessary
 		srvReport := projectReport.Services[*serviceType]
 		if srvReport == nil {
 			srvReport = &limesresources.ProjectServiceReport{
@@ -187,12 +187,12 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 			}
 		}
 
-		//if we don't have a valid resource name, we're done with this result row
+		// if we don't have a valid resource name, we're done with this result row
 		if resourceName == nil || !cluster.HasResource(*serviceType, *resourceName) {
 			return nil
 		}
 
-		//start new resource report when necessary
+		// start new resource report when necessary
 		localBehavior := cluster.BehaviorForResource(*serviceType, *resourceName, domain.Name+"/"+projectName)
 		globalBehavior := cluster.BehaviorForResource(*serviceType, *resourceName, "")
 		resReport := srvReport.Resources[*resourceName]
@@ -203,7 +203,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 				Scaling:          globalBehavior.ToScalingBehavior(),
 				Annotations:      localBehavior.Annotations,
 				CommitmentConfig: globalBehavior.ToCommitmentConfig(now),
-				//all other fields are set below
+				// all other fields are set below
 			}
 
 			if filter.WithAZBreakdown {
@@ -229,9 +229,9 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 			srvReport.Resources[*resourceName] = resReport
 		}
 
-		//fill data from project_az_resources into resource report
+		// fill data from project_az_resources into resource report
 		if az == nil {
-			return nil //no project_az_resources available
+			return nil // no project_az_resources available
 		}
 		resReport.Usage += *azUsage
 		if azPhysicalUsage != nil {
@@ -245,7 +245,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 		if filter.WithAZBreakdown {
 			resReport.PerAZ[*az] = &limesresources.ProjectAZResourceReport{
 				Quota:         azQuota,
-				Committed:     nil, //will be filled by finalizeProjectResourceReport()
+				Committed:     nil, // will be filled by finalizeProjectResourceReport()
 				Usage:         *azUsage,
 				PhysicalUsage: azPhysicalUsage,
 				Subresources:  json.RawMessage(*azSubresources),
@@ -258,7 +258,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 		return err
 	}
 
-	//submit final project report
+	// submit final project report
 	if projectReport != nil {
 		err := finalizeProjectResourceReport(projectReport, currentProjectID, dbi, filter)
 		if err != nil {
@@ -335,10 +335,10 @@ func finalizeProjectResourceReport(projectReport *limesresources.ProjectReport, 
 			return err
 		}
 
-		//project_az_resources always has entries for "any", even if the resource
-		//is AZ-aware, because ApplyComputedProjectQuota needs somewhere to write
-		//the base quotas; we ignore those entries here if the "any" usage is zero
-		//and there are other AZs
+		// project_az_resources always has entries for "any", even if the resource
+		// is AZ-aware, because ApplyComputedProjectQuota needs somewhere to write
+		// the base quotas; we ignore those entries here if the "any" usage is zero
+		// and there are other AZs
 		for _, srvReport := range projectReport.Services {
 			for _, resReport := range srvReport.Resources {
 				if len(resReport.PerAZ) >= 2 {
@@ -361,7 +361,7 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 		fields["p.id"] = project.ID
 	}
 
-	//query for rate data
+	// query for rate data
 	queryStr, joinArgs := filter.PrepareQuery(projectRateReportQuery)
 	whereStr, whereArgs := db.BuildSimpleWhereClause(fields, len(joinArgs))
 
@@ -387,8 +387,8 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 			return err
 		}
 
-		//if we're moving to a different project, publish the finished report
-		//first (and then allow for it to be GCd)
+		// if we're moving to a different project, publish the finished report
+		// first (and then allow for it to be GCd)
 		if projectReport != nil && projectReport.UUID != projectUUID {
 			err := submit(projectReport)
 			if err != nil {
@@ -397,7 +397,7 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 			projectReport = nil
 		}
 
-		//start new project report when necessary
+		// start new project report when necessary
 		if projectReport == nil {
 			projectReport = &limesrates.ProjectReport{
 				ProjectInfo: limes.ProjectInfo{
@@ -409,12 +409,12 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 			}
 		}
 
-		//if we don't have a valid service type, we're done with this result row
+		// if we don't have a valid service type, we're done with this result row
 		if serviceType == nil || !cluster.HasService(*serviceType) {
 			return nil
 		}
 
-		//start new service report when necessary
+		// start new service report when necessary
 		srvReport := projectReport.Services[*serviceType]
 		if srvReport == nil {
 			srvReport = &limesrates.ProjectServiceReport{
@@ -428,7 +428,7 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 				srvReport.ScrapedAt = &t
 			}
 
-			//fill new service report with default rate limits
+			// fill new service report with default rate limits
 			if svcConfig, err := cluster.Config.GetServiceConfigurationForType(*serviceType); err == nil {
 				if len(svcConfig.RateLimits.ProjectDefault) > 0 {
 					srvReport.Rates = make(limesrates.ProjectRateReports, len(svcConfig.RateLimits.ProjectDefault))
@@ -443,14 +443,14 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 			}
 		}
 
-		//if we don't have a rate name, we're done with this result row
+		// if we don't have a rate name, we're done with this result row
 		if rateName == nil {
 			return nil
 		}
 
-		//create the rate report if necessary (rates with a limit will already have
-		//one because of the default rate limit that was applied above, so this is
-		//only relevant for rates that only have a usage)
+		// create the rate report if necessary (rates with a limit will already have
+		// one because of the default rate limit that was applied above, so this is
+		// only relevant for rates that only have a usage)
 		rateReport := srvReport.Rates[*rateName]
 		if rateReport == nil && usageAsBigint != nil && *usageAsBigint != "" && cluster.HasUsageForRate(*serviceType, *rateName) {
 			rateReport = &limesrates.ProjectRateReport{
@@ -459,15 +459,15 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 			srvReport.Rates[*rateName] = rateReport
 		}
 
-		//fill remaining data into rate report
+		// fill remaining data into rate report
 		if rateReport != nil {
 			if usageAsBigint != nil {
 				rateReport.UsageAsBigint = *usageAsBigint
 			}
 
-			//overwrite the default limit if a different custom limit is
-			//configured, but ignore custom limits where there is no default
-			//limit
+			// overwrite the default limit if a different custom limit is
+			// configured, but ignore custom limits where there is no default
+			// limit
 			if rateReport.Limit != 0 && limit != nil && window != nil {
 				if rateReport.Limit != *limit || *rateReport.Window != *window {
 					rateReport.DefaultLimit = rateReport.Limit
@@ -484,7 +484,7 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 		return err
 	}
 
-	//submit final project report
+	// submit final project report
 	if projectReport != nil {
 		return submit(projectReport)
 	}

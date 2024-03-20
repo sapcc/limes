@@ -66,16 +66,16 @@ func p2u64(x uint64) *uint64 {
 }
 
 func prepareDomainsAndProjectsForScrape(t *testing.T, s test.Setup) {
-	//ScanDomains is required to create the entries in `domains`,
-	//`domain_services`, `projects` and `project_services`
+	// ScanDomains is required to create the entries in `domains`,
+	// `domain_services`, `projects` and `project_services`
 	timeZero := func() time.Time { return time.Unix(0, 0).UTC() }
 	_, err := (&Collector{Cluster: s.Cluster, DB: s.DB, MeasureTime: timeZero, AddJitter: test.NoJitter}).ScanDomains(ScanDomainsOpts{})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	//if we have two projects and bursting is enabled, we are going to test with
-	//and without bursting on the two projects
+	// if we have two projects and bursting is enabled, we are going to test with
+	// and without bursting on the two projects
 	if s.Cluster.Config.Bursting.MaxMultiplier > 0 {
 		_, err := s.DB.Exec(`UPDATE projects SET has_bursting = (name = $1)`, "dresden")
 		if err != nil {
@@ -113,13 +113,13 @@ func Test_ScrapeSuccess(t *testing.T) {
 	)
 	prepareDomainsAndProjectsForScrape(t, s)
 
-	//setup a quota constraint for the projects that we're scraping
+	// setup a quota constraint for the projects that we're scraping
 	//
 	//TODO: duplicated with Test_ScrapeFailure
 	//NOTE: This is set only *after* ScanDomains has run, in order to exercise
-	//the code path in Scrape() that applies constraints when first creating
-	//project_resources entries. If we had set this before ScanDomains, then
-	//ScanDomains would already have created the project_resources entries.
+	// the code path in Scrape() that applies constraints when first creating
+	// project_resources entries. If we had set this before ScanDomains, then
+	// ScanDomains would already have created the project_resources entries.
 	projectConstraints := core.QuotaConstraints{
 		"unittest": {
 			"capacity": {Minimum: p2u64(10), Maximum: p2u64(40)},
@@ -139,18 +139,18 @@ func Test_ScrapeSuccess(t *testing.T) {
 	job := c.ResourceScrapeJob(s.Registry)
 	withLabel := jobloop.WithLabel("service_type", "unittest")
 
-	//check that ScanDomains created the domain, project and their services
+	// check that ScanDomains created the domain, project and their services
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualToFile("fixtures/scrape0.sql")
 
-	//first Scrape should create the entries in `project_resources` with the
-	//correct usage and backend quota values (and quota = 0 because nothing was approved yet)
-	//and set `project_services.scraped_at` to the current time
+	// first Scrape should create the entries in `project_resources` with the
+	// correct usage and backend quota values (and quota = 0 because nothing was approved yet)
+	// and set `project_services.scraped_at` to the current time
 	s.Clock.StepBy(scrapeInterval)
 	plugin := s.Cluster.QuotaPlugins["unittest"].(*plugins.GenericQuotaPlugin) //nolint:errcheck
 	plugin.SetQuotaFails = true
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
-	mustT(t, job.ProcessOne(s.Ctx, withLabel)) //twice because there are two projects
+	mustT(t, job.ProcessOne(s.Ctx, withLabel)) // twice because there are two projects
 
 	scrapedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt2 := s.Clock.Now()
@@ -188,16 +188,16 @@ func Test_ScrapeSuccess(t *testing.T) {
 	firstScrapedAt1 := scrapedAt1
 	firstScrapedAt2 := scrapedAt2
 
-	//second Scrape should not change anything (not even the timestamps) since
-	//less than 30 minutes have passed since the last Scrape("unittest")
+	// second Scrape should not change anything (not even the timestamps) since
+	// less than 30 minutes have passed since the last Scrape("unittest")
 	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), sql.ErrNoRows)
 	tr.DBChanges().AssertEmpty()
 
-	//change the data that is reported by the plugin
+	// change the data that is reported by the plugin
 	s.Clock.StepBy(scrapeInterval)
 	plugin.StaticResourceData["capacity"].Quota = 110
 	plugin.StaticResourceData["things"].UsageData["az-two"].Usage = 3
-	//Scrape should pick up the changed resource data
+	// Scrape should pick up the changed resource data
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 
@@ -216,7 +216,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 		firstScrapedAt1.Unix(), firstScrapedAt2.Unix(),
 	)
 
-	//check reporting of MinQuota/MaxQuota
+	// check reporting of MinQuota/MaxQuota
 	s.Clock.StepBy(scrapeInterval)
 	plugin.MinQuota = map[string]uint64{"capacity": 10}
 	plugin.MaxQuota = map[string]uint64{"things": 1000}
@@ -237,7 +237,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 		scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),
 	)
 
-	//check quota overrides
+	// check quota overrides
 	s.Clock.StepBy(scrapeInterval)
 	s.Cluster.QuotaOverrides = map[string]map[string]map[string]map[string]uint64{
 		"germany": {
@@ -274,8 +274,8 @@ func Test_ScrapeSuccess(t *testing.T) {
 		scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),
 	)
 
-	//set some new quota values (note that "capacity" already had a non-zero
-	//quota because of the cluster.QuotaConstraints)
+	// set some new quota values (note that "capacity" already had a non-zero
+	// quota because of the cluster.QuotaConstraints)
 	_, err := s.DB.Exec(`UPDATE project_resources SET quota = $1 WHERE name = $2`, 20, "capacity")
 	if err != nil {
 		t.Fatal(err)
@@ -285,9 +285,9 @@ func Test_ScrapeSuccess(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	//Scrape should try to enforce quota values in the backend (this did not work
-	//until now because the test.Plugin was instructed to have SetQuota fail);
-	//also the quota change above causes ApplyComputedDomainQuota to have an effect here
+	// Scrape should try to enforce quota values in the backend (this did not work
+	// until now because the test.Plugin was instructed to have SetQuota fail);
+	// also the quota change above causes ApplyComputedDomainQuota to have an effect here
 	s.Clock.StepBy(scrapeInterval)
 	plugin.SetQuotaFails = false
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
@@ -308,8 +308,8 @@ func Test_ScrapeSuccess(t *testing.T) {
 		scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),
 	)
 
-	//another Scrape (with SetQuota disabled again) should show that the quota
-	//update was durable
+	// another Scrape (with SetQuota disabled again) should show that the quota
+	// update was durable
 	s.Clock.StepBy(scrapeInterval)
 	plugin.SetQuotaFails = true
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
@@ -325,13 +325,13 @@ func Test_ScrapeSuccess(t *testing.T) {
 		scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),
 	)
 
-	//set a quota that contradicts the cluster.QuotaConstraints
+	// set a quota that contradicts the cluster.QuotaConstraints
 	_, err = s.DB.Exec(`UPDATE project_resources SET quota = $1 WHERE name = $2`, 50, "capacity")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	//Scrape should apply the constraint, then enforce quota values in the backend
+	// Scrape should apply the constraint, then enforce quota values in the backend
 	s.Clock.StepBy(scrapeInterval)
 	plugin.SetQuotaFails = false
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
@@ -349,9 +349,9 @@ func Test_ScrapeSuccess(t *testing.T) {
 		scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),
 	)
 
-	//set "capacity" to a non-zero usage to observe a non-zero usage on
-	//"capacity_portion" (otherwise this resource has been all zeroes this entire
-	//time)
+	// set "capacity" to a non-zero usage to observe a non-zero usage on
+	// "capacity_portion" (otherwise this resource has been all zeroes this entire
+	// time)
 	s.Clock.StepBy(scrapeInterval)
 	plugin.StaticResourceData["capacity"].UsageData["az-one"].Usage = 20
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
@@ -371,7 +371,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 		scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),
 	)
 
-	//check data metrics generated by this scraping pass
+	// check data metrics generated by this scraping pass
 	registry := prometheus.NewPedanticRegistry()
 	amc := &AggregateMetricsCollector{Cluster: s.Cluster, DB: s.DB}
 	registry.MustRegister(amc)
@@ -386,7 +386,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 		ExpectBody:   assert.FixtureFile("fixtures/scrape_metrics.prom"),
 	}.Check(t, promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
 
-	//check data metrics with the skip_zero flag set
+	// check data metrics with the skip_zero flag set
 	registry = prometheus.NewPedanticRegistry()
 	amc = &AggregateMetricsCollector{Cluster: s.Cluster, DB: s.DB}
 	registry.MustRegister(amc)
@@ -408,13 +408,13 @@ func Test_ScrapeFailure(t *testing.T) {
 	)
 	prepareDomainsAndProjectsForScrape(t, s)
 
-	//setup a quota constraint for the projects that we're scraping
+	// setup a quota constraint for the projects that we're scraping
 	//
 	//TODO: duplicated with Test_ScrapeSuccess
 	//NOTE: This is set only *after* ScanDomains has run, in order to exercise
-	//the code path in Scrape() that applies constraints when first creating
-	//project_resources entries. If we had set this before ScanDomains, then
-	//ScanDomains would already have created the project_resources entries.
+	// the code path in Scrape() that applies constraints when first creating
+	// project_resources entries. If we had set this before ScanDomains, then
+	// ScanDomains would already have created the project_resources entries.
 	projectConstraints := core.QuotaConstraints{
 		"unittest": {
 			"capacity": {Minimum: p2u64(10), Maximum: p2u64(40)},
@@ -433,20 +433,20 @@ func Test_ScrapeFailure(t *testing.T) {
 	job := c.ResourceScrapeJob(s.Registry)
 	withLabel := jobloop.WithLabel("service_type", "unittest")
 
-	//we will see an expected ERROR during testing, do not make the test fail because of this
+	// we will see an expected ERROR during testing, do not make the test fail because of this
 	expectedErrorRx := regexp.MustCompile(`^during resource scrape of project germany/(berlin|dresden): Scrape failed as requested$`)
 
-	//check that ScanDomains created the domain, project and their services
+	// check that ScanDomains created the domain, project and their services
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualToFile("fixtures/scrape0.sql")
 
-	//failing Scrape should create dummy records to ensure that the API finds
-	//plausibly-structured data
+	// failing Scrape should create dummy records to ensure that the API finds
+	// plausibly-structured data
 	s.Clock.StepBy(scrapeInterval)
 	plugin := s.Cluster.QuotaPlugins["unittest"].(*plugins.GenericQuotaPlugin) //nolint:errcheck
 	plugin.ScrapeFails = true
 	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx)
-	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx) //twice because there are two projects
+	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx) // twice because there are two projects
 
 	checkedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	checkedAt2 := s.Clock.Now()
@@ -470,7 +470,7 @@ func Test_ScrapeFailure(t *testing.T) {
 		checkedAt2.Unix(), checkedAt2.Add(recheckInterval).Unix(),
 	)
 
-	//next Scrape should yield the same result
+	// next Scrape should yield the same result
 	s.Clock.StepBy(scrapeInterval)
 	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx)
 	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx)
@@ -485,11 +485,11 @@ func Test_ScrapeFailure(t *testing.T) {
 		checkedAt2.Unix(), checkedAt2.Add(recheckInterval).Unix(),
 	)
 
-	//once the backend starts working, we start to see plausible data again
+	// once the backend starts working, we start to see plausible data again
 	s.Clock.StepBy(scrapeInterval)
 	plugin.ScrapeFails = false
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
-	mustT(t, job.ProcessOne(s.Ctx, withLabel)) //twice because there are two projects
+	mustT(t, job.ProcessOne(s.Ctx, withLabel)) // twice because there are two projects
 
 	scrapedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt2 := s.Clock.Now()
@@ -519,13 +519,13 @@ func Test_ScrapeFailure(t *testing.T) {
 		scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),
 	)
 
-	//backend fails again and we need to scrape because of the stale flag ->
-	//touch neither scraped_at nor the existing resources (this also tests that a
-	//failed check causes Scrape("unittest") to continue with the next resource afterwards)
+	// backend fails again and we need to scrape because of the stale flag ->
+	// touch neither scraped_at nor the existing resources (this also tests that a
+	// failed check causes Scrape("unittest") to continue with the next resource afterwards)
 	s.Clock.StepBy(scrapeInterval)
 	plugin.ScrapeFails = true
 	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx)
-	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx) //twice because there are two projects
+	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx) // twice because there are two projects
 
 	checkedAt1 = s.Clock.Now().Add(-5 * time.Second)
 	checkedAt2 = s.Clock.Now()
@@ -570,12 +570,12 @@ func Test_AutoApproveInitialQuota(t *testing.T) {
 	job := c.ResourceScrapeJob(s.Registry)
 	withLabel := jobloop.WithLabel("service_type", "autoapprovaltest")
 
-	//ScanDomains created the domain, project and their services
+	// ScanDomains created the domain, project and their services
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.Ignore()
 
-	//when first scraping, the initial backend quota of the "approve" resource
-	//shall be approved automatically
+	// when first scraping, the initial backend quota of the "approve" resource
+	// shall be approved automatically
 	s.Clock.StepBy(scrapeInterval)
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 
@@ -590,9 +590,9 @@ func Test_AutoApproveInitialQuota(t *testing.T) {
 		scrapedAt.Unix(), scrapedAt.Add(scrapeInterval).Unix(),
 	)
 
-	//modify the backend quota; verify that the second scrape does not
-	//auto-approve the changed value again (auto-approval is limited to the
-	//initial scrape)
+	// modify the backend quota; verify that the second scrape does not
+	// auto-approve the changed value again (auto-approval is limited to the
+	// initial scrape)
 	s.Clock.StepBy(scrapeInterval)
 	plugin := s.Cluster.QuotaPlugins["autoapprovaltest"].(*plugins.AutoApprovalQuotaPlugin) //nolint:errcheck
 	plugin.StaticBackendQuota += 10
@@ -636,9 +636,9 @@ func Test_ScrapeButNoResources(t *testing.T) {
 	job := c.ResourceScrapeJob(s.Registry)
 	withLabel := jobloop.WithLabel("service_type", "noop")
 
-	//check that Scrape() behaves properly when encountering a quota plugin with
-	//no Resources() (in the wild, this can happen because some quota plugins
-	//only have Rates())
+	// check that Scrape() behaves properly when encountering a quota plugin with
+	// no Resources() (in the wild, this can happen because some quota plugins
+	// only have Rates())
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 
 	scrapedAt := s.Clock.Now()
@@ -686,9 +686,9 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 	job := c.ResourceScrapeJob(s.Registry)
 	withLabel := jobloop.WithLabel("service_type", "noop")
 
-	//check that Scrape() behaves properly when encountering a quota plugin with
-	//no Resources() (in the wild, this can happen because some quota plugins
-	//only have Rates())
+	// check that Scrape() behaves properly when encountering a quota plugin with
+	// no Resources() (in the wild, this can happen because some quota plugins
+	// only have Rates())
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 
 	scrapedAt := s.Clock.Now()

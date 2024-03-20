@@ -57,13 +57,13 @@ func Test_ScanDomains(t *testing.T) {
 	c := getCollector(t, s)
 	discovery := cluster.DiscoveryPlugin.(*plugins.StaticDiscoveryPlugin) //nolint:errcheck
 
-	//construct expectation for return value
+	// construct expectation for return value
 	var expectedNewDomains []string
 	for _, domain := range discovery.Domains {
 		expectedNewDomains = append(expectedNewDomains, domain.UUID)
 	}
 
-	//add a quota constraint set; we're going to test if it's applied correctly
+	// add a quota constraint set; we're going to test if it's applied correctly
 	pointerTo := func(x uint64) *uint64 { return &x }
 	cluster.QuotaConstraints = &core.QuotaConstraintSet{
 		Domains: map[string]core.QuotaConstraints{
@@ -74,26 +74,26 @@ func Test_ScanDomains(t *testing.T) {
 				},
 			},
 		},
-		Projects: nil, //not relevant since ScanDomains will never create project_resources
+		Projects: nil, // not relevant since ScanDomains will never create project_resources
 	}
 
-	//first ScanDomains should discover the StaticDomains in the cluster,
-	//and initialize domains, projects and project_services (project_resources
-	//are then constructed by the scraper, and domain_services/domain_resources
-	//are created when a cloud admin approves quota for the domain)
+	// first ScanDomains should discover the StaticDomains in the cluster,
+	// and initialize domains, projects and project_services (project_resources
+	// are then constructed by the scraper, and domain_services/domain_resources
+	// are created when a cloud admin approves quota for the domain)
 	//
-	//This also tests that the quota constraint is applied correctly.
+	// This also tests that the quota constraint is applied correctly.
 	actualNewDomains, err := c.ScanDomains(ScanDomainsOpts{})
 	if err != nil {
 		t.Errorf("ScanDomains #1 failed: %v", err)
 	}
-	sort.Strings(expectedNewDomains) //order does not matter
+	sort.Strings(expectedNewDomains) // order does not matter
 	sort.Strings(actualNewDomains)
 	assert.DeepEqual(t, "new domains after ScanDomains #1", actualNewDomains, expectedNewDomains)
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualToFile("fixtures/scandomains1.sql")
 
-	//second ScanDomains should not discover anything new
+	// second ScanDomains should not discover anything new
 	s.Clock.StepBy(10 * time.Minute)
 	actualNewDomains, err = c.ScanDomains(ScanDomainsOpts{})
 	if err != nil {
@@ -102,13 +102,13 @@ func Test_ScanDomains(t *testing.T) {
 	assert.DeepEqual(t, "new domains after ScanDomains #2", actualNewDomains, []string(nil))
 	tr.DBChanges().AssertEmpty()
 
-	//add another project
+	// add another project
 	domainUUID := "uuid-for-france"
 	discovery.Projects[domainUUID] = append(discovery.Projects[domainUUID],
 		core.KeystoneProject{Name: "bordeaux", UUID: "uuid-for-bordeaux", ParentUUID: "uuid-for-france"},
 	)
 
-	//ScanDomains without ScanAllProjects should not see this new project
+	// ScanDomains without ScanAllProjects should not see this new project
 	s.Clock.StepBy(10 * time.Minute)
 	actualNewDomains, err = c.ScanDomains(ScanDomainsOpts{})
 	if err != nil {
@@ -117,7 +117,7 @@ func Test_ScanDomains(t *testing.T) {
 	assert.DeepEqual(t, "new domains after ScanDomains #3", actualNewDomains, []string(nil))
 	tr.DBChanges().AssertEmpty()
 
-	//ScanDomains with ScanAllProjects should discover the new project
+	// ScanDomains with ScanAllProjects should discover the new project
 	s.Clock.StepBy(10 * time.Minute)
 	actualNewDomains, err = c.ScanDomains(ScanDomainsOpts{ScanAllProjects: true})
 	if err != nil {
@@ -132,10 +132,10 @@ func Test_ScanDomains(t *testing.T) {
 		s.Clock.Now().Unix(),
 	)
 
-	//remove the project again
+	// remove the project again
 	discovery.Projects[domainUUID] = discovery.Projects[domainUUID][0:1]
 
-	//ScanDomains without ScanAllProjects should not notice anything
+	// ScanDomains without ScanAllProjects should not notice anything
 	s.Clock.StepBy(10 * time.Minute)
 	actualNewDomains, err = c.ScanDomains(ScanDomainsOpts{})
 	if err != nil {
@@ -144,7 +144,7 @@ func Test_ScanDomains(t *testing.T) {
 	assert.DeepEqual(t, "new domains after ScanDomains #5", actualNewDomains, []string(nil))
 	tr.DBChanges().AssertEmpty()
 
-	//ScanDomains with ScanAllProjects should notice the deleted project and cleanup its records
+	// ScanDomains with ScanAllProjects should notice the deleted project and cleanup its records
 	s.Clock.StepBy(10 * time.Minute)
 	actualNewDomains, err = c.ScanDomains(ScanDomainsOpts{ScanAllProjects: true})
 	if err != nil {
@@ -157,10 +157,10 @@ func Test_ScanDomains(t *testing.T) {
 		DELETE FROM projects WHERE id = 4 AND uuid = 'uuid-for-bordeaux';
 	`)
 
-	//remove a whole domain
+	// remove a whole domain
 	discovery.Domains = discovery.Domains[0:1]
 
-	//ScanDomains should notice the deleted domain and cleanup its records and also its projects
+	// ScanDomains should notice the deleted domain and cleanup its records and also its projects
 	s.Clock.StepBy(10 * time.Minute)
 	actualNewDomains, err = c.ScanDomains(ScanDomainsOpts{})
 	if err != nil {
@@ -182,11 +182,11 @@ func Test_ScanDomains(t *testing.T) {
 		DELETE FROM projects WHERE id = 3 AND uuid = 'uuid-for-paris';
 	`)
 
-	//rename a domain and a project
+	// rename a domain and a project
 	discovery.Domains[0].Name = "germany-changed"
 	discovery.Projects["uuid-for-germany"][0].Name = "berlin-changed"
 
-	//ScanDomains should notice the changed names and update the domain/project records accordingly
+	// ScanDomains should notice the changed names and update the domain/project records accordingly
 	s.Clock.StepBy(10 * time.Minute)
 	actualNewDomains, err = c.ScanDomains(ScanDomainsOpts{ScanAllProjects: true})
 	if err != nil {

@@ -34,21 +34,21 @@ import (
 
 // HypervisorSelection describes a set of hypervisors.
 type HypervisorSelection struct {
-	//Only match hypervisors with a hypervisor_type attribute matching this pattern.
+	// Only match hypervisors with a hypervisor_type attribute matching this pattern.
 	HypervisorTypeRx regexpext.PlainRegexp `yaml:"hypervisor_type_pattern"`
-	//Only matchhypervisors that have any of these traits.
+	// Only matchhypervisors that have any of these traits.
 	RequiredTraits []string `yaml:"required_traits"`
-	//Exclude hypervisors that have any of these traits.
+	// Exclude hypervisors that have any of these traits.
 	ExcludedTraits []string `yaml:"excluded_traits"`
-	//Only match hypervisors that reside in an aggregate matching this pattern.
-	//If a hypervisor resides in multiple matching aggregates, an error is raised.
+	// Only match hypervisors that reside in an aggregate matching this pattern.
+	// If a hypervisor resides in multiple matching aggregates, an error is raised.
 	AggregateNameRx regexpext.PlainRegexp `yaml:"aggregate_name_pattern"`
 }
 
 // ForeachHypervisor lists all Nova hypervisors matching this
 // HypervisorSelection, and calls the given callback once for each of them.
 func (s HypervisorSelection) ForeachHypervisor(novaV2, placementV1 *gophercloud.ServiceClient, action func(MatchingHypervisor) error) error {
-	//enumerate hypervisors
+	// enumerate hypervisors
 	page, err := hypervisors.List(novaV2, nil).AllPages()
 	if err != nil {
 		return fmt.Errorf("while listing hypervisors: %w", err)
@@ -61,7 +61,7 @@ func (s HypervisorSelection) ForeachHypervisor(novaV2, placementV1 *gophercloud.
 		return fmt.Errorf("while listing hypervisors: %w", err)
 	}
 
-	//enumerate aggregates which establish the hypervisor <-> AZ mapping
+	// enumerate aggregates which establish the hypervisor <-> AZ mapping
 	page, err = aggregates.List(novaV2).AllPages()
 	if err != nil {
 		return fmt.Errorf("while listing aggregates: %w", err)
@@ -71,7 +71,7 @@ func (s HypervisorSelection) ForeachHypervisor(novaV2, placementV1 *gophercloud.
 		return fmt.Errorf("while listing aggregates: %w", err)
 	}
 
-	//enumerate resource providers (there should be one resource provider per hypervisor)
+	// enumerate resource providers (there should be one resource provider per hypervisor)
 	page, err = resourceproviders.List(placementV1, nil).AllPages()
 	if err != nil {
 		return fmt.Errorf("while listing resource providers: %w", err)
@@ -81,17 +81,17 @@ func (s HypervisorSelection) ForeachHypervisor(novaV2, placementV1 *gophercloud.
 		return fmt.Errorf("while listing resource providers: %w", err)
 	}
 
-	//foreach hypervisor...
+	// foreach hypervisor...
 OUTER:
 	for _, h := range hypervisorData.Hypervisors {
-		//check hypervisor type
+		// check hypervisor type
 		if !s.HypervisorTypeRx.MatchString(h.HypervisorType) {
 			//NOTE: If no pattern was given, the regex will be empty and thus always match.
 			logg.Debug("ignoring %s because hypervisor_type %q does not match", h.Description(), h.HypervisorType)
 			continue
 		}
 
-		//check resource provider traits
+		// check resource provider traits
 		providerID, err := h.getResourceProviderID(allResourceProviders)
 		if err != nil {
 			return err
@@ -113,8 +113,8 @@ OUTER:
 			}
 		}
 
-		//check that resource provider reports any capacity (we want to ignore
-		//half-configured hypervisors that are still in buildup)
+		// check that resource provider reports any capacity (we want to ignore
+		// half-configured hypervisors that are still in buildup)
 		inventories, err := resourceproviders.GetInventories(placementV1, providerID).Extract()
 		if err != nil {
 			return fmt.Errorf("while getting inventories for resource provider %s: %w", providerID, err)
@@ -130,7 +130,7 @@ OUTER:
 			}
 		}
 
-		//match hypervisor with AZ and relevant aggregate
+		// match hypervisor with AZ and relevant aggregate
 		matchingAZs := make(map[limes.AvailabilityZone]bool)
 		matchingAggregates := make(map[string]bool)
 		for _, aggr := range allAggregates {
@@ -141,18 +141,18 @@ OUTER:
 				matchingAggregates[aggr.Name] = true
 			}
 			if az := limes.AvailabilityZone(aggr.AvailabilityZone); az != "" {
-				//We also use aggregates not matching our naming pattern to establish a
-				//hypervisor <-> AZ relationship. We have observed in the wild that
-				//matching aggregates do not always have their AZ field maintained.
+				// We also use aggregates not matching our naming pattern to establish a
+				// hypervisor <-> AZ relationship. We have observed in the wild that
+				// matching aggregates do not always have their AZ field maintained.
 				matchingAZs[az] = true
 			}
 		}
 
-		//the mapping from hypervisor to aggregate/AZ must be unique (otherwise the
-		//capacity will be counted either not at all or multiple times)
+		// the mapping from hypervisor to aggregate/AZ must be unique (otherwise the
+		// capacity will be counted either not at all or multiple times)
 		//
 		//NOTE: We leave it to the caller to discard HVs without aggregate or AZ.
-		//This is a state that can happen during buildup, and we want to see it in metrics.
+		// This is a state that can happen during buildup, and we want to see it in metrics.
 		if len(matchingAggregates) > 1 {
 			return fmt.Errorf("%s could not be uniquely matched to an aggregate (matching aggregates = %v)", h.Description(), matchingAggregates)
 		}
@@ -189,11 +189,11 @@ OUTER:
 // MatchingHypervisor is the callback argmuent for
 // func HypervisorSelection.ForeachHypervisor().
 type MatchingHypervisor struct {
-	//information from Nova
+	// information from Nova
 	Hypervisor       Hypervisor
 	AggregateName    string
 	AvailabilityZone limes.AvailabilityZone
-	//information from Placement
+	// information from Placement
 	Traits      []string
 	Inventories map[string]resourceproviders.Inventory
 	Usages      map[string]int

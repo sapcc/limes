@@ -37,7 +37,7 @@ func TestOvercommitFactor(t *testing.T) {
 	check(1, 42, 42)
 	check(1.2, 42, 50)
 
-	//ApplyTo is pretty straightforward, but I'd like some more test coverage for ApplyInReverseTo
+	// ApplyTo is pretty straightforward, but I'd like some more test coverage for ApplyInReverseTo
 	for _, factor := range []OvercommitFactor{0, 1, 1.1, 1.2, 1.5, 2, 2.5, 3, 4} {
 		for raw := uint64(0); raw <= 100; raw++ {
 			check(factor, raw, factor.ApplyTo(raw))

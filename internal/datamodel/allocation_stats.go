@@ -52,14 +52,14 @@ func (c clusterAZAllocationStats) FitsAdditionalCommitment(serviceID db.ProjectS
 		}
 	}
 
-	//commitment can be confirmed if it and all other commitments and usage fit in the total capacity
+	// commitment can be confirmed if it and all other commitments and usage fit in the total capacity
 	return usedCapacity <= c.Capacity
 }
 
 // projectAZAllocationStats describes the resource allocation in a certain AZ
 // resource by a single project.
 type projectAZAllocationStats struct {
-	Committed          uint64 //sum of confirmed commitments
+	Committed          uint64 // sum of confirmed commitments
 	Usage              uint64
 	MinHistoricalUsage uint64
 	MaxHistoricalUsage uint64
@@ -94,7 +94,7 @@ func collectAZAllocationStats(serviceType, resourceName string, azFilter *limes.
 	}
 	result := make(map[limes.AvailabilityZone]clusterAZAllocationStats)
 
-	//get capacity
+	// get capacity
 	queryArgs := []any{serviceType, resourceName, azFilter}
 	overcommitFactor := cluster.BehaviorForResource(serviceType, resourceName, "").OvercommitFactor
 	err := sqlext.ForeachRow(dbi, getRawCapacityInResourceQuery, queryArgs, func(rows *sql.Rows) error {
@@ -112,7 +112,7 @@ func collectAZAllocationStats(serviceType, resourceName string, azFilter *limes.
 		return result, fmt.Errorf("while getting raw capacity for %s: %w", scopeDesc, err)
 	}
 
-	//get resource usage
+	// get resource usage
 	err = sqlext.ForeachRow(dbi, getUsageInResourceQuery, queryArgs, func(rows *sql.Rows) error {
 		var (
 			serviceID           db.ProjectServiceID

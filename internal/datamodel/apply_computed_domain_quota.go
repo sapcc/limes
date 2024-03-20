@@ -54,7 +54,7 @@ func ApplyComputedDomainQuota(dbi db.Interface, cluster *core.Cluster, domainID 
 		return fmt.Errorf("no quota plugin registered for service type %s", serviceType)
 	}
 
-	//check which resources need to have their domain quota recomputed
+	// check which resources need to have their domain quota recomputed
 	var cqdResourceNames []string
 	for _, res := range plugin.Resources() {
 		qdConfig := cluster.QuotaDistributionConfigForResource(serviceType, res.Name)
@@ -63,7 +63,7 @@ func ApplyComputedDomainQuota(dbi db.Interface, cluster *core.Cluster, domainID 
 		}
 	}
 	if len(cqdResourceNames) == 0 {
-		return nil //nothing to do
+		return nil // nothing to do
 	}
 
 	return sqlext.WithPreparedStatement(dbi, recomputeDomainQuotaQueryStr, func(stmt *sql.Stmt) error {

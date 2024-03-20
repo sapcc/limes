@@ -34,16 +34,16 @@ func Test_Consistency(t *testing.T) {
 	c := getCollector(t, s)
 	consistencyJob := c.CheckConsistencyJob(s.Registry)
 
-	//run ScanDomains once to establish a baseline
+	// run ScanDomains once to establish a baseline
 	_, err := c.ScanDomains(ScanDomainsOpts{})
 	if err != nil {
 		t.Errorf("ScanDomains failed: %v", err)
 	}
 	easypg.AssertDBContent(t, s.DB.Db, "fixtures/checkconsistency-pre.sql")
 
-	//check that CheckConsistency() is satisfied with the
-	//{domain,project}_services created by ScanDomains(), but adds
-	//cluster_services entries
+	// check that CheckConsistency() is satisfied with the
+	// {domain,project}_services created by ScanDomains(), but adds
+	// cluster_services entries
 	s.Clock.StepBy(time.Hour)
 	err = consistencyJob.ProcessOne(s.Ctx)
 	if err != nil {
@@ -51,7 +51,7 @@ func Test_Consistency(t *testing.T) {
 	}
 	easypg.AssertDBContent(t, s.DB.Db, "fixtures/checkconsistency0.sql")
 
-	//add some quota constraints
+	// add some quota constraints
 	cluster.QuotaConstraints = &core.QuotaConstraintSet{
 		Domains: map[string]core.QuotaConstraints{
 			"germany": {
@@ -79,7 +79,7 @@ func Test_Consistency(t *testing.T) {
 		},
 	}
 
-	//remove some *_services entries
+	// remove some *_services entries
 	_, err = s.DB.Exec(`DELETE FROM cluster_services WHERE type = $1`, "shared")
 	if err != nil {
 		t.Error(err)
@@ -92,7 +92,7 @@ func Test_Consistency(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	//add some useless *_services entries
+	// add some useless *_services entries
 	err = s.DB.Insert(&db.ClusterService{Type: "whatever"})
 	if err != nil {
 		t.Error(err)
@@ -114,19 +114,19 @@ func Test_Consistency(t *testing.T) {
 		t.Error(err)
 	}
 
-	//add a domain_resource that contradicts the cluster.QuotaConstraints; this
-	//should be fixed by CheckConsistency()
+	// add a domain_resource that contradicts the cluster.QuotaConstraints; this
+	// should be fixed by CheckConsistency()
 	_, err = s.DB.Exec(`UPDATE domain_resources SET quota = 200 WHERE service_id = $1 AND name = $2`, 1, "capacity")
 	if err != nil {
 		t.Error(err)
 	}
 	easypg.AssertDBContent(t, s.DB.Db, "fixtures/checkconsistency1.sql")
 
-	//check that CheckConsistency() brings everything back into a nice state
+	// check that CheckConsistency() brings everything back into a nice state
 	//
-	//Also, for all domain services that are created here, all domain resources
-	//are added; and for all project resources where the quota constraint is not
-	//fulfilled, next_scrape_at will be set to force scraping to fix the constraints.
+	// Also, for all domain services that are created here, all domain resources
+	// are added; and for all project resources where the quota constraint is not
+	// fulfilled, next_scrape_at will be set to force scraping to fix the constraints.
 	s.Clock.StepBy(time.Hour)
 	err = consistencyJob.ProcessOne(s.Ctx)
 	if err != nil {

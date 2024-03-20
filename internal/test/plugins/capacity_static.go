@@ -32,7 +32,7 @@ import (
 
 // StaticCapacityPlugin is a core.CapacityPlugin implementation for unit tests.
 type StaticCapacityPlugin struct {
-	Resources         []string `yaml:"resources"` //each formatted as "servicetype/resourcename"
+	Resources         []string `yaml:"resources"` // each formatted as "servicetype/resourcename"
 	Capacity          uint64   `yaml:"capacity"`
 	WithAZCapData     bool     `yaml:"with_capacity_per_az"`
 	WithSubcapacities bool     `yaml:"with_subcapacities"`
@@ -85,7 +85,7 @@ func (p *StaticCapacityPlugin) Scrape(_ core.CapacityPluginBackchannel) (result 
 	}
 
 	if p.WithSubcapacities {
-		//for historical reasons, serialized metrics are tested at the same time as subcapacities
+		// for historical reasons, serialized metrics are tested at the same time as subcapacities
 		smallerHalf := p.Capacity / 3
 		largerHalf := p.Capacity - smallerHalf
 		serializedMetrics = []byte(fmt.Sprintf(`{"smaller_half":%d,"larger_half":%d}`, smallerHalf, largerHalf))

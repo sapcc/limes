@@ -32,7 +32,7 @@ import (
 )
 
 type keppelPlugin struct {
-	//connections
+	// connections
 	KeppelV1 *keppelClient `yaml:"-"`
 }
 
@@ -107,12 +107,12 @@ func (p *keppelPlugin) SetQuota(project core.KeystoneProject, quotas map[string]
 
 // DescribeMetrics implements the core.QuotaPlugin interface.
 func (p *keppelPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
-	//not used by this plugin
+	// not used by this plugin
 }
 
 // CollectMetrics implements the core.QuotaPlugin interface.
 func (p *keppelPlugin) CollectMetrics(ch chan<- prometheus.Metric, project core.KeystoneProject, serializedMetrics []byte) error {
-	//not used by this plugin
+	// not used by this plugin
 	return nil
 }
 

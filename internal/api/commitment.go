@@ -108,7 +108,7 @@ func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	//enumerate project AZ resources
+	// enumerate project AZ resources
 	filter := reports.ReadFilter(r, p.Cluster.GetServiceTypesForArea)
 	queryStr, joinArgs := filter.PrepareQuery(getProjectAZResourceLocationsQuery)
 	azResourceLocationsByID := make(map[db.ProjectAZResourceID]azResourceLocation)
@@ -131,7 +131,7 @@ func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	//enumerate relevant project commitments
+	// enumerate relevant project commitments
 	queryStr, joinArgs = filter.PrepareQuery(getProjectCommitmentsQuery)
 	whereStr, whereArgs := db.BuildSimpleWhereClause(map[string]any{"ps.project_id": dbProject.ID}, len(joinArgs))
 	var dbCommitments []db.ProjectCommitment
@@ -140,7 +140,7 @@ func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	//render response
+	// render response
 	result := make([]limesresources.Commitment, 0, len(dbCommitments))
 	for _, c := range dbCommitments {
 		loc, exists := azResourceLocationsByID[c.AZResourceID]
@@ -182,7 +182,7 @@ func (p *v1Provider) convertCommitmentToDisplayForm(c db.ProjectCommitment, loc 
 }
 
 func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r *http.Request) (*limesresources.CommitmentRequest, *core.ResourceBehavior) {
-	//parse request
+	// parse request
 	var parseTarget struct {
 		Request limesresources.CommitmentRequest `json:"commitment"`
 	}
@@ -191,7 +191,7 @@ func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r 
 	}
 	req := parseTarget.Request
 
-	//validate request
+	// validate request
 	if !p.Cluster.HasService(req.ServiceType) {
 		http.Error(w, "no such service", http.StatusUnprocessableEntity)
 		return nil, nil
@@ -217,7 +217,7 @@ func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r 
 		}
 	}
 	if !slices.Contains(behavior.CommitmentDurations, req.Duration) {
-		buf := must.Return(json.Marshal(behavior.CommitmentDurations)) //panic on error is acceptable here, marshals should never fail
+		buf := must.Return(json.Marshal(behavior.CommitmentDurations)) // panic on error is acceptable here, marshals should never fail
 		msg := "unacceptable commitment duration for this resource, acceptable values: " + string(buf)
 		http.Error(w, msg, http.StatusUnprocessableEntity)
 		return nil, nil
@@ -250,14 +250,14 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 		return
 	}
 
-	//commitments can never be confirmed immediately if we are before the min_confirm_date
+	// commitments can never be confirmed immediately if we are before the min_confirm_date
 	now := p.timeNow()
 	if behavior.CommitmentMinConfirmDate != nil && behavior.CommitmentMinConfirmDate.After(now) {
 		respondwith.JSON(w, http.StatusOK, map[string]bool{"result": false})
 		return
 	}
 
-	//check for committable capacity
+	// check for committable capacity
 	result, err := datamodel.CanConfirmNewCommitment(*req, *dbProject, p.Cluster, p.DB)
 	if respondwith.ErrorText(w, err) {
 		return
@@ -297,7 +297,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	//if given, confirm_by must definitely after time.Now(), and also after the MinConfirmDate if configured
+	// if given, confirm_by must definitely after time.Now(), and also after the MinConfirmDate if configured
 	now := p.timeNow()
 	if req.ConfirmBy != nil && req.ConfirmBy.Before(now) {
 		http.Error(w, "confirm_by must not be set in the past", http.StatusUnprocessableEntity)
@@ -311,14 +311,14 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	//we want to validate committable capacity in the same transaction that creates the commitment
+	// we want to validate committable capacity in the same transaction that creates the commitment
 	tx, err := p.DB.Begin()
 	if respondwith.ErrorText(w, err) {
 		return
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 
-	//prepare commitment
+	// prepare commitment
 	confirmBy := maybeUnpackUnixEncodedTime(req.ConfirmBy)
 	dbCommitment := db.ProjectCommitment{
 		AZResourceID: azResourceID,
@@ -328,11 +328,11 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		CreatorUUID:  token.UserUUID(),
 		CreatorName:  fmt.Sprintf("%s@%s", token.UserName(), token.UserDomainName()),
 		ConfirmBy:    confirmBy,
-		ConfirmedAt:  nil, //may be set below
+		ConfirmedAt:  nil, // may be set below
 		ExpiresAt:    req.Duration.AddTo(unwrapOrDefault(confirmBy, now)),
 	}
 	if req.ConfirmBy == nil {
-		//if not planned for confirmation in the future, confirm immediately (or fail)
+		// if not planned for confirmation in the future, confirm immediately (or fail)
 		ok, err := datamodel.CanConfirmNewCommitment(*req, *dbProject, p.Cluster, tx)
 		if respondwith.ErrorText(w, err) {
 			return
@@ -347,7 +347,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		dbCommitment.State = db.CommitmentStatePlanned
 	}
 
-	//create commitment
+	// create commitment
 	err = tx.Insert(&dbCommitment)
 	if respondwith.ErrorText(w, err) {
 		return
@@ -364,8 +364,8 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		Commitment:  p.convertCommitmentToDisplayForm(dbCommitment, loc),
 	})
 
-	//if the commitment is immediately confirmed, trigger a capacity scrape in
-	//order to ApplyComputedProjectQuotas based on the new commitment
+	// if the commitment is immediately confirmed, trigger a capacity scrape in
+	// order to ApplyComputedProjectQuotas based on the new commitment
 	if dbCommitment.ConfirmedAt != nil {
 		_, err := p.DB.Exec(forceImmediateCapacityScrapeQuery, now, loc.ServiceType, loc.ResourceName)
 		if respondwith.ErrorText(w, err) {
@@ -373,7 +373,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	//display the possibly confirmed commitment to the user
+	// display the possibly confirmed commitment to the user
 	err = p.DB.SelectOne(&dbCommitment, `SELECT * FROM project_commitments WHERE id = $1`, dbCommitment.ID)
 	if respondwith.ErrorText(w, err) {
 		return
@@ -399,7 +399,7 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	//load commitment
+	// load commitment
 	var dbCommitment db.ProjectCommitment
 	err := p.DB.SelectOne(&dbCommitment, findProjectCommitmentByIDQuery, mux.Vars(r)["id"], dbProject.ID)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -412,14 +412,14 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 	err = p.DB.QueryRow(findProjectAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
 		Scan(&loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)
 	if errors.Is(err, sql.ErrNoRows) {
-		//defense in depth: this should not happen because all the relevant tables are connected by FK constraints
+		// defense in depth: this should not happen because all the relevant tables are connected by FK constraints
 		http.Error(w, "no route to this commitment", http.StatusNotFound)
 		return
 	} else if respondwith.ErrorText(w, err) {
 		return
 	}
 
-	//perform deletion
+	// perform deletion
 	_, err = p.DB.Delete(&dbCommitment)
 	if respondwith.ErrorText(w, err) {
 		return

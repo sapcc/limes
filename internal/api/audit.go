@@ -288,7 +288,7 @@ type targetAttachmentContent struct {
 
 // MarshalJSON implements the json.Marshaler interface.
 func (a targetAttachmentContent) MarshalJSON() ([]byte, error) {
-	//copy data into a struct that does not have a custom MarshalJSON
+	// copy data into a struct that does not have a custom MarshalJSON
 	data := struct {
 		OldQuota     uint64            `json:"oldQuota,omitempty"`
 		NewQuota     uint64            `json:"newQuota,omitempty"`
@@ -310,8 +310,8 @@ func (a targetAttachmentContent) MarshalJSON() ([]byte, error) {
 		OldWindow:    a.OldWindow,
 		NewWindow:    a.NewWindow,
 	}
-	//Hermes does not accept a JSON object at target.attachments[].content, so
-	//we need to wrap the marshaled JSON into a JSON string
+	// Hermes does not accept a JSON object at target.attachments[].content, so
+	// we need to wrap the marshaled JSON into a JSON string
 	bytes, err := json.Marshal(data)
 	if err != nil {
 		return nil, err

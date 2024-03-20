@@ -97,7 +97,7 @@ func (p *NoopQuotaPlugin) CollectMetrics(ch chan<- prometheus.Metric, project co
 func (p *NoopQuotaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[string]core.ResourceData, serializedMetrics []byte, err error) {
 	if p.WithEmptyResource {
 		result = map[string]core.ResourceData{
-			"things": {}, //no usage at all (this is used to test that the scraper adds a zero entry for AZ "any")
+			"things": {}, // no usage at all (this is used to test that the scraper adds a zero entry for AZ "any")
 		}
 	}
 	return result, nil, nil

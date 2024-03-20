@@ -37,19 +37,19 @@ import (
 )
 
 type capacitySapccIronicPlugin struct {
-	//configuration
+	// configuration
 	FlavorNameSelection nova.FlavorNameSelection    `yaml:"flavor_name_selection"`
 	FlavorAliases       nova.FlavorTranslationTable `yaml:"flavor_aliases"`
 	WithSubcapacities   bool                        `yaml:"with_subcapacities"`
-	//connections
+	// connections
 	NovaV2   *gophercloud.ServiceClient `yaml:"-"`
 	IronicV1 *gophercloud.ServiceClient `yaml:"-"`
 }
 
 type capacitySapccIronicSerializedMetrics struct {
 	//NOTE: We only report the node counts to Prometheus. The node names are only
-	//serialized into the DB, so that operators can pull reports or double-check
-	//manually when necessary.
+	// serialized into the DB, so that operators can pull reports or double-check
+	// manually when necessary.
 	UnmatchedNodeNames []string `json:"unmatched_node_names"`
 	RetiredNodeNames   []string `json:"retired_node_names"`
 }
@@ -68,7 +68,7 @@ func (p *capacitySapccIronicPlugin) Init(provider *gophercloud.ProviderClient, e
 	if err != nil {
 		return err
 	}
-	p.IronicV1.Microversion = "1.61" //for node attribute "retired"
+	p.IronicV1.Microversion = "1.61" // for node attribute "retired"
 	return nil
 }
 
@@ -89,7 +89,7 @@ type ironicNode struct {
 		DiskGiB         veryFlexibleUint64 `json:"local_gb"`
 		MemoryMiB       veryFlexibleUint64 `json:"memory_mb"`
 		CPUArchitecture string             `json:"cpu_arch"`
-		Capabilities    string             `json:"capabilities"` //e.g. "cpu_txt:true,cpu_aes:true"
+		Capabilities    string             `json:"capabilities"` // e.g. "cpu_txt:true,cpu_aes:true"
 		SerialNumber    string             `json:"serial"`
 	} `json:"properties"`
 }
@@ -153,13 +153,13 @@ var cpNodeNameRx = regexp.MustCompile(`^node(?:swift)?\d+-(cp\d+)$`)
 
 // Scrape implements the core.CapacityPlugin interface.
 func (p *capacitySapccIronicPlugin) Scrape(_ core.CapacityPluginBackchannel) (result map[string]map[string]core.PerAZ[core.CapacityData], serializedMetrics []byte, err error) {
-	//collect info about flavors with separate instance quota
+	// collect info about flavors with separate instance quota
 	flavorNames, err := p.FlavorAliases.ListFlavorsWithSeparateInstanceQuota(p.NovaV2)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	//we are going to report capacity for all per-flavor instance quotas
+	// we are going to report capacity for all per-flavor instance quotas
 	resultCompute := make(map[string]core.PerAZ[core.CapacityData])
 	for _, flavorName := range flavorNames {
 		if p.FlavorNameSelection.MatchFlavorName(flavorName) != "" {
@@ -168,7 +168,7 @@ func (p *capacitySapccIronicPlugin) Scrape(_ core.CapacityPluginBackchannel) (re
 		}
 	}
 
-	//count Ironic nodes
+	// count Ironic nodes
 	allPages, err := ironicNodesListDetail(p.IronicV1).AllPages()
 	if err != nil {
 		return nil, nil, err
@@ -179,7 +179,7 @@ func (p *capacitySapccIronicPlugin) Scrape(_ core.CapacityPluginBackchannel) (re
 		return nil, nil, err
 	}
 
-	//enumerate aggregates for establishing the hypervisor <-> AZ mapping
+	// enumerate aggregates for establishing the hypervisor <-> AZ mapping
 	page, err := aggregates.List(p.NovaV2).AllPages()
 	if err != nil {
 		return nil, nil, err
@@ -189,8 +189,8 @@ func (p *capacitySapccIronicPlugin) Scrape(_ core.CapacityPluginBackchannel) (re
 		return nil, nil, err
 	}
 
-	//Ironic bPods are expected to be listed as compute hosts assigned to
-	//host aggregates in the format: "nova-compute-ironic-xxxx".
+	// Ironic bPods are expected to be listed as compute hosts assigned to
+	// host aggregates in the format: "nova-compute-ironic-xxxx".
 	azForHostStub := make(map[string]limes.AvailabilityZone)
 	for _, aggr := range allAggregates {
 		az := limes.AvailabilityZone(aggr.AvailabilityZone)
@@ -199,7 +199,7 @@ func (p *capacitySapccIronicPlugin) Scrape(_ core.CapacityPluginBackchannel) (re
 		}
 		for _, host := range aggr.Hosts {
 			if host == "nova-compute-ironic" {
-				azForHostStub["bpod001"] = az //hardcoded for the few nodes using legacy naming convention
+				azForHostStub["bpod001"] = az // hardcoded for the few nodes using legacy naming convention
 			} else {
 				match := computeHostStubRx.FindStringSubmatch(host)
 				if match == nil {
@@ -213,13 +213,13 @@ func (p *capacitySapccIronicPlugin) Scrape(_ core.CapacityPluginBackchannel) (re
 
 	var metrics capacitySapccIronicSerializedMetrics
 	for _, node := range allNodes {
-		//do not consider nodes that have not been made available for provisioning yet
+		// do not consider nodes that have not been made available for provisioning yet
 		if !isAvailableProvisionState[node.StableProvisionState()] {
 			continue
 		}
 
-		//do not consider nodes that are slated for decommissioning
-		//(no domain quota should be given out for that capacity anymore)
+		// do not consider nodes that are slated for decommissioning
+		// (no domain quota should be given out for that capacity anymore)
 		var nodeInfo struct {
 			Retired bool `json:"retired"`
 		}
@@ -231,7 +231,7 @@ func (p *capacitySapccIronicPlugin) Scrape(_ core.CapacityPluginBackchannel) (re
 			logg.Debug("ignoring Ironic node %q (%s) because it is marked for retirement", node.Name, node.ID)
 			metrics.RetiredNodeNames = append(metrics.RetiredNodeNames, node.Name)
 			//NOTE: Ignoring of retired capacity is currently disabled pending clarification with billing/controlling on how to proceed.
-			//continue
+			// continue
 		}
 
 		matched := false
@@ -241,7 +241,7 @@ func (p *capacitySapccIronicPlugin) Scrape(_ core.CapacityPluginBackchannel) (re
 
 				var nodeAZ limes.AvailabilityZone
 				if match := cpNodeNameRx.FindStringSubmatch(node.Name); match != nil {
-					//special case as explained above (near definition of `cpNodeNameRx`)
+					// special case as explained above (near definition of `cpNodeNameRx`)
 					nodeAZ = limes.AvailabilityZone(match[1])
 				} else if match := nodeNameRx.FindStringSubmatch(node.Name); match != nil {
 					nodeAZ = azForHostStub[match[1]]

@@ -29,7 +29,7 @@ import (
 )
 
 type listDiscoveryPlugin struct {
-	//connections
+	// connections
 	KeystoneV3 *gophercloud.ServiceClient `yaml:"-"`
 }
 
