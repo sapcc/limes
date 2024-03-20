@@ -55,7 +55,7 @@ func TestParseQuotaOverrides(t *testing.T) {
 					things: 20
 					capacity: 5 GiB
 	`)
-	buf = bytes.Replace(buf, []byte("\t"), []byte("  "), -1)
+	buf = bytes.ReplaceAll(buf, []byte("\t"), []byte("  "))
 	result, errs := s.Cluster.ParseQuotaOverrides("overrides.yaml", buf)
 	errStrings := strings.Split(errs.Join("\n"), "\n")
 
@@ -87,7 +87,7 @@ func TestParseQuotaOverrides(t *testing.T) {
 				unknown-service:
 					items: 10
 	`)
-	buf = bytes.Replace(buf, []byte("\t"), []byte("  "), -1)
+	buf = bytes.ReplaceAll(buf, []byte("\t"), []byte("  "))
 	_, errs = s.Cluster.ParseQuotaOverrides("overrides.yaml", buf)
 	errStrings = strings.Split(errs.Join("\n"), "\n")
 	sort.Strings(errStrings) // map iteration order is not deterministic

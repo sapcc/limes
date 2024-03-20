@@ -350,6 +350,7 @@ func (u QuotaUpdater) validateAuthorization(srv limes.ServiceInfo, res limesreso
 	qdConfig := u.Cluster.QuotaDistributionConfigForResource(srv.Type, res.Name)
 
 	if oldQuota >= newQuota {
+		//nolint:gocritic // gocritic does not like this singleCaseSwitch, but I'm not rewriting code that I will delete in two weeks
 		switch qdConfig.Model {
 		case limesresources.HierarchicalQuotaDistribution:
 			if u.CanLower(srv.Type, res.Name) {
@@ -374,6 +375,7 @@ func (u QuotaUpdater) validateAuthorization(srv limes.ServiceInfo, res limesreso
 		}
 	}
 
+	//nolint:gocritic // gocritic does not like this singleCaseSwitch, but I'm not rewriting code that I will delete in two weeks
 	switch qdConfig.Model {
 	case limesresources.HierarchicalQuotaDistribution:
 		if u.CanRaise(srv.Type, res.Name) {

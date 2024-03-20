@@ -124,17 +124,17 @@ func main() {
 	}
 }
 
-var usageMessage = strings.Replace(strings.TrimSpace(`
+var usageMessage = strings.ReplaceAll(strings.TrimSpace(`
 Usage:
 \t%s (collect|serve) <config-file>
 \t%s test-get-quota <config-file> <project-id> <service-type>
 \t%s test-get-rates <config-file> <project-id> <service-type> [<prev-serialized-state>]
 \t%s test-set-quota <config-file> <project-id> <service-type> <resource-name>=<integer-value>...
 \t%s test-scan-capacity <config-file> <capacitor>
-`), `\t`, "\t", -1) + "\n"
+`), `\t`, "\t") + "\n"
 
 func printUsageAndExit(exitCode int) {
-	fmt.Fprintln(os.Stderr, strings.Replace(usageMessage, "%s", os.Args[0], -1))
+	fmt.Fprintln(os.Stderr, strings.ReplaceAll(usageMessage, "%s", os.Args[0]))
 	os.Exit(exitCode)
 }
 

@@ -405,11 +405,12 @@ func acpqDistributeFairly[K comparable](total uint64, requested map[K]uint64) ma
 	slices.SortFunc(keys, func(lhs, rhs K) int {
 		leftRemainder := exact[lhs] - math.Floor(exact[lhs])
 		rightRemainder := exact[rhs] - math.Floor(exact[rhs])
-		if leftRemainder < rightRemainder {
+		switch {
+		case leftRemainder < rightRemainder:
 			return -1
-		} else if leftRemainder > rightRemainder {
+		case leftRemainder > rightRemainder:
 			return +1
-		} else {
+		default:
 			return 0
 		}
 	})

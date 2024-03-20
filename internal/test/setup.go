@@ -85,7 +85,7 @@ func normalizeInlineYAML(yamlStr string) string {
 	// In the source code, we usually use tabs for YAML indentation because the
 	// code is indented with tabs, and mixed indentation confuses some editors.
 	// But YAML insists on using spaces for indentation.
-	return strings.Replace(yamlStr, "\t", "  ", -1)
+	return strings.ReplaceAll(yamlStr, "\t", "  ")
 }
 
 // Setup contains all the pieces that are needed for most tests.

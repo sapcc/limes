@@ -187,7 +187,7 @@ func (f OvercommitFactor) ApplyInReverseTo(capacity uint64) uint64 {
 	rawCapacity := uint64(float64(capacity) / float64(f))
 	for f.ApplyTo(rawCapacity) < capacity {
 		// fix errors from rounding down float64 -> uint64 above
-		rawCapacity = rawCapacity + 1
+		rawCapacity++
 	}
 	return rawCapacity
 }
