@@ -52,6 +52,10 @@ var (
 			SELECT id FROM project_resources WHERE service_id = $3 AND name = $4
 		)
 	`)
+	acpqUpdateProjectQuotaQuery = sqlext.SimplifyWhitespace(`
+		UPDATE project_resources SET quota = $1 WHERE quota IS DISTINCT FROM $1 AND service_id = $2 AND name = $3
+	`)
+
 	acpqComputeProjectQuotaQuery = sqlext.SimplifyWhitespace(`
 		UPDATE project_resources pr SET quota = (
 			SELECT SUM(par.quota) FROM project_az_resources par WHERE par.resource_id = pr.id
@@ -120,21 +124,42 @@ func ApplyComputedProjectQuota(serviceType, resourceName string, dbm *gorp.DbMap
 		logg.Debug("ACPQ for %s/%s: target = %s", serviceType, resourceName, string(buf))
 	}
 
-	// write new quotas to database
+	// write new AZ quotas to database
 	err = sqlext.WithPreparedStatement(tx, acpqUpdateAZQuotaQuery, func(stmt *sql.Stmt) error {
 		for az, azTarget := range target {
 			for serviceID, projectTarget := range azTarget {
 				_, err := stmt.Exec(projectTarget.Allocated, az, serviceID, resourceName)
 				if err != nil {
-					return fmt.Errorf("while updating quota for AZ %s in project service %d: %w", az, serviceID, err)
+					return fmt.Errorf("in AZ %s in project service %d: %w", az, serviceID, err)
 				}
 			}
 		}
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("while writing updated %s/%s quotas to DB: %w", serviceType, resourceName, err)
+		return fmt.Errorf("while writing updated %s/%s AZ quotas to DB: %w", serviceType, resourceName, err)
 	}
+
+	// write overall project quotas to database
+	quotasByServiceID := make(map[db.ProjectServiceID]uint64)
+	for _, azTarget := range target {
+		for serviceID, projectTarget := range azTarget {
+			quotasByServiceID[serviceID] += projectTarget.Allocated
+		}
+	}
+	err = sqlext.WithPreparedStatement(tx, acpqUpdateProjectQuotaQuery, func(stmt *sql.Stmt) error {
+		for serviceID, quota := range quotasByServiceID {
+			_, err := stmt.Exec(quota, serviceID, resourceName)
+			if err != nil {
+				return fmt.Errorf("in project service %d: %w", serviceID, err)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("while writing updated %s/%s project quotas to DB: %w", serviceType, resourceName, err)
+	}
+
 	_, err = tx.Exec(acpqComputeProjectQuotaQuery, serviceType, resourceName)
 	if err != nil {
 		return fmt.Errorf("while computing updated %s/%s backend quotas: %w", serviceType, resourceName, err)
