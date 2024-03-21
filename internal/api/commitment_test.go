@@ -51,6 +51,24 @@ const testCommitmentsYAML = `
 		- resource: first/capacity
 			commitment_is_az_aware: true
 `
+const testCommitmentsYAMLWithoutMinConfirmDate = `
+     availability_zones: [ az-one, az-two ]
+     discovery:
+     	method: --test-static
+     services:
+     	- service_type: first
+     		type: --test-generic
+     	- service_type: second
+     		type: --test-generic
+     resource_behavior:
+     	# the resources in "first" have commitments, the ones in "second" do not
+     	- resource: second/.*
+     		commitment_durations: ["1 hour", "2 hours"]
+     	- resource: second/things
+     		commitment_is_az_aware: false
+     	- resource: second/capacity
+     		commitment_is_az_aware: true
+`
 
 func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 	s := test.NewSetup(t,
@@ -540,5 +558,277 @@ func TestDeleteCommitmentErrorCases(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2",
 		ExpectStatus: http.StatusNotFound,
 		ExpectBody:   assert.StringData("no such commitment\n"),
+	}.Check(t, s.Handler)
+}
+
+func Test_StartCommitmentTransfer(t *testing.T) {
+	s := test.NewSetup(t,
+		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
+		test.WithConfig(testCommitmentsYAMLWithoutMinConfirmDate),
+		test.WithAPIHandler(NewV1API),
+	)
+
+	var transferToken = test.GenerateDummyToken()
+
+	// Test on confirmed commitment should succeed.
+	// TransferAmount >= CommitmentAmount
+	req1 := func(transferStatus string) assert.JSONObject {
+		return assert.JSONObject{
+			"id":                1,
+			"service_type":      "second",
+			"resource_name":     "capacity",
+			"availability_zone": "az-two",
+			"amount":            10,
+			"duration":          "1 hour",
+			"transfer_status":   transferStatus,
+			"transfer_token":    "",
+		}
+	}
+
+	resp1 := assert.JSONObject{
+		"id":                1,
+		"service_type":      "second",
+		"resource_name":     "capacity",
+		"availability_zone": "az-two",
+		"amount":            10,
+		"unit":              "B",
+		"duration":          "1 hour",
+		"created_at":        s.Clock.Now().Unix(),
+		"creator_uuid":      "uuid-for-alice",
+		"creator_name":      "alice@Default",
+		"confirmed_at":      0,
+		"expires_at":        3600,
+		"transfer_status":   "unlisted",
+		"transfer_token":    transferToken,
+	}
+
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
+		Body:         assert.JSONObject{"commitment": req1("")},
+		ExpectStatus: http.StatusCreated,
+	}.Check(t, s.Handler)
+
+	assert.HTTPRequest{
+		Method:       "POST",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/start-transfer",
+		ExpectStatus: http.StatusAccepted,
+		ExpectBody:   assert.JSONObject{"commitment": resp1},
+		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 10, "transfer_status": "unlisted"}},
+	}.Check(t, s.Handler)
+
+	// TransferAmount < CommitmentAmount
+	resp2 := assert.JSONObject{
+		"id":                2,
+		"service_type":      "second",
+		"resource_name":     "capacity",
+		"availability_zone": "az-two",
+		"amount":            9,
+		"unit":              "B",
+		"duration":          "1 hour",
+		"created_at":        s.Clock.Now().Unix(),
+		"creator_uuid":      "uuid-for-alice",
+		"creator_name":      "alice@Default",
+		"confirmed_at":      0,
+		"expires_at":        3600,
+		"transfer_status":   "public",
+		"transfer_token":    transferToken,
+	}
+
+	assert.HTTPRequest{
+		Method:       "POST",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/start-transfer",
+		ExpectStatus: http.StatusAccepted,
+		ExpectBody:   assert.JSONObject{"commitment": resp2},
+		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 9, "transfer_status": "public"}},
+	}.Check(t, s.Handler)
+
+	// Test on unconfirmed commitment should fail.
+	// ID is 4, because 2 additional commitments were created previously.
+	var confirmBy = s.Clock.Now().Unix()
+	req2 := assert.JSONObject{
+		"id":                4,
+		"service_type":      "second",
+		"resource_name":     "capacity",
+		"availability_zone": "az-two",
+		"amount":            10,
+		"duration":          "1 hour",
+		"transfer_status":   "",
+		"transfer_token":    "",
+		"confirm_by":        confirmBy,
+	}
+
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
+		Body:         assert.JSONObject{"commitment": req2},
+		ExpectStatus: http.StatusCreated,
+	}.Check(t, s.Handler)
+
+	assert.HTTPRequest{
+		Method:       "POST",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/4/start-transfer",
+		ExpectStatus: http.StatusUnprocessableEntity,
+		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 10, "transfer_status": "unlisted"}},
+	}.Check(t, s.Handler)
+
+	// Negative Test, amount = 0.
+	assert.HTTPRequest{
+		Method:       "POST",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/start-transfer",
+		ExpectStatus: http.StatusBadRequest,
+		ExpectBody:   assert.StringData("delivered amount needs to be a positive value.\n"),
+		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 0, "transfer_status": "public"}},
+	}.Check(t, s.Handler)
+
+	// Negative Test, delivered amount > commitment amount
+	assert.HTTPRequest{
+		Method:       "POST",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/start-transfer",
+		ExpectStatus: http.StatusBadRequest,
+		ExpectBody:   assert.StringData("delivered amount exceeds the commitment amount.\n"),
+		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 11, "transfer_status": "public"}},
+	}.Check(t, s.Handler)
+}
+
+func Test_TransferCommitment(t *testing.T) {
+	s := test.NewSetup(t,
+		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
+		test.WithConfig(testCommitmentsYAMLWithoutMinConfirmDate),
+		test.WithAPIHandler(NewV1API),
+	)
+
+	var transferToken = test.GenerateDummyToken()
+	req1 := assert.JSONObject{
+		"id":                1,
+		"service_type":      "second",
+		"resource_name":     "capacity",
+		"availability_zone": "az-two",
+		"amount":            10,
+		"duration":          "1 hour",
+		"transfer_status":   "",
+	}
+
+	resp1 := assert.JSONObject{
+		"id":                1,
+		"service_type":      "second",
+		"resource_name":     "capacity",
+		"availability_zone": "az-two",
+		"amount":            10,
+		"unit":              "B",
+		"duration":          "1 hour",
+		"created_at":        s.Clock.Now().Unix(),
+		"creator_uuid":      "uuid-for-alice",
+		"creator_name":      "alice@Default",
+		"confirmed_at":      0,
+		"expires_at":        3600,
+		"transfer_status":   "unlisted",
+		"transfer_token":    transferToken,
+	}
+
+	resp2 := assert.JSONObject{
+		"id":                1,
+		"service_type":      "second",
+		"resource_name":     "capacity",
+		"availability_zone": "az-two",
+		"amount":            10,
+		"unit":              "B",
+		"duration":          "1 hour",
+		"created_at":        s.Clock.Now().Unix(),
+		"creator_uuid":      "uuid-for-alice",
+		"creator_name":      "alice@Default",
+		"confirmed_at":      0,
+		"expires_at":        3600,
+	}
+
+	// Split commitment
+	resp3 := assert.JSONObject{
+		"id":                2,
+		"service_type":      "second",
+		"resource_name":     "capacity",
+		"availability_zone": "az-two",
+		"amount":            9,
+		"unit":              "B",
+		"duration":          "1 hour",
+		"created_at":        s.Clock.Now().Unix(),
+		"creator_uuid":      "uuid-for-alice",
+		"creator_name":      "alice@Default",
+		"confirmed_at":      0,
+		"expires_at":        3600,
+		"transfer_status":   "unlisted",
+		"transfer_token":    transferToken,
+	}
+	resp4 := assert.JSONObject{
+		"id":                2,
+		"service_type":      "second",
+		"resource_name":     "capacity",
+		"availability_zone": "az-two",
+		"amount":            9,
+		"unit":              "B",
+		"duration":          "1 hour",
+		"created_at":        s.Clock.Now().Unix(),
+		"creator_uuid":      "uuid-for-alice",
+		"creator_name":      "alice@Default",
+		"confirmed_at":      0,
+		"expires_at":        3600,
+	}
+
+	// Transfer Commitment to target AZ_RESOURCE_ID (SOURCE_ID=3 TARGET_ID=17)
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
+		Body:         assert.JSONObject{"commitment": req1},
+		ExpectStatus: http.StatusCreated,
+	}.Check(t, s.Handler)
+
+	// Transfer full amount
+	assert.HTTPRequest{
+		Method:       "POST",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/start-transfer",
+		ExpectStatus: http.StatusAccepted,
+		ExpectBody:   assert.JSONObject{"commitment": resp1},
+		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 10, "transfer_status": "unlisted"}},
+	}.Check(t, s.Handler)
+
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/transfer-commitment/1",
+		Header:       map[string]string{"Transfer-Token": transferToken},
+		ExpectBody:   assert.JSONObject{"commitment": resp2},
+		ExpectStatus: http.StatusAccepted,
+	}.Check(t, s.Handler)
+
+	// Split and transfer commitment.
+	assert.HTTPRequest{
+		Method:       "POST",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/commitments/1/start-transfer",
+		ExpectStatus: http.StatusAccepted,
+		ExpectBody:   assert.JSONObject{"commitment": resp3},
+		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 9, "transfer_status": "unlisted"}},
+	}.Check(t, s.Handler)
+
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/transfer-commitment/2",
+		Header:       map[string]string{"Transfer-Token": transferToken},
+		ExpectBody:   assert.JSONObject{"commitment": resp4},
+		ExpectStatus: http.StatusAccepted,
+	}.Check(t, s.Handler)
+
+	// wrong token
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/transfer-commitment/1",
+		Header:       map[string]string{"Transfer-Token": "wrongToken"},
+		ExpectStatus: http.StatusNotFound,
+		ExpectBody:   assert.StringData("no matching commitment found\n"),
+	}.Check(t, s.Handler)
+
+	// No token provided
+	assert.HTTPRequest{
+		Method:       "POST",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/transfer-commitment/1",
+		ExpectStatus: http.StatusBadRequest,
+		ExpectBody:   assert.StringData("no transfer token provided\n"),
 	}.Check(t, s.Handler)
 }

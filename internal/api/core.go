@@ -70,12 +70,14 @@ type v1Provider struct {
 	listProjectsMutex sync.Mutex
 	// slots for test doubles
 	timeNow func() time.Time
+	//identifies commitments that will be transferred to other projects.
+	generateTransferToken func() string
 }
 
 // NewV1API creates an httpapi.API that serves the Limes v1 API.
 // It also returns the VersionData for this API version which is needed for the
 // version advertisement on "GET /".
-func NewV1API(cluster *core.Cluster, dbm *gorp.DbMap, tokenValidator gopherpolicy.Validator, timeNow func() time.Time) httpapi.API {
+func NewV1API(cluster *core.Cluster, dbm *gorp.DbMap, tokenValidator gopherpolicy.Validator, timeNow func() time.Time, generateTransferToken func() string) httpapi.API {
 	p := &v1Provider{Cluster: cluster, DB: dbm, tokenValidator: tokenValidator, timeNow: timeNow}
 	p.VersionData = VersionData{
 		Status: "CURRENT",
@@ -92,6 +94,7 @@ func NewV1API(cluster *core.Cluster, dbm *gorp.DbMap, tokenValidator gopherpolic
 			},
 		},
 	}
+	p.generateTransferToken = generateTransferToken
 
 	return p
 }
@@ -108,6 +111,11 @@ func NewTokenValidator(provider *gophercloud.ProviderClient, eo gophercloud.Endp
 	}
 	err = tv.LoadPolicyFile(osext.GetenvOrDefault("LIMES_API_POLICY_PATH", "/etc/limes/policy.yaml"))
 	return &tv, err
+}
+
+func (p *v1Provider) OverrideGenerateTransferToken(generateTransferToken func() string) *v1Provider {
+	p.generateTransferToken = generateTransferToken
+	return p
 }
 
 // AddTo implements the httpapi.API interface.
@@ -153,6 +161,8 @@ func (p *v1Provider) AddTo(r *mux.Router) {
 	r.Methods("POST").Path("/v1/domains/{domain_id}/projects/{project_id}/commitments/new").HandlerFunc(p.CreateProjectCommitment)
 	r.Methods("POST").Path("/v1/domains/{domain_id}/projects/{project_id}/commitments/can-confirm").HandlerFunc(p.CanConfirmNewProjectCommitment)
 	r.Methods("DELETE").Path("/v1/domains/{domain_id}/projects/{project_id}/commitments/{id}").HandlerFunc(p.DeleteProjectCommitment)
+	r.Methods("POST").Path("/v1/domains/{domain_id}/projects/{project_id}/commitments/{id}/start-transfer").HandlerFunc(p.StartCommitmentTransfer)
+	r.Methods("POST").Path("/v1/domains/{domain_id}/projects/{project_id}/transfer-commitment/{id}").HandlerFunc(p.TransferCommitment)
 }
 
 // RequireJSON will parse the request body into the given data structure, or

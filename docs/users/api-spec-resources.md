@@ -752,6 +752,37 @@ Returns 200 (OK) on success, and a JSON document like `{"result":true}` or `{"re
 
 The `result` field indicates whether this commitment can be created without a `confirm_by` attribute, that is, confirmed immediately upon creation.
 
+### POST /v1/domains/:id/projects/:id/commitments/:id/start-transfer
+Prepares a commitment to be transferred from a source project to a target project. Requires a project-admin token, and a request body that is a JSON document like:
+```json
+{
+  "commitment": {
+    "amount": 100,
+    "transfer_status": "unlisted"
+  }
+}
+```
+If the amount to transfer is equal to the commitment, the whole commitment will be marked as transferrable. If the amount is less than the commitment, the commitment will be split in two and the requested amount will be marked as transferrable.
+The transfer status indicates if the commitment stays `unlisted` (private) or `public`.
+The response is a JSON of the commitment including the following fields that identify a commitment in its transferrable state:
+```json
+{
+  "commitment": {
+    "transfer_token": "token",
+    "transfer_status": "unlisted"
+  }
+}
+```
+### POST /v1/domains/:id/projects/:id/transfer-commitment/:id
+Transfers the commitment from a source project to a target project.
+Requires a project-admin token.
+Requires a transfer token in the request header:
+`Transfer-Token: [value]`.
+This endpoint receives the target project ID, but the commitment ID from the source project.
+Requires a generated token from the API: `/v1/domains/:id/projects/:id/commitments/:id/start-transfer`.
+On success the API clears the `transfer_token` and `transfer_status` from the commitment.
+After that, it returns the commitment as a JSON document.  
+
 ### DELETE /v1/domains/:domain\_id/projects/:project\_id/commitments/:id
 
 Deletes a commitment within the given project. Requires a cloud-admin token. On success, returns 204 (No Content).

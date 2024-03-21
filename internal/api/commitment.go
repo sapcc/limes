@@ -83,6 +83,24 @@ var (
 		  JOIN project_services ps ON pr.service_id = ps.id
 		 WHERE par.id = $1
 	`)
+	getCommitmentWithMatchingTransferTokenQuery = sqlext.SimplifyWhitespace(`
+		SELECT * FROM project_commitments WHERE id = $1 AND transfer_token = $2
+	`)
+	findTargetAZResourceIDBySourceIDQuery = sqlext.SimplifyWhitespace(`
+	  WITH source as (
+		SELECT ps.type, pr.name, par.az
+	    FROM project_az_resources as par
+		JOIN project_resources pr ON par.resource_id = pr.id
+	    JOIN project_services ps ON pr.service_id = ps.id
+	  WHERE par.id = $1
+	  )
+	  SELECT par.id 
+	    FROM project_az_resources as par
+		JOIN project_resources pr ON par.resource_id = pr.id
+	    JOIN project_services ps ON pr.service_id = ps.id
+		JOIN source s ON ps.type = s.type AND pr.name = s.name AND par.az = s.az
+	  WHERE ps.project_id = $2
+	`)
 
 	forceImmediateCapacityScrapeQuery = sqlext.SimplifyWhitespace(`
 		UPDATE cluster_capacitors SET next_scrape_at = $1 WHERE capacitor_id = (
@@ -433,4 +451,224 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 		Commitment:  p.convertCommitmentToDisplayForm(dbCommitment, loc),
 	})
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// StartCommitmentTransfer handles POST /v1/domains/:id/projects/:id/commitments/:id/start-transfer
+func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Request) {
+	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/commitments/:id/start-transfer")
+	token := p.CheckToken(r)
+	if !token.Require(w, "project:edit") {
+		return
+	}
+	dbDomain := p.FindDomainFromRequest(w, r)
+	if dbDomain == nil {
+		http.Error(w, "domain not found.", http.StatusNotFound)
+		return
+	}
+	dbProject := p.FindProjectFromRequest(w, r, dbDomain)
+	if dbProject == nil {
+		http.Error(w, "project not found.", http.StatusNotFound)
+		return
+	}
+	// TODO: eventually migrate this struct into go-api-declarations
+	var parseTarget struct {
+		Request struct {
+			Amount         uint64                                  `json:"amount"`
+			TransferStatus limesresources.CommitmentTransferStatus `json:"transfer_status,omitempty"`
+		} `json:"commitment"`
+	}
+	if !RequireJSON(w, r, &parseTarget) {
+		http.Error(w, "json not parsable.", http.StatusBadRequest)
+		return
+	}
+	req := parseTarget.Request
+
+	if req.TransferStatus != limesresources.CommitmentTransferStatusUnlisted && req.TransferStatus != limesresources.CommitmentTransferStatusPublic {
+		http.Error(w, fmt.Sprintf("Invalid transfer_status code. Must be %s or %s.", limesresources.CommitmentTransferStatusUnlisted, limesresources.CommitmentTransferStatusPublic), http.StatusBadRequest)
+		return
+	}
+
+	if req.Amount <= 0 {
+		http.Error(w, "delivered amount needs to be a positive value.", http.StatusBadRequest)
+		return
+	}
+
+	//load commitment
+	var dbCommitment db.ProjectCommitment
+	err := p.DB.SelectOne(&dbCommitment, findProjectCommitmentByIDQuery, mux.Vars(r)["id"], dbProject.ID)
+	if errors.Is(err, sql.ErrNoRows) {
+		http.Error(w, "no such commitment", http.StatusNotFound)
+		return
+	} else if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	// reject commitments that are not confirmed yet.
+	if dbCommitment.ConfirmedAt == nil {
+		http.Error(w, "commitment needs to be confirmed in order to transfer it.", http.StatusUnprocessableEntity)
+		return
+	}
+
+	// Mark whole commitment or a newly created, splitted one as transferrable.
+	tx, err := p.DB.Begin()
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+	defer sqlext.RollbackUnlessCommitted(tx)
+	transferToken := p.generateTransferToken()
+
+	// Deny requests with a greater amount than the commitment.
+	if req.Amount > dbCommitment.Amount {
+		http.Error(w, "delivered amount exceeds the commitment amount.", http.StatusBadRequest)
+		return
+	}
+
+	if req.Amount == dbCommitment.Amount {
+		dbCommitment.TransferStatus = req.TransferStatus
+		dbCommitment.TransferToken = transferToken
+		_, err = tx.Update(&dbCommitment)
+		if respondwith.ErrorText(w, err) {
+			return
+		}
+	} else {
+		now := p.timeNow()
+		transferAmount := req.Amount
+		remainingAmount := dbCommitment.Amount - req.Amount
+		transferCommitment := p.buildSplitCommitment(dbCommitment, transferAmount)
+		transferCommitment.TransferStatus = req.TransferStatus
+		transferCommitment.TransferToken = transferToken
+		remainingCommitment := p.buildSplitCommitment(dbCommitment, remainingAmount)
+		err = tx.Insert(&transferCommitment)
+		if respondwith.ErrorText(w, err) {
+			return
+		}
+		err = tx.Insert(&remainingCommitment)
+		if respondwith.ErrorText(w, err) {
+			return
+		}
+		dbCommitment.SupersededAt = &now
+		_, err = tx.Update(&dbCommitment)
+		if respondwith.ErrorText(w, err) {
+			return
+		}
+		dbCommitment = transferCommitment
+	}
+	err = tx.Commit()
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	var loc azResourceLocation
+	err = p.DB.QueryRow(findProjectAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
+		Scan(&loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)
+	if errors.Is(err, sql.ErrNoRows) {
+		//defense in depth: this should not happen because all the relevant tables are connected by FK constraints
+		http.Error(w, "no route to this commitment", http.StatusNotFound)
+		return
+	} else if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	c := p.convertCommitmentToDisplayForm(dbCommitment, loc)
+	logAndPublishEvent(p.timeNow(), r, token, http.StatusAccepted, commitmentEventTarget{
+		DomainID:    dbDomain.UUID,
+		DomainName:  dbDomain.Name,
+		ProjectID:   dbProject.UUID,
+		ProjectName: dbProject.Name,
+		Commitment:  c,
+	})
+	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
+}
+
+func (p *v1Provider) buildSplitCommitment(dbCommitment db.ProjectCommitment, amount uint64) db.ProjectCommitment {
+	now := p.timeNow()
+	return db.ProjectCommitment{
+		AZResourceID:  dbCommitment.AZResourceID,
+		Amount:        amount,
+		Duration:      dbCommitment.Duration,
+		CreatedAt:     now,
+		CreatorUUID:   dbCommitment.CreatorUUID,
+		CreatorName:   dbCommitment.CreatorName,
+		ConfirmBy:     dbCommitment.ConfirmBy,
+		ConfirmedAt:   dbCommitment.ConfirmedAt,
+		ExpiresAt:     dbCommitment.ExpiresAt,
+		PredecessorID: &dbCommitment.ID,
+	}
+}
+
+// TransferCommitment handles POST /v1/domains/{domain_id}/projects/{project_id}/transfer-commitment/{id}?token={token}
+func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) {
+	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/transfer-commitment/:id")
+	token := p.CheckToken(r)
+	if !token.Require(w, "project:edit") {
+		http.Error(w, "insufficient access rights.", http.StatusForbidden)
+		return
+	}
+	transferToken := r.Header.Get("Transfer-Token")
+	if transferToken == "" {
+		http.Error(w, "no transfer token provided", http.StatusBadRequest)
+		return
+	}
+	commitmentID := mux.Vars(r)["id"]
+	if commitmentID == "" {
+		http.Error(w, "no transfer token provided", http.StatusBadRequest)
+		return
+	}
+	dbDomain := p.FindDomainFromRequest(w, r)
+	if dbDomain == nil {
+		http.Error(w, "domain not found.", http.StatusNotFound)
+		return
+	}
+	targetProject := p.FindProjectFromRequest(w, r, dbDomain)
+	if targetProject == nil {
+		http.Error(w, "project not found.", http.StatusNotFound)
+		return
+	}
+
+	// find commitment by transfer_token
+	var dbCommitment db.ProjectCommitment
+	err := p.DB.SelectOne(&dbCommitment, getCommitmentWithMatchingTransferTokenQuery, commitmentID, transferToken)
+	if errors.Is(err, sql.ErrNoRows) {
+		http.Error(w, "no matching commitment found", http.StatusNotFound)
+		return
+	} else if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	// get target AZ_RESOURCE_ID
+	var targetResourceID db.ProjectAZResourceID
+	err = p.DB.QueryRow(findTargetAZResourceIDBySourceIDQuery, dbCommitment.AZResourceID, targetProject.ID).Scan(&targetResourceID)
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	dbCommitment.TransferStatus = ""
+	dbCommitment.TransferToken = ""
+	dbCommitment.AZResourceID = targetResourceID
+	_, err = p.DB.Update(&dbCommitment)
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	var loc azResourceLocation
+	err = p.DB.QueryRow(findProjectAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
+		Scan(&loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)
+	if errors.Is(err, sql.ErrNoRows) {
+		//defense in depth: this should not happen because all the relevant tables are connected by FK constraints
+		http.Error(w, "no route to this commitment", http.StatusNotFound)
+		return
+	} else if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	c := p.convertCommitmentToDisplayForm(dbCommitment, loc)
+	logAndPublishEvent(p.timeNow(), r, token, http.StatusAccepted, commitmentEventTarget{
+		DomainID:    dbDomain.UUID,
+		DomainName:  dbDomain.Name,
+		ProjectID:   targetProject.UUID,
+		ProjectName: targetProject.Name,
+		Commitment:  c,
+	})
+
+	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
 }
