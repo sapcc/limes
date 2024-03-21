@@ -493,7 +493,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	//load commitment
+	// load commitment
 	var dbCommitment db.ProjectCommitment
 	err := p.DB.SelectOne(&dbCommitment, findProjectCommitmentByIDQuery, mux.Vars(r)["id"], dbProject.ID)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -562,7 +562,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 	err = p.DB.QueryRow(findProjectAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
 		Scan(&loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)
 	if errors.Is(err, sql.ErrNoRows) {
-		//defense in depth: this should not happen because all the relevant tables are connected by FK constraints
+		// defense in depth: this should not happen because all the relevant tables are connected by FK constraints
 		http.Error(w, "no route to this commitment", http.StatusNotFound)
 		return
 	} else if respondwith.ErrorText(w, err) {
@@ -654,7 +654,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	err = p.DB.QueryRow(findProjectAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
 		Scan(&loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)
 	if errors.Is(err, sql.ErrNoRows) {
-		//defense in depth: this should not happen because all the relevant tables are connected by FK constraints
+		// defense in depth: this should not happen because all the relevant tables are connected by FK constraints
 		http.Error(w, "no route to this commitment", http.StatusNotFound)
 		return
 	} else if respondwith.ErrorText(w, err) {

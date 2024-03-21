@@ -70,7 +70,7 @@ type v1Provider struct {
 	listProjectsMutex sync.Mutex
 	// slots for test doubles
 	timeNow func() time.Time
-	//identifies commitments that will be transferred to other projects.
+	// identifies commitments that will be transferred to other projects.
 	generateTransferToken func() string
 }
 
