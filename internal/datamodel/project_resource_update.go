@@ -80,10 +80,9 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, doma
 	// collect ResourceInfo instances for this service
 	allResources := make(map[string]resourceState)
 	for _, resInfo := range cluster.QuotaPlugins[srv.Type].Resources() {
-		resInfo := resInfo
 		allResources[resInfo.Name] = resourceState{
-			Original: nil, // might be filled in the next loop below
-			Info:     &resInfo,
+			Original: nil,      // might be filled in the next loop below
+			Info:     &resInfo, //nolint:gosec //doesn't apply to go 1.22
 		}
 	}
 
@@ -94,9 +93,8 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, doma
 		return nil, fmt.Errorf("while loading %s project resources: %w", srv.Type, err)
 	}
 	for _, res := range dbResources {
-		res := res
 		allResources[res.Name] = resourceState{
-			Original: &res,
+			Original: &res,                        //nolint:gosec //doesn't apply to go 1.22
 			Info:     allResources[res.Name].Info, // might be nil if not filled in the previous loop
 		}
 	}

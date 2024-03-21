@@ -208,13 +208,8 @@ func (p *v1Provider) putOrSimulatePutDomain(w http.ResponseWriter, r *http.Reque
 				continue // nothing to do
 			}
 
-			// take a copy of the loop variable (it will be updated by the loop, so if
-			// we didn't take a copy manually, the resourcesToUpdate list
-			// would contain only identical pointers)
-			res := res
-
 			res.Quota = req.NewValue
-			resourcesToUpdate = append(resourcesToUpdate, &res)
+			resourcesToUpdate = append(resourcesToUpdate, &res) //nolint:gosec //doesn't apply to go 1.22
 		}
 
 		// check resources that need to be created

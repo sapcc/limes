@@ -201,7 +201,7 @@ func (p *GenericQuotaPlugin) Scrape(project core.KeystoneProject, allAZs []limes
 	for _, az := range result["things"].UsageData.Keys() {
 		thingsUsage := result["things"].UsageData[az].Usage
 		subresources := make([]any, thingsUsage)
-		for idx := uint64(0); idx < thingsUsage; idx++ {
+		for idx := range thingsUsage {
 			subresources[idx] = map[string]any{"index": counter}
 			counter++
 		}

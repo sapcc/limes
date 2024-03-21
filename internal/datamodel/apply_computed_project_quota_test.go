@@ -61,7 +61,9 @@ func TestACPQBasicWithoutAZAwareness(t *testing.T) {
 		GrowthMultiplier: 1.2,
 		ProjectBaseQuota: 10,
 	}
-	for _, cfg.AllowQuotaOvercommit = range []bool{false, true} {
+	for _, allowQuotaOvercommit := range []bool{false, true} {
+		// TODO: undo when https://github.com/karamaru-alpha/copyloopvar/issues/7 is fixed
+		cfg.AllowQuotaOvercommit = allowQuotaOvercommit
 		expectACPQResult(t, input, cfg, nil, acpqGlobalTarget{
 			"any": {
 				401: {Allocated: 36}, // 30 * 1.2 = 36
@@ -113,7 +115,9 @@ func TestACPQBasicWithAZAwareness(t *testing.T) {
 		GrowthMultiplier: 1.2,
 		ProjectBaseQuota: 10,
 	}
-	for _, cfg.AllowQuotaOvercommit = range []bool{false, true} {
+	for _, allowQuotaOvercommit := range []bool{false, true} {
+		// TODO: undo when https://github.com/karamaru-alpha/copyloopvar/issues/7 is fixed
+		cfg.AllowQuotaOvercommit = allowQuotaOvercommit
 		expectACPQResult(t, input, cfg, nil, acpqGlobalTarget{
 			"az-one": {
 				401: {Allocated: 24},

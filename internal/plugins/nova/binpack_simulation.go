@@ -117,8 +117,7 @@ func PrepareHypervisorForBinpacking(h MatchingHypervisor) (BinpackHypervisor, er
 		Nodes: make([]*BinpackNode, int(nodeCount)),
 	}
 	for idx := range result.Nodes {
-		node := nodeTemplate
-		result.Nodes[idx] = &node
+		result.Nodes[idx] = &nodeTemplate
 	}
 	return result, nil
 }
@@ -139,7 +138,7 @@ func (h BinpackHypervisor) RenderDebugView(az limes.AvailabilityZone) {
 
 // PlaceSeveralInstances calls PlaceOneInstance multiple times.
 func (hh BinpackHypervisors) PlaceSeveralInstances(ff FullFlavor, reason string, coresOvercommitFactor core.OvercommitFactor, blockedCapacity BinpackVector[uint64], count uint64) (ok bool) {
-	for i := uint64(0); i < count; i++ {
+	for range count {
 		ok = hh.PlaceOneInstance(ff, reason, coresOvercommitFactor, blockedCapacity)
 		if !ok {
 			// if we don't have space for this instance, we won't have space for any following ones
