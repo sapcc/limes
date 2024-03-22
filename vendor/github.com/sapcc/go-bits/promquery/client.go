@@ -78,9 +78,9 @@ func (c Client) GetSingleValue(queryStr string, defaultValue *float64) (float64,
 	case 1:
 		return float64(resultVector[0].Value), nil
 	default:
-		//suppress the log message when all values are the same (this can happen
-		//when an adventurous Prometheus configuration causes the NetApp exporter
-		//to be scraped twice)
+		// suppress the log message when all values are the same (this can happen
+		// when an adventurous Prometheus configuration causes the NetApp exporter
+		// to be scraped twice)
 		firstValue := resultVector[0].Value
 		allTheSame := true
 		for _, entry := range resultVector {

@@ -91,7 +91,7 @@ func (c *BulkQueryCache[K, V]) Get(key K) (entry V, err error) {
 }
 
 func (c *BulkQueryCache[K, V]) fillCacheIfNecessary() error {
-	//query Prometheus only on first call or if cache is too old
+	// query Prometheus only on first call or if cache is too old
 	if c.filledAt != nil && c.filledAt.After(time.Now().Add(-c.refreshInterval)) {
 		return nil
 	}
