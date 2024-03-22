@@ -25,6 +25,7 @@ import (
 
 	gorp "github.com/go-gorp/gorp/v3"
 
+	"github.com/sapcc/go-api-declarations/bininfo"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/osext"
 	"github.com/sapcc/go-bits/sqlext"
@@ -32,6 +33,12 @@ import (
 
 // Init initializes the connection to the database.
 func Init() (*gorp.DbMap, error) {
+	extraConnectionOptions := make(map[string]string)
+	if bininfo.Component() == "limes-serve" {
+		// the API seems to have issues with connections getting stuck in "idle in transaction" during high load, not sure yet why
+		extraConnectionOptions["idle_in_transaction_session_timeout"] = "10000" // 10000 ms = 10 seconds
+	}
+
 	dbURL, err := easypg.URLFrom(easypg.URLParts{
 		HostName:          osext.GetenvOrDefault("LIMES_DB_HOSTNAME", "localhost"),
 		Port:              osext.GetenvOrDefault("LIMES_DB_PORT", "5432"),
