@@ -87,7 +87,7 @@ func (cfg Config) Connect() (Client, error) {
 		return Client{}, fmt.Errorf("cannot connect to Prometheus at %s: client certificate given, but no private key given", cfg.ServerURL)
 	}
 
-	//same configuration as prom_api.DefaultRoundTripper (but we cannot just clone it because it contains a Mutex)
+	// same configuration as prom_api.DefaultRoundTripper (but we cannot just clone it because it contains a Mutex)
 	transport := &http.Transport{
 		Proxy: http.ProxyFromEnvironment,
 		DialContext: (&net.Dialer{
@@ -127,6 +127,6 @@ func (cfg Config) Connect() (Client, error) {
 		return Client{}, fmt.Errorf("cannot connect to Prometheus at %s: %w", cfg.ServerURL, err)
 	}
 
-	cfg.cachedConnection = prom_v1.NewAPI(client) //speed up future calls to Connect()
+	cfg.cachedConnection = prom_v1.NewAPI(client) // speed up future calls to Connect()
 	return Client{cfg.cachedConnection}, nil
 }
