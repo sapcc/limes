@@ -257,21 +257,16 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 			}
 
 			res.BackendQuota = &backendQuota
-			res.MinQuota = resourceData[res.Name].MinQuota
-			res.MaxQuota = resourceData[res.Name].MaxQuota
+			res.MinQuotaFromBackend = resourceData[res.Name].MinQuota
+			res.MaxQuotaFromBackend = resourceData[res.Name].MaxQuota
 
 			// if an override is configured, we need to ensure that it does not
 			// conflict with the MinQuota/MaxQuota prescribed by the backend
 			overrideQuota, exists := overrideQuotas[res.Name]
 			if exists {
-				if res.MinQuota != nil {
-					overrideQuota = max(overrideQuota, *res.MinQuota)
-				}
-				if res.MaxQuota != nil {
-					overrideQuota = min(overrideQuota, *res.MaxQuota)
-				}
-				res.MinQuota = &overrideQuota
-				res.MaxQuota = &overrideQuota
+				res.OverrideQuotaFromConfig = &overrideQuota
+			} else {
+				res.OverrideQuotaFromConfig = nil
 			}
 		}
 
@@ -439,8 +434,7 @@ func (c *Collector) writeDummyResources(dbDomain db.Domain, dbProject db.Project
 			}
 			overrideQuota, exists := overrideQuotas[res.Name]
 			if exists {
-				res.MinQuota = &overrideQuota
-				res.MaxQuota = &overrideQuota
+				res.OverrideQuotaFromConfig = &overrideQuota
 			}
 			return nil
 		},

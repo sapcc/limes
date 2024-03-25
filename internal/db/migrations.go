@@ -189,4 +189,22 @@ var sqlMigrations = map[string]string{
 			ADD COLUMN min_quota BIGINT DEFAULT NULL,
 			ADD COLUMN max_quota BIGINT DEFAULT NULL;
 	`,
+	"038_multi_source_quota_constraints.down.sql": `
+		ALTER TABLE project_resources
+			RENAME COLUMN min_quota_from_backend TO min_quota;
+		ALTER TABLE project_resources
+			RENAME COLUMN max_quota_from_backend TO max_quota;
+		ALTER TABLE project_resources
+			DROP COLUMN max_quota_from_manual_override,
+			DROP COLUMN override_quota_from_config;
+	`,
+	"038_multi_source_quota_constraints.up.sql": `
+		ALTER TABLE project_resources
+			RENAME COLUMN min_quota TO min_quota_from_backend;
+		ALTER TABLE project_resources
+			RENAME COLUMN max_quota TO max_quota_from_backend;
+		ALTER TABLE project_resources
+			ADD COLUMN max_quota_from_admin BIGINT DEFAULT NULL,
+			ADD COLUMN override_quota_from_config BIGINT DEFAULT NULL;
+	`,
 }

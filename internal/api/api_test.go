@@ -901,8 +901,8 @@ func Test_ProjectOperations(t *testing.T) {
 		},
 	}.Check(t, s.Handler)
 
-	// check PutProject: quota rejected by service-specific MinQuota/MaxQuota constraints
-	_, err := s.DB.Exec(`UPDATE project_resources SET min_quota = 9, max_quota = 11 WHERE service_id = $1 AND name = $2`, 2, "capacity")
+	// check PutProject: quota rejected by service-specific MinQuotaFromBackend/MaxQuotaFromBackend constraints
+	_, err := s.DB.Exec(`UPDATE project_resources SET min_quota_from_backend = 9, max_quota_from_backend = 11 WHERE service_id = $1 AND name = $2`, 2, "capacity")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -915,7 +915,7 @@ func Test_ProjectOperations(t *testing.T) {
 			Body:         requestOneQuotaChange("project", "shared", "capacity", requestedValue, limes.UnitNone),
 		}.Check(t, s.Handler)
 	}
-	_, err = s.DB.Exec(`UPDATE project_resources SET min_quota = NULL, max_quota = NULL WHERE service_id = $1 AND name = $2`, 2, "capacity")
+	_, err = s.DB.Exec(`UPDATE project_resources SET min_quota_from_backend = NULL, max_quota_from_backend = NULL WHERE service_id = $1 AND name = $2`, 2, "capacity")
 	if err != nil {
 		t.Fatal(err)
 	}

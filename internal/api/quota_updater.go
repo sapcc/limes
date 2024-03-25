@@ -116,10 +116,10 @@ func (e MissingProjectReportError) Error() string {
 
 var (
 	getMinMaxQuotaQuery = sqlext.SimplifyWhitespace(`
-		SELECT ps.type, pr.name, pr.min_quota, pr.max_quota
+		SELECT ps.type, pr.name, pr.min_quota_from_backend, pr.max_quota_from_backend
 		  FROM project_services ps
 		  JOIN project_resources pr ON pr.service_id = ps.id
-		  WHERE ps.project_id = $1 AND (pr.min_quota IS NOT NULL OR pr.max_quota IS NOT NULL)
+		  WHERE ps.project_id = $1 AND (pr.min_quota_from_backend IS NOT NULL OR pr.max_quota_from_backend IS NOT NULL)
 	`)
 )
 
@@ -273,7 +273,7 @@ func (u *QuotaUpdater) ValidateInput(input limesresources.QuotaRequest, dbi db.I
 				return nil
 			}
 
-			// ...check that it conforms to the MinQuota/MaxQuota boundaries of the service
+			// ...check that it conforms to the MinQuotaFromBackend/MaxQuotaFromBackend boundaries of the service
 			if (minQuota != nil && req.NewValue < *minQuota) || (maxQuota != nil && req.NewValue > *maxQuota) {
 				req.ValidationError = &core.QuotaValidationError{
 					Status:       http.StatusUnprocessableEntity,
@@ -286,7 +286,7 @@ func (u *QuotaUpdater) ValidateInput(input limesresources.QuotaRequest, dbi db.I
 			return nil
 		})
 		if err != nil {
-			return fmt.Errorf("while checking min_quota/max_quota: %w", err)
+			return fmt.Errorf("while checking min_quota_from_backend/max_quota_from_backend: %w", err)
 		}
 	}
 

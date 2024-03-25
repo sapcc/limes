@@ -128,14 +128,16 @@ func (s ProjectService) Ref() ServiceRef[ProjectServiceID] {
 // ProjectResource contains a record from the `project_resources` table. Quota
 // values are NULL for resources that do not track quota.
 type ProjectResource struct {
-	ID                  ProjectResourceID `db:"id"`
-	ServiceID           ProjectServiceID  `db:"service_id"`
-	Name                string            `db:"name"`
-	Quota               *uint64           `db:"quota"`
-	BackendQuota        *int64            `db:"backend_quota"`
-	DesiredBackendQuota *uint64           `db:"desired_backend_quota"`
-	MinQuota            *uint64           `db:"min_quota"`
-	MaxQuota            *uint64           `db:"max_quota"`
+	ID                      ProjectResourceID `db:"id"`
+	ServiceID               ProjectServiceID  `db:"service_id"`
+	Name                    string            `db:"name"`
+	Quota                   *uint64           `db:"quota"`
+	BackendQuota            *int64            `db:"backend_quota"`
+	DesiredBackendQuota     *uint64           `db:"desired_backend_quota"`
+	MinQuotaFromBackend     *uint64           `db:"min_quota_from_backend"`
+	MaxQuotaFromBackend     *uint64           `db:"max_quota_from_backend"`
+	MaxQuotaFromAdmin       *uint64           `db:"max_quota_from_admin"`
+	OverrideQuotaFromConfig *uint64           `db:"override_quota_from_config"`
 }
 
 // Ref returns the ResourceRef for this resource.

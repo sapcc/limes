@@ -39,10 +39,13 @@ import (
 
 var (
 	acpqGetLocalQuotaConstraintsQuery = sqlext.SimplifyWhitespace(`
-		SELECT ps.id, pr.min_quota, pr.max_quota
+		SELECT ps.id, pr.min_quota_from_backend, pr.max_quota_from_backend, pr.max_quota_from_admin, pr.override_quota_from_config
 		  FROM project_services ps
 		  JOIN project_resources pr ON pr.service_id = ps.id
-		 WHERE ps.type = $1 AND pr.name = $2 AND (pr.min_quota IS NOT NULL OR pr.max_quota IS NOT NULL)
+		 WHERE ps.type = $1 AND pr.name = $2 AND (pr.min_quota_from_backend IS NOT NULL
+		                                       OR pr.max_quota_from_backend IS NOT NULL
+		                                       OR pr.max_quota_from_admin IS NOT NULL
+		                                       OR pr.override_quota_from_config IS NOT NULL)
 	`)
 
 	// This does not need to create any entries in project_az_resources, because
@@ -70,6 +73,28 @@ var (
 type projectLocalQuotaConstraints struct {
 	MinQuota *uint64
 	MaxQuota *uint64
+}
+
+func (c *projectLocalQuotaConstraints) AddMinQuota(value *uint64) {
+	if value == nil {
+		return
+	}
+	if c.MinQuota == nil {
+		c.MinQuota = value
+	} else {
+		*c.MinQuota = min(*c.MinQuota, *value)
+	}
+}
+
+func (c *projectLocalQuotaConstraints) AddMaxQuota(value *uint64) {
+	if value == nil {
+		return
+	}
+	if c.MaxQuota == nil {
+		c.MaxQuota = value
+	} else {
+		*c.MaxQuota = max(*c.MaxQuota, *value)
+	}
 }
 
 // ApplyComputedProjectQuota reevaluates auto-computed project quotas for the
@@ -100,13 +125,24 @@ func ApplyComputedProjectQuota(serviceType, resourceName string, dbm *gorp.DbMap
 	constraints := make(map[db.ProjectServiceID]projectLocalQuotaConstraints)
 	err = sqlext.ForeachRow(tx, acpqGetLocalQuotaConstraintsQuery, []any{serviceType, resourceName}, func(rows *sql.Rows) error {
 		var (
-			serviceID db.ProjectServiceID
-			c         projectLocalQuotaConstraints
+			serviceID               db.ProjectServiceID
+			minQuotaFromBackend     *uint64
+			maxQuotaFromBackend     *uint64
+			maxQuotaFromAdmin       *uint64
+			overrideQuotaFromConfig *uint64
 		)
-		err := rows.Scan(&serviceID, &c.MinQuota, &c.MaxQuota)
+		err := rows.Scan(&serviceID, &minQuotaFromBackend, &maxQuotaFromBackend, &maxQuotaFromAdmin, &overrideQuotaFromConfig)
 		if err != nil {
 			return err
 		}
+
+		var c projectLocalQuotaConstraints
+		c.AddMinQuota(minQuotaFromBackend)
+		c.AddMaxQuota(maxQuotaFromBackend)
+		c.AddMaxQuota(maxQuotaFromAdmin)
+		c.AddMinQuota(overrideQuotaFromConfig)
+		c.AddMaxQuota(overrideQuotaFromConfig)
+
 		constraints[serviceID] = c
 		return nil
 	})
