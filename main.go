@@ -210,7 +210,7 @@ func taskServe(cluster *core.Cluster, args []string, provider *gophercloud.Provi
 	corsMiddleware := cors.New(cors.Options{
 		AllowedOrigins: []string{"*"},
 		AllowedMethods: []string{"HEAD", "GET", "POST", "PUT", "DELETE"},
-		AllowedHeaders: []string{"Content-Type", "User-Agent", "X-Auth-Token", "X-Limes-Cluster-Id", "X-Limes-V2-Api-Preview"},
+		AllowedHeaders: []string{"Content-Type", "User-Agent", "X-Auth-Token", "X-Limes-Cluster-Id", "X-Limes-V2-Api-Preview", "Transfer-Token"},
 	})
 	mux := http.NewServeMux()
 	mux.Handle("/", httpapi.Compose(
