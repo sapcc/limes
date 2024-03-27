@@ -546,6 +546,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		if respondwith.ErrorText(w, err) {
 			return
 		}
+		dbCommitment.State = db.CommitmentStateSuperseded
 		dbCommitment.SupersededAt = &now
 		_, err = tx.Update(&dbCommitment)
 		if respondwith.ErrorText(w, err) {
@@ -593,6 +594,7 @@ func (p *v1Provider) buildSplitCommitment(dbCommitment db.ProjectCommitment, amo
 		ConfirmedAt:   dbCommitment.ConfirmedAt,
 		ExpiresAt:     dbCommitment.ExpiresAt,
 		PredecessorID: &dbCommitment.ID,
+		State:         dbCommitment.State,
 	}
 }
 
