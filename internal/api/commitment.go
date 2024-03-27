@@ -30,6 +30,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/respondwith"
@@ -166,7 +167,7 @@ func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Reques
 			// defense in depth (the DB should not change that much between those two queries above)
 			continue
 		}
-		result = append(result, p.convertCommitmentToDisplayForm(c, loc))
+		result = append(result, p.convertCommitmentToDisplayForm(c, loc, token))
 	}
 
 	respondwith.JSON(w, http.StatusOK, map[string]any{"commitments": result})
@@ -178,7 +179,7 @@ type azResourceLocation struct {
 	AvailabilityZone limes.AvailabilityZone
 }
 
-func (p *v1Provider) convertCommitmentToDisplayForm(c db.ProjectCommitment, loc azResourceLocation) limesresources.Commitment {
+func (p *v1Provider) convertCommitmentToDisplayForm(c db.ProjectCommitment, loc azResourceLocation, token *gopherpolicy.Token) limesresources.Commitment {
 	resInfo := p.Cluster.InfoForResource(loc.ServiceType, loc.ResourceName)
 	return limesresources.Commitment{
 		ID:               int64(c.ID),
@@ -191,6 +192,7 @@ func (p *v1Provider) convertCommitmentToDisplayForm(c db.ProjectCommitment, loc 
 		CreatedAt:        limes.UnixEncodedTime{Time: c.CreatedAt},
 		CreatorUUID:      c.CreatorUUID,
 		CreatorName:      c.CreatorName,
+		CanBeDeleted:     p.canDeleteCommitment(token, c),
 		ConfirmBy:        maybeUnixEncodedTime(c.ConfirmBy),
 		ConfirmedAt:      maybeUnixEncodedTime(c.ConfirmedAt),
 		ExpiresAt:        limes.UnixEncodedTime{Time: c.ExpiresAt},
@@ -379,7 +381,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		DomainName:  dbDomain.Name,
 		ProjectID:   dbProject.UUID,
 		ProjectName: dbProject.Name,
-		Commitment:  p.convertCommitmentToDisplayForm(dbCommitment, loc),
+		Commitment:  p.convertCommitmentToDisplayForm(dbCommitment, loc, token),
 	})
 
 	// if the commitment is immediately confirmed, trigger a capacity scrape in
@@ -397,7 +399,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	c := p.convertCommitmentToDisplayForm(dbCommitment, loc)
+	c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token)
 	respondwith.JSON(w, http.StatusCreated, map[string]any{"commitment": c})
 }
 
@@ -405,7 +407,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/commitments/:id")
 	token := p.CheckToken(r)
-	if !token.Require(w, "project:uncommit") {
+	if !token.Require(w, "project:edit") { //NOTE: There is a more specific AuthZ check further down below.
 		return
 	}
 	dbDomain := p.FindDomainFromRequest(w, r)
@@ -437,6 +439,12 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	// check authorization for this specific commitment
+	if !p.canDeleteCommitment(token, dbCommitment) {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+
 	// perform deletion
 	_, err = p.DB.Delete(&dbCommitment)
 	if respondwith.ErrorText(w, err) {
@@ -448,9 +456,26 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 		DomainName:  dbDomain.Name,
 		ProjectID:   dbProject.UUID,
 		ProjectName: dbProject.Name,
-		Commitment:  p.convertCommitmentToDisplayForm(dbCommitment, loc),
+		Commitment:  p.convertCommitmentToDisplayForm(dbCommitment, loc, token),
 	})
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (p *v1Provider) canDeleteCommitment(token *gopherpolicy.Token, commitment db.ProjectCommitment) bool {
+	// up to 24 hours after creation of fresh commitments, future commitments can still be deleted by their creators
+	if commitment.State == db.CommitmentStatePlanned || commitment.State == db.CommitmentStatePending {
+		if commitment.PredecessorID == nil && p.timeNow().Before(commitment.CreatedAt.Add(24*time.Hour)) {
+			if token.Check("project:edit") {
+				return true
+			}
+		}
+	}
+
+	// afterwards, a more specific permission is required to delete it
+	//
+	// This protects cloud admins making capacity planning decisions based on future commitments
+	// from having their forecasts ruined by project admins suffering from buyer's remorse.
+	return token.Check("project:uncommit")
 }
 
 // StartCommitmentTransfer handles POST /v1/domains/:id/projects/:id/commitments/:id/start-transfer
@@ -478,7 +503,6 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		} `json:"commitment"`
 	}
 	if !RequireJSON(w, r, &parseTarget) {
-		http.Error(w, "json not parsable.", http.StatusBadRequest)
 		return
 	}
 	req := parseTarget.Request
@@ -564,7 +588,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	c := p.convertCommitmentToDisplayForm(dbCommitment, loc)
+	c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token)
 	logAndPublishEvent(p.timeNow(), r, token, http.StatusAccepted, commitmentEventTarget{
 		DomainID:    dbDomain.UUID,
 		DomainName:  dbDomain.Name,
@@ -657,7 +681,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	c := p.convertCommitmentToDisplayForm(dbCommitment, loc)
+	c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token)
 	logAndPublishEvent(p.timeNow(), r, token, http.StatusAccepted, commitmentEventTarget{
 		DomainID:    dbDomain.UUID,
 		DomainName:  dbDomain.Name,
