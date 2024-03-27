@@ -503,12 +503,6 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	// reject commitments that are not confirmed yet.
-	if dbCommitment.ConfirmedAt == nil {
-		http.Error(w, "commitment needs to be confirmed in order to transfer it.", http.StatusUnprocessableEntity)
-		return
-	}
-
 	// Mark whole commitment or a newly created, splitted one as transferrable.
 	tx, err := p.DB.Begin()
 	if respondwith.ErrorText(w, err) {
