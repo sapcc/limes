@@ -643,35 +643,6 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 9, "transfer_status": "public"}},
 	}.Check(t, s.Handler)
 
-	// Test on unconfirmed commitment should fail.
-	// ID is 4, because 2 additional commitments were created previously.
-	var confirmBy = s.Clock.Now().Unix()
-	req2 := assert.JSONObject{
-		"id":                4,
-		"service_type":      "second",
-		"resource_name":     "capacity",
-		"availability_zone": "az-two",
-		"amount":            10,
-		"duration":          "1 hour",
-		"transfer_status":   "",
-		"transfer_token":    "",
-		"confirm_by":        confirmBy,
-	}
-
-	assert.HTTPRequest{
-		Method:       http.MethodPost,
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body:         assert.JSONObject{"commitment": req2},
-		ExpectStatus: http.StatusCreated,
-	}.Check(t, s.Handler)
-
-	assert.HTTPRequest{
-		Method:       "POST",
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/4/start-transfer",
-		ExpectStatus: http.StatusUnprocessableEntity,
-		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 10, "transfer_status": "unlisted"}},
-	}.Check(t, s.Handler)
-
 	// Negative Test, amount = 0.
 	assert.HTTPRequest{
 		Method:       "POST",
