@@ -28,6 +28,7 @@ import (
 	"github.com/go-gorp/gorp/v3"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
 
@@ -432,6 +433,14 @@ var unitConversionGauge = prometheus.NewGaugeVec(
 	[]string{"service", "resource"},
 )
 
+var autogrowGrowthMultiplierGauge = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "limes_autogrow_growth_multiplier",
+		Help: `For resources with quota distribution model "autogrow", reports the configured growth multiplier.`,
+	},
+	[]string{"service", "resource"},
+)
+
 // DataMetricsCollector is a prometheus.Collector that submits
 // quota/usage/backend quota from an OpenStack cluster as Prometheus metrics.
 type DataMetricsCollector struct {
@@ -452,6 +461,7 @@ func (c *DataMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 	projectPhysicalUsageGauge.Describe(ch)
 	projectRateUsageGauge.Describe(ch)
 	unitConversionGauge.Describe(ch)
+	autogrowGrowthMultiplierGauge.Describe(ch)
 }
 
 var clusterMetricsQuery = sqlext.SimplifyWhitespace(`
@@ -526,6 +536,8 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	projectRateUsageDesc := <-descCh
 	unitConversionGauge.Describe(descCh)
 	unitConversionDesc := <-descCh
+	autogrowGrowthMultiplierGauge.Describe(descCh)
+	autogrowGrowthMultiplierDesc := <-descCh
 
 	// fetch values for cluster level
 	capacityReported := make(map[string]map[string]bool)
@@ -711,6 +723,15 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 				prometheus.GaugeValue, float64(multiplier),
 				serviceType, resource.Name,
 			)
+
+			qdc := c.Cluster.QuotaDistributionConfigForResource(serviceType, resource.Name)
+			if qdc.Model == limesresources.AutogrowQuotaDistribution {
+				ch <- prometheus.MustNewConstMetric(
+					autogrowGrowthMultiplierDesc,
+					prometheus.GaugeValue, qdc.Autogrow.GrowthMultiplier,
+					serviceType, resource.Name,
+				)
+			}
 		}
 	}
 
