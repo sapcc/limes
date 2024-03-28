@@ -55,8 +55,9 @@ func (p *AutoApprovalQuotaPlugin) PluginTypeID() string {
 // ServiceInfo implements the core.QuotaPlugin interface.
 func (p *AutoApprovalQuotaPlugin) ServiceInfo(serviceType string) limes.ServiceInfo {
 	return limes.ServiceInfo{
-		Type: serviceType,
-		Area: serviceType,
+		Type:        serviceType,
+		Area:        serviceType,
+		ProductName: "autoapproval-" + serviceType,
 	}
 }
 

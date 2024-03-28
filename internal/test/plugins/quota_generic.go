@@ -99,8 +99,9 @@ func (p *GenericQuotaPlugin) PluginTypeID() string {
 // ServiceInfo implements the core.QuotaPlugin interface.
 func (p *GenericQuotaPlugin) ServiceInfo(serviceType string) limes.ServiceInfo {
 	return limes.ServiceInfo{
-		Type: serviceType,
-		Area: serviceType,
+		Type:        serviceType,
+		Area:        serviceType,
+		ProductName: "generic-" + serviceType,
 	}
 }
 

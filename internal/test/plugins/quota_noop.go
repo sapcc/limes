@@ -58,8 +58,9 @@ func (p *NoopQuotaPlugin) PluginTypeID() string {
 // ServiceInfo implements the core.QuotaPlugin interface.
 func (p *NoopQuotaPlugin) ServiceInfo(serviceType string) limes.ServiceInfo {
 	return limes.ServiceInfo{
-		Type: serviceType,
-		Area: serviceType,
+		Type:        serviceType,
+		Area:        serviceType,
+		ProductName: "noop-" + serviceType,
 	}
 }
 

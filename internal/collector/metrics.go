@@ -261,7 +261,7 @@ var quotaPluginMetricsOkGauge = prometheus.NewGaugeVec(
 		Name: "limes_plugin_metrics_ok",
 		Help: "Whether quota plugin metrics were rendered successfully for a particular project service. Only present when the project service emits metrics.",
 	},
-	[]string{"domain", "domain_id", "project", "project_id", "service"},
+	[]string{"domain", "domain_id", "project", "project_id", "service", "service_name"},
 )
 
 // QuotaPluginMetricsCollector is a prometheus.Collector that submits metrics
@@ -303,10 +303,11 @@ func (c *QuotaPluginMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	descCh := make(chan *prometheus.Desc, 1)
 	quotaPluginMetricsOkGauge.Describe(descCh)
 	pluginMetricsOkDesc := <-descCh
+	serviceNameByType := buildServiceNameByTypeMapping(c.Cluster)
 
 	if c.Override != nil {
 		for _, instance := range c.Override {
-			c.collectOneProjectService(ch, pluginMetricsOkDesc, instance)
+			c.collectOneProjectService(ch, pluginMetricsOkDesc, serviceNameByType, instance)
 		}
 		return
 	}
@@ -318,7 +319,7 @@ func (c *QuotaPluginMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			&i.Project.Name, &i.Project.UUID, &i.Project.ParentUUID,
 			&i.ServiceType, &i.SerializedMetrics)
 		if err == nil {
-			c.collectOneProjectService(ch, pluginMetricsOkDesc, i)
+			c.collectOneProjectService(ch, pluginMetricsOkDesc, serviceNameByType, i)
 		}
 		return err
 	})
@@ -327,7 +328,7 @@ func (c *QuotaPluginMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 }
 
-func (c *QuotaPluginMetricsCollector) collectOneProjectService(ch chan<- prometheus.Metric, pluginMetricsOkDesc *prometheus.Desc, instance QuotaPluginMetricsInstance) {
+func (c *QuotaPluginMetricsCollector) collectOneProjectService(ch chan<- prometheus.Metric, pluginMetricsOkDesc *prometheus.Desc, serviceNameByType map[string]string, instance QuotaPluginMetricsInstance) {
 	plugin := c.Cluster.QuotaPlugins[instance.ServiceType]
 	if plugin == nil {
 		return
@@ -344,7 +345,8 @@ func (c *QuotaPluginMetricsCollector) collectOneProjectService(ch chan<- prometh
 	ch <- prometheus.MustNewConstMetric(
 		pluginMetricsOkDesc,
 		prometheus.GaugeValue, successAsFloat,
-		instance.Project.Domain.Name, instance.Project.Domain.UUID, instance.Project.Name, instance.Project.UUID, instance.ServiceType,
+		instance.Project.Domain.Name, instance.Project.Domain.UUID, instance.Project.Name, instance.Project.UUID,
+		instance.ServiceType, serviceNameByType[instance.ServiceType],
 	)
 }
 
@@ -356,7 +358,7 @@ var clusterCapacityGauge = prometheus.NewGaugeVec(
 		Name: "limes_cluster_capacity",
 		Help: "Reported capacity of a Limes resource for an OpenStack cluster.",
 	},
-	[]string{"service", "resource"},
+	[]string{"service", "service_name", "resource"},
 )
 
 var clusterCapacityPerAZGauge = prometheus.NewGaugeVec(
@@ -364,7 +366,7 @@ var clusterCapacityPerAZGauge = prometheus.NewGaugeVec(
 		Name: "limes_cluster_capacity_per_az",
 		Help: "Reported capacity of a Limes resource for an OpenStack cluster in a specific availability zone.",
 	},
-	[]string{"availability_zone", "service", "resource"},
+	[]string{"availability_zone", "service", "service_name", "resource"},
 )
 
 var clusterUsagePerAZGauge = prometheus.NewGaugeVec(
@@ -372,7 +374,7 @@ var clusterUsagePerAZGauge = prometheus.NewGaugeVec(
 		Name: "limes_cluster_usage_per_az",
 		Help: "Actual usage of a Limes resource for an OpenStack cluster in a specific availability zone.",
 	},
-	[]string{"availability_zone", "service", "resource"},
+	[]string{"availability_zone", "service", "service_name", "resource"},
 )
 
 var domainQuotaGauge = prometheus.NewGaugeVec(
@@ -380,7 +382,7 @@ var domainQuotaGauge = prometheus.NewGaugeVec(
 		Name: "limes_domain_quota",
 		Help: "Assigned quota of a Limes resource for an OpenStack domain.",
 	},
-	[]string{"domain", "domain_id", "service", "resource"},
+	[]string{"domain", "domain_id", "service", "service_name", "resource"},
 )
 
 var projectQuotaGauge = prometheus.NewGaugeVec(
@@ -388,7 +390,7 @@ var projectQuotaGauge = prometheus.NewGaugeVec(
 		Name: "limes_project_quota",
 		Help: "Assigned quota of a Limes resource for an OpenStack project.",
 	},
-	[]string{"domain", "domain_id", "project", "project_id", "service", "resource"},
+	[]string{"domain", "domain_id", "project", "project_id", "service", "service_name", "resource"},
 )
 
 var projectBackendQuotaGauge = prometheus.NewGaugeVec(
@@ -396,7 +398,7 @@ var projectBackendQuotaGauge = prometheus.NewGaugeVec(
 		Name: "limes_project_backendquota",
 		Help: "Actual quota of a Limes resource for an OpenStack project.",
 	},
-	[]string{"domain", "domain_id", "project", "project_id", "service", "resource"},
+	[]string{"domain", "domain_id", "project", "project_id", "service", "service_name", "resource"},
 )
 
 var projectUsageGauge = prometheus.NewGaugeVec(
@@ -404,7 +406,7 @@ var projectUsageGauge = prometheus.NewGaugeVec(
 		Name: "limes_project_usage",
 		Help: "Actual (logical) usage of a Limes resource for an OpenStack project.",
 	},
-	[]string{"domain", "domain_id", "project", "project_id", "service", "resource"},
+	[]string{"domain", "domain_id", "project", "project_id", "service", "service_name", "resource"},
 )
 
 var projectPhysicalUsageGauge = prometheus.NewGaugeVec(
@@ -412,7 +414,7 @@ var projectPhysicalUsageGauge = prometheus.NewGaugeVec(
 		Name: "limes_project_physical_usage",
 		Help: "Actual (physical) usage of a Limes resource for an OpenStack project.",
 	},
-	[]string{"domain", "domain_id", "project", "project_id", "service", "resource"},
+	[]string{"domain", "domain_id", "project", "project_id", "service", "service_name", "resource"},
 )
 
 var projectRateUsageGauge = prometheus.NewGaugeVec(
@@ -420,7 +422,7 @@ var projectRateUsageGauge = prometheus.NewGaugeVec(
 		Name: "limes_project_rate_usage",
 		Help: "Usage of a Limes rate for an OpenStack project. These are counters that never reset.",
 	},
-	[]string{"domain", "domain_id", "project", "project_id", "service", "rate"},
+	[]string{"domain", "domain_id", "project", "project_id", "service", "service_name", "rate"},
 )
 
 var unitConversionGauge = prometheus.NewGaugeVec(
@@ -430,7 +432,7 @@ var unitConversionGauge = prometheus.NewGaugeVec(
 			" with to obtain the base unit (e.g. bytes). For use with Grafana when" +
 			" only the base unit can be configured because of templating.",
 	},
-	[]string{"service", "resource"},
+	[]string{"service", "service_name", "resource"},
 )
 
 var autogrowGrowthMultiplierGauge = prometheus.NewGaugeVec(
@@ -438,7 +440,7 @@ var autogrowGrowthMultiplierGauge = prometheus.NewGaugeVec(
 		Name: "limes_autogrow_growth_multiplier",
 		Help: `For resources with quota distribution model "autogrow", reports the configured growth multiplier.`,
 	},
-	[]string{"service", "resource"},
+	[]string{"service", "service_name", "resource"},
 )
 
 // DataMetricsCollector is a prometheus.Collector that submits
@@ -539,6 +541,8 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	autogrowGrowthMultiplierGauge.Describe(descCh)
 	autogrowGrowthMultiplierDesc := <-descCh
 
+	serviceNameByType := buildServiceNameByTypeMapping(c.Cluster)
+
 	// fetch values for cluster level
 	capacityReported := make(map[string]map[string]bool)
 	err := sqlext.ForeachRow(c.DB, clusterMetricsQuery, nil, func(rows *sql.Rows) error {
@@ -580,7 +584,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 				ch <- prometheus.MustNewConstMetric(
 					clusterCapacityPerAZDesc,
 					prometheus.GaugeValue, float64(overcommitFactor.ApplyTo(azCapacity)),
-					string(az), serviceType, resourceName,
+					string(az), serviceType, serviceNameByType[serviceType], resourceName,
 				)
 
 				azUsage := usagePerAZ[az]
@@ -588,7 +592,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 					ch <- prometheus.MustNewConstMetric(
 						clusterUsagePerAZDesc,
 						prometheus.GaugeValue, float64(*azUsage),
-						string(az), serviceType, resourceName,
+						string(az), serviceType, serviceNameByType[serviceType], resourceName,
 					)
 				}
 			}
@@ -597,7 +601,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(
 			clusterCapacityDesc,
 			prometheus.GaugeValue, float64(overcommitFactor.ApplyTo(totalCapacity)),
-			serviceType, resourceName,
+			serviceType, serviceNameByType[serviceType], resourceName,
 		)
 
 		_, exists := capacityReported[serviceType]
@@ -624,7 +628,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			ch <- prometheus.MustNewConstMetric(
 				clusterCapacityDesc,
 				prometheus.GaugeValue, 0,
-				serviceType, res.Name,
+				serviceType, serviceNameByType[serviceType], res.Name,
 			)
 		}
 	}
@@ -645,7 +649,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(
 			domainQuotaDesc,
 			prometheus.GaugeValue, float64(quota),
-			domainName, domainUUID, serviceType, resourceName,
+			domainName, domainUUID, serviceType, serviceNameByType[serviceType], resourceName,
 		)
 		return nil
 	})
@@ -679,7 +683,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 				ch <- prometheus.MustNewConstMetric(
 					projectQuotaDesc,
 					prometheus.GaugeValue, float64(*quota),
-					domainName, domainUUID, projectName, projectUUID, serviceType, resourceName,
+					domainName, domainUUID, projectName, projectUUID, serviceType, serviceNameByType[serviceType], resourceName,
 				)
 			}
 		}
@@ -688,7 +692,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 				ch <- prometheus.MustNewConstMetric(
 					projectBackendQuotaDesc,
 					prometheus.GaugeValue, float64(*backendQuota),
-					domainName, domainUUID, projectName, projectUUID, serviceType, resourceName,
+					domainName, domainUUID, projectName, projectUUID, serviceType, serviceNameByType[serviceType], resourceName,
 				)
 			}
 		}
@@ -696,7 +700,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			ch <- prometheus.MustNewConstMetric(
 				projectUsageDesc,
 				prometheus.GaugeValue, float64(usage),
-				domainName, domainUUID, projectName, projectUUID, serviceType, resourceName,
+				domainName, domainUUID, projectName, projectUUID, serviceType, serviceNameByType[serviceType], resourceName,
 			)
 		}
 		if hasPhysicalUsage {
@@ -704,7 +708,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 				ch <- prometheus.MustNewConstMetric(
 					projectPhysicalUsageDesc,
 					prometheus.GaugeValue, float64(physicalUsage),
-					domainName, domainUUID, projectName, projectUUID, serviceType, resourceName,
+					domainName, domainUUID, projectName, projectUUID, serviceType, serviceNameByType[serviceType], resourceName,
 				)
 			}
 		}
@@ -721,7 +725,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			ch <- prometheus.MustNewConstMetric(
 				unitConversionDesc,
 				prometheus.GaugeValue, float64(multiplier),
-				serviceType, resource.Name,
+				serviceType, serviceNameByType[serviceType], resource.Name,
 			)
 
 			qdc := c.Cluster.QuotaDistributionConfigForResource(serviceType, resource.Name)
@@ -729,7 +733,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 				ch <- prometheus.MustNewConstMetric(
 					autogrowGrowthMultiplierDesc,
 					prometheus.GaugeValue, qdc.Autogrow.GrowthMultiplier,
-					serviceType, resource.Name,
+					serviceType, serviceNameByType[serviceType], resource.Name,
 				)
 			}
 		}
@@ -760,7 +764,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			ch <- prometheus.MustNewConstMetric(
 				projectRateUsageDesc,
 				prometheus.GaugeValue, usageAsFloat,
-				domainName, domainUUID, projectName, projectUUID, serviceType, rateName,
+				domainName, domainUUID, projectName, projectUUID, serviceType, serviceNameByType[serviceType], rateName,
 			)
 		}
 		return nil
@@ -768,4 +772,15 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	if err != nil {
 		logg.Error("collect project metrics failed: %s", err.Error())
 	}
+}
+
+///////////////////////////////////////////////////////////////////////////////////////////
+// utilities
+
+func buildServiceNameByTypeMapping(c *core.Cluster) (serviceNameByType map[string]string) {
+	serviceNameByType = make(map[string]string, len(c.QuotaPlugins))
+	for serviceType, plugin := range c.QuotaPlugins {
+		serviceNameByType[serviceType] = plugin.ServiceInfo(serviceType).ProductName
+	}
+	return
 }
