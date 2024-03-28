@@ -106,6 +106,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		"created_at":        s.Clock.Now().Unix(),
 		"creator_uuid":      "uuid-for-alice",
 		"creator_name":      "alice@Default",
+		"can_be_deleted":    true,
 		"confirm_by":        req1["confirm_by"],
 		"expires_at":        s.Clock.Now().Add(14*day + 1*time.Hour).Unix(),
 	}
@@ -137,6 +138,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		"created_at":        s.Clock.Now().Unix(),
 		"creator_uuid":      "uuid-for-alice",
 		"creator_name":      "alice@Default",
+		"can_be_deleted":    true,
 		"confirm_by":        req2["confirm_by"],
 		"expires_at":        s.Clock.Now().Add(14*day + 2*time.Hour).Unix(),
 	}
@@ -149,6 +151,25 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 	}.Check(t, s.Handler)
 
 	// GET now returns something
+	assert.HTTPRequest{
+		Method:       http.MethodGet,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments",
+		ExpectStatus: http.StatusOK,
+		ExpectBody:   assert.JSONObject{"commitments": []assert.JSONObject{resp1, resp2}},
+	}.Check(t, s.Handler)
+
+	// after 24 hours have passed, `can_be_deleted` is still true if the user has the "uncommit" permission...
+	s.Clock.StepBy(48 * time.Hour)
+	assert.HTTPRequest{
+		Method:       http.MethodGet,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments",
+		ExpectStatus: http.StatusOK,
+		ExpectBody:   assert.JSONObject{"commitments": []assert.JSONObject{resp1, resp2}},
+	}.Check(t, s.Handler)
+	// ...but otherwise flips to false
+	s.TokenValidator.Enforcer.AllowUncommit = false
+	delete(resp1, "can_be_deleted")
+	delete(resp2, "can_be_deleted")
 	assert.HTTPRequest{
 		Method:       http.MethodGet,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments",
@@ -184,11 +205,13 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 	}.Check(t, s.Handler)
 
 	// commitments can be deleted with sufficient privilege
+	s.TokenValidator.Enforcer.AllowUncommit = true
 	assert.HTTPRequest{
 		Method:       http.MethodDelete,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2",
 		ExpectStatus: http.StatusNoContent,
 	}.Check(t, s.Handler)
+	s.TokenValidator.Enforcer.AllowUncommit = false
 	assert.HTTPRequest{
 		Method:       http.MethodGet,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments",
@@ -196,7 +219,44 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 		ExpectBody:   assert.JSONObject{"commitments": []assert.JSONObject{resp1}},
 	}.Check(t, s.Handler)
 
-	// confirm the other commitment
+	// fresh commitments can also be deleted without privilege
+	s.Clock.StepBy(1 * time.Hour)
+	req3 := assert.JSONObject{
+		"service_type":      "first",
+		"resource_name":     "things",
+		"availability_zone": "any",
+		"amount":            30,
+		"duration":          "2 hours",
+		"confirm_by":        s.Clock.Now().Add(14 * day).Unix(),
+	}
+	resp3 := assert.JSONObject{
+		"id":                3,
+		"service_type":      "first",
+		"resource_name":     "things",
+		"availability_zone": "any",
+		"amount":            30,
+		"duration":          "2 hours",
+		"created_at":        s.Clock.Now().Unix(),
+		"creator_uuid":      "uuid-for-alice",
+		"creator_name":      "alice@Default",
+		"can_be_deleted":    true,
+		"confirm_by":        req3["confirm_by"],
+		"expires_at":        s.Clock.Now().Add(14*day + 2*time.Hour).Unix(),
+	}
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
+		Body:         assert.JSONObject{"commitment": req3},
+		ExpectStatus: http.StatusCreated,
+		ExpectBody:   assert.JSONObject{"commitment": resp3},
+	}.Check(t, s.Handler)
+	assert.HTTPRequest{
+		Method:       http.MethodDelete,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/3",
+		ExpectStatus: http.StatusNoContent,
+	}.Check(t, s.Handler)
+
+	// confirm the remaining commitment
 	s.Clock.StepBy(1 * time.Hour)
 	_, err := s.DB.Exec("UPDATE project_commitments SET confirmed_at = $1, expires_at = $2, state = $3",
 		s.Clock.Now(), s.Clock.Now().Add(2*time.Hour), db.CommitmentStateActive,
@@ -216,7 +276,7 @@ func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
 	}.Check(t, s.Handler)
 
 	// confirmed deletions can be deleted by cluster admins
-	s.TokenValidator.Enforcer.AllowCluster = true
+	s.TokenValidator.Enforcer.AllowUncommit = true
 	assert.HTTPRequest{
 		Method:       http.MethodDelete,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1",
@@ -535,6 +595,7 @@ func TestDeleteCommitmentErrorCases(t *testing.T) {
 
 	// no authentication
 	s.TokenValidator.Enforcer.AllowUncommit = false
+	s.Clock.StepBy(48 * time.Hour) // skip over the phase where fresh commitments can be deleted by their creators
 	assert.HTTPRequest{
 		Method:       http.MethodDelete,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1",
@@ -572,17 +633,15 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 
 	// Test on confirmed commitment should succeed.
 	// TransferAmount >= CommitmentAmount
-	req1 := func(transferStatus string) assert.JSONObject {
-		return assert.JSONObject{
-			"id":                1,
-			"service_type":      "second",
-			"resource_name":     "capacity",
-			"availability_zone": "az-two",
-			"amount":            10,
-			"duration":          "1 hour",
-			"transfer_status":   transferStatus,
-			"transfer_token":    "",
-		}
+	req1 := assert.JSONObject{
+		"id":                1,
+		"service_type":      "second",
+		"resource_name":     "capacity",
+		"availability_zone": "az-two",
+		"amount":            10,
+		"duration":          "1 hour",
+		"transfer_status":   "",
+		"transfer_token":    "",
 	}
 
 	resp1 := assert.JSONObject{
@@ -596,6 +655,7 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 		"created_at":        s.Clock.Now().Unix(),
 		"creator_uuid":      "uuid-for-alice",
 		"creator_name":      "alice@Default",
+		"can_be_deleted":    true,
 		"confirmed_at":      0,
 		"expires_at":        3600,
 		"transfer_status":   "unlisted",
@@ -605,7 +665,7 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body:         assert.JSONObject{"commitment": req1("")},
+		Body:         assert.JSONObject{"commitment": req1},
 		ExpectStatus: http.StatusCreated,
 	}.Check(t, s.Handler)
 
@@ -629,6 +689,7 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 		"created_at":        s.Clock.Now().Unix(),
 		"creator_uuid":      "uuid-for-alice",
 		"creator_name":      "alice@Default",
+		"can_be_deleted":    true,
 		"confirmed_at":      0,
 		"expires_at":        3600,
 		"transfer_status":   "public",
@@ -691,6 +752,7 @@ func Test_TransferCommitment(t *testing.T) {
 		"created_at":        s.Clock.Now().Unix(),
 		"creator_uuid":      "uuid-for-alice",
 		"creator_name":      "alice@Default",
+		"can_be_deleted":    true,
 		"confirmed_at":      0,
 		"expires_at":        3600,
 		"transfer_status":   "unlisted",
@@ -708,6 +770,7 @@ func Test_TransferCommitment(t *testing.T) {
 		"created_at":        s.Clock.Now().Unix(),
 		"creator_uuid":      "uuid-for-alice",
 		"creator_name":      "alice@Default",
+		"can_be_deleted":    true,
 		"confirmed_at":      0,
 		"expires_at":        3600,
 	}
@@ -724,6 +787,7 @@ func Test_TransferCommitment(t *testing.T) {
 		"created_at":        s.Clock.Now().Unix(),
 		"creator_uuid":      "uuid-for-alice",
 		"creator_name":      "alice@Default",
+		"can_be_deleted":    true,
 		"confirmed_at":      0,
 		"expires_at":        3600,
 		"transfer_status":   "unlisted",
@@ -740,6 +804,7 @@ func Test_TransferCommitment(t *testing.T) {
 		"created_at":        s.Clock.Now().Unix(),
 		"creator_uuid":      "uuid-for-alice",
 		"creator_name":      "alice@Default",
+		"can_be_deleted":    true,
 		"confirmed_at":      0,
 		"expires_at":        3600,
 	}

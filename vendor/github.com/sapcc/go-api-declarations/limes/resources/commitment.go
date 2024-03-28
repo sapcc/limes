@@ -45,6 +45,9 @@ type Commitment struct {
 	// and intended for informational displays only. API access should always use the UUID.
 	CreatorUUID string `json:"creator_uuid,omitempty"`
 	CreatorName string `json:"creator_name,omitempty"`
+	// CanBeDeleted will be true if the commitment can be deleted by the same user
+	// who saw this object in response to a GET query.
+	CanBeDeleted bool `json:"can_be_deleted,omitempty"`
 	// ConfirmBy is only filled if it was set in the CommitmentRequest.
 	ConfirmBy *limes.UnixEncodedTime `json:"confirm_by,omitempty"`
 	// ConfirmedAt is only filled after the commitment was confirmed.
