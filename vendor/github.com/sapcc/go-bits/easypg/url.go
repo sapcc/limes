@@ -36,7 +36,7 @@ type URLParts struct {
 	UserName               string            // required
 	Password               string            // optional
 	ConnectionOptions      string            // optional (usually used for options coming in via config)
-	ExtraConnectionOptions map[string]string //optional (usually used for options coming in via code)
+	ExtraConnectionOptions map[string]string // optional (usually used for options coming in via code)
 	DatabaseName           string            // required
 }
 
