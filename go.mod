@@ -8,16 +8,16 @@ require (
 	github.com/go-gorp/gorp/v3 v3.1.0
 	github.com/gofrs/uuid/v5 v5.0.0
 	github.com/gophercloud/gophercloud v1.11.0
-	github.com/gophercloud/utils v0.0.0-20231010081019-80377eca5d56
+	github.com/gophercloud/utils b57aefba4cdb
 	github.com/gorilla/mux v1.8.1
 	github.com/majewsky/schwift v1.3.0
 	github.com/prometheus/client_golang v1.19.0
-	github.com/prometheus/common v0.51.0
+	github.com/prometheus/common v0.51.1
 	github.com/rs/cors v1.10.1
 	github.com/sapcc/go-api-declarations v1.10.10
 	github.com/sapcc/go-bits v0.0.0-20240322144225-5d20162d7e9a
 	go.uber.org/automaxprocs v1.5.3
-	golang.org/x/exp v0.0.0-20240318143956-a85f2c67cd81
+	golang.org/x/exp a685a6edb6d8
 	gopkg.in/yaml.v2 v2.4.0
 )
 
