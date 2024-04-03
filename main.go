@@ -169,6 +169,7 @@ func taskCollect(cluster *core.Cluster, args []string) {
 	// start those collector threads which operate over all services simultaneously
 	go c.CapacityScrapeJob(nil).Run(ctx)
 	go c.CheckConsistencyJob(nil).Run(ctx)
+	go c.CleanupOldCommitmentsJob(nil).Run(ctx)
 	go c.ScanDomainsAndProjectsJob(nil).Run(ctx)
 
 	// use main thread to emit Prometheus metrics
