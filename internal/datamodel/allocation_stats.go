@@ -36,25 +36,31 @@ import (
 //
 // - ApplyComputedProjectQuota
 // - CanConfirmNewCommitment
+// - CanMoveExistingCommitment
 // - ConfirmPendingCommitments
 type clusterAZAllocationStats struct {
 	Capacity     uint64
 	ProjectStats map[db.ProjectServiceID]projectAZAllocationStats
 }
 
-func (c clusterAZAllocationStats) FitsAdditionalCommitment(serviceID db.ProjectServiceID, amount uint64) bool {
-	// calculate `sum_over_projects(max(committed, usage))` including the requested commitment
+func (c clusterAZAllocationStats) FitsAfterCommitmentChanges(additions, subtractions map[db.ProjectServiceID]uint64) bool {
+	// calculate `sum_over_projects(max(committed, usage))` including the requested changes
 	usedCapacity := uint64(0)
 	for projectServiceID, stats := range c.ProjectStats {
-		if projectServiceID == serviceID {
-			usedCapacity += max(stats.Committed+amount, stats.Usage)
-		} else {
-			usedCapacity += max(stats.Committed, stats.Usage)
-		}
+		committed := saturatingSub(stats.Committed+additions[projectServiceID], subtractions[projectServiceID])
+		usedCapacity += max(committed, stats.Usage)
 	}
 
 	// commitment can be confirmed if it and all other commitments and usage fit in the total capacity
 	return usedCapacity <= c.Capacity
+}
+
+// Like `lhs - rhs`, but never underflows below 0.
+func saturatingSub(lhs, rhs uint64) uint64 {
+	if lhs < rhs {
+		return 0
+	}
+	return lhs - rhs
 }
 
 // projectAZAllocationStats describes the resource allocation in a certain AZ

@@ -88,19 +88,19 @@ var (
 		SELECT * FROM project_commitments WHERE id = $1 AND transfer_token = $2
 	`)
 	findTargetAZResourceIDBySourceIDQuery = sqlext.SimplifyWhitespace(`
-	  WITH source as (
-		SELECT ps.type, pr.name, par.az
-	    FROM project_az_resources as par
-		JOIN project_resources pr ON par.resource_id = pr.id
-	    JOIN project_services ps ON pr.service_id = ps.id
-	  WHERE par.id = $1
-	  )
-	  SELECT par.id 
-	    FROM project_az_resources as par
-		JOIN project_resources pr ON par.resource_id = pr.id
-	    JOIN project_services ps ON pr.service_id = ps.id
-		JOIN source s ON ps.type = s.type AND pr.name = s.name AND par.az = s.az
-	  WHERE ps.project_id = $2
+		WITH source as (
+		SELECT ps.id AS service_id, ps.type, pr.name, par.az
+		  FROM project_az_resources as par
+		  JOIN project_resources pr ON par.resource_id = pr.id
+		  JOIN project_services ps ON pr.service_id = ps.id
+		 WHERE par.id = $1
+		)
+		SELECT s.service_id, ps.id, par.id
+		  FROM project_az_resources as par
+		  JOIN project_resources pr ON par.resource_id = pr.id
+		  JOIN project_services ps ON pr.service_id = ps.id
+		  JOIN source s ON ps.type = s.type AND pr.name = s.name AND par.az = s.az
+		 WHERE ps.project_id = $2
 	`)
 
 	forceImmediateCapacityScrapeQuery = sqlext.SimplifyWhitespace(`
@@ -649,21 +649,6 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// get target AZ_RESOURCE_ID
-	var targetResourceID db.ProjectAZResourceID
-	err = p.DB.QueryRow(findTargetAZResourceIDBySourceIDQuery, dbCommitment.AZResourceID, targetProject.ID).Scan(&targetResourceID)
-	if respondwith.ErrorText(w, err) {
-		return
-	}
-
-	dbCommitment.TransferStatus = ""
-	dbCommitment.TransferToken = ""
-	dbCommitment.AZResourceID = targetResourceID
-	_, err = p.DB.Update(&dbCommitment)
-	if respondwith.ErrorText(w, err) {
-		return
-	}
-
 	var loc datamodel.AZResourceLocation
 	err = p.DB.QueryRow(findProjectAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
 		Scan(&loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)
@@ -672,6 +657,45 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "no route to this commitment", http.StatusNotFound)
 		return
 	} else if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	// get target service and AZ resource
+	var (
+		sourceServiceID  db.ProjectServiceID
+		targetServiceID  db.ProjectServiceID
+		targetResourceID db.ProjectAZResourceID
+	)
+	err = p.DB.QueryRow(findTargetAZResourceIDBySourceIDQuery, dbCommitment.AZResourceID, targetProject.ID).
+		Scan(&sourceServiceID, &targetServiceID, &targetResourceID)
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	// validate that we have enough committable capacity on the receiving side
+	tx, err := p.DB.Begin()
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+	defer sqlext.RollbackUnlessCommitted(tx)
+	ok, err := datamodel.CanMoveExistingCommitment(dbCommitment.Amount, loc, sourceServiceID, targetServiceID, p.Cluster, tx)
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+	if !ok {
+		http.Error(w, "not enough committable capacity on the receiving side", http.StatusConflict)
+		return
+	}
+
+	dbCommitment.TransferStatus = ""
+	dbCommitment.TransferToken = ""
+	dbCommitment.AZResourceID = targetResourceID
+	_, err = tx.Update(&dbCommitment)
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+	err = tx.Commit()
+	if respondwith.ErrorText(w, err) {
 		return
 	}
 

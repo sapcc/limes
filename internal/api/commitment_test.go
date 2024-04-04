@@ -19,6 +19,7 @@
 package api
 
 import (
+	"encoding/json"
 	"maps"
 	"net/http"
 	"testing"
@@ -52,22 +53,22 @@ const testCommitmentsYAML = `
 			commitment_is_az_aware: true
 `
 const testCommitmentsYAMLWithoutMinConfirmDate = `
-     availability_zones: [ az-one, az-two ]
-     discovery:
-     	method: --test-static
-     services:
-     	- service_type: first
-     		type: --test-generic
-     	- service_type: second
-     		type: --test-generic
-     resource_behavior:
-     	# the resources in "first" have commitments, the ones in "second" do not
-     	- resource: second/.*
-     		commitment_durations: ["1 hour", "2 hours"]
-     	- resource: second/things
-     		commitment_is_az_aware: false
-     	- resource: second/capacity
-     		commitment_is_az_aware: true
+	availability_zones: [ az-one, az-two ]
+	discovery:
+		method: --test-static
+	services:
+		- service_type: first
+			type: --test-generic
+		- service_type: second
+			type: --test-generic
+	resource_behavior:
+		# the resources in "first" have commitments, the ones in "second" do not
+		- resource: second/.*
+			commitment_durations: ["1 hour", "2 hours"]
+		- resource: second/things
+			commitment_is_az_aware: false
+		- resource: second/capacity
+			commitment_is_az_aware: true
 `
 
 func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
@@ -866,5 +867,81 @@ func Test_TransferCommitment(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/transfer-commitment/1",
 		ExpectStatus: http.StatusBadRequest,
 		ExpectBody:   assert.StringData("no transfer token provided\n"),
+	}.Check(t, s.Handler)
+}
+
+func Test_TransferCommitmentForbiddenByCapacityCheck(t *testing.T) {
+	s := test.NewSetup(t,
+		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
+		test.WithConfig(testCommitmentsYAMLWithoutMinConfirmDate),
+		test.WithAPIHandler(NewV1API),
+	)
+
+	// create commitments for resource "second/capacity" in AZ "az-one"
+	// for all projects, so that all existing capacity is covered
+	// (capacity = 30, and each project has usage = 1)
+	req := assert.JSONObject{
+		"commitment": assert.JSONObject{
+			"service_type":      "second",
+			"resource_name":     "capacity",
+			"availability_zone": "az-one",
+			"amount":            10,
+			"duration":          "1 hour",
+		},
+	}
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
+		Body:         req,
+		ExpectStatus: http.StatusCreated,
+	}.Check(t, s.Handler)
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/commitments/new",
+		Body:         req,
+		ExpectStatus: http.StatusCreated,
+	}.Check(t, s.Handler)
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-france/projects/uuid-for-paris/commitments/new",
+		Body:         req,
+		ExpectStatus: http.StatusCreated,
+	}.Check(t, s.Handler)
+
+	// test that this situation makes it impossible to move commitments between projects (without splitting them)
+	//
+	// The reason for that is that we need to enforce `sum_over_projects(max(committed, usage)) <= capacity`.
+	// In other words, all existing commitments and usage must be covered by capacity. Since we already have
+	// `sum_over_projects(committed) == capacity`, i.e. all capacity is committed somewhere, usage must stay
+	// within these commitments in each project. Otherwise, the total amount of capacity allocated to usage
+	// and/or commitments would exceed the available capacity.
+	_, respBodyBytes := assert.HTTPRequest{
+		Method: http.MethodPost,
+		Path:   "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/start-transfer",
+		Body: assert.JSONObject{
+			"commitment": assert.JSONObject{
+				"amount":          10,
+				"transfer_status": "unlisted",
+			},
+		},
+		ExpectStatus: http.StatusAccepted,
+	}.Check(t, s.Handler)
+
+	var resp struct {
+		Commitment struct {
+			TransferToken string `json:"transfer_token"`
+		} `json:"commitment"`
+	}
+	err := json.Unmarshal(respBodyBytes, &resp)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/transfer-commitment/1",
+		Header:       map[string]string{"Transfer-Token": resp.Commitment.TransferToken},
+		ExpectBody:   assert.StringData("not enough committable capacity on the receiving side\n"),
+		ExpectStatus: http.StatusConflict,
 	}.Check(t, s.Handler)
 }

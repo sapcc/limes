@@ -70,7 +70,24 @@ func CanConfirmNewCommitment(req limesresources.CommitmentRequest, project db.Pr
 	if err != nil {
 		return false, err
 	}
-	return stats.FitsAdditionalCommitment(serviceID, req.Amount), nil
+
+	additions := map[db.ProjectServiceID]uint64{serviceID: req.Amount}
+	return stats.FitsAfterCommitmentChanges(additions, nil), nil
+}
+
+// CanMoveExistingCommitment returns whether a commitment of the given amount
+// at the given AZ resource location can be moved from one project to another.
+// The projects are identified by their service IDs.
+func CanMoveExistingCommitment(amount uint64, loc AZResourceLocation, sourceServiceID, targetServiceID db.ProjectServiceID, cluster *core.Cluster, dbi db.Interface) (bool, error) {
+	statsByAZ, err := collectAZAllocationStats(loc.ServiceType, loc.ResourceName, &loc.AvailabilityZone, cluster, dbi)
+	if err != nil {
+		return false, err
+	}
+	stats := statsByAZ[loc.AvailabilityZone]
+
+	additions := map[db.ProjectServiceID]uint64{targetServiceID: amount}
+	subtractions := map[db.ProjectServiceID]uint64{sourceServiceID: amount}
+	return stats.FitsAfterCommitmentChanges(additions, subtractions), nil
 }
 
 // ConfirmPendingCommitments goes through all unconfirmed commitments that
@@ -105,7 +122,8 @@ func ConfirmPendingCommitments(serviceType limes.ServiceType, resourceName limes
 	// foreach confirmable commitment...
 	for _, c := range confirmableCommitments {
 		// ignore commitments that do not fit
-		if !stats.FitsAdditionalCommitment(c.ProjectServiceID, c.Amount) {
+		additions := map[db.ProjectServiceID]uint64{c.ProjectServiceID: c.Amount}
+		if !stats.FitsAfterCommitmentChanges(additions, nil) {
 			continue
 		}
 
