@@ -49,6 +49,13 @@ var (
 	`)
 )
 
+// AZResourceLocation is a tuple identifying an AZ resource within a project.
+type AZResourceLocation struct {
+	ServiceType      limes.ServiceType
+	ResourceName     limesresources.ResourceName
+	AvailabilityZone limes.AvailabilityZone
+}
+
 // CanConfirmNewCommitment returns whether the given commitment request can be
 // confirmed immediately upon creation in the given project.
 func CanConfirmNewCommitment(req limesresources.CommitmentRequest, project db.Project, cluster *core.Cluster, dbi db.Interface) (bool, error) {
