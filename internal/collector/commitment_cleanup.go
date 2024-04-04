@@ -52,7 +52,7 @@ func (c *Collector) CleanupOldCommitmentsJob(registerer prometheus.Registerer) j
 func (c *Collector) cleanupOldCommitments(_ context.Context, _ prometheus.Labels) error {
 	now := c.MeasureTime()
 
-	// step 1: move commitments to state "expired" if expires_at >= NOW()
+	// step 1: move commitments to state "expired" if expires_at <= NOW()
 	query := fmt.Sprintf(
 		`UPDATE project_commitments SET state = '%s' WHERE state != '%s' AND expires_at <= $1`,
 		db.CommitmentStateExpired, db.CommitmentStateSuperseded)
