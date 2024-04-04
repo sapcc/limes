@@ -24,6 +24,7 @@ import (
 	"math"
 	"strings"
 
+	"github.com/gophercloud/gophercloud/openstack/placement/v1/resourceproviders"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/logg"
 
@@ -59,42 +60,48 @@ type BinpackInstance struct {
 	Reason     string // one of "used", "committed", "pending", "padding" (in descending priority), only for debug logging
 }
 
+func guessNodeCountFromMetric(metric string, inv resourceproviders.Inventory) (uint64, error) {
+	if inv.MaxUnit == 0 {
+		return 0, fmt.Errorf("missing MaxUnit for %s metric", metric)
+	}
+	nodeCountFloat := float64(inv.Total-inv.Reserved) / float64(inv.MaxUnit)
+
+	// we prefer to round down (11.6 nodes should go to 11 instead of 12 to be
+	// safe), but data sometimes has slight rounding errors that we want to
+	// correct (9.98 nodes should be rounded up to 10 instead of down to 9)
+	nodeCount := uint64(math.Floor(nodeCountFloat))
+	if nodeCountFloat-float64(nodeCount) > 0.98 {
+		nodeCount = uint64(math.Ceil(nodeCountFloat))
+	}
+	return nodeCount, nil
+}
+
 // PrepareHypervisorForBinpacking converts a MatchingHypervisor into a BinpackHypervisor.
 func PrepareHypervisorForBinpacking(h MatchingHypervisor) (BinpackHypervisor, error) {
 	// compute node count based on the assumption of equal-size nodes:
 	//     nodeCount = (total - reserved) / maxUnit
-	nodeCountCandidates := map[uint64][]string{}
-	for _, metric := range []string{"VCPU", "MEMORY_MB"} {
-		inv := h.Inventories[metric]
-		if inv.MaxUnit == 0 {
-			return BinpackHypervisor{}, fmt.Errorf(
-				"cannot deduce node count for %s (missing MaxUnit for %s metric)",
-				h.Hypervisor.Description(), metric,
-			)
-		}
-		nodeCountFloat := float64(inv.Total-inv.Reserved) / float64(inv.MaxUnit)
-
-		// we prefer to round down (11.6 nodes should go to 11 instead of 12 to be
-		// safe), but data sometimes has slight rounding errors that we want to
-		// correct (9.98 nodes should be rounded up to 10 instead of down to 9)
-		nodeCount := uint64(math.Floor(nodeCountFloat))
-		if nodeCountFloat-float64(nodeCount) > 0.98 {
-			nodeCount = uint64(math.Ceil(nodeCountFloat))
-		}
-		nodeCountCandidates[nodeCount] = append(nodeCountCandidates[nodeCount], metric)
+	nodeCountAccordingToVCPU, err := guessNodeCountFromMetric("VCPU", h.Inventories["VCPU"])
+	if err != nil {
+		return BinpackHypervisor{}, fmt.Errorf("cannot deduce node count for %s: %w", h.Hypervisor.Description(), err)
+	}
+	nodeCountAccordingToRAM, err := guessNodeCountFromMetric("MEMORY_MB", h.Inventories["MEMORY_MB"])
+	if err != nil {
+		return BinpackHypervisor{}, fmt.Errorf("cannot deduce node count for %s: %w", h.Hypervisor.Description(), err)
 	}
 
 	// as a sanity check, all metrics must agree on the same node count
-	if len(nodeCountCandidates) > 1 {
+	if nodeCountAccordingToVCPU != nodeCountAccordingToRAM {
+		vcpuInventory := h.Inventories["VCPU"]
+		ramInventory := h.Inventories["MEMORY_MB"]
 		return BinpackHypervisor{}, fmt.Errorf(
-			"cannot deduce node count for %s (candidate values by metric = %#v)",
-			h.Hypervisor.Description(), nodeCountCandidates)
+			"cannot deduce node count for %s: guessing %d based on VCPU (total = %d, reserved = %d, maxUnit = %d), but %d based on MEMORY_MB (total = %d, reserved = %d, maxUnit = %d)",
+			h.Hypervisor.Description(),
+			nodeCountAccordingToVCPU, vcpuInventory.Total, vcpuInventory.Reserved, vcpuInventory.MaxUnit,
+			nodeCountAccordingToRAM, ramInventory.Total, ramInventory.Reserved, ramInventory.MaxUnit,
+		)
 	}
-	var nodeCount uint64
-	for nodeCountCandidate := range nodeCountCandidates {
-		nodeCount = nodeCountCandidate
-		break
-	}
+
+	nodeCount := nodeCountAccordingToVCPU
 	if nodeCount == 0 {
 		return BinpackHypervisor{}, fmt.Errorf("node count for %s is zero", h.Hypervisor.Description())
 	}
