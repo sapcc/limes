@@ -17,7 +17,6 @@ dockerfile:
     - /*.yaml
 
 golang:
-  enableVendoring: true
   setGoModVersion: true
 
 golangciLint:
