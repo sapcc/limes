@@ -27,22 +27,13 @@ githubWorkflow:
   ci:
     enabled: true
     coveralls: true
-    ignorePaths:
-      - "**.md" # all Markdown files
     postgres: true
-  license:
-    enabled: true
-  securityChecks:
-    enabled: true
+
 renovate:
   enabled: true
   assignees:
     - majewsky
     - SuperSandro2000
-  packageRules:
-    # do not try to update to Postgres > 12 (the tests should match what we use in production)
-    - matchPackageNames: [ postgres ]
-      allowedVersions: '12'
 
 verbatim: |
   copy-fixtures:

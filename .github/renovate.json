@@ -41,12 +41,6 @@
         ".*"
       ],
       "groupName": "External dependencies"
-    },
-    {
-      "matchPackageNames": [
-        "postgres"
-      ],
-      "allowedVersions": "12"
     }
   ],
   "prHourlyLimit": 0,
