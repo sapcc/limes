@@ -270,7 +270,7 @@ func (u *QuotaUpdater) ValidateInput(input limesresources.QuotaRequest, dbi db.I
 			// if a quota is requested for this resource and it looks valid so far...
 			req, exists := u.Requests[serviceType][resourceName]
 			if !exists || req.ValidationError != nil {
-				return nil
+				return nil //nolint: nilerr // false positive
 			}
 
 			// ...check that it conforms to the MinQuotaFromBackend/MaxQuotaFromBackend boundaries of the service
