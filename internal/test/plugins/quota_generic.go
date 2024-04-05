@@ -42,14 +42,14 @@ func init() {
 // mostly reports static data and offers several controls to simulate failed
 // operations.
 type GenericQuotaPlugin struct {
-	StaticRateInfos    []limesrates.RateInfo         `yaml:"rate_infos"`
-	StaticResourceData map[string]*core.ResourceData `yaml:"-"`
-	OverrideQuota      map[string]map[string]uint64  `yaml:"-"`
+	StaticRateInfos    []limesrates.RateInfo                              `yaml:"rate_infos"`
+	StaticResourceData map[limesresources.ResourceName]*core.ResourceData `yaml:"-"`
+	OverrideQuota      map[string]map[limesresources.ResourceName]uint64  `yaml:"-"` // first key is project UUID
 	// behavior flags that can be set by a unit test
-	ScrapeFails   bool              `yaml:"-"`
-	SetQuotaFails bool              `yaml:"-"`
-	MinQuota      map[string]uint64 `yaml:"-"`
-	MaxQuota      map[string]uint64 `yaml:"-"`
+	ScrapeFails   bool                                   `yaml:"-"`
+	SetQuotaFails bool                                   `yaml:"-"`
+	MinQuota      map[limesresources.ResourceName]uint64 `yaml:"-"`
+	MaxQuota      map[limesresources.ResourceName]uint64 `yaml:"-"`
 }
 
 var resources = []limesresources.ResourceInfo{
@@ -71,7 +71,7 @@ var resources = []limesresources.ResourceInfo{
 
 // Init implements the core.QuotaPlugin interface.
 func (p *GenericQuotaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
-	p.StaticResourceData = map[string]*core.ResourceData{
+	p.StaticResourceData = map[limesresources.ResourceName]*core.ResourceData{
 		"things": {
 			Quota: 42,
 			UsageData: core.PerAZ[core.UsageData]{
@@ -87,7 +87,7 @@ func (p *GenericQuotaPlugin) Init(provider *gophercloud.ProviderClient, eo gophe
 			},
 		},
 	}
-	p.OverrideQuota = make(map[string]map[string]uint64)
+	p.OverrideQuota = make(map[string]map[limesresources.ResourceName]uint64)
 	return nil
 }
 
@@ -97,11 +97,11 @@ func (p *GenericQuotaPlugin) PluginTypeID() string {
 }
 
 // ServiceInfo implements the core.QuotaPlugin interface.
-func (p *GenericQuotaPlugin) ServiceInfo(serviceType string) limes.ServiceInfo {
+func (p *GenericQuotaPlugin) ServiceInfo(serviceType limes.ServiceType) limes.ServiceInfo {
 	return limes.ServiceInfo{
 		Type:        serviceType,
-		Area:        serviceType,
-		ProductName: "generic-" + serviceType,
+		Area:        string(serviceType),
+		ProductName: "generic-" + string(serviceType),
 	}
 }
 
@@ -116,13 +116,13 @@ func (p *GenericQuotaPlugin) Rates() []limesrates.RateInfo {
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *GenericQuotaPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+func (p *GenericQuotaPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[limesrates.RateName]*big.Int, serializedState string, err error) {
 	if p.ScrapeFails {
 		return nil, "", errors.New("ScrapeRates failed as requested")
 	}
 
 	// this dummy implementation lets itself be influenced by the existing state, but also alters it a bit
-	state := make(map[string]int64)
+	state := make(map[limesrates.RateName]int64)
 	if prevSerializedState == "" {
 		for _, rate := range p.StaticRateInfos {
 			state[rate.Name] = 0
@@ -137,7 +137,7 @@ func (p *GenericQuotaPlugin) ScrapeRates(project core.KeystoneProject, prevSeria
 		}
 	}
 
-	result = make(map[string]*big.Int)
+	result = make(map[limesrates.RateName]*big.Int)
 	for _, rate := range p.StaticRateInfos {
 		result[rate.Name] = big.NewInt(state[rate.Name] + int64(len(rate.Name)))
 	}
@@ -146,12 +146,12 @@ func (p *GenericQuotaPlugin) ScrapeRates(project core.KeystoneProject, prevSeria
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *GenericQuotaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[string]core.ResourceData, serializedMetrics []byte, err error) {
+func (p *GenericQuotaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
 	if p.ScrapeFails {
 		return nil, nil, errors.New("Scrape failed as requested")
 	}
 
-	result = make(map[string]core.ResourceData)
+	result = make(map[limesresources.ResourceName]core.ResourceData)
 	for key, val := range p.StaticResourceData {
 		copyOfVal := core.ResourceData{
 			Quota:     val.Quota,
@@ -220,7 +220,7 @@ func (p *GenericQuotaPlugin) Scrape(project core.KeystoneProject, allAZs []limes
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *GenericQuotaPlugin) SetQuota(project core.KeystoneProject, quotas map[string]uint64) error {
+func (p *GenericQuotaPlugin) SetQuota(project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
 	if p.SetQuotaFails {
 		return errors.New("SetQuota failed as requested")
 	}

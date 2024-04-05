@@ -27,6 +27,9 @@ import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/prometheus/client_golang/prometheus"
 
+	"github.com/sapcc/go-api-declarations/limes"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+
 	"github.com/sapcc/limes/internal/core"
 )
 
@@ -54,7 +57,7 @@ func (p *StaticCapacityPlugin) PluginTypeID() string {
 }
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *StaticCapacityPlugin) Scrape(_ core.CapacityPluginBackchannel) (result map[string]map[string]core.PerAZ[core.CapacityData], serializedMetrics []byte, err error) {
+func (p *StaticCapacityPlugin) Scrape(_ core.CapacityPluginBackchannel) (result map[limes.ServiceType]map[limesresources.ResourceName]core.PerAZ[core.CapacityData], serializedMetrics []byte, err error) {
 	makeAZCapa := func(az string, capacity, usage uint64) *core.CapacityData {
 		var subcapacities []any
 		if p.WithSubcapacities {
@@ -91,14 +94,17 @@ func (p *StaticCapacityPlugin) Scrape(_ core.CapacityPluginBackchannel) (result 
 		serializedMetrics = []byte(fmt.Sprintf(`{"smaller_half":%d,"larger_half":%d}`, smallerHalf, largerHalf))
 	}
 
-	result = make(map[string]map[string]core.PerAZ[core.CapacityData])
+	result = make(map[limes.ServiceType]map[limesresources.ResourceName]core.PerAZ[core.CapacityData])
 	for _, str := range p.Resources {
 		parts := strings.SplitN(str, "/", 2)
-		_, exists := result[parts[0]]
+		serviceType := limes.ServiceType(parts[0])
+		resourceName := limesresources.ResourceName(parts[1])
+
+		_, exists := result[serviceType]
 		if !exists {
-			result[parts[0]] = make(map[string]core.PerAZ[core.CapacityData])
+			result[serviceType] = make(map[limesresources.ResourceName]core.PerAZ[core.CapacityData])
 		}
-		result[parts[0]][parts[1]] = fullCapa
+		result[serviceType][resourceName] = fullCapa
 	}
 	return result, serializedMetrics, nil
 }

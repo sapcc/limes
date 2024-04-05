@@ -34,8 +34,8 @@ import (
 // low-privilege quota raising in a certain cluster.
 type LowPrivilegeRaiseConfiguration struct {
 	Limits struct {
-		ForDomains  map[string]map[string]string `yaml:"domains"`
-		ForProjects map[string]map[string]string `yaml:"projects"`
+		ForDomains  map[limes.ServiceType]map[limesresources.ResourceName]string `yaml:"domains"`
+		ForProjects map[limes.ServiceType]map[limesresources.ResourceName]string `yaml:"projects"`
 	} `yaml:"limits"`
 	ExcludeProjectDomainRx regexpext.PlainRegexp `yaml:"except_projects_in_domains"`
 	IncludeProjectDomainRx regexpext.PlainRegexp `yaml:"only_projects_in_domains"`
@@ -56,8 +56,8 @@ func (cfg LowPrivilegeRaiseConfiguration) IsAllowedForProjectsIn(domainName stri
 // LowPrivilegeRaiseLimitSet contains the parsed limits for low-privilege quota
 // raising in a certain cluster.
 type LowPrivilegeRaiseLimitSet struct {
-	LimitsForDomains  map[string]map[string]LowPrivilegeRaiseLimit
-	LimitsForProjects map[string]map[string]LowPrivilegeRaiseLimit
+	LimitsForDomains  map[limes.ServiceType]map[limesresources.ResourceName]LowPrivilegeRaiseLimit
+	LimitsForProjects map[limes.ServiceType]map[limesresources.ResourceName]LowPrivilegeRaiseLimit
 }
 
 // LowPrivilegeRaiseLimit is a union type for the different ways in which a
@@ -69,7 +69,7 @@ type LowPrivilegeRaiseLimit struct {
 	UntilPercentOfClusterCapacityAssigned float64
 }
 
-func (cfg LowPrivilegeRaiseConfiguration) parse(quotaPlugins map[string]QuotaPlugin) (result LowPrivilegeRaiseLimitSet, errs errext.ErrorSet) {
+func (cfg LowPrivilegeRaiseConfiguration) parse(quotaPlugins map[limes.ServiceType]QuotaPlugin) (result LowPrivilegeRaiseLimitSet, errs errext.ErrorSet) {
 	var suberrs errext.ErrorSet
 	result.LimitsForDomains, suberrs = parseLPRLimits(cfg.Limits.ForDomains, quotaPlugins, "domain")
 	errs.Append(suberrs)
@@ -78,11 +78,11 @@ func (cfg LowPrivilegeRaiseConfiguration) parse(quotaPlugins map[string]QuotaPlu
 	return
 }
 
-func parseLPRLimits(inputs map[string]map[string]string, quotaPlugins map[string]QuotaPlugin, scopeType string) (result map[string]map[string]LowPrivilegeRaiseLimit, errs errext.ErrorSet) {
-	result = make(map[string]map[string]LowPrivilegeRaiseLimit)
+func parseLPRLimits(inputs map[limes.ServiceType]map[limesresources.ResourceName]string, quotaPlugins map[limes.ServiceType]QuotaPlugin, scopeType string) (result map[limes.ServiceType]map[limesresources.ResourceName]LowPrivilegeRaiseLimit, errs errext.ErrorSet) {
+	result = make(map[limes.ServiceType]map[limesresources.ResourceName]LowPrivilegeRaiseLimit)
 
 	for srvType, quotaPlugin := range quotaPlugins {
-		result[srvType] = make(map[string]LowPrivilegeRaiseLimit)
+		result[srvType] = make(map[limesresources.ResourceName]LowPrivilegeRaiseLimit)
 		for _, res := range quotaPlugin.Resources() {
 			input, exists := inputs[srvType][res.Name]
 			if !exists {

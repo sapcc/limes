@@ -75,7 +75,7 @@ func (p *archerPlugin) PluginTypeID() string {
 }
 
 // ServiceInfo implements the core.QuotaPlugin interface.
-func (p *archerPlugin) ServiceInfo(serviceType string) limes.ServiceInfo {
+func (p *archerPlugin) ServiceInfo(serviceType limes.ServiceType) limes.ServiceInfo {
 	return limes.ServiceInfo{
 		Type:        serviceType,
 		ProductName: "archer",
@@ -94,7 +94,7 @@ func (p *archerPlugin) Rates() []limesrates.RateInfo {
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *archerPlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[string]core.ResourceData, serializedMetrics []byte, err error) {
+func (p *archerPlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
 	url := p.Archer.ServiceURL("quotas", project.UUID)
 	var res gophercloud.Result
 	//nolint:bodyclose // already closed by gophercloud
@@ -110,7 +110,7 @@ func (p *archerPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Avail
 		return nil, nil, err
 	}
 
-	result = map[string]core.ResourceData{
+	result = map[limesresources.ResourceName]core.ResourceData{
 		"endpoints": {
 			Quota: archerQuota.Endpoint,
 			UsageData: core.InAnyAZ(core.UsageData{
@@ -128,7 +128,7 @@ func (p *archerPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Avail
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *archerPlugin) SetQuota(project core.KeystoneProject, quotas map[string]uint64) error {
+func (p *archerPlugin) SetQuota(project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
 	url := p.Archer.ServiceURL("quotas", project.UUID)
 	expect200 := &gophercloud.RequestOpts{OkCodes: []int{200}}
 
@@ -142,7 +142,7 @@ func (p *archerPlugin) SetQuota(project core.KeystoneProject, quotas map[string]
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *archerPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+func (p *archerPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[limesrates.RateName]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 

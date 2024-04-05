@@ -30,23 +30,23 @@ import (
 type Unit string
 
 const (
-	//UnitNone is used for countable (rather than measurable) resources.
+	// UnitNone is used for countable (rather than measurable) resources.
 	UnitNone Unit = ""
-	//UnitBytes is exactly that.
+	// UnitBytes is exactly that.
 	UnitBytes Unit = "B"
-	//UnitKibibytes is exactly that.
+	// UnitKibibytes is exactly that.
 	UnitKibibytes Unit = "KiB"
-	//UnitMebibytes is exactly that.
+	// UnitMebibytes is exactly that.
 	UnitMebibytes Unit = "MiB"
-	//UnitGibibytes is exactly that.
+	// UnitGibibytes is exactly that.
 	UnitGibibytes Unit = "GiB"
-	//UnitTebibytes is exactly that.
+	// UnitTebibytes is exactly that.
 	UnitTebibytes Unit = "TiB"
-	//UnitPebibytes is exactly that.
+	// UnitPebibytes is exactly that.
 	UnitPebibytes Unit = "PiB"
-	//UnitExbibytes is exactly that.
+	// UnitExbibytes is exactly that.
 	UnitExbibytes Unit = "EiB"
-	//UnitUnspecified is used as a placeholder when the unit is not known.
+	// UnitUnspecified is used as a placeholder when the unit is not known.
 	UnitUnspecified Unit = "UNSPECIFIED"
 )
 
@@ -110,7 +110,7 @@ func (u Unit) Base() (Unit, uint64) { //nolint:gocritic // not necessary to name
 //	UnitNone.Parse("42")          -> 42
 //	UnitNone.Parse("42 MiB")      -> returns syntax error (unexpected unit)
 func (u Unit) Parse(str string) (uint64, error) {
-	//for countable resources, expect a number only
+	// for countable resources, expect a number only
 	if u == UnitNone {
 		return strconv.ParseUint(strings.TrimSpace(str), 10, 64)
 	}
@@ -127,7 +127,7 @@ func (u Unit) Parse(str string) (uint64, error) {
 	}
 	value := ValueWithUnit{
 		Value: number,
-		//no need to validate unit string here; that will happen implicitly during .ConvertTo()
+		// no need to validate unit string here; that will happen implicitly during .ConvertTo()
 		Unit: Unit(fields[1]),
 	}
 	converted, err := value.ConvertTo(u)

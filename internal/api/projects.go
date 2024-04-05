@@ -27,6 +27,7 @@ import (
 
 	"github.com/go-gorp/gorp/v3"
 	"github.com/gorilla/mux"
+	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/errext"
 	"github.com/sapcc/go-bits/httpapi"
@@ -215,10 +216,10 @@ func (p *v1Provider) putOrSimulatePutProjectQuotas(w http.ResponseWriter, r *htt
 	if !token.Require(w, "project:show") {
 		return
 	}
-	checkToken := func(policy string) func(string, string) bool {
-		return func(serviceType, resourceName string) bool {
-			token.Context.Request["service_type"] = serviceType
-			token.Context.Request["resource_name"] = resourceName
+	checkToken := func(policy string) func(limes.ServiceType, limesresources.ResourceName) bool {
+		return func(serviceType limes.ServiceType, resourceName limesresources.ResourceName) bool {
+			token.Context.Request["service_type"] = string(serviceType)
+			token.Context.Request["resource_name"] = string(resourceName)
 			return token.Check(policy)
 		}
 	}
@@ -416,9 +417,12 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 			 GROUP BY ps.type, pr.name, pr.quota
 			HAVING SUM(par.usage) > pr.quota`
 		err := sqlext.ForeachRow(dbi, query, []any{project.ID}, func(rows *sql.Rows) error {
-			var serviceType, resourceName string
+			var (
+				serviceType  limes.ServiceType
+				resourceName limesresources.ResourceName
+			)
 			err := rows.Scan(&serviceType, &resourceName)
-			overbookedResources = append(overbookedResources, serviceType+"/"+resourceName)
+			overbookedResources = append(overbookedResources, string(serviceType)+"/"+string(resourceName))
 			return err
 		})
 		if respondwith.ErrorText(w, err) {

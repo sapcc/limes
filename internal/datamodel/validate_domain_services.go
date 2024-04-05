@@ -24,6 +24,7 @@ import (
 
 	"github.com/go-gorp/gorp/v3"
 	"github.com/sapcc/go-api-declarations/limes"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/logg"
 
 	"github.com/sapcc/limes/internal/core"
@@ -34,7 +35,7 @@ import (
 // DomainResource records for this domain exist (and none other).
 func ValidateDomainServices(tx *gorp.Transaction, cluster *core.Cluster, domain db.Domain) error {
 	// list existing services
-	seen := make(map[string]bool)
+	seen := make(map[limes.ServiceType]bool)
 	var services []db.DomainService
 	_, err := tx.Select(&services,
 		`SELECT * FROM domain_services WHERE domain_id = $1 ORDER BY type`, domain.ID)
@@ -93,13 +94,13 @@ func convergeResourcesInDomainService(tx *gorp.Transaction, cluster *core.Cluste
 		return fmt.Errorf("no quota plugin registered for service type %s", srv.Type)
 	}
 
-	var serviceConstraints map[string]core.QuotaConstraint
+	var serviceConstraints map[limesresources.ResourceName]core.QuotaConstraint
 	if cluster.QuotaConstraints != nil {
 		serviceConstraints = cluster.QuotaConstraints.Domains[domain.Name][srv.Type]
 	}
 
 	// list existing resources
-	seen := make(map[string]bool)
+	seen := make(map[limesresources.ResourceName]bool)
 	var resources []db.DomainResource
 	_, err := tx.Select(&resources,
 		`SELECT * FROM domain_resources WHERE service_id = $1`, srv.ID)

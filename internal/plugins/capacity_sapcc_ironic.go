@@ -30,6 +30,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/aggregates"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/logg"
 
 	"github.com/sapcc/limes/internal/core"
@@ -152,7 +153,7 @@ var nodeNameRx = regexp.MustCompile(`^node(?:swift)?\d+-((?:b[bm]|ap|md|st|swf|g
 var cpNodeNameRx = regexp.MustCompile(`^node(?:swift)?\d+-(cp\d+)$`)
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *capacitySapccIronicPlugin) Scrape(_ core.CapacityPluginBackchannel) (result map[string]map[string]core.PerAZ[core.CapacityData], serializedMetrics []byte, err error) {
+func (p *capacitySapccIronicPlugin) Scrape(_ core.CapacityPluginBackchannel) (result map[limes.ServiceType]map[limesresources.ResourceName]core.PerAZ[core.CapacityData], serializedMetrics []byte, err error) {
 	// collect info about flavors with separate instance quota
 	flavorNames, err := p.FlavorAliases.ListFlavorsWithSeparateInstanceQuota(p.NovaV2)
 	if err != nil {
@@ -160,7 +161,7 @@ func (p *capacitySapccIronicPlugin) Scrape(_ core.CapacityPluginBackchannel) (re
 	}
 
 	// we are going to report capacity for all per-flavor instance quotas
-	resultCompute := make(map[string]core.PerAZ[core.CapacityData])
+	resultCompute := make(map[limesresources.ResourceName]core.PerAZ[core.CapacityData])
 	for _, flavorName := range flavorNames {
 		if p.FlavorNameSelection.MatchFlavorName(flavorName) != "" {
 			resName := p.FlavorAliases.LimesResourceNameForFlavor(flavorName)
@@ -309,7 +310,7 @@ func (p *capacitySapccIronicPlugin) Scrape(_ core.CapacityPluginBackchannel) (re
 	}
 
 	serializedMetrics, err = json.Marshal(metrics)
-	return map[string]map[string]core.PerAZ[core.CapacityData]{"compute": resultCompute}, serializedMetrics, err
+	return map[limes.ServiceType]map[limesresources.ResourceName]core.PerAZ[core.CapacityData]{"compute": resultCompute}, serializedMetrics, err
 }
 
 var (

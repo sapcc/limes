@@ -40,11 +40,11 @@ type DomainServiceReport struct {
 // DomainResourceReport is a substructure of DomainReport containing data for
 // a single resource.
 type DomainResourceReport struct {
-	//Several fields are pointers to values to enable precise control over which fields are rendered in output.
+	// Several fields are pointers to values to enable precise control over which fields are rendered in output.
 	ResourceInfo
 	QuotaDistributionModel QuotaDistributionModel   `json:"quota_distribution_model,omitempty"`
 	CommitmentConfig       *CommitmentConfiguration `json:"commitment_config,omitempty"`
-	//PerAZ is only rendered by Limes when the v2 API feature preview is enabled.
+	// PerAZ is only rendered by Limes when the v2 API feature preview is enabled.
 	PerAZ                DomainAZResourceReports `json:"per_az,omitempty"`
 	DomainQuota          *uint64                 `json:"quota,omitempty"`
 	ProjectsQuota        *uint64                 `json:"projects_quota,omitempty"`
@@ -54,8 +54,8 @@ type DomainResourceReport struct {
 	BackendQuota         *uint64                 `json:"backend_quota,omitempty"`
 	InfiniteBackendQuota *bool                   `json:"infinite_backend_quota,omitempty"`
 	Scaling              *ScalingBehavior        `json:"scales_with,omitempty"`
-	//Annotations may contain arbitrary metadata that was configured for this
-	//resource in this scope by Limes' operator.
+	// Annotations may contain arbitrary metadata that was configured for this
+	// resource in this scope by Limes' operator.
 	Annotations map[string]any `json:"annotations,omitempty"`
 }
 
@@ -77,11 +77,11 @@ type DomainAZResourceReport struct {
 
 // DomainServiceReports provides fast lookup of services using a map, but serializes
 // to JSON as a list.
-type DomainServiceReports map[string]*DomainServiceReport
+type DomainServiceReports map[limes.ServiceType]*DomainServiceReport
 
 // DomainResourceReports provides fast lookup of resources using a map, but serializes
 // to JSON as a list.
-type DomainResourceReports map[string]*DomainResourceReport
+type DomainResourceReports map[ResourceName]*DomainResourceReport
 
 // DomainAZResourceReport is a substructure of DomainResourceReport that breaks
 // down quota and usage data for a single resource by availability zone.

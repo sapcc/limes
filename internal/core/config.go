@@ -49,7 +49,7 @@ type ClusterConfiguration struct {
 }
 
 // GetServiceConfigurationForType returns the ServiceConfiguration or an error.
-func (cluster *ClusterConfiguration) GetServiceConfigurationForType(serviceType string) (ServiceConfiguration, error) {
+func (cluster *ClusterConfiguration) GetServiceConfigurationForType(serviceType limes.ServiceType) (ServiceConfiguration, error) {
 	for _, svc := range cluster.Services {
 		if serviceType == svc.ServiceType {
 			return svc, nil
@@ -89,8 +89,8 @@ func (c DiscoveryConfiguration) FilterDomains(domains []KeystoneDomain) []Keysto
 
 // ServiceConfiguration describes a service that is enabled for a certain cluster.
 type ServiceConfiguration struct {
-	ServiceType string `yaml:"service_type"`
-	PluginType  string `yaml:"type"`
+	ServiceType limes.ServiceType `yaml:"service_type"`
+	PluginType  string            `yaml:"type"`
 	// RateLimits describes the global rate limits (all requests for to a backend) and default project level rate limits.
 	RateLimits ServiceRateLimitConfiguration `yaml:"rate_limits"`
 	Parameters util.YamlRawMessage           `yaml:"params"`
@@ -103,7 +103,7 @@ type ServiceRateLimitConfiguration struct {
 }
 
 // GetProjectDefaultRateLimit returns the default project-level rate limit for a given target type URI and action or an error if not found.
-func (svcRlConfig *ServiceRateLimitConfiguration) GetProjectDefaultRateLimit(name string) (RateLimitConfiguration, bool) {
+func (svcRlConfig *ServiceRateLimitConfiguration) GetProjectDefaultRateLimit(name limesrates.RateName) (RateLimitConfiguration, bool) {
 	for _, rateCfg := range svcRlConfig.ProjectDefault {
 		if rateCfg.Name == name {
 			return rateCfg, true
@@ -114,10 +114,10 @@ func (svcRlConfig *ServiceRateLimitConfiguration) GetProjectDefaultRateLimit(nam
 
 // RateLimitConfiguration describes a rate limit configuration.
 type RateLimitConfiguration struct {
-	Name   string            `yaml:"name"`
-	Unit   limes.Unit        `yaml:"unit"`
-	Limit  uint64            `yaml:"limit"`
-	Window limesrates.Window `yaml:"window"`
+	Name   limesrates.RateName `yaml:"name"`
+	Unit   limes.Unit          `yaml:"unit"`
+	Limit  uint64              `yaml:"limit"`
+	Window limesrates.Window   `yaml:"window"`
 }
 
 // CapacitorConfiguration describes a capacity plugin that is enabled for a

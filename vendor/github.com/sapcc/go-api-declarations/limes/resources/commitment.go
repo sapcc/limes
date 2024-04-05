@@ -33,8 +33,8 @@ import (
 // Commitment is the API representation of an *existing* commitment as reported by Limes.
 type Commitment struct {
 	ID               int64                  `json:"id"`
-	ServiceType      string                 `json:"service_type"`
-	ResourceName     string                 `json:"resource_name"`
+	ServiceType      limes.ServiceType      `json:"service_type"`
+	ResourceName     ResourceName           `json:"resource_name"`
 	AvailabilityZone limes.AvailabilityZone `json:"availability_zone"`
 	Amount           uint64                 `json:"amount"`
 	Unit             limes.Unit             `json:"unit,omitempty"`
@@ -60,8 +60,8 @@ type Commitment struct {
 
 // CommitmentRequest is the API representation of a *new* commitment as requested by a user.
 type CommitmentRequest struct {
-	ServiceType      string                 `json:"service_type"`
-	ResourceName     string                 `json:"resource_name"`
+	ServiceType      limes.ServiceType      `json:"service_type"`
+	ResourceName     ResourceName           `json:"resource_name"`
 	AvailabilityZone limes.AvailabilityZone `json:"availability_zone"`
 	Amount           uint64                 `json:"amount"`
 	Duration         CommitmentDuration     `json:"duration"`
@@ -96,7 +96,7 @@ type CommitmentDuration struct {
 	Years  int
 	Months int
 	Days   int
-	Short  time.Duration //represents durations of hours, minutes and seconds
+	Short  time.Duration // represents durations of hours, minutes and seconds
 }
 
 var cdTokenRx = regexp.MustCompile(`^([0-9]*)\s*(second|minute|hour|day|month|year)s?$`)

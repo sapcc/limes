@@ -22,6 +22,7 @@ import (
 	"database/sql"
 
 	"github.com/sapcc/go-api-declarations/limes"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/internal/core"
@@ -40,12 +41,12 @@ type Inconsistencies struct {
 // for the inconsistency type where for a domain the 'sum(projects_quota) > domain_quota'
 // for a single resource.
 type OvercommittedDomainQuota struct {
-	Domain        core.KeystoneDomain `json:"domain"`
-	Service       string              `json:"service"`
-	Resource      string              `json:"resource"`
-	Unit          limes.Unit          `json:"unit,omitempty"`
-	DomainQuota   uint64              `json:"domain_quota"`
-	ProjectsQuota uint64              `json:"projects_quota"`
+	Domain        core.KeystoneDomain         `json:"domain"`
+	Service       limes.ServiceType           `json:"service"`
+	Resource      limesresources.ResourceName `json:"resource"`
+	Unit          limes.Unit                  `json:"unit,omitempty"`
+	DomainQuota   uint64                      `json:"domain_quota"`
+	ProjectsQuota uint64                      `json:"projects_quota"`
 }
 
 // OverspentProjectQuota is a substructure of Inconsistency containing data for
@@ -56,12 +57,12 @@ type OvercommittedDomainQuota struct {
 // and for projects with quota bursting enabled the
 // 'desired_backend_quota == floor(quota * (1 + bursting.multiplier))'.
 type OverspentProjectQuota struct {
-	Project  core.KeystoneProject `json:"project"`
-	Service  string               `json:"service"`
-	Resource string               `json:"resource"`
-	Unit     limes.Unit           `json:"unit,omitempty"`
-	Quota    uint64               `json:"quota"`
-	Usage    uint64               `json:"usage"`
+	Project  core.KeystoneProject        `json:"project"`
+	Service  limes.ServiceType           `json:"service"`
+	Resource limesresources.ResourceName `json:"resource"`
+	Unit     limes.Unit                  `json:"unit,omitempty"`
+	Quota    uint64                      `json:"quota"`
+	Usage    uint64                      `json:"usage"`
 }
 
 // MismatchProjectQuota is a substructure of Inconsistency containing data for
@@ -72,12 +73,12 @@ type OverspentProjectQuota struct {
 // and for projects with quota bursting enabled the
 // 'desired_backend_quota == floor(quota * (1 + bursting.multiplier))'.
 type MismatchProjectQuota struct {
-	Project      core.KeystoneProject `json:"project"`
-	Service      string               `json:"service"`
-	Resource     string               `json:"resource"`
-	Unit         limes.Unit           `json:"unit,omitempty"`
-	Quota        uint64               `json:"quota"`
-	BackendQuota int64                `json:"backend_quota"`
+	Project      core.KeystoneProject        `json:"project"`
+	Service      limes.ServiceType           `json:"service"`
+	Resource     limesresources.ResourceName `json:"resource"`
+	Unit         limes.Unit                  `json:"unit,omitempty"`
+	Quota        uint64                      `json:"quota"`
+	BackendQuota int64                       `json:"backend_quota"`
 }
 
 var ocdqReportQuery = sqlext.SimplifyWhitespace(`

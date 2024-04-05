@@ -106,7 +106,7 @@ type QuotaPlugin interface {
 	// in the ServiceInfo struct. But in general, a plugin cannot know which
 	// serviceType it was instantiated for (esp. in unit tests, where the generic
 	// test plugin is instantiated multiple times for different service types).
-	ServiceInfo(serviceType string) limes.ServiceInfo
+	ServiceInfo(serviceType limes.ServiceType) limes.ServiceInfo
 
 	// Resources returns metadata for all the resources that this plugin scrapes
 	// from the backend service.
@@ -123,11 +123,11 @@ type QuotaPlugin interface {
 	//
 	// The `serializedMetrics` return value is persisted in the Limes DB and
 	// supplied to all subsequent RenderMetrics calls.
-	Scrape(project KeystoneProject, allAZs []limes.AvailabilityZone) (result map[string]ResourceData, serializedMetrics []byte, err error)
+	Scrape(project KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]ResourceData, serializedMetrics []byte, err error)
 	// SetQuota updates the backend service's quotas for the given project in the
 	// given domain to the values specified here. The map is guaranteed to contain
 	// values for all resources defined by Resources().
-	SetQuota(project KeystoneProject, quotas map[string]uint64) error
+	SetQuota(project KeystoneProject, quotas map[limesresources.ResourceName]uint64) error
 
 	// Rates returns metadata for all the rates that this plugin scrapes
 	// from the backend service.
@@ -142,7 +142,7 @@ type QuotaPlugin interface {
 	// by the core application in any way. The plugin implementation can use this
 	// field to carry state between ScrapeRates() calls, esp. to detect and handle
 	// counter resets in the backend.
-	ScrapeRates(project KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error)
+	ScrapeRates(project KeystoneProject, prevSerializedState string) (result map[limesrates.RateName]*big.Int, serializedState string, err error)
 
 	// DescribeMetrics is called when Prometheus is scraping metrics from
 	// limes-collect, to provide an opportunity to the plugin to emit its own
@@ -193,7 +193,7 @@ type CapacityPlugin interface {
 	//
 	// The serializedMetrics return value is persisted in the Limes DB and
 	// supplied to all subsequent RenderMetrics calls.
-	Scrape(backchannel CapacityPluginBackchannel) (result map[string]map[string]PerAZ[CapacityData], serializedMetrics []byte, err error)
+	Scrape(backchannel CapacityPluginBackchannel) (result map[limes.ServiceType]map[limesresources.ResourceName]PerAZ[CapacityData], serializedMetrics []byte, err error)
 
 	// DescribeMetrics is called when Prometheus is scraping metrics from
 	// limes-collect, to provide an opportunity to the plugin to emit its own
@@ -222,8 +222,8 @@ type CapacityPlugin interface {
 // differs from the raw capacity seen by the CapacityPlugin by this
 // OvercommitFactor.
 type CapacityPluginBackchannel interface {
-	GetGlobalResourceDemand(serviceType, resourceName string) (map[limes.AvailabilityZone]ResourceDemand, error)
-	GetOvercommitFactor(serviceType, resourceName string) (OvercommitFactor, error)
+	GetGlobalResourceDemand(serviceType limes.ServiceType, resourceName limesresources.ResourceName) (map[limes.AvailabilityZone]ResourceDemand, error)
+	GetOvercommitFactor(serviceType limes.ServiceType, resourceName limesresources.ResourceName) (OvercommitFactor, error)
 }
 
 // ResourceDemand describes cluster-wide demand for a certain resource within a

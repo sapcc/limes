@@ -21,7 +21,7 @@ package core
 
 import (
 	"os"
-	"sort"
+	"slices"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/sapcc/go-api-declarations/limes"
@@ -39,11 +39,11 @@ import (
 type Cluster struct {
 	Config            ClusterConfiguration
 	DiscoveryPlugin   DiscoveryPlugin
-	QuotaPlugins      map[string]QuotaPlugin
+	QuotaPlugins      map[limes.ServiceType]QuotaPlugin
 	CapacityPlugins   map[string]CapacityPlugin
 	Authoritative     bool
 	QuotaConstraints  *QuotaConstraintSet
-	QuotaOverrides    map[string]map[string]map[string]map[string]uint64
+	QuotaOverrides    map[string]map[string]map[limes.ServiceType]map[limesresources.ResourceName]uint64
 	LowPrivilegeRaise LowPrivilegeRaiseLimitSet
 }
 
@@ -53,7 +53,7 @@ type Cluster struct {
 func NewCluster(config ClusterConfiguration) (c *Cluster, errs errext.ErrorSet) {
 	c = &Cluster{
 		Config:          config,
-		QuotaPlugins:    make(map[string]QuotaPlugin),
+		QuotaPlugins:    make(map[limes.ServiceType]QuotaPlugin),
 		CapacityPlugins: make(map[string]CapacityPlugin),
 		Authoritative:   osext.GetenvBool("LIMES_AUTHORITATIVE"),
 	}
@@ -179,20 +179,20 @@ func (c *Cluster) Connect(provider *gophercloud.ProviderClient, eo gophercloud.E
 // ParseQuotaOverrides is used by Connect to parse the file at LIMES_QUOTA_OVERRIDES_PATH.
 // It is exported as a public function for test coverage.
 // The file contents are in `buf`. The `path` argument is only used for building error messages.
-func (c *Cluster) ParseQuotaOverrides(path string, buf []byte) (result map[string]map[string]map[string]map[string]uint64, errs errext.ErrorSet) {
-	var parsed map[string]map[string]map[string]map[string]any
+func (c *Cluster) ParseQuotaOverrides(path string, buf []byte) (result map[string]map[string]map[limes.ServiceType]map[limesresources.ResourceName]uint64, errs errext.ErrorSet) {
+	var parsed map[string]map[string]map[limes.ServiceType]map[limesresources.ResourceName]any
 	err := yaml.UnmarshalStrict(buf, &parsed)
 	if err != nil {
 		errs.Addf("failed to parse %s: %w", path, err)
 	}
 
-	result = make(map[string]map[string]map[string]map[string]uint64)
+	result = make(map[string]map[string]map[limes.ServiceType]map[limesresources.ResourceName]uint64)
 	for domainName, domainInputs := range parsed {
-		domainResult := make(map[string]map[string]map[string]uint64)
+		domainResult := make(map[string]map[limes.ServiceType]map[limesresources.ResourceName]uint64)
 		for projectName, projectInputs := range domainInputs {
-			projectResult := make(map[string]map[string]uint64)
+			projectResult := make(map[limes.ServiceType]map[limesresources.ResourceName]uint64)
 			for serviceType, serviceInputs := range projectInputs {
-				serviceResult := make(map[string]uint64)
+				serviceResult := make(map[limesresources.ResourceName]uint64)
 				for resourceName, input := range serviceInputs {
 					if !c.HasResource(serviceType, resourceName) {
 						errs.Addf("while parsing %s: %s/%s is not a valid resource", path, serviceType, resourceName)
@@ -228,14 +228,14 @@ func (c *Cluster) ParseQuotaOverrides(path string, buf []byte) (result map[strin
 
 // ServiceTypesInAlphabeticalOrder can be used when service types need to be
 // iterated over in a stable order (mostly to ensure deterministic behavior in unit tests).
-func (c *Cluster) ServiceTypesInAlphabeticalOrder() []string {
-	result := make([]string, 0, len(c.QuotaPlugins))
+func (c *Cluster) ServiceTypesInAlphabeticalOrder() []limes.ServiceType {
+	result := make([]limes.ServiceType, 0, len(c.QuotaPlugins))
 	for serviceType, quotaPlugin := range c.QuotaPlugins {
 		if quotaPlugin != nil { // defense in depth (nil values should never be stored in the map anyway)
 			result = append(result, serviceType)
 		}
 	}
-	sort.Strings(result)
+	slices.Sort(result)
 	return result
 }
 
@@ -249,13 +249,13 @@ func (c *Cluster) AllServiceInfos() []limes.ServiceInfo {
 }
 
 // HasService checks whether the given service is enabled in this cluster.
-func (c *Cluster) HasService(serviceType string) bool {
+func (c *Cluster) HasService(serviceType limes.ServiceType) bool {
 	return c.QuotaPlugins[serviceType] != nil
 }
 
 // HasResource checks whether the given service is enabled in this cluster and
 // whether it advertises the given resource.
-func (c *Cluster) HasResource(serviceType, resourceName string) bool {
+func (c *Cluster) HasResource(serviceType limes.ServiceType, resourceName limesresources.ResourceName) bool {
 	plugin := c.QuotaPlugins[serviceType]
 	if plugin == nil {
 		return false
@@ -272,7 +272,7 @@ func (c *Cluster) HasResource(serviceType, resourceName string) bool {
 // plugin the ResourceInfo for the given resourceName. If the service or
 // resource does not exist, an empty ResourceInfo (with .Unit == UnitNone and
 // .Category == "") is returned.
-func (c *Cluster) InfoForResource(serviceType, resourceName string) limesresources.ResourceInfo {
+func (c *Cluster) InfoForResource(serviceType limes.ServiceType, resourceName limesresources.ResourceName) limesresources.ResourceInfo {
 	plugin := c.QuotaPlugins[serviceType]
 	if plugin == nil {
 		return limesresources.ResourceInfo{Name: resourceName, Unit: limes.UnitNone}
@@ -288,7 +288,7 @@ func (c *Cluster) InfoForResource(serviceType, resourceName string) limesresourc
 // InfoForService finds the plugin for the given serviceType and returns its
 // ServiceInfo(), or an empty ServiceInfo (with .Area == "") when no such
 // service exists in this cluster.
-func (c *Cluster) InfoForService(serviceType string) limes.ServiceInfo {
+func (c *Cluster) InfoForService(serviceType limes.ServiceType) limes.ServiceInfo {
 	plugin := c.QuotaPlugins[serviceType]
 	if plugin == nil {
 		return limes.ServiceInfo{Type: serviceType}
@@ -297,7 +297,7 @@ func (c *Cluster) InfoForService(serviceType string) limes.ServiceInfo {
 }
 
 // GetServiceTypesForArea returns all service types that belong to the given area.
-func (c *Cluster) GetServiceTypesForArea(area string) (serviceTypes []string) {
+func (c *Cluster) GetServiceTypesForArea(area string) (serviceTypes []limes.ServiceType) {
 	for serviceType, plugin := range c.QuotaPlugins {
 		if plugin.ServiceInfo(serviceType).Area == area {
 			serviceTypes = append(serviceTypes, serviceType)
@@ -312,7 +312,7 @@ func (c *Cluster) GetServiceTypesForArea(area string) (serviceTypes []string) {
 // `scopeName` should be empty for cluster resources, equal to the domain name
 // for domain resources, or equal to `$DOMAIN_NAME/$PROJECT_NAME` for project
 // resources.
-func (c *Cluster) BehaviorForResource(serviceType, resourceName, scopeName string) ResourceBehavior {
+func (c *Cluster) BehaviorForResource(serviceType limes.ServiceType, resourceName limesresources.ResourceName, scopeName string) ResourceBehavior {
 	// default behavior
 	maxBurstMultiplier := c.Config.Bursting.MaxMultiplier
 	result := ResourceBehavior{
@@ -320,7 +320,7 @@ func (c *Cluster) BehaviorForResource(serviceType, resourceName, scopeName strin
 	}
 
 	// check for specific behavior
-	fullName := serviceType + "/" + resourceName
+	fullName := string(serviceType) + "/" + string(resourceName)
 	for _, behavior := range c.Config.ResourceBehaviors {
 		if behavior.Matches(fullName, scopeName) {
 			result.Merge(behavior)
@@ -332,9 +332,9 @@ func (c *Cluster) BehaviorForResource(serviceType, resourceName, scopeName strin
 
 // QuotaDistributionConfigForResource returns the QuotaDistributionConfiguration
 // for the given resource.
-func (c *Cluster) QuotaDistributionConfigForResource(serviceType, resourceName string) QuotaDistributionConfiguration {
+func (c *Cluster) QuotaDistributionConfigForResource(serviceType limes.ServiceType, resourceName limesresources.ResourceName) QuotaDistributionConfiguration {
 	// check for specific behavior
-	fullName := serviceType + "/" + resourceName
+	fullName := string(serviceType) + "/" + string(resourceName)
 	for _, dmCfg := range c.Config.QuotaDistributionConfigs {
 		if dmCfg.FullResourceNameRx.MatchString(fullName) {
 			return *dmCfg
@@ -347,7 +347,7 @@ func (c *Cluster) QuotaDistributionConfigForResource(serviceType, resourceName s
 
 // HasUsageForRate checks whether the given service is enabled in this cluster and
 // whether it scrapes usage for the given rate.
-func (c *Cluster) HasUsageForRate(serviceType, rateName string) bool {
+func (c *Cluster) HasUsageForRate(serviceType limes.ServiceType, rateName limesrates.RateName) bool {
 	plugin := c.QuotaPlugins[serviceType]
 	if plugin == nil {
 		return false
@@ -365,7 +365,7 @@ func (c *Cluster) HasUsageForRate(serviceType, rateName string) bool {
 // exist, an empty RateInfo (with .Unit == UnitNone) is returned. Note that this
 // only returns non-empty RateInfos for rates where a usage is reported. There
 // may be rates that only have a limit, as defined in the ClusterConfiguration.
-func (c *Cluster) InfoForRate(serviceType, rateName string) limesrates.RateInfo {
+func (c *Cluster) InfoForRate(serviceType limes.ServiceType, rateName limesrates.RateName) limesrates.RateInfo {
 	plugin := c.QuotaPlugins[serviceType]
 	if plugin == nil {
 		return limesrates.RateInfo{Name: rateName, Unit: limes.UnitNone}

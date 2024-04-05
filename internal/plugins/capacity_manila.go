@@ -30,6 +30,7 @@ import (
 	"github.com/gophercloud/gophercloud/pagination"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/logg"
 
 	"github.com/sapcc/limes/internal/core"
@@ -89,17 +90,17 @@ func (p *capacityManilaPlugin) PluginTypeID() string {
 	return "manila"
 }
 
-func (p *capacityManilaPlugin) makeResourceName(kind string, shareType ManilaShareTypeSpec) string {
+func (p *capacityManilaPlugin) makeResourceName(kind string, shareType ManilaShareTypeSpec) limesresources.ResourceName {
 	if p.ShareTypes[0].Name == shareType.Name {
 		// the resources for the first share type don't get the share type suffix
 		// for backwards compatibility reasons
-		return kind
+		return limesresources.ResourceName(kind)
 	}
-	return kind + "_" + shareType.Name
+	return limesresources.ResourceName(kind + "_" + shareType.Name)
 }
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *capacityManilaPlugin) Scrape(_ core.CapacityPluginBackchannel) (result map[string]map[string]core.PerAZ[core.CapacityData], _ []byte, err error) {
+func (p *capacityManilaPlugin) Scrape(_ core.CapacityPluginBackchannel) (result map[limes.ServiceType]map[limesresources.ResourceName]core.PerAZ[core.CapacityData], _ []byte, err error) {
 	allPages, err := services.List(p.ManilaV2, nil).AllPages()
 	if err != nil {
 		return nil, nil, err
@@ -122,7 +123,7 @@ func (p *capacityManilaPlugin) Scrape(_ core.CapacityPluginBackchannel) (result 
 		}
 	}
 
-	caps := map[string]core.PerAZ[core.CapacityData]{
+	caps := map[limesresources.ResourceName]core.PerAZ[core.CapacityData]{
 		"share_networks": core.InAnyAZ(core.CapacityData{Capacity: p.ShareNetworks}),
 	}
 	for _, shareType := range p.ShareTypes {
@@ -135,7 +136,7 @@ func (p *capacityManilaPlugin) Scrape(_ core.CapacityPluginBackchannel) (result 
 		caps[p.makeResourceName("share_capacity", shareType)] = capForType.ShareGigabytes
 		caps[p.makeResourceName("snapshot_capacity", shareType)] = capForType.SnapshotGigabytes
 	}
-	return map[string]map[string]core.PerAZ[core.CapacityData]{"sharev2": caps}, nil, nil
+	return map[limes.ServiceType]map[limesresources.ResourceName]core.PerAZ[core.CapacityData]{"sharev2": caps}, nil, nil
 }
 
 // DescribeMetrics implements the core.CapacityPlugin interface.

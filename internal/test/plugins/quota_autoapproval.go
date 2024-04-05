@@ -53,11 +53,11 @@ func (p *AutoApprovalQuotaPlugin) PluginTypeID() string {
 }
 
 // ServiceInfo implements the core.QuotaPlugin interface.
-func (p *AutoApprovalQuotaPlugin) ServiceInfo(serviceType string) limes.ServiceInfo {
+func (p *AutoApprovalQuotaPlugin) ServiceInfo(serviceType limes.ServiceType) limes.ServiceInfo {
 	return limes.ServiceInfo{
 		Type:        serviceType,
-		Area:        serviceType,
-		ProductName: "autoapproval-" + serviceType,
+		Area:        string(serviceType),
+		ProductName: "autoapproval-" + string(serviceType),
 	}
 }
 
@@ -82,7 +82,7 @@ func (p *AutoApprovalQuotaPlugin) Rates() []limesrates.RateInfo {
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *AutoApprovalQuotaPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+func (p *AutoApprovalQuotaPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[limesrates.RateName]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
@@ -96,14 +96,14 @@ func (p *AutoApprovalQuotaPlugin) CollectMetrics(ch chan<- prometheus.Metric, pr
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *AutoApprovalQuotaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[string]core.ResourceData, serializedMetrics []byte, err error) {
-	return map[string]core.ResourceData{
+func (p *AutoApprovalQuotaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
+	return map[limesresources.ResourceName]core.ResourceData{
 		"approve":   {UsageData: core.InAnyAZ(core.UsageData{Usage: 0}), Quota: int64(p.StaticBackendQuota)},
 		"noapprove": {UsageData: core.InAnyAZ(core.UsageData{Usage: 0}), Quota: int64(p.StaticBackendQuota) + 10},
 	}, nil, nil
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *AutoApprovalQuotaPlugin) SetQuota(project core.KeystoneProject, quotas map[string]uint64) error {
+func (p *AutoApprovalQuotaPlugin) SetQuota(project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
 	return errors.New("unimplemented")
 }

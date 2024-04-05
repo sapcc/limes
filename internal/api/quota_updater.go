@@ -53,13 +53,13 @@ type QuotaUpdater struct {
 	Now time.Time
 
 	// AuthZ info
-	CanRaise   func(serviceType, resourceName string) bool
-	CanRaiseLP func(serviceType, resourceName string) bool // low-privilege raise
-	CanLower   func(serviceType, resourceName string) bool
-	CanLowerLP func(serviceType, resourceName string) bool
+	CanRaise   func(serviceType limes.ServiceType, resourceName limesresources.ResourceName) bool
+	CanRaiseLP func(serviceType limes.ServiceType, resourceName limesresources.ResourceName) bool // low-privilege raise
+	CanLower   func(serviceType limes.ServiceType, resourceName limesresources.ResourceName) bool
+	CanLowerLP func(serviceType limes.ServiceType, resourceName limesresources.ResourceName) bool
 
 	// Filled by ValidateInput() with the keys being the service type and the resource name.
-	Requests map[string]map[string]QuotaRequest
+	Requests map[limes.ServiceType]map[limesresources.ResourceName]QuotaRequest
 }
 
 // QuotaRequest describes a single quota value that a PUT request wants to
@@ -105,8 +105,8 @@ func (u QuotaUpdater) QuotaConstraints() core.QuotaConstraints {
 // project report is incomplete. This usually happens when a user tries to PUT a
 // quota on a new project that has not been scraped yet.
 type MissingProjectReportError struct {
-	ServiceType  string
-	ResourceName string
+	ServiceType  limes.ServiceType
+	ResourceName limesresources.ResourceName
 }
 
 // Error implements the builtin/error interface.
@@ -146,10 +146,10 @@ func (u *QuotaUpdater) ValidateInput(input limesresources.QuotaRequest, dbi db.I
 	}
 
 	// go through all services and resources and validate the requested quotas
-	u.Requests = make(map[string]map[string]QuotaRequest)
+	u.Requests = make(map[limes.ServiceType]map[limesresources.ResourceName]QuotaRequest)
 	for serviceType, quotaPlugin := range u.Cluster.QuotaPlugins {
 		srv := quotaPlugin.ServiceInfo(serviceType)
-		u.Requests[srv.Type] = map[string]QuotaRequest{}
+		u.Requests[srv.Type] = map[limesresources.ResourceName]QuotaRequest{}
 
 		for _, res := range quotaPlugin.Resources() {
 			// find the report data for this resource
@@ -234,7 +234,7 @@ func (u *QuotaUpdater) ValidateInput(input limesresources.QuotaRequest, dbi db.I
 	for srvType, srvInput := range input {
 		isUnknownService := !u.Cluster.HasService(srvType)
 		if isUnknownService {
-			u.Requests[srvType] = make(map[string]QuotaRequest)
+			u.Requests[srvType] = make(map[limesresources.ResourceName]QuotaRequest)
 		}
 		for resName := range srvInput {
 			if !u.Cluster.HasResource(srvType, resName) {
@@ -257,8 +257,8 @@ func (u *QuotaUpdater) ValidateInput(input limesresources.QuotaRequest, dbi db.I
 	if u.Project != nil {
 		err := sqlext.ForeachRow(u.DB, getMinMaxQuotaQuery, []any{u.Project.ID}, func(rows *sql.Rows) error {
 			var (
-				serviceType  string
-				resourceName string
+				serviceType  limes.ServiceType
+				resourceName limesresources.ResourceName
 				minQuota     *uint64
 				maxQuota     *uint64
 			)
@@ -509,8 +509,8 @@ func (u QuotaUpdater) IsValid() bool {
 //nolint:dupl // This function is very similar to RateLimitUpdater.WriteSimulationReport, but cannot be deduped because of different content types.
 func (u QuotaUpdater) WriteSimulationReport(w http.ResponseWriter) {
 	type unacceptableResource struct {
-		ServiceType  string `json:"service_type"`
-		ResourceName string `json:"resource_name"`
+		ServiceType  limes.ServiceType           `json:"service_type"`
+		ResourceName limesresources.ResourceName `json:"resource_name"`
 		core.QuotaValidationError
 	}
 	var result struct {
@@ -618,8 +618,8 @@ func (u QuotaUpdater) CommitAuditTrail(token *gopherpolicy.Token, r *http.Reques
 			// low-privilege-raise metrics
 			if qdConfig.Model == limesresources.HierarchicalQuotaDistribution && u.CanRaiseLP(srvType, resName) && !u.CanRaise(srvType, resName) {
 				labels := prometheus.Labels{
-					"service":  srvType,
-					"resource": resName,
+					"service":  string(srvType),
+					"resource": string(resName),
 				}
 				if u.ScopeType() == "domain" {
 					if invalid {

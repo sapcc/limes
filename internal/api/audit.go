@@ -118,8 +118,8 @@ type quotaEventTarget struct {
 	DomainName   string
 	ProjectID    string
 	ProjectName  string
-	ServiceType  string
-	ResourceName string
+	ServiceType  limes.ServiceType
+	ResourceName limesresources.ResourceName
 	OldQuota     uint64
 	NewQuota     uint64
 	QuotaUnit    limes.Unit
@@ -191,8 +191,8 @@ type rateLimitEventTarget struct {
 	DomainName   string
 	ProjectID    string
 	ProjectName  string
-	ServiceType  string
-	Name         string
+	ServiceType  limes.ServiceType
+	Name         limesrates.RateName
 	Unit         limes.Unit
 	OldLimit     uint64
 	NewLimit     uint64

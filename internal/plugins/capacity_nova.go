@@ -30,6 +30,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/logg"
 
 	"github.com/sapcc/limes/internal/core"
@@ -41,9 +42,9 @@ type capacityNovaPlugin struct {
 	HypervisorSelection         nova.HypervisorSelection    `yaml:"hypervisor_selection"`
 	FlavorSelection             nova.FlavorSelection        `yaml:"flavor_selection"`
 	FlavorAliases               nova.FlavorTranslationTable `yaml:"flavor_aliases"`
-	PooledCoresResourceName     string                      `yaml:"pooled_cores_resource"`
-	PooledInstancesResourceName string                      `yaml:"pooled_instances_resource"`
-	PooledRAMResourceName       string                      `yaml:"pooled_ram_resource"`
+	PooledCoresResourceName     limesresources.ResourceName `yaml:"pooled_cores_resource"`
+	PooledInstancesResourceName limesresources.ResourceName `yaml:"pooled_instances_resource"`
+	PooledRAMResourceName       limesresources.ResourceName `yaml:"pooled_ram_resource"`
 	WithSubcapacities           bool                        `yaml:"with_subcapacities"`
 	// connections
 	NovaV2      *gophercloud.ServiceClient `yaml:"-"`
@@ -110,7 +111,7 @@ func (p *capacityNovaPlugin) PluginTypeID() string {
 }
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel) (result map[string]map[string]core.PerAZ[core.CapacityData], serializedMetrics []byte, err error) {
+func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel) (result map[limes.ServiceType]map[limesresources.ResourceName]core.PerAZ[core.CapacityData], serializedMetrics []byte, err error) {
 	// collect info about flavors with separate instance quota
 	// (we are calling these "split flavors" here, as opposed to "pooled flavors" that share a common pool of CPU/instances/RAM capacity)
 	allSplitFlavorNames, err := p.FlavorAliases.ListFlavorsWithSeparateInstanceQuota(p.NovaV2)
@@ -363,7 +364,7 @@ func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel) 
 	}
 
 	// compile result for pooled resources
-	capacities := make(map[string]core.PerAZ[core.CapacityData], len(splitFlavors)+3)
+	capacities := make(map[limesresources.ResourceName]core.PerAZ[core.CapacityData], len(splitFlavors)+3)
 	if p.PooledCoresResourceName != "" {
 		capacities[p.PooledCoresResourceName] = make(core.PerAZ[core.CapacityData], len(hypervisorsByAZ))
 		capacities[p.PooledInstancesResourceName] = make(core.PerAZ[core.CapacityData], len(hypervisorsByAZ))
@@ -466,7 +467,7 @@ func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel) 
 	}
 
 	serializedMetrics, err = json.Marshal(metrics)
-	return map[string]map[string]core.PerAZ[core.CapacityData]{"compute": capacities}, serializedMetrics, err
+	return map[limes.ServiceType]map[limesresources.ResourceName]core.PerAZ[core.CapacityData]{"compute": capacities}, serializedMetrics, err
 }
 
 var novaHypervisorWellformedGauge = prometheus.NewGaugeVec(

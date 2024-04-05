@@ -40,7 +40,7 @@ type ProjectServiceReport struct {
 type ProjectRateReport struct {
 	RateInfo
 	//NOTE: Both Window fields must have pointer types because omitempty does not
-	//work directly on json.Marshaler-implementing types.
+	// work directly on json.Marshaler-implementing types.
 	Limit         uint64  `json:"limit,omitempty"`
 	Window        *Window `json:"window,omitempty"`
 	DefaultLimit  uint64  `json:"default_limit,omitempty"`
@@ -50,8 +50,8 @@ type ProjectRateReport struct {
 
 // ProjectServiceReports provides fast lookup of services using a map, but serializes
 // to JSON as a list.
-type ProjectServiceReports map[string]*ProjectServiceReport
+type ProjectServiceReports map[limes.ServiceType]*ProjectServiceReport
 
 // ProjectRateReports provides fast lookup of rates using a map, but serializes
 // to JSON as a list.
-type ProjectRateReports map[string]*ProjectRateReport
+type ProjectRateReports map[RateName]*ProjectRateReport

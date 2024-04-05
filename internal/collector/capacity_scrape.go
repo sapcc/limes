@@ -29,6 +29,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
@@ -166,12 +167,12 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 
 	// collect mapping of cluster_services type names to IDs
 	// (these DB entries are maintained for us by checkConsistencyCluster)
-	serviceIDForType := make(map[string]db.ClusterServiceID)
-	serviceTypeForID := make(map[db.ClusterServiceID]string)
+	serviceIDForType := make(map[limes.ServiceType]db.ClusterServiceID)
+	serviceTypeForID := make(map[db.ClusterServiceID]limes.ServiceType)
 	err := sqlext.ForeachRow(c.DB, getClusterServicesQuery, nil, func(rows *sql.Rows) error {
 		var (
 			serviceID   db.ClusterServiceID
-			serviceType string
+			serviceType limes.ServiceType
 		)
 		err := rows.Scan(&serviceID, &serviceType)
 		if err == nil {
@@ -347,7 +348,7 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 	}
 
 	// for all cluster resources thus updated, recompute project quotas if necessary
-	needsACDQ := make(map[string]bool)
+	needsACDQ := make(map[limes.ServiceType]bool)
 	for _, res := range dbOwnedResources {
 		serviceType := serviceTypeForID[res.ServiceID]
 		err := datamodel.ApplyComputedProjectQuota(serviceType, res.Name, c.DB, c.Cluster)
@@ -383,7 +384,7 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 	return nil
 }
 
-func (c *Collector) confirmPendingCommitmentsIfNecessary(serviceType, resourceName string) error {
+func (c *Collector) confirmPendingCommitmentsIfNecessary(serviceType limes.ServiceType, resourceName limesresources.ResourceName) error {
 	behavior := c.Cluster.BehaviorForResource(serviceType, resourceName, "")
 	now := c.MeasureTime()
 

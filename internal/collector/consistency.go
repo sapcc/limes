@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
@@ -58,7 +59,7 @@ func (c *Collector) checkConsistencyCluster(_ context.Context, _ prometheus.Labe
 	logg.Info("checking consistency for %d cluster services...", len(services))
 
 	// cleanup entries for services that have been disabled
-	seen := make(map[string]bool)
+	seen := make(map[limes.ServiceType]bool)
 	for _, service := range services {
 		seen[service.Type] = true
 

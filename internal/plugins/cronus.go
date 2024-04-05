@@ -75,7 +75,7 @@ func (p *cronusPlugin) PluginTypeID() string {
 }
 
 // ServiceInfo implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) ServiceInfo(serviceType string) limes.ServiceInfo {
+func (p *cronusPlugin) ServiceInfo(serviceType limes.ServiceType) limes.ServiceInfo {
 	return limes.ServiceInfo{
 		Type:        serviceType,
 		ProductName: "cronus",
@@ -94,12 +94,12 @@ func (p *cronusPlugin) Rates() []limesrates.RateInfo {
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[string]core.ResourceData, serializedMetrics []byte, err error) {
+func (p *cronusPlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
 	return nil, nil, nil
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) SetQuota(project core.KeystoneProject, quotas map[string]uint64) error {
+func (p *cronusPlugin) SetQuota(project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
 	return nil
 }
 
@@ -116,7 +116,7 @@ type cronusState struct {
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+func (p *cronusPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[limesrates.RateName]*big.Int, serializedState string, err error) {
 	// decode `prevSerializedState`
 	var state cronusState
 	if prevSerializedState == "" {
@@ -173,7 +173,7 @@ func (p *cronusPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedS
 
 	// obtain the current running totals by adding the current billing period's
 	// running tally to the previous totals
-	return map[string]*big.Int{
+	return map[limesrates.RateName]*big.Int{
 		"attachment_size":   bigintPlusUint64(state.PreviousTotals.AttachmentsSize, currentUsage.AttachmentsSize),
 		"data_transfer_in":  bigintPlusUint64(state.PreviousTotals.DataTransferIn, currentUsage.DataTransferIn),
 		"data_transfer_out": bigintPlusUint64(state.PreviousTotals.DataTransferOut, currentUsage.DataTransferOut),

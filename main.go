@@ -41,6 +41,7 @@ import (
 	"github.com/rs/cors"
 	"github.com/sapcc/go-api-declarations/bininfo"
 	"github.com/sapcc/go-api-declarations/limes"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/errext"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/httpapi/pprofapi"
@@ -161,7 +162,7 @@ func taskCollect(cluster *core.Cluster, args []string) {
 	resourceScrapeJob := c.ResourceScrapeJob(nil)
 	rateScrapeJob := c.RateScrapeJob(nil)
 	for serviceType := range cluster.QuotaPlugins {
-		opt := jobloop.WithLabel("service_type", serviceType)
+		opt := jobloop.WithLabel("service_type", string(serviceType))
 		go resourceScrapeJob.Run(ctx, opt)
 		go rateScrapeJob.Run(ctx, opt)
 	}
@@ -236,7 +237,7 @@ func taskTestGetQuota(cluster *core.Cluster, args []string) {
 		printUsageAndExit(1)
 	}
 
-	serviceType := args[1]
+	serviceType := limes.ServiceType(args[1])
 	project := must.Return(findProjectForTesting(cluster, args[0]))
 
 	if _, ok := cluster.QuotaPlugins[serviceType]; !ok {
@@ -278,7 +279,7 @@ func taskTestGetRates(cluster *core.Cluster, args []string) {
 		printUsageAndExit(1)
 	}
 
-	serviceType := args[1]
+	serviceType := limes.ServiceType(args[1])
 	project := must.Return(findProjectForTesting(cluster, args[0]))
 
 	result, serializedState, err := cluster.QuotaPlugins[serviceType].ScrapeRates(project, prevSerializedState)
@@ -359,11 +360,11 @@ func taskTestSetQuota(cluster *core.Cluster, args []string) {
 		printUsageAndExit(1)
 	}
 
-	serviceType := args[1]
+	serviceType := limes.ServiceType(args[1])
 	project := must.Return(findProjectForTesting(cluster, args[0]))
 
 	quotaValueRx := regexp.MustCompile(`^([^=]+)=(\d+)$`)
-	quotaValues := make(map[string]uint64)
+	quotaValues := make(map[limesresources.ResourceName]uint64)
 	for _, arg := range args[2:] {
 		match := quotaValueRx.FindStringSubmatch(arg)
 		if match == nil {
@@ -373,7 +374,7 @@ func taskTestSetQuota(cluster *core.Cluster, args []string) {
 		if err != nil {
 			logg.Fatal(err.Error())
 		}
-		quotaValues[match[1]] = val
+		quotaValues[limesresources.ResourceName(match[1])] = val
 	}
 
 	must.Succeed(cluster.QuotaPlugins[serviceType].SetQuota(project, quotaValues))
@@ -429,12 +430,12 @@ type mockCapacityPluginBackchannel struct {
 }
 
 // GetOvercommitFactor implements the CapacityPluginBackchannel interface.
-func (b mockCapacityPluginBackchannel) GetOvercommitFactor(serviceType, resourceName string) (core.OvercommitFactor, error) {
+func (b mockCapacityPluginBackchannel) GetOvercommitFactor(serviceType limes.ServiceType, resourceName limesresources.ResourceName) (core.OvercommitFactor, error) {
 	return b.Cluster.BehaviorForResource(serviceType, resourceName, "").OvercommitFactor, nil
 }
 
 // GetGlobalResourceDemand implements the core.CapacityPluginBackchannel interface.
-func (mockCapacityPluginBackchannel) GetGlobalResourceDemand(serviceType, resourceName string) (result map[limes.AvailabilityZone]core.ResourceDemand, err error) {
+func (mockCapacityPluginBackchannel) GetGlobalResourceDemand(serviceType limes.ServiceType, resourceName limesresources.ResourceName) (result map[limes.AvailabilityZone]core.ResourceDemand, err error) {
 	filePath := "mock-global-resource-demand.yaml"
 	buf, err := os.ReadFile(filePath)
 	if err != nil {
@@ -447,8 +448,7 @@ func (mockCapacityPluginBackchannel) GetGlobalResourceDemand(serviceType, resour
 		}
 	}
 
-	//keys: service type -> resource name -> AZ
-	var mockData map[string]map[string]map[limes.AvailabilityZone]core.ResourceDemand
+	var mockData map[limes.ServiceType]map[limesresources.ResourceName]map[limes.AvailabilityZone]core.ResourceDemand
 	err = yaml.Unmarshal(buf, &mockData)
 	if err != nil {
 		return nil, fmt.Errorf("while parsing %s: %w", filePath, err)

@@ -174,8 +174,8 @@ func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Reques
 }
 
 type azResourceLocation struct {
-	ServiceType      string
-	ResourceName     string
+	ServiceType      limes.ServiceType
+	ResourceName     limesresources.ResourceName
 	AvailabilityZone limes.AvailabilityZone
 }
 

@@ -23,6 +23,7 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/sqlext"
 
@@ -48,14 +49,14 @@ var recomputeDomainQuotaQueryStr = sqlext.SimplifyWhitespace(`
 // ApplyComputedDomainQuota reevaluates auto-computed domain quotas in the given domain service.
 // This is only relevant for resources with non-hierarchical quota distribution, since those resources will have their domain
 // quota always set equal to the sum of all respective project quotas.
-func ApplyComputedDomainQuota(dbi db.Interface, cluster *core.Cluster, domainID db.DomainID, serviceType string) error {
+func ApplyComputedDomainQuota(dbi db.Interface, cluster *core.Cluster, domainID db.DomainID, serviceType limes.ServiceType) error {
 	plugin := cluster.QuotaPlugins[serviceType]
 	if plugin == nil {
 		return fmt.Errorf("no quota plugin registered for service type %s", serviceType)
 	}
 
 	// check which resources need to have their domain quota recomputed
-	var cqdResourceNames []string
+	var cqdResourceNames []limesresources.ResourceName
 	for _, res := range plugin.Resources() {
 		qdConfig := cluster.QuotaDistributionConfigForResource(serviceType, res.Name)
 		if qdConfig.Model != limesresources.HierarchicalQuotaDistribution {

@@ -184,7 +184,7 @@ func (p *neutronPlugin) Init(provider *gophercloud.ProviderClient, eo gopherclou
 	}
 
 	// filter resource list to reflect supported extensions and services
-	hasNeutronResource := make(map[string]bool)
+	hasNeutronResource := make(map[limesresources.ResourceName]bool)
 	for _, resource := range neutronResourceMeta {
 		hasNeutronResource[resource.LimesName] = resource.Extension == "" || p.hasExtension[resource.Extension]
 	}
@@ -210,7 +210,7 @@ func (p *neutronPlugin) PluginTypeID() string {
 }
 
 // ServiceInfo implements the core.QuotaPlugin interface.
-func (p *neutronPlugin) ServiceInfo(serviceType string) limes.ServiceInfo {
+func (p *neutronPlugin) ServiceInfo(serviceType limes.ServiceType) limes.ServiceInfo {
 	return limes.ServiceInfo{
 		Type:        serviceType,
 		ProductName: "neutron",
@@ -229,7 +229,7 @@ func (p *neutronPlugin) Rates() []limesrates.RateInfo {
 }
 
 type neutronResourceMetadata struct {
-	LimesName   string
+	LimesName   limesresources.ResourceName
 	NeutronName string
 	Extension   string
 }
@@ -284,7 +284,7 @@ var neutronResourceMeta = []neutronResourceMetadata{
 }
 
 type octaviaResourceMetadata struct {
-	LimesName         string
+	LimesName         limesresources.ResourceName
 	OctaviaName       string
 	LegacyOctaviaName string
 }
@@ -319,13 +319,13 @@ var octaviaResourceMeta = []octaviaResourceMetadata{
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *neutronPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+func (p *neutronPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[limesrates.RateName]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *neutronPlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[string]core.ResourceData, serializedMetrics []byte, err error) {
-	data := make(map[string]core.ResourceData)
+func (p *neutronPlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
+	data := make(map[limesresources.ResourceName]core.ResourceData)
 
 	err = p.scrapeNeutronInto(data, project.UUID)
 	if err != nil {
@@ -342,7 +342,7 @@ func (p *neutronPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Avai
 	return data, nil, nil
 }
 
-func (p *neutronPlugin) scrapeNeutronInto(result map[string]core.ResourceData, projectUUID string) error {
+func (p *neutronPlugin) scrapeNeutronInto(result map[limesresources.ResourceName]core.ResourceData, projectUUID string) error {
 	// read Neutron quota/usage
 	type neutronQuotaStruct struct {
 		Quota int64  `json:"limit"`
@@ -373,7 +373,7 @@ func (p *neutronPlugin) scrapeNeutronInto(result map[string]core.ResourceData, p
 	return nil
 }
 
-func (p *neutronPlugin) scrapeOctaviaInto(result map[string]core.ResourceData, projectUUID string) error {
+func (p *neutronPlugin) scrapeOctaviaInto(result map[limesresources.ResourceName]core.ResourceData, projectUUID string) error {
 	// read Octavia quota
 	var quotas struct {
 		Values map[string]int64 `json:"quota"`
@@ -437,7 +437,7 @@ func (q neutronOrOctaviaQuotaSet) ToQuotaUpdateMap() (map[string]any, error) {
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *neutronPlugin) SetQuota(project core.KeystoneProject, quotas map[string]uint64) error {
+func (p *neutronPlugin) SetQuota(project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
 	// collect Neutron quotas
 	neutronQuotas := make(neutronOrOctaviaQuotaSet)
 	for _, res := range neutronResourceMeta {

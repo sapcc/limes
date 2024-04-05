@@ -12,10 +12,10 @@ require (
 	github.com/gorilla/mux v1.8.1
 	github.com/majewsky/schwift v1.3.0
 	github.com/prometheus/client_golang v1.19.0
-	github.com/prometheus/common v0.51.1
+	github.com/prometheus/common v0.52.2
 	github.com/rs/cors v1.10.1
-	github.com/sapcc/go-api-declarations v1.10.10
-	github.com/sapcc/go-bits v0.0.0-20240328092936-0e0b562825d4
+	github.com/sapcc/go-api-declarations v1.10.11
+	github.com/sapcc/go-bits v0.0.0-20240404145041-8c313ab7cd29
 	go.uber.org/automaxprocs v1.5.3
 	golang.org/x/exp v0.0.0-20240325151524-a685a6edb6d8
 	gopkg.in/yaml.v2 v2.4.0

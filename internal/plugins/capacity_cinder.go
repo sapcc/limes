@@ -31,6 +31,7 @@ import (
 	"github.com/gophercloud/gophercloud/openstack/blockstorage/extensions/services"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/logg"
 
 	"github.com/sapcc/limes/internal/core"
@@ -67,20 +68,20 @@ func (p *capacityCinderPlugin) PluginTypeID() string {
 	return "cinder"
 }
 
-func (p *capacityCinderPlugin) makeResourceName(volumeType string) string {
+func (p *capacityCinderPlugin) makeResourceName(volumeType string) limesresources.ResourceName {
 	// the resources for the volume type marked as default don't get the volume
 	// type suffix for backwards compatibility reasons
 	if p.VolumeTypes[volumeType].IsDefault {
 		return "capacity"
 	}
-	return "capacity_" + volumeType
+	return limesresources.ResourceName("capacity_" + volumeType)
 	//NOTE: We don't make estimates for no. of snapshots/volumes in this
 	// capacitor. These values depend highly on the backend. (On SAP CC, we
 	// configure capacity for snapshots/volumes via the "manual" capacitor.)
 }
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *capacityCinderPlugin) Scrape(_ core.CapacityPluginBackchannel) (result map[string]map[string]core.PerAZ[core.CapacityData], serializedMetrics []byte, err error) {
+func (p *capacityCinderPlugin) Scrape(_ core.CapacityPluginBackchannel) (result map[limes.ServiceType]map[limesresources.ResourceName]core.PerAZ[core.CapacityData], serializedMetrics []byte, err error) {
 	// list storage pools
 	var poolData struct {
 		StoragePools []struct {
@@ -124,7 +125,7 @@ func (p *capacityCinderPlugin) Scrape(_ core.CapacityPluginBackchannel) (result 
 		}
 	}
 
-	capaData := make(map[string]core.PerAZ[core.CapacityData])
+	capaData := make(map[limesresources.ResourceName]core.PerAZ[core.CapacityData])
 	volumeTypesByBackendName := make(map[string]string)
 	for volumeType, cfg := range p.VolumeTypes {
 		volumeTypesByBackendName[cfg.VolumeBackendName] = volumeType
@@ -188,7 +189,7 @@ func (p *capacityCinderPlugin) Scrape(_ core.CapacityPluginBackchannel) (result 
 		}
 	}
 
-	return map[string]map[string]core.PerAZ[core.CapacityData]{"volumev2": capaData}, nil, nil
+	return map[limes.ServiceType]map[limesresources.ResourceName]core.PerAZ[core.CapacityData]{"volumev2": capaData}, nil, nil
 }
 
 // DescribeMetrics implements the core.CapacityPlugin interface.

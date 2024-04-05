@@ -26,6 +26,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/sapcc/go-api-declarations/limes"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/assert"
 
 	"github.com/sapcc/limes/internal/test"
@@ -60,7 +62,7 @@ func TestParseQuotaOverrides(t *testing.T) {
 	errStrings := strings.Split(errs.Join("\n"), "\n")
 
 	assert.DeepEqual(t, "errors", errStrings, []string{""})
-	assert.DeepEqual(t, "result", result, map[string]map[string]map[string]map[string]uint64{
+	assert.DeepEqual(t, "result", result, map[string]map[string]map[limes.ServiceType]map[limesresources.ResourceName]uint64{
 		"domain-one": {
 			"project-one": {
 				"unittest": {

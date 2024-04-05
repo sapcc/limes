@@ -43,7 +43,7 @@ type QuotaConstraintSet struct {
 
 // QuotaConstraints contains the quota constraints for a single domain or project.
 // The outer key is the service type, the inner key is the resource name.
-type QuotaConstraints map[string]map[string]QuotaConstraint
+type QuotaConstraints map[limes.ServiceType]map[limesresources.ResourceName]QuotaConstraint
 
 // QuotaConstraint contains the quota constraints for a single resource within a
 // single domain or project.
@@ -131,9 +131,9 @@ func NewQuotaConstraints(cluster *Cluster, constraintConfigPath string) (result 
 	}
 
 	var data struct {
-		//          dom/proj   srvType    resName
-		Domains  map[string]map[string]map[string]string `yaml:"domains"`
-		Projects map[string]map[string]map[string]string `yaml:"projects"`
+		// first key is domain name for domains, combined domain and project name for projects
+		Domains  map[string]map[limes.ServiceType]map[limesresources.ResourceName]string `yaml:"domains"`
+		Projects map[string]map[limes.ServiceType]map[limesresources.ResourceName]string `yaml:"projects"`
 	}
 	err = yaml.UnmarshalStrict(buf, &data)
 	if err != nil {
@@ -210,7 +210,7 @@ func NewQuotaConstraints(cluster *Cluster, constraintConfigPath string) (result 
 
 // When `data` contains the constraints for a project, `projectsConstraints` will be nil.
 // When `data` contains the constraints for a domain, `projectsConstraints` will be non-nil.
-func compileQuotaConstraints(cluster *Cluster, data map[string]map[string]string, projectsConstraints map[string]QuotaConstraints) (values QuotaConstraints, errs errext.ErrorSet) {
+func compileQuotaConstraints(cluster *Cluster, data map[limes.ServiceType]map[limesresources.ResourceName]string, projectsConstraints map[string]QuotaConstraints) (values QuotaConstraints, errs errext.ErrorSet) {
 	values = make(QuotaConstraints)
 
 	for serviceType, serviceData := range data {
@@ -219,7 +219,7 @@ func compileQuotaConstraints(cluster *Cluster, data map[string]map[string]string
 			// for all services, but some lab regions do not have all those services
 			continue
 		}
-		values[serviceType] = make(map[string]QuotaConstraint)
+		values[serviceType] = make(map[limesresources.ResourceName]QuotaConstraint)
 
 		for resourceName, constraintStr := range serviceData {
 			if constraintStr == "" {
@@ -362,7 +362,7 @@ func validateQuotaConstraints(cluster *Cluster, domainConstraints QuotaConstrain
 	for _, projectConstraints := range projectsConstraints {
 		for serviceType, serviceConstraints := range projectConstraints {
 			if _, exists := sumConstraints[serviceType]; !exists {
-				sumConstraints[serviceType] = make(map[string]QuotaConstraint)
+				sumConstraints[serviceType] = make(map[limesresources.ResourceName]QuotaConstraint)
 			}
 			for resourceName, constraint := range serviceConstraints {
 				sumConstraint := sumConstraints[serviceType][resourceName]

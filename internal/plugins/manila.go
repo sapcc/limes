@@ -148,7 +148,7 @@ func (p *manilaPlugin) PluginTypeID() string {
 }
 
 // ServiceInfo implements the core.QuotaPlugin interface.
-func (p *manilaPlugin) ServiceInfo(serviceType string) limes.ServiceInfo {
+func (p *manilaPlugin) ServiceInfo(serviceType limes.ServiceType) limes.ServiceInfo {
 	return limes.ServiceInfo{
 		Type:        serviceType,
 		ProductName: "manila",
@@ -165,7 +165,7 @@ func (p *manilaPlugin) Resources() []limesresources.ResourceInfo {
 		Category: "sharev2",
 	})
 	for _, shareType := range p.ShareTypes {
-		category := p.makeResourceName("sharev2", shareType)
+		category := string(p.makeResourceName("sharev2", shareType))
 		result = append(result,
 			limesresources.ResourceInfo{
 				Name:     p.makeResourceName("share_capacity", shareType),
@@ -206,13 +206,13 @@ func (p *manilaPlugin) Rates() []limesrates.RateInfo {
 	return nil
 }
 
-func (p *manilaPlugin) makeResourceName(kind string, shareType ManilaShareTypeSpec) string {
+func (p *manilaPlugin) makeResourceName(kind string, shareType ManilaShareTypeSpec) limesresources.ResourceName {
 	if p.ShareTypes[0].Name == shareType.Name {
 		// the resources for the first share type don't get the share type suffix
 		// for backwards compatibility reasons
-		return kind
+		return limesresources.ResourceName(kind)
 	}
-	return kind + "_" + shareType.Name
+	return limesresources.ResourceName(kind + "_" + shareType.Name)
 }
 
 type manilaQuotaSet struct {
@@ -228,18 +228,18 @@ type manilaQuotaSet struct {
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *manilaPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+func (p *manilaPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[limesrates.RateName]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *manilaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[string]core.ResourceData, serializedMetrics []byte, err error) {
+func (p *manilaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
 	// the share_networks quota is only shown when querying for no share_type in particular
 	qs, err := manilaGetQuotaSet(p.ManilaV2, project.UUID, "")
 	if err != nil {
 		return nil, nil, err
 	}
-	result = map[string]core.ResourceData{
+	result = map[limesresources.ResourceName]core.ResourceData{
 		"share_networks": qs.ShareNetworks.ToResourceDataInAnyAZ(),
 	}
 
@@ -364,7 +364,7 @@ func (p *manilaPlugin) scrapeShareType(project core.KeystoneProject, allAZs []li
 	return result, nil
 }
 
-func (p *manilaPlugin) rejectInaccessibleShareType(project core.KeystoneProject, quotas map[string]uint64) error {
+func (p *manilaPlugin) rejectInaccessibleShareType(project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
 	// check if an inaccessible share type is used
 	for _, shareType := range p.ShareTypes {
 		stName := resolveManilaShareType(shareType, project)
@@ -381,7 +381,7 @@ func (p *manilaPlugin) rejectInaccessibleShareType(project core.KeystoneProject,
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *manilaPlugin) SetQuota(project core.KeystoneProject, quotas map[string]uint64) error {
+func (p *manilaPlugin) SetQuota(project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
 	err := p.rejectInaccessibleShareType(project, quotas)
 	if err != nil {
 		return err

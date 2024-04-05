@@ -38,32 +38,32 @@ func (r *ClusterAvailabilityZoneReports) UnmarshalJSON(buf []byte) error {
 	return err
 }
 func (r *ClusterResourceReports) UnmarshalJSON(buf []byte) error {
-	m, err := marshal.MapFromList(buf, func(r *ClusterResourceReport) string { return r.Name })
+	m, err := marshal.MapFromList(buf, func(r *ClusterResourceReport) ResourceName { return r.Name })
 	*r = ClusterResourceReports(m)
 	return err
 }
 func (s *ClusterServiceReports) UnmarshalJSON(buf []byte) error {
-	m, err := marshal.MapFromList(buf, func(s *ClusterServiceReport) string { return s.Type })
+	m, err := marshal.MapFromList(buf, func(s *ClusterServiceReport) limes.ServiceType { return s.Type })
 	*s = ClusterServiceReports(m)
 	return err
 }
 func (r *DomainResourceReports) UnmarshalJSON(buf []byte) error {
-	m, err := marshal.MapFromList(buf, func(r *DomainResourceReport) string { return r.Name })
+	m, err := marshal.MapFromList(buf, func(r *DomainResourceReport) ResourceName { return r.Name })
 	*r = DomainResourceReports(m)
 	return err
 }
 func (s *DomainServiceReports) UnmarshalJSON(buf []byte) error {
-	m, err := marshal.MapFromList(buf, func(s *DomainServiceReport) string { return s.Type })
+	m, err := marshal.MapFromList(buf, func(s *DomainServiceReport) limes.ServiceType { return s.Type })
 	*s = DomainServiceReports(m)
 	return err
 }
 func (r *ProjectResourceReports) UnmarshalJSON(buf []byte) error {
-	m, err := marshal.MapFromList(buf, func(r *ProjectResourceReport) string { return r.Name })
+	m, err := marshal.MapFromList(buf, func(r *ProjectResourceReport) ResourceName { return r.Name })
 	*r = ProjectResourceReports(m)
 	return err
 }
 func (s *ProjectServiceReports) UnmarshalJSON(buf []byte) error {
-	m, err := marshal.MapFromList(buf, func(s *ProjectServiceReport) string { return s.Type })
+	m, err := marshal.MapFromList(buf, func(s *ProjectServiceReport) limes.ServiceType { return s.Type })
 	*s = ProjectServiceReports(m)
 	return err
 }

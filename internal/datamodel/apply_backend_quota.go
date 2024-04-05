@@ -23,6 +23,7 @@ import (
 	"database/sql"
 	"fmt"
 
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/internal/core"
@@ -59,11 +60,11 @@ func ApplyBackendQuota(dbi db.Interface, cluster *core.Cluster, domain core.Keys
 	}
 
 	// collect backend quota values that we want to apply
-	targetQuotasInDB := make(map[string]uint64)
+	targetQuotasInDB := make(map[limesresources.ResourceName]uint64)
 	needsApply := false
 	err := sqlext.ForeachRow(dbi, backendQuotaSelectQuery, []any{srv.ID}, func(rows *sql.Rows) error {
 		var (
-			resourceName string
+			resourceName limesresources.ResourceName
 			currentQuota *int64
 			targetQuota  uint64
 		)
@@ -87,7 +88,7 @@ func ApplyBackendQuota(dbi db.Interface, cluster *core.Cluster, domain core.Keys
 	}
 
 	// double-check that we only include quota values for resources that the backend currently knows about
-	targetQuotasForBackend := make(map[string]uint64)
+	targetQuotasForBackend := make(map[limesresources.ResourceName]uint64)
 	for _, res := range plugin.Resources() {
 		if res.NoQuota {
 			continue

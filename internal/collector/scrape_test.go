@@ -27,6 +27,8 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/sapcc/go-api-declarations/limes"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/jobloop"
@@ -218,8 +220,8 @@ func Test_ScrapeSuccess(t *testing.T) {
 
 	// check reporting of MinQuotaFromBackend/MaxQuotaFromBackend
 	s.Clock.StepBy(scrapeInterval)
-	plugin.MinQuota = map[string]uint64{"capacity": 10}
-	plugin.MaxQuota = map[string]uint64{"things": 1000}
+	plugin.MinQuota = map[limesresources.ResourceName]uint64{"capacity": 10}
+	plugin.MaxQuota = map[limesresources.ResourceName]uint64{"things": 1000}
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 
@@ -239,7 +241,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 
 	// check quota overrides
 	s.Clock.StepBy(scrapeInterval)
-	s.Cluster.QuotaOverrides = map[string]map[string]map[string]map[string]uint64{
+	s.Cluster.QuotaOverrides = map[string]map[string]map[limes.ServiceType]map[limesresources.ResourceName]uint64{
 		"germany": {
 			"berlin": {
 				"unittest": {

@@ -26,27 +26,31 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 )
 
+// ResourceName identifies a resource within a service. This type is used to distinguish
+// resource names from other types of string values in function signatures.
+type ResourceName string
+
 // ResourceInfo contains the metadata for a resource (i.e. some thing for which
 // quota and usage values can be retrieved from a backend service).
 type ResourceInfo struct {
-	Name string     `json:"name"`
-	Unit limes.Unit `json:"unit,omitempty"`
-	//Category is an optional hint that UIs can use to group resources of one
-	//service into subgroups. If it is used, it should be set on all
-	//ResourceInfos reported by the same QuotaPlugin.
+	Name ResourceName `json:"name"`
+	Unit limes.Unit   `json:"unit,omitempty"`
+	// Category is an optional hint that UIs can use to group resources of one
+	// service into subgroups. If it is used, it should be set on all
+	// ResourceInfos reported by the same QuotaPlugin.
 	Category string `json:"category,omitempty"`
-	//If AutoApproveInitialQuota is non-zero, when a new project is scraped for
-	//the first time, a backend quota equal to this value will be approved
-	//automatically (i.e. Quota will be set equal to BackendQuota).
+	// If AutoApproveInitialQuota is non-zero, when a new project is scraped for
+	// the first time, a backend quota equal to this value will be approved
+	// automatically (i.e. Quota will be set equal to BackendQuota).
 	AutoApproveInitialQuota uint64 `json:"-"`
-	//If NoQuota is true, quota is not tracked at all for this resource. The
-	//resource will only report usage. This field is not shown in API responses.
-	//Check `res.Quota == nil` instead.
+	// If NoQuota is true, quota is not tracked at all for this resource. The
+	// resource will only report usage. This field is not shown in API responses.
+	// Check `res.Quota == nil` instead.
 	NoQuota bool `json:"-"`
-	//ContainedIn is an optional hint that UIs can use to group resources. If non-empty,
-	//this resource is semantically contained within the resource with that name
-	//in the same service.
-	ContainedIn string `json:"contained_in,omitempty"`
+	// ContainedIn is an optional hint that UIs can use to group resources. If non-empty,
+	// this resource is semantically contained within the resource with that name
+	// in the same service.
+	ContainedIn ResourceName `json:"contained_in,omitempty"`
 }
 
 // BurstingMultiplier is a multiplier for quota bursting.
@@ -68,9 +72,9 @@ func (m BurstingMultiplier) ApplyTo(quota uint64, qdModel QuotaDistributionModel
 // ProjectResourceReport and describes the scaling behavior of a single
 // resource.
 type ScalingBehavior struct {
-	ScalesWithResourceName string  `json:"resource_name"`
-	ScalesWithServiceType  string  `json:"service_type"`
-	ScalingFactor          float64 `json:"factor"`
+	ScalesWithResourceName ResourceName      `json:"resource_name"`
+	ScalesWithServiceType  limes.ServiceType `json:"service_type"`
+	ScalingFactor          float64           `json:"factor"`
 }
 
 // QuotaDistributionModel is an enum.

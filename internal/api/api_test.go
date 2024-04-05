@@ -630,7 +630,7 @@ func Test_DomainOperations(t *testing.T) {
 // with future unit tests.
 //
 //nolint:unparam
-func expectDomainQuota(t *testing.T, dbm *gorp.DbMap, domainName, serviceType, resourceName string, expected uint64) {
+func expectDomainQuota(t *testing.T, dbm *gorp.DbMap, domainName, serviceType limes.ServiceType, resourceName limesresources.ResourceName, expected uint64) {
 	t.Helper()
 
 	var actualQuota uint64
@@ -1002,7 +1002,7 @@ func Test_ProjectOperations(t *testing.T) {
 	// double-check with the plugin that the write was durable, and also that
 	// SetQuota sent *all* quotas for that service (even for resources that were
 	// not touched) as required by the QuotaPlugin interface documentation
-	expectBackendQuota := map[string]uint64{
+	expectBackendQuota := map[limesresources.ResourceName]uint64{
 		"capacity": 6,  // as set above
 		"things":   10, // unchanged
 	}
@@ -1413,11 +1413,11 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 	s.TokenValidator.Enforcer.AllowLowerLP = true
 	s.TokenValidator.Enforcer.RejectServiceType = ""
 
-	s.Cluster.LowPrivilegeRaise.LimitsForDomains = map[string]map[string]core.LowPrivilegeRaiseLimit{
+	s.Cluster.LowPrivilegeRaise.LimitsForDomains = map[limes.ServiceType]map[limesresources.ResourceName]core.LowPrivilegeRaiseLimit{
 		"shared":   {"capacity": {AbsoluteValue: 29}, "things": {AbsoluteValue: 35}},
 		"unshared": {"capacity": {AbsoluteValue: 10}, "things": {AbsoluteValue: 60}},
 	}
-	s.Cluster.LowPrivilegeRaise.LimitsForProjects = map[string]map[string]core.LowPrivilegeRaiseLimit{
+	s.Cluster.LowPrivilegeRaise.LimitsForProjects = map[limes.ServiceType]map[limesresources.ResourceName]core.LowPrivilegeRaiseLimit{
 		"shared":   {"capacity": {AbsoluteValue: 10}, "things": {AbsoluteValue: 25}},
 		"unshared": {"capacity": {AbsoluteValue: 7}, "things": {AbsoluteValue: 20}},
 	}
@@ -1520,11 +1520,11 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 
 	// test low-privilege raise limits that are specified as percent of cluster capacity (TODO: test lowering, too)
 	s.Cluster.Config.LowPrivilegeRaise.ExcludeProjectDomainRx = ""
-	s.Cluster.LowPrivilegeRaise.LimitsForDomains = map[string]map[string]core.LowPrivilegeRaiseLimit{
+	s.Cluster.LowPrivilegeRaise.LimitsForDomains = map[limes.ServiceType]map[limesresources.ResourceName]core.LowPrivilegeRaiseLimit{
 		// shared/things capacity is 246, so 13% is 31.98 which rounds down to 31
 		"shared": {"things": {PercentOfClusterCapacity: 13}},
 	}
-	s.Cluster.LowPrivilegeRaise.LimitsForProjects = map[string]map[string]core.LowPrivilegeRaiseLimit{
+	s.Cluster.LowPrivilegeRaise.LimitsForProjects = map[limes.ServiceType]map[limesresources.ResourceName]core.LowPrivilegeRaiseLimit{
 		// shared/things capacity is 246, so 5% is 12.3 which rounds down to 12
 		"shared": {"things": {PercentOfClusterCapacity: 5}},
 	}
@@ -1547,7 +1547,7 @@ func Test_RaiseLowerPermissions(t *testing.T) {
 	}.Check(t, s.Handler)
 
 	// test low-privilege raise limits that are specified as percentage of assigned cluster capacity over all domains (TODO: test lowering as well)
-	s.Cluster.LowPrivilegeRaise.LimitsForDomains = map[string]map[string]core.LowPrivilegeRaiseLimit{
+	s.Cluster.LowPrivilegeRaise.LimitsForDomains = map[limes.ServiceType]map[limesresources.ResourceName]core.LowPrivilegeRaiseLimit{
 		// - shared/things capacity is 246, 45% thereof is 110.7 which rounds down to 110
 		// - current shared/things domain quotas: france = 0, germany = 30
 		// -> germany should be able to go up to 80 before sum(domain quotas) exceeds 110
@@ -1611,13 +1611,13 @@ func expectStaleProjectServices(t *testing.T, dbm *gorp.DbMap, staleField string
 	err := sqlext.ForeachRow(dbm, queryStr, nil, func(rows *sql.Rows) error {
 		var (
 			projectName string
-			serviceType string
+			serviceType limes.ServiceType
 		)
 		err := rows.Scan(&projectName, &serviceType)
 		if err != nil {
 			return err
 		}
-		actualPairs = append(actualPairs, fmt.Sprintf("%s:%s", projectName, serviceType))
+		actualPairs = append(actualPairs, fmt.Sprintf("%s:%s", projectName, string(serviceType)))
 		return nil
 	})
 	if err != nil {
@@ -1727,7 +1727,7 @@ func Test_QuotaBursting(t *testing.T) {
 
 	// check that backend_quota has been updated in backend
 	plugin := s.Cluster.QuotaPlugins["shared"].(*plugins.GenericQuotaPlugin) //nolint:errcheck
-	expectBackendQuota := map[string]uint64{
+	expectBackendQuota := map[limesresources.ResourceName]uint64{
 		"capacity": 11, // original value (10) * multiplier (110%)
 		"things":   11, // original value (10) * multiplier (110%)
 	}
@@ -1740,7 +1740,7 @@ func Test_QuotaBursting(t *testing.T) {
 	}
 
 	plugin = s.Cluster.QuotaPlugins["unshared"].(*plugins.GenericQuotaPlugin) //nolint:errcheck
-	expectBackendQuota = map[string]uint64{
+	expectBackendQuota = map[limesresources.ResourceName]uint64{
 		"capacity": 11, // original value (10) * multiplier (110%)
 		"things":   44, // as set above (40) * multiplier (110%)
 	}
@@ -1946,7 +1946,7 @@ func Test_LargeProjectList(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, serviceType := range []string{"shared", "unshared"} {
+		for _, serviceType := range []limes.ServiceType{"shared", "unshared"} {
 			service := db.ProjectService{
 				ProjectID:      project.ID,
 				Type:           serviceType,
@@ -1959,7 +1959,7 @@ func Test_LargeProjectList(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			for _, resourceName := range []string{"things", "capacity"} {
+			for _, resourceName := range []limesresources.ResourceName{"things", "capacity"} {
 				resource := db.ProjectResource{
 					ServiceID:           service.ID,
 					Name:                resourceName,
@@ -2004,8 +2004,8 @@ func Test_LargeProjectList(t *testing.T) {
 	}.Check(t, s.Handler)
 }
 
-func requestOneQuotaChange(structureLevel, serviceType, resourceName string, quota uint64, unit limes.Unit) assert.JSONObject {
-	resource := assert.JSONObject{"name": resourceName, "quota": quota}
+func requestOneQuotaChange(structureLevel string, serviceType limes.ServiceType, resourceName limesresources.ResourceName, quota uint64, unit limes.Unit) assert.JSONObject {
+	resource := assert.JSONObject{"name": string(resourceName), "quota": quota}
 	if unit != limes.UnitNone {
 		resource["unit"] = string(unit)
 	}
@@ -2013,7 +2013,7 @@ func requestOneQuotaChange(structureLevel, serviceType, resourceName string, quo
 		structureLevel: assert.JSONObject{
 			"services": []assert.JSONObject{
 				{
-					"type":      serviceType,
+					"type":      string(serviceType),
 					"resources": []assert.JSONObject{resource},
 				},
 			},

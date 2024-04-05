@@ -67,7 +67,7 @@ func (p *designatePlugin) PluginTypeID() string {
 }
 
 // ServiceInfo implements the core.QuotaPlugin interface.
-func (p *designatePlugin) ServiceInfo(serviceType string) limes.ServiceInfo {
+func (p *designatePlugin) ServiceInfo(serviceType limes.ServiceType) limes.ServiceInfo {
 	return limes.ServiceInfo{
 		Type:        serviceType,
 		ProductName: "designate",
@@ -86,12 +86,12 @@ func (p *designatePlugin) Rates() []limesrates.RateInfo {
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *designatePlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+func (p *designatePlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[limesrates.RateName]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *designatePlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[string]core.ResourceData, serializedMetrics []byte, err error) {
+func (p *designatePlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
 	// query quotas
 	quotas, err := dnsGetQuota(p.DesignateV2, project.UUID)
 	if err != nil {
@@ -118,7 +118,7 @@ func (p *designatePlugin) Scrape(project core.KeystoneProject, allAZs []limes.Av
 		}
 	}
 
-	return map[string]core.ResourceData{
+	return map[limesresources.ResourceName]core.ResourceData{
 		"zones": {
 			Quota: quotas.Zones,
 			UsageData: core.InAnyAZ(core.UsageData{
@@ -135,7 +135,7 @@ func (p *designatePlugin) Scrape(project core.KeystoneProject, allAZs []limes.Av
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *designatePlugin) SetQuota(project core.KeystoneProject, quotas map[string]uint64) error {
+func (p *designatePlugin) SetQuota(project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
 	return dnsSetQuota(p.DesignateV2, project.UUID, &dnsQuota{
 		Zones:          int64(quotas["zones"]),
 		ZoneRecordsets: int64(quotas["recordsets"]),

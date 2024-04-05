@@ -25,6 +25,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/internal/db"
@@ -48,10 +49,10 @@ type ScrapeError struct {
 			Name string `json:"name"`
 		} `json:"domain"`
 	} `json:"project"`
-	AffectedProjects int    `json:"affected_projects,omitempty"`
-	ServiceType      string `json:"service_type"`
-	CheckedAt        *int64 `json:"checked_at"`
-	Message          string `json:"message"`
+	AffectedProjects int               `json:"affected_projects,omitempty"`
+	ServiceType      limes.ServiceType `json:"service_type"`
+	CheckedAt        *int64            `json:"checked_at"`
+	Message          string            `json:"message"`
 }
 
 func GetScrapeErrors(dbi db.Interface, filter Filter) ([]ScrapeError, error) {
@@ -97,7 +98,7 @@ func getScrapeErrors(dbi db.Interface, filter Filter, dbQuery string) ([]ScrapeE
 
 	// To avoid excessively large responses, we group identical scrape errors for multiple
 	// project services of the same type into one item.
-	uniqueErrors := make(map[string]map[string]ScrapeError) // map[serviceType]map[Message]ScrapeError
+	uniqueErrors := make(map[limes.ServiceType]map[string]ScrapeError) // second key is error message
 	for _, v := range result {
 		if vFromMap, found := uniqueErrors[v.ServiceType][v.Message]; found {
 			// Use the value from map so we can preserve AffectedProject count.

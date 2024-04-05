@@ -69,7 +69,7 @@ func CanConfirmNewCommitment(req limesresources.CommitmentRequest, project db.Pr
 // ConfirmPendingCommitments goes through all unconfirmed commitments that
 // could be confirmed, in chronological creation order, and confirms as many of
 // them as possible given the currently available capacity.
-func ConfirmPendingCommitments(serviceType, resourceName string, az limes.AvailabilityZone, cluster *core.Cluster, dbi db.Interface, now time.Time) error {
+func ConfirmPendingCommitments(serviceType limes.ServiceType, resourceName limesresources.ResourceName, az limes.AvailabilityZone, cluster *core.Cluster, dbi db.Interface, now time.Time) error {
 	statsByAZ, err := collectAZAllocationStats(serviceType, resourceName, &az, cluster, dbi)
 	if err != nil {
 		return err

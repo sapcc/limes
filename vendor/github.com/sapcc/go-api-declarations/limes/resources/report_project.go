@@ -51,11 +51,11 @@ type ProjectServiceReport struct {
 // ProjectResourceReport is a substructure of ProjectReport containing data for
 // a single resource.
 type ProjectResourceReport struct {
-	//Several fields are pointers to values to enable precise control over which fields are rendered in output.
+	// Several fields are pointers to values to enable precise control over which fields are rendered in output.
 	ResourceInfo
 	QuotaDistributionModel QuotaDistributionModel   `json:"quota_distribution_model,omitempty"`
 	CommitmentConfig       *CommitmentConfiguration `json:"commitment_config,omitempty"`
-	//PerAZ is only rendered by Limes when the v2 API feature preview is enabled.
+	// PerAZ is only rendered by Limes when the v2 API feature preview is enabled.
 	PerAZ         ProjectAZResourceReports `json:"per_az,omitempty"`
 	Quota         *uint64                  `json:"quota,omitempty"`
 	UsableQuota   *uint64                  `json:"usable_quota,omitempty"`
@@ -65,8 +65,8 @@ type ProjectResourceReport struct {
 	BackendQuota  *int64                   `json:"backend_quota,omitempty"`
 	Subresources  json.RawMessage          `json:"subresources,omitempty"`
 	Scaling       *ScalingBehavior         `json:"scales_with,omitempty"`
-	//Annotations may contain arbitrary metadata that was configured for this
-	//resource in this scope by Limes' operator.
+	// Annotations may contain arbitrary metadata that was configured for this
+	// resource in this scope by Limes' operator.
 	Annotations map[string]any `json:"annotations,omitempty"`
 }
 
@@ -89,11 +89,11 @@ type ProjectAZResourceReport struct {
 
 // ProjectServiceReports provides fast lookup of services using a map, but serializes
 // to JSON as a list.
-type ProjectServiceReports map[string]*ProjectServiceReport
+type ProjectServiceReports map[limes.ServiceType]*ProjectServiceReport
 
 // ProjectResourceReports provides fast lookup of resources using a map, but serializes
 // to JSON as a list.
-type ProjectResourceReports map[string]*ProjectResourceReport
+type ProjectResourceReports map[ResourceName]*ProjectResourceReport
 
 // ProjectAZResourceReport is a substructure of ProjectResourceReport that breaks
 // down quota and usage data for a single resource by availability zone.

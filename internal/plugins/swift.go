@@ -97,7 +97,7 @@ func (p *swiftPlugin) PluginTypeID() string {
 }
 
 // ServiceInfo implements the core.QuotaPlugin interface.
-func (p *swiftPlugin) ServiceInfo(serviceType string) limes.ServiceInfo {
+func (p *swiftPlugin) ServiceInfo(serviceType limes.ServiceType) limes.ServiceInfo {
 	return limes.ServiceInfo{
 		Type:        serviceType,
 		ProductName: "swift",
@@ -120,17 +120,17 @@ func (p *swiftPlugin) Account(projectUUID string) *schwift.Account {
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *swiftPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+func (p *swiftPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[limesrates.RateName]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *swiftPlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[string]core.ResourceData, serializedMetrics []byte, err error) {
+func (p *swiftPlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
 	account := p.Account(project.UUID)
 	headers, err := account.Headers()
 	if schwift.Is(err, http.StatusNotFound) || schwift.Is(err, http.StatusGone) {
 		// Swift account does not exist or was deleted and not yet reaped, but the keystone project exists
-		return map[string]core.ResourceData{
+		return map[limesresources.ResourceName]core.ResourceData{
 			"capacity": {
 				Quota:     0,
 				UsageData: core.InAnyAZ(core.UsageData{Usage: 0}),
@@ -172,11 +172,11 @@ func (p *swiftPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Availa
 	if !headers.BytesUsedQuota().Exists() {
 		data.Quota = -1
 	}
-	return map[string]core.ResourceData{"capacity": data}, serializedMetrics, nil
+	return map[limesresources.ResourceName]core.ResourceData{"capacity": data}, serializedMetrics, nil
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *swiftPlugin) SetQuota(project core.KeystoneProject, quotas map[string]uint64) error {
+func (p *swiftPlugin) SetQuota(project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
 	headers := schwift.NewAccountHeaders()
 	headers.BytesUsedQuota().Set(quotas["capacity"])
 	// this header brought to you by https://github.com/sapcc/swift-addons

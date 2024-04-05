@@ -22,14 +22,16 @@ package plugins
 import (
 	"github.com/gophercloud/gophercloud"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sapcc/go-api-declarations/limes"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/promquery"
 
 	"github.com/sapcc/limes/internal/core"
 )
 
 type capacityPrometheusPlugin struct {
-	APIConfig promquery.Config             `yaml:"api"`
-	Queries   map[string]map[string]string `yaml:"queries"`
+	APIConfig promquery.Config                                             `yaml:"api"`
+	Queries   map[limes.ServiceType]map[limesresources.ResourceName]string `yaml:"queries"`
 }
 
 func init() {
@@ -47,15 +49,15 @@ func (p *capacityPrometheusPlugin) PluginTypeID() string {
 }
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *capacityPrometheusPlugin) Scrape(_ core.CapacityPluginBackchannel) (result map[string]map[string]core.PerAZ[core.CapacityData], _ []byte, err error) {
+func (p *capacityPrometheusPlugin) Scrape(_ core.CapacityPluginBackchannel) (result map[limes.ServiceType]map[limesresources.ResourceName]core.PerAZ[core.CapacityData], _ []byte, err error) {
 	client, err := p.APIConfig.Connect()
 	if err != nil {
 		return nil, nil, err
 	}
 
-	result = make(map[string]map[string]core.PerAZ[core.CapacityData])
+	result = make(map[limes.ServiceType]map[limesresources.ResourceName]core.PerAZ[core.CapacityData])
 	for serviceType, queries := range p.Queries {
-		serviceResult := make(map[string]core.PerAZ[core.CapacityData])
+		serviceResult := make(map[limesresources.ResourceName]core.PerAZ[core.CapacityData])
 		for resourceName, query := range queries {
 			value, err := client.GetSingleValue(query, nil)
 			if err != nil {

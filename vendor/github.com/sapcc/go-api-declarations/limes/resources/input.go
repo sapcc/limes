@@ -27,26 +27,25 @@ import (
 )
 
 // QuotaRequest contains new quota values for resources in multiple services.
-// The map key is the service type. This type is used to serialize JSON
-// request bodies in PUT requests on domains and projects.
-type QuotaRequest map[string]ServiceQuotaRequest
+// This type is used to serialize JSON request bodies in PUT requests on domains and projects.
+type QuotaRequest map[limes.ServiceType]ServiceQuotaRequest
 
 // ServiceQuotaRequest contains new quota values for resources in a single service.
-// The map key is the resource name. This type appears in type QuotaRequest.
-type ServiceQuotaRequest map[string]ResourceQuotaRequest
+// This type appears in type QuotaRequest.
+type ServiceQuotaRequest map[ResourceName]ResourceQuotaRequest
 
 // ResourceQuotaRequest contains new quota values for a single resource.
 // This type appears in type ServiceQuotaRequest.
 type ResourceQuotaRequest limes.ValueWithUnit
 
 type pureResourceQuotaRequest struct {
-	Name  string      `json:"name"`
-	Quota uint64      `json:"quota"`
-	Unit  *limes.Unit `json:"unit"`
+	Name  ResourceName `json:"name"`
+	Quota uint64       `json:"quota"`
+	Unit  *limes.Unit  `json:"unit"`
 }
 
 type pureServiceQuotaRequest struct {
-	Type      string                     `json:"type"`
+	Type      limes.ServiceType          `json:"type"`
 	Resources []pureResourceQuotaRequest `json:"resources"`
 }
 
@@ -68,14 +67,14 @@ func (r QuotaRequest) MarshalJSON() ([]byte, error) {
 			})
 		}
 
-		//ensure test reproducibility
+		// ensure test reproducibility
 		sort.Slice(sReq.Resources, func(i, j int) bool {
 			return sReq.Resources[i].Name < sReq.Resources[j].Name
 		})
 		list = append(list, sReq)
 	}
 
-	//ensure test reproducibility
+	// ensure test reproducibility
 	sort.Slice(list, func(i, j int) bool {
 		return list[i].Type < list[j].Type
 	})
@@ -91,7 +90,7 @@ func (r *QuotaRequest) UnmarshalJSON(input []byte) error {
 		return err
 	}
 
-	//remove existing content
+	// remove existing content
 	for key := range *r {
 		delete(*r, key)
 	}
@@ -99,7 +98,7 @@ func (r *QuotaRequest) UnmarshalJSON(input []byte) error {
 		*r = make(QuotaRequest, len(data))
 	}
 
-	//add new content
+	// add new content
 	for _, sReq := range data {
 		srvReq := make(ServiceQuotaRequest, len(sReq.Resources))
 

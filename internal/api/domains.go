@@ -23,6 +23,7 @@ import (
 	"net/http"
 
 	"github.com/go-gorp/gorp/v3"
+	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/respondwith"
@@ -108,10 +109,10 @@ func (p *v1Provider) putOrSimulatePutDomain(w http.ResponseWriter, r *http.Reque
 	if !token.Require(w, "domain:show") {
 		return
 	}
-	checkToken := func(policy string) func(string, string) bool {
-		return func(serviceType, resourceName string) bool {
-			token.Context.Request["service_type"] = serviceType
-			token.Context.Request["resource_name"] = resourceName
+	checkToken := func(policy string) func(limes.ServiceType, limesresources.ResourceName) bool {
+		return func(serviceType limes.ServiceType, resourceName limesresources.ResourceName) bool {
+			token.Context.Request["service_type"] = string(serviceType)
+			token.Context.Request["resource_name"] = string(resourceName)
 			return token.Check(policy)
 		}
 	}
@@ -189,7 +190,7 @@ func (p *v1Provider) putOrSimulatePutDomain(w http.ResponseWriter, r *http.Reque
 		if !exists {
 			continue
 		}
-		isExistingResource := make(map[string]bool)
+		isExistingResource := make(map[limesresources.ResourceName]bool)
 
 		// check all existing resources
 		var resources []db.DomainResource

@@ -122,8 +122,8 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 		var (
 			domainUUID           string
 			domainName           string
-			serviceType          *string
-			resourceName         *string
+			serviceType          *limes.ServiceType
+			resourceName         *limesresources.ResourceName
 			projectsQuota        *uint64
 			usage                *uint64
 			burstUsage           *uint64
@@ -188,8 +188,8 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 		var (
 			domainUUID   string
 			domainName   string
-			serviceType  *string
-			resourceName *string
+			serviceType  *limes.ServiceType
+			resourceName *limesresources.ResourceName
 			quota        *uint64
 		)
 		err := rows.Scan(
@@ -219,8 +219,8 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 			var (
 				domainUUID        string
 				domainName        string
-				serviceType       string
-				resourceName      string
+				serviceType       limes.ServiceType
+				resourceName      limesresources.ResourceName
 				az                limes.AvailabilityZone
 				quota             *uint64
 				usage             uint64
@@ -259,8 +259,8 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 			var (
 				domainUUID    string
 				domainName    string
-				serviceType   string
-				resourceName  string
+				serviceType   limes.ServiceType
+				resourceName  limesresources.ResourceName
 				az            limes.AvailabilityZone
 				duration      limesresources.CommitmentDuration
 				activeAmount  uint64
@@ -340,7 +340,7 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 
 type domains map[string]*limesresources.DomainReport
 
-func (d domains) Find(cluster *core.Cluster, domainUUID, domainName string, serviceType, resourceName *string, now time.Time) (*limesresources.DomainReport, *limesresources.DomainServiceReport, *limesresources.DomainResourceReport) {
+func (d domains) Find(cluster *core.Cluster, domainUUID, domainName string, serviceType *limes.ServiceType, resourceName *limesresources.ResourceName, now time.Time) (*limesresources.DomainReport, *limesresources.DomainServiceReport, *limesresources.DomainResourceReport) {
 	domain, exists := d[domainUUID]
 	if !exists {
 		domain = &limesresources.DomainReport{

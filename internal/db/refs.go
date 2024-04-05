@@ -18,7 +18,12 @@
 
 package db
 
-import "strings"
+import (
+	"cmp"
+
+	"github.com/sapcc/go-api-declarations/limes"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+)
 
 // ClusterServiceID is an ID into the cluster_services table. This typedef is
 // used to distinguish these IDs from IDs of other tables or raw int64 values.
@@ -66,8 +71,8 @@ type ProjectCommitmentID int64
 
 // ResourceRef identifies an individual ProjectResource, DomainResource or ClusterResource.
 type ResourceRef[I ~int64] struct {
-	ServiceID I      `db:"service_id"`
-	Name      string `db:"name"`
+	ServiceID I                           `db:"service_id"`
+	Name      limesresources.ResourceName `db:"name"`
 }
 
 // CompareResourceRefs is a compare function for ResourceRef (for use with slices.SortFunc etc.)
@@ -75,12 +80,12 @@ func CompareResourceRefs[I ~int64](lhs, rhs ResourceRef[I]) int {
 	if lhs.ServiceID != rhs.ServiceID {
 		return int(rhs.ServiceID - lhs.ServiceID)
 	}
-	return strings.Compare(lhs.Name, rhs.Name)
+	return cmp.Compare(lhs.Name, rhs.Name)
 }
 
 // ServiceRef identifies an individual ProjectService, DomainService or ClusterService.
 // It appears in APIs when not the entire Service record is needed.
 type ServiceRef[I ~int64] struct {
 	ID   I
-	Type string
+	Type limes.ServiceType
 }

@@ -23,6 +23,7 @@ import (
 	"fmt"
 
 	"github.com/sapcc/go-api-declarations/limes"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/internal/core"
@@ -87,7 +88,7 @@ var (
 
 // Shared data collection phase for ApplyComputedProjectQuota,
 // CanConfirmNewCommitment and ConfirmPendingCommitments.
-func collectAZAllocationStats(serviceType, resourceName string, azFilter *limes.AvailabilityZone, cluster *core.Cluster, dbi db.Interface) (map[limes.AvailabilityZone]clusterAZAllocationStats, error) {
+func collectAZAllocationStats(serviceType limes.ServiceType, resourceName limesresources.ResourceName, azFilter *limes.AvailabilityZone, cluster *core.Cluster, dbi db.Interface) (map[limes.AvailabilityZone]clusterAZAllocationStats, error) {
 	scopeDesc := fmt.Sprintf("%s/%s", serviceType, resourceName)
 	if azFilter != nil {
 		scopeDesc += fmt.Sprintf(" in %s", *azFilter)

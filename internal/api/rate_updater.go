@@ -45,10 +45,10 @@ type RateLimitUpdater struct {
 	Project *db.Project
 
 	// AuthZ info
-	CanSetRateLimit func(serviceType string) bool
+	CanSetRateLimit func(limes.ServiceType) bool
 
 	// Filled by ValidateInput() with the keys being the service type and the rate name.
-	Requests map[string]map[string]RateLimitRequest
+	Requests map[limes.ServiceType]map[limesrates.RateName]RateLimitRequest
 }
 
 // RateLimitRequest describes a single rate limit that a PUT requests wants to
@@ -71,7 +71,7 @@ func (u *RateLimitUpdater) ValidateInput(input limesrates.RateRequest, dbi db.In
 		return err
 	}
 
-	u.Requests = make(map[string]map[string]RateLimitRequest)
+	u.Requests = make(map[limes.ServiceType]map[limesrates.RateName]RateLimitRequest)
 
 	// Go through all services and validate the requested rate limits.
 	for svcType, in := range input {
@@ -81,7 +81,7 @@ func (u *RateLimitUpdater) ValidateInput(input limesrates.RateRequest, dbi db.In
 			continue
 		}
 		if _, ok := u.Requests[svcType]; !ok {
-			u.Requests[svcType] = make(map[string]RateLimitRequest)
+			u.Requests[svcType] = make(map[limesrates.RateName]RateLimitRequest)
 		}
 
 		for rateName, newRateLimit := range in {
@@ -156,8 +156,8 @@ func (u RateLimitUpdater) IsValid() bool {
 //nolint:dupl // This function is very similar to QuotaUpdater.WriteSimulationReport, but cannot be deduped because of different content types.
 func (u RateLimitUpdater) WriteSimulationReport(w http.ResponseWriter) {
 	type unacceptableRateLimit struct {
-		ServiceType string `json:"service_type"`
-		Name        string `json:"name"`
+		ServiceType limes.ServiceType   `json:"service_type"`
+		Name        limesrates.RateName `json:"name"`
 		core.QuotaValidationError
 	}
 	var result struct {

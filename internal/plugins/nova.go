@@ -136,7 +136,7 @@ func (p *novaPlugin) PluginTypeID() string {
 }
 
 // ServiceInfo implements the core.QuotaPlugin interface.
-func (p *novaPlugin) ServiceInfo(serviceType string) limes.ServiceInfo {
+func (p *novaPlugin) ServiceInfo(serviceType limes.ServiceType) limes.ServiceInfo {
 	return limes.ServiceInfo{
 		Type:        serviceType,
 		ProductName: "nova",
@@ -155,12 +155,12 @@ func (p *novaPlugin) Rates() []limesrates.RateInfo {
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *novaPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+func (p *novaPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[limesrates.RateName]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *novaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[string]core.ResourceData, serializedMetrics []byte, err error) {
+func (p *novaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
 	// collect quota and usage from Nova
 	var limitsData struct {
 		Limits struct {
@@ -195,7 +195,7 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Availab
 	}
 
 	// initialize `result`
-	result = map[string]core.ResourceData{
+	result = map[limesresources.ResourceName]core.ResourceData{
 		"cores": {
 			Quota:     absoluteLimits.MaxTotalCores,
 			UsageData: core.InUnknownAZUnlessEmpty(core.UsageData{Usage: absoluteLimits.TotalCoresUsed}).AndZeroInTheseAZs(allAZs),
@@ -286,14 +286,14 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Availab
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *novaPlugin) SetQuota(project core.KeystoneProject, quotas map[string]uint64) error {
+func (p *novaPlugin) SetQuota(project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
 	// translate Limes resource names for separate instance quotas into Nova quota names
 	novaQuotas := make(novaQuotaUpdateOpts, len(quotas))
 	for resourceName, quota := range quotas {
 		novaQuotaName := p.SeparateInstanceQuotas.FlavorAliases.NovaQuotaNameForLimesResourceName(resourceName)
 		if novaQuotaName == "" {
 			// not a separate instance quota - leave as-is
-			novaQuotas[resourceName] = quota
+			novaQuotas[string(resourceName)] = quota
 		} else {
 			novaQuotas[novaQuotaName] = quota
 		}

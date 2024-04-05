@@ -145,8 +145,8 @@ func (b *ResourceBehavior) Merge(other ResourceBehavior) {
 // from the configuration YAML, this deserializes from a string in the
 // "service/resource" format.
 type ResourceRef struct {
-	ServiceType  string
-	ResourceName string
+	ServiceType  limes.ServiceType
+	ResourceName limesresources.ResourceName
 }
 
 // UnmarshalYAML implements the yaml.Unmarshaler interface.
@@ -162,7 +162,10 @@ func (r *ResourceRef) UnmarshalYAML(unmarshal func(any) error) error {
 		return fmt.Errorf(`expected scales_with to follow the "service_type/resource_name" format, but got %q`, in)
 	}
 
-	*r = ResourceRef{fields[0], fields[1]}
+	*r = ResourceRef{
+		ServiceType:  limes.ServiceType(fields[0]),
+		ResourceName: limesresources.ResourceName(fields[1]),
+	}
 	return nil
 }
 

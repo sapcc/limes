@@ -26,7 +26,7 @@ import (
 
 // MapAsList marshals a map type into a flat JSON list, thereby discarding the keys.
 func MapAsList[S ~string, T any](vals map[S]T) ([]byte, error) {
-	//serialize with ordered keys to ensure testcase stability
+	// serialize with ordered keys to ensure testcase stability
 	names := make([]S, 0, len(vals))
 	for name := range vals {
 		names = append(names, name)

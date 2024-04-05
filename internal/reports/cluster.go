@@ -125,8 +125,8 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 	queryStr, joinArgs := filter.PrepareQuery(clusterReportQuery1)
 	err := sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
 		var (
-			serviceType       string
-			resourceName      *string
+			serviceType       limes.ServiceType
+			resourceName      *limesresources.ResourceName
 			availabilityZone  *limes.AvailabilityZone
 			usage             *uint64
 			physicalUsage     *uint64
@@ -187,8 +187,8 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 		queryStr, joinArgs = filter.PrepareQuery(clusterReportQuery1B)
 		err := sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
 			var (
-				serviceType  string
-				resourceName *string
+				serviceType  limes.ServiceType
+				resourceName *limesresources.ResourceName
 				burstUsage   *uint64
 			)
 			err := rows.Scan(&serviceType, &resourceName, &burstUsage)
@@ -213,8 +213,8 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 	queryStr, joinArgs = filter.PrepareQuery(clusterReportQuery2)
 	err = sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
 		var (
-			serviceType  string
-			resourceName *string
+			serviceType  limes.ServiceType
+			resourceName *limesresources.ResourceName
 			quota        *uint64
 		)
 		err := rows.Scan(&serviceType, &resourceName, &quota)
@@ -240,8 +240,8 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 	}
 	err = sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
 		var (
-			serviceType       string
-			resourceName      *string
+			serviceType       limes.ServiceType
+			resourceName      *limesresources.ResourceName
 			availabilityZone  *limes.AvailabilityZone
 			rawCapacityInAZ   *uint64
 			usageInAZ         *uint64
@@ -314,8 +314,8 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 		queryStr, joinArgs = filter.PrepareQuery(clusterReportQuery4)
 		err = sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
 			var (
-				serviceType   string
-				resourceName  string
+				serviceType   limes.ServiceType
+				resourceName  limesresources.ResourceName
 				az            limes.AvailabilityZone
 				duration      limesresources.CommitmentDuration
 				activeAmount  uint64
@@ -406,7 +406,7 @@ func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter) (*l
 	queryStr, joinArgs := filter.PrepareQuery(clusterRateReportQuery1)
 	err := sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
 		var (
-			serviceType       string
+			serviceType       limes.ServiceType
 			minRatesScrapedAt *time.Time
 			maxRatesScrapedAt *time.Time
 		)
@@ -456,7 +456,7 @@ func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter) (*l
 	return report, nil
 }
 
-func findInClusterReport(cluster *core.Cluster, report *limesresources.ClusterReport, serviceType string, resourceName *string, now time.Time) (*limesresources.ClusterServiceReport, *limesresources.ClusterResourceReport) {
+func findInClusterReport(cluster *core.Cluster, report *limesresources.ClusterReport, serviceType limes.ServiceType, resourceName *limesresources.ResourceName, now time.Time) (*limesresources.ClusterServiceReport, *limesresources.ClusterResourceReport) {
 	service, exists := report.Services[serviceType]
 	if !exists {
 		if !cluster.HasService(serviceType) {

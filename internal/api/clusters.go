@@ -22,6 +22,8 @@ package api
 import (
 	"net/http"
 
+	"github.com/sapcc/go-api-declarations/limes"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/respondwith"
 
@@ -39,9 +41,9 @@ func (p *v1Provider) GetCluster(w http.ResponseWriter, r *http.Request) {
 
 	filter := reports.ReadFilter(r, p.Cluster.GetServiceTypesForArea)
 	if showBasic {
-		filter.IsSubcapacityAllowed = func(serviceType, resourceName string) bool {
-			token.Context.Request["service"] = serviceType
-			token.Context.Request["resource"] = resourceName
+		filter.IsSubcapacityAllowed = func(serviceType limes.ServiceType, resourceName limesresources.ResourceName) bool {
+			token.Context.Request["service"] = string(serviceType)
+			token.Context.Request["resource"] = string(resourceName)
 			return token.Check("cluster:show_subcapacity")
 		}
 	}

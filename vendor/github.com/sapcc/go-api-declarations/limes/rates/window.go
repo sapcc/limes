@@ -36,13 +36,13 @@ import (
 type Window uint64
 
 const (
-	//WindowMilliseconds is a Window unit.
+	// WindowMilliseconds is a Window unit.
 	WindowMilliseconds Window = 1000 * 1000
-	//WindowSeconds is a Window unit.
+	// WindowSeconds is a Window unit.
 	WindowSeconds Window = 1000 * WindowMilliseconds
-	//WindowMinutes is a Window unit.
+	// WindowMinutes is a Window unit.
 	WindowMinutes Window = 60 * WindowSeconds
-	//WindowHours is a Window unit.
+	// WindowHours is a Window unit.
 	WindowHours Window = 60 * WindowMinutes
 )
 
@@ -91,7 +91,7 @@ func (w Window) String() string {
 		return ""
 	}
 
-	//find the unit that yields the shortest exact representation
+	// find the unit that yields the shortest exact representation
 	shortest := ""
 	for unit, multiplier := range windowUnits {
 		if w%multiplier == 0 {

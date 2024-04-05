@@ -49,8 +49,8 @@ type ClusterRateReport struct {
 
 // ClusterServiceReports provides fast lookup of services by service type, but
 // serializes to JSON as a list.
-type ClusterServiceReports map[string]*ClusterServiceReport
+type ClusterServiceReports map[limes.ServiceType]*ClusterServiceReport
 
 // ClusterRateReports provides fast lookup of rates using a map, but
 // serializes to JSON as a list.
-type ClusterRateReports map[string]*ClusterRateReport
+type ClusterRateReports map[RateName]*ClusterRateReport

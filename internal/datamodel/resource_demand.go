@@ -24,6 +24,7 @@ import (
 	"fmt"
 
 	"github.com/sapcc/go-api-declarations/limes"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/internal/core"
@@ -58,12 +59,12 @@ var (
 )
 
 // GetOvercommitFactor implements the CapacityPluginBackchannel interface.
-func (i capacityPluginBackchannelImpl) GetOvercommitFactor(serviceType, resourceName string) (core.OvercommitFactor, error) {
+func (i capacityPluginBackchannelImpl) GetOvercommitFactor(serviceType limes.ServiceType, resourceName limesresources.ResourceName) (core.OvercommitFactor, error) {
 	return i.Cluster.BehaviorForResource(serviceType, resourceName, "").OvercommitFactor, nil
 }
 
 // GetGlobalResourceDemand implements the CapacityPluginBackchannel interface.
-func (i capacityPluginBackchannelImpl) GetGlobalResourceDemand(serviceType, resourceName string) (map[limes.AvailabilityZone]core.ResourceDemand, error) {
+func (i capacityPluginBackchannelImpl) GetGlobalResourceDemand(serviceType limes.ServiceType, resourceName limesresources.ResourceName) (map[limes.AvailabilityZone]core.ResourceDemand, error) {
 	result := make(map[limes.AvailabilityZone]core.ResourceDemand)
 	err := sqlext.ForeachRow(i.DB, getResourceDemandQuery, []any{serviceType, resourceName}, func(rows *sql.Rows) error {
 		var (

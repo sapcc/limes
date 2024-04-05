@@ -28,6 +28,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sapcc/go-api-declarations/limes"
+	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/jobloop"
@@ -565,7 +566,7 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	// test GetGlobalResourceDemand (this is not used by any of our test plugins,
 	// but we can just call it directly to see that it works)
 	bc := datamodel.NewCapacityPluginBackchannel(s.Cluster, s.DB)
-	expectedDemandsByService := map[string]map[string]map[limes.AvailabilityZone]core.ResourceDemand{
+	expectedDemandsByService := map[limes.ServiceType]map[limesresources.ResourceName]map[limes.AvailabilityZone]core.ResourceDemand{
 		"first": {
 			"capacity": {
 				"az-one":                  {Usage: 2, UnusedCommitments: 109, PendingCommitments: 0},

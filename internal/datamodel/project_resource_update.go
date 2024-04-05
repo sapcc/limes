@@ -22,7 +22,7 @@ package datamodel
 import (
 	"fmt"
 	"reflect"
-	"sort"
+	"slices"
 
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
@@ -64,7 +64,7 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, doma
 	if u.LogError == nil {
 		u.LogError = logg.Error
 	}
-	var constraints map[string]core.QuotaConstraint
+	var constraints map[limesresources.ResourceName]core.QuotaConstraint
 	if cluster.QuotaConstraints != nil {
 		constraints = cluster.QuotaConstraints.Projects[domain.Name][project.Name][srv.Type]
 	}
@@ -78,7 +78,7 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, doma
 	}
 
 	// collect ResourceInfo instances for this service
-	allResources := make(map[string]resourceState)
+	allResources := make(map[limesresources.ResourceName]resourceState)
 	for _, resInfo := range cluster.QuotaPlugins[srv.Type].Resources() {
 		allResources[resInfo.Name] = resourceState{
 			Original: nil,      // might be filled in the next loop below
@@ -100,11 +100,11 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, doma
 	}
 
 	// go through resources in a defined order (to ensure deterministic test behavior)
-	allResourceNames := make([]string, 0, len(allResources))
+	allResourceNames := make([]limesresources.ResourceName, 0, len(allResources))
 	for resName := range allResources {
 		allResourceNames = append(allResourceNames, resName)
 	}
-	sort.Strings(allResourceNames)
+	slices.Sort(allResourceNames)
 
 	// for each resource...
 	hasChanges := false

@@ -22,6 +22,7 @@ package datamodel
 import (
 	"time"
 
+	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/logg"
 
 	"github.com/sapcc/limes/internal/core"
@@ -32,7 +33,7 @@ import (
 // this project exist (and none other).
 func ValidateProjectServices(dbi db.Interface, cluster *core.Cluster, domain db.Domain, project db.Project, now time.Time) error {
 	// list existing records
-	seen := make(map[string]bool)
+	seen := make(map[limes.ServiceType]bool)
 	var services []db.ProjectService
 	_, err := dbi.Select(&services,
 		`SELECT * FROM project_services WHERE project_id = $1 ORDER BY type`, project.ID)

@@ -112,9 +112,9 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 			projectName        string
 			projectParentUUID  string
 			projectHasBursting bool
-			serviceType        *string
+			serviceType        *limes.ServiceType
 			scrapedAt          *time.Time
-			resourceName       *string
+			resourceName       *limesresources.ResourceName
 			quota              *uint64
 			az                 *limes.AvailabilityZone
 			azQuota            *uint64
@@ -284,8 +284,8 @@ func finalizeProjectResourceReport(projectReport *limesresources.ProjectReport, 
 		// if `per_az` is shown, we need to compute the sum of all active commitments using a different query
 		err := sqlext.ForeachRow(dbi, projectReportCommitmentsQuery, []any{projectID}, func(rows *sql.Rows) error {
 			var (
-				serviceType   string
-				resourceName  string
+				serviceType   limes.ServiceType
+				resourceName  limesresources.ResourceName
 				az            limes.AvailabilityZone
 				duration      limesresources.CommitmentDuration
 				activeAmount  uint64
@@ -371,9 +371,9 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 			projectUUID       string
 			projectName       string
 			projectParentUUID string
-			serviceType       *string
+			serviceType       *limes.ServiceType
 			ratesScrapedAt    *time.Time
-			rateName          *string
+			rateName          *limesrates.RateName
 			limit             *uint64
 			window            *limesrates.Window
 			usageAsBigint     *string

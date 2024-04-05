@@ -28,6 +28,7 @@ import (
 	"github.com/go-gorp/gorp/v3"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
+	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
@@ -109,7 +110,7 @@ func (c *AggregateMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 
 	err := sqlext.ForeachRow(c.DB, scrapedAtAggregateQuery, nil, func(rows *sql.Rows) error {
 		var (
-			serviceType       string
+			serviceType       limes.ServiceType
 			minScrapedAt      *time.Time
 			maxScrapedAt      *time.Time
 			minRatesScrapedAt *time.Time
@@ -130,24 +131,24 @@ func (c *AggregateMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			ch <- prometheus.MustNewConstMetric(
 				minScrapedAtDesc,
 				prometheus.GaugeValue, timeAsUnixOrZero(minScrapedAt),
-				serviceType, serviceName,
+				string(serviceType), serviceName,
 			)
 			ch <- prometheus.MustNewConstMetric(
 				maxScrapedAtDesc,
 				prometheus.GaugeValue, timeAsUnixOrZero(maxScrapedAt),
-				serviceType, serviceName,
+				string(serviceType), serviceName,
 			)
 		}
 		if len(plugin.Rates()) > 0 {
 			ch <- prometheus.MustNewConstMetric(
 				minRatesScrapedAtDesc,
 				prometheus.GaugeValue, timeAsUnixOrZero(minRatesScrapedAt),
-				serviceType, serviceName,
+				string(serviceType), serviceName,
 			)
 			ch <- prometheus.MustNewConstMetric(
 				maxRatesScrapedAtDesc,
 				prometheus.GaugeValue, timeAsUnixOrZero(maxRatesScrapedAt),
-				serviceType, serviceName,
+				string(serviceType), serviceName,
 			)
 		}
 		return nil
@@ -278,7 +279,7 @@ type QuotaPluginMetricsCollector struct {
 // metrics are submitted. It appears in type QuotaPluginMetricsCollector.
 type QuotaPluginMetricsInstance struct {
 	Project           core.KeystoneProject
-	ServiceType       string
+	ServiceType       limes.ServiceType
 	SerializedMetrics string
 }
 
@@ -328,7 +329,7 @@ func (c *QuotaPluginMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 }
 
-func (c *QuotaPluginMetricsCollector) collectOneProjectService(ch chan<- prometheus.Metric, pluginMetricsOkDesc *prometheus.Desc, serviceNameByType map[string]string, instance QuotaPluginMetricsInstance) {
+func (c *QuotaPluginMetricsCollector) collectOneProjectService(ch chan<- prometheus.Metric, pluginMetricsOkDesc *prometheus.Desc, serviceNameByType map[limes.ServiceType]string, instance QuotaPluginMetricsInstance) {
 	plugin := c.Cluster.QuotaPlugins[instance.ServiceType]
 	if plugin == nil {
 		return
@@ -346,7 +347,7 @@ func (c *QuotaPluginMetricsCollector) collectOneProjectService(ch chan<- prometh
 		pluginMetricsOkDesc,
 		prometheus.GaugeValue, successAsFloat,
 		instance.Project.Domain.Name, instance.Project.Domain.UUID, instance.Project.Name, instance.Project.UUID,
-		instance.ServiceType, serviceNameByType[instance.ServiceType],
+		string(instance.ServiceType), serviceNameByType[instance.ServiceType],
 	)
 }
 
@@ -544,11 +545,11 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	serviceNameByType := buildServiceNameByTypeMapping(c.Cluster)
 
 	// fetch values for cluster level
-	capacityReported := make(map[string]map[string]bool)
+	capacityReported := make(map[limes.ServiceType]map[limesresources.ResourceName]bool)
 	err := sqlext.ForeachRow(c.DB, clusterMetricsQuery, nil, func(rows *sql.Rows) error {
 		var (
-			serviceType       string
-			resourceName      string
+			serviceType       limes.ServiceType
+			resourceName      limesresources.ResourceName
 			capacityPerAZJSON string
 			usagePerAZJSON    string
 		)
@@ -584,7 +585,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 				ch <- prometheus.MustNewConstMetric(
 					clusterCapacityPerAZDesc,
 					prometheus.GaugeValue, float64(overcommitFactor.ApplyTo(azCapacity)),
-					string(az), serviceType, serviceNameByType[serviceType], resourceName,
+					string(az), string(serviceType), serviceNameByType[serviceType], string(resourceName),
 				)
 
 				azUsage := usagePerAZ[az]
@@ -592,7 +593,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 					ch <- prometheus.MustNewConstMetric(
 						clusterUsagePerAZDesc,
 						prometheus.GaugeValue, float64(*azUsage),
-						string(az), serviceType, serviceNameByType[serviceType], resourceName,
+						string(az), string(serviceType), serviceNameByType[serviceType], string(resourceName),
 					)
 				}
 			}
@@ -601,12 +602,12 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(
 			clusterCapacityDesc,
 			prometheus.GaugeValue, float64(overcommitFactor.ApplyTo(totalCapacity)),
-			serviceType, serviceNameByType[serviceType], resourceName,
+			string(serviceType), serviceNameByType[serviceType], string(resourceName),
 		)
 
 		_, exists := capacityReported[serviceType]
 		if !exists {
-			capacityReported[serviceType] = make(map[string]bool)
+			capacityReported[serviceType] = make(map[limesresources.ResourceName]bool)
 		}
 		capacityReported[serviceType][resourceName] = true
 
@@ -628,7 +629,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			ch <- prometheus.MustNewConstMetric(
 				clusterCapacityDesc,
 				prometheus.GaugeValue, 0,
-				serviceType, serviceNameByType[serviceType], res.Name,
+				string(serviceType), serviceNameByType[serviceType], string(res.Name),
 			)
 		}
 	}
@@ -638,8 +639,8 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		var (
 			domainName   string
 			domainUUID   string
-			serviceType  string
-			resourceName string
+			serviceType  limes.ServiceType
+			resourceName limesresources.ResourceName
 			quota        uint64
 		)
 		err := rows.Scan(&domainName, &domainUUID, &serviceType, &resourceName, &quota)
@@ -649,7 +650,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(
 			domainQuotaDesc,
 			prometheus.GaugeValue, float64(quota),
-			domainName, domainUUID, serviceType, serviceNameByType[serviceType], resourceName,
+			domainName, domainUUID, string(serviceType), serviceNameByType[serviceType], string(resourceName),
 		)
 		return nil
 	})
@@ -664,8 +665,8 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			domainUUID       string
 			projectName      string
 			projectUUID      string
-			serviceType      string
-			resourceName     string
+			serviceType      limes.ServiceType
+			resourceName     limesresources.ResourceName
 			quota            *uint64
 			backendQuota     *int64
 			usage            uint64
@@ -683,7 +684,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 				ch <- prometheus.MustNewConstMetric(
 					projectQuotaDesc,
 					prometheus.GaugeValue, float64(*quota),
-					domainName, domainUUID, projectName, projectUUID, serviceType, serviceNameByType[serviceType], resourceName,
+					domainName, domainUUID, projectName, projectUUID, string(serviceType), serviceNameByType[serviceType], string(resourceName),
 				)
 			}
 		}
@@ -692,7 +693,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 				ch <- prometheus.MustNewConstMetric(
 					projectBackendQuotaDesc,
 					prometheus.GaugeValue, float64(*backendQuota),
-					domainName, domainUUID, projectName, projectUUID, serviceType, serviceNameByType[serviceType], resourceName,
+					domainName, domainUUID, projectName, projectUUID, string(serviceType), serviceNameByType[serviceType], string(resourceName),
 				)
 			}
 		}
@@ -700,7 +701,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			ch <- prometheus.MustNewConstMetric(
 				projectUsageDesc,
 				prometheus.GaugeValue, float64(usage),
-				domainName, domainUUID, projectName, projectUUID, serviceType, serviceNameByType[serviceType], resourceName,
+				domainName, domainUUID, projectName, projectUUID, string(serviceType), serviceNameByType[serviceType], string(resourceName),
 			)
 		}
 		if hasPhysicalUsage {
@@ -708,7 +709,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 				ch <- prometheus.MustNewConstMetric(
 					projectPhysicalUsageDesc,
 					prometheus.GaugeValue, float64(physicalUsage),
-					domainName, domainUUID, projectName, projectUUID, serviceType, serviceNameByType[serviceType], resourceName,
+					domainName, domainUUID, projectName, projectUUID, string(serviceType), serviceNameByType[serviceType], string(resourceName),
 				)
 			}
 		}
@@ -725,7 +726,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			ch <- prometheus.MustNewConstMetric(
 				unitConversionDesc,
 				prometheus.GaugeValue, float64(multiplier),
-				serviceType, serviceNameByType[serviceType], resource.Name,
+				string(serviceType), serviceNameByType[serviceType], string(resource.Name),
 			)
 
 			qdc := c.Cluster.QuotaDistributionConfigForResource(serviceType, resource.Name)
@@ -733,7 +734,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 				ch <- prometheus.MustNewConstMetric(
 					autogrowGrowthMultiplierDesc,
 					prometheus.GaugeValue, qdc.Autogrow.GrowthMultiplier,
-					serviceType, serviceNameByType[serviceType], resource.Name,
+					string(serviceType), serviceNameByType[serviceType], string(resource.Name),
 				)
 			}
 		}
@@ -746,8 +747,8 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			domainUUID    string
 			projectName   string
 			projectUUID   string
-			serviceType   string
-			rateName      string
+			serviceType   limes.ServiceType
+			rateName      limesrates.RateName
 			usageAsBigint string
 		)
 		err := rows.Scan(&domainName, &domainUUID, &projectName, &projectUUID, &serviceType, &rateName, &usageAsBigint)
@@ -764,7 +765,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			ch <- prometheus.MustNewConstMetric(
 				projectRateUsageDesc,
 				prometheus.GaugeValue, usageAsFloat,
-				domainName, domainUUID, projectName, projectUUID, serviceType, serviceNameByType[serviceType], rateName,
+				domainName, domainUUID, projectName, projectUUID, string(serviceType), serviceNameByType[serviceType], string(rateName),
 			)
 		}
 		return nil
@@ -777,8 +778,8 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 ///////////////////////////////////////////////////////////////////////////////////////////
 // utilities
 
-func buildServiceNameByTypeMapping(c *core.Cluster) (serviceNameByType map[string]string) {
-	serviceNameByType = make(map[string]string, len(c.QuotaPlugins))
+func buildServiceNameByTypeMapping(c *core.Cluster) (serviceNameByType map[limes.ServiceType]string) {
+	serviceNameByType = make(map[limes.ServiceType]string, len(c.QuotaPlugins))
 	for serviceType, plugin := range c.QuotaPlugins {
 		serviceNameByType[serviceType] = plugin.ServiceInfo(serviceType).ProductName
 	}

@@ -59,7 +59,7 @@ func (p *keppelPlugin) PluginTypeID() string {
 }
 
 // ServiceInfo implements the core.QuotaPlugin interface.
-func (p *keppelPlugin) ServiceInfo(serviceType string) limes.ServiceInfo {
+func (p *keppelPlugin) ServiceInfo(serviceType limes.ServiceType) limes.ServiceInfo {
 	return limes.ServiceInfo{
 		Type:        serviceType,
 		ProductName: "keppel",
@@ -78,17 +78,17 @@ func (p *keppelPlugin) Rates() []limesrates.RateInfo {
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *keppelPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[string]*big.Int, serializedState string, err error) {
+func (p *keppelPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[limesrates.RateName]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *keppelPlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[string]core.ResourceData, serializedMetrics []byte, err error) {
+func (p *keppelPlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
 	quotas, err := p.KeppelV1.GetQuota(project.UUID)
 	if err != nil {
 		return nil, nil, err
 	}
-	return map[string]core.ResourceData{
+	return map[limesresources.ResourceName]core.ResourceData{
 		"images": {
 			Quota: quotas.Manifests.Quota,
 			UsageData: core.InAnyAZ(core.UsageData{
@@ -99,7 +99,7 @@ func (p *keppelPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Avail
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *keppelPlugin) SetQuota(project core.KeystoneProject, quotas map[string]uint64) error {
+func (p *keppelPlugin) SetQuota(project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
 	var qs keppelQuotaSet
 	qs.Manifests.Quota = int64(quotas["images"])
 	return p.KeppelV1.SetQuota(project.UUID, qs)
