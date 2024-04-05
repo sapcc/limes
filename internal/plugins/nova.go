@@ -40,7 +40,6 @@ import (
 
 type novaPlugin struct {
 	// configuration
-	BigVMMinMemoryMiB      uint64                   `yaml:"bigvm_min_memory"`
 	HypervisorTypeRules    nova.HypervisorTypeRules `yaml:"hypervisor_type_rules"`
 	SeparateInstanceQuotas struct {
 		FlavorNameSelection nova.FlavorNameSelection    `yaml:"flavor_name_selection"`
@@ -122,48 +121,6 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.E
 				Unit:     limes.UnitNone,
 			})
 		}
-	}
-
-	// add price class resources if requested
-	if p.BigVMMinMemoryMiB != 0 {
-		p.resources = append(p.resources,
-			limesresources.ResourceInfo{
-				Name:        "cores_regular",
-				Unit:        limes.UnitNone,
-				NoQuota:     true,
-				ContainedIn: "cores",
-			},
-			limesresources.ResourceInfo{
-				Name:        "cores_bigvm",
-				Unit:        limes.UnitNone,
-				NoQuota:     true,
-				ContainedIn: "cores",
-			},
-			limesresources.ResourceInfo{
-				Name:        "instances_regular",
-				Unit:        limes.UnitNone,
-				NoQuota:     true,
-				ContainedIn: "instances",
-			},
-			limesresources.ResourceInfo{
-				Name:        "instances_bigvm",
-				Unit:        limes.UnitNone,
-				NoQuota:     true,
-				ContainedIn: "instances",
-			},
-			limesresources.ResourceInfo{
-				Name:        "ram_regular",
-				Unit:        limes.UnitMebibytes,
-				NoQuota:     true,
-				ContainedIn: "ram",
-			},
-			limesresources.ResourceInfo{
-				Name:        "ram_bigvm",
-				Unit:        limes.UnitMebibytes,
-				NoQuota:     true,
-				ContainedIn: "ram",
-			},
-		)
 	}
 
 	sort.Slice(p.resources, func(i, j int) bool {
@@ -268,15 +225,6 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Availab
 			}
 		}
 	}
-	if p.BigVMMinMemoryMiB != 0 {
-		for _, classSuffix := range []string{"_regular", "_bigvm"} {
-			for _, baseResName := range []string{"cores", "instances", "ram"} {
-				result[baseResName+classSuffix] = core.ResourceData{
-					UsageData: core.PerAZ[core.UsageData]{}.AndZeroInTheseAZs(allAZs),
-				}
-			}
-		}
-	}
 
 	// Nova does not have a native API for AZ-aware usage reporting,
 	// so we will obtain AZ-aware usage stats by counting up all subresources,
@@ -310,14 +258,6 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Availab
 		// count towards "cores" and "ram"
 		result["cores"].AddLocalizedUsage(az, subres.VCPUs)
 		result["ram"].AddLocalizedUsage(az, subres.MemoryMiB.Value)
-
-		// count towards "bigvm" or "regular" class if requested
-		if p.BigVMMinMemoryMiB != 0 {
-			class := subres.Class
-			result["cores_"+class].UsageInAZ(az).Usage += subres.VCPUs
-			result["instances_"+class].UsageInAZ(az).Usage++
-			result["ram_"+class].UsageInAZ(az).Usage += subres.MemoryMiB.Value
-		}
 	}
 
 	// calculate metrics

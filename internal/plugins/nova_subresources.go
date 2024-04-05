@@ -45,7 +45,6 @@ type novaInstanceSubresource struct {
 	// placement information
 	AZ             limes.AvailabilityZone `json:"availability_zone"`
 	HypervisorType string                 `json:"hypervisor,omitempty"`
-	Class          string                 `json:"class,omitempty"` // either "bigvm" or "regular", see below
 	// information from flavor
 	FlavorName     string               `json:"flavor"`
 	VCPUs          uint64               `json:"vcpu"`
@@ -102,13 +101,6 @@ func (p *novaPlugin) buildInstanceSubresource(instance nova.Instance) (res novaI
 	// calculate classifications based on flavor data
 	if len(p.HypervisorTypeRules) > 0 {
 		res.HypervisorType = p.HypervisorTypeRules.Evaluate(flavorInfo)
-	}
-	if p.BigVMMinMemoryMiB > 0 {
-		if flavorInfo.MemoryMiB >= p.BigVMMinMemoryMiB {
-			res.Class = "bigvm"
-		} else {
-			res.Class = "regular"
-		}
 	}
 
 	// calculate classifications based on image data

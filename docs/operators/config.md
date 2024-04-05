@@ -296,33 +296,6 @@ The area for this service is `compute`.
 | `server_groups` | countable |
 | `server_group_members` | countable |
 
-#### Instance price classes
-
-```yaml
-services:
-  - type: compute
-    params:
-      bigvm_min_memory: 1048576
-```
-
-Instances can be split into two price groups (regular and big VMs) by setting the `params.bigvm_min_memory` key as
-shown above. When enabled, the following extra resources become available:
-
-| Resource | Unit |
-| --- | --- |
-| `cores_regular` | countable, AZ-aware |
-| `cores_bigvm` | countable, AZ-aware |
-| `instances_regular` | countable, AZ-aware |
-| `instances_bigvm` | countable, AZ-aware |
-| `ram_regular` | MiB, AZ-aware |
-| `ram_bigvm` | MiB, AZ-aware |
-
-Those resources don't track quota; only usage will be reported. Each of these resources has a `contained_in` relation,
-e.g. `instances_regular` is `contained_in: "instances"`.
-
-Note that, as of now, this configuration is laser-focused on one specific usecase in SAP Converged Cloud. It might
-become more generic once I have more than this singular usecase and a general pattern arises.
-
 #### Instance subresources
 
 ```yaml
@@ -343,7 +316,6 @@ The `instances` resource supports subresource scraping. If enabled, subresources
 | `ram` | integer value with unit | amount of memory configured in flavor |
 | `vcpu` | integer | number of vCPUs configured in flavor |
 | `disk` | integer value with unit | root disk size configured in flavor |
-| `class` | string | either "regular" or "bigvm" (only if instance price classes are enabled, see above) |
 | `os_type` | string | identifier for OS type as configured in image (see below) |
 | `hypervisor` | string | identifier for the hypervisor type of this instance (only if configured, see below) |
 | `metadata` | object of strings | user-supplied key-value data for this instance as reported by OpenStack Nova |
