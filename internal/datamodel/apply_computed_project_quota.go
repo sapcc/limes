@@ -55,17 +55,7 @@ var (
 		UPDATE project_az_resources SET quota = $1 WHERE quota IS DISTINCT FROM $1 AND az = $2 AND resource_id = $3
 	`)
 	acpqUpdateProjectQuotaQuery = sqlext.SimplifyWhitespace(`
-		UPDATE project_resources SET quota = $1 WHERE quota IS DISTINCT FROM $1 AND id = $2
-	`)
-
-	acpqComputeProjectQuotaQuery = sqlext.SimplifyWhitespace(`
-		UPDATE project_resources pr SET quota = (
-			SELECT SUM(par.quota) FROM project_az_resources par WHERE par.resource_id = pr.id
-		), desired_backend_quota = (
-			SELECT SUM(par.quota) FROM project_az_resources par WHERE par.resource_id = pr.id
-		) WHERE service_id IN (
-			SELECT id FROM project_services WHERE type = $1
-		) AND pr.name = $2
+		UPDATE project_resources SET quota = $1, desired_backend_quota = $1 WHERE (quota IS DISTINCT FROM $1 OR desired_backend_quota IS DISTINCT FROM $1) AND id = $2
 	`)
 )
 
@@ -193,11 +183,6 @@ func ApplyComputedProjectQuota(serviceType limes.ServiceType, resourceName limes
 	})
 	if err != nil {
 		return fmt.Errorf("while writing updated %s/%s project quotas to DB: %w", serviceType, resourceName, err)
-	}
-
-	_, err = tx.Exec(acpqComputeProjectQuotaQuery, serviceType, resourceName)
-	if err != nil {
-		return fmt.Errorf("while computing updated %s/%s backend quotas: %w", serviceType, resourceName, err)
 	}
 	return tx.Commit()
 
