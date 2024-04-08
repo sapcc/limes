@@ -33,7 +33,7 @@ import (
 //
 //- This suite only tests the functional core in acpqComputeQuotas().
 //  The full function is covered by the capacity scrape test.
-//- Project service IDs are chosen in the range 400..499 to make them
+//- Project resource IDs are chosen in the range 400..499 to make them
 //  visually distinctive from other integer literals.
 
 func TestACPQBasicWithoutAZAwareness(t *testing.T) {
@@ -42,7 +42,7 @@ func TestACPQBasicWithoutAZAwareness(t *testing.T) {
 	input := map[limes.AvailabilityZone]clusterAZAllocationStats{
 		"any": {
 			Capacity: 250,
-			ProjectStats: map[db.ProjectServiceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
 				// 401 is a boring base case
 				401: constantUsage(30),
 				// 402 tests how growth multiplier follows historical usage
@@ -83,7 +83,7 @@ func TestACPQBasicWithAZAwareness(t *testing.T) {
 	input := map[limes.AvailabilityZone]clusterAZAllocationStats{
 		"az-one": {
 			Capacity: 200,
-			ProjectStats: map[db.ProjectServiceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
 				// 401 and 402 are boring base cases with usage only in one AZ or both AZs, respectively
 				401: constantUsage(20),
 				402: constantUsage(20),
@@ -101,7 +101,7 @@ func TestACPQBasicWithAZAwareness(t *testing.T) {
 		},
 		"az-two": {
 			Capacity: 200,
-			ProjectStats: map[db.ProjectServiceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
 				401: constantUsage(20),
 				403: {Usage: 20, MinHistoricalUsage: 19, MaxHistoricalUsage: 20},
 				404: {Usage: 0, MinHistoricalUsage: 0, MaxHistoricalUsage: 15},
@@ -157,7 +157,7 @@ func TestACPQCapacityLimitsQuotaAllocation(t *testing.T) {
 	input := map[limes.AvailabilityZone]clusterAZAllocationStats{
 		"any": {
 			Capacity: 0, // set below
-			ProjectStats: map[db.ProjectServiceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
 				// explained below
 				401: constantUsage(20),
 				402: {Usage: 50, MinHistoricalUsage: 50, MaxHistoricalUsage: 70},
@@ -253,14 +253,14 @@ func TestACPQWithProjectLocalQuotaConstraints(t *testing.T) {
 	input := map[limes.AvailabilityZone]clusterAZAllocationStats{
 		"az-one": {
 			Capacity: 10000, // capacity is not a limiting factor here
-			ProjectStats: map[db.ProjectServiceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
 				401: constantUsage(20),
 				402: constantUsage(20),
 			},
 		},
 		"az-two": {
 			Capacity: 200,
-			ProjectStats: map[db.ProjectServiceID]projectAZAllocationStats{
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
 				401: {Usage: 40, MinHistoricalUsage: 20, MaxHistoricalUsage: 40},
 				402: {Usage: 40, MinHistoricalUsage: 40, MaxHistoricalUsage: 60},
 			},
@@ -294,7 +294,7 @@ func TestACPQWithProjectLocalQuotaConstraints(t *testing.T) {
 	// would require waiting for the final result and then adjusting that, but if
 	// we don't block minimum quota early on, we may not be able to fulfil it in
 	// the end if the capacity is tight and not overcommittable.
-	constraints := map[db.ProjectServiceID]projectLocalQuotaConstraints{
+	constraints := map[db.ProjectResourceID]projectLocalQuotaConstraints{
 		401: {MinQuota: p2u64(200)},
 		402: {MinQuota: p2u64(80)},
 	}
@@ -314,7 +314,7 @@ func TestACPQWithProjectLocalQuotaConstraints(t *testing.T) {
 	})
 
 	// test with MaxQuota constraints that constrain the soft minimum (hard minimum is not constrainable)
-	constraints = map[db.ProjectServiceID]projectLocalQuotaConstraints{
+	constraints = map[db.ProjectResourceID]projectLocalQuotaConstraints{
 		401: {MaxQuota: p2u64(50)},
 		402: {MaxQuota: p2u64(70)},
 	}
@@ -334,7 +334,7 @@ func TestACPQWithProjectLocalQuotaConstraints(t *testing.T) {
 	})
 
 	// test with MaxQuota constraints that constrain the base quota
-	constraints = map[db.ProjectServiceID]projectLocalQuotaConstraints{
+	constraints = map[db.ProjectResourceID]projectLocalQuotaConstraints{
 		401: {MaxQuota: p2u64(90)},
 		402: {MaxQuota: p2u64(90)},
 	}
@@ -363,7 +363,7 @@ func constantUsage(usage uint64) projectAZAllocationStats {
 	}
 }
 
-func expectACPQResult(t *testing.T, input map[limes.AvailabilityZone]clusterAZAllocationStats, cfg core.AutogrowQuotaDistributionConfiguration, constraints map[db.ProjectServiceID]projectLocalQuotaConstraints, expected acpqGlobalTarget) {
+func expectACPQResult(t *testing.T, input map[limes.AvailabilityZone]clusterAZAllocationStats, cfg core.AutogrowQuotaDistributionConfiguration, constraints map[db.ProjectResourceID]projectLocalQuotaConstraints, expected acpqGlobalTarget) {
 	t.Helper()
 	actual := acpqComputeQuotas(input, cfg, constraints)
 	// normalize away any left-over intermediate values

@@ -70,7 +70,7 @@ var (
 	`)
 
 	findProjectAZResourceIDByLocationQuery = sqlext.SimplifyWhitespace(`
-		SELECT par.id
+		SELECT pr.id, par.id
 		  FROM project_az_resources par
 		  JOIN project_resources pr ON par.resource_id = pr.id
 		  JOIN project_services ps ON pr.service_id = ps.id
@@ -88,19 +88,19 @@ var (
 		SELECT * FROM project_commitments WHERE id = $1 AND transfer_token = $2
 	`)
 	findTargetAZResourceIDBySourceIDQuery = sqlext.SimplifyWhitespace(`
-	  WITH source as (
-		SELECT ps.type, pr.name, par.az
-	    FROM project_az_resources as par
-		JOIN project_resources pr ON par.resource_id = pr.id
-	    JOIN project_services ps ON pr.service_id = ps.id
-	  WHERE par.id = $1
-	  )
-	  SELECT par.id 
-	    FROM project_az_resources as par
-		JOIN project_resources pr ON par.resource_id = pr.id
-	    JOIN project_services ps ON pr.service_id = ps.id
-		JOIN source s ON ps.type = s.type AND pr.name = s.name AND par.az = s.az
-	  WHERE ps.project_id = $2
+		WITH source as (
+		SELECT pr.id AS resource_id, ps.type, pr.name, par.az
+		  FROM project_az_resources as par
+		  JOIN project_resources pr ON par.resource_id = pr.id
+		  JOIN project_services ps ON pr.service_id = ps.id
+		 WHERE par.id = $1
+		)
+		SELECT s.resource_id, pr.id, par.id
+		  FROM project_az_resources as par
+		  JOIN project_resources pr ON par.resource_id = pr.id
+		  JOIN project_services ps ON pr.service_id = ps.id
+		  JOIN source s ON ps.type = s.type AND pr.name = s.name AND par.az = s.az
+		 WHERE ps.project_id = $2
 	`)
 
 	forceImmediateCapacityScrapeQuery = sqlext.SimplifyWhitespace(`
@@ -130,11 +130,11 @@ func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Reques
 	// enumerate project AZ resources
 	filter := reports.ReadFilter(r, p.Cluster.GetServiceTypesForArea)
 	queryStr, joinArgs := filter.PrepareQuery(getProjectAZResourceLocationsQuery)
-	azResourceLocationsByID := make(map[db.ProjectAZResourceID]azResourceLocation)
+	azResourceLocationsByID := make(map[db.ProjectAZResourceID]datamodel.AZResourceLocation)
 	err := sqlext.ForeachRow(p.DB, queryStr, joinArgs, func(rows *sql.Rows) error {
 		var (
 			id  db.ProjectAZResourceID
-			loc azResourceLocation
+			loc datamodel.AZResourceLocation
 		)
 		err := rows.Scan(&id, &loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)
 		if err != nil {
@@ -173,13 +173,7 @@ func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Reques
 	respondwith.JSON(w, http.StatusOK, map[string]any{"commitments": result})
 }
 
-type azResourceLocation struct {
-	ServiceType      limes.ServiceType
-	ResourceName     limesresources.ResourceName
-	AvailabilityZone limes.AvailabilityZone
-}
-
-func (p *v1Provider) convertCommitmentToDisplayForm(c db.ProjectCommitment, loc azResourceLocation, token *gopherpolicy.Token) limesresources.Commitment {
+func (p *v1Provider) convertCommitmentToDisplayForm(c db.ProjectCommitment, loc datamodel.AZResourceLocation, token *gopherpolicy.Token) limesresources.Commitment {
 	resInfo := p.Cluster.InfoForResource(loc.ServiceType, loc.ResourceName)
 	return limesresources.Commitment{
 		ID:               int64(c.ID),
@@ -270,6 +264,17 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 		return
 	}
 
+	var (
+		resourceID   db.ProjectResourceID
+		azResourceID db.ProjectAZResourceID
+	)
+	err := p.DB.QueryRow(findProjectAZResourceIDByLocationQuery, dbProject.ID, req.ServiceType, req.ResourceName, req.AvailabilityZone).
+		Scan(&resourceID, &azResourceID)
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+	_ = azResourceID // returned by the above query, but not used in this function
+
 	// commitments can never be confirmed immediately if we are before the min_confirm_date
 	now := p.timeNow()
 	if behavior.CommitmentMinConfirmDate != nil && behavior.CommitmentMinConfirmDate.After(now) {
@@ -278,7 +283,7 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 	}
 
 	// check for committable capacity
-	result, err := datamodel.CanConfirmNewCommitment(*req, *dbProject, p.Cluster, p.DB)
+	result, err := datamodel.CanConfirmNewCommitment(*req, resourceID, p.Cluster, p.DB)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -305,14 +310,17 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	loc := azResourceLocation{
+	loc := datamodel.AZResourceLocation{
 		ServiceType:      req.ServiceType,
 		ResourceName:     req.ResourceName,
 		AvailabilityZone: req.AvailabilityZone,
 	}
-	var azResourceID db.ProjectAZResourceID
+	var (
+		resourceID   db.ProjectResourceID
+		azResourceID db.ProjectAZResourceID
+	)
 	err := p.DB.QueryRow(findProjectAZResourceIDByLocationQuery, dbProject.ID, req.ServiceType, req.ResourceName, req.AvailabilityZone).
-		Scan(&azResourceID)
+		Scan(&resourceID, &azResourceID)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -353,7 +361,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	}
 	if req.ConfirmBy == nil {
 		// if not planned for confirmation in the future, confirm immediately (or fail)
-		ok, err := datamodel.CanConfirmNewCommitment(*req, *dbProject, p.Cluster, tx)
+		ok, err := datamodel.CanConfirmNewCommitment(*req, resourceID, p.Cluster, tx)
 		if respondwith.ErrorText(w, err) {
 			return
 		}
@@ -428,7 +436,7 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 	} else if respondwith.ErrorText(w, err) {
 		return
 	}
-	var loc azResourceLocation
+	var loc datamodel.AZResourceLocation
 	err = p.DB.QueryRow(findProjectAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
 		Scan(&loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -577,7 +585,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	var loc azResourceLocation
+	var loc datamodel.AZResourceLocation
 	err = p.DB.QueryRow(findProjectAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
 		Scan(&loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -655,22 +663,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	// get target AZ_RESOURCE_ID
-	var targetResourceID db.ProjectAZResourceID
-	err = p.DB.QueryRow(findTargetAZResourceIDBySourceIDQuery, dbCommitment.AZResourceID, targetProject.ID).Scan(&targetResourceID)
-	if respondwith.ErrorText(w, err) {
-		return
-	}
-
-	dbCommitment.TransferStatus = ""
-	dbCommitment.TransferToken = ""
-	dbCommitment.AZResourceID = targetResourceID
-	_, err = p.DB.Update(&dbCommitment)
-	if respondwith.ErrorText(w, err) {
-		return
-	}
-
-	var loc azResourceLocation
+	var loc datamodel.AZResourceLocation
 	err = p.DB.QueryRow(findProjectAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
 		Scan(&loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -678,6 +671,45 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, "no route to this commitment", http.StatusNotFound)
 		return
 	} else if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	// get target service and AZ resource
+	var (
+		sourceResourceID   db.ProjectResourceID
+		targetResourceID   db.ProjectResourceID
+		targetAZResourceID db.ProjectAZResourceID
+	)
+	err = p.DB.QueryRow(findTargetAZResourceIDBySourceIDQuery, dbCommitment.AZResourceID, targetProject.ID).
+		Scan(&sourceResourceID, &targetResourceID, &targetAZResourceID)
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	// validate that we have enough committable capacity on the receiving side
+	tx, err := p.DB.Begin()
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+	defer sqlext.RollbackUnlessCommitted(tx)
+	ok, err := datamodel.CanMoveExistingCommitment(dbCommitment.Amount, loc, sourceResourceID, targetResourceID, p.Cluster, tx)
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+	if !ok {
+		http.Error(w, "not enough committable capacity on the receiving side", http.StatusConflict)
+		return
+	}
+
+	dbCommitment.TransferStatus = ""
+	dbCommitment.TransferToken = ""
+	dbCommitment.AZResourceID = targetAZResourceID
+	_, err = tx.Update(&dbCommitment)
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+	err = tx.Commit()
+	if respondwith.ErrorText(w, err) {
 		return
 	}
 

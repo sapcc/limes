@@ -39,7 +39,7 @@ var (
 	//
 	// The final `BY pc.id` ordering ensures deterministic behavior in tests.
 	getConfirmableCommitmentsQuery = sqlext.SimplifyWhitespace(`
-		SELECT ps.id, pc.id, pc.amount
+		SELECT pr.id, pc.id, pc.amount
 		  FROM project_services ps
 		  JOIN project_resources pr ON pr.service_id = ps.id
 		  JOIN project_az_resources par ON par.resource_id = pr.id
@@ -49,21 +49,39 @@ var (
 	`)
 )
 
+// AZResourceLocation is a tuple identifying an AZ resource within a project.
+type AZResourceLocation struct {
+	ServiceType      limes.ServiceType
+	ResourceName     limesresources.ResourceName
+	AvailabilityZone limes.AvailabilityZone
+}
+
 // CanConfirmNewCommitment returns whether the given commitment request can be
 // confirmed immediately upon creation in the given project.
-func CanConfirmNewCommitment(req limesresources.CommitmentRequest, project db.Project, cluster *core.Cluster, dbi db.Interface) (bool, error) {
+func CanConfirmNewCommitment(req limesresources.CommitmentRequest, resourceID db.ProjectResourceID, cluster *core.Cluster, dbi db.Interface) (bool, error) {
 	statsByAZ, err := collectAZAllocationStats(req.ServiceType, req.ResourceName, &req.AvailabilityZone, cluster, dbi)
 	if err != nil {
 		return false, err
 	}
 	stats := statsByAZ[req.AvailabilityZone]
 
-	var serviceID db.ProjectServiceID
-	err = dbi.QueryRow(`SELECT id FROM project_services WHERE project_id = $1 AND type = $2`, project.ID, req.ServiceType).Scan(&serviceID)
+	additions := map[db.ProjectResourceID]uint64{resourceID: req.Amount}
+	return stats.FitsAfterCommitmentChanges(additions, nil), nil
+}
+
+// CanMoveExistingCommitment returns whether a commitment of the given amount
+// at the given AZ resource location can be moved from one project to another.
+// The projects are identified by their resource IDs.
+func CanMoveExistingCommitment(amount uint64, loc AZResourceLocation, sourceResourceID, targetResourceID db.ProjectResourceID, cluster *core.Cluster, dbi db.Interface) (bool, error) {
+	statsByAZ, err := collectAZAllocationStats(loc.ServiceType, loc.ResourceName, &loc.AvailabilityZone, cluster, dbi)
 	if err != nil {
 		return false, err
 	}
-	return stats.FitsAdditionalCommitment(serviceID, req.Amount), nil
+	stats := statsByAZ[loc.AvailabilityZone]
+
+	additions := map[db.ProjectResourceID]uint64{targetResourceID: amount}
+	subtractions := map[db.ProjectResourceID]uint64{sourceResourceID: amount}
+	return stats.FitsAfterCommitmentChanges(additions, subtractions), nil
 }
 
 // ConfirmPendingCommitments goes through all unconfirmed commitments that
@@ -79,15 +97,15 @@ func ConfirmPendingCommitments(serviceType limes.ServiceType, resourceName limes
 	// load confirmable commitments (we need to load them into a buffer first, since
 	// lib/pq cannot do UPDATE while a SELECT targeting the same rows is still going)
 	type confirmableCommitment struct {
-		ProjectServiceID db.ProjectServiceID
-		CommitmentID     db.ProjectCommitmentID
-		Amount           uint64
+		ProjectResourceID db.ProjectResourceID
+		CommitmentID      db.ProjectCommitmentID
+		Amount            uint64
 	}
 	var confirmableCommitments []confirmableCommitment
 	queryArgs := []any{serviceType, resourceName, az}
 	err = sqlext.ForeachRow(dbi, getConfirmableCommitmentsQuery, queryArgs, func(rows *sql.Rows) error {
 		var c confirmableCommitment
-		err := rows.Scan(&c.ProjectServiceID, &c.CommitmentID, &c.Amount)
+		err := rows.Scan(&c.ProjectResourceID, &c.CommitmentID, &c.Amount)
 		confirmableCommitments = append(confirmableCommitments, c)
 		return err
 	})
@@ -98,7 +116,8 @@ func ConfirmPendingCommitments(serviceType limes.ServiceType, resourceName limes
 	// foreach confirmable commitment...
 	for _, c := range confirmableCommitments {
 		// ignore commitments that do not fit
-		if !stats.FitsAdditionalCommitment(c.ProjectServiceID, c.Amount) {
+		additions := map[db.ProjectResourceID]uint64{c.ProjectResourceID: c.Amount}
+		if !stats.FitsAfterCommitmentChanges(additions, nil) {
 			continue
 		}
 
@@ -110,8 +129,8 @@ func ConfirmPendingCommitments(serviceType limes.ServiceType, resourceName limes
 		}
 
 		// block its allocation from being committed again in this loop
-		oldStats := stats.ProjectStats[c.ProjectServiceID]
-		stats.ProjectStats[c.ProjectServiceID] = projectAZAllocationStats{
+		oldStats := stats.ProjectStats[c.ProjectResourceID]
+		stats.ProjectStats[c.ProjectResourceID] = projectAZAllocationStats{
 			Committed: oldStats.Committed + c.Amount,
 			Usage:     oldStats.Usage,
 		}

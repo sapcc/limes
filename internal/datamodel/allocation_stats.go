@@ -36,25 +36,33 @@ import (
 //
 // - ApplyComputedProjectQuota
 // - CanConfirmNewCommitment
+// - CanMoveExistingCommitment
 // - ConfirmPendingCommitments
 type clusterAZAllocationStats struct {
-	Capacity     uint64
-	ProjectStats map[db.ProjectServiceID]projectAZAllocationStats
+	Capacity uint64
+	// Using db.ProjectResourceID as a key here is only somewhat arbitrary:
+	// ProjectServiceID and ProjectID could also be used, but then we would have to use more JOINs in some queries.
+	ProjectStats map[db.ProjectResourceID]projectAZAllocationStats
 }
 
-func (c clusterAZAllocationStats) FitsAdditionalCommitment(serviceID db.ProjectServiceID, amount uint64) bool {
-	// calculate `sum_over_projects(max(committed, usage))` including the requested commitment
+func (c clusterAZAllocationStats) FitsAfterCommitmentChanges(additions, subtractions map[db.ProjectResourceID]uint64) bool {
+	// calculate `sum_over_projects(max(committed, usage))` including the requested changes
 	usedCapacity := uint64(0)
-	for projectServiceID, stats := range c.ProjectStats {
-		if projectServiceID == serviceID {
-			usedCapacity += max(stats.Committed+amount, stats.Usage)
-		} else {
-			usedCapacity += max(stats.Committed, stats.Usage)
-		}
+	for projectResourceID, stats := range c.ProjectStats {
+		committed := saturatingSub(stats.Committed+additions[projectResourceID], subtractions[projectResourceID])
+		usedCapacity += max(committed, stats.Usage)
 	}
 
 	// commitment can be confirmed if it and all other commitments and usage fit in the total capacity
 	return usedCapacity <= c.Capacity
+}
+
+// Like `lhs - rhs`, but never underflows below 0.
+func saturatingSub(lhs, rhs uint64) uint64 {
+	if lhs < rhs {
+		return 0
+	}
+	return lhs - rhs
 }
 
 // projectAZAllocationStats describes the resource allocation in a certain AZ
@@ -76,7 +84,7 @@ var (
 	`)
 
 	getUsageInResourceQuery = sqlext.SimplifyWhitespace(`
-		SELECT ps.id, par.az, par.usage, par.historical_usage,
+		SELECT pr.id, par.az, par.usage, par.historical_usage,
 		       (SELECT COALESCE(SUM(pc.amount), 0) FROM project_commitments pc
 		         WHERE pc.az_resource_id = par.id AND pc.state = 'active')
 		  FROM project_services ps
@@ -116,19 +124,19 @@ func collectAZAllocationStats(serviceType limes.ServiceType, resourceName limesr
 	// get resource usage
 	err = sqlext.ForeachRow(dbi, getUsageInResourceQuery, queryArgs, func(rows *sql.Rows) error {
 		var (
-			serviceID           db.ProjectServiceID
+			resourceID          db.ProjectResourceID
 			az                  limes.AvailabilityZone
 			stats               projectAZAllocationStats
 			historicalUsageJSON string
 		)
-		err := rows.Scan(&serviceID, &az, &stats.Usage, &historicalUsageJSON, &stats.Committed)
+		err := rows.Scan(&resourceID, &az, &stats.Usage, &historicalUsageJSON, &stats.Committed)
 		if err != nil {
 			return err
 		}
 		ts, err := util.ParseTimeSeries[uint64](historicalUsageJSON)
 		if err != nil {
-			return fmt.Errorf("could not parse historical usage for project service %d in %s: %w",
-				serviceID, az, err)
+			return fmt.Errorf("could not parse historical usage for project resource %d in %s: %w",
+				resourceID, az, err)
 		}
 		stats.MinHistoricalUsage = ts.MinOr(stats.Usage)
 		stats.MaxHistoricalUsage = ts.MaxOr(stats.Usage)
@@ -136,10 +144,10 @@ func collectAZAllocationStats(serviceType limes.ServiceType, resourceName limesr
 		azStats := result[az].ProjectStats
 		if azStats == nil {
 			azEntry := result[az]
-			azEntry.ProjectStats = map[db.ProjectServiceID]projectAZAllocationStats{serviceID: stats}
+			azEntry.ProjectStats = map[db.ProjectResourceID]projectAZAllocationStats{resourceID: stats}
 			result[az] = azEntry
 		} else {
-			azStats[serviceID] = stats
+			azStats[resourceID] = stats
 		}
 		return nil
 	})
