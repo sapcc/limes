@@ -40,7 +40,7 @@ import (
 
 var (
 	acpqGetLocalQuotaConstraintsQuery = sqlext.SimplifyWhitespace(`
-		SELECT ps.id, pr.min_quota_from_backend, pr.max_quota_from_backend, pr.max_quota_from_admin, pr.override_quota_from_config
+		SELECT pr.id, pr.min_quota_from_backend, pr.max_quota_from_backend, pr.max_quota_from_admin, pr.override_quota_from_config
 		  FROM project_services ps
 		  JOIN project_resources pr ON pr.service_id = ps.id
 		 WHERE ps.type = $1 AND pr.name = $2 AND (pr.min_quota_from_backend IS NOT NULL
@@ -52,12 +52,10 @@ var (
 	// This does not need to create any entries in project_az_resources, because
 	// Scrape() already created them for us.
 	acpqUpdateAZQuotaQuery = sqlext.SimplifyWhitespace(`
-		UPDATE project_az_resources SET quota = $1 WHERE quota IS DISTINCT FROM $1 AND az = $2 AND resource_id = (
-			SELECT id FROM project_resources WHERE service_id = $3 AND name = $4
-		)
+		UPDATE project_az_resources SET quota = $1 WHERE quota IS DISTINCT FROM $1 AND az = $2 AND resource_id = $3
 	`)
 	acpqUpdateProjectQuotaQuery = sqlext.SimplifyWhitespace(`
-		UPDATE project_resources SET quota = $1 WHERE quota IS DISTINCT FROM $1 AND service_id = $2 AND name = $3
+		UPDATE project_resources SET quota = $1 WHERE quota IS DISTINCT FROM $1 AND id = $2
 	`)
 
 	acpqComputeProjectQuotaQuery = sqlext.SimplifyWhitespace(`
@@ -123,16 +121,16 @@ func ApplyComputedProjectQuota(serviceType limes.ServiceType, resourceName limes
 		return err
 	}
 
-	constraints := make(map[db.ProjectServiceID]projectLocalQuotaConstraints)
+	constraints := make(map[db.ProjectResourceID]projectLocalQuotaConstraints)
 	err = sqlext.ForeachRow(tx, acpqGetLocalQuotaConstraintsQuery, []any{serviceType, resourceName}, func(rows *sql.Rows) error {
 		var (
-			serviceID               db.ProjectServiceID
+			resourceID              db.ProjectResourceID
 			minQuotaFromBackend     *uint64
 			maxQuotaFromBackend     *uint64
 			maxQuotaFromAdmin       *uint64
 			overrideQuotaFromConfig *uint64
 		)
-		err := rows.Scan(&serviceID, &minQuotaFromBackend, &maxQuotaFromBackend, &maxQuotaFromAdmin, &overrideQuotaFromConfig)
+		err := rows.Scan(&resourceID, &minQuotaFromBackend, &maxQuotaFromBackend, &maxQuotaFromAdmin, &overrideQuotaFromConfig)
 		if err != nil {
 			return err
 		}
@@ -144,7 +142,7 @@ func ApplyComputedProjectQuota(serviceType limes.ServiceType, resourceName limes
 		c.AddMinQuota(overrideQuotaFromConfig)
 		c.AddMaxQuota(overrideQuotaFromConfig)
 
-		constraints[serviceID] = c
+		constraints[resourceID] = c
 		return nil
 	})
 	if err != nil {
@@ -164,10 +162,10 @@ func ApplyComputedProjectQuota(serviceType limes.ServiceType, resourceName limes
 	// write new AZ quotas to database
 	err = sqlext.WithPreparedStatement(tx, acpqUpdateAZQuotaQuery, func(stmt *sql.Stmt) error {
 		for az, azTarget := range target {
-			for serviceID, projectTarget := range azTarget {
-				_, err := stmt.Exec(projectTarget.Allocated, az, serviceID, resourceName)
+			for resourceID, projectTarget := range azTarget {
+				_, err := stmt.Exec(projectTarget.Allocated, az, resourceID)
 				if err != nil {
-					return fmt.Errorf("in AZ %s in project service %d: %w", az, serviceID, err)
+					return fmt.Errorf("in AZ %s in project resource %d: %w", az, resourceID, err)
 				}
 			}
 		}
@@ -178,17 +176,17 @@ func ApplyComputedProjectQuota(serviceType limes.ServiceType, resourceName limes
 	}
 
 	// write overall project quotas to database
-	quotasByServiceID := make(map[db.ProjectServiceID]uint64)
+	quotasByResourceID := make(map[db.ProjectResourceID]uint64)
 	for _, azTarget := range target {
-		for serviceID, projectTarget := range azTarget {
-			quotasByServiceID[serviceID] += projectTarget.Allocated
+		for resourceID, projectTarget := range azTarget {
+			quotasByResourceID[resourceID] += projectTarget.Allocated
 		}
 	}
 	err = sqlext.WithPreparedStatement(tx, acpqUpdateProjectQuotaQuery, func(stmt *sql.Stmt) error {
-		for serviceID, quota := range quotasByServiceID {
-			_, err := stmt.Exec(quota, serviceID, resourceName)
+		for resourceID, quota := range quotasByResourceID {
+			_, err := stmt.Exec(quota, resourceID)
 			if err != nil {
-				return fmt.Errorf("in project service %d: %w", serviceID, err)
+				return fmt.Errorf("in project resource %d: %w", resourceID, err)
 			}
 		}
 		return nil
@@ -233,7 +231,7 @@ func subtractOrZero(lhs, rhs uint64) uint64 {
 }
 
 // Calculation space for all project AZ resources in a single AZ.
-type acpqAZTarget map[db.ProjectServiceID]*acpqProjectAZTarget
+type acpqAZTarget map[db.ProjectResourceID]*acpqProjectAZTarget
 
 // SumAllocated returns how much is allocated across all projects.
 func (t acpqAZTarget) SumAllocated() (result uint64) {
@@ -244,18 +242,18 @@ func (t acpqAZTarget) SumAllocated() (result uint64) {
 }
 
 // Requested returns how much is desired, but not allocated yet, for each project.
-func (t acpqAZTarget) Requested() map[db.ProjectServiceID]uint64 {
-	result := make(map[db.ProjectServiceID]uint64, len(t))
-	for serviceID, pt := range t {
-		result[serviceID] = pt.Requested()
+func (t acpqAZTarget) Requested() map[db.ProjectResourceID]uint64 {
+	result := make(map[db.ProjectResourceID]uint64, len(t))
+	for resourceID, pt := range t {
+		result[resourceID] = pt.Requested()
 	}
 	return result
 }
 
 // AddGranted extends the allocations in this map by the granted values.
-func (t acpqAZTarget) AddGranted(granted map[db.ProjectServiceID]uint64) {
-	for serviceID, pt := range t {
-		pt.Allocated += granted[serviceID]
+func (t acpqAZTarget) AddGranted(granted map[db.ProjectResourceID]uint64) {
+	for resourceID, pt := range t {
+		pt.Allocated += granted[resourceID]
 	}
 }
 
@@ -267,15 +265,15 @@ type acpqGlobalTarget map[limes.AvailabilityZone]acpqAZTarget
 // effects (reading the DB, writing the DB, setting quota in the backend).
 // This function is separate because most test cases work on this level.
 // The full ApplyComputedProjectQuota() function is tested during capacity scraping.
-func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats, cfg core.AutogrowQuotaDistributionConfiguration, constraints map[db.ProjectServiceID]projectLocalQuotaConstraints) acpqGlobalTarget {
-	isProjectServiceID := make(map[db.ProjectServiceID]struct{})
+func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats, cfg core.AutogrowQuotaDistributionConfiguration, constraints map[db.ProjectResourceID]projectLocalQuotaConstraints) acpqGlobalTarget {
+	isProjectResourceID := make(map[db.ProjectResourceID]struct{})
 	isRelevantAZ := make(map[limes.AvailabilityZone]struct{}, len(stats))
 	var allAZsInOrder []limes.AvailabilityZone
 	for az, azStats := range stats {
 		isRelevantAZ[az] = struct{}{}
 		allAZsInOrder = append(allAZsInOrder, az)
-		for serviceID := range azStats.ProjectStats {
-			isProjectServiceID[serviceID] = struct{}{}
+		for resourceID := range azStats.ProjectStats {
+			isProjectResourceID[resourceID] = struct{}{}
 		}
 	}
 	slices.Sort(allAZsInOrder)
@@ -291,10 +289,10 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 	// few steps of the algorithm itself that use the same looping pattern.
 	target := make(acpqGlobalTarget, len(stats))
 	for az := range isRelevantAZ {
-		target[az] = make(acpqAZTarget, len(isProjectServiceID))
-		for serviceID := range isProjectServiceID {
-			projectAZStats := stats[az].ProjectStats[serviceID]
-			target[az][serviceID] = &acpqProjectAZTarget{
+		target[az] = make(acpqAZTarget, len(isProjectResourceID))
+		for resourceID := range isProjectResourceID {
+			projectAZStats := stats[az].ProjectStats[resourceID]
+			target[az][resourceID] = &acpqProjectAZTarget{
 				// phase 1: always grant hard minimum quota
 				Allocated: max(projectAZStats.Committed, projectAZStats.Usage),
 				// phase 2: try granting soft minimum quota
@@ -302,13 +300,13 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 			}
 		}
 	}
-	target.EnforceConstraints(constraints, allAZsInOrder, isProjectServiceID)
+	target.EnforceConstraints(constraints, allAZsInOrder, isProjectResourceID)
 	target.TryFulfillDesired(stats, cfg)
 
 	// phase 3: try granting desired_quota
 	for az := range isRelevantAZ {
-		for serviceID := range isProjectServiceID {
-			projectAZStats := stats[az].ProjectStats[serviceID]
+		for resourceID := range isProjectResourceID {
+			projectAZStats := stats[az].ProjectStats[resourceID]
 			growthBaseline := max(projectAZStats.Committed, projectAZStats.MinHistoricalUsage)
 			desiredQuota := uint64(float64(growthBaseline) * cfg.GrowthMultiplier)
 			if cfg.GrowthMultiplier > 1.0 && growthBaseline > 0 {
@@ -317,29 +315,29 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 				growthMinimum := max(cfg.GrowthMinimum, 1)
 				desiredQuota = max(desiredQuota, growthBaseline+growthMinimum)
 			}
-			target[az][serviceID].Desired = desiredQuota
+			target[az][resourceID].Desired = desiredQuota
 		}
 	}
-	target.EnforceConstraints(constraints, allAZsInOrder, isProjectServiceID)
+	target.EnforceConstraints(constraints, allAZsInOrder, isProjectResourceID)
 	target.TryFulfillDesired(stats, cfg)
 
 	// phase 4: try granting additional "any" quota until sum of all quotas is ProjectBaseQuota
 	if cfg.ProjectBaseQuota > 0 {
-		for serviceID := range isProjectServiceID {
+		for resourceID := range isProjectResourceID {
 			sumOfLocalizedQuotas := uint64(0)
 			for az := range isRelevantAZ {
 				if az != limes.AvailabilityZoneAny {
-					sumOfLocalizedQuotas += target[az][serviceID].Allocated
+					sumOfLocalizedQuotas += target[az][resourceID].Allocated
 				}
 			}
 			if sumOfLocalizedQuotas < cfg.ProjectBaseQuota {
-				target[limes.AvailabilityZoneAny][serviceID].Desired = cfg.ProjectBaseQuota - sumOfLocalizedQuotas
+				target[limes.AvailabilityZoneAny][resourceID].Desired = cfg.ProjectBaseQuota - sumOfLocalizedQuotas
 			}
 		}
 		if !slices.Contains(allAZsInOrder, limes.AvailabilityZoneAny) {
 			allAZsInOrder = append(allAZsInOrder, limes.AvailabilityZoneAny)
 		}
-		target.EnforceConstraints(constraints, allAZsInOrder, isProjectServiceID)
+		target.EnforceConstraints(constraints, allAZsInOrder, isProjectResourceID)
 		target.TryFulfillDesired(stats, cfg)
 	}
 
@@ -348,20 +346,20 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 
 // After increasing Desired, but before increasing Allocated, this decreases
 // Desired in order to fit into project-local quota constraints.
-func (target acpqGlobalTarget) EnforceConstraints(constraints map[db.ProjectServiceID]projectLocalQuotaConstraints, allAZs []limes.AvailabilityZone, isProjectServiceID map[db.ProjectServiceID]struct{}) {
-	for serviceID, c := range constraints {
+func (target acpqGlobalTarget) EnforceConstraints(constraints map[db.ProjectResourceID]projectLocalQuotaConstraints, allAZs []limes.AvailabilityZone, isProjectResourceID map[db.ProjectResourceID]struct{}) {
+	for resourceID, c := range constraints {
 		// raise Allocated as necessary to fulfil minimum quota
 		if c.MinQuota != nil && *c.MinQuota > 0 {
 			totalAllocated := uint64(0)
 			desireScalePerAZ := make(map[limes.AvailabilityZone]uint64)
 			for _, az := range allAZs {
-				t := target[az][serviceID]
+				t := target[az][resourceID]
 				totalAllocated += t.Allocated
 				desireScalePerAZ[az] = *c.MinQuota * max(1, subtractOrZero(t.Desired, t.Allocated))
 			}
 			extraAllocatedPerAZ := acpqDistributeFairly(subtractOrZero(*c.MinQuota, totalAllocated), desireScalePerAZ)
 			for _, az := range allAZs {
-				target[az][serviceID].Allocated += extraAllocatedPerAZ[az]
+				target[az][resourceID].Allocated += extraAllocatedPerAZ[az]
 			}
 		}
 
@@ -371,7 +369,7 @@ func (target acpqGlobalTarget) EnforceConstraints(constraints map[db.ProjectServ
 			totalDesired := uint64(0)
 			extraDesiredPerAZ := make(map[limes.AvailabilityZone]uint64)
 			for _, az := range allAZs {
-				t := target[az][serviceID]
+				t := target[az][resourceID]
 				totalAllocated += t.Allocated
 				totalDesired += max(t.Allocated, t.Desired)
 				extraDesiredPerAZ[az] = subtractOrZero(t.Desired, t.Allocated)
@@ -379,7 +377,7 @@ func (target acpqGlobalTarget) EnforceConstraints(constraints map[db.ProjectServ
 			if totalDesired > *c.MaxQuota {
 				extraDesiredPerAZ = acpqDistributeFairly(subtractOrZero(*c.MaxQuota, totalAllocated), extraDesiredPerAZ)
 				for _, az := range allAZs {
-					t := target[az][serviceID]
+					t := target[az][resourceID]
 					t.Desired = t.Allocated + extraDesiredPerAZ[az]
 				}
 			}

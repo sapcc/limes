@@ -70,7 +70,7 @@ var (
 	`)
 
 	findProjectAZResourceIDByLocationQuery = sqlext.SimplifyWhitespace(`
-		SELECT par.id
+		SELECT pr.id, par.id
 		  FROM project_az_resources par
 		  JOIN project_resources pr ON par.resource_id = pr.id
 		  JOIN project_services ps ON pr.service_id = ps.id
@@ -89,13 +89,13 @@ var (
 	`)
 	findTargetAZResourceIDBySourceIDQuery = sqlext.SimplifyWhitespace(`
 		WITH source as (
-		SELECT ps.id AS service_id, ps.type, pr.name, par.az
+		SELECT pr.id AS resource_id, ps.type, pr.name, par.az
 		  FROM project_az_resources as par
 		  JOIN project_resources pr ON par.resource_id = pr.id
 		  JOIN project_services ps ON pr.service_id = ps.id
 		 WHERE par.id = $1
 		)
-		SELECT s.service_id, ps.id, par.id
+		SELECT s.resource_id, pr.id, par.id
 		  FROM project_az_resources as par
 		  JOIN project_resources pr ON par.resource_id = pr.id
 		  JOIN project_services ps ON pr.service_id = ps.id
@@ -264,6 +264,17 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 		return
 	}
 
+	var (
+		resourceID   db.ProjectResourceID
+		azResourceID db.ProjectAZResourceID
+	)
+	err := p.DB.QueryRow(findProjectAZResourceIDByLocationQuery, dbProject.ID, req.ServiceType, req.ResourceName, req.AvailabilityZone).
+		Scan(&resourceID, &azResourceID)
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+	_ = azResourceID // returned by the above query, but not used in this function
+
 	// commitments can never be confirmed immediately if we are before the min_confirm_date
 	now := p.timeNow()
 	if behavior.CommitmentMinConfirmDate != nil && behavior.CommitmentMinConfirmDate.After(now) {
@@ -272,7 +283,7 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 	}
 
 	// check for committable capacity
-	result, err := datamodel.CanConfirmNewCommitment(*req, *dbProject, p.Cluster, p.DB)
+	result, err := datamodel.CanConfirmNewCommitment(*req, resourceID, p.Cluster, p.DB)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -304,9 +315,12 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		ResourceName:     req.ResourceName,
 		AvailabilityZone: req.AvailabilityZone,
 	}
-	var azResourceID db.ProjectAZResourceID
+	var (
+		resourceID   db.ProjectResourceID
+		azResourceID db.ProjectAZResourceID
+	)
 	err := p.DB.QueryRow(findProjectAZResourceIDByLocationQuery, dbProject.ID, req.ServiceType, req.ResourceName, req.AvailabilityZone).
-		Scan(&azResourceID)
+		Scan(&resourceID, &azResourceID)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -347,7 +361,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	}
 	if req.ConfirmBy == nil {
 		// if not planned for confirmation in the future, confirm immediately (or fail)
-		ok, err := datamodel.CanConfirmNewCommitment(*req, *dbProject, p.Cluster, tx)
+		ok, err := datamodel.CanConfirmNewCommitment(*req, resourceID, p.Cluster, tx)
 		if respondwith.ErrorText(w, err) {
 			return
 		}
@@ -662,12 +676,12 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 
 	// get target service and AZ resource
 	var (
-		sourceServiceID  db.ProjectServiceID
-		targetServiceID  db.ProjectServiceID
-		targetResourceID db.ProjectAZResourceID
+		sourceResourceID   db.ProjectResourceID
+		targetResourceID   db.ProjectResourceID
+		targetAZResourceID db.ProjectAZResourceID
 	)
 	err = p.DB.QueryRow(findTargetAZResourceIDBySourceIDQuery, dbCommitment.AZResourceID, targetProject.ID).
-		Scan(&sourceServiceID, &targetServiceID, &targetResourceID)
+		Scan(&sourceResourceID, &targetResourceID, &targetAZResourceID)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -678,7 +692,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
-	ok, err := datamodel.CanMoveExistingCommitment(dbCommitment.Amount, loc, sourceServiceID, targetServiceID, p.Cluster, tx)
+	ok, err := datamodel.CanMoveExistingCommitment(dbCommitment.Amount, loc, sourceResourceID, targetResourceID, p.Cluster, tx)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -689,7 +703,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 
 	dbCommitment.TransferStatus = ""
 	dbCommitment.TransferToken = ""
-	dbCommitment.AZResourceID = targetResourceID
+	dbCommitment.AZResourceID = targetAZResourceID
 	_, err = tx.Update(&dbCommitment)
 	if respondwith.ErrorText(w, err) {
 		return
