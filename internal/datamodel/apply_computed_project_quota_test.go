@@ -24,6 +24,7 @@ import (
 	"testing"
 
 	"github.com/sapcc/go-api-declarations/limes"
+	"github.com/sapcc/go-bits/assert"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
@@ -401,4 +402,24 @@ func expectACPQResult(t *testing.T, input map[limes.AvailabilityZone]clusterAZAl
 
 func p2u64(x uint64) *uint64 {
 	return &x
+}
+
+func TestACPQDistributeFairlyWithLargeNumbers(t *testing.T) {
+	// This tests how acpqDistributeFairly() deals with very large numbers
+	// (as can occur e.g. for Swift capacity measured in bytes).
+	// We used to have a crash here because of an overflowing uint64 multiplication.
+	total := uint64(200000000000000)
+	requested := map[db.ProjectServiceID]uint64{
+		401: total / 2,
+		402: total / 2,
+		403: total / 2,
+		404: total / 2,
+	}
+	result := acpqDistributeFairly(total, requested)
+	assert.DeepEqual(t, "output of acpqDistributeFairly", result, map[db.ProjectServiceID]uint64{
+		401: total / 4,
+		402: total / 4,
+		403: total / 4,
+		404: total / 4,
+	})
 }

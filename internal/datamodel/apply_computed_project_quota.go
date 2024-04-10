@@ -410,11 +410,6 @@ func (target acpqGlobalTarget) TryFulfillDesired(stats map[limes.AvailabilityZon
 // smaller than the sum of all requests, distribute the total fairly according
 // to how much was requested.
 func acpqDistributeFairly[K comparable](total uint64, requested map[K]uint64) map[K]uint64 {
-	if logg.ShowDebug {
-		requestedJSON, _ := json.Marshal(requested) //nolint:errcheck
-		logg.Debug("acpqDistributeFairly: distributing %d among %s", total, string(requestedJSON))
-	}
-
 	// easy case: all requests can be granted
 	sumOfRequests := uint64(0)
 	for _, request := range requested {
@@ -427,7 +422,7 @@ func acpqDistributeFairly[K comparable](total uint64, requested map[K]uint64) ma
 	// a completely fair distribution would require using these floating-point values...
 	exact := make(map[K]float64, len(requested))
 	for key, request := range requested {
-		exact[key] = float64(total*request) / float64(sumOfRequests)
+		exact[key] = float64(total) * float64(request) / float64(sumOfRequests)
 	}
 
 	// ...but we have to round to uint64
