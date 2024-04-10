@@ -124,7 +124,8 @@ func PrepareHypervisorForBinpacking(h MatchingHypervisor) (BinpackHypervisor, er
 		Nodes: make([]*BinpackNode, int(nodeCount)),
 	}
 	for idx := range result.Nodes {
-		result.Nodes[idx] = &nodeTemplate
+		node := nodeTemplate // this is an important copy which has nothing to do with loop-variable aliasing!
+		result.Nodes[idx] = &node
 	}
 	return result, nil
 }
