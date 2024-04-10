@@ -132,7 +132,10 @@ func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel) 
 	err = p.FlavorSelection.ForeachFlavor(p.NovaV2, func(f nova.FullFlavor) error {
 		if isSplitFlavorName[f.Flavor.Name] {
 			splitFlavors = append(splitFlavors, f)
-		} else {
+		} else if f.Flavor.IsPublic {
+			// only public flavor contribute to the `maxRootDiskSize` calculation (in
+			// the wild, we have seen non-public legacy flavors with wildly large
+			// disk sizes that would throw off all estimates derived from this number)
 			maxRootDiskSize = max(maxRootDiskSize, uint64(f.Flavor.Disk))
 		}
 		return nil
@@ -143,6 +146,7 @@ func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel) 
 	if p.PooledCoresResourceName != "" && maxRootDiskSize == 0 {
 		return nil, nil, errors.New("pooled capacity requested, but there are no matching flavors")
 	}
+	logg.Debug("max root disk size = %d GiB", maxRootDiskSize)
 
 	// collect all relevant resource demands
 	var (
