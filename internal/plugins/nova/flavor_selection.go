@@ -57,7 +57,8 @@ func (s FlavorSelection) matchesExtraSpecs(specs map[string]string) bool {
 // ForeachFlavor lists all public flavors matching this FlavorSelection, and
 // calls the given callback once for each of them.
 func (s FlavorSelection) ForeachFlavor(novaV2 *gophercloud.ServiceClient, action func(FullFlavor) error) error {
-	page, err := flavors.ListDetail(novaV2, nil).AllPages()
+	opts := flavors.ListOpts{AccessType: flavors.AllAccess}
+	page, err := flavors.ListDetail(novaV2, &opts).AllPages()
 	if err != nil {
 		return fmt.Errorf("while listing public flavors: %w", err)
 	}
