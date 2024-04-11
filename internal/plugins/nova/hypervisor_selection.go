@@ -22,6 +22,7 @@ package nova
 import (
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/aggregates"
@@ -100,15 +101,17 @@ OUTER:
 		if err != nil {
 			return fmt.Errorf("while getting traits for resource provider %s: %w", providerID, err)
 		}
+		slices.Sort(traits.Traits)
+		allTraitsStr := strings.Join(traits.Traits, ", ")
 		for _, trait := range s.RequiredTraits {
 			if !slices.Contains(traits.Traits, trait) {
-				logg.Debug("ignoring %s because trait %q is missing", h.Description(), trait)
+				logg.Debug("ignoring %s because trait %q is missing (traits are: %s)", h.Description(), trait, allTraitsStr)
 				continue OUTER
 			}
 		}
 		for _, trait := range s.ExcludedTraits {
 			if slices.Contains(traits.Traits, trait) {
-				logg.Debug("ignoring %s because trait %q is present", h.Description(), trait)
+				logg.Debug("ignoring %s because trait %q is present (traits are: %s)", h.Description(), trait, allTraitsStr)
 				continue OUTER
 			}
 		}
