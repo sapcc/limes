@@ -519,3 +519,150 @@ func (p *v1Provider) putOrSimulateProjectAttributes(w http.ResponseWriter, r *ht
 	// otherwise, report success
 	w.WriteHeader(http.StatusAccepted)
 }
+
+// PutProjectMaxQuota handles PUT /v1/domains/:domain_id/projects/:project_id/max-quota.
+func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) {
+	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/max-quota")
+	requestTime := p.timeNow()
+	token := p.CheckToken(r)
+	if !token.Require(w, "project:edit") {
+		return
+	}
+	dbDomain := p.FindDomainFromRequest(w, r)
+	if dbDomain == nil {
+		return
+	}
+	dbProject := p.FindProjectFromRequest(w, r, dbDomain)
+	if dbProject == nil {
+		return
+	}
+
+	checkToken := func(serviceType limes.ServiceType, resourceName limesresources.ResourceName) bool {
+		token.Context.Request["service_type"] = string(serviceType)
+		token.Context.Request["resource_name"] = string(resourceName)
+		// this is specifically checking for "raise" which is typically restricted
+		// to domain admins, and that's the kind of restriction we want to have here
+		// (TODO: in v2, rework the entire permission model around the remaining write actions)
+		return token.Check("project:raise")
+	}
+
+	// parse request body
+	var parseTarget struct {
+		Project struct {
+			Services []struct {
+				Type      limes.ServiceType `json:"type"`
+				Resources []struct {
+					Name     limesresources.ResourceName `json:"name"`
+					MaxQuota *uint64                     `json:"max_quota"`
+					Unit     *limes.Unit                 `json:"unit"`
+				} `json:"resources"`
+			} `json:"services"`
+		} `json:"project"`
+	}
+	if !RequireJSON(w, r, &parseTarget) {
+		return
+	}
+
+	// validate request
+	requested := make(map[limes.ServiceType]map[limesresources.ResourceName]*maxQuotaChange)
+	for _, srvRequest := range parseTarget.Project.Services {
+		if !p.Cluster.HasService(srvRequest.Type) {
+			msg := "no such service: " + string(srvRequest.Type)
+			http.Error(w, msg, http.StatusUnprocessableEntity)
+			return
+		}
+
+		requested[srvRequest.Type] = make(map[limesresources.ResourceName]*maxQuotaChange)
+		for _, resRequest := range srvRequest.Resources {
+			if !p.Cluster.HasResource(srvRequest.Type, resRequest.Name) {
+				msg := fmt.Sprintf("no such resource: %s/%s", srvRequest.Type, resRequest.Name)
+				http.Error(w, msg, http.StatusUnprocessableEntity)
+				return
+			}
+			if !checkToken(srvRequest.Type, resRequest.Name) {
+				msg := fmt.Sprintf("user is not allowed to edit %s/%s quotas", srvRequest.Type, resRequest.Name)
+				http.Error(w, msg, http.StatusForbidden)
+				return
+			}
+
+			if resRequest.MaxQuota == nil {
+				requested[srvRequest.Type][resRequest.Name] = &maxQuotaChange{NewValue: nil}
+			} else {
+				// convert given value to correct unit
+				requestedMaxQuota := limes.ValueWithUnit{
+					Unit:  limes.UnitUnspecified,
+					Value: *resRequest.MaxQuota,
+				}
+				if resRequest.Unit != nil {
+					requestedMaxQuota.Unit = *resRequest.Unit
+				}
+				convertedMaxQuota, err := core.ConvertUnitFor(p.Cluster, srvRequest.Type, resRequest.Name, requestedMaxQuota)
+				if err != nil {
+					msg := fmt.Sprintf("invalid input for %s/%s: %s", srvRequest.Type, resRequest.Name, err.Error())
+					http.Error(w, msg, http.StatusUnprocessableEntity)
+					return
+				}
+				requested[srvRequest.Type][resRequest.Name] = &maxQuotaChange{NewValue: &convertedMaxQuota}
+			}
+		}
+	}
+
+	// write requested values to DB
+	tx, err := p.DB.Begin()
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+	defer sqlext.RollbackUnlessCommitted(tx)
+
+	var services []db.ProjectService
+	_, err = tx.Select(&services,
+		`SELECT * FROM project_services WHERE project_id = $1 ORDER BY type`, dbProject.ID)
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	for _, srv := range services {
+		requestedInService, exists := requested[srv.Type]
+		if !exists {
+			continue
+		}
+
+		_, err := datamodel.ProjectResourceUpdate{
+			UpdateResource: func(res *db.ProjectResource) error {
+				requestedChange := requestedInService[res.Name]
+				if requestedChange != nil {
+					requestedChange.OldValue = res.MaxQuotaFromAdmin // remember for audit event
+					res.MaxQuotaFromAdmin = requestedChange.NewValue
+				}
+				return nil
+			},
+		}.Run(tx, p.Cluster, *dbDomain, *dbProject, srv.Ref())
+		if respondwith.ErrorText(w, err) {
+			return
+		}
+	}
+
+	err = tx.Commit()
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	// write audit trail
+	for serviceType, requestedInService := range requested {
+		for resourceName, requestedChange := range requestedInService {
+			logAndPublishEvent(requestTime, r, token, http.StatusOK,
+				maxQuotaEventTarget{
+					DomainID:        dbDomain.UUID,
+					DomainName:      dbDomain.Name,
+					ProjectID:       dbProject.UUID, // is empty for domain quota updates, see above
+					ProjectName:     dbProject.Name,
+					ServiceType:     serviceType,
+					ResourceName:    resourceName,
+					RequestedChange: *requestedChange,
+				},
+			)
+		}
+	}
+
+	w.WriteHeader(http.StatusAccepted)
+}

@@ -153,6 +153,44 @@ func (t quotaEventTarget) Render() cadf.Resource {
 	}
 }
 
+// maxQuotaEventTarget renders a cadf.Event.Target for a max_quota change event.
+type maxQuotaEventTarget struct {
+	DomainID        string
+	DomainName      string
+	ProjectID       string
+	ProjectName     string
+	ServiceType     limes.ServiceType
+	ResourceName    limesresources.ResourceName
+	RequestedChange maxQuotaChange
+}
+
+type maxQuotaChange struct {
+	OldValue *uint64
+	NewValue *uint64
+}
+
+// Render implements the audittools.TargetRenderer interface type.
+func (t maxQuotaEventTarget) Render() cadf.Resource {
+	payloadBytes, _ := json.Marshal(map[string]any{ //nolint:errcheck // cannot fail because all types are safe to marshal
+		"oldMaxQuota": t.RequestedChange.OldValue,
+		"newMaxQuota": t.RequestedChange.NewValue,
+	})
+
+	return cadf.Resource{
+		TypeURI:     fmt.Sprintf("service/%s/%s/max-quota", t.ServiceType, t.ResourceName),
+		ID:          t.ProjectID,
+		DomainID:    t.DomainID,
+		DomainName:  t.DomainName,
+		ProjectID:   t.ProjectID,
+		ProjectName: t.ProjectName,
+		Attachments: []cadf.Attachment{{
+			Name:    "payload",
+			TypeURI: "mime:application/json",
+			Content: string(payloadBytes),
+		}},
+	}
+}
+
 // burstEventTarget contains the structure for rendering a cadf.Event.Target for
 // changes regarding quota bursting for some project.
 type burstEventTarget struct {

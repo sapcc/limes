@@ -34,6 +34,7 @@ import (
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/assert"
+	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/internal/core"
@@ -2079,5 +2080,110 @@ func Test_StrictDomainQuotaLimit(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-france",
 		Body:         requestOneQuotaChange("domain", "shared", "things", 216, limes.UnitNone),
 		ExpectStatus: 202,
+	}.Check(t, s.Handler)
+}
+
+func Test_PutMaxQuotaOnProject(t *testing.T) {
+	s := setupTest(t, "fixtures/start-data.sql")
+
+	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
+	tr0.Ignore()
+
+	makeRequest := func(serviceType limes.ServiceType, resources ...any) assert.JSONObject {
+		return assert.JSONObject{
+			"project": assert.JSONObject{
+				"services": []assert.JSONObject{{
+					"type":      serviceType,
+					"resources": resources,
+				}},
+			},
+		}
+	}
+
+	// happy case: set a non-null value for the first time, then update it
+	for _, value := range []uint64{500, 1000} {
+		assert.HTTPRequest{
+			Method:       "PUT",
+			Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/max-quota",
+			Body:         makeRequest("shared", assert.JSONObject{"name": "things", "max_quota": value}),
+			ExpectStatus: http.StatusAccepted,
+		}.Check(t, s.Handler)
+		tr.DBChanges().AssertEqualf(`
+			UPDATE project_resources SET max_quota_from_admin = %d WHERE id = 4 AND service_id = 2 AND name = 'things';
+		`, value)
+	}
+
+	// happy case: write a NULL value over both an existing NULL value and a non-NULL value
+	assert.HTTPRequest{
+		Method: "PUT",
+		Path:   "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/max-quota",
+		Body: makeRequest("shared",
+			assert.JSONObject{"name": "things", "max_quota": nil},
+			assert.JSONObject{"name": "capacity", "max_quota": nil},
+		),
+		ExpectStatus: http.StatusAccepted,
+	}.Check(t, s.Handler)
+	tr.DBChanges().AssertEqualf(`
+		UPDATE project_resources SET max_quota_from_admin = NULL WHERE id = 4 AND service_id = 2 AND name = 'things';
+	`)
+
+	// happy case: set value with unit conversion
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/max-quota",
+		Body:         makeRequest("shared", assert.JSONObject{"name": "capacity", "max_quota": 10, "unit": "KiB"}),
+		ExpectStatus: http.StatusAccepted,
+	}.Check(t, s.Handler)
+	tr.DBChanges().AssertEqualf(`
+		UPDATE project_resources SET max_quota_from_admin = 10240 WHERE id = 5 AND service_id = 2 AND name = 'capacity';
+	`)
+
+	// error case: no edit permission at all
+	s.TokenValidator.Enforcer.AllowEdit = false
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/max-quota",
+		Body:         makeRequest("shared", assert.JSONObject{"name": "things", "max_quota": 1000}),
+		ExpectStatus: http.StatusForbidden,
+		ExpectBody:   assert.StringData("Forbidden\n"),
+	}.Check(t, s.Handler)
+	s.TokenValidator.Enforcer.AllowEdit = true
+
+	// error case: more specifically, no raise permission
+	s.TokenValidator.Enforcer.AllowRaise = false
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/max-quota",
+		Body:         makeRequest("shared", assert.JSONObject{"name": "things", "max_quota": 1000}),
+		ExpectStatus: http.StatusForbidden,
+		ExpectBody:   assert.StringData("user is not allowed to edit shared/things quotas\n"),
+	}.Check(t, s.Handler)
+	s.TokenValidator.Enforcer.AllowRaise = true
+
+	// error case: invalid service
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/max-quota",
+		Body:         makeRequest("unknown", assert.JSONObject{"name": "things", "max_quota": 1000}),
+		ExpectStatus: http.StatusUnprocessableEntity,
+		ExpectBody:   assert.StringData("no such service: unknown\n"),
+	}.Check(t, s.Handler)
+
+	// error case: invalid resource
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/max-quota",
+		Body:         makeRequest("shared", assert.JSONObject{"name": "items", "max_quota": 1000}),
+		ExpectStatus: http.StatusUnprocessableEntity,
+		ExpectBody:   assert.StringData("no such resource: shared/items\n"),
+	}.Check(t, s.Handler)
+
+	// error case: invalid unit
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/max-quota",
+		Body:         makeRequest("shared", assert.JSONObject{"name": "things", "max_quota": 1000, "unit": "MiB"}),
+		ExpectStatus: http.StatusUnprocessableEntity,
+		ExpectBody:   assert.StringData("invalid input for shared/things: cannot convert value from MiB to <count> because units are incompatible\n"),
 	}.Check(t, s.Handler)
 }
