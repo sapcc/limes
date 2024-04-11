@@ -617,7 +617,7 @@ const (
 	`
 )
 
-//nolint:dupl
+
 func Test_ScrapeButNoResources(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithConfig(testNoopConfigYAML),
@@ -667,7 +667,7 @@ const (
 	`
 )
 
-//nolint:dupl
+
 func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithConfig(testNoUsageDataConfigYAML),

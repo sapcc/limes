@@ -226,7 +226,7 @@ func p2window(val limesrates.Window) *limesrates.Window {
 	return &val
 }
 
-//nolint:dupl
+
 func Test_ScrapeRatesButNoRates(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithConfig(testNoopConfigYAML),
