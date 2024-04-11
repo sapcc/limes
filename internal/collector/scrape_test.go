@@ -617,7 +617,6 @@ const (
 	`
 )
 
-
 func Test_ScrapeButNoResources(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithConfig(testNoopConfigYAML),
@@ -666,7 +665,6 @@ const (
 					with_empty_resource: true
 	`
 )
-
 
 func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 	s := test.NewSetup(t,
