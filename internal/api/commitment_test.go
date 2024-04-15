@@ -852,6 +852,24 @@ func Test_TransferCommitment(t *testing.T) {
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
 
+	var supersededCommitment db.ProjectCommitment
+	err := s.DB.SelectOne(&supersededCommitment, `SELECT * FROM project_commitments where ID = 1`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if supersededCommitment.State != db.CommitmentStateSuperseded {
+		t.Fatalf("commitment state should be %v. Received %v instead.", db.CommitmentStateSuperseded, supersededCommitment.State)
+	}
+
+	var splitCommitment db.ProjectCommitment
+	err = s.DB.SelectOne(&splitCommitment, `SELECT * FROM project_commitments where ID = 2`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if splitCommitment.State != db.CommitmentStateActive {
+		t.Fatalf("commitment state should be %v. Received %v instead.", db.CommitmentStateActive, splitCommitment.State)
+	}
+
 	// wrong token
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
