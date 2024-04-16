@@ -54,7 +54,7 @@ var (
 `)
 
 	projectReportQuery = sqlext.SimplifyWhitespace(`
-	SELECT p.id, p.uuid, p.name, COALESCE(p.parent_uuid, ''), p.has_bursting, ps.type, ps.scraped_at, pr.name, pr.quota, par.az, par.quota, par.usage, par.physical_usage, pr.backend_quota, par.subresources
+	SELECT p.id, p.uuid, p.name, COALESCE(p.parent_uuid, ''), p.has_bursting, ps.type, ps.scraped_at, pr.name, pr.quota, pr.max_quota_from_admin, par.az, par.quota, par.usage, par.physical_usage, pr.backend_quota, par.subresources
 	  FROM projects p
 	  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
 	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
@@ -116,6 +116,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 			scrapedAt          *time.Time
 			resourceName       *limesresources.ResourceName
 			quota              *uint64
+			maxQuotaFromAdmin  *uint64
 			az                 *limes.AvailabilityZone
 			azQuota            *uint64
 			azUsage            *uint64
@@ -126,7 +127,8 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 		err := rows.Scan(
 			&projectID, &projectUUID, &projectName, &projectParentUUID, &projectHasBursting,
 			&serviceType, &scrapedAt, &resourceName,
-			&quota, &az, &azQuota, &azUsage, &azPhysicalUsage, &backendQuota, &azSubresources,
+			&quota, &maxQuotaFromAdmin,
+			&az, &azQuota, &azUsage, &azPhysicalUsage, &backendQuota, &azSubresources,
 		)
 		if err != nil {
 			return err
@@ -220,6 +222,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 						usableQuota := localBehavior.MaxBurstMultiplier.ApplyTo(*quota, qdConfig.Model)
 						resReport.UsableQuota = &usableQuota
 					}
+					resReport.MaxQuota = maxQuotaFromAdmin
 					if backendQuota != nil && (*backendQuota < 0 || uint64(*backendQuota) != *resReport.UsableQuota) {
 						resReport.BackendQuota = backendQuota
 					}
