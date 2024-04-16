@@ -59,6 +59,7 @@ type ProjectResourceReport struct {
 	PerAZ         ProjectAZResourceReports `json:"per_az,omitempty"`
 	Quota         *uint64                  `json:"quota,omitempty"`
 	UsableQuota   *uint64                  `json:"usable_quota,omitempty"`
+	MaxQuota      *uint64                  `json:"max_quota,omitempty"` // refers to max_quota constraint maintained via API
 	Usage         uint64                   `json:"usage"`
 	BurstUsage    uint64                   `json:"burst_usage,omitempty"`
 	PhysicalUsage *uint64                  `json:"physical_usage,omitempty"`

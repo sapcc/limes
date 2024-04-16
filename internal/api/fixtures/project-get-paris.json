@@ -21,6 +21,7 @@
             },
             "quota": 10,
             "usable_quota": 10,
+            "max_quota": 200,
             "usage": 2,
             "physical_usage": 1
           },
