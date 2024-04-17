@@ -394,7 +394,7 @@ func taskTestScanCapacity(cluster *core.Cluster, args []string) {
 		logg.Fatal("unknown capacitor: %s", capacitorID)
 	}
 
-	capacities, serializedMetrics, err := plugin.Scrape(mockCapacityPluginBackchannel{cluster})
+	capacities, serializedMetrics, err := plugin.Scrape(mockCapacityPluginBackchannel{cluster}, cluster.Config.AvailabilityZones)
 	if err != nil {
 		logg.Error("Scrape failed: %s", util.UnpackError(err).Error())
 		capacities = nil

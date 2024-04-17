@@ -81,7 +81,7 @@ func (p *capacityCinderPlugin) makeResourceName(volumeType string) limesresource
 }
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *capacityCinderPlugin) Scrape(_ core.CapacityPluginBackchannel) (result map[limes.ServiceType]map[limesresources.ResourceName]core.PerAZ[core.CapacityData], serializedMetrics []byte, err error) {
+func (p *capacityCinderPlugin) Scrape(_ core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (result map[limes.ServiceType]map[limesresources.ResourceName]core.PerAZ[core.CapacityData], serializedMetrics []byte, err error) {
 	// list storage pools
 	var poolData struct {
 		StoragePools []struct {

@@ -100,7 +100,7 @@ func (p *capacityManilaPlugin) makeResourceName(kind string, shareType ManilaSha
 }
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *capacityManilaPlugin) Scrape(_ core.CapacityPluginBackchannel) (result map[limes.ServiceType]map[limesresources.ResourceName]core.PerAZ[core.CapacityData], _ []byte, err error) {
+func (p *capacityManilaPlugin) Scrape(_ core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (result map[limes.ServiceType]map[limesresources.ResourceName]core.PerAZ[core.CapacityData], _ []byte, err error) {
 	allPages, err := services.List(p.ManilaV2, nil).AllPages()
 	if err != nil {
 		return nil, nil, err
