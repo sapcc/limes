@@ -37,10 +37,12 @@ import (
 type HypervisorSelection struct {
 	// Only match hypervisors with a hypervisor_type attribute matching this pattern.
 	HypervisorTypeRx regexpext.PlainRegexp `yaml:"hypervisor_type_pattern"`
-	// Only matchhypervisors that have any of these traits.
+	// Only match hypervisors that have any of these traits.
+	// Trait names can include a `!` prefix to invert the match.
 	RequiredTraits []string `yaml:"required_traits"`
-	// Exclude hypervisors that have any of these traits.
-	ExcludedTraits []string `yaml:"excluded_traits"`
+	// Set the MatchingHypervisor.ShadowedByTrait field on hypervisors that have any of these traits.
+	// Trait names can include a `!` prefix to invert the match.
+	ShadowingTraits []string `yaml:"shadowing_traits"`
 	// Only match hypervisors that reside in an aggregate matching this pattern.
 	// If a hypervisor resides in multiple matching aggregates, an error is raised.
 	AggregateNameRx regexpext.PlainRegexp `yaml:"aggregate_name_pattern"`
@@ -102,17 +104,18 @@ OUTER:
 			return fmt.Errorf("while getting traits for resource provider %s: %w", providerID, err)
 		}
 		slices.Sort(traits.Traits)
-		allTraitsStr := strings.Join(traits.Traits, ", ")
-		for _, trait := range s.RequiredTraits {
-			if !slices.Contains(traits.Traits, trait) {
-				logg.Debug("ignoring %s because trait %q is missing (traits are: %s)", h.Description(), trait, allTraitsStr)
+
+		for _, traitRule := range s.RequiredTraits {
+			if !checkTraitRule(traits.Traits, traitRule) {
+				allTraitsStr := strings.Join(traits.Traits, ", ")
+				logg.Debug("ignoring %s because of failed trait match %q (traits are: %s)", h.Description(), traitRule, allTraitsStr)
 				continue OUTER
 			}
 		}
-		for _, trait := range s.ExcludedTraits {
-			if slices.Contains(traits.Traits, trait) {
-				logg.Debug("ignoring %s because trait %q is present (traits are: %s)", h.Description(), trait, allTraitsStr)
-				continue OUTER
+		var shadowedByTrait string
+		for _, traitRule := range s.ShadowingTraits {
+			if checkTraitRule(traits.Traits, traitRule) {
+				shadowedByTrait = traitRule
 			}
 		}
 
@@ -180,6 +183,7 @@ OUTER:
 			Traits:           traits.Traits,
 			Inventories:      inventories.Inventories,
 			Usages:           usages.Usages,
+			ShadowedByTrait:  shadowedByTrait,
 		})
 		if err != nil {
 			return err
@@ -189,7 +193,13 @@ OUTER:
 	return nil
 }
 
-// MatchingHypervisor is the callback argmuent for
+// Evaluates a trait rule, as found in the RequiredTraits or ShadowingTraits fields.
+func checkTraitRule(traits []string, rule string) bool {
+	trait, isInverse := strings.CutPrefix(rule, "!")
+	return slices.Contains(traits, trait) != isInverse
+}
+
+// MatchingHypervisor is the callback argument for
 // func HypervisorSelection.ForeachHypervisor().
 type MatchingHypervisor struct {
 	// information from Nova
@@ -200,6 +210,8 @@ type MatchingHypervisor struct {
 	Traits      []string
 	Inventories map[string]resourceproviders.Inventory
 	Usages      map[string]int
+	// information from HypervisorSelection
+	ShadowedByTrait string // empty if not shadowed
 }
 
 // CheckTopology logs an error and returns false if the hypervisor is not

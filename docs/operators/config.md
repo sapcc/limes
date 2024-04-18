@@ -808,9 +808,17 @@ If the `params.hypervisor_selection.hypervisor_type_pattern` parameter is set, o
 matches this regex. Note that this is distinct from the `hypervisor_type_rules` used by the `compute` quota plugin, and
 uses the `hypervisor_type` reported by Nova instead.
 
-The `params.hypervisor_selection` can also contains lists of strings in the `required_traits` and `excluded_traits` keys.
-If given, only those hypervisors will be considered whose resource providers have all of the `required_traits` and none
-of the `excluded_traits`.
+The `params.hypervisor_selection` can also contains lists of strings in the `required_traits` and `shadowing_traits` keys.
+
+- If `required_traits` is given, it must contain a list of trait names, each optionally prefixed with `!`. Only those
+  hypervisors will be considered whose resource providers have all of the traits without `!` prefix and none of those
+  with `!` prefix.
+- If `shadowing_traits` is given, it must have the same format as described above for `required_traits`. If a hypervisor
+  matches any of the rules in this configuration field (using the same logic as above for `required_traits`), the
+  hypervisor will be considered shadowed. Its capacity will not be counted, just as for hypervisors that are excluded
+  entirely by `required_traits`, but if the hypervisor contains running instances of split flavors (see below), this
+  existing usage will be counted towards the total capacity. Shadowing is used to represent usage by legacy instances
+  while migrating to a different resource provider trait setup.
 
 The `params.flavor_selection` parameter can be used to control how flavors are enumerated. Only those flavors will be
 considered which have all the extra specs noted in `required_extra_specs`, and none of those noted in
