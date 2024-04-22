@@ -28,6 +28,7 @@ import (
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
+	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
@@ -194,6 +195,7 @@ func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel, 
 	// enumerate matching hypervisors, prepare data structures for binpacking
 	var metrics capacityNovaSerializedMetrics
 	hypervisorsByAZ := make(map[limes.AvailabilityZone]nova.BinpackHypervisors)
+	isShadowedHVHostname := make(map[string]bool)
 	err = p.HypervisorSelection.ForeachHypervisor(p.NovaV2, p.PlacementV1, func(h nova.MatchingHypervisor) error {
 		// report wellformed-ness of this HV via metrics
 		metrics.Hypervisors = append(metrics.Hypervisors, novaHypervisorMetrics{
@@ -208,18 +210,23 @@ func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel, 
 			return nil
 		}
 
-		bh, err := nova.PrepareHypervisorForBinpacking(h)
-		if err != nil {
-			return err
-		}
-		hypervisorsByAZ[h.AvailabilityZone] = append(hypervisorsByAZ[h.AvailabilityZone], bh)
+		if h.ShadowedByTrait == "" {
+			bh, err := nova.PrepareHypervisorForBinpacking(h)
+			if err != nil {
+				return err
+			}
+			hypervisorsByAZ[h.AvailabilityZone] = append(hypervisorsByAZ[h.AvailabilityZone], bh)
 
-		hc := h.PartialCapacity()
-		logg.Debug("%s in %s reports %s capacity, %s used, %d nodes, %s max unit", h.Hypervisor.Description(), h.AvailabilityZone,
-			nova.BinpackVector[uint64]{VCPUs: hc.VCPUs.Capacity, MemoryMB: hc.MemoryMB.Capacity, LocalGB: hc.LocalGB.Capacity},
-			nova.BinpackVector[uint64]{VCPUs: hc.VCPUs.Usage, MemoryMB: hc.MemoryMB.Usage, LocalGB: hc.LocalGB.Usage},
-			len(bh.Nodes), bh.Nodes[0].Capacity,
-		)
+			hc := h.PartialCapacity()
+			logg.Debug("%s in %s reports %s capacity, %s used, %d nodes, %s max unit", h.Hypervisor.Description(), h.AvailabilityZone,
+				nova.BinpackVector[uint64]{VCPUs: hc.VCPUs.Capacity, MemoryMB: hc.MemoryMB.Capacity, LocalGB: hc.LocalGB.Capacity},
+				nova.BinpackVector[uint64]{VCPUs: hc.VCPUs.Usage, MemoryMB: hc.MemoryMB.Usage, LocalGB: hc.LocalGB.Usage},
+				len(bh.Nodes), bh.Nodes[0].Capacity,
+			)
+		} else {
+			isShadowedHVHostname[h.Hypervisor.HypervisorHostname] = true
+			logg.Debug("%s in %s is shadowed by trait %s", h.Hypervisor.Description(), h.AvailabilityZone, h.ShadowedByTrait)
+		}
 
 		return nil
 	})
@@ -241,6 +248,59 @@ func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel, 
 		return rf.Disk - lf.Disk
 	})
 
+	// if Nova can tell us where existing instances are running, we prefer this
+	// information since it will make our simulation more accurate
+	instancesPlacedOnShadowedHypervisors := make(map[string]map[limes.AvailabilityZone]uint64) // first key is flavor name
+	for _, flavor := range splitFlavors {
+		shadowedForThisFlavor := make(map[limes.AvailabilityZone]uint64)
+
+		// list all servers for this flavor, parsing only placement information from the result
+		listOpts := servers.ListOpts{
+			Flavor:     flavor.Flavor.ID,
+			AllTenants: true,
+		}
+		allPages, err := servers.List(p.NovaV2, listOpts).AllPages()
+		if err != nil {
+			return nil, nil, fmt.Errorf("while listing active instances for flavor %s: %w", flavor.Flavor.Name, err)
+		}
+		var instances []struct {
+			AZ                 limes.AvailabilityZone `json:"OS-EXT-AZ:availability_zone"`
+			HypervisorHostname string                 `json:"OS-EXT-SRV-ATTR:hypervisor_hostname"`
+		}
+		err = servers.ExtractServersInto(allPages, &instances)
+		if err != nil {
+			return nil, nil, fmt.Errorf("while listing active instances for flavor %s: %w", flavor.Flavor.Name, err)
+		}
+
+		for _, instance := range instances {
+			az := instance.AZ
+			if !slices.Contains(allAZs, az) {
+				az = limes.AvailabilityZoneUnknown
+			}
+
+			// If we are absolutely sure that this instance is placed on a shadowed hypervisor,
+			// we remember this and have the final capacity take those into account without
+			// including them in the binpacking simulation.
+			if isShadowedHVHostname[instance.HypervisorHostname] {
+				shadowedForThisFlavor[az]++
+			}
+
+			// If the instance is placed on a known hypervisor, place it right now.
+			// The number of instances thus placed will be skipped below to avoid double counting.
+			for _, hv := range hypervisorsByAZ[az] {
+				if hv.Match.Hypervisor.HypervisorHostname == instance.HypervisorHostname {
+					var zero nova.BinpackVector[uint64]
+					nova.BinpackHypervisors{hv}.PlaceOneInstance(flavor, "USED", coresOvercommitFactor, zero)
+				}
+			}
+		}
+
+		if len(shadowedForThisFlavor) > 0 {
+			instancesPlacedOnShadowedHypervisors[flavor.Flavor.Name] = shadowedForThisFlavor
+		}
+	}
+	logg.Debug("instances for split flavors placed on shadowed hypervisors: %v", instancesPlacedOnShadowedHypervisors)
+
 	// foreach AZ, place demanded split instances in order of priority, unless
 	// blocked by pooled instances of equal or higher priority
 	for az, hypervisors := range hypervisorsByAZ {
@@ -257,7 +317,11 @@ func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel, 
 		}
 		logg.Debug("[%s] blockedCapacity in phase 1: %s", az, blockedCapacity.String())
 		for _, flavor := range splitFlavors {
-			if !hypervisors.PlaceSeveralInstances(flavor, "used", coresOvercommitFactor, blockedCapacity, demandByFlavorName[flavor.Flavor.Name][az].Usage) {
+			unplacedUsage := saturatingSub(
+				demandByFlavorName[flavor.Flavor.Name][az].Usage,
+				hypervisors.PlacementCountForFlavor(flavor.Flavor.Name),
+			)
+			if !hypervisors.PlaceSeveralInstances(flavor, "used", coresOvercommitFactor, blockedCapacity, unplacedUsage) {
 				canPlaceFlavor[flavor.Flavor.Name] = false
 			}
 		}
@@ -468,6 +532,19 @@ func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel, 
 				Subcapacities: subcapacities,
 			}
 		}
+
+		// if shadowed hypervisors are still carrying instances of this flavor,
+		// increase the capacity accordingly to more accurately represent the
+		// free capacity on the unshadowed hypervisors
+		for az, shadowedCount := range instancesPlacedOnShadowedHypervisors[flavor.Flavor.Name] {
+			if capacities[resourceName][az] == nil {
+				capacities[resourceName][az] = &core.CapacityData{
+					Capacity: shadowedCount,
+				}
+			} else {
+				capacities[resourceName][az].Capacity += shadowedCount
+			}
+		}
 	}
 
 	serializedMetrics, err = json.Marshal(metrics)
@@ -523,4 +600,12 @@ func stringOrUnknown[S ~string](value S) string {
 
 func pointerTo[T any](value T) *T {
 	return &value
+}
+
+// Like `lhs - rhs`, but never underflows below 0.
+func saturatingSub(lhs, rhs uint64) uint64 {
+	if lhs < rhs {
+		return 0
+	}
+	return lhs - rhs
 }
