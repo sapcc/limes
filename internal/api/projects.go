@@ -588,6 +588,13 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 			if resRequest.MaxQuota == nil {
 				requested[srvRequest.Type][resRequest.Name] = &maxQuotaChange{NewValue: nil}
 			} else {
+				resInfo := p.Cluster.InfoForResource(srvRequest.Type, resRequest.Name)
+				if resInfo.NoQuota {
+					msg := fmt.Sprintf("resource %s/%s does not track quota", srvRequest.Type, resRequest.Name)
+					http.Error(w, msg, http.StatusUnprocessableEntity)
+					return
+				}
+
 				// convert given value to correct unit
 				requestedMaxQuota := limes.ValueWithUnit{
 					Unit:  limes.UnitUnspecified,

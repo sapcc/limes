@@ -2178,6 +2178,15 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 		ExpectBody:   assert.StringData("no such resource: shared/items\n"),
 	}.Check(t, s.Handler)
 
+	// error case: resource does not track quota
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/max-quota",
+		Body:         makeRequest("shared", assert.JSONObject{"name": "capacity_portion", "max_quota": 1000}),
+		ExpectStatus: http.StatusUnprocessableEntity,
+		ExpectBody:   assert.StringData("resource shared/capacity_portion does not track quota\n"),
+	}.Check(t, s.Handler)
+
 	// error case: invalid unit
 	assert.HTTPRequest{
 		Method:       "PUT",
