@@ -198,12 +198,14 @@ func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel, 
 	isShadowedHVHostname := make(map[string]bool)
 	err = p.HypervisorSelection.ForeachHypervisor(p.NovaV2, p.PlacementV1, func(h nova.MatchingHypervisor) error {
 		// report wellformed-ness of this HV via metrics
-		metrics.Hypervisors = append(metrics.Hypervisors, novaHypervisorMetrics{
-			Name:             h.Hypervisor.Service.Host,
-			Hostname:         h.Hypervisor.HypervisorHostname,
-			AggregateName:    h.AggregateName,
-			AvailabilityZone: h.AvailabilityZone,
-		})
+		if h.ShadowedByTrait != "" {
+			metrics.Hypervisors = append(metrics.Hypervisors, novaHypervisorMetrics{
+				Name:             h.Hypervisor.Service.Host,
+				Hostname:         h.Hypervisor.HypervisorHostname,
+				AggregateName:    h.AggregateName,
+				AvailabilityZone: h.AvailabilityZone,
+			})
+		}
 
 		// ignore HVs that are not associated with an aggregate and AZ
 		if !h.CheckTopology() {
