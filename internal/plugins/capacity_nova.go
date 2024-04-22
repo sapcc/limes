@@ -266,6 +266,7 @@ func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel, 
 			return nil, nil, fmt.Errorf("while listing active instances for flavor %s: %w", flavor.Flavor.Name, err)
 		}
 		var instances []struct {
+			ID                 string                 `json:"id"`
 			AZ                 limes.AvailabilityZone `json:"OS-EXT-AZ:availability_zone"`
 			HypervisorHostname string                 `json:"OS-EXT-SRV-ATTR:hypervisor_hostname"`
 		}
@@ -292,7 +293,10 @@ func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel, 
 			for _, hv := range hypervisorsByAZ[az] {
 				if hv.Match.Hypervisor.HypervisorHostname == instance.HypervisorHostname {
 					var zero nova.BinpackVector[uint64]
-					nova.BinpackHypervisors{hv}.PlaceOneInstance(flavor, "USED", coresOvercommitFactor, zero)
+					placed := nova.BinpackHypervisors{hv}.PlaceOneInstance(flavor, "USED", coresOvercommitFactor, zero)
+					if !placed {
+						logg.Debug("could not simulate placement of known instance %s on %s", instance.ID, hv.Match.Hypervisor.Description())
+					}
 				}
 			}
 		}
