@@ -51,11 +51,16 @@ func TestParseQuotaOverrides(t *testing.T) {
 
 	// test successful parsing
 	buf := []byte(`
-		domain-one:
-			project-one:
-				unittest:
-					things: 20
-					capacity: 5 GiB
+		{
+			"domain-one": {
+				"project-one": {
+					"unittest": {
+						"things": 20,
+						"capacity": "5 GiB"
+					}
+				}
+			}
+		}
 	`)
 	buf = bytes.ReplaceAll(buf, []byte("\t"), []byte("  "))
 	result, errs := s.Cluster.ParseQuotaOverrides("overrides.yaml", buf)
@@ -75,19 +80,30 @@ func TestParseQuotaOverrides(t *testing.T) {
 
 	// test parsing errors
 	buf = []byte(`
-		domain-one:
-			project1:
-				unittest:
-					things: [ 1, GiB ]
-			project2:
-				unittest:
-					things: 50 GiB
-			project3:
-				unittest:
-					unknown-resource: 10
-			project4:
-				unknown-service:
-					items: 10
+		{
+			"domain-one": {
+				"project1": {
+					"unittest": {
+						"capacity": [ 1, "GiB" ]
+					}
+				},
+				"project2": {
+					"unittest": {
+						"things": "50 GiB"
+					}
+				},
+				"project3": {
+					"unittest": {
+						"unknown-resource": 10
+					}
+				},
+				"project4": {
+					"unknown-service": {
+						"items": 10
+					}
+				}
+			}
+		}
 	`)
 	buf = bytes.ReplaceAll(buf, []byte("\t"), []byte("  "))
 	_, errs = s.Cluster.ParseQuotaOverrides("overrides.yaml", buf)
@@ -95,8 +111,8 @@ func TestParseQuotaOverrides(t *testing.T) {
 	sort.Strings(errStrings) // map iteration order is not deterministic
 
 	assert.DeepEqual(t, "errors", errStrings, []string{
-		`while parsing overrides.yaml: in value for unittest/things: expected string or number, but got []interface {}{1, "GiB"}`,
-		`while parsing overrides.yaml: in value for unittest/things: strconv.ParseUint: parsing "50 GiB": invalid syntax`,
+		`while parsing overrides.yaml: expected string field for unittest/capacity, but got "[ 1, \"GiB\" ]"`,
+		`while parsing overrides.yaml: expected uint64 value for unittest/things, but got "\"50 GiB\""`,
 		`while parsing overrides.yaml: unittest/unknown-resource is not a valid resource`,
 		`while parsing overrides.yaml: unknown-service/items is not a valid resource`,
 	})

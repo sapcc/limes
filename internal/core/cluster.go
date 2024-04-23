@@ -20,6 +20,7 @@
 package core
 
 import (
+	"encoding/json"
 	"os"
 	"slices"
 
@@ -180,8 +181,8 @@ func (c *Cluster) Connect(provider *gophercloud.ProviderClient, eo gophercloud.E
 // It is exported as a public function for test coverage.
 // The file contents are in `buf`. The `path` argument is only used for building error messages.
 func (c *Cluster) ParseQuotaOverrides(path string, buf []byte) (result map[string]map[string]map[limes.ServiceType]map[limesresources.ResourceName]uint64, errs errext.ErrorSet) {
-	var parsed map[string]map[string]map[limes.ServiceType]map[limesresources.ResourceName]any
-	err := yaml.UnmarshalStrict(buf, &parsed)
+	var parsed map[string]map[string]map[limes.ServiceType]map[limesresources.ResourceName]json.RawMessage
+	err := json.Unmarshal(buf, &parsed)
 	if err != nil {
 		errs.Addf("failed to parse %s: %w", path, err)
 	}
@@ -193,7 +194,7 @@ func (c *Cluster) ParseQuotaOverrides(path string, buf []byte) (result map[strin
 			projectResult := make(map[limes.ServiceType]map[limesresources.ResourceName]uint64)
 			for serviceType, serviceInputs := range projectInputs {
 				serviceResult := make(map[limesresources.ResourceName]uint64)
-				for resourceName, input := range serviceInputs {
+				for resourceName, inputJSON := range serviceInputs {
 					if !c.HasResource(serviceType, resourceName) {
 						errs.Addf("while parsing %s: %s/%s is not a valid resource", path, serviceType, resourceName)
 						continue
@@ -203,18 +204,26 @@ func (c *Cluster) ParseQuotaOverrides(path string, buf []byte) (result map[strin
 						errs.Addf("while parsing %s: %s/%s does not track quota", path, serviceType, resourceName)
 						continue
 					}
-					switch input := input.(type) {
-					case string:
-						serviceResult[resourceName], err = resInfo.Unit.Parse(input)
+
+					if resInfo.Unit == limes.UnitNone {
+						var value uint64
+						err := json.Unmarshal([]byte(inputJSON), &value)
+						if err != nil {
+							errs.Addf("while parsing %s: expected uint64 value for %s/%s, but got %q", path, serviceType, resourceName, string(inputJSON))
+							continue
+						}
+						serviceResult[resourceName] = value
+					} else {
+						var value string
+						err := json.Unmarshal([]byte(inputJSON), &value)
+						if err != nil {
+							errs.Addf("while parsing %s: expected string field for %s/%s, but got %q", path, serviceType, resourceName, string(inputJSON))
+							continue
+						}
+						serviceResult[resourceName], err = resInfo.Unit.Parse(value)
 						if err != nil {
 							errs.Addf("while parsing %s: in value for %s/%s: %w", path, serviceType, resourceName, err)
 						}
-					case uint:
-						serviceResult[resourceName] = uint64(input)
-					case int:
-						serviceResult[resourceName] = uint64(input)
-					default:
-						errs.Addf("while parsing %s: in value for %s/%s: expected string or number, but got %#v", path, serviceType, resourceName, input)
 					}
 				}
 				projectResult[serviceType] = serviceResult
