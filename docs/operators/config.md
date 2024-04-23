@@ -48,28 +48,39 @@ Limes logs all quota changes at the domain and project level in an Open Standard
 | `LIMES_COLLECTOR_METRICS_LISTEN_ADDRESS` | `:8080` | Bind address for the Prometheus metrics endpoint provided by this service. See `LIMES_API_LISTEN_ADDRESS` for acceptable values. |
 | `LIMES_COLLECTOR_DATA_METRICS_EXPOSE` | `false` | If set to `true`, expose all quota/usage/capacity data as Prometheus gauges. This is disabled by default because this can be a lot of data for OpenStack clusters containing many projects, domains and services. |
 | `LIMES_COLLECTOR_DATA_METRICS_SKIP_ZERO` | `false` | If set to `true`, data metrics will only be emitted for non-zero values. In large deployments, this can substantially reduce the amount of timeseries emitted. |
-| `LIMES_QUOTA_OVERRIDES_PATH` | *(optional)* | Path to a YAML file containing the quota overrides for this cluster. |
+| `LIMES_QUOTA_OVERRIDES_PATH` | *(optional)* | Path to a JSON file containing the quota overrides for this cluster. |
 
 If present, the quota overrides file must be a four-leveled object, with the keys being domain name, project name,
 service type and resource name in that order. The values are either numbers (to override quotas on counted resources) or
 strings of the form `<number> <unit>` (to override quotas on measured resources). For example:
 
-```yaml
-domain-one:
-  project-one:
-    compute:
-      cores: 10000
-      ram: 1 TiB
-  project-two:
-    object-store:
-      capacity: 0 B
-    keppel:
-      images: 0
-domain-two:
-  project-three:
-    compute:
-      cores: 50000
-      ram: 512 GiB
+```json
+{
+  "domain-one": {
+    "project-one": {
+      "compute": {
+        "cores": 10000,
+        "ram": "1 TiB"
+      }
+    },
+    "project-two": {
+      "object-store": {
+        "capacity": "0 B"
+      },
+      "keppel": {
+        "images": 0
+      }
+    }
+  },
+  "domain-two": {
+    "project-three": {
+      "compute": {
+        "cores": 50000,
+        "ram": "512 GiB"
+      }
+    }
+  }
+}
 ```
 
 ## Configuration file
