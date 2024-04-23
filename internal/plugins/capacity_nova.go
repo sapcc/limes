@@ -323,10 +323,11 @@ func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel, 
 		}
 		logg.Debug("[%s] blockedCapacity in phase 1: %s", az, blockedCapacity.String())
 		for _, flavor := range splitFlavors {
-			unplacedUsage := saturatingSub(
-				demandByFlavorName[flavor.Flavor.Name][az].Usage,
-				hypervisors.PlacementCountForFlavor(flavor.Flavor.Name),
-			)
+			// do not place instances that have already been placed in the simulation,
+			// as well as instances that run on hypervisors that do not participate in the binpacking simulation
+			placedUsage := hypervisors.PlacementCountForFlavor(flavor.Flavor.Name)
+			shadowedUsage := instancesPlacedOnShadowedHypervisors[flavor.Flavor.Name][az]
+			unplacedUsage := saturatingSub(demandByFlavorName[flavor.Flavor.Name][az].Usage, placedUsage+shadowedUsage)
 			if !hypervisors.PlaceSeveralInstances(flavor, "used", coresOvercommitFactor, blockedCapacity, unplacedUsage) {
 				canPlaceFlavor[flavor.Flavor.Name] = false
 			}
