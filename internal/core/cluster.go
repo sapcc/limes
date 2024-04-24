@@ -20,7 +20,7 @@
 package core
 
 import (
-	"encoding/json"
+	"fmt"
 	"os"
 	"slices"
 
@@ -151,14 +151,8 @@ func (c *Cluster) Connect(provider *gophercloud.ProviderClient, eo gophercloud.E
 	// load quota overrides
 	overridesPath := os.Getenv("LIMES_QUOTA_OVERRIDES_PATH")
 	if overridesPath != "" && c.QuotaOverrides == nil {
-		buf, err := os.ReadFile(overridesPath)
-		if err == nil {
-			c.QuotaOverrides, suberrs = c.ParseQuotaOverrides(overridesPath, buf)
-			errs.Append(suberrs)
-		} else {
-			errs.Add(err)
-			return
-		}
+		c.QuotaOverrides, suberrs = c.loadQuotaOverrides(overridesPath)
+		errs.Append(suberrs)
 	}
 
 	// parse low-privilege raise limits
@@ -177,60 +171,26 @@ func (c *Cluster) Connect(provider *gophercloud.ProviderClient, eo gophercloud.E
 	return errs
 }
 
-// ParseQuotaOverrides is used by Connect to parse the file at LIMES_QUOTA_OVERRIDES_PATH.
-// It is exported as a public function for test coverage.
-// The file contents are in `buf`. The `path` argument is only used for building error messages.
-func (c *Cluster) ParseQuotaOverrides(path string, buf []byte) (result map[string]map[string]map[limes.ServiceType]map[limesresources.ResourceName]uint64, errs errext.ErrorSet) {
-	var parsed map[string]map[string]map[limes.ServiceType]map[limesresources.ResourceName]json.RawMessage
-	err := json.Unmarshal(buf, &parsed)
+func (c *Cluster) loadQuotaOverrides(path string) (result map[string]map[string]map[limes.ServiceType]map[limesresources.ResourceName]uint64, errs errext.ErrorSet) {
+	buf, err := os.ReadFile(path)
 	if err != nil {
-		errs.Addf("failed to parse %s: %w", path, err)
+		errs.Add(err)
+		return
 	}
 
-	result = make(map[string]map[string]map[limes.ServiceType]map[limesresources.ResourceName]uint64)
-	for domainName, domainInputs := range parsed {
-		domainResult := make(map[string]map[limes.ServiceType]map[limesresources.ResourceName]uint64)
-		for projectName, projectInputs := range domainInputs {
-			projectResult := make(map[limes.ServiceType]map[limesresources.ResourceName]uint64)
-			for serviceType, serviceInputs := range projectInputs {
-				serviceResult := make(map[limesresources.ResourceName]uint64)
-				for resourceName, inputJSON := range serviceInputs {
-					if !c.HasResource(serviceType, resourceName) {
-						errs.Addf("while parsing %s: %s/%s is not a valid resource", path, serviceType, resourceName)
-						continue
-					}
-					resInfo := c.InfoForResource(serviceType, resourceName)
-					if resInfo.NoQuota {
-						errs.Addf("while parsing %s: %s/%s does not track quota", path, serviceType, resourceName)
-						continue
-					}
-
-					if resInfo.Unit == limes.UnitNone {
-						var value uint64
-						err := json.Unmarshal([]byte(inputJSON), &value)
-						if err != nil {
-							errs.Addf("while parsing %s: expected uint64 value for %s/%s, but got %q", path, serviceType, resourceName, string(inputJSON))
-							continue
-						}
-						serviceResult[resourceName] = value
-					} else {
-						var value string
-						err := json.Unmarshal([]byte(inputJSON), &value)
-						if err != nil {
-							errs.Addf("while parsing %s: expected string field for %s/%s, but got %q", path, serviceType, resourceName, string(inputJSON))
-							continue
-						}
-						serviceResult[resourceName], err = resInfo.Unit.Parse(value)
-						if err != nil {
-							errs.Addf("while parsing %s: in value for %s/%s: %w", path, serviceType, resourceName, err)
-						}
-					}
-				}
-				projectResult[serviceType] = serviceResult
-			}
-			domainResult[projectName] = projectResult
+	getUnit := func(serviceType limes.ServiceType, resourceName limesresources.ResourceName) (limes.Unit, error) {
+		if !c.HasResource(serviceType, resourceName) {
+			return limes.UnitUnspecified, fmt.Errorf("%s/%s is not a valid resource", serviceType, resourceName)
 		}
-		result[domainName] = domainResult
+		resInfo := c.InfoForResource(serviceType, resourceName)
+		if resInfo.NoQuota {
+			return limes.UnitUnspecified, fmt.Errorf("%s/%s does not track quota", serviceType, resourceName)
+		}
+		return resInfo.Unit, nil
+	}
+	result, suberrs := limesresources.ParseQuotaOverrides(buf, getUnit)
+	for _, suberr := range suberrs {
+		errs.Addf("while parsing %s: %w", path, suberr)
 	}
 	return result, errs
 }
