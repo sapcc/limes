@@ -22,6 +22,7 @@ package collector
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"math/big"
 	"time"
 
@@ -418,6 +419,22 @@ var projectPhysicalUsageGauge = prometheus.NewGaugeVec(
 	[]string{"domain", "domain_id", "project", "project_id", "service", "service_name", "resource"},
 )
 
+var projectUsagePerAZGauge = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "limes_project_usage_per_az",
+		Help: "Actual (logical) usage of a Limes resource for an OpenStack project in a specific availability zone.",
+	},
+	[]string{"availability_zone", "domain", "domain_id", "project", "project_id", "service", "service_name", "resource"},
+)
+
+var projectCommittedPerAZGauge = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "limes_project_committed_per_az",
+		Help: "Sum of all active commitments of a Limes resource for an OpenStack project, grouped by availability zone and state.",
+	},
+	[]string{"availability_zone", "domain", "domain_id", "project", "project_id", "service", "service_name", "resource", "state"},
+)
+
 var projectRateUsageGauge = prometheus.NewGaugeVec(
 	prometheus.GaugeOpts{
 		Name: "limes_project_rate_usage",
@@ -462,6 +479,8 @@ func (c *DataMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 	projectBackendQuotaGauge.Describe(ch)
 	projectUsageGauge.Describe(ch)
 	projectPhysicalUsageGauge.Describe(ch)
+	projectUsagePerAZGauge.Describe(ch)
+	projectCommittedPerAZGauge.Describe(ch)
 	projectRateUsageGauge.Describe(ch)
 	unitConversionGauge.Describe(ch)
 	autogrowGrowthMultiplierGauge.Describe(ch)
@@ -497,6 +516,26 @@ var projectMetricsQuery = sqlext.SimplifyWhitespace(`
 	  JOIN project_services ps ON ps.project_id = p.id
 	  JOIN project_resources pr ON pr.service_id = ps.id
 	  JOIN project_az_sums pas ON pas.resource_id = pr.id
+`)
+
+var projectAZMetricsQuery = sqlext.SimplifyWhitespace(`
+	WITH project_commitment_sums_by_state AS (
+	  SELECT az_resource_id, state, SUM(amount) AS amount
+	    FROM project_commitments
+	   WHERE state NOT IN ('superseded', 'expired')
+	   GROUP BY az_resource_id, state
+	), project_commitment_sums AS (
+	  SELECT az_resource_id, JSON_OBJECT_AGG(state, amount) AS amount_by_state
+	    FROM project_commitment_sums_by_state
+	   GROUP BY az_resource_id
+	)
+	SELECT d.name, d.uuid, p.name, p.uuid, ps.type, pr.name, par.az, par.usage, pcs.amount_by_state
+	  FROM domains d
+	  JOIN projects p ON p.domain_id = d.id
+	  JOIN project_services ps ON ps.project_id = p.id
+	  JOIN project_resources pr ON pr.service_id = ps.id
+	  JOIN project_az_resources par ON par.resource_id = pr.id
+	  LEFT OUTER JOIN project_commitment_sums pcs ON pcs.az_resource_id = par.id
 `)
 
 var projectRateMetricsQuery = sqlext.SimplifyWhitespace(`
@@ -535,6 +574,10 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	projectUsageDesc := <-descCh
 	projectPhysicalUsageGauge.Describe(descCh)
 	projectPhysicalUsageDesc := <-descCh
+	projectUsagePerAZGauge.Describe(descCh)
+	projectUsagePerAZDesc := <-descCh
+	projectCommittedPerAZGauge.Describe(descCh)
+	projectCommittedPerAZDesc := <-descCh
 	projectRateUsageGauge.Describe(descCh)
 	projectRateUsageDesc := <-descCh
 	unitConversionGauge.Describe(descCh)
@@ -717,6 +760,52 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	})
 	if err != nil {
 		logg.Error("collect project metrics failed: " + err.Error())
+	}
+
+	// fetch values for project AZ level (usage/commitments)
+	err = sqlext.ForeachRow(c.DB, projectAZMetricsQuery, nil, func(rows *sql.Rows) error {
+		var (
+			domainName        string
+			domainUUID        string
+			projectName       string
+			projectUUID       string
+			serviceType       limes.ServiceType
+			resourceName      limesresources.ResourceName
+			az                limes.AvailabilityZone
+			usage             uint64
+			amountByStateJSON *string
+		)
+		err := rows.Scan(&domainName, &domainUUID, &projectName, &projectUUID, &serviceType, &resourceName,
+			&az, &usage, &amountByStateJSON)
+		if err != nil {
+			return err
+		}
+
+		if c.ReportZeroes || usage != 0 {
+			ch <- prometheus.MustNewConstMetric(
+				projectUsagePerAZDesc,
+				prometheus.GaugeValue, float64(usage),
+				string(az), domainName, domainUUID, projectName, projectUUID, string(serviceType), serviceNameByType[serviceType], string(resourceName),
+			)
+		}
+		if amountByStateJSON != nil {
+			var amountByState map[string]uint64
+			err = json.Unmarshal([]byte(*amountByStateJSON), &amountByState)
+			if err != nil {
+				return fmt.Errorf("while unmarshalling amount_by_state: %w (input was %q)", err, *amountByStateJSON)
+			}
+			for state, amount := range amountByState {
+				ch <- prometheus.MustNewConstMetric(
+					projectCommittedPerAZDesc,
+					prometheus.GaugeValue, float64(amount),
+					string(az), domainName, domainUUID, projectName, projectUUID, string(serviceType), serviceNameByType[serviceType], string(resourceName), state,
+				)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		logg.Error("collect project AZ metrics failed: " + err.Error())
 	}
 
 	// fetch metadata for services/resources
