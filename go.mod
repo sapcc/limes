@@ -13,7 +13,7 @@ require (
 	github.com/majewsky/schwift v1.3.0
 	github.com/prometheus/client_golang v1.19.0
 	github.com/prometheus/common v0.53.0
-	github.com/rs/cors v1.10.1
+	github.com/rs/cors v1.11.0
 	github.com/sapcc/go-api-declarations v1.11.0
 	github.com/sapcc/go-bits v0.0.0-20240425084953-de3210f2772e
 	go.uber.org/automaxprocs v1.5.3
