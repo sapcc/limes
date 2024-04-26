@@ -16,7 +16,7 @@ github.com/go-gorp/gorp/v3
 # github.com/gofrs/uuid/v5 v5.1.0
 ## explicit; go 1.19
 github.com/gofrs/uuid/v5
-# github.com/golang-migrate/migrate/v4 v4.17.0
+# github.com/golang-migrate/migrate/v4 v4.17.1
 ## explicit; go 1.18
 github.com/golang-migrate/migrate/v4
 github.com/golang-migrate/migrate/v4/database
@@ -146,7 +146,7 @@ github.com/sapcc/go-api-declarations/internal/marshal
 github.com/sapcc/go-api-declarations/limes
 github.com/sapcc/go-api-declarations/limes/rates
 github.com/sapcc/go-api-declarations/limes/resources
-# github.com/sapcc/go-bits v0.0.0-20240418035538-c509bd89fb1a
+# github.com/sapcc/go-bits v0.0.0-20240425084953-de3210f2772e
 ## explicit; go 1.22
 github.com/sapcc/go-bits/assert
 github.com/sapcc/go-bits/audittools
