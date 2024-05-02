@@ -242,7 +242,7 @@ The objects at `cluster.services[].resources[]` may contain the following fields
 | `unit` | string | The unit of this resource (only shown for measured resources). |
 | `category` | string | The category of this resource (only shown when there is one). |
 | `contained_in` | string | The name of another resource (if any) within the same service that this resource is [contained in](#contained-resources). |
-| `quota_distribution_model` | string | The resource's [quota distribution model](#quota-distribution-model). The only possible value is "hierarchical". |
+| `quota_distribution_model` | string | The resource's [quota distribution model](#quota-distribution-model). The only possible value is "autogrow". |
 | `capacity` | unsigned integer | The available capacity for this resource. |
 | `raw_capacity` | unsigned integer | The available raw capacity for this resource (only shown for [overcommitted resources](#overcommit)). |
 | `per_availability_zone` | list of objects | A breakdown of this resource's capacity by availability zone (only shown for resources supporting a breakdown by AZ). |
@@ -333,7 +333,7 @@ The objects at `domains[].services[].resources[]` may contain the following fiel
 | `unit` | string | The unit of this resource (only shown for measured resources). |
 | `category` | string | The category of this resource (only shown when there is one). |
 | `contained_in` | string | The name of another resource (if any) within the same service that this resource is [contained in](#contained-resources). |
-| `quota_distribution_model` | string | The resource's [quota distribution model](#quota-distribution-model). The only possible value is "hierarchical". |
+| `quota_distribution_model` | string | The resource's [quota distribution model](#quota-distribution-model). The only possible value is "autogrow". |
 | `scales_with` | object | Only present when this resource is [scaling with](#scaling-relations) another resource. |
 | `scales_with.resource_name` | string | The name of the resource that this resource is scaling with. |
 | `scales_with.service_type` | string | The type name of the service containing the resource that this resource is scaling with. |
@@ -554,7 +554,7 @@ The objects at `projects[].services[].resources[]` may contain the following fie
 | `unit` | string | The unit of this resource (only shown for measured resources). |
 | `category` | string | The category of this resource (only shown when there is one). |
 | `contained_in` | string | The name of another resource (if any) within the same service that this resource is [contained in](#contained-resources). |
-| `quota_distribution_model` | string | The resource's [quota distribution model](#quota-distribution-model). The only possible value is "hierarchical". |
+| `quota_distribution_model` | string | The resource's [quota distribution model](#quota-distribution-model). The only possible value is "autogrow". |
 | `scales_with` | object | Only present when this resource is [scaling with](#scaling-relations) another resource. |
 | `scales_with.resource_name` | string | The name of the resource that this resource is scaling with. |
 | `scales_with.service_type` | string | The type name of the service containing the resource that this resource is scaling with. |

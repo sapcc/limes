@@ -118,6 +118,12 @@ func clusterForQuotaConstraintTest() *Cluster {
 			"service-one": quotaConstraintTestPlugin{},
 			"service-two": quotaConstraintTestPlugin{},
 		},
+		Config: ClusterConfiguration{
+			QuotaDistributionConfigs: []*QuotaDistributionConfiguration{{
+				FullResourceNameRx: ".*",
+				Model:              limesresources.HierarchicalQuotaDistribution,
+			}},
+		},
 	}
 }
 

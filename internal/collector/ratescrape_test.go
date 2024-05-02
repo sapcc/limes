@@ -60,6 +60,9 @@ const (
 		bursting:
 			# this should have no effect on rates
 			max_multiplier: 0.1
+		quota_distribution_configs:
+			# TODO: remove and use the new default
+			- { resource: '.*', model: hierarchical }
 	`
 )
 

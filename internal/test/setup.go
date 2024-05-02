@@ -108,6 +108,7 @@ func GenerateDummyToken() string {
 // NewSetup prepares most or all pieces of Keppel for a test.
 func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	logg.ShowDebug = osext.GetenvBool("LIMES_DEBUG")
+	core.AllowHierarchicalQuotaDistribution = true // TODO: remove once all tests have been rewritten
 	var params setupParams
 	for _, option := range opts {
 		option(&params)

@@ -139,11 +139,15 @@ type BurstingConfiguration struct {
 type QuotaDistributionConfiguration struct {
 	FullResourceNameRx regexpext.BoundedRegexp               `yaml:"resource"`
 	Model              limesresources.QuotaDistributionModel `yaml:"model"`
-	// options for HierarchicalQuotaDistribution
+	// options for HierarchicalQuotaDistribution (TODO: remove)
 	StrictDomainQuotaLimit bool `yaml:"strict_domain_quota_limit"`
 	// options for AutogrowQuotaDistribution
 	Autogrow *AutogrowQuotaDistributionConfiguration `yaml:"autogrow"`
 }
+
+// AllowHierarchicalQuotaDistribution is only set in unit tests, while we
+// rewrite them towards AutogrowQuotaDistribution. Outside of unit tests, HQD is forbidden.
+var AllowHierarchicalQuotaDistribution = false
 
 // AutogrowQuotaDistributionConfiguration appears in type QuotaDistributionConfiguration.
 type AutogrowQuotaDistributionConfiguration struct {
@@ -221,7 +225,9 @@ func (cluster ClusterConfiguration) validateConfig() (errs errext.ErrorSet) {
 
 		switch qdCfg.Model {
 		case limesresources.HierarchicalQuotaDistribution:
-			// ok
+			if !AllowHierarchicalQuotaDistribution {
+				errs.Addf("invalid value for distribution_model_configs[%d].model: support for %q has been removed", idx, qdCfg.Model)
+			}
 		case limesresources.AutogrowQuotaDistribution:
 			if qdCfg.Autogrow == nil {
 				missing(fmt.Sprintf(`distribution_model_configs[%d].autogrow`, idx))

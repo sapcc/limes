@@ -122,6 +122,10 @@ const (
 				commitment_is_az_aware: true
 			- resource: shared/things
 				commitment_is_az_aware: false
+
+		quota_distribution_configs:
+			# TODO: remove and use the new default
+			- { resource: '.*', model: hierarchical }
 	`
 )
 
@@ -2031,7 +2035,7 @@ func Test_StrictDomainQuotaLimit(t *testing.T) {
 		Model:                  limesresources.HierarchicalQuotaDistribution,
 		StrictDomainQuotaLimit: false,
 	}
-	s.Cluster.Config.QuotaDistributionConfigs = append(s.Cluster.Config.QuotaDistributionConfigs, qdConfig)
+	s.Cluster.Config.QuotaDistributionConfigs = append([]*core.QuotaDistributionConfiguration{qdConfig}, s.Cluster.Config.QuotaDistributionConfigs...)
 
 	//NOTE: The relevant parts of start-data.sql look as follows for "shared/things":
 	// cluster_capacity      = 246
