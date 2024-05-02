@@ -139,8 +139,6 @@ type BurstingConfiguration struct {
 type QuotaDistributionConfiguration struct {
 	FullResourceNameRx regexpext.BoundedRegexp               `yaml:"resource"`
 	Model              limesresources.QuotaDistributionModel `yaml:"model"`
-	// options for HierarchicalQuotaDistribution (TODO: remove)
-	StrictDomainQuotaLimit bool `yaml:"strict_domain_quota_limit"`
 	// options for AutogrowQuotaDistribution
 	Autogrow *AutogrowQuotaDistributionConfiguration `yaml:"autogrow"`
 }
@@ -242,9 +240,6 @@ func (cluster ClusterConfiguration) validateConfig() (errs errext.ErrorSet) {
 			errs.Addf("invalid value for distribution_model_configs[%d].model: %q", idx, qdCfg.Model)
 		}
 
-		if qdCfg.Model != limesresources.HierarchicalQuotaDistribution && qdCfg.StrictDomainQuotaLimit {
-			errs.Addf("invalid value for distribution_model_configs[%d].strict_domain_quota_limit: cannot be set for model %q", idx, qdCfg.Model)
-		}
 		if qdCfg.Model != limesresources.AutogrowQuotaDistribution && qdCfg.Autogrow != nil {
 			errs.Addf("invalid value for distribution_model_configs[%d].autogrow: cannot be set for model %q", idx, qdCfg.Model)
 		}
