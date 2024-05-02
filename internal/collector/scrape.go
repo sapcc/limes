@@ -321,7 +321,6 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 			Update: func(azRes *db.ProjectAZResource) (err error) {
 				az := azRes.AvailabilityZone
 				data := usageData[az]
-				azRes.Quota = nil // TODO: add the new quota distribution model that assigns quota per AZ
 				azRes.Usage = data.Usage
 				azRes.PhysicalUsage = data.PhysicalUsage
 
