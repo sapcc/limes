@@ -193,7 +193,7 @@ resource_behavior:
 
 ### Quota distribution models
 
-Each resource uses one of several quota distribution models, with `hierarchical` being the default.
+Each resource uses one of several quota distribution models, with `autogrow` being the default.
 
 Resource-specific distribution models can be configured per resource in the `quota_distribution_configs[]` section. Each
 entry in this section can match multiple resources. Because the semantics of distribution models cross the boundaries of
@@ -203,22 +203,11 @@ always applies to the entire resource across all scopes.
 | Field | Required | Description |
 | --- | --- | --- |
 | `quota_distribution_configs[].resource` | yes | Must contain a regex. The config entry applies to all resources where this regex matches against a slash-concatenated pair of service type and resource name. The anchors `^` and `$` are implied at both ends, so the regex must match the entire phrase. |
-| `quota_distribution_configs[].model` | yes | The string "hierarchical". |
+| `quota_distribution_configs[].model` | yes | As listed below. |
 
 A distribution model config can contain additional options based on which model is chosen (see below).
 
-#### Model: `hierarchical` (default)
-
-In this model, quota is distributed to domains by the cloud admins
-(according to the `domain:{raise,raise_lowpriv,lower}` policies), and then the projects by the domain admins
-(according to the `project:{raise,raise_lowpriv,lower}` policies). Domains and projects start out at zero quota.
-This model does not allow AZ-aware quotas.
-
-| Field | Required | Description |
-| --- | --- | --- |
-| `quota_distribution_configs[].strict_domain_quota_limit` | no | Reject attempts to increase domain quotas when the sum of all domain quotas would exceed the cluster capacity. |
-
-#### Model: `autogrow`
+#### Model: `autogrow` (default)
 
 In this model, quota is automatically distributed ("auto") such that:
 
@@ -255,6 +244,16 @@ alone. (Larger quota jumps are still possible if additional commitments are conf
 | `quota_distribution_configs[].autogrow.growth_multiplier` | *(required)* | As explained above. Cannot be set to less than 1 (100%). Can be set to exactly 1 to ensure that no additional quota will be granted above existing usage and/or confirmed commitments. |
 | `quota_distribution_configs[].autogrow.growth_minimum` | `1` | When multiplying a growth baseline greater than 0 with a growth multiplier greater than 1, ensure that the result is at least this much higher than the baseline. |
 | `quota_distribution_configs[].usage_data_retention_period` | *(required)* | As explained above. Must be formatted as a string that [`time.ParseDuration`](https://pkg.go.dev/time#ParseDuration) understands. Cannot be set to zero. To only use current usage when calculating quota, set this to a very short interval like `1m`. |
+
+The default config for resources without a specific `quota_distribution_configs[]` match sets the default values as explained above, and also
+
+```
+growth_multiplier = 1.0
+growth_minimum = 0
+usage_data_retention_period = 1s
+```
+
+This default configuration means that no quota will be assigned except to cover existing usage and honor explicit quota overrides.
 
 ## Supported discovery methods
 

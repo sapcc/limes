@@ -107,6 +107,8 @@ const (
 		quota_distribution_configs:
 			# this is only used to check that historical_usage is tracked
 			- { resource: unittest/things, model: autogrow, autogrow: { growth_multiplier: 1.0, usage_data_retention_period: 48h } }
+			# TODO: remove and use the new default
+			- { resource: '.*', model: hierarchical }
 	`
 )
 
@@ -592,6 +594,9 @@ const (
 				type: --test-auto-approval
 				params:
 					static_backend_quota: 10
+		quota_distribution_configs:
+			# TODO: remove and use the new default
+			- { resource: '.*', model: hierarchical }
 	`
 )
 
@@ -657,6 +662,9 @@ const (
 		services:
 			- service_type: noop
 				type: --test-noop
+		quota_distribution_configs:
+			# TODO: remove and use the new default
+			- { resource: '.*', model: hierarchical }
 	`
 )
 
@@ -706,6 +714,9 @@ const (
 				type: --test-noop
 				params:
 					with_empty_resource: true
+		quota_distribution_configs:
+			# TODO: remove and use the new default
+			- { resource: '.*', model: hierarchical }
 	`
 )
 

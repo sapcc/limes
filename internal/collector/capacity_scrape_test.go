@@ -75,6 +75,9 @@ const (
 		resource_behavior:
 			# overcommit should be reflected in capacity metrics
 			- { resource: unshared2/capacity, overcommit_factor: 2.5 }
+		quota_distribution_configs:
+			# TODO: remove and use the new default
+			- { resource: '.*', model: hierarchical }
 	`
 
 	testScanCapacityNoopConfigYAML = `

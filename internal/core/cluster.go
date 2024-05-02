@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"time"
 
 	"github.com/gophercloud/gophercloud"
 	"github.com/sapcc/go-api-declarations/limes"
@@ -310,8 +311,17 @@ func (c *Cluster) QuotaDistributionConfigForResource(serviceType limes.ServiceTy
 		}
 	}
 
-	// default behavior
-	return QuotaDistributionConfiguration{Model: limesresources.HierarchicalQuotaDistribution}
+	// default behavior: do not give out any quota except for existing usage or with explicit quota override
+	return QuotaDistributionConfiguration{
+		Model: limesresources.AutogrowQuotaDistribution,
+		Autogrow: &AutogrowQuotaDistributionConfiguration{
+			AllowQuotaOvercommit:     false,
+			ProjectBaseQuota:         0,
+			GrowthMultiplier:         1.0,
+			GrowthMinimum:            0,
+			UsageDataRetentionPeriod: util.MarshalableTimeDuration(1 * time.Second),
+		},
+	}
 }
 
 // HasUsageForRate checks whether the given service is enabled in this cluster and

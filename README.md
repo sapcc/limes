@@ -9,24 +9,15 @@ Limes is an OpenStack-compatible quota/usage tracking service, originally design
 
 Pronounce the name like the [Ancient Roman border wall][wp-limes], not like the fruit. (Mnemonic: The original Limes was installed when the Romans wanted to put a quota on Germanic land use.)
 
-# The idea: Hierarchical quota delegation
+# The idea: Automatic quota distribution
 
-OpenStack groups access into three levels:
-
-1. the cluster (the sum of all the resources in an OpenStack installation, e.g. hypervisors or storage capacity)
-2. Keystone domains within that cluster
-3. Keystone projects within each domain
-
-Limes enables a similar hierarchy for resource usage and quotas: After having reviewed the cluster's capacity, a cluster
-admin can allocate quotas to domains. The domain admin can then sublease that quota to its projects. Limes will then
-write these approved project quotas into the backend services that actually manage the resources. Limes also tracks
-resource usage in all projects in all domains, so that users can make informed decisions about resource allocation at
-all levels of the hierarchy.
+Limes can discover capacity and usage for various types of OpenStack resources.
+It can then be set up to distribute quota automatically among all projects in a dynamic and automated fashion.
+Both cloud admins and project admins have several knobs to control their quota assignments in a controlled fashion.
 
 ## Unique features
 
-* Limes can take over the handling of initial project quotas: All quotas for a new project (or domain) will be set to zero initially, until a sufficiently privileged user approves quota explicitly.
-* Limes records quota changes in an Open Standards [CADF Format](https://www.dmtf.org/sites/default/files/standards/documents/DSP0262_1.0.0.pdf), and is compatible with other cloud based audit APIs (e.g. [Hermes](https://github.com/sapcc/hermes)).
+* Limes records quota changes in the Open Standards [CADF Format](https://www.dmtf.org/sites/default/files/standards/documents/DSP0262_1.0.0.pdf), and is compatible with other cloud based audit APIs (e.g. [Hermes](https://github.com/sapcc/hermes)).
 * Quota and usage data can be exposed as [Prometheus metrics](https://prometheus.io) for monitoring and alerting.
 
 # Documentation
