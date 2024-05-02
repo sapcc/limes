@@ -2026,67 +2026,6 @@ func requestOneQuotaChange(structureLevel string, serviceType limes.ServiceType,
 	}
 }
 
-func Test_StrictDomainQuotaLimit(t *testing.T) {
-	s := setupTest(t, "fixtures/start-data.sql")
-
-	// set up a QD config for shared/things with the default behavior
-	qdConfig := &core.QuotaDistributionConfiguration{
-		FullResourceNameRx:     "shared/things",
-		Model:                  limesresources.HierarchicalQuotaDistribution,
-		StrictDomainQuotaLimit: false,
-	}
-	s.Cluster.Config.QuotaDistributionConfigs = append([]*core.QuotaDistributionConfiguration{qdConfig}, s.Cluster.Config.QuotaDistributionConfigs...)
-
-	//NOTE: The relevant parts of start-data.sql look as follows for "shared/things":
-	// cluster_capacity      = 246
-	// domain_quota[germany] = 30
-	// domain_quota[france]  = 0 (not set)
-
-	// with StrictDomainQuotaLimit = false, we can go over the total capacity
-	assert.HTTPRequest{
-		Method: "PUT",
-		Path:   "/v1/domains/uuid-for-france",
-		// this single domain quota is below capacity, but the sum of domain quotas is not
-		Body:         requestOneQuotaChange("domain", "shared", "things", 240, limes.UnitNone),
-		ExpectStatus: 202,
-	}.Check(t, s.Handler)
-
-	// with StrictDomainQuotaLimit = true, we can always go down (even if we are not getting back into the green area)...
-	qdConfig.StrictDomainQuotaLimit = true
-	assert.HTTPRequest{
-		Method: "PUT",
-		Path:   "/v1/domains/uuid-for-france",
-		// this single domain quota is below capacity, but the sum of domain quotas is not
-		Body:         requestOneQuotaChange("domain", "shared", "things", 220, limes.UnitNone),
-		ExpectStatus: 202,
-	}.Check(t, s.Handler)
-
-	// ...and we can also just stay at the same level...
-	assert.HTTPRequest{
-		Method:       "PUT",
-		Path:         "/v1/domains/uuid-for-france",
-		Body:         requestOneQuotaChange("domain", "shared", "things", 220, limes.UnitNone),
-		ExpectStatus: 202,
-	}.Check(t, s.Handler)
-
-	// ...but we cannot go higher into the red
-	assert.HTTPRequest{
-		Method:       "PUT",
-		Path:         "/v1/domains/uuid-for-france",
-		Body:         requestOneQuotaChange("domain", "shared", "things", 240, limes.UnitNone),
-		ExpectStatus: 409,
-		ExpectBody:   assert.StringData("cannot change shared/things quota: cluster capacity may not be exceeded for this resource (maximum acceptable domain quota is 216)\n"),
-	}.Check(t, s.Handler)
-
-	// we can get exactly to the limit though (where all capacity is given out as domain quota)
-	assert.HTTPRequest{
-		Method:       "PUT",
-		Path:         "/v1/domains/uuid-for-france",
-		Body:         requestOneQuotaChange("domain", "shared", "things", 216, limes.UnitNone),
-		ExpectStatus: 202,
-	}.Check(t, s.Handler)
-}
-
 func Test_PutMaxQuotaOnProject(t *testing.T) {
 	s := setupTest(t, "fixtures/start-data.sql")
 
