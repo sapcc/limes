@@ -21,13 +21,11 @@ package api
 
 import (
 	"database/sql"
-	"fmt"
 	"net/http"
 
 	"github.com/go-gorp/gorp/v3"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
-	"github.com/sapcc/go-bits/errext"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sqlext"
@@ -176,16 +174,6 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 	// validate inputs (within the DB transaction, to ensure that we do not apply
 	// inconsistent values later)
 	err := updater.ValidateInput(parseTarget.Project.Services, dbi)
-	if errext.IsOfType[MissingProjectReportError](err) {
-		// MissingProjectReportError indicates that the project is new and initial
-		// scraping is not yet done -> ask the user to wait until that's done, with
-		// a 4xx status code instead of a 5xx one so that this does not trigger
-		// alerts on the operator side
-		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-		w.WriteHeader(http.StatusLocked)
-		fmt.Fprintf(w, "%s (please retry in a few seconds after initial scraping is done)", err.Error())
-		return
-	}
 	if respondwith.ErrorText(w, err) {
 		return
 	}

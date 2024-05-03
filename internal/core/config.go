@@ -42,7 +42,6 @@ type ClusterConfiguration struct {
 	Services          []ServiceConfiguration   `yaml:"services"`
 	Capacitors        []CapacitorConfiguration `yaml:"capacitors"`
 	// ^ Sorry for the stupid pun. Not.
-	LowPrivilegeRaise        LowPrivilegeRaiseConfiguration    `yaml:"lowpriv_raise"`
 	ResourceBehaviors        []ResourceBehavior                `yaml:"resource_behavior"`
 	Bursting                 BurstingConfiguration             `yaml:"bursting"`
 	QuotaDistributionConfigs []*QuotaDistributionConfiguration `yaml:"quota_distribution_configs"`

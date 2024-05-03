@@ -25,7 +25,7 @@ on the top left corner of this document to get to a specific section of this gui
 | Variable | Default | Description |
 | --- | --- | --- |
 | `LIMES_API_LISTEN_ADDRESS` | `:80` | Bind address for the HTTP API exposed by this service, e.g. `127.0.0.1:80` to bind only on one IP, or `:80` to bind on all interfaces and addresses. |
-| `LIMES_API_POLICY_PATH` | `/etc/limes/policy.yaml` | Path to the oslo.policy file that describes authorization behavior for this service. Please refer to the [OpenStack documentation on policies][policy] for syntax reference. This repository includes an [example policy][ex-pol] that can be used for development setups, or as a basis for writing your own policy. For `:raise`, `:raise_lowpriv`, `:lower` and `:set_rate_limit` policies, the object attribute `%(service_type)s` is available to restrict editing to certain service types. |
+| `LIMES_API_POLICY_PATH` | `/etc/limes/policy.yaml` | Path to the oslo.policy file that describes authorization behavior for this service. Please refer to the [OpenStack documentation on policies][policy] for syntax reference. This repository includes an [example policy][ex-pol] that can be used for development setups, or as a basis for writing your own policy. For `:set_rate_limit` policies, the object attribute `%(service_type)s` is available to restrict editing to certain service types. |
 
 ### Audit trail
 
@@ -114,46 +114,9 @@ The following fields and sections are supported:
 | `discovery.params` | yes/no | A subsection containing additional parameters for the specific discovery method. Whether this is required depends on the discovery method; see [*Supported discovery methods*](#supported-discovery-methods) for details. |
 | `services` | yes | List of backend services for which to scrape quota/usage data. Service types for which Limes does not include a suitable *quota plugin* will be ignored. See below for supported service types. |
 | `capacitors` | no | List of capacity plugins to use for scraping capacity data. See below for supported capacity plugins. |
-| `lowpriv_raise` | no | Configuration options for low-privilege quota raising. See [*low-privilege quota raising*](#low-privilege-quota-raising) for details. |
 | `resource_behavior` | no | Configuration options for special resource behaviors. See [*resource behavior*](#resource-behavior) for details. |
 | `bursting.max_multiplier` | no | If given, permits quota bursting in this cluster. When projects enable quota bursting, the backend quota is set to `quota * (1 + max_multiplier)`. In the future, Limes may autonomously adjust the multiplier between 0 and the configured maximum based on cluster-wide resource utilization. |
 | `quota_distribution_configs` | no | Configuration options for selecting resource-specific quota distribution models. See [*quota distribution models*](#quota-distribution-models) for details. |
-
-### Low-privilege quota raising
-
-The Oslo policy for Limes (see [example policy][ex-pol]) is structured such that raising quotas requires
-a different (usually higher) permission level than lowering quotas. However, through the `*:raise_lowpriv` rules,
-low-privilege users can be permitted to raise quotas within certain boundaries.
-
-| Field | Required | Description |
-| --- | --- | --- |
-| `lowpriv_raise.limits.projects` | no | Limits up to which project quotas can be raised by a low-privilege user. |
-| `lowpriv_raise.limits.domains` | no | Limits up to which domain quotas can be raised by a low-privilege user. |
-| `lowpriv_raise.except_projects_in_domains` | no | May contain a regex. If given, low-privilege quota raising will not be allowed for projects in domains whose names match the regex. |
-| `lowpriv_raise.only_projects_in_domains` | no | May contain a regex. If given, low-privilege quota raising will only be possible for projects in domains whose names match the regex. If `except_projects_in_domains` is also given, it takes precedence over `only_projects_in_domains`. |
-
-Both `limits.projects` and `limits.domains` contain two-level maps, first by service type, then by resource name.
-
-- Values may also be specified relative to the cluster capacity with the special syntax `<number>% of cluster capacity`.
-- For `limits.domains` only, the alternative special syntax `until <number>% of cluster capacity is assigned` will cause
-  quota requests to be approved as long as the sum of all domain quotas is below the given value.
-
-For example:
-
-```yaml
-lowpriv_raise:
-  limits:
-    projects:
-      compute:
-        cores: 10
-        instances: 0.5% of cluster capacity
-        ram: 10 GiB
-    domains:
-      compute:
-        cores: 1000
-        instances: until 80% of cluster capacity is assigned
-        ram: 1 TiB
-```
 
 ### Resource behavior
 
