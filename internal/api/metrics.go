@@ -23,32 +23,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 )
 
-var lowPrivilegeRaiseMetricLabels = []string{"service", "resource"}
-
-var lowPrivilegeRaiseDomainSuccessCounter = prometheus.NewCounterVec(
-	prometheus.CounterOpts{
-		Name: "limes_low_privilege_raise_domain_success",
-		Help: "Counter for successful quota auto approval for some service/resource per domain.",
-	}, lowPrivilegeRaiseMetricLabels)
-
-var lowPrivilegeRaiseDomainFailureCounter = prometheus.NewCounterVec(
-	prometheus.CounterOpts{
-		Name: "limes_low_privilege_raise_domain_failure",
-		Help: "Counter for failed quota auto approval for some service/resource per domain.",
-	}, lowPrivilegeRaiseMetricLabels)
-
-var lowPrivilegeRaiseProjectSuccessCounter = prometheus.NewCounterVec(
-	prometheus.CounterOpts{
-		Name: "limes_low_privilege_raise_project_success",
-		Help: "Counter for successful quota auto approval for some service/resource per project.",
-	}, lowPrivilegeRaiseMetricLabels)
-
-var lowPrivilegeRaiseProjectFailureCounter = prometheus.NewCounterVec(
-	prometheus.CounterOpts{
-		Name: "limes_low_privilege_raise_project_failure",
-		Help: "Counter for failed quota auto approval for some service/resource per project.",
-	}, lowPrivilegeRaiseMetricLabels)
-
 var auditEventPublishSuccessCounter = prometheus.NewCounter(
 	prometheus.CounterOpts{
 		Name: "limes_successful_auditevent_publish",
@@ -62,11 +36,6 @@ var auditEventPublishFailedCounter = prometheus.NewCounter(
 	})
 
 func init() {
-	prometheus.MustRegister(lowPrivilegeRaiseDomainSuccessCounter)
-	prometheus.MustRegister(lowPrivilegeRaiseDomainFailureCounter)
-	prometheus.MustRegister(lowPrivilegeRaiseProjectSuccessCounter)
-	prometheus.MustRegister(lowPrivilegeRaiseProjectFailureCounter)
-
 	prometheus.MustRegister(auditEventPublishSuccessCounter)
 	prometheus.MustRegister(auditEventPublishFailedCounter)
 }

@@ -32,13 +32,10 @@ type PolicyEnforcer struct {
 	AllowDomain  bool
 	AllowProject bool
 	// flags by action
-	AllowView     bool
-	AllowEdit     bool
-	AllowRaise    bool
-	AllowRaiseLP  bool
-	AllowLower    bool
-	AllowLowerLP  bool
-	AllowUncommit bool
+	AllowView         bool
+	AllowEdit         bool
+	AllowEditMaxQuota bool
+	AllowUncommit     bool
 	// match by request attribute
 	RejectServiceType string
 }
@@ -74,14 +71,8 @@ func (e *PolicyEnforcer) allowAction(action string) bool {
 		return e.AllowView
 	case "edit":
 		return e.AllowEdit
-	case "raise":
-		return e.AllowRaise
-	case "raise_lowpriv":
-		return e.AllowRaiseLP
-	case "lower":
-		return e.AllowLower
-	case "lower_lowpriv":
-		return e.AllowLowerLP
+	case "edit_max_quota":
+		return e.AllowEditMaxQuota
 	case "uncommit":
 		return e.AllowUncommit
 	default:

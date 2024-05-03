@@ -111,48 +111,6 @@ func logAndPublishEvent(eventTime time.Time, req *http.Request, token *gopherpol
 	}
 }
 
-// quotaEventTarget contains the structure for rendering a cadf.Event.Target for
-// changes regarding resource quota.
-type quotaEventTarget struct {
-	DomainID     string
-	DomainName   string
-	ProjectID    string
-	ProjectName  string
-	ServiceType  limes.ServiceType
-	ResourceName limesresources.ResourceName
-	OldQuota     uint64
-	NewQuota     uint64
-	QuotaUnit    limes.Unit
-	RejectReason string
-}
-
-// Render implements the audittools.TargetRenderer interface type.
-func (t quotaEventTarget) Render() cadf.Resource {
-	targetID := t.ProjectID
-	if t.ProjectID == "" {
-		targetID = t.DomainID
-	}
-
-	return cadf.Resource{
-		TypeURI:     fmt.Sprintf("service/%s/%s/quota", t.ServiceType, t.ResourceName),
-		ID:          targetID,
-		DomainID:    t.DomainID,
-		DomainName:  t.DomainName,
-		ProjectID:   t.ProjectID,
-		ProjectName: t.ProjectName,
-		Attachments: []cadf.Attachment{{
-			Name:    "payload",
-			TypeURI: "mime:application/json",
-			Content: targetAttachmentContent{
-				OldQuota:     t.OldQuota,
-				NewQuota:     t.NewQuota,
-				Unit:         t.QuotaUnit,
-				RejectReason: t.RejectReason,
-			},
-		}},
-	}
-}
-
 // maxQuotaEventTarget renders a cadf.Event.Target for a max_quota change event.
 type maxQuotaEventTarget struct {
 	DomainID        string
@@ -187,37 +145,6 @@ func (t maxQuotaEventTarget) Render() cadf.Resource {
 			Name:    "payload",
 			TypeURI: "mime:application/json",
 			Content: string(payloadBytes),
-		}},
-	}
-}
-
-// burstEventTarget contains the structure for rendering a cadf.Event.Target for
-// changes regarding quota bursting for some project.
-type burstEventTarget struct {
-	DomainID     string
-	DomainName   string
-	ProjectID    string
-	ProjectName  string
-	NewStatus    bool
-	RejectReason string
-}
-
-// Render implements the audittools.TargetRenderer interface type.
-func (t burstEventTarget) Render() cadf.Resource {
-	return cadf.Resource{
-		TypeURI:     "service/resources/bursting",
-		ID:          t.ProjectID,
-		DomainID:    t.DomainID,
-		DomainName:  t.DomainName,
-		ProjectID:   t.ProjectID,
-		ProjectName: t.ProjectName,
-		Attachments: []cadf.Attachment{{
-			Name:    "payload",
-			TypeURI: "mime:application/json",
-			Content: targetAttachmentContent{
-				NewStatus:    t.NewStatus,
-				RejectReason: t.RejectReason,
-			},
 		}},
 	}
 }

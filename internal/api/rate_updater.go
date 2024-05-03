@@ -36,7 +36,7 @@ import (
 	"github.com/sapcc/limes/internal/reports"
 )
 
-// RateLimitUpdater is the equivalent of QuotaUpdater for rate limit PUT requests.
+// RateLimitUpdater contains most of the business logic for PUT on rate limits.
 type RateLimitUpdater struct {
 	// scope (all fields are always set since rate limits can only be updated on
 	// the project level)
@@ -51,8 +51,8 @@ type RateLimitUpdater struct {
 	Requests map[limes.ServiceType]map[limesrates.RateName]RateLimitRequest
 }
 
-// RateLimitRequest describes a single rate limit that a PUT requests wants to
-// change. It appears in type QuotaUpdater.
+// RateLimitRequest describes a single rate limit that a PUT requests wants to change.
+// It appears in type RateLimitUpdater.
 type RateLimitRequest struct {
 	Unit            limes.Unit
 	OldLimit        uint64
@@ -152,8 +152,6 @@ func (u RateLimitUpdater) IsValid() bool {
 
 // WriteSimulationReport produces the HTTP response for the POST /simulate-put
 // endpoints.
-//
-//nolint:dupl // This function is very similar to QuotaUpdater.WriteSimulationReport, but cannot be deduped because of different content types.
 func (u RateLimitUpdater) WriteSimulationReport(w http.ResponseWriter) {
 	type unacceptableRateLimit struct {
 		ServiceType limes.ServiceType   `json:"service_type"`

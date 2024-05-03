@@ -357,99 +357,11 @@ substructure will be returned in the top-level field `domain`.
 
 ### PUT /v1/domains/:domain\_id
 
-Set quotas for the given domain. Requires at least a domain-admin token, and a request body that is a JSON document
-like:
-
-```json
-{
-  "domain": {
-    "services": [
-      {
-        "type": "compute",
-        "resources": [
-          {
-            "name": "instances",
-            "quota": 30
-          },
-          {
-            "name": "ram",
-            "quota": 150,
-            "unit": "GiB"
-          },
-          ...
-        ]
-      },
-      ...
-    ]
-  }
-}
-```
-
-The following fields can appear in the request body:
-
-| Field | Type | Description |
-| ----- | ---- | ----------- |
-| `domain` | object | Top-level grouping to match the response structure in the respective GET endpoint. |
-| `domain.services` | list of objects | List of services where quotas shall be updated. |
-| `domain.services[].type` | string | The type name of this service. |
-| `domain.services[].resources` | list of objects | List of resources in this service where quotas shall be updated. |
-
-The objects at `domain.services[].resources[]` may contain the following fields:
-
-| Field | Type | Description |
-| ----- | ---- | ----------- |
-| `name` | string | The name of this resource. |
-| `quota` | unsigned integer | The requested quota for this resource. |
-| `unit` | string | The unit for the value in the `quota` field (must be omitted if this resource is counted instead of measured, can be omitted to imply the resource's default unit). |
-
-On success, returns 202 (Accepted) and no response body. On error, 4xx responses may be returned. The exact response
-status is determined in the same way as described for the respective `simulate-put` endpoint below.
+**Deprecated.** Always returns 405 (Method Not Allowed) because support for setting quotas manually has been removed from Limes.
 
 ### POST /v1/domains/:domain\_id/simulate-put
 
-Requires a similar token and request body like `PUT /v1/domains/:domain_id`, but does not attempt to actually change any
-quotas.
-
-Returns 200 (OK) on success, or 4xx otherwise (see below). Result is a JSON document like:
-
-```json
-{
-  "success": false,
-  "unacceptable_resources": [
-    {
-      "service_type": "compute",
-      "name": "cores",
-      "status": 403,
-      "message": "user is not allowed to set compute quotas"
-    }
-  ]
-}
-```
-
-If `success` is true, the corresponding PUT request would have been accepted (i.e., produced a 202 response). If
-`success` is false, `unacceptable_resources` contains one entry for each resource whose requested quota was not
-accepted, with the following fields:
-
-| Field | Type | Description |
-| ----- | ---- | ----------- |
-| `service_type` | string | The service wherein the resource with the unacceptable quota is located. |
-| `name` | string | The name of the resource with the unacceptable quota. |
-| `status` | unsigned integer | An HTTP status code providing a broad classification of why the quota is not acceptable. |
-| `message` | string | A human-readable message describing why the quota is not acceptable. |
-| `min_acceptable_quota`<br>`max_acceptable_quota` | unsigned integer | If the specific requested quota value is the problem, one or both of these fields may be shown to indicate which quota values would be acceptable with the current level of permissions. |
-| `unit` | string | The unit for this resource (only shown for measured resources if `min_acceptable_quota` or `max_acceptable_quota` is also shown). |
-
-The response status will be either 422 (Unprocessable Entity) if multiple unacceptable resources have different status
-codes, or equal to the status code of the unacceptable resources if they all agree on one. For example, if all resources are
-rejected with status 403, the entire request will have response status 403.
-
-The following status codes are possible for unacceptable resources:
-
-- 403 (Forbidden) indicates that a higher permission level (e.g. a cloud-admin token instead of a domain-admin token) is
-  needed to set the requested quota value.
-- 409 (Conflict) indicates that the requested quota value contradicts values set on other levels of the quota hierarchy.
-- 422 (Unprocessable Entity) indicates that the quota request itself was malformed (e.g. when a quota of 200 MiB is
-  requested for a countable resource like `compute/cores`).
+**Deprecated.** Always returns 405 (Method Not Allowed) because support for setting quotas manually has been removed from Limes.
 
 ### POST /v1/domains/discover
 
@@ -578,61 +490,11 @@ such object with identical substructure will be returned in the top-level field 
 
 ### PUT /v1/domains/:domain\_id/projects/:project\_id
 
-Set quotas for the given project. Requires at least a project-admin token, and a request body that is a JSON document
-like:
-
-```json
-{
-  "project": {
-    "services": [
-      {
-        "type": "compute",
-        "resources": [
-          {
-            "name": "instances",
-            "quota": 30
-          },
-          {
-            "name": "ram",
-            "quota": 150,
-            "unit": "GiB"
-          },
-          ...
-        ]
-      },
-      ...
-    ]
-  }
-}
-```
-
-The following fields can appear in the request body:
-
-| Field | Type | Description |
-| ----- | ---- | ----------- |
-| `project` | object | Top-level grouping to match the response structure in the respective GET endpoint. |
-| `project.services` | list of objects | List of services where quotas shall be updated. |
-| `project.services[].type` | string | The type name of this service. |
-| `project.services[].resources` | list of objects | List of resources in this service where quotas shall be updated. |
-
-The objects at `project.services[].resources[]` may contain the following fields:
-
-| Field | Type | Description |
-| ----- | ---- | ----------- |
-| `name` | string | The name of this resource. |
-| `quota` | unsigned integer | The requested quota for this resource. |
-| `unit` | string | The unit for the value in the `quota` field (must be omitted if this resource is counted instead of measured, can be omitted to imply the resource's default unit). |
-
-On success, returns 202 (Accepted) and no response body. On error, 4xx responses may be returned. The exact response
-status is determined in the same way as described for the respective `simulate-put` endpoint below.
+**Deprecated.** Always returns 405 (Method Not Allowed) because support for setting quotas manually has been removed from Limes.
 
 ### POST /v1/domains/:domain\_id/projects/:project\_id/simulate-put
 
-Requires a similar token and request body like `PUT /v1/domains/:domain_id`, but does not attempt to actually change any
-quotas.
-
-Returns 200 (OK) on success, or 4xx otherwise (see below). Result is a JSON document with the same structure as for
-`POST /v1/domains/:domain_id/simulate-put`.
+**Deprecated.** Always returns 405 (Method Not Allowed) because support for setting quotas manually has been removed from Limes.
 
 ### POST /v1/domains/:domain\_id/projects/discover
 
