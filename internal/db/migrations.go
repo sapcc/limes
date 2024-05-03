@@ -207,4 +207,12 @@ var sqlMigrations = map[string]string{
 			ADD COLUMN max_quota_from_admin BIGINT DEFAULT NULL,
 			ADD COLUMN override_quota_from_config BIGINT DEFAULT NULL;
 	`,
+	"039_remove_bursting.down.sql": `
+		ALTER TABLE projects
+			ADD COLUMN has_bursting BOOLEAN NOT NULL DEFAULT TRUE;
+	`,
+	"039_remove_bursting.up.sql": `
+		ALTER TABLE projects
+			DROP COLUMN has_bursting;
+	`,
 }

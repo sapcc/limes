@@ -25,7 +25,7 @@ limes_plugin_metrics_ok{domain="germany",domain_id="uuid-for-germany",project="d
 # TYPE limes_project_backendquota gauge
 limes_project_backendquota{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="unittest",service_name="generic-unittest"} 20
 limes_project_backendquota{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="things",service="unittest",service_name="generic-unittest"} 13
-limes_project_backendquota{domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="unittest",service_name="generic-unittest"} 24
+limes_project_backendquota{domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="unittest",service_name="generic-unittest"} 20
 limes_project_backendquota{domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="things",service="unittest",service_name="generic-unittest"} 13
 # HELP limes_project_committed_per_az Sum of all active commitments of a Limes resource for an OpenStack project, grouped by availability zone and state.
 # TYPE limes_project_committed_per_az gauge

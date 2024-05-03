@@ -242,8 +242,6 @@ type targetAttachmentContent struct {
 	// for quota changes
 	OldQuota uint64
 	NewQuota uint64
-	// for quota bursting
-	NewStatus bool
 	// for rate limit changes
 	OldLimit  uint64
 	NewLimit  uint64
@@ -258,7 +256,6 @@ func (a targetAttachmentContent) MarshalJSON() ([]byte, error) {
 		OldQuota     uint64            `json:"oldQuota,omitempty"`
 		NewQuota     uint64            `json:"newQuota,omitempty"`
 		Unit         limes.Unit        `json:"unit,omitempty"`
-		NewStatus    bool              `json:"newStatus,omitempty"`
 		RejectReason string            `json:"rejectReason,omitempty"`
 		OldLimit     uint64            `json:"oldLimit,omitempty"`
 		NewLimit     uint64            `json:"newLimit,omitempty"`
@@ -267,7 +264,6 @@ func (a targetAttachmentContent) MarshalJSON() ([]byte, error) {
 	}{
 		OldQuota:     a.OldQuota,
 		NewQuota:     a.NewQuota,
-		NewStatus:    a.NewStatus,
 		Unit:         a.Unit,
 		RejectReason: a.RejectReason,
 		OldLimit:     a.OldLimit,

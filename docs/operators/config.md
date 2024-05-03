@@ -97,8 +97,6 @@ services:
 capacitors:
   - id: nova
     type: nova
-bursting:
-  max_multiplier: 0.2
 ```
 
 The following fields and sections are supported:
@@ -114,7 +112,6 @@ The following fields and sections are supported:
 | `services` | yes | List of backend services for which to scrape quota/usage data. Service types for which Limes does not include a suitable *quota plugin* will be ignored. See below for supported service types. |
 | `capacitors` | no | List of capacity plugins to use for scraping capacity data. See below for supported capacity plugins. |
 | `resource_behavior` | no | Configuration options for special resource behaviors. See [*resource behavior*](#resource-behavior) for details. |
-| `bursting.max_multiplier` | no | If given, permits quota bursting in this cluster. When projects enable quota bursting, the backend quota is set to `quota * (1 + max_multiplier)`. In the future, Limes may autonomously adjust the multiplier between 0 and the configured maximum based on cluster-wide resource utilization. |
 | `quota_distribution_configs` | no | Configuration options for selecting resource-specific quota distribution models. See [*quota distribution models*](#quota-distribution-models) for details. |
 
 ### Resource behavior
@@ -125,7 +122,6 @@ Some special behaviors for resources can be configured in the `resource_behavior
 | --- | --- | --- |
 | `resource_behavior[].resource` | yes | Must contain a regex. The behavior entry applies to all resources where this regex matches against a slash-concatenated pair of service type and resource name. The anchors `^` and `$` are implied at both ends, so the regex must match the entire phrase. |
 | `resource_behavior[].scope` | yes | May contain a regex. The behavior entry applies to matching resources in all domains where this regex matches against the domain name, and in all projects where this regex matches against a slash-concatenated pair of domain and project name, i.e. `domainname/projectname`. The anchors `^` and `$` are implied at both ends, so the regex must match the entire phrase. This regex is ignored for cluster-level resources. |
-| `resource_behavior[].max_burst_multiplier` | no | If given, the bursting multiplier for matching resources will be restricted to this value (see also `bursting.max_multiplier`). |
 | `resource_behavior[].overcommit_factor` | no | If given, capacity for matching resources will be computed as `raw_capacity * overcommit_factor`, where `raw_capacity` is what the capacity plugin reports. |
 | `resource_behavior[].scales_with` | no | If a resource is given, matching resources scales with this resource. The other resource may be specified by its name (for resources within the same service type), or by a slash-concatenated pair of service type and resource name, e.g. `compute/cores`. |
 | `resource_behavior[].scaling_factor` | yes, if `scales_with` is given | The scaling factor that will be reported for these resources' scaling relation. |
@@ -145,8 +141,6 @@ resource_behavior:
   - { resource: network/pools,          scales_with: network/loadbalancers, scaling_factor: 1 }
   # matches both sharev2/share_capacity and sharev2/snapshot_capacity
   - { resource: sharev2/.*_capacity, overcommit_factor: 2 }
-  # disable bursting for the domain "foo"
-  - { resource: .*, scope: foo/.*, max_burst_multiplier: 0 }
   # require each project to take at least 100 GB of object storage if they use it at all
   - { resource: object-store/capacity, min_nonzero_project_quota: 107374182400 }
   # starting in 2024, offer commitments for Cinder storage

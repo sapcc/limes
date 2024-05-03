@@ -68,24 +68,6 @@ in it. Quota always relates to "usage": For example, consider a project with for
 three NFS shares with a size of 5 GiB each and utilization of 2 GiB each. Therefore, the usage is 15 GiB and only one
 more 5 GiB share can be created, even though the physical usage is only 6 GiB.
 
-### Quota bursting
-
-Limes supports **burstable** resources. If quota bursting is enabled on a project resource with hierarchical quota
-distribution, the project may exceed its granted quota by a certain multiplier. This is implemented by setting the
-backend quota higher than the granted quota, to a value known as **usable quota**. Usable quota is calculated according
-to this formula:
-
-```
-usable_quota = (1 + bursting_multiplier) * quota
-```
-
-Since the usable quota is higher than the granted quota, usage may exceed the granted quota. The amount of usage that
-exceeds the granted quota is referred to as **burst usage**.
-
-Bursting allows users in a project to quickly respond to heightened resource needs. If the higher usage level turns out
-to be permanent, users should request a quota extension from their domain admin or cloud admin, since burst usage is
-usually billed at a higher price than regular usage.
-
 ### Scaling relations
 
 Limes can advertise **scaling relations** between resources. If resource X is marked as **scaling with** resource Y, it
@@ -248,7 +230,6 @@ The objects at `cluster.services[].resources[]` may contain the following fields
 | `per_availability_zone` | list of objects | A breakdown of this resource's capacity by availability zone (only shown for resources supporting a breakdown by AZ). |
 | `domains_quota` | unsigned integer | The sum of all domain quotas for this resource across all domains. |
 | `usage` | unsigned integer | The sum of all usage values for this resource across all projects in all domains. |
-| `burst_usage` | unsigned integer | The sum of `max(usage - quota, 0)` for this resource across all projects in all domains (only shown for [burstable resources](#quota-bursting)). |
 | `physical_usage` | unsigned integer | The sum of all physical usage values for this resource across all projects in all domains (only shown for [resources that report physical usage](#physical-usage)). |
 | `subcapacities` | list of objects | The subcapacities for this resource (only shown if `?detail` is given in the query and the resource supports [subcapacity reporting](#subcapacities)). |
 
@@ -297,7 +278,6 @@ Returns 200 (OK) on success. Result is a JSON document like:
               "quota": 204800,
               "projects_quota": 10240,
               "usage": 2048,
-              "burst_usage": 128,
               "physical_usage": 1376
             }
           ],
@@ -342,7 +322,6 @@ The objects at `domains[].services[].resources[]` may contain the following fiel
 | `quota` | unsigned integer | The domain quota for this resource. |
 | `projects_quota` | unsigned integer | The sum of all project quotas for this resource across all projects in this domain. |
 | `usage` | unsigned integer | The sum of all usage values for this resource across all projects in this domain. |
-| `burst_usage` | unsigned integer | The sum of `max(usage - quota, 0)` for this resource across all projects in this domain. |
 | `physical_usage` | unsigned integer | The sum of all physical usage values for this resource across all projects in this domain (only shown for [resources that report physical usage](#physical-usage)). |
 | `backend_quota` | unsigned integer | The sum of all nonzero backend quota values for this resource across all projects in this domain (only shown if this value differs from the value in the `quota` field). |
 | `infinite_backend_quota` | boolean | Whether any project in this domain has a backend quota value of -1 (only shown if true). |
@@ -400,10 +379,6 @@ Returns 200 (OK) on success. Result is a JSON document like:
       "id": "8ad3bf54-2401-435e-88ad-e80fbf984c19",
       "name": "example-project",
       "parent_id": "e4864dd1-1929-4b41-bb69-e5a724f20fa2",
-      "bursting": {
-        "enabled": true,
-        "multiplier": 0.2
-      },
       "services": [
         {
           "type": "compute",
@@ -418,7 +393,7 @@ Returns 200 (OK) on success. Result is a JSON document like:
             {
               "name": "cores",
               "quota": 20,
-              "usable_quota": 24,
+              "usable_quota": 20,
               "usage": 2,
               "backend_quota": 50
             },
@@ -426,7 +401,7 @@ Returns 200 (OK) on success. Result is a JSON document like:
               "name": "ram",
               "unit": "MiB",
               "quota": 10240,
-              "usable_quota": 12288,
+              "usable_quota": 10240,
               "usage": 2048,
               "physical_usage": 1058
             }
@@ -449,9 +424,6 @@ The following fields can appear in the response body:
 | `projects[].id` | string | UUID of this project in Keystone. |
 | `projects[].name` | string | Name of this project in Keystone. |
 | `projects[].parent_id` | string | UUID of this project's parent object (either the parent project, or the domain) in Keystone. |
-| `projects[].bursting` | object | Bursting information for this project (only shown if [quota bursting](#quota-bursting) is enabled on this cluster). |
-| `projects[].bursting.enabled` | boolean | Whether quota bursting is enabled for this project. |
-| `projects[].bursting.multiplier` | unsigned float | The default [bursting multiplier](#quota-bursting) for this project. Individual project resources may have a different multiplier. |
 | `projects[].services` | list of objects | List of matching services that have resources. |
 | `projects[].services[].type` | string | The type name of this service. |
 | `projects[].services[].area` | string | The area name for this service. |
@@ -473,9 +445,8 @@ The objects at `projects[].services[].resources[]` may contain the following fie
 | `scales_with.factor` | unsigned float | The factor with which this resource is scaling with the other resource. |
 | `annotations` | object | An object with string keys and string values containing arbitrary metadata that was configured for this resource in this project by Limes's operator. |
 | `quota` | unsigned integer | The granted quota for this resource in this project. |
-| `usable_quota` | unsigned integer | The usable quota for this resource in this project (see [quota bursting](#quota-bursting) for details; only shown if different from the granted quota). |
+| `usable_quota` | unsigned integer | **Deprecated.** Always equal to `quota`. |
 | `usage` | unsigned integer | The usage of this resource in this project. |
-| `burst_usage` | unsigned integer | The value of `usage - quota` in this project (only shown for [burstable resources](#quota-bursting) and if greater than zero). |
 | `physical_usage` | unsigned integer | The physical usage of this resource in this project (only shown for [resources that report physical usage](#physical-usage)). |
 | `backend_quota` | integer | The backend quota for this resource in this project (only shown if the value differs from `usable_quota`). Infinite backend quota is represented by the value `-1`. |
 | `subresources` | list of objects | The subresources for this resource (only shown if `?detail` is given in the query and the resource supports [subresource reporting](#subresources)). |

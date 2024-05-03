@@ -75,15 +75,6 @@ func prepareDomainsAndProjectsForScrape(t *testing.T, s test.Setup) {
 	if err != nil {
 		t.Fatal(err)
 	}
-
-	// if we have two projects and bursting is enabled, we are going to test with
-	// and without bursting on the two projects
-	if s.Cluster.Config.Bursting.MaxMultiplier > 0 {
-		_, err := s.DB.Exec(`UPDATE projects SET has_bursting = (name = $1)`, "dresden")
-		if err != nil {
-			t.Fatal(err)
-		}
-	}
 }
 
 const (
@@ -101,8 +92,6 @@ const (
 		services:
 			- service_type: unittest
 				type: --test-generic
-		bursting:
-			max_multiplier: 0.2
 		quota_distribution_configs:
 			# this is only used to check that historical_usage is tracked
 			- { resource: unittest/things, model: autogrow, autogrow: { growth_multiplier: 1.0, usage_data_retention_period: 48h } }
@@ -271,7 +260,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 		UPDATE domain_resources SET quota = 26 WHERE id = 3 AND service_id = 1 AND name = 'things';
 		UPDATE project_resources SET quota = 20, backend_quota = 20, desired_backend_quota = 20 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
 		UPDATE project_resources SET quota = 13, backend_quota = 13, desired_backend_quota = 13 WHERE id = 3 AND service_id = 1 AND name = 'things';
-		UPDATE project_resources SET quota = 20, backend_quota = 24, desired_backend_quota = 24 WHERE id = 4 AND service_id = 2 AND name = 'capacity';
+		UPDATE project_resources SET quota = 20, backend_quota = 20, desired_backend_quota = 20 WHERE id = 4 AND service_id = 2 AND name = 'capacity';
 		UPDATE project_resources SET quota = 13, backend_quota = 13, desired_backend_quota = 13 WHERE id = 6 AND service_id = 2 AND name = 'things';
 		UPDATE project_services SET scraped_at = %[1]d, checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
 		UPDATE project_services SET scraped_at = %[3]d, checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
@@ -621,7 +610,7 @@ func Test_ScrapeButNoResources(t *testing.T) {
 		INSERT INTO domain_services (id, domain_id, type) VALUES (1, 1, 'noop');
 		INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
 		INSERT INTO project_services (id, project_id, type, scraped_at, scrape_duration_secs, checked_at, next_scrape_at, rates_next_scrape_at) VALUES (1, 1, 'noop', %[1]d, 5, %[1]d, %[2]d, 0);
-		INSERT INTO projects (id, domain_id, name, uuid, parent_uuid, has_bursting) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany', FALSE);
+		INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany');
 	`,
 		scrapedAt.Unix(), scrapedAt.Add(scrapeInterval).Unix(),
 	)
@@ -676,7 +665,7 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 		INSERT INTO project_az_resources (id, resource_id, az, usage) VALUES (1, 1, 'any', 0);
 		INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desired_backend_quota) VALUES (1, 1, 'things', 0, 0, 0);
 		INSERT INTO project_services (id, project_id, type, scraped_at, scrape_duration_secs, checked_at, next_scrape_at, rates_next_scrape_at) VALUES (1, 1, 'noop', %[1]d, 5, %[1]d, %[2]d, 0);
-		INSERT INTO projects (id, domain_id, name, uuid, parent_uuid, has_bursting) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany', FALSE);
+		INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany');
 	`,
 		scrapedAt.Unix(), scrapedAt.Add(scrapeInterval).Unix(),
 	)
