@@ -39,13 +39,12 @@ import (
 // Cluster contains all configuration and runtime information for the target
 // cluster.
 type Cluster struct {
-	Config           ClusterConfiguration
-	DiscoveryPlugin  DiscoveryPlugin
-	QuotaPlugins     map[limes.ServiceType]QuotaPlugin
-	CapacityPlugins  map[string]CapacityPlugin
-	Authoritative    bool
-	QuotaConstraints *QuotaConstraintSet
-	QuotaOverrides   map[string]map[string]map[limes.ServiceType]map[limesresources.ResourceName]uint64
+	Config          ClusterConfiguration
+	DiscoveryPlugin DiscoveryPlugin
+	QuotaPlugins    map[limes.ServiceType]QuotaPlugin
+	CapacityPlugins map[string]CapacityPlugin
+	Authoritative   bool
+	QuotaOverrides  map[string]map[string]map[limes.ServiceType]map[limesresources.ResourceName]uint64
 }
 
 // NewCluster creates a new Cluster instance with the given ID and
@@ -88,7 +87,7 @@ func NewCluster(config ClusterConfiguration) (c *Cluster, errs errext.ErrorSet) 
 
 // Connect calls Init() on all plugins.
 //
-// It also loads the QuotaConstraints and QuotaOverrides for this cluster, if configured.
+// It also loads the QuotaOverrides for this cluster, if configured.
 // We also validate if Config.ResourceBehavior[].ScalesWith refers to existing resources.
 //
 // We cannot do any of this earlier because we only know all resources after
@@ -139,15 +138,8 @@ func (c *Cluster) Connect(provider *gophercloud.ProviderClient, eo gophercloud.E
 		return errs
 	}
 
-	// load quota constraints
-	var suberrs errext.ErrorSet
-	constraintPath := os.Getenv("LIMES_CONSTRAINTS_PATH")
-	if constraintPath != "" && c.QuotaConstraints == nil {
-		c.QuotaConstraints, suberrs = NewQuotaConstraints(c, constraintPath)
-		errs.Append(suberrs)
-	}
-
 	// load quota overrides
+	var suberrs errext.ErrorSet
 	overridesPath := os.Getenv("LIMES_QUOTA_OVERRIDES_PATH")
 	if overridesPath != "" && c.QuotaOverrides == nil {
 		c.QuotaOverrides, suberrs = c.loadQuotaOverrides(overridesPath)

@@ -33,7 +33,6 @@ import (
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/jobloop"
 
-	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
 	"github.com/sapcc/limes/internal/test/plugins"
@@ -118,27 +117,6 @@ func Test_ScrapeSuccess(t *testing.T) {
 	)
 	prepareDomainsAndProjectsForScrape(t, s)
 
-	// setup a quota constraint for the projects that we're scraping
-	//
-	//TODO: duplicated with Test_ScrapeFailure
-	//NOTE: This is set only *after* ScanDomains has run, in order to exercise
-	// the code path in Scrape() that applies constraints when first creating
-	// project_resources entries. If we had set this before ScanDomains, then
-	// ScanDomains would already have created the project_resources entries.
-	projectConstraints := core.QuotaConstraints{
-		"unittest": {
-			"capacity": {Minimum: p2u64(10), Maximum: p2u64(40)},
-		},
-	}
-	s.Cluster.QuotaConstraints = &core.QuotaConstraintSet{
-		Projects: map[string]map[string]core.QuotaConstraints{
-			"germany": {
-				"berlin":  projectConstraints,
-				"dresden": projectConstraints,
-			},
-		},
-	}
-
 	s.Cluster.Authoritative = true
 	c := getCollector(t, s)
 	job := c.ResourceScrapeJob(s.Registry)
@@ -178,10 +156,10 @@ func Test_ScrapeSuccess(t *testing.T) {
 		INSERT INTO project_az_resources (id, resource_id, az, usage, historical_usage) VALUES (7, 3, 'any', 0, '{"t":[%[1]d],"v":[0]}');
 		INSERT INTO project_az_resources (id, resource_id, az, usage, subresources, historical_usage) VALUES (8, 3, 'az-one', 2, '[{"index":0},{"index":1}]', '{"t":[%[1]d],"v":[2]}');
 		INSERT INTO project_az_resources (id, resource_id, az, usage, subresources, historical_usage) VALUES (9, 3, 'az-two', 2, '[{"index":2},{"index":3}]', '{"t":[%[1]d],"v":[2]}');
-		INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desired_backend_quota) VALUES (1, 1, 'capacity', 10, 100, 10);
+		INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desired_backend_quota) VALUES (1, 1, 'capacity', 0, 100, 0);
 		INSERT INTO project_resources (id, service_id, name) VALUES (2, 1, 'capacity_portion');
 		INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desired_backend_quota) VALUES (3, 1, 'things', 0, 42, 0);
-		INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desired_backend_quota) VALUES (4, 2, 'capacity', 10, 100, 12);
+		INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desired_backend_quota) VALUES (4, 2, 'capacity', 0, 100, 0);
 		INSERT INTO project_resources (id, service_id, name) VALUES (5, 2, 'capacity_portion');
 		INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desired_backend_quota) VALUES (6, 2, 'things', 0, 42, 0);
 		UPDATE project_services SET scraped_at = %[1]d, scrape_duration_secs = 5, serialized_metrics = '{"capacity_usage":0,"things_usage":4}', checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
@@ -269,8 +247,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 		scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),
 	)
 
-	// set some new quota values (note that "capacity" already had a non-zero
-	// quota because of the cluster.QuotaConstraints)
+	// set some new quota values
 	_, err := s.DB.Exec(`UPDATE project_resources SET quota = $1 WHERE name = $2`, 20, "capacity")
 	if err != nil {
 		t.Fatal(err)
@@ -313,30 +290,6 @@ func Test_ScrapeSuccess(t *testing.T) {
 	scrapedAt1 = s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt2 = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
-		UPDATE project_services SET scraped_at = %[1]d, checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
-		UPDATE project_services SET scraped_at = %[3]d, checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
-	`,
-		scrapedAt1.Unix(), scrapedAt1.Add(scrapeInterval).Unix(),
-		scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),
-	)
-
-	// set a quota that contradicts the cluster.QuotaConstraints
-	_, err = s.DB.Exec(`UPDATE project_resources SET quota = $1 WHERE name = $2`, 50, "capacity")
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	// Scrape should apply the constraint, then enforce quota values in the backend
-	s.Clock.StepBy(scrapeInterval)
-	plugin.SetQuotaFails = false
-	mustT(t, job.ProcessOne(s.Ctx, withLabel))
-	mustT(t, job.ProcessOne(s.Ctx, withLabel))
-
-	scrapedAt1 = s.Clock.Now().Add(-5 * time.Second)
-	scrapedAt2 = s.Clock.Now()
-	tr.DBChanges().AssertEqualf(`
-		UPDATE project_resources SET quota = 40, backend_quota = 40, desired_backend_quota = 40 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
-		UPDATE project_resources SET quota = 40, backend_quota = 48, desired_backend_quota = 48 WHERE id = 4 AND service_id = 2 AND name = 'capacity';
 		UPDATE project_services SET scraped_at = %[1]d, checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
 		UPDATE project_services SET scraped_at = %[3]d, checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`,
@@ -445,27 +398,6 @@ func Test_ScrapeFailure(t *testing.T) {
 	)
 	prepareDomainsAndProjectsForScrape(t, s)
 
-	// setup a quota constraint for the projects that we're scraping
-	//
-	//TODO: duplicated with Test_ScrapeSuccess
-	//NOTE: This is set only *after* ScanDomains has run, in order to exercise
-	// the code path in Scrape() that applies constraints when first creating
-	// project_resources entries. If we had set this before ScanDomains, then
-	// ScanDomains would already have created the project_resources entries.
-	projectConstraints := core.QuotaConstraints{
-		"unittest": {
-			"capacity": {Minimum: p2u64(10), Maximum: p2u64(40)},
-		},
-	}
-	s.Cluster.QuotaConstraints = &core.QuotaConstraintSet{
-		Projects: map[string]map[string]core.QuotaConstraints{
-			"germany": {
-				"berlin":  projectConstraints,
-				"dresden": projectConstraints,
-			},
-		},
-	}
-
 	c := getCollector(t, s)
 	job := c.ResourceScrapeJob(s.Registry)
 	withLabel := jobloop.WithLabel("service_type", "unittest")
@@ -494,10 +426,10 @@ func Test_ScrapeFailure(t *testing.T) {
 		INSERT INTO project_az_resources (id, resource_id, az, usage) VALUES (4, 4, 'any', 0);
 		INSERT INTO project_az_resources (id, resource_id, az, usage) VALUES (5, 5, 'any', 0);
 		INSERT INTO project_az_resources (id, resource_id, az, usage) VALUES (6, 6, 'any', 0);
-		INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desired_backend_quota) VALUES (1, 1, 'capacity', 10, -1, 10);
+		INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desired_backend_quota) VALUES (1, 1, 'capacity', 0, -1, 0);
 		INSERT INTO project_resources (id, service_id, name) VALUES (2, 1, 'capacity_portion');
 		INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desired_backend_quota) VALUES (3, 1, 'things', 0, -1, 0);
-		INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desired_backend_quota) VALUES (4, 2, 'capacity', 10, -1, 12);
+		INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desired_backend_quota) VALUES (4, 2, 'capacity', 0, -1, 0);
 		INSERT INTO project_resources (id, service_id, name) VALUES (5, 2, 'capacity_portion');
 		INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desired_backend_quota) VALUES (6, 2, 'things', 0, -1, 0);
 		UPDATE project_services SET scraped_at = 0, checked_at = %[1]d, scrape_error_message = 'Scrape failed as requested', next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';

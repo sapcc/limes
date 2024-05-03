@@ -59,7 +59,13 @@ type RateLimitRequest struct {
 	NewLimit        uint64
 	OldWindow       limesrates.Window
 	NewWindow       limesrates.Window
-	ValidationError *core.QuotaValidationError
+	ValidationError *RateValidationError
+}
+
+// RateValidationError appears in the Limes API in the POST .../simulate-put responses.
+type RateValidationError struct {
+	Status  int    `json:"status"` // an HTTP status code, e.g. http.StatusForbidden
+	Message string `json:"message"`
 }
 
 // ValidateInput reads the given input and validates the quotas contained therein.
@@ -95,7 +101,7 @@ func (u *RateLimitUpdater) ValidateInput(input limesrates.RateRequest, dbi db.In
 			if exists {
 				req.Unit = defaultRateLimit.Unit
 			} else {
-				req.ValidationError = &core.QuotaValidationError{
+				req.ValidationError = &RateValidationError{
 					Status:  http.StatusForbidden,
 					Message: "user is not allowed to create new rate limits",
 				}
@@ -128,11 +134,11 @@ func (u *RateLimitUpdater) ValidateInput(input limesrates.RateRequest, dbi db.In
 	return nil
 }
 
-func (u RateLimitUpdater) validateRateLimit(srv limes.ServiceInfo) *core.QuotaValidationError {
+func (u RateLimitUpdater) validateRateLimit(srv limes.ServiceInfo) *RateValidationError {
 	if u.CanSetRateLimit(srv.Type) {
 		return nil
 	}
-	return &core.QuotaValidationError{
+	return &RateValidationError{
 		Status:  http.StatusForbidden,
 		Message: fmt.Sprintf("user is not allowed to set %q rate limits", srv.Type),
 	}
@@ -156,7 +162,7 @@ func (u RateLimitUpdater) WriteSimulationReport(w http.ResponseWriter) {
 	type unacceptableRateLimit struct {
 		ServiceType limes.ServiceType   `json:"service_type"`
 		Name        limesrates.RateName `json:"name"`
-		core.QuotaValidationError
+		RateValidationError
 	}
 	var result struct {
 		IsValid                bool                    `json:"success"`
@@ -170,9 +176,9 @@ func (u RateLimitUpdater) WriteSimulationReport(w http.ResponseWriter) {
 				result.IsValid = false
 				result.UnacceptableRateLimits = append(result.UnacceptableRateLimits,
 					unacceptableRateLimit{
-						ServiceType:          srvType,
-						Name:                 rateName,
-						QuotaValidationError: *req.ValidationError,
+						ServiceType:         srvType,
+						Name:                rateName,
+						RateValidationError: *req.ValidationError,
 					},
 				)
 			}

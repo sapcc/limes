@@ -24,7 +24,6 @@ import (
 	"reflect"
 	"slices"
 
-	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/logg"
 
@@ -53,20 +52,13 @@ type ProjectResourceUpdateResult struct {
 
 // Run executes the given ProjectResourceUpdate operation:
 //
-//   - Missing ProjectResource entries are created. If constraints are
-//     configured for this project, they will be taken into account when
-//     initializing missing database entries.
+//   - Missing ProjectResource entries are created.
 //   - The `UpdateResource` callback is called for each resource to allow the
 //     caller to update resource data as necessary.
-//   - Constraints are enforced and other derived fields are recomputed on all
-//     ProjectResource entries.
+//   - Derived fields are recomputed on all ProjectResource entries.
 func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, domain db.Domain, project db.Project, srv db.ServiceRef[db.ProjectServiceID]) (*ProjectResourceUpdateResult, error) {
 	if u.LogError == nil {
 		u.LogError = logg.Error
-	}
-	var constraints map[limesresources.ResourceName]core.QuotaConstraint
-	if cluster.QuotaConstraints != nil {
-		constraints = cluster.QuotaConstraints.Projects[domain.Name][project.Name][srv.Type]
 	}
 
 	// We will first collect all existing data into one of these structs for each
@@ -134,15 +126,15 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, doma
 			res = *state.Original
 		}
 
-		// update in place while enforcing validation rules and constraints
+		// update in place while enforcing validation rules
 		qdConfig := cluster.QuotaDistributionConfigForResource(srv.Type, res.Name)
-		validateResourceConstraints(domain, project, srv, &res, resInfo, constraints[res.Name])
+		validateResourceConstraints(&res, resInfo)
 		if u.UpdateResource != nil {
 			err := u.UpdateResource(&res)
 			if err != nil {
 				return nil, err
 			}
-			validateResourceConstraints(domain, project, srv, &res, resInfo, constraints[res.Name])
+			validateResourceConstraints(&res, resInfo)
 		}
 
 		// (re-)compute derived values
@@ -200,29 +192,15 @@ func unwrapOrDefault[T any](value *T, defaultValue T) T {
 }
 
 // Ensures that `res` conforms to various constraints and validation rules.
-func validateResourceConstraints(domain db.Domain, project db.Project, srv db.ServiceRef[db.ProjectServiceID], res *db.ProjectResource, resInfo limesresources.ResourceInfo, constraint core.QuotaConstraint) {
+func validateResourceConstraints(res *db.ProjectResource, resInfo limesresources.ResourceInfo) {
 	if resInfo.NoQuota {
 		// ensure that NoQuota resources do not contain any quota values
 		res.Quota = nil
 		res.BackendQuota = nil
 		res.DesiredBackendQuota = nil
-	} else {
-		// check if we need to apply a missing default quota
-		if res.Quota == nil || *res.Quota == 0 {
-			initialQuota := uint64(0)
-			res.Quota = &initialQuota
-		}
-
-		// check if we need to enforce a constraint
-		constrainedQuota := constraint.ApplyTo(*res.Quota)
-		if constrainedQuota != *res.Quota {
-			logg.Other("AUDIT", "changing %s/%s quota for project %s/%s from %s to %s to satisfy constraint %q",
-				srv.Type, res.Name, domain.Name, project.Name,
-				limes.ValueWithUnit{Value: *res.Quota, Unit: resInfo.Unit},
-				limes.ValueWithUnit{Value: constrainedQuota, Unit: resInfo.Unit},
-				constraint.String(),
-			)
-			res.Quota = &constrainedQuota
-		}
+	} else if res.Quota == nil || *res.Quota == 0 {
+		// apply missing default quota
+		initialQuota := uint64(0)
+		res.Quota = &initialQuota
 	}
 }
