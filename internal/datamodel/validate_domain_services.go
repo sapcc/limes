@@ -94,13 +94,7 @@ func convergeResourcesInDomainService(tx *gorp.Transaction, cluster *core.Cluste
 		return fmt.Errorf("no quota plugin registered for service type %s", srv.Type)
 	}
 
-	var serviceConstraints map[limesresources.ResourceName]core.QuotaConstraint
-	if cluster.QuotaConstraints != nil {
-		serviceConstraints = cluster.QuotaConstraints.Domains[domain.Name][srv.Type]
-	}
-
 	// list existing resources
-	seen := make(map[limesresources.ResourceName]bool)
 	var resources []db.DomainResource
 	_, err := tx.Select(&resources,
 		`SELECT * FROM domain_resources WHERE service_id = $1`, srv.ID)
@@ -108,50 +102,22 @@ func convergeResourcesInDomainService(tx *gorp.Transaction, cluster *core.Cluste
 		return err
 	}
 
-	// check existing resources
-	hasChanges := false
+	seen := make(map[limesresources.ResourceName]bool)
 	for _, res := range resources {
-		resInfo := cluster.InfoForResource(srv.Type, res.Name)
 		seen[res.Name] = true
-
-		// enforce quota constraints
-		constraint := serviceConstraints[res.Name]
-		if newQuota := constraint.ApplyTo(res.Quota); newQuota != res.Quota {
-			logg.Other("AUDIT", "changing %s/%s quota for domain %s from %s to %s to satisfy constraint %q",
-				srv.Type, res.Name, domain.Name,
-				limes.ValueWithUnit{Value: res.Quota, Unit: resInfo.Unit},
-				limes.ValueWithUnit{Value: newQuota, Unit: resInfo.Unit},
-				constraint.String(),
-			)
-			_, err := tx.Exec(`UPDATE domain_resources SET quota = $1 WHERE service_id = $2 AND name = $3`,
-				newQuota, srv.ID, res.Name)
-			if err != nil {
-				return err
-			}
-			hasChanges = true
-		}
 	}
 
 	// create missing resources
+	hasChanges := false
 	for _, resInfo := range plugin.Resources() {
 		if seen[resInfo.Name] {
 			continue
 		}
 
-		constraint := serviceConstraints[resInfo.Name]
-		initialQuota := constraint.ApplyTo(0)
-		if initialQuota != 0 {
-			logg.Other("AUDIT", "initializing %s/%s quota for domain %s to %s to satisfy constraint %q",
-				srv.Type, resInfo.Name, domain.Name,
-				limes.ValueWithUnit{Value: initialQuota, Unit: resInfo.Unit},
-				constraint.String(),
-			)
-		}
-
 		err := tx.Insert(&db.DomainResource{
 			ServiceID: srv.ID,
 			Name:      resInfo.Name,
-			Quota:     initialQuota,
+			Quota:     0,
 		})
 		if err != nil {
 			return err

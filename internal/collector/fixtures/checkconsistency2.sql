@@ -1,8 +1,8 @@
 INSERT INTO cluster_services (id, type) VALUES (2, 'unshared');
 INSERT INTO cluster_services (id, type) VALUES (4, 'shared');
 
-INSERT INTO domain_resources (id, service_id, name, quota) VALUES (1, 1, 'capacity', 100);
-INSERT INTO domain_resources (id, service_id, name, quota) VALUES (13, 6, 'capacity', 10);
+INSERT INTO domain_resources (id, service_id, name, quota) VALUES (1, 1, 'capacity', 0);
+INSERT INTO domain_resources (id, service_id, name, quota) VALUES (13, 6, 'capacity', 0);
 INSERT INTO domain_resources (id, service_id, name, quota) VALUES (14, 6, 'capacity_portion', 0);
 INSERT INTO domain_resources (id, service_id, name, quota) VALUES (15, 6, 'things', 0);
 INSERT INTO domain_resources (id, service_id, name, quota) VALUES (16, 7, 'capacity', 0);

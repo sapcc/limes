@@ -131,50 +131,11 @@ const (
 
 func setupTest(t *testing.T, startData string) test.Setup {
 	t.Helper()
-	s := test.NewSetup(t,
+	return test.NewSetup(t,
 		test.WithDBFixtureFile(startData),
 		test.WithConfig(testConfigYAML),
 		test.WithAPIHandler(NewV1API),
 	)
-
-	// prepare test configuration
-	westConstraintSet := core.QuotaConstraintSet{
-		Domains: map[string]core.QuotaConstraints{
-			"france": {
-				"shared": {
-					"capacity": {Minimum: p2u64(10), Maximum: p2u64(123), Unit: limes.UnitBytes},
-					"things":   {Minimum: p2u64(20)},
-				},
-				"unshared": {
-					"capacity": {Maximum: p2u64(20), Unit: limes.UnitBytes},
-					"things":   {Minimum: p2u64(20), Maximum: p2u64(20)},
-				},
-			},
-		},
-		Projects: map[string]map[string]core.QuotaConstraints{
-			"germany": {
-				"berlin": {
-					// This constraint is used for the happy-path tests, where PUT
-					// succeeds because the requested value fits within the constraint.
-					"shared": {"capacity": {Minimum: p2u64(1), Maximum: p2u64(12), Unit: limes.UnitBytes}},
-				},
-				"dresden": {
-					// These constraints are used for the failure tests, where PUT fails
-					// because the requested values conflict with the constraint.
-					"shared": {
-						"capacity": {Minimum: p2u64(10), Unit: limes.UnitBytes},
-					},
-					"unshared": {
-						"capacity": {Minimum: p2u64(10), Maximum: p2u64(10), Unit: limes.UnitBytes},
-						"things":   {Maximum: p2u64(10)},
-					},
-				},
-			},
-		},
-	}
-	s.Cluster.QuotaConstraints = &westConstraintSet
-
-	return s
 }
 
 func Test_ScrapeErrorOperations(t *testing.T) {

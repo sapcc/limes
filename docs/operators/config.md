@@ -11,7 +11,6 @@ on the top left corner of this document to get to a specific section of this gui
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `LIMES_CONSTRAINTS_PATH` | no | Path to a YAML file containing the quota constraints for this cluster. See [*quota constraints*](constraints.md) for details. |
 | `LIMES_DB_NAME` | `limes` | The name of the database. |
 | `LIMES_DB_USERNAME` | `postgres` | Username of the user that Limes should use to connect to the database. |
 | `LIMES_DB_PASSWORD` | *(optional)* | Password for the specified user. |

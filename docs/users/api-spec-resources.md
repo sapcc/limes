@@ -662,7 +662,7 @@ situations are considered:
    configured by a cloud administrator.
 2. `project_quota_overspent` &ndash; The quota of some resource in some project is lower than the usage of that resource
    in that project. This may happen when someone else changes the quota in the backend service directly and increases
-   usage before Limes intervenes, or when a cloud administrator changes quota constraints.
+   usage before Limes intervenes.
 3. `project_quota_mismatch` &ndash; The quota of some resource in some project differs from the backend quota for that
    resource and project. This may happen when Limes is unable to write a changed quota value into the backend, for
    example because of a service downtime.

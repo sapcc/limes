@@ -423,7 +423,7 @@ func (c *Collector) writeDummyResources(dbDomain db.Domain, dbProject db.Project
 	defer sqlext.RollbackUnlessCommitted(tx)
 
 	// create all project_resources, but do not set any particular values (except
-	// that quota constraints and default quotas are enforced)
+	// that quota overrides are persisted)
 	overrideQuotas := c.Cluster.QuotaOverrides[dbDomain.Name][dbProject.Name][srv.Type]
 	updateResult, err := datamodel.ProjectResourceUpdate{
 		UpdateResource: func(res *db.ProjectResource) error {

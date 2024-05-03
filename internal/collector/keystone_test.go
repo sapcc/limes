@@ -66,26 +66,10 @@ func Test_ScanDomains(t *testing.T) {
 		expectedNewDomains = append(expectedNewDomains, domain.UUID)
 	}
 
-	// add a quota constraint set; we're going to test if it's applied correctly
-	pointerTo := func(x uint64) *uint64 { return &x }
-	cluster.QuotaConstraints = &core.QuotaConstraintSet{
-		Domains: map[string]core.QuotaConstraints{
-			"germany": {
-				"unshared": {
-					"things":   {Minimum: pointerTo(10)},
-					"capacity": {Minimum: pointerTo(20)},
-				},
-			},
-		},
-		Projects: nil, // not relevant since ScanDomains will never create project_resources
-	}
-
 	// first ScanDomains should discover the StaticDomains in the cluster,
 	// and initialize domains, projects and project_services (project_resources
 	// are then constructed by the scraper, and domain_services/domain_resources
 	// are created when a cloud admin approves quota for the domain)
-	//
-	// This also tests that the quota constraint is applied correctly.
 	actualNewDomains, err := c.ScanDomains(ScanDomainsOpts{})
 	if err != nil {
 		t.Errorf("ScanDomains #1 failed: %v", err)
