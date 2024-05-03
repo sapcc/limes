@@ -371,13 +371,10 @@ func (d domains) Find(cluster *core.Cluster, domainUUID, domainName string, serv
 		if !cluster.HasResource(*serviceType, *resourceName) {
 			return domain, service, resource
 		}
-		localBehavior := cluster.BehaviorForResource(*serviceType, *resourceName, domainName)
-		globalBehavior := cluster.BehaviorForResource(*serviceType, *resourceName, "")
+		behavior := cluster.BehaviorForResource(*serviceType, *resourceName)
 		resource = &limesresources.DomainResourceReport{
 			ResourceInfo:     cluster.InfoForResource(*serviceType, *resourceName),
-			Scaling:          globalBehavior.ToScalingBehavior(),
-			Annotations:      localBehavior.Annotations,
-			CommitmentConfig: globalBehavior.ToCommitmentConfig(now),
+			CommitmentConfig: behavior.ToCommitmentConfig(now),
 		}
 		if !resource.NoQuota {
 			qdConfig := cluster.QuotaDistributionConfigForResource(*serviceType, *resourceName)

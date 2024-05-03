@@ -60,7 +60,7 @@ var (
 
 // GetOvercommitFactor implements the CapacityPluginBackchannel interface.
 func (i capacityPluginBackchannelImpl) GetOvercommitFactor(serviceType limes.ServiceType, resourceName limesresources.ResourceName) (core.OvercommitFactor, error) {
-	return i.Cluster.BehaviorForResource(serviceType, resourceName, "").OvercommitFactor, nil
+	return i.Cluster.BehaviorForResource(serviceType, resourceName).OvercommitFactor, nil
 }
 
 // GetGlobalResourceDemand implements the CapacityPluginBackchannel interface.

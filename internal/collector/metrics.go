@@ -622,7 +622,7 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			}
 		}
 
-		overcommitFactor := c.Cluster.BehaviorForResource(serviceType, resourceName, "").OvercommitFactor
+		overcommitFactor := c.Cluster.BehaviorForResource(serviceType, resourceName).OvercommitFactor
 		if reportAZBreakdown {
 			for az, azCapacity := range capacityPerAZ {
 				ch <- prometheus.MustNewConstMetric(

@@ -69,12 +69,7 @@
             "quota_distribution_model": "hierarchical",
             "quota": 10,
             "usable_quota": 10,
-            "usage": 2,
-            "scales_with": {
-              "resource_name": "things",
-              "service_type": "shared",
-              "factor": 2
-            }
+            "usage": 2
           }
         ],
         "scraped_at": 11

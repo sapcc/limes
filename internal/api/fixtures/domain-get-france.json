@@ -73,12 +73,7 @@
             "projects_quota": 10,
             "usage": 2,
             "backend_quota": 0,
-            "infinite_backend_quota": true,
-            "scales_with": {
-              "resource_name": "things",
-              "service_type": "shared",
-              "factor": 2
-            }
+            "infinite_backend_quota": true
           }
         ],
         "max_scraped_at": 55,

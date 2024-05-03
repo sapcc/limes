@@ -121,28 +121,17 @@ Some special behaviors for resources can be configured in the `resource_behavior
 | Field | Required | Description |
 | --- | --- | --- |
 | `resource_behavior[].resource` | yes | Must contain a regex. The behavior entry applies to all resources where this regex matches against a slash-concatenated pair of service type and resource name. The anchors `^` and `$` are implied at both ends, so the regex must match the entire phrase. |
-| `resource_behavior[].scope` | yes | May contain a regex. The behavior entry applies to matching resources in all domains where this regex matches against the domain name, and in all projects where this regex matches against a slash-concatenated pair of domain and project name, i.e. `domainname/projectname`. The anchors `^` and `$` are implied at both ends, so the regex must match the entire phrase. This regex is ignored for cluster-level resources. |
 | `resource_behavior[].overcommit_factor` | no | If given, capacity for matching resources will be computed as `raw_capacity * overcommit_factor`, where `raw_capacity` is what the capacity plugin reports. |
-| `resource_behavior[].scales_with` | no | If a resource is given, matching resources scales with this resource. The other resource may be specified by its name (for resources within the same service type), or by a slash-concatenated pair of service type and resource name, e.g. `compute/cores`. |
-| `resource_behavior[].scaling_factor` | yes, if `scales_with` is given | The scaling factor that will be reported for these resources' scaling relation. |
-| `resource_behavior[].min_nonzero_project_quota` | no | A lower boundary for project quota values that are not zero. |
 | `resource_behavior[].commitment_durations` | no | If given, commitments for this resource can be created with any of the given durations. The duration format is the same as in the `commitments[].duration` attribute that appears on the resource API. If empty, this resource does not accept commitments. |
 | `resource_behavior[].commitment_is_az_aware` | no | If true, commitments for this resource must be created in a specific AZ (i.e. not in a pseudo-AZ). If false, commitments for this resource must be created in the pseudo-AZ `any`. Ignored if `commitment_durations` is empty. |
 | `resource_behavior[].commitment_min_confirm_date` | no | If given, commitments for this resource will always be created with `confirm_by` no earlier than this timestamp. This can be used to plan the introduction of commitments on a specific date. Ignored if `commitment_durations` is empty. |
-| `resource_behavior[].annotations` | no | A map of extra key-value pairs that will be inserted into matching resources as-is in responses to GET requests, e.g. at `project.services[].resources[].annotations`. |
 
 For example:
 
 ```yaml
 resource_behavior:
-  - { resource: network/healthmonitors, scales_with: network/loadbalancers, scaling_factor: 1 }
-  - { resource: network/listeners,      scales_with: network/loadbalancers, scaling_factor: 2 }
-  - { resource: network/l7policies,     scales_with: network/loadbalancers, scaling_factor: 1 }
-  - { resource: network/pools,          scales_with: network/loadbalancers, scaling_factor: 1 }
   # matches both sharev2/share_capacity and sharev2/snapshot_capacity
   - { resource: sharev2/.*_capacity, overcommit_factor: 2 }
-  # require each project to take at least 100 GB of object storage if they use it at all
-  - { resource: object-store/capacity, min_nonzero_project_quota: 107374182400 }
   # starting in 2024, offer commitments for Cinder storage
   - { resource: volumev2/capacity, commitment_durations: [ 1 year, 2 years, 3 years ], commitment_is_az_aware: true, commitment_min_confirm_date: 2024-01-01T00:00:00Z }
 ```
@@ -151,10 +140,8 @@ resource_behavior:
 
 Each resource uses one of several quota distribution models, with `autogrow` being the default.
 
-Resource-specific distribution models can be configured per resource in the `quota_distribution_configs[]` section. Each
-entry in this section can match multiple resources. Because the semantics of distribution models cross the boundaries of
-individual scopes, a distribution model config cannot be limited to certain scopes (like a resource behavior can). It
-always applies to the entire resource across all scopes.
+Resource-specific distribution models can be configured per resource in the `quota_distribution_configs[]` section.
+Each entry in this section can match multiple resources.
 
 | Field | Required | Description |
 | --- | --- | --- |

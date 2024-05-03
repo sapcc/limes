@@ -97,23 +97,6 @@ const (
 							window: 1s
 
 		resource_behavior:
-			# check minimum non-zero project quota constraint
-			- { resource: unshared/things, min_nonzero_project_quota: 10 }
-
-			# check how scaling relations are reported
-			- { resource: unshared/things, scales_with: shared/things, scaling_factor: 2 }
-
-			# check how annotations are reported
-			- resource: 'shared/.*things'
-				scope:    'germany(?:/dresden)?'
-				annotations:
-					annotated: true
-					text:      'this annotation appears on shared things of domain germany and project dresden'
-			- resource: shared/things
-				scope:    germany/dresden
-				annotations:
-					text: 'this annotation appears on shared/things of project dresden only'
-
 			# check how commitment config is reported
 			- resource: 'shared/(capacity|things)$'
 				commitment_durations: ["1 hour", "2 hours"]

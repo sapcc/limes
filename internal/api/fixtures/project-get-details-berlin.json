@@ -89,12 +89,7 @@
                 "id": "secondthing",
                 "value": 42
               }
-            ],
-            "scales_with": {
-              "resource_name": "things",
-              "service_type": "shared",
-              "factor": 2
-            }
+            ]
           }
         ],
         "scraped_at": 11

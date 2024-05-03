@@ -214,7 +214,7 @@ func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r 
 		http.Error(w, "no such resource", http.StatusUnprocessableEntity)
 		return nil, nil
 	}
-	behavior := p.Cluster.BehaviorForResource(req.ServiceType, req.ResourceName, "")
+	behavior := p.Cluster.BehaviorForResource(req.ServiceType, req.ResourceName)
 	if len(behavior.CommitmentDurations) == 0 {
 		http.Error(w, "commitments are not enabled for this resource", http.StatusUnprocessableEntity)
 		return nil, nil

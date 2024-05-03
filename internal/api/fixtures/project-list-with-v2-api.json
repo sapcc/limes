@@ -118,12 +118,7 @@
               },
               "quota": 10,
               "usable_quota": 10,
-              "usage": 2,
-              "scales_with": {
-                "resource_name": "things",
-                "service_type": "shared",
-                "factor": 2
-              }
+              "usage": 2
             }
           ],
           "scraped_at": 11
@@ -204,11 +199,7 @@
               },
               "quota": 10,
               "usable_quota": 10,
-              "usage": 2,
-              "annotations": {
-                "annotated": true,
-                "text": "this annotation appears on shared/things of project dresden only"
-              }
+              "usage": 2
             }
           ],
           "scraped_at": 44
@@ -277,12 +268,7 @@
               },
               "quota": 10,
               "usable_quota": 10,
-              "usage": 2,
-              "scales_with": {
-                "resource_name": "things",
-                "service_type": "shared",
-                "factor": 2
-              }
+              "usage": 2
             }
           ],
           "scraped_at": 33

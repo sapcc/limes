@@ -49,11 +49,7 @@
               },
               "quota": 10,
               "usable_quota": 10,
-              "usage": 2,
-              "annotations": {
-                "annotated": true,
-                "text": "this annotation appears on shared/things of project dresden only"
-              }
+              "usage": 2
             }
           ],
           "scraped_at": 44
