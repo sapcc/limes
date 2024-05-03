@@ -44,7 +44,6 @@ var domainReportQuery1 = sqlext.SimplifyWhitespace(`
 	   GROUP BY resource_id
 	)
 	SELECT d.uuid, d.name, ps.type, pr.name, SUM(pr.quota), SUM(pas.usage),
-	       SUM(GREATEST(pas.usage - pr.quota, 0)),
 	       SUM(GREATEST(pr.backend_quota, 0)), MIN(pr.backend_quota) < 0,
 	       SUM(pas.physical_usage), BOOL_OR(pas.has_physical_usage),
 	       MIN(ps.scraped_at), MAX(ps.scraped_at)
@@ -107,8 +106,6 @@ var domainReportQuery4 = sqlext.SimplifyWhitespace(`
 // GetDomains returns reports for all domains in the given cluster or, if
 // domainID is non-nil, for that domain only.
 func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi db.Interface, filter Filter) ([]*limesresources.DomainReport, error) {
-	clusterCanBurst := cluster.Config.Bursting.MaxMultiplier > 0
-
 	var fields map[string]any
 	if domainID != nil {
 		fields = map[string]any{"d.id": *domainID}
@@ -126,7 +123,6 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 			resourceName         *limesresources.ResourceName
 			projectsQuota        *uint64
 			usage                *uint64
-			burstUsage           *uint64
 			backendQuota         *uint64
 			infiniteBackendQuota *bool
 			physicalUsage        *uint64
@@ -136,7 +132,7 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 		)
 		err := rows.Scan(
 			&domainUUID, &domainName, &serviceType, &resourceName,
-			&projectsQuota, &usage, &burstUsage,
+			&projectsQuota, &usage,
 			&backendQuota, &infiniteBackendQuota,
 			&physicalUsage, &showPhysicalUsage,
 			&minScrapedAt, &maxScrapedAt,
@@ -155,9 +151,6 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 		if resource != nil {
 			if usage != nil {
 				resource.Usage = *usage
-			}
-			if clusterCanBurst && burstUsage != nil {
-				resource.BurstUsage = *burstUsage
 			}
 			if !resource.NoQuota {
 				if projectsQuota != nil {

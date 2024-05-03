@@ -35,7 +35,6 @@ import (
 type ResourceBehavior struct {
 	FullResourceNameRx       regexpext.BoundedRegexp             `yaml:"resource"`
 	ScopeRx                  regexpext.BoundedRegexp             `yaml:"scope"`
-	MaxBurstMultiplier       *limesresources.BurstingMultiplier  `yaml:"max_burst_multiplier"`
 	OvercommitFactor         OvercommitFactor                    `yaml:"overcommit_factor"`
 	ScalesWith               ResourceRef                         `yaml:"scales_with"`
 	ScalingFactor            float64                             `yaml:"scaling_factor"`
@@ -53,10 +52,6 @@ type ResourceBehavior struct {
 func (b *ResourceBehavior) Validate(path string) (errs errext.ErrorSet) {
 	if b.FullResourceNameRx == "" {
 		errs.Addf("missing configuration value: %s.resource", path)
-	}
-
-	if b.MaxBurstMultiplier != nil && *b.MaxBurstMultiplier < 0 {
-		errs.Addf("%s.max_burst_multiplier may not be negative", path)
 	}
 
 	if (b.ScalesWith.ResourceName == "") != (b.ScalingFactor == 0) {
@@ -111,9 +106,6 @@ func (b ResourceBehavior) ToCommitmentConfig(now time.Time) *limesresources.Comm
 
 // Merge computes the union of both given resource behaviors.
 func (b *ResourceBehavior) Merge(other ResourceBehavior) {
-	if b.MaxBurstMultiplier == nil || (other.MaxBurstMultiplier != nil && *b.MaxBurstMultiplier > *other.MaxBurstMultiplier) {
-		b.MaxBurstMultiplier = other.MaxBurstMultiplier
-	}
 	if other.OvercommitFactor != 0 {
 		b.OvercommitFactor = other.OvercommitFactor
 	}

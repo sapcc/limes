@@ -127,7 +127,6 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, doma
 		}
 
 		// update in place while enforcing validation rules
-		qdConfig := cluster.QuotaDistributionConfigForResource(srv.Type, res.Name)
 		validateResourceConstraints(&res, resInfo)
 		if u.UpdateResource != nil {
 			err := u.UpdateResource(&res)
@@ -139,13 +138,7 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, doma
 
 		// (re-)compute derived values
 		if !resInfo.NoQuota {
-			if project.HasBursting {
-				behavior := cluster.BehaviorForResource(srv.Type, res.Name, domain.Name+"/"+project.Name)
-				desiredBackendQuota := behavior.MaxBurstMultiplier.ApplyTo(*res.Quota, qdConfig.Model)
-				res.DesiredBackendQuota = &desiredBackendQuota
-			} else {
-				res.DesiredBackendQuota = res.Quota
-			}
+			res.DesiredBackendQuota = res.Quota
 		}
 
 		// insert or update resource if changes have been made

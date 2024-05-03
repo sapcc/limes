@@ -270,10 +270,7 @@ func (c *Cluster) GetServiceTypesForArea(area string) (serviceTypes []limes.Serv
 // resources.
 func (c *Cluster) BehaviorForResource(serviceType limes.ServiceType, resourceName limesresources.ResourceName, scopeName string) ResourceBehavior {
 	// default behavior
-	maxBurstMultiplier := c.Config.Bursting.MaxMultiplier
-	result := ResourceBehavior{
-		MaxBurstMultiplier: &maxBurstMultiplier,
-	}
+	var result ResourceBehavior
 
 	// check for specific behavior
 	fullName := string(serviceType) + "/" + string(resourceName)

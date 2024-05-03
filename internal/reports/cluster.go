@@ -53,21 +53,6 @@ var clusterReportQuery1 = sqlext.SimplifyWhitespace(`
 	 GROUP BY ps.type, pr.name, par.az
 `)
 
-// This was split from clusterReportQuery1 because the quota collection and burst usage calculation requires a different `GROUP BY`.
-var clusterReportQuery1B = sqlext.SimplifyWhitespace(`
-	WITH project_az_sums AS (
-	  SELECT resource_id, SUM(usage) AS usage
-	    FROM project_az_resources
-	   GROUP BY resource_id
-	)
-	SELECT ps.type, pr.name, SUM(GREATEST(pas.usage - pr.quota, 0))
-	  FROM project_services ps
-	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
-	  LEFT OUTER JOIN project_az_sums pas ON pas.resource_id = pr.id
-	 WHERE TRUE {{AND ps.type = $service_type}}
-	 GROUP BY ps.type, pr.name
-`)
-
 var clusterReportQuery2 = sqlext.SimplifyWhitespace(`
 	SELECT ds.type, dr.name, SUM(dr.quota)
 	  FROM domain_services ds
@@ -179,34 +164,6 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 	})
 	if err != nil {
 		return nil, err
-	}
-
-	// first query, addendum: collect burst usage data
-	clusterCanBurst := cluster.Config.Bursting.MaxMultiplier > 0
-	if clusterCanBurst {
-		queryStr, joinArgs = filter.PrepareQuery(clusterReportQuery1B)
-		err := sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
-			var (
-				serviceType  limes.ServiceType
-				resourceName *limesresources.ResourceName
-				burstUsage   *uint64
-			)
-			err := rows.Scan(&serviceType, &resourceName, &burstUsage)
-			if err != nil {
-				return err
-			}
-
-			if burstUsage != nil {
-				_, resource := findInClusterReport(cluster, report, serviceType, resourceName, now)
-				if resource != nil {
-					resource.BurstUsage = *burstUsage
-				}
-			}
-			return nil
-		})
-		if err != nil {
-			return nil, err
-		}
 	}
 
 	// second query: collect domain quota data in these clusters

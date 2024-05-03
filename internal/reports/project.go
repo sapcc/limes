@@ -54,7 +54,7 @@ var (
 `)
 
 	projectReportQuery = sqlext.SimplifyWhitespace(`
-	SELECT p.id, p.uuid, p.name, COALESCE(p.parent_uuid, ''), p.has_bursting, ps.type, ps.scraped_at, pr.name, pr.quota, pr.max_quota_from_admin, par.az, par.quota, par.usage, par.physical_usage, pr.backend_quota, par.subresources
+	SELECT p.id, p.uuid, p.name, COALESCE(p.parent_uuid, ''), ps.type, ps.scraped_at, pr.name, pr.quota, pr.max_quota_from_admin, par.az, par.quota, par.usage, par.physical_usage, pr.backend_quota, par.subresources
 	  FROM projects p
 	  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
 	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
@@ -86,8 +86,6 @@ var (
 // return them all in a big list. Instead, the `submit` callback gets called
 // once for each project report once that report is complete.
 func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Project, now time.Time, dbi db.Interface, filter Filter, submit func(*limesresources.ProjectReport) error) error {
-	clusterCanBurst := cluster.Config.Bursting.MaxMultiplier > 0
-
 	fields := map[string]any{"p.domain_id": domain.ID}
 	if project != nil {
 		fields["p.id"] = project.ID
@@ -107,25 +105,24 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 	)
 	err := sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		var (
-			projectID          db.ProjectID
-			projectUUID        string
-			projectName        string
-			projectParentUUID  string
-			projectHasBursting bool
-			serviceType        *limes.ServiceType
-			scrapedAt          *time.Time
-			resourceName       *limesresources.ResourceName
-			quota              *uint64
-			maxQuotaFromAdmin  *uint64
-			az                 *limes.AvailabilityZone
-			azQuota            *uint64
-			azUsage            *uint64
-			azPhysicalUsage    *uint64
-			backendQuota       *int64
-			azSubresources     *string
+			projectID         db.ProjectID
+			projectUUID       string
+			projectName       string
+			projectParentUUID string
+			serviceType       *limes.ServiceType
+			scrapedAt         *time.Time
+			resourceName      *limesresources.ResourceName
+			quota             *uint64
+			maxQuotaFromAdmin *uint64
+			az                *limes.AvailabilityZone
+			azQuota           *uint64
+			azUsage           *uint64
+			azPhysicalUsage   *uint64
+			backendQuota      *int64
+			azSubresources    *string
 		)
 		err := rows.Scan(
-			&projectID, &projectUUID, &projectName, &projectParentUUID, &projectHasBursting,
+			&projectID, &projectUUID, &projectName, &projectParentUUID,
 			&serviceType, &scrapedAt, &resourceName,
 			&quota, &maxQuotaFromAdmin,
 			&az, &azQuota, &azUsage, &azPhysicalUsage, &backendQuota, &azSubresources,
@@ -159,13 +156,6 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 					ParentUUID: projectParentUUID,
 				},
 				Services: make(limesresources.ProjectServiceReports),
-			}
-
-			if clusterCanBurst {
-				projectReport.Bursting = &limesresources.ProjectBurstingInfo{
-					Enabled:    projectHasBursting,
-					Multiplier: cluster.Config.Bursting.MaxMultiplier,
-				}
 			}
 		}
 
@@ -218,12 +208,8 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 				if quota != nil {
 					resReport.Quota = quota
 					resReport.UsableQuota = quota
-					if projectHasBursting && clusterCanBurst {
-						usableQuota := localBehavior.MaxBurstMultiplier.ApplyTo(*quota, qdConfig.Model)
-						resReport.UsableQuota = &usableQuota
-					}
 					resReport.MaxQuota = maxQuotaFromAdmin
-					if backendQuota != nil && (*backendQuota < 0 || uint64(*backendQuota) != *resReport.UsableQuota) {
+					if backendQuota != nil && (*backendQuota < 0 || uint64(*backendQuota) != *quota) {
 						resReport.BackendQuota = backendQuota
 					}
 				}
@@ -273,16 +259,6 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 }
 
 func finalizeProjectResourceReport(projectReport *limesresources.ProjectReport, projectID db.ProjectID, dbi db.Interface, filter Filter) error {
-	if projectReport.Bursting != nil && projectReport.Bursting.Enabled {
-		for _, srvReport := range projectReport.Services {
-			for _, resReport := range srvReport.Resources {
-				if resReport.Quota != nil && resReport.Usage > *resReport.Quota {
-					resReport.BurstUsage = resReport.Usage - *resReport.Quota
-				}
-			}
-		}
-	}
-
 	if filter.WithAZBreakdown {
 		// if `per_az` is shown, we need to compute the sum of all active commitments using a different query
 		err := sqlext.ForeachRow(dbi, projectReportCommitmentsQuery, []any{projectID}, func(rows *sql.Rows) error {

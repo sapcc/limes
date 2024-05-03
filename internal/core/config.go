@@ -43,7 +43,6 @@ type ClusterConfiguration struct {
 	Capacitors        []CapacitorConfiguration `yaml:"capacitors"`
 	// ^ Sorry for the stupid pun. Not.
 	ResourceBehaviors        []ResourceBehavior                `yaml:"resource_behavior"`
-	Bursting                 BurstingConfiguration             `yaml:"bursting"`
 	QuotaDistributionConfigs []*QuotaDistributionConfiguration `yaml:"quota_distribution_configs"`
 }
 
@@ -125,12 +124,6 @@ type CapacitorConfiguration struct {
 	ID         string              `yaml:"id"`
 	PluginType string              `yaml:"type"`
 	Parameters util.YamlRawMessage `yaml:"params"`
-}
-
-// BurstingConfiguration contains the configuration options for quota bursting.
-type BurstingConfiguration struct {
-	// If MaxMultiplier is zero, bursting is disabled.
-	MaxMultiplier limesresources.BurstingMultiplier `yaml:"max_multiplier"`
 }
 
 // QuotaDistributionConfiguration contains configuration options for specifying
@@ -242,10 +235,6 @@ func (cluster ClusterConfiguration) validateConfig() (errs errext.ErrorSet) {
 		if qdCfg.Model != limesresources.AutogrowQuotaDistribution && qdCfg.Autogrow != nil {
 			errs.Addf("invalid value for distribution_model_configs[%d].autogrow: cannot be set for model %q", idx, qdCfg.Model)
 		}
-	}
-
-	if cluster.Bursting.MaxMultiplier < 0 {
-		errs.Addf("bursting.max_multiplier may not be negative")
 	}
 
 	return errs

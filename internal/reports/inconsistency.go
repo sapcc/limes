@@ -50,12 +50,8 @@ type OvercommittedDomainQuota struct {
 }
 
 // OverspentProjectQuota is a substructure of Inconsistency containing data for
-// the inconsistency type where for some project the 'usage > desired_backend_quota' for a
+// the inconsistency type where for some project the 'usage > quota' for a
 // single resource.
-//
-// For projects with quota bursting disabled the 'desired_backend_quota == quota',
-// and for projects with quota bursting enabled the
-// 'desired_backend_quota == floor(quota * (1 + bursting.multiplier))'.
 type OverspentProjectQuota struct {
 	Project  core.KeystoneProject        `json:"project"`
 	Service  limes.ServiceType           `json:"service"`
@@ -66,12 +62,8 @@ type OverspentProjectQuota struct {
 }
 
 // MismatchProjectQuota is a substructure of Inconsistency containing data for
-// the inconsistency type where for some project the 'backend_quota != desired_backend_quota'
+// the inconsistency type where for some project the 'backend_quota != quota'
 // for a single resource.
-//
-// For projects with quota bursting disabled the 'desired_backend_quota == quota',
-// and for projects with quota bursting enabled the
-// 'desired_backend_quota == floor(quota * (1 + bursting.multiplier))'.
 type MismatchProjectQuota struct {
 	Project      core.KeystoneProject        `json:"project"`
 	Service      limes.ServiceType           `json:"service"`

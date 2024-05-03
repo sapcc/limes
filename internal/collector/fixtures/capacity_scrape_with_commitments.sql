@@ -40,8 +40,8 @@ INSERT INTO domain_resources (id, service_id, name, quota) VALUES (5, 2, 'capaci
 INSERT INTO domain_resources (id, service_id, name, quota) VALUES (6, 2, 'things', 0);
 
 -- two projects
-INSERT INTO projects (id, domain_id, name, uuid, parent_uuid, has_bursting) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany', FALSE);
-INSERT INTO projects (id, domain_id, name, uuid, parent_uuid, has_bursting) VALUES (2, 1, 'dresden', 'uuid-for-dresden', 'uuid-for-berlin', FALSE);
+INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany');
+INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (2, 1, 'dresden', 'uuid-for-dresden', 'uuid-for-berlin');
 
 -- project_services is fully populated (as ensured by the collector's consistency check)
 INSERT INTO project_services (id, project_id, type) VALUES (1, 1, 'first');
