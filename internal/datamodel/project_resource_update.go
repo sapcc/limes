@@ -43,7 +43,7 @@ type ProjectResourceUpdate struct {
 // ProjectResourceUpdateResult is the return value for ProjectUpdate.Run().
 type ProjectResourceUpdateResult struct {
 	// If true, some resources have a BackendQuota that differs from the
-	// DesiredBackendQuota. The caller should call ApplyBackendQuota() for these
+	// Quota. The caller should call ApplyBackendQuota() for these
 	// services once the DB transaction has been committed.
 	HasBackendQuotaDrift bool
 	// The set of resources that exists in the DB after the update.
@@ -135,11 +135,6 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, doma
 			validateResourceConstraints(&res, resInfo)
 		}
 
-		// (re-)compute derived values
-		if !resInfo.NoQuota {
-			res.DesiredBackendQuota = res.Quota
-		}
-
 		// insert or update resource if changes have been made
 		if state.Original == nil {
 			err := dbi.Insert(&res)
@@ -157,8 +152,8 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, doma
 		// check if we need to tell the caller to call ApplyBackendQuota after the tx
 		if !resInfo.NoQuota {
 			backendQuota := unwrapOrDefault(res.BackendQuota, -1)
-			desiredBackendQuota := *res.DesiredBackendQuota // definitely not nil, it was set above
-			if backendQuota < 0 || uint64(backendQuota) != desiredBackendQuota {
+			quota := *res.Quota // definitely not nil, it was set above in validateResourceConstraints()
+			if backendQuota < 0 || uint64(backendQuota) != quota {
 				result.HasBackendQuotaDrift = true
 			}
 		}
@@ -180,7 +175,6 @@ func validateResourceConstraints(res *db.ProjectResource, resInfo limesresources
 		// ensure that NoQuota resources do not contain any quota values
 		res.Quota = nil
 		res.BackendQuota = nil
-		res.DesiredBackendQuota = nil
 	} else if res.Quota == nil || *res.Quota == 0 {
 		// apply missing default quota
 		initialQuota := uint64(0)

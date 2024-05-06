@@ -62,24 +62,24 @@ type MismatchProjectQuota struct {
 }
 
 var ospqReportQuery = sqlext.SimplifyWhitespace(`
-	SELECT d.uuid, d.name, p.uuid, p.name, ps.type, pr.name, pr.desired_backend_quota, SUM(par.usage)
+	SELECT d.uuid, d.name, p.uuid, p.name, ps.type, pr.name, pr.quota, SUM(par.usage)
 	  FROM projects p
 	  JOIN domains d ON d.id = p.domain_id
 	  JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
 	  JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
 	  JOIN project_az_resources par ON pr.id = par.resource_id
-	 GROUP BY d.uuid, d.name, p.uuid, p.name, ps.type, pr.name, pr.desired_backend_quota
-	HAVING SUM(par.usage) > pr.desired_backend_quota
+	 GROUP BY d.uuid, d.name, p.uuid, p.name, ps.type, pr.name, pr.quota
+	HAVING SUM(par.usage) > pr.quota
 	 ORDER BY d.name, p.name, ps.type, pr.name
 `)
 
 var mmpqReportQuery = sqlext.SimplifyWhitespace(`
-	SELECT d.uuid, d.name, p.uuid, p.name, ps.type, pr.name, pr.desired_backend_quota, pr.backend_quota
+	SELECT d.uuid, d.name, p.uuid, p.name, ps.type, pr.name, pr.quota, pr.backend_quota
 	  FROM projects p
 	  JOIN domains d ON d.id = p.domain_id
 	  JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
 	  JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
-	WHERE pr.backend_quota != pr.desired_backend_quota
+	WHERE pr.backend_quota != pr.quota
 	ORDER BY d.name, p.name, ps.type, pr.name
 `)
 

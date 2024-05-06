@@ -55,7 +55,7 @@ var (
 		UPDATE project_az_resources SET quota = $1 WHERE quota IS DISTINCT FROM $1 AND az = $2 AND resource_id = $3
 	`)
 	acpqUpdateProjectQuotaQuery = sqlext.SimplifyWhitespace(`
-		UPDATE project_resources SET quota = $1, desired_backend_quota = $1 WHERE (quota IS DISTINCT FROM $1 OR desired_backend_quota IS DISTINCT FROM $1) AND id = $2
+		UPDATE project_resources SET quota = $1 WHERE quota IS DISTINCT FROM $1 AND id = $2
 	`)
 )
 
@@ -187,7 +187,7 @@ func ApplyComputedProjectQuota(serviceType limes.ServiceType, resourceName limes
 	return tx.Commit()
 
 	//NOTE: Quotas are not applied to the backend here because OpenStack is way too inefficient in practice.
-	// We wait for the next scrape cycle to come around and notice that `backend_quota != desired_backend_quota`.
+	// We wait for the next scrape cycle to come around and notice that `backend_quota != quota`.
 }
 
 // Calculation space for a single project AZ resource.

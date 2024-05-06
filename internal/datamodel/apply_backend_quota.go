@@ -32,13 +32,13 @@ import (
 
 var (
 	backendQuotaSelectQuery = sqlext.SimplifyWhitespace(`
-		SELECT name, backend_quota, desired_backend_quota
+		SELECT name, backend_quota, quota
 		  FROM project_resources
-		 WHERE service_id = $1 AND desired_backend_quota IS NOT NULL
+		 WHERE service_id = $1 AND quota IS NOT NULL
 	`)
 	backendQuotaMarkAsAppliedQuery = sqlext.SimplifyWhitespace(`
 		UPDATE project_resources
-		   SET backend_quota = desired_backend_quota
+		   SET backend_quota = quota
 		 WHERE service_id = $1
 	`)
 )
