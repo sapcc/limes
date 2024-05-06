@@ -71,7 +71,9 @@ var domainReportQuery3 = sqlext.SimplifyWhitespace(`
 	   GROUP BY az_resource_id
 	)
 	SELECT d.uuid, d.name, ps.type, pr.name, par.az,
-	       SUM(par.quota), SUM(par.usage), SUM(GREATEST(0, COALESCE(pcs.amount, 0) - par.usage))
+	       SUM(par.quota), SUM(par.usage),
+	       SUM(GREATEST(0, COALESCE(pcs.amount, 0) - par.usage)),
+	       SUM(GREATEST(0, par.usage - COALESCE(pcs.amount, 0)))
 	  FROM domains d
 	  JOIN projects p ON p.domain_id = d.id
 	  JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
@@ -218,10 +220,11 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 				quota             *uint64
 				usage             uint64
 				unusedCommitments uint64
+				uncommittedUsage  uint64
 			)
 			err := rows.Scan(
 				&domainUUID, &domainName, &serviceType, &resourceName, &az,
-				&quota, &usage, &unusedCommitments,
+				&quota, &usage, &unusedCommitments, &uncommittedUsage,
 			)
 			if err != nil {
 				return err
@@ -238,6 +241,7 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 				Quota:             quota,
 				Usage:             usage,
 				UnusedCommitments: unusedCommitments,
+				UncommittedUsage:  uncommittedUsage,
 			}
 			return nil
 		})

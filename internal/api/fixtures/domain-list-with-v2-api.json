@@ -21,10 +21,12 @@
               },
               "per_az": {
                 "az-one": {
-                  "usage": 1
+                  "usage": 1,
+                  "uncommitted_usage": 1
                 },
                 "az-two": {
-                  "usage": 1
+                  "usage": 1,
+                  "uncommitted_usage": 1
                 }
               },
               "quota": 0,
@@ -38,7 +40,8 @@
               "contained_in": "capacity",
               "per_az": {
                 "az-one": {
-                  "usage": 1
+                  "usage": 1,
+                  "uncommitted_usage": 1
                 },
                 "az-two": {
                   "usage": 0
@@ -58,7 +61,8 @@
               },
               "per_az": {
                 "any": {
-                  "usage": 2
+                  "usage": 2,
+                  "uncommitted_usage": 2
                 }
               },
               "quota": 0,
@@ -79,10 +83,12 @@
               "quota_distribution_model": "hierarchical",
               "per_az": {
                 "az-one": {
-                  "usage": 1
+                  "usage": 1,
+                  "uncommitted_usage": 1
                 },
                 "az-two": {
-                  "usage": 1
+                  "usage": 1,
+                  "uncommitted_usage": 1
                 }
               },
               "quota": 55,
@@ -96,7 +102,8 @@
               "contained_in": "capacity",
               "per_az": {
                 "az-one": {
-                  "usage": 1
+                  "usage": 1,
+                  "uncommitted_usage": 1
                 },
                 "az-two": {
                   "usage": 0
@@ -109,7 +116,8 @@
               "quota_distribution_model": "hierarchical",
               "per_az": {
                 "any": {
-                  "usage": 2
+                  "usage": 2,
+                  "uncommitted_usage": 2
                 }
               },
               "quota": 20,
@@ -153,11 +161,13 @@
                   "usage": 2,
                   "planned_commitments": {
                     "2 years": 100
-                  }
+                  },
+                  "uncommitted_usage": 2
                 },
                 "az-two": {
                   "quota": 8,
-                  "usage": 2
+                  "usage": 2,
+                  "uncommitted_usage": 2
                 }
               },
               "quota": 25,
@@ -171,7 +181,8 @@
               "contained_in": "capacity",
               "per_az": {
                 "az-one": {
-                  "usage": 2
+                  "usage": 2,
+                  "uncommitted_usage": 2
                 },
                 "az-two": {
                   "usage": 0
@@ -192,7 +203,8 @@
               "per_az": {
                 "any": {
                   "quota": 20,
-                  "usage": 4
+                  "usage": 4,
+                  "uncommitted_usage": 4
                 }
               },
               "quota": 30,
@@ -223,7 +235,8 @@
                     "1 year": 2,
                     "2 years": 1
                   },
-                  "unused_commitments": 2
+                  "unused_commitments": 2,
+                  "uncommitted_usage": 1
                 },
                 "az-two": {
                   "quota": 8,
@@ -234,7 +247,8 @@
                   "unused_commitments": 1,
                   "pending_commitments": {
                     "2 years": 100
-                  }
+                  },
+                  "uncommitted_usage": 1
                 }
               },
               "quota": 45,
@@ -247,7 +261,8 @@
               "contained_in": "capacity",
               "per_az": {
                 "az-one": {
-                  "usage": 2
+                  "usage": 2,
+                  "uncommitted_usage": 2
                 },
                 "az-two": {
                   "usage": 0
@@ -264,7 +279,8 @@
                   "usage": 4,
                   "committed": {
                     "2 years": 1
-                  }
+                  },
+                  "uncommitted_usage": 3
                 }
               },
               "quota": 50,

@@ -91,6 +91,9 @@ type ClusterAZResourceReport struct {
 	UnusedCommitments  uint64            `json:"unused_commitments,omitempty"`
 	PendingCommitments map[string]uint64 `json:"pending_commitments,omitempty"`
 	PlannedCommitments map[string]uint64 `json:"planned_commitments,omitempty"`
+	// UncommittedUsage can also be derived as Usage - (Committed.Values().Sum() - UnusedCommitments),
+	// so this is only reported for convenience purposes.
+	UncommittedUsage uint64 `json:"uncommitted_usage,omitempty"`
 	// PhysicalUsage is collected per project and then aggregated, same as ProjectsUsage.
 	PhysicalUsage *uint64         `json:"physical_usage,omitempty"`
 	Subcapacities json.RawMessage `json:"subcapacities,omitempty"`

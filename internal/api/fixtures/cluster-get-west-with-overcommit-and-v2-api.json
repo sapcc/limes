@@ -19,12 +19,14 @@
                 "planned_commitments": {
                   "2 years": 100
                 },
+                "uncommitted_usage": 3,
                 "physical_usage": 2
               },
               "az-two": {
                 "capacity": 95,
                 "usage": 15,
                 "projects_usage": 3,
+                "uncommitted_usage": 3,
                 "physical_usage": 3
               }
             },
@@ -51,7 +53,8 @@
             "per_az": {
               "az-one": {
                 "capacity": 0,
-                "projects_usage": 3
+                "projects_usage": 3,
+                "uncommitted_usage": 3
               },
               "az-two": {
                 "capacity": 0
@@ -69,7 +72,8 @@
                 "capacity": 615,
                 "raw_capacity": 246,
                 "usage": 158,
-                "projects_usage": 6
+                "projects_usage": 6,
+                "uncommitted_usage": 6
               }
             },
             "domains_quota": 30,
@@ -96,6 +100,7 @@
                   "2 years": 1
                 },
                 "unused_commitments": 2,
+                "uncommitted_usage": 2,
                 "physical_usage": 2
               },
               "az-two": {
@@ -108,6 +113,7 @@
                 "pending_commitments": {
                   "2 years": 100
                 },
+                "uncommitted_usage": 2,
                 "physical_usage": 3
               }
             },
@@ -122,7 +128,8 @@
             "per_az": {
               "az-one": {
                 "capacity": 0,
-                "projects_usage": 3
+                "projects_usage": 3,
+                "uncommitted_usage": 3
               },
               "az-two": {
                 "capacity": 0
@@ -143,7 +150,8 @@
                 "projects_usage": 6,
                 "committed": {
                   "2 years": 1
-                }
+                },
+                "uncommitted_usage": 5
               }
             },
             "domains_quota": 70,
