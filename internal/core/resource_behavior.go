@@ -34,15 +34,10 @@ import (
 // behaviors of a single resource (or a set thereof).
 type ResourceBehavior struct {
 	FullResourceNameRx       regexpext.BoundedRegexp             `yaml:"resource"`
-	ScopeRx                  regexpext.BoundedRegexp             `yaml:"scope"`
 	OvercommitFactor         OvercommitFactor                    `yaml:"overcommit_factor"`
-	ScalesWith               ResourceRef                         `yaml:"scales_with"`
-	ScalingFactor            float64                             `yaml:"scaling_factor"`
-	MinNonZeroProjectQuota   uint64                              `yaml:"min_nonzero_project_quota"`
 	CommitmentDurations      []limesresources.CommitmentDuration `yaml:"commitment_durations"`
 	CommitmentIsAZAware      bool                                `yaml:"commitment_is_az_aware"`
 	CommitmentMinConfirmDate *time.Time                          `yaml:"commitment_min_confirm_date"`
-	Annotations              map[string]any                      `yaml:"annotations"`
 }
 
 // Validate returns a list of all errors in this behavior configuration. It
@@ -54,39 +49,7 @@ func (b *ResourceBehavior) Validate(path string) (errs errext.ErrorSet) {
 		errs.Addf("missing configuration value: %s.resource", path)
 	}
 
-	if (b.ScalesWith.ResourceName == "") != (b.ScalingFactor == 0) {
-		errs.Addf("%[1]s.scaling_factor and %[1]s.scales_with are invalid: if one is given, the other must be given too", path)
-	}
-
 	return errs
-}
-
-// Matches returns whether this ResourceBehavior matches the given resource and scope.
-//
-// Possible values for `scopeName` include:
-// - `"$DOMAIN/$PROJECT"` for project level
-// - `"$DOMAIN"` for domain level
-// - `""` (empty string) for cluster level
-//
-// TODO: This stringly-typed interface is not nice. We should have a structured Scope type similar to the one in the React UI.
-func (b ResourceBehavior) Matches(fullResourceName, scopeName string) bool {
-	if !b.FullResourceNameRx.MatchString(fullResourceName) {
-		return false
-	}
-	return scopeName == "" || b.ScopeRx == "" || b.ScopeRx.MatchString(scopeName)
-}
-
-// ToScalingBehavior returns the ScalingBehavior for this resource, or nil if
-// no scaling has been configured.
-func (b ResourceBehavior) ToScalingBehavior() *limesresources.ScalingBehavior {
-	if b.ScalesWith.ResourceName == "" {
-		return nil
-	}
-	return &limesresources.ScalingBehavior{
-		ScalesWithServiceType:  b.ScalesWith.ServiceType,
-		ScalesWithResourceName: b.ScalesWith.ResourceName,
-		ScalingFactor:          b.ScalingFactor,
-	}
 }
 
 // ToCommitmentConfig returns the CommitmentConfiguration for this resource,
@@ -109,13 +72,6 @@ func (b *ResourceBehavior) Merge(other ResourceBehavior) {
 	if other.OvercommitFactor != 0 {
 		b.OvercommitFactor = other.OvercommitFactor
 	}
-	if other.ScalingFactor != 0 {
-		b.ScalesWith = other.ScalesWith
-		b.ScalingFactor = other.ScalingFactor
-	}
-	if b.MinNonZeroProjectQuota < other.MinNonZeroProjectQuota {
-		b.MinNonZeroProjectQuota = other.MinNonZeroProjectQuota
-	}
 	b.CommitmentDurations = append(b.CommitmentDurations, other.CommitmentDurations...)
 	if other.CommitmentMinConfirmDate != nil {
 		if b.CommitmentMinConfirmDate == nil || b.CommitmentMinConfirmDate.Before(*other.CommitmentMinConfirmDate) {
@@ -124,12 +80,6 @@ func (b *ResourceBehavior) Merge(other ResourceBehavior) {
 	}
 	if other.CommitmentIsAZAware {
 		b.CommitmentIsAZAware = true
-	}
-	if len(other.Annotations) > 0 && b.Annotations == nil {
-		b.Annotations = make(map[string]any)
-	}
-	for k, v := range other.Annotations {
-		b.Annotations[k] = v
 	}
 }
 

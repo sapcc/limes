@@ -431,7 +431,7 @@ type mockCapacityPluginBackchannel struct {
 
 // GetOvercommitFactor implements the CapacityPluginBackchannel interface.
 func (b mockCapacityPluginBackchannel) GetOvercommitFactor(serviceType limes.ServiceType, resourceName limesresources.ResourceName) (core.OvercommitFactor, error) {
-	return b.Cluster.BehaviorForResource(serviceType, resourceName, "").OvercommitFactor, nil
+	return b.Cluster.BehaviorForResource(serviceType, resourceName).OvercommitFactor, nil
 }
 
 // GetGlobalResourceDemand implements the core.CapacityPluginBackchannel interface.

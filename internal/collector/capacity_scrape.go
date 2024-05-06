@@ -385,7 +385,7 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 }
 
 func (c *Collector) confirmPendingCommitmentsIfNecessary(serviceType limes.ServiceType, resourceName limesresources.ResourceName) error {
-	behavior := c.Cluster.BehaviorForResource(serviceType, resourceName, "")
+	behavior := c.Cluster.BehaviorForResource(serviceType, resourceName)
 	now := c.MeasureTime()
 
 	// do not run ConfirmPendingCommitments if commitments are not enabled (or not live yet) for this resource

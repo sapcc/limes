@@ -229,7 +229,7 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 					Name:  *availabilityZone,
 					Usage: unwrapOrDefault(usageInAZ, 0),
 				}
-				overcommitFactor := cluster.BehaviorForResource(serviceType, *resourceName, "").OvercommitFactor
+				overcommitFactor := cluster.BehaviorForResource(serviceType, *resourceName).OvercommitFactor
 				azReport.Capacity = overcommitFactor.ApplyTo(*rawCapacityInAZ)
 				if azReport.Capacity != *rawCapacityInAZ {
 					azReport.RawCapacity = *rawCapacityInAZ
@@ -322,7 +322,7 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 	//epilogue: perform some calculations that require the full sum over all AZs to be done
 	for serviceType, service := range report.Services {
 		for resourceName, resource := range service.Resources {
-			overcommitFactor := cluster.BehaviorForResource(serviceType, resourceName, "").OvercommitFactor
+			overcommitFactor := cluster.BehaviorForResource(serviceType, resourceName).OvercommitFactor
 			if overcommitFactor == 0 {
 				resource.Capacity = resource.RawCapacity
 				resource.RawCapacity = nil
@@ -435,7 +435,7 @@ func findInClusterReport(cluster *core.Cluster, report *limesresources.ClusterRe
 		if !cluster.HasResource(serviceType, *resourceName) {
 			return service, nil
 		}
-		globalBehavior := cluster.BehaviorForResource(serviceType, *resourceName, "")
+		globalBehavior := cluster.BehaviorForResource(serviceType, *resourceName)
 		resource = &limesresources.ClusterResourceReport{
 			ResourceInfo:     cluster.InfoForResource(serviceType, *resourceName),
 			CommitmentConfig: globalBehavior.ToCommitmentConfig(now),

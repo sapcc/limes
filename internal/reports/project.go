@@ -185,16 +185,13 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 		}
 
 		// start new resource report when necessary
-		localBehavior := cluster.BehaviorForResource(*serviceType, *resourceName, domain.Name+"/"+projectName)
-		globalBehavior := cluster.BehaviorForResource(*serviceType, *resourceName, "")
+		behavior := cluster.BehaviorForResource(*serviceType, *resourceName)
 		resReport := srvReport.Resources[*resourceName]
 		if resReport == nil {
 			resReport = &limesresources.ProjectResourceReport{
 				ResourceInfo:     cluster.InfoForResource(*serviceType, *resourceName),
 				Usage:            0,
-				Scaling:          globalBehavior.ToScalingBehavior(),
-				Annotations:      localBehavior.Annotations,
-				CommitmentConfig: globalBehavior.ToCommitmentConfig(now),
+				CommitmentConfig: behavior.ToCommitmentConfig(now),
 				// all other fields are set below
 			}
 

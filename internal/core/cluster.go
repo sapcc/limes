@@ -146,15 +146,6 @@ func (c *Cluster) Connect(provider *gophercloud.ProviderClient, eo gophercloud.E
 		errs.Append(suberrs)
 	}
 
-	// validate scaling relations
-	for _, behavior := range c.Config.ResourceBehaviors {
-		s := behavior.ScalesWith
-		if s.ResourceName != "" && !c.HasResource(s.ServiceType, s.ResourceName) {
-			errs.Addf(`resources matching "%s" scale with unknown resource "%s/%s"`,
-				string(behavior.FullResourceNameRx), s.ServiceType, s.ResourceName)
-		}
-	}
-
 	return errs
 }
 
@@ -264,18 +255,14 @@ func (c *Cluster) GetServiceTypesForArea(area string) (serviceTypes []limes.Serv
 
 // BehaviorForResource returns the ResourceBehavior for the given resource in
 // the given scope.
-//
-// `scopeName` should be empty for cluster resources, equal to the domain name
-// for domain resources, or equal to `$DOMAIN_NAME/$PROJECT_NAME` for project
-// resources.
-func (c *Cluster) BehaviorForResource(serviceType limes.ServiceType, resourceName limesresources.ResourceName, scopeName string) ResourceBehavior {
+func (c *Cluster) BehaviorForResource(serviceType limes.ServiceType, resourceName limesresources.ResourceName) ResourceBehavior {
 	// default behavior
 	var result ResourceBehavior
 
 	// check for specific behavior
 	fullName := string(serviceType) + "/" + string(resourceName)
 	for _, behavior := range c.Config.ResourceBehaviors {
-		if behavior.Matches(fullName, scopeName) {
+		if behavior.FullResourceNameRx.MatchString(fullName) {
 			result.Merge(behavior)
 		}
 	}

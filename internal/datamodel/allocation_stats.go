@@ -105,7 +105,7 @@ func collectAZAllocationStats(serviceType limes.ServiceType, resourceName limesr
 
 	// get capacity
 	queryArgs := []any{serviceType, resourceName, azFilter}
-	overcommitFactor := cluster.BehaviorForResource(serviceType, resourceName, "").OvercommitFactor
+	overcommitFactor := cluster.BehaviorForResource(serviceType, resourceName).OvercommitFactor
 	err := sqlext.ForeachRow(dbi, getRawCapacityInResourceQuery, queryArgs, func(rows *sql.Rows) error {
 		var (
 			az          limes.AvailabilityZone

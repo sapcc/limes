@@ -68,17 +68,6 @@ in it. Quota always relates to "usage": For example, consider a project with for
 three NFS shares with a size of 5 GiB each and utilization of 2 GiB each. Therefore, the usage is 15 GiB and only one
 more 5 GiB share can be created, even though the physical usage is only 6 GiB.
 
-### Scaling relations
-
-Limes can advertise **scaling relations** between resources. If resource X is marked as **scaling with** resource Y, it
-means that a user agent SHOULD suggest to change the quota for X whenever the user wants to change the quota for Y.
-Scaling relations are only provided as a suggestion to user agents; they are not evaluted by Limes itself.
-
-The amount by which the quota for X is changed shall be equal to the requested change in quota for Y, multiplied with
-the advertised scaling factor. For example, if resource `network/listeners` scales with `network/loadbalancers` with a
-scaling factor of 2, when the user requests that the loadbalancers quota be increased by 5, the user agent should
-suggest to increase the listeners quota by 10.
-
 ### Contained resources
 
 Limes can advertise **containment relations** between resources. If resource X is marked as **contained in** resource Y,
@@ -314,11 +303,6 @@ The objects at `domains[].services[].resources[]` may contain the following fiel
 | `category` | string | The category of this resource (only shown when there is one). |
 | `contained_in` | string | The name of another resource (if any) within the same service that this resource is [contained in](#contained-resources). |
 | `quota_distribution_model` | string | The resource's [quota distribution model](#quota-distribution-model). The only possible value is "autogrow". |
-| `scales_with` | object | Only present when this resource is [scaling with](#scaling-relations) another resource. |
-| `scales_with.resource_name` | string | The name of the resource that this resource is scaling with. |
-| `scales_with.service_type` | string | The type name of the service containing the resource that this resource is scaling with. |
-| `scales_with.factor` | unsigned float | The factor with which this resource is scaling with the other resource. |
-| `annotations` | object | An object with string keys and string values containing arbitrary metadata that was configured for this resource in this domain by Limes's operator. |
 | `quota` | unsigned integer | The domain quota for this resource. |
 | `projects_quota` | unsigned integer | The sum of all project quotas for this resource across all projects in this domain. |
 | `usage` | unsigned integer | The sum of all usage values for this resource across all projects in this domain. |
@@ -439,11 +423,6 @@ The objects at `projects[].services[].resources[]` may contain the following fie
 | `category` | string | The category of this resource (only shown when there is one). |
 | `contained_in` | string | The name of another resource (if any) within the same service that this resource is [contained in](#contained-resources). |
 | `quota_distribution_model` | string | The resource's [quota distribution model](#quota-distribution-model). The only possible value is "autogrow". |
-| `scales_with` | object | Only present when this resource is [scaling with](#scaling-relations) another resource. |
-| `scales_with.resource_name` | string | The name of the resource that this resource is scaling with. |
-| `scales_with.service_type` | string | The type name of the service containing the resource that this resource is scaling with. |
-| `scales_with.factor` | unsigned float | The factor with which this resource is scaling with the other resource. |
-| `annotations` | object | An object with string keys and string values containing arbitrary metadata that was configured for this resource in this project by Limes's operator. |
 | `quota` | unsigned integer | The granted quota for this resource in this project. |
 | `usable_quota` | unsigned integer | **Deprecated.** Always equal to `quota`. |
 | `usage` | unsigned integer | The usage of this resource in this project. |
