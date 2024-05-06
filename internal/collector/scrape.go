@@ -247,16 +247,6 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 
 		resInfo := c.Cluster.InfoForResource(srv.Type, res.Name)
 		if !resInfo.NoQuota {
-			// check if we can auto-approve an initial quota
-			if res.BackendQuota == nil && (res.Quota == nil || *res.Quota == 0) && backendQuota > 0 && uint64(backendQuota) == resInfo.AutoApproveInitialQuota {
-				res.Quota = &resInfo.AutoApproveInitialQuota
-				logg.Other("AUDIT", "changing %s/%s quota for project %s/%s from %s to %s through auto-approval",
-					srv.Type, res.Name, dbDomain.Name, dbProject.Name,
-					limes.ValueWithUnit{Value: 0, Unit: resInfo.Unit},
-					limes.ValueWithUnit{Value: resInfo.AutoApproveInitialQuota, Unit: resInfo.Unit},
-				)
-			}
-
 			res.BackendQuota = &backendQuota
 			res.MinQuotaFromBackend = resourceData[res.Name].MinQuota
 			res.MaxQuotaFromBackend = resourceData[res.Name].MaxQuota
