@@ -20,9 +20,6 @@
 package limesresources
 
 import (
-	"fmt"
-	"math"
-
 	"github.com/sapcc/go-api-declarations/limes"
 )
 
@@ -39,10 +36,6 @@ type ResourceInfo struct {
 	// service into subgroups. If it is used, it should be set on all
 	// ResourceInfos reported by the same QuotaPlugin.
 	Category string `json:"category,omitempty"`
-	// If AutoApproveInitialQuota is non-zero, when a new project is scraped for
-	// the first time, a backend quota equal to this value will be approved
-	// automatically (i.e. Quota will be set equal to BackendQuota).
-	AutoApproveInitialQuota uint64 `json:"-"`
 	// If NoQuota is true, quota is not tracked at all for this resource. The
 	// resource will only report usage. This field is not shown in API responses.
 	// Check `res.Quota == nil` instead.
@@ -51,30 +44,6 @@ type ResourceInfo struct {
 	// this resource is semantically contained within the resource with that name
 	// in the same service.
 	ContainedIn ResourceName `json:"contained_in,omitempty"`
-}
-
-// BurstingMultiplier is a multiplier for quota bursting.
-type BurstingMultiplier float64
-
-// ApplyTo returns the bursted backend quota for the given approved quota.
-func (m BurstingMultiplier) ApplyTo(quota uint64, qdModel QuotaDistributionModel) uint64 {
-	switch qdModel {
-	case AutogrowQuotaDistribution:
-		return quota
-	case HierarchicalQuotaDistribution:
-		return uint64(math.Floor((1 + float64(m)) * float64(quota)))
-	default:
-		panic(fmt.Sprintf("unknown quota distribution model: %q", string(qdModel)))
-	}
-}
-
-// ScalingBehavior appears in type DomainResourceReport and type
-// ProjectResourceReport and describes the scaling behavior of a single
-// resource.
-type ScalingBehavior struct {
-	ScalesWithResourceName ResourceName      `json:"resource_name"`
-	ScalesWithServiceType  limes.ServiceType `json:"service_type"`
-	ScalingFactor          float64           `json:"factor"`
 }
 
 // QuotaDistributionModel is an enum.

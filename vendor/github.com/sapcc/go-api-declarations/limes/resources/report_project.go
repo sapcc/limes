@@ -28,16 +28,7 @@ import (
 // ProjectReport contains all data about resource usage in a project.
 type ProjectReport struct {
 	limes.ProjectInfo
-	Bursting *ProjectBurstingInfo  `json:"bursting,omitempty"`
 	Services ProjectServiceReports `json:"services"`
-}
-
-// ProjectBurstingInfo is a substructure of ProjectReport containing information about
-// quota bursting. (It is omitted if bursting is not supported for the project's
-// cluster.)
-type ProjectBurstingInfo struct {
-	Enabled    bool               `json:"enabled"`
-	Multiplier BurstingMultiplier `json:"multiplier"`
 }
 
 // ProjectServiceReport is a substructure of ProjectReport containing data for
@@ -61,14 +52,9 @@ type ProjectResourceReport struct {
 	UsableQuota   *uint64                  `json:"usable_quota,omitempty"`
 	MaxQuota      *uint64                  `json:"max_quota,omitempty"` // refers to max_quota constraint maintained via API
 	Usage         uint64                   `json:"usage"`
-	BurstUsage    uint64                   `json:"burst_usage,omitempty"`
 	PhysicalUsage *uint64                  `json:"physical_usage,omitempty"`
 	BackendQuota  *int64                   `json:"backend_quota,omitempty"`
 	Subresources  json.RawMessage          `json:"subresources,omitempty"`
-	Scaling       *ScalingBehavior         `json:"scales_with,omitempty"`
-	// Annotations may contain arbitrary metadata that was configured for this
-	// resource in this scope by Limes' operator.
-	Annotations map[string]any `json:"annotations,omitempty"`
 }
 
 // ProjectAZResourceReport is a substructure of ProjectResourceReport containing
