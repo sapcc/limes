@@ -29,7 +29,7 @@
                   "uncommitted_usage": 1
                 }
               },
-              "quota": 0,
+              "quota": 10,
               "projects_quota": 10,
               "usage": 2,
               "physical_usage": 1
@@ -65,7 +65,7 @@
                   "uncommitted_usage": 2
                 }
               },
-              "quota": 0,
+              "quota": 10,
               "projects_quota": 10,
               "usage": 2
             }
@@ -91,7 +91,7 @@
                   "uncommitted_usage": 1
                 }
               },
-              "quota": 55,
+              "quota": 10,
               "projects_quota": 10,
               "usage": 2,
               "physical_usage": 1
@@ -120,7 +120,7 @@
                   "uncommitted_usage": 2
                 }
               },
-              "quota": 20,
+              "quota": 10,
               "projects_quota": 10,
               "usage": 2,
               "backend_quota": 0,
@@ -170,7 +170,7 @@
                   "uncommitted_usage": 2
                 }
               },
-              "quota": 25,
+              "quota": 20,
               "projects_quota": 20,
               "usage": 4,
               "backend_quota": 110
@@ -207,7 +207,7 @@
                   "uncommitted_usage": 4
                 }
               },
-              "quota": 30,
+              "quota": 20,
               "projects_quota": 20,
               "usage": 4
             }
@@ -251,7 +251,7 @@
                   "uncommitted_usage": 1
                 }
               },
-              "quota": 45,
+              "quota": 20,
               "projects_quota": 20,
               "usage": 4
             },
@@ -283,7 +283,7 @@
                   "uncommitted_usage": 3
                 }
               },
-              "quota": 50,
+              "quota": 20,
               "projects_quota": 20,
               "usage": 4
             }

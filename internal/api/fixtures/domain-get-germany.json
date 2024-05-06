@@ -18,7 +18,7 @@
               ],
               "min_confirm_by": 604800
             },
-            "quota": 25,
+            "quota": 20,
             "projects_quota": 20,
             "usage": 4,
             "backend_quota": 110
@@ -39,7 +39,7 @@
               ],
               "min_confirm_by": 604800
             },
-            "quota": 30,
+            "quota": 20,
             "projects_quota": 20,
             "usage": 4
           }
@@ -55,7 +55,7 @@
             "name": "capacity",
             "unit": "B",
             "quota_distribution_model": "hierarchical",
-            "quota": 45,
+            "quota": 20,
             "projects_quota": 20,
             "usage": 4
           },
@@ -68,7 +68,7 @@
           {
             "name": "things",
             "quota_distribution_model": "hierarchical",
-            "quota": 50,
+            "quota": 20,
             "projects_quota": 20,
             "usage": 4
           }

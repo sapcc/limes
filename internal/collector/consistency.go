@@ -27,7 +27,6 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/logg"
-	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
@@ -104,24 +103,9 @@ func (c *Collector) checkConsistencyCluster(_ context.Context, _ prometheus.Labe
 }
 
 func (c *Collector) checkConsistencyDomain(domain db.Domain) error {
-	tx, err := c.DB.Begin()
-	if err != nil {
-		return err
-	}
-	defer sqlext.RollbackUnlessCommitted(tx)
-
-	// validate domain_services entries
-	err = datamodel.ValidateDomainServices(tx, c.Cluster, domain)
-	if err == nil {
-		err = tx.Commit()
-	}
-	if err != nil {
-		return err
-	}
-
 	// recurse into projects (with deterministic ordering for the unit test's sake)
 	var projects []db.Project
-	_, err = c.DB.Select(&projects, `SELECT * FROM projects WHERE domain_id = $1 ORDER BY NAME`, domain.ID)
+	_, err := c.DB.Select(&projects, `SELECT * FROM projects WHERE domain_id = $1 ORDER BY NAME`, domain.ID)
 	if err != nil {
 		return err
 	}

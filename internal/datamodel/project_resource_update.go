@@ -99,7 +99,6 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, doma
 	slices.Sort(allResourceNames)
 
 	// for each resource...
-	hasChanges := false
 	var result ProjectResourceUpdateResult
 	for _, resName := range allResourceNames {
 		state := allResources[resName]
@@ -147,13 +146,11 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, doma
 			if err != nil {
 				return nil, fmt.Errorf("while inserting %s/%s resource in the DB: %w", srv.Type, res.Name, err)
 			}
-			hasChanges = true
 		} else if !reflect.DeepEqual(*state.Original, res) {
 			_, err := dbi.Update(&res)
 			if err != nil {
 				return nil, fmt.Errorf("while updating %s/%s resource in the DB: %w", srv.Type, res.Name, err)
 			}
-			hasChanges = true
 		}
 		result.DBResources = append(result.DBResources, res)
 
@@ -164,13 +161,6 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, doma
 			if backendQuota < 0 || uint64(backendQuota) != desiredBackendQuota {
 				result.HasBackendQuotaDrift = true
 			}
-		}
-	}
-
-	if hasChanges {
-		err = ApplyComputedDomainQuota(dbi, cluster, domain.ID, srv.Type)
-		if err != nil {
-			return nil, fmt.Errorf("while recomputing %s domain quotas: %w", srv.Type, err)
 		}
 	}
 

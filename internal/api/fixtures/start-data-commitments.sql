@@ -18,14 +18,6 @@ INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subc
 INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
 INSERT INTO domains (id, name, uuid) VALUES (2, 'france',  'uuid-for-france');
 
--- domain_services is fully populated (as ensured by the collector's consistency check)
-INSERT INTO domain_services (id, domain_id, type) VALUES (1, 1, 'first');
-INSERT INTO domain_services (id, domain_id, type) VALUES (2, 1, 'second');
-INSERT INTO domain_services (id, domain_id, type) VALUES (3, 2, 'first');
-INSERT INTO domain_services (id, domain_id, type) VALUES (4, 2, 'second');
-
--- domain_resources is empty: the commitment tests do not care about domain quota
-
 -- three projects (default setup for StaticDiscoveryPlugin)
 INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany');
 INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (2, 1, 'dresden', 'uuid-for-dresden', 'uuid-for-berlin');

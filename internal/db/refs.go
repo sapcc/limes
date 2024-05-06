@@ -41,14 +41,6 @@ type ClusterAZResourceID int64
 // used to distinguish these IDs from IDs of other tables or raw int64 values.
 type DomainID int64
 
-// DomainServiceID is an ID into the domain_services table. This typedef is
-// used to distinguish these IDs from IDs of other tables or raw int64 values.
-type DomainServiceID int64
-
-// DomainResourceID is an ID into the domain_resources table. This typedef is
-// used to distinguish these IDs from IDs of other tables or raw int64 values.
-type DomainResourceID int64
-
 // ProjectID is an ID into the projects table. This typedef is
 // used to distinguish these IDs from IDs of other tables or raw int64 values.
 type ProjectID int64

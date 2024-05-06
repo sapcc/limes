@@ -74,21 +74,6 @@ type Domain struct {
 	UUID string   `db:"uuid"`
 }
 
-// DomainService contains a record from the `domain_services` table.
-type DomainService struct {
-	ID       DomainServiceID   `db:"id"`
-	DomainID DomainID          `db:"domain_id"`
-	Type     limes.ServiceType `db:"type"`
-}
-
-// DomainResource contains a record from the `domain_resources` table.
-type DomainResource struct {
-	ID        DomainResourceID            `db:"id"`
-	ServiceID DomainServiceID             `db:"service_id"`
-	Name      limesresources.ResourceName `db:"name"`
-	Quota     uint64                      `db:"quota"`
-}
-
 // Project contains a record from the `projects` table.
 type Project struct {
 	ID         ProjectID `db:"id"`
@@ -225,8 +210,6 @@ func initGorp(db *gorp.DbMap) {
 	db.AddTableWithName(ClusterResource{}, "cluster_resources").SetKeys(true, "id")
 	db.AddTableWithName(ClusterAZResource{}, "cluster_az_resources").SetKeys(true, "id")
 	db.AddTableWithName(Domain{}, "domains").SetKeys(true, "id")
-	db.AddTableWithName(DomainService{}, "domain_services").SetKeys(true, "id")
-	db.AddTableWithName(DomainResource{}, "domain_resources").SetKeys(true, "id")
 	db.AddTableWithName(Project{}, "projects").SetKeys(true, "id")
 	db.AddTableWithName(ProjectService{}, "project_services").SetKeys(true, "id")
 	db.AddTableWithName(ProjectResource{}, "project_resources").SetKeys(true, "id")

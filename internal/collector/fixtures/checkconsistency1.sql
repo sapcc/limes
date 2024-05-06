@@ -1,17 +1,6 @@
 INSERT INTO cluster_services (id, type) VALUES (2, 'unshared');
 INSERT INTO cluster_services (id, type) VALUES (3, 'whatever');
 
-INSERT INTO domain_resources (id, service_id, name, quota) VALUES (1, 1, 'capacity', 0);
-INSERT INTO domain_resources (id, service_id, name, quota) VALUES (2, 1, 'capacity_portion', 0);
-INSERT INTO domain_resources (id, service_id, name, quota) VALUES (3, 1, 'things', 0);
-INSERT INTO domain_resources (id, service_id, name, quota) VALUES (7, 3, 'capacity', 0);
-INSERT INTO domain_resources (id, service_id, name, quota) VALUES (8, 3, 'capacity_portion', 0);
-INSERT INTO domain_resources (id, service_id, name, quota) VALUES (9, 3, 'things', 0);
-
-INSERT INTO domain_services (id, domain_id, type) VALUES (1, 1, 'shared');
-INSERT INTO domain_services (id, domain_id, type) VALUES (3, 2, 'shared');
-INSERT INTO domain_services (id, domain_id, type) VALUES (5, 1, 'whatever');
-
 INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
 INSERT INTO domains (id, name, uuid) VALUES (2, 'france', 'uuid-for-france');
 

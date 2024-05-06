@@ -30,7 +30,7 @@
                 "usage": 15
               }
             ],
-            "domains_quota": 25,
+            "domains_quota": 30,
             "usage": 6,
             "physical_usage": 5
           },
@@ -66,7 +66,7 @@
             "name": "capacity",
             "unit": "B",
             "quota_distribution_model": "hierarchical",
-            "domains_quota": 100,
+            "domains_quota": 30,
             "usage": 6,
             "physical_usage": 5
           },
@@ -80,7 +80,7 @@
             "name": "things",
             "quota_distribution_model": "hierarchical",
             "capacity": 139,
-            "domains_quota": 70,
+            "domains_quota": 30,
             "usage": 6
           }
         ],

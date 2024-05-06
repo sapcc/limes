@@ -18,7 +18,7 @@
                 ],
                 "min_confirm_by": 604800
               },
-              "quota": 0,
+              "quota": 10,
               "projects_quota": 10,
               "usage": 2
             }
@@ -46,7 +46,7 @@
                 ],
                 "min_confirm_by": 604800
               },
-              "quota": 30,
+              "quota": 20,
               "projects_quota": 20,
               "usage": 4
             }

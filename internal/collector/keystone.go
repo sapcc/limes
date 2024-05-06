@@ -114,7 +114,11 @@ func (c *Collector) ScanDomains(opts ScanDomainsOpts) (result []string, resultEr
 		}
 
 		logg.Info("discovered new Keystone domain: %s", domain.Name)
-		dbDomain, err := c.initDomain(domain)
+		dbDomain = &db.Domain{
+			Name: domain.Name,
+			UUID: domain.UUID,
+		}
+		err = c.DB.Insert(dbDomain)
 		if err != nil {
 			return result, err
 		}
@@ -142,32 +146,6 @@ func (c *Collector) ScanDomains(opts ScanDomainsOpts) (result []string, resultEr
 	}
 
 	return result, nil
-}
-
-func (c *Collector) initDomain(domain core.KeystoneDomain) (*db.Domain, error) {
-	// do this in a transaction to avoid half-initialized domains
-	tx, err := c.DB.Begin()
-	if err != nil {
-		return nil, err
-	}
-	defer sqlext.RollbackUnlessCommitted(tx)
-
-	// add record to `domains` table
-	dbDomain := &db.Domain{
-		Name: domain.Name,
-		UUID: domain.UUID,
-	}
-	err = tx.Insert(dbDomain)
-	if err != nil {
-		return nil, err
-	}
-
-	err = datamodel.ValidateDomainServices(tx, c.Cluster, *dbDomain)
-	if err != nil {
-		return nil, err
-	}
-
-	return dbDomain, tx.Commit()
 }
 
 // ScanProjects queries Keystone to discover new projects in the given domain.
@@ -237,14 +215,6 @@ func (c *Collector) ScanProjects(domain *db.Domain) (result []string, resultErr 
 			return result, err
 		}
 		result = append(result, project.UUID)
-	}
-
-	// recompute domain quota values that depend on project quotas if necessary
-	for serviceType := range c.Cluster.QuotaPlugins {
-		err := datamodel.ApplyComputedDomainQuota(c.DB, c.Cluster, domain.ID, serviceType)
-		if err != nil {
-			return result, err
-		}
 	}
 
 	return result, nil

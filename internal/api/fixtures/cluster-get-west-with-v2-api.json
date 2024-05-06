@@ -49,7 +49,7 @@
                 "usage": 15
               }
             ],
-            "domains_quota": 25,
+            "domains_quota": 30,
             "usage": 6,
             "physical_usage": 5
           },
@@ -129,7 +129,7 @@
                 "physical_usage": 3
               }
             },
-            "domains_quota": 100,
+            "domains_quota": 30,
             "usage": 6,
             "physical_usage": 5
           },
@@ -164,7 +164,7 @@
                 "uncommitted_usage": 5
               }
             },
-            "domains_quota": 70,
+            "domains_quota": 30,
             "usage": 6
           }
         ],

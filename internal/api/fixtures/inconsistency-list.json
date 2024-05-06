@@ -1,27 +1,6 @@
 {
   "inconsistencies": {
-    "domain_quota_overcommitted": [
-      {
-        "domain": {
-          "id": "uuid-for-pakistan",
-          "name": "pakistan"
-        },
-        "service": "compute",
-        "resource": "cores",
-        "domain_quota": 30,
-        "projects_quota": 44
-      },
-      {
-        "domain": {
-          "id": "uuid-for-pakistan",
-          "name": "pakistan"
-        },
-        "service": "network",
-        "resource": "loadbalancers",
-        "domain_quota": 0,
-        "projects_quota": 15
-      }
-    ],
+    "domain_quota_overcommitted": [],
     "project_quota_overspent": [
       {
         "project": {

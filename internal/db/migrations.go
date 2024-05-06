@@ -215,4 +215,24 @@ var sqlMigrations = map[string]string{
 		ALTER TABLE projects
 			DROP COLUMN has_bursting;
 	`,
+	"040_remove_domain_quota.down.sql": `
+		CREATE TABLE domain_services (
+			id         BIGSERIAL  NOT NULL PRIMARY KEY,
+			domain_id  BIGINT     NOT NULL REFERENCES domains ON DELETE CASCADE,
+			type       TEXT       NOT NULL,
+			UNIQUE (domain_id, type)
+		);
+
+		CREATE TABLE domain_resources (
+			id          BIGSERIAL  NOT NULL PRIMARY KEY,
+			service_id  BIGINT     NOT NULL REFERENCES domain_services ON DELETE CASCADE,
+			name        TEXT       NOT NULL,
+			quota       BIGINT     NOT NULL,
+			UNIQUE (service_id, name)
+		);
+	`,
+	"040_remove_domain_quota.up.sql": `
+		DROP TABLE domain_resources;
+		DROP TABLE domain_services;
+	`,
 }
