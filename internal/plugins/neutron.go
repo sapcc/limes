@@ -79,15 +79,11 @@ var neutronResources = []limesresources.ResourceInfo{
 		Name:     "security_group_rules",
 		Unit:     limes.UnitNone,
 		Category: "networking",
-		// for "default" security group
-		AutoApproveInitialQuota: 4,
 	},
 	{
 		Name:     "security_groups",
 		Unit:     limes.UnitNone,
 		Category: "networking",
-		// for "default" security group
-		AutoApproveInitialQuota: 1,
 	},
 	{
 		Name:     "subnet_pools",
