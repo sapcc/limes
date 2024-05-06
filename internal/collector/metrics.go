@@ -495,10 +495,12 @@ var clusterMetricsQuery = sqlext.SimplifyWhitespace(`
 `)
 
 var domainMetricsQuery = sqlext.SimplifyWhitespace(`
-	SELECT d.name, d.uuid, ds.type, dr.name, dr.quota
+	SELECT d.name, d.uuid, ps.type, pr.name, SUM(pr.quota)
 	  FROM domains d
-	  JOIN domain_services ds ON ds.domain_id = d.id
-	  JOIN domain_resources dr ON dr.service_id = ds.id
+	  JOIN projects p ON p.domain_id = d.id
+	  JOIN project_services ps ON ps.project_id = p.id
+	  JOIN project_resources pr ON pr.service_id = ps.id
+	 GROUP BY d.name, d.uuid, ps.type, pr.name
 `)
 
 var projectMetricsQuery = sqlext.SimplifyWhitespace(`
@@ -684,17 +686,19 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			domainUUID   string
 			serviceType  limes.ServiceType
 			resourceName limesresources.ResourceName
-			quota        uint64
+			quota        *uint64
 		)
 		err := rows.Scan(&domainName, &domainUUID, &serviceType, &resourceName, &quota)
 		if err != nil {
 			return err
 		}
-		ch <- prometheus.MustNewConstMetric(
-			domainQuotaDesc,
-			prometheus.GaugeValue, float64(quota),
-			domainName, domainUUID, string(serviceType), serviceNameByType[serviceType], string(resourceName),
-		)
+		if quota != nil {
+			ch <- prometheus.MustNewConstMetric(
+				domainQuotaDesc,
+				prometheus.GaugeValue, float64(*quota),
+				domainName, domainUUID, string(serviceType), serviceNameByType[serviceType], string(resourceName),
+			)
+		}
 		return nil
 	})
 	if err != nil {

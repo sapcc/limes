@@ -446,8 +446,6 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
 
 	tr.DBChanges().AssertEqualf(`%s
-		UPDATE domain_resources SET quota = 261 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
-		UPDATE domain_resources SET quota = 20 WHERE id = 4 AND service_id = 2 AND name = 'capacity';
 		UPDATE project_az_resources SET quota = 0 WHERE id = 17 AND resource_id = 2 AND az = 'any';
 		UPDATE project_az_resources SET quota = 1 WHERE id = 18 AND resource_id = 2 AND az = 'az-one';
 		UPDATE project_az_resources SET quota = 250 WHERE id = 19 AND resource_id = 2 AND az = 'az-two';
@@ -474,7 +472,6 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 
 	scrapedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	tr.DBChanges().AssertEqualf(`%s
-		UPDATE domain_resources SET quota = 270 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
 		UPDATE project_az_resources SET quota = 10 WHERE id = 18 AND resource_id = 2 AND az = 'az-one';
 		UPDATE project_commitments SET confirmed_at = %d, state = 'active' WHERE id = 1;
 		UPDATE project_resources SET quota = 260, desired_backend_quota = 260 WHERE id = 2 AND service_id = 1 AND name = 'capacity';
@@ -489,7 +486,6 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 
 	scrapedAt1 = s.Clock.Now().Add(-5 * time.Second)
 	tr.DBChanges().AssertEqualf(`%s
-		UPDATE domain_resources SET quota = 370 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
 		UPDATE project_az_resources SET quota = 110 WHERE id = 18 AND resource_id = 2 AND az = 'az-one';
 		UPDATE project_commitments SET confirmed_at = %d, state = 'active' WHERE id = 2;
 		UPDATE project_commitments SET state = 'pending' WHERE id = 3;
@@ -507,7 +503,6 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 
 	scrapedAt2 := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`%s
-		UPDATE domain_resources SET quota = 31 WHERE id = 4 AND service_id = 2 AND name = 'capacity';
 		UPDATE project_az_resources SET quota = 0 WHERE id = 26 AND resource_id = 11 AND az = 'any';
 		UPDATE project_az_resources SET quota = 20 WHERE id = 27 AND resource_id = 11 AND az = 'az-one';
 		UPDATE project_commitments SET confirmed_at = %d, state = 'active' WHERE id = 4;
@@ -525,7 +520,6 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 
 	scrapedAt1 = s.Clock.Now().Add(-5 * time.Second)
 	tr.DBChanges().AssertEqualf(`%s
-		UPDATE domain_resources SET quota = 420 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
 		UPDATE project_az_resources SET quota = 300 WHERE id = 19 AND resource_id = 2 AND az = 'az-two';
 		UPDATE project_commitments SET state = 'pending' WHERE id = 7;
 		UPDATE project_commitments SET confirmed_at = %d, state = 'active' WHERE id = 8;
@@ -542,7 +536,6 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 
 	scrapedAt2 = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`%s
-		UPDATE domain_resources SET quota = 44 WHERE id = 4 AND service_id = 2 AND name = 'capacity';
 		UPDATE project_az_resources SET quota = 0 WHERE id = 20 AND resource_id = 5 AND az = 'any';
 		UPDATE project_az_resources SET quota = 22 WHERE id = 22 AND resource_id = 5 AND az = 'az-two';
 		UPDATE project_commitments SET state = 'pending' WHERE id = 10;
@@ -556,7 +549,6 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 
 	scrapedAt2 = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`%s
-		UPDATE domain_resources SET quota = 32 WHERE id = 4 AND service_id = 2 AND name = 'capacity';
 		UPDATE project_az_resources SET quota = 8 WHERE id = 20 AND resource_id = 5 AND az = 'any';
 		UPDATE project_az_resources SET quota = 1 WHERE id = 22 AND resource_id = 5 AND az = 'az-two';
 		UPDATE project_az_resources SET quota = 2 WHERE id = 28 AND resource_id = 11 AND az = 'az-two';

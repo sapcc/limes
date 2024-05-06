@@ -28,17 +28,6 @@ INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage) VALU
 -- one domain
 INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
 
--- domain_services and domain_resources are fully populated (as ensured by the collector's consistency check)
-INSERT INTO domain_services (id, domain_id, type) VALUES (1, 1, 'first');
-INSERT INTO domain_services (id, domain_id, type) VALUES (2, 1, 'second');
-
-INSERT INTO domain_resources (id, service_id, name, quota) VALUES (1, 1, 'capacity', 0);
-INSERT INTO domain_resources (id, service_id, name, quota) VALUES (2, 1, 'capacity_portion', 0);
-INSERT INTO domain_resources (id, service_id, name, quota) VALUES (3, 1, 'things', 0);
-INSERT INTO domain_resources (id, service_id, name, quota) VALUES (4, 2, 'capacity', 0);
-INSERT INTO domain_resources (id, service_id, name, quota) VALUES (5, 2, 'capacity_portion', 0);
-INSERT INTO domain_resources (id, service_id, name, quota) VALUES (6, 2, 'things', 0);
-
 -- two projects
 INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany');
 INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (2, 1, 'dresden', 'uuid-for-dresden', 'uuid-for-berlin');

@@ -68,8 +68,7 @@ func Test_ScanDomains(t *testing.T) {
 
 	// first ScanDomains should discover the StaticDomains in the cluster,
 	// and initialize domains, projects and project_services (project_resources
-	// are then constructed by the scraper, and domain_services/domain_resources
-	// are created when a cloud admin approves quota for the domain)
+	// are then constructed by the scraper)
 	actualNewDomains, err := c.ScanDomains(ScanDomainsOpts{})
 	if err != nil {
 		t.Errorf("ScanDomains #1 failed: %v", err)
@@ -155,14 +154,6 @@ func Test_ScanDomains(t *testing.T) {
 	}
 	assert.DeepEqual(t, "new domains after ScanDomains #7", actualNewDomains, []string(nil))
 	tr.DBChanges().AssertEqualf(`
-		DELETE FROM domain_resources WHERE id = 10 AND service_id = 4 AND name = 'capacity';
-		DELETE FROM domain_resources WHERE id = 11 AND service_id = 4 AND name = 'capacity_portion';
-		DELETE FROM domain_resources WHERE id = 12 AND service_id = 4 AND name = 'things';
-		DELETE FROM domain_resources WHERE id = 7 AND service_id = 3 AND name = 'capacity';
-		DELETE FROM domain_resources WHERE id = 8 AND service_id = 3 AND name = 'capacity_portion';
-		DELETE FROM domain_resources WHERE id = 9 AND service_id = 3 AND name = 'things';
-		DELETE FROM domain_services WHERE id = 3 AND domain_id = 2 AND type = 'shared';
-		DELETE FROM domain_services WHERE id = 4 AND domain_id = 2 AND type = 'unshared';
 		DELETE FROM domains WHERE id = 2 AND uuid = 'uuid-for-france';
 		DELETE FROM project_services WHERE id = 5 AND project_id = 3 AND type = 'shared';
 		DELETE FROM project_services WHERE id = 6 AND project_id = 3 AND type = 'unshared';

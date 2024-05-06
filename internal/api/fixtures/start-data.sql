@@ -23,20 +23,6 @@ INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subc
 INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
 INSERT INTO domains (id, name, uuid) VALUES (2, 'france',  'uuid-for-france');
 
--- domain_services is fully populated (as ensured by the collector's consistency check)
-INSERT INTO domain_services (id, domain_id, type) VALUES (1, 1, 'unshared');
-INSERT INTO domain_services (id, domain_id, type) VALUES (2, 1, 'shared');
-INSERT INTO domain_services (id, domain_id, type) VALUES (3, 2, 'unshared');
-INSERT INTO domain_services (id, domain_id, type) VALUES (4, 2, 'shared');
-
--- domain_resources has some holes where no domain quotas have been set yet (and we don't have anything for "capacity_portion" since it's NoQuota)
-INSERT INTO domain_resources (id, service_id, name, quota) VALUES (1, 1, 'things',   50);
-INSERT INTO domain_resources (id, service_id, name, quota) VALUES (2, 1, 'capacity', 45);
-INSERT INTO domain_resources (id, service_id, name, quota) VALUES (3, 2, 'things',   30);
-INSERT INTO domain_resources (id, service_id, name, quota) VALUES (4, 2, 'capacity', 25);
-INSERT INTO domain_resources (id, service_id, name, quota) VALUES (5, 3, 'things',   20);
-INSERT INTO domain_resources (id, service_id, name, quota) VALUES (6, 3, 'capacity', 55);
-
 -- "germany" has two projects, the other domains have one each (Dresden is a child project of Berlin in order to check
 -- correct rendering of the parent_uuid field)
 INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany');
@@ -161,13 +147,10 @@ INSERT INTO project_rates (service_id, name, rate_limit, window_ns, usage_as_big
 INSERT INTO cluster_services (id, type) VALUES (101, 'weird');
 INSERT INTO cluster_resources (id, service_id, name, capacitor_id) VALUES (101, 101, 'things', 'scans-shared');
 INSERT INTO cluster_az_resources (id, resource_id, az, raw_capacity, usage, subcapacities) VALUES (101, 101, 'any', 2, 1, '');
-INSERT INTO domain_services (id, domain_id, type) VALUES (101, 1, 'weird');
-INSERT INTO domain_resources (id, service_id, name, quota) VALUES (101, 101, 'things', 1);
 INSERT INTO project_services (id, project_id, type) VALUES (101, 1, 'weird');
 INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desired_backend_quota) VALUES (101, 101, 'things', 2, 2, 2);
 INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (101, 101, 'any', NULL, 1, 1, '');
 
-INSERT INTO domain_resources (id, service_id, name, quota) VALUES (102, 1, 'items', 1);
 INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desired_backend_quota) VALUES (102, 1, 'items', 2, 2, 2);
 INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desired_backend_quota) VALUES (103, 1, 'items_portion', NULL, NULL, NULL);
 INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (102, 102, 'any', NULL, 1, 1, '');

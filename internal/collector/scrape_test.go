@@ -68,8 +68,7 @@ func p2u64(x uint64) *uint64 {
 }
 
 func prepareDomainsAndProjectsForScrape(t *testing.T, s test.Setup) {
-	// ScanDomains is required to create the entries in `domains`,
-	// `domain_services`, `projects` and `project_services`
+	// ScanDomains is required to create the entries in `domains`, `projects` and `project_services`
 	timeZero := func() time.Time { return time.Unix(0, 0).UTC() }
 	_, err := (&Collector{Cluster: s.Cluster, DB: s.DB, MeasureTime: timeZero, AddJitter: test.NoJitter}).ScanDomains(ScanDomainsOpts{})
 	if err != nil {
@@ -257,7 +256,6 @@ func Test_ScrapeSuccess(t *testing.T) {
 	scrapedAt1 = s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt2 = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
-		UPDATE domain_resources SET quota = 26 WHERE id = 3 AND service_id = 1 AND name = 'things';
 		UPDATE project_resources SET quota = 20, backend_quota = 20, desired_backend_quota = 20 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
 		UPDATE project_resources SET quota = 13, backend_quota = 13, desired_backend_quota = 13 WHERE id = 3 AND service_id = 1 AND name = 'things';
 		UPDATE project_resources SET quota = 20, backend_quota = 20, desired_backend_quota = 20 WHERE id = 4 AND service_id = 2 AND name = 'capacity';
@@ -534,7 +532,6 @@ func Test_ScrapeButNoResources(t *testing.T) {
 	scrapedAt := s.Clock.Now()
 	_, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualf(`
-		INSERT INTO domain_services (id, domain_id, type) VALUES (1, 1, 'noop');
 		INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
 		INSERT INTO project_services (id, project_id, type, scraped_at, scrape_duration_secs, checked_at, next_scrape_at, rates_next_scrape_at) VALUES (1, 1, 'noop', %[1]d, 5, %[1]d, %[2]d, 0);
 		INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany');
@@ -586,8 +583,6 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 	scrapedAt := s.Clock.Now()
 	_, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualf(`
-		INSERT INTO domain_resources (id, service_id, name, quota) VALUES (1, 1, 'things', 0);
-		INSERT INTO domain_services (id, domain_id, type) VALUES (1, 1, 'noop');
 		INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
 		INSERT INTO project_az_resources (id, resource_id, az, usage) VALUES (1, 1, 'any', 0);
 		INSERT INTO project_resources (id, service_id, name, quota, backend_quota, desired_backend_quota) VALUES (1, 1, 'things', 0, 0, 0);

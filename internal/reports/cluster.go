@@ -55,11 +55,11 @@ var clusterReportQuery1 = sqlext.SimplifyWhitespace(`
 `)
 
 var clusterReportQuery2 = sqlext.SimplifyWhitespace(`
-	SELECT ds.type, dr.name, SUM(dr.quota)
-	  FROM domain_services ds
-	  LEFT OUTER JOIN domain_resources dr ON dr.service_id = ds.id {{AND dr.name = $resource_name}}
-	 WHERE TRUE {{AND ds.type = $service_type}}
-	 GROUP BY ds.type, dr.name
+	SELECT ps.type, pr.name, SUM(pr.quota)
+	  FROM project_services ps
+	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
+	 WHERE TRUE {{AND ps.type = $service_type}}
+	 GROUP BY ps.type, pr.name
 `)
 
 var clusterReportQuery3 = sqlext.SimplifyWhitespace(`
@@ -169,7 +169,8 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 		return nil, err
 	}
 
-	// second query: collect domain quota data in these clusters
+	// second query: collect quota data (this is a separate query because we need
+	// to stop at the resource level and not break down by AZ)
 	queryStr, joinArgs = filter.PrepareQuery(clusterReportQuery2)
 	err = sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
 		var (
@@ -184,6 +185,8 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 
 		_, resource := findInClusterReport(cluster, report, serviceType, resourceName, now)
 		if resource != nil && quota != nil && !resource.NoQuota {
+			// NOTE: This is called "DomainsQuota" for historical reasons, but it is actually
+			// the sum of all project quotas, since quotas only exist on project level by now.
 			resource.DomainsQuota = quota
 		}
 

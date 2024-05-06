@@ -3,19 +3,6 @@
 INSERT INTO domains (id, name, uuid) VALUES (1, 'germany',  'uuid-for-germany');
 INSERT INTO domains (id, name, uuid) VALUES (2, 'pakistan', 'uuid-for-pakistan');
 
--- domain_services is fully populated (as ensured by the collector's consistency check)
-INSERT INTO domain_services (id, domain_id, type) VALUES (1, 1, 'compute');
-INSERT INTO domain_services (id, domain_id, type) VALUES (2, 1, 'network');
-INSERT INTO domain_services (id, domain_id, type) VALUES (3, 2, 'compute');
-INSERT INTO domain_services (id, domain_id, type) VALUES (4, 2, 'network');
-
--- domain_resources has a hole where no domain quota (pakistan: loadbalancers) has been set yet
-INSERT INTO domain_resources (id, service_id, name, quota) VALUES (1, 1, 'cores',         100);
-INSERT INTO domain_resources (id, service_id, name, quota) VALUES (2, 1, 'ram',           1000);
-INSERT INTO domain_resources (id, service_id, name, quota) VALUES (3, 2, 'loadbalancers', 20);
-INSERT INTO domain_resources (id, service_id, name, quota) VALUES (4, 3, 'cores',         30);
-INSERT INTO domain_resources (id, service_id, name, quota) VALUES (5, 3, 'ram',           250);
-
 -- "germany" has one project, and "pakistan" has two (lahore is a child project of karachi in order to check
 -- correct rendering of the parent_uuid field)
 INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (1, 1, 'dresden', 'uuid-for-dresden', 'uuid-for-germany');

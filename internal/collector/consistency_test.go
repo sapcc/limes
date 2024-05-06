@@ -56,23 +56,12 @@ func Test_Consistency(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-	_, err = s.DB.Exec(`DELETE FROM domain_services WHERE type = $1`, "unshared")
-	if err != nil {
-		t.Error(err)
-	}
 	_, err = s.DB.Exec(`DELETE FROM project_services WHERE type = $1`, "shared")
 	if err != nil {
 		t.Error(err)
 	}
 	// add some useless *_services entries
 	err = s.DB.Insert(&db.ClusterService{Type: "whatever"})
-	if err != nil {
-		t.Error(err)
-	}
-	err = s.DB.Insert(&db.DomainService{
-		DomainID: 1,
-		Type:     "whatever",
-	})
 	if err != nil {
 		t.Error(err)
 	}

@@ -19,7 +19,7 @@
                 ],
                 "min_confirm_by": 604800
               },
-              "quota": 0,
+              "quota": 10,
               "projects_quota": 10,
               "usage": 2,
               "physical_usage": 1
@@ -40,7 +40,7 @@
                 ],
                 "min_confirm_by": 604800
               },
-              "quota": 0,
+              "quota": 10,
               "projects_quota": 10,
               "usage": 2
             }
@@ -56,7 +56,7 @@
               "name": "capacity",
               "unit": "B",
               "quota_distribution_model": "hierarchical",
-              "quota": 55,
+              "quota": 10,
               "projects_quota": 10,
               "usage": 2,
               "physical_usage": 1
@@ -70,7 +70,7 @@
             {
               "name": "things",
               "quota_distribution_model": "hierarchical",
-              "quota": 20,
+              "quota": 10,
               "projects_quota": 10,
               "usage": 2,
               "backend_quota": 0,
@@ -101,7 +101,7 @@
                 ],
                 "min_confirm_by": 604800
               },
-              "quota": 25,
+              "quota": 20,
               "projects_quota": 20,
               "usage": 4,
               "backend_quota": 110
@@ -122,7 +122,7 @@
                 ],
                 "min_confirm_by": 604800
               },
-              "quota": 30,
+              "quota": 20,
               "projects_quota": 20,
               "usage": 4
             }
@@ -138,7 +138,7 @@
               "name": "capacity",
               "unit": "B",
               "quota_distribution_model": "hierarchical",
-              "quota": 45,
+              "quota": 20,
               "projects_quota": 20,
               "usage": 4
             },
@@ -151,7 +151,7 @@
             {
               "name": "things",
               "quota_distribution_model": "hierarchical",
-              "quota": 50,
+              "quota": 20,
               "projects_quota": 20,
               "usage": 4
             }

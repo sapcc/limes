@@ -55,14 +55,6 @@ var domainReportQuery1 = sqlext.SimplifyWhitespace(`
 	 WHERE %s GROUP BY d.uuid, d.name, ps.type, pr.name
 `)
 
-var domainReportQuery2 = sqlext.SimplifyWhitespace(`
-	SELECT d.uuid, d.name, ds.type, dr.name, dr.quota
-	  FROM domains d
-	  LEFT OUTER JOIN domain_services ds ON ds.domain_id = d.id {{AND ds.type = $service_type}}
-	  LEFT OUTER JOIN domain_resources dr ON dr.service_id = ds.id {{AND dr.name = $resource_name}}
-	 WHERE %s
-`)
-
 var domainReportQuery3 = sqlext.SimplifyWhitespace(`
 	WITH project_commitment_sums AS (
 	  SELECT az_resource_id, SUM(amount) AS amount
@@ -157,6 +149,7 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 			if !resource.NoQuota {
 				if projectsQuota != nil {
 					resource.ProjectsQuota = projectsQuota
+					resource.DomainQuota = projectsQuota
 					if backendQuota != nil && *projectsQuota != *backendQuota {
 						resource.BackendQuota = backendQuota
 					}
@@ -168,36 +161,6 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 			if showPhysicalUsage != nil && *showPhysicalUsage {
 				resource.PhysicalUsage = physicalUsage
 			}
-		}
-
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	// second query: add domain quotas
-	queryStr, joinArgs = filter.PrepareQuery(domainReportQuery2)
-	whereStr, whereArgs = db.BuildSimpleWhereClause(fields, len(joinArgs))
-	err = sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
-		var (
-			domainUUID   string
-			domainName   string
-			serviceType  *limes.ServiceType
-			resourceName *limesresources.ResourceName
-			quota        *uint64
-		)
-		err := rows.Scan(
-			&domainUUID, &domainName, &serviceType, &resourceName, &quota,
-		)
-		if err != nil {
-			return err
-		}
-
-		_, _, resource := domains.Find(cluster, domainUUID, domainName, serviceType, resourceName, now)
-
-		if resource != nil && quota != nil && !resource.NoQuota {
-			resource.DomainQuota = quota
 		}
 
 		return nil
