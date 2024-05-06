@@ -44,6 +44,7 @@ var clusterReportQuery1 = sqlext.SimplifyWhitespace(`
 	SELECT ps.type, pr.name, par.az,
 	       SUM(par.usage), SUM(COALESCE(par.physical_usage, par.usage)), COUNT(par.physical_usage) > 0,
 	       SUM(GREATEST(0, COALESCE(pcs.amount, 0) - par.usage)),
+	       SUM(GREATEST(0, par.usage - COALESCE(pcs.amount, 0))),
 	       MIN(ps.scraped_at), MAX(ps.scraped_at)
 	  FROM project_services ps
 	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
@@ -117,11 +118,12 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 			physicalUsage     *uint64
 			showPhysicalUsage *bool
 			unusedCommitments *uint64
+			uncommittedUsage  *uint64
 			minScrapedAt      *time.Time
 			maxScrapedAt      *time.Time
 		)
 		err := rows.Scan(&serviceType, &resourceName, &availabilityZone,
-			&usage, &physicalUsage, &showPhysicalUsage, &unusedCommitments,
+			&usage, &physicalUsage, &showPhysicalUsage, &unusedCommitments, &uncommittedUsage,
 			&minScrapedAt, &maxScrapedAt)
 		if err != nil {
 			return err
@@ -153,6 +155,7 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 			azReport := limesresources.ClusterAZResourceReport{
 				ProjectsUsage:     *usage,
 				UnusedCommitments: *unusedCommitments,
+				UncommittedUsage:  *uncommittedUsage,
 			}
 			if *showPhysicalUsage {
 				azReport.PhysicalUsage = physicalUsage
