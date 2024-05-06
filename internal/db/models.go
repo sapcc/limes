@@ -117,7 +117,6 @@ type ProjectResource struct {
 	Name                    limesresources.ResourceName `db:"name"`
 	Quota                   *uint64                     `db:"quota"`
 	BackendQuota            *int64                      `db:"backend_quota"`
-	DesiredBackendQuota     *uint64                     `db:"desired_backend_quota"`
 	MinQuotaFromBackend     *uint64                     `db:"min_quota_from_backend"`
 	MaxQuotaFromBackend     *uint64                     `db:"max_quota_from_backend"`
 	MaxQuotaFromAdmin       *uint64                     `db:"max_quota_from_admin"`

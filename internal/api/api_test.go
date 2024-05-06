@@ -815,11 +815,10 @@ func Test_LargeProjectList(t *testing.T) {
 			}
 			for _, resourceName := range []limesresources.ResourceName{"things", "capacity"} {
 				resource := db.ProjectResource{
-					ServiceID:           service.ID,
-					Name:                resourceName,
-					Quota:               p2u64(0),
-					BackendQuota:        p2i64(0),
-					DesiredBackendQuota: p2u64(0),
+					ServiceID:    service.ID,
+					Name:         resourceName,
+					Quota:        p2u64(0),
+					BackendQuota: p2i64(0),
 				}
 				azResource := db.ProjectAZResource{
 					// ResourceID is filled in below once we have it
@@ -830,7 +829,6 @@ func Test_LargeProjectList(t *testing.T) {
 					resource.Quota = p2u64(uint64(idx))
 					azResource.Usage = uint64(idx / 2)
 					resource.BackendQuota = p2i64(int64(idx))
-					resource.DesiredBackendQuota = p2u64(uint64(idx))
 				}
 				err = s.DB.Insert(&resource)
 				if err != nil {

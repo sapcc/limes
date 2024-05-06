@@ -235,4 +235,13 @@ var sqlMigrations = map[string]string{
 		DROP TABLE domain_resources;
 		DROP TABLE domain_services;
 	`,
+	"041_remove_project_resources_desired_backend_quota.down.sql": `
+		ALTER TABLE project_resources
+			ADD COLUMN desired_backend_quota BIGINT DEFAULT NULL;
+		UPDATE project_resources SET desired_backend_quota = quota;
+	`,
+	"041_remove_project_resources_desired_backend_quota.up.sql": `
+		ALTER TABLE project_resources
+			DROP COLUMN desired_backend_quota;
+	`,
 }
