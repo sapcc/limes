@@ -57,9 +57,6 @@ const (
 						- name: firstrate
 						- name: secondrate
 							unit: KiB
-		quota_distribution_configs:
-			# TODO: remove and use the new default
-			- { resource: '.*', model: hierarchical }
 	`
 )
 

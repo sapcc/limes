@@ -42,9 +42,6 @@ const (
 				type: --test-generic
 			- service_type: unshared
 				type: --test-generic
-		quota_distribution_configs:
-			# TODO: remove and use the new default
-			- { resource: '.*', model: hierarchical }
 	`
 )
 
