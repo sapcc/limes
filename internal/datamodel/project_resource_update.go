@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"reflect"
 	"slices"
+	"time"
 
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/logg"
@@ -40,23 +41,12 @@ type ProjectResourceUpdate struct {
 	LogError func(msg string, args ...any)
 }
 
-// ProjectResourceUpdateResult is the return value for ProjectUpdate.Run().
-type ProjectResourceUpdateResult struct {
-	// If true, some resources have a BackendQuota that differs from the
-	// Quota. The caller should call ApplyBackendQuota() for these
-	// services once the DB transaction has been committed.
-	HasBackendQuotaDrift bool
-	// The set of resources that exists in the DB after the update.
-	DBResources []db.ProjectResource
-}
-
 // Run executes the given ProjectResourceUpdate operation:
 //
 //   - Missing ProjectResource entries are created.
 //   - The `UpdateResource` callback is called for each resource to allow the
 //     caller to update resource data as necessary.
-//   - Derived fields are recomputed on all ProjectResource entries.
-func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, domain db.Domain, project db.Project, srv db.ServiceRef[db.ProjectServiceID]) (*ProjectResourceUpdateResult, error) {
+func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, now time.Time, domain db.Domain, project db.Project, srv db.ServiceRef[db.ProjectServiceID]) ([]db.ProjectResource, error) {
 	if u.LogError == nil {
 		u.LogError = logg.Error
 	}
@@ -99,7 +89,8 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, doma
 	slices.Sort(allResourceNames)
 
 	// for each resource...
-	var result ProjectResourceUpdateResult
+	var result []db.ProjectResource
+	hasBackendQuotaDrift := false
 	for _, resName := range allResourceNames {
 		state := allResources[resName]
 		// skip project_resources that we do not know about (we do not delete them
@@ -147,19 +138,29 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, doma
 				return nil, fmt.Errorf("while updating %s/%s resource in the DB: %w", srv.Type, res.Name, err)
 			}
 		}
-		result.DBResources = append(result.DBResources, res)
+		result = append(result, res)
 
-		// check if we need to tell the caller to call ApplyBackendQuota after the tx
+		// check if we need to arrange for SetQuotaJob to look at this project service
 		if !resInfo.NoQuota {
 			backendQuota := unwrapOrDefault(res.BackendQuota, -1)
 			quota := *res.Quota // definitely not nil, it was set above in validateResourceConstraints()
 			if backendQuota < 0 || uint64(backendQuota) != quota {
-				result.HasBackendQuotaDrift = true
+				hasBackendQuotaDrift = true
 			}
 		}
 	}
 
-	return &result, nil
+	// if this update caused `quota != backend_quota` anywhere,
+	// request SetQuotaJob to take over (unless we already have an open request)
+	if hasBackendQuotaDrift {
+		query := `UPDATE project_services SET quota_desynced_at = $2 WHERE id = $1 AND quota_desynced_at IS NULL`
+		_, err := dbi.Exec(query, srv.ID, now)
+		if err != nil {
+			return nil, fmt.Errorf("while scheduling backend sync for %s quotas: %w", srv.Type, err)
+		}
+	}
+
+	return result, nil
 }
 
 func unwrapOrDefault[T any](value *T, defaultValue T) T {

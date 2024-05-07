@@ -244,4 +244,12 @@ var sqlMigrations = map[string]string{
 		ALTER TABLE project_resources
 			DROP COLUMN desired_backend_quota;
 	`,
+	"042_add_project_services_quota_desynced_at.down.sql": `
+		ALTER TABLE project_services
+			DROP COLUMN quota_desynced_at;
+	`,
+	"042_add_project_services_quota_desynced_at.up.sql": `
+		ALTER TABLE project_services
+			ADD COLUMN quota_desynced_at TIMESTAMP DEFAULT NULL;
+	`,
 }

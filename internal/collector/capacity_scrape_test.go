@@ -445,6 +445,8 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	// ApplyComputedProjectQuota() for the first time
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
 
+	desyncedAt1 := s.Clock.Now().Add(-5 * time.Second)
+	desyncedAt2 := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`%s
 		UPDATE project_az_resources SET quota = 0 WHERE id = 17 AND resource_id = 2 AND az = 'any';
 		UPDATE project_az_resources SET quota = 1 WHERE id = 18 AND resource_id = 2 AND az = 'az-one';
@@ -462,7 +464,11 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 		UPDATE project_resources SET quota = 251 WHERE id = 2 AND service_id = 1 AND name = 'capacity';
 		UPDATE project_resources SET quota = 10 WHERE id = 5 AND service_id = 2 AND name = 'capacity';
 		UPDATE project_resources SET quota = 10 WHERE id = 8 AND service_id = 3 AND name = 'capacity';
-	`, timestampUpdates())
+		UPDATE project_services SET quota_desynced_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'first';
+		UPDATE project_services SET quota_desynced_at = %[3]d WHERE id = 2 AND project_id = 1 AND type = 'second';
+		UPDATE project_services SET quota_desynced_at = %[2]d WHERE id = 3 AND project_id = 2 AND type = 'first';
+		UPDATE project_services SET quota_desynced_at = %[3]d WHERE id = 4 AND project_id = 2 AND type = 'second';
+	`, timestampUpdates(), desyncedAt1.Unix(), desyncedAt2.Unix())
 
 	// day 1: test that confirmation works at all
 	//

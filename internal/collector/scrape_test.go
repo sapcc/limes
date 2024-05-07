@@ -109,17 +109,18 @@ func Test_ScrapeSuccess(t *testing.T) {
 	c := getCollector(t, s)
 	job := c.ResourceScrapeJob(s.Registry)
 	withLabel := jobloop.WithLabel("service_type", "unittest")
+	syncJob := c.SyncQuotaToBackendJob(s.Registry)
+	plugin := s.Cluster.QuotaPlugins["unittest"].(*plugins.GenericQuotaPlugin) //nolint:errcheck
 
 	// check that ScanDomains created the domain, project and their services
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualToFile("fixtures/scrape0.sql")
 
 	// first Scrape should create the entries in `project_resources` with the
-	// correct usage and backend quota values (and quota = 0 because nothing was approved yet)
-	// and set `project_services.scraped_at` to the current time
+	// correct usage and backend quota values (and quota = 0 because no ACPQ has run yet)
+	// and set `project_services.scraped_at` to the current time;
+	// a desync should be noted, but we will not run syncJob until later in this test
 	s.Clock.StepBy(scrapeInterval)
-	plugin := s.Cluster.QuotaPlugins["unittest"].(*plugins.GenericQuotaPlugin) //nolint:errcheck
-	plugin.SetQuotaFails = true
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 	mustT(t, job.ProcessOne(s.Ctx, withLabel)) // twice because there are two projects
 
@@ -150,8 +151,8 @@ func Test_ScrapeSuccess(t *testing.T) {
 		INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (4, 2, 'capacity', 0, 100);
 		INSERT INTO project_resources (id, service_id, name) VALUES (5, 2, 'capacity_portion');
 		INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (6, 2, 'things', 0, 42);
-		UPDATE project_services SET scraped_at = %[1]d, scrape_duration_secs = 5, serialized_metrics = '{"capacity_usage":0,"things_usage":4}', checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
-		UPDATE project_services SET scraped_at = %[3]d, scrape_duration_secs = 5, serialized_metrics = '{"capacity_usage":0,"things_usage":4}', checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = %[1]d, scrape_duration_secs = 5, serialized_metrics = '{"capacity_usage":0,"things_usage":4}', checked_at = %[1]d, next_scrape_at = %[2]d, quota_desynced_at = %[1]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = %[3]d, scrape_duration_secs = 5, serialized_metrics = '{"capacity_usage":0,"things_usage":4}', checked_at = %[3]d, next_scrape_at = %[4]d, quota_desynced_at = %[3]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`,
 		scrapedAt1.Unix(), scrapedAt1.Add(scrapeInterval).Unix(),
 		scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),
@@ -169,6 +170,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	plugin.StaticResourceData["capacity"].Quota = 110
 	plugin.StaticResourceData["things"].UsageData["az-two"].Usage = 3
 	// Scrape should pick up the changed resource data
+	// (no quota sync should be requested since there is one requested already)
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 
@@ -244,33 +246,43 @@ func Test_ScrapeSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	tr.DBChanges().Ignore()
 
-	// Scrape should try to enforce quota values in the backend (this did not work
-	// until now because the test.Plugin was instructed to have SetQuota fail);
-	// also the quota change above causes ApplyComputedDomainQuota to have an effect here
-	s.Clock.StepBy(scrapeInterval)
-	plugin.SetQuotaFails = false
-	mustT(t, job.ProcessOne(s.Ctx, withLabel))
-	mustT(t, job.ProcessOne(s.Ctx, withLabel))
-
-	scrapedAt1 = s.Clock.Now().Add(-5 * time.Second)
-	scrapedAt2 = s.Clock.Now()
+	// test SyncQuotaToBackendJob running and failing (this checks that it does
+	// not get stuck on a failing project service and moves on to the other one
+	// in the second attempt)
+	plugin.SetQuotaFails = true
+	expectedErrorRx := regexp.MustCompile(`: SetQuota failed as requested$`)
+	mustFailLikeT(t, syncJob.ProcessOne(s.Ctx, withLabel), expectedErrorRx)
+	mustFailLikeT(t, syncJob.ProcessOne(s.Ctx, withLabel), expectedErrorRx) // twice because there are two projects
+	failedAt1 := s.Clock.Now().Add(-5 * time.Second)
+	failedAt2 := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
-		UPDATE project_resources SET quota = 20, backend_quota = 20 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
-		UPDATE project_resources SET quota = 13, backend_quota = 13 WHERE id = 3 AND service_id = 1 AND name = 'things';
-		UPDATE project_resources SET quota = 20, backend_quota = 20 WHERE id = 4 AND service_id = 2 AND name = 'capacity';
-		UPDATE project_resources SET quota = 13, backend_quota = 13 WHERE id = 6 AND service_id = 2 AND name = 'things';
-		UPDATE project_services SET scraped_at = %[1]d, checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
-		UPDATE project_services SET scraped_at = %[3]d, checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+		UPDATE project_services SET quota_desynced_at = %[1]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET quota_desynced_at = %[2]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`,
-		scrapedAt1.Unix(), scrapedAt1.Add(scrapeInterval).Unix(),
-		scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),
+		failedAt1.Unix(), failedAt2.Unix(),
 	)
 
-	// another Scrape (with SetQuota disabled again) should show that the quota
-	// update was durable
+	// test SyncQuotaToBackendJob running successfully
+	plugin.SetQuotaFails = false
+	mustT(t, syncJob.ProcessOne(s.Ctx, withLabel))
+	mustT(t, syncJob.ProcessOne(s.Ctx, withLabel))
+	tr.DBChanges().AssertEqualf(`
+		UPDATE project_resources SET backend_quota = 20 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
+		UPDATE project_resources SET backend_quota = 13 WHERE id = 3 AND service_id = 1 AND name = 'things';
+		UPDATE project_resources SET backend_quota = 20 WHERE id = 4 AND service_id = 2 AND name = 'capacity';
+		UPDATE project_resources SET backend_quota = 13 WHERE id = 6 AND service_id = 2 AND name = 'things';
+		UPDATE project_services SET quota_desynced_at = NULL WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET quota_desynced_at = NULL WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+	`)
+
+	// test SyncQuotaToBackendJob not having anything to do
+	mustFailT(t, syncJob.ProcessOne(s.Ctx, withLabel), sql.ErrNoRows)
+	tr.DBChanges().AssertEmpty()
+
+	// Scrape should show that the quota update was durable
 	s.Clock.StepBy(scrapeInterval)
-	plugin.SetQuotaFails = true
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 
@@ -398,6 +410,9 @@ func Test_ScrapeFailure(t *testing.T) {
 
 	// failing Scrape should create dummy records to ensure that the API finds
 	// plausibly-structured data
+	//
+	// Note that this does *not* set quota_desynced_at. We would rather not
+	// write any quotas while we cannot even get correct usage numbers.
 	s.Clock.StepBy(scrapeInterval)
 	plugin := s.Cluster.QuotaPlugins["unittest"].(*plugins.GenericQuotaPlugin) //nolint:errcheck
 	plugin.ScrapeFails = true
@@ -468,8 +483,8 @@ func Test_ScrapeFailure(t *testing.T) {
 		UPDATE project_resources SET backend_quota = 42 WHERE id = 3 AND service_id = 1 AND name = 'things';
 		UPDATE project_resources SET backend_quota = 100 WHERE id = 4 AND service_id = 2 AND name = 'capacity';
 		UPDATE project_resources SET backend_quota = 42 WHERE id = 6 AND service_id = 2 AND name = 'things';
-		UPDATE project_services SET scraped_at = %[1]d, scrape_duration_secs = 5, serialized_metrics = '{"capacity_usage":0,"things_usage":4}', checked_at = %[1]d, scrape_error_message = '', next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
-		UPDATE project_services SET scraped_at = %[3]d, scrape_duration_secs = 5, serialized_metrics = '{"capacity_usage":0,"things_usage":4}', checked_at = %[3]d, scrape_error_message = '', next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = %[1]d, scrape_duration_secs = 5, serialized_metrics = '{"capacity_usage":0,"things_usage":4}', checked_at = %[1]d, scrape_error_message = '', next_scrape_at = %[2]d, quota_desynced_at = %[1]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = %[3]d, scrape_duration_secs = 5, serialized_metrics = '{"capacity_usage":0,"things_usage":4}', checked_at = %[3]d, scrape_error_message = '', next_scrape_at = %[4]d, quota_desynced_at = %[3]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`,
 		scrapedAt1.Unix(), scrapedAt1.Add(scrapeInterval).Unix(),
 		scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),

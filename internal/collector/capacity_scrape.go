@@ -350,7 +350,8 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 	// for all cluster resources thus updated, recompute project quotas if necessary
 	for _, res := range dbOwnedResources {
 		serviceType := serviceTypeForID[res.ServiceID]
-		err := datamodel.ApplyComputedProjectQuota(serviceType, res.Name, c.DB, c.Cluster)
+		now := c.MeasureTime()
+		err := datamodel.ApplyComputedProjectQuota(serviceType, res.Name, c.DB, c.Cluster, now)
 		if err != nil {
 			return err
 		}
