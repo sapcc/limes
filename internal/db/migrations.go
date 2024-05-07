@@ -252,4 +252,12 @@ var sqlMigrations = map[string]string{
 		ALTER TABLE project_services
 			ADD COLUMN quota_desynced_at TIMESTAMP DEFAULT NULL;
 	`,
+	"043_add_project_services_quota_sync_duration_secs.down.sql": `
+		ALTER TABLE project_services
+			DROP COLUMN quota_sync_duration_secs;
+	`,
+	"043_add_project_services_quota_sync_duration_secs.up.sql": `
+		ALTER TABLE project_services
+			ADD COLUMN quota_sync_duration_secs REAL NOT NULL DEFAULT 0;
+	`,
 }

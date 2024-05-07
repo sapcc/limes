@@ -50,8 +50,16 @@ func (c *Collector) SyncQuotaToBackendJob(registerer prometheus.Registerer) jobl
 	}).Setup(registerer)
 }
 
+var quotaSyncDiscoverQuery = sqlext.SimplifyWhitespace(`
+	SELECT * FROM project_services
+	 WHERE quota_desynced_at IS NOT NULL
+	 -- order by priority (oldest requests first), then by ID for deterministic test behavior
+	 ORDER BY quota_desynced_at ASC, id ASC
+	 LIMIT 1
+`)
+
 func (c *Collector) discoverQuotaSyncTask(ctx context.Context, labels prometheus.Labels) (srv db.ProjectService, err error) {
-	err = c.DB.SelectOne(&srv, `SELECT * FROM project_services WHERE quota_desynced_at IS NOT NULL LIMIT 1`)
+	err = c.DB.SelectOne(&srv, quotaSyncDiscoverQuery)
 	if err == nil {
 		labels["service_type"] = string(srv.Type)
 		labels["service_name"] = c.Cluster.InfoForService(srv.Type).ProductName
@@ -84,12 +92,12 @@ var (
 	`)
 	quotaSyncMarkServiceAsAppliedQuery = sqlext.SimplifyWhitespace(`
 		UPDATE project_services
-		   SET quota_desynced_at = NULL
+		   SET quota_desynced_at = NULL, quota_sync_duration_secs = $2
 		 WHERE id = $1
 	`)
 	quotaSyncRetryWithDelayQuery = sqlext.SimplifyWhitespace(`
 		UPDATE project_services
-		   SET quota_desynced_at = $2
+		   SET quota_desynced_at = $2, quota_sync_duration_secs = $3
 		 WHERE id = $1
 	`)
 )
@@ -99,6 +107,7 @@ func (c *Collector) performQuotaSync(srv db.ProjectService, project db.Project, 
 	if plugin == nil {
 		return fmt.Errorf("no quota plugin registered for service type %s", srv.Type)
 	}
+	startedAt := c.MeasureTime()
 
 	// collect backend quota values that we want to apply
 	targetQuotasInDB := make(map[limesresources.ResourceName]uint64)
@@ -140,10 +149,11 @@ func (c *Collector) performQuotaSync(srv db.ProjectService, project db.Project, 
 
 	// apply quotas in backend
 	err = plugin.SetQuota(core.KeystoneProjectFromDB(project, domain), targetQuotasForBackend)
+	finishedAt := c.MeasureTimeAtEnd()
+	durationSecs := finishedAt.Sub(startedAt).Seconds()
 	if err != nil {
 		// if SetQuota fails, do not retry immediately; try to sync other projects first
-		now := c.MeasureTimeAtEnd()
-		_, err2 := c.DB.Exec(quotaSyncRetryWithDelayQuery, srv.ID, now)
+		_, err2 := c.DB.Exec(quotaSyncRetryWithDelayQuery, srv.ID, finishedAt, durationSecs)
 		if err2 != nil {
 			return fmt.Errorf("%w (additional error when delaying retry: %s)", err, err2.Error())
 		}
@@ -153,6 +163,6 @@ func (c *Collector) performQuotaSync(srv db.ProjectService, project db.Project, 
 	if err != nil {
 		return err
 	}
-	_, err = c.DB.Exec(quotaSyncMarkServiceAsAppliedQuery, srv.ID)
+	_, err = c.DB.Exec(quotaSyncMarkServiceAsAppliedQuery, srv.ID, durationSecs)
 	return err
 }
