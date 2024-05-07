@@ -23,6 +23,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
@@ -158,10 +159,11 @@ func (c *Collector) performQuotaSync(srv db.ProjectService, project db.Project, 
 		// apply quotas in backend
 		err = plugin.SetQuota(core.KeystoneProjectFromDB(project, domain), targetQuotasForBackend)
 		if err != nil {
-			// if SetQuota fails, do not retry immediately; try to sync other projects first
+			// if SetQuota fails, do not retry immediately;
+			// try to sync other projects first, then retry in 30 seconds from now at the earliest
 			finishedAt := c.MeasureTimeAtEnd()
 			durationSecs := finishedAt.Sub(startedAt).Seconds()
-			_, err2 := c.DB.Exec(quotaSyncRetryWithDelayQuery, srv.ID, finishedAt, durationSecs)
+			_, err2 := c.DB.Exec(quotaSyncRetryWithDelayQuery, srv.ID, finishedAt.Add(30*time.Second), durationSecs)
 			if err2 != nil {
 				return fmt.Errorf("%w (additional error when delaying retry: %s)", err, err2.Error())
 			}
