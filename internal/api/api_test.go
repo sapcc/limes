@@ -105,10 +105,6 @@ const (
 				commitment_is_az_aware: true
 			- resource: shared/things
 				commitment_is_az_aware: false
-
-		quota_distribution_configs:
-			# TODO: remove and use the new default
-			- { resource: '.*', model: hierarchical }
 	`
 )
 
@@ -737,14 +733,14 @@ func Test_LargeProjectList(t *testing.T) {
 						{
 							"name":                     "capacity",
 							"unit":                     "B",
-							"quota_distribution_model": "hierarchical",
+							"quota_distribution_model": "autogrow",
 							"quota":                    0,
 							"usable_quota":             0,
 							"usage":                    0,
 						},
 						{
 							"name":                     "things",
-							"quota_distribution_model": "hierarchical",
+							"quota_distribution_model": "autogrow",
 							"quota":                    0,
 							"usable_quota":             0,
 							"usage":                    0,
@@ -759,14 +755,14 @@ func Test_LargeProjectList(t *testing.T) {
 						{
 							"name":                     "capacity",
 							"unit":                     "B",
-							"quota_distribution_model": "hierarchical",
+							"quota_distribution_model": "autogrow",
 							"quota":                    0,
 							"usable_quota":             0,
 							"usage":                    0,
 						},
 						{
 							"name":                     "things",
-							"quota_distribution_model": "hierarchical",
+							"quota_distribution_model": "autogrow",
 							"quota":                    idx,
 							"usable_quota":             idx,
 							"usage":                    idx / 2,

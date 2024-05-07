@@ -9,7 +9,7 @@
           {
             "name": "capacity",
             "unit": "B",
-            "quota_distribution_model": "hierarchical",
+            "quota_distribution_model": "autogrow",
             "commitment_config": {
               "durations": [
                 "1 hour",
@@ -71,7 +71,7 @@
           },
           {
             "name": "things",
-            "quota_distribution_model": "hierarchical",
+            "quota_distribution_model": "autogrow",
             "commitment_config": {
               "durations": [
                 "1 hour",
@@ -102,7 +102,7 @@
           {
             "name": "capacity",
             "unit": "B",
-            "quota_distribution_model": "hierarchical",
+            "quota_distribution_model": "autogrow",
             "per_az": {
               "az-one": {
                 "capacity": 0,
@@ -151,7 +151,7 @@
           },
           {
             "name": "things",
-            "quota_distribution_model": "hierarchical",
+            "quota_distribution_model": "autogrow",
             "capacity": 139,
             "per_az": {
               "any": {

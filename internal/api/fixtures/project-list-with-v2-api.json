@@ -12,7 +12,7 @@
             {
               "name": "capacity",
               "unit": "B",
-              "quota_distribution_model": "hierarchical",
+              "quota_distribution_model": "autogrow",
               "commitment_config": {
                 "durations": [
                   "1 hour",
@@ -50,7 +50,7 @@
             },
             {
               "name": "things",
-              "quota_distribution_model": "hierarchical",
+              "quota_distribution_model": "autogrow",
               "commitment_config": {
                 "durations": [
                   "1 hour",
@@ -78,7 +78,7 @@
             {
               "name": "capacity",
               "unit": "B",
-              "quota_distribution_model": "hierarchical",
+              "quota_distribution_model": "autogrow",
               "per_az": {
                 "az-one": {
                   "quota": 5,
@@ -109,7 +109,7 @@
             },
             {
               "name": "things",
-              "quota_distribution_model": "hierarchical",
+              "quota_distribution_model": "autogrow",
               "per_az": {
                 "any": {
                   "quota": 10,
@@ -137,7 +137,7 @@
             {
               "name": "capacity",
               "unit": "B",
-              "quota_distribution_model": "hierarchical",
+              "quota_distribution_model": "autogrow",
               "commitment_config": {
                 "durations": [
                   "1 hour",
@@ -183,7 +183,7 @@
             },
             {
               "name": "things",
-              "quota_distribution_model": "hierarchical",
+              "quota_distribution_model": "autogrow",
               "commitment_config": {
                 "durations": [
                   "1 hour",
@@ -211,7 +211,7 @@
             {
               "name": "capacity",
               "unit": "B",
-              "quota_distribution_model": "hierarchical",
+              "quota_distribution_model": "autogrow",
               "per_az": {
                 "any": {
                   "quota": 4,
@@ -256,7 +256,7 @@
             },
             {
               "name": "things",
-              "quota_distribution_model": "hierarchical",
+              "quota_distribution_model": "autogrow",
               "per_az": {
                 "any": {
                   "quota": 10,

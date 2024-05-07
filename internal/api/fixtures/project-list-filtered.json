@@ -11,7 +11,7 @@
           "resources": [
             {
               "name": "things",
-              "quota_distribution_model": "hierarchical",
+              "quota_distribution_model": "autogrow",
               "commitment_config": {
                 "durations": [
                   "1 hour",
@@ -39,7 +39,7 @@
           "resources": [
             {
               "name": "things",
-              "quota_distribution_model": "hierarchical",
+              "quota_distribution_model": "autogrow",
               "commitment_config": {
                 "durations": [
                   "1 hour",
