@@ -258,8 +258,8 @@ func Test_ScrapeSuccess(t *testing.T) {
 	failedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	failedAt2 := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
-		UPDATE project_services SET quota_desynced_at = %[1]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
-		UPDATE project_services SET quota_desynced_at = %[2]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+		UPDATE project_services SET quota_desynced_at = %[1]d, quota_sync_duration_secs = 5 WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET quota_desynced_at = %[2]d, quota_sync_duration_secs = 5 WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`,
 		failedAt1.Unix(), failedAt2.Unix(),
 	)
