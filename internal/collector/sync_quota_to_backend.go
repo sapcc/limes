@@ -50,8 +50,16 @@ func (c *Collector) SyncQuotaToBackendJob(registerer prometheus.Registerer) jobl
 	}).Setup(registerer)
 }
 
+var quotaSyncDiscoverQuery = sqlext.SimplifyWhitespace(`
+	SELECT * FROM project_services
+	 WHERE quota_desynced_at IS NOT NULL
+	 -- order by priority (oldest requests first), then by ID for deterministic test behavior
+	 ORDER BY quota_desynced_at ASC, id ASC
+	 LIMIT 1
+`)
+
 func (c *Collector) discoverQuotaSyncTask(ctx context.Context, labels prometheus.Labels) (srv db.ProjectService, err error) {
-	err = c.DB.SelectOne(&srv, `SELECT * FROM project_services WHERE quota_desynced_at IS NOT NULL LIMIT 1`)
+	err = c.DB.SelectOne(&srv, quotaSyncDiscoverQuery)
 	if err == nil {
 		labels["service_type"] = string(srv.Type)
 		labels["service_name"] = c.Cluster.InfoForService(srv.Type).ProductName
