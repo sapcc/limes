@@ -27,6 +27,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/jobloop"
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/internal/core"
@@ -72,6 +73,7 @@ func (c *Collector) processQuotaSyncTask(_ context.Context, srv db.ProjectServic
 	if err != nil {
 		return err
 	}
+	logg.Debug("syncing %s quotas for project %s/%s...", srv.Type, dbDomain.Name, dbProject.Name)
 	err = c.performQuotaSync(srv, dbProject, project.Domain)
 	if err != nil {
 		return fmt.Errorf("could not sync %s quotas for project %s/%s: %w", srv.Type, dbDomain.Name, dbProject.Name, err)
