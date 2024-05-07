@@ -161,10 +161,14 @@ func taskCollect(cluster *core.Cluster, args []string) {
 	c := collector.NewCollector(cluster, dbm)
 	resourceScrapeJob := c.ResourceScrapeJob(nil)
 	rateScrapeJob := c.RateScrapeJob(nil)
+	syncQuotaToBackendJob := c.SyncQuotaToBackendJob(nil)
 	for serviceType := range cluster.QuotaPlugins {
 		opt := jobloop.WithLabel("service_type", string(serviceType))
 		go resourceScrapeJob.Run(ctx, opt)
 		go rateScrapeJob.Run(ctx, opt)
+		if cluster.Authoritative {
+			go syncQuotaToBackendJob.Run(ctx, opt)
+		}
 	}
 
 	// start those collector threads which operate over all services simultaneously
@@ -172,9 +176,6 @@ func taskCollect(cluster *core.Cluster, args []string) {
 	go c.CheckConsistencyJob(nil).Run(ctx)
 	go c.CleanupOldCommitmentsJob(nil).Run(ctx)
 	go c.ScanDomainsAndProjectsJob(nil).Run(ctx)
-	if cluster.Authoritative {
-		go c.SyncQuotaToBackendJob(nil).Run(ctx)
-	}
 
 	// use main thread to emit Prometheus metrics
 	prometheus.MustRegister(&collector.AggregateMetricsCollector{Cluster: cluster, DB: dbm})

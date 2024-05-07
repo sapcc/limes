@@ -25,6 +25,7 @@ import (
 	"fmt"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/logg"
@@ -36,6 +37,11 @@ import (
 
 // SyncQuotaToBackendJob looks for project services that need to have their
 // quota applied to the backend, and runs SetQuota for those services.
+//
+// This job is not ConcurrencySafe, but multiple instances can safely be run in
+// parallel if they act on separate service types. The job can only be run if
+// a target service type is specified using the
+// `jobloop.WithLabel("service_type", serviceType)` option.
 func (c *Collector) SyncQuotaToBackendJob(registerer prometheus.Registerer) jobloop.Job {
 	return (&jobloop.ProducerConsumerJob[db.ProjectService]{
 		Metadata: jobloop.JobMetadata{
@@ -53,16 +59,20 @@ func (c *Collector) SyncQuotaToBackendJob(registerer prometheus.Registerer) jobl
 
 var quotaSyncDiscoverQuery = sqlext.SimplifyWhitespace(`
 	SELECT * FROM project_services
-	 WHERE quota_desynced_at IS NOT NULL
+	 WHERE type = $1 AND quota_desynced_at IS NOT NULL
 	 -- order by priority (oldest requests first), then by ID for deterministic test behavior
 	 ORDER BY quota_desynced_at ASC, id ASC
 	 LIMIT 1
 `)
 
 func (c *Collector) discoverQuotaSyncTask(ctx context.Context, labels prometheus.Labels) (srv db.ProjectService, err error) {
-	err = c.DB.SelectOne(&srv, quotaSyncDiscoverQuery)
+	serviceType := limes.ServiceType(labels["service_type"])
+	if !c.Cluster.HasService(serviceType) {
+		return db.ProjectService{}, fmt.Errorf("no such service type: %q", serviceType)
+	}
+
+	err = c.DB.SelectOne(&srv, quotaSyncDiscoverQuery, serviceType)
 	if err == nil {
-		labels["service_type"] = string(srv.Type)
 		labels["service_name"] = c.Cluster.InfoForService(srv.Type).ProductName
 	}
 	return
