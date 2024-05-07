@@ -265,10 +265,10 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 	}
 
 	// update project_resources using the action callback from above
-	resourceUpdateResult, err := datamodel.ProjectResourceUpdate{
+	dbResources, err := datamodel.ProjectResourceUpdate{
 		UpdateResource: updateResource,
 		LogError:       c.LogError,
-	}.Run(tx, c.Cluster, dbDomain, dbProject, srv.Ref())
+	}.Run(tx, c.Cluster, c.MeasureTime(), dbDomain, dbProject, srv.Ref())
 	if err != nil {
 		return err
 	}
@@ -279,13 +279,13 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 	if err != nil {
 		return fmt.Errorf("while reading existing project AZ resources: %w", err)
 	}
-	dbAZResourcesByResourceID := make(map[db.ProjectResourceID][]db.ProjectAZResource, len(resourceUpdateResult.DBResources))
+	dbAZResourcesByResourceID := make(map[db.ProjectResourceID][]db.ProjectAZResource, len(dbResources))
 	for _, azRes := range dbAZResources {
 		dbAZResourcesByResourceID[azRes.ResourceID] = append(dbAZResourcesByResourceID[azRes.ResourceID], azRes)
 	}
-	allResourceNames := make([]limesresources.ResourceName, len(resourceUpdateResult.DBResources))
-	dbResourcesByName := make(map[limesresources.ResourceName]db.ProjectResource, len(resourceUpdateResult.DBResources))
-	for idx, res := range resourceUpdateResult.DBResources {
+	allResourceNames := make([]limesresources.ResourceName, len(dbResources))
+	dbResourcesByName := make(map[limesresources.ResourceName]db.ProjectResource, len(dbResources))
+	for idx, res := range dbResources {
 		allResourceNames[idx] = res.Name
 		dbResourcesByName[res.Name] = res
 	}
@@ -376,20 +376,6 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 		logg.Info("scrape of %s in project %s has taken excessively long (%s)", srv.Type, dbProject.UUID, task.Timing.Duration().String())
 	}
 
-	// if a mismatch between frontend and backend quota was detected, try to
-	// rectify it (but an error at this point is non-fatal: we don't want scraping
-	// to get stuck because some project has backend_quota > usage > quota, for
-	// example)
-	if c.Cluster.Authoritative && resourceUpdateResult.HasBackendQuotaDrift {
-		domain := core.KeystoneDomainFromDB(dbDomain)
-		err := datamodel.ApplyBackendQuota(c.DB, c.Cluster, domain, dbProject, srv.Ref())
-		if err != nil {
-			logg.Error("could not rectify frontend/backend quota mismatch for service %s in project %s: %s",
-				srv.Type, dbProject.UUID, err.Error(),
-			)
-		}
-	}
-
 	return nil
 }
 
@@ -415,7 +401,7 @@ func (c *Collector) writeDummyResources(dbDomain db.Domain, dbProject db.Project
 	// create all project_resources, but do not set any particular values (except
 	// that quota overrides are persisted)
 	overrideQuotas := c.Cluster.QuotaOverrides[dbDomain.Name][dbProject.Name][srv.Type]
-	updateResult, err := datamodel.ProjectResourceUpdate{
+	dbResources, err := datamodel.ProjectResourceUpdate{
 		UpdateResource: func(res *db.ProjectResource) error {
 			resInfo := c.Cluster.InfoForResource(srv.Type, res.Name)
 			if !resInfo.NoQuota && res.BackendQuota == nil {
@@ -429,7 +415,7 @@ func (c *Collector) writeDummyResources(dbDomain db.Domain, dbProject db.Project
 			return nil
 		},
 		LogError: c.LogError,
-	}.Run(tx, c.Cluster, dbDomain, dbProject, srv)
+	}.Run(tx, c.Cluster, c.MeasureTime(), dbDomain, dbProject, srv)
 	if err != nil {
 		return err
 	}
@@ -437,7 +423,7 @@ func (c *Collector) writeDummyResources(dbDomain db.Domain, dbProject db.Project
 	// called after scraping errors, so ApplyBackendQuota will likely fail, too.
 
 	// create dummy project_az_resources
-	for _, res := range updateResult.DBResources {
+	for _, res := range dbResources {
 		err := tx.Insert(&db.ProjectAZResource{
 			ResourceID:       res.ID,
 			AvailabilityZone: limes.AvailabilityZoneAny,
@@ -453,7 +439,7 @@ func (c *Collector) writeDummyResources(dbDomain db.Domain, dbProject db.Project
 	// stale services to cover first
 	dummyScrapedAt := time.Unix(0, 0).UTC()
 	_, err = tx.Exec(
-		`UPDATE project_services SET scraped_at = $1, scrape_duration_secs = $2, stale = $3 WHERE id = $4`,
+		`UPDATE project_services SET scraped_at = $1, scrape_duration_secs = $2, stale = $3, quota_desynced_at = NULL WHERE id = $4`,
 		dummyScrapedAt, 0.0, false, srv.ID,
 	)
 	if err != nil {

@@ -172,6 +172,9 @@ func taskCollect(cluster *core.Cluster, args []string) {
 	go c.CheckConsistencyJob(nil).Run(ctx)
 	go c.CleanupOldCommitmentsJob(nil).Run(ctx)
 	go c.ScanDomainsAndProjectsJob(nil).Run(ctx)
+	if cluster.Authoritative {
+		go c.SyncQuotaToBackendJob(nil).Run(ctx)
+	}
 
 	// use main thread to emit Prometheus metrics
 	prometheus.MustRegister(&collector.AggregateMetricsCollector{Cluster: cluster, DB: dbm})

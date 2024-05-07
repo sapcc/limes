@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"math"
 	"slices"
+	"time"
 
 	"github.com/go-gorp/gorp/v3"
 	"github.com/sapcc/go-api-declarations/limes"
@@ -55,7 +56,10 @@ var (
 		UPDATE project_az_resources SET quota = $1 WHERE quota IS DISTINCT FROM $1 AND az = $2 AND resource_id = $3
 	`)
 	acpqUpdateProjectQuotaQuery = sqlext.SimplifyWhitespace(`
-		UPDATE project_resources SET quota = $1 WHERE quota IS DISTINCT FROM $1 AND id = $2
+		UPDATE project_resources SET quota = $1 WHERE quota IS DISTINCT FROM $1 AND id = $2 RETURNING service_id
+	`)
+	acpqUpdateProjectServicesQuery = sqlext.SimplifyWhitespace(`
+		UPDATE project_services SET quota_desynced_at = $1 WHERE id = $2 AND quota_desynced_at IS NULL
 	`)
 )
 
@@ -88,7 +92,7 @@ func (c *projectLocalQuotaConstraints) AddMaxQuota(value *uint64) {
 
 // ApplyComputedProjectQuota reevaluates auto-computed project quotas for the
 // given resource, if supported by its quota distribution model.
-func ApplyComputedProjectQuota(serviceType limes.ServiceType, resourceName limesresources.ResourceName, dbm *gorp.DbMap, cluster *core.Cluster) error {
+func ApplyComputedProjectQuota(serviceType limes.ServiceType, resourceName limesresources.ResourceName, dbm *gorp.DbMap, cluster *core.Cluster, now time.Time) error {
 	// only run for resources with autogrow QD model
 	qdCfg := cluster.QuotaDistributionConfigForResource(serviceType, resourceName)
 	if qdCfg.Autogrow == nil {
@@ -172,18 +176,40 @@ func ApplyComputedProjectQuota(serviceType limes.ServiceType, resourceName limes
 			quotasByResourceID[resourceID] += projectTarget.Allocated
 		}
 	}
+	servicesWithUpdatedQuota := make(map[db.ProjectServiceID]struct{})
 	err = sqlext.WithPreparedStatement(tx, acpqUpdateProjectQuotaQuery, func(stmt *sql.Stmt) error {
 		for resourceID, quota := range quotasByResourceID {
-			_, err := stmt.Exec(quota, resourceID)
+			var serviceID db.ProjectServiceID
+			err := stmt.QueryRow(quota, resourceID).Scan(&serviceID)
+			if err == sql.ErrNoRows {
+				// if quota was not actually changed, do not remember this project service as being stale
+				continue
+			}
 			if err != nil {
 				return fmt.Errorf("in project resource %d: %w", resourceID, err)
 			}
+			servicesWithUpdatedQuota[serviceID] = struct{}{}
 		}
 		return nil
 	})
 	if err != nil {
 		return fmt.Errorf("while writing updated %s/%s project quotas to DB: %w", serviceType, resourceName, err)
 	}
+
+	// mark project services with changed quota for SyncQuotaToBackendJob
+	err = sqlext.WithPreparedStatement(tx, acpqUpdateProjectServicesQuery, func(stmt *sql.Stmt) error {
+		for serviceID := range servicesWithUpdatedQuota {
+			_, err := stmt.Exec(now, serviceID)
+			if err != nil {
+				return fmt.Errorf("in project service %d: %w", serviceID, err)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("while marking updated %s/%s project quotas for sync in DB: %w", serviceType, resourceName, err)
+	}
+
 	return tx.Commit()
 
 	//NOTE: Quotas are not applied to the backend here because OpenStack is way too inefficient in practice.

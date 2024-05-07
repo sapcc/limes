@@ -102,6 +102,7 @@ type ProjectService struct {
 	RatesScrapeState        string            `db:"rates_scrape_state"`
 	RatesScrapeErrorMessage string            `db:"rates_scrape_error_message"`
 	SerializedMetrics       string            `db:"serialized_metrics"`
+	QuotaDesyncedAt         *time.Time        `db:"quota_desynced_at"`
 }
 
 // Ref converts a ProjectService into its ProjectServiceRef.
