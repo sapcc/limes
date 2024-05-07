@@ -134,37 +134,37 @@ func (c *Collector) performQuotaSync(srv db.ProjectService, project db.Project, 
 		return fmt.Errorf("while collecting target quota values for %s backend: %w", srv.Type, err)
 	}
 
-	// if everything is looking good already, we're done here
-	if !needsApply {
-		return nil
-	}
-
-	// double-check that we only include quota values for resources that the backend currently knows about
-	targetQuotasForBackend := make(map[limesresources.ResourceName]uint64)
-	for _, res := range plugin.Resources() {
-		if res.NoQuota {
-			continue
+	if needsApply {
+		// double-check that we only include quota values for resources that the backend currently knows about
+		targetQuotasForBackend := make(map[limesresources.ResourceName]uint64)
+		for _, res := range plugin.Resources() {
+			if res.NoQuota {
+				continue
+			}
+			//NOTE: If `targetQuotasInDB` does not have an entry for this resource, we will write 0 into the backend.
+			targetQuotasForBackend[res.Name] = targetQuotasInDB[res.Name]
 		}
-		//NOTE: If `targetQuotasInDB` does not have an entry for this resource, we will write 0 into the backend.
-		targetQuotasForBackend[res.Name] = targetQuotasInDB[res.Name]
+
+		// apply quotas in backend
+		err = plugin.SetQuota(core.KeystoneProjectFromDB(project, domain), targetQuotasForBackend)
+		if err != nil {
+			// if SetQuota fails, do not retry immediately; try to sync other projects first
+			finishedAt := c.MeasureTimeAtEnd()
+			durationSecs := finishedAt.Sub(startedAt).Seconds()
+			_, err2 := c.DB.Exec(quotaSyncRetryWithDelayQuery, srv.ID, finishedAt, durationSecs)
+			if err2 != nil {
+				return fmt.Errorf("%w (additional error when delaying retry: %s)", err, err2.Error())
+			}
+			return err
+		}
+		_, err = c.DB.Exec(quotaSyncMarkResourcesAsAppliedQuery, srv.ID)
+		if err != nil {
+			return err
+		}
 	}
 
-	// apply quotas in backend
-	err = plugin.SetQuota(core.KeystoneProjectFromDB(project, domain), targetQuotasForBackend)
 	finishedAt := c.MeasureTimeAtEnd()
 	durationSecs := finishedAt.Sub(startedAt).Seconds()
-	if err != nil {
-		// if SetQuota fails, do not retry immediately; try to sync other projects first
-		_, err2 := c.DB.Exec(quotaSyncRetryWithDelayQuery, srv.ID, finishedAt, durationSecs)
-		if err2 != nil {
-			return fmt.Errorf("%w (additional error when delaying retry: %s)", err, err2.Error())
-		}
-		return err
-	}
-	_, err = c.DB.Exec(quotaSyncMarkResourcesAsAppliedQuery, srv.ID)
-	if err != nil {
-		return err
-	}
 	_, err = c.DB.Exec(quotaSyncMarkServiceAsAppliedQuery, srv.ID, durationSecs)
 	return err
 }
