@@ -75,9 +75,6 @@ const (
 		resource_behavior:
 			# overcommit should be reflected in capacity metrics
 			- { resource: unshared2/capacity, overcommit_factor: 2.5 }
-		quota_distribution_configs:
-			# TODO: remove and use the new default
-			- { resource: '.*', model: hierarchical }
 	`
 
 	testScanCapacityNoopConfigYAML = `
@@ -134,9 +131,8 @@ const (
 			# test that overcommit factor is considered when confirming commitments
 			- { resource: first/capacity, overcommit_factor: 10.0 }
 		quota_distribution_configs:
-			# test automatic project quota calculation on */capacity resources
+			# test automatic project quota calculation with non-default settings on */capacity resources
 			- { resource: '.*/capacity', model: autogrow, autogrow: { growth_multiplier: 1.0, project_base_quota: 10, usage_data_retention_period: 1m } }
-			- { resource: '.*/things',   model: hierarchical }
 	`
 )
 
@@ -443,11 +439,17 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	//
 	// however, there will be a lot of quota changes because we run
 	// ApplyComputedProjectQuota() for the first time
+	//
+	// Note that the "things" resources are not explicitly set up in the
+	// quota_distribution_configs test section. The automatic behavior amounts to
+	// pretty much just setting `quota = usage`, i.e. `quota = 0` in this case.
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
 
 	desyncedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	desyncedAt2 := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`%s
+		UPDATE project_az_resources SET quota = 0 WHERE id = 1 AND resource_id = 1 AND az = 'any';
+		UPDATE project_az_resources SET quota = 0 WHERE id = 13 AND resource_id = 10 AND az = 'any';
 		UPDATE project_az_resources SET quota = 0 WHERE id = 17 AND resource_id = 2 AND az = 'any';
 		UPDATE project_az_resources SET quota = 1 WHERE id = 18 AND resource_id = 2 AND az = 'az-one';
 		UPDATE project_az_resources SET quota = 250 WHERE id = 19 AND resource_id = 2 AND az = 'az-two';
@@ -460,9 +462,15 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 		UPDATE project_az_resources SET quota = 8 WHERE id = 26 AND resource_id = 11 AND az = 'any';
 		UPDATE project_az_resources SET quota = 1 WHERE id = 27 AND resource_id = 11 AND az = 'az-one';
 		UPDATE project_az_resources SET quota = 1 WHERE id = 28 AND resource_id = 11 AND az = 'az-two';
+		UPDATE project_az_resources SET quota = 0 WHERE id = 5 AND resource_id = 4 AND az = 'any';
+		UPDATE project_az_resources SET quota = 0 WHERE id = 9 AND resource_id = 7 AND az = 'any';
+		UPDATE project_resources SET quota = 0 WHERE id = 1 AND service_id = 1 AND name = 'things';
+		UPDATE project_resources SET quota = 0 WHERE id = 10 AND service_id = 4 AND name = 'things';
 		UPDATE project_resources SET quota = 10 WHERE id = 11 AND service_id = 4 AND name = 'capacity';
 		UPDATE project_resources SET quota = 251 WHERE id = 2 AND service_id = 1 AND name = 'capacity';
+		UPDATE project_resources SET quota = 0 WHERE id = 4 AND service_id = 2 AND name = 'things';
 		UPDATE project_resources SET quota = 10 WHERE id = 5 AND service_id = 2 AND name = 'capacity';
+		UPDATE project_resources SET quota = 0 WHERE id = 7 AND service_id = 3 AND name = 'things';
 		UPDATE project_resources SET quota = 10 WHERE id = 8 AND service_id = 3 AND name = 'capacity';
 		UPDATE project_services SET quota_desynced_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'first';
 		UPDATE project_services SET quota_desynced_at = %[3]d WHERE id = 2 AND project_id = 1 AND type = 'second';

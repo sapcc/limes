@@ -37,13 +37,10 @@ measured on different levels of this hierarchy:
   the **backend quota** (the project's quota for that resource in the backing service) stays in sync with the quota
   managed in Limes. Limes also scrapes **usage** data from the backing service for each project. The backing service is
   responsible for ensure that the usage for each project resource does not exceed the respective quota.
-- The domain level has a **domain quota** that is managed by Limes. Following the principle of hierarchical quota
-  delegation, Limes ensures that the sum of all project quotas within the domain (the **projects quota**) never exceeds
-  the domain quota.
-- The cluster level is where **capacity** is reported, to enable cloud admins to distribute this capacity to the
-  individual domains in the form of domain quota. The cluster level also has the **domains quota**, the sum of the
-  the domain quota across all domains. However, the capacity is a soft limit: It is possible (though usually not
-  recommended) for the cloud admin to give out more domains quota than there is capacity.
+- For historical reasons, the domain level has two attributes called **domain quota** and **projects quota**. Those are
+  currently both equal to the sum of quotas over all projects within the domain.
+- The cluster level is where **capacity** is reported. The cluster level also reports the **domains quota**, the sum of
+  the domain quota across all domains, which by now is just equal to the sum of the project quota across all projects.
 
 For resources that are **counted**, all these measurements are unitless. However, resources can also be **measured** in
 a certain unit, which then applies to all the aforementioned measurements. Clients should be prepared to handle the
@@ -217,7 +214,7 @@ The objects at `cluster.services[].resources[]` may contain the following fields
 | `capacity` | unsigned integer | The available capacity for this resource. |
 | `raw_capacity` | unsigned integer | The available raw capacity for this resource (only shown for [overcommitted resources](#overcommit)). |
 | `per_availability_zone` | list of objects | A breakdown of this resource's capacity by availability zone (only shown for resources supporting a breakdown by AZ). |
-| `domains_quota` | unsigned integer | The sum of all domain quotas for this resource across all domains. |
+| `domains_quota` | unsigned integer | The sum of all quotas for this resource across all projects. (The name is for historical reasons.) |
 | `usage` | unsigned integer | The sum of all usage values for this resource across all projects in all domains. |
 | `physical_usage` | unsigned integer | The sum of all physical usage values for this resource across all projects in all domains (only shown for [resources that report physical usage](#physical-usage)). |
 | `subcapacities` | list of objects | The subcapacities for this resource (only shown if `?detail` is given in the query and the resource supports [subcapacity reporting](#subcapacities)). |
@@ -303,8 +300,8 @@ The objects at `domains[].services[].resources[]` may contain the following fiel
 | `category` | string | The category of this resource (only shown when there is one). |
 | `contained_in` | string | The name of another resource (if any) within the same service that this resource is [contained in](#contained-resources). |
 | `quota_distribution_model` | string | The resource's [quota distribution model](#quota-distribution-model). The only possible value is "autogrow". |
-| `quota` | unsigned integer | The domain quota for this resource. |
-| `projects_quota` | unsigned integer | The sum of all project quotas for this resource across all projects in this domain. |
+| `quota` | unsigned integer | The sum of all project quotas for this resource across all projects in this domain. |
+| `projects_quota` | unsigned integer | **Deprecated.** Equal to `quota`. |
 | `usage` | unsigned integer | The sum of all usage values for this resource across all projects in this domain. |
 | `physical_usage` | unsigned integer | The sum of all physical usage values for this resource across all projects in this domain (only shown for [resources that report physical usage](#physical-usage)). |
 | `backend_quota` | unsigned integer | The sum of all nonzero backend quota values for this resource across all projects in this domain (only shown if this value differs from the value in the `quota` field). |
@@ -622,19 +619,7 @@ Returns 200 (OK) on success. Result is a JSON document like:
 ```json
 {
   "inconsistencies": {
-    "domain_quota_overcommitted": [
-      {
-        "domain": {
-          "id": "d5fbe312-1f48-42ef-a36e-484659784aa0",
-          "name": "example-domain"
-        },
-        "service": "network",
-        "resource": "security_groups",
-        "domain_quota": 100,
-        "projects_quota": 114
-      },
-      ...
-    ],
+    "domain_quota_overcommitted": [],
     "project_quota_overspent": [
       {
         "project": {
@@ -675,17 +660,7 @@ Returns 200 (OK) on success. Result is a JSON document like:
 }
 ```
 
-The objects at `inconsistencies.domain_quota_overcommitted[]` may contain the following fields:
-
-| Field | Type | Description |
-| ----- | ---- | ----------- |
-| `domain` | string | Metadata for the affected domain. |
-| `domain.id` | string | UUID of this domain in Keystone. |
-| `domain.name` | string | Name of this domain in Keystone. |
-| `service` | string | The type name of the service that contains the resource with the overcommitted domain quota. |
-| `resource` | string | The name of the resource with the overcommitted domain quota. |
-| `domain_quota` | unsigned integer | The domain quota for the affected resource in the affected domain. |
-| `projects_quota` | unsigned integer | The sum of all project quotas for the affected resource in the affected domain. |
+The field `inconsistencies.domain_quota_overcommitted` always contains an empty list for backwards-compatibility reasons.
 
 The objects at `inconsistencies.project_quota_overspent[]` and `inconsistencies.project_quota_mismatch[]` may contain
 the following fields:

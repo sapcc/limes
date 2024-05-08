@@ -1,3 +1,8 @@
+# HELP limes_autogrow_growth_multiplier For resources with quota distribution model "autogrow", reports the configured growth multiplier.
+# TYPE limes_autogrow_growth_multiplier gauge
+limes_autogrow_growth_multiplier{resource="capacity",service="unittest",service_name="generic-unittest"} 1
+limes_autogrow_growth_multiplier{resource="capacity_portion",service="unittest",service_name="generic-unittest"} 1
+limes_autogrow_growth_multiplier{resource="things",service="unittest",service_name="generic-unittest"} 1
 # HELP limes_cluster_capacity Reported capacity of a Limes resource for an OpenStack cluster.
 # TYPE limes_cluster_capacity gauge
 limes_cluster_capacity{resource="capacity",service="unittest",service_name="generic-unittest"} 0

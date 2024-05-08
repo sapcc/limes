@@ -94,8 +94,6 @@ const (
 		quota_distribution_configs:
 			# this is only used to check that historical_usage is tracked
 			- { resource: unittest/things, model: autogrow, autogrow: { growth_multiplier: 1.0, usage_data_retention_period: 48h } }
-			# TODO: remove and use the new default
-			- { resource: '.*', model: hierarchical }
 	`
 )
 
@@ -127,21 +125,21 @@ func Test_ScrapeSuccess(t *testing.T) {
 	scrapedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt2 := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
-		INSERT INTO project_az_resources (id, resource_id, az, usage) VALUES (1, 1, 'any', 0);
-		INSERT INTO project_az_resources (id, resource_id, az, usage) VALUES (10, 4, 'any', 0);
-		INSERT INTO project_az_resources (id, resource_id, az, usage, physical_usage) VALUES (11, 4, 'az-one', 0, 0);
-		INSERT INTO project_az_resources (id, resource_id, az, usage, physical_usage) VALUES (12, 4, 'az-two', 0, 0);
-		INSERT INTO project_az_resources (id, resource_id, az, usage) VALUES (13, 5, 'any', 0);
-		INSERT INTO project_az_resources (id, resource_id, az, usage) VALUES (14, 5, 'az-one', 0);
-		INSERT INTO project_az_resources (id, resource_id, az, usage) VALUES (15, 5, 'az-two', 0);
+		INSERT INTO project_az_resources (id, resource_id, az, usage, historical_usage) VALUES (1, 1, 'any', 0, '{"t":[%[1]d],"v":[0]}');
+		INSERT INTO project_az_resources (id, resource_id, az, usage, historical_usage) VALUES (10, 4, 'any', 0, '{"t":[%[3]d],"v":[0]}');
+		INSERT INTO project_az_resources (id, resource_id, az, usage, physical_usage, historical_usage) VALUES (11, 4, 'az-one', 0, 0, '{"t":[%[3]d],"v":[0]}');
+		INSERT INTO project_az_resources (id, resource_id, az, usage, physical_usage, historical_usage) VALUES (12, 4, 'az-two', 0, 0, '{"t":[%[3]d],"v":[0]}');
+		INSERT INTO project_az_resources (id, resource_id, az, usage, historical_usage) VALUES (13, 5, 'any', 0, '{"t":[%[3]d],"v":[0]}');
+		INSERT INTO project_az_resources (id, resource_id, az, usage, historical_usage) VALUES (14, 5, 'az-one', 0, '{"t":[%[3]d],"v":[0]}');
+		INSERT INTO project_az_resources (id, resource_id, az, usage, historical_usage) VALUES (15, 5, 'az-two', 0, '{"t":[%[3]d],"v":[0]}');
 		INSERT INTO project_az_resources (id, resource_id, az, usage, historical_usage) VALUES (16, 6, 'any', 0, '{"t":[%[3]d],"v":[0]}');
 		INSERT INTO project_az_resources (id, resource_id, az, usage, subresources, historical_usage) VALUES (17, 6, 'az-one', 2, '[{"index":0},{"index":1}]', '{"t":[%[3]d],"v":[2]}');
 		INSERT INTO project_az_resources (id, resource_id, az, usage, subresources, historical_usage) VALUES (18, 6, 'az-two', 2, '[{"index":2},{"index":3}]', '{"t":[%[3]d],"v":[2]}');
-		INSERT INTO project_az_resources (id, resource_id, az, usage, physical_usage) VALUES (2, 1, 'az-one', 0, 0);
-		INSERT INTO project_az_resources (id, resource_id, az, usage, physical_usage) VALUES (3, 1, 'az-two', 0, 0);
-		INSERT INTO project_az_resources (id, resource_id, az, usage) VALUES (4, 2, 'any', 0);
-		INSERT INTO project_az_resources (id, resource_id, az, usage) VALUES (5, 2, 'az-one', 0);
-		INSERT INTO project_az_resources (id, resource_id, az, usage) VALUES (6, 2, 'az-two', 0);
+		INSERT INTO project_az_resources (id, resource_id, az, usage, physical_usage, historical_usage) VALUES (2, 1, 'az-one', 0, 0, '{"t":[%[1]d],"v":[0]}');
+		INSERT INTO project_az_resources (id, resource_id, az, usage, physical_usage, historical_usage) VALUES (3, 1, 'az-two', 0, 0, '{"t":[%[1]d],"v":[0]}');
+		INSERT INTO project_az_resources (id, resource_id, az, usage, historical_usage) VALUES (4, 2, 'any', 0, '{"t":[%[1]d],"v":[0]}');
+		INSERT INTO project_az_resources (id, resource_id, az, usage, historical_usage) VALUES (5, 2, 'az-one', 0, '{"t":[%[1]d],"v":[0]}');
+		INSERT INTO project_az_resources (id, resource_id, az, usage, historical_usage) VALUES (6, 2, 'az-two', 0, '{"t":[%[1]d],"v":[0]}');
 		INSERT INTO project_az_resources (id, resource_id, az, usage, historical_usage) VALUES (7, 3, 'any', 0, '{"t":[%[1]d],"v":[0]}');
 		INSERT INTO project_az_resources (id, resource_id, az, usage, subresources, historical_usage) VALUES (8, 3, 'az-one', 2, '[{"index":0},{"index":1}]', '{"t":[%[1]d],"v":[2]}');
 		INSERT INTO project_az_resources (id, resource_id, az, usage, subresources, historical_usage) VALUES (9, 3, 'az-two', 2, '[{"index":2},{"index":3}]', '{"t":[%[1]d],"v":[2]}');
@@ -308,15 +306,17 @@ func Test_ScrapeSuccess(t *testing.T) {
 	scrapedAt1 = s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt2 = s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
-		UPDATE project_az_resources SET usage = 20, physical_usage = 10 WHERE id = 11 AND resource_id = 4 AND az = 'az-one';
-		UPDATE project_az_resources SET usage = 5 WHERE id = 14 AND resource_id = 5 AND az = 'az-one';
-		UPDATE project_az_resources SET usage = 20, physical_usage = 10 WHERE id = 2 AND resource_id = 1 AND az = 'az-one';
-		UPDATE project_az_resources SET usage = 5 WHERE id = 5 AND resource_id = 2 AND az = 'az-one';
+		UPDATE project_az_resources SET usage = 20, physical_usage = 10, historical_usage = '{"t":[%[6]d,%[3]d],"v":[0,20]}' WHERE id = 11 AND resource_id = 4 AND az = 'az-one';
+		UPDATE project_az_resources SET usage = 5, historical_usage = '{"t":[%[6]d,%[3]d],"v":[0,5]}' WHERE id = 14 AND resource_id = 5 AND az = 'az-one';
+		UPDATE project_az_resources SET usage = 20, physical_usage = 10, historical_usage = '{"t":[%[5]d,%[1]d],"v":[0,20]}' WHERE id = 2 AND resource_id = 1 AND az = 'az-one';
+		UPDATE project_az_resources SET usage = 5, historical_usage = '{"t":[%[5]d,%[1]d],"v":[0,5]}' WHERE id = 5 AND resource_id = 2 AND az = 'az-one';
 		UPDATE project_services SET scraped_at = %[1]d, serialized_metrics = '{"capacity_usage":20,"things_usage":5}', checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
 		UPDATE project_services SET scraped_at = %[3]d, serialized_metrics = '{"capacity_usage":20,"things_usage":5}', checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`,
 		scrapedAt1.Unix(), scrapedAt1.Add(scrapeInterval).Unix(),
 		scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),
+		firstScrapedAt1.Unix(),
+		firstScrapedAt2.Unix(),
 	)
 
 	// add some commitments in order to test the `limes_project_committed_per_az` metric below
@@ -466,20 +466,24 @@ func Test_ScrapeFailure(t *testing.T) {
 	scrapedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	scrapedAt2 := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
-		INSERT INTO project_az_resources (id, resource_id, az, usage) VALUES (10, 2, 'az-two', 0);
+		UPDATE project_az_resources SET historical_usage = '{"t":[%[1]d],"v":[0]}' WHERE id = 1 AND resource_id = 1 AND az = 'any';
+		INSERT INTO project_az_resources (id, resource_id, az, usage, historical_usage) VALUES (10, 2, 'az-two', 0, '{"t":[%[1]d],"v":[0]}');
 		INSERT INTO project_az_resources (id, resource_id, az, usage, subresources, historical_usage) VALUES (11, 3, 'az-one', 2, '[{"index":0},{"index":1}]', '{"t":[%[1]d],"v":[2]}');
 		INSERT INTO project_az_resources (id, resource_id, az, usage, subresources, historical_usage) VALUES (12, 3, 'az-two', 2, '[{"index":2},{"index":3}]', '{"t":[%[1]d],"v":[2]}');
-		INSERT INTO project_az_resources (id, resource_id, az, usage, physical_usage) VALUES (13, 4, 'az-one', 0, 0);
-		INSERT INTO project_az_resources (id, resource_id, az, usage, physical_usage) VALUES (14, 4, 'az-two', 0, 0);
-		INSERT INTO project_az_resources (id, resource_id, az, usage) VALUES (15, 5, 'az-one', 0);
-		INSERT INTO project_az_resources (id, resource_id, az, usage) VALUES (16, 5, 'az-two', 0);
+		INSERT INTO project_az_resources (id, resource_id, az, usage, physical_usage, historical_usage) VALUES (13, 4, 'az-one', 0, 0, '{"t":[%[3]d],"v":[0]}');
+		INSERT INTO project_az_resources (id, resource_id, az, usage, physical_usage, historical_usage) VALUES (14, 4, 'az-two', 0, 0, '{"t":[%[3]d],"v":[0]}');
+		INSERT INTO project_az_resources (id, resource_id, az, usage, historical_usage) VALUES (15, 5, 'az-one', 0, '{"t":[%[3]d],"v":[0]}');
+		INSERT INTO project_az_resources (id, resource_id, az, usage, historical_usage) VALUES (16, 5, 'az-two', 0, '{"t":[%[3]d],"v":[0]}');
 		INSERT INTO project_az_resources (id, resource_id, az, usage, subresources, historical_usage) VALUES (17, 6, 'az-one', 2, '[{"index":0},{"index":1}]', '{"t":[%[3]d],"v":[2]}');
 		INSERT INTO project_az_resources (id, resource_id, az, usage, subresources, historical_usage) VALUES (18, 6, 'az-two', 2, '[{"index":2},{"index":3}]', '{"t":[%[3]d],"v":[2]}');
+		UPDATE project_az_resources SET historical_usage = '{"t":[%[1]d],"v":[0]}' WHERE id = 2 AND resource_id = 2 AND az = 'any';
 		UPDATE project_az_resources SET historical_usage = '{"t":[%[1]d],"v":[0]}' WHERE id = 3 AND resource_id = 3 AND az = 'any';
+		UPDATE project_az_resources SET historical_usage = '{"t":[%[3]d],"v":[0]}' WHERE id = 4 AND resource_id = 4 AND az = 'any';
+		UPDATE project_az_resources SET historical_usage = '{"t":[%[3]d],"v":[0]}' WHERE id = 5 AND resource_id = 5 AND az = 'any';
 		UPDATE project_az_resources SET historical_usage = '{"t":[%[3]d],"v":[0]}' WHERE id = 6 AND resource_id = 6 AND az = 'any';
-		INSERT INTO project_az_resources (id, resource_id, az, usage, physical_usage) VALUES (7, 1, 'az-one', 0, 0);
-		INSERT INTO project_az_resources (id, resource_id, az, usage, physical_usage) VALUES (8, 1, 'az-two', 0, 0);
-		INSERT INTO project_az_resources (id, resource_id, az, usage) VALUES (9, 2, 'az-one', 0);
+		INSERT INTO project_az_resources (id, resource_id, az, usage, physical_usage, historical_usage) VALUES (7, 1, 'az-one', 0, 0, '{"t":[%[1]d],"v":[0]}');
+		INSERT INTO project_az_resources (id, resource_id, az, usage, physical_usage, historical_usage) VALUES (8, 1, 'az-two', 0, 0, '{"t":[%[1]d],"v":[0]}');
+		INSERT INTO project_az_resources (id, resource_id, az, usage, historical_usage) VALUES (9, 2, 'az-one', 0, '{"t":[%[1]d],"v":[0]}');
 		UPDATE project_resources SET backend_quota = 100 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
 		UPDATE project_resources SET backend_quota = 42 WHERE id = 3 AND service_id = 1 AND name = 'things';
 		UPDATE project_resources SET backend_quota = 100 WHERE id = 4 AND service_id = 2 AND name = 'capacity';
@@ -524,9 +528,6 @@ const (
 		services:
 			- service_type: noop
 				type: --test-noop
-		quota_distribution_configs:
-			# TODO: remove and use the new default
-			- { resource: '.*', model: hierarchical }
 	`
 )
 
@@ -575,9 +576,6 @@ const (
 				type: --test-noop
 				params:
 					with_empty_resource: true
-		quota_distribution_configs:
-			# TODO: remove and use the new default
-			- { resource: '.*', model: hierarchical }
 	`
 )
 
@@ -600,7 +598,7 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 	_, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualf(`
 		INSERT INTO domains (id, name, uuid) VALUES (1, 'germany', 'uuid-for-germany');
-		INSERT INTO project_az_resources (id, resource_id, az, usage) VALUES (1, 1, 'any', 0);
+		INSERT INTO project_az_resources (id, resource_id, az, usage, historical_usage) VALUES (1, 1, 'any', 0, '{"t":[%[1]d],"v":[0]}');
 		INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (1, 1, 'things', 0, 0);
 		INSERT INTO project_services (id, project_id, type, scraped_at, scrape_duration_secs, checked_at, next_scrape_at, rates_next_scrape_at) VALUES (1, 1, 'noop', %[1]d, 5, %[1]d, %[2]d, 0);
 		INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (1, 1, 'berlin', 'uuid-for-berlin', 'uuid-for-germany');

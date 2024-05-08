@@ -1,3 +1,14 @@
+# HELP limes_autogrow_growth_multiplier For resources with quota distribution model "autogrow", reports the configured growth multiplier.
+# TYPE limes_autogrow_growth_multiplier gauge
+limes_autogrow_growth_multiplier{resource="capacity",service="shared",service_name="generic-shared"} 1
+limes_autogrow_growth_multiplier{resource="capacity",service="unshared",service_name="generic-unshared"} 1
+limes_autogrow_growth_multiplier{resource="capacity",service="unshared2",service_name="generic-unshared2"} 1
+limes_autogrow_growth_multiplier{resource="capacity_portion",service="shared",service_name="generic-shared"} 1
+limes_autogrow_growth_multiplier{resource="capacity_portion",service="unshared",service_name="generic-unshared"} 1
+limes_autogrow_growth_multiplier{resource="capacity_portion",service="unshared2",service_name="generic-unshared2"} 1
+limes_autogrow_growth_multiplier{resource="things",service="shared",service_name="generic-shared"} 1
+limes_autogrow_growth_multiplier{resource="things",service="unshared",service_name="generic-unshared"} 1
+limes_autogrow_growth_multiplier{resource="things",service="unshared2",service_name="generic-unshared2"} 1
 # HELP limes_capacity_plugin_metrics_ok Whether capacity plugin metrics were rendered successfully for a particular capacitor. Only present when the capacitor emits metrics.
 # TYPE limes_capacity_plugin_metrics_ok gauge
 limes_capacity_plugin_metrics_ok{capacitor="unittest4"} 1

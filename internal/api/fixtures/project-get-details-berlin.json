@@ -11,7 +11,7 @@
           {
             "name": "capacity",
             "unit": "B",
-            "quota_distribution_model": "hierarchical",
+            "quota_distribution_model": "autogrow",
             "commitment_config": {
               "durations": [
                 "1 hour",
@@ -31,7 +31,7 @@
           },
           {
             "name": "things",
-            "quota_distribution_model": "hierarchical",
+            "quota_distribution_model": "autogrow",
             "commitment_config": {
               "durations": [
                 "1 hour",
@@ -63,7 +63,7 @@
           {
             "name": "capacity",
             "unit": "B",
-            "quota_distribution_model": "hierarchical",
+            "quota_distribution_model": "autogrow",
             "quota": 10,
             "usable_quota": 10,
             "usage": 2
@@ -76,7 +76,7 @@
           },
           {
             "name": "things",
-            "quota_distribution_model": "hierarchical",
+            "quota_distribution_model": "autogrow",
             "quota": 10,
             "usable_quota": 10,
             "usage": 2,
