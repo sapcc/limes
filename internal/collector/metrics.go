@@ -589,6 +589,16 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 
 	serviceNameByType := buildServiceNameByTypeMapping(c.Cluster)
 
+	// see down below on doc of type stringUniquifier for why we want this
+	uniqueDomainUUID := newStringUniquifier[string]()
+	uniqueDomainName := newStringUniquifier[string]()
+	uniqueProjectUUID := newStringUniquifier[string]()
+	uniqueProjectName := newStringUniquifier[string]()
+	uniqueAvailabilityZone := newStringUniquifier[limes.AvailabilityZone]()
+	uniqueServiceType := newStringUniquifier[limes.ServiceType]()
+	uniqueResourceName := newStringUniquifier[limesresources.ResourceName]()
+	uniqueRateName := newStringUniquifier[limesrates.RateName]()
+
 	// fetch values for cluster level
 	capacityReported := make(map[limes.ServiceType]map[limesresources.ResourceName]bool)
 	err := sqlext.ForeachRow(c.DB, clusterMetricsQuery, nil, func(rows *sql.Rows) error {
@@ -630,7 +640,10 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 				ch <- prometheus.MustNewConstMetric(
 					clusterCapacityPerAZDesc,
 					prometheus.GaugeValue, float64(overcommitFactor.ApplyTo(azCapacity)),
-					string(az), string(serviceType), serviceNameByType[serviceType], string(resourceName),
+					uniqueAvailabilityZone.For(az),
+					uniqueServiceType.For(serviceType),
+					serviceNameByType[serviceType],
+					uniqueResourceName.For(resourceName),
 				)
 
 				azUsage := usagePerAZ[az]
@@ -638,7 +651,10 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 					ch <- prometheus.MustNewConstMetric(
 						clusterUsagePerAZDesc,
 						prometheus.GaugeValue, float64(*azUsage),
-						string(az), string(serviceType), serviceNameByType[serviceType], string(resourceName),
+						uniqueAvailabilityZone.For(az),
+						uniqueServiceType.For(serviceType),
+						serviceNameByType[serviceType],
+						uniqueResourceName.For(resourceName),
 					)
 				}
 			}
@@ -647,7 +663,9 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(
 			clusterCapacityDesc,
 			prometheus.GaugeValue, float64(overcommitFactor.ApplyTo(totalCapacity)),
-			string(serviceType), serviceNameByType[serviceType], string(resourceName),
+			uniqueServiceType.For(serviceType),
+			serviceNameByType[serviceType],
+			uniqueResourceName.For(resourceName),
 		)
 
 		_, exists := capacityReported[serviceType]
@@ -674,7 +692,9 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			ch <- prometheus.MustNewConstMetric(
 				clusterCapacityDesc,
 				prometheus.GaugeValue, 0,
-				string(serviceType), serviceNameByType[serviceType], string(res.Name),
+				uniqueServiceType.For(serviceType),
+				serviceNameByType[serviceType],
+				uniqueResourceName.For(res.Name),
 			)
 		}
 	}
@@ -696,7 +716,11 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			ch <- prometheus.MustNewConstMetric(
 				domainQuotaDesc,
 				prometheus.GaugeValue, float64(*quota),
-				domainName, domainUUID, string(serviceType), serviceNameByType[serviceType], string(resourceName),
+				uniqueDomainName.For(domainName),
+				uniqueDomainUUID.For(domainUUID),
+				uniqueServiceType.For(serviceType),
+				serviceNameByType[serviceType],
+				uniqueResourceName.For(resourceName),
 			)
 		}
 		return nil
@@ -731,7 +755,13 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 				ch <- prometheus.MustNewConstMetric(
 					projectQuotaDesc,
 					prometheus.GaugeValue, float64(*quota),
-					domainName, domainUUID, projectName, projectUUID, string(serviceType), serviceNameByType[serviceType], string(resourceName),
+					uniqueDomainName.For(domainName),
+					uniqueDomainUUID.For(domainUUID),
+					uniqueProjectName.For(projectName),
+					uniqueProjectUUID.For(projectUUID),
+					uniqueServiceType.For(serviceType),
+					serviceNameByType[serviceType],
+					uniqueResourceName.For(resourceName),
 				)
 			}
 		}
@@ -740,7 +770,13 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 				ch <- prometheus.MustNewConstMetric(
 					projectBackendQuotaDesc,
 					prometheus.GaugeValue, float64(*backendQuota),
-					domainName, domainUUID, projectName, projectUUID, string(serviceType), serviceNameByType[serviceType], string(resourceName),
+					uniqueDomainName.For(domainName),
+					uniqueDomainUUID.For(domainUUID),
+					uniqueProjectName.For(projectName),
+					uniqueProjectUUID.For(projectUUID),
+					uniqueServiceType.For(serviceType),
+					serviceNameByType[serviceType],
+					uniqueResourceName.For(resourceName),
 				)
 			}
 		}
@@ -748,7 +784,13 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			ch <- prometheus.MustNewConstMetric(
 				projectUsageDesc,
 				prometheus.GaugeValue, float64(usage),
-				domainName, domainUUID, projectName, projectUUID, string(serviceType), serviceNameByType[serviceType], string(resourceName),
+				uniqueDomainName.For(domainName),
+				uniqueDomainUUID.For(domainUUID),
+				uniqueProjectName.For(projectName),
+				uniqueProjectUUID.For(projectUUID),
+				uniqueServiceType.For(serviceType),
+				serviceNameByType[serviceType],
+				uniqueResourceName.For(resourceName),
 			)
 		}
 		if hasPhysicalUsage {
@@ -756,7 +798,13 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 				ch <- prometheus.MustNewConstMetric(
 					projectPhysicalUsageDesc,
 					prometheus.GaugeValue, float64(physicalUsage),
-					domainName, domainUUID, projectName, projectUUID, string(serviceType), serviceNameByType[serviceType], string(resourceName),
+					uniqueDomainName.For(domainName),
+					uniqueDomainUUID.For(domainUUID),
+					uniqueProjectName.For(projectName),
+					uniqueProjectUUID.For(projectUUID),
+					uniqueServiceType.For(serviceType),
+					serviceNameByType[serviceType],
+					uniqueResourceName.For(resourceName),
 				)
 			}
 		}
@@ -789,7 +837,14 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			ch <- prometheus.MustNewConstMetric(
 				projectUsagePerAZDesc,
 				prometheus.GaugeValue, float64(usage),
-				string(az), domainName, domainUUID, projectName, projectUUID, string(serviceType), serviceNameByType[serviceType], string(resourceName),
+				uniqueAvailabilityZone.For(az),
+				uniqueDomainName.For(domainName),
+				uniqueDomainUUID.For(domainUUID),
+				uniqueProjectName.For(projectName),
+				uniqueProjectUUID.For(projectUUID),
+				uniqueServiceType.For(serviceType),
+				serviceNameByType[serviceType],
+				uniqueResourceName.For(resourceName),
 			)
 		}
 		if amountByStateJSON != nil {
@@ -802,7 +857,15 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 				ch <- prometheus.MustNewConstMetric(
 					projectCommittedPerAZDesc,
 					prometheus.GaugeValue, float64(amount),
-					string(az), domainName, domainUUID, projectName, projectUUID, string(serviceType), serviceNameByType[serviceType], string(resourceName), state,
+					uniqueAvailabilityZone.For(az),
+					uniqueDomainName.For(domainName),
+					uniqueDomainUUID.For(domainUUID),
+					uniqueProjectName.For(projectName),
+					uniqueProjectUUID.For(projectUUID),
+					uniqueServiceType.For(serviceType),
+					serviceNameByType[serviceType],
+					uniqueResourceName.For(resourceName),
+					state,
 				)
 			}
 		}
@@ -819,7 +882,9 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			ch <- prometheus.MustNewConstMetric(
 				unitConversionDesc,
 				prometheus.GaugeValue, float64(multiplier),
-				string(serviceType), serviceNameByType[serviceType], string(resource.Name),
+				uniqueServiceType.For(serviceType),
+				serviceNameByType[serviceType],
+				uniqueResourceName.For(resource.Name),
 			)
 
 			qdc := c.Cluster.QuotaDistributionConfigForResource(serviceType, resource.Name)
@@ -827,7 +892,9 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 				ch <- prometheus.MustNewConstMetric(
 					autogrowGrowthMultiplierDesc,
 					prometheus.GaugeValue, qdc.Autogrow.GrowthMultiplier,
-					string(serviceType), serviceNameByType[serviceType], string(resource.Name),
+					uniqueServiceType.For(serviceType),
+					serviceNameByType[serviceType],
+					uniqueResourceName.For(resource.Name),
 				)
 			}
 		}
@@ -858,7 +925,13 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			ch <- prometheus.MustNewConstMetric(
 				projectRateUsageDesc,
 				prometheus.GaugeValue, usageAsFloat,
-				domainName, domainUUID, projectName, projectUUID, string(serviceType), serviceNameByType[serviceType], string(rateName),
+				uniqueDomainName.For(domainName),
+				uniqueDomainUUID.For(domainUUID),
+				uniqueProjectName.For(projectName),
+				uniqueProjectUUID.For(projectUUID),
+				uniqueServiceType.For(serviceType),
+				serviceNameByType[serviceType],
+				uniqueRateName.For(rateName),
 			)
 		}
 		return nil
@@ -877,4 +950,40 @@ func buildServiceNameByTypeMapping(c *core.Cluster) (serviceNameByType map[limes
 		serviceNameByType[serviceType] = plugin.ServiceInfo(serviceType).ProductName
 	}
 	return
+}
+
+// stringUniquifier replaces string instances of equal value with the same unique instance.
+//
+// We have seen that, when metrics are being scraped from the collector in big
+// production deployments, heap usage just for Prometheus labels will go up by
+// several 100 MiB because of all the allocations for labelsets.
+//
+// The Prometheus library makes a truly mind-boggling amount of allocations for
+// things like *string or *dto.LabelPair that we do not control, but maybe we
+// can make a dent in this heap of allocations (pun definitely intended) by
+// reusing string instances as much as possible.
+//
+// Our data metrics are generated from SQL queries, so each labelset will have
+// project names, service types, resource names etc. coming out of the database
+// cursor that refer to separate memory locations each time. But by passing all
+// these string values through a stringUniquifier, we end up giving the same
+// string instances to the Prometheus library as much as possible.
+//
+// At the time of this writing, I do not have verified that this actually
+// produces the desired reduction in memory footprint. If you're reading this,
+// and this comment is more than a month old, it probably did. Otherwise we
+// would have deleted this again.
+type stringUniquifier[S ~string] map[S]string
+
+func newStringUniquifier[S ~string]() stringUniquifier[S] {
+	return make(stringUniquifier[S])
+}
+
+func (s stringUniquifier[S]) For(value S) string {
+	result, exists := s[value]
+	if !exists {
+		result = string(value)
+		s[value] = result
+	}
+	return result
 }
