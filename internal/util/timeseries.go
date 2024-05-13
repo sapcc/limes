@@ -135,7 +135,11 @@ func (s *TimeSeries[T]) findCutoffIndex(now time.Time, retentionPeriod time.Dura
 			return max(idx-1, 0)
 		}
 	}
-	return 0
+
+	// If all measurements fall before `cutoffTimestamp`, the loop above will not return.
+	// In this case, only the most recent of those ancient measurements is
+	// relevant to describing the behavior within our retention period.
+	return max(len(s.timestamps)-1, 0)
 }
 
 // The JSON representation of type TimeSeries. This is a separate type because

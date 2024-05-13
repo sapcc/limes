@@ -102,6 +102,21 @@ func TestTimeSeriesUnmarshalErrors(t *testing.T) {
 	}
 }
 
+func TestTimeSeriesPruningWithOnlyAncientValues(t *testing.T) {
+	// This time series is from prod.
+	s, err := ParseTimeSeries[uint64](`{"t":[1714649006,1715247668],"v":[5,6]}`)
+	mustT(t, err)
+	// A few days after the timestamps in the time series...
+	now := time.Unix(1715600837, 0)
+	// ...the following measurement was added...
+	mustT(t, s.AddMeasurement(now, 6))
+	// ...with the following retention.
+	s.PruneOldValues(now, 48*time.Hour)
+
+	// The bug was that the value 5 was not pruned from the time series as expected.
+	expectJSON(t, s, `{"t":[1715247668],"v":[6]}`)
+}
+
 func mustT(t *testing.T, err error) {
 	t.Helper()
 	if err != nil {
