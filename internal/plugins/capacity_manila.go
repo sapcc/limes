@@ -21,6 +21,7 @@ package plugins
 
 import (
 	"errors"
+	"slices"
 	"strings"
 
 	"github.com/gophercloud/gophercloud"
@@ -127,7 +128,7 @@ func (p *capacityManilaPlugin) Scrape(_ core.CapacityPluginBackchannel, allAZs [
 		"share_networks": core.InAnyAZ(core.CapacityData{Capacity: p.ShareNetworks}),
 	}
 	for _, shareType := range p.ShareTypes {
-		capForType, err := p.scrapeForShareType(shareType, azForServiceHost)
+		capForType, err := p.scrapeForShareType(shareType, azForServiceHost, allAZs)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -157,6 +158,13 @@ type capacityForShareType struct {
 	SnapshotGigabytes core.PerAZ[core.CapacityData]
 }
 
+type azCapacityForShareType struct {
+	Shares            core.CapacityData
+	Snapshots         core.CapacityData
+	ShareGigabytes    core.CapacityData
+	SnapshotGigabytes core.CapacityData
+}
+
 type poolsListDetailOpts struct {
 	// upstream type (schedulerstats.ListDetailOpts) does not work because of wrong field tags (`json:"..."` instead of `q:"..."`)
 	//TODO: fix upstream; I'm doing this quick fix now because I don't have the time to submit an upstream PR and figure out how to write testcases for them
@@ -169,9 +177,9 @@ func (opts poolsListDetailOpts) ToPoolsListQuery() (string, error) {
 	return q.String(), err
 }
 
-func (p *capacityManilaPlugin) scrapeForShareType(shareType ManilaShareTypeSpec, azForServiceHost map[string]limes.AvailabilityZone) (capacityForShareType, error) {
+func (p *capacityManilaPlugin) scrapeForShareType(shareType ManilaShareTypeSpec, azForServiceHost map[string]limes.AvailabilityZone, allAZs []limes.AvailabilityZone) (capacityForShareType, error) {
 	// list all pools for the Manila share types corresponding to this virtual share type
-	var allPools []manilaPool
+	allPoolsByAZ := make(map[limes.AvailabilityZone][]*manilaPool)
 	for _, stName := range getAllManilaShareTypes(shareType) {
 		allPages, err := schedulerstats.ListDetail(p.ManilaV2, poolsListDetailOpts{ShareType: stName}).AllPages()
 		if err != nil {
@@ -181,9 +189,41 @@ func (p *capacityManilaPlugin) scrapeForShareType(shareType ManilaShareTypeSpec,
 		if err != nil {
 			return capacityForShareType{}, err
 		}
-		allPools = append(allPools, pools...)
+
+		// sort pools by AZ
+		for _, pool := range pools {
+			poolAZ := azForServiceHost[pool.Host]
+			if poolAZ == "" {
+				logg.Info("Manila storage pool %q (share type %q) does not match any service host", pool.Name, shareType.Name)
+				poolAZ = limes.AvailabilityZoneUnknown
+			}
+			if !slices.Contains(allAZs, poolAZ) {
+				logg.Info("Manila storage pool %q (share type %q) belongs to unknown AZ %q", pool.Name, shareType.Name, poolAZ)
+				poolAZ = limes.AvailabilityZoneUnknown
+			}
+			allPoolsByAZ[poolAZ] = append(allPoolsByAZ[poolAZ], &pool) //nolint:gosec // not relevant in Go 1.22
+		}
 	}
 
+	// the following computations are performed for each AZ separately
+	result := capacityForShareType{
+		Shares:            make(core.PerAZ[core.CapacityData]),
+		Snapshots:         make(core.PerAZ[core.CapacityData]),
+		ShareGigabytes:    make(core.PerAZ[core.CapacityData]),
+		SnapshotGigabytes: make(core.PerAZ[core.CapacityData]),
+	}
+	for az, azPools := range allPoolsByAZ {
+		azResult := p.scrapeForShareTypeAndAZ(shareType, uint64(len(allAZs)), az, azPools)
+		result.Shares[az] = &azResult.Shares
+		result.Snapshots[az] = &azResult.Snapshots
+		result.ShareGigabytes[az] = &azResult.ShareGigabytes
+		result.SnapshotGigabytes[az] = &azResult.SnapshotGigabytes
+	}
+
+	return result, nil
+}
+
+func (p *capacityManilaPlugin) scrapeForShareTypeAndAZ(shareType ManilaShareTypeSpec, azCount uint64, az limes.AvailabilityZone, pools []*manilaPool) azCapacityForShareType {
 	//NOTE: The value of `p.CapacityBalance` is how many capacity we give out
 	// to snapshots as a fraction of the capacity given out to shares. For
 	// example, with CapacityBalance = 2, we allocate 2/3 of the total capacity to
@@ -192,52 +232,44 @@ func (p *capacityManilaPlugin) scrapeForShareType(shareType ManilaShareTypeSpec,
 
 	// count pools and their capacities
 	var (
-		availabilityZones          = make(map[limes.AvailabilityZone]bool)
-		poolCountPerAZ             = make(map[limes.AvailabilityZone]uint64)
-		totalCapacityGbPerAZ       = make(map[limes.AvailabilityZone]float64)
-		allocatedCapacityGbPerAZ   = make(map[limes.AvailabilityZone]float64)
-		shareSubcapacitiesPerAZ    = make(map[limes.AvailabilityZone][]any)
-		snapshotSubcapacitiesPerAZ = make(map[limes.AvailabilityZone][]any)
+		poolCount             uint64
+		totalCapacityGB       float64
+		allocatedCapacityGB   float64
+		shareSubcapacities    []any
+		snapshotSubcapacities []any
 	)
-	for _, pool := range allPools {
+	for _, pool := range pools {
 		isIncluded := true
 		if pool.Capabilities.HardwareState != "" {
 			var ok bool
 			isIncluded, ok = manilaIncludeByHardwareState[pool.Capabilities.HardwareState]
 			if !ok {
-				logg.Error("Manila storage pool %q (share type %q) has unknown hardware_state value: %q",
-					pool.Name, shareType.Name, pool.Capabilities.HardwareState)
+				logg.Error("Manila storage pool %q (share type %q) in AZ %q has unknown hardware_state value: %q",
+					pool.Name, shareType.Name, az, pool.Capabilities.HardwareState)
 				continue
 			}
 			if !isIncluded {
-				logg.Info("ignoring Manila storage pool %q (share type %q) because of hardware_state value: %q",
-					pool.Name, shareType.Name, pool.Capabilities.HardwareState)
+				logg.Info("ignoring Manila storage pool %q (share type %q) in AZ %q because of hardware_state value: %q",
+					pool.Name, shareType.Name, az, pool.Capabilities.HardwareState)
 			}
 		}
 
-		poolAZ := azForServiceHost[pool.Host]
-		if poolAZ == "" {
-			logg.Info("Manila storage pool %q (share type %q) does not match any service host", pool.Name, shareType.Name)
-			poolAZ = limes.AvailabilityZoneUnknown
-		}
-
-		availabilityZones[poolAZ] = true
 		if isIncluded {
-			poolCountPerAZ[poolAZ]++
-			totalCapacityGbPerAZ[poolAZ] += pool.Capabilities.TotalCapacityGB
-			allocatedCapacityGbPerAZ[poolAZ] += pool.Capabilities.AllocatedCapacityGB
+			poolCount++
+			totalCapacityGB += pool.Capabilities.TotalCapacityGB
+			allocatedCapacityGB += pool.Capabilities.AllocatedCapacityGB
 		}
 
 		if p.WithSubcapacities {
 			shareSubcapa := storagePoolSubcapacity{
 				PoolName:         pool.Name,
-				AvailabilityZone: poolAZ,
+				AvailabilityZone: az,
 				CapacityGiB:      getShareCapacity(pool.Capabilities.TotalCapacityGB, capBalance),
 				UsageGiB:         getShareCapacity(pool.Capabilities.AllocatedCapacityGB, capBalance),
 			}
 			snapshotSubcapa := storagePoolSubcapacity{
 				PoolName:         pool.Name,
-				AvailabilityZone: poolAZ,
+				AvailabilityZone: az,
 				CapacityGiB:      getSnapshotCapacity(pool.Capabilities.TotalCapacityGB, capBalance),
 				UsageGiB:         getSnapshotCapacity(pool.Capabilities.AllocatedCapacityGB, capBalance),
 			}
@@ -246,38 +278,30 @@ func (p *capacityManilaPlugin) scrapeForShareType(shareType ManilaShareTypeSpec,
 				shareSubcapa.ExclusionReason = "hardware_state = " + pool.Capabilities.HardwareState
 				snapshotSubcapa.ExclusionReason = "hardware_state = " + pool.Capabilities.HardwareState
 			}
-			shareSubcapacitiesPerAZ[poolAZ] = append(shareSubcapacitiesPerAZ[poolAZ], shareSubcapa)
-			snapshotSubcapacitiesPerAZ[poolAZ] = append(snapshotSubcapacitiesPerAZ[poolAZ], snapshotSubcapa)
+			shareSubcapacities = append(shareSubcapacities, shareSubcapa)
+			snapshotSubcapacities = append(snapshotSubcapacities, snapshotSubcapa)
 		}
 	}
 
-	// derive availability zone usage and capacities
-	result := capacityForShareType{
-		Shares:            make(core.PerAZ[core.CapacityData]),
-		Snapshots:         make(core.PerAZ[core.CapacityData]),
-		ShareGigabytes:    make(core.PerAZ[core.CapacityData]),
-		SnapshotGigabytes: make(core.PerAZ[core.CapacityData]),
+	// derive total usage and capacities for AZ
+	var result azCapacityForShareType
+	result.Shares = core.CapacityData{
+		Capacity: getShareCount(poolCount, p.SharesPerPool, (p.ShareNetworks / azCount)),
 	}
-	for az := range availabilityZones {
-		result.Shares[az] = &core.CapacityData{
-			Capacity: getShareCount(poolCountPerAZ[az], p.SharesPerPool, (p.ShareNetworks / uint64(len(availabilityZones)))),
-		}
-		result.Snapshots[az] = &core.CapacityData{
-			Capacity: getShareSnapshots(result.Shares[az].Capacity, p.SnapshotsPerShare),
-		}
-		result.ShareGigabytes[az] = &core.CapacityData{
-			Capacity:      getShareCapacity(totalCapacityGbPerAZ[az], capBalance),
-			Usage:         p2u64(getShareCapacity(allocatedCapacityGbPerAZ[az], capBalance)),
-			Subcapacities: shareSubcapacitiesPerAZ[az],
-		}
-		result.SnapshotGigabytes[az] = &core.CapacityData{
-			Capacity:      getSnapshotCapacity(totalCapacityGbPerAZ[az], capBalance),
-			Usage:         p2u64(getSnapshotCapacity(allocatedCapacityGbPerAZ[az], capBalance)),
-			Subcapacities: snapshotSubcapacitiesPerAZ[az],
-		}
+	result.Snapshots = core.CapacityData{
+		Capacity: getShareSnapshots(result.Shares.Capacity, p.SnapshotsPerShare),
 	}
-
-	return result, nil
+	result.ShareGigabytes = core.CapacityData{
+		Capacity:      getShareCapacity(totalCapacityGB, capBalance),
+		Usage:         p2u64(getShareCapacity(allocatedCapacityGB, capBalance)),
+		Subcapacities: shareSubcapacities,
+	}
+	result.SnapshotGigabytes = core.CapacityData{
+		Capacity:      getSnapshotCapacity(totalCapacityGB, capBalance),
+		Usage:         p2u64(getSnapshotCapacity(allocatedCapacityGB, capBalance)),
+		Subcapacities: snapshotSubcapacities,
+	}
+	return result
 }
 
 func getShareCount(poolCount, sharesPerPool, shareNetworks uint64) uint64 {
