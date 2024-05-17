@@ -230,36 +230,53 @@ func (p *capacityManilaPlugin) scrapeForShareTypeAndAZ(shareType ManilaShareType
 	// snapshots, and 1/3 to shares.
 	capBalance := p.CapacityBalance
 
-	// count pools and their capacities
+	// count pools and sum their capacities if they are included
 	var (
-		poolCount             uint64
-		totalCapacityGB       float64
-		allocatedCapacityGB   float64
-		shareSubcapacities    []any
-		snapshotSubcapacities []any
+		poolCount           uint64
+		totalCapacityGB     float64
+		allocatedCapacityGB float64
 	)
 	for _, pool := range pools {
-		isIncluded := true
+		pool.IsIncluded = true
 		if pool.Capabilities.HardwareState != "" {
 			var ok bool
-			isIncluded, ok = manilaIncludeByHardwareState[pool.Capabilities.HardwareState]
+			pool.IsIncluded, ok = manilaIncludeByHardwareState[pool.Capabilities.HardwareState]
 			if !ok {
 				logg.Error("Manila storage pool %q (share type %q) in AZ %q has unknown hardware_state value: %q",
 					pool.Name, shareType.Name, az, pool.Capabilities.HardwareState)
-				continue
-			}
-			if !isIncluded {
+				pool.IsIncluded = false
+			} else if !pool.IsIncluded {
 				logg.Info("ignoring Manila storage pool %q (share type %q) in AZ %q because of hardware_state value: %q",
 					pool.Name, shareType.Name, az, pool.Capabilities.HardwareState)
 			}
 		}
 
-		if isIncluded {
+		if pool.IsIncluded {
 			poolCount++
 			totalCapacityGB += pool.Capabilities.TotalCapacityGB
 			allocatedCapacityGB += pool.Capabilities.AllocatedCapacityGB
 		}
+	}
 
+	// derive total usage and capacities for AZ
+	var result azCapacityForShareType
+	result.Shares = core.CapacityData{
+		Capacity: getShareCount(poolCount, p.SharesPerPool, (p.ShareNetworks / azCount)),
+	}
+	result.Snapshots = core.CapacityData{
+		Capacity: getShareSnapshots(result.Shares.Capacity, p.SnapshotsPerShare),
+	}
+	result.ShareGigabytes = core.CapacityData{
+		Capacity: getShareCapacity(totalCapacityGB, capBalance),
+		Usage:    p2u64(getShareCapacity(allocatedCapacityGB, capBalance)),
+	}
+	result.SnapshotGigabytes = core.CapacityData{
+		Capacity: getSnapshotCapacity(totalCapacityGB, capBalance),
+		Usage:    p2u64(getSnapshotCapacity(allocatedCapacityGB, capBalance)),
+	}
+
+	// render subcapacities
+	for _, pool := range pools {
 		if p.WithSubcapacities {
 			shareSubcapa := storagePoolSubcapacity{
 				PoolName:         pool.Name,
@@ -274,33 +291,15 @@ func (p *capacityManilaPlugin) scrapeForShareTypeAndAZ(shareType ManilaShareType
 				UsageGiB:         getSnapshotCapacity(pool.Capabilities.AllocatedCapacityGB, capBalance),
 			}
 
-			if !isIncluded {
+			if !pool.IsIncluded {
 				shareSubcapa.ExclusionReason = "hardware_state = " + pool.Capabilities.HardwareState
 				snapshotSubcapa.ExclusionReason = "hardware_state = " + pool.Capabilities.HardwareState
 			}
-			shareSubcapacities = append(shareSubcapacities, shareSubcapa)
-			snapshotSubcapacities = append(snapshotSubcapacities, snapshotSubcapa)
+			result.ShareGigabytes.Subcapacities = append(result.ShareGigabytes.Subcapacities, shareSubcapa)
+			result.SnapshotGigabytes.Subcapacities = append(result.SnapshotGigabytes.Subcapacities, snapshotSubcapa)
 		}
 	}
 
-	// derive total usage and capacities for AZ
-	var result azCapacityForShareType
-	result.Shares = core.CapacityData{
-		Capacity: getShareCount(poolCount, p.SharesPerPool, (p.ShareNetworks / azCount)),
-	}
-	result.Snapshots = core.CapacityData{
-		Capacity: getShareSnapshots(result.Shares.Capacity, p.SnapshotsPerShare),
-	}
-	result.ShareGigabytes = core.CapacityData{
-		Capacity:      getShareCapacity(totalCapacityGB, capBalance),
-		Usage:         p2u64(getShareCapacity(allocatedCapacityGB, capBalance)),
-		Subcapacities: shareSubcapacities,
-	}
-	result.SnapshotGigabytes = core.CapacityData{
-		Capacity:      getSnapshotCapacity(totalCapacityGB, capBalance),
-		Usage:         p2u64(getSnapshotCapacity(allocatedCapacityGB, capBalance)),
-		Subcapacities: snapshotSubcapacities,
-	}
 	return result
 }
 
@@ -358,6 +357,8 @@ type manilaPool struct {
 		// CCloud extension fields
 		HardwareState string `json:"hardware_state"`
 	} `json:"capabilities,omitempty"`
+	// temporary storage used by calculations in scrapeForShareTypeAndAZ()
+	IsIncluded bool `json:"-"`
 }
 
 // manilaExtractPools is `schedulerstats.ExtractPools()`, but using our custom pool type.
