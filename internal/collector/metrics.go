@@ -35,6 +35,7 @@ import (
 	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/internal/core"
+	"github.com/sapcc/limes/internal/db"
 )
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -435,6 +436,17 @@ var projectCommittedPerAZGauge = prometheus.NewGaugeVec(
 	[]string{"availability_zone", "domain", "domain_id", "project", "project_id", "service", "service_name", "resource", "state"},
 )
 
+// This metric might appear to be redundant because it could be computed in PromQL.
+// But `max(limes_project_usage_per_az, limes_project_committed_per_az{state="active"})` will not yield all necessary results
+// if zero metrics are not emitted (as is the recommended configuration).
+var projectUsedAndOrCommittedPerAZGauge = prometheus.NewGaugeVec(
+	prometheus.GaugeOpts{
+		Name: "limes_project_used_and_or_committed_per_az",
+		Help: `The maximum of limes_project_usage_per_az and limes_project_committed_per_az{state="active"}.`,
+	},
+	[]string{"availability_zone", "domain", "domain_id", "project", "project_id", "service", "service_name", "resource"},
+)
+
 var projectRateUsageGauge = prometheus.NewGaugeVec(
 	prometheus.GaugeOpts{
 		Name: "limes_project_rate_usage",
@@ -481,6 +493,7 @@ func (c *DataMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
 	projectPhysicalUsageGauge.Describe(ch)
 	projectUsagePerAZGauge.Describe(ch)
 	projectCommittedPerAZGauge.Describe(ch)
+	projectUsedAndOrCommittedPerAZGauge.Describe(ch)
 	projectRateUsageGauge.Describe(ch)
 	unitConversionGauge.Describe(ch)
 	autogrowGrowthMultiplierGauge.Describe(ch)
@@ -580,6 +593,8 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	projectUsagePerAZDesc := <-descCh
 	projectCommittedPerAZGauge.Describe(descCh)
 	projectCommittedPerAZDesc := <-descCh
+	projectUsedAndOrCommittedPerAZGauge.Describe(descCh)
+	projectUsedAndOrCommittedPerAZDesc := <-descCh
 	projectRateUsageGauge.Describe(descCh)
 	projectRateUsageDesc := <-descCh
 	unitConversionGauge.Describe(descCh)
@@ -847,12 +862,14 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 				uniqueResourceName.For(resourceName),
 			)
 		}
+		committed := uint64(0)
 		if amountByStateJSON != nil {
-			var amountByState map[string]uint64
+			var amountByState map[db.CommitmentState]uint64
 			err = json.Unmarshal([]byte(*amountByStateJSON), &amountByState)
 			if err != nil {
 				return fmt.Errorf("while unmarshalling amount_by_state: %w (input was %q)", err, *amountByStateJSON)
 			}
+			committed = amountByState[db.CommitmentStateActive]
 			for state, amount := range amountByState {
 				ch <- prometheus.MustNewConstMetric(
 					projectCommittedPerAZDesc,
@@ -865,9 +882,23 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 					uniqueServiceType.For(serviceType),
 					serviceNameByType[serviceType],
 					uniqueResourceName.For(resourceName),
-					state,
+					string(state),
 				)
 			}
+		}
+		if c.ReportZeroes || max(usage, committed) != 0 {
+			ch <- prometheus.MustNewConstMetric(
+				projectUsedAndOrCommittedPerAZDesc,
+				prometheus.GaugeValue, float64(max(usage, committed)),
+				uniqueAvailabilityZone.For(az),
+				uniqueDomainName.For(domainName),
+				uniqueDomainUUID.For(domainUUID),
+				uniqueProjectName.For(projectName),
+				uniqueProjectUUID.For(projectUUID),
+				uniqueServiceType.For(serviceType),
+				serviceNameByType[serviceType],
+				uniqueResourceName.For(resourceName),
+			)
 		}
 		return nil
 	})
