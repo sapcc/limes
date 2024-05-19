@@ -64,7 +64,7 @@ func (c *Collector) checkConsistencyCluster(_ context.Context, _ prometheus.Labe
 
 		if !c.Cluster.HasService(service.Type) {
 			logg.Info("cleaning up %s cluster service entry", service.Type)
-			_, err := c.DB.Delete(&service) //nolint:gosec // Delete is not holding onto the pointer after it returns
+			_, err := c.DB.Delete(&service)
 			if err != nil {
 				c.LogError(err.Error())
 			}

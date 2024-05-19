@@ -97,7 +97,7 @@ func (u SetUpdate[R, K]) Execute(tx *gorp.Transaction) ([]R, error) {
 	for _, r := range u.ExistingRecords {
 		k := u.KeyForRecord(r)
 		if !slices.Contains(u.WantedKeys, k) {
-			_, err := tx.Delete(&r) //nolint:gosec // this pointer is not held beyond the call
+			_, err := tx.Delete(&r)
 			if err != nil {
 				return nil, fmt.Errorf("could not delete %T record with key %v: %w", r, k, err)
 			}

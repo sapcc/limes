@@ -63,8 +63,8 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, now 
 	allResources := make(map[limesresources.ResourceName]resourceState)
 	for _, resInfo := range cluster.QuotaPlugins[srv.Type].Resources() {
 		allResources[resInfo.Name] = resourceState{
-			Original: nil,      // might be filled in the next loop below
-			Info:     &resInfo, //nolint:gosec //doesn't apply to go 1.22
+			Original: nil, // might be filled in the next loop below
+			Info:     &resInfo,
 		}
 	}
 
@@ -76,7 +76,7 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, now 
 	}
 	for _, res := range dbResources {
 		allResources[res.Name] = resourceState{
-			Original: &res,                        //nolint:gosec //doesn't apply to go 1.22
+			Original: &res,
 			Info:     allResources[res.Name].Info, // might be nil if not filled in the previous loop
 		}
 	}

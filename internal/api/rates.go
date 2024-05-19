@@ -221,8 +221,8 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 					}
 				}
 
-				rate.Limit = &req.NewLimit   //nolint:gosec //doesn't apply to go 1.22
-				rate.Window = &req.NewWindow //nolint:gosec //doesn't apply to go 1.22
+				rate.Limit = &req.NewLimit
+				rate.Window = &req.NewWindow
 				ratesToUpdate = append(ratesToUpdate, rate)
 			}
 		}

@@ -201,7 +201,7 @@ func (p *capacityManilaPlugin) scrapeForShareType(shareType ManilaShareTypeSpec,
 				logg.Info("Manila storage pool %q (share type %q) belongs to unknown AZ %q", pool.Name, shareType.Name, poolAZ)
 				poolAZ = limes.AvailabilityZoneUnknown
 			}
-			allPoolsByAZ[poolAZ] = append(allPoolsByAZ[poolAZ], &pool) //nolint:gosec // not relevant in Go 1.22
+			allPoolsByAZ[poolAZ] = append(allPoolsByAZ[poolAZ], &pool)
 		}
 	}
 

@@ -47,7 +47,7 @@ func ValidateProjectServices(dbi db.Interface, cluster *core.Cluster, domain db.
 		seen[srv.Type] = true
 		if !cluster.HasService(srv.Type) {
 			logg.Info("cleaning up %s service entry for project %s/%s", srv.Type, domain.Name, project.Name)
-			_, err := dbi.Delete(&srv) //nolint:gosec // Delete is not holding onto the pointer after it returns
+			_, err := dbi.Delete(&srv)
 			if err != nil {
 				return err
 			}
