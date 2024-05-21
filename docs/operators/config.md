@@ -675,15 +675,15 @@ considering pools with that share type.
 The `mapping_rules` inside a share type have the same semantics as for the `sharev2` quota plugin, and must be set
 identically to ensure that the capacity values make sense in context.
 
-When subcapacity scraping is enabled (as shown above), subcapacities will be scraped for the `share_capacity` and
-`snapshot_capacity` resources. Each subcapacity corresponds to one Manila pool, and bears the following attributes:
+When `with_subcapacities` is set (see above), subcapacities will be shown on the `share_capacity` resources.
+Each subcapacity corresponds to one Manila pool, and bears the following attributes:
 
 | Name | Type | Comment |
 | --- | --- | --- |
 | `pool_name` | string | The pool name as reported by Manila. |
 | `az` | string | The pool's availability zone. The AZ is determined by matching the pool's hostname against the list of services configured in Manila. |
-| `capacity_gib` | integer | Total capacity for shares/snapshots in GiB. This is based on the pool's `total_capacity_gb` attribute in Manila. |
-| `usage_gib` | integer | Usage level for shares/snapshots in GiB. This is based on the pool's `allocated_capacity_gb` attribute in Manila. |
+| `capacity_gib` | integer | Total capacity for shares and snapshots in GiB. This is the pool's `total_capacity_gb` attribute reported by Manila. |
+| `usage_gib` | integer | Usage level in GiB. This is the pool's `allocated_capacity_gb` attribute reported by Manila. |
 | `exclusion_reason` | string | If filled (see below), the pool's capacity and usage is not counted towards the global and AZ-wide totals. |
 
 As a SAP-specific extension, the pool capability field `hardware_state` is recognized to ignore capacity that is not

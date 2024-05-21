@@ -275,28 +275,22 @@ func (p *capacityManilaPlugin) scrapeForShareTypeAndAZ(shareType ManilaShareType
 		Usage:    p2u64(getSnapshotCapacity(allocatedCapacityGB, capBalance)),
 	}
 
-	// render subcapacities
+	// render subcapacities (these are not split between share_capacity and
+	// snapshot_capacity because that quickly turns into an algorithmic
+	// nightmare, and we have no demand (pun intended) for that right now)
 	for _, pool := range pools {
 		if p.WithSubcapacities {
-			shareSubcapa := storagePoolSubcapacity{
+			subcapacity := storagePoolSubcapacity{
 				PoolName:         pool.Name,
 				AvailabilityZone: az,
-				CapacityGiB:      getShareCapacity(pool.Capabilities.TotalCapacityGB, capBalance),
-				UsageGiB:         getShareCapacity(pool.Capabilities.AllocatedCapacityGB, capBalance),
-			}
-			snapshotSubcapa := storagePoolSubcapacity{
-				PoolName:         pool.Name,
-				AvailabilityZone: az,
-				CapacityGiB:      getSnapshotCapacity(pool.Capabilities.TotalCapacityGB, capBalance),
-				UsageGiB:         getSnapshotCapacity(pool.Capabilities.AllocatedCapacityGB, capBalance),
+				CapacityGiB:      uint64(pool.Capabilities.TotalCapacityGB),
+				UsageGiB:         uint64(pool.Capabilities.AllocatedCapacityGB),
 			}
 
 			if !pool.IsIncluded {
-				shareSubcapa.ExclusionReason = "hardware_state = " + pool.Capabilities.HardwareState
-				snapshotSubcapa.ExclusionReason = "hardware_state = " + pool.Capabilities.HardwareState
+				subcapacity.ExclusionReason = "hardware_state = " + pool.Capabilities.HardwareState
 			}
-			result.ShareGigabytes.Subcapacities = append(result.ShareGigabytes.Subcapacities, shareSubcapa)
-			result.SnapshotGigabytes.Subcapacities = append(result.SnapshotGigabytes.Subcapacities, snapshotSubcapa)
+			result.ShareGigabytes.Subcapacities = append(result.ShareGigabytes.Subcapacities, subcapacity)
 		}
 	}
 
