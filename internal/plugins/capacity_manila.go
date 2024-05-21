@@ -20,6 +20,7 @@
 package plugins
 
 import (
+	"encoding/json"
 	"errors"
 	"slices"
 	"strings"
@@ -35,6 +36,7 @@ import (
 	"github.com/sapcc/go-bits/logg"
 
 	"github.com/sapcc/limes/internal/core"
+	"github.com/sapcc/limes/internal/util"
 )
 
 type capacityManilaPlugin struct {
@@ -101,7 +103,7 @@ func (p *capacityManilaPlugin) makeResourceName(kind string, shareType ManilaSha
 }
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *capacityManilaPlugin) Scrape(_ core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (result map[limes.ServiceType]map[limesresources.ResourceName]core.PerAZ[core.CapacityData], _ []byte, err error) {
+func (p *capacityManilaPlugin) Scrape(backchannel core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (result map[limes.ServiceType]map[limesresources.ResourceName]core.PerAZ[core.CapacityData], _ []byte, err error) {
 	allPages, err := services.List(p.ManilaV2, nil).AllPages()
 	if err != nil {
 		return nil, nil, err
@@ -128,7 +130,31 @@ func (p *capacityManilaPlugin) Scrape(_ core.CapacityPluginBackchannel, allAZs [
 		"share_networks": core.InAnyAZ(core.CapacityData{Capacity: p.ShareNetworks}),
 	}
 	for _, shareType := range p.ShareTypes {
-		capForType, err := p.scrapeForShareType(shareType, azForServiceHost, allAZs)
+		shareCapacityDemand, err := backchannel.GetGlobalResourceDemand("sharev2", p.makeResourceName("share_capacity", shareType))
+		if err != nil {
+			return nil, nil, err
+		}
+		shareOvercommitFactor, err := backchannel.GetOvercommitFactor("sharev2", p.makeResourceName("share_capacity", shareType))
+		if err != nil {
+			return nil, nil, err
+		}
+		for az, demand := range shareCapacityDemand {
+			shareCapacityDemand[az] = shareOvercommitFactor.ApplyInReverseToDemand(demand)
+		}
+
+		snapshotCapacityDemand, err := backchannel.GetGlobalResourceDemand("sharev2", p.makeResourceName("snapshot_capacity", shareType))
+		if err != nil {
+			return nil, nil, err
+		}
+		snapshotOvercommitFactor, err := backchannel.GetOvercommitFactor("sharev2", p.makeResourceName("snapshot_capacity", shareType))
+		if err != nil {
+			return nil, nil, err
+		}
+		for az, demand := range snapshotCapacityDemand {
+			snapshotCapacityDemand[az] = snapshotOvercommitFactor.ApplyInReverseToDemand(demand)
+		}
+
+		capForType, err := p.scrapeForShareType(shareType, azForServiceHost, allAZs, shareCapacityDemand, snapshotCapacityDemand)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -177,7 +203,7 @@ func (opts poolsListDetailOpts) ToPoolsListQuery() (string, error) {
 	return q.String(), err
 }
 
-func (p *capacityManilaPlugin) scrapeForShareType(shareType ManilaShareTypeSpec, azForServiceHost map[string]limes.AvailabilityZone, allAZs []limes.AvailabilityZone) (capacityForShareType, error) {
+func (p *capacityManilaPlugin) scrapeForShareType(shareType ManilaShareTypeSpec, azForServiceHost map[string]limes.AvailabilityZone, allAZs []limes.AvailabilityZone, shareCapacityDemand, snapshotCapacityDemand map[limes.AvailabilityZone]core.ResourceDemand) (capacityForShareType, error) {
 	// list all pools for the Manila share types corresponding to this virtual share type
 	allPoolsByAZ := make(map[limes.AvailabilityZone][]*manilaPool)
 	for _, stName := range getAllManilaShareTypes(shareType) {
@@ -213,7 +239,7 @@ func (p *capacityManilaPlugin) scrapeForShareType(shareType ManilaShareTypeSpec,
 		SnapshotGigabytes: make(core.PerAZ[core.CapacityData]),
 	}
 	for az, azPools := range allPoolsByAZ {
-		azResult := p.scrapeForShareTypeAndAZ(shareType, uint64(len(allAZs)), az, azPools)
+		azResult := p.scrapeForShareTypeAndAZ(shareType, uint64(len(allAZs)), az, azPools, shareCapacityDemand[az], snapshotCapacityDemand[az])
 		result.Shares[az] = &azResult.Shares
 		result.Snapshots[az] = &azResult.Snapshots
 		result.ShareGigabytes[az] = &azResult.ShareGigabytes
@@ -223,13 +249,7 @@ func (p *capacityManilaPlugin) scrapeForShareType(shareType ManilaShareTypeSpec,
 	return result, nil
 }
 
-func (p *capacityManilaPlugin) scrapeForShareTypeAndAZ(shareType ManilaShareTypeSpec, azCount uint64, az limes.AvailabilityZone, pools []*manilaPool) azCapacityForShareType {
-	//NOTE: The value of `p.CapacityBalance` is how many capacity we give out
-	// to snapshots as a fraction of the capacity given out to shares. For
-	// example, with CapacityBalance = 2, we allocate 2/3 of the total capacity to
-	// snapshots, and 1/3 to shares.
-	capBalance := p.CapacityBalance
-
+func (p *capacityManilaPlugin) scrapeForShareTypeAndAZ(shareType ManilaShareTypeSpec, azCount uint64, az limes.AvailabilityZone, pools []*manilaPool, shareCapacityDemand, snapshotCapacityDemand core.ResourceDemand) azCapacityForShareType {
 	// count pools and sum their capacities if they are included
 	var (
 		poolCount           uint64
@@ -258,21 +278,33 @@ func (p *capacityManilaPlugin) scrapeForShareTypeAndAZ(shareType ManilaShareType
 		}
 	}
 
-	// derive total usage and capacities for AZ
+	// distribute capacity and usage between the various resource types
+	logg.Debug("distributing capacity for share_type %q, AZ %q", shareType.Name, az)
+	distributedCapacityGiB := p.distributeByDemand(uint64(totalCapacityGB), map[string]core.ResourceDemand{
+		"shares":    shareCapacityDemand,
+		"snapshots": snapshotCapacityDemand,
+	})
+	logg.Debug("distributing usage for share_type %q, AZ %q", shareType.Name, az)
+	distributedUsageGiB := p.distributeByDemand(uint64(allocatedCapacityGB), map[string]core.ResourceDemand{
+		"shares":    {Usage: shareCapacityDemand.Usage},
+		"snapshots": {Usage: snapshotCapacityDemand.Usage},
+	})
+
+	// build overall result
 	var result azCapacityForShareType
 	result.Shares = core.CapacityData{
-		Capacity: getShareCount(poolCount, p.SharesPerPool, (p.ShareNetworks / azCount)),
+		Capacity: saturatingSub(p.SharesPerPool*poolCount, p.ShareNetworks/azCount),
 	}
 	result.Snapshots = core.CapacityData{
-		Capacity: getShareSnapshots(result.Shares.Capacity, p.SnapshotsPerShare),
+		Capacity: result.Shares.Capacity * p.SnapshotsPerShare,
 	}
 	result.ShareGigabytes = core.CapacityData{
-		Capacity: getShareCapacity(totalCapacityGB, capBalance),
-		Usage:    p2u64(getShareCapacity(allocatedCapacityGB, capBalance)),
+		Capacity: distributedCapacityGiB["shares"],
+		Usage:    p2u64(distributedUsageGiB["shares"]),
 	}
 	result.SnapshotGigabytes = core.CapacityData{
-		Capacity: getSnapshotCapacity(totalCapacityGB, capBalance),
-		Usage:    p2u64(getSnapshotCapacity(allocatedCapacityGB, capBalance)),
+		Capacity: distributedCapacityGiB["snapshots"],
+		Usage:    p2u64(distributedUsageGiB["snapshots"]),
 	}
 
 	// render subcapacities (these are not split between share_capacity and
@@ -297,25 +329,80 @@ func (p *capacityManilaPlugin) scrapeForShareTypeAndAZ(shareType ManilaShareType
 	return result
 }
 
-func getShareCount(poolCount, sharesPerPool, shareNetworks uint64) uint64 {
-	shareCount := (sharesPerPool * poolCount) - shareNetworks
-	logg.Debug("sc = sp * pc - sn: %d * %d - %d = %d", sharesPerPool, poolCount, shareNetworks, shareCount)
-	if (sharesPerPool * poolCount) < shareNetworks { // detect unsigned int underflow
-		shareCount = 0
+// This implements the method we use to distribute capacity and usage between shares and snapshots:
+// Each tier of demand is distributed fairly (while supplies last).
+// Then anything that is not covered by demand is distributed according to the configured CapacityBalance.
+//
+// For capacity, each tier of demand is considered.
+// For usage, the caller will set all demand fields except for Usage to 0.
+func (p *capacityManilaPlugin) distributeByDemand(totalAmount uint64, demands map[string]core.ResourceDemand) map[string]uint64 {
+	// setup phase to make each of the paragraphs below as identical as possible (for clarity)
+	requests := make(map[string]uint64)
+	result := make(map[string]uint64)
+	remaining := totalAmount
+
+	// tier 1: usage
+	for k, demand := range demands {
+		requests[k] = demand.Usage
 	}
-	return shareCount
-}
+	grantedAmount := util.DistributeFairly(remaining, requests)
+	for k := range demands {
+		remaining -= grantedAmount[k]
+		result[k] += grantedAmount[k]
+	}
+	if logg.ShowDebug {
+		resultJSON, _ := json.Marshal(result) //nolint:errcheck // no reasonable way for this to fail, also only debug log
+		logg.Debug("distributeByDemand after phase 1: " + string(resultJSON))
+	}
 
-func getShareSnapshots(shareCount, snapshotsPerShare uint64) uint64 {
-	return (snapshotsPerShare * shareCount)
-}
+	// tier 2: unused commitments
+	for k, demand := range demands {
+		requests[k] = demand.UnusedCommitments
+	}
+	grantedAmount = util.DistributeFairly(remaining, requests)
+	for k := range demands {
+		remaining -= grantedAmount[k]
+		result[k] += grantedAmount[k]
+	}
+	if logg.ShowDebug {
+		resultJSON, _ := json.Marshal(result) //nolint:errcheck // no reasonable way for this to fail, also only debug log
+		logg.Debug("distributeByDemand after phase 2: " + string(resultJSON))
+	}
 
-func getShareCapacity(capGB, capBalance float64) uint64 {
-	return uint64(1 / (capBalance + 1) * capGB)
-}
+	// tier 3: pending commitments
+	for k, demand := range demands {
+		requests[k] = demand.PendingCommitments
+	}
+	grantedAmount = util.DistributeFairly(remaining, requests)
+	for k := range demands {
+		remaining -= grantedAmount[k]
+		result[k] += grantedAmount[k]
+	}
+	if logg.ShowDebug {
+		resultJSON, _ := json.Marshal(result) //nolint:errcheck // no reasonable way for this to fail, also only debug log
+		logg.Debug("distributeByDemand after phase 2: " + string(resultJSON))
+	}
 
-func getSnapshotCapacity(capGB, capBalance float64) uint64 {
-	return uint64(capBalance / (capBalance + 1) * capGB)
+	// final phase: distribute all remaining capacity according to the configured CapacityBalance
+	//
+	// NOTE: The CapacityBalance value says how much capacity we give out
+	// to snapshots as a fraction of the capacity given out to shares. For
+	// example, with CapacityBalance = 2, we allocate 2/3 of the total capacity to
+	// snapshots, and 1/3 to shares.
+	if remaining > 0 {
+		cb := p.CapacityBalance
+		portionForSnapshots := uint64(cb / (cb + 1) * float64(remaining))
+		portionForShares := remaining - portionForSnapshots
+
+		result["snapshots"] += portionForSnapshots
+		result["shares"] += portionForShares
+	}
+	if logg.ShowDebug {
+		resultJSON, _ := json.Marshal(result) //nolint:errcheck // no reasonable way for this to fail, also only debug log
+		logg.Debug("distributeByDemand after CapacityBalance: " + string(resultJSON))
+	}
+
+	return result
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -352,7 +439,9 @@ type manilaPool struct {
 		HardwareState string `json:"hardware_state"`
 	} `json:"capabilities,omitempty"`
 	// temporary storage used by calculations in scrapeForShareTypeAndAZ()
-	IsIncluded bool `json:"-"`
+	IsIncluded             bool                `json:"-"`
+	ShareCapacityDemand    core.ResourceDemand `json:"-"`
+	SnapshotCapacityDemand core.ResourceDemand `json:"-"`
 }
 
 // manilaExtractPools is `schedulerstats.ExtractPools()`, but using our custom pool type.

@@ -691,13 +691,20 @@ marked as live. Ignored pools will still show up in the subcapacities, but their
 
 #### Capacity balance
 
-The capacity balance is defined as
+When pool capacity is split between the `share_capacity` and `snapshot_capacity` resources, Limes will first allocate
+capacity to both resources according to the global resource demand (i.e. the usage, unused commitments, and pending
+commitments, in that order, across all projects).
+
+At that point, if there is unallocated capacity left over, it is distributed according to the `capacity_balance`
+parameter, such that
 
 ```
-snapshot_capacity = capacity_balance * share_capacity,
+extra_snapshot_capacity = capacity_balance * extra_share_capacity,
 ```
 
-that is, there is `capacity_balance` as much snapshot capacity as there is share capacity. For example, `capacity_balance = 0.5` means that the capacity for snapshots is half as big as that for shares, meaning that shares get 2/3 of the total capacity and snapshots get the other 1/3.
+that is, there is `capacity_balance` as much extra snapshot capacity as there is extra share capacity. For example,
+`capacity_balance = 0.5` means that the capacity for snapshots is half as big as that for shares, meaning that shares
+get 2/3 of the total capacity and snapshots get the other 1/3.
 
 ### `manual`
 
