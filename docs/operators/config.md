@@ -838,6 +838,15 @@ instances onto the matching hypervisors. Afterwards, any remaining space is fill
 distribution of flavors as closely as possible. The resulting capacity is equal to how many instances could be placed in
 this simulation. The placement simulation strives for an optimal result by using a binpacking algorithm.
 
+The placement simulation can be tweaked through the additional configuration attributes:
+
+| Field | Type | Explanation |
+| --- | --- | --- |
+| `params.binpack_behavior.score_ignores_cores`<br>`params.binpack_behavior.score_ignores_disk`<br>`params.binpack_behavior.score_ignores_ram` | boolean | If true, when ranking nodes during placement, do not include the respective dimension in the score. |
+
+Ignoring dimensions in the score is useful if there is one dimension that throws off the placement simulation. However,
+if multiple dimensions are ignored, the placement algorithm deteriorates into very crude "first fit" logic.
+
 #### Option 3: Hybrid mode
 
 If `pooled_cores_resource` etc. are set (like in option 1), but there are also matching flavors with separate instance
