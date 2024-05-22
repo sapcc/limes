@@ -136,3 +136,14 @@ func (f OvercommitFactor) ApplyInReverseTo(capacity uint64) uint64 {
 	}
 	return rawCapacity
 }
+
+// ApplyInReverseToDemand is a shorthand for calling ApplyInReverseTo() on all fields of a ResourceDemand.
+// This can be used in capacity plugins to convert demand numbers operating on
+// overcommitted capacity into numbers that relate to raw capacity.
+func (f OvercommitFactor) ApplyInReverseToDemand(demand ResourceDemand) ResourceDemand {
+	return ResourceDemand{
+		Usage:              f.ApplyInReverseTo(demand.Usage),
+		UnusedCommitments:  f.ApplyInReverseTo(demand.UnusedCommitments),
+		PendingCommitments: f.ApplyInReverseTo(demand.PendingCommitments),
+	}
+}
