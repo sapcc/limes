@@ -46,6 +46,7 @@ type capacityManilaPlugin struct {
 	SharesPerPool     uint64                `yaml:"shares_per_pool"`
 	SnapshotsPerShare uint64                `yaml:"snapshots_per_share"`
 	CapacityBalance   float64               `yaml:"capacity_balance"`
+	WithSnapmirror    bool                  `yaml:"with_snapmirror"`
 	WithSubcapacities bool                  `yaml:"with_subcapacities"`
 	// connections
 	ManilaV2 *gophercloud.ServiceClient `yaml:"-"`
@@ -154,7 +155,24 @@ func (p *capacityManilaPlugin) Scrape(backchannel core.CapacityPluginBackchannel
 			snapshotCapacityDemand[az] = snapshotOvercommitFactor.ApplyInReverseToDemand(demand)
 		}
 
-		capForType, err := p.scrapeForShareType(shareType, azForServiceHost, allAZs, shareCapacityDemand, snapshotCapacityDemand)
+		var snapmirrorCapacityDemand map[limes.AvailabilityZone]core.ResourceDemand
+		if p.WithSnapmirror {
+			snapmirrorCapacityDemand, err = backchannel.GetGlobalResourceDemand("sharev2", p.makeResourceName("snapmirror_capacity", shareType))
+			if err != nil {
+				return nil, nil, err
+			}
+			snapmirrorOvercommitFactor, err := backchannel.GetOvercommitFactor("sharev2", p.makeResourceName("snapmirror_capacity", shareType))
+			if err != nil {
+				return nil, nil, err
+			}
+			for az, demand := range snapmirrorCapacityDemand {
+				snapmirrorCapacityDemand[az] = snapmirrorOvercommitFactor.ApplyInReverseToDemand(demand)
+			}
+		}
+		// ^ NOTE: If p.WithSnapmirror is false, `snapmirrorCapacityDemand[az]` is always zero-valued
+		// and thus no capacity will be allocated to the snapmirror_capacity resource.
+
+		capForType, err := p.scrapeForShareType(shareType, azForServiceHost, allAZs, shareCapacityDemand, snapshotCapacityDemand, snapmirrorCapacityDemand)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -162,6 +180,9 @@ func (p *capacityManilaPlugin) Scrape(backchannel core.CapacityPluginBackchannel
 		caps[p.makeResourceName("share_snapshots", shareType)] = capForType.Snapshots
 		caps[p.makeResourceName("share_capacity", shareType)] = capForType.ShareGigabytes
 		caps[p.makeResourceName("snapshot_capacity", shareType)] = capForType.SnapshotGigabytes
+		if p.WithSnapmirror {
+			caps[p.makeResourceName("snapmirror_capacity", shareType)] = capForType.SnapmirrorGigabytes
+		}
 	}
 	return map[limes.ServiceType]map[limesresources.ResourceName]core.PerAZ[core.CapacityData]{"sharev2": caps}, nil, nil
 }
@@ -178,17 +199,19 @@ func (p *capacityManilaPlugin) CollectMetrics(ch chan<- prometheus.Metric, seria
 }
 
 type capacityForShareType struct {
-	Shares            core.PerAZ[core.CapacityData]
-	Snapshots         core.PerAZ[core.CapacityData]
-	ShareGigabytes    core.PerAZ[core.CapacityData]
-	SnapshotGigabytes core.PerAZ[core.CapacityData]
+	Shares              core.PerAZ[core.CapacityData]
+	Snapshots           core.PerAZ[core.CapacityData]
+	ShareGigabytes      core.PerAZ[core.CapacityData]
+	SnapshotGigabytes   core.PerAZ[core.CapacityData]
+	SnapmirrorGigabytes core.PerAZ[core.CapacityData]
 }
 
 type azCapacityForShareType struct {
-	Shares            core.CapacityData
-	Snapshots         core.CapacityData
-	ShareGigabytes    core.CapacityData
-	SnapshotGigabytes core.CapacityData
+	Shares              core.CapacityData
+	Snapshots           core.CapacityData
+	ShareGigabytes      core.CapacityData
+	SnapshotGigabytes   core.CapacityData
+	SnapmirrorGigabytes core.CapacityData
 }
 
 type poolsListDetailOpts struct {
@@ -203,7 +226,7 @@ func (opts poolsListDetailOpts) ToPoolsListQuery() (string, error) {
 	return q.String(), err
 }
 
-func (p *capacityManilaPlugin) scrapeForShareType(shareType ManilaShareTypeSpec, azForServiceHost map[string]limes.AvailabilityZone, allAZs []limes.AvailabilityZone, shareCapacityDemand, snapshotCapacityDemand map[limes.AvailabilityZone]core.ResourceDemand) (capacityForShareType, error) {
+func (p *capacityManilaPlugin) scrapeForShareType(shareType ManilaShareTypeSpec, azForServiceHost map[string]limes.AvailabilityZone, allAZs []limes.AvailabilityZone, shareCapacityDemand, snapshotCapacityDemand, snapmirrorCapacityDemand map[limes.AvailabilityZone]core.ResourceDemand) (capacityForShareType, error) {
 	// list all pools for the Manila share types corresponding to this virtual share type
 	allPoolsByAZ := make(map[limes.AvailabilityZone][]*manilaPool)
 	for _, stName := range getAllManilaShareTypes(shareType) {
@@ -233,23 +256,25 @@ func (p *capacityManilaPlugin) scrapeForShareType(shareType ManilaShareTypeSpec,
 
 	// the following computations are performed for each AZ separately
 	result := capacityForShareType{
-		Shares:            make(core.PerAZ[core.CapacityData]),
-		Snapshots:         make(core.PerAZ[core.CapacityData]),
-		ShareGigabytes:    make(core.PerAZ[core.CapacityData]),
-		SnapshotGigabytes: make(core.PerAZ[core.CapacityData]),
+		Shares:              make(core.PerAZ[core.CapacityData]),
+		Snapshots:           make(core.PerAZ[core.CapacityData]),
+		ShareGigabytes:      make(core.PerAZ[core.CapacityData]),
+		SnapshotGigabytes:   make(core.PerAZ[core.CapacityData]),
+		SnapmirrorGigabytes: make(core.PerAZ[core.CapacityData]),
 	}
 	for az, azPools := range allPoolsByAZ {
-		azResult := p.scrapeForShareTypeAndAZ(shareType, uint64(len(allAZs)), az, azPools, shareCapacityDemand[az], snapshotCapacityDemand[az])
+		azResult := p.scrapeForShareTypeAndAZ(shareType, uint64(len(allAZs)), az, azPools, shareCapacityDemand[az], snapshotCapacityDemand[az], snapmirrorCapacityDemand[az])
 		result.Shares[az] = &azResult.Shares
 		result.Snapshots[az] = &azResult.Snapshots
 		result.ShareGigabytes[az] = &azResult.ShareGigabytes
 		result.SnapshotGigabytes[az] = &azResult.SnapshotGigabytes
+		result.SnapmirrorGigabytes[az] = &azResult.SnapmirrorGigabytes
 	}
 
 	return result, nil
 }
 
-func (p *capacityManilaPlugin) scrapeForShareTypeAndAZ(shareType ManilaShareTypeSpec, azCount uint64, az limes.AvailabilityZone, pools []*manilaPool, shareCapacityDemand, snapshotCapacityDemand core.ResourceDemand) azCapacityForShareType {
+func (p *capacityManilaPlugin) scrapeForShareTypeAndAZ(shareType ManilaShareTypeSpec, azCount uint64, az limes.AvailabilityZone, pools []*manilaPool, shareCapacityDemand, snapshotCapacityDemand, snapmirrorCapacityDemand core.ResourceDemand) azCapacityForShareType {
 	// count pools and sum their capacities if they are included
 	var (
 		poolCount           uint64
@@ -281,13 +306,15 @@ func (p *capacityManilaPlugin) scrapeForShareTypeAndAZ(shareType ManilaShareType
 	// distribute capacity and usage between the various resource types
 	logg.Debug("distributing capacity for share_type %q, AZ %q", shareType.Name, az)
 	distributedCapacityGiB := p.distributeByDemand(uint64(totalCapacityGB), map[string]core.ResourceDemand{
-		"shares":    shareCapacityDemand,
-		"snapshots": snapshotCapacityDemand,
+		"shares":      shareCapacityDemand,
+		"snapshots":   snapshotCapacityDemand,
+		"snapmirrors": snapmirrorCapacityDemand,
 	})
 	logg.Debug("distributing usage for share_type %q, AZ %q", shareType.Name, az)
 	distributedUsageGiB := p.distributeByDemand(uint64(allocatedCapacityGB), map[string]core.ResourceDemand{
-		"shares":    {Usage: shareCapacityDemand.Usage},
-		"snapshots": {Usage: snapshotCapacityDemand.Usage},
+		"shares":      {Usage: shareCapacityDemand.Usage},
+		"snapshots":   {Usage: snapshotCapacityDemand.Usage},
+		"snapmirrors": {Usage: snapmirrorCapacityDemand.Usage},
 	})
 
 	// build overall result
@@ -306,12 +333,19 @@ func (p *capacityManilaPlugin) scrapeForShareTypeAndAZ(shareType ManilaShareType
 		Capacity: distributedCapacityGiB["snapshots"],
 		Usage:    p2u64(distributedUsageGiB["snapshots"]),
 	}
+	result.SnapmirrorGigabytes = core.CapacityData{
+		Capacity: distributedCapacityGiB["snapmirrors"],
+		Usage:    p2u64(distributedUsageGiB["snapmirrors"]),
+	}
 
 	// render subcapacities (these are not split between share_capacity and
 	// snapshot_capacity because that quickly turns into an algorithmic
 	// nightmare, and we have no demand (pun intended) for that right now)
-	for _, pool := range pools {
-		if p.WithSubcapacities {
+	if p.WithSubcapacities {
+		slices.SortFunc(pools, func(lhs, rhs *manilaPool) int {
+			return strings.Compare(lhs.Name, rhs.Name)
+		})
+		for _, pool := range pools {
 			subcapacity := storagePoolSubcapacity{
 				PoolName:         pool.Name,
 				AvailabilityZone: az,

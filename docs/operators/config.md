@@ -656,6 +656,7 @@ capacitors:
     shares_per_pool: 1000
     snapshots_per_share: 5
     capacity_balance: 0.5
+    with_snapmirror: false
     with_subcapacities: true
 ```
 
@@ -664,7 +665,7 @@ capacitors:
 | `sharev2/share_networks` | Taken from identically-named configuration parameter. |
 | `sharev2/shares` | Calculated as `shares_per_pool * count(pools) - share_networks`. |
 | `sharev2/share_snapshots` | Calculated as `snapshots_per_share` times the above value. |
-| `sharev2/share_capacity`<br>`sharev2/snapshot_capacity` | Calculated as `sum(pool.capabilities.totalCapacityGB)`, then divided among those two resources according to the `capacity_balance` (see below). |
+| `sharev2/share_capacity`<br>`sharev2/snapshot_capacity`<br>`sharev2/snapmirror_capacity` | Calculated as `sum(pool.capabilities.totalCapacityGB)`, then divided among those resources according to demand and `capacity_balance` (see below). The `snapmirror_capacity` is only reported if `with_snapmirror` is set (set this iff the respective quota plugin emits this resource). |
 
 The last four of these five resources consider only pools with the share type
 that appears first in `params.share_types` (to match the behavior of the quota
@@ -691,9 +692,8 @@ marked as live. Ignored pools will still show up in the subcapacities, but their
 
 #### Capacity balance
 
-When pool capacity is split between the `share_capacity` and `snapshot_capacity` resources, Limes will first allocate
-capacity to both resources according to the global resource demand (i.e. the usage, unused commitments, and pending
-commitments, in that order, across all projects).
+When pool capacity is split between the various capacity resources, Limes will first allocate capacity according to the
+global resource demand (i.e. the usage, unused commitments, and pending commitments, in that order, across all projects).
 
 At that point, if there is unallocated capacity left over, it is distributed according to the `capacity_balance`
 parameter, such that
@@ -705,6 +705,8 @@ extra_snapshot_capacity = capacity_balance * extra_share_capacity,
 that is, there is `capacity_balance` as much extra snapshot capacity as there is extra share capacity. For example,
 `capacity_balance = 0.5` means that the capacity for snapshots is half as big as that for shares, meaning that shares
 get 2/3 of the total capacity and snapshots get the other 1/3.
+
+The `snapmirror_capacity` resource will never get extra capacity this way. It will only get capacity to cover demand.
 
 ### `manual`
 
