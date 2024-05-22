@@ -310,8 +310,11 @@ func (p *capacityManilaPlugin) scrapeForShareTypeAndAZ(shareType ManilaShareType
 	// render subcapacities (these are not split between share_capacity and
 	// snapshot_capacity because that quickly turns into an algorithmic
 	// nightmare, and we have no demand (pun intended) for that right now)
-	for _, pool := range pools {
-		if p.WithSubcapacities {
+	if p.WithSubcapacities {
+		slices.SortFunc(pools, func(lhs, rhs *manilaPool) int {
+			return strings.Compare(lhs.Name, rhs.Name)
+		})
+		for _, pool := range pools {
 			subcapacity := storagePoolSubcapacity{
 				PoolName:         pool.Name,
 				AvailabilityZone: az,
