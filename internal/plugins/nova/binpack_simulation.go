@@ -31,6 +31,16 @@ import (
 	"github.com/sapcc/limes/internal/core"
 )
 
+// BinpackBehavior contains configuration parameters for the binpack simulation.
+type BinpackBehavior struct {
+	// When ranking nodes during placement, do not include the VCPU count dimension in the score.
+	ScoreIgnoresCores bool `yaml:"score_ignores_cores"`
+	// When ranking nodes during placement, do not include the disk size dimension in the score.
+	ScoreIgnoresDisk bool `yaml:"score_ignores_disk"`
+	// When ranking nodes during placement, do not include the RAM size dimension in the score.
+	ScoreIgnoresRAM bool `yaml:"score_ignores_ram"`
+}
+
 // BinpackHypervisor models an entire Nova hypervisor for the purposes of the
 // binpacking simulation.
 //
@@ -145,9 +155,9 @@ func (h BinpackHypervisor) RenderDebugView(az limes.AvailabilityZone) {
 }
 
 // PlaceSeveralInstances calls PlaceOneInstance multiple times.
-func (hh BinpackHypervisors) PlaceSeveralInstances(ff FullFlavor, reason string, coresOvercommitFactor core.OvercommitFactor, blockedCapacity BinpackVector[uint64], count uint64) (ok bool) {
+func (hh BinpackHypervisors) PlaceSeveralInstances(ff FullFlavor, reason string, coresOvercommitFactor core.OvercommitFactor, blockedCapacity BinpackVector[uint64], bb BinpackBehavior, count uint64) (ok bool) {
 	for range count {
-		ok = hh.PlaceOneInstance(ff, reason, coresOvercommitFactor, blockedCapacity)
+		ok = hh.PlaceOneInstance(ff, reason, coresOvercommitFactor, blockedCapacity, bb)
 		if !ok {
 			// if we don't have space for this instance, we won't have space for any following ones
 			return false
@@ -158,7 +168,7 @@ func (hh BinpackHypervisors) PlaceSeveralInstances(ff FullFlavor, reason string,
 
 // PlaceOneInstance places a single instance of the given flavor using the vector-dot binpacking algorithm.
 // If the instance cannot be placed, false is returned.
-func (hh BinpackHypervisors) PlaceOneInstance(ff FullFlavor, reason string, coresOvercommitFactor core.OvercommitFactor, blockedCapacity BinpackVector[uint64]) (ok bool) {
+func (hh BinpackHypervisors) PlaceOneInstance(ff FullFlavor, reason string, coresOvercommitFactor core.OvercommitFactor, blockedCapacity BinpackVector[uint64], bb BinpackBehavior) (ok bool) {
 	// This function implements the vector dot binpacking method described in [Mayank] (section III,
 	// subsection D, including the correction presented in the last paragraph of that subsection).
 	//
@@ -214,8 +224,8 @@ func (hh BinpackHypervisors) PlaceOneInstance(ff FullFlavor, reason string, core
 			// squaring in the nominator)
 			s := vmSize.Div(node.Capacity)
 			f := nodeFree.Div(node.Capacity)
-			dotProduct := s.Dot(f)
-			score := dotProduct * dotProduct / (s.Dot(s) * f.Dot(f))
+			dotProduct := s.Dot(f, bb)
+			score := dotProduct * dotProduct / (s.Dot(s, bb) * f.Dot(f, bb))
 
 			// choose node with best score
 			if score > bestScore {
@@ -312,8 +322,18 @@ func (v BinpackVector[T]) AsUint() BinpackVector[uint64] {
 	}
 }
 
-func (v BinpackVector[T]) Dot(other BinpackVector[T]) T {
-	return v.VCPUs*other.VCPUs + v.MemoryMB*other.MemoryMB + v.LocalGB*other.LocalGB
+func (v BinpackVector[T]) Dot(other BinpackVector[T], bb BinpackBehavior) T {
+	score := T(0)
+	if !bb.ScoreIgnoresCores {
+		score += v.VCPUs * other.VCPUs
+	}
+	if !bb.ScoreIgnoresDisk {
+		score += v.LocalGB * other.LocalGB
+	}
+	if !bb.ScoreIgnoresRAM {
+		score += v.MemoryMB * other.MemoryMB
+	}
+	return score
 }
 
 func (v BinpackVector[T]) IsAnyZero() bool {

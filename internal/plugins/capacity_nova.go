@@ -47,6 +47,7 @@ type capacityNovaPlugin struct {
 	PooledInstancesResourceName limesresources.ResourceName `yaml:"pooled_instances_resource"`
 	PooledRAMResourceName       limesresources.ResourceName `yaml:"pooled_ram_resource"`
 	WithSubcapacities           bool                        `yaml:"with_subcapacities"`
+	BinpackBehavior             nova.BinpackBehavior        `yaml:"binpack_behavior"`
 	// connections
 	NovaV2      *gophercloud.ServiceClient `yaml:"-"`
 	PlacementV1 *gophercloud.ServiceClient `yaml:"-"`
@@ -253,6 +254,7 @@ func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel, 
 	// if Nova can tell us where existing instances are running, we prefer this
 	// information since it will make our simulation more accurate
 	instancesPlacedOnShadowedHypervisors := make(map[string]map[limes.AvailabilityZone]uint64) // first key is flavor name
+	bb := p.BinpackBehavior
 	for _, flavor := range splitFlavors {
 		shadowedForThisFlavor := make(map[limes.AvailabilityZone]uint64)
 
@@ -293,7 +295,7 @@ func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel, 
 			for _, hv := range hypervisorsByAZ[az] {
 				if hv.Match.Hypervisor.HypervisorHostname == instance.HypervisorHostname {
 					var zero nova.BinpackVector[uint64]
-					placed := nova.BinpackHypervisors{hv}.PlaceOneInstance(flavor, "USED", coresOvercommitFactor, zero)
+					placed := nova.BinpackHypervisors{hv}.PlaceOneInstance(flavor, "USED", coresOvercommitFactor, zero, bb)
 					if !placed {
 						logg.Debug("could not simulate placement of known instance %s on %s", instance.ID, hv.Match.Hypervisor.Description())
 					}
@@ -328,7 +330,7 @@ func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel, 
 			placedUsage := hypervisors.PlacementCountForFlavor(flavor.Flavor.Name)
 			shadowedUsage := instancesPlacedOnShadowedHypervisors[flavor.Flavor.Name][az]
 			unplacedUsage := saturatingSub(demandByFlavorName[flavor.Flavor.Name][az].Usage, placedUsage+shadowedUsage)
-			if !hypervisors.PlaceSeveralInstances(flavor, "used", coresOvercommitFactor, blockedCapacity, unplacedUsage) {
+			if !hypervisors.PlaceSeveralInstances(flavor, "used", coresOvercommitFactor, blockedCapacity, bb, unplacedUsage) {
 				canPlaceFlavor[flavor.Flavor.Name] = false
 			}
 		}
@@ -339,7 +341,7 @@ func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel, 
 		blockedCapacity.LocalGB += instancesDemand[az].UnusedCommitments * maxRootDiskSize
 		logg.Debug("[%s] blockedCapacity in phase 2: %s", az, blockedCapacity.String())
 		for _, flavor := range splitFlavors {
-			if !hypervisors.PlaceSeveralInstances(flavor, "committed", coresOvercommitFactor, blockedCapacity, demandByFlavorName[flavor.Flavor.Name][az].UnusedCommitments) {
+			if !hypervisors.PlaceSeveralInstances(flavor, "committed", coresOvercommitFactor, blockedCapacity, bb, demandByFlavorName[flavor.Flavor.Name][az].UnusedCommitments) {
 				canPlaceFlavor[flavor.Flavor.Name] = false
 			}
 		}
@@ -350,7 +352,7 @@ func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel, 
 		blockedCapacity.LocalGB += instancesDemand[az].PendingCommitments * maxRootDiskSize
 		logg.Debug("[%s] blockedCapacity in phase 3: %s", az, blockedCapacity.String())
 		for _, flavor := range splitFlavors {
-			if !hypervisors.PlaceSeveralInstances(flavor, "pending", coresOvercommitFactor, blockedCapacity, demandByFlavorName[flavor.Flavor.Name][az].PendingCommitments) {
+			if !hypervisors.PlaceSeveralInstances(flavor, "pending", coresOvercommitFactor, blockedCapacity, bb, demandByFlavorName[flavor.Flavor.Name][az].PendingCommitments) {
 				canPlaceFlavor[flavor.Flavor.Name] = false
 			}
 		}
@@ -420,7 +422,7 @@ func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel, 
 				// no flavor left that can be placed -> stop
 				break
 			} else {
-				if hypervisors.PlaceOneInstance(*bestFlavor, "padding", coresOvercommitFactor, blockedCapacity) {
+				if hypervisors.PlaceOneInstance(*bestFlavor, "padding", coresOvercommitFactor, blockedCapacity, bb) {
 					totalPlacedInstances[bestFlavor.Flavor.Name]++
 				} else {
 					canPlaceFlavor[bestFlavor.Flavor.Name] = false
