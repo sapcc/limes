@@ -185,6 +185,7 @@ func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel, 
 	// enumerate matching hypervisors, prepare data structures for binpacking
 	var metrics capacityNovaSerializedMetrics
 	hypervisorsByAZ := make(map[limes.AvailabilityZone]nova.BinpackHypervisors)
+	shadowedHypervisorsByAZ := make(map[limes.AvailabilityZone][]nova.MatchingHypervisor)
 	isShadowedHVHostname := make(map[string]bool)
 	err = p.HypervisorSelection.ForeachHypervisor(p.NovaV2, p.PlacementV1, func(h nova.MatchingHypervisor) error {
 		// report wellformed-ness of this HV via metrics
@@ -216,6 +217,7 @@ func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel, 
 				len(bh.Nodes), bh.Nodes[0].Capacity,
 			)
 		} else {
+			shadowedHypervisorsByAZ[h.AvailabilityZone] = append(shadowedHypervisorsByAZ[h.AvailabilityZone], h)
 			isShadowedHVHostname[h.Hypervisor.HypervisorHostname] = true
 			logg.Debug("%s in %s is shadowed by trait %s", h.Hypervisor.Description(), h.AvailabilityZone, h.ShadowedByTrait)
 		}
@@ -445,6 +447,12 @@ func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel, 
 				azCapacity.Add(h.Match.PartialCapacity())
 				if p.WithSubcapacities {
 					builder.AddHypervisor(h.Match, float64(maxRootDiskSize))
+				}
+			}
+			for _, h := range shadowedHypervisorsByAZ[az] {
+				azCapacity.Add(h.PartialCapacity().CappedToUsage())
+				if p.WithSubcapacities {
+					builder.AddHypervisor(h, float64(maxRootDiskSize))
 				}
 			}
 

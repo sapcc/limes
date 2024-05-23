@@ -780,7 +780,10 @@ The `params.hypervisor_selection` can also contains lists of strings in the `req
   hypervisor will be considered shadowed. Its capacity will not be counted, just as for hypervisors that are excluded
   entirely by `required_traits`, but if the hypervisor contains running instances of split flavors (see below), this
   existing usage will be counted towards the total capacity. Shadowing is used to represent usage by legacy instances
-  while migrating to a different resource provider trait setup.
+  while migrating to a different resource provider trait setup. It can also be employed to report capacity
+  conservatively during a decommissioning operation: When moving payload from an old hypervisor to a newer model, both
+  hypervisors should be shadowed during this operation to avoid higher capacity being reported while both generations of
+  hypervisor are enabled concurrently.
 
 The `params.flavor_selection` parameter can be used to control how flavors are enumerated. Only those flavors will be
 considered which have all the extra specs noted in `required_extra_specs`, and none of those noted in
