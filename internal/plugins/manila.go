@@ -535,17 +535,19 @@ func manilaGetQuotaSet(client *gophercloud.ServiceClient, projectUUID, shareType
 // Prometheus queries and related types
 
 const (
+	// NOTE: In these queries, the `last_over_time(...[15m])` part guards against temporary unavailability of metrics resulting in spurious zero values.
+
 	// queries for AZ awareness metrics
-	manilaShareCountQuery       = `count by (availability_zone_name, project_id, share_type_id) (max by (availability_zone_name, id, project_id, share_id, share_type_id) (openstack_manila_replicas_count_gauge))`
-	manilaShareCapacityQuery    = `sum   by (availability_zone_name, project_id, share_type_id) (max by (availability_zone_name, id, project_id, share_id, share_type_id) (openstack_manila_replicas_size_gauge))`
-	manilaSnapshotCountQuery    = `count by (availability_zone_name, project_id, share_type_id) (max by (availability_zone_name, id, project_id, share_id, share_type_id) (openstack_manila_snapshot_count_gauge))`
-	manilaSnapshotCapacityQuery = `sum   by (availability_zone_name, project_id, share_type_id) (max by (availability_zone_name, id, project_id, share_id, share_type_id) (openstack_manila_snapshot_size_gauge))`
+	manilaShareCountQuery       = `count by (availability_zone_name, project_id, share_type_id) (max by (availability_zone_name, id, project_id, share_id, share_type_id) (last_over_time(openstack_manila_replicas_count_gauge[15m])))`
+	manilaShareCapacityQuery    = `sum   by (availability_zone_name, project_id, share_type_id) (max by (availability_zone_name, id, project_id, share_id, share_type_id) (last_over_time(openstack_manila_replicas_size_gauge[15m])))`
+	manilaSnapshotCountQuery    = `count by (availability_zone_name, project_id, share_type_id) (max by (availability_zone_name, id, project_id, share_id, share_type_id) (last_over_time(openstack_manila_snapshot_count_gauge[15m])))`
+	manilaSnapshotCapacityQuery = `sum   by (availability_zone_name, project_id, share_type_id) (max by (availability_zone_name, id, project_id, share_id, share_type_id) (last_over_time(openstack_manila_snapshot_size_gauge[15m])))`
 
 	// queries for netapp-exporter metrics
-	manilaSharePhysicalUsageQuery      = `sum by (availability_zone, project_id, share_type) (max by (availability_zone, project_id, share_id, share_type) (netapp_volume_used_bytes         {project_id!="",share_type!="",volume_type!="dp",volume_state="online"}))`
-	manilaSnapshotPhysicalUsageQuery   = `sum by (availability_zone, project_id, share_type) (max by (availability_zone, project_id, share_id, share_type) (netapp_volume_snapshot_used_bytes{project_id!="",share_type!="",volume_type!="dp",volume_state="online"}))`
-	manilaSnapmirrorUsageQuery         = `sum by (availability_zone, project_id, share_type) (max by (availability_zone, project_id, share_id, share_type) (netapp_volume_total_bytes        {project_id!="",share_type!="",volume_type!="dp",volume_state="online",snapshot_policy="EC2_Backups"}))`
-	manilaSnapmirrorPhysicalUsageQuery = `sum by (availability_zone, project_id, share_type) (max by (availability_zone, project_id, share_id, share_type) (netapp_volume_used_bytes         {project_id!="",share_type!="",volume_type!="dp",volume_state="online",snapshot_policy="EC2_Backups"}))`
+	manilaSharePhysicalUsageQuery      = `sum by (availability_zone, project_id, share_type) (max by (availability_zone, project_id, share_id, share_type) (last_over_time(netapp_volume_used_bytes         {project_id!="",share_type!="",volume_type!="dp",volume_state="online"}[15m])))`
+	manilaSnapshotPhysicalUsageQuery   = `sum by (availability_zone, project_id, share_type) (max by (availability_zone, project_id, share_id, share_type) (last_over_time(netapp_volume_snapshot_used_bytes{project_id!="",share_type!="",volume_type!="dp",volume_state="online"}[15m])))`
+	manilaSnapmirrorUsageQuery         = `sum by (availability_zone, project_id, share_type) (max by (availability_zone, project_id, share_id, share_type) (last_over_time(netapp_volume_total_bytes        {project_id!="",share_type!="",volume_type!="dp",volume_state="online",snapshot_policy="EC2_Backups"}[15m])))`
+	manilaSnapmirrorPhysicalUsageQuery = `sum by (availability_zone, project_id, share_type) (max by (availability_zone, project_id, share_id, share_type) (last_over_time(netapp_volume_used_bytes         {project_id!="",share_type!="",volume_type!="dp",volume_state="online",snapshot_policy="EC2_Backups"}[15m])))`
 )
 
 type manilaAZMetricsKey struct {
