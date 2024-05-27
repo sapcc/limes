@@ -331,7 +331,7 @@ func (p *capacitySapccIronicPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) 
 }
 
 // CollectMetrics implements the core.CapacityPlugin interface.
-func (p *capacitySapccIronicPlugin) CollectMetrics(ch chan<- prometheus.Metric, serializedMetrics []byte) error {
+func (p *capacitySapccIronicPlugin) CollectMetrics(ch chan<- prometheus.Metric, serializedMetrics []byte, capacitorID string) error {
 	if len(serializedMetrics) == 0 {
 		return nil
 	}

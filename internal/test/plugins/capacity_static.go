@@ -127,7 +127,7 @@ func (p *StaticCapacityPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 }
 
 // CollectMetrics implements the core.CapacityPlugin interface.
-func (p *StaticCapacityPlugin) CollectMetrics(ch chan<- prometheus.Metric, serializedMetrics []byte) error {
+func (p *StaticCapacityPlugin) CollectMetrics(ch chan<- prometheus.Metric, serializedMetrics []byte, capacitorID string) error {
 	if !p.WithSubcapacities {
 		return nil
 	}

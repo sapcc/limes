@@ -210,7 +210,7 @@ type CapacityPlugin interface {
 	// Some plugins also emit metrics directly within Scrape. This newer interface
 	// should be preferred since metrics emitted here won't be lost between
 	// restarts of limes-collect.
-	CollectMetrics(ch chan<- prometheus.Metric, serializedMetrics []byte) error
+	CollectMetrics(ch chan<- prometheus.Metric, serializedMetrics []byte, capacitorID string) error
 }
 
 // CapacityPluginBackchannel is a callback interface that is provided to
