@@ -198,7 +198,7 @@ func (p *capacityCinderPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 }
 
 // CollectMetrics implements the core.CapacityPlugin interface.
-func (p *capacityCinderPlugin) CollectMetrics(ch chan<- prometheus.Metric, serializedMetrics []byte) error {
+func (p *capacityCinderPlugin) CollectMetrics(ch chan<- prometheus.Metric, serializedMetrics []byte, capacitorID string) error {
 	// not used by this plugin
 	return nil
 }
