@@ -64,17 +64,6 @@ type novaHypervisorMetrics struct {
 	AvailabilityZone limes.AvailabilityZone `json:"az"`
 }
 
-type novaHypervisorSubcapacity struct {
-	ServiceHost      string                      `json:"service_host"`
-	AvailabilityZone limes.AvailabilityZone      `json:"az"`
-	AggregateName    string                      `json:"aggregate"`
-	Capacity         *uint64                     `json:"capacity,omitempty"`
-	Usage            *uint64                     `json:"usage,omitempty"`
-	CapacityVector   *nova.BinpackVector[uint64] `json:"capacity_vector,omitempty"`
-	UsageVector      *nova.BinpackVector[uint64] `json:"usage_vector,omitempty"`
-	Traits           []string                    `json:"traits"`
-}
-
 func init() {
 	core.CapacityPluginRegistry.Add(func() core.CapacityPlugin { return &capacityNovaPlugin{} })
 }
@@ -196,6 +185,7 @@ func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel, 
 	// enumerate matching hypervisors, prepare data structures for binpacking
 	var metrics capacityNovaSerializedMetrics
 	hypervisorsByAZ := make(map[limes.AvailabilityZone]nova.BinpackHypervisors)
+	shadowedHypervisorsByAZ := make(map[limes.AvailabilityZone][]nova.MatchingHypervisor)
 	isShadowedHVHostname := make(map[string]bool)
 	err = p.HypervisorSelection.ForeachHypervisor(p.NovaV2, p.PlacementV1, func(h nova.MatchingHypervisor) error {
 		// report wellformed-ness of this HV via metrics
@@ -227,6 +217,7 @@ func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel, 
 				len(bh.Nodes), bh.Nodes[0].Capacity,
 			)
 		} else {
+			shadowedHypervisorsByAZ[h.AvailabilityZone] = append(shadowedHypervisorsByAZ[h.AvailabilityZone], h)
 			isShadowedHVHostname[h.Hypervisor.HypervisorHostname] = true
 			logg.Debug("%s in %s is shadowed by trait %s", h.Hypervisor.Description(), h.AvailabilityZone, h.ShadowedByTrait)
 		}
@@ -449,49 +440,25 @@ func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel, 
 
 		for az, hypervisors := range hypervisorsByAZ {
 			var (
-				azCapacity             nova.PartialCapacity
-				coresSubcapacities     []any
-				instancesSubcapacities []any
-				ramSubcapacities       []any
+				azCapacity nova.PartialCapacity
+				builder    nova.PooledSubcapacityBuilder
 			)
 			for _, h := range hypervisors {
-				mh := h.Match
-				azCapacity.Add(mh.PartialCapacity())
-
+				azCapacity.Add(h.Match.PartialCapacity())
 				if p.WithSubcapacities {
-					hvCoresCapa := mh.PartialCapacity().IntoCapacityData("cores", float64(maxRootDiskSize), nil)
-					coresSubcapacities = append(coresSubcapacities, novaHypervisorSubcapacity{
-						ServiceHost:      mh.Hypervisor.Service.Host,
-						AggregateName:    mh.AggregateName,
-						AvailabilityZone: mh.AvailabilityZone,
-						Capacity:         &hvCoresCapa.Capacity,
-						Usage:            hvCoresCapa.Usage,
-						Traits:           mh.Traits,
-					})
-					hvInstancesCapa := mh.PartialCapacity().IntoCapacityData("instances", float64(maxRootDiskSize), nil)
-					instancesSubcapacities = append(instancesSubcapacities, novaHypervisorSubcapacity{
-						ServiceHost:      mh.Hypervisor.Service.Host,
-						AggregateName:    mh.AggregateName,
-						AvailabilityZone: mh.AvailabilityZone,
-						Capacity:         &hvInstancesCapa.Capacity,
-						Usage:            hvInstancesCapa.Usage,
-						Traits:           mh.Traits,
-					})
-					hvRAMCapa := mh.PartialCapacity().IntoCapacityData("ram", float64(maxRootDiskSize), nil)
-					ramSubcapacities = append(ramSubcapacities, novaHypervisorSubcapacity{
-						ServiceHost:      mh.Hypervisor.Service.Host,
-						AggregateName:    mh.AggregateName,
-						AvailabilityZone: mh.AvailabilityZone,
-						Capacity:         &hvRAMCapa.Capacity,
-						Usage:            hvRAMCapa.Usage,
-						Traits:           mh.Traits,
-					})
+					builder.AddHypervisor(h.Match, float64(maxRootDiskSize))
+				}
+			}
+			for _, h := range shadowedHypervisorsByAZ[az] {
+				azCapacity.Add(h.PartialCapacity().CappedToUsage())
+				if p.WithSubcapacities {
+					builder.AddHypervisor(h, float64(maxRootDiskSize))
 				}
 			}
 
-			capacities[p.PooledCoresResourceName][az] = pointerTo(azCapacity.IntoCapacityData("cores", float64(maxRootDiskSize), coresSubcapacities))
-			capacities[p.PooledInstancesResourceName][az] = pointerTo(azCapacity.IntoCapacityData("instances", float64(maxRootDiskSize), instancesSubcapacities))
-			capacities[p.PooledRAMResourceName][az] = pointerTo(azCapacity.IntoCapacityData("ram", float64(maxRootDiskSize), ramSubcapacities))
+			capacities[p.PooledCoresResourceName][az] = pointerTo(azCapacity.IntoCapacityData("cores", float64(maxRootDiskSize), builder.CoresSubcapacities))
+			capacities[p.PooledInstancesResourceName][az] = pointerTo(azCapacity.IntoCapacityData("instances", float64(maxRootDiskSize), builder.InstancesSubcapacities))
+			capacities[p.PooledRAMResourceName][az] = pointerTo(azCapacity.IntoCapacityData("ram", float64(maxRootDiskSize), builder.RAMSubcapacities))
 			for _, flavor := range splitFlavors {
 				count := hypervisors.PlacementCountForFlavor(flavor.Flavor.Name)
 				capacities[p.PooledCoresResourceName][az].Capacity -= coresOvercommitFactor.ApplyInReverseTo(count * uint64(flavor.Flavor.VCPUs))
@@ -512,33 +479,16 @@ func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel, 
 		for az, hypervisors := range hypervisorsByAZ {
 			// if we could not report subcapacities on pooled resources, report them on
 			// the first flavor in alphabetic order (this is why we just sorted them)
-			var subcapacities []any
+			var builder nova.SplitFlavorSubcapacityBuilder
 			if p.WithSubcapacities && p.PooledCoresResourceName == "" && idx == 0 {
 				for _, h := range hypervisors {
-					mh := h.Match
-					pc := mh.PartialCapacity()
-					subcapacities = append(subcapacities, novaHypervisorSubcapacity{
-						ServiceHost:      mh.Hypervisor.Service.Host,
-						AggregateName:    mh.AggregateName,
-						AvailabilityZone: mh.AvailabilityZone,
-						CapacityVector: &nova.BinpackVector[uint64]{
-							VCPUs:    pc.VCPUs.Capacity,
-							MemoryMB: pc.MemoryMB.Capacity,
-							LocalGB:  pc.LocalGB.Capacity,
-						},
-						UsageVector: &nova.BinpackVector[uint64]{
-							VCPUs:    pc.VCPUs.Usage,
-							MemoryMB: pc.MemoryMB.Usage,
-							LocalGB:  pc.LocalGB.Usage,
-						},
-						Traits: mh.Traits,
-					})
+					builder.AddHypervisor(h.Match)
 				}
 			}
 
 			capacities[resourceName][az] = &core.CapacityData{
 				Capacity:      hypervisors.PlacementCountForFlavor(flavor.Flavor.Name),
-				Subcapacities: subcapacities,
+				Subcapacities: builder.Subcapacities,
 			}
 		}
 

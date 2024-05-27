@@ -55,6 +55,17 @@ func (c *PartialCapacity) Add(other PartialCapacity) {
 	}
 }
 
+func (c PartialCapacity) CappedToUsage() PartialCapacity {
+	return PartialCapacity{
+		VCPUs:              c.VCPUs.CappedToUsage(),
+		MemoryMB:           c.MemoryMB.CappedToUsage(),
+		LocalGB:            c.LocalGB.CappedToUsage(),
+		RunningVMs:         c.RunningVMs,
+		MatchingAggregates: c.MatchingAggregates,
+		Subcapacities:      c.Subcapacities,
+	}
+}
+
 func (c PartialCapacity) IntoCapacityData(resourceName string, maxRootDiskSize float64, subcapacities []any) core.CapacityData {
 	switch resourceName {
 	case "cores":
@@ -91,4 +102,11 @@ func (c PartialCapacity) IntoCapacityData(resourceName string, maxRootDiskSize f
 type PartialCapacityMetric struct {
 	Capacity uint64
 	Usage    uint64
+}
+
+func (m PartialCapacityMetric) CappedToUsage() PartialCapacityMetric {
+	return PartialCapacityMetric{
+		Capacity: min(m.Capacity, m.Usage),
+		Usage:    m.Usage,
+	}
 }
