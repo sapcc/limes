@@ -1,0 +1,68 @@
+# HELP limes_autogrow_growth_multiplier For resources with quota distribution model "autogrow", reports the configured growth multiplier.
+# TYPE limes_autogrow_growth_multiplier gauge
+limes_autogrow_growth_multiplier{resource="capacity",service="unittest",service_name="generic-unittest"} 1
+limes_autogrow_growth_multiplier{resource="capacity_portion",service="unittest",service_name="generic-unittest"} 1
+limes_autogrow_growth_multiplier{resource="things",service="unittest",service_name="generic-unittest"} 1
+# HELP limes_cluster_capacity Reported capacity of a Limes resource for an OpenStack cluster.
+# TYPE limes_cluster_capacity gauge
+limes_cluster_capacity{resource="capacity",service="unittest",service_name="generic-unittest"} 0
+limes_cluster_capacity{resource="capacity_portion",service="unittest",service_name="generic-unittest"} 0
+limes_cluster_capacity{resource="things",service="unittest",service_name="generic-unittest"} 0
+# HELP limes_domain_quota Assigned quota of a Limes resource for an OpenStack domain.
+# TYPE limes_domain_quota gauge
+limes_domain_quota{domain="germany",domain_id="uuid-for-germany",resource="capacity",service="unittest",service_name="generic-unittest"} 40
+limes_domain_quota{domain="germany",domain_id="uuid-for-germany",resource="things",service="unittest",service_name="generic-unittest"} 26
+# HELP limes_project_backendquota Actual quota of a Limes resource for an OpenStack project.
+# TYPE limes_project_backendquota gauge
+limes_project_backendquota{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="unittest",service_name="generic-unittest"} 20
+limes_project_backendquota{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="things",service="unittest",service_name="generic-unittest"} 13
+limes_project_backendquota{domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="unittest",service_name="generic-unittest"} 20
+limes_project_backendquota{domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="things",service="unittest",service_name="generic-unittest"} 13
+# HELP limes_project_committed_per_az Sum of all active commitments of a Limes resource for an OpenStack project, grouped by availability zone and state.
+# TYPE limes_project_committed_per_az gauge
+limes_project_committed_per_az{availability_zone="az-one",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="unittest",service_name="generic-unittest",state="active"} 15
+limes_project_committed_per_az{availability_zone="az-one",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="unittest",service_name="generic-unittest",state="active"} 10
+limes_project_committed_per_az{availability_zone="az-one",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="unittest",service_name="generic-unittest",state="pending"} 10
+# HELP limes_project_physical_usage Actual (physical) usage of a Limes resource for an OpenStack project.
+# TYPE limes_project_physical_usage gauge
+limes_project_physical_usage{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="unittest",service_name="generic-unittest"} 10
+limes_project_physical_usage{domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="unittest",service_name="generic-unittest"} 10
+# HELP limes_project_quota Assigned quota of a Limes resource for an OpenStack project.
+# TYPE limes_project_quota gauge
+limes_project_quota{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="unittest",service_name="generic-unittest"} 20
+limes_project_quota{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="things",service="unittest",service_name="generic-unittest"} 13
+limes_project_quota{domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="unittest",service_name="generic-unittest"} 20
+limes_project_quota{domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="things",service="unittest",service_name="generic-unittest"} 13
+# HELP limes_project_usage Actual (logical) usage of a Limes resource for an OpenStack project.
+# TYPE limes_project_usage gauge
+limes_project_usage{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="unittest",service_name="generic-unittest"} 20
+limes_project_usage{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity_portion",service="unittest",service_name="generic-unittest"} 5
+limes_project_usage{domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="things",service="unittest",service_name="generic-unittest"} 5
+limes_project_usage{domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="unittest",service_name="generic-unittest"} 20
+limes_project_usage{domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="capacity_portion",service="unittest",service_name="generic-unittest"} 5
+limes_project_usage{domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="things",service="unittest",service_name="generic-unittest"} 5
+# HELP limes_project_usage_per_az Actual (logical) usage of a Limes resource for an OpenStack project in a specific availability zone.
+# TYPE limes_project_usage_per_az gauge
+limes_project_usage_per_az{availability_zone="az-one",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="unittest",service_name="generic-unittest"} 20
+limes_project_usage_per_az{availability_zone="az-one",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity_portion",service="unittest",service_name="generic-unittest"} 5
+limes_project_usage_per_az{availability_zone="az-one",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="things",service="unittest",service_name="generic-unittest"} 2
+limes_project_usage_per_az{availability_zone="az-one",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="unittest",service_name="generic-unittest"} 20
+limes_project_usage_per_az{availability_zone="az-one",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="capacity_portion",service="unittest",service_name="generic-unittest"} 5
+limes_project_usage_per_az{availability_zone="az-one",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="things",service="unittest",service_name="generic-unittest"} 2
+limes_project_usage_per_az{availability_zone="az-two",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="things",service="unittest",service_name="generic-unittest"} 3
+limes_project_usage_per_az{availability_zone="az-two",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="things",service="unittest",service_name="generic-unittest"} 3
+# HELP limes_project_used_and_or_committed_per_az The maximum of limes_project_usage_per_az and limes_project_committed_per_az{state="active"}.
+# TYPE limes_project_used_and_or_committed_per_az gauge
+limes_project_used_and_or_committed_per_az{availability_zone="az-one",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity",service="unittest",service_name="generic-unittest"} 20
+limes_project_used_and_or_committed_per_az{availability_zone="az-one",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="capacity_portion",service="unittest",service_name="generic-unittest"} 5
+limes_project_used_and_or_committed_per_az{availability_zone="az-one",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="things",service="unittest",service_name="generic-unittest"} 2
+limes_project_used_and_or_committed_per_az{availability_zone="az-one",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="capacity",service="unittest",service_name="generic-unittest"} 20
+limes_project_used_and_or_committed_per_az{availability_zone="az-one",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="capacity_portion",service="unittest",service_name="generic-unittest"} 5
+limes_project_used_and_or_committed_per_az{availability_zone="az-one",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="things",service="unittest",service_name="generic-unittest"} 2
+limes_project_used_and_or_committed_per_az{availability_zone="az-two",domain="germany",domain_id="uuid-for-germany",project="berlin",project_id="uuid-for-berlin",resource="things",service="unittest",service_name="generic-unittest"} 3
+limes_project_used_and_or_committed_per_az{availability_zone="az-two",domain="germany",domain_id="uuid-for-germany",project="dresden",project_id="uuid-for-dresden",resource="things",service="unittest",service_name="generic-unittest"} 3
+# HELP limes_unit_multiplier Conversion factor that a value of this resource must be multiplied with to obtain the base unit (e.g. bytes). For use with Grafana when only the base unit can be configured because of templating.
+# TYPE limes_unit_multiplier gauge
+limes_unit_multiplier{resource="capacity",service="unittest",service_name="generic-unittest"} 1
+limes_unit_multiplier{resource="capacity_portion",service="unittest",service_name="generic-unittest"} 1
+limes_unit_multiplier{resource="things",service="unittest",service_name="generic-unittest"} 1

@@ -1,47 +1,6 @@
-# HELP limes_autogrow_growth_multiplier For resources with quota distribution model "autogrow", reports the configured growth multiplier.
-# TYPE limes_autogrow_growth_multiplier gauge
-limes_autogrow_growth_multiplier{resource="capacity",service="shared",service_name="generic-shared"} 1
-limes_autogrow_growth_multiplier{resource="capacity",service="unshared",service_name="generic-unshared"} 1
-limes_autogrow_growth_multiplier{resource="capacity",service="unshared2",service_name="generic-unshared2"} 1
-limes_autogrow_growth_multiplier{resource="capacity_portion",service="shared",service_name="generic-shared"} 1
-limes_autogrow_growth_multiplier{resource="capacity_portion",service="unshared",service_name="generic-unshared"} 1
-limes_autogrow_growth_multiplier{resource="capacity_portion",service="unshared2",service_name="generic-unshared2"} 1
-limes_autogrow_growth_multiplier{resource="things",service="shared",service_name="generic-shared"} 1
-limes_autogrow_growth_multiplier{resource="things",service="unshared",service_name="generic-unshared"} 1
-limes_autogrow_growth_multiplier{resource="things",service="unshared2",service_name="generic-unshared2"} 1
 # HELP limes_capacity_plugin_metrics_ok Whether capacity plugin metrics were rendered successfully for a particular capacitor. Only present when the capacitor emits metrics.
 # TYPE limes_capacity_plugin_metrics_ok gauge
 limes_capacity_plugin_metrics_ok{capacitor="unittest4"} 1
-# HELP limes_cluster_capacity Reported capacity of a Limes resource for an OpenStack cluster.
-# TYPE limes_cluster_capacity gauge
-limes_cluster_capacity{resource="capacity",service="shared",service_name="generic-shared"} 0
-limes_cluster_capacity{resource="capacity",service="unshared",service_name="generic-unshared"} 42
-limes_cluster_capacity{resource="capacity",service="unshared2",service_name="generic-unshared2"} 0
-limes_cluster_capacity{resource="capacity_portion",service="shared",service_name="generic-shared"} 0
-limes_cluster_capacity{resource="capacity_portion",service="unshared",service_name="generic-unshared"} 0
-limes_cluster_capacity{resource="capacity_portion",service="unshared2",service_name="generic-unshared2"} 0
-limes_cluster_capacity{resource="things",service="shared",service_name="generic-shared"} 23
-limes_cluster_capacity{resource="things",service="unshared",service_name="generic-unshared"} 10
-limes_cluster_capacity{resource="things",service="unshared2",service_name="generic-unshared2"} 30
-# HELP limes_cluster_capacity_per_az Reported capacity of a Limes resource for an OpenStack cluster in a specific availability zone.
-# TYPE limes_cluster_capacity_per_az gauge
-limes_cluster_capacity_per_az{availability_zone="az-one",resource="things",service="unshared2",service_name="generic-unshared2"} 15
-limes_cluster_capacity_per_az{availability_zone="az-two",resource="things",service="unshared2",service_name="generic-unshared2"} 15
-# HELP limes_cluster_usage_per_az Actual usage of a Limes resource for an OpenStack cluster in a specific availability zone.
-# TYPE limes_cluster_usage_per_az gauge
-limes_cluster_usage_per_az{availability_zone="az-one",resource="things",service="unshared2",service_name="generic-unshared2"} 3
-limes_cluster_usage_per_az{availability_zone="az-two",resource="things",service="unshared2",service_name="generic-unshared2"} 3
-# HELP limes_unit_multiplier Conversion factor that a value of this resource must be multiplied with to obtain the base unit (e.g. bytes). For use with Grafana when only the base unit can be configured because of templating.
-# TYPE limes_unit_multiplier gauge
-limes_unit_multiplier{resource="capacity",service="shared",service_name="generic-shared"} 1
-limes_unit_multiplier{resource="capacity",service="unshared",service_name="generic-unshared"} 1
-limes_unit_multiplier{resource="capacity",service="unshared2",service_name="generic-unshared2"} 1
-limes_unit_multiplier{resource="capacity_portion",service="shared",service_name="generic-shared"} 1
-limes_unit_multiplier{resource="capacity_portion",service="unshared",service_name="generic-unshared"} 1
-limes_unit_multiplier{resource="capacity_portion",service="unshared2",service_name="generic-unshared2"} 1
-limes_unit_multiplier{resource="things",service="shared",service_name="generic-shared"} 1
-limes_unit_multiplier{resource="things",service="unshared",service_name="generic-unshared"} 1
-limes_unit_multiplier{resource="things",service="unshared2",service_name="generic-unshared2"} 1
 # HELP limes_unittest_capacity_larger_half 
 # TYPE limes_unittest_capacity_larger_half gauge
 limes_unittest_capacity_larger_half 7

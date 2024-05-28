@@ -29,6 +29,7 @@ Limes consists of two basic services:
   - Keystone to discover new domains/projects or updates to existing ones, and to
   - all other supported OpenStack services to gather quota/usage/capacity data.
 - Both services emit Prometheus metrics. See [List of metrics](./metrics.md) for details.
+- The optional **data metrics service** `limes serve-data-metrics` exposes all quota, usage and capacity data as Prometheus metrics.
 - Persistence is provided by a PostgreSQL database which is accessible to both services.
 
 # Building

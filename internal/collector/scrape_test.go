@@ -21,6 +21,7 @@ package collector
 
 import (
 	"database/sql"
+	"net/http"
 	"regexp"
 	"testing"
 	"time"
@@ -367,29 +368,32 @@ func Test_ScrapeSuccess(t *testing.T) {
 	registry.MustRegister(amc)
 	pmc := &QuotaPluginMetricsCollector{Cluster: s.Cluster, DB: s.DB}
 	registry.MustRegister(pmc)
-	dmc := &DataMetricsCollector{Cluster: s.Cluster, DB: s.DB, ReportZeroes: true}
-	registry.MustRegister(dmc)
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/metrics",
-		ExpectStatus: 200,
+		ExpectStatus: http.StatusOK,
+		ExpectHeader: map[string]string{"Content-Type": contentTypeForPrometheusMetrics},
 		ExpectBody:   assert.FixtureFile("fixtures/scrape_metrics.prom"),
 	}.Check(t, promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
 
-	// check data metrics with the skip_zero flag set
-	registry = prometheus.NewPedanticRegistry()
-	amc = &AggregateMetricsCollector{Cluster: s.Cluster, DB: s.DB}
-	registry.MustRegister(amc)
-	pmc = &QuotaPluginMetricsCollector{Cluster: s.Cluster, DB: s.DB}
-	registry.MustRegister(pmc)
-	dmc = &DataMetricsCollector{Cluster: s.Cluster, DB: s.DB, ReportZeroes: false}
-	registry.MustRegister(dmc)
+	dmr := &DataMetricsReporter{Cluster: s.Cluster, DB: s.DB, ReportZeroes: true}
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/metrics",
-		ExpectStatus: 200,
-		ExpectBody:   assert.FixtureFile("fixtures/scrape_metrics_skipzero.prom"),
-	}.Check(t, promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
+		ExpectStatus: http.StatusOK,
+		ExpectHeader: map[string]string{"Content-Type": contentTypeForPrometheusMetrics},
+		ExpectBody:   assert.FixtureFile("fixtures/scrape_data_metrics.prom"),
+	}.Check(t, dmr)
+
+	// check data metrics with the skip_zero flag set
+	dmr.ReportZeroes = false
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/metrics",
+		ExpectStatus: http.StatusOK,
+		ExpectHeader: map[string]string{"Content-Type": contentTypeForPrometheusMetrics},
+		ExpectBody:   assert.FixtureFile("fixtures/scrape_data_metrics_skipzero.prom"),
+	}.Check(t, dmr)
 }
 
 func Test_ScrapeFailure(t *testing.T) {
