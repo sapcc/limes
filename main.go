@@ -186,6 +186,7 @@ func taskCollect(cluster *core.Cluster, args []string) {
 	mux := http.NewServeMux()
 	mux.Handle("/", httpapi.Compose(
 		pprofapi.API{IsAuthorized: pprofapi.IsRequestFromLocalhost},
+		httpapi.HealthCheckAPI{SkipRequestLog: true},
 	))
 	mux.Handle("/metrics", promhttp.Handler())
 
@@ -228,7 +229,7 @@ func taskServe(cluster *core.Cluster, args []string, provider *gophercloud.Provi
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-// task: serve
+// task: serve data metrics
 
 func taskServeDataMetrics(cluster *core.Cluster, args []string) {
 	if len(args) != 0 {
@@ -252,6 +253,7 @@ func taskServeDataMetrics(cluster *core.Cluster, args []string) {
 	mux := http.NewServeMux()
 	mux.Handle("/", httpapi.Compose(
 		pprofapi.API{IsAuthorized: pprofapi.IsRequestFromLocalhost},
+		httpapi.HealthCheckAPI{SkipRequestLog: true},
 	))
 	mux.Handle("/metrics", &dmr)
 
