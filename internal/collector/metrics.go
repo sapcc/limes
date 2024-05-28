@@ -20,10 +20,15 @@
 package collector
 
 import (
+	"bufio"
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math/big"
+	"net/http"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/go-gorp/gorp/v3"
@@ -32,6 +37,7 @@ import (
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/logg"
+	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/internal/core"
@@ -356,147 +362,87 @@ func (c *QuotaPluginMetricsCollector) collectOneProjectService(ch chan<- prometh
 ////////////////////////////////////////////////////////////////////////////////
 // data metrics
 
-var clusterCapacityGauge = prometheus.NewGaugeVec(
-	prometheus.GaugeOpts{
-		Name: "limes_cluster_capacity",
-		Help: "Reported capacity of a Limes resource for an OpenStack cluster.",
-	},
-	[]string{"service", "service_name", "resource"},
-)
-
-var clusterCapacityPerAZGauge = prometheus.NewGaugeVec(
-	prometheus.GaugeOpts{
-		Name: "limes_cluster_capacity_per_az",
-		Help: "Reported capacity of a Limes resource for an OpenStack cluster in a specific availability zone.",
-	},
-	[]string{"availability_zone", "service", "service_name", "resource"},
-)
-
-var clusterUsagePerAZGauge = prometheus.NewGaugeVec(
-	prometheus.GaugeOpts{
-		Name: "limes_cluster_usage_per_az",
-		Help: "Actual usage of a Limes resource for an OpenStack cluster in a specific availability zone.",
-	},
-	[]string{"availability_zone", "service", "service_name", "resource"},
-)
-
-var domainQuotaGauge = prometheus.NewGaugeVec(
-	prometheus.GaugeOpts{
-		Name: "limes_domain_quota",
-		Help: "Assigned quota of a Limes resource for an OpenStack domain.",
-	},
-	[]string{"domain", "domain_id", "service", "service_name", "resource"},
-)
-
-var projectQuotaGauge = prometheus.NewGaugeVec(
-	prometheus.GaugeOpts{
-		Name: "limes_project_quota",
-		Help: "Assigned quota of a Limes resource for an OpenStack project.",
-	},
-	[]string{"domain", "domain_id", "project", "project_id", "service", "service_name", "resource"},
-)
-
-var projectBackendQuotaGauge = prometheus.NewGaugeVec(
-	prometheus.GaugeOpts{
-		Name: "limes_project_backendquota",
-		Help: "Actual quota of a Limes resource for an OpenStack project.",
-	},
-	[]string{"domain", "domain_id", "project", "project_id", "service", "service_name", "resource"},
-)
-
-var projectUsageGauge = prometheus.NewGaugeVec(
-	prometheus.GaugeOpts{
-		Name: "limes_project_usage",
-		Help: "Actual (logical) usage of a Limes resource for an OpenStack project.",
-	},
-	[]string{"domain", "domain_id", "project", "project_id", "service", "service_name", "resource"},
-)
-
-var projectPhysicalUsageGauge = prometheus.NewGaugeVec(
-	prometheus.GaugeOpts{
-		Name: "limes_project_physical_usage",
-		Help: "Actual (physical) usage of a Limes resource for an OpenStack project.",
-	},
-	[]string{"domain", "domain_id", "project", "project_id", "service", "service_name", "resource"},
-)
-
-var projectUsagePerAZGauge = prometheus.NewGaugeVec(
-	prometheus.GaugeOpts{
-		Name: "limes_project_usage_per_az",
-		Help: "Actual (logical) usage of a Limes resource for an OpenStack project in a specific availability zone.",
-	},
-	[]string{"availability_zone", "domain", "domain_id", "project", "project_id", "service", "service_name", "resource"},
-)
-
-var projectCommittedPerAZGauge = prometheus.NewGaugeVec(
-	prometheus.GaugeOpts{
-		Name: "limes_project_committed_per_az",
-		Help: "Sum of all active commitments of a Limes resource for an OpenStack project, grouped by availability zone and state.",
-	},
-	[]string{"availability_zone", "domain", "domain_id", "project", "project_id", "service", "service_name", "resource", "state"},
-)
-
-// This metric might appear to be redundant because it could be computed in PromQL.
-// But `max(limes_project_usage_per_az, limes_project_committed_per_az{state="active"})` will not yield all necessary results
-// if zero metrics are not emitted (as is the recommended configuration).
-var projectUsedAndOrCommittedPerAZGauge = prometheus.NewGaugeVec(
-	prometheus.GaugeOpts{
-		Name: "limes_project_used_and_or_committed_per_az",
-		Help: `The maximum of limes_project_usage_per_az and limes_project_committed_per_az{state="active"}.`,
-	},
-	[]string{"availability_zone", "domain", "domain_id", "project", "project_id", "service", "service_name", "resource"},
-)
-
-var projectRateUsageGauge = prometheus.NewGaugeVec(
-	prometheus.GaugeOpts{
-		Name: "limes_project_rate_usage",
-		Help: "Usage of a Limes rate for an OpenStack project. These are counters that never reset.",
-	},
-	[]string{"domain", "domain_id", "project", "project_id", "service", "service_name", "rate"},
-)
-
-var unitConversionGauge = prometheus.NewGaugeVec(
-	prometheus.GaugeOpts{
-		Name: "limes_unit_multiplier",
-		Help: "Conversion factor that a value of this resource must be multiplied" +
-			" with to obtain the base unit (e.g. bytes). For use with Grafana when" +
-			" only the base unit can be configured because of templating.",
-	},
-	[]string{"service", "service_name", "resource"},
-)
-
-var autogrowGrowthMultiplierGauge = prometheus.NewGaugeVec(
-	prometheus.GaugeOpts{
-		Name: "limes_autogrow_growth_multiplier",
-		Help: `For resources with quota distribution model "autogrow", reports the configured growth multiplier.`,
-	},
-	[]string{"service", "service_name", "resource"},
-)
-
-// DataMetricsCollector is a prometheus.Collector that submits
-// quota/usage/backend quota from an OpenStack cluster as Prometheus metrics.
-type DataMetricsCollector struct {
+// DataMetricsReporter renders Prometheus metrics for data attributes (quota,
+// usage, etc.) for all projects known to Limes.
+//
+// It is an http.Handler, instead of implementing the prometheus.Collector
+// interface (like all the other Collector types in this package) and going
+// through the normal promhttp facility.
+//
+// We are not going through promhttp here because promhttp insists on holding
+// all metrics in memory before rendering them out (in order to sort them).
+// Given the extremely high cardinality of these metrics, this results in
+// unreasonably high memory usage spikes.
+//
+// This implementation also holds all the metrics in memory (because ORDER BY
+// on database level turned out to be prohibitively expensive), but we hold
+// their rendered forms (i.e. something like `{bar="bar",foo="foo"} 42` instead
+// of a dozen allocations for each label name, label value, label pair, a map
+// of label pairs, and so on) in order to save memory.
+type DataMetricsReporter struct {
 	Cluster      *core.Cluster
 	DB           *gorp.DbMap
 	ReportZeroes bool
 }
 
-// Describe implements the prometheus.Collector interface.
-func (c *DataMetricsCollector) Describe(ch chan<- *prometheus.Desc) {
-	clusterCapacityGauge.Describe(ch)
-	clusterCapacityPerAZGauge.Describe(ch)
-	clusterUsagePerAZGauge.Describe(ch)
-	domainQuotaGauge.Describe(ch)
-	projectQuotaGauge.Describe(ch)
-	projectBackendQuotaGauge.Describe(ch)
-	projectUsageGauge.Describe(ch)
-	projectPhysicalUsageGauge.Describe(ch)
-	projectUsagePerAZGauge.Describe(ch)
-	projectCommittedPerAZGauge.Describe(ch)
-	projectUsedAndOrCommittedPerAZGauge.Describe(ch)
-	projectRateUsageGauge.Describe(ch)
-	unitConversionGauge.Describe(ch)
-	autogrowGrowthMultiplierGauge.Describe(ch)
+// This is the same Content-Type that promhttp's GET /metrics implementation reports.
+// If this changes because of a prometheus/client-go upgrade, we will know because our
+// test verifies that promhttp yields this Content-Type. In the case of a change,
+// the output format of promhttp should be carefully reviewed for changes, and then
+// our implementation should match those changes (including to the Content-Type).
+const contentTypeForPrometheusMetrics = "text/plain; version=0.0.4; charset=utf-8; escaping=values"
+
+// ServeHTTP implements the http.Handler interface.
+func (d *DataMetricsReporter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	metricsBySeries, err := d.collectMetricsBySeries()
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	w.Header().Set("Content-Type", contentTypeForPrometheusMetrics)
+	w.WriteHeader(http.StatusOK)
+
+	// NOTE: Keep metrics ordered by name!
+	bw := bufio.NewWriter(w)
+	printDataMetrics(bw, metricsBySeries, "limes_autogrow_growth_multiplier", `For resources with quota distribution model "autogrow", reports the configured growth multiplier.`)
+	printDataMetrics(bw, metricsBySeries, "limes_cluster_capacity", `Reported capacity of a Limes resource for an OpenStack cluster.`)
+	printDataMetrics(bw, metricsBySeries, "limes_cluster_capacity_per_az", "Reported capacity of a Limes resource for an OpenStack cluster in a specific availability zone.")
+	printDataMetrics(bw, metricsBySeries, "limes_cluster_usage_per_az", "Actual usage of a Limes resource for an OpenStack cluster in a specific availability zone.")
+	printDataMetrics(bw, metricsBySeries, "limes_domain_quota", `Assigned quota of a Limes resource for an OpenStack domain.`)
+	printDataMetrics(bw, metricsBySeries, "limes_project_backendquota", `Actual quota of a Limes resource for an OpenStack project.`)
+	printDataMetrics(bw, metricsBySeries, "limes_project_committed_per_az", `Sum of all active commitments of a Limes resource for an OpenStack project, grouped by availability zone and state.`)
+	printDataMetrics(bw, metricsBySeries, "limes_project_physical_usage", `Actual (physical) usage of a Limes resource for an OpenStack project.`)
+	printDataMetrics(bw, metricsBySeries, "limes_project_quota", `Assigned quota of a Limes resource for an OpenStack project.`)
+	printDataMetrics(bw, metricsBySeries, "limes_project_rate_usage", `Usage of a Limes rate for an OpenStack project. These are counters that never reset.`)
+	printDataMetrics(bw, metricsBySeries, "limes_project_usage", `Actual (logical) usage of a Limes resource for an OpenStack project.`)
+	printDataMetrics(bw, metricsBySeries, "limes_project_usage_per_az", `Actual (logical) usage of a Limes resource for an OpenStack project in a specific availability zone.`)
+	printDataMetrics(bw, metricsBySeries, "limes_project_used_and_or_committed_per_az", `The maximum of limes_project_usage_per_az and limes_project_committed_per_az{state="active"}.`)
+	printDataMetrics(bw, metricsBySeries, "limes_unit_multiplier", `Conversion factor that a value of this resource must be multiplied with to obtain the base unit (e.g. bytes). For use with Grafana when only the base unit can be configured because of templating.`)
+
+	err = bw.Flush()
+	if err != nil {
+		logg.Error("in DataMetricsReporter.ServeHTTP: " + err.Error())
+	}
+}
+
+type dataMetric struct {
+	Labels string // e.g. `bar="bar",foo="foo"`
+	Value  float64
+}
+
+func printDataMetrics(w io.Writer, metricsBySeries map[string][]dataMetric, seriesName, seriesHelp string) {
+	metrics := metricsBySeries[seriesName]
+	if len(metrics) == 0 {
+		return
+	}
+	fmt.Fprintf(w, "# HELP %s %s\n# TYPE %s gauge\n", seriesName, seriesHelp, seriesName)
+
+	slices.SortFunc(metrics, func(lhs, rhs dataMetric) int {
+		return strings.Compare(lhs.Labels, rhs.Labels)
+	})
+	for _, m := range metrics {
+		fmt.Fprintf(w, "%s{%s} %g\n", seriesName, m.Labels, m.Value)
+	}
 }
 
 var clusterMetricsQuery = sqlext.SimplifyWhitespace(`
@@ -562,61 +508,13 @@ var projectRateMetricsQuery = sqlext.SimplifyWhitespace(`
 	 WHERE pra.usage_as_bigint != ''
 `)
 
-// Collect implements the prometheus.Collector interface.
-func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
-	//NOTE: I use NewConstMetric() instead of storing the values in the GaugeVec
-	// instances,
-	//
-	// 1. because it is faster.
-	// 2. because this automatically handles deleted projects/domains correctly.
-	//   (Their metrics just disappear when Prometheus scrapes next time.)
-
-	// fetch Descs for all metrics
-	descCh := make(chan *prometheus.Desc, 1)
-	clusterCapacityGauge.Describe(descCh)
-	clusterCapacityDesc := <-descCh
-	clusterCapacityPerAZGauge.Describe(descCh)
-	clusterCapacityPerAZDesc := <-descCh
-	clusterUsagePerAZGauge.Describe(descCh)
-	clusterUsagePerAZDesc := <-descCh
-	domainQuotaGauge.Describe(descCh)
-	domainQuotaDesc := <-descCh
-	projectQuotaGauge.Describe(descCh)
-	projectQuotaDesc := <-descCh
-	projectBackendQuotaGauge.Describe(descCh)
-	projectBackendQuotaDesc := <-descCh
-	projectUsageGauge.Describe(descCh)
-	projectUsageDesc := <-descCh
-	projectPhysicalUsageGauge.Describe(descCh)
-	projectPhysicalUsageDesc := <-descCh
-	projectUsagePerAZGauge.Describe(descCh)
-	projectUsagePerAZDesc := <-descCh
-	projectCommittedPerAZGauge.Describe(descCh)
-	projectCommittedPerAZDesc := <-descCh
-	projectUsedAndOrCommittedPerAZGauge.Describe(descCh)
-	projectUsedAndOrCommittedPerAZDesc := <-descCh
-	projectRateUsageGauge.Describe(descCh)
-	projectRateUsageDesc := <-descCh
-	unitConversionGauge.Describe(descCh)
-	unitConversionDesc := <-descCh
-	autogrowGrowthMultiplierGauge.Describe(descCh)
-	autogrowGrowthMultiplierDesc := <-descCh
-
-	serviceNameByType := buildServiceNameByTypeMapping(c.Cluster)
-
-	// see down below on doc of type stringUniquifier for why we want this
-	uniqueDomainUUID := newStringUniquifier[string]()
-	uniqueDomainName := newStringUniquifier[string]()
-	uniqueProjectUUID := newStringUniquifier[string]()
-	uniqueProjectName := newStringUniquifier[string]()
-	uniqueAvailabilityZone := newStringUniquifier[limes.AvailabilityZone]()
-	uniqueServiceType := newStringUniquifier[limes.ServiceType]()
-	uniqueResourceName := newStringUniquifier[limesresources.ResourceName]()
-	uniqueRateName := newStringUniquifier[limesrates.RateName]()
+func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric, error) {
+	serviceNameByType := buildServiceNameByTypeMapping(d.Cluster)
+	result := make(map[string][]dataMetric)
 
 	// fetch values for cluster level
 	capacityReported := make(map[limes.ServiceType]map[limesresources.ResourceName]bool)
-	err := sqlext.ForeachRow(c.DB, clusterMetricsQuery, nil, func(rows *sql.Rows) error {
+	err := sqlext.ForeachRow(d.DB, clusterMetricsQuery, nil, func(rows *sql.Rows) error {
 		var (
 			serviceType       limes.ServiceType
 			resourceName      limesresources.ResourceName
@@ -649,39 +547,28 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			}
 		}
 
-		overcommitFactor := c.Cluster.BehaviorForResource(serviceType, resourceName).OvercommitFactor
+		overcommitFactor := d.Cluster.BehaviorForResource(serviceType, resourceName).OvercommitFactor
 		if reportAZBreakdown {
 			for az, azCapacity := range capacityPerAZ {
-				ch <- prometheus.MustNewConstMetric(
-					clusterCapacityPerAZDesc,
-					prometheus.GaugeValue, float64(overcommitFactor.ApplyTo(azCapacity)),
-					uniqueAvailabilityZone.For(az),
-					uniqueServiceType.For(serviceType),
-					serviceNameByType[serviceType],
-					uniqueResourceName.For(resourceName),
+				azLabels := fmt.Sprintf(`availability_zone=%q,resource=%q,service=%q,service_name=%q`,
+					az, resourceName, serviceType, serviceNameByType[serviceType],
 				)
+				metric := dataMetric{Labels: azLabels, Value: float64(overcommitFactor.ApplyTo(azCapacity))}
+				result["limes_cluster_capacity_per_az"] = append(result["limes_cluster_capacity_per_az"], metric)
 
 				azUsage := usagePerAZ[az]
 				if azUsage != nil && *azUsage != 0 {
-					ch <- prometheus.MustNewConstMetric(
-						clusterUsagePerAZDesc,
-						prometheus.GaugeValue, float64(*azUsage),
-						uniqueAvailabilityZone.For(az),
-						uniqueServiceType.For(serviceType),
-						serviceNameByType[serviceType],
-						uniqueResourceName.For(resourceName),
-					)
+					metric := dataMetric{Labels: azLabels, Value: float64(*azUsage)}
+					result["limes_cluster_usage_per_az"] = append(result["limes_cluster_usage_per_az"], metric)
 				}
 			}
 		}
 
-		ch <- prometheus.MustNewConstMetric(
-			clusterCapacityDesc,
-			prometheus.GaugeValue, float64(overcommitFactor.ApplyTo(totalCapacity)),
-			uniqueServiceType.For(serviceType),
-			serviceNameByType[serviceType],
-			uniqueResourceName.For(resourceName),
+		labels := fmt.Sprintf(`resource=%q,service=%q,service_name=%q`,
+			resourceName, serviceType, serviceNameByType[serviceType],
 		)
+		metric := dataMetric{Labels: labels, Value: float64(overcommitFactor.ApplyTo(totalCapacity))}
+		result["limes_cluster_capacity"] = append(result["limes_cluster_capacity"], metric)
 
 		_, exists := capacityReported[serviceType]
 		if !exists {
@@ -692,30 +579,28 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		return nil
 	})
 	if err != nil {
-		logg.Error("collect cluster data metrics failed: " + err.Error())
+		return nil, fmt.Errorf("in clusterMetricsQuery: %w", err)
 	}
 
 	// make sure that a cluster capacity value is reported for each resource (the
 	// corresponding time series might otherwise be missing if capacity scraping
 	// fails)
-	for serviceType, quotaPlugin := range c.Cluster.QuotaPlugins {
+	for serviceType, quotaPlugin := range d.Cluster.QuotaPlugins {
 		for _, res := range quotaPlugin.Resources() {
 			if capacityReported[serviceType][res.Name] {
 				continue
 			}
 
-			ch <- prometheus.MustNewConstMetric(
-				clusterCapacityDesc,
-				prometheus.GaugeValue, 0,
-				uniqueServiceType.For(serviceType),
-				serviceNameByType[serviceType],
-				uniqueResourceName.For(res.Name),
+			labels := fmt.Sprintf(`resource=%q,service=%q,service_name=%q`,
+				res.Name, serviceType, serviceNameByType[serviceType],
 			)
+			metric := dataMetric{Labels: labels, Value: 0}
+			result["limes_cluster_capacity"] = append(result["limes_cluster_capacity"], metric)
 		}
 	}
 
 	// fetch values for domain level
-	err = sqlext.ForeachRow(c.DB, domainMetricsQuery, nil, func(rows *sql.Rows) error {
+	err = sqlext.ForeachRow(d.DB, domainMetricsQuery, nil, func(rows *sql.Rows) error {
 		var (
 			domainName   string
 			domainUUID   string
@@ -727,25 +612,24 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		if err != nil {
 			return err
 		}
+
 		if quota != nil {
-			ch <- prometheus.MustNewConstMetric(
-				domainQuotaDesc,
-				prometheus.GaugeValue, float64(*quota),
-				uniqueDomainName.For(domainName),
-				uniqueDomainUUID.For(domainUUID),
-				uniqueServiceType.For(serviceType),
-				serviceNameByType[serviceType],
-				uniqueResourceName.For(resourceName),
+			labels := fmt.Sprintf(
+				`domain=%q,domain_id=%q,resource=%q,service=%q,service_name=%q`,
+				domainName, domainUUID,
+				resourceName, serviceType, serviceNameByType[serviceType],
 			)
+			metric := dataMetric{Labels: labels, Value: float64(*quota)}
+			result["limes_domain_quota"] = append(result["limes_domain_quota"], metric)
 		}
 		return nil
 	})
 	if err != nil {
-		logg.Error("collect domain metrics failed: " + err.Error())
+		return nil, fmt.Errorf("during projectMetricsQuery: %w", err)
 	}
 
 	// fetch values for project level (quota/usage)
-	err = sqlext.ForeachRow(c.DB, projectMetricsQuery, nil, func(rows *sql.Rows) error {
+	err = sqlext.ForeachRow(d.DB, projectMetricsQuery, nil, func(rows *sql.Rows) error {
 		var (
 			domainName       string
 			domainUUID       string
@@ -764,73 +648,42 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		if err != nil {
 			return err
 		}
+		labels := fmt.Sprintf(
+			`domain=%q,domain_id=%q,project=%q,project_id=%q,resource=%q,service=%q,service_name=%q`,
+			domainName, domainUUID, projectName, projectUUID,
+			resourceName, serviceType, serviceNameByType[serviceType],
+		)
 
 		if quota != nil {
-			if c.ReportZeroes || *quota != 0 {
-				ch <- prometheus.MustNewConstMetric(
-					projectQuotaDesc,
-					prometheus.GaugeValue, float64(*quota),
-					uniqueDomainName.For(domainName),
-					uniqueDomainUUID.For(domainUUID),
-					uniqueProjectName.For(projectName),
-					uniqueProjectUUID.For(projectUUID),
-					uniqueServiceType.For(serviceType),
-					serviceNameByType[serviceType],
-					uniqueResourceName.For(resourceName),
-				)
+			if d.ReportZeroes || *quota != 0 {
+				metric := dataMetric{Labels: labels, Value: float64(*quota)}
+				result["limes_project_quota"] = append(result["limes_project_quota"], metric)
 			}
 		}
 		if backendQuota != nil {
-			if c.ReportZeroes || *backendQuota != 0 {
-				ch <- prometheus.MustNewConstMetric(
-					projectBackendQuotaDesc,
-					prometheus.GaugeValue, float64(*backendQuota),
-					uniqueDomainName.For(domainName),
-					uniqueDomainUUID.For(domainUUID),
-					uniqueProjectName.For(projectName),
-					uniqueProjectUUID.For(projectUUID),
-					uniqueServiceType.For(serviceType),
-					serviceNameByType[serviceType],
-					uniqueResourceName.For(resourceName),
-				)
+			if d.ReportZeroes || *backendQuota != 0 {
+				metric := dataMetric{Labels: labels, Value: float64(*backendQuota)}
+				result["limes_project_backendquota"] = append(result["limes_project_backendquota"], metric)
 			}
 		}
-		if c.ReportZeroes || usage != 0 {
-			ch <- prometheus.MustNewConstMetric(
-				projectUsageDesc,
-				prometheus.GaugeValue, float64(usage),
-				uniqueDomainName.For(domainName),
-				uniqueDomainUUID.For(domainUUID),
-				uniqueProjectName.For(projectName),
-				uniqueProjectUUID.For(projectUUID),
-				uniqueServiceType.For(serviceType),
-				serviceNameByType[serviceType],
-				uniqueResourceName.For(resourceName),
-			)
+		if d.ReportZeroes || usage != 0 {
+			metric := dataMetric{Labels: labels, Value: float64(usage)}
+			result["limes_project_usage"] = append(result["limes_project_usage"], metric)
 		}
 		if hasPhysicalUsage {
-			if c.ReportZeroes || physicalUsage != 0 {
-				ch <- prometheus.MustNewConstMetric(
-					projectPhysicalUsageDesc,
-					prometheus.GaugeValue, float64(physicalUsage),
-					uniqueDomainName.For(domainName),
-					uniqueDomainUUID.For(domainUUID),
-					uniqueProjectName.For(projectName),
-					uniqueProjectUUID.For(projectUUID),
-					uniqueServiceType.For(serviceType),
-					serviceNameByType[serviceType],
-					uniqueResourceName.For(resourceName),
-				)
+			if d.ReportZeroes || physicalUsage != 0 {
+				metric := dataMetric{Labels: labels, Value: float64(physicalUsage)}
+				result["limes_project_physical_usage"] = append(result["limes_project_physical_usage"], metric)
 			}
 		}
 		return nil
 	})
 	if err != nil {
-		logg.Error("collect project metrics failed: " + err.Error())
+		return nil, fmt.Errorf("during projectMetricsQuery: %w", err)
 	}
 
 	// fetch values for project AZ level (usage/commitments)
-	err = sqlext.ForeachRow(c.DB, projectAZMetricsQuery, nil, func(rows *sql.Rows) error {
+	err = sqlext.ForeachRow(d.DB, projectAZMetricsQuery, nil, func(rows *sql.Rows) error {
 		var (
 			domainName        string
 			domainUUID        string
@@ -847,20 +700,15 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		if err != nil {
 			return err
 		}
+		labels := fmt.Sprintf(
+			`availability_zone=%q,domain=%q,domain_id=%q,project=%q,project_id=%q,resource=%q,service=%q,service_name=%q`,
+			az, domainName, domainUUID, projectName, projectUUID,
+			resourceName, serviceType, serviceNameByType[serviceType],
+		)
 
-		if c.ReportZeroes || usage != 0 {
-			ch <- prometheus.MustNewConstMetric(
-				projectUsagePerAZDesc,
-				prometheus.GaugeValue, float64(usage),
-				uniqueAvailabilityZone.For(az),
-				uniqueDomainName.For(domainName),
-				uniqueDomainUUID.For(domainUUID),
-				uniqueProjectName.For(projectName),
-				uniqueProjectUUID.For(projectUUID),
-				uniqueServiceType.For(serviceType),
-				serviceNameByType[serviceType],
-				uniqueResourceName.For(resourceName),
-			)
+		if d.ReportZeroes || usage != 0 {
+			metric := dataMetric{Labels: labels, Value: float64(usage)}
+			result["limes_project_usage_per_az"] = append(result["limes_project_usage_per_az"], metric)
 		}
 		committed := uint64(0)
 		if amountByStateJSON != nil {
@@ -871,68 +719,42 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 			}
 			committed = amountByState[db.CommitmentStateActive]
 			for state, amount := range amountByState {
-				ch <- prometheus.MustNewConstMetric(
-					projectCommittedPerAZDesc,
-					prometheus.GaugeValue, float64(amount),
-					uniqueAvailabilityZone.For(az),
-					uniqueDomainName.For(domainName),
-					uniqueDomainUUID.For(domainUUID),
-					uniqueProjectName.For(projectName),
-					uniqueProjectUUID.For(projectUUID),
-					uniqueServiceType.For(serviceType),
-					serviceNameByType[serviceType],
-					uniqueResourceName.For(resourceName),
-					string(state),
-				)
+				labelsWithState := fmt.Sprintf(`%s,state=%q`, labels, state)
+				metric := dataMetric{Labels: labelsWithState, Value: float64(amount)}
+				result["limes_project_committed_per_az"] = append(result["limes_project_committed_per_az"], metric)
 			}
 		}
-		if c.ReportZeroes || max(usage, committed) != 0 {
-			ch <- prometheus.MustNewConstMetric(
-				projectUsedAndOrCommittedPerAZDesc,
-				prometheus.GaugeValue, float64(max(usage, committed)),
-				uniqueAvailabilityZone.For(az),
-				uniqueDomainName.For(domainName),
-				uniqueDomainUUID.For(domainUUID),
-				uniqueProjectName.For(projectName),
-				uniqueProjectUUID.For(projectUUID),
-				uniqueServiceType.For(serviceType),
-				serviceNameByType[serviceType],
-				uniqueResourceName.For(resourceName),
-			)
+		if d.ReportZeroes || max(usage, committed) != 0 {
+			metric := dataMetric{Labels: labels, Value: float64(max(usage, committed))}
+			result["limes_project_used_and_or_committed_per_az"] = append(result["limes_project_used_and_or_committed_per_az"], metric)
 		}
 		return nil
 	})
 	if err != nil {
-		logg.Error("collect project AZ metrics failed: " + err.Error())
+		return nil, fmt.Errorf("during projectAZMetricsQuery: %w", err)
 	}
 
 	// fetch metadata for services/resources
-	for serviceType, quotaPlugin := range c.Cluster.QuotaPlugins {
+	for serviceType, quotaPlugin := range d.Cluster.QuotaPlugins {
 		for _, resource := range quotaPlugin.Resources() {
-			_, multiplier := resource.Unit.Base()
-			ch <- prometheus.MustNewConstMetric(
-				unitConversionDesc,
-				prometheus.GaugeValue, float64(multiplier),
-				uniqueServiceType.For(serviceType),
-				serviceNameByType[serviceType],
-				uniqueResourceName.For(resource.Name),
+			labels := fmt.Sprintf(`resource=%q,service=%q,service_name=%q`,
+				resource.Name, serviceType, serviceNameByType[serviceType],
 			)
 
-			qdc := c.Cluster.QuotaDistributionConfigForResource(serviceType, resource.Name)
+			_, multiplier := resource.Unit.Base()
+			metric := dataMetric{Labels: labels, Value: float64(multiplier)}
+			result["limes_unit_multiplier"] = append(result["limes_unit_multiplier"], metric)
+
+			qdc := d.Cluster.QuotaDistributionConfigForResource(serviceType, resource.Name)
 			if qdc.Model == limesresources.AutogrowQuotaDistribution {
-				ch <- prometheus.MustNewConstMetric(
-					autogrowGrowthMultiplierDesc,
-					prometheus.GaugeValue, qdc.Autogrow.GrowthMultiplier,
-					uniqueServiceType.For(serviceType),
-					serviceNameByType[serviceType],
-					uniqueResourceName.For(resource.Name),
-				)
+				metric := dataMetric{Labels: labels, Value: qdc.Autogrow.GrowthMultiplier}
+				result["limes_autogrow_growth_multiplier"] = append(result["limes_autogrow_growth_multiplier"], metric)
 			}
 		}
 	}
 
 	// fetch values for project level (rate usage)
-	err = sqlext.ForeachRow(c.DB, projectRateMetricsQuery, nil, func(rows *sql.Rows) error {
+	err = sqlext.ForeachRow(d.DB, projectRateMetricsQuery, nil, func(rows *sql.Rows) error {
 		var (
 			domainName    string
 			domainUUID    string
@@ -952,24 +774,22 @@ func (c *DataMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		}
 		usageAsFloat, _ := usageAsBigFloat.Float64()
 
-		if c.ReportZeroes || usageAsFloat != 0 {
-			ch <- prometheus.MustNewConstMetric(
-				projectRateUsageDesc,
-				prometheus.GaugeValue, usageAsFloat,
-				uniqueDomainName.For(domainName),
-				uniqueDomainUUID.For(domainUUID),
-				uniqueProjectName.For(projectName),
-				uniqueProjectUUID.For(projectUUID),
-				uniqueServiceType.For(serviceType),
-				serviceNameByType[serviceType],
-				uniqueRateName.For(rateName),
+		if d.ReportZeroes || usageAsFloat != 0 {
+			labels := fmt.Sprintf(
+				`domain=%q,domain_id=%q,project=%q,project_id=%q,rate=%q,service=%q,service_name=%q`,
+				domainName, domainUUID, projectName, projectUUID,
+				rateName, serviceType, serviceNameByType[serviceType],
 			)
+			metric := dataMetric{Labels: labels, Value: usageAsFloat}
+			result["limes_project_rate_usage"] = append(result["limes_project_rate_usage"], metric)
 		}
 		return nil
 	})
 	if err != nil {
-		logg.Error("collect project metrics failed: %s", err.Error())
+		return nil, fmt.Errorf("during projectRateMetricsQuery: %w", err)
 	}
+
+	return result, nil
 }
 
 ///////////////////////////////////////////////////////////////////////////////////////////
@@ -981,40 +801,4 @@ func buildServiceNameByTypeMapping(c *core.Cluster) (serviceNameByType map[limes
 		serviceNameByType[serviceType] = plugin.ServiceInfo(serviceType).ProductName
 	}
 	return
-}
-
-// stringUniquifier replaces string instances of equal value with the same unique instance.
-//
-// We have seen that, when metrics are being scraped from the collector in big
-// production deployments, heap usage just for Prometheus labels will go up by
-// several 100 MiB because of all the allocations for labelsets.
-//
-// The Prometheus library makes a truly mind-boggling amount of allocations for
-// things like *string or *dto.LabelPair that we do not control, but maybe we
-// can make a dent in this heap of allocations (pun definitely intended) by
-// reusing string instances as much as possible.
-//
-// Our data metrics are generated from SQL queries, so each labelset will have
-// project names, service types, resource names etc. coming out of the database
-// cursor that refer to separate memory locations each time. But by passing all
-// these string values through a stringUniquifier, we end up giving the same
-// string instances to the Prometheus library as much as possible.
-//
-// At the time of this writing, I do not have verified that this actually
-// produces the desired reduction in memory footprint. If you're reading this,
-// and this comment is more than a month old, it probably did. Otherwise we
-// would have deleted this again.
-type stringUniquifier[S ~string] map[S]string
-
-func newStringUniquifier[S ~string]() stringUniquifier[S] {
-	return make(stringUniquifier[S])
-}
-
-func (s stringUniquifier[S]) For(value S) string {
-	result, exists := s[value]
-	if !exists {
-		result = string(value)
-		s[value] = result
-	}
-	return result
 }

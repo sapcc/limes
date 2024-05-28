@@ -21,6 +21,7 @@ package collector
 
 import (
 	"fmt"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -327,16 +328,24 @@ func Test_ScanCapacity(t *testing.T) {
 
 	// check data metrics generated for these capacity data
 	registry := prometheus.NewPedanticRegistry()
-	dmc := &DataMetricsCollector{Cluster: s.Cluster, DB: s.DB}
-	registry.MustRegister(dmc)
 	pmc := &CapacityPluginMetricsCollector{Cluster: s.Cluster, DB: s.DB}
 	registry.MustRegister(pmc)
 	assert.HTTPRequest{
 		Method:       "GET",
 		Path:         "/metrics",
-		ExpectStatus: 200,
+		ExpectStatus: http.StatusOK,
+		ExpectHeader: map[string]string{"Content-Type": contentTypeForPrometheusMetrics},
 		ExpectBody:   assert.FixtureFile("fixtures/capacity_metrics.prom"),
 	}.Check(t, promhttp.HandlerFor(registry, promhttp.HandlerOpts{}))
+
+	dmr := &DataMetricsReporter{Cluster: s.Cluster, DB: s.DB, ReportZeroes: true}
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/metrics",
+		ExpectStatus: http.StatusOK,
+		ExpectHeader: map[string]string{"Content-Type": contentTypeForPrometheusMetrics},
+		ExpectBody:   assert.FixtureFile("fixtures/capacity_data_metrics.prom"),
+	}.Check(t, dmr)
 
 	// check that removing a capacitor removes its associated resources
 	delete(s.Cluster.CapacityPlugins, "unittest5")

@@ -112,6 +112,8 @@ func main() {
 		taskCollect(cluster, remainingArgs)
 	case "serve":
 		taskServe(cluster, remainingArgs, provider, eo)
+	case "serve-data-metrics":
+		taskServeDataMetrics(cluster, remainingArgs)
 	case "test-get-quota":
 		taskTestGetQuota(cluster, remainingArgs)
 	case "test-get-rates":
@@ -127,7 +129,7 @@ func main() {
 
 var usageMessage = strings.ReplaceAll(strings.TrimSpace(`
 Usage:
-\t%s (collect|serve) <config-file>
+\t%s (collect|serve|serve-data-metrics) <config-file>
 \t%s test-get-quota <config-file> <project-id> <service-type>
 \t%s test-get-rates <config-file> <project-id> <service-type> [<prev-serialized-state>]
 \t%s test-set-quota <config-file> <project-id> <service-type> <resource-name>=<integer-value>...
@@ -181,17 +183,10 @@ func taskCollect(cluster *core.Cluster, args []string) {
 	prometheus.MustRegister(&collector.AggregateMetricsCollector{Cluster: cluster, DB: dbm})
 	prometheus.MustRegister(&collector.CapacityPluginMetricsCollector{Cluster: cluster, DB: dbm})
 	prometheus.MustRegister(&collector.QuotaPluginMetricsCollector{Cluster: cluster, DB: dbm})
-	if osext.GetenvBool("LIMES_COLLECTOR_DATA_METRICS_EXPOSE") {
-		skipZero := osext.GetenvBool("LIMES_COLLECTOR_DATA_METRICS_SKIP_ZERO")
-		prometheus.MustRegister(&collector.DataMetricsCollector{
-			Cluster:      cluster,
-			DB:           dbm,
-			ReportZeroes: !skipZero,
-		})
-	}
 	mux := http.NewServeMux()
 	mux.Handle("/", httpapi.Compose(
 		pprofapi.API{IsAuthorized: pprofapi.IsRequestFromLocalhost},
+		httpapi.HealthCheckAPI{SkipRequestLog: true},
 	))
 	mux.Handle("/metrics", promhttp.Handler())
 
@@ -231,6 +226,39 @@ func taskServe(cluster *core.Cluster, args []string, provider *gophercloud.Provi
 	apiListenAddr := osext.GetenvOrDefault("LIMES_API_LISTEN_ADDRESS", ":80")
 	ctx := httpext.ContextWithSIGINT(context.Background(), 10*time.Second)
 	must.Succeed(httpext.ListenAndServeContext(ctx, apiListenAddr, mux))
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// task: serve data metrics
+
+func taskServeDataMetrics(cluster *core.Cluster, args []string) {
+	if len(args) != 0 {
+		printUsageAndExit(1)
+	}
+
+	ctx := httpext.ContextWithSIGINT(context.Background(), 10*time.Second)
+
+	// connect to database
+	dbm := must.Return(db.Init())
+	prometheus.MustRegister(sqlstats.NewStatsCollector("limes", dbm.Db))
+
+	// serve data metrics
+	skipZero := osext.GetenvBool("LIMES_DATA_METRICS_SKIP_ZERO")
+	dmr := collector.DataMetricsReporter{
+		Cluster:      cluster,
+		DB:           dbm,
+		ReportZeroes: !skipZero,
+	}
+
+	mux := http.NewServeMux()
+	mux.Handle("/", httpapi.Compose(
+		pprofapi.API{IsAuthorized: pprofapi.IsRequestFromLocalhost},
+		httpapi.HealthCheckAPI{SkipRequestLog: true},
+	))
+	mux.Handle("/metrics", &dmr)
+
+	metricsListenAddr := osext.GetenvOrDefault("LIMES_DATA_METRICS_LISTEN_ADDRESS", ":8080")
+	must.Succeed(httpext.ListenAndServeContext(ctx, metricsListenAddr, mux))
 }
 
 ////////////////////////////////////////////////////////////////////////////////

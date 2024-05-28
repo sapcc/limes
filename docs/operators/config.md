@@ -82,6 +82,13 @@ strings of the form `<number> <unit>` (to override quotas on measured resources)
 }
 ```
 
+## Environment variables for `limes serve-data-metrics` only
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `LIMES_DATA_METRICS_LISTEN_ADDRESS` | `:8080` | Bind address for the Prometheus metrics endpoint provided by this service. See `LIMES_API_LISTEN_ADDRESS` for acceptable values. |
+| `LIMES_DATA_METRICS_SKIP_ZERO` | `false` | If set to `true`, data metrics will only be emitted for non-zero values. In large deployments, this can substantially reduce the amount of timeseries emitted, at the expense of making some PromQL queries harder to formulate. |
+
 ## Configuration file
 
 A configuration file in YAML format must be provided that describes things like the set of available backend services and the quota/capacity scraping behavior. A minimal config file could look like this:
