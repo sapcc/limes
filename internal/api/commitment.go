@@ -471,7 +471,7 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 
 func (p *v1Provider) canDeleteCommitment(token *gopherpolicy.Token, commitment db.ProjectCommitment) bool {
 	// up to 24 hours after creation of fresh commitments, future commitments can still be deleted by their creators
-	if commitment.State == db.CommitmentStatePlanned || commitment.State == db.CommitmentStatePending {
+	if commitment.State == db.CommitmentStatePlanned || commitment.State == db.CommitmentStatePending || commitment.State == db.CommitmentStateActive {
 		if commitment.PredecessorID == nil && p.timeNow().Before(commitment.CreatedAt.Add(24*time.Hour)) {
 			if token.Check("project:edit") {
 				return true
