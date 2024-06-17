@@ -401,14 +401,33 @@ func (target acpqGlobalTarget) EnforceConstraints(constraints map[db.ProjectReso
 }
 
 func (target acpqGlobalTarget) TryFulfillDesired(stats map[limes.AvailabilityZone]clusterAZAllocationStats, cfg core.AutogrowQuotaDistributionConfiguration) {
-	// if quota overcommit is allowed, we do not have to be careful
-	if cfg.AllowQuotaOvercommit {
-		for _, azTarget := range target {
+	// which AZs allow quota overcommit?
+	allowsQuotaOvercommit := make(map[limes.AvailabilityZone]bool)
+	isAZAware := false
+	allRealAZsAllowQuotaOvercommit := true
+	for az := range target {
+		allowsQuotaOvercommit[az] = stats[az].AllowsQuotaOvercommit(cfg)
+		if az != limes.AvailabilityZoneAny {
+			isAZAware = true
+			if !allowsQuotaOvercommit[az] {
+				allRealAZsAllowQuotaOvercommit = false
+			}
+		}
+	}
+
+	// in AZ-aware resources, quota for the pseudo-AZ "any" is backed by capacity
+	// in all the real AZs, so it can only allow quota overcommit if all AZs do
+	if isAZAware {
+		allowsQuotaOvercommit[limes.AvailabilityZoneAny] = allRealAZsAllowQuotaOvercommit
+	}
+
+	// in AZs where quota overcommit is allowed, we do not have to be careful
+	for az, azTarget := range target {
+		if allowsQuotaOvercommit[az] {
 			for _, projectTarget := range azTarget {
 				projectTarget.Allocated = max(projectTarget.Desired, projectTarget.Allocated)
 			}
 		}
-		return
 	}
 
 	// real AZs (i.e. not "any") can only have their demand fulfilled locally,

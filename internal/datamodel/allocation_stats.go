@@ -45,6 +45,20 @@ type clusterAZAllocationStats struct {
 	ProjectStats map[db.ProjectResourceID]projectAZAllocationStats
 }
 
+func (c clusterAZAllocationStats) AllowsQuotaOvercommit(cfg core.AutogrowQuotaDistributionConfiguration) bool {
+	if cfg.AllowQuotaOvercommitUntilAllocatedPercent == 0 {
+		// optimization
+		return false
+	}
+
+	usedCapacity := uint64(0)
+	for _, stats := range c.ProjectStats {
+		usedCapacity += max(stats.Committed, stats.Usage)
+	}
+	usedPercent := 100 * float64(usedCapacity) / float64(c.Capacity)
+	return usedPercent < cfg.AllowQuotaOvercommitUntilAllocatedPercent
+}
+
 func (c clusterAZAllocationStats) CanAcceptCommitmentChanges(additions, subtractions map[db.ProjectResourceID]uint64) bool {
 	// calculate `sum_over_projects(max(committed, usage))` including the requested changes
 	usedCapacity := uint64(0)

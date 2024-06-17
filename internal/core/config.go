@@ -137,11 +137,11 @@ type QuotaDistributionConfiguration struct {
 
 // AutogrowQuotaDistributionConfiguration appears in type QuotaDistributionConfiguration.
 type AutogrowQuotaDistributionConfiguration struct {
-	AllowQuotaOvercommit     bool                         `yaml:"allow_quota_overcommit"`
-	ProjectBaseQuota         uint64                       `yaml:"project_base_quota"`
-	GrowthMultiplier         float64                      `yaml:"growth_multiplier"`
-	GrowthMinimum            uint64                       `yaml:"growth_minimum"`
-	UsageDataRetentionPeriod util.MarshalableTimeDuration `yaml:"usage_data_retention_period"`
+	AllowQuotaOvercommitUntilAllocatedPercent float64                      `yaml:"allow_quota_overcommit_until_allocated_percent"`
+	ProjectBaseQuota                          uint64                       `yaml:"project_base_quota"`
+	GrowthMultiplier                          float64                      `yaml:"growth_multiplier"`
+	GrowthMinimum                             uint64                       `yaml:"growth_minimum"`
+	UsageDataRetentionPeriod                  util.MarshalableTimeDuration `yaml:"usage_data_retention_period"`
 }
 
 // NewClusterFromYAML reads and validates the configuration in the given YAML document.
