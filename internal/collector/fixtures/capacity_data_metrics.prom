@@ -9,6 +9,17 @@ limes_autogrow_growth_multiplier{resource="capacity_portion",service="unshared2"
 limes_autogrow_growth_multiplier{resource="things",service="shared",service_name="generic-shared"} 1
 limes_autogrow_growth_multiplier{resource="things",service="unshared",service_name="generic-unshared"} 1
 limes_autogrow_growth_multiplier{resource="things",service="unshared2",service_name="generic-unshared2"} 1
+# HELP limes_autogrow_quota_overcommit_threshold_percent For resources with quota distribution model "autogrow", reports the allocation percentage above which quota overcommit is disabled.
+# TYPE limes_autogrow_quota_overcommit_threshold_percent gauge
+limes_autogrow_quota_overcommit_threshold_percent{resource="capacity",service="shared",service_name="generic-shared"} 0
+limes_autogrow_quota_overcommit_threshold_percent{resource="capacity",service="unshared",service_name="generic-unshared"} 0
+limes_autogrow_quota_overcommit_threshold_percent{resource="capacity",service="unshared2",service_name="generic-unshared2"} 0
+limes_autogrow_quota_overcommit_threshold_percent{resource="capacity_portion",service="shared",service_name="generic-shared"} 0
+limes_autogrow_quota_overcommit_threshold_percent{resource="capacity_portion",service="unshared",service_name="generic-unshared"} 0
+limes_autogrow_quota_overcommit_threshold_percent{resource="capacity_portion",service="unshared2",service_name="generic-unshared2"} 0
+limes_autogrow_quota_overcommit_threshold_percent{resource="things",service="shared",service_name="generic-shared"} 0
+limes_autogrow_quota_overcommit_threshold_percent{resource="things",service="unshared",service_name="generic-unshared"} 0
+limes_autogrow_quota_overcommit_threshold_percent{resource="things",service="unshared2",service_name="generic-unshared2"} 0
 # HELP limes_cluster_capacity Reported capacity of a Limes resource for an OpenStack cluster.
 # TYPE limes_cluster_capacity gauge
 limes_cluster_capacity{resource="capacity",service="shared",service_name="generic-shared"} 0
