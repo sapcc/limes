@@ -66,7 +66,7 @@ func CanConfirmNewCommitment(req limesresources.CommitmentRequest, resourceID db
 	stats := statsByAZ[req.AvailabilityZone]
 
 	additions := map[db.ProjectResourceID]uint64{resourceID: req.Amount}
-	return stats.FitsAfterCommitmentChanges(additions, nil), nil
+	return stats.CanAcceptCommitmentChanges(additions, nil), nil
 }
 
 // CanMoveExistingCommitment returns whether a commitment of the given amount
@@ -81,7 +81,7 @@ func CanMoveExistingCommitment(amount uint64, loc AZResourceLocation, sourceReso
 
 	additions := map[db.ProjectResourceID]uint64{targetResourceID: amount}
 	subtractions := map[db.ProjectResourceID]uint64{sourceResourceID: amount}
-	return stats.FitsAfterCommitmentChanges(additions, subtractions), nil
+	return stats.CanAcceptCommitmentChanges(additions, subtractions), nil
 }
 
 // ConfirmPendingCommitments goes through all unconfirmed commitments that
@@ -117,7 +117,7 @@ func ConfirmPendingCommitments(serviceType limes.ServiceType, resourceName limes
 	for _, c := range confirmableCommitments {
 		// ignore commitments that do not fit
 		additions := map[db.ProjectResourceID]uint64{c.ProjectResourceID: c.Amount}
-		if !stats.FitsAfterCommitmentChanges(additions, nil) {
+		if !stats.CanAcceptCommitmentChanges(additions, nil) {
 			continue
 		}
 

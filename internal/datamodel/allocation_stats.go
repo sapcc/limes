@@ -45,7 +45,7 @@ type clusterAZAllocationStats struct {
 	ProjectStats map[db.ProjectResourceID]projectAZAllocationStats
 }
 
-func (c clusterAZAllocationStats) FitsAfterCommitmentChanges(additions, subtractions map[db.ProjectResourceID]uint64) bool {
+func (c clusterAZAllocationStats) CanAcceptCommitmentChanges(additions, subtractions map[db.ProjectResourceID]uint64) bool {
 	// calculate `sum_over_projects(max(committed, usage))` including the requested changes
 	usedCapacity := uint64(0)
 	for projectResourceID, stats := range c.ProjectStats {
@@ -54,7 +54,19 @@ func (c clusterAZAllocationStats) FitsAfterCommitmentChanges(additions, subtract
 	}
 
 	// commitment can be confirmed if it and all other commitments and usage fit in the total capacity
-	return usedCapacity <= c.Capacity
+	if usedCapacity <= c.Capacity {
+		return true
+	}
+
+	// as an exception, even if capacity is exceeded, commitments can always be reduced,
+	// and always be increased as far as to cover existing usage
+	for projectResourceID, stats := range c.ProjectStats {
+		committed := saturatingSub(stats.Committed+additions[projectResourceID], subtractions[projectResourceID])
+		if committed > stats.Usage {
+			return false
+		}
+	}
+	return true
 }
 
 // Like `lhs - rhs`, but never underflows below 0.
