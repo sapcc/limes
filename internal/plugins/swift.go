@@ -133,6 +133,7 @@ func (p *swiftPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Availa
 		return map[limesresources.ResourceName]core.ResourceData{
 			"capacity": {
 				Quota:     0,
+				MaxQuota:  p2u64(0), // do not try to assign quota to this project in ApplyComputedProjectQuota(), it will not work
 				UsageData: core.InAnyAZ(core.UsageData{Usage: 0}),
 			},
 		}, nil, nil
