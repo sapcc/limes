@@ -134,14 +134,16 @@ func (p *capacityCinderPlugin) Scrape(_ core.CapacityPluginBackchannel, allAZs [
 
 	// add results from scheduler-stats
 	for _, pool := range poolData.StoragePools {
-		// do not consider pools that are slated for decommissioning (state "drain")
-		// or reserved for absorbing payloads from draining pools (state "reserved")
-		// (no quota should be given out for such capacity)
+		// on pools that are slated for decommissioning (state "drain")
+		// or reserved for absorbing payloads from draining pools (state "reserved"),
+		// no quota should be given out for the free capacity;
+		// only actively used capacity is included in the total (for business continuity purposes)
+		exclusionReason := ""
 		state := pool.Capabilities.CustomAttributes.CinderState
 		if state == "drain" || state == "reserved" {
-			logg.Info("Cinder capacity plugin: skipping pool %q with %g GiB capacity because of cinder_state %q",
-				pool.Name, pool.Capabilities.TotalCapacityGB, state)
-			continue
+			logg.Info("Cinder capacity plugin: pool %q with %g GiB capacity has cinder_state %q -- only considering %g GiB used capacity",
+				pool.Name, pool.Capabilities.TotalCapacityGB, state, pool.Capabilities.AllocatedCapacityGB)
+			exclusionReason = "cinder_state = " + state
 		}
 
 		volumeType, ok := volumeTypesByBackendName[pool.Capabilities.VolumeBackendName]
@@ -173,7 +175,11 @@ func (p *capacityCinderPlugin) Scrape(_ core.CapacityPluginBackchannel, allAZs [
 			capaData[resourceName][poolAZ] = capa
 		}
 
-		capa.Capacity += uint64(pool.Capabilities.TotalCapacityGB)
+		if exclusionReason == "" {
+			capa.Capacity += uint64(pool.Capabilities.TotalCapacityGB)
+		} else {
+			capa.Capacity += uint64(pool.Capabilities.AllocatedCapacityGB)
+		}
 		if capa.Usage == nil {
 			capa.Usage = p2u64(0)
 		}
@@ -185,6 +191,7 @@ func (p *capacityCinderPlugin) Scrape(_ core.CapacityPluginBackchannel, allAZs [
 				AvailabilityZone: poolAZ,
 				CapacityGiB:      uint64(pool.Capabilities.TotalCapacityGB),
 				UsageGiB:         uint64(pool.Capabilities.AllocatedCapacityGB),
+				ExclusionReason:  exclusionReason,
 			})
 		}
 	}
