@@ -128,8 +128,17 @@ func (p *swiftPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedSt
 func (p *swiftPlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
 	account := p.Account(project.UUID)
 	headers, err := account.Headers()
-	if schwift.Is(err, http.StatusNotFound) || schwift.Is(err, http.StatusGone) {
-		// Swift account does not exist or was deleted and not yet reaped, but the keystone project exists
+	switch {
+	case schwift.Is(err, http.StatusNotFound):
+		// Swift account does not exist yet, but the Keystone project exists (usually after project creation)
+		return map[limesresources.ResourceName]core.ResourceData{
+			"capacity": {
+				Quota:     0,
+				UsageData: core.InAnyAZ(core.UsageData{Usage: 0}),
+			},
+		}, nil, nil
+	case schwift.Is(err, http.StatusGone):
+		// Swift account was deleted and not yet reaped (usually right before the Keystone project is deleted)
 		return map[limesresources.ResourceName]core.ResourceData{
 			"capacity": {
 				Quota:     0,
@@ -137,7 +146,8 @@ func (p *swiftPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Availa
 				UsageData: core.InAnyAZ(core.UsageData{Usage: 0}),
 			},
 		}, nil, nil
-	} else if err != nil {
+	case err != nil:
+		// unexpected error
 		return nil, nil, err
 	}
 
