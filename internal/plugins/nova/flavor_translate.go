@@ -95,15 +95,6 @@ func (t FlavorTranslationTable) findEntry(flavorName string) *FlavorTranslationE
 	return nil
 }
 
-// Used by ListFlavorsWithSeparateInstanceQuota() to record the fact that the
-// given `flavorName` is used by Nova for a separate instance quota.
-func (t FlavorTranslationTable) recordNovaPreferredName(flavorName string) {
-	entry := t.findEntry(flavorName)
-	if entry != nil {
-		entry.NovaPreferredName = flavorName
-	}
-}
-
 // LimesResourceNameForFlavor returns the Limes resource name for a flavor with
 // a separate instance quota.
 func (t FlavorTranslationTable) LimesResourceNameForFlavor(flavorName string) limesresources.ResourceName {
@@ -138,37 +129,12 @@ func (t FlavorTranslationTable) NovaQuotaNameForLimesResourceName(resourceName l
 // ListFlavorsWithSeparateInstanceQuota queries Nova for all separate instance
 // quotas, and returns the flavor names that Nova prefers for each.
 func (t FlavorTranslationTable) ListFlavorsWithSeparateInstanceQuota(computeV2 *gophercloud.ServiceClient) ([]string, error) {
-	// look at the magical quota class "flavors" to determine which quotas exist
-	url := computeV2.ServiceURL("os-quota-class-sets", "flavors")
-	var result gophercloud.Result
-	_, err := computeV2.Get(url, &result.Body, nil)
-	if err != nil {
-		return nil, err
-	}
-
-	// At SAP Converged Cloud, we use separate instance quotas for baremetal
-	// (Ironic) flavors, to control precisely how many baremetal machines can be
-	// used by each domain/project. Each such quota has the resource name
-	// "instances_${FLAVOR_NAME}".
-	var body struct {
-		//NOTE: cannot use map[string]int64 here because this object contains the
-		// field "id": "default" (curse you, untyped JSON)
-		QuotaClassSet map[string]any `json:"quota_class_set"`
-	}
-	err = result.ExtractInto(&body)
-	if err != nil {
-		return nil, err
-	}
-
 	var flavorNames []string
-	for key := range body.QuotaClassSet {
-		if !strings.HasPrefix(key, "instances_") {
-			continue
+	err := FlavorSelection{}.ForeachFlavor(computeV2, func(f FullFlavor) error {
+		if f.ExtraSpecs["quota:separate"] == "true" {
+			flavorNames = append(flavorNames, f.Flavor.Name)
 		}
-		flavorName := strings.TrimPrefix(key, "instances_")
-		flavorNames = append(flavorNames, flavorName)
-		t.recordNovaPreferredName(flavorName)
-	}
-
-	return flavorNames, nil
+		return nil
+	})
+	return flavorNames, err
 }
