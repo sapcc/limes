@@ -95,15 +95,6 @@ func (t FlavorTranslationTable) findEntry(flavorName string) *FlavorTranslationE
 	return nil
 }
 
-// Used by ListFlavorsWithSeparateInstanceQuota() to record the fact that the
-// given `flavorName` is used by Nova for a separate instance quota.
-func (t FlavorTranslationTable) recordNovaPreferredName(flavorName string) {
-	entry := t.findEntry(flavorName)
-	if entry != nil {
-		entry.NovaPreferredName = flavorName
-	}
-}
-
 // LimesResourceNameForFlavor returns the Limes resource name for a flavor with
 // a separate instance quota.
 func (t FlavorTranslationTable) LimesResourceNameForFlavor(flavorName string) limesresources.ResourceName {
