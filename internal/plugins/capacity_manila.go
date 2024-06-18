@@ -282,24 +282,15 @@ func (p *capacityManilaPlugin) scrapeForShareTypeAndAZ(shareType ManilaShareType
 		allocatedCapacityGB float64
 	)
 	for _, pool := range pools {
-		pool.IsIncluded = true
-		if pool.Capabilities.HardwareState != "" {
-			var ok bool
-			pool.IsIncluded, ok = manilaIncludeByHardwareState[pool.Capabilities.HardwareState]
-			if !ok {
-				logg.Error("Manila storage pool %q (share type %q) in AZ %q has unknown hardware_state value: %q",
-					pool.Name, shareType.Name, az, pool.Capabilities.HardwareState)
-				pool.IsIncluded = false
-			} else if !pool.IsIncluded {
-				logg.Info("ignoring Manila storage pool %q (share type %q) in AZ %q because of hardware_state value: %q",
-					pool.Name, shareType.Name, az, pool.Capabilities.HardwareState)
-			}
-		}
+		poolCount++
+		allocatedCapacityGB += pool.Capabilities.AllocatedCapacityGB
 
-		if pool.IsIncluded {
-			poolCount++
+		if pool.CountsUnusedCapacity() {
 			totalCapacityGB += pool.Capabilities.TotalCapacityGB
-			allocatedCapacityGB += pool.Capabilities.AllocatedCapacityGB
+		} else {
+			totalCapacityGB += pool.Capabilities.AllocatedCapacityGB
+			logg.Info("ignoring unused capacity in Manila storage pool %q (share type %q) in AZ %q because of hardware_state value: %q",
+				pool.Name, shareType.Name, az, pool.Capabilities.HardwareState)
 		}
 	}
 
@@ -353,7 +344,7 @@ func (p *capacityManilaPlugin) scrapeForShareTypeAndAZ(shareType ManilaShareType
 				UsageGiB:         uint64(pool.Capabilities.AllocatedCapacityGB),
 			}
 
-			if !pool.IsIncluded {
+			if !pool.CountsUnusedCapacity() {
 				subcapacity.ExclusionReason = "hardware_state = " + pool.Capabilities.HardwareState
 			}
 			result.ShareGigabytes.Subcapacities = append(result.ShareGigabytes.Subcapacities, subcapacity)
@@ -442,25 +433,6 @@ func (p *capacityManilaPlugin) distributeByDemand(totalAmount uint64, demands ma
 ////////////////////////////////////////////////////////////////////////////////
 // We need a custom type for Pool.Capabilities to support CCloud-specific fields.
 
-// key = value for hardware_state capability
-// value = whether pools with this state count towards the reported capacity
-var manilaIncludeByHardwareState = map[string]bool{
-	// Default value.
-	"live": true,
-	// Pool is in buildup. At that phase, Manila already knows this storage
-	// backend, but it is not handed out to customers. Shares are only deployable
-	// with custom share type `integration` for integration testing. Capacity
-	// should not yet be handed out.
-	"in_build": false,
-	// Pool will be decommissioned soon. Still serving customer shares, but drain
-	// is ongoing. Capacity should no longer be handed out.
-	"in_decom": false,
-	// Pool is meant as replacement for another pool in_decom. Capacity should
-	// not be handed out. Will only be used in tight situations to ensure there
-	// is enough capacity to drain backend in decommissioning.
-	"replacing_decom": false,
-}
-
 // manilaPool is a custom extension of the type `schedulerstats.Pool`.
 type manilaPool struct {
 	Name         string `json:"name"`
@@ -472,10 +444,35 @@ type manilaPool struct {
 		// CCloud extension fields
 		HardwareState string `json:"hardware_state"`
 	} `json:"capabilities,omitempty"`
-	// temporary storage used by calculations in scrapeForShareTypeAndAZ()
-	IsIncluded             bool                `json:"-"`
-	ShareCapacityDemand    core.ResourceDemand `json:"-"`
-	SnapshotCapacityDemand core.ResourceDemand `json:"-"`
+}
+
+// Returns whether this pool has all its capacity count towards the total
+// (instead of just the used capacity).
+func (p manilaPool) CountsUnusedCapacity() bool {
+	switch p.Capabilities.HardwareState {
+	// Pool is in buildup. At that phase, Manila already knows this storage
+	// backend, but it is not handed out to customers. Shares are only deployable
+	// with custom share type `integration` for integration testing. Capacity
+	// should not yet be handed out.
+	case "in_build":
+		return false
+	// Pool will be decommissioned soon. Still serving customer shares, but drain
+	// is ongoing. Unused capacity should no longer be handed out.
+	case "in_decom":
+		return false
+	// Pool is meant as replacement for another pool in_decom. Capacity should
+	// not be handed out. Will only be used in tight situations to ensure there
+	// is enough capacity to drain backend in decommissioning.
+	case "replacing_decom":
+		return false
+	// Default value.
+	case "live":
+		return true
+	default:
+		logg.Info("Manila storage pool %q has unknown hardware_state value: %q",
+			p.Name, p.Capabilities.HardwareState)
+		return true
+	}
 }
 
 // manilaExtractPools is `schedulerstats.ExtractPools()`, but using our custom pool type.
