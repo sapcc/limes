@@ -38,7 +38,7 @@ import (
 
 func TestACPQBasicWithoutAZAwareness(t *testing.T) {
 	// This basic test for a non-AZ-aware resource does not give out all capacity,
-	// so it does not matter whether AllowQuotaOvercommit is enabled or not.
+	// so it does not matter whether quota overcommit is allowed or not.
 	input := map[limes.AvailabilityZone]clusterAZAllocationStats{
 		"any": {
 			Capacity: 250,
@@ -61,9 +61,7 @@ func TestACPQBasicWithoutAZAwareness(t *testing.T) {
 		GrowthMultiplier: 1.2,
 		ProjectBaseQuota: 10,
 	}
-	for _, allowQuotaOvercommit := range []bool{false, true} {
-		// TODO: undo when https://github.com/karamaru-alpha/copyloopvar/issues/7 is fixed
-		cfg.AllowQuotaOvercommit = allowQuotaOvercommit
+	for _, cfg.AllowQuotaOvercommitUntilAllocatedPercent = range []float64{0, 10000} {
 		expectACPQResult(t, input, cfg, nil, acpqGlobalTarget{
 			"any": {
 				401: {Allocated: 36}, // 30 * 1.2 = 36
@@ -78,8 +76,8 @@ func TestACPQBasicWithoutAZAwareness(t *testing.T) {
 }
 
 func TestACPQBasicWithAZAwareness(t *testing.T) {
-	// This basic test for a non-AZ-aware resource does not give out all capacity,
-	// so it does not matter whether AllowQuotaOvercommit is enabled or not.
+	// This basic test for an AZ-aware resource does not give out all capacity,
+	// so it does not matter whether quota overcommit is allowed or not.
 	input := map[limes.AvailabilityZone]clusterAZAllocationStats{
 		"az-one": {
 			Capacity: 200,
@@ -115,9 +113,7 @@ func TestACPQBasicWithAZAwareness(t *testing.T) {
 		GrowthMultiplier: 1.2,
 		ProjectBaseQuota: 10,
 	}
-	for _, allowQuotaOvercommit := range []bool{false, true} {
-		// TODO: undo when https://github.com/karamaru-alpha/copyloopvar/issues/7 is fixed
-		cfg.AllowQuotaOvercommit = allowQuotaOvercommit
+	for _, cfg.AllowQuotaOvercommitUntilAllocatedPercent = range []float64{0, 10000} {
 		expectACPQResult(t, input, cfg, nil, acpqGlobalTarget{
 			"az-one": {
 				401: {Allocated: 24},
@@ -244,6 +240,66 @@ func TestACPQCapacityLimitsQuotaAllocation(t *testing.T) {
 			403: {Allocated: 0},
 			404: {Allocated: 0},
 			405: {Allocated: 0},
+		},
+	})
+}
+
+func TestACPQQuotaOvercommitTurnsOffAboveAllocationThreshold(t *testing.T) {
+	// This scenario has a resource that has its capacity 85% allocated to usage and commitments.
+	input := map[limes.AvailabilityZone]clusterAZAllocationStats{
+		"az-one": {
+			Capacity: 100,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: constantUsage(30),
+				402: {Committed: 50, Usage: 10, MinHistoricalUsage: 10, MaxHistoricalUsage: 10},
+				403: constantUsage(5),
+				// some more empty projects to make sure that we try to distribute more than the available capacity
+				404: constantUsage(0),
+				405: constantUsage(0),
+			},
+		},
+	}
+	cfg := core.AutogrowQuotaDistributionConfiguration{
+		GrowthMultiplier: 1.2,
+		ProjectBaseQuota: 10,
+	}
+
+	// test with quota overcommit allowed (85% allocation is below 90%)
+	cfg.AllowQuotaOvercommitUntilAllocatedPercent = 90
+	expectACPQResult(t, input, cfg, nil, acpqGlobalTarget{
+		"az-one": {
+			401: {Allocated: 36}, // 30 * 1.2 = 36
+			402: {Allocated: 60}, // 50 * 1.2 = 60
+			403: {Allocated: 6},  //  5 * 1.2 =  6
+			404: {},
+			405: {},
+		},
+		"any": {
+			401: {},
+			402: {},
+			403: {Allocated: 4},
+			404: {Allocated: 10},
+			405: {Allocated: 10},
+		},
+	})
+
+	// test with quota overcommit forbidden (85% allocation is above 80%)
+	cfg.AllowQuotaOvercommitUntilAllocatedPercent = 80
+	expectACPQResult(t, input, cfg, nil, acpqGlobalTarget{
+		"az-one": {
+			401: {Allocated: 35}, // 30 * 1.2 = 36, but fair distribution gives only 35
+			402: {Allocated: 59}, // 50 * 1.2 = 60, but fair distribution gives only 59
+			403: {Allocated: 6},  //  5 * 1.2 =  6
+			404: {},
+			405: {},
+		},
+		"any": {
+			// there is no capacity left over after growth quota, so base quota is not given out
+			401: {},
+			402: {},
+			403: {},
+			404: {},
+			405: {},
 		},
 	})
 }
