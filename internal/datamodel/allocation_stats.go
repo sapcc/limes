@@ -55,6 +55,11 @@ func (c clusterAZAllocationStats) AllowsQuotaOvercommit(cfg core.AutogrowQuotaDi
 	for _, stats := range c.ProjectStats {
 		usedCapacity += max(stats.Committed, stats.Usage)
 	}
+	if c.Capacity == 0 {
+		// explicit special case to avoid divide-by-zero below
+		return usedCapacity == 0
+	}
+
 	usedPercent := 100 * float64(usedCapacity) / float64(c.Capacity)
 	return usedPercent < cfg.AllowQuotaOvercommitUntilAllocatedPercent
 }
