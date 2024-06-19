@@ -407,7 +407,7 @@ func (target acpqGlobalTarget) TryFulfillDesired(stats map[limes.AvailabilityZon
 	allRealAZsAllowQuotaOvercommit := true
 	for az := range target {
 		allowsQuotaOvercommit[az] = stats[az].AllowsQuotaOvercommit(cfg)
-		if az != limes.AvailabilityZoneAny {
+		if az != limes.AvailabilityZoneAny && az != limes.AvailabilityZoneUnknown {
 			isAZAware = true
 			if !allowsQuotaOvercommit[az] {
 				allRealAZsAllowQuotaOvercommit = false
