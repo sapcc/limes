@@ -410,6 +410,86 @@ func TestACPQWithProjectLocalQuotaConstraints(t *testing.T) {
 	})
 }
 
+func TestEmptyRegionDoesNotPrecludeQuotaOvercommit(t *testing.T) {
+	// This test is based on real-world data in a three-AZ region.
+	input := map[limes.AvailabilityZone]clusterAZAllocationStats{
+		"az-one": {
+			Capacity: 15,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				// 401-403 have real usage in az-one and az-three
+				401: constantUsage(1),
+				402: constantUsage(0),
+				403: withCommitted(12, constantUsage(12)),
+				// 404-405 are empty projects that should get base quota; this will require overcommit to do
+				404: constantUsage(0),
+				405: constantUsage(0),
+			},
+		},
+		"az-two": {
+			Capacity: 0,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				// az-two is completely devoid of both capacity and usage
+				401: constantUsage(0),
+				402: constantUsage(0),
+				403: constantUsage(0),
+				404: constantUsage(0),
+				405: constantUsage(0),
+			},
+		},
+		"az-three": {
+			Capacity: 14,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: constantUsage(0),
+				402: withCommitted(1, constantUsage(1)),
+				403: withCommitted(7, constantUsage(7)),
+				404: constantUsage(0),
+				405: constantUsage(0),
+			},
+		},
+	}
+	// Quota overcommit should always be allowed.
+	cfg := core.AutogrowQuotaDistributionConfiguration{
+		AllowQuotaOvercommitUntilAllocatedPercent: 10000,
+		GrowthMultiplier: 1.2,
+		ProjectBaseQuota: 5,
+	}
+
+	// There used to be a bug where quota overcommit was not applied because az-two
+	// has 0 capacity and 0 usage, so calculating the utilization ratio as
+	// (usage / capacity) gave a NaN from divide-by-zero and thus blocked quota
+	// overcommit for base quota in the "any" AZ.
+	expectACPQResult(t, input, cfg, nil, acpqGlobalTarget{
+		"az-one": {
+			401: {Allocated: 2}, // 1 * 1.2 = 1.2 rounded up because of GrowthMinimum
+			402: {Allocated: 0},
+			403: {Allocated: 14}, // 12 * 1.2 = 14.4 rounded down
+			404: {Allocated: 0},
+			405: {Allocated: 0},
+		},
+		"az-two": {
+			401: {Allocated: 0},
+			402: {Allocated: 0},
+			403: {Allocated: 0},
+			404: {Allocated: 0},
+			405: {Allocated: 0},
+		},
+		"az-three": {
+			401: {Allocated: 0},
+			402: {Allocated: 2}, // 1 * 1.2 = 1.2 rounded up because of GrowthMinimum
+			403: {Allocated: 8}, // 7 * 1.2 = 8.4 rounded down
+			404: {Allocated: 0},
+			405: {Allocated: 0},
+		},
+		"any": {
+			401: {Allocated: 3},
+			402: {Allocated: 3},
+			403: {Allocated: 0},
+			404: {Allocated: 5},
+			405: {Allocated: 5},
+		},
+	})
+}
+
 // Shortcut to avoid repetition in projectAZAllocationStats literals.
 func constantUsage(usage uint64) projectAZAllocationStats {
 	return projectAZAllocationStats{
@@ -417,6 +497,11 @@ func constantUsage(usage uint64) projectAZAllocationStats {
 		MinHistoricalUsage: usage,
 		MaxHistoricalUsage: usage,
 	}
+}
+
+func withCommitted(committed uint64, stats projectAZAllocationStats) projectAZAllocationStats {
+	stats.Committed = committed
+	return stats
 }
 
 func expectACPQResult(t *testing.T, input map[limes.AvailabilityZone]clusterAZAllocationStats, cfg core.AutogrowQuotaDistributionConfiguration, constraints map[db.ProjectResourceID]projectLocalQuotaConstraints, expected acpqGlobalTarget) {
