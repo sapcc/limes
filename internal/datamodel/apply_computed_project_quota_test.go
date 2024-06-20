@@ -549,7 +549,7 @@ func withCommitted(committed uint64, stats projectAZAllocationStats) projectAZAl
 
 func expectACPQResult(t *testing.T, input map[limes.AvailabilityZone]clusterAZAllocationStats, cfg core.AutogrowQuotaDistributionConfiguration, constraints map[db.ProjectResourceID]projectLocalQuotaConstraints, expected acpqGlobalTarget) {
 	t.Helper()
-	actual := acpqComputeQuotas(input, cfg, constraints)
+	actual, _ := acpqComputeQuotas(input, cfg, constraints)
 	// normalize away any left-over intermediate values
 	for _, azTarget := range actual {
 		for _, projectTarget := range azTarget {

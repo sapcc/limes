@@ -148,11 +148,12 @@ func ApplyComputedProjectQuota(serviceType limes.ServiceType, resourceName limes
 	}
 
 	// evaluate QD algorithm
-	target := acpqComputeQuotas(stats, cfg, constraints)
+	target, allowsQuotaOvercommit := acpqComputeQuotas(stats, cfg, constraints)
 	if logg.ShowDebug {
 		logg.Debug("ACPQ for %s/%s: stats = %#v", serviceType, resourceName, stats)
 		logg.Debug("ACPQ for %s/%s: cfg = %#v", serviceType, resourceName, cfg)
 		logg.Debug("ACPQ for %s/%s: constraints = %#v", serviceType, resourceName, constraints)
+		logg.Debug("ACPQ for %s/%s: allowsQuotaOvercommit = %#v", serviceType, resourceName, allowsQuotaOvercommit)
 		buf, _ := json.Marshal(target) //nolint:errcheck
 		logg.Debug("ACPQ for %s/%s: target = %s", serviceType, resourceName, string(buf))
 	}
@@ -280,7 +281,9 @@ type acpqGlobalTarget map[limes.AvailabilityZone]acpqAZTarget
 // effects (reading the DB, writing the DB, setting quota in the backend).
 // This function is separate because most test cases work on this level.
 // The full ApplyComputedProjectQuota() function is tested during capacity scraping.
-func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats, cfg core.AutogrowQuotaDistributionConfiguration, constraints map[db.ProjectResourceID]projectLocalQuotaConstraints) acpqGlobalTarget {
+func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats, cfg core.AutogrowQuotaDistributionConfiguration, constraints map[db.ProjectResourceID]projectLocalQuotaConstraints) (target acpqGlobalTarget, allowsQuotaOvercommit map[limes.AvailabilityZone]bool) {
+	// enumerate which project resource IDs and AZs are relevant
+	// ("Relevant" AZs are all that have allocation stats available.)
 	isProjectResourceID := make(map[db.ProjectResourceID]struct{})
 	isRelevantAZ := make(map[limes.AvailabilityZone]struct{}, len(stats))
 	var allAZsInOrder []limes.AvailabilityZone
@@ -297,12 +300,32 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 		isRelevantAZ[limes.AvailabilityZoneAny] = struct{}{}
 	}
 
+	// enumerate which AZs allow quota overcommit
+	allowsQuotaOvercommit = make(map[limes.AvailabilityZone]bool)
+	isAZAware := false
+	allRealAZsAllowQuotaOvercommit := true
+	for az := range isRelevantAZ {
+		allowsQuotaOvercommit[az] = stats[az].AllowsQuotaOvercommit(cfg)
+		if az != limes.AvailabilityZoneAny && az != limes.AvailabilityZoneUnknown {
+			isAZAware = true
+			if !allowsQuotaOvercommit[az] {
+				allRealAZsAllowQuotaOvercommit = false
+			}
+		}
+	}
+
+	// in AZ-aware resources, quota for the pseudo-AZ "any" is backed by capacity
+	// in all the real AZs, so it can only allow quota overcommit if all AZs do
+	if isAZAware {
+		allowsQuotaOvercommit[limes.AvailabilityZoneAny] = allRealAZsAllowQuotaOvercommit
+	}
+
 	// initialize data structure where new quota will be computed (this uses eager
 	// allocation of all required entries to simplify the following steps)
 	//
 	// Because we're looping through everything anyway, we're also doing the first
 	// few steps of the algorithm itself that use the same looping pattern.
-	target := make(acpqGlobalTarget, len(stats))
+	target = make(acpqGlobalTarget, len(stats))
 	for az := range isRelevantAZ {
 		target[az] = make(acpqAZTarget, len(isProjectResourceID))
 		for resourceID := range isProjectResourceID {
@@ -316,7 +339,7 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 		}
 	}
 	target.EnforceConstraints(constraints, allAZsInOrder, isProjectResourceID)
-	target.TryFulfillDesired(stats, cfg)
+	target.TryFulfillDesired(stats, cfg, allowsQuotaOvercommit)
 
 	// phase 3: try granting desired_quota
 	for az := range isRelevantAZ {
@@ -334,7 +357,7 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 		}
 	}
 	target.EnforceConstraints(constraints, allAZsInOrder, isProjectResourceID)
-	target.TryFulfillDesired(stats, cfg)
+	target.TryFulfillDesired(stats, cfg, allowsQuotaOvercommit)
 
 	// phase 4: try granting additional "any" quota until sum of all quotas is ProjectBaseQuota
 	if cfg.ProjectBaseQuota > 0 {
@@ -353,10 +376,10 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 			allAZsInOrder = append(allAZsInOrder, limes.AvailabilityZoneAny)
 		}
 		target.EnforceConstraints(constraints, allAZsInOrder, isProjectResourceID)
-		target.TryFulfillDesired(stats, cfg)
+		target.TryFulfillDesired(stats, cfg, allowsQuotaOvercommit)
 	}
 
-	return target
+	return target, allowsQuotaOvercommit
 }
 
 // After increasing Desired, but before increasing Allocated, this decreases
@@ -400,27 +423,7 @@ func (target acpqGlobalTarget) EnforceConstraints(constraints map[db.ProjectReso
 	}
 }
 
-func (target acpqGlobalTarget) TryFulfillDesired(stats map[limes.AvailabilityZone]clusterAZAllocationStats, cfg core.AutogrowQuotaDistributionConfiguration) {
-	// which AZs allow quota overcommit?
-	allowsQuotaOvercommit := make(map[limes.AvailabilityZone]bool)
-	isAZAware := false
-	allRealAZsAllowQuotaOvercommit := true
-	for az := range target {
-		allowsQuotaOvercommit[az] = stats[az].AllowsQuotaOvercommit(cfg)
-		if az != limes.AvailabilityZoneAny && az != limes.AvailabilityZoneUnknown {
-			isAZAware = true
-			if !allowsQuotaOvercommit[az] {
-				allRealAZsAllowQuotaOvercommit = false
-			}
-		}
-	}
-
-	// in AZ-aware resources, quota for the pseudo-AZ "any" is backed by capacity
-	// in all the real AZs, so it can only allow quota overcommit if all AZs do
-	if isAZAware {
-		allowsQuotaOvercommit[limes.AvailabilityZoneAny] = allRealAZsAllowQuotaOvercommit
-	}
-
+func (target acpqGlobalTarget) TryFulfillDesired(stats map[limes.AvailabilityZone]clusterAZAllocationStats, cfg core.AutogrowQuotaDistributionConfiguration, allowsQuotaOvercommit map[limes.AvailabilityZone]bool) {
 	// in AZs where quota overcommit is allowed, we do not have to be careful
 	for az, azTarget := range target {
 		if allowsQuotaOvercommit[az] {
