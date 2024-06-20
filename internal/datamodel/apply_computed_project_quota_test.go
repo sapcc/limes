@@ -101,11 +101,25 @@ func TestACPQBasicWithAZAwareness(t *testing.T) {
 			Capacity: 200,
 			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
 				401: constantUsage(20),
+				402: constantUsage(0),
 				403: {Usage: 20, MinHistoricalUsage: 19, MaxHistoricalUsage: 20},
 				404: {Usage: 0, MinHistoricalUsage: 0, MaxHistoricalUsage: 15},
 				405: constantUsage(40),
 				406: constantUsage(0),
 				407: constantUsage(1),
+			},
+		},
+		// The scraper creates empty fallback entries in project_az_resources for AZ "any", so we will always see those in the input, too.
+		"any": {
+			Capacity: 0,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: {},
+				402: {},
+				403: {},
+				404: {},
+				405: {},
+				406: {},
+				407: {},
 			},
 		},
 	}
@@ -258,6 +272,17 @@ func TestACPQQuotaOvercommitTurnsOffAboveAllocationThreshold(t *testing.T) {
 				405: constantUsage(0),
 			},
 		},
+		// The scraper creates empty fallback entries in project_az_resources for AZ "any", so we will always see those in the input, too.
+		"any": {
+			Capacity: 0,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: {},
+				402: {},
+				403: {},
+				404: {},
+				405: {},
+			},
+		},
 	}
 	cfg := core.AutogrowQuotaDistributionConfiguration{
 		GrowthMultiplier: 1.2,
@@ -319,6 +344,14 @@ func TestACPQWithProjectLocalQuotaConstraints(t *testing.T) {
 			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
 				401: {Usage: 40, MinHistoricalUsage: 20, MaxHistoricalUsage: 40},
 				402: {Usage: 40, MinHistoricalUsage: 40, MaxHistoricalUsage: 60},
+			},
+		},
+		// The scraper creates empty fallback entries in project_az_resources for AZ "any", so we will always see those in the input, too.
+		"any": {
+			Capacity: 0,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: {},
+				402: {},
 			},
 		},
 	}
@@ -444,6 +477,16 @@ func TestEmptyRegionDoesNotPrecludeQuotaOvercommit(t *testing.T) {
 				403: withCommitted(7, constantUsage(7)),
 				404: constantUsage(0),
 				405: constantUsage(0),
+			},
+		},
+		"any": {
+			Capacity: 0,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: {},
+				402: {},
+				403: {},
+				404: {},
+				405: {},
 			},
 		},
 	}
