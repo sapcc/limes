@@ -51,6 +51,7 @@ type novaInstanceSubresource struct {
 	MemoryMiB      limes.ValueWithUnit  `json:"ram"`
 	DiskGiB        limes.ValueWithUnit  `json:"disk"`
 	VideoMemoryMiB *limes.ValueWithUnit `json:"video_ram,omitempty"`
+	HWVersion      string               `json:"-"` // this is only used for sorting the subresource into the right resource
 	// information from image
 	OSType string `json:"os_type"`
 }
@@ -97,6 +98,7 @@ func (p *novaPlugin) buildInstanceSubresource(instance nova.Instance) (res novaI
 			}
 		}
 	}
+	res.HWVersion = flavorInfo.ExtraSpecs["quota:hw_version"]
 
 	// calculate classifications based on flavor data
 	if len(p.HypervisorTypeRules) > 0 {
