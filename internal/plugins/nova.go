@@ -23,6 +23,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"regexp"
+	"slices"
 	"sort"
 
 	"github.com/gophercloud/gophercloud"
@@ -47,7 +49,8 @@ type novaPlugin struct {
 	} `yaml:"separate_instance_quotas"`
 	WithSubresources bool `yaml:"with_subresources"`
 	// computed state
-	resources []limesresources.ResourceInfo `yaml:"-"`
+	resources         []limesresources.ResourceInfo                   `yaml:"-"`
+	hasPooledResource map[string]map[limesresources.ResourceName]bool `yaml:"-"`
 	// connections
 	NovaV2            *gophercloud.ServiceClient `yaml:"-"`
 	OSTypeProber      *nova.OSTypeProber         `yaml:"-"`
@@ -89,7 +92,7 @@ func init() {
 
 // Init implements the core.QuotaPlugin interface.
 func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
-	p.resources = novaDefaultResources
+	p.resources = slices.Clone(novaDefaultResources)
 
 	p.NovaV2, err = openstack.NewComputeV2(provider, eo)
 	if err != nil {
@@ -106,6 +109,39 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.E
 	}
 	p.OSTypeProber = nova.NewOSTypeProber(p.NovaV2, cinderV3, glanceV2)
 	p.ServerGroupProber = nova.NewServerGroupProber(p.NovaV2)
+
+	// SAPCC extension: Nova may report quotas with this name pattern in its quota sets and quota class sets.
+	// If it does, instances with flavors that have the extra spec `quota:hw_version` set to the first match
+	// group of this regexp will count towards those quotas instead of the regular `cores/instances/ram` quotas.
+	//
+	// This initialization enumerates which such pooled resources exist.
+	defaultQuotaClassSet, err := getDefaultQuotaClassSet(p.NovaV2)
+	if err != nil {
+		return fmt.Errorf("while enumerating default quotas: %w", err)
+	}
+	p.hasPooledResource = make(map[string]map[limesresources.ResourceName]bool)
+	hwVersionResourceRx := regexp.MustCompile(`^hw_version_(\S+)_(cores|instances|ram)$`)
+	for resourceName := range defaultQuotaClassSet {
+		match := hwVersionResourceRx.FindStringSubmatch(resourceName)
+		if match == nil {
+			continue
+		}
+		hwVersion, baseResourceName := match[1], limesresources.ResourceName(match[2])
+
+		if p.hasPooledResource[hwVersion] == nil {
+			p.hasPooledResource[hwVersion] = make(map[limesresources.ResourceName]bool)
+		}
+		p.hasPooledResource[hwVersion][baseResourceName] = true
+
+		unit := limes.UnitNone
+		if baseResourceName == "ram" {
+			unit = limes.UnitMebibytes
+		}
+		p.resources = append(p.resources, limesresources.ResourceInfo{
+			Name: limesresources.ResourceName(resourceName),
+			Unit: unit,
+		})
+	}
 
 	// find per-flavor instance resources
 	flavorNames, err := p.SeparateInstanceQuotas.FlavorAliases.ListFlavorsWithSeparateInstanceQuota(p.NovaV2)
@@ -128,6 +164,23 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.E
 	})
 
 	return p.HypervisorTypeRules.Validate()
+}
+
+func getDefaultQuotaClassSet(novaV2 *gophercloud.ServiceClient) (map[string]any, error) {
+	url := novaV2.ServiceURL("os-quota-class-sets", "default")
+	var result gophercloud.Result
+	_, err := novaV2.Get(url, &result.Body, nil) //nolint:bodyclose // already closed by gophercloud
+	if err != nil {
+		return nil, err
+	}
+
+	var body struct {
+		//NOTE: cannot use map[string]int64 here because this object contains the
+		// field "id": "default" (curse you, untyped JSON)
+		QuotaClassSet map[string]any `json:"quota_class_set"`
+	}
+	err = result.ExtractInto(&body)
+	return body.QuotaClassSet, err
 }
 
 // PluginTypeID implements the core.QuotaPlugin interface.
@@ -179,6 +232,14 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Availab
 				MaxTotalInstances  int64  `json:"maxTotalInstances"`
 				TotalInstancesUsed uint64 `json:"totalInstancesUsed"`
 			} `json:"absolutePerFlavor"`
+			AbsolutePerHWVersion map[string]struct {
+				MaxTotalCores      int64  `json:"maxTotalCores"`
+				MaxTotalInstances  int64  `json:"maxTotalInstances"`
+				MaxTotalRAMSize    int64  `json:"maxTotalRAMSize"`
+				TotalCoresUsed     uint64 `json:"totalCoresUsed"`
+				TotalInstancesUsed uint64 `json:"totalInstancesUsed"`
+				TotalRAMUsed       uint64 `json:"totalRAMUsed"`
+			} `json:"absolutePerHwVersion"`
 		} `json:"limits"`
 	}
 	err = limits.Get(p.NovaV2, limits.GetOpts{TenantID: project.UUID}).ExtractInto(&limitsData)
@@ -225,6 +286,26 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Availab
 			}
 		}
 	}
+	for hwVersion, limits := range limitsData.Limits.AbsolutePerHWVersion {
+		if p.hasPooledResource[hwVersion]["cores"] {
+			result[p.pooledResourceName(hwVersion, "cores")] = core.ResourceData{
+				Quota:     limits.MaxTotalCores,
+				UsageData: core.InUnknownAZUnlessEmpty(core.UsageData{Usage: limits.TotalCoresUsed}).AndZeroInTheseAZs(allAZs),
+			}
+		}
+		if p.hasPooledResource[hwVersion]["instances"] {
+			result[p.pooledResourceName(hwVersion, "instances")] = core.ResourceData{
+				Quota:     limits.MaxTotalInstances,
+				UsageData: core.InUnknownAZUnlessEmpty(core.UsageData{Usage: limits.TotalInstancesUsed}).AndZeroInTheseAZs(allAZs),
+			}
+		}
+		if p.hasPooledResource[hwVersion]["ram"] {
+			result[p.pooledResourceName(hwVersion, "ram")] = core.ResourceData{
+				Quota:     limits.MaxTotalRAMSize,
+				UsageData: core.InUnknownAZUnlessEmpty(core.UsageData{Usage: limits.TotalRAMUsed}).AndZeroInTheseAZs(allAZs),
+			}
+		}
+	}
 
 	// Nova does not have a native API for AZ-aware usage reporting,
 	// so we will obtain AZ-aware usage stats by counting up all subresources,
@@ -239,8 +320,11 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Availab
 
 		// use separate instance resource if we have a matching "instances_$FLAVOR" resource
 		instanceResourceName := p.SeparateInstanceQuotas.FlavorAliases.LimesResourceNameForFlavor(subres.FlavorName)
+		isPooled := false
 		if _, exists := result[instanceResourceName]; !exists {
-			instanceResourceName = "instances"
+			// otherwise used the appropriate pooled instance resource
+			isPooled = true
+			instanceResourceName = p.pooledResourceName(subres.HWVersion, "instances")
 		}
 
 		// count subresource towards "instances" (or separate instance resource)
@@ -251,13 +335,13 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Availab
 		}
 
 		// if counted towards separate instance resource, do not count towards "cores" and "ram"
-		if instanceResourceName != "instances" {
+		if !isPooled {
 			continue
 		}
 
-		// count towards "cores" and "ram"
-		result["cores"].AddLocalizedUsage(az, subres.VCPUs)
-		result["ram"].AddLocalizedUsage(az, subres.MemoryMiB.Value)
+		// count towards "cores" and "ram" under the appropriate pooled resource
+		result[p.pooledResourceName(subres.HWVersion, "cores")].AddLocalizedUsage(az, subres.VCPUs)
+		result[p.pooledResourceName(subres.HWVersion, "ram")].AddLocalizedUsage(az, subres.MemoryMiB.Value)
 	}
 
 	// calculate metrics
@@ -283,6 +367,19 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Availab
 
 	serializedMetrics, err = json.Marshal(metrics)
 	return result, serializedMetrics, err
+}
+
+func (p *novaPlugin) pooledResourceName(hwVersion string, base limesresources.ResourceName) limesresources.ResourceName {
+	// `base` is one of "cores", "instances" or "ram"
+	if hwVersion == "" {
+		return base
+	}
+
+	// if we saw a "quota:hw_version" extra spec on the instance's flavor, use the appropriate resource if it exists
+	if p.hasPooledResource[hwVersion][base] {
+		return limesresources.ResourceName(fmt.Sprintf("hw_version_%s_instances", hwVersion))
+	}
+	return base
 }
 
 // SetQuota implements the core.QuotaPlugin interface.

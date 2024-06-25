@@ -343,6 +343,14 @@ same flavor, and Limes prefers the name `bm_newflavor2`. The preferred name will
 for the respective separate instance quota. In the previous example, the resource will be called
 `instances_bm_newflavor2` since `bm_newflavor2` is the flavor alias that Limes prefers.
 
+#### Hardware-versioned quota
+
+On SAP Converged Cloud (or any other OpenStack cluster where Nova carries the relevant patches), there will be
+additional resources following the name pattern `hw_version_(.+)_(cores|instances|ram)`. Any of these resources that
+exist will also be reported by Limes. (Not all resources may exist for a given hardware version). They behave like the
+regular `cores`/`instances`/`ram` resources and cover instances whose flavors have the respective value in the
+`quota:hw_version` extra spec.
+
 ### `dns`: Designate v2
 
 ```yaml
