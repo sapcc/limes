@@ -79,8 +79,11 @@ func guessNodeCountFromMetric(metric string, inv resourceproviders.Inventory) (u
 	// we prefer to round down (11.6 nodes should go to 11 instead of 12 to be
 	// safe), but data sometimes has slight rounding errors that we want to
 	// correct (9.98 nodes should be rounded up to 10 instead of down to 9)
+	//
+	// The cutoff of 0.9 is based on what nova-bigvm does. It too accepts up to
+	// 10% difference in RAM between nodes of the same hypervisor cluster.
 	nodeCount := uint64(math.Floor(nodeCountFloat))
-	if nodeCountFloat-float64(nodeCount) > 0.98 {
+	if nodeCountFloat-float64(nodeCount) > 0.9 {
 		nodeCount = uint64(math.Ceil(nodeCountFloat))
 	}
 	return nodeCount, nil
