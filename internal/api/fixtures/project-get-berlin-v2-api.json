@@ -22,7 +22,12 @@
             "per_az": {
               "az-one": {
                 "quota": 5,
-                "usage": 2
+                "usage": 2,
+                "historical_usage": {
+                  "min_usage": 1,
+                  "max_usage": 5,
+                  "duration": "1 second"
+                }
               },
               "az-two": {
                 "quota": 5,
