@@ -54,7 +54,7 @@ var (
 `)
 
 	projectReportQuery = sqlext.SimplifyWhitespace(`
-	SELECT p.id, p.uuid, p.name, COALESCE(p.parent_uuid, ''), ps.type, ps.scraped_at, pr.name, pr.quota, pr.max_quota_from_admin, par.az, par.quota, par.usage, par.physical_usage, pr.backend_quota, par.subresources
+	SELECT p.id, p.uuid, p.name, COALESCE(p.parent_uuid, ''), ps.type, ps.scraped_at, pr.name, pr.quota, pr.max_quota_from_admin, par.az, par.quota, par.usage, par.physical_usage, par.historical_usage, pr.backend_quota, par.subresources
 	  FROM projects p
 	  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
 	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
@@ -118,6 +118,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 			azQuota           *uint64
 			azUsage           *uint64
 			azPhysicalUsage   *uint64
+			historicalUsage   *string
 			backendQuota      *int64
 			azSubresources    *string
 		)
@@ -125,7 +126,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 			&projectID, &projectUUID, &projectName, &projectParentUUID,
 			&serviceType, &scrapedAt, &resourceName,
 			&quota, &maxQuotaFromAdmin,
-			&az, &azQuota, &azUsage, &azPhysicalUsage, &backendQuota, &azSubresources,
+			&az, &azQuota, &azUsage, &azPhysicalUsage, &historicalUsage, &backendQuota, &azSubresources,
 		)
 		if err != nil {
 			return err

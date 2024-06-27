@@ -954,3 +954,25 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 		ExpectBody:   assert.StringData("invalid input for shared/things: cannot convert value from MiB to <count> because units are incompatible\n"),
 	}.Check(t, s.Handler)
 }
+
+func Test_Historical_Usage(t *testing.T) {
+	s := setupTest(t, "fixtures/start-data.sql")
+	res, err := s.DB.Query(`UPDATE project_az_resources SET historical_usage='{"t":[1719399600, 1719486000],"v":[0, 2]}'  WHERE id=10 AND resource_id=5 AND az='az-one'`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Err() != nil {
+		t.Fatal(res.Err())
+	}
+	defer res.Close()
+
+	fmt.Print(res)
+
+	assert.HTTPRequest{
+		Method:       "GET",
+		Header:       map[string]string{"X-Limes-V2-API-Preview": "per-az"},
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin",
+		ExpectStatus: 200,
+		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-berlin-v2-api.json"),
+	}.Check(t, s.Handler)
+}
