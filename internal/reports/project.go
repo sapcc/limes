@@ -239,7 +239,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 				Subresources:  json.RawMessage(*azSubresources),
 			}
 
-			if len(*azHisoricalUsage) > 0 {
+			if *azHisoricalUsage != "" {
 				config := cluster.QuotaDistributionConfigForResource(*serviceType, *resourceName)
 				retentionPeriod := config.Autogrow.UsageDataRetentionPeriod
 				duration := limesresources.CommitmentDuration{
