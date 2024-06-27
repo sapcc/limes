@@ -1,0 +1,311 @@
+# Editing note: This document uses the "one sentence per line" style.
+# If your lines get too long, please consider breaking up long sentences into multiple shorter ones to improve clarity.
+
+openapi: 3.1.0
+
+info:
+  title: LIQUID - Limes Interface for Quota and Usage Interrogation and Discovery
+  version: 0.1.0
+  summary: |
+    Limes expects OpenStack services to expose this interface either natively or through an adapter.
+    The interface allows Limes to retrieve quota and usage data, and optionally capacity data, from the respective OpenStack service.
+    Limes will also use the interface to set quota within the service.
+  description: |
+    Throughout this document:
+    - "LIQUID" (upper case) refers to the REST interface defined by this document.
+    - "A liquid" (lower case) refers to a server implementing LIQUID.
+    - "The liquid's service" refers to the OpenStack service that that liquid is a part of or connected to.
+
+    Each liquid provides access to one or more **resources**.
+    A resource is any countable or measurable kind of entity managed by the liquid's service.
+
+    Limes discovers liquids through the Keystone service catalog.
+    Each liquid should be registered there with a service type that has the prefix "liquid-".
+    If a liquid uses vendor-specific APIs to interact with its service, its service type should include the vendor name.
+  license:
+    name: Apache 2.0
+    identifier: Apache-2.0
+
+paths:
+  /v1/info:
+    get:
+      summary: Returns information about the OpenStack service and the resources available within it.
+      responses:
+        200:
+          $ref: "#/components/responses/serviceInfo"
+        default:
+          $ref: "#/components/responses/textError"
+
+  /v1/capacity:
+    post:
+      summary: Measures cluster capacity for all known resources that support capacity measurements.
+      requestBody:
+        $ref: "#/components/requestBodies/capacityRequest"
+      responses:
+        200:
+          $ref: "#/components/responses/capacityReport"
+        default:
+          $ref: "#/components/responses/textError"
+
+components:
+  requestBodies:
+    capacityRequest:
+      description: Provides resource demand information to the liquid for the purposes of a cluster capacity measurement.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CapacityRequest"
+
+  responses:
+    serviceInfo:
+      description: Provides information about the OpenStack service and the resources available within it.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ServiceInfo"
+          examples:
+            compute:
+              summary: An example of a ServiceInfo for a compute service.
+              value:
+                resources:
+                  cores:
+                    hasCapacity: true
+                    hasQuota: true
+                  instances:
+                    hasCapacity: false
+                    hasQuota: true
+                  ram:
+                    unit: MiB
+                    hasCapacity: true
+                    hasQuota: true
+
+    capacityReport:
+      description: Includes cluster capacity data for all known resources that support capacity measurements.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/CapacityReport"
+          examples:
+            compute:
+              summary: An example of a CapacityReport for a compute service.
+              value:
+                resources:
+                  cores:
+                    perAZ:
+                      az-one:
+                        capacity: 1500
+                        usage: 576
+                      az-two:
+                        capacity: 1000
+                        usage: 129
+                  ram:
+                    perAZ:
+                      az-one:
+                        capacity: 3000
+                        usage: 1038
+                      az-two:
+                        capacity: 2000
+                        usage: 274
+
+    textError:
+      description: |
+        If any request cannot be finished successfully, the liquid shall respond with a 4xx or 5xx status code and a human-readable error message.
+        The error message will be relayed by Limes to its operator(s).
+      content:
+        text/plain:
+          example: "Could not apply quota for resource 'foobars': Expected 200 from PUT /quota/foobars, but got 401: 'Token expired.'"
+
+  schemas:
+    ServiceInfo:
+      type: object
+      description: Declares basic metadata for the liquid's service.
+      required: [ resources ]
+      properties:
+        resources:
+          description: The keys of this object are the resource names.
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/ResourceInfo"
+        capacityMetricFamilies:
+          description: |
+            The set of metric families that is included in a response to a query for cluster capacity.
+            The keys of this object are the metric family names.
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/MetricFamilyInfo"
+        usageMetricFamilies:
+          description: |
+            The set of metric families that is included in a response to a query for project quota and usage.
+            The keys of this object are the metric family names.
+          type: object
+          additionalProperties:
+            $ref: "#/components/schemas/MetricFamilyInfo"
+
+    ResourceInfo:
+      type: object
+      description: Declares basic metadata for a resource.
+      required: [ hasCapacity, hasQuota ]
+      properties:
+        unit:
+          type: string
+          enum: [ "", B, KiB, MiB, GiB, TiB, PiB, EiB ]
+          default: ""
+          description: |
+            If omitted or empty, the resource is **countable** and any quota or usage values describe a number of objects.
+            If non-empty, the resource is **measured** and and quota or usage values are measured in the given unit.
+            For example, the compute resource "cores" is countable, but the compute resource "ram" is measured, usually in MiB.
+        hasCapacity:
+          type: boolean
+          description: |
+            Whether the liquid reports capacity for this resource on the cluster level.
+        needsResourceDemand:
+          type: boolean
+          default: false
+          description: |
+            Whether Limes needs to include demand for this resource in its requests for a capacity report.
+        hasQuota:
+          type: boolean
+          description: |
+            Whether the liquid reports quota for this resource on the project level.
+            If false, only usage is reported on the project level.
+            Limes will abstain from maintaining quota on such resources.
+
+    MetricFamilyInfo:
+      type: object
+      description: |
+        The definition for a metric family.
+        Metrics from this family may be included in a response to a query for either cluster capacity or project quota and usage.
+        The idea of this mechanism is that liquids may want to provide more granular information on the substructure of the reported capacity or usage.
+        By sending the metrics to Limes, liquids do not need to persist these metrics (as well as the set of existing projects) on their side.
+      required: [ type ]
+      properties:
+        type:
+          type: string
+          enum: [ "unknown", "gauge", "counter", "stateset", "info", "histogram", "gaugehistogram", "summary" ]
+          description: |
+            The metric type.
+            The most common values are "counter" and "gauge".
+          externalDocs:
+            description: Based on the type enumeration in the OpenMetrics spec
+            url: "https://github.com/OpenObservability/OpenMetrics/blob/1386544931307dff279688f332890c31b6c5de36/specification/OpenMetrics.md#type"
+        help:
+          type: string
+          default: ""
+          description: |
+            A brief description of the metric family for human consumption.
+            Should be short enough to be used as a tooltip.
+          externalDocs:
+            description: Based on the type enumeration in the OpenMetrics spec
+            url: "https://github.com/OpenObservability/OpenMetrics/blob/1386544931307dff279688f332890c31b6c5de36/specification/OpenMetrics.md#help"
+
+    CapacityRequest:
+      type: object
+      description: |
+        Information about resource demand that the liquid can use for its calculations during a cluster capacity measurement.
+      properties:
+        resourceDemand:
+          type: object
+          description: |
+            The keys are the resource names.
+            An entry must be present for each resource with `needsResourceDemand: true`.
+            All other entries will be ignored.
+          additionalProperties:
+            $ref: "#/components/schemas/ResourceDemand"
+
+    ResourceDemand:
+      type: object
+      description: |
+        Demand for a single resource across all projects.
+      required: [ usage ]
+      properties:
+        perAZ:
+          type: object
+          description: |
+            The keys in this object are availability zone names.
+            For AZ-aware resources, one entry should be present for each AZ.
+            Furthermore, an entry may be present for the pseudo-AZ "unknown" to contain AZ-aware demand that cannot be matched to a known AZ.
+            For non-AZ-aware resources, the only entry shall be for the pseudo-AZ "any".
+          additionalProperties:
+            type: object
+            properties:
+              usage:
+                type: integer
+                description: |
+                  Amount of resource that is actively used in this AZ.
+                  This is logical usage, not physical usage.
+                  For example, a storage share with 10 GiB size that contains only 5 GiB worth of files counts as 10 GiB here.
+              unusedCommitments:
+                type: integer
+                default: 0
+                description: |
+                  Total amount of commitments in this AZ that are confirmed, each to the extent not included in the `usage` number.
+              pendingCommitments:
+                type: integer
+                default: 0
+                description: |
+                  Total amount of commitments in this AZ that are currently waiting for confirmation.
+        overcommitFactor:
+          type: number
+          default: 1
+          description: |
+            If present, Limes applies this multiplier to the raw capacity values reported by the liquid to obtain a logical capacity.
+            The values for `usage`, `unusedCommitments` and `pendingCommitments` in this object are in terms of this logical capacity.
+            To obtain the respective demand for raw capacity, the liquid must divide them by this overcommit factor.
+
+    CapacityReport:
+      type: object
+      description: |
+        Cluster capacity data for all known resources that support capacity measurements.  required: [ resources ]
+      properties:
+        resources:
+          type: object
+          description: |
+            The keys in this object are resource names.
+            One entry must be present for each resource with `hasCapacity: true`.
+          additionalProperties:
+            type: object
+            properties:
+              perAZ:
+                type: object
+                description: |
+                  The keys in this object are availability zone names.
+                  For AZ-aware resources, one entry should be present for each AZ.
+                  Furthermore, an entry may be present for the pseudo-AZ "unknown" to contain AZ-aware capacity or usage that cannot be matched to a known AZ.
+                  For non-AZ-aware resources, the only entry shall be for the pseudo-AZ "any".
+                additionalProperties:
+                  type: object
+                  required: [ capacity ]
+                  properties:
+                    capacity:
+                      type: integer
+                      description: |
+                        Raw amount of resource that is available in this AZ.
+                    usage:
+                      type: integer
+                      description: |
+                        Raw amount of resource that is used in this AZ.
+                        This should only be filled if the liquid has a way of discovering aggregate usage across the cluster.
+                        It should not be filled by enumerating all projects (Limes already does that) or by reflecting the usage number from the provided resource demand (that's the same aggregation over project usage).
+                    # TODO: subcapacities (more structured than before?)
+        metrics:
+          type: object
+          description: |
+            The keys in this object are metric family names.
+            One entry must be present for each of the `capacityMetricFamilies` from the service info.
+          additionalProperties:
+            type: array
+            items:
+              type: object
+              required: [ labels, value ]
+              properties:
+                labels:
+                  type: array
+                  items:
+                    type: string
+                  description: |
+                    The labels on this metric.
+                    This set of labels must be unique among all metrics in this family.
+                value:
+                  type: number
+                  description: |
+                    The numeric value of this metric.
