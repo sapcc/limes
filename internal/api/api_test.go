@@ -957,7 +957,7 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 
 func Test_Historical_Usage(t *testing.T) {
 	s := setupTest(t, "fixtures/start-data.sql")
-	res, err := s.DB.Query(`UPDATE project_az_resources SET historical_usage='{"t":[1719399600, 1719486000],"v":[0, 2]}'  WHERE id=10 AND resource_id=5 AND az='az-one'`)
+	res, err := s.DB.Query(`UPDATE project_az_resources SET usage=2, historical_usage='{"t":[1719399600, 1719486000],"v":[1, 5]}'  WHERE id=10 AND resource_id=5 AND az='az-one'`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -965,8 +965,6 @@ func Test_Historical_Usage(t *testing.T) {
 		t.Fatal(res.Err())
 	}
 	defer res.Close()
-
-	fmt.Print(res)
 
 	assert.HTTPRequest{
 		Method:       "GET",

@@ -22,7 +22,7 @@
             "per_az": {
               "az-one": {
                 "quota": 5,
-                "usage": 1
+                "usage": 2
               },
               "az-two": {
                 "quota": 5,
@@ -31,7 +31,7 @@
             },
             "quota": 10,
             "usable_quota": 10,
-            "usage": 2
+            "usage": 3
           },
           {
             "name": "capacity_portion",

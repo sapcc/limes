@@ -33,6 +33,7 @@ import (
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
+	"github.com/sapcc/limes/internal/util"
 )
 
 // NOTE: Both queries use LEFT OUTER JOIN to generate at least one result row
@@ -118,7 +119,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 			azQuota           *uint64
 			azUsage           *uint64
 			azPhysicalUsage   *uint64
-			historicalUsage   *string
+			azHisoricalUsage  *string
 			backendQuota      *int64
 			azSubresources    *string
 		)
@@ -126,7 +127,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 			&projectID, &projectUUID, &projectName, &projectParentUUID,
 			&serviceType, &scrapedAt, &resourceName,
 			&quota, &maxQuotaFromAdmin,
-			&az, &azQuota, &azUsage, &azPhysicalUsage, &historicalUsage, &backendQuota, &azSubresources,
+			&az, &azQuota, &azUsage, &azPhysicalUsage, &azHisoricalUsage, &backendQuota, &azSubresources,
 		)
 		if err != nil {
 			return err
@@ -236,6 +237,23 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 				Usage:         *azUsage,
 				PhysicalUsage: azPhysicalUsage,
 				Subresources:  json.RawMessage(*azSubresources),
+			}
+
+			if len(*azHisoricalUsage) > 0 {
+				config := cluster.QuotaDistributionConfigForResource(*serviceType, *resourceName)
+				retentionPeriod := config.Autogrow.UsageDataRetentionPeriod
+				duration := limesresources.CommitmentDuration{
+					Short: retentionPeriod.Into(),
+				}
+				ts, err := util.ParseTimeSeries[uint64](*azHisoricalUsage)
+				if err != nil {
+					return err
+				}
+				resReport.PerAZ[*az].HistoricalUsage = &limesresources.HistoricalReport{
+					MinUsage: ts.MinOr(resReport.Usage),
+					MaxUsage: ts.MaxOr(resReport.Usage),
+					Duration: duration,
+				}
 			}
 		}
 
