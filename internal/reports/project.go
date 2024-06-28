@@ -119,7 +119,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 			azQuota           *uint64
 			azUsage           *uint64
 			azPhysicalUsage   *uint64
-			azHisoricalUsage  *string
+			azHistoricalUsage *string
 			backendQuota      *int64
 			azSubresources    *string
 		)
@@ -127,7 +127,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 			&projectID, &projectUUID, &projectName, &projectParentUUID,
 			&serviceType, &scrapedAt, &resourceName,
 			&quota, &maxQuotaFromAdmin,
-			&az, &azQuota, &azUsage, &azPhysicalUsage, &azHisoricalUsage, &backendQuota, &azSubresources,
+			&az, &azQuota, &azUsage, &azPhysicalUsage, &azHistoricalUsage, &backendQuota, &azSubresources,
 		)
 		if err != nil {
 			return err
@@ -239,13 +239,20 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 				Subresources:  json.RawMessage(*azSubresources),
 			}
 
-			if *azHisoricalUsage != "" {
+			if *azHistoricalUsage != "" {
 				config := cluster.QuotaDistributionConfigForResource(*serviceType, *resourceName)
-				retentionPeriod := config.Autogrow.UsageDataRetentionPeriod
-				duration := limesresources.CommitmentDuration{
-					Short: retentionPeriod.Into(),
+				var duration limesresources.CommitmentDuration
+				if config.Autogrow != nil {
+					retentionPeriod := config.Autogrow.UsageDataRetentionPeriod
+					duration = limesresources.CommitmentDuration{
+						Short: retentionPeriod.Into(),
+					}
+				} else {
+					duration = limesresources.CommitmentDuration{
+						Short: 0,
+					}
 				}
-				ts, err := util.ParseTimeSeries[uint64](*azHisoricalUsage)
+				ts, err := util.ParseTimeSeries[uint64](*azHistoricalUsage)
 				if err != nil {
 					return err
 				}
