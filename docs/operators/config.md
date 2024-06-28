@@ -899,14 +899,18 @@ capacitors:
         ca_cert: /path/to/server-ca.pem
       queries:
         compute:
-          cores:     sum(hypervisor_cores)
-          ram:       sum(hypervisor_ram_gigabytes) * 1024
+          cores:     sum by (az) (hypervisor_cores)
+          ram:       sum by (az) (hypervisor_ram_gigabytes) * 1024
 ```
 
 Like the `manual` capacity plugin, this plugin can provide capacity values for arbitrary resources. A [Prometheus][prom]
 instance must be running at the URL given in `params.api.url`. Each of the queries in `params.queries` is
-executed on this Prometheus instance, and the resulting value is reported as capacity for the resource named by the key
-of this query. Queries are grouped by service, then by resource.
+executed on this Prometheus instance. Queries are grouped by service, then by resource.
+
+Each query must result in one or more metrics with a unique `az` label. The values will be reported as capacity for that
+AZ, if the AZ is one of the known AZs or the pseudo-AZ `any`. All other capacity will be grouped under the pseudo-AZ
+`unknown` as a safe fallback. For non-AZ-aware resources, you can wrap the query expression in
+`label_replace($QUERY, "az", "any", "", "")` to add the required label.
 
 In `params.api`, only the `url` field is required. You can pin the server's CA
 certificate (`params.api.ca_cert`) and/or specify a TLS client certificate

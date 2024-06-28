@@ -20,8 +20,12 @@
 package plugins
 
 import (
+	"fmt"
+	"slices"
+
 	"github.com/gophercloud/gophercloud"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/model"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/promquery"
@@ -59,15 +63,59 @@ func (p *capacityPrometheusPlugin) Scrape(_ core.CapacityPluginBackchannel, allA
 	for serviceType, queries := range p.Queries {
 		serviceResult := make(map[limesresources.ResourceName]core.PerAZ[core.CapacityData])
 		for resourceName, query := range queries {
-			value, err := client.GetSingleValue(query, nil)
+			serviceResult[resourceName], err = p.scrapeOneResource(client, query, allAZs)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, fmt.Errorf("while scraping %s/%s capacity: %w", serviceType, resourceName, err)
 			}
-			serviceResult[resourceName] = core.InAnyAZ(core.CapacityData{Capacity: uint64(value)})
 		}
 		result[serviceType] = serviceResult
 	}
 	return result, nil, nil
+}
+
+func (p *capacityPrometheusPlugin) scrapeOneResource(client promquery.Client, query string, allAZs []limes.AvailabilityZone) (core.PerAZ[core.CapacityData], error) {
+	vector, err := client.GetVector(query)
+	if err != nil {
+		return nil, err
+	}
+
+	// for known AZs, we expect exactly one result;
+	// all unknown AZs get lumped into AvailabilityZoneUnknown
+	matchedSamples := make(map[limes.AvailabilityZone]*model.Sample)
+	var unmatchedSamples []*model.Sample
+	for _, sample := range vector {
+		az := limes.AvailabilityZone(sample.Metric["az"])
+		switch {
+		case az == "":
+			return nil, fmt.Errorf(`missing label "az" on metric %v = %g`, sample.Metric, sample.Value)
+		case slices.Contains(allAZs, az) || az == limes.AvailabilityZoneAny:
+			if matchedSamples[az] != nil {
+				other := matchedSamples[az]
+				return nil, fmt.Errorf(`multiple samples for az=%q: found %v = %g and %v = %g`, az, sample.Metric, sample.Value, other.Metric, other.Value)
+			}
+			matchedSamples[az] = sample
+		default:
+			unmatchedSamples = append(unmatchedSamples, sample)
+		}
+	}
+
+	// build result
+	result := core.PerAZ[core.CapacityData]{}
+	for az, sample := range matchedSamples {
+		result[az] = &core.CapacityData{
+			Capacity: uint64(sample.Value),
+		}
+	}
+	if len(result) == 0 || len(unmatchedSamples) > 0 {
+		unmatchedCapacity := float64(0.0)
+		for _, sample := range unmatchedSamples {
+			unmatchedCapacity += float64(sample.Value)
+		}
+		result[limes.AvailabilityZoneUnknown] = &core.CapacityData{
+			Capacity: uint64(unmatchedCapacity),
+		}
+	}
+	return result, nil
 }
 
 // DescribeMetrics implements the core.CapacityPlugin interface.
