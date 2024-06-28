@@ -112,6 +112,9 @@ github.com/modern-go/concurrent
 # github.com/modern-go/reflect2 v1.0.2
 ## explicit; go 1.12
 github.com/modern-go/reflect2
+# github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822
+## explicit
+github.com/munnerz/goautoneg
 # github.com/prometheus/client_golang v1.19.1
 ## explicit; go 1.20
 github.com/prometheus/client_golang/api
@@ -122,13 +125,12 @@ github.com/prometheus/client_golang/prometheus/promhttp
 # github.com/prometheus/client_model v0.6.1
 ## explicit; go 1.19
 github.com/prometheus/client_model/go
-# github.com/prometheus/common v0.54.0
+# github.com/prometheus/common v0.55.0
 ## explicit; go 1.20
 github.com/prometheus/common/expfmt
-github.com/prometheus/common/internal/bitbucket.org/ww/goautoneg
 github.com/prometheus/common/model
-# github.com/prometheus/procfs v0.12.0
-## explicit; go 1.19
+# github.com/prometheus/procfs v0.15.1
+## explicit; go 1.20
 github.com/prometheus/procfs
 github.com/prometheus/procfs/internal/fs
 github.com/prometheus/procfs/internal/util
@@ -181,19 +183,19 @@ go.uber.org/automaxprocs/maxprocs
 # golang.org/x/exp v0.0.0-20240613232115-7f521ea00fb8
 ## explicit; go 1.20
 golang.org/x/exp/maps
-# golang.org/x/sys v0.20.0
+# golang.org/x/sys v0.21.0
 ## explicit; go 1.18
 golang.org/x/sys/unix
 golang.org/x/sys/windows
-# golang.org/x/text v0.15.0
+# golang.org/x/text v0.16.0
 ## explicit; go 1.18
 golang.org/x/text/encoding
 golang.org/x/text/encoding/charmap
 golang.org/x/text/encoding/internal
 golang.org/x/text/encoding/internal/identifier
 golang.org/x/text/transform
-# google.golang.org/protobuf v1.34.0
-## explicit; go 1.17
+# google.golang.org/protobuf v1.34.2
+## explicit; go 1.20
 google.golang.org/protobuf/encoding/protodelim
 google.golang.org/protobuf/encoding/prototext
 google.golang.org/protobuf/encoding/protowire
