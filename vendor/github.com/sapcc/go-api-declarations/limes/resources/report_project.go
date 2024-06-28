@@ -71,7 +71,14 @@ type ProjectAZResourceReport struct {
 	PlannedCommitments map[string]uint64 `json:"planned_commitments,omitempty"`
 	Usage              uint64            `json:"usage"`
 	PhysicalUsage      *uint64           `json:"physical_usage,omitempty"`
+	HistoricalUsage    *HistoricalReport `json:"historical_usage,omitempty"`
 	Subresources       json.RawMessage   `json:"subresources,omitempty"`
+}
+
+type HistoricalReport struct {
+	MinUsage uint64             `json:"min_usage,omitempty"`
+	MaxUsage uint64             `json:"max_usage,omitempty"`
+	Duration CommitmentDuration `json:"duration,omitempty"`
 }
 
 // ProjectServiceReports provides fast lookup of services using a map, but serializes
