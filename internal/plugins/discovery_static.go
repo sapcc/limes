@@ -20,10 +20,11 @@
 package plugins
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
-	"github.com/gophercloud/gophercloud"
+	"github.com/gophercloud/gophercloud/v2"
 
 	"github.com/sapcc/limes/internal/core"
 )
@@ -50,12 +51,12 @@ func (p *staticDiscoveryPlugin) PluginTypeID() string {
 }
 
 // Init implements the core.DiscoveryPlugin interface.
-func (p *staticDiscoveryPlugin) Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
+func (p *staticDiscoveryPlugin) Init(ctx context.Context, client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
 	return nil
 }
 
 // ListDomains implements the core.DiscoveryPlugin interface.
-func (p *staticDiscoveryPlugin) ListDomains() ([]core.KeystoneDomain, error) {
+func (p *staticDiscoveryPlugin) ListDomains(ctx context.Context) ([]core.KeystoneDomain, error) {
 	var result []core.KeystoneDomain
 	if len(p.Domains) == 0 {
 		return nil, errors.New("no domains configured")
@@ -76,7 +77,7 @@ func (p *staticDiscoveryPlugin) ListDomains() ([]core.KeystoneDomain, error) {
 }
 
 // ListProjects implements the core.DiscoveryPlugin interface.
-func (p *staticDiscoveryPlugin) ListProjects(queryDomain core.KeystoneDomain) ([]core.KeystoneProject, error) {
+func (p *staticDiscoveryPlugin) ListProjects(ctx context.Context, queryDomain core.KeystoneDomain) ([]core.KeystoneProject, error) {
 	var result []core.KeystoneProject
 	if len(p.Domains) == 0 {
 		return nil, errors.New("no domains configured")

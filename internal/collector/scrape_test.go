@@ -71,7 +71,7 @@ func p2u64(x uint64) *uint64 {
 func prepareDomainsAndProjectsForScrape(t *testing.T, s test.Setup) {
 	// ScanDomains is required to create the entries in `domains`, `projects` and `project_services`
 	timeZero := func() time.Time { return time.Unix(0, 0).UTC() }
-	_, err := (&Collector{Cluster: s.Cluster, DB: s.DB, MeasureTime: timeZero, AddJitter: test.NoJitter}).ScanDomains(ScanDomainsOpts{})
+	_, err := (&Collector{Cluster: s.Cluster, DB: s.DB, MeasureTime: timeZero, AddJitter: test.NoJitter}).ScanDomains(s.Ctx, ScanDomainsOpts{})
 	if err != nil {
 		t.Fatal(err)
 	}

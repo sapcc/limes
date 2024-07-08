@@ -20,12 +20,13 @@
 package nova
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"strings"
 
-	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/flavors"
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 )
 
 // FlavorSelection describes a set of public flavors.
@@ -56,9 +57,9 @@ func (s FlavorSelection) matchesExtraSpecs(specs map[string]string) bool {
 
 // ForeachFlavor lists all public flavors matching this FlavorSelection, and
 // calls the given callback once for each of them.
-func (s FlavorSelection) ForeachFlavor(novaV2 *gophercloud.ServiceClient, action func(FullFlavor) error) error {
+func (s FlavorSelection) ForeachFlavor(ctx context.Context, novaV2 *gophercloud.ServiceClient, action func(FullFlavor) error) error {
 	opts := flavors.ListOpts{AccessType: flavors.AllAccess}
-	page, err := flavors.ListDetail(novaV2, &opts).AllPages()
+	page, err := flavors.ListDetail(novaV2, &opts).AllPages(ctx)
 	if err != nil {
 		return fmt.Errorf("while listing public flavors: %w", err)
 	}
@@ -68,7 +69,7 @@ func (s FlavorSelection) ForeachFlavor(novaV2 *gophercloud.ServiceClient, action
 	}
 
 	for _, flavor := range allFlavors {
-		specs, err := flavors.ListExtraSpecs(novaV2, flavor.ID).Extract()
+		specs, err := flavors.ListExtraSpecs(ctx, novaV2, flavor.ID).Extract()
 		if err != nil {
 			return fmt.Errorf("while listing extra specs of public flavor %q: %w", flavor.Name, err)
 		}

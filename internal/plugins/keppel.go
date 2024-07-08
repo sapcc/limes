@@ -19,10 +19,11 @@
 package plugins
 
 import (
+	"context"
 	"math/big"
 	"net/http"
 
-	"github.com/gophercloud/gophercloud"
+	"github.com/gophercloud/gophercloud/v2"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
@@ -48,7 +49,7 @@ func init() {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *keppelPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
+func (p *keppelPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
 	p.KeppelV1, err = newKeppelClient(provider, eo)
 	return err
 }
@@ -78,13 +79,13 @@ func (p *keppelPlugin) Rates() []limesrates.RateInfo {
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *keppelPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[limesrates.RateName]*big.Int, serializedState string, err error) {
+func (p *keppelPlugin) ScrapeRates(ctx context.Context, project core.KeystoneProject, prevSerializedState string) (result map[limesrates.RateName]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *keppelPlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
-	quotas, err := p.KeppelV1.GetQuota(project.UUID)
+func (p *keppelPlugin) Scrape(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
+	quotas, err := p.KeppelV1.GetQuota(ctx, project.UUID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -99,10 +100,10 @@ func (p *keppelPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Avail
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *keppelPlugin) SetQuota(project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
+func (p *keppelPlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
 	var qs keppelQuotaSet
 	qs.Manifests.Quota = int64(quotas["images"])
-	return p.KeppelV1.SetQuota(project.UUID, qs)
+	return p.KeppelV1.SetQuota(ctx, project.UUID, qs)
 }
 
 // DescribeMetrics implements the core.QuotaPlugin interface.
@@ -147,11 +148,11 @@ type keppelQuotaSet struct {
 	} `json:"manifests"`
 }
 
-func (c keppelClient) GetQuota(projectUUID string) (keppelQuotaSet, error) {
+func (c keppelClient) GetQuota(ctx context.Context, projectUUID string) (keppelQuotaSet, error) {
 	url := c.ServiceURL("keppel", "v1", "quotas", projectUUID)
 
 	var result gophercloud.Result
-	_, result.Err = c.Get(url, &result.Body, &gophercloud.RequestOpts{ //nolint:bodyclose // already closed by gophercloud
+	_, result.Err = c.Get(ctx, url, &result.Body, &gophercloud.RequestOpts{ //nolint:bodyclose // already closed by gophercloud
 		OkCodes: []int{http.StatusOK},
 	})
 
@@ -160,9 +161,9 @@ func (c keppelClient) GetQuota(projectUUID string) (keppelQuotaSet, error) {
 	return qs, err
 }
 
-func (c keppelClient) SetQuota(projectUUID string, qs keppelQuotaSet) error {
+func (c keppelClient) SetQuota(ctx context.Context, projectUUID string, qs keppelQuotaSet) error {
 	url := c.ServiceURL("keppel", "v1", "quotas", projectUUID)
-	_, err := c.Put(url, &qs, nil, &gophercloud.RequestOpts{ //nolint:bodyclose // already closed by gophercloud
+	_, err := c.Put(ctx, url, &qs, nil, &gophercloud.RequestOpts{ //nolint:bodyclose // already closed by gophercloud
 		OkCodes: []int{http.StatusOK},
 	})
 	return err

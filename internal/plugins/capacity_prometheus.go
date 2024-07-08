@@ -20,10 +20,11 @@
 package plugins
 
 import (
+	"context"
 	"fmt"
 	"slices"
 
-	"github.com/gophercloud/gophercloud"
+	"github.com/gophercloud/gophercloud/v2"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/sapcc/go-api-declarations/limes"
@@ -43,7 +44,7 @@ func init() {
 }
 
 // Init implements the core.CapacityPlugin interface.
-func (p *capacityPrometheusPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
+func (p *capacityPrometheusPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
 	return nil
 }
 
@@ -53,7 +54,7 @@ func (p *capacityPrometheusPlugin) PluginTypeID() string {
 }
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *capacityPrometheusPlugin) Scrape(_ core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (result map[limes.ServiceType]map[limesresources.ResourceName]core.PerAZ[core.CapacityData], _ []byte, err error) {
+func (p *capacityPrometheusPlugin) Scrape(ctx context.Context, _ core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (result map[limes.ServiceType]map[limesresources.ResourceName]core.PerAZ[core.CapacityData], _ []byte, err error) {
 	client, err := p.APIConfig.Connect()
 	if err != nil {
 		return nil, nil, err

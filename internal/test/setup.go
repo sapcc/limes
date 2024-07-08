@@ -27,7 +27,7 @@ import (
 	"time"
 
 	"github.com/go-gorp/gorp/v3"
-	"github.com/gophercloud/gophercloud"
+	"github.com/gophercloud/gophercloud/v2"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/gopherpolicy"
@@ -116,7 +116,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 	var s Setup
 	s.Ctx = context.Background()
 	s.DB = initDatabase(t, params.DBFixtureFile)
-	s.Cluster = initCluster(t, params.ConfigYAML)
+	s.Cluster = initCluster(t, s.Ctx, params.ConfigYAML)
 	s.Clock = mock.NewClock()
 	s.Registry = prometheus.NewPedanticRegistry()
 
@@ -200,10 +200,10 @@ func initDatabase(t *testing.T, fixtureFile string) *gorp.DbMap {
 	return dbm
 }
 
-func initCluster(t *testing.T, configYAML string) *core.Cluster {
+func initCluster(t *testing.T, ctx context.Context, configYAML string) *core.Cluster {
 	cluster, errs := core.NewClusterFromYAML([]byte(configYAML))
 	if errs.IsEmpty() {
-		errs = cluster.Connect(nil, gophercloud.EndpointOpts{})
+		errs = cluster.Connect(ctx, nil, gophercloud.EndpointOpts{})
 	}
 	for _, err := range errs {
 		t.Error(err)
@@ -238,7 +238,7 @@ func (s *Setup) AddCapacityPlugin(t *testing.T, configYAML string) core.Capacity
 	if err != nil {
 		t.Fatal("failed to supply params to capacitor: " + err.Error())
 	}
-	err = plugin.Init(nil, gophercloud.EndpointOpts{})
+	err = plugin.Init(s.Ctx, nil, gophercloud.EndpointOpts{})
 	if err != nil {
 		t.Fatal(err)
 	}

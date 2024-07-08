@@ -20,10 +20,11 @@
 package plugins
 
 import (
+	"context"
 	"math/big"
 	"net/http"
 
-	"github.com/gophercloud/gophercloud"
+	"github.com/gophercloud/gophercloud/v2"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
@@ -53,7 +54,7 @@ func init() {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *archerPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
+func (p *archerPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
 	serviceType := "endpoint-services"
 	eo.ApplyDefaults(serviceType)
 
@@ -94,11 +95,11 @@ func (p *archerPlugin) Rates() []limesrates.RateInfo {
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *archerPlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
+func (p *archerPlugin) Scrape(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
 	url := p.Archer.ServiceURL("quotas", project.UUID)
 	var res gophercloud.Result
 	//nolint:bodyclose // already closed by gophercloud
-	_, res.Err = p.Archer.Get(url, &res.Body, &gophercloud.RequestOpts{OkCodes: []int{http.StatusOK}})
+	_, res.Err = p.Archer.Get(ctx, url, &res.Body, &gophercloud.RequestOpts{OkCodes: []int{http.StatusOK}})
 
 	var archerQuota struct {
 		Endpoint      int64  `json:"endpoint"`
@@ -128,7 +129,7 @@ func (p *archerPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Avail
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *archerPlugin) SetQuota(project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
+func (p *archerPlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
 	url := p.Archer.ServiceURL("quotas", project.UUID)
 	expect200 := &gophercloud.RequestOpts{OkCodes: []int{200}}
 
@@ -137,12 +138,12 @@ func (p *archerPlugin) SetQuota(project core.KeystoneProject, quotas map[limesre
 		"service":  quotas["services"],
 	}
 	//nolint:bodyclose // already closed by gophercloud
-	_, err := p.Archer.Put(url, body, nil, expect200)
+	_, err := p.Archer.Put(ctx, url, body, nil, expect200)
 	return err
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *archerPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[limesrates.RateName]*big.Int, serializedState string, err error) {
+func (p *archerPlugin) ScrapeRates(ctx context.Context, project core.KeystoneProject, prevSerializedState string) (result map[limesrates.RateName]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 

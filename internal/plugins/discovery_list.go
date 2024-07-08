@@ -20,10 +20,12 @@
 package plugins
 
 import (
-	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/openstack"
-	"github.com/gophercloud/gophercloud/openstack/identity/v3/domains"
-	"github.com/gophercloud/gophercloud/openstack/identity/v3/projects"
+	"context"
+
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack"
+	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/domains"
+	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/projects"
 
 	"github.com/sapcc/limes/internal/core"
 )
@@ -43,14 +45,14 @@ func (p *listDiscoveryPlugin) PluginTypeID() string {
 }
 
 // Init implements the core.DiscoveryPlugin interface.
-func (p *listDiscoveryPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
+func (p *listDiscoveryPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
 	p.KeystoneV3, err = openstack.NewIdentityV3(provider, eo)
 	return err
 }
 
 // ListDomains implements the core.DiscoveryPlugin interface.
-func (p *listDiscoveryPlugin) ListDomains() ([]core.KeystoneDomain, error) {
-	allPages, err := domains.List(p.KeystoneV3, nil).AllPages()
+func (p *listDiscoveryPlugin) ListDomains(ctx context.Context) ([]core.KeystoneDomain, error) {
+	allPages, err := domains.List(p.KeystoneV3, nil).AllPages(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -70,8 +72,8 @@ func (p *listDiscoveryPlugin) ListDomains() ([]core.KeystoneDomain, error) {
 }
 
 // ListProjects implements the core.DiscoveryPlugin interface.
-func (p *listDiscoveryPlugin) ListProjects(domain core.KeystoneDomain) ([]core.KeystoneProject, error) {
-	allPages, err := projects.List(p.KeystoneV3, projects.ListOpts{DomainID: domain.UUID}).AllPages()
+func (p *listDiscoveryPlugin) ListProjects(ctx context.Context, domain core.KeystoneDomain) ([]core.KeystoneProject, error) {
+	allPages, err := projects.List(p.KeystoneV3, projects.ListOpts{DomainID: domain.UUID}).AllPages(ctx)
 	if err != nil {
 		return nil, err
 	}

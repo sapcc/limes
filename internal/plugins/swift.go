@@ -20,15 +20,16 @@
 package plugins
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"math/big"
 	"net/http"
 
-	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/openstack"
-	"github.com/majewsky/schwift"
-	"github.com/majewsky/schwift/gopherschwift"
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack"
+	"github.com/majewsky/schwift/v2"
+	"github.com/majewsky/schwift/v2/gopherschwift"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
@@ -82,7 +83,7 @@ func init() {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *swiftPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
+func (p *swiftPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
 	client, err := openstack.NewObjectStorageV1(provider, eo)
 	if err != nil {
 		return err
@@ -120,14 +121,14 @@ func (p *swiftPlugin) Account(projectUUID string) *schwift.Account {
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *swiftPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[limesrates.RateName]*big.Int, serializedState string, err error) {
+func (p *swiftPlugin) ScrapeRates(ctx context.Context, project core.KeystoneProject, prevSerializedState string) (result map[limesrates.RateName]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *swiftPlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
+func (p *swiftPlugin) Scrape(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
 	account := p.Account(project.UUID)
-	headers, err := account.Headers()
+	headers, err := account.Headers(ctx)
 	switch {
 	case schwift.Is(err, http.StatusNotFound):
 		// Swift account does not exist yet, but the Keystone project exists (usually after project creation)
@@ -152,7 +153,7 @@ func (p *swiftPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Availa
 	}
 
 	// collect object count metrics per container
-	containerInfos, err := account.Containers().CollectDetailed()
+	containerInfos, err := account.Containers().CollectDetailed(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("cannot list containers: %w", err)
 	}
@@ -187,17 +188,17 @@ func (p *swiftPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Availa
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *swiftPlugin) SetQuota(project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
+func (p *swiftPlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
 	headers := schwift.NewAccountHeaders()
 	headers.BytesUsedQuota().Set(quotas["capacity"])
 	// this header brought to you by https://github.com/sapcc/swift-addons
 	headers.Set("X-Account-Project-Domain-Id-Override", project.Domain.UUID)
 
 	account := p.Account(project.UUID)
-	err := account.Update(headers, nil)
+	err := account.Update(ctx, headers, nil)
 	if schwift.Is(err, http.StatusNotFound) && quotas["capacity"] > 0 {
 		// account does not exist yet - if there is a non-zero quota, enable it now
-		err = account.Create(headers.ToOpts())
+		err = account.Create(ctx, headers.ToOpts())
 		if err == nil {
 			logg.Info("Swift Account %s created", project.UUID)
 		}

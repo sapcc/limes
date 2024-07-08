@@ -20,21 +20,19 @@
 package nova
 
 import (
+	"context"
+	"net/http"
 	"strings"
 
-	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/volumeattach"
-	"github.com/gophercloud/gophercloud/openstack/imageservice/v2/images"
-	"github.com/sapcc/go-bits/errext"
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/volumeattach"
+	"github.com/gophercloud/gophercloud/v2/openstack/image/v2/images"
 	"github.com/sapcc/go-bits/logg"
 
 	"github.com/sapcc/limes/internal/util"
 )
-
-// use a name that's unique to github.com/gophercloud/gophercloud/openstack/imageservice/v2/images
-// to ensure that goimports does not mistakenly replace it by .../compute/v2/images
-var _ images.ImageVisibility
 
 // OSTypeProber contains the logic for filling the OSType attribute of a Nova instance subresource.
 type OSTypeProber struct {
@@ -58,21 +56,21 @@ func NewOSTypeProber(novaV2, cinderV3, glanceV2 *gophercloud.ServiceClient) *OST
 	}
 }
 
-func (p *OSTypeProber) Get(instance Instance) string {
+func (p *OSTypeProber) Get(ctx context.Context, instance servers.Server) string {
 	if instance.Image == nil {
-		return p.getFromBootVolume(instance.ID)
+		return p.getFromBootVolume(ctx, instance.ID)
 	} else {
-		return p.getFromImage(instance.Image["id"])
+		return p.getFromImage(ctx, instance.Image["id"])
 	}
 }
 
-func (p *OSTypeProber) getFromBootVolume(instanceID string) string {
+func (p *OSTypeProber) getFromBootVolume(ctx context.Context, instanceID string) string {
 	result, ok := p.CacheByInstance[instanceID]
 	if ok {
 		return result
 	}
 
-	result, err := p.findFromBootVolume(instanceID)
+	result, err := p.findFromBootVolume(ctx, instanceID)
 	if err == nil {
 		p.CacheByInstance[instanceID] = result
 		return result
@@ -82,7 +80,7 @@ func (p *OSTypeProber) getFromBootVolume(instanceID string) string {
 	}
 }
 
-func (p *OSTypeProber) getFromImage(imageIDAttribute any) string {
+func (p *OSTypeProber) getFromImage(ctx context.Context, imageIDAttribute any) string {
 	imageID, ok := imageIDAttribute.(string)
 	if !ok {
 		// malformed "image" section in the instance JSON returned by Nova
@@ -94,7 +92,7 @@ func (p *OSTypeProber) getFromImage(imageIDAttribute any) string {
 		return result
 	}
 
-	result, err := p.findFromImage(imageID)
+	result, err := p.findFromImage(ctx, imageID)
 	if err == nil {
 		p.CacheByImage[imageID] = result
 		return result
@@ -104,9 +102,9 @@ func (p *OSTypeProber) getFromImage(imageIDAttribute any) string {
 	}
 }
 
-func (p *OSTypeProber) findFromBootVolume(instanceID string) (string, error) {
+func (p *OSTypeProber) findFromBootVolume(ctx context.Context, instanceID string) (string, error) {
 	// list volume attachments
-	page, err := volumeattach.List(p.NovaV2, instanceID).AllPages()
+	page, err := volumeattach.List(p.NovaV2, instanceID).AllPages(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -133,7 +131,7 @@ func (p *OSTypeProber) findFromBootVolume(instanceID string) (string, error) {
 			VMwareOSType string `json:"vmware_ostype"`
 		} `json:"volume_image_metadata"`
 	}
-	err = volumes.Get(p.CinderV3, rootVolumeID).ExtractInto(&volume)
+	err = volumes.Get(ctx, p.CinderV3, rootVolumeID).ExtractInto(&volume)
 	if err != nil {
 		return "", err
 	}
@@ -144,15 +142,15 @@ func (p *OSTypeProber) findFromBootVolume(instanceID string) (string, error) {
 	return "unknown", nil
 }
 
-func (p *OSTypeProber) findFromImage(imageID string) (string, error) {
+func (p *OSTypeProber) findFromImage(ctx context.Context, imageID string) (string, error) {
 	var result struct {
 		Tags         []string `json:"tags"`
 		VMwareOSType string   `json:"vmware_ostype"`
 	}
-	err := images.Get(p.GlanceV2, imageID).ExtractInto(&result)
+	err := images.Get(ctx, p.GlanceV2, imageID).ExtractInto(&result)
 	if err != nil {
 		// report a dummy value if image has been deleted...
-		if errext.IsOfType[gophercloud.ErrDefault404](err) {
+		if gophercloud.ResponseCodeIs(err, http.StatusNotFound) {
 			return "image-deleted", nil
 		}
 		// otherwise, try to GET image again during next scrape

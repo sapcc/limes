@@ -20,7 +20,9 @@
 package plugins
 
 import (
-	"github.com/gophercloud/gophercloud"
+	"context"
+
+	"github.com/gophercloud/gophercloud/v2"
 
 	"github.com/sapcc/limes/internal/core"
 )
@@ -42,7 +44,7 @@ func (p *StaticDiscoveryPlugin) PluginTypeID() string {
 }
 
 // Init implements the core.DiscoveryPlugin interface.
-func (p *StaticDiscoveryPlugin) Init(client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
+func (p *StaticDiscoveryPlugin) Init(ctx context.Context, client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
 	// apply default set of domains and projects
 	if len(p.Domains) == 0 && len(p.Projects) == 0 {
 		p.Domains = []core.KeystoneDomain{
@@ -63,12 +65,12 @@ func (p *StaticDiscoveryPlugin) Init(client *gophercloud.ProviderClient, eo goph
 }
 
 // ListDomains implements the core.DiscoveryPlugin interface.
-func (p *StaticDiscoveryPlugin) ListDomains() ([]core.KeystoneDomain, error) {
+func (p *StaticDiscoveryPlugin) ListDomains(ctx context.Context) ([]core.KeystoneDomain, error) {
 	return p.Domains, nil
 }
 
 // ListProjects implements the core.DiscoveryPlugin interface.
-func (p *StaticDiscoveryPlugin) ListProjects(domain core.KeystoneDomain) ([]core.KeystoneProject, error) {
+func (p *StaticDiscoveryPlugin) ListProjects(ctx context.Context, domain core.KeystoneDomain) ([]core.KeystoneProject, error) {
 	// the domain is not duplicated in each Projects entry, so it must be added now
 	result := make([]core.KeystoneProject, len(p.Projects[domain.UUID]))
 	for idx, project := range p.Projects[domain.UUID] {

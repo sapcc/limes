@@ -20,12 +20,13 @@
 package plugins
 
 import (
+	"context"
 	"math/big"
 
-	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/openstack"
-	"github.com/gophercloud/gophercloud/openstack/dns/v2/zones"
-	"github.com/gophercloud/gophercloud/pagination"
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack"
+	"github.com/gophercloud/gophercloud/v2/openstack/dns/v2/zones"
+	"github.com/gophercloud/gophercloud/v2/pagination"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
@@ -56,7 +57,7 @@ func init() {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *designatePlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
+func (p *designatePlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
 	p.DesignateV2, err = openstack.NewDNSV2(provider, eo)
 	return err
 }
@@ -86,20 +87,20 @@ func (p *designatePlugin) Rates() []limesrates.RateInfo {
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *designatePlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[limesrates.RateName]*big.Int, serializedState string, err error) {
+func (p *designatePlugin) ScrapeRates(ctx context.Context, project core.KeystoneProject, prevSerializedState string) (result map[limesrates.RateName]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *designatePlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
+func (p *designatePlugin) Scrape(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
 	// query quotas
-	quotas, err := dnsGetQuota(p.DesignateV2, project.UUID)
+	quotas, err := dnsGetQuota(ctx, p.DesignateV2, project.UUID)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	// to query usage, start by listing all zones
-	zoneIDs, err := dnsListZoneIDs(p.DesignateV2, project.UUID)
+	zoneIDs, err := dnsListZoneIDs(ctx, p.DesignateV2, project.UUID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -109,7 +110,7 @@ func (p *designatePlugin) Scrape(project core.KeystoneProject, allAZs []limes.Av
 	// but that won't help since the quota applies per individual zone)
 	maxRecordsetsPerZone := uint64(0)
 	for _, zoneID := range zoneIDs {
-		count, err := dnsCountZoneRecordsets(p.DesignateV2, project.UUID, zoneID)
+		count, err := dnsCountZoneRecordsets(ctx, p.DesignateV2, project.UUID, zoneID)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -135,8 +136,8 @@ func (p *designatePlugin) Scrape(project core.KeystoneProject, allAZs []limes.Av
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *designatePlugin) SetQuota(project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
-	return dnsSetQuota(p.DesignateV2, project.UUID, &dnsQuota{
+func (p *designatePlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
+	return dnsSetQuota(ctx, p.DesignateV2, project.UUID, &dnsQuota{
 		Zones:          int64(quotas["zones"]),
 		ZoneRecordsets: int64(quotas["recordsets"]),
 		// set ZoneRecords quota to match ZoneRecordsets
@@ -166,7 +167,7 @@ type dnsQuota struct {
 	ZoneRecords    int64 `json:"zone_records"`
 }
 
-func dnsGetQuota(client *gophercloud.ServiceClient, projectUUID string) (*dnsQuota, error) {
+func dnsGetQuota(ctx context.Context, client *gophercloud.ServiceClient, projectUUID string) (*dnsQuota, error) {
 	url := client.ServiceURL("quotas", projectUUID)
 	opts := gophercloud.RequestOpts{
 		MoreHeaders: map[string]string{"X-Auth-All-Projects": "true"},
@@ -174,22 +175,22 @@ func dnsGetQuota(client *gophercloud.ServiceClient, projectUUID string) (*dnsQuo
 
 	var result gophercloud.Result
 	var data dnsQuota
-	_, result.Err = client.Get(url, &result.Body, &opts) //nolint:bodyclose // already closed by gophercloud
+	_, result.Err = client.Get(ctx, url, &result.Body, &opts) //nolint:bodyclose // already closed by gophercloud
 	err := result.ExtractInto(&data)
 	return &data, err
 }
 
-func dnsSetQuota(client *gophercloud.ServiceClient, projectUUID string, quota *dnsQuota) error {
+func dnsSetQuota(ctx context.Context, client *gophercloud.ServiceClient, projectUUID string, quota *dnsQuota) error {
 	url := client.ServiceURL("quotas", projectUUID)
 	opts := gophercloud.RequestOpts{
 		MoreHeaders: map[string]string{"X-Auth-All-Projects": "true"},
 	}
 
-	_, err := client.Patch(url, quota, nil, &opts) //nolint:bodyclose // already closed by gophercloud
+	_, err := client.Patch(ctx, url, quota, nil, &opts) //nolint:bodyclose // already closed by gophercloud
 	return err
 }
 
-func dnsListZoneIDs(client *gophercloud.ServiceClient, projectUUID string) ([]string, error) {
+func dnsListZoneIDs(ctx context.Context, client *gophercloud.ServiceClient, projectUUID string) ([]string, error) {
 	pager := zones.List(client, zones.ListOpts{})
 	pager.Headers = map[string]string{
 		"X-Auth-All-Projects":    "false",
@@ -197,7 +198,7 @@ func dnsListZoneIDs(client *gophercloud.ServiceClient, projectUUID string) ([]st
 	}
 
 	var ids []string
-	err := pager.EachPage(func(page pagination.Page) (bool, error) {
+	err := pager.EachPage(ctx, func(ctx context.Context, page pagination.Page) (bool, error) {
 		zones, err := zones.ExtractZones(page)
 		if err != nil {
 			return false, err
@@ -210,7 +211,7 @@ func dnsListZoneIDs(client *gophercloud.ServiceClient, projectUUID string) ([]st
 	return ids, err
 }
 
-func dnsCountZoneRecordsets(client *gophercloud.ServiceClient, projectUUID, zoneID string) (uint64, error) {
+func dnsCountZoneRecordsets(ctx context.Context, client *gophercloud.ServiceClient, projectUUID, zoneID string) (uint64, error) {
 	url := client.ServiceURL("zones", zoneID, "recordsets")
 	opts := gophercloud.RequestOpts{
 		MoreHeaders: map[string]string{
@@ -228,7 +229,7 @@ func dnsCountZoneRecordsets(client *gophercloud.ServiceClient, projectUUID, zone
 			Count uint64 `json:"total_count"`
 		} `json:"metadata"`
 	}
-	_, result.Err = client.Get(url, &result.Body, &opts) //nolint:bodyclose // already closed by gophercloud
+	_, result.Err = client.Get(ctx, url, &result.Body, &opts) //nolint:bodyclose // already closed by gophercloud
 	err := result.ExtractInto(&data)
 	return data.Metadata.Count, err
 }

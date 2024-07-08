@@ -20,14 +20,15 @@
 package nova
 
 import (
+	"context"
 	"fmt"
 	"slices"
 	"strings"
 
-	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/aggregates"
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/hypervisors"
-	"github.com/gophercloud/gophercloud/openstack/placement/v1/resourceproviders"
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/aggregates"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/hypervisors"
+	"github.com/gophercloud/gophercloud/v2/openstack/placement/v1/resourceproviders"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/regexpext"
@@ -50,9 +51,9 @@ type HypervisorSelection struct {
 
 // ForeachHypervisor lists all Nova hypervisors matching this
 // HypervisorSelection, and calls the given callback once for each of them.
-func (s HypervisorSelection) ForeachHypervisor(novaV2, placementV1 *gophercloud.ServiceClient, action func(MatchingHypervisor) error) error {
+func (s HypervisorSelection) ForeachHypervisor(ctx context.Context, novaV2, placementV1 *gophercloud.ServiceClient, action func(MatchingHypervisor) error) error {
 	// enumerate hypervisors
-	page, err := hypervisors.List(novaV2, nil).AllPages()
+	page, err := hypervisors.List(novaV2, nil).AllPages(ctx)
 	if err != nil {
 		return fmt.Errorf("while listing hypervisors: %w", err)
 	}
@@ -65,7 +66,7 @@ func (s HypervisorSelection) ForeachHypervisor(novaV2, placementV1 *gophercloud.
 	}
 
 	// enumerate aggregates which establish the hypervisor <-> AZ mapping
-	page, err = aggregates.List(novaV2).AllPages()
+	page, err = aggregates.List(novaV2).AllPages(ctx)
 	if err != nil {
 		return fmt.Errorf("while listing aggregates: %w", err)
 	}
@@ -75,7 +76,7 @@ func (s HypervisorSelection) ForeachHypervisor(novaV2, placementV1 *gophercloud.
 	}
 
 	// enumerate resource providers (there should be one resource provider per hypervisor)
-	page, err = resourceproviders.List(placementV1, nil).AllPages()
+	page, err = resourceproviders.List(placementV1, nil).AllPages(ctx)
 	if err != nil {
 		return fmt.Errorf("while listing resource providers: %w", err)
 	}
@@ -99,7 +100,7 @@ OUTER:
 		if err != nil {
 			return err
 		}
-		traits, err := resourceproviders.GetTraits(placementV1, providerID).Extract()
+		traits, err := resourceproviders.GetTraits(ctx, placementV1, providerID).Extract()
 		if err != nil {
 			return fmt.Errorf("while getting traits for resource provider %s: %w", providerID, err)
 		}
@@ -121,11 +122,11 @@ OUTER:
 
 		// check that resource provider reports any capacity (we want to ignore
 		// half-configured hypervisors that are still in buildup)
-		inventories, err := resourceproviders.GetInventories(placementV1, providerID).Extract()
+		inventories, err := resourceproviders.GetInventories(ctx, placementV1, providerID).Extract()
 		if err != nil {
 			return fmt.Errorf("while getting inventories for resource provider %s: %w", providerID, err)
 		}
-		usages, err := resourceproviders.GetUsages(placementV1, providerID).Extract()
+		usages, err := resourceproviders.GetUsages(ctx, placementV1, providerID).Extract()
 		if err != nil {
 			return fmt.Errorf("while getting usages for resource provider %s: %w", providerID, err)
 		}

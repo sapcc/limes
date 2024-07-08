@@ -20,17 +20,18 @@
 package plugins
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"math/big"
 	"slices"
 
-	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/openstack"
-	"github.com/gophercloud/gophercloud/openstack/blockstorage/extensions/quotasets"
-	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/snapshots"
-	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
-	"github.com/gophercloud/gophercloud/pagination"
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack"
+	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/quotasets"
+	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/snapshots"
+	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
+	"github.com/gophercloud/gophercloud/v2/pagination"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
@@ -53,7 +54,7 @@ func init() {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *cinderPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
+func (p *cinderPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
 	if len(p.VolumeTypes) == 0 {
 		return errors.New("quota plugin volumev2: missing required configuration field volumev2.volume_types")
 	}
@@ -149,16 +150,16 @@ func (f quotaSetField) ToResourceData(allAZs []limes.AvailabilityZone) core.Reso
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *cinderPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[limesrates.RateName]*big.Int, serializedState string, err error) {
+func (p *cinderPlugin) ScrapeRates(ctx context.Context, project core.KeystoneProject, prevSerializedState string) (result map[limesrates.RateName]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *cinderPlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]core.ResourceData, _ []byte, err error) {
+func (p *cinderPlugin) Scrape(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]core.ResourceData, _ []byte, err error) {
 	var data struct {
 		QuotaSet map[string]quotaSetField `json:"quota_set"`
 	}
-	err = quotasets.GetUsage(p.CinderV3, project.UUID).ExtractInto(&data)
+	err = quotasets.GetUsage(ctx, p.CinderV3, project.UUID).ExtractInto(&data)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -172,12 +173,12 @@ func (p *cinderPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Avail
 
 	//NOTE: We always enumerate subresources, even if we don't end up reporting
 	// them, to calculate the AZ breakdown.
-	placementForVolumeUUID, err := p.collectVolumeSubresources(project, allAZs, result)
+	placementForVolumeUUID, err := p.collectVolumeSubresources(ctx, project, allAZs, result)
 	if err != nil {
 		return nil, nil, err
 	}
 	if p.WithSnapshotSubresources {
-		err = p.collectSnapshotSubresources(project, allAZs, placementForVolumeUUID, result)
+		err = p.collectSnapshotSubresources(ctx, project, allAZs, placementForVolumeUUID, result)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -217,14 +218,14 @@ type cinderSnapshotSubresource struct {
 	VolumeUUID string              `json:"volume_id"`
 }
 
-func (p *cinderPlugin) collectVolumeSubresources(project core.KeystoneProject, allAZs []limes.AvailabilityZone, result map[limesresources.ResourceName]core.ResourceData) (placementForVolumeUUID map[string]cinderVolumePlacement, err error) {
+func (p *cinderPlugin) collectVolumeSubresources(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone, result map[limesresources.ResourceName]core.ResourceData) (placementForVolumeUUID map[string]cinderVolumePlacement, err error) {
 	placementForVolumeUUID = make(map[string]cinderVolumePlacement)
 	listOpts := volumes.ListOpts{
 		AllTenants: true,
 		TenantID:   project.UUID,
 	}
 
-	err = volumes.List(p.CinderV3, listOpts).EachPage(func(page pagination.Page) (bool, error) {
+	err = volumes.List(p.CinderV3, listOpts).EachPage(ctx, func(ctx context.Context, page pagination.Page) (bool, error) {
 		vols, err := volumes.ExtractVolumes(page)
 		if err != nil {
 			return false, err
@@ -264,13 +265,13 @@ func (p *cinderPlugin) collectVolumeSubresources(project core.KeystoneProject, a
 	return placementForVolumeUUID, err
 }
 
-func (p *cinderPlugin) collectSnapshotSubresources(project core.KeystoneProject, allAZs []limes.AvailabilityZone, placementForVolumeUUID map[string]cinderVolumePlacement, result map[limesresources.ResourceName]core.ResourceData) error {
+func (p *cinderPlugin) collectSnapshotSubresources(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone, placementForVolumeUUID map[string]cinderVolumePlacement, result map[limesresources.ResourceName]core.ResourceData) error {
 	listOpts := snapshots.ListOpts{
 		AllTenants: true,
 		TenantID:   project.UUID,
 	}
 
-	err := snapshots.List(p.CinderV3, listOpts).EachPage(func(page pagination.Page) (bool, error) {
+	err := snapshots.List(p.CinderV3, listOpts).EachPage(ctx, func(ctx context.Context, page pagination.Page) (bool, error) {
 		snaps, err := snapshots.ExtractSnapshots(page)
 		if err != nil {
 			return false, err
@@ -307,7 +308,7 @@ func (p *cinderPlugin) collectSnapshotSubresources(project core.KeystoneProject,
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *cinderPlugin) SetQuota(project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
+func (p *cinderPlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
 	var requestData struct {
 		QuotaSet map[string]uint64 `json:"quota_set"`
 	}
@@ -328,7 +329,7 @@ func (p *cinderPlugin) SetQuota(project core.KeystoneProject, quotas map[limesre
 	}
 
 	url := p.CinderV3.ServiceURL("os-quota-sets", project.UUID)
-	_, err := p.CinderV3.Put(url, requestData, nil, &gophercloud.RequestOpts{OkCodes: []int{200}}) //nolint:bodyclose // already closed by gophercloud
+	_, err := p.CinderV3.Put(ctx, url, requestData, nil, &gophercloud.RequestOpts{OkCodes: []int{200}}) //nolint:bodyclose // already closed by gophercloud
 	return err
 }
 

@@ -20,15 +20,16 @@
 package plugins
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
 	"strings"
 
-	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/openstack"
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
@@ -69,7 +70,7 @@ func init() {
 }
 
 // Init implements the core.CapacityPlugin interface.
-func (p *capacityNovaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
+func (p *capacityNovaPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
 	if p.HypervisorSelection.AggregateNameRx == "" {
 		return errors.New("missing value for params.hypervisor_selection.aggregate_name_pattern")
 	}
@@ -102,10 +103,10 @@ func (p *capacityNovaPlugin) PluginTypeID() string {
 }
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (result map[limes.ServiceType]map[limesresources.ResourceName]core.PerAZ[core.CapacityData], serializedMetrics []byte, err error) {
+func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (result map[limes.ServiceType]map[limesresources.ResourceName]core.PerAZ[core.CapacityData], serializedMetrics []byte, err error) {
 	// collect info about flavors with separate instance quota
 	// (we are calling these "split flavors" here, as opposed to "pooled flavors" that share a common pool of CPU/instances/RAM capacity)
-	allSplitFlavorNames, err := p.FlavorAliases.ListFlavorsWithSeparateInstanceQuota(p.NovaV2)
+	allSplitFlavorNames, err := p.FlavorAliases.ListFlavorsWithSeparateInstanceQuota(ctx, p.NovaV2)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -120,7 +121,7 @@ func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel, 
 		splitFlavors    []nova.FullFlavor
 		maxRootDiskSize = uint64(0)
 	)
-	err = p.FlavorSelection.ForeachFlavor(p.NovaV2, func(f nova.FullFlavor) error {
+	err = p.FlavorSelection.ForeachFlavor(ctx, p.NovaV2, func(f nova.FullFlavor) error {
 		if isSplitFlavorName[f.Flavor.Name] {
 			splitFlavors = append(splitFlavors, f)
 		} else if f.Flavor.IsPublic {
@@ -187,7 +188,7 @@ func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel, 
 	hypervisorsByAZ := make(map[limes.AvailabilityZone]nova.BinpackHypervisors)
 	shadowedHypervisorsByAZ := make(map[limes.AvailabilityZone][]nova.MatchingHypervisor)
 	isShadowedHVHostname := make(map[string]bool)
-	err = p.HypervisorSelection.ForeachHypervisor(p.NovaV2, p.PlacementV1, func(h nova.MatchingHypervisor) error {
+	err = p.HypervisorSelection.ForeachHypervisor(ctx, p.NovaV2, p.PlacementV1, func(h nova.MatchingHypervisor) error {
 		// report wellformed-ness of this HV via metrics
 		if h.ShadowedByTrait != "" {
 			metrics.Hypervisors = append(metrics.Hypervisors, novaHypervisorMetrics{
@@ -254,7 +255,7 @@ func (p *capacityNovaPlugin) Scrape(backchannel core.CapacityPluginBackchannel, 
 			Flavor:     flavor.Flavor.ID,
 			AllTenants: true,
 		}
-		allPages, err := servers.List(p.NovaV2, listOpts).AllPages()
+		allPages, err := servers.List(p.NovaV2, listOpts).AllPages(ctx)
 		if err != nil {
 			return nil, nil, fmt.Errorf("while listing active instances for flavor %s: %w", flavor.Flavor.Name, err)
 		}

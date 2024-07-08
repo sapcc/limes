@@ -47,8 +47,8 @@ func (c *Collector) ScanDomainsAndProjectsJob(registerer prometheus.Registerer) 
 			},
 		},
 		Interval: 3 * time.Minute,
-		Task: func(_ context.Context, _ prometheus.Labels) error {
-			_, err := c.ScanDomains(ScanDomainsOpts{ScanAllProjects: true})
+		Task: func(ctx context.Context, _ prometheus.Labels) error {
+			_, err := c.ScanDomains(ctx, ScanDomainsOpts{ScanAllProjects: true})
 			return err
 		},
 	}).Setup(registerer)
@@ -63,9 +63,9 @@ type ScanDomainsOpts struct {
 
 // ScanDomains queries Keystone to discover new domains, and returns a
 // list of UUIDs for the newly discovered domains.
-func (c *Collector) ScanDomains(opts ScanDomainsOpts) (result []string, resultErr error) {
+func (c *Collector) ScanDomains(ctx context.Context, opts ScanDomainsOpts) (result []string, resultErr error) {
 	// list domains in Keystone
-	allDomains, err := c.Cluster.DiscoveryPlugin.ListDomains()
+	allDomains, err := c.Cluster.DiscoveryPlugin.ListDomains(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("while listing domains: %w", util.UnpackError(err))
 	}
@@ -128,7 +128,7 @@ func (c *Collector) ScanDomains(opts ScanDomainsOpts) (result []string, resultEr
 		if opts.ScanAllProjects {
 			dbDomains = append(dbDomains, dbDomain)
 		} else {
-			_, err = c.ScanProjects(dbDomain)
+			_, err = c.ScanProjects(ctx, dbDomain)
 			if err != nil {
 				return result, err
 			}
@@ -138,7 +138,7 @@ func (c *Collector) ScanDomains(opts ScanDomainsOpts) (result []string, resultEr
 	// recurse into ScanProjects if requested
 	if opts.ScanAllProjects {
 		for _, dbDomain := range dbDomains {
-			_, err = c.ScanProjects(dbDomain)
+			_, err = c.ScanProjects(ctx, dbDomain)
 			if err != nil {
 				return result, err
 			}
@@ -149,9 +149,9 @@ func (c *Collector) ScanDomains(opts ScanDomainsOpts) (result []string, resultEr
 }
 
 // ScanProjects queries Keystone to discover new projects in the given domain.
-func (c *Collector) ScanProjects(domain *db.Domain) (result []string, resultErr error) {
+func (c *Collector) ScanProjects(ctx context.Context, domain *db.Domain) (result []string, resultErr error) {
 	// list projects in Keystone
-	projects, err := c.Cluster.DiscoveryPlugin.ListProjects(core.KeystoneDomainFromDB(*domain))
+	projects, err := c.Cluster.DiscoveryPlugin.ListProjects(ctx, core.KeystoneDomainFromDB(*domain))
 	if err != nil {
 		return nil, fmt.Errorf("while listing projects in domain %q: %w", domain.Name, util.UnpackError(err))
 	}

@@ -24,7 +24,7 @@ import (
 	"math"
 	"strings"
 
-	"github.com/gophercloud/gophercloud/openstack/placement/v1/resourceproviders"
+	"github.com/gophercloud/gophercloud/v2/openstack/placement/v1/resourceproviders"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-bits/logg"
 

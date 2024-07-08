@@ -20,16 +20,17 @@
 package plugins
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"slices"
 	"strings"
 
-	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/openstack"
-	"github.com/gophercloud/gophercloud/openstack/sharedfilesystems/v2/schedulerstats"
-	"github.com/gophercloud/gophercloud/openstack/sharedfilesystems/v2/services"
-	"github.com/gophercloud/gophercloud/pagination"
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack"
+	"github.com/gophercloud/gophercloud/v2/openstack/sharedfilesystems/v2/schedulerstats"
+	"github.com/gophercloud/gophercloud/v2/openstack/sharedfilesystems/v2/services"
+	"github.com/gophercloud/gophercloud/v2/pagination"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
@@ -67,7 +68,7 @@ func init() {
 }
 
 // Init implements the core.CapacityPlugin interface.
-func (p *capacityManilaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
+func (p *capacityManilaPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
 	if len(p.ShareTypes) == 0 {
 		return errors.New("capacity plugin manila: missing required configuration field manila.share_types")
 	}
@@ -104,8 +105,8 @@ func (p *capacityManilaPlugin) makeResourceName(kind string, shareType ManilaSha
 }
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *capacityManilaPlugin) Scrape(backchannel core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (result map[limes.ServiceType]map[limesresources.ResourceName]core.PerAZ[core.CapacityData], _ []byte, err error) {
-	allPages, err := services.List(p.ManilaV2, nil).AllPages()
+func (p *capacityManilaPlugin) Scrape(ctx context.Context, backchannel core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (result map[limes.ServiceType]map[limesresources.ResourceName]core.PerAZ[core.CapacityData], _ []byte, err error) {
+	allPages, err := services.List(p.ManilaV2, nil).AllPages(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -172,7 +173,7 @@ func (p *capacityManilaPlugin) Scrape(backchannel core.CapacityPluginBackchannel
 		// ^ NOTE: If p.WithSnapmirror is false, `snapmirrorCapacityDemand[az]` is always zero-valued
 		// and thus no capacity will be allocated to the snapmirror_capacity resource.
 
-		capForType, err := p.scrapeForShareType(shareType, azForServiceHost, allAZs, shareCapacityDemand, snapshotCapacityDemand, snapmirrorCapacityDemand)
+		capForType, err := p.scrapeForShareType(ctx, shareType, azForServiceHost, allAZs, shareCapacityDemand, snapshotCapacityDemand, snapmirrorCapacityDemand)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -226,11 +227,11 @@ func (opts poolsListDetailOpts) ToPoolsListQuery() (string, error) {
 	return q.String(), err
 }
 
-func (p *capacityManilaPlugin) scrapeForShareType(shareType ManilaShareTypeSpec, azForServiceHost map[string]limes.AvailabilityZone, allAZs []limes.AvailabilityZone, shareCapacityDemand, snapshotCapacityDemand, snapmirrorCapacityDemand map[limes.AvailabilityZone]core.ResourceDemand) (capacityForShareType, error) {
+func (p *capacityManilaPlugin) scrapeForShareType(ctx context.Context, shareType ManilaShareTypeSpec, azForServiceHost map[string]limes.AvailabilityZone, allAZs []limes.AvailabilityZone, shareCapacityDemand, snapshotCapacityDemand, snapmirrorCapacityDemand map[limes.AvailabilityZone]core.ResourceDemand) (capacityForShareType, error) {
 	// list all pools for the Manila share types corresponding to this virtual share type
 	allPoolsByAZ := make(map[limes.AvailabilityZone][]*manilaPool)
 	for _, stName := range getAllManilaShareTypes(shareType) {
-		allPages, err := schedulerstats.ListDetail(p.ManilaV2, poolsListDetailOpts{ShareType: stName}).AllPages()
+		allPages, err := schedulerstats.ListDetail(p.ManilaV2, poolsListDetailOpts{ShareType: stName}).AllPages(ctx)
 		if err != nil {
 			return capacityForShareType{}, err
 		}

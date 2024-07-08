@@ -20,10 +20,11 @@
 package nova
 
 import (
+	"context"
 	"slices"
 	"strings"
 
-	"github.com/gophercloud/gophercloud"
+	"github.com/gophercloud/gophercloud/v2"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 )
 
@@ -137,9 +138,9 @@ func (t FlavorTranslationTable) NovaQuotaNameForLimesResourceName(resourceName l
 
 // ListFlavorsWithSeparateInstanceQuota queries Nova for all separate instance
 // quotas, and returns the flavor names that Nova prefers for each.
-func (t FlavorTranslationTable) ListFlavorsWithSeparateInstanceQuota(computeV2 *gophercloud.ServiceClient) ([]string, error) {
+func (t FlavorTranslationTable) ListFlavorsWithSeparateInstanceQuota(ctx context.Context, computeV2 *gophercloud.ServiceClient) ([]string, error) {
 	var flavorNames []string
-	err := FlavorSelection{}.ForeachFlavor(computeV2, func(f FullFlavor) error {
+	err := FlavorSelection{}.ForeachFlavor(ctx, computeV2, func(f FullFlavor) error {
 		if f.ExtraSpecs["quota:separate"] == "true" {
 			flavorNames = append(flavorNames, f.Flavor.Name)
 			t.recordNovaPreferredName(f.Flavor.Name)
