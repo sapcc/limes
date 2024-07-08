@@ -84,13 +84,15 @@ func main() {
 	wrap.SetOverrideUserAgent(bininfo.Component(), bininfo.VersionOr("rolling"))
 	wrap.Attach(util.AddLoggingRoundTripper)
 
+	ctx := httpext.ContextWithSIGINT(context.Background(), 10*time.Second)
+
 	// connect to OpenStack
 	ao, err := clientconfig.AuthOptions(nil)
 	if err != nil {
 		logg.Fatal("cannot find OpenStack credentials: " + err.Error())
 	}
 	ao.AllowReauth = true
-	provider, err := openstack.AuthenticatedClient(*ao)
+	provider, err := openstack.AuthenticatedClient(ctx, *ao)
 	if err != nil {
 		logg.Fatal("cannot initialize OpenStack client: " + err.Error())
 	}
@@ -102,26 +104,26 @@ func main() {
 	// load configuration and connect to cluster
 	cluster, errs := core.NewClusterFromYAML(must.Return(os.ReadFile(configPath)))
 	errs.LogFatalIfError()
-	errs = cluster.Connect(provider, eo)
+	errs = cluster.Connect(ctx, provider, eo)
 	errs.LogFatalIfError()
 	api.StartAuditTrail()
 
 	// select task
 	switch taskName {
 	case "collect":
-		taskCollect(cluster, remainingArgs)
+		taskCollect(ctx, cluster, remainingArgs)
 	case "serve":
-		taskServe(cluster, remainingArgs, provider, eo)
+		taskServe(ctx, cluster, remainingArgs, provider, eo)
 	case "serve-data-metrics":
-		taskServeDataMetrics(cluster, remainingArgs)
+		taskServeDataMetrics(ctx, cluster, remainingArgs)
 	case "test-get-quota":
-		taskTestGetQuota(cluster, remainingArgs)
+		taskTestGetQuota(ctx, cluster, remainingArgs)
 	case "test-get-rates":
-		taskTestGetRates(cluster, remainingArgs)
+		taskTestGetRates(ctx, cluster, remainingArgs)
 	case "test-set-quota":
-		taskTestSetQuota(cluster, remainingArgs)
+		taskTestSetQuota(ctx, cluster, remainingArgs)
 	case "test-scan-capacity":
-		taskTestScanCapacity(cluster, remainingArgs)
+		taskTestScanCapacity(ctx, cluster, remainingArgs)
 	default:
 		printUsageAndExit(1)
 	}
@@ -144,12 +146,10 @@ func printUsageAndExit(exitCode int) {
 ////////////////////////////////////////////////////////////////////////////////
 // task: collect
 
-func taskCollect(cluster *core.Cluster, args []string) {
+func taskCollect(ctx context.Context, cluster *core.Cluster, args []string) {
 	if len(args) != 0 {
 		printUsageAndExit(1)
 	}
-
-	ctx := httpext.ContextWithSIGINT(context.Background(), 10*time.Second)
 
 	// connect to database
 	dbm := must.Return(db.Init())
@@ -197,7 +197,7 @@ func taskCollect(cluster *core.Cluster, args []string) {
 ////////////////////////////////////////////////////////////////////////////////
 // task: serve
 
-func taskServe(cluster *core.Cluster, args []string, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) {
+func taskServe(ctx context.Context, cluster *core.Cluster, args []string, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) {
 	if len(args) != 0 {
 		printUsageAndExit(1)
 	}
@@ -224,19 +224,16 @@ func taskServe(cluster *core.Cluster, args []string, provider *gophercloud.Provi
 
 	// start HTTP server
 	apiListenAddr := osext.GetenvOrDefault("LIMES_API_LISTEN_ADDRESS", ":80")
-	ctx := httpext.ContextWithSIGINT(context.Background(), 10*time.Second)
 	must.Succeed(httpext.ListenAndServeContext(ctx, apiListenAddr, mux))
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // task: serve data metrics
 
-func taskServeDataMetrics(cluster *core.Cluster, args []string) {
+func taskServeDataMetrics(ctx context.Context, cluster *core.Cluster, args []string) {
 	if len(args) != 0 {
 		printUsageAndExit(1)
 	}
-
-	ctx := httpext.ContextWithSIGINT(context.Background(), 10*time.Second)
 
 	// connect to database
 	dbm := must.Return(db.Init())
@@ -264,19 +261,19 @@ func taskServeDataMetrics(cluster *core.Cluster, args []string) {
 ////////////////////////////////////////////////////////////////////////////////
 // tasks: test quota plugin
 
-func taskTestGetQuota(cluster *core.Cluster, args []string) {
+func taskTestGetQuota(ctx context.Context, cluster *core.Cluster, args []string) {
 	if len(args) != 2 {
 		printUsageAndExit(1)
 	}
 
 	serviceType := limes.ServiceType(args[1])
-	project := must.Return(findProjectForTesting(cluster, args[0]))
+	project := must.Return(findProjectForTesting(ctx, cluster, args[0]))
 
 	if _, ok := cluster.QuotaPlugins[serviceType]; !ok {
 		logg.Fatal("unknown service type: %s", serviceType)
 	}
 
-	result, serializedMetrics, err := cluster.QuotaPlugins[serviceType].Scrape(project, cluster.Config.AvailabilityZones)
+	result, serializedMetrics, err := cluster.QuotaPlugins[serviceType].Scrape(ctx, project, cluster.Config.AvailabilityZones)
 	must.Succeed(err)
 
 	for resourceName := range result {
@@ -300,7 +297,7 @@ func taskTestGetQuota(cluster *core.Cluster, args []string) {
 	must.Succeed(enc.Encode(result))
 }
 
-func taskTestGetRates(cluster *core.Cluster, args []string) {
+func taskTestGetRates(ctx context.Context, cluster *core.Cluster, args []string) {
 	var prevSerializedState string
 	switch len(args) {
 	case 2:
@@ -312,9 +309,9 @@ func taskTestGetRates(cluster *core.Cluster, args []string) {
 	}
 
 	serviceType := limes.ServiceType(args[1])
-	project := must.Return(findProjectForTesting(cluster, args[0]))
+	project := must.Return(findProjectForTesting(ctx, cluster, args[0]))
 
-	result, serializedState, err := cluster.QuotaPlugins[serviceType].ScrapeRates(project, prevSerializedState)
+	result, serializedState, err := cluster.QuotaPlugins[serviceType].ScrapeRates(ctx, project, prevSerializedState)
 	must.Succeed(err)
 	if serializedState != "" {
 		logg.Info("scrape returned new serialized state: %s", serializedState)
@@ -333,13 +330,13 @@ func taskTestGetRates(cluster *core.Cluster, args []string) {
 	must.Succeed(enc.Encode(result))
 }
 
-func findProjectForTesting(cluster *core.Cluster, projectUUID string) (core.KeystoneProject, error) {
-	domains, err := cluster.DiscoveryPlugin.ListDomains()
+func findProjectForTesting(ctx context.Context, cluster *core.Cluster, projectUUID string) (core.KeystoneProject, error) {
+	domains, err := cluster.DiscoveryPlugin.ListDomains(ctx)
 	if err != nil {
 		return core.KeystoneProject{}, util.UnpackError(err)
 	}
 	for _, d := range domains {
-		projects, err := cluster.DiscoveryPlugin.ListProjects(d)
+		projects, err := cluster.DiscoveryPlugin.ListProjects(ctx, d)
 		if err != nil {
 			return core.KeystoneProject{}, util.UnpackError(err)
 		}
@@ -387,13 +384,13 @@ func dumpGeneratedPrometheusMetrics() {
 	}
 }
 
-func taskTestSetQuota(cluster *core.Cluster, args []string) {
+func taskTestSetQuota(ctx context.Context, cluster *core.Cluster, args []string) {
 	if len(args) < 3 {
 		printUsageAndExit(1)
 	}
 
 	serviceType := limes.ServiceType(args[1])
-	project := must.Return(findProjectForTesting(cluster, args[0]))
+	project := must.Return(findProjectForTesting(ctx, cluster, args[0]))
 
 	quotaValueRx := regexp.MustCompile(`^([^=]+)=(\d+)$`)
 	quotaValues := make(map[limesresources.ResourceName]uint64)
@@ -409,13 +406,13 @@ func taskTestSetQuota(cluster *core.Cluster, args []string) {
 		quotaValues[limesresources.ResourceName(match[1])] = val
 	}
 
-	must.Succeed(cluster.QuotaPlugins[serviceType].SetQuota(project, quotaValues))
+	must.Succeed(cluster.QuotaPlugins[serviceType].SetQuota(ctx, project, quotaValues))
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // task: test-scan-capacity
 
-func taskTestScanCapacity(cluster *core.Cluster, args []string) {
+func taskTestScanCapacity(ctx context.Context, cluster *core.Cluster, args []string) {
 	if len(args) != 1 {
 		printUsageAndExit(1)
 	}
@@ -426,7 +423,7 @@ func taskTestScanCapacity(cluster *core.Cluster, args []string) {
 		logg.Fatal("unknown capacitor: %s", capacitorID)
 	}
 
-	capacities, serializedMetrics, err := plugin.Scrape(mockCapacityPluginBackchannel{cluster}, cluster.Config.AvailabilityZones)
+	capacities, serializedMetrics, err := plugin.Scrape(ctx, mockCapacityPluginBackchannel{cluster}, cluster.Config.AvailabilityZones)
 	if err != nil {
 		logg.Error("Scrape failed: %s", util.UnpackError(err).Error())
 		capacities = nil

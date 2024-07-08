@@ -35,7 +35,7 @@ func Test_Consistency(t *testing.T) {
 	consistencyJob := c.CheckConsistencyJob(s.Registry)
 
 	// run ScanDomains once to establish a baseline
-	_, err := c.ScanDomains(ScanDomainsOpts{})
+	_, err := c.ScanDomains(s.Ctx, ScanDomainsOpts{})
 	if err != nil {
 		t.Errorf("ScanDomains failed: %v", err)
 	}

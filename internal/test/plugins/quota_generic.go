@@ -20,6 +20,7 @@
 package plugins
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -70,7 +71,7 @@ var resources = []limesresources.ResourceInfo{
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *GenericQuotaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
+func (p *GenericQuotaPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
 	p.StaticResourceData = map[limesresources.ResourceName]*core.ResourceData{
 		"things": {
 			Quota: 42,
@@ -116,7 +117,7 @@ func (p *GenericQuotaPlugin) Rates() []limesrates.RateInfo {
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *GenericQuotaPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[limesrates.RateName]*big.Int, serializedState string, err error) {
+func (p *GenericQuotaPlugin) ScrapeRates(ctx context.Context, project core.KeystoneProject, prevSerializedState string) (result map[limesrates.RateName]*big.Int, serializedState string, err error) {
 	if p.ScrapeFails {
 		return nil, "", errors.New("ScrapeRates failed as requested")
 	}
@@ -146,7 +147,7 @@ func (p *GenericQuotaPlugin) ScrapeRates(project core.KeystoneProject, prevSeria
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *GenericQuotaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
+func (p *GenericQuotaPlugin) Scrape(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
 	if p.ScrapeFails {
 		return nil, nil, errors.New("Scrape failed as requested")
 	}
@@ -220,7 +221,7 @@ func (p *GenericQuotaPlugin) Scrape(project core.KeystoneProject, allAZs []limes
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *GenericQuotaPlugin) SetQuota(project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
+func (p *GenericQuotaPlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
 	if p.SetQuotaFails {
 		return errors.New("SetQuota failed as requested")
 	}

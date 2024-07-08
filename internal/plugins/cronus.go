@@ -20,6 +20,7 @@
 package plugins
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -64,7 +65,7 @@ func init() {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
+func (p *cronusPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
 	p.CronusV1, err = newCronusClient(provider, eo)
 	return err
 }
@@ -94,12 +95,12 @@ func (p *cronusPlugin) Rates() []limesrates.RateInfo {
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
+func (p *cronusPlugin) Scrape(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
 	return nil, nil, nil
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) SetQuota(project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
+func (p *cronusPlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
 	return nil
 }
 
@@ -116,7 +117,7 @@ type cronusState struct {
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[limesrates.RateName]*big.Int, serializedState string, err error) {
+func (p *cronusPlugin) ScrapeRates(ctx context.Context, project core.KeystoneProject, prevSerializedState string) (result map[limesrates.RateName]*big.Int, serializedState string, err error) {
 	// decode `prevSerializedState`
 	var state cronusState
 	if prevSerializedState == "" {
@@ -134,7 +135,7 @@ func (p *cronusPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedS
 	}
 
 	// get usage for the current billing period
-	currentUsage, err := p.CronusV1.GetUsage(project.UUID, false)
+	currentUsage, err := p.CronusV1.GetUsage(ctx, project.UUID, false)
 	if err != nil {
 		return nil, "", err
 	}
@@ -146,7 +147,7 @@ func (p *cronusPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedS
 	if state.CurrentPeriod.StartDate == currentUsage.StartDate {
 		newSerializedState = prevSerializedState
 	} else {
-		prevUsage, err := p.CronusV1.GetUsage(project.UUID, true)
+		prevUsage, err := p.CronusV1.GetUsage(ctx, project.UUID, true)
 		if err != nil {
 			return nil, "", err
 		}
@@ -232,14 +233,14 @@ type cronusUsage struct {
 	EndDate         string `json:"end"`
 }
 
-func (c cronusClient) GetUsage(projectUUID string, previous bool) (cronusUsage, error) {
+func (c cronusClient) GetUsage(ctx context.Context, projectUUID string, previous bool) (cronusUsage, error) {
 	url := c.ServiceURL("v1", "usage", projectUUID)
 	if previous {
 		url += "?prev=true"
 	}
 
 	var result gophercloud.Result
-	_, result.Err = c.Get(url, &result.Body, &gophercloud.RequestOpts{ //nolint:bodyclose // already closed by gophercloud
+	_, result.Err = c.Get(ctx, url, &result.Body, &gophercloud.RequestOpts{ //nolint:bodyclose // already closed by gophercloud
 		OkCodes: []int{http.StatusOK},
 	})
 

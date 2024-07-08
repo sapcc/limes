@@ -20,6 +20,7 @@
 package plugins
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -56,7 +57,7 @@ type novaInstanceSubresource struct {
 	OSType string `json:"os_type"`
 }
 
-func (p *novaPlugin) buildInstanceSubresource(instance nova.Instance) (res novaInstanceSubresource, err error) {
+func (p *novaPlugin) buildInstanceSubresource(ctx context.Context, instance servers.Server) (res novaInstanceSubresource, err error) {
 	// copy base attributes
 	res.ID = instance.ID
 	res.Name = instance.Name
@@ -106,26 +107,26 @@ func (p *novaPlugin) buildInstanceSubresource(instance nova.Instance) (res novaI
 	}
 
 	// calculate classifications based on image data
-	res.OSType = p.OSTypeProber.Get(instance)
+	res.OSType = p.OSTypeProber.Get(ctx, instance)
 	return res, nil
 }
 
-func (p *novaPlugin) buildInstanceSubresources(project core.KeystoneProject) ([]novaInstanceSubresource, error) {
+func (p *novaPlugin) buildInstanceSubresources(ctx context.Context, project core.KeystoneProject) ([]novaInstanceSubresource, error) {
 	opts := novaServerListOpts{
 		AllTenants: true,
 		TenantID:   project.UUID,
 	}
 
 	var result []novaInstanceSubresource
-	err := servers.List(p.NovaV2, opts).EachPage(func(page pagination.Page) (bool, error) {
-		var instances []nova.Instance
+	err := servers.List(p.NovaV2, opts).EachPage(ctx, func(ctx context.Context, page pagination.Page) (bool, error) {
+		var instances []servers.Server
 		err := servers.ExtractServersInto(page, &instances)
 		if err != nil {
 			return false, err
 		}
 
 		for _, instance := range instances {
-			res, err := p.buildInstanceSubresource(instance)
+			res, err := p.buildInstanceSubresource(ctx, instance)
 			if err != nil {
 				return false, err
 			}

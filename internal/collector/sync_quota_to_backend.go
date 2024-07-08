@@ -79,13 +79,13 @@ func (c *Collector) discoverQuotaSyncTask(ctx context.Context, labels prometheus
 	return
 }
 
-func (c *Collector) processQuotaSyncTask(_ context.Context, srv db.ProjectService, labels prometheus.Labels) error {
+func (c *Collector) processQuotaSyncTask(ctx context.Context, srv db.ProjectService, labels prometheus.Labels) error {
 	dbProject, dbDomain, project, err := c.identifyProjectBeingScraped(srv)
 	if err != nil {
 		return err
 	}
 	logg.Debug("syncing %s quotas for project %s/%s...", srv.Type, dbDomain.Name, dbProject.Name)
-	err = c.performQuotaSync(srv, dbProject, project.Domain)
+	err = c.performQuotaSync(ctx, srv, dbProject, project.Domain)
 	if err != nil {
 		return fmt.Errorf("could not sync %s quotas for project %s/%s: %w", srv.Type, dbDomain.Name, dbProject.Name, err)
 	}
@@ -115,7 +115,7 @@ var (
 	`)
 )
 
-func (c *Collector) performQuotaSync(srv db.ProjectService, project db.Project, domain core.KeystoneDomain) error {
+func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService, project db.Project, domain core.KeystoneDomain) error {
 	plugin := c.Cluster.QuotaPlugins[srv.Type]
 	if plugin == nil {
 		return fmt.Errorf("no quota plugin registered for service type %s", srv.Type)
@@ -157,7 +157,7 @@ func (c *Collector) performQuotaSync(srv db.ProjectService, project db.Project, 
 		}
 
 		// apply quotas in backend
-		err = plugin.SetQuota(core.KeystoneProjectFromDB(project, domain), targetQuotasForBackend)
+		err = plugin.SetQuota(ctx, core.KeystoneProjectFromDB(project, domain), targetQuotasForBackend)
 		if err != nil {
 			// if SetQuota fails, do not retry immediately;
 			// try to sync other projects first, then retry in 30 seconds from now at the earliest

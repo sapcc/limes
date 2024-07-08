@@ -20,8 +20,10 @@
 package plugins
 
 import (
+	"context"
 	"fmt"
 	"math/big"
+	"net/http"
 
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
@@ -144,7 +146,7 @@ func init() {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *neutronPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
+func (p *neutronPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
 	p.NeutronV2, err = openstack.NewNetworkV2(provider, eo)
 	if err != nil {
 		return err
@@ -156,11 +158,11 @@ func (p *neutronPlugin) Init(provider *gophercloud.ProviderClient, eo gopherclou
 		if resource.Extension == "" {
 			continue
 		}
-		_, err := extensions.Get(p.NeutronV2, resource.Extension).Extract()
+		_, err := extensions.Get(ctx, p.NeutronV2, resource.Extension).Extract()
 		switch {
 		case err == nil:
 			p.hasExtension[resource.Extension] = true
-		case errext.IsOfType[gophercloud.ErrDefault404](err):
+		case gophercloud.ResponseCodeIs(err, http.StatusNotFound):
 			p.hasExtension[resource.Extension] = false
 		default:
 			return fmt.Errorf("cannot check for %q support in Neutron: %w", resource.Extension, err)
@@ -315,21 +317,21 @@ var octaviaResourceMeta = []octaviaResourceMetadata{
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *neutronPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[limesrates.RateName]*big.Int, serializedState string, err error) {
+func (p *neutronPlugin) ScrapeRates(ctx context.Context, project core.KeystoneProject, prevSerializedState string) (result map[limesrates.RateName]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *neutronPlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
+func (p *neutronPlugin) Scrape(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
 	data := make(map[limesresources.ResourceName]core.ResourceData)
 
-	err = p.scrapeNeutronInto(data, project.UUID)
+	err = p.scrapeNeutronInto(ctx, data, project.UUID)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	if p.hasOctavia {
-		err = p.scrapeOctaviaInto(data, project.UUID)
+		err = p.scrapeOctaviaInto(ctx, data, project.UUID)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -338,7 +340,7 @@ func (p *neutronPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Avai
 	return data, nil, nil
 }
 
-func (p *neutronPlugin) scrapeNeutronInto(result map[limesresources.ResourceName]core.ResourceData, projectUUID string) error {
+func (p *neutronPlugin) scrapeNeutronInto(ctx context.Context, result map[limesresources.ResourceName]core.ResourceData, projectUUID string) error {
 	// read Neutron quota/usage
 	type neutronQuotaStruct struct {
 		Quota int64  `json:"limit"`
@@ -348,7 +350,7 @@ func (p *neutronPlugin) scrapeNeutronInto(result map[limesresources.ResourceName
 		Values map[string]neutronQuotaStruct `json:"quota"`
 	}
 	quotas.Values = make(map[string]neutronQuotaStruct)
-	err := neutron_quotas.GetDetail(p.NeutronV2, projectUUID).ExtractInto(&quotas)
+	err := neutron_quotas.GetDetail(ctx, p.NeutronV2, projectUUID).ExtractInto(&quotas)
 	if err != nil {
 		return err
 	}
@@ -369,18 +371,18 @@ func (p *neutronPlugin) scrapeNeutronInto(result map[limesresources.ResourceName
 	return nil
 }
 
-func (p *neutronPlugin) scrapeOctaviaInto(result map[limesresources.ResourceName]core.ResourceData, projectUUID string) error {
+func (p *neutronPlugin) scrapeOctaviaInto(ctx context.Context, result map[limesresources.ResourceName]core.ResourceData, projectUUID string) error {
 	// read Octavia quota
 	var quotas struct {
 		Values map[string]int64 `json:"quota"`
 	}
-	err := octavia_quotas.Get(p.OctaviaV2, projectUUID).ExtractInto(&quotas)
+	err := octavia_quotas.Get(ctx, p.OctaviaV2, projectUUID).ExtractInto(&quotas)
 	if err != nil {
 		return err
 	}
 
 	// read Octavia usage
-	usage, err := p.scrapeOctaviaUsage(projectUUID)
+	usage, err := p.scrapeOctaviaUsage(ctx, projectUUID)
 	if err != nil {
 		return err
 	}
@@ -401,7 +403,7 @@ func (p *neutronPlugin) scrapeOctaviaInto(result map[limesresources.ResourceName
 }
 
 // scrapeOctaviaUsage returns Octavia quota usage for a project.
-func (p *neutronPlugin) scrapeOctaviaUsage(projectID string) (map[string]uint64, error) {
+func (p *neutronPlugin) scrapeOctaviaUsage(ctx context.Context, projectID string) (map[string]uint64, error) {
 	var (
 		usage struct {
 			Values map[string]uint64 `json:"quota_usage"`
@@ -409,7 +411,7 @@ func (p *neutronPlugin) scrapeOctaviaUsage(projectID string) (map[string]uint64,
 		r gophercloud.Result
 	)
 	usage.Values = make(map[string]uint64)
-	resp, err := p.OctaviaV2.Get(p.OctaviaV2.ServiceURL("quota_usage", projectID), &r.Body, nil) //nolint:bodyclose // already closed by gophercloud
+	resp, err := p.OctaviaV2.Get(ctx, p.OctaviaV2.ServiceURL("quota_usage", projectID), &r.Body, nil) //nolint:bodyclose // already closed by gophercloud
 	if err != nil {
 		return usage.Values, err
 	}
@@ -433,7 +435,7 @@ func (q neutronOrOctaviaQuotaSet) ToQuotaUpdateMap() (map[string]any, error) {
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *neutronPlugin) SetQuota(project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
+func (p *neutronPlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
 	// collect Neutron quotas
 	neutronQuotas := make(neutronOrOctaviaQuotaSet)
 	for _, res := range neutronResourceMeta {
@@ -448,7 +450,7 @@ func (p *neutronPlugin) SetQuota(project core.KeystoneProject, quotas map[limesr
 	}
 
 	// set Neutron quotas
-	_, err := neutron_quotas.Update(p.NeutronV2, project.UUID, neutronQuotas).Extract()
+	_, err := neutron_quotas.Update(ctx, p.NeutronV2, project.UUID, neutronQuotas).Extract()
 	if err != nil {
 		return err
 	}
@@ -464,7 +466,7 @@ func (p *neutronPlugin) SetQuota(project core.KeystoneProject, quotas map[limesr
 		}
 
 		// set Octavia quotas
-		_, err = octavia_quotas.Update(p.OctaviaV2, project.UUID, octaviaQuotas).Extract()
+		_, err = octavia_quotas.Update(ctx, p.OctaviaV2, project.UUID, octaviaQuotas).Extract()
 		if err != nil {
 			return err
 		}

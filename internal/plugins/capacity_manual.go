@@ -20,6 +20,7 @@
 package plugins
 
 import (
+	"context"
 	"errors"
 
 	"github.com/gophercloud/gophercloud/v2"
@@ -40,7 +41,7 @@ func init() {
 }
 
 // Init implements the core.CapacityPlugin interface.
-func (p *capacityManualPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
+func (p *capacityManualPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
 	return nil
 }
 
@@ -52,7 +53,7 @@ func (p *capacityManualPlugin) PluginTypeID() string {
 var errNoManualData = errors.New(`missing values for capacitor plugin "manual"`)
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *capacityManualPlugin) Scrape(_ core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (result map[limes.ServiceType]map[limesresources.ResourceName]core.PerAZ[core.CapacityData], _ []byte, err error) {
+func (p *capacityManualPlugin) Scrape(ctx context.Context, _ core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (result map[limes.ServiceType]map[limesresources.ResourceName]core.PerAZ[core.CapacityData], _ []byte, err error) {
 	if p.Values == nil {
 		return nil, nil, errNoManualData
 	}

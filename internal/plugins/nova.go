@@ -20,6 +20,7 @@
 package plugins
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"math/big"
@@ -91,7 +92,7 @@ func init() {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
+func (p *novaPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
 	p.resources = slices.Clone(novaDefaultResources)
 
 	p.NovaV2, err = openstack.NewComputeV2(provider, eo)
@@ -103,7 +104,7 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.E
 	if err != nil {
 		return err
 	}
-	glanceV2, err := openstack.NewImageServiceV2(provider, eo)
+	glanceV2, err := openstack.NewImageV2(provider, eo)
 	if err != nil {
 		return err
 	}
@@ -115,7 +116,7 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.E
 	// group of this regexp will count towards those quotas instead of the regular `cores/instances/ram` quotas.
 	//
 	// This initialization enumerates which such pooled resources exist.
-	defaultQuotaClassSet, err := getDefaultQuotaClassSet(p.NovaV2)
+	defaultQuotaClassSet, err := getDefaultQuotaClassSet(ctx, p.NovaV2)
 	if err != nil {
 		return fmt.Errorf("while enumerating default quotas: %w", err)
 	}
@@ -144,7 +145,7 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.E
 	}
 
 	// find per-flavor instance resources
-	flavorNames, err := p.SeparateInstanceQuotas.FlavorAliases.ListFlavorsWithSeparateInstanceQuota(p.NovaV2)
+	flavorNames, err := p.SeparateInstanceQuotas.FlavorAliases.ListFlavorsWithSeparateInstanceQuota(ctx, p.NovaV2)
 	if err != nil {
 		return err
 	}
@@ -166,10 +167,10 @@ func (p *novaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.E
 	return p.HypervisorTypeRules.Validate()
 }
 
-func getDefaultQuotaClassSet(novaV2 *gophercloud.ServiceClient) (map[string]any, error) {
+func getDefaultQuotaClassSet(ctx context.Context, novaV2 *gophercloud.ServiceClient) (map[string]any, error) {
 	url := novaV2.ServiceURL("os-quota-class-sets", "default")
 	var result gophercloud.Result
-	_, err := novaV2.Get(url, &result.Body, nil) //nolint:bodyclose // already closed by gophercloud
+	_, err := novaV2.Get(ctx, url, &result.Body, nil) //nolint:bodyclose // already closed by gophercloud
 	if err != nil {
 		return nil, err
 	}
@@ -208,12 +209,12 @@ func (p *novaPlugin) Rates() []limesrates.RateInfo {
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *novaPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[limesrates.RateName]*big.Int, serializedState string, err error) {
+func (p *novaPlugin) ScrapeRates(ctx context.Context, project core.KeystoneProject, prevSerializedState string) (result map[limesrates.RateName]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *novaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
+func (p *novaPlugin) Scrape(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
 	// collect quota and usage from Nova
 	var limitsData struct {
 		Limits struct {
@@ -242,14 +243,14 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Availab
 			} `json:"absolutePerHwVersion"`
 		} `json:"limits"`
 	}
-	err = limits.Get(p.NovaV2, limits.GetOpts{TenantID: project.UUID}).ExtractInto(&limitsData)
+	err = limits.Get(ctx, p.NovaV2, limits.GetOpts{TenantID: project.UUID}).ExtractInto(&limitsData)
 	if err != nil {
 		return nil, nil, err
 	}
 	absoluteLimits := limitsData.Limits.Absolute
 	var totalServerGroupMembersUsed uint64
 	if absoluteLimits.TotalServerGroupsUsed > 0 {
-		totalServerGroupMembersUsed, err = p.ServerGroupProber.GetMemberUsageForProject(project.UUID)
+		totalServerGroupMembersUsed, err = p.ServerGroupProber.GetMemberUsageForProject(ctx, project.UUID)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -310,7 +311,7 @@ func (p *novaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Availab
 	// Nova does not have a native API for AZ-aware usage reporting,
 	// so we will obtain AZ-aware usage stats by counting up all subresources,
 	// even if we don't end up showing them in the API
-	allSubresources, err := p.buildInstanceSubresources(project)
+	allSubresources, err := p.buildInstanceSubresources(ctx, project)
 	if err != nil {
 		return nil, nil, fmt.Errorf("while collecting instance data: %w", err)
 	}
@@ -383,7 +384,7 @@ func (p *novaPlugin) pooledResourceName(hwVersion string, base limesresources.Re
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *novaPlugin) SetQuota(project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
+func (p *novaPlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
 	// translate Limes resource names for separate instance quotas into Nova quota names
 	novaQuotas := make(novaQuotaUpdateOpts, len(quotas))
 	for resourceName, quota := range quotas {
@@ -396,7 +397,7 @@ func (p *novaPlugin) SetQuota(project core.KeystoneProject, quotas map[limesreso
 		}
 	}
 
-	return quotasets.Update(p.NovaV2, project.UUID, novaQuotas).Err
+	return quotasets.Update(ctx, p.NovaV2, project.UUID, novaQuotas).Err
 }
 
 var novaInstanceCountGauge = prometheus.NewGaugeVec(

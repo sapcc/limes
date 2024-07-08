@@ -20,6 +20,7 @@
 package nova
 
 import (
+	"context"
 	"time"
 
 	"github.com/gophercloud/gophercloud/v2"
@@ -46,17 +47,17 @@ func NewServerGroupProber(novaV2 *gophercloud.ServiceClient) *ServerGroupProber 
 }
 
 // GetMemberUsageForProject returns server_group_members usage in the given project.
-func (p *ServerGroupProber) GetMemberUsageForProject(projectID string) (uint64, error) {
+func (p *ServerGroupProber) GetMemberUsageForProject(ctx context.Context, projectID string) (uint64, error) {
 	// refresh cache if not initialized or outdated
 	var err error
 	if p.usageByProjectID == nil || time.Since(p.lastScrapeTime) > 10*time.Minute {
-		err = p.fillCache()
+		err = p.fillCache(ctx)
 	}
 
 	return p.usageByProjectID[projectID], err
 }
 
-func (p *ServerGroupProber) fillCache() error {
+func (p *ServerGroupProber) fillCache(ctx context.Context) error {
 	// When paginating through the list of server groups, perform steps slightly
 	// smaller than the actual page size, in order to correctly detect insertions
 	// and deletions that may cause list entries to shift around while we iterate
@@ -67,7 +68,7 @@ func (p *ServerGroupProber) fillCache() error {
 	serverGroupSeen := make(map[string]bool)
 	usageByProjectID := make(map[string]uint64)
 	for {
-		groups, err := p.getServerGroupsPage(pageSize, currentOffset)
+		groups, err := p.getServerGroupsPage(ctx, pageSize, currentOffset)
 		if err != nil {
 			return err
 		}
@@ -90,8 +91,8 @@ func (p *ServerGroupProber) fillCache() error {
 	return nil
 }
 
-func (p *ServerGroupProber) getServerGroupsPage(limit, offset int) ([]servergroups.ServerGroup, error) {
-	allPages, err := servergroups.List(p.novaV2, servergroups.ListOpts{AllProjects: true, Limit: limit, Offset: offset}).AllPages()
+func (p *ServerGroupProber) getServerGroupsPage(ctx context.Context, limit, offset int) ([]servergroups.ServerGroup, error) {
+	allPages, err := servergroups.List(p.novaV2, servergroups.ListOpts{AllProjects: true, Limit: limit, Offset: offset}).AllPages(ctx)
 	if err != nil {
 		return nil, err
 	}

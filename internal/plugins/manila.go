@@ -20,11 +20,13 @@
 package plugins
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
 	"math/big"
+	"net/http"
 	"regexp"
 	"strconv"
 	"time"
@@ -62,7 +64,7 @@ func init() {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *manilaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
+func (p *manilaPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
 	if len(p.ShareTypes) == 0 {
 		return errors.New("quota plugin sharev2: missing required configuration field params.share_types")
 	}
@@ -75,7 +77,7 @@ func (p *manilaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud
 	if err != nil {
 		return err
 	}
-	microversion, err := p.findMicroversion(p.ManilaV2)
+	microversion, err := p.findMicroversion(ctx, p.ManilaV2)
 	if err != nil {
 		return err
 	}
@@ -89,7 +91,7 @@ func (p *manilaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud
 
 	// we need to enumerate all share types once to establish an ID-name mapping
 	// (the Manila quota API exclusively deals with share type names, but some Prometheus metrics need the share type ID)
-	pager, err := sharetypes.List(p.ManilaV2, &sharetypes.ListOpts{IsPublic: "all"}).AllPages()
+	pager, err := sharetypes.List(p.ManilaV2, &sharetypes.ListOpts{IsPublic: "all"}).AllPages(ctx)
 	if err != nil {
 		return fmt.Errorf("cannot enumerate Manila share types: %w", err)
 	}
@@ -120,8 +122,8 @@ func (p *manilaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud
 	return nil
 }
 
-func (p *manilaPlugin) findMicroversion(client *gophercloud.ServiceClient) (int, error) {
-	pager, err := apiversions.List(client).AllPages()
+func (p *manilaPlugin) findMicroversion(ctx context.Context, client *gophercloud.ServiceClient) (int, error) {
+	pager, err := apiversions.List(client).AllPages(ctx)
 	if err != nil {
 		return 0, err
 	}
@@ -228,14 +230,14 @@ type manilaQuotaSet struct {
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *manilaPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[limesrates.RateName]*big.Int, serializedState string, err error) {
+func (p *manilaPlugin) ScrapeRates(ctx context.Context, project core.KeystoneProject, prevSerializedState string) (result map[limesrates.RateName]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *manilaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
+func (p *manilaPlugin) Scrape(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
 	// the share_networks quota is only shown when querying for no share_type in particular
-	qs, err := manilaGetQuotaSet(p.ManilaV2, project.UUID, "")
+	qs, err := manilaGetQuotaSet(ctx, p.ManilaV2, project.UUID, "")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -245,7 +247,7 @@ func (p *manilaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Avail
 
 	// all other quotas and usages are grouped under their respective share type
 	for _, shareType := range p.ShareTypes {
-		subresult, err := p.scrapeShareType(project, allAZs, shareType)
+		subresult, err := p.scrapeShareType(ctx, project, allAZs, shareType)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -269,7 +271,7 @@ type manilaResourceData struct {
 	SnapmirrorCapacity core.ResourceData // only filled if p.NetappMetrics != nil
 }
 
-func (p *manilaPlugin) scrapeShareType(project core.KeystoneProject, allAZs []limes.AvailabilityZone, shareType ManilaShareTypeSpec) (manilaResourceData, error) {
+func (p *manilaPlugin) scrapeShareType(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone, shareType ManilaShareTypeSpec) (manilaResourceData, error) {
 	// return all-zero data if this share type is not enabled for this project,
 	// and also set MaxQuota = 0 to keep Limes from auto-assigning quota
 	stName := resolveManilaShareType(shareType, project)
@@ -289,7 +291,7 @@ func (p *manilaPlugin) scrapeShareType(project core.KeystoneProject, allAZs []li
 	}
 
 	// start with the quota data from Manila
-	qs, err := manilaGetQuotaSet(p.ManilaV2, project.UUID, stName)
+	qs, err := manilaGetQuotaSet(ctx, p.ManilaV2, project.UUID, stName)
 	if err != nil {
 		return manilaResourceData{}, err
 	}
@@ -381,13 +383,13 @@ func (p *manilaPlugin) rejectInaccessibleShareType(project core.KeystoneProject,
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *manilaPlugin) SetQuota(project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
+func (p *manilaPlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
 	err := p.rejectInaccessibleShareType(project, quotas)
 	if err != nil {
 		return err
 	}
 
-	expect200 := &gophercloud.RequestOpts{OkCodes: []int{200}}
+	expect200 := &gophercloud.RequestOpts{OkCodes: []int{http.StatusOK}}
 
 	// General note: Even though it complicates the code, we need to set overall
 	// quotas first, otherwise share-type-specific quotas may get rejected for not
@@ -444,7 +446,7 @@ func (p *manilaPlugin) SetQuota(project core.KeystoneProject, quotas map[limesre
 
 	url := p.ManilaV2.ServiceURL("quota-sets", project.UUID)
 	logDebugSetQuota(project.UUID, "overall", overallQuotas)
-	_, err = p.ManilaV2.Put(url, map[string]any{"quota_set": overallQuotas}, nil, expect200) //nolint:bodyclose // already closed by gophercloud
+	_, err = p.ManilaV2.Put(ctx, url, map[string]any{"quota_set": overallQuotas}, nil, expect200) //nolint:bodyclose // already closed by gophercloud
 	if err != nil {
 		return fmt.Errorf("could not set overall share quotas: %s", err.Error())
 	}
@@ -452,7 +454,7 @@ func (p *manilaPlugin) SetQuota(project core.KeystoneProject, quotas map[limesre
 	for shareTypeName, quotasForType := range shareTypeQuotas {
 		logDebugSetQuota(project.UUID, shareTypeName, quotasForType)
 		url := p.ManilaV2.ServiceURL("quota-sets", project.UUID) + "?share_type=" + shareTypeName
-		_, err = p.ManilaV2.Put(url, map[string]any{"quota_set": quotasForType}, nil, expect200) //nolint:bodyclose // already closed by gophercloud
+		_, err = p.ManilaV2.Put(ctx, url, map[string]any{"quota_set": quotasForType}, nil, expect200) //nolint:bodyclose // already closed by gophercloud
 		if err != nil {
 			return fmt.Errorf("could not set quotas for share type %q: %s", shareTypeName, err.Error())
 		}
@@ -513,13 +515,13 @@ func (q manilaQuotaDetail) ToResourceDataFor(allAZs []limes.AvailabilityZone) co
 	}
 }
 
-func manilaGetQuotaSet(client *gophercloud.ServiceClient, projectUUID, shareTypeName string) (manilaQuotaSetDetail, error) {
+func manilaGetQuotaSet(ctx context.Context, client *gophercloud.ServiceClient, projectUUID, shareTypeName string) (manilaQuotaSetDetail, error) {
 	var result gophercloud.Result
 	url := client.ServiceURL("quota-sets", projectUUID, "detail")
 	if shareTypeName != "" {
 		url += "?share_type=" + shareTypeName
 	}
-	_, err := client.Get(url, &result.Body, nil) //nolint:bodyclose // already closed by gophercloud
+	_, err := client.Get(ctx, url, &result.Body, nil) //nolint:bodyclose // already closed by gophercloud
 	if err != nil {
 		return manilaQuotaSetDetail{}, err
 	}

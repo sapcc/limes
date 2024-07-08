@@ -94,7 +94,7 @@ func (c *Collector) RateScrapeJob(registerer prometheus.Registerer) jobloop.Job 
 	}).Setup(registerer)
 }
 
-func (c *Collector) processRateScrapeTask(_ context.Context, task projectScrapeTask, labels prometheus.Labels) error {
+func (c *Collector) processRateScrapeTask(ctx context.Context, task projectScrapeTask, labels prometheus.Labels) error {
 	srv := task.Service
 	plugin := c.Cluster.QuotaPlugins[srv.Type] //NOTE: discoverScrapeTask already verified that this exists
 
@@ -106,7 +106,7 @@ func (c *Collector) processRateScrapeTask(_ context.Context, task projectScrapeT
 	logg.Debug("scraping %s rates for %s/%s", srv.Type, project.Domain.Name, project.Name)
 
 	// perform rate scrape
-	rateData, ratesScrapeState, err := plugin.ScrapeRates(project, srv.RatesScrapeState)
+	rateData, ratesScrapeState, err := plugin.ScrapeRates(ctx, project, srv.RatesScrapeState)
 	if err != nil {
 		task.Err = util.UnpackError(err)
 	}

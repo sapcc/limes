@@ -53,7 +53,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 
 	// to be able to create commitments, we need to have the projects discovered
 	// and their respective project resources created
-	_, err := c.ScanDomains(ScanDomainsOpts{})
+	_, err := c.ScanDomains(s.Ctx, ScanDomainsOpts{})
 	mustT(t, err)
 	projectCount, err := c.DB.SelectInt(`SELECT COUNT(*) FROM projects`)
 	mustT(t, err)

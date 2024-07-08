@@ -151,7 +151,7 @@ func (c *Collector) identifyProjectBeingScraped(srv db.ProjectService) (dbProjec
 	return
 }
 
-func (c *Collector) processResourceScrapeTask(_ context.Context, task projectScrapeTask, labels prometheus.Labels) error {
+func (c *Collector) processResourceScrapeTask(ctx context.Context, task projectScrapeTask, labels prometheus.Labels) error {
 	srv := task.Service
 	plugin := c.Cluster.QuotaPlugins[srv.Type] //NOTE: discoverScrapeTask already verified that this exists
 
@@ -163,7 +163,7 @@ func (c *Collector) processResourceScrapeTask(_ context.Context, task projectScr
 	logg.Debug("scraping %s resources for %s/%s", srv.Type, dbDomain.Name, dbProject.Name)
 
 	// perform resource scrape
-	resourceData, serializedMetrics, err := plugin.Scrape(project, c.Cluster.Config.AvailabilityZones)
+	resourceData, serializedMetrics, err := plugin.Scrape(ctx, project, c.Cluster.Config.AvailabilityZones)
 	if err != nil {
 		task.Err = util.UnpackError(err)
 	}

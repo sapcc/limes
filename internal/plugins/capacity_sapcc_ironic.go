@@ -20,6 +20,7 @@
 package plugins
 
 import (
+	"context"
 	"encoding/json"
 	"regexp"
 	"strconv"
@@ -60,7 +61,7 @@ func init() {
 }
 
 // Init implements the core.CapacityPlugin interface.
-func (p *capacitySapccIronicPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
+func (p *capacitySapccIronicPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
 	p.NovaV2, err = openstack.NewComputeV2(provider, eo)
 	if err != nil {
 		return err
@@ -153,9 +154,9 @@ var nodeNameRx = regexp.MustCompile(`^node(?:swift)?\d+-((?:b[bm]|ap|md|st|swf|g
 var cpNodeNameRx = regexp.MustCompile(`^node(?:swift)?\d+-(cp\d+)$`)
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *capacitySapccIronicPlugin) Scrape(_ core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (result map[limes.ServiceType]map[limesresources.ResourceName]core.PerAZ[core.CapacityData], serializedMetrics []byte, err error) {
+func (p *capacitySapccIronicPlugin) Scrape(ctx context.Context, _ core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (result map[limes.ServiceType]map[limesresources.ResourceName]core.PerAZ[core.CapacityData], serializedMetrics []byte, err error) {
 	// collect info about flavors with separate instance quota
-	flavorNames, err := p.FlavorAliases.ListFlavorsWithSeparateInstanceQuota(p.NovaV2)
+	flavorNames, err := p.FlavorAliases.ListFlavorsWithSeparateInstanceQuota(ctx, p.NovaV2)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -170,7 +171,7 @@ func (p *capacitySapccIronicPlugin) Scrape(_ core.CapacityPluginBackchannel, all
 	}
 
 	// count Ironic nodes
-	allPages, err := ironicNodesListDetail(p.IronicV1).AllPages()
+	allPages, err := ironicNodesListDetail(p.IronicV1).AllPages(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -181,7 +182,7 @@ func (p *capacitySapccIronicPlugin) Scrape(_ core.CapacityPluginBackchannel, all
 	}
 
 	// enumerate aggregates for establishing the hypervisor <-> AZ mapping
-	page, err := aggregates.List(p.NovaV2).AllPages()
+	page, err := aggregates.List(p.NovaV2).AllPages(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -224,7 +225,7 @@ func (p *capacitySapccIronicPlugin) Scrape(_ core.CapacityPluginBackchannel, all
 		var nodeInfo struct {
 			Retired bool `json:"retired"`
 		}
-		err := nodes.Get(p.IronicV1, node.ID).ExtractInto(&nodeInfo)
+		err := nodes.Get(ctx, p.IronicV1, node.ID).ExtractInto(&nodeInfo)
 		if err != nil {
 			return nil, nil, err
 		}

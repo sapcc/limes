@@ -148,7 +148,7 @@ func (c *Collector) discoverCapacityScrapeTask(_ context.Context, _ prometheus.L
 	return task, err
 }
 
-func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacityScrapeTask, labels prometheus.Labels) (returnedErr error) {
+func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacityScrapeTask, labels prometheus.Labels) (returnedErr error) {
 	capacitor := task.Capacitor
 	labels["capacitor_id"] = capacitor.CapacitorID
 
@@ -186,7 +186,7 @@ func (c *Collector) processCapacityScrapeTask(_ context.Context, task capacitySc
 	}
 
 	// scrape capacity data
-	capacityData, serializedMetrics, err := plugin.Scrape(datamodel.NewCapacityPluginBackchannel(c.Cluster, c.DB), c.Cluster.Config.AvailabilityZones)
+	capacityData, serializedMetrics, err := plugin.Scrape(ctx, datamodel.NewCapacityPluginBackchannel(c.Cluster, c.DB), c.Cluster.Config.AvailabilityZones)
 	task.Timing.FinishedAt = c.MeasureTimeAtEnd()
 	if err == nil {
 		capacitor.ScrapedAt = &task.Timing.FinishedAt

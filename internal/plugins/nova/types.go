@@ -19,18 +19,6 @@
 
 package nova
 
-import (
-	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/availabilityzones"
-	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
-)
-
-// Instance is a Nova instance as shown on the Nova API.
-// This includes some API extensions that we need.
-type Instance struct {
-	servers.Server
-	availabilityzones.ServerAvailabilityZoneExt
-}
-
 // FlavorInfo contains information about a flavor, in the format that appears
 // in Nova's GET /servers/:id in the "flavor" key with newer Nova microversions.
 type FlavorInfo struct {

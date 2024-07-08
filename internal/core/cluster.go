@@ -20,6 +20,7 @@
 package core
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"slices"
@@ -92,13 +93,13 @@ func NewCluster(config ClusterConfiguration) (c *Cluster, errs errext.ErrorSet) 
 //
 // We cannot do any of this earlier because we only know all resources after
 // calling Init() on all quota plugins.
-func (c *Cluster) Connect(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (errs errext.ErrorSet) {
+func (c *Cluster) Connect(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (errs errext.ErrorSet) {
 	// initialize discovery plugin
 	err := yaml.UnmarshalStrict([]byte(c.Config.Discovery.Parameters), c.DiscoveryPlugin)
 	if err != nil {
 		errs.Addf("failed to supply params to discovery method: %w", err)
 	} else {
-		err = c.DiscoveryPlugin.Init(provider, eo)
+		err = c.DiscoveryPlugin.Init(ctx, provider, eo)
 		if err != nil {
 			errs.Addf("failed to initialize discovery method: %w", util.UnpackError(err))
 		}
@@ -112,7 +113,7 @@ func (c *Cluster) Connect(provider *gophercloud.ProviderClient, eo gophercloud.E
 			errs.Addf("failed to supply params to service %s: %w", srv.ServiceType, err)
 			continue
 		}
-		err := plugin.Init(provider, eo)
+		err := plugin.Init(ctx, provider, eo)
 		if err != nil {
 			errs.Addf("failed to initialize service %s: %w", srv.ServiceType, util.UnpackError(err))
 		}
@@ -126,7 +127,7 @@ func (c *Cluster) Connect(provider *gophercloud.ProviderClient, eo gophercloud.E
 			errs.Addf("failed to supply params to capacitor %s: %w", capa.ID, err)
 			continue
 		}
-		err := plugin.Init(provider, eo)
+		err := plugin.Init(ctx, provider, eo)
 		if err != nil {
 			errs.Addf("failed to initialize capacitor %s: %w", capa.ID, util.UnpackError(err))
 		}

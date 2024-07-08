@@ -66,7 +66,7 @@ func Test_ScanDomains(t *testing.T) {
 	// first ScanDomains should discover the StaticDomains in the cluster,
 	// and initialize domains, projects and project_services (project_resources
 	// are then constructed by the scraper)
-	actualNewDomains, err := c.ScanDomains(ScanDomainsOpts{})
+	actualNewDomains, err := c.ScanDomains(s.Ctx, ScanDomainsOpts{})
 	if err != nil {
 		t.Errorf("ScanDomains #1 failed: %v", err)
 	}
@@ -78,7 +78,7 @@ func Test_ScanDomains(t *testing.T) {
 
 	// second ScanDomains should not discover anything new
 	s.Clock.StepBy(10 * time.Minute)
-	actualNewDomains, err = c.ScanDomains(ScanDomainsOpts{})
+	actualNewDomains, err = c.ScanDomains(s.Ctx, ScanDomainsOpts{})
 	if err != nil {
 		t.Errorf("ScanDomains #2 failed: %v", err)
 	}
@@ -93,7 +93,7 @@ func Test_ScanDomains(t *testing.T) {
 
 	// ScanDomains without ScanAllProjects should not see this new project
 	s.Clock.StepBy(10 * time.Minute)
-	actualNewDomains, err = c.ScanDomains(ScanDomainsOpts{})
+	actualNewDomains, err = c.ScanDomains(s.Ctx, ScanDomainsOpts{})
 	if err != nil {
 		t.Errorf("ScanDomains #3 failed: %v", err)
 	}
@@ -102,7 +102,7 @@ func Test_ScanDomains(t *testing.T) {
 
 	// ScanDomains with ScanAllProjects should discover the new project
 	s.Clock.StepBy(10 * time.Minute)
-	actualNewDomains, err = c.ScanDomains(ScanDomainsOpts{ScanAllProjects: true})
+	actualNewDomains, err = c.ScanDomains(s.Ctx, ScanDomainsOpts{ScanAllProjects: true})
 	if err != nil {
 		t.Errorf("ScanDomains #4 failed: %v", err)
 	}
@@ -120,7 +120,7 @@ func Test_ScanDomains(t *testing.T) {
 
 	// ScanDomains without ScanAllProjects should not notice anything
 	s.Clock.StepBy(10 * time.Minute)
-	actualNewDomains, err = c.ScanDomains(ScanDomainsOpts{})
+	actualNewDomains, err = c.ScanDomains(s.Ctx, ScanDomainsOpts{})
 	if err != nil {
 		t.Errorf("ScanDomains #5 failed: %v", err)
 	}
@@ -129,7 +129,7 @@ func Test_ScanDomains(t *testing.T) {
 
 	// ScanDomains with ScanAllProjects should notice the deleted project and cleanup its records
 	s.Clock.StepBy(10 * time.Minute)
-	actualNewDomains, err = c.ScanDomains(ScanDomainsOpts{ScanAllProjects: true})
+	actualNewDomains, err = c.ScanDomains(s.Ctx, ScanDomainsOpts{ScanAllProjects: true})
 	if err != nil {
 		t.Errorf("ScanDomains #6 failed: %v", err)
 	}
@@ -145,7 +145,7 @@ func Test_ScanDomains(t *testing.T) {
 
 	// ScanDomains should notice the deleted domain and cleanup its records and also its projects
 	s.Clock.StepBy(10 * time.Minute)
-	actualNewDomains, err = c.ScanDomains(ScanDomainsOpts{})
+	actualNewDomains, err = c.ScanDomains(s.Ctx, ScanDomainsOpts{})
 	if err != nil {
 		t.Errorf("ScanDomains #7 failed: %v", err)
 	}
@@ -163,7 +163,7 @@ func Test_ScanDomains(t *testing.T) {
 
 	// ScanDomains should notice the changed names and update the domain/project records accordingly
 	s.Clock.StepBy(10 * time.Minute)
-	actualNewDomains, err = c.ScanDomains(ScanDomainsOpts{ScanAllProjects: true})
+	actualNewDomains, err = c.ScanDomains(s.Ctx, ScanDomainsOpts{ScanAllProjects: true})
 	if err != nil {
 		t.Errorf("ScanDomains #8 failed: %v", err)
 	}

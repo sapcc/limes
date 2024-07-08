@@ -20,6 +20,7 @@
 package plugins
 
 import (
+	"context"
 	"math/big"
 
 	"github.com/gophercloud/gophercloud/v2"
@@ -46,7 +47,7 @@ type NoopQuotaPlugin struct {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *NoopQuotaPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
+func (p *NoopQuotaPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
 	return nil
 }
 
@@ -81,7 +82,7 @@ func (p *NoopQuotaPlugin) Rates() []limesrates.RateInfo {
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *NoopQuotaPlugin) ScrapeRates(project core.KeystoneProject, prevSerializedState string) (result map[limesrates.RateName]*big.Int, serializedState string, err error) {
+func (p *NoopQuotaPlugin) ScrapeRates(ctx context.Context, project core.KeystoneProject, prevSerializedState string) (result map[limesrates.RateName]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
@@ -95,7 +96,7 @@ func (p *NoopQuotaPlugin) CollectMetrics(ch chan<- prometheus.Metric, project co
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *NoopQuotaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
+func (p *NoopQuotaPlugin) Scrape(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
 	if p.WithEmptyResource {
 		result = map[limesresources.ResourceName]core.ResourceData{
 			"things": {}, // no usage at all (this is used to test that the scraper adds a zero entry for AZ "any")
@@ -105,6 +106,6 @@ func (p *NoopQuotaPlugin) Scrape(project core.KeystoneProject, allAZs []limes.Av
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *NoopQuotaPlugin) SetQuota(project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
+func (p *NoopQuotaPlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
 	return nil
 }

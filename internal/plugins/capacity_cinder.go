@@ -20,6 +20,7 @@
 package plugins
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"math"
@@ -53,7 +54,7 @@ func init() {
 }
 
 // Init implements the core.CapacityPlugin interface.
-func (p *capacityCinderPlugin) Init(provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
+func (p *capacityCinderPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
 	if len(p.VolumeTypes) == 0 {
 		//nolint:stylecheck //Cinder is a proper name
 		return errors.New("Cinder capacity plugin: missing required configuration field cinder.volume_types")
@@ -81,7 +82,7 @@ func (p *capacityCinderPlugin) makeResourceName(volumeType string) limesresource
 }
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *capacityCinderPlugin) Scrape(_ core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (result map[limes.ServiceType]map[limesresources.ResourceName]core.PerAZ[core.CapacityData], serializedMetrics []byte, err error) {
+func (p *capacityCinderPlugin) Scrape(ctx context.Context, _ core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (result map[limes.ServiceType]map[limesresources.ResourceName]core.PerAZ[core.CapacityData], serializedMetrics []byte, err error) {
 	// list storage pools
 	var poolData struct {
 		StoragePools []struct {
@@ -98,7 +99,7 @@ func (p *capacityCinderPlugin) Scrape(_ core.CapacityPluginBackchannel, allAZs [
 		} `json:"pools"`
 	}
 
-	allPages, err := schedulerstats.List(p.CinderV3, schedulerstats.ListOpts{Detail: true}).AllPages()
+	allPages, err := schedulerstats.List(p.CinderV3, schedulerstats.ListOpts{Detail: true}).AllPages(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -108,7 +109,7 @@ func (p *capacityCinderPlugin) Scrape(_ core.CapacityPluginBackchannel, allAZs [
 	}
 
 	// list service hosts
-	allPages, err = services.List(p.CinderV3, nil).AllPages()
+	allPages, err = services.List(p.CinderV3, nil).AllPages(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
