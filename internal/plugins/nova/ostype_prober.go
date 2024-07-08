@@ -22,19 +22,15 @@ package nova
 import (
 	"strings"
 
-	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/openstack/blockstorage/v3/volumes"
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/volumeattach"
-	"github.com/gophercloud/gophercloud/openstack/imageservice/v2/images"
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/volumeattach"
+	"github.com/gophercloud/gophercloud/v2/openstack/image/v2/images"
 	"github.com/sapcc/go-bits/errext"
 	"github.com/sapcc/go-bits/logg"
 
 	"github.com/sapcc/limes/internal/util"
 )
-
-// use a name that's unique to github.com/gophercloud/gophercloud/openstack/imageservice/v2/images
-// to ensure that goimports does not mistakenly replace it by .../compute/v2/images
-var _ images.ImageVisibility
 
 // OSTypeProber contains the logic for filling the OSType attribute of a Nova instance subresource.
 type OSTypeProber struct {

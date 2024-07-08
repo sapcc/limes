@@ -27,7 +27,7 @@ import (
 	"time"
 
 	"github.com/go-gorp/gorp/v3"
-	"github.com/gophercloud/gophercloud"
+	"github.com/gophercloud/gophercloud/v2"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/gopherpolicy"

@@ -22,8 +22,8 @@ package nova
 import (
 	"time"
 
-	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/servergroups"
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servergroups"
 )
 
 // ServerGroupProber measures server_group_members usage within a project.

@@ -22,7 +22,7 @@ package util
 import (
 	"errors"
 
-	"github.com/gophercloud/gophercloud"
+	"github.com/gophercloud/gophercloud/v2"
 )
 
 // UnpackError is usually a no-op, but for some Gophercloud errors, it removes

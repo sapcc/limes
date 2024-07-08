@@ -23,7 +23,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/gophercloud/gophercloud"
+	"github.com/gophercloud/gophercloud/v2"
 
 	"github.com/sapcc/limes/internal/core"
 )

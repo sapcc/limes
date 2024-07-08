@@ -20,8 +20,8 @@
 package nova
 
 import (
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/availabilityzones"
-	"github.com/gophercloud/gophercloud/openstack/compute/v2/servers"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/availabilityzones"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
 )
 
 // Instance is a Nova instance as shown on the Nova API.

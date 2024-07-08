@@ -20,9 +20,9 @@
 package plugins
 
 import (
-	"github.com/gophercloud/gophercloud"
-	"github.com/gophercloud/gophercloud/openstack/baremetal/v1/nodes"
-	"github.com/gophercloud/gophercloud/pagination"
+	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack/baremetal/v1/nodes"
+	"github.com/gophercloud/gophercloud/v2/pagination"
 )
 
 // Like `nodes.ListDetail(client, nil)`, but works around <https://github.com/gophercloud/gophercloud/issues/2431>.
