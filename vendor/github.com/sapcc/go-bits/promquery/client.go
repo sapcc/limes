@@ -41,8 +41,8 @@ type Client struct {
 }
 
 // GetVector executes a Prometheus query and returns a vector of results.
-func (c Client) GetVector(queryStr string) (model.Vector, error) {
-	value, warnings, err := c.api.Query(context.Background(), queryStr, time.Now())
+func (c Client) GetVector(ctx context.Context, queryStr string) (model.Vector, error) {
+	value, warnings, err := c.api.Query(ctx, queryStr, time.Now())
 	if err != nil {
 		return nil, fmt.Errorf("could not execute Prometheus query: %s: %w", queryStr, err)
 	}
@@ -63,8 +63,8 @@ func (c Client) GetVector(queryStr string) (model.Vector, error) {
 // If the query produces no values, the `defaultValue` will be returned if one
 // was supplied. Otherwise, the returned error will be of type NoRowsError.
 // That condition can be checked with `promquery.IsErrNoRows(err)`.
-func (c Client) GetSingleValue(queryStr string, defaultValue *float64) (float64, error) {
-	resultVector, err := c.GetVector(queryStr)
+func (c Client) GetSingleValue(ctx context.Context, queryStr string, defaultValue *float64) (float64, error) {
+	resultVector, err := c.GetVector(ctx, queryStr)
 	if err != nil {
 		return 0, err
 	}

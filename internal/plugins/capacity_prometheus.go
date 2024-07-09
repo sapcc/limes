@@ -64,7 +64,7 @@ func (p *capacityPrometheusPlugin) Scrape(ctx context.Context, _ core.CapacityPl
 	for serviceType, queries := range p.Queries {
 		serviceResult := make(map[limesresources.ResourceName]core.PerAZ[core.CapacityData])
 		for resourceName, query := range queries {
-			serviceResult[resourceName], err = p.scrapeOneResource(client, query, allAZs)
+			serviceResult[resourceName], err = p.scrapeOneResource(ctx, client, query, allAZs)
 			if err != nil {
 				return nil, nil, fmt.Errorf("while scraping %s/%s capacity: %w", serviceType, resourceName, err)
 			}
@@ -74,8 +74,8 @@ func (p *capacityPrometheusPlugin) Scrape(ctx context.Context, _ core.CapacityPl
 	return result, nil, nil
 }
 
-func (p *capacityPrometheusPlugin) scrapeOneResource(client promquery.Client, query string, allAZs []limes.AvailabilityZone) (core.PerAZ[core.CapacityData], error) {
-	vector, err := client.GetVector(query)
+func (p *capacityPrometheusPlugin) scrapeOneResource(ctx context.Context, client promquery.Client, query string, allAZs []limes.AvailabilityZone) (core.PerAZ[core.CapacityData], error) {
+	vector, err := client.GetVector(ctx, query)
 	if err != nil {
 		return nil, err
 	}

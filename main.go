@@ -106,7 +106,7 @@ func main() {
 	errs.LogFatalIfError()
 	errs = cluster.Connect(ctx, provider, eo)
 	errs.LogFatalIfError()
-	api.StartAuditTrail()
+	api.StartAuditTrail(ctx)
 
 	// select task
 	switch taskName {
