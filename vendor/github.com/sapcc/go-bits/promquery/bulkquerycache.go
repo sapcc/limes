@@ -19,6 +19,7 @@
 package promquery
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -78,8 +79,8 @@ func NewBulkQueryCache[K comparable, V any](queries []BulkQuery[K, V], refreshIn
 
 // Get returns the entry for this key, or a zero-initialized entry if this key
 // does not exist in the dataset.
-func (c *BulkQueryCache[K, V]) Get(key K) (entry V, err error) {
-	err = c.fillCacheIfNecessary()
+func (c *BulkQueryCache[K, V]) Get(ctx context.Context, key K) (entry V, err error) {
+	err = c.fillCacheIfNecessary(ctx)
 	if err != nil {
 		return
 	}
@@ -90,7 +91,7 @@ func (c *BulkQueryCache[K, V]) Get(key K) (entry V, err error) {
 	return
 }
 
-func (c *BulkQueryCache[K, V]) fillCacheIfNecessary() error {
+func (c *BulkQueryCache[K, V]) fillCacheIfNecessary(ctx context.Context) error {
 	// query Prometheus only on first call or if cache is too old
 	if c.filledAt != nil && c.filledAt.After(time.Now().Add(-c.refreshInterval)) {
 		return nil
@@ -98,7 +99,7 @@ func (c *BulkQueryCache[K, V]) fillCacheIfNecessary() error {
 
 	result := make(map[K]*V)
 	for _, q := range c.queries {
-		vector, err := c.client.GetVector(q.Query)
+		vector, err := c.client.GetVector(ctx, q.Query)
 		if err != nil {
 			return fmt.Errorf("cannot collect %s: %w", q.Description, err)
 		}

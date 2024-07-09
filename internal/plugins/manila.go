@@ -324,7 +324,7 @@ func (p *manilaPlugin) scrapeShareType(ctx context.Context, project core.Keyston
 		return manilaResourceData{}, fmt.Errorf("cannot find ID for share type with name %q", stName)
 	}
 	for _, az := range allAZs {
-		azm, err := p.AZMetrics.Get(manilaAZMetricsKey{
+		azm, err := p.AZMetrics.Get(ctx, manilaAZMetricsKey{
 			AvailabilityZone: az,
 			ProjectUUID:      project.UUID,
 			ShareTypeID:      stID,
@@ -345,7 +345,7 @@ func (p *manilaPlugin) scrapeShareType(ctx context.Context, project core.Keyston
 		result.SnapmirrorCapacity = emptyQuota.ToResourceDataFor(allAZs)
 
 		for _, az := range allAZs {
-			nm, err := p.NetappMetrics.Get(manilaNetappMetricsKey{
+			nm, err := p.NetappMetrics.Get(ctx, manilaNetappMetricsKey{
 				AvailabilityZone: az,
 				ProjectUUID:      project.UUID,
 				ShareTypeName:    stName,

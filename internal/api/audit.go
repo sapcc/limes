@@ -20,6 +20,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -45,7 +46,7 @@ var eventSink chan<- cadf.Event
 
 // StartAuditTrail starts the audit trail by initializing the event sink and
 // starting a Commit() goroutine.
-func StartAuditTrail() {
+func StartAuditTrail(ctx context.Context) {
 	if osext.GetenvBool("LIMES_AUDIT_ENABLE") {
 		auditEventPublishSuccessCounter.Add(0)
 		auditEventPublishFailedCounter.Add(0)
@@ -70,7 +71,7 @@ func StartAuditTrail() {
 			EventSink:           s,
 			OnSuccessfulPublish: onSuccessFunc,
 			OnFailedPublish:     onFailFunc,
-		}.Commit(rabbitURI, osext.MustGetenv("LIMES_AUDIT_QUEUE_NAME"))
+		}.Commit(ctx, rabbitURI, osext.MustGetenv("LIMES_AUDIT_QUEUE_NAME"))
 	}
 }
 
