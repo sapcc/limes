@@ -132,6 +132,7 @@ Some special behaviors for resources can be configured in the `resource_behavior
 | `resource_behavior[].commitment_durations` | no | If given, commitments for this resource can be created with any of the given durations. The duration format is the same as in the `commitments[].duration` attribute that appears on the resource API. If empty, this resource does not accept commitments. |
 | `resource_behavior[].commitment_is_az_aware` | no | If true, commitments for this resource must be created in a specific AZ (i.e. not in a pseudo-AZ). If false, commitments for this resource must be created in the pseudo-AZ `any`. Ignored if `commitment_durations` is empty. |
 | `resource_behavior[].commitment_min_confirm_date` | no | If given, commitments for this resource will always be created with `confirm_by` no earlier than this timestamp. This can be used to plan the introduction of commitments on a specific date. Ignored if `commitment_durations` is empty. |
+| `resource_behavior[].commitment_until_percent` | no | If given, commitments for this resource will only be confirmed while the total of all confirmed commitments or uncommitted usage in the respective AZ is smaller than the respective percentage of the total capacity for that AZ. This is intended to provide a reserved buffer for the growth quota configured by `quota_distribution_configs[].autogrow.growth_multiplier`. Defaults to 100, i.e. all capacity is committable. |
 
 For example:
 
