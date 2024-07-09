@@ -66,7 +66,8 @@ func CanConfirmNewCommitment(req limesresources.CommitmentRequest, resourceID db
 	stats := statsByAZ[req.AvailabilityZone]
 
 	additions := map[db.ProjectResourceID]uint64{resourceID: req.Amount}
-	return stats.CanAcceptCommitmentChanges(additions, nil), nil
+	behavior := cluster.BehaviorForResource(req.ServiceType, req.ResourceName)
+	return stats.CanAcceptCommitmentChanges(additions, nil, behavior), nil
 }
 
 // CanMoveExistingCommitment returns whether a commitment of the given amount
@@ -81,13 +82,16 @@ func CanMoveExistingCommitment(amount uint64, loc AZResourceLocation, sourceReso
 
 	additions := map[db.ProjectResourceID]uint64{targetResourceID: amount}
 	subtractions := map[db.ProjectResourceID]uint64{sourceResourceID: amount}
-	return stats.CanAcceptCommitmentChanges(additions, subtractions), nil
+	behavior := cluster.BehaviorForResource(loc.ServiceType, loc.ResourceName)
+	return stats.CanAcceptCommitmentChanges(additions, subtractions, behavior), nil
 }
 
 // ConfirmPendingCommitments goes through all unconfirmed commitments that
 // could be confirmed, in chronological creation order, and confirms as many of
 // them as possible given the currently available capacity.
 func ConfirmPendingCommitments(serviceType limes.ServiceType, resourceName limesresources.ResourceName, az limes.AvailabilityZone, cluster *core.Cluster, dbi db.Interface, now time.Time) error {
+	behavior := cluster.BehaviorForResource(serviceType, resourceName)
+
 	statsByAZ, err := collectAZAllocationStats(serviceType, resourceName, &az, cluster, dbi)
 	if err != nil {
 		return err
@@ -117,7 +121,7 @@ func ConfirmPendingCommitments(serviceType limes.ServiceType, resourceName limes
 	for _, c := range confirmableCommitments {
 		// ignore commitments that do not fit
 		additions := map[db.ProjectResourceID]uint64{c.ProjectResourceID: c.Amount}
-		if !stats.CanAcceptCommitmentChanges(additions, nil) {
+		if !stats.CanAcceptCommitmentChanges(additions, nil, behavior) {
 			continue
 		}
 

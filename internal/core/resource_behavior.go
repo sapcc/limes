@@ -38,6 +38,7 @@ type ResourceBehavior struct {
 	CommitmentDurations      []limesresources.CommitmentDuration `yaml:"commitment_durations"`
 	CommitmentIsAZAware      bool                                `yaml:"commitment_is_az_aware"`
 	CommitmentMinConfirmDate *time.Time                          `yaml:"commitment_min_confirm_date"`
+	CommitmentUntilPercent   *float64                            `yaml:"commitment_until_percent"`
 }
 
 // Validate returns a list of all errors in this behavior configuration. It
@@ -47,6 +48,11 @@ type ResourceBehavior struct {
 func (b *ResourceBehavior) Validate(path string) (errs errext.ErrorSet) {
 	if b.FullResourceNameRx == "" {
 		errs.Addf("missing configuration value: %s.resource", path)
+	}
+	if b.CommitmentUntilPercent != nil {
+		if *b.CommitmentUntilPercent > 100 {
+			errs.Addf("invalid value: %s.commitment_until_percent may not be bigger than 100", path)
+		}
 	}
 
 	return errs
@@ -80,6 +86,11 @@ func (b *ResourceBehavior) Merge(other ResourceBehavior) {
 	}
 	if other.CommitmentIsAZAware {
 		b.CommitmentIsAZAware = true
+	}
+	if other.CommitmentUntilPercent != nil {
+		if b.CommitmentUntilPercent == nil || *b.CommitmentUntilPercent > *other.CommitmentUntilPercent {
+			b.CommitmentUntilPercent = other.CommitmentUntilPercent
+		}
 	}
 }
 
