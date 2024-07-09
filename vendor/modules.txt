@@ -39,7 +39,6 @@ github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/snapshots
 github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes
 github.com/gophercloud/gophercloud/v2/openstack/common/extensions
 github.com/gophercloud/gophercloud/v2/openstack/compute/v2/aggregates
-github.com/gophercloud/gophercloud/v2/openstack/compute/v2/availabilityzones
 github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors
 github.com/gophercloud/gophercloud/v2/openstack/compute/v2/hypervisors
 github.com/gophercloud/gophercloud/v2/openstack/compute/v2/limits
@@ -179,7 +178,7 @@ go.uber.org/atomic
 go.uber.org/automaxprocs/internal/cgroups
 go.uber.org/automaxprocs/internal/runtime
 go.uber.org/automaxprocs/maxprocs
-# golang.org/x/exp v0.0.0-20240613232115-7f521ea00fb8
+# golang.org/x/exp v0.0.0-20240707233637-46b078467d37
 ## explicit; go 1.20
 golang.org/x/exp/maps
 # golang.org/x/sys v0.22.0
