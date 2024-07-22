@@ -103,6 +103,10 @@ func (c *BulkQueryCache[K, V]) fillCacheIfNecessary(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("cannot collect %s: %w", q.Description, err)
 		}
+		// prevent empty prometheus results from being processed downstream.
+		if len(vector) == 0 {
+			return fmt.Errorf("did not receive any values from prometheus for %s", q.Description)
+		}
 		for _, sample := range vector {
 			key := q.Keyer(sample)
 			entry := result[key]
