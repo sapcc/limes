@@ -87,6 +87,9 @@ var (
 	getCommitmentWithMatchingTransferTokenQuery = sqlext.SimplifyWhitespace(`
 		SELECT * FROM project_commitments WHERE id = $1 AND transfer_token = $2
 	`)
+	findCommitmentByTransferToken = sqlext.SimplifyWhitespace(`
+		SELECT * from project_commitments where transfer_token = $1
+   `)
 	findTargetAZResourceIDBySourceIDQuery = sqlext.SimplifyWhitespace(`
 		WITH source as (
 		SELECT pr.id AS resource_id, ps.type, pr.name, par.az
@@ -622,6 +625,84 @@ func (p *v1Provider) buildSplitCommitment(dbCommitment db.ProjectCommitment, amo
 		PredecessorID: &dbCommitment.ID,
 		State:         dbCommitment.State,
 	}
+}
+
+// GetCommitmentByTransferToken handles GET /v1/domains/{domain_id}/projects/{project_id}/commitments/{token}
+func (p *v1Provider) GetCommitmentByTransferToken(w http.ResponseWriter, r *http.Request) {
+	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/commitments/:token")
+	token := p.CheckToken(r)
+	if !token.Require(w, "project:show") {
+		http.Error(w, "insufficient access rights.", http.StatusForbidden)
+		return
+	}
+	transferToken := mux.Vars(r)["token"]
+	if transferToken == "" {
+		http.Error(w, "no transfer token provided", http.StatusBadRequest)
+		return
+	}
+	dbDomain := p.FindDomainFromRequest(w, r)
+	if dbDomain == nil {
+		http.Error(w, "domain not found.", http.StatusNotFound)
+		return
+	}
+	dbProject := p.FindProjectFromRequest(w, r, dbDomain)
+	if dbProject == nil {
+		http.Error(w, "project not found.", http.StatusNotFound)
+		return
+	}
+
+	// A token might not be unique in very rare edge cases. We handle this here.
+	rows, err := p.DB.Query(findCommitmentByTransferToken, transferToken)
+	if errors.Is(err, sql.ErrNoRows) || rows.Err() != nil {
+		http.Error(w, "no matching commitment found.", http.StatusNotFound)
+		return
+	} else if respondwith.ErrorText(w, err) {
+		return
+	}
+	defer rows.Close()
+	rowCount := 0
+	for rows.Next() {
+		rowCount += 1
+	}
+	if rowCount == 0 {
+		http.Error(w, "no matching commitment found.", http.StatusNotFound)
+		return
+	}
+	if rowCount > 1 {
+		http.Error(w, "detected multiple commitments with the same token.", http.StatusConflict)
+		return
+	}
+
+	var dbCommitment db.ProjectCommitment
+	err = p.DB.SelectOne(&dbCommitment, findCommitmentByTransferToken, transferToken)
+	if errors.Is(err, sql.ErrNoRows) {
+		http.Error(w, "commitment unexpectingly not found.", http.StatusNotFound)
+		return
+	} else if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	var loc datamodel.AZResourceLocation
+	err = p.DB.QueryRow(findProjectAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
+		Scan(&loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)
+	if errors.Is(err, sql.ErrNoRows) {
+		// defense in depth: this should not happen because all the relevant tables are connected by FK constraints
+		http.Error(w, "location data not found.", http.StatusNotFound)
+		return
+	} else if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token)
+	logAndPublishEvent(p.timeNow(), r, token, http.StatusAccepted, commitmentEventTarget{
+		DomainID:    dbDomain.UUID,
+		DomainName:  dbDomain.Name,
+		ProjectID:   dbProject.UUID,
+		ProjectName: dbProject.Name,
+		Commitment:  c,
+	})
+	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
+
 }
 
 // TransferCommitment handles POST /v1/domains/{domain_id}/projects/{project_id}/transfer-commitment/{id}?token={token}
