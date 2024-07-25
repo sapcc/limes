@@ -260,4 +260,8 @@ var sqlMigrations = map[string]string{
 		ALTER TABLE project_services
 			ADD COLUMN quota_sync_duration_secs REAL NOT NULL DEFAULT 0;
 	`,
+	"044_add_unique_key_to_transfer_token.up.sql": `
+		ALTER TABLE project_commitments 
+			ADD CONSTRAINT unique_token UNIQUE (transfer_token);
+	`,
 }

@@ -741,38 +741,12 @@ func Test_GetCommitmentByToken(t *testing.T) {
 		"amount":            10,
 		"duration":          "1 hour",
 	}
-	req2 := assert.JSONObject{
-		"id":                2,
-		"service_type":      "second",
-		"resource_name":     "capacity",
-		"availability_zone": "az-two",
-		"amount":            20,
-		"duration":          "1 hour",
-	}
-
 	resp1 := assert.JSONObject{
 		"id":                1,
 		"service_type":      "second",
 		"resource_name":     "capacity",
 		"availability_zone": "az-two",
 		"amount":            10,
-		"unit":              "B",
-		"duration":          "1 hour",
-		"created_at":        s.Clock.Now().Unix(),
-		"creator_uuid":      "uuid-for-alice",
-		"creator_name":      "alice@Default",
-		"can_be_deleted":    true,
-		"confirmed_at":      0,
-		"expires_at":        3600,
-		"transfer_status":   "unlisted",
-		"transfer_token":    transferToken,
-	}
-	resp2 := assert.JSONObject{
-		"id":                2,
-		"service_type":      "second",
-		"resource_name":     "capacity",
-		"availability_zone": "az-two",
-		"amount":            20,
 		"unit":              "B",
 		"duration":          "1 hour",
 		"created_at":        s.Clock.Now().Unix(),
@@ -813,27 +787,6 @@ func Test_GetCommitmentByToken(t *testing.T) {
 		Path:         "/v1/commitments/" + "notExistingToken",
 		ExpectStatus: http.StatusNotFound,
 		ExpectBody:   assert.StringData("no matching commitment found.\n"),
-	}.Check(t, s.Handler)
-
-	// Token exists twice in the database.
-	assert.HTTPRequest{
-		Method:       http.MethodPost,
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/commitments/new",
-		Body:         assert.JSONObject{"commitment": req2},
-		ExpectStatus: http.StatusCreated,
-	}.Check(t, s.Handler)
-	assert.HTTPRequest{
-		Method:       "POST",
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/commitments/2/start-transfer",
-		ExpectStatus: http.StatusAccepted,
-		ExpectBody:   assert.JSONObject{"commitment": resp2},
-		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 20, "transfer_status": "unlisted"}},
-	}.Check(t, s.Handler)
-	assert.HTTPRequest{
-		Method:       http.MethodGet,
-		Path:         "/v1/commitments/" + transferToken,
-		ExpectStatus: http.StatusConflict,
-		ExpectBody:   assert.StringData("detected multiple commitments with the same token.\n"),
 	}.Check(t, s.Handler)
 }
 

@@ -641,32 +641,11 @@ func (p *v1Provider) GetCommitmentByTransferToken(w http.ResponseWriter, r *http
 		return
 	}
 
-	// A token might not be unique in very rare edge cases. We handle this here.
-	rows, err := p.DB.Query(findCommitmentByTransferToken, transferToken)
-	if errors.Is(err, sql.ErrNoRows) || rows.Err() != nil {
-		http.Error(w, "no matching commitment found.", http.StatusNotFound)
-		return
-	} else if respondwith.ErrorText(w, err) {
-		return
-	}
-	defer rows.Close()
-	rowCount := 0
-	for rows.Next() {
-		rowCount += 1
-	}
-	if rowCount == 0 {
-		http.Error(w, "no matching commitment found.", http.StatusNotFound)
-		return
-	}
-	if rowCount > 1 {
-		http.Error(w, "detected multiple commitments with the same token.", http.StatusConflict)
-		return
-	}
-
+	// The token column is a unique key, so we expect only one result.
 	var dbCommitment db.ProjectCommitment
-	err = p.DB.SelectOne(&dbCommitment, findCommitmentByTransferToken, transferToken)
+	err := p.DB.SelectOne(&dbCommitment, findCommitmentByTransferToken, transferToken)
 	if errors.Is(err, sql.ErrNoRows) {
-		http.Error(w, "commitment unexpectedly not found.", http.StatusNotFound)
+		http.Error(w, "no matching commitment found.", http.StatusNotFound)
 		return
 	} else if respondwith.ErrorText(w, err) {
 		return
