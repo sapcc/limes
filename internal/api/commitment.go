@@ -627,9 +627,9 @@ func (p *v1Provider) buildSplitCommitment(dbCommitment db.ProjectCommitment, amo
 	}
 }
 
-// GetCommitmentByTransferToken handles GET /v1/domains/{domain_id}/projects/{project_id}/commitments/{token}
+// GetCommitmentByTransferToken handles GET /v1/commitments/{token}
 func (p *v1Provider) GetCommitmentByTransferToken(w http.ResponseWriter, r *http.Request) {
-	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/commitments/:token")
+	httpapi.IdentifyEndpoint(r, "/v1/commitments/:token")
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:show") {
 		http.Error(w, "insufficient access rights.", http.StatusForbidden)
@@ -638,16 +638,6 @@ func (p *v1Provider) GetCommitmentByTransferToken(w http.ResponseWriter, r *http
 	transferToken := mux.Vars(r)["token"]
 	if transferToken == "" {
 		http.Error(w, "no transfer token provided", http.StatusBadRequest)
-		return
-	}
-	dbDomain := p.FindDomainFromRequest(w, r)
-	if dbDomain == nil {
-		http.Error(w, "domain not found.", http.StatusNotFound)
-		return
-	}
-	dbProject := p.FindProjectFromRequest(w, r, dbDomain)
-	if dbProject == nil {
-		http.Error(w, "project not found.", http.StatusNotFound)
 		return
 	}
 
@@ -694,13 +684,6 @@ func (p *v1Provider) GetCommitmentByTransferToken(w http.ResponseWriter, r *http
 	}
 
 	c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token)
-	logAndPublishEvent(p.timeNow(), r, token, http.StatusAccepted, commitmentEventTarget{
-		DomainID:    dbDomain.UUID,
-		DomainName:  dbDomain.Name,
-		ProjectID:   dbProject.UUID,
-		ProjectName: dbProject.Name,
-		Commitment:  c,
-	})
 	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
 }
 

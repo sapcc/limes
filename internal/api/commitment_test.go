@@ -802,7 +802,7 @@ func Test_GetCommitmentByToken(t *testing.T) {
 	// Get commitment by token.
 	assert.HTTPRequest{
 		Method:       http.MethodGet,
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/commitments/" + transferToken,
+		Path:         "/v1/commitments/" + transferToken,
 		ExpectBody:   assert.JSONObject{"commitment": resp1},
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
@@ -810,7 +810,7 @@ func Test_GetCommitmentByToken(t *testing.T) {
 	// Now check a token that does not exist.
 	assert.HTTPRequest{
 		Method:       http.MethodGet,
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/commitments/" + "notExistingToken",
+		Path:         "/v1/commitments/" + "notExistingToken",
 		ExpectStatus: http.StatusNotFound,
 		ExpectBody:   assert.StringData("no matching commitment found.\n"),
 	}.Check(t, s.Handler)
@@ -831,7 +831,7 @@ func Test_GetCommitmentByToken(t *testing.T) {
 	}.Check(t, s.Handler)
 	assert.HTTPRequest{
 		Method:       http.MethodGet,
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/commitments/" + transferToken,
+		Path:         "/v1/commitments/" + transferToken,
 		ExpectStatus: http.StatusConflict,
 		ExpectBody:   assert.StringData("detected multiple commitments with the same token.\n"),
 	}.Check(t, s.Handler)
