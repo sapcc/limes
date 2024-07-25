@@ -702,7 +702,6 @@ func (p *v1Provider) GetCommitmentByTransferToken(w http.ResponseWriter, r *http
 		Commitment:  c,
 	})
 	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
-
 }
 
 // TransferCommitment handles POST /v1/domains/{domain_id}/projects/{project_id}/transfer-commitment/{id}?token={token}
