@@ -592,7 +592,7 @@ Requires a generated token from the API: `/v1/domains/:id/projects/:id/commitmen
 On success the API clears the `transfer_token` and `transfer_status` from the commitment.
 After that, it returns the commitment as a JSON document.  
 
-### GET "/v1/domains/:id/projects/:id/commitments/:token"
+### GET /v1/domains/:id/projects/:id/commitments/:token
 To ensure that a commitment can be checked for its `resource` type or `availability zone` before it gets transferred to a target project, this endpoint fetches the target commitment by its respective token.
 
 ### DELETE /v1/domains/:domain\_id/projects/:project\_id/commitments/:id
