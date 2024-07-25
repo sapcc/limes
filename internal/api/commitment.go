@@ -666,7 +666,7 @@ func (p *v1Provider) GetCommitmentByTransferToken(w http.ResponseWriter, r *http
 	var dbCommitment db.ProjectCommitment
 	err = p.DB.SelectOne(&dbCommitment, findCommitmentByTransferToken, transferToken)
 	if errors.Is(err, sql.ErrNoRows) {
-		http.Error(w, "commitment unexpectingly not found.", http.StatusNotFound)
+		http.Error(w, "commitment unexpectedly not found.", http.StatusNotFound)
 		return
 	} else if respondwith.ErrorText(w, err) {
 		return
