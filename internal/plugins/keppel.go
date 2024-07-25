@@ -49,7 +49,7 @@ func init() {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *keppelPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
+func (p *keppelPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType limes.ServiceType) (err error) {
 	p.KeppelV1, err = newKeppelClient(provider, eo)
 	return err
 }

@@ -99,7 +99,7 @@ type QuotaPlugin interface {
 	//
 	// Before Init is called, the `services[].params` provided in the config
 	// file will be yaml.Unmarshal()ed into the plugin object itself.
-	Init(ctx context.Context, client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error
+	Init(ctx context.Context, client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType limes.ServiceType) error
 
 	// ServiceInfo returns metadata for this service.
 	//

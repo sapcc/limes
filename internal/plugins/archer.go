@@ -54,9 +54,8 @@ func init() {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *archerPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
-	serviceType := "endpoint-services"
-	eo.ApplyDefaults(serviceType)
+func (p *archerPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType limes.ServiceType) error {
+	eo.ApplyDefaults(string(serviceType))
 
 	url, err := provider.EndpointLocator(eo)
 	if err != nil {
@@ -65,7 +64,7 @@ func (p *archerPlugin) Init(ctx context.Context, provider *gophercloud.ProviderC
 	p.Archer = &gophercloud.ServiceClient{
 		ProviderClient: provider,
 		Endpoint:       url,
-		Type:           serviceType,
+		Type:           string(serviceType),
 	}
 	return nil
 }
