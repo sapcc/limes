@@ -554,7 +554,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 
 	if req.Amount == dbCommitment.Amount {
 		dbCommitment.TransferStatus = req.TransferStatus
-		dbCommitment.TransferToken = transferToken
+		dbCommitment.TransferToken = &transferToken
 		_, err = tx.Update(&dbCommitment)
 		if respondwith.ErrorText(w, err) {
 			return
@@ -565,7 +565,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		remainingAmount := dbCommitment.Amount - req.Amount
 		transferCommitment := p.buildSplitCommitment(dbCommitment, transferAmount)
 		transferCommitment.TransferStatus = req.TransferStatus
-		transferCommitment.TransferToken = transferToken
+		transferCommitment.TransferToken = &transferToken
 		remainingCommitment := p.buildSplitCommitment(dbCommitment, remainingAmount)
 		err = tx.Insert(&transferCommitment)
 		if respondwith.ErrorText(w, err) {
@@ -738,7 +738,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	}
 
 	dbCommitment.TransferStatus = ""
-	dbCommitment.TransferToken = ""
+	dbCommitment.TransferToken = nil
 	dbCommitment.AZResourceID = targetAZResourceID
 	_, err = tx.Update(&dbCommitment)
 	if respondwith.ErrorText(w, err) {

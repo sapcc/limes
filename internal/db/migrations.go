@@ -261,10 +261,17 @@ var sqlMigrations = map[string]string{
 			ADD COLUMN quota_sync_duration_secs REAL NOT NULL DEFAULT 0;
 	`,
 	"044_add_unique_key_to_transfer_token.down.sql": `
-		DROP INDEX transfer_token_idx;
+	  	ALTER TABLE project_commitments DROP CONSTRAINT transfer_token_idx;
+		UPDATE project_commitments SET transfer_token = '' where transfer_token is NULL;
+		ALTER TABLE project_commitments 
+			ALTER COLUMN transfer_token SET NOT NULL,
+			ALTER COLUMN transfer_token SET DEFAULT '';
 	`,
 	"044_add_unique_key_to_transfer_token.up.sql": `
-		CREATE UNIQUE INDEX transfer_token_idx ON project_commitments (transfer_token)
-            WHERE transfer_token <> '';
-	`,
+		ALTER TABLE project_commitments 
+			ALTER COLUMN transfer_token DROP NOT NULL,
+			ALTER COLUMN transfer_token SET DEFAULT NULL;
+		UPDATE project_commitments SET transfer_token = NULL where transfer_token = '';
+		ALTER TABLE project_commitments ADD CONSTRAINT transfer_token_idx UNIQUE (transfer_token);
+		`,
 }
