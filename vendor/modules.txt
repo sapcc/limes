@@ -64,7 +64,7 @@ github.com/gophercloud/gophercloud/v2/openstack/sharedfilesystems/v2/services
 github.com/gophercloud/gophercloud/v2/openstack/sharedfilesystems/v2/sharetypes
 github.com/gophercloud/gophercloud/v2/openstack/utils
 github.com/gophercloud/gophercloud/v2/pagination
-# github.com/gophercloud/utils/v2 v2.0.0-20240705071316-780b64d153e3
+# github.com/gophercloud/utils/v2 v2.0.0-20240725072607-4241c98875fa
 ## explicit; go 1.22
 github.com/gophercloud/utils/v2/env
 github.com/gophercloud/utils/v2/gnocchi
@@ -179,7 +179,7 @@ go.uber.org/atomic
 go.uber.org/automaxprocs/internal/cgroups
 go.uber.org/automaxprocs/internal/runtime
 go.uber.org/automaxprocs/maxprocs
-# golang.org/x/exp v0.0.0-20240716175740-e3f259677ff7
+# golang.org/x/exp v0.0.0-20240719175910-8a7402abbf56
 ## explicit; go 1.20
 golang.org/x/exp/maps
 # golang.org/x/sys v0.22.0
