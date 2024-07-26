@@ -265,7 +265,7 @@ var sqlMigrations = map[string]string{
 			DROP CONSTRAINT project_commitments_transfer_token_key;
 	`,
 	"044_add_unique_key_to_transfer_token.up.sql": `
-		ALTER TABLE project_commitments
-			ADD CONSTRAINT UNIQUE (transfer_token);
+		CREATE UNIQUE INDEX on project_commitments (transfer_token)
+            where transfer_token <> '';
 	`,
 }
