@@ -632,14 +632,9 @@ func (p *v1Provider) GetCommitmentByTransferToken(w http.ResponseWriter, r *http
 	httpapi.IdentifyEndpoint(r, "/v1/commitments/:token")
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:show") {
-		http.Error(w, "insufficient access rights.", http.StatusForbidden)
 		return
 	}
 	transferToken := mux.Vars(r)["token"]
-	if transferToken == "" {
-		http.Error(w, "no transfer token provided", http.StatusBadRequest)
-		return
-	}
 
 	// The token column is a unique key, so we expect only one result.
 	var dbCommitment db.ProjectCommitment
@@ -671,7 +666,6 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/transfer-commitment/:id")
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:edit") {
-		http.Error(w, "insufficient access rights.", http.StatusForbidden)
 		return
 	}
 	transferToken := r.Header.Get("Transfer-Token")
