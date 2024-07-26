@@ -19,6 +19,8 @@
 
 package limes
 
+import "github.com/sapcc/go-api-declarations/liquid"
+
 // ClusterInfo contains the metadata for a cluster that appears in both
 // resource data and rate data reports.
 type ClusterInfo struct {
@@ -61,12 +63,12 @@ type ServiceInfo struct {
 }
 
 // AvailabilityZone is the name of an availability zone.
-// Some special values are enumerated below.
-type AvailabilityZone string
+// Some special values are enumerated at the original declaration site.
+type AvailabilityZone = liquid.AvailabilityZone
 
 const (
 	// AvailabilityZoneAny marks values that are not bound to a specific AZ.
-	AvailabilityZoneAny AvailabilityZone = "any"
+	AvailabilityZoneAny AvailabilityZone = liquid.AvailabilityZoneAny
 	// AvailabilityZoneUnknown marks values that are bound to an unknown AZ.
-	AvailabilityZoneUnknown AvailabilityZone = "unknown"
+	AvailabilityZoneUnknown AvailabilityZone = liquid.AvailabilityZoneUnknown
 )

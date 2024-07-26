@@ -82,7 +82,7 @@ func parseSingleQuotaOverrideValue(input json.RawMessage, serviceType limes.Serv
 	if err != nil {
 		return 0, fmt.Errorf("expected string field for %s/%s, but got %q", serviceType, resourceName, string(input))
 	}
-	parsedValue, err := unit.Parse(value)
+	parsedValue, err := limes.ParseInUnit(unit, value)
 	if err != nil {
 		return 0, fmt.Errorf("in value for %s/%s: %w", serviceType, resourceName, err)
 	}
