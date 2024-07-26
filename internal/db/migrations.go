@@ -266,6 +266,6 @@ var sqlMigrations = map[string]string{
 	`,
 	"044_add_unique_key_to_transfer_token.up.sql": `
 		CREATE UNIQUE INDEX on project_commitments (transfer_token)
-            where transfer_token <> '';
+            WHERE transfer_token <> '';
 	`,
 }
