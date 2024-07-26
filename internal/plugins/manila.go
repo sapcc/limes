@@ -596,7 +596,6 @@ type manilaNetappMetrics struct {
 }
 
 var (
-	//nolint:dupl
 	manilaAZMetricsQueries = []promquery.BulkQuery[manilaAZMetricsKey, manilaAZMetrics]{
 		{
 			Query:       manilaShareCountQuery,
@@ -631,7 +630,6 @@ var (
 			},
 		},
 	}
-	//nolint:dupl
 	manilaNetappMetricsQueries = []promquery.BulkQuery[manilaNetappMetricsKey, manilaNetappMetrics]{
 		{
 			Query:       manilaSharePhysicalUsageQuery,
@@ -656,6 +654,7 @@ var (
 			Filler: func(entry *manilaNetappMetrics, sample *model.Sample) {
 				entry.SnapmirrorUsage = roundUpIntoGigabytes(float64(sample.Value))
 			},
+			ZeroResultsIsNotAnError: true, // some regions legitimately do not have any snapmirror deployments
 		},
 		{
 			Query:       manilaSnapmirrorPhysicalUsageQuery,
@@ -664,6 +663,7 @@ var (
 			Filler: func(entry *manilaNetappMetrics, sample *model.Sample) {
 				entry.SnapmirrorPhysicalUsage = roundUpIntoGigabytes(float64(sample.Value))
 			},
+			ZeroResultsIsNotAnError: true, // some regions legitimately do not have any snapmirror deployments
 		},
 	}
 )

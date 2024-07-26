@@ -65,6 +65,10 @@ type BulkQuery[K comparable, V any] struct {
 	Keyer func(*model.Sample) K
 	// Fills data from this sample into the cache entry.
 	Filler func(*V, *model.Sample)
+	// Usually, it is an error for a BulkQuery to not return any data.
+	// This protects against an outage on the Prometheus or metrics collection level to be misinterpreted as zero-valued metrics.
+	// Set this flag if a query can legitimately have zero results during normal operation.
+	ZeroResultsIsNotAnError bool
 }
 
 // NewBulkQueryCache initializes a BulkQueryCache that executes the given
@@ -104,7 +108,7 @@ func (c *BulkQueryCache[K, V]) fillCacheIfNecessary(ctx context.Context) error {
 			return fmt.Errorf("cannot collect %s: %w", q.Description, err)
 		}
 		// prevent empty prometheus results from being processed downstream.
-		if len(vector) == 0 {
+		if len(vector) == 0 && !q.ZeroResultsIsNotAnError {
 			return fmt.Errorf("did not receive any values from prometheus for %s", q.Description)
 		}
 		for _, sample := range vector {
