@@ -26,9 +26,8 @@ import (
 
 	"github.com/gophercloud/gophercloud/v2/openstack/placement/v1/resourceproviders"
 	"github.com/sapcc/go-api-declarations/limes"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/logg"
-
-	"github.com/sapcc/limes/internal/core"
 )
 
 // BinpackBehavior contains configuration parameters for the binpack simulation.
@@ -158,7 +157,7 @@ func (h BinpackHypervisor) RenderDebugView(az limes.AvailabilityZone) {
 }
 
 // PlaceSeveralInstances calls PlaceOneInstance multiple times.
-func (hh BinpackHypervisors) PlaceSeveralInstances(ff FullFlavor, reason string, coresOvercommitFactor core.OvercommitFactor, blockedCapacity BinpackVector[uint64], bb BinpackBehavior, count uint64) (ok bool) {
+func (hh BinpackHypervisors) PlaceSeveralInstances(ff FullFlavor, reason string, coresOvercommitFactor liquid.OvercommitFactor, blockedCapacity BinpackVector[uint64], bb BinpackBehavior, count uint64) (ok bool) {
 	for range count {
 		ok = hh.PlaceOneInstance(ff, reason, coresOvercommitFactor, blockedCapacity, bb)
 		if !ok {
@@ -171,7 +170,7 @@ func (hh BinpackHypervisors) PlaceSeveralInstances(ff FullFlavor, reason string,
 
 // PlaceOneInstance places a single instance of the given flavor using the vector-dot binpacking algorithm.
 // If the instance cannot be placed, false is returned.
-func (hh BinpackHypervisors) PlaceOneInstance(ff FullFlavor, reason string, coresOvercommitFactor core.OvercommitFactor, blockedCapacity BinpackVector[uint64], bb BinpackBehavior) (ok bool) {
+func (hh BinpackHypervisors) PlaceOneInstance(ff FullFlavor, reason string, coresOvercommitFactor liquid.OvercommitFactor, blockedCapacity BinpackVector[uint64], bb BinpackBehavior) (ok bool) {
 	// This function implements the vector dot binpacking method described in [Mayank] (section III,
 	// subsection D, including the correction presented in the last paragraph of that subsection).
 	//

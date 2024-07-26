@@ -42,6 +42,7 @@ import (
 	"github.com/sapcc/go-api-declarations/bininfo"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/errext"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/httpapi/pprofapi"
@@ -458,36 +459,34 @@ type mockCapacityPluginBackchannel struct {
 	Cluster *core.Cluster
 }
 
-// GetOvercommitFactor implements the CapacityPluginBackchannel interface.
-func (b mockCapacityPluginBackchannel) GetOvercommitFactor(serviceType limes.ServiceType, resourceName limesresources.ResourceName) (core.OvercommitFactor, error) {
-	return b.Cluster.BehaviorForResource(serviceType, resourceName).OvercommitFactor, nil
-}
-
-// GetGlobalResourceDemand implements the core.CapacityPluginBackchannel interface.
-func (mockCapacityPluginBackchannel) GetGlobalResourceDemand(serviceType limes.ServiceType, resourceName limesresources.ResourceName) (result map[limes.AvailabilityZone]core.ResourceDemand, err error) {
-	filePath := "mock-global-resource-demand.yaml"
+// GetResourceDemand implements the core.CapacityPluginBackchannel interface.
+func (b mockCapacityPluginBackchannel) GetResourceDemand(serviceType limes.ServiceType, resourceName limesresources.ResourceName) (result liquid.ResourceDemand, err error) {
+	filePath := "mock-global-resource-demand.json"
 	buf, err := os.ReadFile(filePath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			logg.Info("capacity plugin asked for GetGlobalResourceDemand(%q, %q), but no mock data found at %s, so an empty result will be returned",
+			logg.Info("capacity plugin asked for GetResourceDemand(%q, %q), but no mock data found at %s, so an empty result will be returned",
 				serviceType, resourceName, filePath)
-			return nil, nil
+			return liquid.ResourceDemand{}, nil
 		} else {
-			return nil, err
+			return liquid.ResourceDemand{}, err
 		}
 	}
 
-	var mockData map[limes.ServiceType]map[limesresources.ResourceName]map[limes.AvailabilityZone]core.ResourceDemand
+	var mockData map[limes.ServiceType]map[limesresources.ResourceName]map[limes.AvailabilityZone]liquid.ResourceDemandInAZ
 	err = yaml.Unmarshal(buf, &mockData)
 	if err != nil {
-		return nil, fmt.Errorf("while parsing %s: %w", filePath, err)
+		return liquid.ResourceDemand{}, fmt.Errorf("while parsing %s: %w", filePath, err)
 	}
 
-	result = mockData[serviceType][resourceName]
-	if result == nil {
-		logg.Info("capacity plugin asked for GetGlobalResourceDemand(%q, %q), but no mock data found for this resource in %s, so an empty result will be returned",
+	resultPerAZ := mockData[serviceType][resourceName]
+	if resultPerAZ == nil {
+		logg.Info("capacity plugin asked for GetResourceDemand(%q, %q), but no mock data found for this resource in %s, so an empty result will be returned",
 			serviceType, resourceName, filePath)
-		return nil, nil
+		return liquid.ResourceDemand{}, nil
 	}
-	return result, nil
+	return liquid.ResourceDemand{
+		OvercommitFactor: b.Cluster.BehaviorForResource(serviceType, resourceName).OvercommitFactor,
+		PerAZ:            resultPerAZ,
+	}, nil
 }

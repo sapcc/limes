@@ -25,6 +25,7 @@ import (
 
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/internal/core"
@@ -58,14 +59,12 @@ var (
 	`)
 )
 
-// GetOvercommitFactor implements the CapacityPluginBackchannel interface.
-func (i capacityPluginBackchannelImpl) GetOvercommitFactor(serviceType limes.ServiceType, resourceName limesresources.ResourceName) (core.OvercommitFactor, error) {
-	return i.Cluster.BehaviorForResource(serviceType, resourceName).OvercommitFactor, nil
-}
-
-// GetGlobalResourceDemand implements the CapacityPluginBackchannel interface.
-func (i capacityPluginBackchannelImpl) GetGlobalResourceDemand(serviceType limes.ServiceType, resourceName limesresources.ResourceName) (map[limes.AvailabilityZone]core.ResourceDemand, error) {
-	result := make(map[limes.AvailabilityZone]core.ResourceDemand)
+// GetResourceDemand implements the CapacityPluginBackchannel interface.
+func (i capacityPluginBackchannelImpl) GetResourceDemand(serviceType limes.ServiceType, resourceName limesresources.ResourceName) (liquid.ResourceDemand, error) {
+	result := liquid.ResourceDemand{
+		OvercommitFactor: i.Cluster.BehaviorForResource(serviceType, resourceName).OvercommitFactor,
+		PerAZ:            make(map[limes.AvailabilityZone]liquid.ResourceDemandInAZ),
+	}
 	err := sqlext.ForeachRow(i.DB, getResourceDemandQuery, []any{serviceType, resourceName}, func(rows *sql.Rows) error {
 		var (
 			az                 limes.AvailabilityZone
@@ -78,18 +77,18 @@ func (i capacityPluginBackchannelImpl) GetGlobalResourceDemand(serviceType limes
 			return err
 		}
 
-		demand := result[az]
+		demand := result.PerAZ[az]
 		demand.Usage += usage
 		if activeCommitments > usage {
 			demand.UnusedCommitments += activeCommitments - usage
 		}
 		demand.PendingCommitments += pendingCommitments
-		result[az] = demand
+		result.PerAZ[az] = demand
 
 		return nil
 	})
 	if err != nil {
-		return nil, fmt.Errorf("while getting resource demand for %s/%s through backchannel: %w", serviceType, resourceName, err)
+		return liquid.ResourceDemand{}, fmt.Errorf("while getting resource demand for %s/%s through backchannel: %w", serviceType, resourceName, err)
 	}
 	return result, nil
 }
