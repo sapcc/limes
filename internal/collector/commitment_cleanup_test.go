@@ -99,7 +99,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	// job should set it to "expired", but leave it around for now
 	s.Clock.StepBy(1 * time.Minute)
 	mustT(t, job.ProcessOne(s.Ctx))
-	tr.DBChanges().AssertEqualf(`UPDATE project_commitments SET state = 'expired' WHERE id = 2;`)
+	tr.DBChanges().AssertEqualf(`UPDATE project_commitments SET state = 'expired' WHERE id = 2 AND transfer_token = NULL;`)
 
 	// one month later, the commitment should be deleted
 	s.Clock.StepBy(10 * oneDay)
@@ -107,7 +107,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	tr.DBChanges().AssertEmpty()
 	s.Clock.StepBy(30 * oneDay)
 	mustT(t, job.ProcessOne(s.Ctx))
-	tr.DBChanges().AssertEqualf(`DELETE FROM project_commitments WHERE id = 2;`)
+	tr.DBChanges().AssertEqualf(`DELETE FROM project_commitments WHERE id = 2 AND transfer_token = NULL;`)
 
 	// test 2: simulate a commitment that was created yesterday,
 	// and then moved to a different project five minutes later
@@ -138,16 +138,16 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	// the commitment in state "superseded" should not be touched when moving to state "expired"
 	s.Clock.StepBy(1 * time.Minute)
 	mustT(t, job.ProcessOne(s.Ctx))
-	tr.DBChanges().AssertEqualf(`UPDATE project_commitments SET state = 'expired' WHERE id = 4;`)
+	tr.DBChanges().AssertEqualf(`UPDATE project_commitments SET state = 'expired' WHERE id = 4 AND transfer_token = NULL;`)
 
 	// when cleaning up, the successor commitment needs to be cleaned up first...
 	s.Clock.StepBy(40 * oneDay)
 	mustT(t, job.ProcessOne(s.Ctx))
-	tr.DBChanges().AssertEqualf(`DELETE FROM project_commitments WHERE id = 4;`)
+	tr.DBChanges().AssertEqualf(`DELETE FROM project_commitments WHERE id = 4 AND transfer_token = NULL;`)
 
 	// ...and then the superseded commitment can be cleaned up because it does not have predecessors left
 	mustT(t, job.ProcessOne(s.Ctx))
-	tr.DBChanges().AssertEqualf(`DELETE FROM project_commitments WHERE id = 3;`)
+	tr.DBChanges().AssertEqualf(`DELETE FROM project_commitments WHERE id = 3 AND transfer_token = NULL;`)
 }
 
 func pointerTo[T any](val T) *T {

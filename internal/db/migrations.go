@@ -273,5 +273,5 @@ var sqlMigrations = map[string]string{
 			ALTER COLUMN transfer_token SET DEFAULT NULL;
 		UPDATE project_commitments SET transfer_token = NULL where transfer_token = '';
 		ALTER TABLE project_commitments ADD CONSTRAINT transfer_token_idx UNIQUE (transfer_token);
-		`,
+	`,
 }

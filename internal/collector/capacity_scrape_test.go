@@ -496,7 +496,7 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	scrapedAt1 := s.Clock.Now().Add(-5 * time.Second)
 	tr.DBChanges().AssertEqualf(`%s
 		UPDATE project_az_resources SET quota = 10 WHERE id = 18 AND resource_id = 2 AND az = 'az-one';
-		UPDATE project_commitments SET confirmed_at = %d, state = 'active' WHERE id = 1;
+		UPDATE project_commitments SET confirmed_at = %d, state = 'active' WHERE id = 1 AND transfer_token = NULL;
 		UPDATE project_resources SET quota = 260 WHERE id = 2 AND service_id = 1 AND name = 'capacity';
 	`, timestampUpdates(), scrapedAt1.Unix())
 
@@ -510,8 +510,8 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	scrapedAt1 = s.Clock.Now().Add(-5 * time.Second)
 	tr.DBChanges().AssertEqualf(`%s
 		UPDATE project_az_resources SET quota = 110 WHERE id = 18 AND resource_id = 2 AND az = 'az-one';
-		UPDATE project_commitments SET confirmed_at = %d, state = 'active' WHERE id = 2;
-		UPDATE project_commitments SET state = 'pending' WHERE id = 3;
+		UPDATE project_commitments SET confirmed_at = %d, state = 'active' WHERE id = 2 AND transfer_token = NULL;
+		UPDATE project_commitments SET state = 'pending' WHERE id = 3 AND transfer_token = NULL;
 		UPDATE project_resources SET quota = 360 WHERE id = 2 AND service_id = 1 AND name = 'capacity';
 	`, timestampUpdates(), scrapedAt1.Unix())
 
@@ -528,9 +528,9 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	tr.DBChanges().AssertEqualf(`%s
 		UPDATE project_az_resources SET quota = 0 WHERE id = 26 AND resource_id = 11 AND az = 'any';
 		UPDATE project_az_resources SET quota = 20 WHERE id = 27 AND resource_id = 11 AND az = 'az-one';
-		UPDATE project_commitments SET confirmed_at = %d, state = 'active' WHERE id = 4;
-		UPDATE project_commitments SET confirmed_at = %d, state = 'active' WHERE id = 5;
-		UPDATE project_commitments SET state = 'pending' WHERE id = 6;
+		UPDATE project_commitments SET confirmed_at = %d, state = 'active' WHERE id = 4 AND transfer_token = NULL;
+		UPDATE project_commitments SET confirmed_at = %d, state = 'active' WHERE id = 5 AND transfer_token = NULL;
+		UPDATE project_commitments SET state = 'pending' WHERE id = 6 AND transfer_token = NULL;
 		UPDATE project_resources SET quota = 21 WHERE id = 11 AND service_id = 4 AND name = 'capacity';
 	`, timestampUpdates(), scrapedAt2.Unix(), scrapedAt2.Unix())
 
@@ -544,8 +544,8 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	scrapedAt1 = s.Clock.Now().Add(-5 * time.Second)
 	tr.DBChanges().AssertEqualf(`%s
 		UPDATE project_az_resources SET quota = 300 WHERE id = 19 AND resource_id = 2 AND az = 'az-two';
-		UPDATE project_commitments SET state = 'pending' WHERE id = 7;
-		UPDATE project_commitments SET confirmed_at = %d, state = 'active' WHERE id = 8;
+		UPDATE project_commitments SET state = 'pending' WHERE id = 7 AND transfer_token = NULL;
+		UPDATE project_commitments SET confirmed_at = %d, state = 'active' WHERE id = 8 AND transfer_token = NULL;
 		UPDATE project_resources SET quota = 410 WHERE id = 2 AND service_id = 1 AND name = 'capacity';
 	`, timestampUpdates(), scrapedAt1.Unix())
 
@@ -561,8 +561,8 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	tr.DBChanges().AssertEqualf(`%s
 		UPDATE project_az_resources SET quota = 0 WHERE id = 20 AND resource_id = 5 AND az = 'any';
 		UPDATE project_az_resources SET quota = 22 WHERE id = 22 AND resource_id = 5 AND az = 'az-two';
-		UPDATE project_commitments SET state = 'pending' WHERE id = 10;
-		UPDATE project_commitments SET confirmed_at = %d, state = 'active' WHERE id = 9;
+		UPDATE project_commitments SET state = 'pending' WHERE id = 10 AND transfer_token = NULL;
+		UPDATE project_commitments SET confirmed_at = %d, state = 'active' WHERE id = 9 AND transfer_token = NULL;
 		UPDATE project_resources SET quota = 23 WHERE id = 5 AND service_id = 2 AND name = 'capacity';
 	`, timestampUpdates(), scrapedAt2.Unix())
 
@@ -575,8 +575,8 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 		UPDATE project_az_resources SET quota = 8 WHERE id = 20 AND resource_id = 5 AND az = 'any';
 		UPDATE project_az_resources SET quota = 1 WHERE id = 22 AND resource_id = 5 AND az = 'az-two';
 		UPDATE project_az_resources SET quota = 2 WHERE id = 28 AND resource_id = 11 AND az = 'az-two';
-		UPDATE project_commitments SET confirmed_at = %d, state = 'active' WHERE id = 10;
-		UPDATE project_commitments SET state = 'expired' WHERE id = 9;
+		UPDATE project_commitments SET confirmed_at = %d, state = 'active' WHERE id = 10 AND transfer_token = NULL;
+		UPDATE project_commitments SET state = 'expired' WHERE id = 9 AND transfer_token = NULL;
 		UPDATE project_resources SET quota = 22 WHERE id = 11 AND service_id = 4 AND name = 'capacity';
 		UPDATE project_resources SET quota = 10 WHERE id = 5 AND service_id = 2 AND name = 'capacity';
 	`, timestampUpdates(), scrapedAt2.Unix())
