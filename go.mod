@@ -7,15 +7,15 @@ require (
 	github.com/dlmiddlecote/sqlstats v1.0.2
 	github.com/go-gorp/gorp/v3 v3.1.0
 	github.com/gofrs/uuid/v5 v5.2.0
-	github.com/gophercloud/gophercloud/v2 v2.0.0
+	github.com/gophercloud/gophercloud/v2 v2.1.0
 	github.com/gophercloud/utils/v2 v2.0.0-20240705071316-780b64d153e3
 	github.com/gorilla/mux v1.8.1
 	github.com/majewsky/schwift/v2 v2.0.0
 	github.com/prometheus/client_golang v1.19.1
 	github.com/prometheus/common v0.55.0
 	github.com/rs/cors v1.11.0
-	github.com/sapcc/go-api-declarations v1.11.3
-	github.com/sapcc/go-bits v0.0.0-20240722144140-beea373e0a9c
+	github.com/sapcc/go-api-declarations v1.12.0
+	github.com/sapcc/go-bits v0.0.0-20240725082021-261f0bf53c79
 	go.uber.org/automaxprocs v1.5.3
 	golang.org/x/exp v0.0.0-20240716175740-e3f259677ff7
 	gopkg.in/yaml.v2 v2.4.0
