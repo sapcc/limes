@@ -260,9 +260,11 @@ var sqlMigrations = map[string]string{
 		ALTER TABLE project_services
 			ADD COLUMN quota_sync_duration_secs REAL NOT NULL DEFAULT 0;
 	`,
-	"044_add_unique_key_to_transfer_token.down.sql": ``,
+	"044_add_unique_key_to_transfer_token.down.sql": `
+		DROP INDEX transfer_token_idx;
+	`,
 	"044_add_unique_key_to_transfer_token.up.sql": `
-		CREATE UNIQUE INDEX on project_commitments (transfer_token)
+		CREATE UNIQUE INDEX transfer_token_idx ON project_commitments (transfer_token)
             WHERE transfer_token <> '';
 	`,
 }
