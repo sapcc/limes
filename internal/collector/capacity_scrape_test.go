@@ -30,11 +30,11 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/jobloop"
 
-	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
@@ -584,7 +584,7 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	// test GetGlobalResourceDemand (this is not used by any of our test plugins,
 	// but we can just call it directly to see that it works)
 	bc := datamodel.NewCapacityPluginBackchannel(s.Cluster, s.DB)
-	expectedDemandsByService := map[limes.ServiceType]map[limesresources.ResourceName]map[limes.AvailabilityZone]core.ResourceDemand{
+	expectedDemandsByService := map[limes.ServiceType]map[limesresources.ResourceName]map[limes.AvailabilityZone]liquid.ResourceDemandInAZ{
 		"first": {
 			"capacity": {
 				"az-one":                  {Usage: 2, UnusedCommitments: 109, PendingCommitments: 0},
@@ -608,10 +608,10 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	}
 	for serviceType, expectedDemandsByResource := range expectedDemandsByService {
 		for resourceName, expectedDemands := range expectedDemandsByResource {
-			actualDemands, err := bc.GetGlobalResourceDemand(serviceType, resourceName)
+			actualDemands, err := bc.GetResourceDemand(serviceType, resourceName)
 			mustT(t, err)
 			desc := fmt.Sprintf("GetGlobalResourceDemand for %s/%s", serviceType, resourceName)
-			assert.DeepEqual(t, desc, actualDemands, expectedDemands)
+			assert.DeepEqual(t, desc, actualDemands.PerAZ, expectedDemands)
 		}
 	}
 }

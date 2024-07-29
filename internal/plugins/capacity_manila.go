@@ -34,6 +34,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/logg"
 
 	"github.com/sapcc/limes/internal/core"
@@ -132,48 +133,36 @@ func (p *capacityManilaPlugin) Scrape(ctx context.Context, backchannel core.Capa
 		"share_networks": core.InAnyAZ(core.CapacityData{Capacity: p.ShareNetworks}),
 	}
 	for _, shareType := range p.ShareTypes {
-		shareCapacityDemand, err := backchannel.GetGlobalResourceDemand("sharev2", p.makeResourceName("share_capacity", shareType))
+		shareCapacityDemand, err := backchannel.GetResourceDemand("sharev2", p.makeResourceName("share_capacity", shareType))
 		if err != nil {
 			return nil, nil, err
 		}
-		shareOvercommitFactor, err := backchannel.GetOvercommitFactor("sharev2", p.makeResourceName("share_capacity", shareType))
-		if err != nil {
-			return nil, nil, err
-		}
-		for az, demand := range shareCapacityDemand {
-			shareCapacityDemand[az] = shareOvercommitFactor.ApplyInReverseToDemand(demand)
+		for az, demand := range shareCapacityDemand.PerAZ {
+			shareCapacityDemand.PerAZ[az] = shareCapacityDemand.OvercommitFactor.ApplyInReverseToDemand(demand)
 		}
 
-		snapshotCapacityDemand, err := backchannel.GetGlobalResourceDemand("sharev2", p.makeResourceName("snapshot_capacity", shareType))
+		snapshotCapacityDemand, err := backchannel.GetResourceDemand("sharev2", p.makeResourceName("snapshot_capacity", shareType))
 		if err != nil {
 			return nil, nil, err
 		}
-		snapshotOvercommitFactor, err := backchannel.GetOvercommitFactor("sharev2", p.makeResourceName("snapshot_capacity", shareType))
-		if err != nil {
-			return nil, nil, err
-		}
-		for az, demand := range snapshotCapacityDemand {
-			snapshotCapacityDemand[az] = snapshotOvercommitFactor.ApplyInReverseToDemand(demand)
+		for az, demand := range snapshotCapacityDemand.PerAZ {
+			snapshotCapacityDemand.PerAZ[az] = snapshotCapacityDemand.OvercommitFactor.ApplyInReverseToDemand(demand)
 		}
 
-		var snapmirrorCapacityDemand map[limes.AvailabilityZone]core.ResourceDemand
+		var snapmirrorCapacityDemand liquid.ResourceDemand
 		if p.WithSnapmirror {
-			snapmirrorCapacityDemand, err = backchannel.GetGlobalResourceDemand("sharev2", p.makeResourceName("snapmirror_capacity", shareType))
+			snapmirrorCapacityDemand, err = backchannel.GetResourceDemand("sharev2", p.makeResourceName("snapmirror_capacity", shareType))
 			if err != nil {
 				return nil, nil, err
 			}
-			snapmirrorOvercommitFactor, err := backchannel.GetOvercommitFactor("sharev2", p.makeResourceName("snapmirror_capacity", shareType))
-			if err != nil {
-				return nil, nil, err
-			}
-			for az, demand := range snapmirrorCapacityDemand {
-				snapmirrorCapacityDemand[az] = snapmirrorOvercommitFactor.ApplyInReverseToDemand(demand)
+			for az, demand := range snapmirrorCapacityDemand.PerAZ {
+				snapmirrorCapacityDemand.PerAZ[az] = snapmirrorCapacityDemand.OvercommitFactor.ApplyInReverseToDemand(demand)
 			}
 		}
 		// ^ NOTE: If p.WithSnapmirror is false, `snapmirrorCapacityDemand[az]` is always zero-valued
 		// and thus no capacity will be allocated to the snapmirror_capacity resource.
 
-		capForType, err := p.scrapeForShareType(ctx, shareType, azForServiceHost, allAZs, shareCapacityDemand, snapshotCapacityDemand, snapmirrorCapacityDemand)
+		capForType, err := p.scrapeForShareType(ctx, shareType, azForServiceHost, allAZs, shareCapacityDemand.PerAZ, snapshotCapacityDemand.PerAZ, snapmirrorCapacityDemand.PerAZ)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -227,7 +216,7 @@ func (opts poolsListDetailOpts) ToPoolsListQuery() (string, error) {
 	return q.String(), err
 }
 
-func (p *capacityManilaPlugin) scrapeForShareType(ctx context.Context, shareType ManilaShareTypeSpec, azForServiceHost map[string]limes.AvailabilityZone, allAZs []limes.AvailabilityZone, shareCapacityDemand, snapshotCapacityDemand, snapmirrorCapacityDemand map[limes.AvailabilityZone]core.ResourceDemand) (capacityForShareType, error) {
+func (p *capacityManilaPlugin) scrapeForShareType(ctx context.Context, shareType ManilaShareTypeSpec, azForServiceHost map[string]limes.AvailabilityZone, allAZs []limes.AvailabilityZone, shareCapacityDemand, snapshotCapacityDemand, snapmirrorCapacityDemand map[limes.AvailabilityZone]liquid.ResourceDemandInAZ) (capacityForShareType, error) {
 	// list all pools for the Manila share types corresponding to this virtual share type
 	allPoolsByAZ := make(map[limes.AvailabilityZone][]*manilaPool)
 	for _, stName := range getAllManilaShareTypes(shareType) {
@@ -275,7 +264,7 @@ func (p *capacityManilaPlugin) scrapeForShareType(ctx context.Context, shareType
 	return result, nil
 }
 
-func (p *capacityManilaPlugin) scrapeForShareTypeAndAZ(shareType ManilaShareTypeSpec, azCount uint64, az limes.AvailabilityZone, pools []*manilaPool, shareCapacityDemand, snapshotCapacityDemand, snapmirrorCapacityDemand core.ResourceDemand) azCapacityForShareType {
+func (p *capacityManilaPlugin) scrapeForShareTypeAndAZ(shareType ManilaShareTypeSpec, azCount uint64, az limes.AvailabilityZone, pools []*manilaPool, shareCapacityDemand, snapshotCapacityDemand, snapmirrorCapacityDemand liquid.ResourceDemandInAZ) azCapacityForShareType {
 	// count pools and sum their capacities if they are included
 	var (
 		poolCount           uint64
@@ -297,13 +286,13 @@ func (p *capacityManilaPlugin) scrapeForShareTypeAndAZ(shareType ManilaShareType
 
 	// distribute capacity and usage between the various resource types
 	logg.Debug("distributing capacity for share_type %q, AZ %q", shareType.Name, az)
-	distributedCapacityGiB := p.distributeByDemand(uint64(totalCapacityGB), map[string]core.ResourceDemand{
+	distributedCapacityGiB := p.distributeByDemand(uint64(totalCapacityGB), map[string]liquid.ResourceDemandInAZ{
 		"shares":      shareCapacityDemand,
 		"snapshots":   snapshotCapacityDemand,
 		"snapmirrors": snapmirrorCapacityDemand,
 	})
 	logg.Debug("distributing usage for share_type %q, AZ %q", shareType.Name, az)
-	distributedUsageGiB := p.distributeByDemand(uint64(allocatedCapacityGB), map[string]core.ResourceDemand{
+	distributedUsageGiB := p.distributeByDemand(uint64(allocatedCapacityGB), map[string]liquid.ResourceDemandInAZ{
 		"shares":      {Usage: shareCapacityDemand.Usage},
 		"snapshots":   {Usage: snapshotCapacityDemand.Usage},
 		"snapmirrors": {Usage: snapmirrorCapacityDemand.Usage},
@@ -361,7 +350,7 @@ func (p *capacityManilaPlugin) scrapeForShareTypeAndAZ(shareType ManilaShareType
 //
 // For capacity, each tier of demand is considered.
 // For usage, the caller will set all demand fields except for Usage to 0.
-func (p *capacityManilaPlugin) distributeByDemand(totalAmount uint64, demands map[string]core.ResourceDemand) map[string]uint64 {
+func (p *capacityManilaPlugin) distributeByDemand(totalAmount uint64, demands map[string]liquid.ResourceDemandInAZ) map[string]uint64 {
 	// setup phase to make each of the paragraphs below as identical as possible (for clarity)
 	requests := make(map[string]uint64)
 	result := make(map[string]uint64)

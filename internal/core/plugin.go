@@ -28,6 +28,7 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/pluggable"
 
 	"github.com/sapcc/limes/internal/db"
@@ -99,7 +100,7 @@ type QuotaPlugin interface {
 	//
 	// Before Init is called, the `services[].params` provided in the config
 	// file will be yaml.Unmarshal()ed into the plugin object itself.
-	Init(ctx context.Context, client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error
+	Init(ctx context.Context, client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType limes.ServiceType) error
 
 	// ServiceInfo returns metadata for this service.
 	//
@@ -223,20 +224,7 @@ type CapacityPlugin interface {
 // differs from the raw capacity seen by the CapacityPlugin by this
 // OvercommitFactor.
 type CapacityPluginBackchannel interface {
-	GetGlobalResourceDemand(serviceType limes.ServiceType, resourceName limesresources.ResourceName) (map[limes.AvailabilityZone]ResourceDemand, error)
-	GetOvercommitFactor(serviceType limes.ServiceType, resourceName limesresources.ResourceName) (OvercommitFactor, error)
-}
-
-// ResourceDemand describes cluster-wide demand for a certain resource within a
-// specific AZ. It appears in type CapacityPluginBackchannel.
-type ResourceDemand struct {
-	Usage uint64 `yaml:"usage"`
-	// UnusedCommitments counts all commitments that are confirmed but not covered by existing usage.
-	UnusedCommitments uint64 `yaml:"unused_commitments"`
-	// PendingCommitments counts all commitments that should be confirmed by now, but are not.
-	PendingCommitments uint64 `yaml:"pending_commitments"`
-
-	//NOTE: The yaml tags are used by test-scan-capacity to deserialize ResourceDemand fixtures from a file.
+	GetResourceDemand(serviceType limes.ServiceType, resourceName limesresources.ResourceName) (liquid.ResourceDemand, error)
 }
 
 var (

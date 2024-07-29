@@ -92,7 +92,7 @@ func init() {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *novaPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
+func (p *novaPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType limes.ServiceType) (err error) {
 	p.resources = slices.Clone(novaDefaultResources)
 
 	p.NovaV2, err = openstack.NewComputeV2(provider, eo)

@@ -113,7 +113,7 @@ func (c *Cluster) Connect(ctx context.Context, provider *gophercloud.ProviderCli
 			errs.Addf("failed to supply params to service %s: %w", srv.ServiceType, err)
 			continue
 		}
-		err := plugin.Init(ctx, provider, eo)
+		err := plugin.Init(ctx, provider, eo, srv.ServiceType)
 		if err != nil {
 			errs.Addf("failed to initialize service %s: %w", srv.ServiceType, util.UnpackError(err))
 		}

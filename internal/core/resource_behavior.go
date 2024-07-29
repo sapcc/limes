@@ -26,6 +26,7 @@ import (
 
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/errext"
 	"github.com/sapcc/go-bits/regexpext"
 )
@@ -34,7 +35,7 @@ import (
 // behaviors of a single resource (or a set thereof).
 type ResourceBehavior struct {
 	FullResourceNameRx       regexpext.BoundedRegexp             `yaml:"resource"`
-	OvercommitFactor         OvercommitFactor                    `yaml:"overcommit_factor"`
+	OvercommitFactor         liquid.OvercommitFactor             `yaml:"overcommit_factor"`
 	CommitmentDurations      []limesresources.CommitmentDuration `yaml:"commitment_durations"`
 	CommitmentIsAZAware      bool                                `yaml:"commitment_is_az_aware"`
 	CommitmentMinConfirmDate *time.Time                          `yaml:"commitment_min_confirm_date"`
@@ -120,41 +121,4 @@ func (r *ResourceRef) UnmarshalYAML(unmarshal func(any) error) error {
 		ResourceName: limesresources.ResourceName(fields[1]),
 	}
 	return nil
-}
-
-// OvercommitFactor is a float64 with a convenience method.
-type OvercommitFactor float64
-
-// ApplyTo converts a raw capacity into an effective capacity.
-func (f OvercommitFactor) ApplyTo(rawCapacity uint64) uint64 {
-	if f == 0 {
-		// if no overcommit was configured, assume an overcommit factor of 1
-		return rawCapacity
-	}
-	return uint64(float64(rawCapacity) * float64(f))
-}
-
-// ApplyInReverseTo turns the given effective capacity back into a raw capacity.
-func (f OvercommitFactor) ApplyInReverseTo(capacity uint64) uint64 {
-	if f == 0 {
-		// if no overcommit was configured, assume an overcommit factor of 1
-		return capacity
-	}
-	rawCapacity := uint64(float64(capacity) / float64(f))
-	for f.ApplyTo(rawCapacity) < capacity {
-		// fix errors from rounding down float64 -> uint64 above
-		rawCapacity++
-	}
-	return rawCapacity
-}
-
-// ApplyInReverseToDemand is a shorthand for calling ApplyInReverseTo() on all fields of a ResourceDemand.
-// This can be used in capacity plugins to convert demand numbers operating on
-// overcommitted capacity into numbers that relate to raw capacity.
-func (f OvercommitFactor) ApplyInReverseToDemand(demand ResourceDemand) ResourceDemand {
-	return ResourceDemand{
-		Usage:              f.ApplyInReverseTo(demand.Usage),
-		UnusedCommitments:  f.ApplyInReverseTo(demand.UnusedCommitments),
-		PendingCommitments: f.ApplyInReverseTo(demand.PendingCommitments),
-	}
 }

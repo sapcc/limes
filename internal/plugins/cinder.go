@@ -54,7 +54,7 @@ func init() {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *cinderPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
+func (p *cinderPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType limes.ServiceType) (err error) {
 	if len(p.VolumeTypes) == 0 {
 		return errors.New("quota plugin volumev2: missing required configuration field volumev2.volume_types")
 	}

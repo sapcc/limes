@@ -33,6 +33,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/logg"
 
 	"github.com/sapcc/limes/internal/core"
@@ -142,41 +143,45 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 
 	// collect all relevant resource demands
 	var (
-		coresDemand           map[limes.AvailabilityZone]core.ResourceDemand
-		instancesDemand       map[limes.AvailabilityZone]core.ResourceDemand
-		ramDemand             map[limes.AvailabilityZone]core.ResourceDemand
-		coresOvercommitFactor core.OvercommitFactor
+		coresDemand     liquid.ResourceDemand
+		instancesDemand liquid.ResourceDemand
+		ramDemand       liquid.ResourceDemand
 	)
 	if p.PooledCoresResourceName == "" {
-		coresOvercommitFactor = 1
+		coresDemand.OvercommitFactor = 1
 	} else {
-		coresDemand, err = backchannel.GetGlobalResourceDemand("compute", p.PooledCoresResourceName)
+		coresDemand, err = backchannel.GetResourceDemand("compute", p.PooledCoresResourceName)
 		if err != nil {
 			return nil, nil, fmt.Errorf("while collecting resource demand for compute/%s: %w", p.PooledCoresResourceName, err)
 		}
-		instancesDemand, err = backchannel.GetGlobalResourceDemand("compute", p.PooledInstancesResourceName)
+		instancesDemand, err = backchannel.GetResourceDemand("compute", p.PooledInstancesResourceName)
 		if err != nil {
 			return nil, nil, fmt.Errorf("while collecting resource demand for compute/%s: %w", p.PooledInstancesResourceName, err)
 		}
-		ramDemand, err = backchannel.GetGlobalResourceDemand("compute", p.PooledRAMResourceName)
+		if instancesDemand.OvercommitFactor != 1 {
+			return nil, nil, fmt.Errorf("overcommit on compute/%s is not supported", p.PooledInstancesResourceName)
+		}
+		ramDemand, err = backchannel.GetResourceDemand("compute", p.PooledRAMResourceName)
 		if err != nil {
 			return nil, nil, fmt.Errorf("while collecting resource demand for compute/%s: %w", p.PooledRAMResourceName, err)
 		}
-		coresOvercommitFactor, err = backchannel.GetOvercommitFactor("compute", p.PooledCoresResourceName)
-		if err != nil {
-			return nil, nil, fmt.Errorf("while getting overcommit factor for compute/%s: %w", p.PooledCoresResourceName, err)
+		if ramDemand.OvercommitFactor != 1 {
+			return nil, nil, fmt.Errorf("overcommit on compute/%s is not supported", p.PooledRAMResourceName)
 		}
 	}
-	logg.Debug("pooled cores demand: %#v (overcommit factor = %g)", coresDemand, coresOvercommitFactor)
-	logg.Debug("pooled instances demand: %#v", instancesDemand)
-	logg.Debug("pooled RAM demand: %#v", ramDemand)
+	logg.Debug("pooled cores demand: %#v (overcommit factor = %g)", coresDemand.PerAZ, coresDemand.OvercommitFactor)
+	logg.Debug("pooled instances demand: %#v", instancesDemand.PerAZ)
+	logg.Debug("pooled RAM demand: %#v", ramDemand.PerAZ)
 
-	demandByFlavorName := make(map[string]map[limes.AvailabilityZone]core.ResourceDemand)
+	demandByFlavorName := make(map[string]liquid.ResourceDemand)
 	for _, f := range splitFlavors {
 		resourceName := p.FlavorAliases.LimesResourceNameForFlavor(f.Flavor.Name)
-		demand, err := backchannel.GetGlobalResourceDemand("compute", resourceName)
+		demand, err := backchannel.GetResourceDemand("compute", resourceName)
 		if err != nil {
 			return nil, nil, fmt.Errorf("while collecting resource demand for compute/%s: %w", resourceName, err)
+		}
+		if demand.OvercommitFactor != 1 {
+			return nil, nil, fmt.Errorf("overcommit on compute/%s is not supported", resourceName)
 		}
 		demandByFlavorName[f.Flavor.Name] = demand
 	}
@@ -287,7 +292,7 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 			for _, hv := range hypervisorsByAZ[az] {
 				if hv.Match.Hypervisor.HypervisorHostname == instance.HypervisorHostname {
 					var zero nova.BinpackVector[uint64]
-					placed := nova.BinpackHypervisors{hv}.PlaceOneInstance(flavor, "USED", coresOvercommitFactor, zero, bb)
+					placed := nova.BinpackHypervisors{hv}.PlaceOneInstance(flavor, "USED", coresDemand.OvercommitFactor, zero, bb)
 					if !placed {
 						logg.Debug("could not simulate placement of known instance %s on %s", instance.ID, hv.Match.Hypervisor.Description())
 					}
@@ -311,9 +316,9 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 
 		// phase 1: block existing usage
 		blockedCapacity := nova.BinpackVector[uint64]{
-			VCPUs:    coresOvercommitFactor.ApplyInReverseTo(coresDemand[az].Usage),
-			MemoryMB: ramDemand[az].Usage,
-			LocalGB:  instancesDemand[az].Usage * maxRootDiskSize,
+			VCPUs:    coresDemand.OvercommitFactor.ApplyInReverseTo(coresDemand.PerAZ[az].Usage),
+			MemoryMB: ramDemand.PerAZ[az].Usage,
+			LocalGB:  instancesDemand.PerAZ[az].Usage * maxRootDiskSize,
 		}
 		logg.Debug("[%s] blockedCapacity in phase 1: %s", az, blockedCapacity.String())
 		for _, flavor := range splitFlavors {
@@ -321,30 +326,30 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 			// as well as instances that run on hypervisors that do not participate in the binpacking simulation
 			placedUsage := hypervisors.PlacementCountForFlavor(flavor.Flavor.Name)
 			shadowedUsage := instancesPlacedOnShadowedHypervisors[flavor.Flavor.Name][az]
-			unplacedUsage := saturatingSub(demandByFlavorName[flavor.Flavor.Name][az].Usage, placedUsage+shadowedUsage)
-			if !hypervisors.PlaceSeveralInstances(flavor, "used", coresOvercommitFactor, blockedCapacity, bb, unplacedUsage) {
+			unplacedUsage := saturatingSub(demandByFlavorName[flavor.Flavor.Name].PerAZ[az].Usage, placedUsage+shadowedUsage)
+			if !hypervisors.PlaceSeveralInstances(flavor, "used", coresDemand.OvercommitFactor, blockedCapacity, bb, unplacedUsage) {
 				canPlaceFlavor[flavor.Flavor.Name] = false
 			}
 		}
 
 		// phase 2: block confirmed, but unused commitments
-		blockedCapacity.VCPUs += coresOvercommitFactor.ApplyInReverseTo(coresDemand[az].UnusedCommitments)
-		blockedCapacity.MemoryMB += ramDemand[az].UnusedCommitments
-		blockedCapacity.LocalGB += instancesDemand[az].UnusedCommitments * maxRootDiskSize
+		blockedCapacity.VCPUs += coresDemand.OvercommitFactor.ApplyInReverseTo(coresDemand.PerAZ[az].UnusedCommitments)
+		blockedCapacity.MemoryMB += ramDemand.PerAZ[az].UnusedCommitments
+		blockedCapacity.LocalGB += instancesDemand.PerAZ[az].UnusedCommitments * maxRootDiskSize
 		logg.Debug("[%s] blockedCapacity in phase 2: %s", az, blockedCapacity.String())
 		for _, flavor := range splitFlavors {
-			if !hypervisors.PlaceSeveralInstances(flavor, "committed", coresOvercommitFactor, blockedCapacity, bb, demandByFlavorName[flavor.Flavor.Name][az].UnusedCommitments) {
+			if !hypervisors.PlaceSeveralInstances(flavor, "committed", coresDemand.OvercommitFactor, blockedCapacity, bb, demandByFlavorName[flavor.Flavor.Name].PerAZ[az].UnusedCommitments) {
 				canPlaceFlavor[flavor.Flavor.Name] = false
 			}
 		}
 
 		// phase 3: block pending commitments
-		blockedCapacity.VCPUs += coresOvercommitFactor.ApplyInReverseTo(coresDemand[az].PendingCommitments)
-		blockedCapacity.MemoryMB += ramDemand[az].PendingCommitments
-		blockedCapacity.LocalGB += instancesDemand[az].PendingCommitments * maxRootDiskSize
+		blockedCapacity.VCPUs += coresDemand.OvercommitFactor.ApplyInReverseTo(coresDemand.PerAZ[az].PendingCommitments)
+		blockedCapacity.MemoryMB += ramDemand.PerAZ[az].PendingCommitments
+		blockedCapacity.LocalGB += instancesDemand.PerAZ[az].PendingCommitments * maxRootDiskSize
 		logg.Debug("[%s] blockedCapacity in phase 3: %s", az, blockedCapacity.String())
 		for _, flavor := range splitFlavors {
-			if !hypervisors.PlaceSeveralInstances(flavor, "pending", coresOvercommitFactor, blockedCapacity, bb, demandByFlavorName[flavor.Flavor.Name][az].PendingCommitments) {
+			if !hypervisors.PlaceSeveralInstances(flavor, "pending", coresDemand.OvercommitFactor, blockedCapacity, bb, demandByFlavorName[flavor.Flavor.Name].PerAZ[az].PendingCommitments) {
 				canPlaceFlavor[flavor.Flavor.Name] = false
 			}
 		}
@@ -361,7 +366,7 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 			totalPlacedInstances[flavor.Flavor.Name] = float64(count)
 			// The max(..., 0.1) is explained below.
 
-			splitFlavorsUsage.VCPUs += coresOvercommitFactor.ApplyInReverseTo(count * uint64(flavor.Flavor.VCPUs))
+			splitFlavorsUsage.VCPUs += coresDemand.OvercommitFactor.ApplyInReverseTo(count * uint64(flavor.Flavor.VCPUs))
 			splitFlavorsUsage.MemoryMB += count * uint64(flavor.Flavor.RAM)
 			splitFlavorsUsage.LocalGB += count * uint64(flavor.Flavor.Disk)
 		}
@@ -414,7 +419,7 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 				// no flavor left that can be placed -> stop
 				break
 			} else {
-				if hypervisors.PlaceOneInstance(*bestFlavor, "padding", coresOvercommitFactor, blockedCapacity, bb) {
+				if hypervisors.PlaceOneInstance(*bestFlavor, "padding", coresDemand.OvercommitFactor, blockedCapacity, bb) {
 					totalPlacedInstances[bestFlavor.Flavor.Name]++
 				} else {
 					canPlaceFlavor[bestFlavor.Flavor.Name] = false
@@ -462,7 +467,7 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 			capacities[p.PooledRAMResourceName][az] = pointerTo(azCapacity.IntoCapacityData("ram", float64(maxRootDiskSize), builder.RAMSubcapacities))
 			for _, flavor := range splitFlavors {
 				count := hypervisors.PlacementCountForFlavor(flavor.Flavor.Name)
-				capacities[p.PooledCoresResourceName][az].Capacity -= coresOvercommitFactor.ApplyInReverseTo(count * uint64(flavor.Flavor.VCPUs))
+				capacities[p.PooledCoresResourceName][az].Capacity -= coresDemand.OvercommitFactor.ApplyInReverseTo(count * uint64(flavor.Flavor.VCPUs))
 				capacities[p.PooledInstancesResourceName][az].Capacity-- //TODO: not accurate when uint64(flavor.Disk) != maxRootDiskSize
 				capacities[p.PooledRAMResourceName][az].Capacity -= count * uint64(flavor.Flavor.RAM)
 			}

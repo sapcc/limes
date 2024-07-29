@@ -65,7 +65,7 @@ func init() {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
+func (p *cronusPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType limes.ServiceType) (err error) {
 	p.CronusV1, err = newCronusClient(provider, eo)
 	return err
 }

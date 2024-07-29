@@ -57,7 +57,7 @@ func init() {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *designatePlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
+func (p *designatePlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType limes.ServiceType) (err error) {
 	p.DesignateV2, err = openstack.NewDNSV2(provider, eo)
 	return err
 }

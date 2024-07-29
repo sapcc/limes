@@ -64,7 +64,7 @@ func init() {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *manilaPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
+func (p *manilaPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType limes.ServiceType) (err error) {
 	if len(p.ShareTypes) == 0 {
 		return errors.New("quota plugin sharev2: missing required configuration field params.share_types")
 	}

@@ -83,7 +83,7 @@ func init() {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *swiftPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
+func (p *swiftPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType limes.ServiceType) error {
 	client, err := openstack.NewObjectStorageV1(provider, eo)
 	if err != nil {
 		return err

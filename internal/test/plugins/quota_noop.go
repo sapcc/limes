@@ -47,7 +47,7 @@ type NoopQuotaPlugin struct {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *NoopQuotaPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) error {
+func (p *NoopQuotaPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType limes.ServiceType) error {
 	return nil
 }
 
