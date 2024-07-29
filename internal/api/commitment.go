@@ -87,6 +87,9 @@ var (
 	getCommitmentWithMatchingTransferTokenQuery = sqlext.SimplifyWhitespace(`
 		SELECT * FROM project_commitments WHERE id = $1 AND transfer_token = $2
 	`)
+	findCommitmentByTransferToken = sqlext.SimplifyWhitespace(`
+		SELECT * FROM project_commitments WHERE transfer_token = $1
+   `)
 	findTargetAZResourceIDBySourceIDQuery = sqlext.SimplifyWhitespace(`
 		WITH source as (
 		SELECT pr.id AS resource_id, ps.type, pr.name, par.az
@@ -551,7 +554,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 
 	if req.Amount == dbCommitment.Amount {
 		dbCommitment.TransferStatus = req.TransferStatus
-		dbCommitment.TransferToken = transferToken
+		dbCommitment.TransferToken = &transferToken
 		_, err = tx.Update(&dbCommitment)
 		if respondwith.ErrorText(w, err) {
 			return
@@ -562,7 +565,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		remainingAmount := dbCommitment.Amount - req.Amount
 		transferCommitment := p.buildSplitCommitment(dbCommitment, transferAmount)
 		transferCommitment.TransferStatus = req.TransferStatus
-		transferCommitment.TransferToken = transferToken
+		transferCommitment.TransferToken = &transferToken
 		remainingCommitment := p.buildSplitCommitment(dbCommitment, remainingAmount)
 		err = tx.Insert(&transferCommitment)
 		if respondwith.ErrorText(w, err) {
@@ -624,12 +627,45 @@ func (p *v1Provider) buildSplitCommitment(dbCommitment db.ProjectCommitment, amo
 	}
 }
 
+// GetCommitmentByTransferToken handles GET /v1/commitments/{token}
+func (p *v1Provider) GetCommitmentByTransferToken(w http.ResponseWriter, r *http.Request) {
+	httpapi.IdentifyEndpoint(r, "/v1/commitments/:token")
+	token := p.CheckToken(r)
+	if !token.Require(w, "cluster:show_basic") {
+		return
+	}
+	transferToken := mux.Vars(r)["token"]
+
+	// The token column is a unique key, so we expect only one result.
+	var dbCommitment db.ProjectCommitment
+	err := p.DB.SelectOne(&dbCommitment, findCommitmentByTransferToken, transferToken)
+	if errors.Is(err, sql.ErrNoRows) {
+		http.Error(w, "no matching commitment found.", http.StatusNotFound)
+		return
+	} else if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	var loc datamodel.AZResourceLocation
+	err = p.DB.QueryRow(findProjectAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
+		Scan(&loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)
+	if errors.Is(err, sql.ErrNoRows) {
+		// defense in depth: this should not happen because all the relevant tables are connected by FK constraints
+		http.Error(w, "location data not found.", http.StatusNotFound)
+		return
+	} else if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token)
+	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
+}
+
 // TransferCommitment handles POST /v1/domains/{domain_id}/projects/{project_id}/transfer-commitment/{id}?token={token}
 func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/transfer-commitment/:id")
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:edit") {
-		http.Error(w, "insufficient access rights.", http.StatusForbidden)
 		return
 	}
 	transferToken := r.Header.Get("Transfer-Token")
@@ -702,7 +738,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	}
 
 	dbCommitment.TransferStatus = ""
-	dbCommitment.TransferToken = ""
+	dbCommitment.TransferToken = nil
 	dbCommitment.AZResourceID = targetAZResourceID
 	_, err = tx.Update(&dbCommitment)
 	if respondwith.ErrorText(w, err) {

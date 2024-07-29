@@ -55,7 +55,7 @@ type Commitment struct {
 	ExpiresAt   limes.UnixEncodedTime  `json:"expires_at,omitempty"`
 	// TransferStatus and TransferToken are only filled while the commitment is marked for transfer.
 	TransferStatus CommitmentTransferStatus `json:"transfer_status,omitempty"`
-	TransferToken  string                   `json:"transfer_token,omitempty"`
+	TransferToken  *string                  `json:"transfer_token,omitempty"`
 }
 
 // CommitmentRequest is the API representation of a *new* commitment as requested by a user.

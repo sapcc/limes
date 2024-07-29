@@ -678,9 +678,15 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 10, "transfer_status": "unlisted"}},
 	}.Check(t, s.Handler)
 
+	assert.HTTPRequest{
+		Method:       http.MethodDelete,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1",
+		ExpectStatus: http.StatusNoContent,
+	}.Check(t, s.Handler)
+
 	// TransferAmount < CommitmentAmount
 	resp2 := assert.JSONObject{
-		"id":                2,
+		"id":                3,
 		"service_type":      "second",
 		"resource_name":     "capacity",
 		"availability_zone": "az-two",
@@ -698,8 +704,15 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 	}
 
 	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
+		Body:         assert.JSONObject{"commitment": req1},
+		ExpectStatus: http.StatusCreated,
+	}.Check(t, s.Handler)
+
+	assert.HTTPRequest{
 		Method:       "POST",
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/start-transfer",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2/start-transfer",
 		ExpectStatus: http.StatusAccepted,
 		ExpectBody:   assert.JSONObject{"commitment": resp2},
 		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 9, "transfer_status": "public"}},
@@ -717,10 +730,76 @@ func Test_StartCommitmentTransfer(t *testing.T) {
 	// Negative Test, delivered amount > commitment amount
 	assert.HTTPRequest{
 		Method:       "POST",
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/start-transfer",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2/start-transfer",
 		ExpectStatus: http.StatusBadRequest,
 		ExpectBody:   assert.StringData("delivered amount exceeds the commitment amount.\n"),
 		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 11, "transfer_status": "public"}},
+	}.Check(t, s.Handler)
+}
+
+func Test_GetCommitmentByToken(t *testing.T) {
+	s := test.NewSetup(t,
+		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
+		test.WithConfig(testCommitmentsYAMLWithoutMinConfirmDate),
+		test.WithAPIHandler(NewV1API),
+	)
+
+	var transferToken = test.GenerateDummyToken()
+	// Prepare a commitment to test against in transfer mode.
+	req1 := assert.JSONObject{
+		"id":                1,
+		"service_type":      "second",
+		"resource_name":     "capacity",
+		"availability_zone": "az-two",
+		"amount":            10,
+		"duration":          "1 hour",
+	}
+	resp1 := assert.JSONObject{
+		"id":                1,
+		"service_type":      "second",
+		"resource_name":     "capacity",
+		"availability_zone": "az-two",
+		"amount":            10,
+		"unit":              "B",
+		"duration":          "1 hour",
+		"created_at":        s.Clock.Now().Unix(),
+		"creator_uuid":      "uuid-for-alice",
+		"creator_name":      "alice@Default",
+		"can_be_deleted":    true,
+		"confirmed_at":      0,
+		"expires_at":        3600,
+		"transfer_status":   "unlisted",
+		"transfer_token":    transferToken,
+	}
+
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
+		Body:         assert.JSONObject{"commitment": req1},
+		ExpectStatus: http.StatusCreated,
+	}.Check(t, s.Handler)
+	assert.HTTPRequest{
+		Method:       "POST",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/start-transfer",
+		ExpectStatus: http.StatusAccepted,
+		ExpectBody:   assert.JSONObject{"commitment": resp1},
+		Body:         assert.JSONObject{"commitment": assert.JSONObject{"amount": 10, "transfer_status": "unlisted"}},
+	}.Check(t, s.Handler)
+
+	// Get commitment by token.
+	assert.HTTPRequest{
+		Method:       http.MethodGet,
+		Path:         "/v1/commitments/" + transferToken,
+		ExpectBody:   assert.JSONObject{"commitment": resp1},
+		ExpectStatus: http.StatusAccepted,
+	}.Check(t, s.Handler)
+
+	// Now check a token that does not exist.
+	assert.HTTPRequest{
+		Method:       http.MethodGet,
+		Path:         "/v1/commitments/" + "notExistingToken",
+		ExpectStatus: http.StatusNotFound,
+		ExpectBody:   assert.StringData("no matching commitment found.\n"),
 	}.Check(t, s.Handler)
 }
 

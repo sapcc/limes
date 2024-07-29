@@ -180,7 +180,7 @@ type ProjectCommitment struct {
 	// While a commitment is marked for transfer, it does not count towards quota
 	// calculation, but it still blocks capacity and still counts towards billing.
 	TransferStatus limesresources.CommitmentTransferStatus `db:"transfer_status"`
-	TransferToken  string                                  `db:"transfer_token"`
+	TransferToken  *string                                 `db:"transfer_token"`
 
 	// This column is technically redundant, since the state can be derived from
 	// the values of other fields. But having this field simplifies lots of
