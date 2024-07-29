@@ -631,7 +631,7 @@ func (p *v1Provider) buildSplitCommitment(dbCommitment db.ProjectCommitment, amo
 func (p *v1Provider) GetCommitmentByTransferToken(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/commitments/:token")
 	token := p.CheckToken(r)
-	if !token.Require(w, "project:show") {
+	if !token.Require(w, "cluster:show_basic") {
 		return
 	}
 	transferToken := mux.Vars(r)["token"]
