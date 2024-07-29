@@ -158,14 +158,14 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 		if err != nil {
 			return nil, nil, fmt.Errorf("while collecting resource demand for compute/%s: %w", p.PooledInstancesResourceName, err)
 		}
-		if instancesDemand.OvercommitFactor != 1 {
+		if instancesDemand.OvercommitFactor != 1 && instancesDemand.OvercommitFactor != 0 {
 			return nil, nil, fmt.Errorf("overcommit on compute/%s is not supported", p.PooledInstancesResourceName)
 		}
 		ramDemand, err = backchannel.GetResourceDemand("compute", p.PooledRAMResourceName)
 		if err != nil {
 			return nil, nil, fmt.Errorf("while collecting resource demand for compute/%s: %w", p.PooledRAMResourceName, err)
 		}
-		if ramDemand.OvercommitFactor != 1 {
+		if ramDemand.OvercommitFactor != 1 && ramDemand.OvercommitFactor != 0 {
 			return nil, nil, fmt.Errorf("overcommit on compute/%s is not supported", p.PooledRAMResourceName)
 		}
 	}
@@ -180,7 +180,7 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 		if err != nil {
 			return nil, nil, fmt.Errorf("while collecting resource demand for compute/%s: %w", resourceName, err)
 		}
-		if demand.OvercommitFactor != 1 {
+		if demand.OvercommitFactor != 1 && demand.OvercommitFactor != 0 {
 			return nil, nil, fmt.Errorf("overcommit on compute/%s is not supported", resourceName)
 		}
 		demandByFlavorName[f.Flavor.Name] = demand
