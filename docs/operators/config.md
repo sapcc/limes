@@ -245,6 +245,7 @@ This section lists all supported service types and the resources that are unders
 ```yaml
 services:
   - type: compute
+    service_type: compute
 ```
 
 The area for this service is `compute`.
@@ -262,6 +263,7 @@ The area for this service is `compute`.
 ```yaml
 services:
   - type: compute
+    service_type: compute
     params:
       with_subresources: true
 ```
@@ -292,6 +294,7 @@ rules supplied in the configuration like this:
 ```yaml
 services:
   - type: compute
+    service_type: compute
     params:
       hypervisor_type_rules:
         - match: extra-spec:vmware:hv_enabled # match on extra spec with name "vmware:hv_enabled"
@@ -320,6 +323,7 @@ category.
 ```yaml
 services:
   - type: compute
+    service_type: compute
     params:
       separate_instance_quotas:
         flavor_name_selection:
@@ -357,6 +361,7 @@ regular `cores`/`instances`/`ram` resources and cover instances whose flavors ha
 ```yaml
 services:
   - type: dns
+    service_type: dns
 ```
 
 The area for this service is `dns`.
@@ -373,6 +378,7 @@ When the `recordsets` quota is set, the backend quota for records is set to 20 t
 ```yaml
 services:
   - type: email-aws
+    service_type: email-aws
 ```
 
 The area for this service is `email`. This service has no resources, only rates.
@@ -389,6 +395,7 @@ The area for this service is `email`. This service has no resources, only rates.
 ```yaml
 services:
   - type: endpoint-services
+    service_type: endpoint-services
 ```
 
 The area for this service is `network`.
@@ -398,11 +405,30 @@ The area for this service is `network`.
 | `endpoints` | countable |
 | `services` | countable |
 
+### `liquid`: Any service with LIQUID support
+
+```yaml
+services:
+  - type: liquid
+    service_type: someservice
+    params:
+      area: storage
+      liquid_service_type: liquid-myservice
+```
+
+This is a generic integration method for any service that supports [LIQUID](https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid);
+see documentation over there. The LIQUID endpoint will by located in the Keystone service catalog at service type `liquid-$SERVICE_TYPE`,
+unless this default is overridden by `params.liquid_service_type`. The area for this service is as configured in `params.area`.
+
+Currently, any increase in the ServiceInfo version of the liquid will prompt a fatal error in Limes, thus usually forcing it to restart.
+This is something that we plan on changing into a graceful reload in the future.
+
 ### `keppel`: Keppel v1
 
-```
+```yaml
 services:
   - type: keppel
+    service_type: keppel
 ```
 
 The area for this service is `storage`.
@@ -416,6 +442,7 @@ The area for this service is `storage`.
 ```yaml
 services:
   - type: network
+    service_type: network
 ```
 
 The area for this service is `network`. Resources are categorized into `networking` for SDN resources and `loadbalancing` for LBaaS resources.
@@ -449,6 +476,7 @@ automatically created in a new project.
 ```yaml
 services:
   - type: object-store
+    service_type: object-store
 ```
 
 The area for this service is `storage`.
@@ -462,6 +490,7 @@ The area for this service is `storage`.
 ```yaml
 services:
   - type: sharev2
+    service_type: sharev2
     params:
       share_types:
         - name: default
@@ -561,6 +590,7 @@ The service type name refers to the v2 API for backwards compatibility reasons.
 ```yaml
 services:
   - type: volumev2
+    service_type: volumev2
     params:
       volume_types: [ vmware, vmware_hdd ]
       with_volume_subresources: true
@@ -653,6 +683,24 @@ subcapacity corresponds to one Cinder pool, and bears the following attributes:
 | `az` | string | The pool's availability zone. The AZ is determined by matching the pool's hostname against the list of services configured in Cinder. |
 | `capacity_gib` | integer | Total capacity of this pool in GiB. This corresponds to the pool's `total_capacity_gb` attribute in Cinder. |
 | `usage_gib` | integer | Usage level of this pool in GiB. This corresponds to the pool's `allocated_capacity_gb` attribute in Cinder. |
+
+### `liquid`
+
+```yaml
+capacitors:
+  - id: liquid-nova
+    type: liquid
+    params:
+      service_type: compute
+      liquid_service_type: liquid-nova
+```
+
+This is a generic integration method for any service that supports [LIQUID](https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid);
+see documentation over there. The LIQUID endpoint will by located in the Keystone service catalog at service type `liquid-$SERVICE_TYPE`,
+using the value from `params.service_type`, unless this default logic is overridden by `params.liquid_service_type`.
+
+Currently, any increase in the ServiceInfo version of the liquid will prompt a fatal error in Limes, thus usually forcing it to restart.
+This is something that we plan on changing into a graceful reload in the future.
 
 ### `manila`
 
