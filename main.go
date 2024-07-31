@@ -90,7 +90,7 @@ func main() {
 			must.Succeed(liquidapi.Run(ctx, &swift.Logic{}, liquidapi.RunOpts{
 				ServiceInfoRefreshInterval: 0,
 				MaxConcurrentRequests:      5,
-				DefaultListenAddress:       ":8080",
+				DefaultListenAddress:       ":80",
 			}))
 		default:
 			printUsageAndExit(1)
