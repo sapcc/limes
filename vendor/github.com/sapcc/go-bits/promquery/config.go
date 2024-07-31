@@ -39,16 +39,16 @@ import (
 // establishing a connection to a Prometheus instance's API.
 type Config struct {
 	// Required: Main URL of Prometheus instance.
-	ServerURL string `yaml:"url"`
+	ServerURL string `json:"url" yaml:"url"`
 	// Optional: To check validity of TLS server certificate.
-	ServerCACertificatePath string `yaml:"ca_cert"`
+	ServerCACertificatePath string `json:"ca_cert" yaml:"ca_cert"`
 	// Optional: TLS client certificate to present while connecting.
-	ClientCertificatePath string `yaml:"cert"`
+	ClientCertificatePath string `json:"cert" yaml:"cert"`
 	// Required if ClientCertificatePath is given: Private key for TLS client certificate.
-	ClientCertificateKeyPath string `yaml:"key"`
+	ClientCertificateKeyPath string `json:"key" yaml:"key"`
 
 	// Cache for repeated calls to Connect().
-	cachedConnection prom_v1.API `yaml:"-"`
+	cachedConnection prom_v1.API `json:"-" yaml:"-"`
 }
 
 // ConfigFromEnv fills a Config object from the following environment variables:

@@ -423,6 +423,8 @@ unless this default is overridden by `params.liquid_service_type`. The area for 
 Currently, any increase in the ServiceInfo version of the liquid will prompt a fatal error in Limes, thus usually forcing it to restart.
 This is something that we plan on changing into a graceful reload in the future.
 
+For information on liquids provided by Limes itself, please refer to the [liquids documentation](../liquids/index.md).
+
 ### `keppel`: Keppel v1
 
 ```yaml
@@ -701,6 +703,8 @@ using the value from `params.service_type`, unless this default logic is overrid
 
 Currently, any increase in the ServiceInfo version of the liquid will prompt a fatal error in Limes, thus usually forcing it to restart.
 This is something that we plan on changing into a graceful reload in the future.
+
+For information on liquids provided by Limes itself, please refer to the [liquids documentation](../liquids/index.md).
 
 ### `manila`
 
