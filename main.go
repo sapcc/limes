@@ -48,6 +48,7 @@ import (
 	"github.com/sapcc/go-bits/httpapi/pprofapi"
 	"github.com/sapcc/go-bits/httpext"
 	"github.com/sapcc/go-bits/jobloop"
+	"github.com/sapcc/go-bits/liquidapi"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/must"
 	"github.com/sapcc/go-bits/osext"
@@ -58,6 +59,7 @@ import (
 	"github.com/sapcc/limes/internal/collector"
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
+	"github.com/sapcc/limes/internal/liquids/swift"
 	"github.com/sapcc/limes/internal/util"
 
 	_ "github.com/sapcc/limes/internal/plugins"
@@ -69,6 +71,33 @@ func main() {
 	undoMaxprocs := must.Return(maxprocs.Set(maxprocs.Logger(logg.Debug)))
 	defer undoMaxprocs()
 
+	// setup http.DefaultTransport overrides
+	wrap := httpext.WrapTransport(&http.DefaultTransport)
+	wrap.SetInsecureSkipVerify(osext.GetenvBool("LIMES_INSECURE")) // for debugging with mitmproxy etc. (DO NOT SET IN PRODUCTION)
+	wrap.SetOverrideUserAgent(bininfo.Component(), bininfo.VersionOr("rolling"))
+	wrap.Attach(util.AddLoggingRoundTripper)
+
+	ctx := httpext.ContextWithSIGINT(context.Background(), 100*time.Millisecond)
+
+	// when running as a liquid, branch off early; liquids do not share most of
+	// the initialization steps that the core components need
+	if len(os.Args) > 2 && os.Args[1] == "liquid" {
+		if len(os.Args) != 3 {
+			printUsageAndExit(1)
+		}
+		switch os.Args[2] {
+		case "swift":
+			must.Succeed(liquidapi.Run(ctx, &swift.Logic{}, liquidapi.RunOpts{
+				ServiceInfoRefreshInterval: 0,
+				MaxConcurrentRequests:      5,
+				DefaultListenAddress:       ":8080",
+			}))
+		default:
+			printUsageAndExit(1)
+		}
+		return
+	}
+
 	// first two arguments must be task name and configuration file
 	if slices.Contains(os.Args, "--help") {
 		printUsageAndExit(0)
@@ -78,14 +107,6 @@ func main() {
 	}
 	taskName, configPath, remainingArgs := os.Args[1], os.Args[2], os.Args[3:]
 	bininfo.SetTaskName(taskName)
-
-	// setup http.DefaultTransport overrides
-	wrap := httpext.WrapTransport(&http.DefaultTransport)
-	wrap.SetInsecureSkipVerify(osext.GetenvBool("LIMES_INSECURE")) // for debugging with mitmproxy etc. (DO NOT SET IN PRODUCTION)
-	wrap.SetOverrideUserAgent(bininfo.Component(), bininfo.VersionOr("rolling"))
-	wrap.Attach(util.AddLoggingRoundTripper)
-
-	ctx := httpext.ContextWithSIGINT(context.Background(), 10*time.Second)
 
 	// connect to OpenStack
 	ao, err := clientconfig.AuthOptions(nil)
@@ -133,6 +154,7 @@ func main() {
 var usageMessage = strings.ReplaceAll(strings.TrimSpace(`
 Usage:
 \t%s (collect|serve|serve-data-metrics) <config-file>
+\t%s liquid swift
 \t%s test-get-quota <config-file> <project-id> <service-type>
 \t%s test-get-rates <config-file> <project-id> <service-type> [<prev-serialized-state>]
 \t%s test-set-quota <config-file> <project-id> <service-type> <resource-name>=<integer-value>...
