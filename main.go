@@ -74,8 +74,8 @@ func main() {
 	// setup http.DefaultTransport overrides
 	wrap := httpext.WrapTransport(&http.DefaultTransport)
 	wrap.SetInsecureSkipVerify(osext.GetenvBool("LIMES_INSECURE")) // for debugging with mitmproxy etc. (DO NOT SET IN PRODUCTION)
-	wrap.SetOverrideUserAgent(bininfo.Component(), bininfo.VersionOr("rolling"))
 	wrap.Attach(util.AddLoggingRoundTripper)
+	// NOTE: wrap.SetOverrideUserAgent() needs to be delayed until further down when we have figured out the task name.
 
 	ctx := httpext.ContextWithSIGINT(context.Background(), 100*time.Millisecond)
 
@@ -85,7 +85,12 @@ func main() {
 		if len(os.Args) != 3 {
 			printUsageAndExit(1)
 		}
-		switch os.Args[2] {
+
+		liquidName := os.Args[2]
+		bininfo.SetTaskName("liquid-" + liquidName)
+		wrap.SetOverrideUserAgent(bininfo.Component(), bininfo.VersionOr("rolling"))
+
+		switch liquidName {
 		case "swift":
 			must.Succeed(liquidapi.Run(ctx, &swift.Logic{}, liquidapi.RunOpts{
 				ServiceInfoRefreshInterval: 0,
@@ -107,6 +112,7 @@ func main() {
 	}
 	taskName, configPath, remainingArgs := os.Args[1], os.Args[2], os.Args[3:]
 	bininfo.SetTaskName(taskName)
+	wrap.SetOverrideUserAgent(bininfo.Component(), bininfo.VersionOr("rolling"))
 
 	// connect to OpenStack
 	ao, err := clientconfig.AuthOptions(nil)
