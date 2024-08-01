@@ -503,20 +503,6 @@ This is something that we plan on changing into a graceful reload in the future.
 
 For information on liquids provided by Limes itself, please refer to the [liquids documentation](../liquids/index.md).
 
-### `keppel`: Keppel v1
-
-```yaml
-services:
-  - type: keppel
-    service_type: keppel
-```
-
-The area for this service is `storage`.
-
-| Resource | Unit |
-| --- | --- |
-| `images` | countable |
-
 ### `network`: Neutron v1
 
 ```yaml
@@ -550,20 +536,6 @@ The area for this service is `network`. Resources are categorized into `networki
 When a new project is scraped for the first time, and usage for `security_groups` and `security_group_rules` is 1 and 4,
 respectively, quota of the same size is approved automatically. This covers the `default` security group that is
 automatically created in a new project.
-
-### `object-store`: Swift v1
-
-```yaml
-services:
-  - type: object-store
-    service_type: object-store
-```
-
-The area for this service is `storage`.
-
-| Resource | Unit |
-| --- | --- |
-| `capacity` | Bytes |
 
 ### `sharev2`: Manila v2
 
