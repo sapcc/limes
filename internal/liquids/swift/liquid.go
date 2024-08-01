@@ -94,14 +94,15 @@ func (l *Logic) Account(projectUUID string) *schwift.Account {
 	return l.ResellerAccount.SwitchAccount("AUTH_" + projectUUID)
 }
 
-func (l *Logic) emptyUsageReport(serviceInfo liquid.ServiceInfo) liquid.ServiceUsageReport {
+func (l *Logic) emptyUsageReport(serviceInfo liquid.ServiceInfo, forbidden bool) liquid.ServiceUsageReport {
 	quota := int64(0)
 	return liquid.ServiceUsageReport{
 		InfoVersion: serviceInfo.Version,
 		Resources: map[liquid.ResourceName]*liquid.ResourceUsageReport{
 			"capacity": {
-				Quota: &quota,
-				PerAZ: liquid.InAnyAZ(liquid.AZResourceUsageReport{Usage: 0}),
+				Forbidden: forbidden,
+				Quota:     &quota,
+				PerAZ:     liquid.InAnyAZ(liquid.AZResourceUsageReport{Usage: 0}),
 			},
 		},
 		Metrics: map[liquid.MetricName][]liquid.Metric{
@@ -119,10 +120,10 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 	switch {
 	case schwift.Is(err, http.StatusNotFound):
 		// Swift account does not exist yet, but the Keystone project exists (usually after project creation)
-		return l.emptyUsageReport(serviceInfo), nil
+		return l.emptyUsageReport(serviceInfo, false), nil
 	case schwift.Is(err, http.StatusGone):
 		// Swift account was deleted and not yet reaped (usually right before the Keystone project is deleted)
-		return l.emptyUsageReport(serviceInfo), nil
+		return l.emptyUsageReport(serviceInfo, true), nil
 	case err != nil:
 		// unexpected error
 		return liquid.ServiceUsageReport{}, err
