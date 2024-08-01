@@ -98,7 +98,7 @@ func (c *LiquidV1Client) GetUsageReport(ctx context.Context, projectUUID string,
 func (c *LiquidV1Client) PutQuota(ctx context.Context, projectUUID string, req liquid.ServiceQuotaRequest) (err error) {
 	url := c.ServiceURL("v1", "projects", projectUUID, "quota")
 	opts := gophercloud.RequestOpts{KeepResponseBody: true, OkCodes: []int{http.StatusNoContent}}
-	_, err = c.Post(ctx, url, req, nil, &opts) //nolint:bodyclose // either the response is 204 and does not have a body, or it's an error and Gophercloud does a ReadAll() internally
+	_, err = c.Put(ctx, url, req, nil, &opts) //nolint:bodyclose // either the response is 204 and does not have a body, or it's an error and Gophercloud does a ReadAll() internally
 	return
 }
 
