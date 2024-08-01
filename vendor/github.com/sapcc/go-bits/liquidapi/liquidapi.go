@@ -206,6 +206,7 @@ func Run(ctx context.Context, logic Logic, opts RunOpts) error {
 	muxer := http.NewServeMux()
 	muxer.Handle("/", httpapi.Compose(
 		rt,
+		httpapi.HealthCheckAPI{SkipRequestLog: true},
 		httpapi.WithGlobalMiddleware(limitRequestsMiddleware(opts.MaxConcurrentRequests)),
 	))
 	muxer.Handle("/metrics", promhttp.Handler())
