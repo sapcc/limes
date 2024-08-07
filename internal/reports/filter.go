@@ -71,7 +71,7 @@ func ReadFilter(r *http.Request, cluster *core.Cluster) Filter {
 	// we cannot check those against the query filters directly. The query
 	// filters apply to the identifiers in `apiIdentity`.
 	for serviceType, quotaPlugin := range cluster.QuotaPlugins {
-		if !apiAreas.Matches(quotaPlugin.ServiceInfo(serviceType).Area) {
+		if !apiAreas.Matches(quotaPlugin.ServiceInfo().Area) {
 			continue
 		}
 

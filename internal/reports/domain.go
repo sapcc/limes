@@ -343,10 +343,8 @@ func findInDomainReport(domain *limesresources.DomainReport, cluster *core.Clust
 
 	service, exists := domain.Services[apiIdentity.ServiceType]
 	if !exists {
-		srvInfo := cluster.InfoForService(dbServiceType)
-		srvInfo.Type = apiIdentity.ServiceType
 		service = &limesresources.DomainServiceReport{
-			ServiceInfo: srvInfo,
+			ServiceInfo: cluster.InfoForService(dbServiceType).ForAPI(apiIdentity.ServiceType),
 			Resources:   make(limesresources.DomainResourceReports),
 		}
 		domain.Services[apiIdentity.ServiceType] = service

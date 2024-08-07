@@ -84,9 +84,8 @@ func (p *liquidQuotaPlugin) Init(ctx context.Context, client *gophercloud.Provid
 }
 
 // ServiceInfo implements the core.QuotaPlugin interface.
-func (p *liquidQuotaPlugin) ServiceInfo(serviceType limes.ServiceType) limes.ServiceInfo {
-	return limes.ServiceInfo{
-		Type:        serviceType,
+func (p *liquidQuotaPlugin) ServiceInfo() core.ServiceInfo {
+	return core.ServiceInfo{
 		ProductName: strings.TrimPrefix(p.LiquidServiceType, "liquid-"),
 		Area:        p.Area,
 	}

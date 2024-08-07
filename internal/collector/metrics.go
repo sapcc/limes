@@ -133,7 +133,7 @@ func (c *AggregateMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		if plugin == nil {
 			return nil
 		}
-		serviceName := plugin.ServiceInfo(serviceType).ProductName
+		serviceName := plugin.ServiceInfo().ProductName
 
 		if len(plugin.Resources()) > 0 {
 			ch <- prometheus.MustNewConstMetric(
@@ -809,7 +809,7 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 func buildServiceNameByTypeMapping(c *core.Cluster) (serviceNameByType map[limes.ServiceType]string) {
 	serviceNameByType = make(map[limes.ServiceType]string, len(c.QuotaPlugins))
 	for serviceType, plugin := range c.QuotaPlugins {
-		serviceNameByType[serviceType] = plugin.ServiceInfo(serviceType).ProductName
+		serviceNameByType[serviceType] = plugin.ServiceInfo().ProductName
 	}
 	return
 }

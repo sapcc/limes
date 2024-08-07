@@ -187,15 +187,6 @@ func (c *Cluster) ServiceTypesInAlphabeticalOrder() []limes.ServiceType {
 	return result
 }
 
-// AllServiceInfos returns the ServiceInfo for all known services.
-func (c *Cluster) AllServiceInfos() []limes.ServiceInfo {
-	result := make([]limes.ServiceInfo, 0, len(c.QuotaPlugins))
-	for serviceType, quotaPlugin := range c.QuotaPlugins {
-		result = append(result, quotaPlugin.ServiceInfo(serviceType))
-	}
-	return result
-}
-
 // HasService checks whether the given service is enabled in this cluster.
 func (c *Cluster) HasService(serviceType limes.ServiceType) bool {
 	return c.QuotaPlugins[serviceType] != nil
@@ -236,12 +227,12 @@ func (c *Cluster) InfoForResource(serviceType limes.ServiceType, resourceName li
 // InfoForService finds the plugin for the given serviceType and returns its
 // ServiceInfo(), or an empty ServiceInfo (with .Area == "") when no such
 // service exists in this cluster.
-func (c *Cluster) InfoForService(serviceType limes.ServiceType) limes.ServiceInfo {
+func (c *Cluster) InfoForService(serviceType limes.ServiceType) ServiceInfo {
 	plugin := c.QuotaPlugins[serviceType]
 	if plugin == nil {
-		return limes.ServiceInfo{Type: serviceType}
+		return ServiceInfo{}
 	}
-	return plugin.ServiceInfo(serviceType)
+	return plugin.ServiceInfo()
 }
 
 // BehaviorForResource returns the ResourceBehavior for the given resource in

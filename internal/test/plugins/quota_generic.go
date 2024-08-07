@@ -43,6 +43,7 @@ func init() {
 // mostly reports static data and offers several controls to simulate failed
 // operations.
 type GenericQuotaPlugin struct {
+	ServiceType        limes.ServiceType                                  `yaml:"-"`
 	StaticRateInfos    []limesrates.RateInfo                              `yaml:"rate_infos"`
 	StaticResourceData map[limesresources.ResourceName]*core.ResourceData `yaml:"-"`
 	OverrideQuota      map[string]map[limesresources.ResourceName]uint64  `yaml:"-"` // first key is project UUID
@@ -72,6 +73,7 @@ var resources = []limesresources.ResourceInfo{
 
 // Init implements the core.QuotaPlugin interface.
 func (p *GenericQuotaPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType limes.ServiceType) error {
+	p.ServiceType = serviceType
 	p.StaticResourceData = map[limesresources.ResourceName]*core.ResourceData{
 		"things": {
 			Quota: 42,
@@ -98,11 +100,10 @@ func (p *GenericQuotaPlugin) PluginTypeID() string {
 }
 
 // ServiceInfo implements the core.QuotaPlugin interface.
-func (p *GenericQuotaPlugin) ServiceInfo(serviceType limes.ServiceType) limes.ServiceInfo {
-	return limes.ServiceInfo{
-		Type:        serviceType,
-		Area:        string(serviceType),
-		ProductName: "generic-" + string(serviceType),
+func (p *GenericQuotaPlugin) ServiceInfo() core.ServiceInfo {
+	return core.ServiceInfo{
+		Area:        string(p.ServiceType),
+		ProductName: "generic-" + string(p.ServiceType),
 	}
 }
 
