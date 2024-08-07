@@ -620,6 +620,7 @@ var (
 			Filler: func(entry *manilaAZMetrics, sample *model.Sample) {
 				entry.SnapshotCount = roundUp(float64(sample.Value))
 			},
+			ZeroResultsIsNotAnError: true, // some regions legitimately do not have any snapshots
 		},
 		{
 			Query:       manilaSnapshotCapacityQuery,
@@ -628,6 +629,7 @@ var (
 			Filler: func(entry *manilaAZMetrics, sample *model.Sample) {
 				entry.SnapshotCapacityGiB = roundUp(float64(sample.Value))
 			},
+			ZeroResultsIsNotAnError: true, // some regions legitimately do not have any snapshots
 		},
 	}
 	manilaNetappMetricsQueries = []promquery.BulkQuery[manilaNetappMetricsKey, manilaNetappMetrics]{
@@ -646,6 +648,7 @@ var (
 			Filler: func(entry *manilaNetappMetrics, sample *model.Sample) {
 				entry.SnapshotPhysicalUsage = roundUpIntoGigabytes(float64(sample.Value))
 			},
+			ZeroResultsIsNotAnError: true, // some regions legitimately do not have any snapshots
 		},
 		{
 			Query:       manilaSnapmirrorUsageQuery,
