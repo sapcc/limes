@@ -155,7 +155,8 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 		if !filter.Includes[dbServiceType][dbResourceName] {
 			return nil
 		}
-		apiIdentity := cluster.IdentityInV1APIForResource(dbServiceType, dbResourceName)
+		behavior := cluster.BehaviorForResource(dbServiceType, dbResourceName)
+		apiIdentity := behavior.IdentityInV1API
 
 		// if we're moving to a different project, publish the finished report
 		// first (and then allow for it to be GCd)
@@ -204,7 +205,6 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 		}
 
 		// start new resource report when necessary
-		behavior := cluster.BehaviorForResource(dbServiceType, dbResourceName)
 		resReport := srvReport.Resources[apiIdentity.ResourceName]
 		if resReport == nil {
 			resReport = &limesresources.ProjectResourceReport{

@@ -338,7 +338,8 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 }
 
 func findInDomainReport(domain *limesresources.DomainReport, cluster *core.Cluster, dbServiceType limes.ServiceType, dbResourceName limesresources.ResourceName, now time.Time) (*limesresources.DomainServiceReport, *limesresources.DomainResourceReport) {
-	apiIdentity := cluster.IdentityInV1APIForResource(dbServiceType, dbResourceName)
+	behavior := cluster.BehaviorForResource(dbServiceType, dbResourceName)
+	apiIdentity := behavior.IdentityInV1API
 
 	service, exists := domain.Services[apiIdentity.ServiceType]
 	if !exists {
@@ -353,7 +354,6 @@ func findInDomainReport(domain *limesresources.DomainReport, cluster *core.Clust
 
 	resource, exists := service.Resources[apiIdentity.ResourceName]
 	if !exists {
-		behavior := cluster.BehaviorForResource(dbServiceType, dbResourceName)
 		resource = &limesresources.DomainResourceReport{
 			ResourceInfo:     cluster.InfoForResource(dbServiceType, dbResourceName),
 			CommitmentConfig: behavior.ToCommitmentConfig(now),

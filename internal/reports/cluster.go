@@ -427,7 +427,8 @@ func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter) (*l
 }
 
 func findInClusterReport(cluster *core.Cluster, report *limesresources.ClusterReport, dbServiceType limes.ServiceType, dbResourceName limesresources.ResourceName, now time.Time) (*limesresources.ClusterServiceReport, *limesresources.ClusterResourceReport) {
-	apiIdentity := cluster.IdentityInV1APIForResource(dbServiceType, dbResourceName)
+	behavior := cluster.BehaviorForResource(dbServiceType, dbResourceName)
+	apiIdentity := behavior.IdentityInV1API
 
 	service, exists := report.Services[apiIdentity.ServiceType]
 	if !exists {
@@ -442,10 +443,9 @@ func findInClusterReport(cluster *core.Cluster, report *limesresources.ClusterRe
 
 	resource, exists := service.Resources[apiIdentity.ResourceName]
 	if !exists {
-		globalBehavior := cluster.BehaviorForResource(dbServiceType, dbResourceName)
 		resource = &limesresources.ClusterResourceReport{
 			ResourceInfo:     cluster.InfoForResource(dbServiceType, dbResourceName),
-			CommitmentConfig: globalBehavior.ToCommitmentConfig(now),
+			CommitmentConfig: behavior.ToCommitmentConfig(now),
 		}
 		if !resource.ResourceInfo.NoQuota {
 			qdConfig := cluster.QuotaDistributionConfigForResource(dbServiceType, dbResourceName)

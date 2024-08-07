@@ -248,7 +248,12 @@ func (c *Cluster) InfoForService(serviceType limes.ServiceType) limes.ServiceInf
 // the given scope.
 func (c *Cluster) BehaviorForResource(serviceType limes.ServiceType, resourceName limesresources.ResourceName) ResourceBehavior {
 	// default behavior
-	var result ResourceBehavior
+	result := ResourceBehavior{
+		IdentityInV1API: ResourceRef{
+			ServiceType:  serviceType,
+			ResourceName: resourceName,
+		},
+	}
 
 	// check for specific behavior
 	fullName := string(serviceType) + "/" + string(resourceName)
@@ -259,18 +264,6 @@ func (c *Cluster) BehaviorForResource(serviceType limes.ServiceType, resourceNam
 	}
 
 	return result
-}
-
-// IdentityInV1APIForResource returns the service type and resource name that
-// this resource will be displayed under on the v1 API. This is identical to the
-// supplied service type and resource name unless the ResourceBehavior specifies
-// a different API identity.
-func (c *Cluster) IdentityInV1APIForResource(serviceType limes.ServiceType, resourceName limesresources.ResourceName) ResourceRef {
-	behavior := c.BehaviorForResource(serviceType, resourceName)
-	if behavior.IdentityInV1API != (ResourceRef{}) {
-		return behavior.IdentityInV1API
-	}
-	return ResourceRef{ServiceType: serviceType, ResourceName: resourceName}
 }
 
 // QuotaDistributionConfigForResource returns the QuotaDistributionConfiguration
