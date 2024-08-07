@@ -244,16 +244,6 @@ func (c *Cluster) InfoForService(serviceType limes.ServiceType) limes.ServiceInf
 	return plugin.ServiceInfo(serviceType)
 }
 
-// GetServiceTypesForArea returns all service types that belong to the given area.
-func (c *Cluster) GetServiceTypesForArea(area string) (serviceTypes []limes.ServiceType) {
-	for serviceType, plugin := range c.QuotaPlugins {
-		if plugin.ServiceInfo(serviceType).Area == area {
-			serviceTypes = append(serviceTypes, serviceType)
-		}
-	}
-	return
-}
-
 // BehaviorForResource returns the ResourceBehavior for the given resource in
 // the given scope.
 func (c *Cluster) BehaviorForResource(serviceType limes.ServiceType, resourceName limesresources.ResourceName) ResourceBehavior {
@@ -269,6 +259,18 @@ func (c *Cluster) BehaviorForResource(serviceType limes.ServiceType, resourceNam
 	}
 
 	return result
+}
+
+// IdentityInV1APIForResource returns the service type and resource name that
+// this resource will be displayed under on the v1 API. This is identical to the
+// supplied service type and resource name unless the ResourceBehavior specifies
+// a different API identity.
+func (c *Cluster) IdentityInV1APIForResource(serviceType limes.ServiceType, resourceName limesresources.ResourceName) ResourceRef {
+	behavior := c.BehaviorForResource(serviceType, resourceName)
+	if behavior.IdentityInV1API != (ResourceRef{}) {
+		return behavior.IdentityInV1API
+	}
+	return ResourceRef{ServiceType: serviceType, ResourceName: resourceName}
 }
 
 // QuotaDistributionConfigForResource returns the QuotaDistributionConfiguration

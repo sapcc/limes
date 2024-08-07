@@ -40,6 +40,7 @@ type ResourceBehavior struct {
 	CommitmentIsAZAware      bool                                `yaml:"commitment_is_az_aware"`
 	CommitmentMinConfirmDate *time.Time                          `yaml:"commitment_min_confirm_date"`
 	CommitmentUntilPercent   *float64                            `yaml:"commitment_until_percent"`
+	IdentityInV1API          ResourceRef                         `yaml:"identity_in_v1_api"`
 }
 
 // Validate returns a list of all errors in this behavior configuration. It
@@ -93,6 +94,9 @@ func (b *ResourceBehavior) Merge(other ResourceBehavior) {
 			b.CommitmentUntilPercent = other.CommitmentUntilPercent
 		}
 	}
+	if other.IdentityInV1API != (ResourceRef{}) {
+		b.IdentityInV1API = other.IdentityInV1API
+	}
 }
 
 // ResourceRef contains a pair of service type and resource name. When read
@@ -113,7 +117,7 @@ func (r *ResourceRef) UnmarshalYAML(unmarshal func(any) error) error {
 
 	fields := strings.Split(in, "/")
 	if len(fields) != 2 || fields[0] == "" || fields[1] == "" {
-		return fmt.Errorf(`expected scales_with to follow the "service_type/resource_name" format, but got %q`, in)
+		return fmt.Errorf(`expected identity_in_v1_api to follow the "service_type/resource_name" format, but got %q`, in)
 	}
 
 	*r = ResourceRef{

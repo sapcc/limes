@@ -223,7 +223,7 @@ func Test_ClusterOperations(t *testing.T) {
 		Method:       "GET",
 		Path:         "/v1/clusters/current?service=shared&resource=unknown",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-no-resources.json"),
+		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-no-services.json"),
 	}.Check(t, s.Handler)
 	assert.HTTPRequest{
 		Method:       "GET",
@@ -322,7 +322,7 @@ func Test_DomainOperations(t *testing.T) {
 		Method:       "GET",
 		Path:         "/v1/domains?service=shared&resource=unknown",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/domain-list-no-resources.json"),
+		ExpectBody:   assert.JSONFixtureFile("./fixtures/domain-list-no-services.json"),
 	}.Check(t, s.Handler)
 	assert.HTTPRequest{
 		Method:       "GET",
@@ -449,7 +449,7 @@ func Test_ProjectOperations(t *testing.T) {
 		Method:       "GET",
 		Path:         "/v1/domains/uuid-for-germany/projects?service=shared&resource=unknown",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-list-no-resources.json"),
+		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-list-no-services.json"),
 	}.Check(t, s.Handler)
 	assert.HTTPRequest{
 		Method:       "GET",

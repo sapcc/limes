@@ -23,6 +23,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -54,11 +55,11 @@ var (
 	 ORDER BY p.uuid
 `)
 
-	projectReportQuery = sqlext.SimplifyWhitespace(`
-	SELECT p.id, p.uuid, p.name, COALESCE(p.parent_uuid, ''), ps.type, ps.scraped_at, pr.name, pr.quota, pr.max_quota_from_admin, par.az, par.quota, par.usage, par.physical_usage, par.historical_usage, pr.backend_quota, par.subresources
+	projectReportResourcesQuery = sqlext.SimplifyWhitespace(`
+	SELECT p.id, ps.type, ps.scraped_at, pr.name, pr.quota, pr.max_quota_from_admin, par.az, par.quota, par.usage, par.physical_usage, par.historical_usage, pr.backend_quota, par.subresources
 	  FROM projects p
-	  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
-	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
+	  JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
+	  JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
 	  LEFT OUTER JOIN project_az_resources par ON par.resource_id = pr.id
 	 WHERE %s
 	 ORDER BY p.uuid, par.az
@@ -92,27 +93,47 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 		fields["p.id"] = project.ID
 	}
 
+	// first, query for basic project information
+	//
+	// (this is important because a filter like `?service=none` is supported,
+	// but will yield no results at all in the other queries)
+	whereStr, whereArgs := db.BuildSimpleWhereClause(fields, 0)
+	queryStr := `SELECT * FROM projects p WHERE ` + whereStr
+	var allProjects []db.Project
+	_, err := dbi.Select(&allProjects, queryStr, whereArgs...)
+	if err != nil {
+		return err
+	}
+	allProjectReports := make(map[db.ProjectID]*limesresources.ProjectReport, len(allProjects))
+	for _, project := range allProjects {
+		allProjectReports[project.ID] = &limesresources.ProjectReport{
+			ProjectInfo: limes.ProjectInfo{
+				Name:       project.Name,
+				UUID:       project.UUID,
+				ParentUUID: project.ParentUUID,
+			},
+			Services: make(limesresources.ProjectServiceReports),
+		}
+	}
+
 	// avoid collecting the potentially large subresources strings when possible
-	queryStr := projectReportQuery
+	queryStr = projectReportResourcesQuery
 	if !filter.WithSubresources {
 		queryStr = strings.Replace(queryStr, "par.subresources", "''", 1)
 	}
 	queryStr, joinArgs := filter.PrepareQuery(queryStr)
-	whereStr, whereArgs := db.BuildSimpleWhereClause(fields, len(joinArgs))
+	whereStr, whereArgs = db.BuildSimpleWhereClause(fields, len(joinArgs))
 
 	var (
 		currentProjectID db.ProjectID
 		projectReport    *limesresources.ProjectReport
 	)
-	err := sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
+	err = sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		var (
 			projectID         db.ProjectID
-			projectUUID       string
-			projectName       string
-			projectParentUUID string
-			serviceType       *limes.ServiceType
+			dbServiceType     limes.ServiceType
 			scrapedAt         *time.Time
-			resourceName      *limesresources.ResourceName
+			dbResourceName    limesresources.ResourceName
 			quota             *uint64
 			maxQuotaFromAdmin *uint64
 			az                *limes.AvailabilityZone
@@ -124,18 +145,21 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 			azSubresources    *string
 		)
 		err := rows.Scan(
-			&projectID, &projectUUID, &projectName, &projectParentUUID,
-			&serviceType, &scrapedAt, &resourceName,
+			&projectID, &dbServiceType, &scrapedAt, &dbResourceName,
 			&quota, &maxQuotaFromAdmin,
 			&az, &azQuota, &azUsage, &azPhysicalUsage, &azHistoricalUsage, &backendQuota, &azSubresources,
 		)
 		if err != nil {
 			return err
 		}
+		if !filter.Includes[dbServiceType][dbResourceName] {
+			return nil
+		}
+		apiIdentity := cluster.IdentityInV1APIForResource(dbServiceType, dbResourceName)
 
 		// if we're moving to a different project, publish the finished report
 		// first (and then allow for it to be GCd)
-		if projectReport != nil && projectReport.UUID != projectUUID {
+		if projectReport != nil && currentProjectID != projectID {
 			err := finalizeProjectResourceReport(projectReport, currentProjectID, dbi, filter)
 			if err != nil {
 				return err
@@ -150,30 +174,28 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 
 		// start new project report when necessary
 		if projectReport == nil {
-			currentProjectID = projectID
-			projectReport = &limesresources.ProjectReport{
-				ProjectInfo: limes.ProjectInfo{
-					Name:       projectName,
-					UUID:       projectUUID,
-					ParentUUID: projectParentUUID,
-				},
-				Services: make(limesresources.ProjectServiceReports),
+			projectReport = allProjectReports[projectID]
+			delete(allProjectReports, projectID)
+			if projectReport == nil {
+				// this can happen if a project was inserted between the first and second query;
+				// ignore those projects because we don't have complete information about them
+				currentProjectID = 0
+				return nil
+			} else {
+				currentProjectID = projectID
 			}
-		}
-
-		// if we don't have a valid service type, we're done with this result row
-		if serviceType == nil || !cluster.HasService(*serviceType) {
-			return nil
 		}
 
 		// start new service report when necessary
-		srvReport := projectReport.Services[*serviceType]
+		srvReport := projectReport.Services[apiIdentity.ServiceType]
 		if srvReport == nil {
+			srvInfo := cluster.InfoForService(dbServiceType)
+			srvInfo.Type = apiIdentity.ServiceType
 			srvReport = &limesresources.ProjectServiceReport{
-				ServiceInfo: cluster.InfoForService(*serviceType),
+				ServiceInfo: srvInfo,
 				Resources:   make(limesresources.ProjectResourceReports),
 			}
-			projectReport.Services[*serviceType] = srvReport
+			projectReport.Services[apiIdentity.ServiceType] = srvReport
 
 			if scrapedAt != nil {
 				t := limes.UnixEncodedTime{Time: *scrapedAt}
@@ -181,17 +203,12 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 			}
 		}
 
-		// if we don't have a valid resource name, we're done with this result row
-		if resourceName == nil || !cluster.HasResource(*serviceType, *resourceName) {
-			return nil
-		}
-
 		// start new resource report when necessary
-		behavior := cluster.BehaviorForResource(*serviceType, *resourceName)
-		resReport := srvReport.Resources[*resourceName]
+		behavior := cluster.BehaviorForResource(dbServiceType, dbResourceName)
+		resReport := srvReport.Resources[apiIdentity.ResourceName]
 		if resReport == nil {
 			resReport = &limesresources.ProjectResourceReport{
-				ResourceInfo:     cluster.InfoForResource(*serviceType, *resourceName),
+				ResourceInfo:     cluster.InfoForResource(dbServiceType, dbResourceName),
 				Usage:            0,
 				CommitmentConfig: behavior.ToCommitmentConfig(now),
 				// all other fields are set below
@@ -202,7 +219,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 			}
 
 			if !resReport.NoQuota {
-				qdConfig := cluster.QuotaDistributionConfigForResource(*serviceType, *resourceName)
+				qdConfig := cluster.QuotaDistributionConfigForResource(dbServiceType, dbResourceName)
 				resReport.QuotaDistributionModel = qdConfig.Model
 				if quota != nil {
 					resReport.Quota = quota
@@ -214,7 +231,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 				}
 			}
 
-			srvReport.Resources[*resourceName] = resReport
+			srvReport.Resources[apiIdentity.ResourceName] = resReport
 		}
 
 		// fill data from project_az_resources into resource report
@@ -240,7 +257,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 			}
 
 			if *azHistoricalUsage != "" {
-				config := cluster.QuotaDistributionConfigForResource(*serviceType, *resourceName)
+				config := cluster.QuotaDistributionConfigForResource(dbServiceType, dbResourceName)
 				var duration limesresources.CommitmentDuration
 				if config.Autogrow != nil {
 					retentionPeriod := config.Autogrow.UsageDataRetentionPeriod
@@ -270,14 +287,34 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 		return err
 	}
 
-	// submit final project report
+	// submit final non-empty project report
 	if projectReport != nil {
 		err := finalizeProjectResourceReport(projectReport, currentProjectID, dbi, filter)
 		if err != nil {
 			return err
 		}
-		return submit(projectReport)
+		err = submit(projectReport)
+		if err != nil {
+			return err
+		}
 	}
+
+	// submit all project reports that did not have any resource data on them
+	// (e.g. because the request filter was for `?service=none`)
+	emptyProjectReports := make([]*limesresources.ProjectReport, 0, len(allProjectReports))
+	for _, projectReport := range allProjectReports {
+		emptyProjectReports = append(emptyProjectReports, projectReport)
+	}
+	slices.SortFunc(emptyProjectReports, func(lhs, rhs *limesresources.ProjectReport) int {
+		return strings.Compare(lhs.UUID, rhs.UUID)
+	})
+	for _, projectReport := range emptyProjectReports {
+		err = submit(projectReport)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 

@@ -57,7 +57,7 @@ func (p *v1Provider) ListProjects(w http.ResponseWriter, r *http.Request) {
 	p.listProjectsMutex.Lock()
 	defer p.listProjectsMutex.Unlock()
 
-	filter := reports.ReadFilter(r, p.Cluster.GetServiceTypesForArea)
+	filter := reports.ReadFilter(r, p.Cluster)
 	stream := NewJSONListStream[*limesresources.ProjectReport](w, r, "projects")
 	stream.FinalizeDocument(reports.GetProjectResources(p.Cluster, *dbDomain, nil, p.timeNow(), p.DB, filter, stream.WriteItem))
 }
@@ -78,7 +78,7 @@ func (p *v1Provider) GetProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	project, err := GetProjectResourceReport(p.Cluster, *dbDomain, *dbProject, p.timeNow(), p.DB, reports.ReadFilter(r, p.Cluster.GetServiceTypesForArea))
+	project, err := GetProjectResourceReport(p.Cluster, *dbDomain, *dbProject, p.timeNow(), p.DB, reports.ReadFilter(r, p.Cluster))
 	if respondwith.ErrorText(w, err) {
 		return
 	}

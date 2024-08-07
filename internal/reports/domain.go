@@ -22,7 +22,8 @@ package reports
 import (
 	"database/sql"
 	"fmt"
-	"sort"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/sapcc/go-api-declarations/limes"
@@ -33,8 +34,14 @@ import (
 	"github.com/sapcc/limes/internal/db"
 )
 
-// NOTE: The subquery emulates the behavior of the old `usage` and `physical_usage` columns on `project_resources`.
 var domainReportQuery1 = sqlext.SimplifyWhitespace(`
+	SELECT d.id, d.uuid, d.name
+	  FROM domains d
+	 WHERE %s
+`)
+
+// NOTE: The subquery emulates the behavior of the old `usage` and `physical_usage` columns on `project_resources`.
+var domainReportQuery2 = sqlext.SimplifyWhitespace(`
 	WITH project_az_sums AS (
 	  SELECT resource_id,
 	         SUM(usage) AS usage,
@@ -43,16 +50,15 @@ var domainReportQuery1 = sqlext.SimplifyWhitespace(`
 	    FROM project_az_resources
 	   GROUP BY resource_id
 	)
-	SELECT d.uuid, d.name, ps.type, pr.name, SUM(pr.quota), SUM(pas.usage),
+	SELECT p.domain_id, ps.type, pr.name, SUM(pr.quota), SUM(pas.usage),
 	       SUM(GREATEST(pr.backend_quota, 0)), MIN(pr.backend_quota) < 0,
 	       SUM(pas.physical_usage), BOOL_OR(pas.has_physical_usage),
 	       MIN(ps.scraped_at), MAX(ps.scraped_at)
-	  FROM domains d
-	  JOIN projects p ON p.domain_id = d.id
-	  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
-	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
+	  FROM projects p
+	  JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
+	  JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
 	  LEFT OUTER JOIN project_az_sums pas ON pas.resource_id = pr.id
-	 WHERE %s GROUP BY d.uuid, d.name, ps.type, pr.name
+	 WHERE %s GROUP BY p.domain_id, ps.type, pr.name
 `)
 
 var domainReportQuery3 = sqlext.SimplifyWhitespace(`
@@ -62,18 +68,17 @@ var domainReportQuery3 = sqlext.SimplifyWhitespace(`
 	   WHERE state = 'active'
 	   GROUP BY az_resource_id
 	)
-	SELECT d.uuid, d.name, ps.type, pr.name, par.az,
+	SELECT p.domain_id, ps.type, pr.name, par.az,
 	       SUM(par.quota), SUM(par.usage),
 	       SUM(GREATEST(0, COALESCE(pcs.amount, 0) - par.usage)),
 	       SUM(GREATEST(0, par.usage - COALESCE(pcs.amount, 0)))
-	  FROM domains d
-	  JOIN projects p ON p.domain_id = d.id
+	  FROM projects p
 	  JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
 	  JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
 	  JOIN project_az_resources par ON par.resource_id = pr.id
 	  LEFT OUTER JOIN project_commitment_sums pcs ON pcs.az_resource_id = par.id
 	 WHERE %s
-	 GROUP BY d.uuid, d.name, ps.type, pr.name, par.az
+	 GROUP BY p.domain_id, ps.type, pr.name, par.az
 `)
 
 var domainReportQuery4 = sqlext.SimplifyWhitespace(`
@@ -85,16 +90,15 @@ var domainReportQuery4 = sqlext.SimplifyWhitespace(`
 	    FROM project_commitments
 	   GROUP BY az_resource_id, duration
 	)
-	SELECT d.uuid, d.name, ps.type, pr.name, par.az,
+	SELECT p.domain_id, ps.type, pr.name, par.az,
 	       pcs.duration, SUM(pcs.active), SUM(pcs.pending), SUM(pcs.planned)
-	  FROM domains d
-	  JOIN projects p ON p.domain_id = d.id
+	  FROM projects p
 	  JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
 	  JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
 	  JOIN project_az_resources par ON par.resource_id = pr.id
 	  JOIN project_commitment_sums pcs ON pcs.az_resource_id = par.id
 	 WHERE %s
-	 GROUP BY d.uuid, d.name, ps.type, pr.name, par.az, pcs.duration
+	 GROUP BY p.domain_id, ps.type, pr.name, par.az, pcs.duration
 `)
 
 // GetDomains returns reports for all domains in the given cluster or, if
@@ -105,16 +109,45 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 		fields = map[string]any{"d.id": *domainID}
 	}
 
-	// first query: data for projects in this domain
-	domains := make(domains)
-	queryStr, joinArgs := filter.PrepareQuery(domainReportQuery1)
-	whereStr, whereArgs := db.BuildSimpleWhereClause(fields, len(joinArgs))
-	err := sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
+	// first query: basic information about domains
+	//
+	// (this is important because a filter like `?service=none` is supported,
+	// but will yield no results at all in the other queries)
+	domains := make(map[db.DomainID]*limesresources.DomainReport)
+	whereStr, whereArgs := db.BuildSimpleWhereClause(fields, 0)
+	err := sqlext.ForeachRow(dbi, fmt.Sprintf(domainReportQuery1, whereStr), whereArgs, func(rows *sql.Rows) error {
 		var (
-			domainUUID           string
-			domainName           string
-			serviceType          *limes.ServiceType
-			resourceName         *limesresources.ResourceName
+			domainID   db.DomainID
+			domainInfo limes.DomainInfo
+		)
+		err := rows.Scan(&domainID, &domainInfo.UUID, &domainInfo.Name)
+		if err != nil {
+			return err
+		}
+
+		domains[domainID] = &limesresources.DomainReport{
+			DomainInfo: domainInfo,
+			Services:   make(limesresources.DomainServiceReports),
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// in the other queries, the filter must target `p.domain_id` instead of `d.id`
+	if domainID != nil {
+		fields = map[string]any{"p.domain_id": *domainID}
+	}
+
+	// second query: data for projects in this domain
+	queryStr, joinArgs := filter.PrepareQuery(domainReportQuery2)
+	whereStr, whereArgs = db.BuildSimpleWhereClause(fields, len(joinArgs))
+	err = sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
+		var (
+			domainID             db.DomainID
+			dbServiceType        limes.ServiceType
+			dbResourceName       limesresources.ResourceName
 			projectsQuota        *uint64
 			usage                *uint64
 			backendQuota         *uint64
@@ -125,7 +158,7 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 			maxScrapedAt         *time.Time
 		)
 		err := rows.Scan(
-			&domainUUID, &domainName, &serviceType, &resourceName,
+			&domainID, &dbServiceType, &dbResourceName,
 			&projectsQuota, &usage,
 			&backendQuota, &infiniteBackendQuota,
 			&physicalUsage, &showPhysicalUsage,
@@ -134,33 +167,34 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 		if err != nil {
 			return err
 		}
-
-		_, service, resource := domains.Find(cluster, domainUUID, domainName, serviceType, resourceName, now)
-
-		if service != nil {
-			service.MaxScrapedAt = mergeMaxTime(service.MaxScrapedAt, maxScrapedAt)
-			service.MinScrapedAt = mergeMinTime(service.MinScrapedAt, minScrapedAt)
+		if domains[domainID] == nil {
+			return nil
 		}
+		if !filter.Includes[dbServiceType][dbResourceName] {
+			return nil
+		}
+		service, resource := findInDomainReport(domains[domainID], cluster, dbServiceType, dbResourceName, now)
 
-		if resource != nil {
-			if usage != nil {
-				resource.Usage = *usage
-			}
-			if !resource.NoQuota {
-				if projectsQuota != nil {
-					resource.ProjectsQuota = projectsQuota
-					resource.DomainQuota = projectsQuota
-					if backendQuota != nil && *projectsQuota != *backendQuota {
-						resource.BackendQuota = backendQuota
-					}
-				}
-				if infiniteBackendQuota != nil && *infiniteBackendQuota {
-					resource.InfiniteBackendQuota = infiniteBackendQuota
+		service.MaxScrapedAt = mergeMaxTime(service.MaxScrapedAt, maxScrapedAt)
+		service.MinScrapedAt = mergeMinTime(service.MinScrapedAt, minScrapedAt)
+
+		if usage != nil {
+			resource.Usage = *usage
+		}
+		if !resource.NoQuota {
+			if projectsQuota != nil {
+				resource.ProjectsQuota = projectsQuota
+				resource.DomainQuota = projectsQuota
+				if backendQuota != nil && *projectsQuota != *backendQuota {
+					resource.BackendQuota = backendQuota
 				}
 			}
-			if showPhysicalUsage != nil && *showPhysicalUsage {
-				resource.PhysicalUsage = physicalUsage
+			if infiniteBackendQuota != nil && *infiniteBackendQuota {
+				resource.InfiniteBackendQuota = infiniteBackendQuota
 			}
+		}
+		if showPhysicalUsage != nil && *showPhysicalUsage {
+			resource.PhysicalUsage = physicalUsage
 		}
 
 		return nil
@@ -175,10 +209,9 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 		whereStr, whereArgs = db.BuildSimpleWhereClause(fields, len(joinArgs))
 		err = sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 			var (
-				domainUUID        string
-				domainName        string
-				serviceType       limes.ServiceType
-				resourceName      limesresources.ResourceName
+				domainID          db.DomainID
+				dbServiceType     limes.ServiceType
+				dbResourceName    limesresources.ResourceName
 				az                limes.AvailabilityZone
 				quota             *uint64
 				usage             uint64
@@ -186,17 +219,20 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 				uncommittedUsage  uint64
 			)
 			err := rows.Scan(
-				&domainUUID, &domainName, &serviceType, &resourceName, &az,
+				&domainID, &dbServiceType, &dbResourceName, &az,
 				&quota, &usage, &unusedCommitments, &uncommittedUsage,
 			)
 			if err != nil {
 				return err
 			}
-
-			_, _, resource := domains.Find(cluster, domainUUID, domainName, &serviceType, &resourceName, now)
-			if resource == nil {
+			if domains[domainID] == nil {
 				return nil
 			}
+			if !filter.Includes[dbServiceType][dbResourceName] {
+				return nil
+			}
+			_, resource := findInDomainReport(domains[domainID], cluster, dbServiceType, dbResourceName, now)
+
 			if resource.PerAZ == nil {
 				resource.PerAZ = make(limesresources.DomainAZResourceReports)
 			}
@@ -212,31 +248,36 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 			return nil, err
 		}
 
-		//TODO: fourth query: add AZ breakdown by commitment duration (Committed, PendingCommitments, PlannedCommitments)
+		// fourth query: add AZ breakdown by commitment duration (Committed, PendingCommitments, PlannedCommitments)
 		queryStr, joinArgs = filter.PrepareQuery(domainReportQuery4)
 		whereStr, whereArgs = db.BuildSimpleWhereClause(fields, len(joinArgs))
 		err = sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 			var (
-				domainUUID    string
-				domainName    string
-				serviceType   limes.ServiceType
-				resourceName  limesresources.ResourceName
-				az            limes.AvailabilityZone
-				duration      limesresources.CommitmentDuration
-				activeAmount  uint64
-				pendingAmount uint64
-				plannedAmount uint64
+				domainID       db.DomainID
+				dbServiceType  limes.ServiceType
+				dbResourceName limesresources.ResourceName
+				az             limes.AvailabilityZone
+				duration       limesresources.CommitmentDuration
+				activeAmount   uint64
+				pendingAmount  uint64
+				plannedAmount  uint64
 			)
 			err := rows.Scan(
-				&domainUUID, &domainName, &serviceType, &resourceName, &az,
+				&domainID, &dbServiceType, &dbResourceName, &az,
 				&duration, &activeAmount, &pendingAmount, &plannedAmount,
 			)
 			if err != nil {
 				return err
 			}
+			if domains[domainID] == nil {
+				return nil
+			}
+			if !filter.Includes[dbServiceType][dbResourceName] {
+				return nil
+			}
+			_, resource := findInDomainReport(domains[domainID], cluster, dbServiceType, dbResourceName, now)
 
-			_, _, resource := domains.Find(cluster, domainUUID, domainName, &serviceType, &resourceName, now)
-			if resource == nil || resource.PerAZ[az] == nil {
+			if resource.PerAZ[az] == nil {
 				return nil
 			}
 			azReport := resource.PerAZ[az]
@@ -285,73 +326,47 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 	}
 
 	// flatten result (with stable order to keep the tests happy)
-	uuids := make([]string, 0, len(domains))
-	for uuid := range domains {
-		uuids = append(uuids, uuid)
+	result := make([]*limesresources.DomainReport, 0, len(domains))
+	for _, domainReport := range domains {
+		result = append(result, domainReport)
 	}
-	sort.Strings(uuids)
-	result := make([]*limesresources.DomainReport, len(domains))
-	for idx, uuid := range uuids {
-		result[idx] = domains[uuid]
-	}
+	slices.SortFunc(result, func(lhs, rhs *limesresources.DomainReport) int {
+		return strings.Compare(lhs.UUID, rhs.UUID)
+	})
 
 	return result, nil
 }
 
-type domains map[string]*limesresources.DomainReport
+func findInDomainReport(domain *limesresources.DomainReport, cluster *core.Cluster, dbServiceType limes.ServiceType, dbResourceName limesresources.ResourceName, now time.Time) (*limesresources.DomainServiceReport, *limesresources.DomainResourceReport) {
+	apiIdentity := cluster.IdentityInV1APIForResource(dbServiceType, dbResourceName)
 
-func (d domains) Find(cluster *core.Cluster, domainUUID, domainName string, serviceType *limes.ServiceType, resourceName *limesresources.ResourceName, now time.Time) (*limesresources.DomainReport, *limesresources.DomainServiceReport, *limesresources.DomainResourceReport) {
-	domain, exists := d[domainUUID]
+	service, exists := domain.Services[apiIdentity.ServiceType]
 	if !exists {
-		domain = &limesresources.DomainReport{
-			DomainInfo: limes.DomainInfo{
-				UUID: domainUUID,
-				Name: domainName,
-			},
-			Services: make(limesresources.DomainServiceReports),
-		}
-		d[domainUUID] = domain
-	}
-
-	if serviceType == nil {
-		return domain, nil, nil
-	}
-
-	service, exists := domain.Services[*serviceType]
-	if !exists {
-		if !cluster.HasService(*serviceType) {
-			return domain, nil, nil
-		}
+		srvInfo := cluster.InfoForService(dbServiceType)
+		srvInfo.Type = apiIdentity.ServiceType
 		service = &limesresources.DomainServiceReport{
-			ServiceInfo: cluster.InfoForService(*serviceType),
+			ServiceInfo: srvInfo,
 			Resources:   make(limesresources.DomainResourceReports),
 		}
-		domain.Services[*serviceType] = service
+		domain.Services[apiIdentity.ServiceType] = service
 	}
 
-	if resourceName == nil {
-		return domain, service, nil
-	}
-
-	resource, exists := service.Resources[*resourceName]
+	resource, exists := service.Resources[apiIdentity.ResourceName]
 	if !exists {
-		if !cluster.HasResource(*serviceType, *resourceName) {
-			return domain, service, resource
-		}
-		behavior := cluster.BehaviorForResource(*serviceType, *resourceName)
+		behavior := cluster.BehaviorForResource(dbServiceType, dbResourceName)
 		resource = &limesresources.DomainResourceReport{
-			ResourceInfo:     cluster.InfoForResource(*serviceType, *resourceName),
+			ResourceInfo:     cluster.InfoForResource(dbServiceType, dbResourceName),
 			CommitmentConfig: behavior.ToCommitmentConfig(now),
 		}
 		if !resource.NoQuota {
-			qdConfig := cluster.QuotaDistributionConfigForResource(*serviceType, *resourceName)
+			qdConfig := cluster.QuotaDistributionConfigForResource(dbServiceType, dbResourceName)
 			resource.QuotaDistributionModel = qdConfig.Model
 			// this default is used when no `domain_resources` entry exists for this resource
 			defaultQuota := uint64(0)
 			resource.DomainQuota = &defaultQuota
 		}
-		service.Resources[*resourceName] = resource
+		service.Resources[apiIdentity.ResourceName] = resource
 	}
 
-	return domain, service, resource
+	return service, resource
 }
