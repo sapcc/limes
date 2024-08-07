@@ -59,6 +59,7 @@ import (
 	"github.com/sapcc/limes/internal/collector"
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
+	"github.com/sapcc/limes/internal/liquids/cinder"
 	"github.com/sapcc/limes/internal/liquids/swift"
 	"github.com/sapcc/limes/internal/util"
 
@@ -91,8 +92,16 @@ func main() {
 		wrap.SetOverrideUserAgent(bininfo.Component(), bininfo.VersionOr("rolling"))
 
 		switch liquidName {
+		case "cinder":
+			must.Succeed(liquidapi.Run(ctx, &cinder.Logic{}, liquidapi.RunOpts{
+				TakesConfiguration:         true,
+				ServiceInfoRefreshInterval: 0,
+				MaxConcurrentRequests:      5,
+				DefaultListenAddress:       ":80",
+			}))
 		case "swift":
 			must.Succeed(liquidapi.Run(ctx, &swift.Logic{}, liquidapi.RunOpts{
+				TakesConfiguration:         false,
 				ServiceInfoRefreshInterval: 0,
 				MaxConcurrentRequests:      5,
 				DefaultListenAddress:       ":80",
