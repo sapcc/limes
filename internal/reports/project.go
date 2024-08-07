@@ -207,8 +207,10 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 		// start new resource report when necessary
 		resReport := srvReport.Resources[apiIdentity.ResourceName]
 		if resReport == nil {
+			resInfo := cluster.InfoForResource(dbServiceType, dbResourceName)
+			resInfo.Name = apiIdentity.ResourceName
 			resReport = &limesresources.ProjectResourceReport{
-				ResourceInfo:     cluster.InfoForResource(dbServiceType, dbResourceName),
+				ResourceInfo:     resInfo,
 				Usage:            0,
 				CommitmentConfig: behavior.ToCommitmentConfig(now),
 				// all other fields are set below

@@ -76,7 +76,7 @@ func ReadFilter(r *http.Request, cluster *core.Cluster) Filter {
 		}
 
 		for _, resInfo := range quotaPlugin.Resources() {
-			apiIdentity := cluster.IdentityInV1APIForResource(serviceType, resInfo.Name)
+			apiIdentity := cluster.BehaviorForResource(serviceType, resInfo.Name).IdentityInV1API
 
 			if !apiServiceTypes.Matches(string(apiIdentity.ServiceType)) {
 				continue

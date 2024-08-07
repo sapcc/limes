@@ -443,8 +443,10 @@ func findInClusterReport(cluster *core.Cluster, report *limesresources.ClusterRe
 
 	resource, exists := service.Resources[apiIdentity.ResourceName]
 	if !exists {
+		resInfo := cluster.InfoForResource(dbServiceType, dbResourceName)
+		resInfo.Name = apiIdentity.ResourceName
 		resource = &limesresources.ClusterResourceReport{
-			ResourceInfo:     cluster.InfoForResource(dbServiceType, dbResourceName),
+			ResourceInfo:     resInfo,
 			CommitmentConfig: behavior.ToCommitmentConfig(now),
 		}
 		if !resource.ResourceInfo.NoQuota {
