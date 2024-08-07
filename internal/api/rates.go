@@ -47,7 +47,7 @@ func (p *v1Provider) GetClusterRates(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	cluster, err := reports.GetClusterRates(p.Cluster, p.DB, reports.ReadFilter(r, p.Cluster.GetServiceTypesForArea))
+	cluster, err := reports.GetClusterRates(p.Cluster, p.DB, reports.ReadFilter(r, p.Cluster))
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -71,7 +71,7 @@ func (p *v1Provider) ListProjectRates(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	filter := reports.ReadFilter(r, p.Cluster.GetServiceTypesForArea)
+	filter := reports.ReadFilter(r, p.Cluster)
 	stream := NewJSONListStream[*limesrates.ProjectReport](w, r, "projects")
 	stream.FinalizeDocument(reports.GetProjectRates(p.Cluster, *dbDomain, nil, p.DB, filter, stream.WriteItem))
 }
@@ -97,7 +97,7 @@ func (p *v1Provider) GetProjectRates(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	project, err := GetProjectRateReport(p.Cluster, *dbDomain, *dbProject, p.DB, reports.ReadFilter(r, p.Cluster.GetServiceTypesForArea))
+	project, err := GetProjectRateReport(p.Cluster, *dbDomain, *dbProject, p.DB, reports.ReadFilter(r, p.Cluster))
 	if respondwith.ErrorText(w, err) {
 		return
 	}

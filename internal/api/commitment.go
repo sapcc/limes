@@ -131,7 +131,7 @@ func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Reques
 	}
 
 	// enumerate project AZ resources
-	filter := reports.ReadFilter(r, p.Cluster.GetServiceTypesForArea)
+	filter := reports.ReadFilter(r, p.Cluster)
 	queryStr, joinArgs := filter.PrepareQuery(getProjectAZResourceLocationsQuery)
 	azResourceLocationsByID := make(map[db.ProjectAZResourceID]datamodel.AZResourceLocation)
 	err := sqlext.ForeachRow(p.DB, queryStr, joinArgs, func(rows *sql.Rows) error {

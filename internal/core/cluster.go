@@ -244,21 +244,16 @@ func (c *Cluster) InfoForService(serviceType limes.ServiceType) limes.ServiceInf
 	return plugin.ServiceInfo(serviceType)
 }
 
-// GetServiceTypesForArea returns all service types that belong to the given area.
-func (c *Cluster) GetServiceTypesForArea(area string) (serviceTypes []limes.ServiceType) {
-	for serviceType, plugin := range c.QuotaPlugins {
-		if plugin.ServiceInfo(serviceType).Area == area {
-			serviceTypes = append(serviceTypes, serviceType)
-		}
-	}
-	return
-}
-
 // BehaviorForResource returns the ResourceBehavior for the given resource in
 // the given scope.
 func (c *Cluster) BehaviorForResource(serviceType limes.ServiceType, resourceName limesresources.ResourceName) ResourceBehavior {
 	// default behavior
-	var result ResourceBehavior
+	result := ResourceBehavior{
+		IdentityInV1API: ResourceRef{
+			ServiceType:  serviceType,
+			ResourceName: resourceName,
+		},
+	}
 
 	// check for specific behavior
 	fullName := string(serviceType) + "/" + string(resourceName)

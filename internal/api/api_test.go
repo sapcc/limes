@@ -20,10 +20,13 @@
 package api
 
 import (
+	"bytes"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"reflect"
+	"slices"
 	"sort"
 	"testing"
 	"time"
@@ -223,7 +226,7 @@ func Test_ClusterOperations(t *testing.T) {
 		Method:       "GET",
 		Path:         "/v1/clusters/current?service=shared&resource=unknown",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-no-resources.json"),
+		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-west-no-services.json"),
 	}.Check(t, s.Handler)
 	assert.HTTPRequest{
 		Method:       "GET",
@@ -322,7 +325,7 @@ func Test_DomainOperations(t *testing.T) {
 		Method:       "GET",
 		Path:         "/v1/domains?service=shared&resource=unknown",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/domain-list-no-resources.json"),
+		ExpectBody:   assert.JSONFixtureFile("./fixtures/domain-list-no-services.json"),
 	}.Check(t, s.Handler)
 	assert.HTTPRequest{
 		Method:       "GET",
@@ -449,7 +452,7 @@ func Test_ProjectOperations(t *testing.T) {
 		Method:       "GET",
 		Path:         "/v1/domains/uuid-for-germany/projects?service=shared&resource=unknown",
 		ExpectStatus: 200,
-		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-list-no-resources.json"),
+		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-list-no-services.json"),
 	}.Check(t, s.Handler)
 	assert.HTTPRequest{
 		Method:       "GET",
@@ -969,4 +972,254 @@ func Test_Historical_Usage(t *testing.T) {
 		ExpectStatus: 200,
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-berlin-v2-api.json"),
 	}.Check(t, s.Handler)
+}
+
+func TestResourceRenaming(t *testing.T) {
+	s := setupTest(t, "fixtures/start-data.sql")
+
+	// a shorthand constructor
+	makeDurations := func(d time.Duration) []limesresources.CommitmentDuration {
+		return []limesresources.CommitmentDuration{{Short: d}}
+	}
+
+	// I want to test with various renaming configs, but matching on the full
+	// report is extremely tedious because the types and names are scattered
+	// throughout, making a compact match; as a proxy, we set a different
+	// commitment duration on each resource and then use those values to identify
+	// the resources post renaming
+	baseBehaviors := []core.ResourceBehavior{
+		{FullResourceNameRx: "shared/capacity", CommitmentDurations: makeDurations(2 * time.Second)},
+		{FullResourceNameRx: "shared/capacity_portion", CommitmentDurations: makeDurations(3 * time.Second)},
+		{FullResourceNameRx: "shared/things", CommitmentDurations: makeDurations(4 * time.Second)},
+		{FullResourceNameRx: "unshared/capacity", CommitmentDurations: makeDurations(5 * time.Second)},
+		{FullResourceNameRx: "unshared/capacity_portion", CommitmentDurations: makeDurations(6 * time.Second)},
+		{FullResourceNameRx: "unshared/things", CommitmentDurations: makeDurations(7 * time.Second)},
+	}
+
+	// helper function that makes one GET query per structural level and checks
+	// that commitment durations appear on the right resources in the right
+	// services
+	//
+	// (there is an unfortunate amount of duplication between the
+	// project/domain/cluster level checks here because the different report
+	// types make it difficult to write this generically)
+	expect := func(query string, expectedDurations ...string) {
+		t.Helper()
+
+		////// project level
+
+		var projectData struct {
+			Report limesresources.ProjectReport `json:"project"`
+		}
+		assert.HTTPRequest{
+			Method:       "GET",
+			Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin" + query,
+			ExpectStatus: 200,
+			ExpectBody:   JSONThatUnmarshalsInto{Value: &projectData},
+		}.Check(t, s.Handler)
+
+		var actualDurationsInProject []string
+		for serviceType, serviceReport := range projectData.Report.Services {
+			for resourceName, resourceReport := range serviceReport.Resources {
+				if resourceReport.CommitmentConfig != nil {
+					for _, duration := range resourceReport.CommitmentConfig.Durations {
+						msg := fmt.Sprintf("%s: %s/%s", duration.String(), serviceType, resourceName)
+						actualDurationsInProject = append(actualDurationsInProject, msg)
+					}
+				}
+			}
+		}
+		sort.Strings(actualDurationsInProject)
+		assert.DeepEqual(t, "durations on project level with query "+query, actualDurationsInProject, expectedDurations)
+
+		////// domain level
+
+		var domainData struct {
+			Report limesresources.DomainReport `json:"domain"`
+		}
+		assert.HTTPRequest{
+			Method:       "GET",
+			Path:         "/v1/domains/uuid-for-germany" + query,
+			ExpectStatus: 200,
+			ExpectBody:   JSONThatUnmarshalsInto{Value: &domainData},
+		}.Check(t, s.Handler)
+
+		var actualDurationsInDomain []string
+		for serviceType, serviceReport := range domainData.Report.Services {
+			for resourceName, resourceReport := range serviceReport.Resources {
+				if resourceReport.CommitmentConfig != nil {
+					for _, duration := range resourceReport.CommitmentConfig.Durations {
+						msg := fmt.Sprintf("%s: %s/%s", duration.String(), serviceType, resourceName)
+						actualDurationsInDomain = append(actualDurationsInDomain, msg)
+					}
+				}
+			}
+		}
+		sort.Strings(actualDurationsInDomain)
+		assert.DeepEqual(t, "durations on domain level with query "+query, actualDurationsInDomain, expectedDurations)
+
+		////// cluster level
+
+		var clusterData struct {
+			Report limesresources.ClusterReport `json:"cluster"`
+		}
+		assert.HTTPRequest{
+			Method:       "GET",
+			Path:         "/v1/clusters/current" + query,
+			ExpectStatus: 200,
+			ExpectBody:   JSONThatUnmarshalsInto{Value: &clusterData},
+		}.Check(t, s.Handler)
+
+		var actualDurationsInCluster []string
+		for serviceType, serviceReport := range clusterData.Report.Services {
+			for resourceName, resourceReport := range serviceReport.Resources {
+				if resourceReport.CommitmentConfig != nil {
+					for _, duration := range resourceReport.CommitmentConfig.Durations {
+						msg := fmt.Sprintf("%s: %s/%s", duration.String(), serviceType, resourceName)
+						actualDurationsInCluster = append(actualDurationsInCluster, msg)
+					}
+				}
+			}
+		}
+		sort.Strings(actualDurationsInCluster)
+		assert.DeepEqual(t, "durations on cluster level with query "+query, actualDurationsInCluster, expectedDurations)
+	}
+
+	// baseline
+	s.Cluster.Config.ResourceBehaviors = slices.Clone(baseBehaviors)
+	expect("?",
+		"2 seconds: shared/capacity",
+		"3 seconds: shared/capacity_portion",
+		"4 seconds: shared/things",
+		"5 seconds: unshared/capacity",
+		"6 seconds: unshared/capacity_portion",
+		"7 seconds: unshared/things",
+	)
+	expect("?service=shared",
+		"2 seconds: shared/capacity",
+		"3 seconds: shared/capacity_portion",
+		"4 seconds: shared/things",
+	)
+	expect("?resource=things",
+		"4 seconds: shared/things",
+		"7 seconds: unshared/things",
+	)
+
+	// rename resources within a service
+	s.Cluster.Config.ResourceBehaviors = append(slices.Clone(baseBehaviors),
+		core.ResourceBehavior{
+			FullResourceNameRx: "shared/things",
+			IdentityInV1API:    core.ResourceRef{ServiceType: "shared", ResourceName: "items"},
+		},
+	)
+	expect("?",
+		"2 seconds: shared/capacity",
+		"3 seconds: shared/capacity_portion",
+		"4 seconds: shared/items",
+		"5 seconds: unshared/capacity",
+		"6 seconds: unshared/capacity_portion",
+		"7 seconds: unshared/things",
+	)
+	expect("?service=shared",
+		"2 seconds: shared/capacity",
+		"3 seconds: shared/capacity_portion",
+		"4 seconds: shared/items",
+	)
+	expect("?resource=items",
+		"4 seconds: shared/items",
+	)
+	expect("?resource=things",
+		"7 seconds: unshared/things",
+	)
+
+	// move resource to a different, existing service
+	s.Cluster.Config.ResourceBehaviors = append(slices.Clone(baseBehaviors),
+		core.ResourceBehavior{
+			FullResourceNameRx: "shared/things",
+			IdentityInV1API:    core.ResourceRef{ServiceType: "unshared", ResourceName: "other_things"},
+		},
+	)
+	expect("?",
+		"2 seconds: shared/capacity",
+		"3 seconds: shared/capacity_portion",
+		"4 seconds: unshared/other_things",
+		"5 seconds: unshared/capacity",
+		"6 seconds: unshared/capacity_portion",
+		"7 seconds: unshared/things",
+	)
+	expect("?service=shared",
+		"2 seconds: shared/capacity",
+		"3 seconds: shared/capacity_portion",
+	)
+	expect("?service=unshared",
+		"4 seconds: unshared/other_things",
+		"5 seconds: unshared/capacity",
+		"6 seconds: unshared/capacity_portion",
+		"7 seconds: unshared/things",
+	)
+	expect("?resource=other_things",
+		"4 seconds: unshared/other_things",
+	)
+	expect("?resource=things",
+		"7 seconds: unshared/things",
+	)
+
+	// move resources to a different, new service
+	s.Cluster.Config.ResourceBehaviors = append(slices.Clone(baseBehaviors),
+		core.ResourceBehavior{
+			FullResourceNameRx: "shared/capacity",
+			IdentityInV1API:    core.ResourceRef{ServiceType: "shared_capacity", ResourceName: "all"},
+		},
+		core.ResourceBehavior{
+			FullResourceNameRx: "shared/capacity_portion",
+			IdentityInV1API:    core.ResourceRef{ServiceType: "shared_capacity", ResourceName: "part"},
+		},
+	)
+	expect("?",
+		"2 seconds: shared_capacity/all",
+		"3 seconds: shared_capacity/part",
+		"4 seconds: shared/things",
+		"5 seconds: unshared/capacity",
+		"6 seconds: unshared/capacity_portion",
+		"7 seconds: unshared/things",
+	)
+	expect("?service=shared",
+		"4 seconds: shared/things",
+	)
+	expect("?service=shared_capacity",
+		"2 seconds: shared_capacity/all",
+		"3 seconds: shared_capacity/part",
+	)
+	expect("?resource=all",
+		"2 seconds: shared_capacity/all",
+	)
+	expect("?resource=capacity",
+		"5 seconds: unshared/capacity",
+	)
+}
+
+// JSONThatUnmarshalsInto is an implementor of the assert.HTTPResponseBody interface that
+// checks that the response body unmarshals cleanly into the given value. The wrapped
+// value must be of a pointer type.
+//
+// This can be used instead of assert.JSONObject if the test wants to capture
+// the response in a structured form to perform further computations and/or
+// assertions afterwards.
+//
+// TODO: upstream this into go-bits if we like it
+type JSONThatUnmarshalsInto struct {
+	Value any
+}
+
+// AssertResponseBody implements the HTTPResponseBody interface.
+func (j JSONThatUnmarshalsInto) AssertResponseBody(t *testing.T, requestInfo string, responseBody []byte) bool {
+	dec := json.NewDecoder(bytes.NewReader(responseBody))
+	dec.DisallowUnknownFields()
+	err := dec.Decode(j.Value)
+	if err != nil {
+		t.Errorf("%s: could not decode response as %T", requestInfo, j.Value)
+		t.Logf("%s: response body was %q", requestInfo, responseBody)
+		return false
+	}
+	return true
 }

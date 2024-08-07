@@ -133,6 +133,7 @@ Some special behaviors for resources can be configured in the `resource_behavior
 | `resource_behavior[].commitment_is_az_aware` | no | If true, commitments for this resource must be created in a specific AZ (i.e. not in a pseudo-AZ). If false, commitments for this resource must be created in the pseudo-AZ `any`. Ignored if `commitment_durations` is empty. |
 | `resource_behavior[].commitment_min_confirm_date` | no | If given, commitments for this resource will always be created with `confirm_by` no earlier than this timestamp. This can be used to plan the introduction of commitments on a specific date. Ignored if `commitment_durations` is empty. |
 | `resource_behavior[].commitment_until_percent` | no | If given, commitments for this resource will only be confirmed while the total of all confirmed commitments or uncommitted usage in the respective AZ is smaller than the respective percentage of the total capacity for that AZ. This is intended to provide a reserved buffer for the growth quota configured by `quota_distribution_configs[].autogrow.growth_multiplier`. Defaults to 100, i.e. all capacity is committable. |
+| `resource_behavior[].identity_in_v1_api` | no | If given, must be a slash-concatenated pair of service type and resource name, e.g. `myservice/someresource`. The resource will appear as having the specified name and occurring within the specified service when queried on the v1 API. See [*Resource renaming*](#resource-renaming) for details. |
 
 For example:
 
@@ -142,7 +143,84 @@ resource_behavior:
   - { resource: sharev2/.*_capacity, overcommit_factor: 2 }
   # starting in 2024, offer commitments for Cinder storage
   - { resource: volumev2/capacity, commitment_durations: [ 1 year, 2 years, 3 years ], commitment_is_az_aware: true, commitment_min_confirm_date: 2024-01-01T00:00:00Z }
+  # an Ironic flavor has been renamed from "thebigbox" to "baremetal_large"
+  - { resource: compute/instances_baremetal_large, identity_in_v1_api: compute/instances_thebigbox }
 ```
+
+#### Resource renaming
+
+Limes provides amenities for renaming and restructuring services and resources in a way where the backwards-incompatible
+change to these identifiers can take place internally, while happening at a separate later date in the API. For example,
+suppose that in the service type `compute`, the resource `instances_thebigbox` models separate instance quota for the
+baremetal flavor `thebigbox`. Suppose further that it is later decided to change this rather silly name to a more
+conventional name like `baremetal_large`. The resource therefore has to be renamed to `instances_baremetal_large`, but
+this might break users of the Limes API that rely on the existing resource name. The following configuration can be
+applied to mask the internal name change from API users until an announcement can be made to switch over to the new name
+on the API at a later date:
+
+```yaml
+resource_behavior:
+  - { resource: compute/instances_baremetal_large, identity_in_v1_api: compute/instances_thebigbox }
+```
+
+On the subject of resource renaming, here is a playbook-level explanation of how to actually rename resources like this
+within the same service: (Replace service types and resource names as necessary.)
+
+1. Stop all processes that might write into the Limes DB (specifically, `limes serve` and `limes collect`) to avoid
+   interference in the next step.
+2. Update the `name` columns in the resources tables of the DB:
+   ```sql
+   UPDATE cluster_resources SET name = 'instances_baremetal_large' WHERE name = 'instances_thebigbox'
+      AND service_id IN (SELECT id FROM cluster_services WHERE type = 'compute');
+   UPDATE project_resources SET name = 'instances_baremetal_large' WHERE name = 'instances_thebigbox'
+      AND service_id IN (SELECT id FROM project_services WHERE type = 'compute');
+   ```
+3. Apply configuration matching the new resource name to all relevant processes (specifically, the Limes core components
+   and the respective liquid).
+4. Restart all relevant processes.
+
+The process is slightly more involved when the renaming moves resources to a different service. For example, suppose
+that we have all network-related resources grouped under service type `network` (as was the case before Octavia was
+split from Neutron)  and we want to split them into the new service types `neutron` and `octavia`. Specifically, the
+resource `network/routers` needs to move to `neutron/routers`. In this case, replace step 2 from the example playbook
+with the following sequence:
+
+1. If not done yet, ensure that service records exist for the target service type:
+   ```sql
+   INSERT INTO cluster_services (type) VALUES ('neutron')
+       ON CONFLICT DO NOTHING;
+   INSERT INTO project_services (project_id, type, next_scrape_at, rates_next_scrape_at)
+       SELECT id, 'neutron', NOW(), NOW() FROM projects
+       ON CONFLICT DO NOTHING;
+   ```
+2. Attach the existing resource records to the new service records:
+   ```sql
+   UPDATE cluster_resources
+       SET service_id = (SELECT id FROM cluster_services WHERE type = 'neutron')
+       WHERE name = 'routers' AND service_id = (SELECT id FROM cluster_services WHERE type = 'network');
+
+   UPDATE project_resources res SET service_id = (
+       SELECT new.id FROM project_services new JOIN project_services old ON old.project_id = new.project_id
+       WHERE old.id = res.service_id AND old.type = 'network' AND new.type = 'neutron'
+   ) WHERE name = 'routers' AND service_id = (SELECT id FROM project_services WHERE type = 'network');
+   ```
+   If the resource name also changes, add `SET name = 'newname'` to each UPDATE statement.
+   If multiple resources need to be moved from the same old service type to the same new service type, you can replace
+   `WHERE name = 'routers'` by a list match, e.g. `WHERE name IN ('routers','floating_ips','networks')`.
+3. If this was the last resource in the old service type, clean up the old service type:
+   ```sql
+   DELETE FROM cluster_services WHERE type = 'network' AND id NOT IN (SELECT DISTINCT service_id FROM cluster_resources);
+   DELETE FROM project_services WHERE type = 'network' AND id NOT IN (SELECT DISTINCT service_id FROM project_resources);
+   ```
+
+Alternatively, if an entire service is renamed without changing its resource structure, then the following simplified
+database update process can be substituted instead: (This example renames service `object-store` to `swift`.)
+
+1. Update the `type` columns in the services tables of the DB:
+   ```sql
+   UPDATE cluster_services SET name = 'swift' WHERE name = 'object-store';
+   UPDATE project_services SET name = 'swift' WHERE name = 'object-store';
+   ```
 
 ### Quota distribution models
 

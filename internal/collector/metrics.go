@@ -517,12 +517,12 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 	capacityReported := make(map[limes.ServiceType]map[limesresources.ResourceName]bool)
 	err := sqlext.ForeachRow(d.DB, clusterMetricsQuery, nil, func(rows *sql.Rows) error {
 		var (
-			serviceType       limes.ServiceType
-			resourceName      limesresources.ResourceName
+			dbServiceType     limes.ServiceType
+			dbResourceName    limesresources.ResourceName
 			capacityPerAZJSON string
 			usagePerAZJSON    string
 		)
-		err := rows.Scan(&serviceType, &resourceName, &capacityPerAZJSON, &usagePerAZJSON)
+		err := rows.Scan(&dbServiceType, &dbResourceName, &capacityPerAZJSON, &usagePerAZJSON)
 		if err != nil {
 			return err
 		}
@@ -548,13 +548,14 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 			}
 		}
 
-		overcommitFactor := d.Cluster.BehaviorForResource(serviceType, resourceName).OvercommitFactor
+		behavior := d.Cluster.BehaviorForResource(dbServiceType, dbResourceName)
+		apiIdentity := behavior.IdentityInV1API
 		if reportAZBreakdown {
 			for az, azCapacity := range capacityPerAZ {
 				azLabels := fmt.Sprintf(`availability_zone=%q,resource=%q,service=%q,service_name=%q`,
-					az, resourceName, serviceType, serviceNameByType[serviceType],
+					az, apiIdentity.ResourceName, apiIdentity.ServiceType, serviceNameByType[dbServiceType],
 				)
-				metric := dataMetric{Labels: azLabels, Value: float64(overcommitFactor.ApplyTo(azCapacity))}
+				metric := dataMetric{Labels: azLabels, Value: float64(behavior.OvercommitFactor.ApplyTo(azCapacity))}
 				result["limes_cluster_capacity_per_az"] = append(result["limes_cluster_capacity_per_az"], metric)
 
 				azUsage := usagePerAZ[az]
@@ -566,16 +567,16 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 		}
 
 		labels := fmt.Sprintf(`resource=%q,service=%q,service_name=%q`,
-			resourceName, serviceType, serviceNameByType[serviceType],
+			apiIdentity.ResourceName, apiIdentity.ServiceType, serviceNameByType[dbServiceType],
 		)
-		metric := dataMetric{Labels: labels, Value: float64(overcommitFactor.ApplyTo(totalCapacity))}
+		metric := dataMetric{Labels: labels, Value: float64(behavior.OvercommitFactor.ApplyTo(totalCapacity))}
 		result["limes_cluster_capacity"] = append(result["limes_cluster_capacity"], metric)
 
-		_, exists := capacityReported[serviceType]
+		_, exists := capacityReported[dbServiceType]
 		if !exists {
-			capacityReported[serviceType] = make(map[limesresources.ResourceName]bool)
+			capacityReported[dbServiceType] = make(map[limesresources.ResourceName]bool)
 		}
-		capacityReported[serviceType][resourceName] = true
+		capacityReported[dbServiceType][dbResourceName] = true
 
 		return nil
 	})
@@ -591,9 +592,10 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 			if capacityReported[serviceType][res.Name] {
 				continue
 			}
+			apiIdentity := d.Cluster.BehaviorForResource(serviceType, res.Name).IdentityInV1API
 
 			labels := fmt.Sprintf(`resource=%q,service=%q,service_name=%q`,
-				res.Name, serviceType, serviceNameByType[serviceType],
+				apiIdentity.ResourceName, apiIdentity.ServiceType, serviceNameByType[serviceType],
 			)
 			metric := dataMetric{Labels: labels, Value: 0}
 			result["limes_cluster_capacity"] = append(result["limes_cluster_capacity"], metric)
@@ -603,22 +605,23 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 	// fetch values for domain level
 	err = sqlext.ForeachRow(d.DB, domainMetricsQuery, nil, func(rows *sql.Rows) error {
 		var (
-			domainName   string
-			domainUUID   string
-			serviceType  limes.ServiceType
-			resourceName limesresources.ResourceName
-			quota        *uint64
+			domainName     string
+			domainUUID     string
+			dbServiceType  limes.ServiceType
+			dbResourceName limesresources.ResourceName
+			quota          *uint64
 		)
-		err := rows.Scan(&domainName, &domainUUID, &serviceType, &resourceName, &quota)
+		err := rows.Scan(&domainName, &domainUUID, &dbServiceType, &dbResourceName, &quota)
 		if err != nil {
 			return err
 		}
+		apiIdentity := d.Cluster.BehaviorForResource(dbServiceType, dbResourceName).IdentityInV1API
 
 		if quota != nil {
 			labels := fmt.Sprintf(
 				`domain=%q,domain_id=%q,resource=%q,service=%q,service_name=%q`,
 				domainName, domainUUID,
-				resourceName, serviceType, serviceNameByType[serviceType],
+				apiIdentity.ResourceName, apiIdentity.ServiceType, serviceNameByType[dbServiceType],
 			)
 			metric := dataMetric{Labels: labels, Value: float64(*quota)}
 			result["limes_domain_quota"] = append(result["limes_domain_quota"], metric)
@@ -636,23 +639,25 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 			domainUUID       string
 			projectName      string
 			projectUUID      string
-			serviceType      limes.ServiceType
-			resourceName     limesresources.ResourceName
+			dbServiceType    limes.ServiceType
+			dbResourceName   limesresources.ResourceName
 			quota            *uint64
 			backendQuota     *int64
 			usage            uint64
 			physicalUsage    uint64
 			hasPhysicalUsage bool
 		)
-		err := rows.Scan(&domainName, &domainUUID, &projectName, &projectUUID, &serviceType, &resourceName,
+		err := rows.Scan(&domainName, &domainUUID, &projectName, &projectUUID, &dbServiceType, &dbResourceName,
 			&quota, &backendQuota, &usage, &physicalUsage, &hasPhysicalUsage)
 		if err != nil {
 			return err
 		}
+		apiIdentity := d.Cluster.BehaviorForResource(dbServiceType, dbResourceName).IdentityInV1API
+
 		labels := fmt.Sprintf(
 			`domain=%q,domain_id=%q,project=%q,project_id=%q,resource=%q,service=%q,service_name=%q`,
 			domainName, domainUUID, projectName, projectUUID,
-			resourceName, serviceType, serviceNameByType[serviceType],
+			apiIdentity.ResourceName, apiIdentity.ServiceType, serviceNameByType[dbServiceType],
 		)
 
 		if quota != nil {
@@ -690,21 +695,23 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 			domainUUID        string
 			projectName       string
 			projectUUID       string
-			serviceType       limes.ServiceType
-			resourceName      limesresources.ResourceName
+			dbServiceType     limes.ServiceType
+			dbResourceName    limesresources.ResourceName
 			az                limes.AvailabilityZone
 			usage             uint64
 			amountByStateJSON *string
 		)
-		err := rows.Scan(&domainName, &domainUUID, &projectName, &projectUUID, &serviceType, &resourceName,
+		err := rows.Scan(&domainName, &domainUUID, &projectName, &projectUUID, &dbServiceType, &dbResourceName,
 			&az, &usage, &amountByStateJSON)
 		if err != nil {
 			return err
 		}
+		apiIdentity := d.Cluster.BehaviorForResource(dbServiceType, dbResourceName).IdentityInV1API
+
 		labels := fmt.Sprintf(
 			`availability_zone=%q,domain=%q,domain_id=%q,project=%q,project_id=%q,resource=%q,service=%q,service_name=%q`,
 			az, domainName, domainUUID, projectName, projectUUID,
-			resourceName, serviceType, serviceNameByType[serviceType],
+			apiIdentity.ResourceName, apiIdentity.ServiceType, serviceNameByType[dbServiceType],
 		)
 
 		if d.ReportZeroes || usage != 0 {

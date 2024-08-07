@@ -47,7 +47,7 @@ var clusterReportQuery1 = sqlext.SimplifyWhitespace(`
 	       SUM(GREATEST(0, par.usage - COALESCE(pcs.amount, 0))),
 	       MIN(ps.scraped_at), MAX(ps.scraped_at)
 	  FROM project_services ps
-	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
+	  JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
 	  LEFT OUTER JOIN project_az_resources par ON par.resource_id = pr.id
 	  LEFT OUTER JOIN project_commitment_sums pcs ON pcs.az_resource_id = par.id
 	 WHERE TRUE {{AND ps.type = $service_type}}
@@ -57,7 +57,7 @@ var clusterReportQuery1 = sqlext.SimplifyWhitespace(`
 var clusterReportQuery2 = sqlext.SimplifyWhitespace(`
 	SELECT ps.type, pr.name, SUM(pr.quota)
 	  FROM project_services ps
-	  LEFT OUTER JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
+	  JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
 	 WHERE TRUE {{AND ps.type = $service_type}}
 	 GROUP BY ps.type, pr.name
 `)
@@ -65,7 +65,7 @@ var clusterReportQuery2 = sqlext.SimplifyWhitespace(`
 var clusterReportQuery3 = sqlext.SimplifyWhitespace(`
 	SELECT cs.type, cr.name, car.az, car.raw_capacity, car.usage, car.subcapacities, cc.scraped_at
 	  FROM cluster_services cs
-	  LEFT OUTER JOIN cluster_resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
+	  JOIN cluster_resources cr ON cr.service_id = cs.id {{AND cr.name = $resource_name}}
 	  LEFT OUTER JOIN cluster_az_resources car ON car.resource_id = cr.id
 	  LEFT OUTER JOIN cluster_capacitors cc ON cc.capacitor_id = cr.capacitor_id
 	 WHERE TRUE {{AND cs.type = $service_type}}
@@ -111,8 +111,8 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 	queryStr, joinArgs := filter.PrepareQuery(clusterReportQuery1)
 	err := sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
 		var (
-			serviceType       limes.ServiceType
-			resourceName      *limesresources.ResourceName
+			dbServiceType     limes.ServiceType
+			dbResourceName    limesresources.ResourceName
 			availabilityZone  *limes.AvailabilityZone
 			usage             *uint64
 			physicalUsage     *uint64
@@ -122,20 +122,21 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 			minScrapedAt      *time.Time
 			maxScrapedAt      *time.Time
 		)
-		err := rows.Scan(&serviceType, &resourceName, &availabilityZone,
+		err := rows.Scan(&dbServiceType, &dbResourceName, &availabilityZone,
 			&usage, &physicalUsage, &showPhysicalUsage, &unusedCommitments, &uncommittedUsage,
 			&minScrapedAt, &maxScrapedAt)
 		if err != nil {
 			return err
 		}
-
-		service, resource := findInClusterReport(cluster, report, serviceType, resourceName, now)
-
-		if service != nil {
-			service.MaxScrapedAt = mergeMaxTime(service.MaxScrapedAt, maxScrapedAt)
-			service.MinScrapedAt = mergeMinTime(service.MinScrapedAt, minScrapedAt)
+		if !filter.Includes[dbServiceType][dbResourceName] {
+			return nil
 		}
-		if resource == nil || availabilityZone == nil {
+		service, resource := findInClusterReport(cluster, report, dbServiceType, dbResourceName, now)
+
+		service.MaxScrapedAt = mergeMaxTime(service.MaxScrapedAt, maxScrapedAt)
+		service.MinScrapedAt = mergeMinTime(service.MinScrapedAt, minScrapedAt)
+
+		if availabilityZone == nil {
 			return nil
 		}
 
@@ -174,17 +175,20 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 	queryStr, joinArgs = filter.PrepareQuery(clusterReportQuery2)
 	err = sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
 		var (
-			serviceType  limes.ServiceType
-			resourceName *limesresources.ResourceName
-			quota        *uint64
+			dbServiceType  limes.ServiceType
+			dbResourceName limesresources.ResourceName
+			quota          *uint64
 		)
-		err := rows.Scan(&serviceType, &resourceName, &quota)
+		err := rows.Scan(&dbServiceType, &dbResourceName, &quota)
 		if err != nil {
 			return err
 		}
+		if !filter.Includes[dbServiceType][dbResourceName] {
+			return nil
+		}
+		_, resource := findInClusterReport(cluster, report, dbServiceType, dbResourceName, now)
 
-		_, resource := findInClusterReport(cluster, report, serviceType, resourceName, now)
-		if resource != nil && quota != nil && !resource.NoQuota {
+		if quota != nil && !resource.NoQuota {
 			// NOTE: This is called "DomainsQuota" for historical reasons, but it is actually
 			// the sum of all project quotas, since quotas only exist on project level by now.
 			resource.DomainsQuota = quota
@@ -203,63 +207,63 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 	}
 	err = sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
 		var (
-			serviceType       limes.ServiceType
-			resourceName      *limesresources.ResourceName
+			dbServiceType     limes.ServiceType
+			dbResourceName    limesresources.ResourceName
 			availabilityZone  *limes.AvailabilityZone
 			rawCapacityInAZ   *uint64
 			usageInAZ         *uint64
 			subcapacitiesInAZ *string
 			scrapedAt         *time.Time
 		)
-		err := rows.Scan(&serviceType, &resourceName, &availabilityZone,
+		err := rows.Scan(&dbServiceType, &dbResourceName, &availabilityZone,
 			&rawCapacityInAZ, &usageInAZ, &subcapacitiesInAZ, &scrapedAt)
 		if err != nil {
 			return err
 		}
+		if !filter.Includes[dbServiceType][dbResourceName] {
+			return nil
+		}
+		_, resource := findInClusterReport(cluster, report, dbServiceType, dbResourceName, now)
 
-		_, resource := findInClusterReport(cluster, report, serviceType, resourceName, now)
+		//NOTE: resource.Capacity is computed from this below once data for all AZs was ingested
+		if resource.RawCapacity == nil {
+			resource.RawCapacity = rawCapacityInAZ
+		} else if rawCapacityInAZ != nil {
+			resource.RawCapacity = pointerTo(*resource.RawCapacity + *rawCapacityInAZ)
+		}
+		if subcapacitiesInAZ != nil && *subcapacitiesInAZ != "" && filter.IsSubcapacityAllowed(dbServiceType, dbResourceName) {
+			mergeJSONListInto(&resource.Subcapacities, *subcapacitiesInAZ)
+		}
 
-		if resource != nil {
-			//NOTE: resource.Capacity is computed from this below once data for all AZs was ingested
-			if resource.RawCapacity == nil {
-				resource.RawCapacity = rawCapacityInAZ
-			} else if rawCapacityInAZ != nil {
-				resource.RawCapacity = pointerTo(*resource.RawCapacity + *rawCapacityInAZ)
+		if availabilityZone != nil && rawCapacityInAZ != nil {
+			azReport := limesresources.ClusterAvailabilityZoneReport{
+				Name:  *availabilityZone,
+				Usage: unwrapOrDefault(usageInAZ, 0),
 			}
-			if subcapacitiesInAZ != nil && *subcapacitiesInAZ != "" && filter.IsSubcapacityAllowed(serviceType, *resourceName) {
-				mergeJSONListInto(&resource.Subcapacities, *subcapacitiesInAZ)
+			overcommitFactor := cluster.BehaviorForResource(dbServiceType, dbResourceName).OvercommitFactor
+			azReport.Capacity = overcommitFactor.ApplyTo(*rawCapacityInAZ)
+			if azReport.Capacity != *rawCapacityInAZ {
+				azReport.RawCapacity = *rawCapacityInAZ
 			}
 
-			if availabilityZone != nil && rawCapacityInAZ != nil {
-				azReport := limesresources.ClusterAvailabilityZoneReport{
-					Name:  *availabilityZone,
-					Usage: unwrapOrDefault(usageInAZ, 0),
-				}
-				overcommitFactor := cluster.BehaviorForResource(serviceType, *resourceName).OvercommitFactor
-				azReport.Capacity = overcommitFactor.ApplyTo(*rawCapacityInAZ)
-				if azReport.Capacity != *rawCapacityInAZ {
-					azReport.RawCapacity = *rawCapacityInAZ
-				}
+			if resource.CapacityPerAZ == nil {
+				resource.CapacityPerAZ = make(limesresources.ClusterAvailabilityZoneReports)
+			}
+			resource.CapacityPerAZ[*availabilityZone] = &azReport
 
-				if resource.CapacityPerAZ == nil {
-					resource.CapacityPerAZ = make(limesresources.ClusterAvailabilityZoneReports)
+			if filter.WithAZBreakdown {
+				if resource.PerAZ == nil {
+					resource.PerAZ = make(limesresources.ClusterAZResourceReports)
 				}
-				resource.CapacityPerAZ[*availabilityZone] = &azReport
-
-				if filter.WithAZBreakdown {
-					if resource.PerAZ == nil {
-						resource.PerAZ = make(limesresources.ClusterAZResourceReports)
-					}
-					azReportV2 := resource.PerAZ[*availabilityZone]
-					if azReportV2 == nil {
-						azReportV2 = &limesresources.ClusterAZResourceReport{}
-						resource.PerAZ[*availabilityZone] = azReportV2
-					}
-					azReportV2.Capacity = azReport.Capacity
-					azReportV2.RawCapacity = azReport.RawCapacity
-					azReportV2.Usage = usageInAZ
-					azReportV2.Subcapacities = json.RawMessage(unwrapOrDefault(subcapacitiesInAZ, ""))
+				azReportV2 := resource.PerAZ[*availabilityZone]
+				if azReportV2 == nil {
+					azReportV2 = &limesresources.ClusterAZResourceReport{}
+					resource.PerAZ[*availabilityZone] = azReportV2
 				}
+				azReportV2.Capacity = azReport.Capacity
+				azReportV2.RawCapacity = azReport.RawCapacity
+				azReportV2.Usage = usageInAZ
+				azReportV2.Subcapacities = json.RawMessage(unwrapOrDefault(subcapacitiesInAZ, ""))
 			}
 		}
 
@@ -277,27 +281,30 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 		queryStr, joinArgs = filter.PrepareQuery(clusterReportQuery4)
 		err = sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
 			var (
-				serviceType   limes.ServiceType
-				resourceName  limesresources.ResourceName
-				az            limes.AvailabilityZone
-				duration      limesresources.CommitmentDuration
-				activeAmount  uint64
-				pendingAmount uint64
-				plannedAmount uint64
+				dbServiceType  limes.ServiceType
+				dbResourceName limesresources.ResourceName
+				az             limes.AvailabilityZone
+				duration       limesresources.CommitmentDuration
+				activeAmount   uint64
+				pendingAmount  uint64
+				plannedAmount  uint64
 			)
 			err := rows.Scan(
-				&serviceType, &resourceName, &az,
+				&dbServiceType, &dbResourceName, &az,
 				&duration, &activeAmount, &pendingAmount, &plannedAmount,
 			)
 			if err != nil {
 				return err
 			}
-
-			_, resource := findInClusterReport(cluster, report, serviceType, &resourceName, now)
-			if resource == nil || resource.PerAZ[az] == nil {
+			if !filter.Includes[dbServiceType][dbResourceName] {
 				return nil
 			}
+			_, resource := findInClusterReport(cluster, report, dbServiceType, dbResourceName, now)
+
 			azReport := resource.PerAZ[az]
+			if azReport == nil {
+				return nil
+			}
 
 			if activeAmount > 0 {
 				if azReport.Committed == nil {
@@ -419,35 +426,31 @@ func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter) (*l
 	return report, nil
 }
 
-func findInClusterReport(cluster *core.Cluster, report *limesresources.ClusterReport, serviceType limes.ServiceType, resourceName *limesresources.ResourceName, now time.Time) (*limesresources.ClusterServiceReport, *limesresources.ClusterResourceReport) {
-	service, exists := report.Services[serviceType]
+func findInClusterReport(cluster *core.Cluster, report *limesresources.ClusterReport, dbServiceType limes.ServiceType, dbResourceName limesresources.ResourceName, now time.Time) (*limesresources.ClusterServiceReport, *limesresources.ClusterResourceReport) {
+	behavior := cluster.BehaviorForResource(dbServiceType, dbResourceName)
+	apiIdentity := behavior.IdentityInV1API
+
+	service, exists := report.Services[apiIdentity.ServiceType]
 	if !exists {
-		if !cluster.HasService(serviceType) {
-			return nil, nil
-		}
+		srvInfo := cluster.InfoForService(dbServiceType)
+		srvInfo.Type = apiIdentity.ServiceType
 		service = &limesresources.ClusterServiceReport{
-			ServiceInfo: cluster.InfoForService(serviceType),
+			ServiceInfo: srvInfo,
 			Resources:   make(limesresources.ClusterResourceReports),
 		}
-		report.Services[serviceType] = service
+		report.Services[apiIdentity.ServiceType] = service
 	}
 
-	if resourceName == nil {
-		return service, nil
-	}
-
-	resource, exists := service.Resources[*resourceName]
+	resource, exists := service.Resources[apiIdentity.ResourceName]
 	if !exists {
-		if !cluster.HasResource(serviceType, *resourceName) {
-			return service, nil
-		}
-		globalBehavior := cluster.BehaviorForResource(serviceType, *resourceName)
+		resInfo := cluster.InfoForResource(dbServiceType, dbResourceName)
+		resInfo.Name = apiIdentity.ResourceName
 		resource = &limesresources.ClusterResourceReport{
-			ResourceInfo:     cluster.InfoForResource(serviceType, *resourceName),
-			CommitmentConfig: globalBehavior.ToCommitmentConfig(now),
+			ResourceInfo:     resInfo,
+			CommitmentConfig: behavior.ToCommitmentConfig(now),
 		}
 		if !resource.ResourceInfo.NoQuota {
-			qdConfig := cluster.QuotaDistributionConfigForResource(serviceType, *resourceName)
+			qdConfig := cluster.QuotaDistributionConfigForResource(dbServiceType, dbResourceName)
 			resource.QuotaDistributionModel = qdConfig.Model
 			// We need to set a default value here. Otherwise zero values will never
 			// be reported when there are no `domain_resources` entries to aggregate
@@ -455,7 +458,7 @@ func findInClusterReport(cluster *core.Cluster, report *limesresources.ClusterRe
 			defaultDomainsQuota := uint64(0)
 			resource.DomainsQuota = &defaultDomainsQuota
 		}
-		service.Resources[*resourceName] = resource
+		service.Resources[apiIdentity.ResourceName] = resource
 	}
 
 	return service, resource
