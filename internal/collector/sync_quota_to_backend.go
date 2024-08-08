@@ -148,12 +148,12 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 	if needsApply {
 		// double-check that we only include quota values for resources that the backend currently knows about
 		targetQuotasForBackend := make(map[limesresources.ResourceName]uint64)
-		for _, res := range plugin.Resources() {
-			if res.NoQuota {
+		for resName, resInfo := range plugin.Resources() {
+			if !resInfo.HasQuota {
 				continue
 			}
 			//NOTE: If `targetQuotasInDB` does not have an entry for this resource, we will write 0 into the backend.
-			targetQuotasForBackend[res.Name] = targetQuotasInDB[res.Name]
+			targetQuotasForBackend[resName] = targetQuotasInDB[resName]
 		}
 
 		// apply quotas in backend

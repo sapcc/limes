@@ -56,7 +56,6 @@
           {
             "name": "capacity_portion",
             "unit": "B",
-            "contained_in": "capacity",
             "per_az": {
               "az-one": {
                 "capacity": 0,
@@ -136,7 +135,6 @@
           {
             "name": "capacity_portion",
             "unit": "B",
-            "contained_in": "capacity",
             "per_az": {
               "az-one": {
                 "capacity": 0,

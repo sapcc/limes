@@ -40,6 +40,7 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/promquery"
 
@@ -158,45 +159,34 @@ func (p *manilaPlugin) ServiceInfo() core.ServiceInfo {
 }
 
 // Resources implements the core.QuotaPlugin interface.
-func (p *manilaPlugin) Resources() []limesresources.ResourceInfo {
-	result := make([]limesresources.ResourceInfo, 0, 1+4*len(p.ShareTypes))
-	result = append(result, limesresources.ResourceInfo{
-		Name:     "share_networks",
+func (p *manilaPlugin) Resources() map[liquid.ResourceName]liquid.ResourceInfo {
+	result := make(map[liquid.ResourceName]liquid.ResourceInfo, 1+4*len(p.ShareTypes))
+	result["share_networks"] = liquid.ResourceInfo{
 		Unit:     limes.UnitNone,
-		Category: "sharev2",
-	})
+		HasQuota: true,
+	}
 	for _, shareType := range p.ShareTypes {
-		category := string(p.makeResourceName("sharev2", shareType))
-		result = append(result,
-			limesresources.ResourceInfo{
-				Name:     p.makeResourceName("share_capacity", shareType),
-				Unit:     limes.UnitGibibytes,
-				Category: category,
-			},
-			limesresources.ResourceInfo{
-				Name:     p.makeResourceName("shares", shareType),
-				Unit:     limes.UnitNone,
-				Category: category,
-			},
-			limesresources.ResourceInfo{
-				Name:     p.makeResourceName("snapshot_capacity", shareType),
-				Unit:     limes.UnitGibibytes,
-				Category: category,
-			},
-			limesresources.ResourceInfo{
-				Name:     p.makeResourceName("share_snapshots", shareType),
-				Unit:     limes.UnitNone,
-				Category: category,
-			},
-		)
+		result[p.makeResourceName("share_capacity", shareType)] = liquid.ResourceInfo{
+			Unit:     limes.UnitGibibytes,
+			HasQuota: true,
+		}
+		result[p.makeResourceName("shares", shareType)] = liquid.ResourceInfo{
+			Unit:     limes.UnitNone,
+			HasQuota: true,
+		}
+		result[p.makeResourceName("snapshot_capacity", shareType)] = liquid.ResourceInfo{
+			Unit:     limes.UnitGibibytes,
+			HasQuota: true,
+		}
+		result[p.makeResourceName("share_snapshots", shareType)] = liquid.ResourceInfo{
+			Unit:     limes.UnitNone,
+			HasQuota: true,
+		}
 		if p.NetappMetrics != nil {
-			result = append(result, limesresources.ResourceInfo{
-				Name:        p.makeResourceName("snapmirror_capacity", shareType),
-				Unit:        limes.UnitGibibytes,
-				Category:    category,
-				NoQuota:     true,
-				ContainedIn: p.makeResourceName("share_capacity", shareType),
-			})
+			result[p.makeResourceName("snapmirror_capacity", shareType)] = liquid.ResourceInfo{
+				Unit:     limes.UnitGibibytes,
+				HasQuota: false,
+			}
 		}
 	}
 	return result

@@ -31,6 +31,7 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 
 	"github.com/sapcc/limes/internal/core"
 )
@@ -54,21 +55,10 @@ type GenericQuotaPlugin struct {
 	MaxQuota      map[limesresources.ResourceName]uint64 `yaml:"-"`
 }
 
-var resources = []limesresources.ResourceInfo{
-	{
-		Name: "capacity",
-		Unit: limes.UnitBytes,
-	},
-	{
-		Name:        "capacity_portion",
-		Unit:        limes.UnitBytes,
-		NoQuota:     true,
-		ContainedIn: "capacity",
-	},
-	{
-		Name: "things",
-		Unit: limes.UnitNone,
-	},
+var resources = map[liquid.ResourceName]liquid.ResourceInfo{
+	"capacity":         {Unit: limes.UnitBytes, HasQuota: true},
+	"capacity_portion": {Unit: limes.UnitBytes, HasQuota: false}, // NOTE: This used to be `ContainedIn: "capacity"` before we removed support for this relation.
+	"things":           {Unit: limes.UnitNone, HasQuota: true},
 }
 
 // Init implements the core.QuotaPlugin interface.
@@ -108,7 +98,7 @@ func (p *GenericQuotaPlugin) ServiceInfo() core.ServiceInfo {
 }
 
 // Resources implements the core.QuotaPlugin interface.
-func (p *GenericQuotaPlugin) Resources() []limesresources.ResourceInfo {
+func (p *GenericQuotaPlugin) Resources() map[liquid.ResourceName]liquid.ResourceInfo {
 	return resources
 }
 

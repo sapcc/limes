@@ -65,13 +65,6 @@ in it. Quota always relates to "usage": For example, consider a project with for
 three NFS shares with a size of 5 GiB each and utilization of 2 GiB each. Therefore, the usage is 15 GiB and only one
 more 5 GiB share can be created, even though the physical usage is only 6 GiB.
 
-### Contained resources
-
-Limes can advertise **containment relations** between resources. If resource X is marked as **contained in** resource Y,
-it means that usage for resource Y is considered a part of the usage for resource X, and hence it will never exceed the
-usage for resource X as a whole. Contained resources usually do not have any quota of their own; they are only reported
-to further break down the usage of the containing resource.
-
 ### Commitments
 
 Resources can be configured to allow **commitments**. A commitment expresses that the project owner promises to use a
@@ -209,7 +202,7 @@ The objects at `cluster.services[].resources[]` may contain the following fields
 | `name` | string | The name of this resource. |
 | `unit` | string | The unit of this resource (only shown for measured resources). |
 | `category` | string | The category of this resource (only shown when there is one). |
-| `contained_in` | string | The name of another resource (if any) within the same service that this resource is [contained in](#contained-resources). |
+| `contained_in` | string | Obsolete. If this field is shown at all, ignore it. |
 | `quota_distribution_model` | string | The resource's [quota distribution model](#quota-distribution-model). The only possible value is "autogrow". |
 | `capacity` | unsigned integer | The available capacity for this resource. |
 | `raw_capacity` | unsigned integer | The available raw capacity for this resource (only shown for [overcommitted resources](#overcommit)). |
@@ -298,7 +291,7 @@ The objects at `domains[].services[].resources[]` may contain the following fiel
 | `name` | string | The name of this resource. |
 | `unit` | string | The unit of this resource (only shown for measured resources). |
 | `category` | string | The category of this resource (only shown when there is one). |
-| `contained_in` | string | The name of another resource (if any) within the same service that this resource is [contained in](#contained-resources). |
+| `contained_in` | string | Obsolete. If this field is shown at all, ignore it. |
 | `quota_distribution_model` | string | The resource's [quota distribution model](#quota-distribution-model). The only possible value is "autogrow". |
 | `quota` | unsigned integer | The sum of all project quotas for this resource across all projects in this domain. |
 | `projects_quota` | unsigned integer | **Deprecated.** Equal to `quota`. |
@@ -418,7 +411,7 @@ The objects at `projects[].services[].resources[]` may contain the following fie
 | `name` | string | The name of this resource. |
 | `unit` | string | The unit of this resource (only shown for measured resources). |
 | `category` | string | The category of this resource (only shown when there is one). |
-| `contained_in` | string | The name of another resource (if any) within the same service that this resource is [contained in](#contained-resources). |
+| `contained_in` | string | Obsolete. If this field is shown at all, ignore it. |
 | `quota_distribution_model` | string | The resource's [quota distribution model](#quota-distribution-model). The only possible value is "autogrow". |
 | `quota` | unsigned integer | The granted quota for this resource in this project. |
 | `usable_quota` | unsigned integer | **Deprecated.** Always equal to `quota`. |

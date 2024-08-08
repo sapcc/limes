@@ -31,18 +31,16 @@ type FlavorNameSelection []FlavorNameSelectionRule
 
 // FlavorNameSelectionRule appears in type FlavorNameSelection.
 type FlavorNameSelectionRule struct {
-	NamePattern  regexpext.PlainRegexp `yaml:"name_pattern"`
-	CategoryName string                `yaml:"category"`
+	NamePattern regexpext.PlainRegexp `yaml:"name_pattern"`
 }
 
-// MatchFlavorName returns the category into which this flavor shall be
-// grouped, or an empty string if the flavor shall be ignored.
-func (s FlavorNameSelection) MatchFlavorName(flavorName string) (category string) {
+// MatchFlavorName returns whether this flavor matches the selection.
+func (s FlavorNameSelection) MatchFlavorName(flavorName string) bool {
 	for _, rule := range s {
 		//NOTE: If `name_pattern` is empty, any `flavorName` will match.
 		if rule.NamePattern.MatchString(flavorName) {
-			return rule.CategoryName
+			return true
 		}
 	}
-	return ""
+	return false
 }

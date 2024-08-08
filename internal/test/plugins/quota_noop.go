@@ -28,6 +28,7 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 
 	"github.com/sapcc/limes/internal/core"
 )
@@ -67,14 +68,13 @@ func (p *NoopQuotaPlugin) ServiceInfo() core.ServiceInfo {
 }
 
 // Resources implements the core.QuotaPlugin interface.
-func (p *NoopQuotaPlugin) Resources() []limesresources.ResourceInfo {
+func (p *NoopQuotaPlugin) Resources() map[liquid.ResourceName]liquid.ResourceInfo {
 	if !p.WithEmptyResource {
 		return nil
 	}
-	return []limesresources.ResourceInfo{{
-		Name: "things",
-		Unit: limes.UnitNone,
-	}}
+	return map[liquid.ResourceName]liquid.ResourceInfo{
+		"things": {Unit: limes.UnitNone, HasQuota: true},
+	}
 }
 
 // Rates implements the core.QuotaPlugin interface.

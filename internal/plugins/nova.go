@@ -23,10 +23,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"math/big"
 	"regexp"
-	"slices"
-	"sort"
 
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
@@ -36,6 +35,7 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/plugins/nova"
@@ -50,8 +50,8 @@ type novaPlugin struct {
 	} `yaml:"separate_instance_quotas"`
 	WithSubresources bool `yaml:"with_subresources"`
 	// computed state
-	resources         []limesresources.ResourceInfo                   `yaml:"-"`
-	hasPooledResource map[string]map[limesresources.ResourceName]bool `yaml:"-"`
+	resources         map[liquid.ResourceName]liquid.ResourceInfo `yaml:"-"`
+	hasPooledResource map[string]map[liquid.ResourceName]bool     `yaml:"-"`
 	// connections
 	NovaV2            *gophercloud.ServiceClient `yaml:"-"`
 	OSTypeProber      *nova.OSTypeProber         `yaml:"-"`
@@ -64,27 +64,12 @@ type novaSerializedMetrics struct {
 	InstanceCountsByHypervisorAndAZ map[string]map[limes.AvailabilityZone]uint64 `json:"ic_hv_az,omitempty"`
 }
 
-var novaDefaultResources = []limesresources.ResourceInfo{
-	{
-		Name: "cores",
-		Unit: limes.UnitNone,
-	},
-	{
-		Name: "instances",
-		Unit: limes.UnitNone,
-	},
-	{
-		Name: "ram",
-		Unit: limes.UnitMebibytes,
-	},
-	{
-		Name: "server_groups",
-		Unit: limes.UnitNone,
-	},
-	{
-		Name: "server_group_members",
-		Unit: limes.UnitNone,
-	},
+var novaDefaultResources = map[liquid.ResourceName]liquid.ResourceInfo{
+	"cores":                {Unit: limes.UnitNone, HasQuota: true},
+	"instances":            {Unit: limes.UnitNone, HasQuota: true},
+	"ram":                  {Unit: limes.UnitMebibytes, HasQuota: true},
+	"server_groups":        {Unit: limes.UnitNone, HasQuota: true},
+	"server_group_members": {Unit: limes.UnitNone, HasQuota: true},
 }
 
 func init() {
@@ -93,7 +78,7 @@ func init() {
 
 // Init implements the core.QuotaPlugin interface.
 func (p *novaPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType limes.ServiceType) (err error) {
-	p.resources = slices.Clone(novaDefaultResources)
+	p.resources = maps.Clone(novaDefaultResources)
 
 	p.NovaV2, err = openstack.NewComputeV2(provider, eo)
 	if err != nil {
@@ -120,17 +105,17 @@ func (p *novaPlugin) Init(ctx context.Context, provider *gophercloud.ProviderCli
 	if err != nil {
 		return fmt.Errorf("while enumerating default quotas: %w", err)
 	}
-	p.hasPooledResource = make(map[string]map[limesresources.ResourceName]bool)
+	p.hasPooledResource = make(map[string]map[liquid.ResourceName]bool)
 	hwVersionResourceRx := regexp.MustCompile(`^hw_version_(\S+)_(cores|instances|ram)$`)
 	for resourceName := range defaultQuotaClassSet {
 		match := hwVersionResourceRx.FindStringSubmatch(resourceName)
 		if match == nil {
 			continue
 		}
-		hwVersion, baseResourceName := match[1], limesresources.ResourceName(match[2])
+		hwVersion, baseResourceName := match[1], liquid.ResourceName(match[2])
 
 		if p.hasPooledResource[hwVersion] == nil {
-			p.hasPooledResource[hwVersion] = make(map[limesresources.ResourceName]bool)
+			p.hasPooledResource[hwVersion] = make(map[liquid.ResourceName]bool)
 		}
 		p.hasPooledResource[hwVersion][baseResourceName] = true
 
@@ -138,10 +123,10 @@ func (p *novaPlugin) Init(ctx context.Context, provider *gophercloud.ProviderCli
 		if baseResourceName == "ram" {
 			unit = limes.UnitMebibytes
 		}
-		p.resources = append(p.resources, limesresources.ResourceInfo{
-			Name: limesresources.ResourceName(resourceName),
-			Unit: unit,
-		})
+		p.resources[liquid.ResourceName(resourceName)] = liquid.ResourceInfo{
+			Unit:     unit,
+			HasQuota: true,
+		}
 	}
 
 	// find per-flavor instance resources
@@ -150,19 +135,14 @@ func (p *novaPlugin) Init(ctx context.Context, provider *gophercloud.ProviderCli
 		return err
 	}
 	for _, flavorName := range flavorNames {
-		category := p.SeparateInstanceQuotas.FlavorNameSelection.MatchFlavorName(flavorName)
-		if category != "" {
-			p.resources = append(p.resources, limesresources.ResourceInfo{
-				Name:     p.SeparateInstanceQuotas.FlavorAliases.LimesResourceNameForFlavor(flavorName),
-				Category: category,
+		if p.SeparateInstanceQuotas.FlavorNameSelection.MatchFlavorName(flavorName) {
+			resName := p.SeparateInstanceQuotas.FlavorAliases.LimesResourceNameForFlavor(flavorName)
+			p.resources[resName] = liquid.ResourceInfo{
 				Unit:     limes.UnitNone,
-			})
+				HasQuota: true,
+			}
 		}
 	}
-
-	sort.Slice(p.resources, func(i, j int) bool {
-		return p.resources[i].Name < p.resources[j].Name
-	})
 
 	return p.HypervisorTypeRules.Validate()
 }
@@ -198,7 +178,7 @@ func (p *novaPlugin) ServiceInfo() core.ServiceInfo {
 }
 
 // Resources implements the core.QuotaPlugin interface.
-func (p *novaPlugin) Resources() []limesresources.ResourceInfo {
+func (p *novaPlugin) Resources() map[liquid.ResourceName]liquid.ResourceInfo {
 	return p.resources
 }
 
@@ -279,7 +259,7 @@ func (p *novaPlugin) Scrape(ctx context.Context, project core.KeystoneProject, a
 		},
 	}
 	for flavorName, flavorLimits := range limitsData.Limits.AbsolutePerFlavor {
-		if p.SeparateInstanceQuotas.FlavorNameSelection.MatchFlavorName(flavorName) != "" {
+		if p.SeparateInstanceQuotas.FlavorNameSelection.MatchFlavorName(flavorName) {
 			result[p.SeparateInstanceQuotas.FlavorAliases.LimesResourceNameForFlavor(flavorName)] = core.ResourceData{
 				Quota:     flavorLimits.MaxTotalInstances,
 				UsageData: core.InUnknownAZUnlessEmpty(core.UsageData{Usage: flavorLimits.TotalInstancesUsed}).AndZeroInTheseAZs(allAZs),

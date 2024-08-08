@@ -107,7 +107,7 @@ type QuotaPlugin interface {
 
 	// Resources returns metadata for all the resources that this plugin scrapes
 	// from the backend service.
-	Resources() []limesresources.ResourceInfo
+	Resources() map[liquid.ResourceName]liquid.ResourceInfo
 	// Scrape queries the backend service for the quota and usage data of all
 	// known resources for the given project in the given domain. The string keys
 	// in the result map must be identical to the resource names

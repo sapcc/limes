@@ -24,7 +24,6 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"slices"
 	"strings"
 
 	"github.com/gophercloud/gophercloud/v2"
@@ -92,20 +91,8 @@ func (p *liquidQuotaPlugin) ServiceInfo() core.ServiceInfo {
 }
 
 // Resources implements the core.QuotaPlugin interface.
-func (p *liquidQuotaPlugin) Resources() []limesresources.ResourceInfo {
-	result := make([]limesresources.ResourceInfo, 0, len(p.LiquidServiceInfo.Resources))
-	for resName, resInfo := range p.LiquidServiceInfo.Resources {
-		result = append(result, limesresources.ResourceInfo{
-			Name:     resName,
-			Unit:     resInfo.Unit,
-			Category: "", // TODO: once required, add plugin configuration for the category mapping
-			NoQuota:  !resInfo.HasQuota,
-		})
-	}
-	slices.SortFunc(result, func(lhs, rhs limesresources.ResourceInfo) int {
-		return strings.Compare(string(lhs.Name), string(rhs.Name))
-	})
-	return result
+func (p *liquidQuotaPlugin) Resources() map[liquid.ResourceName]liquid.ResourceInfo {
+	return p.LiquidServiceInfo.Resources
 }
 
 // Scrape implements the core.QuotaPlugin interface.
