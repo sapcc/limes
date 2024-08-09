@@ -100,6 +100,9 @@ const (
 							window: 1s
 
 		resource_behavior:
+			# check that category mapping is reported
+			- resource: '.+/capacity_portion'
+				category: portion
 			# check how commitment config is reported
 			- resource: 'shared/(capacity|things)$'
 				commitment_durations: ["1 hour", "2 hours"]
