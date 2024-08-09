@@ -25,6 +25,7 @@ import (
 
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/internal/core"
@@ -67,6 +68,8 @@ func CanConfirmNewCommitment(req limesresources.CommitmentRequest, resourceID db
 
 	additions := map[db.ProjectResourceID]uint64{resourceID: req.Amount}
 	behavior := cluster.BehaviorForResource(req.ServiceType, req.ResourceName)
+	logg.Debug("checking CanConfirmNewCommitment in %s/%s/%s: resourceID = %d, amount = %d",
+		req.ServiceType, req.ResourceName, req.AvailabilityZone, resourceID, req.Amount)
 	return stats.CanAcceptCommitmentChanges(additions, nil, behavior), nil
 }
 
@@ -83,6 +86,8 @@ func CanMoveExistingCommitment(amount uint64, loc AZResourceLocation, sourceReso
 	additions := map[db.ProjectResourceID]uint64{targetResourceID: amount}
 	subtractions := map[db.ProjectResourceID]uint64{sourceResourceID: amount}
 	behavior := cluster.BehaviorForResource(loc.ServiceType, loc.ResourceName)
+	logg.Debug("checking CanMoveExistingCommitment in %s/%s/%s: resourceID = %d -> %s, amount = %d",
+		loc.ServiceType, loc.ResourceName, loc.AvailabilityZone, sourceResourceID, targetResourceID, amount)
 	return stats.CanAcceptCommitmentChanges(additions, subtractions, behavior), nil
 }
 
@@ -121,6 +126,8 @@ func ConfirmPendingCommitments(serviceType limes.ServiceType, resourceName limes
 	for _, c := range confirmableCommitments {
 		// ignore commitments that do not fit
 		additions := map[db.ProjectResourceID]uint64{c.ProjectResourceID: c.Amount}
+		logg.Debug("checking ConfirmPendingCommitments in %s/%s/%s: resourceID = %d, amount = %d",
+			serviceType, resourceName, az, c.ProjectResourceID, c.Amount)
 		if !stats.CanAcceptCommitmentChanges(additions, nil, behavior) {
 			continue
 		}
