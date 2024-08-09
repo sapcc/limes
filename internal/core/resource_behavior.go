@@ -114,6 +114,9 @@ func (b *ResourceBehavior) Merge(other ResourceBehavior) {
 	if other.IdentityInV1API != (ResourceRef{}) {
 		b.IdentityInV1API = other.IdentityInV1API
 	}
+	if other.Category != "" {
+		b.Category = other.Category
+	}
 }
 
 // ResourceRef contains a pair of service type and resource name. When read

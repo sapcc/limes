@@ -37,6 +37,7 @@
           {
             "name": "capacity_portion",
             "unit": "B",
+            "category": "portion",
             "usage": 3
           },
           {
@@ -72,6 +73,7 @@
           {
             "name": "capacity_portion",
             "unit": "B",
+            "category": "portion",
             "usage": 3
           },
           {
