@@ -24,6 +24,7 @@ import (
 
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/internal/core"
@@ -78,6 +79,7 @@ func (c clusterAZAllocationStats) CanAcceptCommitmentChanges(additions, subtract
 		committableCapacity = uint64(float64(c.Capacity) * *behavior.CommitmentUntilPercent / 100)
 	}
 	if usedCapacity <= committableCapacity {
+		logg.Debug("CanAcceptCommitmentChanges: accepted")
 		return true
 	}
 
@@ -86,9 +88,12 @@ func (c clusterAZAllocationStats) CanAcceptCommitmentChanges(additions, subtract
 	for projectResourceID, stats := range c.ProjectStats {
 		committed := saturatingSub(stats.Committed+additions[projectResourceID], subtractions[projectResourceID])
 		if committed > stats.Usage {
+			logg.Debug("CanAcceptCommitmentChanges: forbidden by commitment target %d > usage %d in resourceID = %d",
+				committed, stats.Usage, projectResourceID)
 			return false
 		}
 	}
+	logg.Debug("CanAcceptCommitmentChanges: accepted")
 	return true
 }
 
