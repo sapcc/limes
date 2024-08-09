@@ -59,6 +59,8 @@ import (
 	"github.com/sapcc/limes/internal/collector"
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
+	"github.com/sapcc/limes/internal/liquids/neutron"
+	"github.com/sapcc/limes/internal/liquids/octavia"
 	"github.com/sapcc/limes/internal/liquids/swift"
 	"github.com/sapcc/limes/internal/util"
 
@@ -90,13 +92,18 @@ func main() {
 		bininfo.SetTaskName("liquid-" + liquidName)
 		wrap.SetOverrideUserAgent(bininfo.Component(), bininfo.VersionOr("rolling"))
 
+		opts := liquidapi.RunOpts{
+			ServiceInfoRefreshInterval: 0,
+			MaxConcurrentRequests:      5,
+			DefaultListenAddress:       ":80",
+		}
 		switch liquidName {
+		case "neutron":
+			must.Succeed(liquidapi.Run(ctx, &neutron.Logic{}, opts))
+		case "octavia":
+			must.Succeed(liquidapi.Run(ctx, &octavia.Logic{}, opts))
 		case "swift":
-			must.Succeed(liquidapi.Run(ctx, &swift.Logic{}, liquidapi.RunOpts{
-				ServiceInfoRefreshInterval: 0,
-				MaxConcurrentRequests:      5,
-				DefaultListenAddress:       ":80",
-			}))
+			must.Succeed(liquidapi.Run(ctx, &swift.Logic{}, opts))
 		default:
 			printUsageAndExit(1)
 		}
