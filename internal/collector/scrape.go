@@ -246,7 +246,7 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 		backendQuota := resourceData[res.Name].Quota
 
 		resInfo := c.Cluster.InfoForResource(srv.Type, res.Name)
-		if !resInfo.NoQuota {
+		if resInfo.HasQuota {
 			res.BackendQuota = &backendQuota
 			res.MinQuotaFromBackend = resourceData[res.Name].MinQuota
 			res.MaxQuotaFromBackend = resourceData[res.Name].MaxQuota
@@ -404,7 +404,7 @@ func (c *Collector) writeDummyResources(dbDomain db.Domain, dbProject db.Project
 	dbResources, err := datamodel.ProjectResourceUpdate{
 		UpdateResource: func(res *db.ProjectResource) error {
 			resInfo := c.Cluster.InfoForResource(srv.Type, res.Name)
-			if !resInfo.NoQuota && res.BackendQuota == nil {
+			if resInfo.HasQuota && res.BackendQuota == nil {
 				dummyBackendQuota := int64(-1)
 				res.BackendQuota = &dummyBackendQuota
 			}

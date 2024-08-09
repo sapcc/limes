@@ -29,6 +29,7 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 
 	"github.com/sapcc/limes/internal/core"
 )
@@ -38,14 +39,14 @@ type archerPlugin struct {
 	Archer *gophercloud.ServiceClient `yaml:"-"`
 }
 
-var archerResources = []limesresources.ResourceInfo{
-	{
-		Name: "endpoints",
-		Unit: limes.UnitNone,
+var archerResources = map[liquid.ResourceName]liquid.ResourceInfo{
+	"endpoints": {
+		Unit:     limes.UnitNone,
+		HasQuota: true,
 	},
-	{
-		Name: "services",
-		Unit: limes.UnitNone,
+	"services": {
+		Unit:     limes.UnitNone,
+		HasQuota: true,
 	},
 }
 
@@ -75,16 +76,15 @@ func (p *archerPlugin) PluginTypeID() string {
 }
 
 // ServiceInfo implements the core.QuotaPlugin interface.
-func (p *archerPlugin) ServiceInfo(serviceType limes.ServiceType) limes.ServiceInfo {
-	return limes.ServiceInfo{
-		Type:        serviceType,
+func (p *archerPlugin) ServiceInfo() core.ServiceInfo {
+	return core.ServiceInfo{
 		ProductName: "archer",
 		Area:        "network",
 	}
 }
 
 // Resources implements the core.QuotaPlugin interface.
-func (p *archerPlugin) Resources() []limesresources.ResourceInfo {
+func (p *archerPlugin) Resources() map[liquid.ResourceName]liquid.ResourceInfo {
 	return archerResources
 }
 

@@ -126,7 +126,7 @@ func (u *RateLimitUpdater) ValidateInput(input limesrates.RateRequest, dbi db.In
 			}
 
 			// value is valid and novel -> perform further validation
-			req.ValidationError = u.validateRateLimit(u.Cluster.InfoForService(svcType))
+			req.ValidationError = u.validateRateLimit(svcType)
 			u.Requests[svcType][rateName] = req
 		}
 	}
@@ -134,13 +134,13 @@ func (u *RateLimitUpdater) ValidateInput(input limesrates.RateRequest, dbi db.In
 	return nil
 }
 
-func (u RateLimitUpdater) validateRateLimit(srv limes.ServiceInfo) *RateValidationError {
-	if u.CanSetRateLimit(srv.Type) {
+func (u RateLimitUpdater) validateRateLimit(serviceType limes.ServiceType) *RateValidationError {
+	if u.CanSetRateLimit(serviceType) {
 		return nil
 	}
 	return &RateValidationError{
 		Status:  http.StatusForbidden,
-		Message: fmt.Sprintf("user is not allowed to set %q rate limits", srv.Type),
+		Message: fmt.Sprintf("user is not allowed to set %q rate limits", serviceType),
 	}
 }
 

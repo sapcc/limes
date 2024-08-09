@@ -34,6 +34,7 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/errext"
 	"github.com/sapcc/go-bits/logg"
 
@@ -42,103 +43,12 @@ import (
 
 type neutronPlugin struct {
 	// computed state
-	resources    []limesresources.ResourceInfo `yaml:"-"`
-	hasExtension map[string]bool               `yaml:"-"`
-	hasOctavia   bool                          `yaml:"-"`
+	resources    map[liquid.ResourceName]liquid.ResourceInfo `yaml:"-"`
+	hasExtension map[string]bool                             `yaml:"-"`
+	hasOctavia   bool                                        `yaml:"-"`
 	// connections
 	NeutronV2 *gophercloud.ServiceClient `yaml:"-"`
 	OctaviaV2 *gophercloud.ServiceClient `yaml:"-"`
-}
-
-var neutronResources = []limesresources.ResourceInfo{
-	////////// SDN resources
-	{
-		Name:     "floating_ips",
-		Unit:     limes.UnitNone,
-		Category: "networking",
-	},
-	{
-		Name:     "networks",
-		Unit:     limes.UnitNone,
-		Category: "networking",
-	},
-	{
-		Name:     "ports",
-		Unit:     limes.UnitNone,
-		Category: "networking",
-	},
-	{
-		Name:     "rbac_policies",
-		Unit:     limes.UnitNone,
-		Category: "networking",
-	},
-	{
-		Name:     "routers",
-		Unit:     limes.UnitNone,
-		Category: "networking",
-	},
-	{
-		Name:     "security_group_rules",
-		Unit:     limes.UnitNone,
-		Category: "networking",
-	},
-	{
-		Name:     "security_groups",
-		Unit:     limes.UnitNone,
-		Category: "networking",
-	},
-	{
-		Name:     "subnet_pools",
-		Unit:     limes.UnitNone,
-		Category: "networking",
-	},
-	{
-		Name:     "subnets",
-		Unit:     limes.UnitNone,
-		Category: "networking",
-	},
-	////////// network resources belonging to optional extensions
-	{
-		Name:     "bgpvpns",
-		Unit:     limes.UnitNone,
-		Category: "networking",
-	},
-	{
-		Name:     "trunks",
-		Unit:     limes.UnitNone,
-		Category: "networking",
-	},
-	////////// LBaaS resources
-	{
-		Name:     "healthmonitors",
-		Unit:     limes.UnitNone,
-		Category: "loadbalancing",
-	},
-	{
-		Name:     "l7policies",
-		Unit:     limes.UnitNone,
-		Category: "loadbalancing",
-	},
-	{
-		Name:     "listeners",
-		Unit:     limes.UnitNone,
-		Category: "loadbalancing",
-	},
-	{
-		Name:     "loadbalancers",
-		Unit:     limes.UnitNone,
-		Category: "loadbalancing",
-	},
-	{
-		Name:     "pools",
-		Unit:     limes.UnitNone,
-		Category: "loadbalancing",
-	},
-	{
-		Name:     "pool_members",
-		Unit:     limes.UnitNone,
-		Category: "loadbalancing",
-	},
 }
 
 func init() {
@@ -182,20 +92,19 @@ func (p *neutronPlugin) Init(ctx context.Context, provider *gophercloud.Provider
 	}
 
 	// filter resource list to reflect supported extensions and services
-	hasNeutronResource := make(map[limesresources.ResourceName]bool)
-	for _, resource := range neutronResourceMeta {
-		hasNeutronResource[resource.LimesName] = resource.Extension == "" || p.hasExtension[resource.Extension]
+	resInfo := liquid.ResourceInfo{
+		Unit:     limes.UnitNone,
+		HasQuota: true,
 	}
-	p.resources = nil
-	for _, res := range neutronResources {
-		var hasResource bool
-		if res.Category == "loadbalancing" {
-			hasResource = p.hasOctavia
-		} else {
-			hasResource = hasNeutronResource[res.Name]
+	p.resources = make(map[liquid.ResourceName]liquid.ResourceInfo)
+	for _, resource := range neutronResourceMeta {
+		if resource.Extension == "" || p.hasExtension[resource.Extension] {
+			p.resources[resource.LimesName] = resInfo
 		}
-		if hasResource {
-			p.resources = append(p.resources, res)
+	}
+	if p.hasOctavia {
+		for _, resource := range octaviaResourceMeta {
+			p.resources[resource.LimesName] = resInfo
 		}
 	}
 
@@ -208,16 +117,15 @@ func (p *neutronPlugin) PluginTypeID() string {
 }
 
 // ServiceInfo implements the core.QuotaPlugin interface.
-func (p *neutronPlugin) ServiceInfo(serviceType limes.ServiceType) limes.ServiceInfo {
-	return limes.ServiceInfo{
-		Type:        serviceType,
+func (p *neutronPlugin) ServiceInfo() core.ServiceInfo {
+	return core.ServiceInfo{
 		ProductName: "neutron",
 		Area:        "network",
 	}
 }
 
 // Resources implements the core.QuotaPlugin interface.
-func (p *neutronPlugin) Resources() []limesresources.ResourceInfo {
+func (p *neutronPlugin) Resources() map[liquid.ResourceName]liquid.ResourceInfo {
 	return p.resources
 }
 

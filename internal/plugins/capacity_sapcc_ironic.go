@@ -164,7 +164,7 @@ func (p *capacitySapccIronicPlugin) Scrape(ctx context.Context, _ core.CapacityP
 	// we are going to report capacity for all per-flavor instance quotas
 	resultCompute := make(map[limesresources.ResourceName]core.PerAZ[core.CapacityData])
 	for _, flavorName := range flavorNames {
-		if p.FlavorNameSelection.MatchFlavorName(flavorName) != "" {
+		if p.FlavorNameSelection.MatchFlavorName(flavorName) {
 			resName := p.FlavorAliases.LimesResourceNameForFlavor(flavorName)
 			resultCompute[resName] = make(core.PerAZ[core.CapacityData])
 		}

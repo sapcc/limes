@@ -190,10 +190,8 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 		// start new service report when necessary
 		srvReport := projectReport.Services[apiIdentity.ServiceType]
 		if srvReport == nil {
-			srvInfo := cluster.InfoForService(dbServiceType)
-			srvInfo.Type = apiIdentity.ServiceType
 			srvReport = &limesresources.ProjectServiceReport{
-				ServiceInfo: srvInfo,
+				ServiceInfo: cluster.InfoForService(dbServiceType).ForAPI(apiIdentity.ServiceType),
 				Resources:   make(limesresources.ProjectResourceReports),
 			}
 			projectReport.Services[apiIdentity.ServiceType] = srvReport
@@ -208,9 +206,8 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 		resReport := srvReport.Resources[apiIdentity.ResourceName]
 		if resReport == nil {
 			resInfo := cluster.InfoForResource(dbServiceType, dbResourceName)
-			resInfo.Name = apiIdentity.ResourceName
 			resReport = &limesresources.ProjectResourceReport{
-				ResourceInfo:     resInfo,
+				ResourceInfo:     behavior.BuildAPIResourceInfo(apiIdentity.ResourceName, resInfo),
 				Usage:            0,
 				CommitmentConfig: behavior.ToCommitmentConfig(now),
 				// all other fields are set below
@@ -459,7 +456,7 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 		srvReport := projectReport.Services[*serviceType]
 		if srvReport == nil {
 			srvReport = &limesrates.ProjectServiceReport{
-				ServiceInfo: cluster.InfoForService(*serviceType),
+				ServiceInfo: cluster.InfoForService(*serviceType).ForAPI(*serviceType),
 				Rates:       make(limesrates.ProjectRateReports),
 			}
 			projectReport.Services[*serviceType] = srvReport

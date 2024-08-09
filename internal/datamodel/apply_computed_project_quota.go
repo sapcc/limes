@@ -95,7 +95,7 @@ func (c *projectLocalQuotaConstraints) AddMaxQuota(value *uint64) {
 func ApplyComputedProjectQuota(serviceType limes.ServiceType, resourceName limesresources.ResourceName, dbm *gorp.DbMap, cluster *core.Cluster, now time.Time) error {
 	// only run for resources with quota and autogrow QD model
 	resInfo := cluster.InfoForResource(serviceType, resourceName)
-	if resInfo.NoQuota {
+	if !resInfo.HasQuota {
 		return nil
 	}
 	qdCfg := cluster.QuotaDistributionConfigForResource(serviceType, resourceName)

@@ -134,6 +134,7 @@ Some special behaviors for resources can be configured in the `resource_behavior
 | `resource_behavior[].commitment_min_confirm_date` | no | If given, commitments for this resource will always be created with `confirm_by` no earlier than this timestamp. This can be used to plan the introduction of commitments on a specific date. Ignored if `commitment_durations` is empty. |
 | `resource_behavior[].commitment_until_percent` | no | If given, commitments for this resource will only be confirmed while the total of all confirmed commitments or uncommitted usage in the respective AZ is smaller than the respective percentage of the total capacity for that AZ. This is intended to provide a reserved buffer for the growth quota configured by `quota_distribution_configs[].autogrow.growth_multiplier`. Defaults to 100, i.e. all capacity is committable. |
 | `resource_behavior[].identity_in_v1_api` | no | If given, must be a slash-concatenated pair of service type and resource name, e.g. `myservice/someresource`. The resource will appear as having the specified name and occurring within the specified service when queried on the v1 API. See [*Resource renaming*](#resource-renaming) for details. |
+| `resource_behavior[].category` | no | If given, matching resources belong to the given category. This is a UI hint to subdivide resources within the same service into logical groupings. |
 
 For example:
 
@@ -503,20 +504,6 @@ This is something that we plan on changing into a graceful reload in the future.
 
 For information on liquids provided by Limes itself, please refer to the [liquids documentation](../liquids/index.md).
 
-### `keppel`: Keppel v1
-
-```yaml
-services:
-  - type: keppel
-    service_type: keppel
-```
-
-The area for this service is `storage`.
-
-| Resource | Unit |
-| --- | --- |
-| `images` | countable |
-
 ### `network`: Neutron v1
 
 ```yaml
@@ -550,20 +537,6 @@ The area for this service is `network`. Resources are categorized into `networki
 When a new project is scraped for the first time, and usage for `security_groups` and `security_group_rules` is 1 and 4,
 respectively, quota of the same size is approved automatically. This covers the `default` security group that is
 automatically created in a new project.
-
-### `object-store`: Swift v1
-
-```yaml
-services:
-  - type: object-store
-    service_type: object-store
-```
-
-The area for this service is `storage`.
-
-| Resource | Unit |
-| --- | --- |
-| `capacity` | Bytes |
 
 ### `sharev2`: Manila v2
 

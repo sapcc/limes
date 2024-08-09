@@ -30,6 +30,7 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/errext"
 	"github.com/sapcc/go-bits/osext"
 	yaml "gopkg.in/yaml.v2"
@@ -162,7 +163,7 @@ func (c *Cluster) loadQuotaOverrides(path string) (result map[string]map[string]
 			return limes.UnitUnspecified, fmt.Errorf("%s/%s is not a valid resource", serviceType, resourceName)
 		}
 		resInfo := c.InfoForResource(serviceType, resourceName)
-		if resInfo.NoQuota {
+		if !resInfo.HasQuota {
 			return limes.UnitUnspecified, fmt.Errorf("%s/%s does not track quota", serviceType, resourceName)
 		}
 		return resInfo.Unit, nil
@@ -187,15 +188,6 @@ func (c *Cluster) ServiceTypesInAlphabeticalOrder() []limes.ServiceType {
 	return result
 }
 
-// AllServiceInfos returns the ServiceInfo for all known services.
-func (c *Cluster) AllServiceInfos() []limes.ServiceInfo {
-	result := make([]limes.ServiceInfo, 0, len(c.QuotaPlugins))
-	for serviceType, quotaPlugin := range c.QuotaPlugins {
-		result = append(result, quotaPlugin.ServiceInfo(serviceType))
-	}
-	return result
-}
-
 // HasService checks whether the given service is enabled in this cluster.
 func (c *Cluster) HasService(serviceType limes.ServiceType) bool {
 	return c.QuotaPlugins[serviceType] != nil
@@ -208,40 +200,35 @@ func (c *Cluster) HasResource(serviceType limes.ServiceType, resourceName limesr
 	if plugin == nil {
 		return false
 	}
-	for _, res := range plugin.Resources() {
-		if res.Name == resourceName {
-			return true
-		}
-	}
-	return false
+	_, exists := plugin.Resources()[resourceName]
+	return exists
 }
 
 // InfoForResource finds the plugin for the given serviceType and finds within that
 // plugin the ResourceInfo for the given resourceName. If the service or
 // resource does not exist, an empty ResourceInfo (with .Unit == UnitNone and
 // .Category == "") is returned.
-func (c *Cluster) InfoForResource(serviceType limes.ServiceType, resourceName limesresources.ResourceName) limesresources.ResourceInfo {
+func (c *Cluster) InfoForResource(serviceType limes.ServiceType, resourceName limesresources.ResourceName) liquid.ResourceInfo {
 	plugin := c.QuotaPlugins[serviceType]
 	if plugin == nil {
-		return limesresources.ResourceInfo{Name: resourceName, Unit: limes.UnitNone}
+		return liquid.ResourceInfo{Unit: limes.UnitNone}
 	}
-	for _, res := range plugin.Resources() {
-		if res.Name == resourceName {
-			return res
-		}
+	resInfo, exists := plugin.Resources()[resourceName]
+	if !exists {
+		return liquid.ResourceInfo{Unit: limes.UnitNone}
 	}
-	return limesresources.ResourceInfo{Name: resourceName, Unit: limes.UnitNone}
+	return resInfo
 }
 
 // InfoForService finds the plugin for the given serviceType and returns its
 // ServiceInfo(), or an empty ServiceInfo (with .Area == "") when no such
 // service exists in this cluster.
-func (c *Cluster) InfoForService(serviceType limes.ServiceType) limes.ServiceInfo {
+func (c *Cluster) InfoForService(serviceType limes.ServiceType) ServiceInfo {
 	plugin := c.QuotaPlugins[serviceType]
 	if plugin == nil {
-		return limes.ServiceInfo{Type: serviceType}
+		return ServiceInfo{}
 	}
-	return plugin.ServiceInfo(serviceType)
+	return plugin.ServiceInfo()
 }
 
 // BehaviorForResource returns the ResourceBehavior for the given resource in

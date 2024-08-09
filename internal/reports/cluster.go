@@ -391,7 +391,7 @@ func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter) (*l
 		srvReport, exists := report.Services[serviceType]
 		if !exists {
 			srvReport = &limesrates.ClusterServiceReport{
-				ServiceInfo: cluster.InfoForService(serviceType),
+				ServiceInfo: cluster.InfoForService(serviceType).ForAPI(serviceType),
 				Rates:       make(limesrates.ClusterRateReports),
 			}
 			report.Services[serviceType] = srvReport
@@ -432,10 +432,8 @@ func findInClusterReport(cluster *core.Cluster, report *limesresources.ClusterRe
 
 	service, exists := report.Services[apiIdentity.ServiceType]
 	if !exists {
-		srvInfo := cluster.InfoForService(dbServiceType)
-		srvInfo.Type = apiIdentity.ServiceType
 		service = &limesresources.ClusterServiceReport{
-			ServiceInfo: srvInfo,
+			ServiceInfo: cluster.InfoForService(dbServiceType).ForAPI(apiIdentity.ServiceType),
 			Resources:   make(limesresources.ClusterResourceReports),
 		}
 		report.Services[apiIdentity.ServiceType] = service
@@ -444,9 +442,8 @@ func findInClusterReport(cluster *core.Cluster, report *limesresources.ClusterRe
 	resource, exists := service.Resources[apiIdentity.ResourceName]
 	if !exists {
 		resInfo := cluster.InfoForResource(dbServiceType, dbResourceName)
-		resInfo.Name = apiIdentity.ResourceName
 		resource = &limesresources.ClusterResourceReport{
-			ResourceInfo:     resInfo,
+			ResourceInfo:     behavior.BuildAPIResourceInfo(apiIdentity.ResourceName, resInfo),
 			CommitmentConfig: behavior.ToCommitmentConfig(now),
 		}
 		if !resource.ResourceInfo.NoQuota {

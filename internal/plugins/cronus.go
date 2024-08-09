@@ -31,6 +31,7 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/logg"
 
 	"github.com/sapcc/limes/internal/core"
@@ -76,16 +77,15 @@ func (p *cronusPlugin) PluginTypeID() string {
 }
 
 // ServiceInfo implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) ServiceInfo(serviceType limes.ServiceType) limes.ServiceInfo {
-	return limes.ServiceInfo{
-		Type:        serviceType,
+func (p *cronusPlugin) ServiceInfo() core.ServiceInfo {
+	return core.ServiceInfo{
 		ProductName: "cronus",
 		Area:        "email",
 	}
 }
 
 // Resources implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) Resources() []limesresources.ResourceInfo {
+func (p *cronusPlugin) Resources() map[liquid.ResourceName]liquid.ResourceInfo {
 	return nil
 }
 

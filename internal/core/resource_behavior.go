@@ -41,6 +41,7 @@ type ResourceBehavior struct {
 	CommitmentMinConfirmDate *time.Time                          `yaml:"commitment_min_confirm_date"`
 	CommitmentUntilPercent   *float64                            `yaml:"commitment_until_percent"`
 	IdentityInV1API          ResourceRef                         `yaml:"identity_in_v1_api"`
+	Category                 string                              `yaml:"category"`
 }
 
 // Validate returns a list of all errors in this behavior configuration. It
@@ -73,6 +74,22 @@ func (b ResourceBehavior) ToCommitmentConfig(now time.Time) *limesresources.Comm
 		result.MinConfirmBy = &limes.UnixEncodedTime{Time: *b.CommitmentMinConfirmDate}
 	}
 	return &result
+}
+
+// BuildAPIResourceInfo converts a ResourceInfo from LIQUID into the API
+// format, using the category mapping in this behavior object.
+func (b ResourceBehavior) BuildAPIResourceInfo(resName liquid.ResourceName, resInfo liquid.ResourceInfo) limesresources.ResourceInfo {
+	result := limesresources.ResourceInfo{
+		Name:     resName,
+		Unit:     resInfo.Unit,
+		Category: b.Category,
+		NoQuota:  !resInfo.HasQuota,
+	}
+	// TODO: remove this deprecated field once CBR has removed their use of it on this particular resource
+	if suffix, ok := strings.CutPrefix(string(resName), "snapmirror_capacity"); ok {
+		result.ContainedIn = limesresources.ResourceName("share_capacity" + suffix)
+	}
+	return result
 }
 
 // Merge computes the union of both given resource behaviors.

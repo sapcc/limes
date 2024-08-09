@@ -103,16 +103,11 @@ type QuotaPlugin interface {
 	Init(ctx context.Context, client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType limes.ServiceType) error
 
 	// ServiceInfo returns metadata for this service.
-	//
-	// This receives the `serviceType` as an argument because it needs to appear
-	// in the ServiceInfo struct. But in general, a plugin cannot know which
-	// serviceType it was instantiated for (esp. in unit tests, where the generic
-	// test plugin is instantiated multiple times for different service types).
-	ServiceInfo(serviceType limes.ServiceType) limes.ServiceInfo
+	ServiceInfo() ServiceInfo
 
 	// Resources returns metadata for all the resources that this plugin scrapes
 	// from the backend service.
-	Resources() []limesresources.ResourceInfo
+	Resources() map[liquid.ResourceName]liquid.ResourceInfo
 	// Scrape queries the backend service for the quota and usage data of all
 	// known resources for the given project in the given domain. The string keys
 	// in the result map must be identical to the resource names
@@ -162,6 +157,23 @@ type QuotaPlugin interface {
 	// should be preferred since metrics emitted here won't be lost between
 	// restarts of limes-collect.
 	CollectMetrics(ch chan<- prometheus.Metric, project KeystoneProject, serializedMetrics []byte) error
+}
+
+// ServiceInfo is a reduced version of type limes.ServiceInfo, suitable for
+// being returned from func QuotaPlugin.ServiceInfo().
+type ServiceInfo struct {
+	ProductName string
+	Area        string
+}
+
+// ForAPI inflates the given core.ServiceInfo into a limes.ServiceInfo.
+// The given ServiceType should be the one that we want to appear in the API.
+func (s ServiceInfo) ForAPI(serviceType limes.ServiceType) limes.ServiceInfo {
+	return limes.ServiceInfo{
+		Type:        serviceType,
+		ProductName: s.ProductName,
+		Area:        s.Area,
+	}
 }
 
 // CapacityPlugin is the interface that all capacity collector plugins must

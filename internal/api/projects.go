@@ -233,7 +233,7 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 				requested[srvRequest.Type][resRequest.Name] = &maxQuotaChange{NewValue: nil}
 			} else {
 				resInfo := p.Cluster.InfoForResource(srvRequest.Type, resRequest.Name)
-				if resInfo.NoQuota {
+				if !resInfo.HasQuota {
 					msg := fmt.Sprintf("resource %s/%s does not track quota", srvRequest.Type, resRequest.Name)
 					http.Error(w, msg, http.StatusUnprocessableEntity)
 					return

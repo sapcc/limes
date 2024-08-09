@@ -31,6 +31,7 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 
 	"github.com/sapcc/limes/internal/core"
 )
@@ -40,15 +41,15 @@ type designatePlugin struct {
 	DesignateV2 *gophercloud.ServiceClient `yaml:"-"`
 }
 
-var designateResources = []limesresources.ResourceInfo{
-	{
-		Name: "zones",
-		Unit: limes.UnitNone,
+var designateResources = map[liquid.ResourceName]liquid.ResourceInfo{
+	"zones": {
+		Unit:     limes.UnitNone,
+		HasQuota: true,
 	},
-	{
+	"recordsets": {
 		// this quota means "recordsets per zone", not "recordsets per project"!
-		Name: "recordsets",
-		Unit: limes.UnitNone,
+		Unit:     limes.UnitNone,
+		HasQuota: true,
 	},
 }
 
@@ -68,16 +69,15 @@ func (p *designatePlugin) PluginTypeID() string {
 }
 
 // ServiceInfo implements the core.QuotaPlugin interface.
-func (p *designatePlugin) ServiceInfo(serviceType limes.ServiceType) limes.ServiceInfo {
-	return limes.ServiceInfo{
-		Type:        serviceType,
+func (p *designatePlugin) ServiceInfo() core.ServiceInfo {
+	return core.ServiceInfo{
 		ProductName: "designate",
 		Area:        "dns",
 	}
 }
 
 // Resources implements the core.QuotaPlugin interface.
-func (p *designatePlugin) Resources() []limesresources.ResourceInfo {
+func (p *designatePlugin) Resources() map[liquid.ResourceName]liquid.ResourceInfo {
 	return designateResources
 }
 

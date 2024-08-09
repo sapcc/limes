@@ -133,7 +133,7 @@ func (c *AggregateMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 		if plugin == nil {
 			return nil
 		}
-		serviceName := plugin.ServiceInfo(serviceType).ProductName
+		serviceName := plugin.ServiceInfo().ProductName
 
 		if len(plugin.Resources()) > 0 {
 			ch <- prometheus.MustNewConstMetric(
@@ -588,11 +588,11 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 	// corresponding time series might otherwise be missing if capacity scraping
 	// fails)
 	for serviceType, quotaPlugin := range d.Cluster.QuotaPlugins {
-		for _, res := range quotaPlugin.Resources() {
-			if capacityReported[serviceType][res.Name] {
+		for resName := range quotaPlugin.Resources() {
+			if capacityReported[serviceType][resName] {
 				continue
 			}
-			apiIdentity := d.Cluster.BehaviorForResource(serviceType, res.Name).IdentityInV1API
+			apiIdentity := d.Cluster.BehaviorForResource(serviceType, resName).IdentityInV1API
 
 			labels := fmt.Sprintf(`resource=%q,service=%q,service_name=%q`,
 				apiIdentity.ResourceName, apiIdentity.ServiceType, serviceNameByType[serviceType],
@@ -744,16 +744,16 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 
 	// fetch metadata for services/resources
 	for serviceType, quotaPlugin := range d.Cluster.QuotaPlugins {
-		for _, resource := range quotaPlugin.Resources() {
+		for resourceName, resourceInfo := range quotaPlugin.Resources() {
 			labels := fmt.Sprintf(`resource=%q,service=%q,service_name=%q`,
-				resource.Name, serviceType, serviceNameByType[serviceType],
+				resourceName, serviceType, serviceNameByType[serviceType],
 			)
 
-			_, multiplier := resource.Unit.Base()
+			_, multiplier := resourceInfo.Unit.Base()
 			metric := dataMetric{Labels: labels, Value: float64(multiplier)}
 			result["limes_unit_multiplier"] = append(result["limes_unit_multiplier"], metric)
 
-			qdc := d.Cluster.QuotaDistributionConfigForResource(serviceType, resource.Name)
+			qdc := d.Cluster.QuotaDistributionConfigForResource(serviceType, resourceName)
 			if qdc.Model == limesresources.AutogrowQuotaDistribution {
 				metric := dataMetric{Labels: labels, Value: qdc.Autogrow.GrowthMultiplier}
 				result["limes_autogrow_growth_multiplier"] = append(result["limes_autogrow_growth_multiplier"], metric)
@@ -809,7 +809,7 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 func buildServiceNameByTypeMapping(c *core.Cluster) (serviceNameByType map[limes.ServiceType]string) {
 	serviceNameByType = make(map[limes.ServiceType]string, len(c.QuotaPlugins))
 	for serviceType, plugin := range c.QuotaPlugins {
-		serviceNameByType[serviceType] = plugin.ServiceInfo(serviceType).ProductName
+		serviceNameByType[serviceType] = plugin.ServiceInfo().ProductName
 	}
 	return
 }

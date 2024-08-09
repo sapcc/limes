@@ -36,6 +36,7 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 
 	"github.com/sapcc/limes/internal/core"
 )
@@ -69,36 +70,29 @@ func (p *cinderPlugin) PluginTypeID() string {
 }
 
 // ServiceInfo implements the core.QuotaPlugin interface.
-func (p *cinderPlugin) ServiceInfo(serviceType limes.ServiceType) limes.ServiceInfo {
-	return limes.ServiceInfo{
-		Type:        serviceType,
+func (p *cinderPlugin) ServiceInfo() core.ServiceInfo {
+	return core.ServiceInfo{
 		ProductName: "cinder",
 		Area:        "storage",
 	}
 }
 
 // Resources implements the core.QuotaPlugin interface.
-func (p *cinderPlugin) Resources() []limesresources.ResourceInfo {
-	result := make([]limesresources.ResourceInfo, 0, 3*len(p.VolumeTypes))
+func (p *cinderPlugin) Resources() map[liquid.ResourceName]liquid.ResourceInfo {
+	result := make(map[liquid.ResourceName]liquid.ResourceInfo, 3*len(p.VolumeTypes))
 	for _, volumeType := range p.VolumeTypes {
-		category := string(p.makeResourceName("volumev2", volumeType))
-		result = append(result,
-			limesresources.ResourceInfo{
-				Name:     p.makeResourceName("capacity", volumeType),
-				Unit:     limes.UnitGibibytes,
-				Category: category,
-			},
-			limesresources.ResourceInfo{
-				Name:     p.makeResourceName("snapshots", volumeType),
-				Unit:     limes.UnitNone,
-				Category: category,
-			},
-			limesresources.ResourceInfo{
-				Name:     p.makeResourceName("volumes", volumeType),
-				Unit:     limes.UnitNone,
-				Category: category,
-			},
-		)
+		result[p.makeResourceName("capacity", volumeType)] = liquid.ResourceInfo{
+			Unit:     limes.UnitGibibytes,
+			HasQuota: true,
+		}
+		result[p.makeResourceName("snapshots", volumeType)] = liquid.ResourceInfo{
+			Unit:     limes.UnitNone,
+			HasQuota: true,
+		}
+		result[p.makeResourceName("volumes", volumeType)] = liquid.ResourceInfo{
+			Unit:     limes.UnitNone,
+			HasQuota: true,
+		}
 	}
 	return result
 }

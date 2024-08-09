@@ -27,7 +27,6 @@
           {
             "name": "capacity_portion",
             "unit": "B",
-            "contained_in": "capacity",
             "usage": 1
           },
           {
@@ -62,7 +61,6 @@
           {
             "name": "capacity_portion",
             "unit": "B",
-            "contained_in": "capacity",
             "usage": 1
           },
           {

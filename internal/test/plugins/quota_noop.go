@@ -28,6 +28,7 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 
 	"github.com/sapcc/limes/internal/core"
 )
@@ -43,11 +44,13 @@ func init() {
 // with no UsageData at all (not even zero, the UsageData map just does not
 // have any entries at all).
 type NoopQuotaPlugin struct {
-	WithEmptyResource bool `yaml:"with_empty_resource"`
+	ServiceType       limes.ServiceType `yaml:"-"`
+	WithEmptyResource bool              `yaml:"with_empty_resource"`
 }
 
 // Init implements the core.QuotaPlugin interface.
 func (p *NoopQuotaPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType limes.ServiceType) error {
+	p.ServiceType = serviceType
 	return nil
 }
 
@@ -57,23 +60,21 @@ func (p *NoopQuotaPlugin) PluginTypeID() string {
 }
 
 // ServiceInfo implements the core.QuotaPlugin interface.
-func (p *NoopQuotaPlugin) ServiceInfo(serviceType limes.ServiceType) limes.ServiceInfo {
-	return limes.ServiceInfo{
-		Type:        serviceType,
-		Area:        string(serviceType),
-		ProductName: "noop-" + string(serviceType),
+func (p *NoopQuotaPlugin) ServiceInfo() core.ServiceInfo {
+	return core.ServiceInfo{
+		Area:        string(p.ServiceType),
+		ProductName: "noop-" + string(p.ServiceType),
 	}
 }
 
 // Resources implements the core.QuotaPlugin interface.
-func (p *NoopQuotaPlugin) Resources() []limesresources.ResourceInfo {
+func (p *NoopQuotaPlugin) Resources() map[liquid.ResourceName]liquid.ResourceInfo {
 	if !p.WithEmptyResource {
 		return nil
 	}
-	return []limesresources.ResourceInfo{{
-		Name: "things",
-		Unit: limes.UnitNone,
-	}}
+	return map[liquid.ResourceName]liquid.ResourceInfo{
+		"things": {Unit: limes.UnitNone, HasQuota: true},
+	}
 }
 
 // Rates implements the core.QuotaPlugin interface.
