@@ -774,14 +774,18 @@ func (p *v1Provider) GetCommitmentConversion(w http.ResponseWriter, r *http.Requ
 	resourceName := mux.Vars(r)["resource_name"]
 
 	behavior := p.Cluster.BehaviorForResource(limes.ServiceType(serviceType), limesresources.ResourceName(resourceName))
-	if behavior.CommitmentConversion == (core.Conversion{}) {
+	if len(behavior.CommitmentConversion) == 0 {
 		http.Error(w, "no convertible found.", http.StatusUnprocessableEntity)
 		return
 	}
 
-	c := limesresources.CommitmentConversion{
-		Amount:      behavior.CommitmentConversion.Amount,
-		Convertible: behavior.CommitmentConversion.BaseUnit,
+	var c []limesresources.CommitmentConversion
+	for _, conversion := range behavior.CommitmentConversion {
+		convertible := limesresources.CommitmentConversion{
+			Amount:      conversion.Amount,
+			Convertible: conversion.BaseUnit,
+		}
+		c = append(c, convertible)
 	}
 
 	respondwith.JSON(w, http.StatusOK, map[string]any{"convertible": c})

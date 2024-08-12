@@ -70,7 +70,7 @@ const testCommitmentsYAMLWithoutMinConfirmDate = `
 		- resource: second/capacity
 			commitment_is_az_aware: true
 		- resource: compute/flavour_c_96
-			commitment_conversion: {amount: 2, base_unit: flavour_c_48}
+			commitment_conversion: [{amount: 2, base_unit: flavour_c_48}, {amount: 4, base_unit: flavour_c_24}]
 `
 
 func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
@@ -1051,10 +1051,13 @@ func Test_GetCommitmentConversion(t *testing.T) {
 		test.WithConfig(testCommitmentsYAMLWithoutMinConfirmDate),
 		test.WithAPIHandler(NewV1API),
 	)
-	resp := assert.JSONObject{
+	resp := []assert.JSONObject{{
 		"amount":      2,
 		"convertible": "flavour_c_48",
-	}
+	}, {
+		"amount":      4,
+		"convertible": "flavour_c_24",
+	}}
 	assert.HTTPRequest{
 		Method:       http.MethodGet,
 		Path:         "/v1/commitments/compute/flavour_c_96",

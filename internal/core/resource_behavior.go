@@ -41,7 +41,7 @@ type ResourceBehavior struct {
 	CommitmentIsAZAware      bool                                `yaml:"commitment_is_az_aware"`
 	CommitmentMinConfirmDate *time.Time                          `yaml:"commitment_min_confirm_date"`
 	CommitmentUntilPercent   *float64                            `yaml:"commitment_until_percent"`
-	CommitmentConversion     Conversion                          `yaml:"commitment_conversion"`
+	CommitmentConversion     []Conversion                        `yaml:"commitment_conversion"`
 	IdentityInV1API          ResourceRef                         `yaml:"identity_in_v1_api"`
 	Category                 string                              `yaml:"category"`
 }
@@ -119,7 +119,7 @@ func (b *ResourceBehavior) Merge(other ResourceBehavior) {
 	if other.Category != "" {
 		b.Category = other.Category
 	}
-	if other.CommitmentConversion != (Conversion{}) {
+	if len(other.CommitmentConversion) != 0 {
 		b.CommitmentConversion = other.CommitmentConversion
 	}
 }
