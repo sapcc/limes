@@ -788,5 +788,5 @@ func (p *v1Provider) GetCommitmentConversion(w http.ResponseWriter, r *http.Requ
 		c = append(c, convertible)
 	}
 
-	respondwith.JSON(w, http.StatusOK, map[string]any{"convertible": c})
+	respondwith.JSON(w, http.StatusOK, map[string]any{"conversions": c})
 }

@@ -1062,7 +1062,7 @@ func Test_GetCommitmentConversion(t *testing.T) {
 		Method:       http.MethodGet,
 		Path:         "/v1/commitments/compute/flavour_c_96",
 		ExpectStatus: http.StatusOK,
-		ExpectBody:   assert.JSONObject{"convertible": resp},
+		ExpectBody:   assert.JSONObject{"conversions": resp},
 	}.Check(t, s.Handler)
 
 	assert.HTTPRequest{
