@@ -33,6 +33,7 @@ import (
 
 // ResourceBehavior contains the configuration options for specialized
 // behaviors of a single resource (or a set thereof).
+
 type ResourceBehavior struct {
 	FullResourceNameRx       regexpext.BoundedRegexp             `yaml:"resource"`
 	OvercommitFactor         liquid.OvercommitFactor             `yaml:"overcommit_factor"`
@@ -40,6 +41,7 @@ type ResourceBehavior struct {
 	CommitmentIsAZAware      bool                                `yaml:"commitment_is_az_aware"`
 	CommitmentMinConfirmDate *time.Time                          `yaml:"commitment_min_confirm_date"`
 	CommitmentUntilPercent   *float64                            `yaml:"commitment_until_percent"`
+	CommitmentConversion     Conversion                          `yaml:"commitment_conversion"`
 	IdentityInV1API          ResourceRef                         `yaml:"identity_in_v1_api"`
 	Category                 string                              `yaml:"category"`
 }
@@ -117,6 +119,9 @@ func (b *ResourceBehavior) Merge(other ResourceBehavior) {
 	if other.Category != "" {
 		b.Category = other.Category
 	}
+	if other.CommitmentConversion != (Conversion{}) {
+		b.CommitmentConversion = other.CommitmentConversion
+	}
 }
 
 // ResourceRef contains a pair of service type and resource name. When read
@@ -145,4 +150,9 @@ func (r *ResourceRef) UnmarshalYAML(unmarshal func(any) error) error {
 		ResourceName: limesresources.ResourceName(fields[1]),
 	}
 	return nil
+}
+
+type Conversion struct {
+	Amount   uint64 `yaml:"amount"`
+	BaseUnit string `yaml:"base_unit"`
 }

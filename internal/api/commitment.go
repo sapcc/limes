@@ -762,3 +762,27 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 
 	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
 }
+
+// GetCommitmentConversion handles GET /v1/commitments/{service_type}/{resource_name}
+func (p *v1Provider) GetCommitmentConversion(w http.ResponseWriter, r *http.Request) {
+	httpapi.IdentifyEndpoint(r, "/v1/commitments/:service_type/:resource_name")
+	token := p.CheckToken(r)
+	if !token.Require(w, "cluster:show_basic") {
+		return
+	}
+	serviceType := mux.Vars(r)["service_type"]
+	resourceName := mux.Vars(r)["resource_name"]
+
+	behavior := p.Cluster.BehaviorForResource(limes.ServiceType(serviceType), limesresources.ResourceName(resourceName))
+	if behavior.CommitmentConversion == (core.Conversion{}) {
+		http.Error(w, "no convertible found.", http.StatusUnprocessableEntity)
+		return
+	}
+
+	c := limesresources.CommitmentConversion{
+		Amount:      behavior.CommitmentConversion.Amount,
+		Convertible: behavior.CommitmentConversion.BaseUnit,
+	}
+
+	respondwith.JSON(w, http.StatusOK, map[string]any{"convertible": c})
+}

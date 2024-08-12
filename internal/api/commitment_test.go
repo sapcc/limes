@@ -69,6 +69,8 @@ const testCommitmentsYAMLWithoutMinConfirmDate = `
 			commitment_is_az_aware: false
 		- resource: second/capacity
 			commitment_is_az_aware: true
+		- resource: compute/flavour_c_96
+			commitment_conversion: {amount: 2, base_unit: flavour_c_48}
 `
 
 func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
@@ -1040,5 +1042,30 @@ func Test_TransferCommitmentForbiddenByCapacityCheck(t *testing.T) {
 		Header:       map[string]string{"Transfer-Token": resp.Commitment.TransferToken},
 		ExpectBody:   assert.StringData("not enough committable capacity on the receiving side\n"),
 		ExpectStatus: http.StatusConflict,
+	}.Check(t, s.Handler)
+}
+
+func Test_GetCommitmentConversion(t *testing.T) {
+	s := test.NewSetup(t,
+		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
+		test.WithConfig(testCommitmentsYAMLWithoutMinConfirmDate),
+		test.WithAPIHandler(NewV1API),
+	)
+	resp := assert.JSONObject{
+		"amount":      2,
+		"convertible": "flavour_c_48",
+	}
+	assert.HTTPRequest{
+		Method:       http.MethodGet,
+		Path:         "/v1/commitments/compute/flavour_c_96",
+		ExpectStatus: http.StatusOK,
+		ExpectBody:   assert.JSONObject{"convertible": resp},
+	}.Check(t, s.Handler)
+
+	assert.HTTPRequest{
+		Method:       http.MethodGet,
+		Path:         "/v1/commitments/compute/wrongFlavour",
+		ExpectStatus: http.StatusUnprocessableEntity,
+		ExpectBody:   assert.StringData("no convertible found.\n"),
 	}.Check(t, s.Handler)
 }

@@ -165,6 +165,7 @@ func (p *v1Provider) AddTo(r *mux.Router) {
 	r.Methods("POST").Path("/v1/domains/{domain_id}/projects/{project_id}/commitments/{id}/start-transfer").HandlerFunc(p.StartCommitmentTransfer)
 	r.Methods("GET").Path("/v1/commitments/{token}").HandlerFunc(p.GetCommitmentByTransferToken)
 	r.Methods("POST").Path("/v1/domains/{domain_id}/projects/{project_id}/transfer-commitment/{id}").HandlerFunc(p.TransferCommitment)
+	r.Methods("GET").Path("/v1/commitments/{service_type}/{resource_name}").HandlerFunc(p.GetCommitmentConversion)
 }
 
 // RequireJSON will parse the request body into the given data structure, or
