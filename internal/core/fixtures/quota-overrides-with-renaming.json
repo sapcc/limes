@@ -1,0 +1,34 @@
+{
+  "firstdomain": {
+    "firstproject": {
+      "capacities": {
+        "first": "10 B"
+      },
+      "second": {
+        "capacity": "30 B",
+        "things": 40
+      },
+      "things": {
+        "first": 20
+      }
+    },
+    "secondproject": {
+      "capacities": {
+        "first": "50 B"
+      },
+      "second": {
+        "capacity": "60 B"
+      }
+    }
+  },
+  "seconddomain": {
+    "thirdproject": {
+      "things": {
+        "first": 70
+      },
+      "second": {
+        "things": 80
+      }
+    }
+  }
+}

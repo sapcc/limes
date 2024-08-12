@@ -50,8 +50,10 @@ Limes logs all quota changes at the domain and project level in an Open Standard
 | `LIMES_QUOTA_OVERRIDES_PATH` | *(optional)* | Path to a JSON file containing the quota overrides for this cluster. |
 
 If present, the quota overrides file must be a four-leveled object, with the keys being domain name, project name,
-service type and resource name in that order. The values are either numbers (to override quotas on counted resources) or
-strings of the form `<number> <unit>` (to override quotas on measured resources). For example:
+service type and resource name in that order. If API-level resource renaming is used (see configuration option
+`resource_behavior[].identity_in_v1_api`), the service type and resource name refer to the renamed identifiers used by
+the v1 API. The values are either numbers (to override quotas on counted resources) or strings of the form
+`<number> <unit>` (to override quotas on measured resources). For example:
 
 ```json
 {
