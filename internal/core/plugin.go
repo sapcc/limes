@@ -66,6 +66,18 @@ func KeystoneProjectFromDB(dbProject db.Project, domain KeystoneDomain) Keystone
 	}
 }
 
+// ForLiquid casts this KeystoneProject into the format used in LIQUID requests.
+func (p KeystoneProject) ForLiquid() *liquid.ProjectMetadata {
+	return &liquid.ProjectMetadata{
+		UUID: p.UUID,
+		Name: p.Name,
+		Domain: liquid.DomainMetadata{
+			UUID: p.Domain.UUID,
+			Name: p.Domain.Name,
+		},
+	}
+}
+
 // DiscoveryPlugin is the interface that the collector uses to discover Keystone
 // projects and domains in a cluster.
 type DiscoveryPlugin interface {

@@ -98,6 +98,10 @@ func (p *liquidQuotaPlugin) Resources() map[liquid.ResourceName]liquid.ResourceI
 // Scrape implements the core.QuotaPlugin interface.
 func (p *liquidQuotaPlugin) Scrape(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
 	req := liquid.ServiceUsageRequest{AllAZs: allAZs}
+	if p.LiquidServiceInfo.UsageReportNeedsProjectMetadata {
+		req.ProjectMetadata = project.ForLiquid()
+	}
+
 	resp, err := p.LiquidClient.GetUsageReport(ctx, project.UUID, req)
 	if err != nil {
 		return nil, nil, err
@@ -156,6 +160,9 @@ func (p *liquidQuotaPlugin) SetQuota(ctx context.Context, project core.KeystoneP
 	}
 	for resName, quota := range quotas {
 		req.Resources[resName] = liquid.ResourceQuotaRequest{Quota: quota}
+	}
+	if p.LiquidServiceInfo.QuotaUpdateNeedsProjectMetadata {
+		req.ProjectMetadata = project.ForLiquid()
 	}
 
 	return p.LiquidClient.PutQuota(ctx, project.UUID, req)
