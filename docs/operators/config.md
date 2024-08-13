@@ -205,7 +205,7 @@ with the following sequence:
    UPDATE project_resources res SET service_id = (
        SELECT new.id FROM project_services new JOIN project_services old ON old.project_id = new.project_id
        WHERE old.id = res.service_id AND old.type = 'network' AND new.type = 'neutron'
-   ) WHERE name = 'routers' AND service_id = (SELECT id FROM project_services WHERE type = 'network');
+   ) WHERE name = 'routers' AND service_id IN (SELECT id FROM project_services WHERE type = 'network');
    ```
    If the resource name also changes, add `SET name = 'newname'` to each UPDATE statement.
    If multiple resources need to be moved from the same old service type to the same new service type, you can replace
@@ -221,8 +221,8 @@ database update process can be substituted instead: (This example renames servic
 
 1. Update the `type` columns in the services tables of the DB:
    ```sql
-   UPDATE cluster_services SET name = 'swift' WHERE name = 'object-store';
-   UPDATE project_services SET name = 'swift' WHERE name = 'object-store';
+   UPDATE cluster_services SET type = 'swift' WHERE type = 'object-store';
+   UPDATE project_services SET type = 'swift' WHERE type = 'object-store';
    ```
 
 ### Quota distribution models
