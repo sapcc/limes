@@ -58,6 +58,7 @@ var (
 		  FROM project_az_resources par
 		  JOIN project_resources pr ON par.resource_id = pr.id {{AND pr.name = $resource_name}}
 		  JOIN project_services ps ON pr.service_id = ps.id {{AND ps.type = $service_type}}
+		 WHERE %s
 	`)
 
 	findProjectCommitmentByIDQuery = sqlext.SimplifyWhitespace(`
@@ -133,8 +134,9 @@ func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Reques
 	// enumerate project AZ resources
 	filter := reports.ReadFilter(r, p.Cluster)
 	queryStr, joinArgs := filter.PrepareQuery(getProjectAZResourceLocationsQuery)
+	whereStr, whereArgs := db.BuildSimpleWhereClause(map[string]any{"ps.project_id": dbProject.ID}, len(joinArgs))
 	azResourceLocationsByID := make(map[db.ProjectAZResourceID]datamodel.AZResourceLocation)
-	err := sqlext.ForeachRow(p.DB, queryStr, joinArgs, func(rows *sql.Rows) error {
+	err := sqlext.ForeachRow(p.DB, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		var (
 			id  db.ProjectAZResourceID
 			loc datamodel.AZResourceLocation
@@ -155,7 +157,7 @@ func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Reques
 
 	// enumerate relevant project commitments
 	queryStr, joinArgs = filter.PrepareQuery(getProjectCommitmentsQuery)
-	whereStr, whereArgs := db.BuildSimpleWhereClause(map[string]any{"ps.project_id": dbProject.ID}, len(joinArgs))
+	whereStr, whereArgs = db.BuildSimpleWhereClause(map[string]any{"ps.project_id": dbProject.ID}, len(joinArgs))
 	var dbCommitments []db.ProjectCommitment
 	_, err = p.DB.Select(&dbCommitments, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...)...)
 	if respondwith.ErrorText(w, err) {
