@@ -26,7 +26,6 @@ import (
 
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
-	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/projects"
 	"github.com/majewsky/schwift/v2"
 	"github.com/majewsky/schwift/v2/gopherschwift"
 	"github.com/sapcc/go-api-declarations/limes"
@@ -36,8 +35,7 @@ import (
 
 type Logic struct {
 	// connections
-	IdentityV3      *gophercloud.ServiceClient `json:"-"`
-	ResellerAccount *schwift.Account           `json:"-"`
+	ResellerAccount *schwift.Account `json:"-"`
 }
 
 // Init implements the liquidapi.Logic interface.
@@ -47,15 +45,7 @@ func (l *Logic) Init(ctx context.Context, provider *gophercloud.ProviderClient, 
 		return fmt.Errorf("cannot initialize Swift v1 client: %w", err)
 	}
 	l.ResellerAccount, err = gopherschwift.Wrap(swiftV1, nil)
-	if err != nil {
-		return err
-	}
-
-	l.IdentityV3, err = openstack.NewIdentityV3(provider, eo)
-	if err != nil {
-		return fmt.Errorf("cannot initialize Keystone v3 client: %w", err)
-	}
-	return nil
+	return err
 }
 
 // BuildServiceInfo implements the liquidapi.Logic interface.
@@ -81,6 +71,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 				LabelKeys: []string{"container_name"},
 			},
 		},
+		QuotaUpdateNeedsProjectMetadata: true,
 	}, nil
 }
 
@@ -172,19 +163,14 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 
 // SetQuota implements the liquidapi.Logic interface.
 func (l *Logic) SetQuota(ctx context.Context, projectUUID string, req liquid.ServiceQuotaRequest, serviceInfo liquid.ServiceInfo) error {
-	project, err := projects.Get(ctx, l.IdentityV3, projectUUID).Extract()
-	if err != nil {
-		return fmt.Errorf("while finding project in Keystone: %w", err)
-	}
-
 	quota := req.Resources["capacity"].Quota
 	headers := schwift.NewAccountHeaders()
 	headers.BytesUsedQuota().Set(quota)
 	// this header brought to you by https://github.com/sapcc/swift-addons
-	headers.Set("X-Account-Project-Domain-Id-Override", project.DomainID)
+	headers.Set("X-Account-Project-Domain-Id-Override", req.ProjectMetadata.Domain.UUID)
 
 	account := l.Account(projectUUID)
-	err = account.Update(ctx, headers, nil)
+	err := account.Update(ctx, headers, nil)
 	if schwift.Is(err, http.StatusNotFound) && quota > 0 {
 		// account does not exist yet - if there is a non-zero quota, enable it now
 		err = account.Create(ctx, headers.ToOpts())
