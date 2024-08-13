@@ -59,6 +59,8 @@ import (
 	"github.com/sapcc/limes/internal/collector"
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
+	"github.com/sapcc/limes/internal/liquids/archer"
+	"github.com/sapcc/limes/internal/liquids/designate"
 	"github.com/sapcc/limes/internal/liquids/neutron"
 	"github.com/sapcc/limes/internal/liquids/octavia"
 	"github.com/sapcc/limes/internal/liquids/swift"
@@ -98,6 +100,10 @@ func main() {
 			DefaultListenAddress:       ":80",
 		}
 		switch liquidName {
+		case "archer":
+			must.Succeed(liquidapi.Run(ctx, &archer.Logic{}, opts))
+		case "designate":
+			must.Succeed(liquidapi.Run(ctx, &designate.Logic{}, opts))
 		case "neutron":
 			must.Succeed(liquidapi.Run(ctx, &neutron.Logic{}, opts))
 		case "octavia":
