@@ -165,7 +165,7 @@ func (p *v1Provider) AddTo(r *mux.Router) {
 	r.Methods("POST").Path("/v1/domains/{domain_id}/projects/{project_id}/commitments/{id}/start-transfer").HandlerFunc(p.StartCommitmentTransfer)
 	r.Methods("GET").Path("/v1/commitments/{token}").HandlerFunc(p.GetCommitmentByTransferToken)
 	r.Methods("POST").Path("/v1/domains/{domain_id}/projects/{project_id}/transfer-commitment/{id}").HandlerFunc(p.TransferCommitment)
-	r.Methods("GET").Path("/v1/commitments/{service_type}/{resource_name}").HandlerFunc(p.GetCommitmentConversion)
+	r.Methods("POST").Path("/v1/commitments/can-convert").HandlerFunc(p.GetCommitmentConversions)
 }
 
 // RequireJSON will parse the request body into the given data structure, or
@@ -303,4 +303,12 @@ func GetProjectRateReport(cluster *core.Cluster, dbDomain db.Domain, dbProject d
 		return nil, errors.New("no resource data found for project")
 	}
 	return result, nil
+}
+
+// GetGreatestCommonDivisor is used to calculate the conversion ratios between different committment resoucetypes.
+func GetGreatestCommonDivisor(a, b uint64) uint64 {
+	if b == 0 {
+		return a
+	}
+	return GetGreatestCommonDivisor(b, a%b)
 }

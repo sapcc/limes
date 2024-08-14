@@ -588,6 +588,25 @@ After that, it returns the commitment as a JSON document.
 ### GET /v1/commitments/:token
 To ensure that a commitment can be checked for its `resource` type or `availability zone` before it gets transferred to a target project, this endpoint fetches the target commitment by its respective token.
 
+
+### POST /v1/commitments/can-convert
+Checks if a commitment could be converted to a resource of a different type.
+
+Returns 200 (OK) on success, and a JSON document like: 
+
+```json
+{
+  "conversions": [{
+    "from":            1,
+    "to":              2,
+    "target_resource": "serviceType/targetResource"
+  }]
+}
+```
+
+The `result` field indicates whether this commitment can be created without a `confirm_by` attribute, that is, confirmed immediately upon creation.
+
+
 ### DELETE /v1/domains/:domain\_id/projects/:project\_id/commitments/:id
 
 Deletes a commitment within the given project. Requires a cloud-admin token. On success, returns 204 (No Content).

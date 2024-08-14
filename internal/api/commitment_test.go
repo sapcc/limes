@@ -69,8 +69,16 @@ const testCommitmentsYAMLWithoutMinConfirmDate = `
 			commitment_is_az_aware: false
 		- resource: second/capacity
 			commitment_is_az_aware: true
-		- resource: compute/flavour_c_96
-			commitment_conversion: [{amount: 2, base_unit: flavour_c_48}, {amount: 4, base_unit: flavour_c_24}]
+		- resource: second/capacity_portion
+			commitment_is_az_aware: true
+		- resource: second/flavor_c_32
+			commitment_conversion: {identifier: flavor1, weight: 32}
+		- resource: second/capacity
+			commitment_conversion: {identifier: flavor1, weight: 48}
+		- resource: second/flavor_c_96
+			commitment_conversion: {identifier: flavor1, weight: 96}
+		- resource: second/capacity_portion
+			commitment_conversion: {identifier: flavor2, weight: 144}
 `
 
 func TestCommitmentLifecycleWithDelayedConfirmation(t *testing.T) {
@@ -1051,24 +1059,42 @@ func Test_GetCommitmentConversion(t *testing.T) {
 		test.WithConfig(testCommitmentsYAMLWithoutMinConfirmDate),
 		test.WithAPIHandler(NewV1API),
 	)
+
+	request := func(amount uint64, resourceName string) assert.JSONObject {
+		return assert.JSONObject{
+			"commitment": assert.JSONObject{
+				"service_type":      "second",
+				"resource_name":     resourceName,
+				"availability_zone": "az-one",
+				"amount":            amount,
+				"duration":          "1 hour",
+			},
+		}
+	}
+
 	resp := []assert.JSONObject{{
-		"amount":      2,
-		"convertible": "flavour_c_48",
+		"from":            2,
+		"to":              3,
+		"target_resource": "second/flavor_c_32",
 	}, {
-		"amount":      4,
-		"convertible": "flavour_c_24",
+		"from":            2,
+		"to":              1,
+		"target_resource": "second/flavor_c_96",
 	}}
+
 	assert.HTTPRequest{
-		Method:       http.MethodGet,
-		Path:         "/v1/commitments/compute/flavour_c_96",
+		Method:       http.MethodPost,
+		Path:         "/v1/commitments/can-convert",
+		Body:         request(10, "capacity"),
 		ExpectStatus: http.StatusOK,
 		ExpectBody:   assert.JSONObject{"conversions": resp},
 	}.Check(t, s.Handler)
 
 	assert.HTTPRequest{
-		Method:       http.MethodGet,
-		Path:         "/v1/commitments/compute/wrongFlavour",
+		Method:       http.MethodPost,
+		Path:         "/v1/commitments/can-convert",
+		Body:         request(10, "capacity_portion"),
 		ExpectStatus: http.StatusUnprocessableEntity,
-		ExpectBody:   assert.StringData("no convertible found.\n"),
+		ExpectBody:   assert.StringData("no convertibles found\n"),
 	}.Check(t, s.Handler)
 }

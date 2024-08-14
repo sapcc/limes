@@ -30,6 +30,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/must"
@@ -763,30 +764,51 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
 }
 
-// GetCommitmentConversion handles GET /v1/commitments/{service_type}/{resource_name}
-func (p *v1Provider) GetCommitmentConversion(w http.ResponseWriter, r *http.Request) {
-	httpapi.IdentifyEndpoint(r, "/v1/commitments/:service_type/:resource_name")
+// GetCommitmentConversion handles POST /v1/commitments/can-convert
+func (p *v1Provider) GetCommitmentConversions(w http.ResponseWriter, r *http.Request) {
+	httpapi.IdentifyEndpoint(r, "/v1/commitments/can-convert")
 	token := p.CheckToken(r)
 	if !token.Require(w, "cluster:show_basic") {
 		return
 	}
-	serviceType := mux.Vars(r)["service_type"]
-	resourceName := mux.Vars(r)["resource_name"]
 
-	behavior := p.Cluster.BehaviorForResource(limes.ServiceType(serviceType), limesresources.ResourceName(resourceName))
-	if len(behavior.CommitmentConversion) == 0 {
-		http.Error(w, "no convertible found.", http.StatusUnprocessableEntity)
+	req, sourceBehavior := p.parseAndValidateCommitmentRequest(w, r)
+	if req == nil {
 		return
 	}
 
-	var c []limesresources.CommitmentConversion
-	for _, conversion := range behavior.CommitmentConversion {
-		convertible := limesresources.CommitmentConversion{
-			Amount:      conversion.Amount,
-			Convertible: conversion.BaseUnit,
+	var conversions []limesresources.CommitmentConversion
+	for _, targetBehavior := range p.Cluster.Config.ResourceBehaviors {
+		if targetBehavior.CommitmentConversion == (core.CommitmentConversion{}) {
+			continue
 		}
-		c = append(c, convertible)
+		sourceName := string(req.ServiceType) + "/" + string(req.ResourceName)
+		if targetBehavior.FullResourceNameRx.MatchString(sourceName) {
+			continue
+		}
+		if sourceBehavior.CommitmentConversion.Identifier != targetBehavior.CommitmentConversion.Identifier {
+			continue
+		}
+		from, to := p.getCommitmentConversionRate(sourceBehavior, &targetBehavior)
+		result := limesresources.CommitmentConversion{
+			From:           from,
+			To:             to,
+			TargetResource: liquid.ResourceName(targetBehavior.FullResourceNameRx),
+		}
+		conversions = append(conversions, result)
 	}
 
-	respondwith.JSON(w, http.StatusOK, map[string]any{"conversions": c})
+	if len(conversions) == 0 {
+		http.Error(w, "no convertibles found", http.StatusUnprocessableEntity)
+		return
+	}
+
+	respondwith.JSON(w, http.StatusOK, map[string]any{"conversions": conversions})
+}
+
+func (p *v1Provider) getCommitmentConversionRate(source, target *core.ResourceBehavior) (from, to uint64) {
+	divisor := GetGreatestCommonDivisor(source.CommitmentConversion.Weight, target.CommitmentConversion.Weight)
+	from = target.CommitmentConversion.Weight / divisor
+	to = source.CommitmentConversion.Weight / divisor
+	return from, to
 }

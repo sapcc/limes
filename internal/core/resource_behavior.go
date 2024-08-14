@@ -33,7 +33,6 @@ import (
 
 // ResourceBehavior contains the configuration options for specialized
 // behaviors of a single resource (or a set thereof).
-
 type ResourceBehavior struct {
 	FullResourceNameRx       regexpext.BoundedRegexp             `yaml:"resource"`
 	OvercommitFactor         liquid.OvercommitFactor             `yaml:"overcommit_factor"`
@@ -41,7 +40,7 @@ type ResourceBehavior struct {
 	CommitmentIsAZAware      bool                                `yaml:"commitment_is_az_aware"`
 	CommitmentMinConfirmDate *time.Time                          `yaml:"commitment_min_confirm_date"`
 	CommitmentUntilPercent   *float64                            `yaml:"commitment_until_percent"`
-	CommitmentConversion     []Conversion                        `yaml:"commitment_conversion"`
+	CommitmentConversion     CommitmentConversion                `yaml:"commitment_conversion"`
 	IdentityInV1API          ResourceRef                         `yaml:"identity_in_v1_api"`
 	Category                 string                              `yaml:"category"`
 }
@@ -119,8 +118,9 @@ func (b *ResourceBehavior) Merge(other ResourceBehavior) {
 	if other.Category != "" {
 		b.Category = other.Category
 	}
-	if len(other.CommitmentConversion) != 0 {
+	if other.CommitmentConversion != (CommitmentConversion{}) {
 		b.CommitmentConversion = other.CommitmentConversion
+
 	}
 }
 
@@ -152,7 +152,7 @@ func (r *ResourceRef) UnmarshalYAML(unmarshal func(any) error) error {
 	return nil
 }
 
-type Conversion struct {
-	Amount   uint64 `yaml:"amount"`
-	BaseUnit string `yaml:"base_unit"`
+type CommitmentConversion struct {
+	Identifier string `yaml:"identifier"`
+	Weight     uint64 `yaml:"weight"`
 }
