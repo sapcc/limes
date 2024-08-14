@@ -22,6 +22,7 @@ package plugins
 import (
 	"fmt"
 	"maps"
+	"slices"
 
 	"github.com/sapcc/go-bits/regexpext"
 
@@ -64,7 +65,7 @@ func getAllManilaShareTypes(spec ManilaShareTypeSpec) []string {
 
 		// if there is a catch-all rule, no rules afterwards will have any effect
 		if rule.NameRx == `.*` || rule.NameRx == `.+` {
-			return maps.Keys(resultSet)
+			return slices.Collect(maps.Keys(resultSet))
 		}
 	}
 
@@ -72,5 +73,5 @@ func getAllManilaShareTypes(spec ManilaShareTypeSpec) []string {
 	// mapping rules will use the name of the virtual share type as the actual
 	// Manila-level share type
 	resultSet[spec.Name] = true
-	return maps.Keys(resultSet)
+	return slices.Collect(maps.Keys(resultSet))
 }

@@ -196,8 +196,6 @@ type UsageData struct {
 }
 
 // clone implements the AZAwareData interface.
-//
-//nolint:unused // looks like a linter bug
 func (d UsageData) clone() UsageData {
 	result := UsageData{
 		Usage:        d.Usage,
@@ -211,8 +209,6 @@ func (d UsageData) clone() UsageData {
 }
 
 // add implements the AZAwareData interface.
-//
-//nolint:unused // looks like a linter bug
 func (d UsageData) add(other UsageData) UsageData {
 	result := UsageData{
 		Usage:        d.Usage + other.Usage,
@@ -229,8 +225,6 @@ func (d UsageData) add(other UsageData) UsageData {
 }
 
 // isEmpty implements the AZAwareData interface.
-//
-//nolint:unused // looks like a linter bug
 func (d UsageData) isEmpty() bool {
 	return d.Usage == 0 && (d.PhysicalUsage == nil || *d.PhysicalUsage == 0) && len(d.Subresources) == 0
 }
@@ -244,8 +238,6 @@ type CapacityData struct {
 }
 
 // clone implements the AZAwareData interface.
-//
-//nolint:unused // looks like a linter bug
 func (d CapacityData) clone() CapacityData {
 	return CapacityData{
 		Capacity:      d.Capacity,
@@ -255,8 +247,6 @@ func (d CapacityData) clone() CapacityData {
 }
 
 // add implements the AZAwareData interface.
-//
-//nolint:unused // looks like a linter bug
 func (d CapacityData) add(other CapacityData) CapacityData {
 	result := CapacityData{
 		Capacity:      d.Capacity + other.Capacity,
@@ -273,8 +263,6 @@ func (d CapacityData) add(other CapacityData) CapacityData {
 }
 
 // isEmpty implements the AZAwareData interface.
-//
-//nolint:unused // looks like a linter bug
 func (d CapacityData) isEmpty() bool {
 	return d.Capacity == 0 && (d.Usage == nil || *d.Usage == 0) && len(d.Subcapacities) == 0
 }
