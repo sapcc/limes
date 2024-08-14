@@ -120,7 +120,6 @@ func (b *ResourceBehavior) Merge(other ResourceBehavior) {
 	}
 	if other.CommitmentConversion != (CommitmentConversion{}) {
 		b.CommitmentConversion = other.CommitmentConversion
-
 	}
 }
 
