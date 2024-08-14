@@ -21,9 +21,9 @@ package plugins
 
 import (
 	"fmt"
+	"maps"
 
 	"github.com/sapcc/go-bits/regexpext"
-	"golang.org/x/exp/maps"
 
 	"github.com/sapcc/limes/internal/core"
 )

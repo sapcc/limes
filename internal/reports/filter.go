@@ -21,6 +21,7 @@ package reports
 
 import (
 	"fmt"
+	"maps"
 	"net/http"
 	"regexp"
 	"slices"
@@ -28,7 +29,6 @@ import (
 
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
-	"golang.org/x/exp/maps"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
@@ -148,7 +148,7 @@ func (f Filter) PrepareQuery(query string) (preparedQuery string, args []any) {
 					}
 				}
 			}
-			values = maps.Keys(isValue)
+			values = slices.Collect(maps.Keys(isValue))
 
 		default:
 			panic(fmt.Sprintf("unreachable: matchStr = %q", matchStr))
