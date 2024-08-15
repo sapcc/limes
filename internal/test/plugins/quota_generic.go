@@ -59,9 +59,6 @@ var resources = map[liquid.ResourceName]liquid.ResourceInfo{
 	"capacity":         {Unit: limes.UnitBytes, HasQuota: true},
 	"capacity_portion": {Unit: limes.UnitBytes, HasQuota: false}, // NOTE: This used to be `ContainedIn: "capacity"` before we removed support for this relation.
 	"things":           {Unit: limes.UnitNone, HasQuota: true},
-	"capacity_c32":     {Unit: limes.UnitBytes, HasQuota: true}, // Note: Used to convert commitments.
-	"capacity_c96":     {Unit: limes.UnitBytes, HasQuota: true},
-	"capacity_c120":    {Unit: limes.UnitNone, HasQuota: true},
 }
 
 // Init implements the core.QuotaPlugin interface.

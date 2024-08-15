@@ -71,15 +71,30 @@ const testCommitmentsYAMLWithoutMinConfirmDate = `
 			commitment_is_az_aware: true
 		- resource: second/capacity_portion
 			commitment_is_az_aware: true
-		- resource: second/capacity_c32
+`
+
+const testConvertCommitmentsYAMl = `
+	availability_zones: [ az-one, az-two ]
+	discovery:
+		method: --test-static
+	services:
+		- service_type: third
+			type: --test-noop
+			params:
+				with_empty_resource: true
+				with_convert_commitments: true
+	resource_behavior:
+		- resource: third/.*
+			commitment_durations: ["1 hour", "2 hours"]
+		- resource: third/capacity_c32
 			commitment_conversion: {identifier: flavor1, weight: 32}
-		- resource: second/capacity
+		- resource: third/capacity_c48
 			commitment_conversion: {identifier: flavor1, weight: 48}
-		- resource: second/capacity_c96
+		- resource: third/capacity_c96
 			commitment_conversion: {identifier: flavor1, weight: 96}
-		- resource: second/capacity_c120
+		- resource: third/capacity_c120
 			commitment_conversion: {identifier: flavor1, weight: 120}
-		- resource: second/capacity_portion
+		- resource: third/capacity2_c144
 			commitment_conversion: {identifier: flavor2, weight: 144}
 `
 
@@ -1058,7 +1073,7 @@ func Test_TransferCommitmentForbiddenByCapacityCheck(t *testing.T) {
 func Test_GetCommitmentConversion(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(testCommitmentsYAMLWithoutMinConfirmDate),
+		test.WithConfig(testConvertCommitmentsYAMl),
 		test.WithAPIHandler(NewV1API),
 	)
 
@@ -1066,25 +1081,25 @@ func Test_GetCommitmentConversion(t *testing.T) {
 	resp1 := []assert.JSONObject{{
 		"from":            2,
 		"to":              3,
-		"target_resource": "second/capacity_c32",
+		"target_resource": "third/capacity_c32",
 	}, {
 		"from":            2,
 		"to":              1,
-		"target_resource": "second/capacity_c96",
+		"target_resource": "third/capacity_c96",
 	}}
 
 	resp2 := []assert.JSONObject{}
 
 	assert.HTTPRequest{
 		Method:       http.MethodGet,
-		Path:         "/v1/commitment-conversion/second/capacity",
+		Path:         "/v1/commitment-conversion/third/capacity_c48",
 		ExpectStatus: http.StatusOK,
 		ExpectBody:   assert.JSONObject{"conversions": resp1},
 	}.Check(t, s.Handler)
 
 	assert.HTTPRequest{
 		Method:       http.MethodGet,
-		Path:         "/v1/commitment-conversion/second/capacity_portion",
+		Path:         "/v1/commitment-conversion/third/capacity2_c144",
 		ExpectStatus: http.StatusOK,
 		ExpectBody:   assert.JSONObject{"conversions": resp2},
 	}.Check(t, s.Handler)
