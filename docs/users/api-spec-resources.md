@@ -597,9 +597,10 @@ Returns 200 (OK) on success, and a JSON document like:
 ```json
 {
   "conversions": [{
-    "from":            1,
-    "to":              2,
-    "target_resource": "serviceType/targetResource"
+    "from":             1,
+    "to":               2,
+    "target_service":   "targetService",
+    "target_resource":  "targetResource"
   }]
 }
 ```
