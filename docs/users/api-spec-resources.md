@@ -589,7 +589,7 @@ After that, it returns the commitment as a JSON document.
 To ensure that a commitment can be checked for its `resource` type or `availability zone` before it gets transferred to a target project, this endpoint fetches the target commitment by its respective token.
 
 
-### POST /v1/commitments/can-convert
+### GET /v1/commitment-conversion/:service_type/:reosurce_name
 Checks if a commitment could be converted to a resource of a different type.
 
 Returns 200 (OK) on success, and a JSON document like: 
