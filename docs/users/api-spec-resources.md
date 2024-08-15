@@ -604,7 +604,7 @@ Returns 200 (OK) on success, and a JSON document like:
 }
 ```
 
-The `result` field indicates whether this commitment can be created without a `confirm_by` attribute, that is, confirmed immediately upon creation.
+In this example, a commitment 1 unit of the original resource can be converted into a commitment for 2 units of the target resource.
 
 
 ### DELETE /v1/domains/:domain\_id/projects/:project\_id/commitments/:id

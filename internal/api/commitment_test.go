@@ -1060,19 +1060,7 @@ func Test_GetCommitmentConversion(t *testing.T) {
 		test.WithAPIHandler(NewV1API),
 	)
 
-	request := func(amount uint64, resourceName string) assert.JSONObject {
-		return assert.JSONObject{
-			"commitment": assert.JSONObject{
-				"service_type":      "second",
-				"resource_name":     resourceName,
-				"availability_zone": "az-one",
-				"amount":            amount,
-				"duration":          "1 hour",
-			},
-		}
-	}
-
-	resp := []assert.JSONObject{{
+	resp1 := []assert.JSONObject{{
 		"from":            2,
 		"to":              3,
 		"target_resource": "second/flavor_c_32",
@@ -1082,19 +1070,19 @@ func Test_GetCommitmentConversion(t *testing.T) {
 		"target_resource": "second/flavor_c_96",
 	}}
 
+	resp2 := []assert.JSONObject{}
+
 	assert.HTTPRequest{
-		Method:       http.MethodPost,
-		Path:         "/v1/commitments/can-convert",
-		Body:         request(10, "capacity"),
+		Method:       http.MethodGet,
+		Path:         "/v1/commitment-conversion/second/capacity",
 		ExpectStatus: http.StatusOK,
-		ExpectBody:   assert.JSONObject{"conversions": resp},
+		ExpectBody:   assert.JSONObject{"conversions": resp1},
 	}.Check(t, s.Handler)
 
 	assert.HTTPRequest{
-		Method:       http.MethodPost,
-		Path:         "/v1/commitments/can-convert",
-		Body:         request(10, "capacity_portion"),
-		ExpectStatus: http.StatusUnprocessableEntity,
-		ExpectBody:   assert.StringData("no convertibles found\n"),
+		Method:       http.MethodGet,
+		Path:         "/v1/commitment-conversion/second/capacity_portion",
+		ExpectStatus: http.StatusOK,
+		ExpectBody:   assert.JSONObject{"conversions": resp2},
 	}.Check(t, s.Handler)
 }

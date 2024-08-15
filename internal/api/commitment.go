@@ -764,25 +764,27 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
 }
 
-// GetCommitmentConversion handles POST /v1/commitments/can-convert
+// GetCommitmentConversion handles GET /v1/commitment-conversion/{service_type}/{resource_name}
 func (p *v1Provider) GetCommitmentConversions(w http.ResponseWriter, r *http.Request) {
-	httpapi.IdentifyEndpoint(r, "/v1/commitments/can-convert")
+	httpapi.IdentifyEndpoint(r, "/v1/commitment-conversion/:service_type/:resource_name")
 	token := p.CheckToken(r)
 	if !token.Require(w, "cluster:show_basic") {
 		return
 	}
 
-	req, sourceBehavior := p.parseAndValidateCommitmentRequest(w, r)
-	if req == nil {
+	sourceBehavior := p.parseAndValidateConversionRequest(w, r)
+	if sourceBehavior == nil {
 		return
 	}
+	serviceType := sourceBehavior.IdentityInV1API.ServiceType
+	resourceName := sourceBehavior.IdentityInV1API.ResourceName
 
-	var conversions []limesresources.CommitmentConversion
+	conversions := make([]limesresources.CommitmentConversion, 0)
 	for _, targetBehavior := range p.Cluster.Config.ResourceBehaviors {
 		if targetBehavior.CommitmentConversion == (core.CommitmentConversion{}) {
 			continue
 		}
-		sourceName := string(req.ServiceType) + "/" + string(req.ResourceName)
+		sourceName := string(serviceType) + "/" + string(resourceName)
 		if targetBehavior.FullResourceNameRx.MatchString(sourceName) {
 			continue
 		}
@@ -798,12 +800,26 @@ func (p *v1Provider) GetCommitmentConversions(w http.ResponseWriter, r *http.Req
 		conversions = append(conversions, result)
 	}
 
-	if len(conversions) == 0 {
-		http.Error(w, "no convertibles found", http.StatusUnprocessableEntity)
-		return
-	}
-
 	respondwith.JSON(w, http.StatusOK, map[string]any{"conversions": conversions})
+}
+
+func (p *v1Provider) parseAndValidateConversionRequest(w http.ResponseWriter, r *http.Request) *core.ResourceBehavior {
+	serviceType := limes.ServiceType(mux.Vars(r)["service_type"])
+	resourceName := liquid.ResourceName(mux.Vars(r)["resource_name"])
+	if !p.Cluster.HasService(serviceType) {
+		http.Error(w, "no such service", http.StatusUnprocessableEntity)
+		return nil
+	}
+	if !p.Cluster.HasResource(serviceType, resourceName) {
+		http.Error(w, "no such resource", http.StatusUnprocessableEntity)
+		return nil
+	}
+	behavior := p.Cluster.BehaviorForResource(serviceType, resourceName)
+	if len(behavior.CommitmentDurations) == 0 {
+		http.Error(w, "commitments are not enabled for this resource", http.StatusUnprocessableEntity)
+		return nil
+	}
+	return &behavior
 }
 
 func (p *v1Provider) getCommitmentConversionRate(source, target *core.ResourceBehavior) (from, to uint64) {
