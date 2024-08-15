@@ -73,7 +73,7 @@ const testCommitmentsYAMLWithoutMinConfirmDate = `
 			commitment_is_az_aware: true
 `
 
-const testConvertCommitmentsYAMl = `
+const testConvertCommitmentsYAML = `
 	availability_zones: [ az-one, az-two ]
 	discovery:
 		method: --test-static
