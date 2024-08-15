@@ -814,7 +814,7 @@ func (p *v1Provider) GetCommitmentConversions(w http.ResponseWriter, r *http.Req
 
 func (p *v1Provider) parseAndValidateConversionRequest(w http.ResponseWriter, r *http.Request) *core.ResourceBehavior {
 	serviceType := limes.ServiceType(mux.Vars(r)["service_type"])
-	resourceName := liquid.ResourceName(mux.Vars(r)["resource_name"])
+	resourceName := limesresources.ResourceName(mux.Vars(r)["resource_name"])
 	if !p.Cluster.HasService(serviceType) {
 		http.Error(w, "no such service", http.StatusUnprocessableEntity)
 		return nil
