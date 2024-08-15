@@ -1073,7 +1073,7 @@ func Test_TransferCommitmentForbiddenByCapacityCheck(t *testing.T) {
 func Test_GetCommitmentConversion(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
-		test.WithConfig(testConvertCommitmentsYAMl),
+		test.WithConfig(testConvertCommitmentsYAML),
 		test.WithAPIHandler(NewV1API),
 	)
 
@@ -1081,11 +1081,13 @@ func Test_GetCommitmentConversion(t *testing.T) {
 	resp1 := []assert.JSONObject{{
 		"from":            2,
 		"to":              3,
-		"target_resource": "third/capacity_c32",
+		"target_service":  "third",
+		"target_resource": "capacity_c32",
 	}, {
 		"from":            2,
 		"to":              1,
-		"target_resource": "third/capacity_c96",
+		"target_service":  "third",
+		"target_resource": "capacity_c96",
 	}}
 
 	resp2 := []assert.JSONObject{}

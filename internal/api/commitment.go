@@ -30,7 +30,6 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
-	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/must"
@@ -778,11 +777,11 @@ func (p *v1Provider) GetCommitmentConversions(w http.ResponseWriter, r *http.Req
 	}
 	sourceAPIIdentity := sourceBehavior.IdentityInV1API
 
-	conversions := make([]limesresources.CommitmentConversion, 0)
+	sourceResource := p.Cluster.InfoForResource(sourceAPIIdentity.ServiceType, sourceAPIIdentity.ResourceName)
+	conversions := make([]limesresources.CommitmentConversionRule, 0)
 	for targetService, quotaPlugin := range p.Cluster.QuotaPlugins {
-		sourceResource := quotaPlugin.Resources()[sourceAPIIdentity.ResourceName]
 		for targetResourceName := range quotaPlugin.Resources() {
-			targetResource := quotaPlugin.Resources()[targetResourceName]
+			targetResource := p.Cluster.InfoForResource(targetService, targetResourceName)
 			targetBehavior := p.Cluster.BehaviorForResource(targetService, targetResourceName)
 			targetAPIIdentity := targetBehavior.IdentityInV1API
 			if targetBehavior.CommitmentConversion == (core.CommitmentConversion{}) {
@@ -798,11 +797,11 @@ func (p *v1Provider) GetCommitmentConversions(w http.ResponseWriter, r *http.Req
 				continue
 			}
 
-			from, to := p.getCommitmentConversionRate(sourceBehavior, &targetBehavior)
-			targetResourceName := limesresources.ResourceName(string(targetAPIIdentity.ServiceType) + "/" + string(targetAPIIdentity.ResourceName))
-			result := limesresources.CommitmentConversion{
-				From:           from,
-				To:             to,
+			fromAmount, toAmount := p.getCommitmentConversionRate(sourceBehavior, &targetBehavior)
+			result := limesresources.CommitmentConversionRule{
+				FromAmount:     fromAmount,
+				ToAmount:       toAmount,
+				TargetService:  targetService,
 				TargetResource: targetResourceName,
 			}
 			conversions = append(conversions, result)
@@ -831,9 +830,9 @@ func (p *v1Provider) parseAndValidateConversionRequest(w http.ResponseWriter, r 
 	return &behavior
 }
 
-func (p *v1Provider) getCommitmentConversionRate(source, target *core.ResourceBehavior) (from, to uint64) {
+func (p *v1Provider) getCommitmentConversionRate(source, target *core.ResourceBehavior) (fromAmount, toAmount uint64) {
 	divisor := GetGreatestCommonDivisor(source.CommitmentConversion.Weight, target.CommitmentConversion.Weight)
-	from = target.CommitmentConversion.Weight / divisor
-	to = source.CommitmentConversion.Weight / divisor
-	return from, to
+	fromAmount = target.CommitmentConversion.Weight / divisor
+	toAmount = source.CommitmentConversion.Weight / divisor
+	return fromAmount, toAmount
 }
