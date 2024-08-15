@@ -71,12 +71,14 @@ const testCommitmentsYAMLWithoutMinConfirmDate = `
 			commitment_is_az_aware: true
 		- resource: second/capacity_portion
 			commitment_is_az_aware: true
-		- resource: second/flavor_c_32
+		- resource: second/capacity_c32
 			commitment_conversion: {identifier: flavor1, weight: 32}
 		- resource: second/capacity
 			commitment_conversion: {identifier: flavor1, weight: 48}
-		- resource: second/flavor_c_96
+		- resource: second/capacity_c96
 			commitment_conversion: {identifier: flavor1, weight: 96}
+		- resource: second/capacity_c120
+			commitment_conversion: {identifier: flavor1, weight: 120}
 		- resource: second/capacity_portion
 			commitment_conversion: {identifier: flavor2, weight: 144}
 `
@@ -1060,14 +1062,15 @@ func Test_GetCommitmentConversion(t *testing.T) {
 		test.WithAPIHandler(NewV1API),
 	)
 
+	// capacity_c120 uses a different Unit than the source and is therefore ignored.
 	resp1 := []assert.JSONObject{{
 		"from":            2,
 		"to":              3,
-		"target_resource": "second/flavor_c_32",
+		"target_resource": "second/capacity_c32",
 	}, {
 		"from":            2,
 		"to":              1,
-		"target_resource": "second/flavor_c_96",
+		"target_resource": "second/capacity_c96",
 	}}
 
 	resp2 := []assert.JSONObject{}

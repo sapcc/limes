@@ -776,28 +776,37 @@ func (p *v1Provider) GetCommitmentConversions(w http.ResponseWriter, r *http.Req
 	if sourceBehavior == nil {
 		return
 	}
-	serviceType := sourceBehavior.IdentityInV1API.ServiceType
-	resourceName := sourceBehavior.IdentityInV1API.ResourceName
+	sourceAPIIdentity := sourceBehavior.IdentityInV1API
 
 	conversions := make([]limesresources.CommitmentConversion, 0)
-	for _, targetBehavior := range p.Cluster.Config.ResourceBehaviors {
-		if targetBehavior.CommitmentConversion == (core.CommitmentConversion{}) {
-			continue
+	for targetService, quotaPlugin := range p.Cluster.QuotaPlugins {
+		sourceResource := quotaPlugin.Resources()[sourceAPIIdentity.ResourceName]
+		for targetResourceName := range quotaPlugin.Resources() {
+			targetResource := quotaPlugin.Resources()[targetResourceName]
+			targetBehavior := p.Cluster.BehaviorForResource(targetService, targetResourceName)
+			targetAPIIdentity := targetBehavior.IdentityInV1API
+			if targetBehavior.CommitmentConversion == (core.CommitmentConversion{}) {
+				continue
+			}
+			if sourceAPIIdentity.ServiceType == targetAPIIdentity.ServiceType && sourceAPIIdentity.ResourceName == targetAPIIdentity.ResourceName {
+				continue
+			}
+			if sourceResource.Unit != targetResource.Unit {
+				continue
+			}
+			if sourceBehavior.CommitmentConversion.Identifier != targetBehavior.CommitmentConversion.Identifier {
+				continue
+			}
+
+			from, to := p.getCommitmentConversionRate(sourceBehavior, &targetBehavior)
+			targetResourceName := limesresources.ResourceName(string(targetAPIIdentity.ServiceType) + "/" + string(targetAPIIdentity.ResourceName))
+			result := limesresources.CommitmentConversion{
+				From:           from,
+				To:             to,
+				TargetResource: targetResourceName,
+			}
+			conversions = append(conversions, result)
 		}
-		sourceName := string(serviceType) + "/" + string(resourceName)
-		if targetBehavior.FullResourceNameRx.MatchString(sourceName) {
-			continue
-		}
-		if sourceBehavior.CommitmentConversion.Identifier != targetBehavior.CommitmentConversion.Identifier {
-			continue
-		}
-		from, to := p.getCommitmentConversionRate(sourceBehavior, &targetBehavior)
-		result := limesresources.CommitmentConversion{
-			From:           from,
-			To:             to,
-			TargetResource: liquid.ResourceName(targetBehavior.FullResourceNameRx),
-		}
-		conversions = append(conversions, result)
 	}
 
 	respondwith.JSON(w, http.StatusOK, map[string]any{"conversions": conversions})
