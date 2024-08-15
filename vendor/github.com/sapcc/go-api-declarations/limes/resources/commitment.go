@@ -68,12 +68,15 @@ type CommitmentRequest struct {
 	ConfirmBy        *limes.UnixEncodedTime `json:"confirm_by,omitempty"`
 }
 
-// CommitmentConversion is the API representation of a commitment that can be converted to another resource type.
-// From and To are used to represent the fracture of Up and Down conversions.
-type CommitmentConversion struct {
-	From           uint64       `json:"from"`
-	To             uint64       `json:"to"`
-	TargetResource ResourceName `json:"target_resource"`
+// CommitmentConversionRule is the API representation of how commitments can be converted into a different resource.
+//
+// The conversion rate is represented as an integer fraction:
+// For example, "FromAmount = 2" of the source resource and "ToAmount = 3" of the target resource corresponds to a 2:3 conversion rate.
+type CommitmentConversionRule struct {
+	FromAmount     uint64            `json:"from"`
+	ToAmount       uint64            `json:"to"`
+	TargetService  limes.ServiceType `json:"target_service"`
+	TargetResource ResourceName      `json:"target_resource"`
 }
 
 // CommitmentTransferStatus is an enum.
