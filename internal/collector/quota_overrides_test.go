@@ -20,10 +20,10 @@
 package collector
 
 import (
+	"os"
+	"path/filepath"
 	"testing"
 
-	"github.com/sapcc/go-api-declarations/limes"
-	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/jobloop"
 
@@ -47,17 +47,16 @@ func TestApplyQuotaOverrides(t *testing.T) {
 	tr0.Ignore()
 	job := c.ApplyQuotaOverridesJob(s.Registry)
 
+	configPath := filepath.Join(t.TempDir(), "quota-overrides.json")
+	t.Setenv("LIMES_QUOTA_OVERRIDES_PATH", configPath)
+
 	// test applying some quota overrides
-	s.Cluster.QuotaOverrides = map[string]map[string]map[limes.ServiceType]map[limesresources.ResourceName]uint64{
+	buf := `{
 		"germany": {
-			"berlin": {
-				"unittest": {
-					"capacity": 10,
-					"things":   1000,
-				},
-			},
-		},
-	}
+			"berlin": { "unittest": { "capacity": "10 B", "things": 1000 } }
+		}
+	}`
+	mustT(t, os.WriteFile(configPath, []byte(buf), 0666))
 	mustT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_resources SET override_quota_from_config = 10 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
@@ -65,20 +64,13 @@ func TestApplyQuotaOverrides(t *testing.T) {
 	`)
 
 	// test changing and removing quota overrides
-	s.Cluster.QuotaOverrides = map[string]map[string]map[limes.ServiceType]map[limesresources.ResourceName]uint64{
+	buf = `{
 		"germany": {
-			"berlin": {
-				"unittest": {
-					"capacity": 15,
-				},
-			},
-			"dresden": {
-				"unittest": {
-					"capacity": 20,
-				},
-			},
-		},
-	}
+			"berlin": { "unittest": { "capacity": "15 B" } },
+			"dresden": { "unittest": { "capacity": "20 B" } }
+		}
+	}`
+	mustT(t, os.WriteFile(configPath, []byte(buf), 0666))
 	mustT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_resources SET override_quota_from_config = 15 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
@@ -86,19 +78,18 @@ func TestApplyQuotaOverrides(t *testing.T) {
 		UPDATE project_resources SET override_quota_from_config = 20 WHERE id = 4 AND service_id = 2 AND name = 'capacity';
 	`)
 
-	// test quota overrides referring to nonexistent projects (should be ignored without error)
-	s.Cluster.QuotaOverrides["france"] = map[string]map[limes.ServiceType]map[limesresources.ResourceName]uint64{
-		"paris": {
-			"unittest": {
-				"capacity": 42,
-			},
+	// test quota overrides referring to nonexistent domains and projects (should be ignored without error)
+	buf = `{
+		"france": {
+			"paris": { "unittest": { "capacity": "42 B" } }
 		},
-	}
-	s.Cluster.QuotaOverrides["germany"]["bremen"] = map[limes.ServiceType]map[limesresources.ResourceName]uint64{
-		"unittest": {
-			"capacity": 42,
-		},
-	}
+		"germany": {
+			"berlin": { "unittest": { "capacity": "15 B" } },
+			"bremen": { "unittest": { "capacity": "42 B" } },
+			"dresden": { "unittest": { "capacity": "20 B" } }
+		}
+	}`
+	mustT(t, os.WriteFile(configPath, []byte(buf), 0666))
 	mustT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEmpty()
 }

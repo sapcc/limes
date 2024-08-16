@@ -22,6 +22,7 @@ package collector
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -31,6 +32,7 @@ import (
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/sqlext"
 
+	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
 )
 
@@ -56,10 +58,13 @@ func (c *Collector) ApplyQuotaOverridesJob(registerer prometheus.Registerer) job
 // ApplyQuotaOverrides is called once on startup of limes-collect.
 // It persists the contents of the quota overrides config file into the DB.
 func (c *Collector) applyQuotaOverrides(_ context.Context, _ prometheus.Labels) error {
-	// TODO: move quota override loading in here, too (we can get rid of the Cluster.QuotaOverrides field entirely)
+	overrides, errs := datamodel.LoadQuotaOverrides(c.Cluster)
+	if !errs.IsEmpty() {
+		return errors.New(errs.Join(", "))
+	}
 
 	// write configured quota overrides
-	for domainName, domainOverrides := range c.Cluster.QuotaOverrides {
+	for domainName, domainOverrides := range overrides {
 		for projectName, projectOverrides := range domainOverrides {
 			for serviceType, serviceOverrides := range projectOverrides {
 				err := c.aqoUpdateOneProjectService(domainName, projectName, serviceType, serviceOverrides)
@@ -83,7 +88,7 @@ func (c *Collector) applyQuotaOverrides(_ context.Context, _ prometheus.Labels) 
 		if err != nil {
 			return err
 		}
-		_, exists := c.Cluster.QuotaOverrides[domainName][projectName][serviceType][resourceName]
+		_, exists := overrides[domainName][projectName][serviceType][resourceName]
 		if exists {
 			return nil // nothing to do in this loop iteration
 		}

@@ -17,9 +17,7 @@
 *
 *******************************************************************************/
 
-// NOTE: This needs to be in a separate package to avoid an import cycle when
-// importing from internal/test.
-package core_test
+package datamodel
 
 import (
 	"testing"
@@ -98,7 +96,11 @@ func TestQuotaOverridesWithoutResourceRenaming(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithConfig(testQuotaOverridesNoRenamingConfigYAML),
 	)
-	assert.DeepEqual(t, "quota overrides", s.Cluster.QuotaOverrides, expectedQuotaOverrides)
+	overrides, errs := LoadQuotaOverrides(s.Cluster)
+	for _, err := range errs {
+		t.Error(err.Error())
+	}
+	assert.DeepEqual(t, "quota overrides", overrides, expectedQuotaOverrides)
 }
 
 func TestQuotaOverridesWithResourceRenaming(t *testing.T) {
@@ -106,5 +108,9 @@ func TestQuotaOverridesWithResourceRenaming(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithConfig(testQuotaOverridesWithRenamingConfigYAML),
 	)
-	assert.DeepEqual(t, "quota overrides", s.Cluster.QuotaOverrides, expectedQuotaOverrides)
+	overrides, errs := LoadQuotaOverrides(s.Cluster)
+	for _, err := range errs {
+		t.Error(err.Error())
+	}
+	assert.DeepEqual(t, "quota overrides", overrides, expectedQuotaOverrides)
 }
