@@ -86,7 +86,7 @@ func CanMoveExistingCommitment(amount uint64, loc AZResourceLocation, sourceReso
 	additions := map[db.ProjectResourceID]uint64{targetResourceID: amount}
 	subtractions := map[db.ProjectResourceID]uint64{sourceResourceID: amount}
 	behavior := cluster.BehaviorForResource(loc.ServiceType, loc.ResourceName)
-	logg.Debug("checking CanMoveExistingCommitment in %s/%s/%s: resourceID = %d -> %s, amount = %d",
+	logg.Debug("checking CanMoveExistingCommitment in %s/%s/%s: resourceID = %d -> %d, amount = %d",
 		loc.ServiceType, loc.ResourceName, loc.AvailabilityZone, sourceResourceID, targetResourceID, amount)
 	return stats.CanAcceptCommitmentChanges(additions, subtractions, behavior), nil
 }
