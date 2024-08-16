@@ -78,14 +78,21 @@ const testConvertCommitmentsYAML = `
 	discovery:
 		method: --test-static
 	services:
+		- service_type: second
+			type: --test-generic
 		- service_type: third
 			type: --test-noop
 			params:
 				with_empty_resource: true
 				with_convert_commitments: true
 	resource_behavior:
+		- resource: second/.*
+			commitment_durations: ["1 hour", "2 hours"]
 		- resource: third/.*
 			commitment_durations: ["1 hour", "2 hours"]
+		- resource: second/capacity
+			commitment_is_az_aware: true
+			commitment_conversion: {identifier: flavor1, weight: 32}
 		- resource: third/capacity_c32
 			commitment_conversion: {identifier: flavor1, weight: 32}
 		- resource: third/capacity_c48
@@ -1095,17 +1102,24 @@ func Test_GetCommitmentConversion(t *testing.T) {
 	)
 
 	// capacity_c120 uses a different Unit than the source and is therefore ignored.
-	resp1 := []assert.JSONObject{{
-		"from":            2,
-		"to":              3,
-		"target_service":  "third",
-		"target_resource": "capacity_c32",
-	}, {
-		"from":            2,
-		"to":              1,
-		"target_service":  "third",
-		"target_resource": "capacity_c96",
-	}}
+	resp1 := []assert.JSONObject{
+		{
+			"from":            2,
+			"to":              3,
+			"target_service":  "second",
+			"target_resource": "capacity",
+		},
+		{
+			"from":            2,
+			"to":              3,
+			"target_service":  "third",
+			"target_resource": "capacity_c32",
+		}, {
+			"from":            2,
+			"to":              1,
+			"target_service":  "third",
+			"target_resource": "capacity_c96",
+		}}
 
 	resp2 := []assert.JSONObject{}
 
@@ -1122,4 +1136,41 @@ func Test_GetCommitmentConversion(t *testing.T) {
 		ExpectStatus: http.StatusOK,
 		ExpectBody:   assert.JSONObject{"conversions": resp2},
 	}.Check(t, s.Handler)
+}
+
+func Test_ConvertCommitments(t *testing.T) {
+	s := test.NewSetup(t,
+		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
+		test.WithConfig(testConvertCommitmentsYAML),
+		test.WithAPIHandler(NewV1API),
+	)
+
+	req := assert.JSONObject{
+		"commitment": assert.JSONObject{
+			"service_type":      "second",
+			"resource_name":     "capacity",
+			"availability_zone": "az-one",
+			"amount":            11,
+			"duration":          "1 hour",
+		},
+	}
+
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
+		Body:         req,
+		ExpectStatus: http.StatusCreated,
+	}.Check(t, s.Handler)
+
+	// TODO: Test for a real result set.
+	/*
+		assert.HTTPRequest{
+			Method:       http.MethodPost,
+			Path:         "/v1/commitment-conversion/1/third/capacity_c48",
+			ExpectStatus: http.StatusOK,
+			Body:         req,
+			ExpectBody:   assert.JSONObject{"conversions": ""},
+		}.Check(t, s.Handler)
+	*/
+
 }
