@@ -83,22 +83,20 @@ func (c clusterAZAllocationStats) CanAcceptCommitmentChanges(additions, subtract
 		return true
 	}
 
-	// as an exception, even if capacity is exceeded, commitments can always be reduced,
-	// and always be increased as far as to cover existing usage
+	// As an exception, even if capacity is exceeded:
+	// - Commitments can always be reduced.
+	// - Commitments can always be increased to cover existing usage.
+	// This rule is designed to accommodate edits that do not change `usedCapacity` as computed above.
 	for projectResourceID, stats := range c.ProjectStats {
-		// this exemption rule shall only be evaluated in projects that are trying to change their commitment amounts
-		// (otherwise, the rule could not apply if there are unused commitments in any uninvolved project)
-		if additions[projectResourceID] == 0 && subtractions[projectResourceID] == 0 {
-			continue
-		}
-
 		committed := saturatingSub(stats.Committed+additions[projectResourceID], subtractions[projectResourceID])
-		if committed > stats.Usage {
+
+		if additions[projectResourceID] > 0 && committed > stats.Usage {
 			logg.Debug("CanAcceptCommitmentChanges: forbidden by commitment target %d > usage %d in resourceID = %d",
 				committed, stats.Usage, projectResourceID)
 			return false
 		}
 	}
+
 	logg.Debug("CanAcceptCommitmentChanges: accepted")
 	return true
 }
