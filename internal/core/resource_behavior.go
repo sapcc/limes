@@ -40,6 +40,7 @@ type ResourceBehavior struct {
 	CommitmentIsAZAware      bool                                `yaml:"commitment_is_az_aware"`
 	CommitmentMinConfirmDate *time.Time                          `yaml:"commitment_min_confirm_date"`
 	CommitmentUntilPercent   *float64                            `yaml:"commitment_until_percent"`
+	CommitmentConversion     CommitmentConversion                `yaml:"commitment_conversion"`
 	IdentityInV1API          ResourceRef                         `yaml:"identity_in_v1_api"`
 	Category                 string                              `yaml:"category"`
 }
@@ -117,6 +118,9 @@ func (b *ResourceBehavior) Merge(other ResourceBehavior) {
 	if other.Category != "" {
 		b.Category = other.Category
 	}
+	if other.CommitmentConversion != (CommitmentConversion{}) {
+		b.CommitmentConversion = other.CommitmentConversion
+	}
 }
 
 // ResourceRef contains a pair of service type and resource name. When read
@@ -145,4 +149,9 @@ func (r *ResourceRef) UnmarshalYAML(unmarshal func(any) error) error {
 		ResourceName: limesresources.ResourceName(fields[1]),
 	}
 	return nil
+}
+
+type CommitmentConversion struct {
+	Identifier string `yaml:"identifier"`
+	Weight     uint64 `yaml:"weight"`
 }

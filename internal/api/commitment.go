@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -761,4 +762,85 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	})
 
 	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
+}
+
+// GetCommitmentConversion handles GET /v1/commitment-conversion/{service_type}/{resource_name}
+func (p *v1Provider) GetCommitmentConversions(w http.ResponseWriter, r *http.Request) {
+	httpapi.IdentifyEndpoint(r, "/v1/commitment-conversion/:service_type/:resource_name")
+	token := p.CheckToken(r)
+	if !token.Require(w, "cluster:show_basic") {
+		return
+	}
+
+	sourceResource, sourceBehavior, ok := p.parseAndValidateConversionRequest(w, r)
+	if !ok {
+		return
+	}
+	sourceResInfo := p.Cluster.InfoForResource(sourceResource.ServiceType, sourceResource.ResourceName)
+
+	conversions := make([]limesresources.CommitmentConversionRule, 0)
+	for targetServiceType, quotaPlugin := range p.Cluster.QuotaPlugins {
+		for targetResourceName := range quotaPlugin.Resources() {
+			targetResource := p.Cluster.InfoForResource(targetServiceType, targetResourceName)
+			targetBehavior := p.Cluster.BehaviorForResource(targetServiceType, targetResourceName)
+			if targetBehavior.CommitmentConversion == (core.CommitmentConversion{}) {
+				continue
+			}
+			if sourceResource.ServiceType == targetServiceType && sourceResource.ResourceName == targetResourceName {
+				continue
+			}
+			if sourceResInfo.Unit != targetResource.Unit {
+				continue
+			}
+			if sourceBehavior.CommitmentConversion.Identifier != targetBehavior.CommitmentConversion.Identifier {
+				continue
+			}
+
+			fromAmount, toAmount := p.getCommitmentConversionRate(sourceBehavior, targetBehavior)
+			result := limesresources.CommitmentConversionRule{
+				FromAmount:     fromAmount,
+				ToAmount:       toAmount,
+				TargetService:  targetServiceType,
+				TargetResource: targetResourceName,
+			}
+			conversions = append(conversions, result)
+		}
+	}
+
+	// use a defined sorting to ensure deterministic behavior in tests
+	slices.SortFunc(conversions, func(lhs, rhs limesresources.CommitmentConversionRule) int {
+		result := strings.Compare(string(lhs.TargetService), string(rhs.TargetService))
+		if result != 0 {
+			return result
+		}
+		return strings.Compare(string(lhs.TargetResource), string(rhs.TargetResource))
+	})
+
+	respondwith.JSON(w, http.StatusOK, map[string]any{"conversions": conversions})
+}
+
+func (p *v1Provider) parseAndValidateConversionRequest(w http.ResponseWriter, r *http.Request) (ref core.ResourceRef, behavior core.ResourceBehavior, ok bool) {
+	ref.ServiceType = limes.ServiceType(mux.Vars(r)["service_type"])
+	ref.ResourceName = limesresources.ResourceName(mux.Vars(r)["resource_name"])
+	if !p.Cluster.HasService(ref.ServiceType) {
+		http.Error(w, "no such service", http.StatusUnprocessableEntity)
+		return core.ResourceRef{}, core.ResourceBehavior{}, false
+	}
+	if !p.Cluster.HasResource(ref.ServiceType, ref.ResourceName) {
+		http.Error(w, "no such resource", http.StatusUnprocessableEntity)
+		return core.ResourceRef{}, core.ResourceBehavior{}, false
+	}
+	behavior = p.Cluster.BehaviorForResource(ref.ServiceType, ref.ResourceName)
+	if len(behavior.CommitmentDurations) == 0 {
+		http.Error(w, "commitments are not enabled for this resource", http.StatusUnprocessableEntity)
+		return core.ResourceRef{}, core.ResourceBehavior{}, false
+	}
+	return ref, behavior, true
+}
+
+func (p *v1Provider) getCommitmentConversionRate(source, target core.ResourceBehavior) (fromAmount, toAmount uint64) {
+	divisor := GetGreatestCommonDivisor(source.CommitmentConversion.Weight, target.CommitmentConversion.Weight)
+	fromAmount = target.CommitmentConversion.Weight / divisor
+	toAmount = source.CommitmentConversion.Weight / divisor
+	return fromAmount, toAmount
 }

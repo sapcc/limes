@@ -44,8 +44,9 @@ func init() {
 // with no UsageData at all (not even zero, the UsageData map just does not
 // have any entries at all).
 type NoopQuotaPlugin struct {
-	ServiceType       limes.ServiceType `yaml:"-"`
-	WithEmptyResource bool              `yaml:"with_empty_resource"`
+	ServiceType            limes.ServiceType `yaml:"-"`
+	WithEmptyResource      bool              `yaml:"with_empty_resource"`
+	WithConvertCommitments bool              `yaml:"with_convert_commitments"`
 }
 
 // Init implements the core.QuotaPlugin interface.
@@ -71,6 +72,15 @@ func (p *NoopQuotaPlugin) ServiceInfo() core.ServiceInfo {
 func (p *NoopQuotaPlugin) Resources() map[liquid.ResourceName]liquid.ResourceInfo {
 	if !p.WithEmptyResource {
 		return nil
+	}
+	if p.WithConvertCommitments {
+		return map[liquid.ResourceName]liquid.ResourceInfo{
+			"capacity_c32":   {Unit: limes.UnitBytes, HasQuota: true},
+			"capacity_c48":   {Unit: limes.UnitBytes, HasQuota: true},
+			"capacity_c96":   {Unit: limes.UnitBytes, HasQuota: true},
+			"capacity_c120":  {Unit: limes.UnitNone, HasQuota: true},
+			"capacity2_c144": {Unit: limes.UnitNone, HasQuota: true},
+		}
 	}
 	return map[liquid.ResourceName]liquid.ResourceInfo{
 		"things": {Unit: limes.UnitNone, HasQuota: true},
