@@ -30,7 +30,6 @@ import (
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/errext"
-	"github.com/sapcc/go-bits/osext"
 	yaml "gopkg.in/yaml.v2"
 
 	"github.com/sapcc/limes/internal/util"
@@ -43,7 +42,6 @@ type Cluster struct {
 	DiscoveryPlugin DiscoveryPlugin
 	QuotaPlugins    map[limes.ServiceType]QuotaPlugin
 	CapacityPlugins map[string]CapacityPlugin
-	Authoritative   bool
 }
 
 // NewCluster creates a new Cluster instance with the given ID and
@@ -54,7 +52,6 @@ func NewCluster(config ClusterConfiguration) (c *Cluster, errs errext.ErrorSet) 
 		Config:          config,
 		QuotaPlugins:    make(map[limes.ServiceType]QuotaPlugin),
 		CapacityPlugins: make(map[string]CapacityPlugin),
-		Authoritative:   osext.GetenvBool("LIMES_AUTHORITATIVE"),
 	}
 
 	// instantiate discovery plugin

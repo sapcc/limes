@@ -103,7 +103,6 @@ func Test_ScrapeSuccess(t *testing.T) {
 	)
 	prepareDomainsAndProjectsForScrape(t, s)
 
-	s.Cluster.Authoritative = true
 	c := getCollector(t, s)
 	job := c.ResourceScrapeJob(s.Registry)
 	withLabel := jobloop.WithLabel("service_type", "unittest")
