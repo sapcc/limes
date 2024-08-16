@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -805,6 +806,15 @@ func (p *v1Provider) GetCommitmentConversions(w http.ResponseWriter, r *http.Req
 			conversions = append(conversions, result)
 		}
 	}
+
+	// use a defined sorting to ensure deterministic behavior in tests
+	slices.SortFunc(conversions, func(lhs, rhs limesresources.CommitmentConversionRule) int {
+		result := strings.Compare(string(lhs.TargetService), string(rhs.TargetService))
+		if result != 0 {
+			return result
+		}
+		return strings.Compare(string(lhs.TargetResource), string(rhs.TargetResource))
+	})
 
 	respondwith.JSON(w, http.StatusOK, map[string]any{"conversions": conversions})
 }
