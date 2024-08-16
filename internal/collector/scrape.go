@@ -241,7 +241,6 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 	}
 
 	// this is the callback that ProjectResourceUpdate will use to write the scraped data into the project_resources
-	overrideQuotas := c.Cluster.QuotaOverrides[dbDomain.Name][dbProject.Name][srv.Type]
 	updateResource := func(res *db.ProjectResource) error {
 		backendQuota := resourceData[res.Name].Quota
 
@@ -250,15 +249,6 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 			res.BackendQuota = &backendQuota
 			res.MinQuotaFromBackend = resourceData[res.Name].MinQuota
 			res.MaxQuotaFromBackend = resourceData[res.Name].MaxQuota
-
-			// if an override is configured, we need to ensure that it does not
-			// conflict with the MinQuota/MaxQuota prescribed by the backend
-			overrideQuota, exists := overrideQuotas[res.Name]
-			if exists {
-				res.OverrideQuotaFromConfig = &overrideQuota
-			} else {
-				res.OverrideQuotaFromConfig = nil
-			}
 		}
 
 		return nil
@@ -400,17 +390,12 @@ func (c *Collector) writeDummyResources(dbDomain db.Domain, dbProject db.Project
 
 	// create all project_resources, but do not set any particular values (except
 	// that quota overrides are persisted)
-	overrideQuotas := c.Cluster.QuotaOverrides[dbDomain.Name][dbProject.Name][srv.Type]
 	dbResources, err := datamodel.ProjectResourceUpdate{
 		UpdateResource: func(res *db.ProjectResource) error {
 			resInfo := c.Cluster.InfoForResource(srv.Type, res.Name)
 			if resInfo.HasQuota && res.BackendQuota == nil {
 				dummyBackendQuota := int64(-1)
 				res.BackendQuota = &dummyBackendQuota
-			}
-			overrideQuota, exists := overrideQuotas[res.Name]
-			if exists {
-				res.OverrideQuotaFromConfig = &overrideQuota
 			}
 			return nil
 		},

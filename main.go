@@ -192,6 +192,7 @@ func taskCollect(ctx context.Context, cluster *core.Cluster, args []string) {
 	if len(args) != 0 {
 		printUsageAndExit(1)
 	}
+	isAuthoritative := osext.GetenvBool("LIMES_AUTHORITATIVE")
 
 	// connect to database
 	dbm := must.Return(db.Init())
@@ -210,12 +211,13 @@ func taskCollect(ctx context.Context, cluster *core.Cluster, args []string) {
 		opt := jobloop.WithLabel("service_type", string(serviceType))
 		go resourceScrapeJob.Run(ctx, opt)
 		go rateScrapeJob.Run(ctx, opt)
-		if cluster.Authoritative {
+		if isAuthoritative {
 			go syncQuotaToBackendJob.Run(ctx, opt)
 		}
 	}
 
 	// start those collector threads which operate over all services simultaneously
+	go c.ApplyQuotaOverridesJob(nil).Run(ctx)
 	go c.CapacityScrapeJob(nil).Run(ctx)
 	go c.CheckConsistencyJob(nil).Run(ctx)
 	go c.CleanupOldCommitmentsJob(nil).Run(ctx)

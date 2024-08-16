@@ -21,8 +21,6 @@ package core
 
 import (
 	"context"
-	"fmt"
-	"os"
 	"slices"
 	"time"
 
@@ -32,7 +30,6 @@ import (
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/errext"
-	"github.com/sapcc/go-bits/osext"
 	yaml "gopkg.in/yaml.v2"
 
 	"github.com/sapcc/limes/internal/util"
@@ -45,8 +42,6 @@ type Cluster struct {
 	DiscoveryPlugin DiscoveryPlugin
 	QuotaPlugins    map[limes.ServiceType]QuotaPlugin
 	CapacityPlugins map[string]CapacityPlugin
-	Authoritative   bool
-	QuotaOverrides  map[string]map[string]map[limes.ServiceType]map[limesresources.ResourceName]uint64
 }
 
 // NewCluster creates a new Cluster instance with the given ID and
@@ -57,7 +52,6 @@ func NewCluster(config ClusterConfiguration) (c *Cluster, errs errext.ErrorSet) 
 		Config:          config,
 		QuotaPlugins:    make(map[limes.ServiceType]QuotaPlugin),
 		CapacityPlugins: make(map[string]CapacityPlugin),
-		Authoritative:   osext.GetenvBool("LIMES_AUTHORITATIVE"),
 	}
 
 	// instantiate discovery plugin
@@ -134,92 +128,7 @@ func (c *Cluster) Connect(ctx context.Context, provider *gophercloud.ProviderCli
 		}
 	}
 
-	// if we could not load all plugins, we cannot be sure that we know the
-	// correct set of resources, so the following steps will likely report wrong errors
-	if !errs.IsEmpty() {
-		return errs
-	}
-
-	// load quota overrides
-	var suberrs errext.ErrorSet
-	overridesPath := os.Getenv("LIMES_QUOTA_OVERRIDES_PATH")
-	if overridesPath != "" && c.QuotaOverrides == nil {
-		c.QuotaOverrides, suberrs = c.loadQuotaOverrides(overridesPath)
-		errs.Append(suberrs)
-	}
-
 	return errs
-}
-
-func (c *Cluster) loadQuotaOverrides(path string) (result map[string]map[string]map[limes.ServiceType]map[limesresources.ResourceName]uint64, errs errext.ErrorSet) {
-	buf, err := os.ReadFile(path)
-	if err != nil {
-		errs.Add(err)
-		return
-	}
-
-	resInfosByIdentityInV1API := make(map[ResourceRef]liquid.ResourceInfo)
-	dbIdentitiesByIdentityInV1API := make(map[ResourceRef]ResourceRef)
-	for dbServiceType, quotaPlugin := range c.QuotaPlugins {
-		for dbResourceName, resInfo := range quotaPlugin.Resources() {
-			apiIdentity := c.BehaviorForResource(dbServiceType, dbResourceName).IdentityInV1API
-			resInfosByIdentityInV1API[apiIdentity] = resInfo
-
-			dbIdentity := ResourceRef{ServiceType: dbServiceType, ResourceName: dbResourceName}
-			dbIdentitiesByIdentityInV1API[apiIdentity] = dbIdentity
-		}
-	}
-
-	// the quota-overrides.json file refers to services and resources using IdentityInV1API, so we:
-	// a) need to lookup by API identity
-	// b) get a result that is structured by API identity and needs to be mapped back to DB identity afterwards
-	getUnit := func(serviceType limes.ServiceType, resourceName limesresources.ResourceName) (limes.Unit, error) {
-		apiIdentity := ResourceRef{ServiceType: serviceType, ResourceName: resourceName}
-		resInfo, exists := resInfosByIdentityInV1API[apiIdentity]
-		if !exists {
-			return limes.UnitUnspecified, fmt.Errorf("%s/%s is not a valid resource", serviceType, resourceName)
-		}
-		if !resInfo.HasQuota {
-			return limes.UnitUnspecified, fmt.Errorf("%s/%s does not track quota", serviceType, resourceName)
-		}
-		return resInfo.Unit, nil
-	}
-	parsed, suberrs := limesresources.ParseQuotaOverrides(buf, getUnit)
-	for _, suberr := range suberrs {
-		errs.Addf("while parsing %s: %w", path, suberr)
-	}
-	if !errs.IsEmpty() {
-		return nil, errs
-	}
-
-	result = make(map[string]map[string]map[limes.ServiceType]map[limesresources.ResourceName]uint64, len(parsed))
-	for domainName, parsedInDomain := range parsed {
-		result[domainName] = make(map[string]map[limes.ServiceType]map[limesresources.ResourceName]uint64, len(parsedInDomain))
-		for projectName, parsedInProject := range parsedInDomain {
-			result[domainName][projectName] = translateQuotaOverrides(parsedInProject, dbIdentitiesByIdentityInV1API)
-		}
-	}
-	return result, nil
-}
-
-func translateQuotaOverrides(overrides map[limes.ServiceType]map[limesresources.ResourceName]uint64, dbIdentitiesByIdentityInV1API map[ResourceRef]ResourceRef) map[limes.ServiceType]map[limesresources.ResourceName]uint64 {
-	result := make(map[limes.ServiceType]map[limesresources.ResourceName]uint64)
-	for apiServiceType, overridesByService := range overrides {
-		for apiResourceName, overrideQuota := range overridesByService {
-			apiIdentity := ResourceRef{ServiceType: apiServiceType, ResourceName: apiResourceName}
-			dbIdentity, ok := dbIdentitiesByIdentityInV1API[apiIdentity]
-			if !ok {
-				// defense in depth: this branch should be impossible to reach because ParseQuotaOverrides() rejected unknown resources
-				dbIdentity = apiIdentity
-			}
-
-			if result[dbIdentity.ServiceType] == nil {
-				result[dbIdentity.ServiceType] = make(map[limesresources.ResourceName]uint64)
-			}
-			result[dbIdentity.ServiceType][dbIdentity.ResourceName] = overrideQuota
-		}
-	}
-	return result
 }
 
 // ServiceTypesInAlphabeticalOrder can be used when service types need to be
