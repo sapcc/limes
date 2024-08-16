@@ -55,7 +55,7 @@ ifeq ($(GO_TESTPKGS),)
 GO_TESTPKGS := ./...
 endif
 # which packages to measure coverage for
-GO_COVERPKGS := $(shell go list ./... | grep -Ev '/plugins')
+GO_COVERPKGS := $(shell go list ./... | grep -Ev '/plugins|/liquids')
 # to get around weird Makefile syntax restrictions, we need variables containing nothing, a space and comma
 null :=
 space := $(null) $(null)
