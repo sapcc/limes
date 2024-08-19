@@ -26,6 +26,7 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 )
 
 // ClusterCapacitor contains a record from the `cluster_capacitors` table.
@@ -40,16 +41,16 @@ type ClusterCapacitor struct {
 
 // ClusterService contains a record from the `cluster_services` table.
 type ClusterService struct {
-	ID   ClusterServiceID  `db:"id"`
-	Type limes.ServiceType `db:"type"`
+	ID   ClusterServiceID `db:"id"`
+	Type ServiceType      `db:"type"`
 }
 
 // ClusterResource contains a record from the `cluster_resources` table.
 type ClusterResource struct {
-	ID          ClusterResourceID           `db:"id"`
-	CapacitorID string                      `db:"capacitor_id"`
-	ServiceID   ClusterServiceID            `db:"service_id"`
-	Name        limesresources.ResourceName `db:"name"`
+	ID          ClusterResourceID   `db:"id"`
+	CapacitorID string              `db:"capacitor_id"`
+	ServiceID   ClusterServiceID    `db:"service_id"`
+	Name        liquid.ResourceName `db:"name"`
 }
 
 // Ref returns the ResourceRef for this resource.
@@ -85,25 +86,25 @@ type Project struct {
 
 // ProjectService contains a record from the `project_services` table.
 type ProjectService struct {
-	ID                      ProjectServiceID  `db:"id"`
-	ProjectID               ProjectID         `db:"project_id"`
-	Type                    limes.ServiceType `db:"type"`
-	ScrapedAt               *time.Time        `db:"scraped_at"` // pointer type to allow for NULL value
-	CheckedAt               *time.Time        `db:"checked_at"`
-	NextScrapeAt            time.Time         `db:"next_scrape_at"`
-	Stale                   bool              `db:"stale"`
-	ScrapeDurationSecs      float64           `db:"scrape_duration_secs"`
-	ScrapeErrorMessage      string            `db:"scrape_error_message"`
-	RatesScrapedAt          *time.Time        `db:"rates_scraped_at"` // same as above
-	RatesCheckedAt          *time.Time        `db:"rates_checked_at"`
-	RatesNextScrapeAt       time.Time         `db:"rates_next_scrape_at"`
-	RatesStale              bool              `db:"rates_stale"`
-	RatesScrapeDurationSecs float64           `db:"rates_scrape_duration_secs"`
-	RatesScrapeState        string            `db:"rates_scrape_state"`
-	RatesScrapeErrorMessage string            `db:"rates_scrape_error_message"`
-	SerializedMetrics       string            `db:"serialized_metrics"`
-	QuotaDesyncedAt         *time.Time        `db:"quota_desynced_at"`
-	QuotaSyncDurationSecs   float64           `db:"quota_sync_duration_secs"`
+	ID                      ProjectServiceID `db:"id"`
+	ProjectID               ProjectID        `db:"project_id"`
+	Type                    ServiceType      `db:"type"`
+	ScrapedAt               *time.Time       `db:"scraped_at"` // pointer type to allow for NULL value
+	CheckedAt               *time.Time       `db:"checked_at"`
+	NextScrapeAt            time.Time        `db:"next_scrape_at"`
+	Stale                   bool             `db:"stale"`
+	ScrapeDurationSecs      float64          `db:"scrape_duration_secs"`
+	ScrapeErrorMessage      string           `db:"scrape_error_message"`
+	RatesScrapedAt          *time.Time       `db:"rates_scraped_at"` // same as above
+	RatesCheckedAt          *time.Time       `db:"rates_checked_at"`
+	RatesNextScrapeAt       time.Time        `db:"rates_next_scrape_at"`
+	RatesStale              bool             `db:"rates_stale"`
+	RatesScrapeDurationSecs float64          `db:"rates_scrape_duration_secs"`
+	RatesScrapeState        string           `db:"rates_scrape_state"`
+	RatesScrapeErrorMessage string           `db:"rates_scrape_error_message"`
+	SerializedMetrics       string           `db:"serialized_metrics"`
+	QuotaDesyncedAt         *time.Time       `db:"quota_desynced_at"`
+	QuotaSyncDurationSecs   float64          `db:"quota_sync_duration_secs"`
 }
 
 // Ref converts a ProjectService into its ProjectServiceRef.
@@ -114,15 +115,15 @@ func (s ProjectService) Ref() ServiceRef[ProjectServiceID] {
 // ProjectResource contains a record from the `project_resources` table. Quota
 // values are NULL for resources that do not track quota.
 type ProjectResource struct {
-	ID                      ProjectResourceID           `db:"id"`
-	ServiceID               ProjectServiceID            `db:"service_id"`
-	Name                    limesresources.ResourceName `db:"name"`
-	Quota                   *uint64                     `db:"quota"`
-	BackendQuota            *int64                      `db:"backend_quota"`
-	MinQuotaFromBackend     *uint64                     `db:"min_quota_from_backend"`
-	MaxQuotaFromBackend     *uint64                     `db:"max_quota_from_backend"`
-	MaxQuotaFromAdmin       *uint64                     `db:"max_quota_from_admin"`
-	OverrideQuotaFromConfig *uint64                     `db:"override_quota_from_config"`
+	ID                      ProjectResourceID   `db:"id"`
+	ServiceID               ProjectServiceID    `db:"service_id"`
+	Name                    liquid.ResourceName `db:"name"`
+	Quota                   *uint64             `db:"quota"`
+	BackendQuota            *int64              `db:"backend_quota"`
+	MinQuotaFromBackend     *uint64             `db:"min_quota_from_backend"`
+	MaxQuotaFromBackend     *uint64             `db:"max_quota_from_backend"`
+	MaxQuotaFromAdmin       *uint64             `db:"max_quota_from_admin"`
+	OverrideQuotaFromConfig *uint64             `db:"override_quota_from_config"`
 }
 
 // Ref returns the ResourceRef for this resource.
@@ -144,11 +145,11 @@ type ProjectAZResource struct {
 
 // ProjectRate contains a record from the `project_rates` table.
 type ProjectRate struct {
-	ServiceID     ProjectServiceID    `db:"service_id"`
-	Name          limesrates.RateName `db:"name"`
-	Limit         *uint64             `db:"rate_limit"`      // nil for rates that don't have a limit (just a usage)
-	Window        *limesrates.Window  `db:"window_ns"`       // nil for rates that don't have a limit (just a usage)
-	UsageAsBigint string              `db:"usage_as_bigint"` // empty for rates that don't have a usage (just a limit)
+	ServiceID     ProjectServiceID   `db:"service_id"`
+	Name          RateName           `db:"name"`
+	Limit         *uint64            `db:"rate_limit"`      // nil for rates that don't have a limit (just a usage)
+	Window        *limesrates.Window `db:"window_ns"`       // nil for rates that don't have a limit (just a usage)
+	UsageAsBigint string             `db:"usage_as_bigint"` // empty for rates that don't have a usage (just a limit)
 	// ^ NOTE: Postgres has a NUMERIC type that would be large enough to hold an
 	//  uint128, but Go does not have a uint128 builtin, so it's easier to just
 	//  use strings throughout and cast into bigints in the scraper only.

@@ -27,18 +27,18 @@ import (
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
-	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/logg"
 
 	"github.com/sapcc/limes/internal/core"
+	"github.com/sapcc/limes/internal/db"
 )
 
 type liquidCapacityPlugin struct {
 	// configuration
-	ServiceType       limes.ServiceType `yaml:"service_type"`
-	LiquidServiceType string            `yaml:"liquid_service_type"`
-	EndpointOverride  string            `yaml:"endpoint_override"` // see comment on liquidQuotaPlugin for details
+	ServiceType       db.ServiceType `yaml:"service_type"`
+	LiquidServiceType string         `yaml:"liquid_service_type"`
+	EndpointOverride  string         `yaml:"endpoint_override"` // see comment on liquidQuotaPlugin for details
 
 	// state
 	LiquidServiceInfo liquid.ServiceInfo `yaml:"-"`
@@ -72,7 +72,7 @@ func (p *liquidCapacityPlugin) Init(ctx context.Context, client *gophercloud.Pro
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *liquidCapacityPlugin) Scrape(ctx context.Context, backchannel core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (result map[limes.ServiceType]map[limesresources.ResourceName]core.PerAZ[core.CapacityData], serializedMetrics []byte, err error) {
+func (p *liquidCapacityPlugin) Scrape(ctx context.Context, backchannel core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (result map[db.ServiceType]map[liquid.ResourceName]core.PerAZ[core.CapacityData], serializedMetrics []byte, err error) {
 	req := liquid.ServiceCapacityRequest{
 		AllAZs:           allAZs,
 		DemandByResource: make(map[liquid.ResourceName]liquid.ResourceDemand, len(p.LiquidServiceInfo.Resources)),
@@ -100,7 +100,7 @@ func (p *liquidCapacityPlugin) Scrape(ctx context.Context, backchannel core.Capa
 			p.LiquidServiceType, p.LiquidServiceInfo.Version, resp.InfoVersion)
 	}
 
-	resultInService := make(map[limesresources.ResourceName]core.PerAZ[core.CapacityData], len(p.LiquidServiceInfo.Resources))
+	resultInService := make(map[liquid.ResourceName]core.PerAZ[core.CapacityData], len(p.LiquidServiceInfo.Resources))
 	for resName := range p.LiquidServiceInfo.Resources {
 		resReport := resp.Resources[resName]
 
@@ -114,7 +114,7 @@ func (p *liquidCapacityPlugin) Scrape(ctx context.Context, backchannel core.Capa
 		}
 		resultInService[resName] = resData
 	}
-	result = map[limes.ServiceType]map[limesresources.ResourceName]core.PerAZ[core.CapacityData]{
+	result = map[db.ServiceType]map[liquid.ResourceName]core.PerAZ[core.CapacityData]{
 		p.ServiceType: resultInService,
 	}
 

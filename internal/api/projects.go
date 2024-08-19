@@ -26,6 +26,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sqlext"
@@ -213,28 +214,26 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// validate request
-	requested := make(map[limes.ServiceType]map[limesresources.ResourceName]*maxQuotaChange)
+	nm := core.BuildNameMapping(p.Cluster)
+	requested := make(map[db.ServiceType]map[liquid.ResourceName]*maxQuotaChange)
 	for _, srvRequest := range parseTarget.Project.Services {
-		if !p.Cluster.HasService(srvRequest.Type) {
-			msg := "no such service: " + string(srvRequest.Type)
-			http.Error(w, msg, http.StatusUnprocessableEntity)
-			return
-		}
-
-		requested[srvRequest.Type] = make(map[limesresources.ResourceName]*maxQuotaChange)
 		for _, resRequest := range srvRequest.Resources {
-			if !p.Cluster.HasResource(srvRequest.Type, resRequest.Name) {
-				msg := fmt.Sprintf("no such resource: %s/%s", srvRequest.Type, resRequest.Name)
+			dbServiceType, dbResourceName, exists := nm.MapResourceFromV1API(srvRequest.Type, resRequest.Name)
+			if !exists {
+				msg := fmt.Sprintf("no such service and/or resource: %s/%s", srvRequest.Type, resRequest.Name)
 				http.Error(w, msg, http.StatusUnprocessableEntity)
 				return
 			}
 
+			if requested[dbServiceType] == nil {
+				requested[dbServiceType] = make(map[liquid.ResourceName]*maxQuotaChange)
+			}
 			if resRequest.MaxQuota == nil {
-				requested[srvRequest.Type][resRequest.Name] = &maxQuotaChange{NewValue: nil}
+				requested[dbServiceType][dbResourceName] = &maxQuotaChange{NewValue: nil}
 			} else {
-				resInfo := p.Cluster.InfoForResource(srvRequest.Type, resRequest.Name)
+				resInfo := p.Cluster.InfoForResource(dbServiceType, dbResourceName)
 				if !resInfo.HasQuota {
-					msg := fmt.Sprintf("resource %s/%s does not track quota", srvRequest.Type, resRequest.Name)
+					msg := fmt.Sprintf("resource %s/%s does not track quota", dbServiceType, dbResourceName)
 					http.Error(w, msg, http.StatusUnprocessableEntity)
 					return
 				}
@@ -247,13 +246,13 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 				if resRequest.Unit != nil {
 					requestedMaxQuota.Unit = *resRequest.Unit
 				}
-				convertedMaxQuota, err := core.ConvertUnitFor(p.Cluster, srvRequest.Type, resRequest.Name, requestedMaxQuota)
+				convertedMaxQuota, err := core.ConvertUnitFor(p.Cluster, dbServiceType, dbResourceName, requestedMaxQuota)
 				if err != nil {
-					msg := fmt.Sprintf("invalid input for %s/%s: %s", srvRequest.Type, resRequest.Name, err.Error())
+					msg := fmt.Sprintf("invalid input for %s/%s: %s", dbServiceType, dbResourceName, err.Error())
 					http.Error(w, msg, http.StatusUnprocessableEntity)
 					return
 				}
-				requested[srvRequest.Type][resRequest.Name] = &maxQuotaChange{NewValue: &convertedMaxQuota}
+				requested[dbServiceType][dbResourceName] = &maxQuotaChange{NewValue: &convertedMaxQuota}
 			}
 		}
 	}
@@ -299,19 +298,22 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// write audit trail
-	for serviceType, requestedInService := range requested {
-		for resourceName, requestedChange := range requestedInService {
-			logAndPublishEvent(requestTime, r, token, http.StatusOK,
-				maxQuotaEventTarget{
-					DomainID:        dbDomain.UUID,
-					DomainName:      dbDomain.Name,
-					ProjectID:       dbProject.UUID, // is empty for domain quota updates, see above
-					ProjectName:     dbProject.Name,
-					ServiceType:     serviceType,
-					ResourceName:    resourceName,
-					RequestedChange: *requestedChange,
-				},
-			)
+	for dbServiceType, requestedInService := range requested {
+		for dbResourceName, requestedChange := range requestedInService {
+			apiServiceType, apiResourceName, exists := nm.MapResourceToV1API(dbServiceType, dbResourceName)
+			if exists {
+				logAndPublishEvent(requestTime, r, token, http.StatusOK,
+					maxQuotaEventTarget{
+						DomainID:        dbDomain.UUID,
+						DomainName:      dbDomain.Name,
+						ProjectID:       dbProject.UUID, // is empty for domain quota updates, see above
+						ProjectName:     dbProject.Name,
+						ServiceType:     apiServiceType,
+						ResourceName:    apiResourceName,
+						RequestedChange: *requestedChange,
+					},
+				)
+			}
 		}
 	}
 

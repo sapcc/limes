@@ -29,10 +29,11 @@ import (
 	"github.com/sapcc/go-bits/errext"
 
 	"github.com/sapcc/limes/internal/core"
+	"github.com/sapcc/limes/internal/db"
 )
 
 // LoadQuotaOverrides parses the config file at $LIMES_QUOTA_OVERRIDES_PATH.
-func LoadQuotaOverrides(c *core.Cluster) (result map[string]map[string]map[limes.ServiceType]map[limesresources.ResourceName]uint64, errs errext.ErrorSet) {
+func LoadQuotaOverrides(c *core.Cluster) (result map[string]map[string]map[db.ServiceType]map[liquid.ResourceName]uint64, errs errext.ErrorSet) {
 	path := os.Getenv("LIMES_QUOTA_OVERRIDES_PATH")
 	if path == "" {
 		return nil, nil
@@ -43,24 +44,21 @@ func LoadQuotaOverrides(c *core.Cluster) (result map[string]map[string]map[limes
 		return
 	}
 
-	resInfosByIdentityInV1API := make(map[core.ResourceRef]liquid.ResourceInfo)
-	dbIdentitiesByIdentityInV1API := make(map[core.ResourceRef]core.ResourceRef)
+	nameMapping := core.BuildNameMapping(c)
+	allResInfos := make(map[db.ServiceType]map[liquid.ResourceName]liquid.ResourceInfo, len(c.QuotaPlugins))
 	for dbServiceType, quotaPlugin := range c.QuotaPlugins {
-		for dbResourceName, resInfo := range quotaPlugin.Resources() {
-			apiIdentity := c.BehaviorForResource(dbServiceType, dbResourceName).IdentityInV1API
-			resInfosByIdentityInV1API[apiIdentity] = resInfo
-
-			dbIdentity := core.ResourceRef{ServiceType: dbServiceType, ResourceName: dbResourceName}
-			dbIdentitiesByIdentityInV1API[apiIdentity] = dbIdentity
-		}
+		allResInfos[dbServiceType] = quotaPlugin.Resources()
 	}
 
 	// the quota-overrides.json file refers to services and resources using IdentityInV1API, so we:
 	// a) need to lookup by API identity
 	// b) get a result that is structured by API identity and needs to be mapped back to DB identity afterwards
 	getUnit := func(serviceType limes.ServiceType, resourceName limesresources.ResourceName) (limes.Unit, error) {
-		apiIdentity := core.ResourceRef{ServiceType: serviceType, ResourceName: resourceName}
-		resInfo, exists := resInfosByIdentityInV1API[apiIdentity]
+		dbServiceType, dbResourceName, exists := nameMapping.MapResourceFromV1API(serviceType, resourceName)
+		if !exists {
+			return limes.UnitUnspecified, fmt.Errorf("%s/%s is not a valid resource", serviceType, resourceName)
+		}
+		resInfo, exists := allResInfos[dbServiceType][dbResourceName]
 		if !exists {
 			return limes.UnitUnspecified, fmt.Errorf("%s/%s is not a valid resource", serviceType, resourceName)
 		}
@@ -77,32 +75,35 @@ func LoadQuotaOverrides(c *core.Cluster) (result map[string]map[string]map[limes
 		return nil, errs
 	}
 
-	result = make(map[string]map[string]map[limes.ServiceType]map[limesresources.ResourceName]uint64, len(parsed))
+	result = make(map[string]map[string]map[db.ServiceType]map[liquid.ResourceName]uint64, len(parsed))
 	for domainName, parsedInDomain := range parsed {
-		result[domainName] = make(map[string]map[limes.ServiceType]map[limesresources.ResourceName]uint64, len(parsedInDomain))
+		result[domainName] = make(map[string]map[db.ServiceType]map[liquid.ResourceName]uint64, len(parsedInDomain))
 		for projectName, parsedInProject := range parsedInDomain {
-			result[domainName][projectName] = translateQuotaOverrides(parsedInProject, dbIdentitiesByIdentityInV1API)
+			result[domainName][projectName], err = translateQuotaOverrides(parsedInProject, nameMapping)
+			if err != nil {
+				errs.Add(err)
+				return nil, errs
+			}
 		}
 	}
 	return result, nil
 }
 
-func translateQuotaOverrides(overrides map[limes.ServiceType]map[limesresources.ResourceName]uint64, dbIdentitiesByIdentityInV1API map[core.ResourceRef]core.ResourceRef) map[limes.ServiceType]map[limesresources.ResourceName]uint64 {
-	result := make(map[limes.ServiceType]map[limesresources.ResourceName]uint64)
+func translateQuotaOverrides(overrides map[limes.ServiceType]map[limesresources.ResourceName]uint64, nameMapping core.NameMapping) (map[db.ServiceType]map[liquid.ResourceName]uint64, error) {
+	result := make(map[db.ServiceType]map[liquid.ResourceName]uint64)
 	for apiServiceType, overridesByService := range overrides {
 		for apiResourceName, overrideQuota := range overridesByService {
-			apiIdentity := core.ResourceRef{ServiceType: apiServiceType, ResourceName: apiResourceName}
-			dbIdentity, ok := dbIdentitiesByIdentityInV1API[apiIdentity]
-			if !ok {
+			dbServiceType, dbResourceName, exists := nameMapping.MapResourceFromV1API(apiServiceType, apiResourceName)
+			if !exists {
 				// defense in depth: this branch should be impossible to reach because ParseQuotaOverrides() rejected unknown resources
-				dbIdentity = apiIdentity
+				return nil, fmt.Errorf("%s/%s is not a valid resource", apiServiceType, apiResourceName)
 			}
 
-			if result[dbIdentity.ServiceType] == nil {
-				result[dbIdentity.ServiceType] = make(map[limesresources.ResourceName]uint64)
+			if result[dbServiceType] == nil {
+				result[dbServiceType] = make(map[liquid.ResourceName]uint64)
 			}
-			result[dbIdentity.ServiceType][dbIdentity.ResourceName] = overrideQuota
+			result[dbServiceType][dbResourceName] = overrideQuota
 		}
 	}
-	return result
+	return result, nil
 }

@@ -29,11 +29,10 @@ import (
 	"github.com/gophercloud/gophercloud/v2/pagination"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
-	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
-	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 
 	"github.com/sapcc/limes/internal/core"
+	"github.com/sapcc/limes/internal/db"
 )
 
 type designatePlugin struct {
@@ -58,7 +57,7 @@ func init() {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *designatePlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType limes.ServiceType) (err error) {
+func (p *designatePlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType db.ServiceType) (err error) {
 	p.DesignateV2, err = openstack.NewDNSV2(provider, eo)
 	return err
 }
@@ -82,17 +81,17 @@ func (p *designatePlugin) Resources() map[liquid.ResourceName]liquid.ResourceInf
 }
 
 // Rates implements the core.QuotaPlugin interface.
-func (p *designatePlugin) Rates() []limesrates.RateInfo {
+func (p *designatePlugin) Rates() map[db.RateName]core.RateInfo {
 	return nil
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *designatePlugin) ScrapeRates(ctx context.Context, project core.KeystoneProject, prevSerializedState string) (result map[limesrates.RateName]*big.Int, serializedState string, err error) {
+func (p *designatePlugin) ScrapeRates(ctx context.Context, project core.KeystoneProject, prevSerializedState string) (result map[db.RateName]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *designatePlugin) Scrape(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
+func (p *designatePlugin) Scrape(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[liquid.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
 	// query quotas
 	quotas, err := dnsGetQuota(ctx, p.DesignateV2, project.UUID)
 	if err != nil {
@@ -119,7 +118,7 @@ func (p *designatePlugin) Scrape(ctx context.Context, project core.KeystoneProje
 		}
 	}
 
-	return map[limesresources.ResourceName]core.ResourceData{
+	return map[liquid.ResourceName]core.ResourceData{
 		"zones": {
 			Quota: quotas.Zones,
 			UsageData: core.InAnyAZ(core.UsageData{
@@ -136,7 +135,7 @@ func (p *designatePlugin) Scrape(ctx context.Context, project core.KeystoneProje
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *designatePlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
+func (p *designatePlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotas map[liquid.ResourceName]uint64) error {
 	return dnsSetQuota(ctx, p.DesignateV2, project.UUID, &dnsQuota{
 		Zones:          int64(quotas["zones"]),      //nolint:gosec // uint64 -> int64 would only fail if quota is bigger than 2^63
 		ZoneRecordsets: int64(quotas["recordsets"]), //nolint:gosec // uint64 -> int64 would only fail if quota is bigger than 2^63

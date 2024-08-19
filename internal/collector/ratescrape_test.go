@@ -53,9 +53,8 @@ const (
 				type: --test-generic
 				params:
 					rate_infos:
-						- name: firstrate
-						- name: secondrate
-							unit: KiB
+						firstrate: {}
+						secondrate: { unit: KiB }
 	`
 )
 

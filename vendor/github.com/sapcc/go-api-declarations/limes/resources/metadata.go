@@ -21,12 +21,16 @@ package limesresources
 
 import (
 	"github.com/sapcc/go-api-declarations/limes"
-	"github.com/sapcc/go-api-declarations/liquid"
 )
 
 // ResourceName identifies a resource within a service. This type is used to distinguish
 // resource names from other types of string values in function signatures.
-type ResourceName = liquid.ResourceName
+//
+// This type is legally distinct from liquid.ResourceName: Within Limes,
+// LIQUID-level resource names and API-level resource names are separated by
+// configurable renaming rules, so we are using separate types to enforce that
+// this conversion takes place.
+type ResourceName string
 
 // ResourceInfo contains the metadata for a resource (i.e. some thing for which
 // quota and usage values can be retrieved from a backend service).

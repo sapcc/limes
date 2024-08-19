@@ -25,7 +25,6 @@ import (
 	"math/big"
 
 	"github.com/prometheus/client_golang/prometheus"
-	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
@@ -138,7 +137,7 @@ func (c *Collector) processRateScrapeTask(ctx context.Context, task projectScrap
 	return fmt.Errorf("during rate scrape of project %s/%s: %w", project.Domain.Name, project.Name, task.Err)
 }
 
-func (c *Collector) writeRateScrapeResult(task projectScrapeTask, rateData map[limesrates.RateName]*big.Int, ratesScrapeState string) error {
+func (c *Collector) writeRateScrapeResult(task projectScrapeTask, rateData map[db.RateName]*big.Int, ratesScrapeState string) error {
 	srv := task.Service
 	plugin := c.Cluster.QuotaPlugins[srv.Type] //NOTE: discoverScrapeTask already verified that this exists
 
@@ -149,7 +148,7 @@ func (c *Collector) writeRateScrapeResult(task projectScrapeTask, rateData map[l
 	defer sqlext.RollbackUnlessCommitted(tx)
 
 	// update existing project_rates entries
-	rateExists := make(map[limesrates.RateName]bool)
+	rateExists := make(map[db.RateName]bool)
 	var rates []db.ProjectRate
 	_, err = tx.Select(&rates, `SELECT * FROM project_rates WHERE service_id = $1`, srv.ID)
 	if err != nil {
@@ -187,15 +186,15 @@ func (c *Collector) writeRateScrapeResult(task projectScrapeTask, rateData map[l
 	}
 
 	// insert missing project_rates entries
-	for _, rateMetadata := range plugin.Rates() {
-		if _, exists := rateExists[rateMetadata.Name]; exists {
+	for rateName := range plugin.Rates() {
+		if _, exists := rateExists[rateName]; exists {
 			continue
 		}
-		usageData := rateData[rateMetadata.Name]
+		usageData := rateData[rateName]
 
 		rate := &db.ProjectRate{
 			ServiceID: srv.ID,
-			Name:      rateMetadata.Name,
+			Name:      rateName,
 		}
 		if usageData != nil {
 			rate.UsageAsBigint = usageData.String()

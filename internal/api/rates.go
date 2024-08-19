@@ -24,7 +24,6 @@ import (
 	"net/http"
 
 	"github.com/go-gorp/gorp/v3"
-	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/respondwith"
@@ -142,7 +141,7 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 
 	updater := RateLimitUpdater{
 		Cluster: p.Cluster,
-		CanSetRateLimit: func(serviceType limes.ServiceType) bool {
+		CanSetRateLimit: func(serviceType db.ServiceType) bool {
 			token.Context.Request["service_type"] = string(serviceType)
 			return token.Check("project:set_rate_limit")
 		},
@@ -207,7 +206,7 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 			if respondwith.ErrorText(w, err) {
 				return
 			}
-			ratesByName := make(map[limesrates.RateName]db.ProjectRate)
+			ratesByName := make(map[db.RateName]db.ProjectRate)
 			for _, rate := range rates {
 				ratesByName[rate.Name] = rate
 			}

@@ -181,10 +181,11 @@ func (p *v1Provider) GetProjectCommitments(w http.ResponseWriter, r *http.Reques
 
 func (p *v1Provider) convertCommitmentToDisplayForm(c db.ProjectCommitment, loc datamodel.AZResourceLocation, token *gopherpolicy.Token) limesresources.Commitment {
 	resInfo := p.Cluster.InfoForResource(loc.ServiceType, loc.ResourceName)
+	apiIdentity := p.Cluster.BehaviorForResource(loc.ServiceType, loc.ResourceName).IdentityInV1API
 	return limesresources.Commitment{
 		ID:               int64(c.ID),
-		ServiceType:      loc.ServiceType,
-		ResourceName:     loc.ResourceName,
+		ServiceType:      apiIdentity.ServiceType,
+		ResourceName:     apiIdentity.ResourceName,
 		AvailabilityZone: loc.AvailabilityZone,
 		Amount:           c.Amount,
 		Unit:             resInfo.Unit,
@@ -201,53 +202,57 @@ func (p *v1Provider) convertCommitmentToDisplayForm(c db.ProjectCommitment, loc 
 	}
 }
 
-func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r *http.Request) (*limesresources.CommitmentRequest, *core.ResourceBehavior) {
+func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r *http.Request) (*limesresources.CommitmentRequest, *datamodel.AZResourceLocation, *core.ResourceBehavior) {
 	// parse request
 	var parseTarget struct {
 		Request limesresources.CommitmentRequest `json:"commitment"`
 	}
 	if !RequireJSON(w, r, &parseTarget) {
-		return nil, nil
+		return nil, nil, nil
 	}
 	req := parseTarget.Request
 
 	// validate request
-	if !p.Cluster.HasService(req.ServiceType) {
-		http.Error(w, "no such service", http.StatusUnprocessableEntity)
-		return nil, nil
+	nm := core.BuildNameMapping(p.Cluster)
+	dbServiceType, dbResourceName, ok := nm.MapResourceFromV1API(req.ServiceType, req.ResourceName)
+	if !ok {
+		msg := fmt.Sprintf("no such service and/or resource: %s/%s", req.ServiceType, req.ResourceName)
+		http.Error(w, msg, http.StatusUnprocessableEntity)
+		return nil, nil, nil
 	}
-	if !p.Cluster.HasResource(req.ServiceType, req.ResourceName) {
-		http.Error(w, "no such resource", http.StatusUnprocessableEntity)
-		return nil, nil
-	}
-	behavior := p.Cluster.BehaviorForResource(req.ServiceType, req.ResourceName)
+	behavior := p.Cluster.BehaviorForResource(dbServiceType, dbResourceName)
 	if len(behavior.CommitmentDurations) == 0 {
 		http.Error(w, "commitments are not enabled for this resource", http.StatusUnprocessableEntity)
-		return nil, nil
+		return nil, nil, nil
 	}
 	if behavior.CommitmentIsAZAware {
 		if !slices.Contains(p.Cluster.Config.AvailabilityZones, req.AvailabilityZone) {
 			http.Error(w, "no such availability zone", http.StatusUnprocessableEntity)
-			return nil, nil
+			return nil, nil, nil
 		}
 	} else {
 		if req.AvailabilityZone != limes.AvailabilityZoneAny {
 			http.Error(w, `resource does not accept AZ-aware commitments, so the AZ must be set to "any"`, http.StatusUnprocessableEntity)
-			return nil, nil
+			return nil, nil, nil
 		}
 	}
 	if !slices.Contains(behavior.CommitmentDurations, req.Duration) {
 		buf := must.Return(json.Marshal(behavior.CommitmentDurations)) // panic on error is acceptable here, marshals should never fail
 		msg := "unacceptable commitment duration for this resource, acceptable values: " + string(buf)
 		http.Error(w, msg, http.StatusUnprocessableEntity)
-		return nil, nil
+		return nil, nil, nil
 	}
 	if req.Amount == 0 {
 		http.Error(w, "amount of committed resource must be greater than zero", http.StatusUnprocessableEntity)
-		return nil, nil
+		return nil, nil, nil
 	}
 
-	return &req, &behavior
+	loc := datamodel.AZResourceLocation{
+		ServiceType:      dbServiceType,
+		ResourceName:     dbResourceName,
+		AvailabilityZone: req.AvailabilityZone,
+	}
+	return &req, &loc, &behavior
 }
 
 // CanConfirmNewProjectCommitment handles POST /v1/domains/:domain_id/projects/:project_id/commitments/can-confirm.
@@ -265,7 +270,7 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 	if dbProject == nil {
 		return
 	}
-	req, behavior := p.parseAndValidateCommitmentRequest(w, r)
+	req, loc, behavior := p.parseAndValidateCommitmentRequest(w, r)
 	if req == nil {
 		return
 	}
@@ -289,7 +294,7 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 	}
 
 	// check for committable capacity
-	result, err := datamodel.CanConfirmNewCommitment(*req, resourceID, p.Cluster, p.DB)
+	result, err := datamodel.CanConfirmNewCommitment(*loc, resourceID, req.Amount, p.Cluster, p.DB)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
@@ -311,16 +316,11 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	if dbProject == nil {
 		return
 	}
-	req, behavior := p.parseAndValidateCommitmentRequest(w, r)
+	req, loc, behavior := p.parseAndValidateCommitmentRequest(w, r)
 	if req == nil {
 		return
 	}
 
-	loc := datamodel.AZResourceLocation{
-		ServiceType:      req.ServiceType,
-		ResourceName:     req.ResourceName,
-		AvailabilityZone: req.AvailabilityZone,
-	}
 	var (
 		resourceID   db.ProjectResourceID
 		azResourceID db.ProjectAZResourceID
@@ -367,7 +367,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	}
 	if req.ConfirmBy == nil {
 		// if not planned for confirmation in the future, confirm immediately (or fail)
-		ok, err := datamodel.CanConfirmNewCommitment(*req, resourceID, p.Cluster, tx)
+		ok, err := datamodel.CanConfirmNewCommitment(*loc, resourceID, req.Amount, p.Cluster, tx)
 		if respondwith.ErrorText(w, err) {
 			return
 		}
@@ -395,7 +395,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		DomainName:  dbDomain.Name,
 		ProjectID:   dbProject.UUID,
 		ProjectName: dbProject.Name,
-		Commitment:  p.convertCommitmentToDisplayForm(dbCommitment, loc, token),
+		Commitment:  p.convertCommitmentToDisplayForm(dbCommitment, *loc, token),
 	})
 
 	// if the commitment is immediately confirmed, trigger a capacity scrape in
@@ -413,7 +413,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token)
+	c := p.convertCommitmentToDisplayForm(dbCommitment, *loc, token)
 	respondwith.JSON(w, http.StatusCreated, map[string]any{"commitment": c})
 }
 
@@ -772,24 +772,37 @@ func (p *v1Provider) GetCommitmentConversions(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	sourceResource, sourceBehavior, ok := p.parseAndValidateConversionRequest(w, r)
-	if !ok {
+	// validate request
+	vars := mux.Vars(r)
+	nm := core.BuildNameMapping(p.Cluster)
+	sourceServiceType, sourceResourceName, exists := nm.MapResourceFromV1API(
+		limes.ServiceType(vars["service_type"]),
+		limesresources.ResourceName(vars["resource_name"]),
+	)
+	if !exists {
+		msg := fmt.Sprintf("no such service and/or resource: %s/%s", vars["service_type"], vars["resource_name"])
+		http.Error(w, msg, http.StatusUnprocessableEntity)
 		return
 	}
-	sourceResInfo := p.Cluster.InfoForResource(sourceResource.ServiceType, sourceResource.ResourceName)
+	sourceBehavior := p.Cluster.BehaviorForResource(sourceServiceType, sourceResourceName)
+	if len(sourceBehavior.CommitmentDurations) == 0 {
+		http.Error(w, "commitments are not enabled for this resource", http.StatusUnprocessableEntity)
+		return
+	}
+	sourceResInfo := p.Cluster.InfoForResource(sourceServiceType, sourceResourceName)
 
+	// enumerate possible conversions
 	conversions := make([]limesresources.CommitmentConversionRule, 0)
 	for targetServiceType, quotaPlugin := range p.Cluster.QuotaPlugins {
-		for targetResourceName := range quotaPlugin.Resources() {
-			targetResource := p.Cluster.InfoForResource(targetServiceType, targetResourceName)
+		for targetResourceName, targetResInfo := range quotaPlugin.Resources() {
 			targetBehavior := p.Cluster.BehaviorForResource(targetServiceType, targetResourceName)
 			if targetBehavior.CommitmentConversion == (core.CommitmentConversion{}) {
 				continue
 			}
-			if sourceResource.ServiceType == targetServiceType && sourceResource.ResourceName == targetResourceName {
+			if sourceServiceType == targetServiceType && sourceResourceName == targetResourceName {
 				continue
 			}
-			if sourceResInfo.Unit != targetResource.Unit {
+			if sourceResInfo.Unit != targetResInfo.Unit {
 				continue
 			}
 			if sourceBehavior.CommitmentConversion.Identifier != targetBehavior.CommitmentConversion.Identifier {
@@ -797,13 +810,15 @@ func (p *v1Provider) GetCommitmentConversions(w http.ResponseWriter, r *http.Req
 			}
 
 			fromAmount, toAmount := p.getCommitmentConversionRate(sourceBehavior, targetBehavior)
-			result := limesresources.CommitmentConversionRule{
-				FromAmount:     fromAmount,
-				ToAmount:       toAmount,
-				TargetService:  targetServiceType,
-				TargetResource: targetResourceName,
+			apiServiceType, apiResourceName, ok := nm.MapResourceToV1API(targetServiceType, targetResourceName)
+			if ok {
+				conversions = append(conversions, limesresources.CommitmentConversionRule{
+					FromAmount:     fromAmount,
+					ToAmount:       toAmount,
+					TargetService:  apiServiceType,
+					TargetResource: apiResourceName,
+				})
 			}
-			conversions = append(conversions, result)
 		}
 	}
 
@@ -817,25 +832,6 @@ func (p *v1Provider) GetCommitmentConversions(w http.ResponseWriter, r *http.Req
 	})
 
 	respondwith.JSON(w, http.StatusOK, map[string]any{"conversions": conversions})
-}
-
-func (p *v1Provider) parseAndValidateConversionRequest(w http.ResponseWriter, r *http.Request) (ref core.ResourceRef, behavior core.ResourceBehavior, ok bool) {
-	ref.ServiceType = limes.ServiceType(mux.Vars(r)["service_type"])
-	ref.ResourceName = limesresources.ResourceName(mux.Vars(r)["resource_name"])
-	if !p.Cluster.HasService(ref.ServiceType) {
-		http.Error(w, "no such service", http.StatusUnprocessableEntity)
-		return core.ResourceRef{}, core.ResourceBehavior{}, false
-	}
-	if !p.Cluster.HasResource(ref.ServiceType, ref.ResourceName) {
-		http.Error(w, "no such resource", http.StatusUnprocessableEntity)
-		return core.ResourceRef{}, core.ResourceBehavior{}, false
-	}
-	behavior = p.Cluster.BehaviorForResource(ref.ServiceType, ref.ResourceName)
-	if len(behavior.CommitmentDurations) == 0 {
-		http.Error(w, "commitments are not enabled for this resource", http.StatusUnprocessableEntity)
-		return core.ResourceRef{}, core.ResourceBehavior{}, false
-	}
-	return ref, behavior, true
 }
 
 func (p *v1Provider) getCommitmentConversionRate(source, target core.ResourceBehavior) (fromAmount, toAmount uint64) {

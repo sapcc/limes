@@ -79,7 +79,7 @@ func (b ResourceBehavior) ToCommitmentConfig(now time.Time) *limesresources.Comm
 
 // BuildAPIResourceInfo converts a ResourceInfo from LIQUID into the API
 // format, using the category mapping in this behavior object.
-func (b ResourceBehavior) BuildAPIResourceInfo(resName liquid.ResourceName, resInfo liquid.ResourceInfo) limesresources.ResourceInfo {
+func (b ResourceBehavior) BuildAPIResourceInfo(resName limesresources.ResourceName, resInfo liquid.ResourceInfo) limesresources.ResourceInfo {
 	result := limesresources.ResourceInfo{
 		Name:     resName,
 		Unit:     resInfo.Unit,
@@ -123,9 +123,8 @@ func (b *ResourceBehavior) Merge(other ResourceBehavior) {
 	}
 }
 
-// ResourceRef contains a pair of service type and resource name. When read
-// from the configuration YAML, this deserializes from a string in the
-// "service/resource" format.
+// ResourceRef contains a pair of service type and resource name using API-level identifiers.
+// When read from the configuration YAML, this deserializes from a string in the "service/resource" format.
 type ResourceRef struct {
 	ServiceType  limes.ServiceType
 	ResourceName limesresources.ResourceName

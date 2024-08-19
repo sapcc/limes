@@ -31,10 +31,11 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/aggregates"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
-	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/logg"
 
 	"github.com/sapcc/limes/internal/core"
+	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/plugins/nova"
 )
 
@@ -154,7 +155,7 @@ var nodeNameRx = regexp.MustCompile(`^node(?:swift)?\d+-((?:b[bm]|ap|md|st|swf|g
 var cpNodeNameRx = regexp.MustCompile(`^node(?:swift)?\d+-(cp\d+)$`)
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *capacitySapccIronicPlugin) Scrape(ctx context.Context, _ core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (result map[limes.ServiceType]map[limesresources.ResourceName]core.PerAZ[core.CapacityData], serializedMetrics []byte, err error) {
+func (p *capacitySapccIronicPlugin) Scrape(ctx context.Context, _ core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (result map[db.ServiceType]map[liquid.ResourceName]core.PerAZ[core.CapacityData], serializedMetrics []byte, err error) {
 	// collect info about flavors with separate instance quota
 	flavorNames, err := p.FlavorAliases.ListFlavorsWithSeparateInstanceQuota(ctx, p.NovaV2)
 	if err != nil {
@@ -162,7 +163,7 @@ func (p *capacitySapccIronicPlugin) Scrape(ctx context.Context, _ core.CapacityP
 	}
 
 	// we are going to report capacity for all per-flavor instance quotas
-	resultCompute := make(map[limesresources.ResourceName]core.PerAZ[core.CapacityData])
+	resultCompute := make(map[liquid.ResourceName]core.PerAZ[core.CapacityData])
 	for _, flavorName := range flavorNames {
 		if p.FlavorNameSelection.MatchFlavorName(flavorName) {
 			resName := p.FlavorAliases.LimesResourceNameForFlavor(flavorName)
@@ -311,7 +312,7 @@ func (p *capacitySapccIronicPlugin) Scrape(ctx context.Context, _ core.CapacityP
 	}
 
 	serializedMetrics, err = json.Marshal(metrics)
-	return map[limes.ServiceType]map[limesresources.ResourceName]core.PerAZ[core.CapacityData]{"compute": resultCompute}, serializedMetrics, err
+	return map[db.ServiceType]map[liquid.ResourceName]core.PerAZ[core.CapacityData]{"compute": resultCompute}, serializedMetrics, err
 }
 
 var (

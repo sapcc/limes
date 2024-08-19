@@ -11,8 +11,9 @@
             "name": "pakistan"
           }
         },
-        "service": "compute",
-        "resource": "cores",
+        "service": "shared",
+        "resource": "capacity",
+        "unit": "B",
         "quota": 14,
         "usage": 18
       }
@@ -27,8 +28,9 @@
             "name": "germany"
           }
         },
-        "service": "compute",
-        "resource": "cores",
+        "service": "shared",
+        "resource": "capacity",
+        "unit": "B",
         "quota": 30,
         "backend_quota": 10
       }

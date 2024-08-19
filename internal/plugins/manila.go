@@ -38,13 +38,12 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/sapcc/go-api-declarations/limes"
-	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
-	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/promquery"
 
 	"github.com/sapcc/limes/internal/core"
+	"github.com/sapcc/limes/internal/db"
 )
 
 type manilaPlugin struct {
@@ -65,7 +64,7 @@ func init() {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *manilaPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType limes.ServiceType) (err error) {
+func (p *manilaPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType db.ServiceType) (err error) {
 	if len(p.ShareTypes) == 0 {
 		return errors.New("quota plugin sharev2: missing required configuration field params.share_types")
 	}
@@ -193,17 +192,17 @@ func (p *manilaPlugin) Resources() map[liquid.ResourceName]liquid.ResourceInfo {
 }
 
 // Rates implements the core.QuotaPlugin interface.
-func (p *manilaPlugin) Rates() []limesrates.RateInfo {
+func (p *manilaPlugin) Rates() map[db.RateName]core.RateInfo {
 	return nil
 }
 
-func (p *manilaPlugin) makeResourceName(kind string, shareType ManilaShareTypeSpec) limesresources.ResourceName {
+func (p *manilaPlugin) makeResourceName(kind string, shareType ManilaShareTypeSpec) liquid.ResourceName {
 	if p.ShareTypes[0].Name == shareType.Name {
 		// the resources for the first share type don't get the share type suffix
 		// for backwards compatibility reasons
-		return limesresources.ResourceName(kind)
+		return liquid.ResourceName(kind)
 	}
-	return limesresources.ResourceName(kind + "_" + shareType.Name)
+	return liquid.ResourceName(kind + "_" + shareType.Name)
 }
 
 type manilaQuotaSet struct {
@@ -219,18 +218,18 @@ type manilaQuotaSet struct {
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *manilaPlugin) ScrapeRates(ctx context.Context, project core.KeystoneProject, prevSerializedState string) (result map[limesrates.RateName]*big.Int, serializedState string, err error) {
+func (p *manilaPlugin) ScrapeRates(ctx context.Context, project core.KeystoneProject, prevSerializedState string) (result map[db.RateName]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *manilaPlugin) Scrape(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
+func (p *manilaPlugin) Scrape(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[liquid.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
 	// the share_networks quota is only shown when querying for no share_type in particular
 	qs, err := manilaGetQuotaSet(ctx, p.ManilaV2, project.UUID, "")
 	if err != nil {
 		return nil, nil, err
 	}
-	result = map[limesresources.ResourceName]core.ResourceData{
+	result = map[liquid.ResourceName]core.ResourceData{
 		"share_networks": qs.ShareNetworks.ToResourceDataInAnyAZ(),
 	}
 
@@ -355,7 +354,7 @@ func (p *manilaPlugin) scrapeShareType(ctx context.Context, project core.Keyston
 	return result, nil
 }
 
-func (p *manilaPlugin) rejectInaccessibleShareType(project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
+func (p *manilaPlugin) rejectInaccessibleShareType(project core.KeystoneProject, quotas map[liquid.ResourceName]uint64) error {
 	// check if an inaccessible share type is used
 	for _, shareType := range p.ShareTypes {
 		stName := resolveManilaShareType(shareType, project)
@@ -372,7 +371,7 @@ func (p *manilaPlugin) rejectInaccessibleShareType(project core.KeystoneProject,
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *manilaPlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
+func (p *manilaPlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotas map[liquid.ResourceName]uint64) error {
 	err := p.rejectInaccessibleShareType(project, quotas)
 	if err != nil {
 		return err

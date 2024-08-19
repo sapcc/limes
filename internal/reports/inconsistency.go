@@ -23,6 +23,7 @@ import (
 
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/internal/core"
@@ -93,22 +94,33 @@ func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter) 
 		OverspentQuotas:     []OverspentProjectQuota{},
 		MismatchQuotas:      []MismatchProjectQuota{},
 	}
+	nm := core.BuildNameMapping(cluster)
 
 	//ospqReportQuery: data for overspent project quota inconsistencies
 	queryStr, joinArgs := filter.PrepareQuery(ospqReportQuery)
 	//nolint:dupl
 	err := sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
-		ospq := OverspentProjectQuota{}
+		var (
+			ospq           OverspentProjectQuota
+			dbServiceType  db.ServiceType
+			dbResourceName liquid.ResourceName
+		)
 		err := rows.Scan(
 			&ospq.Project.Domain.UUID, &ospq.Project.Domain.Name,
-			&ospq.Project.UUID, &ospq.Project.Name, &ospq.Service,
-			&ospq.Resource, &ospq.Quota, &ospq.Usage,
+			&ospq.Project.UUID, &ospq.Project.Name, &dbServiceType,
+			&dbResourceName, &ospq.Quota, &ospq.Usage,
 		)
 		if err != nil {
 			return err
 		}
 
-		ospq.Unit = cluster.InfoForResource(ospq.Service, ospq.Resource).Unit
+		var exists bool
+		ospq.Service, ospq.Resource, exists = nm.MapResourceToV1API(dbServiceType, dbResourceName)
+		if !exists {
+			return nil
+		}
+
+		ospq.Unit = cluster.InfoForResource(dbServiceType, dbResourceName).Unit
 		inconsistencies.OverspentQuotas = append(inconsistencies.OverspentQuotas, ospq)
 
 		return nil
@@ -121,17 +133,27 @@ func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter) 
 	queryStr, joinArgs = filter.PrepareQuery(mmpqReportQuery)
 	//nolint:dupl
 	err = sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
-		mmpq := MismatchProjectQuota{}
+		var (
+			mmpq           MismatchProjectQuota
+			dbServiceType  db.ServiceType
+			dbResourceName liquid.ResourceName
+		)
 		err := rows.Scan(
 			&mmpq.Project.Domain.UUID, &mmpq.Project.Domain.Name,
-			&mmpq.Project.UUID, &mmpq.Project.Name, &mmpq.Service,
-			&mmpq.Resource, &mmpq.Quota, &mmpq.BackendQuota,
+			&mmpq.Project.UUID, &mmpq.Project.Name, &dbServiceType,
+			&dbResourceName, &mmpq.Quota, &mmpq.BackendQuota,
 		)
 		if err != nil {
 			return err
 		}
 
-		mmpq.Unit = cluster.InfoForResource(mmpq.Service, mmpq.Resource).Unit
+		var exists bool
+		mmpq.Service, mmpq.Resource, exists = nm.MapResourceToV1API(dbServiceType, dbResourceName)
+		if !exists {
+			return nil
+		}
+
+		mmpq.Unit = cluster.InfoForResource(dbServiceType, dbResourceName).Unit
 		inconsistencies.MismatchQuotas = append(inconsistencies.MismatchQuotas, mmpq)
 
 		return nil

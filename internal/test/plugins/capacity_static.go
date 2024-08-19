@@ -29,9 +29,10 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/sapcc/go-api-declarations/limes"
-	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 
 	"github.com/sapcc/limes/internal/core"
+	"github.com/sapcc/limes/internal/db"
 )
 
 // StaticCapacityPlugin is a core.CapacityPlugin implementation for unit tests.
@@ -58,7 +59,7 @@ func (p *StaticCapacityPlugin) PluginTypeID() string {
 }
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *StaticCapacityPlugin) Scrape(ctx context.Context, _ core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (result map[limes.ServiceType]map[limesresources.ResourceName]core.PerAZ[core.CapacityData], serializedMetrics []byte, err error) {
+func (p *StaticCapacityPlugin) Scrape(ctx context.Context, _ core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (result map[db.ServiceType]map[liquid.ResourceName]core.PerAZ[core.CapacityData], serializedMetrics []byte, err error) {
 	makeAZCapa := func(az string, capacity, usage uint64) *core.CapacityData {
 		var subcapacities []any
 		if p.WithSubcapacities {
@@ -95,15 +96,15 @@ func (p *StaticCapacityPlugin) Scrape(ctx context.Context, _ core.CapacityPlugin
 		serializedMetrics = []byte(fmt.Sprintf(`{"smaller_half":%d,"larger_half":%d}`, smallerHalf, largerHalf))
 	}
 
-	result = make(map[limes.ServiceType]map[limesresources.ResourceName]core.PerAZ[core.CapacityData])
+	result = make(map[db.ServiceType]map[liquid.ResourceName]core.PerAZ[core.CapacityData])
 	for _, str := range p.Resources {
 		parts := strings.SplitN(str, "/", 2)
-		serviceType := limes.ServiceType(parts[0])
-		resourceName := limesresources.ResourceName(parts[1])
+		serviceType := db.ServiceType(parts[0])
+		resourceName := liquid.ResourceName(parts[1])
 
 		_, exists := result[serviceType]
 		if !exists {
-			result[serviceType] = make(map[limesresources.ResourceName]core.PerAZ[core.CapacityData])
+			result[serviceType] = make(map[liquid.ResourceName]core.PerAZ[core.CapacityData])
 		}
 		result[serviceType][resourceName] = fullCapa
 	}

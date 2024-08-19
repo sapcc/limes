@@ -34,11 +34,10 @@ import (
 	"github.com/gophercloud/gophercloud/v2/pagination"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
-	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
-	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 
 	"github.com/sapcc/limes/internal/core"
+	"github.com/sapcc/limes/internal/db"
 )
 
 type cinderPlugin struct {
@@ -55,7 +54,7 @@ func init() {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *cinderPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType limes.ServiceType) (err error) {
+func (p *cinderPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType db.ServiceType) (err error) {
 	if len(p.VolumeTypes) == 0 {
 		return errors.New("quota plugin volumev2: missing required configuration field volumev2.volume_types")
 	}
@@ -98,17 +97,17 @@ func (p *cinderPlugin) Resources() map[liquid.ResourceName]liquid.ResourceInfo {
 }
 
 // Rates implements the core.QuotaPlugin interface.
-func (p *cinderPlugin) Rates() []limesrates.RateInfo {
+func (p *cinderPlugin) Rates() map[db.RateName]core.RateInfo {
 	return nil
 }
 
-func (p *cinderPlugin) makeResourceName(kind, volumeType string) limesresources.ResourceName {
+func (p *cinderPlugin) makeResourceName(kind, volumeType string) liquid.ResourceName {
 	if p.VolumeTypes[0] == volumeType {
 		// the resources for the first volume type don't get the volume type suffix
 		// for backwards compatibility reasons
-		return limesresources.ResourceName(kind)
+		return liquid.ResourceName(kind)
 	}
-	return limesresources.ResourceName(kind + "_" + volumeType)
+	return liquid.ResourceName(kind + "_" + volumeType)
 }
 
 type quotaSetField struct {
@@ -144,12 +143,12 @@ func (f quotaSetField) ToResourceData(allAZs []limes.AvailabilityZone) core.Reso
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *cinderPlugin) ScrapeRates(ctx context.Context, project core.KeystoneProject, prevSerializedState string) (result map[limesrates.RateName]*big.Int, serializedState string, err error) {
+func (p *cinderPlugin) ScrapeRates(ctx context.Context, project core.KeystoneProject, prevSerializedState string) (result map[db.RateName]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *cinderPlugin) Scrape(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]core.ResourceData, _ []byte, err error) {
+func (p *cinderPlugin) Scrape(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[liquid.ResourceName]core.ResourceData, _ []byte, err error) {
 	var data struct {
 		QuotaSet map[string]quotaSetField `json:"quota_set"`
 	}
@@ -158,7 +157,7 @@ func (p *cinderPlugin) Scrape(ctx context.Context, project core.KeystoneProject,
 		return nil, nil, err
 	}
 
-	result = make(map[limesresources.ResourceName]core.ResourceData)
+	result = make(map[liquid.ResourceName]core.ResourceData)
 	for _, volumeType := range p.VolumeTypes {
 		result[p.makeResourceName("capacity", volumeType)] = data.QuotaSet["gigabytes_"+volumeType].ToResourceData(allAZs)
 		result[p.makeResourceName("snapshots", volumeType)] = data.QuotaSet["snapshots_"+volumeType].ToResourceData(allAZs)
@@ -212,7 +211,7 @@ type cinderSnapshotSubresource struct {
 	VolumeUUID string              `json:"volume_id"`
 }
 
-func (p *cinderPlugin) collectVolumeSubresources(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone, result map[limesresources.ResourceName]core.ResourceData) (placementForVolumeUUID map[string]cinderVolumePlacement, err error) {
+func (p *cinderPlugin) collectVolumeSubresources(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone, result map[liquid.ResourceName]core.ResourceData) (placementForVolumeUUID map[string]cinderVolumePlacement, err error) {
 	placementForVolumeUUID = make(map[string]cinderVolumePlacement)
 	listOpts := volumes.ListOpts{
 		AllTenants: true,
@@ -259,7 +258,7 @@ func (p *cinderPlugin) collectVolumeSubresources(ctx context.Context, project co
 	return placementForVolumeUUID, err
 }
 
-func (p *cinderPlugin) collectSnapshotSubresources(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone, placementForVolumeUUID map[string]cinderVolumePlacement, result map[limesresources.ResourceName]core.ResourceData) error {
+func (p *cinderPlugin) collectSnapshotSubresources(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone, placementForVolumeUUID map[string]cinderVolumePlacement, result map[liquid.ResourceName]core.ResourceData) error {
 	listOpts := snapshots.ListOpts{
 		AllTenants: true,
 		TenantID:   project.UUID,
@@ -302,7 +301,7 @@ func (p *cinderPlugin) collectSnapshotSubresources(ctx context.Context, project 
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *cinderPlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
+func (p *cinderPlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotas map[liquid.ResourceName]uint64) error {
 	var requestData struct {
 		QuotaSet map[string]uint64 `json:"quota_set"`
 	}

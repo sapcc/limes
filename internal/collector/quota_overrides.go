@@ -27,8 +27,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/sapcc/go-api-declarations/limes"
-	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/sqlext"
 
@@ -81,8 +80,8 @@ func (c *Collector) applyQuotaOverrides(_ context.Context, _ prometheus.Labels) 
 			resourceID   db.ProjectResourceID
 			domainName   string
 			projectName  string
-			serviceType  limes.ServiceType
-			resourceName limesresources.ResourceName
+			serviceType  db.ServiceType
+			resourceName liquid.ResourceName
 		)
 		err := rows.Scan(&resourceID, &domainName, &projectName, &serviceType, &resourceName)
 		if err != nil {
@@ -130,7 +129,7 @@ var (
 	`)
 )
 
-func (c *Collector) aqoUpdateOneProjectService(domainName, projectName string, serviceType limes.ServiceType, overrides map[limesresources.ResourceName]uint64) error {
+func (c *Collector) aqoUpdateOneProjectService(domainName, projectName string, serviceType db.ServiceType, overrides map[liquid.ResourceName]uint64) error {
 	// find project service
 	var serviceID db.ProjectServiceID
 	err := c.DB.QueryRow(aqoSelectServiceQuery, domainName, projectName, serviceType).Scan(&serviceID)

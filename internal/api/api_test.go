@@ -36,6 +36,7 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/sqlext"
@@ -59,10 +60,8 @@ const (
 				type: --test-generic
 				params:
 					rate_infos:
-						- name:   service/shared/objects:delete
-							unit:   MiB
-						- name:   service/shared/objects:unlimited
-							unit:   KiB
+						"service/shared/objects:delete":    { unit: MiB }
+						"service/shared/objects:unlimited": { unit: KiB }
 				rate_limits:
 					global:
 						- name:   service/shared/objects:create
@@ -86,7 +85,7 @@ const (
 				type: --test-generic
 				params:
 					rate_infos:
-						- name:   service/unshared/instances:delete
+						"service/unshared/instances:delete": {}
 				rate_limits:
 					project_default:
 						- name:   service/unshared/instances:create
@@ -802,7 +801,7 @@ func Test_LargeProjectList(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, serviceType := range []limes.ServiceType{"shared", "unshared"} {
+		for _, serviceType := range []db.ServiceType{"shared", "unshared"} {
 			service := db.ProjectService{
 				ProjectID:      project.ID,
 				Type:           serviceType,
@@ -815,7 +814,7 @@ func Test_LargeProjectList(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			for _, resourceName := range []limesresources.ResourceName{"things", "capacity"} {
+			for _, resourceName := range []liquid.ResourceName{"things", "capacity"} {
 				resource := db.ProjectResource{
 					ServiceID:    service.ID,
 					Name:         resourceName,
@@ -930,7 +929,7 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/max-quota",
 		Body:         makeRequest("unknown", assert.JSONObject{"name": "things", "max_quota": 1000}),
 		ExpectStatus: http.StatusUnprocessableEntity,
-		ExpectBody:   assert.StringData("no such service: unknown\n"),
+		ExpectBody:   assert.StringData("no such service and/or resource: unknown/things\n"),
 	}.Check(t, s.Handler)
 
 	// error case: invalid resource
@@ -939,7 +938,7 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/max-quota",
 		Body:         makeRequest("shared", assert.JSONObject{"name": "items", "max_quota": 1000}),
 		ExpectStatus: http.StatusUnprocessableEntity,
-		ExpectBody:   assert.StringData("no such resource: shared/items\n"),
+		ExpectBody:   assert.StringData("no such service and/or resource: shared/items\n"),
 	}.Check(t, s.Handler)
 
 	// error case: resource does not track quota

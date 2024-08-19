@@ -29,11 +29,10 @@ import (
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
-	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
-	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 
 	"github.com/sapcc/limes/internal/core"
+	"github.com/sapcc/limes/internal/db"
 )
 
 func init() {
@@ -44,15 +43,15 @@ func init() {
 // mostly reports static data and offers several controls to simulate failed
 // operations.
 type GenericQuotaPlugin struct {
-	ServiceType        limes.ServiceType                                  `yaml:"-"`
-	StaticRateInfos    []limesrates.RateInfo                              `yaml:"rate_infos"`
-	StaticResourceData map[limesresources.ResourceName]*core.ResourceData `yaml:"-"`
-	OverrideQuota      map[string]map[limesresources.ResourceName]uint64  `yaml:"-"` // first key is project UUID
+	ServiceType        db.ServiceType                             `yaml:"-"`
+	StaticRateInfos    map[db.RateName]core.RateInfo              `yaml:"rate_infos"`
+	StaticResourceData map[liquid.ResourceName]*core.ResourceData `yaml:"-"`
+	OverrideQuota      map[string]map[liquid.ResourceName]uint64  `yaml:"-"` // first key is project UUID
 	// behavior flags that can be set by a unit test
-	ScrapeFails   bool                                   `yaml:"-"`
-	SetQuotaFails bool                                   `yaml:"-"`
-	MinQuota      map[limesresources.ResourceName]uint64 `yaml:"-"`
-	MaxQuota      map[limesresources.ResourceName]uint64 `yaml:"-"`
+	ScrapeFails   bool                           `yaml:"-"`
+	SetQuotaFails bool                           `yaml:"-"`
+	MinQuota      map[liquid.ResourceName]uint64 `yaml:"-"`
+	MaxQuota      map[liquid.ResourceName]uint64 `yaml:"-"`
 }
 
 var resources = map[liquid.ResourceName]liquid.ResourceInfo{
@@ -62,9 +61,9 @@ var resources = map[liquid.ResourceName]liquid.ResourceInfo{
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *GenericQuotaPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType limes.ServiceType) error {
+func (p *GenericQuotaPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType db.ServiceType) error {
 	p.ServiceType = serviceType
-	p.StaticResourceData = map[limesresources.ResourceName]*core.ResourceData{
+	p.StaticResourceData = map[liquid.ResourceName]*core.ResourceData{
 		"things": {
 			Quota: 42,
 			UsageData: core.PerAZ[core.UsageData]{
@@ -80,7 +79,7 @@ func (p *GenericQuotaPlugin) Init(ctx context.Context, provider *gophercloud.Pro
 			},
 		},
 	}
-	p.OverrideQuota = make(map[string]map[limesresources.ResourceName]uint64)
+	p.OverrideQuota = make(map[string]map[liquid.ResourceName]uint64)
 	return nil
 }
 
@@ -103,47 +102,47 @@ func (p *GenericQuotaPlugin) Resources() map[liquid.ResourceName]liquid.Resource
 }
 
 // Rates implements the core.QuotaPlugin interface.
-func (p *GenericQuotaPlugin) Rates() []limesrates.RateInfo {
+func (p *GenericQuotaPlugin) Rates() map[db.RateName]core.RateInfo {
 	return p.StaticRateInfos
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *GenericQuotaPlugin) ScrapeRates(ctx context.Context, project core.KeystoneProject, prevSerializedState string) (result map[limesrates.RateName]*big.Int, serializedState string, err error) {
+func (p *GenericQuotaPlugin) ScrapeRates(ctx context.Context, project core.KeystoneProject, prevSerializedState string) (result map[db.RateName]*big.Int, serializedState string, err error) {
 	if p.ScrapeFails {
 		return nil, "", errors.New("ScrapeRates failed as requested")
 	}
 
 	// this dummy implementation lets itself be influenced by the existing state, but also alters it a bit
-	state := make(map[limesrates.RateName]int64)
+	state := make(map[db.RateName]int64)
 	if prevSerializedState == "" {
-		for _, rate := range p.StaticRateInfos {
-			state[rate.Name] = 0
+		for rateName := range p.StaticRateInfos {
+			state[rateName] = 0
 		}
 	} else {
 		err := json.Unmarshal([]byte(prevSerializedState), &state)
 		if err != nil {
 			return nil, "", err
 		}
-		for _, rate := range p.StaticRateInfos {
-			state[rate.Name] += 1024
+		for rateName := range p.StaticRateInfos {
+			state[rateName] += 1024
 		}
 	}
 
-	result = make(map[limesrates.RateName]*big.Int)
-	for _, rate := range p.StaticRateInfos {
-		result[rate.Name] = big.NewInt(state[rate.Name] + int64(len(rate.Name)))
+	result = make(map[db.RateName]*big.Int)
+	for rateName := range p.StaticRateInfos {
+		result[rateName] = big.NewInt(state[rateName] + int64(len(rateName)))
 	}
 	serializedStateBytes, _ := json.Marshal(state) //nolint:errcheck
 	return result, string(serializedStateBytes), nil
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *GenericQuotaPlugin) Scrape(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
+func (p *GenericQuotaPlugin) Scrape(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[liquid.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
 	if p.ScrapeFails {
 		return nil, nil, errors.New("Scrape failed as requested")
 	}
 
-	result = make(map[limesresources.ResourceName]core.ResourceData)
+	result = make(map[liquid.ResourceName]core.ResourceData)
 	for key, val := range p.StaticResourceData {
 		copyOfVal := core.ResourceData{
 			Quota:     val.Quota,
@@ -212,7 +211,7 @@ func (p *GenericQuotaPlugin) Scrape(ctx context.Context, project core.KeystonePr
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *GenericQuotaPlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
+func (p *GenericQuotaPlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotas map[liquid.ResourceName]uint64) error {
 	if p.SetQuotaFails {
 		return errors.New("SetQuota failed as requested")
 	}

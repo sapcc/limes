@@ -27,11 +27,10 @@ import (
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
-	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
-	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 
 	"github.com/sapcc/limes/internal/core"
+	"github.com/sapcc/limes/internal/db"
 )
 
 type archerPlugin struct {
@@ -55,7 +54,7 @@ func init() {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *archerPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType limes.ServiceType) error {
+func (p *archerPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType db.ServiceType) error {
 	eo.ApplyDefaults(string(serviceType))
 
 	url, err := provider.EndpointLocator(eo)
@@ -89,12 +88,12 @@ func (p *archerPlugin) Resources() map[liquid.ResourceName]liquid.ResourceInfo {
 }
 
 // Rates implements the core.QuotaPlugin interface.
-func (p *archerPlugin) Rates() []limesrates.RateInfo {
+func (p *archerPlugin) Rates() map[db.RateName]core.RateInfo {
 	return nil
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *archerPlugin) Scrape(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
+func (p *archerPlugin) Scrape(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[liquid.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
 	url := p.Archer.ServiceURL("quotas", project.UUID)
 	var res gophercloud.Result
 	//nolint:bodyclose // already closed by gophercloud
@@ -110,7 +109,7 @@ func (p *archerPlugin) Scrape(ctx context.Context, project core.KeystoneProject,
 		return nil, nil, err
 	}
 
-	result = map[limesresources.ResourceName]core.ResourceData{
+	result = map[liquid.ResourceName]core.ResourceData{
 		"endpoints": {
 			Quota: archerQuota.Endpoint,
 			UsageData: core.InAnyAZ(core.UsageData{
@@ -128,7 +127,7 @@ func (p *archerPlugin) Scrape(ctx context.Context, project core.KeystoneProject,
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *archerPlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
+func (p *archerPlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotas map[liquid.ResourceName]uint64) error {
 	url := p.Archer.ServiceURL("quotas", project.UUID)
 	expect200 := &gophercloud.RequestOpts{OkCodes: []int{200}}
 
@@ -142,7 +141,7 @@ func (p *archerPlugin) SetQuota(ctx context.Context, project core.KeystoneProjec
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *archerPlugin) ScrapeRates(ctx context.Context, project core.KeystoneProject, prevSerializedState string) (result map[limesrates.RateName]*big.Int, serializedState string, err error) {
+func (p *archerPlugin) ScrapeRates(ctx context.Context, project core.KeystoneProject, prevSerializedState string) (result map[db.RateName]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 

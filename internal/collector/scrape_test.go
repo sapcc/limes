@@ -29,6 +29,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/jobloop"
@@ -188,8 +189,8 @@ func Test_ScrapeSuccess(t *testing.T) {
 
 	// check reporting of MinQuotaFromBackend/MaxQuotaFromBackend
 	s.Clock.StepBy(scrapeInterval)
-	plugin.MinQuota = map[limesresources.ResourceName]uint64{"capacity": 10}
-	plugin.MaxQuota = map[limesresources.ResourceName]uint64{"things": 1000}
+	plugin.MinQuota = map[liquid.ResourceName]uint64{"capacity": 10}
+	plugin.MaxQuota = map[liquid.ResourceName]uint64{"things": 1000}
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 

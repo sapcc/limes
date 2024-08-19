@@ -27,7 +27,7 @@ import (
 
 	"github.com/go-gorp/gorp/v3"
 	"github.com/sapcc/go-api-declarations/limes"
-	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
 
@@ -92,7 +92,7 @@ func (c *projectLocalQuotaConstraints) AddMaxQuota(value *uint64) {
 
 // ApplyComputedProjectQuota reevaluates auto-computed project quotas for the
 // given resource, if supported by its quota distribution model.
-func ApplyComputedProjectQuota(serviceType limes.ServiceType, resourceName limesresources.ResourceName, dbm *gorp.DbMap, cluster *core.Cluster, now time.Time) error {
+func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.ResourceName, dbm *gorp.DbMap, cluster *core.Cluster, now time.Time) error {
 	// only run for resources with quota and autogrow QD model
 	resInfo := cluster.InfoForResource(serviceType, resourceName)
 	if !resInfo.HasQuota {

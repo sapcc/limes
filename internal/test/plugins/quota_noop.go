@@ -26,11 +26,10 @@ import (
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
-	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
-	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 
 	"github.com/sapcc/limes/internal/core"
+	"github.com/sapcc/limes/internal/db"
 )
 
 func init() {
@@ -44,13 +43,13 @@ func init() {
 // with no UsageData at all (not even zero, the UsageData map just does not
 // have any entries at all).
 type NoopQuotaPlugin struct {
-	ServiceType            limes.ServiceType `yaml:"-"`
-	WithEmptyResource      bool              `yaml:"with_empty_resource"`
-	WithConvertCommitments bool              `yaml:"with_convert_commitments"`
+	ServiceType            db.ServiceType `yaml:"-"`
+	WithEmptyResource      bool           `yaml:"with_empty_resource"`
+	WithConvertCommitments bool           `yaml:"with_convert_commitments"`
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *NoopQuotaPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType limes.ServiceType) error {
+func (p *NoopQuotaPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType db.ServiceType) error {
 	p.ServiceType = serviceType
 	return nil
 }
@@ -88,12 +87,12 @@ func (p *NoopQuotaPlugin) Resources() map[liquid.ResourceName]liquid.ResourceInf
 }
 
 // Rates implements the core.QuotaPlugin interface.
-func (p *NoopQuotaPlugin) Rates() []limesrates.RateInfo {
+func (p *NoopQuotaPlugin) Rates() map[db.RateName]core.RateInfo {
 	return nil
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *NoopQuotaPlugin) ScrapeRates(ctx context.Context, project core.KeystoneProject, prevSerializedState string) (result map[limesrates.RateName]*big.Int, serializedState string, err error) {
+func (p *NoopQuotaPlugin) ScrapeRates(ctx context.Context, project core.KeystoneProject, prevSerializedState string) (result map[db.RateName]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
@@ -107,9 +106,9 @@ func (p *NoopQuotaPlugin) CollectMetrics(ch chan<- prometheus.Metric, project co
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *NoopQuotaPlugin) Scrape(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
+func (p *NoopQuotaPlugin) Scrape(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[liquid.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
 	if p.WithEmptyResource {
-		result = map[limesresources.ResourceName]core.ResourceData{
+		result = map[liquid.ResourceName]core.ResourceData{
 			"things": {}, // no usage at all (this is used to test that the scraper adds a zero entry for AZ "any")
 		}
 	}
@@ -117,6 +116,6 @@ func (p *NoopQuotaPlugin) Scrape(ctx context.Context, project core.KeystoneProje
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *NoopQuotaPlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
+func (p *NoopQuotaPlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotas map[liquid.ResourceName]uint64) error {
 	return nil
 }

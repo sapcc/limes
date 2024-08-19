@@ -30,6 +30,7 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/internal/core"
@@ -88,6 +89,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 	if project != nil {
 		fields["p.id"] = project.ID
 	}
+	nm := core.BuildNameMapping(cluster)
 
 	// first, query for basic project information
 	//
@@ -127,9 +129,9 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 	err = sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		var (
 			projectID         db.ProjectID
-			dbServiceType     limes.ServiceType
+			dbServiceType     db.ServiceType
 			scrapedAt         *time.Time
-			dbResourceName    limesresources.ResourceName
+			dbResourceName    liquid.ResourceName
 			quota             *uint64
 			maxQuotaFromAdmin *uint64
 			az                *limes.AvailabilityZone
@@ -157,7 +159,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 		// if we're moving to a different project, publish the finished report
 		// first (and then allow for it to be GCd)
 		if projectReport != nil && currentProjectID != projectID {
-			err := finalizeProjectResourceReport(projectReport, currentProjectID, dbi, filter)
+			err := finalizeProjectResourceReport(projectReport, currentProjectID, dbi, filter, nm)
 			if err != nil {
 				return err
 			}
@@ -284,7 +286,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 
 	// submit final non-empty project report
 	if projectReport != nil {
-		err := finalizeProjectResourceReport(projectReport, currentProjectID, dbi, filter)
+		err := finalizeProjectResourceReport(projectReport, currentProjectID, dbi, filter, nm)
 		if err != nil {
 			return err
 		}
@@ -313,29 +315,32 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 	return nil
 }
 
-func finalizeProjectResourceReport(projectReport *limesresources.ProjectReport, projectID db.ProjectID, dbi db.Interface, filter Filter) error {
+func finalizeProjectResourceReport(projectReport *limesresources.ProjectReport, projectID db.ProjectID, dbi db.Interface, filter Filter, nm core.NameMapping) error {
 	if filter.WithAZBreakdown {
 		// if `per_az` is shown, we need to compute the sum of all active commitments using a different query
 		err := sqlext.ForeachRow(dbi, projectReportCommitmentsQuery, []any{projectID}, func(rows *sql.Rows) error {
 			var (
-				serviceType   limes.ServiceType
-				resourceName  limesresources.ResourceName
-				az            limes.AvailabilityZone
-				duration      limesresources.CommitmentDuration
-				activeAmount  uint64
-				pendingAmount uint64
-				plannedAmount uint64
+				dbServiceType  db.ServiceType
+				dbResourceName liquid.ResourceName
+				az             limes.AvailabilityZone
+				duration       limesresources.CommitmentDuration
+				activeAmount   uint64
+				pendingAmount  uint64
+				plannedAmount  uint64
 			)
-			err := rows.Scan(&serviceType, &resourceName, &az, &duration, &activeAmount, &pendingAmount, &plannedAmount)
+			err := rows.Scan(&dbServiceType, &dbResourceName, &az, &duration, &activeAmount, &pendingAmount, &plannedAmount)
 			if err != nil {
 				return err
 			}
-
-			srvReport := projectReport.Services[serviceType]
+			apiServiceType, apiResourceName, exists := nm.MapResourceToV1API(dbServiceType, dbResourceName)
+			if !exists {
+				return nil
+			}
+			srvReport := projectReport.Services[apiServiceType]
 			if srvReport == nil {
 				return nil
 			}
-			resReport := srvReport.Resources[resourceName]
+			resReport := srvReport.Resources[apiResourceName]
 			if resReport == nil {
 				return nil
 			}
@@ -394,6 +399,7 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 	if project != nil {
 		fields["p.id"] = project.ID
 	}
+	nm := core.BuildNameMapping(cluster)
 
 	// first, query for basic project information
 	//
@@ -426,16 +432,16 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 	err = sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		var (
 			projectID      db.ProjectID
-			serviceType    limes.ServiceType
+			dbServiceType  db.ServiceType
 			ratesScrapedAt *time.Time
-			rateName       limesrates.RateName
+			dbRateName     db.RateName
 			limit          *uint64
 			window         *limesrates.Window
 			usageAsBigint  *string
 		)
 		err := rows.Scan(
-			&projectID, &serviceType, &ratesScrapedAt,
-			&rateName, &limit, &window, &usageAsBigint,
+			&projectID, &dbServiceType, &ratesScrapedAt,
+			&dbRateName, &limit, &window, &usageAsBigint,
 		)
 		if err != nil {
 			return err
@@ -463,22 +469,23 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 				currentProjectID = 0
 				return nil
 			}
-			projectReport = initProjectRateReport(projectInfo, cluster)
+			projectReport = initProjectRateReport(projectInfo, cluster, nm)
 		}
 
 		// if we don't have a valid service type, we're done with this result row
-		if !cluster.HasService(serviceType) {
+		if !cluster.HasService(dbServiceType) {
 			return nil
 		}
+		apiServiceType, apiRateName := nm.MapRateToV1API(dbServiceType, dbRateName)
 
 		// start new service report when necessary
-		srvReport := projectReport.Services[serviceType]
+		srvReport := projectReport.Services[apiServiceType]
 		if srvReport == nil {
 			srvReport = &limesrates.ProjectServiceReport{
-				ServiceInfo: cluster.InfoForService(serviceType).ForAPI(serviceType),
+				ServiceInfo: cluster.InfoForService(dbServiceType).ForAPI(apiServiceType),
 				Rates:       make(limesrates.ProjectRateReports),
 			}
-			projectReport.Services[serviceType] = srvReport
+			projectReport.Services[apiServiceType] = srvReport
 		}
 
 		if ratesScrapedAt != nil {
@@ -489,12 +496,12 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 		// create the rate report if necessary (rates with a limit will already have
 		// one because of the default rate limit, so this is only relevant for
 		// rates that only have a usage)
-		rateReport := srvReport.Rates[rateName]
-		if rateReport == nil && usageAsBigint != nil && *usageAsBigint != "" && cluster.HasUsageForRate(serviceType, rateName) {
+		rateReport := srvReport.Rates[apiRateName]
+		if rateReport == nil && usageAsBigint != nil && *usageAsBigint != "" && cluster.HasUsageForRate(dbServiceType, dbRateName) {
 			rateReport = &limesrates.ProjectRateReport{
-				RateInfo: cluster.InfoForRate(serviceType, rateName),
+				RateInfo: cluster.InfoForRate(dbServiceType, dbRateName).ForAPI(apiRateName),
 			}
-			srvReport.Rates[rateName] = rateReport
+			srvReport.Rates[apiRateName] = rateReport
 		}
 
 		// fill remaining data into rate report
@@ -531,7 +538,7 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 	// (e.g. because the request filter was for `?service=none`)
 	emptyProjectReports := make([]*limesrates.ProjectReport, 0, len(allProjectInfos))
 	for _, projectInfo := range allProjectInfos {
-		emptyProjectReports = append(emptyProjectReports, initProjectRateReport(projectInfo, cluster))
+		emptyProjectReports = append(emptyProjectReports, initProjectRateReport(projectInfo, cluster, nm))
 	}
 	slices.SortFunc(emptyProjectReports, func(lhs, rhs *limesrates.ProjectReport) int {
 		return strings.Compare(lhs.UUID, rhs.UUID)
@@ -547,26 +554,28 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 }
 
 // Builds a fresh ProjectReport with default rate-limits pre-filled from the cluster config.
-func initProjectRateReport(projectInfo limes.ProjectInfo, cluster *core.Cluster) *limesrates.ProjectReport {
+func initProjectRateReport(projectInfo limes.ProjectInfo, cluster *core.Cluster, nm core.NameMapping) *limesrates.ProjectReport {
 	report := limesrates.ProjectReport{
 		ProjectInfo: projectInfo,
 		Services:    make(limesrates.ProjectServiceReports),
 	}
 
 	for _, srvConfig := range cluster.Config.Services {
-		serviceType := srvConfig.ServiceType
-		srvReport := report.Services[serviceType]
-		if srvReport == nil {
-			srvReport = &limesrates.ProjectServiceReport{
-				ServiceInfo: cluster.InfoForService(serviceType).ForAPI(serviceType),
-				Rates:       make(limesrates.ProjectRateReports),
-			}
-			report.Services[serviceType] = srvReport
-		}
-
+		dbServiceType := srvConfig.ServiceType
 		for _, rateLimitConfig := range srvConfig.RateLimits.ProjectDefault {
-			srvReport.Rates[rateLimitConfig.Name] = &limesrates.ProjectRateReport{
-				RateInfo: cluster.InfoForRate(serviceType, rateLimitConfig.Name),
+			apiServiceType, apiRateName := nm.MapRateToV1API(dbServiceType, rateLimitConfig.Name)
+
+			srvReport := report.Services[apiServiceType]
+			if srvReport == nil {
+				srvReport = &limesrates.ProjectServiceReport{
+					ServiceInfo: cluster.InfoForService(dbServiceType).ForAPI(apiServiceType),
+					Rates:       make(limesrates.ProjectRateReports),
+				}
+				report.Services[apiServiceType] = srvReport
+			}
+
+			srvReport.Rates[apiRateName] = &limesrates.ProjectRateReport{
+				RateInfo: cluster.InfoForRate(dbServiceType, rateLimitConfig.Name).ForAPI(apiRateName),
 				Limit:    rateLimitConfig.Limit,
 				Window:   &rateLimitConfig.Window,
 			}
