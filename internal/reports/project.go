@@ -37,20 +37,16 @@ import (
 	"github.com/sapcc/limes/internal/util"
 )
 
-// NOTE: Both queries use LEFT OUTER JOIN to generate at least one result row
-// per known project, to ensure that each project gets a report even if its
-// resource data and/or rate data is incomplete.
-//
 // Both queries are "ORDER BY p.uuid" to ensure that a) the output order is
 // reproducible to keep the tests happy and b) records for the same project
 // appear in a cluster, so that the implementation can publish completed
 // project reports (and then reclaim their memory usage) as soon as possible.
 var (
 	projectRateReportQuery = sqlext.SimplifyWhitespace(`
-	SELECT p.uuid, p.name, COALESCE(p.parent_uuid, ''), ps.type, ps.rates_scraped_at, pra.name, pra.rate_limit, pra.window_ns, pra.usage_as_bigint
+	SELECT p.id, ps.type, ps.rates_scraped_at, pra.name, pra.rate_limit, pra.window_ns, pra.usage_as_bigint
 	  FROM projects p
-	  LEFT OUTER JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
-	  LEFT OUTER JOIN project_rates pra ON pra.service_id = ps.id
+	  JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
+	  JOIN project_rates pra ON pra.service_id = ps.id
 	 WHERE %s
 	 ORDER BY p.uuid
 `)
@@ -399,26 +395,46 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 		fields["p.id"] = project.ID
 	}
 
+	// first, query for basic project information
+	//
+	// (this is important because a filter like `?service=none` is supported,
+	// but will yield no results at all in the other queries)
+	whereStr, whereArgs := db.BuildSimpleWhereClause(fields, 0)
+	queryStr := `SELECT * FROM projects p WHERE ` + whereStr
+	var allProjects []db.Project
+	_, err := dbi.Select(&allProjects, queryStr, whereArgs...)
+	if err != nil {
+		return err
+	}
+	allProjectInfos := make(map[db.ProjectID]limes.ProjectInfo, len(allProjects))
+	for _, project := range allProjects {
+		allProjectInfos[project.ID] = limes.ProjectInfo{
+			Name:       project.Name,
+			UUID:       project.UUID,
+			ParentUUID: project.ParentUUID,
+		}
+	}
+
 	// query for rate data
 	queryStr, joinArgs := filter.PrepareQuery(projectRateReportQuery)
-	whereStr, whereArgs := db.BuildSimpleWhereClause(fields, len(joinArgs))
+	whereStr, whereArgs = db.BuildSimpleWhereClause(fields, len(joinArgs))
 
-	var projectReport *limesrates.ProjectReport
-	err := sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
+	var (
+		currentProjectID db.ProjectID
+		projectReport    *limesrates.ProjectReport
+	)
+	err = sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		var (
-			projectUUID       string
-			projectName       string
-			projectParentUUID string
-			serviceType       *limes.ServiceType
-			ratesScrapedAt    *time.Time
-			rateName          *limesrates.RateName
-			limit             *uint64
-			window            *limesrates.Window
-			usageAsBigint     *string
+			projectID      db.ProjectID
+			serviceType    limes.ServiceType
+			ratesScrapedAt *time.Time
+			rateName       limesrates.RateName
+			limit          *uint64
+			window         *limesrates.Window
+			usageAsBigint  *string
 		)
 		err := rows.Scan(
-			&projectUUID, &projectName, &projectParentUUID,
-			&serviceType, &ratesScrapedAt,
+			&projectID, &serviceType, &ratesScrapedAt,
 			&rateName, &limit, &window, &usageAsBigint,
 		)
 		if err != nil {
@@ -427,7 +443,7 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 
 		// if we're moving to a different project, publish the finished report
 		// first (and then allow for it to be GCd)
-		if projectReport != nil && projectReport.UUID != projectUUID {
+		if projectReport != nil && currentProjectID != projectID {
 			err := submit(projectReport)
 			if err != nil {
 				return err
@@ -437,64 +453,48 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 
 		// start new project report when necessary
 		if projectReport == nil {
-			projectReport = &limesrates.ProjectReport{
-				ProjectInfo: limes.ProjectInfo{
-					Name:       projectName,
-					UUID:       projectUUID,
-					ParentUUID: projectParentUUID,
-				},
-				Services: make(limesrates.ProjectServiceReports),
+			projectInfo, exists := allProjectInfos[projectID]
+			delete(allProjectInfos, projectID)
+			if exists {
+				currentProjectID = projectID
+			} else {
+				// this can happen if a project was inserted between the first and second query;
+				// ignore those projects because we don't have complete information about them
+				currentProjectID = 0
+				return nil
 			}
+			projectReport = initProjectRateReport(projectInfo, cluster)
 		}
 
 		// if we don't have a valid service type, we're done with this result row
-		if serviceType == nil || !cluster.HasService(*serviceType) {
+		if !cluster.HasService(serviceType) {
 			return nil
 		}
 
 		// start new service report when necessary
-		srvReport := projectReport.Services[*serviceType]
+		srvReport := projectReport.Services[serviceType]
 		if srvReport == nil {
 			srvReport = &limesrates.ProjectServiceReport{
-				ServiceInfo: cluster.InfoForService(*serviceType).ForAPI(*serviceType),
+				ServiceInfo: cluster.InfoForService(serviceType).ForAPI(serviceType),
 				Rates:       make(limesrates.ProjectRateReports),
 			}
-			projectReport.Services[*serviceType] = srvReport
-
-			if ratesScrapedAt != nil {
-				t := limes.UnixEncodedTime{Time: *ratesScrapedAt}
-				srvReport.ScrapedAt = &t
-			}
-
-			// fill new service report with default rate limits
-			if svcConfig, err := cluster.Config.GetServiceConfigurationForType(*serviceType); err == nil {
-				if len(svcConfig.RateLimits.ProjectDefault) > 0 {
-					srvReport.Rates = make(limesrates.ProjectRateReports, len(svcConfig.RateLimits.ProjectDefault))
-					for _, rateLimit := range svcConfig.RateLimits.ProjectDefault {
-						srvReport.Rates[rateLimit.Name] = &limesrates.ProjectRateReport{
-							RateInfo: cluster.InfoForRate(srvReport.Type, rateLimit.Name),
-							Limit:    rateLimit.Limit,
-							Window:   pointerTo(rateLimit.Window),
-						}
-					}
-				}
-			}
+			projectReport.Services[serviceType] = srvReport
 		}
 
-		// if we don't have a rate name, we're done with this result row
-		if rateName == nil {
-			return nil
+		if ratesScrapedAt != nil {
+			t := limes.UnixEncodedTime{Time: *ratesScrapedAt}
+			srvReport.ScrapedAt = &t
 		}
 
 		// create the rate report if necessary (rates with a limit will already have
-		// one because of the default rate limit that was applied above, so this is
-		// only relevant for rates that only have a usage)
-		rateReport := srvReport.Rates[*rateName]
-		if rateReport == nil && usageAsBigint != nil && *usageAsBigint != "" && cluster.HasUsageForRate(*serviceType, *rateName) {
+		// one because of the default rate limit, so this is only relevant for
+		// rates that only have a usage)
+		rateReport := srvReport.Rates[rateName]
+		if rateReport == nil && usageAsBigint != nil && *usageAsBigint != "" && cluster.HasUsageForRate(serviceType, rateName) {
 			rateReport = &limesrates.ProjectRateReport{
-				RateInfo: cluster.InfoForRate(*serviceType, *rateName),
+				RateInfo: cluster.InfoForRate(serviceType, rateName),
 			}
-			srvReport.Rates[*rateName] = rateReport
+			srvReport.Rates[rateName] = rateReport
 		}
 
 		// fill remaining data into rate report
@@ -522,9 +522,56 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 		return err
 	}
 
-	// submit final project report
+	// submit final non-empty project report
 	if projectReport != nil {
 		return submit(projectReport)
 	}
+
+	// submit all project reports that did not have any resource data on them
+	// (e.g. because the request filter was for `?service=none`)
+	emptyProjectReports := make([]*limesrates.ProjectReport, 0, len(allProjectInfos))
+	for _, projectInfo := range allProjectInfos {
+		emptyProjectReports = append(emptyProjectReports, initProjectRateReport(projectInfo, cluster))
+	}
+	slices.SortFunc(emptyProjectReports, func(lhs, rhs *limesrates.ProjectReport) int {
+		return strings.Compare(lhs.UUID, rhs.UUID)
+	})
+	for _, projectReport := range emptyProjectReports {
+		err = submit(projectReport)
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
+}
+
+// Builds a fresh ProjectReport with default rate-limits pre-filled from the cluster config.
+func initProjectRateReport(projectInfo limes.ProjectInfo, cluster *core.Cluster) *limesrates.ProjectReport {
+	report := limesrates.ProjectReport{
+		ProjectInfo: projectInfo,
+		Services:    make(limesrates.ProjectServiceReports),
+	}
+
+	for _, srvConfig := range cluster.Config.Services {
+		serviceType := srvConfig.ServiceType
+		srvReport := report.Services[serviceType]
+		if srvReport == nil {
+			srvReport = &limesrates.ProjectServiceReport{
+				ServiceInfo: cluster.InfoForService(serviceType).ForAPI(serviceType),
+				Rates:       make(limesrates.ProjectRateReports),
+			}
+			report.Services[serviceType] = srvReport
+		}
+
+		for _, rateLimitConfig := range srvConfig.RateLimits.ProjectDefault {
+			srvReport.Rates[rateLimitConfig.Name] = &limesrates.ProjectRateReport{
+				RateInfo: cluster.InfoForRate(serviceType, rateLimitConfig.Name),
+				Limit:    rateLimitConfig.Limit,
+				Window:   &rateLimitConfig.Window,
+			}
+		}
+	}
+
+	return &report
 }
