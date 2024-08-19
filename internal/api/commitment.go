@@ -91,7 +91,7 @@ var (
 	`)
 	findCommitmentByTransferToken = sqlext.SimplifyWhitespace(`
 		SELECT * FROM project_commitments WHERE transfer_token = $1
-   `)
+	`)
 	findTargetAZResourceIDBySourceIDQuery = sqlext.SimplifyWhitespace(`
 		WITH source as (
 		SELECT pr.id AS resource_id, ps.type, pr.name, par.az
