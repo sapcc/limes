@@ -21,6 +21,7 @@ package plugins
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 
@@ -35,8 +36,9 @@ import (
 )
 
 type capacityPrometheusPlugin struct {
-	APIConfig promquery.Config                                             `yaml:"api"`
-	Queries   map[limes.ServiceType]map[limesresources.ResourceName]string `yaml:"queries"`
+	APIConfig         promquery.Config                                             `yaml:"api"`
+	Queries           map[limes.ServiceType]map[limesresources.ResourceName]string `yaml:"queries"`
+	AllowZeroCapacity bool                                                         `yaml:"allow_zero_capacity"`
 }
 
 func init() {
@@ -116,6 +118,18 @@ func (p *capacityPrometheusPlugin) scrapeOneResource(ctx context.Context, client
 			Capacity: uint64(unmatchedCapacity),
 		}
 	}
+
+	// validate result
+	if !p.AllowZeroCapacity {
+		totalCapacity := uint64(0)
+		for _, azData := range result {
+			totalCapacity += azData.Capacity
+		}
+		if totalCapacity == 0 {
+			return nil, errors.New("got 0 total capacity, but allow_zero_capacity = false")
+		}
+	}
+
 	return result, nil
 }
 
