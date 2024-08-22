@@ -8,6 +8,7 @@ deploy a liquid for each OpenStack service whose resources Limes should manage.
 If the service does not provide LIQUID support itself, you can use one of the liquids bundled with Limes:
 
 - [`archer`](./archer.md) for the endpoint injection service [Archer](https://github.com/sapcc/archer)
+- [`cinder`](./cinder.md) for the block storage service Cinder
 - [`designate`](./designate.md) for the DNS service Designate
 - [`neutron`](./neutron.md) for the networking service Neutron
 - [`octavia`](./octavia.md) for the loadbalancing service Octavia

@@ -59,6 +59,7 @@ import (
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/liquids/archer"
+	"github.com/sapcc/limes/internal/liquids/cinder"
 	"github.com/sapcc/limes/internal/liquids/designate"
 	"github.com/sapcc/limes/internal/liquids/neutron"
 	"github.com/sapcc/limes/internal/liquids/octavia"
@@ -94,13 +95,17 @@ func main() {
 		wrap.SetOverrideUserAgent(bininfo.Component(), bininfo.VersionOr("rolling"))
 
 		opts := liquidapi.RunOpts{
-			ServiceInfoRefreshInterval: 0,
+			TakesConfiguration:         false,
+			ServiceInfoRefreshInterval: 0, // TODO: enable for services that can benefit from it, once limes-collect can reload on the fly
 			MaxConcurrentRequests:      5,
 			DefaultListenAddress:       ":80",
 		}
 		switch liquidName {
 		case "archer":
 			must.Succeed(liquidapi.Run(ctx, &archer.Logic{}, opts))
+		case "cinder":
+			opts.TakesConfiguration = true
+			must.Succeed(liquidapi.Run(ctx, &cinder.Logic{}, opts))
 		case "designate":
 			must.Succeed(liquidapi.Run(ctx, &designate.Logic{}, opts))
 		case "neutron":
