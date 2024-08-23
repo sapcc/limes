@@ -184,7 +184,7 @@ func (p *GenericQuotaPlugin) Scrape(ctx context.Context, project core.KeystonePr
 	if exists {
 		for resourceName, quota := range data {
 			resData := result[resourceName]
-			resData.Quota = int64(quota)
+			resData.Quota = int64(quota) //nolint:gosec // uint64 -> int64 would only fail if quota is bigger than 2^63
 			result[resourceName] = resData
 		}
 	}

@@ -138,12 +138,12 @@ func (p *designatePlugin) Scrape(ctx context.Context, project core.KeystoneProje
 // SetQuota implements the core.QuotaPlugin interface.
 func (p *designatePlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
 	return dnsSetQuota(ctx, p.DesignateV2, project.UUID, &dnsQuota{
-		Zones:          int64(quotas["zones"]),
-		ZoneRecordsets: int64(quotas["recordsets"]),
+		Zones:          int64(quotas["zones"]),      //nolint:gosec // uint64 -> int64 would only fail if quota is bigger than 2^63
+		ZoneRecordsets: int64(quotas["recordsets"]), //nolint:gosec // uint64 -> int64 would only fail if quota is bigger than 2^63
 		// set ZoneRecords quota to match ZoneRecordsets
 		// (Designate has a records_per_recordset quota of default 20, so if we set
 		// ZoneRecords to 20 * ZoneRecordsets, this quota will not disturb us)
-		ZoneRecords: int64(quotas["recordsets"] * 20),
+		ZoneRecords: int64(quotas["recordsets"] * 20), //nolint:gosec // uint64 -> int64 would only fail if quota is bigger than 2^63 / 20
 	})
 }
 

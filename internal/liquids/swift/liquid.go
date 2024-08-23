@@ -121,7 +121,7 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 	}
 
 	// get quota and usage data from account headers
-	quota := int64(headers.BytesUsedQuota().Get())
+	quota := int64(headers.BytesUsedQuota().Get()) //nolint:gosec // uint64 -> int64 would only fail if quota is bigger than 2^63
 	if !headers.BytesUsedQuota().Exists() {
 		quota = -1
 	}
