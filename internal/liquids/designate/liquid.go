@@ -111,11 +111,11 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 // SetQuota implements the liquidapi.Logic interface.
 func (l *Logic) SetQuota(ctx context.Context, projectUUID string, req liquid.ServiceQuotaRequest, serviceInfo liquid.ServiceInfo) error {
 	return l.DesignateV2.SetQuota(ctx, projectUUID, QuotaSet{
-		Zones:             int64(req.Resources["zones"].Quota),
-		RecordsetsPerZone: int64(req.Resources["recordsets_per_zone"].Quota),
+		Zones:             int64(req.Resources["zones"].Quota),               //nolint:gosec // uint64 -> int64 would only fail if quota is bigger than 2^63
+		RecordsetsPerZone: int64(req.Resources["recordsets_per_zone"].Quota), //nolint:gosec // uint64 -> int64 would only fail if quota is bigger than 2^63
 
 		// Designate has a records_per_recordset quota of default 20, so if we set
 		// ZoneRecords to 20 * ZoneRecordsets, this quota will not disturb us
-		RecordsPerZone: int64(req.Resources["recordsets_per_zone"].Quota * 20),
+		RecordsPerZone: int64(req.Resources["recordsets_per_zone"].Quota * 20), //nolint:gosec // uint64 -> int64 would only fail if quota is bigger than 2^63 / 20
 	})
 }
