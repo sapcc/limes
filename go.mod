@@ -11,7 +11,7 @@ require (
 	github.com/gophercloud/utils/v2 v2.0.0-20240812072210-8ce1fc0f2894
 	github.com/gorilla/mux v1.8.1
 	github.com/majewsky/schwift/v2 v2.0.0
-	github.com/prometheus/client_golang v1.20.1
+	github.com/prometheus/client_golang v1.20.2
 	github.com/prometheus/common v0.55.0
 	github.com/rs/cors v1.11.0
 	github.com/sapcc/go-api-declarations v1.12.4
