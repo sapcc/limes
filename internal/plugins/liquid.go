@@ -114,6 +114,9 @@ func (p *liquidQuotaPlugin) Scrape(ctx context.Context, project core.KeystonePro
 	result = make(map[limesresources.ResourceName]core.ResourceData, len(p.LiquidServiceInfo.Resources))
 	for resName := range p.LiquidServiceInfo.Resources {
 		resReport := resp.Resources[resName]
+		if resReport == nil {
+			return nil, nil, fmt.Errorf("missing report for resource %q", resName)
+		}
 
 		var resData core.ResourceData
 		if resReport.Quota != nil {
