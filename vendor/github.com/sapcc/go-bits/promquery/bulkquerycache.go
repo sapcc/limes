@@ -21,6 +21,7 @@ package promquery
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/prometheus/common/model"
@@ -47,11 +48,14 @@ import (
 // (V) containing such a single record. In this expanded example, K and V are
 // instantiated as HostName and HostFilesystemMetrics, respectively:
 type BulkQueryCache[K comparable, V any] struct {
+	// configuration
 	client          Client
 	queries         []BulkQuery[K, V]
 	refreshInterval time.Duration
-	filledAt        *time.Time
-	entries         map[K]*V
+	// state
+	stateMutex sync.Mutex
+	filledAt   *time.Time
+	entries    map[K]*V
 }
 
 // BulkQuery is a query that can be executed by type BulkQueryCache
@@ -84,32 +88,35 @@ func NewBulkQueryCache[K comparable, V any](queries []BulkQuery[K, V], refreshIn
 // Get returns the entry for this key, or a zero-initialized entry if this key
 // does not exist in the dataset.
 func (c *BulkQueryCache[K, V]) Get(ctx context.Context, key K) (entry V, err error) {
-	err = c.fillCacheIfNecessary(ctx)
+	entries, err := c.getEntries(ctx)
 	if err != nil {
 		return
 	}
-	entryPtr := c.entries[key]
+	entryPtr := entries[key]
 	if entryPtr != nil {
 		entry = *entryPtr
 	}
 	return
 }
 
-func (c *BulkQueryCache[K, V]) fillCacheIfNecessary(ctx context.Context) error {
+func (c *BulkQueryCache[K, V]) getEntries(ctx context.Context) (map[K]*V, error) {
+	c.stateMutex.Lock()
+	defer c.stateMutex.Unlock()
+
 	// query Prometheus only on first call or if cache is too old
 	if c.filledAt != nil && c.filledAt.After(time.Now().Add(-c.refreshInterval)) {
-		return nil
+		return c.entries, nil
 	}
 
 	result := make(map[K]*V)
 	for _, q := range c.queries {
 		vector, err := c.client.GetVector(ctx, q.Query)
 		if err != nil {
-			return fmt.Errorf("cannot collect %s: %w", q.Description, err)
+			return nil, fmt.Errorf("cannot collect %s: %w", q.Description, err)
 		}
 		// prevent empty prometheus results from being processed downstream.
 		if len(vector) == 0 && !q.ZeroResultsIsNotAnError {
-			return fmt.Errorf("did not receive any values from prometheus for %s", q.Description)
+			return nil, fmt.Errorf("did not receive any values from prometheus for %s", q.Description)
 		}
 		for _, sample := range vector {
 			key := q.Keyer(sample)
@@ -126,5 +133,5 @@ func (c *BulkQueryCache[K, V]) fillCacheIfNecessary(ctx context.Context) error {
 	now := time.Now()
 	c.filledAt = &now
 	c.entries = result
-	return nil
+	return result, nil
 }
