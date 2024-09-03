@@ -279,7 +279,7 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 		resourceID   db.ProjectResourceID
 		azResourceID db.ProjectAZResourceID
 	)
-	err := p.DB.QueryRow(findProjectAZResourceIDByLocationQuery, dbProject.ID, req.ServiceType, req.ResourceName, req.AvailabilityZone).
+	err := p.DB.QueryRow(findProjectAZResourceIDByLocationQuery, dbProject.ID, loc.ServiceType, loc.ResourceName, loc.AvailabilityZone).
 		Scan(&resourceID, &azResourceID)
 	if respondwith.ErrorText(w, err) {
 		return
@@ -325,7 +325,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		resourceID   db.ProjectResourceID
 		azResourceID db.ProjectAZResourceID
 	)
-	err := p.DB.QueryRow(findProjectAZResourceIDByLocationQuery, dbProject.ID, req.ServiceType, req.ResourceName, req.AvailabilityZone).
+	err := p.DB.QueryRow(findProjectAZResourceIDByLocationQuery, dbProject.ID, loc.ServiceType, loc.ResourceName, loc.AvailabilityZone).
 		Scan(&resourceID, &azResourceID)
 	if respondwith.ErrorText(w, err) {
 		return

@@ -28,7 +28,6 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
@@ -183,7 +182,7 @@ func Test_ScanCapacity(t *testing.T) {
 	}
 	err = s.DB.Insert(&db.ClusterAZResource{
 		ResourceID:       unknownRes.ID,
-		AvailabilityZone: limes.AvailabilityZoneAny,
+		AvailabilityZone: liquid.AvailabilityZoneAny,
 		RawCapacity:      100,
 		Usage:            p2u64(50),
 	})
@@ -583,25 +582,25 @@ func Test_ScanCapacityWithCommitments(t *testing.T) {
 	// test GetGlobalResourceDemand (this is not used by any of our test plugins,
 	// but we can just call it directly to see that it works)
 	bc := datamodel.NewCapacityPluginBackchannel(s.Cluster, s.DB)
-	expectedDemandsByService := map[db.ServiceType]map[liquid.ResourceName]map[limes.AvailabilityZone]liquid.ResourceDemandInAZ{
+	expectedDemandsByService := map[db.ServiceType]map[liquid.ResourceName]map[liquid.AvailabilityZone]liquid.ResourceDemandInAZ{
 		"first": {
 			"capacity": {
-				"az-one":                  {Usage: 2, UnusedCommitments: 109, PendingCommitments: 0},
-				"az-two":                  {Usage: 251, UnusedCommitments: 50, PendingCommitments: 300},
-				limes.AvailabilityZoneAny: {Usage: 0, UnusedCommitments: 0, PendingCommitments: 0},
+				"az-one":                   {Usage: 2, UnusedCommitments: 109, PendingCommitments: 0},
+				"az-two":                   {Usage: 251, UnusedCommitments: 50, PendingCommitments: 300},
+				liquid.AvailabilityZoneAny: {Usage: 0, UnusedCommitments: 0, PendingCommitments: 0},
 			},
 			"things": {
-				limes.AvailabilityZoneAny: {Usage: 0, UnusedCommitments: 0, PendingCommitments: 0},
+				liquid.AvailabilityZoneAny: {Usage: 0, UnusedCommitments: 0, PendingCommitments: 0},
 			},
 		},
 		"second": {
 			"capacity": {
-				"az-one":                  {Usage: 2, UnusedCommitments: 19, PendingCommitments: 110},
-				"az-two":                  {Usage: 2, UnusedCommitments: 1, PendingCommitments: 0},
-				limes.AvailabilityZoneAny: {Usage: 0, UnusedCommitments: 0, PendingCommitments: 0},
+				"az-one":                   {Usage: 2, UnusedCommitments: 19, PendingCommitments: 110},
+				"az-two":                   {Usage: 2, UnusedCommitments: 1, PendingCommitments: 0},
+				liquid.AvailabilityZoneAny: {Usage: 0, UnusedCommitments: 0, PendingCommitments: 0},
 			},
 			"things": {
-				limes.AvailabilityZoneAny: {Usage: 0, UnusedCommitments: 0, PendingCommitments: 0},
+				liquid.AvailabilityZoneAny: {Usage: 0, UnusedCommitments: 0, PendingCommitments: 0},
 			},
 		},
 	}

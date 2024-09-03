@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/logg"
@@ -217,9 +216,9 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 			// for AZ-aware resources, ensure that we also have a ProjectAZResource in
 			// "any", because ApplyComputedProjectQuota needs somewhere to write base
 			// quotas into if enabled
-			_, exists := resData.UsageData[limes.AvailabilityZoneAny]
+			_, exists := resData.UsageData[liquid.AvailabilityZoneAny]
 			if !exists {
-				resData.UsageData[limes.AvailabilityZoneAny] = &core.UsageData{Usage: 0}
+				resData.UsageData[liquid.AvailabilityZoneAny] = &core.UsageData{Usage: 0}
 			}
 		}
 	}
@@ -286,13 +285,13 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 		res := dbResourcesByName[resourceName]
 		usageData := resourceData[resourceName].UsageData.Normalize(c.Cluster.Config.AvailabilityZones)
 
-		setUpdate := db.SetUpdate[db.ProjectAZResource, limes.AvailabilityZone]{
+		setUpdate := db.SetUpdate[db.ProjectAZResource, liquid.AvailabilityZone]{
 			ExistingRecords: dbAZResourcesByResourceID[res.ID],
 			WantedKeys:      usageData.Keys(),
-			KeyForRecord: func(azRes db.ProjectAZResource) limes.AvailabilityZone {
+			KeyForRecord: func(azRes db.ProjectAZResource) liquid.AvailabilityZone {
 				return azRes.AvailabilityZone
 			},
-			Create: func(az limes.AvailabilityZone) (db.ProjectAZResource, error) {
+			Create: func(az liquid.AvailabilityZone) (db.ProjectAZResource, error) {
 				return db.ProjectAZResource{
 					ResourceID:       res.ID,
 					AvailabilityZone: az,
@@ -411,7 +410,7 @@ func (c *Collector) writeDummyResources(dbDomain db.Domain, dbProject db.Project
 	for _, res := range dbResources {
 		err := tx.Insert(&db.ProjectAZResource{
 			ResourceID:       res.ID,
-			AvailabilityZone: limes.AvailabilityZoneAny,
+			AvailabilityZone: liquid.AvailabilityZoneAny,
 			Usage:            0,
 		})
 		if err != nil {

@@ -33,7 +33,6 @@ import (
 
 	"github.com/go-gorp/gorp/v3"
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/logg"
@@ -528,8 +527,8 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 		}
 
 		var (
-			capacityPerAZ map[limes.AvailabilityZone]uint64
-			usagePerAZ    map[limes.AvailabilityZone]*uint64
+			capacityPerAZ map[liquid.AvailabilityZone]uint64
+			usagePerAZ    map[liquid.AvailabilityZone]*uint64
 		)
 		err = json.Unmarshal([]byte(capacityPerAZJSON), &capacityPerAZ)
 		if err != nil {
@@ -543,7 +542,7 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 		totalCapacity := uint64(0)
 		for az, azCapacity := range capacityPerAZ {
 			totalCapacity += azCapacity
-			if az != limes.AvailabilityZoneAny {
+			if az != liquid.AvailabilityZoneAny {
 				reportAZBreakdown = true
 			}
 		}
@@ -697,7 +696,7 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 			projectUUID       string
 			dbServiceType     db.ServiceType
 			dbResourceName    liquid.ResourceName
-			az                limes.AvailabilityZone
+			az                liquid.AvailabilityZone
 			usage             uint64
 			amountByStateJSON *string
 		)

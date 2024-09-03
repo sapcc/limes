@@ -28,7 +28,6 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/logg"
@@ -294,13 +293,13 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 		serviceType := serviceTypeForID[res.ServiceID]
 		resourceDataPerAZ := capacityData[serviceType][res.Name].Normalize(c.Cluster.Config.AvailabilityZones)
 
-		setUpdate := db.SetUpdate[db.ClusterAZResource, limes.AvailabilityZone]{
+		setUpdate := db.SetUpdate[db.ClusterAZResource, liquid.AvailabilityZone]{
 			ExistingRecords: dbAZResourcesByResourceID[res.ID],
 			WantedKeys:      resourceDataPerAZ.Keys(),
-			KeyForRecord: func(azRes db.ClusterAZResource) limes.AvailabilityZone {
+			KeyForRecord: func(azRes db.ClusterAZResource) liquid.AvailabilityZone {
 				return azRes.AvailabilityZone
 			},
-			Create: func(az limes.AvailabilityZone) (db.ClusterAZResource, error) {
+			Create: func(az liquid.AvailabilityZone) (db.ClusterAZResource, error) {
 				return db.ClusterAZResource{
 					ResourceID:       res.ID,
 					AvailabilityZone: az,
@@ -380,7 +379,7 @@ func (c *Collector) confirmPendingCommitmentsIfNecessary(serviceType db.ServiceT
 
 	committableAZs := c.Cluster.Config.AvailabilityZones
 	if !behavior.CommitmentIsAZAware {
-		committableAZs = []limes.AvailabilityZone{limes.AvailabilityZoneAny}
+		committableAZs = []liquid.AvailabilityZone{liquid.AvailabilityZoneAny}
 	}
 	for _, az := range committableAZs {
 		loc := datamodel.AZResourceLocation{
