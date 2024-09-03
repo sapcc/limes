@@ -71,8 +71,12 @@ var (
 		 WHERE pc.id = $1 AND ps.project_id = $2
 	`)
 
+	// NOTE: The third output column is `resourceAllowsCommitments`.
+	// We should be checking for `ResourceUsageReport.Forbidden == true`, but
+	// since the `Forbidden` field is not persisted in the DB, we need to use
+	// `max_quota_from_backend` as a proxy.
 	findProjectAZResourceIDByLocationQuery = sqlext.SimplifyWhitespace(`
-		SELECT pr.id, par.id
+		SELECT pr.id, par.id, pr.max_quota_from_backend IS NULL
 		  FROM project_az_resources par
 		  JOIN project_resources pr ON par.resource_id = pr.id
 		  JOIN project_services ps ON pr.service_id = ps.id
@@ -276,12 +280,18 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 	}
 
 	var (
-		resourceID   db.ProjectResourceID
-		azResourceID db.ProjectAZResourceID
+		resourceID                db.ProjectResourceID
+		azResourceID              db.ProjectAZResourceID
+		resourceAllowsCommitments bool
 	)
 	err := p.DB.QueryRow(findProjectAZResourceIDByLocationQuery, dbProject.ID, loc.ServiceType, loc.ResourceName, loc.AvailabilityZone).
-		Scan(&resourceID, &azResourceID)
+		Scan(&resourceID, &azResourceID, &resourceAllowsCommitments)
 	if respondwith.ErrorText(w, err) {
+		return
+	}
+	if !resourceAllowsCommitments {
+		msg := fmt.Sprintf("resource %s/%s is not enabled in this project", req.ServiceType, req.ResourceName)
+		http.Error(w, msg, http.StatusUnprocessableEntity)
 		return
 	}
 	_ = azResourceID // returned by the above query, but not used in this function
@@ -322,12 +332,18 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	}
 
 	var (
-		resourceID   db.ProjectResourceID
-		azResourceID db.ProjectAZResourceID
+		resourceID                db.ProjectResourceID
+		azResourceID              db.ProjectAZResourceID
+		resourceAllowsCommitments bool
 	)
 	err := p.DB.QueryRow(findProjectAZResourceIDByLocationQuery, dbProject.ID, loc.ServiceType, loc.ResourceName, loc.AvailabilityZone).
-		Scan(&resourceID, &azResourceID)
+		Scan(&resourceID, &azResourceID, &resourceAllowsCommitments)
 	if respondwith.ErrorText(w, err) {
+		return
+	}
+	if !resourceAllowsCommitments {
+		msg := fmt.Sprintf("resource %s/%s is not enabled in this project", req.ServiceType, req.ResourceName)
+		http.Error(w, msg, http.StatusUnprocessableEntity)
 		return
 	}
 
