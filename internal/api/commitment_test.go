@@ -529,6 +529,23 @@ func TestPutCommitmentErrorCases(t *testing.T) {
 		ExpectBody:   assert.StringData("commitments are not enabled for this resource\n"),
 	}.Check(t, s.Handler)
 
+	// invalid request field: service_type/resource_name accepts commitments, but is forbidden in this project
+	_, err := s.DB.Exec(`UPDATE project_resources SET max_quota_from_backend = 1`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
+		Body:         assert.JSONObject{"commitment": request},
+		ExpectStatus: http.StatusUnprocessableEntity,
+		ExpectBody:   assert.StringData("resource first/capacity is not enabled in this project\n"),
+	}.Check(t, s.Handler)
+	_, err = s.DB.Exec(`UPDATE project_resources SET max_quota_from_backend = NULL`)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	// invalid request field: AZ given, but resource does not accept AZ-aware commitments
 	cloned = maps.Clone(request)
 	cloned["resource_name"] = "things"
