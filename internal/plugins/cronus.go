@@ -29,12 +29,11 @@ import (
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
-	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
-	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/logg"
 
 	"github.com/sapcc/limes/internal/core"
+	"github.com/sapcc/limes/internal/db"
 )
 
 type cronusPlugin struct {
@@ -42,23 +41,11 @@ type cronusPlugin struct {
 	CronusV1 *cronusClient `yaml:"-"`
 }
 
-var cronusRates = []limesrates.RateInfo{
-	{
-		Name: "attachment_size",
-		Unit: limes.UnitBytes,
-	},
-	{
-		Name: "data_transfer_in",
-		Unit: limes.UnitBytes,
-	},
-	{
-		Name: "data_transfer_out",
-		Unit: limes.UnitBytes,
-	},
-	{
-		Name: "recipients",
-		Unit: limes.UnitNone,
-	},
+var cronusRates = map[db.RateName]core.RateInfo{
+	"attachment_size":   {Unit: limes.UnitBytes},
+	"data_transfer_in":  {Unit: limes.UnitBytes},
+	"data_transfer_out": {Unit: limes.UnitBytes},
+	"recipients":        {Unit: limes.UnitNone},
 }
 
 func init() {
@@ -66,7 +53,7 @@ func init() {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType limes.ServiceType) (err error) {
+func (p *cronusPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType db.ServiceType) (err error) {
 	p.CronusV1, err = newCronusClient(provider, eo)
 	return err
 }
@@ -90,17 +77,17 @@ func (p *cronusPlugin) Resources() map[liquid.ResourceName]liquid.ResourceInfo {
 }
 
 // Rates implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) Rates() []limesrates.RateInfo {
+func (p *cronusPlugin) Rates() map[db.RateName]core.RateInfo {
 	return cronusRates
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) Scrape(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
+func (p *cronusPlugin) Scrape(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[liquid.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
 	return nil, nil, nil
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
+func (p *cronusPlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotas map[liquid.ResourceName]uint64) error {
 	return nil
 }
 
@@ -117,7 +104,7 @@ type cronusState struct {
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) ScrapeRates(ctx context.Context, project core.KeystoneProject, prevSerializedState string) (result map[limesrates.RateName]*big.Int, serializedState string, err error) {
+func (p *cronusPlugin) ScrapeRates(ctx context.Context, project core.KeystoneProject, prevSerializedState string) (result map[db.RateName]*big.Int, serializedState string, err error) {
 	// decode `prevSerializedState`
 	var state cronusState
 	if prevSerializedState == "" {
@@ -174,7 +161,7 @@ func (p *cronusPlugin) ScrapeRates(ctx context.Context, project core.KeystonePro
 
 	// obtain the current running totals by adding the current billing period's
 	// running tally to the previous totals
-	return map[limesrates.RateName]*big.Int{
+	return map[db.RateName]*big.Int{
 		"attachment_size":   bigintPlusUint64(state.PreviousTotals.AttachmentsSize, currentUsage.AttachmentsSize),
 		"data_transfer_in":  bigintPlusUint64(state.PreviousTotals.DataTransferIn, currentUsage.DataTransferIn),
 		"data_transfer_out": bigintPlusUint64(state.PreviousTotals.DataTransferOut, currentUsage.DataTransferOut),

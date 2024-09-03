@@ -34,8 +34,8 @@ import (
 	"github.com/go-gorp/gorp/v3"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
-	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sqlext"
@@ -118,7 +118,7 @@ func (c *AggregateMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 
 	err := sqlext.ForeachRow(c.DB, scrapedAtAggregateQuery, nil, func(rows *sql.Rows) error {
 		var (
-			serviceType       limes.ServiceType
+			serviceType       db.ServiceType
 			minScrapedAt      *time.Time
 			maxScrapedAt      *time.Time
 			minRatesScrapedAt *time.Time
@@ -287,7 +287,7 @@ type QuotaPluginMetricsCollector struct {
 // metrics are submitted. It appears in type QuotaPluginMetricsCollector.
 type QuotaPluginMetricsInstance struct {
 	Project           core.KeystoneProject
-	ServiceType       limes.ServiceType
+	ServiceType       db.ServiceType
 	SerializedMetrics string
 }
 
@@ -337,7 +337,7 @@ func (c *QuotaPluginMetricsCollector) Collect(ch chan<- prometheus.Metric) {
 	}
 }
 
-func (c *QuotaPluginMetricsCollector) collectOneProjectService(ch chan<- prometheus.Metric, pluginMetricsOkDesc *prometheus.Desc, serviceNameByType map[limes.ServiceType]string, instance QuotaPluginMetricsInstance) {
+func (c *QuotaPluginMetricsCollector) collectOneProjectService(ch chan<- prometheus.Metric, pluginMetricsOkDesc *prometheus.Desc, serviceNameByType map[db.ServiceType]string, instance QuotaPluginMetricsInstance) {
 	plugin := c.Cluster.QuotaPlugins[instance.ServiceType]
 	if plugin == nil {
 		return
@@ -514,11 +514,11 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 	result := make(map[string][]dataMetric)
 
 	// fetch values for cluster level
-	capacityReported := make(map[limes.ServiceType]map[limesresources.ResourceName]bool)
+	capacityReported := make(map[db.ServiceType]map[liquid.ResourceName]bool)
 	err := sqlext.ForeachRow(d.DB, clusterMetricsQuery, nil, func(rows *sql.Rows) error {
 		var (
-			dbServiceType     limes.ServiceType
-			dbResourceName    limesresources.ResourceName
+			dbServiceType     db.ServiceType
+			dbResourceName    liquid.ResourceName
 			capacityPerAZJSON string
 			usagePerAZJSON    string
 		)
@@ -574,7 +574,7 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 
 		_, exists := capacityReported[dbServiceType]
 		if !exists {
-			capacityReported[dbServiceType] = make(map[limesresources.ResourceName]bool)
+			capacityReported[dbServiceType] = make(map[liquid.ResourceName]bool)
 		}
 		capacityReported[dbServiceType][dbResourceName] = true
 
@@ -607,8 +607,8 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 		var (
 			domainName     string
 			domainUUID     string
-			dbServiceType  limes.ServiceType
-			dbResourceName limesresources.ResourceName
+			dbServiceType  db.ServiceType
+			dbResourceName liquid.ResourceName
 			quota          *uint64
 		)
 		err := rows.Scan(&domainName, &domainUUID, &dbServiceType, &dbResourceName, &quota)
@@ -639,8 +639,8 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 			domainUUID       string
 			projectName      string
 			projectUUID      string
-			dbServiceType    limes.ServiceType
-			dbResourceName   limesresources.ResourceName
+			dbServiceType    db.ServiceType
+			dbResourceName   liquid.ResourceName
 			quota            *uint64
 			backendQuota     *int64
 			usage            uint64
@@ -695,8 +695,8 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 			domainUUID        string
 			projectName       string
 			projectUUID       string
-			dbServiceType     limes.ServiceType
-			dbResourceName    limesresources.ResourceName
+			dbServiceType     db.ServiceType
+			dbResourceName    liquid.ResourceName
 			az                limes.AvailabilityZone
 			usage             uint64
 			amountByStateJSON *string
@@ -771,8 +771,8 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 			domainUUID    string
 			projectName   string
 			projectUUID   string
-			serviceType   limes.ServiceType
-			rateName      limesrates.RateName
+			serviceType   db.ServiceType
+			rateName      db.RateName
 			usageAsBigint string
 		)
 		err := rows.Scan(&domainName, &domainUUID, &projectName, &projectUUID, &serviceType, &rateName, &usageAsBigint)
@@ -806,8 +806,8 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 ///////////////////////////////////////////////////////////////////////////////////////////
 // utilities
 
-func buildServiceNameByTypeMapping(c *core.Cluster) (serviceNameByType map[limes.ServiceType]string) {
-	serviceNameByType = make(map[limes.ServiceType]string, len(c.QuotaPlugins))
+func buildServiceNameByTypeMapping(c *core.Cluster) (serviceNameByType map[db.ServiceType]string) {
+	serviceNameByType = make(map[db.ServiceType]string, len(c.QuotaPlugins))
 	for serviceType, plugin := range c.QuotaPlugins {
 		serviceNameByType[serviceType] = plugin.ServiceInfo().ProductName
 	}

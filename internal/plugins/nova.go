@@ -33,11 +33,10 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/quotasets"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
-	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
-	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 
 	"github.com/sapcc/limes/internal/core"
+	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/plugins/nova"
 )
 
@@ -77,7 +76,7 @@ func init() {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *novaPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType limes.ServiceType) (err error) {
+func (p *novaPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType db.ServiceType) (err error) {
 	p.resources = maps.Clone(novaDefaultResources)
 
 	p.NovaV2, err = openstack.NewComputeV2(provider, eo)
@@ -183,17 +182,17 @@ func (p *novaPlugin) Resources() map[liquid.ResourceName]liquid.ResourceInfo {
 }
 
 // Rates implements the core.QuotaPlugin interface.
-func (p *novaPlugin) Rates() []limesrates.RateInfo {
+func (p *novaPlugin) Rates() map[db.RateName]core.RateInfo {
 	return nil
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *novaPlugin) ScrapeRates(ctx context.Context, project core.KeystoneProject, prevSerializedState string) (result map[limesrates.RateName]*big.Int, serializedState string, err error) {
+func (p *novaPlugin) ScrapeRates(ctx context.Context, project core.KeystoneProject, prevSerializedState string) (result map[db.RateName]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *novaPlugin) Scrape(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
+func (p *novaPlugin) Scrape(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[liquid.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
 	// collect quota and usage from Nova
 	var limitsData struct {
 		Limits struct {
@@ -236,7 +235,7 @@ func (p *novaPlugin) Scrape(ctx context.Context, project core.KeystoneProject, a
 	}
 
 	// initialize `result`
-	result = map[limesresources.ResourceName]core.ResourceData{
+	result = map[liquid.ResourceName]core.ResourceData{
 		"cores": {
 			Quota:     absoluteLimits.MaxTotalCores,
 			UsageData: core.InUnknownAZUnlessEmpty(core.UsageData{Usage: absoluteLimits.TotalCoresUsed}).AndZeroInTheseAZs(allAZs),
@@ -349,7 +348,7 @@ func (p *novaPlugin) Scrape(ctx context.Context, project core.KeystoneProject, a
 	return result, serializedMetrics, err
 }
 
-func (p *novaPlugin) pooledResourceName(hwVersion string, base limesresources.ResourceName) limesresources.ResourceName {
+func (p *novaPlugin) pooledResourceName(hwVersion string, base liquid.ResourceName) liquid.ResourceName {
 	// `base` is one of "cores", "instances" or "ram"
 	if hwVersion == "" {
 		return base
@@ -357,13 +356,13 @@ func (p *novaPlugin) pooledResourceName(hwVersion string, base limesresources.Re
 
 	// if we saw a "quota:hw_version" extra spec on the instance's flavor, use the appropriate resource if it exists
 	if p.hasPooledResource[hwVersion][base] {
-		return limesresources.ResourceName(fmt.Sprintf("hw_version_%s_instances", hwVersion))
+		return liquid.ResourceName(fmt.Sprintf("hw_version_%s_instances", hwVersion))
 	}
 	return base
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *novaPlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
+func (p *novaPlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotas map[liquid.ResourceName]uint64) error {
 	// translate Limes resource names for separate instance quotas into Nova quota names
 	novaQuotas := make(novaQuotaUpdateOpts, len(quotas))
 	for resourceName, quota := range quotas {

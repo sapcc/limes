@@ -10,23 +10,23 @@ INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (2, 2, 'kar
 INSERT INTO projects (id, domain_id, name, uuid, parent_uuid) VALUES (3, 2, 'lahore',  'uuid-for-lahore',  'uuid-for-karachi');
 
 -- project_services is fully populated (as ensured by the collector's consistency check)
-INSERT INTO project_services (id, project_id, type, scraped_at, checked_at) VALUES (1, 1, 'compute', '2018-06-13 15:06:37', '2018-06-13 15:06:37');
-INSERT INTO project_services (id, project_id, type, scraped_at, checked_at) VALUES (2, 1, 'network', '2018-06-13 15:06:37', '2018-06-13 15:06:37');
-INSERT INTO project_services (id, project_id, type, scraped_at, checked_at) VALUES (3, 2, 'compute', '2018-06-13 15:06:37', '2018-06-13 15:06:37');
-INSERT INTO project_services (id, project_id, type, scraped_at, checked_at) VALUES (4, 2, 'network', '2018-06-13 15:06:37', '2018-06-13 15:06:37');
-INSERT INTO project_services (id, project_id, type, scraped_at, checked_at) VALUES (5, 3, 'compute', '2018-06-13 15:06:37', '2018-06-13 15:06:37');
-INSERT INTO project_services (id, project_id, type, scraped_at, checked_at) VALUES (6, 3, 'network', '2018-06-13 15:06:37', '2018-06-13 15:06:37');
+INSERT INTO project_services (id, project_id, type, scraped_at, checked_at) VALUES (1, 1, 'shared', '2018-06-13 15:06:37', '2018-06-13 15:06:37');
+INSERT INTO project_services (id, project_id, type, scraped_at, checked_at) VALUES (2, 1, 'unshared', '2018-06-13 15:06:37', '2018-06-13 15:06:37');
+INSERT INTO project_services (id, project_id, type, scraped_at, checked_at) VALUES (3, 2, 'shared', '2018-06-13 15:06:37', '2018-06-13 15:06:37');
+INSERT INTO project_services (id, project_id, type, scraped_at, checked_at) VALUES (4, 2, 'unshared', '2018-06-13 15:06:37', '2018-06-13 15:06:37');
+INSERT INTO project_services (id, project_id, type, scraped_at, checked_at) VALUES (5, 3, 'shared', '2018-06-13 15:06:37', '2018-06-13 15:06:37');
+INSERT INTO project_services (id, project_id, type, scraped_at, checked_at) VALUES (6, 3, 'unshared', '2018-06-13 15:06:37', '2018-06-13 15:06:37');
 
 -- project_resources contains some pathological cases
-INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (1, 1, 'cores',         30,  10);
-INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (2, 1, 'ram',           100, 100);
-INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (3, 2, 'loadbalancers', 10,  10);
-INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (4, 3, 'cores',         14,  14);
-INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (5, 3, 'ram',           60,  60);
-INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (6, 4, 'loadbalancers', 5,   5);
-INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (7, 5, 'cores',         30,  30);
-INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (8, 5, 'ram',           62,  62);
-INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (9, 6, 'loadbalancers', 10,  10);
+INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (1, 1, 'capacity', 30,  10);
+INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (2, 1, 'things',   100, 100);
+INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (3, 2, 'things',   10,  10);
+INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (4, 3, 'capacity', 14,  14);
+INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (5, 3, 'things',   60,  60);
+INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (6, 4, 'things',   5,   5);
+INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (7, 5, 'capacity', 30,  30);
+INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (8, 5, 'things',   62,  62);
+INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (9, 6, 'things',   10,  10);
 
 -- project_az_resources has everything as non-AZ-aware (the consistency checks do not really care about AZs)
 INSERT INTO project_az_resources (id, resource_id, az, usage, physical_usage) VALUES (1, 1, 'any', 14, NULL);

@@ -45,10 +45,10 @@ type RateLimitUpdater struct {
 	Project *db.Project
 
 	// AuthZ info
-	CanSetRateLimit func(limes.ServiceType) bool
+	CanSetRateLimit func(db.ServiceType) bool
 
 	// Filled by ValidateInput() with the keys being the service type and the rate name.
-	Requests map[limes.ServiceType]map[limesrates.RateName]RateLimitRequest
+	Requests map[db.ServiceType]map[db.RateName]RateLimitRequest
 }
 
 // RateLimitRequest describes a single rate limit that a PUT requests wants to change.
@@ -77,27 +77,29 @@ func (u *RateLimitUpdater) ValidateInput(input limesrates.RateRequest, dbi db.In
 		return err
 	}
 
-	u.Requests = make(map[limes.ServiceType]map[limesrates.RateName]RateLimitRequest)
+	nm := core.BuildNameMapping(u.Cluster)
+	u.Requests = make(map[db.ServiceType]map[db.RateName]RateLimitRequest)
 
 	// Go through all services and validate the requested rate limits.
-	for svcType, in := range input {
-		svcConfig, err := u.Cluster.Config.GetServiceConfigurationForType(svcType)
-		if err != nil {
-			// Skip service if not configured.
-			continue
-		}
-		if _, ok := u.Requests[svcType]; !ok {
-			u.Requests[svcType] = make(map[limesrates.RateName]RateLimitRequest)
-		}
+	for apiServiceType, in := range input {
+		for apiRateName, newRateLimit := range in {
+			dbServiceType, dbRateName := nm.MapRateFromV1API(apiServiceType, apiRateName)
+			serviceConfig, ok := u.Cluster.Config.GetServiceConfigurationForType(dbServiceType)
+			if !ok {
+				// Skip service if not configured.
+				continue
+			}
+			if u.Requests[dbServiceType] == nil {
+				u.Requests[dbServiceType] = make(map[db.RateName]RateLimitRequest)
+			}
 
-		for rateName, newRateLimit := range in {
 			req := RateLimitRequest{
 				NewLimit:  newRateLimit.Limit,
 				NewWindow: newRateLimit.Window,
 			}
 
 			// only allow setting rate limits for which a default exists
-			defaultRateLimit, exists := svcConfig.RateLimits.GetProjectDefaultRateLimit(rateName)
+			defaultRateLimit, exists := serviceConfig.RateLimits.GetProjectDefaultRateLimit(dbRateName)
 			if exists {
 				req.Unit = defaultRateLimit.Unit
 			} else {
@@ -105,12 +107,12 @@ func (u *RateLimitUpdater) ValidateInput(input limesrates.RateRequest, dbi db.In
 					Status:  http.StatusForbidden,
 					Message: "user is not allowed to create new rate limits",
 				}
-				u.Requests[svcType][rateName] = req
+				u.Requests[dbServiceType][dbRateName] = req
 				continue
 			}
 
-			if projectService, exists := projectReport.Services[svcType]; exists {
-				projectRate, exists := projectService.Rates[rateName]
+			if projectService, exists := projectReport.Services[apiServiceType]; exists {
+				projectRate, exists := projectService.Rates[apiRateName]
 				if exists && projectRate.Limit != 0 && projectRate.Window != nil {
 					req.OldLimit = projectRate.Limit
 					req.OldWindow = *projectRate.Window
@@ -126,15 +128,15 @@ func (u *RateLimitUpdater) ValidateInput(input limesrates.RateRequest, dbi db.In
 			}
 
 			// value is valid and novel -> perform further validation
-			req.ValidationError = u.validateRateLimit(svcType)
-			u.Requests[svcType][rateName] = req
+			req.ValidationError = u.validateRateLimit(dbServiceType)
+			u.Requests[dbServiceType][dbRateName] = req
 		}
 	}
 
 	return nil
 }
 
-func (u RateLimitUpdater) validateRateLimit(serviceType limes.ServiceType) *RateValidationError {
+func (u RateLimitUpdater) validateRateLimit(serviceType db.ServiceType) *RateValidationError {
 	if u.CanSetRateLimit(serviceType) {
 		return nil
 	}
@@ -170,14 +172,16 @@ func (u RateLimitUpdater) WriteSimulationReport(w http.ResponseWriter) {
 	}
 	result.IsValid = true // until proven otherwise
 
-	for srvType, reqs := range u.Requests {
-		for rateName, req := range reqs {
+	nm := core.BuildNameMapping(u.Cluster)
+	for dbServiceType, reqs := range u.Requests {
+		for dbRateName, req := range reqs {
 			if req.ValidationError != nil {
 				result.IsValid = false
+				apiServiceType, apiRateName := nm.MapRateToV1API(dbServiceType, dbRateName)
 				result.UnacceptableRateLimits = append(result.UnacceptableRateLimits,
 					unacceptableRateLimit{
-						ServiceType:         srvType,
-						Name:                rateName,
+						ServiceType:         apiServiceType,
+						Name:                apiRateName,
 						RateValidationError: *req.ValidationError,
 					},
 				)
@@ -207,13 +211,15 @@ func (u RateLimitUpdater) WritePutErrorResponse(w http.ResponseWriter) {
 	hasSubstatus := make(map[int]bool)
 
 	// collect error messages
-	for srvType, reqs := range u.Requests {
-		for rateName, req := range reqs {
+	nm := core.BuildNameMapping(u.Cluster)
+	for dbServiceType, reqs := range u.Requests {
+		for dbRateName, req := range reqs {
 			if err := req.ValidationError; err != nil {
+				apiServiceType, apiRateName := nm.MapRateToV1API(dbServiceType, dbRateName)
 				hasSubstatus[err.Status] = true
 				lines = append(
 					lines,
-					fmt.Sprintf("cannot change %s/%s rate limits: %s", srvType, rateName, err.Message),
+					fmt.Sprintf("cannot change %s/%s rate limits: %s", apiServiceType, apiRateName, err.Message),
 				)
 			}
 		}
@@ -244,8 +250,9 @@ func (u RateLimitUpdater) CommitAuditTrail(token *gopherpolicy.Token, r *http.Re
 		statusCode = http.StatusUnprocessableEntity
 	}
 
-	for srvType, reqs := range u.Requests {
-		for rateName, req := range reqs {
+	nm := core.BuildNameMapping(u.Cluster)
+	for dbServiceType, reqs := range u.Requests {
+		for dbRateName, req := range reqs {
 			// if !u.IsValid(), then all requested quotas in this PUT are considered
 			// invalid (and none are committed), so set the rejectReason to explain this
 			rejectReason := ""
@@ -257,14 +264,15 @@ func (u RateLimitUpdater) CommitAuditTrail(token *gopherpolicy.Token, r *http.Re
 				}
 			}
 
+			apiServiceType, apiRateName := nm.MapRateToV1API(dbServiceType, dbRateName)
 			logAndPublishEvent(requestTime, r, token, statusCode,
 				rateLimitEventTarget{
 					DomainID:     u.Domain.UUID,
 					DomainName:   u.Domain.Name,
 					ProjectID:    u.Project.UUID,
 					ProjectName:  u.Project.Name,
-					ServiceType:  srvType,
-					Name:         rateName,
+					ServiceType:  apiServiceType,
+					Name:         apiRateName,
 					OldLimit:     req.OldLimit,
 					NewLimit:     req.NewLimit,
 					OldWindow:    req.OldWindow,

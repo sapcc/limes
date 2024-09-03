@@ -28,6 +28,7 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/internal/core"
@@ -92,10 +93,11 @@ var clusterReportQuery4 = sqlext.SimplifyWhitespace(`
 `)
 
 var clusterRateReportQuery1 = sqlext.SimplifyWhitespace(`
-	SELECT type, MIN(rates_scraped_at), MAX(rates_scraped_at)
-	  FROM project_services
-	 WHERE TRUE {{AND type = $service_type}}
-	 GROUP BY type
+	SELECT ps.type, pra.name, MIN(ps.rates_scraped_at), MAX(ps.rates_scraped_at)
+	  FROM project_services ps
+	  JOIN project_rates pra ON pra.service_id = ps.id
+	 WHERE TRUE {{AND ps.type = $service_type}}
+	 GROUP BY ps.type, pra.name
 `)
 
 // GetClusterResources returns the resource data report for the whole cluster.
@@ -111,8 +113,8 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 	queryStr, joinArgs := filter.PrepareQuery(clusterReportQuery1)
 	err := sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
 		var (
-			dbServiceType     limes.ServiceType
-			dbResourceName    limesresources.ResourceName
+			dbServiceType     db.ServiceType
+			dbResourceName    liquid.ResourceName
 			availabilityZone  *limes.AvailabilityZone
 			usage             *uint64
 			physicalUsage     *uint64
@@ -175,8 +177,8 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 	queryStr, joinArgs = filter.PrepareQuery(clusterReportQuery2)
 	err = sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
 		var (
-			dbServiceType  limes.ServiceType
-			dbResourceName limesresources.ResourceName
+			dbServiceType  db.ServiceType
+			dbResourceName liquid.ResourceName
 			quota          *uint64
 		)
 		err := rows.Scan(&dbServiceType, &dbResourceName, &quota)
@@ -207,8 +209,8 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 	}
 	err = sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
 		var (
-			dbServiceType     limes.ServiceType
-			dbResourceName    limesresources.ResourceName
+			dbServiceType     db.ServiceType
+			dbResourceName    liquid.ResourceName
 			availabilityZone  *limes.AvailabilityZone
 			rawCapacityInAZ   *uint64
 			usageInAZ         *uint64
@@ -281,8 +283,8 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 		queryStr, joinArgs = filter.PrepareQuery(clusterReportQuery4)
 		err = sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
 			var (
-				dbServiceType  limes.ServiceType
-				dbResourceName limesresources.ResourceName
+				dbServiceType  db.ServiceType
+				dbResourceName liquid.ResourceName
 				az             limes.AvailabilityZone
 				duration       limesresources.CommitmentDuration
 				activeAmount   uint64
@@ -333,9 +335,16 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 	}
 
 	//epilogue: perform some calculations that require the full sum over all AZs to be done
-	for serviceType, service := range report.Services {
-		for resourceName, resource := range service.Resources {
-			overcommitFactor := cluster.BehaviorForResource(serviceType, resourceName).OvercommitFactor
+	nm := core.BuildNameMapping(cluster)
+	for apiServiceType, service := range report.Services {
+		for apiResourceName, resource := range service.Resources {
+			dbServiceType, dbResourceName, exists := nm.MapResourceFromV1API(apiServiceType, apiResourceName)
+			if !exists {
+				// defense in depth: should not happen; we should not have created entries for non-existent resources
+				continue
+			}
+
+			overcommitFactor := cluster.BehaviorForResource(dbServiceType, dbResourceName).OvercommitFactor
 			if overcommitFactor == 0 {
 				resource.Capacity = resource.RawCapacity
 				resource.RawCapacity = nil
@@ -365,6 +374,7 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 
 // GetClusterRates returns the rate data report for the whole cluster.
 func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter) (*limesrates.ClusterReport, error) {
+	nm := core.BuildNameMapping(cluster)
 	report := &limesrates.ClusterReport{
 		ClusterInfo: limes.ClusterInfo{
 			ID: "current", // multi-cluster support has been removed; this value is only included for backwards-compatibility
@@ -376,25 +386,28 @@ func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter) (*l
 	queryStr, joinArgs := filter.PrepareQuery(clusterRateReportQuery1)
 	err := sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
 		var (
-			serviceType       limes.ServiceType
+			dbServiceType     db.ServiceType
+			dbRateName        db.RateName
 			minRatesScrapedAt *time.Time
 			maxRatesScrapedAt *time.Time
 		)
-		err := rows.Scan(&serviceType, &minRatesScrapedAt, &maxRatesScrapedAt)
+		err := rows.Scan(&dbServiceType, &dbRateName, &minRatesScrapedAt, &maxRatesScrapedAt)
 		if err != nil {
 			return err
 		}
 
-		if !cluster.HasService(serviceType) {
+		if !cluster.HasService(dbServiceType) {
 			return nil
 		}
-		srvReport, exists := report.Services[serviceType]
+		apiServiceType, _ := nm.MapRateToV1API(dbServiceType, dbRateName)
+
+		srvReport, exists := report.Services[apiServiceType]
 		if !exists {
 			srvReport = &limesrates.ClusterServiceReport{
-				ServiceInfo: cluster.InfoForService(serviceType).ForAPI(serviceType),
+				ServiceInfo: cluster.InfoForService(dbServiceType).ForAPI(apiServiceType),
 				Rates:       make(limesrates.ClusterRateReports),
 			}
-			report.Services[serviceType] = srvReport
+			report.Services[apiServiceType] = srvReport
 		}
 
 		srvReport.MaxScrapedAt = mergeMaxTime(srvReport.MaxScrapedAt, maxRatesScrapedAt)
@@ -408,17 +421,23 @@ func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter) (*l
 
 	// include global rate limits from configuration
 	for _, serviceConfig := range cluster.Config.Services {
-		srvReport := report.Services[serviceConfig.ServiceType]
-		if srvReport != nil {
-			for _, rateCfg := range serviceConfig.RateLimits.Global {
-				srvReport.Rates[rateCfg.Name] = &limesrates.ClusterRateReport{
-					RateInfo: limesrates.RateInfo{
-						Name: rateCfg.Name,
-						Unit: rateCfg.Unit,
-					},
-					Limit:  rateCfg.Limit,
-					Window: rateCfg.Window,
+		dbServiceType := serviceConfig.ServiceType
+		for _, rateConfig := range serviceConfig.RateLimits.Global {
+			dbRateName := rateConfig.Name
+			apiServiceType, apiRateName := nm.MapRateToV1API(dbServiceType, dbRateName)
+
+			srvReport, exists := report.Services[apiServiceType]
+			if !exists {
+				srvReport = &limesrates.ClusterServiceReport{
+					ServiceInfo: cluster.InfoForService(dbServiceType).ForAPI(apiServiceType),
+					Rates:       make(limesrates.ClusterRateReports),
 				}
+				report.Services[apiServiceType] = srvReport
+			}
+			srvReport.Rates[apiRateName] = &limesrates.ClusterRateReport{
+				RateInfo: core.RateInfo{Unit: rateConfig.Unit}.ForAPI(apiRateName),
+				Limit:    rateConfig.Limit,
+				Window:   rateConfig.Window,
 			}
 		}
 	}
@@ -426,7 +445,7 @@ func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter) (*l
 	return report, nil
 }
 
-func findInClusterReport(cluster *core.Cluster, report *limesresources.ClusterReport, dbServiceType limes.ServiceType, dbResourceName limesresources.ResourceName, now time.Time) (*limesresources.ClusterServiceReport, *limesresources.ClusterResourceReport) {
+func findInClusterReport(cluster *core.Cluster, report *limesresources.ClusterReport, dbServiceType db.ServiceType, dbResourceName liquid.ResourceName, now time.Time) (*limesresources.ClusterServiceReport, *limesresources.ClusterResourceReport) {
 	behavior := cluster.BehaviorForResource(dbServiceType, dbResourceName)
 	apiIdentity := behavior.IdentityInV1API
 

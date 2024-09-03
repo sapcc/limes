@@ -27,7 +27,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
-	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/pluggable"
 
@@ -112,7 +111,7 @@ type QuotaPlugin interface {
 	//
 	// Before Init is called, the `services[].params` provided in the config
 	// file will be yaml.Unmarshal()ed into the plugin object itself.
-	Init(ctx context.Context, client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType limes.ServiceType) error
+	Init(ctx context.Context, client *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType db.ServiceType) error
 
 	// ServiceInfo returns metadata for this service.
 	ServiceInfo() ServiceInfo
@@ -132,15 +131,15 @@ type QuotaPlugin interface {
 	//
 	// The `serializedMetrics` return value is persisted in the Limes DB and
 	// supplied to all subsequent RenderMetrics calls.
-	Scrape(ctx context.Context, project KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]ResourceData, serializedMetrics []byte, err error)
+	Scrape(ctx context.Context, project KeystoneProject, allAZs []limes.AvailabilityZone) (result map[liquid.ResourceName]ResourceData, serializedMetrics []byte, err error)
 	// SetQuota updates the backend service's quotas for the given project in the
 	// given domain to the values specified here. The map is guaranteed to contain
 	// values for all resources defined by Resources().
-	SetQuota(ctx context.Context, project KeystoneProject, quotas map[limesresources.ResourceName]uint64) error
+	SetQuota(ctx context.Context, project KeystoneProject, quotas map[liquid.ResourceName]uint64) error
 
 	// Rates returns metadata for all the rates that this plugin scrapes
 	// from the backend service.
-	Rates() []limesrates.RateInfo
+	Rates() map[db.RateName]RateInfo
 	// ScrapeRates queries the backend service for the usage data of all the rates
 	// enumerated by Rates() for the given project in the given domain. The string
 	// keys in the result map must be identical to the rate names from Rates().
@@ -151,7 +150,7 @@ type QuotaPlugin interface {
 	// by the core application in any way. The plugin implementation can use this
 	// field to carry state between ScrapeRates() calls, esp. to detect and handle
 	// counter resets in the backend.
-	ScrapeRates(ctx context.Context, project KeystoneProject, prevSerializedState string) (result map[limesrates.RateName]*big.Int, serializedState string, err error)
+	ScrapeRates(ctx context.Context, project KeystoneProject, prevSerializedState string) (result map[db.RateName]*big.Int, serializedState string, err error)
 
 	// DescribeMetrics is called when Prometheus is scraping metrics from
 	// limes-collect, to provide an opportunity to the plugin to emit its own
@@ -188,6 +187,21 @@ func (s ServiceInfo) ForAPI(serviceType limes.ServiceType) limes.ServiceInfo {
 	}
 }
 
+// RateInfo is a reduced version of type limesrates.RateInfo, suitable for
+// being returned from func QuotaPlugin.Rates().
+type RateInfo struct {
+	Unit limes.Unit `yaml:"unit"`
+}
+
+// ForAPI inflates the given core.RateInfo into a limesrates.RateInfo.
+// The given RateName should be the one that we want to appear in the API.
+func (r RateInfo) ForAPI(rateName limesrates.RateName) limesrates.RateInfo {
+	return limesrates.RateInfo{
+		Name: rateName,
+		Unit: r.Unit,
+	}
+}
+
 // CapacityPlugin is the interface that all capacity collector plugins must
 // implement.
 //
@@ -219,7 +233,7 @@ type CapacityPlugin interface {
 	//
 	// The serializedMetrics return value is persisted in the Limes DB and
 	// supplied to all subsequent RenderMetrics calls.
-	Scrape(ctx context.Context, backchannel CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (result map[limes.ServiceType]map[limesresources.ResourceName]PerAZ[CapacityData], serializedMetrics []byte, err error)
+	Scrape(ctx context.Context, backchannel CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (result map[db.ServiceType]map[liquid.ResourceName]PerAZ[CapacityData], serializedMetrics []byte, err error)
 
 	// DescribeMetrics is called when Prometheus is scraping metrics from
 	// limes-collect, to provide an opportunity to the plugin to emit its own
@@ -248,7 +262,7 @@ type CapacityPlugin interface {
 // differs from the raw capacity seen by the CapacityPlugin by this
 // OvercommitFactor.
 type CapacityPluginBackchannel interface {
-	GetResourceDemand(serviceType limes.ServiceType, resourceName limesresources.ResourceName) (liquid.ResourceDemand, error)
+	GetResourceDemand(serviceType db.ServiceType, resourceName liquid.ResourceName) (liquid.ResourceDemand, error)
 }
 
 var (

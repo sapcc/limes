@@ -27,7 +27,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
-	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
@@ -124,7 +124,7 @@ type projectScrapeTask struct {
 }
 
 func (c *Collector) discoverScrapeTask(labels prometheus.Labels, query string) (task projectScrapeTask, err error) {
-	serviceType := limes.ServiceType(labels["service_type"])
+	serviceType := db.ServiceType(labels["service_type"])
 	if !c.Cluster.HasService(serviceType) {
 		return projectScrapeTask{}, fmt.Errorf("no such service type: %q", serviceType)
 	}
@@ -205,7 +205,7 @@ func (c *Collector) processResourceScrapeTask(ctx context.Context, task projectS
 	return fmt.Errorf("during resource scrape of project %s/%s: %w", dbDomain.Name, dbProject.Name, task.Err)
 }
 
-func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.Project, task projectScrapeTask, resourceData map[limesresources.ResourceName]core.ResourceData, serializedMetrics []byte) error {
+func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.Project, task projectScrapeTask, resourceData map[liquid.ResourceName]core.ResourceData, serializedMetrics []byte) error {
 	srv := task.Service
 
 	for resName, resData := range resourceData {
@@ -273,8 +273,8 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 	for _, azRes := range dbAZResources {
 		dbAZResourcesByResourceID[azRes.ResourceID] = append(dbAZResourcesByResourceID[azRes.ResourceID], azRes)
 	}
-	allResourceNames := make([]limesresources.ResourceName, len(dbResources))
-	dbResourcesByName := make(map[limesresources.ResourceName]db.ProjectResource, len(dbResources))
+	allResourceNames := make([]liquid.ResourceName, len(dbResources))
+	dbResourcesByName := make(map[liquid.ResourceName]db.ProjectResource, len(dbResources))
 	for idx, res := range dbResources {
 		allResourceNames[idx] = res.Name
 		dbResourcesByName[res.Name] = res

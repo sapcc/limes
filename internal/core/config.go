@@ -29,6 +29,7 @@ import (
 	"github.com/sapcc/go-bits/regexpext"
 	yaml "gopkg.in/yaml.v2"
 
+	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/util"
 )
 
@@ -46,14 +47,14 @@ type ClusterConfiguration struct {
 	QuotaDistributionConfigs []*QuotaDistributionConfiguration `yaml:"quota_distribution_configs"`
 }
 
-// GetServiceConfigurationForType returns the ServiceConfiguration or an error.
-func (cluster *ClusterConfiguration) GetServiceConfigurationForType(serviceType limes.ServiceType) (ServiceConfiguration, error) {
+// GetServiceConfigurationForType returns the ServiceConfiguration or false.
+func (cluster *ClusterConfiguration) GetServiceConfigurationForType(serviceType db.ServiceType) (ServiceConfiguration, bool) {
 	for _, svc := range cluster.Services {
 		if serviceType == svc.ServiceType {
-			return svc, nil
+			return svc, true
 		}
 	}
-	return ServiceConfiguration{}, fmt.Errorf("no configuration found for service %s", serviceType)
+	return ServiceConfiguration{}, false
 }
 
 // DiscoveryConfiguration describes the method of discovering Keystone domains
@@ -87,8 +88,8 @@ func (c DiscoveryConfiguration) FilterDomains(domains []KeystoneDomain) []Keysto
 
 // ServiceConfiguration describes a service that is enabled for a certain cluster.
 type ServiceConfiguration struct {
-	ServiceType limes.ServiceType `yaml:"service_type"`
-	PluginType  string            `yaml:"type"`
+	ServiceType db.ServiceType `yaml:"service_type"`
+	PluginType  string         `yaml:"type"`
 	// RateLimits describes the global rate limits (all requests for to a backend) and default project level rate limits.
 	RateLimits ServiceRateLimitConfiguration `yaml:"rate_limits"`
 	Parameters util.YamlRawMessage           `yaml:"params"`
@@ -101,7 +102,7 @@ type ServiceRateLimitConfiguration struct {
 }
 
 // GetProjectDefaultRateLimit returns the default project-level rate limit for a given target type URI and action or an error if not found.
-func (svcRlConfig *ServiceRateLimitConfiguration) GetProjectDefaultRateLimit(name limesrates.RateName) (RateLimitConfiguration, bool) {
+func (svcRlConfig *ServiceRateLimitConfiguration) GetProjectDefaultRateLimit(name db.RateName) (RateLimitConfiguration, bool) {
 	for _, rateCfg := range svcRlConfig.ProjectDefault {
 		if rateCfg.Name == name {
 			return rateCfg, true
@@ -112,10 +113,10 @@ func (svcRlConfig *ServiceRateLimitConfiguration) GetProjectDefaultRateLimit(nam
 
 // RateLimitConfiguration describes a rate limit configuration.
 type RateLimitConfiguration struct {
-	Name   limesrates.RateName `yaml:"name"`
-	Unit   limes.Unit          `yaml:"unit"`
-	Limit  uint64              `yaml:"limit"`
-	Window limesrates.Window   `yaml:"window"`
+	Name   db.RateName       `yaml:"name"`
+	Unit   limes.Unit        `yaml:"unit"`
+	Limit  uint64            `yaml:"limit"`
+	Window limesrates.Window `yaml:"window"`
 }
 
 // CapacitorConfiguration describes a capacity plugin that is enabled for a

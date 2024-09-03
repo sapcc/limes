@@ -26,8 +26,7 @@ import (
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
-	"github.com/sapcc/go-api-declarations/limes"
-	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
@@ -67,7 +66,7 @@ var quotaSyncDiscoverQuery = sqlext.SimplifyWhitespace(`
 `)
 
 func (c *Collector) discoverQuotaSyncTask(ctx context.Context, labels prometheus.Labels) (srv db.ProjectService, err error) {
-	serviceType := limes.ServiceType(labels["service_type"])
+	serviceType := db.ServiceType(labels["service_type"])
 	if !c.Cluster.HasService(serviceType) {
 		return db.ProjectService{}, fmt.Errorf("no such service type: %q", serviceType)
 	}
@@ -123,11 +122,11 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 	startedAt := c.MeasureTime()
 
 	// collect backend quota values that we want to apply
-	targetQuotasInDB := make(map[limesresources.ResourceName]uint64)
+	targetQuotasInDB := make(map[liquid.ResourceName]uint64)
 	needsApply := false
 	err := sqlext.ForeachRow(c.DB, quotaSyncSelectQuery, []any{srv.ID}, func(rows *sql.Rows) error {
 		var (
-			resourceName limesresources.ResourceName
+			resourceName liquid.ResourceName
 			currentQuota *int64
 			targetQuota  uint64
 		)
@@ -147,7 +146,7 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 
 	if needsApply {
 		// double-check that we only include quota values for resources that the backend currently knows about
-		targetQuotasForBackend := make(map[limesresources.ResourceName]uint64)
+		targetQuotasForBackend := make(map[liquid.ResourceName]uint64)
 		for resName, resInfo := range plugin.Resources() {
 			if !resInfo.HasQuota {
 				continue

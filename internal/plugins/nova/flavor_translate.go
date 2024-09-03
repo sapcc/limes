@@ -25,7 +25,7 @@ import (
 	"strings"
 
 	"github.com/gophercloud/gophercloud/v2"
-	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 )
 
 // FlavorTranslationTable is used in situations where certain flavors can
@@ -107,18 +107,18 @@ func (t FlavorTranslationTable) recordNovaPreferredName(flavorName string) {
 
 // LimesResourceNameForFlavor returns the Limes resource name for a flavor with
 // a separate instance quota.
-func (t FlavorTranslationTable) LimesResourceNameForFlavor(flavorName string) limesresources.ResourceName {
+func (t FlavorTranslationTable) LimesResourceNameForFlavor(flavorName string) liquid.ResourceName {
 	entry := t.findEntry(flavorName)
 	if entry == nil {
-		return limesresources.ResourceName("instances_" + flavorName)
+		return liquid.ResourceName("instances_" + flavorName)
 	}
-	return limesresources.ResourceName("instances_" + entry.LimesPreferredName)
+	return liquid.ResourceName("instances_" + entry.LimesPreferredName)
 }
 
 // NovaQuotaNameForLimesResourceName returns the Nova quota name for the given
 // Limes resource name, or "" if the given resource name does not refer to a
 // separate instance quota.
-func (t FlavorTranslationTable) NovaQuotaNameForLimesResourceName(resourceName limesresources.ResourceName) string {
+func (t FlavorTranslationTable) NovaQuotaNameForLimesResourceName(resourceName liquid.ResourceName) string {
 	//NOTE: Know the difference!
 	//  novaQuotaName = "instances_${novaPreferredName}"
 	//  resourceName = "instances_${limesPreferredName}"

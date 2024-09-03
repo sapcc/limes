@@ -24,7 +24,6 @@ import (
 	"fmt"
 
 	"github.com/sapcc/go-api-declarations/limes"
-	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/sqlext"
 
@@ -60,7 +59,7 @@ var (
 )
 
 // GetResourceDemand implements the CapacityPluginBackchannel interface.
-func (i capacityPluginBackchannelImpl) GetResourceDemand(serviceType limes.ServiceType, resourceName limesresources.ResourceName) (liquid.ResourceDemand, error) {
+func (i capacityPluginBackchannelImpl) GetResourceDemand(serviceType db.ServiceType, resourceName liquid.ResourceName) (liquid.ResourceDemand, error) {
 	result := liquid.ResourceDemand{
 		OvercommitFactor: i.Cluster.BehaviorForResource(serviceType, resourceName).OvercommitFactor,
 		PerAZ:            make(map[limes.AvailabilityZone]liquid.ResourceDemandInAZ),

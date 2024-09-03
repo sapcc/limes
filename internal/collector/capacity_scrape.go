@@ -29,7 +29,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
-	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
@@ -167,12 +167,12 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 
 	// collect mapping of cluster_services type names to IDs
 	// (these DB entries are maintained for us by checkConsistencyCluster)
-	serviceIDForType := make(map[limes.ServiceType]db.ClusterServiceID)
-	serviceTypeForID := make(map[db.ClusterServiceID]limes.ServiceType)
+	serviceIDForType := make(map[db.ServiceType]db.ClusterServiceID)
+	serviceTypeForID := make(map[db.ClusterServiceID]db.ServiceType)
 	err := sqlext.ForeachRow(c.DB, getClusterServicesQuery, nil, func(rows *sql.Rows) error {
 		var (
 			serviceID   db.ClusterServiceID
-			serviceType limes.ServiceType
+			serviceType db.ServiceType
 		)
 		err := rows.Scan(&serviceID, &serviceType)
 		if err == nil {
@@ -360,7 +360,7 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 	return nil
 }
 
-func (c *Collector) confirmPendingCommitmentsIfNecessary(serviceType limes.ServiceType, resourceName limesresources.ResourceName) error {
+func (c *Collector) confirmPendingCommitmentsIfNecessary(serviceType db.ServiceType, resourceName liquid.ResourceName) error {
 	behavior := c.Cluster.BehaviorForResource(serviceType, resourceName)
 	now := c.MeasureTime()
 
@@ -383,7 +383,12 @@ func (c *Collector) confirmPendingCommitmentsIfNecessary(serviceType limes.Servi
 		committableAZs = []limes.AvailabilityZone{limes.AvailabilityZoneAny}
 	}
 	for _, az := range committableAZs {
-		err = datamodel.ConfirmPendingCommitments(serviceType, resourceName, az, c.Cluster, tx, now)
+		loc := datamodel.AZResourceLocation{
+			ServiceType:      serviceType,
+			ResourceName:     resourceName,
+			AvailabilityZone: az,
+		}
+		err = datamodel.ConfirmPendingCommitments(loc, c.Cluster, tx, now)
 		if err != nil {
 			return err
 		}

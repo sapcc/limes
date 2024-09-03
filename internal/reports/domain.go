@@ -28,6 +28,7 @@ import (
 
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/internal/core"
@@ -146,8 +147,8 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 	err = sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		var (
 			domainID             db.DomainID
-			dbServiceType        limes.ServiceType
-			dbResourceName       limesresources.ResourceName
+			dbServiceType        db.ServiceType
+			dbResourceName       liquid.ResourceName
 			projectsQuota        *uint64
 			usage                *uint64
 			backendQuota         *uint64
@@ -210,8 +211,8 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 		err = sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 			var (
 				domainID          db.DomainID
-				dbServiceType     limes.ServiceType
-				dbResourceName    limesresources.ResourceName
+				dbServiceType     db.ServiceType
+				dbResourceName    liquid.ResourceName
 				az                limes.AvailabilityZone
 				quota             *uint64
 				usage             uint64
@@ -254,8 +255,8 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 		err = sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 			var (
 				domainID       db.DomainID
-				dbServiceType  limes.ServiceType
-				dbResourceName limesresources.ResourceName
+				dbServiceType  db.ServiceType
+				dbResourceName liquid.ResourceName
 				az             limes.AvailabilityZone
 				duration       limesresources.CommitmentDuration
 				activeAmount   uint64
@@ -337,7 +338,7 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 	return result, nil
 }
 
-func findInDomainReport(domain *limesresources.DomainReport, cluster *core.Cluster, dbServiceType limes.ServiceType, dbResourceName limesresources.ResourceName, now time.Time) (*limesresources.DomainServiceReport, *limesresources.DomainResourceReport) {
+func findInDomainReport(domain *limesresources.DomainReport, cluster *core.Cluster, dbServiceType db.ServiceType, dbResourceName liquid.ResourceName, now time.Time) (*limesresources.DomainServiceReport, *limesresources.DomainResourceReport) {
 	behavior := cluster.BehaviorForResource(dbServiceType, dbResourceName)
 	apiIdentity := behavior.IdentityInV1API
 

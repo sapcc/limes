@@ -26,12 +26,12 @@ import (
 
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/sapcc/go-api-declarations/limes"
-	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/errext"
 	yaml "gopkg.in/yaml.v2"
 
+	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/util"
 )
 
@@ -40,7 +40,7 @@ import (
 type Cluster struct {
 	Config          ClusterConfiguration
 	DiscoveryPlugin DiscoveryPlugin
-	QuotaPlugins    map[limes.ServiceType]QuotaPlugin
+	QuotaPlugins    map[db.ServiceType]QuotaPlugin
 	CapacityPlugins map[string]CapacityPlugin
 }
 
@@ -50,7 +50,7 @@ type Cluster struct {
 func NewCluster(config ClusterConfiguration) (c *Cluster, errs errext.ErrorSet) {
 	c = &Cluster{
 		Config:          config,
-		QuotaPlugins:    make(map[limes.ServiceType]QuotaPlugin),
+		QuotaPlugins:    make(map[db.ServiceType]QuotaPlugin),
 		CapacityPlugins: make(map[string]CapacityPlugin),
 	}
 
@@ -133,8 +133,8 @@ func (c *Cluster) Connect(ctx context.Context, provider *gophercloud.ProviderCli
 
 // ServiceTypesInAlphabeticalOrder can be used when service types need to be
 // iterated over in a stable order (mostly to ensure deterministic behavior in unit tests).
-func (c *Cluster) ServiceTypesInAlphabeticalOrder() []limes.ServiceType {
-	result := make([]limes.ServiceType, 0, len(c.QuotaPlugins))
+func (c *Cluster) ServiceTypesInAlphabeticalOrder() []db.ServiceType {
+	result := make([]db.ServiceType, 0, len(c.QuotaPlugins))
 	for serviceType, quotaPlugin := range c.QuotaPlugins {
 		if quotaPlugin != nil { // defense in depth (nil values should never be stored in the map anyway)
 			result = append(result, serviceType)
@@ -145,13 +145,13 @@ func (c *Cluster) ServiceTypesInAlphabeticalOrder() []limes.ServiceType {
 }
 
 // HasService checks whether the given service is enabled in this cluster.
-func (c *Cluster) HasService(serviceType limes.ServiceType) bool {
+func (c *Cluster) HasService(serviceType db.ServiceType) bool {
 	return c.QuotaPlugins[serviceType] != nil
 }
 
 // HasResource checks whether the given service is enabled in this cluster and
 // whether it advertises the given resource.
-func (c *Cluster) HasResource(serviceType limes.ServiceType, resourceName limesresources.ResourceName) bool {
+func (c *Cluster) HasResource(serviceType db.ServiceType, resourceName liquid.ResourceName) bool {
 	plugin := c.QuotaPlugins[serviceType]
 	if plugin == nil {
 		return false
@@ -164,7 +164,7 @@ func (c *Cluster) HasResource(serviceType limes.ServiceType, resourceName limesr
 // plugin the ResourceInfo for the given resourceName. If the service or
 // resource does not exist, an empty ResourceInfo (with .Unit == UnitNone and
 // .Category == "") is returned.
-func (c *Cluster) InfoForResource(serviceType limes.ServiceType, resourceName limesresources.ResourceName) liquid.ResourceInfo {
+func (c *Cluster) InfoForResource(serviceType db.ServiceType, resourceName liquid.ResourceName) liquid.ResourceInfo {
 	plugin := c.QuotaPlugins[serviceType]
 	if plugin == nil {
 		return liquid.ResourceInfo{Unit: limes.UnitNone}
@@ -179,7 +179,7 @@ func (c *Cluster) InfoForResource(serviceType limes.ServiceType, resourceName li
 // InfoForService finds the plugin for the given serviceType and returns its
 // ServiceInfo(), or an empty ServiceInfo (with .Area == "") when no such
 // service exists in this cluster.
-func (c *Cluster) InfoForService(serviceType limes.ServiceType) ServiceInfo {
+func (c *Cluster) InfoForService(serviceType db.ServiceType) ServiceInfo {
 	plugin := c.QuotaPlugins[serviceType]
 	if plugin == nil {
 		return ServiceInfo{}
@@ -189,12 +189,13 @@ func (c *Cluster) InfoForService(serviceType limes.ServiceType) ServiceInfo {
 
 // BehaviorForResource returns the ResourceBehavior for the given resource in
 // the given scope.
-func (c *Cluster) BehaviorForResource(serviceType limes.ServiceType, resourceName limesresources.ResourceName) ResourceBehavior {
+func (c *Cluster) BehaviorForResource(serviceType db.ServiceType, resourceName liquid.ResourceName) ResourceBehavior {
 	// default behavior
 	result := ResourceBehavior{
 		IdentityInV1API: ResourceRef{
-			ServiceType:  serviceType,
-			ResourceName: resourceName,
+			// NOTE: This is the only place where these particular cross-type casts are allowed.
+			ServiceType:  limes.ServiceType(serviceType),
+			ResourceName: limesresources.ResourceName(resourceName),
 		},
 	}
 
@@ -211,7 +212,7 @@ func (c *Cluster) BehaviorForResource(serviceType limes.ServiceType, resourceNam
 
 // QuotaDistributionConfigForResource returns the QuotaDistributionConfiguration
 // for the given resource.
-func (c *Cluster) QuotaDistributionConfigForResource(serviceType limes.ServiceType, resourceName limesresources.ResourceName) QuotaDistributionConfiguration {
+func (c *Cluster) QuotaDistributionConfigForResource(serviceType db.ServiceType, resourceName liquid.ResourceName) QuotaDistributionConfiguration {
 	// check for specific behavior
 	fullName := string(serviceType) + "/" + string(resourceName)
 	for _, dmCfg := range c.Config.QuotaDistributionConfigs {
@@ -235,17 +236,13 @@ func (c *Cluster) QuotaDistributionConfigForResource(serviceType limes.ServiceTy
 
 // HasUsageForRate checks whether the given service is enabled in this cluster and
 // whether it scrapes usage for the given rate.
-func (c *Cluster) HasUsageForRate(serviceType limes.ServiceType, rateName limesrates.RateName) bool {
+func (c *Cluster) HasUsageForRate(serviceType db.ServiceType, rateName db.RateName) bool {
 	plugin := c.QuotaPlugins[serviceType]
 	if plugin == nil {
 		return false
 	}
-	for _, rate := range plugin.Rates() {
-		if rate.Name == rateName {
-			return true
-		}
-	}
-	return false
+	_, exists := plugin.Rates()[rateName]
+	return exists
 }
 
 // InfoForRate finds the plugin for the given serviceType and finds within that
@@ -253,15 +250,14 @@ func (c *Cluster) HasUsageForRate(serviceType limes.ServiceType, rateName limesr
 // exist, an empty RateInfo (with .Unit == UnitNone) is returned. Note that this
 // only returns non-empty RateInfos for rates where a usage is reported. There
 // may be rates that only have a limit, as defined in the ClusterConfiguration.
-func (c *Cluster) InfoForRate(serviceType limes.ServiceType, rateName limesrates.RateName) limesrates.RateInfo {
+func (c *Cluster) InfoForRate(serviceType db.ServiceType, rateName db.RateName) RateInfo {
 	plugin := c.QuotaPlugins[serviceType]
 	if plugin == nil {
-		return limesrates.RateInfo{Name: rateName, Unit: limes.UnitNone}
+		return RateInfo{Unit: limes.UnitNone}
 	}
-	for _, rate := range plugin.Rates() {
-		if rate.Name == rateName {
-			return rate
-		}
+	info, exists := plugin.Rates()[rateName]
+	if exists {
+		return info
 	}
-	return limesrates.RateInfo{Name: rateName, Unit: limes.UnitNone}
+	return RateInfo{Unit: limes.UnitNone}
 }

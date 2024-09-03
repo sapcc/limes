@@ -24,7 +24,7 @@ import (
 	"time"
 
 	"github.com/sapcc/go-api-declarations/limes"
-	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
 
@@ -52,24 +52,24 @@ var (
 
 // AZResourceLocation is a tuple identifying an AZ resource within a project.
 type AZResourceLocation struct {
-	ServiceType      limes.ServiceType
-	ResourceName     limesresources.ResourceName
+	ServiceType      db.ServiceType
+	ResourceName     liquid.ResourceName
 	AvailabilityZone limes.AvailabilityZone
 }
 
 // CanConfirmNewCommitment returns whether the given commitment request can be
 // confirmed immediately upon creation in the given project.
-func CanConfirmNewCommitment(req limesresources.CommitmentRequest, resourceID db.ProjectResourceID, cluster *core.Cluster, dbi db.Interface) (bool, error) {
-	statsByAZ, err := collectAZAllocationStats(req.ServiceType, req.ResourceName, &req.AvailabilityZone, cluster, dbi)
+func CanConfirmNewCommitment(loc AZResourceLocation, resourceID db.ProjectResourceID, amount uint64, cluster *core.Cluster, dbi db.Interface) (bool, error) {
+	statsByAZ, err := collectAZAllocationStats(loc.ServiceType, loc.ResourceName, &loc.AvailabilityZone, cluster, dbi)
 	if err != nil {
 		return false, err
 	}
-	stats := statsByAZ[req.AvailabilityZone]
+	stats := statsByAZ[loc.AvailabilityZone]
 
-	additions := map[db.ProjectResourceID]uint64{resourceID: req.Amount}
-	behavior := cluster.BehaviorForResource(req.ServiceType, req.ResourceName)
+	additions := map[db.ProjectResourceID]uint64{resourceID: amount}
+	behavior := cluster.BehaviorForResource(loc.ServiceType, loc.ResourceName)
 	logg.Debug("checking CanConfirmNewCommitment in %s/%s/%s: resourceID = %d, amount = %d",
-		req.ServiceType, req.ResourceName, req.AvailabilityZone, resourceID, req.Amount)
+		loc.ServiceType, loc.ResourceName, loc.AvailabilityZone, resourceID, amount)
 	return stats.CanAcceptCommitmentChanges(additions, nil, behavior), nil
 }
 
@@ -94,14 +94,14 @@ func CanMoveExistingCommitment(amount uint64, loc AZResourceLocation, sourceReso
 // ConfirmPendingCommitments goes through all unconfirmed commitments that
 // could be confirmed, in chronological creation order, and confirms as many of
 // them as possible given the currently available capacity.
-func ConfirmPendingCommitments(serviceType limes.ServiceType, resourceName limesresources.ResourceName, az limes.AvailabilityZone, cluster *core.Cluster, dbi db.Interface, now time.Time) error {
-	behavior := cluster.BehaviorForResource(serviceType, resourceName)
+func ConfirmPendingCommitments(loc AZResourceLocation, cluster *core.Cluster, dbi db.Interface, now time.Time) error {
+	behavior := cluster.BehaviorForResource(loc.ServiceType, loc.ResourceName)
 
-	statsByAZ, err := collectAZAllocationStats(serviceType, resourceName, &az, cluster, dbi)
+	statsByAZ, err := collectAZAllocationStats(loc.ServiceType, loc.ResourceName, &loc.AvailabilityZone, cluster, dbi)
 	if err != nil {
 		return err
 	}
-	stats := statsByAZ[az]
+	stats := statsByAZ[loc.AvailabilityZone]
 
 	// load confirmable commitments (we need to load them into a buffer first, since
 	// lib/pq cannot do UPDATE while a SELECT targeting the same rows is still going)
@@ -111,7 +111,7 @@ func ConfirmPendingCommitments(serviceType limes.ServiceType, resourceName limes
 		Amount            uint64
 	}
 	var confirmableCommitments []confirmableCommitment
-	queryArgs := []any{serviceType, resourceName, az}
+	queryArgs := []any{loc.ServiceType, loc.ResourceName, loc.AvailabilityZone}
 	err = sqlext.ForeachRow(dbi, getConfirmableCommitmentsQuery, queryArgs, func(rows *sql.Rows) error {
 		var c confirmableCommitment
 		err := rows.Scan(&c.ProjectResourceID, &c.CommitmentID, &c.Amount)
@@ -119,7 +119,7 @@ func ConfirmPendingCommitments(serviceType limes.ServiceType, resourceName limes
 		return err
 	})
 	if err != nil {
-		return fmt.Errorf("while enumerating confirmable commitments for %s/%s in %s: %w", serviceType, resourceName, az, err)
+		return fmt.Errorf("while enumerating confirmable commitments for %s/%s in %s: %w", loc.ServiceType, loc.ResourceName, loc.AvailabilityZone, err)
 	}
 
 	// foreach confirmable commitment...
@@ -127,7 +127,7 @@ func ConfirmPendingCommitments(serviceType limes.ServiceType, resourceName limes
 		// ignore commitments that do not fit
 		additions := map[db.ProjectResourceID]uint64{c.ProjectResourceID: c.Amount}
 		logg.Debug("checking ConfirmPendingCommitments in %s/%s/%s: resourceID = %d, amount = %d",
-			serviceType, resourceName, az, c.ProjectResourceID, c.Amount)
+			loc.ServiceType, loc.ResourceName, loc.AvailabilityZone, c.ProjectResourceID, c.Amount)
 		if !stats.CanAcceptCommitmentChanges(additions, nil, behavior) {
 			continue
 		}
@@ -136,7 +136,7 @@ func ConfirmPendingCommitments(serviceType limes.ServiceType, resourceName limes
 		_, err = dbi.Exec(`UPDATE project_commitments SET confirmed_at = $1, state = $2 WHERE id = $3`,
 			now, db.CommitmentStateActive, c.CommitmentID)
 		if err != nil {
-			return fmt.Errorf("while confirming commitment ID=%d for %s/%s in %s: %w", c.CommitmentID, serviceType, resourceName, az, err)
+			return fmt.Errorf("while confirming commitment ID=%d for %s/%s in %s: %w", c.CommitmentID, loc.ServiceType, loc.ResourceName, loc.AvailabilityZone, err)
 		}
 
 		// block its allocation from being committed again in this loop

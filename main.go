@@ -41,7 +41,6 @@ import (
 	"github.com/rs/cors"
 	"github.com/sapcc/go-api-declarations/bininfo"
 	"github.com/sapcc/go-api-declarations/limes"
-	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/errext"
 	"github.com/sapcc/go-bits/httpapi"
@@ -310,7 +309,7 @@ func taskTestGetQuota(ctx context.Context, cluster *core.Cluster, args []string)
 		printUsageAndExit(1)
 	}
 
-	serviceType := limes.ServiceType(args[1])
+	serviceType := db.ServiceType(args[1])
 	project := must.Return(findProjectForTesting(ctx, cluster, args[0]))
 
 	if _, ok := cluster.QuotaPlugins[serviceType]; !ok {
@@ -352,7 +351,7 @@ func taskTestGetRates(ctx context.Context, cluster *core.Cluster, args []string)
 		printUsageAndExit(1)
 	}
 
-	serviceType := limes.ServiceType(args[1])
+	serviceType := db.ServiceType(args[1])
 	project := must.Return(findProjectForTesting(ctx, cluster, args[0]))
 
 	result, serializedState, err := cluster.QuotaPlugins[serviceType].ScrapeRates(ctx, project, prevSerializedState)
@@ -433,11 +432,11 @@ func taskTestSetQuota(ctx context.Context, cluster *core.Cluster, args []string)
 		printUsageAndExit(1)
 	}
 
-	serviceType := limes.ServiceType(args[1])
+	serviceType := db.ServiceType(args[1])
 	project := must.Return(findProjectForTesting(ctx, cluster, args[0]))
 
 	quotaValueRx := regexp.MustCompile(`^([^=]+)=(\d+)$`)
-	quotaValues := make(map[limesresources.ResourceName]uint64)
+	quotaValues := make(map[liquid.ResourceName]uint64)
 	for _, arg := range args[2:] {
 		match := quotaValueRx.FindStringSubmatch(arg)
 		if match == nil {
@@ -447,7 +446,7 @@ func taskTestSetQuota(ctx context.Context, cluster *core.Cluster, args []string)
 		if err != nil {
 			logg.Fatal(err.Error())
 		}
-		quotaValues[limesresources.ResourceName(match[1])] = val
+		quotaValues[liquid.ResourceName(match[1])] = val
 	}
 
 	must.Succeed(cluster.QuotaPlugins[serviceType].SetQuota(ctx, project, quotaValues))
@@ -503,7 +502,7 @@ type mockCapacityPluginBackchannel struct {
 }
 
 // GetResourceDemand implements the core.CapacityPluginBackchannel interface.
-func (b mockCapacityPluginBackchannel) GetResourceDemand(serviceType limes.ServiceType, resourceName limesresources.ResourceName) (result liquid.ResourceDemand, err error) {
+func (b mockCapacityPluginBackchannel) GetResourceDemand(serviceType db.ServiceType, resourceName liquid.ResourceName) (result liquid.ResourceDemand, err error) {
 	filePath := "mock-global-resource-demand.json"
 	buf, err := os.ReadFile(filePath)
 	if err != nil {
@@ -516,7 +515,7 @@ func (b mockCapacityPluginBackchannel) GetResourceDemand(serviceType limes.Servi
 		}
 	}
 
-	var mockData map[limes.ServiceType]map[limesresources.ResourceName]map[limes.AvailabilityZone]liquid.ResourceDemandInAZ
+	var mockData map[db.ServiceType]map[liquid.ResourceName]map[limes.AvailabilityZone]liquid.ResourceDemandInAZ
 	err = yaml.Unmarshal(buf, &mockData)
 	if err != nil {
 		return liquid.ResourceDemand{}, fmt.Errorf("while parsing %s: %w", filePath, err)

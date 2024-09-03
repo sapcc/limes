@@ -21,9 +21,23 @@ package db
 import (
 	"cmp"
 
-	"github.com/sapcc/go-api-declarations/limes"
-	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 )
+
+// ServiceType identifies a backend service that can have resources or rates.
+//
+// This type is used for the service type columns that appear in the DB.
+// It is legally distinct from `limes.ServiceType` to ensure that the
+// ResourceBehavior.IdentityInV1API mapping is applied when converting between
+// API-level and DB-level identifiers.
+type ServiceType string
+
+// RateName identifies a rate within a service.
+//
+// This type is used for the resource name columns that appear in the DB.
+// It is legally distinct from `limesrates.RateName`, not because we currently
+// support API-level renaming, but to make it easier to add it in the future.
+type RateName string
 
 // ClusterServiceID is an ID into the cluster_services table. This typedef is
 // used to distinguish these IDs from IDs of other tables or raw int64 values.
@@ -63,8 +77,8 @@ type ProjectCommitmentID int64
 
 // ResourceRef identifies an individual ProjectResource, DomainResource or ClusterResource.
 type ResourceRef[I ~int64] struct {
-	ServiceID I                           `db:"service_id"`
-	Name      limesresources.ResourceName `db:"name"`
+	ServiceID I                   `db:"service_id"`
+	Name      liquid.ResourceName `db:"name"`
 }
 
 // CompareResourceRefs is a compare function for ResourceRef (for use with slices.SortFunc etc.)
@@ -79,5 +93,5 @@ func CompareResourceRefs[I ~int64](lhs, rhs ResourceRef[I]) int {
 // It appears in APIs when not the entire Service record is needed.
 type ServiceRef[I ~int64] struct {
 	ID   I
-	Type limes.ServiceType
+	Type ServiceType
 }

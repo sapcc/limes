@@ -504,7 +504,7 @@ func TestPutCommitmentErrorCases(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
 		Body:         assert.JSONObject{"commitment": cloned},
 		ExpectStatus: http.StatusUnprocessableEntity,
-		ExpectBody:   assert.StringData("no such service\n"),
+		ExpectBody:   assert.StringData("no such service and/or resource: unknown/capacity\n"),
 	}.Check(t, s.Handler)
 
 	// invalid request field: resource_name does not exist
@@ -515,7 +515,7 @@ func TestPutCommitmentErrorCases(t *testing.T) {
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
 		Body:         assert.JSONObject{"commitment": cloned},
 		ExpectStatus: http.StatusUnprocessableEntity,
-		ExpectBody:   assert.StringData("no such resource\n"),
+		ExpectBody:   assert.StringData("no such service and/or resource: first/unknown\n"),
 	}.Check(t, s.Handler)
 
 	// invalid request field: service_type/resource_name does not accept commitments

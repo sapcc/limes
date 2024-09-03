@@ -22,10 +22,10 @@ package datamodel
 import (
 	"testing"
 
-	"github.com/sapcc/go-api-declarations/limes"
-	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/assert"
 
+	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
 )
 
@@ -58,7 +58,7 @@ const (
 	`
 )
 
-var expectedQuotaOverrides = map[string]map[string]map[limes.ServiceType]map[limesresources.ResourceName]uint64{
+var expectedQuotaOverrides = map[string]map[string]map[db.ServiceType]map[liquid.ResourceName]uint64{
 	"firstdomain": {
 		"firstproject": {
 			"first": {

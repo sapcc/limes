@@ -32,13 +32,12 @@ import (
 	neutron_quotas "github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/quotas"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
-	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
-	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/errext"
 	"github.com/sapcc/go-bits/logg"
 
 	"github.com/sapcc/limes/internal/core"
+	"github.com/sapcc/limes/internal/db"
 )
 
 type neutronPlugin struct {
@@ -56,7 +55,7 @@ func init() {
 }
 
 // Init implements the core.QuotaPlugin interface.
-func (p *neutronPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType limes.ServiceType) (err error) {
+func (p *neutronPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType db.ServiceType) (err error) {
 	p.NeutronV2, err = openstack.NewNetworkV2(provider, eo)
 	if err != nil {
 		return err
@@ -130,12 +129,12 @@ func (p *neutronPlugin) Resources() map[liquid.ResourceName]liquid.ResourceInfo 
 }
 
 // Rates implements the core.QuotaPlugin interface.
-func (p *neutronPlugin) Rates() []limesrates.RateInfo {
+func (p *neutronPlugin) Rates() map[db.RateName]core.RateInfo {
 	return nil
 }
 
 type neutronResourceMetadata struct {
-	LimesName   limesresources.ResourceName
+	LimesName   liquid.ResourceName
 	NeutronName string
 	Extension   string
 }
@@ -190,7 +189,7 @@ var neutronResourceMeta = []neutronResourceMetadata{
 }
 
 type octaviaResourceMetadata struct {
-	LimesName         limesresources.ResourceName
+	LimesName         liquid.ResourceName
 	OctaviaName       string
 	LegacyOctaviaName string
 }
@@ -225,13 +224,13 @@ var octaviaResourceMeta = []octaviaResourceMetadata{
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *neutronPlugin) ScrapeRates(ctx context.Context, project core.KeystoneProject, prevSerializedState string) (result map[limesrates.RateName]*big.Int, serializedState string, err error) {
+func (p *neutronPlugin) ScrapeRates(ctx context.Context, project core.KeystoneProject, prevSerializedState string) (result map[db.RateName]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
 // Scrape implements the core.QuotaPlugin interface.
-func (p *neutronPlugin) Scrape(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[limesresources.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
-	data := make(map[limesresources.ResourceName]core.ResourceData)
+func (p *neutronPlugin) Scrape(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[liquid.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
+	data := make(map[liquid.ResourceName]core.ResourceData)
 
 	err = p.scrapeNeutronInto(ctx, data, project.UUID)
 	if err != nil {
@@ -248,7 +247,7 @@ func (p *neutronPlugin) Scrape(ctx context.Context, project core.KeystoneProject
 	return data, nil, nil
 }
 
-func (p *neutronPlugin) scrapeNeutronInto(ctx context.Context, result map[limesresources.ResourceName]core.ResourceData, projectUUID string) error {
+func (p *neutronPlugin) scrapeNeutronInto(ctx context.Context, result map[liquid.ResourceName]core.ResourceData, projectUUID string) error {
 	// read Neutron quota/usage
 	type neutronQuotaStruct struct {
 		Quota int64  `json:"limit"`
@@ -279,7 +278,7 @@ func (p *neutronPlugin) scrapeNeutronInto(ctx context.Context, result map[limesr
 	return nil
 }
 
-func (p *neutronPlugin) scrapeOctaviaInto(ctx context.Context, result map[limesresources.ResourceName]core.ResourceData, projectUUID string) error {
+func (p *neutronPlugin) scrapeOctaviaInto(ctx context.Context, result map[liquid.ResourceName]core.ResourceData, projectUUID string) error {
 	// read Octavia quota
 	var quotas struct {
 		Values map[string]int64 `json:"quota"`
@@ -343,7 +342,7 @@ func (q neutronOrOctaviaQuotaSet) ToQuotaUpdateMap() (map[string]any, error) {
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *neutronPlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotas map[limesresources.ResourceName]uint64) error {
+func (p *neutronPlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotas map[liquid.ResourceName]uint64) error {
 	// collect Neutron quotas
 	neutronQuotas := make(neutronOrOctaviaQuotaSet)
 	for _, res := range neutronResourceMeta {

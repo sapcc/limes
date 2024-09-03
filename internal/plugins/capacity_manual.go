@@ -27,13 +27,14 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 
 	"github.com/sapcc/go-api-declarations/limes"
-	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 
 	"github.com/sapcc/limes/internal/core"
+	"github.com/sapcc/limes/internal/db"
 )
 
 type capacityManualPlugin struct {
-	Values map[limes.ServiceType]map[limesresources.ResourceName]uint64 `yaml:"values"`
+	Values map[db.ServiceType]map[liquid.ResourceName]uint64 `yaml:"values"`
 }
 
 func init() {
@@ -53,14 +54,14 @@ func (p *capacityManualPlugin) PluginTypeID() string {
 var errNoManualData = errors.New(`missing values for capacitor plugin "manual"`)
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *capacityManualPlugin) Scrape(ctx context.Context, _ core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (result map[limes.ServiceType]map[limesresources.ResourceName]core.PerAZ[core.CapacityData], _ []byte, err error) {
+func (p *capacityManualPlugin) Scrape(ctx context.Context, _ core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (result map[db.ServiceType]map[liquid.ResourceName]core.PerAZ[core.CapacityData], _ []byte, err error) {
 	if p.Values == nil {
 		return nil, nil, errNoManualData
 	}
 
-	result = make(map[limes.ServiceType]map[limesresources.ResourceName]core.PerAZ[core.CapacityData])
+	result = make(map[db.ServiceType]map[liquid.ResourceName]core.PerAZ[core.CapacityData])
 	for serviceType, serviceData := range p.Values {
-		serviceResult := make(map[limesresources.ResourceName]core.PerAZ[core.CapacityData])
+		serviceResult := make(map[liquid.ResourceName]core.PerAZ[core.CapacityData])
 		for resourceName, capacity := range serviceData {
 			serviceResult[resourceName] = core.InAnyAZ(core.CapacityData{Capacity: capacity})
 		}

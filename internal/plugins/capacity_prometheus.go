@@ -29,16 +29,17 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/model"
 	"github.com/sapcc/go-api-declarations/limes"
-	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/promquery"
 
 	"github.com/sapcc/limes/internal/core"
+	"github.com/sapcc/limes/internal/db"
 )
 
 type capacityPrometheusPlugin struct {
-	APIConfig         promquery.Config                                             `yaml:"api"`
-	Queries           map[limes.ServiceType]map[limesresources.ResourceName]string `yaml:"queries"`
-	AllowZeroCapacity bool                                                         `yaml:"allow_zero_capacity"`
+	APIConfig         promquery.Config                                  `yaml:"api"`
+	Queries           map[db.ServiceType]map[liquid.ResourceName]string `yaml:"queries"`
+	AllowZeroCapacity bool                                              `yaml:"allow_zero_capacity"`
 }
 
 func init() {
@@ -56,15 +57,15 @@ func (p *capacityPrometheusPlugin) PluginTypeID() string {
 }
 
 // Scrape implements the core.CapacityPlugin interface.
-func (p *capacityPrometheusPlugin) Scrape(ctx context.Context, _ core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (result map[limes.ServiceType]map[limesresources.ResourceName]core.PerAZ[core.CapacityData], _ []byte, err error) {
+func (p *capacityPrometheusPlugin) Scrape(ctx context.Context, _ core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (result map[db.ServiceType]map[liquid.ResourceName]core.PerAZ[core.CapacityData], _ []byte, err error) {
 	client, err := p.APIConfig.Connect()
 	if err != nil {
 		return nil, nil, err
 	}
 
-	result = make(map[limes.ServiceType]map[limesresources.ResourceName]core.PerAZ[core.CapacityData])
+	result = make(map[db.ServiceType]map[liquid.ResourceName]core.PerAZ[core.CapacityData])
 	for serviceType, queries := range p.Queries {
-		serviceResult := make(map[limesresources.ResourceName]core.PerAZ[core.CapacityData])
+		serviceResult := make(map[liquid.ResourceName]core.PerAZ[core.CapacityData])
 		for resourceName, query := range queries {
 			serviceResult[resourceName], err = p.scrapeOneResource(ctx, client, query, allAZs)
 			if err != nil {

@@ -25,7 +25,6 @@ import (
 	"slices"
 	"time"
 
-	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/logg"
 
@@ -61,7 +60,7 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, now 
 	}
 
 	// collect ResourceInfo instances for this service
-	allResources := make(map[limesresources.ResourceName]resourceState)
+	allResources := make(map[liquid.ResourceName]resourceState)
 	for resName, resInfo := range cluster.QuotaPlugins[srv.Type].Resources() {
 		allResources[resName] = resourceState{
 			Original: nil, // might be filled in the next loop below
@@ -83,7 +82,7 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, now 
 	}
 
 	// go through resources in a defined order (to ensure deterministic test behavior)
-	allResourceNames := make([]limesresources.ResourceName, 0, len(allResources))
+	allResourceNames := make([]liquid.ResourceName, 0, len(allResources))
 	for resName := range allResources {
 		allResourceNames = append(allResourceNames, resName)
 	}
