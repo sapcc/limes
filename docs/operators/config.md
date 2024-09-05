@@ -439,23 +439,6 @@ exist will also be reported by Limes. (Not all resources may exist for a given h
 regular `cores`/`instances`/`ram` resources and cover instances whose flavors have the respective value in the
 `quota:hw_version` extra spec.
 
-### `dns`: Designate v2
-
-```yaml
-services:
-  - type: dns
-    service_type: dns
-```
-
-The area for this service is `dns`.
-
-| Resource | Unit |
-| --- | --- |
-| `recordsets` | countable |
-| `zones` | countable |
-
-When the `recordsets` quota is set, the backend quota for records is set to 20 times that value, to fit into the `records_per_recordset` quota (which is set to 20 by default in Designate). The record quota cannot be controlled explicitly in Limes.
-
 ### `email-aws`: Cronus v1 (SAP Converged Cloud only)
 
 ```yaml
@@ -472,21 +455,6 @@ The area for this service is `email`. This service has no resources, only rates.
 | `data_transfer_in` | bytes | Total size of incoming emails. |
 | `data_transfer_out` | bytes | Total size of outgoing emails. |
 | `recipients` | countable | Number of recipients on outgoing emails. |
-
-### `endpoint-services`: [Archer](https://github.com/sapcc/archer) v1
-
-```yaml
-services:
-  - type: endpoint-services
-    service_type: endpoint-services
-```
-
-The area for this service is `network`.
-
-| Resource | Unit |
-| --- | --- |
-| `endpoints` | countable |
-| `services` | countable |
 
 ### `liquid`: Any service with LIQUID support
 
@@ -507,40 +475,6 @@ Currently, any increase in the ServiceInfo version of the liquid will prompt a f
 This is something that we plan on changing into a graceful reload in the future.
 
 For information on liquids provided by Limes itself, please refer to the [liquids documentation](../liquids/index.md).
-
-### `network`: Neutron v1
-
-```yaml
-services:
-  - type: network
-    service_type: network
-```
-
-The area for this service is `network`. Resources are categorized into `networking` for SDN resources and `loadbalancing` for LBaaS resources.
-
-| Category | Resource | Unit | Comment |
-| --- | --- | --- | --- |
-| `networking` | `floating_ips` | countable ||
-|| `networks` | countable ||
-|| `ports` | countable ||
-|| `rbac_policies` | countable ||
-|| `routers` | countable ||
-|| `security_group_rules` | countable | See note about auto-approval below. |
-|| `security_groups` | countable | See note about auto-approval below. |
-|| `subnet_pools` | countable ||
-|| `subnets` | countable ||
-|| `bgpvpns` | countable | Only when Neutron has the `bgpvpn` extension. |
-|| `trunks` | countable | Only when Neutron has the `trunk` extension. |
-| `loadbalancing` | `healthmonitors` | countable ||
-|| `l7policies` | countable ||
-|| `listeners` | countable ||
-|| `loadbalancers` | countable ||
-|| `pools` | countable ||
-|| `pool_members` | countable ||
-
-When a new project is scraped for the first time, and usage for `security_groups` and `security_group_rules` is 1 and 4,
-respectively, quota of the same size is approved automatically. This covers the `default` security group that is
-automatically created in a new project.
 
 ### `sharev2`: Manila v2
 
