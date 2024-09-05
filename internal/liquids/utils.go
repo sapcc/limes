@@ -71,6 +71,14 @@ func PointerTo[T any](value T) *T {
 	return &value
 }
 
+// SaturatingSub is like `lhs - rhs`, but never underflows below 0.
+func SaturatingSub(lhs, rhs uint64) uint64 {
+	if lhs < rhs {
+		return 0
+	}
+	return lhs - rhs
+}
+
 // State contains data that is guarded by an RWMutex,
 // such that the data cannot be accessed without using the mutex.
 // A zero-initialized State contains a zero-initialized piece of data.

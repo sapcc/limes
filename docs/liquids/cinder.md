@@ -60,6 +60,7 @@ If a pool has the field `capabilities.custom_attributes.cinder_state` with the v
 
 - This pool will only contribute capacity towards the total to the extent to which it is actually used (i.e., not higher than its `usage` value).
 - Consequently, the `capacity` field of the subcapacity will also show the `usage` value, with the real capacity value relegated to `attributes.real_capacity`.
+
 The `attributes.exclusion_reason` will explain this by showing the value `cinder_state = drain` or `cinder_state = reserved`, respectively.
 
 We use this to avoid double-counting of capacity when a new filer is brought in to replace an old one.

@@ -61,6 +61,7 @@ import (
 	"github.com/sapcc/limes/internal/liquids/archer"
 	"github.com/sapcc/limes/internal/liquids/cinder"
 	"github.com/sapcc/limes/internal/liquids/designate"
+	"github.com/sapcc/limes/internal/liquids/manila"
 	"github.com/sapcc/limes/internal/liquids/neutron"
 	"github.com/sapcc/limes/internal/liquids/octavia"
 	"github.com/sapcc/limes/internal/liquids/swift"
@@ -108,6 +109,9 @@ func main() {
 			must.Succeed(liquidapi.Run(ctx, &cinder.Logic{}, opts))
 		case "designate":
 			must.Succeed(liquidapi.Run(ctx, &designate.Logic{}, opts))
+		case "manila":
+			opts.TakesConfiguration = true
+			must.Succeed(liquidapi.Run(ctx, &manila.Logic{}, opts))
 		case "neutron":
 			must.Succeed(liquidapi.Run(ctx, &neutron.Logic{}, opts))
 		case "octavia":

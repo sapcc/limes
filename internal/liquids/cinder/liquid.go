@@ -27,6 +27,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack"
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumetypes"
 	"github.com/sapcc/go-api-declarations/liquid"
+
 	"github.com/sapcc/limes/internal/liquids"
 )
 
@@ -112,10 +113,10 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 		HasQuota:    true,
 	}
 	resources := make(map[liquid.ResourceName]liquid.ResourceInfo, 3*len(volumeTypes))
-	for volumeType := range volumeTypes {
-		resources[volumeType.CapacityResourceName()] = resInfoForCapacity
-		resources[volumeType.SnapshotsResourceName()] = resInfoForObjects
-		resources[volumeType.VolumesResourceName()] = resInfoForObjects
+	for vt := range volumeTypes {
+		resources[vt.CapacityResourceName()] = resInfoForCapacity
+		resources[vt.SnapshotsResourceName()] = resInfoForObjects
+		resources[vt.VolumesResourceName()] = resInfoForObjects
 	}
 
 	return liquid.ServiceInfo{
