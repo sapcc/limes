@@ -38,6 +38,7 @@ import (
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
+	"github.com/sapcc/limes/internal/liquids"
 	"github.com/sapcc/limes/internal/util"
 )
 
@@ -273,12 +274,12 @@ func (p *capacityManilaPlugin) scrapeForShareTypeAndAZ(shareType ManilaShareType
 	)
 	for _, pool := range pools {
 		poolCount++
-		allocatedCapacityGB += pool.Capabilities.AllocatedCapacityGB
+		allocatedCapacityGB += float64(pool.Capabilities.AllocatedCapacityGB)
 
 		if pool.CountsUnusedCapacity() {
-			totalCapacityGB += pool.Capabilities.TotalCapacityGB
+			totalCapacityGB += float64(pool.Capabilities.TotalCapacityGB)
 		} else {
-			totalCapacityGB += pool.Capabilities.AllocatedCapacityGB
+			totalCapacityGB += float64(pool.Capabilities.AllocatedCapacityGB)
 			logg.Info("ignoring unused capacity in Manila storage pool %q (share type %q) in AZ %q because of hardware_state value: %q",
 				pool.Name, shareType.Name, az, pool.Capabilities.HardwareState)
 		}
@@ -429,8 +430,8 @@ type manilaPool struct {
 	Host         string `json:"host"`
 	Capabilities struct {
 		// standard fields
-		TotalCapacityGB     float64 `json:"total_capacity_gb"`
-		AllocatedCapacityGB float64 `json:"allocated_capacity_gb"`
+		TotalCapacityGB     liquids.Float64WithStringErrors `json:"total_capacity_gb"`
+		AllocatedCapacityGB liquids.Float64WithStringErrors `json:"allocated_capacity_gb"`
 		// CCloud extension fields
 		HardwareState string `json:"hardware_state"`
 	} `json:"capabilities,omitempty"`

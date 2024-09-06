@@ -21,9 +21,12 @@ package liquids
 
 import (
 	"fmt"
+	"slices"
+	"sync"
 
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack/identity/v3/tokens"
+	"github.com/sapcc/go-api-declarations/liquid"
 )
 
 // GetProjectIDFromTokenScope returns the project ID from the client's token scope.
@@ -43,4 +46,57 @@ func GetProjectIDFromTokenScope(provider *gophercloud.ProviderClient) (string, e
 		return "", fmt.Errorf(`expected "id" attribute in "project" section, but got %#v`, project)
 	}
 	return project.ID, nil
+}
+
+// RestrictToKnownAZs takes a mapping of objects sorted by AZ, and moves all
+// objects in unknown AZs into the pseudo-AZ "unknown".
+//
+// The resulting map will have an entry for each known AZ (possibly a nil slice),
+// and at most one additional key (the well-known value "unknown").
+func RestrictToKnownAZs[T any](input map[liquid.AvailabilityZone][]T, allAZs []liquid.AvailabilityZone) map[liquid.AvailabilityZone][]T {
+	output := make(map[liquid.AvailabilityZone][]T, len(allAZs))
+	for _, az := range allAZs {
+		output[az] = input[az]
+	}
+	for az, items := range input {
+		if !slices.Contains(allAZs, az) {
+			output[liquid.AvailabilityZoneUnknown] = append(output[liquid.AvailabilityZoneUnknown], items...)
+		}
+	}
+	return output
+}
+
+// PointerTo casts T into *T without going through a named variable.
+func PointerTo[T any](value T) *T {
+	return &value
+}
+
+// SaturatingSub is like `lhs - rhs`, but never underflows below 0.
+func SaturatingSub(lhs, rhs uint64) uint64 {
+	if lhs < rhs {
+		return 0
+	}
+	return lhs - rhs
+}
+
+// State contains data that is guarded by an RWMutex,
+// such that the data cannot be accessed without using the mutex.
+// A zero-initialized State contains a zero-initialized piece of data.
+type State[T any] struct {
+	mutex sync.RWMutex
+	data  T
+}
+
+// Set replaces the contained value.
+func (s *State[T]) Set(value T) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	s.data = value
+}
+
+// Get returns a shallow copy of the contained value.
+func (s *State[T]) Get() T {
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
+	return s.data
 }
