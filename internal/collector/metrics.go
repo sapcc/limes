@@ -389,7 +389,7 @@ type DataMetricsReporter struct {
 // test verifies that promhttp yields this Content-Type. In the case of a change,
 // the output format of promhttp should be carefully reviewed for changes, and then
 // our implementation should match those changes (including to the Content-Type).
-const contentTypeForPrometheusMetrics = "text/plain; version=0.0.4; charset=utf-8; escaping=values"
+const contentTypeForPrometheusMetrics = "text/plain; version=0.0.4; charset=utf-8; escaping=underscores"
 
 // ServeHTTP implements the http.Handler interface.
 func (d *DataMetricsReporter) ServeHTTP(w http.ResponseWriter, r *http.Request) {
