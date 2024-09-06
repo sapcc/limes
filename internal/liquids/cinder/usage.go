@@ -154,8 +154,9 @@ func (l *Logic) collectSnapshotSubresources(ctx context.Context, projectUUID str
 					ID:   snapshot.ID,
 					Name: snapshot.Name,
 					Attributes: SnapshotAttributes{
-						SizeGiB: uint64(snapshot.Size),
-						Status:  snapshot.Status,
+						SizeGiB:  uint64(snapshot.Size),
+						Status:   snapshot.Status,
+						VolumeID: snapshot.VolumeID,
 					},
 				}.Finalize()
 				if err != nil {
@@ -186,8 +187,9 @@ type VolumeAttributes struct {
 
 // SnapshotAttributes is the Attributes payload for a Cinder snapshot subresource.
 type SnapshotAttributes struct {
-	SizeGiB uint64 `json:"size_gib"`
-	Status  string `json:"status"`
+	SizeGiB  uint64 `json:"size_gib"`
+	Status   string `json:"status"`
+	VolumeID string `json:"volume_id"`
 }
 
 ////////////////////////////////////////////////////////////////////////////////
