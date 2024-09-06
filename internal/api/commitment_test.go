@@ -1145,32 +1145,39 @@ func Test_ConvertCommitments(t *testing.T) {
 		test.WithAPIHandler(NewV1API),
 	)
 
-	req := assert.JSONObject{
+	commitment := assert.JSONObject{
 		"commitment": assert.JSONObject{
 			"service_type":      "second",
 			"resource_name":     "capacity",
 			"availability_zone": "az-one",
-			"amount":            11,
+			"amount":            10,
 			"duration":          "1 hour",
+		},
+	}
+
+	req := assert.JSONObject{
+		"commitment": assert.JSONObject{
+			"target_service":  "third",
+			"target_resource": "capacity_c48",
+			"source_amount":   10,
+			"target_amount":   6,
 		},
 	}
 
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body:         req,
+		Body:         commitment,
 		ExpectStatus: http.StatusCreated,
 	}.Check(t, s.Handler)
 
 	// TODO: Test for a real result set.
-	/*
-		assert.HTTPRequest{
-			Method:       http.MethodPost,
-			Path:         "/v1/commitment-conversion/1/third/capacity_c48",
-			ExpectStatus: http.StatusOK,
-			Body:         req,
-			ExpectBody:   assert.JSONObject{"conversions": ""},
-		}.Check(t, s.Handler)
-	*/
 
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/commitment-conversion/1",
+		ExpectStatus: http.StatusOK,
+		Body:         req,
+		ExpectBody:   assert.JSONObject{"commitment": 0},
+	}.Check(t, s.Handler)
 }
