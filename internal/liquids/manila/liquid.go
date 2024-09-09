@@ -39,9 +39,6 @@ import (
 	"github.com/sapcc/limes/internal/liquids"
 )
 
-// NOTE: this will render subresources and subcapacities in the LIQUID format - to maintain compatibility within the v1 API, we will use a translation layer on the API level to translate subresources and subcapacities back into the known formats
-// TODO: if you see this comment, reject the PR review
-
 type Logic struct {
 	// configuration
 	CapacityCalculation struct {

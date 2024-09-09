@@ -241,6 +241,14 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 			resReport.PhysicalUsage = &sum
 		}
 		if azSubresources != nil {
+			translate := behavior.TranslationRuleInV1API.TranslateSubresources
+			if translate != nil {
+				*azSubresources, err = translate(*azSubresources, *az)
+				if err != nil {
+					return fmt.Errorf("could not apply TranslationRule to subresources in %s/%s/%s of project %d: %w",
+						dbServiceType, dbResourceName, *az, currentProjectID, err)
+				}
+			}
 			mergeJSONListInto(&resReport.Subresources, *azSubresources)
 		}
 

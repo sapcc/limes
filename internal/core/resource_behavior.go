@@ -42,6 +42,7 @@ type ResourceBehavior struct {
 	CommitmentUntilPercent   *float64                            `yaml:"commitment_until_percent"`
 	CommitmentConversion     CommitmentConversion                `yaml:"commitment_conversion"`
 	IdentityInV1API          ResourceRef                         `yaml:"identity_in_v1_api"`
+	TranslationRuleInV1API   TranslationRule                     `yaml:"translation_rule_in_v1_api"`
 	Category                 string                              `yaml:"category"`
 }
 
@@ -114,6 +115,9 @@ func (b *ResourceBehavior) Merge(other ResourceBehavior) {
 	}
 	if other.IdentityInV1API != (ResourceRef{}) {
 		b.IdentityInV1API = other.IdentityInV1API
+	}
+	if !other.TranslationRuleInV1API.IsEmpty() {
+		b.TranslationRuleInV1API = other.TranslationRuleInV1API
 	}
 	if other.Category != "" {
 		b.Category = other.Category
