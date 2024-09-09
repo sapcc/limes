@@ -79,13 +79,25 @@ var (
 	`)
 
 	findCommitmentLocationByIDQuery = sqlext.SimplifyWhitespace(`
-	SELECT ps.type, pr.name
-	  FROM project_commitments pc
-	  JOIN project_az_resources par ON pc.az_resource_id = par.id
-	  JOIN project_resources pr ON par.resource_id = pr.id
-	  JOIN project_services ps ON pr.service_id = ps.id
-	 WHERE pc.id = $1
-`)
+		SELECT ps.type, pr.name
+		  FROM project_commitments pc
+		  JOIN project_az_resources par ON pc.az_resource_id = par.id
+		  JOIN project_resources pr ON par.resource_id = pr.id
+		  JOIN project_services ps ON pr.service_id = ps.id
+		 WHERE pc.id = $1
+	`)
+
+	findTargetAZResourceIDByCommitmentQuery = sqlext.SimplifyWhitespace(`
+		SELECT par.id
+		  FROM project_az_resources par
+		  JOIN project_resources pr ON par.resource_id = pr.id
+		  JOIN project_services ps ON pr.service_id = ps.id
+		 WHERE ps.type = $1 AND pr.name = $2 AND par.az = (
+		 	SELECT par.az
+			FROM project_commitments pc
+			JOIN project_az_resources par ON pc.az_resource_id = par.id
+			WHERE pc.id = $3)
+	`)
 
 	// NOTE: The third output column is `resourceAllowsCommitments`.
 	// We should be checking for `ResourceUsageReport.Forbidden == true`, but
@@ -933,11 +945,22 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: finish the conversion part.
 	// conversion
+	if req.SourceAmount <= 0 || req.SourceAmount > dbCommitment.Amount {
+		http.Error(w, "unprocessable source_amount provided", http.StatusConflict)
+		return
+	}
 	fromAmount, toAmount := p.getCommitmentConversionRate(sourceBehavior, targetBehavior)
-	conversionAmount := (dbCommitment.Amount / fromAmount) * toAmount
-	remainderAmount := dbCommitment.Amount % fromAmount
+	conversionAmount := (req.SourceAmount / fromAmount) * toAmount
+	remainderAmount := req.SourceAmount % fromAmount
+
+	// TODO: add a check to dismiss requests with conversionAmount = 0
+
+	if conversionAmount != req.TargetAmount {
+		msg := fmt.Sprintf("conversion mismatch. calculated: %v, provided: %v", conversionAmount, req.TargetAmount)
+		http.Error(w, msg, http.StatusConflict)
+		return
+	}
 
 	tx, err := p.DB.Begin()
 	if respondwith.ErrorText(w, err) {
@@ -951,9 +974,19 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	// TODO: Required is the translated target AZResourceID.
 	// This would require the use of "findProjectAZResourceIDByLocationQuery" and therefore the domaind and project ID.
 	// The URL will become quite messy with this. Think about a solution.
+
+	var azResourceID db.ProjectAZResourceID
+	err = p.DB.SelectOne(&azResourceID, findTargetAZResourceIDByCommitmentQuery, targetServiceType, targetResourceName, dbCommitment.ID)
+	if errors.Is(err, sql.ErrNoRows) {
+		http.Error(w, "target resource not found", http.StatusNotFound)
+		return
+	} else if respondwith.ErrorText(w, err) {
+		return
+	}
+
 	now := p.timeNow()
 	convertedCommitment := db.ProjectCommitment{
-		AZResourceID: 0,
+		AZResourceID: azResourceID,
 		Amount:       conversionAmount,
 		Duration:     dbCommitment.Duration,
 		CreatedAt:    now,
@@ -979,7 +1012,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if remainderAmount > 0 {
-		dbCommitment.Amount = remainderAmount
+		dbCommitment.Amount = dbCommitment.Amount - req.SourceAmount + remainderAmount
 		_, err = tx.Update(&dbCommitment)
 		if respondwith.ErrorText(w, err) {
 			return

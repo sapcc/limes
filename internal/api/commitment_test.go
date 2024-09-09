@@ -78,6 +78,8 @@ const testConvertCommitmentsYAML = `
 	discovery:
 		method: --test-static
 	services:
+		- service_type: first
+			type: --test-generic
 		- service_type: second
 			type: --test-generic
 		- service_type: third
@@ -86,10 +88,15 @@ const testConvertCommitmentsYAML = `
 				with_empty_resource: true
 				with_convert_commitments: true
 	resource_behavior:
+		- resource: first/.*
+			commitment_durations: ["1 hour", "2 hours"]
 		- resource: second/.*
 			commitment_durations: ["1 hour", "2 hours"]
 		- resource: third/.*
 			commitment_durations: ["1 hour", "2 hours"]
+		- resource: first/capacity
+			commitment_is_az_aware: true
+			commitment_conversion: {identifier: flavor1, weight: 48}
 		- resource: second/capacity
 			commitment_is_az_aware: true
 			commitment_conversion: {identifier: flavor1, weight: 32}
@@ -1104,6 +1111,12 @@ func Test_GetCommitmentConversion(t *testing.T) {
 	// capacity_c120 uses a different Unit than the source and is therefore ignored.
 	resp1 := []assert.JSONObject{
 		{
+			"from":            1,
+			"to":              1,
+			"target_service":  "first",
+			"target_resource": "capacity",
+		},
+		{
 			"from":            2,
 			"to":              3,
 			"target_service":  "second",
@@ -1150,15 +1163,15 @@ func Test_ConvertCommitments(t *testing.T) {
 			"service_type":      "second",
 			"resource_name":     "capacity",
 			"availability_zone": "az-one",
-			"amount":            10,
+			"amount":            13,
 			"duration":          "1 hour",
 		},
 	}
 
 	req := assert.JSONObject{
 		"commitment": assert.JSONObject{
-			"target_service":  "third",
-			"target_resource": "capacity_c48",
+			"target_service":  "first",
+			"target_resource": "capacity",
 			"source_amount":   10,
 			"target_amount":   6,
 		},
