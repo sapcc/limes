@@ -947,21 +947,23 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 
 	// conversion
 	if req.SourceAmount <= 0 || req.SourceAmount > dbCommitment.Amount {
-		http.Error(w, "unprocessable source_amount provided", http.StatusConflict)
+		msg := fmt.Sprintf("unprocessable source amount provided. provided: %v, commitment: %v", req.SourceAmount, dbCommitment.Amount)
+		http.Error(w, msg, http.StatusConflict)
 		return
 	}
 	fromAmount, toAmount := p.getCommitmentConversionRate(sourceBehavior, targetBehavior)
+	if fromAmount > req.SourceAmount {
+		msg := fmt.Sprintf("amount: %v does not match conversion rate of: %v", req.SourceAmount, fromAmount)
+		http.Error(w, msg, http.StatusConflict)
+		return
+	}
 	conversionAmount := (req.SourceAmount / fromAmount) * toAmount
 	remainderAmount := req.SourceAmount % fromAmount
-
-	// TODO: add a check to dismiss requests with conversionAmount = 0
-
 	if conversionAmount != req.TargetAmount {
 		msg := fmt.Sprintf("conversion mismatch. calculated: %v, provided: %v", conversionAmount, req.TargetAmount)
 		http.Error(w, msg, http.StatusConflict)
 		return
 	}
-
 	tx, err := p.DB.Begin()
 	if respondwith.ErrorText(w, err) {
 		return
