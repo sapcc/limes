@@ -31,7 +31,6 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
-	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/must"
@@ -75,15 +74,6 @@ var (
 	findCommitmentByIDQuery = sqlext.SimplifyWhitespace(`
 		SELECT pc.*
 		  FROM project_commitments pc
-		 WHERE pc.id = $1
-	`)
-
-	findCommitmentLocationByIDQuery = sqlext.SimplifyWhitespace(`
-		SELECT ps.type, pr.name
-		  FROM project_commitments pc
-		  JOIN project_az_resources par ON pc.az_resource_id = par.id
-		  JOIN project_resources pr ON par.resource_id = pr.id
-		  JOIN project_services ps ON pr.service_id = ps.id
 		 WHERE pc.id = $1
 	`)
 
@@ -887,11 +877,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// sourceBehavior
-	var (
-		dbCommitment       db.ProjectCommitment
-		sourceServiceType  db.ServiceType
-		sourceResourceName liquid.ResourceName
-	)
+	var dbCommitment db.ProjectCommitment
 	err := p.DB.SelectOne(&dbCommitment, findCommitmentByIDQuery, mux.Vars(r)["commitment_id"])
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "no such commitment", http.StatusNotFound)
@@ -899,12 +885,17 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	} else if respondwith.ErrorText(w, err) {
 		return
 	}
-	err = p.DB.QueryRow(findCommitmentLocationByIDQuery, mux.Vars(r)["commitment_id"]).
-		Scan(&sourceServiceType, &sourceResourceName)
-	if respondwith.ErrorText(w, err) {
+	var loc datamodel.AZResourceLocation
+	err = p.DB.QueryRow(findProjectAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
+		Scan(&loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)
+	if errors.Is(err, sql.ErrNoRows) {
+		// defense in depth: this should not happen because all the relevant tables are connected by FK constraints
+		http.Error(w, "no route to this commitment", http.StatusNotFound)
+		return
+	} else if respondwith.ErrorText(w, err) {
 		return
 	}
-	sourceBehavior := p.Cluster.BehaviorForResource(sourceServiceType, sourceResourceName)
+	sourceBehavior := p.Cluster.BehaviorForResource(loc.ServiceType, loc.ResourceName)
 	if len(sourceBehavior.CommitmentDurations) == 0 {
 		http.Error(w, "commitments are not enabled for this resource", http.StatusUnprocessableEntity)
 		return
@@ -947,7 +938,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 
 	// conversion
 	if req.SourceAmount <= 0 || req.SourceAmount > dbCommitment.Amount {
-		msg := fmt.Sprintf("unprocessable source amount provided. provided: %v, commitment: %v", req.SourceAmount, dbCommitment.Amount)
+		msg := fmt.Sprintf("unprocessable source amount. provided: %v, commitment: %v", req.SourceAmount, dbCommitment.Amount)
 		http.Error(w, msg, http.StatusConflict)
 		return
 	}
