@@ -99,7 +99,7 @@ func (l *Logic) collectVolumeSubresources(ctx context.Context, projectUUID strin
 
 			placementForVolumeUUID[volume.ID] = VolumePlacement{vt, az}
 			if az != liquid.AvailabilityZoneUnknown {
-				resources[vt.CapacityResourceName()].AddLocalizedUsage(az, uint64(volume.Size))
+				resources[vt.CapacityResourceName()].AddLocalizedUsage(az, uint64(volume.Size)) //nolint:gosec // volume size cannot be negative
 				resources[vt.VolumesResourceName()].AddLocalizedUsage(az, 1)
 			}
 
@@ -108,7 +108,7 @@ func (l *Logic) collectVolumeSubresources(ctx context.Context, projectUUID strin
 					ID:   volume.ID,
 					Name: volume.Name,
 					Attributes: VolumeAttributes{
-						SizeGiB: uint64(volume.Size),
+						SizeGiB: uint64(volume.Size), //nolint:gosec // volume size cannot be negative
 						Status:  volume.Status,
 					},
 				}.Finalize()
@@ -145,7 +145,7 @@ func (l *Logic) collectSnapshotSubresources(ctx context.Context, projectUUID str
 			vt := placement.VolumeType
 			az := placement.AvailabilityZone
 			if az != liquid.AvailabilityZoneUnknown {
-				resources[vt.CapacityResourceName()].AddLocalizedUsage(az, uint64(snapshot.Size))
+				resources[vt.CapacityResourceName()].AddLocalizedUsage(az, uint64(snapshot.Size)) //nolint:gosec // snapshot size cannot be negative
 				resources[vt.SnapshotsResourceName()].AddLocalizedUsage(az, 1)
 			}
 
@@ -154,7 +154,7 @@ func (l *Logic) collectSnapshotSubresources(ctx context.Context, projectUUID str
 					ID:   snapshot.ID,
 					Name: snapshot.Name,
 					Attributes: SnapshotAttributes{
-						SizeGiB:  uint64(snapshot.Size),
+						SizeGiB:  uint64(snapshot.Size), //nolint:gosec // snapshot size cannot be negative
 						Status:   snapshot.Status,
 						VolumeID: snapshot.VolumeID,
 					},

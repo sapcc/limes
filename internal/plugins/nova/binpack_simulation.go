@@ -24,6 +24,8 @@ import (
 	"math"
 	"strings"
 
+	"github.com/sapcc/limes/internal/liquids"
+
 	"github.com/gophercloud/gophercloud/v2/openstack/placement/v1/resourceproviders"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
@@ -121,14 +123,14 @@ func PrepareHypervisorForBinpacking(h MatchingHypervisor) (BinpackHypervisor, er
 	// break down capacity into equal-sized nodes
 	nodeTemplate := BinpackNode{
 		Capacity: BinpackVector[uint64]{
-			VCPUs:    uint64(h.Inventories["VCPU"].MaxUnit),
-			MemoryMB: uint64(h.Inventories["MEMORY_MB"].MaxUnit),
+			VCPUs:    uint64(h.Inventories["VCPU"].MaxUnit),      //nolint:gosec // cpu core count cannot be negative
+			MemoryMB: uint64(h.Inventories["MEMORY_MB"].MaxUnit), //nolint:gosec // ram size cannot be negative
 			// We do not use `h.Inventories["DISK_GB"].MaxUnit` because it appears to describe the max root
 			// disk size for a single instance, rather than the actual available disk size. Maybe this is
 			// because the root disks are stored on nearby NFS filers, so MaxUnit is actually the max
 			// volume size instead of the total capacity per node. Since we have a good nodeCount number
 			// now, we can divide up the total disk space for all nodes.
-			LocalGB: uint64(h.Inventories["DISK_GB"].Total-h.Inventories["DISK_GB"].Reserved) / nodeCount,
+			LocalGB: liquids.SaturatingSub(uint64(h.Inventories["DISK_GB"].Total), uint64(h.Inventories["DISK_GB"].Reserved)) / nodeCount, //nolint:gosec // SaturatingSub handles values smaller than 0
 		},
 	}
 	result := BinpackHypervisor{
@@ -186,9 +188,9 @@ func (hh BinpackHypervisors) PlaceOneInstance(ff FullFlavor, reason string, core
 	// [Mayank]: https://www.it.iitb.ac.in/~sahoo/papers/cloud2011_mayank.pdf
 
 	vmSize := BinpackVector[uint64]{
-		VCPUs:    coresOvercommitFactor.ApplyInReverseTo(uint64(ff.Flavor.VCPUs)),
-		MemoryMB: uint64(ff.Flavor.RAM),
-		LocalGB:  uint64(ff.Flavor.Disk),
+		VCPUs:    coresOvercommitFactor.ApplyInReverseTo(uint64(ff.Flavor.VCPUs)), //nolint:gosec // cpu core count cannot be negative
+		MemoryMB: uint64(ff.Flavor.RAM),                                           //nolint:gosec // ram size cannot be negative
+		LocalGB:  uint64(ff.Flavor.Disk),                                          //nolint:gosec // root disk size cannot be negative
 	}
 
 	// ensure that placing this instance does not encroach on the overall blocked capacity

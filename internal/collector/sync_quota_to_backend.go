@@ -135,7 +135,7 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 			return err
 		}
 		targetQuotasInDB[resourceName] = targetQuota
-		if currentQuota == nil || *currentQuota < 0 || uint64(*currentQuota) != targetQuota {
+		if currentQuota == nil || *currentQuota < 0 || uint64(*currentQuota) != targetQuota { //nolint:gosec // negative backend quota is explicitly checked
 			needsApply = true
 		}
 		return nil

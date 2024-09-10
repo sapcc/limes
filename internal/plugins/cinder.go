@@ -236,7 +236,7 @@ func (p *cinderPlugin) collectVolumeSubresources(ctx context.Context, project co
 				Name:   volume.Name,
 				Status: volume.Status,
 				Size: limes.ValueWithUnit{
-					Value: uint64(volume.Size),
+					Value: uint64(volume.Size), //nolint:gosec // volume size cannot be negative
 					Unit:  limes.UnitGibibytes,
 				},
 				AvailabilityZone: limes.AvailabilityZone(volume.AvailabilityZone),
@@ -279,7 +279,7 @@ func (p *cinderPlugin) collectSnapshotSubresources(ctx context.Context, project 
 				Name:   snapshot.Name,
 				Status: snapshot.Status,
 				Size: limes.ValueWithUnit{
-					Value: uint64(snapshot.Size),
+					Value: uint64(snapshot.Size), //nolint:gosec // snapshot size cannot be negative
 					Unit:  limes.UnitGibibytes,
 				},
 				VolumeUUID: snapshot.VolumeID,

@@ -25,6 +25,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/sapcc/limes/internal/liquids"
+
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/aggregates"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/hypervisors"
@@ -237,8 +239,8 @@ func (h MatchingHypervisor) CheckTopology() bool {
 func (h MatchingHypervisor) PartialCapacity() PartialCapacity {
 	makeMetric := func(metric string) PartialCapacityMetric {
 		return PartialCapacityMetric{
-			Capacity: uint64(h.Inventories[metric].Total - h.Inventories[metric].Reserved),
-			Usage:    uint64(h.Usages[metric]),
+			Capacity: liquids.SaturatingSub(uint64(h.Inventories[metric].Total), uint64(h.Inventories[metric].Reserved)), //nolint:gosec // SaturatingSub handles values smaller than 0
+			Usage:    uint64(h.Usages[metric]),                                                                           //nolint:gosec // usages cannot be negative
 		}
 	}
 	return PartialCapacity{
