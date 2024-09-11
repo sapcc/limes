@@ -37,6 +37,7 @@ import (
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
+	"github.com/sapcc/limes/internal/liquids"
 	"github.com/sapcc/limes/internal/plugins/nova"
 )
 
@@ -129,7 +130,7 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 			// only public flavor contribute to the `maxRootDiskSize` calculation (in
 			// the wild, we have seen non-public legacy flavors with wildly large
 			// disk sizes that would throw off all estimates derived from this number)
-			maxRootDiskSize = max(maxRootDiskSize, uint64(f.Flavor.Disk)) //nolint:gosec // root disk size cannot be negative
+			maxRootDiskSize = max(maxRootDiskSize, liquids.AtLeastZero(f.Flavor.Disk))
 		}
 		return nil
 	})
@@ -366,9 +367,9 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 			totalPlacedInstances[flavor.Flavor.Name] = float64(count)
 			// The max(..., 0.1) is explained below.
 
-			splitFlavorsUsage.VCPUs += coresDemand.OvercommitFactor.ApplyInReverseTo(count * uint64(flavor.Flavor.VCPUs)) //nolint:gosec // cpu count cannot be negative
-			splitFlavorsUsage.MemoryMB += count * uint64(flavor.Flavor.RAM)                                               //nolint:gosec // ram size cannot be negative
-			splitFlavorsUsage.LocalGB += count * uint64(flavor.Flavor.Disk)                                               //nolint:gosec // disk size cannot be negative
+			splitFlavorsUsage.VCPUs += coresDemand.OvercommitFactor.ApplyInReverseTo(count * liquids.AtLeastZero(flavor.Flavor.VCPUs))
+			splitFlavorsUsage.MemoryMB += count * liquids.AtLeastZero(flavor.Flavor.RAM)
+			splitFlavorsUsage.LocalGB += count * liquids.AtLeastZero(flavor.Flavor.Disk)
 		}
 
 		// for the upcoming final fill, we want to block capacity in such a way that
@@ -467,9 +468,9 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 			capacities[p.PooledRAMResourceName][az] = pointerTo(azCapacity.IntoCapacityData("ram", float64(maxRootDiskSize), builder.RAMSubcapacities))
 			for _, flavor := range splitFlavors {
 				count := hypervisors.PlacementCountForFlavor(flavor.Flavor.Name)
-				capacities[p.PooledCoresResourceName][az].Capacity -= coresDemand.OvercommitFactor.ApplyInReverseTo(count * uint64(flavor.Flavor.VCPUs)) //nolint:gosec // cpu core count cannot be negative
-				capacities[p.PooledInstancesResourceName][az].Capacity--                                                                                 //TODO: not accurate when uint64(flavor.Disk) != maxRootDiskSize
-				capacities[p.PooledRAMResourceName][az].Capacity -= count * uint64(flavor.Flavor.RAM)                                                    //nolint:gosec // ram size cannot be negative
+				capacities[p.PooledCoresResourceName][az].Capacity -= coresDemand.OvercommitFactor.ApplyInReverseTo(count * liquids.AtLeastZero(flavor.Flavor.VCPUs))
+				capacities[p.PooledInstancesResourceName][az].Capacity-- //TODO: not accurate when uint64(flavor.Disk) != maxRootDiskSize
+				capacities[p.PooledRAMResourceName][az].Capacity -= count * liquids.AtLeastZero(flavor.Flavor.RAM)
 			}
 		}
 	}

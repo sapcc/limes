@@ -239,8 +239,8 @@ func (h MatchingHypervisor) CheckTopology() bool {
 func (h MatchingHypervisor) PartialCapacity() PartialCapacity {
 	makeMetric := func(metric string) PartialCapacityMetric {
 		return PartialCapacityMetric{
-			Capacity: liquids.SaturatingSub(uint64(h.Inventories[metric].Total), uint64(h.Inventories[metric].Reserved)), //nolint:gosec // SaturatingSub handles values smaller than 0
-			Usage:    uint64(h.Usages[metric]),                                                                           //nolint:gosec // usages cannot be negative
+			Capacity: liquids.SaturatingSub(h.Inventories[metric].Total, h.Inventories[metric].Reserved),
+			Usage:    liquids.AtLeastZero(h.Usages[metric]),
 		}
 	}
 	return PartialCapacity{
