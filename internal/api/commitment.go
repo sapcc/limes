@@ -71,24 +71,6 @@ var (
 		 WHERE pc.id = $1 AND ps.project_id = $2
 	`)
 
-	findCommitmentByIDQuery = sqlext.SimplifyWhitespace(`
-		SELECT pc.*
-		  FROM project_commitments pc
-		 WHERE pc.id = $1
-	`)
-
-	findTargetAZResourceIDByCommitmentQuery = sqlext.SimplifyWhitespace(`
-		SELECT par.id
-		  FROM project_az_resources par
-		  JOIN project_resources pr ON par.resource_id = pr.id
-		  JOIN project_services ps ON pr.service_id = ps.id
-		 WHERE ps.type = $1 AND pr.name = $2 AND par.az = (
-		 	SELECT par.az
-			FROM project_commitments pc
-			JOIN project_az_resources par ON pc.az_resource_id = par.id
-			WHERE pc.id = $3)
-	`)
-
 	// NOTE: The third output column is `resourceAllowsCommitments`.
 	// We should be checking for `ResourceUsageReport.Forbidden == true`, but
 	// since the `Forbidden` field is not persisted in the DB, we need to use
@@ -114,6 +96,11 @@ var (
 	findCommitmentByTransferToken = sqlext.SimplifyWhitespace(`
 		SELECT * FROM project_commitments WHERE transfer_token = $1
 	`)
+	findCommitmentByIDQuery = sqlext.SimplifyWhitespace(`
+        SELECT pc.*
+          FROM project_commitments pc
+         WHERE pc.id = $1
+    `)
 	findTargetAZResourceIDBySourceIDQuery = sqlext.SimplifyWhitespace(`
 		WITH source as (
 		SELECT pr.id AS resource_id, ps.type, pr.name, par.az
@@ -129,7 +116,13 @@ var (
 		  JOIN source s ON ps.type = s.type AND pr.name = s.name AND par.az = s.az
 		 WHERE ps.project_id = $2
 	`)
-
+	findTargetAZResourceByTargetProjectQuery = sqlext.SimplifyWhitespace(`
+		SELECT pr.id, par.id
+		  FROM project_az_resources par
+		  JOIN project_resources pr ON par.resource_id = pr.id
+		  JOIN project_services ps ON pr.service_id = ps.id
+		 WHERE ps.project_id = $1 AND ps.type = $2 AND pr.name = $3 AND par.az = $4
+	`)
 	forceImmediateCapacityScrapeQuery = sqlext.SimplifyWhitespace(`
 		UPDATE cluster_capacitors SET next_scrape_at = $1 WHERE capacitor_id = (
 			SELECT capacitor_id FROM cluster_services cs JOIN cluster_resources cr ON cs.id = cr.service_id
@@ -868,26 +861,41 @@ func (p *v1Provider) GetCommitmentConversions(w http.ResponseWriter, r *http.Req
 	respondwith.JSON(w, http.StatusOK, map[string]any{"conversions": conversions})
 }
 
-// ConvertCommitment handles POST /v1/commitment-conversion/{commitment_id}
+// ConvertCommitment handles POST /v1/domains/{domain_id}/projects/{project_id}/commitment-conversion/{commitment_id}
 func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
-	httpapi.IdentifyEndpoint(r, "/v1/commitment-conversion/:commitment_id")
+	httpapi.IdentifyEndpoint(r, "/v1/domains/:domain_id/projects/:project_id/commitment-conversion/:commitment_id")
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:edit") {
+		return
+	}
+	commitmentID := mux.Vars(r)["commitment_id"]
+	if commitmentID == "" {
+		http.Error(w, "no transfer token provided", http.StatusBadRequest)
+		return
+	}
+	dbDomain := p.FindDomainFromRequest(w, r)
+	if dbDomain == nil {
+		http.Error(w, "domain not found.", http.StatusNotFound)
+		return
+	}
+	targetProject := p.FindProjectFromRequest(w, r, dbDomain)
+	if targetProject == nil {
+		http.Error(w, "project not found.", http.StatusNotFound)
 		return
 	}
 
 	// sourceBehavior
 	var dbCommitment db.ProjectCommitment
-	err := p.DB.SelectOne(&dbCommitment, findCommitmentByIDQuery, mux.Vars(r)["commitment_id"])
+	err := p.DB.SelectOne(&dbCommitment, findCommitmentByIDQuery, commitmentID)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "no such commitment", http.StatusNotFound)
 		return
 	} else if respondwith.ErrorText(w, err) {
 		return
 	}
-	var loc datamodel.AZResourceLocation
+	var sourceLoc datamodel.AZResourceLocation
 	err = p.DB.QueryRow(findProjectAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
-		Scan(&loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)
+		Scan(&sourceLoc.ServiceType, &sourceLoc.ResourceName, &sourceLoc.AvailabilityZone)
 	if errors.Is(err, sql.ErrNoRows) {
 		// defense in depth: this should not happen because all the relevant tables are connected by FK constraints
 		http.Error(w, "no route to this commitment", http.StatusNotFound)
@@ -895,7 +903,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	} else if respondwith.ErrorText(w, err) {
 		return
 	}
-	sourceBehavior := p.Cluster.BehaviorForResource(loc.ServiceType, loc.ResourceName)
+	sourceBehavior := p.Cluster.BehaviorForResource(sourceLoc.ServiceType, sourceLoc.ResourceName)
 	if len(sourceBehavior.CommitmentDurations) == 0 {
 		http.Error(w, "commitments are not enabled for this resource", http.StatusUnprocessableEntity)
 		return
@@ -930,7 +938,6 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "commitments are not enabled for this resource", http.StatusUnprocessableEntity)
 		return
 	}
-
 	if (sourceBehavior.CommitmentConversion == core.CommitmentConversion{} || targetBehavior.CommitmentConversion == core.CommitmentConversion{}) {
 		http.Error(w, "commitment is not convertible", http.StatusUnprocessableEntity)
 		return
@@ -951,59 +958,67 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	conversionAmount := (req.SourceAmount / fromAmount) * toAmount
 	remainderAmount := req.SourceAmount % fromAmount
 	if conversionAmount != req.TargetAmount {
-		msg := fmt.Sprintf("conversion mismatch. calculated: %v, provided: %v", conversionAmount, req.TargetAmount)
+		msg := fmt.Sprintf("conversion mismatch. provided: %v, calculated: %v", req.TargetAmount, conversionAmount)
 		http.Error(w, msg, http.StatusConflict)
 		return
 	}
+
 	tx, err := p.DB.Begin()
 	if respondwith.ErrorText(w, err) {
 		return
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 
-	// TODO: Here we need to perform a capacity check.
-
-	// Create converted commitment
-	// TODO: Required is the translated target AZResourceID.
-	// This would require the use of "findProjectAZResourceIDByLocationQuery" and therefore the domaind and project ID.
-	// The URL will become quite messy with this. Think about a solution.
-
-	var azResourceID db.ProjectAZResourceID
-	err = p.DB.SelectOne(&azResourceID, findTargetAZResourceIDByCommitmentQuery, targetServiceType, targetResourceName, dbCommitment.ID)
-	if errors.Is(err, sql.ErrNoRows) {
-		http.Error(w, "target resource not found", http.StatusNotFound)
+	var (
+		targetResourceID   db.ProjectResourceID
+		targetAZResourceID db.ProjectAZResourceID
+	)
+	err = p.DB.QueryRow(findTargetAZResourceByTargetProjectQuery, targetProject.ID, targetServiceType, targetResourceName, sourceLoc.AvailabilityZone).
+		Scan(&targetResourceID, &targetAZResourceID)
+	if respondwith.ErrorText(w, err) {
 		return
-	} else if respondwith.ErrorText(w, err) {
+	}
+	targetLoc := datamodel.AZResourceLocation{
+		ServiceType:      targetServiceType,
+		ResourceName:     targetResourceName,
+		AvailabilityZone: sourceLoc.AvailabilityZone,
+	}
+	// The commitment at the source resource was already confirmed and checked.
+	// Therefore only the addition to the target resource has to be checked against.
+	ok, err := datamodel.CanConfirmNewCommitment(targetLoc, targetResourceID, conversionAmount, p.Cluster, p.DB)
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+	if !ok {
+		http.Error(w, "not enough capacity to confirm the commitment", http.StatusUnprocessableEntity)
 		return
 	}
 
 	now := p.timeNow()
 	convertedCommitment := db.ProjectCommitment{
-		AZResourceID: azResourceID,
-		Amount:       conversionAmount,
-		Duration:     dbCommitment.Duration,
-		CreatedAt:    now,
-		CreatorUUID:  dbCommitment.CreatorUUID,
-		CreatorName:  dbCommitment.CreatorName,
-		ConfirmedAt:  &now,
-		ExpiresAt:    dbCommitment.ExpiresAt,
-		SupersededAt: &now,
-		State:        db.CommitmentStateSuperseded,
+		AZResourceID:  targetAZResourceID,
+		Amount:        conversionAmount,
+		Duration:      dbCommitment.Duration,
+		CreatedAt:     now,
+		CreatorUUID:   dbCommitment.CreatorUUID,
+		CreatorName:   dbCommitment.CreatorName,
+		ConfirmedAt:   &now,
+		ExpiresAt:     dbCommitment.ExpiresAt,
+		SupersededAt:  &now,
+		State:         db.CommitmentStateSuperseded,
+		PredecessorID: &dbCommitment.ID,
 	}
 
 	err = tx.Insert(&convertedCommitment)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-
-	// Update source commitment. Delete it when it has no remainder.
 	if remainderAmount == 0 {
 		_, err := tx.Delete(&dbCommitment)
 		if respondwith.ErrorText(w, err) {
 			return
 		}
 	}
-
 	if remainderAmount > 0 {
 		dbCommitment.Amount = dbCommitment.Amount - req.SourceAmount + remainderAmount
 		_, err = tx.Update(&dbCommitment)
@@ -1017,7 +1032,16 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondwith.JSON(w, http.StatusOK, map[string]any{"commitment": 0})
+	c := p.convertCommitmentToDisplayForm(convertedCommitment, targetLoc, token)
+	logAndPublishEvent(p.timeNow(), r, token, http.StatusAccepted, commitmentEventTarget{
+		DomainID:    dbDomain.UUID,
+		DomainName:  dbDomain.Name,
+		ProjectID:   targetProject.UUID,
+		ProjectName: targetProject.Name,
+		Commitment:  c,
+	})
+
+	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
 }
 
 func (p *v1Provider) getCommitmentConversionRate(source, target core.ResourceBehavior) (fromAmount, toAmount uint64) {

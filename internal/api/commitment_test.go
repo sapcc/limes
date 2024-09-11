@@ -1163,20 +1163,40 @@ func Test_ConvertCommitments(t *testing.T) {
 			"service_type":      "second",
 			"resource_name":     "capacity",
 			"availability_zone": "az-one",
-			"amount":            13,
+			"amount":            20,
 			"duration":          "1 hour",
 		},
 	}
 
-	req := assert.JSONObject{
-		"commitment": assert.JSONObject{
-			"target_service":  "first",
-			"target_resource": "capacity",
-			"source_amount":   10,
-			"target_amount":   6,
-		},
+	req := func(sourceAmount, TargetAmount uint64) assert.JSONObject {
+		return assert.JSONObject{
+			"commitment": assert.JSONObject{
+				"target_service":  "first",
+				"target_resource": "capacity",
+				"source_amount":   sourceAmount,
+				"target_amount":   TargetAmount,
+			},
+		}
 	}
 
+	s.Clock.StepBy(1 * time.Hour)
+	resp1 := assert.JSONObject{
+		"id":                2,
+		"service_type":      "first",
+		"resource_name":     "capacity",
+		"availability_zone": "az-one",
+		"amount":            6,
+		"unit":              "B",
+		"duration":          "1 hour",
+		"created_at":        s.Clock.Now().Unix(),
+		"creator_uuid":      "uuid-for-alice",
+		"creator_name":      "alice@Default",
+		"can_be_deleted":    true,
+		"confirmed_at":      s.Clock.Now().Unix(),
+		"expires_at":        7200,
+	}
+
+	// conversion rate is (3:2)
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
@@ -1184,13 +1204,32 @@ func Test_ConvertCommitments(t *testing.T) {
 		ExpectStatus: http.StatusCreated,
 	}.Check(t, s.Handler)
 
-	// TODO: Test for a real result set.
-
+	// Converted commitment does not fit into the capacity (amount: 12, capacity: 10)
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
-		Path:         "/v1/commitment-conversion/1",
-		ExpectStatus: http.StatusOK,
-		Body:         req,
-		ExpectBody:   assert.JSONObject{"commitment": 0},
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitment-conversion/1",
+		Body:         req(20, 12),
+		ExpectBody:   assert.StringData("not enough capacity to confirm the commitment\n"),
+		ExpectStatus: http.StatusUnprocessableEntity,
 	}.Check(t, s.Handler)
+
+	// Conversion without remainder
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitment-conversion/1",
+		Body:         req(10, 6),
+		ExpectBody:   assert.JSONObject{"commitment": resp1},
+		ExpectStatus: http.StatusAccepted,
+	}.Check(t, s.Handler)
+
+	// Conversion with remainder
+
+	// Convert to other project
+
+	// Mismatching target amount
+
+	// Check empty commitment from conversion (from amount > source amount)
+
+	// TODO: Test for a real result set.
+
 }
