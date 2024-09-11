@@ -152,6 +152,16 @@ resource_behavior:
   - { resource: compute/instances_baremetal_large, identity_in_v1_api: compute/instances_thebigbox }
 ```
 
+The fields `category` and `identity_in_v1_api` can be templated with placeholders `$1`, `$2`, etc., which will be filled with the respective match groups from the `resource` regex. For example:
+
+```yaml
+resource_behavior:
+  # this entire service was renamed
+  - { resource: 'volumev2/(.*)', identity_in_v1_api: 'cinder/$1' }
+  # this service contains sets of resources for each share type
+  - { resource: 'manila/(shares|snapshots|share_capacity|snapshot_capacity)_(.+)', category: 'share_type_$2' }
+```
+
 #### Resource renaming
 
 Limes provides amenities for renaming and restructuring services and resources in a way where the backwards-incompatible
