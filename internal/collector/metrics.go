@@ -742,17 +742,19 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 	}
 
 	// fetch metadata for services/resources
-	for serviceType, quotaPlugin := range d.Cluster.QuotaPlugins {
-		for resourceName, resourceInfo := range quotaPlugin.Resources() {
+	for dbServiceType, quotaPlugin := range d.Cluster.QuotaPlugins {
+		for dbResourceName, resourceInfo := range quotaPlugin.Resources() {
+			behavior := d.Cluster.BehaviorForResource(dbServiceType, dbResourceName)
+			apiIdentity := behavior.IdentityInV1API
 			labels := fmt.Sprintf(`resource=%q,service=%q,service_name=%q`,
-				resourceName, serviceType, serviceNameByType[serviceType],
+				apiIdentity.ResourceName, apiIdentity.ServiceType, serviceNameByType[dbServiceType],
 			)
 
 			_, multiplier := resourceInfo.Unit.Base()
 			metric := dataMetric{Labels: labels, Value: float64(multiplier)}
 			result["limes_unit_multiplier"] = append(result["limes_unit_multiplier"], metric)
 
-			qdc := d.Cluster.QuotaDistributionConfigForResource(serviceType, resourceName)
+			qdc := d.Cluster.QuotaDistributionConfigForResource(dbServiceType, dbResourceName)
 			if qdc.Model == limesresources.AutogrowQuotaDistribution {
 				metric := dataMetric{Labels: labels, Value: qdc.Autogrow.GrowthMultiplier}
 				result["limes_autogrow_growth_multiplier"] = append(result["limes_autogrow_growth_multiplier"], metric)
@@ -771,7 +773,7 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 			projectName   string
 			projectUUID   string
 			serviceType   db.ServiceType
-			rateName      db.RateName
+			rateName      db.RateName // TODO: when transitioning rates to LIQUID, add an IdentityInV1API cast on the labels below
 			usageAsBigint string
 		)
 		err := rows.Scan(&domainName, &domainUUID, &projectName, &projectUUID, &serviceType, &rateName, &usageAsBigint)
