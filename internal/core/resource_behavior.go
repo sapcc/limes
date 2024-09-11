@@ -81,17 +81,12 @@ func (b ResourceBehavior) ToCommitmentConfig(now time.Time) *limesresources.Comm
 // BuildAPIResourceInfo converts a ResourceInfo from LIQUID into the API
 // format, using the category mapping in this behavior object.
 func (b ResourceBehavior) BuildAPIResourceInfo(resName limesresources.ResourceName, resInfo liquid.ResourceInfo) limesresources.ResourceInfo {
-	result := limesresources.ResourceInfo{
+	return limesresources.ResourceInfo{
 		Name:     resName,
 		Unit:     resInfo.Unit,
 		Category: b.Category,
 		NoQuota:  !resInfo.HasQuota,
 	}
-	// TODO: remove this deprecated field once CBR has removed their use of it on this particular resource
-	if suffix, ok := strings.CutPrefix(string(resName), "snapmirror_capacity"); ok {
-		result.ContainedIn = limesresources.ResourceName("share_capacity" + suffix)
-	}
-	return result
 }
 
 // Merge computes the union of both given resource behaviors.
