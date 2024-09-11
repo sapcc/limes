@@ -978,6 +978,10 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	if respondwith.ErrorText(w, err) {
 		return
 	}
+	if dbCommitment.AZResourceID == targetAZResourceID {
+		http.Error(w, "conversion attempt to the same resource.", http.StatusConflict)
+		return
+	}
 	targetLoc := datamodel.AZResourceLocation{
 		ServiceType:      targetServiceType,
 		ResourceName:     targetResourceName,
@@ -1004,8 +1008,6 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		CreatorName:   dbCommitment.CreatorName,
 		ConfirmedAt:   &now,
 		ExpiresAt:     dbCommitment.ExpiresAt,
-		SupersededAt:  &now,
-		State:         db.CommitmentStateSuperseded,
 		PredecessorID: &dbCommitment.ID,
 	}
 
@@ -1014,7 +1016,9 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if remainderAmount == 0 {
-		_, err := tx.Delete(&dbCommitment)
+		dbCommitment.State = db.CommitmentStateSuperseded
+		dbCommitment.SupersededAt = &now
+		_, err := tx.Update(&dbCommitment)
 		if respondwith.ErrorText(w, err) {
 			return
 		}
