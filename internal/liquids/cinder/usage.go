@@ -30,6 +30,8 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
 	"github.com/gophercloud/gophercloud/v2/pagination"
 	"github.com/sapcc/go-api-declarations/liquid"
+
+	"github.com/sapcc/limes/internal/liquids"
 )
 
 // ScanUsage implements the liquidapi.Logic interface.
@@ -99,7 +101,7 @@ func (l *Logic) collectVolumeSubresources(ctx context.Context, projectUUID strin
 
 			placementForVolumeUUID[volume.ID] = VolumePlacement{vt, az}
 			if az != liquid.AvailabilityZoneUnknown {
-				resources[vt.CapacityResourceName()].AddLocalizedUsage(az, uint64(volume.Size))
+				resources[vt.CapacityResourceName()].AddLocalizedUsage(az, liquids.AtLeastZero(volume.Size))
 				resources[vt.VolumesResourceName()].AddLocalizedUsage(az, 1)
 			}
 
@@ -108,7 +110,7 @@ func (l *Logic) collectVolumeSubresources(ctx context.Context, projectUUID strin
 					ID:   volume.ID,
 					Name: volume.Name,
 					Attributes: VolumeAttributes{
-						SizeGiB: uint64(volume.Size),
+						SizeGiB: liquids.AtLeastZero(volume.Size),
 						Status:  volume.Status,
 					},
 				}.Finalize()
@@ -145,7 +147,7 @@ func (l *Logic) collectSnapshotSubresources(ctx context.Context, projectUUID str
 			vt := placement.VolumeType
 			az := placement.AvailabilityZone
 			if az != liquid.AvailabilityZoneUnknown {
-				resources[vt.CapacityResourceName()].AddLocalizedUsage(az, uint64(snapshot.Size))
+				resources[vt.CapacityResourceName()].AddLocalizedUsage(az, liquids.AtLeastZero(snapshot.Size))
 				resources[vt.SnapshotsResourceName()].AddLocalizedUsage(az, 1)
 			}
 
@@ -154,7 +156,7 @@ func (l *Logic) collectSnapshotSubresources(ctx context.Context, projectUUID str
 					ID:   snapshot.ID,
 					Name: snapshot.Name,
 					Attributes: SnapshotAttributes{
-						SizeGiB:  uint64(snapshot.Size),
+						SizeGiB:  liquids.AtLeastZero(snapshot.Size),
 						Status:   snapshot.Status,
 						VolumeID: snapshot.VolumeID,
 					},

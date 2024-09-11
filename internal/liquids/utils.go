@@ -72,11 +72,20 @@ func PointerTo[T any](value T) *T {
 }
 
 // SaturatingSub is like `lhs - rhs`, but never underflows below 0.
-func SaturatingSub(lhs, rhs uint64) uint64 {
+func SaturatingSub[T interface{ int | uint64 }](lhs, rhs T) uint64 {
 	if lhs < rhs {
 		return 0
 	}
-	return lhs - rhs
+	return uint64(lhs - rhs)
+}
+
+// AtLeastZero safely converts int values (which often appear in Gophercloud
+// types) to uint64 by clamping negative values to 0.
+func AtLeastZero(x int) uint64 {
+	if x < 0 {
+		return 0
+	}
+	return uint64(x)
 }
 
 // State contains data that is guarded by an RWMutex,

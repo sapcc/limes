@@ -38,6 +38,7 @@ import (
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
+	"github.com/sapcc/limes/internal/liquids"
 )
 
 type cinderPlugin struct {
@@ -236,7 +237,7 @@ func (p *cinderPlugin) collectVolumeSubresources(ctx context.Context, project co
 				Name:   volume.Name,
 				Status: volume.Status,
 				Size: limes.ValueWithUnit{
-					Value: uint64(volume.Size),
+					Value: liquids.AtLeastZero(volume.Size),
 					Unit:  limes.UnitGibibytes,
 				},
 				AvailabilityZone: limes.AvailabilityZone(volume.AvailabilityZone),
@@ -279,7 +280,7 @@ func (p *cinderPlugin) collectSnapshotSubresources(ctx context.Context, project 
 				Name:   snapshot.Name,
 				Status: snapshot.Status,
 				Size: limes.ValueWithUnit{
-					Value: uint64(snapshot.Size),
+					Value: liquids.AtLeastZero(snapshot.Size),
 					Unit:  limes.UnitGibibytes,
 				},
 				VolumeUUID: snapshot.VolumeID,
