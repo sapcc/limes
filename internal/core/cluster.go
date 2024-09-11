@@ -203,7 +203,7 @@ func (c *Cluster) BehaviorForResource(serviceType db.ServiceType, resourceName l
 	fullName := string(serviceType) + "/" + string(resourceName)
 	for _, behavior := range c.Config.ResourceBehaviors {
 		if behavior.FullResourceNameRx.MatchString(fullName) {
-			result.Merge(behavior)
+			result.Merge(behavior, fullName)
 		}
 	}
 

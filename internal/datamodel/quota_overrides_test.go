@@ -53,8 +53,8 @@ const (
 		resource_behavior:
 		- resource: first/capacity
 			identity_in_v1_api: capacities/first
-		- resource: first/things
-			identity_in_v1_api: things/first
+		- resource: (first)/thi(ngs)
+			identity_in_v1_api: thi$2/$1
 	`
 )
 

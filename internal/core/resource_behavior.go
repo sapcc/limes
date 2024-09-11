@@ -95,7 +95,7 @@ func (b ResourceBehavior) BuildAPIResourceInfo(resName limesresources.ResourceNa
 }
 
 // Merge computes the union of both given resource behaviors.
-func (b *ResourceBehavior) Merge(other ResourceBehavior) {
+func (b *ResourceBehavior) Merge(other ResourceBehavior, fullResourceName string) {
 	if other.OvercommitFactor != 0 {
 		b.OvercommitFactor = other.OvercommitFactor
 	}
@@ -114,17 +114,35 @@ func (b *ResourceBehavior) Merge(other ResourceBehavior) {
 		}
 	}
 	if other.IdentityInV1API != (ResourceRef{}) {
-		b.IdentityInV1API = other.IdentityInV1API
+		b.IdentityInV1API.ServiceType = interpolateFromResourceNameMatch(other, other.IdentityInV1API.ServiceType, fullResourceName)
+		b.IdentityInV1API.ResourceName = interpolateFromResourceNameMatch(other, other.IdentityInV1API.ResourceName, fullResourceName)
 	}
 	if !other.TranslationRuleInV1API.IsEmpty() {
 		b.TranslationRuleInV1API = other.TranslationRuleInV1API
 	}
 	if other.Category != "" {
-		b.Category = other.Category
+		b.Category = interpolateFromResourceNameMatch(other, other.Category, fullResourceName)
 	}
 	if other.CommitmentConversion != (CommitmentConversion{}) {
 		b.CommitmentConversion = other.CommitmentConversion
 	}
+}
+
+func interpolateFromResourceNameMatch[S ~string](b ResourceBehavior, value S, fullResourceName string) S {
+	if !strings.Contains(string(value), "$") {
+		return value
+	}
+	rx, err := b.FullResourceNameRx.Regexp()
+	if err != nil {
+		// defense in depth: this should not happen because the regex should have been validated at UnmarshalYAML time
+		return value
+	}
+	match := rx.FindStringSubmatchIndex(fullResourceName)
+	if match == nil {
+		// defense in depth: this should not happen because this is only called after the resource name has already matched
+		return value
+	}
+	return S(rx.ExpandString(nil, string(value), fullResourceName, match))
 }
 
 // ResourceRef contains a pair of service type and resource name using API-level identifiers.
