@@ -523,12 +523,10 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 	}
 	dbDomain := p.FindDomainFromRequest(w, r)
 	if dbDomain == nil {
-		http.Error(w, "domain not found.", http.StatusNotFound)
 		return
 	}
 	dbProject := p.FindProjectFromRequest(w, r, dbDomain)
 	if dbProject == nil {
-		http.Error(w, "project not found.", http.StatusNotFound)
 		return
 	}
 	// TODO: eventually migrate this struct into go-api-declarations
@@ -705,12 +703,10 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	}
 	dbDomain := p.FindDomainFromRequest(w, r)
 	if dbDomain == nil {
-		http.Error(w, "domain not found.", http.StatusNotFound)
 		return
 	}
 	targetProject := p.FindProjectFromRequest(w, r, dbDomain)
 	if targetProject == nil {
-		http.Error(w, "project not found.", http.StatusNotFound)
 		return
 	}
 
@@ -870,12 +866,10 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	}
 	dbDomain := p.FindDomainFromRequest(w, r)
 	if dbDomain == nil {
-		http.Error(w, "domain not found.", http.StatusNotFound)
 		return
 	}
 	targetProject := p.FindProjectFromRequest(w, r, dbDomain)
 	if targetProject == nil {
-		http.Error(w, "project not found.", http.StatusNotFound)
 		return
 	}
 
