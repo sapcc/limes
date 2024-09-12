@@ -904,7 +904,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if dbCommitment.ConfirmBy != nil {
-		http.Error(w, "unable to convert unconfirmed commitments", http.StatusNotFound)
+		http.Error(w, "unable to convert unconfirmed commitments", http.StatusConflict)
 		return
 	}
 
