@@ -616,7 +616,7 @@ Requires a request body like:
 	"commitment": {
 		"target_service":  "compute",
 		"target_resource": "flavor_c48",
-		"source_amount":   10,
+		"source_amount":   9,
 		"target_amount":   6,
 	},
 }
