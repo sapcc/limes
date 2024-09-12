@@ -934,7 +934,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, msg, http.StatusUnprocessableEntity)
 		return
 	}
-	if (sourceBehavior.CommitmentConversion == core.CommitmentConversion{} || targetBehavior.CommitmentConversion == core.CommitmentConversion{}) {
+	if sourceBehavior.CommitmentConversion.Identifier == "" || sourceBehavior.CommitmentConversion.Identifier != targetBehavior.CommitmentConversion.Identifier {
 		http.Error(w, "commitment is not convertible", http.StatusUnprocessableEntity)
 		return
 	}
