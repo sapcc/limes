@@ -930,7 +930,8 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	}
 	targetBehavior := p.Cluster.BehaviorForResource(targetServiceType, targetResourceName)
 	if len(targetBehavior.CommitmentDurations) == 0 {
-		http.Error(w, "commitments are not enabled for this resource", http.StatusUnprocessableEntity)
+                msg := fmt.Sprintf("commitments are not enabled for resource %s/%s", req.TargetService, req.TargetResource)
+		http.Error(w, msg, http.StatusUnprocessableEntity)
 		return
 	}
 	if (sourceBehavior.CommitmentConversion == core.CommitmentConversion{} || targetBehavior.CommitmentConversion == core.CommitmentConversion{}) {
