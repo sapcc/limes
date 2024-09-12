@@ -650,6 +650,12 @@ func (p *v1Provider) buildSplitCommitment(dbCommitment db.ProjectCommitment, amo
 	}
 }
 
+func (p *v1Provider) buildConvertedCommitment(dbCommitment db.ProjectCommitment, azResourceID db.ProjectAZResourceID, amount uint64) db.ProjectCommitment {
+	commitment := p.buildSplitCommitment(dbCommitment, amount)
+	commitment.AZResourceID = azResourceID
+	return commitment
+}
+
 // GetCommitmentByTransferToken handles GET /v1/commitments/{token}
 func (p *v1Provider) GetCommitmentByTransferToken(w http.ResponseWriter, r *http.Request) {
 	httpapi.IdentifyEndpoint(r, "/v1/commitments/:token")
@@ -940,13 +946,13 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	fromAmount, toAmount := p.getCommitmentConversionRate(sourceBehavior, targetBehavior)
-	if fromAmount > req.SourceAmount {
-		msg := fmt.Sprintf("amount: %v does not match conversion rate of: %v", req.SourceAmount, fromAmount)
+	conversionAmount := (req.SourceAmount / fromAmount) * toAmount
+	remainderAmount := req.SourceAmount % fromAmount
+	if remainderAmount > 0 {
+		msg := fmt.Sprintf("amount: %v does not fit into conversion rate of: %v", req.SourceAmount, fromAmount)
 		http.Error(w, msg, http.StatusConflict)
 		return
 	}
-	conversionAmount := (req.SourceAmount / fromAmount) * toAmount
-	remainderAmount := req.SourceAmount % fromAmount
 	if conversionAmount != req.TargetAmount {
 		msg := fmt.Sprintf("conversion mismatch. provided: %v, calculated: %v", req.TargetAmount, conversionAmount)
 		http.Error(w, msg, http.StatusConflict)
@@ -988,37 +994,25 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	now := p.timeNow()
-	convertedCommitment := db.ProjectCommitment{
-		AZResourceID:  targetAZResourceID,
-		Amount:        conversionAmount,
-		Duration:      dbCommitment.Duration,
-		CreatedAt:     now,
-		CreatorUUID:   dbCommitment.CreatorUUID,
-		CreatorName:   dbCommitment.CreatorName,
-		ConfirmedAt:   &now,
-		ExpiresAt:     dbCommitment.ExpiresAt,
-		PredecessorID: &dbCommitment.ID,
+	remainingAmount := dbCommitment.Amount - req.SourceAmount
+	remainingCommitment := p.buildSplitCommitment(dbCommitment, remainingAmount)
+	err = tx.Insert(&remainingCommitment)
+	if respondwith.ErrorText(w, err) {
+		return
 	}
-
+	convertedCommitment := p.buildConvertedCommitment(dbCommitment, targetAZResourceID, conversionAmount)
 	err = tx.Insert(&convertedCommitment)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-	if remainderAmount == 0 {
-		dbCommitment.State = db.CommitmentStateSuperseded
-		dbCommitment.SupersededAt = &now
-		_, err := tx.Update(&dbCommitment)
-		if respondwith.ErrorText(w, err) {
-			return
-		}
-	}
-	if remainderAmount > 0 {
-		dbCommitment.Amount = dbCommitment.Amount - req.SourceAmount + remainderAmount
-		_, err = tx.Update(&dbCommitment)
-		if respondwith.ErrorText(w, err) {
-			return
-		}
+
+	// supersede the original commitment
+	now := p.timeNow()
+	dbCommitment.State = db.CommitmentStateSuperseded
+	dbCommitment.SupersededAt = &now
+	_, err = tx.Update(&dbCommitment)
+	if respondwith.ErrorText(w, err) {
+		return
 	}
 
 	err = tx.Commit()
