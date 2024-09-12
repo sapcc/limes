@@ -1168,11 +1168,11 @@ func Test_ConvertCommitments(t *testing.T) {
 		},
 	}
 
-	req := func(targetService string, sourceAmount, TargetAmount uint64) assert.JSONObject {
+	req := func(targetService, targetResource string, sourceAmount, TargetAmount uint64) assert.JSONObject {
 		return assert.JSONObject{
 			"commitment": assert.JSONObject{
 				"target_service":  targetService,
-				"target_resource": "capacity",
+				"target_resource": targetResource,
 				"source_amount":   sourceAmount,
 				"target_amount":   TargetAmount,
 			},
@@ -1210,7 +1210,7 @@ func Test_ConvertCommitments(t *testing.T) {
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/convert",
-		Body:         req("first", 20, 12),
+		Body:         req("first", "capacity", 20, 12),
 		ExpectBody:   assert.StringData("not enough capacity to confirm the commitment\n"),
 		ExpectStatus: http.StatusUnprocessableEntity,
 	}.Check(t, s.Handler)
@@ -1219,7 +1219,7 @@ func Test_ConvertCommitments(t *testing.T) {
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/convert",
-		Body:         req("first", 10, 6),
+		Body:         req("first", "capacity", 10, 6),
 		ExpectBody:   assert.JSONObject{"commitment": resp(2, 6, "first", "capacity")},
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
@@ -1237,7 +1237,7 @@ func Test_ConvertCommitments(t *testing.T) {
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2/convert",
-		Body:         req("second", 6, 9),
+		Body:         req("second", "capacity", 6, 9),
 		ExpectBody:   assert.JSONObject{"commitment": resp(3, 9, "second", "capacity")},
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
@@ -1253,7 +1253,7 @@ func Test_ConvertCommitments(t *testing.T) {
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/commitments/3/convert",
-		Body:         req("first", 9, 6),
+		Body:         req("first", "capacity", 9, 6),
 		ExpectBody:   assert.JSONObject{"commitment": resp(4, 6, "first", "capacity")},
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
@@ -1269,7 +1269,7 @@ func Test_ConvertCommitments(t *testing.T) {
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/commitments/4/convert",
-		Body:         req("first", 6, 6),
+		Body:         req("first", "capacity", 6, 6),
 		ExpectBody:   assert.StringData("conversion attempt to the same resource.\n"),
 		ExpectStatus: http.StatusConflict,
 	}.Check(t, s.Handler)
@@ -1278,7 +1278,7 @@ func Test_ConvertCommitments(t *testing.T) {
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/4/convert",
-		Body:         req("second", 6, 8),
+		Body:         req("second", "capacity", 6, 8),
 		ExpectBody:   assert.StringData("conversion mismatch. provided: 8, calculated: 9\n"),
 		ExpectStatus: http.StatusConflict,
 	}.Check(t, s.Handler)
@@ -1287,8 +1287,17 @@ func Test_ConvertCommitments(t *testing.T) {
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/4/convert",
-		Body:         req("second", 1, 3),
+		Body:         req("second", "capacity", 1, 3),
 		ExpectBody:   assert.StringData("amount: 1 does not match conversion rate of: 2\n"),
 		ExpectStatus: http.StatusConflict,
+	}.Check(t, s.Handler)
+
+	// Check conversion to a different identifier which should be rejected
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/4/convert",
+		Body:         req("third", "capacity2_c144", 1, 3),
+		ExpectBody:   assert.StringData("commitment is not convertible\n"),
+		ExpectStatus: http.StatusUnprocessableEntity,
 	}.Check(t, s.Handler)
 }
