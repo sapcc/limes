@@ -96,11 +96,6 @@ var (
 	findCommitmentByTransferToken = sqlext.SimplifyWhitespace(`
 		SELECT * FROM project_commitments WHERE transfer_token = $1
 	`)
-	findCommitmentByIDQuery = sqlext.SimplifyWhitespace(`
-        SELECT pc.*
-          FROM project_commitments pc
-         WHERE pc.id = $1
-    `)
 	findTargetAZResourceIDBySourceIDQuery = sqlext.SimplifyWhitespace(`
 		WITH source as (
 		SELECT pr.id AS resource_id, ps.type, pr.name, par.az
@@ -861,9 +856,9 @@ func (p *v1Provider) GetCommitmentConversions(w http.ResponseWriter, r *http.Req
 	respondwith.JSON(w, http.StatusOK, map[string]any{"conversions": conversions})
 }
 
-// ConvertCommitment handles POST /v1/domains/{domain_id}/projects/{project_id}/commitment-conversion/{commitment_id}
+// ConvertCommitment handles POST /v1/domains/{domain_id}/projects/{project_id}/commitments/{commitment_id}/convert
 func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
-	httpapi.IdentifyEndpoint(r, "/v1/domains/:domain_id/projects/:project_id/commitment-conversion/:commitment_id")
+	httpapi.IdentifyEndpoint(r, "/v1/domains/:domain_id/projects/:project_id/commitments/:commitment_id/convert")
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:edit") {
 		return
@@ -886,7 +881,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 
 	// sourceBehavior
 	var dbCommitment db.ProjectCommitment
-	err := p.DB.SelectOne(&dbCommitment, findCommitmentByIDQuery, commitmentID)
+	err := p.DB.SelectOne(&dbCommitment, `SELECT pc.* FROM project_commitments pc WHERE pc.id = $1`, commitmentID)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "no such commitment", http.StatusNotFound)
 		return

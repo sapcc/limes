@@ -1209,7 +1209,7 @@ func Test_ConvertCommitments(t *testing.T) {
 	// Converted commitment does not fit into the capacity (amount: 12, capacity: 10)
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitment-conversion/1",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/convert",
 		Body:         req("first", 20, 12),
 		ExpectBody:   assert.StringData("not enough capacity to confirm the commitment\n"),
 		ExpectStatus: http.StatusUnprocessableEntity,
@@ -1218,7 +1218,7 @@ func Test_ConvertCommitments(t *testing.T) {
 	// Conversion with remainder
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitment-conversion/1",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/convert",
 		Body:         req("first", 10, 6),
 		ExpectBody:   assert.JSONObject{"commitment": resp(2, 6, "first", "capacity")},
 		ExpectStatus: http.StatusAccepted,
@@ -1236,7 +1236,7 @@ func Test_ConvertCommitments(t *testing.T) {
 	// Conversion without remainder (from: 2 to: 3)
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitment-conversion/2",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2/convert",
 		Body:         req("second", 6, 9),
 		ExpectBody:   assert.JSONObject{"commitment": resp(3, 9, "second", "capacity")},
 		ExpectStatus: http.StatusAccepted,
@@ -1252,7 +1252,7 @@ func Test_ConvertCommitments(t *testing.T) {
 	// Convert to another project
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/commitment-conversion/3",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/commitments/3/convert",
 		Body:         req("first", 9, 6),
 		ExpectBody:   assert.JSONObject{"commitment": resp(4, 6, "first", "capacity")},
 		ExpectStatus: http.StatusAccepted,
@@ -1268,7 +1268,7 @@ func Test_ConvertCommitments(t *testing.T) {
 	// Reject conversion at the same project to the same resource.
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/commitment-conversion/4",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/commitments/4/convert",
 		Body:         req("first", 6, 6),
 		ExpectBody:   assert.StringData("conversion attempt to the same resource.\n"),
 		ExpectStatus: http.StatusConflict,
@@ -1277,7 +1277,7 @@ func Test_ConvertCommitments(t *testing.T) {
 	// Mismatching target amount
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitment-conversion/4",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/4/convert",
 		Body:         req("second", 6, 8),
 		ExpectBody:   assert.StringData("conversion mismatch. provided: 8, calculated: 9\n"),
 		ExpectStatus: http.StatusConflict,
@@ -1286,7 +1286,7 @@ func Test_ConvertCommitments(t *testing.T) {
 	// Check resulting empty commitment from conversion calculation (from amount > source amount)
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitment-conversion/4",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/4/convert",
 		Body:         req("second", 1, 3),
 		ExpectBody:   assert.StringData("amount: 1 does not match conversion rate of: 2\n"),
 		ExpectStatus: http.StatusConflict,
