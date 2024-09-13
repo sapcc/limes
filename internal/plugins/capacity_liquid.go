@@ -101,7 +101,10 @@ func (p *liquidCapacityPlugin) Scrape(ctx context.Context, backchannel core.Capa
 	}
 
 	resultInService := make(map[liquid.ResourceName]core.PerAZ[core.CapacityData], len(p.LiquidServiceInfo.Resources))
-	for resName := range p.LiquidServiceInfo.Resources {
+	for resName, resInfo := range p.LiquidServiceInfo.Resources {
+		if !resInfo.HasCapacity {
+			continue
+		}
 		resReport := resp.Resources[resName]
 		if resReport == nil {
 			return nil, nil, fmt.Errorf("missing report for resource %q", resName)
