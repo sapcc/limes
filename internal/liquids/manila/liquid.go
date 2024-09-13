@@ -159,6 +159,12 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 		HasQuota:            true,
 		NeedsResourceDemand: true,
 	}
+	resInfoForSnapmirrorCapacity := liquid.ResourceInfo{
+		Unit:                liquid.UnitGibibytes,
+		HasCapacity:         true,
+		HasQuota:            false,
+		NeedsResourceDemand: true,
+	}
 	resInfoForObjects := liquid.ResourceInfo{
 		Unit:        liquid.UnitNone,
 		HasCapacity: true,
@@ -172,7 +178,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 		resources[vst.ShareCapacityResourceName()] = resInfoForCapacity
 		resources[vst.SnapshotCapacityResourceName()] = resInfoForCapacity
 		if l.NetappMetrics != nil {
-			resources[vst.SnapmirrorCapacityResourceName()] = resInfoForCapacity
+			resources[vst.SnapmirrorCapacityResourceName()] = resInfoForSnapmirrorCapacity
 		}
 	}
 
