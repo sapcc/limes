@@ -92,7 +92,7 @@ func (l *Logic) Init(ctx context.Context, provider *gophercloud.ProviderClient, 
 	l.ManilaV2.Microversion = "2.53"
 
 	// initialize connection to Prometheus
-	if l.PrometheusAPIConfigForAZAwareness != nil {
+	if l.PrometheusAPIConfigForAZAwareness != nil && l.PrometheusAPIConfigForAZAwareness.ServerURL != "" {
 		promClientForAZAwareness, err := l.PrometheusAPIConfigForAZAwareness.Connect()
 		if err != nil {
 			return err
@@ -100,7 +100,7 @@ func (l *Logic) Init(ctx context.Context, provider *gophercloud.ProviderClient, 
 		l.AZMetrics = promquery.NewBulkQueryCache(azMetricsQueries, 2*time.Minute, promClientForAZAwareness)
 	}
 
-	if l.PrometheusAPIConfigForNetappMetrics != nil {
+	if l.PrometheusAPIConfigForNetappMetrics != nil && l.PrometheusAPIConfigForNetappMetrics.ServerURL != "" {
 		promClientForNetappMetrics, err := l.PrometheusAPIConfigForNetappMetrics.Connect()
 		if err != nil {
 			return err
