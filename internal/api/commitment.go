@@ -993,11 +993,14 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	remainingAmount := dbCommitment.Amount - req.SourceAmount
-	remainingCommitment := p.buildSplitCommitment(dbCommitment, remainingAmount)
-	err = tx.Insert(&remainingCommitment)
-	if respondwith.ErrorText(w, err) {
-		return
+	if remainingAmount > 0 {
+		remainingCommitment := p.buildSplitCommitment(dbCommitment, remainingAmount)
+		err = tx.Insert(&remainingCommitment)
+		if respondwith.ErrorText(w, err) {
+			return
+		}
 	}
+
 	convertedCommitment := p.buildConvertedCommitment(dbCommitment, targetAZResourceID, conversionAmount)
 	err = tx.Insert(&convertedCommitment)
 	if respondwith.ErrorText(w, err) {
