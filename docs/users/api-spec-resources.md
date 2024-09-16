@@ -606,7 +606,7 @@ Returns 200 (OK) on success, and a JSON document like:
 }
 ```
 
-### POST "/v1/domains/:domain_id/projects/:project_id/commitment-conversion/:commitment_id"
+### POST "/v1/domains/:domain_id/projects/:project_id/commitments/:commitment_id/convert"
 
 Convert a commitment from a given resource to one of a different type. The target project is defined with the provided `project_id`.
 Requires a request body like:
@@ -625,7 +625,6 @@ In the example above the commitment that should be converted to the `target_reso
 
 
 Returns 202 (Accepted) on success, and and returns the converted commitment as a JSON document.
-```
 
 In this example, a commitment for 1 unit of the original resource can be converted into a commitment for 2 units of the target resource.
 
