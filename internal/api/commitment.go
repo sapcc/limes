@@ -940,7 +940,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// conversion
-	if req.SourceAmount <= 0 || req.SourceAmount > dbCommitment.Amount {
+	if req.SourceAmount > dbCommitment.Amount {
 		msg := fmt.Sprintf("unprocessable source amount. provided: %v, commitment: %v", req.SourceAmount, dbCommitment.Amount)
 		http.Error(w, msg, http.StatusConflict)
 		return
