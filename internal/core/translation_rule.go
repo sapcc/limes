@@ -45,10 +45,10 @@ func NewTranslationRule(id string) (TranslationRule, error) {
 		// the default is to not do any translation
 		return TranslationRule{nil, nil}, nil
 	case "cinder-volumes":
-		return TranslationRule{translateCinderOrManilaSubcapacities, translateCinderVolumeSubresources}, nil
+		return TranslationRule{nil, translateCinderVolumeSubresources}, nil
 	case "cinder-snapshots":
-		return TranslationRule{translateCinderOrManilaSubcapacities, translateCinderSnapshotSubresources}, nil
-	case "manila":
+		return TranslationRule{nil, translateCinderSnapshotSubresources}, nil
+	case "cinder-manila-capacity":
 		return TranslationRule{translateCinderOrManilaSubcapacities, nil}, nil
 	default:
 		return TranslationRule{}, fmt.Errorf("no such TranslationRule: %q", id)
