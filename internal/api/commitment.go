@@ -903,10 +903,6 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "commitments are not enabled for this resource", http.StatusUnprocessableEntity)
 		return
 	}
-	if dbCommitment.ConfirmBy != nil {
-		http.Error(w, "unable to convert unconfirmed commitments", http.StatusConflict)
-		return
-	}
 
 	// targetBehavior
 	var parseTarget struct {
@@ -985,13 +981,15 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	}
 	// The commitment at the source resource was already confirmed and checked.
 	// Therefore only the addition to the target resource has to be checked against.
-	ok, err := datamodel.CanConfirmNewCommitment(targetLoc, targetResourceID, conversionAmount, p.Cluster, p.DB)
-	if respondwith.ErrorText(w, err) {
-		return
-	}
-	if !ok {
-		http.Error(w, "not enough capacity to confirm the commitment", http.StatusUnprocessableEntity)
-		return
+	if dbCommitment.ConfirmBy == nil {
+		ok, err := datamodel.CanConfirmNewCommitment(targetLoc, targetResourceID, conversionAmount, p.Cluster, p.DB)
+		if respondwith.ErrorText(w, err) {
+			return
+		}
+		if !ok {
+			http.Error(w, "not enough capacity to confirm the commitment", http.StatusUnprocessableEntity)
+			return
+		}
 	}
 
 	remainingAmount := dbCommitment.Amount - req.SourceAmount

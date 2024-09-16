@@ -1167,6 +1167,17 @@ func Test_ConvertCommitments(t *testing.T) {
 			"duration":          "1 hour",
 		},
 	}
+	confirmByDate := s.Clock.Now().Add(14 * day).Unix()
+	commitmentWithConfirmBy := assert.JSONObject{
+		"commitment": assert.JSONObject{
+			"service_type":      "second",
+			"resource_name":     "capacity",
+			"availability_zone": "az-one",
+			"amount":            3,
+			"duration":          "1 hour",
+			"confirm_by":        confirmByDate,
+		},
+	}
 
 	req := func(targetService, targetResource string, sourceAmount, TargetAmount uint64) assert.JSONObject {
 		return assert.JSONObject{
@@ -1180,7 +1191,7 @@ func Test_ConvertCommitments(t *testing.T) {
 	}
 
 	s.Clock.StepBy(1 * time.Hour)
-	resp := func(id, amount uint64, targetService, targetResource string) assert.JSONObject {
+	resp := func(id, amount uint64, targetService, targetResource string, confirm_by *int64) assert.JSONObject {
 		return assert.JSONObject{
 			"id":                id,
 			"service_type":      targetService,
@@ -1195,6 +1206,7 @@ func Test_ConvertCommitments(t *testing.T) {
 			"can_be_deleted":    true,
 			"confirmed_at":      s.Clock.Now().Unix(),
 			"expires_at":        7200,
+			"confirm_by":        *confirm_by,
 		}
 	}
 
@@ -1231,7 +1243,7 @@ func Test_ConvertCommitments(t *testing.T) {
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/convert",
 		Body:         req("first", "capacity", 3, 2),
-		ExpectBody:   assert.JSONObject{"commitment": resp(3, 2, "first", "capacity")},
+		ExpectBody:   assert.JSONObject{"commitment": resp(3, 2, "first", "capacity", nil)},
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
 	err := s.DB.SelectOne(&originalCommitment, `SELECT * FROM project_commitments where ID = 1`)
@@ -1254,7 +1266,7 @@ func Test_ConvertCommitments(t *testing.T) {
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/commitments/2/convert",
 		Body:         req("first", "capacity", 6, 4),
-		ExpectBody:   assert.JSONObject{"commitment": resp(5, 4, "first", "capacity")},
+		ExpectBody:   assert.JSONObject{"commitment": resp(5, 4, "first", "capacity", nil)},
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
 	err = s.DB.SelectOne(&originalCommitment, `SELECT * FROM project_commitments where ID = 5`)
@@ -1310,4 +1322,21 @@ func Test_ConvertCommitments(t *testing.T) {
 		ExpectBody:   assert.StringData("commitment is not convertible\n"),
 		ExpectStatus: http.StatusUnprocessableEntity,
 	}.Check(t, s.Handler)
+
+	// test commitment conversion with confirmBy field (unconfirmed commitment)
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
+		Body:         commitmentWithConfirmBy,
+		ExpectStatus: http.StatusCreated,
+	}.Check(t, s.Handler)
+
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/6/convert",
+		Body:         req("first", "capacity", 3, 2),
+		ExpectBody:   assert.JSONObject{"commitment": resp(8, 2, "first", "capacity", &confirmByDate)},
+		ExpectStatus: http.StatusAccepted,
+	}.Check(t, s.Handler)
+
 }
