@@ -50,7 +50,7 @@ func TestTranslateManilaSubcapacities(t *testing.T) {
 	)
 	s.Cluster.Config.ResourceBehaviors = []core.ResourceBehavior{{
 		FullResourceNameRx:     "first/capacity",
-		TranslationRuleInV1API: must.Return(core.NewTranslationRule("manila")),
+		TranslationRuleInV1API: must.Return(core.NewTranslationRule("cinder-manila-capacity")),
 	}}
 
 	// this is what liquid-manila (or liquid-cinder) writes into the DB
