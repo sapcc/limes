@@ -510,7 +510,7 @@ var projectRateMetricsQuery = sqlext.SimplifyWhitespace(`
 
 func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric, error) {
 	serviceNameByType := buildServiceNameByTypeMapping(d.Cluster)
-	behaviorCache := newResourceBehaviorCache(d.Cluster)
+	behaviorCache := newResourceAndRateBehaviorCache(d.Cluster)
 	result := make(map[string][]dataMetric)
 
 	// fetch values for cluster level
@@ -553,7 +553,7 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 		if reportAZBreakdown {
 			for az, azCapacity := range capacityPerAZ {
 				azLabels := fmt.Sprintf(`availability_zone=%q,resource=%q,service=%q,service_name=%q`,
-					az, apiIdentity.ResourceName, apiIdentity.ServiceType, serviceNameByType[dbServiceType],
+					az, apiIdentity.Name, apiIdentity.ServiceType, serviceNameByType[dbServiceType],
 				)
 				metric := dataMetric{Labels: azLabels, Value: float64(behavior.OvercommitFactor.ApplyTo(azCapacity))}
 				result["limes_cluster_capacity_per_az"] = append(result["limes_cluster_capacity_per_az"], metric)
@@ -567,7 +567,7 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 		}
 
 		labels := fmt.Sprintf(`resource=%q,service=%q,service_name=%q`,
-			apiIdentity.ResourceName, apiIdentity.ServiceType, serviceNameByType[dbServiceType],
+			apiIdentity.Name, apiIdentity.ServiceType, serviceNameByType[dbServiceType],
 		)
 		metric := dataMetric{Labels: labels, Value: float64(behavior.OvercommitFactor.ApplyTo(totalCapacity))}
 		result["limes_cluster_capacity"] = append(result["limes_cluster_capacity"], metric)
@@ -595,7 +595,7 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 			apiIdentity := behaviorCache.Get(serviceType, resName).IdentityInV1API
 
 			labels := fmt.Sprintf(`resource=%q,service=%q,service_name=%q`,
-				apiIdentity.ResourceName, apiIdentity.ServiceType, serviceNameByType[serviceType],
+				apiIdentity.Name, apiIdentity.ServiceType, serviceNameByType[serviceType],
 			)
 			metric := dataMetric{Labels: labels, Value: 0}
 			result["limes_cluster_capacity"] = append(result["limes_cluster_capacity"], metric)
@@ -621,7 +621,7 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 			labels := fmt.Sprintf(
 				`domain=%q,domain_id=%q,resource=%q,service=%q,service_name=%q`,
 				domainName, domainUUID,
-				apiIdentity.ResourceName, apiIdentity.ServiceType, serviceNameByType[dbServiceType],
+				apiIdentity.Name, apiIdentity.ServiceType, serviceNameByType[dbServiceType],
 			)
 			metric := dataMetric{Labels: labels, Value: float64(*quota)}
 			result["limes_domain_quota"] = append(result["limes_domain_quota"], metric)
@@ -657,7 +657,7 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 		labels := fmt.Sprintf(
 			`domain=%q,domain_id=%q,project=%q,project_id=%q,resource=%q,service=%q,service_name=%q`,
 			domainName, domainUUID, projectName, projectUUID,
-			apiIdentity.ResourceName, apiIdentity.ServiceType, serviceNameByType[dbServiceType],
+			apiIdentity.Name, apiIdentity.ServiceType, serviceNameByType[dbServiceType],
 		)
 
 		if quota != nil {
@@ -711,7 +711,7 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 		labels := fmt.Sprintf(
 			`availability_zone=%q,domain=%q,domain_id=%q,project=%q,project_id=%q,resource=%q,service=%q,service_name=%q`,
 			az, domainName, domainUUID, projectName, projectUUID,
-			apiIdentity.ResourceName, apiIdentity.ServiceType, serviceNameByType[dbServiceType],
+			apiIdentity.Name, apiIdentity.ServiceType, serviceNameByType[dbServiceType],
 		)
 
 		if d.ReportZeroes || usage != 0 {
@@ -748,7 +748,7 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 			behavior := behaviorCache.Get(dbServiceType, dbResourceName)
 			apiIdentity := behavior.IdentityInV1API
 			labels := fmt.Sprintf(`resource=%q,service=%q,service_name=%q`,
-				apiIdentity.ResourceName, apiIdentity.ServiceType, serviceNameByType[dbServiceType],
+				apiIdentity.Name, apiIdentity.ServiceType, serviceNameByType[dbServiceType],
 			)
 
 			_, multiplier := resourceInfo.Unit.Base()
@@ -773,11 +773,11 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 			domainUUID    string
 			projectName   string
 			projectUUID   string
-			serviceType   db.ServiceType
-			rateName      db.RateName // TODO: when transitioning rates to LIQUID, add an IdentityInV1API cast on the labels below
+			dbServiceType db.ServiceType
+			dbRateName    db.RateName
 			usageAsBigint string
 		)
-		err := rows.Scan(&domainName, &domainUUID, &projectName, &projectUUID, &serviceType, &rateName, &usageAsBigint)
+		err := rows.Scan(&domainName, &domainUUID, &projectName, &projectUUID, &dbServiceType, &dbRateName, &usageAsBigint)
 		if err != nil {
 			return err
 		}
@@ -788,10 +788,12 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 		usageAsFloat, _ := usageAsBigFloat.Float64()
 
 		if d.ReportZeroes || usageAsFloat != 0 {
+			behavior := behaviorCache.GetForRate(dbServiceType, dbRateName)
+			apiIdentity := behavior.IdentityInV1API
 			labels := fmt.Sprintf(
 				`domain=%q,domain_id=%q,project=%q,project_id=%q,rate=%q,service=%q,service_name=%q`,
 				domainName, domainUUID, projectName, projectUUID,
-				rateName, serviceType, serviceNameByType[serviceType],
+				apiIdentity.Name, apiIdentity.ServiceType, serviceNameByType[dbServiceType],
 			)
 			metric := dataMetric{Labels: labels, Value: usageAsFloat}
 			result["limes_project_rate_usage"] = append(result["limes_project_rate_usage"], metric)
@@ -821,17 +823,19 @@ func buildServiceNameByTypeMapping(c *core.Cluster) (serviceNameByType map[db.Se
 // NOTE: This looks like something that should be baked into BehaviorForResource() itself.
 // But since the entire handling of ServiceInfo and ResourceInfo is due for an overhaul soonish,
 // I don't want to complicate the core implementation over there.
-type resourceBehaviorCache struct {
-	cluster *core.Cluster
-	cache   map[db.ServiceType]map[liquid.ResourceName]core.ResourceBehavior
+type resourceAndRateBehaviorCache struct {
+	cluster   *core.Cluster
+	cache     map[db.ServiceType]map[liquid.ResourceName]core.ResourceBehavior
+	rateCache map[db.ServiceType]map[db.RateName]core.RateBehavior
 }
 
-func newResourceBehaviorCache(cluster *core.Cluster) resourceBehaviorCache {
+func newResourceAndRateBehaviorCache(cluster *core.Cluster) resourceAndRateBehaviorCache {
 	cache := make(map[db.ServiceType]map[liquid.ResourceName]core.ResourceBehavior)
-	return resourceBehaviorCache{cluster, cache}
+	rateCache := make(map[db.ServiceType]map[db.RateName]core.RateBehavior)
+	return resourceAndRateBehaviorCache{cluster, cache, rateCache}
 }
 
-func (c resourceBehaviorCache) Get(srvType db.ServiceType, resName liquid.ResourceName) core.ResourceBehavior {
+func (c resourceAndRateBehaviorCache) Get(srvType db.ServiceType, resName liquid.ResourceName) core.ResourceBehavior {
 	if c.cache[srvType] == nil {
 		c.cache[srvType] = make(map[liquid.ResourceName]core.ResourceBehavior)
 	}
@@ -839,6 +843,18 @@ func (c resourceBehaviorCache) Get(srvType db.ServiceType, resName liquid.Resour
 	if !exists {
 		behavior = c.cluster.BehaviorForResource(srvType, resName)
 		c.cache[srvType][resName] = behavior
+	}
+	return behavior
+}
+
+func (c resourceAndRateBehaviorCache) GetForRate(srvType db.ServiceType, rateName db.RateName) core.RateBehavior {
+	if c.rateCache[srvType] == nil {
+		c.rateCache[srvType] = make(map[db.RateName]core.RateBehavior)
+	}
+	behavior, exists := c.rateCache[srvType][rateName]
+	if !exists {
+		behavior = c.cluster.BehaviorForRate(srvType, rateName)
+		c.rateCache[srvType][rateName] = behavior
 	}
 	return behavior
 }

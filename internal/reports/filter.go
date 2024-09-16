@@ -81,7 +81,7 @@ func ReadFilter(r *http.Request, cluster *core.Cluster) Filter {
 			if f.Includes[dbServiceType] == nil {
 				f.Includes[dbServiceType] = make(map[liquid.ResourceName]bool)
 			}
-			f.Includes[dbServiceType][dbResourceName] = apiResourceNames.Matches(string(apiIdentity.ResourceName))
+			f.Includes[dbServiceType][dbResourceName] = apiResourceNames.Matches(string(apiIdentity.Name))
 		}
 	}
 

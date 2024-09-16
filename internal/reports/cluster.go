@@ -408,7 +408,10 @@ func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter) (*l
 		if !cluster.HasService(dbServiceType) {
 			return nil
 		}
-		apiServiceType, _ := nm.MapRateToV1API(dbServiceType, dbRateName)
+		apiServiceType, _, exists := nm.MapRateToV1API(dbServiceType, dbRateName)
+		if !exists {
+			return nil
+		}
 
 		srvReport, exists := report.Services[apiServiceType]
 		if !exists {
@@ -433,7 +436,10 @@ func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter) (*l
 		dbServiceType := serviceConfig.ServiceType
 		for _, rateConfig := range serviceConfig.RateLimits.Global {
 			dbRateName := rateConfig.Name
-			apiServiceType, apiRateName := nm.MapRateToV1API(dbServiceType, dbRateName)
+			apiServiceType, apiRateName, exists := nm.MapRateToV1API(dbServiceType, dbRateName)
+			if !exists {
+				continue // defense in depth: should not happen because NameMapping iterated through the same structure
+			}
 
 			srvReport, exists := report.Services[apiServiceType]
 			if !exists {
@@ -467,11 +473,11 @@ func findInClusterReport(cluster *core.Cluster, report *limesresources.ClusterRe
 		report.Services[apiIdentity.ServiceType] = service
 	}
 
-	resource, exists := service.Resources[apiIdentity.ResourceName]
+	resource, exists := service.Resources[apiIdentity.Name]
 	if !exists {
 		resInfo := cluster.InfoForResource(dbServiceType, dbResourceName)
 		resource = &limesresources.ClusterResourceReport{
-			ResourceInfo:     behavior.BuildAPIResourceInfo(apiIdentity.ResourceName, resInfo),
+			ResourceInfo:     behavior.BuildAPIResourceInfo(apiIdentity.Name, resInfo),
 			CommitmentConfig: behavior.ToCommitmentConfig(now),
 		}
 		if !resource.ResourceInfo.NoQuota {
@@ -483,7 +489,7 @@ func findInClusterReport(cluster *core.Cluster, report *limesresources.ClusterRe
 			defaultDomainsQuota := uint64(0)
 			resource.DomainsQuota = &defaultDomainsQuota
 		}
-		service.Resources[apiIdentity.ResourceName] = resource
+		service.Resources[apiIdentity.Name] = resource
 	}
 
 	return service, resource, behavior

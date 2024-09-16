@@ -26,6 +26,7 @@ import (
 
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/sapcc/go-api-declarations/limes"
+	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/errext"
@@ -194,8 +195,8 @@ func (c *Cluster) BehaviorForResource(serviceType db.ServiceType, resourceName l
 	result := ResourceBehavior{
 		IdentityInV1API: ResourceRef{
 			// NOTE: This is the only place where these particular cross-type casts are allowed.
-			ServiceType:  limes.ServiceType(serviceType),
-			ResourceName: limesresources.ResourceName(resourceName),
+			ServiceType: limes.ServiceType(serviceType),
+			Name:        limesresources.ResourceName(resourceName),
 		},
 	}
 
@@ -203,6 +204,29 @@ func (c *Cluster) BehaviorForResource(serviceType db.ServiceType, resourceName l
 	fullName := string(serviceType) + "/" + string(resourceName)
 	for _, behavior := range c.Config.ResourceBehaviors {
 		if behavior.FullResourceNameRx.MatchString(fullName) {
+			result.Merge(behavior, fullName)
+		}
+	}
+
+	return result
+}
+
+// BehaviorForRate returns the RateBehavior for the given rate in
+// the given scope.
+func (c *Cluster) BehaviorForRate(serviceType db.ServiceType, rateName db.RateName) RateBehavior {
+	// default behavior
+	result := RateBehavior{
+		IdentityInV1API: RateRef{
+			// NOTE: This is the only place where these particular cross-type casts are allowed.
+			ServiceType: limes.ServiceType(serviceType),
+			Name:        limesrates.RateName(rateName),
+		},
+	}
+
+	// check for specific behavior
+	fullName := string(serviceType) + "/" + string(rateName)
+	for _, behavior := range c.Config.RateBehaviors {
+		if behavior.FullRateNameRx.MatchString(fullName) {
 			result.Merge(behavior, fullName)
 		}
 	}

@@ -46,10 +46,10 @@ type ResourceBehavior struct {
 	Category                 string                              `yaml:"category"`
 }
 
-// Validate returns a list of all errors in this behavior configuration. It
-// also applies default values. The `path` argument denotes the location of
-// this behavior in the configuration file, and will be used when generating
-// error messages.
+// Validate returns a list of all errors in this behavior configuration.
+//
+// The `path` argument denotes the location of this behavior in the
+// configuration file, and will be used when generating error messages.
 func (b *ResourceBehavior) Validate(path string) (errs errext.ErrorSet) {
 	if b.FullResourceNameRx == "" {
 		errs.Addf("missing configuration value: %s.resource", path)
@@ -109,46 +109,49 @@ func (b *ResourceBehavior) Merge(other ResourceBehavior, fullResourceName string
 		}
 	}
 	if other.IdentityInV1API != (ResourceRef{}) {
-		b.IdentityInV1API.ServiceType = interpolateFromResourceNameMatch(other, other.IdentityInV1API.ServiceType, fullResourceName)
-		b.IdentityInV1API.ResourceName = interpolateFromResourceNameMatch(other, other.IdentityInV1API.ResourceName, fullResourceName)
+		b.IdentityInV1API.ServiceType = interpolateFromNameMatch(other.FullResourceNameRx, other.IdentityInV1API.ServiceType, fullResourceName)
+		b.IdentityInV1API.Name = interpolateFromNameMatch(other.FullResourceNameRx, other.IdentityInV1API.Name, fullResourceName)
 	}
 	if !other.TranslationRuleInV1API.IsEmpty() {
 		b.TranslationRuleInV1API = other.TranslationRuleInV1API
 	}
 	if other.Category != "" {
-		b.Category = interpolateFromResourceNameMatch(other, other.Category, fullResourceName)
+		b.Category = interpolateFromNameMatch(other.FullResourceNameRx, other.Category, fullResourceName)
 	}
 	if other.CommitmentConversion != (CommitmentConversion{}) {
 		b.CommitmentConversion = other.CommitmentConversion
 	}
 }
 
-func interpolateFromResourceNameMatch[S ~string](b ResourceBehavior, value S, fullResourceName string) S {
+func interpolateFromNameMatch[S ~string](fullNameRx regexpext.BoundedRegexp, value S, fullName string) S {
 	if !strings.Contains(string(value), "$") {
 		return value
 	}
-	rx, err := b.FullResourceNameRx.Regexp()
+	rx, err := fullNameRx.Regexp()
 	if err != nil {
 		// defense in depth: this should not happen because the regex should have been validated at UnmarshalYAML time
 		return value
 	}
-	match := rx.FindStringSubmatchIndex(fullResourceName)
+	match := rx.FindStringSubmatchIndex(fullName)
 	if match == nil {
 		// defense in depth: this should not happen because this is only called after the resource name has already matched
 		return value
 	}
-	return S(rx.ExpandString(nil, string(value), fullResourceName, match))
+	return S(rx.ExpandString(nil, string(value), fullName, match))
 }
 
-// ResourceRef contains a pair of service type and resource name using API-level identifiers.
-// When read from the configuration YAML, this deserializes from a string in the "service/resource" format.
-type ResourceRef struct {
-	ServiceType  limes.ServiceType
-	ResourceName limesresources.ResourceName
+// RefInService contains a pair of service type and resource or rate name.
+// When read from the configuration YAML, this deserializes from a string in the "service/resource" or "service/rate" format.
+type RefInService[S, R ~string] struct {
+	ServiceType S
+	Name        R
 }
+
+// ResourceRef is an instance of RefInService. It appears in type ResourceBehavior.
+type ResourceRef = RefInService[limes.ServiceType, limesresources.ResourceName]
 
 // UnmarshalYAML implements the yaml.Unmarshaler interface.
-func (r *ResourceRef) UnmarshalYAML(unmarshal func(any) error) error {
+func (r *RefInService[S, R]) UnmarshalYAML(unmarshal func(any) error) error {
 	var in string
 	err := unmarshal(&in)
 	if err != nil {
@@ -157,12 +160,12 @@ func (r *ResourceRef) UnmarshalYAML(unmarshal func(any) error) error {
 
 	fields := strings.Split(in, "/")
 	if len(fields) != 2 || fields[0] == "" || fields[1] == "" {
-		return fmt.Errorf(`expected identity_in_v1_api to follow the "service_type/resource_name" format, but got %q`, in)
+		return fmt.Errorf(`expected identity_in_v1_api to follow the "service_type/rate_or_resource_name" format, but got %q`, in)
 	}
 
-	*r = ResourceRef{
-		ServiceType:  limes.ServiceType(fields[0]),
-		ResourceName: limesresources.ResourceName(fields[1]),
+	*r = RefInService[S, R]{
+		ServiceType: S(fields[0]),
+		Name:        R(fields[1]),
 	}
 	return nil
 }

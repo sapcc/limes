@@ -31,9 +31,11 @@ import (
 // NameMapping contains an efficient pre-computed mapping between API-level and
 // DB-level service/resource/rate identifiers.
 type NameMapping struct {
-	cluster        *Cluster
-	resFromAPIToDB map[ResourceRef]dbResourceRef
-	resFromDBToAPI map[dbResourceRef]ResourceRef
+	cluster         *Cluster
+	resFromAPIToDB  map[ResourceRef]dbResourceRef
+	resFromDBToAPI  map[dbResourceRef]ResourceRef
+	rateFromAPIToDB map[RateRef]dbRateRef
+	rateFromDBToAPI map[dbRateRef]RateRef
 }
 
 type dbResourceRef struct {
@@ -41,12 +43,19 @@ type dbResourceRef struct {
 	ResourceName liquid.ResourceName
 }
 
+type dbRateRef struct {
+	ServiceType db.ServiceType
+	RateName    db.RateName
+}
+
 // BuildNameMapping constructs a new NameMapping instance.
 func BuildNameMapping(cluster *Cluster) NameMapping {
 	nm := NameMapping{
-		cluster:        cluster,
-		resFromAPIToDB: make(map[ResourceRef]dbResourceRef),
-		resFromDBToAPI: make(map[dbResourceRef]ResourceRef),
+		cluster:         cluster,
+		resFromAPIToDB:  make(map[ResourceRef]dbResourceRef),
+		resFromDBToAPI:  make(map[dbResourceRef]ResourceRef),
+		rateFromAPIToDB: make(map[RateRef]dbRateRef),
+		rateFromDBToAPI: make(map[dbRateRef]RateRef),
 	}
 	for dbServiceType, quotaPlugin := range cluster.QuotaPlugins {
 		for dbResourceName := range quotaPlugin.Resources() {
@@ -54,6 +63,25 @@ func BuildNameMapping(cluster *Cluster) NameMapping {
 			apiRef := cluster.BehaviorForResource(dbServiceType, dbResourceName).IdentityInV1API
 			nm.resFromAPIToDB[apiRef] = dbRef
 			nm.resFromDBToAPI[dbRef] = apiRef
+		}
+	}
+	for dbServiceType, quotaPlugin := range cluster.QuotaPlugins {
+		dbRateNames := make(map[db.RateName]struct{})
+		for dbRateName := range quotaPlugin.Rates() {
+			dbRateNames[dbRateName] = struct{}{}
+		}
+		cfg, _ := cluster.Config.GetServiceConfigurationForType(dbServiceType)
+		for _, rateLimit := range cfg.RateLimits.Global {
+			dbRateNames[rateLimit.Name] = struct{}{}
+		}
+		for _, rateLimit := range cfg.RateLimits.ProjectDefault {
+			dbRateNames[rateLimit.Name] = struct{}{}
+		}
+		for dbRateName := range dbRateNames {
+			dbRef := dbRateRef{dbServiceType, dbRateName}
+			apiRef := cluster.BehaviorForRate(dbServiceType, dbRateName).IdentityInV1API
+			nm.rateFromAPIToDB[apiRef] = dbRef
+			nm.rateFromDBToAPI[dbRef] = apiRef
 		}
 	}
 	return nm
@@ -76,25 +104,23 @@ func (nm NameMapping) MapResourceToV1API(serviceType db.ServiceType, resourceNam
 	if !ok {
 		return "", "", false
 	}
-	return ref.ServiceType, ref.ResourceName, true
+	return ref.ServiceType, ref.Name, true
 }
 
 // MapRateFromV1API maps API-level identifiers for a rate into DB-level identifiers.
-func (nm NameMapping) MapRateFromV1API(serviceType limes.ServiceType, rateName limesrates.RateName) (db.ServiceType, db.RateName) {
-	// NOTE: This is the only place where these particular cross-type casts are allowed.
-	//
-	// The implementation is currently boring because we don't support renaming
-	// here yet, but by funneling all such conversions through here, it is easy
-	// to add in the future.
-	return db.ServiceType(serviceType), db.RateName(rateName)
+func (nm NameMapping) MapRateFromV1API(serviceType limes.ServiceType, rateName limesrates.RateName) (db.ServiceType, db.RateName, bool) {
+	ref, ok := nm.rateFromAPIToDB[RateRef{serviceType, rateName}]
+	if !ok {
+		return "", "", false
+	}
+	return ref.ServiceType, ref.RateName, true
 }
 
 // MapRateToV1API maps API-level identifiers for a rate into DB-level identifiers.
-func (nm NameMapping) MapRateToV1API(serviceType db.ServiceType, rateName db.RateName) (limes.ServiceType, limesrates.RateName) {
-	// NOTE: This is the only place where these particular cross-type casts are allowed.
-	//
-	// The implementation is currently boring because we don't support renaming
-	// here yet, but by funneling all such conversions through here, it is easy
-	// to add in the future.
-	return limes.ServiceType(serviceType), limesrates.RateName(rateName)
+func (nm NameMapping) MapRateToV1API(serviceType db.ServiceType, rateName db.RateName) (limes.ServiceType, limesrates.RateName, bool) {
+	ref, ok := nm.rateFromDBToAPI[dbRateRef{serviceType, rateName}]
+	if !ok {
+		return "", "", false
+	}
+	return ref.ServiceType, ref.Name, true
 }

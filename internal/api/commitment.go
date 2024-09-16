@@ -189,7 +189,7 @@ func (p *v1Provider) convertCommitmentToDisplayForm(c db.ProjectCommitment, loc 
 	return limesresources.Commitment{
 		ID:               int64(c.ID),
 		ServiceType:      apiIdentity.ServiceType,
-		ResourceName:     apiIdentity.ResourceName,
+		ResourceName:     apiIdentity.Name,
 		AvailabilityZone: loc.AvailabilityZone,
 		Amount:           c.Amount,
 		Unit:             resInfo.Unit,

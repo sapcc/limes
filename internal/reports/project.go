@@ -201,11 +201,11 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 		}
 
 		// start new resource report when necessary
-		resReport := srvReport.Resources[apiIdentity.ResourceName]
+		resReport := srvReport.Resources[apiIdentity.Name]
 		if resReport == nil {
 			resInfo := cluster.InfoForResource(dbServiceType, dbResourceName)
 			resReport = &limesresources.ProjectResourceReport{
-				ResourceInfo:     behavior.BuildAPIResourceInfo(apiIdentity.ResourceName, resInfo),
+				ResourceInfo:     behavior.BuildAPIResourceInfo(apiIdentity.Name, resInfo),
 				Usage:            0,
 				CommitmentConfig: behavior.ToCommitmentConfig(now),
 				// all other fields are set below
@@ -228,7 +228,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 				}
 			}
 
-			srvReport.Resources[apiIdentity.ResourceName] = resReport
+			srvReport.Resources[apiIdentity.Name] = resReport
 		}
 
 		// fill data from project_az_resources into resource report
@@ -484,7 +484,10 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 		if !cluster.HasService(dbServiceType) {
 			return nil
 		}
-		apiServiceType, apiRateName := nm.MapRateToV1API(dbServiceType, dbRateName)
+		apiServiceType, apiRateName, exists := nm.MapRateToV1API(dbServiceType, dbRateName)
+		if !exists {
+			return nil
+		}
 
 		// start new service report when necessary
 		srvReport := projectReport.Services[apiServiceType]
@@ -571,7 +574,10 @@ func initProjectRateReport(projectInfo limes.ProjectInfo, cluster *core.Cluster,
 	for _, srvConfig := range cluster.Config.Services {
 		dbServiceType := srvConfig.ServiceType
 		for _, rateLimitConfig := range srvConfig.RateLimits.ProjectDefault {
-			apiServiceType, apiRateName := nm.MapRateToV1API(dbServiceType, rateLimitConfig.Name)
+			apiServiceType, apiRateName, exists := nm.MapRateToV1API(dbServiceType, rateLimitConfig.Name)
+			if !exists {
+				continue // defense in depth: should not happen because NameMapping iterated through the same structure
+			}
 
 			srvReport := report.Services[apiServiceType]
 			if srvReport == nil {
