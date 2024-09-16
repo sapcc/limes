@@ -510,6 +510,7 @@ var projectRateMetricsQuery = sqlext.SimplifyWhitespace(`
 
 func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric, error) {
 	serviceNameByType := buildServiceNameByTypeMapping(d.Cluster)
+	behaviorCache := newResourceBehaviorCache(d.Cluster)
 	result := make(map[string][]dataMetric)
 
 	// fetch values for cluster level
@@ -547,7 +548,7 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 			}
 		}
 
-		behavior := d.Cluster.BehaviorForResource(dbServiceType, dbResourceName)
+		behavior := behaviorCache.Get(dbServiceType, dbResourceName)
 		apiIdentity := behavior.IdentityInV1API
 		if reportAZBreakdown {
 			for az, azCapacity := range capacityPerAZ {
@@ -591,7 +592,7 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 			if capacityReported[serviceType][resName] {
 				continue
 			}
-			apiIdentity := d.Cluster.BehaviorForResource(serviceType, resName).IdentityInV1API
+			apiIdentity := behaviorCache.Get(serviceType, resName).IdentityInV1API
 
 			labels := fmt.Sprintf(`resource=%q,service=%q,service_name=%q`,
 				apiIdentity.ResourceName, apiIdentity.ServiceType, serviceNameByType[serviceType],
@@ -614,7 +615,7 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 		if err != nil {
 			return err
 		}
-		apiIdentity := d.Cluster.BehaviorForResource(dbServiceType, dbResourceName).IdentityInV1API
+		apiIdentity := behaviorCache.Get(dbServiceType, dbResourceName).IdentityInV1API
 
 		if quota != nil {
 			labels := fmt.Sprintf(
@@ -651,7 +652,7 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 		if err != nil {
 			return err
 		}
-		apiIdentity := d.Cluster.BehaviorForResource(dbServiceType, dbResourceName).IdentityInV1API
+		apiIdentity := behaviorCache.Get(dbServiceType, dbResourceName).IdentityInV1API
 
 		labels := fmt.Sprintf(
 			`domain=%q,domain_id=%q,project=%q,project_id=%q,resource=%q,service=%q,service_name=%q`,
@@ -705,7 +706,7 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 		if err != nil {
 			return err
 		}
-		apiIdentity := d.Cluster.BehaviorForResource(dbServiceType, dbResourceName).IdentityInV1API
+		apiIdentity := behaviorCache.Get(dbServiceType, dbResourceName).IdentityInV1API
 
 		labels := fmt.Sprintf(
 			`availability_zone=%q,domain=%q,domain_id=%q,project=%q,project_id=%q,resource=%q,service=%q,service_name=%q`,
@@ -744,7 +745,7 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 	// fetch metadata for services/resources
 	for dbServiceType, quotaPlugin := range d.Cluster.QuotaPlugins {
 		for dbResourceName, resourceInfo := range quotaPlugin.Resources() {
-			behavior := d.Cluster.BehaviorForResource(dbServiceType, dbResourceName)
+			behavior := behaviorCache.Get(dbServiceType, dbResourceName)
 			apiIdentity := behavior.IdentityInV1API
 			labels := fmt.Sprintf(`resource=%q,service=%q,service_name=%q`,
 				apiIdentity.ResourceName, apiIdentity.ServiceType, serviceNameByType[dbServiceType],
@@ -813,4 +814,31 @@ func buildServiceNameByTypeMapping(c *core.Cluster) (serviceNameByType map[db.Se
 		serviceNameByType[serviceType] = plugin.ServiceInfo().ProductName
 	}
 	return
+}
+
+// Caches the result of repeated cluster.BehaviorForResource() calls.
+//
+// NOTE: This looks like something that should be baked into BehaviorForResource() itself.
+// But since the entire handling of ServiceInfo and ResourceInfo is due for an overhaul soonish,
+// I don't want to complicate the core implementation over there.
+type resourceBehaviorCache struct {
+	cluster *core.Cluster
+	cache   map[db.ServiceType]map[liquid.ResourceName]core.ResourceBehavior
+}
+
+func newResourceBehaviorCache(cluster *core.Cluster) resourceBehaviorCache {
+	cache := make(map[db.ServiceType]map[liquid.ResourceName]core.ResourceBehavior)
+	return resourceBehaviorCache{cluster, cache}
+}
+
+func (c resourceBehaviorCache) Get(srvType db.ServiceType, resName liquid.ResourceName) core.ResourceBehavior {
+	if c.cache[srvType] == nil {
+		c.cache[srvType] = make(map[liquid.ResourceName]core.ResourceBehavior)
+	}
+	behavior, exists := c.cache[srvType][resName]
+	if !exists {
+		behavior = c.cluster.BehaviorForResource(srvType, resName)
+		c.cache[srvType][resName] = behavior
+	}
+	return behavior
 }
