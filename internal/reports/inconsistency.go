@@ -94,7 +94,7 @@ func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter) 
 		OverspentQuotas:     []OverspentProjectQuota{},
 		MismatchQuotas:      []MismatchProjectQuota{},
 	}
-	nm := core.BuildNameMapping(cluster)
+	nm := core.BuildResourceNameMapping(cluster)
 
 	//ospqReportQuery: data for overspent project quota inconsistencies
 	queryStr, joinArgs := filter.PrepareQuery(ospqReportQuery)
@@ -115,7 +115,7 @@ func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter) 
 		}
 
 		var exists bool
-		ospq.Service, ospq.Resource, exists = nm.MapResourceToV1API(dbServiceType, dbResourceName)
+		ospq.Service, ospq.Resource, exists = nm.MapToV1API(dbServiceType, dbResourceName)
 		if !exists {
 			return nil
 		}
@@ -148,7 +148,7 @@ func GetInconsistencies(cluster *core.Cluster, dbi db.Interface, filter Filter) 
 		}
 
 		var exists bool
-		mmpq.Service, mmpq.Resource, exists = nm.MapResourceToV1API(dbServiceType, dbResourceName)
+		mmpq.Service, mmpq.Resource, exists = nm.MapToV1API(dbServiceType, dbResourceName)
 		if !exists {
 			return nil
 		}

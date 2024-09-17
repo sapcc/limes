@@ -28,12 +28,12 @@ import (
 	"github.com/sapcc/limes/internal/db"
 )
 
-// NameMapping contains an efficient pre-computed mapping between API-level and
-// DB-level service/resource/rate identifiers.
-type NameMapping struct {
-	cluster        *Cluster
-	resFromAPIToDB map[ResourceRef]dbResourceRef
-	resFromDBToAPI map[dbResourceRef]ResourceRef
+// ResourceNameMapping contains an efficient pre-computed mapping between
+// API-level and DB-level service and resource identifiers.
+type ResourceNameMapping struct {
+	cluster     *Cluster
+	fromAPIToDB map[ResourceRef]dbResourceRef
+	fromDBToAPI map[dbResourceRef]ResourceRef
 }
 
 type dbResourceRef struct {
@@ -41,60 +41,99 @@ type dbResourceRef struct {
 	ResourceName liquid.ResourceName
 }
 
-// BuildNameMapping constructs a new NameMapping instance.
-func BuildNameMapping(cluster *Cluster) NameMapping {
-	nm := NameMapping{
-		cluster:        cluster,
-		resFromAPIToDB: make(map[ResourceRef]dbResourceRef),
-		resFromDBToAPI: make(map[dbResourceRef]ResourceRef),
+// RateNameMapping is like ResourceNameMapping, but for rates instead.
+type RateNameMapping struct {
+	cluster     *Cluster
+	fromAPIToDB map[RateRef]dbRateRef
+	fromDBToAPI map[dbRateRef]RateRef
+}
+
+type dbRateRef struct {
+	ServiceType db.ServiceType
+	RateName    db.RateName
+}
+
+// BuildResourceNameMapping constructs a new ResourceNameMapping instance.
+func BuildResourceNameMapping(cluster *Cluster) ResourceNameMapping {
+	nm := ResourceNameMapping{
+		cluster:     cluster,
+		fromAPIToDB: make(map[ResourceRef]dbResourceRef),
+		fromDBToAPI: make(map[dbResourceRef]ResourceRef),
 	}
 	for dbServiceType, quotaPlugin := range cluster.QuotaPlugins {
 		for dbResourceName := range quotaPlugin.Resources() {
 			dbRef := dbResourceRef{dbServiceType, dbResourceName}
 			apiRef := cluster.BehaviorForResource(dbServiceType, dbResourceName).IdentityInV1API
-			nm.resFromAPIToDB[apiRef] = dbRef
-			nm.resFromDBToAPI[dbRef] = apiRef
+			nm.fromAPIToDB[apiRef] = dbRef
+			nm.fromDBToAPI[dbRef] = apiRef
 		}
 	}
 	return nm
 }
 
-// MapResourceFromV1API maps API-level identifiers for a resource into DB-level identifiers.
+// BuildRateNameMapping constructs a new RateNameMapping instance.
+func BuildRateNameMapping(cluster *Cluster) RateNameMapping {
+	nm := RateNameMapping{
+		cluster:     cluster,
+		fromAPIToDB: make(map[RateRef]dbRateRef),
+		fromDBToAPI: make(map[dbRateRef]RateRef),
+	}
+	for dbServiceType, quotaPlugin := range cluster.QuotaPlugins {
+		dbRateNames := make(map[db.RateName]struct{})
+		for dbRateName := range quotaPlugin.Rates() {
+			dbRateNames[dbRateName] = struct{}{}
+		}
+		cfg, _ := cluster.Config.GetServiceConfigurationForType(dbServiceType)
+		for _, rateLimit := range cfg.RateLimits.Global {
+			dbRateNames[rateLimit.Name] = struct{}{}
+		}
+		for _, rateLimit := range cfg.RateLimits.ProjectDefault {
+			dbRateNames[rateLimit.Name] = struct{}{}
+		}
+		for dbRateName := range dbRateNames {
+			dbRef := dbRateRef{dbServiceType, dbRateName}
+			apiRef := cluster.BehaviorForRate(dbServiceType, dbRateName).IdentityInV1API
+			nm.fromAPIToDB[apiRef] = dbRef
+			nm.fromDBToAPI[dbRef] = apiRef
+		}
+	}
+	return nm
+}
+
+// MapFromV1API maps API-level identifiers for a resource into DB-level identifiers.
 // False is returned if the given resource does not exist.
-func (nm NameMapping) MapResourceFromV1API(serviceType limes.ServiceType, resourceName limesresources.ResourceName) (db.ServiceType, liquid.ResourceName, bool) {
-	ref, ok := nm.resFromAPIToDB[ResourceRef{serviceType, resourceName}]
+func (nm ResourceNameMapping) MapFromV1API(serviceType limes.ServiceType, resourceName limesresources.ResourceName) (db.ServiceType, liquid.ResourceName, bool) {
+	ref, ok := nm.fromAPIToDB[ResourceRef{serviceType, resourceName}]
 	if !ok {
 		return "", "", false
 	}
 	return ref.ServiceType, ref.ResourceName, true
 }
 
-// MapResourceToV1API maps DB-level identifiers for a resource into API-level identifiers.
+// MapToV1API maps DB-level identifiers for a resource into API-level identifiers.
 // False is returned if the given resource does not exist.
-func (nm NameMapping) MapResourceToV1API(serviceType db.ServiceType, resourceName liquid.ResourceName) (limes.ServiceType, limesresources.ResourceName, bool) {
-	ref, ok := nm.resFromDBToAPI[dbResourceRef{serviceType, resourceName}]
+func (nm ResourceNameMapping) MapToV1API(serviceType db.ServiceType, resourceName liquid.ResourceName) (limes.ServiceType, limesresources.ResourceName, bool) {
+	ref, ok := nm.fromDBToAPI[dbResourceRef{serviceType, resourceName}]
 	if !ok {
 		return "", "", false
 	}
-	return ref.ServiceType, ref.ResourceName, true
+	return ref.ServiceType, ref.Name, true
 }
 
-// MapRateFromV1API maps API-level identifiers for a rate into DB-level identifiers.
-func (nm NameMapping) MapRateFromV1API(serviceType limes.ServiceType, rateName limesrates.RateName) (db.ServiceType, db.RateName) {
-	// NOTE: This is the only place where these particular cross-type casts are allowed.
-	//
-	// The implementation is currently boring because we don't support renaming
-	// here yet, but by funneling all such conversions through here, it is easy
-	// to add in the future.
-	return db.ServiceType(serviceType), db.RateName(rateName)
+// MapFromV1API maps API-level identifiers for a rate into DB-level identifiers.
+func (nm RateNameMapping) MapFromV1API(serviceType limes.ServiceType, rateName limesrates.RateName) (db.ServiceType, db.RateName, bool) {
+	ref, ok := nm.fromAPIToDB[RateRef{serviceType, rateName}]
+	if !ok {
+		return "", "", false
+	}
+	return ref.ServiceType, ref.RateName, true
 }
 
-// MapRateToV1API maps API-level identifiers for a rate into DB-level identifiers.
-func (nm NameMapping) MapRateToV1API(serviceType db.ServiceType, rateName db.RateName) (limes.ServiceType, limesrates.RateName) {
-	// NOTE: This is the only place where these particular cross-type casts are allowed.
-	//
-	// The implementation is currently boring because we don't support renaming
-	// here yet, but by funneling all such conversions through here, it is easy
-	// to add in the future.
-	return limes.ServiceType(serviceType), limesrates.RateName(rateName)
+// MapToV1API maps API-level identifiers for a rate into DB-level identifiers.
+func (nm RateNameMapping) MapToV1API(serviceType db.ServiceType, rateName db.RateName) (limes.ServiceType, limesrates.RateName, bool) {
+	ref, ok := nm.fromDBToAPI[dbRateRef{serviceType, rateName}]
+	if !ok {
+		return "", "", false
+	}
+	return ref.ServiceType, ref.Name, true
 }

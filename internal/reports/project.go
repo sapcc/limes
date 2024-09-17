@@ -89,7 +89,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 	if project != nil {
 		fields["p.id"] = project.ID
 	}
-	nm := core.BuildNameMapping(cluster)
+	nm := core.BuildResourceNameMapping(cluster)
 
 	// first, query for basic project information
 	//
@@ -201,11 +201,11 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 		}
 
 		// start new resource report when necessary
-		resReport := srvReport.Resources[apiIdentity.ResourceName]
+		resReport := srvReport.Resources[apiIdentity.Name]
 		if resReport == nil {
 			resInfo := cluster.InfoForResource(dbServiceType, dbResourceName)
 			resReport = &limesresources.ProjectResourceReport{
-				ResourceInfo:     behavior.BuildAPIResourceInfo(apiIdentity.ResourceName, resInfo),
+				ResourceInfo:     behavior.BuildAPIResourceInfo(apiIdentity.Name, resInfo),
 				Usage:            0,
 				CommitmentConfig: behavior.ToCommitmentConfig(now),
 				// all other fields are set below
@@ -228,7 +228,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 				}
 			}
 
-			srvReport.Resources[apiIdentity.ResourceName] = resReport
+			srvReport.Resources[apiIdentity.Name] = resReport
 		}
 
 		// fill data from project_az_resources into resource report
@@ -323,7 +323,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 	return nil
 }
 
-func finalizeProjectResourceReport(projectReport *limesresources.ProjectReport, projectID db.ProjectID, dbi db.Interface, filter Filter, nm core.NameMapping) error {
+func finalizeProjectResourceReport(projectReport *limesresources.ProjectReport, projectID db.ProjectID, dbi db.Interface, filter Filter, nm core.ResourceNameMapping) error {
 	if filter.WithAZBreakdown {
 		// if `per_az` is shown, we need to compute the sum of all active commitments using a different query
 		err := sqlext.ForeachRow(dbi, projectReportCommitmentsQuery, []any{projectID}, func(rows *sql.Rows) error {
@@ -340,7 +340,7 @@ func finalizeProjectResourceReport(projectReport *limesresources.ProjectReport, 
 			if err != nil {
 				return err
 			}
-			apiServiceType, apiResourceName, exists := nm.MapResourceToV1API(dbServiceType, dbResourceName)
+			apiServiceType, apiResourceName, exists := nm.MapToV1API(dbServiceType, dbResourceName)
 			if !exists {
 				return nil
 			}
@@ -407,7 +407,7 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 	if project != nil {
 		fields["p.id"] = project.ID
 	}
-	nm := core.BuildNameMapping(cluster)
+	nm := core.BuildRateNameMapping(cluster)
 
 	// first, query for basic project information
 	//
@@ -484,7 +484,10 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 		if !cluster.HasService(dbServiceType) {
 			return nil
 		}
-		apiServiceType, apiRateName := nm.MapRateToV1API(dbServiceType, dbRateName)
+		apiServiceType, apiRateName, exists := nm.MapToV1API(dbServiceType, dbRateName)
+		if !exists {
+			return nil
+		}
 
 		// start new service report when necessary
 		srvReport := projectReport.Services[apiServiceType]
@@ -562,7 +565,7 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 }
 
 // Builds a fresh ProjectReport with default rate-limits pre-filled from the cluster config.
-func initProjectRateReport(projectInfo limes.ProjectInfo, cluster *core.Cluster, nm core.NameMapping) *limesrates.ProjectReport {
+func initProjectRateReport(projectInfo limes.ProjectInfo, cluster *core.Cluster, nm core.RateNameMapping) *limesrates.ProjectReport {
 	report := limesrates.ProjectReport{
 		ProjectInfo: projectInfo,
 		Services:    make(limesrates.ProjectServiceReports),
@@ -571,7 +574,10 @@ func initProjectRateReport(projectInfo limes.ProjectInfo, cluster *core.Cluster,
 	for _, srvConfig := range cluster.Config.Services {
 		dbServiceType := srvConfig.ServiceType
 		for _, rateLimitConfig := range srvConfig.RateLimits.ProjectDefault {
-			apiServiceType, apiRateName := nm.MapRateToV1API(dbServiceType, rateLimitConfig.Name)
+			apiServiceType, apiRateName, exists := nm.MapToV1API(dbServiceType, rateLimitConfig.Name)
+			if !exists {
+				continue // defense in depth: should not happen because NameMapping iterated through the same structure
+			}
 
 			srvReport := report.Services[apiServiceType]
 			if srvReport == nil {

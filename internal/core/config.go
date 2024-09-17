@@ -44,6 +44,7 @@ type ClusterConfiguration struct {
 	Capacitors        []CapacitorConfiguration `yaml:"capacitors"`
 	// ^ Sorry for the stupid pun. Not.
 	ResourceBehaviors        []ResourceBehavior                `yaml:"resource_behavior"`
+	RateBehaviors            []RateBehavior                    `yaml:"rate_behavior"`
 	QuotaDistributionConfigs []*QuotaDistributionConfiguration `yaml:"quota_distribution_configs"`
 }
 
@@ -203,6 +204,9 @@ func (cluster ClusterConfiguration) validateConfig() (errs errext.ErrorSet) {
 
 	for idx, behavior := range cluster.ResourceBehaviors {
 		errs.Append(behavior.Validate(fmt.Sprintf("resource_behavior[%d]", idx)))
+	}
+	for idx, behavior := range cluster.RateBehaviors {
+		errs.Append(behavior.Validate(fmt.Sprintf("rate_behavior[%d]", idx)))
 	}
 
 	for idx, qdCfg := range cluster.QuotaDistributionConfigs {

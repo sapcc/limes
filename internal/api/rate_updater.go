@@ -77,16 +77,22 @@ func (u *RateLimitUpdater) ValidateInput(input limesrates.RateRequest, dbi db.In
 		return err
 	}
 
-	nm := core.BuildNameMapping(u.Cluster)
+	nm := core.BuildRateNameMapping(u.Cluster)
 	u.Requests = make(map[db.ServiceType]map[db.RateName]RateLimitRequest)
 
 	// Go through all services and validate the requested rate limits.
 	for apiServiceType, in := range input {
 		for apiRateName, newRateLimit := range in {
-			dbServiceType, dbRateName := nm.MapRateFromV1API(apiServiceType, apiRateName)
+			dbServiceType, dbRateName, exists := nm.MapFromV1API(apiServiceType, apiRateName)
+			if !exists {
+				// it is ugly that this breaks the existing error reporting format, but
+				// since we don't have a DB-level identifier, we cannot record this in
+				// our usual structure
+				return fmt.Errorf("no such rate: %s/%s", apiServiceType, apiRateName)
+			}
 			serviceConfig, ok := u.Cluster.Config.GetServiceConfigurationForType(dbServiceType)
 			if !ok {
-				// Skip service if not configured.
+				// defense in depth: should not occur because then we should have had `!exists` above
 				continue
 			}
 			if u.Requests[dbServiceType] == nil {
@@ -172,16 +178,15 @@ func (u RateLimitUpdater) WriteSimulationReport(w http.ResponseWriter) {
 	}
 	result.IsValid = true // until proven otherwise
 
-	nm := core.BuildNameMapping(u.Cluster)
 	for dbServiceType, reqs := range u.Requests {
 		for dbRateName, req := range reqs {
 			if req.ValidationError != nil {
 				result.IsValid = false
-				apiServiceType, apiRateName := nm.MapRateToV1API(dbServiceType, dbRateName)
+				apiIdentity := u.Cluster.BehaviorForRate(dbServiceType, dbRateName).IdentityInV1API
 				result.UnacceptableRateLimits = append(result.UnacceptableRateLimits,
 					unacceptableRateLimit{
-						ServiceType:         apiServiceType,
-						Name:                apiRateName,
+						ServiceType:         apiIdentity.ServiceType,
+						Name:                apiIdentity.Name,
 						RateValidationError: *req.ValidationError,
 					},
 				)
@@ -211,15 +216,14 @@ func (u RateLimitUpdater) WritePutErrorResponse(w http.ResponseWriter) {
 	hasSubstatus := make(map[int]bool)
 
 	// collect error messages
-	nm := core.BuildNameMapping(u.Cluster)
 	for dbServiceType, reqs := range u.Requests {
 		for dbRateName, req := range reqs {
 			if err := req.ValidationError; err != nil {
-				apiServiceType, apiRateName := nm.MapRateToV1API(dbServiceType, dbRateName)
+				apiIdentity := u.Cluster.BehaviorForRate(dbServiceType, dbRateName).IdentityInV1API
 				hasSubstatus[err.Status] = true
 				lines = append(
 					lines,
-					fmt.Sprintf("cannot change %s/%s rate limits: %s", apiServiceType, apiRateName, err.Message),
+					fmt.Sprintf("cannot change %s/%s rate limits: %s", apiIdentity.ServiceType, apiIdentity.Name, err.Message),
 				)
 			}
 		}
@@ -250,7 +254,6 @@ func (u RateLimitUpdater) CommitAuditTrail(token *gopherpolicy.Token, r *http.Re
 		statusCode = http.StatusUnprocessableEntity
 	}
 
-	nm := core.BuildNameMapping(u.Cluster)
 	for dbServiceType, reqs := range u.Requests {
 		for dbRateName, req := range reqs {
 			// if !u.IsValid(), then all requested quotas in this PUT are considered
@@ -264,15 +267,15 @@ func (u RateLimitUpdater) CommitAuditTrail(token *gopherpolicy.Token, r *http.Re
 				}
 			}
 
-			apiServiceType, apiRateName := nm.MapRateToV1API(dbServiceType, dbRateName)
+			apiIdentity := u.Cluster.BehaviorForRate(dbServiceType, dbRateName).IdentityInV1API
 			logAndPublishEvent(requestTime, r, token, statusCode,
 				rateLimitEventTarget{
 					DomainID:     u.Domain.UUID,
 					DomainName:   u.Domain.Name,
 					ProjectID:    u.Project.UUID,
 					ProjectName:  u.Project.Name,
-					ServiceType:  apiServiceType,
-					Name:         apiRateName,
+					ServiceType:  apiIdentity.ServiceType,
+					Name:         apiIdentity.Name,
 					OldLimit:     req.OldLimit,
 					NewLimit:     req.NewLimit,
 					OldWindow:    req.OldWindow,
