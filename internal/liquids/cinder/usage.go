@@ -58,7 +58,7 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 		return liquid.ServiceUsageReport{}, err
 	}
 	if l.WithSnapshotSubresources {
-		err = l.collectSnapshotSubresources(ctx, projectUUID, placementForVolumeUUID, resources)
+		err = l.collectSnapshotSubresources(ctx, projectUUID, req.AllAZs, placementForVolumeUUID, resources)
 		if err != nil {
 			return liquid.ServiceUsageReport{}, err
 		}
@@ -126,7 +126,12 @@ func (l *Logic) collectVolumeSubresources(ctx context.Context, projectUUID strin
 	return placementForVolumeUUID, err
 }
 
-func (l *Logic) collectSnapshotSubresources(ctx context.Context, projectUUID string, placementForVolumeUUID map[string]VolumePlacement, resources map[liquid.ResourceName]*liquid.ResourceUsageReport) error {
+func (l *Logic) collectSnapshotSubresources(ctx context.Context, projectUUID string, allAZs []liquid.AvailabilityZone, placementForVolumeUUID map[string]VolumePlacement, resources map[liquid.ResourceName]*liquid.ResourceUsageReport) error {
+	isKnownVolumeType := make(map[VolumeType]bool)
+	for vt := range l.VolumeTypes.Get() {
+		isKnownVolumeType[vt] = true
+	}
+
 	listOpts := snapshots.ListOpts{
 		AllTenants: true,
 		TenantID:   projectUUID,
@@ -141,7 +146,21 @@ func (l *Logic) collectSnapshotSubresources(ctx context.Context, projectUUID str
 		for _, snapshot := range snaps {
 			placement, exists := placementForVolumeUUID[snapshot.VolumeID]
 			if !exists {
-				return false, fmt.Errorf("snapshot %s in project %s belongs to unknown volume %s", snapshot.ID, projectUUID, snapshot.VolumeID)
+				volume, err := volumes.Get(ctx, l.CinderV3, snapshot.VolumeID).Extract()
+				if err != nil {
+					return false, fmt.Errorf("could not get info on volume %s that owns snapshot %s in project %s: %w",
+						snapshot.VolumeID, snapshot.ID, projectUUID, err)
+				}
+				vt := VolumeType(volume.VolumeType)
+				if !isKnownVolumeType[vt] {
+					return false, fmt.Errorf("volume %s that owns snapshot %s in project %s has unknown volume type %q",
+						snapshot.VolumeID, snapshot.ID, projectUUID, volume.VolumeType)
+				}
+				az := liquid.AvailabilityZone(volume.AvailabilityZone)
+				if !slices.Contains(allAZs, az) {
+					az = liquid.AvailabilityZoneUnknown
+				}
+				placement = VolumePlacement{vt, az}
 			}
 
 			vt := placement.VolumeType
