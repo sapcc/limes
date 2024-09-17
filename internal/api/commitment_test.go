@@ -1158,26 +1158,6 @@ func Test_ConvertCommitments(t *testing.T) {
 		test.WithAPIHandler(NewV1API),
 	)
 
-	commitment := assert.JSONObject{
-		"commitment": assert.JSONObject{
-			"service_type":      "second",
-			"resource_name":     "capacity",
-			"availability_zone": "az-one",
-			"amount":            21,
-			"duration":          "1 hour",
-		},
-	}
-	commitmentWithConfirmBy := assert.JSONObject{
-		"commitment": assert.JSONObject{
-			"service_type":      "second",
-			"resource_name":     "capacity",
-			"availability_zone": "az-one",
-			"amount":            3,
-			"duration":          "1 hour",
-			"confirm_by":        s.Clock.Now().Add(14 * day).Unix(),
-		},
-	}
-
 	req := func(targetService, targetResource string, sourceAmount, TargetAmount uint64) assert.JSONObject {
 		return assert.JSONObject{
 			"commitment": assert.JSONObject{
@@ -1226,9 +1206,17 @@ func Test_ConvertCommitments(t *testing.T) {
 
 	// conversion rate is (second: 3 to first: 2)
 	assert.HTTPRequest{
-		Method:       http.MethodPost,
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body:         commitment,
+		Method: http.MethodPost,
+		Path:   "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
+		Body: assert.JSONObject{
+			"commitment": assert.JSONObject{
+				"service_type":      "second",
+				"resource_name":     "capacity",
+				"availability_zone": "az-one",
+				"amount":            21,
+				"duration":          "1 hour",
+			},
+		},
 		ExpectStatus: http.StatusCreated,
 	}.Check(t, s.Handler)
 
@@ -1320,9 +1308,18 @@ func Test_ConvertCommitments(t *testing.T) {
 
 	// test commitment conversion with confirmBy field (unconfirmed commitment)
 	assert.HTTPRequest{
-		Method:       http.MethodPost,
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
-		Body:         commitmentWithConfirmBy,
+		Method: http.MethodPost,
+		Path:   "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
+		Body: assert.JSONObject{
+			"commitment": assert.JSONObject{
+				"service_type":      "second",
+				"resource_name":     "capacity",
+				"availability_zone": "az-one",
+				"amount":            3,
+				"duration":          "1 hour",
+				"confirm_by":        s.Clock.Now().Add(14 * day).Unix(),
+			},
+		},
 		ExpectStatus: http.StatusCreated,
 	}.Check(t, s.Handler)
 

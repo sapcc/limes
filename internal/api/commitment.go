@@ -979,7 +979,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	}
 	// The commitment at the source resource was already confirmed and checked.
 	// Therefore only the addition to the target resource has to be checked against.
-	if dbCommitment.ConfirmBy == nil {
+	if dbCommitment.ConfirmedAt != nil {
 		ok, err := datamodel.CanConfirmNewCommitment(targetLoc, targetResourceID, conversionAmount, p.Cluster, p.DB)
 		if respondwith.ErrorText(w, err) {
 			return
