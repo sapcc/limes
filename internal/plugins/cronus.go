@@ -104,7 +104,7 @@ type cronusState struct {
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) ScrapeRates(ctx context.Context, project core.KeystoneProject, prevSerializedState string) (result map[liquid.RateName]*big.Int, serializedState string, err error) {
+func (p *cronusPlugin) ScrapeRates(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone, prevSerializedState string) (result map[liquid.RateName]*big.Int, serializedState string, err error) {
 	// decode `prevSerializedState`
 	var state cronusState
 	if prevSerializedState == "" {

@@ -144,13 +144,18 @@ type QuotaPlugin interface {
 	// enumerated by Rates() for the given project in the given domain. The string
 	// keys in the result map must be identical to the rate names from Rates().
 	//
+	// The `allAZs` list comes from the Limes config and should be used when
+	// building AZ-aware usage data, to ensure that each AZ-aware resource reports
+	// usage in all available AZs, even when the project in question does not have
+	// usage in every AZ.
+	//
 	// The serializedState return value is persisted in the Limes DB and returned
 	// back to the next ScrapeRates() call for the same project in the
 	// prevSerializedState argument. Besides that, this field is not interpreted
 	// by the core application in any way. The plugin implementation can use this
 	// field to carry state between ScrapeRates() calls, esp. to detect and handle
 	// counter resets in the backend.
-	ScrapeRates(ctx context.Context, project KeystoneProject, prevSerializedState string) (result map[liquid.RateName]*big.Int, serializedState string, err error)
+	ScrapeRates(ctx context.Context, project KeystoneProject, allAZs []limes.AvailabilityZone, prevSerializedState string) (result map[liquid.RateName]*big.Int, serializedState string, err error)
 
 	// DescribeMetrics is called when Prometheus is scraping metrics from
 	// limes-collect, to provide an opportunity to the plugin to emit its own

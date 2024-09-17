@@ -363,7 +363,7 @@ func taskTestGetRates(ctx context.Context, cluster *core.Cluster, args []string)
 	serviceType := db.ServiceType(args[1])
 	project := must.Return(findProjectForTesting(ctx, cluster, args[0]))
 
-	result, serializedState, err := cluster.QuotaPlugins[serviceType].ScrapeRates(ctx, project, prevSerializedState)
+	result, serializedState, err := cluster.QuotaPlugins[serviceType].ScrapeRates(ctx, project, cluster.Config.AvailabilityZones, prevSerializedState)
 	must.Succeed(err)
 	if serializedState != "" {
 		logg.Info("scrape returned new serialized state: %s", serializedState)

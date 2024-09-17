@@ -176,7 +176,7 @@ func (p *liquidQuotaPlugin) Rates() map[liquid.RateName]liquid.RateInfo {
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *liquidQuotaPlugin) ScrapeRates(ctx context.Context, project core.KeystoneProject, prevSerializedState string) (result map[liquid.RateName]*big.Int, serializedState string, err error) {
+func (p *liquidQuotaPlugin) ScrapeRates(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone, prevSerializedState string) (result map[liquid.RateName]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 
