@@ -146,7 +146,7 @@ type ProjectAZResource struct {
 // ProjectRate contains a record from the `project_rates` table.
 type ProjectRate struct {
 	ServiceID     ProjectServiceID   `db:"service_id"`
-	Name          RateName           `db:"name"`
+	Name          liquid.RateName    `db:"name"`
 	Limit         *uint64            `db:"rate_limit"`      // nil for rates that don't have a limit (just a usage)
 	Window        *limesrates.Window `db:"window_ns"`       // nil for rates that don't have a limit (just a usage)
 	UsageAsBigint string             `db:"usage_as_bigint"` // empty for rates that don't have a usage (just a limit)

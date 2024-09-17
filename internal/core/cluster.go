@@ -213,7 +213,7 @@ func (c *Cluster) BehaviorForResource(serviceType db.ServiceType, resourceName l
 
 // BehaviorForRate returns the RateBehavior for the given rate in
 // the given scope.
-func (c *Cluster) BehaviorForRate(serviceType db.ServiceType, rateName db.RateName) RateBehavior {
+func (c *Cluster) BehaviorForRate(serviceType db.ServiceType, rateName liquid.RateName) RateBehavior {
 	// default behavior
 	result := RateBehavior{
 		IdentityInV1API: RateRef{
@@ -260,7 +260,7 @@ func (c *Cluster) QuotaDistributionConfigForResource(serviceType db.ServiceType,
 
 // HasUsageForRate checks whether the given service is enabled in this cluster and
 // whether it scrapes usage for the given rate.
-func (c *Cluster) HasUsageForRate(serviceType db.ServiceType, rateName db.RateName) bool {
+func (c *Cluster) HasUsageForRate(serviceType db.ServiceType, rateName liquid.RateName) bool {
 	plugin := c.QuotaPlugins[serviceType]
 	if plugin == nil {
 		return false
@@ -274,7 +274,7 @@ func (c *Cluster) HasUsageForRate(serviceType db.ServiceType, rateName db.RateNa
 // exist, an empty RateInfo (with .Unit == UnitNone) is returned. Note that this
 // only returns non-empty RateInfos for rates where a usage is reported. There
 // may be rates that only have a limit, as defined in the ClusterConfiguration.
-func (c *Cluster) InfoForRate(serviceType db.ServiceType, rateName db.RateName) RateInfo {
+func (c *Cluster) InfoForRate(serviceType db.ServiceType, rateName liquid.RateName) RateInfo {
 	plugin := c.QuotaPlugins[serviceType]
 	if plugin == nil {
 		return RateInfo{Unit: limes.UnitNone}

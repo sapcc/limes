@@ -87,12 +87,12 @@ func (p *NoopQuotaPlugin) Resources() map[liquid.ResourceName]liquid.ResourceInf
 }
 
 // Rates implements the core.QuotaPlugin interface.
-func (p *NoopQuotaPlugin) Rates() map[db.RateName]core.RateInfo {
+func (p *NoopQuotaPlugin) Rates() map[liquid.RateName]core.RateInfo {
 	return nil
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *NoopQuotaPlugin) ScrapeRates(ctx context.Context, project core.KeystoneProject, prevSerializedState string) (result map[db.RateName]*big.Int, serializedState string, err error) {
+func (p *NoopQuotaPlugin) ScrapeRates(ctx context.Context, project core.KeystoneProject, prevSerializedState string) (result map[liquid.RateName]*big.Int, serializedState string, err error) {
 	return nil, "", nil
 }
 

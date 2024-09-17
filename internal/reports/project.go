@@ -442,7 +442,7 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 			projectID      db.ProjectID
 			dbServiceType  db.ServiceType
 			ratesScrapedAt *time.Time
-			dbRateName     db.RateName
+			dbRateName     liquid.RateName
 			limit          *uint64
 			window         *limesrates.Window
 			usageAsBigint  *string

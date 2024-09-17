@@ -782,7 +782,7 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 			projectName   string
 			projectUUID   string
 			dbServiceType db.ServiceType
-			dbRateName    db.RateName
+			dbRateName    liquid.RateName
 			usageAsBigint string
 		)
 		err := rows.Scan(&domainName, &domainUUID, &projectName, &projectUUID, &dbServiceType, &dbRateName, &usageAsBigint)
@@ -834,12 +834,12 @@ func buildServiceNameByTypeMapping(c *core.Cluster) (serviceNameByType map[db.Se
 type resourceAndRateBehaviorCache struct {
 	cluster   *core.Cluster
 	cache     map[db.ServiceType]map[liquid.ResourceName]core.ResourceBehavior
-	rateCache map[db.ServiceType]map[db.RateName]core.RateBehavior
+	rateCache map[db.ServiceType]map[liquid.RateName]core.RateBehavior
 }
 
 func newResourceAndRateBehaviorCache(cluster *core.Cluster) resourceAndRateBehaviorCache {
 	cache := make(map[db.ServiceType]map[liquid.ResourceName]core.ResourceBehavior)
-	rateCache := make(map[db.ServiceType]map[db.RateName]core.RateBehavior)
+	rateCache := make(map[db.ServiceType]map[liquid.RateName]core.RateBehavior)
 	return resourceAndRateBehaviorCache{cluster, cache, rateCache}
 }
 
@@ -855,9 +855,9 @@ func (c resourceAndRateBehaviorCache) Get(srvType db.ServiceType, resName liquid
 	return behavior
 }
 
-func (c resourceAndRateBehaviorCache) GetForRate(srvType db.ServiceType, rateName db.RateName) core.RateBehavior {
+func (c resourceAndRateBehaviorCache) GetForRate(srvType db.ServiceType, rateName liquid.RateName) core.RateBehavior {
 	if c.rateCache[srvType] == nil {
-		c.rateCache[srvType] = make(map[db.RateName]core.RateBehavior)
+		c.rateCache[srvType] = make(map[liquid.RateName]core.RateBehavior)
 	}
 	behavior, exists := c.rateCache[srvType][rateName]
 	if !exists {

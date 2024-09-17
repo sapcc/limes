@@ -44,7 +44,7 @@ func init() {
 // operations.
 type GenericQuotaPlugin struct {
 	ServiceType        db.ServiceType                             `yaml:"-"`
-	StaticRateInfos    map[db.RateName]core.RateInfo              `yaml:"rate_infos"`
+	StaticRateInfos    map[liquid.RateName]core.RateInfo          `yaml:"rate_infos"`
 	StaticResourceData map[liquid.ResourceName]*core.ResourceData `yaml:"-"`
 	OverrideQuota      map[string]map[liquid.ResourceName]uint64  `yaml:"-"` // first key is project UUID
 	// behavior flags that can be set by a unit test
@@ -102,18 +102,18 @@ func (p *GenericQuotaPlugin) Resources() map[liquid.ResourceName]liquid.Resource
 }
 
 // Rates implements the core.QuotaPlugin interface.
-func (p *GenericQuotaPlugin) Rates() map[db.RateName]core.RateInfo {
+func (p *GenericQuotaPlugin) Rates() map[liquid.RateName]core.RateInfo {
 	return p.StaticRateInfos
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *GenericQuotaPlugin) ScrapeRates(ctx context.Context, project core.KeystoneProject, prevSerializedState string) (result map[db.RateName]*big.Int, serializedState string, err error) {
+func (p *GenericQuotaPlugin) ScrapeRates(ctx context.Context, project core.KeystoneProject, prevSerializedState string) (result map[liquid.RateName]*big.Int, serializedState string, err error) {
 	if p.ScrapeFails {
 		return nil, "", errors.New("ScrapeRates failed as requested")
 	}
 
 	// this dummy implementation lets itself be influenced by the existing state, but also alters it a bit
-	state := make(map[db.RateName]int64)
+	state := make(map[liquid.RateName]int64)
 	if prevSerializedState == "" {
 		for rateName := range p.StaticRateInfos {
 			state[rateName] = 0
@@ -128,7 +128,7 @@ func (p *GenericQuotaPlugin) ScrapeRates(ctx context.Context, project core.Keyst
 		}
 	}
 
-	result = make(map[db.RateName]*big.Int)
+	result = make(map[liquid.RateName]*big.Int)
 	for rateName := range p.StaticRateInfos {
 		result[rateName] = big.NewInt(state[rateName] + int64(len(rateName)))
 	}

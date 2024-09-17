@@ -25,6 +25,7 @@ import (
 	"math/big"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/jobloop"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
@@ -137,7 +138,7 @@ func (c *Collector) processRateScrapeTask(ctx context.Context, task projectScrap
 	return fmt.Errorf("during rate scrape of project %s/%s: %w", project.Domain.Name, project.Name, task.Err)
 }
 
-func (c *Collector) writeRateScrapeResult(task projectScrapeTask, rateData map[db.RateName]*big.Int, ratesScrapeState string) error {
+func (c *Collector) writeRateScrapeResult(task projectScrapeTask, rateData map[liquid.RateName]*big.Int, ratesScrapeState string) error {
 	srv := task.Service
 	plugin := c.Cluster.QuotaPlugins[srv.Type] //NOTE: discoverScrapeTask already verified that this exists
 
@@ -148,7 +149,7 @@ func (c *Collector) writeRateScrapeResult(task projectScrapeTask, rateData map[d
 	defer sqlext.RollbackUnlessCommitted(tx)
 
 	// update existing project_rates entries
-	rateExists := make(map[db.RateName]bool)
+	rateExists := make(map[liquid.RateName]bool)
 	var rates []db.ProjectRate
 	_, err = tx.Select(&rates, `SELECT * FROM project_rates WHERE service_id = $1`, srv.ID)
 	if err != nil {

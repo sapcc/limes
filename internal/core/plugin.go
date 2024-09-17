@@ -139,7 +139,7 @@ type QuotaPlugin interface {
 
 	// Rates returns metadata for all the rates that this plugin scrapes
 	// from the backend service.
-	Rates() map[db.RateName]RateInfo
+	Rates() map[liquid.RateName]RateInfo
 	// ScrapeRates queries the backend service for the usage data of all the rates
 	// enumerated by Rates() for the given project in the given domain. The string
 	// keys in the result map must be identical to the rate names from Rates().
@@ -150,7 +150,7 @@ type QuotaPlugin interface {
 	// by the core application in any way. The plugin implementation can use this
 	// field to carry state between ScrapeRates() calls, esp. to detect and handle
 	// counter resets in the backend.
-	ScrapeRates(ctx context.Context, project KeystoneProject, prevSerializedState string) (result map[db.RateName]*big.Int, serializedState string, err error)
+	ScrapeRates(ctx context.Context, project KeystoneProject, prevSerializedState string) (result map[liquid.RateName]*big.Int, serializedState string, err error)
 
 	// DescribeMetrics is called when Prometheus is scraping metrics from
 	// limes-collect, to provide an opportunity to the plugin to emit its own

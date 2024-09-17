@@ -25,6 +25,7 @@ import (
 
 	"github.com/go-gorp/gorp/v3"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sqlext"
@@ -206,7 +207,7 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 			if respondwith.ErrorText(w, err) {
 				return
 			}
-			ratesByName := make(map[db.RateName]db.ProjectRate)
+			ratesByName := make(map[liquid.RateName]db.ProjectRate)
 			for _, rate := range rates {
 				ratesByName[rate.Name] = rate
 			}
