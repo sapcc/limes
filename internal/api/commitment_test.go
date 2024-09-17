@@ -1302,7 +1302,7 @@ func Test_ConvertCommitments(t *testing.T) {
 		ExpectStatus: http.StatusConflict,
 	}.Check(t, s.Handler)
 
-	// Check resulting empty commitment from conversion calculation (remainderAmount > 0)
+	// Reject an amount that doesn't fit into the conversion rate (remainder > 0).
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2/convert",
@@ -1316,7 +1316,7 @@ func Test_ConvertCommitments(t *testing.T) {
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2/convert",
 		Body:         req("third", "capacity2_c144", 1, 3),
-		ExpectBody:   assert.StringData("commitment is not convertible\n"),
+		ExpectBody:   assert.StringData("commitment is not convertible into target resource: capacity2_c144\n"),
 		ExpectStatus: http.StatusUnprocessableEntity,
 	}.Check(t, s.Handler)
 

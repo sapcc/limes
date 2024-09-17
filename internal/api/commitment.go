@@ -925,13 +925,17 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	targetBehavior := p.Cluster.BehaviorForResource(targetServiceType, targetResourceName)
+	if sourceLoc.ResourceName == targetResourceName && sourceLoc.ServiceType == targetServiceType {
+		http.Error(w, "conversion attempt to the same resource.", http.StatusConflict)
+		return
+	}
 	if len(targetBehavior.CommitmentDurations) == 0 {
 		msg := fmt.Sprintf("commitments are not enabled for resource %s/%s", req.TargetService, req.TargetResource)
 		http.Error(w, msg, http.StatusUnprocessableEntity)
 		return
 	}
 	if sourceBehavior.CommitmentConversion.Identifier == "" || sourceBehavior.CommitmentConversion.Identifier != targetBehavior.CommitmentConversion.Identifier {
-		msg := fmt.Sprintf("commitments are not enabled for resource into target resource: %s", req.TargetResource)
+		msg := fmt.Sprintf("commitment is not convertible into target resource: %s", req.TargetResource)
 		http.Error(w, msg, http.StatusUnprocessableEntity)
 		return
 	}
@@ -971,6 +975,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	if respondwith.ErrorText(w, err) {
 		return
 	}
+	// defense in depth. ServiceType and ResourceName of source and target are already checked. Here it's possible to explicitly check the ID's.
 	if dbCommitment.AZResourceID == targetAZResourceID {
 		http.Error(w, "conversion attempt to the same resource.", http.StatusConflict)
 		return
