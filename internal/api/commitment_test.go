@@ -1271,9 +1271,7 @@ func Test_ConvertCommitments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if originalCommitment.Amount != 18 {
-		t.Fatalf("commitment amount should be %v. Received %v instead.", 18, originalCommitment.Amount)
-	}
+	assert.DeepEqual(t, "commitment amount", originalCommitment.Amount, 18)
 
 	// Reject conversion attempt to a different project.
 	assert.HTTPRequest{

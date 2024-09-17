@@ -809,10 +809,6 @@ func (p *v1Provider) GetCommitmentConversions(w http.ResponseWriter, r *http.Req
 		return
 	}
 	sourceBehavior := p.Cluster.BehaviorForResource(sourceServiceType, sourceResourceName)
-	if len(sourceBehavior.CommitmentDurations) == 0 {
-		http.Error(w, "commitments are not enabled for this resource", http.StatusUnprocessableEntity)
-		return
-	}
 	sourceResInfo := p.Cluster.InfoForResource(sourceServiceType, sourceResourceName)
 
 	// enumerate possible conversions
@@ -899,10 +895,6 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sourceBehavior := p.Cluster.BehaviorForResource(sourceLoc.ServiceType, sourceLoc.ResourceName)
-	if len(sourceBehavior.CommitmentDurations) == 0 {
-		http.Error(w, "commitments are not enabled for this resource", http.StatusUnprocessableEntity)
-		return
-	}
 
 	// section: targetBehavior
 	var parseTarget struct {
