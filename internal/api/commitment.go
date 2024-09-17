@@ -874,14 +874,14 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	if dbDomain == nil {
 		return
 	}
-	targetProject := p.FindProjectFromRequest(w, r, dbDomain)
-	if targetProject == nil {
+	dbProject := p.FindProjectFromRequest(w, r, dbDomain)
+	if dbProject == nil {
 		return
 	}
 
-	// sourceBehavior
+	// section: sourceBehavior
 	var dbCommitment db.ProjectCommitment
-	err := p.DB.SelectOne(&dbCommitment, `SELECT pc.* FROM project_commitments pc WHERE pc.id = $1`, commitmentID)
+	err := p.DB.SelectOne(&dbCommitment, findProjectCommitmentByIDQuery, commitmentID, dbProject.ID)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "no such commitment", http.StatusNotFound)
 		return
@@ -904,7 +904,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// targetBehavior
+	// section: targetBehavior
 	var parseTarget struct {
 		Request struct {
 			TargetService  limes.ServiceType           `json:"target_service"`
@@ -935,7 +935,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// conversion
+	// section: conversion
 	if req.SourceAmount > dbCommitment.Amount {
 		msg := fmt.Sprintf("unprocessable source amount. provided: %v, commitment: %v", req.SourceAmount, dbCommitment.Amount)
 		http.Error(w, msg, http.StatusConflict)
@@ -965,7 +965,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		targetResourceID   db.ProjectResourceID
 		targetAZResourceID db.ProjectAZResourceID
 	)
-	err = p.DB.QueryRow(findTargetAZResourceByTargetProjectQuery, targetProject.ID, targetServiceType, targetResourceName, sourceLoc.AvailabilityZone).
+	err = p.DB.QueryRow(findTargetAZResourceByTargetProjectQuery, dbProject.ID, targetServiceType, targetResourceName, sourceLoc.AvailabilityZone).
 		Scan(&targetResourceID, &targetAZResourceID)
 	if respondwith.ErrorText(w, err) {
 		return
@@ -1025,8 +1025,8 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	logAndPublishEvent(p.timeNow(), r, token, http.StatusAccepted, commitmentEventTarget{
 		DomainID:    dbDomain.UUID,
 		DomainName:  dbDomain.Name,
-		ProjectID:   targetProject.UUID,
-		ProjectName: targetProject.Name,
+		ProjectID:   dbProject.UUID,
+		ProjectName: dbProject.Name,
 		Commitment:  c,
 	})
 

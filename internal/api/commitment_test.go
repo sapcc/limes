@@ -1275,36 +1275,19 @@ func Test_ConvertCommitments(t *testing.T) {
 		t.Fatalf("commitment amount should be %v. Received %v instead.", 18, originalCommitment.Amount)
 	}
 
-	// Convert to another project
+	// Reject conversion attempt to a different project.
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/commitments/2/convert",
 		Body:         req("first", "capacity", 6, 4),
-		ExpectBody:   assert.JSONObject{"commitment": resp(5, 4, "first", "capacity")},
-		ExpectStatus: http.StatusAccepted,
+		ExpectBody:   assert.StringData("no such commitment\n"),
+		ExpectStatus: http.StatusNotFound,
 	}.Check(t, s.Handler)
-	err = s.DB.SelectOne(&originalCommitment, `SELECT * FROM project_commitments where ID = 5`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if originalCommitment.AZResourceID != 17 {
-		t.Fatalf("commitment az resource ID should be %v. Received %v instead.", 17, originalCommitment.AZResourceID)
-	}
-	err = s.DB.SelectOne(&originalCommitment, `SELECT * FROM project_commitments where ID = 4`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if *originalCommitment.PredecessorID != 2 {
-		t.Fatalf("commitment predecessor ID should be %v. Received %v instead.", 2, originalCommitment.PredecessorID)
-	}
-	if originalCommitment.Amount != 12 {
-		t.Fatalf("commitment amount should be %v. Received %v instead.", 12, originalCommitment.Amount)
-	}
 
 	// Reject conversion at the same project to the same resource.
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/4/convert",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2/convert",
 		Body:         req("second", "capacity", 6, 6),
 		ExpectBody:   assert.StringData("conversion attempt to the same resource.\n"),
 		ExpectStatus: http.StatusConflict,
@@ -1313,7 +1296,7 @@ func Test_ConvertCommitments(t *testing.T) {
 	// Mismatching target amount
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/4/convert",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2/convert",
 		Body:         req("first", "capacity", 6, 3),
 		ExpectBody:   assert.StringData("conversion mismatch. provided: 3, calculated: 4\n"),
 		ExpectStatus: http.StatusConflict,
@@ -1322,7 +1305,7 @@ func Test_ConvertCommitments(t *testing.T) {
 	// Check resulting empty commitment from conversion calculation (remainderAmount > 0)
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/4/convert",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2/convert",
 		Body:         req("first", "capacity", 1, 3),
 		ExpectBody:   assert.StringData("amount: 1 does not fit into conversion rate of: 3\n"),
 		ExpectStatus: http.StatusConflict,
@@ -1331,7 +1314,7 @@ func Test_ConvertCommitments(t *testing.T) {
 	// Check conversion to a different identifier which should be rejected
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/4/convert",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2/convert",
 		Body:         req("third", "capacity2_c144", 1, 3),
 		ExpectBody:   assert.StringData("commitment is not convertible\n"),
 		ExpectStatus: http.StatusUnprocessableEntity,
@@ -1347,9 +1330,9 @@ func Test_ConvertCommitments(t *testing.T) {
 
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/6/convert",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/4/convert",
 		Body:         req("first", "capacity", 3, 2),
-		ExpectBody:   assert.JSONObject{"commitment": respWithConfirmBy(7, 2, "first", "capacity")},
+		ExpectBody:   assert.JSONObject{"commitment": respWithConfirmBy(5, 2, "first", "capacity")},
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
 }
