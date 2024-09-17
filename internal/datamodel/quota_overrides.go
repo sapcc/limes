@@ -44,7 +44,7 @@ func LoadQuotaOverrides(c *core.Cluster) (result map[string]map[string]map[db.Se
 		return
 	}
 
-	nameMapping := core.BuildNameMapping(c)
+	nameMapping := core.BuildResourceNameMapping(c)
 	allResInfos := make(map[db.ServiceType]map[liquid.ResourceName]liquid.ResourceInfo, len(c.QuotaPlugins))
 	for dbServiceType, quotaPlugin := range c.QuotaPlugins {
 		allResInfos[dbServiceType] = quotaPlugin.Resources()
@@ -54,7 +54,7 @@ func LoadQuotaOverrides(c *core.Cluster) (result map[string]map[string]map[db.Se
 	// a) need to lookup by API identity
 	// b) get a result that is structured by API identity and needs to be mapped back to DB identity afterwards
 	getUnit := func(serviceType limes.ServiceType, resourceName limesresources.ResourceName) (limes.Unit, error) {
-		dbServiceType, dbResourceName, exists := nameMapping.MapResourceFromV1API(serviceType, resourceName)
+		dbServiceType, dbResourceName, exists := nameMapping.MapFromV1API(serviceType, resourceName)
 		if !exists {
 			return limes.UnitUnspecified, fmt.Errorf("%s/%s is not a valid resource", serviceType, resourceName)
 		}
@@ -89,11 +89,11 @@ func LoadQuotaOverrides(c *core.Cluster) (result map[string]map[string]map[db.Se
 	return result, nil
 }
 
-func translateQuotaOverrides(overrides map[limes.ServiceType]map[limesresources.ResourceName]uint64, nameMapping core.NameMapping) (map[db.ServiceType]map[liquid.ResourceName]uint64, error) {
+func translateQuotaOverrides(overrides map[limes.ServiceType]map[limesresources.ResourceName]uint64, nameMapping core.ResourceNameMapping) (map[db.ServiceType]map[liquid.ResourceName]uint64, error) {
 	result := make(map[db.ServiceType]map[liquid.ResourceName]uint64)
 	for apiServiceType, overridesByService := range overrides {
 		for apiResourceName, overrideQuota := range overridesByService {
-			dbServiceType, dbResourceName, exists := nameMapping.MapResourceFromV1API(apiServiceType, apiResourceName)
+			dbServiceType, dbResourceName, exists := nameMapping.MapFromV1API(apiServiceType, apiResourceName)
 			if !exists {
 				// defense in depth: this branch should be impossible to reach because ParseQuotaOverrides() rejected unknown resources
 				return nil, fmt.Errorf("%s/%s is not a valid resource", apiServiceType, apiResourceName)

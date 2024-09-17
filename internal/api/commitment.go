@@ -217,8 +217,8 @@ func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r 
 	req := parseTarget.Request
 
 	// validate request
-	nm := core.BuildNameMapping(p.Cluster)
-	dbServiceType, dbResourceName, ok := nm.MapResourceFromV1API(req.ServiceType, req.ResourceName)
+	nm := core.BuildResourceNameMapping(p.Cluster)
+	dbServiceType, dbResourceName, ok := nm.MapFromV1API(req.ServiceType, req.ResourceName)
 	if !ok {
 		msg := fmt.Sprintf("no such service and/or resource: %s/%s", req.ServiceType, req.ResourceName)
 		http.Error(w, msg, http.StatusUnprocessableEntity)
@@ -790,8 +790,8 @@ func (p *v1Provider) GetCommitmentConversions(w http.ResponseWriter, r *http.Req
 
 	// validate request
 	vars := mux.Vars(r)
-	nm := core.BuildNameMapping(p.Cluster)
-	sourceServiceType, sourceResourceName, exists := nm.MapResourceFromV1API(
+	nm := core.BuildResourceNameMapping(p.Cluster)
+	sourceServiceType, sourceResourceName, exists := nm.MapFromV1API(
 		limes.ServiceType(vars["service_type"]),
 		limesresources.ResourceName(vars["resource_name"]),
 	)
@@ -826,7 +826,7 @@ func (p *v1Provider) GetCommitmentConversions(w http.ResponseWriter, r *http.Req
 			}
 
 			fromAmount, toAmount := p.getCommitmentConversionRate(sourceBehavior, targetBehavior)
-			apiServiceType, apiResourceName, ok := nm.MapResourceToV1API(targetServiceType, targetResourceName)
+			apiServiceType, apiResourceName, ok := nm.MapToV1API(targetServiceType, targetResourceName)
 			if ok {
 				conversions = append(conversions, limesresources.CommitmentConversionRule{
 					FromAmount:     fromAmount,

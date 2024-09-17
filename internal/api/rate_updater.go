@@ -77,13 +77,13 @@ func (u *RateLimitUpdater) ValidateInput(input limesrates.RateRequest, dbi db.In
 		return err
 	}
 
-	nm := core.BuildNameMapping(u.Cluster)
+	nm := core.BuildRateNameMapping(u.Cluster)
 	u.Requests = make(map[db.ServiceType]map[db.RateName]RateLimitRequest)
 
 	// Go through all services and validate the requested rate limits.
 	for apiServiceType, in := range input {
 		for apiRateName, newRateLimit := range in {
-			dbServiceType, dbRateName, exists := nm.MapRateFromV1API(apiServiceType, apiRateName)
+			dbServiceType, dbRateName, exists := nm.MapFromV1API(apiServiceType, apiRateName)
 			if !exists {
 				// it is ugly that this breaks the existing error reporting format, but
 				// since we don't have a DB-level identifier, we cannot record this in

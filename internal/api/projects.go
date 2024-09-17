@@ -214,11 +214,11 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 	}
 
 	// validate request
-	nm := core.BuildNameMapping(p.Cluster)
+	nm := core.BuildResourceNameMapping(p.Cluster)
 	requested := make(map[db.ServiceType]map[liquid.ResourceName]*maxQuotaChange)
 	for _, srvRequest := range parseTarget.Project.Services {
 		for _, resRequest := range srvRequest.Resources {
-			dbServiceType, dbResourceName, exists := nm.MapResourceFromV1API(srvRequest.Type, resRequest.Name)
+			dbServiceType, dbResourceName, exists := nm.MapFromV1API(srvRequest.Type, resRequest.Name)
 			if !exists {
 				msg := fmt.Sprintf("no such service and/or resource: %s/%s", srvRequest.Type, resRequest.Name)
 				http.Error(w, msg, http.StatusUnprocessableEntity)
@@ -300,7 +300,7 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 	// write audit trail
 	for dbServiceType, requestedInService := range requested {
 		for dbResourceName, requestedChange := range requestedInService {
-			apiServiceType, apiResourceName, exists := nm.MapResourceToV1API(dbServiceType, dbResourceName)
+			apiServiceType, apiResourceName, exists := nm.MapToV1API(dbServiceType, dbResourceName)
 			if exists {
 				logAndPublishEvent(requestTime, r, token, http.StatusOK,
 					maxQuotaEventTarget{

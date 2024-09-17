@@ -89,7 +89,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 	if project != nil {
 		fields["p.id"] = project.ID
 	}
-	nm := core.BuildNameMapping(cluster)
+	nm := core.BuildResourceNameMapping(cluster)
 
 	// first, query for basic project information
 	//
@@ -323,7 +323,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 	return nil
 }
 
-func finalizeProjectResourceReport(projectReport *limesresources.ProjectReport, projectID db.ProjectID, dbi db.Interface, filter Filter, nm core.NameMapping) error {
+func finalizeProjectResourceReport(projectReport *limesresources.ProjectReport, projectID db.ProjectID, dbi db.Interface, filter Filter, nm core.ResourceNameMapping) error {
 	if filter.WithAZBreakdown {
 		// if `per_az` is shown, we need to compute the sum of all active commitments using a different query
 		err := sqlext.ForeachRow(dbi, projectReportCommitmentsQuery, []any{projectID}, func(rows *sql.Rows) error {
@@ -340,7 +340,7 @@ func finalizeProjectResourceReport(projectReport *limesresources.ProjectReport, 
 			if err != nil {
 				return err
 			}
-			apiServiceType, apiResourceName, exists := nm.MapResourceToV1API(dbServiceType, dbResourceName)
+			apiServiceType, apiResourceName, exists := nm.MapToV1API(dbServiceType, dbResourceName)
 			if !exists {
 				return nil
 			}
@@ -407,7 +407,7 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 	if project != nil {
 		fields["p.id"] = project.ID
 	}
-	nm := core.BuildNameMapping(cluster)
+	nm := core.BuildRateNameMapping(cluster)
 
 	// first, query for basic project information
 	//
@@ -484,7 +484,7 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 		if !cluster.HasService(dbServiceType) {
 			return nil
 		}
-		apiServiceType, apiRateName, exists := nm.MapRateToV1API(dbServiceType, dbRateName)
+		apiServiceType, apiRateName, exists := nm.MapToV1API(dbServiceType, dbRateName)
 		if !exists {
 			return nil
 		}
@@ -565,7 +565,7 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 }
 
 // Builds a fresh ProjectReport with default rate-limits pre-filled from the cluster config.
-func initProjectRateReport(projectInfo limes.ProjectInfo, cluster *core.Cluster, nm core.NameMapping) *limesrates.ProjectReport {
+func initProjectRateReport(projectInfo limes.ProjectInfo, cluster *core.Cluster, nm core.RateNameMapping) *limesrates.ProjectReport {
 	report := limesrates.ProjectReport{
 		ProjectInfo: projectInfo,
 		Services:    make(limesrates.ProjectServiceReports),
@@ -574,7 +574,7 @@ func initProjectRateReport(projectInfo limes.ProjectInfo, cluster *core.Cluster,
 	for _, srvConfig := range cluster.Config.Services {
 		dbServiceType := srvConfig.ServiceType
 		for _, rateLimitConfig := range srvConfig.RateLimits.ProjectDefault {
-			apiServiceType, apiRateName, exists := nm.MapRateToV1API(dbServiceType, rateLimitConfig.Name)
+			apiServiceType, apiRateName, exists := nm.MapToV1API(dbServiceType, rateLimitConfig.Name)
 			if !exists {
 				continue // defense in depth: should not happen because NameMapping iterated through the same structure
 			}
