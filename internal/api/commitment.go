@@ -917,8 +917,8 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	req := parseTarget.Request
-	nm := core.BuildNameMapping(p.Cluster)
-	targetServiceType, targetResourceName, exists := nm.MapResourceFromV1API(req.TargetService, req.TargetResource)
+	nm := core.BuildResourceNameMapping(p.Cluster)
+	targetServiceType, targetResourceName, exists := nm.MapFromV1API(req.TargetService, req.TargetResource)
 	if !exists {
 		msg := fmt.Sprintf("no such service and/or resource: %s/%s", req.TargetService, req.TargetResource)
 		http.Error(w, msg, http.StatusUnprocessableEntity)
