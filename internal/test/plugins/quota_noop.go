@@ -87,7 +87,7 @@ func (p *NoopQuotaPlugin) Resources() map[liquid.ResourceName]liquid.ResourceInf
 }
 
 // Rates implements the core.QuotaPlugin interface.
-func (p *NoopQuotaPlugin) Rates() map[liquid.RateName]core.RateInfo {
+func (p *NoopQuotaPlugin) Rates() map[liquid.RateName]liquid.RateInfo {
 	return nil
 }
 

@@ -44,7 +44,7 @@ func init() {
 // operations.
 type GenericQuotaPlugin struct {
 	ServiceType        db.ServiceType                             `yaml:"-"`
-	StaticRateInfos    map[liquid.RateName]core.RateInfo          `yaml:"rate_infos"`
+	StaticRateInfos    map[liquid.RateName]liquid.RateInfo        `yaml:"rate_infos"`
 	StaticResourceData map[liquid.ResourceName]*core.ResourceData `yaml:"-"`
 	OverrideQuota      map[string]map[liquid.ResourceName]uint64  `yaml:"-"` // first key is project UUID
 	// behavior flags that can be set by a unit test
@@ -102,7 +102,7 @@ func (p *GenericQuotaPlugin) Resources() map[liquid.ResourceName]liquid.Resource
 }
 
 // Rates implements the core.QuotaPlugin interface.
-func (p *GenericQuotaPlugin) Rates() map[liquid.RateName]core.RateInfo {
+func (p *GenericQuotaPlugin) Rates() map[liquid.RateName]liquid.RateInfo {
 	return p.StaticRateInfos
 }
 

@@ -41,11 +41,11 @@ type cronusPlugin struct {
 	CronusV1 *cronusClient `yaml:"-"`
 }
 
-var cronusRates = map[liquid.RateName]core.RateInfo{
-	"attachment_size":   {Unit: limes.UnitBytes},
-	"data_transfer_in":  {Unit: limes.UnitBytes},
-	"data_transfer_out": {Unit: limes.UnitBytes},
-	"recipients":        {Unit: limes.UnitNone},
+var cronusRates = map[liquid.RateName]liquid.RateInfo{
+	"attachment_size":   {HasUsage: true, Unit: limes.UnitBytes},
+	"data_transfer_in":  {HasUsage: true, Unit: limes.UnitBytes},
+	"data_transfer_out": {HasUsage: true, Unit: limes.UnitBytes},
+	"recipients":        {HasUsage: true, Unit: limes.UnitNone},
 }
 
 func init() {
@@ -77,7 +77,7 @@ func (p *cronusPlugin) Resources() map[liquid.ResourceName]liquid.ResourceInfo {
 }
 
 // Rates implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) Rates() map[liquid.RateName]core.RateInfo {
+func (p *cronusPlugin) Rates() map[liquid.RateName]liquid.RateInfo {
 	return cronusRates
 }
 

@@ -182,7 +182,7 @@ func (p *novaPlugin) Resources() map[liquid.ResourceName]liquid.ResourceInfo {
 }
 
 // Rates implements the core.QuotaPlugin interface.
-func (p *novaPlugin) Rates() map[liquid.RateName]core.RateInfo {
+func (p *novaPlugin) Rates() map[liquid.RateName]liquid.RateInfo {
 	return nil
 }
 

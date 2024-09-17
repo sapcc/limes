@@ -139,7 +139,7 @@ type QuotaPlugin interface {
 
 	// Rates returns metadata for all the rates that this plugin scrapes
 	// from the backend service.
-	Rates() map[liquid.RateName]RateInfo
+	Rates() map[liquid.RateName]liquid.RateInfo
 	// ScrapeRates queries the backend service for the usage data of all the rates
 	// enumerated by Rates() for the given project in the given domain. The string
 	// keys in the result map must be identical to the rate names from Rates().
@@ -187,18 +187,11 @@ func (s ServiceInfo) ForAPI(serviceType limes.ServiceType) limes.ServiceInfo {
 	}
 }
 
-// RateInfo is a reduced version of type limesrates.RateInfo, suitable for
-// being returned from func QuotaPlugin.Rates().
-type RateInfo struct {
-	Unit limes.Unit `yaml:"unit"`
-}
-
-// ForAPI inflates the given core.RateInfo into a limesrates.RateInfo.
-// The given RateName should be the one that we want to appear in the API.
-func (r RateInfo) ForAPI(rateName limesrates.RateName) limesrates.RateInfo {
+// BuildAPIRateInfo converts a RateInfo from LIQUID into the API format.
+func BuildAPIRateInfo(rateName limesrates.RateName, rateInfo liquid.RateInfo) limesrates.RateInfo {
 	return limesrates.RateInfo{
 		Name: rateName,
-		Unit: r.Unit,
+		Unit: rateInfo.Unit,
 	}
 }
 

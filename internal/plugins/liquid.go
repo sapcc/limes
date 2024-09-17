@@ -171,7 +171,7 @@ func (p *liquidQuotaPlugin) SetQuota(ctx context.Context, project core.KeystoneP
 }
 
 // Rates implements the core.QuotaPlugin interface.
-func (p *liquidQuotaPlugin) Rates() map[liquid.RateName]core.RateInfo {
+func (p *liquidQuotaPlugin) Rates() map[liquid.RateName]liquid.RateInfo {
 	return nil
 }
 

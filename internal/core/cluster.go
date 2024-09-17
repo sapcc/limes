@@ -274,14 +274,14 @@ func (c *Cluster) HasUsageForRate(serviceType db.ServiceType, rateName liquid.Ra
 // exist, an empty RateInfo (with .Unit == UnitNone) is returned. Note that this
 // only returns non-empty RateInfos for rates where a usage is reported. There
 // may be rates that only have a limit, as defined in the ClusterConfiguration.
-func (c *Cluster) InfoForRate(serviceType db.ServiceType, rateName liquid.RateName) RateInfo {
+func (c *Cluster) InfoForRate(serviceType db.ServiceType, rateName liquid.RateName) liquid.RateInfo {
 	plugin := c.QuotaPlugins[serviceType]
 	if plugin == nil {
-		return RateInfo{Unit: limes.UnitNone}
+		return liquid.RateInfo{Unit: limes.UnitNone}
 	}
 	info, exists := plugin.Rates()[rateName]
 	if exists {
 		return info
 	}
-	return RateInfo{Unit: limes.UnitNone}
+	return liquid.RateInfo{Unit: limes.UnitNone}
 }
