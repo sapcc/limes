@@ -40,6 +40,7 @@ import (
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
+	"github.com/sapcc/limes/internal/liquids"
 	"github.com/sapcc/limes/internal/reports"
 )
 
@@ -111,7 +112,13 @@ var (
 		  JOIN source s ON ps.type = s.type AND pr.name = s.name AND par.az = s.az
 		 WHERE ps.project_id = $2
 	`)
-
+	findTargetAZResourceByTargetProjectQuery = sqlext.SimplifyWhitespace(`
+		SELECT pr.id, par.id
+		  FROM project_az_resources par
+		  JOIN project_resources pr ON par.resource_id = pr.id
+		  JOIN project_services ps ON pr.service_id = ps.id
+		 WHERE ps.project_id = $1 AND ps.type = $2 AND pr.name = $3 AND par.az = $4
+	`)
 	forceImmediateCapacityScrapeQuery = sqlext.SimplifyWhitespace(`
 		UPDATE cluster_capacitors SET next_scrape_at = $1 WHERE capacitor_id = (
 			SELECT capacitor_id FROM cluster_services cs JOIN cluster_resources cr ON cs.id = cr.service_id
@@ -411,7 +418,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		DomainName:  dbDomain.Name,
 		ProjectID:   dbProject.UUID,
 		ProjectName: dbProject.Name,
-		Commitment:  p.convertCommitmentToDisplayForm(dbCommitment, *loc, token),
+		Commitments: []limesresources.Commitment{p.convertCommitmentToDisplayForm(dbCommitment, *loc, token)},
 	})
 
 	// if the commitment is immediately confirmed, trigger a capacity scrape in
@@ -486,7 +493,7 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 		DomainName:  dbDomain.Name,
 		ProjectID:   dbProject.UUID,
 		ProjectName: dbProject.Name,
-		Commitment:  p.convertCommitmentToDisplayForm(dbCommitment, loc, token),
+		Commitments: []limesresources.Commitment{p.convertCommitmentToDisplayForm(dbCommitment, loc, token)},
 	})
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -517,12 +524,10 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 	}
 	dbDomain := p.FindDomainFromRequest(w, r)
 	if dbDomain == nil {
-		http.Error(w, "domain not found.", http.StatusNotFound)
 		return
 	}
 	dbProject := p.FindProjectFromRequest(w, r, dbDomain)
 	if dbProject == nil {
-		http.Error(w, "project not found.", http.StatusNotFound)
 		return
 	}
 	// TODO: eventually migrate this struct into go-api-declarations
@@ -624,7 +629,8 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		DomainName:  dbDomain.Name,
 		ProjectID:   dbProject.UUID,
 		ProjectName: dbProject.Name,
-		Commitment:  c,
+		Commitments: []limesresources.Commitment{c},
+		// TODO: if commitment was split, log all participating commitment objects (incl. the SupersededCommitment)
 	})
 	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
 }
@@ -644,6 +650,12 @@ func (p *v1Provider) buildSplitCommitment(dbCommitment db.ProjectCommitment, amo
 		PredecessorID: &dbCommitment.ID,
 		State:         dbCommitment.State,
 	}
+}
+
+func (p *v1Provider) buildConvertedCommitment(dbCommitment db.ProjectCommitment, azResourceID db.ProjectAZResourceID, amount uint64) db.ProjectCommitment {
+	commitment := p.buildSplitCommitment(dbCommitment, amount)
+	commitment.AZResourceID = azResourceID
+	return commitment
 }
 
 // GetCommitmentByTransferToken handles GET /v1/commitments/{token}
@@ -699,12 +711,10 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	}
 	dbDomain := p.FindDomainFromRequest(w, r)
 	if dbDomain == nil {
-		http.Error(w, "domain not found.", http.StatusNotFound)
 		return
 	}
 	targetProject := p.FindProjectFromRequest(w, r, dbDomain)
 	if targetProject == nil {
-		http.Error(w, "project not found.", http.StatusNotFound)
 		return
 	}
 
@@ -774,7 +784,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 		DomainName:  dbDomain.Name,
 		ProjectID:   targetProject.UUID,
 		ProjectName: targetProject.Name,
-		Commitment:  c,
+		Commitments: []limesresources.Commitment{c},
 	})
 
 	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
@@ -801,10 +811,6 @@ func (p *v1Provider) GetCommitmentConversions(w http.ResponseWriter, r *http.Req
 		return
 	}
 	sourceBehavior := p.Cluster.BehaviorForResource(sourceServiceType, sourceResourceName)
-	if len(sourceBehavior.CommitmentDurations) == 0 {
-		http.Error(w, "commitments are not enabled for this resource", http.StatusUnprocessableEntity)
-		return
-	}
 	sourceResInfo := p.Cluster.InfoForResource(sourceServiceType, sourceResourceName)
 
 	// enumerate possible conversions
@@ -848,6 +854,189 @@ func (p *v1Provider) GetCommitmentConversions(w http.ResponseWriter, r *http.Req
 	})
 
 	respondwith.JSON(w, http.StatusOK, map[string]any{"conversions": conversions})
+}
+
+// ConvertCommitment handles POST /v1/domains/{domain_id}/projects/{project_id}/commitments/{commitment_id}/convert
+func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
+	httpapi.IdentifyEndpoint(r, "/v1/domains/:domain_id/projects/:project_id/commitments/:commitment_id/convert")
+	token := p.CheckToken(r)
+	if !token.Require(w, "project:edit") {
+		return
+	}
+	commitmentID := mux.Vars(r)["commitment_id"]
+	if commitmentID == "" {
+		http.Error(w, "no transfer token provided", http.StatusBadRequest)
+		return
+	}
+	dbDomain := p.FindDomainFromRequest(w, r)
+	if dbDomain == nil {
+		return
+	}
+	dbProject := p.FindProjectFromRequest(w, r, dbDomain)
+	if dbProject == nil {
+		return
+	}
+
+	// section: sourceBehavior
+	var dbCommitment db.ProjectCommitment
+	err := p.DB.SelectOne(&dbCommitment, findProjectCommitmentByIDQuery, commitmentID, dbProject.ID)
+	if errors.Is(err, sql.ErrNoRows) {
+		http.Error(w, "no such commitment", http.StatusNotFound)
+		return
+	} else if respondwith.ErrorText(w, err) {
+		return
+	}
+	var sourceLoc datamodel.AZResourceLocation
+	err = p.DB.QueryRow(findProjectAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
+		Scan(&sourceLoc.ServiceType, &sourceLoc.ResourceName, &sourceLoc.AvailabilityZone)
+	if errors.Is(err, sql.ErrNoRows) {
+		// defense in depth: this should not happen because all the relevant tables are connected by FK constraints
+		http.Error(w, "no route to this commitment", http.StatusNotFound)
+		return
+	} else if respondwith.ErrorText(w, err) {
+		return
+	}
+	sourceBehavior := p.Cluster.BehaviorForResource(sourceLoc.ServiceType, sourceLoc.ResourceName)
+
+	// section: targetBehavior
+	var parseTarget struct {
+		Request struct {
+			TargetService  limes.ServiceType           `json:"target_service"`
+			TargetResource limesresources.ResourceName `json:"target_resource"`
+			SourceAmount   uint64                      `json:"source_amount"`
+			TargetAmount   uint64                      `json:"target_amount"`
+		} `json:"commitment"`
+	}
+	if !RequireJSON(w, r, &parseTarget) {
+		return
+	}
+	req := parseTarget.Request
+	nm := core.BuildResourceNameMapping(p.Cluster)
+	targetServiceType, targetResourceName, exists := nm.MapFromV1API(req.TargetService, req.TargetResource)
+	if !exists {
+		msg := fmt.Sprintf("no such service and/or resource: %s/%s", req.TargetService, req.TargetResource)
+		http.Error(w, msg, http.StatusUnprocessableEntity)
+		return
+	}
+	targetBehavior := p.Cluster.BehaviorForResource(targetServiceType, targetResourceName)
+	if sourceLoc.ResourceName == targetResourceName && sourceLoc.ServiceType == targetServiceType {
+		http.Error(w, "conversion attempt to the same resource.", http.StatusConflict)
+		return
+	}
+	if len(targetBehavior.CommitmentDurations) == 0 {
+		msg := fmt.Sprintf("commitments are not enabled for resource %s/%s", req.TargetService, req.TargetResource)
+		http.Error(w, msg, http.StatusUnprocessableEntity)
+		return
+	}
+	if sourceBehavior.CommitmentConversion.Identifier == "" || sourceBehavior.CommitmentConversion.Identifier != targetBehavior.CommitmentConversion.Identifier {
+		msg := fmt.Sprintf("commitment is not convertible into resource %s/%s", req.TargetService, req.TargetResource)
+		http.Error(w, msg, http.StatusUnprocessableEntity)
+		return
+	}
+
+	// section: conversion
+	if req.SourceAmount > dbCommitment.Amount {
+		msg := fmt.Sprintf("unprocessable source amount. provided: %v, commitment: %v", req.SourceAmount, dbCommitment.Amount)
+		http.Error(w, msg, http.StatusConflict)
+		return
+	}
+	fromAmount, toAmount := p.getCommitmentConversionRate(sourceBehavior, targetBehavior)
+	conversionAmount := (req.SourceAmount / fromAmount) * toAmount
+	remainderAmount := req.SourceAmount % fromAmount
+	if remainderAmount > 0 {
+		msg := fmt.Sprintf("amount: %v does not fit into conversion rate of: %v", req.SourceAmount, fromAmount)
+		http.Error(w, msg, http.StatusConflict)
+		return
+	}
+	if conversionAmount != req.TargetAmount {
+		msg := fmt.Sprintf("conversion mismatch. provided: %v, calculated: %v", req.TargetAmount, conversionAmount)
+		http.Error(w, msg, http.StatusConflict)
+		return
+	}
+
+	tx, err := p.DB.Begin()
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+	defer sqlext.RollbackUnlessCommitted(tx)
+
+	var (
+		targetResourceID   db.ProjectResourceID
+		targetAZResourceID db.ProjectAZResourceID
+	)
+	err = p.DB.QueryRow(findTargetAZResourceByTargetProjectQuery, dbProject.ID, targetServiceType, targetResourceName, sourceLoc.AvailabilityZone).
+		Scan(&targetResourceID, &targetAZResourceID)
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+	// defense in depth. ServiceType and ResourceName of source and target are already checked. Here it's possible to explicitly check the ID's.
+	if dbCommitment.AZResourceID == targetAZResourceID {
+		http.Error(w, "conversion attempt to the same resource.", http.StatusConflict)
+		return
+	}
+	targetLoc := datamodel.AZResourceLocation{
+		ServiceType:      targetServiceType,
+		ResourceName:     targetResourceName,
+		AvailabilityZone: sourceLoc.AvailabilityZone,
+	}
+	// The commitment at the source resource was already confirmed and checked.
+	// Therefore only the addition to the target resource has to be checked against.
+	if dbCommitment.ConfirmedAt != nil {
+		ok, err := datamodel.CanConfirmNewCommitment(targetLoc, targetResourceID, conversionAmount, p.Cluster, p.DB)
+		if respondwith.ErrorText(w, err) {
+			return
+		}
+		if !ok {
+			http.Error(w, "not enough capacity to confirm the commitment", http.StatusUnprocessableEntity)
+			return
+		}
+	}
+
+	auditEvent := commitmentEventTarget{
+		DomainID:             dbDomain.UUID,
+		DomainName:           dbDomain.Name,
+		ProjectID:            dbProject.UUID,
+		ProjectName:          dbProject.Name,
+		SupersededCommitment: liquids.PointerTo(p.convertCommitmentToDisplayForm(dbCommitment, sourceLoc, token)),
+	}
+
+	remainingAmount := dbCommitment.Amount - req.SourceAmount
+	if remainingAmount > 0 {
+		remainingCommitment := p.buildSplitCommitment(dbCommitment, remainingAmount)
+		err = tx.Insert(&remainingCommitment)
+		if respondwith.ErrorText(w, err) {
+			return
+		}
+		auditEvent.Commitments = append(auditEvent.Commitments,
+			p.convertCommitmentToDisplayForm(remainingCommitment, sourceLoc, token),
+		)
+	}
+
+	convertedCommitment := p.buildConvertedCommitment(dbCommitment, targetAZResourceID, conversionAmount)
+	err = tx.Insert(&convertedCommitment)
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	// supersede the original commitment
+	now := p.timeNow()
+	dbCommitment.State = db.CommitmentStateSuperseded
+	dbCommitment.SupersededAt = &now
+	_, err = tx.Update(&dbCommitment)
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	err = tx.Commit()
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	c := p.convertCommitmentToDisplayForm(convertedCommitment, targetLoc, token)
+	auditEvent.Commitments = append([]limesresources.Commitment{c}, auditEvent.Commitments...)
+	logAndPublishEvent(p.timeNow(), r, token, http.StatusAccepted, auditEvent)
+
+	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
 }
 
 func (p *v1Provider) getCommitmentConversionRate(source, target core.ResourceBehavior) (fromAmount, toAmount uint64) {

@@ -606,6 +606,26 @@ Returns 200 (OK) on success, and a JSON document like:
 }
 ```
 
+### POST "/v1/domains/:domain_id/projects/:project_id/commitments/:commitment_id/convert"
+
+Convert a commitment from a given resource to one of a different type. The target project is defined with the provided `project_id`.
+Requires a request body like:
+
+```json
+{
+	"commitment": {
+		"target_service":  "compute",
+		"target_resource": "flavor_c48",
+		"source_amount":   9,
+		"target_amount":   6,
+	},
+}
+```
+In the example above the commitment that should be converted to the `target_resource` could be from type `flavor_c32` resulting in a conversion of `3:2`.
+
+
+Returns 202 (Accepted) on success, and and returns the converted commitment as a JSON document.
+
 In this example, a commitment for 1 unit of the original resource can be converted into a commitment for 2 units of the target resource.
 
 ### DELETE /v1/domains/:domain\_id/projects/:project\_id/commitments/:id

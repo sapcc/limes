@@ -78,14 +78,28 @@ const testConvertCommitmentsYAML = `
 	discovery:
 		method: --test-static
 	services:
+		- service_type: first
+			type: --test-generic
+		- service_type: second
+			type: --test-generic
 		- service_type: third
 			type: --test-noop
 			params:
 				with_empty_resource: true
 				with_convert_commitments: true
 	resource_behavior:
+		- resource: first/.*
+			commitment_durations: ["1 hour", "2 hours"]
+		- resource: second/.*
+			commitment_durations: ["1 hour", "2 hours"]
 		- resource: third/.*
 			commitment_durations: ["1 hour", "2 hours"]
+		- resource: first/capacity
+			commitment_is_az_aware: true
+			commitment_conversion: {identifier: flavor1, weight: 48}
+		- resource: second/capacity
+			commitment_is_az_aware: true
+			commitment_conversion: {identifier: flavor1, weight: 32}
 		- resource: third/capacity_c32
 			commitment_conversion: {identifier: flavor1, weight: 32}
 		- resource: third/capacity_c48
@@ -980,18 +994,14 @@ func Test_TransferCommitment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if supersededCommitment.State != db.CommitmentStateSuperseded {
-		t.Fatalf("commitment state should be %v. Received %v instead.", db.CommitmentStateSuperseded, supersededCommitment.State)
-	}
+	assert.DeepEqual(t, "commitment state", supersededCommitment.State, db.CommitmentStateSuperseded)
 
 	var splitCommitment db.ProjectCommitment
 	err = s.DB.SelectOne(&splitCommitment, `SELECT * FROM project_commitments where ID = 2`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if splitCommitment.State != db.CommitmentStateActive {
-		t.Fatalf("commitment state should be %v. Received %v instead.", db.CommitmentStateActive, splitCommitment.State)
-	}
+	assert.DeepEqual(t, "commitment state", splitCommitment.State, db.CommitmentStateActive)
 
 	// wrong token
 	assert.HTTPRequest{
@@ -1095,17 +1105,30 @@ func Test_GetCommitmentConversion(t *testing.T) {
 	)
 
 	// capacity_c120 uses a different Unit than the source and is therefore ignored.
-	resp1 := []assert.JSONObject{{
-		"from":            2,
-		"to":              3,
-		"target_service":  "third",
-		"target_resource": "capacity_c32",
-	}, {
-		"from":            2,
-		"to":              1,
-		"target_service":  "third",
-		"target_resource": "capacity_c96",
-	}}
+	resp1 := []assert.JSONObject{
+		{
+			"from":            1,
+			"to":              1,
+			"target_service":  "first",
+			"target_resource": "capacity",
+		},
+		{
+			"from":            2,
+			"to":              3,
+			"target_service":  "second",
+			"target_resource": "capacity",
+		},
+		{
+			"from":            2,
+			"to":              3,
+			"target_service":  "third",
+			"target_resource": "capacity_c32",
+		}, {
+			"from":            2,
+			"to":              1,
+			"target_service":  "third",
+			"target_resource": "capacity_c96",
+		}}
 
 	resp2 := []assert.JSONObject{}
 
@@ -1121,5 +1144,184 @@ func Test_GetCommitmentConversion(t *testing.T) {
 		Path:         "/v1/commitment-conversion/third/capacity2_c144",
 		ExpectStatus: http.StatusOK,
 		ExpectBody:   assert.JSONObject{"conversions": resp2},
+	}.Check(t, s.Handler)
+}
+
+func Test_ConvertCommitments(t *testing.T) {
+	s := test.NewSetup(t,
+		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
+		test.WithConfig(testConvertCommitmentsYAML),
+		test.WithAPIHandler(NewV1API),
+	)
+
+	req := func(targetService, targetResource string, sourceAmount, TargetAmount uint64) assert.JSONObject {
+		return assert.JSONObject{
+			"commitment": assert.JSONObject{
+				"target_service":  targetService,
+				"target_resource": targetResource,
+				"source_amount":   sourceAmount,
+				"target_amount":   TargetAmount,
+			},
+		}
+	}
+
+	resp := func(id, amount uint64, targetService, targetResource string) assert.JSONObject {
+		return assert.JSONObject{
+			"id":                id,
+			"service_type":      targetService,
+			"resource_name":     targetResource,
+			"availability_zone": "az-one",
+			"amount":            amount,
+			"unit":              "B",
+			"duration":          "1 hour",
+			"created_at":        s.Clock.Now().Unix(),
+			"creator_uuid":      "uuid-for-alice",
+			"creator_name":      "alice@Default",
+			"can_be_deleted":    true,
+			"confirmed_at":      s.Clock.Now().Unix(),
+			"expires_at":        s.Clock.Now().Add(1 * time.Hour).Unix(),
+		}
+	}
+	respWithConfirmBy := func(id, amount uint64, targetService, targetResource string) assert.JSONObject {
+		return assert.JSONObject{
+			"id":                id,
+			"service_type":      targetService,
+			"resource_name":     targetResource,
+			"availability_zone": "az-one",
+			"amount":            amount,
+			"unit":              "B",
+			"duration":          "1 hour",
+			"created_at":        s.Clock.Now().Unix(),
+			"creator_uuid":      "uuid-for-alice",
+			"creator_name":      "alice@Default",
+			"can_be_deleted":    true,
+			"confirm_by":        s.Clock.Now().Add(14 * day).Unix(),
+			"expires_at":        s.Clock.Now().Add(14*day + 1*time.Hour).Unix(),
+		}
+	}
+
+	// conversion rate is (second: 3 to first: 2)
+	assert.HTTPRequest{
+		Method: http.MethodPost,
+		Path:   "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
+		Body: assert.JSONObject{
+			"commitment": assert.JSONObject{
+				"service_type":      "second",
+				"resource_name":     "capacity",
+				"availability_zone": "az-one",
+				"amount":            21,
+				"duration":          "1 hour",
+			},
+		},
+		ExpectStatus: http.StatusCreated,
+	}.Check(t, s.Handler)
+
+	// Converted commitment does not fit into the capacity (amount: 12, capacity: 10)
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/convert",
+		Body:         req("first", "capacity", 21, 14),
+		ExpectBody:   assert.StringData("not enough capacity to confirm the commitment\n"),
+		ExpectStatus: http.StatusUnprocessableEntity,
+	}.Check(t, s.Handler)
+
+	// Conversion with remainder should be rejected.
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/convert",
+		Body:         req("first", "capacity", 10, 6),
+		ExpectBody:   assert.StringData("amount: 10 does not fit into conversion rate of: 3\n"),
+		ExpectStatus: http.StatusConflict,
+	}.Check(t, s.Handler)
+
+	var originalCommitment db.ProjectCommitment
+
+	// Conversion without remainder
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/convert",
+		Body:         req("first", "capacity", 3, 2),
+		ExpectBody:   assert.JSONObject{"commitment": resp(3, 2, "first", "capacity")},
+		ExpectStatus: http.StatusAccepted,
+	}.Check(t, s.Handler)
+	err := s.DB.SelectOne(&originalCommitment, `SELECT * FROM project_commitments where ID = 1`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.DeepEqual(t, "commitment state", originalCommitment.State, db.CommitmentStateSuperseded)
+	err = s.DB.SelectOne(&originalCommitment, `SELECT * FROM project_commitments where ID = 2`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.DeepEqual(t, "commitment amount", originalCommitment.Amount, 18)
+
+	// Reject conversion attempt to a different project.
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-dresden/commitments/2/convert",
+		Body:         req("first", "capacity", 6, 4),
+		ExpectBody:   assert.StringData("no such commitment\n"),
+		ExpectStatus: http.StatusNotFound,
+	}.Check(t, s.Handler)
+
+	// Reject conversion at the same project to the same resource.
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2/convert",
+		Body:         req("second", "capacity", 6, 6),
+		ExpectBody:   assert.StringData("conversion attempt to the same resource.\n"),
+		ExpectStatus: http.StatusConflict,
+	}.Check(t, s.Handler)
+
+	// Mismatching target amount
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2/convert",
+		Body:         req("first", "capacity", 6, 3),
+		ExpectBody:   assert.StringData("conversion mismatch. provided: 3, calculated: 4\n"),
+		ExpectStatus: http.StatusConflict,
+	}.Check(t, s.Handler)
+
+	// Reject an amount that doesn't fit into the conversion rate (remainder > 0).
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2/convert",
+		Body:         req("first", "capacity", 1, 3),
+		ExpectBody:   assert.StringData("amount: 1 does not fit into conversion rate of: 3\n"),
+		ExpectStatus: http.StatusConflict,
+	}.Check(t, s.Handler)
+
+	// Check conversion to a different identifier which should be rejected
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2/convert",
+		Body:         req("third", "capacity2_c144", 1, 3),
+		ExpectBody:   assert.StringData("commitment is not convertible into resource third/capacity2_c144\n"),
+		ExpectStatus: http.StatusUnprocessableEntity,
+	}.Check(t, s.Handler)
+
+	// test commitment conversion with confirmBy field (unconfirmed commitment)
+	assert.HTTPRequest{
+		Method: http.MethodPost,
+		Path:   "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
+		Body: assert.JSONObject{
+			"commitment": assert.JSONObject{
+				"service_type":      "second",
+				"resource_name":     "capacity",
+				"availability_zone": "az-one",
+				"amount":            3,
+				"duration":          "1 hour",
+				"confirm_by":        s.Clock.Now().Add(14 * day).Unix(),
+			},
+		},
+		ExpectStatus: http.StatusCreated,
+	}.Check(t, s.Handler)
+
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/4/convert",
+		Body:         req("first", "capacity", 3, 2),
+		ExpectBody:   assert.JSONObject{"commitment": respWithConfirmBy(5, 2, "first", "capacity")},
+		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
 }
