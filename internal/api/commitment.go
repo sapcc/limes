@@ -927,7 +927,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if sourceBehavior.CommitmentConversion.Identifier == "" || sourceBehavior.CommitmentConversion.Identifier != targetBehavior.CommitmentConversion.Identifier {
-		msg := fmt.Sprintf("commitment is not convertible into target resource: %s", req.TargetResource)
+		msg := fmt.Sprintf("commitment is not convertible into resource %s/%s", req.TargetService, req.TargetResource)
 		http.Error(w, msg, http.StatusUnprocessableEntity)
 		return
 	}

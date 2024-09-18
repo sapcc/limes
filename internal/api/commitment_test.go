@@ -994,18 +994,14 @@ func Test_TransferCommitment(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if supersededCommitment.State != db.CommitmentStateSuperseded {
-		t.Fatalf("commitment state should be %v. Received %v instead.", db.CommitmentStateSuperseded, supersededCommitment.State)
-	}
+	assert.DeepEqual(t, "commitment state", supersededCommitment.State, db.CommitmentStateSuperseded)
 
 	var splitCommitment db.ProjectCommitment
 	err = s.DB.SelectOne(&splitCommitment, `SELECT * FROM project_commitments where ID = 2`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if splitCommitment.State != db.CommitmentStateActive {
-		t.Fatalf("commitment state should be %v. Received %v instead.", db.CommitmentStateActive, splitCommitment.State)
-	}
+	assert.DeepEqual(t, "commitment state", splitCommitment.State, db.CommitmentStateActive)
 
 	// wrong token
 	assert.HTTPRequest{
@@ -1252,9 +1248,7 @@ func Test_ConvertCommitments(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if originalCommitment.State != db.CommitmentStateSuperseded {
-		t.Fatalf("commitment state should be %v. Received %v instead.", db.CommitmentStateSuperseded, originalCommitment.State)
-	}
+	assert.DeepEqual(t, "commitment state", originalCommitment.State, db.CommitmentStateSuperseded)
 	err = s.DB.SelectOne(&originalCommitment, `SELECT * FROM project_commitments where ID = 2`)
 	if err != nil {
 		t.Fatal(err)
@@ -1302,7 +1296,7 @@ func Test_ConvertCommitments(t *testing.T) {
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2/convert",
 		Body:         req("third", "capacity2_c144", 1, 3),
-		ExpectBody:   assert.StringData("commitment is not convertible into target resource: capacity2_c144\n"),
+		ExpectBody:   assert.StringData("commitment is not convertible into resource third/capacity2_c144\n"),
 		ExpectStatus: http.StatusUnprocessableEntity,
 	}.Check(t, s.Handler)
 
