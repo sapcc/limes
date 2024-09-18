@@ -40,6 +40,7 @@ import (
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
+	"github.com/sapcc/limes/internal/liquids"
 	"github.com/sapcc/limes/internal/reports"
 )
 
@@ -417,7 +418,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		DomainName:  dbDomain.Name,
 		ProjectID:   dbProject.UUID,
 		ProjectName: dbProject.Name,
-		Commitment:  p.convertCommitmentToDisplayForm(dbCommitment, *loc, token),
+		Commitments: []limesresources.Commitment{p.convertCommitmentToDisplayForm(dbCommitment, *loc, token)},
 	})
 
 	// if the commitment is immediately confirmed, trigger a capacity scrape in
@@ -492,7 +493,7 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 		DomainName:  dbDomain.Name,
 		ProjectID:   dbProject.UUID,
 		ProjectName: dbProject.Name,
-		Commitment:  p.convertCommitmentToDisplayForm(dbCommitment, loc, token),
+		Commitments: []limesresources.Commitment{p.convertCommitmentToDisplayForm(dbCommitment, loc, token)},
 	})
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -628,7 +629,8 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		DomainName:  dbDomain.Name,
 		ProjectID:   dbProject.UUID,
 		ProjectName: dbProject.Name,
-		Commitment:  c,
+		Commitments: []limesresources.Commitment{c},
+		// TODO: if commitment was split, log all participating commitment objects (incl. the SupersededCommitment)
 	})
 	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
 }
@@ -782,7 +784,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 		DomainName:  dbDomain.Name,
 		ProjectID:   targetProject.UUID,
 		ProjectName: targetProject.Name,
-		Commitment:  c,
+		Commitments: []limesresources.Commitment{c},
 	})
 
 	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
@@ -990,6 +992,14 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	auditEvent := commitmentEventTarget{
+		DomainID:             dbDomain.UUID,
+		DomainName:           dbDomain.Name,
+		ProjectID:            dbProject.UUID,
+		ProjectName:          dbProject.Name,
+		SupersededCommitment: liquids.PointerTo(p.convertCommitmentToDisplayForm(dbCommitment, sourceLoc, token)),
+	}
+
 	remainingAmount := dbCommitment.Amount - req.SourceAmount
 	if remainingAmount > 0 {
 		remainingCommitment := p.buildSplitCommitment(dbCommitment, remainingAmount)
@@ -997,6 +1007,9 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		if respondwith.ErrorText(w, err) {
 			return
 		}
+		auditEvent.Commitments = append(auditEvent.Commitments,
+			p.convertCommitmentToDisplayForm(remainingCommitment, sourceLoc, token),
+		)
 	}
 
 	convertedCommitment := p.buildConvertedCommitment(dbCommitment, targetAZResourceID, conversionAmount)
@@ -1020,13 +1033,8 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	}
 
 	c := p.convertCommitmentToDisplayForm(convertedCommitment, targetLoc, token)
-	logAndPublishEvent(p.timeNow(), r, token, http.StatusAccepted, commitmentEventTarget{
-		DomainID:    dbDomain.UUID,
-		DomainName:  dbDomain.Name,
-		ProjectID:   dbProject.UUID,
-		ProjectName: dbProject.Name,
-		Commitment:  c,
-	})
+	auditEvent.Commitments = append([]limesresources.Commitment{c}, auditEvent.Commitments...)
+	logAndPublishEvent(p.timeNow(), r, token, http.StatusAccepted, auditEvent)
 
 	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
 }

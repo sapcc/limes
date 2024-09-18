@@ -196,28 +196,47 @@ func (t rateLimitEventTarget) Render() cadf.Resource {
 // commitmentEventTarget contains the structure for rendering a cadf.Event.Target for
 // changes regarding commitments.
 type commitmentEventTarget struct {
-	DomainID    string
-	DomainName  string
-	ProjectID   string
-	ProjectName string
-	Commitment  limesresources.Commitment
+	DomainID             string
+	DomainName           string
+	ProjectID            string
+	ProjectName          string
+	SupersededCommitment *limesresources.Commitment
+	Commitments          []limesresources.Commitment // must have at least one entry
 }
 
 // Render implements the audittools.TargetRenderer interface type.
 func (t commitmentEventTarget) Render() cadf.Resource {
-	return cadf.Resource{
+	if len(t.Commitments) == 0 {
+		panic("commitmentEventTarget must contain at least one commitment")
+	}
+	res := cadf.Resource{
 		TypeURI:     "service/resources/commitment",
-		ID:          strconv.FormatInt(t.Commitment.ID, 10),
+		ID:          strconv.FormatInt(t.Commitments[0].ID, 10),
 		DomainID:    t.DomainID,
 		DomainName:  t.DomainName,
 		ProjectID:   t.ProjectID,
 		ProjectName: t.ProjectName,
-		Attachments: []cadf.Attachment{{
-			Name:    "payload",
-			TypeURI: "mime:application/json",
-			Content: wrappedAttachment[limesresources.Commitment]{t.Commitment},
-		}},
+		Attachments: []cadf.Attachment{},
 	}
+	for idx, commitment := range t.Commitments {
+		name := "payload"
+		if idx > 0 {
+			name = "additional-payload"
+		}
+		res.Attachments = append(res.Attachments, cadf.Attachment{
+			Name:    name,
+			TypeURI: "mime:application/json",
+			Content: wrappedAttachment[limesresources.Commitment]{commitment},
+		})
+	}
+	if t.SupersededCommitment != nil {
+		res.Attachments = append(res.Attachments, cadf.Attachment{
+			Name:    "superseded-payload",
+			TypeURI: "mime:application/json",
+			Content: wrappedAttachment[limesresources.Commitment]{*t.SupersededCommitment},
+		})
+	}
+	return res
 }
 
 // This type marshals to JSON like a string containing the JSON representation of its inner type.
