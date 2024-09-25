@@ -677,7 +677,7 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 			}
 		}
 		if overrideQuotaFromConfig != nil {
-			metric := dataMetric{Labels: labels, Value: float64(*backendQuota)}
+			metric := dataMetric{Labels: labels, Value: float64(*overrideQuotaFromConfig)}
 			result["limes_project_override_quota_from_config"] = append(result["limes_project_override_quota_from_config"], metric)
 		}
 		if d.ReportZeroes || usage != 0 {
