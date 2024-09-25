@@ -411,6 +411,7 @@ func (d *DataMetricsReporter) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	printDataMetrics(bw, metricsBySeries, "limes_domain_quota", `Assigned quota of a Limes resource for an OpenStack domain.`)
 	printDataMetrics(bw, metricsBySeries, "limes_project_backendquota", `Actual quota of a Limes resource for an OpenStack project.`)
 	printDataMetrics(bw, metricsBySeries, "limes_project_committed_per_az", `Sum of all active commitments of a Limes resource for an OpenStack project, grouped by availability zone and state.`)
+	printDataMetrics(bw, metricsBySeries, "limes_project_override_quota_from_config", `Quota override for a Limes resource for an OpenStack project, if any. (Value comes from cluster configuration.)`)
 	printDataMetrics(bw, metricsBySeries, "limes_project_physical_usage", `Actual (physical) usage of a Limes resource for an OpenStack project.`)
 	printDataMetrics(bw, metricsBySeries, "limes_project_quota", `Assigned quota of a Limes resource for an OpenStack project.`)
 	printDataMetrics(bw, metricsBySeries, "limes_project_rate_usage", `Usage of a Limes rate for an OpenStack project. These are counters that never reset.`)
@@ -471,7 +472,9 @@ var projectMetricsQuery = sqlext.SimplifyWhitespace(`
 	    FROM project_az_resources
 	   GROUP BY resource_id
 	)
-	SELECT d.name, d.uuid, p.name, p.uuid, ps.type, pr.name, pr.quota, pr.backend_quota, pas.usage, pas.physical_usage, pas.has_physical_usage
+	SELECT d.name, d.uuid, p.name, p.uuid, ps.type, pr.name,
+	       pr.quota, pr.backend_quota, pr.override_quota_from_config,
+	       pas.usage, pas.physical_usage, pas.has_physical_usage
 	  FROM domains d
 	  JOIN projects p ON p.domain_id = d.id
 	  JOIN project_services ps ON ps.project_id = p.id
@@ -635,20 +638,21 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 	// fetch values for project level (quota/usage)
 	err = sqlext.ForeachRow(d.DB, projectMetricsQuery, nil, func(rows *sql.Rows) error {
 		var (
-			domainName       string
-			domainUUID       string
-			projectName      string
-			projectUUID      string
-			dbServiceType    db.ServiceType
-			dbResourceName   liquid.ResourceName
-			quota            *uint64
-			backendQuota     *int64
-			usage            uint64
-			physicalUsage    uint64
-			hasPhysicalUsage bool
+			domainName              string
+			domainUUID              string
+			projectName             string
+			projectUUID             string
+			dbServiceType           db.ServiceType
+			dbResourceName          liquid.ResourceName
+			quota                   *uint64
+			backendQuota            *int64
+			overrideQuotaFromConfig *uint64
+			usage                   uint64
+			physicalUsage           uint64
+			hasPhysicalUsage        bool
 		)
 		err := rows.Scan(&domainName, &domainUUID, &projectName, &projectUUID, &dbServiceType, &dbResourceName,
-			&quota, &backendQuota, &usage, &physicalUsage, &hasPhysicalUsage)
+			&quota, &backendQuota, &overrideQuotaFromConfig, &usage, &physicalUsage, &hasPhysicalUsage)
 		if err != nil {
 			return err
 		}
@@ -671,6 +675,10 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 				metric := dataMetric{Labels: labels, Value: float64(*backendQuota)}
 				result["limes_project_backendquota"] = append(result["limes_project_backendquota"], metric)
 			}
+		}
+		if overrideQuotaFromConfig != nil {
+			metric := dataMetric{Labels: labels, Value: float64(*backendQuota)}
+			result["limes_project_override_quota_from_config"] = append(result["limes_project_override_quota_from_config"], metric)
 		}
 		if d.ReportZeroes || usage != 0 {
 			metric := dataMetric{Labels: labels, Value: float64(usage)}
