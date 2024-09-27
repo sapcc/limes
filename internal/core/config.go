@@ -44,9 +44,8 @@ type ClusterConfiguration struct {
 	Services          []ServiceConfiguration   `yaml:"services"`
 	Capacitors        []CapacitorConfiguration `yaml:"capacitors"`
 	// ^ Sorry for the stupid pun. Not.
-	ResourceBehaviors        []ResourceBehavior                `yaml:"resource_behavior"`
-	RateBehaviors            []RateBehavior                    `yaml:"rate_behavior"`
-	QuotaDistributionConfigs []*QuotaDistributionConfiguration `yaml:"quota_distribution_configs"`
+	ResourceBehaviors []ResourceBehavior `yaml:"resource_behavior"`
+	RateBehaviors     []RateBehavior     `yaml:"rate_behavior"`
 }
 
 // GetServiceConfigurationForType returns the ServiceConfiguration or false.
@@ -90,11 +89,15 @@ func (c DiscoveryConfiguration) FilterDomains(domains []KeystoneDomain) []Keysto
 
 // ServiceConfiguration describes a service that is enabled for a certain cluster.
 type ServiceConfiguration struct {
-	ServiceType db.ServiceType `yaml:"service_type"`
-	PluginType  string         `yaml:"type"`
+	ServiceType db.ServiceType      `yaml:"service_type"`
+	PluginType  string              `yaml:"type"`
+	Parameters  util.YamlRawMessage `yaml:"params"`
+
+	// Resource-specific configuration.
+	QuotaDistributionConfigs regexpext.ConfigSet[liquid.ResourceName, QuotaDistributionConfiguration] `yaml:"quota_distribution_config_for_resource"`
+
 	// RateLimits describes the global rate limits (all requests for to a backend) and default project level rate limits.
 	RateLimits ServiceRateLimitConfiguration `yaml:"rate_limits"`
-	Parameters util.YamlRawMessage           `yaml:"params"`
 }
 
 // ServiceRateLimitConfiguration describes the global and project-level default rate limit configurations for a service.
@@ -132,8 +135,7 @@ type CapacitorConfiguration struct {
 // QuotaDistributionConfiguration contains configuration options for specifying
 // the QuotaDistributionModel of specific resources.
 type QuotaDistributionConfiguration struct {
-	FullResourceNameRx regexpext.BoundedRegexp               `yaml:"resource"`
-	Model              limesresources.QuotaDistributionModel `yaml:"model"`
+	Model limesresources.QuotaDistributionModel `yaml:"model"`
 	// options for AutogrowQuotaDistribution
 	Autogrow *AutogrowQuotaDistributionConfiguration `yaml:"autogrow"`
 }
@@ -186,14 +188,10 @@ func (cluster ClusterConfiguration) validateConfig() (errs errext.ErrorSet) {
 	}
 	//NOTE: cluster.Capacitors is optional
 
-	for idx, srv := range cluster.Services {
-		if srv.ServiceType == "" {
-			missing(fmt.Sprintf("services[%d].id", idx))
-		}
-		if srv.PluginType == "" {
-			missing(fmt.Sprintf("services[%d].type", idx))
-		}
+	for _, srv := range cluster.Services {
+		errs.Append(srv.validateConfig())
 	}
+
 	for idx, capa := range cluster.Capacitors {
 		if capa.ID == "" {
 			missing(fmt.Sprintf("capacitors[%d].id", idx))
@@ -210,28 +208,47 @@ func (cluster ClusterConfiguration) validateConfig() (errs errext.ErrorSet) {
 		errs.Append(behavior.Validate(fmt.Sprintf("rate_behavior[%d]", idx)))
 	}
 
-	for idx, qdCfg := range cluster.QuotaDistributionConfigs {
-		if qdCfg.FullResourceNameRx == "" {
-			missing(fmt.Sprintf(`distribution_model_configs[%d].resource`, idx))
-		}
+	return errs
+}
 
-		switch qdCfg.Model {
+func (srv ServiceConfiguration) validateConfig() (errs errext.ErrorSet) {
+	// for use in error messages below
+	srvPath := fmt.Sprintf(`services[service_type=%q]`, srv.ServiceType)
+	missing := func(key string) {
+		errs.Addf("missing configuration value: %s.%s", srvPath, key)
+	}
+
+	if srv.ServiceType == "" {
+		missing("service_type")
+	}
+	if srv.PluginType == "" {
+		missing("type")
+	}
+
+	for idx, qdCfg := range srv.QuotaDistributionConfigs {
+		if qdCfg.Key == "" {
+			missing(fmt.Sprintf(`quota_distribution_config_for_resource[%d].key`, idx))
+		}
+		qdPath := fmt.Sprintf(`%s.quota_distribution_config_for_resource[key=%q].value`, srvPath, qdCfg.Key)
+
+		switch qdCfg.Value.Model {
 		case limesresources.AutogrowQuotaDistribution:
-			if qdCfg.Autogrow == nil {
-				missing(fmt.Sprintf(`distribution_model_configs[%d].autogrow`, idx))
+			if qdCfg.Value.Autogrow == nil {
+				missing(qdPath + ".autogrow")
 			}
-			if qdCfg.Autogrow.GrowthMultiplier < 0 {
-				errs.Addf("invalid value for distribution_model_configs[%d].growth_multiplier: %g (must be >= 0)", idx, qdCfg.Autogrow.GrowthMultiplier)
+			autogrow := *qdCfg.Value.Autogrow
+			if autogrow.GrowthMultiplier < 0 {
+				errs.Addf("invalid value for %s.growth_multiplier: %g (must be >= 0)", qdPath, autogrow.GrowthMultiplier)
 			}
-			if qdCfg.Autogrow.UsageDataRetentionPeriod.Into() == 0 {
-				errs.Addf("invalid value for distribution_model_configs[%d].usage_data_retention_period: must not be 0", idx)
+			if autogrow.UsageDataRetentionPeriod.Into() == 0 {
+				errs.Addf("invalid value for %s.usage_data_retention_period: must not be 0", qdPath)
 			}
 		default:
-			errs.Addf("invalid value for distribution_model_configs[%d].model: %q", idx, qdCfg.Model)
+			errs.Addf("invalid value for %s.model: %q", qdPath, qdCfg.Value.Model)
 		}
 
-		if qdCfg.Model != limesresources.AutogrowQuotaDistribution && qdCfg.Autogrow != nil {
-			errs.Addf("invalid value for distribution_model_configs[%d].autogrow: cannot be set for model %q", idx, qdCfg.Model)
+		if qdCfg.Value.Model != limesresources.AutogrowQuotaDistribution && qdCfg.Value.Autogrow != nil {
+			errs.Addf("invalid value for %s.autogrow: cannot be set for model %q", qdPath, qdCfg.Value.Model)
 		}
 	}
 

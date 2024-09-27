@@ -118,10 +118,10 @@ The following fields and sections are supported:
 | `discovery.except_domains` | no | May contain a regex. Domains whose names match the regex will not be considered by Limes. |
 | `discovery.only_domains` | no | May contain a regex. If given, only domains whose names match the regex will be considered by Limes. If `except_domains` is also given, it takes precedence over `only_domains`. |
 | `discovery.params` | yes/no | A subsection containing additional parameters for the specific discovery method. Whether this is required depends on the discovery method; see [*Supported discovery methods*](#supported-discovery-methods) for details. |
-| `services` | yes | List of backend services for which to scrape quota/usage data. Service types for which Limes does not include a suitable *quota plugin* will be ignored. See below for supported service types. |
+| `services[]` | yes | List of backend services for which to scrape quota/usage data. Service types for which Limes does not include a suitable *quota plugin* will be ignored. See below for supported service types. |
+| `services[].quota_distribution_config_for_resource` | yes | List of quota distribution configurations for resources in this service. See [*quota distribution models*](#quota-distribution-models) for details. |
 | `capacitors` | no | List of capacity plugins to use for scraping capacity data. See below for supported capacity plugins. |
 | `resource_behavior` | no | Configuration options for special resource behaviors. See [*resource behavior*](#resource-behavior) for details. |
-| `quota_distribution_configs` | no | Configuration options for selecting resource-specific quota distribution models. See [*quota distribution models*](#quota-distribution-models) for details. |
 
 ### Resource behavior
 
@@ -134,7 +134,7 @@ Some special behaviors for resources can be configured in the `resource_behavior
 | `resource_behavior[].commitment_durations` | no | If given, commitments for this resource can be created with any of the given durations. The duration format is the same as in the `commitments[].duration` attribute that appears on the resource API. If empty, this resource does not accept commitments. |
 | `resource_behavior[].commitment_is_az_aware` | no | If true, commitments for this resource must be created in a specific AZ (i.e. not in a pseudo-AZ). If false, commitments for this resource must be created in the pseudo-AZ `any`. Ignored if `commitment_durations` is empty. |
 | `resource_behavior[].commitment_min_confirm_date` | no | If given, commitments for this resource will always be created with `confirm_by` no earlier than this timestamp. This can be used to plan the introduction of commitments on a specific date. Ignored if `commitment_durations` is empty. |
-| `resource_behavior[].commitment_until_percent` | no | If given, commitments for this resource will only be confirmed while the total of all confirmed commitments or uncommitted usage in the respective AZ is smaller than the respective percentage of the total capacity for that AZ. This is intended to provide a reserved buffer for the growth quota configured by `quota_distribution_configs[].autogrow.growth_multiplier`. Defaults to 100, i.e. all capacity is committable. |
+| `resource_behavior[].commitment_until_percent` | no | If given, commitments for this resource will only be confirmed while the total of all confirmed commitments or uncommitted usage in the respective AZ is smaller than the respective percentage of the total capacity for that AZ. This is intended to provide a reserved buffer for the growth quota configured by the `autogrow.growth_multiplier` field of the quota distribution configuration. Defaults to 100, i.e. all capacity is committable. |
 | `resource_behavior[].commitment_conversion.identifier` | no | If given, must contain a string. Commitments for this resource will then be allowed to be converted into commitments for all resources that set the same conversion identifier. |
 | `resource_behavior[].commitment_conversion.weight` | no | If given, must contain an integer. When converting commitments for this resource into another compatible resource, the ratio of the weights of both resources gives the conversion rate for the commitment amount. For example, if resource `foo` has a weight of 2 and `bar` has a weight of 5, the conversion rate is 2:5, meaning that a commitment for 10 units of `foo` would be converted into a commitment for 25 units of `bar`. |
 | `resource_behavior[].identity_in_v1_api` | no | If given, must be a slash-concatenated pair of service type and resource name, e.g. `myservice/someresource`. The resource will appear as having the specified name and occurring within the specified service when queried on the v1 API. See [*Resource renaming*](#resource-renaming) for details. |
@@ -241,13 +241,13 @@ database update process can be substituted instead: (This example renames servic
 
 Each resource uses one of several quota distribution models, with `autogrow` being the default.
 
-Resource-specific distribution models can be configured per resource in the `quota_distribution_configs[]` section.
-Each entry in this section can match multiple resources.
+Resource-specific distribution models can be configured per resource in the `services[].quota_distribution_config_for_resource[]` section.
+Each entry in this section can contain the following fields:
 
 | Field | Required | Description |
 | --- | --- | --- |
-| `quota_distribution_configs[].resource` | yes | Must contain a regex. The config entry applies to all resources where this regex matches against a slash-concatenated pair of service type and resource name. The anchors `^` and `$` are implied at both ends, so the regex must match the entire phrase. |
-| `quota_distribution_configs[].model` | yes | As listed below. |
+| `key` | yes | Must contain a regex. The entry applies to all resources in the respective service whose resource name matches the regex. The anchors `^` and `$` are implied at both ends, so the regex must match the entire resource name. If multiple entries match the same resource name, the first match wins. |
+| `value.model` | yes | As listed below. |
 
 A distribution model config can contain additional options based on which model is chosen (see below).
 
@@ -281,15 +281,17 @@ desired, a very short retention period like `1m` can be configured.) By consider
 two days (retention period `48h`), quota will never grow by more than one growth multiplier per two days from usage
 alone. (Larger quota jumps are still possible if additional commitments are confirmed.)
 
+For `autogrow`, the respective entry in `services[].quota_distribution_config_for_resource[]` may contain the following fields:
+
 | Field | Default | Description |
 | --- | --- | --- |
-| `quota_distribution_configs[].autogrow.allow_quota_overcommit_until_allocated_percent` | `0` | If quota overcommit is allowed, means that the desired quota and base quota is always given out to all projects, even if the sum of all project quotas ends up being greater than the resource's capacity. If this value is set to 0, quota overcommit is never allowed, i.e. the sum of all project quotas will never exceed the resource's capacity. If overcommit is to be allowed, a typical setting is something like 95% or 99%: Once usage reaches that threshold, quota overcommit will be disabled to ensure that confirmed commitments are honored. To enable quota overcommit unconditionally, set a very large value like 10000%. |
-| `quota_distribution_configs[].autogrow.project_base_quota` | `0` | The minimum amount of quota that will always be given to a project even if it does not have that much commitments or usage to warrant it under the regular formula. Can be set to zero to force projects to bootstrap their quota via commitments. |
-| `quota_distribution_configs[].autogrow.growth_multiplier` | *(required)* | As explained above. Cannot be set to less than 1 (100%). Can be set to exactly 1 to ensure that no additional quota will be granted above existing usage and/or confirmed commitments. |
-| `quota_distribution_configs[].autogrow.growth_minimum` | `1` | When multiplying a growth baseline greater than 0 with a growth multiplier greater than 1, ensure that the result is at least this much higher than the baseline. |
-| `quota_distribution_configs[].usage_data_retention_period` | *(required)* | As explained above. Must be formatted as a string that [`time.ParseDuration`](https://pkg.go.dev/time#ParseDuration) understands. Cannot be set to zero. To only use current usage when calculating quota, set this to a very short interval like `1m`. |
+| `value.autogrow.allow_quota_overcommit_until_allocated_percent` | `0` | If quota overcommit is allowed, means that the desired quota and base quota is always given out to all projects, even if the sum of all project quotas ends up being greater than the resource's capacity. If this value is set to 0, quota overcommit is never allowed, i.e. the sum of all project quotas will never exceed the resource's capacity. If overcommit is to be allowed, a typical setting is something like 95% or 99%: Once usage reaches that threshold, quota overcommit will be disabled to ensure that confirmed commitments are honored. To enable quota overcommit unconditionally, set a very large value like 10000%. |
+| `value.autogrow.project_base_quota` | `0` | The minimum amount of quota that will always be given to a project even if it does not have that much commitments or usage to warrant it under the regular formula. Can be set to zero to force projects to bootstrap their quota via commitments. |
+| `value.autogrow.growth_multiplier` | *(required)* | As explained above. Cannot be set to less than 1 (100%). Can be set to exactly 1 to ensure that no additional quota will be granted above existing usage and/or confirmed commitments. |
+| `value.autogrow.growth_minimum` | `1` | When multiplying a growth baseline greater than 0 with a growth multiplier greater than 1, ensure that the result is at least this much higher than the baseline. |
+| `value.autogrow.usage_data_retention_period` | *(required)* | As explained above. Must be formatted as a string that [`time.ParseDuration`](https://pkg.go.dev/time#ParseDuration) understands. Cannot be set to zero. To only use current usage when calculating quota, set this to a very short interval like `1m`. |
 
-The default config for resources without a specific `quota_distribution_configs[]` match sets the default values as explained above, and also
+The default config for resources without a specific `services[].quota_distribution_config_for_resource[]` match sets the default values as explained above, and also
 
 ```
 growth_multiplier = 1.0

@@ -92,9 +92,9 @@ const (
 		services:
 			- service_type: unittest
 				type: --test-generic
-		quota_distribution_configs:
-			# this is only used to check that historical_usage is tracked
-			- { resource: unittest/things, model: autogrow, autogrow: { growth_multiplier: 1.0, usage_data_retention_period: 48h } }
+				quota_distribution_config_for_resource:
+					# this is only used to check that historical_usage is tracked
+					- { key: things, value: { model: autogrow, autogrow: { growth_multiplier: 1.0, usage_data_retention_period: 48h } } }
 	`
 )
 

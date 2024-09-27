@@ -234,27 +234,26 @@ func (c *Cluster) BehaviorForRate(serviceType db.ServiceType, rateName liquid.Ra
 	return result
 }
 
+// default quota distribution behavior: do not give out any quota except for existing usage or with explicit quota override
+var defaultQuotaDistCfg = QuotaDistributionConfiguration{
+	Model: limesresources.AutogrowQuotaDistribution,
+	Autogrow: &AutogrowQuotaDistributionConfiguration{
+		AllowQuotaOvercommitUntilAllocatedPercent: 0,
+		ProjectBaseQuota:         0,
+		GrowthMultiplier:         1.0,
+		GrowthMinimum:            0,
+		UsageDataRetentionPeriod: util.MarshalableTimeDuration(1 * time.Second),
+	},
+}
+
 // QuotaDistributionConfigForResource returns the QuotaDistributionConfiguration
 // for the given resource.
 func (c *Cluster) QuotaDistributionConfigForResource(serviceType db.ServiceType, resourceName liquid.ResourceName) QuotaDistributionConfiguration {
-	// check for specific behavior
-	fullName := string(serviceType) + "/" + string(resourceName)
-	for _, dmCfg := range c.Config.QuotaDistributionConfigs {
-		if dmCfg.FullResourceNameRx.MatchString(fullName) {
-			return *dmCfg
-		}
-	}
-
-	// default behavior: do not give out any quota except for existing usage or with explicit quota override
-	return QuotaDistributionConfiguration{
-		Model: limesresources.AutogrowQuotaDistribution,
-		Autogrow: &AutogrowQuotaDistributionConfiguration{
-			AllowQuotaOvercommitUntilAllocatedPercent: 0,
-			ProjectBaseQuota:         0,
-			GrowthMultiplier:         1.0,
-			GrowthMinimum:            0,
-			UsageDataRetentionPeriod: util.MarshalableTimeDuration(1 * time.Second),
-		},
+	svc, ok := c.Config.GetServiceConfigurationForType(serviceType)
+	if ok {
+		return svc.QuotaDistributionConfigs.Pick(resourceName, defaultQuotaDistCfg)
+	} else {
+		return defaultQuotaDistCfg
 	}
 }
 
