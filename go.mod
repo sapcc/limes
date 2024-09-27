@@ -16,7 +16,7 @@ require (
 	github.com/rs/cors v1.11.1
 	github.com/sapcc/go-api-declarations v1.12.6
 	github.com/sapcc/go-bits v0.0.0-20240925150026-37945f71a03e
-	go.uber.org/automaxprocs v1.5.3
+	go.uber.org/automaxprocs v1.6.0
 	gopkg.in/yaml.v2 v2.4.0
 )
 
