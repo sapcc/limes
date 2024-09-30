@@ -41,11 +41,11 @@ type cronusPlugin struct {
 	CronusV1 *cronusClient `yaml:"-"`
 }
 
-var cronusRates = map[db.RateName]core.RateInfo{
-	"attachment_size":   {Unit: limes.UnitBytes},
-	"data_transfer_in":  {Unit: limes.UnitBytes},
-	"data_transfer_out": {Unit: limes.UnitBytes},
-	"recipients":        {Unit: limes.UnitNone},
+var cronusRates = map[liquid.RateName]liquid.RateInfo{
+	"attachment_size":   {HasUsage: true, Unit: limes.UnitBytes},
+	"data_transfer_in":  {HasUsage: true, Unit: limes.UnitBytes},
+	"data_transfer_out": {HasUsage: true, Unit: limes.UnitBytes},
+	"recipients":        {HasUsage: true, Unit: limes.UnitNone},
 }
 
 func init() {
@@ -77,7 +77,7 @@ func (p *cronusPlugin) Resources() map[liquid.ResourceName]liquid.ResourceInfo {
 }
 
 // Rates implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) Rates() map[db.RateName]core.RateInfo {
+func (p *cronusPlugin) Rates() map[liquid.RateName]liquid.RateInfo {
 	return cronusRates
 }
 
@@ -104,7 +104,7 @@ type cronusState struct {
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *cronusPlugin) ScrapeRates(ctx context.Context, project core.KeystoneProject, prevSerializedState string) (result map[db.RateName]*big.Int, serializedState string, err error) {
+func (p *cronusPlugin) ScrapeRates(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone, prevSerializedState string) (result map[liquid.RateName]*big.Int, serializedState string, err error) {
 	// decode `prevSerializedState`
 	var state cronusState
 	if prevSerializedState == "" {
@@ -161,7 +161,7 @@ func (p *cronusPlugin) ScrapeRates(ctx context.Context, project core.KeystonePro
 
 	// obtain the current running totals by adding the current billing period's
 	// running tally to the previous totals
-	return map[db.RateName]*big.Int{
+	return map[liquid.RateName]*big.Int{
 		"attachment_size":   bigintPlusUint64(state.PreviousTotals.AttachmentsSize, currentUsage.AttachmentsSize),
 		"data_transfer_in":  bigintPlusUint64(state.PreviousTotals.DataTransferIn, currentUsage.DataTransferIn),
 		"data_transfer_out": bigintPlusUint64(state.PreviousTotals.DataTransferOut, currentUsage.DataTransferOut),

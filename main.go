@@ -60,6 +60,7 @@ import (
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/liquids/archer"
 	"github.com/sapcc/limes/internal/liquids/cinder"
+	"github.com/sapcc/limes/internal/liquids/cronus"
 	"github.com/sapcc/limes/internal/liquids/designate"
 	"github.com/sapcc/limes/internal/liquids/manila"
 	"github.com/sapcc/limes/internal/liquids/neutron"
@@ -107,6 +108,8 @@ func main() {
 		case "cinder":
 			opts.TakesConfiguration = true
 			must.Succeed(liquidapi.Run(ctx, &cinder.Logic{}, opts))
+		case "cronus":
+			must.Succeed(liquidapi.Run(ctx, &cronus.Logic{}, opts))
 		case "designate":
 			must.Succeed(liquidapi.Run(ctx, &designate.Logic{}, opts))
 		case "manila":
@@ -363,7 +366,7 @@ func taskTestGetRates(ctx context.Context, cluster *core.Cluster, args []string)
 	serviceType := db.ServiceType(args[1])
 	project := must.Return(findProjectForTesting(ctx, cluster, args[0]))
 
-	result, serializedState, err := cluster.QuotaPlugins[serviceType].ScrapeRates(ctx, project, prevSerializedState)
+	result, serializedState, err := cluster.QuotaPlugins[serviceType].ScrapeRates(ctx, project, cluster.Config.AvailabilityZones, prevSerializedState)
 	must.Succeed(err)
 	if serializedState != "" {
 		logg.Info("scrape returned new serialized state: %s", serializedState)

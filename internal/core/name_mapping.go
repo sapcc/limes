@@ -50,7 +50,7 @@ type RateNameMapping struct {
 
 type dbRateRef struct {
 	ServiceType db.ServiceType
-	RateName    db.RateName
+	RateName    liquid.RateName
 }
 
 // BuildResourceNameMapping constructs a new ResourceNameMapping instance.
@@ -79,7 +79,7 @@ func BuildRateNameMapping(cluster *Cluster) RateNameMapping {
 		fromDBToAPI: make(map[dbRateRef]RateRef),
 	}
 	for dbServiceType, quotaPlugin := range cluster.QuotaPlugins {
-		dbRateNames := make(map[db.RateName]struct{})
+		dbRateNames := make(map[liquid.RateName]struct{})
 		for dbRateName := range quotaPlugin.Rates() {
 			dbRateNames[dbRateName] = struct{}{}
 		}
@@ -121,7 +121,7 @@ func (nm ResourceNameMapping) MapToV1API(serviceType db.ServiceType, resourceNam
 }
 
 // MapFromV1API maps API-level identifiers for a rate into DB-level identifiers.
-func (nm RateNameMapping) MapFromV1API(serviceType limes.ServiceType, rateName limesrates.RateName) (db.ServiceType, db.RateName, bool) {
+func (nm RateNameMapping) MapFromV1API(serviceType limes.ServiceType, rateName limesrates.RateName) (db.ServiceType, liquid.RateName, bool) {
 	ref, ok := nm.fromAPIToDB[RateRef{serviceType, rateName}]
 	if !ok {
 		return "", "", false
@@ -130,7 +130,7 @@ func (nm RateNameMapping) MapFromV1API(serviceType limes.ServiceType, rateName l
 }
 
 // MapToV1API maps API-level identifiers for a rate into DB-level identifiers.
-func (nm RateNameMapping) MapToV1API(serviceType db.ServiceType, rateName db.RateName) (limes.ServiceType, limesrates.RateName, bool) {
+func (nm RateNameMapping) MapToV1API(serviceType db.ServiceType, rateName liquid.RateName) (limes.ServiceType, limesrates.RateName, bool) {
 	ref, ok := nm.fromDBToAPI[dbRateRef{serviceType, rateName}]
 	if !ok {
 		return "", "", false

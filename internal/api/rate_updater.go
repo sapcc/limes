@@ -28,6 +28,7 @@ import (
 
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/respondwith"
 
@@ -48,7 +49,7 @@ type RateLimitUpdater struct {
 	CanSetRateLimit func(db.ServiceType) bool
 
 	// Filled by ValidateInput() with the keys being the service type and the rate name.
-	Requests map[db.ServiceType]map[db.RateName]RateLimitRequest
+	Requests map[db.ServiceType]map[liquid.RateName]RateLimitRequest
 }
 
 // RateLimitRequest describes a single rate limit that a PUT requests wants to change.
@@ -78,7 +79,7 @@ func (u *RateLimitUpdater) ValidateInput(input limesrates.RateRequest, dbi db.In
 	}
 
 	nm := core.BuildRateNameMapping(u.Cluster)
-	u.Requests = make(map[db.ServiceType]map[db.RateName]RateLimitRequest)
+	u.Requests = make(map[db.ServiceType]map[liquid.RateName]RateLimitRequest)
 
 	// Go through all services and validate the requested rate limits.
 	for apiServiceType, in := range input {
@@ -96,7 +97,7 @@ func (u *RateLimitUpdater) ValidateInput(input limesrates.RateRequest, dbi db.In
 				continue
 			}
 			if u.Requests[dbServiceType] == nil {
-				u.Requests[dbServiceType] = make(map[db.RateName]RateLimitRequest)
+				u.Requests[dbServiceType] = make(map[liquid.RateName]RateLimitRequest)
 			}
 
 			req := RateLimitRequest{

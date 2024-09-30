@@ -396,7 +396,7 @@ func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter) (*l
 	err := sqlext.ForeachRow(dbi, queryStr, joinArgs, func(rows *sql.Rows) error {
 		var (
 			dbServiceType     db.ServiceType
-			dbRateName        db.RateName
+			dbRateName        liquid.RateName
 			minRatesScrapedAt *time.Time
 			maxRatesScrapedAt *time.Time
 		)
@@ -450,7 +450,7 @@ func GetClusterRates(cluster *core.Cluster, dbi db.Interface, filter Filter) (*l
 				report.Services[apiServiceType] = srvReport
 			}
 			srvReport.Rates[apiRateName] = &limesrates.ClusterRateReport{
-				RateInfo: core.RateInfo{Unit: rateConfig.Unit}.ForAPI(apiRateName),
+				RateInfo: core.BuildAPIRateInfo(apiRateName, liquid.RateInfo{Unit: rateConfig.Unit}),
 				Limit:    rateConfig.Limit,
 				Window:   rateConfig.Window,
 			}

@@ -21,6 +21,7 @@ package plugins
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
@@ -96,6 +97,11 @@ func (p *liquidQuotaPlugin) Resources() map[liquid.ResourceName]liquid.ResourceI
 
 // Scrape implements the core.QuotaPlugin interface.
 func (p *liquidQuotaPlugin) Scrape(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[liquid.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
+	// shortcut for liquids that only have rates and no resources
+	if len(p.LiquidServiceInfo.Resources) == 0 && len(p.LiquidServiceInfo.UsageMetricFamilies) == 0 {
+		return nil, nil, nil
+	}
+
 	req := liquid.ServiceUsageRequest{AllAZs: allAZs}
 	if p.LiquidServiceInfo.UsageReportNeedsProjectMetadata {
 		req.ProjectMetadata = project.ForLiquid()
@@ -171,13 +177,51 @@ func (p *liquidQuotaPlugin) SetQuota(ctx context.Context, project core.KeystoneP
 }
 
 // Rates implements the core.QuotaPlugin interface.
-func (p *liquidQuotaPlugin) Rates() map[db.RateName]core.RateInfo {
-	return nil
+func (p *liquidQuotaPlugin) Rates() map[liquid.RateName]liquid.RateInfo {
+	return p.LiquidServiceInfo.Rates
 }
 
 // ScrapeRates implements the core.QuotaPlugin interface.
-func (p *liquidQuotaPlugin) ScrapeRates(ctx context.Context, project core.KeystoneProject, prevSerializedState string) (result map[db.RateName]*big.Int, serializedState string, err error) {
-	return nil, "", nil
+func (p *liquidQuotaPlugin) ScrapeRates(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone, prevSerializedState string) (result map[liquid.RateName]*big.Int, serializedState string, err error) {
+	// shortcut for liquids that do not have rates
+	if len(p.LiquidServiceInfo.Rates) == 0 {
+		return nil, "", nil
+	}
+
+	req := liquid.ServiceUsageRequest{
+		AllAZs:          allAZs,
+		SerializedState: json.RawMessage(prevSerializedState),
+	}
+	if p.LiquidServiceInfo.QuotaUpdateNeedsProjectMetadata {
+		req.ProjectMetadata = project.ForLiquid()
+	}
+
+	resp, err := p.LiquidClient.GetUsageReport(ctx, project.UUID, req)
+	if err != nil {
+		return nil, "", err
+	}
+	if resp.InfoVersion != p.LiquidServiceInfo.Version {
+		logg.Fatal("ServiceInfo version for %s changed from %d to %d; restarting now to reload ServiceInfo...",
+			p.LiquidServiceType, p.LiquidServiceInfo.Version, resp.InfoVersion)
+	}
+
+	result = make(map[liquid.RateName]*big.Int)
+	for rateName := range p.LiquidServiceInfo.Rates {
+		rateReport := resp.Rates[rateName]
+		if rateReport == nil {
+			return nil, "", fmt.Errorf("missing report for rate %q", rateName)
+		}
+
+		// TODO: add AZ-awareness for rate usage in Limes
+		// (until this is done, we take the sum over all AZs here)
+		result[rateName] = &big.Int{}
+		for _, azReport := range rateReport.PerAZ {
+			var x big.Int
+			result[rateName] = x.Add(result[rateName], azReport.Usage)
+		}
+	}
+
+	return result, string(resp.SerializedState), nil
 }
 
 // DescribeMetrics implements the core.QuotaPlugin interface.

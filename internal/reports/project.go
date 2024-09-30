@@ -442,7 +442,7 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 			projectID      db.ProjectID
 			dbServiceType  db.ServiceType
 			ratesScrapedAt *time.Time
-			dbRateName     db.RateName
+			dbRateName     liquid.RateName
 			limit          *uint64
 			window         *limesrates.Window
 			usageAsBigint  *string
@@ -509,8 +509,9 @@ func GetProjectRates(cluster *core.Cluster, domain db.Domain, project *db.Projec
 		// rates that only have a usage)
 		rateReport := srvReport.Rates[apiRateName]
 		if rateReport == nil && usageAsBigint != nil && *usageAsBigint != "" && cluster.HasUsageForRate(dbServiceType, dbRateName) {
+			rateInfo := cluster.InfoForRate(dbServiceType, dbRateName)
 			rateReport = &limesrates.ProjectRateReport{
-				RateInfo: cluster.InfoForRate(dbServiceType, dbRateName).ForAPI(apiRateName),
+				RateInfo: core.BuildAPIRateInfo(apiRateName, rateInfo),
 			}
 			srvReport.Rates[apiRateName] = rateReport
 		}
@@ -588,8 +589,9 @@ func initProjectRateReport(projectInfo limes.ProjectInfo, cluster *core.Cluster,
 				report.Services[apiServiceType] = srvReport
 			}
 
+			rateInfo := cluster.InfoForRate(dbServiceType, rateLimitConfig.Name)
 			srvReport.Rates[apiRateName] = &limesrates.ProjectRateReport{
-				RateInfo: cluster.InfoForRate(dbServiceType, rateLimitConfig.Name).ForAPI(apiRateName),
+				RateInfo: core.BuildAPIRateInfo(apiRateName, rateInfo),
 				Limit:    rateLimitConfig.Limit,
 				Window:   &rateLimitConfig.Window,
 			}

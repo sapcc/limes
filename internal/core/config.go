@@ -25,6 +25,7 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/errext"
 	"github.com/sapcc/go-bits/regexpext"
 	yaml "gopkg.in/yaml.v2"
@@ -103,7 +104,7 @@ type ServiceRateLimitConfiguration struct {
 }
 
 // GetProjectDefaultRateLimit returns the default project-level rate limit for a given target type URI and action or an error if not found.
-func (svcRlConfig *ServiceRateLimitConfiguration) GetProjectDefaultRateLimit(name db.RateName) (RateLimitConfiguration, bool) {
+func (svcRlConfig *ServiceRateLimitConfiguration) GetProjectDefaultRateLimit(name liquid.RateName) (RateLimitConfiguration, bool) {
 	for _, rateCfg := range svcRlConfig.ProjectDefault {
 		if rateCfg.Name == name {
 			return rateCfg, true
@@ -114,7 +115,7 @@ func (svcRlConfig *ServiceRateLimitConfiguration) GetProjectDefaultRateLimit(nam
 
 // RateLimitConfiguration describes a rate limit configuration.
 type RateLimitConfiguration struct {
-	Name   db.RateName       `yaml:"name"`
+	Name   liquid.RateName   `yaml:"name"`
 	Unit   limes.Unit        `yaml:"unit"`
 	Limit  uint64            `yaml:"limit"`
 	Window limesrates.Window `yaml:"window"`

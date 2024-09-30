@@ -32,13 +32,6 @@ import (
 // API-level and DB-level identifiers.
 type ServiceType string
 
-// RateName identifies a rate within a service.
-//
-// This type is used for the resource name columns that appear in the DB.
-// It is legally distinct from `limesrates.RateName`, not because we currently
-// support API-level renaming, but to make it easier to add it in the future.
-type RateName string
-
 // ClusterServiceID is an ID into the cluster_services table. This typedef is
 // used to distinguish these IDs from IDs of other tables or raw int64 values.
 type ClusterServiceID int64
