@@ -55,11 +55,6 @@ func NewTranslationRule(id string) (TranslationRule, error) {
 	}
 }
 
-// IsEmpty returns whether this translation rule contains only nil members.
-func (r TranslationRule) IsEmpty() bool {
-	return r.TranslateSubcapacities == nil && r.TranslateSubresources == nil
-}
-
 // UnmarshalYAML implements the yaml.Unmarshaler interface.
 func (r *TranslationRule) UnmarshalYAML(unmarshal func(any) error) error {
 	var id string

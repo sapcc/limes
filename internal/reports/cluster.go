@@ -235,7 +235,7 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 			resource.RawCapacity = pointerTo(*resource.RawCapacity + *rawCapacityInAZ)
 		}
 		if subcapacitiesInAZ != nil && *subcapacitiesInAZ != "" && filter.IsSubcapacityAllowed(dbServiceType, dbResourceName) {
-			translate := behavior.TranslationRuleInV1API.TranslateSubcapacities
+			translate := cluster.TranslationRuleInV1APIForResource(dbServiceType, dbResourceName).TranslateSubcapacities
 			if translate != nil {
 				*subcapacitiesInAZ, err = translate(*subcapacitiesInAZ, *availabilityZone)
 				if err != nil {

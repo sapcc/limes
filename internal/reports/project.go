@@ -241,7 +241,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 			resReport.PhysicalUsage = &sum
 		}
 		if azSubresources != nil {
-			translate := behavior.TranslationRuleInV1API.TranslateSubresources
+			translate := cluster.TranslationRuleInV1APIForResource(dbServiceType, dbResourceName).TranslateSubresources
 			if translate != nil {
 				*azSubresources, err = translate(*azSubresources, *az)
 				if err != nil {

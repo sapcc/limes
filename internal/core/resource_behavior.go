@@ -33,11 +33,10 @@ import (
 // ResourceBehavior contains the configuration options for specialized
 // behaviors of a single resource (or a set thereof).
 type ResourceBehavior struct {
-	FullResourceNameRx     regexpext.BoundedRegexp `yaml:"resource"`
-	OvercommitFactor       liquid.OvercommitFactor `yaml:"overcommit_factor"`
-	IdentityInV1API        ResourceRef             `yaml:"identity_in_v1_api"`
-	TranslationRuleInV1API TranslationRule         `yaml:"translation_rule_in_v1_api"`
-	Category               string                  `yaml:"category"`
+	FullResourceNameRx regexpext.BoundedRegexp `yaml:"resource"`
+	OvercommitFactor   liquid.OvercommitFactor `yaml:"overcommit_factor"`
+	IdentityInV1API    ResourceRef             `yaml:"identity_in_v1_api"`
+	Category           string                  `yaml:"category"`
 }
 
 // Validate returns a list of all errors in this behavior configuration.
@@ -71,9 +70,6 @@ func (b *ResourceBehavior) Merge(other ResourceBehavior, fullResourceName string
 	if other.IdentityInV1API != (ResourceRef{}) {
 		b.IdentityInV1API.ServiceType = interpolateFromNameMatch(other.FullResourceNameRx, other.IdentityInV1API.ServiceType, fullResourceName)
 		b.IdentityInV1API.Name = interpolateFromNameMatch(other.FullResourceNameRx, other.IdentityInV1API.Name, fullResourceName)
-	}
-	if !other.TranslationRuleInV1API.IsEmpty() {
-		b.TranslationRuleInV1API = other.TranslationRuleInV1API
 	}
 	if other.Category != "" {
 		b.Category = interpolateFromNameMatch(other.FullResourceNameRx, other.Category, fullResourceName)

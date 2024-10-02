@@ -279,6 +279,17 @@ func (c *Cluster) CommitmentConversionRuleForResource(serviceType db.ServiceType
 	}
 }
 
+// TranslationRuleInV1APIForResource returns the TranslationRule
+// for the given resource.
+func (c *Cluster) TranslationRuleInV1APIForResource(serviceType db.ServiceType, resourceName liquid.ResourceName) TranslationRule {
+	svc, ok := c.Config.GetServiceConfigurationForType(serviceType)
+	if ok {
+		return svc.TranslationRulesInV1API.Pick(resourceName, TranslationRule{nil, nil})
+	} else {
+		return TranslationRule{nil, nil}
+	}
+}
+
 // HasUsageForRate checks whether the given service is enabled in this cluster and
 // whether it scrapes usage for the given rate.
 func (c *Cluster) HasUsageForRate(serviceType db.ServiceType, rateName liquid.RateName) bool {

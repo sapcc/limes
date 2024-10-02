@@ -98,6 +98,7 @@ type ServiceConfiguration struct {
 	QuotaDistributionConfigs  regexpext.ConfigSet[liquid.ResourceName, QuotaDistributionConfiguration] `yaml:"quota_distribution_config_for_resource"`
 	CommitmentCreationRules   regexpext.ConfigSet[liquid.ResourceName, CommitmentCreationRule]         `yaml:"commitment_creation_rule_for_resource"`
 	CommitmentConversionRules regexpext.ConfigSet[liquid.ResourceName, CommitmentConversionRule]       `yaml:"commitment_conversion_rule_for_resource"`
+	TranslationRulesInV1API   regexpext.ConfigSet[liquid.ResourceName, TranslationRule]                `yaml:"translation_rule_in_v1_api_for_resource"`
 
 	// RateLimits describes the global rate limits (all requests for to a backend) and default project level rate limits.
 	RateLimits ServiceRateLimitConfiguration `yaml:"rate_limits"`
@@ -305,6 +306,12 @@ func (srv ServiceConfiguration) validateConfig() (errs errext.ErrorSet) {
 
 		if ccr.Value.Identifier != "" && ccr.Value.Weight == 0 {
 			errs.Addf("invalid value: %s.weight must not be 0", ccrPath)
+		}
+	}
+
+	for idx, tr := range srv.TranslationRulesInV1API {
+		if tr.Key == "" {
+			missing(fmt.Sprintf(`translation_rule_in_v1_api_for_resource[%d].key`, idx))
 		}
 	}
 

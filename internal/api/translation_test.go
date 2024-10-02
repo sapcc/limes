@@ -24,8 +24,10 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/must"
+	"github.com/sapcc/go-bits/regexpext"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/test"
@@ -48,9 +50,9 @@ func TestTranslateManilaSubcapacities(t *testing.T) {
 		test.WithConfig(testSmallConfigYAML),
 		test.WithAPIHandler(NewV1API),
 	)
-	s.Cluster.Config.ResourceBehaviors = []core.ResourceBehavior{{
-		FullResourceNameRx:     "first/capacity",
-		TranslationRuleInV1API: must.Return(core.NewTranslationRule("cinder-manila-capacity")),
+	s.Cluster.Config.Services[0].TranslationRulesInV1API = regexpext.ConfigSet[liquid.ResourceName, core.TranslationRule]{{
+		Key:   "capacity",
+		Value: must.Return(core.NewTranslationRule("cinder-manila-capacity")),
 	}}
 
 	// this is what liquid-manila (or liquid-cinder) writes into the DB
@@ -206,9 +208,9 @@ func testSubresourceTranslation(t *testing.T, ruleID string, subresourcesInLiqui
 		test.WithConfig(testSmallConfigYAML),
 		test.WithAPIHandler(NewV1API),
 	)
-	s.Cluster.Config.ResourceBehaviors = []core.ResourceBehavior{{
-		FullResourceNameRx:     "first/capacity",
-		TranslationRuleInV1API: must.Return(core.NewTranslationRule(ruleID)),
+	s.Cluster.Config.Services[0].TranslationRulesInV1API = regexpext.ConfigSet[liquid.ResourceName, core.TranslationRule]{{
+		Key:   "capacity",
+		Value: must.Return(core.NewTranslationRule(ruleID)),
 	}}
 
 	_, err := s.DB.Exec(`UPDATE project_az_resources SET subresources = $1 WHERE id = 3`,
