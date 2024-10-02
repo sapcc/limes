@@ -67,10 +67,10 @@ func CanConfirmNewCommitment(loc AZResourceLocation, resourceID db.ProjectResour
 	stats := statsByAZ[loc.AvailabilityZone]
 
 	additions := map[db.ProjectResourceID]uint64{resourceID: amount}
-	behavior := cluster.BehaviorForResource(loc.ServiceType, loc.ResourceName)
+	ccr := cluster.CommitmentCreationRuleForResource(loc.ServiceType, loc.ResourceName)
 	logg.Debug("checking CanConfirmNewCommitment in %s/%s/%s: resourceID = %d, amount = %d",
 		loc.ServiceType, loc.ResourceName, loc.AvailabilityZone, resourceID, amount)
-	return stats.CanAcceptCommitmentChanges(additions, nil, behavior), nil
+	return stats.CanAcceptCommitmentChanges(additions, nil, ccr), nil
 }
 
 // CanMoveExistingCommitment returns whether a commitment of the given amount
@@ -85,17 +85,17 @@ func CanMoveExistingCommitment(amount uint64, loc AZResourceLocation, sourceReso
 
 	additions := map[db.ProjectResourceID]uint64{targetResourceID: amount}
 	subtractions := map[db.ProjectResourceID]uint64{sourceResourceID: amount}
-	behavior := cluster.BehaviorForResource(loc.ServiceType, loc.ResourceName)
+	ccr := cluster.CommitmentCreationRuleForResource(loc.ServiceType, loc.ResourceName)
 	logg.Debug("checking CanMoveExistingCommitment in %s/%s/%s: resourceID = %d -> %d, amount = %d",
 		loc.ServiceType, loc.ResourceName, loc.AvailabilityZone, sourceResourceID, targetResourceID, amount)
-	return stats.CanAcceptCommitmentChanges(additions, subtractions, behavior), nil
+	return stats.CanAcceptCommitmentChanges(additions, subtractions, ccr), nil
 }
 
 // ConfirmPendingCommitments goes through all unconfirmed commitments that
 // could be confirmed, in chronological creation order, and confirms as many of
 // them as possible given the currently available capacity.
 func ConfirmPendingCommitments(loc AZResourceLocation, cluster *core.Cluster, dbi db.Interface, now time.Time) error {
-	behavior := cluster.BehaviorForResource(loc.ServiceType, loc.ResourceName)
+	ccr := cluster.CommitmentCreationRuleForResource(loc.ServiceType, loc.ResourceName)
 
 	statsByAZ, err := collectAZAllocationStats(loc.ServiceType, loc.ResourceName, &loc.AvailabilityZone, cluster, dbi)
 	if err != nil {
@@ -128,7 +128,7 @@ func ConfirmPendingCommitments(loc AZResourceLocation, cluster *core.Cluster, db
 		additions := map[db.ProjectResourceID]uint64{c.ProjectResourceID: c.Amount}
 		logg.Debug("checking ConfirmPendingCommitments in %s/%s/%s: resourceID = %d, amount = %d",
 			loc.ServiceType, loc.ResourceName, loc.AvailabilityZone, c.ProjectResourceID, c.Amount)
-		if !stats.CanAcceptCommitmentChanges(additions, nil, behavior) {
+		if !stats.CanAcceptCommitmentChanges(additions, nil, ccr) {
 			continue
 		}
 

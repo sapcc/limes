@@ -360,14 +360,14 @@ func (c *Collector) processCapacityScrapeTask(ctx context.Context, task capacity
 }
 
 func (c *Collector) confirmPendingCommitmentsIfNecessary(serviceType db.ServiceType, resourceName liquid.ResourceName) error {
-	behavior := c.Cluster.BehaviorForResource(serviceType, resourceName)
+	ccr := c.Cluster.CommitmentCreationRuleForResource(serviceType, resourceName)
 	now := c.MeasureTime()
 
 	// do not run ConfirmPendingCommitments if commitments are not enabled (or not live yet) for this resource
-	if len(behavior.CommitmentDurations) == 0 {
+	if len(ccr.Durations) == 0 {
 		return nil
 	}
-	if minConfirmBy := behavior.CommitmentMinConfirmDate; minConfirmBy != nil && minConfirmBy.After(now) {
+	if minConfirmBy := ccr.MinConfirmDate; minConfirmBy != nil && minConfirmBy.After(now) {
 		return nil
 	}
 
@@ -378,7 +378,7 @@ func (c *Collector) confirmPendingCommitmentsIfNecessary(serviceType db.ServiceT
 	defer sqlext.RollbackUnlessCommitted(tx)
 
 	committableAZs := c.Cluster.Config.AvailabilityZones
-	if !behavior.CommitmentIsAZAware {
+	if !ccr.IsAZAware {
 		committableAZs = []liquid.AvailabilityZone{liquid.AvailabilityZoneAny}
 	}
 	for _, az := range committableAZs {

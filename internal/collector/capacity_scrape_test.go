@@ -108,11 +108,15 @@ const (
 				quota_distribution_config_for_resource:
 					# test automatic project quota calculation with non-default settings on */capacity resources
 					- { key: capacity, value: { model: autogrow, autogrow: { growth_multiplier: 1.0, project_base_quota: 10, usage_data_retention_period: 1m } } }
+				commitment_creation_rule_for_resource:
+					- { key: capacity, value: { durations: [ '1 hour', '10 days' ], is_az_aware: true } }
 			- service_type: second
 				type: --test-generic
 				quota_distribution_config_for_resource:
 					# test automatic project quota calculation with non-default settings on */capacity resources
 					- { key: capacity, value: { model: autogrow, autogrow: { growth_multiplier: 1.0, project_base_quota: 10, usage_data_retention_period: 1m } } }
+				commitment_creation_rule_for_resource:
+					- { key: capacity, value: { durations: [ '1 hour', '10 days' ], is_az_aware: true } }
 		capacitors:
 		- id: scans-first
 			type: --test-static
@@ -131,8 +135,6 @@ const (
 					- second/capacity
 					- second/things
 		resource_behavior:
-			# enable commitments for the */capacity resources
-			- { resource: '.*/capacity', commitment_durations: [ '1 hour', '10 days' ], commitment_is_az_aware: true }
 			# test that overcommit factor is considered when confirming commitments
 			- { resource: first/capacity, overcommit_factor: 10.0 }
 	`

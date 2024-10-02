@@ -207,7 +207,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 			resReport = &limesresources.ProjectResourceReport{
 				ResourceInfo:     behavior.BuildAPIResourceInfo(apiIdentity.Name, resInfo),
 				Usage:            0,
-				CommitmentConfig: behavior.ToCommitmentConfig(now),
+				CommitmentConfig: cluster.CommitmentCreationRuleForResource(dbServiceType, dbResourceName).ToAPI(now),
 				// all other fields are set below
 			}
 

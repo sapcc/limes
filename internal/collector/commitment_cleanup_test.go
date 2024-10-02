@@ -39,9 +39,6 @@ const (
 		services:
 			- service_type: unittest
 				type: --test-generic
-		resource_behavior:
-			# enable commitments for the */capacity resources
-			- { resource: '.*/capacity', commitment_durations: [ '1 day', '3 years' ], commitment_is_az_aware: true }
 	`
 )
 

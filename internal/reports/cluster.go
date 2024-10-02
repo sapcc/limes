@@ -478,7 +478,7 @@ func findInClusterReport(cluster *core.Cluster, report *limesresources.ClusterRe
 		resInfo := cluster.InfoForResource(dbServiceType, dbResourceName)
 		resource = &limesresources.ClusterResourceReport{
 			ResourceInfo:     behavior.BuildAPIResourceInfo(apiIdentity.Name, resInfo),
-			CommitmentConfig: behavior.ToCommitmentConfig(now),
+			CommitmentConfig: cluster.CommitmentCreationRuleForResource(dbServiceType, dbResourceName).ToAPI(now),
 		}
 		if !resource.ResourceInfo.NoQuota {
 			qdConfig := cluster.QuotaDistributionConfigForResource(dbServiceType, dbResourceName)

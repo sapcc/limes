@@ -26,7 +26,6 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
-	"slices"
 	"sort"
 	"testing"
 	"time"
@@ -39,6 +38,7 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
+	"github.com/sapcc/go-bits/regexpext"
 	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/internal/core"
@@ -81,6 +81,19 @@ const (
 							limit:  3
 							window: 1s
 
+				# check how commitment config is reported
+				commitment_creation_rule_for_resource:
+					- key: capacity
+						value:
+							durations: ["1 hour", "2 hours"]
+							min_confirm_date: '1970-01-08T00:00:00Z' # one week after start of mock.Clock
+							is_az_aware: true
+					- key: things
+						value:
+							durations: ["1 hour", "2 hours"]
+							min_confirm_date: '1970-01-08T00:00:00Z' # one week after start of mock.Clock
+							is_az_aware: false
+
 			- service_type: unshared
 				type: --test-generic
 				params:
@@ -102,14 +115,6 @@ const (
 			# check that category mapping is reported
 			- resource: '.+/capacity_portion'
 				category: portion
-			# check how commitment config is reported
-			- resource: 'shared/(capacity|things)$'
-				commitment_durations: ["1 hour", "2 hours"]
-				commitment_min_confirm_date: '1970-01-08T00:00:00Z' # one week after start of mock.Clock
-			- resource: 'shared/capacity$'
-				commitment_is_az_aware: true
-			- resource: shared/things
-				commitment_is_az_aware: false
 	`
 )
 
@@ -720,7 +725,10 @@ func Test_EmptyProjectList(t *testing.T) {
 func Test_LargeProjectList(t *testing.T) {
 	// start without any projects pre-defined in the start data
 	s := setupTest(t, "fixtures/start-data-minimal.sql")
-	// we don't care about the various ResourceBehaviors in this test
+	// we don't care about the various behavior rules in this test
+	for idx := range s.Cluster.Config.Services {
+		s.Cluster.Config.Services[idx].CommitmentCreationRules = nil
+	}
 	s.Cluster.Config.ResourceBehaviors = nil
 
 	// template for how a single project will look in the output JSON
@@ -989,13 +997,17 @@ func TestResourceRenaming(t *testing.T) {
 	// throughout, making a compact match; as a proxy, we set a different
 	// commitment duration on each resource and then use those values to identify
 	// the resources post renaming
-	baseBehaviors := []core.ResourceBehavior{
-		{FullResourceNameRx: "shared/capacity", CommitmentDurations: makeDurations(2 * time.Second)},
-		{FullResourceNameRx: "shared/capacity_portion", CommitmentDurations: makeDurations(3 * time.Second)},
-		{FullResourceNameRx: "shared/things", CommitmentDurations: makeDurations(4 * time.Second)},
-		{FullResourceNameRx: "unshared/capacity", CommitmentDurations: makeDurations(5 * time.Second)},
-		{FullResourceNameRx: "unshared/capacity_portion", CommitmentDurations: makeDurations(6 * time.Second)},
-		{FullResourceNameRx: "unshared/things", CommitmentDurations: makeDurations(7 * time.Second)},
+	assert.DeepEqual(t, "service type", s.Cluster.Config.Services[0].ServiceType, "shared")
+	s.Cluster.Config.Services[0].CommitmentCreationRules = regexpext.ConfigSet[liquid.ResourceName, core.CommitmentCreationRule]{
+		{Key: "capacity", Value: core.CommitmentCreationRule{Durations: makeDurations(2 * time.Second)}},
+		{Key: "capacity_portion", Value: core.CommitmentCreationRule{Durations: makeDurations(3 * time.Second)}},
+		{Key: "things", Value: core.CommitmentCreationRule{Durations: makeDurations(4 * time.Second)}},
+	}
+	assert.DeepEqual(t, "service type", s.Cluster.Config.Services[1].ServiceType, "unshared")
+	s.Cluster.Config.Services[1].CommitmentCreationRules = regexpext.ConfigSet[liquid.ResourceName, core.CommitmentCreationRule]{
+		{Key: "capacity", Value: core.CommitmentCreationRule{Durations: makeDurations(5 * time.Second)}},
+		{Key: "capacity_portion", Value: core.CommitmentCreationRule{Durations: makeDurations(6 * time.Second)}},
+		{Key: "things", Value: core.CommitmentCreationRule{Durations: makeDurations(7 * time.Second)}},
 	}
 
 	// helper function that makes one GET query per structural level and checks
@@ -1088,7 +1100,7 @@ func TestResourceRenaming(t *testing.T) {
 	}
 
 	// baseline
-	s.Cluster.Config.ResourceBehaviors = slices.Clone(baseBehaviors)
+	s.Cluster.Config.ResourceBehaviors = nil
 	expect("?",
 		"2 seconds: shared/capacity",
 		"3 seconds: shared/capacity_portion",
@@ -1108,12 +1120,10 @@ func TestResourceRenaming(t *testing.T) {
 	)
 
 	// rename resources within a service
-	s.Cluster.Config.ResourceBehaviors = append(slices.Clone(baseBehaviors),
-		core.ResourceBehavior{
-			FullResourceNameRx: "shared/things",
-			IdentityInV1API:    core.ResourceRef{ServiceType: "shared", Name: "items"},
-		},
-	)
+	s.Cluster.Config.ResourceBehaviors = []core.ResourceBehavior{{
+		FullResourceNameRx: "shared/things",
+		IdentityInV1API:    core.ResourceRef{ServiceType: "shared", Name: "items"},
+	}}
 	expect("?",
 		"2 seconds: shared/capacity",
 		"3 seconds: shared/capacity_portion",
@@ -1135,12 +1145,10 @@ func TestResourceRenaming(t *testing.T) {
 	)
 
 	// move resource to a different, existing service
-	s.Cluster.Config.ResourceBehaviors = append(slices.Clone(baseBehaviors),
-		core.ResourceBehavior{
-			FullResourceNameRx: "shared/things",
-			IdentityInV1API:    core.ResourceRef{ServiceType: "unshared", Name: "other_things"},
-		},
-	)
+	s.Cluster.Config.ResourceBehaviors = []core.ResourceBehavior{{
+		FullResourceNameRx: "shared/things",
+		IdentityInV1API:    core.ResourceRef{ServiceType: "unshared", Name: "other_things"},
+	}}
 	expect("?",
 		"2 seconds: shared/capacity",
 		"3 seconds: shared/capacity_portion",
@@ -1167,16 +1175,16 @@ func TestResourceRenaming(t *testing.T) {
 	)
 
 	// move resources to a different, new service
-	s.Cluster.Config.ResourceBehaviors = append(slices.Clone(baseBehaviors),
-		core.ResourceBehavior{
+	s.Cluster.Config.ResourceBehaviors = []core.ResourceBehavior{
+		{
 			FullResourceNameRx: "shared/capacity",
 			IdentityInV1API:    core.ResourceRef{ServiceType: "shared_capacity", Name: "all"},
 		},
-		core.ResourceBehavior{
+		{
 			FullResourceNameRx: "shared/capacity_portion",
 			IdentityInV1API:    core.ResourceRef{ServiceType: "shared_capacity", Name: "part"},
 		},
-	)
+	}
 	expect("?",
 		"2 seconds: shared_capacity/all",
 		"3 seconds: shared_capacity/part",

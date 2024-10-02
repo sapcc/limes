@@ -213,13 +213,13 @@ func (p *v1Provider) convertCommitmentToDisplayForm(c db.ProjectCommitment, loc 
 	}
 }
 
-func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r *http.Request) (*limesresources.CommitmentRequest, *datamodel.AZResourceLocation, *core.ResourceBehavior) {
+func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r *http.Request) (*limesresources.CommitmentRequest, *datamodel.AZResourceLocation, core.CommitmentCreationRule) {
 	// parse request
 	var parseTarget struct {
 		Request limesresources.CommitmentRequest `json:"commitment"`
 	}
 	if !RequireJSON(w, r, &parseTarget) {
-		return nil, nil, nil
+		return nil, nil, core.CommitmentCreationRule{}
 	}
 	req := parseTarget.Request
 
@@ -229,33 +229,33 @@ func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r 
 	if !ok {
 		msg := fmt.Sprintf("no such service and/or resource: %s/%s", req.ServiceType, req.ResourceName)
 		http.Error(w, msg, http.StatusUnprocessableEntity)
-		return nil, nil, nil
+		return nil, nil, core.CommitmentCreationRule{}
 	}
-	behavior := p.Cluster.BehaviorForResource(dbServiceType, dbResourceName)
-	if len(behavior.CommitmentDurations) == 0 {
+	ccr := p.Cluster.CommitmentCreationRuleForResource(dbServiceType, dbResourceName)
+	if len(ccr.Durations) == 0 {
 		http.Error(w, "commitments are not enabled for this resource", http.StatusUnprocessableEntity)
-		return nil, nil, nil
+		return nil, nil, core.CommitmentCreationRule{}
 	}
-	if behavior.CommitmentIsAZAware {
+	if ccr.IsAZAware {
 		if !slices.Contains(p.Cluster.Config.AvailabilityZones, req.AvailabilityZone) {
 			http.Error(w, "no such availability zone", http.StatusUnprocessableEntity)
-			return nil, nil, nil
+			return nil, nil, core.CommitmentCreationRule{}
 		}
 	} else {
 		if req.AvailabilityZone != limes.AvailabilityZoneAny {
 			http.Error(w, `resource does not accept AZ-aware commitments, so the AZ must be set to "any"`, http.StatusUnprocessableEntity)
-			return nil, nil, nil
+			return nil, nil, core.CommitmentCreationRule{}
 		}
 	}
-	if !slices.Contains(behavior.CommitmentDurations, req.Duration) {
-		buf := must.Return(json.Marshal(behavior.CommitmentDurations)) // panic on error is acceptable here, marshals should never fail
+	if !slices.Contains(ccr.Durations, req.Duration) {
+		buf := must.Return(json.Marshal(ccr.Durations)) // panic on error is acceptable here, marshals should never fail
 		msg := "unacceptable commitment duration for this resource, acceptable values: " + string(buf)
 		http.Error(w, msg, http.StatusUnprocessableEntity)
-		return nil, nil, nil
+		return nil, nil, core.CommitmentCreationRule{}
 	}
 	if req.Amount == 0 {
 		http.Error(w, "amount of committed resource must be greater than zero", http.StatusUnprocessableEntity)
-		return nil, nil, nil
+		return nil, nil, core.CommitmentCreationRule{}
 	}
 
 	loc := datamodel.AZResourceLocation{
@@ -263,7 +263,7 @@ func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r 
 		ResourceName:     dbResourceName,
 		AvailabilityZone: req.AvailabilityZone,
 	}
-	return &req, &loc, &behavior
+	return &req, &loc, ccr
 }
 
 // CanConfirmNewProjectCommitment handles POST /v1/domains/:domain_id/projects/:project_id/commitments/can-confirm.
@@ -281,7 +281,7 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 	if dbProject == nil {
 		return
 	}
-	req, loc, behavior := p.parseAndValidateCommitmentRequest(w, r)
+	req, loc, ccr := p.parseAndValidateCommitmentRequest(w, r)
 	if req == nil {
 		return
 	}
@@ -305,7 +305,7 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 
 	// commitments can never be confirmed immediately if we are before the min_confirm_date
 	now := p.timeNow()
-	if behavior.CommitmentMinConfirmDate != nil && behavior.CommitmentMinConfirmDate.After(now) {
+	if ccr.MinConfirmDate != nil && ccr.MinConfirmDate.After(now) {
 		respondwith.JSON(w, http.StatusOK, map[string]bool{"result": false})
 		return
 	}
@@ -333,7 +333,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	if dbProject == nil {
 		return
 	}
-	req, loc, behavior := p.parseAndValidateCommitmentRequest(w, r)
+	req, loc, ccr := p.parseAndValidateCommitmentRequest(w, r)
 	if req == nil {
 		return
 	}
@@ -360,9 +360,9 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		http.Error(w, "confirm_by must not be set in the past", http.StatusUnprocessableEntity)
 		return
 	}
-	if minConfirmBy := behavior.CommitmentMinConfirmDate; minConfirmBy != nil && minConfirmBy.After(now) {
+	if minConfirmBy := ccr.MinConfirmDate; minConfirmBy != nil && minConfirmBy.After(now) {
 		if req.ConfirmBy == nil || req.ConfirmBy.Before(*minConfirmBy) {
-			msg := "this commitment needs a `confirm_by` timestamp at or after " + behavior.CommitmentMinConfirmDate.Format(time.RFC3339)
+			msg := "this commitment needs a `confirm_by` timestamp at or after " + ccr.MinConfirmDate.Format(time.RFC3339)
 			http.Error(w, msg, http.StatusUnprocessableEntity)
 			return
 		}
@@ -810,15 +810,15 @@ func (p *v1Provider) GetCommitmentConversions(w http.ResponseWriter, r *http.Req
 		http.Error(w, msg, http.StatusUnprocessableEntity)
 		return
 	}
-	sourceBehavior := p.Cluster.BehaviorForResource(sourceServiceType, sourceResourceName)
+	sourceRule := p.Cluster.CommitmentConversionRuleForResource(sourceServiceType, sourceResourceName)
 	sourceResInfo := p.Cluster.InfoForResource(sourceServiceType, sourceResourceName)
 
 	// enumerate possible conversions
 	conversions := make([]limesresources.CommitmentConversionRule, 0)
 	for targetServiceType, quotaPlugin := range p.Cluster.QuotaPlugins {
 		for targetResourceName, targetResInfo := range quotaPlugin.Resources() {
-			targetBehavior := p.Cluster.BehaviorForResource(targetServiceType, targetResourceName)
-			if targetBehavior.CommitmentConversion == (core.CommitmentConversion{}) {
+			targetRule := p.Cluster.CommitmentConversionRuleForResource(targetServiceType, targetResourceName)
+			if targetRule == (core.CommitmentConversionRule{}) {
 				continue
 			}
 			if sourceServiceType == targetServiceType && sourceResourceName == targetResourceName {
@@ -827,11 +827,11 @@ func (p *v1Provider) GetCommitmentConversions(w http.ResponseWriter, r *http.Req
 			if sourceResInfo.Unit != targetResInfo.Unit {
 				continue
 			}
-			if sourceBehavior.CommitmentConversion.Identifier != targetBehavior.CommitmentConversion.Identifier {
+			if sourceRule.Identifier != targetRule.Identifier {
 				continue
 			}
 
-			fromAmount, toAmount := p.getCommitmentConversionRate(sourceBehavior, targetBehavior)
+			fromAmount, toAmount := p.getCommitmentConversionRate(sourceRule, targetRule)
 			apiServiceType, apiResourceName, ok := nm.MapToV1API(targetServiceType, targetResourceName)
 			if ok {
 				conversions = append(conversions, limesresources.CommitmentConversionRule{
@@ -877,7 +877,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// section: sourceBehavior
+	// section: sourceRule
 	var dbCommitment db.ProjectCommitment
 	err := p.DB.SelectOne(&dbCommitment, findProjectCommitmentByIDQuery, commitmentID, dbProject.ID)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -896,9 +896,9 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	} else if respondwith.ErrorText(w, err) {
 		return
 	}
-	sourceBehavior := p.Cluster.BehaviorForResource(sourceLoc.ServiceType, sourceLoc.ResourceName)
+	sourceRule := p.Cluster.CommitmentConversionRuleForResource(sourceLoc.ServiceType, sourceLoc.ResourceName)
 
-	// section: targetBehavior
+	// section: targetRule
 	var parseTarget struct {
 		Request struct {
 			TargetService  limes.ServiceType           `json:"target_service"`
@@ -918,17 +918,18 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, msg, http.StatusUnprocessableEntity)
 		return
 	}
-	targetBehavior := p.Cluster.BehaviorForResource(targetServiceType, targetResourceName)
 	if sourceLoc.ResourceName == targetResourceName && sourceLoc.ServiceType == targetServiceType {
 		http.Error(w, "conversion attempt to the same resource.", http.StatusConflict)
 		return
 	}
-	if len(targetBehavior.CommitmentDurations) == 0 {
+	targetCCR := p.Cluster.CommitmentCreationRuleForResource(targetServiceType, targetResourceName)
+	if len(targetCCR.Durations) == 0 {
 		msg := fmt.Sprintf("commitments are not enabled for resource %s/%s", req.TargetService, req.TargetResource)
 		http.Error(w, msg, http.StatusUnprocessableEntity)
 		return
 	}
-	if sourceBehavior.CommitmentConversion.Identifier == "" || sourceBehavior.CommitmentConversion.Identifier != targetBehavior.CommitmentConversion.Identifier {
+	targetRule := p.Cluster.CommitmentConversionRuleForResource(targetServiceType, targetResourceName)
+	if sourceRule.Identifier == "" || sourceRule.Identifier != targetRule.Identifier {
 		msg := fmt.Sprintf("commitment is not convertible into resource %s/%s", req.TargetService, req.TargetResource)
 		http.Error(w, msg, http.StatusUnprocessableEntity)
 		return
@@ -940,7 +941,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, msg, http.StatusConflict)
 		return
 	}
-	fromAmount, toAmount := p.getCommitmentConversionRate(sourceBehavior, targetBehavior)
+	fromAmount, toAmount := p.getCommitmentConversionRate(sourceRule, targetRule)
 	conversionAmount := (req.SourceAmount / fromAmount) * toAmount
 	remainderAmount := req.SourceAmount % fromAmount
 	if remainderAmount > 0 {
@@ -1039,9 +1040,9 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
 }
 
-func (p *v1Provider) getCommitmentConversionRate(source, target core.ResourceBehavior) (fromAmount, toAmount uint64) {
-	divisor := GetGreatestCommonDivisor(source.CommitmentConversion.Weight, target.CommitmentConversion.Weight)
-	fromAmount = target.CommitmentConversion.Weight / divisor
-	toAmount = source.CommitmentConversion.Weight / divisor
+func (p *v1Provider) getCommitmentConversionRate(source, target core.CommitmentConversionRule) (fromAmount, toAmount uint64) {
+	divisor := GetGreatestCommonDivisor(source.Weight, target.Weight)
+	fromAmount = target.Weight / divisor
+	toAmount = source.Weight / divisor
 	return fromAmount, toAmount
 }

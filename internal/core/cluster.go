@@ -257,6 +257,28 @@ func (c *Cluster) QuotaDistributionConfigForResource(serviceType db.ServiceType,
 	}
 }
 
+// CommitmentCreationRuleForResource returns the CommitmentCreationRule
+// for the given resource.
+func (c *Cluster) CommitmentCreationRuleForResource(serviceType db.ServiceType, resourceName liquid.ResourceName) CommitmentCreationRule {
+	svc, ok := c.Config.GetServiceConfigurationForType(serviceType)
+	if ok {
+		return svc.CommitmentCreationRules.Pick(resourceName, CommitmentCreationRule{})
+	} else {
+		return CommitmentCreationRule{}
+	}
+}
+
+// CommitmentConversionRuleForResource returns the CommitmentConversionRule
+// for the given resource.
+func (c *Cluster) CommitmentConversionRuleForResource(serviceType db.ServiceType, resourceName liquid.ResourceName) CommitmentConversionRule {
+	svc, ok := c.Config.GetServiceConfigurationForType(serviceType)
+	if ok {
+		return svc.CommitmentConversionRules.Pick(resourceName, CommitmentConversionRule{})
+	} else {
+		return CommitmentConversionRule{}
+	}
+}
+
 // HasUsageForRate checks whether the given service is enabled in this cluster and
 // whether it scrapes usage for the given rate.
 func (c *Cluster) HasUsageForRate(serviceType db.ServiceType, rateName liquid.RateName) bool {

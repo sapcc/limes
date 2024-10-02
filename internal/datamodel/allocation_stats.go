@@ -65,7 +65,7 @@ func (c clusterAZAllocationStats) AllowsQuotaOvercommit(cfg core.AutogrowQuotaDi
 	return usedPercent < cfg.AllowQuotaOvercommitUntilAllocatedPercent
 }
 
-func (c clusterAZAllocationStats) CanAcceptCommitmentChanges(additions, subtractions map[db.ProjectResourceID]uint64, behavior core.ResourceBehavior) bool {
+func (c clusterAZAllocationStats) CanAcceptCommitmentChanges(additions, subtractions map[db.ProjectResourceID]uint64, ccr core.CommitmentCreationRule) bool {
 	// calculate `sum_over_projects(max(committed, usage))` including the requested changes
 	usedCapacity := uint64(0)
 	for projectResourceID, stats := range c.ProjectStats {
@@ -75,8 +75,8 @@ func (c clusterAZAllocationStats) CanAcceptCommitmentChanges(additions, subtract
 
 	// commitment can be confirmed if it and all other commitments and usage fit in the committable portion of the total capacity
 	committableCapacity := c.Capacity
-	if behavior.CommitmentUntilPercent != nil {
-		committableCapacity = uint64(float64(c.Capacity) * *behavior.CommitmentUntilPercent / 100)
+	if ccr.UntilPercent != nil {
+		committableCapacity = uint64(float64(c.Capacity) * *ccr.UntilPercent / 100)
 	}
 	if usedCapacity <= committableCapacity {
 		logg.Debug("CanAcceptCommitmentChanges: accepted")
