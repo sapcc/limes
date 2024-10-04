@@ -17,7 +17,7 @@ require (
 	github.com/sapcc/go-api-declarations v1.12.6
 	github.com/sapcc/go-bits v0.0.0-20240925150026-37945f71a03e
 	go.uber.org/automaxprocs v1.6.0
-	gopkg.in/yaml.v2 v2.4.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -43,5 +43,5 @@ require (
 	golang.org/x/sys v0.25.0 // indirect
 	golang.org/x/text v0.18.0 // indirect
 	google.golang.org/protobuf v1.34.2 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
+	gopkg.in/yaml.v2 v2.4.0 // indirect
 )

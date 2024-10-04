@@ -36,7 +36,7 @@ import (
 	"github.com/sapcc/go-bits/mock"
 	"github.com/sapcc/go-bits/osext"
 	"github.com/sapcc/go-bits/sqlext"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
