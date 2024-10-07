@@ -1045,3 +1045,74 @@ func (p *v1Provider) getCommitmentConversionRate(source, target core.ResourceBeh
 	toAmount = source.CommitmentConversion.Weight / divisor
 	return fromAmount, toAmount
 }
+
+// ExtendCommitmentDuration handles POST /v1/domains/{domain_id}/projects/{project_id}/commitments/{commitment_id}/extend-duration
+func (p *v1Provider) ExtendCommitmentDuration(w http.ResponseWriter, r *http.Request) {
+	httpapi.IdentifyEndpoint(r, "/v1/domains/:domain_id/projects/:project_id/commitments/:commitment_id/extend-duration")
+	token := p.CheckToken(r)
+	if !token.Require(w, "project:edit") {
+		return
+	}
+	commitmentID := mux.Vars(r)["commitment_id"]
+	if commitmentID == "" {
+		http.Error(w, "no transfer token provided", http.StatusBadRequest)
+		return
+	}
+	dbDomain := p.FindDomainFromRequest(w, r)
+	if dbDomain == nil {
+		return
+	}
+	dbProject := p.FindProjectFromRequest(w, r, dbDomain)
+	if dbProject == nil {
+		return
+	}
+	var Request struct {
+		Duration limesresources.CommitmentDuration `json:"duration"`
+	}
+	req := Request
+	if !RequireJSON(w, r, &req) {
+		return
+	}
+
+	var dbCommitment db.ProjectCommitment
+	err := p.DB.SelectOne(&dbCommitment, findProjectCommitmentByIDQuery, commitmentID, dbProject.ID)
+	if errors.Is(err, sql.ErrNoRows) {
+		http.Error(w, "no such commitment", http.StatusNotFound)
+		return
+	} else if respondwith.ErrorText(w, err) {
+		return
+	}
+	var loc datamodel.AZResourceLocation
+	err = p.DB.QueryRow(findProjectAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
+		Scan(&loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)
+	if errors.Is(err, sql.ErrNoRows) {
+		// defense in depth: this should not happen because all the relevant tables are connected by FK constraints
+		http.Error(w, "no route to this commitment", http.StatusNotFound)
+		return
+	} else if respondwith.ErrorText(w, err) {
+		return
+	}
+	behavior := p.Cluster.BehaviorForResource(loc.ServiceType, loc.ResourceName)
+	validDurations := behavior.CommitmentDurations
+
+	existsInDurations := false
+	//allowsUpConversion := false
+	for _, duration := range validDurations {
+		timeStamp := time.Date(duration.Years, time.Month(duration.Months), duration.Days, int(duration.Short/time.Hour), 0, 0, 0, time.Local)
+		providedDuration := time.Date(req.Duration.Years, time.Month(req.Duration.Months), req.Duration.Days, int(req.Duration.Short/time.Hour), 0, 0, 0, time.Local)
+		difference := timeStamp.Compare(providedDuration)
+		switch difference {
+		case 0:
+			existsInDurations = true
+		default:
+			continue
+		}
+	}
+	if !existsInDurations {
+		msg := fmt.Sprintf("provided duration %s does not match the config %v", req, validDurations)
+		http.Error(w, msg, http.StatusUnprocessableEntity)
+		return
+	}
+
+	respondwith.JSON(w, http.StatusOK, map[string]any{"commitment": validDurations})
+}

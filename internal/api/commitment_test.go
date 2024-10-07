@@ -64,7 +64,7 @@ const testCommitmentsYAMLWithoutMinConfirmDate = `
 	resource_behavior:
 		# the resources in "first" have commitments, the ones in "second" do not
 		- resource: second/.*
-			commitment_durations: ["1 hour", "2 hours"]
+			commitment_durations: ["1 hour", "2 hours", "3 seconds"]
 		- resource: second/things
 			commitment_is_az_aware: false
 		- resource: second/capacity
@@ -1324,4 +1324,42 @@ func Test_ConvertCommitments(t *testing.T) {
 		ExpectBody:   assert.JSONObject{"commitment": respWithConfirmBy(5, 2, "first", "capacity")},
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
+}
+
+func Test_ExtendCommitmentDuration(t *testing.T) {
+	s := test.NewSetup(t,
+		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
+		test.WithConfig(testCommitmentsYAMLWithoutMinConfirmDate),
+		test.WithAPIHandler(NewV1API),
+	)
+
+	s.Clock.StepBy(1 * time.Hour)
+	assert.HTTPRequest{
+		Method: http.MethodPost,
+		Path:   "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
+		Body: assert.JSONObject{
+			"commitment": assert.JSONObject{
+				"service_type":      "second",
+				"resource_name":     "capacity",
+				"availability_zone": "az-one",
+				"amount":            10,
+				"duration":          "1 hour",
+			},
+		},
+		ExpectStatus: http.StatusCreated,
+	}.Check(t, s.Handler)
+
+	// Positive: Confirmed commitment
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/extend-duration",
+		Body:         assert.JSONObject{"duration": "3 seconds"},
+		ExpectStatus: http.StatusCreated,
+	}.Check(t, s.Handler)
+
+	// Positive: Pending commitment
+
+	// Negative: Provided Date < Commitment Duration
+
+	// Negative: Provided date is invalid
 }
