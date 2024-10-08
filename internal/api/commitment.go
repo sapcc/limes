@@ -1094,14 +1094,14 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 	}
 	behavior := p.Cluster.BehaviorForResource(loc.ServiceType, loc.ResourceName)
 	if !slices.Contains(behavior.CommitmentDurations, req.Duration) {
-		msg := fmt.Sprintf("provided duration: %s does not match the config %v", req.Duration, validDurations)
+		msg := fmt.Sprintf("provided duration: %s does not match the config %v", req.Duration, behavior.CommitmentDurations)
 		http.Error(w, msg, http.StatusUnprocessableEntity)
 		return
 	}
 
 	newExpiresAt := req.Duration.AddTo(unwrapOrDefault(dbCommitment.ConfirmBy, dbCommitment.CreatedAt))
 	if newExpiresAt.Before(dbCommitment.ExpiresAt) {
-		msg := fmt.Sprintf("provided duration: %s cannot be extended with config %v", req.Duration, validDurations)
+		msg := fmt.Sprintf("provided duration: %s cannot be extended with config %v", req.Duration, behavior.CommitmentDurations)
 		http.Error(w, msg, http.StatusUnprocessableEntity)
 		return
 	}
