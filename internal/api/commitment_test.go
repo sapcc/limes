@@ -64,7 +64,7 @@ const testCommitmentsYAMLWithoutMinConfirmDate = `
 	resource_behavior:
 		# the resources in "first" have commitments, the ones in "second" do not
 		- resource: second/.*
-			commitment_durations: ["1 hour", "2 hours", "3 seconds"]
+			commitment_durations: ["1 hour", "2 hours"]
 		- resource: second/things
 			commitment_is_az_aware: false
 		- resource: second/capacity
@@ -1334,6 +1334,7 @@ func Test_ExtendCommitmentDuration(t *testing.T) {
 	)
 
 	s.Clock.StepBy(1 * time.Hour)
+	// Positive: Confirmed commitment
 	assert.HTTPRequest{
 		Method: http.MethodPost,
 		Path:   "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
@@ -1343,23 +1344,88 @@ func Test_ExtendCommitmentDuration(t *testing.T) {
 				"resource_name":     "capacity",
 				"availability_zone": "az-one",
 				"amount":            10,
-				"duration":          "1 hour",
+				"duration":          "1 hours",
 			},
 		},
 		ExpectStatus: http.StatusCreated,
 	}.Check(t, s.Handler)
 
-	// Positive: Confirmed commitment
 	assert.HTTPRequest{
-		Method:       http.MethodPost,
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/extend-duration",
-		Body:         assert.JSONObject{"duration": "3 seconds"},
-		ExpectStatus: http.StatusCreated,
+		Method: http.MethodPost,
+		Path:   "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/extend-duration",
+		Body:   assert.JSONObject{"duration": "2 hours"},
+		ExpectBody: assert.JSONObject{"commitment": assert.JSONObject{
+			"id":                1,
+			"service_type":      "second",
+			"resource_name":     "capacity",
+			"availability_zone": "az-one",
+			"amount":            10,
+			"unit":              "B",
+			"duration":          "2 hours",
+			"created_at":        s.Clock.Now().Unix(),
+			"creator_uuid":      "uuid-for-alice",
+			"creator_name":      "alice@Default",
+			"can_be_deleted":    true,
+			"confirmed_at":      s.Clock.Now().Unix(),
+			"expires_at":        s.Clock.Now().Add(2 * time.Hour).Unix(),
+		}},
+		ExpectStatus: http.StatusOK,
 	}.Check(t, s.Handler)
 
 	// Positive: Pending commitment
+	assert.HTTPRequest{
+		Method: http.MethodPost,
+		Path:   "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
+		Body: assert.JSONObject{
+			"commitment": assert.JSONObject{
+				"service_type":      "second",
+				"resource_name":     "capacity",
+				"availability_zone": "az-one",
+				"amount":            10,
+				"confirm_by":        s.Clock.Now().Add(1 * day).Unix(),
+				"duration":          "1 hours",
+			},
+		},
+		ExpectStatus: http.StatusCreated,
+	}.Check(t, s.Handler)
 
-	// Negative: Provided Date < Commitment Duration
+	assert.HTTPRequest{
+		Method: http.MethodPost,
+		Path:   "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2/extend-duration",
+		Body:   assert.JSONObject{"duration": "2 hours"},
+		ExpectBody: assert.JSONObject{"commitment": assert.JSONObject{
+			"id":                2,
+			"service_type":      "second",
+			"resource_name":     "capacity",
+			"availability_zone": "az-one",
+			"amount":            10,
+			"unit":              "B",
+			"duration":          "2 hours",
+			"created_at":        s.Clock.Now().Unix(),
+			"creator_uuid":      "uuid-for-alice",
+			"creator_name":      "alice@Default",
+			"can_be_deleted":    true,
+			"confirm_by":        s.Clock.Now().Add(1 * day).Unix(),
+			"expires_at":        s.Clock.Now().Add(2*time.Hour + 1*day).Unix(),
+		}},
+		ExpectStatus: http.StatusOK,
+	}.Check(t, s.Handler)
 
 	// Negative: Provided date is invalid
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/extend-duration",
+		Body:         assert.JSONObject{"duration": "3 hours"},
+		ExpectBody:   assert.StringData("provided duration: 3 hours does not match the config [1 hour 2 hours]\n"),
+		ExpectStatus: http.StatusUnprocessableEntity,
+	}.Check(t, s.Handler)
+
+	// Negative: Provided Date < Commitment Duration
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/extend-duration",
+		Body:         assert.JSONObject{"duration": "2 hours"},
+		ExpectBody:   assert.StringData("provided duration: 2 hours cannot be extended with config [1 hour 2 hours]\n"),
+		ExpectStatus: http.StatusUnprocessableEntity,
+	}.Check(t, s.Handler)
 }

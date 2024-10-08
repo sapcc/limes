@@ -1096,23 +1096,50 @@ func (p *v1Provider) ExtendCommitmentDuration(w http.ResponseWriter, r *http.Req
 	validDurations := behavior.CommitmentDurations
 
 	existsInDurations := false
-	//allowsUpConversion := false
 	for _, duration := range validDurations {
-		timeStamp := time.Date(duration.Years, time.Month(duration.Months), duration.Days, int(duration.Short/time.Hour), 0, 0, 0, time.Local)
-		providedDuration := time.Date(req.Duration.Years, time.Month(req.Duration.Months), req.Duration.Days, int(req.Duration.Short/time.Hour), 0, 0, 0, time.Local)
-		difference := timeStamp.Compare(providedDuration)
-		switch difference {
-		case 0:
+		difference := req.Duration.CompareTo(duration)
+		if difference == 0 {
 			existsInDurations = true
-		default:
-			continue
 		}
 	}
 	if !existsInDurations {
-		msg := fmt.Sprintf("provided duration %s does not match the config %v", req, validDurations)
+		msg := fmt.Sprintf("provided duration: %s does not match the config %v", req.Duration, validDurations)
+		http.Error(w, msg, http.StatusUnprocessableEntity)
+		return
+	}
+	allowsDurationExtension := req.Duration.CompareTo(dbCommitment.Duration)
+	if allowsDurationExtension != 1 {
+		msg := fmt.Sprintf("provided duration: %s cannot be extended with config %v", req.Duration, validDurations)
 		http.Error(w, msg, http.StatusUnprocessableEntity)
 		return
 	}
 
-	respondwith.JSON(w, http.StatusOK, map[string]any{"commitment": validDurations})
+	tx, err := p.DB.Begin()
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+	defer sqlext.RollbackUnlessCommitted(tx)
+
+	now := p.timeNow()
+	dbCommitment.Duration = req.Duration
+	dbCommitment.ExpiresAt = req.Duration.AddTo(unwrapOrDefault(dbCommitment.ConfirmBy, now))
+	_, err = tx.Update(&dbCommitment)
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+	err = tx.Commit()
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token)
+	logAndPublishEvent(p.timeNow(), r, token, http.StatusAccepted, commitmentEventTarget{
+		DomainID:    dbDomain.UUID,
+		DomainName:  dbDomain.Name,
+		ProjectID:   dbProject.UUID,
+		ProjectName: dbProject.Name,
+		Commitments: []limesresources.Commitment{c},
+	})
+
+	respondwith.JSON(w, http.StatusOK, map[string]any{"commitment": c})
 }
