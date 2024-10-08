@@ -1093,15 +1093,7 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 		return
 	}
 	behavior := p.Cluster.BehaviorForResource(loc.ServiceType, loc.ResourceName)
-	validDurations := behavior.CommitmentDurations
-
-	existsInDurations := false
-	for _, duration := range validDurations {
-		if duration.String() == req.Duration.String() {
-			existsInDurations = true
-		}
-	}
-	if !existsInDurations {
+	if !slices.Contains(behavior.CommitmentDurations, req.Duration) {
 		msg := fmt.Sprintf("provided duration: %s does not match the config %v", req.Duration, validDurations)
 		http.Error(w, msg, http.StatusUnprocessableEntity)
 		return
