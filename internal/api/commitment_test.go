@@ -1333,7 +1333,6 @@ func Test_ExtendCommitmentDuration(t *testing.T) {
 		test.WithAPIHandler(NewV1API),
 	)
 
-	s.Clock.StepBy(1 * time.Hour)
 	// Positive: Confirmed commitment
 	assert.HTTPRequest{
 		Method: http.MethodPost,
@@ -1350,6 +1349,9 @@ func Test_ExtendCommitmentDuration(t *testing.T) {
 		ExpectStatus: http.StatusCreated,
 	}.Check(t, s.Handler)
 
+	// Fast forward by 1 hour. Creation_time = 0; Now = 1; (Expire = Creation_time + 2 hours)
+	s.Clock.StepBy(1 * time.Hour)
+
 	assert.HTTPRequest{
 		Method: http.MethodPost,
 		Path:   "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/extend-duration",
@@ -1362,12 +1364,12 @@ func Test_ExtendCommitmentDuration(t *testing.T) {
 			"amount":            10,
 			"unit":              "B",
 			"duration":          "2 hours",
-			"created_at":        s.Clock.Now().Unix(),
+			"created_at":        s.Clock.Now().Add(-1 * time.Hour).Unix(),
 			"creator_uuid":      "uuid-for-alice",
 			"creator_name":      "alice@Default",
 			"can_be_deleted":    true,
-			"confirmed_at":      s.Clock.Now().Unix(),
-			"expires_at":        s.Clock.Now().Add(2 * time.Hour).Unix(),
+			"confirmed_at":      s.Clock.Now().Add(-1 * time.Hour).Unix(),
+			"expires_at":        s.Clock.Now().Add(1 * time.Hour).Unix(),
 		}},
 		ExpectStatus: http.StatusOK,
 	}.Check(t, s.Handler)
