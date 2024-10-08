@@ -1082,6 +1082,19 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 	} else if respondwith.ErrorText(w, err) {
 		return
 	}
+
+	now := p.timeNow()
+	if dbCommitment.ExpiresAt.Before(now) || dbCommitment.ExpiresAt.Equal(now) {
+		http.Error(w, "unable to process expired commitment", http.StatusForbidden)
+		return
+	}
+
+	if dbCommitment.State == db.CommitmentStateSuperseded {
+		msg := fmt.Sprintf("unable to operate on commitment with a state of %s", dbCommitment.State)
+		http.Error(w, msg, http.StatusForbidden)
+		return
+	}
+
 	var loc datamodel.AZResourceLocation
 	err = p.DB.QueryRow(findProjectAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
 		Scan(&loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)

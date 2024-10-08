@@ -64,7 +64,7 @@ const testCommitmentsYAMLWithoutMinConfirmDate = `
 	resource_behavior:
 		# the resources in "first" have commitments, the ones in "second" do not
 		- resource: second/.*
-			commitment_durations: ["1 hour", "2 hours"]
+			commitment_durations: ["1 hour", "2 hours", "3 hours"]
 		- resource: second/things
 			commitment_is_az_aware: false
 		- resource: second/capacity
@@ -1333,7 +1333,7 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 		test.WithAPIHandler(NewV1API),
 	)
 
-	// Positive: Confirmed commitment
+	// Positive: confirmed commitment
 	assert.HTTPRequest{
 		Method: http.MethodPost,
 		Path:   "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
@@ -1343,7 +1343,7 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 				"resource_name":     "capacity",
 				"availability_zone": "az-one",
 				"amount":            10,
-				"duration":          "1 hours",
+				"duration":          "2 hours",
 			},
 		},
 		ExpectStatus: http.StatusCreated,
@@ -1355,7 +1355,7 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 	assert.HTTPRequest{
 		Method: http.MethodPost,
 		Path:   "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/update-duration",
-		Body:   assert.JSONObject{"duration": "2 hours"},
+		Body:   assert.JSONObject{"duration": "3 hours"},
 		ExpectBody: assert.JSONObject{"commitment": assert.JSONObject{
 			"id":                1,
 			"service_type":      "second",
@@ -1363,13 +1363,13 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 			"availability_zone": "az-one",
 			"amount":            10,
 			"unit":              "B",
-			"duration":          "2 hours",
+			"duration":          "3 hours",
 			"created_at":        s.Clock.Now().Add(-1 * time.Hour).Unix(),
 			"creator_uuid":      "uuid-for-alice",
 			"creator_name":      "alice@Default",
 			"can_be_deleted":    true,
 			"confirmed_at":      s.Clock.Now().Add(-1 * time.Hour).Unix(),
-			"expires_at":        s.Clock.Now().Add(1 * time.Hour).Unix(),
+			"expires_at":        s.Clock.Now().Add(2 * time.Hour).Unix(),
 		}},
 		ExpectStatus: http.StatusOK,
 	}.Check(t, s.Handler)
@@ -1394,7 +1394,7 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 	assert.HTTPRequest{
 		Method: http.MethodPost,
 		Path:   "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2/update-duration",
-		Body:   assert.JSONObject{"duration": "2 hours"},
+		Body:   assert.JSONObject{"duration": "3 hours"},
 		ExpectBody: assert.JSONObject{"commitment": assert.JSONObject{
 			"id":                2,
 			"service_type":      "second",
@@ -1402,13 +1402,13 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 			"availability_zone": "az-one",
 			"amount":            10,
 			"unit":              "B",
-			"duration":          "2 hours",
+			"duration":          "3 hours",
 			"created_at":        s.Clock.Now().Unix(),
 			"creator_uuid":      "uuid-for-alice",
 			"creator_name":      "alice@Default",
 			"can_be_deleted":    true,
 			"confirm_by":        s.Clock.Now().Add(1 * day).Unix(),
-			"expires_at":        s.Clock.Now().Add(2*time.Hour + 1*day).Unix(),
+			"expires_at":        s.Clock.Now().Add(3*time.Hour + 1*day).Unix(),
 		}},
 		ExpectStatus: http.StatusOK,
 	}.Check(t, s.Handler)
@@ -1417,8 +1417,8 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/update-duration",
-		Body:         assert.JSONObject{"duration": "3 hours"},
-		ExpectBody:   assert.StringData("provided duration: 3 hours does not match the config [1 hour 2 hours]\n"),
+		Body:         assert.JSONObject{"duration": "99 hours"},
+		ExpectBody:   assert.StringData("provided duration: 99 hours does not match the config [1 hour 2 hours 3 hours]\n"),
 		ExpectStatus: http.StatusUnprocessableEntity,
 	}.Check(t, s.Handler)
 
@@ -1427,7 +1427,46 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/update-duration",
 		Body:         assert.JSONObject{"duration": "1 hour"},
-		ExpectBody:   assert.StringData("duration change from 2 hours to 1 hour forbidden\n"),
+		ExpectBody:   assert.StringData("duration change from 3 hours to 1 hour forbidden\n"),
+		ExpectStatus: http.StatusForbidden,
+	}.Check(t, s.Handler)
+
+	// Negative: Expired commitment.
+	s.Clock.StepBy(-1 * time.Hour)
+	assert.HTTPRequest{
+		Method: http.MethodPost,
+		Path:   "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/new",
+		Body: assert.JSONObject{
+			"commitment": assert.JSONObject{
+				"service_type":      "second",
+				"resource_name":     "capacity",
+				"availability_zone": "az-one",
+				"amount":            10,
+				"duration":          "1 hours",
+			},
+		},
+		ExpectStatus: http.StatusCreated,
+	}.Check(t, s.Handler)
+
+	s.Clock.StepBy(1 * time.Hour)
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/3/update-duration",
+		Body:         assert.JSONObject{"duration": "2 hours"},
+		ExpectBody:   assert.StringData("unable to process expired commitment\n"),
+		ExpectStatus: http.StatusForbidden,
+	}.Check(t, s.Handler)
+
+	// Negative: Superseded commitment
+	_, err := s.DB.Exec("UPDATE project_commitments SET state='superseded' where ID = 3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	assert.HTTPRequest{
+		Method:       http.MethodPost,
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/3/update-duration",
+		Body:         assert.JSONObject{"duration": "2 hours"},
+		ExpectBody:   assert.StringData("unable to operate on commitment with a state of superseded\n"),
 		ExpectStatus: http.StatusForbidden,
 	}.Check(t, s.Handler)
 }
