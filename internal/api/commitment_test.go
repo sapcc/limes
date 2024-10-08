@@ -1427,7 +1427,7 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/update-duration",
 		Body:         assert.JSONObject{"duration": "1 hour"},
-		ExpectBody:   assert.StringData("provided duration: 1 hour cannot be extended with config [1 hour 2 hours]\n"),
-		ExpectStatus: http.StatusUnprocessableEntity,
+		ExpectBody:   assert.StringData("duration change from 2 hours to 1 hour forbidden\n"),
+		ExpectStatus: http.StatusForbidden,
 	}.Check(t, s.Handler)
 }

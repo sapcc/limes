@@ -1101,8 +1101,8 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 
 	newExpiresAt := req.Duration.AddTo(unwrapOrDefault(dbCommitment.ConfirmBy, dbCommitment.CreatedAt))
 	if newExpiresAt.Before(dbCommitment.ExpiresAt) {
-		msg := fmt.Sprintf("provided duration: %s cannot be extended with config %v", req.Duration, behavior.CommitmentDurations)
-		http.Error(w, msg, http.StatusUnprocessableEntity)
+		msg := fmt.Sprintf("duration change from %s to %s forbidden", dbCommitment.Duration, req.Duration)
+		http.Error(w, msg, http.StatusForbidden)
 		return
 	}
 
