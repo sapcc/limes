@@ -187,14 +187,6 @@ func (d CommitmentDuration) AddTo(t time.Time) time.Time {
 	return t.AddDate(d.Years, d.Months, d.Days).Add(d.Short)
 }
 
-// CompareTo compares its origin with a target duration.
-// Returns: -1 (origin below target), 0 (they are equal), 1 (target above origin)
-func (d CommitmentDuration) CompareTo(cmp CommitmentDuration) int {
-	origin := d.AddTo(time.Time{})
-	target := cmp.AddTo(time.Time{})
-	return origin.Compare(target)
-}
-
 // MarshalJSON implements the json.Marshaler interface.
 func (d CommitmentDuration) MarshalJSON() ([]byte, error) {
 	return json.Marshal(d.String())

@@ -1097,8 +1097,7 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 
 	existsInDurations := false
 	for _, duration := range validDurations {
-		difference := req.Duration.CompareTo(duration)
-		if difference == 0 {
+		if duration.String() == req.Duration.String() {
 			existsInDurations = true
 		}
 	}
