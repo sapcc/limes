@@ -1106,19 +1106,9 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	tx, err := p.DB.Begin()
-	if respondwith.ErrorText(w, err) {
-		return
-	}
-	defer sqlext.RollbackUnlessCommitted(tx)
-
 	dbCommitment.Duration = req.Duration
 	dbCommitment.ExpiresAt = newExpiresAt
-	_, err = tx.Update(&dbCommitment)
-	if respondwith.ErrorText(w, err) {
-		return
-	}
-	err = tx.Commit()
+	_, err = p.DB.Update(&dbCommitment)
 	if respondwith.ErrorText(w, err) {
 		return
 	}
