@@ -1326,7 +1326,7 @@ func Test_ConvertCommitments(t *testing.T) {
 	}.Check(t, s.Handler)
 }
 
-func Test_ExtendCommitmentDuration(t *testing.T) {
+func Test_UpdateCommitmentDuration(t *testing.T) {
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-commitments.sql"),
 		test.WithConfig(testCommitmentsYAMLWithoutMinConfirmDate),
@@ -1354,7 +1354,7 @@ func Test_ExtendCommitmentDuration(t *testing.T) {
 
 	assert.HTTPRequest{
 		Method: http.MethodPost,
-		Path:   "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/extend-duration",
+		Path:   "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/update-duration",
 		Body:   assert.JSONObject{"duration": "2 hours"},
 		ExpectBody: assert.JSONObject{"commitment": assert.JSONObject{
 			"id":                1,
@@ -1393,7 +1393,7 @@ func Test_ExtendCommitmentDuration(t *testing.T) {
 
 	assert.HTTPRequest{
 		Method: http.MethodPost,
-		Path:   "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2/extend-duration",
+		Path:   "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/2/update-duration",
 		Body:   assert.JSONObject{"duration": "2 hours"},
 		ExpectBody: assert.JSONObject{"commitment": assert.JSONObject{
 			"id":                2,
@@ -1416,7 +1416,7 @@ func Test_ExtendCommitmentDuration(t *testing.T) {
 	// Negative: Provided date is invalid
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/extend-duration",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/update-duration",
 		Body:         assert.JSONObject{"duration": "3 hours"},
 		ExpectBody:   assert.StringData("provided duration: 3 hours does not match the config [1 hour 2 hours]\n"),
 		ExpectStatus: http.StatusUnprocessableEntity,
@@ -1425,7 +1425,7 @@ func Test_ExtendCommitmentDuration(t *testing.T) {
 	// Negative: Provided Date < Commitment Duration
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
-		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/extend-duration",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/update-duration",
 		Body:         assert.JSONObject{"duration": "2 hours"},
 		ExpectBody:   assert.StringData("provided duration: 2 hours cannot be extended with config [1 hour 2 hours]\n"),
 		ExpectStatus: http.StatusUnprocessableEntity,
