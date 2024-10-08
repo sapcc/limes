@@ -1120,9 +1120,8 @@ func (p *v1Provider) ExtendCommitmentDuration(w http.ResponseWriter, r *http.Req
 	}
 	defer sqlext.RollbackUnlessCommitted(tx)
 
-	now := p.timeNow()
 	dbCommitment.Duration = req.Duration
-	dbCommitment.ExpiresAt = req.Duration.AddTo(unwrapOrDefault(dbCommitment.ConfirmBy, now))
+	dbCommitment.ExpiresAt = req.Duration.AddTo(unwrapOrDefault(dbCommitment.ConfirmBy, dbCommitment.CreatedAt))
 	_, err = tx.Update(&dbCommitment)
 	if respondwith.ErrorText(w, err) {
 		return
