@@ -9,7 +9,6 @@ testing/postgres*
 /*.yaml
 /*.yml
 /*.json
-/*.envrc
 /*.env
 !Makefile.maker.yaml
 !.golangci.yaml
