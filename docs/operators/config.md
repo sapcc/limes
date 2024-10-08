@@ -449,23 +449,6 @@ exist will also be reported by Limes. (Not all resources may exist for a given h
 regular `cores`/`instances`/`ram` resources and cover instances whose flavors have the respective value in the
 `quota:hw_version` extra spec.
 
-### `email-aws`: Cronus v1 (SAP Converged Cloud only)
-
-```yaml
-services:
-  - type: email-aws
-    service_type: email-aws
-```
-
-The area for this service is `email`. This service has no resources, only rates.
-
-| Rate | Unit | Comment |
-| --- | --- | --- |
-| `attachments_size` | bytes | Size of attachments for outgoing emails. |
-| `data_transfer_in` | bytes | Total size of incoming emails. |
-| `data_transfer_out` | bytes | Total size of outgoing emails. |
-| `recipients` | countable | Number of recipients on outgoing emails. |
-
 ### `liquid`: Any service with LIQUID support
 
 ```yaml
