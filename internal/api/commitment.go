@@ -1046,9 +1046,9 @@ func (p *v1Provider) getCommitmentConversionRate(source, target core.ResourceBeh
 	return fromAmount, toAmount
 }
 
-// ExtendCommitmentDuration handles POST /v1/domains/{domain_id}/projects/{project_id}/commitments/{commitment_id}/extend-duration
+// ExtendCommitmentDuration handles POST /v1/domains/{domain_id}/projects/{project_id}/commitments/{commitment_id}/update-duration
 func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Request) {
-	httpapi.IdentifyEndpoint(r, "/v1/domains/:domain_id/projects/:project_id/commitments/:commitment_id/extend-duration")
+	httpapi.IdentifyEndpoint(r, "/v1/domains/:domain_id/projects/:project_id/commitments/:commitment_id/update-duration")
 	token := p.CheckToken(r)
 	if !token.Require(w, "project:edit") {
 		return
