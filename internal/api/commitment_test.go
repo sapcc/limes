@@ -1458,6 +1458,7 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 	}.Check(t, s.Handler)
 
 	// Negative: Superseded commitment
+	s.Clock.StepBy(-1 * time.Hour)
 	_, err := s.DB.Exec("UPDATE project_commitments SET state='superseded' where ID = 3")
 	if err != nil {
 		t.Fatal(err)
