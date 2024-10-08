@@ -1107,8 +1107,9 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 		http.Error(w, msg, http.StatusUnprocessableEntity)
 		return
 	}
-	allowsDurationExtension := req.Duration.CompareTo(dbCommitment.Duration)
-	if allowsDurationExtension != 1 {
+
+	newExpiresAt := req.Duration.AddTo(unwrapOrDefault(dbCommitment.ConfirmBy, dbCommitment.CreatedAt))
+	if newExpiresAt.Before(dbCommitment.ExpiresAt) {
 		msg := fmt.Sprintf("provided duration: %s cannot be extended with config %v", req.Duration, validDurations)
 		http.Error(w, msg, http.StatusUnprocessableEntity)
 		return
@@ -1121,7 +1122,7 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 	defer sqlext.RollbackUnlessCommitted(tx)
 
 	dbCommitment.Duration = req.Duration
-	dbCommitment.ExpiresAt = req.Duration.AddTo(unwrapOrDefault(dbCommitment.ConfirmBy, dbCommitment.CreatedAt))
+	dbCommitment.ExpiresAt = newExpiresAt
 	_, err = tx.Update(&dbCommitment)
 	if respondwith.ErrorText(w, err) {
 		return
