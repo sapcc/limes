@@ -67,6 +67,8 @@ func (p *capacitySapccIronicPlugin) Init(ctx context.Context, provider *gophercl
 	if err != nil {
 		return err
 	}
+	p.NovaV2.Microversion = "2.61" // to include extra specs in flavors.ListDetail()
+
 	p.IronicV1, err = openstack.NewBareMetalV1(provider, eo)
 	if err != nil {
 		return err

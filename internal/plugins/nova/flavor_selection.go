@@ -57,7 +57,7 @@ func (s FlavorSelection) matchesExtraSpecs(specs map[string]string) bool {
 
 // ForeachFlavor lists all public flavors matching this FlavorSelection, and
 // calls the given callback once for each of them.
-func (s FlavorSelection) ForeachFlavor(ctx context.Context, novaV2 *gophercloud.ServiceClient, action func(FullFlavor) error) error {
+func (s FlavorSelection) ForeachFlavor(ctx context.Context, novaV2 *gophercloud.ServiceClient, action func(flavors.Flavor) error) error {
 	opts := flavors.ListOpts{AccessType: flavors.AllAccess}
 	page, err := flavors.ListDetail(novaV2, &opts).AllPages(ctx)
 	if err != nil {
@@ -69,12 +69,8 @@ func (s FlavorSelection) ForeachFlavor(ctx context.Context, novaV2 *gophercloud.
 	}
 
 	for _, flavor := range allFlavors {
-		specs, err := flavors.ListExtraSpecs(ctx, novaV2, flavor.ID).Extract()
-		if err != nil {
-			return fmt.Errorf("while listing extra specs of public flavor %q: %w", flavor.Name, err)
-		}
-		if s.matchesExtraSpecs(specs) {
-			err = action(FullFlavor{flavor, specs})
+		if s.matchesExtraSpecs(flavor.ExtraSpecs) {
+			err = action(flavor)
 			if err != nil {
 				return err
 			}
@@ -83,14 +79,8 @@ func (s FlavorSelection) ForeachFlavor(ctx context.Context, novaV2 *gophercloud.
 	return nil
 }
 
-// FullFlavor is a flavor plus its set of extra specs.
-type FullFlavor struct {
-	Flavor     flavors.Flavor
-	ExtraSpecs map[string]string
-}
-
-// MatchesHypervisor returns true if instances of this flavor can be placed on the given hypervisor.
-func (f FullFlavor) MatchesHypervisor(mh MatchingHypervisor) bool {
+// FlavorMatchesHypervisor returns true if instances of this flavor can be placed on the given hypervisor.
+func FlavorMatchesHypervisor(f flavors.Flavor, mh MatchingHypervisor) bool {
 	// extra specs like `"trait:FOO": "required"` or `"trait:BAR": "forbidden"`
 	// are used by the Nova scheduler to ignore hypervisors that do not (or do)
 	// have the respective traits

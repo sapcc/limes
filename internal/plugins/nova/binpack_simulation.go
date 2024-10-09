@@ -26,6 +26,7 @@ import (
 
 	"github.com/sapcc/limes/internal/liquids"
 
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/v2/openstack/placement/v1/resourceproviders"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
@@ -159,9 +160,9 @@ func (h BinpackHypervisor) RenderDebugView(az limes.AvailabilityZone) {
 }
 
 // PlaceSeveralInstances calls PlaceOneInstance multiple times.
-func (hh BinpackHypervisors) PlaceSeveralInstances(ff FullFlavor, reason string, coresOvercommitFactor liquid.OvercommitFactor, blockedCapacity BinpackVector[uint64], bb BinpackBehavior, count uint64) (ok bool) {
+func (hh BinpackHypervisors) PlaceSeveralInstances(f flavors.Flavor, reason string, coresOvercommitFactor liquid.OvercommitFactor, blockedCapacity BinpackVector[uint64], bb BinpackBehavior, count uint64) (ok bool) {
 	for range count {
-		ok = hh.PlaceOneInstance(ff, reason, coresOvercommitFactor, blockedCapacity, bb)
+		ok = hh.PlaceOneInstance(f, reason, coresOvercommitFactor, blockedCapacity, bb)
 		if !ok {
 			// if we don't have space for this instance, we won't have space for any following ones
 			return false
@@ -172,7 +173,7 @@ func (hh BinpackHypervisors) PlaceSeveralInstances(ff FullFlavor, reason string,
 
 // PlaceOneInstance places a single instance of the given flavor using the vector-dot binpacking algorithm.
 // If the instance cannot be placed, false is returned.
-func (hh BinpackHypervisors) PlaceOneInstance(ff FullFlavor, reason string, coresOvercommitFactor liquid.OvercommitFactor, blockedCapacity BinpackVector[uint64], bb BinpackBehavior) (ok bool) {
+func (hh BinpackHypervisors) PlaceOneInstance(flavor flavors.Flavor, reason string, coresOvercommitFactor liquid.OvercommitFactor, blockedCapacity BinpackVector[uint64], bb BinpackBehavior) (ok bool) {
 	// This function implements the vector dot binpacking method described in [Mayank] (section III,
 	// subsection D, including the correction presented in the last paragraph of that subsection).
 	//
@@ -188,9 +189,9 @@ func (hh BinpackHypervisors) PlaceOneInstance(ff FullFlavor, reason string, core
 	// [Mayank]: https://www.it.iitb.ac.in/~sahoo/papers/cloud2011_mayank.pdf
 
 	vmSize := BinpackVector[uint64]{
-		VCPUs:    coresOvercommitFactor.ApplyInReverseTo(liquids.AtLeastZero(ff.Flavor.VCPUs)),
-		MemoryMB: liquids.AtLeastZero(ff.Flavor.RAM),
-		LocalGB:  liquids.AtLeastZero(ff.Flavor.Disk),
+		VCPUs:    coresOvercommitFactor.ApplyInReverseTo(liquids.AtLeastZero(flavor.VCPUs)),
+		MemoryMB: liquids.AtLeastZero(flavor.RAM),
+		LocalGB:  liquids.AtLeastZero(flavor.Disk),
 	}
 
 	// ensure that placing this instance does not encroach on the overall blocked capacity
@@ -202,7 +203,7 @@ func (hh BinpackHypervisors) PlaceOneInstance(ff FullFlavor, reason string, core
 	}
 	if !blockedCapacity.Add(vmSize).FitsIn(totalFree) {
 		logg.Debug("refusing to place %s with %s because of blocked capacity %s (total free = %s)",
-			ff.Flavor.Name, vmSize.String(), blockedCapacity.String(), totalFree.String())
+			flavor.Name, vmSize.String(), blockedCapacity.String(), totalFree.String())
 		return false
 	}
 
@@ -212,7 +213,7 @@ func (hh BinpackHypervisors) PlaceOneInstance(ff FullFlavor, reason string, core
 	)
 	for _, hypervisor := range hh {
 		// skip hypervisors that the flavor does not accept
-		if !ff.MatchesHypervisor(hypervisor.Match) {
+		if !FlavorMatchesHypervisor(flavor, hypervisor.Match) {
 			continue
 		}
 
@@ -240,11 +241,11 @@ func (hh BinpackHypervisors) PlaceOneInstance(ff FullFlavor, reason string, core
 	}
 
 	if bestNode == nil {
-		logg.Debug("refusing to place %s with %s because no node has enough space", ff.Flavor.Name, vmSize.String())
+		logg.Debug("refusing to place %s with %s because no node has enough space", flavor.Name, vmSize.String())
 		return false
 	} else {
 		bestNode.Instances = append(bestNode.Instances, BinpackInstance{
-			FlavorName: ff.Flavor.Name,
+			FlavorName: flavor.Name,
 			Size:       vmSize,
 			Reason:     reason,
 		})
