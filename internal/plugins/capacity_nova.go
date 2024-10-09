@@ -29,6 +29,7 @@ import (
 
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
@@ -90,6 +91,8 @@ func (p *capacityNovaPlugin) Init(ctx context.Context, provider *gophercloud.Pro
 	if err != nil {
 		return err
 	}
+	p.NovaV2.Microversion = "2.61" // to include extra specs in flavors.ListDetail()
+
 	p.PlacementV1, err = openstack.NewPlacementV1(provider, eo)
 	if err != nil {
 		return err
@@ -120,17 +123,17 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 	// enumerate matching flavors, divide into split and pooled flavors;
 	// also, for the pooled instances capacity, we need to know the max root disk size on public pooled flavors
 	var (
-		splitFlavors    []nova.FullFlavor
+		splitFlavors    []flavors.Flavor
 		maxRootDiskSize = uint64(0)
 	)
-	err = p.FlavorSelection.ForeachFlavor(ctx, p.NovaV2, func(f nova.FullFlavor) error {
-		if isSplitFlavorName[f.Flavor.Name] {
+	err = p.FlavorSelection.ForeachFlavor(ctx, p.NovaV2, func(f flavors.Flavor) error {
+		if isSplitFlavorName[f.Name] {
 			splitFlavors = append(splitFlavors, f)
-		} else if f.Flavor.IsPublic {
+		} else if f.IsPublic {
 			// only public flavor contribute to the `maxRootDiskSize` calculation (in
 			// the wild, we have seen non-public legacy flavors with wildly large
 			// disk sizes that would throw off all estimates derived from this number)
-			maxRootDiskSize = max(maxRootDiskSize, liquids.AtLeastZero(f.Flavor.Disk))
+			maxRootDiskSize = max(maxRootDiskSize, liquids.AtLeastZero(f.Disk))
 		}
 		return nil
 	})
@@ -176,7 +179,7 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 
 	demandByFlavorName := make(map[string]liquid.ResourceDemand)
 	for _, f := range splitFlavors {
-		resourceName := p.FlavorAliases.LimesResourceNameForFlavor(f.Flavor.Name)
+		resourceName := p.FlavorAliases.LimesResourceNameForFlavor(f.Name)
 		demand, err := backchannel.GetResourceDemand("compute", resourceName)
 		if err != nil {
 			return nil, nil, fmt.Errorf("while collecting resource demand for compute/%s: %w", resourceName, err)
@@ -184,7 +187,7 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 		if demand.OvercommitFactor != 1 && demand.OvercommitFactor != 0 {
 			return nil, nil, fmt.Errorf("overcommit on compute/%s is not supported", resourceName)
 		}
-		demandByFlavorName[f.Flavor.Name] = demand
+		demandByFlavorName[f.Name] = demand
 	}
 	logg.Debug("binpackable flavors: %#v", splitFlavors)
 	logg.Debug("demand for binpackable flavors: %#v", demandByFlavorName)
@@ -236,17 +239,15 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 	}
 
 	// during binpacking, place instances of large flavors first to achieve optimal results
-	slices.SortFunc(splitFlavors, func(lhs, rhs nova.FullFlavor) int {
+	slices.SortFunc(splitFlavors, func(lhs, rhs flavors.Flavor) int {
 		//NOTE: this returns `rhs-lhs` instead of `lhs-rhs` to achieve descending order
-		lf := lhs.Flavor
-		rf := rhs.Flavor
-		if lf.VCPUs != rf.VCPUs {
-			return rf.VCPUs - lf.VCPUs
+		if lhs.VCPUs != rhs.VCPUs {
+			return rhs.VCPUs - lhs.VCPUs
 		}
-		if lf.RAM != rf.RAM {
-			return rf.RAM - lf.RAM
+		if lhs.RAM != rhs.RAM {
+			return rhs.RAM - lhs.RAM
 		}
-		return rf.Disk - lf.Disk
+		return rhs.Disk - lhs.Disk
 	})
 
 	// if Nova can tell us where existing instances are running, we prefer this
@@ -258,12 +259,12 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 
 		// list all servers for this flavor, parsing only placement information from the result
 		listOpts := servers.ListOpts{
-			Flavor:     flavor.Flavor.ID,
+			Flavor:     flavor.ID,
 			AllTenants: true,
 		}
 		allPages, err := servers.List(p.NovaV2, listOpts).AllPages(ctx)
 		if err != nil {
-			return nil, nil, fmt.Errorf("while listing active instances for flavor %s: %w", flavor.Flavor.Name, err)
+			return nil, nil, fmt.Errorf("while listing active instances for flavor %s: %w", flavor.Name, err)
 		}
 		var instances []struct {
 			ID                 string                 `json:"id"`
@@ -272,7 +273,7 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 		}
 		err = servers.ExtractServersInto(allPages, &instances)
 		if err != nil {
-			return nil, nil, fmt.Errorf("while listing active instances for flavor %s: %w", flavor.Flavor.Name, err)
+			return nil, nil, fmt.Errorf("while listing active instances for flavor %s: %w", flavor.Name, err)
 		}
 
 		for _, instance := range instances {
@@ -302,7 +303,7 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 		}
 
 		if len(shadowedForThisFlavor) > 0 {
-			instancesPlacedOnShadowedHypervisors[flavor.Flavor.Name] = shadowedForThisFlavor
+			instancesPlacedOnShadowedHypervisors[flavor.Name] = shadowedForThisFlavor
 		}
 	}
 	logg.Debug("instances for split flavors placed on shadowed hypervisors: %v", instancesPlacedOnShadowedHypervisors)
@@ -312,7 +313,7 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 	for az, hypervisors := range hypervisorsByAZ {
 		canPlaceFlavor := make(map[string]bool)
 		for _, flavor := range splitFlavors {
-			canPlaceFlavor[flavor.Flavor.Name] = true
+			canPlaceFlavor[flavor.Name] = true
 		}
 
 		// phase 1: block existing usage
@@ -325,11 +326,11 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 		for _, flavor := range splitFlavors {
 			// do not place instances that have already been placed in the simulation,
 			// as well as instances that run on hypervisors that do not participate in the binpacking simulation
-			placedUsage := hypervisors.PlacementCountForFlavor(flavor.Flavor.Name)
-			shadowedUsage := instancesPlacedOnShadowedHypervisors[flavor.Flavor.Name][az]
-			unplacedUsage := saturatingSub(demandByFlavorName[flavor.Flavor.Name].PerAZ[az].Usage, placedUsage+shadowedUsage)
+			placedUsage := hypervisors.PlacementCountForFlavor(flavor.Name)
+			shadowedUsage := instancesPlacedOnShadowedHypervisors[flavor.Name][az]
+			unplacedUsage := saturatingSub(demandByFlavorName[flavor.Name].PerAZ[az].Usage, placedUsage+shadowedUsage)
 			if !hypervisors.PlaceSeveralInstances(flavor, "used", coresDemand.OvercommitFactor, blockedCapacity, bb, unplacedUsage) {
-				canPlaceFlavor[flavor.Flavor.Name] = false
+				canPlaceFlavor[flavor.Name] = false
 			}
 		}
 
@@ -339,8 +340,8 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 		blockedCapacity.LocalGB += instancesDemand.PerAZ[az].UnusedCommitments * maxRootDiskSize
 		logg.Debug("[%s] blockedCapacity in phase 2: %s", az, blockedCapacity.String())
 		for _, flavor := range splitFlavors {
-			if !hypervisors.PlaceSeveralInstances(flavor, "committed", coresDemand.OvercommitFactor, blockedCapacity, bb, demandByFlavorName[flavor.Flavor.Name].PerAZ[az].UnusedCommitments) {
-				canPlaceFlavor[flavor.Flavor.Name] = false
+			if !hypervisors.PlaceSeveralInstances(flavor, "committed", coresDemand.OvercommitFactor, blockedCapacity, bb, demandByFlavorName[flavor.Name].PerAZ[az].UnusedCommitments) {
+				canPlaceFlavor[flavor.Name] = false
 			}
 		}
 
@@ -350,8 +351,8 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 		blockedCapacity.LocalGB += instancesDemand.PerAZ[az].PendingCommitments * maxRootDiskSize
 		logg.Debug("[%s] blockedCapacity in phase 3: %s", az, blockedCapacity.String())
 		for _, flavor := range splitFlavors {
-			if !hypervisors.PlaceSeveralInstances(flavor, "pending", coresDemand.OvercommitFactor, blockedCapacity, bb, demandByFlavorName[flavor.Flavor.Name].PerAZ[az].PendingCommitments) {
-				canPlaceFlavor[flavor.Flavor.Name] = false
+			if !hypervisors.PlaceSeveralInstances(flavor, "pending", coresDemand.OvercommitFactor, blockedCapacity, bb, demandByFlavorName[flavor.Name].PerAZ[az].PendingCommitments) {
+				canPlaceFlavor[flavor.Name] = false
 			}
 		}
 
@@ -361,15 +362,15 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 		totalPlacedInstances := make(map[string]float64) // these two will diverge in the final round of placements
 		var splitFlavorsUsage nova.BinpackVector[uint64]
 		for _, flavor := range splitFlavors {
-			count := hypervisors.PlacementCountForFlavor(flavor.Flavor.Name)
-			initiallyPlacedInstances[flavor.Flavor.Name] = max(float64(count), 0.1)
+			count := hypervisors.PlacementCountForFlavor(flavor.Name)
+			initiallyPlacedInstances[flavor.Name] = max(float64(count), 0.1)
 			sumInitiallyPlacedInstances += count
-			totalPlacedInstances[flavor.Flavor.Name] = float64(count)
+			totalPlacedInstances[flavor.Name] = float64(count)
 			// The max(..., 0.1) is explained below.
 
-			splitFlavorsUsage.VCPUs += coresDemand.OvercommitFactor.ApplyInReverseTo(count * liquids.AtLeastZero(flavor.Flavor.VCPUs))
-			splitFlavorsUsage.MemoryMB += count * liquids.AtLeastZero(flavor.Flavor.RAM)
-			splitFlavorsUsage.LocalGB += count * liquids.AtLeastZero(flavor.Flavor.Disk)
+			splitFlavorsUsage.VCPUs += coresDemand.OvercommitFactor.ApplyInReverseTo(count * liquids.AtLeastZero(flavor.VCPUs))
+			splitFlavorsUsage.MemoryMB += count * liquids.AtLeastZero(flavor.RAM)
+			splitFlavorsUsage.LocalGB += count * liquids.AtLeastZero(flavor.Disk)
 		}
 
 		// for the upcoming final fill, we want to block capacity in such a way that
@@ -398,14 +399,14 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 		// the placements (`totalPlacedInstances`).
 		for fillUp {
 			var (
-				bestFlavor *nova.FullFlavor
+				bestFlavor *flavors.Flavor
 				bestScore  = -1.0
 			)
 			for _, flavor := range splitFlavors {
-				if !canPlaceFlavor[flavor.Flavor.Name] {
+				if !canPlaceFlavor[flavor.Name] {
 					continue
 				}
-				score := (initiallyPlacedInstances[flavor.Flavor.Name]) / (2*totalPlacedInstances[flavor.Flavor.Name] + 1)
+				score := (initiallyPlacedInstances[flavor.Name]) / (2*totalPlacedInstances[flavor.Name] + 1)
 				// ^ This is why we adjusted all initiallyPlacedInstances[flavor.Name] = 0 to 0.1
 				// above. If the nominator of this fraction is 0 for multiple flavors, the first
 				// (biggest) flavor always wins unfairly. By adjusting to slightly away from zero,
@@ -421,9 +422,9 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 				break
 			} else {
 				if hypervisors.PlaceOneInstance(*bestFlavor, "padding", coresDemand.OvercommitFactor, blockedCapacity, bb) {
-					totalPlacedInstances[bestFlavor.Flavor.Name]++
+					totalPlacedInstances[bestFlavor.Name]++
 				} else {
-					canPlaceFlavor[bestFlavor.Flavor.Name] = false
+					canPlaceFlavor[bestFlavor.Name] = false
 				}
 			}
 		}
@@ -467,20 +468,20 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 			capacities[p.PooledInstancesResourceName][az] = pointerTo(azCapacity.IntoCapacityData("instances", float64(maxRootDiskSize), builder.InstancesSubcapacities))
 			capacities[p.PooledRAMResourceName][az] = pointerTo(azCapacity.IntoCapacityData("ram", float64(maxRootDiskSize), builder.RAMSubcapacities))
 			for _, flavor := range splitFlavors {
-				count := hypervisors.PlacementCountForFlavor(flavor.Flavor.Name)
-				capacities[p.PooledCoresResourceName][az].Capacity -= coresDemand.OvercommitFactor.ApplyInReverseTo(count * liquids.AtLeastZero(flavor.Flavor.VCPUs))
+				count := hypervisors.PlacementCountForFlavor(flavor.Name)
+				capacities[p.PooledCoresResourceName][az].Capacity -= coresDemand.OvercommitFactor.ApplyInReverseTo(count * liquids.AtLeastZero(flavor.VCPUs))
 				capacities[p.PooledInstancesResourceName][az].Capacity-- //TODO: not accurate when uint64(flavor.Disk) != maxRootDiskSize
-				capacities[p.PooledRAMResourceName][az].Capacity -= count * liquids.AtLeastZero(flavor.Flavor.RAM)
+				capacities[p.PooledRAMResourceName][az].Capacity -= count * liquids.AtLeastZero(flavor.RAM)
 			}
 		}
 	}
 
 	// compile result for split flavors
-	slices.SortFunc(splitFlavors, func(lhs, rhs nova.FullFlavor) int {
-		return strings.Compare(lhs.Flavor.Name, rhs.Flavor.Name)
+	slices.SortFunc(splitFlavors, func(lhs, rhs flavors.Flavor) int {
+		return strings.Compare(lhs.Name, rhs.Name)
 	})
 	for idx, flavor := range splitFlavors {
-		resourceName := p.FlavorAliases.LimesResourceNameForFlavor(flavor.Flavor.Name)
+		resourceName := p.FlavorAliases.LimesResourceNameForFlavor(flavor.Name)
 		capacities[resourceName] = make(core.PerAZ[core.CapacityData], len(hypervisorsByAZ))
 
 		for az, hypervisors := range hypervisorsByAZ {
@@ -494,7 +495,7 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 			}
 
 			capacities[resourceName][az] = &core.CapacityData{
-				Capacity:      hypervisors.PlacementCountForFlavor(flavor.Flavor.Name),
+				Capacity:      hypervisors.PlacementCountForFlavor(flavor.Name),
 				Subcapacities: builder.Subcapacities,
 			}
 		}
@@ -502,7 +503,7 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 		// if shadowed hypervisors are still carrying instances of this flavor,
 		// increase the capacity accordingly to more accurately represent the
 		// free capacity on the unshadowed hypervisors
-		for az, shadowedCount := range instancesPlacedOnShadowedHypervisors[flavor.Flavor.Name] {
+		for az, shadowedCount := range instancesPlacedOnShadowedHypervisors[flavor.Name] {
 			if capacities[resourceName][az] == nil {
 				capacities[resourceName][az] = &core.CapacityData{
 					Capacity: shadowedCount,

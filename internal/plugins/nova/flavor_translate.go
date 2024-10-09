@@ -25,6 +25,7 @@ import (
 	"strings"
 
 	"github.com/gophercloud/gophercloud/v2"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/sapcc/go-api-declarations/liquid"
 )
 
@@ -140,10 +141,10 @@ func (t FlavorTranslationTable) NovaQuotaNameForLimesResourceName(resourceName l
 // quotas, and returns the flavor names that Nova prefers for each.
 func (t FlavorTranslationTable) ListFlavorsWithSeparateInstanceQuota(ctx context.Context, computeV2 *gophercloud.ServiceClient) ([]string, error) {
 	var flavorNames []string
-	err := FlavorSelection{}.ForeachFlavor(ctx, computeV2, func(f FullFlavor) error {
+	err := FlavorSelection{}.ForeachFlavor(ctx, computeV2, func(f flavors.Flavor) error {
 		if f.ExtraSpecs["quota:separate"] == "true" {
-			flavorNames = append(flavorNames, f.Flavor.Name)
-			t.recordNovaPreferredName(f.Flavor.Name)
+			flavorNames = append(flavorNames, f.Name)
+			t.recordNovaPreferredName(f.Name)
 		}
 		return nil
 	})
