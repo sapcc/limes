@@ -405,6 +405,7 @@ func (d *DataMetricsReporter) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 	bw := bufio.NewWriter(w)
 	printDataMetrics(bw, metricsBySeries, "limes_autogrow_growth_multiplier", `For resources with quota distribution model "autogrow", reports the configured growth multiplier.`)
 	printDataMetrics(bw, metricsBySeries, "limes_autogrow_quota_overcommit_threshold_percent", `For resources with quota distribution model "autogrow", reports the allocation percentage above which quota overcommit is disabled.`)
+	printDataMetrics(bw, metricsBySeries, "limes_available_commitment_duration", `Reports which commitment durations are available for new commitments on a Limes resource.`)
 	printDataMetrics(bw, metricsBySeries, "limes_cluster_capacity", `Reported capacity of a Limes resource for an OpenStack cluster.`)
 	printDataMetrics(bw, metricsBySeries, "limes_cluster_capacity_per_az", "Reported capacity of a Limes resource for an OpenStack cluster in a specific availability zone.")
 	printDataMetrics(bw, metricsBySeries, "limes_cluster_usage_per_az", "Actual usage of a Limes resource for an OpenStack cluster in a specific availability zone.")
@@ -770,6 +771,14 @@ func (d *DataMetricsReporter) collectMetricsBySeries() (map[string][]dataMetric,
 
 				metric = dataMetric{Labels: labels, Value: qdc.Autogrow.AllowQuotaOvercommitUntilAllocatedPercent}
 				result["limes_autogrow_quota_overcommit_threshold_percent"] = append(result["limes_autogrow_quota_overcommit_threshold_percent"], metric)
+			}
+
+			for _, duration := range behavior.CommitmentDurations {
+				labels := fmt.Sprintf(`duration=%q,resource=%q,service=%q,service_name=%q`,
+					duration.String(), apiIdentity.Name, apiIdentity.ServiceType, serviceNameByType[dbServiceType],
+				)
+				metric := dataMetric{Labels: labels, Value: 1.0}
+				result["limes_available_commitment_duration"] = append(result["limes_available_commitment_duration"], metric)
 			}
 		}
 	}
