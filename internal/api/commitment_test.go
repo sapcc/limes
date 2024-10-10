@@ -1413,7 +1413,7 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 		ExpectStatus: http.StatusOK,
 	}.Check(t, s.Handler)
 
-	// Negative: Provided date is invalid
+	// Negative: Provided duration is invalid
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/update-duration",
@@ -1422,7 +1422,7 @@ func Test_UpdateCommitmentDuration(t *testing.T) {
 		ExpectStatus: http.StatusUnprocessableEntity,
 	}.Check(t, s.Handler)
 
-	// Negative: Provided Date < Commitment Duration
+	// Negative: Provided duration < Commitment Duration
 	assert.HTTPRequest{
 		Method:       http.MethodPost,
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/commitments/1/update-duration",
