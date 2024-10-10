@@ -1045,3 +1045,95 @@ func (p *v1Provider) getCommitmentConversionRate(source, target core.ResourceBeh
 	toAmount = source.CommitmentConversion.Weight / divisor
 	return fromAmount, toAmount
 }
+
+// ExtendCommitmentDuration handles POST /v1/domains/{domain_id}/projects/{project_id}/commitments/{commitment_id}/update-duration
+func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Request) {
+	httpapi.IdentifyEndpoint(r, "/v1/domains/:domain_id/projects/:project_id/commitments/:commitment_id/update-duration")
+	token := p.CheckToken(r)
+	if !token.Require(w, "project:edit") {
+		return
+	}
+	commitmentID := mux.Vars(r)["commitment_id"]
+	if commitmentID == "" {
+		http.Error(w, "no transfer token provided", http.StatusBadRequest)
+		return
+	}
+	dbDomain := p.FindDomainFromRequest(w, r)
+	if dbDomain == nil {
+		return
+	}
+	dbProject := p.FindProjectFromRequest(w, r, dbDomain)
+	if dbProject == nil {
+		return
+	}
+	var Request struct {
+		Duration limesresources.CommitmentDuration `json:"duration"`
+	}
+	req := Request
+	if !RequireJSON(w, r, &req) {
+		return
+	}
+
+	var dbCommitment db.ProjectCommitment
+	err := p.DB.SelectOne(&dbCommitment, findProjectCommitmentByIDQuery, commitmentID, dbProject.ID)
+	if errors.Is(err, sql.ErrNoRows) {
+		http.Error(w, "no such commitment", http.StatusNotFound)
+		return
+	} else if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	now := p.timeNow()
+	if dbCommitment.ExpiresAt.Before(now) || dbCommitment.ExpiresAt.Equal(now) {
+		http.Error(w, "unable to process expired commitment", http.StatusForbidden)
+		return
+	}
+
+	if dbCommitment.State == db.CommitmentStateSuperseded {
+		msg := fmt.Sprintf("unable to operate on commitment with a state of %s", dbCommitment.State)
+		http.Error(w, msg, http.StatusForbidden)
+		return
+	}
+
+	var loc datamodel.AZResourceLocation
+	err = p.DB.QueryRow(findProjectAZResourceLocationByIDQuery, dbCommitment.AZResourceID).
+		Scan(&loc.ServiceType, &loc.ResourceName, &loc.AvailabilityZone)
+	if errors.Is(err, sql.ErrNoRows) {
+		// defense in depth: this should not happen because all the relevant tables are connected by FK constraints
+		http.Error(w, "no route to this commitment", http.StatusNotFound)
+		return
+	} else if respondwith.ErrorText(w, err) {
+		return
+	}
+	behavior := p.Cluster.BehaviorForResource(loc.ServiceType, loc.ResourceName)
+	if !slices.Contains(behavior.CommitmentDurations, req.Duration) {
+		msg := fmt.Sprintf("provided duration: %s does not match the config %v", req.Duration, behavior.CommitmentDurations)
+		http.Error(w, msg, http.StatusUnprocessableEntity)
+		return
+	}
+
+	newExpiresAt := req.Duration.AddTo(unwrapOrDefault(dbCommitment.ConfirmBy, dbCommitment.CreatedAt))
+	if newExpiresAt.Before(dbCommitment.ExpiresAt) {
+		msg := fmt.Sprintf("duration change from %s to %s forbidden", dbCommitment.Duration, req.Duration)
+		http.Error(w, msg, http.StatusForbidden)
+		return
+	}
+
+	dbCommitment.Duration = req.Duration
+	dbCommitment.ExpiresAt = newExpiresAt
+	_, err = p.DB.Update(&dbCommitment)
+	if respondwith.ErrorText(w, err) {
+		return
+	}
+
+	c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token)
+	logAndPublishEvent(p.timeNow(), r, token, http.StatusAccepted, commitmentEventTarget{
+		DomainID:    dbDomain.UUID,
+		DomainName:  dbDomain.Name,
+		ProjectID:   dbProject.UUID,
+		ProjectName: dbProject.Name,
+		Commitments: []limesresources.Commitment{c},
+	})
+
+	respondwith.JSON(w, http.StatusOK, map[string]any{"commitment": c})
+}

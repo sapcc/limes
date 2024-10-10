@@ -628,6 +628,18 @@ Returns 202 (Accepted) on success, and and returns the converted commitment as a
 
 In this example, a commitment for 1 unit of the original resource can be converted into a commitment for 2 units of the target resource.
 
+### POST "/v1/domains/:domain_id/projects/:project_id/commitments/:commitment_id/update-duration"
+
+Change the duration of a commitment to a supported alternative.
+Requires a request body like:
+```json
+{
+	"duration": "3 years"
+}
+```
+
+Returns 200 (OK) on Success, and returns the updated commitment as a JSON document.
+
 ### DELETE /v1/domains/:domain\_id/projects/:project\_id/commitments/:id
 
 Deletes a commitment within the given project. Requires a cloud-admin token. On success, returns 204 (No Content).
