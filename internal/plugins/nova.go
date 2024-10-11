@@ -83,7 +83,7 @@ func (p *novaPlugin) Init(ctx context.Context, provider *gophercloud.ProviderCli
 	if err != nil {
 		return err
 	}
-	p.NovaV2.Microversion = "2.60" // to list server groups across projects and get all required server attributes
+	p.NovaV2.Microversion = "2.61" // to include extra specs in flavors.ListDetail()
 	cinderV3, err := openstack.NewBlockStorageV3(provider, eo)
 	if err != nil {
 		return err
