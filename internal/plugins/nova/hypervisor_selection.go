@@ -258,7 +258,7 @@ func (h MatchingHypervisor) PartialCapacity() PartialCapacity {
 // In our clusters, that type breaks because some hypervisors report unexpected
 // NULL values on fields that we are not even interested in.
 type Hypervisor struct {
-	ID                 int    `json:"id"`
+	ID                 string `json:"id"`
 	HypervisorHostname string `json:"hypervisor_hostname"`
 	HypervisorType     string `json:"hypervisor_type"`
 	// LocalGB            uint64              `json:"local_gb"`
