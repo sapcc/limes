@@ -75,7 +75,7 @@ func (c *projectLocalQuotaConstraints) AddMinQuota(value *uint64) {
 	if c.MinQuota == nil {
 		c.MinQuota = value
 	} else {
-		*c.MinQuota = min(*c.MinQuota, *value)
+		*c.MinQuota = max(*c.MinQuota, *value)
 	}
 }
 
@@ -86,7 +86,7 @@ func (c *projectLocalQuotaConstraints) AddMaxQuota(value *uint64) {
 	if c.MaxQuota == nil {
 		c.MaxQuota = value
 	} else {
-		*c.MaxQuota = max(*c.MaxQuota, *value)
+		*c.MaxQuota = min(*c.MaxQuota, *value)
 	}
 }
 
