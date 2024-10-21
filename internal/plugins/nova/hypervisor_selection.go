@@ -55,14 +55,14 @@ type HypervisorSelection struct {
 // HypervisorSelection, and calls the given callback once for each of them.
 func (s HypervisorSelection) ForeachHypervisor(ctx context.Context, novaV2, placementV1 *gophercloud.ServiceClient, action func(MatchingHypervisor) error) error {
 	// enumerate hypervisors
-	page, err := hypervisors.List(novaV2, nil).AllPages(ctx)
+	page, err := hypervisorsList(novaV2, nil).AllPages(ctx)
 	if err != nil {
 		return fmt.Errorf("while listing hypervisors: %w", err)
 	}
 	var hypervisorData struct {
 		Hypervisors []Hypervisor `json:"hypervisors"`
 	}
-	err = page.(hypervisors.HypervisorPage).ExtractInto(&hypervisorData)
+	err = page.(hypervisorPage).ExtractInto(&hypervisorData)
 	if err != nil {
 		return fmt.Errorf("while listing hypervisors: %w", err)
 	}
