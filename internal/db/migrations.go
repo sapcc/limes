@@ -20,16 +20,14 @@
 package db
 
 var sqlMigrations = map[string]string{
-	//NOTE: Migrations 1 through 36 have been rolled up into one at 2023-02-26
+	//NOTE: Migrations 1 through 44 have been rolled up into one at 2024-10-21
 	// to better represent the current baseline of the DB schema.
-	"036_rollup.down.sql": `
+	"044_rollup.down.sql": `
 		DROP TABLE cluster_capacitors;
 		DROP TABLE cluster_services;
 		DROP TABLE cluster_resources;
 		DROP TABLE cluster_az_resources;
 		DROP TABLE domains;
-		DROP TABLE domain_services;
-		DROP TABLE domain_resources;
 		DROP TABLE projects;
 		DROP INDEX project_services_stale_idx;
 		DROP TABLE project_services;
@@ -38,7 +36,7 @@ var sqlMigrations = map[string]string{
 		DROP TABLE project_commitments;
 		DROP TABLE project_rates;
 	`,
-	"036_rollup.up.sql": `
+	"044_rollup.up.sql": `
 		---------- cluster level
 
 		CREATE TABLE cluster_capacitors (
@@ -82,21 +80,6 @@ var sqlMigrations = map[string]string{
 			uuid  TEXT       NOT NULL UNIQUE
 		);
 
-		CREATE TABLE domain_services (
-			id         BIGSERIAL  NOT NULL PRIMARY KEY,
-			domain_id  BIGINT     NOT NULL REFERENCES domains ON DELETE CASCADE,
-			type       TEXT       NOT NULL,
-			UNIQUE (domain_id, type)
-		);
-
-		CREATE TABLE domain_resources (
-			id          BIGSERIAL  NOT NULL PRIMARY KEY,
-			service_id  BIGINT     NOT NULL REFERENCES domain_services ON DELETE CASCADE,
-			name        TEXT       NOT NULL,
-			quota       BIGINT     NOT NULL,
-			UNIQUE (service_id, name)
-		);
-
 		---------- project level
 
 		CREATE TABLE projects (
@@ -104,8 +87,7 @@ var sqlMigrations = map[string]string{
 			domain_id     BIGINT     NOT NULL REFERENCES domains ON DELETE CASCADE,
 			name          TEXT       NOT NULL,
 			uuid          TEXT       NOT NULL UNIQUE,
-			parent_uuid   TEXT       NOT NULL DEFAULT '',
-			has_bursting  BOOLEAN    NOT NULL DEFAULT TRUE
+			parent_uuid   TEXT       NOT NULL DEFAULT ''
 		);
 
 		CREATE TABLE project_services (
@@ -126,17 +108,22 @@ var sqlMigrations = map[string]string{
 			rates_scrape_error_message  TEXT       NOT NULL DEFAULT '',
 			next_scrape_at              TIMESTAMP  NOT NULL DEFAULT NOW(),
 			rates_next_scrape_at        TIMESTAMP  NOT NULL DEFAULT NOW(),
+			quota_desynced_at           TIMESTAMP  DEFAULT NULL,
+			quota_sync_duration_secs    REAL       NOT NULL DEFAULT 0,
 			UNIQUE (project_id, type)
 		);
 		CREATE INDEX project_services_stale_idx ON project_services (stale);
 
 		CREATE TABLE project_resources (
-			id                     BIGSERIAL  NOT NULL PRIMARY KEY,
-			service_id             BIGINT     NOT NULL REFERENCES project_services ON DELETE CASCADE,
-			name                   TEXT       NOT NULL,
-			quota                  BIGINT     DEFAULT NULL, -- null if resInfo.NoQuota == true
-			backend_quota          BIGINT     DEFAULT NULL,
-			desired_backend_quota  BIGINT     DEFAULT NULL,
+			id                          BIGSERIAL  NOT NULL PRIMARY KEY,
+			service_id                  BIGINT     NOT NULL REFERENCES project_services ON DELETE CASCADE,
+			name                        TEXT       NOT NULL,
+			quota                       BIGINT     DEFAULT NULL, -- null if resInfo.NoQuota == true
+			backend_quota               BIGINT     DEFAULT NULL,
+			min_quota_from_backend      BIGINT     DEFAULT NULL,
+			max_quota_from_backend      BIGINT     DEFAULT NULL,
+			max_quota_from_admin        BIGINT     DEFAULT NULL,
+			override_quota_from_config  BIGINT     DEFAULT NULL,
 			UNIQUE (service_id, name)
 		);
 
@@ -166,8 +153,9 @@ var sqlMigrations = map[string]string{
 			superseded_at      TIMESTAMP  DEFAULT NULL,
 			predecessor_id     BIGINT     DEFAULT NULL REFERENCES project_commitments ON DELETE RESTRICT,
 			transfer_status    TEXT       NOT NULL DEFAULT '',
-			transfer_token     TEXT       NOT NULL DEFAULT '',
-			state              TEXT       NOT NULL
+			transfer_token     TEXT       DEFAULT NULL, -- default is NULL instead of '' to enable the uniqueness constraint below
+			state              TEXT       NOT NULL,
+			UNIQUE (transfer_token)
 		);
 
 		CREATE TABLE project_rates (
@@ -178,100 +166,5 @@ var sqlMigrations = map[string]string{
 			usage_as_bigint  TEXT    NOT NULL,     -- empty = not scraped
 			PRIMARY KEY (service_id, name)
 		);
-	`,
-	"037_service_specific_quota_constraints.down.sql": `
-		ALTER TABLE project_resources
-			DROP COLUMN min_quota,
-			DROP COLUMN max_quota;
-	`,
-	"037_service_specific_quota_constraints.up.sql": `
-		ALTER TABLE project_resources
-			ADD COLUMN min_quota BIGINT DEFAULT NULL,
-			ADD COLUMN max_quota BIGINT DEFAULT NULL;
-	`,
-	"038_multi_source_quota_constraints.down.sql": `
-		ALTER TABLE project_resources
-			RENAME COLUMN min_quota_from_backend TO min_quota;
-		ALTER TABLE project_resources
-			RENAME COLUMN max_quota_from_backend TO max_quota;
-		ALTER TABLE project_resources
-			DROP COLUMN max_quota_from_manual_override,
-			DROP COLUMN override_quota_from_config;
-	`,
-	"038_multi_source_quota_constraints.up.sql": `
-		ALTER TABLE project_resources
-			RENAME COLUMN min_quota TO min_quota_from_backend;
-		ALTER TABLE project_resources
-			RENAME COLUMN max_quota TO max_quota_from_backend;
-		ALTER TABLE project_resources
-			ADD COLUMN max_quota_from_admin BIGINT DEFAULT NULL,
-			ADD COLUMN override_quota_from_config BIGINT DEFAULT NULL;
-	`,
-	"039_remove_bursting.down.sql": `
-		ALTER TABLE projects
-			ADD COLUMN has_bursting BOOLEAN NOT NULL DEFAULT TRUE;
-	`,
-	"039_remove_bursting.up.sql": `
-		ALTER TABLE projects
-			DROP COLUMN has_bursting;
-	`,
-	"040_remove_domain_quota.down.sql": `
-		CREATE TABLE domain_services (
-			id         BIGSERIAL  NOT NULL PRIMARY KEY,
-			domain_id  BIGINT     NOT NULL REFERENCES domains ON DELETE CASCADE,
-			type       TEXT       NOT NULL,
-			UNIQUE (domain_id, type)
-		);
-
-		CREATE TABLE domain_resources (
-			id          BIGSERIAL  NOT NULL PRIMARY KEY,
-			service_id  BIGINT     NOT NULL REFERENCES domain_services ON DELETE CASCADE,
-			name        TEXT       NOT NULL,
-			quota       BIGINT     NOT NULL,
-			UNIQUE (service_id, name)
-		);
-	`,
-	"040_remove_domain_quota.up.sql": `
-		DROP TABLE domain_resources;
-		DROP TABLE domain_services;
-	`,
-	"041_remove_project_resources_desired_backend_quota.down.sql": `
-		ALTER TABLE project_resources
-			ADD COLUMN desired_backend_quota BIGINT DEFAULT NULL;
-		UPDATE project_resources SET desired_backend_quota = quota;
-	`,
-	"041_remove_project_resources_desired_backend_quota.up.sql": `
-		ALTER TABLE project_resources
-			DROP COLUMN desired_backend_quota;
-	`,
-	"042_add_project_services_quota_desynced_at.down.sql": `
-		ALTER TABLE project_services
-			DROP COLUMN quota_desynced_at;
-	`,
-	"042_add_project_services_quota_desynced_at.up.sql": `
-		ALTER TABLE project_services
-			ADD COLUMN quota_desynced_at TIMESTAMP DEFAULT NULL;
-	`,
-	"043_add_project_services_quota_sync_duration_secs.down.sql": `
-		ALTER TABLE project_services
-			DROP COLUMN quota_sync_duration_secs;
-	`,
-	"043_add_project_services_quota_sync_duration_secs.up.sql": `
-		ALTER TABLE project_services
-			ADD COLUMN quota_sync_duration_secs REAL NOT NULL DEFAULT 0;
-	`,
-	"044_add_unique_key_to_transfer_token.down.sql": `
-			ALTER TABLE project_commitments DROP CONSTRAINT project_commitments_transfer_token_key;
-		UPDATE project_commitments SET transfer_token = '' WHERE transfer_token IS NULL;
-		ALTER TABLE project_commitments
-			ALTER COLUMN transfer_token SET DEFAULT '',
-			ALTER COLUMN transfer_token SET NOT NULL;
-	`,
-	"044_add_unique_key_to_transfer_token.up.sql": `
-		ALTER TABLE project_commitments
-			ALTER COLUMN transfer_token DROP NOT NULL,
-			ALTER COLUMN transfer_token SET DEFAULT NULL;
-		UPDATE project_commitments SET transfer_token = NULL WHERE transfer_token = '';
-		ALTER TABLE project_commitments ADD UNIQUE (transfer_token);
 	`,
 }
