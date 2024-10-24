@@ -30,6 +30,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumes"
 	"github.com/gophercloud/gophercloud/v2/pagination"
 	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/logg"
 
 	"github.com/sapcc/limes/internal/liquids"
 )
@@ -53,12 +54,13 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 
 	// NOTE: We always enumerate volume subresources because we need them for the
 	// AZ breakdown, even if we don't end up reporting them.
-	placementForVolumeUUID, err := l.collectVolumeSubresources(ctx, projectUUID, req.AllAZs, resources)
+	var metrics usageMetrics
+	placementForVolumeUUID, err := l.collectVolumeSubresources(ctx, projectUUID, req.AllAZs, resources, &metrics)
 	if err != nil {
 		return liquid.ServiceUsageReport{}, err
 	}
 	if l.WithSnapshotSubresources {
-		err = l.collectSnapshotSubresources(ctx, projectUUID, req.AllAZs, placementForVolumeUUID, resources)
+		err = l.collectSnapshotSubresources(ctx, projectUUID, req.AllAZs, placementForVolumeUUID, resources, &metrics)
 		if err != nil {
 			return liquid.ServiceUsageReport{}, err
 		}
@@ -67,10 +69,25 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 	return liquid.ServiceUsageReport{
 		InfoVersion: serviceInfo.Version,
 		Resources:   resources,
+		Metrics: map[liquid.MetricName][]liquid.Metric{
+			"liquid_cinder_snapshots_with_unknown_volume_type_size": {{
+				Value: float64(metrics.UnknownVolumeType.SnapshotSizeGiB),
+			}},
+			"liquid_cinder_volumes_with_unknown_volume_type_size": {{
+				Value: float64(metrics.UnknownVolumeType.VolumeSizeGiB),
+			}},
+		},
 	}, nil
 }
 
-func (l *Logic) collectVolumeSubresources(ctx context.Context, projectUUID string, allAZs []liquid.AvailabilityZone, resources map[liquid.ResourceName]*liquid.ResourceUsageReport) (placementForVolumeUUID map[string]VolumePlacement, err error) {
+type usageMetrics struct {
+	UnknownVolumeType struct {
+		SnapshotSizeGiB uint64
+		VolumeSizeGiB   uint64
+	}
+}
+
+func (l *Logic) collectVolumeSubresources(ctx context.Context, projectUUID string, allAZs []liquid.AvailabilityZone, resources map[liquid.ResourceName]*liquid.ResourceUsageReport, metrics *usageMetrics) (placementForVolumeUUID map[string]VolumePlacement, err error) {
 	placementForVolumeUUID = make(map[string]VolumePlacement)
 	isKnownVolumeType := make(map[VolumeType]bool)
 	for vt := range l.VolumeTypes.Get() {
@@ -89,17 +106,19 @@ func (l *Logic) collectVolumeSubresources(ctx context.Context, projectUUID strin
 		}
 
 		for _, volume := range vols {
-			vt := VolumeType(volume.VolumeType)
-			if !isKnownVolumeType[vt] {
-				return false, fmt.Errorf("volume %s in project %s has unknown volume type %q", volume.ID, projectUUID, volume.VolumeType)
-			}
-
 			az := liquid.AvailabilityZone(volume.AvailabilityZone)
 			if !slices.Contains(allAZs, az) {
 				az = liquid.AvailabilityZoneUnknown
 			}
-
+			vt := VolumeType(volume.VolumeType)
 			placementForVolumeUUID[volume.ID] = VolumePlacement{vt, az}
+
+			if !isKnownVolumeType[vt] {
+				logg.Info("volume %s in project %s has unknown volume type %q", volume.ID, projectUUID, volume.VolumeType)
+				metrics.UnknownVolumeType.VolumeSizeGiB += liquids.AtLeastZero(volume.Size)
+				continue
+			}
+
 			if az != liquid.AvailabilityZoneUnknown {
 				resources[vt.CapacityResourceName()].AddLocalizedUsage(az, liquids.AtLeastZero(volume.Size))
 				resources[vt.VolumesResourceName()].AddLocalizedUsage(az, 1)
@@ -126,7 +145,7 @@ func (l *Logic) collectVolumeSubresources(ctx context.Context, projectUUID strin
 	return placementForVolumeUUID, err
 }
 
-func (l *Logic) collectSnapshotSubresources(ctx context.Context, projectUUID string, allAZs []liquid.AvailabilityZone, placementForVolumeUUID map[string]VolumePlacement, resources map[liquid.ResourceName]*liquid.ResourceUsageReport) error {
+func (l *Logic) collectSnapshotSubresources(ctx context.Context, projectUUID string, allAZs []liquid.AvailabilityZone, placementForVolumeUUID map[string]VolumePlacement, resources map[liquid.ResourceName]*liquid.ResourceUsageReport, metrics *usageMetrics) error {
 	isKnownVolumeType := make(map[VolumeType]bool)
 	for vt := range l.VolumeTypes.Get() {
 		isKnownVolumeType[vt] = true
@@ -152,10 +171,6 @@ func (l *Logic) collectSnapshotSubresources(ctx context.Context, projectUUID str
 						snapshot.VolumeID, snapshot.ID, projectUUID, err)
 				}
 				vt := VolumeType(volume.VolumeType)
-				if !isKnownVolumeType[vt] {
-					return false, fmt.Errorf("volume %s that owns snapshot %s in project %s has unknown volume type %q",
-						snapshot.VolumeID, snapshot.ID, projectUUID, volume.VolumeType)
-				}
 				az := liquid.AvailabilityZone(volume.AvailabilityZone)
 				if !slices.Contains(allAZs, az) {
 					az = liquid.AvailabilityZoneUnknown
@@ -164,6 +179,13 @@ func (l *Logic) collectSnapshotSubresources(ctx context.Context, projectUUID str
 			}
 
 			vt := placement.VolumeType
+			if !isKnownVolumeType[vt] {
+				logg.Info("volume %s that owns snapshot %s in project %s has unknown volume type %q",
+					snapshot.VolumeID, snapshot.ID, projectUUID, vt)
+				metrics.UnknownVolumeType.SnapshotSizeGiB += liquids.AtLeastZero(snapshot.Size)
+				continue
+			}
+
 			az := placement.AvailabilityZone
 			if az != liquid.AvailabilityZoneUnknown {
 				resources[vt.CapacityResourceName()].AddLocalizedUsage(az, liquids.AtLeastZero(snapshot.Size))

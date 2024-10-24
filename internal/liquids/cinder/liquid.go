@@ -119,6 +119,16 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 	return liquid.ServiceInfo{
 		Version:   time.Now().Unix(),
 		Resources: resources,
+		UsageMetricFamilies: map[liquid.MetricName]liquid.MetricFamilyInfo{
+			"liquid_cinder_snapshots_with_unknown_volume_type_size": {
+				Type: liquid.MetricTypeGauge,
+				Help: "Total size of snapshots that do not have a volume type known to liquid-cinder (and thus Limes), grouped per project.",
+			},
+			"liquid_cinder_volumes_with_unknown_volume_type_size": {
+				Type: liquid.MetricTypeGauge,
+				Help: "Total size of volumes that do not have a volume type known to liquid-cinder (and thus Limes), grouped per project.",
+			},
+		},
 	}, nil
 }
 
