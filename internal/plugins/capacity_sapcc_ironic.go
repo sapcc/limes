@@ -27,7 +27,6 @@ import (
 
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
-	"github.com/gophercloud/gophercloud/v2/openstack/baremetal/v1/nodes"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/aggregates"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
@@ -89,6 +88,7 @@ type ironicNode struct {
 	TargetProvisionState *string `json:"target_provision_state"`
 	InstanceID           *string `json:"instance_uuid"`
 	ResourceClass        *string `json:"resource_class"`
+	Retired              bool    `json:"retired"`
 	Properties           struct {
 		Cores           veryFlexibleUint64 `json:"cpus"`
 		DiskGiB         veryFlexibleUint64 `json:"local_gb"`
@@ -225,14 +225,7 @@ func (p *capacitySapccIronicPlugin) Scrape(ctx context.Context, _ core.CapacityP
 
 		// do not consider nodes that are slated for decommissioning
 		// (no domain quota should be given out for that capacity anymore)
-		var nodeInfo struct {
-			Retired bool `json:"retired"`
-		}
-		err := nodes.Get(ctx, p.IronicV1, node.ID).ExtractInto(&nodeInfo)
-		if err != nil {
-			return nil, nil, err
-		}
-		if nodeInfo.Retired {
+		if node.Retired {
 			logg.Debug("ignoring Ironic node %q (%s) because it is marked for retirement", node.Name, node.ID)
 			metrics.RetiredNodeNames = append(metrics.RetiredNodeNames, node.Name)
 			//NOTE: Ignoring of retired capacity is currently disabled pending clarification with billing/controlling on how to proceed.
