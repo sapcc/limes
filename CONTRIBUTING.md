@@ -12,8 +12,8 @@ This guide describes Limes' code structure and contains everything that you need
 ### Run Limes locally
 
 Before you can run Limes, you need to set up some [configuration
-options](../operators/config.md#configuration-options) via environment variables and
-create a [config file](../operators/config.md#configuration-file) for cluster options.
+options](./docs/operators/config.md#configuration-options) via environment variables and
+create a [config file](./docs/operators/config.md#configuration-file) for cluster options.
 
 #### Configuration Options
 
@@ -31,7 +31,7 @@ export LIMES_DB_USERNAME=$USER # on macOS
 
 #### Configuration File
 
-Refer to the [config guide](../operators/config.md#configuration-file) for instructions
+Refer to the [config guide](./docs/operators/config.md#configuration-file) for instructions
 relating to the configuration file.
 
 If you already have a deployment of Limes, you can quickly get a nearly sufficient configuration file by just
