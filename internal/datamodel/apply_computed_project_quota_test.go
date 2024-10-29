@@ -653,6 +653,70 @@ func TestAllForbiddenWithAZSeparated(t *testing.T) {
 	}, resourceInfo)
 }
 
+func TestMinQuotaConstraintRespectsAZAwareCapacityDistribution(t *testing.T) {
+	// This test is based on real behavior observed in the wild for baremetal
+	// flavors that only exist in specific AZs. When enforcing MinQuota overrides,
+	// quota should preferably be given in those AZs that have capacity.
+	input := map[limes.AvailabilityZone]clusterAZAllocationStats{
+		"az-one": {
+			Capacity: 0,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: {},
+				402: {},
+			},
+		},
+		"az-two": {
+			Capacity: 0,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: {},
+				402: {},
+			},
+		},
+		"az-three": {
+			Capacity: 10, // only AZ with capacity > 0
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: {},
+				402: {},
+			},
+		},
+		"any": {
+			Capacity: 0,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: {},
+				402: {},
+			},
+		},
+	}
+	cfg := core.AutogrowQuotaDistributionConfiguration{
+		GrowthMultiplier: 1,
+		ProjectBaseQuota: 0,
+	}
+	constraints := map[db.ProjectResourceID]projectLocalQuotaConstraints{
+		401: {MinQuota: p2u64(3)},
+		402: {MinQuota: p2u64(5)},
+	}
+
+	expectACPQResult(t, input, cfg, constraints, acpqGlobalTarget{
+		"az-one": {
+			401: {Allocated: 0},
+			402: {Allocated: 0},
+		},
+		"az-two": {
+			401: {Allocated: 0},
+			402: {Allocated: 0},
+		},
+		"az-three": {
+			// this is the only AZ with capacity, so the MinQuota should all be allocated here
+			401: {Allocated: 3},
+			402: {Allocated: 5},
+		},
+		"any": {
+			401: {Allocated: 0},
+			402: {Allocated: 0},
+		},
+	}, liquid.ResourceInfo{Topology: liquid.AZAwareResourceTopology})
+}
+
 // Shortcut to avoid repetition in projectAZAllocationStats literals.
 func constantUsage(usage uint64) projectAZAllocationStats {
 	return projectAZAllocationStats{
