@@ -11,6 +11,7 @@ If the service does not provide LIQUID support itself, you can use one of the li
 - [`cinder`](./cinder.md) for the block storage service Cinder
 - [`cronus`](./cronus.md) for the email service Cronus (SAP Converged Cloud internal only)
 - [`designate`](./designate.md) for the DNS service Designate
+- [`ironic`](./ironic.md) for the baremetal compute service Ironic
 - [`manila`](./manila.md) for the shared file system storage service Manila
 - [`neutron`](./neutron.md) for the networking service Neutron
 - [`octavia`](./octavia.md) for the loadbalancing service Octavia
