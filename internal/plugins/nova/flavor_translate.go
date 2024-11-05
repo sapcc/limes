@@ -139,9 +139,12 @@ func (t FlavorTranslationTable) NovaQuotaNameForLimesResourceName(resourceName l
 
 // ListFlavorsWithSeparateInstanceQuota queries Nova for all separate instance
 // quotas, and returns the flavor names that Nova prefers for each.
-func (t FlavorTranslationTable) ListFlavorsWithSeparateInstanceQuota(ctx context.Context, computeV2 *gophercloud.ServiceClient) ([]string, error) {
+func (t FlavorTranslationTable) ListFlavorsWithSeparateInstanceQuota(ctx context.Context, computeV2 *gophercloud.ServiceClient, ignoreIronicFlavors bool) ([]string, error) {
 	var flavorNames []string
 	err := FlavorSelection{}.ForeachFlavor(ctx, computeV2, func(f flavors.Flavor) error {
+		if ignoreIronicFlavors && f.ExtraSpecs["capabilities:hypervisor_type"] == "ironic" {
+			return nil
+		}
 		if f.ExtraSpecs["quota:separate"] == "true" {
 			flavorNames = append(flavorNames, f.Name)
 			t.recordNovaPreferredName(f.Name)

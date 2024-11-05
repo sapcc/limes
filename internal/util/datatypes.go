@@ -20,29 +20,10 @@
 package util
 
 import (
-	"encoding/json"
 	"time"
 
 	"gopkg.in/yaml.v2"
 )
-
-// Float64OrUnknown extracts a value of type float64 or unknown from a json
-// result is an float64
-type Float64OrUnknown float64
-
-// UnmarshalJSON implements the json.Unmarshaler interface
-func (f *Float64OrUnknown) UnmarshalJSON(buffer []byte) error {
-	if buffer[0] == '"' {
-		*f = 0
-		return nil
-	}
-	var x float64
-	err := json.Unmarshal(buffer, &x)
-	*f = Float64OrUnknown(x)
-	return err
-}
-
-////////////////////////////////////////////////////////////////////////////////
 
 // YamlRawMessage is like json.RawMessage: During yaml.Unmarshal(), it will
 // just collect the provided YAML representation instead of parsing it into a

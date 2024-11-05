@@ -62,6 +62,7 @@ import (
 	"github.com/sapcc/limes/internal/liquids/cinder"
 	"github.com/sapcc/limes/internal/liquids/cronus"
 	"github.com/sapcc/limes/internal/liquids/designate"
+	"github.com/sapcc/limes/internal/liquids/ironic"
 	"github.com/sapcc/limes/internal/liquids/manila"
 	"github.com/sapcc/limes/internal/liquids/neutron"
 	"github.com/sapcc/limes/internal/liquids/octavia"
@@ -112,6 +113,9 @@ func main() {
 			must.Succeed(liquidapi.Run(ctx, &cronus.Logic{}, opts))
 		case "designate":
 			must.Succeed(liquidapi.Run(ctx, &designate.Logic{}, opts))
+		case "ironic":
+			opts.TakesConfiguration = true
+			must.Succeed(liquidapi.Run(ctx, &ironic.Logic{}, opts))
 		case "manila":
 			opts.TakesConfiguration = true
 			must.Succeed(liquidapi.Run(ctx, &manila.Logic{}, opts))
@@ -122,7 +126,7 @@ func main() {
 		case "swift":
 			must.Succeed(liquidapi.Run(ctx, &swift.Logic{}, opts))
 		default:
-			printUsageAndExit(1)
+			logg.Fatal("no liquid implementation available for %q", liquidName)
 		}
 		return
 	}
@@ -184,7 +188,7 @@ func main() {
 var usageMessage = strings.ReplaceAll(strings.TrimSpace(`
 Usage:
 \t%s (collect|serve|serve-data-metrics) <config-file>
-\t%s liquid swift
+\t%s liquid <service-type>
 \t%s test-get-quota <config-file> <project-id> <service-type>
 \t%s test-get-rates <config-file> <project-id> <service-type> [<prev-serialized-state>]
 \t%s test-set-quota <config-file> <project-id> <service-type> <resource-name>=<integer-value>...

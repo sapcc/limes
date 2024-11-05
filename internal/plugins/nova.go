@@ -47,7 +47,8 @@ type novaPlugin struct {
 		FlavorNameSelection nova.FlavorNameSelection    `yaml:"flavor_name_selection"`
 		FlavorAliases       nova.FlavorTranslationTable `yaml:"flavor_aliases"`
 	} `yaml:"separate_instance_quotas"`
-	WithSubresources bool `yaml:"with_subresources"`
+	WithSubresources              bool `yaml:"with_subresources"`
+	LiquidIronicCompatibilityMode bool `yaml:"liquid_ironic_compat_mode"` // NOTE: if true, assume that liquid-ironic is in use and ignore Ironic flavors
 	// computed state
 	resources         map[liquid.ResourceName]liquid.ResourceInfo `yaml:"-"`
 	hasPooledResource map[string]map[liquid.ResourceName]bool     `yaml:"-"`
@@ -129,7 +130,7 @@ func (p *novaPlugin) Init(ctx context.Context, provider *gophercloud.ProviderCli
 	}
 
 	// find per-flavor instance resources
-	flavorNames, err := p.SeparateInstanceQuotas.FlavorAliases.ListFlavorsWithSeparateInstanceQuota(ctx, p.NovaV2)
+	flavorNames, err := p.SeparateInstanceQuotas.FlavorAliases.ListFlavorsWithSeparateInstanceQuota(ctx, p.NovaV2, p.LiquidIronicCompatibilityMode)
 	if err != nil {
 		return err
 	}

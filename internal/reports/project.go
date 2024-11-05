@@ -243,7 +243,8 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 		if azSubresources != nil {
 			translate := behavior.TranslationRuleInV1API.TranslateSubresources
 			if translate != nil {
-				*azSubresources, err = translate(*azSubresources, *az)
+				resInfo := cluster.InfoForResource(dbServiceType, dbResourceName)
+				*azSubresources, err = translate(*azSubresources, *az, dbResourceName, resInfo)
 				if err != nil {
 					return fmt.Errorf("could not apply TranslationRule to subresources in %s/%s/%s of project %d: %w",
 						dbServiceType, dbResourceName, *az, currentProjectID, err)
