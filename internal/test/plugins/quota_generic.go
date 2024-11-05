@@ -30,6 +30,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/must"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
@@ -43,21 +44,16 @@ func init() {
 // mostly reports static data and offers several controls to simulate failed
 // operations.
 type GenericQuotaPlugin struct {
-	ServiceType        db.ServiceType                             `yaml:"-"`
-	StaticRateInfos    map[liquid.RateName]liquid.RateInfo        `yaml:"rate_infos"`
-	StaticResourceData map[liquid.ResourceName]*core.ResourceData `yaml:"-"`
-	OverrideQuota      map[string]map[liquid.ResourceName]uint64  `yaml:"-"` // first key is project UUID
+	ServiceType              db.ServiceType                             `yaml:"-"`
+	StaticRateInfos          map[liquid.RateName]liquid.RateInfo        `yaml:"rate_infos"`
+	StaticResourceData       map[liquid.ResourceName]*core.ResourceData `yaml:"-"`
+	StaticResourceAttributes map[liquid.ResourceName]map[string]any     `yaml:"-"`
+	OverrideQuota            map[string]map[liquid.ResourceName]uint64  `yaml:"-"` // first key is project UUID
 	// behavior flags that can be set by a unit test
 	ScrapeFails   bool                           `yaml:"-"`
 	SetQuotaFails bool                           `yaml:"-"`
 	MinQuota      map[liquid.ResourceName]uint64 `yaml:"-"`
 	MaxQuota      map[liquid.ResourceName]uint64 `yaml:"-"`
-}
-
-var resources = map[liquid.ResourceName]liquid.ResourceInfo{
-	"capacity":         {Unit: limes.UnitBytes, HasQuota: true},
-	"capacity_portion": {Unit: limes.UnitBytes, HasQuota: false}, // NOTE: This used to be `ContainedIn: "capacity"` before we removed support for this relation.
-	"things":           {Unit: limes.UnitNone, HasQuota: true},
 }
 
 // Init implements the core.QuotaPlugin interface.
@@ -98,7 +94,22 @@ func (p *GenericQuotaPlugin) ServiceInfo() core.ServiceInfo {
 
 // Resources implements the core.QuotaPlugin interface.
 func (p *GenericQuotaPlugin) Resources() map[liquid.ResourceName]liquid.ResourceInfo {
-	return resources
+	result := map[liquid.ResourceName]liquid.ResourceInfo{
+		"capacity":         {Unit: limes.UnitBytes, HasQuota: true},
+		"capacity_portion": {Unit: limes.UnitBytes, HasQuota: false}, // NOTE: This used to be `ContainedIn: "capacity"` before we removed support for this relation.
+		"things":           {Unit: limes.UnitNone, HasQuota: true},
+	}
+
+	for resName, resInfo := range result {
+		attrs := p.StaticResourceAttributes[resName]
+		if len(attrs) > 0 {
+			buf := must.Return(json.Marshal(attrs))
+			resInfo.Attributes = json.RawMessage(buf)
+			result[resName] = resInfo
+		}
+	}
+
+	return result
 }
 
 // Rates implements the core.QuotaPlugin interface.

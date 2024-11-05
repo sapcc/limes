@@ -24,11 +24,13 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/must"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/test"
+	"github.com/sapcc/limes/internal/test/plugins"
 )
 
 const (
@@ -83,10 +85,72 @@ func TestTranslateManilaSubcapacities(t *testing.T) {
 		},
 	}
 
-	testSubcapacityTranslation(t, "cinder-manila-capacity", subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat)
+	testSubcapacityTranslation(t, "cinder-manila-capacity", nil, subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat)
 }
 
-func testSubcapacityTranslation(t *testing.T, ruleID string, subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat []assert.JSONObject) {
+func TestTranslateIronicSubcapacities(t *testing.T) {
+	extraSetup := func(s *test.Setup) {
+		// this subcapacity translation depends on ResourceInfo.Attributes on the respective resource
+		plugin := s.Cluster.QuotaPlugins["first"].(*plugins.GenericQuotaPlugin) //nolint:errcheck // it's okay to crash here on type mismatch
+		plugin.StaticResourceAttributes = map[liquid.ResourceName]map[string]any{"capacity": {
+			"cores":    5,
+			"ram_mib":  23,
+			"disk_gib": 42,
+		}}
+	}
+
+	subcapacitiesInLiquidFormat := []assert.JSONObject{
+		{
+			"id":       "c28b2abb-0da6-4b37-81f6-5ae255d53e1f",
+			"name":     "node001",
+			"capacity": 1,
+			"attributes": assert.JSONObject{
+				"provision_state": "AVAILABLE",
+				"serial_number":   "98105291",
+			},
+		},
+		{
+			"id":       "6f8c1838-42db-4d7e-b3c0-98f3bc59fd62",
+			"name":     "node002",
+			"capacity": 1,
+			"attributes": assert.JSONObject{
+				"provision_state":        "DEPLOYING",
+				"target_provision_state": "ACTIVE",
+				"serial_number":          "98105292",
+				"instance_id":            "1bb45c1a-e10f-449a-abf6-1ffc6c93e113",
+			},
+		},
+	}
+
+	subcapacitiesInLegacyFormat := []assert.JSONObject{
+		{
+			"id":                "c28b2abb-0da6-4b37-81f6-5ae255d53e1f",
+			"name":              "node001",
+			"provision_state":   "AVAILABLE",
+			"availability_zone": "az-one",
+			"ram":               assert.JSONObject{"value": 23, "unit": "MiB"},
+			"disk":              assert.JSONObject{"value": 42, "unit": "GiB"},
+			"cores":             5,
+			"serial":            "98105291",
+		},
+		{
+			"id":                     "6f8c1838-42db-4d7e-b3c0-98f3bc59fd62",
+			"name":                   "node002",
+			"provision_state":        "DEPLOYING",
+			"target_provision_state": "ACTIVE",
+			"availability_zone":      "az-one",
+			"ram":                    assert.JSONObject{"value": 23, "unit": "MiB"},
+			"disk":                   assert.JSONObject{"value": 42, "unit": "GiB"},
+			"cores":                  5,
+			"serial":                 "98105292",
+			"instance_id":            "1bb45c1a-e10f-449a-abf6-1ffc6c93e113",
+		},
+	}
+
+	testSubcapacityTranslation(t, "ironic-flavors", extraSetup, subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat)
+}
+
+func testSubcapacityTranslation(t *testing.T, ruleID string, extraSetup func(s *test.Setup), subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat []assert.JSONObject) {
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-small.sql"),
 		test.WithConfig(testSmallConfigYAML),
@@ -96,6 +160,10 @@ func testSubcapacityTranslation(t *testing.T, ruleID string, subcapacitiesInLiqu
 		FullResourceNameRx:     "first/capacity",
 		TranslationRuleInV1API: must.Return(core.NewTranslationRule(ruleID)),
 	}}
+
+	if extraSetup != nil {
+		extraSetup(&s)
+	}
 
 	// this is what liquid-manila (or liquid-cinder) writes into the DB
 	_, err := s.DB.Exec(`UPDATE cluster_az_resources SET subcapacities = $1 WHERE id = 2`,
@@ -183,7 +251,7 @@ func TestTranslateCinderVolumeSubresources(t *testing.T) {
 		},
 	}
 
-	testSubresourceTranslation(t, "cinder-volumes", subresourcesInLiquidFormat, subresourcesInLegacyFormat)
+	testSubresourceTranslation(t, "cinder-volumes", nil, subresourcesInLiquidFormat, subresourcesInLegacyFormat)
 }
 
 func TestTranslateCinderSnapshotSubresources(t *testing.T) {
@@ -209,10 +277,76 @@ func TestTranslateCinderSnapshotSubresources(t *testing.T) {
 		},
 	}
 
-	testSubresourceTranslation(t, "cinder-snapshots", subresourcesInLiquidFormat, subresourcesInLegacyFormat)
+	testSubresourceTranslation(t, "cinder-snapshots", nil, subresourcesInLiquidFormat, subresourcesInLegacyFormat)
 }
 
-func testSubresourceTranslation(t *testing.T, ruleID string, subresourcesInLiquidFormat, subresourcesInLegacyFormat []assert.JSONObject) {
+func TestTranslateIronicSubresources(t *testing.T) {
+	extraSetup := func(s *test.Setup) {
+		// this subcapacity translation depends on ResourceInfo.Attributes on the respective resource
+		plugin := s.Cluster.QuotaPlugins["first"].(*plugins.GenericQuotaPlugin) //nolint:errcheck // it's okay to crash here on type mismatch
+		plugin.StaticResourceAttributes = map[liquid.ResourceName]map[string]any{"capacity": {
+			"cores":    5,
+			"ram_mib":  23,
+			"disk_gib": 42,
+		}}
+	}
+
+	subresourcesInLiquidFormat := []assert.JSONObject{
+		{
+			"id":   "7c84fbdb-9a18-43b4-be3e-d45c267d821b",
+			"name": "minimal-instance",
+			"attributes": assert.JSONObject{
+				"status":  "ACTIVE",
+				"os_type": "rhel9",
+			},
+		},
+		{
+			"id":   "248bbfcc-e2cd-4ccc-9782-f2a8050da612",
+			"name": "maximal-instance",
+			"attributes": assert.JSONObject{
+				"status":   "ACTIVE",
+				"metadata": assert.JSONObject{"foo": "bar"},
+				"tags":     []string{"foobar"},
+				"os_type":  "image-deleted",
+			},
+		},
+	}
+
+	subresourcesInLegacyFormat := []assert.JSONObject{
+		{
+			"id":                "7c84fbdb-9a18-43b4-be3e-d45c267d821b",
+			"name":              "minimal-instance",
+			"status":            "ACTIVE",
+			"metadata":          nil,
+			"tags":              nil,
+			"availability_zone": "az-one",
+			"hypervisor":        "none",
+			"flavor":            "capacity", // this is derived from the resource name, so it looks weird in this test
+			"vcpu":              5,
+			"ram":               assert.JSONObject{"value": 23, "unit": "MiB"},
+			"disk":              assert.JSONObject{"value": 42, "unit": "GiB"},
+			"os_type":           "rhel9",
+		},
+		{
+			"id":                "248bbfcc-e2cd-4ccc-9782-f2a8050da612",
+			"name":              "maximal-instance",
+			"status":            "ACTIVE",
+			"metadata":          assert.JSONObject{"foo": "bar"},
+			"tags":              []string{"foobar"},
+			"availability_zone": "az-one",
+			"hypervisor":        "none",
+			"flavor":            "capacity",
+			"vcpu":              5,
+			"ram":               assert.JSONObject{"value": 23, "unit": "MiB"},
+			"disk":              assert.JSONObject{"value": 42, "unit": "GiB"},
+			"os_type":           "image-deleted",
+		},
+	}
+
+	testSubresourceTranslation(t, "ironic-flavors", extraSetup, subresourcesInLiquidFormat, subresourcesInLegacyFormat)
+}
+
+func testSubresourceTranslation(t *testing.T, ruleID string, extraSetup func(s *test.Setup), subresourcesInLiquidFormat, subresourcesInLegacyFormat []assert.JSONObject) {
 	s := test.NewSetup(t,
 		test.WithDBFixtureFile("fixtures/start-data-small.sql"),
 		test.WithConfig(testSmallConfigYAML),
@@ -222,6 +356,10 @@ func testSubresourceTranslation(t *testing.T, ruleID string, subresourcesInLiqui
 		FullResourceNameRx:     "first/capacity",
 		TranslationRuleInV1API: must.Return(core.NewTranslationRule(ruleID)),
 	}}
+
+	if extraSetup != nil {
+		extraSetup(&s)
+	}
 
 	_, err := s.DB.Exec(`UPDATE project_az_resources SET subresources = $1 WHERE id = 3`,
 		string(must.Return(json.Marshal(subresourcesInLiquidFormat))),
