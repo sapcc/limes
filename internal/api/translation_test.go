@@ -42,19 +42,12 @@ const (
 	`
 )
 
-func TestTranslateManilaSubcapacities(t *testing.T) {
-	s := test.NewSetup(t,
-		test.WithDBFixtureFile("fixtures/start-data-small.sql"),
-		test.WithConfig(testSmallConfigYAML),
-		test.WithAPIHandler(NewV1API),
-	)
-	s.Cluster.Config.ResourceBehaviors = []core.ResourceBehavior{{
-		FullResourceNameRx:     "first/capacity",
-		TranslationRuleInV1API: must.Return(core.NewTranslationRule("cinder-manila-capacity")),
-	}}
+///////////////////////////////////////////////////////////////////////////////////////////
+// subcapacity translation
 
+func TestTranslateManilaSubcapacities(t *testing.T) {
 	// this is what liquid-manila (or liquid-cinder) writes into the DB
-	newFormatSubcapacities := []assert.JSONObject{
+	subcapacitiesInLiquidFormat := []assert.JSONObject{
 		{
 			"name":     "pool1",
 			"capacity": 520,
@@ -71,15 +64,9 @@ func TestTranslateManilaSubcapacities(t *testing.T) {
 			"attributes": assert.JSONObject{},
 		},
 	}
-	_, err := s.DB.Exec(`UPDATE cluster_az_resources SET subcapacities = $1 WHERE id = 2`,
-		string(must.Return(json.Marshal(newFormatSubcapacities))),
-	)
-	if err != nil {
-		t.Fatal(err.Error())
-	}
 
 	// this is what we expect to be reported on the API
-	oldFormatSubcapacities := []assert.JSONObject{
+	subcapacitiesInLegacyFormat := []assert.JSONObject{
 		{
 			"pool_name":        "pool1",
 			"az":               "az-one",
@@ -94,6 +81,28 @@ func TestTranslateManilaSubcapacities(t *testing.T) {
 			"usage_gib":        10,
 			"exclusion_reason": "",
 		},
+	}
+
+	testSubcapacityTranslation(t, "cinder-manila-capacity", subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat)
+}
+
+func testSubcapacityTranslation(t *testing.T, ruleID string, subcapacitiesInLiquidFormat, subcapacitiesInLegacyFormat []assert.JSONObject) {
+	s := test.NewSetup(t,
+		test.WithDBFixtureFile("fixtures/start-data-small.sql"),
+		test.WithConfig(testSmallConfigYAML),
+		test.WithAPIHandler(NewV1API),
+	)
+	s.Cluster.Config.ResourceBehaviors = []core.ResourceBehavior{{
+		FullResourceNameRx:     "first/capacity",
+		TranslationRuleInV1API: must.Return(core.NewTranslationRule(ruleID)),
+	}}
+
+	// this is what liquid-manila (or liquid-cinder) writes into the DB
+	_, err := s.DB.Exec(`UPDATE cluster_az_resources SET subcapacities = $1 WHERE id = 2`,
+		string(must.Return(json.Marshal(subcapacitiesInLiquidFormat))),
+	)
+	if err != nil {
+		t.Fatal(err.Error())
 	}
 
 	assert.HTTPRequest{
@@ -122,17 +131,20 @@ func TestTranslateManilaSubcapacities(t *testing.T) {
 							{"capacity": 0, "name": "az-two"},
 						},
 						"per_az": assert.JSONObject{
-							"az-one": assert.JSONObject{"capacity": 0, "usage": 0, "subcapacities": oldFormatSubcapacities},
+							"az-one": assert.JSONObject{"capacity": 0, "usage": 0, "subcapacities": subcapacitiesInLegacyFormat},
 							"az-two": assert.JSONObject{"capacity": 0, "usage": 0},
 						},
 						"quota_distribution_model": "autogrow",
-						"subcapacities":            oldFormatSubcapacities,
+						"subcapacities":            subcapacitiesInLegacyFormat,
 					}},
 				}},
 			},
 		},
 	}.Check(t, s.Handler)
 }
+
+///////////////////////////////////////////////////////////////////////////////////////////
+// subresource translation
 
 func TestTranslateCinderVolumeSubresources(t *testing.T) {
 	subresourcesInLiquidFormat := []assert.JSONObject{
