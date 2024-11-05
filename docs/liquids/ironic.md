@@ -44,7 +44,7 @@ TODO: `os_type` inference is shared with Nova. When the Nova subresource scrapin
 ### Considerations for cloud operators
 
 This liquid will consider all flavors that have the extra spec `capabilities:hypervisor_type = "ironic"` in Nova.
-You need to make sure that the extra specs on your Ironic flavors are all set up as described above.
+You need to make sure that the extra specs on your Ironic flavors are all set up in this way.
 
 Furthermore, Nova needs to be patched to ignore the usual quotas for instances of Ironic flavors.
 Instead, Nova must accept quotas with the same naming pattern (`instances_$FLAVOR`), and only enforce these quotas when accepting new instances using Ironic flavors, without counting those instances towards the usual quotas.

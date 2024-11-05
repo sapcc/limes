@@ -74,7 +74,7 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 	// virtualized instances and no baremetal usage.
 	if hasUsage {
 		// NOTE 2: This query style still retrieves information on virtualized
-		// instances which is useless to us. It would be more efficient to
+		// instances which are useless to us. It would be more efficient to
 		// `GET /servers?flavor=$ID` for each baremetal flavor with `usage > 0`,
 		// but this filter gets translated into a filter on the flavor's current
 		// instance type ID. If there are instances that were created with an earlier
