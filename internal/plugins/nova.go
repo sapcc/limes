@@ -150,7 +150,7 @@ func (p *novaPlugin) Init(ctx context.Context, provider *gophercloud.ProviderCli
 func getDefaultQuotaClassSet(ctx context.Context, novaV2 *gophercloud.ServiceClient) (map[string]any, error) {
 	url := novaV2.ServiceURL("os-quota-class-sets", "default")
 	var result gophercloud.Result
-	_, err := novaV2.Get(ctx, url, &result.Body, nil) //nolint:bodyclose // already closed by gophercloud
+	_, err := novaV2.Get(ctx, url, &result.Body, nil)
 	if err != nil {
 		return nil, err
 	}

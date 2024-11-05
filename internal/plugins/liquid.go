@@ -31,6 +31,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/liquidapi"
 	"github.com/sapcc/go-bits/logg"
 
 	"github.com/sapcc/limes/internal/core"
@@ -52,7 +53,7 @@ type liquidQuotaPlugin struct {
 
 	// state
 	LiquidServiceInfo liquid.ServiceInfo `yaml:"-"`
-	LiquidClient      *LiquidV1Client    `yaml:"-"`
+	LiquidClient      *liquidapi.Client  `yaml:"-"`
 }
 
 func init() {
@@ -74,7 +75,10 @@ func (p *liquidQuotaPlugin) Init(ctx context.Context, client *gophercloud.Provid
 		p.LiquidServiceType = "liquid-" + string(p.ServiceType)
 	}
 
-	p.LiquidClient, err = NewLiquidV1(client, eo, p.LiquidServiceType, p.EndpointOverride)
+	p.LiquidClient, err = liquidapi.NewClient(client, eo, liquidapi.ClientOpts{
+		ServiceType:      p.LiquidServiceType,
+		EndpointOverride: p.EndpointOverride,
+	})
 	if err != nil {
 		return fmt.Errorf("cannot initialize ServiceClient for liquid-%s: %w", serviceType, err)
 	}

@@ -20,101 +20,13 @@
 package plugins
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"slices"
 
-	"github.com/gophercloud/gophercloud/v2"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/liquid"
 )
-
-type LiquidV1Client struct {
-	gophercloud.ServiceClient
-}
-
-// NewLiquidV1 creates a ServiceClient for interacting with a liquid.
-// Ref: <https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid>
-func NewLiquidV1(client *gophercloud.ProviderClient, endpointOpts gophercloud.EndpointOpts, liquidServiceType, endpointOverride string) (*LiquidV1Client, error) {
-	var (
-		endpoint string
-		err      error
-	)
-	if endpointOverride == "" {
-		endpointOpts.ApplyDefaults(liquidServiceType)
-		endpoint, err = client.EndpointLocator(endpointOpts)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		endpoint = endpointOverride
-	}
-
-	return &LiquidV1Client{
-		ServiceClient: gophercloud.ServiceClient{
-			ProviderClient: client,
-			Endpoint:       endpoint,
-			Type:           liquidServiceType,
-		},
-	}, nil
-}
-
-// GetInfo executes GET /v1/info.
-func (c *LiquidV1Client) GetInfo(ctx context.Context) (result liquid.ServiceInfo, err error) {
-	url := c.ServiceURL("v1", "info")
-	opts := gophercloud.RequestOpts{KeepResponseBody: true}
-	resp, err := c.Get(ctx, url, nil, &opts)
-	if err == nil {
-		err = parseLiquidResponse(resp, &result)
-	}
-	return
-}
-
-// GetCapacityReport executes POST /v1/report-capacity.
-func (c *LiquidV1Client) GetCapacityReport(ctx context.Context, req liquid.ServiceCapacityRequest) (result liquid.ServiceCapacityReport, err error) {
-	url := c.ServiceURL("v1", "report-capacity")
-	opts := gophercloud.RequestOpts{KeepResponseBody: true, OkCodes: []int{http.StatusOK}}
-	resp, err := c.Post(ctx, url, req, nil, &opts)
-	if err == nil {
-		err = parseLiquidResponse(resp, &result)
-	}
-	return
-}
-
-// GetUsageReport executes POST /v1/projects/:uuid/report-usage.
-func (c *LiquidV1Client) GetUsageReport(ctx context.Context, projectUUID string, req liquid.ServiceUsageRequest) (result liquid.ServiceUsageReport, err error) {
-	url := c.ServiceURL("v1", "projects", projectUUID, "report-usage")
-	opts := gophercloud.RequestOpts{KeepResponseBody: true, OkCodes: []int{http.StatusOK}}
-	resp, err := c.Post(ctx, url, req, nil, &opts)
-	if err == nil {
-		err = parseLiquidResponse(resp, &result)
-	}
-	return
-}
-
-// PutQuota executes PUT /v1/projects/:uuid/quota.
-func (c *LiquidV1Client) PutQuota(ctx context.Context, projectUUID string, req liquid.ServiceQuotaRequest) (err error) {
-	url := c.ServiceURL("v1", "projects", projectUUID, "quota")
-	opts := gophercloud.RequestOpts{KeepResponseBody: true, OkCodes: []int{http.StatusNoContent}}
-	_, err = c.Put(ctx, url, req, nil, &opts) //nolint:bodyclose // either the response is 204 and does not have a body, or it's an error and Gophercloud does a ReadAll() internally
-	return
-}
-
-// We do not use the standard response body parsing from Gophercloud
-// because we want to be strict and DisallowUnknownFields().
-func parseLiquidResponse(resp *http.Response, result any) error {
-	defer resp.Body.Close()
-	dec := json.NewDecoder(resp.Body)
-	dec.DisallowUnknownFields()
-	err := dec.Decode(&result)
-	if err != nil {
-		return fmt.Errorf("could not parse response body from %s %s: %w",
-			resp.Request.Method, resp.Request.URL.String(), err)
-	}
-	return nil
-}
 
 // Plugin-internal serialization format for metrics (see Scrape() and CollectMetrics()).
 //

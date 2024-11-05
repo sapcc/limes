@@ -21,6 +21,11 @@
 // API and nothing else. The application will only have to provide a type that
 // implements the Logic interface. Then it can call Run() on an instance of it
 // to parse configuration, connect to OpenStack and run the HTTP server.
+//
+// Ref: <https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid>
+//
+// This package also provides a Gophercloud-based Client for talking to the
+// LIQUID API. Realistically, only Limes and limesctl will need this though. :)
 package liquidapi
 
 import (
