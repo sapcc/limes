@@ -64,7 +64,7 @@ github.com/gophercloud/gophercloud/v2/openstack/sharedfilesystems/v2/services
 github.com/gophercloud/gophercloud/v2/openstack/sharedfilesystems/v2/sharetypes
 github.com/gophercloud/gophercloud/v2/openstack/utils
 github.com/gophercloud/gophercloud/v2/pagination
-# github.com/gophercloud/utils/v2 v2.0.0-20241021065553-b46d0737ee98
+# github.com/gophercloud/utils/v2 v2.0.0-20241107125844-da754bc75cd6
 ## explicit; go 1.22
 github.com/gophercloud/utils/v2/env
 github.com/gophercloud/utils/v2/gnocchi
