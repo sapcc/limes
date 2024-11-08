@@ -310,6 +310,10 @@ func (p *capacitySapccIronicPlugin) Scrape(ctx context.Context, _ core.CapacityP
 	return map[db.ServiceType]map[liquid.ResourceName]core.PerAZ[core.CapacityData]{"compute": resultCompute}, serializedMetrics, err
 }
 
+func (p *capacitySapccIronicPlugin) BuildServiceCapacityRequest(backchannel core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (liquid.ServiceCapacityRequest, error) {
+	return liquid.ServiceCapacityRequest{}, core.ErrNotALiquid
+}
+
 var (
 	ironicUnmatchedNodesGauge = prometheus.NewGauge(prometheus.GaugeOpts{
 		Name: "limes_unmatched_ironic_nodes",

@@ -71,6 +71,10 @@ func (p *capacityManualPlugin) Scrape(ctx context.Context, _ core.CapacityPlugin
 	return result, nil, nil
 }
 
+func (p *capacityManualPlugin) BuildServiceCapacityRequest(backchannel core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (liquid.ServiceCapacityRequest, error) {
+	return liquid.ServiceCapacityRequest{}, core.ErrNotALiquid
+}
+
 // DescribeMetrics implements the core.CapacityPlugin interface.
 func (p *capacityManualPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 	// not used by this plugin

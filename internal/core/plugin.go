@@ -21,6 +21,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"math/big"
 
 	"github.com/gophercloud/gophercloud/v2"
@@ -132,6 +133,11 @@ type QuotaPlugin interface {
 	// The `serializedMetrics` return value is persisted in the Limes DB and
 	// supplied to all subsequent RenderMetrics calls.
 	Scrape(ctx context.Context, project KeystoneProject, allAZs []limes.AvailabilityZone) (result map[liquid.ResourceName]ResourceData, serializedMetrics []byte, err error)
+
+	// BuildServiceUsageRequest generates the request body payload for querying
+	// the LIQUID API endpoint /v1/projects/:uuid/report-usage
+	BuildServiceUsageRequest(project KeystoneProject, allAZs []limes.AvailabilityZone) (liquid.ServiceUsageRequest, error)
+
 	// SetQuota updates the backend service's quotas for the given project in the
 	// given domain to the values specified here. The map is guaranteed to contain
 	// values for all resources defined by Resources().
@@ -233,6 +239,10 @@ type CapacityPlugin interface {
 	// supplied to all subsequent RenderMetrics calls.
 	Scrape(ctx context.Context, backchannel CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (result map[db.ServiceType]map[liquid.ResourceName]PerAZ[CapacityData], serializedMetrics []byte, err error)
 
+	// BuildServiceCapacityRequest generates the request body payload for querying
+	// the LIQUID API endpoint /v1/report-capacity
+	BuildServiceCapacityRequest(backchannel CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (liquid.ServiceCapacityRequest, error)
+
 	// DescribeMetrics is called when Prometheus is scraping metrics from
 	// limes-collect, to provide an opportunity to the plugin to emit its own
 	// metrics.
@@ -271,3 +281,6 @@ var (
 	// CapacityPluginRegistry is a pluggable.Registry for CapacityPlugin implementations.
 	CapacityPluginRegistry pluggable.Registry[CapacityPlugin]
 )
+
+// ErrNotALiquid is a custom eror that is thrown by plugins that do not support the LIQUID API
+var ErrNotALiquid = errors.New("this plugin is not a liquid")

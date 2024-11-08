@@ -134,6 +134,10 @@ func (p *capacityPrometheusPlugin) scrapeOneResource(ctx context.Context, client
 	return result, nil
 }
 
+func (p *capacityPrometheusPlugin) BuildServiceCapacityRequest(backchannel core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (liquid.ServiceCapacityRequest, error) {
+	return liquid.ServiceCapacityRequest{}, core.ErrNotALiquid
+}
+
 // DescribeMetrics implements the core.CapacityPlugin interface.
 func (p *capacityPrometheusPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
 	// not used by this plugin

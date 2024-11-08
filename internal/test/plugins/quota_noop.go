@@ -115,6 +115,10 @@ func (p *NoopQuotaPlugin) Scrape(ctx context.Context, project core.KeystoneProje
 	return result, nil, nil
 }
 
+func (p *NoopQuotaPlugin) BuildServiceUsageRequest(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (liquid.ServiceUsageRequest, error) {
+	return liquid.ServiceUsageRequest{}, core.ErrNotALiquid
+}
+
 // SetQuota implements the core.QuotaPlugin interface.
 func (p *NoopQuotaPlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotas map[liquid.ResourceName]uint64) error {
 	return nil

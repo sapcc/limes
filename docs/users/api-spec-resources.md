@@ -798,3 +798,13 @@ The objects at `scrape_errors[]` may contain the following fields:
 | `service_type` | string | Type name of the service where this resource scrape error was observed. |
 | `checked_at` | integer | UNIX timestamp of the instant when this resource scrape error was observed in the specified project and service. |
 | `message` | string | The exact error message that was observed. |
+
+### GET /admin/liquid/service-capacity-request
+
+Generates the request body payload for querying the LIQUID API endpoint /v1/report-capacity of a specific service.
+Requires the `?service_type` query parameter.
+
+### GET /admin/liquid/service-usage-request
+
+Generates the request body payload for querying the LIQUID API endpoint /v1/projects/:uuid/report-usage of a specific service and project.
+Requires the `?service_type` and `?project_id` query parameters.

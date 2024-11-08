@@ -102,9 +102,9 @@ func (p *liquidQuotaPlugin) Scrape(ctx context.Context, project core.KeystonePro
 		return nil, nil, nil
 	}
 
-	req := liquid.ServiceUsageRequest{AllAZs: allAZs}
-	if p.LiquidServiceInfo.UsageReportNeedsProjectMetadata {
-		req.ProjectMetadata = project.ForLiquid()
+	req, err := p.BuildServiceUsageRequest(project, allAZs)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	resp, err := p.LiquidClient.GetUsageReport(ctx, project.UUID, req)
@@ -148,6 +148,14 @@ func (p *liquidQuotaPlugin) Scrape(ctx context.Context, project core.KeystonePro
 		return nil, nil, fmt.Errorf("while serializing metrics: %w", err)
 	}
 	return result, serializedMetrics, nil
+}
+
+func (p *liquidQuotaPlugin) BuildServiceUsageRequest(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (liquid.ServiceUsageRequest, error) {
+	req := liquid.ServiceUsageRequest{AllAZs: allAZs}
+	if p.LiquidServiceInfo.UsageReportNeedsProjectMetadata {
+		req.ProjectMetadata = project.ForLiquid()
+	}
+	return req, nil
 }
 
 func castSliceToAny[T any](input []T) (output []any) {
