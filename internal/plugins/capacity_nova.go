@@ -518,6 +518,10 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 	return map[db.ServiceType]map[liquid.ResourceName]core.PerAZ[core.CapacityData]{"compute": capacities}, serializedMetrics, err
 }
 
+func (p *capacityNovaPlugin) BuildServiceCapacityRequest(backchannel core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (liquid.ServiceCapacityRequest, error) {
+	return liquid.ServiceCapacityRequest{}, core.ErrNotALiquid
+}
+
 var novaHypervisorWellformedGauge = prometheus.NewGaugeVec(
 	prometheus.GaugeOpts{
 		Name: "limes_nova_hypervisor_is_wellformed",

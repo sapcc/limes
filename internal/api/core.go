@@ -168,6 +168,9 @@ func (p *v1Provider) AddTo(r *mux.Router) {
 	r.Methods("GET").Path("/v1/commitment-conversion/{service_type}/{resource_name}").HandlerFunc(p.GetCommitmentConversions)
 	r.Methods("POST").Path("/v1/domains/{domain_id}/projects/{project_id}/commitments/{commitment_id}/convert").HandlerFunc(p.ConvertCommitment)
 	r.Methods("POST").Path("/v1/domains/{domain_id}/projects/{project_id}/commitments/{commitment_id}/update-duration").HandlerFunc(p.UpdateCommitmentDuration)
+
+	r.Methods("GET").Path("/admin/liquid/service-capacity-request").HandlerFunc(p.GetServiceCapacityRequest)
+	r.Methods("GET").Path("/admin/liquid/service-usage-request").HandlerFunc(p.GetServiceUsageRequest)
 }
 
 // RequireJSON will parse the request body into the given data structure, or

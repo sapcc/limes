@@ -77,22 +77,9 @@ func (p *liquidCapacityPlugin) Init(ctx context.Context, client *gophercloud.Pro
 
 // Scrape implements the core.QuotaPlugin interface.
 func (p *liquidCapacityPlugin) Scrape(ctx context.Context, backchannel core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (result map[db.ServiceType]map[liquid.ResourceName]core.PerAZ[core.CapacityData], serializedMetrics []byte, err error) {
-	req := liquid.ServiceCapacityRequest{
-		AllAZs:           allAZs,
-		DemandByResource: make(map[liquid.ResourceName]liquid.ResourceDemand, len(p.LiquidServiceInfo.Resources)),
-	}
-
-	for resName, resInfo := range p.LiquidServiceInfo.Resources {
-		if !resInfo.HasCapacity {
-			continue
-		}
-		if !resInfo.NeedsResourceDemand {
-			continue
-		}
-		req.DemandByResource[resName], err = backchannel.GetResourceDemand(p.ServiceType, resName)
-		if err != nil {
-			return nil, nil, fmt.Errorf("while getting resource demand for %s/%s: %w", p.ServiceType, resName, err)
-		}
+	req, err := p.BuildServiceCapacityRequest(backchannel, allAZs)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	resp, err := p.LiquidClient.GetCapacityReport(ctx, req)
@@ -133,6 +120,28 @@ func (p *liquidCapacityPlugin) Scrape(ctx context.Context, backchannel core.Capa
 		return nil, nil, fmt.Errorf("while serializing metrics: %w", err)
 	}
 	return result, serializedMetrics, nil
+}
+
+func (p *liquidCapacityPlugin) BuildServiceCapacityRequest(backchannel core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (liquid.ServiceCapacityRequest, error) {
+	req := liquid.ServiceCapacityRequest{
+		AllAZs:           allAZs,
+		DemandByResource: make(map[liquid.ResourceName]liquid.ResourceDemand, len(p.LiquidServiceInfo.Resources)),
+	}
+
+	var err error
+	for resName, resInfo := range p.LiquidServiceInfo.Resources {
+		if !resInfo.HasCapacity {
+			continue
+		}
+		if !resInfo.NeedsResourceDemand {
+			continue
+		}
+		req.DemandByResource[resName], err = backchannel.GetResourceDemand(p.ServiceType, resName)
+		if err != nil {
+			return liquid.ServiceCapacityRequest{}, fmt.Errorf("while getting resource demand for %s/%s: %w", p.ServiceType, resName, err)
+		}
+	}
+	return req, nil
 }
 
 // DescribeMetrics implements the core.QuotaPlugin interface.

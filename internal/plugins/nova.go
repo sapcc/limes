@@ -349,6 +349,10 @@ func (p *novaPlugin) Scrape(ctx context.Context, project core.KeystoneProject, a
 	return result, serializedMetrics, err
 }
 
+func (p *novaPlugin) BuildServiceUsageRequest(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (liquid.ServiceUsageRequest, error) {
+	return liquid.ServiceUsageRequest{}, core.ErrNotALiquid
+}
+
 func (p *novaPlugin) pooledResourceName(hwVersion string, base liquid.ResourceName) liquid.ResourceName {
 	// `base` is one of "cores", "instances" or "ram"
 	if hwVersion == "" {

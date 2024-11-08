@@ -147,6 +147,13 @@ func (p *GenericQuotaPlugin) ScrapeRates(ctx context.Context, project core.Keyst
 	return result, string(serializedStateBytes), nil
 }
 
+func (p *GenericQuotaPlugin) BuildServiceUsageRequest(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (liquid.ServiceUsageRequest, error) {
+	return liquid.ServiceUsageRequest{
+		AllAZs:          []liquid.AvailabilityZone{"az-one", "az-two"},
+		ProjectMetadata: project.ForLiquid(),
+	}, nil
+}
+
 // Scrape implements the core.QuotaPlugin interface.
 func (p *GenericQuotaPlugin) Scrape(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[liquid.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
 	if p.ScrapeFails {

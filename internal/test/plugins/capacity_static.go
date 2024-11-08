@@ -111,6 +111,24 @@ func (p *StaticCapacityPlugin) Scrape(ctx context.Context, _ core.CapacityPlugin
 	return result, serializedMetrics, nil
 }
 
+func (p *StaticCapacityPlugin) BuildServiceCapacityRequest(backchannel core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (liquid.ServiceCapacityRequest, error) {
+	return liquid.ServiceCapacityRequest{
+		AllAZs: []liquid.AvailabilityZone{"az-one", "az-two"},
+		DemandByResource: map[liquid.ResourceName]liquid.ResourceDemand{
+			"capacity": {
+				OvercommitFactor: 1.5,
+				PerAZ: map[liquid.AvailabilityZone]liquid.ResourceDemandInAZ{
+					liquid.AvailabilityZoneAny: {
+						Usage:              10,
+						UnusedCommitments:  0,
+						PendingCommitments: 0,
+					},
+				},
+			},
+		},
+	}, nil
+}
+
 var (
 	unittestCapacitySmallerHalfMetric = prometheus.NewGauge(
 		prometheus.GaugeOpts{Name: "limes_unittest_capacity_smaller_half"},
