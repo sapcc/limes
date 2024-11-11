@@ -123,7 +123,7 @@ func TestServiceUsageRequest(t *testing.T) {
 	s.TokenValidator.Enforcer.AllowView = false
 	assert.HTTPRequest{
 		Method:       "GET",
-		Path:         "/admin/liquid/service-usage-request?service_type=unittest&project_id=1",
+		Path:         "/admin/liquid/service-usage-request?service_type=unittest&project_id=uuid-for-berlin",
 		ExpectStatus: http.StatusForbidden,
 	}.Check(t, s.Handler)
 	s.TokenValidator.Enforcer.AllowView = true
@@ -131,7 +131,7 @@ func TestServiceUsageRequest(t *testing.T) {
 	// expect error when service type is missing
 	assert.HTTPRequest{
 		Method:       "GET",
-		Path:         "/admin/liquid/service-usage-request?project_id=1",
+		Path:         "/admin/liquid/service-usage-request?project_id=uuid-for-berlin",
 		ExpectStatus: http.StatusBadRequest,
 		ExpectBody:   assert.StringData("missing required parameter: service_type\n"),
 	}.Check(t, s.Handler)
@@ -147,7 +147,7 @@ func TestServiceUsageRequest(t *testing.T) {
 	// expect error for invalid service type
 	assert.HTTPRequest{
 		Method:       "GET",
-		Path:         "/admin/liquid/service-usage-request?service_type=invalid_service_type&project_id=1",
+		Path:         "/admin/liquid/service-usage-request?service_type=invalid_service_type&project_id=uuid-for-berlin",
 		ExpectStatus: http.StatusBadRequest,
 		ExpectBody:   assert.StringData("invalid service type\n"),
 	}.Check(t, s.Handler)
@@ -163,7 +163,7 @@ func TestServiceUsageRequest(t *testing.T) {
 	// happy path
 	assert.HTTPRequest{
 		Method:       "GET",
-		Path:         "/admin/liquid/service-usage-request?service_type=unittest&project_id=1",
+		Path:         "/admin/liquid/service-usage-request?service_type=unittest&project_id=uuid-for-berlin",
 		ExpectStatus: 200,
 		ExpectBody: assert.JSONObject{
 			"allAZs": []string{"az-one", "az-two"},

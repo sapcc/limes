@@ -91,7 +91,7 @@ func (p *v1Provider) GetServiceUsageRequest(w http.ResponseWriter, r *http.Reque
 	}
 
 	var dbProject db.Project
-	err := p.DB.SelectOne(&dbProject, `SELECT * FROM projects WHERE id = $1`, projectID)
+	err := p.DB.SelectOne(&dbProject, `SELECT * FROM projects WHERE uuid = $1`, projectID)
 	if errors.Is(err, sql.ErrNoRows) {
 		http.Error(w, "project not found", http.StatusNotFound)
 		return
