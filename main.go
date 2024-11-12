@@ -34,8 +34,6 @@ import (
 
 	"github.com/dlmiddlecote/sqlstats"
 	"github.com/gophercloud/gophercloud/v2"
-	"github.com/gophercloud/gophercloud/v2/openstack"
-	"github.com/gophercloud/utils/v2/openstack/clientconfig"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/cors"
@@ -43,6 +41,7 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/errext"
+	"github.com/sapcc/go-bits/gophercloudext"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/httpapi/pprofapi"
 	"github.com/sapcc/go-bits/httpext"
@@ -143,19 +142,8 @@ func main() {
 	wrap.SetOverrideUserAgent(bininfo.Component(), bininfo.VersionOr("rolling"))
 
 	// connect to OpenStack
-	ao, err := clientconfig.AuthOptions(nil)
-	if err != nil {
-		logg.Fatal("cannot find OpenStack credentials: " + err.Error())
-	}
-	ao.AllowReauth = true
-	provider, err := openstack.AuthenticatedClient(ctx, *ao)
-	if err != nil {
-		logg.Fatal("cannot initialize OpenStack client: " + err.Error())
-	}
-	eo := gophercloud.EndpointOpts{
-		Availability: gophercloud.Availability(os.Getenv("OS_INTERFACE")),
-		Region:       os.Getenv("OS_REGION_NAME"),
-	}
+	provider, eo, err := gophercloudext.NewProviderClient(ctx, nil)
+	must.Succeed(err)
 
 	// load configuration and connect to cluster
 	cluster, errs := core.NewClusterFromYAML(must.Return(os.ReadFile(configPath)))

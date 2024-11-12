@@ -108,7 +108,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 	job := c.ResourceScrapeJob(s.Registry)
 	withLabel := jobloop.WithLabel("service_type", "unittest")
 	syncJob := c.SyncQuotaToBackendJob(s.Registry)
-	plugin := s.Cluster.QuotaPlugins["unittest"].(*plugins.GenericQuotaPlugin) //nolint:errcheck
+	plugin := s.Cluster.QuotaPlugins["unittest"].(*plugins.GenericQuotaPlugin)
 
 	// check that ScanDomains created the domain, project and their services
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
@@ -391,7 +391,7 @@ func Test_ScrapeFailure(t *testing.T) {
 	// Note that this does *not* set quota_desynced_at. We would rather not
 	// write any quotas while we cannot even get correct usage numbers.
 	s.Clock.StepBy(scrapeInterval)
-	plugin := s.Cluster.QuotaPlugins["unittest"].(*plugins.GenericQuotaPlugin) //nolint:errcheck
+	plugin := s.Cluster.QuotaPlugins["unittest"].(*plugins.GenericQuotaPlugin)
 	plugin.ScrapeFails = true
 	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx)
 	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx) // twice because there are two projects

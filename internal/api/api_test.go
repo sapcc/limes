@@ -288,7 +288,7 @@ func Test_ClusterOperations(t *testing.T) {
 
 func Test_DomainOperations(t *testing.T) {
 	s := setupTest(t, "fixtures/start-data.sql")
-	discovery := s.Cluster.DiscoveryPlugin.(*plugins.StaticDiscoveryPlugin) //nolint:errcheck
+	discovery := s.Cluster.DiscoveryPlugin.(*plugins.StaticDiscoveryPlugin)
 
 	// all reports are pulled at the same simulated time, `s.Clock().Now().Unix() == 3600`,
 	// to match the setup of active vs. expired commitments in `fixtures/start-data.sql`
@@ -366,7 +366,7 @@ func Test_DomainOperations(t *testing.T) {
 
 func Test_ProjectOperations(t *testing.T) {
 	s := setupTest(t, "fixtures/start-data.sql")
-	discovery := s.Cluster.DiscoveryPlugin.(*plugins.StaticDiscoveryPlugin) //nolint:errcheck
+	discovery := s.Cluster.DiscoveryPlugin.(*plugins.StaticDiscoveryPlugin)
 
 	// all reports are pulled at the same simulated time, `s.Clock().Now().Unix() == 3600`,
 	// to match the setup of active vs. expired commitments in `fixtures/start-data.sql`

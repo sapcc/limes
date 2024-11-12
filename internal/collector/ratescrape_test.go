@@ -195,7 +195,7 @@ func Test_RateScrapeFailure(t *testing.T) {
 	tr0.AssertEqualToFile("fixtures/scrape0.sql")
 
 	// ScrapeRates should not touch the DB when scraping fails
-	plugin := s.Cluster.QuotaPlugins["unittest"].(*plugins.GenericQuotaPlugin) //nolint:errcheck
+	plugin := s.Cluster.QuotaPlugins["unittest"].(*plugins.GenericQuotaPlugin)
 	plugin.ScrapeFails = true
 	mustFailLikeT(t, job.ProcessOne(s.Ctx, withLabel), expectedErrorRx)
 

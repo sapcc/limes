@@ -228,7 +228,7 @@ func Test_ScanCapacity(t *testing.T) {
 			with_subcapacities: true
 			without_usage: true
 	`
-	subcapacityPlugin := s.AddCapacityPlugin(t, pluginConfig).(*plugins.StaticCapacityPlugin) //nolint:errcheck
+	subcapacityPlugin := s.AddCapacityPlugin(t, pluginConfig).(*plugins.StaticCapacityPlugin)
 	setClusterCapacitorsStale(t, s)
 	s.Clock.StepBy(5 * time.Minute) // to force a capacitor consistency check to run
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
@@ -277,7 +277,7 @@ func Test_ScanCapacity(t *testing.T) {
 			resources: [ unshared2/things ]
 			with_capacity_per_az: true
 	`
-	azCapacityPlugin := s.AddCapacityPlugin(t, pluginConfig).(*plugins.StaticCapacityPlugin) //nolint:errcheck
+	azCapacityPlugin := s.AddCapacityPlugin(t, pluginConfig).(*plugins.StaticCapacityPlugin)
 	setClusterCapacitorsStale(t, s)
 	s.Clock.StepBy(5 * time.Minute) // to force a capacitor consistency check to run
 	mustT(t, jobloop.ProcessMany(job, s.Ctx, len(s.Cluster.CapacityPlugins)))
