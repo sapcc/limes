@@ -26,6 +26,7 @@ import (
 	"maps"
 	"math/big"
 	"regexp"
+	"slices"
 
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
@@ -50,8 +51,9 @@ type novaPlugin struct {
 	WithSubresources              bool `yaml:"with_subresources"`
 	LiquidIronicCompatibilityMode bool `yaml:"liquid_ironic_compat_mode"` // NOTE: if true, assume that liquid-ironic is in use and ignore Ironic flavors
 	// computed state
-	resources         map[liquid.ResourceName]liquid.ResourceInfo `yaml:"-"`
-	hasPooledResource map[string]map[liquid.ResourceName]bool     `yaml:"-"`
+	resources          map[liquid.ResourceName]liquid.ResourceInfo `yaml:"-"`
+	hasPooledResource  map[string]map[liquid.ResourceName]bool     `yaml:"-"`
+	ignoredFlavorNames []string                                    `yaml:"-"`
 	// connections
 	NovaV2            *gophercloud.ServiceClient `yaml:"-"`
 	OSTypeProber      *nova.OSTypeProber         `yaml:"-"`
@@ -130,11 +132,11 @@ func (p *novaPlugin) Init(ctx context.Context, provider *gophercloud.ProviderCli
 	}
 
 	// find per-flavor instance resources
-	flavorNames, err := p.SeparateInstanceQuotas.FlavorAliases.ListFlavorsWithSeparateInstanceQuota(ctx, p.NovaV2, p.LiquidIronicCompatibilityMode)
+	splitFlavorNames, ignoredFlavorNames, err := p.SeparateInstanceQuotas.FlavorAliases.ListFlavorsWithSeparateInstanceQuota(ctx, p.NovaV2, p.LiquidIronicCompatibilityMode)
 	if err != nil {
 		return err
 	}
-	for _, flavorName := range flavorNames {
+	for _, flavorName := range splitFlavorNames {
 		if p.SeparateInstanceQuotas.FlavorNameSelection.MatchFlavorName(flavorName) {
 			resName := p.SeparateInstanceQuotas.FlavorAliases.LimesResourceNameForFlavor(flavorName)
 			p.resources[resName] = liquid.ResourceInfo{
@@ -143,6 +145,7 @@ func (p *novaPlugin) Init(ctx context.Context, provider *gophercloud.ProviderCli
 			}
 		}
 	}
+	p.ignoredFlavorNames = ignoredFlavorNames
 
 	return p.HypervisorTypeRules.Validate()
 }
@@ -259,6 +262,9 @@ func (p *novaPlugin) Scrape(ctx context.Context, project core.KeystoneProject, a
 		},
 	}
 	for flavorName, flavorLimits := range limitsData.Limits.AbsolutePerFlavor {
+		if slices.Contains(p.ignoredFlavorNames, flavorName) {
+			continue
+		}
 		if p.SeparateInstanceQuotas.FlavorNameSelection.MatchFlavorName(flavorName) {
 			result[p.SeparateInstanceQuotas.FlavorAliases.LimesResourceNameForFlavor(flavorName)] = core.ResourceData{
 				Quota:     flavorLimits.MaxTotalInstances,
@@ -297,6 +303,10 @@ func (p *novaPlugin) Scrape(ctx context.Context, project core.KeystoneProject, a
 
 	for _, subres := range allSubresources {
 		az := subres.AZ
+
+		if slices.Contains(p.ignoredFlavorNames, subres.FlavorName) {
+			continue
+		}
 
 		// use separate instance resource if we have a matching "instances_$FLAVOR" resource
 		instanceResourceName := p.SeparateInstanceQuotas.FlavorAliases.LimesResourceNameForFlavor(subres.FlavorName)

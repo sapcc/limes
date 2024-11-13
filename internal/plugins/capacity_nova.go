@@ -111,7 +111,7 @@ func (p *capacityNovaPlugin) PluginTypeID() string {
 func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (result map[db.ServiceType]map[liquid.ResourceName]core.PerAZ[core.CapacityData], serializedMetrics []byte, err error) {
 	// collect info about flavors with separate instance quota
 	// (we are calling these "split flavors" here, as opposed to "pooled flavors" that share a common pool of CPU/instances/RAM capacity)
-	allSplitFlavorNames, err := p.FlavorAliases.ListFlavorsWithSeparateInstanceQuota(ctx, p.NovaV2, true) // true = ignore Ironic flavors
+	allSplitFlavorNames, _, err := p.FlavorAliases.ListFlavorsWithSeparateInstanceQuota(ctx, p.NovaV2, true) // true = ignore Ironic flavors
 	if err != nil {
 		return nil, nil, err
 	}

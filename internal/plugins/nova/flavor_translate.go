@@ -139,17 +139,21 @@ func (t FlavorTranslationTable) NovaQuotaNameForLimesResourceName(resourceName l
 
 // ListFlavorsWithSeparateInstanceQuota queries Nova for all separate instance
 // quotas, and returns the flavor names that Nova prefers for each.
-func (t FlavorTranslationTable) ListFlavorsWithSeparateInstanceQuota(ctx context.Context, computeV2 *gophercloud.ServiceClient, ignoreIronicFlavors bool) ([]string, error) {
-	var flavorNames []string
-	err := FlavorSelection{}.ForeachFlavor(ctx, computeV2, func(f flavors.Flavor) error {
+//
+// By default, the second return value (ignoredFlavorNames) will be empty.
+// If ignoreIronicFlavors is given, it will contain the names of all Ironic flavors,
+// which are then guaranteed to not be in the first list (splitFlavorNames).
+func (t FlavorTranslationTable) ListFlavorsWithSeparateInstanceQuota(ctx context.Context, computeV2 *gophercloud.ServiceClient, ignoreIronicFlavors bool) (splitFlavorNames, ignoredFlavorNames []string, err error) {
+	err = FlavorSelection{}.ForeachFlavor(ctx, computeV2, func(f flavors.Flavor) error {
 		if ignoreIronicFlavors && f.ExtraSpecs["capabilities:hypervisor_type"] == "ironic" {
+			ignoredFlavorNames = append(ignoredFlavorNames, f.Name)
 			return nil
 		}
 		if f.ExtraSpecs["quota:separate"] == "true" {
-			flavorNames = append(flavorNames, f.Name)
+			splitFlavorNames = append(splitFlavorNames, f.Name)
 			t.recordNovaPreferredName(f.Name)
 		}
 		return nil
 	})
-	return flavorNames, err
+	return splitFlavorNames, ignoredFlavorNames, err
 }
