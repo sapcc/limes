@@ -91,7 +91,7 @@ func TestTranslateManilaSubcapacities(t *testing.T) {
 func TestTranslateIronicSubcapacities(t *testing.T) {
 	extraSetup := func(s *test.Setup) {
 		// this subcapacity translation depends on ResourceInfo.Attributes on the respective resource
-		plugin := s.Cluster.QuotaPlugins["first"].(*plugins.GenericQuotaPlugin) //nolint:errcheck // it's okay to crash here on type mismatch
+		plugin := s.Cluster.QuotaPlugins["first"].(*plugins.GenericQuotaPlugin)
 		plugin.StaticResourceAttributes = map[liquid.ResourceName]map[string]any{"capacity": {
 			"cores":    5,
 			"ram_mib":  23,
@@ -283,7 +283,7 @@ func TestTranslateCinderSnapshotSubresources(t *testing.T) {
 func TestTranslateIronicSubresources(t *testing.T) {
 	extraSetup := func(s *test.Setup) {
 		// this subcapacity translation depends on ResourceInfo.Attributes on the respective resource
-		plugin := s.Cluster.QuotaPlugins["first"].(*plugins.GenericQuotaPlugin) //nolint:errcheck // it's okay to crash here on type mismatch
+		plugin := s.Cluster.QuotaPlugins["first"].(*plugins.GenericQuotaPlugin)
 		plugin.StaticResourceAttributes = map[liquid.ResourceName]map[string]any{"capacity": {
 			"cores":    5,
 			"ram_mib":  23,

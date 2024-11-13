@@ -109,7 +109,7 @@ func NewTokenValidator(provider *gophercloud.ProviderClient, eo gophercloud.Endp
 		IdentityV3: identityV3,
 		Cacher:     gopherpolicy.InMemoryCacher(),
 	}
-	err = tv.LoadPolicyFile(osext.GetenvOrDefault("LIMES_API_POLICY_PATH", "/etc/limes/policy.yaml"))
+	err = tv.LoadPolicyFile(osext.GetenvOrDefault("LIMES_API_POLICY_PATH", "/etc/limes/policy.yaml"), nil)
 	return &tv, err
 }
 

@@ -40,11 +40,11 @@ import (
 
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
-	"github.com/gophercloud/utils/v2/openstack/clientconfig"
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sapcc/go-api-declarations/liquid"
 
+	"github.com/sapcc/go-bits/gophercloudext"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/httpext"
@@ -83,6 +83,11 @@ type RunOpts struct {
 	// If set, the file at $LIQUID_CONFIG_PATH will be json.Unmarshal()ed into
 	// the Logic instance to supply configuration to it, before Init() is called.
 	TakesConfiguration bool
+
+	// If set, when the runtime loads its oslo.policy from $LIQUID_POLICY_PATH,
+	// YAML will be supported in addition to JSON. This is an explicit dependency
+	// injection slot to allow the caller to choose their YAML library.
+	YAMLUnmarshal func(in []byte, out any) error
 
 	// How often the runtime will call BuildServiceInfo() to refresh the
 	// ServiceInfo of the liquid. The zero value can be used for liquids with
@@ -150,18 +155,9 @@ func Run(ctx context.Context, logic Logic, opts RunOpts) error {
 	}
 
 	// connect to OpenStack
-	ao, err := clientconfig.AuthOptions(nil)
+	provider, eo, err := gophercloudext.NewProviderClient(ctx, nil)
 	if err != nil {
-		return fmt.Errorf("cannot find OpenStack credentials: %w", err)
-	}
-	ao.AllowReauth = true
-	provider, err := openstack.AuthenticatedClient(ctx, *ao)
-	if err != nil {
-		return fmt.Errorf("cannot initialize OpenStack client: %w", err)
-	}
-	eo := gophercloud.EndpointOpts{
-		Availability: gophercloud.Availability(os.Getenv("OS_INTERFACE")),
-		Region:       os.Getenv("OS_REGION_NAME"),
+		return err
 	}
 
 	// initialize TokenValidator
@@ -177,7 +173,7 @@ func Run(ctx context.Context, logic Logic, opts RunOpts) error {
 	if err != nil {
 		return err
 	}
-	err = tv.LoadPolicyFile(policyPath)
+	err = tv.LoadPolicyFile(policyPath, opts.YAMLUnmarshal)
 	if err != nil {
 		return err
 	}
