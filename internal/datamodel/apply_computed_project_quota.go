@@ -126,9 +126,10 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 			minQuotaFromBackend     *uint64
 			maxQuotaFromBackend     *uint64
 			maxQuotaFromAdmin       *uint64
+			maxQuotaFromProject     *uint64
 			overrideQuotaFromConfig *uint64
 		)
-		err := rows.Scan(&resourceID, &minQuotaFromBackend, &maxQuotaFromBackend, &maxQuotaFromAdmin, &overrideQuotaFromConfig)
+		err := rows.Scan(&resourceID, &minQuotaFromBackend, &maxQuotaFromBackend, &maxQuotaFromAdmin, &maxQuotaFromProject, &overrideQuotaFromConfig)
 		if err != nil {
 			return err
 		}
@@ -137,6 +138,7 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 		c.AddMinQuota(minQuotaFromBackend)
 		c.AddMaxQuota(maxQuotaFromBackend)
 		c.AddMaxQuota(maxQuotaFromAdmin)
+		c.AddMaxQuota(maxQuotaFromProject)
 		c.AddMinQuota(overrideQuotaFromConfig)
 		c.AddMaxQuota(overrideQuotaFromConfig)
 

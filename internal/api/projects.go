@@ -184,7 +184,10 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/max-quota")
 	requestTime := p.timeNow()
 	token := p.CheckToken(r)
-	if !token.Require(w, "project:edit_max_quota") {
+	projectAccess := token.Check("project:edit_max_quota")
+	domainAccess := token.Check("domain:edit_max_quota")
+	if !projectAccess && !domainAccess {
+		http.Error(w, "Forbidden", http.StatusForbidden)
 		return
 	}
 	dbDomain := p.FindDomainFromRequest(w, r)
@@ -280,9 +283,14 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 		_, err := datamodel.ProjectResourceUpdate{
 			UpdateResource: func(res *db.ProjectResource) error {
 				requestedChange := requestedInService[res.Name]
-				if requestedChange != nil {
+				if requestedChange != nil && domainAccess {
 					requestedChange.OldValue = res.MaxQuotaFromAdmin // remember for audit event
 					res.MaxQuotaFromAdmin = requestedChange.NewValue
+					return nil
+				}
+				if requestedChange != nil && projectAccess {
+					requestedChange.OldValue = res.MaxQuotaFromProject
+					res.MaxQuotaFromProject = requestedChange.NewValue
 				}
 				return nil
 			},

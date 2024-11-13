@@ -123,6 +123,7 @@ type ProjectResource struct {
 	MinQuotaFromBackend     *uint64             `db:"min_quota_from_backend"`
 	MaxQuotaFromBackend     *uint64             `db:"max_quota_from_backend"`
 	MaxQuotaFromAdmin       *uint64             `db:"max_quota_from_admin"`
+	MaxQuotaFromProject     *uint64             `db:"max_quota_from_project"`
 	OverrideQuotaFromConfig *uint64             `db:"override_quota_from_config"`
 }
 
