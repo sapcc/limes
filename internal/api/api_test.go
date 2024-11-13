@@ -401,7 +401,7 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-paris.json"),
 	}.Check(t, s.Handler)
 
-	// paris handles local max quota setting
+	// paris returns lowest max_quota setting
 	_, dberr := s.DB.Exec("UPDATE project_resources SET max_quota_from_outside_admin=300, max_quota_from_local_admin=200 where id=17")
 	if dberr != nil {
 		t.Fatal(dberr)
