@@ -41,13 +41,13 @@ import (
 
 var (
 	acpqGetLocalQuotaConstraintsQuery = sqlext.SimplifyWhitespace(`
-		SELECT pr.id, pr.min_quota_from_backend, pr.max_quota_from_backend, pr.max_quota_from_admin, pr.override_quota_from_config
+		SELECT pr.id, pr.min_quota_from_backend, pr.max_quota_from_backend, pr.max_quota_from_outside_admin, pr.max_quota_from_local_admin, pr.override_quota_from_config
 		  FROM project_services ps
 		  JOIN project_resources pr ON pr.service_id = ps.id
 		 WHERE ps.type = $1 AND pr.name = $2 AND (pr.min_quota_from_backend IS NOT NULL
 		                                       OR pr.max_quota_from_backend IS NOT NULL
-		                                       OR pr.max_quota_from_admin IS NOT NULL
-											   OR pr.max_quota_from_project IS NOT NULL
+		                                       OR pr.max_quota_from_outside_admin IS NOT NULL
+											   OR pr.max_quota_from_local_admin IS NOT NULL
 		                                       OR pr.override_quota_from_config IS NOT NULL)
 	`)
 
@@ -123,14 +123,14 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 	constraints := make(map[db.ProjectResourceID]projectLocalQuotaConstraints)
 	err = sqlext.ForeachRow(tx, acpqGetLocalQuotaConstraintsQuery, []any{serviceType, resourceName}, func(rows *sql.Rows) error {
 		var (
-			resourceID              db.ProjectResourceID
-			minQuotaFromBackend     *uint64
-			maxQuotaFromBackend     *uint64
-			maxQuotaFromAdmin       *uint64
-			maxQuotaFromProject     *uint64
-			overrideQuotaFromConfig *uint64
+			resourceID               db.ProjectResourceID
+			minQuotaFromBackend      *uint64
+			maxQuotaFromBackend      *uint64
+			maxQuotaFromOutsideAdmin *uint64
+			maxQuotaFromLocalAdmin   *uint64
+			overrideQuotaFromConfig  *uint64
 		)
-		err := rows.Scan(&resourceID, &minQuotaFromBackend, &maxQuotaFromBackend, &maxQuotaFromAdmin, &maxQuotaFromProject, &overrideQuotaFromConfig)
+		err := rows.Scan(&resourceID, &minQuotaFromBackend, &maxQuotaFromBackend, &maxQuotaFromOutsideAdmin, &maxQuotaFromLocalAdmin, &overrideQuotaFromConfig)
 		if err != nil {
 			return err
 		}
@@ -138,8 +138,8 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 		var c projectLocalQuotaConstraints
 		c.AddMinQuota(minQuotaFromBackend)
 		c.AddMaxQuota(maxQuotaFromBackend)
-		c.AddMaxQuota(maxQuotaFromAdmin)
-		c.AddMaxQuota(maxQuotaFromProject)
+		c.AddMaxQuota(maxQuotaFromOutsideAdmin)
+		c.AddMaxQuota(maxQuotaFromLocalAdmin)
 		c.AddMinQuota(overrideQuotaFromConfig)
 		c.AddMaxQuota(overrideQuotaFromConfig)
 

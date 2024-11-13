@@ -402,7 +402,7 @@ func Test_ProjectOperations(t *testing.T) {
 	}.Check(t, s.Handler)
 
 	// paris handles local max quota setting
-	_, dberr := s.DB.Exec("UPDATE project_resources SET max_quota_from_admin=300, max_quota_from_project=200 where id=17")
+	_, dberr := s.DB.Exec("UPDATE project_resources SET max_quota_from_outside_admin=300, max_quota_from_local_admin=200 where id=17")
 	if dberr != nil {
 		t.Fatal(dberr)
 	}
@@ -895,7 +895,7 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 			ExpectStatus: http.StatusAccepted,
 		}.Check(t, s.Handler)
 		tr.DBChanges().AssertEqualf(`
-			UPDATE project_resources SET max_quota_from_admin = %d WHERE id = 4 AND service_id = 2 AND name = 'things';
+			UPDATE project_resources SET max_quota_from_outside_admin = %d WHERE id = 4 AND service_id = 2 AND name = 'things';
 		`, value)
 	}
 
@@ -910,7 +910,7 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
 	tr.DBChanges().AssertEqualf(`
-		UPDATE project_resources SET max_quota_from_admin = NULL WHERE id = 4 AND service_id = 2 AND name = 'things';
+		UPDATE project_resources SET max_quota_from_outside_admin = NULL WHERE id = 4 AND service_id = 2 AND name = 'things';
 	`)
 
 	// happy case: set value with unit conversion
@@ -921,7 +921,7 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
 	tr.DBChanges().AssertEqualf(`
-		UPDATE project_resources SET max_quota_from_admin = 10240 WHERE id = 5 AND service_id = 2 AND name = 'capacity';
+		UPDATE project_resources SET max_quota_from_outside_admin = 10240 WHERE id = 5 AND service_id = 2 AND name = 'capacity';
 	`)
 
 	// happy case: set max quota with project permissions
@@ -933,7 +933,7 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
 	tr.DBChanges().AssertEqualf(`
-		UPDATE project_resources SET max_quota_from_project = %d WHERE id = 4 AND service_id = 2 AND name = 'things';
+		UPDATE project_resources SET max_quota_from_local_admin = %d WHERE id = 4 AND service_id = 2 AND name = 'things';
 	`, 500)
 	s.TokenValidator.Enforcer.AllowDomain = true
 

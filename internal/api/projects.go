@@ -284,13 +284,13 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 			UpdateResource: func(res *db.ProjectResource) error {
 				requestedChange := requestedInService[res.Name]
 				if requestedChange != nil && domainAccess {
-					requestedChange.OldValue = res.MaxQuotaFromAdmin // remember for audit event
-					res.MaxQuotaFromAdmin = requestedChange.NewValue
+					requestedChange.OldValue = res.MaxQuotaFromOutsideAdmin // remember for audit event
+					res.MaxQuotaFromOutsideAdmin = requestedChange.NewValue
 					return nil
 				}
 				if requestedChange != nil && projectAccess {
-					requestedChange.OldValue = res.MaxQuotaFromProject
-					res.MaxQuotaFromProject = requestedChange.NewValue
+					requestedChange.OldValue = res.MaxQuotaFromLocalAdmin
+					res.MaxQuotaFromLocalAdmin = requestedChange.NewValue
 				}
 				return nil
 			},
