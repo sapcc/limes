@@ -232,7 +232,7 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 						maxQuota := min(*maxQuotaFromAdmin, *maxQuotaFromProject)
 						resReport.MaxQuota = &maxQuota
 					}
-					if backendQuota != nil && (*backendQuota < 0 || uint64(*backendQuota) != *quota) { //nolint:gosec // negative backend quota is explicitly checked
+					if backendQuota != nil && (*backendQuota < 0 || uint64(*backendQuota) != *quota) {
 						resReport.BackendQuota = backendQuota
 					}
 				}
