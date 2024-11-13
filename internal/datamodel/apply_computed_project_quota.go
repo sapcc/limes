@@ -47,6 +47,7 @@ var (
 		 WHERE ps.type = $1 AND pr.name = $2 AND (pr.min_quota_from_backend IS NOT NULL
 		                                       OR pr.max_quota_from_backend IS NOT NULL
 		                                       OR pr.max_quota_from_admin IS NOT NULL
+											   OR pr.max_quota_from_project IS NOT NULL
 		                                       OR pr.override_quota_from_config IS NOT NULL)
 	`)
 

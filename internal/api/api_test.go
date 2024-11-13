@@ -401,6 +401,18 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-paris.json"),
 	}.Check(t, s.Handler)
 
+	// paris handles local max quota setting
+	_, dberr := s.DB.Exec("UPDATE project_resources SET max_quota_from_admin=300, max_quota_from_project=200 where id=17")
+	if dberr != nil {
+		t.Fatal(dberr)
+	}
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/v1/domains/uuid-for-france/projects/uuid-for-paris",
+		ExpectStatus: 200,
+		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-paris.json"),
+	}.Check(t, s.Handler)
+
 	// check GetProjectRates
 	assert.HTTPRequest{
 		Method:       "GET",

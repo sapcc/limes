@@ -53,7 +53,7 @@ var (
 `)
 
 	projectReportResourcesQuery = sqlext.SimplifyWhitespace(`
-	SELECT p.id, ps.type, ps.scraped_at, pr.name, pr.quota, pr.max_quota_from_admin, par.az, par.quota, par.usage, par.physical_usage, par.historical_usage, pr.backend_quota, par.subresources
+	SELECT p.id, ps.type, ps.scraped_at, pr.name, pr.quota, pr.max_quota_from_admin, pr.max_quota_from_project, par.az, par.quota, par.usage, par.physical_usage, par.historical_usage, pr.backend_quota, par.subresources
 	  FROM projects p
 	  JOIN project_services ps ON ps.project_id = p.id {{AND ps.type = $service_type}}
 	  JOIN project_resources pr ON pr.service_id = ps.id {{AND pr.name = $resource_name}}
@@ -128,23 +128,24 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 	)
 	err = sqlext.ForeachRow(dbi, fmt.Sprintf(queryStr, whereStr), append(joinArgs, whereArgs...), func(rows *sql.Rows) error {
 		var (
-			projectID         db.ProjectID
-			dbServiceType     db.ServiceType
-			scrapedAt         *time.Time
-			dbResourceName    liquid.ResourceName
-			quota             *uint64
-			maxQuotaFromAdmin *uint64
-			az                *limes.AvailabilityZone
-			azQuota           *uint64
-			azUsage           *uint64
-			azPhysicalUsage   *uint64
-			azHistoricalUsage *string
-			backendQuota      *int64
-			azSubresources    *string
+			projectID           db.ProjectID
+			dbServiceType       db.ServiceType
+			scrapedAt           *time.Time
+			dbResourceName      liquid.ResourceName
+			quota               *uint64
+			maxQuotaFromAdmin   *uint64
+			maxQuotaFromProject *uint64
+			az                  *limes.AvailabilityZone
+			azQuota             *uint64
+			azUsage             *uint64
+			azPhysicalUsage     *uint64
+			azHistoricalUsage   *string
+			backendQuota        *int64
+			azSubresources      *string
 		)
 		err := rows.Scan(
 			&projectID, &dbServiceType, &scrapedAt, &dbResourceName,
-			&quota, &maxQuotaFromAdmin,
+			&quota, &maxQuotaFromAdmin, &maxQuotaFromProject,
 			&az, &azQuota, &azUsage, &azPhysicalUsage, &azHistoricalUsage, &backendQuota, &azSubresources,
 		)
 		if err != nil {
@@ -221,7 +222,16 @@ func GetProjectResources(cluster *core.Cluster, domain db.Domain, project *db.Pr
 				if quota != nil {
 					resReport.Quota = quota
 					resReport.UsableQuota = quota
-					resReport.MaxQuota = maxQuotaFromAdmin
+					if maxQuotaFromAdmin != nil && maxQuotaFromProject == nil {
+						resReport.MaxQuota = maxQuotaFromAdmin
+					}
+					if maxQuotaFromProject != nil && maxQuotaFromAdmin == nil {
+						resReport.MaxQuota = maxQuotaFromProject
+					}
+					if maxQuotaFromProject != nil && maxQuotaFromAdmin != nil {
+						maxQuota := min(*maxQuotaFromAdmin, *maxQuotaFromProject)
+						resReport.MaxQuota = &maxQuota
+					}
 					if backendQuota != nil && (*backendQuota < 0 || uint64(*backendQuota) != *quota) { //nolint:gosec // negative backend quota is explicitly checked
 						resReport.BackendQuota = backendQuota
 					}
