@@ -71,7 +71,7 @@ func (e *PolicyEnforcer) allowAction(action string) bool {
 		return e.AllowView
 	case "edit":
 		return e.AllowEdit
-	case "edit_max_quota":
+	case "edit_as_outside_admin":
 		return e.AllowEditMaxQuota
 	case "uncommit":
 		return e.AllowUncommit
