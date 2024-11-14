@@ -184,10 +184,10 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 	httpapi.IdentifyEndpoint(r, "/v1/domains/:id/projects/:id/max-quota")
 	requestTime := p.timeNow()
 	token := p.CheckToken(r)
-	projectAccess := token.Check("project:edit_max_quota")
-	domainAccess := token.Check("domain:edit_max_quota")
-	if !projectAccess && !domainAccess {
-		http.Error(w, "Forbidden", http.StatusForbidden)
+	if !token.Require("project:edit") {
+		return
+	}
+	domainAccess := token.Check("project:edit_as_outside_admin")
 		return
 	}
 	dbDomain := p.FindDomainFromRequest(w, r)
