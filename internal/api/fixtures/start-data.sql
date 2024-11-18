@@ -57,7 +57,7 @@ INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUE
 INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (14, 5, 'capacity', 10, 10);
 INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (15, 5, 'capacity_portion', NULL, NULL);
 INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (16, 6, 'things',   10, 10);
-INSERT INTO project_resources (id, service_id, name, quota, backend_quota, max_quota_from_admin) VALUES (17, 6, 'capacity', 10, 10, 200);
+INSERT INTO project_resources (id, service_id, name, quota, backend_quota, max_quota_from_outside_admin) VALUES (17, 6, 'capacity', 10, 10, 200);
 INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (18, 6, 'capacity_portion', NULL, NULL);
 
 -- "capacity" is modeled as AZ-aware, "things" is not

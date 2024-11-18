@@ -401,6 +401,18 @@ func Test_ProjectOperations(t *testing.T) {
 		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-paris.json"),
 	}.Check(t, s.Handler)
 
+	// paris returns lowest max_quota setting
+	_, dberr := s.DB.Exec("UPDATE project_resources SET max_quota_from_outside_admin=300, max_quota_from_local_admin=200 where id=17")
+	if dberr != nil {
+		t.Fatal(dberr)
+	}
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/v1/domains/uuid-for-france/projects/uuid-for-paris",
+		ExpectStatus: 200,
+		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-get-paris.json"),
+	}.Check(t, s.Handler)
+
 	// check GetProjectRates
 	assert.HTTPRequest{
 		Method:       "GET",
@@ -883,7 +895,7 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 			ExpectStatus: http.StatusAccepted,
 		}.Check(t, s.Handler)
 		tr.DBChanges().AssertEqualf(`
-			UPDATE project_resources SET max_quota_from_admin = %d WHERE id = 4 AND service_id = 2 AND name = 'things';
+			UPDATE project_resources SET max_quota_from_outside_admin = %d WHERE id = 4 AND service_id = 2 AND name = 'things';
 		`, value)
 	}
 
@@ -898,7 +910,7 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
 	tr.DBChanges().AssertEqualf(`
-		UPDATE project_resources SET max_quota_from_admin = NULL WHERE id = 4 AND service_id = 2 AND name = 'things';
+		UPDATE project_resources SET max_quota_from_outside_admin = NULL WHERE id = 4 AND service_id = 2 AND name = 'things';
 	`)
 
 	// happy case: set value with unit conversion
@@ -909,11 +921,24 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 		ExpectStatus: http.StatusAccepted,
 	}.Check(t, s.Handler)
 	tr.DBChanges().AssertEqualf(`
-		UPDATE project_resources SET max_quota_from_admin = 10240 WHERE id = 5 AND service_id = 2 AND name = 'capacity';
+		UPDATE project_resources SET max_quota_from_outside_admin = 10240 WHERE id = 5 AND service_id = 2 AND name = 'capacity';
 	`)
 
-	// error case: missing the appropriate edit permission
+	// happy case: set max quota with project permissions
 	s.TokenValidator.Enforcer.AllowEditMaxQuota = false
+	assert.HTTPRequest{
+		Method:       "PUT",
+		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/max-quota",
+		Body:         makeRequest("shared", assert.JSONObject{"name": "things", "max_quota": 500}),
+		ExpectStatus: http.StatusAccepted,
+	}.Check(t, s.Handler)
+	tr.DBChanges().AssertEqualf(`
+		UPDATE project_resources SET max_quota_from_local_admin = %d WHERE id = 4 AND service_id = 2 AND name = 'things';
+	`, 500)
+	s.TokenValidator.Enforcer.AllowEditMaxQuota = true
+
+	// error case: missing the appropriate edit permission
+	s.TokenValidator.Enforcer.AllowEdit = false
 	assert.HTTPRequest{
 		Method:       "PUT",
 		Path:         "/v1/domains/uuid-for-germany/projects/uuid-for-berlin/max-quota",
@@ -921,7 +946,7 @@ func Test_PutMaxQuotaOnProject(t *testing.T) {
 		ExpectStatus: http.StatusForbidden,
 		ExpectBody:   assert.StringData("Forbidden\n"),
 	}.Check(t, s.Handler)
-	s.TokenValidator.Enforcer.AllowEditMaxQuota = true
+	s.TokenValidator.Enforcer.AllowEdit = true
 
 	// error case: invalid service
 	assert.HTTPRequest{
