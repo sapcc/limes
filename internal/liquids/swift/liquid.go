@@ -28,7 +28,6 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack"
 	"github.com/majewsky/schwift/v2"
 	"github.com/majewsky/schwift/v2/gopherschwift"
-	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/logg"
 )
@@ -54,7 +53,8 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 		Version: 1,
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
 			"capacity": {
-				Unit:        limes.UnitBytes,
+				Unit:        liquid.UnitBytes,
+				Topology:    liquid.FlatResourceTopology,
 				HasCapacity: false,
 				HasQuota:    true,
 			},

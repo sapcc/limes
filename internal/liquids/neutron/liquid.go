@@ -27,7 +27,6 @@ import (
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
 	"github.com/gophercloud/gophercloud/v2/openstack/networking/v2/extensions/quotas"
-	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
 
 	"github.com/sapcc/limes/internal/liquids"
@@ -89,7 +88,8 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 		_, exists := data.Quota[neutronName]
 		if exists {
 			resources[resName] = liquid.ResourceInfo{
-				Unit:        limes.UnitNone,
+				Unit:        liquid.UnitNone,
+				Topology:    liquid.FlatResourceTopology,
 				HasCapacity: false,
 				HasQuota:    true,
 			}

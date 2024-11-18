@@ -32,7 +32,6 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/sharedfilesystems/apiversions"
 	"github.com/gophercloud/gophercloud/v2/openstack/sharedfilesystems/v2/sharetypes"
 	"github.com/prometheus/common/model"
-	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/promquery"
 
@@ -153,25 +152,38 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 	l.ShareTypeIDByName.Set(shareTypeIDByName)
 
 	// build ResourceInfo set
+	topology := liquid.FlatResourceTopology
+	if l.AZMetrics != nil {
+		topology = liquid.AZAwareResourceTopology
+	}
 	resInfoForCapacity := liquid.ResourceInfo{
 		Unit:                liquid.UnitGibibytes,
+		Topology:            topology,
 		HasCapacity:         true,
 		HasQuota:            true,
 		NeedsResourceDemand: true,
 	}
 	resInfoForSnapmirrorCapacity := liquid.ResourceInfo{
 		Unit:                liquid.UnitGibibytes,
+		Topology:            topology,
 		HasCapacity:         true,
 		HasQuota:            false,
 		NeedsResourceDemand: true,
 	}
 	resInfoForObjects := liquid.ResourceInfo{
 		Unit:        liquid.UnitNone,
+		Topology:    topology,
 		HasCapacity: true,
 		HasQuota:    true,
 	}
+
 	resources := make(map[liquid.ResourceName]liquid.ResourceInfo, 5*len(l.VirtualShareTypes)+1)
-	resources["share_networks"] = resInfoForObjects
+	resources["share_networks"] = liquid.ResourceInfo{
+		Unit:        liquid.UnitNone,
+		Topology:    liquid.FlatResourceTopology,
+		HasCapacity: true,
+		HasQuota:    true,
+	}
 	for _, vst := range l.VirtualShareTypes {
 		resources[vst.SharesResourceName()] = resInfoForObjects
 		resources[vst.SnapshotsResourceName()] = resInfoForObjects
@@ -210,28 +222,28 @@ const (
 )
 
 type azMetricsKey struct {
-	AvailabilityZone limes.AvailabilityZone
+	AvailabilityZone liquid.AvailabilityZone
 	ProjectUUID      string
 	ShareTypeID      string
 }
 
 func azMetricsKeyer(sample *model.Sample) azMetricsKey {
 	return azMetricsKey{
-		AvailabilityZone: limes.AvailabilityZone(sample.Metric["availability_zone_name"]),
+		AvailabilityZone: liquid.AvailabilityZone(sample.Metric["availability_zone_name"]),
 		ProjectUUID:      string(sample.Metric["project_id"]),
 		ShareTypeID:      string(sample.Metric["share_type_id"]),
 	}
 }
 
 type netappMetricsKey struct {
-	AvailabilityZone limes.AvailabilityZone
+	AvailabilityZone liquid.AvailabilityZone
 	ProjectUUID      string
 	ShareTypeName    RealShareType
 }
 
 func netappMetricsKeyer(sample *model.Sample) netappMetricsKey {
 	return netappMetricsKey{
-		AvailabilityZone: limes.AvailabilityZone(sample.Metric["availability_zone"]),
+		AvailabilityZone: liquid.AvailabilityZone(sample.Metric["availability_zone"]),
 		ProjectUUID:      string(sample.Metric["project_id"]),
 		ShareTypeName:    RealShareType(sample.Metric["share_type"]),
 	}
