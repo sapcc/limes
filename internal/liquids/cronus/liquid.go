@@ -26,7 +26,6 @@ import (
 	"math/big"
 
 	"github.com/gophercloud/gophercloud/v2"
-	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/logg"
 )
@@ -47,10 +46,10 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 	return liquid.ServiceInfo{
 		Version: 1,
 		Rates: map[liquid.RateName]liquid.RateInfo{
-			"attachment_size":   {HasUsage: true, Unit: limes.UnitBytes},
-			"data_transfer_in":  {HasUsage: true, Unit: limes.UnitBytes},
-			"data_transfer_out": {HasUsage: true, Unit: limes.UnitBytes},
-			"recipients":        {HasUsage: true, Unit: limes.UnitNone},
+			"attachment_size":   {HasUsage: true, Unit: liquid.UnitBytes},
+			"data_transfer_in":  {HasUsage: true, Unit: liquid.UnitBytes},
+			"data_transfer_out": {HasUsage: true, Unit: liquid.UnitBytes},
+			"recipients":        {HasUsage: true, Unit: liquid.UnitNone},
 		},
 	}, nil
 }

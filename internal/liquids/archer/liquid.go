@@ -23,7 +23,6 @@ import (
 	"context"
 
 	"github.com/gophercloud/gophercloud/v2"
-	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
 )
 
@@ -44,11 +43,13 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 		Version: 1,
 		Resources: map[liquid.ResourceName]liquid.ResourceInfo{
 			"endpoints": {
-				Unit:     limes.UnitNone,
+				Unit:     liquid.UnitNone,
+				Topology: liquid.FlatResourceTopology,
 				HasQuota: true,
 			},
 			"services": {
-				Unit:     limes.UnitNone,
+				Unit:     liquid.UnitNone,
+				Topology: liquid.FlatResourceTopology,
 				HasQuota: true,
 			},
 		},
