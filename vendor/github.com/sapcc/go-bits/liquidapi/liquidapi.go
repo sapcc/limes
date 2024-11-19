@@ -47,6 +47,7 @@ import (
 	"github.com/sapcc/go-bits/gophercloudext"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpapi"
+	"github.com/sapcc/go-bits/httpapi/pprofapi"
 	"github.com/sapcc/go-bits/httpext"
 	"github.com/sapcc/go-bits/osext"
 	"github.com/sapcc/go-bits/respondwith"
@@ -209,6 +210,7 @@ func Run(ctx context.Context, logic Logic, opts RunOpts) error {
 		rt,
 		httpapi.HealthCheckAPI{SkipRequestLog: true},
 		httpapi.WithGlobalMiddleware(limitRequestsMiddleware(opts.MaxConcurrentRequests)),
+		pprofapi.API{IsAuthorized: pprofapi.IsRequestFromLocalhost},
 	))
 	muxer.Handle("/metrics", promhttp.Handler())
 
