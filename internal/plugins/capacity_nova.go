@@ -44,14 +44,13 @@ import (
 
 type capacityNovaPlugin struct {
 	// configuration
-	HypervisorSelection         nova.HypervisorSelection    `yaml:"hypervisor_selection"`
-	FlavorSelection             nova.FlavorSelection        `yaml:"flavor_selection"`
-	FlavorAliases               nova.FlavorTranslationTable `yaml:"flavor_aliases"`
-	PooledCoresResourceName     liquid.ResourceName         `yaml:"pooled_cores_resource"`
-	PooledInstancesResourceName liquid.ResourceName         `yaml:"pooled_instances_resource"`
-	PooledRAMResourceName       liquid.ResourceName         `yaml:"pooled_ram_resource"`
-	WithSubcapacities           bool                        `yaml:"with_subcapacities"`
-	BinpackBehavior             nova.BinpackBehavior        `yaml:"binpack_behavior"`
+	HypervisorSelection         nova.HypervisorSelection `yaml:"hypervisor_selection"`
+	FlavorSelection             nova.FlavorSelection     `yaml:"flavor_selection"`
+	PooledCoresResourceName     liquid.ResourceName      `yaml:"pooled_cores_resource"`
+	PooledInstancesResourceName liquid.ResourceName      `yaml:"pooled_instances_resource"`
+	PooledRAMResourceName       liquid.ResourceName      `yaml:"pooled_ram_resource"`
+	WithSubcapacities           bool                     `yaml:"with_subcapacities"`
+	BinpackBehavior             nova.BinpackBehavior     `yaml:"binpack_behavior"`
 	// connections
 	NovaV2      *gophercloud.ServiceClient `yaml:"-"`
 	PlacementV1 *gophercloud.ServiceClient `yaml:"-"`
@@ -109,27 +108,22 @@ func (p *capacityNovaPlugin) PluginTypeID() string {
 
 // Scrape implements the core.CapacityPlugin interface.
 func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (result map[db.ServiceType]map[liquid.ResourceName]core.PerAZ[core.CapacityData], serializedMetrics []byte, err error) {
-	// collect info about flavors with separate instance quota
-	// (we are calling these "split flavors" here, as opposed to "pooled flavors" that share a common pool of CPU/instances/RAM capacity)
-	allSplitFlavorNames, _, err := p.FlavorAliases.ListFlavorsWithSeparateInstanceQuota(ctx, p.NovaV2, true) // true = ignore Ironic flavors
-	if err != nil {
-		return nil, nil, err
-	}
-	isSplitFlavorName := make(map[string]bool, len(allSplitFlavorNames))
-	for _, n := range allSplitFlavorNames {
-		isSplitFlavorName[n] = true
-	}
-
 	// enumerate matching flavors, divide into split and pooled flavors;
+	// ("split flavors" are those with separate instance quota, as opposed to
+	// "pooled flavors" that share a common pool of CPU/instances/RAM capacity)
+	//
 	// also, for the pooled instances capacity, we need to know the max root disk size on public pooled flavors
 	var (
 		splitFlavors    []flavors.Flavor
 		maxRootDiskSize = uint64(0)
 	)
 	err = p.FlavorSelection.ForeachFlavor(ctx, p.NovaV2, func(f flavors.Flavor) error {
-		if isSplitFlavorName[f.Name] {
+		switch {
+		case nova.IsIronicFlavor(f):
+			// ignore Ironic flavors
+		case nova.IsSplitFlavor(f):
 			splitFlavors = append(splitFlavors, f)
-		} else if f.IsPublic {
+		case f.IsPublic:
 			// only public flavor contribute to the `maxRootDiskSize` calculation (in
 			// the wild, we have seen non-public legacy flavors with wildly large
 			// disk sizes that would throw off all estimates derived from this number)
@@ -179,7 +173,7 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 
 	demandByFlavorName := make(map[string]liquid.ResourceDemand)
 	for _, f := range splitFlavors {
-		resourceName := p.FlavorAliases.LimesResourceNameForFlavor(f.Name)
+		resourceName := nova.ResourceNameForFlavor(f.Name)
 		demand, err := backchannel.GetResourceDemand("compute", resourceName)
 		if err != nil {
 			return nil, nil, fmt.Errorf("while collecting resource demand for compute/%s: %w", resourceName, err)
@@ -481,7 +475,7 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 		return strings.Compare(lhs.Name, rhs.Name)
 	})
 	for idx, flavor := range splitFlavors {
-		resourceName := p.FlavorAliases.LimesResourceNameForFlavor(flavor.Name)
+		resourceName := nova.ResourceNameForFlavor(flavor.Name)
 		capacities[resourceName] = make(core.PerAZ[core.CapacityData], len(hypervisorsByAZ))
 
 		for az, hypervisors := range hypervisorsByAZ {

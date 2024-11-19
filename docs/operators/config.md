@@ -381,29 +381,7 @@ The `os_type` field contains:
 - for VMware images: the value of the `vmware_ostype` property of the instance's image, or
 - otherwise: the part after the colon of a tag starting with `ostype:`, e.g. `rhel` if there is a tag `ostype:rhel` on the image.
 
-The value of the `hypervisor` field is determined by looking at the extra specs of the instance's flavor, using matching
-rules supplied in the configuration like this:
-
-```yaml
-services:
-  - type: compute
-    service_type: compute
-    params:
-      hypervisor_type_rules:
-        - match: extra-spec:vmware:hv_enabled # match on extra spec with name "vmware:hv_enabled"
-          pattern: '^True$'                   # regular expression
-          type: vmware
-        - match: flavor-name
-          pattern: '^kvm'
-          type: kvm
-        - match: extra-spec:capabilities:cpu_arch
-          pattern: '.+'
-          type: none # i.e. bare-metal
-```
-
-Rules are evaluated in the order given, and the first matching rule will be taken. If no rule matches, the hypervisor
-will be reported as `unknown`. If rules cannot be evaluated because the instance's flavor has been deleted, the
-hypervisor will be reported as `flavor-deleted`.
+The value of the `hypervisor` field is copied from `params.hypervisor_type` of the service configuration, or otherwise left empty.
 
 #### Separate instance quotas
 
@@ -411,7 +389,7 @@ On SAP Converged Cloud (or any other OpenStack cluster where Nova carries the re
 additional resource `instances_<flavorname>` for each flavor with the `quota:separate = true` extra spec. These resources
 behave like the `instances` resource. When subresources are scraped for the `instances` resource, they will also be
 scraped for these flavor-specific instance resources. The flavor-specific instance resources are in the `per_flavor`
-category.
+category (unless overridden by [resource behavior](#resource-behavior)).
 
 ```yaml
 services:
@@ -419,27 +397,13 @@ services:
     service_type: compute
     params:
       separate_instance_quotas:
-        flavor_name_selection:
-          - name_pattern: ^bm_
-            category: baremetal-flavors
-        flavor_aliases:
-          bm_newflavor1: [ bm_oldflavor1 ]
-          bm_newflavor2: [ bm_oldflavor2, bm_oldflavor3 ]
+        flavor_name_selection: ^bigvm_
 ```
 
 Sometimes Tempest creates resource classes or flavors that Limes recognizes as requiring a separate instance quota,
 which may not be desired. To control which flavors get a separate instance quota, give the
-`params.separate_instance_quotas.flavor_name_selection` option as shown above. Only flavors with a name matching one of
-the `name_pattern` regexes will be considered. If all flavors shall be matched, give an empty `name_pattern`. The
-`category` setting controls which category the respective resources will be grouped into within the `compute` service.
-
-On some Nova installations, some flavors can have multiple names, either as permanent aliases or temporarily while
-moving to a new flavor naming scheme. The `params.separate_instance_quotas.flavor_aliases` option configures Limes to
-recognize flavor names that are aliased to each other, and decides which flavor name Limes prefers. For instance, in the
-config example above, the names `bm_newflavor2`, `bm_oldflavor2` and `bm_oldflavor3` are all aliases referring to the
-same flavor, and Limes prefers the name `bm_newflavor2`. The preferred name will be used when deriving a resource name
-for the respective separate instance quota. In the previous example, the resource will be called
-`instances_bm_newflavor2` since `bm_newflavor2` is the flavor alias that Limes prefers.
+`params.separate_instance_quotas.flavor_name_pattern` option as shown above. Only flavors with a name matching this
+regex will be considered. Omit this option to match all flavors.
 
 #### Hardware-versioned quota
 
@@ -619,7 +583,7 @@ SAP Converged Cloud ([see above](#compute-nova-v2)). Flavors with such a resourc
 they do not count towards the regular `cores`, `instances` and `ram` resources, but only towards their own separate
 instance quota.
 
-Unlike `sapcc-ironic`, this capacitor is used for VM flavors. Usually, the resource provider traits are used to limit
+Unlike `liquid-ironic`, this capacitor is used for VM flavors. Usually, the resource provider traits are used to limit
 the VM flavors to certain hypervisors where no other VMs can be deployed (see below at "Option 3" for what happens if
 there is no such limitation). The `flavor_selection` and `hypervisor_selection` parameters work the same as explained
 above for "Option 1".
@@ -706,43 +670,6 @@ capacitors:
         object-store:
           capacity: min(swift_cluster_storage_capacity_bytes < inf) / 3
 ```
-
-### `sapcc-ironic`
-
-```yaml
-capacitors:
-  - id: sapcc-ironic
-    type: sapcc-ironic
-    params:
-      flavor_name_selection:
-        - name_pattern: ^bm_
-          category: baremetal-flavors
-      flavor_aliases:
-        newflavor1: [ oldflavor1 ]
-        newflavor2: [ oldflavor2, oldflavor3 ]
-      with_subcapacities: true
-```
-
-This capacity plugin reports capacity for the special `compute/instances_<flavorname>` resources that exist on SAP
-Converged Cloud ([see above](#compute-nova-v2)). For each such flavor, it uses the Ironic node's resource class to
-match it to a flavor with the **same name**.
-
-The `params.flavor_name_selection` and `params.flavor_aliases` parameters have the same semantics as the respective
-parameters on the `compute` service type, and should have the same contents as well (except where the name patterns and
-aliases refer to non-baremetal flavors).
-
-When subcapacity scraping is enabled (as shown above), subcapacities will be scraped for all resources reported by
-this plugin. Subcapacities correspond to Ironic nodes and bear the following attributes:
-
-| Attribute | Type | Comment |
-| --- | --- | --- |
-| `id` | string | node UUID |
-| `name` | string | node name |
-| `instance_id` | string | UUID of the Nova instance running on this node (if any) |
-| `ram` | integer value with unit | amount of memory |
-| `cores` | integer | number of CPU cores |
-| `disk` | integer value with unit | root disk size |
-| `serial` | string | hardware serial number for node |
 
 [yaml]:   http://yaml.org/
 [pq-uri]: https://www.postgresql.org/docs/9.6/static/libpq-connect.html#LIBPQ-CONNSTRING
