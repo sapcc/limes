@@ -20,8 +20,12 @@
 package util
 
 import (
+	"encoding/json"
 	"math"
 	"slices"
+
+	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/logg"
 )
 
 // DistributeFairly takes a number of resource requests, as well as a total
@@ -83,4 +87,96 @@ func DistributeFairly[K comparable](total uint64, requested map[K]uint64) map[K]
 		fair[key] += 1
 	}
 	return fair
+}
+
+// DistributeDemandFairly is used to distribute cluster capacity or cluster-wide usage between different resources.
+// Each tier of demand is distributed fairly (while supplies last).
+//
+// Then anything not yet distributed is split according to the given balance numbers.
+// For example, if balance = { "foo": 3, "bar": 1 }, then "foo" gets 3/4 of the remaining capacity, "bar" gets 1/4, and all other resources do not get anything extra.
+func DistributeDemandFairly[K comparable](total uint64, demands map[K]liquid.ResourceDemandInAZ, balance map[K]float64) map[K]uint64 {
+	// setup phase to make each of the paragraphs below as identical as possible (for clarity)
+	requests := make(map[K]uint64)
+	result := make(map[K]uint64)
+	remaining := total
+
+	// tier 1: usage
+	for k, demand := range demands {
+		requests[k] = demand.Usage
+	}
+	grantedAmount := DistributeFairly(remaining, requests)
+	for k := range demands {
+		remaining -= grantedAmount[k]
+		result[k] += grantedAmount[k]
+	}
+	if logg.ShowDebug {
+		resultJSON, err := json.Marshal(result)
+		if err == nil {
+			logg.Debug("DistributeDemandFairly after phase 1: " + string(resultJSON))
+		}
+	}
+
+	// tier 2: unused commitments
+	for k, demand := range demands {
+		requests[k] = demand.UnusedCommitments
+	}
+	grantedAmount = DistributeFairly(remaining, requests)
+	for k := range demands {
+		remaining -= grantedAmount[k]
+		result[k] += grantedAmount[k]
+	}
+	if logg.ShowDebug {
+		resultJSON, err := json.Marshal(result)
+		if err == nil {
+			logg.Debug("DistributeDemandFairly after phase 2: " + string(resultJSON))
+		}
+	}
+
+	// tier 3: pending commitments
+	for k, demand := range demands {
+		requests[k] = demand.PendingCommitments
+	}
+	grantedAmount = DistributeFairly(remaining, requests)
+	for k := range demands {
+		remaining -= grantedAmount[k]
+		result[k] += grantedAmount[k]
+	}
+	if logg.ShowDebug {
+		resultJSON, err := json.Marshal(result)
+		if err == nil {
+			logg.Debug("DistributeDemandFairly after phase 3: " + string(resultJSON))
+		}
+	}
+
+	// final phase: distribute remainder according to the given balance
+	if remaining == 0 {
+		return result
+	}
+	for k := range demands {
+		// This requests incorrect ratios if `remaining` and `balance[k]` are so
+		// large that `balance[k] * remaining` falls outside the range of uint64.
+		//
+		// I'm accepting this since this scenario is very unlikely, and only made
+		// sure that there are no weird overflows, truncations and such.
+		requests[k] = clampFloatToUint64(balance[k] * float64(remaining))
+	}
+	grantedAmount = DistributeFairly(remaining, requests)
+	for k := range demands {
+		remaining -= grantedAmount[k]
+		result[k] += grantedAmount[k]
+	}
+	if logg.ShowDebug {
+		resultJSON, err := json.Marshal(result)
+		if err == nil {
+			logg.Debug("DistributeDemandFairly after balance: " + string(resultJSON))
+		}
+	}
+
+	return result
+}
+
+func clampFloatToUint64(x float64) uint64 {
+	x = max(x, 0)
+	x = min(x, math.MaxUint64)
+	return uint64(x)
 }
