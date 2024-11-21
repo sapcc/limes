@@ -20,6 +20,7 @@
 package cinder
 
 import (
+	"cmp"
 	"context"
 	"strings"
 
@@ -29,6 +30,7 @@ import (
 	"github.com/sapcc/go-bits/logg"
 
 	"github.com/sapcc/limes/internal/liquids"
+	"github.com/sapcc/limes/internal/util"
 )
 
 // ScanCapacity implements the liquidapi.Logic interface.
@@ -56,17 +58,24 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 		}
 	}
 
-	// sort pools by volume type and AZ
-	volumeTypesByBackendName := make(map[string]VolumeType)
-	sortedPools := make(map[VolumeType]map[liquid.AvailabilityZone][]StoragePool)
-	for volumeType, cfg := range l.VolumeTypes.Get() {
-		volumeTypesByBackendName[cfg.VolumeBackendName] = volumeType
-		sortedPools[volumeType] = make(map[liquid.AvailabilityZone][]StoragePool)
+	// sort volume types by VolumeTypeInfo (if multiple volume types have the same VolumeTypeInfo, they need to share the same pools)
+	volumeTypesByInfo := make(map[VolumeTypeInfo][]VolumeType)
+	for volumeType, info := range l.VolumeTypes.Get() {
+		volumeTypesByInfo[info] = append(volumeTypesByInfo[info], volumeType)
+	}
+
+	// sort pools by volume backend name and AZ
+	sortedPools := make(map[VolumeTypeInfo]map[liquid.AvailabilityZone][]StoragePool, len(volumeTypesByInfo))
+	for info := range volumeTypesByInfo {
+		sortedPools[info] = make(map[liquid.AvailabilityZone][]StoragePool)
 	}
 	for _, pool := range pools {
-		volumeType, ok := volumeTypesByBackendName[pool.Capabilities.VolumeBackendName]
-		if !ok {
-			logg.Info("ScanCapacity: skipping pool %q with unknown volume_backend_name %q", pool.Name, pool.Capabilities.VolumeBackendName)
+		info := VolumeTypeInfo{
+			VolumeBackendName: pool.Capabilities.VolumeBackendName,
+		}
+		_, exists := sortedPools[info]
+		if !exists {
+			logg.Info("ScanCapacity: skipping pool %q: no volume type uses pools with %s", pool.Name, info)
 			continue
 		}
 
@@ -81,43 +90,78 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 			}
 		}
 		if poolAZ == liquid.AvailabilityZoneUnknown {
-			logg.Info("ScanCapacity: pool %q does not match any service host", pool.Name)
+			logg.Info("ScanCapacity: pool %q with %s does not match any service host", pool.Name, info)
 		}
-		logg.Debug("ScanCapacity: considering pool %q for volume type %q in AZ %q", pool.Name, volumeType, poolAZ)
+		logg.Debug("ScanCapacity: considering pool %q with %s in AZ %q", pool.Name, info, poolAZ)
 
-		sortedPools[volumeType][poolAZ] = append(sortedPools[volumeType][poolAZ], pool)
+		sortedPools[info][poolAZ] = append(sortedPools[info][poolAZ], pool)
 	}
 
-	// render result
+	// calculate result
 	result := liquid.ServiceCapacityReport{
 		InfoVersion: serviceInfo.Version,
 		Resources:   make(map[liquid.ResourceName]*liquid.ResourceCapacityReport),
 	}
-	for volumeType := range l.VolumeTypes.Get() {
-		poolsForVolumeType := liquids.RestrictToKnownAZs(sortedPools[volumeType], req.AllAZs)
-		result.Resources[volumeType.CapacityResourceName()], err = l.buildResourceCapacityReport(poolsForVolumeType)
+	for info, volumeTypes := range volumeTypesByInfo {
+		relevantPools := liquids.RestrictToKnownAZs(sortedPools[info], req.AllAZs)
+		relevantDemands := make(map[VolumeType]liquid.ResourceDemand)
+		for _, volumeType := range volumeTypes {
+			relevantDemands[volumeType] = req.DemandByResource[volumeType.CapacityResourceName()]
+		}
+
+		reportsByVolumeType, err := l.buildCapacityReportForPoolSet(relevantPools, relevantDemands)
 		if err != nil {
 			return liquid.ServiceCapacityReport{}, err
+		}
+		for volumeType, resReport := range reportsByVolumeType {
+			result.Resources[volumeType.CapacityResourceName()] = resReport
 		}
 	}
 	return result, nil
 }
 
-func (l *Logic) buildResourceCapacityReport(pools map[liquid.AvailabilityZone][]StoragePool) (result *liquid.ResourceCapacityReport, err error) {
-	perAZ := make(map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport, len(pools))
+func (l *Logic) buildCapacityReportForPoolSet(pools map[liquid.AvailabilityZone][]StoragePool, demands map[VolumeType]liquid.ResourceDemand) (map[VolumeType]*liquid.ResourceCapacityReport, error) {
+	// prepare output structure
+	result := make(map[VolumeType]*liquid.ResourceCapacityReport, len(demands))
+	for volumeType := range demands {
+		result[volumeType] = &liquid.ResourceCapacityReport{
+			PerAZ: make(map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport, len(pools)),
+		}
+	}
+
+	// this is used to decide where to report subcapacities (see below)
+	mostCommonVolumeType := argmax(demands, func(demand liquid.ResourceDemand) (result uint64) {
+		for _, d := range demand.PerAZ {
+			result += d.Usage + d.UnusedCommitments + d.PendingCommitments
+		}
+		return result
+	})
+
+	// fill report, one AZ at a time
 	for az, azPools := range pools {
-		perAZ[az], err = l.buildAZResourceCapacityReport(azPools)
+		azRawDemands := make(map[VolumeType]liquid.ResourceDemandInAZ)
+		for volumeType, demand := range demands {
+			azRawDemands[volumeType] = demand.OvercommitFactor.ApplyInReverseToDemand(demand.PerAZ[az])
+		}
+		azReports, err := l.buildAZCapacityReportForPoolSet(azPools, azRawDemands, az, mostCommonVolumeType)
 		if err != nil {
 			return nil, err
 		}
+		for volumeType, azResReport := range azReports {
+			result[volumeType].PerAZ[az] = azResReport
+		}
 	}
-	return &liquid.ResourceCapacityReport{PerAZ: perAZ}, nil
+	return result, nil
 }
 
-func (l *Logic) buildAZResourceCapacityReport(pools []StoragePool) (*liquid.AZResourceCapacityReport, error) {
-	var subcapacities []liquid.Subcapacity
+func (l *Logic) buildAZCapacityReportForPoolSet(pools []StoragePool, rawDemands map[VolumeType]liquid.ResourceDemandInAZ, az liquid.AvailabilityZone, mostCommonVolumeType VolumeType) (map[VolumeType]*liquid.AZResourceCapacityReport, error) {
+	var (
+		totalCapacityGiB = uint64(0)
+		totalUsageGiB    = uint64(0)
+		subcapacities    []liquid.Subcapacity
+	)
 
-	// prepare information for each pool
+	// prepare information for each pool, and also compute running totals
 	for _, pool := range pools {
 		usage := uint64(pool.Capabilities.AllocatedCapacityGB)
 		builder := liquid.SubcapacityBuilder[StoragePoolAttributes]{
@@ -136,27 +180,58 @@ func (l *Logic) buildAZResourceCapacityReport(pools []StoragePool) (*liquid.AZRe
 			builder.Capacity = usage // this is what counts towards the total capacity down below
 		}
 
-		subcapacity, err := builder.Finalize()
-		if err != nil {
-			return nil, err
+		if l.WithSubcapacities {
+			subcapacity, err := builder.Finalize()
+			if err != nil {
+				return nil, err
+			}
+			subcapacities = append(subcapacities, subcapacity)
 		}
-		subcapacities = append(subcapacities, subcapacity)
+
+		totalCapacityGiB += builder.Capacity
+		totalUsageGiB += *builder.Usage
 	}
 
-	// compute overall numbers
-	result := &liquid.AZResourceCapacityReport{
-		Capacity: 0,
-		Usage:    liquids.PointerTo(uint64(0)),
+	// distribute capacity and usage between the relevant volume types
+	balance := make(map[VolumeType]float64, len(rawDemands))
+	for volumeType := range rawDemands {
+		balance[volumeType] = 1.0
 	}
-	for _, sub := range subcapacities {
-		result.Capacity += sub.Capacity
-		*result.Usage += *sub.Usage
+	logg.Debug("distributing for AZ %q: capacity = %d between volume types %v", az, totalCapacityGiB, balance)
+	distributedCapacityGiB := util.DistributeDemandFairly(totalCapacityGiB, rawDemands, balance)
+	logg.Debug("distributing for AZ %q: usage = %d between volume types %v", az, totalUsageGiB, balance)
+	distributedUsageGiB := util.DistributeDemandFairly(totalUsageGiB, rawDemands, balance)
+
+	result := make(map[VolumeType]*liquid.AZResourceCapacityReport, len(rawDemands))
+	for volumeType := range rawDemands {
+		result[volumeType] = &liquid.AZResourceCapacityReport{
+			Capacity: distributedCapacityGiB[volumeType],
+			Usage:    liquids.PointerTo(distributedUsageGiB[volumeType]),
+		}
 	}
+
+	// splitting the subcapacities between resources would quickly turn into a mess;
+	// since we don't have a need for that, we just report subcapacities on the most commonly used volume type
 	if l.WithSubcapacities {
-		result.Subcapacities = subcapacities
+		result[mostCommonVolumeType].Subcapacities = subcapacities
 	}
-
 	return result, nil
+}
+
+func argmax[K comparable, V any, N cmp.Ordered](set map[K]V, predicate func(V) N) K {
+	var (
+		bestKey   K
+		bestScore N
+		first     = true
+	)
+	for key, value := range set {
+		score := predicate(value)
+		if first || score > bestScore {
+			bestKey = key
+			bestScore = score
+		}
+	}
+	return bestKey
 }
 
 ////////////////////////////////////////////////////////////////////////////////
