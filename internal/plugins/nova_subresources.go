@@ -101,10 +101,8 @@ func (p *novaPlugin) buildInstanceSubresource(ctx context.Context, instance serv
 	}
 	res.HWVersion = flavorInfo.ExtraSpecs["quota:hw_version"]
 
-	// calculate classifications based on flavor data
-	if len(p.HypervisorTypeRules) > 0 {
-		res.HypervisorType = p.HypervisorTypeRules.Evaluate(flavorInfo)
-	}
+	// calculate classifications based on flavor data (NOTE: deprecated, only here for backwards compatibility)
+	res.HypervisorType = p.HypervisorType
 
 	// calculate classifications based on image data
 	res.OSType = p.OSTypeProber.Get(ctx, instance)

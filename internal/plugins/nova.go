@@ -30,11 +30,13 @@ import (
 
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/limits"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/quotasets"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/regexpext"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
@@ -43,13 +45,11 @@ import (
 
 type novaPlugin struct {
 	// configuration
-	HypervisorTypeRules    nova.HypervisorTypeRules `yaml:"hypervisor_type_rules"`
+	HypervisorType         string `yaml:"hypervisor_type"`
 	SeparateInstanceQuotas struct {
-		FlavorNameSelection nova.FlavorNameSelection    `yaml:"flavor_name_selection"`
-		FlavorAliases       nova.FlavorTranslationTable `yaml:"flavor_aliases"`
+		FlavorNamePattern regexpext.PlainRegexp `yaml:"flavor_name_pattern"`
 	} `yaml:"separate_instance_quotas"`
-	WithSubresources              bool `yaml:"with_subresources"`
-	LiquidIronicCompatibilityMode bool `yaml:"liquid_ironic_compat_mode"` // NOTE: if true, assume that liquid-ironic is in use and ignore Ironic flavors
+	WithSubresources bool `yaml:"with_subresources"`
 	// computed state
 	resources          map[liquid.ResourceName]liquid.ResourceInfo `yaml:"-"`
 	hasPooledResource  map[string]map[liquid.ResourceName]bool     `yaml:"-"`
@@ -132,22 +132,20 @@ func (p *novaPlugin) Init(ctx context.Context, provider *gophercloud.ProviderCli
 	}
 
 	// find per-flavor instance resources
-	splitFlavorNames, ignoredFlavorNames, err := p.SeparateInstanceQuotas.FlavorAliases.ListFlavorsWithSeparateInstanceQuota(ctx, p.NovaV2, p.LiquidIronicCompatibilityMode)
-	if err != nil {
-		return err
-	}
-	for _, flavorName := range splitFlavorNames {
-		if p.SeparateInstanceQuotas.FlavorNameSelection.MatchFlavorName(flavorName) {
-			resName := p.SeparateInstanceQuotas.FlavorAliases.LimesResourceNameForFlavor(flavorName)
-			p.resources[resName] = liquid.ResourceInfo{
-				Unit:     limes.UnitNone,
-				HasQuota: true,
+	return nova.FlavorSelection{}.ForeachFlavor(ctx, p.NovaV2, func(f flavors.Flavor) error {
+		if p.SeparateInstanceQuotas.FlavorNamePattern.MatchString(f.Name) {
+			if nova.IsIronicFlavor(f) {
+				p.ignoredFlavorNames = append(p.ignoredFlavorNames, f.Name)
+			} else if nova.IsSplitFlavor(f) {
+				resName := nova.ResourceNameForFlavor(f.Name)
+				p.resources[resName] = liquid.ResourceInfo{
+					Unit:     limes.UnitNone,
+					HasQuota: true,
+				}
 			}
 		}
-	}
-	p.ignoredFlavorNames = ignoredFlavorNames
-
-	return p.HypervisorTypeRules.Validate()
+		return nil
+	})
 }
 
 func getDefaultQuotaClassSet(ctx context.Context, novaV2 *gophercloud.ServiceClient) (map[string]any, error) {
@@ -265,11 +263,10 @@ func (p *novaPlugin) Scrape(ctx context.Context, project core.KeystoneProject, a
 		if slices.Contains(p.ignoredFlavorNames, flavorName) {
 			continue
 		}
-		if p.SeparateInstanceQuotas.FlavorNameSelection.MatchFlavorName(flavorName) {
-			result[p.SeparateInstanceQuotas.FlavorAliases.LimesResourceNameForFlavor(flavorName)] = core.ResourceData{
-				Quota:     flavorLimits.MaxTotalInstances,
-				UsageData: core.InUnknownAZUnlessEmpty(core.UsageData{Usage: flavorLimits.TotalInstancesUsed}).AndZeroInTheseAZs(allAZs),
-			}
+		resName := nova.ResourceNameForFlavor(flavorName)
+		result[resName] = core.ResourceData{
+			Quota:     flavorLimits.MaxTotalInstances,
+			UsageData: core.InUnknownAZUnlessEmpty(core.UsageData{Usage: flavorLimits.TotalInstancesUsed}).AndZeroInTheseAZs(allAZs),
 		}
 	}
 	for hwVersion, limits := range limitsData.Limits.AbsolutePerHWVersion {
@@ -309,7 +306,7 @@ func (p *novaPlugin) Scrape(ctx context.Context, project core.KeystoneProject, a
 		}
 
 		// use separate instance resource if we have a matching "instances_$FLAVOR" resource
-		instanceResourceName := p.SeparateInstanceQuotas.FlavorAliases.LimesResourceNameForFlavor(subres.FlavorName)
+		instanceResourceName := nova.ResourceNameForFlavor(subres.FlavorName)
 		isPooled := false
 		if _, exists := result[instanceResourceName]; !exists {
 			// otherwise used the appropriate pooled instance resource
@@ -336,22 +333,17 @@ func (p *novaPlugin) Scrape(ctx context.Context, project core.KeystoneProject, a
 
 	// calculate metrics
 	var metrics novaSerializedMetrics
-	if len(p.HypervisorTypeRules) > 0 {
-		metrics.InstanceCountsByHypervisor = map[string]uint64{"unknown": 0}
-		metrics.InstanceCountsByHypervisorAndAZ = map[string]map[limes.AvailabilityZone]uint64{
-			"unknown": {limes.AvailabilityZoneUnknown: 0},
+	if p.HypervisorType != "" {
+		countsByAZ := map[limes.AvailabilityZone]uint64{limes.AvailabilityZoneUnknown: 0}
+		for _, subres := range allSubresources {
+			countsByAZ[subres.AZ]++
 		}
 
-		for _, subres := range allSubresources {
-			hvType := subres.HypervisorType
-			if hvType == "" {
-				continue
-			}
-			metrics.InstanceCountsByHypervisor[hvType]++
-			if metrics.InstanceCountsByHypervisorAndAZ[hvType] == nil {
-				metrics.InstanceCountsByHypervisorAndAZ[hvType] = make(map[limes.AvailabilityZone]uint64)
-			}
-			metrics.InstanceCountsByHypervisorAndAZ[hvType][subres.AZ]++
+		metrics.InstanceCountsByHypervisor = map[string]uint64{
+			p.HypervisorType: uint64(len(allSubresources)),
+		}
+		metrics.InstanceCountsByHypervisorAndAZ = map[string]map[limes.AvailabilityZone]uint64{
+			p.HypervisorType: countsByAZ,
 		}
 	}
 
@@ -381,13 +373,7 @@ func (p *novaPlugin) SetQuota(ctx context.Context, project core.KeystoneProject,
 	// translate Limes resource names for separate instance quotas into Nova quota names
 	novaQuotas := make(novaQuotaUpdateOpts, len(quotas))
 	for resourceName, quota := range quotas {
-		novaQuotaName := p.SeparateInstanceQuotas.FlavorAliases.NovaQuotaNameForLimesResourceName(resourceName)
-		if novaQuotaName == "" {
-			// not a separate instance quota - leave as-is
-			novaQuotas[string(resourceName)] = quota
-		} else {
-			novaQuotas[novaQuotaName] = quota
-		}
+		novaQuotas[string(resourceName)] = quota
 	}
 
 	return quotasets.Update(ctx, p.NovaV2, project.UUID, novaQuotas).Err

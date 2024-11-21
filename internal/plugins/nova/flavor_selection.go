@@ -27,6 +27,7 @@ import (
 
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
+	"github.com/sapcc/go-api-declarations/liquid"
 )
 
 // FlavorSelection describes a set of public flavors.
@@ -77,6 +78,23 @@ func (s FlavorSelection) ForeachFlavor(ctx context.Context, novaV2 *gophercloud.
 		}
 	}
 	return nil
+}
+
+// IsIronicFlavor returns whether the given flavor belongs to Ironic and should
+// be ignored by the Nova plugins.
+func IsIronicFlavor(f flavors.Flavor) bool {
+	return f.ExtraSpecs["capabilities:hypervisor_type"] == "ironic"
+}
+
+// IsSplitFlavor returns whether the given flavor has separate instance quota.
+func IsSplitFlavor(f flavors.Flavor) bool {
+	return f.ExtraSpecs["quota:separate"] == "true"
+}
+
+// ResourceNameForFlavor returns the resource name for a flavor with separate
+// instance quota.
+func ResourceNameForFlavor(flavorName string) liquid.ResourceName {
+	return liquid.ResourceName("instances_" + flavorName)
 }
 
 // FlavorMatchesHypervisor returns true if instances of this flavor can be placed on the given hypervisor.
