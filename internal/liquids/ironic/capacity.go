@@ -73,18 +73,34 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 	}
 
 	// enumerate Ironic nodes and sort by resource class (which should contain the flavor name)
-	allPages, err := ListNodesDetail(l.IronicV1).AllPages(ctx)
-	if err != nil {
-		return liquid.ServiceCapacityReport{}, err
-	}
-	var allNodes []Node
-	err = ExtractNodesInto(allPages, &allNodes)
-	if err != nil {
-		return liquid.ServiceCapacityReport{}, err
-	}
+	//
+	// NOTE: In most cases, we pull AllPages() at once when dealing with a paginated API.
+	// However, baremetal nodes have an extremely high number of attributes, most of which we don't care about.
+	// Holding them all in memory at once in the AllPages result object creates a very big spike in memory usage.
+	//
+	// To avoid this, this implementation uses EachPage() to pull in only 100 nodes at a time,
+	// and then parses into our own reduced representation in `type Node` which can be stored much more efficiently.
+	// Profiling on a cluster with 1850 Ironic nodes showed the following peak memory usage levels:
+	//
+	// - AllPages:                109.27MB
+	// - EachPage (limit = 1000):  94.11MB
+	// - EachPage (limit = 100):   20.21MB
+	//
 	nodesByFlavorName := make(map[string][]Node)
-	for _, node := range allNodes {
-		nodesByFlavorName[node.ResourceClass] = append(nodesByFlavorName[node.ResourceClass], node)
+	opts := &nodes.ListOpts{Limit: 100}
+	err = ListNodesDetail(l.IronicV1, opts).EachPage(ctx, func(ctx context.Context, page pagination.Page) (bool, error) {
+		var nodes []Node
+		err = ExtractNodesInto(page, &nodes)
+		if err != nil {
+			return false, err
+		}
+		for _, node := range nodes {
+			nodesByFlavorName[node.ResourceClass] = append(nodesByFlavorName[node.ResourceClass], node)
+		}
+		return true, nil
+	})
+	if err != nil {
+		return liquid.ServiceCapacityReport{}, err
 	}
 
 	// build result
@@ -230,8 +246,15 @@ func (n Node) StableProvisionState() string {
 
 // ListNodesDetail is like `nodes.ListDetail(client, nil)`,
 // but works around <https://github.com/gophercloud/gophercloud/issues/2431>.
-func ListNodesDetail(client *gophercloud.ServiceClient) pagination.Pager {
+func ListNodesDetail(client *gophercloud.ServiceClient, opts *nodes.ListOpts) pagination.Pager {
 	url := client.ServiceURL("nodes", "detail")
+	if opts != nil {
+		query, err := opts.ToNodeListDetailQuery()
+		if err != nil {
+			return pagination.Pager{Err: err}
+		}
+		url += query
+	}
 	return pagination.NewPager(client, url, func(r pagination.PageResult) pagination.Page {
 		return nodePage{nodes.NodePage{LinkedPageBase: pagination.LinkedPageBase{PageResult: r}}}
 	})
