@@ -21,6 +21,7 @@ package cinder
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/gophercloud/gophercloud/v2"
@@ -71,6 +72,11 @@ type VolumeTypeInfo struct {
 	VolumeBackendName string
 }
 
+// String returns a string representation of this VolumeTypeInfo for log messages.
+func (i VolumeTypeInfo) String() string {
+	return fmt.Sprintf("volume_backend_name = %q", i.VolumeBackendName)
+}
+
 // Init implements the liquidapi.Logic interface.
 func (l *Logic) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
 	l.CinderV3, err = openstack.NewBlockStorageV3(provider, eo)
@@ -100,10 +106,11 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 
 	// build ResourceInfo set
 	resInfoForCapacity := liquid.ResourceInfo{
-		Unit:        liquid.UnitGibibytes,
-		Topology:    liquid.AZAwareResourceTopology,
-		HasCapacity: true,
-		HasQuota:    true,
+		Unit:                liquid.UnitGibibytes,
+		Topology:            liquid.AZAwareResourceTopology,
+		HasCapacity:         true,
+		NeedsResourceDemand: true,
+		HasQuota:            true,
 	}
 	resInfoForObjects := liquid.ResourceInfo{
 		Unit:        liquid.UnitNone,
