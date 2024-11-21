@@ -20,7 +20,6 @@ package manila
 
 import (
 	"context"
-	"encoding/json"
 	"slices"
 	"strings"
 
@@ -185,18 +184,23 @@ func (l *Logic) scanCapacityForShareTypeAndAZ(vst VirtualShareType, azCount uint
 	}
 
 	// distribute capacity and usage between the various resource types
+	balance := map[string]float64{
+		"shares":      1,
+		"snapshots":   l.CapacityCalculation.CapacityBalance,
+		"snapmirrors": 0,
+	}
 	logg.Debug("distributing capacity for share_type %q, AZ %q", vst.Name, az)
-	distributedCapacityGiB := l.distributeByDemand(uint64(totalCapacityGB), map[string]liquid.ResourceDemandInAZ{
+	distributedCapacityGiB := util.DistributeDemandFairly(uint64(totalCapacityGB), map[string]liquid.ResourceDemandInAZ{
 		"shares":      shareCapacityDemand,
 		"snapshots":   snapshotCapacityDemand,
 		"snapmirrors": snapmirrorCapacityDemand,
-	})
+	}, balance)
 	logg.Debug("distributing usage for share_type %q, AZ %q", vst.Name, az)
-	distributedUsageGiB := l.distributeByDemand(uint64(allocatedCapacityGB), map[string]liquid.ResourceDemandInAZ{
+	distributedUsageGiB := util.DistributeDemandFairly(uint64(allocatedCapacityGB), map[string]liquid.ResourceDemandInAZ{
 		"shares":      {Usage: shareCapacityDemand.Usage},
 		"snapshots":   {Usage: snapshotCapacityDemand.Usage},
 		"snapmirrors": {Usage: snapmirrorCapacityDemand.Usage},
-	})
+	}, balance)
 
 	// build overall result
 	params := l.CapacityCalculation
@@ -251,82 +255,6 @@ func (l *Logic) scanCapacityForShareTypeAndAZ(vst VirtualShareType, azCount uint
 	}
 
 	return result, nil
-}
-
-// This implements the method we use to distribute capacity and usage between shares and snapshots:
-// Each tier of demand is distributed fairly (while supplies last).
-// Then anything that is not covered by demand is distributed according to the configured CapacityBalance.
-//
-// For capacity, each tier of demand is considered.
-// For usage, the caller will set all demand fields except for Usage to 0.
-func (l *Logic) distributeByDemand(totalAmount uint64, demands map[string]liquid.ResourceDemandInAZ) map[string]uint64 {
-	// setup phase to make each of the paragraphs below as identical as possible (for clarity)
-	requests := make(map[string]uint64)
-	result := make(map[string]uint64)
-	remaining := totalAmount
-
-	// tier 1: usage
-	for k, demand := range demands {
-		requests[k] = demand.Usage
-	}
-	grantedAmount := util.DistributeFairly(remaining, requests)
-	for k := range demands {
-		remaining -= grantedAmount[k]
-		result[k] += grantedAmount[k]
-	}
-	if logg.ShowDebug {
-		resultJSON, _ := json.Marshal(result) //nolint:errcheck // no reasonable way for this to fail, also only debug log
-		logg.Debug("distributeByDemand after phase 1: " + string(resultJSON))
-	}
-
-	// tier 2: unused commitments
-	for k, demand := range demands {
-		requests[k] = demand.UnusedCommitments
-	}
-	grantedAmount = util.DistributeFairly(remaining, requests)
-	for k := range demands {
-		remaining -= grantedAmount[k]
-		result[k] += grantedAmount[k]
-	}
-	if logg.ShowDebug {
-		resultJSON, _ := json.Marshal(result) //nolint:errcheck // no reasonable way for this to fail, also only debug log
-		logg.Debug("distributeByDemand after phase 2: " + string(resultJSON))
-	}
-
-	// tier 3: pending commitments
-	for k, demand := range demands {
-		requests[k] = demand.PendingCommitments
-	}
-	grantedAmount = util.DistributeFairly(remaining, requests)
-	for k := range demands {
-		remaining -= grantedAmount[k]
-		result[k] += grantedAmount[k]
-	}
-	if logg.ShowDebug {
-		resultJSON, _ := json.Marshal(result) //nolint:errcheck // no reasonable way for this to fail, also only debug log
-		logg.Debug("distributeByDemand after phase 2: " + string(resultJSON))
-	}
-
-	// final phase: distribute all remaining capacity according to the configured CapacityBalance
-	//
-	// NOTE: The CapacityBalance value says how much capacity we give out
-	// to snapshots as a fraction of the capacity given out to shares. For
-	// example, with CapacityBalance = 2, we allocate 2/3 of the total capacity to
-	// snapshots, and 1/3 to shares.
-	if remaining > 0 {
-		cb := l.CapacityCalculation.CapacityBalance
-		portionForSnapshots := uint64(cb / (cb + 1) * float64(remaining))
-		portionForShares := remaining - portionForSnapshots
-
-		result["snapshots"] += portionForSnapshots
-		result["shares"] += portionForShares
-	}
-	if logg.ShowDebug {
-		resultJSON, _ := json.Marshal(result) //nolint:errcheck // no reasonable way for this to fail, also only debug log
-		logg.Debug("distributeByDemand after CapacityBalance: " + string(resultJSON))
-	}
-
-	return result
 }
 
 ////////////////////////////////////////////////////////////////////////////////
