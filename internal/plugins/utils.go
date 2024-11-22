@@ -19,6 +19,25 @@
 
 package plugins
 
+import (
+	"fmt"
+	"github.com/sapcc/go-api-declarations/liquid"
+)
+
 func p2u64(val uint64) *uint64 {
 	return &val
+}
+
+func checkResourceTopologies(serviceInfo liquid.ServiceInfo) (err error) {
+	invalidTopologies := map[liquid.ResourceName]liquid.ResourceTopology{}
+	resources := serviceInfo.Resources
+	for k, v := range resources {
+		if !v.Topology.IsValid() || v.Topology != "" {
+			invalidTopologies[k] = v.Topology
+		}
+	}
+	if len(invalidTopologies) > 0 {
+		return fmt.Errorf("invalid topologies detected: %v", invalidTopologies)
+	}
+	return
 }

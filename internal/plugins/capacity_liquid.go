@@ -72,6 +72,10 @@ func (p *liquidCapacityPlugin) Init(ctx context.Context, client *gophercloud.Pro
 		return fmt.Errorf("cannot initialize ServiceClient for %s: %w", p.LiquidServiceType, err)
 	}
 	p.LiquidServiceInfo, err = p.LiquidClient.GetInfo(ctx)
+	if err != nil {
+		return err
+	}
+	err = checkResourceTopologies(p.LiquidServiceInfo)
 	return err
 }
 
