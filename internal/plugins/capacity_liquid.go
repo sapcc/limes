@@ -94,6 +94,14 @@ func (p *liquidCapacityPlugin) Scrape(ctx context.Context, backchannel core.Capa
 		logg.Fatal("ServiceInfo version for %s changed from %d to %d; restarting now to reload ServiceInfo...",
 			p.LiquidServiceType, p.LiquidServiceInfo.Version, resp.InfoVersion)
 	}
+	for resourceName, resource := range p.LiquidServiceInfo.Resources {
+		perAZ := resp.Resources[resourceName].PerAZ
+		toplogy := resource.Topology
+		err := matchLiquidReportToTopology(perAZ, toplogy)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
 
 	resultInService := make(map[liquid.ResourceName]core.PerAZ[core.CapacityData], len(p.LiquidServiceInfo.Resources))
 	for resName, resInfo := range p.LiquidServiceInfo.Resources {

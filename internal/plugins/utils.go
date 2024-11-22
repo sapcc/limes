@@ -21,6 +21,8 @@ package plugins
 
 import (
 	"fmt"
+	"reflect"
+
 	"github.com/sapcc/go-api-declarations/liquid"
 )
 
@@ -40,4 +42,24 @@ func checkResourceTopologies(serviceInfo liquid.ServiceInfo) (err error) {
 		return fmt.Errorf("invalid topologies detected: %v", invalidTopologies)
 	}
 	return
+}
+
+func matchLiquidReportToTopology[V any](perAZReport map[liquid.AvailabilityZone]*V, topology liquid.ResourceTopology) (err error) {
+	_, anyExists := perAZReport[liquid.AvailabilityZoneAny]
+	_, unknownExsits := perAZReport[liquid.AvailabilityZoneUnknown]
+	switch topology {
+	case liquid.FlatResourceTopology:
+		if len(perAZReport) == 1 && anyExists {
+			return
+		}
+	case liquid.AZAwareResourceTopology:
+		if len(perAZReport) > 0 && !anyExists {
+			return
+		}
+	case liquid.AZSeparatedResourceTopology:
+		if len(perAZReport) > 0 && !anyExists && !unknownExsits {
+			return
+		}
+	}
+	return fmt.Errorf("scrape with toplogy type: %v returned AZs: %v", topology, reflect.ValueOf(perAZReport).MapKeys())
 }
