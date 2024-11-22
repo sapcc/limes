@@ -128,7 +128,7 @@ func (p *liquidQuotaPlugin) Scrape(ctx context.Context, project core.KeystonePro
 		toplogy := resource.Topology
 		err := matchLiquidReportToTopology(perAZ, toplogy)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, fmt.Errorf("service: %s, resource: %s: %w", p.ServiceType, resourceName, err)
 		}
 	}
 

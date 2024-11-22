@@ -61,5 +61,5 @@ func matchLiquidReportToTopology[V any](perAZReport map[liquid.AvailabilityZone]
 			return
 		}
 	}
-	return fmt.Errorf("scrape with toplogy type: %v returned AZs: %v", topology, reflect.ValueOf(perAZReport).MapKeys())
+	return fmt.Errorf("scrape with toplogy type: %s returned AZs: %v", topology, reflect.ValueOf(perAZReport).MapKeys())
 }
