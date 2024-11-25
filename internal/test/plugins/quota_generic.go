@@ -34,6 +34,7 @@ import (
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
+	"github.com/sapcc/limes/internal/plugins"
 )
 
 func init() {
@@ -45,15 +46,17 @@ func init() {
 // operations.
 type GenericQuotaPlugin struct {
 	ServiceType              db.ServiceType                             `yaml:"-"`
+	LiquidServiceInfo        liquid.ServiceInfo                         `yaml:"-"`
 	StaticRateInfos          map[liquid.RateName]liquid.RateInfo        `yaml:"rate_infos"`
 	StaticResourceData       map[liquid.ResourceName]*core.ResourceData `yaml:"-"`
 	StaticResourceAttributes map[liquid.ResourceName]map[string]any     `yaml:"-"`
 	OverrideQuota            map[string]map[liquid.ResourceName]uint64  `yaml:"-"` // first key is project UUID
 	// behavior flags that can be set by a unit test
-	ScrapeFails   bool                           `yaml:"-"`
-	SetQuotaFails bool                           `yaml:"-"`
-	MinQuota      map[liquid.ResourceName]uint64 `yaml:"-"`
-	MaxQuota      map[liquid.ResourceName]uint64 `yaml:"-"`
+	ReportedAZs   map[liquid.AvailabilityZone]*any `yaml:"-"`
+	ScrapeFails   bool                             `yaml:"-"`
+	SetQuotaFails bool                             `yaml:"-"`
+	MinQuota      map[liquid.ResourceName]uint64   `yaml:"-"`
+	MaxQuota      map[liquid.ResourceName]uint64   `yaml:"-"`
 }
 
 // Init implements the core.QuotaPlugin interface.
@@ -158,6 +161,23 @@ func (p *GenericQuotaPlugin) BuildServiceUsageRequest(project core.KeystoneProje
 func (p *GenericQuotaPlugin) Scrape(ctx context.Context, project core.KeystoneProject, allAZs []limes.AvailabilityZone) (result map[liquid.ResourceName]core.ResourceData, serializedMetrics []byte, err error) {
 	if p.ScrapeFails {
 		return nil, nil, errors.New("Scrape failed as requested")
+	}
+
+	if len(p.LiquidServiceInfo.Resources) > 0 {
+		err := plugins.CheckResourceTopologies(p.LiquidServiceInfo)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
+	if len(p.ReportedAZs) > 0 {
+		for resourceName, resource := range p.LiquidServiceInfo.Resources {
+			toplogy := resource.Topology
+			err := plugins.MatchLiquidReportToTopology(p.ReportedAZs, toplogy)
+			if err != nil {
+				return nil, nil, fmt.Errorf("service: %s, resource: %s: %w", p.ServiceType, resourceName, err)
+			}
+		}
 	}
 
 	result = make(map[liquid.ResourceName]core.ResourceData)

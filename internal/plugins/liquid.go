@@ -86,7 +86,7 @@ func (p *liquidQuotaPlugin) Init(ctx context.Context, client *gophercloud.Provid
 	if err != nil {
 		return err
 	}
-	err = checkResourceTopologies(p.LiquidServiceInfo)
+	err = CheckResourceTopologies(p.LiquidServiceInfo)
 	return err
 }
 
@@ -126,7 +126,7 @@ func (p *liquidQuotaPlugin) Scrape(ctx context.Context, project core.KeystonePro
 	for resourceName, resource := range p.LiquidServiceInfo.Resources {
 		perAZ := resp.Resources[resourceName].PerAZ
 		toplogy := resource.Topology
-		err := matchLiquidReportToTopology(perAZ, toplogy)
+		err := MatchLiquidReportToTopology(perAZ, toplogy)
 		if err != nil {
 			return nil, nil, fmt.Errorf("service: %s, resource: %s: %w", p.ServiceType, resourceName, err)
 		}

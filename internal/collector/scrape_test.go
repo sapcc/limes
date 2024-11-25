@@ -21,6 +21,7 @@ package collector
 
 import (
 	"database/sql"
+	"errors"
 	"net/http"
 	"regexp"
 	"testing"
@@ -581,4 +582,36 @@ func Test_ScrapeReturnsNoUsageData(t *testing.T) {
 	`,
 		scrapedAt.Unix(), scrapedAt.Add(scrapeInterval).Unix(),
 	)
+}
+
+func Test_TopologyScrapes(t *testing.T) {
+	s := test.NewSetup(t,
+		test.WithConfig(testScrapeBasicConfigYAML),
+	)
+	prepareDomainsAndProjectsForScrape(t, s)
+
+	c := getCollector(t, s)
+	job := c.ResourceScrapeJob(s.Registry)
+	withLabel := jobloop.WithLabel("service_type", "unittest")
+	plugin := s.Cluster.QuotaPlugins["unittest"].(*plugins.GenericQuotaPlugin)
+
+	_, tr0 := easypg.NewTracker(t, s.DB.Db)
+	tr0.AssertEqualToFile("fixtures/scrape0.sql")
+
+	var status *any
+	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"capacity": {Topology: liquid.FlatResourceTopology}}
+	plugin.ReportedAZs = map[liquid.AvailabilityZone]*any{"az-one": status, "az-two": status}
+	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during resource scrape of project germany/berlin: service: unittest, resource: capacity: scrape with toplogy type: flat returned AZs: [az-one az-two]"))
+
+	plugin.LiquidServiceInfo.Resources["capacity"] = liquid.ResourceInfo{Topology: liquid.AZAwareResourceTopology}
+	plugin.ReportedAZs = map[liquid.AvailabilityZone]*any{"any": status}
+	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during resource scrape of project germany/dresden: service: unittest, resource: capacity: scrape with toplogy type: az-aware returned AZs: [any]"))
+
+	s.Clock.StepBy(scrapeInterval)
+	plugin.LiquidServiceInfo.Resources["capacity"] = liquid.ResourceInfo{Topology: liquid.AZSeparatedResourceTopology}
+	plugin.ReportedAZs = map[liquid.AvailabilityZone]*any{"az-one": status, "unknown": status}
+	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during resource scrape of project germany/berlin: service: unittest, resource: capacity: scrape with toplogy type: az-separated returned AZs: [az-one unknown]"))
+
+	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"capacity": {Topology: "invalidAZ1"}, "things": {Topology: "invalidAZ2"}}
+	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during resource scrape of project germany/dresden: invalid toplogy: invalidAZ1 on resource: capacity\ninvalid toplogy: invalidAZ2 on resource: things"))
 }

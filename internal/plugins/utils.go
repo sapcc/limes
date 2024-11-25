@@ -20,8 +20,9 @@
 package plugins
 
 import (
+	"errors"
 	"fmt"
-	"reflect"
+	"sort"
 
 	"github.com/sapcc/go-api-declarations/liquid"
 )
@@ -30,21 +31,29 @@ func p2u64(val uint64) *uint64 {
 	return &val
 }
 
-func checkResourceTopologies(serviceInfo liquid.ServiceInfo) (err error) {
-	invalidTopologies := map[liquid.ResourceName]liquid.ResourceTopology{}
+func CheckResourceTopologies(serviceInfo liquid.ServiceInfo) (err error) {
+	errs := []error{}
 	resources := serviceInfo.Resources
-	for k, v := range resources {
-		if !v.Topology.IsValid() || v.Topology != "" {
-			invalidTopologies[k] = v.Topology
+
+	var resourceNames []string
+	for resource := range resources {
+		resourceNames = append(resourceNames, string(resource))
+	}
+	sort.Strings(resourceNames)
+
+	for _, resourceName := range resourceNames {
+		topology := resources[liquid.ResourceName(resourceName)].Topology
+		if !topology.IsValid() {
+			errs = append(errs, fmt.Errorf("invalid toplogy: %s on resource: %s", topology, resourceName))
 		}
 	}
-	if len(invalidTopologies) > 0 {
-		return fmt.Errorf("invalid topologies detected: %v", invalidTopologies)
+	if len(errs) > 0 {
+		return errors.Join(errs...)
 	}
 	return
 }
 
-func matchLiquidReportToTopology[V any](perAZReport map[liquid.AvailabilityZone]*V, topology liquid.ResourceTopology) (err error) {
+func MatchLiquidReportToTopology[V any](perAZReport map[liquid.AvailabilityZone]*V, topology liquid.ResourceTopology) (err error) {
 	_, anyExists := perAZReport[liquid.AvailabilityZoneAny]
 	_, unknownExists := perAZReport[liquid.AvailabilityZoneUnknown]
 	switch topology {
@@ -60,6 +69,15 @@ func matchLiquidReportToTopology[V any](perAZReport map[liquid.AvailabilityZone]
 		if len(perAZReport) > 0 && !anyExists && !unknownExists {
 			return
 		}
+	case "":
+		return
 	}
-	return fmt.Errorf("scrape with toplogy type: %s returned AZs: %v", topology, reflect.ValueOf(perAZReport).MapKeys())
+
+	var reportedAZs []string
+	for az := range perAZReport {
+		reportedAZs = append(reportedAZs, string(az))
+	}
+	sort.Strings(reportedAZs)
+
+	return fmt.Errorf("scrape with toplogy type: %s returned AZs: %v", topology, reportedAZs)
 }

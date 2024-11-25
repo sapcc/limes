@@ -75,7 +75,7 @@ func (p *liquidCapacityPlugin) Init(ctx context.Context, client *gophercloud.Pro
 	if err != nil {
 		return err
 	}
-	err = checkResourceTopologies(p.LiquidServiceInfo)
+	err = CheckResourceTopologies(p.LiquidServiceInfo)
 	return err
 }
 
@@ -97,7 +97,7 @@ func (p *liquidCapacityPlugin) Scrape(ctx context.Context, backchannel core.Capa
 	for resourceName, resource := range p.LiquidServiceInfo.Resources {
 		perAZ := resp.Resources[resourceName].PerAZ
 		toplogy := resource.Topology
-		err := matchLiquidReportToTopology(perAZ, toplogy)
+		err := MatchLiquidReportToTopology(perAZ, toplogy)
 		if err != nil {
 			return nil, nil, fmt.Errorf("service: %s, resource: %s: %w", p.LiquidServiceType, resourceName, err)
 		}
