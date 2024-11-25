@@ -21,7 +21,6 @@ package plugins
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"maps"
 	"math/big"
@@ -58,12 +57,6 @@ type novaPlugin struct {
 	NovaV2            *gophercloud.ServiceClient `yaml:"-"`
 	OSTypeProber      *nova.OSTypeProber         `yaml:"-"`
 	ServerGroupProber *nova.ServerGroupProber    `yaml:"-"`
-}
-
-type novaSerializedMetrics struct {
-	//TODO: flip the generated metrics to use the new structure, then remove the old one
-	InstanceCountsByHypervisor      map[string]uint64                            `json:"instances_by_hypervisor,omitempty"`
-	InstanceCountsByHypervisorAndAZ map[string]map[limes.AvailabilityZone]uint64 `json:"ic_hv_az,omitempty"`
 }
 
 var novaDefaultResources = map[liquid.ResourceName]liquid.ResourceInfo{
@@ -331,24 +324,7 @@ func (p *novaPlugin) Scrape(ctx context.Context, project core.KeystoneProject, a
 		result[p.pooledResourceName(subres.HWVersion, "ram")].AddLocalizedUsage(az, subres.MemoryMiB.Value)
 	}
 
-	// calculate metrics
-	var metrics novaSerializedMetrics
-	if p.HypervisorType != "" {
-		countsByAZ := map[limes.AvailabilityZone]uint64{limes.AvailabilityZoneUnknown: 0}
-		for _, subres := range allSubresources {
-			countsByAZ[subres.AZ]++
-		}
-
-		metrics.InstanceCountsByHypervisor = map[string]uint64{
-			p.HypervisorType: uint64(len(allSubresources)),
-		}
-		metrics.InstanceCountsByHypervisorAndAZ = map[string]map[limes.AvailabilityZone]uint64{
-			p.HypervisorType: countsByAZ,
-		}
-	}
-
-	serializedMetrics, err = json.Marshal(metrics)
-	return result, serializedMetrics, err
+	return result, nil, nil
 }
 
 func (p *novaPlugin) BuildServiceUsageRequest(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (liquid.ServiceUsageRequest, error) {
@@ -379,42 +355,14 @@ func (p *novaPlugin) SetQuota(ctx context.Context, project core.KeystoneProject,
 	return quotasets.Update(ctx, p.NovaV2, project.UUID, novaQuotas).Err
 }
 
-var novaInstanceCountGauge = prometheus.NewGaugeVec(
-	prometheus.GaugeOpts{
-		Name: "limes_instance_counts",
-		Help: "Number of Nova instances per project and hypervisor type.",
-	},
-	[]string{"domain_id", "project_id", "hypervisor"},
-)
-
 // DescribeMetrics implements the core.QuotaPlugin interface.
 func (p *novaPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
-	novaInstanceCountGauge.Describe(ch)
+	// unused
 }
 
 // CollectMetrics implements the core.QuotaPlugin interface.
 func (p *novaPlugin) CollectMetrics(ch chan<- prometheus.Metric, project core.KeystoneProject, serializedMetrics []byte) error {
-	if len(serializedMetrics) == 0 {
-		return nil
-	}
-	var metrics novaSerializedMetrics
-	err := json.Unmarshal(serializedMetrics, &metrics)
-	if err != nil {
-		return err
-	}
-
-	descCh := make(chan *prometheus.Desc, 1)
-	novaInstanceCountGauge.Describe(descCh)
-	novaInstanceCountDesc := <-descCh
-
-	for hypervisorName, instanceCount := range metrics.InstanceCountsByHypervisor {
-		ch <- prometheus.MustNewConstMetric(
-			novaInstanceCountDesc,
-			prometheus.GaugeValue, float64(instanceCount),
-			project.Domain.UUID, project.UUID, hypervisorName,
-		)
-	}
-	return nil
+	return nil // unused
 }
 
 type novaQuotaUpdateOpts map[string]uint64
