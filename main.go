@@ -122,6 +122,7 @@ func main() {
 		case "neutron":
 			must.Succeed(liquidapi.Run(ctx, &neutron.Logic{}, opts))
 		case "nova":
+			opts.TakesConfiguration = true
 			must.Succeed(liquidapi.Run(ctx, &nova.Logic{}, opts))
 		case "octavia":
 			must.Succeed(liquidapi.Run(ctx, &octavia.Logic{}, opts))
@@ -326,6 +327,10 @@ func taskTestGetQuota(ctx context.Context, cluster *core.Cluster, args []string)
 	result, serializedMetrics, err := cluster.QuotaPlugins[serviceType].Scrape(ctx, project, cluster.Config.AvailabilityZones)
 	must.Succeed(err)
 
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	must.Succeed(enc.Encode(result))
+
 	for resourceName := range result {
 		if !cluster.HasResource(serviceType, resourceName) {
 			logg.Fatal("scrape returned data for unknown resource: %s/%s", serviceType, resourceName)
@@ -342,7 +347,7 @@ func taskTestGetQuota(ctx context.Context, cluster *core.Cluster, args []string)
 	})
 	dumpGeneratedPrometheusMetrics()
 
-	enc := json.NewEncoder(os.Stdout)
+	enc = json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	must.Succeed(enc.Encode(result))
 }
