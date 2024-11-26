@@ -303,6 +303,12 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 				azRes.Usage = data.Usage
 				azRes.PhysicalUsage = data.PhysicalUsage
 
+				// set AZ backend quota
+				resInfo := c.Cluster.InfoForResource(srv.Type, res.Name)
+				if resInfo.HasQuota && resInfo.Topology == liquid.AZSeparatedResourceTopology {
+					azRes.BackendQuota = &data.Quota
+				}
+
 				// warn when the backend is inconsistent with itself
 				if data.Subresources != nil && uint64(len(data.Subresources)) != data.Usage {
 					logg.Info("resource quantity mismatch in project %s, resource %s/%s, AZ %s: usage = %d, but found %d subresources",

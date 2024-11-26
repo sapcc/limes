@@ -133,7 +133,7 @@ func (p *liquidQuotaPlugin) Scrape(ctx context.Context, project core.KeystonePro
 	}
 
 	result = make(map[liquid.ResourceName]core.ResourceData, len(p.LiquidServiceInfo.Resources))
-	for resName := range p.LiquidServiceInfo.Resources {
+	for resName, resInfo := range p.LiquidServiceInfo.Resources {
 		resReport := resp.Resources[resName]
 		if resReport == nil {
 			return nil, nil, fmt.Errorf("missing report for resource %q", resName)
@@ -153,6 +153,9 @@ func (p *liquidQuotaPlugin) Scrape(ctx context.Context, project core.KeystonePro
 				Usage:         azReport.Usage,
 				PhysicalUsage: azReport.PhysicalUsage,
 				Subresources:  castSliceToAny(azReport.Subresources),
+			}
+			if resInfo.Topology == liquid.AZSeparatedResourceTopology && azReport.Quota != nil {
+				resData.UsageData[az].Quota = *azReport.Quota
 			}
 		}
 
