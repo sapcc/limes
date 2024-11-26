@@ -31,7 +31,7 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 
 	"github.com/sapcc/limes/internal/core"
-	"github.com/sapcc/limes/internal/plugins/nova"
+	"github.com/sapcc/limes/internal/liquids/nova"
 )
 
 // A compute instance as shown in our compute/instances subresources.
