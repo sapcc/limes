@@ -593,25 +593,114 @@ func Test_TopologyScrapes(t *testing.T) {
 	c := getCollector(t, s)
 	job := c.ResourceScrapeJob(s.Registry)
 	withLabel := jobloop.WithLabel("service_type", "unittest")
+	syncJob := c.SyncQuotaToBackendJob(s.Registry)
 	plugin := s.Cluster.QuotaPlugins["unittest"].(*plugins.GenericQuotaPlugin)
 
-	_, tr0 := easypg.NewTracker(t, s.DB.Db)
+	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualToFile("fixtures/scrape0.sql")
 
 	var status *any
+	// positive: Sync az-separated quota values with the backend
+	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"capacity": {Topology: liquid.AZSeparatedResourceTopology}, "things": {Topology: liquid.AZSeparatedResourceTopology}}
+	plugin.ReportedAZs = map[liquid.AvailabilityZone]*any{"az-one": status, "az-two": status}
+	mustT(t, job.ProcessOne(s.Ctx, withLabel))
+	mustT(t, job.ProcessOne(s.Ctx, withLabel))
+
+	scrapedAt1 := s.Clock.Now().Add(-5 * time.Second)
+	scrapedAt2 := s.Clock.Now()
+	tr.DBChanges().AssertEqualf(`
+		INSERT INTO project_az_resources (id, resource_id, az, usage, historical_usage) VALUES (1, 1, 'any', 0, '{"t":[%[1]d],"v":[0]}');
+		INSERT INTO project_az_resources (id, resource_id, az, usage, historical_usage) VALUES (10, 4, 'any', 0, '{"t":[%[3]d],"v":[0]}');
+		INSERT INTO project_az_resources (id, resource_id, az, usage, physical_usage, historical_usage, backend_quota) VALUES (11, 4, 'az-one', 0, 0, '{"t":[%[3]d],"v":[0]}', 50);
+		INSERT INTO project_az_resources (id, resource_id, az, usage, physical_usage, historical_usage, backend_quota) VALUES (12, 4, 'az-two', 0, 0, '{"t":[%[3]d],"v":[0]}', 50);
+		INSERT INTO project_az_resources (id, resource_id, az, usage, historical_usage) VALUES (13, 5, 'any', 0, '{"t":[%[3]d],"v":[0]}');
+		INSERT INTO project_az_resources (id, resource_id, az, usage, historical_usage) VALUES (14, 5, 'az-one', 0, '{"t":[%[3]d],"v":[0]}');
+		INSERT INTO project_az_resources (id, resource_id, az, usage, historical_usage) VALUES (15, 5, 'az-two', 0, '{"t":[%[3]d],"v":[0]}');
+		INSERT INTO project_az_resources (id, resource_id, az, usage, historical_usage) VALUES (16, 6, 'any', 0, '{"t":[%[3]d],"v":[0]}');
+		INSERT INTO project_az_resources (id, resource_id, az, usage, subresources, historical_usage, backend_quota) VALUES (17, 6, 'az-one', 2, '[{"index":0},{"index":1}]', '{"t":[%[3]d],"v":[2]}', 21);
+		INSERT INTO project_az_resources (id, resource_id, az, usage, subresources, historical_usage, backend_quota) VALUES (18, 6, 'az-two', 2, '[{"index":2},{"index":3}]', '{"t":[%[3]d],"v":[2]}', 21);
+		INSERT INTO project_az_resources (id, resource_id, az, usage, physical_usage, historical_usage, backend_quota) VALUES (2, 1, 'az-one', 0, 0, '{"t":[%[1]d],"v":[0]}', 50);
+		INSERT INTO project_az_resources (id, resource_id, az, usage, physical_usage, historical_usage, backend_quota) VALUES (3, 1, 'az-two', 0, 0, '{"t":[%[1]d],"v":[0]}', 50);
+		INSERT INTO project_az_resources (id, resource_id, az, usage, historical_usage) VALUES (4, 2, 'any', 0, '{"t":[%[1]d],"v":[0]}');
+		INSERT INTO project_az_resources (id, resource_id, az, usage, historical_usage) VALUES (5, 2, 'az-one', 0, '{"t":[%[1]d],"v":[0]}');
+		INSERT INTO project_az_resources (id, resource_id, az, usage, historical_usage) VALUES (6, 2, 'az-two', 0, '{"t":[%[1]d],"v":[0]}');
+		INSERT INTO project_az_resources (id, resource_id, az, usage, historical_usage) VALUES (7, 3, 'any', 0, '{"t":[%[1]d],"v":[0]}');
+		INSERT INTO project_az_resources (id, resource_id, az, usage, subresources, historical_usage, backend_quota) VALUES (8, 3, 'az-one', 2, '[{"index":0},{"index":1}]', '{"t":[%[1]d],"v":[2]}', 21);
+		INSERT INTO project_az_resources (id, resource_id, az, usage, subresources, historical_usage, backend_quota) VALUES (9, 3, 'az-two', 2, '[{"index":2},{"index":3}]', '{"t":[%[1]d],"v":[2]}', 21);
+		INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (1, 1, 'capacity', 0, 100);
+		INSERT INTO project_resources (id, service_id, name) VALUES (2, 1, 'capacity_portion');
+		INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (3, 1, 'things', 0, 42);
+		INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (4, 2, 'capacity', 0, 100);
+		INSERT INTO project_resources (id, service_id, name) VALUES (5, 2, 'capacity_portion');
+		INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (6, 2, 'things', 0, 42);
+		UPDATE project_services SET scraped_at = %[1]d, scrape_duration_secs = 5, serialized_metrics = '{"capacity_usage":0,"things_usage":4}', checked_at = %[1]d, next_scrape_at = %[2]d, quota_desynced_at = %[1]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = %[3]d, scrape_duration_secs = 5, serialized_metrics = '{"capacity_usage":0,"things_usage":4}', checked_at = %[3]d, next_scrape_at = %[4]d, quota_desynced_at = %[3]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+		`,
+		scrapedAt1.Unix(), scrapedAt1.Add(scrapeInterval).Unix(),
+		scrapedAt2.Unix(), scrapedAt2.Add(scrapeInterval).Unix(),
+	)
+
+	// set some quota acpq values.
+	// resource level
+	_, err := s.DB.Exec(`UPDATE project_resources SET quota = $1 WHERE name = $2`, 20, "capacity")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.DB.Exec(`UPDATE project_resources SET quota = $1 WHERE name = $2`, 13, "things")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// az level
+	_, err = s.DB.Exec(`UPDATE project_az_resources SET quota = $1 WHERE resource_id IN (1,4) and az != 'any'`, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.DB.Exec(`UPDATE project_az_resources SET quota = $1 WHERE resource_id IN (3,6) and az != 'any'`, 13)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tr.DBChanges().Ignore()
+
+	mustT(t, syncJob.ProcessOne(s.Ctx, withLabel))
+	mustT(t, syncJob.ProcessOne(s.Ctx, withLabel))
+
+	tr.DBChanges().AssertEqualf(`
+		UPDATE project_az_resources SET backend_quota = 20 WHERE id = 11 AND resource_id = 4 AND az = 'az-one';
+		UPDATE project_az_resources SET backend_quota = 20 WHERE id = 12 AND resource_id = 4 AND az = 'az-two';
+		UPDATE project_az_resources SET backend_quota = 13 WHERE id = 17 AND resource_id = 6 AND az = 'az-one';
+		UPDATE project_az_resources SET backend_quota = 13 WHERE id = 18 AND resource_id = 6 AND az = 'az-two';
+		UPDATE project_az_resources SET backend_quota = 20 WHERE id = 2 AND resource_id = 1 AND az = 'az-one';
+		UPDATE project_az_resources SET backend_quota = 20 WHERE id = 3 AND resource_id = 1 AND az = 'az-two';
+		UPDATE project_az_resources SET backend_quota = 13 WHERE id = 8 AND resource_id = 3 AND az = 'az-one';
+		UPDATE project_az_resources SET backend_quota = 13 WHERE id = 9 AND resource_id = 3 AND az = 'az-two';
+		UPDATE project_resources SET backend_quota = 20 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
+		UPDATE project_resources SET backend_quota = 13 WHERE id = 3 AND service_id = 1 AND name = 'things';
+		UPDATE project_resources SET backend_quota = 20 WHERE id = 4 AND service_id = 2 AND name = 'capacity';
+		UPDATE project_resources SET backend_quota = 13 WHERE id = 6 AND service_id = 2 AND name = 'things';
+		UPDATE project_services SET quota_desynced_at = NULL, quota_sync_duration_secs = 5 WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET quota_desynced_at = NULL, quota_sync_duration_secs = 5 WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+	`)
+
+	s.Clock.StepBy(scrapeInterval)
+
+	// negative: scrape with flat topology returns invalid AZs
 	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"capacity": {Topology: liquid.FlatResourceTopology}}
 	plugin.ReportedAZs = map[liquid.AvailabilityZone]*any{"az-one": status, "az-two": status}
 	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during resource scrape of project germany/berlin: service: unittest, resource: capacity: scrape with toplogy type: flat returned AZs: [az-one az-two]"))
 
+	// negative: scrape with az-aware toplogy returns invalid any AZ
 	plugin.LiquidServiceInfo.Resources["capacity"] = liquid.ResourceInfo{Topology: liquid.AZAwareResourceTopology}
 	plugin.ReportedAZs = map[liquid.AvailabilityZone]*any{"any": status}
 	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during resource scrape of project germany/dresden: service: unittest, resource: capacity: scrape with toplogy type: az-aware returned AZs: [any]"))
 
 	s.Clock.StepBy(scrapeInterval)
+	// negative: scrape with az-separated toplogy returns invalid AZs any and unknown
 	plugin.LiquidServiceInfo.Resources["capacity"] = liquid.ResourceInfo{Topology: liquid.AZSeparatedResourceTopology}
 	plugin.ReportedAZs = map[liquid.AvailabilityZone]*any{"az-one": status, "unknown": status}
 	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during resource scrape of project germany/berlin: service: unittest, resource: capacity: scrape with toplogy type: az-separated returned AZs: [az-one unknown]"))
 
+	// negative: reject liquid initialization with invalid topologies
 	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"capacity": {Topology: "invalidAZ1"}, "things": {Topology: "invalidAZ2"}}
 	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during resource scrape of project germany/dresden: invalid toplogy: invalidAZ1 on resource: capacity\ninvalid toplogy: invalidAZ2 on resource: things"))
+
 }

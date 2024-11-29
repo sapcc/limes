@@ -93,14 +93,29 @@ func (c *Collector) processQuotaSyncTask(ctx context.Context, srv db.ProjectServ
 
 var (
 	quotaSyncSelectQuery = sqlext.SimplifyWhitespace(`
-		SELECT name, backend_quota, quota
+		SELECT id, name, backend_quota, quota
 		  FROM project_resources
 		 WHERE service_id = $1 AND quota IS NOT NULL
+	`)
+	azQuotaSyncSelectQuery = sqlext.SimplifyWhitespace(`
+		SELECT az, backend_quota, quota
+	 	  FROM project_az_resources
+		 WHERE resource_id = $1 AND quota IS NOT NULL
 	`)
 	quotaSyncMarkResourcesAsAppliedQuery = sqlext.SimplifyWhitespace(`
 		UPDATE project_resources
 		   SET backend_quota = quota
 		 WHERE service_id = $1
+	`)
+	azQuotaSyncMarkResourcesAsAppliedQuery = sqlext.SimplifyWhitespace(`
+		WITH resourceIDs as (
+		  SELECT id
+			FROM project_resources
+		 WHERE service_id = $1
+		)
+		UPDATE project_az_resources
+		   SET backend_quota = quota
+	 	 WHERE resource_id in (SELECT id from resourceIDs)
 	`)
 	quotaSyncMarkServiceAsAppliedQuery = sqlext.SimplifyWhitespace(`
 		UPDATE project_services
@@ -123,14 +138,17 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 
 	// collect backend quota values that we want to apply
 	targetQuotasInDB := make(map[liquid.ResourceName]uint64)
+	targetAZQuotasInDB := make(map[liquid.ResourceName]map[liquid.AvailabilityZone]liquid.AZResourceQuotaRequest)
 	needsApply := false
+	azSeparatedNeedsApply := false
 	err := sqlext.ForeachRow(c.DB, quotaSyncSelectQuery, []any{srv.ID}, func(rows *sql.Rows) error {
 		var (
+			resourceID   db.ProjectResourceID
 			resourceName liquid.ResourceName
 			currentQuota *int64
 			targetQuota  uint64
 		)
-		err := rows.Scan(&resourceName, &currentQuota, &targetQuota)
+		err := rows.Scan(&resourceID, &resourceName, &currentQuota, &targetQuota)
 		if err != nil {
 			return err
 		}
@@ -138,21 +156,50 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 		if currentQuota == nil || *currentQuota < 0 || uint64(*currentQuota) != targetQuota {
 			needsApply = true
 		}
+
+		resInfo := c.Cluster.InfoForResource(srv.Type, resourceName)
+		if resInfo.Topology != liquid.AZSeparatedResourceTopology {
+			return nil
+		}
+		err = sqlext.ForeachRow(c.DB, azQuotaSyncSelectQuery, []any{resourceID}, func(rows *sql.Rows) error {
+			var (
+				availabilityZone liquid.AvailabilityZone
+				currentAZQuota   *int64
+				targetAZQuota    uint64
+			)
+			err := rows.Scan(&availabilityZone, &currentAZQuota, &targetAZQuota)
+			if err != nil {
+				return err
+			}
+			// defense in depth: configured backend_quota for AZ any or unknown are not valid for the azSeparatedQuota topology.
+			if (availabilityZone == liquid.AvailabilityZoneAny || availabilityZone == liquid.AvailabilityZoneUnknown) && currentAZQuota != nil {
+				return fmt.Errorf("detected invalid AZ: %s for resource: %s with topology: %s has backend_quota: %v", availabilityZone, resourceName, resInfo.Topology, currentAZQuota)
+			}
+			targetAZQuotasInDB[resourceName] = make(map[liquid.AvailabilityZone]liquid.AZResourceQuotaRequest)
+			targetAZQuotasInDB[resourceName][availabilityZone] = liquid.AZResourceQuotaRequest{Quota: targetAZQuota}
+			if currentAZQuota == nil || *currentAZQuota < 0 || uint64(*currentAZQuota) != targetAZQuota {
+				azSeparatedNeedsApply = true
+			}
+			return nil
+		})
+		if err != nil {
+			return err
+		}
 		return nil
 	})
 	if err != nil {
 		return fmt.Errorf("while collecting target quota values for %s backend: %w", srv.Type, err)
 	}
 
-	if needsApply {
+	if needsApply || azSeparatedNeedsApply {
 		// double-check that we only include quota values for resources that the backend currently knows about
-		targetQuotasForBackend := make(map[liquid.ResourceName]uint64)
+		targetQuotasForBackend := make(map[liquid.ResourceName]core.Quotas)
 		for resName, resInfo := range plugin.Resources() {
 			if !resInfo.HasQuota {
 				continue
 			}
 			//NOTE: If `targetQuotasInDB` does not have an entry for this resource, we will write 0 into the backend.
-			targetQuotasForBackend[resName] = targetQuotasInDB[resName]
+			targetQuotasForBackend[resName] = core.Quotas{QuotaForResource: targetQuotasInDB[resName], QuotasForAZs: targetAZQuotasInDB[resName]}
 		}
 
 		// apply quotas in backend
@@ -171,6 +218,12 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 		_, err = c.DB.Exec(quotaSyncMarkResourcesAsAppliedQuery, srv.ID)
 		if err != nil {
 			return err
+		}
+		if azSeparatedNeedsApply {
+			_, err = c.DB.Exec(azQuotaSyncMarkResourcesAsAppliedQuery, srv.ID)
+			if err != nil {
+				return err
+			}
 		}
 	}
 

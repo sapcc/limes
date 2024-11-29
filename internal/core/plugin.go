@@ -141,7 +141,7 @@ type QuotaPlugin interface {
 	// SetQuota updates the backend service's quotas for the given project in the
 	// given domain to the values specified here. The map is guaranteed to contain
 	// values for all resources defined by Resources().
-	SetQuota(ctx context.Context, project KeystoneProject, quotas map[liquid.ResourceName]uint64) error
+	SetQuota(ctx context.Context, project KeystoneProject, quotas map[liquid.ResourceName]Quotas) error
 
 	// Rates returns metadata for all the rates that this plugin scrapes
 	// from the backend service.
@@ -179,6 +179,11 @@ type QuotaPlugin interface {
 	// should be preferred since metrics emitted here won't be lost between
 	// restarts of limes-collect.
 	CollectMetrics(ch chan<- prometheus.Metric, project KeystoneProject, serializedMetrics []byte) error
+}
+
+type Quotas struct {
+	QuotaForResource uint64
+	QuotasForAZs     map[liquid.AvailabilityZone]liquid.AZResourceQuotaRequest
 }
 
 // ServiceInfo is a reduced version of type limes.ServiceInfo, suitable for

@@ -303,10 +303,12 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 				azRes.Usage = data.Usage
 				azRes.PhysicalUsage = data.PhysicalUsage
 
-				// set AZ backend quota
+				// set AZ backend quota. Do not set backend quota to the automatically created any AZ.
 				resInfo := c.Cluster.InfoForResource(srv.Type, res.Name)
-				if resInfo.HasQuota && resInfo.Topology == liquid.AZSeparatedResourceTopology {
-					azRes.BackendQuota = &data.Quota
+				if resInfo.Topology == liquid.AZSeparatedResourceTopology && resInfo.HasQuota {
+					if azRes.AvailabilityZone != liquid.AvailabilityZoneAny {
+						azRes.BackendQuota = &data.Quota
+					}
 				}
 
 				// warn when the backend is inconsistent with itself

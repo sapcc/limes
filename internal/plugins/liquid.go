@@ -189,12 +189,12 @@ func castSliceToAny[T any](input []T) (output []any) {
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *liquidQuotaPlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotas map[liquid.ResourceName]uint64) error {
+func (p *liquidQuotaPlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotas map[liquid.ResourceName]core.Quotas) error {
 	req := liquid.ServiceQuotaRequest{
 		Resources: make(map[liquid.ResourceName]liquid.ResourceQuotaRequest, len(quotas)),
 	}
-	for resName, quota := range quotas {
-		req.Resources[resName] = liquid.ResourceQuotaRequest{Quota: quota}
+	for resName, quotas := range quotas {
+		req.Resources[resName] = liquid.ResourceQuotaRequest{Quota: quotas.QuotaForResource, PerAZ: quotas.QuotasForAZs}
 	}
 	if p.LiquidServiceInfo.QuotaUpdateNeedsProjectMetadata {
 		req.ProjectMetadata = project.ForLiquid()
