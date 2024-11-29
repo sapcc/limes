@@ -683,6 +683,26 @@ func Test_TopologyScrapes(t *testing.T) {
 
 	s.Clock.StepBy(scrapeInterval)
 
+	// toplogy of a resource changes. Reset AZ-separated backend_quota
+	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"capacity": {Topology: liquid.AZSeparatedResourceTopology}, "things": {Topology: liquid.AZAwareResourceTopology}}
+	mustT(t, job.ProcessOne(s.Ctx, withLabel))
+	mustT(t, job.ProcessOne(s.Ctx, withLabel))
+
+	tr.DBChanges().AssertEqualf(`
+		UPDATE project_az_resources SET backend_quota = 50 WHERE id = 11 AND resource_id = 4 AND az = 'az-one';
+		UPDATE project_az_resources SET backend_quota = 50 WHERE id = 12 AND resource_id = 4 AND az = 'az-two';
+		UPDATE project_az_resources SET backend_quota = NULL WHERE id = 17 AND resource_id = 6 AND az = 'az-one';
+		UPDATE project_az_resources SET backend_quota = NULL WHERE id = 18 AND resource_id = 6 AND az = 'az-two';
+		UPDATE project_az_resources SET backend_quota = 50 WHERE id = 2 AND resource_id = 1 AND az = 'az-one';
+		UPDATE project_az_resources SET backend_quota = 50 WHERE id = 3 AND resource_id = 1 AND az = 'az-two';
+		UPDATE project_az_resources SET backend_quota = NULL WHERE id = 8 AND resource_id = 3 AND az = 'az-one';
+		UPDATE project_az_resources SET backend_quota = NULL WHERE id = 9 AND resource_id = 3 AND az = 'az-two';
+		UPDATE project_services SET scraped_at = 1825, checked_at = 1825, next_scrape_at = 3625 WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = 1830, checked_at = 1830, next_scrape_at = 3630 WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+	`)
+
+	s.Clock.StepBy(scrapeInterval)
+
 	// negative: scrape with flat topology returns invalid AZs
 	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"capacity": {Topology: liquid.FlatResourceTopology}}
 	plugin.ReportedAZs = map[liquid.AvailabilityZone]*any{"az-one": status, "az-two": status}

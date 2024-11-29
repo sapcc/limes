@@ -64,6 +64,12 @@ var (
 		WHERE pr.service_id = $1
 	`)
 
+	resetAZBackendQuotas = sqlext.SimplifyWhitespace(`
+		UPDATE project_az_resources 
+			SET backend_quota = NULL
+		WHERE resource_id = $1 and backend_quota IS NOT NULL
+	`)
+
 	writeResourceScrapeSuccessQuery = sqlext.SimplifyWhitespace(`
 		UPDATE project_services SET
 			-- timing information
@@ -308,6 +314,13 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 				if resInfo.Topology == liquid.AZSeparatedResourceTopology && resInfo.HasQuota {
 					if azRes.AvailabilityZone != liquid.AvailabilityZoneAny {
 						azRes.BackendQuota = &data.Quota
+					}
+				}
+				// reset backendQuota entries for topology changes
+				if resInfo.Topology != liquid.AZSeparatedResourceTopology {
+					_, err = c.DB.Exec(resetAZBackendQuotas, azRes.ResourceID)
+					if err != nil {
+						return fmt.Errorf("AZ backend quota reset for resource %s failed", resourceName)
 					}
 				}
 
