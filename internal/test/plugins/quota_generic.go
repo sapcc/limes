@@ -171,12 +171,17 @@ func (p *GenericQuotaPlugin) Scrape(ctx context.Context, project core.KeystonePr
 	}
 
 	if len(p.ReportedAZs) > 0 {
-		for resourceName, resource := range p.LiquidServiceInfo.Resources {
-			toplogy := resource.Topology
+		errs := []error{}
+		resourceNames := plugins.SortMapKeys(p.LiquidServiceInfo.Resources)
+		for _, resourceName := range resourceNames {
+			toplogy := p.LiquidServiceInfo.Resources[liquid.ResourceName(resourceName)].Topology
 			err := plugins.MatchLiquidReportToTopology(p.ReportedAZs, toplogy)
 			if err != nil {
-				return nil, nil, fmt.Errorf("service: %s, resource: %s: %w", p.ServiceType, resourceName, err)
+				errs = append(errs, fmt.Errorf("service: %s, resource: %s: %w", p.ServiceType, resourceName, err))
 			}
+		}
+		if len(errs) > 0 {
+			return nil, nil, errors.Join(errs...)
 		}
 	}
 

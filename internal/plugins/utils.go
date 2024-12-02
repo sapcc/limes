@@ -31,16 +31,21 @@ func p2u64(val uint64) *uint64 {
 	return &val
 }
 
+func SortMapKeys[M map[K]V, K ~string, V any](mapToSort M) []string {
+	var sortedKeys []string
+	for key := range mapToSort {
+		sortedKeys = append(sortedKeys, string(key))
+	}
+	sort.Strings(sortedKeys)
+
+	return sortedKeys
+}
+
 func CheckResourceTopologies(serviceInfo liquid.ServiceInfo) (err error) {
 	errs := []error{}
 	resources := serviceInfo.Resources
 
-	var resourceNames []string
-	for resource := range resources {
-		resourceNames = append(resourceNames, string(resource))
-	}
-	sort.Strings(resourceNames)
-
+	resourceNames := SortMapKeys(resources)
 	for _, resourceName := range resourceNames {
 		topology := resources[liquid.ResourceName(resourceName)].Topology
 		if topology == "" {

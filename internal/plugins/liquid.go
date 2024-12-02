@@ -123,12 +123,17 @@ func (p *liquidQuotaPlugin) Scrape(ctx context.Context, project core.KeystonePro
 		logg.Fatal("ServiceInfo version for %s changed from %d to %d; restarting now to reload ServiceInfo...",
 			p.LiquidServiceType, p.LiquidServiceInfo.Version, resp.InfoVersion)
 	}
-	for resourceName, resource := range p.LiquidServiceInfo.Resources {
-		perAZ := resp.Resources[resourceName].PerAZ
-		toplogy := resource.Topology
+	resourceNames := SortMapKeys(p.LiquidServiceInfo.Resources)
+	for _, resourceName := range resourceNames {
+		errs := []error{}
+		perAZ := resp.Resources[liquid.ResourceName(resourceName)].PerAZ
+		toplogy := p.LiquidServiceInfo.Resources[liquid.ResourceName(resourceName)].Topology
 		err := MatchLiquidReportToTopology(perAZ, toplogy)
 		if err != nil {
-			return nil, nil, fmt.Errorf("service: %s, resource: %s: %w", p.ServiceType, resourceName, err)
+			errs = append(errs, fmt.Errorf("service: %s, resource: %s: %w", p.ServiceType, resourceName, err))
+		}
+		if len(errs) > 0 {
+			return nil, nil, errors.Join(errs...)
 		}
 	}
 

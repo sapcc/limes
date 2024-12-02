@@ -722,4 +722,10 @@ func Test_TopologyScrapes(t *testing.T) {
 	// negative: reject liquid initialization with invalid topologies
 	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"capacity": {Topology: "invalidAZ1"}, "things": {Topology: "invalidAZ2"}}
 	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during resource scrape of project germany/dresden: invalid toplogy: invalidAZ1 on resource: capacity\ninvalid toplogy: invalidAZ2 on resource: things"))
+
+	s.Clock.StepBy(scrapeInterval)
+	// negative: multiple resources with mismatching topology to AZ responses
+	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"capacity": {Topology: liquid.AZSeparatedResourceTopology}, "things": {Topology: liquid.AZSeparatedResourceTopology}}
+	plugin.ReportedAZs = map[liquid.AvailabilityZone]*any{"unknown": status}
+	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during resource scrape of project germany/berlin: service: unittest, resource: capacity: scrape with toplogy type: az-separated returned AZs: [unknown]\nservice: unittest, resource: things: scrape with toplogy type: az-separated returned AZs: [unknown]"))
 }
