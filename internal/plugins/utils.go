@@ -81,11 +81,6 @@ func MatchLiquidReportToTopology[V any](perAZReport map[liquid.AvailabilityZone]
 		return
 	}
 
-	var reportedAZs []string
-	for az := range perAZReport {
-		reportedAZs = append(reportedAZs, string(az))
-	}
-	sort.Strings(reportedAZs)
-
+	reportedAZs := SortMapKeys(perAZReport)
 	return fmt.Errorf("scrape with toplogy type: %s returned AZs: %v", topology, reportedAZs)
 }
