@@ -32,6 +32,7 @@ import (
 	"github.com/sapcc/go-api-declarations/cadf"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/audittools"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpapi"
@@ -234,11 +235,12 @@ func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r 
 		return nil, nil, nil
 	}
 	behavior := p.Cluster.BehaviorForResource(dbServiceType, dbResourceName)
+	resInfo := p.Cluster.InfoForResource(dbServiceType, dbResourceName)
 	if len(behavior.CommitmentDurations) == 0 {
 		http.Error(w, "commitments are not enabled for this resource", http.StatusUnprocessableEntity)
 		return nil, nil, nil
 	}
-	if behavior.CommitmentIsAZAware {
+	if resInfo.Topology != liquid.FlatResourceTopology {
 		if !slices.Contains(p.Cluster.Config.AvailabilityZones, req.AvailabilityZone) {
 			http.Error(w, "no such availability zone", http.StatusUnprocessableEntity)
 			return nil, nil, nil
