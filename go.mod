@@ -14,7 +14,7 @@ require (
 	github.com/prometheus/common v0.60.1
 	github.com/rs/cors v1.11.1
 	github.com/sapcc/go-api-declarations v1.13.0
-	github.com/sapcc/go-bits v0.0.0-20241128180218-03123d6bae9b
+	github.com/sapcc/go-bits v0.0.0-20241204103411-aa06a1b92800
 	go.uber.org/automaxprocs v1.6.0
 	gopkg.in/yaml.v2 v2.4.0
 )
