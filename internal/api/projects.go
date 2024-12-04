@@ -24,9 +24,11 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
+	"github.com/sapcc/go-api-declarations/cadf"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/audittools"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/respondwith"
 	"github.com/sapcc/go-bits/sqlext"
@@ -309,8 +311,13 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 		for dbResourceName, requestedChange := range requestedInService {
 			apiServiceType, apiResourceName, exists := nm.MapToV1API(dbServiceType, dbResourceName)
 			if exists {
-				logAndPublishEvent(requestTime, r, token, http.StatusOK,
-					maxQuotaEventTarget{
+				p.auditor.Record(audittools.EventParameters{
+					Time:       requestTime,
+					Request:    r,
+					User:       token,
+					ReasonCode: http.StatusAccepted,
+					Action:     cadf.UpdateAction,
+					Target: maxQuotaEventTarget{
 						DomainID:        dbDomain.UUID,
 						DomainName:      dbDomain.Name,
 						ProjectID:       dbProject.UUID, // is empty for domain quota updates, see above
@@ -319,7 +326,7 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 						ResourceName:    apiResourceName,
 						RequestedChange: *requestedChange,
 					},
-				)
+				})
 			}
 		}
 	}

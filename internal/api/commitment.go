@@ -29,8 +29,10 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/sapcc/go-api-declarations/cadf"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-bits/audittools"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/must"
@@ -413,12 +415,19 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-	logAndPublishEvent(now, r, token, http.StatusCreated, commitmentEventTarget{
-		DomainID:    dbDomain.UUID,
-		DomainName:  dbDomain.Name,
-		ProjectID:   dbProject.UUID,
-		ProjectName: dbProject.Name,
-		Commitments: []limesresources.Commitment{p.convertCommitmentToDisplayForm(dbCommitment, *loc, token)},
+	p.auditor.Record(audittools.EventParameters{
+		Time:       now,
+		Request:    r,
+		User:       token,
+		ReasonCode: http.StatusCreated,
+		Action:     cadf.CreateAction,
+		Target: commitmentEventTarget{
+			DomainID:    dbDomain.UUID,
+			DomainName:  dbDomain.Name,
+			ProjectID:   dbProject.UUID,
+			ProjectName: dbProject.Name,
+			Commitments: []limesresources.Commitment{p.convertCommitmentToDisplayForm(dbCommitment, *loc, token)},
+		},
 	})
 
 	// if the commitment is immediately confirmed, trigger a capacity scrape in
@@ -487,14 +496,21 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-
-	logAndPublishEvent(p.timeNow(), r, token, http.StatusCreated, commitmentEventTarget{
-		DomainID:    dbDomain.UUID,
-		DomainName:  dbDomain.Name,
-		ProjectID:   dbProject.UUID,
-		ProjectName: dbProject.Name,
-		Commitments: []limesresources.Commitment{p.convertCommitmentToDisplayForm(dbCommitment, loc, token)},
+	p.auditor.Record(audittools.EventParameters{
+		Time:       p.timeNow(),
+		Request:    r,
+		User:       token,
+		ReasonCode: http.StatusNoContent,
+		Action:     cadf.DeleteAction,
+		Target: commitmentEventTarget{
+			DomainID:    dbDomain.UUID,
+			DomainName:  dbDomain.Name,
+			ProjectID:   dbProject.UUID,
+			ProjectName: dbProject.Name,
+			Commitments: []limesresources.Commitment{p.convertCommitmentToDisplayForm(dbCommitment, loc, token)},
+		},
 	})
+
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -624,13 +640,20 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 	}
 
 	c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token)
-	logAndPublishEvent(p.timeNow(), r, token, http.StatusAccepted, commitmentEventTarget{
-		DomainID:    dbDomain.UUID,
-		DomainName:  dbDomain.Name,
-		ProjectID:   dbProject.UUID,
-		ProjectName: dbProject.Name,
-		Commitments: []limesresources.Commitment{c},
-		// TODO: if commitment was split, log all participating commitment objects (incl. the SupersededCommitment)
+	p.auditor.Record(audittools.EventParameters{
+		Time:       p.timeNow(),
+		Request:    r,
+		User:       token,
+		ReasonCode: http.StatusAccepted,
+		Action:     cadf.UpdateAction,
+		Target: commitmentEventTarget{
+			DomainID:    dbDomain.UUID,
+			DomainName:  dbDomain.Name,
+			ProjectID:   dbProject.UUID,
+			ProjectName: dbProject.Name,
+			Commitments: []limesresources.Commitment{c},
+			// TODO: if commitment was split, log all participating commitment objects (incl. the SupersededCommitment)
+		},
 	})
 	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
 }
@@ -779,12 +802,19 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	}
 
 	c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token)
-	logAndPublishEvent(p.timeNow(), r, token, http.StatusAccepted, commitmentEventTarget{
-		DomainID:    dbDomain.UUID,
-		DomainName:  dbDomain.Name,
-		ProjectID:   targetProject.UUID,
-		ProjectName: targetProject.Name,
-		Commitments: []limesresources.Commitment{c},
+	p.auditor.Record(audittools.EventParameters{
+		Time:       p.timeNow(),
+		Request:    r,
+		User:       token,
+		ReasonCode: http.StatusAccepted,
+		Action:     cadf.UpdateAction,
+		Target: commitmentEventTarget{
+			DomainID:    dbDomain.UUID,
+			DomainName:  dbDomain.Name,
+			ProjectID:   targetProject.UUID,
+			ProjectName: targetProject.Name,
+			Commitments: []limesresources.Commitment{c},
+		},
 	})
 
 	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
@@ -1034,7 +1064,14 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 
 	c := p.convertCommitmentToDisplayForm(convertedCommitment, targetLoc, token)
 	auditEvent.Commitments = append([]limesresources.Commitment{c}, auditEvent.Commitments...)
-	logAndPublishEvent(p.timeNow(), r, token, http.StatusAccepted, auditEvent)
+	p.auditor.Record(audittools.EventParameters{
+		Time:       p.timeNow(),
+		Request:    r,
+		User:       token,
+		ReasonCode: http.StatusAccepted,
+		Action:     cadf.UpdateAction,
+		Target:     auditEvent,
+	})
 
 	respondwith.JSON(w, http.StatusAccepted, map[string]any{"commitment": c})
 }
@@ -1127,12 +1164,19 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 	}
 
 	c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token)
-	logAndPublishEvent(p.timeNow(), r, token, http.StatusAccepted, commitmentEventTarget{
-		DomainID:    dbDomain.UUID,
-		DomainName:  dbDomain.Name,
-		ProjectID:   dbProject.UUID,
-		ProjectName: dbProject.Name,
-		Commitments: []limesresources.Commitment{c},
+	p.auditor.Record(audittools.EventParameters{
+		Time:       p.timeNow(),
+		Request:    r,
+		User:       token,
+		ReasonCode: http.StatusOK,
+		Action:     cadf.UpdateAction,
+		Target: commitmentEventTarget{
+			DomainID:    dbDomain.UUID,
+			DomainName:  dbDomain.Name,
+			ProjectID:   dbProject.UUID,
+			ProjectName: dbProject.Name,
+			Commitments: []limesresources.Commitment{c},
+		},
 	})
 
 	respondwith.JSON(w, http.StatusOK, map[string]any{"commitment": c})

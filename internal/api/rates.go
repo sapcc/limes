@@ -146,6 +146,7 @@ func (p *v1Provider) putOrSimulatePutProjectRates(w http.ResponseWriter, r *http
 			token.Context.Request["service_type"] = string(serviceType)
 			return token.Check("project:set_rate_limit")
 		},
+		Auditor: p.auditor,
 	}
 	updater.Domain = p.FindDomainFromRequest(w, r)
 	if updater.Domain == nil {
