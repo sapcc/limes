@@ -95,17 +95,17 @@ func (p *liquidCapacityPlugin) Scrape(ctx context.Context, backchannel core.Capa
 			p.LiquidServiceType, p.LiquidServiceInfo.Version, resp.InfoVersion)
 	}
 	resourceNames := SortMapKeys(p.LiquidServiceInfo.Resources)
+	var errs []error
 	for _, resourceName := range resourceNames {
-		errs := []error{}
 		perAZ := resp.Resources[liquid.ResourceName(resourceName)].PerAZ
 		toplogy := p.LiquidServiceInfo.Resources[liquid.ResourceName(resourceName)].Topology
 		err := MatchLiquidReportToTopology(perAZ, toplogy)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("service: %s, resource: %s: %w", p.ServiceType, resourceName, err))
 		}
-		if len(errs) > 0 {
-			return nil, nil, errors.Join(errs...)
-		}
+	}
+	if len(errs) > 0 {
+		return nil, nil, errors.Join(errs...)
 	}
 
 	resultInService := make(map[liquid.ResourceName]core.PerAZ[core.CapacityData], len(p.LiquidServiceInfo.Resources))

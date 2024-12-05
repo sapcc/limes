@@ -124,17 +124,17 @@ func (p *liquidQuotaPlugin) Scrape(ctx context.Context, project core.KeystonePro
 			p.LiquidServiceType, p.LiquidServiceInfo.Version, resp.InfoVersion)
 	}
 	resourceNames := SortMapKeys(p.LiquidServiceInfo.Resources)
+	var errs []error
 	for _, resourceName := range resourceNames {
-		errs := []error{}
 		perAZ := resp.Resources[liquid.ResourceName(resourceName)].PerAZ
 		toplogy := p.LiquidServiceInfo.Resources[liquid.ResourceName(resourceName)].Topology
 		err := MatchLiquidReportToTopology(perAZ, toplogy)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("service: %s, resource: %s: %w", p.ServiceType, resourceName, err))
 		}
-		if len(errs) > 0 {
-			return nil, nil, errors.Join(errs...)
-		}
+	}
+	if len(errs) > 0 {
+		return nil, nil, errors.Join(errs...)
 	}
 
 	result = make(map[liquid.ResourceName]core.ResourceData, len(p.LiquidServiceInfo.Resources))
