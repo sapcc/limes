@@ -26,6 +26,7 @@ import (
 	"slices"
 
 	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/logg"
 )
 
 func p2u64(val uint64) *uint64 {
