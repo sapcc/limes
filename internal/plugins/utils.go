@@ -59,7 +59,7 @@ func CheckResourceTopologies(serviceInfo liquid.ServiceInfo) (err error) {
 	return
 }
 
-func MatchLiquidReportToTopology[V any](perAZReport map[liquid.AvailabilityZone]*V, topology liquid.ResourceTopology) (err error) {
+func MatchLiquidReportToTopology[V any](perAZReport map[liquid.AvailabilityZone]V, topology liquid.ResourceTopology) (err error) {
 	_, anyExists := perAZReport[liquid.AvailabilityZoneAny]
 	_, unknownExists := perAZReport[liquid.AvailabilityZoneUnknown]
 	switch topology {

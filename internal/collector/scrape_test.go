@@ -599,10 +599,9 @@ func Test_TopologyScrapes(t *testing.T) {
 	tr, tr0 := easypg.NewTracker(t, s.DB.Db)
 	tr0.AssertEqualToFile("fixtures/scrape0.sql")
 
-	var status *any
 	// positive: Sync az-separated quota values with the backend
 	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"capacity": {Topology: liquid.AZSeparatedResourceTopology}, "things": {Topology: liquid.AZSeparatedResourceTopology}}
-	plugin.ReportedAZs = map[liquid.AvailabilityZone]*any{"az-one": status, "az-two": status}
+	plugin.ReportedAZs = map[liquid.AvailabilityZone]struct{}{"az-one": {}, "az-two": {}}
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 
@@ -703,18 +702,18 @@ func Test_TopologyScrapes(t *testing.T) {
 
 	// negative: scrape with flat topology returns invalid AZs
 	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"capacity": {Topology: liquid.FlatResourceTopology}}
-	plugin.ReportedAZs = map[liquid.AvailabilityZone]*any{"az-one": status, "az-two": status}
+	plugin.ReportedAZs = map[liquid.AvailabilityZone]struct{}{"az-one": {}, "az-two": {}}
 	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during resource scrape of project germany/berlin: service: unittest, resource: capacity: scrape with topology type: flat returned AZs: [az-one az-two]"))
 
 	// negative: scrape with az-aware topology returns invalid any AZ
 	plugin.LiquidServiceInfo.Resources["capacity"] = liquid.ResourceInfo{Topology: liquid.AZAwareResourceTopology}
-	plugin.ReportedAZs = map[liquid.AvailabilityZone]*any{"any": status}
+	plugin.ReportedAZs = map[liquid.AvailabilityZone]struct{}{"any": {}}
 	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during resource scrape of project germany/dresden: service: unittest, resource: capacity: scrape with topology type: az-aware returned AZs: [any]"))
 
 	s.Clock.StepBy(scrapeInterval)
 	// negative: scrape with az-separated topology returns invalid AZs any and unknown
 	plugin.LiquidServiceInfo.Resources["capacity"] = liquid.ResourceInfo{Topology: liquid.AZSeparatedResourceTopology}
-	plugin.ReportedAZs = map[liquid.AvailabilityZone]*any{"az-one": status, "unknown": status}
+	plugin.ReportedAZs = map[liquid.AvailabilityZone]struct{}{"az-one": {}, "unknown": {}}
 	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during resource scrape of project germany/berlin: service: unittest, resource: capacity: scrape with topology type: az-separated returned AZs: [az-one unknown]"))
 
 	// negative: reject liquid initialization with invalid topologies
@@ -724,6 +723,6 @@ func Test_TopologyScrapes(t *testing.T) {
 	s.Clock.StepBy(scrapeInterval)
 	// negative: multiple resources with mismatching topology to AZ responses
 	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"capacity": {Topology: liquid.AZSeparatedResourceTopology}, "things": {Topology: liquid.AZSeparatedResourceTopology}}
-	plugin.ReportedAZs = map[liquid.AvailabilityZone]*any{"unknown": status}
+	plugin.ReportedAZs = map[liquid.AvailabilityZone]struct{}{"unknown": {}}
 	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during resource scrape of project germany/berlin: service: unittest, resource: capacity: scrape with topology type: az-separated returned AZs: [unknown]\nservice: unittest, resource: things: scrape with topology type: az-separated returned AZs: [unknown]"))
 }

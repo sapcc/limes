@@ -52,11 +52,11 @@ type GenericQuotaPlugin struct {
 	StaticResourceAttributes map[liquid.ResourceName]map[string]any                         `yaml:"-"`
 	OverrideQuota            map[string]map[liquid.ResourceName]liquid.ResourceQuotaRequest `yaml:"-"` // first key is project UUID
 	// behavior flags that can be set by a unit test
-	ReportedAZs   map[liquid.AvailabilityZone]*any `yaml:"-"`
-	ScrapeFails   bool                             `yaml:"-"`
-	SetQuotaFails bool                             `yaml:"-"`
-	MinQuota      map[liquid.ResourceName]uint64   `yaml:"-"`
-	MaxQuota      map[liquid.ResourceName]uint64   `yaml:"-"`
+	ReportedAZs   map[liquid.AvailabilityZone]struct{} `yaml:"-"`
+	ScrapeFails   bool                                 `yaml:"-"`
+	SetQuotaFails bool                                 `yaml:"-"`
+	MinQuota      map[liquid.ResourceName]uint64       `yaml:"-"`
+	MaxQuota      map[liquid.ResourceName]uint64       `yaml:"-"`
 }
 
 // Init implements the core.QuotaPlugin interface.
