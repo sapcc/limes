@@ -22,7 +22,8 @@ package plugins
 import (
 	"errors"
 	"fmt"
-	"sort"
+	"maps"
+	"slices"
 
 	"github.com/sapcc/go-api-declarations/liquid"
 )
@@ -31,13 +32,9 @@ func p2u64(val uint64) *uint64 {
 	return &val
 }
 
-func SortMapKeys[M map[K]V, K ~string, V any](mapToSort M) []string {
-	var sortedKeys []string
-	for key := range mapToSort {
-		sortedKeys = append(sortedKeys, string(key))
-	}
-	sort.Strings(sortedKeys)
-
+func SortMapKeys[M map[K]V, K ~string, V any](mapToSort M) []K {
+	sortedKeys := slices.Collect(maps.Keys(mapToSort))
+	slices.Sort(sortedKeys)
 	return sortedKeys
 }
 
