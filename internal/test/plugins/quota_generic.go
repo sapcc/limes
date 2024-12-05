@@ -45,12 +45,12 @@ func init() {
 // mostly reports static data and offers several controls to simulate failed
 // operations.
 type GenericQuotaPlugin struct {
-	ServiceType              db.ServiceType                                 `yaml:"-"`
-	LiquidServiceInfo        liquid.ServiceInfo                             `yaml:"-"`
-	StaticRateInfos          map[liquid.RateName]liquid.RateInfo            `yaml:"rate_infos"`
-	StaticResourceData       map[liquid.ResourceName]*core.ResourceData     `yaml:"-"`
-	StaticResourceAttributes map[liquid.ResourceName]map[string]any         `yaml:"-"`
-	OverrideQuota            map[string]map[liquid.ResourceName]core.Quotas `yaml:"-"` // first key is project UUID
+	ServiceType              db.ServiceType                                                 `yaml:"-"`
+	LiquidServiceInfo        liquid.ServiceInfo                                             `yaml:"-"`
+	StaticRateInfos          map[liquid.RateName]liquid.RateInfo                            `yaml:"rate_infos"`
+	StaticResourceData       map[liquid.ResourceName]*core.ResourceData                     `yaml:"-"`
+	StaticResourceAttributes map[liquid.ResourceName]map[string]any                         `yaml:"-"`
+	OverrideQuota            map[string]map[liquid.ResourceName]liquid.ResourceQuotaRequest `yaml:"-"` // first key is project UUID
 	// behavior flags that can be set by a unit test
 	ReportedAZs   map[liquid.AvailabilityZone]*any `yaml:"-"`
 	ScrapeFails   bool                             `yaml:"-"`
@@ -78,7 +78,7 @@ func (p *GenericQuotaPlugin) Init(ctx context.Context, provider *gophercloud.Pro
 			},
 		},
 	}
-	p.OverrideQuota = make(map[string]map[liquid.ResourceName]core.Quotas)
+	p.OverrideQuota = make(map[string]map[liquid.ResourceName]liquid.ResourceQuotaRequest)
 	return nil
 }
 
@@ -231,7 +231,7 @@ func (p *GenericQuotaPlugin) Scrape(ctx context.Context, project core.KeystonePr
 	if exists {
 		for resourceName, quota := range data {
 			resData := result[resourceName]
-			resData.Quota = int64(quota.QuotaForResource) //nolint:gosec // uint64 -> int64 would only fail if quota is bigger than 2^63
+			resData.Quota = int64(quota.Quota) //nolint:gosec // uint64 -> int64 would only fail if quota is bigger than 2^63
 			result[resourceName] = resData
 		}
 	}
@@ -259,7 +259,7 @@ func (p *GenericQuotaPlugin) Scrape(ctx context.Context, project core.KeystonePr
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *GenericQuotaPlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotas map[liquid.ResourceName]core.Quotas) error {
+func (p *GenericQuotaPlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotas map[liquid.ResourceName]liquid.ResourceQuotaRequest) error {
 	if p.SetQuotaFails {
 		return errors.New("SetQuota failed as requested")
 	}

@@ -193,13 +193,13 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 
 	if needsApply || azSeparatedNeedsApply {
 		// double-check that we only include quota values for resources that the backend currently knows about
-		targetQuotasForBackend := make(map[liquid.ResourceName]core.Quotas)
+		targetQuotasForBackend := make(map[liquid.ResourceName]liquid.ResourceQuotaRequest)
 		for resName, resInfo := range plugin.Resources() {
 			if !resInfo.HasQuota {
 				continue
 			}
 			//NOTE: If `targetQuotasInDB` does not have an entry for this resource, we will write 0 into the backend.
-			targetQuotasForBackend[resName] = core.Quotas{QuotaForResource: targetQuotasInDB[resName], QuotasForAZs: targetAZQuotasInDB[resName]}
+			targetQuotasForBackend[resName] = liquid.ResourceQuotaRequest{Quota: targetQuotasInDB[resName], PerAZ: targetAZQuotasInDB[resName]}
 		}
 
 		// apply quotas in backend

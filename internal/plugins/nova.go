@@ -345,11 +345,11 @@ func (p *novaPlugin) pooledResourceName(hwVersion string, base liquid.ResourceNa
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *novaPlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotas map[liquid.ResourceName]core.Quotas) error {
+func (p *novaPlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotaReq map[liquid.ResourceName]liquid.ResourceQuotaRequest) error {
 	// translate Limes resource names for separate instance quotas into Nova quota names
-	novaQuotas := make(novaQuotaUpdateOpts, len(quotas))
-	for resourceName, quotas := range quotas {
-		novaQuotas[string(resourceName)] = quotas.QuotaForResource
+	novaQuotas := make(novaQuotaUpdateOpts, len(quotaReq))
+	for resourceName, request := range quotaReq {
+		novaQuotas[string(resourceName)] = request.Quota
 	}
 
 	return quotasets.Update(ctx, p.NovaV2, project.UUID, novaQuotas).Err

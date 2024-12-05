@@ -453,7 +453,7 @@ func taskTestSetQuota(ctx context.Context, cluster *core.Cluster, args []string)
 	project := must.Return(findProjectForTesting(ctx, cluster, args[0]))
 
 	quotaValueRx := regexp.MustCompile(`^([^=]+)=(\d+)$`)
-	quotaValues := make(map[liquid.ResourceName]core.Quotas)
+	quotaValues := make(map[liquid.ResourceName]liquid.ResourceQuotaRequest)
 	for _, arg := range args[2:] {
 		match := quotaValueRx.FindStringSubmatch(arg)
 		if match == nil {
@@ -463,7 +463,7 @@ func taskTestSetQuota(ctx context.Context, cluster *core.Cluster, args []string)
 		if err != nil {
 			logg.Fatal(err.Error())
 		}
-		quotaValues[liquid.ResourceName(match[1])] = core.Quotas{QuotaForResource: val}
+		quotaValues[liquid.ResourceName(match[1])] = liquid.ResourceQuotaRequest{Quota: val}
 	}
 
 	must.Succeed(cluster.QuotaPlugins[serviceType].SetQuota(ctx, project, quotaValues))
