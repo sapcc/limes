@@ -378,7 +378,7 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 				// AZ separated topology receives the basequota to all available AZs
 				if resInfo.Topology == liquid.AZSeparatedResourceTopology {
 					for az := range isRelevantAZ {
-						target[az][resourceID].Desired = cfg.ProjectBaseQuota - target[az][resourceID].Allocated
+						target[az][resourceID].Desired = cfg.ProjectBaseQuota
 					}
 				} else {
 					target[limes.AvailabilityZoneAny][resourceID].Desired = cfg.ProjectBaseQuota - sumOfLocalizedQuotas
