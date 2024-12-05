@@ -683,6 +683,8 @@ func Test_TopologyScrapes(t *testing.T) {
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 
+	checkedAt1 := s.Clock.Now().Add(-5 * time.Second)
+	checkedAt2 := s.Clock.Now()
 	tr.DBChanges().AssertEqualf(`
 		UPDATE project_az_resources SET backend_quota = 50 WHERE id = 1 AND resource_id = 1 AND az = 'az-one';
 		UPDATE project_az_resources SET backend_quota = NULL WHERE id = 13 AND resource_id = 6 AND az = 'az-one';
@@ -694,12 +696,39 @@ func Test_TopologyScrapes(t *testing.T) {
 		UPDATE project_az_resources SET backend_quota = NULL WHERE id = 7 AND resource_id = 3 AND az = 'az-two';
 		UPDATE project_az_resources SET backend_quota = 50 WHERE id = 8 AND resource_id = 4 AND az = 'az-one';
 		UPDATE project_az_resources SET backend_quota = 50 WHERE id = 9 AND resource_id = 4 AND az = 'az-two';
-		UPDATE project_services SET scraped_at = 1825, checked_at = 1825, next_scrape_at = 3625 WHERE id = 1 AND project_id = 1 AND type = 'unittest';
-		UPDATE project_services SET scraped_at = 1830, checked_at = 1830, next_scrape_at = 3630 WHERE id = 2 AND project_id = 2 AND type = 'unittest';
-	`)
+		UPDATE project_services SET scraped_at = %[1]d, checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = %[3]d, checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+	`,
+		checkedAt1.Unix(), checkedAt1.Add(scrapeInterval).Unix(),
+		checkedAt2.Unix(), checkedAt2.Add(scrapeInterval).Unix(),
+	)
 
 	s.Clock.StepBy(scrapeInterval)
+	// positive: missing AZ in resource report will be created by the scraper in order to assign basequota later.
+	// warning: any AZs will be removed, because resource things switches from AZAware to AZSeparated.
+	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"capacity": {Topology: liquid.AZSeparatedResourceTopology}, "things": {Topology: liquid.AZSeparatedResourceTopology}}
+	delete(plugin.StaticResourceData["things"].UsageData, "az-two")
+	mustT(t, job.ProcessOne(s.Ctx, withLabel))
+	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 
+	checkedAt1 = s.Clock.Now().Add(-5 * time.Second)
+	checkedAt2 = s.Clock.Now()
+	tr.DBChanges().AssertEqualf(`
+		UPDATE project_az_resources SET backend_quota = 21 WHERE id = 13 AND resource_id = 6 AND az = 'az-one';
+		UPDATE project_az_resources SET usage = 0, subresources = '', historical_usage = '{"t":[%[2]d,%[5]d],"v":[2,0]}' WHERE id = 14 AND resource_id = 6 AND az = 'az-two';
+		DELETE FROM project_az_resources WHERE id = 15 AND resource_id = 3 AND az = 'any';
+		DELETE FROM project_az_resources WHERE id = 16 AND resource_id = 6 AND az = 'any';
+		UPDATE project_az_resources SET backend_quota = 21 WHERE id = 6 AND resource_id = 3 AND az = 'az-one';
+		UPDATE project_az_resources SET usage = 0, subresources = '', historical_usage = '{"t":[%[1]d,%[3]d],"v":[2,0]}' WHERE id = 7 AND resource_id = 3 AND az = 'az-two';
+		UPDATE project_services SET scraped_at = %[3]d, serialized_metrics = '{"capacity_usage":0,"things_usage":2}', checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = %[5]d, serialized_metrics = '{"capacity_usage":0,"things_usage":2}', checked_at = %[5]d, next_scrape_at = %[6]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+	`,
+		scrapedAt1.Unix(), scrapedAt2.Unix(),
+		checkedAt1.Unix(), checkedAt1.Add(scrapeInterval).Unix(),
+		checkedAt2.Unix(), checkedAt2.Add(scrapeInterval).Unix(),
+	)
+
+	s.Clock.StepBy(scrapeInterval)
 	// negative: scrape with flat topology returns invalid AZs
 	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"capacity": {Topology: liquid.FlatResourceTopology}}
 	plugin.ReportedAZs = map[liquid.AvailabilityZone]struct{}{"az-one": {}, "az-two": {}}

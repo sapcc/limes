@@ -215,15 +215,22 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 			resourceData[resName] = resData
 		} else {
 			// AZ separated resources will not include "any" AZ. The basequota will be distributed towards the existing AZs.
+			// If an AZ is not available within the scrape response, it will be created to store the basequota.
 			if resInfo.Topology == liquid.AZSeparatedResourceTopology {
-				continue
-			}
-			// for AZ-aware resources, ensure that we also have a ProjectAZResource in
-			// "any", because ApplyComputedProjectQuota needs somewhere to write base
-			// quotas into if enabled
-			_, exists := resData.UsageData[liquid.AvailabilityZoneAny]
-			if !exists {
-				resData.UsageData[liquid.AvailabilityZoneAny] = &core.UsageData{Usage: 0}
+				for _, availabilityZone := range c.Cluster.Config.AvailabilityZones {
+					_, exists := resData.UsageData[availabilityZone]
+					if !exists {
+						resData.UsageData[availabilityZone] = &core.UsageData{Usage: 0}
+					}
+				}
+			} else {
+				// for AZ-aware resources, ensure that we also have a ProjectAZResource in
+				// "any", because ApplyComputedProjectQuota needs somewhere to write base
+				// quotas into if enabled
+				_, exists := resData.UsageData[liquid.AvailabilityZoneAny]
+				if !exists {
+					resData.UsageData[liquid.AvailabilityZoneAny] = &core.UsageData{Usage: 0}
+				}
 			}
 		}
 	}
