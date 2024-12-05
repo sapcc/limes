@@ -24,6 +24,7 @@ import (
 	"testing"
 
 	"github.com/sapcc/go-api-declarations/limes"
+	"github.com/sapcc/go-api-declarations/liquid"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
@@ -155,6 +156,68 @@ func TestACPQBasicWithAZAwareness(t *testing.T) {
 				405: {Allocated: 0},
 				406: {Allocated: 10},
 				407: {Allocated: 5},
+			},
+		})
+	}
+}
+
+func TestACPQBasicWithAZSeparated(t *testing.T) {
+	input := map[limes.AvailabilityZone]clusterAZAllocationStats{
+		"az-one": {
+			Capacity: 200,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				// 401 and 402 are boring base cases with usage only in one AZ or both AZs, respectively
+				401: constantUsage(20),
+				402: constantUsage(20),
+				// 403 tests how growth multiplier follows historical usage
+				403: {Usage: 30, MinHistoricalUsage: 28, MaxHistoricalUsage: 30},
+				// 404 tests how historical usage limits quota shrinking
+				404: {Usage: 5, MinHistoricalUsage: 5, MaxHistoricalUsage: 20},
+				// 405 tests how commitment guarantees quota even with low usage,
+				// and also that usage in one AZ does not reflect commitments in another
+				405: {Committed: 60, Usage: 10, MinHistoricalUsage: 8, MaxHistoricalUsage: 12},
+				// 406 and 407 test the application of base quota in "any"
+				406: constantUsage(0),
+				407: constantUsage(2),
+			},
+		},
+		"az-two": {
+			Capacity: 200,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: constantUsage(20),
+				402: constantUsage(0),
+				403: {Usage: 20, MinHistoricalUsage: 19, MaxHistoricalUsage: 20},
+				404: {Usage: 0, MinHistoricalUsage: 0, MaxHistoricalUsage: 15},
+				405: constantUsage(40),
+				406: constantUsage(0),
+				407: constantUsage(1),
+			},
+		},
+	}
+	cfg := core.AutogrowQuotaDistributionConfiguration{
+		GrowthMultiplier: 1.2,
+		ProjectBaseQuota: 10,
+	}
+
+	for _, cfg.AllowQuotaOvercommitUntilAllocatedPercent = range []float64{0, 10000} {
+		expectACPQResultForAZSeparated(t, input, cfg, nil, acpqGlobalTarget{
+			"az-one": {
+				401: {Allocated: 24},
+				402: {Allocated: 24},
+				403: {Allocated: 33}, // 28 * 1.2 = 33.6
+				404: {Allocated: 20},
+				405: {Allocated: 72}, // 60 * 1.2 = 72
+				406: {Allocated: 10}, // Basequota
+				407: {Allocated: 7},  // 2 * 1.2 = 2.4 rounded to 3 (guaranteed minimum growth) -> Basquota: 10 - 3 = 7
+			},
+			"az-two": {
+				401: {Allocated: 24},
+				402: {Allocated: 0},
+				403: {Allocated: 22}, // 19 * 1.2 = 22.8
+				404: {Allocated: 15},
+				405: {Allocated: 48}, // 40 * 1.2 = 48
+				406: {Allocated: 10}, // Basequota
+				407: {Allocated: 8},  // 1 * 1.2 = 1.2 rounded to 2 (guaranteed minimum growth) -> Basequota: 10 - 2 = 8
 			},
 		})
 	}
@@ -547,9 +610,19 @@ func withCommitted(committed uint64, stats projectAZAllocationStats) projectAZAl
 	return stats
 }
 
+func expectACPQResultForAZSeparated(t *testing.T, input map[limes.AvailabilityZone]clusterAZAllocationStats, cfg core.AutogrowQuotaDistributionConfiguration, constraints map[db.ProjectResourceID]projectLocalQuotaConstraints, expected acpqGlobalTarget) {
+	t.Helper()
+	actual, _ := acpqComputeQuotas(input, cfg, constraints, liquid.ResourceInfo{Topology: liquid.AZSeparatedResourceTopology})
+	createACPQResult(t, input, cfg, actual, expected)
+}
+
 func expectACPQResult(t *testing.T, input map[limes.AvailabilityZone]clusterAZAllocationStats, cfg core.AutogrowQuotaDistributionConfiguration, constraints map[db.ProjectResourceID]projectLocalQuotaConstraints, expected acpqGlobalTarget) {
 	t.Helper()
-	actual, _ := acpqComputeQuotas(input, cfg, constraints)
+	actual, _ := acpqComputeQuotas(input, cfg, constraints, liquid.ResourceInfo{})
+	createACPQResult(t, input, cfg, actual, expected)
+}
+
+func createACPQResult(t *testing.T, input map[limes.AvailabilityZone]clusterAZAllocationStats, cfg core.AutogrowQuotaDistributionConfiguration, actual, expected acpqGlobalTarget) {
 	// normalize away any left-over intermediate values
 	for _, azTarget := range actual {
 		for _, projectTarget := range azTarget {

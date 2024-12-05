@@ -208,11 +208,16 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 	srv := task.Service
 
 	for resName, resData := range resourceData {
+		resInfo := c.Cluster.InfoForResource(task.Service.Type, resName)
 		if len(resData.UsageData) == 0 {
 			// ensure that there is at least one ProjectAZResource for each ProjectResource
 			resData.UsageData = core.InAnyAZ(core.UsageData{Usage: 0})
 			resourceData[resName] = resData
 		} else {
+			// AZ separated resources will not include "any" AZ. The basequota will be distributed towards the existing AZs.
+			if resInfo.Topology == liquid.AZSeparatedResourceTopology {
+				continue
+			}
 			// for AZ-aware resources, ensure that we also have a ProjectAZResource in
 			// "any", because ApplyComputedProjectQuota needs somewhere to write base
 			// quotas into if enabled
@@ -303,12 +308,10 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 				azRes.Usage = data.Usage
 				azRes.PhysicalUsage = data.PhysicalUsage
 
-				// set AZ backend quota. Do not set backend quota to the automatically created any AZ.
+				// set AZ backend quota.
 				resInfo := c.Cluster.InfoForResource(srv.Type, res.Name)
 				if resInfo.Topology == liquid.AZSeparatedResourceTopology && resInfo.HasQuota {
-					if azRes.AvailabilityZone != liquid.AvailabilityZoneAny {
-						azRes.BackendQuota = &data.Quota
-					}
+					azRes.BackendQuota = &data.Quota
 				}
 				// reset backendQuota entries for topology changes
 				if resInfo.Topology != liquid.AZSeparatedResourceTopology {
