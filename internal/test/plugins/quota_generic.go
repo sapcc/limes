@@ -62,19 +62,21 @@ type GenericQuotaPlugin struct {
 // Init implements the core.QuotaPlugin interface.
 func (p *GenericQuotaPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType db.ServiceType) error {
 	p.ServiceType = serviceType
+	thingsAZQuota := int64(21)
+	capacityAZQuota := int64(50)
 	p.StaticResourceData = map[liquid.ResourceName]*core.ResourceData{
 		"things": {
 			Quota: 42,
 			UsageData: core.PerAZ[core.UsageData]{
-				"az-one": {Usage: 2, Quota: 21},
-				"az-two": {Usage: 2, Quota: 21},
+				"az-one": {Usage: 2, Quota: &thingsAZQuota},
+				"az-two": {Usage: 2, Quota: &thingsAZQuota},
 			},
 		},
 		"capacity": {
 			Quota: 100,
 			UsageData: core.PerAZ[core.UsageData]{
-				"az-one": {Usage: 0, Quota: 50},
-				"az-two": {Usage: 0, Quota: 50},
+				"az-one": {Usage: 0, Quota: &capacityAZQuota},
+				"az-two": {Usage: 0, Quota: &capacityAZQuota},
 			},
 		},
 	}

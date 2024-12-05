@@ -160,7 +160,7 @@ func (p *liquidQuotaPlugin) Scrape(ctx context.Context, project core.KeystonePro
 				Subresources:  castSliceToAny(azReport.Subresources),
 			}
 			if resInfo.Topology == liquid.AZSeparatedResourceTopology && azReport.Quota != nil {
-				resData.UsageData[az].Quota = *azReport.Quota
+				resData.UsageData[az].Quota = azReport.Quota
 			}
 		}
 

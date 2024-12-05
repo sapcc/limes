@@ -311,7 +311,7 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 				// set AZ backend quota.
 				resInfo := c.Cluster.InfoForResource(srv.Type, res.Name)
 				if resInfo.Topology == liquid.AZSeparatedResourceTopology && resInfo.HasQuota {
-					azRes.BackendQuota = &data.Quota
+					azRes.BackendQuota = data.Quota
 				}
 				// reset backendQuota entries for topology changes
 				if resInfo.Topology != liquid.AZSeparatedResourceTopology {
