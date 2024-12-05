@@ -20,97 +20,15 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-	"net"
-	"net/http"
-	"net/url"
 	"strconv"
-	"time"
 
 	"github.com/sapcc/go-api-declarations/cadf"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
-	"github.com/sapcc/go-bits/audittools"
-	"github.com/sapcc/go-bits/gopherpolicy"
-	"github.com/sapcc/go-bits/logg"
-	"github.com/sapcc/go-bits/osext"
 )
-
-var showAuditOnStdout = !osext.GetenvBool("LIMES_SILENT")
-
-// eventSink is a channel that receives audit events.
-var eventSink chan<- cadf.Event
-
-// StartAuditTrail starts the audit trail by initializing the event sink and
-// starting a Commit() goroutine.
-func StartAuditTrail(ctx context.Context) {
-	if osext.GetenvBool("LIMES_AUDIT_ENABLE") {
-		auditEventPublishSuccessCounter.Add(0)
-		auditEventPublishFailedCounter.Add(0)
-
-		onSuccessFunc := func() {
-			auditEventPublishSuccessCounter.Inc()
-		}
-		onFailFunc := func() {
-			auditEventPublishFailedCounter.Inc()
-		}
-		s := make(chan cadf.Event, 20)
-		eventSink = s
-
-		rabbitURI := url.URL{
-			Scheme: "amqp",
-			Host:   net.JoinHostPort(osext.GetenvOrDefault("LIMES_AUDIT_RABBITMQ_HOSTNAME", "localhost"), osext.GetenvOrDefault("LIMES_AUDIT_RABBITMQ_PORT", "5672")),
-			User:   url.UserPassword(osext.GetenvOrDefault("LIMES_AUDIT_RABBITMQ_USERNAME", "guest"), osext.GetenvOrDefault("LIMES_AUDIT_RABBITMQ_PASSWORD", "guest")),
-			Path:   "/",
-		}
-
-		go audittools.AuditTrail{
-			EventSink:           s,
-			OnSuccessfulPublish: onSuccessFunc,
-			OnFailedPublish:     onFailFunc,
-		}.Commit(ctx, rabbitURI, osext.MustGetenv("LIMES_AUDIT_QUEUE_NAME"))
-	}
-}
-
-var observerUUID = audittools.GenerateUUID()
-
-// logAndPublishEvent takes the necessary parameters and generates a cadf.Event.
-// It logs the event to stdout and publishes it to a RabbitMQ server.
-func logAndPublishEvent(eventTime time.Time, req *http.Request, token *gopherpolicy.Token, reasonCode int, target audittools.TargetRenderer) {
-	p := audittools.EventParameters{
-		Time:       eventTime,
-		Request:    req,
-		User:       token,
-		ReasonCode: reasonCode,
-		Action:     cadf.UpdateAction,
-		Observer: struct {
-			TypeURI string
-			Name    string
-			ID      string
-		}{
-			TypeURI: "service/resources",
-			Name:    "limes",
-			ID:      observerUUID,
-		},
-		Target: target,
-	}
-	event := audittools.NewEvent(p)
-
-	if showAuditOnStdout {
-		if msg, err := json.Marshal(event); err == nil {
-			logg.Other("AUDIT", string(msg))
-		} else {
-			logg.Error("could not marshal audit event: %s", err.Error())
-		}
-	}
-
-	if eventSink != nil {
-		eventSink <- event
-	}
-}
 
 // maxQuotaEventTarget renders a cadf.Event.Target for a max_quota change event.
 type maxQuotaEventTarget struct {

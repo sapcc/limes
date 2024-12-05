@@ -36,6 +36,7 @@ import (
 	"github.com/gorilla/mux"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-bits/audittools"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpapi"
 	"github.com/sapcc/go-bits/osext"
@@ -66,6 +67,7 @@ type v1Provider struct {
 	DB             *gorp.DbMap
 	VersionData    VersionData
 	tokenValidator gopherpolicy.Validator
+	auditor        audittools.Auditor
 	// see comment in ListProjects() for details
 	listProjectsMutex sync.Mutex
 	// slots for test doubles
@@ -77,8 +79,8 @@ type v1Provider struct {
 // NewV1API creates an httpapi.API that serves the Limes v1 API.
 // It also returns the VersionData for this API version which is needed for the
 // version advertisement on "GET /".
-func NewV1API(cluster *core.Cluster, dbm *gorp.DbMap, tokenValidator gopherpolicy.Validator, timeNow func() time.Time, generateTransferToken func() string) httpapi.API {
-	p := &v1Provider{Cluster: cluster, DB: dbm, tokenValidator: tokenValidator, timeNow: timeNow}
+func NewV1API(cluster *core.Cluster, dbm *gorp.DbMap, tokenValidator gopherpolicy.Validator, auditor audittools.Auditor, timeNow func() time.Time, generateTransferToken func() string) httpapi.API {
+	p := &v1Provider{Cluster: cluster, DB: dbm, tokenValidator: tokenValidator, auditor: auditor, timeNow: timeNow}
 	p.VersionData = VersionData{
 		Status: "CURRENT",
 		ID:     "v1",

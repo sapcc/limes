@@ -28,12 +28,12 @@ on the top left corner of this document to get to a specific section of this gui
 
 ### Audit trail
 
-Limes logs all quota changes at the domain and project level in an Open Standards [CADF format](https://www.dmtf.org/standards/cadf). These audit events can be sent to a RabbitMQ server which can then forward them to any cloud audit API, datastore, etc.
+The Limes API logs all write operations at the domain and project level in the Open Standards [CADF format](https://www.dmtf.org/standards/cadf).
+These audit events can be sent to a RabbitMQ server which can then forward them to any cloud audit API, datastore, etc.
 
 | Variable | Default | Description |
 | --- | --- | --- |
-| `LIMES_AUDIT_ENABLE` | `false` | Set this to true if you want to send the audit events to a RabbitMQ server. |
-| `LIMES_AUDIT_QUEUE_NAME` | *(required if auditing is enabled)* | Name for the queue that will hold the audit events. The events are published to the default exchange. |
+| `LIMES_AUDIT_RABBITMQ_QUEUE_NAME` | *(optional)* | Name for the queue that will hold the audit events. The events are published to the default exchange. If not given, audit logging is disabled and audit events will only be written to the debug log. |
 | `LIMES_AUDIT_RABBITMQ_USERNAME` | `guest` | RabbitMQ Username. |
 | `LIMES_AUDIT_RABBITMQ_PASSWORD` | `guest` | Password for the specified user. |
 | `LIMES_AUDIT_RABBITMQ_HOSTNAME` | `localhost` | Hostname of the RabbitMQ server. |

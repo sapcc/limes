@@ -26,9 +26,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/sapcc/go-api-declarations/cadf"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/audittools"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/respondwith"
 
@@ -47,6 +49,7 @@ type RateLimitUpdater struct {
 
 	// AuthZ info
 	CanSetRateLimit func(db.ServiceType) bool
+	Auditor         audittools.Auditor
 
 	// Filled by ValidateInput() with the keys being the service type and the rate name.
 	Requests map[db.ServiceType]map[liquid.RateName]RateLimitRequest
@@ -269,8 +272,13 @@ func (u RateLimitUpdater) CommitAuditTrail(token *gopherpolicy.Token, r *http.Re
 			}
 
 			apiIdentity := u.Cluster.BehaviorForRate(dbServiceType, dbRateName).IdentityInV1API
-			logAndPublishEvent(requestTime, r, token, statusCode,
-				rateLimitEventTarget{
+			u.Auditor.Record(audittools.EventParameters{
+				Time:       requestTime,
+				Request:    r,
+				User:       token,
+				ReasonCode: statusCode,
+				Action:     cadf.UpdateAction,
+				Target: rateLimitEventTarget{
 					DomainID:     u.Domain.UUID,
 					DomainName:   u.Domain.Name,
 					ProjectID:    u.Project.UUID,
@@ -283,7 +291,8 @@ func (u RateLimitUpdater) CommitAuditTrail(token *gopherpolicy.Token, r *http.Re
 					NewWindow:    req.NewWindow,
 					Unit:         req.Unit,
 					RejectReason: rejectReason,
-				})
+				},
+			})
 		}
 	}
 }

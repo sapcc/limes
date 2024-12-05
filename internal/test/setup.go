@@ -29,6 +29,7 @@ import (
 	"github.com/go-gorp/gorp/v3"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/sapcc/go-bits/audittools"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/gopherpolicy"
 	"github.com/sapcc/go-bits/httpapi"
@@ -46,7 +47,7 @@ import (
 type setupParams struct {
 	DBFixtureFile  string
 	ConfigYAML     string
-	APIBuilder     func(*core.Cluster, *gorp.DbMap, gopherpolicy.Validator, func() time.Time, func() string) httpapi.API
+	APIBuilder     func(*core.Cluster, *gorp.DbMap, gopherpolicy.Validator, audittools.Auditor, func() time.Time, func() string) httpapi.API
 	APIMiddlewares []httpapi.API
 }
 
@@ -74,7 +75,7 @@ func WithConfig(yamlStr string) SetupOption {
 // Limes API. The `apiBuilder` function signature matches NewV1API(). We cannot
 // directly call this function because that would create an import cycle, so it
 // must be given by the caller here.
-func WithAPIHandler(apiBuilder func(*core.Cluster, *gorp.DbMap, gopherpolicy.Validator, func() time.Time, func() string) httpapi.API, middlewares ...httpapi.API) SetupOption {
+func WithAPIHandler(apiBuilder func(*core.Cluster, *gorp.DbMap, gopherpolicy.Validator, audittools.Auditor, func() time.Time, func() string) httpapi.API, middlewares ...httpapi.API) SetupOption {
 	return func(params *setupParams) {
 		params.APIBuilder = apiBuilder
 		params.APIMiddlewares = middlewares
@@ -97,6 +98,7 @@ type Setup struct {
 	Clock          *mock.Clock
 	Registry       *prometheus.Registry
 	TokenValidator *mock.Validator[*PolicyEnforcer]
+	Auditor        *audittools.MockAuditor
 	// fields that are only set if their respective SetupOptions are given
 	Handler http.Handler
 }
@@ -141,11 +143,12 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 		"project_domain_id":   "uuid-for-default",
 	}
 	s.TokenValidator = mock.NewValidator(enforcer, mockUserIdentity)
+	s.Auditor = audittools.NewMockAuditor()
 
 	if params.APIBuilder != nil {
 		s.Handler = httpapi.Compose(
 			append([]httpapi.API{
-				params.APIBuilder(s.Cluster, s.DB, s.TokenValidator, s.Clock.Now, GenerateDummyToken),
+				params.APIBuilder(s.Cluster, s.DB, s.TokenValidator, s.Auditor, s.Clock.Now, GenerateDummyToken),
 				httpapi.WithoutLogging(),
 			}, params.APIMiddlewares...)...,
 		)

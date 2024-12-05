@@ -40,6 +40,7 @@ import (
 	"github.com/sapcc/go-api-declarations/bininfo"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/audittools"
 	"github.com/sapcc/go-bits/errext"
 	"github.com/sapcc/go-bits/gophercloudext"
 	"github.com/sapcc/go-bits/httpapi"
@@ -150,7 +151,6 @@ func main() {
 	errs.LogFatalIfError()
 	errs = cluster.Connect(ctx, provider, eo)
 	errs.LogFatalIfError()
-	api.StartAuditTrail(ctx)
 
 	// select task
 	switch taskName {
@@ -253,6 +253,19 @@ func taskServe(ctx context.Context, cluster *core.Cluster, args []string, provid
 	dbm := must.Return(db.Init())
 	prometheus.MustRegister(sqlstats.NewStatsCollector("limes", dbm.Db))
 
+	// connect to Hermes RabbitMQ if requested
+	auditor := audittools.NewNullAuditor()
+	if os.Getenv("LIMES_AUDIT_RABBITMQ_QUEUE_NAME") != "" {
+		auditor = must.Return(audittools.NewAuditor(ctx, audittools.AuditorOpts{
+			EnvPrefix: "LIMES_AUDIT_RABBITMQ",
+			Observer: audittools.Observer{
+				TypeURI: "service/resources",
+				Name:    bininfo.Component(),
+				ID:      audittools.GenerateUUID(),
+			},
+		}))
+	}
+
 	// collect all API endpoints and middlewares
 	tokenValidator := must.Return(api.NewTokenValidator(provider, eo))
 	corsMiddleware := cors.New(cors.Options{
@@ -262,7 +275,7 @@ func taskServe(ctx context.Context, cluster *core.Cluster, args []string, provid
 	})
 	mux := http.NewServeMux()
 	mux.Handle("/", httpapi.Compose(
-		api.NewV1API(cluster, dbm, tokenValidator, time.Now, api.GenerateTransferToken),
+		api.NewV1API(cluster, dbm, tokenValidator, auditor, time.Now, api.GenerateTransferToken),
 		pprofapi.API{IsAuthorized: pprofapi.IsRequestFromLocalhost},
 		httpapi.WithGlobalMiddleware(api.ForbidClusterIDHeader),
 		httpapi.WithGlobalMiddleware(corsMiddleware.Handler),
