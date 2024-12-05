@@ -208,7 +208,7 @@ func TestACPQBasicWithAZSeparated(t *testing.T) {
 				404: {Allocated: 20},
 				405: {Allocated: 72}, // 60 * 1.2 = 72
 				406: {Allocated: 10}, // Basequota
-				407: {Allocated: 7},  // 2 * 1.2 = 2.4 rounded to 3 (guaranteed minimum growth) -> Basquota: 10 - 3 = 7
+				407: {Allocated: 10}, // Basequota
 			},
 			"az-two": {
 				401: {Allocated: 24},
@@ -217,7 +217,7 @@ func TestACPQBasicWithAZSeparated(t *testing.T) {
 				404: {Allocated: 15},
 				405: {Allocated: 48}, // 40 * 1.2 = 48
 				406: {Allocated: 10}, // Basequota
-				407: {Allocated: 8},  // 1 * 1.2 = 1.2 rounded to 2 (guaranteed minimum growth) -> Basequota: 10 - 2 = 8
+				407: {Allocated: 10}, // Basequota
 			},
 		})
 	}
