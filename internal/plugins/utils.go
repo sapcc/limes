@@ -44,7 +44,7 @@ func CheckResourceTopologies(serviceInfo liquid.ServiceInfo) (err error) {
 
 	resourceNames := SortMapKeys(resources)
 	for _, resourceName := range resourceNames {
-		topology := resources[liquid.ResourceName(resourceName)].Topology
+		topology := resources[resourceName].Topology
 		if topology == "" {
 			continue
 		}
