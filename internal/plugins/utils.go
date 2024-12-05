@@ -42,7 +42,7 @@ func SortMapKeys[M map[K]V, K ~string, V any](mapToSort M) []string {
 }
 
 func CheckResourceTopologies(serviceInfo liquid.ServiceInfo) (err error) {
-	errs := []error{}
+	var errs []error
 	resources := serviceInfo.Resources
 
 	resourceNames := SortMapKeys(resources)
