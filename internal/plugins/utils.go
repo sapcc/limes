@@ -46,7 +46,7 @@ func CheckResourceTopologies(serviceInfo liquid.ServiceInfo) (err error) {
 	for _, resourceName := range resourceNames {
 		topology := resources[resourceName].Topology
 		if topology == "" {
-			continue
+			logg.Error("missing topology on resource: %s", resourceName)
 		}
 		if !topology.IsValid() {
 			errs = append(errs, fmt.Errorf("invalid toplogy: %s on resource: %s", topology, resourceName))
