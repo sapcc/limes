@@ -49,8 +49,6 @@ const testCommitmentsYAML = `
 		- resource: first/.*
 			commitment_durations: ["1 hour", "2 hours"]
 			commitment_min_confirm_date: '1970-01-08T00:00:00Z' # one week after start of mock.Clock
-		- resource: first/things
-		- resource: first/capacity
 `
 const testCommitmentsYAMLWithoutMinConfirmDate = `
 	availability_zones: [ az-one, az-two ]

@@ -240,14 +240,14 @@ func (p *v1Provider) parseAndValidateCommitmentRequest(w http.ResponseWriter, r 
 		http.Error(w, "commitments are not enabled for this resource", http.StatusUnprocessableEntity)
 		return nil, nil, nil
 	}
-	if resInfo.Topology != liquid.FlatResourceTopology {
-		if !slices.Contains(p.Cluster.Config.AvailabilityZones, req.AvailabilityZone) {
-			http.Error(w, "no such availability zone", http.StatusUnprocessableEntity)
+	if resInfo.Topology == liquid.FlatResourceTopology {
+		if req.AvailabilityZone != limes.AvailabilityZoneAny {
+			http.Error(w, `resource does not accept AZ-aware commitments, so the AZ must be set to "any"`, http.StatusUnprocessableEntity)
 			return nil, nil, nil
 		}
 	} else {
-		if req.AvailabilityZone != limes.AvailabilityZoneAny {
-			http.Error(w, `resource does not accept AZ-aware commitments, so the AZ must be set to "any"`, http.StatusUnprocessableEntity)
+		if !slices.Contains(p.Cluster.Config.AvailabilityZones, req.AvailabilityZone) {
+			http.Error(w, "no such availability zone", http.StatusUnprocessableEntity)
 			return nil, nil, nil
 		}
 	}
