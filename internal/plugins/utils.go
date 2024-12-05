@@ -50,7 +50,7 @@ func CheckResourceTopologies(serviceInfo liquid.ServiceInfo) (err error) {
 			logg.Error("missing topology on resource: %s", resourceName)
 		}
 		if !topology.IsValid() {
-			errs = append(errs, fmt.Errorf("invalid toplogy: %s on resource: %s", topology, resourceName))
+			errs = append(errs, fmt.Errorf("invalid topology: %s on resource: %s", topology, resourceName))
 		}
 	}
 	if len(errs) > 0 {
@@ -80,5 +80,5 @@ func MatchLiquidReportToTopology[V any](perAZReport map[liquid.AvailabilityZone]
 	}
 
 	reportedAZs := SortMapKeys(perAZReport)
-	return fmt.Errorf("scrape with toplogy type: %s returned AZs: %v", topology, reportedAZs)
+	return fmt.Errorf("scrape with topology type: %s returned AZs: %v", topology, reportedAZs)
 }

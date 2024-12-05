@@ -679,7 +679,7 @@ func Test_TopologyScrapes(t *testing.T) {
 
 	s.Clock.StepBy(scrapeInterval)
 
-	// toplogy of a resource changes. Reset AZ-separated backend_quota
+	// topology of a resource changes. Reset AZ-separated backend_quota
 	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"capacity": {Topology: liquid.AZSeparatedResourceTopology}, "things": {Topology: liquid.AZAwareResourceTopology}}
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
 	mustT(t, job.ProcessOne(s.Ctx, withLabel))
@@ -704,26 +704,26 @@ func Test_TopologyScrapes(t *testing.T) {
 	// negative: scrape with flat topology returns invalid AZs
 	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"capacity": {Topology: liquid.FlatResourceTopology}}
 	plugin.ReportedAZs = map[liquid.AvailabilityZone]*any{"az-one": status, "az-two": status}
-	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during resource scrape of project germany/berlin: service: unittest, resource: capacity: scrape with toplogy type: flat returned AZs: [az-one az-two]"))
+	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during resource scrape of project germany/berlin: service: unittest, resource: capacity: scrape with topology type: flat returned AZs: [az-one az-two]"))
 
-	// negative: scrape with az-aware toplogy returns invalid any AZ
+	// negative: scrape with az-aware topology returns invalid any AZ
 	plugin.LiquidServiceInfo.Resources["capacity"] = liquid.ResourceInfo{Topology: liquid.AZAwareResourceTopology}
 	plugin.ReportedAZs = map[liquid.AvailabilityZone]*any{"any": status}
-	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during resource scrape of project germany/dresden: service: unittest, resource: capacity: scrape with toplogy type: az-aware returned AZs: [any]"))
+	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during resource scrape of project germany/dresden: service: unittest, resource: capacity: scrape with topology type: az-aware returned AZs: [any]"))
 
 	s.Clock.StepBy(scrapeInterval)
-	// negative: scrape with az-separated toplogy returns invalid AZs any and unknown
+	// negative: scrape with az-separated topology returns invalid AZs any and unknown
 	plugin.LiquidServiceInfo.Resources["capacity"] = liquid.ResourceInfo{Topology: liquid.AZSeparatedResourceTopology}
 	plugin.ReportedAZs = map[liquid.AvailabilityZone]*any{"az-one": status, "unknown": status}
-	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during resource scrape of project germany/berlin: service: unittest, resource: capacity: scrape with toplogy type: az-separated returned AZs: [az-one unknown]"))
+	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during resource scrape of project germany/berlin: service: unittest, resource: capacity: scrape with topology type: az-separated returned AZs: [az-one unknown]"))
 
 	// negative: reject liquid initialization with invalid topologies
 	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"capacity": {Topology: "invalidAZ1"}, "things": {Topology: "invalidAZ2"}}
-	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during resource scrape of project germany/dresden: invalid toplogy: invalidAZ1 on resource: capacity\ninvalid toplogy: invalidAZ2 on resource: things"))
+	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during resource scrape of project germany/dresden: invalid topology: invalidAZ1 on resource: capacity\ninvalid topology: invalidAZ2 on resource: things"))
 
 	s.Clock.StepBy(scrapeInterval)
 	// negative: multiple resources with mismatching topology to AZ responses
 	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"capacity": {Topology: liquid.AZSeparatedResourceTopology}, "things": {Topology: liquid.AZSeparatedResourceTopology}}
 	plugin.ReportedAZs = map[liquid.AvailabilityZone]*any{"unknown": status}
-	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during resource scrape of project germany/berlin: service: unittest, resource: capacity: scrape with toplogy type: az-separated returned AZs: [unknown]\nservice: unittest, resource: things: scrape with toplogy type: az-separated returned AZs: [unknown]"))
+	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during resource scrape of project germany/berlin: service: unittest, resource: capacity: scrape with topology type: az-separated returned AZs: [unknown]\nservice: unittest, resource: things: scrape with topology type: az-separated returned AZs: [unknown]"))
 }
