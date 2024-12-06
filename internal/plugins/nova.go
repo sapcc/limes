@@ -60,11 +60,11 @@ type novaPlugin struct {
 }
 
 var novaDefaultResources = map[liquid.ResourceName]liquid.ResourceInfo{
-	"cores":                {Unit: limes.UnitNone, HasQuota: true},
-	"instances":            {Unit: limes.UnitNone, HasQuota: true},
-	"ram":                  {Unit: limes.UnitMebibytes, HasQuota: true},
-	"server_groups":        {Unit: limes.UnitNone, HasQuota: true},
-	"server_group_members": {Unit: limes.UnitNone, HasQuota: true},
+	"cores":                {Unit: limes.UnitNone, HasQuota: true, Topology: liquid.AZAwareResourceTopology},
+	"instances":            {Unit: limes.UnitNone, HasQuota: true, Topology: liquid.AZAwareResourceTopology},
+	"ram":                  {Unit: limes.UnitMebibytes, HasQuota: true, Topology: liquid.AZAwareResourceTopology},
+	"server_groups":        {Unit: limes.UnitNone, HasQuota: true, Topology: liquid.FlatResourceTopology},
+	"server_group_members": {Unit: limes.UnitNone, HasQuota: true, Topology: liquid.FlatResourceTopology},
 }
 
 func init() {
@@ -121,6 +121,7 @@ func (p *novaPlugin) Init(ctx context.Context, provider *gophercloud.ProviderCli
 		p.resources[liquid.ResourceName(resourceName)] = liquid.ResourceInfo{
 			Unit:     unit,
 			HasQuota: true,
+			Topology: liquid.AZAwareResourceTopology,
 		}
 	}
 
@@ -134,6 +135,7 @@ func (p *novaPlugin) Init(ctx context.Context, provider *gophercloud.ProviderCli
 				p.resources[resName] = liquid.ResourceInfo{
 					Unit:     limes.UnitNone,
 					HasQuota: true,
+					Topology: liquid.AZAwareResourceTopology,
 				}
 			}
 		}
