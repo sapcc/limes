@@ -130,7 +130,7 @@ func (p *liquidQuotaPlugin) Scrape(ctx context.Context, project core.KeystonePro
 		topology := p.LiquidServiceInfo.Resources[resourceName].Topology
 		err := MatchLiquidReportToTopology(perAZ, topology)
 		if err != nil {
-			errs = append(errs, fmt.Errorf("service: %s, resource: %s: %w", p.ServiceType, resourceName, err))
+			errs = append(errs, fmt.Errorf("resource: %s: %w", resourceName, err))
 		}
 	}
 	if len(errs) > 0 {
