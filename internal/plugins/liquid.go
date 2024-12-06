@@ -123,7 +123,7 @@ func (p *liquidQuotaPlugin) Scrape(ctx context.Context, project core.KeystonePro
 		logg.Fatal("ServiceInfo version for %s changed from %d to %d; restarting now to reload ServiceInfo...",
 			p.LiquidServiceType, p.LiquidServiceInfo.Version, resp.InfoVersion)
 	}
-	resourceNames := SortMapKeys(p.LiquidServiceInfo.Resources)
+	resourceNames := SortedMapKeys(p.LiquidServiceInfo.Resources)
 	var errs []error
 	for _, resourceName := range resourceNames {
 		perAZ := resp.Resources[resourceName].PerAZ
@@ -198,9 +198,7 @@ func (p *liquidQuotaPlugin) SetQuota(ctx context.Context, project core.KeystoneP
 	req := liquid.ServiceQuotaRequest{
 		Resources: make(map[liquid.ResourceName]liquid.ResourceQuotaRequest, len(quotaReq)),
 	}
-	for resName, request := range quotaReq {
-		req.Resources[resName] = liquid.ResourceQuotaRequest{Quota: request.Quota, PerAZ: request.PerAZ}
-	}
+	req = liquid.ServiceQuotaRequest{Resources: quotaReq}
 	if p.LiquidServiceInfo.QuotaUpdateNeedsProjectMetadata {
 		req.ProjectMetadata = project.ForLiquid()
 	}

@@ -94,7 +94,7 @@ func (p *liquidCapacityPlugin) Scrape(ctx context.Context, backchannel core.Capa
 		logg.Fatal("ServiceInfo version for %s changed from %d to %d; restarting now to reload ServiceInfo...",
 			p.LiquidServiceType, p.LiquidServiceInfo.Version, resp.InfoVersion)
 	}
-	resourceNames := SortMapKeys(p.LiquidServiceInfo.Resources)
+	resourceNames := SortedMapKeys(p.LiquidServiceInfo.Resources)
 	var errs []error
 	for _, resourceName := range resourceNames {
 		perAZ := resp.Resources[resourceName].PerAZ

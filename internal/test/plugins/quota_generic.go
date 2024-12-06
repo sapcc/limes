@@ -174,7 +174,7 @@ func (p *GenericQuotaPlugin) Scrape(ctx context.Context, project core.KeystonePr
 
 	if len(p.ReportedAZs) > 0 {
 		var errs []error
-		resourceNames := plugins.SortMapKeys(p.LiquidServiceInfo.Resources)
+		resourceNames := plugins.SortedMapKeys(p.LiquidServiceInfo.Resources)
 		for _, resourceName := range resourceNames {
 			topology := p.LiquidServiceInfo.Resources[resourceName].Topology
 			err := plugins.MatchLiquidReportToTopology(p.ReportedAZs, topology)

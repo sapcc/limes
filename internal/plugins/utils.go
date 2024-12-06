@@ -33,7 +33,7 @@ func p2u64(val uint64) *uint64 {
 	return &val
 }
 
-func SortMapKeys[M map[K]V, K ~string, V any](mapToSort M) []K {
+func SortedMapKeys[M map[K]V, K ~string, V any](mapToSort M) []K {
 	sortedKeys := slices.Collect(maps.Keys(mapToSort))
 	slices.Sort(sortedKeys)
 	return sortedKeys
@@ -43,7 +43,7 @@ func CheckResourceTopologies(serviceInfo liquid.ServiceInfo) (err error) {
 	var errs []error
 	resources := serviceInfo.Resources
 
-	resourceNames := SortMapKeys(resources)
+	resourceNames := SortedMapKeys(resources)
 	for _, resourceName := range resourceNames {
 		topology := resources[resourceName].Topology
 		if topology == "" {
@@ -84,6 +84,6 @@ func MatchLiquidReportToTopology[V any](perAZReport map[liquid.AvailabilityZone]
 		return
 	}
 
-	reportedAZs := SortMapKeys(perAZReport)
+	reportedAZs := SortedMapKeys(perAZReport)
 	return fmt.Errorf("scrape with topology type: %s returned AZs: %v", topology, reportedAZs)
 }
