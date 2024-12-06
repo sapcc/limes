@@ -189,6 +189,11 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 	}
 	servicesWithUpdatedQuota := make(map[db.ProjectServiceID]struct{})
 	err = sqlext.WithPreparedStatement(tx, acpqUpdateProjectQuotaQuery, func(stmt *sql.Stmt) error {
+		// Skip resources with AZSeparated toplogy. The quota scrape would receive a resource nil value, while ACPQ calculates qouta.
+		// This would lead to unnecessary quota syncs with the backend, because backendQuota != quota.
+		if resInfo.Topology == liquid.AZSeparatedResourceTopology {
+			return nil
+		}
 		for resourceID, quota := range quotasByResourceID {
 			var serviceID db.ProjectServiceID
 			err := stmt.QueryRow(quota, resourceID).Scan(&serviceID)
