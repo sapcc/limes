@@ -100,7 +100,7 @@ var (
 	`)
 	azQuotaSyncSelectQuery = sqlext.SimplifyWhitespace(`
 		SELECT az, backend_quota, quota
-	 	  FROM project_az_resources
+		  FROM project_az_resources
 		 WHERE resource_id = $1 AND quota IS NOT NULL
 	`)
 	quotaSyncMarkResourcesAsAppliedQuery = sqlext.SimplifyWhitespace(`
@@ -111,7 +111,7 @@ var (
 	azQuotaSyncMarkResourcesAsAppliedQuery = sqlext.SimplifyWhitespace(`
 		UPDATE project_az_resources
 		   SET backend_quota = quota
-	 	 WHERE resource_id = ANY($1)
+		 WHERE resource_id = ANY($1)
 	`)
 	quotaSyncMarkServiceAsAppliedQuery = sqlext.SimplifyWhitespace(`
 		UPDATE project_services
@@ -137,7 +137,7 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 	targetAZQuotasInDB := make(map[liquid.ResourceName]map[liquid.AvailabilityZone]liquid.AZResourceQuotaRequest)
 	needsApply := false
 	azSeparatedNeedsApply := false
-	var azSeparatedResouceIDs []db.ProjectResourceID
+	var azSeparatedResourceIDs []db.ProjectResourceID
 	err := sqlext.ForeachRow(c.DB, quotaSyncSelectQuery, []any{srv.ID}, func(rows *sql.Rows) error {
 		var (
 			resourceID   db.ProjectResourceID
@@ -172,7 +172,7 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 			if (availabilityZone == liquid.AvailabilityZoneAny || availabilityZone == liquid.AvailabilityZoneUnknown) && currentAZQuota != nil {
 				return fmt.Errorf("detected invalid AZ: %s for resource: %s with topology: %s has backend_quota: %v", availabilityZone, resourceName, resInfo.Topology, currentAZQuota)
 			}
-			azSeparatedResouceIDs = append(azSeparatedResouceIDs, resourceID)
+			azSeparatedResourceIDs = append(azSeparatedResourceIDs, resourceID)
 			if targetAZQuotasInDB[resourceName] == nil {
 				targetAZQuotasInDB[resourceName] = make(map[liquid.AvailabilityZone]liquid.AZResourceQuotaRequest)
 			}
@@ -220,7 +220,7 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 			return err
 		}
 		if azSeparatedNeedsApply {
-			_, err = c.DB.Exec(azQuotaSyncMarkResourcesAsAppliedQuery, pq.Array(azSeparatedResouceIDs))
+			_, err = c.DB.Exec(azQuotaSyncMarkResourcesAsAppliedQuery, pq.Array(azSeparatedResourceIDs))
 			if err != nil {
 				return err
 			}
