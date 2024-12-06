@@ -72,7 +72,7 @@ func TestACPQBasicWithoutAZAwareness(t *testing.T) {
 				405: {Allocated: 10},
 				406: {Allocated: 10},
 			},
-		}, liquid.ResourceInfo{Topology: liquid.AZAwareResourceTopology})
+		}, liquid.ResourceInfo{Topology: liquid.FlatResourceTopology})
 	}
 }
 
@@ -262,7 +262,7 @@ func TestACPQCapacityLimitsQuotaAllocation(t *testing.T) {
 			404: {Allocated: 5},
 			405: {Allocated: 5},
 		},
-	}, liquid.ResourceInfo{Topology: liquid.AZAwareResourceTopology})
+	}, liquid.ResourceInfo{Topology: liquid.FlatResourceTopology})
 
 	// Stage 2: There is enough capacity for the minimum quotas, but not for the
 	// desired quotas.
@@ -281,7 +281,7 @@ func TestACPQCapacityLimitsQuotaAllocation(t *testing.T) {
 			404: {Allocated: 0},
 			405: {Allocated: 0},
 		},
-	}, liquid.ResourceInfo{Topology: liquid.AZAwareResourceTopology})
+	}, liquid.ResourceInfo{Topology: liquid.FlatResourceTopology})
 
 	// Stage 3: There is enough capacity for the hard minimum quotas, but not for
 	// the soft minimum quotas.
@@ -300,7 +300,7 @@ func TestACPQCapacityLimitsQuotaAllocation(t *testing.T) {
 			404: {Allocated: 0},
 			405: {Allocated: 0},
 		},
-	}, liquid.ResourceInfo{Topology: liquid.AZAwareResourceTopology})
+	}, liquid.ResourceInfo{Topology: liquid.FlatResourceTopology})
 
 	// Stage 4: Capacity is SOMEHOW not even enough for the hard minimum quotas.
 	input["any"] = clusterAZAllocationStats{
@@ -318,7 +318,7 @@ func TestACPQCapacityLimitsQuotaAllocation(t *testing.T) {
 			404: {Allocated: 0},
 			405: {Allocated: 0},
 		},
-	}, liquid.ResourceInfo{Topology: liquid.AZAwareResourceTopology})
+	}, liquid.ResourceInfo{Topology: liquid.FlatResourceTopology})
 }
 
 func TestACPQQuotaOvercommitTurnsOffAboveAllocationThreshold(t *testing.T) {
