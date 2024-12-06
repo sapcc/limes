@@ -179,4 +179,12 @@ var sqlMigrations = map[string]string{
 		ALTER TABLE project_resources
 			RENAME COLUMN max_quota_from_admin TO max_quota_from_outside_admin;
 	`,
+	"046_az_backend_quota.down.sql": `
+		ALTER TABLE project_az_resources
+			DROP COLUMN backend_quota;
+	`,
+	"046_az_backend_quota.up.sql": `
+		ALTER TABLE project_az_resources
+			ADD COLUMN backend_quota BIGINT default NULL;
+	`,
 }

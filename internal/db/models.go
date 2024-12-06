@@ -138,6 +138,7 @@ type ProjectAZResource struct {
 	ResourceID          ProjectResourceID      `db:"resource_id"`
 	AvailabilityZone    limes.AvailabilityZone `db:"az"`
 	Quota               *uint64                `db:"quota"`
+	BackendQuota        *int64                 `db:"backend_quota"`
 	Usage               uint64                 `db:"usage"`
 	PhysicalUsage       *uint64                `db:"physical_usage"`
 	SubresourcesJSON    string                 `db:"subresources"`

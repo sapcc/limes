@@ -106,10 +106,6 @@ const (
 			- resource: 'shared/(capacity|things)$'
 				commitment_durations: ["1 hour", "2 hours"]
 				commitment_min_confirm_date: '1970-01-08T00:00:00Z' # one week after start of mock.Clock
-			- resource: 'shared/capacity$'
-				commitment_is_az_aware: true
-			- resource: shared/things
-				commitment_is_az_aware: false
 	`
 )
 

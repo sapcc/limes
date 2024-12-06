@@ -120,6 +120,6 @@ func (p *NoopQuotaPlugin) BuildServiceUsageRequest(project core.KeystoneProject,
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *NoopQuotaPlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotas map[liquid.ResourceName]uint64) error {
+func (p *NoopQuotaPlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotas map[liquid.ResourceName]liquid.ResourceQuotaRequest) error {
 	return nil
 }

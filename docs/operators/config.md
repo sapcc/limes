@@ -132,7 +132,6 @@ Some special behaviors for resources can be configured in the `resource_behavior
 | `resource_behavior[].resource` | yes | Must contain a regex. The behavior entry applies to all resources where this regex matches against a slash-concatenated pair of service type and resource name. The anchors `^` and `$` are implied at both ends, so the regex must match the entire phrase. |
 | `resource_behavior[].overcommit_factor` | no | If given, capacity for matching resources will be computed as `raw_capacity * overcommit_factor`, where `raw_capacity` is what the capacity plugin reports. |
 | `resource_behavior[].commitment_durations` | no | If given, commitments for this resource can be created with any of the given durations. The duration format is the same as in the `commitments[].duration` attribute that appears on the resource API. If empty, this resource does not accept commitments. |
-| `resource_behavior[].commitment_is_az_aware` | no | If true, commitments for this resource must be created in a specific AZ (i.e. not in a pseudo-AZ). If false, commitments for this resource must be created in the pseudo-AZ `any`. Ignored if `commitment_durations` is empty. |
 | `resource_behavior[].commitment_min_confirm_date` | no | If given, commitments for this resource will always be created with `confirm_by` no earlier than this timestamp. This can be used to plan the introduction of commitments on a specific date. Ignored if `commitment_durations` is empty. |
 | `resource_behavior[].commitment_until_percent` | no | If given, commitments for this resource will only be confirmed while the total of all confirmed commitments or uncommitted usage in the respective AZ is smaller than the respective percentage of the total capacity for that AZ. This is intended to provide a reserved buffer for the growth quota configured by `quota_distribution_configs[].autogrow.growth_multiplier`. Defaults to 100, i.e. all capacity is committable. |
 | `resource_behavior[].commitment_conversion.identifier` | no | If given, must contain a string. Commitments for this resource will then be allowed to be converted into commitments for all resources that set the same conversion identifier. |
@@ -147,7 +146,7 @@ resource_behavior:
   # matches both sharev2/share_capacity and sharev2/snapshot_capacity
   - { resource: sharev2/.*_capacity, overcommit_factor: 2 }
   # starting in 2024, offer commitments for Cinder storage
-  - { resource: volumev2/capacity, commitment_durations: [ 1 year, 2 years, 3 years ], commitment_is_az_aware: true, commitment_min_confirm_date: 2024-01-01T00:00:00Z }
+  - { resource: volumev2/capacity, commitment_durations: [ 1 year, 2 years, 3 years ], commitment_min_confirm_date: 2024-01-01T00:00:00Z }
   # an Ironic flavor has been renamed from "thebigbox" to "baremetal_large"
   - { resource: compute/instances_baremetal_large, identity_in_v1_api: compute/instances_thebigbox }
 ```

@@ -126,7 +126,7 @@ const (
 					- second/things
 		resource_behavior:
 			# enable commitments for the */capacity resources
-			- { resource: '.*/capacity', commitment_durations: [ '1 hour', '10 days' ], commitment_is_az_aware: true }
+			- { resource: '.*/capacity', commitment_durations: [ '1 hour', '10 days' ] }
 			# test that overcommit factor is considered when confirming commitments
 			- { resource: first/capacity, overcommit_factor: 10.0 }
 		quota_distribution_configs:

@@ -37,7 +37,6 @@ type ResourceBehavior struct {
 	FullResourceNameRx       regexpext.BoundedRegexp             `yaml:"resource"`
 	OvercommitFactor         liquid.OvercommitFactor             `yaml:"overcommit_factor"`
 	CommitmentDurations      []limesresources.CommitmentDuration `yaml:"commitment_durations"`
-	CommitmentIsAZAware      bool                                `yaml:"commitment_is_az_aware"`
 	CommitmentMinConfirmDate *time.Time                          `yaml:"commitment_min_confirm_date"`
 	CommitmentUntilPercent   *float64                            `yaml:"commitment_until_percent"`
 	CommitmentConversion     CommitmentConversion                `yaml:"commitment_conversion"`
@@ -99,9 +98,6 @@ func (b *ResourceBehavior) Merge(other ResourceBehavior, fullResourceName string
 		if b.CommitmentMinConfirmDate == nil || b.CommitmentMinConfirmDate.Before(*other.CommitmentMinConfirmDate) {
 			b.CommitmentMinConfirmDate = other.CommitmentMinConfirmDate
 		}
-	}
-	if other.CommitmentIsAZAware {
-		b.CommitmentIsAZAware = true
 	}
 	if other.CommitmentUntilPercent != nil {
 		if b.CommitmentUntilPercent == nil || *b.CommitmentUntilPercent > *other.CommitmentUntilPercent {

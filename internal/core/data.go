@@ -190,6 +190,7 @@ func (r ResourceData) AddLocalizedUsage(az limes.AvailabilityZone, usage uint64)
 // UsageData contains usage data for a single project resource.
 // It appears in type ResourceData.
 type UsageData struct {
+	Quota         *int64
 	Usage         uint64
 	PhysicalUsage *uint64 // only supported by some plugins
 	Subresources  []any   // only if supported by plugin and enabled in config

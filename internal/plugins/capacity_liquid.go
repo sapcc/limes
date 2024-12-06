@@ -72,6 +72,10 @@ func (p *liquidCapacityPlugin) Init(ctx context.Context, client *gophercloud.Pro
 		return fmt.Errorf("cannot initialize ServiceClient for %s: %w", p.LiquidServiceType, err)
 	}
 	p.LiquidServiceInfo, err = p.LiquidClient.GetInfo(ctx)
+	if err != nil {
+		return err
+	}
+	err = CheckResourceTopologies(p.LiquidServiceInfo)
 	return err
 }
 
@@ -89,6 +93,19 @@ func (p *liquidCapacityPlugin) Scrape(ctx context.Context, backchannel core.Capa
 	if resp.InfoVersion != p.LiquidServiceInfo.Version {
 		logg.Fatal("ServiceInfo version for %s changed from %d to %d; restarting now to reload ServiceInfo...",
 			p.LiquidServiceType, p.LiquidServiceInfo.Version, resp.InfoVersion)
+	}
+	resourceNames := SortedMapKeys(p.LiquidServiceInfo.Resources)
+	var errs []error
+	for _, resourceName := range resourceNames {
+		perAZ := resp.Resources[resourceName].PerAZ
+		topology := p.LiquidServiceInfo.Resources[resourceName].Topology
+		err := MatchLiquidReportToTopology(perAZ, topology)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("resource: %s: %w", resourceName, err))
+		}
+	}
+	if len(errs) > 0 {
+		return nil, nil, errors.Join(errs...)
 	}
 
 	resultInService := make(map[liquid.ResourceName]core.PerAZ[core.CapacityData], len(p.LiquidServiceInfo.Resources))

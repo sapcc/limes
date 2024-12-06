@@ -83,6 +83,10 @@ func (p *liquidQuotaPlugin) Init(ctx context.Context, client *gophercloud.Provid
 		return fmt.Errorf("cannot initialize ServiceClient for liquid-%s: %w", serviceType, err)
 	}
 	p.LiquidServiceInfo, err = p.LiquidClient.GetInfo(ctx)
+	if err != nil {
+		return err
+	}
+	err = CheckResourceTopologies(p.LiquidServiceInfo)
 	return err
 }
 
@@ -119,9 +123,22 @@ func (p *liquidQuotaPlugin) Scrape(ctx context.Context, project core.KeystonePro
 		logg.Fatal("ServiceInfo version for %s changed from %d to %d; restarting now to reload ServiceInfo...",
 			p.LiquidServiceType, p.LiquidServiceInfo.Version, resp.InfoVersion)
 	}
+	resourceNames := SortedMapKeys(p.LiquidServiceInfo.Resources)
+	var errs []error
+	for _, resourceName := range resourceNames {
+		perAZ := resp.Resources[resourceName].PerAZ
+		topology := p.LiquidServiceInfo.Resources[resourceName].Topology
+		err := MatchLiquidReportToTopology(perAZ, topology)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("resource: %s: %w", resourceName, err))
+		}
+	}
+	if len(errs) > 0 {
+		return nil, nil, errors.Join(errs...)
+	}
 
 	result = make(map[liquid.ResourceName]core.ResourceData, len(p.LiquidServiceInfo.Resources))
-	for resName := range p.LiquidServiceInfo.Resources {
+	for resName, resInfo := range p.LiquidServiceInfo.Resources {
 		resReport := resp.Resources[resName]
 		if resReport == nil {
 			return nil, nil, fmt.Errorf("missing report for resource %q", resName)
@@ -141,6 +158,9 @@ func (p *liquidQuotaPlugin) Scrape(ctx context.Context, project core.KeystonePro
 				Usage:         azReport.Usage,
 				PhysicalUsage: azReport.PhysicalUsage,
 				Subresources:  castSliceToAny(azReport.Subresources),
+			}
+			if resInfo.Topology == liquid.AZSeparatedResourceTopology && azReport.Quota != nil {
+				resData.UsageData[az].Quota = azReport.Quota
 			}
 		}
 
@@ -174,13 +194,8 @@ func castSliceToAny[T any](input []T) (output []any) {
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *liquidQuotaPlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotas map[liquid.ResourceName]uint64) error {
-	req := liquid.ServiceQuotaRequest{
-		Resources: make(map[liquid.ResourceName]liquid.ResourceQuotaRequest, len(quotas)),
-	}
-	for resName, quota := range quotas {
-		req.Resources[resName] = liquid.ResourceQuotaRequest{Quota: quota}
-	}
+func (p *liquidQuotaPlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotaReq map[liquid.ResourceName]liquid.ResourceQuotaRequest) error {
+	req := liquid.ServiceQuotaRequest{Resources: quotaReq}
 	if p.LiquidServiceInfo.QuotaUpdateNeedsProjectMetadata {
 		req.ProjectMetadata = project.ForLiquid()
 	}
