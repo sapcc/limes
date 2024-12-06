@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/lib/pq"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/jobloop"
@@ -108,14 +109,9 @@ var (
 		 WHERE service_id = $1
 	`)
 	azQuotaSyncMarkResourcesAsAppliedQuery = sqlext.SimplifyWhitespace(`
-		WITH resourceIDs as (
-		  SELECT id
-			FROM project_resources
-		 WHERE service_id = $1
-		)
 		UPDATE project_az_resources
 		   SET backend_quota = quota
-	 	 WHERE resource_id in (SELECT id from resourceIDs)
+	 	 WHERE resource_id = ANY($1)
 	`)
 	quotaSyncMarkServiceAsAppliedQuery = sqlext.SimplifyWhitespace(`
 		UPDATE project_services
@@ -141,6 +137,7 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 	targetAZQuotasInDB := make(map[liquid.ResourceName]map[liquid.AvailabilityZone]liquid.AZResourceQuotaRequest)
 	needsApply := false
 	azSeparatedNeedsApply := false
+	var azSeparatedResouceIDs []db.ProjectResourceID
 	err := sqlext.ForeachRow(c.DB, quotaSyncSelectQuery, []any{srv.ID}, func(rows *sql.Rows) error {
 		var (
 			resourceID   db.ProjectResourceID
@@ -175,6 +172,7 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 			if (availabilityZone == liquid.AvailabilityZoneAny || availabilityZone == liquid.AvailabilityZoneUnknown) && currentAZQuota != nil {
 				return fmt.Errorf("detected invalid AZ: %s for resource: %s with topology: %s has backend_quota: %v", availabilityZone, resourceName, resInfo.Topology, currentAZQuota)
 			}
+			azSeparatedResouceIDs = append(azSeparatedResouceIDs, resourceID)
 			targetAZQuotasInDB[resourceName] = make(map[liquid.AvailabilityZone]liquid.AZResourceQuotaRequest)
 			targetAZQuotasInDB[resourceName][availabilityZone] = liquid.AZResourceQuotaRequest{Quota: targetAZQuota}
 			if currentAZQuota == nil || *currentAZQuota < 0 || uint64(*currentAZQuota) != targetAZQuota {
@@ -220,7 +218,7 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 			return err
 		}
 		if azSeparatedNeedsApply {
-			_, err = c.DB.Exec(azQuotaSyncMarkResourcesAsAppliedQuery, srv.ID)
+			_, err = c.DB.Exec(azQuotaSyncMarkResourcesAsAppliedQuery, pq.Array(azSeparatedResouceIDs))
 			if err != nil {
 				return err
 			}
