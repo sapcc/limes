@@ -272,25 +272,27 @@ func (u RateLimitUpdater) CommitAuditTrail(token *gopherpolicy.Token, r *http.Re
 			}
 
 			apiIdentity := u.Cluster.BehaviorForRate(dbServiceType, dbRateName).IdentityInV1API
-			u.Auditor.Record(audittools.EventParameters{
+			u.Auditor.Record(audittools.Event{
 				Time:       requestTime,
 				Request:    r,
 				User:       token,
 				ReasonCode: statusCode,
 				Action:     cadf.UpdateAction,
 				Target: rateLimitEventTarget{
-					DomainID:     u.Domain.UUID,
-					DomainName:   u.Domain.Name,
-					ProjectID:    u.Project.UUID,
-					ProjectName:  u.Project.Name,
-					ServiceType:  apiIdentity.ServiceType,
-					Name:         apiIdentity.Name,
-					OldLimit:     req.OldLimit,
-					NewLimit:     req.NewLimit,
-					OldWindow:    req.OldWindow,
-					NewWindow:    req.NewWindow,
-					Unit:         req.Unit,
-					RejectReason: rejectReason,
+					DomainID:    u.Domain.UUID,
+					DomainName:  u.Domain.Name,
+					ProjectID:   u.Project.UUID,
+					ProjectName: u.Project.Name,
+					ServiceType: apiIdentity.ServiceType,
+					Name:        apiIdentity.Name,
+					Payload: rateLimitChange{
+						OldLimit:     req.OldLimit,
+						NewLimit:     req.NewLimit,
+						OldWindow:    req.OldWindow,
+						NewWindow:    req.NewWindow,
+						Unit:         req.Unit,
+						RejectReason: rejectReason,
+					},
 				},
 			})
 		}

@@ -311,7 +311,7 @@ func (p *v1Provider) PutProjectMaxQuota(w http.ResponseWriter, r *http.Request) 
 		for dbResourceName, requestedChange := range requestedInService {
 			apiServiceType, apiResourceName, exists := nm.MapToV1API(dbServiceType, dbResourceName)
 			if exists {
-				p.auditor.Record(audittools.EventParameters{
+				p.auditor.Record(audittools.Event{
 					Time:       requestTime,
 					Request:    r,
 					User:       token,

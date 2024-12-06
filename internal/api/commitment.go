@@ -415,7 +415,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-	p.auditor.Record(audittools.EventParameters{
+	p.auditor.Record(audittools.Event{
 		Time:       now,
 		Request:    r,
 		User:       token,
@@ -496,7 +496,7 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 	if respondwith.ErrorText(w, err) {
 		return
 	}
-	p.auditor.Record(audittools.EventParameters{
+	p.auditor.Record(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
 		User:       token,
@@ -640,7 +640,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 	}
 
 	c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token)
-	p.auditor.Record(audittools.EventParameters{
+	p.auditor.Record(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
 		User:       token,
@@ -802,7 +802,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	}
 
 	c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token)
-	p.auditor.Record(audittools.EventParameters{
+	p.auditor.Record(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
 		User:       token,
@@ -1064,7 +1064,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 
 	c := p.convertCommitmentToDisplayForm(convertedCommitment, targetLoc, token)
 	auditEvent.Commitments = append([]limesresources.Commitment{c}, auditEvent.Commitments...)
-	p.auditor.Record(audittools.EventParameters{
+	p.auditor.Record(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
 		User:       token,
@@ -1164,7 +1164,7 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 	}
 
 	c := p.convertCommitmentToDisplayForm(dbCommitment, loc, token)
-	p.auditor.Record(audittools.EventParameters{
+	p.auditor.Record(audittools.Event{
 		Time:       p.timeNow(),
 		Request:    r,
 		User:       token,
