@@ -173,7 +173,9 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 				return fmt.Errorf("detected invalid AZ: %s for resource: %s with topology: %s has backend_quota: %v", availabilityZone, resourceName, resInfo.Topology, currentAZQuota)
 			}
 			azSeparatedResouceIDs = append(azSeparatedResouceIDs, resourceID)
-			targetAZQuotasInDB[resourceName] = make(map[liquid.AvailabilityZone]liquid.AZResourceQuotaRequest)
+			if targetAZQuotasInDB[resourceName] == nil {
+				targetAZQuotasInDB[resourceName] = make(map[liquid.AvailabilityZone]liquid.AZResourceQuotaRequest)
+			}
 			targetAZQuotasInDB[resourceName][availabilityZone] = liquid.AZResourceQuotaRequest{Quota: targetAZQuota}
 			if currentAZQuota == nil || *currentAZQuota < 0 || uint64(*currentAZQuota) != targetAZQuota {
 				azSeparatedNeedsApply = true
