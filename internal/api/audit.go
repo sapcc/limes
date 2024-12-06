@@ -20,7 +20,6 @@
 package api
 
 import (
-	"encoding/json"
 	"fmt"
 	"strconv"
 
@@ -28,6 +27,7 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
+	"github.com/sapcc/go-bits/must"
 )
 
 // maxQuotaEventTarget renders a cadf.Event.Target for a max_quota change event.
@@ -42,17 +42,12 @@ type maxQuotaEventTarget struct {
 }
 
 type maxQuotaChange struct {
-	OldValue *uint64
-	NewValue *uint64
+	OldValue *uint64 `json:"oldMaxQuota"`
+	NewValue *uint64 `json:"newMaxQuota"`
 }
 
-// Render implements the audittools.TargetRenderer interface type.
+// Render implements the audittools.Target interface.
 func (t maxQuotaEventTarget) Render() cadf.Resource {
-	payloadBytes, _ := json.Marshal(map[string]any{ //nolint:errcheck // cannot fail because all types are safe to marshal
-		"oldMaxQuota": t.RequestedChange.OldValue,
-		"newMaxQuota": t.RequestedChange.NewValue,
-	})
-
 	return cadf.Resource{
 		TypeURI:     fmt.Sprintf("service/%s/%s/max-quota", t.ServiceType, t.ResourceName),
 		ID:          t.ProjectID,
@@ -60,32 +55,35 @@ func (t maxQuotaEventTarget) Render() cadf.Resource {
 		DomainName:  t.DomainName,
 		ProjectID:   t.ProjectID,
 		ProjectName: t.ProjectName,
-		Attachments: []cadf.Attachment{{
-			Name:    "payload",
-			TypeURI: "mime:application/json",
-			Content: string(payloadBytes),
-		}},
+		Attachments: []cadf.Attachment{
+			must.Return(cadf.NewJSONAttachment("payload", t.RequestedChange)),
+		},
 	}
 }
 
 // rateLimitEventTarget contains the structure for rendering a cadf.Event.Target for
 // changes regarding rate limits
 type rateLimitEventTarget struct {
-	DomainID     string
-	DomainName   string
-	ProjectID    string
-	ProjectName  string
-	ServiceType  limes.ServiceType
-	Name         limesrates.RateName
-	Unit         limes.Unit
-	OldLimit     uint64
-	NewLimit     uint64
-	OldWindow    limesrates.Window
-	NewWindow    limesrates.Window
-	RejectReason string
+	DomainID    string
+	DomainName  string
+	ProjectID   string
+	ProjectName string
+	ServiceType limes.ServiceType
+	Name        limesrates.RateName
+	Payload     rateLimitChange
 }
 
-// Render implements the audittools.TargetRenderer interface type.
+// rateLimitChange appears in type rateLimitEventTarget.
+type rateLimitChange struct {
+	Unit         limes.Unit        `json:"unit,omitempty"`
+	OldLimit     uint64            `json:"oldLimit"`
+	NewLimit     uint64            `json:"newLimit"`
+	OldWindow    limesrates.Window `json:"oldWindow"`
+	NewWindow    limesrates.Window `json:"newWindow"`
+	RejectReason string            `json:"rejectReason,omitempty"`
+}
+
+// Render implements the audittools.Target interface.
 func (t rateLimitEventTarget) Render() cadf.Resource {
 	return cadf.Resource{
 		TypeURI:     fmt.Sprintf("service/%s/%s/rates", t.ServiceType, t.Name),
@@ -95,18 +93,7 @@ func (t rateLimitEventTarget) Render() cadf.Resource {
 		ProjectID:   t.ProjectID,
 		ProjectName: t.ProjectName,
 		Attachments: []cadf.Attachment{
-			{
-				Name:    "payload",
-				TypeURI: "mime:application/json",
-				Content: targetAttachmentContent{
-					Unit:         t.Unit,
-					OldLimit:     t.OldLimit,
-					NewLimit:     t.NewLimit,
-					OldWindow:    t.OldWindow,
-					NewWindow:    t.NewWindow,
-					RejectReason: t.RejectReason,
-				},
-			},
+			must.Return(cadf.NewJSONAttachment("payload", t.Payload)),
 		},
 	}
 }
@@ -122,7 +109,7 @@ type commitmentEventTarget struct {
 	Commitments          []limesresources.Commitment // must have at least one entry
 }
 
-// Render implements the audittools.TargetRenderer interface type.
+// Render implements the audittools.Target interface.
 func (t commitmentEventTarget) Render() cadf.Resource {
 	if len(t.Commitments) == 0 {
 		panic("commitmentEventTarget must contain at least one commitment")
@@ -141,79 +128,12 @@ func (t commitmentEventTarget) Render() cadf.Resource {
 		if idx > 0 {
 			name = "additional-payload"
 		}
-		res.Attachments = append(res.Attachments, cadf.Attachment{
-			Name:    name,
-			TypeURI: "mime:application/json",
-			Content: wrappedAttachment[limesresources.Commitment]{commitment},
-		})
+		attachment := must.Return(cadf.NewJSONAttachment(name, commitment))
+		res.Attachments = append(res.Attachments, attachment)
 	}
 	if t.SupersededCommitment != nil {
-		res.Attachments = append(res.Attachments, cadf.Attachment{
-			Name:    "superseded-payload",
-			TypeURI: "mime:application/json",
-			Content: wrappedAttachment[limesresources.Commitment]{*t.SupersededCommitment},
-		})
+		attachment := must.Return(cadf.NewJSONAttachment("superseded-payload", *t.SupersededCommitment))
+		res.Attachments = append(res.Attachments, attachment)
 	}
 	return res
-}
-
-// This type marshals to JSON like a string containing the JSON representation of its inner type.
-// This is the type of structure that cadf.Attachment.Content expects.
-type wrappedAttachment[T any] struct {
-	Inner T
-}
-
-// MarshalJSON implements the json.Marshaler interface.
-func (a wrappedAttachment[T]) MarshalJSON() ([]byte, error) {
-	buf, err := json.Marshal(a.Inner)
-	if err != nil {
-		return nil, err
-	}
-	return json.Marshal(string(buf))
-}
-
-// This type is needed for the custom MarshalJSON behavior.
-type targetAttachmentContent struct {
-	RejectReason string
-	// for quota or rate limit changes
-	Unit limes.Unit
-	// for quota changes
-	OldQuota uint64
-	NewQuota uint64
-	// for rate limit changes
-	OldLimit  uint64
-	NewLimit  uint64
-	OldWindow limesrates.Window
-	NewWindow limesrates.Window
-}
-
-// MarshalJSON implements the json.Marshaler interface.
-func (a targetAttachmentContent) MarshalJSON() ([]byte, error) {
-	// copy data into a struct that does not have a custom MarshalJSON
-	data := struct {
-		OldQuota     uint64            `json:"oldQuota,omitempty"`
-		NewQuota     uint64            `json:"newQuota,omitempty"`
-		Unit         limes.Unit        `json:"unit,omitempty"`
-		RejectReason string            `json:"rejectReason,omitempty"`
-		OldLimit     uint64            `json:"oldLimit,omitempty"`
-		NewLimit     uint64            `json:"newLimit,omitempty"`
-		OldWindow    limesrates.Window `json:"oldWindow,omitempty"`
-		NewWindow    limesrates.Window `json:"newWindow,omitempty"`
-	}{
-		OldQuota:     a.OldQuota,
-		NewQuota:     a.NewQuota,
-		Unit:         a.Unit,
-		RejectReason: a.RejectReason,
-		OldLimit:     a.OldLimit,
-		NewLimit:     a.NewLimit,
-		OldWindow:    a.OldWindow,
-		NewWindow:    a.NewWindow,
-	}
-	// Hermes does not accept a JSON object at target.attachments[].content, so
-	// we need to wrap the marshaled JSON into a JSON string
-	bytes, err := json.Marshal(data)
-	if err != nil {
-		return nil, err
-	}
-	return json.Marshal(string(bytes))
 }
