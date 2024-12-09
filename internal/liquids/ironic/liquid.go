@@ -32,7 +32,7 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 
 	"github.com/sapcc/limes/internal/liquids"
-	"github.com/sapcc/limes/internal/plugins/nova"
+	"github.com/sapcc/limes/internal/liquids/nova"
 )
 
 type Logic struct {
