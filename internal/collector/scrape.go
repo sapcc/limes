@@ -208,17 +208,29 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 	srv := task.Service
 
 	for resName, resData := range resourceData {
+		resInfo := c.Cluster.InfoForResource(task.Service.Type, resName)
 		if len(resData.UsageData) == 0 {
 			// ensure that there is at least one ProjectAZResource for each ProjectResource
 			resData.UsageData = core.InAnyAZ(core.UsageData{Usage: 0})
 			resourceData[resName] = resData
 		} else {
-			// for AZ-aware resources, ensure that we also have a ProjectAZResource in
-			// "any", because ApplyComputedProjectQuota needs somewhere to write base
-			// quotas into if enabled
-			_, exists := resData.UsageData[liquid.AvailabilityZoneAny]
-			if !exists {
-				resData.UsageData[liquid.AvailabilityZoneAny] = &core.UsageData{Usage: 0}
+			// AZ separated resources will not include "any" AZ. The basequota will be distributed towards the existing AZs.
+			// If an AZ is not available within the scrape response, it will be created to store the basequota.
+			if resInfo.Topology == liquid.AZSeparatedResourceTopology {
+				for _, availabilityZone := range c.Cluster.Config.AvailabilityZones {
+					_, exists := resData.UsageData[availabilityZone]
+					if !exists {
+						resData.UsageData[availabilityZone] = &core.UsageData{Usage: 0}
+					}
+				}
+			} else {
+				// for AZ-aware resources, ensure that we also have a ProjectAZResource in
+				// "any", because ApplyComputedProjectQuota needs somewhere to write base
+				// quotas into if enabled
+				_, exists := resData.UsageData[liquid.AvailabilityZoneAny]
+				if !exists {
+					resData.UsageData[liquid.AvailabilityZoneAny] = &core.UsageData{Usage: 0}
+				}
 			}
 		}
 	}
@@ -302,6 +314,14 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 				data := usageData[az]
 				azRes.Usage = data.Usage
 				azRes.PhysicalUsage = data.PhysicalUsage
+
+				// set AZ backend quota.
+				resInfo := c.Cluster.InfoForResource(srv.Type, res.Name)
+				if resInfo.Topology == liquid.AZSeparatedResourceTopology && resInfo.HasQuota {
+					azRes.BackendQuota = data.Quota
+				} else {
+					azRes.BackendQuota = nil
+				}
 
 				// warn when the backend is inconsistent with itself
 				if data.Subresources != nil && uint64(len(data.Subresources)) != data.Usage {

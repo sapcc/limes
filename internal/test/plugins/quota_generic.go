@@ -34,6 +34,7 @@ import (
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
+	"github.com/sapcc/limes/internal/plugins"
 )
 
 func init() {
@@ -44,38 +45,42 @@ func init() {
 // mostly reports static data and offers several controls to simulate failed
 // operations.
 type GenericQuotaPlugin struct {
-	ServiceType              db.ServiceType                             `yaml:"-"`
-	StaticRateInfos          map[liquid.RateName]liquid.RateInfo        `yaml:"rate_infos"`
-	StaticResourceData       map[liquid.ResourceName]*core.ResourceData `yaml:"-"`
-	StaticResourceAttributes map[liquid.ResourceName]map[string]any     `yaml:"-"`
-	OverrideQuota            map[string]map[liquid.ResourceName]uint64  `yaml:"-"` // first key is project UUID
+	ServiceType              db.ServiceType                                                 `yaml:"-"`
+	LiquidServiceInfo        liquid.ServiceInfo                                             `yaml:"-"`
+	StaticRateInfos          map[liquid.RateName]liquid.RateInfo                            `yaml:"rate_infos"`
+	StaticResourceData       map[liquid.ResourceName]*core.ResourceData                     `yaml:"-"`
+	StaticResourceAttributes map[liquid.ResourceName]map[string]any                         `yaml:"-"`
+	OverrideQuota            map[string]map[liquid.ResourceName]liquid.ResourceQuotaRequest `yaml:"-"` // first key is project UUID
 	// behavior flags that can be set by a unit test
-	ScrapeFails   bool                           `yaml:"-"`
-	SetQuotaFails bool                           `yaml:"-"`
-	MinQuota      map[liquid.ResourceName]uint64 `yaml:"-"`
-	MaxQuota      map[liquid.ResourceName]uint64 `yaml:"-"`
+	ReportedAZs   map[liquid.AvailabilityZone]struct{} `yaml:"-"`
+	ScrapeFails   bool                                 `yaml:"-"`
+	SetQuotaFails bool                                 `yaml:"-"`
+	MinQuota      map[liquid.ResourceName]uint64       `yaml:"-"`
+	MaxQuota      map[liquid.ResourceName]uint64       `yaml:"-"`
 }
 
 // Init implements the core.QuotaPlugin interface.
 func (p *GenericQuotaPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType db.ServiceType) error {
 	p.ServiceType = serviceType
+	thingsAZQuota := int64(21)
+	capacityAZQuota := int64(50)
 	p.StaticResourceData = map[liquid.ResourceName]*core.ResourceData{
 		"things": {
 			Quota: 42,
 			UsageData: core.PerAZ[core.UsageData]{
-				"az-one": {Usage: 2},
-				"az-two": {Usage: 2},
+				"az-one": {Usage: 2, Quota: &thingsAZQuota},
+				"az-two": {Usage: 2, Quota: &thingsAZQuota},
 			},
 		},
 		"capacity": {
 			Quota: 100,
 			UsageData: core.PerAZ[core.UsageData]{
-				"az-one": {Usage: 0},
-				"az-two": {Usage: 0},
+				"az-one": {Usage: 0, Quota: &capacityAZQuota},
+				"az-two": {Usage: 0, Quota: &capacityAZQuota},
 			},
 		},
 	}
-	p.OverrideQuota = make(map[string]map[liquid.ResourceName]uint64)
+	p.OverrideQuota = make(map[string]map[liquid.ResourceName]liquid.ResourceQuotaRequest)
 	return nil
 }
 
@@ -95,9 +100,9 @@ func (p *GenericQuotaPlugin) ServiceInfo() core.ServiceInfo {
 // Resources implements the core.QuotaPlugin interface.
 func (p *GenericQuotaPlugin) Resources() map[liquid.ResourceName]liquid.ResourceInfo {
 	result := map[liquid.ResourceName]liquid.ResourceInfo{
-		"capacity":         {Unit: limes.UnitBytes, HasQuota: true},
-		"capacity_portion": {Unit: limes.UnitBytes, HasQuota: false}, // NOTE: This used to be `ContainedIn: "capacity"` before we removed support for this relation.
-		"things":           {Unit: limes.UnitNone, HasQuota: true},
+		"capacity":         {Unit: limes.UnitBytes, HasQuota: true, Topology: p.LiquidServiceInfo.Resources["capacity"].Topology},
+		"capacity_portion": {Unit: limes.UnitBytes, HasQuota: false, Topology: p.LiquidServiceInfo.Resources["capacity_portion"].Topology}, // NOTE: This used to be `ContainedIn: "capacity"` before we removed support for this relation.
+		"things":           {Unit: limes.UnitNone, HasQuota: true, Topology: p.LiquidServiceInfo.Resources["things"].Topology},
 	}
 
 	for resName, resInfo := range result {
@@ -160,11 +165,38 @@ func (p *GenericQuotaPlugin) Scrape(ctx context.Context, project core.KeystonePr
 		return nil, nil, errors.New("Scrape failed as requested")
 	}
 
+	if len(p.LiquidServiceInfo.Resources) > 0 {
+		err := plugins.CheckResourceTopologies(p.LiquidServiceInfo)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
+	if len(p.ReportedAZs) > 0 {
+		var errs []error
+		resourceNames := plugins.SortedMapKeys(p.LiquidServiceInfo.Resources)
+		for _, resourceName := range resourceNames {
+			topology := p.LiquidServiceInfo.Resources[resourceName].Topology
+			err := plugins.MatchLiquidReportToTopology(p.ReportedAZs, topology)
+			if err != nil {
+				errs = append(errs, fmt.Errorf("service: %s, resource: %s: %w", p.ServiceType, resourceName, err))
+			}
+		}
+		if len(errs) > 0 {
+			return nil, nil, errors.Join(errs...)
+		}
+	}
+
 	result = make(map[liquid.ResourceName]core.ResourceData)
 	for key, val := range p.StaticResourceData {
 		copyOfVal := core.ResourceData{
 			Quota:     val.Quota,
 			UsageData: val.UsageData.Clone(),
+		}
+
+		// populate azSeparatedQuota
+		for az, data := range copyOfVal.UsageData {
+			data.Quota = val.UsageData[az].Quota
 		}
 
 		// test coverage for PhysicalUsage != Usage
@@ -201,7 +233,7 @@ func (p *GenericQuotaPlugin) Scrape(ctx context.Context, project core.KeystonePr
 	if exists {
 		for resourceName, quota := range data {
 			resData := result[resourceName]
-			resData.Quota = int64(quota) //nolint:gosec // uint64 -> int64 would only fail if quota is bigger than 2^63
+			resData.Quota = int64(quota.Quota) //nolint:gosec // uint64 -> int64 would only fail if quota is bigger than 2^63
 			result[resourceName] = resData
 		}
 	}
@@ -229,7 +261,7 @@ func (p *GenericQuotaPlugin) Scrape(ctx context.Context, project core.KeystonePr
 }
 
 // SetQuota implements the core.QuotaPlugin interface.
-func (p *GenericQuotaPlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotas map[liquid.ResourceName]uint64) error {
+func (p *GenericQuotaPlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotas map[liquid.ResourceName]liquid.ResourceQuotaRequest) error {
 	if p.SetQuotaFails {
 		return errors.New("SetQuota failed as requested")
 	}
