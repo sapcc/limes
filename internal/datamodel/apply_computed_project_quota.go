@@ -47,7 +47,7 @@ var (
 		 WHERE ps.type = $1 AND pr.name = $2 AND (pr.min_quota_from_backend IS NOT NULL
 		                                       OR pr.max_quota_from_backend IS NOT NULL
 		                                       OR pr.max_quota_from_outside_admin IS NOT NULL
-											   OR pr.max_quota_from_local_admin IS NOT NULL
+		                                       OR pr.max_quota_from_local_admin IS NOT NULL
 		                                       OR pr.override_quota_from_config IS NOT NULL)
 	`)
 
@@ -173,7 +173,7 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 				if err != nil {
 					return fmt.Errorf("in AZ %s in project resource %d: %w", az, resourceID, err)
 				}
-				// AZSeparated Toplogy does not update resource quota. Therefore the service desync will be prepared right here.
+				// AZSeparatedResourceTopology does not update resource quota. Therefore the service desync needs to be queued right here.
 				if resInfo.Topology == liquid.AZSeparatedResourceTopology {
 					var serviceID db.ProjectServiceID
 					err := tx.SelectOne(&serviceID, `SELECT service_id FROM project_resources WHERE id = $1`, resourceID)
@@ -199,7 +199,7 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 	}
 
 	err = sqlext.WithPreparedStatement(tx, acpqUpdateProjectQuotaQuery, func(stmt *sql.Stmt) error {
-		// Skip resources with AZSeparated toplogy. The quota scrape would receive a resource nil value, while ACPQ calculates qouta.
+		// Skip resources with AZSeparatedResourceTopology. The quota scrape would receive a resource nil value, while ACPQ calculates qouta.
 		// This would lead to unnecessary quota syncs with the backend, because backendQuota != quota.
 		if resInfo.Topology == liquid.AZSeparatedResourceTopology {
 			return nil
