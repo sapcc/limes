@@ -45,17 +45,16 @@ func CheckResourceTopologies(serviceInfo liquid.ServiceInfo) (err error) {
 
 	resourceNames := SortedMapKeys(resources)
 	for _, resourceName := range resourceNames {
-		topology := resources[resourceName].Topology
-		if topology == "" {
+		resInfo := resources[resourceName]
+		if resInfo.Topology == "" {
 			// several algorithms inside Limes depend on a topology being chosen, so we have to pick a default for now
 			// TODO: make this a fatal error once liquid-ceph has rolled out their Topology patch
 			logg.Error("missing topology on resource: %s (assuming %q)", resourceName, liquid.FlatResourceTopology)
-			resInfo := resources[resourceName]
 			resInfo.Topology = liquid.FlatResourceTopology
 			resources[resourceName] = resInfo
 		}
-		if !topology.IsValid() {
-			errs = append(errs, fmt.Errorf("invalid topology: %s on resource: %s", topology, resourceName))
+		if !resInfo.Topology.IsValid() {
+			errs = append(errs, fmt.Errorf("invalid topology: %s on resource: %s", resInfo.Topology, resourceName))
 		}
 	}
 	if len(errs) > 0 {
