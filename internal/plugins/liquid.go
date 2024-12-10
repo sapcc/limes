@@ -123,19 +123,6 @@ func (p *liquidQuotaPlugin) Scrape(ctx context.Context, project core.KeystonePro
 		logg.Fatal("ServiceInfo version for %s changed from %d to %d; restarting now to reload ServiceInfo...",
 			p.LiquidServiceType, p.LiquidServiceInfo.Version, resp.InfoVersion)
 	}
-	resourceNames := SortedMapKeys(p.LiquidServiceInfo.Resources)
-	var errs []error
-	for _, resourceName := range resourceNames {
-		perAZ := resp.Resources[resourceName].PerAZ
-		topology := p.LiquidServiceInfo.Resources[resourceName].Topology
-		err := MatchLiquidReportToTopology(perAZ, topology)
-		if err != nil {
-			errs = append(errs, fmt.Errorf("resource: %s: %w", resourceName, err))
-		}
-	}
-	if len(errs) > 0 {
-		return nil, nil, errors.Join(errs...)
-	}
 
 	result = make(map[liquid.ResourceName]core.ResourceData, len(p.LiquidServiceInfo.Resources))
 	for resName, resInfo := range p.LiquidServiceInfo.Resources {
@@ -165,6 +152,20 @@ func (p *liquidQuotaPlugin) Scrape(ctx context.Context, project core.KeystonePro
 		}
 
 		result[resName] = resData
+	}
+
+	resourceNames := SortedMapKeys(p.LiquidServiceInfo.Resources)
+	var errs []error
+	for _, resourceName := range resourceNames {
+		perAZ := resp.Resources[resourceName].PerAZ
+		topology := p.LiquidServiceInfo.Resources[resourceName].Topology
+		err := MatchLiquidReportToTopology(perAZ, topology)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("resource: %s: %w", resourceName, err))
+		}
+	}
+	if len(errs) > 0 {
+		return nil, nil, errors.Join(errs...)
 	}
 
 	serializedMetrics, err = liquidSerializeMetrics(p.LiquidServiceInfo.UsageMetricFamilies, resp.Metrics)
