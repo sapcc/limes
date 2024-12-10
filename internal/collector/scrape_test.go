@@ -754,4 +754,10 @@ func Test_TopologyScrapes(t *testing.T) {
 	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"capacity": {Topology: liquid.AZSeparatedResourceTopology}, "things": {Topology: liquid.AZSeparatedResourceTopology}}
 	plugin.ReportedAZs = map[liquid.AvailabilityZone]struct{}{"unknown": {}}
 	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during resource scrape of project germany/berlin: service: unittest, resource: capacity: scrape with topology type: az-separated returned AZs: [unknown]\nservice: unittest, resource: things: scrape with topology type: az-separated returned AZs: [unknown]"))
+
+	s.Clock.StepBy(scrapeInterval)
+	// negative: empty toplogy should be treated as FlatResourceTopology
+	plugin.LiquidServiceInfo.Resources = map[liquid.ResourceName]liquid.ResourceInfo{"things": {Topology: ""}}
+	plugin.ReportedAZs = map[liquid.AvailabilityZone]struct{}{"az-one": {}}
+	mustFailT(t, job.ProcessOne(s.Ctx, withLabel), errors.New("during resource scrape of project germany/dresden: service: unittest, resource: things: scrape with topology type: flat returned AZs: [az-one]"))
 }
