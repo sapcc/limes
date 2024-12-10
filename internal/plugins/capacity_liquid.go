@@ -119,6 +119,9 @@ func (p *liquidCapacityPlugin) Scrape(ctx context.Context, backchannel core.Capa
 	resourceNames := SortedMapKeys(p.LiquidServiceInfo.Resources)
 	var errs []error
 	for _, resourceName := range resourceNames {
+		if !p.LiquidServiceInfo.Resources[resourceName].HasCapacity {
+			continue
+		}
 		perAZ := resp.Resources[resourceName].PerAZ
 		topology := p.LiquidServiceInfo.Resources[resourceName].Topology
 		err := MatchLiquidReportToTopology(perAZ, topology)
