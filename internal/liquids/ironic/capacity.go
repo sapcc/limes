@@ -114,6 +114,9 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 		delete(nodesByFlavorName, flavorName)
 
 		perAZ := make(map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport)
+		for _, az := range req.AllAZs {
+			perAZ[az] = &liquid.AZResourceCapacityReport{Capacity: 0}
+		}
 		for _, node := range matchingNodes {
 			logg.Debug("Ironic node %q (%s) matches flavor %s", node.Name, node.UUID, flavorName)
 
@@ -135,9 +138,9 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 			az := azForResourceProviderUUID[node.UUID]
 			if !slices.Contains(req.AllAZs, az) {
 				az = liquid.AvailabilityZoneUnknown
-			}
-			if perAZ[az] == nil {
-				perAZ[az] = &liquid.AZResourceCapacityReport{Capacity: 0}
+				if perAZ[az] == nil {
+					perAZ[az] = &liquid.AZResourceCapacityReport{Capacity: 0}
+				}
 			}
 			perAZ[az].Capacity++
 
