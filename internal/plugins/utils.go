@@ -26,7 +26,6 @@ import (
 	"slices"
 
 	"github.com/sapcc/go-api-declarations/liquid"
-	"github.com/sapcc/go-bits/logg"
 )
 
 func p2u64(val uint64) *uint64 {
@@ -40,21 +39,23 @@ func SortedMapKeys[M map[K]V, K ~string, V any](mapToSort M) []K {
 }
 
 func CheckResourceTopologies(serviceInfo liquid.ServiceInfo) (err error) {
+	// TODO: remove this special case once liquid-ceph has rolled out their topology support
+	//       (if you come across this, it's probably time; ping Stefan M. to ask for confirmation)
+	for resName, resInfo := range serviceInfo.Resources {
+		if resName == "objectstore_region_3_hdd_capacity" && resInfo.Topology == "" {
+			resInfo.Topology = liquid.FlatResourceTopology
+			serviceInfo.Resources[resName] = resInfo
+		}
+	}
+
 	var errs []error
 	resources := serviceInfo.Resources
 
 	resourceNames := SortedMapKeys(resources)
 	for _, resourceName := range resourceNames {
-		resInfo := resources[resourceName]
-		if resInfo.Topology == "" {
-			// several algorithms inside Limes depend on a topology being chosen, so we have to pick a default for now
-			// TODO: make this a fatal error once liquid-ceph has rolled out their Topology patch
-			logg.Error("missing topology on resource: %s (assuming %q)", resourceName, liquid.FlatResourceTopology)
-			resInfo.Topology = liquid.FlatResourceTopology
-			resources[resourceName] = resInfo
-		}
-		if !resInfo.Topology.IsValid() {
-			errs = append(errs, fmt.Errorf("invalid topology: %s on resource: %s", resInfo.Topology, resourceName))
+		topology := resources[resourceName].Topology
+		if !topology.IsValid() {
+			errs = append(errs, fmt.Errorf("invalid topology: %s on resource: %s", topology, resourceName))
 		}
 	}
 	if len(errs) > 0 {
