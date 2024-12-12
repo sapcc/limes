@@ -48,13 +48,14 @@ func Init() (*sql.DB, error) {
 		extraConnectionOptions["idle_in_transaction_session_timeout"] = "10000" // 10000 ms = 10 seconds
 	}
 
+	dbName := osext.GetenvOrDefault("LIMES_DB_NAME", "limes")
 	dbURL, err := easypg.URLFrom(easypg.URLParts{
 		HostName:          osext.GetenvOrDefault("LIMES_DB_HOSTNAME", "localhost"),
 		Port:              osext.GetenvOrDefault("LIMES_DB_PORT", "5432"),
 		UserName:          osext.GetenvOrDefault("LIMES_DB_USERNAME", "postgres"),
 		Password:          os.Getenv("LIMES_DB_PASSWORD"),
 		ConnectionOptions: os.Getenv("LIMES_DB_CONNECTION_OPTIONS"),
-		DatabaseName:      osext.GetenvOrDefault("LIMES_DB_NAME", "limes"),
+		DatabaseName:      dbName,
 	})
 	if err != nil {
 		return nil, err
@@ -63,7 +64,7 @@ func Init() (*sql.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	prometheus.MustRegister(sqlstats.NewStatsCollector("limes", dbConn))
+	prometheus.MustRegister(sqlstats.NewStatsCollector(dbName, dbConn))
 	return dbConn, nil
 }
 
