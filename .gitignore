@@ -2,7 +2,7 @@
 build/
 
 # test artifacts
-testing/postgres*
+/.testdb
 *.actual
 
 # custom configuration files used during development
