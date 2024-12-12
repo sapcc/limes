@@ -32,7 +32,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dlmiddlecote/sqlstats"
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -198,8 +197,7 @@ func taskCollect(ctx context.Context, cluster *core.Cluster, args []string) {
 	isAuthoritative := osext.GetenvBool("LIMES_AUTHORITATIVE")
 
 	// connect to database
-	dbm := must.Return(db.Init())
-	prometheus.MustRegister(sqlstats.NewStatsCollector("limes", dbm.Db))
+	dbm := db.InitORM(must.Return(db.Init()))
 
 	// start scraping threads (NOTE: Many people use a pair of sync.WaitGroup and
 	// stop channel to shutdown threads in a controlled manner. I decided against
@@ -250,8 +248,7 @@ func taskServe(ctx context.Context, cluster *core.Cluster, args []string, provid
 	}
 
 	// connect to database
-	dbm := must.Return(db.Init())
-	prometheus.MustRegister(sqlstats.NewStatsCollector("limes", dbm.Db))
+	dbm := db.InitORM(must.Return(db.Init()))
 
 	// connect to Hermes RabbitMQ if requested
 	auditor := audittools.NewNullAuditor()
@@ -296,8 +293,7 @@ func taskServeDataMetrics(ctx context.Context, cluster *core.Cluster, args []str
 	}
 
 	// connect to database
-	dbm := must.Return(db.Init())
-	prometheus.MustRegister(sqlstats.NewStatsCollector("limes", dbm.Db))
+	dbm := db.InitORM(must.Return(db.Init()))
 
 	// serve data metrics
 	skipZero := osext.GetenvBool("LIMES_DATA_METRICS_SKIP_ZERO")

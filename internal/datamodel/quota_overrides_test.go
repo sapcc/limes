@@ -24,10 +24,15 @@ import (
 
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/assert"
+	"github.com/sapcc/go-bits/easypg"
 
 	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/test"
 )
+
+func TestMain(m *testing.M) {
+	easypg.WithTestDB(m, func() int { return m.Run() })
+}
 
 const (
 	testQuotaOverridesNoRenamingConfigYAML = `

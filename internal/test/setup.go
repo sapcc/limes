@@ -21,7 +21,7 @@ package test
 import (
 	"context"
 	"net/http"
-	"net/url"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -45,6 +45,7 @@ import (
 )
 
 type setupParams struct {
+	DBSetupOptions []easypg.TestSetupOption
 	DBFixtureFile  string
 	ConfigYAML     string
 	APIBuilder     func(*core.Cluster, *gorp.DbMap, gopherpolicy.Validator, audittools.Auditor, func() time.Time, func() string) httpapi.API
@@ -58,7 +59,7 @@ type SetupOption func(*setupParams)
 // the SQL statements in the given file.
 func WithDBFixtureFile(file string) SetupOption {
 	return func(params *setupParams) {
-		params.DBFixtureFile = file
+		params.DBSetupOptions = append(params.DBSetupOptions, easypg.LoadSQLFile(file))
 	}
 }
 
@@ -117,7 +118,7 @@ func NewSetup(t *testing.T, opts ...SetupOption) Setup {
 
 	var s Setup
 	s.Ctx = context.Background()
-	s.DB = initDatabase(t, params.DBFixtureFile)
+	s.DB = initDatabase(t, params.DBSetupOptions)
 	s.Cluster = initCluster(t, s.Ctx, params.ConfigYAML)
 	s.Clock = mock.NewClock()
 	s.Registry = prometheus.NewPedanticRegistry()
@@ -163,44 +164,18 @@ var cleanupProjectCommitmentsQuery = sqlext.SimplifyWhitespace(`
 	)
 `)
 
-func initDatabase(t *testing.T, fixtureFile string) *gorp.DbMap {
-	//nolint:errcheck
-	postgresURL, _ := url.Parse("postgres://postgres:postgres@localhost:54321/limes?sslmode=disable")
-	dbm, err := db.InitFromURL(postgresURL)
-	if err != nil {
-		t.Error(err)
-		t.Log("Try prepending ./testing/with-postgres-db.sh to your command.")
-		t.FailNow()
-	}
-
-	// reset the DB contents, starting with project_commitments because the "ON DELETE RESTRICT" constraint
-	// demands a specific deletion strategy
-	for {
-		result, err := dbm.Exec(cleanupProjectCommitmentsQuery)
-		if err != nil {
-			t.Fatal(err)
-		}
-		rowCount, err := result.RowsAffected()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if rowCount == 0 {
-			break
-		}
-	}
-
-	// reset the DB contents and populate with initial resources if requested
-	easypg.ClearTables(t, dbm.Db, "cluster_capacitors", "cluster_services", "domains") // all other tables via "ON DELETE CASCADE"
-	if fixtureFile != "" {
-		easypg.ExecSQLFile(t, dbm.Db, fixtureFile)
-	}
-	easypg.ResetPrimaryKeys(t, dbm.Db,
-		"cluster_services", "cluster_resources", "cluster_az_resources",
-		"domains", "projects", "project_commitments",
-		"project_services", "project_resources", "project_az_resources",
+func initDatabase(t *testing.T, extraOpts []easypg.TestSetupOption) *gorp.DbMap {
+	opts := append(slices.Clone(extraOpts),
+		// project_commitments needs a specialized cleanup strategy because of an "ON DELETE RESTRICT" constraint
+		easypg.ClearContentsWith(cleanupProjectCommitmentsQuery),
+		easypg.ClearTables("cluster_capacitors", "cluster_services", "domains"),
+		easypg.ResetPrimaryKeys(
+			"cluster_services", "cluster_resources", "cluster_az_resources",
+			"domains", "projects", "project_commitments",
+			"project_services", "project_resources", "project_az_resources",
+		),
 	)
-
-	return dbm
+	return db.InitORM(easypg.ConnectForTest(t, db.Configuration(), opts...))
 }
 
 func initCluster(t *testing.T, ctx context.Context, configYAML string) *core.Cluster {

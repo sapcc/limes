@@ -25,7 +25,7 @@ github.com/golang-migrate/migrate/v4/database/postgres
 github.com/golang-migrate/migrate/v4/internal/url
 github.com/golang-migrate/migrate/v4/source
 github.com/golang-migrate/migrate/v4/source/go_bindata
-# github.com/gophercloud/gophercloud/v2 v2.2.0
+# github.com/gophercloud/gophercloud/v2 v2.3.0
 ## explicit; go 1.22
 github.com/gophercloud/gophercloud/v2
 github.com/gophercloud/gophercloud/v2/openstack
@@ -150,7 +150,7 @@ github.com/sapcc/go-api-declarations/limes
 github.com/sapcc/go-api-declarations/limes/rates
 github.com/sapcc/go-api-declarations/limes/resources
 github.com/sapcc/go-api-declarations/liquid
-# github.com/sapcc/go-bits v0.0.0-20241206132118-f18a227dc952
+# github.com/sapcc/go-bits v0.0.0-20241212131355-30c23561fbfd
 ## explicit; go 1.23
 github.com/sapcc/go-bits/assert
 github.com/sapcc/go-bits/audittools

@@ -47,6 +47,10 @@ import (
 	"github.com/sapcc/limes/internal/test/plugins"
 )
 
+func TestMain(m *testing.M) {
+	easypg.WithTestDB(m, func() int { return m.Run() })
+}
+
 // NOTE: MiB makes no sense for a deletion rate, but I want to test as many
 // combinations of "has unit or not", "has limit or not" and "has usage or not"
 // as possible

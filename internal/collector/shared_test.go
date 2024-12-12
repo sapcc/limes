@@ -23,8 +23,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sapcc/go-bits/easypg"
+
 	"github.com/sapcc/limes/internal/test"
 )
+
+func TestMain(m *testing.M) {
+	easypg.WithTestDB(m, func() int { return m.Run() })
+}
 
 func getCollector(t *testing.T, s test.Setup) Collector {
 	return Collector{
