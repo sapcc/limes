@@ -293,6 +293,7 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 						logg.Debug("could not simulate placement of known instance %s on %s", instance.ID, hv.Match.Hypervisor.Description())
 					}
 				}
+				break
 			}
 		}
 
@@ -443,7 +444,7 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 		for az, hypervisors := range hypervisorsByAZ {
 			var (
 				azCapacity nova.PartialCapacity
-				builder    nova.PooledSubcapacityBuilder
+				builder    nova.DeprecatedPooledSubcapacityBuilder
 			)
 			for _, h := range hypervisors {
 				azCapacity.Add(h.Match.PartialCapacity())
@@ -458,9 +459,9 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 				}
 			}
 
-			capacities[p.PooledCoresResourceName][az] = pointerTo(azCapacity.IntoCapacityData("cores", float64(maxRootDiskSize), builder.CoresSubcapacities))
-			capacities[p.PooledInstancesResourceName][az] = pointerTo(azCapacity.IntoCapacityData("instances", float64(maxRootDiskSize), builder.InstancesSubcapacities))
-			capacities[p.PooledRAMResourceName][az] = pointerTo(azCapacity.IntoCapacityData("ram", float64(maxRootDiskSize), builder.RAMSubcapacities))
+			capacities[p.PooledCoresResourceName][az] = pointerTo(azCapacity.DeprecatedIntoCapacityData("cores", float64(maxRootDiskSize), builder.CoresSubcapacities))
+			capacities[p.PooledInstancesResourceName][az] = pointerTo(azCapacity.DeprecatedIntoCapacityData("instances", float64(maxRootDiskSize), builder.InstancesSubcapacities))
+			capacities[p.PooledRAMResourceName][az] = pointerTo(azCapacity.DeprecatedIntoCapacityData("ram", float64(maxRootDiskSize), builder.RAMSubcapacities))
 			for _, flavor := range splitFlavors {
 				count := hypervisors.PlacementCountForFlavor(flavor.Name)
 				capacities[p.PooledCoresResourceName][az].Capacity -= coresDemand.OvercommitFactor.ApplyInReverseTo(count * liquids.AtLeastZero(flavor.VCPUs))
@@ -481,7 +482,7 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 		for az, hypervisors := range hypervisorsByAZ {
 			// if we could not report subcapacities on pooled resources, report them on
 			// the first flavor in alphabetic order (this is why we just sorted them)
-			var builder nova.SplitFlavorSubcapacityBuilder
+			var builder nova.DeprecatedSplitFlavorSubcapacityBuilder
 			if p.WithSubcapacities && p.PooledCoresResourceName == "" && idx == 0 {
 				for _, h := range hypervisors {
 					builder.AddHypervisor(h.Match)

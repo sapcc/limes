@@ -21,7 +21,6 @@ package nova
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"regexp"
 	"slices"
@@ -37,9 +36,18 @@ import (
 
 type Logic struct {
 	// configuration
-	WithSubresources bool `json:"with_subresources"`
+	HypervisorSelection         HypervisorSelection `json:"hypervisor_selection"`
+	FlavorSelection             FlavorSelection     `json:"flavor_selection"`
+	PooledCoresResourceName     liquid.ResourceName `json:"pooled_cores_resource"`
+	PooledInstancesResourceName liquid.ResourceName `json:"pooled_instances_resource"`
+	PooledRAMResourceName       liquid.ResourceName `json:"pooled_ram_resource"`
+	WithSubresources            bool                `json:"with_subresources"`
+	WithSubcapacities           bool                `json:"with_subcapacities"`
+	BinpackBehavior             BinpackBehavior     `json:"binpack_behavior"`
+	IgnoreTraits                []string            `json:"ignore_traits"`
 	// connections
 	NovaV2            *gophercloud.ServiceClient `json:"-"`
+	PlacementV1       *gophercloud.ServiceClient `json:"-"`
 	OSTypeProber      *OSTypeProber              `json:"-"`
 	ServerGroupProber *ServerGroupProber         `json:"-"`
 	// computed state
@@ -55,10 +63,18 @@ func (l *Logic) Init(ctx context.Context, provider *gophercloud.ProviderClient, 
 		return err
 	}
 	l.NovaV2.Microversion = "2.61" // to include extra specs in flavors.ListDetail()
+
+	l.PlacementV1, err = openstack.NewPlacementV1(provider, eo)
+	if err != nil {
+		return err
+	}
+	l.PlacementV1.Microversion = "1.6" // for traits endpoint
+
 	cinderV3, err := openstack.NewBlockStorageV3(provider, eo)
 	if err != nil {
 		return err
 	}
+
 	glanceV2, err := openstack.NewImageV2(provider, eo)
 	if err != nil {
 		return err
@@ -121,19 +137,22 @@ func getDefaultQuotaClassSet(ctx context.Context, novaV2 *gophercloud.ServiceCli
 func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error) {
 	resources := map[liquid.ResourceName]liquid.ResourceInfo{
 		"cores": {
-			Unit:        liquid.UnitNone,
-			HasCapacity: true,
-			HasQuota:    true,
+			Unit:                liquid.UnitNone,
+			HasCapacity:         true,
+			HasQuota:            true,
+			NeedsResourceDemand: true,
 		},
 		"instances": {
-			Unit:        liquid.UnitNone,
-			HasCapacity: true,
-			HasQuota:    true,
+			Unit:                liquid.UnitNone,
+			HasCapacity:         true,
+			HasQuota:            true,
+			NeedsResourceDemand: true,
 		},
 		"ram": {
-			Unit:        liquid.UnitMebibytes,
-			HasCapacity: true,
-			HasQuota:    true,
+			Unit:                liquid.UnitMebibytes,
+			HasCapacity:         true,
+			HasQuota:            true,
+			NeedsResourceDemand: true,
 		},
 		"server_groups": {
 			Unit:     liquid.UnitNone,
@@ -151,9 +170,10 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 		}
 		if IsSplitFlavor(f) {
 			resources[ResourceNameForFlavor(f.Name)] = liquid.ResourceInfo{
-				Unit:        liquid.UnitNone,
-				HasCapacity: true,
-				HasQuota:    true,
+				Unit:                liquid.UnitNone,
+				HasCapacity:         true,
+				HasQuota:            true,
+				NeedsResourceDemand: true,
 			}
 		}
 		return nil
@@ -177,11 +197,6 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 		Version:   time.Now().Unix(),
 		Resources: resources,
 	}, nil
-}
-
-// ScanCapacity implements the liquidapi.Logic interface.
-func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequest, serviceInfo liquid.ServiceInfo) (liquid.ServiceCapacityReport, error) {
-	return liquid.ServiceCapacityReport{}, errors.New("TODO")
 }
 
 // SetQuota implements the liquidapi.Logic interface.
