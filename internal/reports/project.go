@@ -401,6 +401,11 @@ func finalizeProjectResourceReport(projectReport *limesresources.ProjectReport, 
 			for _, resReport := range srvReport.Resources {
 				if len(resReport.PerAZ) >= 2 {
 					reportInAny := resReport.PerAZ[limes.AvailabilityZoneAny]
+					// TODO: implement a proper fix and isolate a test case
+					// AZSeparatedToplogy does not provide the any AZ.
+					if reportInAny == nil {
+						return nil
+					}
 					if (reportInAny.Quota == nil || *reportInAny.Quota == 0) && reportInAny.Usage == 0 {
 						delete(resReport.PerAZ, limes.AvailabilityZoneAny)
 					}
