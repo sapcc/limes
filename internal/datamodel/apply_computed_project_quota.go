@@ -152,15 +152,17 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 
 	// evaluate QD algorithm
 	// AZ separated basequota will be assigned to all available AZs
-	target, allowsQuotaOvercommit := acpqComputeQuotas(stats, cfg, constraints, resInfo)
 	if logg.ShowDebug {
 		// NOTE: The structs that contain pointers must be printed as JSON to actually show all values.
 		logg.Debug("ACPQ for %s/%s: stats = %#v", serviceType, resourceName, stats)
 		logg.Debug("ACPQ for %s/%s: cfg = %#v", serviceType, resourceName, cfg)
 		buf, _ := json.Marshal(constraints) //nolint:errcheck
 		logg.Debug("ACPQ for %s/%s: constraints = %s", serviceType, resourceName, string(buf))
+	}
+	target, allowsQuotaOvercommit := acpqComputeQuotas(stats, cfg, constraints, resInfo)
+	if logg.ShowDebug {
 		logg.Debug("ACPQ for %s/%s: allowsQuotaOvercommit = %#v", serviceType, resourceName, allowsQuotaOvercommit)
-		buf, _ = json.Marshal(target) //nolint:errcheck
+		buf, _ := json.Marshal(target) //nolint:errcheck
 		logg.Debug("ACPQ for %s/%s: target = %s", serviceType, resourceName, string(buf))
 	}
 
