@@ -93,10 +93,12 @@ func (c *Collector) processQuotaSyncTask(ctx context.Context, srv db.ProjectServ
 }
 
 var (
+	// NOTE: This query does not use `AND quota IS NOT NULL` to filter out NoQuota resources
+	// because it would also filter out resources with AZSeparatedResourceTopology.
 	quotaSyncSelectQuery = sqlext.SimplifyWhitespace(`
 		SELECT id, name, backend_quota, quota
 		  FROM project_resources
-		 WHERE service_id = $1 AND quota IS NOT NULL
+		 WHERE service_id = $1
 	`)
 	azQuotaSyncSelectQuery = sqlext.SimplifyWhitespace(`
 		SELECT az, backend_quota, quota
@@ -140,50 +142,65 @@ func (c *Collector) performQuotaSync(ctx context.Context, srv db.ProjectService,
 	var azSeparatedResourceIDs []db.ProjectResourceID
 	err := sqlext.ForeachRow(c.DB, quotaSyncSelectQuery, []any{srv.ID}, func(rows *sql.Rows) error {
 		var (
-			resourceID   db.ProjectResourceID
-			resourceName liquid.ResourceName
-			currentQuota *int64
-			targetQuota  uint64
+			resourceID     db.ProjectResourceID
+			resourceName   liquid.ResourceName
+			currentQuota   *int64
+			targetQuotaPtr *uint64
 		)
-		err := rows.Scan(&resourceID, &resourceName, &currentQuota, &targetQuota)
+		err := rows.Scan(&resourceID, &resourceName, &currentQuota, &targetQuotaPtr)
 		if err != nil {
 			return err
-		}
-		targetQuotasInDB[resourceName] = targetQuota
-		if currentQuota == nil || *currentQuota < 0 || uint64(*currentQuota) != targetQuota {
-			needsApply = true
 		}
 
 		resInfo := c.Cluster.InfoForResource(srv.Type, resourceName)
-		if resInfo.Topology != liquid.AZSeparatedResourceTopology {
+		if !resInfo.HasQuota {
 			return nil
 		}
-		err = sqlext.ForeachRow(c.DB, azQuotaSyncSelectQuery, []any{resourceID}, func(rows *sql.Rows) error {
-			var (
-				availabilityZone liquid.AvailabilityZone
-				currentAZQuota   *int64
-				targetAZQuota    uint64
-			)
-			err := rows.Scan(&availabilityZone, &currentAZQuota, &targetAZQuota)
+
+		var targetQuota uint64
+		if resInfo.Topology == liquid.AZSeparatedResourceTopology {
+			// for AZSeparatedResourceTopology, project_resources.quota is effectively empty (always set to zero)
+			// and `targetQuota` needs to be computed by summing over project_az_resources.quota
+			targetQuota = 0
+			err = sqlext.ForeachRow(c.DB, azQuotaSyncSelectQuery, []any{resourceID}, func(rows *sql.Rows) error {
+				var (
+					availabilityZone liquid.AvailabilityZone
+					currentAZQuota   *int64
+					targetAZQuota    uint64
+				)
+				err := rows.Scan(&availabilityZone, &currentAZQuota, &targetAZQuota)
+				if err != nil {
+					return err
+				}
+				// defense in depth: configured backend_quota for AZ any or unknown are not valid for the azSeparatedQuota topology.
+				if (availabilityZone == liquid.AvailabilityZoneAny || availabilityZone == liquid.AvailabilityZoneUnknown) && currentAZQuota != nil {
+					return fmt.Errorf("detected invalid AZ: %s for resource: %s with topology: %s has backend_quota: %v", availabilityZone, resourceName, resInfo.Topology, currentAZQuota)
+				}
+				azSeparatedResourceIDs = append(azSeparatedResourceIDs, resourceID)
+				if targetAZQuotasInDB[resourceName] == nil {
+					targetAZQuotasInDB[resourceName] = make(map[liquid.AvailabilityZone]liquid.AZResourceQuotaRequest)
+				}
+				targetAZQuotasInDB[resourceName][availabilityZone] = liquid.AZResourceQuotaRequest{Quota: targetAZQuota}
+				targetQuota += targetAZQuota
+				if currentAZQuota == nil || *currentAZQuota < 0 || uint64(*currentAZQuota) != targetAZQuota {
+					azSeparatedNeedsApply = true
+				}
+				return nil
+			})
 			if err != nil {
 				return err
 			}
-			// defense in depth: configured backend_quota for AZ any or unknown are not valid for the azSeparatedQuota topology.
-			if (availabilityZone == liquid.AvailabilityZoneAny || availabilityZone == liquid.AvailabilityZoneUnknown) && currentAZQuota != nil {
-				return fmt.Errorf("detected invalid AZ: %s for resource: %s with topology: %s has backend_quota: %v", availabilityZone, resourceName, resInfo.Topology, currentAZQuota)
+		} else {
+			// for anything except AZSeparatedResourceTopology, the total target quota is just what we have in project_resources.quota
+			if targetQuotaPtr == nil {
+				return fmt.Errorf("found unexpected NULL value in project_resources.quota for id = %d", resourceID)
 			}
-			azSeparatedResourceIDs = append(azSeparatedResourceIDs, resourceID)
-			if targetAZQuotasInDB[resourceName] == nil {
-				targetAZQuotasInDB[resourceName] = make(map[liquid.AvailabilityZone]liquid.AZResourceQuotaRequest)
-			}
-			targetAZQuotasInDB[resourceName][availabilityZone] = liquid.AZResourceQuotaRequest{Quota: targetAZQuota}
-			if currentAZQuota == nil || *currentAZQuota < 0 || uint64(*currentAZQuota) != targetAZQuota {
-				azSeparatedNeedsApply = true
-			}
-			return nil
-		})
-		if err != nil {
-			return err
+			targetQuota = *targetQuotaPtr
+		}
+
+		targetQuotasInDB[resourceName] = targetQuota
+		if currentQuota == nil || *currentQuota < 0 || uint64(*currentQuota) != targetQuota {
+			needsApply = true
 		}
 		return nil
 	})

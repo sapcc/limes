@@ -201,14 +201,17 @@ func ApplyComputedProjectQuota(serviceType db.ServiceType, resourceName liquid.R
 	}
 
 	err = sqlext.WithPreparedStatement(tx, acpqUpdateProjectQuotaQuery, func(stmt *sql.Stmt) error {
-		// Skip resources with AZSeparatedResourceTopology. The quota scrape would receive a resource nil value, while ACPQ calculates qouta.
-		// This would lead to unnecessary quota syncs with the backend, because backendQuota != quota.
-		if resInfo.Topology == liquid.AZSeparatedResourceTopology {
-			return nil
-		}
 		for resourceID, quota := range quotasByResourceID {
+			// Resources with AZSeparatedResourceTopology will report `backendQuota == nil` during scrape.
+			// If we set anything other than nil here, this would lead to unnecessary quota syncs with the backend,
+			// because backendQuota != quota.
+			quotaToWrite := &quota
+			if resInfo.Topology == liquid.AZSeparatedResourceTopology {
+				quotaToWrite = nil
+			}
+
 			var serviceID db.ProjectServiceID
-			err := stmt.QueryRow(quota, resourceID).Scan(&serviceID)
+			err := stmt.QueryRow(quotaToWrite, resourceID).Scan(&serviceID)
 			if err == sql.ErrNoRows {
 				// if quota was not actually changed, do not remember this project service as being stale
 				continue

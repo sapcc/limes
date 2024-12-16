@@ -636,12 +636,12 @@ func Test_TopologyScrapes(t *testing.T) {
 	)
 
 	// set some quota acpq values.
-	// resource level
-	_, err := s.DB.Exec(`UPDATE project_resources SET quota = $1 WHERE name = $2`, 20, "capacity")
+	// resource level (ACPQ always writes NULL on this level for AZSeparatedResourceTopology)
+	_, err := s.DB.Exec(`UPDATE project_resources SET quota = NULL WHERE name = $1`, "capacity")
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = s.DB.Exec(`UPDATE project_resources SET quota = $1 WHERE name = $2`, 13, "things")
+	_, err = s.DB.Exec(`UPDATE project_resources SET quota = NULL WHERE name = $1`, "things")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -668,10 +668,10 @@ func Test_TopologyScrapes(t *testing.T) {
 		UPDATE project_az_resources SET backend_quota = 13 WHERE id = 7 AND resource_id = 3 AND az = 'az-two';
 		UPDATE project_az_resources SET backend_quota = 20 WHERE id = 8 AND resource_id = 4 AND az = 'az-one';
 		UPDATE project_az_resources SET backend_quota = 20 WHERE id = 9 AND resource_id = 4 AND az = 'az-two';
-		UPDATE project_resources SET backend_quota = 20 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
-		UPDATE project_resources SET backend_quota = 13 WHERE id = 3 AND service_id = 1 AND name = 'things';
-		UPDATE project_resources SET backend_quota = 20 WHERE id = 4 AND service_id = 2 AND name = 'capacity';
-		UPDATE project_resources SET backend_quota = 13 WHERE id = 6 AND service_id = 2 AND name = 'things';
+		UPDATE project_resources SET backend_quota = NULL WHERE id = 1 AND service_id = 1 AND name = 'capacity';
+		UPDATE project_resources SET backend_quota = NULL WHERE id = 3 AND service_id = 1 AND name = 'things';
+		UPDATE project_resources SET backend_quota = NULL WHERE id = 4 AND service_id = 2 AND name = 'capacity';
+		UPDATE project_resources SET backend_quota = NULL WHERE id = 6 AND service_id = 2 AND name = 'things';
 		UPDATE project_services SET quota_desynced_at = NULL, quota_sync_duration_secs = 5 WHERE id = 1 AND project_id = 1 AND type = 'unittest';
 		UPDATE project_services SET quota_desynced_at = NULL, quota_sync_duration_secs = 5 WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`)
@@ -696,8 +696,12 @@ func Test_TopologyScrapes(t *testing.T) {
 		UPDATE project_az_resources SET backend_quota = NULL WHERE id = 7 AND resource_id = 3 AND az = 'az-two';
 		UPDATE project_az_resources SET backend_quota = 50 WHERE id = 8 AND resource_id = 4 AND az = 'az-one';
 		UPDATE project_az_resources SET backend_quota = 50 WHERE id = 9 AND resource_id = 4 AND az = 'az-two';
-		UPDATE project_services SET scraped_at = %[1]d, checked_at = %[1]d, next_scrape_at = %[2]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
-		UPDATE project_services SET scraped_at = %[3]d, checked_at = %[3]d, next_scrape_at = %[4]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
+		UPDATE project_resources SET quota = 0, backend_quota = 40 WHERE id = 1 AND service_id = 1 AND name = 'capacity';
+		UPDATE project_resources SET quota = 0, backend_quota = 26 WHERE id = 3 AND service_id = 1 AND name = 'things';
+		UPDATE project_resources SET quota = 0, backend_quota = 40 WHERE id = 4 AND service_id = 2 AND name = 'capacity';
+		UPDATE project_resources SET quota = 0, backend_quota = 26 WHERE id = 6 AND service_id = 2 AND name = 'things';
+		UPDATE project_services SET scraped_at = %[1]d, checked_at = %[1]d, next_scrape_at = %[2]d, quota_desynced_at = %[1]d WHERE id = 1 AND project_id = 1 AND type = 'unittest';
+		UPDATE project_services SET scraped_at = %[3]d, checked_at = %[3]d, next_scrape_at = %[4]d, quota_desynced_at = %[3]d WHERE id = 2 AND project_id = 2 AND type = 'unittest';
 	`,
 		checkedAt1.Unix(), checkedAt1.Add(scrapeInterval).Unix(),
 		checkedAt2.Unix(), checkedAt2.Add(scrapeInterval).Unix(),
