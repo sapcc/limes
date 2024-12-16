@@ -402,7 +402,7 @@ func acpqComputeQuotas(stats map[limes.AvailabilityZone]clusterAZAllocationStats
 				}
 			}
 		}
-		if !slices.Contains(allAZsInOrder, limes.AvailabilityZoneAny) {
+		if resInfo.Topology != liquid.AZSeparatedResourceTopology && !slices.Contains(allAZsInOrder, limes.AvailabilityZoneAny) {
 			allAZsInOrder = append(allAZsInOrder, limes.AvailabilityZoneAny)
 		}
 		target.EnforceConstraints(constraints, allAZsInOrder, isProjectResourceID, isAZAware)

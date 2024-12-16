@@ -596,6 +596,63 @@ func TestEmptyRegionDoesNotPrecludeQuotaOvercommit(t *testing.T) {
 	}, liquid.ResourceInfo{Topology: liquid.AZAwareResourceTopology})
 }
 
+func TestAllForbiddenWithAZSeparated(t *testing.T) {
+	resourceInfo := liquid.ResourceInfo{Topology: liquid.AZSeparatedResourceTopology}
+
+	input := map[limes.AvailabilityZone]clusterAZAllocationStats{
+		"az-one": {
+			Capacity: 100,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: constantUsage(0),
+				402: constantUsage(0),
+			},
+		},
+		"az-two": {
+			Capacity: 100,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: constantUsage(0),
+				402: constantUsage(0),
+			},
+		},
+		"az-three": {
+			Capacity: 100,
+			ProjectStats: map[db.ProjectResourceID]projectAZAllocationStats{
+				401: constantUsage(0),
+				402: constantUsage(0),
+			},
+		},
+		// NOTE: no entry for "any" because this resource has AZSeparatedResourceTopology
+	}
+
+	cfg := core.AutogrowQuotaDistributionConfiguration{
+		AllowQuotaOvercommitUntilAllocatedPercent: 95,
+		GrowthMultiplier: 1.0,
+		ProjectBaseQuota: 10,
+	}
+
+	constraints := map[db.ProjectResourceID]projectLocalQuotaConstraints{
+		// all projects set ResourceUsageReport.Forbidden = true
+		401: {MaxQuota: p2u64(0)},
+		402: {MaxQuota: p2u64(0)},
+	}
+
+	expectACPQResult(t, input, cfg, constraints, acpqGlobalTarget{
+		// NOTE: no quota allocated because of MaxQuota = 0
+		"az-one": {
+			401: {Allocated: 0},
+			402: {Allocated: 0},
+		},
+		"az-two": {
+			401: {Allocated: 0},
+			402: {Allocated: 0},
+		},
+		"az-three": {
+			401: {Allocated: 0},
+			402: {Allocated: 0},
+		},
+	}, resourceInfo)
+}
+
 // Shortcut to avoid repetition in projectAZAllocationStats literals.
 func constantUsage(usage uint64) projectAZAllocationStats {
 	return projectAZAllocationStats{
