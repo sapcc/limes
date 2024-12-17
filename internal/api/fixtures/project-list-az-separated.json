@@ -1,0 +1,34 @@
+{
+  "projects": [
+    {
+      "id": "uuid-for-berlin",
+      "name": "berlin",
+      "parent_id": "uuid-for-germany",
+      "services": [
+        {
+          "type": "shared",
+          "area": "shared",
+          "resources": [
+            {
+              "name": "capacity_portion",
+              "unit": "B",
+              "category": "portion",
+              "per_az": {
+                "az-one": {
+                  "quota": 5,
+                  "usage": 1
+                },
+                "az-two": {
+                  "quota": 5,
+                  "usage": 1
+                }
+              },
+              "usage": 2
+            }
+          ],
+          "scraped_at": 22
+        }
+      ]
+    }
+  ]
+}

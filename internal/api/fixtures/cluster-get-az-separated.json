@@ -1,0 +1,33 @@
+{
+  "cluster": {
+    "id": "current",
+    "services": [
+      {
+        "type": "shared",
+        "area": "shared",
+        "resources": [
+          {
+            "name": "capacity_portion",
+            "unit": "B",
+            "category": "portion",
+            "per_az": {
+              "az-one": {
+                "capacity": 0,
+                "projects_usage": 1,
+                "uncommitted_usage": 1
+              },
+              "az-two": {
+                "capacity": 0,
+                "projects_usage": 1,
+                "uncommitted_usage": 1
+              }
+            },
+            "usage": 2
+          }
+        ],
+        "max_scraped_at": 22,
+        "min_scraped_at": 22
+      }
+    ]
+  }
+}

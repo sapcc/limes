@@ -1250,3 +1250,31 @@ func (j JSONThatUnmarshalsInto) AssertResponseBody(t *testing.T, requestInfo str
 	}
 	return true
 }
+
+func Test_SeparatedToplogyOperations(t *testing.T) {
+	// This test structure ensures that the consumable limes APIs do not break with the introduction (or further changes) of the az separated toplogy.
+	s := setupTest(t, "fixtures/start-data-az-separated.sql")
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/v1/clusters/current",
+		Header:       map[string]string{"X-Limes-V2-API-Preview": "per-az"},
+		ExpectStatus: 200,
+		ExpectBody:   assert.JSONFixtureFile("fixtures/cluster-get-az-separated.json"),
+	}.Check(t, s.Handler)
+
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/v1/domains",
+		Header:       map[string]string{"X-Limes-V2-API-Preview": "per-az"},
+		ExpectStatus: 200,
+		ExpectBody:   assert.JSONFixtureFile("./fixtures/domain-list-az-separated.json"),
+	}.Check(t, s.Handler)
+
+	assert.HTTPRequest{
+		Method:       "GET",
+		Path:         "/v1/domains/uuid-for-germany/projects",
+		Header:       map[string]string{"X-Limes-V2-API-Preview": "per-az"},
+		ExpectStatus: 200,
+		ExpectBody:   assert.JSONFixtureFile("./fixtures/project-list-az-separated.json"),
+	}.Check(t, s.Handler)
+}
