@@ -31,6 +31,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/quotasets"
 	"github.com/sapcc/go-api-declarations/liquid"
 )
 
@@ -185,9 +186,22 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 
 // SetQuota implements the liquidapi.Logic interface.
 func (l *Logic) SetQuota(ctx context.Context, projectUUID string, req liquid.ServiceQuotaRequest, serviceInfo liquid.ServiceInfo) error {
-	return errors.New("TODO")
+	opts := make(novaQuotaUpdateOpts, len(serviceInfo.Resources))
+	for resName := range serviceInfo.Resources {
+		opts[string(resName)] = req.Resources[resName].Quota
+	}
+	return quotasets.Update(ctx, l.NovaV2, projectUUID, opts).Err
 }
 
 func (l *Logic) IgnoreFlavor(flavorName string) bool {
 	return slices.Contains(l.ignoredFlavorNames, flavorName)
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// custom types for OpenStack APIs
+
+type novaQuotaUpdateOpts map[string]uint64
+
+func (opts novaQuotaUpdateOpts) ToComputeQuotaUpdateMap() (map[string]any, error) {
+	return map[string]any{"quota_set": opts}, nil
 }
