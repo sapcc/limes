@@ -9,5 +9,5 @@ INSERT INTO project_services (id, project_id, type, scraped_at, rates_scraped_at
 INSERT INTO project_resources (id, service_id, name, quota, backend_quota) VALUES (1,  1, 'capacity_portion', NULL, NULL);
 
 -- AZ separated resource does not include any az.
-INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (1,  1,  'az-one', 5,    1, NULL, '');
-INSERT INTO project_az_resources (id, resource_id, az, quota, usage, physical_usage, subresources) VALUES (2,  1,  'az-two', 5,    1, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, backend_quota, quota, usage, physical_usage, subresources) VALUES (1,  1,  'az-one', 5, 5,    1, NULL, '');
+INSERT INTO project_az_resources (id, resource_id, az, backend_quota, quota, usage, physical_usage, subresources) VALUES (2,  1,  'az-two', 5, 5,    1, NULL, '');
