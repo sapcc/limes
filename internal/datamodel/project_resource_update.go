@@ -141,7 +141,7 @@ func (u ProjectResourceUpdate) Run(dbi db.Interface, cluster *core.Cluster, now 
 		result = append(result, res)
 
 		// check if we need to arrange for SetQuotaJob to look at this project service
-		if resInfo.HasQuota {
+		if resInfo.HasQuota && resInfo.Topology != liquid.AZSeparatedResourceTopology {
 			backendQuota := unwrapOrDefault(res.BackendQuota, -1)
 			quota := *res.Quota // definitely not nil, it was set above in validateResourceConstraints()
 			if backendQuota < 0 || uint64(backendQuota) != quota {
@@ -172,7 +172,7 @@ func unwrapOrDefault[T any](value *T, defaultValue T) T {
 
 // Ensures that `res` conforms to various constraints and validation rules.
 func validateResourceConstraints(res *db.ProjectResource, resInfo liquid.ResourceInfo) {
-	if !resInfo.HasQuota {
+	if !resInfo.HasQuota || resInfo.Topology == liquid.AZSeparatedResourceTopology {
 		// ensure that NoQuota resources do not contain any quota values
 		res.Quota = nil
 		res.BackendQuota = nil
