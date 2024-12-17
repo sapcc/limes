@@ -49,7 +49,7 @@ func (l *Logic) pooledResourceName(hwVersion string, base liquid.ResourceName) l
 	}
 
 	// if we saw a "quota:hw_version" extra spec on the instance's flavor, use the appropriate resource if it exists
-	if l.hasPooledResource[hwVersion][base] {
+	if l.hasPooledResource.Get()[hwVersion][base] {
 		return liquid.ResourceName(fmt.Sprintf("hw_version_%s_%s", hwVersion, base))
 	}
 	return base
@@ -130,19 +130,19 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 		}
 	}
 	for hwVersion, limits := range limitsData.Limits.AbsolutePerHWVersion {
-		if l.hasPooledResource[hwVersion]["cores"] {
+		if l.hasPooledResource.Get()[hwVersion]["cores"] {
 			resources[l.pooledResourceName(hwVersion, "cores")] = &liquid.ResourceUsageReport{
 				Quota: &limits.MaxTotalCores,
 				PerAZ: liquid.AZResourceUsageReport{Usage: limits.TotalCoresUsed}.PrepareForBreakdownInto(req.AllAZs),
 			}
 		}
-		if l.hasPooledResource[hwVersion]["instances"] {
+		if l.hasPooledResource.Get()[hwVersion]["instances"] {
 			resources[l.pooledResourceName(hwVersion, "instances")] = &liquid.ResourceUsageReport{
 				Quota: &limits.MaxTotalInstances,
 				PerAZ: liquid.AZResourceUsageReport{Usage: limits.TotalInstancesUsed}.PrepareForBreakdownInto(req.AllAZs),
 			}
 		}
-		if l.hasPooledResource[hwVersion]["ram"] {
+		if l.hasPooledResource.Get()[hwVersion]["ram"] {
 			resources[l.pooledResourceName(hwVersion, "ram")] = &liquid.ResourceUsageReport{
 				Quota: &limits.MaxTotalRAMSize,
 				PerAZ: liquid.AZResourceUsageReport{Usage: limits.TotalRAMUsed}.PrepareForBreakdownInto(req.AllAZs),

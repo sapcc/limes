@@ -33,6 +33,8 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/quotasets"
 	"github.com/sapcc/go-api-declarations/liquid"
+
+	"github.com/sapcc/limes/internal/liquids"
 )
 
 type Logic struct {
@@ -43,9 +45,9 @@ type Logic struct {
 	OSTypeProber      *OSTypeProber              `json:"-"`
 	ServerGroupProber *ServerGroupProber         `json:"-"`
 	// computed state
-	ignoredFlavorNames []string                                `json:"-"`
-	hasPooledResource  map[string]map[liquid.ResourceName]bool `json:"-"`
-	hwVersionResources []liquid.ResourceName                   `json:"-"`
+	ignoredFlavorNames liquids.State[[]string]                                `json:"-"`
+	hasPooledResource  liquids.State[map[string]map[liquid.ResourceName]bool] `json:"-"`
+	hwVersionResources liquids.State[[]liquid.ResourceName]                   `json:"-"`
 }
 
 // Init implements the liquidapi.Logic interface.
@@ -66,38 +68,7 @@ func (l *Logic) Init(ctx context.Context, provider *gophercloud.ProviderClient, 
 	l.OSTypeProber = NewOSTypeProber(l.NovaV2, cinderV3, glanceV2)
 	l.ServerGroupProber = NewServerGroupProber(l.NovaV2)
 
-	// SAPCC extension: Nova may report quotas with this name pattern in its quota sets and quota class sets.
-	// If it does, instances with flavors that have the extra spec `quota:hw_version` set to the first match
-	// group of this regexp will count towards those quotas instead of the regular `cores/instances/ram` quotas.
-	//
-	// This initialization enumerates which such pooled resources exist.
-	defaultQuotaClassSet, err := getDefaultQuotaClassSet(ctx, l.NovaV2)
-	if err != nil {
-		return fmt.Errorf("while enumerating default quotas: %w", err)
-	}
-	l.hasPooledResource = make(map[string]map[liquid.ResourceName]bool)
-	hwVersionResourceRx := regexp.MustCompile(`^hw_version_(\S+)_(cores|instances|ram)$`)
-	for resourceName := range defaultQuotaClassSet {
-		match := hwVersionResourceRx.FindStringSubmatch(resourceName)
-		if match == nil {
-			continue
-		}
-		hwVersion, baseResourceName := match[1], liquid.ResourceName(match[2])
-
-		l.hwVersionResources = append(l.hwVersionResources, liquid.ResourceName(resourceName))
-
-		if l.hasPooledResource[hwVersion] == nil {
-			l.hasPooledResource[hwVersion] = make(map[liquid.ResourceName]bool)
-		}
-		l.hasPooledResource[hwVersion][baseResourceName] = true
-	}
-
-	return FlavorSelection{}.ForeachFlavor(ctx, l.NovaV2, func(f flavors.Flavor) error {
-		if IsIronicFlavor(f) {
-			l.ignoredFlavorNames = append(l.ignoredFlavorNames, f.Name)
-		}
-		return nil
-	})
+	return nil
 }
 
 func getDefaultQuotaClassSet(ctx context.Context, novaV2 *gophercloud.ServiceClient) (map[string]any, error) {
@@ -119,6 +90,47 @@ func getDefaultQuotaClassSet(ctx context.Context, novaV2 *gophercloud.ServiceCli
 
 // BuildServiceInfo implements the liquidapi.Logic interface.
 func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error) {
+	// SAPCC extension: Nova may report quotas with this name pattern in its quota sets and quota class sets.
+	// If it does, instances with flavors that have the extra spec `quota:hw_version` set to the first match
+	// group of this regexp will count towards those quotas instead of the regular `cores/instances/ram` quotas.
+	//
+	// This initialization enumerates which such pooled resources exist.
+	defaultQuotaClassSet, err := getDefaultQuotaClassSet(ctx, l.NovaV2)
+	if err != nil {
+		return liquid.ServiceInfo{}, fmt.Errorf("while enumerating default quotas: %w", err)
+	}
+	hasPooledResource := make(map[string]map[liquid.ResourceName]bool)
+	var hwVersionResources []liquid.ResourceName
+	hwVersionResourceRx := regexp.MustCompile(`^hw_version_(\S+)_(cores|instances|ram)$`)
+	for resourceName := range defaultQuotaClassSet {
+		match := hwVersionResourceRx.FindStringSubmatch(resourceName)
+		if match == nil {
+			continue
+		}
+		hwVersion, baseResourceName := match[1], liquid.ResourceName(match[2])
+
+		hwVersionResources = append(hwVersionResources, liquid.ResourceName(resourceName))
+
+		if hasPooledResource[hwVersion] == nil {
+			hasPooledResource[hwVersion] = make(map[liquid.ResourceName]bool)
+		}
+		hasPooledResource[hwVersion][baseResourceName] = true
+	}
+	l.hasPooledResource.Set(hasPooledResource)
+	l.hwVersionResources.Set(hwVersionResources)
+
+	var ignoredFlavorNames []string
+	err = FlavorSelection{}.ForeachFlavor(ctx, l.NovaV2, func(f flavors.Flavor) error {
+		if IsIronicFlavor(f) {
+			ignoredFlavorNames = append(ignoredFlavorNames, f.Name)
+		}
+		return nil
+	})
+	if err != nil {
+		return liquid.ServiceInfo{}, err
+	}
+	l.ignoredFlavorNames.Set(ignoredFlavorNames)
+
 	resources := map[liquid.ResourceName]liquid.ResourceInfo{
 		"cores": {
 			Unit:        liquid.UnitNone,
@@ -145,7 +157,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 		},
 	}
 
-	err := FlavorSelection{}.ForeachFlavor(ctx, l.NovaV2, func(f flavors.Flavor) error {
+	err = FlavorSelection{}.ForeachFlavor(ctx, l.NovaV2, func(f flavors.Flavor) error {
 		if IsIronicFlavor(f) {
 			return nil
 		}
@@ -162,7 +174,7 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 		return liquid.ServiceInfo{}, err
 	}
 
-	for _, resourceName := range l.hwVersionResources {
+	for _, resourceName := range hwVersionResources {
 		unit := liquid.UnitNone
 		if strings.HasSuffix(string(resourceName), "ram") {
 			unit = liquid.UnitMebibytes
@@ -194,7 +206,7 @@ func (l *Logic) SetQuota(ctx context.Context, projectUUID string, req liquid.Ser
 }
 
 func (l *Logic) IgnoreFlavor(flavorName string) bool {
-	return slices.Contains(l.ignoredFlavorNames, flavorName)
+	return slices.Contains(l.ignoredFlavorNames.Get(), flavorName)
 }
 
 ////////////////////////////////////////////////////////////////////////////////
