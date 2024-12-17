@@ -4,7 +4,7 @@ Limes accepts configuration options via environment variables for some component
 requires a configuration file ([see below](#configuration-file)) for cluster options in the [YAML format][yaml].
 
 Use the table of contents icon
-<img src="https://github.com/github/docs/raw/main/assets/images/table-of-contents.png" width="25" height="25" />
+<img src="https://github.com/github/docs/raw/main/contributing/images/table-of-contents.png" width="25" height="25" />
 on the top left corner of this document to get to a specific section of this guide quickly.
 
 ## Common environment variables
