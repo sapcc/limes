@@ -31,7 +31,7 @@ import (
 )
 
 type Logic struct {
-	NovaV2 *gophercloud.ServiceClient `yaml:"-"`
+	NovaV2 *gophercloud.ServiceClient `json:"-"`
 }
 
 // Init implements the liquidapi.Logic interface.
