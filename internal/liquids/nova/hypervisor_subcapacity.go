@@ -170,33 +170,36 @@ type SplitFlavorSubcapacityBuilder struct {
 	Subcapacities []liquid.Subcapacity
 }
 
+type SplitFlavorSubcapacityAttributes struct {
+	AggregateName  string                 `json:"aggregate_name"`
+	CapacityVector *BinpackVector[uint64] `json:"capacity_vector,omitempty"`
+	UsageVector    *BinpackVector[uint64] `json:"usage_vector,omitempty"`
+	Traits         []string               `json:"traits"`
+}
+
 func (b *SplitFlavorSubcapacityBuilder) AddHypervisor(h MatchingHypervisor) error {
 	pc := h.PartialCapacity()
-	attrs := SubcapacityAttributes{
+	attrs := SplitFlavorSubcapacityAttributes{
 		AggregateName: h.AggregateName,
-		Traits:        h.Traits,
+		CapacityVector: &BinpackVector[uint64]{
+			VCPUs:    pc.VCPUs.Capacity,
+			MemoryMB: pc.MemoryMB.Capacity,
+			LocalGB:  pc.LocalGB.Capacity,
+		},
+		UsageVector: &BinpackVector[uint64]{
+			VCPUs:    pc.VCPUs.Usage,
+			MemoryMB: pc.MemoryMB.Usage,
+			LocalGB:  pc.LocalGB.Usage,
+		},
+		Traits: h.Traits,
 	}
 	buf, err := json.Marshal(attrs)
 	if err != nil {
 		return fmt.Errorf("while serializing Subcapacity Attributes: %w", err)
 	}
 	b.Subcapacities = append(b.Subcapacities, liquid.Subcapacity{
-		// TODO: What should be the naming here? We list subcapacities for cores, ram and instances on the same split flavor capacity
-		Name:       h.Hypervisor.Service.Host + "_cores",
-		Capacity:   pc.VCPUs.Capacity,
-		Usage:      &pc.VCPUs.Usage,
-		Attributes: json.RawMessage(buf),
-	})
-	b.Subcapacities = append(b.Subcapacities, liquid.Subcapacity{
-		Name:       h.Hypervisor.Service.Host + "ram",
-		Capacity:   pc.MemoryMB.Capacity,
-		Usage:      &pc.MemoryMB.Usage,
-		Attributes: json.RawMessage(buf),
-	})
-	b.Subcapacities = append(b.Subcapacities, liquid.Subcapacity{
-		Name:       h.Hypervisor.Service.Host + "instances",
-		Capacity:   pc.LocalGB.Capacity,
-		Usage:      &pc.LocalGB.Usage,
+		Name:       h.Hypervisor.Service.Host,
+		Capacity:   0,
 		Attributes: json.RawMessage(buf),
 	})
 

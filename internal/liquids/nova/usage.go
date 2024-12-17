@@ -21,7 +21,6 @@ package nova
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/limits"
@@ -153,16 +152,13 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 	// Nova does not have a native API for AZ-aware usage reporting,
 	// so we will obtain AZ-aware usage stats by counting up all subresources,
 	// even if we don't end up showing them in the API
-	allSubresources, err := l.buildInstanceSubresources(ctx, projectUUID)
+	allSubresourceBuilders, err := l.buildInstanceSubresources(ctx, projectUUID)
 	if err != nil {
 		return liquid.ServiceUsageReport{}, fmt.Errorf("while collecting instance data: %w", err)
 	}
 
-	for _, subres := range allSubresources {
-		var attrs SubresourceAttributes
-		if err = json.Unmarshal(subres.Attributes, &attrs); err != nil { // TODO: Unmarshalling here + marshalling when building the subresources seems inefficient
-			return liquid.ServiceUsageReport{}, err
-		}
+	for _, subresBuilder := range allSubresourceBuilders {
+		attrs := subresBuilder.Attributes
 
 		az := attrs.AZ
 
@@ -183,6 +179,10 @@ func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.Se
 		resources[instanceResourceName].AddLocalizedUsage(az, 1)
 		if l.WithSubresources {
 			azData := UsageInAZ(resources[instanceResourceName], az)
+			subres, err := subresBuilder.Finalize()
+			if err != nil {
+				return liquid.ServiceUsageReport{}, fmt.Errorf("could not serialze attributes of subresource: %w", err)
+			}
 			azData.Subresources = append(azData.Subresources, subres)
 		}
 

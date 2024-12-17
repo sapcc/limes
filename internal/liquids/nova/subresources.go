@@ -49,7 +49,7 @@ type SubresourceAttributes struct {
 	OSType string `json:"os_type"`
 }
 
-func (l *Logic) buildInstanceSubresource(ctx context.Context, instance servers.Server) (res liquid.Subresource, err error) {
+func (l *Logic) buildInstanceSubresource(ctx context.Context, instance servers.Server) (res liquid.SubresourceBuilder[SubresourceAttributes], err error) {
 	// copy base attributes
 	res.ID = instance.ID
 	res.Name = instance.Name
@@ -90,21 +90,17 @@ func (l *Logic) buildInstanceSubresource(ctx context.Context, instance servers.S
 	// calculate classifications based on image data
 	attrs.OSType = l.OSTypeProber.Get(ctx, instance)
 
-	buf, err = json.Marshal(attrs)
-	if err != nil {
-		return res, fmt.Errorf("while serializing Subresource Attributes: %w", err)
-	}
-	res.Attributes = json.RawMessage(buf)
+	res.Attributes = attrs
 	return res, nil
 }
 
-func (l *Logic) buildInstanceSubresources(ctx context.Context, projectUUID string) ([]liquid.Subresource, error) {
+func (l *Logic) buildInstanceSubresources(ctx context.Context, projectUUID string) ([]liquid.SubresourceBuilder[SubresourceAttributes], error) {
 	opts := novaServerListOpts{
 		AllTenants: true,
 		TenantID:   projectUUID,
 	}
 
-	var result []liquid.Subresource
+	var result []liquid.SubresourceBuilder[SubresourceAttributes]
 	err := servers.List(l.NovaV2, opts).EachPage(ctx, func(ctx context.Context, page pagination.Page) (bool, error) {
 		var instances []servers.Server
 		err := servers.ExtractServersInto(page, &instances)

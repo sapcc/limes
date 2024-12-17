@@ -201,7 +201,6 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 	logg.Debug("max root disk size = %d GiB", maxRootDiskSize)
 
 	// collect all relevant resource demands
-	// TODO: Is a check necessary if the demand exists? This is not done in liquid cinder
 	coresDemand := req.DemandByResource[l.PooledCoresResourceName]
 	instancesDemand := req.DemandByResource[l.PooledCoresResourceName]
 	ramDemand := req.DemandByResource[l.PooledCoresResourceName]
@@ -522,7 +521,6 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 		}
 
 		for az, hypervisors := range hypervisorsByAZ {
-			// TODO: Do we want subcapacities for split flavors? I.e. which hypervisors have capacity for how many instances of that flavor.
 			// if we could not report subcapacities on pooled resources, report them on
 			// the first flavor in alphabetic order (this is why we just sorted them)
 			var builder SplitFlavorSubcapacityBuilder
