@@ -372,7 +372,7 @@ func GetClusterResources(cluster *core.Cluster, now time.Time, dbi db.Interface,
 			// zero and there are other AZs
 			if len(resource.PerAZ) >= 2 {
 				capaInAny := resource.PerAZ[limes.AvailabilityZoneAny]
-				// AZSeparatedToplogy does not provide the "any" AZ.
+				// AZSeparatedTopology does not provide the "any" AZ.
 				if capaInAny == nil {
 					continue
 				}

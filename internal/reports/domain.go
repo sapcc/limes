@@ -317,7 +317,7 @@ func GetDomains(cluster *core.Cluster, domainID *db.DomainID, now time.Time, dbi
 				for _, resReport := range srvReport.Resources {
 					if len(resReport.PerAZ) >= 2 {
 						reportInAny := resReport.PerAZ[limes.AvailabilityZoneAny]
-						// AZSeparatedToplogy does not provide the "any" AZ.
+						// AZSeparatedTopology does not provide the "any" AZ.
 						if reportInAny == nil {
 							continue
 						}

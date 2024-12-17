@@ -1251,8 +1251,8 @@ func (j JSONThatUnmarshalsInto) AssertResponseBody(t *testing.T, requestInfo str
 	return true
 }
 
-func Test_SeparatedToplogyOperations(t *testing.T) {
-	// This test structure ensures that the consumable limes APIs do not break with the introduction (or further changes) of the az separated toplogy.
+func Test_SeparatedTopologyOperations(t *testing.T) {
+	// This test structure ensures that the consumable limes APIs do not break with the introduction (or further changes) of the az separated topology.
 	s := setupTest(t, "fixtures/start-data-az-separated.sql")
 	assert.HTTPRequest{
 		Method:       "GET",
