@@ -39,7 +39,7 @@ import (
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
-	"github.com/sapcc/limes/internal/plugins/nova"
+	"github.com/sapcc/limes/internal/liquids/nova"
 )
 
 type novaPlugin struct {

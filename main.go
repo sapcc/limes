@@ -64,6 +64,7 @@ import (
 	"github.com/sapcc/limes/internal/liquids/ironic"
 	"github.com/sapcc/limes/internal/liquids/manila"
 	"github.com/sapcc/limes/internal/liquids/neutron"
+	"github.com/sapcc/limes/internal/liquids/nova"
 	"github.com/sapcc/limes/internal/liquids/octavia"
 	"github.com/sapcc/limes/internal/liquids/swift"
 	"github.com/sapcc/limes/internal/util"
@@ -120,6 +121,8 @@ func main() {
 			must.Succeed(liquidapi.Run(ctx, &manila.Logic{}, opts))
 		case "neutron":
 			must.Succeed(liquidapi.Run(ctx, &neutron.Logic{}, opts))
+		case "nova":
+			must.Succeed(liquidapi.Run(ctx, &nova.Logic{}, opts))
 		case "octavia":
 			must.Succeed(liquidapi.Run(ctx, &octavia.Logic{}, opts))
 		case "swift":
