@@ -257,7 +257,9 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 
 		resInfo := c.Cluster.InfoForResource(srv.Type, res.Name)
 		if resInfo.HasQuota {
-			res.BackendQuota = &backendQuota
+			if resInfo.Topology != liquid.AZSeparatedResourceTopology {
+				res.BackendQuota = &backendQuota
+			}
 			res.MinQuotaFromBackend = resourceData[res.Name].MinQuota
 			res.MaxQuotaFromBackend = resourceData[res.Name].MaxQuota
 		}
@@ -437,6 +439,10 @@ func (c *Collector) writeDummyResources(dbDomain db.Domain, dbProject db.Project
 			return err
 		}
 	}
+
+	// FIXME: These dummy resources do not conform to `resInfo.Topology` and are never AZ-aware.
+	//        I'm not fixing this right now because dummy resources are an extremely rare corner-case anyway.
+	// TODO:  When we rework the DB schema next year, we should build it so that dummy resources can be avoided entirely.
 
 	// update scraped_at timestamp and reset stale flag to make sure that we do
 	// not scrape this service again immediately afterwards if there are other

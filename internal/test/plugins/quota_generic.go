@@ -195,8 +195,12 @@ func (p *GenericQuotaPlugin) Scrape(ctx context.Context, project core.KeystonePr
 		}
 
 		// populate azSeparatedQuota
-		for az, data := range copyOfVal.UsageData {
-			data.Quota = val.UsageData[az].Quota
+		topology := p.LiquidServiceInfo.Resources[key].Topology
+		if topology == liquid.AZSeparatedResourceTopology {
+			copyOfVal.Quota = 0
+			for az, data := range copyOfVal.UsageData {
+				data.Quota = val.UsageData[az].Quota
+			}
 		}
 
 		// test coverage for PhysicalUsage != Usage
