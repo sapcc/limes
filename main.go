@@ -64,6 +64,7 @@ import (
 	"github.com/sapcc/limes/internal/liquids/ironic"
 	"github.com/sapcc/limes/internal/liquids/manila"
 	"github.com/sapcc/limes/internal/liquids/neutron"
+	"github.com/sapcc/limes/internal/liquids/nova"
 	"github.com/sapcc/limes/internal/liquids/octavia"
 	"github.com/sapcc/limes/internal/liquids/swift"
 	"github.com/sapcc/limes/internal/util"
@@ -120,6 +121,9 @@ func main() {
 			must.Succeed(liquidapi.Run(ctx, &manila.Logic{}, opts))
 		case "neutron":
 			must.Succeed(liquidapi.Run(ctx, &neutron.Logic{}, opts))
+		case "nova":
+			opts.TakesConfiguration = true
+			must.Succeed(liquidapi.Run(ctx, &nova.Logic{}, opts))
 		case "octavia":
 			must.Succeed(liquidapi.Run(ctx, &octavia.Logic{}, opts))
 		case "swift":
@@ -332,6 +336,10 @@ func taskTestGetQuota(ctx context.Context, cluster *core.Cluster, args []string)
 	result, serializedMetrics, err := cluster.QuotaPlugins[serviceType].Scrape(ctx, project, cluster.Config.AvailabilityZones)
 	must.Succeed(err)
 
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	must.Succeed(enc.Encode(result))
+
 	for resourceName := range result {
 		if !cluster.HasResource(serviceType, resourceName) {
 			logg.Fatal("scrape returned data for unknown resource: %s/%s", serviceType, resourceName)
@@ -348,7 +356,7 @@ func taskTestGetQuota(ctx context.Context, cluster *core.Cluster, args []string)
 	})
 	dumpGeneratedPrometheusMetrics()
 
-	enc := json.NewEncoder(os.Stdout)
+	enc = json.NewEncoder(os.Stdout)
 	enc.SetIndent("", "  ")
 	must.Succeed(enc.Encode(result))
 }

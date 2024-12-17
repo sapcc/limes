@@ -1,6 +1,6 @@
 /*******************************************************************************
 *
-* Copyright 2017-2024 SAP SE
+* Copyright 2019-2024 SAP SE
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -17,97 +17,146 @@
 *
 *******************************************************************************/
 
-package plugins
+package nova
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
 	"strings"
 
-	"github.com/gophercloud/gophercloud/v2"
-	"github.com/gophercloud/gophercloud/v2/openstack"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/logg"
 
 	"github.com/sapcc/limes/internal/core"
-	"github.com/sapcc/limes/internal/db"
 	"github.com/sapcc/limes/internal/liquids"
-	"github.com/sapcc/limes/internal/liquids/nova"
 )
 
-type capacityNovaPlugin struct {
-	// configuration
-	HypervisorSelection         nova.HypervisorSelection `yaml:"hypervisor_selection"`
-	FlavorSelection             nova.FlavorSelection     `yaml:"flavor_selection"`
-	PooledCoresResourceName     liquid.ResourceName      `yaml:"pooled_cores_resource"`
-	PooledInstancesResourceName liquid.ResourceName      `yaml:"pooled_instances_resource"`
-	PooledRAMResourceName       liquid.ResourceName      `yaml:"pooled_ram_resource"`
-	WithSubcapacities           bool                     `yaml:"with_subcapacities"`
-	BinpackBehavior             nova.BinpackBehavior     `yaml:"binpack_behavior"`
-	// connections
-	NovaV2      *gophercloud.ServiceClient `yaml:"-"`
-	PlacementV1 *gophercloud.ServiceClient `yaml:"-"`
+// PartialCapacity describes compute capacity at a level below the entire
+// cluster (e.g. for a single hypervisor, aggregate or AZ).
+type PartialCapacity struct {
+	VCPUs              PartialCapacityMetric
+	MemoryMB           PartialCapacityMetric
+	LocalGB            PartialCapacityMetric
+	RunningVMs         uint64
+	MatchingAggregates map[string]bool
+	Subcapacities      []any // only filled on AZ level
 }
 
-type capacityNovaSerializedMetrics struct {
-	Hypervisors []novaHypervisorMetrics `json:"hv"`
-}
+func (c *PartialCapacity) Add(other PartialCapacity) {
+	c.VCPUs.Capacity += other.VCPUs.Capacity
+	c.VCPUs.Usage += other.VCPUs.Usage
+	c.MemoryMB.Capacity += other.MemoryMB.Capacity
+	c.MemoryMB.Usage += other.MemoryMB.Usage
+	c.LocalGB.Capacity += other.LocalGB.Capacity
+	c.LocalGB.Usage += other.LocalGB.Usage
+	c.RunningVMs += other.RunningVMs
 
-type novaHypervisorMetrics struct {
-	Name             string                 `json:"n"`
-	Hostname         string                 `json:"hn"`
-	AggregateName    string                 `json:"ag"`
-	AvailabilityZone limes.AvailabilityZone `json:"az"`
-}
-
-func init() {
-	core.CapacityPluginRegistry.Add(func() core.CapacityPlugin { return &capacityNovaPlugin{} })
-}
-
-// Init implements the core.CapacityPlugin interface.
-func (p *capacityNovaPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts) (err error) {
-	if p.HypervisorSelection.AggregateNameRx == "" {
-		return errors.New("missing value for params.hypervisor_selection.aggregate_name_pattern")
+	if c.MatchingAggregates == nil {
+		c.MatchingAggregates = make(map[string]bool)
 	}
-	if p.PooledCoresResourceName == "" {
-		if p.PooledInstancesResourceName != "" || p.PooledRAMResourceName != "" {
-			return errors.New("if params.pooled_cores_resource is empty, then params.pooled_instances_resource and params.pooled_ram_resource must also be empty")
-		}
-	} else {
-		if p.PooledInstancesResourceName == "" || p.PooledRAMResourceName == "" {
-			return errors.New("if params.pooled_cores_resource is given, then params.pooled_instances_resource and params.pooled_ram_resource must also be given")
+	for aggrName, matches := range other.MatchingAggregates {
+		if matches {
+			c.MatchingAggregates[aggrName] = true
 		}
 	}
-
-	p.NovaV2, err = openstack.NewComputeV2(provider, eo)
-	if err != nil {
-		return err
-	}
-	p.NovaV2.Microversion = "2.61" // to include extra specs in flavors.ListDetail()
-
-	p.PlacementV1, err = openstack.NewPlacementV1(provider, eo)
-	if err != nil {
-		return err
-	}
-	p.PlacementV1.Microversion = "1.6" // for traits endpoint
-
-	return nil
 }
 
-// PluginTypeID implements the core.CapacityPlugin interface.
-func (p *capacityNovaPlugin) PluginTypeID() string {
-	return "nova"
+func (c PartialCapacity) CappedToUsage() PartialCapacity {
+	return PartialCapacity{
+		VCPUs:              c.VCPUs.CappedToUsage(),
+		MemoryMB:           c.MemoryMB.CappedToUsage(),
+		LocalGB:            c.LocalGB.CappedToUsage(),
+		RunningVMs:         c.RunningVMs,
+		MatchingAggregates: c.MatchingAggregates,
+		Subcapacities:      c.Subcapacities,
+	}
 }
 
-// Scrape implements the core.CapacityPlugin interface.
-func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (result map[db.ServiceType]map[liquid.ResourceName]core.PerAZ[core.CapacityData], serializedMetrics []byte, err error) {
+// TODO: Remove when switching to liquid-nova
+func (c PartialCapacity) DeprecatedIntoCapacityData(resourceName string, maxRootDiskSize float64, subcapacities []any) core.CapacityData { //nolint:dupl
+	switch resourceName {
+	case "cores":
+		return core.CapacityData{
+			Capacity:      c.VCPUs.Capacity,
+			Usage:         &c.VCPUs.Usage,
+			Subcapacities: subcapacities,
+		}
+	case "ram":
+		return core.CapacityData{
+			Capacity:      c.MemoryMB.Capacity,
+			Usage:         &c.MemoryMB.Usage,
+			Subcapacities: subcapacities,
+		}
+	case "instances":
+		amount := 10000 * uint64(len(c.MatchingAggregates))
+		if maxRootDiskSize != 0 {
+			maxAmount := uint64(float64(c.LocalGB.Capacity) / maxRootDiskSize)
+			if amount > maxAmount {
+				amount = maxAmount
+			}
+		}
+		return core.CapacityData{
+			Capacity:      amount,
+			Usage:         &c.RunningVMs,
+			Subcapacities: subcapacities,
+		}
+	default:
+		panic(fmt.Sprintf("called with unknown resourceName %q", resourceName))
+	}
+}
+
+// TODO: Remove nolint:dupl when switching to liquid-nova
+func (c PartialCapacity) IntoCapacityData(resourceName string, maxRootDiskSize float64, subcapacities []liquid.Subcapacity) liquid.AZResourceCapacityReport { //nolint:dupl
+	switch resourceName {
+	case "cores":
+		return liquid.AZResourceCapacityReport{
+			Capacity:      c.VCPUs.Capacity,
+			Usage:         &c.VCPUs.Usage,
+			Subcapacities: subcapacities,
+		}
+	case "ram":
+		return liquid.AZResourceCapacityReport{
+			Capacity:      c.MemoryMB.Capacity,
+			Usage:         &c.MemoryMB.Usage,
+			Subcapacities: subcapacities,
+		}
+	case "instances":
+		amount := 10000 * uint64(len(c.MatchingAggregates))
+		if maxRootDiskSize != 0 {
+			maxAmount := uint64(float64(c.LocalGB.Capacity) / maxRootDiskSize)
+			if amount > maxAmount {
+				amount = maxAmount
+			}
+		}
+		return liquid.AZResourceCapacityReport{
+			Capacity:      amount,
+			Usage:         &c.RunningVMs,
+			Subcapacities: subcapacities,
+		}
+	default:
+		panic(fmt.Sprintf("called with unknown resourceName %q", resourceName))
+	}
+}
+
+// PartialCapacityMetric appears in type PartialCapacity.
+type PartialCapacityMetric struct {
+	Capacity uint64
+	Usage    uint64
+}
+
+func (m PartialCapacityMetric) CappedToUsage() PartialCapacityMetric {
+	return PartialCapacityMetric{
+		Capacity: min(m.Capacity, m.Usage),
+		Usage:    m.Usage,
+	}
+}
+
+// ScanCapacity implements the liquidapi.Logic interface.
+func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequest, serviceInfo liquid.ServiceInfo) (liquid.ServiceCapacityReport, error) {
 	// enumerate matching flavors, divide into split and pooled flavors;
 	// ("split flavors" are those with separate instance quota, as opposed to
 	// "pooled flavors" that share a common pool of CPU/instances/RAM capacity)
@@ -117,13 +166,25 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 		splitFlavors    []flavors.Flavor
 		maxRootDiskSize = uint64(0)
 	)
-	err = p.FlavorSelection.ForeachFlavor(ctx, p.NovaV2, func(f flavors.Flavor) error {
+	pooledExtraSpecs := make(map[string]string)
+	err := l.FlavorSelection.ForeachFlavor(ctx, l.NovaV2, func(f flavors.Flavor) error {
 		switch {
-		case nova.IsIronicFlavor(f):
+		case IsIronicFlavor(f):
 			// ignore Ironic flavors
-		case nova.IsSplitFlavor(f):
+		case IsSplitFlavor(f):
 			splitFlavors = append(splitFlavors, f)
 		case f.IsPublic:
+			// require that all pooled flavors agree on the same trait-match extra specs
+			for spec, val := range f.ExtraSpecs {
+				if !strings.HasPrefix(spec, "trait:") || slices.Contains(l.IgnoreTraits, spec) {
+					continue
+				}
+				if pooledVal, exists := pooledExtraSpecs[spec]; !exists {
+					pooledExtraSpecs[spec] = val
+				} else if val != pooledVal {
+					return fmt.Errorf("conflict: pooled flavors both require extra spec %s values %s and %s", spec, val, pooledVal)
+				}
+			}
 			// only public flavor contribute to the `maxRootDiskSize` calculation (in
 			// the wild, we have seen non-public legacy flavors with wildly large
 			// disk sizes that would throw off all estimates derived from this number)
@@ -132,40 +193,21 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 		return nil
 	})
 	if err != nil {
-		return nil, nil, err
+		return liquid.ServiceCapacityReport{}, err
 	}
-	if p.PooledCoresResourceName != "" && maxRootDiskSize == 0 {
-		return nil, nil, errors.New("pooled capacity requested, but there are no matching flavors")
+	if l.PooledCoresResourceName != "" && maxRootDiskSize == 0 {
+		return liquid.ServiceCapacityReport{}, errors.New("pooled capacity requested, but there are no matching flavors")
 	}
 	logg.Debug("max root disk size = %d GiB", maxRootDiskSize)
 
 	// collect all relevant resource demands
-	var (
-		coresDemand     liquid.ResourceDemand
-		instancesDemand liquid.ResourceDemand
-		ramDemand       liquid.ResourceDemand
-	)
-	if p.PooledCoresResourceName == "" {
+	// TODO: Is a check necessary if the demand exists? This is not done in liquid cinder
+	coresDemand := req.DemandByResource[l.PooledCoresResourceName]
+	instancesDemand := req.DemandByResource[l.PooledCoresResourceName]
+	ramDemand := req.DemandByResource[l.PooledCoresResourceName]
+
+	if l.PooledCoresResourceName == "" {
 		coresDemand.OvercommitFactor = 1
-	} else {
-		coresDemand, err = backchannel.GetResourceDemand("compute", p.PooledCoresResourceName)
-		if err != nil {
-			return nil, nil, fmt.Errorf("while collecting resource demand for compute/%s: %w", p.PooledCoresResourceName, err)
-		}
-		instancesDemand, err = backchannel.GetResourceDemand("compute", p.PooledInstancesResourceName)
-		if err != nil {
-			return nil, nil, fmt.Errorf("while collecting resource demand for compute/%s: %w", p.PooledInstancesResourceName, err)
-		}
-		if instancesDemand.OvercommitFactor != 1 && instancesDemand.OvercommitFactor != 0 {
-			return nil, nil, fmt.Errorf("overcommit on compute/%s is not supported", p.PooledInstancesResourceName)
-		}
-		ramDemand, err = backchannel.GetResourceDemand("compute", p.PooledRAMResourceName)
-		if err != nil {
-			return nil, nil, fmt.Errorf("while collecting resource demand for compute/%s: %w", p.PooledRAMResourceName, err)
-		}
-		if ramDemand.OvercommitFactor != 1 && ramDemand.OvercommitFactor != 0 {
-			return nil, nil, fmt.Errorf("overcommit on compute/%s is not supported", p.PooledRAMResourceName)
-		}
 	}
 	logg.Debug("pooled cores demand: %#v (overcommit factor = %g)", coresDemand.PerAZ, coresDemand.OvercommitFactor)
 	logg.Debug("pooled instances demand: %#v", instancesDemand.PerAZ)
@@ -173,13 +215,10 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 
 	demandByFlavorName := make(map[string]liquid.ResourceDemand)
 	for _, f := range splitFlavors {
-		resourceName := nova.ResourceNameForFlavor(f.Name)
-		demand, err := backchannel.GetResourceDemand("compute", resourceName)
-		if err != nil {
-			return nil, nil, fmt.Errorf("while collecting resource demand for compute/%s: %w", resourceName, err)
-		}
+		resourceName := ResourceNameForFlavor(f.Name)
+		demand := req.DemandByResource[resourceName]
 		if demand.OvercommitFactor != 1 && demand.OvercommitFactor != 0 {
-			return nil, nil, fmt.Errorf("overcommit on compute/%s is not supported", resourceName)
+			return liquid.ServiceCapacityReport{}, fmt.Errorf("overcommit on compute/%s is not supported", resourceName)
 		}
 		demandByFlavorName[f.Name] = demand
 	}
@@ -187,28 +226,17 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 	logg.Debug("demand for binpackable flavors: %#v", demandByFlavorName)
 
 	// enumerate matching hypervisors, prepare data structures for binpacking
-	var metrics capacityNovaSerializedMetrics
-	hypervisorsByAZ := make(map[limes.AvailabilityZone]nova.BinpackHypervisors)
-	shadowedHypervisorsByAZ := make(map[limes.AvailabilityZone][]nova.MatchingHypervisor)
+	hypervisorsByAZ := make(map[liquid.AvailabilityZone]BinpackHypervisors)
+	shadowedHypervisorsByAZ := make(map[liquid.AvailabilityZone][]MatchingHypervisor)
 	isShadowedHVHostname := make(map[string]bool)
-	err = p.HypervisorSelection.ForeachHypervisor(ctx, p.NovaV2, p.PlacementV1, func(h nova.MatchingHypervisor) error {
-		// report wellformed-ness of this HV via metrics
-		if h.ShadowedByTrait != "" {
-			metrics.Hypervisors = append(metrics.Hypervisors, novaHypervisorMetrics{
-				Name:             h.Hypervisor.Service.Host,
-				Hostname:         h.Hypervisor.HypervisorHostname,
-				AggregateName:    h.AggregateName,
-				AvailabilityZone: h.AvailabilityZone,
-			})
-		}
-
+	err = l.HypervisorSelection.ForeachHypervisor(ctx, l.NovaV2, l.PlacementV1, func(h MatchingHypervisor) error {
 		// ignore HVs that are not associated with an aggregate and AZ
 		if !h.CheckTopology() {
 			return nil
 		}
 
 		if h.ShadowedByTrait == "" {
-			bh, err := nova.PrepareHypervisorForBinpacking(h)
+			bh, err := PrepareHypervisorForBinpacking(h)
 			if err != nil {
 				return err
 			}
@@ -216,8 +244,8 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 
 			hc := h.PartialCapacity()
 			logg.Debug("%s in %s reports %s capacity, %s used, %d nodes, %s max unit", h.Hypervisor.Description(), h.AvailabilityZone,
-				nova.BinpackVector[uint64]{VCPUs: hc.VCPUs.Capacity, MemoryMB: hc.MemoryMB.Capacity, LocalGB: hc.LocalGB.Capacity},
-				nova.BinpackVector[uint64]{VCPUs: hc.VCPUs.Usage, MemoryMB: hc.MemoryMB.Usage, LocalGB: hc.LocalGB.Usage},
+				BinpackVector[uint64]{VCPUs: hc.VCPUs.Capacity, MemoryMB: hc.MemoryMB.Capacity, LocalGB: hc.LocalGB.Capacity},
+				BinpackVector[uint64]{VCPUs: hc.VCPUs.Usage, MemoryMB: hc.MemoryMB.Usage, LocalGB: hc.LocalGB.Usage},
 				len(bh.Nodes), bh.Nodes[0].Capacity,
 			)
 		} else {
@@ -229,7 +257,7 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 		return nil
 	})
 	if err != nil {
-		return nil, nil, err
+		return liquid.ServiceCapacityReport{}, err
 	}
 
 	// during binpacking, place instances of large flavors first to achieve optimal results
@@ -246,34 +274,34 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 
 	// if Nova can tell us where existing instances are running, we prefer this
 	// information since it will make our simulation more accurate
-	instancesPlacedOnShadowedHypervisors := make(map[string]map[limes.AvailabilityZone]uint64) // first key is flavor name
-	bb := p.BinpackBehavior
+	instancesPlacedOnShadowedHypervisors := make(map[string]map[liquid.AvailabilityZone]uint64) // first key is flavor name
+	bb := l.BinpackBehavior
 	for _, flavor := range splitFlavors {
-		shadowedForThisFlavor := make(map[limes.AvailabilityZone]uint64)
+		shadowedForThisFlavor := make(map[liquid.AvailabilityZone]uint64)
 
 		// list all servers for this flavor, parsing only placement information from the result
 		listOpts := servers.ListOpts{
 			Flavor:     flavor.ID,
 			AllTenants: true,
 		}
-		allPages, err := servers.List(p.NovaV2, listOpts).AllPages(ctx)
+		allPages, err := servers.List(l.NovaV2, listOpts).AllPages(ctx)
 		if err != nil {
-			return nil, nil, fmt.Errorf("while listing active instances for flavor %s: %w", flavor.Name, err)
+			return liquid.ServiceCapacityReport{}, fmt.Errorf("while listing active instances for flavor %s: %w", flavor.Name, err)
 		}
 		var instances []struct {
-			ID                 string                 `json:"id"`
-			AZ                 limes.AvailabilityZone `json:"OS-EXT-AZ:availability_zone"`
-			HypervisorHostname string                 `json:"OS-EXT-SRV-ATTR:hypervisor_hostname"`
+			ID                 string                  `json:"id"`
+			AZ                 liquid.AvailabilityZone `json:"OS-EXT-AZ:availability_zone"`
+			HypervisorHostname string                  `json:"OS-EXT-SRV-ATTR:hypervisor_hostname"`
 		}
 		err = servers.ExtractServersInto(allPages, &instances)
 		if err != nil {
-			return nil, nil, fmt.Errorf("while listing active instances for flavor %s: %w", flavor.Name, err)
+			return liquid.ServiceCapacityReport{}, fmt.Errorf("while listing active instances for flavor %s: %w", flavor.Name, err)
 		}
 
 		for _, instance := range instances {
 			az := instance.AZ
-			if !slices.Contains(allAZs, az) {
-				az = limes.AvailabilityZoneUnknown
+			if !slices.Contains(req.AllAZs, az) {
+				az = liquid.AvailabilityZoneUnknown
 			}
 
 			// If we are absolutely sure that this instance is placed on a shadowed hypervisor,
@@ -287,8 +315,8 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 			// The number of instances thus placed will be skipped below to avoid double counting.
 			for _, hv := range hypervisorsByAZ[az] {
 				if hv.Match.Hypervisor.HypervisorHostname == instance.HypervisorHostname {
-					var zero nova.BinpackVector[uint64]
-					placed := nova.BinpackHypervisors{hv}.PlaceOneInstance(flavor, "USED", coresDemand.OvercommitFactor, zero, bb)
+					var zero BinpackVector[uint64]
+					placed := BinpackHypervisors{hv}.PlaceOneInstance(flavor, "USED", coresDemand.OvercommitFactor, zero, bb)
 					if !placed {
 						logg.Debug("could not simulate placement of known instance %s on %s", instance.ID, hv.Match.Hypervisor.Description())
 					}
@@ -312,7 +340,7 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 		}
 
 		// phase 1: block existing usage
-		blockedCapacity := nova.BinpackVector[uint64]{
+		blockedCapacity := BinpackVector[uint64]{
 			VCPUs:    coresDemand.OvercommitFactor.ApplyInReverseTo(coresDemand.PerAZ[az].Usage),
 			MemoryMB: ramDemand.PerAZ[az].Usage,
 			LocalGB:  instancesDemand.PerAZ[az].Usage * maxRootDiskSize,
@@ -355,7 +383,7 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 		initiallyPlacedInstances := make(map[string]float64)
 		sumInitiallyPlacedInstances := uint64(0)
 		totalPlacedInstances := make(map[string]float64) // these two will diverge in the final round of placements
-		var splitFlavorsUsage nova.BinpackVector[uint64]
+		var splitFlavorsUsage BinpackVector[uint64]
 		for _, flavor := range splitFlavors {
 			count := hypervisors.PlacementCountForFlavor(flavor.Name)
 			initiallyPlacedInstances[flavor.Name] = max(float64(count), 0.1)
@@ -387,7 +415,7 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 		// fill up with padding in a fair way as long as there is space left,
 		// except if there is pooling and we don't have any demand at all on the split flavors
 		// (in order to avoid weird numerical edge cases in the `blockedCapacity` calculation above)
-		fillUp := p.PooledCoresResourceName == "" || sumInitiallyPlacedInstances > 0
+		fillUp := l.PooledCoresResourceName == "" || sumInitiallyPlacedInstances > 0
 		// This uses the Sainte-Laguë method designed for allocation of parliament
 		// seats. In this case, the parties are the flavors, the votes are what we
 		// allocated based on demand (`initiallyPlacedInstances`), and the seats are
@@ -435,38 +463,50 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 	}
 
 	// compile result for pooled resources
-	capacities := make(map[liquid.ResourceName]core.PerAZ[core.CapacityData], len(splitFlavors)+3)
-	if p.PooledCoresResourceName != "" {
-		capacities[p.PooledCoresResourceName] = make(core.PerAZ[core.CapacityData], len(hypervisorsByAZ))
-		capacities[p.PooledInstancesResourceName] = make(core.PerAZ[core.CapacityData], len(hypervisorsByAZ))
-		capacities[p.PooledRAMResourceName] = make(core.PerAZ[core.CapacityData], len(hypervisorsByAZ))
+	capacities := make(map[liquid.ResourceName]*liquid.ResourceCapacityReport, len(splitFlavors)+3)
+	if l.PooledCoresResourceName != "" {
+		capacities[l.PooledCoresResourceName] = &liquid.ResourceCapacityReport{
+			PerAZ: make(map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport),
+		}
+		capacities[l.PooledInstancesResourceName] = &liquid.ResourceCapacityReport{
+			PerAZ: make(map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport),
+		}
+		capacities[l.PooledRAMResourceName] = &liquid.ResourceCapacityReport{
+			PerAZ: make(map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport),
+		}
 
 		for az, hypervisors := range hypervisorsByAZ {
 			var (
-				azCapacity nova.PartialCapacity
-				builder    nova.DeprecatedPooledSubcapacityBuilder
+				azCapacity PartialCapacity
+				builder    PooledSubcapacityBuilder
 			)
 			for _, h := range hypervisors {
 				azCapacity.Add(h.Match.PartialCapacity())
-				if p.WithSubcapacities {
-					builder.AddHypervisor(h.Match, float64(maxRootDiskSize))
+				if l.WithSubcapacities {
+					err = builder.AddHypervisor(h.Match, float64(maxRootDiskSize))
+					if err != nil {
+						return liquid.ServiceCapacityReport{}, fmt.Errorf("could not add hypervisor as subcapacity: %w", err)
+					}
 				}
 			}
 			for _, h := range shadowedHypervisorsByAZ[az] {
 				azCapacity.Add(h.PartialCapacity().CappedToUsage())
-				if p.WithSubcapacities {
-					builder.AddHypervisor(h, float64(maxRootDiskSize))
+				if l.WithSubcapacities {
+					err = builder.AddHypervisor(h, float64(maxRootDiskSize))
+					if err != nil {
+						return liquid.ServiceCapacityReport{}, fmt.Errorf("could not add hypervisor as subcapacity: %w", err)
+					}
 				}
 			}
 
-			capacities[p.PooledCoresResourceName][az] = pointerTo(azCapacity.DeprecatedIntoCapacityData("cores", float64(maxRootDiskSize), builder.CoresSubcapacities))
-			capacities[p.PooledInstancesResourceName][az] = pointerTo(azCapacity.DeprecatedIntoCapacityData("instances", float64(maxRootDiskSize), builder.InstancesSubcapacities))
-			capacities[p.PooledRAMResourceName][az] = pointerTo(azCapacity.DeprecatedIntoCapacityData("ram", float64(maxRootDiskSize), builder.RAMSubcapacities))
+			capacities[l.PooledCoresResourceName].PerAZ[az] = pointerTo(azCapacity.IntoCapacityData("cores", float64(maxRootDiskSize), builder.CoresSubcapacities))
+			capacities[l.PooledInstancesResourceName].PerAZ[az] = pointerTo(azCapacity.IntoCapacityData("instances", float64(maxRootDiskSize), builder.InstancesSubcapacities))
+			capacities[l.PooledRAMResourceName].PerAZ[az] = pointerTo(azCapacity.IntoCapacityData("ram", float64(maxRootDiskSize), builder.RAMSubcapacities))
 			for _, flavor := range splitFlavors {
 				count := hypervisors.PlacementCountForFlavor(flavor.Name)
-				capacities[p.PooledCoresResourceName][az].Capacity -= coresDemand.OvercommitFactor.ApplyInReverseTo(count * liquids.AtLeastZero(flavor.VCPUs))
-				capacities[p.PooledInstancesResourceName][az].Capacity-- //TODO: not accurate when uint64(flavor.Disk) != maxRootDiskSize
-				capacities[p.PooledRAMResourceName][az].Capacity -= count * liquids.AtLeastZero(flavor.RAM)
+				capacities[l.PooledCoresResourceName].PerAZ[az].Capacity -= coresDemand.OvercommitFactor.ApplyInReverseTo(count * liquids.AtLeastZero(flavor.VCPUs))
+				capacities[l.PooledInstancesResourceName].PerAZ[az].Capacity-- //TODO: not accurate when uint64(flavor.Disk) != maxRootDiskSize
+				capacities[l.PooledRAMResourceName].PerAZ[az].Capacity -= count * liquids.AtLeastZero(flavor.RAM)
 			}
 		}
 	}
@@ -476,20 +516,26 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 		return strings.Compare(lhs.Name, rhs.Name)
 	})
 	for idx, flavor := range splitFlavors {
-		resourceName := nova.ResourceNameForFlavor(flavor.Name)
-		capacities[resourceName] = make(core.PerAZ[core.CapacityData], len(hypervisorsByAZ))
+		resourceName := ResourceNameForFlavor(flavor.Name)
+		capacities[resourceName] = &liquid.ResourceCapacityReport{
+			PerAZ: make(map[liquid.AvailabilityZone]*liquid.AZResourceCapacityReport),
+		}
 
 		for az, hypervisors := range hypervisorsByAZ {
+			// TODO: Do we want subcapacities for split flavors? I.e. which hypervisors have capacity for how many instances of that flavor.
 			// if we could not report subcapacities on pooled resources, report them on
 			// the first flavor in alphabetic order (this is why we just sorted them)
-			var builder nova.DeprecatedSplitFlavorSubcapacityBuilder
-			if p.WithSubcapacities && p.PooledCoresResourceName == "" && idx == 0 {
+			var builder SplitFlavorSubcapacityBuilder
+			if l.WithSubcapacities && l.PooledCoresResourceName == "" && idx == 0 {
 				for _, h := range hypervisors {
-					builder.AddHypervisor(h.Match)
+					err = builder.AddHypervisor(h.Match)
+					if err != nil {
+						return liquid.ServiceCapacityReport{}, fmt.Errorf("could not add hypervisor as subcapacity: %w", err)
+					}
 				}
 			}
 
-			capacities[resourceName][az] = &core.CapacityData{
+			capacities[resourceName].PerAZ[az] = &liquid.AZResourceCapacityReport{
 				Capacity:      hypervisors.PlacementCountForFlavor(flavor.Name),
 				Subcapacities: builder.Subcapacities,
 			}
@@ -499,69 +545,20 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 		// increase the capacity accordingly to more accurately represent the
 		// free capacity on the unshadowed hypervisors
 		for az, shadowedCount := range instancesPlacedOnShadowedHypervisors[flavor.Name] {
-			if capacities[resourceName][az] == nil {
-				capacities[resourceName][az] = &core.CapacityData{
+			if capacities[resourceName].PerAZ[az] == nil {
+				capacities[resourceName].PerAZ[az] = &liquid.AZResourceCapacityReport{
 					Capacity: shadowedCount,
 				}
 			} else {
-				capacities[resourceName][az].Capacity += shadowedCount
+				capacities[resourceName].PerAZ[az].Capacity += shadowedCount
 			}
 		}
 	}
 
-	serializedMetrics, err = json.Marshal(metrics)
-	return map[db.ServiceType]map[liquid.ResourceName]core.PerAZ[core.CapacityData]{"compute": capacities}, serializedMetrics, err
-}
-
-func (p *capacityNovaPlugin) BuildServiceCapacityRequest(backchannel core.CapacityPluginBackchannel, allAZs []limes.AvailabilityZone) (liquid.ServiceCapacityRequest, error) {
-	return liquid.ServiceCapacityRequest{}, core.ErrNotALiquid
-}
-
-var novaHypervisorWellformedGauge = prometheus.NewGaugeVec(
-	prometheus.GaugeOpts{
-		Name: "limes_nova_hypervisor_is_wellformed",
-		Help: "One metric per Nova hypervisor that was discovered by Limes's capacity scanner. Value is 1 for wellformed hypervisors that could be uniquely matched to an aggregate and an AZ, 0 otherwise.",
-	},
-	[]string{"capacitor_id", "hypervisor", "hostname", "aggregate", "az"},
-)
-
-// DescribeMetrics implements the core.CapacityPlugin interface.
-func (p *capacityNovaPlugin) DescribeMetrics(ch chan<- *prometheus.Desc) {
-	novaHypervisorWellformedGauge.Describe(ch)
-}
-
-// CollectMetrics implements the core.CapacityPlugin interface.
-func (p *capacityNovaPlugin) CollectMetrics(ch chan<- prometheus.Metric, serializedMetrics []byte, capacitorID string) error {
-	var metrics capacityNovaSerializedMetrics
-	err := json.Unmarshal(serializedMetrics, &metrics)
-	if err != nil {
-		return err
-	}
-
-	descCh := make(chan *prometheus.Desc, 1)
-	novaHypervisorWellformedGauge.Describe(descCh)
-	novaHypervisorWellformedDesc := <-descCh
-
-	for _, hv := range metrics.Hypervisors {
-		isWellformed := float64(0)
-		if hv.AggregateName != "" && hv.AvailabilityZone != "" {
-			isWellformed = 1
-		}
-
-		ch <- prometheus.MustNewConstMetric(
-			novaHypervisorWellformedDesc,
-			prometheus.GaugeValue, isWellformed,
-			capacitorID, hv.Name, hv.Hostname, stringOrUnknown(hv.AggregateName), stringOrUnknown(hv.AvailabilityZone),
-		)
-	}
-	return nil
-}
-
-func stringOrUnknown[S ~string](value S) string {
-	if value == "" {
-		return "unknown"
-	}
-	return string(value)
+	return liquid.ServiceCapacityReport{
+		InfoVersion: serviceInfo.Version,
+		Resources:   capacities,
+	}, nil
 }
 
 func pointerTo[T any](value T) *T {

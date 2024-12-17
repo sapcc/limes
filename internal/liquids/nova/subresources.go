@@ -1,6 +1,6 @@
 /*******************************************************************************
 *
-* Copyright 2017-2023 SAP SE
+* Copyright 2024 SAP SE
 *
 * Licensed under the Apache License, Version 2.0 (the "License");
 * you may not use this file except in compliance with the License.
@@ -17,7 +17,7 @@
 *
 *******************************************************************************/
 
-package plugins
+package nova
 
 import (
 	"context"
@@ -28,44 +28,39 @@ import (
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/servers"
 	"github.com/gophercloud/gophercloud/v2/pagination"
-	"github.com/sapcc/go-api-declarations/limes"
-
-	"github.com/sapcc/limes/internal/core"
-	"github.com/sapcc/limes/internal/liquids/nova"
+	"github.com/sapcc/go-api-declarations/liquid"
 )
 
-// A compute instance as shown in our compute/instances subresources.
-type novaInstanceSubresource struct {
-	// instance identity
-	ID   string `json:"id"`
-	Name string `json:"name"`
+type SubresourceAttributes struct {
 	// base metadata
 	Status   string            `json:"status"`
 	Metadata map[string]string `json:"metadata"`
 	Tags     []string          `json:"tags"`
 	// placement information
-	AZ             limes.AvailabilityZone `json:"availability_zone"`
-	HypervisorType string                 `json:"hypervisor,omitempty"`
+	AZ liquid.AvailabilityZone `json:"availability_zone"`
 	// information from flavor
-	FlavorName     string               `json:"flavor"`
-	VCPUs          uint64               `json:"vcpu"`
-	MemoryMiB      limes.ValueWithUnit  `json:"ram"`
-	DiskGiB        limes.ValueWithUnit  `json:"disk"`
-	VideoMemoryMiB *limes.ValueWithUnit `json:"video_ram,omitempty"`
-	HWVersion      string               `json:"-"` // this is only used for sorting the subresource into the right resource
+	FlavorName     string  `json:"flavor"`
+	VCPUs          uint64  `json:"vcpu"`
+	MemoryMiB      uint64  `json:"ram"`
+	DiskGiB        uint64  `json:"disk"`
+	VideoMemoryMiB *uint64 `json:"video_ram,omitempty"`
+	HWVersion      string  `json:"-"` // this is only used for sorting the subresource into the right resource
 	// information from image
 	OSType string `json:"os_type"`
 }
 
-func (p *novaPlugin) buildInstanceSubresource(ctx context.Context, instance servers.Server) (res novaInstanceSubresource, err error) {
+func (l *Logic) buildInstanceSubresource(ctx context.Context, instance servers.Server) (res liquid.Subresource, err error) {
 	// copy base attributes
 	res.ID = instance.ID
 	res.Name = instance.Name
-	res.Status = instance.Status
-	res.AZ = limes.AvailabilityZone(instance.AvailabilityZone)
-	res.Metadata = instance.Metadata
+
+	attrs := SubresourceAttributes{
+		Status:   instance.Status,
+		AZ:       liquid.AvailabilityZone(instance.AvailabilityZone),
+		Metadata: instance.Metadata,
+	}
 	if instance.Tags != nil {
-		res.Tags = *instance.Tags
+		attrs.Tags = *instance.Tags
 	}
 
 	// flavor data is given to us as a map[string]any, but we want something more structured
@@ -73,50 +68,44 @@ func (p *novaPlugin) buildInstanceSubresource(ctx context.Context, instance serv
 	if err != nil {
 		return res, fmt.Errorf("could not reserialize flavor data for instance %s: %w", instance.ID, err)
 	}
-	var flavorInfo nova.FlavorInfo
+	var flavorInfo FlavorInfo
 	err = json.Unmarshal(buf, &flavorInfo)
 	if err != nil {
 		return res, fmt.Errorf("could not parse flavor data for instance %s: %w", instance.ID, err)
 	}
 
 	// copy attributes from flavor data
-	res.FlavorName = flavorInfo.OriginalName
-	res.VCPUs = flavorInfo.VCPUs
-	res.MemoryMiB = limes.ValueWithUnit{
-		Value: flavorInfo.MemoryMiB,
-		Unit:  limes.UnitMebibytes,
-	}
-	res.DiskGiB = limes.ValueWithUnit{
-		Value: flavorInfo.DiskGiB,
-		Unit:  limes.UnitGibibytes,
-	}
+	attrs.FlavorName = flavorInfo.OriginalName
+	attrs.VCPUs = flavorInfo.VCPUs
+	attrs.MemoryMiB = flavorInfo.MemoryMiB
+	attrs.DiskGiB = flavorInfo.DiskGiB
 	if videoRAMStr, exists := flavorInfo.ExtraSpecs["hw_video:ram_max_mb"]; exists {
 		videoRAMVal, err := strconv.ParseUint(videoRAMStr, 10, 64)
 		if err == nil {
-			res.VideoMemoryMiB = &limes.ValueWithUnit{
-				Value: videoRAMVal,
-				Unit:  limes.UnitMebibytes,
-			}
+			attrs.VideoMemoryMiB = &videoRAMVal
 		}
 	}
-	res.HWVersion = flavorInfo.ExtraSpecs["quota:hw_version"]
-
-	// calculate classifications based on flavor data (NOTE: deprecated, only here for backwards compatibility)
-	res.HypervisorType = p.HypervisorType
+	attrs.HWVersion = flavorInfo.ExtraSpecs["quota:hw_version"]
 
 	// calculate classifications based on image data
-	res.OSType = p.OSTypeProber.Get(ctx, instance)
+	attrs.OSType = l.OSTypeProber.Get(ctx, instance)
+
+	buf, err = json.Marshal(attrs)
+	if err != nil {
+		return res, fmt.Errorf("while serializing Subresource Attributes: %w", err)
+	}
+	res.Attributes = json.RawMessage(buf)
 	return res, nil
 }
 
-func (p *novaPlugin) buildInstanceSubresources(ctx context.Context, project core.KeystoneProject) ([]novaInstanceSubresource, error) {
+func (l *Logic) buildInstanceSubresources(ctx context.Context, projectUUID string) ([]liquid.Subresource, error) {
 	opts := novaServerListOpts{
 		AllTenants: true,
-		TenantID:   project.UUID,
+		TenantID:   projectUUID,
 	}
 
-	var result []novaInstanceSubresource
-	err := servers.List(p.NovaV2, opts).EachPage(ctx, func(ctx context.Context, page pagination.Page) (bool, error) {
+	var result []liquid.Subresource
+	err := servers.List(l.NovaV2, opts).EachPage(ctx, func(ctx context.Context, page pagination.Page) (bool, error) {
 		var instances []servers.Server
 		err := servers.ExtractServersInto(page, &instances)
 		if err != nil {
@@ -124,7 +113,7 @@ func (p *novaPlugin) buildInstanceSubresources(ctx context.Context, project core
 		}
 
 		for _, instance := range instances {
-			res, err := p.buildInstanceSubresource(ctx, instance)
+			res, err := l.buildInstanceSubresource(ctx, instance)
 			if err != nil {
 				return false, err
 			}
