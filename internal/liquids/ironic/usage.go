@@ -22,7 +22,6 @@ package ironic
 import (
 	"context"
 	"fmt"
-	"slices"
 
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/limits"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/quotasets"
@@ -122,10 +121,7 @@ func (l *Logic) addInstanceToReport(ctx context.Context, resources map[liquid.Re
 	}
 
 	// count this instance for the AZ breakdown
-	az := liquid.AvailabilityZone(instance.AvailabilityZone)
-	if !slices.Contains(allAZs, az) {
-		az = liquid.AvailabilityZoneUnknown
-	}
+	az := liquid.NormalizeAZ(instance.AvailabilityZone, allAZs)
 	resReport.AddLocalizedUsage(az, 1)
 
 	// add subresource if requested
