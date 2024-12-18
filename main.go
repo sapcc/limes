@@ -122,6 +122,7 @@ func main() {
 		case "neutron":
 			must.Succeed(liquidapi.Run(ctx, &neutron.Logic{}, opts))
 		case "nova":
+			opts.TakesConfiguration = true
 			must.Succeed(liquidapi.Run(ctx, &nova.Logic{}, opts))
 		case "octavia":
 			must.Succeed(liquidapi.Run(ctx, &octavia.Logic{}, opts))
