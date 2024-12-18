@@ -23,7 +23,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"slices"
 
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/quotasets"
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/snapshots"
@@ -106,10 +105,7 @@ func (l *Logic) collectVolumeSubresources(ctx context.Context, projectUUID strin
 		}
 
 		for _, volume := range vols {
-			az := liquid.AvailabilityZone(volume.AvailabilityZone)
-			if !slices.Contains(allAZs, az) {
-				az = liquid.AvailabilityZoneUnknown
-			}
+			az := liquid.NormalizeAZ(volume.AvailabilityZone, allAZs)
 			vt := VolumeType(volume.VolumeType)
 			placementForVolumeUUID[volume.ID] = VolumePlacement{vt, az}
 
@@ -171,10 +167,7 @@ func (l *Logic) collectSnapshotSubresources(ctx context.Context, projectUUID str
 						snapshot.VolumeID, snapshot.ID, projectUUID, err)
 				}
 				vt := VolumeType(volume.VolumeType)
-				az := liquid.AvailabilityZone(volume.AvailabilityZone)
-				if !slices.Contains(allAZs, az) {
-					az = liquid.AvailabilityZoneUnknown
-				}
+				az := liquid.NormalizeAZ(volume.AvailabilityZone, allAZs)
 				placement = VolumePlacement{vt, az}
 			}
 

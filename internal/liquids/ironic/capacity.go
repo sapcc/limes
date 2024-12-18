@@ -50,8 +50,8 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 	// so we can use this to establish an AZ-to-node relationship.
 	azForResourceProviderUUID := make(map[string]liquid.AvailabilityZone)
 	for _, aggr := range allAggregates {
-		az := liquid.AvailabilityZone(aggr.AvailabilityZone)
-		if az == "" || !slices.Contains(req.AllAZs, az) {
+		az := liquid.NormalizeAZ(aggr.AvailabilityZone, req.AllAZs)
+		if az == liquid.AvailabilityZoneUnknown {
 			// we are only interested in aggregates that are connected to AZs that we know
 			continue
 		}
