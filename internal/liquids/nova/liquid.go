@@ -22,16 +22,32 @@ package nova
 import (
 	"context"
 	"errors"
+	"fmt"
+	"regexp"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/gophercloud/gophercloud/v2"
 	"github.com/gophercloud/gophercloud/v2/openstack"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
+	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/quotasets"
 	"github.com/sapcc/go-api-declarations/liquid"
+
+	"github.com/sapcc/limes/internal/liquids"
 )
 
 type Logic struct {
-	NovaV2 *gophercloud.ServiceClient `json:"-"`
+	// configuration
+	WithSubresources bool `json:"with_subresources"`
+	// connections
+	NovaV2            *gophercloud.ServiceClient `json:"-"`
+	OSTypeProber      *OSTypeProber              `json:"-"`
+	ServerGroupProber *ServerGroupProber         `json:"-"`
+	// computed state
+	ignoredFlavorNames liquids.State[[]string]                                `json:"-"`
+	hasPooledResource  liquids.State[map[string]map[liquid.ResourceName]bool] `json:"-"`
+	hwVersionResources liquids.State[[]liquid.ResourceName]                   `json:"-"`
 }
 
 // Init implements the liquidapi.Logic interface.
@@ -41,12 +57,77 @@ func (l *Logic) Init(ctx context.Context, provider *gophercloud.ProviderClient, 
 		return err
 	}
 	l.NovaV2.Microversion = "2.61" // to include extra specs in flavors.ListDetail()
+	cinderV3, err := openstack.NewBlockStorageV3(provider, eo)
+	if err != nil {
+		return err
+	}
+	glanceV2, err := openstack.NewImageV2(provider, eo)
+	if err != nil {
+		return err
+	}
+	l.OSTypeProber = NewOSTypeProber(l.NovaV2, cinderV3, glanceV2)
+	l.ServerGroupProber = NewServerGroupProber(l.NovaV2)
 
 	return nil
 }
 
+func getDefaultQuotaClassSet(ctx context.Context, novaV2 *gophercloud.ServiceClient) (map[string]any, error) {
+	url := novaV2.ServiceURL("os-quota-class-sets", "default")
+	var result gophercloud.Result
+	_, err := novaV2.Get(ctx, url, &result.Body, nil) //nolint:bodyclose
+	if err != nil {
+		return nil, err
+	}
+
+	var body struct {
+		//NOTE: cannot use map[string]int64 here because this object contains the
+		// field "id": "default" (curse you, untyped JSON)
+		QuotaClassSet map[string]any `json:"quota_class_set"`
+	}
+	err = result.ExtractInto(&body)
+	return body.QuotaClassSet, err
+}
+
 // BuildServiceInfo implements the liquidapi.Logic interface.
 func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error) {
+	// SAPCC extension: Nova may report quotas with this name pattern in its quota sets and quota class sets.
+	// If it does, instances with flavors that have the extra spec `quota:hw_version` set to the first match
+	// group of this regexp will count towards those quotas instead of the regular `cores/instances/ram` quotas.
+	//
+	// This initialization enumerates which such pooled resources exist.
+	defaultQuotaClassSet, err := getDefaultQuotaClassSet(ctx, l.NovaV2)
+	if err != nil {
+		return liquid.ServiceInfo{}, fmt.Errorf("while enumerating default quotas: %w", err)
+	}
+	hasPooledResource := make(map[string]map[liquid.ResourceName]bool)
+	var hwVersionResources []liquid.ResourceName
+	hwVersionResourceRx := regexp.MustCompile(`^hw_version_(\S+)_(cores|instances|ram)$`)
+	for resourceName := range defaultQuotaClassSet {
+		match := hwVersionResourceRx.FindStringSubmatch(resourceName)
+		if match == nil {
+			continue
+		}
+		hwVersion, baseResourceName := match[1], liquid.ResourceName(match[2])
+
+		hwVersionResources = append(hwVersionResources, liquid.ResourceName(resourceName))
+
+		if hasPooledResource[hwVersion] == nil {
+			hasPooledResource[hwVersion] = make(map[liquid.ResourceName]bool)
+		}
+		hasPooledResource[hwVersion][baseResourceName] = true
+	}
+
+	var ignoredFlavorNames []string
+	err = FlavorSelection{}.ForeachFlavor(ctx, l.NovaV2, func(f flavors.Flavor) error {
+		if IsIronicFlavor(f) {
+			ignoredFlavorNames = append(ignoredFlavorNames, f.Name)
+		}
+		return nil
+	})
+	if err != nil {
+		return liquid.ServiceInfo{}, err
+	}
+
 	resources := map[liquid.ResourceName]liquid.ResourceInfo{
 		"cores": {
 			Unit:        liquid.UnitNone,
@@ -73,12 +154,12 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 		},
 	}
 
-	err := FlavorSelection{}.ForeachFlavor(ctx, l.NovaV2, func(f flavors.Flavor) error {
+	err = FlavorSelection{}.ForeachFlavor(ctx, l.NovaV2, func(f flavors.Flavor) error {
 		if IsIronicFlavor(f) {
 			return nil
 		}
-		if f.ExtraSpecs["quota:separate"] == "true" {
-			resources[liquid.ResourceName("instances_"+f.Name)] = liquid.ResourceInfo{
+		if IsSplitFlavor(f) {
+			resources[ResourceNameForFlavor(f.Name)] = liquid.ResourceInfo{
 				Unit:        liquid.UnitNone,
 				HasCapacity: true,
 				HasQuota:    true,
@@ -89,6 +170,21 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 	if err != nil {
 		return liquid.ServiceInfo{}, err
 	}
+
+	for _, resourceName := range hwVersionResources {
+		unit := liquid.UnitNone
+		if strings.HasSuffix(string(resourceName), "ram") {
+			unit = liquid.UnitMebibytes
+		}
+		resources[resourceName] = liquid.ResourceInfo{
+			Unit:     unit,
+			HasQuota: true,
+		}
+	}
+
+	l.hasPooledResource.Set(hasPooledResource)
+	l.hwVersionResources.Set(hwVersionResources)
+	l.ignoredFlavorNames.Set(ignoredFlavorNames)
 
 	return liquid.ServiceInfo{
 		Version:   time.Now().Unix(),
@@ -101,12 +197,24 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 	return liquid.ServiceCapacityReport{}, errors.New("TODO")
 }
 
-// ScanUsage implements the liquidapi.Logic interface.
-func (l *Logic) ScanUsage(ctx context.Context, projectUUID string, req liquid.ServiceUsageRequest, serviceInfo liquid.ServiceInfo) (liquid.ServiceUsageReport, error) {
-	return liquid.ServiceUsageReport{}, errors.New("TODO")
-}
-
 // SetQuota implements the liquidapi.Logic interface.
 func (l *Logic) SetQuota(ctx context.Context, projectUUID string, req liquid.ServiceQuotaRequest, serviceInfo liquid.ServiceInfo) error {
-	return errors.New("TODO")
+	opts := make(novaQuotaUpdateOpts, len(serviceInfo.Resources))
+	for resName := range serviceInfo.Resources {
+		opts[string(resName)] = req.Resources[resName].Quota
+	}
+	return quotasets.Update(ctx, l.NovaV2, projectUUID, opts).Err
+}
+
+func (l *Logic) IsIgnoredFlavor(flavorName string) bool {
+	return slices.Contains(l.ignoredFlavorNames.Get(), flavorName)
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// custom types for OpenStack APIs
+
+type novaQuotaUpdateOpts map[string]uint64
+
+func (opts novaQuotaUpdateOpts) ToComputeQuotaUpdateMap() (map[string]any, error) {
+	return map[string]any{"quota_set": opts}, nil
 }
