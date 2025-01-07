@@ -56,16 +56,13 @@ Make sure that Postgres is running then you can now run both Limes jobs:
 
 ### Run the test suite
 
-Tests can be run with the helper script `testing/with-postgres-db.sh` to use a
-self-contained testing database located at `testing/postgresql*`.
-
-Run the full test suite with:
+You can run the full test suite with:
 
 ```bash
-./testing/with-postgres-db.sh make check
+make check
 ```
 
-This will produce a coverage report at `build/cover.html`.
+This will produce a coverage report at `build/cover.html`. The test suite features a self-contained testing database with files being stored in `.testdb`. This directory also contains debugging scripts for interacting with the database contents.
 
 ### Test Harnesses
 
