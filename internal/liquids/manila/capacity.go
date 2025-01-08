@@ -27,10 +27,10 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/sharedfilesystems/v2/schedulerstats"
 	"github.com/gophercloud/gophercloud/v2/openstack/sharedfilesystems/v2/services"
 	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/liquidapi"
 	"github.com/sapcc/go-bits/logg"
 
 	"github.com/sapcc/limes/internal/liquids"
-	"github.com/sapcc/limes/internal/util"
 )
 
 // ScanCapacity implements the liquidapi.Logic interface.
@@ -190,13 +190,13 @@ func (l *Logic) scanCapacityForShareTypeAndAZ(vst VirtualShareType, azCount uint
 		"snapmirrors": 0,
 	}
 	logg.Debug("distributing capacity for share_type %q, AZ %q", vst.Name, az)
-	distributedCapacityGiB := util.DistributeDemandFairly(uint64(totalCapacityGB), map[string]liquid.ResourceDemandInAZ{
+	distributedCapacityGiB := liquidapi.DistributeDemandFairly(uint64(totalCapacityGB), map[string]liquid.ResourceDemandInAZ{
 		"shares":      shareCapacityDemand,
 		"snapshots":   snapshotCapacityDemand,
 		"snapmirrors": snapmirrorCapacityDemand,
 	}, balance)
 	logg.Debug("distributing usage for share_type %q, AZ %q", vst.Name, az)
-	distributedUsageGiB := util.DistributeDemandFairly(uint64(allocatedCapacityGB), map[string]liquid.ResourceDemandInAZ{
+	distributedUsageGiB := liquidapi.DistributeDemandFairly(uint64(allocatedCapacityGB), map[string]liquid.ResourceDemandInAZ{
 		"shares":      {Usage: shareCapacityDemand.Usage},
 		"snapshots":   {Usage: snapshotCapacityDemand.Usage},
 		"snapmirrors": {Usage: snapmirrorCapacityDemand.Usage},
@@ -206,7 +206,7 @@ func (l *Logic) scanCapacityForShareTypeAndAZ(vst VirtualShareType, azCount uint
 	params := l.CapacityCalculation
 	var result azCapacityForShareType
 	result.Shares = liquid.AZResourceCapacityReport{
-		Capacity: liquids.SaturatingSub(params.SharesPerPool*poolCount, params.ShareNetworks/azCount),
+		Capacity: liquidapi.SaturatingSub(params.SharesPerPool*poolCount, params.ShareNetworks/azCount),
 	}
 	result.Snapshots = liquid.AZResourceCapacityReport{
 		Capacity: result.Shares.Capacity * params.SnapshotsPerShare,

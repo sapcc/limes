@@ -34,11 +34,11 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/liquidapi"
 	"github.com/sapcc/go-bits/logg"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
-	"github.com/sapcc/limes/internal/liquids"
 	"github.com/sapcc/limes/internal/liquids/nova"
 )
 
@@ -127,7 +127,7 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 			// only public flavor contribute to the `maxRootDiskSize` calculation (in
 			// the wild, we have seen non-public legacy flavors with wildly large
 			// disk sizes that would throw off all estimates derived from this number)
-			maxRootDiskSize = max(maxRootDiskSize, liquids.AtLeastZero(f.Disk))
+			maxRootDiskSize = max(maxRootDiskSize, liquidapi.AtLeastZero(f.Disk))
 		}
 		return nil
 	})
@@ -362,9 +362,9 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 			totalPlacedInstances[flavor.Name] = float64(count)
 			// The max(..., 0.1) is explained below.
 
-			splitFlavorsUsage.VCPUs += coresDemand.OvercommitFactor.ApplyInReverseTo(count * liquids.AtLeastZero(flavor.VCPUs))
-			splitFlavorsUsage.MemoryMB += count * liquids.AtLeastZero(flavor.RAM)
-			splitFlavorsUsage.LocalGB += count * liquids.AtLeastZero(flavor.Disk)
+			splitFlavorsUsage.VCPUs += coresDemand.OvercommitFactor.ApplyInReverseTo(count * liquidapi.AtLeastZero(flavor.VCPUs))
+			splitFlavorsUsage.MemoryMB += count * liquidapi.AtLeastZero(flavor.RAM)
+			splitFlavorsUsage.LocalGB += count * liquidapi.AtLeastZero(flavor.Disk)
 		}
 
 		// for the upcoming final fill, we want to block capacity in such a way that
@@ -463,9 +463,9 @@ func (p *capacityNovaPlugin) Scrape(ctx context.Context, backchannel core.Capaci
 			capacities[p.PooledRAMResourceName][az] = pointerTo(azCapacity.IntoCapacityData("ram", float64(maxRootDiskSize), builder.RAMSubcapacities))
 			for _, flavor := range splitFlavors {
 				count := hypervisors.PlacementCountForFlavor(flavor.Name)
-				capacities[p.PooledCoresResourceName][az].Capacity -= coresDemand.OvercommitFactor.ApplyInReverseTo(count * liquids.AtLeastZero(flavor.VCPUs))
+				capacities[p.PooledCoresResourceName][az].Capacity -= coresDemand.OvercommitFactor.ApplyInReverseTo(count * liquidapi.AtLeastZero(flavor.VCPUs))
 				capacities[p.PooledInstancesResourceName][az].Capacity-- //TODO: not accurate when uint64(flavor.Disk) != maxRootDiskSize
-				capacities[p.PooledRAMResourceName][az].Capacity -= count * liquids.AtLeastZero(flavor.RAM)
+				capacities[p.PooledRAMResourceName][az].Capacity -= count * liquidapi.AtLeastZero(flavor.RAM)
 			}
 		}
 	}

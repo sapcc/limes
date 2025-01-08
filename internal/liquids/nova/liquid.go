@@ -33,8 +33,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/quotasets"
 	"github.com/sapcc/go-api-declarations/liquid"
-
-	"github.com/sapcc/limes/internal/liquids"
+	"github.com/sapcc/go-bits/liquidapi"
 )
 
 type Logic struct {
@@ -45,9 +44,9 @@ type Logic struct {
 	OSTypeProber      *OSTypeProber              `json:"-"`
 	ServerGroupProber *ServerGroupProber         `json:"-"`
 	// computed state
-	ignoredFlavorNames liquids.State[[]string]                                `json:"-"`
-	hasPooledResource  liquids.State[map[string]map[liquid.ResourceName]bool] `json:"-"`
-	hwVersionResources liquids.State[[]liquid.ResourceName]                   `json:"-"`
+	ignoredFlavorNames liquidapi.State[[]string]                                `json:"-"`
+	hasPooledResource  liquidapi.State[map[string]map[liquid.ResourceName]bool] `json:"-"`
+	hwVersionResources liquidapi.State[[]liquid.ResourceName]                   `json:"-"`
 }
 
 // Init implements the liquidapi.Logic interface.

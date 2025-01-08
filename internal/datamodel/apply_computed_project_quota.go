@@ -28,12 +28,12 @@ import (
 	"github.com/go-gorp/gorp/v3"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/liquidapi"
 	"github.com/sapcc/go-bits/logg"
 	"github.com/sapcc/go-bits/sqlext"
 
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/db"
-	"github.com/sapcc/limes/internal/util"
 )
 
 // NOTE: Most private functions in this file have the name prefix "acpq"
@@ -432,7 +432,7 @@ func (target acpqGlobalTarget) EnforceConstraints(constraints map[db.ProjectReso
 				totalAllocated += t.Allocated
 				desireScalePerAZ[az] = *c.MinQuota * max(1, subtractOrZero(t.Desired, t.Allocated))
 			}
-			extraAllocatedPerAZ := util.DistributeFairly(subtractOrZero(*c.MinQuota, totalAllocated), desireScalePerAZ)
+			extraAllocatedPerAZ := liquidapi.DistributeFairly(subtractOrZero(*c.MinQuota, totalAllocated), desireScalePerAZ)
 			for _, az := range allAZs {
 				if az == limes.AvailabilityZoneAny && isAZAware {
 					continue
@@ -453,7 +453,7 @@ func (target acpqGlobalTarget) EnforceConstraints(constraints map[db.ProjectReso
 				extraDesiredPerAZ[az] = subtractOrZero(t.Desired, t.Allocated)
 			}
 			if totalDesired > *c.MaxQuota {
-				extraDesiredPerAZ = util.DistributeFairly(subtractOrZero(*c.MaxQuota, totalAllocated), extraDesiredPerAZ)
+				extraDesiredPerAZ = liquidapi.DistributeFairly(subtractOrZero(*c.MaxQuota, totalAllocated), extraDesiredPerAZ)
 				for _, az := range allAZs {
 					t := target[az][resourceID]
 					t.Desired = t.Allocated + extraDesiredPerAZ[az]
@@ -481,7 +481,7 @@ func (target acpqGlobalTarget) TryFulfillDesired(stats map[limes.AvailabilityZon
 		}
 		availableCapacity := subtractOrZero(stats[az].Capacity, azTarget.SumAllocated())
 		if availableCapacity > 0 {
-			granted := util.DistributeFairly(availableCapacity, azTarget.Requested())
+			granted := liquidapi.DistributeFairly(availableCapacity, azTarget.Requested())
 			azTarget.AddGranted(granted)
 		}
 	}
@@ -493,7 +493,7 @@ func (target acpqGlobalTarget) TryFulfillDesired(stats map[limes.AvailabilityZon
 	}
 	if totalAvailable > 0 {
 		anyTarget := target[limes.AvailabilityZoneAny]
-		granted := util.DistributeFairly(totalAvailable, anyTarget.Requested())
+		granted := liquidapi.DistributeFairly(totalAvailable, anyTarget.Requested())
 		anyTarget.AddGranted(granted)
 	}
 }

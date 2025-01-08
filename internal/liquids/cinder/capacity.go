@@ -27,10 +27,10 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/schedulerstats"
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/services"
 	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/liquidapi"
 	"github.com/sapcc/go-bits/logg"
 
 	"github.com/sapcc/limes/internal/liquids"
-	"github.com/sapcc/limes/internal/util"
 )
 
 // ScanCapacity implements the liquidapi.Logic interface.
@@ -103,7 +103,7 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 		Resources:   make(map[liquid.ResourceName]*liquid.ResourceCapacityReport),
 	}
 	for info, volumeTypes := range volumeTypesByInfo {
-		relevantPools := liquids.RestrictToKnownAZs(sortedPools[info], req.AllAZs)
+		relevantPools := liquidapi.RestrictToKnownAZs(sortedPools[info], req.AllAZs)
 		relevantDemands := make(map[VolumeType]liquid.ResourceDemand)
 		for _, volumeType := range volumeTypes {
 			relevantDemands[volumeType] = req.DemandByResource[volumeType.CapacityResourceName()]
@@ -198,9 +198,9 @@ func (l *Logic) buildAZCapacityReportForPoolSet(pools []StoragePool, rawDemands 
 		balance[volumeType] = 1.0
 	}
 	logg.Debug("distributing for AZ %q: capacity = %d between volume types %v", az, totalCapacityGiB, balance)
-	distributedCapacityGiB := util.DistributeDemandFairly(totalCapacityGiB, rawDemands, balance)
+	distributedCapacityGiB := liquidapi.DistributeDemandFairly(totalCapacityGiB, rawDemands, balance)
 	logg.Debug("distributing for AZ %q: usage = %d between volume types %v", az, totalUsageGiB, balance)
-	distributedUsageGiB := util.DistributeDemandFairly(totalUsageGiB, rawDemands, balance)
+	distributedUsageGiB := liquidapi.DistributeDemandFairly(totalUsageGiB, rawDemands, balance)
 
 	result := make(map[VolumeType]*liquid.AZResourceCapacityReport, len(rawDemands))
 	for volumeType := range rawDemands {

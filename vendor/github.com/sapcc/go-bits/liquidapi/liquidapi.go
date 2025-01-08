@@ -17,15 +17,6 @@
 *
 *******************************************************************************/
 
-// Package liquidapi provides a runtime for servers that implement the LIQUID
-// API and nothing else. The application will only have to provide a type that
-// implements the Logic interface. Then it can call Run() on an instance of it
-// to parse configuration, connect to OpenStack and run the HTTP server.
-//
-// Ref: <https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid>
-//
-// This package also provides a Gophercloud-based Client for talking to the
-// LIQUID API. Realistically, only Limes and limesctl will need this though. :)
 package liquidapi
 
 import (
@@ -67,6 +58,11 @@ type Logic interface {
 	// periodically (as configured in RunOpts). The previous ServiceInfo will be
 	// served until this call returns, so it's not a big deal if this call takes
 	// a long time.
+	//
+	// If any long-lived state is computed here and needs to be preserved,
+	// in addition to the information stored in the ServiceInfo instance,
+	// we recommend adding fields of type liquidapi.State to the Logic object.
+	// Then, only fill these state slots immediately before returning success from BuildServiceInfo.
 	BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error)
 
 	// These methods represent all the API endpoints of LIQUID that do actual work.
@@ -74,6 +70,9 @@ type Logic interface {
 	// The latest ServiceInfo is provided for reference. Only a shallow copy is
 	// provided, so implementations must make sure to not edit the ServiceInfo in
 	// order to uphold thread-safety.
+	//
+	// All these functions should not store long-lived state in the Logic object.
+	// Long-lived state should only be computed and updated during BuildServiceInfo().
 	ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequest, serviceInfo liquid.ServiceInfo) (liquid.ServiceCapacityReport, error)
 	ScanUsage(ctx context.Context, projectUUID string, req liquid.ServiceUsageRequest, serviceInfo liquid.ServiceInfo) (liquid.ServiceUsageReport, error)
 	SetQuota(ctx context.Context, projectUUID string, req liquid.ServiceQuotaRequest, serviceInfo liquid.ServiceInfo) error
