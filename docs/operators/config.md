@@ -280,13 +280,15 @@ desired, a very short retention period like `1m` can be configured.) By consider
 two days (retention period `48h`), quota will never grow by more than one growth multiplier per two days from usage
 alone. (Larger quota jumps are still possible if additional commitments are confirmed.)
 
+Autogrow requires an object with configuration options at `quota_distribution_configs[].autogrow`:
+
 | Field | Default | Description |
 | --- | --- | --- |
-| `quota_distribution_configs[].autogrow.allow_quota_overcommit_until_allocated_percent` | `0` | If quota overcommit is allowed, means that the desired quota and base quota is always given out to all projects, even if the sum of all project quotas ends up being greater than the resource's capacity. If this value is set to 0, quota overcommit is never allowed, i.e. the sum of all project quotas will never exceed the resource's capacity. If overcommit is to be allowed, a typical setting is something like 95% or 99%: Once usage reaches that threshold, quota overcommit will be disabled to ensure that confirmed commitments are honored. To enable quota overcommit unconditionally, set a very large value like 10000%. |
-| `quota_distribution_configs[].autogrow.project_base_quota` | `0` | The minimum amount of quota that will always be given to a project even if it does not have that much commitments or usage to warrant it under the regular formula. Can be set to zero to force projects to bootstrap their quota via commitments. |
-| `quota_distribution_configs[].autogrow.growth_multiplier` | *(required)* | As explained above. Cannot be set to less than 1 (100%). Can be set to exactly 1 to ensure that no additional quota will be granted above existing usage and/or confirmed commitments. |
-| `quota_distribution_configs[].autogrow.growth_minimum` | `1` | When multiplying a growth baseline greater than 0 with a growth multiplier greater than 1, ensure that the result is at least this much higher than the baseline. |
-| `quota_distribution_configs[].usage_data_retention_period` | *(required)* | As explained above. Must be formatted as a string that [`time.ParseDuration`](https://pkg.go.dev/time#ParseDuration) understands. Cannot be set to zero. To only use current usage when calculating quota, set this to a very short interval like `1m`. |
+| `allow_quota_overcommit_until_allocated_percent` | `0` | If quota overcommit is allowed, means that the desired quota and base quota is always given out to all projects, even if the sum of all project quotas ends up being greater than the resource's capacity. If this value is set to 0, quota overcommit is never allowed, i.e. the sum of all project quotas will never exceed the resource's capacity. If overcommit is to be allowed, a typical setting is something like 95% or 99%: Once usage reaches that threshold, quota overcommit will be disabled to ensure that confirmed commitments are honored. To enable quota overcommit unconditionally, set a very large value like 10000%. |
+| `project_base_quota` | `0` | The minimum amount of quota that will always be given to a project even if it does not have that much commitments or usage to warrant it under the regular formula. Can be set to zero to force projects to bootstrap their quota via commitments. |
+| `growth_multiplier` | *(required)* | As explained above. Cannot be set to less than 1 (100%). Can be set to exactly 1 to ensure that no additional quota will be granted above existing usage and/or confirmed commitments. |
+| `growth_minimum` | `1` | When multiplying a growth baseline greater than 0 with a growth multiplier greater than 1, ensure that the result is at least this much higher than the baseline. |
+| `usage_data_retention_period` | *(required)* | As explained above. Must be formatted as a string that [`time.ParseDuration`](https://pkg.go.dev/time#ParseDuration) understands. Cannot be set to zero. To only use current usage when calculating quota, set this to a very short interval like `1m`. |
 
 The default config for resources without a specific `quota_distribution_configs[]` match sets the default values as explained above, and also
 
