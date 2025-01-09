@@ -37,8 +37,9 @@ import (
 
 type Logic struct {
 	// configuration
-	WithSubcapacities bool `json:"with_subcapacities"`
-	WithSubresources  bool `json:"with_subresources"`
+	WithSubcapacities bool                               `json:"with_subcapacities"`
+	WithSubresources  bool                               `json:"with_subresources"`
+	NodeToAZOvewrites map[string]liquid.AvailabilityZone `json:"node_to_az_overwrites"`
 	// connections
 	NovaV2       *gophercloud.ServiceClient `json:"-"`
 	IronicV1     *gophercloud.ServiceClient `json:"-"`

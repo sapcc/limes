@@ -136,6 +136,10 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 			}
 
 			az := azForResourceProviderUUID[node.UUID]
+			azOverwrite, ok := l.NodeToAZOvewrites[node.UUID]
+			if ok {
+				az = azOverwrite
+			}
 			if !slices.Contains(req.AllAZs, az) {
 				az = liquid.AvailabilityZoneUnknown
 				if perAZ[az] == nil {
