@@ -150,7 +150,7 @@ github.com/sapcc/go-api-declarations/limes
 github.com/sapcc/go-api-declarations/limes/rates
 github.com/sapcc/go-api-declarations/limes/resources
 github.com/sapcc/go-api-declarations/liquid
-# github.com/sapcc/go-bits v0.0.0-20250101161453-7169321dc311
+# github.com/sapcc/go-bits v0.0.0-20250108104100-5bc9c24d5c51
 ## explicit; go 1.23
 github.com/sapcc/go-bits/assert
 github.com/sapcc/go-bits/audittools

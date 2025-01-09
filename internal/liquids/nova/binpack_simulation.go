@@ -24,12 +24,11 @@ import (
 	"math"
 	"strings"
 
-	"github.com/sapcc/limes/internal/liquids"
-
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/v2/openstack/placement/v1/resourceproviders"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/liquidapi"
 	"github.com/sapcc/go-bits/logg"
 )
 
@@ -124,14 +123,14 @@ func PrepareHypervisorForBinpacking(h MatchingHypervisor) (BinpackHypervisor, er
 	// break down capacity into equal-sized nodes
 	nodeTemplate := BinpackNode{
 		Capacity: BinpackVector[uint64]{
-			VCPUs:    liquids.AtLeastZero(h.Inventories["VCPU"].MaxUnit),
-			MemoryMB: liquids.AtLeastZero(h.Inventories["MEMORY_MB"].MaxUnit),
+			VCPUs:    liquidapi.AtLeastZero(h.Inventories["VCPU"].MaxUnit),
+			MemoryMB: liquidapi.AtLeastZero(h.Inventories["MEMORY_MB"].MaxUnit),
 			// We do not use `h.Inventories["DISK_GB"].MaxUnit` because it appears to describe the max root
 			// disk size for a single instance, rather than the actual available disk size. Maybe this is
 			// because the root disks are stored on nearby NFS filers, so MaxUnit is actually the max
 			// volume size instead of the total capacity per node. Since we have a good nodeCount number
 			// now, we can divide up the total disk space for all nodes.
-			LocalGB: liquids.SaturatingSub(h.Inventories["DISK_GB"].Total, h.Inventories["DISK_GB"].Reserved) / nodeCount,
+			LocalGB: liquidapi.SaturatingSub(h.Inventories["DISK_GB"].Total, h.Inventories["DISK_GB"].Reserved) / nodeCount,
 		},
 	}
 	result := BinpackHypervisor{
@@ -189,9 +188,9 @@ func (hh BinpackHypervisors) PlaceOneInstance(flavor flavors.Flavor, reason stri
 	// [Mayank]: https://www.it.iitb.ac.in/~sahoo/papers/cloud2011_mayank.pdf
 
 	vmSize := BinpackVector[uint64]{
-		VCPUs:    coresOvercommitFactor.ApplyInReverseTo(liquids.AtLeastZero(flavor.VCPUs)),
-		MemoryMB: liquids.AtLeastZero(flavor.RAM),
-		LocalGB:  liquids.AtLeastZero(flavor.Disk),
+		VCPUs:    coresOvercommitFactor.ApplyInReverseTo(liquidapi.AtLeastZero(flavor.VCPUs)),
+		MemoryMB: liquidapi.AtLeastZero(flavor.RAM),
+		LocalGB:  liquidapi.AtLeastZero(flavor.Disk),
 	}
 
 	// ensure that placing this instance does not encroach on the overall blocked capacity

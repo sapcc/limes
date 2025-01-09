@@ -33,9 +33,8 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/sharedfilesystems/v2/sharetypes"
 	"github.com/prometheus/common/model"
 	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/liquidapi"
 	"github.com/sapcc/go-bits/promquery"
-
-	"github.com/sapcc/limes/internal/liquids"
 )
 
 type Logic struct {
@@ -55,7 +54,7 @@ type Logic struct {
 	AZMetrics     *promquery.BulkQueryCache[azMetricsKey, azMetrics]         `json:"-"`
 	NetappMetrics *promquery.BulkQueryCache[netappMetricsKey, netappMetrics] `json:"-"`
 	// caches
-	ShareTypeIDByName liquids.State[map[RealShareType]string] `json:"-"`
+	ShareTypeIDByName liquidapi.State[map[RealShareType]string] `json:"-"`
 }
 
 // Init implements the liquidapi.Logic interface.

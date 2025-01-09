@@ -28,8 +28,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack"
 	"github.com/gophercloud/gophercloud/v2/openstack/loadbalancer/v2/quotas"
 	"github.com/sapcc/go-api-declarations/liquid"
-
-	"github.com/sapcc/limes/internal/liquids"
+	"github.com/sapcc/go-bits/gophercloudext"
 )
 
 type Logic struct {
@@ -60,7 +59,7 @@ func (l *Logic) Init(ctx context.Context, provider *gophercloud.ProviderClient, 
 	if err != nil {
 		return fmt.Errorf("cannot initialize Octavia v2 client: %w", err)
 	}
-	l.OwnProjectID, err = liquids.GetProjectIDFromTokenScope(provider)
+	l.OwnProjectID, err = gophercloudext.GetProjectIDFromTokenScope(provider)
 	if err != nil {
 		return fmt.Errorf("cannot find project scope of own token: %w", err)
 	}

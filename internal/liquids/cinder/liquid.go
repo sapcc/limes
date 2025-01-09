@@ -28,8 +28,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack"
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumetypes"
 	"github.com/sapcc/go-api-declarations/liquid"
-
-	"github.com/sapcc/limes/internal/liquids"
+	"github.com/sapcc/go-bits/liquidapi"
 )
 
 type Logic struct {
@@ -40,7 +39,7 @@ type Logic struct {
 	// connections
 	CinderV3 *gophercloud.ServiceClient `json:"-"`
 	// state
-	VolumeTypes liquids.State[map[VolumeType]VolumeTypeInfo] `json:"-"`
+	VolumeTypes liquidapi.State[map[VolumeType]VolumeTypeInfo] `json:"-"`
 }
 
 // VolumeType is a type with convenience functions for deriving resource names.

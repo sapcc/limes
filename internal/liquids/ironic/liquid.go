@@ -30,8 +30,8 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack"
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/sapcc/go-api-declarations/liquid"
+	"github.com/sapcc/go-bits/liquidapi"
 
-	"github.com/sapcc/limes/internal/liquids"
 	"github.com/sapcc/limes/internal/liquids/nova"
 )
 
@@ -101,9 +101,9 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 		}
 
 		buf, err := json.Marshal(FlavorAttributes{
-			Cores:     liquids.AtLeastZero(flavor.VCPUs),
-			MemoryMiB: liquids.AtLeastZero(flavor.RAM),
-			DiskGiB:   liquids.AtLeastZero(flavor.Disk),
+			Cores:     liquidapi.AtLeastZero(flavor.VCPUs),
+			MemoryMiB: liquidapi.AtLeastZero(flavor.RAM),
+			DiskGiB:   liquidapi.AtLeastZero(flavor.Disk),
 		})
 		if err != nil {
 			return liquid.ServiceInfo{}, fmt.Errorf("while serializing FlavorAttributes: %w", err)

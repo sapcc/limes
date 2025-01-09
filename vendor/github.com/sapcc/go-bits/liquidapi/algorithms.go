@@ -17,7 +17,7 @@
 *
 *******************************************************************************/
 
-package util
+package liquidapi
 
 import (
 	"encoding/json"
@@ -25,6 +25,7 @@ import (
 	"slices"
 
 	"github.com/sapcc/go-api-declarations/liquid"
+
 	"github.com/sapcc/go-bits/logg"
 )
 
