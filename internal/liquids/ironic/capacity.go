@@ -136,9 +136,10 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 			}
 
 			az := azForResourceProviderUUID[node.UUID]
-			azOverwrite, ok := l.NodeToAZOvewrites[node.UUID]
+			// NOTE: An override covers a legacy deployment which is not matched by a resource provider.
+			azOverride, ok := l.NodeToAZOverrides[node.UUID]
 			if ok {
-				az = azOverwrite
+				az = azOverride
 			}
 			if !slices.Contains(req.AllAZs, az) {
 				az = liquid.AvailabilityZoneUnknown
