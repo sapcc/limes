@@ -35,19 +35,20 @@ import (
 	"github.com/sapcc/go-bits/regexpext"
 )
 
+// TODO: Remove yaml tags when switching to liquid-nova
 // HypervisorSelection describes a set of hypervisors.
 type HypervisorSelection struct {
 	// Only match hypervisors with a hypervisor_type attribute matching this pattern.
-	HypervisorTypeRx regexpext.PlainRegexp `yaml:"hypervisor_type_pattern"`
+	HypervisorTypeRx regexpext.PlainRegexp `yaml:"hypervisor_type_pattern" json:"hypervisor_type_pattern"`
 	// Only match hypervisors that have any of these traits.
 	// Trait names can include a `!` prefix to invert the match.
-	RequiredTraits []string `yaml:"required_traits"`
+	RequiredTraits []string `yaml:"required_traits" json:"required_traits"`
 	// Set the MatchingHypervisor.ShadowedByTrait field on hypervisors that have any of these traits.
 	// Trait names can include a `!` prefix to invert the match.
-	ShadowingTraits []string `yaml:"shadowing_traits"`
+	ShadowingTraits []string `yaml:"shadowing_traits" json:"shadowing_traits"`
 	// Only match hypervisors that reside in an aggregate matching this pattern.
 	// If a hypervisor resides in multiple matching aggregates, an error is raised.
-	AggregateNameRx regexpext.PlainRegexp `yaml:"aggregate_name_pattern"`
+	AggregateNameRx regexpext.PlainRegexp `yaml:"aggregate_name_pattern" json:"aggregate_name_pattern"`
 }
 
 // ForeachHypervisor lists all Nova hypervisors matching this

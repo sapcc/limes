@@ -26,20 +26,20 @@ import (
 
 	"github.com/gophercloud/gophercloud/v2/openstack/compute/v2/flavors"
 	"github.com/gophercloud/gophercloud/v2/openstack/placement/v1/resourceproviders"
-	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/liquidapi"
 	"github.com/sapcc/go-bits/logg"
 )
 
+// TODO: Remove yaml tags when switching to liquid-nova
 // BinpackBehavior contains configuration parameters for the binpack simulation.
 type BinpackBehavior struct {
 	// When ranking nodes during placement, do not include the VCPU count dimension in the score.
-	ScoreIgnoresCores bool `yaml:"score_ignores_cores"`
+	ScoreIgnoresCores bool `yaml:"score_ignores_cores" json:"score_ignores_cores"`
 	// When ranking nodes during placement, do not include the disk size dimension in the score.
-	ScoreIgnoresDisk bool `yaml:"score_ignores_disk"`
+	ScoreIgnoresDisk bool `yaml:"score_ignores_disk" json:"score_ignores_disk"`
 	// When ranking nodes during placement, do not include the RAM size dimension in the score.
-	ScoreIgnoresRAM bool `yaml:"score_ignores_ram"`
+	ScoreIgnoresRAM bool `yaml:"score_ignores_ram" json:"score_ignores_ram"`
 }
 
 // BinpackHypervisor models an entire Nova hypervisor for the purposes of the
@@ -145,7 +145,7 @@ func PrepareHypervisorForBinpacking(h MatchingHypervisor) (BinpackHypervisor, er
 }
 
 // RenderDebugView prints an overview of the placements in this hypervisor on several logg.Debug lines.
-func (h BinpackHypervisor) RenderDebugView(az limes.AvailabilityZone) {
+func (h BinpackHypervisor) RenderDebugView(az liquid.AvailabilityZone) {
 	shortID := h.Match.Hypervisor.Service.Host
 	logg.Debug("[%s][%s] %s", az, shortID, h.Match.Hypervisor.Description())
 	for idx, n := range h.Nodes {
@@ -159,9 +159,9 @@ func (h BinpackHypervisor) RenderDebugView(az limes.AvailabilityZone) {
 }
 
 // PlaceSeveralInstances calls PlaceOneInstance multiple times.
-func (hh BinpackHypervisors) PlaceSeveralInstances(f flavors.Flavor, reason string, coresOvercommitFactor liquid.OvercommitFactor, blockedCapacity BinpackVector[uint64], bb BinpackBehavior, count uint64) (ok bool) {
+func (hh BinpackHypervisors) PlaceSeveralInstances(f flavors.Flavor, reason string, coresOvercommitFactor liquid.OvercommitFactor, blockedCapacity BinpackVector[uint64], bb BinpackBehavior, skipTraitMatch bool, count uint64) (ok bool) {
 	for range count {
-		ok = hh.PlaceOneInstance(f, reason, coresOvercommitFactor, blockedCapacity, bb)
+		ok = hh.PlaceOneInstance(f, reason, coresOvercommitFactor, blockedCapacity, bb, skipTraitMatch)
 		if !ok {
 			// if we don't have space for this instance, we won't have space for any following ones
 			return false
@@ -172,7 +172,7 @@ func (hh BinpackHypervisors) PlaceSeveralInstances(f flavors.Flavor, reason stri
 
 // PlaceOneInstance places a single instance of the given flavor using the vector-dot binpacking algorithm.
 // If the instance cannot be placed, false is returned.
-func (hh BinpackHypervisors) PlaceOneInstance(flavor flavors.Flavor, reason string, coresOvercommitFactor liquid.OvercommitFactor, blockedCapacity BinpackVector[uint64], bb BinpackBehavior) (ok bool) {
+func (hh BinpackHypervisors) PlaceOneInstance(flavor flavors.Flavor, reason string, coresOvercommitFactor liquid.OvercommitFactor, blockedCapacity BinpackVector[uint64], bb BinpackBehavior, skipTraitMatch bool) (ok bool) {
 	// This function implements the vector dot binpacking method described in [Mayank] (section III,
 	// subsection D, including the correction presented in the last paragraph of that subsection).
 	//
@@ -212,7 +212,7 @@ func (hh BinpackHypervisors) PlaceOneInstance(flavor flavors.Flavor, reason stri
 	)
 	for _, hypervisor := range hh {
 		// skip hypervisors that the flavor does not accept
-		if !FlavorMatchesHypervisor(flavor, hypervisor.Match) {
+		if !skipTraitMatch && !FlavorMatchesHypervisor(flavor, hypervisor.Match) {
 			continue
 		}
 
