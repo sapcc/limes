@@ -10,6 +10,7 @@ require (
 	github.com/gophercloud/gophercloud/v2 v2.4.0
 	github.com/gorilla/mux v1.8.1
 	github.com/lib/pq v1.10.9
+	github.com/majewsky/gg v0.0.0-20250111151300-e739523ac1f9
 	github.com/majewsky/schwift/v2 v2.0.0
 	github.com/prometheus/client_golang v1.20.5
 	github.com/prometheus/common v0.61.0

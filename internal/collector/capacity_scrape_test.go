@@ -26,6 +26,7 @@ import (
 	"testing"
 	"time"
 
+	. "github.com/majewsky/gg/option"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sapcc/go-api-declarations/liquid"
@@ -184,7 +185,7 @@ func Test_ScanCapacity(t *testing.T) {
 		ResourceID:       unknownRes.ID,
 		AvailabilityZone: liquid.AvailabilityZoneAny,
 		RawCapacity:      100,
-		Usage:            p2u64(50),
+		Usage:            Some[uint64](50),
 	})
 	if err != nil {
 		t.Error(err)

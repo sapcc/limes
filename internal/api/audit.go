@@ -23,6 +23,7 @@ import (
 	"fmt"
 	"strconv"
 
+	. "github.com/majewsky/gg/option" //nolint:stylecheck
 	"github.com/sapcc/go-api-declarations/cadf"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
@@ -42,8 +43,8 @@ type maxQuotaEventTarget struct {
 }
 
 type maxQuotaChange struct {
-	OldValue *uint64 `json:"oldMaxQuota"`
-	NewValue *uint64 `json:"newMaxQuota"`
+	OldValue Option[uint64] `json:"oldMaxQuota"`
+	NewValue Option[uint64] `json:"newMaxQuota"`
 }
 
 // Render implements the audittools.Target interface.
@@ -105,7 +106,7 @@ type commitmentEventTarget struct {
 	DomainName           string
 	ProjectID            string
 	ProjectName          string
-	SupersededCommitment *limesresources.Commitment
+	SupersededCommitment Option[limesresources.Commitment]
 	Commitments          []limesresources.Commitment // must have at least one entry
 }
 
@@ -131,8 +132,8 @@ func (t commitmentEventTarget) Render() cadf.Resource {
 		attachment := must.Return(cadf.NewJSONAttachment(name, commitment))
 		res.Attachments = append(res.Attachments, attachment)
 	}
-	if t.SupersededCommitment != nil {
-		attachment := must.Return(cadf.NewJSONAttachment("superseded-payload", *t.SupersededCommitment))
+	if sc, ok := t.SupersededCommitment.Unpack(); ok {
+		attachment := must.Return(cadf.NewJSONAttachment("superseded-payload", sc))
 		res.Attachments = append(res.Attachments, attachment)
 	}
 	return res

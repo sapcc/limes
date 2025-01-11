@@ -27,6 +27,7 @@ import (
 	"testing"
 	"time"
 
+	. "github.com/majewsky/gg/option"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
@@ -63,10 +64,6 @@ func mustFailLikeT(t *testing.T, err error, rx *regexp.Regexp) {
 	} else if !rx.MatchString(err.Error()) {
 		t.Errorf("expected to fail with %q, but failed with %q", rx.String(), err.Error())
 	}
-}
-
-func p2u64(x uint64) *uint64 {
-	return &x
 }
 
 func prepareDomainsAndProjectsForScrape(t *testing.T, s test.Setup) {
@@ -306,7 +303,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 			CreatedAt:    now,
 			CreatorUUID:  "dummy",
 			CreatorName:  "dummy",
-			ConfirmedAt:  &now,
+			ConfirmedAt:  Some(now),
 			ExpiresAt:    commitmentForOneYear.AddTo(now),
 			State:        db.CommitmentStateActive,
 		}))
@@ -319,7 +316,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 		CreatedAt:    now,
 		CreatorUUID:  "dummy",
 		CreatorName:  "dummy",
-		ConfirmedAt:  &now,
+		ConfirmedAt:  Some(now),
 		ExpiresAt:    commitmentForOneYear.AddTo(now),
 		State:        db.CommitmentStateActive,
 	}))
@@ -330,7 +327,7 @@ func Test_ScrapeSuccess(t *testing.T) {
 		CreatedAt:    now,
 		CreatorUUID:  "dummy",
 		CreatorName:  "dummy",
-		ConfirmBy:    &now,
+		ConfirmBy:    Some(now),
 		ExpiresAt:    commitmentForOneYear.AddTo(now),
 		State:        db.CommitmentStatePending,
 	}))

@@ -27,6 +27,7 @@ import (
 	"math/big"
 
 	"github.com/gophercloud/gophercloud/v2"
+	. "github.com/majewsky/gg/option" //nolint:stylecheck
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
@@ -62,21 +63,19 @@ type GenericQuotaPlugin struct {
 // Init implements the core.QuotaPlugin interface.
 func (p *GenericQuotaPlugin) Init(ctx context.Context, provider *gophercloud.ProviderClient, eo gophercloud.EndpointOpts, serviceType db.ServiceType) error {
 	p.ServiceType = serviceType
-	thingsAZQuota := int64(21)
-	capacityAZQuota := int64(50)
 	p.StaticResourceData = map[liquid.ResourceName]*core.ResourceData{
 		"things": {
 			Quota: 42,
 			UsageData: core.PerAZ[core.UsageData]{
-				"az-one": {Usage: 2, Quota: &thingsAZQuota},
-				"az-two": {Usage: 2, Quota: &thingsAZQuota},
+				"az-one": {Usage: 2, Quota: Some[int64](21)},
+				"az-two": {Usage: 2, Quota: Some[int64](21)},
 			},
 		},
 		"capacity": {
 			Quota: 100,
 			UsageData: core.PerAZ[core.UsageData]{
-				"az-one": {Usage: 0, Quota: &capacityAZQuota},
-				"az-two": {Usage: 0, Quota: &capacityAZQuota},
+				"az-one": {Usage: 0, Quota: Some[int64](50)},
+				"az-two": {Usage: 0, Quota: Some[int64](50)},
 			},
 		},
 	}
@@ -155,7 +154,7 @@ func (p *GenericQuotaPlugin) ScrapeRates(ctx context.Context, project core.Keyst
 func (p *GenericQuotaPlugin) BuildServiceUsageRequest(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (liquid.ServiceUsageRequest, error) {
 	return liquid.ServiceUsageRequest{
 		AllAZs:          []liquid.AvailabilityZone{"az-one", "az-two"},
-		ProjectMetadata: project.ForLiquid(),
+		ProjectMetadata: Some(project.ForLiquid()),
 	}, nil
 }
 
@@ -206,8 +205,7 @@ func (p *GenericQuotaPlugin) Scrape(ctx context.Context, project core.KeystonePr
 		// test coverage for PhysicalUsage != Usage
 		if key == "capacity" {
 			for _, data := range copyOfVal.UsageData {
-				physUsage := data.Usage / 2
-				data.PhysicalUsage = &physUsage
+				data.PhysicalUsage = Some(data.Usage / 2)
 			}
 
 			// derive a resource that does not track quota
@@ -223,11 +221,11 @@ func (p *GenericQuotaPlugin) Scrape(ctx context.Context, project core.KeystonePr
 		// test MinQuota/MaxQuota if requested
 		minQuota, exists := p.MinQuota[key]
 		if exists {
-			copyOfVal.MinQuota = &minQuota
+			copyOfVal.MinQuota = Some(minQuota)
 		}
 		maxQuota, exists := p.MaxQuota[key]
 		if exists {
-			copyOfVal.MaxQuota = &maxQuota
+			copyOfVal.MaxQuota = Some(maxQuota)
 		}
 
 		result[key] = copyOfVal

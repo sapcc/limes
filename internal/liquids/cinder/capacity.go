@@ -26,6 +26,7 @@ import (
 
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/schedulerstats"
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/services"
+	. "github.com/majewsky/gg/option" //nolint:stylecheck
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/liquidapi"
 	"github.com/sapcc/go-bits/logg"
@@ -167,7 +168,7 @@ func (l *Logic) buildAZCapacityReportForPoolSet(pools []StoragePool, rawDemands 
 		builder := liquid.SubcapacityBuilder[StoragePoolAttributes]{
 			Name:       pool.Name,
 			Capacity:   uint64(pool.Capabilities.TotalCapacityGB),
-			Usage:      &usage,
+			Usage:      Some(usage),
 			Attributes: StoragePoolAttributes{},
 		}
 
@@ -189,7 +190,7 @@ func (l *Logic) buildAZCapacityReportForPoolSet(pools []StoragePool, rawDemands 
 		}
 
 		totalCapacityGiB += builder.Capacity
-		totalUsageGiB += *builder.Usage
+		totalUsageGiB += builder.Usage.UnwrapOr(0)
 	}
 
 	// distribute capacity and usage between the relevant volume types
@@ -206,7 +207,7 @@ func (l *Logic) buildAZCapacityReportForPoolSet(pools []StoragePool, rawDemands 
 	for volumeType := range rawDemands {
 		result[volumeType] = &liquid.AZResourceCapacityReport{
 			Capacity: distributedCapacityGiB[volumeType],
-			Usage:    liquids.PointerTo(distributedUsageGiB[volumeType]),
+			Usage:    Some(distributedUsageGiB[volumeType]),
 		}
 	}
 

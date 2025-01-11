@@ -241,7 +241,7 @@ func (c *Cluster) QuotaDistributionConfigForResource(serviceType db.ServiceType,
 	fullName := string(serviceType) + "/" + string(resourceName)
 	for _, dmCfg := range c.Config.QuotaDistributionConfigs {
 		if dmCfg.FullResourceNameRx.MatchString(fullName) {
-			return *dmCfg
+			return dmCfg
 		}
 	}
 

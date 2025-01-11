@@ -25,6 +25,7 @@ import (
 	"slices"
 	"time"
 
+	. "github.com/majewsky/gg/option" //nolint:stylecheck
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/jobloop"
@@ -187,7 +188,7 @@ func (c *Collector) processResourceScrapeTask(ctx context.Context, task projectS
 			)
 		}
 
-		if srv.ScrapedAt == nil {
+		if srv.ScrapedAt.IsNone() {
 			// see explanation inside the called function's body
 			err := c.writeDummyResources(dbDomain, dbProject, srv.Ref())
 			if err != nil {
@@ -258,7 +259,7 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 		resInfo := c.Cluster.InfoForResource(srv.Type, res.Name)
 		if resInfo.HasQuota {
 			if resInfo.Topology != liquid.AZSeparatedResourceTopology {
-				res.BackendQuota = &backendQuota
+				res.BackendQuota = Some[int64](backendQuota)
 			}
 			res.MinQuotaFromBackend = resourceData[res.Name].MinQuota
 			res.MaxQuotaFromBackend = resourceData[res.Name].MaxQuota
@@ -322,7 +323,7 @@ func (c *Collector) writeResourceScrapeResult(dbDomain db.Domain, dbProject db.P
 				if resInfo.Topology == liquid.AZSeparatedResourceTopology && resInfo.HasQuota {
 					azRes.BackendQuota = data.Quota
 				} else {
-					azRes.BackendQuota = nil
+					azRes.BackendQuota = None[int64]()
 				}
 
 				// warn when the backend is inconsistent with itself
@@ -414,9 +415,8 @@ func (c *Collector) writeDummyResources(dbDomain db.Domain, dbProject db.Project
 	dbResources, err := datamodel.ProjectResourceUpdate{
 		UpdateResource: func(res *db.ProjectResource) error {
 			resInfo := c.Cluster.InfoForResource(srv.Type, res.Name)
-			if resInfo.HasQuota && res.BackendQuota == nil {
-				dummyBackendQuota := int64(-1)
-				res.BackendQuota = &dummyBackendQuota
+			if resInfo.HasQuota && res.BackendQuota.IsNone() {
+				res.BackendQuota = Some[int64](-1)
 			}
 			return nil
 		},

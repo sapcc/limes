@@ -22,6 +22,7 @@ package datamodel
 import (
 	"testing"
 
+	. "github.com/majewsky/gg/option"
 	"github.com/sapcc/go-bits/assert"
 
 	"github.com/sapcc/limes/internal/core"
@@ -39,7 +40,7 @@ func TestCanAcceptCommitmentChanges(t *testing.T) {
 		},
 	}
 	behavior := core.ResourceBehavior{
-		CommitmentUntilPercent: p2f64(100),
+		CommitmentUntilPercent: Some[float64](100),
 	}
 	additions := map[db.ProjectResourceID]uint64{2: 300}
 	result := stats.CanAcceptCommitmentChanges(additions, nil, behavior)
@@ -48,7 +49,7 @@ func TestCanAcceptCommitmentChanges(t *testing.T) {
 	// not acceptable: even though there would be enough capacity to cover this commitment,
 	// this addition exceeds the portion of capacity that is allowed to be committed
 	restrictiveBehavior := core.ResourceBehavior{
-		CommitmentUntilPercent: p2f64(50),
+		CommitmentUntilPercent: Some[float64](50),
 	}
 	additions = map[db.ProjectResourceID]uint64{2: 300}
 	result = stats.CanAcceptCommitmentChanges(additions, nil, restrictiveBehavior)
@@ -79,8 +80,4 @@ func TestCanAcceptCommitmentChanges(t *testing.T) {
 	subtractions := map[db.ProjectResourceID]uint64{2: 3}
 	result = stats.CanAcceptCommitmentChanges(nil, subtractions, behavior)
 	assert.DeepEqual(t, "CanAcceptCommitmentChanges", result, true)
-}
-
-func p2f64(value float64) *float64 {
-	return &value
 }

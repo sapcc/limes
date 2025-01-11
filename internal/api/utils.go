@@ -26,25 +26,12 @@ import (
 	"github.com/sapcc/go-api-declarations/limes"
 )
 
-func maybeUnixEncodedTime(t *time.Time) *limes.UnixEncodedTime {
-	if t == nil {
-		return nil
-	}
-	return &limes.UnixEncodedTime{Time: *t}
+func intoUnixEncodedTime(t time.Time) limes.UnixEncodedTime {
+	return limes.UnixEncodedTime{Time: t}
 }
 
-func maybeUnpackUnixEncodedTime(t *limes.UnixEncodedTime) *time.Time {
-	if t == nil {
-		return nil
-	}
-	return &t.Time
-}
-
-func unwrapOrDefault[T any](value *T, defaultValue T) T {
-	if value == nil {
-		return defaultValue
-	}
-	return *value
+func fromUnixEncodedTime(t limes.UnixEncodedTime) time.Time {
+	return t.Time
 }
 
 // Generates a token that is used to transfer a commitment from a source to a target project.

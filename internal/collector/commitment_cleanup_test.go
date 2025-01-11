@@ -23,6 +23,7 @@ import (
 	"testing"
 	"time"
 
+	. "github.com/majewsky/gg/option"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-bits/easypg"
 	"github.com/sapcc/go-bits/jobloop"
@@ -77,7 +78,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 		Amount:       10,
 		Duration:     commitmentForOneDay,
 		CreatedAt:    s.Clock.Now(),
-		ConfirmedAt:  pointerTo(s.Clock.Now()),
+		ConfirmedAt:  Some(s.Clock.Now()),
 		ExpiresAt:    commitmentForThreeYears.AddTo(s.Clock.Now()),
 		State:        db.CommitmentStateActive,
 	}))
@@ -90,7 +91,7 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 		Amount:       10,
 		Duration:     commitmentForOneDay,
 		CreatedAt:    s.Clock.Now().Add(-oneDay),
-		ConfirmedAt:  pointerTo(s.Clock.Now().Add(-oneDay)),
+		ConfirmedAt:  Some(s.Clock.Now().Add(-oneDay)),
 		ExpiresAt:    s.Clock.Now(),
 		State:        db.CommitmentStateActive,
 	}))
@@ -117,9 +118,9 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 		Amount:       10,
 		Duration:     commitmentForOneDay,
 		CreatedAt:    s.Clock.Now().Add(-oneDay),
-		ConfirmedAt:  pointerTo(s.Clock.Now().Add(-oneDay)),
+		ConfirmedAt:  Some(s.Clock.Now().Add(-oneDay)),
 		ExpiresAt:    s.Clock.Now(),
-		SupersededAt: pointerTo(s.Clock.Now().Add(-oneDay).Add(5 * time.Minute)),
+		SupersededAt: Some(s.Clock.Now().Add(-oneDay).Add(5 * time.Minute)),
 		State:        db.CommitmentStateSuperseded,
 	}))
 	mustT(t, c.DB.Insert(&db.ProjectCommitment{
@@ -128,10 +129,10 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 		Amount:        10,
 		Duration:      commitmentForOneDay,
 		CreatedAt:     s.Clock.Now().Add(-oneDay).Add(5 * time.Minute),
-		ConfirmedAt:   pointerTo(s.Clock.Now().Add(-oneDay)),
+		ConfirmedAt:   Some(s.Clock.Now().Add(-oneDay)),
 		ExpiresAt:     s.Clock.Now(),
 		State:         db.CommitmentStateActive,
-		PredecessorID: pointerTo(db.ProjectCommitmentID(3)),
+		PredecessorID: Some(db.ProjectCommitmentID(3)),
 	}))
 	tr.DBChanges().Ignore()
 
@@ -148,8 +149,4 @@ func TestCleanupOldCommitmentsJob(t *testing.T) {
 	// ...and then the superseded commitment can be cleaned up because it does not have predecessors left
 	mustT(t, job.ProcessOne(s.Ctx))
 	tr.DBChanges().AssertEqualf(`DELETE FROM project_commitments WHERE id = 3 AND transfer_token = NULL;`)
-}
-
-func pointerTo[T any](val T) *T {
-	return &val
 }

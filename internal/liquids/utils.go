@@ -20,6 +20,9 @@
 package liquids
 
 // PointerTo casts T into *T without going through a named variable.
+//
+// Warning: This should only be used if an external API demands a pointer type.
+// When using an internal type, check if the type could be changed from *T to Option[T].
 func PointerTo[T any](value T) *T {
 	return &value
 }

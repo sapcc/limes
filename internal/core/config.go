@@ -44,9 +44,9 @@ type ClusterConfiguration struct {
 	Services          []ServiceConfiguration   `yaml:"services"`
 	Capacitors        []CapacitorConfiguration `yaml:"capacitors"`
 	// ^ Sorry for the stupid pun. Not.
-	ResourceBehaviors        []ResourceBehavior                `yaml:"resource_behavior"`
-	RateBehaviors            []RateBehavior                    `yaml:"rate_behavior"`
-	QuotaDistributionConfigs []*QuotaDistributionConfiguration `yaml:"quota_distribution_configs"`
+	ResourceBehaviors        []ResourceBehavior               `yaml:"resource_behavior"`
+	RateBehaviors            []RateBehavior                   `yaml:"rate_behavior"`
+	QuotaDistributionConfigs []QuotaDistributionConfiguration `yaml:"quota_distribution_configs"`
 }
 
 // GetServiceConfigurationForType returns the ServiceConfiguration or false.

@@ -28,10 +28,6 @@ import (
 	"github.com/sapcc/go-api-declarations/liquid"
 )
 
-func p2u64(val uint64) *uint64 {
-	return &val
-}
-
 func SortedMapKeys[M map[K]V, K ~string, V any](mapToSort M) []K {
 	sortedKeys := slices.Collect(maps.Keys(mapToSort))
 	slices.Sort(sortedKeys)

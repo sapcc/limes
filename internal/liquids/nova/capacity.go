@@ -22,6 +22,8 @@ package nova
 import (
 	"fmt"
 
+	. "github.com/majewsky/gg/option" //nolint:stylecheck
+
 	"github.com/sapcc/limes/internal/core"
 )
 
@@ -71,13 +73,13 @@ func (c PartialCapacity) IntoCapacityData(resourceName string, maxRootDiskSize f
 	case "cores":
 		return core.CapacityData{
 			Capacity:      c.VCPUs.Capacity,
-			Usage:         &c.VCPUs.Usage,
+			Usage:         Some(c.VCPUs.Usage),
 			Subcapacities: subcapacities,
 		}
 	case "ram":
 		return core.CapacityData{
 			Capacity:      c.MemoryMB.Capacity,
-			Usage:         &c.MemoryMB.Usage,
+			Usage:         Some(c.MemoryMB.Usage),
 			Subcapacities: subcapacities,
 		}
 	case "instances":
@@ -90,7 +92,7 @@ func (c PartialCapacity) IntoCapacityData(resourceName string, maxRootDiskSize f
 		}
 		return core.CapacityData{
 			Capacity:      amount,
-			Usage:         &c.RunningVMs,
+			Usage:         Some(c.RunningVMs),
 			Subcapacities: subcapacities,
 		}
 	default:

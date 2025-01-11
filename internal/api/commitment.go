@@ -29,6 +29,8 @@ import (
 	"time"
 
 	"github.com/gorilla/mux"
+	. "github.com/majewsky/gg/option" //nolint:stylecheck
+	"github.com/majewsky/gg/options"
 	"github.com/sapcc/go-api-declarations/cadf"
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
@@ -43,7 +45,6 @@ import (
 	"github.com/sapcc/limes/internal/core"
 	"github.com/sapcc/limes/internal/datamodel"
 	"github.com/sapcc/limes/internal/db"
-	"github.com/sapcc/limes/internal/liquids"
 	"github.com/sapcc/limes/internal/reports"
 )
 
@@ -208,11 +209,11 @@ func (p *v1Provider) convertCommitmentToDisplayForm(c db.ProjectCommitment, loc 
 		CreatorUUID:      c.CreatorUUID,
 		CreatorName:      c.CreatorName,
 		CanBeDeleted:     p.canDeleteCommitment(token, c),
-		ConfirmBy:        maybeUnixEncodedTime(c.ConfirmBy),
-		ConfirmedAt:      maybeUnixEncodedTime(c.ConfirmedAt),
+		ConfirmBy:        options.Map(c.ConfirmBy, intoUnixEncodedTime).AsPointer(),
+		ConfirmedAt:      options.Map(c.ConfirmedAt, intoUnixEncodedTime).AsPointer(),
 		ExpiresAt:        limes.UnixEncodedTime{Time: c.ExpiresAt},
 		TransferStatus:   c.TransferStatus,
-		TransferToken:    c.TransferToken,
+		TransferToken:    c.TransferToken.AsPointer(),
 	}
 }
 
@@ -309,7 +310,7 @@ func (p *v1Provider) CanConfirmNewProjectCommitment(w http.ResponseWriter, r *ht
 
 	// commitments can never be confirmed immediately if we are before the min_confirm_date
 	now := p.timeNow()
-	if behavior.CommitmentMinConfirmDate != nil && behavior.CommitmentMinConfirmDate.After(now) {
+	if behavior.CommitmentMinConfirmDate.IsSomeAnd(func(t time.Time) bool { return t.After(now) }) {
 		respondwith.JSON(w, http.StatusOK, map[string]bool{"result": false})
 		return
 	}
@@ -364,9 +365,9 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		http.Error(w, "confirm_by must not be set in the past", http.StatusUnprocessableEntity)
 		return
 	}
-	if minConfirmBy := behavior.CommitmentMinConfirmDate; minConfirmBy != nil && minConfirmBy.After(now) {
-		if req.ConfirmBy == nil || req.ConfirmBy.Before(*minConfirmBy) {
-			msg := "this commitment needs a `confirm_by` timestamp at or after " + behavior.CommitmentMinConfirmDate.Format(time.RFC3339)
+	if minConfirmBy, ok := behavior.CommitmentMinConfirmDate.Unpack(); ok && minConfirmBy.After(now) {
+		if req.ConfirmBy == nil || req.ConfirmBy.Before(minConfirmBy) {
+			msg := "this commitment needs a `confirm_by` timestamp at or after " + minConfirmBy.Format(time.RFC3339)
 			http.Error(w, msg, http.StatusUnprocessableEntity)
 			return
 		}
@@ -380,7 +381,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 	defer sqlext.RollbackUnlessCommitted(tx)
 
 	// prepare commitment
-	confirmBy := maybeUnpackUnixEncodedTime(req.ConfirmBy)
+	confirmBy := options.Map(options.FromPointer(req.ConfirmBy), fromUnixEncodedTime)
 	dbCommitment := db.ProjectCommitment{
 		AZResourceID: azResourceID,
 		Amount:       req.Amount,
@@ -389,8 +390,8 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 		CreatorUUID:  token.UserUUID(),
 		CreatorName:  fmt.Sprintf("%s@%s", token.UserName(), token.UserDomainName()),
 		ConfirmBy:    confirmBy,
-		ConfirmedAt:  nil, // may be set below
-		ExpiresAt:    req.Duration.AddTo(unwrapOrDefault(confirmBy, now)),
+		ConfirmedAt:  None[time.Time](), // may be set below
+		ExpiresAt:    req.Duration.AddTo(confirmBy.UnwrapOr(now)),
 	}
 	if req.ConfirmBy == nil {
 		// if not planned for confirmation in the future, confirm immediately (or fail)
@@ -402,7 +403,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 			http.Error(w, "not enough capacity available for immediate confirmation", http.StatusConflict)
 			return
 		}
-		dbCommitment.ConfirmedAt = &now
+		dbCommitment.ConfirmedAt = Some(now)
 		dbCommitment.State = db.CommitmentStateActive
 	} else {
 		dbCommitment.State = db.CommitmentStatePlanned
@@ -434,7 +435,7 @@ func (p *v1Provider) CreateProjectCommitment(w http.ResponseWriter, r *http.Requ
 
 	// if the commitment is immediately confirmed, trigger a capacity scrape in
 	// order to ApplyComputedProjectQuotas based on the new commitment
-	if dbCommitment.ConfirmedAt != nil {
+	if dbCommitment.ConfirmedAt.IsSome() {
 		_, err := p.DB.Exec(forceImmediateCapacityScrapeQuery, now, loc.ServiceType, loc.ResourceName)
 		if respondwith.ErrorText(w, err) {
 			return
@@ -519,7 +520,7 @@ func (p *v1Provider) DeleteProjectCommitment(w http.ResponseWriter, r *http.Requ
 func (p *v1Provider) canDeleteCommitment(token *gopherpolicy.Token, commitment db.ProjectCommitment) bool {
 	// up to 24 hours after creation of fresh commitments, future commitments can still be deleted by their creators
 	if commitment.State == db.CommitmentStatePlanned || commitment.State == db.CommitmentStatePending || commitment.State == db.CommitmentStateActive {
-		if commitment.PredecessorID == nil && p.timeNow().Before(commitment.CreatedAt.Add(24*time.Hour)) {
+		if commitment.PredecessorID.IsNone() && p.timeNow().Before(commitment.CreatedAt.Add(24*time.Hour)) {
 			if token.Check("project:edit") {
 				return true
 			}
@@ -596,7 +597,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 
 	if req.Amount == dbCommitment.Amount {
 		dbCommitment.TransferStatus = req.TransferStatus
-		dbCommitment.TransferToken = &transferToken
+		dbCommitment.TransferToken = Some(transferToken)
 		_, err = tx.Update(&dbCommitment)
 		if respondwith.ErrorText(w, err) {
 			return
@@ -607,7 +608,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 		remainingAmount := dbCommitment.Amount - req.Amount
 		transferCommitment := p.buildSplitCommitment(dbCommitment, transferAmount)
 		transferCommitment.TransferStatus = req.TransferStatus
-		transferCommitment.TransferToken = &transferToken
+		transferCommitment.TransferToken = Some(transferToken)
 		remainingCommitment := p.buildSplitCommitment(dbCommitment, remainingAmount)
 		err = tx.Insert(&transferCommitment)
 		if respondwith.ErrorText(w, err) {
@@ -618,7 +619,7 @@ func (p *v1Provider) StartCommitmentTransfer(w http.ResponseWriter, r *http.Requ
 			return
 		}
 		dbCommitment.State = db.CommitmentStateSuperseded
-		dbCommitment.SupersededAt = &now
+		dbCommitment.SupersededAt = Some(now)
 		_, err = tx.Update(&dbCommitment)
 		if respondwith.ErrorText(w, err) {
 			return
@@ -672,7 +673,7 @@ func (p *v1Provider) buildSplitCommitment(dbCommitment db.ProjectCommitment, amo
 		ConfirmBy:     dbCommitment.ConfirmBy,
 		ConfirmedAt:   dbCommitment.ConfirmedAt,
 		ExpiresAt:     dbCommitment.ExpiresAt,
-		PredecessorID: &dbCommitment.ID,
+		PredecessorID: Some(dbCommitment.ID),
 		State:         dbCommitment.State,
 	}
 }
@@ -792,7 +793,7 @@ func (p *v1Provider) TransferCommitment(w http.ResponseWriter, r *http.Request) 
 	}
 
 	dbCommitment.TransferStatus = ""
-	dbCommitment.TransferToken = nil
+	dbCommitment.TransferToken = None[string]()
 	dbCommitment.AZResourceID = targetAZResourceID
 	_, err = tx.Update(&dbCommitment)
 	if respondwith.ErrorText(w, err) {
@@ -1013,7 +1014,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	}
 	// The commitment at the source resource was already confirmed and checked.
 	// Therefore only the addition to the target resource has to be checked against.
-	if dbCommitment.ConfirmedAt != nil {
+	if dbCommitment.ConfirmedAt.IsSome() {
 		ok, err := datamodel.CanConfirmNewCommitment(targetLoc, targetResourceID, conversionAmount, p.Cluster, p.DB)
 		if respondwith.ErrorText(w, err) {
 			return
@@ -1029,7 +1030,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 		DomainName:           dbDomain.Name,
 		ProjectID:            dbProject.UUID,
 		ProjectName:          dbProject.Name,
-		SupersededCommitment: liquids.PointerTo(p.convertCommitmentToDisplayForm(dbCommitment, sourceLoc, token)),
+		SupersededCommitment: Some(p.convertCommitmentToDisplayForm(dbCommitment, sourceLoc, token)),
 	}
 
 	remainingAmount := dbCommitment.Amount - req.SourceAmount
@@ -1053,7 +1054,7 @@ func (p *v1Provider) ConvertCommitment(w http.ResponseWriter, r *http.Request) {
 	// supersede the original commitment
 	now := p.timeNow()
 	dbCommitment.State = db.CommitmentStateSuperseded
-	dbCommitment.SupersededAt = &now
+	dbCommitment.SupersededAt = Some(now)
 	_, err = tx.Update(&dbCommitment)
 	if respondwith.ErrorText(w, err) {
 		return
@@ -1151,7 +1152,7 @@ func (p *v1Provider) UpdateCommitmentDuration(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	newExpiresAt := req.Duration.AddTo(unwrapOrDefault(dbCommitment.ConfirmBy, dbCommitment.CreatedAt))
+	newExpiresAt := req.Duration.AddTo(dbCommitment.ConfirmBy.UnwrapOr(dbCommitment.CreatedAt))
 	if newExpiresAt.Before(dbCommitment.ExpiresAt) {
 		msg := fmt.Sprintf("duration change from %s to %s forbidden", dbCommitment.Duration, req.Duration)
 		http.Error(w, msg, http.StatusForbidden)

@@ -26,8 +26,8 @@ import (
 	"strings"
 
 	"github.com/gophercloud/gophercloud/v2"
+	. "github.com/majewsky/gg/option" //nolint:stylecheck
 	"github.com/prometheus/client_golang/prometheus"
-
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
 
@@ -72,11 +72,10 @@ func (p *StaticCapacityPlugin) Scrape(ctx context.Context, _ core.CapacityPlugin
 		}
 		result := core.CapacityData{
 			Capacity:      capacity,
-			Usage:         &usage,
 			Subcapacities: subcapacities,
 		}
-		if p.WithoutUsage {
-			result.Usage = nil
+		if !p.WithoutUsage {
+			result.Usage = Some(usage)
 		}
 		return &result
 	}

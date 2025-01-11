@@ -28,6 +28,7 @@ import (
 	"strings"
 
 	"github.com/gophercloud/gophercloud/v2"
+	. "github.com/majewsky/gg/option" //nolint:stylecheck
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/sapcc/go-api-declarations/limes"
 	"github.com/sapcc/go-api-declarations/liquid"
@@ -131,12 +132,11 @@ func (p *liquidQuotaPlugin) Scrape(ctx context.Context, project core.KeystonePro
 			return nil, nil, fmt.Errorf("missing report for resource %q", resName)
 		}
 
-		var resData core.ResourceData
-		if resReport.Quota != nil {
-			resData.Quota = *resReport.Quota
+		resData := core.ResourceData{
+			Quota: resReport.Quota.UnwrapOr(0), // TODO: ResourceData should use an Option type in its Quota field
 		}
 		if resReport.Forbidden {
-			resData.MaxQuota = p2u64(0) // this is a temporary approximation; TODO: make Forbidden a first-class citizen in Limes core
+			resData.MaxQuota = Some[uint64](0) // this is a temporary approximation; TODO: make Forbidden a first-class citizen in Limes core
 		}
 
 		resData.UsageData = make(core.PerAZ[core.UsageData], len(resReport.PerAZ))
@@ -146,7 +146,7 @@ func (p *liquidQuotaPlugin) Scrape(ctx context.Context, project core.KeystonePro
 				PhysicalUsage: azReport.PhysicalUsage,
 				Subresources:  castSliceToAny(azReport.Subresources),
 			}
-			if resInfo.Topology == liquid.AZSeparatedResourceTopology && azReport.Quota != nil {
+			if resInfo.Topology == liquid.AZSeparatedResourceTopology {
 				resData.UsageData[az].Quota = azReport.Quota
 			}
 		}
@@ -178,7 +178,7 @@ func (p *liquidQuotaPlugin) Scrape(ctx context.Context, project core.KeystonePro
 func (p *liquidQuotaPlugin) BuildServiceUsageRequest(project core.KeystoneProject, allAZs []limes.AvailabilityZone) (liquid.ServiceUsageRequest, error) {
 	req := liquid.ServiceUsageRequest{AllAZs: allAZs}
 	if p.LiquidServiceInfo.UsageReportNeedsProjectMetadata {
-		req.ProjectMetadata = project.ForLiquid()
+		req.ProjectMetadata = Some(project.ForLiquid())
 	}
 	return req, nil
 }
@@ -198,7 +198,7 @@ func castSliceToAny[T any](input []T) (output []any) {
 func (p *liquidQuotaPlugin) SetQuota(ctx context.Context, project core.KeystoneProject, quotaReq map[liquid.ResourceName]liquid.ResourceQuotaRequest) error {
 	req := liquid.ServiceQuotaRequest{Resources: quotaReq}
 	if p.LiquidServiceInfo.QuotaUpdateNeedsProjectMetadata {
-		req.ProjectMetadata = project.ForLiquid()
+		req.ProjectMetadata = Some(project.ForLiquid())
 	}
 
 	return p.LiquidClient.PutQuota(ctx, project.UUID, req)
@@ -220,8 +220,8 @@ func (p *liquidQuotaPlugin) ScrapeRates(ctx context.Context, project core.Keysto
 		AllAZs:          allAZs,
 		SerializedState: json.RawMessage(prevSerializedState),
 	}
-	if p.LiquidServiceInfo.QuotaUpdateNeedsProjectMetadata {
-		req.ProjectMetadata = project.ForLiquid()
+	if p.LiquidServiceInfo.UsageReportNeedsProjectMetadata {
+		req.ProjectMetadata = Some(project.ForLiquid())
 	}
 
 	resp, err := p.LiquidClient.GetUsageReport(ctx, project.UUID, req)
@@ -244,8 +244,10 @@ func (p *liquidQuotaPlugin) ScrapeRates(ctx context.Context, project core.Keysto
 		// (until this is done, we take the sum over all AZs here)
 		result[rateName] = &big.Int{}
 		for _, azReport := range rateReport.PerAZ {
-			var x big.Int
-			result[rateName] = x.Add(result[rateName], azReport.Usage)
+			if azUsage, ok := azReport.Usage.Unpack(); ok {
+				var x big.Int
+				result[rateName] = x.Add(result[rateName], azUsage)
+			}
 		}
 	}
 

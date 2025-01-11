@@ -75,8 +75,8 @@ func (c clusterAZAllocationStats) CanAcceptCommitmentChanges(additions, subtract
 
 	// commitment can be confirmed if it and all other commitments and usage fit in the committable portion of the total capacity
 	committableCapacity := c.Capacity
-	if behavior.CommitmentUntilPercent != nil {
-		committableCapacity = uint64(float64(c.Capacity) * *behavior.CommitmentUntilPercent / 100)
+	if percent, ok := behavior.CommitmentUntilPercent.Unpack(); ok {
+		committableCapacity = uint64(float64(c.Capacity) * percent / 100)
 	}
 	if usedCapacity <= committableCapacity {
 		logg.Debug("CanAcceptCommitmentChanges: accepted")

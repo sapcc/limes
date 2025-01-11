@@ -24,6 +24,7 @@ import (
 	"strings"
 	"time"
 
+	. "github.com/majewsky/gg/option" //nolint:stylecheck
 	"github.com/sapcc/go-api-declarations/limes"
 	limesresources "github.com/sapcc/go-api-declarations/limes/resources"
 	"github.com/sapcc/go-api-declarations/liquid"
@@ -37,8 +38,8 @@ type ResourceBehavior struct {
 	FullResourceNameRx       regexpext.BoundedRegexp             `yaml:"resource"`
 	OvercommitFactor         liquid.OvercommitFactor             `yaml:"overcommit_factor"`
 	CommitmentDurations      []limesresources.CommitmentDuration `yaml:"commitment_durations"`
-	CommitmentMinConfirmDate *time.Time                          `yaml:"commitment_min_confirm_date"`
-	CommitmentUntilPercent   *float64                            `yaml:"commitment_until_percent"`
+	CommitmentMinConfirmDate Option[time.Time]                   `yaml:"commitment_min_confirm_date"`
+	CommitmentUntilPercent   Option[float64]                     `yaml:"commitment_until_percent"`
 	CommitmentConversion     CommitmentConversion                `yaml:"commitment_conversion"`
 	IdentityInV1API          ResourceRef                         `yaml:"identity_in_v1_api"`
 	TranslationRuleInV1API   TranslationRule                     `yaml:"translation_rule_in_v1_api"`
@@ -53,10 +54,8 @@ func (b *ResourceBehavior) Validate(path string) (errs errext.ErrorSet) {
 	if b.FullResourceNameRx == "" {
 		errs.Addf("missing configuration value: %s.resource", path)
 	}
-	if b.CommitmentUntilPercent != nil {
-		if *b.CommitmentUntilPercent > 100 {
-			errs.Addf("invalid value: %s.commitment_until_percent may not be bigger than 100", path)
-		}
+	if b.CommitmentUntilPercent.IsSomeAnd(func(val float64) bool { return val > 100 }) {
+		errs.Addf("invalid value: %s.commitment_until_percent may not be bigger than 100", path)
 	}
 
 	return errs
@@ -71,8 +70,8 @@ func (b ResourceBehavior) ToCommitmentConfig(now time.Time) *limesresources.Comm
 	result := limesresources.CommitmentConfiguration{
 		Durations: b.CommitmentDurations,
 	}
-	if b.CommitmentMinConfirmDate != nil && b.CommitmentMinConfirmDate.After(now) {
-		result.MinConfirmBy = &limes.UnixEncodedTime{Time: *b.CommitmentMinConfirmDate}
+	if t, ok := b.CommitmentMinConfirmDate.Unpack(); ok && t.After(now) {
+		result.MinConfirmBy = &limes.UnixEncodedTime{Time: t}
 	}
 	return &result
 }
@@ -94,13 +93,13 @@ func (b *ResourceBehavior) Merge(other ResourceBehavior, fullResourceName string
 		b.OvercommitFactor = other.OvercommitFactor
 	}
 	b.CommitmentDurations = append(b.CommitmentDurations, other.CommitmentDurations...)
-	if other.CommitmentMinConfirmDate != nil {
-		if b.CommitmentMinConfirmDate == nil || b.CommitmentMinConfirmDate.Before(*other.CommitmentMinConfirmDate) {
+	if otherDate, ok := other.CommitmentMinConfirmDate.Unpack(); ok {
+		if b.CommitmentMinConfirmDate.IsNoneOr(func(t time.Time) bool { return t.Before(otherDate) }) {
 			b.CommitmentMinConfirmDate = other.CommitmentMinConfirmDate
 		}
 	}
-	if other.CommitmentUntilPercent != nil {
-		if b.CommitmentUntilPercent == nil || *b.CommitmentUntilPercent > *other.CommitmentUntilPercent {
+	if otherPercent, ok := other.CommitmentUntilPercent.Unpack(); ok {
+		if b.CommitmentUntilPercent.IsNoneOr(func(p float64) bool { return p > otherPercent }) {
 			b.CommitmentUntilPercent = other.CommitmentUntilPercent
 		}
 	}

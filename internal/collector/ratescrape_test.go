@@ -26,6 +26,7 @@ import (
 	"testing"
 	"time"
 
+	. "github.com/majewsky/gg/option"
 	limesrates "github.com/sapcc/go-api-declarations/limes/rates"
 	"github.com/sapcc/go-bits/assert"
 	"github.com/sapcc/go-bits/easypg"
@@ -73,8 +74,8 @@ func Test_RateScrapeSuccess(t *testing.T) {
 	err := s.DB.Insert(&db.ProjectRate{
 		ServiceID: 1,
 		Name:      "secondrate",
-		Limit:     p2u64(10),
-		Window:    p2window(1 * limesrates.WindowSeconds),
+		Limit:     Some[uint64](10),
+		Window:    Some(1 * limesrates.WindowSeconds),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -82,8 +83,8 @@ func Test_RateScrapeSuccess(t *testing.T) {
 	err = s.DB.Insert(&db.ProjectRate{
 		ServiceID: 1,
 		Name:      "otherrate",
-		Limit:     p2u64(42),
-		Window:    p2window(2 * limesrates.WindowMinutes),
+		Limit:     Some[uint64](42),
+		Window:    Some(2 * limesrates.WindowMinutes),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -205,10 +206,6 @@ func Test_RateScrapeFailure(t *testing.T) {
 	`,
 		checkedAt.Unix(), checkedAt.Add(recheckInterval).Unix(),
 	)
-}
-
-func p2window(val limesrates.Window) *limesrates.Window {
-	return &val
 }
 
 func Test_ScrapeRatesButNoRates(t *testing.T) {

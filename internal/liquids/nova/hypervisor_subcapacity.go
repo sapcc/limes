@@ -20,6 +20,7 @@
 package nova
 
 import (
+	. "github.com/majewsky/gg/option" //nolint:stylecheck
 	"github.com/sapcc/go-api-declarations/limes"
 )
 
@@ -32,8 +33,8 @@ type Subcapacity struct {
 	ServiceHost      string                 `json:"service_host"`
 	AvailabilityZone limes.AvailabilityZone `json:"az"`
 	AggregateName    string                 `json:"aggregate"`
-	Capacity         *uint64                `json:"capacity,omitempty"`
-	Usage            *uint64                `json:"usage,omitempty"`
+	Capacity         Option[uint64]         `json:"capacity,omitzero"`
+	Usage            Option[uint64]         `json:"usage,omitzero"`
 	CapacityVector   *BinpackVector[uint64] `json:"capacity_vector,omitempty"`
 	UsageVector      *BinpackVector[uint64] `json:"usage_vector,omitempty"`
 	Traits           []string               `json:"traits"`
@@ -56,7 +57,7 @@ func (b *PooledSubcapacityBuilder) AddHypervisor(h MatchingHypervisor, maxRootDi
 		ServiceHost:      h.Hypervisor.Service.Host,
 		AggregateName:    h.AggregateName,
 		AvailabilityZone: h.AvailabilityZone,
-		Capacity:         &hvCoresCapa.Capacity,
+		Capacity:         Some(hvCoresCapa.Capacity),
 		Usage:            hvCoresCapa.Usage,
 		Traits:           h.Traits,
 	})
@@ -65,7 +66,7 @@ func (b *PooledSubcapacityBuilder) AddHypervisor(h MatchingHypervisor, maxRootDi
 		ServiceHost:      h.Hypervisor.Service.Host,
 		AggregateName:    h.AggregateName,
 		AvailabilityZone: h.AvailabilityZone,
-		Capacity:         &hvInstancesCapa.Capacity,
+		Capacity:         Some(hvInstancesCapa.Capacity),
 		Usage:            hvInstancesCapa.Usage,
 		Traits:           h.Traits,
 	})
@@ -74,7 +75,7 @@ func (b *PooledSubcapacityBuilder) AddHypervisor(h MatchingHypervisor, maxRootDi
 		ServiceHost:      h.Hypervisor.Service.Host,
 		AggregateName:    h.AggregateName,
 		AvailabilityZone: h.AvailabilityZone,
-		Capacity:         &hvRAMCapa.Capacity,
+		Capacity:         Some(hvRAMCapa.Capacity),
 		Usage:            hvRAMCapa.Usage,
 		Traits:           h.Traits,
 	})
