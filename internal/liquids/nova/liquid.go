@@ -42,7 +42,7 @@ type Logic struct {
 	WithSubresources    bool                `json:"with_subresources"`
 	WithSubcapacities   bool                `json:"with_subcapacities"`
 	BinpackBehavior     BinpackBehavior     `json:"binpack_behavior"`
-	IgnoredTraits       []string            `json:"ignore_traits"`
+	IgnoredTraits       []string            `json:"ignored_traits"`
 	// connections
 	NovaV2            *gophercloud.ServiceClient `json:"-"`
 	PlacementV1       *gophercloud.ServiceClient `json:"-"`
