@@ -33,9 +33,9 @@ import (
 type FlavorAttributes struct {
 	Name           string  `json:"name"`
 	VCPUs          uint64  `json:"vcpu"`
-	MemoryMiB      uint64  `json:"ram"`
-	DiskGiB        uint64  `json:"disk"`
-	VideoMemoryMiB *uint64 `json:"video_ram,omitempty"`
+	MemoryMiB      uint64  `json:"ram_mib"`
+	DiskGiB        uint64  `json:"disk_gib"`
+	VideoMemoryMiB *uint64 `json:"video_ram_mib,omitempty"`
 	HWVersion      string  `json:"-"` // this is only used for sorting the subresource into the right resource
 }
 
