@@ -87,7 +87,11 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 	// - EachPage (limit = 100):   20.21MB
 	//
 	nodesByFlavorName := make(map[string][]Node)
-	opts := &nodes.ListOpts{Limit: 50}
+	// set a base value if the value is not provided by config
+	if l.NodeDetailPageLimit == 0 {
+		l.NodeDetailPageLimit = 100
+	}
+	opts := &nodes.ListOpts{Limit: l.NodeDetailPageLimit}
 	err = ListNodesDetail(l.IronicV1, opts).EachPage(ctx, func(ctx context.Context, page pagination.Page) (bool, error) {
 		var nodes []Node
 		err = ExtractNodesInto(page, &nodes)
