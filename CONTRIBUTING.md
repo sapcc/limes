@@ -5,11 +5,19 @@ This guide describes Limes' code structure and contains everything that you need
 ## Prerequisites
 
 - [PostgreSQL](https://www.postgresql.org/)
-  - It's enough to have the server binaries installed.
+  - The minimum is to have the server binaries installed.
+    The `pg_ctl` command needs to be visible in `$PATH`; you might have to add an entry like `/usr/lib/postgresql/$VERSION/bin`.
     You don't need a server running; the test machinery will start a local server process on its own when needed.
+    We also recommend installing the client binaries, like `psql` or `pg_dump`, to aid with debugging of failed tests.
 - [Go](https://go.dev/)
+  - If going through your package manager, check that it does not have an ancient Go version (_\*cough\*_ Debian _\*cough\*_).
+    You should have at least the Go version required in the second paragraph of the `go.mod` file in this repository.
   - If your package manager has both `go` and `go-tools`, install both.
+    `go-tools` is technically not required, but many editors support running the code formatter contained therein (`goimports`) automatically if it is in `$PATH`.
   - Make sure that the output of `go env GOBIN` is a directory that is in your `$PATH`.
+    If `go env GOBIN` is empty, then `$(go env GOPATH)/bin` should be in your `$PATH`.
+
+Alternatively, if you have [Nix](https://nixos.org/) installed, you can run `nix-shell` to get all that in a single command.
 
 ## Testing methodology
 
