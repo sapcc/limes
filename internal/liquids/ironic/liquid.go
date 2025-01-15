@@ -40,6 +40,7 @@ type Logic struct {
 	WithSubcapacities bool                               `json:"with_subcapacities"`
 	WithSubresources  bool                               `json:"with_subresources"`
 	NodeToAZOverrides map[string]liquid.AvailabilityZone `json:"node_to_az_overrides"`
+	NodePageLimit     int                                `json:"node_page_limit"`
 	// connections
 	NovaV2       *gophercloud.ServiceClient `json:"-"`
 	IronicV1     *gophercloud.ServiceClient `json:"-"`

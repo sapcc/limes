@@ -11,6 +11,7 @@ This liquid provides support for the baremetal compute service Ironic.
 | ----- | ---- | ----------- |
 | `with_subcapacities` | boolean | If true, subcapacities are reported. |
 | `with_subresources` | boolean | If true, subresources are reported. |
+| `node_page_limit` | integer | When listing baremetal nodes during capacity calculation, only this many nodes will be listed at once. Defaults to 100. This number has a major impact on the peak memory usage of this liquid, because Ironic nodes often have an absurd amount of metadata on them that we need to parse temporarily. Reducing this number reduces memory consumption nearly linearly, at the cost of linearly increasing the amount of requests that need to be made to Ironic. |
 
 ## Resources
 
