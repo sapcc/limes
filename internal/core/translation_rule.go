@@ -345,12 +345,6 @@ func translateNovaSubcapacities(input string, az limes.AvailabilityZone, _ liqui
 		return input, nil
 	}
 
-	type BinpackVector[T float64 | uint64] struct {
-		VCPUs    T `json:"vcpus"`
-		MemoryMB T `json:"memory_mib"`
-		LocalGB  T `json:"local_disk_gib"`
-	}
-
 	type newFormat struct {
 		ID         string  `json:"id"`
 		Name       string  `json:"name"`
@@ -374,8 +368,6 @@ func translateNovaSubcapacities(input string, az limes.AvailabilityZone, _ liqui
 		AggregateName    string                 `json:"aggregate"`
 		Capacity         *uint64                `json:"capacity,omitempty"`
 		Usage            *uint64                `json:"usage,omitempty"`
-		CapacityVector   *BinpackVector[uint64] `json:"capacity_vector,omitempty"`
-		UsageVector      *BinpackVector[uint64] `json:"usage_vector,omitempty"`
 		Traits           []string               `json:"traits"`
 	}
 	outputs := make([]oldFormat, len(inputs))
@@ -413,7 +405,6 @@ func translateNovaSubresources(input string, az limes.AvailabilityZone, resName 
 				MemoryMiB      uint64  `json:"ram_mib"`
 				DiskGiB        uint64  `json:"disk_gib"`
 				VideoMemoryMiB *uint64 `json:"video_ram_mib"`
-				HWVersion      string  `json:"-"`
 			} `json:"flavor"`
 			OSType string `json:"os_type"`
 		}
@@ -437,7 +428,6 @@ func translateNovaSubresources(input string, az limes.AvailabilityZone, resName 
 		MemoryMiB      limes.ValueWithUnit    `json:"ram"`
 		DiskGiB        limes.ValueWithUnit    `json:"disk"`
 		VideoMemoryMiB *limes.ValueWithUnit   `json:"video_ram,omitempty"`
-		HWVersion      string                 `json:"-"`
 		OSType         string                 `json:"os_type"`
 	}
 	outputs := make([]oldFormat, len(inputs))
