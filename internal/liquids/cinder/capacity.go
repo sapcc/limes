@@ -60,6 +60,12 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 
 	// sort volume types by VolumeTypeInfo (if multiple volume types have the same VolumeTypeInfo, they need to share the same pools)
 	volumeTypesByInfo := make(map[VolumeTypeInfo][]VolumeType)
+	//volumeFCDInfoByType := make(map[VolumeType][]VolumeTypeFCDInfo)
+
+	for volumeType, info := range l.VolumeFCDTypes.Get() {
+		logg.Info("fcdVolType: %s, vcdInfo: %s", volumeType, info)
+	}
+
 	for volumeType, info := range l.VolumeTypes.Get() {
 		volumeTypesByInfo[info] = append(volumeTypesByInfo[info], volumeType)
 	}
@@ -255,6 +261,8 @@ type StoragePool struct {
 		VolumeBackendName   string                          `json:"volume_backend_name"`
 		TotalCapacityGB     liquids.Float64WithStringErrors `json:"total_capacity_gb"`
 		AllocatedCapacityGB liquids.Float64WithStringErrors `json:"allocated_capacity_gb"`
+		StorageProtocol     string                          `json:"storage_protocol"`
+		QualityType         string                          `json:"quality_type"`
 
 		// SAP Converged Cloud extension
 		CustomAttributes struct {

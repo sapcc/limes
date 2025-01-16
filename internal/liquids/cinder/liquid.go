@@ -29,6 +29,7 @@ import (
 	"github.com/gophercloud/gophercloud/v2/openstack/blockstorage/v3/volumetypes"
 	"github.com/sapcc/go-api-declarations/liquid"
 	"github.com/sapcc/go-bits/liquidapi"
+	"github.com/sapcc/go-bits/logg"
 )
 
 type Logic struct {
@@ -39,7 +40,8 @@ type Logic struct {
 	// connections
 	CinderV3 *gophercloud.ServiceClient `json:"-"`
 	// state
-	VolumeTypes liquidapi.State[map[VolumeType]VolumeTypeInfo] `json:"-"`
+	VolumeTypes    liquidapi.State[map[VolumeType]VolumeTypeInfo]    `json:"-"`
+	VolumeFCDTypes liquidapi.State[map[VolumeType]VolumeTypeFCDInfo] `json:"-"`
 }
 
 // VolumeType is a type with convenience functions for deriving resource names.
@@ -67,8 +69,18 @@ func (vt VolumeType) VolumesQuotaName() string {
 
 // VolumeTypeInfo contains configuration for a VolumeType.
 // We need this for matching pools with their VolumeType.
+
 type VolumeTypeInfo struct {
 	VolumeBackendName string
+}
+
+// VolumeTypeFCDInfo contains configuration for a volumeType based on FCD.
+// We need this for matching pools with their VolumeType.
+type VolumeTypeFCDInfo struct {
+	// During a transition period, legacy volumes are still matched with the volume_backend_nam.
+	VolumeBackendName string
+	StorageProtocol   string
+	QualityType       string
 }
 
 // String returns a string representation of this VolumeTypeInfo for log messages.
@@ -94,14 +106,32 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 		return liquid.ServiceInfo{}, err
 	}
 	volumeTypes := make(map[VolumeType]VolumeTypeInfo, len(vtSpecs))
+	volumeFCDTypes := make(map[VolumeType]VolumeTypeFCDInfo, len(vtSpecs))
 	for _, vtSpec := range vtSpecs {
-		if vtSpec.IsPublic && vtSpec.PublicAccess {
+		if !vtSpec.IsPublic && !vtSpec.PublicAccess {
+			continue
+		}
+
+		volumeBackendName := vtSpec.ExtraSpecs["volume_backend_name"]
+		storageProtocol := vtSpec.ExtraSpecs["storage_protocol"]
+		if storageProtocol == "" {
 			volumeTypes[VolumeType(vtSpec.Name)] = VolumeTypeInfo{
-				VolumeBackendName: vtSpec.ExtraSpecs["volume_backend_name"],
+				VolumeBackendName: volumeBackendName,
+			}
+		} else {
+			volumeFCDTypes[VolumeType(vtSpec.Name)] = VolumeTypeFCDInfo{
+				VolumeBackendName: volumeBackendName,
+				StorageProtocol:   storageProtocol,
+				QualityType:       vtSpec.ExtraSpecs["quality_type"],
 			}
 		}
 	}
+
 	l.VolumeTypes.Set(volumeTypes)
+	l.VolumeFCDTypes.Set(volumeFCDTypes)
+
+	logg.Info("volTypes: %s", volumeTypes)
+	logg.Info("volTypes: %s", volumeFCDTypes)
 
 	// build ResourceInfo set
 	resInfoForCapacity := liquid.ResourceInfo{
