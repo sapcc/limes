@@ -4,115 +4,120 @@ This guide describes Limes' code structure and contains everything that you need
 
 ## Prerequisites
 
-* Postgres
-* Go
+- [PostgreSQL](https://www.postgresql.org/)
+  - The minimum is to have the server binaries installed.
+    The `pg_ctl` command needs to be visible in `$PATH`; you might have to add an entry like `/usr/lib/postgresql/$VERSION/bin`.
+    You don't need a server running; the test machinery will start a local server process on its own when needed.
+    We also recommend installing the client binaries, like `psql` or `pg_dump`, to aid with debugging of failed tests.
+- [Go](https://go.dev/)
+  - If going through your package manager, check that it does not have an ancient Go version (_\*cough\*_ Debian _\*cough\*_).
+    You should have at least the Go version required in the second paragraph of the `go.mod` file in this repository.
+  - If your package manager has both `go` and `go-tools`, install both.
+    `go-tools` is technically not required, but many editors support running the code formatter contained therein (`goimports`) automatically if it is in `$PATH`.
+  - Make sure that the output of `go env GOBIN` is a directory that is in your `$PATH`.
+    If `go env GOBIN` is empty, then `$(go env GOPATH)/bin` should be in your `$PATH`.
+
+Alternatively, if you have [Nix](https://nixos.org/) installed, you can run `nix-shell` to get all that in a single command.
 
 ## Testing methodology
 
-### Run Limes locally
+The vast majority of Limes code is covered by automated tests that can be executed with `make check`.
+On success, this will produce a coverage report at `build/cover.html`.
+The test suite features a self-contained testing database with files being stored in `.testdb`.
+The `.testdb` directory contains debugging scripts for interacting with the database contents, in order to inspect the database state after failed tests.
 
-Before you can run Limes, you need to set up some [configuration
-options](./docs/operators/config.md#configuration-options) via environment variables and
-create a [config file](./docs/operators/config.md#configuration-file) for cluster options.
+When only changing this code, you can stop reading here; you know all that you need to know.
 
-#### Configuration Options
+The only significant exception is the liquids: adapters that translate between an OpenStack service's native API
+and the [LIQUID API](https://pkg.go.dev/github.com/sapcc/go-api-declarations/liquid) that Limes understands
+(LIQUID = Limes Interface for Quota and Usage Interrogation and Discovery).
 
-Limes already has good defaults for its configuration so you won't need to do a lot of
-configuring. Here is an example of some options that you might want to configure:
+We don't do automated testing of liquids because, in our experience, it's not very useful:
+- Either tests would require an OpenStack cluster to be present.
+  This makes them less versatile, e.g. they cannot be executed in GitHub Actions.
+- Or alternatively, tests would try to mock away the OpenStack service (e.g. using recorded HTTP responses).
+  This makes them more brittle, e.g. most relevant changes to the code would require changes to the tests.
 
-```bash
-export LIMES_API_POLICY_PATH=$(pwd)/docs/example-policy.yaml
-export LIMES_DB_CONNECTION_OPTIONS='sslmode=disable'
-export LIMES_DB_USERNAME=$USER # on macOS
+In practice, ongoing test coverage for the liquids is provided by our QA deployments.
+This is especially useful in case of OpenStack upgrades that cause backwards incompatibilities.
+That's something that a test against a mock filled with recorded responses would not be able to find.
+
+When changing code in a liquid, we expect you to conduct manual tests against an OpenStack cluster, using the test tooling explained below.
+For changes to read-only operations (BuildServiceInfo, ReportCapacity, ReportUsage), it is absolutely encouraged to test against productive deployments, too.
+Real customers are just much better at coming up with interesting edge cases than anything in a QA deployment. :)
+
+## Running a liquid locally for manual testing
+
+You will need to have OpenStack credentials, usually ones that give you cloud-admin access to the respective service.
+See [the documentation of the NewProviderClient function](https://pkg.go.dev/github.com/sapcc/go-bits/gophercloudext#NewProviderClient) for which variables are allowed.
+
+In the repo root directory, create the following minimal policy file, replacing the `role:` names as appropriate for your deployment:
+
+```shellSession
+$ cat test-policy.json
+{
+  "readwrite": "role:cloud_resource_admin",
+  "readonly": "role:cloud_resource_viewer or rule:readwrite",
+  "liquid:get_info": "rule:readonly",
+  "liquid:get_capacity": "rule:readonly",
+  "liquid:get_usage": "rule:readonly",
+  "liquid:set_quota": "rule:readwrite"
+}
 ```
 
-**Hint**: for convenience, you can store the above commands in a `.env` file and execute
-`source .env` once to set up the configuration options for your current shell session.
+Furthermore, if the liquid you want to run takes configuration (that is, if `opts.TakesConfiguration = true` is set for it in `main.go`),
+write a configuration file according to the [liquid's documentation in `docs/liquids/`](docs/liquids/index.md).
 
-#### Configuration File
+Finally, run the liquid like this, replacing `foobar` by the actual liquid name:
 
-Refer to the [config guide](./docs/operators/config.md#configuration-file) for instructions
-relating to the configuration file.
-
-If you already have a deployment of Limes, you can quickly get a nearly sufficient configuration file by just
-downloading it from there. For example, if you use the [official Helm chart for Limes][chart], here's what you would do:
-
-```bash
-$ kubectl config use-context qa-de-1
-$ kubectl --namespace limes get pods -l app=limes-collect
-# select one of the pods shown
-$ kubectl --namespace limes exec "${POD_NAME}" -- cat /etc/limes/limes.yaml > test.yaml
+```sh
+export LIMES_DEBUG=true # show debug logs (enable only if needed, debug logs might be very verbose)
+export LIQUID_LISTEN_ADDRESS=:8080
+export LIQUID_POLICY_PATH=$PWD/test-policy.json
+export LIQUID_CONFIG_PATH=$PWD/config-liquid-foobar.json # if opts.TakesConfiguration == true
+make && ./build/limes liquid foobar
 ```
 
-To avoid confusion, you need to set the `authoritative` field to `false` when operating against an
-OpenStack cluster that already has a Limes instance.
+**TODO:** It would be nice to have a simplified invocation for this, e.g. `limes test-liquid foobar --port 8080 --config $CONFIG_PATH`.
 
-#### Run
+## Querying a liquid running locally
 
-Make sure that Postgres is running then you can now run both Limes jobs:
+Just having the liquid running does not do a lot.
+It's a service exposing a REST API, so you need to query it.
 
-* the API: `./build/limes serve test.yaml`
-* the collector: `./build/limes collect test.yaml`
+Because doing so with curl is tedious, we have tooling for it in [limesctl](https://github.com/sapcc/limesctl).
+Install `limesctl` and take a look at `limesctl liquid --help` for which subcommands are available.
+Note that you need to run `limesctl` in a second terminal while the liquid itself keeps running in the first one.
 
-### Run the test suite
+For example, this command queries the liquid started above for a capacity report:
 
-You can run the full test suite with:
-
-```bash
-make check
+```sh
+limesctl liquid report-capacity foobar --endpoint http://localhost:8080/
 ```
 
-This will produce a coverage report at `build/cover.html`. The test suite features a self-contained testing database with files being stored in `.testdb`. This directory also contains debugging scripts for interacting with the database contents.
-
-### Test Harnesses
-
-The following subcommands assist with the development of new plugins:
-
-* `limes test-get-quota` invokes the specific quota plugin for a specific service type on
-  a single project, and dumps the quota/usage data that was scraped by the plugin.
-* `limes test-get-rates` invokes the specific quota plugin for a specific service type on
-  a single project, and dumps the rate limits data that was scraped by the plugin.
-* `limes test-set-quota` invokes the specific quota plugin for a specific service type on
-  a single project, and can be used to test setting a new quota value for a resource.
-* `limes test-scan-capacity` invokes all enabled capacity plugins on the current cluster
-  and dumps the capacity data that was scrapes by the plugins.
-
-Run `limes --help` for details about the arguments that are required for the subcommands.
-
-Additionally, the following environment variables can be useful during development:
-
-```bash
-export LIMES_DEBUG=1       # show debug logs
-export LIMES_INSECURE=1    # disable SSL certificate verification (useful with mitmproxy)
-```
+It's also highly recommended to use the `--compare` flag to have limesctl run the same query both against the deployed liquid and your local copy, and report the diff.
+When refactoring, you want to check that the diff is empty.
+When adding new logic, you want to check that the diff matches what you expect.
 
 ## Code structure
 
-Once compiled, Limes is only a single binary containing subcommands for the various components (`limes serve` and `limes
-collect`). This reduces the size of the compiled application dramatically since a lot of code is shared. The main
-entrypoint is in `cmd/limes/main.go`, from which everything else follows.
-
-The `main.go` is fairly compact. The main source code is below `internal/`, organized into packages as follows: (listed
-from the bottom up)
+Once compiled, Limes is only a single binary containing subcommands for the various components (`limes serve`, `limes collect` and `limes serve-data-metrics`).
+This reduces the size of the compiled application dramatically since a lot of code is shared.
+The main entrypoint is in `main.go`, from which everything else follows.
+The bulk of the source code is below `internal/`, organized into packages as follows (listed from the bottom up):
 
 | Package | `go test` | Contents |
 | --- | :---: | --- |
-| _(toplevel)_ | yes | types for data structures that appear in the Limes API |
-| `internal/util` | no | various small utility functions (esp. for type conversion) |
-| `internal/db` | no | database configuration, connection handling, ORM model classes, utility functions |
+| `internal/util` | yes | various small utility functions (esp. for type conversion), custom data types that can be serialized into the DB and/or API |
+| `internal/db` | no | database connection handling, schema definitions, ORM model classes, utility functions |
 | `internal/core` | yes | core interfaces (DiscoveryPlugin, QuotaPlugin, CapacityPlugin) and data structures (Configuration, Cluster), config parsing and validation |
 | `internal/test` | no | testing helpers: mock implementations of core interfaces, test runners, etc. |
-| `internal/plugins` | no | implementations of QuotaPlugin and CapacityPlugin |
-| `internal/datamodel` | no | higher-level functions that operate on the ORM model classes (not in `internal/db` because of dependency on stuff from `internal/limes` |
-| `internal/collector` | yes | functionality of `limes collect` |
+| `internal/plugins` | no | implementations of QuotaPlugin and CapacityPlugin (**deprecated**) |
+| `internal/datamodel` | yes | higher-level functions that operate on the ORM model classes (not in `internal/db` because of dependency on stuff from `internal/limes` |
+| `internal/collector` | yes | functionality of `limes collect` and `limes serve-data-metrics` |
 | `internal/reports` | no | helper for `internal/api`: rendering of reports for GET requests |
 | `internal/api` | yes | functionality of `limes serve` |
+| `internal/liquids` | no | implementations of liquid adapters (these only depend on [go-api-declarations](https://github.com/sapcc/go-api-declarations) and [go-bits](https://github.com/sapcc/go-bits); not on any other Limes internals) |
 
-Only the top-level package is considered public API. Third-party programs should not import anything from `internal/` and its subdirectories..
-
-The database is defined by SQL files in `internal/db/migrations.go`. The contents follow the PostgreSQL dialect of SQL, the
-filenames follow the requirements of [the library that Limes uses for handling the DB schema][migrate].
-
-[yaml]: http://yaml.org/
-[chart]: https://github.com/sapcc/helm-charts/tree/master/openstack/limes
-[migrate]: https://github.com/golang-migrate/migrate
+The database is defined by SQL files in `internal/db/migrations.go`.
+The filenames follow the requirements of [the library that Limes uses for handling the DB schema](https://github.com/golang-migrate/migrate).

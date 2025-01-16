@@ -17,7 +17,7 @@ on the top left corner of this document to get to a specific section of this gui
 | `LIMES_DB_HOSTNAME` | `localhost` | Hostname of the database server. |
 | `LIMES_DB_PORT` | `5432` | Port on which the PostgreSQL service is running on. |
 | `LIMES_DB_CONNECTION_OPTIONS` | *(optional)* | Database connection options. |
-| `OS_...` | *(required)* | A full set of OpenStack auth environment variables for Limes's service user. See [documentation for openstackclient](https://docs.openstack.org/python-openstackclient/latest/cli/man/openstack.html) for details. |
+| `OS_...` | *(required)* | A full set of OpenStack auth environment variables for Limes's service user. See [the documentation of the NewProviderClient function](https://pkg.go.dev/github.com/sapcc/go-bits/gophercloudext#NewProviderClient) for which variables are allowed. |
 
 ## Environment variables for `limes serve` only
 
