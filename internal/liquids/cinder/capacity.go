@@ -60,11 +60,6 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 
 	// sort volume types by VolumeTypeInfo (if multiple volume types have the same VolumeTypeInfo, they need to share the same pools)
 	volumeTypesByInfo := make(map[VolumeTypeInfo][]VolumeType)
-	//volumeFCDInfoByType := make(map[VolumeType][]VolumeTypeFCDInfo)
-
-	for volumeType, info := range l.VolumeFCDTypes.Get() {
-		logg.Info("fcdVolType: %s, vcdInfo: %s", volumeType, info)
-	}
 
 	for volumeType, info := range l.VolumeTypes.Get() {
 		volumeTypesByInfo[info] = append(volumeTypesByInfo[info], volumeType)
@@ -75,16 +70,37 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 	for info := range volumeTypesByInfo {
 		sortedPools[info] = make(map[liquid.AvailabilityZone][]StoragePool)
 	}
+
+	poolMatches := make(map[StoragePool]VolumeTypeInfo, len(pools))
+	remainingPools := make(map[StoragePool]struct{}, len(pools))
 	for _, pool := range pools {
 		info := VolumeTypeInfo{
 			VolumeBackendName: pool.Capabilities.VolumeBackendName,
+		}
+
+		_, exists := sortedPools[info]
+		if !exists {
+			remainingPools[pool] = struct{}{}
+			continue
+		}
+		poolMatches[pool] = info
+	}
+
+	for pool := range remainingPools {
+		info := VolumeTypeInfo{
+			StorageProtocol: pool.Capabilities.StorageProtocol,
+			QualityType:     pool.Capabilities.QualityType,
 		}
 		_, exists := sortedPools[info]
 		if !exists {
 			logg.Info("ScanCapacity: skipping pool %q: no volume type uses pools with %s", pool.Name, info)
 			continue
 		}
+		poolMatches[pool] = info
+		delete(remainingPools, pool)
+	}
 
+	for pool, info := range poolMatches {
 		poolAZ := liquid.AvailabilityZoneUnknown
 		for az, hosts := range serviceHostsPerAZ {
 			for _, v := range hosts {
@@ -99,7 +115,6 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 			logg.Info("ScanCapacity: pool %q with %s does not match any service host", pool.Name, info)
 		}
 		logg.Debug("ScanCapacity: considering pool %q with %s in AZ %q", pool.Name, info, poolAZ)
-
 		sortedPools[info][poolAZ] = append(sortedPools[info][poolAZ], pool)
 	}
 
