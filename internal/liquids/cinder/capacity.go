@@ -70,8 +70,9 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 		sortedPools[info] = make(map[liquid.AvailabilityZone][]StoragePool)
 	}
 
-	poolMatches := make(map[StoragePool]VolumeTypeInfo, len(pools))
-	remainingPools := make(map[StoragePool]struct{}, len(pools))
+	// regular pool check.
+	poolMatches := make(map[StoragePool]VolumeTypeInfo)
+	remainingPools := make(map[StoragePool]VolumeTypeInfo)
 	for _, pool := range pools {
 		info := VolumeTypeInfo{
 			VolumeBackendName: pool.Capabilities.VolumeBackendName,
@@ -79,12 +80,13 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 
 		_, exists := sortedPools[info]
 		if !exists {
-			remainingPools[pool] = struct{}{}
+			remainingPools[pool] = info
 			continue
 		}
 		poolMatches[pool] = info
 	}
 
+	// fcd pool check.
 	for pool := range remainingPools {
 		info := VolumeTypeInfo{
 			StorageProtocol: pool.Capabilities.StorageProtocol,
@@ -92,11 +94,14 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 		}
 		_, exists := sortedPools[info]
 		if !exists {
-			logg.Info("ScanCapacity: skipping pool %q: no volume type uses pools with %s", pool.Name, info)
 			continue
 		}
 		poolMatches[pool] = info
 		delete(remainingPools, pool)
+	}
+
+	for pool, info := range remainingPools {
+		logg.Info("ScanCapacity: skipping pool %q: no volume type uses pools with %s", pool.Name, info)
 	}
 
 	for pool, info := range poolMatches {

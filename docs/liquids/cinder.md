@@ -7,11 +7,11 @@ This liquid provides support for the block storage service Cinder.
 
 ## Service-specific configuration
 
-| Field | Type | Description |
-| ----- | ---- | ----------- |
-| `with_subcapacities` | boolean | If true, subcapacities are reported. |
+| Field                        | Type    | Description                                                |
+| ---------------------------- | ------- | ---------------------------------------------------------- |
+| `with_subcapacities`         | boolean | If true, subcapacities are reported.                       |
 | `with_snapshot_subresources` | boolean | If true, subresources are reported on snapshots resources. |
-| `with_volume_subresources` | boolean | If true, subresources are reported on volumes resources. |
+| `with_volume_subresources`   | boolean | If true, subresources are reported on volumes resources.   |
 
 ## Resources
 
@@ -28,31 +28,46 @@ When writing quota, the overall quotas are set to the sum of the respective volu
 
 If `with_volume_subresources` and/or `with_snapshot_subresources` is set, the respective resources will have one subresource for each volume/snapshot, with the following fields:
 
-| Field | Type | Description |
-| ----- | ---- | ----------- |
-| `id` | string | The UUID of the volume or snapshot. |
-| `name` | string | The human-readable name of the volume or snapshot. |
-| `attributes.size_gib` | uint64 | The logical size of the volume or snapshot. |
-| `attributes.status` | string | The status of the volume or snapshot according to Cinder. |
+| Field                 | Type   | Description                                               |
+| --------------------- | ------ | --------------------------------------------------------- |
+| `id`                  | string | The UUID of the volume or snapshot.                       |
+| `name`                | string | The human-readable name of the volume or snapshot.        |
+| `attributes.size_gib` | uint64 | The logical size of the volume or snapshot.               |
+| `attributes.status`   | string | The status of the volume or snapshot according to Cinder. |
 
 ## Capacity calculation
 
-Capacity is calculated as the sum over all storage pools:
+Capacity is calculated as the sum over all storage pools and will be grouped into volume types.
+The following methods to assign pools to volume types are implemented:
 
-- Pools are grouped into volume types by matching their `volume_backend_name` against `extra_specs.volume_backend_name` of the volume type.
-  Pools without a matching volume type are ignored.
+- Regular Pools are grouped into volume types by matching their `volume_backend_name` against `extra_specs.volume_backend_name` of the volume type.
+- Remaining Pools are grouped into volume types by matching their `storage_protocol` and `quality_type` against the `extra_specs.storage_protocol` and
+  `extra_secs.quality_type` of the volume type.
+
+| Matching | Volume Type         | Pools               |
+| -------- | ------------------- | ------------------- |
+| Type 1   | volume_backend_name | volume_backend_name |
+| Type2    | storage_protocol    | storage_protocol    |
+|          | quality_type        | quality_type        |
+
+Pools without a matching volume type are ignored.
+
 - Pools are grouped into availability zones by matching the pool's hostname against the list of services configured in Cinder.
   Pools without a matching AZ are reported in AZ `unknown`.
 
+| Pools | Service |
+| ----- | ------- |
+| name  | host    |
+
 If `with_subcapacities` is set, the capacity resource will have one subcapacity for each pool, with the following fields:
 
-| Field | Type | Description |
-| ----- | ---- | ----------- |
-| `name` | string | The name of the pool. |
-| `capacity` | uint64 | The logical size of the pool, in GiB. |
-| `usage` | uint64 | The logical size of all volumes and snapshots on this pool, in GiB. |
-| `attributes.exclusion_reason` | string or omitted | See below for details. |
-| `attributes.real_capacity` | uint64 or omitted | Only shown if different from `capacity`. See below for details. |
+| Field                         | Type              | Description                                                         |
+| ----------------------------- | ----------------- | ------------------------------------------------------------------- |
+| `name`                        | string            | The name of the pool.                                               |
+| `capacity`                    | uint64            | The logical size of the pool, in GiB.                               |
+| `usage`                       | uint64            | The logical size of all volumes and snapshots on this pool, in GiB. |
+| `attributes.exclusion_reason` | string or omitted | See below for details.                                              |
+| `attributes.real_capacity`    | uint64 or omitted | Only shown if different from `capacity`. See below for details.     |
 
 ### SAP Converged Cloud extension: Pool exclusion
 
