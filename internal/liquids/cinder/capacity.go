@@ -60,7 +60,6 @@ func (l *Logic) ScanCapacity(ctx context.Context, req liquid.ServiceCapacityRequ
 
 	// sort volume types by VolumeTypeInfo (if multiple volume types have the same VolumeTypeInfo, they need to share the same pools)
 	volumeTypesByInfo := make(map[VolumeTypeInfo][]VolumeType)
-
 	for volumeType, info := range l.VolumeTypes.Get() {
 		volumeTypesByInfo[info] = append(volumeTypesByInfo[info], volumeType)
 	}

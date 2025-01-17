@@ -108,7 +108,6 @@ func (l *Logic) BuildServiceInfo(ctx context.Context) (liquid.ServiceInfo, error
 			QualityType:       vtSpec.ExtraSpecs["quality_type"],
 		}
 	}
-
 	l.VolumeTypes.Set(volumeTypes)
 
 	// build ResourceInfo set
